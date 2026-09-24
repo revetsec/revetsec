@@ -33,7 +33,7 @@
 # digest (image created 2026-09-23). The digest is what Docker uses; the tag is for readers and
 # Dependabot. The workflows run the clusterfuzzlite-build-fuzzers and -run-fuzzers images as
 # digest-pinned docker:// steps (.github/workflows/cflite_*.yml); move those digests with this one.
-FROM gcr.io/oss-fuzz-base/base-builder-jvm:v1@sha256:5eaa9b0d62fe132cfd319061dffa85a7bb6a6795ff2cdd52872a4b3a2c816f4a
+FROM gcr.io/oss-fuzz-base/base-builder-jvm:v1@sha256:7195b1413bfb4ec854f8d590ee4349bab105e55c7e8be2779a6bac0060155d25
 
 # Maven is not in the base image. Ubuntu 20.04's apt package is 3.6.3, older than the fuzz pom's
 # enforcer floor (3.9.0), so install a pinned release from Maven Central and verify its SHA-512
