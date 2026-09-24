@@ -1,0 +1,3 @@
+# TEST ONLY fixtures (see README.md): keep the bytes exactly as scripts/regenerate-test-pki.sh wrote them.
+*.p12 binary
+*.pem text eol=lf

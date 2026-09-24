@@ -1,0 +1,59 @@
+name: Scorecard supply-chain security
+
+# OpenSSF Scorecard (plan §14.7 item 8). Actions are pinned to full commit SHAs; the trailing comment is
+# the tag each was resolved from (peeled for annotated tags).
+#
+# publish_results stays false until review gate 20 authorizes publishing (plan §13 gate 20: "the
+# Scorecard `publish_results` setting"). Publishing sends results to the public OpenSSF API and enables
+# the badge. When gate 20 authorizes it: set publish_results to true, add `id-token: write` to the job's
+# permissions, and remove the workflow_dispatch trigger if the Scorecard API rejects results from it.
+# Until then results go only to this repository's code-scanning page and a short-lived artifact.
+
+on:
+  branch_protection_rule:
+  schedule:
+    - cron: '23 7 * * 1'
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: scorecard-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analysis:
+    name: Scorecard analysis
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read # check out the repository and read its files
+      security-events: write # upload SARIF to code scanning
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Run analysis
+        uses: ossf/scorecard-action@2d1146689b8cda280b9bc96326124645441f03bc # v2.4.4
+        with:
+          results_file: results.sarif
+          results_format: sarif
+          # Not before gate 20 (see the header).
+          publish_results: false
+
+      - name: Upload SARIF artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: scorecard-sarif-${{ github.run_id }}-${{ github.run_attempt }}
+          path: results.sarif
+          retention-days: 5
+
+      - name: Upload to code scanning
+        uses: github/codeql-action/upload-sarif@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
+        with:
+          sarif_file: results.sarif

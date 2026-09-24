@@ -1,0 +1,5 @@
+# The image needs only the lock file and the package.
+*
+!requirements.txt
+!scripted_idp
+**/__pycache__

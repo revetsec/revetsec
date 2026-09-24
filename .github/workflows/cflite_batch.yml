@@ -1,0 +1,159 @@
+name: ClusterFuzzLite batch fuzzing
+
+# Nightly batch fuzzing of the Jazzer targets in fuzz/ (plan §14.5), following the ClusterFuzzLite
+# GitHub Actions guide. Corpus pruning, which the guide requires wherever batch fuzzing runs, is in
+# cflite_cron.yml. It has to be a separate workflow run: ClusterFuzzLite stores a target's corpus under
+# the same name in batch and prune mode, and an artifact name can be uploaded only once per run.
+#
+# CORPUS STORAGE. The corpus is kept in a separate git repository (ClusterFuzzLite's `storage-repo`),
+# never in workflow artifacts. Any pull request, a fork's included, can upload an artifact named
+# cifuzz-corpus-<target>, and ClusterFuzzLite's artifact store takes the newest artifact of that name
+# from any run and extracts it. Only this workflow and cflite_cron.yml write the storage repository,
+# with a token that fork pull requests never receive. cflite_pr.yml only reads it, anonymously.
+#
+# Owner setup. Until steps 1-3 are done, this workflow and cflite_cron.yml skip with a notice, and
+# cflite_pr.yml fuzzes from the checked-in seed corpus only.
+#   1. Create the storage repository, for example revetsec/revetsec-fuzz-corpus, with a README so that
+#      `main` exists. If it is public, PR fuzzing starts from the batch corpus. If it is private, the
+#      corpus stays unpublished and PR fuzzing uses the seeds only.
+#   2. Create a fine-grained personal access token with resource owner revetsec, access to that one
+#      repository only, the single repository permission Contents: Read and write, and an expiry date.
+#   3. In this repository, add the Actions variable CFLITE_STORAGE_REPO = <owner>/<name>. Store the
+#      token as the secret CFLITE_STORAGE_TOKEN of the environment `cflite-storage` (Settings >
+#      Environments), with Deployment branches and tags limited to `main`. A repository secret also
+#      works, but then a workflow edited on any branch can read the token.
+#   4. Settings > Actions > General > "Approval for running fork pull request workflows from
+#      contributors": choose "Require approval for all external contributors". Before approving a
+#      run, review any change to .github/ or .clusterfuzzlite/ in the pull request.
+#   Rotate the token before it expires: an expired or wrong token fails the preflight step.
+#
+# IMAGES. The ClusterFuzzLite build_fuzzers and run_fuzzers actions (google/clusterfuzzlite
+# actions/*@884713a6c30a92e5e8544c39945cd7cb630abcd1, the peeled v1 tag) are Docker actions that run
+# the floating tags gcr.io/oss-fuzz-base/clusterfuzzlite-{build,run}-fuzzers:v1. So each step runs the
+# same image here directly, pinned by digest (plan §10.3), with the environment that the action.yml at
+# that commit passes. Inputs left at an empty default are omitted, and cifuzz treats unset and empty
+# the same for each of them. KEEP_UNAFFECTED_FUZZ_TARGETS is 'true' where the action defaults to
+# 'false': no workflow here produces the coverage report that target selection needs, so every target
+# was kept anyway, and the build step no longer reads a coverage artifact. The digests were resolved
+# on 2026-09-23 with `docker buildx imagetools inspect`. Do not rely on Dependabot for docker://
+# steps: move the digests by hand, in cflite_pr.yml and cflite_cron.yml too, and together with the
+# base-builder-jvm digest in .clusterfuzzlite/Dockerfile.
+#
+# At M0 the only target is PlaceholderFuzzTests (no RevetSec code), so the budgets are small. Raise
+# FUZZ_SECONDS when real targets land at M1.
+
+on:
+  schedule:
+    # Nightly, offset from the CI (06:17) and CodeQL (06:41) crons. Pruning runs at 09:17.
+    - cron: '47 7 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Batch fuzzing and pruning (cflite_cron.yml) both write the storage repository, so they share one
+# group and never overlap. A run is never cancelled part-way; a second trigger waits.
+concurrency:
+  group: cflite-corpus
+  cancel-in-progress: false
+
+defaults:
+  run:
+    # Explicit bash gives `-eo pipefail` on every run step.
+    shell: bash
+
+jobs:
+  batch-fuzzing:
+    name: Batch Fuzzing (${{ matrix.sanitizer }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    # Holds CFLITE_STORAGE_TOKEN (owner setup, step 3).
+    environment: cflite-storage
+    permissions:
+      # The build step clones the repository itself. No `actions: read`: nothing here downloads an
+      # artifact.
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        # JVM projects support only address and undefined. RevetSec has no native code, so
+        # undefined would add nothing.
+        sanitizer: [address]
+    steps:
+      - name: Check the corpus storage configuration
+        id: storage
+        env:
+          STORAGE_REPO: ${{ vars.CFLITE_STORAGE_REPO }}
+          STORAGE_TOKEN: ${{ secrets.CFLITE_STORAGE_TOKEN }}
+          THIS_REPO: ${{ github.repository }}
+          REF: ${{ github.ref }}
+        run: |
+          missing=()
+          [[ -n "$STORAGE_REPO" ]] || missing+=("the Actions variable CFLITE_STORAGE_REPO")
+          [[ -n "$STORAGE_TOKEN" ]] || missing+=("the secret CFLITE_STORAGE_TOKEN")
+          if (( ${#missing[@]} > 0 )); then
+            printf -v what '%s, ' "${missing[@]}"
+            echo "::notice title=Batch fuzzing skipped::Corpus storage is not configured (not set: ${what%, }). The corpus is never kept in workflow artifacts; see the owner setup in the header of .github/workflows/cflite_batch.yml."
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # The storage repository takes one corpus, the default branch's.
+          if [[ "$REF" != refs/heads/main ]]; then
+            echo "::notice title=Batch fuzzing skipped::The corpus is written only from main; this run is on ${REF}."
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [[ ! "$STORAGE_REPO" =~ ^[A-Za-z0-9-]+/[A-Za-z0-9._-]+$ ]]; then
+            echo "::error title=Invalid CFLITE_STORAGE_REPO::The Actions variable CFLITE_STORAGE_REPO must be <owner>/<name> of the corpus storage repository."
+            exit 1
+          fi
+          if [[ "${STORAGE_REPO,,}" == "${THIS_REPO,,}" ]]; then
+            echo "::error title=Invalid CFLITE_STORAGE_REPO::The corpus storage repository must be a separate repository, not ${THIS_REPO}."
+            exit 1
+          fi
+          if ! GIT_TERMINAL_PROMPT=0 git -c credential.helper= ls-remote --quiet \
+            "https://x-access-token:${STORAGE_TOKEN}@github.com/${STORAGE_REPO}.git" > /dev/null; then
+            echo "::error title=Corpus storage unreachable::CFLITE_STORAGE_TOKEN cannot read ${STORAGE_REPO}. Check that the repository exists and that the token has not expired and has Contents: Read and write on it."
+            exit 1
+          fi
+          echo "configured=true" >> "$GITHUB_OUTPUT"
+          echo "Corpus storage: ${STORAGE_REPO} (branch main)"
+
+      - name: Build fuzzers (${{ matrix.sanitizer }})
+        id: build
+        if: steps.storage.outputs.configured == 'true'
+        uses: docker://gcr.io/oss-fuzz-base/clusterfuzzlite-build-fuzzers:v1@sha256:fde96247c3488104b96822156a6e107d58487140115247a34e1f967c23df5604
+        env:
+          LANGUAGE: jvm
+          SANITIZER: ${{ matrix.sanitizer }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CFL_PLATFORM: github
+          LOW_DISK_SPACE: 'True'
+          BAD_BUILD_CHECK: 'true'
+          UPLOAD_BUILD: 'false'
+          DRY_RUN: 'false'
+          KEEP_UNAFFECTED_FUZZ_TARGETS: 'true'
+
+      - name: Run fuzzers (${{ matrix.sanitizer }})
+        id: run
+        if: steps.storage.outputs.configured == 'true'
+        uses: docker://gcr.io/oss-fuzz-base/clusterfuzzlite-run-fuzzers:v1@sha256:4c1febe9ddec42ff005c6115f7769608d1beff57e96ae365d5c4fea1013926dc
+        env:
+          LANGUAGE: jvm
+          SANITIZER: ${{ matrix.sanitizer }}
+          MODE: batch
+          # Total budget, shared by all targets.
+          FUZZ_SECONDS: '600'
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CFL_PLATFORM: github
+          LOW_DISK_SPACE: 'True'
+          DRY_RUN: 'false'
+          REPORT_UNREPRODUCIBLE_CRASHES: 'false'
+          MINIMIZE_CRASHES: 'false'
+          PARALLEL_FUZZING: 'false'
+          OUTPUT_SARIF: 'false'
+          # Reads and writes corpus/<target>/ on the storage repository's main branch. Crashes are
+          # still uploaded as this run's artifacts (crashes-<target>); nothing is read back from them.
+          GIT_STORE_REPO: 'https://x-access-token:${{ secrets.CFLITE_STORAGE_TOKEN }}@github.com/${{ vars.CFLITE_STORAGE_REPO }}.git'
+          GIT_STORE_BRANCH: main
+          GIT_STORE_BRANCH_COVERAGE: gh-pages

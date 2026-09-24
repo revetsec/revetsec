@@ -1,0 +1,330 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+	Copyright 2026 Revetware LLC.
+
+	Licensed under the Apache License, Version 2.0 (the "License");
+	you may not use this file except in compliance with the License.
+	You may obtain a copy of the License at
+
+	http://www.apache.org/licenses/LICENSE-2.0
+
+	Unless required by applicable law or agreed to in writing, software
+	distributed under the License is distributed on an "AS IS" BASIS,
+	WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+	See the License for the specific language governing permissions and
+	limitations under the License.
+-->
+<!--
+	RevetSec fuzz tooling. This pom is NOT built by the root pom and is never published:
+	install and deploy are skipped below. It compiles RevetSec's main sources directly
+	(../src/main/java), plus the core test tree (../src/test/java, ../src/test/resources) so that
+	fuzz targets can reuse test helpers and fixtures. The core test tree is filtered: Failsafe ITs
+	(**/*IT.java) and the Testcontainers-backed scripted-IdP classes (com/revetsec/saml/ScriptedIdp*)
+	are excluded, so nothing here needs Docker or Testcontainers.
+
+	Replay the checked-in seed corpus (Jazzer regression mode):
+	  mvn -B -ntp -f fuzz/pom.xml verify
+
+	Compile against the core main sources only, without the core test tree:
+	  mvn -B -ntp -f fuzz/pom.xml -Drevetsec.fuzz.mainSourcesOnly verify
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+		 xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+		 xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+
+	<groupId>com.revetsec</groupId>
+	<artifactId>revetsec-fuzz</artifactId>
+	<version>1.0.0-SNAPSHOT</version>
+	<packaging>jar</packaging>
+
+	<name>RevetSec Fuzz Tests</name>
+	<description>Jazzer fuzz targets for RevetSec. Test tooling only; never published.</description>
+	<url>https://www.revetsec.com</url>
+
+	<licenses>
+		<license>
+			<name>Apache License, Version 2.0</name>
+			<url>https://www.apache.org/licenses/LICENSE-2.0.txt</url>
+			<distribution>repo</distribution>
+		</license>
+	</licenses>
+
+	<properties>
+		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+		<project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+		<project.build.outputTimestamp>2026-09-01T00:00:00Z</project.build.outputTimestamp>
+		<maven.compiler.release>17</maven.compiler.release>
+		<!-- Same Jazzer line as Soklet's fuzz/ (0.30.0 is the latest on Central as of 2026-09-23). -->
+		<jazzer.version>0.30.0</jazzer.version>
+		<!-- Jazzer supports JUnit 5.9.0 and newer. The JUnit BOM aligns Jazzer's transitive JUnit
+			 modules (jupiter-params, platform-commons, platform-launcher) with the explicit
+			 API/engine/launcher dependencies below. Without it, old Platform classes stay on the
+			 test classpath and the run can fail before any corpus input executes. -->
+		<junit.version>6.1.3</junit.version>
+		<!-- The RevetSec core checkout whose sources this module compiles. The core test tree is
+			 compiled in by default; the "main-sources-only" profile unbinds the add-core-test-*
+			 executions. -->
+		<revetsec.core.basedir>${project.basedir}/..</revetsec.core.basedir>
+		<!-- Empty by default. The "jdk23-plus-unsafe-memory-access" profile sets this to the JDK 23+
+			 "sun.misc.Unsafe memory-access" allow flag (JEP 471), which the JVM only recognizes on
+			 JDK 23 and newer. Passing it on JDK 17 through 22 crashes the forked test VM with an
+			 "Unrecognized option" error. -->
+		<surefire.unsafeMemoryAccessArg></surefire.unsafeMemoryAccessArg>
+	</properties>
+
+	<dependencyManagement>
+		<dependencies>
+			<dependency>
+				<groupId>org.junit</groupId>
+				<artifactId>junit-bom</artifactId>
+				<version>${junit.version}</version>
+				<type>pom</type>
+				<scope>import</scope>
+			</dependency>
+		</dependencies>
+	</dependencyManagement>
+
+	<dependencies>
+		<!-- Compile-time-only annotations used by RevetSec's main sources (same as core). -->
+		<dependency>
+			<groupId>org.jspecify</groupId>
+			<artifactId>jspecify</artifactId>
+			<version>1.0.1</version>
+			<scope>provided</scope>
+		</dependency>
+		<dependency>
+			<groupId>com.google.code.findbugs</groupId>
+			<artifactId>jsr305</artifactId>
+			<version>3.0.2</version>
+			<scope>provided</scope>
+		</dependency>
+		<dependency>
+			<groupId>com.google.errorprone</groupId>
+			<artifactId>error_prone_annotations</artifactId>
+			<version>2.50.0</version>
+			<scope>provided</scope>
+		</dependency>
+
+		<!-- Test scope only. -->
+		<dependency>
+			<groupId>com.code-intelligence</groupId>
+			<artifactId>jazzer-junit</artifactId>
+			<version>${jazzer.version}</version>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.junit.jupiter</groupId>
+			<artifactId>junit-jupiter-api</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.junit.jupiter</groupId>
+			<artifactId>junit-jupiter-engine</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.junit.platform</groupId>
+			<artifactId>junit-platform-launcher</artifactId>
+			<scope>test</scope>
+		</dependency>
+	</dependencies>
+
+	<build>
+		<plugins>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-enforcer-plugin</artifactId>
+				<version>3.6.3</version>
+				<executions>
+					<execution>
+						<id>enforce-fuzz-build-contract</id>
+						<goals>
+							<goal>enforce</goal>
+						</goals>
+						<configuration>
+							<rules>
+								<requireMavenVersion>
+									<version>[3.9.0,)</version>
+								</requireMavenVersion>
+								<requireJavaVersion>
+									<version>[17,)</version>
+								</requireJavaVersion>
+								<dependencyConvergence/>
+							</rules>
+						</configuration>
+					</execution>
+				</executions>
+			</plugin>
+
+			<plugin>
+				<groupId>org.codehaus.mojo</groupId>
+				<artifactId>build-helper-maven-plugin</artifactId>
+				<version>3.6.2</version>
+				<executions>
+					<execution>
+						<id>add-core-main-sources</id>
+						<phase>generate-sources</phase>
+						<goals>
+							<goal>add-source</goal>
+						</goals>
+						<configuration>
+							<sources>
+								<source>${revetsec.core.basedir}/src/main/java</source>
+							</sources>
+						</configuration>
+					</execution>
+					<!-- build-helper's add-test-source has no include/exclude support, so the
+						 ITs and scripted-IdP classes are filtered by the compiler's testExcludes
+						 below. Test resources do support excludes, but nothing there needs them. -->
+					<execution>
+						<id>add-core-test-sources</id>
+						<phase>generate-test-sources</phase>
+						<goals>
+							<goal>add-test-source</goal>
+						</goals>
+						<configuration>
+							<sources>
+								<source>${revetsec.core.basedir}/src/test/java</source>
+							</sources>
+						</configuration>
+					</execution>
+					<execution>
+						<id>add-core-test-resources</id>
+						<phase>generate-test-resources</phase>
+						<goals>
+							<goal>add-test-resource</goal>
+						</goals>
+						<configuration>
+							<resources>
+								<resource>
+									<directory>${revetsec.core.basedir}/src/test/resources</directory>
+								</resource>
+							</resources>
+						</configuration>
+					</execution>
+				</executions>
+			</plugin>
+
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-compiler-plugin</artifactId>
+				<version>3.16.0</version>
+				<configuration>
+					<release>${maven.compiler.release}</release>
+					<compilerArgs>
+						<arg>-parameters</arg>
+						<arg>-Xlint:unchecked</arg>
+					</compilerArgs>
+					<proc>none</proc>
+					<showDeprecation>true</showDeprecation>
+					<showWarnings>true</showWarnings>
+					<!-- The excluded files stay on javac's -sourcepath (the compiler plugin passes
+						 every source root). If an included file ever references one of them, javac
+						 compiles it implicitly and fails on the missing Testcontainers classes, so
+						 the leak is loud rather than silent. -->
+					<testExcludes>
+						<!-- Failsafe/Testcontainers legs never run here. -->
+						<testExclude>**/*IT.java</testExclude>
+						<!-- ScriptedIdpContainer, ScriptedIdpClient, ScriptedIdpSpecs (plan §14.10)
+							 need Testcontainers, which this module does not declare. -->
+						<testExclude>com/revetsec/saml/ScriptedIdp*</testExclude>
+					</testExcludes>
+				</configuration>
+			</plugin>
+
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-surefire-plugin</artifactId>
+				<version>3.6.0</version>
+				<configuration>
+					<!-- Only fuzz targets run here. The core test tree is compiled in for its helpers,
+						 but its *Tests classes (contract tests included) run in the root build, whose
+						 basedir they assume. Fuzz targets are named *FuzzTests; see README.md. -->
+					<includes>
+						<include>**/*FuzzTests.java</include>
+					</includes>
+					<failIfNoTests>true</failIfNoTests>
+					<argLine>
+						-Xmx512m
+						-Djdk.attach.allowAttachSelf=true
+						-XX:+EnableDynamicAgentLoading
+						--enable-native-access=ALL-UNNAMED
+						${surefire.unsafeMemoryAccessArg}
+					</argLine>
+				</configuration>
+			</plugin>
+
+			<!-- Tooling only: this module produces no jar and is never installed or deployed. -->
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-jar-plugin</artifactId>
+				<version>3.5.1</version>
+				<executions>
+					<execution>
+						<id>default-jar</id>
+						<phase>none</phase>
+					</execution>
+				</executions>
+			</plugin>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-install-plugin</artifactId>
+				<version>3.1.4</version>
+				<configuration>
+					<skip>true</skip>
+				</configuration>
+			</plugin>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-deploy-plugin</artifactId>
+				<version>3.1.4</version>
+				<configuration>
+					<skip>true</skip>
+				</configuration>
+			</plugin>
+		</plugins>
+	</build>
+
+	<profiles>
+		<profile>
+			<id>jdk23-plus-unsafe-memory-access</id>
+			<activation>
+				<jdk>[23,)</jdk>
+			</activation>
+			<properties>
+				<surefire.unsafeMemoryAccessArg>--sun-misc-unsafe-memory-access=allow</surefire.unsafeMemoryAccessArg>
+			</properties>
+		</profile>
+
+		<!-- Fallback toggle: compile against RevetSec's main sources only, leaving the core test
+			 tree out. Use it when the core test tree does not compile (for example while a change
+			 to it is in flight). Activate with -Drevetsec.fuzz.mainSourcesOnly. -->
+		<profile>
+			<id>main-sources-only</id>
+			<activation>
+				<property>
+					<name>revetsec.fuzz.mainSourcesOnly</name>
+				</property>
+			</activation>
+			<build>
+				<plugins>
+					<plugin>
+						<groupId>org.codehaus.mojo</groupId>
+						<artifactId>build-helper-maven-plugin</artifactId>
+						<executions>
+							<execution>
+								<id>add-core-test-sources</id>
+								<phase>none</phase>
+							</execution>
+							<execution>
+								<id>add-core-test-resources</id>
+								<phase>none</phase>
+							</execution>
+						</executions>
+					</plugin>
+				</plugins>
+			</build>
+		</profile>
+	</profiles>
+</project>

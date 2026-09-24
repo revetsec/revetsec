@@ -1,0 +1,492 @@
+name: CI
+
+# M0 subset of plan §10.3. Jobs that start in a later milestone are listed at the end as commented
+# stubs, each naming the milestone it starts in.
+#
+# Every action is pinned to a full commit SHA (the trailing comment is the tag it was resolved from with
+# `git ls-remote`, peeled for annotated tags). Dependabot's github-actions entry keeps the pins current.
+
+on:
+  push:
+    branches: [main, develop, 'feature/**']
+  pull_request:
+  schedule:
+    # Nightly: the advisory alternative-JDK and EA legs, a cache-free scripted-IdP image rebuild that
+    # catches pin rot (a vanished digest or wheel), and the gating jobs again as a drift signal.
+    - cron: '17 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Cancel superseded push and PR runs on the same ref. Never cancel a nightly or manual run.
+concurrency:
+  group: ci-${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 'nightly' || 'change' }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'push' || github.event_name == 'pull_request' }}
+
+defaults:
+  run:
+    # Explicit bash gives `-eo pipefail` on every run step.
+    shell: bash
+
+jobs:
+  # Gating. Tier 0 only: contract tests (PublicApiContractTests, PackageDependencyTests, SourcePolicyTests,
+  # ContractMetaTests) and ClaimsLintTests all run inside `verify`, so the plan's `claims-lint` job is
+  # covered here. Javadoc is skipped on every leg until M1 (plan §12.3 M0).
+  test:
+    name: Test (JDK ${{ matrix.jdk }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      # Do not cancel the other JDKs when one fails; every JDK's result is useful.
+      fail-fast: false
+      matrix:
+        jdk: ['17', '21', '25', '27']
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Corretto ${{ matrix.jdk }}
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: corretto
+          java-version: ${{ matrix.jdk }}
+          cache: maven
+
+      - name: Verify
+        run: mvn -B -ntp -Dmaven.javadoc.skip=true verify
+
+      - name: Upload test reports
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: test-reports-jdk-${{ matrix.jdk }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: target/surefire-reports
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # Gating. Case mapping and number formatting under Turkish and Arabic default locales.
+  locale:
+    name: Locale (${{ matrix.locale.tag }}, JDK 21)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        locale:
+          - { tag: tr-TR, language: tr, country: TR }
+          - { tag: ar-EG, language: ar, country: EG }
+    env:
+      # JAVA_TOOL_OPTIONS reaches Surefire's forked test JVM at startup; a Maven user property alone does not.
+      JAVA_TOOL_OPTIONS: -Duser.language=${{ matrix.locale.language }} -Duser.country=${{ matrix.locale.country }}
+      # For the canary test: when set, it asserts the forked test JVM's default locale has this tag.
+      REVETSEC_EXPECTED_LOCALE: ${{ matrix.locale.tag }}
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Corretto 21
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: corretto
+          java-version: '21'
+          cache: maven
+
+      - name: Assert the JVM picks up the locale
+        env:
+          EXPECTED_LANGUAGE: ${{ matrix.locale.language }}
+          EXPECTED_COUNTRY: ${{ matrix.locale.country }}
+        run: |
+          settings=$(java -XshowSettings:properties -version 2>&1)
+          grep -Eq "^[[:space:]]+user\.language = ${EXPECTED_LANGUAGE}\$" <<<"$settings" || {
+            echo "::error::JVM default language is not ${EXPECTED_LANGUAGE}"; exit 1; }
+          grep -Eq "^[[:space:]]+user\.country = ${EXPECTED_COUNTRY}\$" <<<"$settings" || {
+            echo "::error::JVM default country is not ${EXPECTED_COUNTRY}"; exit 1; }
+          echo "JVM default locale: ${EXPECTED_LANGUAGE}-${EXPECTED_COUNTRY}"
+
+      - name: Verify under ${{ matrix.locale.tag }}
+        run: mvn -B -ntp -Dmaven.javadoc.skip=true verify
+
+  # Gating. Error Prone + NullAway need JDK 21; the release target stays 17. Profile from the pom.
+  static-analysis:
+    name: Static Analysis (JDK 21)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Corretto 21
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: corretto
+          java-version: '21'
+          cache: maven
+
+      - name: Error Prone + NullAway
+        run: mvn -B -ntp -Pstatic-analysis -Dmaven.javadoc.skip=true verify
+
+  # Gating. SpotBugs + FindSecBugs, bound to `verify` by the pom's spotbugs profile.
+  spotbugs:
+    name: SpotBugs (JDK 21)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Corretto 21
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: corretto
+          java-version: '21'
+          cache: maven
+
+      - name: SpotBugs + FindSecBugs
+        run: mvn -B -ntp -Pspotbugs -Dmaven.javadoc.skip=true verify
+
+  # Gating (INV-L1). Installs core into an isolated local repository, then checks the installed POM
+  # (zero compile/runtime/system dependencies), the JAR's contents and Automatic-Module-Name, a Maven
+  # consumer's resolved class path (exactly the RevetSec JAR), and the jdeps module list. The oldest and
+  # newest supported JDKs each build, consume and analyze the JAR. A Gradle consumer joins from M1.
+  packaged-consumer:
+    name: Packaged Consumer (JDK ${{ matrix.jdk }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        jdk: ['17', '27']
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # No Maven cache: the isolated repository must hold only what this job resolves and installs.
+      - name: Set up Corretto ${{ matrix.jdk }}
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: corretto
+          java-version: ${{ matrix.jdk }}
+
+      - name: Self-test verification scripts
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          python3 -m unittest discover -s verification -p 'test_*.py'
+          python3 -m unittest discover -s verification/packaged-consumer -p 'test_*.py'
+
+      - name: Install core into an isolated local repository
+        run: >-
+          mvn -B -ntp -Dmaven.repo.local="${RUNNER_TEMP}/consumer-repository"
+          -Dmaven.javadoc.skip=true -DskipTests clean install
+
+      - name: Verify installed POM, JAR, Maven consumer and jdeps module list
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: >-
+          python3 verification/packaged-consumer/verify-packaged-consumer.py
+          --repository "${RUNNER_TEMP}/consumer-repository"
+          --java-home "${JAVA_HOME}"
+          --output "${RUNNER_TEMP}/packaged-consumer-result"
+
+      - name: Upload packaged-consumer evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: packaged-consumer-jdk-${{ matrix.jdk }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/packaged-consumer-result
+          if-no-files-found: warn
+          retention-days: 30
+
+  # Gating on replay: the checked-in seed corpus runs in Jazzer's regression mode (plan §14.5).
+  # ClusterFuzzLite's PR fuzzing, batch fuzzing and corpus pruning live in cflite_pr.yml,
+  # cflite_batch.yml and cflite_cron.yml.
+  fuzz-regression:
+    name: Fuzz Corpus Replay (JDK 21)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Corretto 21
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: corretto
+          java-version: '21'
+          cache: maven
+
+      - name: Replay fuzz corpus
+        run: mvn -B -ntp -f fuzz/pom.xml verify
+
+  # Decides whether the scripted-IdP image must be rebuilt on this push or PR.
+  changes:
+    name: Changed Paths
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      scripted-idp: ${{ steps.scripted-idp.outputs.changed }}
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Detect scripted-IdP changes
+        id: scripted-idp
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          # Nightly and manual runs always build. A push or PR builds when the image's inputs or this
+          # workflow changed. If the base commit cannot be resolved, it builds: fail toward running.
+          changed=true
+          if [[ "$EVENT_NAME" == pull_request || "$EVENT_NAME" == push ]] \
+            && [[ "$BASE_SHA" =~ ^[0-9a-f]{40}$ ]] \
+            && [[ "$BASE_SHA" != 0000000000000000000000000000000000000000 ]] \
+            && git cat-file -e "${BASE_SHA}^{commit}" 2>/dev/null \
+            && git diff --quiet "$BASE_SHA" HEAD -- interop/scripted-idp .github/workflows/ci.yml; then
+            changed=false
+          fi
+          echo "changed=${changed}" >> "$GITHUB_OUTPUT"
+          echo "Scripted-IdP image inputs changed (or always-build event): ${changed}"
+
+  # Gating from M0 (plan §10.3, §14.10). Builds the scripted-IdP image on x86-64 and arm64 and runs its
+  # selftest, so a broken pin is caught before M7. The image is loaded into the runner's Docker daemon
+  # only: it is never pushed to any registry (pushing would be publication, plan §14.10).
+  scripted-idp-image:
+    name: Scripted IdP Image (${{ matrix.runner }})
+    needs: changes
+    if: needs.changes.outputs.scripted-idp == 'true'
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+    env:
+      # A local tag only; there is no registry prefix and nothing pushes it.
+      SCRIPTED_IDP_IMAGE: revetsec-scripted-idp:ci
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Require the scripted-IdP build context
+        run: |
+          test -f interop/scripted-idp/Dockerfile || {
+            echo "::error::interop/scripted-idp/Dockerfile is missing"; exit 1; }
+
+      # The docker-container builder runs BuildKit in a privileged container. Without driver-opts it
+      # would pull the floating moby/buildkit:buildx-stable-1 tag, so the image is pinned by digest (plan
+      # §10.3): on 2026-09-23 buildx-stable-1 and v0.32.2 both resolved to this index digest (checked
+      # with `docker buildx imagetools inspect`; linux/amd64 and linux/arm64 included). Dependabot does
+      # not update driver-opts, so move it by hand, together with the python base-image digest in
+      # interop/scripted-idp/Dockerfile. The buildx CLI is the runner image's own.
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+        with:
+          driver-opts: image=moby/buildkit:v0.32.2@sha256:28a898719c18a33f4e8000685287fa36fd0dd9560c6440227d3a732d79bb41d8
+
+      - name: Build image (load only, never pushed)
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: interop/scripted-idp
+          load: true
+          push: false
+          provenance: false
+          sbom: false
+          tags: ${{ env.SCRIPTED_IDP_IMAGE }}
+          # Nightly and manual builds ignore the cache so upstream pin rot surfaces; they still refresh it.
+          no-cache: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
+          cache-from: type=gha,scope=scripted-idp-${{ matrix.runner }}
+          cache-to: type=gha,mode=max,scope=scripted-idp-${{ matrix.runner }}
+
+      - name: Assert the image exists locally
+        run: |
+          docker image inspect --format 'id={{.Id}} os={{.Os}} arch={{.Architecture}} size={{.Size}}' \
+            "$SCRIPTED_IDP_IMAGE"
+
+      # The Dockerfile already runs the selftest at build time; this re-runs it from the built image with
+      # no network, so it must pass with every input inside the image (plan §14.10). The image runs as
+      # UID 65534, so the host output directory is world-writable.
+      - name: Run selftest
+        run: |
+          out="${RUNNER_TEMP}/scripted-idp-selftest"
+          mkdir -p "$out"
+          chmod 0777 "$out"
+          docker run --rm --network none --volume "${out}:/out" "$SCRIPTED_IDP_IMAGE" selftest --out /out
+
+      - name: Upload selftest evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: scripted-idp-selftest-${{ matrix.runner }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/scripted-idp-selftest/results.json
+            ${{ runner.temp }}/scripted-idp-selftest/versions.json
+          if-no-files-found: warn
+          retention-days: 30
+
+  # Advisory, nightly. Other JDK builds of the supported line (plan §14.6). Failures do not fail the run.
+  alt-jdk:
+    name: Alternative JDK (${{ matrix.name }}, advisory)
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    continue-on-error: true
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: Temurin 21, distribution: temurin, jdk: '21' }
+          - { name: Semeru 21 OpenJ9, distribution: semeru, jdk: '21' }
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up ${{ matrix.name }}
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: ${{ matrix.distribution }}
+          java-version: ${{ matrix.jdk }}
+          cache: maven
+
+      - name: Verify
+        run: mvn -B -ntp -Dmaven.javadoc.skip=true verify
+
+  # Advisory, nightly. The latest early-access JDK from jdk.java.net (setup-java's `oracle-openjdk`
+  # distribution accepts `N-ea`). Move to the next EA line after each GA, every March and September.
+  ea:
+    name: Early-Access JDK (${{ matrix.jdk }}, advisory)
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    continue-on-error: true
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        jdk: ['28-ea']
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up OpenJDK ${{ matrix.jdk }}
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: oracle-openjdk
+          java-version: ${{ matrix.jdk }}
+          cache: maven
+
+      - name: Verify
+        run: mvn -B -ntp -Dmaven.javadoc.skip=true verify
+
+  # Gating from M1. Until M1 there is no public type to document (plan §12.3 M0), so the job is disabled.
+  # At M1: remove `if: false`, and replace the javadoc JDK step with a checksum-pinned Corretto 26
+  # install (as Soklet's CI does), since the pom runs javadoc from ${env.REVETSEC_JAVADOC_HOME}. Keep it
+  # at 26 to match the pom's Java API offline links (src/main/javadoc/links/java-26); move both together.
+  javadoc:
+    name: Javadoc (from M1)
+    if: false
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up the javadoc JDK (Corretto 26)
+        id: javadoc-jdk
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: corretto
+          java-version: '26'
+
+      - name: Export the javadoc JDK
+        env:
+          JAVADOC_JDK_PATH: ${{ steps.javadoc-jdk.outputs.path }}
+        run: echo "REVETSEC_JAVADOC_HOME=${JAVADOC_JDK_PATH}" >> "$GITHUB_ENV"
+
+      - name: Set up Corretto 17
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: corretto
+          java-version: '17'
+          cache: maven
+
+      - name: Build Javadoc (doclint warnings are errors)
+        run: mvn -B -ntp -DskipTests -Dmaven.javadoc.failOnWarnings=true package
+
+  # ---------------------------------------------------------------------------------------------------
+  # Later milestones (plan §10.3). Uncomment and complete each job when its milestone starts.
+  # "[inferred]" marks a start the plan does not fix explicitly.
+  # ---------------------------------------------------------------------------------------------------
+
+  # integration: from M3 (Keycloak OAuth legs gating), M4 (OIDC), M5 (node-oidc-provider, at+jwt,
+  # introspection), M7/M8/M8b (scripted-IdP SAML signing, encryption, SLO). PR: one JDK on x86-64;
+  # nightly: all JDKs plus one ubuntu-24.04-arm leg. Images pinned by digest. A post-step fails on any
+  # skipped IT and on fewer *ScriptedIdpIT than interop/scripted-idp/it-floor.txt. No Docker = failure.
+  #
+  # integration:
+  #   name: Integration (JDK ${{ matrix.jdk }}, ${{ matrix.runner }})
+  #   runs-on: ${{ matrix.runner }}
+  #   steps:
+  #     - checkout; setup-java (corretto)
+  #     - build the scripted-IdP image as in scripted-idp-image (load: true, push: false, GHA cache)  # from M7
+  #     - run: mvn -B -ntp -Pintegration -Dmaven.javadoc.skip=true -Dscripted-idp.image="$SCRIPTED_IDP_IMAGE" verify
+  #     - run: fail on skipped tests or an IT count under the floor in target/failsafe-reports/TEST-*.xml
+
+  # conformance: from M4. OIDF suite release-v5.3.1 (digest-pinned) through the conformance/ Java driver:
+  # Basic, Config, Form Post and Refresh RP plans; oidcc-client-test-plan with private_key_jwt from M6.
+  # Nightly + release branches; Basic RP per PR if under ~10 min. Logs archived as artifacts.
+  #
+  # conformance:
+  #   name: OIDF Conformance
+  #   steps:
+  #     - run: mvn -B -ntp -f conformance/pom.xml verify
+
+  # mcp-client-auth: from M5 [inferred]. Advisory, nightly. MCP conformance `auth` client scenarios through
+  # the Java shim in conformance/, with an expected-failures baseline (CIMD unsupported).
+
+  # metadata-drift: from M3 [inferred; the metadata fixture suite is captured at M3 start]. Advisory,
+  # nightly; opens an issue (needs `issues: write` at job level only). Structural diff of live
+  # discovery/JWKS/SAML metadata against the latest fixture snapshot.
+
+  # examples: from M5. Gating on PR. Install core (-DskipTests -Dmaven.javadoc.skip=true), check out
+  # revetsec/revetsec-soklet at the SHA in examples/revetsec-soklet.sha and install it against this
+  # core, then `mvn -B -ntp -f examples/pom.xml verify`. Soklet is built at a pinned SHA until 4.0.0 is
+  # on Central.
+
+  # interop: from M6. Advisory; nightly + dispatch, never on fork PRs. Machine-to-machine live probes
+  # (Entra, Okta, Auth0, GitHub, GitHub Actions OIDC). Secrets only in the `interop` environment
+  # (main-only deployment rule) and the reviewer-gated `interop-manual` environment for dispatch. The
+  # Actions OIDC leg sets `permissions: id-token: write` at job level only.
+
+  # interop-selfhosted: from M6 [inferred] for Hydra and Dex; SimpleSAMLphp 2.5 and mock-saml from M7;
+  # authentik (outbound SCIM client) from M11. Advisory, nightly; Hydra, Dex and authentik become gating
+  # after 30 consecutive green nightly runs. Shibboleth IdP 5 is a workflow_dispatch capture at M8 and RC-2.
+
+  # scim: from M11. Gating on PR. scim2-tester (hash-pinned) against the examples/ server.
+
+  # differential: from RC-1 (JOSE, JSON gating), RC-2 (SAML, with the scripted IdP's libxmlsec1 oracle via
+  # the same image pre-step and -Dscripted-idp.image), RC-3 (SCIM). PR touching saml/jose/scim/internal.json
+  # + nightly: `mvn -B -ntp -f differential/pom.xml verify`. Any unexplained divergence blocks.

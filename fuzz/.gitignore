@@ -1,0 +1,13 @@
+# Build output and Jazzer's generated fuzzing state. Curated seeds under
+# src/test/resources/**/<Class>Inputs/<method>/ are committed; raw generated inputs and crash files
+# are not (see README.md, "Corpus policy").
+/target/
+/.cifuzz-corpus/
+/src/test/resources/**/crash-*
+/src/test/resources/**/timeout-*
+/src/test/resources/**/slow-unit-*
+/src/test/resources/**/oom-*
+/crash-*
+/timeout-*
+/slow-unit-*
+/oom-*

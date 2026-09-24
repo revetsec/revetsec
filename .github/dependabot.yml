@@ -1,0 +1,86 @@
+version: 2
+updates:
+  # RevetSec core has zero runtime dependencies; these entries watch build/test tooling only.
+  # Every entry waits 7 days after a release before proposing it (cooldown), so a compromised or
+  # yanked release is less likely to reach a PR.
+  - package-ecosystem: maven
+    directory: "/"
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+
+  # Jazzer fuzz tooling (own pom, never published).
+  - package-ecosystem: maven
+    directory: "/fuzz"
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+
+  # The packaged-consumer fixture pins its build plugins. Its RevetSec dependency tracks the core
+  # version under test (passed by verify-packaged-consumer.py), never a released version.
+  - package-ecosystem: maven
+    directory: "/verification/packaged-consumer"
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    ignore:
+      - dependency-name: "com.revetsec:revetsec"
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+
+  # The scripted IdP's hash-pinned Python wheels (plan §14.10).
+  - package-ecosystem: pip
+    directory: "/interop/scripted-idp"
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    ignore:
+      # lxml and xmlsec move only together, in a manual PR: lxml must match the libxml2 bundled in the
+      # xmlsec wheel (plan §14.10, §16).
+      - dependency-name: "lxml"
+      - dependency-name: "xmlsec"
+
+  # The scripted IdP's digest-pinned base image.
+  - package-ecosystem: docker
+    directory: "/interop/scripted-idp"
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    ignore:
+      # The wheels are cp313, so only patch and digest updates of the python image are taken.
+      - dependency-name: "python"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+
+  # ClusterFuzzLite builder image (digest-pinned base-builder-jvm:v1; the Maven version and SHA-512 ARGs
+  # move by hand). Move the clusterfuzzlite-build-fuzzers and -run-fuzzers digests in the docker://
+  # steps of .github/workflows/cflite_*.yml by hand in the same PR; do not rely on Dependabot for them.
+  - package-ecosystem: docker
+    directory: "/.clusterfuzzlite"
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+
+  # node-oidc-provider test OP (plan §14.8): npm lockfile and digest-pinned node base image.
+  - package-ecosystem: npm
+    directory: "/interop/node-oidc-provider"
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+  - package-ecosystem: docker
+    directory: "/interop/node-oidc-provider"
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7

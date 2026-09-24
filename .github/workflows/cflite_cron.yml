@@ -1,0 +1,126 @@
+name: ClusterFuzzLite corpus pruning
+
+# Nightly corpus pruning (plan §14.5), which the ClusterFuzzLite GitHub Actions guide requires wherever
+# batch fuzzing (cflite_batch.yml) runs. It is its own workflow, not a second job of the batch run:
+# ClusterFuzzLite stores a target's corpus under the same name in batch and prune mode, and an artifact
+# name can be uploaded only once per workflow run.
+#
+# Pruning replaces corpus/<target>/ on the corpus storage repository with the minimized corpus. The
+# storage design, the owner setup it needs and the digest-pinned ClusterFuzzLite images are described
+# in the header of cflite_batch.yml. Until corpus storage is configured, this workflow skips with a
+# notice. Move the image digests together with cflite_batch.yml and cflite_pr.yml.
+
+on:
+  schedule:
+    # After the 07:47 batch run and its 45-minute timeout.
+    - cron: '17 9 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Shared with cflite_batch.yml: both write the storage repository, so they never overlap. A run is
+# never cancelled part-way; a second trigger waits.
+concurrency:
+  group: cflite-corpus
+  cancel-in-progress: false
+
+defaults:
+  run:
+    # Explicit bash gives `-eo pipefail` on every run step.
+    shell: bash
+
+jobs:
+  corpus-pruning:
+    name: Corpus Pruning (${{ matrix.sanitizer }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    # Holds CFLITE_STORAGE_TOKEN (cflite_batch.yml, owner setup, step 3).
+    environment: cflite-storage
+    permissions:
+      # The build step clones the repository itself. No `actions: read`: nothing here downloads an
+      # artifact.
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        # The sanitizer batch fuzzing uses (cflite_batch.yml).
+        sanitizer: [address]
+    steps:
+      - name: Check the corpus storage configuration
+        id: storage
+        env:
+          STORAGE_REPO: ${{ vars.CFLITE_STORAGE_REPO }}
+          STORAGE_TOKEN: ${{ secrets.CFLITE_STORAGE_TOKEN }}
+          THIS_REPO: ${{ github.repository }}
+          REF: ${{ github.ref }}
+        run: |
+          missing=()
+          [[ -n "$STORAGE_REPO" ]] || missing+=("the Actions variable CFLITE_STORAGE_REPO")
+          [[ -n "$STORAGE_TOKEN" ]] || missing+=("the secret CFLITE_STORAGE_TOKEN")
+          if (( ${#missing[@]} > 0 )); then
+            printf -v what '%s, ' "${missing[@]}"
+            echo "::notice title=Corpus pruning skipped::Corpus storage is not configured (not set: ${what%, }). The corpus is never kept in workflow artifacts; see the owner setup in the header of .github/workflows/cflite_batch.yml."
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # The storage repository takes one corpus, the default branch's.
+          if [[ "$REF" != refs/heads/main ]]; then
+            echo "::notice title=Corpus pruning skipped::The corpus is written only from main; this run is on ${REF}."
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [[ ! "$STORAGE_REPO" =~ ^[A-Za-z0-9-]+/[A-Za-z0-9._-]+$ ]]; then
+            echo "::error title=Invalid CFLITE_STORAGE_REPO::The Actions variable CFLITE_STORAGE_REPO must be <owner>/<name> of the corpus storage repository."
+            exit 1
+          fi
+          if [[ "${STORAGE_REPO,,}" == "${THIS_REPO,,}" ]]; then
+            echo "::error title=Invalid CFLITE_STORAGE_REPO::The corpus storage repository must be a separate repository, not ${THIS_REPO}."
+            exit 1
+          fi
+          if ! GIT_TERMINAL_PROMPT=0 git -c credential.helper= ls-remote --quiet \
+            "https://x-access-token:${STORAGE_TOKEN}@github.com/${STORAGE_REPO}.git" > /dev/null; then
+            echo "::error title=Corpus storage unreachable::CFLITE_STORAGE_TOKEN cannot read ${STORAGE_REPO}. Check that the repository exists and that the token has not expired and has Contents: Read and write on it."
+            exit 1
+          fi
+          echo "configured=true" >> "$GITHUB_OUTPUT"
+          echo "Corpus storage: ${STORAGE_REPO} (branch main)"
+
+      - name: Build fuzzers (${{ matrix.sanitizer }})
+        id: build
+        if: steps.storage.outputs.configured == 'true'
+        uses: docker://gcr.io/oss-fuzz-base/clusterfuzzlite-build-fuzzers:v1@sha256:fde96247c3488104b96822156a6e107d58487140115247a34e1f967c23df5604
+        env:
+          LANGUAGE: jvm
+          SANITIZER: ${{ matrix.sanitizer }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CFL_PLATFORM: github
+          LOW_DISK_SPACE: 'True'
+          BAD_BUILD_CHECK: 'true'
+          UPLOAD_BUILD: 'false'
+          DRY_RUN: 'false'
+          KEEP_UNAFFECTED_FUZZ_TARGETS: 'true'
+
+      - name: Prune corpus (${{ matrix.sanitizer }})
+        id: run
+        if: steps.storage.outputs.configured == 'true'
+        uses: docker://gcr.io/oss-fuzz-base/clusterfuzzlite-run-fuzzers:v1@sha256:4c1febe9ddec42ff005c6115f7769608d1beff57e96ae365d5c4fea1013926dc
+        env:
+          LANGUAGE: jvm
+          SANITIZER: ${{ matrix.sanitizer }}
+          MODE: prune
+          # Total budget, shared by all targets.
+          FUZZ_SECONDS: '600'
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CFL_PLATFORM: github
+          LOW_DISK_SPACE: 'True'
+          DRY_RUN: 'false'
+          REPORT_UNREPRODUCIBLE_CRASHES: 'false'
+          MINIMIZE_CRASHES: 'false'
+          PARALLEL_FUZZING: 'false'
+          OUTPUT_SARIF: 'false'
+          # Reads corpus/<target>/ from the storage repository's main branch and replaces it with the
+          # pruned corpus.
+          GIT_STORE_REPO: 'https://x-access-token:${{ secrets.CFLITE_STORAGE_TOKEN }}@github.com/${{ vars.CFLITE_STORAGE_REPO }}.git'
+          GIT_STORE_BRANCH: main
+          GIT_STORE_BRANCH_COVERAGE: gh-pages

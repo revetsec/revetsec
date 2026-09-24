@@ -1,0 +1,125 @@
+name: ClusterFuzzLite PR fuzzing
+
+# PR-diff fuzzing of the Jazzer targets in fuzz/ (plan §14.5), following the ClusterFuzzLite GitHub
+# Actions guide. The build integration is .clusterfuzzlite/ (Dockerfile, build.sh, project.yaml).
+# Deterministic seed-corpus replay is the gating `fuzz-regression` job in ci.yml; this workflow adds
+# coverage-guided fuzzing of every target. A crash fails the job and is uploaded as an artifact.
+#
+# Starting corpus. When the corpus storage repository that nightly batch fuzzing writes
+# (cflite_batch.yml) is configured and publicly readable, fuzzing starts from its corpus, cloned
+# anonymously: this workflow holds no storage token, and fork pull requests never receive secrets.
+# Otherwise it starts from the checked-in seed corpus only, with no ClusterFuzzLite filestore at all
+# (NO_CLUSTERFUZZ_DEPLOYMENT), so it never reads a workflow artifact that another pull request could
+# have uploaded. See the header of cflite_batch.yml for the storage design and the owner setup.
+#
+# The ClusterFuzzLite images run as digest-pinned docker:// steps with the environment the
+# google/clusterfuzzlite v1 actions pass (header of cflite_batch.yml). Move the digests together with
+# cflite_batch.yml and cflite_cron.yml.
+#
+# At M0 the only target is PlaceholderFuzzTests, which exercises no RevetSec code; it exists so the
+# build check has a target, and is deleted at M1.
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    # Explicit bash gives `-eo pipefail` on every run step.
+    shell: bash
+
+jobs:
+  pr-fuzzing:
+    name: PR Fuzzing (${{ matrix.sanitizer }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    permissions:
+      # The build step clones the repository itself. No `actions: read`: the corpus never comes from
+      # workflow artifacts.
+      contents: read
+    concurrency:
+      group: ${{ github.workflow }}-${{ matrix.sanitizer }}-${{ github.ref }}
+      cancel-in-progress: true
+    strategy:
+      fail-fast: false
+      matrix:
+        # JVM projects support only address and undefined. RevetSec has no native code, so
+        # undefined would add nothing.
+        sanitizer: [address]
+    steps:
+      - name: Choose the starting corpus
+        id: storage
+        env:
+          STORAGE_REPO: ${{ vars.CFLITE_STORAGE_REPO }}
+        run: |
+          seeds_only() {
+            echo "::notice title=PR fuzzing from seeds only::$1 Fuzzing starts from the checked-in seed corpus; see the owner setup in the header of .github/workflows/cflite_batch.yml."
+            {
+              echo "repo-url="
+              echo "seeds-only=true"
+            } >> "$GITHUB_OUTPUT"
+            exit 0
+          }
+          [[ -n "$STORAGE_REPO" ]] \
+            || seeds_only "The Actions variable CFLITE_STORAGE_REPO is not set or not visible to this run."
+          [[ "$STORAGE_REPO" =~ ^[A-Za-z0-9-]+/[A-Za-z0-9._-]+$ ]] \
+            || seeds_only "CFLITE_STORAGE_REPO is not <owner>/<name>."
+          url="https://github.com/${STORAGE_REPO}.git"
+          GIT_TERMINAL_PROMPT=0 git -c credential.helper= ls-remote --quiet "$url" > /dev/null \
+            || seeds_only "${STORAGE_REPO} is not publicly readable."
+          {
+            echo "repo-url=${url}"
+            echo "seeds-only=false"
+          } >> "$GITHUB_OUTPUT"
+          echo "Starting from the batch corpus in ${STORAGE_REPO} (branch main), read anonymously."
+
+      - name: Build fuzzers (${{ matrix.sanitizer }})
+        id: build
+        uses: docker://gcr.io/oss-fuzz-base/clusterfuzzlite-build-fuzzers:v1@sha256:fde96247c3488104b96822156a6e107d58487140115247a34e1f967c23df5604
+        env:
+          LANGUAGE: jvm
+          SANITIZER: ${{ matrix.sanitizer }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CFL_PLATFORM: github
+          LOW_DISK_SPACE: 'True'
+          BAD_BUILD_CHECK: 'true'
+          UPLOAD_BUILD: 'false'
+          DRY_RUN: 'false'
+          KEEP_UNAFFECTED_FUZZ_TARGETS: 'true'
+
+      - name: Run fuzzers (${{ matrix.sanitizer }})
+        id: run
+        uses: docker://gcr.io/oss-fuzz-base/clusterfuzzlite-run-fuzzers:v1@sha256:4c1febe9ddec42ff005c6115f7769608d1beff57e96ae365d5c4fea1013926dc
+        env:
+          LANGUAGE: jvm
+          SANITIZER: ${{ matrix.sanitizer }}
+          MODE: code-change
+          # Total budget, shared by all targets.
+          FUZZ_SECONDS: '300'
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CFL_PLATFORM: github
+          LOW_DISK_SPACE: 'True'
+          DRY_RUN: 'false'
+          REPORT_UNREPRODUCIBLE_CRASHES: 'false'
+          MINIMIZE_CRASHES: 'false'
+          PARALLEL_FUZZING: 'false'
+          OUTPUT_SARIF: 'false'
+          # Anonymous, read-only: the corpus is downloaded and never pushed in code-change mode.
+          GIT_STORE_REPO: ${{ steps.storage.outputs.repo-url }}
+          GIT_STORE_BRANCH: main
+          GIT_STORE_BRANCH_COVERAGE: gh-pages
+          # Seeds only: no filestore, so no corpus download and no crash upload by ClusterFuzzLite.
+          NO_CLUSTERFUZZ_DEPLOYMENT: ${{ steps.storage.outputs.seeds-only }}
+
+      # With a filestore, ClusterFuzzLite uploads crashes itself (crashes-<target>). Without one, this
+      # uploads what it saved under $GITHUB_WORKSPACE/out/artifacts.
+      - name: Upload crashes (seed-corpus-only run)
+        if: failure() && steps.storage.outputs.seeds-only == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: cflite-pr-crashes-${{ matrix.sanitizer }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ github.workspace }}/out/artifacts
+          if-no-files-found: ignore
+          retention-days: 14
