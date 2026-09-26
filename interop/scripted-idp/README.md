@@ -1,6 +1,6 @@
 # Scripted IdP
 
-RevetSec's own SAML test IdP, built to be the SAML partner in RevetSec's integration tests.
+Revetsec's own SAML test IdP, built to be the SAML partner in Revetsec's integration tests.
 It signs and encrypts with **libxmlsec1** (through python-xmlsec) and **signxml**, neither of
 which shares code with the JDK's XMLDSig (Apache Santuario). It is test tooling only, licensed
 Apache-2.0.

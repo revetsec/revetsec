@@ -15,9 +15,14 @@
  */
 
 /**
- * Internal codecs: Base64url, percent-encoding and {@code application/x-www-form-urlencoded}.
+ * Internal codecs: strict Base64 (base64url, standard and SAML POST), percent-encoding,
+ * {@code application/x-www-form-urlencoded} and query parameters, and strict UTF-8. Every decoder rejects malformed
+ * input with a checked {@link com.revetsec.internal.encoding.EncodingException} and never repairs or replaces it.
+ * Inputs of hundreds of millions of characters, far beyond every R8 bound, fail instead with
+ * {@link java.lang.ArithmeticException} where a length would pass {@link java.lang.Integer#MAX_VALUE}; each method
+ * that can do so documents it.
  * <p>
- * <strong>Not API.</strong> This package is public only because other RevetSec packages need access to it.
+ * <strong>Not API.</strong> This package is public only because other Revetsec packages need access to it.
  * Its types may change or disappear in any release without notice, are not covered by semantic versioning,
  * are excluded from the published Javadoc, and never appear in a public or protected signature of an
  * exported package.

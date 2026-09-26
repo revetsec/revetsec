@@ -1,6 +1,6 @@
 # Keycloak test realm (test-only)
 
-`revetsec-test-realm.json` is a minimal Keycloak realm for RevetSec's Tier-1 interop legs: self-hosted test partners for CI's planned `integration` job (see `.github/workflows/ci.yml`). Keycloak 26.7.x imports it at startup with `--import-realm` from `/opt/keycloak/data/import/`. The M0 spike in `../spike/` measures the import cost; see `../spike/TIER1-RESULTS.md`.
+`revetsec-test-realm.json` is a minimal Keycloak realm for Revetsec's Tier-1 interop legs: self-hosted test partners for CI's planned `integration` job (see `.github/workflows/ci.yml`). Keycloak 26.7.x imports it at startup with `--import-realm` from `/opt/keycloak/data/import/`. The M0 spike in `../spike/` measures the import cost; see `../spike/TIER1-RESULTS.md`.
 
 **Everything in this file is test-only.** The credentials below are fixed public values that protect nothing. Never import this realm into a Keycloak that is reachable from outside a throwaway test network, and never reuse these values anywhere else.
 

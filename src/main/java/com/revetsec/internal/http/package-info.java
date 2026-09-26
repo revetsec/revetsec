@@ -18,7 +18,7 @@
  * Internal HTTP transport on the JDK {@code HttpClient}: bounded response bodies, deadlines and the lazily
  * created default client.
  * <p>
- * <strong>Not API.</strong> This package is public only because other RevetSec packages need access to it.
+ * <strong>Not API.</strong> This package is public only because other Revetsec packages need access to it.
  * Its types may change or disappear in any release without notice, are not covered by semantic versioning,
  * are excluded from the published Javadoc, and never appear in a public or protected signature of an
  * exported package.

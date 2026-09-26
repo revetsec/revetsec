@@ -15,10 +15,11 @@
  */
 
 /**
- * Internal cryptographic helpers built on the JDK's JCA providers, such as constant-time comparison and
- * entropy.
+ * Internal cryptographic helpers built on the JDK's JCA providers: entropy, constant-time comparison, HMAC-SHA256,
+ * HKDF-SHA256, AES-256-GCM, and the StateSealer v1 format with its type labels and the set-once accessor that the
+ * protocol packages use to reach those labels.
  * <p>
- * <strong>Not API.</strong> This package is public only because other RevetSec packages need access to it.
+ * <strong>Not API.</strong> This package is public only because other Revetsec packages need access to it.
  * Its types may change or disappear in any release without notice, are not covered by semantic versioning,
  * are excluded from the published Javadoc, and never appear in a public or protected signature of an
  * exported package.

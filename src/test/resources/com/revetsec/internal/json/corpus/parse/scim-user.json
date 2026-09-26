@@ -1,0 +1,62 @@
+{
+  "schemas": [
+    "urn:ietf:params:scim:schemas:core:2.0:User",
+    "urn:ietf:params:scim:schemas:extension:enterprise:2.0:User"
+  ],
+  "id": "2819c223-7f76-453a-919d-413861904646",
+  "externalId": "701984",
+  "userName": "ada@example.com",
+  "name": {
+    "formatted": "Ms. Ada M\u00fcller-Example",
+    "familyName": "Müller-Example",
+    "givenName": "Ada",
+    "honorificPrefix": "Ms."
+  },
+  "displayName": "Ada Müller-Example 🚀",
+  "nickName": "Ada",
+  "profileUrl": "https://login.example.com/ada",
+  "emails": [
+    {"value": "ada@example.com", "type": "work", "primary": true},
+    {"value": "ada@home.example.org", "type": "home"}
+  ],
+  "phoneNumbers": [
+    {"value": "+1-555-555-8377", "type": "work"}
+  ],
+  "addresses": [
+    {
+      "type": "work",
+      "streetAddress": "100 Universal City Plaza\nBuilding 2",
+      "locality": "Hollywood",
+      "region": "CA",
+      "postalCode": "91608",
+      "country": "US",
+      "primary": true
+    }
+  ],
+  "locale": "en-US",
+  "timezone": "America/Los_Angeles",
+  "active": true,
+  "groups": [
+    {
+      "value": "e9e30dba-f08f-4109-8486-d5c6a331660a",
+      "$ref": "https://example.com/v2/Groups/e9e30dba-f08f-4109-8486-d5c6a331660a",
+      "display": "Tour Guides"
+    }
+  ],
+  "urn:ietf:params:scim:schemas:extension:enterprise:2.0:User": {
+    "employeeNumber": "701984",
+    "costCenter": "4130",
+    "manager": {
+      "value": "26118915-6090-4610-87e4-49d8ca9f808d",
+      "$ref": "../Users/26118915-6090-4610-87e4-49d8ca9f808d",
+      "displayName": "John Smith"
+    }
+  },
+  "meta": {
+    "resourceType": "User",
+    "created": "2010-01-23T04:56:22Z",
+    "lastModified": "2011-05-13T04:42:34Z",
+    "version": "W/\"a330bc54f0671c9\"",
+    "location": "https://example.com/v2/Users/2819c223-7f76-453a-919d-413861904646"
+  }
+}

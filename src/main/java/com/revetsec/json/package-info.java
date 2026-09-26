@@ -15,10 +15,14 @@
  */
 
 /**
- * Reserved for RevetSec's public, immutable JSON value types, shared by the JOSE, OAuth, OpenID Connect and
- * SCIM packages.
+ * Revetsec's public, immutable JSON value model (RFC 8259), shared by the JOSE, OAuth, OpenID Connect and SCIM
+ * packages: {@link com.revetsec.json.JsonValue} and its six permitted types.
  * <p>
- * It depends only on the root package.
+ * There is no public parser. Values come from Revetsec's protocol types, or are built with the types' factories and
+ * {@link com.revetsec.json.JsonObject#builder()}. {@link com.revetsec.json.JsonValue#toJson()} serializes a value,
+ * and every {@code toString()} is redacted, so logging a value never shows its content.
+ * <p>
+ * It depends only on the root package, apart from Revetsec's internal packages.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */

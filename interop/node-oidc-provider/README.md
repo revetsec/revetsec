@@ -1,6 +1,6 @@
 # node-oidc-provider test OP (test-only)
 
-A strict, spec-exact OpenID Provider for RevetSec's Tier-1 interop legs, planned to gate from M5 in CI's `integration` job (see `.github/workflows/ci.yml`). It is built from:
+A strict, spec-exact OpenID Provider for Revetsec's Tier-1 interop legs, planned to gate from M5 in CI's `integration` job (see `.github/workflows/ci.yml`). It is built from:
 
 - [`oidc-provider`](https://github.com/panva/node-oidc-provider) **9.12.2** (MIT, Copyright Filip Skokan), installed unmodified from registry.npmjs.org. `package-lock.json` pins it and its 39 transitive packages with integrity hashes;
 - `server.js`, our own code (Apache-2.0): one test client, one test account, and an auto-login interaction handler;

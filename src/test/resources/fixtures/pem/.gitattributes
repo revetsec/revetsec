@@ -1,0 +1,2 @@
+# TEST ONLY fixtures (see README.txt): keep the bytes exactly as OpenSSL wrote them.
+*.pem text eol=lf

@@ -450,7 +450,7 @@ elif [[ -f "$test_pki/server.pem" && -f "$test_pki/server-key.pem" && -f "$test_
 else
 	# A throwaway CA (P-256) and a localhost leaf, valid for one day.
 	openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes -days 1 \
-		-subj "/CN=RevetSec Tier-1 spike throwaway CA" \
+		-subj "/CN=Revetsec Tier-1 spike throwaway CA" \
 		-addext "basicConstraints=critical,CA:TRUE" -addext "keyUsage=critical,keyCertSign,cRLSign" \
 		-keyout "$work/ca-key.pem" -out "$work/ca.pem" >/dev/null 2>&1 || fail "openssl could not create the CA."
 	openssl req -new -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes -subj "/CN=localhost" \
@@ -630,7 +630,7 @@ oidf_smoke() {
 		record oidf "smoke" "$run" "FAIL" "could not list plans"
 		return
 	fi
-	# The RP test plans RevetSec plans to run must exist in the pinned release.
+	# The RP test plans Revetsec plans to run must exist in the pinned release.
 	if ! python3 - "$work/plans.json" >"$work/smoke.log" 2>&1 <<'PY'
 import json, sys
 names = {p.get("planName") for p in json.load(open(sys.argv[1]))}
@@ -656,7 +656,7 @@ PY
 	variant=$(python3 -c 'import json, urllib.parse; print(urllib.parse.quote(json.dumps({"client_registration": "static_client", "request_type": "plain_http_request"})))')
 	plan_id=$(curl -sk --max-time 10 --resolve "$resolve" -X POST -H 'Content-Type: application/json' \
 		"$base/api/plan?planName=oidcc-client-basic-certification-test-plan&variant=$variant" \
-		-d "{\"alias\":\"revetsec-spike-$run\",\"description\":\"RevetSec Tier-1 spike (test only)\",\"client\":{\"client_id\":\"$TEST_CLIENT_ID\",\"client_secret\":\"$TEST_CLIENT_SECRET\",\"redirect_uri\":\"$TEST_REDIRECT_URI\"}}" \
+		-d "{\"alias\":\"revetsec-spike-$run\",\"description\":\"Revetsec Tier-1 spike (test only)\",\"client\":{\"client_id\":\"$TEST_CLIENT_ID\",\"client_secret\":\"$TEST_CLIENT_SECRET\",\"redirect_uri\":\"$TEST_REDIRECT_URI\"}}" \
 		| python3 -c 'import json, sys; print(json.load(sys.stdin)["id"])' 2>/dev/null || true)
 	if [[ -z "$plan_id" ]]; then
 		record oidf "smoke" "$run" "FAIL" "POST /api/plan failed"

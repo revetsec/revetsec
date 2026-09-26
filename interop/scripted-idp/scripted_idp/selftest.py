@@ -392,7 +392,7 @@ class Selftest:
                 "inner Assertion signature verified")
 
     def case5(self):
-        """An rsa-1_5 EncryptedKey (a producer for RevetSec's negative tests)."""
+        """An rsa-1_5 EncryptedKey (a producer for Revetsec's negative tests)."""
         self._encrypted_assertion_case("case5-encrypted-assertion-gcm-rsa-1_5", RSA_1_5, 5)
         return "decrypted by libxmlsec1 and by pyca (PKCS#1 v1.5); inner Assertion signature verified"
 

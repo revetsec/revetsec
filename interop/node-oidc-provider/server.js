@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-// TEST-ONLY OpenID Provider for RevetSec's Tier-1 interop legs.
+// TEST-ONLY OpenID Provider for Revetsec's Tier-1 interop legs.
 //
 // It is built on oidc-provider (https://github.com/panva/node-oidc-provider,
 // MIT, Copyright Filip Skokan), which is installed unmodified from the npm

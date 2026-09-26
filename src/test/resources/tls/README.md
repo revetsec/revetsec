@@ -3,11 +3,11 @@
 > **TEST ONLY. PUBLIC. NEVER USE ANYWHERE ELSE.**
 >
 > Every file in this directory, including every private key and the test CA's private key, is committed to a public
-> repository. Anyone can read these keys and mint certificates with the test CA. Use them only in RevetSec's own tests
+> repository. Anyone can read these keys and mint certificates with the test CA. Use them only in Revetsec's own tests
 > and local test containers. Never use them to protect anything real, never deploy them, never copy them into another
 > project, and never add `test-ca.pem` to an operating-system, browser or JDK trust store.
 
-This directory holds the test CA and the TLS server certificate that RevetSec's in-process HTTPS test servers and
+This directory holds the test CA and the TLS server certificate that Revetsec's in-process HTTPS test servers and
 test containers use. HTTPS stays on in tests, so clients verify the server against this CA instead of turning
 verification off.
 
@@ -36,7 +36,7 @@ Everything below is fixed by `scripts/regenerate-test-pki.sh`. Only the key mate
 - **Validity:** every certificate is valid from `2026-01-01T00:00:00Z` to `2126-01-01T00:00:00Z` (100 years), so the
   fixtures do not expire and fixed-`Clock` tests from 2026 onward see valid certificates.
 - **Test CA** (`test-ca.pem`):
-  - subject `CN=RevetSec Test CA - DO NOT TRUST, O=RevetSec test fixtures - TEST ONLY`, self-signed, serial 1000;
+  - subject `CN=Revetsec Test CA - DO NOT TRUST, O=Revetsec test fixtures - TEST ONLY`, self-signed, serial 1000;
   - RSA-3072, `sha256WithRSAEncryption`;
   - `basicConstraints` critical `CA:TRUE, pathlen:0`; `keyUsage` critical `keyCertSign, cRLSign`;
   - `extendedKeyUsage` `serverAuth` only, so verifiers that apply a CA's extended key usage reject TLS client and
@@ -69,7 +69,7 @@ Everything below is fixed by `scripts/regenerate-test-pki.sh`. Only the key mate
       25 and 27 accepted a test-CA leaf for `evil.com`, and all four accepted a TLS client leaf and a leaf with an
       email SAN (observed 2026-09-23). So a JDK trust store that contains this CA trusts it for every name and purpose.
 - **Server leaf** (`server.pem`):
-  - subject `CN=localhost, O=RevetSec test fixtures - TEST ONLY`, serial 1001;
+  - subject `CN=localhost, O=Revetsec test fixtures - TEST ONLY`, serial 1001;
   - RSA-2048, `sha256WithRSAEncryption`, issued by the test CA;
   - `subjectAltName`, in this order: `DNS:localhost`, `IP:127.0.0.1`, `DNS:host.testcontainers.internal`,
     `DNS:host.docker.internal`;
@@ -87,7 +87,7 @@ Everything below is fixed by `scripts/regenerate-test-pki.sh`. Only the key mate
 - **Containers:** copy each file individually, read-only. Never bake these files into an image.
 
 Apple platform TLS clients (Safari, `URLSession`) reject TLS server certificates that are valid for more than 825
-days, so this leaf is not meant for browsers on macOS or iOS. RevetSec's tests use `java.net.http`, Python and Node
+days, so this leaf is not meant for browsers on macOS or iOS. Revetsec's tests use `java.net.http`, Python and Node
 clients, which do not apply that limit.
 
 ## Remote Docker host

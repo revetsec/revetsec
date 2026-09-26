@@ -1,12 +1,12 @@
-# RevetSec
+# Revetsec
 
 ### What Is It?
 
 A zero-dependency Java library for OAuth 2.0 clients and resource servers, OpenID Connect relying parties, JOSE, SAML 2.0 service providers and SCIM 2.0 servers.
 
-**RevetSec is pre-release, and no protocol code exists yet.** This README describes what it is being built to do; see [Status](#status).
+**Revetsec is pre-release, and no protocol code exists yet.** This README describes what it is being built to do; see [Status](#status) for what exists.
 
-RevetSec handles the application side of these protocols. It builds outbound requests, parses and validates what comes back, and hands your code a validated result or an exception. Your application keeps its own users, sessions, routes and storage.
+Revetsec handles the application side of these protocols. It builds outbound requests, parses and validates what comes back, and hands your code a validated result or an exception. Your application keeps its own users, sessions, routes and storage.
 
 Framework adapters for [Soklet](https://www.soklet.com) and the Servlet API are separate artifacts in their own repositories (see [Installation](#installation)).
 
@@ -14,7 +14,7 @@ Framework adapters for [Soklet](https://www.soklet.com) and the Servlet API are 
 
 Adding single sign-on, API protection or user provisioning to a Java application usually means assembling several libraries, one per protocol, each with its own dependency tree, release cadence and advisory stream.
 
-RevetSec aims to cover the common application-side needs of these protocols with one artifact and the JDK: one dependency, one version, and one place to report and track security issues.
+Revetsec aims to cover the common application-side needs of these protocols with one artifact and the JDK: one dependency, one version, and one place to report and track security issues.
 
 It is a library, not a framework or an identity server. It has protocol-specific APIs rather than one abstraction over every protocol, and it does not treat an OAuth token response as an authenticated identity.
 
@@ -55,7 +55,7 @@ Attributions are kept in [`NOTICE`](NOTICE).
 
 ### Installation
 
-RevetSec is a single JAR. JDK 17 or newer is required, with a minimum runtime of Java 17.0.3.
+Revetsec is a single JAR. JDK 17 or newer is required, with a minimum runtime of Java 17.0.3.
 
 **Nothing has been published yet, including snapshots.** The version is `1.0.0-SNAPSHOT` until the first release. To try the current source, install it into your local Maven repository:
 
@@ -89,7 +89,7 @@ dependencies {
 
 #### Framework adapters
 
-Each adapter lives in its own repository, and its README lists its coordinates. An adapter declares RevetSec core and its framework API as `provided` dependencies, so your application declares both.
+Each adapter lives in its own repository, and its README lists its coordinates. An adapter declares Revetsec core and its framework API as `provided` dependencies, so your application declares both.
 
 - [revetsec-soklet](https://github.com/revetsec/revetsec-soklet) for [Soklet](https://www.soklet.com)
 - [revetsec-servlet-jakarta](https://github.com/revetsec/revetsec-servlet-jakarta) for the `jakarta.servlet` API
@@ -110,9 +110,11 @@ Each area gets its own section here, with application code, when it lands.
 
 ### Status
 
-RevetSec is **pre-release**. The repository currently holds the build, contract tests, CI configuration and documents (milestone M0). The version is `1.0.0-SNAPSHOT`, and there is no compatibility promise before 1.0.0; see [COMPATIBILITY.md](COMPATIBILITY.md).
+Revetsec is **pre-release**. The version is `1.0.0-SNAPSHOT`, and there is no compatibility promise before 1.0.0; see [COMPATIBILITY.md](COMPATIBILITY.md).
 
-RevetSec has not been independently audited. Its security evidence is meant to be reproducible by anyone and will be listed in [`docs/`](docs/) as it is produced: conformance logs, the interop matrix, the threat model with its invariant-to-test map, review ledgers, penetration-test notes, and fuzz and mutation reports. None of it exists yet.
+The repository holds the build, contract tests, CI configuration and documents (milestone M0), and the shared foundations (milestone M1). The foundations are the exception root and error categories, `StateSealer` for sealing short-lived state with key rotation, a provisional outbound URI policy, and the JSON value model, plus internal parsers and a bounded HTTP helper that the protocol areas will use. No protocol area exists yet.
+
+Revetsec has not been independently audited. Its security evidence is meant to be reproducible by anyone and will be listed in [`docs/`](docs/) as it is produced: conformance logs, the interop matrix, the threat model with its invariant-to-test map, review ledgers, penetration-test notes, and fuzz and mutation reports. So far the [threat model](docs/threat-model.md) maps the foundations' invariants to their tests, and [fuzz/README.md](fuzz/README.md) records the foundations' local fuzzing runs and planted-defect checks; the rest does not exist yet.
 
 To report a vulnerability, see [SECURITY.md](SECURITY.md).
 

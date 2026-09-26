@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-"""Fail unless a RevetSec POM gives consumers zero compile, runtime or system dependencies.
+"""Fail unless a Revetsec POM gives consumers zero compile, runtime or system dependencies.
 
 Run it on the POM exactly as a consumer receives it: the file `mvn install` wrote
 into a local repository, or the file downloaded from Central. It checks INV-L1 and

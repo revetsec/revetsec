@@ -7,5 +7,5 @@
 # entry for that file. Every entry must still match its file, so stale entries fail the build.
 # Each entry states the evidence for its wording, or why the wording is not a claim.
 
-README.md|RevetSec has not been independently audited.|Required disclosure; states the absence of an audit and makes no claim.
-SECURITY.md|RevetSec has not been independently audited.|Required disclosure; states the absence of an audit and makes no claim.
+README.md|Revetsec has not been independently audited.|Required disclosure; states the absence of an audit and makes no claim.
+SECURITY.md|Revetsec has not been independently audited.|Required disclosure; states the absence of an audit and makes no claim.

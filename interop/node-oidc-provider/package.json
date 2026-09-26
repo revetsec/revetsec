@@ -2,7 +2,7 @@
   "name": "revetsec-interop-node-oidc-provider",
   "version": "0.0.0",
   "private": true,
-  "description": "Test-only OpenID Provider for RevetSec interop legs, built on oidc-provider. Never deploy it.",
+  "description": "Test-only OpenID Provider for Revetsec interop legs, built on oidc-provider. Never deploy it.",
   "license": "Apache-2.0",
   "type": "module",
   "main": "server.js",

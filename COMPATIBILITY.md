@@ -1,8 +1,8 @@
 # Compatibility Policy
 
-RevetSec is pre-release. The version is `1.0.0-SNAPSHOT`, and **there is no compatibility promise before 1.0.0**. Until then, any public type, member, default or behavior may change incompatibly, without deprecation.
+Revetsec is pre-release. The version is `1.0.0-SNAPSHOT`, and **there is no compatibility promise before 1.0.0**. Until then, any public type, member, default or behavior may change incompatibly, without deprecation.
 
-From 1.0.0, RevetSec follows [Semantic Versioning](https://semver.org/), with release tags `vX.Y.Z`:
+From 1.0.0, Revetsec follows [Semantic Versioning](https://semver.org/), with release tags `vX.Y.Z`:
 
 * **Major** (`2.0.0`): may remove or incompatibly change public API. Migration notes are provided in the CHANGELOG.
 * **Minor** (`1.1.0`): additive public API, and behavior changes documented under "Migration Notes" in the CHANGELOG.
@@ -17,12 +17,23 @@ Everything `public` or `protected` in the exported packages of the `revetsec` ar
 | Package | Planned contents |
 | --- | --- |
 | `com.revetsec` | shared, protocol-neutral types |
-| `com.revetsec.json` | JSON values that appear in public signatures (under review) |
+| `com.revetsec.json` | the immutable JSON value model that appears in public signatures |
 | `com.revetsec.jose` | JWS verification, JWK and JWK Sets, JWT validation |
 | `com.revetsec.oauth` | OAuth 2.0 client and resource server |
 | `com.revetsec.oidc` | OpenID Connect relying party |
 | `com.revetsec.saml` | SAML 2.0 service provider |
 | `com.revetsec.scim` | SCIM 2.0 server primitives |
+
+### Public types so far
+
+Milestone M1 (foundations) added the first public types. The other packages in the table above hold no types yet.
+
+| Package | Public types | Count |
+| --- | --- | --- |
+| `com.revetsec` | `RevetsecException` (abstract), `ErrorCategory`, `InvalidSealedStateException`, `StateSealer`, `SealingKey`, `OutboundUriPolicy` | 6, plus 1 nested: `StateSealer.Builder` |
+| `com.revetsec.json` | `JsonValue` (sealed), `JsonObject`, `JsonArray`, `JsonString`, `JsonNumber`, `JsonBoolean`, `JsonNull` | 7, plus 1 nested: `JsonObject.Builder` |
+
+`OutboundUriPolicy` is provisional: only `defaultInstance()` and `permits(URI)` exist, and the policy's final shape is decided before 1.0.0. `JsonValue`'s Javadoc designates its six permitted types for exhaustive matching, so they are frozen within a major version (see below).
 
 These are not API:
 
@@ -58,15 +69,17 @@ Each such change is listed under Security in the CHANGELOG, with migration notes
 
 * **Source and binary baseline:** Java 17 (`<release>17</release>`). There is no multi-release JAR.
 * **Minimum runtime:** Java 17.0.3, the first Java 17 update with the fixes for CVE-2022-21449 (ECDSA signature verification) and CVE-2022-21476 (XML Signature validation). Types that perform network I/O are planned to refuse to build on an older runtime unless the application explicitly acknowledges it.
+* **JDK modules:** the JAR uses `java.base`, `java.net.http` (the JDK `HttpClient`, for outbound HTTPS) and `java.logging` (a guarded `FINE` log record when an observer throws). SAML adds `java.xml` and `java.xml.crypto`. A runtime image built with `jlink` needs these modules; the packaged-consumer check runs `jdeps` to keep the list within these five (INV-L1). `jdeps` does not see security providers, which the JDK loads as services: on Java 17 and 21 the elliptic-curve provider, which TLS with EC keys and ECDSA need, is in `jdk.crypto.ec`, so a `jlink` image there needs that module too. On Java 25 and 27, that provider is in `java.base`.
+* **Outbound HTTP (from M2):** the types that make requests will take the application's `HttpClient`, which must not follow redirects. When none is supplied, Revetsec creates one default client per JVM on first network use, pinned to HTTP/1.1 and never following redirects. That client starts the JDK's own threads; Revetsec's own code starts none.
 * **Tested:** CI is configured to build and test on Java 17, 21, 25 and 27 (Amazon Corretto).
-* RevetSec uses no `sun.*` APIs and no `setAccessible` (a source-policy test bans both), so `--add-opens` is never required.
+* Revetsec uses no `sun.*` APIs and no `setAccessible` (a source-policy test bans both), so `--add-opens` is never required.
 * The JAR declares `Automatic-Module-Name: com.revetsec`.
 
 ## Dependencies
 
 The core `revetsec` artifact declares **zero compile or runtime dependencies**. A Maven Enforcer `bannedDependencies` rule enforces this at build time, and it is visible in the published POM. The annotation dependencies (JSpecify, JSR 305 concurrency annotations and Error Prone annotations) are `provided` scope and are not needed at runtime.
 
-Each adapter depends on RevetSec core and on its framework's API, both `provided`, so applications declare both explicitly.
+Each adapter depends on Revetsec core and on its framework's API, both `provided`, so applications declare both explicitly.
 
 ## Supported algorithms
 
@@ -84,7 +97,7 @@ Not yet written. The SAML service provider's deviations from the saml2int SP req
 
 Not yet written. It will be a dated provider matrix, modeled on Pyranid's table of wire-compatible databases. Each row will name the provider and version observed, say whether its CI leg gates or is advisory, carry an "observed on YYYY-MM-DD" date, and list divergences. Any combination found unsafe will carry an explicit warning.
 
-**No production consumer.** RevetSec has no production consumer, and none is planned for 1.0.0, including for SCIM. The evidence at 1.0.0 will come from self-hosted test partners, conformance suites run locally, and dated captures from provider accounts.
+**No production consumer.** Revetsec has no production consumer, and none is planned for 1.0.0, including for SCIM. The evidence at 1.0.0 will come from self-hosted test partners, conformance suites run locally, and dated captures from provider accounts.
 
 ## Conformance suites
 

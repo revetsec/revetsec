@@ -1,0 +1,73 @@
+# JSONTestSuite i_ files: Revetsec's intended outcome for each one, under both codec profiles.
+#
+# Format: one line per i_ file in test_parsing/, sorted by name, fields separated by a single tab:
+#   <file name><TAB><protocol-profile outcome><TAB><SCIM-profile outcome>
+# An outcome is "accept" or "reject:<KIND>", where KIND names a constant of
+# com.revetsec.internal.json.JsonParseException.Kind. Lines that are blank or start with '#' are ignored.
+# The protocol profile is JsonLimits.protocolDocument(...) and the SCIM profile is JsonLimits.scim(...), each
+# with its default structural limits.
+#
+# The test runner (com.revetsec.internal.json.JsonTestSuiteTests) parses every i_ file under both profiles and
+# checks the result against its line here. Stale entries fail the build: a line for a file that does not exist,
+# an i_ file with no line, a duplicate or malformed line, or an outcome (accept, or the rejection's Kind) that
+# differs from what the codec does.
+#
+# Drafted 2026-09-24 from the codec rules in the M1 plan, before the codec existed; the runner confirms each line.
+#
+# Why each group has its outcome:
+# - Numbers are strict RFC 8259 numbers, parsed exactly (BigDecimal), so size alone never rejects one: integers
+#   of any length up to NUMBER_LENGTH (1,024 characters) are accepted, and so are values outside the range of a
+#   double. EXPONENT rejects a number whose written exponent or adjusted decimal exponent
+#   (precision - scale - 1) exceeds 10,000 in magnitude.
+#     accept:   123.456e-789 (adjusted exponent -787); -1e+9999 and 1.5e+9999 (9,999); 21-, 30- and 48-digit
+#               integers.
+#     EXPONENT: 0.4e006699...999006 (a 131-digit exponent); 123123e100000 and -123123e100000; 123e-10000000.
+# - An escaped high surrogate must be followed at once by an escaped low surrogate, and an escaped low surrogate
+#   must follow an escaped high one. Anything else is UNPAIRED_SURROGATE, in member names too.
+# - The input is decoded as strict UTF-8 before it is tokenized, so ill-formed UTF-8 anywhere is INVALID_UTF8:
+#   overlong forms, UTF-8-encoded surrogates (CESU-8), code points above U+10FFFF, the bytes C0, C1 and F5-FF,
+#   lone continuation bytes, and truncated sequences.
+# - UTF-16 and UTF-32 input is not supported. The three UTF-16 files are rejected as INVALID_UTF8 because each
+#   is ill-formed UTF-8 (FF at offset 0, or E9 followed by 00). These three lines rely on UTF-8 being validated
+#   across the whole input before tokenizing; a codec that tokenized first would report SYNTAX for the two
+#   files without a BOM.
+# - A leading UTF-8 byte-order mark (EF BB BF) is BOM.
+# - Depth is limited to 32 under the protocol profile and 64 under the SCIM profile, so 500 nested arrays is
+#   DEPTH under both.
+# - The profiles differ only in depth, node, input-size and SCIM case-folded duplicate checks. No i_ file reaches
+#   any of them except depth, where both profiles reject, so every line has the same outcome in both columns.
+i_number_double_huge_neg_exp.json	accept	accept
+i_number_huge_exp.json	reject:EXPONENT	reject:EXPONENT
+i_number_neg_int_huge_exp.json	accept	accept
+i_number_pos_double_huge_exp.json	accept	accept
+i_number_real_neg_overflow.json	reject:EXPONENT	reject:EXPONENT
+i_number_real_pos_overflow.json	reject:EXPONENT	reject:EXPONENT
+i_number_real_underflow.json	reject:EXPONENT	reject:EXPONENT
+i_number_too_big_neg_int.json	accept	accept
+i_number_too_big_pos_int.json	accept	accept
+i_number_very_big_negative_int.json	accept	accept
+i_object_key_lone_2nd_surrogate.json	reject:UNPAIRED_SURROGATE	reject:UNPAIRED_SURROGATE
+i_string_1st_surrogate_but_2nd_missing.json	reject:UNPAIRED_SURROGATE	reject:UNPAIRED_SURROGATE
+i_string_1st_valid_surrogate_2nd_invalid.json	reject:UNPAIRED_SURROGATE	reject:UNPAIRED_SURROGATE
+i_string_UTF-16LE_with_BOM.json	reject:INVALID_UTF8	reject:INVALID_UTF8
+i_string_UTF-8_invalid_sequence.json	reject:INVALID_UTF8	reject:INVALID_UTF8
+i_string_UTF8_surrogate_U+D800.json	reject:INVALID_UTF8	reject:INVALID_UTF8
+i_string_incomplete_surrogate_and_escape_valid.json	reject:UNPAIRED_SURROGATE	reject:UNPAIRED_SURROGATE
+i_string_incomplete_surrogate_pair.json	reject:UNPAIRED_SURROGATE	reject:UNPAIRED_SURROGATE
+i_string_incomplete_surrogates_escape_valid.json	reject:UNPAIRED_SURROGATE	reject:UNPAIRED_SURROGATE
+i_string_invalid_lonely_surrogate.json	reject:UNPAIRED_SURROGATE	reject:UNPAIRED_SURROGATE
+i_string_invalid_surrogate.json	reject:UNPAIRED_SURROGATE	reject:UNPAIRED_SURROGATE
+i_string_invalid_utf-8.json	reject:INVALID_UTF8	reject:INVALID_UTF8
+i_string_inverted_surrogates_U+1D11E.json	reject:UNPAIRED_SURROGATE	reject:UNPAIRED_SURROGATE
+i_string_iso_latin_1.json	reject:INVALID_UTF8	reject:INVALID_UTF8
+i_string_lone_second_surrogate.json	reject:UNPAIRED_SURROGATE	reject:UNPAIRED_SURROGATE
+i_string_lone_utf8_continuation_byte.json	reject:INVALID_UTF8	reject:INVALID_UTF8
+i_string_not_in_unicode_range.json	reject:INVALID_UTF8	reject:INVALID_UTF8
+i_string_overlong_sequence_2_bytes.json	reject:INVALID_UTF8	reject:INVALID_UTF8
+i_string_overlong_sequence_6_bytes.json	reject:INVALID_UTF8	reject:INVALID_UTF8
+i_string_overlong_sequence_6_bytes_null.json	reject:INVALID_UTF8	reject:INVALID_UTF8
+i_string_truncated-utf-8.json	reject:INVALID_UTF8	reject:INVALID_UTF8
+i_string_utf16BE_no_BOM.json	reject:INVALID_UTF8	reject:INVALID_UTF8
+i_string_utf16LE_no_BOM.json	reject:INVALID_UTF8	reject:INVALID_UTF8
+i_structure_500_nested_arrays.json	reject:DEPTH	reject:DEPTH
+i_structure_UTF-8_BOM_empty_object.json	reject:BOM	reject:BOM

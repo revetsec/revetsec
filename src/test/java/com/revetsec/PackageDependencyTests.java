@@ -56,7 +56,7 @@ import java.util.TreeMap;
 import java.util.TreeSet;
 
 /**
- * Enforces RevetSec's package dependency graph (plan 6 and the M0 plan).
+ * Enforces Revetsec's package dependency graph (plan 6 and the M0 plan).
  * <p>
  * Dependencies come from import declarations and from every resolved type or member reference in the code, so
  * fully qualified names count too. The rules:
@@ -65,12 +65,14 @@ import java.util.TreeSet;
  *   <li>Each internal package belongs to the exported package it serves ({@link #INTERNAL_PACKAGE_LAYERS}), and
  *   is held to that package's rules in both directions: {@code saml} cannot reach {@code internal.jose}, and
  *   {@code internal.json} cannot reach {@code jose}. Extracting a protocol later stays mechanical.</li>
- *   <li>{@code internal.xml} is used only by {@code saml}, and {@code internal.oauth} only by {@code oauth} and
- *   {@code oidc}.</li>
+ *   <li>{@code internal.xml} is used only by {@code saml}, {@code internal.oauth} only by {@code oauth} and
+ *   {@code oidc}, and {@code internal.http} only by {@code jose}, {@code oauth}, {@code oidc} and their internal
+ *   packages ({@link #RESTRICTED_INTERNAL_PACKAGES}), so the HTTP helper stays out of {@code saml}, {@code scim},
+ *   {@code json}, the root package and every other internal package.</li>
  *   <li>Every package is in the graph and has a {@code package-info.java} annotated {@code @NullMarked}.</li>
  *   <li>No public or protected signature of an exported type mentions a {@code com.revetsec.internal} type: not
  *   a supertype at any depth (reached through a package-private class, say), not a member it declares or inherits
- *   from a non-exported RevetSec class, and not an internal annotation that is {@code @Documented} or
+ *   from a non-exported Revetsec class, and not an internal annotation that is {@code @Documented} or
  *   runtime-retained on the type, its members or their parameters.</li>
  * </ul>
  *
@@ -114,11 +116,19 @@ final class PackageDependencyTests {
 			INTERNAL + ".xml", SAML);
 
 	/**
-	 * Internal packages that only the listed packages may use (besides themselves).
+	 * Internal packages that only the listed packages may use (besides themselves). The check matches the importing
+	 * package by name, not by layer, so an internal package that may use a restricted one is listed in its own right.
+	 * <p>
+	 * {@code internal.http} is for the protocols that fetch over the network: JWKS (jose), token, introspection and
+	 * revocation endpoints (oauth), and discovery and UserInfo (oidc), and for their internal packages
+	 * {@code internal.jose} and {@code internal.oauth}, where that fetching code may live (M1 plan, "Contract-list
+	 * changes" item 3; open question 4 leaves the JWKS fetch's package to M2). Its layer is the root package, which
+	 * every package may use, so without this row {@code saml}, {@code scim} and {@code json} could reach it too.
 	 */
 	static final Map<String, Set<String>> RESTRICTED_INTERNAL_PACKAGES = Map.of(
 			INTERNAL + ".xml", Set.of(SAML),
-			INTERNAL + ".oauth", Set.of(OAUTH, OIDC));
+			INTERNAL + ".oauth", Set.of(OAUTH, OIDC),
+			INTERNAL + ".http", Set.of(JOSE, OAUTH, OIDC, INTERNAL + ".jose", INTERNAL + ".oauth"));
 
 	@Test
 	void mainSourcesRespectPackageDependencyRules() throws IOException {
@@ -266,7 +276,7 @@ final class PackageDependencyTests {
 				}
 
 				private void record(@Nullable String target, Tree node) {
-					if (target == null || target.equals(source) || !isRevetSecPackage(target))
+					if (target == null || target.equals(source) || !isRevetsecPackage(target))
 						return;
 					targets.putIfAbsent(target, analysis.location(compilationUnit, node));
 				}
@@ -276,7 +286,7 @@ final class PackageDependencyTests {
 		return dependencies;
 	}
 
-	private static boolean isRevetSecPackage(String packageName) {
+	private static boolean isRevetsecPackage(String packageName) {
 		return packageName.equals(ROOT) || packageName.startsWith(ROOT + ".");
 	}
 

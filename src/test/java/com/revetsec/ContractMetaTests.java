@@ -45,11 +45,15 @@ import java.util.stream.Stream;
  */
 final class ContractMetaTests {
 	private static final String BANNED_CALLS = "com/revetsec/BannedCallsFixture.java";
+	private static final String INTERNAL_HTTP_USERS = "com.revetsec.internal.http may be used only by "
+			+ "[com.revetsec.internal.jose, com.revetsec.internal.oauth, com.revetsec.jose, com.revetsec.oauth, "
+			+ "com.revetsec.oidc]";
 
 	/**
-	 * Reviewed-exception lists for the public-api fixture, in place of the real (empty) ones: entries in the
-	 * binary-name form that messages print, which exempt their types, plus canonical {@code Outer.Nested} spellings of
-	 * other nested types and a missing type, which exempt nothing and must be reported as stale or misspelled.
+	 * Reviewed-exception lists for the public-api fixture, in place of the real ones: entries in the binary-name form
+	 * that messages print, which exempt their types, plus canonical {@code Outer.Nested} spellings of other nested
+	 * types, a missing type and (for {@code OPEN_ABSTRACT_TYPES}) a sealed class, which exempt nothing and must be
+	 * reported as stale or misspelled.
 	 */
 	private static final Set<String> FIXTURE_VERIFIED_TYPE_SOURCES = Set.of(
 			"com.revetsec.oidc.IdTokenValidatorFixture",
@@ -59,6 +63,43 @@ final class ContractMetaTests {
 	private static final Set<String> FIXTURE_R1_EXCEPTIONS = Set.of(
 			"com.revetsec.scim.ScimErrorsFixture$LegacyError",
 			"com.revetsec.scim.ScimErrorsFixture.RetiredError");
+	private static final Set<String> FIXTURE_OPEN_ABSTRACT_TYPES = Set.of(
+			"com.revetsec.RevetsecException",
+			"com.revetsec.AbstractControlFixture",
+			"com.revetsec.OpenAbstractHolder.NestedOpenFixture",
+			"com.revetsec.oauth.OAuthFixtureException",
+			"com.revetsec.RenamedAbstractFixture");
+	/**
+	 * The app-constructible exception factories for the public-api fixture, in place of the real (empty) list: one
+	 * entry that exempts a factory, and stale entries for a missing method, an instance method and a canonical
+	 * {@code Outer.Nested} spelling.
+	 */
+	private static final Set<String> FIXTURE_APP_CONSTRUCTIBLE_EXCEPTION_FACTORIES = Set.of(
+			"com.revetsec.oauth.TokenFixtureException#fromStatus(java.lang.Integer)",
+			"com.revetsec.oauth.TokenFixtureException#fromRetiredStatus(java.lang.Integer)",
+			"com.revetsec.oauth.TokenFixtureException#getReason()",
+			"com.revetsec.LeafFixtureException.Nested#describe(java.lang.Integer)");
+
+	/**
+	 * The mutable-static allowlist for the source-policy fixture, in place of the real (empty) one: a row that exempts
+	 * a seeded field, then a duplicate of it, stale rows (a canonical {@code Outer.Nested} spelling, a field the rule
+	 * does not report, a missing class) and malformed rows (too few values, a blank reason, surrounding whitespace),
+	 * which exempt nothing; and last, a row that exempts one of two fields declared on the same line.
+	 */
+	private static final List<List<String>> FIXTURE_MUTABLE_STATIC_ALLOWLIST = List.of(
+			List.of("com.revetsec.MutableStaticFixture$LookupTable", "VALUES",
+					"private lookup table, never written after class initialization"),
+			List.of("com.revetsec.MutableStaticFixture$LookupTable", "VALUES", "the same field again"),
+			List.of("com.revetsec.MutableStaticFixture.LookupTable", "UNLISTED", "canonical spelling, exempts nothing"),
+			List.of("com.revetsec.MutableStaticFixture$Controls", "LIMIT", "a field the rule does not report"),
+			List.of("com.revetsec.RenamedFixture", "TABLE", "a class that no longer exists"),
+			List.of("com.revetsec.MutableStaticFixture", "COUNT"),
+			List.of("com.revetsec.MutableStaticFixture", "BUFFER", " "),
+			List.of(" com.revetsec.MutableStaticFixture", "NAMES", "surrounding whitespace"),
+			List.of("com.revetsec.MutableStaticBranchesFixture", "LEFT", "one of two fields declared on one line"));
+	private static final String MUTABLE_STATIC_FIXTURE = "com/revetsec/MutableStaticFixture.java";
+	private static final String MUTABLE_STATIC_BRANCHES_FIXTURE = "com/revetsec/MutableStaticBranchesFixture.java";
+	private static final String MUTABLE_STATIC_ALLOWLIST = "mutable-static SourcePolicyTests.MUTABLE_STATIC_ALLOWLIST";
 
 	private static Path fixture(String name) {
 		Path fixture = ContractSupport.repositoryRoot().resolve("src/test/resources/contract-fixtures").resolve(name);
@@ -70,11 +111,12 @@ final class ContractMetaTests {
 	void publicApiContractReportsExactlyTheSeededViolations() throws IOException {
 		// The rendering of an annotated type in a nullness message differs across JDKs, so it is left out.
 		List<String> violations = PublicApiContractTests.findViolations(fixture("public-api"),
-						FIXTURE_VERIFIED_TYPE_SOURCES, FIXTURE_R1_EXCEPTIONS).stream()
+						FIXTURE_VERIFIED_TYPE_SOURCES, FIXTURE_R1_EXCEPTIONS, FIXTURE_OPEN_ABSTRACT_TYPES,
+						FIXTURE_APP_CONSTRUCTIBLE_EXCEPTION_FACTORIES).stream()
 				.map(violation -> violation.replaceFirst(" at .* \\(R2\\)$", " (R2)"))
 				.toList();
 
-		Assertions.assertEquals(List.of(
+		List<String> expected = new ArrayList<>(List.of(
 				"PublicApiContractTests.R1_EXCEPTIONS entry \"com.revetsec.scim.ScimErrorsFixture.RetiredError\": "
 						+ "stale or misspelled entry; use the binary name (Outer$Nested, as violation messages print it) "
 						+ "of an exported type in the analyzed sources",
@@ -172,12 +214,102 @@ final class ContractMetaTests {
 				"com.revetsec.scim.ScimErrorsFixture$LegacyError#LegacyError(java.lang.String): public concrete types "
 						+ "have private constructors (R1)",
 				"com.revetsec.scim.ScimErrorsFixture$RetiredError: public concrete types are final, or sealed with only "
-						+ "final or sealed permitted subclasses (R1)"), violations);
+						+ "final or sealed permitted subclasses (R1)"));
+		expected.addAll(m1PublicApiViolations());
+		expected.sort(null);
+		Assertions.assertEquals(expected, violations);
+	}
+
+	/**
+	 * The public-api fixture's seeded violations of the rules M1 added (M1 plan, "Contract-list changes" item 2):
+	 * open abstract classes (G6-1), exported Throwables (G6-1) and observer interfaces (G6-4), with the stale entries of
+	 * their reviewed lists. The controls (the fixture's RevetsecException and AbstractControlFixture, both listed; the
+	 * sealed OAuthFixtureException and its final TokenFixtureException, whose listed fromStatus factory, package-private
+	 * factory and instance accessor are allowed; LegacyTokenFixtureException, whose inherited ReopenedFixtureException
+	 * factory is reported on ReopenedFixtureException only; CompliantObserver, which uses every allowlisted hook
+	 * parameter type; ExtendedObserver, which extends it; LeakyChildObserver, whose inherited LeakyObserver members are
+	 * reported on LeakyObserver only; and ExportedHooks, which is not an observer) are reported nowhere. Members an
+	 * observer inherits from an interface that is not an exported observer (a package-private one, or an exported one
+	 * with another name) are reported on the observer.
+	 */
+	private static List<String> m1PublicApiViolations() {
+		String openAbstract = ": exported abstract classes are sealed, so only Revetsec extends them; an open one needs "
+				+ "a reviewed entry in OPEN_ABSTRACT_TYPES (G6-1)";
+		String staleOpenAbstract = "\": stale or misspelled entry; use the binary name (Outer$Nested, as violation "
+				+ "messages print it) of an unsealed exported abstract class in the analyzed sources";
+		String staticMethod = ": exported exceptions have no public or protected static methods, because Revetsec "
+				+ "creates them; a factory applications need is a reviewed entry in APP_CONSTRUCTIBLE_EXCEPTION_FACTORIES "
+				+ "(G6-1)";
+		String staleFactory = "\": stale or misspelled entry; name a public or protected static method of an exported "
+				+ "exception as violation messages print it (Outer$Nested#method(erased parameter types))";
+		String observerStatic = ": an observer's only static method is disabledInstance(), which takes no arguments and "
+				+ "returns the observer (G6-4)";
+		String abstractHook = ": observer hooks are default methods that do nothing, so an application overrides only "
+				+ "the hooks it needs (G6-4)";
+		String hookParameter = ": observer hook parameters are enums, boxed numbers or Boolean, Duration, Instant, URI, "
+				+ "String or Revetsec exceptions, not ";
+		String serialVersionUid = "#serialVersionUID: declare it private static final long; serialization ignores one "
+				+ "that is not static and final, the specification requires a long, and private keeps it out of the API "
+				+ "(G6-1)";
+
+		List<String> violations = new ArrayList<>(List.of(
+				"PublicApiContractTests.OPEN_ABSTRACT_TYPES entry \"com.revetsec.OpenAbstractHolder.NestedOpenFixture"
+						+ staleOpenAbstract,
+				"PublicApiContractTests.OPEN_ABSTRACT_TYPES entry \"com.revetsec.RenamedAbstractFixture" + staleOpenAbstract,
+				"PublicApiContractTests.OPEN_ABSTRACT_TYPES entry \"com.revetsec.oauth.OAuthFixtureException"
+						+ staleOpenAbstract,
+				"com.revetsec.OpenAbstractFixture" + openAbstract,
+				"com.revetsec.OpenAbstractHolder$NestedOpenFixture" + openAbstract,
+				"com.revetsec.oauth.ReopenedFixtureException" + openAbstract,
+				"com.revetsec.RogueFixtureException: every exported Throwable extends com.revetsec.RevetsecException (G6-1)",
+				"com.revetsec.UnversionedFixtureException: exported Throwable declares no serialVersionUID; declare "
+						+ "private static final long serialVersionUID (G6-1)",
+				"com.revetsec.MisversionedFixtureException" + serialVersionUid,
+				"com.revetsec.SerialVersionFixtures$UnfinalFixtureException" + serialVersionUid,
+				"com.revetsec.SerialVersionFixtures$InstanceFixtureException" + serialVersionUid,
+				"com.revetsec.SerialVersionFixtures$UnprivateFixtureException" + serialVersionUid,
+				"com.revetsec.oauth.TokenFixtureException#fromDescription(java.lang.String)" + staticMethod,
+				"com.revetsec.oauth.ReopenedFixtureException#fromLegacyStatus(java.lang.Integer)" + staticMethod,
+				"com.revetsec.LeafFixtureException#describe(java.lang.Integer) (inherited from "
+						+ "com.revetsec.BaseFixtureException)" + staticMethod,
+				"PublicApiContractTests.APP_CONSTRUCTIBLE_EXCEPTION_FACTORIES entry "
+						+ "\"com.revetsec.LeafFixtureException.Nested#describe(java.lang.Integer)" + staleFactory,
+				"PublicApiContractTests.APP_CONSTRUCTIBLE_EXCEPTION_FACTORIES entry "
+						+ "\"com.revetsec.oauth.TokenFixtureException#fromRetiredStatus(java.lang.Integer)" + staleFactory,
+				"PublicApiContractTests.APP_CONSTRUCTIBLE_EXCEPTION_FACTORIES entry "
+						+ "\"com.revetsec.oauth.TokenFixtureException#getReason()" + staleFactory,
+				"com.revetsec.oauth.LeakyObserver#NAME: observer interfaces declare no fields, only default void hooks and "
+						+ "a static disabledInstance() (G6-4)",
+				"com.revetsec.oauth.LeakyObserver#disabledInstance()" + observerStatic,
+				"com.revetsec.oauth.LeakyObserver#fromDefaults()" + observerStatic,
+				"com.revetsec.oauth.LeakyObserver#didStart(java.lang.String)" + abstractHook,
+				"com.revetsec.oauth.LeakyObserver#didFinish(): observer hooks return void (G6-4)",
+				"com.revetsec.oauth.LeakyObserver#didSee(java.lang.Object) parameter 0" + hookParameter
+						+ "type variable T (G6-4)",
+				"com.revetsec.oauth.SilentObserver#didHide(java.lang.String) (inherited from "
+						+ "com.revetsec.oauth.HiddenHooks)" + abstractHook,
+				"com.revetsec.oauth.SilentObserver#disabledInstance(java.lang.String)" + observerStatic,
+				"com.revetsec.oauth.SilentObserver: observer interfaces declare a static disabledInstance() (G6-4)",
+				"com.revetsec.oauth.InheritingObserver#didRotate(java.lang.String) (inherited from "
+						+ "com.revetsec.oauth.ExportedHooks)" + abstractHook,
+				"com.revetsec.oauth.InheritingObserver#didConceal(java.lang.String) (inherited from "
+						+ "com.revetsec.oauth.HiddenObserver)" + abstractHook));
+
+		// One seeded violation per kind of type outside the hook allowlist.
+		String didFail = "com.revetsec.oauth.LeakyObserver#didFail(int,java.lang.String[],java.util.List,"
+				+ "java.util.Optional,java.lang.Object,java.io.IOException,java.math.BigDecimal,java.lang.Character,"
+				+ "com.revetsec.CompliantFixture,com.revetsec.RogueFixtureException)";
+		List<String> disallowedTypes = List.of("int", "java.lang.String[]", "java.util.List", "java.util.Optional",
+				"java.lang.Object", "java.io.IOException", "java.math.BigDecimal", "java.lang.Character",
+				"com.revetsec.CompliantFixture", "com.revetsec.RogueFixtureException");
+		for (int index = 0; index < disallowedTypes.size(); ++index)
+			violations.add(didFail + " parameter " + index + hookParameter + disallowedTypes.get(index) + " (G6-4)");
+		return violations;
 	}
 
 	@Test
 	void packageDependencyContractReportsExactlyTheSeededViolations() throws IOException {
-		Assertions.assertEquals(List.of(
+		Assertions.assertEquals(Stream.of(
 				"com.revetsec.extra: package is not in the package dependency graph; add it to "
 						+ "PackageDependencyTests deliberately",
 				"com.revetsec.internal.json uses com.revetsec.jose "
@@ -215,8 +347,16 @@ final class ContractMetaTests {
 				"com.revetsec.scim uses com.revetsec.internal.xml (com/revetsec/scim/ScimUsesXmlFixture.java:19): "
 						+ "com.revetsec.scim may depend only on [com.revetsec, com.revetsec.json], not on "
 						+ "com.revetsec.internal.xml (part of "
-						+ "com.revetsec.saml)"
-						+ ""), PackageDependencyTests.findViolations(fixture("package-dependencies")));
+						+ "com.revetsec.saml)",
+				// Only jose, oauth, oidc, internal.jose and internal.oauth may use internal.http; each of those five has
+				// a control that is not reported.
+				"com.revetsec.json uses com.revetsec.internal.http (com/revetsec/json/JsonUsesHttpFixture.java:27): "
+						+ INTERNAL_HTTP_USERS,
+				"com.revetsec.saml uses com.revetsec.internal.http (com/revetsec/saml/SamlUsesHttpFixture.java:19): "
+						+ INTERNAL_HTTP_USERS,
+				"com.revetsec.scim uses com.revetsec.internal.http (com/revetsec/scim/ScimUsesHttpFixture.java:19): "
+						+ INTERNAL_HTTP_USERS).sorted().toList(),
+				PackageDependencyTests.findViolations(fixture("package-dependencies")));
 	}
 
 	@Test
@@ -247,12 +387,86 @@ final class ContractMetaTests {
 		expect(expected, "non-namespace-dom-lookup", "com/revetsec/internal/xml/XmlFixture.java", 29);
 		expect(expected, "xml-factory-outside-internal-xml", "com/revetsec/saml/SamlFixture.java", 25);
 		expect(expected, "non-namespace-dom-lookup", "com/revetsec/saml/SamlFixture.java", 26, 27);
+		// R10: internal.crypto and the two sealer files. json/ScopeControlFixture.java is the out-of-scope control.
+		expect(expected, "constant-time-comparison", "com/revetsec/internal/crypto/ComparisonFixture.java", 27, 28, 29,
+				30, 31, 32);
+		expect(expected, "constant-time-comparison", "com/revetsec/StateSealer.java", 24);
+		expect(expected, "constant-time-comparison", "com/revetsec/SealingKey.java", 24);
+		// G7-7: scim and internal.json.
+		expect(expected, "ascii-case-fold", "com/revetsec/scim/CaseFoldFixture.java", 26, 27, 28, 29, 30, 31, 32);
+		expect(expected, "ascii-case-fold", "com/revetsec/internal/json/JsonCaseFoldFixture.java", 19, 27, 28);
+		// G6-4: internal/ObserverDispatch.java is exempt from logging only.
+		expect(expected, "logging", "com/revetsec/LoggingFixture.java", 27, 28, 29, 30, 31, 32, 33, 34, 35);
+		expect(expected, "console-output", "com/revetsec/internal/ObserverDispatch.java", 33);
+		// R4, G6-10: LookupTable.VALUES (line 49) is allowlisted; the stale, duplicate and malformed rows are reported.
+		expect(expected, "mutable-static", MUTABLE_STATIC_FIXTURE, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38,
+				45, 50, 84, 86);
+		// Each branch of a conditional or switch initializer is checked, and EnumSet.of is not an immutable factory.
+		expect(expected, "mutable-static", MUTABLE_STATIC_BRANCHES_FIXTURE, 35, 36, 37, 38, 42, 48, 54, 55, 56);
+		expected.addAll(List.of(
+				MUTABLE_STATIC_ALLOWLIST + " entry \"com.revetsec.MutableStaticFixture$LookupTable#VALUES\"",
+				MUTABLE_STATIC_ALLOWLIST + " entry \"com.revetsec.MutableStaticFixture.LookupTable#UNLISTED\"",
+				MUTABLE_STATIC_ALLOWLIST + " entry \"com.revetsec.MutableStaticFixture$Controls#LIMIT\"",
+				MUTABLE_STATIC_ALLOWLIST + " entry \"com.revetsec.RenamedFixture#TABLE\"",
+				MUTABLE_STATIC_ALLOWLIST + " row 6",
+				MUTABLE_STATIC_ALLOWLIST + " row 7",
+				MUTABLE_STATIC_ALLOWLIST + " row 8"));
 
-		List<String> reported = SourcePolicyTests.findViolations(fixture("source-policy")).stream()
+		List<String> reported = SourcePolicyTests.findViolations(fixture("source-policy"),
+						FIXTURE_MUTABLE_STATIC_ALLOWLIST).stream()
 				.map(violation -> violation.substring(0, violation.indexOf(": ")))
 				.sorted()
 				.toList();
 		Assertions.assertEquals(expected.stream().sorted().toList(), reported);
+	}
+
+	/**
+	 * Allowlist rows are checked like the other reviewed-exception lists: a repeated row, one that names no reported
+	 * field (misspelled, renamed or no longer mutable) and a malformed one are each reported with the reason, and a
+	 * reported field names itself in the form a row uses.
+	 */
+	@Test
+	void mutableStaticAllowlistRowsAreCheckedForStalenessAndForm() throws IOException {
+		List<String> violations = SourcePolicyTests.findViolations(fixture("source-policy"),
+				FIXTURE_MUTABLE_STATIC_ALLOWLIST);
+		String stale = ": stale or misspelled entry; name a field that mutable-static reports, by the binary name of "
+				+ "its class (Outer$Nested, as violation messages print it) and its name";
+		String malformed = ": malformed row; expected {\"<binary class name>\", \"<field name>\", \"<why it is "
+				+ "safe>\"}, with no blank value and no surrounding whitespace";
+
+		Assertions.assertEquals(List.of(
+				MUTABLE_STATIC_ALLOWLIST + " entry \"com.revetsec.MutableStaticFixture$LookupTable#VALUES\": "
+						+ "duplicate entry; list each field once",
+				MUTABLE_STATIC_ALLOWLIST + " entry \"com.revetsec.MutableStaticFixture.LookupTable#UNLISTED\"" + stale,
+				MUTABLE_STATIC_ALLOWLIST + " entry \"com.revetsec.MutableStaticFixture$Controls#LIMIT\"" + stale,
+				MUTABLE_STATIC_ALLOWLIST + " entry \"com.revetsec.RenamedFixture#TABLE\"" + stale,
+				MUTABLE_STATIC_ALLOWLIST + " row 6" + malformed,
+				MUTABLE_STATIC_ALLOWLIST + " row 7" + malformed,
+				MUTABLE_STATIC_ALLOWLIST + " row 8" + malformed), violations.stream()
+				.filter(violation -> violation.startsWith(MUTABLE_STATIC_ALLOWLIST))
+				.toList());
+		assertReported(violations, "mutable-static " + MUTABLE_STATIC_FIXTURE
+				+ ":50: com.revetsec.MutableStaticFixture$LookupTable#UNLISTED: no mutable static state");
+		assertReported(violations, "mutable-static " + MUTABLE_STATIC_FIXTURE
+				+ ":45: com.revetsec.MutableStaticFixture$Constants#VALUES: ");
+		assertNotReported(violations, "com.revetsec.MutableStaticFixture$LookupTable#VALUES: no mutable static state");
+	}
+
+	/**
+	 * A line that declares several reported fields names each of them, so every allowlist row the line needs can be
+	 * written from one run; a field that a row exempts drops out of its line (R4, G6-10).
+	 */
+	@Test
+	void mutableStaticNamesEveryReportedFieldOnALine() throws IOException {
+		List<String> violations = SourcePolicyTests.findViolations(fixture("source-policy"),
+				FIXTURE_MUTABLE_STATIC_ALLOWLIST);
+
+		assertReported(violations, "mutable-static " + MUTABLE_STATIC_BRANCHES_FIXTURE
+				+ ":54: com.revetsec.MutableStaticBranchesFixture#first, "
+				+ "com.revetsec.MutableStaticBranchesFixture#second: no mutable static state");
+		assertReported(violations, "mutable-static " + MUTABLE_STATIC_BRANCHES_FIXTURE
+				+ ":55: com.revetsec.MutableStaticBranchesFixture#RIGHT: no mutable static state");
+		assertNotReported(violations, "com.revetsec.MutableStaticBranchesFixture#LEFT");
 	}
 
 	/**
@@ -262,7 +476,7 @@ final class ContractMetaTests {
 	@Test
 	void everySourcePolicyAlternativeHasItsOwnSeededLine() throws IOException {
 		Map<String, List<String>> alternativesByLine = SourcePolicyTests.alternativeIdsByKey(
-				SourcePolicyTests.findDetections(fixture("source-policy")));
+				SourcePolicyTests.findDetections(fixture("source-policy"), FIXTURE_MUTABLE_STATIC_ALLOWLIST));
 
 		List<String> unexercised = SourcePolicyTests.alternativeIds().stream()
 				.filter(alternative -> !alternativesByLine.containsValue(List.of(alternative)))

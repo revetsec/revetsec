@@ -1,7 +1,7 @@
 name: CI
 
-# M0 subset of plan §10.3. Jobs that start in a later milestone are listed at the end as commented
-# stubs, each naming the milestone it starts in.
+# The M0 and M1 subset of plan §10.3. Jobs that start in a later milestone are listed at the end as
+# commented stubs, each naming the milestone it starts in.
 #
 # Every action is pinned to a full commit SHA (the trailing comment is the tag it was resolved from with
 # `git ls-remote`, peeled for annotated tags). Dependabot's github-actions entry keeps the pins current.
@@ -32,7 +32,8 @@ defaults:
 jobs:
   # Gating. Tier 0 only: contract tests (PublicApiContractTests, PackageDependencyTests, SourcePolicyTests,
   # ContractMetaTests) and ClaimsLintTests all run inside `verify`, so the plan's `claims-lint` job is
-  # covered here. Javadoc is skipped on every leg until M1 (plan §12.3 M0).
+  # covered here. Javadoc is built only by the `javadoc` job, from its pinned JDK; every other job passes
+  # -Dmaven.javadoc.skip=true.
   test:
     name: Test (JDK ${{ matrix.jdk }})
     runs-on: ubuntu-24.04
@@ -154,9 +155,11 @@ jobs:
         run: mvn -B -ntp -Pspotbugs -Dmaven.javadoc.skip=true verify
 
   # Gating (INV-L1). Installs core into an isolated local repository, then checks the installed POM
-  # (zero compile/runtime/system dependencies), the JAR's contents and Automatic-Module-Name, a Maven
-  # consumer's resolved class path (exactly the RevetSec JAR), and the jdeps module list. The oldest and
-  # newest supported JDKs each build, consume and analyze the JAR. A Gradle consumer joins from M1.
+  # (zero compile/runtime/system dependencies), the JAR's contents and Automatic-Module-Name, what a Maven
+  # consumer and a Gradle consumer resolve from that repository (exactly the Revetsec JAR, with no
+  # dependency of its own), that both consumers compile warning-free and run calls to the public API
+  # without the provided-scope annotation JARs, and the jdeps module list. The oldest and newest supported
+  # JDKs each build, consume and analyze the JAR, and run Gradle.
   packaged-consumer:
     name: Packaged Consumer (JDK ${{ matrix.jdk }})
     runs-on: ubuntu-24.04
@@ -185,18 +188,29 @@ jobs:
           python3 -m unittest discover -s verification -p 'test_*.py'
           python3 -m unittest discover -s verification/packaged-consumer -p 'test_*.py'
 
+      # The Gradle distribution is pinned by SHA-256 in verify-packaged-consumer.py (GRADLE_VERSION and
+      # GRADLE_DISTRIBUTION_SHA256), which checks the archive before extracting anything from it. Dependabot
+      # does not update this pin: move the URL here, the constants there, CONTRIBUTING.md and
+      # verification/README.md together (test_verify_packaged_consumer.py fails while they disagree).
+      - name: Download the pinned Gradle distribution
+        run: >-
+          curl --proto '=https' --tlsv1.2 --fail --location --silent --show-error --retry 3
+          --output "${RUNNER_TEMP}/gradle-9.8.0-bin.zip"
+          https://services.gradle.org/distributions/gradle-9.8.0-bin.zip
+
       - name: Install core into an isolated local repository
         run: >-
           mvn -B -ntp -Dmaven.repo.local="${RUNNER_TEMP}/consumer-repository"
           -Dmaven.javadoc.skip=true -DskipTests clean install
 
-      - name: Verify installed POM, JAR, Maven consumer and jdeps module list
+      - name: Verify installed POM, JAR, Maven and Gradle consumers, and jdeps module list
         env:
           PYTHONDONTWRITEBYTECODE: '1'
         run: >-
           python3 verification/packaged-consumer/verify-packaged-consumer.py
           --repository "${RUNNER_TEMP}/consumer-repository"
           --java-home "${JAVA_HOME}"
+          --gradle-distribution "${RUNNER_TEMP}/gradle-9.8.0-bin.zip"
           --output "${RUNNER_TEMP}/packaged-consumer-result"
 
       - name: Upload packaged-consumer evidence
@@ -399,13 +413,14 @@ jobs:
       - name: Verify
         run: mvn -B -ntp -Dmaven.javadoc.skip=true verify
 
-  # Gating from M1. Until M1 there is no public type to document (plan §12.3 M0), so the job is disabled.
-  # At M1: remove `if: false`, and replace the javadoc JDK step with a checksum-pinned Corretto 26
-  # install (as Soklet's CI does), since the pom runs javadoc from ${env.REVETSEC_JAVADOC_HOME}. Keep it
-  # at 26 to match the pom's Java API offline links (src/main/javadoc/links/java-26); move both together.
+  # Gating from M1 (plan §10.3). Maven and the compiler run on Corretto 17; javadoc runs from
+  # ${env.REVETSEC_JAVADOC_HOME}, a Corretto 26 that .github/scripts/install-pinned-corretto-linux-x64.sh
+  # downloads, checks against its pinned SHA-256 and version, and exports (as Soklet's CI does). The pom
+  # enables every doclint group except html, and failOnWarnings makes each doclint warning an error. Keep
+  # the javadoc JDK at 26 to match the pom's Java API offline links (src/main/javadoc/links/java-26); move
+  # both together.
   javadoc:
-    name: Javadoc (from M1)
-    if: false
+    name: Javadoc (Corretto 26)
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -414,17 +429,11 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Set up the javadoc JDK (Corretto 26)
-        id: javadoc-jdk
-        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
-        with:
-          distribution: corretto
-          java-version: '26'
-
-      - name: Export the javadoc JDK
-        env:
-          JAVADOC_JDK_PATH: ${{ steps.javadoc-jdk.outputs.path }}
-        run: echo "REVETSEC_JAVADOC_HOME=${JAVADOC_JDK_PATH}" >> "$GITHUB_ENV"
+      - name: Install the checksum-pinned javadoc JDK (Corretto 26)
+        run: >-
+          bash .github/scripts/install-pinned-corretto-linux-x64.sh
+          javadocJava "${RUNNER_TEMP}" "${GITHUB_ENV}"
+          "${RUNNER_TEMP}/javadoc-java-distribution.txt"
 
       - name: Set up Corretto 17
         uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
@@ -434,7 +443,7 @@ jobs:
           cache: maven
 
       - name: Build Javadoc (doclint warnings are errors)
-        run: mvn -B -ntp -DskipTests -Dmaven.javadoc.failOnWarnings=true package
+        run: mvn -B -ntp -Dmaven.javadoc.failOnWarnings=true -DskipTests verify
 
   # ---------------------------------------------------------------------------------------------------
   # Later milestones (plan §10.3). Uncomment and complete each job when its milestone starts.

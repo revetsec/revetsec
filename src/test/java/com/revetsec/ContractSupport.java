@@ -279,7 +279,7 @@ final class ContractSupport {
 			if (Files.isRegularFile(candidate.resolve("pom.xml"))
 					&& Files.isRegularFile(candidate.resolve("src/main/java/com/revetsec/package-info.java")))
 				return candidate;
-		throw new IllegalStateException("Unable to locate the RevetSec repository root from " + start);
+		throw new IllegalStateException("Unable to locate the Revetsec repository root from " + start);
 	}
 
 	static void assertNoViolations(String title, List<String> violations) {
@@ -660,7 +660,7 @@ final class ContractSupport {
 
 	/**
 	 * Exported types: every public top-level type in an exported package, plus every public or protected type
-	 * nested in one, recursively. These are the types a caller outside RevetSec can name.
+	 * nested in one, recursively. These are the types a caller outside Revetsec can name.
 	 */
 	static List<TypeElement> exportedTypes(SourceAnalysis analysis) {
 		List<TypeElement> exportedTypes = new ArrayList<>();
@@ -695,7 +695,7 @@ final class ContractSupport {
 	}
 
 	/**
-	 * Class path for attributing RevetSec sources: only the JARs that hold JSpecify, jsr305 and Error Prone
+	 * Class path for attributing Revetsec sources: only the JARs that hold JSpecify, jsr305 and Error Prone
 	 * annotations (the provided-scope dependencies), located from the classes themselves so it works under any
 	 * Surefire class-path mode.
 	 */

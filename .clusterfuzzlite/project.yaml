@@ -13,5 +13,5 @@
 # limitations under the License.
 
 # ClusterFuzzLite project metadata. JVM projects support only the address and undefined
-# sanitizers; RevetSec is pure Java with no native code, so the workflows use address only.
+# sanitizers; Revetsec is pure Java with no native code, so the workflows use address only.
 language: jvm

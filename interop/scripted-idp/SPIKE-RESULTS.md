@@ -118,10 +118,10 @@ As reported by `GET /health` and `versions.json`. arm64 and amd64 report the sam
 
 1. **The JDK rejects RSA-SHA1 under secure validation** on 17, 21, 25 and 27, through
    `jdk.xml.dsig.secureValidationPolicy`.
-   - RevetSec's M7 `SHA1_SIGNATURES` compatibility mode therefore can't simply rely on
+   - Revetsec's M7 `SHA1_SIGNATURES` compatibility mode therefore can't simply rely on
      `javax.xml.crypto` defaults.
    - Turning secure validation off drops all the other policy checks too.
-   - This needs a design decision before M7, both in RevetSec's algorithm policy and in
+   - This needs a design decision before M7, both in Revetsec's algorithm policy and in
      how it treats the JDK's XML Signature settings.
    - Producing SHA-1 fixtures is not a problem, because the wheel's OpenSSL signs SHA-1.
 2. **Encrypted plaintext must declare its own namespaces.** libxmlsec1 encrypts the
@@ -132,7 +132,7 @@ As reported by `GET /health` and `versions.json`. arm64 and amd64 report the sam
      standalone serialization of the Assertion or NameID.
    - libxmlsec1's decryptor parses plaintext in the context of the EncryptedData's
      parent, while the JDK cross-check parses it standalone.
-   - RevetSec's M8 decryptor must choose one behavior, and the scripted IdP should be able
+   - Revetsec's M8 decryptor must choose one behavior, and the scripted IdP should be able
      to produce both shapes as test inputs.
 3. **The three OpenSSL builds differ from the pre-spike assumption.** cryptography 50.0.1
    bundles OpenSSL **4.0.2**, not the 3.x release that was expected. Alpine's system OpenSSL
@@ -145,7 +145,7 @@ As reported by `GET /health` and `versions.json`. arm64 and amd64 report the sam
    - The manual "lxml and xmlsec move together" rule, plus the Dependabot ignore entry,
      remain the guard.
 5. **libxmlsec1 wraps base64 at 64 characters** in `SignatureValue`, `CipherValue` and
-   `X509Certificate`. RevetSec's decoders must accept XML whitespace inside base64 content.
+   `X509Certificate`. Revetsec's decoders must accept XML whitespace inside base64 content.
    The JDK MIME decoder accepts it.
 6. **Digest URIs.** libxmlsec1 writes `xmlenc#sha256` and `xmlenc#sha512` for SHA-256 and
    SHA-512 digests, and `xmldsig-more#sha384` for SHA-384. The JDK accepts all three.

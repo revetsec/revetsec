@@ -1,8 +1,8 @@
 # Compatibility Modes
 
-**Status: skeleton.** RevetSec contains no protocol code yet, so no compatibility mode exists. Each mode is registered here when it lands, and the registry is complete before 1.0.0.
+**Status: skeleton.** Revetsec contains no protocol code yet, so no compatibility mode exists. Each mode is registered here when it lands, and the registry is complete before 1.0.0.
 
-A compatibility mode is a named, explicit relaxation that lets RevetSec work with a provider that departs from a specification or from RevetSec's defaults. The rules for every mode:
+A compatibility mode is a named, explicit relaxation that lets Revetsec work with a provider that departs from a specification or from Revetsec's defaults. The rules for every mode:
 
 - It is off by default.
 - It is set per instance: per client, per identity provider or per tenant, never globally.

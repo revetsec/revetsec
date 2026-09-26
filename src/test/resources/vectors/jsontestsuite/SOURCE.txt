@@ -1,0 +1,46 @@
+JSONTestSuite: provenance of the vendored files
+
+Upstream repository:  https://github.com/nst/JSONTestSuite
+Branch:               master (the default branch when fetched)
+Commit:               1ef36fa01286573e846ac449e8683f8833c5b26a
+Commit date:          2024-11-22T12:55:41Z ("Merge pull request #139 from hsjoihs/patch-hsjoihs")
+Fetch date:           2026-09-24
+Fetched from:         https://codeload.github.com/nst/JSONTestSuite/tar.gz/1ef36fa01286573e846ac449e8683f8833c5b26a
+                      (the archive's embedded commit ID matched the commit above; archive SHA-256 as fetched:
+                      32ab2fb37cc26679dbd9164dbb7053bcef10134643d53cb0cef45de7680dcdcc)
+License:              MIT, copyright (c) 2016 Nicolas Seriot; the upstream LICENSE file is copied verbatim
+                      to LICENSE in this directory.
+
+What is vendored
+
+Only the upstream test_parsing/ directory, plus the upstream LICENSE file. Nothing else from the upstream
+repository (no README, parsers, results, test_transform/ or scripts) is vendored.
+
+  test_parsing/ files:  318
+    y_ (must be accepted):        95
+    n_ (must be rejected):       188
+    i_ (implementation-defined):  35
+
+Every vendored file is byte-for-byte identical to the upstream file at the commit above: the content was not
+modified, re-encoded or normalized in any way (no line-ending, whitespace or BOM changes). Each file's git blob
+SHA-1 was also compared with the upstream tree at that commit, and all 318 test_parsing/ files and LICENSE
+matched. The only difference is file permissions: upstream marks 122 of the test_parsing/ files executable, and
+every vendored file is stored as a plain, non-executable file.
+
+The repository's .gitattributes marks src/test/resources/vectors/** as -text, so git never converts line
+endings in these files.
+
+Files added by Revetsec (not from upstream)
+
+  SOURCE.txt       this file
+  DEVIATIONS.txt   the y_ files Revetsec rejects by design (duplicate member names), each with DUPLICATE_MEMBER
+  I_DECISIONS.txt  Revetsec's intended outcome for every i_ file under the protocol and SCIM profiles
+  MANIFEST.sha256  SHA-256 of every other file in this directory tree, in sha256sum format, sorted by path
+
+Verifying
+
+  cd src/test/resources/vectors/jsontestsuite && shasum -a 256 -c MANIFEST.sha256
+  (or: sha256sum -c MANIFEST.sha256)
+
+The test runner (com.revetsec.internal.json.JsonTestSuiteTests) verifies the manifest before it runs the files.
+These files are used only by tests. They are not in the published JAR.

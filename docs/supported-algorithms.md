@@ -1,6 +1,6 @@
 # Supported Algorithms
 
-**Status: skeleton.** RevetSec contains no protocol code yet. Each table is added when its protocol area lands, and the page is complete before 1.0.0.
+**Status: skeleton.** Revetsec contains no protocol code yet. Each table is added when its protocol area lands, and the page is complete before 1.0.0.
 
 Algorithms come from allowlists configured on the validating object, never from the message being validated. Names are compared exactly: JOSE `alg` values case-sensitively, and XML Signature and XML Encryption algorithms as exact URIs.
 

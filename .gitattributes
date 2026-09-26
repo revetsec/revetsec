@@ -1,0 +1,4 @@
+# Test vectors and corpora are compared byte for byte (SHA-256 manifests), and some files test exact bytes such
+# as CR, LF, a BOM or invalid UTF-8. Git must never convert their line endings or otherwise treat them as text.
+src/test/resources/vectors/** -text
+src/test/resources/com/revetsec/internal/json/corpus/** -text

@@ -14,7 +14,7 @@
 # limitations under the License.
 #
 
-# RevetSec scripted IdP, a SAML test partner. Test tooling only: build it locally or in
+# Revetsec scripted IdP, a SAML test partner. Test tooling only: build it locally or in
 # CI with load: true and push: false. Never push this image to a registry; that would be
 # publication, and it would redistribute Alpine's GPL busybox and the xmlsec wheel's
 # statically linked LGPL libiconv.
@@ -30,7 +30,7 @@
 FROM python:3.13-alpine3.24@sha256:79e7a9b9ff1cbceff819f856fb374477792a5967759d94df266de7b7b4120e6f
 
 LABEL org.opencontainers.image.title="revetsec-scripted-idp" \
-      org.opencontainers.image.description="RevetSec SAML test IdP (libxmlsec1 + signxml). Test tooling; never pushed." \
+      org.opencontainers.image.description="Revetsec SAML test IdP (libxmlsec1 + signxml). Test tooling; never pushed." \
       org.opencontainers.image.licenses="Apache-2.0"
 
 ENV PYTHONDONTWRITEBYTECODE=1 \

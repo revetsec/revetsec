@@ -19,7 +19,7 @@ Standard library only. It proves that a freshly started test OP is usable,
 not just "up": discovery, the authorization endpoint (auto-login, or a
 Keycloak-style login form POST), and a code exchange that returns an ID token
 whose iss/aud/nonce match. It does NOT verify the ID token signature; that is
-RevetSec's job, and this spike runs before any RevetSec code exists.
+Revetsec's job, and this spike runs before any Revetsec code exists.
 
 The redirect URI is never contacted: the flow stops when the OP redirects to it.
 Exit status 0 means the flow completed; anything else prints the reason.

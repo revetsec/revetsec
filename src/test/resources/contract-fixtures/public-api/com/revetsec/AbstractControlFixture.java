@@ -19,7 +19,8 @@ package com.revetsec;
 import javax.annotation.concurrent.ThreadSafe;
 
 /**
- * Control: an abstract exported class may be non-final and have a protected constructor.
+ * Control: an abstract exported class may be non-final and have a protected constructor (R1). ContractMetaTests
+ * lists it in OPEN_ABSTRACT_TYPES, so it may also stay unsealed.
  *
  * @since 1.0.0
  */

@@ -31,8 +31,10 @@ import javax.lang.model.element.ExecutableElement;
 import javax.lang.model.element.Modifier;
 import javax.lang.model.element.TypeElement;
 import javax.lang.model.element.TypeParameterElement;
+import javax.lang.model.element.VariableElement;
 import javax.lang.model.type.ArrayType;
 import javax.lang.model.type.DeclaredType;
+import javax.lang.model.type.ExecutableType;
 import javax.lang.model.type.IntersectionType;
 import javax.lang.model.type.TypeKind;
 import javax.lang.model.type.TypeMirror;
@@ -51,7 +53,7 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
- * Source-inventory contracts for RevetSec's exported API (plan R1, R2, R17, R20, 14.6), adapted from Soklet.
+ * Source-inventory contracts for Revetsec's exported API (plan R1, R2, R17, R20, 14.6), adapted from Soklet.
  * <p>
  * For every exported type (public top-level types in the seven exported packages, and their public or protected
  * nested types):
@@ -62,15 +64,28 @@ import java.util.stream.Collectors;
  *   <li>a concrete class is final, or sealed with every permitted subclass final or sealed in turn, unless it is in
  *   {@link #R1_EXCEPTIONS}; and it has no public or protected constructor, listed or not (R1);</li>
  *   <li>it has Javadoc with {@code @since}, and so does every public or protected member it declares or inherits
- *   from a non-exported RevetSec class (such as a package-private base class), since callers can reach those
+ *   from a non-exported Revetsec class (such as a package-private base class), since callers can reach those
  *   members too. Two exemptions: {@code @Override} methods inherit their documentation, and enum constants need
  *   Javadoc but take their {@code @since} from the enum (Pyranid precedent);</li>
  *   <li>it has no implicit public or protected constructor (declare constructors explicitly);</li>
  *   <li>no public or protected static method is named {@code of*}, {@code create*} or {@code new*} (R1);</li>
  *   <li>every non-primitive type in a public or protected field, parameter or return type carries exactly one
  *   JSpecify nullness annotation, in type-argument, array-component and wildcard-bound positions too
- *   ({@code Optional}'s type argument must be {@code @NonNull}).</li>
+ *   ({@code Optional}'s type argument must be {@code @NonNull});</li>
+ *   <li>an abstract class is sealed, unless it is in {@link #OPEN_ABSTRACT_TYPES} (G6-1).</li>
  * </ul>
+ * Every exported {@link Throwable} extends {@code com.revetsec.RevetsecException}, declares its own
+ * {@code private static final long serialVersionUID}, and has no public or protected static method, declared or
+ * inherited from a non-exported Revetsec class, unless {@link #APP_CONSTRUCTIBLE_EXCEPTION_FACTORIES} lists it:
+ * Revetsec creates its exceptions itself (G6-1).
+ * <p>
+ * Every exported interface named {@code *Observer} declares a static {@code disabledInstance()} that takes no
+ * arguments and returns the observer, and otherwise only {@code default void} hooks, which applications override
+ * one by one. Hook parameters are enums, boxed numbers or {@code Boolean}, {@code Duration}, {@code Instant},
+ * {@code URI}, {@code String} or Revetsec exceptions (G6-4). A member inherited from another interface is held to the
+ * same rules, unless that interface is an exported observer, which is checked on its own. Fields and every other
+ * static method are reported; private methods are not API and are not checked.
+ * <p>
  * Verified identity types (R17) and their subtypes have no public or protected constructor and no public or
  * protected nested {@code Builder} or {@code Copier}; each is final, or sealed with only non-public permitted
  * subclasses. No public or protected method or field of an accessible type, in any package, declared or inherited,
@@ -78,9 +93,10 @@ import java.util.stream.Collectors;
  * in {@link #VERIFIED_TYPE_SOURCES} is exempt for its instance members only; its static methods and fields are
  * checked like any other.
  * <p>
- * Entries in {@link #VERIFIED_TYPE_SOURCES} and {@link #R1_EXCEPTIONS} are binary names ({@code Outer$Nested}), the
- * form every violation message prints. An entry that names no type its rule examines is reported as stale or
- * misspelled.
+ * Entries in {@link #VERIFIED_TYPE_SOURCES}, {@link #R1_EXCEPTIONS} and {@link #OPEN_ABSTRACT_TYPES} are binary names
+ * ({@code Outer$Nested}), and entries in {@link #APP_CONSTRUCTIBLE_EXCEPTION_FACTORIES} are
+ * {@code Outer$Nested#method(erased parameter types)}: the forms every violation message prints. An entry that names
+ * nothing its rule examines is reported as stale or misspelled.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
@@ -112,6 +128,24 @@ final class PublicApiContractTests {
 	 */
 	static final Set<String> R1_EXCEPTIONS = Set.of();
 
+	/**
+	 * Binary names of the exported abstract classes approved to be neither final nor sealed (M1 plan, "Contract-list
+	 * changes" item 2; G6-1). Every other exported abstract class is sealed, so no application can extend it. The
+	 * exception root stays open because each protocol's {@code abstract sealed} intermediate extends it from its own
+	 * package, and a sealed class outside a named module permits subclasses only in its own package. Each entry is a
+	 * reviewed decision.
+	 */
+	static final Set<String> OPEN_ABSTRACT_TYPES = Set.of("com.revetsec.RevetsecException");
+
+	/**
+	 * Public or protected static methods of exported exceptions that applications may call to create one, as
+	 * {@code Outer$Nested#method(erased parameter types)} (M1 plan, "Contract-list changes" item 2; G6-1). Revetsec
+	 * creates its exceptions through package-private factories, so any other public or protected static method on an
+	 * exported exception is reported. Each entry is a reviewed decision; there are none before M9's
+	 * {@code ScimException}.
+	 */
+	static final Set<String> APP_CONSTRUCTIBLE_EXCEPTION_FACTORIES = Set.of();
+
 	private static final Set<String> THREAD_SAFETY_MARKERS = Set.of(
 			"javax.annotation.concurrent.ThreadSafe",
 			"javax.annotation.concurrent.NotThreadSafe",
@@ -121,6 +155,28 @@ final class PublicApiContractTests {
 	private static final String OVERRIDE = "java.lang.Override";
 	private static final Set<String> FORBIDDEN_VERIFIED_TYPE_NESTED_NAMES = Set.of("Builder", "Copier");
 	private static final Pattern FORBIDDEN_FACTORY_NAME = Pattern.compile("(?:of|create|new)(?:\\p{Lu}.*)?");
+	private static final String REVETSEC_EXCEPTION = "com.revetsec.RevetsecException";
+	private static final String THROWABLE = "java.lang.Throwable";
+	private static final String OBJECT = "java.lang.Object";
+	private static final String SERIAL_VERSION_UID = "serialVersionUID";
+	private static final String DISABLED_INSTANCE = "disabledInstance";
+	private static final String OBSERVER_SUFFIX = "Observer";
+	/**
+	 * Observer hook parameter types besides enums and Revetsec exceptions (G6-4): the boxed numbers and
+	 * {@code Boolean}, and the value types hooks report with.
+	 */
+	private static final Set<String> OBSERVER_HOOK_PARAMETER_TYPES = Set.of(
+			"java.lang.Byte",
+			"java.lang.Short",
+			"java.lang.Integer",
+			"java.lang.Long",
+			"java.lang.Float",
+			"java.lang.Double",
+			"java.lang.Boolean",
+			"java.time.Duration",
+			"java.time.Instant",
+			"java.net.URI",
+			"java.lang.String");
 
 	@Test
 	void exportedApiMeetsSourceContracts() throws IOException {
@@ -132,23 +188,25 @@ final class PublicApiContractTests {
 	 * Checks the Java sources under {@code sourceRoot} and returns one message per violation (empty if none).
 	 */
 	static List<String> findViolations(Path sourceRoot) throws IOException {
-		return findViolations(sourceRoot, VERIFIED_TYPE_SOURCES, R1_EXCEPTIONS);
+		return findViolations(sourceRoot, VERIFIED_TYPE_SOURCES, R1_EXCEPTIONS, OPEN_ABSTRACT_TYPES,
+				APP_CONSTRUCTIBLE_EXCEPTION_FACTORIES);
 	}
 
 	/**
-	 * {@link #findViolations(Path)} with the given lists in place of {@link #VERIFIED_TYPE_SOURCES} and
-	 * {@link #R1_EXCEPTIONS}, so {@link ContractMetaTests} can exercise entries against the fixtures.
+	 * {@link #findViolations(Path)} with the given lists in place of {@link #VERIFIED_TYPE_SOURCES},
+	 * {@link #R1_EXCEPTIONS}, {@link #OPEN_ABSTRACT_TYPES} and {@link #APP_CONSTRUCTIBLE_EXCEPTION_FACTORIES}, so
+	 * {@link ContractMetaTests} can exercise entries against the fixtures.
 	 */
-	static List<String> findViolations(Path sourceRoot, Set<String> verifiedTypeSources, Set<String> r1Exceptions)
-			throws IOException {
+	static List<String> findViolations(Path sourceRoot, Set<String> verifiedTypeSources, Set<String> r1Exceptions,
+			Set<String> openAbstractTypes, Set<String> appConstructibleExceptionFactories) throws IOException {
 		if (ContractSupport.javaSources(sourceRoot).isEmpty())
 			return List.of();
-		return ContractSupport.analyze(sourceRoot,
-				analysis -> findViolations(analysis, verifiedTypeSources, r1Exceptions));
+		return ContractSupport.analyze(sourceRoot, analysis -> findViolations(analysis, verifiedTypeSources,
+				r1Exceptions, openAbstractTypes, appConstructibleExceptionFactories));
 	}
 
 	private static List<String> findViolations(SourceAnalysis analysis, Set<String> verifiedTypeSources,
-			Set<String> r1Exceptions) {
+			Set<String> r1Exceptions, Set<String> openAbstractTypes, Set<String> appConstructibleExceptionFactories) {
 		List<String> violations = new ArrayList<>();
 		List<TypeElement> exportedTypes = ContractSupport.exportedTypes(analysis);
 		Set<TypeElement> exported = new HashSet<>(exportedTypes);
@@ -156,6 +214,9 @@ final class PublicApiContractTests {
 			checkExportedType(type, exported, r1Exceptions, analysis, violations);
 		Set<TypeElement> accessibleTypes = accessibleTypes(analysis);
 		checkVerifiedTypes(accessibleTypes, verifiedTypeSources, analysis, violations);
+		checkOpenAbstractTypes(exportedTypes, openAbstractTypes, analysis, violations);
+		checkExceptions(exportedTypes, exported, appConstructibleExceptionFactories, analysis, violations);
+		checkObservers(exportedTypes, exported, analysis, violations);
 		checkReviewedEntries("R1_EXCEPTIONS", r1Exceptions, exported, "exported type", analysis, violations);
 		checkReviewedEntries("VERIFIED_TYPE_SOURCES", verifiedTypeSources, accessibleTypes, "accessible type",
 				analysis, violations);
@@ -177,6 +238,182 @@ final class PublicApiContractTests {
 				violations.add("PublicApiContractTests." + listName + " entry \"" + entry + "\": stale or misspelled "
 						+ "entry; use the binary name (Outer$Nested, as violation messages print it) of an "
 						+ typeDescription + " in the analyzed sources");
+	}
+
+	/**
+	 * G6-1: an exported abstract class is sealed, so every subclass is Revetsec's, unless {@code openAbstractTypes}
+	 * lists it. Concrete classes are held to R1's finality rule instead ({@link #checkFinal}), and interfaces are not
+	 * classes.
+	 */
+	private static void checkOpenAbstractTypes(List<TypeElement> exportedTypes, Set<String> openAbstractTypes,
+			SourceAnalysis analysis, List<String> violations) {
+		Set<TypeElement> openAbstractClasses = new LinkedHashSet<>();
+		for (TypeElement type : exportedTypes) {
+			Set<Modifier> modifiers = type.getModifiers();
+			if (type.getKind() != ElementKind.CLASS || !modifiers.contains(Modifier.ABSTRACT)
+					|| modifiers.contains(Modifier.SEALED))
+				continue;
+			openAbstractClasses.add(type);
+			String typeName = binaryName(type, analysis);
+			if (!openAbstractTypes.contains(typeName))
+				violations.add(typeName + ": exported abstract classes are sealed, so only Revetsec extends them; an "
+						+ "open one needs a reviewed entry in OPEN_ABSTRACT_TYPES (G6-1)");
+		}
+		checkReviewedEntries("OPEN_ABSTRACT_TYPES", openAbstractTypes, openAbstractClasses,
+				"unsealed exported abstract class", analysis, violations);
+	}
+
+	/**
+	 * G6-1: every exported {@link Throwable} extends RevetsecException and declares its own serialVersionUID, and
+	 * applications never create one through a public or protected static method, declared or inherited from a
+	 * non-exported Revetsec class, unless {@code appConstructibleExceptionFactories} lists it. An inherited method of
+	 * an exported class is checked on that class.
+	 */
+	private static void checkExceptions(List<TypeElement> exportedTypes, Set<TypeElement> exported,
+			Set<String> appConstructibleExceptionFactories, SourceAnalysis analysis, List<String> violations) {
+		TypeElement throwable = analysis.getElements().getTypeElement(THROWABLE);
+		@Nullable TypeElement revetsecException = analysis.getElements().getTypeElement(REVETSEC_EXCEPTION);
+		Set<String> staticMethods = new HashSet<>();
+
+		for (TypeElement type : exportedTypes) {
+			if (!analysis.isSubtype(type, throwable))
+				continue;
+			String typeName = binaryName(type, analysis);
+			if (revetsecException == null || !analysis.isSubtype(type, revetsecException))
+				violations.add(typeName + ": every exported Throwable extends " + REVETSEC_EXCEPTION + " (G6-1)");
+			checkSerialVersionUid(type, typeName, violations);
+
+			for (Element member : analysis.getElements().getAllMembers(type)) {
+				if (member.getKind() != ElementKind.METHOD || !member.getModifiers().contains(Modifier.STATIC)
+						|| !ContractSupport.isPublicOrProtected(member)
+						|| !(member.getEnclosingElement() instanceof TypeElement declaringType))
+					continue;
+				boolean inherited = !declaringType.equals(type);
+				if (inherited && (exported.contains(declaringType) || !analysis.isAnalyzed(declaringType)))
+					continue;
+				String factory = typeName + "#" + analysis.describe(member);
+				staticMethods.add(factory);
+				if (!appConstructibleExceptionFactories.contains(factory))
+					violations.add(factory + (inherited ? " (inherited from " + binaryName(declaringType, analysis) + ")"
+							: "") + ": exported exceptions have no public or protected static methods, because Revetsec "
+							+ "creates them; a factory applications need is a reviewed entry in "
+							+ "APP_CONSTRUCTIBLE_EXCEPTION_FACTORIES (G6-1)");
+			}
+		}
+
+		for (String entry : appConstructibleExceptionFactories)
+			if (!staticMethods.contains(entry))
+				violations.add("PublicApiContractTests.APP_CONSTRUCTIBLE_EXCEPTION_FACTORIES entry \"" + entry + "\": "
+						+ "stale or misspelled entry; name a public or protected static method of an exported exception "
+						+ "as violation messages print it (Outer$Nested#method(erased parameter types))");
+	}
+
+	/**
+	 * The serialization specification requires a {@code static final long serialVersionUID}; declared
+	 * {@code private}, it stays out of the API. The JDK ignores the field unless it is both {@code static} and
+	 * {@code final}, and then computes the version from the class's members, so it changes with them. (It widens a
+	 * narrower integral type, but the specification does not allow one.)
+	 */
+	private static void checkSerialVersionUid(TypeElement type, String typeName, List<String> violations) {
+		@Nullable VariableElement serialVersionUid = ElementFilter.fieldsIn(type.getEnclosedElements()).stream()
+				.filter(field -> field.getSimpleName().contentEquals(SERIAL_VERSION_UID))
+				.findFirst()
+				.orElse(null);
+		if (serialVersionUid == null)
+			violations.add(typeName + ": exported Throwable declares no serialVersionUID; declare private static final "
+					+ "long " + SERIAL_VERSION_UID + " (G6-1)");
+		else if (serialVersionUid.asType().getKind() != TypeKind.LONG || !serialVersionUid.getModifiers()
+				.containsAll(Set.of(Modifier.PRIVATE, Modifier.STATIC, Modifier.FINAL)))
+			violations.add(typeName + "#" + SERIAL_VERSION_UID + ": declare it private static final long; "
+					+ "serialization ignores one that is not static and final, the specification requires a long, and "
+					+ "private keeps it out of the API (G6-1)");
+	}
+
+	/**
+	 * G6-4: the rules for exported interfaces named {@code *Observer} (see the class description).
+	 */
+	private static void checkObservers(List<TypeElement> exportedTypes, Set<TypeElement> exported,
+			SourceAnalysis analysis, List<String> violations) {
+		@Nullable TypeElement revetsecException = analysis.getElements().getTypeElement(REVETSEC_EXCEPTION);
+
+		for (TypeElement type : exportedTypes) {
+			if (!isObserver(type))
+				continue;
+			String typeName = binaryName(type, analysis);
+			DeclaredType observerType = (DeclaredType) type.asType();
+			boolean hasDisabledInstance = false;
+
+			for (Element member : analysis.getElements().getAllMembers(type)) {
+				if (member instanceof TypeElement || member.getModifiers().contains(Modifier.PRIVATE)
+						|| !(member.getEnclosingElement() instanceof TypeElement declaringType)
+						|| declaringType.getQualifiedName().contentEquals(OBJECT))
+					continue;
+				boolean inherited = !declaringType.equals(type);
+				if (inherited && isObserver(declaringType) && exported.contains(declaringType))
+					continue;
+				String memberName = typeName + "#" + analysis.describe(member) + (inherited ? " (inherited from "
+						+ binaryName(declaringType, analysis) + ")" : "");
+
+				if (member.getKind() == ElementKind.FIELD) {
+					violations.add(memberName + ": observer interfaces declare no fields, only default void hooks and a "
+							+ "static disabledInstance() (G6-4)");
+					continue;
+				}
+				if (!(member instanceof ExecutableElement method) || method.getKind() != ElementKind.METHOD)
+					continue;
+
+				if (method.getModifiers().contains(Modifier.STATIC)) {
+					// Static interface methods are not inherited, so this one is the observer's own.
+					boolean disabledInstance = method.getSimpleName().contentEquals(DISABLED_INSTANCE)
+							&& method.getParameters().isEmpty();
+					hasDisabledInstance = hasDisabledInstance || disabledInstance;
+					if (!disabledInstance || !analysis.getTypes().isSameType(
+							analysis.getTypes().erasure(method.getReturnType()), analysis.getTypes().erasure(observerType)))
+						violations.add(memberName + ": an observer's only static method is disabledInstance(), which takes "
+								+ "no arguments and returns the observer (G6-4)");
+					continue;
+				}
+
+				if (!method.isDefault())
+					violations.add(memberName + ": observer hooks are default methods that do nothing, so an application "
+							+ "overrides only the hooks it needs (G6-4)");
+				if (method.getReturnType().getKind() != TypeKind.VOID)
+					violations.add(memberName + ": observer hooks return void (G6-4)");
+				List<? extends TypeMirror> parameterTypes = ((ExecutableType) analysis.getTypes()
+						.asMemberOf(observerType, method)).getParameterTypes();
+				for (int index = 0; index < parameterTypes.size(); ++index)
+					if (!isObserverHookParameterType(parameterTypes.get(index), revetsecException, analysis))
+						violations.add(memberName + " parameter " + index + ": observer hook parameters are enums, boxed "
+								+ "numbers or Boolean, Duration, Instant, URI, String or Revetsec exceptions, not "
+								+ describeHookParameterType(parameterTypes.get(index), analysis) + " (G6-4)");
+			}
+
+			if (!hasDisabledInstance)
+				violations.add(typeName + ": observer interfaces declare a static disabledInstance() (G6-4)");
+		}
+	}
+
+	private static boolean isObserver(TypeElement type) {
+		return type.getKind() == ElementKind.INTERFACE && type.getSimpleName().toString().endsWith(OBSERVER_SUFFIX);
+	}
+
+	private static boolean isObserverHookParameterType(TypeMirror type, @Nullable TypeElement revetsecException,
+			SourceAnalysis analysis) {
+		if (!(type instanceof DeclaredType declaredType) || !(declaredType.asElement() instanceof TypeElement element))
+			return false;
+		return element.getKind() == ElementKind.ENUM
+				|| OBSERVER_HOOK_PARAMETER_TYPES.contains(element.getQualifiedName().toString())
+				|| (revetsecException != null && analysis.isSubtype(element, revetsecException));
+	}
+
+	private static String describeHookParameterType(TypeMirror type, SourceAnalysis analysis) {
+		if (type instanceof TypeVariable typeVariable)
+			return "type variable " + typeVariable.asElement().getSimpleName();
+		return analysis.erasedName(type);
+	}
+
+	private static String binaryName(TypeElement type, SourceAnalysis analysis) {
+		return analysis.getElements().getBinaryName(type).toString();
 	}
 
 	private static void checkExportedType(TypeElement type, Set<TypeElement> exported, Set<String> r1Exceptions,
@@ -223,7 +460,7 @@ final class PublicApiContractTests {
 			checkMember(memberName, enclosed, analysis, violations);
 		}
 
-		// Members inherited from non-exported RevetSec classes (a package-private base class, say) are callable
+		// Members inherited from non-exported Revetsec classes (a package-private base class, say) are callable
 		// through this type but are checked nowhere else.
 		for (Element member : analysis.getElements().getAllMembers(type)) {
 			if (member instanceof TypeElement || !ContractSupport.isPublicOrProtected(member)

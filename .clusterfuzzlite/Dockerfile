@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# ClusterFuzzLite builder image for RevetSec's Jazzer targets (fuzz/).
+# ClusterFuzzLite builder image for Revetsec's Jazzer targets (fuzz/).
 #
 # The build context is the repository root. ClusterFuzzLite clones the repository at the commit
 # under test, runs `docker build -f .clusterfuzzlite/Dockerfile <clone>`, and then runs `compile`

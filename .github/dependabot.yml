@@ -1,6 +1,6 @@
 version: 2
 updates:
-  # RevetSec core has zero runtime dependencies; these entries watch build/test tooling only.
+  # Revetsec core has zero runtime dependencies; these entries watch build/test tooling only.
   # Every entry waits 7 days after a release before proposing it (cooldown), so a compromised or
   # yanked release is less likely to reach a PR.
   - package-ecosystem: maven
@@ -18,7 +18,7 @@ updates:
     cooldown:
       default-days: 7
 
-  # The packaged-consumer fixture pins its build plugins. Its RevetSec dependency tracks the core
+  # The packaged-consumer fixture pins its build plugins. Its Revetsec dependency tracks the core
   # version under test (passed by verify-packaged-consumer.py), never a released version.
   - package-ecosystem: maven
     directory: "/verification/packaged-consumer"
@@ -84,3 +84,7 @@ updates:
       interval: weekly
     cooldown:
       default-days: 7
+    ignore:
+      # The test OP stays on a Node LTS line; major moves are deliberate, by hand.
+      - dependency-name: "node"
+        update-types: ["version-update:semver-major"]

@@ -12,7 +12,7 @@ name: ClusterFuzzLite corpus pruning
 
 on:
   schedule:
-    # After the 07:47 batch run and its 45-minute timeout.
+    # After the 07:47 batch run and its 75-minute timeout (cflite_batch.yml), which ends by 09:02.
     - cron: '17 9 * * *'
   workflow_dispatch:
 
@@ -34,7 +34,8 @@ jobs:
   corpus-pruning:
     name: Corpus Pruning (${{ matrix.sanitizer }})
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    # FUZZ_SECONDS (20 minutes) plus the builds and the corpus transfers.
+    timeout-minutes: 45
     # Holds CFLITE_STORAGE_TOKEN (cflite_batch.yml, owner setup, step 3).
     environment: cflite-storage
     permissions:
@@ -109,8 +110,9 @@ jobs:
           LANGUAGE: jvm
           SANITIZER: ${{ matrix.sanitizer }}
           MODE: prune
-          # Total budget, shared by all targets.
-          FUZZ_SECONDS: '600'
+          # Total budget, shared by the targets (cflite_batch.yml header: BUDGETS). Pruning
+          # merges each target's stored corpus within that share, and the corpus grows every night.
+          FUZZ_SECONDS: '1200'
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CFL_PLATFORM: github
           LOW_DISK_SPACE: 'True'

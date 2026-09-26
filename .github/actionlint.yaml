@@ -3,9 +3,3 @@
 # Actions variables the workflows read. actionlint reports any other `vars.*` name as a typo.
 config-variables:
   - CFLITE_STORAGE_REPO
-
-paths:
-  .github/workflows/ci.yml:
-    ignore:
-      # The javadoc job is disabled with `if: false` until M1 on purpose (plan §12.3 M0).
-      - 'constant expression "false" in condition'

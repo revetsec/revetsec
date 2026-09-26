@@ -15,13 +15,14 @@
 # limitations under the License.
 #
 
-"""Verify the installed RevetSec JAR and POM as a Maven consumer sees them (plan 10.3, INV-L1).
+"""Verify the installed Revetsec JAR and POM as Maven and Gradle consumers see them (plan 10.3, INV-L1).
 
 Install core first, for example:
 
     mvn -B -ntp -Dmaven.javadoc.skip=true -DskipTests install
 
-then run this script with the same JAVA_HOME and local repository. It fails unless:
+download the pinned Gradle distribution (GRADLE_DISTRIBUTION_URL below), then run this
+script with the same JAVA_HOME and local repository. It fails unless:
 
 1. the installed POM is byte-identical to the core pom.xml, and the installed JAR to
    target/<artifact>-<version>.jar when that file exists;
@@ -29,14 +30,25 @@ then run this script with the same JAVA_HOME and local repository. It fails unle
    runtime or system dependencies, no parent, no repositories;
 3. the JAR holds classes only under com/revetsec/, has no module-info.class, carries
    META-INF/LICENSE and META-INF/NOTICE, and declares Automatic-Module-Name: com.revetsec;
-4. a Maven consumer (this directory, copied to a scratch directory) compiles against
-   the installed artifact, and its resolved runtime class path is exactly that JAR;
-5. the consumer runs on the class path and resolves the automatic module com.revetsec;
-6. jdeps finds only the INV-L1 modules (java.base, java.net.http, java.xml,
+4. a Maven consumer (this directory's pom.xml and src/, copied to a scratch directory)
+   compiles against the installed artifact, and its resolved runtime class path is
+   exactly that JAR;
+5. the Gradle distribution has the pinned SHA-256 (checked before anything is extracted
+   from it), and a Gradle consumer (this directory's build.gradle, settings.gradle and
+   src/, copied to a scratch directory) built offline by that Gradle on this JDK resolves
+   the installed artifact from the same local repository: its runtimeClasspath and
+   compileClasspath are exactly that JAR, and the Revetsec component has no dependency;
+6. each consumer runs on the class path, resolves the automatic module com.revetsec, and
+   calls the public API of com.revetsec and com.revetsec.json: PackagedConsumer prints its
+   public-api= line only after every call behaved as documented. Both consumers compile it
+   with warnings as errors against nothing but the Revetsec JAR, so the build proves the
+   published signatures resolve without the provided-scope annotation JARs;
+7. jdeps finds only the INV-L1 modules (java.base, java.net.http, java.xml,
    java.xml.crypto, java.logging). The only classes it may report as not found are
-   RevetSec's provided-scope annotations, which the JVM ignores when absent; and no
+   Revetsec's provided-scope annotations, which the JVM ignores when absent; and no
    class file names one of them in a CONSTANT_Class entry (a class literal, cast,
-   instanceof or call), which the JVM would resolve and fail on at run time.
+   instanceof or call), which the JVM would resolve and fail on at run time;
+8. the installed JAR and POM are unchanged after both consumer builds.
 """
 
 import argparse
@@ -48,6 +60,7 @@ import os
 from pathlib import Path
 import re
 import shutil
+import stat
 import struct
 import subprocess
 import sys
@@ -65,9 +78,28 @@ AUTOMATIC_MODULE_NAME = "com.revetsec"
 CLASS_PREFIX = "com/revetsec/"
 REQUIRED_ENTRIES = ("META-INF/MANIFEST.MF", "META-INF/LICENSE", "META-INF/NOTICE")
 CONSUMER_MAIN_CLASS = "example.PackagedConsumer"
-CONSUMER_SOURCES = ("pom.xml", "src")
+# PackagedConsumer prints this line last, and only after every public API call behaved as documented.
+PUBLIC_API_LINE_PREFIX = "public-api="
+# The groups of public API calls PackagedConsumer makes, in order; its public-api= line names each (M1, WP-10b).
+PUBLIC_API_CALLS = ("com.revetsec.json", "StateSealer", "OutboundUriPolicy")
+MAVEN_CONSUMER_SOURCES = ("pom.xml", "src")
+GRADLE_CONSUMER_SOURCES = ("build.gradle", "settings.gradle", "src")
 
-# INV-L1 (plan 9.2): the only JDK modules RevetSec may need.
+# The Gradle distribution the Gradle consumer builds with, pinned by SHA-256. 9.8.0 was the current release on
+# 2026-09-24, and its release highlights list Java 27 support. That day it built and ran this consumer on Corretto
+# 17, 21, 25, 26 and 27, so one distribution serves the whole JDK matrix. The digest is the one Gradle
+# publishes at GRADLE_DISTRIBUTION_URL + ".sha256", and it matched the downloaded archive. Dependabot does not
+# update this pin. Move it together with the download URL in .github/workflows/ci.yml, CONTRIBUTING.md and
+# verification/README.md; test_verify_packaged_consumer.py fails while they disagree.
+GRADLE_VERSION = "9.8.0"
+GRADLE_DISTRIBUTION_SHA256 = "bafd5ce9cfaea0fbccfdc8439a1ac42fbd4cd9c89dc9a988228d8a2639a58e6c"
+GRADLE_DISTRIBUTION_URL = f"https://services.gradle.org/distributions/gradle-{GRADLE_VERSION}-bin.zip"
+# Written by build.gradle's resolutionReport task.
+GRADLE_REPORT = Path("build", "revetsec-consumer", "resolution.json")
+GRADLE_REPORT_FORMAT_VERSION = 1
+GRADLE_CONFIGURATIONS = ("runtimeClasspath", "compileClasspath")
+
+# INV-L1 (plan 9.2): the only JDK modules Revetsec may need.
 INV_L1_MODULES = frozenset({"java.base", "java.net.http", "java.xml", "java.xml.crypto", "java.logging"})
 
 # Provided-scope annotation packages (plan 10.2: JSpecify, jsr305 concurrency markers, Error Prone
@@ -331,17 +363,22 @@ def java_environment(java_home):
     return environment
 
 
-def build_consumer(maven, java_home, repository, version, work_directory, maven_arguments=()):
-    consumer_directory = work_directory / "packaged-consumer"
+def copy_consumer_sources(names, consumer_directory):
+    """Copy the named consumer sources from this directory into a fresh consumer_directory."""
     if consumer_directory.exists():
         shutil.rmtree(consumer_directory)
     consumer_directory.mkdir(parents=True)
-    for name in CONSUMER_SOURCES:
+    for name in names:
         source = SCRIPT_DIRECTORY / name
         if source.is_dir():
             shutil.copytree(source, consumer_directory / name)
         else:
             shutil.copy2(source, consumer_directory / name)
+
+
+def build_consumer(maven, java_home, repository, version, work_directory, maven_arguments=()):
+    consumer_directory = work_directory / "maven-consumer"
+    copy_consumer_sources(MAVEN_CONSUMER_SOURCES, consumer_directory)
     run(
         [
             maven, "-B", "-ntp", "-nsu",
@@ -367,9 +404,190 @@ def classpath_violations(entries, installed_jar):
     if resolved == [expected]:
         return []
     return [
-        "The consumer's resolved runtime class path must be exactly the installed RevetSec JAR "
+        "The consumer's resolved runtime class path must be exactly the installed Revetsec JAR "
         f"{expected}, found {[str(path) for path in resolved]}"
     ]
+
+
+def check_gradle_distribution_digest(archive, expected_sha256=GRADLE_DISTRIBUTION_SHA256):
+    """Raise VerificationError unless the archive's SHA-256 is the pinned one. Nothing is extracted before this."""
+    actual = sha256(archive)
+    if actual != expected_sha256:
+        raise VerificationError(
+            f"Gradle distribution {archive} has SHA-256 {actual}, expected the pinned {expected_sha256} "
+            f"(Gradle {GRADLE_VERSION}, {GRADLE_DISTRIBUTION_URL})"
+        )
+    return actual
+
+
+def gradle_distribution_member_violation(info, root):
+    """Return why a distribution archive member is unsafe to extract, or None."""
+    name = info.filename
+    if "\\" in name or "\0" in name:
+        return f"{name!r}: backslash or NUL in the entry name"
+    if name.startswith("/") or re.match(r"^[A-Za-z]:", name):
+        return f"{name!r}: absolute entry name"
+    parts = name.rstrip("/").split("/")
+    if any(part in ("", ".", "..") for part in parts):
+        return f"{name!r}: empty, '.' or '..' path segment"
+    if parts[0] != root:
+        return f"{name!r}: outside the distribution root {root}/"
+    mode = info.external_attr >> 16
+    if stat.S_ISLNK(mode):
+        return f"{name!r}: symbolic link"
+    return None
+
+
+def unpack_gradle_distribution(archive, destination, expected_sha256=GRADLE_DISTRIBUTION_SHA256,
+                               version=GRADLE_VERSION):
+    """Check the pinned digest, then extract the distribution into destination; return the gradle launcher.
+
+    Every member must lie under gradle-<version>/, with no absolute path, '..' segment or symbolic link. Regular
+    files keep their owner-executable bit, so bin/gradle stays runnable; nothing gets set-id or world-write bits.
+    """
+    check_gradle_distribution_digest(archive, expected_sha256)
+    root = f"gradle-{version}"
+    destination = Path(destination)
+    if destination.exists():
+        shutil.rmtree(destination)
+    destination.mkdir(parents=True)
+    with zipfile.ZipFile(archive) as distribution:
+        members = distribution.infolist()
+        violations = [gradle_distribution_member_violation(info, root) for info in members]
+        violations = [violation for violation in violations if violation is not None]
+        if violations:
+            raise VerificationError(
+                "Unsafe Gradle distribution entries:\n" + "\n".join(f"  - {item}" for item in violations)
+            )
+        for info in members:
+            target = destination.joinpath(*info.filename.rstrip("/").split("/"))
+            if info.is_dir():
+                target.mkdir(parents=True, exist_ok=True)
+                continue
+            target.parent.mkdir(parents=True, exist_ok=True)
+            with distribution.open(info) as source, open(target, "xb") as sink:
+                shutil.copyfileobj(source, sink)
+            executable = (info.external_attr >> 16) & stat.S_IXUSR
+            target.chmod(0o755 if executable else 0o644)
+    launcher = destination / root / "bin" / "gradle"
+    if not launcher.is_file() or launcher.is_symlink() or not os.access(launcher, os.X_OK):
+        raise VerificationError(f"The Gradle distribution has no executable {root}/bin/gradle")
+    return launcher
+
+
+def gradle_environment(java_home, gradle_user_home):
+    environment = java_environment(java_home)
+    # A fresh Gradle user home: no init scripts, gradle.properties or caches from the caller's ~/.gradle.
+    environment["GRADLE_USER_HOME"] = str(gradle_user_home)
+    # Launcher JVM options from the caller must not change what runs.
+    environment.pop("GRADLE_OPTS", None)
+    environment.pop("JAVA_OPTS", None)
+    return environment
+
+
+def build_gradle_consumer(gradle, java_home, repository, version, work_directory):
+    """Build the Gradle consumer offline; return (consumer directory, parsed resolution report)."""
+    consumer_directory = work_directory / "gradle-consumer"
+    copy_consumer_sources(GRADLE_CONSUMER_SOURCES, consumer_directory)
+    gradle_user_home = work_directory / "gradle-user-home"
+    if gradle_user_home.exists():
+        shutil.rmtree(gradle_user_home)
+    run(
+        [
+            str(gradle),
+            "--offline", "--no-daemon", "--no-build-cache", "--no-configuration-cache",
+            "--console=plain", "--warning-mode=fail", "--stacktrace",
+            "--project-dir", str(consumer_directory),
+            f"-Prevetsec.repository={repository}",
+            f"-Prevetsec.version={version}",
+            "clean", "classes", "resolutionReport",
+        ],
+        env=gradle_environment(java_home, gradle_user_home),
+        description="Gradle consumer build",
+    )
+    return consumer_directory, read_gradle_report(consumer_directory / GRADLE_REPORT)
+
+
+def read_gradle_report(path):
+    if not path.is_file():
+        raise VerificationError(f"The Gradle consumer build did not write {path}")
+    try:
+        report = json.loads(path.read_text(encoding="utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exception:
+        raise VerificationError(f"{path} is not valid JSON: {exception}") from exception
+    if not isinstance(report, dict):
+        raise VerificationError(f"{path} does not hold a JSON object")
+    return report
+
+
+def gradle_report_violations(report, installed_jar, coordinates, java_home, gradle_version=GRADLE_VERSION):
+    """Check build.gradle's resolution report; return violations (empty when it shows zero dependencies)."""
+    violations = []
+    if report.get("formatVersion") != GRADLE_REPORT_FORMAT_VERSION:
+        return [
+            f"Gradle report formatVersion is {report.get('formatVersion')!r}, expected {GRADLE_REPORT_FORMAT_VERSION}"
+        ]
+    if report.get("gradleVersion") != gradle_version:
+        violations.append(
+            f"Gradle {report.get('gradleVersion')!r} ran the consumer build, expected the pinned {gradle_version}"
+        )
+    gradle_java_home = report.get("gradleJavaHome")
+    if not isinstance(gradle_java_home, str) or Path(gradle_java_home).resolve() != Path(java_home).resolve():
+        violations.append(f"Gradle ran on the JDK at {gradle_java_home!r}, expected {Path(java_home).resolve()}")
+    expected_jar = Path(installed_jar).resolve()
+    configurations = report.get("configurations")
+    if not isinstance(configurations, dict):
+        return violations + ["Gradle report has no configurations object"]
+    for name in GRADLE_CONFIGURATIONS:
+        resolution = configurations.get(name)
+        if not isinstance(resolution, dict):
+            violations.append(f"{name}: missing from the Gradle report")
+            continue
+        components = resolution.get("components")
+        if components != [{"id": coordinates, "dependencies": []}]:
+            violations.append(
+                f"{name}: must resolve exactly {coordinates} with no dependency of its own, found {components!r}"
+            )
+        unresolved = resolution.get("unresolved")
+        if unresolved != []:
+            violations.append(f"{name}: unresolved dependencies {unresolved!r}")
+        files = resolution.get("files")
+        if (not isinstance(files, list) or len(files) != 1 or not isinstance(files[0], dict)
+                or files[0].get("component") != coordinates or not isinstance(files[0].get("path"), str)
+                or Path(files[0]["path"]).resolve() != expected_jar):
+            violations.append(f"{name}: must be exactly the installed Revetsec JAR {expected_jar}, found {files!r}")
+    return violations
+
+
+def consumer_output_violations(lines, description):
+    """Return violations unless the consumer's output ends with the public-api= line naming every call group."""
+    api_lines = [line for line in lines if line.startswith(PUBLIC_API_LINE_PREFIX)]
+    if len(api_lines) != 1 or not lines or lines[-1] != api_lines[0]:
+        return [
+            f"{description} must print exactly one {PUBLIC_API_LINE_PREFIX} line, last; PackagedConsumer prints it "
+            f"only after calling the public API, found {api_lines!r}"
+        ]
+    called = api_lines[0][len(PUBLIC_API_LINE_PREFIX):].split(",")
+    if called != list(PUBLIC_API_CALLS):
+        return [f"{description} called {called!r}, expected {list(PUBLIC_API_CALLS)!r}"]
+    return []
+
+
+def run_consumer(java, java_home, classes_directory, entries, installed_jar, description):
+    output = run(
+        [
+            str(java), "-cp",
+            os.pathsep.join([str(classes_directory), *entries]),
+            CONSUMER_MAIN_CLASS, str(installed_jar),
+        ],
+        env=java_environment(java_home),
+        description=description,
+    )
+    lines = output.splitlines()
+    violations = consumer_output_violations(lines, description)
+    if violations:
+        raise VerificationError("\n".join(violations))
+    return lines
 
 
 def verify(arguments):
@@ -377,18 +595,26 @@ def verify(arguments):
     core_directory = arguments.core_directory.resolve()
     repository = arguments.repository.expanduser().resolve()
     java_home = arguments.java_home.resolve()
+    gradle_distribution = arguments.gradle_distribution.resolve()
     jdeps = java_home / "bin" / "jdeps"
     java = java_home / "bin" / "java"
     for tool in (jdeps, java):
         if not tool.is_file():
             raise VerificationError(f"{tool} not found; pass --java-home or set JAVA_HOME to a JDK")
+    if not gradle_distribution.is_file():
+        raise VerificationError(
+            f"{gradle_distribution} not found; download {GRADLE_DISTRIBUTION_URL} and pass it as --gradle-distribution"
+        )
+    # Fail before any build on a wrong archive; unpack_gradle_distribution checks the digest again before extracting.
+    check_gradle_distribution_digest(gradle_distribution)
 
     group_id, artifact_id, version = read_core_coordinates(pom_verifier, core_directory)
+    coordinates = f"{group_id}:{artifact_id}:{version}"
     installed_jar, installed_pom = installed_artifact_paths(repository, group_id, artifact_id, version)
     evidence = {
-        "formatVersion": 1,
+        "formatVersion": 2,
         "checkedAt": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "coordinates": f"{group_id}:{artifact_id}:{version}",
+        "coordinates": coordinates,
         "installedJar": {"path": str(installed_jar), "sha256": sha256(installed_jar)},
         "installedPom": {"path": str(installed_pom), "sha256": sha256(installed_pom)},
         "javaHome": str(java_home),
@@ -429,20 +655,51 @@ def verify(arguments):
         violations = classpath_violations(entries, installed_jar)
         if violations:
             raise VerificationError("\n".join(violations))
-        evidence["consumerRuntimeClasspath"] = entries
-        report.append("Maven consumer compiled; its resolved runtime class path is exactly the RevetSec JAR")
-
-        consumer_output = run(
-            [
-                str(java), "-cp",
-                os.pathsep.join([str(consumer_directory / "target" / "classes"), *entries]),
-                CONSUMER_MAIN_CLASS, str(installed_jar),
-            ],
-            env=java_environment(java_home),
-            description="Consumer run",
+        maven_output = run_consumer(
+            java, java_home, consumer_directory / "target" / "classes", entries, installed_jar, "Maven consumer run"
         )
-        evidence["consumerOutput"] = consumer_output.splitlines()
-        report.append("consumer ran on the class path and resolved the automatic module com.revetsec")
+        evidence["mavenConsumer"] = {"runtimeClasspath": entries, "output": maven_output}
+        report.append("Maven consumer compiled; its resolved runtime class path is exactly the Revetsec JAR")
+        report.append(
+            f"Maven consumer ran on the class path, resolved the automatic module com.revetsec and called the "
+            f"public API: {', '.join(PUBLIC_API_CALLS)}"
+        )
+
+        # unpack_gradle_distribution checks the pinned SHA-256 before it extracts anything.
+        gradle = unpack_gradle_distribution(gradle_distribution, work_directory / "gradle-distribution")
+        distribution_sha256 = GRADLE_DISTRIBUTION_SHA256
+        consumer_directory, gradle_report = build_gradle_consumer(
+            gradle, java_home, repository, version, work_directory
+        )
+        violations = gradle_report_violations(gradle_report, installed_jar, coordinates, java_home)
+        if violations:
+            raise VerificationError(
+                "Gradle consumer resolution violations:\n" + "\n".join(f"  - {item}" for item in violations)
+            )
+        runtime_entries = [item["path"] for item in gradle_report["configurations"]["runtimeClasspath"]["files"]]
+        gradle_output = run_consumer(
+            java, java_home, consumer_directory / "build" / "classes" / "java" / "main", runtime_entries, installed_jar,
+            "Gradle consumer run",
+        )
+        evidence["gradleConsumer"] = {
+            "gradleVersion": gradle_report["gradleVersion"],
+            "distribution": {"url": GRADLE_DISTRIBUTION_URL, "sha256": distribution_sha256},
+            "gradleJavaVersion": gradle_report.get("gradleJavaVersion"),
+            "configurations": gradle_report["configurations"],
+            "output": gradle_output,
+        }
+        report.append(
+            f"Gradle {gradle_report['gradleVersion']} (pinned SHA-256 {distribution_sha256[:12]}...) built the "
+            f"consumer offline on Java {gradle_report.get('gradleJavaVersion')}"
+        )
+        report.append(
+            f"Gradle consumer's runtimeClasspath and compileClasspath are exactly the Revetsec JAR; "
+            f"{coordinates} resolves with zero dependencies"
+        )
+        report.append(
+            f"Gradle consumer ran on the class path, resolved the automatic module com.revetsec and called the "
+            f"public API: {', '.join(PUBLIC_API_CALLS)}"
+        )
     finally:
         if temporary is not None:
             temporary.cleanup()
@@ -481,6 +738,12 @@ def verify(arguments):
             f"jdeps not-found classes, all provided-scope annotations used only as annotations: {', '.join(not_found)}"
         )
 
+    for label, path, recorded in (("JAR", installed_jar, evidence["installedJar"]["sha256"]),
+                                  ("POM", installed_pom, evidence["installedPom"]["sha256"])):
+        if sha256(path) != recorded:
+            raise VerificationError(f"Installed {label} {path} changed while the consumers were built")
+    report.append("installed JAR and POM are unchanged after both consumer builds")
+
     evidence["result"] = "PASS"
     evidence["checks"] = report
     return evidence
@@ -493,16 +756,19 @@ def main(argv=None):
     parser.add_argument("--repository", type=Path, default=Path("~/.m2/repository"),
                         help="the Maven local repository core was installed into (default: ~/.m2/repository)")
     parser.add_argument("--java-home", type=Path, default=os.environ.get("JAVA_HOME"),
-                        help="the JDK for Maven, the consumer and jdeps (default: $JAVA_HOME)")
+                        help="the JDK for Maven, Gradle, the consumers and jdeps (default: $JAVA_HOME)")
     parser.add_argument("--maven", default=shutil.which("mvn"),
                         help="the Maven executable (default: mvn on PATH)")
     parser.add_argument("--maven-arg", action="append", default=[], metavar="ARG",
                         help="an extra argument for the consumer's Maven build, for example "
                              "-Dmaven.repo.local.tail=$HOME/.m2/repository (repeatable)")
+    parser.add_argument("--gradle-distribution", type=Path, required=True, metavar="ZIP",
+                        help=f"the Gradle distribution archive downloaded from {GRADLE_DISTRIBUTION_URL}; "
+                             "its SHA-256 must be the pinned one")
     parser.add_argument("--jdeps-release", type=int, default=17,
                         help="the --multi-release version jdeps analyzes (default: 17)")
     parser.add_argument("--work-directory", type=Path,
-                        help="where to build the consumer (default: a temporary directory, removed afterwards)")
+                        help="where to build the consumers (default: a temporary directory, removed afterwards)")
     parser.add_argument("--output", type=Path,
                         help="a directory to write packaged-consumer-result.json into")
     arguments = parser.parse_args(argv)
@@ -518,7 +784,7 @@ def main(argv=None):
         if arguments.output is not None:
             arguments.output.mkdir(parents=True, exist_ok=True)
             (arguments.output / "packaged-consumer-result.json").write_text(
-                json.dumps({"formatVersion": 1, "result": "FAIL", "error": str(exception)}, indent=2) + "\n",
+                json.dumps({"formatVersion": 2, "result": "FAIL", "error": str(exception)}, indent=2) + "\n",
                 encoding="utf-8",
             )
         return 1

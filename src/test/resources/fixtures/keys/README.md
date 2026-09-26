@@ -3,7 +3,7 @@
 > **TEST ONLY. PUBLIC. NEVER USE ANYWHERE ELSE.**
 >
 > Every private key in this directory is committed to a public repository, so anyone can sign or decrypt with it.
-> Use these keys only in RevetSec's own tests and local test containers, such as the scripted IdP. Never use them to
+> Use these keys only in Revetsec's own tests and local test containers, such as the scripted IdP. Never use them to
 > sign, encrypt or protect anything real, never register their certificates with a real identity provider or service
 > provider, and never copy them into another project.
 
@@ -46,7 +46,7 @@ The complete file list:
 
 ## Profile
 
-- Every certificate is self-signed, with subject and issuer `CN=<description>, O=RevetSec test fixtures - TEST ONLY`.
+- Every certificate is self-signed, with subject and issuer `CN=<description>, O=Revetsec test fixtures - TEST ONLY`.
 - `basicConstraints` critical `CA:FALSE`; a subject key identifier; the `keyUsage` shown above.
 - Every certificate is valid from `2026-01-01T00:00:00Z` to `2126-01-01T00:00:00Z` (100 years), so fixtures do not
   expire.
@@ -59,6 +59,12 @@ The complete file list:
 Regenerating replaces every key here. **Every committed fixture that was signed with, or encrypted to, one of these
 keys stops verifying or decrypting.** That includes the scripted IdP's minted corpus and any captured fixture that
 targets these keys. Regenerate only on purpose, and re-mint or re-capture the dependent fixtures in the same change.
+
+Fixtures derived from these keys go stale too. `../pem/` is made from `idp-signing-rsa-2048` and
+`idp-signing-ec-p256`, and `PemTests` checks that its files match these keys, so re-run the commands in
+`../pem/README.txt` in the same change. The hand-written PEM and DER seeds under
+`fuzz/src/test/resources/com/revetsec/internal/pem/PemFuzzTestsInputs/` were made from those fixtures; rebuild them
+as `fuzz/README.md` describes (Seeds, PEM), or they keep exercising the old keys' bytes.
 
 ```sh
 scripts/regenerate-test-pki.sh check          # verify what is checked in (read-only; needs a JDK keytool)

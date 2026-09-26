@@ -6,7 +6,7 @@
 	<artifactId>revetsec</artifactId>
 	<version>1.0.0-SNAPSHOT</version>
 	<packaging>jar</packaging>
-	<name>RevetSec</name>
+	<name>Revetsec</name>
 	<description>Zero-dependency Java library for OAuth 2.0 clients and resource servers, OpenID Connect relying parties, JOSE, SAML 2.0 service providers and SCIM 2.0 servers.</description>
 	<url>https://www.revetsec.com</url>
 
@@ -82,17 +82,56 @@
 		<junit.jupiter.version>6.1.3</junit.jupiter.version>
 		<testcontainers.version>2.0.5</testcontainers.version>
 
-		<!-- The javadoc JAR is built by a separately pinned JDK (REVETSEC_JAVADOC_HOME), as in Soklet.
-		     Every CI job passes -Dmaven.javadoc.skip=true until M1, when the first public type exists. -->
+		<!-- The javadoc JAR is built by a separately pinned JDK (REVETSEC_JAVADOC_HOME, Corretto 26), as in Soklet.
+		     CI builds it only in the javadoc job; every other job passes -Dmaven.javadoc.skip=true. -->
 		<revetsec.javadoc.executable>${env.REVETSEC_JAVADOC_HOME}/bin/javadoc</revetsec.javadoc.executable>
 		<revetsec.spotbugs.excludeFilterFile>${project.basedir}/config/spotbugs-exclude.xml</revetsec.spotbugs.excludeFilterFile>
 
-		<!-- Coverage floors (coverage profile). Proposed values, above Pyranid's 0.74/0.63; revisit at M1
-		     once real code exists. The per-package floors apply to internal.jose, internal.xml, oidc and saml. -->
-		<revetsec.coverage.bundle.instruction>0.80</revetsec.coverage.bundle.instruction>
-		<revetsec.coverage.bundle.branch>0.70</revetsec.coverage.bundle.branch>
+		<!-- Coverage floors (coverage profile), instruction and branch COVEREDRATIO. The critical floor applies to
+		     every package in the critical set: internal.json, internal.crypto, internal.encoding and internal.http
+		     (M1), and internal.jose, internal.xml, oidc and saml, which have no code yet. Each M1 package also has
+		     its own floor, set from measured runs.
+
+		     Measured 2026-09-24 (M1, WP-10b) on an arm64 Mac with Corretto 17.0.20.1, 21.0.11, 25.0.4.1, 26.0.1
+		     and 27. Method: nine runs of `mvn -B -ntp -Dmaven.javadoc.skip=true -Pcoverage clean verify`, three
+		     each on 17, 21 and 27, each compiled by its own JDK; plus a merged measurement, in which the classes
+		     compiled once on 17 were tested twice each on 17, 21 and 27 and once each on 25 and 26, and the eight
+		     JaCoCo exec files were merged. The single runs on 25 and 26 fell inside the range of the others. The
+		     check runs on one JDK at a time, so each floor sits a small margin below the lowest single run.
+		     Re-measured 2026-09-25, after the fixes from M1's final review, with four single runs of the same
+		     command (two on 21, one each on 17 and 27); no floor had to move.
+
+		       package             lowest single run   merged              lowest single run   floor
+		                           2026-09-24          2026-09-24          2026-09-25
+		       bundle              0.9871 / 0.9548     0.9875 / 0.9575     0.9867 / 0.9554     0.98 / 0.94
+		       internal.json       1.0000 / 1.0000     1.0000 / 1.0000     1.0000 / 1.0000     0.99 / 0.99
+		       internal.crypto     0.9750 / 0.9561     0.9750 / 0.9561     0.9729 / 0.9732     0.97 / 0.94
+		       internal.encoding   0.9954 / 1.0000     0.9954 / 1.0000     0.9954 / 1.0000     0.99 / 0.99
+		       internal.http       0.9667 / 0.8628     0.9681 / 0.8715     0.9685 / 0.8647     0.96 / 0.85
+
+		     Every package except internal.http gave the same numbers in every run on every JDK. In internal.http,
+		     73 to 79 of 576 branches were missed on 2026-09-24, and 79 at least once on each of 17, 21, 26 and 27;
+		     74 to 79 of 584 on 2026-09-25. Five or six branches in HttpExchange (Sink.subscriberFor,
+		     BoundedSubscriber.onSubscribe and BoundedSubscriber.abandon) are race backstops that only some runs
+		     reach. Its other misses were the same in every run, so there is no JDK-specific branch to exclude, and
+		     nothing is excluded. internal.crypto's instruction floor has the least margin: 33 of 1,218 instructions
+		     were missed, and the floor allows 36. Code that runs only in a child JVM (ChildJvm) is never counted,
+		     because the child does not get the JaCoCo agent: the default HTTP client's startup failure and the
+		     zero-thread build check (exit criteria 13 and 14), and StateSealer's refusing-provider and
+		     failing-SecureRandom tests. Move the floors with the code, and set each new critical package's own
+		     floor from a measured run when it lands. -->
+		<revetsec.coverage.bundle.instruction>0.98</revetsec.coverage.bundle.instruction>
+		<revetsec.coverage.bundle.branch>0.94</revetsec.coverage.bundle.branch>
 		<revetsec.coverage.critical.instruction>0.90</revetsec.coverage.critical.instruction>
 		<revetsec.coverage.critical.branch>0.85</revetsec.coverage.critical.branch>
+		<revetsec.coverage.internal.json.instruction>0.99</revetsec.coverage.internal.json.instruction>
+		<revetsec.coverage.internal.json.branch>0.99</revetsec.coverage.internal.json.branch>
+		<revetsec.coverage.internal.crypto.instruction>0.97</revetsec.coverage.internal.crypto.instruction>
+		<revetsec.coverage.internal.crypto.branch>0.94</revetsec.coverage.internal.crypto.branch>
+		<revetsec.coverage.internal.encoding.instruction>0.99</revetsec.coverage.internal.encoding.instruction>
+		<revetsec.coverage.internal.encoding.branch>0.99</revetsec.coverage.internal.encoding.branch>
+		<revetsec.coverage.internal.http.instruction>0.96</revetsec.coverage.internal.http.instruction>
+		<revetsec.coverage.internal.http.branch>0.85</revetsec.coverage.internal.http.branch>
 	</properties>
 
 	<build>
@@ -123,7 +162,7 @@
 										<exclude>*:*:*:*:runtime</exclude>
 										<exclude>*:*:*:*:system</exclude>
 									</excludes>
-									<message>RevetSec core must not declare compile, runtime or system dependencies; use provided or test scope instead.</message>
+									<message>Revetsec core must not declare compile, runtime or system dependencies; use provided or test scope instead.</message>
 								</bannedDependencies>
 							</rules>
 						</configuration>
@@ -205,8 +244,8 @@
 				<artifactId>maven-javadoc-plugin</artifactId>
 				<version>${maven.javadoc.plugin.version}</version>
 				<configuration>
-					<!-- Documentation uses a separately pinned JDK; compilation still targets 17. Required from M1;
-					     until then every build passes -Dmaven.javadoc.skip=true (there is no public type yet). -->
+					<!-- Documentation uses a separately pinned JDK; compilation still targets 17. Any build that does
+					     not pass -Dmaven.javadoc.skip=true needs REVETSEC_JAVADOC_HOME (see CONTRIBUTING.md). -->
 					<javadocExecutable>${revetsec.javadoc.executable}</javadocExecutable>
 					<detectJavaApiLink>false</detectJavaApiLink>
 					<detectOfflineLinks>false</detectOfflineLinks>
@@ -244,9 +283,12 @@
 							<version>${project.version}</version>
 						</additionalDependency>
 					</additionalDependencies>
+					<!-- Every doclint group except html. With -Xdoclint:-html alone, javadoc 26 reported neither a missing
+					     @return nor an undocumented public method; with all,-html both are warnings, and so is an
+					     undocumented serialized field of an exception. The javadoc CI job makes warnings fatal. -->
+					<doclint>all,-html</doclint>
 					<additionalOptions>
 						<additionalOption>-XDignore.symbol.file</additionalOption>
-						<additionalOption>-Xdoclint:-html</additionalOption>
 					</additionalOptions>
 					<linksource>true</linksource>
 					<show>public</show>
@@ -434,11 +476,12 @@
 		</profile>
 
 		<!--
-			JaCoCo coverage floors: a bundle floor above Pyranid's 0.74/0.63, plus stricter per-package floors
-			for internal.jose, internal.xml, oidc and saml. Package names use '?' so the rule matches whether
-			JaCoCo reports them with dots or slashes.
+			JaCoCo coverage floors: a bundle floor, the critical floor for every package in the critical set, and a
+			measured floor for each critical package that has code. The values and how they were measured are with
+			the revetsec.coverage.* properties above. A rule whose packages have no classes yet passes. Package
+			names use '?' so a rule matches whether JaCoCo reports them with dots or slashes.
 
-			  mvn -B -ntp -Pcoverage -Dmaven.javadoc.skip=true verify
+			  mvn -B -ntp -Dmaven.javadoc.skip=true -Pcoverage clean verify
 		-->
 		<profile>
 			<id>coverage</id>
@@ -493,6 +536,10 @@
 										<rule>
 											<element>PACKAGE</element>
 											<includes>
+												<include>com?revetsec?internal?json</include>
+												<include>com?revetsec?internal?crypto</include>
+												<include>com?revetsec?internal?encoding</include>
+												<include>com?revetsec?internal?http</include>
 												<include>com?revetsec?internal?jose</include>
 												<include>com?revetsec?internal?xml</include>
 												<include>com?revetsec?oidc</include>
@@ -508,6 +555,78 @@
 													<counter>BRANCH</counter>
 													<value>COVEREDRATIO</value>
 													<minimum>${revetsec.coverage.critical.branch}</minimum>
+												</limit>
+											</limits>
+										</rule>
+										<rule>
+											<element>PACKAGE</element>
+											<includes>
+												<include>com?revetsec?internal?json</include>
+											</includes>
+											<limits>
+												<limit>
+													<counter>INSTRUCTION</counter>
+													<value>COVEREDRATIO</value>
+													<minimum>${revetsec.coverage.internal.json.instruction}</minimum>
+												</limit>
+												<limit>
+													<counter>BRANCH</counter>
+													<value>COVEREDRATIO</value>
+													<minimum>${revetsec.coverage.internal.json.branch}</minimum>
+												</limit>
+											</limits>
+										</rule>
+										<rule>
+											<element>PACKAGE</element>
+											<includes>
+												<include>com?revetsec?internal?crypto</include>
+											</includes>
+											<limits>
+												<limit>
+													<counter>INSTRUCTION</counter>
+													<value>COVEREDRATIO</value>
+													<minimum>${revetsec.coverage.internal.crypto.instruction}</minimum>
+												</limit>
+												<limit>
+													<counter>BRANCH</counter>
+													<value>COVEREDRATIO</value>
+													<minimum>${revetsec.coverage.internal.crypto.branch}</minimum>
+												</limit>
+											</limits>
+										</rule>
+										<rule>
+											<element>PACKAGE</element>
+											<includes>
+												<include>com?revetsec?internal?encoding</include>
+											</includes>
+											<limits>
+												<limit>
+													<counter>INSTRUCTION</counter>
+													<value>COVEREDRATIO</value>
+													<minimum>${revetsec.coverage.internal.encoding.instruction}</minimum>
+												</limit>
+												<limit>
+													<counter>BRANCH</counter>
+													<value>COVEREDRATIO</value>
+													<minimum>${revetsec.coverage.internal.encoding.branch}</minimum>
+												</limit>
+											</limits>
+										</rule>
+										<rule>
+											<element>PACKAGE</element>
+											<includes>
+												<include>com?revetsec?internal?http</include>
+											</includes>
+											<limits>
+												<limit>
+													<counter>INSTRUCTION</counter>
+													<value>COVEREDRATIO</value>
+													<minimum>${revetsec.coverage.internal.http.instruction}</minimum>
+												</limit>
+												<limit>
+													<counter>BRANCH</counter>
+													<value>COVEREDRATIO</value>
+													<minimum>${revetsec.coverage.internal.http.branch}</minimum>
 												</limit>
 											</limits>
 										</rule>

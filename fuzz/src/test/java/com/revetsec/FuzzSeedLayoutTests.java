@@ -1,0 +1,313 @@
+/*
+ * Copyright 2026 Revetware LLC.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package com.revetsec;
+
+import com.code_intelligence.jazzer.junit.FuzzTest;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
+
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
+import java.net.URISyntaxException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.TreeMap;
+import java.util.TreeSet;
+import java.util.function.Predicate;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
+
+/**
+ * The fuzz module's seed layout (M1 plan, WP-8 and exit criterion 18). Jazzer's replay and
+ * {@code .clusterfuzzlite/build.sh} find a target's seeds only by the path
+ * {@code <package>/<SimpleClassName>Inputs/<method>/} on the test class path, which the hand-written seed directories
+ * and the fuzz pom's {@code targetPath} entries spell out as plain strings. Without these checks, renaming or moving a
+ * target drops its seeds silently: the replay passes with fewer inputs, and ClusterFuzzLite starts the target from
+ * nothing.
+ * <p>
+ * This is a plain JUnit class, not a fuzz target, so the pom's Surefire includes name it next to the
+ * {@code *FuzzTests} pattern, and {@code build.sh}, which looks only for {@code *FuzzTests} classes, never sees it.
+ *
+ * @author <a href="https://www.revetkn.com">Mark Allen</a>
+ */
+final class FuzzSeedLayoutTests {
+	private static final String INPUTS_SUFFIX = "Inputs";
+	private static final String FUZZ_TESTS_SUFFIX = "FuzzTests";
+	private static final String CLASS_FILE_SUFFIX = ".class";
+
+	/**
+	 * The packages whose {@code byte[]} targets read JSON text, so each must be seeded with the core JSON corpus and
+	 * JSONTestSuite.
+	 */
+	private static final Set<String> JSON_TEXT_PACKAGES = Set.of("com.revetsec.json", "com.revetsec.internal.json");
+
+	private static final List<MappedCorpus> JSON_TEXT_CORPORA = List.of(
+			new MappedCorpus("src/test/resources/com/revetsec/internal/json/corpus", "",
+					relative -> relative.startsWith("parse/") || relative.startsWith("round-trip/")),
+			new MappedCorpus("src/test/resources/vectors/jsontestsuite/test_parsing", "jsontestsuite/",
+					relative -> relative.indexOf('/') < 0 && relative.endsWith(".json")));
+
+	private static final List<MappedCorpus> PEM_TEXT_CORPORA = List.of(
+			new MappedCorpus("src/test/resources/fixtures/pem", "fixtures-pem/",
+					relative -> relative.indexOf('/') < 0 && relative.endsWith(".pem")),
+			new MappedCorpus("src/test/resources/fixtures/keys", "fixtures-keys/",
+					relative -> relative.indexOf('/') < 0 && relative.endsWith(".pem")));
+
+	/**
+	 * Every target the fuzz pom maps a core corpus into, with the corpora it maps (its {@code testResource} entries).
+	 */
+	private static final Map<String, List<MappedCorpus>> MAPPED_TARGETS = Map.of(
+			"com.revetsec.internal.json.JsonCodecFuzzTests#"
+					+ "parseRejectsOnlyWithJsonParseExceptionAndAcceptsOnlyValuesInsideTheProfile", JSON_TEXT_CORPORA,
+			"com.revetsec.internal.json.JsonCodecFuzzTests#acceptedValuesRoundTripUnderTheMaximumCapProfile",
+			JSON_TEXT_CORPORA,
+			"com.revetsec.internal.json.JsonCodecFuzzTests#scimAcceptsOnlyWhatTheExactNameProfileAccepts",
+			JSON_TEXT_CORPORA,
+			"com.revetsec.json.JsonModelFuzzTests#parsedValuesKeepEqualityUnderReorderingAndRescaling", JSON_TEXT_CORPORA,
+			"com.revetsec.internal.json.Rfc7638FuzzTests#canonicalJwkAgreesWithAnIndependentEncoder", JSON_TEXT_CORPORA,
+			"com.revetsec.internal.pem.PemFuzzTests#pemParsersRejectOnlyWithPemExceptionAndAcceptAtMostOneLabel",
+			PEM_TEXT_CORPORA);
+
+	// A seed directory whose class or method no longer exists (after a rename or a move) is never replayed or zipped.
+	@Test
+	void everyInputsDirectoryBelongsToAFuzzTestMethodOfItsClass() throws IOException {
+		Path root = testClassesRoot();
+		List<String> orphans = new ArrayList<>();
+		int directories = 0;
+
+		for (Path inputs : inputsDirectories(root)) {
+			String className = className(root, inputs);
+			Set<String> methods = fuzzTestMethodNames(className);
+
+			try (Stream<Path> children = Files.list(inputs)) {
+				for (Path child : children.sorted().toList()) {
+					++directories;
+					if (!Files.isDirectory(child) || !methods.contains(child.getFileName().toString()))
+						orphans.add(root.relativize(child).toString());
+				}
+			}
+		}
+
+		Assertions.assertTrue(directories > 0, "no inputs directory was found under " + root);
+		Assertions.assertEquals(List.of(), orphans, "seed directories with no matching @FuzzTest method");
+	}
+
+	// Every target starts from at least one seed, in the Maven replay and in ClusterFuzzLite's seed zip.
+	@Test
+	void everyFuzzTestMethodHasAtLeastOneSeed() throws IOException {
+		Path root = testClassesRoot();
+		Map<String, Long> seedCounts = new TreeMap<>();
+
+		for (String target : fuzzTargets(root))
+			seedCounts.put(target, countFiles(inputsDirectory(root, target)));
+
+		Assertions.assertTrue(seedCounts.size() >= MAPPED_TARGETS.size(), seedCounts::toString);
+		Assertions.assertEquals(Map.of(), seedCounts.entrySet().stream().filter(entry -> entry.getValue() == 0)
+				.collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue)), "targets with no seed");
+	}
+
+	// Each mapped corpus reaches its target whole and unchanged, every JSON-text target is mapped, and no mapping names
+	// a method that is gone.
+	@Test
+	void everyMappedCorpusReachesItsTargetWhole() throws IOException {
+		Path root = testClassesRoot();
+		Path core = coreBasedir(root);
+		Set<String> targets = fuzzTargets(root);
+
+		Set<String> unmappedJsonTextTargets = new TreeSet<>();
+		for (String target : targets)
+			if (readsJsonText(target) && !MAPPED_TARGETS.containsKey(target))
+				unmappedJsonTextTargets.add(target);
+		Assertions.assertEquals(Set.of(), unmappedJsonTextTargets, "JSON-text targets without the mapped corpora");
+
+		for (Map.Entry<String, List<MappedCorpus>> entry : MAPPED_TARGETS.entrySet()) {
+			Assertions.assertTrue(targets.contains(entry.getKey()), () -> "no @FuzzTest method " + entry.getKey());
+			Path inputs = inputsDirectory(root, entry.getKey());
+
+			for (MappedCorpus corpus : entry.getValue()) {
+				List<String> sources = corpus.sourceFiles(core);
+				Assertions.assertFalse(sources.isEmpty(), () -> "no source files in " + core.resolve(corpus.source));
+
+				for (String relative : sources) {
+					Path mapped = inputs.resolve(corpus.target + relative);
+					Assertions.assertTrue(Files.isRegularFile(mapped), () -> entry.getKey() + " lacks " + mapped);
+					Assertions.assertEquals(-1L, Files.mismatch(core.resolve(corpus.source).resolve(relative), mapped),
+							() -> mapped + " differs from its source");
+				}
+			}
+		}
+	}
+
+	/**
+	 * Every {@code <SimpleClassName>Inputs} directory on the test class path: each lives in its class's package
+	 * directory. The core test tree, which this module compiles in, has none.
+	 */
+	private static List<Path> inputsDirectories(Path root) throws IOException {
+		try (Stream<Path> paths = Files.walk(root)) {
+			return paths.filter(Files::isDirectory)
+					.filter(path -> !path.equals(root) && path.getFileName().toString().endsWith(INPUTS_SUFFIX))
+					.sorted()
+					.toList();
+		}
+	}
+
+	/**
+	 * Every {@code @FuzzTest} method, as {@code <binary class name>#<method>}, of every top-level {@code *FuzzTests}
+	 * class on the test class path, which is the set {@code build.sh} makes targets of.
+	 */
+	private static Set<String> fuzzTargets(Path root) throws IOException {
+		Set<String> targets = new TreeSet<>();
+
+		try (Stream<Path> paths = Files.walk(root)) {
+			for (Path classFile : paths.filter(Files::isRegularFile)
+					.filter(path -> path.getFileName().toString().endsWith(FUZZ_TESTS_SUFFIX + CLASS_FILE_SUFFIX))
+					.sorted()
+					.toList()) {
+				String relative = root.relativize(classFile).toString().replace('\\', '/');
+				String className = relative.substring(0, relative.length() - CLASS_FILE_SUFFIX.length()).replace('/', '.');
+
+				for (String method : fuzzTestMethodNames(className))
+					targets.add(className + "#" + method);
+			}
+		}
+
+		Assertions.assertFalse(targets.isEmpty(), "no @FuzzTest method was found under " + root);
+		return targets;
+	}
+
+	private static Set<String> fuzzTestMethodNames(String className) {
+		Class<?> type = loadClass(className);
+		return Arrays.stream(type.getDeclaredMethods())
+				.filter(method -> method.isAnnotationPresent(FuzzTest.class))
+				.map(Method::getName)
+				.collect(Collectors.toCollection(TreeSet::new));
+	}
+
+	/**
+	 * A {@code byte[]} target in a JSON package reads JSON text, so it is seeded with the JSON corpora.
+	 */
+	private static boolean readsJsonText(String target) {
+		String className = target.substring(0, target.indexOf('#'));
+		String methodName = target.substring(target.indexOf('#') + 1);
+		Class<?> type = loadClass(className);
+
+		if (!JSON_TEXT_PACKAGES.contains(type.getPackageName()))
+			return false;
+
+		for (Method method : type.getDeclaredMethods())
+			if (method.getName().equals(methodName) && Modifier.isPublic(method.getModifiers())
+					&& Arrays.equals(method.getParameterTypes(), new Class<?>[]{byte[].class}))
+				return true;
+
+		return false;
+	}
+
+	private static Class<?> loadClass(String className) {
+		try {
+			return Class.forName(className, false, FuzzSeedLayoutTests.class.getClassLoader());
+		} catch (ClassNotFoundException e) {
+			throw new AssertionError("No class " + className + " for its seed directory", e);
+		}
+	}
+
+	private static Path inputsDirectory(Path root, String target) {
+		String className = target.substring(0, target.indexOf('#'));
+		String methodName = target.substring(target.indexOf('#') + 1);
+		return root.resolve(className.replace('.', '/') + INPUTS_SUFFIX).resolve(methodName);
+	}
+
+	private static String className(Path root, Path inputs) {
+		String relative = root.relativize(inputs).toString().replace('\\', '/');
+		return relative.substring(0, relative.length() - INPUTS_SUFFIX.length()).replace('/', '.');
+	}
+
+	private static long countFiles(Path directory) throws IOException {
+		if (!Files.isDirectory(directory))
+			return 0;
+
+		try (Stream<Path> paths = Files.walk(directory)) {
+			return paths.filter(Files::isRegularFile).count();
+		}
+	}
+
+	/**
+	 * The directory the test classes were loaded from: {@code fuzz/target/test-classes}.
+	 */
+	private static Path testClassesRoot() {
+		try {
+			Path root = Path.of(FuzzSeedLayoutTests.class.getProtectionDomain().getCodeSource().getLocation().toURI());
+			Assertions.assertTrue(Files.isDirectory(root), () -> "the test classes are not in a directory: " + root);
+			return root;
+		} catch (URISyntaxException e) {
+			throw new IllegalStateException(e);
+		}
+	}
+
+	/**
+	 * The core checkout the fuzz pom maps its corpora from: the {@code revetsec.core.basedir} Surefire passes, or,
+	 * outside Maven, the checkout that holds {@code fuzz/target/test-classes}.
+	 */
+	private static Path coreBasedir(Path testClassesRoot) {
+		String configured = System.getProperty("revetsec.core.basedir");
+		Path core = configured == null || configured.isBlank()
+				? testClassesRoot.getParent().getParent().getParent()
+				: Path.of(configured);
+		Assertions.assertTrue(Files.isDirectory(core.resolve("src/test/resources")),
+				() -> "not a Revetsec core checkout: " + core);
+		return core.toAbsolutePath().normalize();
+	}
+
+	/**
+	 * One core corpus the fuzz pom maps into a target's inputs directory: its source directory in the core checkout,
+	 * the subdirectory it lands in, and which of its files the pom's includes select.
+	 */
+	private static final class MappedCorpus {
+		private final String source;
+		private final String target;
+		private final Predicate<String> included;
+
+		private MappedCorpus(String source, String target, Predicate<String> included) {
+			this.source = source;
+			this.target = target;
+			this.included = included;
+		}
+
+		/**
+		 * The included files, as paths relative to the source directory with {@code /} separators.
+		 */
+		private List<String> sourceFiles(Path core) {
+			Path directory = core.resolve(this.source);
+
+			try (Stream<Path> paths = Files.walk(directory)) {
+				return paths.filter(Files::isRegularFile)
+						.map(path -> directory.relativize(path).toString().replace('\\', '/'))
+						.filter(this.included)
+						.sorted()
+						.toList();
+			} catch (IOException e) {
+				throw new UncheckedIOException(e);
+			}
+		}
+	}
+}

@@ -15,15 +15,18 @@
 	limitations under the License.
 -->
 <!--
-	RevetSec fuzz tooling. This pom is NOT built by the root pom and is never published:
-	install and deploy are skipped below. It compiles RevetSec's main sources directly
+	Revetsec fuzz tooling. This pom is NOT built by the root pom and is never published:
+	install and deploy are skipped below. It compiles Revetsec's main sources directly
 	(../src/main/java), plus the core test tree (../src/test/java, ../src/test/resources) so that
 	fuzz targets can reuse test helpers and fixtures. The core test tree is filtered: Failsafe ITs
 	(**/*IT.java) and the Testcontainers-backed scripted-IdP classes (com/revetsec/saml/ScriptedIdp*)
 	are excluded, so nothing here needs Docker or Testcontainers.
 
-	Replay the checked-in seed corpus (Jazzer regression mode):
-	  mvn -B -ntp -f fuzz/pom.xml verify
+	Replay every seed, the module's own and the corpora mapped in below (Jazzer regression mode):
+	  mvn -B -ntp -f fuzz/pom.xml clean verify
+
+	Fuzz one @FuzzTest method (see README.md for the options that keep generated files out of the tree):
+	  JAZZER_FUZZ=1 mvn -B -ntp -f fuzz/pom.xml test -Dtest='<Class>#<method>' -Djazzer.max_duration=5m
 
 	Compile against the core main sources only, without the core test tree:
 	  mvn -B -ntp -f fuzz/pom.xml -Drevetsec.fuzz.mainSourcesOnly verify
@@ -38,8 +41,8 @@
 	<version>1.0.0-SNAPSHOT</version>
 	<packaging>jar</packaging>
 
-	<name>RevetSec Fuzz Tests</name>
-	<description>Jazzer fuzz targets for RevetSec. Test tooling only; never published.</description>
+	<name>Revetsec Fuzz Tests</name>
+	<description>Jazzer fuzz targets for Revetsec. Test tooling only; never published.</description>
 	<url>https://www.revetsec.com</url>
 
 	<licenses>
@@ -62,7 +65,7 @@
 			 API/engine/launcher dependencies below. Without it, old Platform classes stay on the
 			 test classpath and the run can fail before any corpus input executes. -->
 		<junit.version>6.1.3</junit.version>
-		<!-- The RevetSec core checkout whose sources this module compiles. The core test tree is
+		<!-- The Revetsec core checkout whose sources this module compiles. The core test tree is
 			 compiled in by default; the "main-sources-only" profile unbinds the add-core-test-*
 			 executions. -->
 		<revetsec.core.basedir>${project.basedir}/..</revetsec.core.basedir>
@@ -86,7 +89,7 @@
 	</dependencyManagement>
 
 	<dependencies>
-		<!-- Compile-time-only annotations used by RevetSec's main sources (same as core). -->
+		<!-- Compile-time-only annotations used by Revetsec's main sources (same as core). -->
 		<dependency>
 			<groupId>org.jspecify</groupId>
 			<artifactId>jspecify</artifactId>
@@ -131,6 +134,109 @@
 	</dependencies>
 
 	<build>
+		<!-- Seed corpora. The module's own curated seeds are in src/test/resources/<package>/<Class>Inputs/<method>/.
+			 The larger corpora stay where the core build keeps (and SHA-256-checks) them, and are mapped here into
+			 each target's Jazzer inputs directory through targetPath, so they are never duplicated in the tree:
+			 - the core JSON corpus (corpus/parse and corpus/round-trip, the .bin files included) and every
+			   JSONTestSuite test_parsing file, for each JSON target that reads JSON text;
+			 - the TEST ONLY PEM fixtures (fixtures/pem and fixtures/keys), for the PEM text target.
+			 Mapped seeds exist only under target/test-classes, which is where .clusterfuzzlite/build.sh zips every
+			 target's seeds from. Jazzer reads an inputs directory recursively, so the subdirectories are kept. -->
+		<testResources>
+			<testResource>
+				<directory>src/test/resources</directory>
+			</testResource>
+			<testResource>
+				<directory>${revetsec.core.basedir}/src/test/resources/com/revetsec/internal/json/corpus</directory>
+				<targetPath>com/revetsec/internal/json/JsonCodecFuzzTestsInputs/parseRejectsOnlyWithJsonParseExceptionAndAcceptsOnlyValuesInsideTheProfile</targetPath>
+				<includes>
+					<include>parse/**</include>
+					<include>round-trip/**</include>
+				</includes>
+			</testResource>
+			<testResource>
+				<directory>${revetsec.core.basedir}/src/test/resources/vectors/jsontestsuite/test_parsing</directory>
+				<targetPath>com/revetsec/internal/json/JsonCodecFuzzTestsInputs/parseRejectsOnlyWithJsonParseExceptionAndAcceptsOnlyValuesInsideTheProfile/jsontestsuite</targetPath>
+				<includes>
+					<include>*.json</include>
+				</includes>
+			</testResource>
+			<testResource>
+				<directory>${revetsec.core.basedir}/src/test/resources/com/revetsec/internal/json/corpus</directory>
+				<targetPath>com/revetsec/internal/json/JsonCodecFuzzTestsInputs/acceptedValuesRoundTripUnderTheMaximumCapProfile</targetPath>
+				<includes>
+					<include>parse/**</include>
+					<include>round-trip/**</include>
+				</includes>
+			</testResource>
+			<testResource>
+				<directory>${revetsec.core.basedir}/src/test/resources/vectors/jsontestsuite/test_parsing</directory>
+				<targetPath>com/revetsec/internal/json/JsonCodecFuzzTestsInputs/acceptedValuesRoundTripUnderTheMaximumCapProfile/jsontestsuite</targetPath>
+				<includes>
+					<include>*.json</include>
+				</includes>
+			</testResource>
+			<testResource>
+				<directory>${revetsec.core.basedir}/src/test/resources/com/revetsec/internal/json/corpus</directory>
+				<targetPath>com/revetsec/internal/json/JsonCodecFuzzTestsInputs/scimAcceptsOnlyWhatTheExactNameProfileAccepts</targetPath>
+				<includes>
+					<include>parse/**</include>
+					<include>round-trip/**</include>
+				</includes>
+			</testResource>
+			<testResource>
+				<directory>${revetsec.core.basedir}/src/test/resources/vectors/jsontestsuite/test_parsing</directory>
+				<targetPath>com/revetsec/internal/json/JsonCodecFuzzTestsInputs/scimAcceptsOnlyWhatTheExactNameProfileAccepts/jsontestsuite</targetPath>
+				<includes>
+					<include>*.json</include>
+				</includes>
+			</testResource>
+			<testResource>
+				<directory>${revetsec.core.basedir}/src/test/resources/com/revetsec/internal/json/corpus</directory>
+				<targetPath>com/revetsec/json/JsonModelFuzzTestsInputs/parsedValuesKeepEqualityUnderReorderingAndRescaling</targetPath>
+				<includes>
+					<include>parse/**</include>
+					<include>round-trip/**</include>
+				</includes>
+			</testResource>
+			<testResource>
+				<directory>${revetsec.core.basedir}/src/test/resources/vectors/jsontestsuite/test_parsing</directory>
+				<targetPath>com/revetsec/json/JsonModelFuzzTestsInputs/parsedValuesKeepEqualityUnderReorderingAndRescaling/jsontestsuite</targetPath>
+				<includes>
+					<include>*.json</include>
+				</includes>
+			</testResource>
+			<testResource>
+				<directory>${revetsec.core.basedir}/src/test/resources/com/revetsec/internal/json/corpus</directory>
+				<targetPath>com/revetsec/internal/json/Rfc7638FuzzTestsInputs/canonicalJwkAgreesWithAnIndependentEncoder</targetPath>
+				<includes>
+					<include>parse/**</include>
+					<include>round-trip/**</include>
+				</includes>
+			</testResource>
+			<testResource>
+				<directory>${revetsec.core.basedir}/src/test/resources/vectors/jsontestsuite/test_parsing</directory>
+				<targetPath>com/revetsec/internal/json/Rfc7638FuzzTestsInputs/canonicalJwkAgreesWithAnIndependentEncoder/jsontestsuite</targetPath>
+				<includes>
+					<include>*.json</include>
+				</includes>
+			</testResource>
+			<testResource>
+				<directory>${revetsec.core.basedir}/src/test/resources/fixtures/pem</directory>
+				<targetPath>com/revetsec/internal/pem/PemFuzzTestsInputs/pemParsersRejectOnlyWithPemExceptionAndAcceptAtMostOneLabel/fixtures-pem</targetPath>
+				<includes>
+					<include>*.pem</include>
+				</includes>
+			</testResource>
+			<testResource>
+				<directory>${revetsec.core.basedir}/src/test/resources/fixtures/keys</directory>
+				<targetPath>com/revetsec/internal/pem/PemFuzzTestsInputs/pemParsersRejectOnlyWithPemExceptionAndAcceptAtMostOneLabel/fixtures-keys</targetPath>
+				<includes>
+					<include>*.pem</include>
+				</includes>
+			</testResource>
+		</testResources>
+
 		<plugins>
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
@@ -238,13 +344,19 @@
 				<artifactId>maven-surefire-plugin</artifactId>
 				<version>3.6.0</version>
 				<configuration>
-					<!-- Only fuzz targets run here. The core test tree is compiled in for its helpers,
-						 but its *Tests classes (contract tests included) run in the root build, whose
-						 basedir they assume. Fuzz targets are named *FuzzTests; see README.md. -->
+					<!-- Only fuzz targets run here, plus FuzzSeedLayoutTests, which checks that every target's
+						 seed directory and mapped corpora match its class and method names. The core test tree is
+						 compiled in for its helpers, but its *Tests classes (contract tests included) run in the
+						 root build, whose basedir they assume. Fuzz targets are named *FuzzTests; see README.md. -->
 					<includes>
 						<include>**/*FuzzTests.java</include>
+						<include>com/revetsec/FuzzSeedLayoutTests.java</include>
 					</includes>
 					<failIfNoTests>true</failIfNoTests>
+					<systemPropertyVariables>
+						<!-- FuzzSeedLayoutTests compares the mapped corpora with their sources here. -->
+						<revetsec.core.basedir>${revetsec.core.basedir}</revetsec.core.basedir>
+					</systemPropertyVariables>
 					<argLine>
 						-Xmx512m
 						-Djdk.attach.allowAttachSelf=true
@@ -297,7 +409,7 @@
 			</properties>
 		</profile>
 
-		<!-- Fallback toggle: compile against RevetSec's main sources only, leaving the core test
+		<!-- Fallback toggle: compile against Revetsec's main sources only, leaving the core test
 			 tree out. Use it when the core test tree does not compile (for example while a change
 			 to it is in flight). Activate with -Drevetsec.fuzz.mainSourcesOnly. -->
 		<profile>

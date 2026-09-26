@@ -1,6 +1,6 @@
 {
   "realm": "revetsec-test",
-  "displayName": "RevetSec test realm (TEST ONLY)",
+  "displayName": "Revetsec test realm (TEST ONLY)",
   "enabled": true,
   "sslRequired": "external",
   "registrationAllowed": false,
@@ -13,7 +13,7 @@
   "clients": [
     {
       "clientId": "revetsec-test-client",
-      "name": "RevetSec test client (TEST ONLY)",
+      "name": "Revetsec test client (TEST ONLY)",
       "enabled": true,
       "protocol": "openid-connect",
       "publicClient": false,

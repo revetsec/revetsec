@@ -1,0 +1,19 @@
+{
+  "schemas": ["urn:ietf:params:scim:api:messages:2.0:PatchOp"],
+  "Operations": [
+    {
+      "op": "add",
+      "path": "members",
+      "value": [
+        {
+          "display": "Ada Müller-Example",
+          "$ref": "https://example.com/v2/Users/2819c223-7f76-453a-919d-413861904646",
+          "value": "2819c223-7f76-453a-919d-413861904646"
+        }
+      ]
+    },
+    {"op": "remove", "path": "members[value eq \"902c246b-6245-4190-8e05-00816be7344a\"]"},
+    {"op": "replace", "path": "emails[type eq \"work\"].value", "value": "ada.m@example.com"},
+    {"op": "Replace", "value": {"active": false, "nickName": "Ada", "x-quota": 1.5e3, "x-score": -0.25}}
+  ]
+}

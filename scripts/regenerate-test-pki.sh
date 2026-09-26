@@ -16,11 +16,11 @@
 #
 
 # ---------------------------------------------------------------------------------------------------------------------
-# regenerate-test-pki.sh: RevetSec's TEST-ONLY PKI and signing keys.
+# regenerate-test-pki.sh: Revetsec's TEST-ONLY PKI and signing keys.
 #
 # TEST ONLY. Everything this script writes is committed to a public repository, including every private key and the
 # test CA's private key. Anyone can mint certificates with it. Never trust, install, deploy or reuse any of it outside
-# RevetSec's own tests and local test containers, and never add the test CA to an OS, browser or JDK trust store.
+# Revetsec's own tests and local test containers, and never add the test CA to an OS, browser or JDK trust store.
 #
 # Outputs (file names are stable and documented in each directory's README.md):
 #   src/test/resources/tls/            test CA (PKCS#12 + PEM), server leaf (PEM + PKCS#12), truststore (PKCS#12)
@@ -41,7 +41,10 @@
 #
 # --force is required to overwrite existing files. Regenerating keys/ invalidates every committed fixture that was
 # signed with, or encrypted to, those keys (for example the scripted-IdP minted corpus), so re-mint those in the same
-# change. Regenerating tls/ only changes the TLS material; nothing embeds it.
+# change. It also invalidates src/test/resources/fixtures/pem/, which is derived from these keys and which PemTests
+# checks against them: re-run the commands in fixtures/pem/README.txt in the same change, and rebuild the hand-written
+# PEM and DER seeds under fuzz/src/test/resources/com/revetsec/internal/pem/ that were made from those fixtures.
+# Regenerating tls/ only changes the TLS material; nothing embeds it.
 #
 # Requirements: bash 3.2+; OpenSSL 3.4+ to generate (for -not_before/-not_after), 3.0+ for check; a JDK keytool
 # for tls, all and check.
@@ -74,9 +77,9 @@ readonly NOT_AFTER='21260101000000Z'
 readonly NOT_BEFORE_PRINTED='Jan  1 00:00:00 2026 GMT'
 readonly NOT_AFTER_PRINTED='Jan  1 00:00:00 2126 GMT'
 
-readonly SUBJECT_O='RevetSec test fixtures - TEST ONLY'
+readonly SUBJECT_O='Revetsec test fixtures - TEST ONLY'
 
-readonly CA_SUBJECT="/O=$SUBJECT_O/CN=RevetSec Test CA - DO NOT TRUST"
+readonly CA_SUBJECT="/O=$SUBJECT_O/CN=Revetsec Test CA - DO NOT TRUST"
 readonly CA_SERIAL=1000
 readonly CA_ALIAS='test-ca'
 readonly SERVER_SUBJECT="/O=$SUBJECT_O/CN=localhost"
@@ -127,16 +130,16 @@ permitted;URI.1 = invalid'
 # Signing and encryption fixtures, one per line:
 #   name|algorithm|size or curve|certificate digest|serial|keyUsage|CN
 # Each yields <name>-key.pem (PKCS#8) and <name>-cert.pem (self-signed X.509).
-readonly KEY_SPECS='idp-signing-rsa-2048|RSA|2048|sha256|2001|digitalSignature|RevetSec test IdP signing RSA-2048
-idp-signing-rsa-3072|RSA|3072|sha256|2002|digitalSignature|RevetSec test IdP signing RSA-3072
-idp-signing-ec-p256|EC|P-256|sha256|2003|digitalSignature|RevetSec test IdP signing EC P-256
-idp-signing-ec-p384|EC|P-384|sha384|2004|digitalSignature|RevetSec test IdP signing EC P-384
-idp-signing-ec-p521|EC|P-521|sha512|2005|digitalSignature|RevetSec test IdP signing EC P-521
-negative-attacker-rsa-2048|RSA|2048|sha256|2101|digitalSignature|RevetSec test attacker RSA-2048 - never trusted
-negative-rsa-1024|RSA|1024|sha256|2102|digitalSignature|RevetSec test weak RSA-1024 - below every key-size floor
-negative-unconfigured-ec-p256|EC|P-256|sha256|2103|digitalSignature|RevetSec test unconfigured EC P-256 - never configured
-sp-signing-rsa-2048|RSA|2048|sha256|2201|digitalSignature|RevetSec test SP signing RSA-2048
-sp-encryption-rsa-2048|RSA|2048|sha256|2202|keyEncipherment|RevetSec test SP encryption RSA-2048'
+readonly KEY_SPECS='idp-signing-rsa-2048|RSA|2048|sha256|2001|digitalSignature|Revetsec test IdP signing RSA-2048
+idp-signing-rsa-3072|RSA|3072|sha256|2002|digitalSignature|Revetsec test IdP signing RSA-3072
+idp-signing-ec-p256|EC|P-256|sha256|2003|digitalSignature|Revetsec test IdP signing EC P-256
+idp-signing-ec-p384|EC|P-384|sha384|2004|digitalSignature|Revetsec test IdP signing EC P-384
+idp-signing-ec-p521|EC|P-521|sha512|2005|digitalSignature|Revetsec test IdP signing EC P-521
+negative-attacker-rsa-2048|RSA|2048|sha256|2101|digitalSignature|Revetsec test attacker RSA-2048 - never trusted
+negative-rsa-1024|RSA|1024|sha256|2102|digitalSignature|Revetsec test weak RSA-1024 - below every key-size floor
+negative-unconfigured-ec-p256|EC|P-256|sha256|2103|digitalSignature|Revetsec test unconfigured EC P-256 - never configured
+sp-signing-rsa-2048|RSA|2048|sha256|2201|digitalSignature|Revetsec test SP signing RSA-2048
+sp-encryption-rsa-2048|RSA|2048|sha256|2202|keyEncipherment|Revetsec test SP encryption RSA-2048'
 
 # The same constraints as OpenSSL prints them (-ext nameConstraints, lines joined with "; ").
 readonly CA_NAME_CONSTRAINTS_PRINTED='Permitted:; DNS:localhost; DNS:internal; DNS:test; DNS:example; DNS:local; DNS:home.arpa; IP:127.0.0.0/255.0.0.0; IP:10.0.0.0/255.0.0.0; IP:172.16.0.0/255.240.0.0; IP:192.168.0.0/255.255.0.0; IP:100.64.0.0/255.192.0.0; IP:0:0:0:0:0:0:0:1/FFFF:FFFF:FFFF:FFFF:FFFF:FFFF:FFFF:FFFF; IP:FC00:0:0:0:0:0:0:0/FE00:0:0:0:0:0:0:0; email:invalid; URI:invalid'
@@ -512,7 +515,7 @@ check_readme_lists() {
 # check_tls <dir> [readme]: the whole tls/ profile.
 check_tls() {
 	local dir=$1 readme=${2:-readme} ca_subject server_subject
-	ca_subject="CN=RevetSec Test CA - DO NOT TRUST,O=$SUBJECT_O"
+	ca_subject="CN=Revetsec Test CA - DO NOT TRUST,O=$SUBJECT_O"
 	server_subject="CN=localhost,O=$SUBJECT_O"
 
 	check_pkcs8_key "$dir/test-ca-key.pem" RSA 3072

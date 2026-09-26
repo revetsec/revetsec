@@ -14,7 +14,7 @@
 # limitations under the License.
 #
 
-"""RevetSec scripted IdP: a SAML test IdP built on libxmlsec1 and signxml.
+"""Revetsec scripted IdP: a SAML test IdP built on libxmlsec1 and signxml.
 
 Test tooling only. The image is never pushed to a registry.
 """

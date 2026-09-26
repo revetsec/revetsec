@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# TEST-ONLY OpenID Provider image for RevetSec interop legs. Build it locally or
+# TEST-ONLY OpenID Provider image for Revetsec interop legs. Build it locally or
 # in CI with --load; it is never pushed to a registry.
 #
 # Base: node 24.21.0 on Alpine 3.24, pinned by the multi-arch index digest

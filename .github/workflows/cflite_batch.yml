@@ -39,8 +39,17 @@ name: ClusterFuzzLite batch fuzzing
 # steps: move the digests by hand, in cflite_pr.yml and cflite_cron.yml too, and together with the
 # base-builder-jvm digest in .clusterfuzzlite/Dockerfile.
 #
-# At M0 the only target is PlaceholderFuzzTests (no RevetSec code), so the budgets are small. Raise
-# FUZZ_SECONDS when real targets land at M1.
+# BUDGETS. From M1 fuzz/ holds six *FuzzTests classes (JSON codec, JSON model, RFC 7638, StateSealer,
+# PEM and encoding), and .clusterfuzzlite/build.sh makes one target of every @FuzzTest method in them.
+# ClusterFuzzLite runs the targets one at a time and gives each at least FUZZ_SECONDS divided by the
+# number of targets, plus any time the earlier ones left unused (cifuzz run_fuzzers.py). So each
+# FUZZ_SECONDS below is a total, whatever the number of targets, plus each target's start-up:
+#   cflite_pr.yml      900 s (15 minutes) per pull-request run, in a 45-minute job;
+#   cflite_batch.yml  2700 s (45 minutes) a night, in a 75-minute job;
+#   cflite_cron.yml   1200 s (20 minutes) of corpus pruning a night, in a 45-minute job.
+# Each job's timeout leaves room for the image build, the Maven build, JVM start-up per target and the
+# corpus transfers. The prune cron in cflite_cron.yml starts after this job's timeout; move it if this
+# timeout grows. More targets mean less time for each, so revisit these totals as targets are added.
 
 on:
   schedule:
@@ -66,7 +75,9 @@ jobs:
   batch-fuzzing:
     name: Batch Fuzzing (${{ matrix.sanitizer }})
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    # FUZZ_SECONDS (45 minutes) plus the builds and the corpus transfers. cflite_cron.yml's 09:17 prune
+    # starts after this timeout.
+    timeout-minutes: 75
     # Holds CFLITE_STORAGE_TOKEN (owner setup, step 3).
     environment: cflite-storage
     permissions:
@@ -76,7 +87,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # JVM projects support only address and undefined. RevetSec has no native code, so
+        # JVM projects support only address and undefined. Revetsec has no native code, so
         # undefined would add nothing.
         sanitizer: [address]
     steps:
@@ -142,8 +153,8 @@ jobs:
           LANGUAGE: jvm
           SANITIZER: ${{ matrix.sanitizer }}
           MODE: batch
-          # Total budget, shared by all targets.
-          FUZZ_SECONDS: '600'
+          # Total budget, shared by the targets (header: BUDGETS).
+          FUZZ_SECONDS: '2700'
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CFL_PLATFORM: github
           LOW_DISK_SPACE: 'True'

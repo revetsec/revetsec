@@ -61,7 +61,7 @@ import java.util.concurrent.Callable;
  * Re-checks every selftest output with only the JDK: XMLDSig signatures through {@code javax.xml.crypto} with secure
  * validation on, and XML Encryption by hand with JCA ({@code RSA/ECB/OAEPPadding} with an explicit
  * {@link OAEPParameterSpec}, or {@code RSA/ECB/PKCS1Padding}, then {@code AES/GCM/NoPadding}). Throwaway code: it is
- * not RevetSec's verifier and shares nothing with it.
+ * not Revetsec's verifier and shares nothing with it.
  * <p>
  * Run: {@code java spike/Crosscheck.java <selftest-output-dir>}
  */

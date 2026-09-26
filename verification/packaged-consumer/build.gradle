@@ -1,0 +1,129 @@
+/*
+ * Copyright 2026 Revetware LLC.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+/*
+ * A consumer of the installed Revetsec JAR, as a Gradle application sees it: the Gradle twin of pom.xml in this
+ * directory, building the same sources. Verification tooling only: never published, never built by the root pom.
+ * Run it through verify-packaged-consumer.py, which copies this project to a scratch directory, runs the pinned
+ * Gradle distribution offline against the local repository core was installed into, and checks the report this
+ * build writes (build/revetsec-consumer/resolution.json).
+ */
+
+import groovy.json.JsonOutput
+import org.gradle.api.artifacts.result.DependencyResult
+import org.gradle.api.artifacts.result.ResolvedArtifactResult
+import org.gradle.api.artifacts.result.ResolvedComponentResult
+import org.gradle.api.artifacts.result.ResolvedDependencyResult
+
+plugins {
+	id 'java'
+}
+
+// The core under test. verify-packaged-consumer.py passes both properties. There are no defaults, so the build
+// cannot quietly resolve some other copy of Revetsec.
+String requiredProperty(String name) {
+	String value = providers.gradleProperty(name).getOrNull()
+	if (value == null || value.isBlank())
+		throw new GradleException("Missing -P${name}=...; run this build through verify-packaged-consumer.py")
+	return value
+}
+
+String revetsecRepository = requiredProperty('revetsec.repository')
+String revetsecVersion = requiredProperty('revetsec.version')
+
+repositories {
+	// The Maven local repository core was installed into, read as a plain file repository, so Gradle resolves the
+	// installed POM and JAR in place. It is the only repository and it serves only com.revetsec: if the POM ever
+	// named a dependency a consumer inherits, resolution would fail rather than fetch it from somewhere else.
+	maven {
+		name = 'installedCore'
+		url = uri(revetsecRepository)
+		content {
+			includeGroup 'com.revetsec'
+		}
+	}
+}
+
+dependencies {
+	// The usual Gradle declaration for a library an application compiles against and runs with.
+	implementation "com.revetsec:revetsec:${revetsecVersion}"
+}
+
+tasks.withType(JavaCompile).configureEach {
+	options.release = 17
+	options.encoding = 'UTF-8'
+	// A consumer must compile warning-free without Revetsec's provided-scope annotation JARs.
+	options.compilerArgs += ['-Xlint:all', '-Werror']
+}
+
+// Every component reachable from the configuration's root (the root itself excluded), each with the components it
+// depends on; every dependency that did not resolve; and every file the configuration puts on its class path.
+static Map describeResolution(ResolvedComponentResult root, Set<ResolvedArtifactResult> artifacts) {
+	Map<String, List<String>> components = new TreeMap<>()
+	List<String> unresolved = []
+	Deque<ResolvedComponentResult> pending = new ArrayDeque<>([root])
+	Set<ResolvedComponentResult> visited = new HashSet<>()
+	while (!pending.isEmpty()) {
+		ResolvedComponentResult component = pending.removeFirst()
+		if (!visited.add(component))
+			continue
+		List<String> dependencies = []
+		for (DependencyResult dependency : component.dependencies) {
+			if (dependency instanceof ResolvedDependencyResult) {
+				dependencies.add(dependency.selected.id.displayName)
+				pending.add(dependency.selected)
+			} else {
+				unresolved.add(dependency.requested.displayName)
+			}
+		}
+		if (!component.is(root))
+			components.put(component.id.displayName, dependencies.sort())
+	}
+	return [
+		components: components.collect { id, dependencies -> [id: id, dependencies: dependencies] },
+		unresolved: unresolved.sort(),
+		files     : artifacts.collect { [component: it.id.componentIdentifier.displayName, path: it.file.absolutePath] },
+	]
+}
+
+tasks.register('resolutionReport') {
+	group = 'verification'
+	description = 'Writes what this consumer resolved, for verify-packaged-consumer.py.'
+	def runtimeRoot = configurations.runtimeClasspath.incoming.resolutionResult.rootComponent
+	def runtimeArtifacts = configurations.runtimeClasspath.incoming.artifacts.resolvedArtifacts
+	def compileRoot = configurations.compileClasspath.incoming.resolutionResult.rootComponent
+	def compileArtifacts = configurations.compileClasspath.incoming.artifacts.resolvedArtifacts
+	def reportFile = layout.buildDirectory.file('revetsec-consumer/resolution.json')
+	def gradleVersion = gradle.gradleVersion
+	outputs.file(reportFile)
+	outputs.upToDateWhen { false }
+	doLast {
+		Map report = [
+			formatVersion   : 1,
+			gradleVersion   : gradleVersion,
+			// The JVM this build ran on, so the report shows which JDK ran Gradle.
+			gradleJavaHome  : System.getProperty('java.home'),
+			gradleJavaVersion: Runtime.version().toString(),
+			configurations  : [
+				runtimeClasspath: describeResolution(runtimeRoot.get(), runtimeArtifacts.get()),
+				compileClasspath: describeResolution(compileRoot.get(), compileArtifacts.get()),
+			],
+		]
+		File file = reportFile.get().asFile
+		file.parentFile.mkdirs()
+		file.setText(JsonOutput.prettyPrint(JsonOutput.toJson(report)) + '\n', 'UTF-8')
+	}
+}

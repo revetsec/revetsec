@@ -1,0 +1,17 @@
+# JSONTestSuite y_ files that Revetsec rejects by design.
+#
+# Format: one file name per line, relative to test_parsing/. Lines that are blank or start with '#' are ignored.
+#
+# Each listed file contains an object with a duplicate member name (compared after unescaping, at any depth).
+# Revetsec's codec rejects duplicate member names (M1 plan, gate 7), so under both the protocol and the SCIM
+# profile each listed file must fail with JsonParseException.Kind DUPLICATE_MEMBER, and every y_ file not
+# listed here must be accepted. The list holds exactly the y_ files with a duplicate member name: the test
+# runner fails if a listed file is missing, is not a y_ file, or is accepted or rejected with another Kind.
+#
+# How the list was found (2026-09-24, commit 1ef36fa01286573e846ac449e8683f8833c5b26a): every y_ file was
+# decoded as strict UTF-8 and parsed with Python's json module using an object_pairs_hook that fails on a
+# repeated name; all 95 y_ files parsed, and exactly the two below had a repeated name. None of the y_ files
+# has two member names that differ only in ASCII case, so the SCIM profile's case-folded duplicate check adds
+# no file to this list.
+y_object_duplicated_key.json
+y_object_duplicated_key_and_value.json

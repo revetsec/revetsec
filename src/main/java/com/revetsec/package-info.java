@@ -15,10 +15,12 @@
  */
 
 /**
- * RevetSec's root package: the types shared by every protocol package, such as the exception root, error
+ * Revetsec's root package: the types shared by every protocol package, such as the exception root, error
  * categories, sealed pending-state support and the outbound URI policy.
  * <p>
- * It contains nothing protocol-specific, and it depends on no other RevetSec package.
+ * It contains nothing protocol-specific, and it depends on no other exported Revetsec package. Its implementation
+ * uses the internal packages that serve it, such as {@code com.revetsec.internal}, which never appear in its public
+ * signatures.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */

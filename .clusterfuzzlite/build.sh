@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# ClusterFuzzLite build script for RevetSec. The base image's `compile` command runs it inside the
+# ClusterFuzzLite build script for Revetsec. The base image's `compile` command runs it inside the
 # image built from .clusterfuzzlite/Dockerfile, with the repository at $SRC/revetsec. `compile`
 # has already copied the base image's jazzer_driver, jazzer_agent_deploy.jar and jazzer_junit.jar
 # into $OUT.
@@ -21,8 +21,11 @@
 # Every Jazzer @FuzzTest method in fuzz/src/test/java/**/*FuzzTests.java becomes one libFuzzer
 # target: an executable wrapper $OUT/<SimpleClassName>_<method> that runs the method through the
 # base image's Jazzer driver (--target_class/--target_method), plus
-# $OUT/<SimpleClassName>_<method>_seed_corpus.zip built from the checked-in seeds under
-# fuzz/src/test/resources/<package>/<SimpleClassName>Inputs/<method>/.
+# $OUT/<SimpleClassName>_<method>_seed_corpus.zip built from the method's Jazzer inputs directory as
+# test-compile leaves it: fuzz/target/test-classes/<package>/<SimpleClassName>Inputs/<method>/.
+# That directory holds both the module's own seeds (fuzz/src/test/resources) and the corpora the fuzz
+# pom maps in from the core tree through Maven resource targetPath (the core JSON corpus,
+# JSONTestSuite, the PEM fixtures). The mapped seeds exist only there, never under fuzz/src.
 #
 # The same targets run locally, without Docker, as JUnit tests:
 #   mvn -B -ntp -f fuzz/pom.xml verify                     (seed replay)
@@ -39,17 +42,18 @@ fail() {
 
 cd "$REPO_DIR"
 
-# The base image's JDK is the one the runner uses too. RevetSec targets Java 17.
+# The base image's JDK is the one the runner uses too. Revetsec targets Java 17.
 java_spec=$("$JAVA_HOME/bin/java" -XshowSettings:properties -version 2>&1 \
 	| sed -n 's/^ *java\.specification\.version = //p')
 [[ "$java_spec" =~ ^[0-9]+$ ]] || fail "could not read the Java version of $JAVA_HOME"
-(( java_spec >= 17 )) || fail "RevetSec needs JDK 17 or newer; $JAVA_HOME is Java $java_spec"
+(( java_spec >= 17 )) || fail "Revetsec needs JDK 17 or newer; $JAVA_HOME is Java $java_spec"
 
 for required in jazzer_driver jazzer_agent_deploy.jar jazzer_junit.jar; do
 	[[ -f "$OUT/$required" ]] || fail "$OUT/$required is missing; is FUZZING_LANGUAGE=jvm set?"
 done
 
-# Fuzz target classes are the fuzz module's own *FuzzTests classes (the same set Surefire runs).
+# Fuzz target classes are the fuzz module's own *FuzzTests classes. Surefire runs these too, plus the
+# plain JUnit FuzzSeedLayoutTests, which is not a target.
 mapfile -t fuzz_classes < <(
 	cd fuzz/src/test/java \
 		&& find . -type f -name '*FuzzTests.java' \
@@ -57,12 +61,14 @@ mapfile -t fuzz_classes < <(
 		| LC_ALL=C sort
 )
 (( ${#fuzz_classes[@]} > 0 )) || fail "no *FuzzTests.java classes under fuzz/src/test/java"
-class_list=$(IFS=,; echo "${fuzz_classes[*]}")
+# Jazzer splits the value of --list_fuzz_tests on ':' (a comma-separated list is read as one class name,
+# which lists nothing once there is more than one class).
+class_list=$(IFS=:; echo "${fuzz_classes[*]}")
 
 rm -rf "$FUZZ_OUT"
 mkdir -p "$FUZZ_OUT/lib"
 
-# Compile RevetSec's main sources and the fuzz module's test tree, then copy the test-scope jars
+# Compile Revetsec's main sources and the fuzz module's test tree, then copy the test-scope jars
 # the targets need at runtime (JUnit Platform, Jupiter and their dependencies). Jazzer's own jars
 # are excluded: at runtime the base image's Jazzer agent and JUnit integration are used, and a
 # second copy of Jazzer on the classpath would mix versions.
@@ -74,13 +80,6 @@ mkdir -p "$FUZZ_OUT/lib"
 	-DoutputDirectory="$FUZZ_OUT/lib"
 
 cp -R fuzz/target/test-classes "$FUZZ_OUT/test-classes"
-# Jazzer's JUnit runner adds <Class>Inputs/<method>/ from the classpath as extra input directories.
-# ClusterFuzzLite supplies the same seeds through <target>_seed_corpus.zip, and its bad-build check
-# requires a `-runs=4` start-up run to execute exactly four inputs, so the seed directories are
-# removed from the runtime copy (they stay in fuzz/target for the Maven replay).
-for fuzz_class in "${fuzz_classes[@]}"; do
-	rm -rf "$FUZZ_OUT/test-classes/${fuzz_class//.//}Inputs"
-done
 if [[ -d fuzz/target/classes ]]; then
 	cp -R fuzz/target/classes "$FUZZ_OUT/classes"
 else
@@ -116,10 +115,30 @@ mapfile -t fuzz_tests < <(
 		| LC_ALL=C sort -u
 )
 (( ${#fuzz_tests[@]} > 0 )) || fail "Jazzer listed no @FuzzTest methods in: $class_list"
+declare -A listed_tests=()
 for fuzz_test in "${fuzz_tests[@]}"; do
 	# The names are pasted into the generated wrapper, so allow only plain identifiers.
 	[[ "$fuzz_test" =~ ^[A-Za-z0-9_.]+::[A-Za-z0-9_]+$ ]] || fail "unsupported fuzz test name: $fuzz_test"
+	listed_tests[$fuzz_test]=1
 done
+
+# Seeds are tied to a method by name only: its <Class>Inputs/<method>/ directory under
+# fuzz/src/test/resources, and the targetPath strings in fuzz/pom.xml that map the core corpora into
+# it. A seed directory whose method Jazzer did not list is left over from a renamed or removed
+# @FuzzTest method, and its seeds would silently stop reaching any target, so it fails the build.
+# (Each listed method must also have seeds; see below.)
+shopt -s nullglob
+while IFS= read -r -d '' inputs_dir; do
+	inputs_class=${inputs_dir#fuzz/target/test-classes/}
+	inputs_class=${inputs_class%Inputs}
+	inputs_class=${inputs_class//\//.}
+	for method_dir in "$inputs_dir"/*/; do
+		method=$(basename "$method_dir")
+		[[ -n "${listed_tests[$inputs_class::$method]:-}" ]] \
+			|| fail "$inputs_dir/$method holds seeds, but Jazzer lists no @FuzzTest $inputs_class::$method"
+	done
+done < <(find fuzz/target/test-classes -type d -name '*Inputs' -print0)
+shopt -u nullglob
 
 declare -A seen_targets=()
 for fuzz_test in "${fuzz_tests[@]}"; do
@@ -157,12 +176,35 @@ LD_LIBRARY_PATH="\${JVM_LD_LIBRARY_PATH:-$JVM_LD_LIBRARY_PATH}:\$this_dir" \\
 EOF
 	chmod 0755 "$OUT/$target_name"
 
+	# The seeds come from fuzz/target/test-classes, which test-compile filled and nothing here deletes,
+	# never from fuzz/src/test/resources, which lacks the mapped corpora. The paths inside the zip keep
+	# their subdirectories (parse/, round-trip/, jsontestsuite/, ...), because two corpora may use the
+	# same file name (parse/ and round-trip/ both hold surrogate-pair.json), so a flat zip cannot hold
+	# them. The base image's run_fuzzer, used for local reproduction, unzips the tree as it is, and
+	# libFuzzer reads a corpus directory recursively; ClusterFuzzLite's own fuzzing step instead
+	# renumbers every seed into one flat directory as it unpacks the zip.
+	# Every target must have seeds. None means its seed directory, or a targetPath in fuzz/pom.xml, no
+	# longer matches the method's name, and the target would start from nothing.
 	seed_zip="$OUT/${target_name}_seed_corpus.zip"
-	seed_dir="fuzz/src/test/resources/${target_class//.//}Inputs/$target_method"
+	seed_dir="fuzz/target/test-classes/${target_class//.//}Inputs/$target_method"
 	rm -f "$seed_zip"
-	if [[ -d "$seed_dir" ]] && [[ -n "$(find "$seed_dir" -type f -print -quit)" ]]; then
-		(cd "$seed_dir" && find . -type f | LC_ALL=C sort | zip -q -X -@ "$seed_zip")
+	seed_count=0
+	if [[ -d "$seed_dir" ]]; then
+		seed_count=$(find "$seed_dir" -type f | wc -l | tr -d ' ')
 	fi
+	(( seed_count > 0 )) || fail "$fuzz_test has no seeds in $seed_dir"
+	(cd "$seed_dir" && find . -type f | LC_ALL=C sort | zip -q -X -@ "$seed_zip")
+	zipped=$(unzip -Z1 "$seed_zip" | grep -cv '/$' || true)
+	(( zipped == seed_count )) || fail "$seed_zip holds $zipped seeds, expected $seed_count"
 
-	echo "Built fuzz target $target_name ($fuzz_test)"
+	echo "Built fuzz target $target_name ($fuzz_test), $seed_count seeds"
+done
+
+# Jazzer's JUnit runner adds <Class>Inputs/<method>/ from the classpath as extra input directories.
+# ClusterFuzzLite supplies the same seeds through <target>_seed_corpus.zip, and its bad-build check
+# requires a `-runs=4` start-up run to execute exactly four inputs, so the seed directories are
+# removed from the runtime copy. This runs only now, after every zip above was built from
+# fuzz/target/test-classes, which keeps its copy for the Maven replay.
+for fuzz_class in "${fuzz_classes[@]}"; do
+	rm -rf "$FUZZ_OUT/test-classes/${fuzz_class//.//}Inputs"
 done

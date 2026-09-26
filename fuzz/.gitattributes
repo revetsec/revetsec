@@ -1,0 +1,3 @@
+# Fuzz seeds are exact bytes: some hold CR, LF, NUL, invalid UTF-8 or DER, and the sealed values must not gain a
+# line ending. Git must never convert them or otherwise treat them as text.
+src/test/resources/** -text

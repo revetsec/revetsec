@@ -16,8 +16,12 @@ name: ClusterFuzzLite PR fuzzing
 # google/clusterfuzzlite v1 actions pass (header of cflite_batch.yml). Move the digests together with
 # cflite_batch.yml and cflite_cron.yml.
 #
-# At M0 the only target is PlaceholderFuzzTests, which exercises no RevetSec code; it exists so the
-# build check has a target, and is deleted at M1.
+# Targets. .clusterfuzzlite/build.sh makes one target of every Jazzer @FuzzTest method in fuzz/'s
+# *FuzzTests classes. From M1 there are six classes, all under com.revetsec: internal.json.JsonCodecFuzzTests,
+# json.JsonModelFuzzTests, internal.json.Rfc7638FuzzTests, StateSealerFuzzTests,
+# internal.pem.PemFuzzTests and internal.encoding.EncodingFuzzTests. ClusterFuzzLite runs the targets one
+# at a time and shares FUZZ_SECONDS between them, so the budget below is the total for a PR run, whatever
+# the number of targets. Budgets for all three workflows are in the header of cflite_batch.yml.
 
 on:
   pull_request:
@@ -34,7 +38,8 @@ jobs:
   pr-fuzzing:
     name: PR Fuzzing (${{ matrix.sanitizer }})
     runs-on: ubuntu-24.04
-    timeout-minutes: 40
+    # The FUZZ_SECONDS budget plus the image build, the Maven build and the per-target start-up.
+    timeout-minutes: 45
     permissions:
       # The build step clones the repository itself. No `actions: read`: the corpus never comes from
       # workflow artifacts.
@@ -45,7 +50,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # JVM projects support only address and undefined. RevetSec has no native code, so
+        # JVM projects support only address and undefined. Revetsec has no native code, so
         # undefined would add nothing.
         sanitizer: [address]
     steps:
@@ -96,8 +101,8 @@ jobs:
           LANGUAGE: jvm
           SANITIZER: ${{ matrix.sanitizer }}
           MODE: code-change
-          # Total budget, shared by all targets.
-          FUZZ_SECONDS: '300'
+          # Total budget, shared by the targets: 15 minutes keeps a PR run time-boxed.
+          FUZZ_SECONDS: '900'
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CFL_PLATFORM: github
           LOW_DISK_SPACE: 'True'
