@@ -23,9 +23,12 @@ import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.time.Duration;
+import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -106,6 +109,38 @@ final class DefaultHttpClientHolderTests {
 		Assertions.assertTrue(httpClient.executor().isEmpty());
 		Assertions.assertSame(httpClient, HttpExchange.fromHttpClient(null, OutboundUriPolicy.defaultInstance(), false)
 				.resolveHttpClient());
+	}
+
+	// M2 plan G8-4 and exit criterion 17: the two test hooks are public, because the zero-thread test for the key-set
+	// source lives in com.revetsec.jose. They are the only public members the holder adds: creating the client stays
+	// package-private. The exchange's hook resolves exactly the client a request would use: the injected one, or the
+	// holder's.
+	@Test
+	void theTwoTestHooksArePublicAndResolveTheClientARequestUses() throws Exception {
+		Assertions.assertTrue(Modifier.isPublic(DefaultHttpClientHolder.class.getModifiers()));
+		Method held = DefaultHttpClientHolder.class.getDeclaredMethod("heldHttpClientForTests");
+		Assertions.assertTrue(Modifier.isPublic(held.getModifiers()) && Modifier.isStatic(held.getModifiers()));
+		Assertions.assertEquals(List.of("heldHttpClientForTests"), Arrays.stream(
+						DefaultHttpClientHolder.class.getDeclaredMethods())
+				.filter(method -> Modifier.isPublic(method.getModifiers()))
+				.map(Method::getName)
+				.toList());
+		Assertions.assertFalse(Modifier.isPublic(DefaultHttpClientHolder.class.getDeclaredMethod("httpClient")
+				.getModifiers()));
+		Method resolved = HttpExchange.class.getDeclaredMethod("resolvedHttpClientForTests");
+		Assertions.assertTrue(Modifier.isPublic(resolved.getModifiers()));
+		Assertions.assertFalse(Modifier.isPublic(HttpExchange.class.getDeclaredMethod("resolveHttpClient")
+				.getModifiers()));
+
+		HttpClient defaultClient = HttpExchange.fromHttpClient(null, OutboundUriPolicy.defaultInstance(), false)
+				.resolvedHttpClientForTests();
+		Assertions.assertSame(DefaultHttpClientHolder.heldHttpClientForTests(), defaultClient);
+		Assertions.assertSame(defaultClient, HttpExchange.fromHttpClient(null, OutboundUriPolicy.defaultInstance(), true)
+				.resolvedHttpClientForTests());
+		StandInHttpClient injected = new StandInHttpClient();
+		Assertions.assertSame(injected, HttpExchange.fromHttpClient(injected, OutboundUriPolicy.defaultInstance(), false)
+				.resolvedHttpClientForTests());
+		Assertions.assertEquals(0, injected.getSendCount());
 	}
 
 	/**

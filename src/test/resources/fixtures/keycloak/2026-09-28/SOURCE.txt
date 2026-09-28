@@ -1,0 +1,41 @@
+Captured 2026-09-28 (UTC) from a local Keycloak 26.7.4 container, for Revetsec's CapturedProviderKeySetTests.
+TEST ONLY: every key that signed these tokens was generated inside a throwaway container and destroyed with it.
+
+Image: quay.io/keycloak/keycloak:26.7.4 at digest
+sha256:82a77884f3af238beab1e7afd63b5f530e1b5c0590bd7aa60b40a40463e29b2c (arm64; the pin in interop/spike/tier1-spike.sh),
+already present locally and started with --pull never.
+
+How:
+- The container ran with --network none, with the command
+  start --db=dev-file --hostname=https://localhost:8443 --http-enabled=false --import-realm
+  and the test CA's TLS server certificate and key from src/test/resources/tls/.
+- A capture driver (Python standard library, adapted from interop/spike/oidc_smoke.py) ran in a second container that
+  shared the Keycloak container's network namespace, so every request stayed on that namespace's loopback.
+- For each test client it ran the authorization-code flow with PKCE (S256), logging in as the realm's synthetic test
+  user, and exchanged the code at the token endpoint with client_secret_basic.
+- It fetched each key set before and after the flows; both fetches returned the same bytes. The files hold each
+  response body byte for byte as served, with no line break added.
+
+Realms (both imported at the same start):
+- revetsec-test (files default-*): interop/keycloak/revetsec-test-realm.json, unmodified. Keycloak generated the realm's
+  default keys, so the key set is its default: an RSA-OAEP encryption key (use enc) and an RS256 signing key.
+- revetsec-test-algorithms (files algorithms-*): the same realm file, renamed, with two additions. Its key providers are
+  rsa-generated for RS256, RS384, RS512, PS256, PS384 and PS512 (2048, 3072 and 4096 bits for the 256, 384 and 512
+  variants), ecdsa-generated on P-256, P-384 and P-521, and eddsa-generated on Ed25519, in place of Keycloak's default
+  providers. It has one test client per algorithm, revetsec-test-client-<alg>, whose ID and access tokens that
+  algorithm signs. Client secret, redirect URIs and test user are those of the realm file.
+
+Files (all times 2026-09-28 UTC; Keycloak sent no Date header, and its discovery and key-set responses carried no
+Expires, Age, Pragma, ETag or Last-Modified):
+default-openid-configuration.json     03:34:14  discovery; Content-Type application/json;
+                                                Cache-Control no-cache, must-revalidate, no-transform, no-store
+default-jwks.json                     03:34:14  jwks_uri; Content-Type application/json; Cache-Control no-cache
+default-rs256-id-token.jwt            03:34:14  ID token for revetsec-test-client
+default-rs256-access-token.jwt        03:34:14  access token from the same token response
+algorithms-openid-configuration.json  03:34:15  as above
+algorithms-jwks.json                  03:34:15  as above
+algorithms-<alg>-id-token.jwt         03:34:15  ID token for revetsec-test-client-<alg>, for the ten algorithms above
+
+Left out: refresh tokens, cookies, authorization codes, session state, client credentials, the algorithms realm's access
+tokens and every other response header. The tokens name only the realm's synthetic test user (test-user,
+test-user@example.test, Test User) under a random subject UUID, with random session, nonce and token identifiers.

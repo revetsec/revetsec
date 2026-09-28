@@ -32,8 +32,9 @@ import java.util.Set;
 import java.util.stream.Stream;
 
 /**
- * The limits registry as a whole (plan R8; M1 plan gate 5, "Limits registry"). {@code FrozenLimitsTests} (WP-9b)
- * pins every value; these tests check that each row enforces its own range and that the registry is complete.
+ * The limits registry as a whole (plan R8; M1 plan gate 5, "Limits registry"; gate 8, G8-10).
+ * {@code FrozenLimitsTests} pins every value; these tests check that each row enforces its own range and that the
+ * registry is complete.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
@@ -92,12 +93,13 @@ final class LimitsTests {
 	}
 
 	@Test
-	void zeroIsAllowedOnlyForMaximumStalenessAndRenewBefore() {
-		// M1 plan, Limits registry: "Zero is allowed only for maximum staleness and renewBefore."
+	void zeroIsAllowedOnlyForTheJoseClockSkewMaximumStalenessAndRenewBefore() {
+		// M1 plan, Limits registry: "Zero is allowed only for maximum staleness and renewBefore." G8-10 adds the JOSE
+		// clock skew (R11: "configurable 0-5 min") as the third zero row, in registry order.
 		List<Limit> zeroAllowed = Limits.all().stream().filter(Limit::isZeroAllowed).toList();
 
-		Assertions.assertEquals(List.of(Limits.JWKS_MAXIMUM_STALENESS, Limits.CLIENT_CREDENTIALS_RENEW_BEFORE),
-				zeroAllowed);
+		Assertions.assertEquals(List.of(Limits.JOSE_CLOCK_SKEW, Limits.JWKS_MAXIMUM_STALENESS,
+				Limits.CLIENT_CREDENTIALS_RENEW_BEFORE), zeroAllowed);
 	}
 
 	@Test
@@ -115,7 +117,7 @@ final class LimitsTests {
 		}
 
 		Assertions.assertEquals(constants, Limits.all());
-		Assertions.assertEquals(40, Limits.all().size());
+		Assertions.assertEquals(42, Limits.all().size());
 
 		Set<String> names = new HashSet<>();
 		for (Limit limit : Limits.all())
@@ -159,6 +161,31 @@ final class LimitsTests {
 	}
 
 	@Test
+	void gateEightRowsAreInPlace() {
+		// G8-10: the JOSE clock skew is 60 s [0, 5 min] and zero compares times exactly; the ID token maximum age,
+		// for M4, is 5 min [1 min, 1 h]. FrozenLimitsTests pins every value.
+		Assertions.assertEquals(Duration.ofSeconds(60), Limits.JOSE_CLOCK_SKEW.getDefaultDuration());
+		Assertions.assertEquals(Duration.ZERO, Limits.JOSE_CLOCK_SKEW.require(Duration.ZERO));
+		Assertions.assertEquals(Duration.ofMinutes(5), Limits.JOSE_CLOCK_SKEW.require(Duration.ofMinutes(5)));
+		Assertions.assertThrows(IllegalArgumentException.class,
+				() -> Limits.JOSE_CLOCK_SKEW.require(Duration.ofMinutes(5).plusNanos(1)));
+		Assertions.assertThrows(IllegalArgumentException.class,
+				() -> Limits.JOSE_CLOCK_SKEW.require(Duration.ofNanos(-1)));
+
+		Assertions.assertEquals(Duration.ofMinutes(5), Limits.ID_TOKEN_MAXIMUM_AGE.getDefaultDuration());
+		Assertions.assertEquals(Duration.ofMinutes(1), Limits.ID_TOKEN_MAXIMUM_AGE.getFloorDuration());
+		Assertions.assertEquals(Duration.ofHours(1), Limits.ID_TOKEN_MAXIMUM_AGE.getCapDuration());
+		Assertions.assertFalse(Limits.ID_TOKEN_MAXIMUM_AGE.isZeroAllowed());
+		Assertions.assertThrows(IllegalArgumentException.class,
+				() -> Limits.ID_TOKEN_MAXIMUM_AGE.require(Duration.ofMinutes(1).minusNanos(1)));
+
+		// Both sit with the other JOSE row, after the compact JWT size.
+		int compactJwtSize = Limits.all().indexOf(Limits.COMPACT_JWT_SIZE);
+		Assertions.assertEquals(List.of(Limits.COMPACT_JWT_SIZE, Limits.JOSE_CLOCK_SKEW, Limits.ID_TOKEN_MAXIMUM_AGE),
+				Limits.all().subList(compactJwtSize, compactJwtSize + 3));
+	}
+
+	@Test
 	void requestTimeoutMustNotExceedTheTotalDeadline() {
 		// M1 plan G5-5: build() rejects requestTimeout > totalDeadline.
 		Limits.requireRequestTimeoutWithinTotalDeadline(Duration.ofSeconds(10), Duration.ofSeconds(15));
@@ -179,6 +206,23 @@ final class LimitsTests {
 				Duration.ofMinutes(2), Duration.ofMinutes(1), Duration.ofHours(1)));
 		Assertions.assertThrows(IllegalArgumentException.class, () -> Limits.requireJwksTimeToLiveOrder(
 				Duration.ofMinutes(1), Duration.ofHours(2), Duration.ofHours(1)));
+	}
+
+	@Test
+	void jwksCooldownMustNotExceedTheMinimumTimeToLive() {
+		// M2-8, the owner's decision of 2026-09-28: unknown-kid cooldown <= minimum TTL; equal passes.
+		Limits.requireJwksCooldownWithinMinimumTimeToLive(Limits.JWKS_UNKNOWN_KEY_ID_COOLDOWN.getDefaultDuration(),
+				Limits.JWKS_MINIMUM_TIME_TO_LIVE.getDefaultDuration());
+		Limits.requireJwksCooldownWithinMinimumTimeToLive(Duration.ofMinutes(1), Duration.ofMinutes(1));
+		Assertions.assertThrows(IllegalArgumentException.class, () -> Limits.requireJwksCooldownWithinMinimumTimeToLive(
+				Duration.ofMinutes(1).plusNanos(1), Duration.ofMinutes(1)));
+		// The rows' floors pass together, and the cooldown's cap passes only with a minimum TTL as long.
+		Limits.requireJwksCooldownWithinMinimumTimeToLive(Limits.JWKS_UNKNOWN_KEY_ID_COOLDOWN.getFloorDuration(),
+				Limits.JWKS_MINIMUM_TIME_TO_LIVE.getFloorDuration());
+		Limits.requireJwksCooldownWithinMinimumTimeToLive(Limits.JWKS_UNKNOWN_KEY_ID_COOLDOWN.getCapDuration(),
+				Limits.JWKS_UNKNOWN_KEY_ID_COOLDOWN.getCapDuration());
+		Assertions.assertThrows(IllegalArgumentException.class, () -> Limits.requireJwksCooldownWithinMinimumTimeToLive(
+				Limits.JWKS_UNKNOWN_KEY_ID_COOLDOWN.getCapDuration(), Limits.JWKS_MINIMUM_TIME_TO_LIVE.getDefaultDuration()));
 	}
 
 	@Test

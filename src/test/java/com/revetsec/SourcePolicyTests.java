@@ -17,11 +17,14 @@
 package com.revetsec;
 
 import com.revetsec.ContractSupport.SourceAnalysis;
+import com.sun.source.tree.AnnotationTree;
+import com.sun.source.tree.BinaryTree;
 import com.sun.source.tree.CaseTree;
 import com.sun.source.tree.ClassTree;
 import com.sun.source.tree.CompilationUnitTree;
 import com.sun.source.tree.ConditionalExpressionTree;
 import com.sun.source.tree.ExpressionTree;
+import com.sun.source.tree.IdentifierTree;
 import com.sun.source.tree.LiteralTree;
 import com.sun.source.tree.MemberReferenceTree;
 import com.sun.source.tree.MemberSelectTree;
@@ -47,12 +50,14 @@ import javax.lang.model.element.Element;
 import javax.lang.model.element.ElementKind;
 import javax.lang.model.element.ExecutableElement;
 import javax.lang.model.element.Modifier;
+import javax.lang.model.element.ModuleElement;
 import javax.lang.model.element.NestingKind;
 import javax.lang.model.element.TypeElement;
 import javax.lang.model.element.VariableElement;
 import javax.lang.model.type.DeclaredType;
 import javax.lang.model.type.TypeKind;
 import javax.lang.model.type.TypeMirror;
+import javax.lang.model.util.ElementFilter;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -69,6 +74,7 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Predicate;
@@ -77,8 +83,8 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
- * Source-level policy guards for properties functional tests cannot see (plan 12.3 M0, R4, R10, R18, 14.6, and M1's
- * G6-4, G6-10 and G7-7; Pyranid precedent). Two mechanisms check {@code src/main/java}:
+ * Source-level policy guards for properties functional tests cannot see (plan 12.3 M0, R4, R10, R18, 14.6, M1's
+ * G6-4, G6-10 and G7-7, and M2's G8-3, G8-4 and M2-10; Pyranid precedent). Two mechanisms check {@code src/main/java}:
  * <ul>
  *   <li>regular expressions, each rule a list of alternatives, matched over each whole file after Unicode escapes
  *   are translated and comments and string literals removed, so only live code counts and a construct split
@@ -86,11 +92,63 @@ import java.util.stream.Collectors;
  *   <li>javac-attributed checks for what text cannot see reliably: {@code synchronized} however it is spelled,
  *   banned methods and constructors reached through calls, method references, {@code new} or {@code super(...)},
  *   however the call is qualified (see {@link #MEMBER_BANS}), classes that extend or implement a banned
- *   supertype ({@link #SUPERTYPE_BANS}), and mutable static fields ({@code mutable-static}, below).</li>
+ *   supertype ({@link #SUPERTYPE_BANS}), mutable static fields ({@code mutable-static}, below), and the four M2
+ *   checks below.</li>
  * </ul>
- * Most rules apply to every file. {@code constant-time-comparison} applies only where sealing keys and sealed state
- * are handled ({@code internal.crypto}, {@code StateSealer.java} and {@code SealingKey.java}), {@code ascii-case-fold}
- * only to {@code scim} and {@code internal.json}, and {@code logging} everywhere except {@link #OBSERVER_DISPATCH}.
+ * Most rules apply to every file. The scoped ones:
+ * <ul>
+ *   <li>{@code constant-time-comparison} applies where secrets and key material are handled: {@code internal.crypto},
+ *   which holds the sealer's keys and sealed state, HMAC tags and the signature and public-key helpers that JOSE and
+ *   SAML share, and {@code StateSealer.java} and {@code SealingKey.java};</li>
+ *   <li>{@code byte-comparison} applies to {@code internal.jose}, where most comparisons are of public values, so
+ *   {@code String} equality stays allowed and only byte comparisons are confined to {@code ConstantTime};</li>
+ *   <li>{@code ascii-case-fold} applies to {@code scim}, {@code internal.json} and {@code internal.jose} (the
+ *   {@code typ} media type, M2-4);</li>
+ *   <li>{@code jca-provider-argument} applies to {@code internal.jose} and {@code internal.crypto};</li>
+ *   <li>{@code raw-base64url-decoder} applies everywhere except {@code internal.encoding}, and {@code logging}
+ *   everywhere except {@link #OBSERVER_DISPATCH};</li>
+ *   <li>{@code provided-annotation-with-element} applies to files whose declared package is exported (see
+ *   {@link ContractSupport#EXPORTED_PACKAGES}), not to their subpackages;</li>
+ *   <li>{@code for-tests-call} applies to every call, except one in the file that declares the method it calls.</li>
+ * </ul>
+ * <p>
+ * The M2 attributed checks:
+ * <ul>
+ *   <li>{@code provided-annotation-with-element} reports every use, anywhere in such a file (a package-private class,
+ *   a private field or a {@code package-info.java} included), of an annotation whose type declares at least one element
+ *   and comes from a provided-scope JAR (JSpecify, jsr305 or Error Prone annotations): a class on the analysis class
+ *   path, neither in the analyzed sources nor in a JDK module, for example jsr305's {@code @GuardedBy("lock")} or
+ *   Error Prone's {@code @InlineMe}. When such an annotation carries a value, even on a private field, javac 17 to 26
+ *   (not 27) warns in a consumer that compiles against the class without the annotation JAR, which fails a
+ *   {@code -Werror} build; a use that leaves every element to its default does not, but the rule reports the type, not
+ *   the use, so a value added later cannot slip through.</li>
+ *   <li>{@code p1363-signature-name} reports each string constant whose upper-case form ({@link Locale#ROOT}, as the
+ *   JCA folds algorithm names) contains {@code INP1363FORMAT}: a literal (a text block, or one spelled with escapes,
+ *   included) outside a string concatenation, and in a concatenation, each run of consecutive operands that are
+ *   literals or constant variables, joined, however the concatenation is parenthesized, and reported once where the
+ *   run starts. So {@code PREFIX + "P1363Format"}, {@code digest + "withECDSAin" + "P1363Format"} and a dotless i
+ *   (U+0131) in place of the {@code i}, which JDK 17 and 27 both resolve to SunEC's P1363 signature, are found. A
+ *   name completed at run time is not, and neither is a run that a numeric subexpression such as {@code (1000 + 363)}
+ *   interrupts, because its value is not folded. The rule's regular expression finds the name in identifiers too,
+ *   such as an enum constant whose {@code name()} would be handed to the JCA.</li>
+ *   <li>{@code jca-provider-argument} reports a call, constructor or method reference whose target has a
+ *   {@code java.security.Provider} parameter, or takes a provider's name: a {@code String} parameter where an
+ *   overload of the same name and arity, declared in or inherited by the target's class, takes a {@code Provider}.
+ *   That finds every engine class's {@code getInstance(algorithm, provider)}, and also
+ *   {@code Certificate.verify(key, sigProvider)}, {@code X509CRL.verify(key, sigProvider)} and
+ *   {@code EncryptedPrivateKeyInfo.getKeySpec(key, providerName)}, with no list of names or packages to keep up to
+ *   date; a {@code String} that no overload pairs with a {@code Provider}, such as the mechanism type of XML
+ *   signature's two-parameter {@code TransformService.getInstance}, is not reported. The JDK's three provider-name
+ *   parameters (17 to 27, by a scan of its sources) that have no {@code Provider} overload are {@link #MEMBER_BANS}
+ *   entries: {@code SealedObject.getObject(key, provider)}, the deprecated {@code javax.security.cert}
+ *   {@code Certificate.verify(key, sigProvider)} and {@code PKIXParameters.setSigProvider(sigProvider)}.</li>
+ *   <li>{@code for-tests-call} reports a javac-resolved call or method reference to a method whose name ends in
+ *   {@code ForTests}, such as {@code HttpExchange.resolvedHttpClientForTests()}, unless the method is declared in the
+ *   calling file. Such a test hook is public only so that tests in other packages can reach it (G8-4); main code that
+ *   called it from elsewhere would make it a production path. The check resolves static imports and calls through an
+ *   instance, and ignores the names in strings and comments; a hook reached by reflection is not found, as with every
+ *   other attributed ban.</li>
+ * </ul>
  * <p>
  * {@code mutable-static} (R4, G6-10) reports every static field that is not final, and every static final field
  * whose declared type, or the type of a value its initializer can take, is
@@ -154,7 +212,9 @@ final class SourcePolicyTests {
 
 	private static final String INTERNAL_XML = "com/revetsec/internal/xml/";
 	private static final String INTERNAL_JSON = "com/revetsec/internal/json/";
+	private static final String INTERNAL_JOSE = "com/revetsec/internal/jose/";
 	private static final String INTERNAL_CRYPTO = "com/revetsec/internal/crypto/";
+	private static final String INTERNAL_ENCODING = "com/revetsec/internal/encoding/";
 	private static final String SAML = "com/revetsec/saml/";
 	private static final String SCIM = "com/revetsec/scim/";
 
@@ -163,6 +223,20 @@ final class SourcePolicyTests {
 	 */
 	private static final Set<String> SEALER_FILES = Set.of("com/revetsec/StateSealer.java",
 			"com/revetsec/SealingKey.java");
+
+	/**
+	 * What {@code p1363-signature-name} looks for in a string constant's upper-case form: the suffix of SunEC's
+	 * IEEE P1363 (fixed-length r and s) ECDSA signature names, such as {@code SHA256withECDSAinP1363Format}.
+	 */
+	private static final String P1363_SIGNATURE_SUFFIX = "INP1363FORMAT";
+	private static final String JCA_PROVIDER = "java.security.Provider";
+
+	/**
+	 * The name suffix of a test hook, a method that exists only for tests, such as
+	 * {@code HttpExchange.resolvedHttpClientForTests()}: {@code for-tests-call} bans calling one from main code outside
+	 * the file that declares it.
+	 */
+	static final String FOR_TESTS_SUFFIX = "ForTests";
 
 	private static final String MUTABLE_STATIC_ALLOWLIST_NAME = "SourcePolicyTests.MUTABLE_STATIC_ALLOWLIST";
 	private static final String ATOMIC_PACKAGE = "java.util.concurrent.atomic";
@@ -200,9 +274,15 @@ final class SourcePolicyTests {
 	static final String PACKAGE_PATH_MISMATCH = "package-path-mismatch";
 	static final String MARKDOWN_DOC_COMMENT = "markdown-doc-comment";
 	static final String CONSTANT_TIME_COMPARISON = "constant-time-comparison";
+	static final String BYTE_COMPARISON = "byte-comparison";
 	static final String ASCII_CASE_FOLD = "ascii-case-fold";
 	static final String LOGGING = "logging";
 	static final String MUTABLE_STATIC = "mutable-static";
+	static final String PROVIDED_ANNOTATION_WITH_ELEMENT = "provided-annotation-with-element";
+	static final String P1363_SIGNATURE_NAME = "p1363-signature-name";
+	static final String JCA_PROVIDER_ARGUMENT = "jca-provider-argument";
+	static final String RAW_BASE64URL_DECODER = "raw-base64url-decoder";
+	static final String FOR_TESTS_CALL = "for-tests-call";
 
 	/**
 	 * Alternative IDs of the checks that are neither a regular expression nor a table entry.
@@ -219,6 +299,16 @@ final class SourcePolicyTests {
 			+ " static final StringBuilder or StringBuffer";
 	static final String MUTABLE_STATIC_COLLECTION_ALTERNATIVE = MUTABLE_STATIC + " static final collection or map "
 			+ "not initialized by List, Set or Map .of, .ofEntries or .copyOf";
+	static final String PROVIDED_ANNOTATION_WITH_ELEMENT_ALTERNATIVE = PROVIDED_ANNOTATION_WITH_ELEMENT
+			+ " provided-scope annotation type with elements, in a file of an exported package";
+	static final String P1363_SIGNATURE_NAME_ALTERNATIVE = P1363_SIGNATURE_NAME
+			+ " string constant whose upper-case form contains " + P1363_SIGNATURE_SUFFIX;
+	static final String JCA_PROVIDER_OBJECT_ALTERNATIVE = JCA_PROVIDER_ARGUMENT + " target with a " + JCA_PROVIDER
+			+ " parameter";
+	static final String JCA_PROVIDER_NAME_ALTERNATIVE = JCA_PROVIDER_ARGUMENT + " String parameter where an overload of "
+			+ "the same name and arity takes a " + JCA_PROVIDER;
+	static final String FOR_TESTS_CALL_ALTERNATIVE = FOR_TESTS_CALL + " call or method reference to a method whose name "
+			+ "ends in " + FOR_TESTS_SUFFIX + ", declared outside the calling file";
 
 	/**
 	 * One banned construct: an ID used in messages, the regular-expression alternatives that detect it textually
@@ -399,14 +489,22 @@ final class SourcePolicyTests {
 					"multi-argument URI constructors re-encode components and let parameters inject; build the string "
 							+ "with the internal encoders and use a single-argument constructor (14.6)"),
 			new Rule(CONSTANT_TIME_COMPARISON, List.of(), SourcePolicyTests::handlesSealingKeys,
-					"compare keys, tags, kids and other sealed-state values in constant time (MessageDigest.isEqual, "
-							+ "through internal.crypto.ConstantTime); String and Arrays equality return at the first "
-							+ "difference (R10)"),
+					"String and Arrays equality return at the first difference: compare keys, tags (Hmac's "
+							+ "included), kids and other sealed state through internal.crypto.ConstantTime "
+							+ "(MessageDigest.isEqual), and names through enums or switch; only the public-key and "
+							+ "signature helpers (EcdsaSignatures, EcCurve, EcPublicKeys, RsaPublicKeys, "
+							+ "Ed25519PublicKeys and SignatureVerifier) may also range-check public values with "
+							+ "BigInteger.compareTo (R10, M2-7)"),
+			new Rule(BYTE_COMPARISON, List.of(), path -> path.startsWith(INTERNAL_JOSE),
+					"compare bytes through internal.crypto.ConstantTime: Arrays and ByteBuffer comparisons return at "
+							+ "the first difference, and ConstantTime is the one caller of MessageDigest.isEqual; String "
+							+ "equality on public JOSE values stays allowed (R10, M2-10)"),
 			new Rule(ASCII_CASE_FOLD, List.of("\\bCASE_INSENSITIVE_ORDER\\b"),
-					path -> path.startsWith(SCIM) || path.startsWith(INTERNAL_JSON),
+					path -> path.startsWith(SCIM) || path.startsWith(INTERNAL_JSON) || path.startsWith(INTERNAL_JOSE),
 					"fold case with internal.json.AsciiCase; the JDK's case-insensitive comparisons and case mappings "
 							+ "also fold non-ASCII letters, even with Locale.ROOT (dotless i uppercases to I, and the "
-							+ "Kelvin sign lowercases to k), so SCIM names that differ would be treated as one (G7-7)"),
+							+ "Kelvin sign lowercases to k), so SCIM names or JOSE typ media types that differ would be "
+							+ "treated as one (G7-7, M2-4)"),
 			new Rule(LOGGING, List.of(
 					"\\bjava\\s*\\.\\s*util\\s*\\.\\s*logging\\b",
 					"\\bSystem\\s*\\.\\s*Logger(?:Finder)?\\b"),
@@ -416,6 +514,32 @@ final class SourcePolicyTests {
 			new Rule(MUTABLE_STATIC, List.of(), SourcePolicyTests::everywhere,
 					"no mutable static state: make the field final and immutable (List, Set or Map .of or .copyOf for "
 							+ "collections), or add a reviewed row to " + MUTABLE_STATIC_ALLOWLIST_NAME + " (R4, G6-10)"),
+			// Scoped by the declared package, in the attributed check: only files whose package is exported.
+			new Rule(PROVIDED_ANNOTATION_WITH_ELEMENT, List.of(), SourcePolicyTests::everywhere,
+					"no provided-scope annotation whose type has elements (jsr305 @GuardedBy, Error Prone @InlineMe) in "
+							+ "a file of an exported package: when one carries a value, even on a private field, javac 17 "
+							+ "to 26 warns in a consumer that compiles against the class without the annotation JAR, which "
+							+ "fails -Werror builds; document lock ownership in a comment instead (M2-10)"),
+			// The expression finds the name in identifiers (an enum constant whose name() would be handed to the JCA);
+			// string constants are the attributed check's, because text cannot join them.
+			new Rule(P1363_SIGNATURE_NAME, List.of("(?i)inP1363Format"), SourcePolicyTests::everywhere,
+					"verify ECDSA through the DER-encoded SHAxxxwithECDSA names, after internal.crypto's exact-length "
+							+ "and range checks; SunEC's P1363 form accepts signatures that are too short, so it stays a "
+							+ "test oracle (G8-3, INV-J5)"),
+			new Rule(JCA_PROVIDER_ARGUMENT, List.of(),
+					path -> path.startsWith(INTERNAL_JOSE) || path.startsWith(INTERNAL_CRYPTO),
+					"name the algorithm and let the JCA choose the provider: algorithm names are pinned and providers "
+							+ "are not, so Revetsec works with any JCA provider, including hardware-backed and "
+							+ "approved-mode ones (INV-G10)"),
+			new Rule(RAW_BASE64URL_DECODER, List.of(), path -> !path.startsWith(INTERNAL_ENCODING),
+					"decode base64url through internal.encoding.Base64Url; the JDK's URL decoder accepts padding and "
+							+ "non-canonical trailing bits, so one value would have several encodings (RFC 7515 section 2, "
+							+ "INV-J7)"),
+			// Scoped per call, in the attributed check: a hook may be called in the file that declares it.
+			new Rule(FOR_TESTS_CALL, List.of(), SourcePolicyTests::everywhere,
+					"a *" + FOR_TESTS_SUFFIX + " method is a test hook, public only so that tests in other packages can "
+							+ "reach it; main code calls one only in the file that declares it, so a hook never becomes a "
+							+ "production path (G8-4)"),
 			new Rule(PACKAGE_PATH_MISMATCH, List.of(), SourcePolicyTests::everywhere,
 					"a file must sit in the directory of its declared package, or path-based exemptions do not hold"),
 			new Rule(MARKDOWN_DOC_COMMENT, List.of(), SourcePolicyTests::everywhere,
@@ -474,6 +598,20 @@ final class SourcePolicyTests {
 			new MemberBan(JVM_GLOBAL_MUTATION, "java.security.Policy", "setPolicy"),
 			new MemberBan(CONSTANT_TIME_COMPARISON, "java.util.Arrays", "equals"),
 			new MemberBan(CONSTANT_TIME_COMPARISON, "java.lang.String", "equals|contentEquals"),
+			// Every early-exit byte comparison the JDK offers: Arrays and ByteBuffer (whose MappedByteBuffer subclass
+			// inherits them), and Objects.deepEquals, which compares two byte arrays with Arrays.equals.
+			// MessageDigest.isEqual is constant time, but reached only through ConstantTime.
+			new MemberBan(BYTE_COMPARISON, "java.util.Arrays", "equals|deepEquals|mismatch|compare|compareUnsigned"),
+			new MemberBan(BYTE_COMPARISON, "java.nio.ByteBuffer", "equals|compareTo|mismatch"),
+			new MemberBan(BYTE_COMPARISON, "java.util.Objects", "deepEquals"),
+			new MemberBan(BYTE_COMPARISON, "java.security.MessageDigest", "isEqual"),
+			new MemberBan(RAW_BASE64URL_DECODER, "java.util.Base64", "getUrlDecoder"),
+			// The JDK's provider-name parameters (17 to 27) that no Provider overload pairs with, so the attributed
+			// jca-provider-argument check cannot find them: SealedObject.getObject(key, provider), the deprecated
+			// javax.security.cert verify(key, sigProvider), and PKIXParameters.setSigProvider(sigProvider).
+			new MemberBan(JCA_PROVIDER_ARGUMENT, "javax.crypto.SealedObject", "getObject", 2, 2),
+			new MemberBan(JCA_PROVIDER_ARGUMENT, "javax.security.cert.Certificate", "verify", 2, 2),
+			new MemberBan(JCA_PROVIDER_ARGUMENT, "java.security.cert.PKIXParameters", "setSigProvider"),
 			new MemberBan(ASCII_CASE_FOLD, "java.lang.String", "equalsIgnoreCase|compareToIgnoreCase"),
 			// regionMatches(boolean ignoreCase, int, String, int, int); the four-parameter form is case-sensitive.
 			new MemberBan(ASCII_CASE_FOLD, "java.lang.String", "regionMatches", 5, 5),
@@ -676,7 +814,9 @@ final class SourcePolicyTests {
 		alternativeIds.addAll(List.of(SYNCHRONIZED_METHOD_ALTERNATIVE, SYNCHRONIZED_STATEMENT_ALTERNATIVE,
 				PACKAGE_PATH_MISMATCH_ALTERNATIVE, MARKDOWN_DOC_COMMENT_ALTERNATIVE,
 				MUTABLE_STATIC_NON_FINAL_ALTERNATIVE, MUTABLE_STATIC_ARRAY_ALTERNATIVE, MUTABLE_STATIC_ATOMIC_ALTERNATIVE,
-				MUTABLE_STATIC_STRING_BUILDER_ALTERNATIVE, MUTABLE_STATIC_COLLECTION_ALTERNATIVE));
+				MUTABLE_STATIC_STRING_BUILDER_ALTERNATIVE, MUTABLE_STATIC_COLLECTION_ALTERNATIVE,
+				PROVIDED_ANNOTATION_WITH_ELEMENT_ALTERNATIVE, P1363_SIGNATURE_NAME_ALTERNATIVE,
+				JCA_PROVIDER_OBJECT_ALTERNATIVE, JCA_PROVIDER_NAME_ALTERNATIVE, FOR_TESTS_CALL_ALTERNATIVE));
 		return List.copyOf(alternativeIds);
 	}
 
@@ -730,7 +870,8 @@ final class SourcePolicyTests {
 
 	/**
 	 * The javac-attributed checks: {@code synchronized}, {@link #MEMBER_BANS}, {@link #SUPERTYPE_BANS},
-	 * {@code mutable-static} and the package location of each file.
+	 * {@code mutable-static}, {@code provided-annotation-with-element}, {@code p1363-signature-name},
+	 * {@code jca-provider-argument}, {@code for-tests-call} and the package location of each file.
 	 */
 	private static List<Detection> findAttributedDetections(SourceAnalysis analysis) {
 		List<Detection> detections = new ArrayList<>();
@@ -741,10 +882,15 @@ final class SourcePolicyTests {
 		for (SupertypeBan ban : SUPERTYPE_BANS)
 			supertypeBanOwners.put(ban, ownerType(analysis, ban.owner));
 		MutableStaticCheck mutableStaticCheck = new MutableStaticCheck(analysis);
+		TypeElement provider = ownerType(analysis, JCA_PROVIDER);
+		TypeElement string = ownerType(analysis, "java.lang.String");
 		SourcePositions positions = analysis.getTrees().getSourcePositions();
 
 		for (CompilationUnitTree compilationUnit : analysis.getCompilationUnits()) {
 			String relativePath = analysis.relativePath(compilationUnit);
+			boolean exportedPackage = ContractSupport.EXPORTED_PACKAGES.contains(
+					ContractSupport.packageName(compilationUnit));
+			boolean providerScope = rule(JCA_PROVIDER_ARGUMENT).appliesTo.test(relativePath);
 
 			String packagePath = ContractSupport.packageName(compilationUnit).replace('.', '/');
 			int lastSlash = relativePath.lastIndexOf('/');
@@ -831,6 +977,42 @@ final class SourcePolicyTests {
 					return super.visitVariable(node, null);
 				}
 
+				@Override
+				public @Nullable Void visitAnnotation(AnnotationTree node, Void unused) {
+					if (exportedPackage && analysis.getTrees().getElement(new TreePath(getCurrentPath(),
+							node.getAnnotationType())) instanceof TypeElement annotationType
+							&& isProvidedScope(annotationType, analysis)
+							&& !ElementFilter.methodsIn(annotationType.getEnclosedElements()).isEmpty())
+						detect(PROVIDED_ANNOTATION_WITH_ELEMENT, node, PROVIDED_ANNOTATION_WITH_ELEMENT_ALTERNATIVE);
+					return super.visitAnnotation(node, null);
+				}
+
+				// A literal that is an operand of a string concatenation is checked with its run, in visitBinary.
+				@Override
+				public @Nullable Void visitLiteral(LiteralTree node, Void unused) {
+					if (node.getValue() instanceof String value
+							&& !isConcatenationOperand(getCurrentPath(), analysis, string))
+						checkSignatureName(value, node);
+					return super.visitLiteral(node, null);
+				}
+
+				// A string concatenation is checked once, from its outermost +, one run of constant operands at a
+				// time; the scan still descends into it, for the literals in method calls and other operands.
+				@Override
+				public @Nullable Void visitBinary(BinaryTree node, Void unused) {
+					TreePath path = getCurrentPath();
+					if (isStringConcatenation(path, analysis, string)
+							&& !isConcatenationOperand(path, analysis, string))
+						for (Map.Entry<Tree, String> run : constantRuns(path, analysis, string))
+							checkSignatureName(run.getValue(), run.getKey());
+					return super.visitBinary(node, null);
+				}
+
+				private void checkSignatureName(String constant, Tree node) {
+					if (constant.toUpperCase(Locale.ROOT).contains(P1363_SIGNATURE_SUFFIX))
+						detect(P1363_SIGNATURE_NAME, node, P1363_SIGNATURE_NAME_ALTERNATIVE);
+				}
+
 				private boolean isWritten(Tree node) {
 					return positions.getEndPosition(compilationUnit, node) >= 0;
 				}
@@ -848,6 +1030,18 @@ final class SourcePolicyTests {
 								&& analysis.isSubtype(declaringType, entry.getValue()))
 							detect(ban.ruleId, position, ban.alternativeId());
 					}
+
+					if (name.endsWith(FOR_TESTS_SUFFIX) && !isDeclaredIn(executable, compilationUnit, analysis))
+						detect(FOR_TESTS_CALL, position, FOR_TESTS_CALL_ALTERNATIVE);
+
+					// Only where the rule applies: the name check walks the target class's members.
+					if (!providerScope)
+						return;
+					if (executable.getParameters().stream().anyMatch(parameter ->
+							isSubtype(parameter.asType(), provider, analysis)))
+						detect(JCA_PROVIDER_ARGUMENT, position, JCA_PROVIDER_OBJECT_ALTERNATIVE);
+					else if (takesProviderName(executable, declaringType, provider, string, analysis))
+						detect(JCA_PROVIDER_ARGUMENT, position, JCA_PROVIDER_NAME_ALTERNATIVE);
 				}
 
 				private void detect(String ruleId, Tree node, String alternativeId) {
@@ -1058,6 +1252,142 @@ final class SourcePolicyTests {
 					&& executable.getEnclosingElement() instanceof TypeElement owner
 					&& IMMUTABLE_COLLECTION_OWNERS.contains(owner.getQualifiedName().toString());
 		}
+	}
+
+	/**
+	 * Returns whether {@code annotationType} comes from a provided-scope JAR: it is on the analysis class path, so
+	 * neither in the analyzed sources nor in a JDK module ({@link ContractSupport#analyze} puts only the JSpecify, jsr305
+	 * and Error Prone annotation JARs there).
+	 */
+	private static boolean isProvidedScope(TypeElement annotationType, SourceAnalysis analysis) {
+		@Nullable ModuleElement module = analysis.getElements().getModuleOf(annotationType);
+		return module != null && module.isUnnamed() && !analysis.isAnalyzed(annotationType);
+	}
+
+	private static boolean isSubtype(TypeMirror type, TypeElement supertype, SourceAnalysis analysis) {
+		return analysis.getTypes().isSubtype(analysis.getTypes().erasure(type),
+				analysis.getTypes().erasure(supertype.asType()));
+	}
+
+	/**
+	 * Returns whether {@code element} is declared in {@code compilationUnit}, the file being checked. A member of the
+	 * JDK or of a class-path JAR is declared in no analyzed file, so it is never declared in the calling one.
+	 */
+	private static boolean isDeclaredIn(Element element, CompilationUnitTree compilationUnit, SourceAnalysis analysis) {
+		@Nullable TreePath path = analysis.getTrees().getPath(element);
+		return path != null && path.getCompilationUnit().equals(compilationUnit);
+	}
+
+	/**
+	 * Returns whether {@code executable} takes a JCA provider's name ({@code jca-provider-argument}): a {@code String}
+	 * parameter at a position where an overload of the same name and arity, declared in or inherited by
+	 * {@code declaringType} (a constructor of that class, for a constructor), takes a {@code java.security.Provider}.
+	 * The JCA pairs its provider-name parameters with such an overload, apart from the three that {@link #MEMBER_BANS}
+	 * lists, so no list of method names or packages is needed; a {@code String} it never pairs with a provider (an
+	 * algorithm, a mechanism type) is not a provider's name.
+	 */
+	private static boolean takesProviderName(ExecutableElement executable, TypeElement declaringType,
+			TypeElement provider, TypeElement string, SourceAnalysis analysis) {
+		List<? extends VariableElement> parameters = executable.getParameters();
+		if (parameters.stream().noneMatch(parameter -> isSubtype(parameter.asType(), string, analysis)))
+			return false;
+		List<ExecutableElement> overloads = executable.getKind() == ElementKind.CONSTRUCTOR
+				? ElementFilter.constructorsIn(declaringType.getEnclosedElements())
+				: ElementFilter.methodsIn(analysis.getElements().getAllMembers(declaringType));
+		for (ExecutableElement overload : overloads) {
+			if (!overload.getSimpleName().contentEquals(executable.getSimpleName())
+					|| overload.getParameters().size() != parameters.size())
+				continue;
+			for (int index = 0; index < parameters.size(); ++index)
+				if (isSubtype(parameters.get(index).asType(), string, analysis)
+						&& isSubtype(overload.getParameters().get(index).asType(), provider, analysis))
+					return true;
+		}
+		return false;
+	}
+
+	/**
+	 * Returns whether the expression at {@code expression} is a string concatenation: a {@code +} whose type is
+	 * {@code String}. Numeric addition, such as the {@code 1 + 2} in {@code 1 + 2 + "x"}, is not.
+	 */
+	private static boolean isStringConcatenation(TreePath expression, SourceAnalysis analysis, TypeElement string) {
+		if (expression.getLeaf().getKind() != Tree.Kind.PLUS)
+			return false;
+		@Nullable TypeMirror type = analysis.getTrees().getTypeMirror(expression);
+		return type != null && isSubtype(type, string, analysis);
+	}
+
+	/**
+	 * Returns whether the expression at {@code expression}, inside any parentheses, is an operand of a string
+	 * concatenation.
+	 */
+	private static boolean isConcatenationOperand(TreePath expression, SourceAnalysis analysis, TypeElement string) {
+		@Nullable TreePath parent = expression.getParentPath();
+		while (parent != null && parent.getLeaf() instanceof ParenthesizedTree)
+			parent = parent.getParentPath();
+		return parent != null && isStringConcatenation(parent, analysis, string);
+	}
+
+	/**
+	 * The runs of consecutive constant operands of the string concatenation at {@code concatenation}, each as the
+	 * operand that starts it and the run's text. The operands are flattened left to right through nested
+	 * concatenations, parenthesized or not, because a concatenation's text does not depend on how it is grouped:
+	 * {@code (a + "b") + "c"} and {@code a + ("b" + "c")} both hold the run {@code "bc"}. An operand that is not a
+	 * literal or a constant variable (a variable, a call, a numeric subexpression) ends a run.
+	 */
+	private static List<Map.Entry<Tree, String>> constantRuns(TreePath concatenation, SourceAnalysis analysis,
+			TypeElement string) {
+		List<TreePath> operands = new ArrayList<>();
+		collectConcatenationOperands(concatenation, analysis, string, operands);
+		List<Map.Entry<Tree, String>> runs = new ArrayList<>();
+		@Nullable Tree runStart = null;
+		StringBuilder runText = new StringBuilder();
+		for (TreePath operand : operands) {
+			@Nullable String constant = constantOperand(operand, analysis);
+			if (constant == null) {
+				if (runStart != null)
+					runs.add(Map.entry(runStart, runText.toString()));
+				runStart = null;
+				runText.setLength(0);
+				continue;
+			}
+			if (runStart == null)
+				runStart = operand.getLeaf();
+			runText.append(constant);
+		}
+		if (runStart != null)
+			runs.add(Map.entry(runStart, runText.toString()));
+		return List.copyOf(runs);
+	}
+
+	private static void collectConcatenationOperands(TreePath expression, SourceAnalysis analysis, TypeElement string,
+			List<TreePath> operands) {
+		TreePath current = expression;
+		while (current.getLeaf() instanceof ParenthesizedTree parenthesized)
+			current = new TreePath(current, parenthesized.getExpression());
+		if (current.getLeaf() instanceof BinaryTree binary && isStringConcatenation(current, analysis, string)) {
+			collectConcatenationOperands(new TreePath(current, binary.getLeftOperand()), analysis, string, operands);
+			collectConcatenationOperands(new TreePath(current, binary.getRightOperand()), analysis, string, operands);
+		} else {
+			operands.add(current);
+		}
+	}
+
+	/**
+	 * The text that the concatenation operand at {@code operand} contributes, if it is a literal (of any type,
+	 * {@code null} included) or a constant variable; otherwise {@code null}. A numeric subexpression such as
+	 * {@code (1000 + 363)} is not folded.
+	 */
+	private static @Nullable String constantOperand(TreePath operand, SourceAnalysis analysis) {
+		Tree leaf = operand.getLeaf();
+		if (leaf instanceof LiteralTree literal)
+			return String.valueOf(literal.getValue());
+		if (leaf instanceof IdentifierTree || leaf instanceof MemberSelectTree) {
+			@Nullable Element element = analysis.getTrees().getElement(operand);
+			if (element instanceof VariableElement variable && variable.getConstantValue() != null)
+				return String.valueOf(variable.getConstantValue());
+		}
+		return null;
 	}
 
 	private static TypeElement ownerType(SourceAnalysis analysis, String qualifiedName) {

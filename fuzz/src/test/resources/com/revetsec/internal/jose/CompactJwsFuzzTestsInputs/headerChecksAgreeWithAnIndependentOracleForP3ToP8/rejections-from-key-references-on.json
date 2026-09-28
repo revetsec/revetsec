@@ -1,0 +1,1 @@
+{"alg":"ES256","jku":"https://issuer.example.com/jwks","typ":"logout+jwt","cty":"JWT","kid":""}

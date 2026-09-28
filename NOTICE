@@ -71,9 +71,84 @@ licensed under the MIT License, reproduced here from LICENSE at that commit
   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
   SOFTWARE.
 
-Other test material
+Project Wycheproof (src/test/resources/vectors/wycheproof/)
 
-Other third-party test vectors, such as Project Wycheproof (Apache License,
-Version 2.0), are planned but are not in the repository yet. Each one's
-copyright notice and license text will be reproduced here when its files are
-added.
+src/test/resources/vectors/wycheproof/testvectors_v1/ holds 28 unmodified files
+from the testvectors_v1/ directory of Project Wycheproof, commit
+3fa63dd0344abb611f1fb1d77e119938603ea230 (https://github.com/C2SP/wycheproof).
+SOURCE.txt in src/test/resources/vectors/wycheproof/ records where the files
+came from, and MANIFEST.sha256 beside it their checksums. Fuzz seeds derived
+from those files (strings, keys and signatures copied out of them, each
+signature's hex decoded to its octets) are under fuzz/src/test/resources/, each
+in a file whose name starts with "wycheproof-".
+The files and the seeds are used only by tests and are not in the published
+JAR. The upstream material is
+
+  Copyright 2016-2026 The Wycheproof Authors
+
+and is licensed under the Apache License, Version 2.0, the license Revetsec
+itself uses (see LICENSE). The upstream LICENSE file at that commit is copied
+verbatim to src/test/resources/vectors/wycheproof/LICENSE. The upstream
+repository has no NOTICE file.
+
+Examples from IETF RFCs (test sources, test data and fuzz seeds)
+
+Some test sources, test data files and fuzz seeds contain examples, keys and
+test vectors copied or derived from IETF RFCs, each cited where it is used:
+RFC 4231 section 4; RFC 4648 section 10; RFC 5869 appendix A; RFC 6749 section
+4.1.2 and appendix B; RFC 7515 appendix A; RFC 7517 appendix A; RFC 7520
+sections 3 and 4; RFC 7638 section 3.1; RFC 8032 section 7.1; RFC 8037 appendix
+A; and the example dates of RFC 9110 section 5.6.7. None of them is in the
+published JAR.
+
+RFC 4231 (2005) and RFC 4648 (2006) carry an Internet Society copyright notice,
+"Copyright (C) The Internet Society", rather than an IETF Trust one, and are
+subject to BCP 78 as it stood when each was published. The other RFCs are
+Copyright (c) the IETF Trust and the persons identified as the document
+authors, all rights reserved, and are subject to BCP 78 and the IETF Trust's
+Legal Provisions Relating to IETF Documents
+(https://trustee.ietf.org/license-info) in effect on the date each was
+published. RFC 8032 was published in the Internet Research Task Force (IRTF)
+stream, and section 4 of the Legal Provisions, which covers Code Components and
+the Revised BSD License, does not apply to IRTF documents (version 5.0, section
+8.g). Its section 7.1 test vectors are copied unmodified, with attribution,
+under the license of section 3.a, which section 8.c applies to IRTF documents
+without its limit to the IETF Standards Process. The rest of the RFCs with an
+IETF Trust notice were published in the IETF stream, and to the extent that
+material from them consists of Code Components under those provisions, it is
+used under the Revised BSD License that they describe. Section 4.e of the Legal
+Provisions, version 5.0, permits a Code Component to carry the full text of
+that license as their section 4.c sets it out, so the text is reproduced here
+word for word, with <insert year> standing for the year in which the RFC the
+material comes from was published. Versions of the Legal Provisions before the
+IETF Trust's correction of September 21, 2021 call the same license text the
+"Simplified BSD License".
+
+  Copyright (c) <insert year> IETF Trust and the persons identified as authors
+  of the code. All rights reserved.
+
+  Redistribution and use in source and binary forms, with or without
+  modification, are permitted provided that the following conditions are met:
+
+  - Redistributions of source code must retain the above copyright notice,
+    this list of conditions and the following disclaimer.
+
+  - Redistributions in binary form must reproduce the above copyright notice,
+    this list of conditions and the following disclaimer in the documentation
+    and/or other materials provided with the distribution.
+
+  - Neither the name of Internet Society, IETF or IETF Trust, nor the names of
+    specific contributors, may be used to endorse or promote products derived
+    from this software without specific prior written permission.
+
+  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+  AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+  IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+  ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+  LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+  CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+  SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+  INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+  CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+  ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+  POSSIBILITY OF SUCH DAMAGE.

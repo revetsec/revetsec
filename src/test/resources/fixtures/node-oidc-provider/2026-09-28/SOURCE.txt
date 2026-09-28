@@ -1,0 +1,42 @@
+Captured 2026-09-28 (UTC) from local node-oidc-provider containers, for Revetsec's CapturedProviderKeySetTests.
+TEST ONLY: every key that signed these tokens was generated at container start and destroyed with the container.
+
+Image: revetsec-interop/node-oidc-provider, image ID
+sha256:135998110ca9f8ca706ae4708419417d0b17a6ef871d7d753fa28d033b11812e (arm64), built earlier from
+interop/node-oidc-provider and not rebuilt: oidc-provider 9.12.2 on Node.js 24.21.0, with a package-lock.json identical
+to the committed one. It was already present locally and started with --pull never.
+
+How:
+- Each container ran with --network none, ISSUER=https://localhost:3000, and the test CA's TLS server certificate and
+  key from src/test/resources/tls/. The server.js described below was copied in before the container started.
+- A capture driver (Python standard library, adapted from interop/spike/oidc_smoke.py) ran in a second container that
+  shared the provider container's network namespace, so every request stayed on that namespace's loopback.
+- For each test client it ran the authorization-code flow with PKCE (S256) through server.js's auto-login handler,
+  which logs in the synthetic test account, and exchanged the code at the token endpoint with client_secret_basic.
+- It fetched each key set before and after the flows; both fetches returned the same bytes. The files hold each
+  response body byte for byte as served, with no line break added.
+
+Runs:
+- default (files default-*): interop/node-oidc-provider/server.js, unmodified. It generates an RS256 and an ES256 key
+  at start, and its one client gets ID tokens signed RS256, oidc-provider's default.
+- algorithms (files algorithms-*): the same server.js with two changes. signingKeys() generates RSA keys with alg
+  RS256, RS384, RS512, PS256, PS384 and PS512 (2048, 3072 and 4096 bits for the 256, 384 and 512 variants), EC keys
+  with alg ES256, ES384 and ES512 on P-256, P-384 and P-521, one Ed25519 key with no alg (oidc-provider then signs both
+  Ed25519 and EdDSA with it), and one ML-DSA-44 key (kty AKP). And there is one client per ID token signing algorithm,
+  revetsec-test-client-<alg>, with enabledJWA.idTokenSigningAlgValues naming those twelve algorithms. Client secret,
+  redirect URIs and test account are those of server.js.
+
+Files (all times 2026-09-28 UTC; each discovery and key-set response carried a Date header at the listed second, and
+none carried Expires, Age, Pragma, ETag or Last-Modified):
+default-openid-configuration.json     03:33:53  discovery; Content-Type application/json; charset=utf-8;
+                                                no Cache-Control
+default-jwks.json                     03:33:53  jwks_uri; Content-Type application/jwk-set+json; charset=utf-8;
+                                                no Cache-Control
+default-rs256-id-token.jwt            03:33:53  ID token for revetsec-test-client
+algorithms-openid-configuration.json  03:33:55  as above
+algorithms-jwks.json                  03:33:55  as above
+algorithms-<alg>-id-token.jwt         03:33:55  ID token for revetsec-test-client-<alg>, for the twelve algorithms above
+
+Left out: access tokens (opaque in this configuration), cookies, authorization codes, client credentials and every
+response header. No refresh token was issued. The ID tokens name only the synthetic test account (sub test-user), with
+random nonces.

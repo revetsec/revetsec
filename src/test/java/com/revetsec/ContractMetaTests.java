@@ -46,8 +46,10 @@ import java.util.stream.Stream;
 final class ContractMetaTests {
 	private static final String BANNED_CALLS = "com/revetsec/BannedCallsFixture.java";
 	private static final String INTERNAL_HTTP_USERS = "com.revetsec.internal.http may be used only by "
-			+ "[com.revetsec.internal.jose, com.revetsec.internal.oauth, com.revetsec.jose, com.revetsec.oauth, "
-			+ "com.revetsec.oidc]";
+			+ "[com.revetsec.internal.oauth, com.revetsec.jose, com.revetsec.oauth, com.revetsec.oidc]";
+	private static final String SIGNATURE_NAME_FIXTURE = "com/revetsec/internal/crypto/SignatureNameFixture.java";
+	private static final String PROVIDED_ANNOTATION_FIXTURE = "com/revetsec/ProvidedAnnotationFixture.java";
+	private static final String TEST_HOOK_CALLER_FIXTURE = "com/revetsec/jose/TestHookCallerFixture.java";
 
 	/**
 	 * Reviewed-exception lists for the public-api fixture, in place of the real ones: entries in the binary-name form
@@ -216,6 +218,7 @@ final class ContractMetaTests {
 				"com.revetsec.scim.ScimErrorsFixture$RetiredError: public concrete types are final, or sealed with only "
 						+ "final or sealed permitted subclasses (R1)"));
 		expected.addAll(m1PublicApiViolations());
+		expected.addAll(m2PublicApiViolations());
 		expected.sort(null);
 		Assertions.assertEquals(expected, violations);
 	}
@@ -307,6 +310,41 @@ final class ContractMetaTests {
 		return violations;
 	}
 
+	/**
+	 * The public-api fixture's seeded violations of the M2 changes (M2 plan, "Contract-list changes" item 1): a public
+	 * factory on JwtClaims, now a verified type (M2-5); non-sealed subtypes of exported sealed types, found by walking
+	 * the permitted subtypes, package-private ones and ones behind a sealed intermediate included (M2-10 item 6); and
+	 * public and protected constructors on an abstract sealed class, where an implicit one is reported once, by R1's
+	 * implicit-constructor check (ImplicitHolderFixture). The controls (JoseFixtureException's
+	 * package-private constructor and its final exported leaf, ExposedFixtureException's final package-private
+	 * subclass, KeySourceFixture's final exported implementation and its package-private record and enum, and the
+	 * sealed ScimPatchResult and SamlAuthentication, whose subclasses are final and whose constructors are
+	 * package-private) are not reported by these rules.
+	 */
+	private static List<String> m2PublicApiViolations() {
+		String nonSealedSubtype = ", which reopens its hierarchy; every permitted subtype must be final or sealed (G6-1)";
+		String constructor = ": exported abstract sealed classes have package-private constructors, because only their "
+				+ "permitted subclasses call them (G6-1)";
+		return List.of(
+				"com.revetsec.jose.JwtClaims#fromJson(java.lang.String): public or protected method returns a verified "
+						+ "type; only validators may create one (R17)",
+				"com.revetsec.jose.JoseFixtureException: exported sealed abstract class permits the non-sealed subtype "
+						+ "com.revetsec.jose.LenientFixtureException" + nonSealedSubtype,
+				"com.revetsec.jose.JoseFixtureException: exported sealed abstract class permits the non-sealed subtype "
+						+ "com.revetsec.jose.LooseFixtureException" + nonSealedSubtype,
+				"com.revetsec.oauth.OAuthFixtureException: exported sealed abstract class permits the non-sealed subtype "
+						+ "com.revetsec.oauth.ReopenedFixtureException" + nonSealedSubtype,
+				"com.revetsec.jose.KeySourceFixture: exported sealed interface permits the non-sealed subtype "
+						+ "com.revetsec.jose.OpenKeySourceFixture" + nonSealedSubtype,
+				"com.revetsec.jose.KeySourceFixture: exported sealed interface permits the non-sealed subtype "
+						+ "com.revetsec.jose.WideKeySourceFixture" + nonSealedSubtype,
+				"com.revetsec.jose.ExposedFixtureException#ExposedFixtureException()" + constructor,
+				"com.revetsec.jose.ExposedFixtureException#ExposedFixtureException(java.lang.String)" + constructor,
+				"com.revetsec.jose.ImplicitHolderFixture#ImplicitHolderFixture(): implicit public or protected "
+						+ "constructor; declare every constructor explicitly (R1: public concrete types have private "
+						+ "constructors)");
+	}
+
 	@Test
 	void packageDependencyContractReportsExactlyTheSeededViolations() throws IOException {
 		Assertions.assertEquals(Stream.of(
@@ -348,8 +386,10 @@ final class ContractMetaTests {
 						+ "com.revetsec.scim may depend only on [com.revetsec, com.revetsec.json], not on "
 						+ "com.revetsec.internal.xml (part of "
 						+ "com.revetsec.saml)",
-				// Only jose, oauth, oidc, internal.jose and internal.oauth may use internal.http; each of those five has
-				// a control that is not reported.
+				// Only jose, oauth, oidc and internal.oauth may use internal.http; each of those four has a control that
+				// is not reported. internal.jose, a permitted user until G8-11, is now a seeded violation.
+				"com.revetsec.internal.jose uses com.revetsec.internal.http "
+						+ "(com/revetsec/internal/jose/InternalJoseUsesHttpFixture.java:19): " + INTERNAL_HTTP_USERS,
 				"com.revetsec.json uses com.revetsec.internal.http (com/revetsec/json/JsonUsesHttpFixture.java:27): "
 						+ INTERNAL_HTTP_USERS,
 				"com.revetsec.saml uses com.revetsec.internal.http (com/revetsec/saml/SamlUsesHttpFixture.java:19): "
@@ -398,6 +438,35 @@ final class ContractMetaTests {
 		// G6-4: internal/ObserverDispatch.java is exempt from logging only.
 		expect(expected, "logging", "com/revetsec/LoggingFixture.java", 27, 28, 29, 30, 31, 32, 33, 34, 35);
 		expect(expected, "console-output", "com/revetsec/internal/ObserverDispatch.java", 33);
+		// M2-10 item 1: internal.jose; json/ScopeControlFixture.java is the out-of-scope control.
+		expect(expected, "byte-comparison", "com/revetsec/internal/jose/ByteComparisonFixture.java", 29, 30, 31, 32,
+				33, 34, 35, 36, 37, 38, 39, 40, 41);
+		// M2-10 item 8: internal.jose joins scim and internal.json.
+		expect(expected, "ascii-case-fold", "com/revetsec/internal/jose/TypeHeaderFixture.java", 25, 26, 27);
+		// M2-10 item 4: internal.jose and internal.crypto; json/ScopeControlFixture.java is the out-of-scope control.
+		// Lines 50 to 55 name a provider outside getInstance, which a getInstance-only check would miss: the
+		// certificate, CRL and encrypted-key methods that have Provider overloads, and the three that have none.
+		expect(expected, "jca-provider-argument", "com/revetsec/internal/jose/ProviderArgumentFixture.java", 36, 37, 38,
+				39, 40, 41, 42, 43, 44, 50, 51, 52, 53, 54, 55);
+		expect(expected, "jca-provider-argument", SIGNATURE_NAME_FIXTURE, 49);
+		// M2-10 item 3: everywhere, in string constants and (line 63, an enum constant) in identifiers.
+		expect(expected, "p1363-signature-name", SIGNATURE_NAME_FIXTURE, 33, 36, 37, 38, 39, 40, 42, 44, 45, 46, 47,
+				63);
+		// M2-10 item 5: everywhere except internal.encoding (internal/encoding/UrlDecoderControlFixture.java).
+		expect(expected, "raw-base64url-decoder", "com/revetsec/internal/jose/SegmentDecoderFixture.java", 28, 29, 30);
+		expect(expected, "raw-base64url-decoder", PROVIDED_ANNOTATION_FIXTURE, 37);
+		// M2-10 item 2: files of exported packages only; internal/http/GuardedExchangeFixture.java is the control.
+		expect(expected, "provided-annotation-with-element", "com/revetsec/jose/GuardedStateFixture.java", 33, 35, 36,
+				39, 45);
+		expect(expected, "provided-annotation-with-element", PROVIDED_ANNOTATION_FIXTURE, 26, 32);
+		// G8-4's test hooks: a *ForTests method is called only in the file that declares it. Line 41 is a hook call
+		// passed as an argument, and line 58 an unqualified call to an inherited hook. The same package is not the same
+		// file (TestHookNeighborFixture), and neither is the same file and class name in another package
+		// (internal/TestHookFixture.java, whose own hook is not reported); internal/http/TestHookFixture.java, which
+		// declares and calls its own hooks, also from a second top-level class, is the control.
+		expect(expected, "for-tests-call", TEST_HOOK_CALLER_FIXTURE, 35, 36, 37, 38, 39, 41, 58);
+		expect(expected, "for-tests-call", "com/revetsec/internal/http/TestHookNeighborFixture.java", 25);
+		expect(expected, "for-tests-call", "com/revetsec/internal/TestHookFixture.java", 26);
 		// R4, G6-10: LookupTable.VALUES (line 49) is allowlisted; the stale, duplicate and malformed rows are reported.
 		expect(expected, "mutable-static", MUTABLE_STATIC_FIXTURE, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38,
 				45, 50, 84, 86);
@@ -467,6 +536,42 @@ final class ContractMetaTests {
 		assertReported(violations, "mutable-static " + MUTABLE_STATIC_BRANCHES_FIXTURE
 				+ ":55: com.revetsec.MutableStaticBranchesFixture#RIGHT: no mutable static state");
 		assertNotReported(violations, "com.revetsec.MutableStaticBranchesFixture#LEFT");
+	}
+
+	/**
+	 * Each M2 rule reports its own reason (M2-10, and for-tests-call for G8-4's test hooks), and
+	 * constant-time-comparison's reason covers the helpers M2 adds to internal.crypto (M2-7), so a rule wired to another
+	 * rule's reason, or left with M1's sealer-only reason, fails here.
+	 */
+	@Test
+	void m2RulesReportTheirOwnReasons() throws IOException {
+		List<String> violations = SourcePolicyTests.findViolations(fixture("source-policy"),
+				FIXTURE_MUTABLE_STATIC_ALLOWLIST);
+
+		assertReported(violations, "byte-comparison com/revetsec/internal/jose/ByteComparisonFixture.java:29: compare "
+				+ "bytes through internal.crypto.ConstantTime");
+		assertReported(violations, "ascii-case-fold com/revetsec/internal/jose/TypeHeaderFixture.java:25: fold case "
+				+ "with internal.json.AsciiCase");
+		assertReported(violations, "jca-provider-argument com/revetsec/internal/jose/ProviderArgumentFixture.java:36: "
+				+ "name the algorithm and let the JCA choose the provider");
+		assertReported(violations, "p1363-signature-name " + SIGNATURE_NAME_FIXTURE + ":38: verify ECDSA through the "
+				+ "DER-encoded SHAxxxwithECDSA names");
+		assertReported(violations, "raw-base64url-decoder com/revetsec/internal/jose/SegmentDecoderFixture.java:28: "
+				+ "decode base64url through internal.encoding.Base64Url");
+		assertReported(violations, "provided-annotation-with-element com/revetsec/jose/GuardedStateFixture.java:33: no "
+				+ "provided-scope annotation whose type has elements");
+		assertReported(violations, "for-tests-call " + TEST_HOOK_CALLER_FIXTURE + ":35: a *ForTests method is a test "
+				+ "hook, public only so that tests in other packages can reach it; main code calls one only in the file "
+				+ "that declares it");
+		assertReported(violations, "constant-time-comparison com/revetsec/internal/crypto/ComparisonFixture.java:27: "
+				+ "String and Arrays equality return at the first difference");
+		// Tags, Hmac's included, go through ConstantTime; BigInteger.compareTo is only for the helpers' public values.
+		assertReported(violations, "compare keys, tags (Hmac's included), kids and other sealed state through "
+				+ "internal.crypto.ConstantTime (MessageDigest.isEqual), and names through enums or switch; only the "
+				+ "public-key and signature helpers (EcdsaSignatures, EcCurve, EcPublicKeys, RsaPublicKeys, "
+				+ "Ed25519PublicKeys and SignatureVerifier) may also range-check public values with BigInteger.compareTo "
+				+ "(R10, M2-7)");
+		assertNotReported(violations, "Hmac, EcdsaSignatures");
 	}
 
 	/**

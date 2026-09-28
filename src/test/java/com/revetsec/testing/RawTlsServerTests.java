@@ -25,6 +25,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import javax.net.ssl.SSLSocket;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.InetAddress;
@@ -34,6 +35,8 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -41,8 +44,10 @@ import java.util.Optional;
  * on its own pacing executor (A-2), ends close-delimited HTTP/1.0 bodies, and reports whether the client closed
  * each connection: after {@code Connection: close}, on an abandoned oversized body, and during a stall (exit
  * criteria 10 to 12). Each response reports whether it was written in full or the client ended it early, hits count
- * from the request line, and a silent client is dropped as a server close. Closing the server is prompt even with a
- * writer blocked on a full send buffer or a trickle in progress, and releases every wait.
+ * from the request line, and a silent client is dropped as a server close. A path's cycle of scripts answers
+ * successive requests in turn, a response head the JDK refuses included (plan M2-8, exit criterion 14). Closing the
+ * server is prompt even with a writer blocked on a full send buffer or a trickle in progress, and releases every
+ * wait.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
@@ -76,6 +81,60 @@ final class RawTlsServerTests {
 			Assertions.assertTrue(recorded.getHead().endsWith("\r\n\r\n"), recorded::getHead);
 			Assertions.assertEquals(1, server.getHitCount("/exact"));
 			Assertions.assertEquals(0, server.getHitCount("/never"));
+		}
+	}
+
+	@Test
+	void aScriptCycleAnswersSuccessiveRequestsInTurnAndStartsOver() throws Exception {
+		// Plan M2-8 and G8-8: a key-set endpoint that alternates a failure with a valid answer.
+		try (RawTlsServer server = RawTlsServer.start()) {
+			server.scriptCycle("/jwks", List.of(
+					Script.fromString("HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\n\r\n"),
+					Script.fromString("HTTP/1.1 200 OK\r\nContent-Type: application/jwk-set+json\r\n"
+							+ "Cache-Control: no-store\r\nContent-Length: 11\r\n\r\n{\"keys\":[]}")));
+			HttpClient client = TestTls.httpClient();
+
+			List<Integer> statuses = new ArrayList<>();
+			for (int request = 0; request < 5; ++request)
+				statuses.add(client.send(HttpRequest.newBuilder(server.uri("/jwks")).build(),
+						HttpResponse.BodyHandlers.ofString()).statusCode());
+
+			Assertions.assertEquals(List.of(503, 200, 503, 200, 503), statuses);
+			Assertions.assertEquals(5, server.getHitCount("/jwks"));
+			server.script("/jwks", Script.fromString("HTTP/1.1 204 No Content\r\n\r\n"));
+			Assertions.assertEquals(204, client.send(HttpRequest.newBuilder(server.uri("/jwks")).build(),
+					HttpResponse.BodyHandlers.discarding()).statusCode(), "script() replaces a cycle");
+			Assertions.assertThrows(IllegalArgumentException.class,
+					() -> server.scriptCycle("/jwks", List.of()));
+			Assertions.assertThrows(IllegalArgumentException.class,
+					() -> server.scriptCycle("jwks", List.of(Script.fromString("x"))));
+		}
+	}
+
+	@Test
+	void aScriptCycleAlternatesAResponseHeadTheJdkRefusesWithAValidKeySet() throws Exception {
+		// Plan M2 exit criterion 14: an invalid status line after each valid, no-store key set. The JDK refuses the
+		// head with an IOException and does not retry it, so every call is one request on the server.
+		try (RawTlsServer server = RawTlsServer.start()) {
+			server.scriptCycle("/jwks", List.of(
+					Script.fromString("HTTP/1.1 099 Invalid\r\nContent-Length: 0\r\n\r\n"),
+					Script.fromString("HTTP/1.1 200 OK\r\nContent-Type: application/jwk-set+json\r\n"
+							+ "Cache-Control: no-store\r\nContent-Length: 11\r\n\r\n{\"keys\":[]}")));
+			HttpClient client = TestTls.httpClient();
+
+			List<String> answers = new ArrayList<>();
+			for (int request = 0; request < 4; ++request) {
+				try {
+					HttpResponse<String> response = client.send(HttpRequest.newBuilder(server.uri("/jwks")).build(),
+							HttpResponse.BodyHandlers.ofString());
+					answers.add(response.statusCode() + " " + response.body());
+				} catch (IOException e) {
+					answers.add("refused");
+				}
+			}
+
+			Assertions.assertEquals(List.of("refused", "200 {\"keys\":[]}", "refused", "200 {\"keys\":[]}"), answers);
+			Assertions.assertEquals(4, server.getHitCount("/jwks"));
 		}
 	}
 

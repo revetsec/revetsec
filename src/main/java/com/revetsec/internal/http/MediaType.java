@@ -300,7 +300,10 @@ public final class MediaType {
 		};
 	}
 
-	private static int tokenEnd(@NonNull String value, int start, int end) {
+	/**
+	 * The index after the run of tchar starting at {@code start}; {@code start} itself when there is none.
+	 */
+	static int tokenEnd(@NonNull String value, int start, int end) {
 		int index = start;
 
 		while (index < end && isTokenCharacter(value.charAt(index)))
@@ -309,7 +312,10 @@ public final class MediaType {
 		return index;
 	}
 
-	private static int owsEnd(@NonNull String value, int start, int end) {
+	/**
+	 * The index after the run of OWS starting at {@code start}.
+	 */
+	static int owsEnd(@NonNull String value, int start, int end) {
 		int index = start;
 
 		while (index < end && isOws(value.charAt(index)))
@@ -322,8 +328,8 @@ public final class MediaType {
 	 * Reads a quoted-string starting at the opening quote (RFC 9110 section 5.6.4), appending its unquoted text;
 	 * returns the index after the closing quote, or -1 if it is malformed or unterminated.
 	 */
-	private static int quotedStringEnd(@NonNull String value, int openingQuote, int end,
-																		 @NonNull StringBuilder unquoted) {
+	static int quotedStringEnd(@NonNull String value, int openingQuote, int end,
+														 @NonNull StringBuilder unquoted) {
 		int index = openingQuote + 1;
 
 		while (index < end) {

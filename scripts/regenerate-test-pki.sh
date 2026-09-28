@@ -44,6 +44,10 @@
 # change. It also invalidates src/test/resources/fixtures/pem/, which is derived from these keys and which PemTests
 # checks against them: re-run the commands in fixtures/pem/README.txt in the same change, and rebuild the hand-written
 # PEM and DER seeds under fuzz/src/test/resources/com/revetsec/internal/pem/ that were made from those fixtures.
+# The fuzz module's generated JOSE seeds (generated-* under fuzz/src/test/resources/) and
+# fuzz/src/test/resources/com/revetsec/jose/fixture-key-set.json are made from these keys too: re-run
+# com.revetsec.FuzzSeedGenerator as fuzz/README.md describes (Seeds, generated seeds); FuzzSeedProvenanceTests fails
+# the fuzz replay until they match.
 # Regenerating tls/ only changes the TLS material; nothing embeds it.
 #
 # Requirements: bash 3.2+; OpenSSL 3.4+ to generate (for -not_before/-not_after), 3.0+ for check; a JDK keytool

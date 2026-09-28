@@ -1,0 +1,2 @@
+Cache-Control: max-age=60
+Expires: Mon, 28 Sep 2026 12:00:00 GMT

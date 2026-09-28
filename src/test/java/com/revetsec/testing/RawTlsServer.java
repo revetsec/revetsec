@@ -71,8 +71,9 @@ import static java.util.Objects.requireNonNull;
  * headers of 384 KiB and more, and trickled or stalled bodies (M1 plan, "Test helpers"; G6-7; exit criteria 10 to
  * 12). It presents the TEST ONLY server certificate ({@link TestTls}).
  * <p>
- * <strong>Scripts.</strong> Each path answers with its {@link Script} ({@link #script(String, Script)}); a path
- * without one gets {@code 404} with {@code Connection: close}. A script is a list of steps: write bytes, trickle
+ * <strong>Scripts.</strong> Each path answers with its {@link Script} ({@link #script(String, Script)}), or with a
+ * cycle of scripts taken in turn ({@link #scriptCycle(String, List)}); a path without one gets {@code 404} with
+ * {@code Connection: close}. A script is a list of steps: write bytes, trickle
  * bytes in timed chunks, stall, end the stream (TLS {@code close_notify}, then keep reading), or close the
  * connection. Trickled chunks are paced by the server's own {@link ScheduledExecutorService}, the one timed wait the
  * test policy allows (A-2); the test itself never sleeps.
@@ -129,7 +130,8 @@ public final class RawTlsServer implements AutoCloseable {
 	private final ScheduledExecutorService scheduler;
 	private final Duration handshakeTimeout;
 	private final URI baseUri;
-	private final Map<String, Script> scripts = new ConcurrentHashMap<>();
+	// Each path's scripts, taken in turn; a list of one is a fixed script.
+	private final Map<String, ScriptCycle> scripts = new ConcurrentHashMap<>();
 	private final Map<String, AtomicInteger> hitCounts = new ConcurrentHashMap<>();
 	private final List<Connection> connections = new CopyOnWriteArrayList<>();
 	private final List<RecordedRequest> requests = new CopyOnWriteArrayList<>();
@@ -190,7 +192,24 @@ public final class RawTlsServer implements AutoCloseable {
 	 * @return this server
 	 */
 	public RawTlsServer script(String path, Script script) {
-		this.scripts.put(requirePath(path), requireNonNull(script));
+		this.scripts.put(requirePath(path), new ScriptCycle(List.of(requireNonNull(script))));
+		return this;
+	}
+
+	/**
+	 * Sets a cycle of scripts for {@code path}, replacing any earlier script: successive requests take them in turn,
+	 * starting over after the last. For a server that alternates, such as one that sends a valid key set after each
+	 * invalid status line (plan M2-8, G8-8). It applies to requests that arrive afterward.
+	 *
+	 * @param path the exact path of the request target (before any {@code ?}), starting with {@code /}
+	 * @param scripts one or more scripts, in order
+	 * @return this server
+	 */
+	public RawTlsServer scriptCycle(String path, List<Script> scripts) {
+		List<Script> copy = List.copyOf(scripts);
+		if (copy.isEmpty())
+			throw new IllegalArgumentException("A cycle needs at least one script");
+		this.scripts.put(requirePath(path), new ScriptCycle(copy));
 		return this;
 	}
 
@@ -377,7 +396,8 @@ public final class RawTlsServer implements AutoCloseable {
 				this.requests.add(request);
 				signalWaiters();
 
-				Script script = this.scripts.getOrDefault(request.getPath(), NOT_FOUND);
+				@Nullable ScriptCycle cycle = this.scripts.get(request.getPath());
+				Script script = cycle == null ? NOT_FOUND : cycle.next();
 				@Nullable ClosedBy closedBy = perform(script, request, sslSocket, inputStream, outputStream);
 				if (closedBy != null) {
 					connection.finish(closedBy);
@@ -649,6 +669,23 @@ public final class RawTlsServer implements AutoCloseable {
 		if (!path.startsWith("/"))
 			throw new IllegalArgumentException("A path starts with /: " + path);
 		return path;
+	}
+
+	/**
+	 * A path's scripts, handed out in turn.
+	 */
+	@ThreadSafe
+	private static final class ScriptCycle {
+		private final List<Script> scripts;
+		private final AtomicInteger next = new AtomicInteger();
+
+		private ScriptCycle(List<Script> scripts) {
+			this.scripts = scripts;
+		}
+
+		private Script next() {
+			return this.scripts.get(Math.floorMod(this.next.getAndIncrement(), this.scripts.size()));
+		}
 	}
 
 	/**

@@ -75,6 +75,15 @@ import static java.util.Objects.requireNonNull;
  * {@link HttpsServer#stop(int) stop(0)}: stopping first hung for more than 10 s on JDK 25 and 27 (M1 plan). The JDK
  * server speaks only HTTP/1.1 and frames bodies itself; responses whose framing must be wrong on purpose belong on
  * {@link RawTlsServer}.
+ * <p>
+ * <strong>Key-set scripts</strong> (plan M2, "Test helpers"): {@link Response#fromJsonWebKeySet(String, String)} serves
+ * a JWK Set with a {@code Cache-Control} value, {@link Response#fromRetryAfter(Integer, String)} a 429 or 5xx with
+ * {@code Retry-After}; {@link Script#fromSequence(List)} and {@link Script#fromCycle(List)} answer successive requests
+ * differently (a key rotation, a server that alternates failures and successes); {@link HeldScript} holds each
+ * request until the test releases it; and {@link Script#fromTarpit()} never answers. A script can set {@code Expires}
+ * and {@code Age}, but <strong>not {@code Date}</strong>: the JDK server always sends its own wall-clock
+ * {@code Date}, replacing any scripted one. So a lifetime test through this server uses {@code max-age},
+ * {@code no-store} or no header at all, and every case that needs a chosen {@code Date} runs on {@link RawTlsServer}.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
@@ -84,6 +93,11 @@ public final class TestHttpsServer implements AutoCloseable {
 	 * The most request-body bytes a {@link RecordedRequest} keeps; the rest is read and discarded.
 	 */
 	public static final int MAXIMUM_RECORDED_BODY_BYTES = 1024 * 1024;
+
+	/**
+	 * The JWK Set media type, {@code application/jwk-set+json} (RFC 7517 section 8.5.1).
+	 */
+	public static final String JWK_SET_MEDIA_TYPE = "application/jwk-set+json";
 
 	private static final Script NOT_FOUND = Script.fromResponse(Response.fromStatus(404));
 
@@ -360,6 +374,53 @@ public final class TestHttpsServer implements AutoCloseable {
 		}
 
 		/**
+		 * Answers the first request with the first response, the second with the second, and so on; once the list runs
+		 * out, every later request gets the last response. For a key rotation scripted in advance, or failures before a
+		 * success.
+		 *
+		 * @param responses one or more responses, in order
+		 * @return the script
+		 */
+		static Script fromSequence(List<Response> responses) {
+			List<Response> copy = requireResponses(responses);
+			AtomicInteger next = new AtomicInteger();
+			// The index stops at the last response, so it never overflows.
+			return exchange -> exchange.send(
+					copy.get(next.getAndUpdate(index -> Math.min(index + 1, copy.size() - 1))));
+		}
+
+		/**
+		 * Answers successive requests with the responses in turn, starting over after the last: a server that
+		 * alternates, such as one that answers a valid key set after each failure (plan M2-8, G8-8).
+		 *
+		 * @param responses one or more responses, in order
+		 * @return the script
+		 */
+		static Script fromCycle(List<Response> responses) {
+			List<Response> copy = requireResponses(responses);
+			AtomicInteger next = new AtomicInteger();
+			return exchange -> exchange.send(copy.get(Math.floorMod(next.getAndIncrement(), copy.size())));
+		}
+
+		/**
+		 * Never answers: no status line, no headers, until the server closes. The client's own timeout or deadline is
+		 * the only way out, which is what a tarpit key-set endpoint tests (plan M2-8). Unlike
+		 * {@link #fromStalledResponse(Integer, Map)}, the client never sees a response head.
+		 *
+		 * @return the script
+		 */
+		static Script fromTarpit() {
+			return Exchange::awaitServerClose;
+		}
+
+		private static List<Response> requireResponses(List<Response> responses) {
+			List<Response> copy = List.copyOf(responses);
+			if (copy.isEmpty())
+				throw new IllegalArgumentException("A script needs at least one response");
+			return copy;
+		}
+
+		/**
 		 * Sends {@code status} and {@code headers} declaring a 1 MiB {@code Content-Length} it never sends, then sends
 		 * nothing more until the server closes: a response that stalls after its headers. Because the declared length
 		 * is never met, the JDK server drops the connection when the server closes, so a client still reading the body
@@ -450,6 +511,155 @@ public final class TestHttpsServer implements AutoCloseable {
 	}
 
 	/**
+	 * A script that holds every request it receives until the test calls {@link #release()}, then answers it with the
+	 * script it wraps; requests that arrive after the release are answered at once. A test starts callers, waits with
+	 * {@link #awaitHeldCount(Integer, Duration)} until the fetch it expects is held, lets its callers gather (for the
+	 * key-set cache, through its own {@code awaitWaitersForTests} seam), and then releases the response, so a
+	 * single-flight test needs no sleeps (plan M2, A-2). {@link TestHttpsServer#close()} interrupts every held request,
+	 * which then ends as {@link Outcome#SERVER_CLOSED}.
+	 */
+	@ThreadSafe
+	public static final class HeldScript implements Script {
+		private final Script script;
+		// The lock guards released, heldCount and arrivalCount, and the condition signals every change to them.
+		private final ReentrantLock lock = new ReentrantLock();
+		private final Condition changed = this.lock.newCondition();
+		private boolean released;
+		private int heldCount;
+		private int arrivalCount;
+
+		private HeldScript(Script script) {
+			this.script = script;
+		}
+
+		/**
+		 * Holds each request, then runs {@code script}.
+		 *
+		 * @param script what answers each request once released
+		 * @return a new held script
+		 */
+		public static HeldScript fromScript(Script script) {
+			return new HeldScript(requireNonNull(script));
+		}
+
+		/**
+		 * Holds each request, then sends {@code response}.
+		 *
+		 * @param response what each request gets once released
+		 * @return a new held script
+		 */
+		public static HeldScript fromResponse(Response response) {
+			return fromScript(Script.fromResponse(response));
+		}
+
+		@Override
+		public void run(Exchange exchange) throws IOException, InterruptedException {
+			requireNonNull(exchange);
+			this.lock.lock();
+			try {
+				++this.arrivalCount;
+				++this.heldCount;
+				this.changed.signalAll();
+				try {
+					while (!this.released)
+						this.changed.await();
+				} finally {
+					--this.heldCount;
+					this.changed.signalAll();
+				}
+			} finally {
+				this.lock.unlock();
+			}
+			this.script.run(exchange);
+		}
+
+		/**
+		 * Releases every held request, and lets every later one through at once. Calling it again does nothing.
+		 */
+		public void release() {
+			this.lock.lock();
+			try {
+				this.released = true;
+				this.changed.signalAll();
+			} finally {
+				this.lock.unlock();
+			}
+		}
+
+		/**
+		 * Whether {@link #release()} has run.
+		 *
+		 * @return whether requests pass through
+		 */
+		public Boolean isReleased() {
+			this.lock.lock();
+			try {
+				return this.released;
+			} finally {
+				this.lock.unlock();
+			}
+		}
+
+		/**
+		 * How many requests are held now.
+		 *
+		 * @return the count
+		 */
+		public Integer getHeldCount() {
+			this.lock.lock();
+			try {
+				return this.heldCount;
+			} finally {
+				this.lock.unlock();
+			}
+		}
+
+		/**
+		 * How many requests have arrived, held or not.
+		 *
+		 * @return the count
+		 */
+		public Integer getArrivalCount() {
+			this.lock.lock();
+			try {
+				return this.arrivalCount;
+			} finally {
+				this.lock.unlock();
+			}
+		}
+
+		/**
+		 * Waits until at least {@code count} requests are held at once, or the timeout passes.
+		 *
+		 * @param count how many held requests to wait for
+		 * @param timeout the longest wait
+		 * @return whether that many were held
+		 * @throws InterruptedException if interrupted while waiting
+		 */
+		public Boolean awaitHeldCount(Integer count, Duration timeout) throws InterruptedException {
+			requireNonNull(count);
+			long remaining = timeout.toNanos();
+			this.lock.lock();
+			try {
+				while (this.heldCount < count) {
+					if (remaining <= 0)
+						return false;
+					remaining = this.changed.awaitNanos(remaining);
+				}
+				return true;
+			} finally {
+				this.lock.unlock();
+			}
+		}
+
+		@Override
+		public String toString() {
+			return "HeldScript[held=" + getHeldCount() + ", arrivals=" + getArrivalCount() + ", released="
+					+ isReleased() + "]";
+		}
+	}
+
+	/**
 	 * How a response body is framed by the JDK server.
 	 */
 	@Immutable
@@ -510,6 +720,42 @@ public final class TestHttpsServer implements AutoCloseable {
 		 */
 		public static Response fromJson(Integer status, String json) {
 			return withStatus(status).header("Content-Type", "application/json").body(json).build();
+		}
+
+		/**
+		 * A {@code 200} with {@code Content-Type: application/jwk-set+json} (RFC 7517 section 8.5.1) and {@code json}
+		 * as its UTF-8 body, and no {@code Cache-Control}, so a cache applies its default lifetime.
+		 *
+		 * @param json the key set, such as from {@link TestJsonWebKeys#keySet(List)}
+		 * @return the response
+		 */
+		public static Response fromJsonWebKeySet(String json) {
+			return withStatus(200).header("Content-Type", JWK_SET_MEDIA_TYPE).body(requireNonNull(json)).build();
+		}
+
+		/**
+		 * {@link #fromJsonWebKeySet(String)} with a {@code Cache-Control} value, such as {@code max-age=300} or
+		 * {@code no-store}.
+		 *
+		 * @param json the key set
+		 * @param cacheControl the {@code Cache-Control} field value
+		 * @return the response
+		 */
+		public static Response fromJsonWebKeySet(String json, String cacheControl) {
+			return withStatus(200).header("Content-Type", JWK_SET_MEDIA_TYPE).header("Cache-Control", cacheControl)
+					.body(requireNonNull(json)).build();
+		}
+
+		/**
+		 * A failure with {@code Retry-After} and an empty body, such as {@code 429} or {@code 503} with {@code 120}
+		 * (RFC 9110 section 10.2.3).
+		 *
+		 * @param status the status, 100 to 999
+		 * @param retryAfter the {@code Retry-After} field value: delay seconds or an HTTP-date
+		 * @return the response
+		 */
+		public static Response fromRetryAfter(Integer status, String retryAfter) {
+			return withStatus(status).header("Retry-After", retryAfter).build();
 		}
 
 		/**

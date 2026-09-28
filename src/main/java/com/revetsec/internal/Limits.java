@@ -28,7 +28,7 @@ import static java.util.Objects.requireNonNull;
 
 /**
  * The R8 limits registry: one {@link Limit} per row, with the values approved at gate 5 (M1 plan, "Limits
- * registry"). {@code FrozenLimitsTests} pins every row.
+ * registry") and the two rows added at gate 8 (G8-10). {@code FrozenLimitsTests} pins every row.
  * <p>
  * Every row is here, including rows whose consumers arrive in later milestones. A builder checks each setting with
  * the row's {@code require} method, and takes its default from the row.
@@ -39,8 +39,9 @@ import static java.util.Objects.requireNonNull;
  * scalar or empty container as 1 and each enclosing container as one more (M1 plan G7-6), and the exponent row
  * bounds the magnitude of the adjusted decimal exponent.
  * <p>
- * <strong>Zero</strong> is permitted only by {@link #JWKS_MAXIMUM_STALENESS} (never serve a stale key set) and
- * {@link #CLIENT_CREDENTIALS_RENEW_BEFORE} (renew only at expiry). Every other row rejects zero and negative values.
+ * <strong>Zero</strong> is permitted only by three rows: {@link #JWKS_MAXIMUM_STALENESS} (never serve a stale key
+ * set), {@link #CLIENT_CREDENTIALS_RENEW_BEFORE} (renew only at expiry) and {@link #JOSE_CLOCK_SKEW} (compare times
+ * exactly). Every other row rejects zero and negative values.
  * <p>
  * <strong>Internal rows.</strong> The JSON structural rows other than {@link #SCIM_JSON_NODES} are fixed in 1.0.0:
  * the codec's profiles use their defaults, and their floors bind only if a row is ever made configurable.
@@ -49,6 +50,9 @@ import static java.util.Objects.requireNonNull;
  * <ul>
  *   <li>requestTimeout &le; totalDeadline ({@link #requireRequestTimeoutWithinTotalDeadline});</li>
  *   <li>JWKS minimum TTL &le; default TTL &le; maximum TTL ({@link #requireJwksTimeToLiveOrder});</li>
+ *   <li>JWKS unknown-kid cooldown &le; minimum TTL ({@link #requireJwksCooldownWithinMinimumTimeToLive}; M2-8, the
+ *   owner's decision of 2026-09-28), so the limit of two key-set requests per cooldown holds back no refresh after
+ *   expiry unless fetches were cut short;</li>
  *   <li>renewBefore &lt; maximumCacheDuration ({@link #requireRenewBeforeBelowMaximumCacheDuration});</li>
  *   <li>fallbackCacheDuration &le; maximumCacheDuration ({@link #requireFallbackWithinMaximumCacheDuration}).</li>
  * </ul>
@@ -114,6 +118,20 @@ public final class Limits {
 	 */
 	public static final Limit COMPACT_JWT_SIZE = Limit.fromAmounts("Compact JWT size", Unit.BYTES, 64 * KIB, 8 * KIB,
 			MIB);
+
+	/**
+	 * Clock skew allowed when a JWT's {@code exp}, {@code nbf} and {@code iat} are compared with the current time:
+	 * 60 s [0, 5 min] (G8-10). Zero compares the times exactly.
+	 */
+	public static final Limit JOSE_CLOCK_SKEW = Limit.fromDurations("JOSE clock skew", Duration.ofSeconds(60),
+			Duration.ZERO, Duration.ofMinutes(5));
+
+	/**
+	 * Oldest ID token accepted, measured from its {@code iat}: 5 min [1 min, 1 h] (G8-10). The age rule includes the
+	 * clock skew: a token is too old when now - iat &gt; maximum age + skew.
+	 */
+	public static final Limit ID_TOKEN_MAXIMUM_AGE = Limit.fromDurations("ID token maximum age", Duration.ofMinutes(5),
+			Duration.ofMinutes(1), Duration.ofHours(1));
 
 	// JSON (internal in 1.0.0, except SCIM_JSON_NODES)
 
@@ -292,7 +310,9 @@ public final class Limits {
 			Duration.ofMinutes(1), Duration.ofSeconds(30), Duration.ofHours(1));
 
 	/**
-	 * Time a fetched key set is cached when the response gives no usable cache lifetime: 10 min [30 s, 24 h] (G5-4).
+	 * Time a fetched key set is cached when the response carries neither {@code max-age} nor {@code Expires}: 10 min
+	 * [30 s, 24 h] (G5-4). A malformed or conflicting {@code Cache-Control}, {@code no-store}, {@code no-cache}, or an
+	 * invalid or repeated {@code Expires} gives {@link #JWKS_MINIMUM_TIME_TO_LIVE} instead.
 	 */
 	public static final Limit JWKS_DEFAULT_TIME_TO_LIVE = Limit.fromDurations("JWKS default time to live",
 			Duration.ofMinutes(10), Duration.ofSeconds(30), Duration.ofHours(24));
@@ -345,6 +365,8 @@ public final class Limits {
 			REQUEST_TIMEOUT,
 			TOTAL_DEADLINE,
 			COMPACT_JWT_SIZE,
+			JOSE_CLOCK_SKEW,
+			ID_TOKEN_MAXIMUM_AGE,
 			JSON_DEPTH_PROTOCOL,
 			JSON_DEPTH_SCIM,
 			JSON_NODES,
@@ -426,6 +448,25 @@ public final class Limits {
 
 		if (minimumTimeToLive.compareTo(defaultTimeToLive) > 0 || defaultTimeToLive.compareTo(maximumTimeToLive) > 0)
 			throw new IllegalArgumentException("JWKS time to live must satisfy minimum <= default <= maximum.");
+	}
+
+	/**
+	 * Checks that the JWKS unknown-kid cooldown is no longer than the minimum TTL. The cooldown is also the window of
+	 * the limit of two key-set requests of any kind; with it no longer than the minimum TTL, every successful fetch
+	 * leaves a key set fresh for at least one cooldown, so that limit holds back no refresh after expiry unless fetches
+	 * were cut short. Call it after each value's own check.
+	 *
+	 * @param unknownKeyIdCooldown the unknown-kid cooldown setting
+	 * @param minimumTimeToLive    the minimum TTL setting
+	 * @throws IllegalArgumentException if {@code unknownKeyIdCooldown > minimumTimeToLive}
+	 */
+	public static void requireJwksCooldownWithinMinimumTimeToLive(@NonNull Duration unknownKeyIdCooldown,
+																																@NonNull Duration minimumTimeToLive) {
+		requireNonNull(unknownKeyIdCooldown);
+		requireNonNull(minimumTimeToLive);
+
+		if (unknownKeyIdCooldown.compareTo(minimumTimeToLive) > 0)
+			throw new IllegalArgumentException("JWKS unknown-kid cooldown must not exceed the JWKS minimum time to live.");
 	}
 
 	/**

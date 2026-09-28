@@ -17,8 +17,10 @@
 package com.revetsec.json;
 
 /**
- * Controls: constant-time-comparison covers only internal.crypto, StateSealer.java and SealingKey.java, and
- * ascii-case-fold only scim and internal.json, so nothing in the public JSON model's package is reported.
+ * Controls: constant-time-comparison covers only internal.crypto, StateSealer.java and SealingKey.java,
+ * byte-comparison only internal.jose, ascii-case-fold only scim, internal.json and internal.jose, and
+ * jca-provider-argument only internal.jose and internal.crypto, so nothing in the public JSON model's package is
+ * reported.
  */
 final class ScopeControlFixture {
 	boolean controls(String name, String other, byte[] first, byte[] second) {
@@ -26,5 +28,14 @@ final class ScopeControlFixture {
 		equal |= name.equalsIgnoreCase(other) || name.regionMatches(true, 0, other, 0, 2);
 		equal |= name.toLowerCase(java.util.Locale.ROOT).equals(other) || Character.toUpperCase('k') == 'K';
 		return equal || String.CASE_INSENSITIVE_ORDER.compare(name, other) == 0;
+	}
+
+	boolean m2Controls(byte[] first, byte[] second, java.nio.ByteBuffer buffer, java.security.Provider provider)
+			throws java.security.GeneralSecurityException {
+		boolean equal = java.util.Arrays.mismatch(first, second) < 0 && buffer.compareTo(buffer) == 0;
+		equal &= java.security.MessageDigest.isEqual(first, second);
+		java.security.Signature.getInstance("SHA256withRSA", "SunRsaSign");
+		java.security.KeyFactory.getInstance("RSA", provider);
+		return equal;
 	}
 }

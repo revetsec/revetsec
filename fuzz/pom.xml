@@ -138,7 +138,9 @@
 			 The larger corpora stay where the core build keeps (and SHA-256-checks) them, and are mapped here into
 			 each target's Jazzer inputs directory through targetPath, so they are never duplicated in the tree:
 			 - the core JSON corpus (corpus/parse and corpus/round-trip, the .bin files included) and every
-			   JSONTestSuite test_parsing file, for each JSON target that reads JSON text;
+			   JSONTestSuite test_parsing file, for each JSON target that reads JSON text and for the two JOSE targets
+			   that do (the JOSE header and the JWK Set document);
+			 - the Entra key-set captures (com/revetsec/jose/entra/<date>/*-keys.json), for the JWK Set target;
 			 - the TEST ONLY PEM fixtures (fixtures/pem and fixtures/keys), for the PEM text target.
 			 Mapped seeds exist only under target/test-classes, which is where .clusterfuzzlite/build.sh zips every
 			 target's seeds from. Jazzer reads an inputs directory recursively, so the subdirectories are kept. -->
@@ -219,6 +221,43 @@
 				<targetPath>com/revetsec/internal/json/Rfc7638FuzzTestsInputs/canonicalJwkAgreesWithAnIndependentEncoder/jsontestsuite</targetPath>
 				<includes>
 					<include>*.json</include>
+				</includes>
+			</testResource>
+			<testResource>
+				<directory>${revetsec.core.basedir}/src/test/resources/com/revetsec/internal/json/corpus</directory>
+				<targetPath>com/revetsec/internal/jose/CompactJwsFuzzTestsInputs/headerChecksAgreeWithAnIndependentOracleForP3ToP8</targetPath>
+				<includes>
+					<include>parse/**</include>
+					<include>round-trip/**</include>
+				</includes>
+			</testResource>
+			<testResource>
+				<directory>${revetsec.core.basedir}/src/test/resources/vectors/jsontestsuite/test_parsing</directory>
+				<targetPath>com/revetsec/internal/jose/CompactJwsFuzzTestsInputs/headerChecksAgreeWithAnIndependentOracleForP3ToP8/jsontestsuite</targetPath>
+				<includes>
+					<include>*.json</include>
+				</includes>
+			</testResource>
+			<testResource>
+				<directory>${revetsec.core.basedir}/src/test/resources/com/revetsec/internal/json/corpus</directory>
+				<targetPath>com/revetsec/internal/jose/JsonWebKeyFuzzTestsInputs/keySetDocumentsSkipExactlyTheKeysAnIndependentOracleRefuses</targetPath>
+				<includes>
+					<include>parse/**</include>
+					<include>round-trip/**</include>
+				</includes>
+			</testResource>
+			<testResource>
+				<directory>${revetsec.core.basedir}/src/test/resources/vectors/jsontestsuite/test_parsing</directory>
+				<targetPath>com/revetsec/internal/jose/JsonWebKeyFuzzTestsInputs/keySetDocumentsSkipExactlyTheKeysAnIndependentOracleRefuses/jsontestsuite</targetPath>
+				<includes>
+					<include>*.json</include>
+				</includes>
+			</testResource>
+			<testResource>
+				<directory>${revetsec.core.basedir}/src/test/resources/com/revetsec/jose/entra/2026-09-27</directory>
+				<targetPath>com/revetsec/internal/jose/JsonWebKeyFuzzTestsInputs/keySetDocumentsSkipExactlyTheKeysAnIndependentOracleRefuses/entra</targetPath>
+				<includes>
+					<include>*-keys.json</include>
 				</includes>
 			</testResource>
 			<testResource>
@@ -345,12 +384,14 @@
 				<version>3.6.0</version>
 				<configuration>
 					<!-- Only fuzz targets run here, plus FuzzSeedLayoutTests, which checks that every target's
-						 seed directory and mapped corpora match its class and method names. The core test tree is
+						 seed directory and mapped corpora match its class and method names, and FuzzSeedProvenanceTests,
+						 which checks the generated and Wycheproof-derived seeds against their sources. The core test tree is
 						 compiled in for its helpers, but its *Tests classes (contract tests included) run in the
 						 root build, whose basedir they assume. Fuzz targets are named *FuzzTests; see README.md. -->
 					<includes>
 						<include>**/*FuzzTests.java</include>
 						<include>com/revetsec/FuzzSeedLayoutTests.java</include>
+						<include>com/revetsec/FuzzSeedProvenanceTests.java</include>
 					</includes>
 					<failIfNoTests>true</failIfNoTests>
 					<systemPropertyVariables>

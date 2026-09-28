@@ -60,10 +60,13 @@ import static java.util.Objects.requireNonNull;
  * </ul>
  * {@link #rejections()} are decided without timing. {@link #timeouts()} are paced or stalled responses that end in
  * {@link Kind#TIMEOUT} only when the caller's deadline or request timeout is short (a second or two); each keeps its
- * server busy for minutes otherwise.
+ * server busy for minutes otherwise. {@link #jwks()} is the catalog a JSON Web Key Set fetch runs (M2 exit criterion
+ * 14): every case under {@link ResponseProfile#JWKS}, plus 300 KiB bodies and bodies one byte over the JWKS body
+ * limit, a 304 without a {@code Location}, and more {@code Content-Type} fields a key set must not carry.
  * <p>
- * Bodies default to the limits of {@link HttpExchangeRequest#fromDefaults}: 256 KiB for a 2xx and 16 KiB for an error
- * body. The oversized bodies are {@value #OVERSIZED_BODY_BYTES} bytes, far above every socket buffer.
+ * Bodies default to the limits of {@link HttpExchangeRequest#fromDefaults}: 256 KiB for a 2xx (the
+ * {@link ResponseProfile#getBodySizeLimit()} row's default) and 16 KiB for an error body. The oversized bodies are
+ * {@value #OVERSIZED_BODY_BYTES} bytes, far above every socket buffer.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
@@ -79,7 +82,21 @@ public final class HostileResponse {
 	 */
 	public static final String REDIRECT_TARGET_SUFFIX = "-redirect-target";
 
+	/**
+	 * The suffix {@link #jwks()} appends to the name of a case it takes from {@link #all()} and requests under
+	 * {@link ResponseProfile#JWKS}, so {@code "an invalid status line" + JWKS_NAME_SUFFIX} names that case there.
+	 */
+	public static final String JWKS_NAME_SUFFIX = " (JWKS)";
+
+	/**
+	 * The size of the JWKS bodies that stream past the default JWKS body limit without a {@code Content-Length}:
+	 * 300 KiB (M2 exit criterion 15).
+	 */
+	public static final int JWKS_OVERSIZED_BODY_BYTES = 300 * 1024;
+
 	private static final int DEFAULT_BODY_LIMIT = Limits.HTTP_RESPONSE_BODY_SIZE.getDefaultIntValue();
+	private static final int DEFAULT_JWKS_BODY_LIMIT = Limits.JWKS_RESPONSE_BODY_SIZE.getDefaultIntValue();
+	private static final String JWK_SET = "application/jwk-set+json";
 	private static final int DEFAULT_ERROR_BODY_LIMIT = Limits.HTTP_ERROR_BODY_SIZE.getDefaultIntValue();
 	private static final String JSON = "application/json";
 	private static final byte[] SMALL_JSON = "{\"a\":1}".getBytes(StandardCharsets.US_ASCII);
@@ -162,6 +179,28 @@ public final class HostileResponse {
 		if (this.transport == Transport.TEST_HTTPS_SERVER && (this.framing == Framing.CLOSE_DELIMITED
 				|| this.framing == Framing.VERBATIM || this.pacing != null || this.bodyNeverSent))
 			throw new IllegalStateException(this.name + ": the JDK server cannot send this case");
+	}
+
+	/**
+	 * A copy of {@code source} under another name and profile; every byte the server sends stays the same.
+	 */
+	private HostileResponse(HostileResponse source, String name, ResponseProfile profile) {
+		this.name = requireNonNull(name);
+		this.transport = source.transport;
+		this.profile = requireNonNull(profile);
+		this.expectedKind = source.expectedKind;
+		this.expectedDroppedStatus = source.expectedDroppedStatus;
+		this.statusLine = source.statusLine;
+		this.status = source.status;
+		this.headers = source.headers;
+		this.bodyBytes = source.bodyBytes;
+		this.jsonBody = source.jsonBody;
+		this.framing = source.framing;
+		this.redirect = source.redirect;
+		this.serverAbortObservable = source.serverAbortObservable;
+		this.clientCloseObservableFrom = source.clientCloseObservableFrom;
+		this.bodyNeverSent = source.bodyNeverSent;
+		this.pacing = source.pacing;
 	}
 
 	/**
@@ -380,6 +419,74 @@ public final class HostileResponse {
 	}
 
 	/**
+	 * The catalog a JSON Web Key Set fetch runs (M2 plan, "Exceptions, transience and observers"; exit criterion 14),
+	 * every case requested under {@link ResponseProfile#JWKS} with the default limits: 256 KiB for a 2xx body
+	 * ({@link Limits#JWKS_RESPONSE_BODY_SIZE}) and 16 KiB for an error body. In order:
+	 * <ol>
+	 *   <li>every {@link #rejections()} case that {@link #appliesTo(ResponseProfile) applies} to JWKS: the JWKS
+	 *   media-type cases as they are, and every other one under JWKS, named with {@link #JWKS_NAME_SUFFIX}. Among them
+	 *   are {@code "an invalid status line (JWKS)"}, which the JDK refuses as {@link Kind#IO}, and the 304, which is
+	 *   {@link Kind#REDIRECT} because there are no conditional requests;</li>
+	 *   <li>JWKS-only cases, named from {@code "JWKS: "}: a 300 KiB body without a {@code Content-Length}, chunked and
+	 *   close-delimited (exit criterion 15), a body one byte over the JWKS body limit in three forms, a 304 without
+	 *   a {@code Location}, and more {@code Content-Type} fields a key set must not carry;</li>
+	 *   <li>every {@link #timeouts()} case under JWKS, last, so callers can split the list with {@link #isPaced()}.</li>
+	 * </ol>
+	 * Each case keeps its expected {@link Kind}, or its dropped error status. A JWKS source maps them through its own
+	 * table: the kind's category and transience, and for a dropped status, {@code REMOTE_ERROR}, transient on 429 and
+	 * 5xx.
+	 *
+	 * @return the cases, in a fixed order, with unique names
+	 */
+	public static List<HostileResponse> jwks() {
+		List<HostileResponse> cases = new ArrayList<>();
+
+		for (HostileResponse hostileResponse : rejections())
+			if (hostileResponse.appliesTo(ResponseProfile.JWKS))
+				cases.add(hostileResponse.underJwks());
+
+		// Exit criterion 15: a key set that streams past the 256 KiB JWKS limit without a Content-Length is aborted,
+		// chunked or close-delimited; and one byte over the limit is enough, chunked, with a Content-Length, or declared
+		// by a Content-Length whose body never comes.
+		cases.add(onJdkServer("JWKS: 300 KiB chunked 2xx", Kind.TOO_LARGE)
+				.profile(ResponseProfile.JWKS).header("Content-Type", JWK_SET).body(JWKS_OVERSIZED_BODY_BYTES)
+				.framing(Framing.CHUNKED).build());
+		cases.add(raw("JWKS: 300 KiB close-delimited 2xx", Kind.TOO_LARGE)
+				.profile(ResponseProfile.JWKS).header("Content-Type", JWK_SET).body(JWKS_OVERSIZED_BODY_BYTES)
+				.framing(Framing.CLOSE_DELIMITED).build());
+		cases.add(onJdkServer("JWKS: chunked 2xx one byte over the JWKS body limit", Kind.TOO_LARGE)
+				.profile(ResponseProfile.JWKS).header("Content-Type", JWK_SET).body(DEFAULT_JWKS_BODY_LIMIT + 1)
+				.framing(Framing.CHUNKED).build());
+		cases.add(onJdkServer("JWKS: fixed-length 2xx one byte over the JWKS body limit", Kind.TOO_LARGE)
+				.profile(ResponseProfile.JWKS).header("Content-Type", JWK_SET).body(DEFAULT_JWKS_BODY_LIMIT + 1).build());
+		cases.add(raw("JWKS: 2xx declaring one byte over the JWKS body limit that never sends its body", Kind.TOO_LARGE)
+				.profile(ResponseProfile.JWKS).header("Content-Type", JWK_SET)
+				.header("Content-Length", String.valueOf(DEFAULT_JWKS_BODY_LIMIT + 1)).bodyNeverSent().build());
+
+		// M2-8: there are no conditional requests, so a 304 is a redirect like any 3xx, with or without a Location.
+		cases.add(raw("JWKS: 304 Not Modified without a Location", Kind.REDIRECT)
+				.profile(ResponseProfile.JWKS).status(304, "Not Modified").header("Content-Length", "0").build());
+
+		// G6-7: a key set needs exactly one Content-Type, application/jwk-set+json or application/json, with no
+		// charset but utf-8.
+		cases.add(onJdkServer("JWKS: no Content-Type", Kind.MEDIA_TYPE)
+				.profile(ResponseProfile.JWKS).json().build());
+		cases.add(onJdkServer("JWKS: two Content-Type fields", Kind.MEDIA_TYPE)
+				.profile(ResponseProfile.JWKS).header("Content-Type", JWK_SET).header("Content-Type", JSON).json()
+				.build());
+		for (String contentType : List.of("application/jwk-set+json, application/json",
+				"application/jwk-set+json; charset=utf-16", "application/jwks+json", "application/jwk-set",
+				"text/json"))
+			cases.add(onJdkServer("JWKS: Content-Type \"" + contentType + "\"", Kind.MEDIA_TYPE)
+					.profile(ResponseProfile.JWKS).header("Content-Type", contentType).json().build());
+
+		for (HostileResponse hostileResponse : timeouts())
+			cases.add(hostileResponse.underJwks());
+
+		return List.copyOf(cases);
+	}
+
+	/**
 	 * Scripts this case on {@code server} at {@code path}.
 	 *
 	 * @param server the server
@@ -533,6 +640,16 @@ public final class HostileResponse {
 	@Override
 	public String toString() {
 		return this.name;
+	}
+
+	/**
+	 * This case under {@link ResponseProfile#JWKS}: itself if it already is, otherwise a copy named with
+	 * {@link #JWKS_NAME_SUFFIX}.
+	 */
+	private HostileResponse underJwks() {
+		if (this.profile == ResponseProfile.JWKS)
+			return this;
+		return new HostileResponse(this, this.name + JWKS_NAME_SUFFIX, ResponseProfile.JWKS);
 	}
 
 	private List<List<String>> headersFor(String path) {

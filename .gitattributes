@@ -2,3 +2,7 @@
 # as CR, LF, a BOM or invalid UTF-8. Git must never convert their line endings or otherwise treat them as text.
 src/test/resources/vectors/** -text
 src/test/resources/com/revetsec/internal/json/corpus/** -text
+src/test/resources/com/revetsec/jose/entra/** -text
+src/test/resources/com/revetsec/internal/*/wycheproof/** -text
+src/test/resources/fixtures/keycloak/** -text
+src/test/resources/fixtures/node-oidc-provider/** -text

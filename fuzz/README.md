@@ -18,17 +18,20 @@ The module compiles Revetsec's sources directly, the same way Soklet's `fuzz/` d
 file ever references one of them, javac compiles it implicitly and the build fails on the missing
 Testcontainers classes. That failure is deliberate.
 
-Because the targets sit in the packages they exercise, they can use package-private hooks. The M1
+Because the targets sit in the packages they exercise, they can use package-private hooks. The
 targets use these:
 
 - `JsonLimits.maximumCaps()` and the `JsonLimits` constructor (for SCIM's exact-name twin and the
   tight profile), reached through the helper `com.revetsec.internal.json.JsonFuzzSupport` in this
   module;
 - the input-size caps `JsonLimits.PROTOCOL_DOCUMENT_INPUT_BYTES_CAP` and `SCIM_INPUT_BYTES_CAP`;
-- `JsonInvariants.depthOf` in `com.revetsec.json`.
+- `JsonInvariants.depthOf` in `com.revetsec.json`;
+- `PreparedJws`'s signing input, payload, signature and JSON profile after
+  `JwtProcessor.prepare` (`internal.jose`), and `JoseException.Reason`'s category and fixed
+  message (`jose`).
 
-None of the M1 targets uses a core test helper, so they also build with
-`-Drevetsec.fuzz.mainSourcesOnly`.
+No target uses a core test helper, and neither do the seed generator and the two seed checks
+(below), so the module also builds with `-Drevetsec.fuzz.mainSourcesOnly`.
 
 Versions: Jazzer 0.30.0 (as in Soklet's `fuzz/`) and JUnit 6.1.3 through the JUnit BOM, on Java
 17 or newer. The BOM aligns Jazzer's transitive JUnit Platform modules with the explicit API,
@@ -38,7 +41,9 @@ and a run can fail before any input executes.
 ## Targets
 
 M1 deleted the M0 placeholder (`PlaceholderFuzzTests`, which exercised no Revetsec code) and added
-six classes with twelve `@FuzzTest` methods. Each method is one ClusterFuzzLite target, named
+six classes with twelve `@FuzzTest` methods. M2 added five classes with nine methods, for the JOSE
+layer, the fixed-length ECDSA path and the key-set cache lifetime, so there are now eleven classes
+and twenty-one methods. Each method is one ClusterFuzzLite target, named
 `<SimpleClassName>_<method>`.
 
 | Class (package) | Method | Input | What it checks |
@@ -55,6 +60,15 @@ six classes with twelve `@FuzzTest` methods. Each method is one ClusterFuzzLite 
 | | `derParsersRejectOnlyWithPemExceptionAndAgreeWithTheirArmoredForms` | DER bytes | `parseCertificateDer` and all four labels over the same DER throw only `PemException`, and the certificate parser gives the same outcome with and without armor. Where the target's DER reader finds no minimal definite-length `SEQUENCE`, all five fail with `MALFORMED_DER`, and where bytes follow it, all five fail with `TRAILING_DATA`. An accepted PKCS#8 key's `privateKey` octets hold exactly one element. |
 | `EncodingFuzzTests` (`internal.encoding`) | `base64DecodersAcceptExactlyTheCanonicalEncodings` | text and octets | `Base64Url`, `StandardBase64` and `SamlBase64` agree with an RFC 4648 oracle: the exact octets, or the exact Kind of the first failed check, so each octet string has one accepted encoding. Every encoding round-trips, and a line-wrapped one also round-trips through `SamlBase64`. |
 | | `urlAndUtf8CodecsMatchTheirOraclesExactly` | octets, also read as text | `StrictUtf8`, `PercentDecoding`, `FormUrlEncoding` and `QueryParameters` agree with oracles written from RFC 3629, RFC 3986 and RFC 6749 Appendix B. `FormUrlEncoding` also agrees with `URLDecoder` where it accepts and with `URLEncoder` for well-formed input. Query parameters survive re-encoding. |
+| `CompactJwsFuzzTests` (`internal.jose`) | `compactSerializationsSplitIntoThreeCanonicalSegmentsOrFailInStepOrder` | token text | `CompactJwsParser.parse` under two maximum lengths, then `JwtProcessor.prepare` under three header policies (M2 plan, "JOSE semantics" steps 1 to 5): the oracle's decoded segments and the received signing input, or the reason of the first failed step, from `TOKEN_TOO_LARGE` through `JSON_SERIALIZATION`, `TOKEN_SYNTAX`, `ENCRYPTED_TOKEN` and the header reasons to `SIGNATURE_MALFORMED`. An empty payload or signature passes the split (M2-6). Every `JoseFailure` names only its reason, with no cause and no stack trace. |
+| | `headerChecksAgreeWithAnIndependentOracleForP3ToP8` | JSON bytes | `JoseHeaderPolicy.check` under three policies against a P3 to P8 oracle with its own table of `alg` wire values and its own `typ` normalization: `HEADER`, `ALGORITHM_NOT_ALLOWED` (every spelling of `none`), `CRITICAL_HEADER`, `UNENCODED_PAYLOAD`, `COMPRESSED_PAYLOAD`, `UNTRUSTED_KEY_REFERENCE`, `INVALID_TYPE` and `NESTED_TOKEN`, in that order, or the header's algorithm, `kid` and raw `typ`. For every string in the header, `normalizeType`, `allowsType` and `JwsAlgorithm.findByWireValue` agree with the oracle. |
+| `JsonWebKeyFuzzTests` (`internal.jose`) | `keySetDocumentsSkipExactlyTheKeysAnIndependentOracleRefuses` | JSON bytes | `JwkSetParser` under the default and tight limits: `KEY_SET` exactly for the oracle's document failures, and otherwise every key kept or skipped with the reason of the first of the plan's twelve key rules it breaks, at its index (M2-7). Every object in the document also goes through `JwkParser` alone. A kept key has the oracle's `kid`, `kty`, `crv`, `alg`, `use`, JWK `issuer`, RFC 7638 thumbprint and JCA key values. `JsonWebKeySet.fromJson` agrees on the same text, escapes the `kid` in `toString`, and a `StaticJsonWebKeySource` needs one usable key. |
+| | `keysBuiltFromFuzzedIntegersAgreeWithTheCurveAndThumbprintOracle` | `FuzzedDataProvider` | Builds the JWKs that byte mutation seldom reaches: RSA moduli of chosen sizes and parity, some built to carry the ROCA fingerprint for every prime or for all but one; exponents at their bounds; EC points computed on the curve, moved off it, or past the field prime; Ed25519 small-order points, `y` at or past the field prime, and `x = 0` with the sign bit; encodings that are not minimal or not the curve's length; every optional member, valid and invalid. `JwkParser`, and a one-key document through `JwkSetParser`, give the oracle's verdict. |
+| `JwtValidatorFuzzTests` (`jose`) | `validateAcceptsOnlyWhatTheJdkVerifiersAccept` | token text | Three validators over the TEST ONLY fixture keys' public halves (see below). A token is accepted only if the JDK's own verifier for its algorithm accepts its signature with the one key the selection rules pick, and every header and claim rule passes; then it carries exactly the oracle's claims. A rejection has the reason of the oracle's first failed step, in that reason's exception class, with its fixed message, no cause, never transient, and `didFailToValidateJwt` gets the same instance. |
+| | `signedTokensAreJudgedLikeTheOracleWhateverTheirHeaderAndClaims` | signing program | The same validators and oracle over fuzz-only keys. The input spells a header and a payload, which the target signs and may then damage (a flipped bit, a byte cut or added, a zeroed or emptied signature, the high-S twin, `r` of 0 or `n`, another key's signature, a changed payload, padding), so fuzzed headers and claims reach the checks after the signature. |
+| `EcdsaFuzzTests` (`internal.crypto`) | `shapeCheckAndDerEncodingAgreeWithTheRangeRuleAndAnX690Reader` | signature octets | For each curve, `EcdsaSignatures.findShapeFailure` gives RFC 7518 section 3.4's verdict (the exact length, then `1 <= r, s <= n - 1` over the curve orders the JDK names). `toDer` refuses a signature of the wrong length and otherwise gives a minimal DER `SEQUENCE` that an X.690 reader written here reads back to `r` and `s`. `SignatureVerifier.verifyEcdsa` decides the shape before it looks at the key (G8-3, CVE-2022-21449). |
+| | `verdictsAgreeWithTheJdksFixedLengthEngine` | `FuzzedDataProvider` | `SignatureVerifier.verifyEcdsa` is `VALID` exactly when the JDK's fixed-length engine (`SHAxxxwithECDSAinP1363Format`, which the main code never uses) accepts a signature of the exact length with `r` and `s` in range, under a key on the curve. Signatures come from the fuzzer, or are signed here and damaged: `r` or `s` set to 0, 1, `n - 1`, `n`, `n + 1`, the field prime or all ones, the high-S twin (which is valid), swapped halves, a byte cut or added, halves padded to another curve's length, or the DER form. Curve and hash are chosen separately. |
+| `CacheLifetimeFuzzTests` (`internal.http`) | `timeToLiveIsTotalClampedAndAgreesWithAnRfc9111Oracle` | header lines | `CacheLifetime.timeToLive` never throws, stays within its bounds, and equals an oracle for its RFC 9111 subset (M2-8 "TTL": list splitting with quoted strings, the `cache-directive` grammar, `no-store`, `no-cache`, `max-age` and its 2<sup>31</sup> cap, `Expires` minus `Date`, `Age`) for three receipt times and three sets of bounds. `HttpDate.parse` and `parseSingleField` agree with a regular-expression reading of RFC 9110 section 5.6.7's three forms and its two-digit-year rule. |
 
 ### Invariants shared by every target
 
@@ -67,11 +81,16 @@ six classes with twelve `@FuzzTest` methods. Each method is one ClusterFuzzLite 
     hundreds of millions of characters, where a length would pass `Integer.MAX_VALUE` (see their
     Javadoc). Fuzz inputs are bounded by libFuzzer's `-max_len`, far below that, so no target
     allows it.
+- **Only the documented exception, in JOSE.** Inside, `JoseFailure` and `SkippedKeyException`;
+  at the public API, the `JoseException` subclass of the reason, and `IllegalArgumentException`
+  only from `StaticJsonWebKeySource.fromJsonWebKeySet` for a set with no usable key. A static key
+  source never throws `JsonWebKeySetUnavailableException`, so one would be a finding too.
 - **Fixed messages, no input echo.** A checked failure's message must equal its Kind's own fixed
-  message. The model's and the sealer's `IllegalArgumentException` messages must be the fixed
-  message of the first failed check; for a seal lifetime, that is the `Limits` row's own message,
-  which names the lifetime but never the plaintext or context. So no message can echo the input,
-  and the check needs no sentinel.
+  message; a `JoseFailure` or `SkippedKeyException` message names only its reason, and a
+  `JoseException` carries its reason's fixed message. The model's and the sealer's
+  `IllegalArgumentException` messages must be the fixed message of the first failed check; for a
+  seal lifetime, that is the `Limits` row's own message, which names the lifetime but never the
+  plaintext or context. So no message can echo the input, and the check needs no sentinel.
 - **Bounded work.** Every accepted JSON document is measured by a separate walker and number
   lexer and must stay inside its profile's limits; a document never yields more values than it
   has bytes. libFuzzer's `-timeout` stops a slow input:
@@ -79,12 +98,20 @@ six classes with twelve `@FuzzTest` methods. Each method is one ClusterFuzzLite 
     JVM, so the Maven run fails;
   - ClusterFuzzLite passes `-timeout=25`, but reports a timeout only when its `REPORT_TIMEOUTS`
     setting is on (here, the `REPORT_TIMEOUTS` environment variable of the workflows' `docker://`
-    run step). It is off by default and the M1 workflows do not set it, so a slow input does not
-    fail a ClusterFuzzLite job today.
+    run step). It is off by default and none of the three workflows (`cflite_pr.yml`,
+    `cflite_batch.yml`, `cflite_cron.yml`) sets it, so a slow input does not fail a
+    ClusterFuzzLite job today.
 - **Oracles, not self-comparison.** Where a target predicts a result, the prediction comes from
   code written here from the specification: its own walker, ASCII fold, Base64 and
   percent-decoding, DER reader (X.690), and StateSealer v1 implementation. It never calls the code
   under test to decide what that code should do.
+  - The JOSE targets parse JSON text with `JsonCodec` and certificates with `Pem`, which have
+    targets of their own, and decide everything after those parses themselves: the compact split,
+    base64url, the header rules, the twelve key rules in `BigInteger` arithmetic over the curve
+    parameters the JDK names, RFC 7638, key selection, the claim rules and NumericDates.
+  - Signature verdicts come from the JDK's own engines, never from `internal.crypto`, and a
+    fixed-length ECDSA verdict from the JDK's `inP1363Format` engines, which the main code is
+    banned from using.
 
 ### The sealer's independent v1 implementation
 
@@ -95,6 +122,37 @@ salt, and the additional authenticated data from the header, the label and the c
 check cannot see the label in the key derivation, because the label is also in the additional
 authenticated data, so a wrong label fails either way. This comparison sees it, for every fuzzed
 plaintext, context and label, where `SealerV1Tests` pins four known-answer vectors.
+
+### The JOSE validators and keys
+
+`JwtValidatorFuzzTests` checks every token with three validators over one key set:
+
+- one for `https://issuer.example.com` that allows the eleven asymmetric algorithms, expects
+  `https://api.example.com`, requires `sub` and `client_id`, and allows the default 60 seconds of
+  skew;
+- one for a made-up Entra tenant that allows `RS256`, `ES256` and `EdDSA`, accepts any audience,
+  requires `typ` from `JWT` and `at+jwt`, allows no skew and caps tokens at 8,192 characters;
+- one for the same tenant spelled in upper case, with the defaults and any audience. The Entra
+  `{tenantid}` template stands only for a lowercase `tid` (M2-11), so it must never serve this
+  issuer.
+
+All three read the time from a clock fixed at 2026-09-27T12:00:00Z. The key set has twenty-one
+slots (`JwtValidatorFuzzSupport.KEY_SLOTS`): the RSA-2048 key once per RSA algorithm, the
+RSA-3072 key without `alg`, the three EC keys (two with an `x5c` certificate), the Ed25519 key
+without `alg`, with `EdDSA` and with `Ed25519`, RSA keys whose JWK `issuer` is another issuer, the
+Entra template or the exact Entra issuer, an EC key bound to the first validator's issuer, one key
+without `kid`, and three keys that share one `kid` (the P-521 key with `ES512` and without `alg`,
+and an RSA key with `RS384`). So the selection rules all apply: one RSA algorithm per key without
+`alg` (INV-J3), each direction of the `EdDSA`/`Ed25519` alias between a key's `alg` and the
+token's, ambiguity with and without `kid`, a shared `kid` that only one key fits,
+`KEY_ISSUER_MISMATCH`, and the template.
+
+- The first target verifies with the TEST ONLY fixture keys' public halves, which this module's
+  `src/test/resources/com/revetsec/jose/fixture-key-set.json` holds as written by the seed
+  generator (below).
+- The second target signs its tokens itself, so it holds fuzz-only key pairs for the same slots,
+  generated when the class loads from fixed `SHA1PRNG` seeds; no private key is committed.
+  `EcdsaFuzzTests` generates its fuzz-only keys the same way.
 
 ### "Exact" name comparison and the SCIM profile
 
@@ -137,6 +195,8 @@ sources fill it.
 |---|---|---|
 | `com/revetsec/internal/json/corpus/parse/` and `round-trip/`: the 25 files ported from Soklet plus the protocol-shaped seeds, `.bin` files included | 30 | the five JSON-text methods (`parse/`, `round-trip/`) |
 | `vectors/jsontestsuite/test_parsing/`: JSONTestSuite at `1ef36fa0`, one file name containing `#` | 318 | the same five methods (`jsontestsuite/`) |
+| `com/revetsec/internal/json/corpus/`, `vectors/jsontestsuite/test_parsing/` (the same files) | 30 and 318 | the two JOSE JSON-text methods, `CompactJwsFuzzTests#headerChecksAgreeWithAnIndependentOracleForP3ToP8` and `JsonWebKeyFuzzTests#keySetDocumentsSkipExactlyTheKeysAnIndependentOracleRefuses` |
+| `com/revetsec/jose/entra/2026-09-27/*-keys.json`: the captured Entra key sets, with `x5c` chains and templated `issuer` members | 5 | `JsonWebKeyFuzzTests#keySetDocumentsSkipExactlyTheKeysAnIndependentOracleRefuses` (`entra/`) |
 | `fixtures/pem/` and `fixtures/keys/`: the TEST ONLY PEM fixtures | 33 | `PemFuzzTests#pemParsersRejectOnlyWithPemExceptionAndAcceptAtMostOneLabel` (`fixtures-pem/`, `fixtures-keys/`) |
 
 The core build checks the two JSON corpora against their SHA-256 manifests
@@ -148,9 +208,66 @@ seeds without failing any test.
 `FuzzSeedLayoutTests` checks the layout in the replay: every inputs directory belongs to a
 `@FuzzTest` method of its class, every `@FuzzTest` method has at least one seed, every `byte[]`
 target in a JSON package is mapped, and each mapped target holds every file of its mapped corpora,
-unchanged (for a JSON-text method, all 30 core corpus files and all 318 JSONTestSuite files).
+unchanged (for a JSON-text method, all 30 core corpus files and all 318 JSONTestSuite files). The
+JOSE packages hold targets of both kinds, so each of their `byte[]` targets must be on one of two
+lists, JSON text (a decoded header, a JWK Set document) or not (a token, a signing program), and
+the JSON-text ones are mapped like the JSON targets. It also requires that no method of a target
+class names a record in its signature (see "Writing a target").
 Renaming or moving a target therefore fails the replay, and the ClusterFuzzLite build, until its
 `targetPath` entries and seed directory move with it.
+
+**Generated seeds** (`generated-*`), and the fixture key set, come from
+`com.revetsec.FuzzSeedGenerator` in this module, which reads the TEST ONLY fixture keys from the
+core checkout (its `src/test/resources/fixtures/keys/` and `fixtures/pem/ed25519-*.pem`):
+
+- tokens for the JwtValidator target, and some of them for the compact target: every algorithm
+  with its key, the selection cases (each direction of the `EdDSA`/`Ed25519` alias, a shared
+  `kid`), the time boundaries at 60 seconds of skew (`iat` at +60 and +61 seconds among them), the
+  issuer, audience, required-claim and `cnf` cases (`cnf` of JSON `null` too), a `jti` that is not
+  a string, damaged signatures (DER, `r = 0`, `r = n`, the high-S twin, 63, 65, 255 and 257
+  octets, empty, another key's, a flipped bit, a changed payload, a padded segment, an HMAC keyed
+  with the RSA public key's DER encoding), and the Entra cases, including tokens of exactly 8,192
+  and 8,193 characters for the Entra validator's cap;
+- key sets for the JWK Set target: the fixture key set, every fixture key with its certificate,
+  certificates of other keys, and damaged copies (a leading zero octet, an even modulus,
+  exponents 3, 65,535, 65,536 and 2<sup>32</sup> + 1, the RSA-1024 key, a coordinate one octet
+  short, a point off the curve or at the field prime, the Ed25519 points of order 1, 2 and 4 and
+  encodings that do not decode, and malformed optional members, among them `kid`s of 256 and 257
+  characters). Keys computed by the generator sit at the key rules' bounds: moduli of 2,047,
+  16,384 and 16,385 bits drawn from SHA-256, moduli that carry the ROCA fingerprint for every prime
+  or for all but the first or the last, a point on each NIST curve whose `x` is written as the
+  field prime, and Ed25519's four points of order 8. A seed that needs a private member carries a
+  placeholder value, never a fixture's private key;
+- `com/revetsec/jose/fixture-key-set.json`, the JwtValidator target's key set.
+
+The tree's generated seeds were written on 2026-09-28 with Corretto 21.0.11, from the repository
+root, after `test-compile`:
+
+```sh
+java -cp "fuzz/target/test-classes:fuzz/target/classes" com.revetsec.FuzzSeedGenerator .
+```
+
+RSASSA-PKCS1-v1_5, Ed25519 and HMAC signatures are deterministic. RSASSA-PSS and ECDSA signing
+draw from a `SHA1PRNG` seeded with a constant, which repeats on one JDK but not necessarily across
+JDKs.
+
+**Wycheproof-derived seeds** (`wycheproof-<file>-tc<tcId>-<field>`) each hold one field of the
+vendored Wycheproof files (the core tree's `src/test/resources/vectors/wycheproof/testvectors_v1/`;
+see NOTICE): JWS strings (`jws`), byte for byte, for the token targets, including the RFC 7520
+examples and the base64 canonicality tests; group keys and key sets (`public`, `private`), the
+same JSON values written as canonical JSON, for the JWK Set target, the ROCA key among them; and
+fixed-length ECDSA signatures (`sig`), the octets their hex spells, for the ECDSA shape target.
+The generator writes them too.
+
+`FuzzSeedProvenanceTests` checks both kinds in the replay, against the core checkout that
+Surefire names:
+
+- each `wycheproof-*` seed is still exactly the field its name gives, read from the vendored
+  file by name, apart from the generator's selection;
+- each `generated-*` seed and the fixture key set is what the generator makes now: byte for byte
+  for the deterministic signatures and every key set; the same signing input and a signature that
+  still verifies with its fixture key for a PSS or ECDSA token; the same signing input and
+  signature length for a damaged one. A generated file the generator no longer makes fails too.
 
 **Hand-written seeds**, in `src/test/resources/`:
 
@@ -186,14 +303,54 @@ Renaming or moving a target therefore fails the replay, and the ClusterFuzzLite 
 - **Encoding:** RFC 4648 vectors and their non-canonical, padded, misplaced-padding and wrapped
   variants, and the RFC 6749 Appendix B vector with malformed, truncated, overlong, surrogate and
   non-ASCII-digit escapes, raw CESU-8 surrogates and repeated query parameters.
+- **JOSE tokens** (the compact and JwtValidator targets): every spelling of `none` with empty and
+  non-empty signatures; `rs256`, `ES256K`, `RSA-OAEP` and a numeric `alg`; the JSON
+  serialization; five, four and two segments; an empty header; padding, the standard alphabet, a
+  4n + 1 segment, non-canonical trailing bits and a space; `crit`, `b64`, `zip`, `jku` (the
+  configured URI), `jwk`, `x5u`, an ignored `x5c` and `cty`; `typ` of another profile, with a
+  parameter, or a number; `kid` empty, of 257 characters, or a number; a duplicate `alg`, a
+  byte-order mark and invalid UTF-8; RS256, PS256 and ES256 signatures of impossible lengths with
+  an unknown `kid`, which must fail before key selection; and the RFC 7515 appendix A and RFC 8037
+  appendix A.4 examples. The compact target also has tokens of exactly 64 and 65 characters for
+  its 64-character limit.
+- **JOSE headers** (the header target): each P4 to P8 rejection, and five headers that each hold
+  every rejection from one step on (from `b64`, `zip`, the key references, `typ` and `cty`), so
+  that the replay pins the order of P5 to P8; `typ` spellings (lower case, `application/`,
+  parameters, two slashes, empty, non-ASCII, the Kelvin sign), `kid` at 256 and 257 UTF-16 code
+  units, in surrogate pairs too, and with control and bidirectional characters, a byte-order mark
+  and a lone surrogate.
+- **JWK Sets:** each document failure (`keys` missing, null, not an array, an element that is not
+  an object, a duplicate `keys` member, more elements than the tight limit, and 101 keys against
+  the default limit of 100, next to 100 keys), each skip reason in a small document, `kid` values
+  that `JsonWebKey.toString` must escape, and the RFC 7515 appendix A, RFC 7517 appendix A.1 and
+  RFC 8037 appendix A.2 public keys.
+- **ECDSA:** empty, all-zero, all-ones and single-bit signatures of each curve's length, and two
+  P-521 signatures whose DER form has 127 and 128 content octets, on each side of the long form.
+- **Cache lifetime:** exit criterion 15's `max-age` rows (5 s, 999,999,999 s), one hour, the
+  2<sup>31</sup> cap, quoted and quoted-pair arguments, conflicting and repeated `max-age`, every
+  malformed element form, `no-store`, `no-cache` with an argument, the ignored directives,
+  directive names in upper case, `Expires` in all three date forms and with a wrong day name, 30
+  February, a leap second, another zone, year 0, the RFC 9110 section 5.6.7 example dates, the
+  RFC 850 century boundary, and `Age` in lists, over several lines and past the lifetime.
+- **Signing programs** (the second JwtValidator target): each algorithm and damage kind, claim
+  types and time boundaries, `cnf`, the Entra template with a lowercase and an uppercase `tid`,
+  and a bare header, which the target signs with the key its `kid` names.
 
-The two `FuzzedDataProvider` methods read construction programs, not documents, so their seeds are
+The JSON model factory target and the sealer's seal target read `FuzzedDataProvider` construction
+programs, not documents, so their seeds are
 reproducers: of the two target defects that the first fuzzing round found (see "M1 local
 fuzzing"), and, for the model factory target, of two planted model defects (a kept `BigDecimal`
 subclass, `lying-bigdecimal-subclass.bin`, and an unpaired surrogate in a `fromMembers` name,
 `unpaired-surrogate-member-name-in-a-map.bin`), so that the replay reaches those oracles too. A
 change to how a target consumes its `FuzzedDataProvider` turns these seeds into other programs;
-regenerate them by fuzzing the planted defect again.
+regenerate them by fuzzing the planted defect again. The two M2 `FuzzedDataProvider` targets
+(`JsonWebKeyFuzzTests#keysBuiltFromFuzzedIntegersAgreeWithTheCurveAndThumbprintOracle` and
+`EcdsaFuzzTests#verdictsAgreeWithTheJdksFixedLengthEngine`) start from programs kept from their
+2026-09-28 fuzzing sessions' corpora: for each key kind and each skip reason or usable outcome (46),
+and for each curve, signature form (raw, signed, signed and damaged), verifying key and verdict
+(33), the shortest input that reaches it, named for them, such as `rsa-weak-key.bin` or
+`p-384-damaged-signer-key-valid.bin` (the high-S twin). They were classified by replaying each
+corpus input through the target's own choice sequence.
 
 `fuzz/.gitattributes` marks `src/test/resources/**` as `-text`, because seeds hold CR, LF, NUL,
 invalid UTF-8 and DER, and git must never rewrite them.
@@ -201,18 +358,33 @@ invalid UTF-8 and DER, and git must never rewrite them.
 ## Writing a target
 
 - Put the class in `fuzz/src/test/java`, in the package of the code it exercises.
-- Name the class `*FuzzTests`. Surefire here runs only `**/*FuzzTests.java` and
-  `FuzzSeedLayoutTests`, because the core test tree is compiled into this module but its tests
+- Name the class `*FuzzTests`. Surefire here runs only `**/*FuzzTests.java`,
+  `FuzzSeedLayoutTests` and `FuzzSeedProvenanceTests`, because the core test tree is compiled into
+  this module but its tests
   (the contract tests included) belong to the root build. `.clusterfuzzlite/build.sh` looks only
   for the `*FuzzTests` classes. For the same reason, no class in the core test tree may be named
-  `*FuzzTests`. Helpers such as `JsonFuzzSupport` take any other name.
+  `*FuzzTests`. Helpers such as `JsonFuzzSupport`, `JwtValidatorFuzzSupport` and
+  `FuzzSeedGenerator` take any other name.
 - Each `@FuzzTest` method becomes one ClusterFuzzLite target, named
   `<SimpleClassName>_<method>`. Target names must be unique across packages.
 - Put curated seeds in `src/test/resources/<package>/<SimpleClassName>Inputs/<method>/`, or map a
   corpus from the core tree there through a `testResource` with a `targetPath` in the fuzz pom.
   Every target needs at least one seed. Renaming a `@FuzzTest` method or moving its class means
   updating its `targetPath` entries and moving its seed directory; `FuzzSeedLayoutTests` fails
-  the replay until both match.
+  the replay until both match. A new `byte[]` target in `jose` or `internal.jose` also goes on one
+  of `FuzzSeedLayoutTests`' two JOSE lists.
+- Seeds made from fixtures or vendored files come from `FuzzSeedGenerator`, never by hand, so that
+  `FuzzSeedProvenanceTests` can check them: a `generated-*` or `wycheproof-*` file that the
+  generator does not make fails the replay.
+- Keep choice 0 of a `FuzzedDataProvider` target on the ordinary path. An exhausted input gives
+  the minimum of every range, so a rare branch at 0 would absorb most short inputs.
+- Never name a main-code record (such as `VerificationKey` or `ParsedKeySet`) in the signature of
+  a method of a target class; take `Object` and cast inside. Jazzer finds a target by reflecting
+  over its class's declared methods, which loads every type their signatures name before fuzzing
+  starts, and in ClusterFuzzLite's base image (its own Jazzer on Temurin 17.0.16) a record loaded
+  that early fails on its first construction with `NoSuchFieldError` on one of its own fields.
+  Locally, with Jazzer 0.30.0, the same target runs; `FuzzSeedLayoutTests` fails the replay
+  instead, so the ClusterFuzzLite build check is not the first to show it (see below).
 - Carry the Apache-2.0 header, a jsr305 thread-safety marker and the `@author` line, as the
   existing targets do. Name each method as a sentence stating its invariant, and cite the plan
   item, RFC or INV row it checks.
@@ -256,10 +428,20 @@ hooks, such as `java.util.regex`. Use JDK 17 to 25 for fuzzing sessions until a 
 supports 27.
 
 If the core test tree doesn't compile (for example while a change to it is in flight), build
-against the main sources alone. The M1 targets need nothing from the core test tree:
+against the main sources alone. No target needs anything from the core test tree:
 
 ```sh
 mvn -B -ntp -f fuzz/pom.xml -Drevetsec.fuzz.mainSourcesOnly clean verify
+```
+
+After a change to the fixture keys, the key slots, the generated tokens' claims or the Wycheproof
+selection, regenerate the generated seeds and commit the result (see "Seeds"); the replay's
+`FuzzSeedProvenanceTests` fails until they match. The generator writes files but never deletes
+one, so remove a `generated-*` or `wycheproof-*` seed it no longer makes by hand:
+
+```sh
+mvn -B -ntp -f fuzz/pom.xml test-compile
+java -cp "fuzz/target/test-classes:fuzz/target/classes" com.revetsec.FuzzSeedGenerator .
 ```
 
 ### M1 local fuzzing
@@ -322,6 +504,81 @@ scratch copies of the main code, one at a time, and the seed replay was run agai
   coverage cannot steer toward one. The target still reports any exception other than
   `PemException` as a finding.
 
+### M2 local fuzzing
+
+Every M2 method was fuzzed the same way on 2026-09-28, each in its own copy of the tree: 330 seconds
+per method on Corretto 21.0.11, all nine at once, then 210 seconds per method on Corretto 17.0.20.1.
+Three targets were fuzzed again, and their rows give the last session: the two
+`FuzzedDataProvider` targets after their choice order changed (choice 0, which an exhausted input
+gives, now takes the ordinary path, where it had taken a rare one), and the two `JsonWebKeyFuzzTests`
+targets after their helpers stopped naming records in their signatures (see "Writing a target").
+In review, the two `JwtValidatorFuzzTests` targets were fuzzed once more the same way (all four
+sessions at once), after their key set gained five slots, and their rows give that session. The
+seeds the review added (see "Planted defects (M2)") changed no other target's code. The first
+target now also starts from seeds of 8,192 and 8,193 characters, which raise libFuzzer's input
+length limit from 4,096 bytes, so it runs fewer, longer inputs than before.
+
+| Target | 21 (330 s) | 17 (210 s) |
+|---|---:|---:|
+| `CompactJwsFuzzTests_compactSerializationsSplitIntoThreeCanonicalSegmentsOrFailInStepOrder` | 11,403,269 | 8,932,078 |
+| `CompactJwsFuzzTests_headerChecksAgreeWithAnIndependentOracleForP3ToP8` | 4,345,714 | 2,913,392 |
+| `JsonWebKeyFuzzTests_keySetDocumentsSkipExactlyTheKeysAnIndependentOracleRefuses` | 621,287 | 374,124 |
+| `JsonWebKeyFuzzTests_keysBuiltFromFuzzedIntegersAgreeWithTheCurveAndThumbprintOracle` | 2,889,353 | 1,929,494 |
+| `JwtValidatorFuzzTests_validateAcceptsOnlyWhatTheJdkVerifiersAccept` | 4,124,988 | 2,767,915 |
+| `JwtValidatorFuzzTests_signedTokensAreJudgedLikeTheOracleWhateverTheirHeaderAndClaims` | 411,064 | 236,196 |
+| `EcdsaFuzzTests_shapeCheckAndDerEncodingAgreeWithTheRangeRuleAndAnX690Reader` | 29,372,437 | 19,157,972 |
+| `EcdsaFuzzTests_verdictsAgreeWithTheJdksFixedLengthEngine` | 221,792 | 143,333 |
+| `CacheLifetimeFuzzTests_timeToLiveIsTotalClampedAndAgreesWithAnRfc9111Oracle` | 1,004,951 | 790,303 |
+
+The numbers are executions; the targets that sign, verify or build keys run slowest. No run found a
+defect in Revetsec's main code or in a target, and no crash, timeout or out-of-memory file was
+written.
+
+**Planted defects (M2).** Forty-seven defects were planted in scratch copies of the main code, one
+at a time, and the seed replay of the affected targets was run against each. On the final targets
+and seeds it failed on all 47:
+
+- compact serialization and header: `rs256` read as `RS256`; `none`, in any case, read as `RS256`;
+  `jku` not treated as a key reference; base64url padding accepted; four dots not recognized as an
+  encrypted token; an empty signature segment refused; a leading brace not recognized as the JSON
+  serialization; `typ` parameters stripped before the comparison; a 257-character `kid` accepted;
+  `cty` ignored; an empty `crit` array ignored;
+- signature shape: the ECDSA range check skipped; a DER ECDSA signature passed to the JCA; the RSA
+  length bound before key selection dropped; the exact RSA modulus length not checked; the DER
+  `SEQUENCE` given the long form from 64 octets;
+- key selection: an RSA key without `alg` fitting every RSA algorithm; the first of two candidate
+  keys used; a key without `kid` matching every `kid`;
+- claims: the audience check dropped; `exp` plus the skew still valid; `cnf` ignored; `iss`
+  compared ignoring case; `aud: []` counted as absent; a required claim of JSON `null` counted as
+  present; an uppercase `tid` substituted into the Entra template, which only the third validator
+  (for an uppercase tenant) catches, and which survived until it was added;
+- keys: the Ed25519 decoding skipped; the small-order check skipped; a JWK `issuer` that is not a
+  string counted as absent; the ROCA check skipped; leading zero octets in `n` or `e` accepted; the
+  exponent floor lowered to 3; the on-curve check skipped; an `x5c` certificate of another key
+  accepted; `key_ops` without `verify` accepted; `use` not checked; `ES384` on a P-256 key accepted;
+  one element over the key limit accepted;
+- cache lifetime and dates: the first of two conflicting `max-age` values used; `no-cache`
+  ignored; `Age` not subtracted; `Age`'s last list member used; the day name not checked against
+  the date; no century fallback for an RFC 850 year; a leap second refused; a quoted-pair not
+  unescaped; the 2<sup>31</sup> cap lowered by one.
+
+In review, 36 more defects were planted the same way. The replay failed on 15 of them at once. The
+other 21 survived it, because no seed reached them and, for the first five, no key in the
+JwtValidator targets' key set could: the `EdDSA`/`Ed25519` alias between a key's `alg` and the
+token's dropped, in either direction or both; a shared `kid` answered by its first fitting key, or
+ambiguous even when only one key fits; `iat` at exactly the skew refused; a `cnf` of JSON `null`
+ignored; a `jti` that is not a string accepted; a token of exactly the maximum length refused; a
+validator's own maximum token length ignored for the default; the ROCA check without its first
+or its last prime; moduli of 2,047 or 16,385 bits accepted; a JWK `kid` of 256 characters refused;
+the small-order check blind to Ed25519's points of order 8; an EC coordinate equal to the field
+prime accepted; `zip` checked before `b64`; `Cache-Control` directive names compared
+case-sensitively; the DER `SEQUENCE` given the short form at 128 content octets; and
+`JsonWebKeySet.fromJson` accepting 101 keys. The key slots and the seeds described above were
+added for them, and the replay now fails on all 36, and still on the first 47.
+
+The key-set cache's own behavior (cooldowns, backoff, a removed key, stale keys) is outside these
+targets, which verify over static key sources; the core tests cover it.
+
 ## Corpus policy
 
 Inputs checked in under `src/test/resources/**/<Class>Inputs/<method>/` are curated regression
@@ -340,9 +597,15 @@ then promote the reproducer into one or both of:
 - a focused unit or regression test next to the affected code;
 - a named seed that describes the behavior, such as `number-plain-canonical-form-longer-than-its-text.json`.
 
-Seeds are synthetic protocol values only. They must never contain captured production requests,
-tokens, assertions, secrets, credentials or personal data. Test keys come only from the test-only
-material under `src/test/resources/fixtures/`, and the sealer target's keys are fuzz-only
+Seeds must never contain captured production requests, tokens, assertions, secrets, credentials
+or personal data. They are synthetic protocol values and published test vectors, apart from the
+Entra key sets that the pom maps in, which are Microsoft's published public keys as the core tree
+captured them. The keys in seeds are the public halves of the TEST ONLY fixtures under
+`src/test/resources/fixtures/`, keys the seed generator computes, Wycheproof's test keys (their
+`private` members included) and RFC example public keys (see NOTICE). Generated tokens are signed
+with the TEST ONLY fixtures, the Wycheproof and RFC tokens carry their sources' signatures, and
+the signing targets sign with fuzz-only key pairs that `JwtValidatorFuzzTests` and
+`EcdsaFuzzTests` generate from fixed seeds when they load; the sealer target's keys are fuzz-only
 constants.
 
 Passing replay, and fuzzing without findings, are bounded evidence and not proof of the absence
@@ -361,7 +624,9 @@ Actions:
 | `cflite_cron.yml` | nightly, manual | Corpus pruning in that storage repository |
 
 `FUZZ_SECONDS` is one budget shared by every target. M0 set it for a single placeholder target,
-and it is raised in the workflows (`.github/`) for the twelve M1 targets. The batch and pruning
+and the workflows (`.github/`) raise it as targets are added: twelve in M1, twenty-one from M2. Each
+target gets at least its share, so the M2 JOSE targets, which sign or verify, execute fewer inputs
+in their share than the codec targets. The batch and pruning
 workflows skip with a notice until the corpus storage repository described in `cflite_batch.yml`
 is configured, and PR fuzzing then starts from the seeds alone.
 
@@ -452,7 +717,32 @@ and `compile`. The results of the final run:
   `PemFuzzTests_derParsersRejectOnlyWithPemExceptionAndAgreeWithTheirArmoredForms` on 2026-09-25
   loaded all 15 seeds from its zip and executed 95,702 inputs.
 
-The first run also found a defect that M0's single target had hidden. `build.sh` passed the class list
-to `--list_fuzz_tests` separated by commas, but Jazzer splits that value on `:`. With more than one
-class, Jazzer read the whole list as one class name and listed no targets, so the build failed.
-`build.sh` now joins the list with `:`.
+The first M1 run (2026-09-24) also found a defect that M0's single target had hidden. `build.sh`
+passed the class list to `--list_fuzz_tests` separated by commas, but Jazzer splits that value on
+`:`. With more than one class, Jazzer read the whole list as one class name and listed no targets,
+so the build failed. `build.sh` now joins the list with `:`.
+
+The same offline build was run on 2026-09-28 with the twenty-one M2 targets:
+
+- `compile` built all twenty-one. The runtime copy held no inputs directories, and it kept
+  `com/revetsec/jose/fixture-key-set.json`.
+- The first run's `test_all.py` passed its threshold but reported one broken target: both JWK
+  targets crashed on their first key with `NoSuchFieldError` on a field of `VerificationKey`, a
+  record that the target's method signatures had made Jazzer load early (see "Writing a target").
+  After the signatures changed, `test_all.py` reported no broken target; under emulation twelve
+  targets timed out when all were checked in parallel, and passed when test_all retried them one
+  at a time.
+- A 20-second `run_fuzzer` of
+  `JsonWebKeyFuzzTests_keysBuiltFromFuzzedIntegersAgreeWithTheCurveAndThumbprintOracle` loaded its
+  seeds from its zip and executed 76,847 inputs, and one of
+  `JwtValidatorFuzzTests_validateAcceptsOnlyWhatTheJdkVerifiersAccept` executed 109,373. Neither
+  found anything.
+- After the review's key slots and seeds, the build was run once more the same way, on the same
+  day. `compile` built all twenty-one targets. The M2 seed zips held 153 and 396 seeds for the
+  compact and header targets, 466 and 46 for the two JWK targets, 240 and 26 for the two
+  JwtValidator targets, 61 and 33 for the two ECDSA targets, and 60 for the cache lifetime target.
+  `test_all.py` passed with no broken target, again after retrying twelve targets one at a time,
+  and 20-second `run_fuzzer` runs of the two JwtValidator targets executed 71,249 and 12,336
+  inputs and found nothing. libFuzzer counted 238 seeds for the first of them, two fewer than its
+  zip holds: the two it left out are empty, the `jws` values of Wycheproof's JWS tcIds 13 and 30.
+

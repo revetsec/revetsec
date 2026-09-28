@@ -25,7 +25,8 @@
 # test-compile leaves it: fuzz/target/test-classes/<package>/<SimpleClassName>Inputs/<method>/.
 # That directory holds both the module's own seeds (fuzz/src/test/resources) and the corpora the fuzz
 # pom maps in from the core tree through Maven resource targetPath (the core JSON corpus,
-# JSONTestSuite, the PEM fixtures). The mapped seeds exist only there, never under fuzz/src.
+# JSONTestSuite, the Entra key-set captures, the PEM fixtures). The mapped seeds exist only there,
+# never under fuzz/src.
 #
 # The same targets run locally, without Docker, as JUnit tests:
 #   mvn -B -ntp -f fuzz/pom.xml verify                     (seed replay)
@@ -53,7 +54,7 @@ for required in jazzer_driver jazzer_agent_deploy.jar jazzer_junit.jar; do
 done
 
 # Fuzz target classes are the fuzz module's own *FuzzTests classes. Surefire runs these too, plus the
-# plain JUnit FuzzSeedLayoutTests, which is not a target.
+# plain JUnit FuzzSeedLayoutTests and FuzzSeedProvenanceTests, which are not targets.
 mapfile -t fuzz_classes < <(
 	cd fuzz/src/test/java \
 		&& find . -type f -name '*FuzzTests.java' \

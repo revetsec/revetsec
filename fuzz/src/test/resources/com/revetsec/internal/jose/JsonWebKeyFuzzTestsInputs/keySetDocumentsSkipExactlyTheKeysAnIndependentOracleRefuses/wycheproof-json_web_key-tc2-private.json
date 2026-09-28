@@ -1,0 +1,1 @@
+{"keys":[{"alg":"HS256","use":"sig","k":"-ebuDNsVZ2iJtoZ-akfXTSCt4UO2cruLCsbWlBinggE","kid":"kid-aes-sign","kty":"oct"},{"alg":"HS256","use":"sig","k":"-xbuDNsVZ2iJtoZ-akfXTSCt4UO2cruLCsbWlBinggE","kid":"kid-aes-sign-2","kty":"oct"}]}

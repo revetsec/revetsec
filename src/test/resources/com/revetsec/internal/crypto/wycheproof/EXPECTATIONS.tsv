@@ -1,0 +1,88 @@
+# Revetsec's expected outcomes for the Project Wycheproof signature and MAC vectors (plan M2-9), as the primitive
+# runner com.revetsec.internal.crypto.WycheproofSignatureTests observes them. The vectors are C2SP/wycheproof's
+# testvectors_v1 at 3fa63dd0344abb611f1fb1d77e119938603ea230, vendored under src/test/resources/vectors/wycheproof/.
+# Reason codes are VerifyResult and KeyRejectedException.Kind names.
+#
+# Format (see WycheproofSignatureTests.Expectations): one line per exception, five TAB-separated fields:
+#   file <TAB> tcId=<n> or rule:<name> <TAB> jdk <TAB> outcome <TAB> note
+# jdk is all, <n>, <n>+ or <n>-<m> (Java feature releases, 17 and up); outcome is accept, reject:<code> or n/a.
+# A vector with no line expects accept if upstream marks it valid, and any rejection if invalid; every acceptable
+# vector needs a line. A #count line pins a file's outcome counts, reason by reason, on the releases it names; each
+# file has exactly one for every release. A stale, duplicate or overlapping line, or a count that no longer holds,
+# fails the build.
+#
+# Outcome counts, measured on Corretto 17.0.20.1, 21, 25, 26 and 27 (21 and later agree).
+
+#count	ecdsa_secp256r1_sha256_p1363_test.json	17	accept=171	reject:MISMATCH=20	reject:OUT_OF_RANGE=50	reject:WRONG_LENGTH=21
+#count	ecdsa_secp256r1_sha256_p1363_test.json	18+	accept=173	reject:MISMATCH=18	reject:OUT_OF_RANGE=50	reject:WRONG_LENGTH=21
+#count	ecdsa_secp384r1_sha384_p1363_test.json	17	accept=191	reject:MISMATCH=20	reject:OUT_OF_RANGE=50	reject:WRONG_LENGTH=19
+#count	ecdsa_secp384r1_sha384_p1363_test.json	18+	accept=193	reject:MISMATCH=18	reject:OUT_OF_RANGE=50	reject:WRONG_LENGTH=19
+#count	ecdsa_secp521r1_sha512_p1363_test.json	17	accept=229	reject:MISMATCH=20	reject:OUT_OF_RANGE=55	reject:WRONG_LENGTH=14
+#count	ecdsa_secp521r1_sha512_p1363_test.json	18+	accept=231	reject:MISMATCH=18	reject:OUT_OF_RANGE=55	reject:WRONG_LENGTH=14
+#count	ed25519_test.json	all	accept=88	reject:MISMATCH=19	reject:PROVIDER_FAILURE=32	reject:WRONG_LENGTH=12
+#count	hmac_sha256_test.json	all	accept=30	reject:MISMATCH=54	reject:SECRET_TOO_SHORT=6	reject:WRONG_LENGTH=84
+#count	hmac_sha384_test.json	all	accept=30	reject:MISMATCH=54	reject:SECRET_TOO_SHORT=6	reject:WRONG_LENGTH=84
+#count	hmac_sha512_test.json	all	accept=30	reject:MISMATCH=54	reject:SECRET_TOO_SHORT=6	reject:WRONG_LENGTH=84
+#count	rsa_pss_2048_sha256_mgf1_32_test.json	all	accept=63	reject:MISMATCH=40	reject:WRONG_LENGTH=5
+#count	rsa_pss_2048_sha384_mgf1_48_test.json	all	accept=95	reject:MISMATCH=41	reject:WRONG_LENGTH=5
+#count	rsa_pss_3072_sha256_mgf1_32_test.json	all	accept=63	reject:MISMATCH=40	reject:WRONG_LENGTH=5
+#count	rsa_pss_4096_sha256_mgf1_32_test.json	all	accept=63	reject:MISMATCH=40	reject:WRONG_LENGTH=5
+#count	rsa_pss_4096_sha384_mgf1_48_test.json	all	accept=95	reject:MISMATCH=41	reject:WRONG_LENGTH=5
+#count	rsa_pss_4096_sha512_mgf1_64_test.json	all	accept=132	reject:MISMATCH=42	reject:WRONG_LENGTH=5
+#count	rsa_pss_misc_test.json	all	accept=3	n/a=60	reject:MISMATCH=87
+#count	rsa_signature_2048_sha256_test.json	all	accept=8	reject:MISMATCH=247	reject:RSA_EXPONENT=2	reject:WRONG_LENGTH=2
+#count	rsa_signature_2048_sha384_test.json	all	accept=8	reject:MISMATCH=248	reject:WRONG_LENGTH=2
+#count	rsa_signature_2048_sha512_test.json	all	accept=8	reject:MISMATCH=248	reject:RSA_EXPONENT=1	reject:WRONG_LENGTH=2
+#count	rsa_signature_3072_sha256_test.json	all	accept=8	reject:MISMATCH=248	reject:RSA_EXPONENT=1	reject:WRONG_LENGTH=2
+#count	rsa_signature_3072_sha384_test.json	all	accept=8	reject:MISMATCH=249	reject:WRONG_LENGTH=2
+#count	rsa_signature_3072_sha512_test.json	all	accept=8	reject:MISMATCH=249	reject:RSA_EXPONENT=1	reject:WRONG_LENGTH=2
+#count	rsa_signature_4096_sha256_test.json	all	accept=8	reject:MISMATCH=248	reject:WRONG_LENGTH=2
+#count	rsa_signature_4096_sha384_test.json	all	accept=8	reject:MISMATCH=249	reject:WRONG_LENGTH=2
+#count	rsa_signature_4096_sha512_test.json	all	accept=8	reject:MISMATCH=249	reject:WRONG_LENGTH=2
+#count	rsa_signature_8192_sha256_test.json	all	accept=8	reject:MISMATCH=248	reject:WRONG_LENGTH=2
+#count	rsa_signature_8192_sha384_test.json	all	accept=8	reject:MISMATCH=249	reject:WRONG_LENGTH=2
+#count	rsa_signature_8192_sha512_test.json	all	accept=8	reject:MISMATCH=249	reject:WRONG_LENGTH=2
+
+# ECDSA (IEEE P1363): SunEC on JDK 17 rejects a valid signature whose x(R) is at least n, which needs a reduction
+# mod n (plan section 9.6); JDK 21 and later accept it. An honest signature hits this with probability below 2^-129.
+ecdsa_secp256r1_sha256_p1363_test.json	tcId=115	17	reject:MISMATCH	x(R) >= n (ArithmeticError): SunEC on JDK 17 rejects it
+ecdsa_secp256r1_sha256_p1363_test.json	tcId=257	17	reject:MISMATCH	r = 3, x(R) = n + 3: SunEC on JDK 17 rejects it
+ecdsa_secp384r1_sha384_p1363_test.json	tcId=147	17	reject:MISMATCH	x(R) >= n (ArithmeticError): SunEC on JDK 17 rejects it
+ecdsa_secp384r1_sha384_p1363_test.json	tcId=275	17	reject:MISMATCH	r = 2, x(R) = n + 2: SunEC on JDK 17 rejects it
+ecdsa_secp521r1_sha512_p1363_test.json	tcId=184	17	reject:MISMATCH	x(R) >= n (ArithmeticError): SunEC on JDK 17 rejects it
+ecdsa_secp521r1_sha512_p1363_test.json	tcId=313	17	reject:MISMATCH	r = 1, x(R) = n + 1: SunEC on JDK 17 rejects it
+
+# RSASSA-PKCS1-v1_5: the only acceptable vectors (MissingNull, a DigestInfo without the NULL parameters). SunRsaSign
+# accepts them on every release tested.
+rsa_signature_2048_sha256_test.json	tcId=8	all	accept	acceptable (MissingNull): the JCA accepts the legacy DigestInfo
+rsa_signature_2048_sha384_test.json	tcId=8	all	accept	acceptable (MissingNull): the JCA accepts the legacy DigestInfo
+rsa_signature_2048_sha512_test.json	tcId=8	all	accept	acceptable (MissingNull): the JCA accepts the legacy DigestInfo
+rsa_signature_3072_sha256_test.json	tcId=8	all	accept	acceptable (MissingNull): the JCA accepts the legacy DigestInfo
+rsa_signature_3072_sha384_test.json	tcId=8	all	accept	acceptable (MissingNull): the JCA accepts the legacy DigestInfo
+rsa_signature_3072_sha512_test.json	tcId=8	all	accept	acceptable (MissingNull): the JCA accepts the legacy DigestInfo
+rsa_signature_4096_sha256_test.json	tcId=8	all	accept	acceptable (MissingNull): the JCA accepts the legacy DigestInfo
+rsa_signature_4096_sha384_test.json	tcId=8	all	accept	acceptable (MissingNull): the JCA accepts the legacy DigestInfo
+rsa_signature_4096_sha512_test.json	tcId=8	all	accept	acceptable (MissingNull): the JCA accepts the legacy DigestInfo
+rsa_signature_8192_sha256_test.json	tcId=8	all	accept	acceptable (MissingNull): the JCA accepts the legacy DigestInfo
+rsa_signature_8192_sha384_test.json	tcId=8	all	accept	acceptable (MissingNull): the JCA accepts the legacy DigestInfo
+rsa_signature_8192_sha512_test.json	tcId=8	all	accept	acceptable (MissingNull): the JCA accepts the legacy DigestInfo
+
+# RSASSA-PKCS1-v1_5, M2-7: the public exponent is odd and at least 65537, so the e = 3 keys are refused.
+rsa_signature_2048_sha256_test.json	rule:small-public-exponent	all	reject:RSA_EXPONENT	M2-7: e = 3 is below the 65537 floor
+rsa_signature_2048_sha512_test.json	rule:small-public-exponent	all	reject:RSA_EXPONENT	M2-7: e = 3 is below the 65537 floor
+rsa_signature_3072_sha256_test.json	rule:small-public-exponent	all	reject:RSA_EXPONENT	M2-7: e = 3 is below the 65537 floor
+rsa_signature_3072_sha512_test.json	rule:small-public-exponent	all	reject:RSA_EXPONENT	M2-7: e = 3 is below the 65537 floor
+
+# RSASSA-PSS: PS* fixes MGF1 with the same hash and a salt as long as the hash output (RFC 7518 section 3.5), and the
+# runner never takes the parameters from the file. The misc file's other combinations are refused, and its SHA-1 and
+# SHA-224 groups have no JOSE algorithm.
+rsa_pss_misc_test.json	rule:pss-params-not-jose	all	reject:MISMATCH	RFC 7518 section 3.5: another MGF1 hash or salt length than PS* fixes
+rsa_pss_misc_test.json	rule:hash-not-jose	all	n/a	SHA-1 and SHA-224 have no PS* algorithm
+
+# HMAC, RFC 7518 section 3.2: an HS* secret is at least as long as the hash output, and the tag is the full output.
+hmac_sha256_test.json	rule:key-shorter-than-hash	all	reject:SECRET_TOO_SHORT	RFC 7518 section 3.2: a 32-octet secret at least
+hmac_sha256_test.json	rule:truncated-tag	all	reject:WRONG_LENGTH	RFC 7518 section 3.2: the full 32-octet tag
+hmac_sha384_test.json	rule:key-shorter-than-hash	all	reject:SECRET_TOO_SHORT	RFC 7518 section 3.2: a 48-octet secret at least
+hmac_sha384_test.json	rule:truncated-tag	all	reject:WRONG_LENGTH	RFC 7518 section 3.2: the full 48-octet tag
+hmac_sha512_test.json	rule:key-shorter-than-hash	all	reject:SECRET_TOO_SHORT	RFC 7518 section 3.2: a 64-octet secret at least
+hmac_sha512_test.json	rule:truncated-tag	all	reject:WRONG_LENGTH	RFC 7518 section 3.2: the full 64-octet tag

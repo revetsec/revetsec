@@ -1,0 +1,1 @@
+{"typ":"JWT","kid":"k","alg":"ES256","x5t":"x","x5c":["MIIB"],"x5t#S256":"y","extra":{"nested":[1,2,3]}}

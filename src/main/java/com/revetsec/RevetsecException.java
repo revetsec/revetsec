@@ -35,9 +35,10 @@ import static java.util.Objects.requireNonNull;
  * <ul>
  *   <li>an {@link ErrorCategory} ({@link #getCategory()});</li>
  *   <li>a transience flag ({@link #isTransient()}), which follows from the category and the cause alone, never
- *   from the exception's class: a {@link ErrorCategory#TRANSPORT} failure from a timeout or an I/O error is
- *   transient, and so is a {@link ErrorCategory#REMOTE_ERROR} for HTTP 429 or 5xx or OAuth
- *   {@code error=temporarily_unavailable}. Nothing else is;</li>
+ *   from the exception's class: a {@link ErrorCategory#TRANSPORT} failure from a timeout or an I/O error, or from a
+ *   request Revetsec held back so that it can be sent later, is transient, and so is a
+ *   {@link ErrorCategory#REMOTE_ERROR} for HTTP 429 or 5xx or OAuth {@code error=temporarily_unavailable}. Nothing
+ *   else is;</li>
  *   <li>a fixed, one-sentence message that never contains input, tokens, keys or other secrets;</li>
  *   <li>no cause, except the JDK {@link IOException} behind a {@link ErrorCategory#TRANSPORT} failure;</li>
  *   <li>suppression disabled, so {@link #addSuppressed(Throwable)} does nothing and {@link #getSuppressed()} is
@@ -115,10 +116,10 @@ public abstract class RevetsecException extends RuntimeException {
 	/**
 	 * Returns whether retrying the same operation later may succeed.
 	 * <p>
-	 * It is {@code true} only for a {@link ErrorCategory#TRANSPORT} failure caused by a timeout or an I/O error,
-	 * and for a {@link ErrorCategory#REMOTE_ERROR} with HTTP status 429 or 5xx or the OAuth error
-	 * {@code temporarily_unavailable}. It is always {@code false} for an interrupted thread and for every other
-	 * category.
+	 * It is {@code true} only for a {@link ErrorCategory#TRANSPORT} failure caused by a timeout or an I/O error, or
+	 * by a request Revetsec held back so that it can be sent later, and for a {@link ErrorCategory#REMOTE_ERROR} with
+	 * HTTP status 429 or 5xx or the OAuth error {@code temporarily_unavailable}. It is always {@code false} for an
+	 * interrupted thread and for every other category.
 	 *
 	 * @return whether retrying the same operation later may succeed
 	 * @since 1.0.0

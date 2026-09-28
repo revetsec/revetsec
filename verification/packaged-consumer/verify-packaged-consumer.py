@@ -39,10 +39,11 @@ script with the same JAVA_HOME and local repository. It fails unless:
    the installed artifact from the same local repository: its runtimeClasspath and
    compileClasspath are exactly that JAR, and the Revetsec component has no dependency;
 6. each consumer runs on the class path, resolves the automatic module com.revetsec, and
-   calls the public API of com.revetsec and com.revetsec.json: PackagedConsumer prints its
-   public-api= line only after every call behaved as documented. Both consumers compile it
-   with warnings as errors against nothing but the Revetsec JAR, so the build proves the
-   published signatures resolve without the provided-scope annotation JARs;
+   calls the public API of com.revetsec, com.revetsec.json and com.revetsec.jose:
+   PackagedConsumer prints its public-api= line only after every call behaved as
+   documented. Both consumers compile it with warnings as errors against nothing but the
+   Revetsec JAR, so the build proves the published signatures resolve without the
+   provided-scope annotation JARs;
 7. jdeps finds only the INV-L1 modules (java.base, java.net.http, java.xml,
    java.xml.crypto, java.logging). The only classes it may report as not found are
    Revetsec's provided-scope annotations, which the JVM ignores when absent; and no
@@ -80,8 +81,9 @@ REQUIRED_ENTRIES = ("META-INF/MANIFEST.MF", "META-INF/LICENSE", "META-INF/NOTICE
 CONSUMER_MAIN_CLASS = "example.PackagedConsumer"
 # PackagedConsumer prints this line last, and only after every public API call behaved as documented.
 PUBLIC_API_LINE_PREFIX = "public-api="
-# The groups of public API calls PackagedConsumer makes, in order; its public-api= line names each (M1, WP-10b).
-PUBLIC_API_CALLS = ("com.revetsec.json", "StateSealer", "OutboundUriPolicy")
+# The groups of public API calls PackagedConsumer makes, in order; its public-api= line names each (M1, WP-10b;
+# com.revetsec.jose from M2).
+PUBLIC_API_CALLS = ("com.revetsec.json", "StateSealer", "OutboundUriPolicy", "com.revetsec.jose")
 MAVEN_CONSUMER_SOURCES = ("pom.xml", "src")
 GRADLE_CONSUMER_SOURCES = ("build.gradle", "settings.gradle", "src")
 

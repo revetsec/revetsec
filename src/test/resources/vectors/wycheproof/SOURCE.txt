@@ -1,0 +1,110 @@
+Project Wycheproof: provenance of the vendored files
+
+Upstream repository:  https://github.com/C2SP/wycheproof
+Branch:               main (the default branch when fetched)
+Commit:               3fa63dd0344abb611f1fb1d77e119938603ea230
+Commit date:          2026-09-02T15:59:32Z ("mlkem: add re-encryption comparison vectors to the seed-key files")
+Fetch date:           2026-09-26
+Fetched from:         https://codeload.github.com/C2SP/wycheproof/tar.gz/3fa63dd0344abb611f1fb1d77e119938603ea230
+                      (the archive's embedded commit ID matched the commit above; archive SHA-256 as fetched:
+                      3e3ec73e31525d4b99a3023a28f008e812f6e3f5ec20b7ffb6a0027aef0958e3)
+Vendored:             2026-09-27, from that archive, after its SHA-256 and embedded commit ID were checked again
+License:              Apache License, Version 2.0, "Copyright 2016-2026 The Wycheproof Authors" (the upstream
+                      README.md, which is not vendored). The upstream LICENSE file is copied verbatim to LICENSE in
+                      this directory. The upstream repository has no NOTICE file.
+
+What is vendored
+
+28 of the 343 files in the upstream testvectors_v1/ directory, plus the upstream LICENSE file. The 28 cover the
+signature and MAC algorithms of JOSE that Revetsec verifies: JSON Web Signature and JSON Web Key cases; ECDSA over
+P-256, P-384 and P-521 with the hash JOSE pairs with each curve, as fixed-length R||S (IEEE P1363); RSASSA-PKCS1-v1_5
+with 2048-, 3072-, 4096- and 8192-bit keys and SHA-256, SHA-384 and SHA-512; RSASSA-PSS with the MGF1 hash and salt
+length JOSE fixes for each hash, plus the miscellaneous-parameter file; Ed25519; and HMAC with SHA-256, SHA-384 and
+SHA-512.
+
+Nothing else from the upstream repository is vendored: no README.md or other Markdown, and nothing from schemas/,
+doc/, vectorgen/ or tools/. Of the upstream vector files closest to that scope, these are deliberately left out:
+  ed448_test.json                      Ed448 is not a supported curve
+  json_web_crypto_test.json            a legacy combined file: 39 of its 40 distinct JWS values reappear in the JWS
+                                       and JWK files
+  json_web_encryption_test.json        JWE is not supported, and a handwritten case covers its rejection
+  rsa_pkcs1_*_test.json                RSAES-PKCS1-v1_5 decryption and signature generation, not signature
+                                       verification
+  rsa_pss_*_params_test.json           keys that carry RSASSA-PSS parameters, which a JWK cannot express
+  the other rsa_pss_*_test.json        hashes, MGF1 hashes or salt lengths JOSE does not use (the vendored
+                                       rsa_pss_misc_test.json covers many such combinations)
+  the other rsa_signature_*_test.json  hashes JOSE does not use (SHA-224, SHA-512/224, SHA-512/256 and SHA-3)
+  the other ecdsa_*_test.json          curves Revetsec does not verify (secp256k1 and the Brainpool curves among
+                                       them), DER-encoded signatures, or a hash JOSE does not pair with the curve
+  the other hmac_*_test.json           hashes JOSE does not use
+
+Every vendored file is byte-for-byte identical to the upstream file at the commit above: the content was not
+modified, re-encoded or normalized in any way (no line-ending, whitespace or BOM changes). Each file's git blob
+SHA-1 was also compared with the upstream tree at that commit, as the GitHub API listed it on 2026-09-26
+(https://api.github.com/repos/C2SP/wycheproof/git/trees/3fa63dd0344abb611f1fb1d77e119938603ea230?recursive=1, not
+truncated), and all 29 matched. Upstream marks none of them executable, and every vendored file is stored as a
+plain, non-executable file.
+
+The repository's .gitattributes marks src/test/resources/vectors/** as -text, so git never converts line endings
+in these files.
+
+Files
+
+The table lists every file in this directory tree except this file and MANIFEST.sha256, sorted by path, followed by
+the total over the 28 vector files. For each file it gives the size in bytes and the git blob SHA-1 of the upstream
+file at the commit above. For each vector file it also gives the number of tests, which equals the file's
+numberOfTests (the tcIds run from 1 to that number, each once), and how many of them upstream marks valid, invalid
+and acceptable.
+
+  path                                                     bytes  tests  valid  invalid  acceptable  git blob SHA-1
+  LICENSE                                                  11357      -      -        -           -  7a4a3ea2424c09fbe48d455aed1eaa94d9124835
+  testvectors_v1/ecdsa_secp256r1_sha256_p1363_test.json   242550    262    173       89           0  d5c41c1d498a69f81e9ddf49bc217217e1ccc2b8
+  testvectors_v1/ecdsa_secp384r1_sha384_p1363_test.json   283550    280    193       87           0  be2d9c2856075274ce58b795a917304c706f79fb
+  testvectors_v1/ecdsa_secp521r1_sha512_p1363_test.json   360316    318    231       87           0  f0494e9f6cac4cfcb0a84da0357312b68952e00d
+  testvectors_v1/ed25519_test.json                        126699    151     88       63           0  42d44cd7eca6003c7de611b6487c9cc57a124b38
+  testvectors_v1/hmac_sha256_test.json                     69111    174     66      108           0  19181195d1bfa01ded2ca5620f0aedd0e50dc31f
+  testvectors_v1/hmac_sha384_test.json                     78567    174     66      108           0  3ba4fbac6744df6ef62c6d0a205cc7466a8a7cbc
+  testvectors_v1/hmac_sha512_test.json                     88023    174     66      108           0  a56fe183738b5bb19d09eb8c36c5f3f7c6218fc7
+  testvectors_v1/json_web_key_test.json                    33730     26      5       21           0  61a0f721c388ca3c7ee769c113eea0f84f64f7a7
+  testvectors_v1/json_web_signature_test.json             252527    401     46      355           0  cdb1c77a770b72e340d6c1e2ed502b86628e9438
+  testvectors_v1/rsa_pss_2048_sha256_mgf1_32_test.json     85280    108     63       45           0  bdb7694c4b44e8f0a3569bc2a9c56c33e9d24cec
+  testvectors_v1/rsa_pss_2048_sha384_mgf1_48_test.json    110184    141     95       46           0  2626470be2712e92e001fa3cf21695e48b1ca78e
+  testvectors_v1/rsa_pss_3072_sha256_mgf1_32_test.json    113786    108     63       45           0  ae66ed7a7b1b8ff8ab1bbe277a034af49f8823bc
+  testvectors_v1/rsa_pss_4096_sha256_mgf1_32_test.json    142295    108     63       45           0  bc269c8ad5be25bc45a60a214ead990e27db44ff
+  testvectors_v1/rsa_pss_4096_sha384_mgf1_48_test.json    184095    141     95       46           0  1104795da826412538ea8fb0849f45ce6f296c29
+  testvectors_v1/rsa_pss_4096_sha512_mgf1_64_test.json    232338    179    132       47           0  7c6b44626473f71f6ac94694a9edc3d253976b93
+  testvectors_v1/rsa_pss_misc_test.json                   496116    150    150        0           0  8e4d8b2ae4a91851f0c73c508203e9f734747402
+  testvectors_v1/rsa_signature_2048_sha256_test.json      211075    259      9      249           1  26f8d2c5b5c50bcba47653ee54d7b81e97f2ea0a
+  testvectors_v1/rsa_signature_2048_sha384_test.json      203297    258      7      250           1  4f46227342d74e456ddb91fb0f0ff99f4dfecbc1
+  testvectors_v1/rsa_signature_2048_sha512_test.json      207663    259      8      250           1  83f0083b48ad67a5faee5e2d68ac534496a2210f
+  testvectors_v1/rsa_signature_3072_sha256_test.json      275722    259      8      250           1  eadbe046ce232284e522b0bab426fd98669f2f1e
+  testvectors_v1/rsa_signature_3072_sha384_test.json      270950    259      7      251           1  78fc1d1dbea93d36e1c98bfae728795a1a9eaa9c
+  testvectors_v1/rsa_signature_3072_sha512_test.json      276682    260      8      251           1  a07b4380dc9cce6264d8f6bbbeb7e6d59a4cd2c2
+  testvectors_v1/rsa_signature_4096_sha256_test.json      336643    258      7      250           1  06f58684beabb55c28cbdd1fdcec81b83d085e5a
+  testvectors_v1/rsa_signature_4096_sha384_test.json      337859    259      7      251           1  492e3321c99dfcb71564038c4ae33c984f84d113
+  testvectors_v1/rsa_signature_4096_sha512_test.json      337859    259      7      251           1  5dcb85df9bd300c0f573bcad7070c4998073ceb5
+  testvectors_v1/rsa_signature_8192_sha256_test.json      603244    258      7      250           1  a6d6a96190416223337a752558f1a618899d3202
+  testvectors_v1/rsa_signature_8192_sha384_test.json      605484    259      7      251           1  4f1a4d74e928291c00a207853a8b190be281ecea
+  testvectors_v1/rsa_signature_8192_sha512_test.json      605484    259      7      251           1  a9f4cb7d43d38c0ab83d70dd8f809a7a97e64ab6
+  total                                                  7171129   6001   1684     4305          12  -
+
+The only acceptable tests are tcId 8 ("MissingNull") in each of the twelve rsa_signature_* files.
+
+Files added by Revetsec (not from upstream)
+
+  SOURCE.txt       this file
+  MANIFEST.sha256  SHA-256 of every other file in this directory tree, in sha256sum format, sorted by path
+
+Revetsec's expected outcome for each vector is not recorded here: the test runners that use these files keep it in
+their own expectation manifests, beside the runners.
+
+Verifying
+
+  cd src/test/resources/vectors/wycheproof && shasum -a 256 -c MANIFEST.sha256
+  (or: sha256sum -c MANIFEST.sha256)
+
+The test helper com.revetsec.testing.WycheproofVectors checks the manifest in both directions, then recomputes every
+column of the table above from the files and checks that each file is a well-formed vector file, before it hands
+any vector to a test; any difference fails the build. com.revetsec.WycheproofManifestTests pins the commit, the 28
+file names, their counts and their git blob SHA-1s. These files are used only by tests. They are not in the
+published JAR.

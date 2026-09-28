@@ -64,7 +64,11 @@ Fixtures derived from these keys go stale too. `../pem/` is made from `idp-signi
 `idp-signing-ec-p256`, and `PemTests` checks that its files match these keys, so re-run the commands in
 `../pem/README.txt` in the same change. The hand-written PEM and DER seeds under
 `fuzz/src/test/resources/com/revetsec/internal/pem/PemFuzzTestsInputs/` were made from those fixtures; rebuild them
-as `fuzz/README.md` describes (Seeds, PEM), or they keep exercising the old keys' bytes.
+as `fuzz/README.md` describes (Seeds, PEM), or they keep exercising the old keys' bytes. The fuzz module's generated
+JOSE seeds (`generated-*` under `fuzz/src/test/resources/`) and
+`fuzz/src/test/resources/com/revetsec/jose/fixture-key-set.json` are made from these keys too: re-run
+`com.revetsec.FuzzSeedGenerator` as `fuzz/README.md` describes (Seeds, generated seeds), and remove by hand any
+generated seed it no longer makes. `FuzzSeedProvenanceTests` fails the fuzz replay until they match.
 
 ```sh
 scripts/regenerate-test-pki.sh check          # verify what is checked in (read-only; needs a JDK keytool)

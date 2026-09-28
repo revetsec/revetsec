@@ -17,8 +17,6 @@
 package com.revetsec.internal.http;
 
 import com.revetsec.OutboundUriPolicy;
-import com.revetsec.internal.HostClassifier;
-import com.revetsec.internal.HostClassifier.HostClass;
 import com.revetsec.internal.http.HttpExchangeException.Kind;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
@@ -67,13 +65,14 @@ import static java.util.Objects.requireNonNull;
  * <p>
  * <strong>Algorithm</strong> ({@link #execute(HttpExchangeRequest, Deadline)}):
  * <ol>
- *   <li>The URI must be absolute, with a host, no user information and a port from 1 to 65535 if one is given; its
- *   scheme must be {@code https}, or {@code http} to a loopback host when loopback is allowed; and the
- *   {@link OutboundUriPolicy} must permit it. Otherwise {@link Kind#URI_REJECTED}, before anything is sent. A loopback
- *   host is exactly one the JDK connects to as loopback: an IPv4 literal in {@code 127.0.0.0/8}, {@code [::1]}, an
- *   IPv4-mapped literal in {@code ::ffff:127.0.0.0/104} (which {@code InetAddress} turns into the IPv4 address), or
- *   a {@code localhost} name. IPv4-compatible ({@code [::127.0.0.1]}) and NAT64 ({@code [64:ff9b::127.0.0.1]}) forms
- *   of a loopback address do not count: the JDK connects to them as ordinary IPv6 addresses, off the host.</li>
+ *   <li>The URI must pass {@link UriChecks}, the same check a builder runs at {@code build()} (G8-9): absolute and
+ *   hierarchical, with a host, a port from 1 to 65535 if one is given, and no user information or fragment; its
+ *   scheme {@code https}, or {@code http} when loopback is allowed and the host is a loopback literal the JDK
+ *   connects to as loopback ({@code 127.0.0.0/8}, {@code [::1]} or {@code [::ffff:127.x.y.z]}) or exactly
+ *   {@code localhost} (G8-7); and the {@link OutboundUriPolicy} must permit it. Otherwise {@link Kind#URI_REJECTED},
+ *   before anything is sent. IPv4-compatible ({@code [::127.0.0.1]}) and NAT64 ({@code [64:ff9b::127.0.0.1]}) forms
+ *   of a loopback address do not count, because the JDK connects to them as ordinary IPv6 addresses, off the host;
+ *   nor do names under {@code .localhost} or {@code localhost.}, which the JDK hands to the platform resolver.</li>
  *   <li>If no time is left on the {@link Deadline}, {@link Kind#TIMEOUT} before a request is built. An interrupted
  *   thread fails with {@link Kind#INTERRUPTED} before a request is sent.</li>
  *   <li>The request gets {@code timeout(min(requestTimeout, remaining))}, {@code Accept} from the profile and
@@ -290,8 +289,24 @@ public final class HttpExchange {
 	}
 
 	/**
+	 * Test hook, public by necessity (M2 plan, G8-4; exit criterion 17): the client this component uses, as
+	 * {@link #execute(HttpExchangeRequest, Deadline)} resolves it. A test in another package calls it to show that two
+	 * components share the process-wide default client. The first call on a component without an injected client
+	 * creates that default client, as a first request would. Production code never calls it.
+	 *
+	 * @return the injected client, or the process-wide default
+	 * @throws HttpExchangeException with {@link Kind#DEFAULT_CLIENT_UNAVAILABLE} if no client was injected and the
+	 *                               default client could not be created in this runtime
+	 */
+	@NonNull
+	public HttpClient resolvedHttpClientForTests() throws HttpExchangeException {
+		return resolveHttpClient();
+	}
+
+	/**
 	 * The client this component uses: the injected one, or the process-wide default, created on the first call.
-	 * Package-private so exit criterion 14's test can show that two components share the default.
+	 * Package-private so exit criterion 14's test can show that two components share the default;
+	 * {@link #resolvedHttpClientForTests()} is the public form for tests in other packages.
 	 */
 	@NonNull
 	HttpClient resolveHttpClient() throws HttpExchangeException {
@@ -306,30 +321,13 @@ public final class HttpExchange {
 		}
 	}
 
-	private void requirePermittedUri(@NonNull URI uri) throws HttpExchangeException {
-		@Nullable String scheme = uri.getScheme();
-		@Nullable String host = uri.getHost();
-		int port = uri.getPort();
-
-		if (!uri.isAbsolute() || uri.isOpaque() || scheme == null || host == null || uri.getRawUserInfo() != null
-				|| (port != -1 && (port < 1 || port > 65_535)))
-			throw new HttpExchangeException(Kind.URI_REJECTED);
-
-		String lowerCaseScheme = MediaType.asciiLowerCase(scheme);
-		boolean https = "https".equals(lowerCaseScheme);
-		boolean loopbackHttp = "http".equals(lowerCaseScheme) && this.insecureLoopbackAllowed && isLoopback(host);
-
-		if (!(https || loopbackHttp) || !this.outboundUriPolicy.permits(uri))
-			throw new HttpExchangeException(Kind.URI_REJECTED);
-	}
-
 	/**
-	 * Whether plain {@code http} to {@code host} stays on this host: a literal the JDK connects to as loopback, never
-	 * an IPv4-compatible or NAT64 embedding, which {@link HostClass#LOOPBACK} also covers for rejection only; or a
-	 * {@code localhost} name.
+	 * The fetch-time half of the shared URI check (G8-9): a URI that a builder accepted at {@code build()} with the same
+	 * policy and loopback setting passes here too.
 	 */
-	private static boolean isLoopback(@NonNull String host) {
-		return HostClassifier.isLoopbackLiteral(host) || HostClassifier.classify(host) == HostClass.LOCALHOST_NAME;
+	private void requirePermittedUri(@NonNull URI uri) throws HttpExchangeException {
+		if (!UriChecks.isPermitted(uri, this.outboundUriPolicy, this.insecureLoopbackAllowed))
+			throw new HttpExchangeException(Kind.URI_REJECTED);
 	}
 
 	/**

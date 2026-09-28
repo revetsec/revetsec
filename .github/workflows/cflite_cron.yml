@@ -12,8 +12,8 @@ name: ClusterFuzzLite corpus pruning
 
 on:
   schedule:
-    # After the 07:47 batch run and its 75-minute timeout (cflite_batch.yml), which ends by 09:02.
-    - cron: '17 9 * * *'
+    # After the 07:47 batch run and its 90-minute timeout (cflite_batch.yml), which ends by 09:17.
+    - cron: '37 9 * * *'
   workflow_dispatch:
 
 permissions:

@@ -1,0 +1,1 @@
+Cache-Control: s-maxage=5, private, public, must-revalidate, immutable, stale-if-error=60, stale-while-revalidate=30, max-age=7200

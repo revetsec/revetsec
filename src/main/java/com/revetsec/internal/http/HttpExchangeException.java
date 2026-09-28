@@ -30,8 +30,9 @@ import static java.util.Objects.requireNonNull;
  * Checked failure of one HTTP exchange (M1 plan, G6-2 and "HTTP helper").
  * <p>
  * Each {@link Kind} fixes the {@link ErrorCategory} and transience that the translating entry point passes on
- * (G6-3); M2 and later choose the public exception class per path. The message is the kind's fixed sentence and never
- * contains the URI, a header or any part of the body. Only {@link Kind#IO} keeps a cause, and only the JDK's
+ * (G6-3); M2 and later choose the public exception class per path. The one exception is {@link Kind#URI_REJECTED},
+ * whose category the carrying class decides (M2 plan, G8-9); its transience stays fixed. The message is the kind's
+ * fixed sentence and never contains the URI, a header or any part of the body. Only {@link Kind#IO} keeps a cause, and only the JDK's
  * {@link IOException}. Suppression is disabled. A non-2xx response is not an exception: {@link HttpExchange} returns
  * it as a {@link RawResponse}, and the protocol raises {@code REMOTE_ERROR}.
  *
@@ -91,8 +92,12 @@ public final class HttpExchangeException extends Exception {
 		 */
 		MEDIA_TYPE(ErrorCategory.MALFORMED_INPUT, false, "The response does not have exactly one permitted media type."),
 		/**
-		 * The URI is not {@code https} (or loopback {@code http} where allowed), or the {@code OutboundUriPolicy}
-		 * refused it. No request was sent.
+		 * The URI failed {@link UriChecks}: it is malformed, carries user information or a fragment, is not
+		 * {@code https} (or loopback {@code http} where allowed), or the {@code OutboundUriPolicy} refused it. No request
+		 * was sent. The category here is the one a protocol exception carries for a discovered or app-supplied endpoint
+		 * ({@code OUTBOUND_URI_REJECTED}); the class that carries the kind decides it (G8-9), and a JSON Web Key Set
+		 * source, whose URI was already checked at {@code build()}, reports this unreachable backstop as
+		 * {@link ErrorCategory#CONFIGURATION}.
 		 */
 		URI_REJECTED(ErrorCategory.VALIDATION_FAILURE, false, "The request URI is not permitted."),
 		/**

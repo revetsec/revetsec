@@ -15,7 +15,7 @@
  */
 
 /**
- * Shared test infrastructure (M1 plan, "Test helpers"; plan 14.1 as amended by A-2).
+ * Shared test infrastructure (M1 and M2 plans, "Test helpers"; plan 14.1 as amended by A-2).
  * <p>
  * <strong>Test code only.</strong> Nothing here is compiled into the Revetsec JAR. The helpers are public so tests in
  * every Revetsec package can use them, and their names carry no {@code Tests} suffix, so Surefire never runs them as
@@ -23,14 +23,25 @@
  * <ul>
  *   <li>{@link com.revetsec.testing.TestTls}: SSL contexts and an {@code HttpClient} built from the TEST ONLY PKI in
  *   {@code src/test/resources/tls/};</li>
- *   <li>{@link com.revetsec.testing.TestHttpsServer}: a JDK {@code HttpsServer} with per-path scripts, hit counters
- *   and a request recorder;</li>
+ *   <li>{@link com.revetsec.testing.TestHttpsServer}: a JDK {@code HttpsServer} with per-path scripts (key-set
+ *   responses, sequences, cycles, held responses and a tarpit among them), hit counters and a request recorder;</li>
  *   <li>{@link com.revetsec.testing.RawTlsServer}: a TLS server that writes exact bytes and reports whether the
  *   client closed each connection;</li>
- *   <li>{@link com.revetsec.testing.TestClock}: a settable, thread-safe {@link java.time.Clock};</li>
+ *   <li>{@link com.revetsec.testing.TestClock}: a settable, thread-safe, monotonic {@link java.time.Clock};</li>
+ *   <li>{@link com.revetsec.testing.RewindableClock}: a thread-safe {@link java.time.Clock} that can also move
+ *   backward;</li>
  *   <li>{@link com.revetsec.testing.ChildJvm}: runs a main class in a child JVM and captures its output;</li>
- *   <li>{@link com.revetsec.testing.Sentinels}: sentinel secrets and a walker that looks for them in renderings;</li>
- *   <li>{@link com.revetsec.testing.RecordingObserver}: a proxy that records every observer hook call.</li>
+ *   <li>{@link com.revetsec.testing.Sentinels}: sentinel secrets, sentinel JWTs, and a walker that looks for them,
+ *   plain or base64- or hex-encoded, in renderings;</li>
+ *   <li>{@link com.revetsec.testing.RecordingObserver}: a proxy that records every observer hook call;</li>
+ *   <li>{@link com.revetsec.testing.TestJws}: compact JWS and JWT strings signed with the JDK's own engines, and
+ *   their hostile variants;</li>
+ *   <li>{@link com.revetsec.testing.TestJsonWebKeys}: the TEST ONLY fixture keys as JWK and JWK Set JSON, and the
+ *   malformed, weak and unsupported keys a key-set parser must skip;</li>
+ *   <li>{@link com.revetsec.testing.JsonText}: JSON text written without Revetsec's codec, for the raw values those
+ *   two helpers take;</li>
+ *   <li>{@link com.revetsec.testing.WycheproofVectors}: the vendored Project Wycheproof files, handed out only after
+ *   their manifest, file set, structure and {@code SOURCE.txt} counts check out.</li>
  * </ul>
  * Test assertions never sleep. Servers release every wait when they close, and the only timed pacing is
  * {@code RawTlsServer}'s server-side trickle, which runs on the server's own scheduled executor.

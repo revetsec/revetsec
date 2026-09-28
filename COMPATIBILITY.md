@@ -26,14 +26,15 @@ Everything `public` or `protected` in the exported packages of the `revetsec` ar
 
 ### Public types so far
 
-Milestone M1 (foundations) added the first public types. The other packages in the table above hold no types yet.
+Milestone M1 (foundations) added the first public types, and milestone M2 (JOSE) added `com.revetsec.jose`. The other packages in the table above hold no types yet.
 
 | Package | Public types | Count |
 | --- | --- | --- |
 | `com.revetsec` | `RevetsecException` (abstract), `ErrorCategory`, `InvalidSealedStateException`, `StateSealer`, `SealingKey`, `OutboundUriPolicy` | 6, plus 1 nested: `StateSealer.Builder` |
 | `com.revetsec.json` | `JsonValue` (sealed), `JsonObject`, `JsonArray`, `JsonString`, `JsonNumber`, `JsonBoolean`, `JsonNull` | 7, plus 1 nested: `JsonObject.Builder` |
+| `com.revetsec.jose` | `JwtValidator`, `Jwt`, `JwtClaims`, `JwsAlgorithm`, `JsonWebKey`, `JsonWebKeySet`, `JsonWebKeySkipReason`, `JsonWebKeySource` (sealed), `StaticJsonWebKeySource`, `RemoteJsonWebKeySource`, `JoseObserver`, `JoseException` (abstract, sealed), `MalformedJoseInputException`, `UnsupportedJoseFeatureException`, `JwtValidationException`, `JsonWebKeySetUnavailableException` | 16, plus 3 nested: `JwtValidator.Builder`, `RemoteJsonWebKeySource.Builder` and the enum `JoseException.Reason` |
 
-`OutboundUriPolicy` is provisional: only `defaultInstance()` and `permits(URI)` exist, and the policy's final shape is decided before 1.0.0. `JsonValue`'s Javadoc designates its six permitted types for exhaustive matching, so they are frozen within a major version (see below).
+`OutboundUriPolicy` has its final shape: two presets, `defaultInstance()` and `publicAddressesOnlyInstance()`, and `permits(URI)`. The addresses and names each preset rejects are dated lists, and adding to them is a security tightening (see below). `JsonValue`'s Javadoc designates its six permitted types for exhaustive matching, so they are frozen within a major version (see below). `JwsAlgorithm`, `JoseException.Reason` and `JsonWebKeySkipReason` are not switch-stable: a later release may add constants, so a `switch` over one needs a default branch. Nor is the sealed `JsonWebKeySource`: a later release may add a permitted implementation.
 
 These are not API:
 
@@ -68,9 +69,9 @@ Each such change is listed under Security in the CHANGELOG, with migration notes
 ## Supported JDKs
 
 * **Source and binary baseline:** Java 17 (`<release>17</release>`). There is no multi-release JAR.
-* **Minimum runtime:** Java 17.0.3, the first Java 17 update with the fixes for CVE-2022-21449 (ECDSA signature verification) and CVE-2022-21476 (XML Signature validation). Types that perform network I/O are planned to refuse to build on an older runtime unless the application explicitly acknowledges it.
+* **Minimum runtime:** Java 17.0.3, the first Java 17 update with the fixes for CVE-2022-21449 (ECDSA signature verification) and CVE-2022-21476 (XML Signature validation). Types that perform network I/O, so far `RemoteJsonWebKeySource`, refuse to build on an older runtime, or on Java 18 before 18.0.1, unless the application acknowledges it with `acknowledgeUnpatchedRuntime(true)`, a [compatibility mode](docs/compatibility-modes.md) that is reported to the observer.
 * **JDK modules:** the JAR uses `java.base`, `java.net.http` (the JDK `HttpClient`, for outbound HTTPS) and `java.logging` (a guarded `FINE` log record when an observer throws). SAML adds `java.xml` and `java.xml.crypto`. A runtime image built with `jlink` needs these modules; the packaged-consumer check runs `jdeps` to keep the list within these five (INV-L1). `jdeps` does not see security providers, which the JDK loads as services: on Java 17 and 21 the elliptic-curve provider, which TLS with EC keys and ECDSA need, is in `jdk.crypto.ec`, so a `jlink` image there needs that module too. On Java 25 and 27, that provider is in `java.base`.
-* **Outbound HTTP (from M2):** the types that make requests will take the application's `HttpClient`, which must not follow redirects. When none is supplied, Revetsec creates one default client per JVM on first network use, pinned to HTTP/1.1 and never following redirects. That client starts the JDK's own threads; Revetsec's own code starts none.
+* **Outbound HTTP:** the types that make requests, so far `RemoteJsonWebKeySource`, take the application's `HttpClient`, which must not follow redirects; `build()` refuses one that does. When none is supplied, Revetsec creates one default client per JVM on first network use, pinned to HTTP/1.1 and never following redirects. That client starts the JDK's own threads; Revetsec's own code starts none.
 * **Tested:** CI is configured to build and test on Java 17, 21, 25 and 27 (Amazon Corretto).
 * Revetsec uses no `sun.*` APIs and no `setAccessible` (a source-policy test bans both), so `--add-opens` is never required.
 * The JAR declares `Automatic-Module-Name: com.revetsec`.
@@ -83,11 +84,11 @@ Each adapter depends on Revetsec core and on its framework's API, both `provided
 
 ## Supported algorithms
 
-Not yet written. The table in [docs/supported-algorithms.md](docs/supported-algorithms.md) will list, for each protocol area, the algorithms allowed by default, those available only by explicit opt-in, and those never accepted.
+[docs/supported-algorithms.md](docs/supported-algorithms.md) lists, for each protocol area, the algorithms allowed by default, those available only by explicit opt-in, and those never accepted. So far it covers JWS signature verification and JSON Web Key types; the other areas are added as they land.
 
 ## Compatibility-mode registry
 
-Not yet written. Every compatibility mode will be registered in [docs/compatibility-modes.md](docs/compatibility-modes.md), with its conditions and the release that added it.
+Every compatibility mode is registered in [docs/compatibility-modes.md](docs/compatibility-modes.md), with its conditions and the release that added it. So far there are two, both in JOSE: `JwtValidator.Builder.acceptAnyAudience(true)` and `RemoteJsonWebKeySource.Builder.acknowledgeUnpatchedRuntime(true)`.
 
 ### saml2int deviations
 
@@ -96,6 +97,10 @@ Not yet written. The SAML service provider's deviations from the saml2int SP req
 ## Interop matrix
 
 Not yet written. It will be a dated provider matrix, modeled on Pyranid's table of wire-compatible databases. Each row will name the provider and version observed, say whether its CI leg gates or is advisory, carry an "observed on YYYY-MM-DD" date, and list divergences. Any combination found unsafe will carry an explicit warning.
+
+Evidence for a first row exists: Microsoft Entra ID's public key sets and discovery documents, as read on 2026-09-27, are kept as test fixtures, and every key in them loads with none skipped. Verifying a token Entra itself signed needs an Entra account, so that part of the row is unproven so far. Entra's keys carry no `alg`, so a validator that allows two RSA algorithms cannot use them (see [docs/supported-algorithms.md](docs/supported-algorithms.md)).
+
+Two self-hosted providers have been checked offline too. Key sets, discovery documents and tokens captured on 2026-09-28 from local Keycloak 26.7.4 and node-oidc-provider 9.12.2 test containers, with one token for each signing algorithm the provider offers, are kept as test fixtures. Every token whose algorithm Revetsec supports verifies with a fixed clock, and every key in their key sets loads except the ones the key rules skip: Keycloak's default RSA-OAEP encryption key and node-oidc-provider's ML-DSA-44 key. Both providers put `alg` on every RSA key.
 
 **No production consumer.** Revetsec has no production consumer, and none is planned for 1.0.0, including for SCIM. The evidence at 1.0.0 will come from self-hosted test partners, conformance suites run locally, and dated captures from provider accounts.
 

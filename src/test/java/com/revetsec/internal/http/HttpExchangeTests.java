@@ -426,8 +426,9 @@ final class HttpExchangeTests {
 		Assertions.assertEquals(0, scripted.getSubscription().getRequested());
 	}
 
-	// R12 and A-1: only https (or loopback http when allowed) to a URI the policy permits is sent; everything else is
-	// URI_REJECTED before the client is asked to send anything.
+	// R12, A-1 and G8-9: only https (or loopback http when allowed) to a URI the policy permits, with no user
+	// information or fragment, is sent; everything else is URI_REJECTED before the client is asked to send anything.
+	// The fragment rows are new in M2: the fetch runs the same UriChecks as a builder's build().
 	@TestFactory
 	Stream<DynamicTest> rejectsUrisBeforeSendingAnything() {
 		return Stream.of("http://example.com/", "http://127.0.0.1:1/", "http://[::1]:1/", "http://localhost:1/",
@@ -435,7 +436,8 @@ final class HttpExchangeTests {
 						"https://user:secret@example.com/", "https://user@example.com/", "https://example.com:0/",
 						"https://example.com:65536/", "https:///no-host", "https://169.254.169.254/latest/meta-data/",
 						"https://[fe80::1]/", "https://[fd00:ec2::254]/", "https://0/", "https://0xa9fea9fe/",
-						"https://127.1/")
+						"https://127.1/", "https://example.com/#", "https://example.com/jwks#keys",
+						"https://100.100.100.200/", "https://metadata.google.internal/", "https://[64:ff9b:1::a9fe:a9fe]/")
 				.map(uri -> DynamicTest.dynamicTest(uri, () -> {
 					StandInHttpClient standIn = new StandInHttpClient();
 					HttpExchange strict = HttpExchange.fromHttpClient(standIn, OutboundUriPolicy.defaultInstance(), false);
@@ -464,7 +466,10 @@ final class HttpExchangeTests {
 				new Object[]{"http://[::1]:1/", true},
 				new Object[]{"http://[::ffff:127.0.0.1]:1/", true},
 				new Object[]{"http://localhost:1/", true},
-				new Object[]{"HTTP://LOCALHOST:1/", true}
+				new Object[]{"HTTP://LOCALHOST:1/", true},
+				new Object[]{"http://LocalHost:1/", true},
+				new Object[]{"http://127.255.255.254:1/", true},
+				new Object[]{"https://example.com/jwks?appid=x", false}
 		).map(testCase -> DynamicTest.dynamicTest(testCase[0] + " loopback " + testCase[1], () -> {
 			StandInHttpClient standIn = new StandInHttpClient();
 			HttpExchange httpExchange = HttpExchange.fromHttpClient(standIn, OutboundUriPolicy.defaultInstance(),
@@ -486,7 +491,33 @@ final class HttpExchangeTests {
 	@TestFactory
 	Stream<DynamicTest> refusesPlainHttpToEmbeddedLoopbackForms() {
 		return Stream.of("http://[::127.0.0.1]:1/", "http://[::7f00:1]:1/", "http://[::127.1.2.3]:1/",
-						"http://[64:ff9b::127.0.0.1]:1/", "http://[64:ff9b::7f00:1]:1/")
+						"http://[64:ff9b::127.0.0.1]:1/", "http://[64:ff9b::7f00:1]:1/", "http://[::ffff:0:127.0.0.1]:1/")
+				.map(uri -> DynamicTest.dynamicTest(uri, () -> {
+					StandInHttpClient standIn = new StandInHttpClient();
+					HttpExchange loopbackAllowed = HttpExchange.fromHttpClient(standIn, OutboundUriPolicy.defaultInstance(),
+							true);
+
+					HttpExchangeException refused = Assertions.assertThrows(HttpExchangeException.class,
+							() -> loopbackAllowed.execute(HttpExchangeRequest.fromDefaults(URI.create(uri),
+									ResponseProfile.TOKEN), Deadline.fromNow(LONG)));
+					Assertions.assertEquals(Kind.URI_REJECTED, refused.getKind());
+					Assertions.assertEquals(0, standIn.getSendCount());
+
+					HttpExchangeException sent = Assertions.assertThrows(HttpExchangeException.class,
+							() -> loopbackAllowed.execute(HttpExchangeRequest.fromDefaults(URI.create(uri.replace("http:",
+									"https:")), ResponseProfile.TOKEN), Deadline.fromNow(LONG)));
+					Assertions.assertEquals(Kind.IO, sent.getKind());
+					Assertions.assertEquals(1, standIn.getSendCount());
+				}));
+	}
+
+	// G8-7: plain http under insecure loopback goes to exactly localhost among names. The JDK hands names under
+	// .localhost, and localhost. with its trailing dot, to the platform resolver, so they may leave the host; plain http
+	// to them is refused, while https to them stays permitted, as the default policy decides.
+	@TestFactory
+	Stream<DynamicTest> refusesPlainHttpToLocalhostNamesOtherThanExactlyLocalhost() {
+		return Stream.of("http://api.localhost:1/", "http://a.b.localhost:1/", "http://localhost.:1/",
+						"http://LOCALHOST.:1/", "http://API.LOCALHOST:1/")
 				.map(uri -> DynamicTest.dynamicTest(uri, () -> {
 					StandInHttpClient standIn = new StandInHttpClient();
 					HttpExchange loopbackAllowed = HttpExchange.fromHttpClient(standIn, OutboundUriPolicy.defaultInstance(),

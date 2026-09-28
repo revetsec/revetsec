@@ -1,6 +1,6 @@
 # Identity Mapping
 
-**Status: skeleton.** Revetsec contains no protocol code yet. This guide is expanded, with application code, as the OpenID Connect and SAML areas land.
+**Status: skeleton.** Revetsec has no OpenID Connect or SAML code yet. This guide is expanded, with application code, as those areas land.
 
 Choosing which value identifies an account is the application's job, and the wrong choice leads to account takeover. These principles will shape the full guide:
 

@@ -22,8 +22,10 @@ import org.jspecify.annotations.NonNull;
 import javax.annotation.concurrent.NotThreadSafe;
 
 /**
- * Control: a protocol's abstract sealed intermediate exception. ContractMetaTests lists it in OPEN_ABSTRACT_TYPES,
- * which is a stale entry because a sealed class needs no exemption.
+ * A protocol's abstract sealed intermediate exception, with a package-private constructor. ContractMetaTests lists it
+ * in OPEN_ABSTRACT_TYPES, which is a stale entry because a sealed class needs no exemption. Seeded violation: it
+ * permits the exported non-sealed {@link ReopenedFixtureException}, which is reported here for reopening this
+ * hierarchy, and on its own for being an open abstract class.
  *
  * @since 1.0.0
  */

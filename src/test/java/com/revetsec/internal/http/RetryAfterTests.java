@@ -33,7 +33,8 @@ import java.util.stream.Stream;
 
 /**
  * {@code Retry-After} (RFC 9110 section 10.2.3): {@code delay-seconds} and the three {@code HTTP-date} formats a
- * recipient must accept (section 5.6.7), read as a delay from the component's clock; anything else is dropped.
+ * recipient must accept (section 5.6.7, read 2026-09-28), read as a delay from the component's clock; anything else is
+ * dropped.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */

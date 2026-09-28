@@ -1,0 +1,43 @@
+# Revetsec's expected outcomes for the Project Wycheproof JSON Web Signature and JSON Web Key vectors (plan M2-9), as
+# the JOSE runner com.revetsec.internal.jose.WycheproofJoseTests observes them through the internal JWS layer. The
+# vectors are C2SP/wycheproof's testvectors_v1 at 3fa63dd0344abb611f1fb1d77e119938603ea230, vendored under
+# src/test/resources/vectors/wycheproof/. Reason codes are JoseException.Reason names; n/a marks key-set semantics
+# that the HMAC engine's one configured secret cannot express.
+#
+# Format (see WycheproofSignatureTests.Expectations): one line per exception, five TAB-separated fields:
+#   file <TAB> tcId=<n> or rule:<name> <TAB> jdk <TAB> outcome <TAB> note
+# jdk is all, <n>, <n>+ or <n>-<m> (Java feature releases, 17 and up); outcome is accept, reject:<code> or n/a.
+# A vector with no line expects accept if upstream marks it valid, and any rejection if invalid; every acceptable
+# vector needs a line. A #count line pins a file's outcome counts, reason by reason, on the releases it names; each
+# file has exactly one for every release. A stale, duplicate or overlapping line, or a count that no longer holds,
+# fails the build.
+#
+# Outcome counts, measured on Corretto 17.0.20.1, 21, 25, 26 and 27 (all agree).
+
+#count	json_web_key_test.json	all	accept=5	n/a=2	reject:SIGNATURE_MALFORMED=1	reject:SIGNATURE_MISMATCH=1	reject:UNKNOWN_KEY=17
+#count	json_web_signature_test.json	all	accept=42	reject:ALGORITHM_NOT_ALLOWED=5	reject:JSON_SERIALIZATION=1	reject:KEY_ALGORITHM_MISMATCH=7	reject:SIGNATURE_MALFORMED=26	reject:SIGNATURE_MISMATCH=272	reject:TOKEN_SYNTAX=37	reject:UNKNOWN_KEY=10	reject:UNTRUSTED_KEY_REFERENCE=1
+
+# json_web_signature_test.json, INV-J3: a JWK with alg verifies only that algorithm.
+json_web_signature_test.json	tcId=346	all	reject:KEY_ALGORITHM_MISMATCH	INV-J3: Wycheproof's copy of RFC 7520's key carries alg PS256; the token is PS384
+json_web_signature_test.json	tcId=347	all	reject:UNKNOWN_KEY	INV-J3: the key's alg ES521 is no JWS algorithm, so the key is skipped
+json_web_signature_test.json	tcId=350	all	reject:KEY_ALGORITHM_MISMATCH	as tcId 346, with key_ops [verify]
+json_web_signature_test.json	tcId=351	all	reject:UNKNOWN_KEY	as tcId 347, with key_ops [verify]
+
+# json_web_signature_test.json, INV-J7 (P1): only base64url characters; upstream expects the '?' to be stripped.
+json_web_signature_test.json	tcId=372	all	reject:TOKEN_SYNTAX	INV-J7: a '?' inside the header segment
+json_web_signature_test.json	tcId=373	all	reject:TOKEN_SYNTAX	INV-J7: a '?' inside the payload segment
+
+# json_web_signature_test.json, upstream defects: marked invalid for their padding, but an upstream format change
+# lost it, so each is byte-identical to the valid tcId 357.
+json_web_signature_test.json	tcId=367	all	accept	upstream defect (invalidBase64Padding): identical to the valid tcId 357
+json_web_signature_test.json	tcId=370	all	accept	upstream defect (invalidBase64PaddingInPayload): identical to the valid tcId 357
+
+# json_web_key_test.json: key sets the HMAC engine cannot take as one secret; the key-set-only path rejects both.
+json_web_key_test.json	tcId=1	all	n/a	MixedKeySet: symmetric and asymmetric keys in one set
+json_web_key_test.json	tcId=4	all	n/a	DuplicateKid: two secrets with one kid
+
+# json_web_key_test.json, M2-6 and M2-7: the reasons of the weak and malformed keys, pinned.
+json_web_key_test.json	tcId=7	all	reject:UNKNOWN_KEY	M2-7: the ROCA-fingerprinted key is skipped as WEAK_KEY
+json_web_key_test.json	tcId=8	all	reject:SIGNATURE_MALFORMED	M2-6: a 128-octet RS256 signature (the RSA-1024 key is skipped as RSA_KEY_SIZE)
+json_web_key_test.json	tcId=9	all	reject:UNKNOWN_KEY	M2-7: e = 1 is skipped as RSA_EXPONENT
+json_web_key_test.json	tcId=22	all	reject:UNKNOWN_KEY	M2-7: the point off the curve is skipped as EC_POINT_NOT_ON_CURVE

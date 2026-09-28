@@ -15,7 +15,9 @@
  */
 
 /**
- * Internal JOSE algorithm engines and compact-serialization parsing.
+ * Internal JOSE: compact-serialization parsing, the header and claims policies, JWK and JWK Set parsing, key
+ * selection, and the JWS and JWT verification pipeline that {@code jose.JwtValidator} and the later profiles share. It
+ * is pure: it does no I/O, and a caller resolves keys between the pipeline's halves.
  * <p>
  * <strong>Not API.</strong> This package is public only because other Revetsec packages need access to it.
  * Its types may change or disappear in any release without notice, are not covered by semantic versioning,

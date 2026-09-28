@@ -1,6 +1,6 @@
 name: CI
 
-# The M0 and M1 subset of plan §10.3. Jobs that start in a later milestone are listed at the end as
+# The M0 to M2 subset of plan §10.3. Jobs that start in a later milestone are listed at the end as
 # commented stubs, each naming the milestone it starts in.
 #
 # Every action is pinned to a full commit SHA (the trailing comment is the tag it was resolved from with

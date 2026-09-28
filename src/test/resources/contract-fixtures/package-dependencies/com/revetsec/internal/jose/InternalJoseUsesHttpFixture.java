@@ -19,8 +19,8 @@ package com.revetsec.internal.jose;
 import com.revetsec.internal.http.HttpFixture;
 
 /**
- * Control: internal.jose may use internal.http. The restriction matches the importing package by name, so
- * internal.jose must be listed in its own right.
+ * Seeded violation: internal.jose holds only pure, I/O-free JOSE code, and the JWKS fetch lives in jose (G8-11), so
+ * internal.jose may not use internal.http, although its layer, jose, may.
  */
 public final class InternalJoseUsesHttpFixture {
 	private InternalJoseUsesHttpFixture() {

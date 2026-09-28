@@ -72,7 +72,13 @@ import java.util.stream.Collectors;
  *   <li>every non-primitive type in a public or protected field, parameter or return type carries exactly one
  *   JSpecify nullness annotation, in type-argument, array-component and wildcard-bound positions too
  *   ({@code Optional}'s type argument must be {@code @NonNull});</li>
- *   <li>an abstract class is sealed, unless it is in {@link #OPEN_ABSTRACT_TYPES} (G6-1).</li>
+ *   <li>an abstract class is sealed, unless it is in {@link #OPEN_ABSTRACT_TYPES} (G6-1); a sealed abstract class
+ *   declares no public or protected constructor, because only its permitted subclasses, in its own package, call
+ *   one (G6-1, M2-10);</li>
+ *   <li>a sealed abstract class or sealed interface permits only final or sealed subtypes, recursively, whether they
+ *   are exported or not (G6-1, M2-10): a {@code non-sealed} one, such as a package-private leaf of an exception
+ *   family, reopens the hierarchy to any class in its package, which a split package on the class path can add. A
+ *   sealed concrete class is held to the same rule by R1's finality check.</li>
  * </ul>
  * Every exported {@link Throwable} extends {@code com.revetsec.RevetsecException}, declares its own
  * {@code private static final long serialVersionUID}, and has no public or protected static method, declared or
@@ -107,6 +113,7 @@ final class PublicApiContractTests {
 	 */
 	static final Set<String> VERIFIED_TYPES = Set.of(
 			"com.revetsec.jose.Jwt",
+			"com.revetsec.jose.JwtClaims",
 			"com.revetsec.oauth.VerifiedAccessToken",
 			"com.revetsec.oidc.IdToken",
 			"com.revetsec.oidc.OidcAuthentication",
@@ -117,9 +124,11 @@ final class PublicApiContractTests {
 	 * Binary names of the accessible classes whose public or protected instance methods and fields may return or hold
 	 * a verified type: the validators that create them, and results or verified types whose accessors hand one out.
 	 * Static members are never exempt, because a static factory or field would give any caller a verified type without
-	 * validation. Each entry is a reviewed decision; there are none before the first validator exists.
+	 * validation. Each entry is a reviewed decision.
 	 */
-	static final Set<String> VERIFIED_TYPE_SOURCES = Set.of();
+	static final Set<String> VERIFIED_TYPE_SOURCES = Set.of(
+			"com.revetsec.jose.JwtValidator",
+			"com.revetsec.jose.Jwt");
 
 	/**
 	 * Binary names of the exported concrete classes approved to be neither final nor sealed (R1). The exemption covers
@@ -242,19 +251,38 @@ final class PublicApiContractTests {
 
 	/**
 	 * G6-1: an exported abstract class is sealed, so every subclass is Revetsec's, unless {@code openAbstractTypes}
-	 * lists it. Concrete classes are held to R1's finality rule instead ({@link #checkFinal}), and interfaces are not
-	 * classes.
+	 * lists it. A sealed one declares no public or protected constructor (the protocol intermediates' constructors
+	 * are package-private), and it and every exported sealed interface permit only final or sealed subtypes, all the
+	 * way down, so the sealing cannot be undone by a {@code non-sealed} subtype, exported or not (M2-10 item 6).
+	 * Concrete classes are held to R1's finality rule instead ({@link #checkFinal}), which walks their permitted
+	 * subclasses the same way.
 	 */
 	private static void checkOpenAbstractTypes(List<TypeElement> exportedTypes, Set<String> openAbstractTypes,
 			SourceAnalysis analysis, List<String> violations) {
 		Set<TypeElement> openAbstractClasses = new LinkedHashSet<>();
 		for (TypeElement type : exportedTypes) {
 			Set<Modifier> modifiers = type.getModifiers();
-			if (type.getKind() != ElementKind.CLASS || !modifiers.contains(Modifier.ABSTRACT)
-					|| modifiers.contains(Modifier.SEALED))
+			boolean abstractClass = type.getKind() == ElementKind.CLASS && modifiers.contains(Modifier.ABSTRACT);
+			boolean sealed = modifiers.contains(Modifier.SEALED);
+			String typeName = binaryName(type, analysis);
+
+			if (sealed && (abstractClass || type.getKind() == ElementKind.INTERFACE)) {
+				List<TypeElement> openSubtypes = new ArrayList<>();
+				collectNonSealedSubclasses(type, analysis, openSubtypes, new HashSet<>());
+				for (TypeElement openSubtype : openSubtypes)
+					violations.add(typeName + ": exported sealed " + (abstractClass ? "abstract class" : "interface")
+							+ " permits the non-sealed subtype " + binaryName(openSubtype, analysis) + ", which reopens "
+							+ "its hierarchy; every permitted subtype must be final or sealed (G6-1)");
+			}
+			if (abstractClass && sealed)
+				for (ExecutableElement constructor : ElementFilter.constructorsIn(type.getEnclosedElements()))
+					if (ContractSupport.isPublicOrProtected(constructor) && analysis.isSourceAuthored(constructor))
+						violations.add(typeName + "#" + analysis.describe(constructor) + ": exported abstract sealed "
+								+ "classes have package-private constructors, because only their permitted subclasses "
+								+ "call them (G6-1)");
+			if (!abstractClass || sealed)
 				continue;
 			openAbstractClasses.add(type);
-			String typeName = binaryName(type, analysis);
 			if (!openAbstractTypes.contains(typeName))
 				violations.add(typeName + ": exported abstract classes are sealed, so only Revetsec extends them; an "
 						+ "open one needs a reviewed entry in OPEN_ABSTRACT_TYPES (G6-1)");

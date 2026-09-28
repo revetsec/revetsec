@@ -17,11 +17,13 @@ name: ClusterFuzzLite PR fuzzing
 # cflite_batch.yml and cflite_cron.yml.
 #
 # Targets. .clusterfuzzlite/build.sh makes one target of every Jazzer @FuzzTest method in fuzz/'s
-# *FuzzTests classes. From M1 there are six classes, all under com.revetsec: internal.json.JsonCodecFuzzTests,
-# json.JsonModelFuzzTests, internal.json.Rfc7638FuzzTests, StateSealerFuzzTests,
-# internal.pem.PemFuzzTests and internal.encoding.EncodingFuzzTests. ClusterFuzzLite runs the targets one
-# at a time and shares FUZZ_SECONDS between them, so the budget below is the total for a PR run, whatever
-# the number of targets. Budgets for all three workflows are in the header of cflite_batch.yml.
+# *FuzzTests classes, all under com.revetsec. M1 added internal.json.JsonCodecFuzzTests,
+# json.JsonModelFuzzTests, internal.json.Rfc7638FuzzTests, StateSealerFuzzTests, internal.pem.PemFuzzTests
+# and internal.encoding.EncodingFuzzTests; M2 added internal.jose.CompactJwsFuzzTests,
+# internal.jose.JsonWebKeyFuzzTests, jose.JwtValidatorFuzzTests, internal.crypto.EcdsaFuzzTests and
+# internal.http.CacheLifetimeFuzzTests. ClusterFuzzLite runs the targets one at a time and shares
+# FUZZ_SECONDS between them, so the budget below is the total for a PR run, whatever the number of
+# targets. Budgets for all three workflows are in the header of cflite_batch.yml.
 
 on:
   pull_request:
@@ -39,7 +41,7 @@ jobs:
     name: PR Fuzzing (${{ matrix.sanitizer }})
     runs-on: ubuntu-24.04
     # The FUZZ_SECONDS budget plus the image build, the Maven build and the per-target start-up.
-    timeout-minutes: 45
+    timeout-minutes: 50
     permissions:
       # The build step clones the repository itself. No `actions: read`: the corpus never comes from
       # workflow artifacts.
@@ -101,8 +103,9 @@ jobs:
           LANGUAGE: jvm
           SANITIZER: ${{ matrix.sanitizer }}
           MODE: code-change
-          # Total budget, shared by the targets: 15 minutes keeps a PR run time-boxed.
-          FUZZ_SECONDS: '900'
+          # Total budget, shared by the targets: 20 minutes keeps a PR run time-boxed (cflite_batch.yml
+          # header: BUDGETS).
+          FUZZ_SECONDS: '1200'
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CFL_PLATFORM: github
           LOW_DISK_SPACE: 'True'

@@ -17,8 +17,8 @@
 package com.revetsec.internal.http;
 
 /**
- * Fixture internal type: stands in for the outbound HTTP helper, which only jose, oauth, oidc, internal.jose and
- * internal.oauth may use.
+ * Fixture internal type: stands in for the outbound HTTP helper, which only jose, oauth, oidc and internal.oauth may
+ * use.
  */
 public final class HttpFixture {
 	public static final String CONSTANT = "http";

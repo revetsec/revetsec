@@ -60,7 +60,13 @@ The coverage floors are not a pull-request check: they are checked when a milest
 $ mvn -B -ntp -Dmaven.javadoc.skip=true -Pcoverage clean verify
 ```
 
-The `coverage` profile fails the build when the whole JAR, or a package in the critical set (`internal.json`, `internal.crypto`, `internal.encoding` and `internal.http` so far), falls below its floor. The pom lists each floor with the measurement it came from. Code that runs only in a child JVM, which some tests start, is not counted.
+The `coverage` profile fails the build when the whole JAR, or a package in the critical set (`internal.json`, `internal.crypto`, `internal.encoding`, `internal.http`, `internal.jose` and `jose` so far), falls below its floor. The pom lists each floor with the measurement it came from. Code that runs only in a child JVM, which some tests start, is not counted.
+
+Mutation testing is not a pull-request check either. PIT mutates the protocol packages as they land, so far `jose`, `internal.jose` and the signature and key classes of `internal.crypto` (the pom's `mutation` profile lists its targets). Its report is evidence for milestone reviews, and at each release candidate every surviving mutant must be killed or explained in writing. To run it:
+
+```shell
+$ mvn -B -ntp -Dmaven.javadoc.skip=true -Pmutation clean verify
+```
 
 The build's contract tests enforce the conventions in [NAMING_CONVENTIONS.md](NAMING_CONVENTIONS.md), the allowed dependencies between packages, a list of banned source constructs, and the wording of the documentation. `ClaimsLintTests` rejects unsupported claims in any Markdown file. If it flags wording you wrote, rephrase it. An entry in `claims-allowlist.txt` is for wording that has evidence behind it, and each entry states that evidence.
 
@@ -94,7 +100,7 @@ The container runs as uid 65534, so the output directory must be writable by any
 
 ##### Other Workflows
 
-`.github/workflows/` is the source of truth for all of the above. CodeQL (`codeql.yml`) and ClusterFuzzLite's time-boxed fuzzing (`cflite_pr.yml`, 15 minutes shared by every fuzz target) also run on pull requests, but only in GitHub Actions. Once the corpus storage repository is set up (the owner setup in the header of `cflite_batch.yml`), ClusterFuzzLite also fuzzes every target nightly and prunes the stored corpus (`cflite_batch.yml` and `cflite_cron.yml`). [fuzz/README.md](fuzz/README.md) describes the targets and how to fuzz one locally. The nightly legs on other JDK builds and on an early-access JDK are advisory. The tooling directories (`fuzz/`, `verification/` and `interop/`) have their own builds, and the root build does not build them.
+`.github/workflows/` is the source of truth for all of the above. CodeQL (`codeql.yml`) and ClusterFuzzLite's time-boxed fuzzing (`cflite_pr.yml`, 20 minutes shared by every fuzz target) also run on pull requests, but only in GitHub Actions. Once the corpus storage repository is set up (the owner setup in the header of `cflite_batch.yml`), ClusterFuzzLite also fuzzes every target nightly and prunes the stored corpus (`cflite_batch.yml` and `cflite_cron.yml`). [fuzz/README.md](fuzz/README.md) describes the targets and how to fuzz one locally. The nightly legs on other JDK builds and on an early-access JDK are advisory. The tooling directories (`fuzz/`, `verification/` and `interop/`) have their own builds, and the root build does not build them.
 
 #### Code Conventions
 
@@ -103,6 +109,7 @@ The container runs as uid 65534, so the output directory must be writable by any
 - Public API follows [NAMING_CONVENTIONS.md](NAMING_CONVENTIONS.md). There are no public records. Every public element carries JSpecify nullness annotations, every exported type carries exactly one of `@ThreadSafe`, `@NotThreadSafe` or `@Immutable`, and every public member has `@since`.
 - No compile or runtime dependencies. Build-time dependencies are `provided` or `test` scope.
 - Test classes are named `*Tests`. Tests use a fixed `Clock`, hand-written fakes instead of a mocking library, and no `Thread.sleep`.
+- Build a `@TestFactory`'s dynamic tests in a fixed order, from a `List`, a `LinkedHashMap`, an `EnumMap` or sorted entries, not by iterating a `Map.of`, `Set.of`, `HashMap` or `HashSet`, whose order can differ from one JVM to the next. A dynamic test's ID is its position, and PIT reruns a test by its ID in a fresh JVM, so an order that changes can make it report a mutant as surviving that the tests kill.
 
 #### Publishing
 

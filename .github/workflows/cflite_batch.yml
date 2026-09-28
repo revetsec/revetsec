@@ -39,21 +39,25 @@ name: ClusterFuzzLite batch fuzzing
 # steps: move the digests by hand, in cflite_pr.yml and cflite_cron.yml too, and together with the
 # base-builder-jvm digest in .clusterfuzzlite/Dockerfile.
 #
-# BUDGETS. From M1 fuzz/ holds six *FuzzTests classes (JSON codec, JSON model, RFC 7638, StateSealer,
-# PEM and encoding), and .clusterfuzzlite/build.sh makes one target of every @FuzzTest method in them.
-# ClusterFuzzLite runs the targets one at a time and gives each at least FUZZ_SECONDS divided by the
-# number of targets, plus any time the earlier ones left unused (cifuzz run_fuzzers.py). So each
-# FUZZ_SECONDS below is a total, whatever the number of targets, plus each target's start-up:
-#   cflite_pr.yml      900 s (15 minutes) per pull-request run, in a 45-minute job;
-#   cflite_batch.yml  2700 s (45 minutes) a night, in a 75-minute job;
+# BUDGETS. fuzz/ holds eleven *FuzzTests classes: six from M1 (JSON codec, JSON model, RFC 7638,
+# StateSealer, PEM and encoding) and five from M2 (compact JWS, JSON Web Keys, JwtValidator, ECDSA and
+# cache lifetimes). .clusterfuzzlite/build.sh makes one target of every @FuzzTest method in them, 21
+# targets in all. ClusterFuzzLite runs the targets one at a time and gives each at least FUZZ_SECONDS
+# divided by the number of targets, plus any time the earlier ones left unused (cifuzz run_fuzzers.py).
+# So each FUZZ_SECONDS below is a total, whatever the number of targets, plus each target's start-up:
+#   cflite_pr.yml     1200 s (20 minutes) per pull-request run, in a 50-minute job;
+#   cflite_batch.yml  3600 s (60 minutes) a night, in a 90-minute job;
 #   cflite_cron.yml   1200 s (20 minutes) of corpus pruning a night, in a 45-minute job.
-# Each job's timeout leaves room for the image build, the Maven build, JVM start-up per target and the
-# corpus transfers. The prune cron in cflite_cron.yml starts after this job's timeout; move it if this
-# timeout grows. More targets mean less time for each, so revisit these totals as targets are added.
+# At 21 targets that is about a minute each per pull request and three minutes each a night. M2
+# raised the pull-request and nightly totals from M1's 900 s and 2700 s, in 45- and 75-minute jobs, when
+# it added its five target classes. Each job's timeout leaves room for the image build, the Maven build,
+# JVM start-up per target and the corpus transfers. The prune cron in cflite_cron.yml starts after this
+# job's timeout; move it if this timeout grows. More targets mean less time for each, so revisit these
+# totals as targets are added.
 
 on:
   schedule:
-    # Nightly, offset from the CI (06:17) and CodeQL (06:41) crons. Pruning runs at 09:17.
+    # Nightly, offset from the CI (06:17) and CodeQL (06:41) crons. Pruning runs at 09:37.
     - cron: '47 7 * * *'
   workflow_dispatch:
 
@@ -75,9 +79,9 @@ jobs:
   batch-fuzzing:
     name: Batch Fuzzing (${{ matrix.sanitizer }})
     runs-on: ubuntu-24.04
-    # FUZZ_SECONDS (45 minutes) plus the builds and the corpus transfers. cflite_cron.yml's 09:17 prune
+    # FUZZ_SECONDS (60 minutes) plus the builds and the corpus transfers. cflite_cron.yml's 09:37 prune
     # starts after this timeout.
-    timeout-minutes: 75
+    timeout-minutes: 90
     # Holds CFLITE_STORAGE_TOKEN (owner setup, step 3).
     environment: cflite-storage
     permissions:
@@ -154,7 +158,7 @@ jobs:
           SANITIZER: ${{ matrix.sanitizer }}
           MODE: batch
           # Total budget, shared by the targets (header: BUDGETS).
-          FUZZ_SECONDS: '2700'
+          FUZZ_SECONDS: '3600'
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CFL_PLATFORM: github
           LOW_DISK_SPACE: 'True'

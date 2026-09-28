@@ -17,6 +17,7 @@
 package com.revetsec.internal.http;
 
 import com.revetsec.OutboundUriPolicy;
+import com.revetsec.internal.Limits;
 import com.revetsec.internal.http.HttpExchangeException.Kind;
 import com.revetsec.testing.RawTlsServer;
 import com.revetsec.testing.TestHttpsServer;
@@ -37,6 +38,7 @@ import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Stream;
 
@@ -56,6 +58,12 @@ final class HttpExchangeHostileTests {
 	 * Server-side checks allow about 10 s: once a server took 3.1 s to notice an abort on JDK 25 (M1 plan).
 	 */
 	private static final Duration SERVER_WAIT = Duration.ofSeconds(10);
+
+	/**
+	 * The deadline that ends a paced case, as in exit criterion 11's own test; each keeps its server busy for minutes
+	 * otherwise. It leaves time for the connection and the request, which the server must record, on a loaded host.
+	 */
+	private static final Duration SHORT_DEADLINE = Duration.ofMillis(1_500);
 
 	private static final AtomicInteger NEXT_PATH = new AtomicInteger();
 
@@ -136,6 +144,96 @@ final class HttpExchangeHostileTests {
 					transport::name);
 		Assertions.assertEquals(cases.size(), cases.stream().map(HostileResponse::getName).distinct().count(),
 				"case names are unique");
+	}
+
+	// M2 exit criterion 14: every case of the JWKS catalog ends as expected when it is requested the way a JSON Web Key
+	// Set fetch requests it, under the JWKS profile and its 256 KiB default body limit, on the transport it names, with
+	// the same client-close and redirect-target checks as above.
+	@TestFactory
+	Stream<DynamicTest> everyJwksRejectionEndsAsExpectedUnderTheJwksProfile() {
+		return HostileResponse.jwks().stream()
+				.filter(hostileResponse -> !hostileResponse.isPaced())
+				.map(hostileResponse -> DynamicTest.dynamicTest(hostileResponse.getName(), () -> {
+					HttpExchangeRequest request = hostileResponse.requestFor(URI.create("https://example.com/jwks"));
+					Assertions.assertEquals(ResponseProfile.JWKS, request.profile());
+					Assertions.assertEquals(Limits.JWKS_RESPONSE_BODY_SIZE.getDefaultIntValue(), request.maximumBodyBytes());
+
+					if (hostileResponse.getTransport() == HostileResponse.Transport.TEST_HTTPS_SERVER)
+						runOnJdkServer(hostileResponse);
+					else
+						runOnRawServer(hostileResponse);
+				}));
+	}
+
+	// M2 exit criterion 14 (the tarpit) and M1 exit criterion 11: the paced cases end in TIMEOUT under the JWKS profile
+	// too, by a short deadline, and the server sees the client leave.
+	@TestFactory
+	Stream<DynamicTest> everyJwksTimeoutEndsInTimeoutByAShortDeadline() {
+		return HostileResponse.jwks().stream()
+				.filter(HostileResponse::isPaced)
+				.map(hostileResponse -> DynamicTest.dynamicTest(hostileResponse.getName(), () -> {
+					RawTlsServer server = requireNonNullServer(rawServer);
+					String path = nextPath();
+					hostileResponse.installOn(server, path);
+
+					HttpExchangeException exception = Assertions.assertThrows(HttpExchangeException.class,
+							() -> requireNonNullExchange(exchange).execute(hostileResponse.requestFor(server.uri(path)),
+									Deadline.fromNow(SHORT_DEADLINE)));
+
+					Assertions.assertEquals(Kind.TIMEOUT, exception.getKind());
+					Assertions.assertEquals(Optional.of(Kind.TIMEOUT), hostileResponse.getExpectedKind());
+					RawTlsServer.Connection connection = connectionOf(server, awaitRecordedRequest(server, path));
+					Assertions.assertTrue(connection.awaitClientClose(SERVER_WAIT), () -> "the client closed " + connection);
+				}));
+	}
+
+	// M2 exit criterion 14: the JWKS catalog is every rejection that applies to JWKS, the JWKS-only cases and every
+	// paced case, last; every case is requested under JWKS; the names are unique; and together they cover every kind
+	// a response can cause, a dropped error body, a JDK-refused head (IO) and the JWKS body limit.
+	@Test
+	void theJwksCatalogCoversEveryResponseKindUnderTheJwksProfile() {
+		List<HostileResponse> cases = HostileResponse.jwks();
+		List<String> names = cases.stream().map(HostileResponse::getName).toList();
+
+		Assertions.assertEquals(names.size(), names.stream().distinct().count(), "case names are unique");
+		for (HostileResponse hostileResponse : cases)
+			Assertions.assertEquals(ResponseProfile.JWKS, hostileResponse.getProfile(), hostileResponse::getName);
+
+		for (HostileResponse rejection : HostileResponse.rejections()) {
+			String expectedName = rejection.getProfile() == ResponseProfile.JWKS ? rejection.getName()
+					: rejection.getName() + HostileResponse.JWKS_NAME_SUFFIX;
+			Assertions.assertEquals(rejection.appliesTo(ResponseProfile.JWKS), names.contains(expectedName),
+					rejection::getName);
+		}
+		for (HostileResponse timeout : HostileResponse.timeouts())
+			Assertions.assertTrue(names.contains(timeout.getName() + HostileResponse.JWKS_NAME_SUFFIX), timeout::getName);
+
+		long jwksOnly = names.stream().filter(name -> name.startsWith("JWKS: ")).count();
+		Assertions.assertEquals(13, jwksOnly);
+		Assertions.assertEquals(HostileResponse.rejections().stream()
+				.filter(rejection -> rejection.appliesTo(ResponseProfile.JWKS)).count() + jwksOnly
+				+ HostileResponse.timeouts().size(), cases.size());
+
+		int firstPaced = names.size();
+		for (int index = 0; index < cases.size(); ++index)
+			if (cases.get(index).isPaced()) {
+				firstPaced = index;
+				break;
+			}
+		Assertions.assertEquals(HostileResponse.timeouts().size(), cases.size() - firstPaced, "the paced cases are last");
+		for (HostileResponse paced : cases.subList(firstPaced, cases.size()))
+			Assertions.assertTrue(paced.isPaced(), paced::getName);
+
+		for (Kind kind : List.of(Kind.REDIRECT, Kind.FRAMING, Kind.CONTENT_ENCODING, Kind.TOO_LARGE, Kind.MEDIA_TYPE,
+				Kind.TIMEOUT, Kind.IO))
+			Assertions.assertTrue(cases.stream().anyMatch(hostileResponse -> hostileResponse.getExpectedKind()
+					.filter(kind::equals).isPresent()), kind::name);
+		Assertions.assertTrue(cases.stream().anyMatch(hostileResponse -> hostileResponse.getExpectedKind().isEmpty()));
+		Assertions.assertEquals(Optional.of(Kind.IO), cases.stream()
+				.filter(hostileResponse -> hostileResponse.getName().equals("an invalid status line"
+						+ HostileResponse.JWKS_NAME_SUFFIX))
+				.findFirst().orElseThrow().getExpectedKind());
+		Assertions.assertTrue(names.contains("JWKS: fixed-length 2xx one byte over the JWKS body limit"));
 	}
 
 	// HostileResponse.appliesTo: every case that is not a media-type case keeps its expectation under every profile,
@@ -257,6 +355,21 @@ final class HttpExchangeHostileTests {
 			if (request.getPath().equals(path))
 				return request;
 		throw new AssertionError("No recorded request for " + path + " among " + server.getRequests());
+	}
+
+	/**
+	 * The request recorded at {@code path}, waiting up to {@link #SERVER_WAIT} for the server to record it.
+	 */
+	private static RawTlsServer.RecordedRequest awaitRecordedRequest(RawTlsServer server, String path)
+			throws InterruptedException {
+		long deadline = System.nanoTime() + SERVER_WAIT.toNanos();
+		while (server.getRequests().stream().noneMatch(request -> request.getPath().equals(path))) {
+			long remaining = deadline - System.nanoTime();
+			if (remaining <= 0)
+				throw new AssertionError("No recorded request for " + path);
+			server.awaitRequestCount(server.getRequests().size() + 1, Duration.ofNanos(remaining));
+		}
+		return recordedRequest(server, path);
 	}
 
 	private static RawTlsServer.Connection connectionOf(RawTlsServer server, RawTlsServer.RecordedRequest request) {

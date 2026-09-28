@@ -89,49 +89,61 @@
 
 		<!-- Coverage floors (coverage profile), instruction and branch COVEREDRATIO. The critical floor applies to
 		     every package in the critical set: internal.json, internal.crypto, internal.encoding and internal.http
-		     (M1), and internal.jose, internal.xml, oidc and saml, which have no code yet. Each M1 package also has
-		     its own floor, set from measured runs.
+		     (M1), jose and internal.jose (M2), and internal.xml, oidc and saml, which have no code yet. Each critical
+		     package with code also has its own floor, set from measured runs.
 
-		     Measured 2026-09-24 (M1, WP-10b) on an arm64 Mac with Corretto 17.0.20.1, 21.0.11, 25.0.4.1, 26.0.1
-		     and 27. Method: nine runs of `mvn -B -ntp -Dmaven.javadoc.skip=true -Pcoverage clean verify`, three
-		     each on 17, 21 and 27, each compiled by its own JDK; plus a merged measurement, in which the classes
-		     compiled once on 17 were tested twice each on 17, 21 and 27 and once each on 25 and 26, and the eight
-		     JaCoCo exec files were merged. The single runs on 25 and 26 fell inside the range of the others. The
-		     check runs on one JDK at a time, so each floor sits a small margin below the lowest single run.
-		     Re-measured 2026-09-25, after the fixes from M1's final review, with four single runs of the same
-		     command (two on 21, one each on 17 and 27); no floor had to move.
+		     M2 (plan A-6), measured 2026-09-27 and 2026-09-28 on an arm64 Mac with Corretto 17.0.20.1, 21.0.11,
+		     25.0.4.1, 26.0.1 and 27, on the phase-2 tree. Method: six runs of `mvn -B -ntp
+		     -Dmaven.javadoc.skip=true -Pcoverage clean verify`, two each on 17 and 21 and one each on 25 and 27,
+		     each compiled by its own JDK; plus a merged measurement, in which the classes compiled once on 17 were
+		     tested on 17, 21, 25, 26 and 27 into one JaCoCo exec file. The check runs on one JDK at a time, so each
+		     floor sits a margin below the lowest single run.
 
-		       package             lowest single run   merged              lowest single run   floor
-		                           2026-09-24          2026-09-24          2026-09-25
-		       bundle              0.9871 / 0.9548     0.9875 / 0.9575     0.9867 / 0.9554     0.98 / 0.94
-		       internal.json       1.0000 / 1.0000     1.0000 / 1.0000     1.0000 / 1.0000     0.99 / 0.99
-		       internal.crypto     0.9750 / 0.9561     0.9750 / 0.9561     0.9729 / 0.9732     0.97 / 0.94
-		       internal.encoding   0.9954 / 1.0000     0.9954 / 1.0000     0.9954 / 1.0000     0.99 / 0.99
-		       internal.http       0.9667 / 0.8628     0.9681 / 0.8715     0.9685 / 0.8647     0.96 / 0.85
+		       package             lowest single run   highest single run   merged              floor
+		       bundle              0.9884 / 0.9771     0.9887 / 0.9793      0.9887 / 0.9797     0.98 / 0.97
+		       internal.json       1.0000 / 1.0000     1.0000 / 1.0000      1.0000 / 1.0000     0.99 / 0.99
+		       internal.crypto     0.9825 / 0.9856     0.9825 / 0.9856      0.9825 / 0.9856     0.97 / 0.97
+		       internal.encoding   0.9954 / 1.0000     0.9954 / 1.0000      0.9954 / 1.0000     0.99 / 0.99
+		       internal.http       0.9739 / 0.9348     0.9751 / 0.9424      0.9751 / 0.9424     0.96 / 0.92
+		       internal.jose       0.9861 / 0.9870     0.9862 / 0.9870      0.9862 / 0.9892     0.98 / 0.98
+		       jose                0.9911 / 0.9669     0.9919 / 0.9720      0.9919 / 0.9720     0.98 / 0.95
 
-		     Every package except internal.http gave the same numbers in every run on every JDK. In internal.http,
-		     73 to 79 of 576 branches were missed on 2026-09-24, and 79 at least once on each of 17, 21, 26 and 27;
-		     74 to 79 of 584 on 2026-09-25. Five or six branches in HttpExchange (Sink.subscriberFor,
-		     BoundedSubscriber.onSubscribe and BoundedSubscriber.abandon) are race backstops that only some runs
-		     reach. Its other misses were the same in every run, so there is no JDK-specific branch to exclude, and
-		     nothing is excluded. internal.crypto's instruction floor has the least margin: 33 of 1,218 instructions
-		     were missed, and the floor allows 36. Code that runs only in a child JVM (ChildJvm) is never counted,
-		     because the child does not get the JaCoCo agent: the default HTTP client's startup failure and the
-		     zero-thread build check (exit criteria 13 and 14), and StateSealer's refusing-provider and
-		     failing-SecureRandom tests. Move the floors with the code, and set each new critical package's own
-		     floor from a measured run when it lands. -->
+		     The lowest bundle and jose figures came from the run on 27, and the lowest internal.http figures from
+		     runs on 17 and 27. The phase-2 integration's coverage run on 21 gave 0.9886 / 0.9790 for the bundle,
+		     0.9751 / 0.9424 for internal.http and 0.9914 / 0.9695 for jose. internal.json, internal.crypto and
+		     internal.encoding gave the same figures in every single run, and internal.jose missed the same 46
+		     instructions and 6 branches in each. In jose, 11 to 13 of 393 branches were missed: JwksCache has
+		     branches that only some interleavings of concurrent callers reach, so its floor leaves the most room.
+		     In internal.http, 38 to 43 of 660 branches were missed, from the same race backstops in HttpExchange as
+		     in M1. The merged measurement also covers one internal.jose branch that no single run covered. Nothing
+		     is excluded.
+
+		     M1 (WP-10b) measured 2026-09-24 and 2026-09-25 with the same method, nine and four single runs, and set
+		     0.98 / 0.94 for the bundle, 0.97 / 0.94 for internal.crypto (lowest runs 0.9729 / 0.9561) and
+		     0.96 / 0.85 for internal.http (0.9667 / 0.8628). M2 re-measured every package and raised those three
+		     branch floors with the code.
+
+		     Code that runs only in a child JVM (ChildJvm) is never counted, because the child does not get the
+		     JaCoCo agent: the default HTTP client's startup failure, the zero-thread build checks (M1 exit criteria
+		     13 and 14, M2 exit criterion 17), and StateSealer's refusing-provider and failing-SecureRandom tests.
+		     Move the floors with the code, and set each new critical package's own floor from a measured run when
+		     it lands. -->
 		<revetsec.coverage.bundle.instruction>0.98</revetsec.coverage.bundle.instruction>
-		<revetsec.coverage.bundle.branch>0.94</revetsec.coverage.bundle.branch>
+		<revetsec.coverage.bundle.branch>0.97</revetsec.coverage.bundle.branch>
 		<revetsec.coverage.critical.instruction>0.90</revetsec.coverage.critical.instruction>
 		<revetsec.coverage.critical.branch>0.85</revetsec.coverage.critical.branch>
 		<revetsec.coverage.internal.json.instruction>0.99</revetsec.coverage.internal.json.instruction>
 		<revetsec.coverage.internal.json.branch>0.99</revetsec.coverage.internal.json.branch>
 		<revetsec.coverage.internal.crypto.instruction>0.97</revetsec.coverage.internal.crypto.instruction>
-		<revetsec.coverage.internal.crypto.branch>0.94</revetsec.coverage.internal.crypto.branch>
+		<revetsec.coverage.internal.crypto.branch>0.97</revetsec.coverage.internal.crypto.branch>
 		<revetsec.coverage.internal.encoding.instruction>0.99</revetsec.coverage.internal.encoding.instruction>
 		<revetsec.coverage.internal.encoding.branch>0.99</revetsec.coverage.internal.encoding.branch>
 		<revetsec.coverage.internal.http.instruction>0.96</revetsec.coverage.internal.http.instruction>
-		<revetsec.coverage.internal.http.branch>0.85</revetsec.coverage.internal.http.branch>
+		<revetsec.coverage.internal.http.branch>0.92</revetsec.coverage.internal.http.branch>
+		<revetsec.coverage.internal.jose.instruction>0.98</revetsec.coverage.internal.jose.instruction>
+		<revetsec.coverage.internal.jose.branch>0.98</revetsec.coverage.internal.jose.branch>
+		<revetsec.coverage.jose.instruction>0.98</revetsec.coverage.jose.instruction>
+		<revetsec.coverage.jose.branch>0.95</revetsec.coverage.jose.branch>
 	</properties>
 
 	<build>
@@ -541,6 +553,7 @@
 												<include>com?revetsec?internal?encoding</include>
 												<include>com?revetsec?internal?http</include>
 												<include>com?revetsec?internal?jose</include>
+												<include>com?revetsec?jose</include>
 												<include>com?revetsec?internal?xml</include>
 												<include>com?revetsec?oidc</include>
 												<include>com?revetsec?saml</include>
@@ -630,6 +643,42 @@
 												</limit>
 											</limits>
 										</rule>
+										<rule>
+											<element>PACKAGE</element>
+											<includes>
+												<include>com?revetsec?internal?jose</include>
+											</includes>
+											<limits>
+												<limit>
+													<counter>INSTRUCTION</counter>
+													<value>COVEREDRATIO</value>
+													<minimum>${revetsec.coverage.internal.jose.instruction}</minimum>
+												</limit>
+												<limit>
+													<counter>BRANCH</counter>
+													<value>COVEREDRATIO</value>
+													<minimum>${revetsec.coverage.internal.jose.branch}</minimum>
+												</limit>
+											</limits>
+										</rule>
+										<rule>
+											<element>PACKAGE</element>
+											<includes>
+												<include>com?revetsec?jose</include>
+											</includes>
+											<limits>
+												<limit>
+													<counter>INSTRUCTION</counter>
+													<value>COVEREDRATIO</value>
+													<minimum>${revetsec.coverage.jose.instruction}</minimum>
+												</limit>
+												<limit>
+													<counter>BRANCH</counter>
+													<value>COVEREDRATIO</value>
+													<minimum>${revetsec.coverage.jose.branch}</minimum>
+												</limit>
+											</limits>
+										</rule>
 									</rules>
 								</configuration>
 							</execution>
@@ -640,11 +689,13 @@
 		</profile>
 
 		<!--
-			PIT mutation testing (plan 14.5) on internal.jose, internal.xml, the OAuth pipeline (internal.oauth) and
-			the oidc, saml and scim validators. At M0 there is nothing to mutate, so an empty run passes; from M1 on,
-			every surviving mutant is killed or justified in writing at each RC.
+			PIT mutation testing (plan 14.5) on jose and internal.jose, the signature and key classes of
+			internal.crypto (added in M2), internal.xml, the OAuth pipeline (internal.oauth) and the oidc, saml and
+			scim validators. Packages with no code yet contribute no mutants. The internal.crypto entries name classes,
+			not the package, so the sealer's classes are not targets. A milestone's PIT run is evidence for its review,
+			not a gate; at each RC, every surviving mutant is killed or justified in writing.
 
-			  mvn -B -ntp -Pmutation -Dmaven.javadoc.skip=true verify
+			  mvn -B -ntp -Pmutation -Dmaven.javadoc.skip=true clean verify
 		-->
 		<profile>
 			<id>mutation</id>
@@ -663,7 +714,18 @@
 						</dependencies>
 						<configuration>
 							<targetClasses>
+								<param>com.revetsec.jose.*</param>
 								<param>com.revetsec.internal.jose.*</param>
+								<param>com.revetsec.internal.crypto.HashAlgorithm*</param>
+								<param>com.revetsec.internal.crypto.EcCurve*</param>
+								<param>com.revetsec.internal.crypto.EcdsaSignatures*</param>
+								<param>com.revetsec.internal.crypto.EcPublicKeys*</param>
+								<param>com.revetsec.internal.crypto.RsaPublicKeys*</param>
+								<param>com.revetsec.internal.crypto.Ed25519PublicKeys*</param>
+								<param>com.revetsec.internal.crypto.SignatureVerifier*</param>
+								<param>com.revetsec.internal.crypto.VerifyResult*</param>
+								<param>com.revetsec.internal.crypto.KeyRejectedException*</param>
+								<param>com.revetsec.internal.crypto.Hmac*</param>
 								<param>com.revetsec.internal.xml.*</param>
 								<param>com.revetsec.internal.oauth.*</param>
 								<param>com.revetsec.oidc.*</param>

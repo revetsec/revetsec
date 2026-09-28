@@ -63,7 +63,8 @@ final class LimitTests {
 
 	@Test
 	void aZeroFloorRowAcceptsZeroButNotNegatives() {
-		// Plan R8: maximum staleness (and, from gate 5, renewBefore) may be zero.
+		// Plan R8: maximum staleness (and, from gate 5, renewBefore; from gate 8, G8-10, the JOSE clock skew) may be
+		// zero.
 		Assertions.assertTrue(ZERO_FLOOR_TIME.isZeroAllowed());
 		Assertions.assertFalse(TIME.isZeroAllowed());
 		Assertions.assertFalse(SIZE.isZeroAllowed());

@@ -27,10 +27,13 @@ import java.lang.reflect.Modifier;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Deque;
+import java.util.HexFormat;
 import java.util.IdentityHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -43,17 +46,41 @@ import java.util.regex.Pattern;
 import static java.util.Objects.requireNonNull;
 
 /**
- * Sentinel secrets, and a walker that looks for them in everything Revetsec renders (R9, R16; exit criterion 17).
+ * Sentinel secrets, and a walker that looks for them in everything Revetsec renders (R9, R16; M1 exit criterion 17,
+ * M2 exit criterion 20).
  * <p>
  * <strong>Sentinels.</strong> Every sentinel is {@code MARKER-label-MARKER}, for example
  * {@code sentinel7f3a9c-client-secret-sentinel7f3a9c}. It uses only ASCII letters, digits and {@code -}, so it
  * survives JSON string escaping, percent-encoding, form encoding and HTTP header values unchanged, and a leak is
  * found whatever the label. A partial echo is found too if it covers either end's {@link #MARKER}. Tests that plant a
- * secret use {@link #secret(String)} or one of the named constants.
+ * secret use {@link #secret(String)} or one of the named constants. Those characters are all in the base64url
+ * alphabet too, so a sentinel can stand in for a JWK member such as {@code d} or {@code k}.
  * <p>
- * <strong>The walker</strong> ({@link #findIn(Object)}) reports every rendering of {@code root} that contains
- * {@link #MARKER}, compared case-insensitively. It never reads private fields; it reads what a log line, an error
- * page or a debugger would print:
+ * <strong>Encoded forms.</strong> A secret inside a compact JWT, an {@code x5c} or a PEM block is base64-encoded, so
+ * its plain text never appears (plan M2, "the sentinel blind spot"). {@link #containsSentinel(CharSequence)}
+ * therefore also finds {@link #MARKER}
+ * <ul>
+ *   <li>base64url- or standard-base64-encoded at each of the three alignments: when the marker starts at byte offset
+ *   o, its encoding always contains the characters that depend on the marker's bits alone, one fixed 18-character
+ *   core for each value of o mod 3 ({@link #ENCODED_MARKERS}); cores are matched case-sensitively, in the text as
+ *   is and with its whitespace removed, so a line-wrapped PEM or MIME body is covered;</li>
+ *   <li>hex-encoded, in either case.</li>
+ * </ul>
+ * A core covers the marker's inner octets fully but only part of its first and last, so a string that differs from
+ * the marker only in the low bits of its last octet (or the high bits of its first) matches too; such near-markers do
+ * not occur by accident. Base64 of base64, percent-encoded {@code +} and {@code /}, and JSON's {@code \/} escape are
+ * not decoded.
+ * {@link #sentinelClaimsJson(Integer)} and {@link #compactJwtWithSentinelClaim(Integer)} are the positive controls:
+ * each carries {@link #MARKER} exactly once, at a chosen alignment, and only in base64url form.
+ * <p>
+ * <strong>Sentinel tokens.</strong> {@link #compactJwt(String, Integer)} is a JWT-shaped string with a sentinel in its
+ * header's {@code kid}, in a claim and, literally, in its signature segment, which decodes to exactly the requested
+ * number of octets. It has no valid signature: it drives the failure paths up to and including signature
+ * verification.
+ * <p>
+ * <strong>The walker</strong> ({@link #findIn(Object)}) reports every rendering of {@code root} that
+ * {@link #containsSentinel(CharSequence)}. It never reads private fields; it reads what a log line, an error page or a
+ * debugger would print:
  * <ul>
  *   <li>a {@link CharSequence}: its text;</li>
  *   <li>a {@link Throwable}: {@code getMessage()}, {@code getLocalizedMessage()}, {@code toString()}, the printed
@@ -134,10 +161,89 @@ public final class Sentinels {
 	public static final String SEALED_PLAINTEXT = secret("sealed-plaintext");
 
 	/**
+	 * A private JWK member's value ({@code d} of an RSA, EC or OKP key, and the RSA CRT members). Its 48 characters
+	 * are canonical base64url for 36 octets, so a parser that decodes before it rejects meets a well-formed value.
+	 */
+	public static final String PRIVATE_KEY_MEMBER = secret("private-key-member");
+
+	/**
+	 * A symmetric JWK's {@code k}. Its 43 characters are canonical base64url for 32 octets.
+	 */
+	public static final String SYMMETRIC_KEY = secret("symmetric-key");
+
+	/**
+	 * An HMAC secret. Its 64 UTF-8 octets are long enough for HS512, and its characters are canonical base64url for 48
+	 * octets.
+	 */
+	public static final String HMAC_SECRET = secret("hmac-secret-long-enough-for-hs-512");
+
+	/**
+	 * The {@code kid} in {@link #compactJwt(String, Integer)}'s header.
+	 */
+	public static final String JWT_KEY_ID = secret("jwt-key-id");
+
+	/**
+	 * The {@code sub} claim in {@link #compactJwt(String, Integer)}'s payload.
+	 */
+	public static final String JWT_CLAIM = secret("jwt-claim");
+
+	/**
+	 * The text {@link #signatureSegment(Integer)} repeats to fill a signature segment.
+	 */
+	public static final String JWT_SIGNATURE = secret("jwt-signature");
+
+	/**
 	 * Every named sentinel above.
 	 */
 	public static final List<String> NAMED_SENTINELS = List.of(CLIENT_SECRET, ACCESS_TOKEN, REFRESH_TOKEN, ID_TOKEN,
-			AUTHORIZATION_CODE, CODE_VERIFIER, PASSWORD, SEALED_PLAINTEXT);
+			AUTHORIZATION_CODE, CODE_VERIFIER, PASSWORD, SEALED_PLAINTEXT, PRIVATE_KEY_MEMBER, SYMMETRIC_KEY,
+			HMAC_SECRET, JWT_KEY_ID, JWT_CLAIM, JWT_SIGNATURE);
+
+	/**
+	 * The {@code iss} of the sentinel tokens ({@link #compactJwt(String, Integer)},
+	 * {@link #sentinelClaimsJson(Integer)}).
+	 */
+	public static final String COMPACT_JWT_ISSUER = "https://issuer.example";
+
+	/**
+	 * The {@code aud} of {@link #compactJwt(String, Integer)}.
+	 */
+	public static final String COMPACT_JWT_AUDIENCE = "https://audience.example";
+
+	/**
+	 * The {@code iat} of {@link #compactJwt(String, Integer)}: 2026-01-01T00:00:00Z.
+	 */
+	public static final Long COMPACT_JWT_ISSUED_AT = 1_767_225_600L;
+
+	/**
+	 * The {@code exp} of {@link #compactJwt(String, Integer)}: 2100-01-01T00:00:00Z.
+	 */
+	public static final Long COMPACT_JWT_EXPIRES_AT = 4_102_444_800L;
+
+	/**
+	 * The encoded forms of {@link #MARKER} that {@link #containsSentinel(CharSequence)} looks for besides the marker
+	 * itself: the base64url and standard-base64 cores for byte offsets 0, 1 and 2 mod 3 (the two alphabets agree for
+	 * this marker, so each core appears once), then its lowercase hex.
+	 */
+	static final List<String> ENCODED_MARKERS = encodedMarkers();
+
+	/**
+	 * The base64 cores alone, in alignment order: index i is the core for a marker at byte offset i mod 3.
+	 */
+	static final List<String> BASE64_MARKER_CORES = ENCODED_MARKERS.subList(0, ENCODED_MARKERS.size() - 1);
+
+	/**
+	 * The fewest octets {@link #signatureSegment(Integer)} can fill: 11 octets are 15 characters, room for the
+	 * 14-character {@link #MARKER}.
+	 */
+	public static final int MINIMUM_SIGNATURE_OCTETS = 11;
+
+	/**
+	 * The most octets {@link #signatureSegment(Integer)} fills.
+	 */
+	public static final int MAXIMUM_SIGNATURE_OCTETS = 65_536;
+
+	private static final Pattern WHITESPACE = Pattern.compile("\\s+");
 
 	/**
 	 * The package whose objects the walker renders with {@code toJson()} as well as {@code toString()}.
@@ -169,13 +275,142 @@ public final class Sentinels {
 	}
 
 	/**
-	 * Whether {@code text} contains {@link #MARKER}, compared case-insensitively.
+	 * Whether {@code text} contains {@link #MARKER}, compared case-insensitively, or one of its encoded forms (see the
+	 * class description).
 	 *
 	 * @param text the text to check, or {@code null}
-	 * @return {@code true} if a sentinel (or either end of one) appears in {@code text}
+	 * @return {@code true} if a sentinel (or either end of one), plain or encoded, appears in {@code text}
 	 */
 	public static Boolean containsSentinel(@Nullable CharSequence text) {
-		return text != null && text.toString().toLowerCase(Locale.ROOT).contains(MARKER);
+		if (text == null)
+			return false;
+		String string = text.toString();
+		String lowerCase = string.toLowerCase(Locale.ROOT);
+		if (lowerCase.contains(MARKER) || lowerCase.contains(ENCODED_MARKERS.get(ENCODED_MARKERS.size() - 1)))
+			return true;
+		if (containsBase64Core(string))
+			return true;
+		String withoutWhitespace = WHITESPACE.matcher(string).replaceAll("");
+		return withoutWhitespace.length() != string.length() && containsBase64Core(withoutWhitespace);
+	}
+
+	/**
+	 * A JWT-shaped compact string that carries a sentinel in three places: its header is
+	 * <code>{"alg":<i>algorithm</i>,"typ":"JWT","kid":</code>{@link #JWT_KEY_ID}<code>}</code>, its claims are
+	 * {@link #COMPACT_JWT_ISSUER}, {@code sub} {@link #JWT_CLAIM}, {@link #COMPACT_JWT_AUDIENCE},
+	 * {@link #COMPACT_JWT_ISSUED_AT} and {@link #COMPACT_JWT_EXPIRES_AT}, and its signature segment is
+	 * {@link #signatureSegment(Integer)}. The signature is not valid for any key.
+	 * <p>
+	 * At an algorithm's own signature length the token reaches signature verification, and fails there, with one
+	 * exception: at ES512's 132 octets, r's first octet is {@code 0xb1} (from the marker's {@code sen}), so r exceeds
+	 * the P-521 group order and the token stops at the range check before key selection. ES256's and ES384's r lie
+	 * in range.
+	 *
+	 * @param algorithm the {@code alg} header value, such as {@code RS256}
+	 * @param signatureOctets how many octets the signature segment decodes to: the algorithm's length, for the
+	 * signature-mismatch path, or another, for the wrong-length path
+	 * @return the compact string
+	 */
+	public static String compactJwt(String algorithm, Integer signatureOctets) {
+		requireNonNull(algorithm);
+		String header = JsonText.object(List.of(Map.entry("alg", JsonText.string(algorithm)),
+				Map.entry("typ", JsonText.string("JWT")), Map.entry("kid", JsonText.string(JWT_KEY_ID))));
+		String claims = JsonText.object(List.of(Map.entry("iss", JsonText.string(COMPACT_JWT_ISSUER)),
+				Map.entry("sub", JsonText.string(JWT_CLAIM)), Map.entry("aud", JsonText.string(COMPACT_JWT_AUDIENCE)),
+				Map.entry("iat", String.valueOf(COMPACT_JWT_ISSUED_AT)),
+				Map.entry("exp", String.valueOf(COMPACT_JWT_EXPIRES_AT))));
+		return TestJws.base64Url(header) + "." + TestJws.base64Url(claims) + "." + signatureSegment(signatureOctets);
+	}
+
+	/**
+	 * A canonical base64url signature segment that decodes to exactly {@code signatureOctets} octets and whose text is
+	 * {@link #JWT_SIGNATURE}, repeated and cut to length, with its last character's unused bits cleared. It starts with
+	 * {@link #MARKER}, so the plain walker finds it in any rendering of the token.
+	 *
+	 * @param signatureOctets how many octets the segment decodes to, {@value #MINIMUM_SIGNATURE_OCTETS} to
+	 * {@value #MAXIMUM_SIGNATURE_OCTETS}
+	 * @return the segment
+	 */
+	public static String signatureSegment(Integer signatureOctets) {
+		requireNonNull(signatureOctets);
+		if (signatureOctets < MINIMUM_SIGNATURE_OCTETS || signatureOctets > MAXIMUM_SIGNATURE_OCTETS)
+			throw new IllegalArgumentException("A sentinel signature is " + MINIMUM_SIGNATURE_OCTETS + " to "
+					+ MAXIMUM_SIGNATURE_OCTETS + " octets, not " + signatureOctets);
+		int characters = (8 * signatureOctets + 5) / 6;
+		StringBuilder segment = new StringBuilder(characters + JWT_SIGNATURE.length());
+		while (segment.length() < characters)
+			segment.append(JWT_SIGNATURE);
+		segment.setLength(characters);
+		int unusedBits = 6 * characters - 8 * signatureOctets;
+		int last = TestJws.BASE64_URL_ALPHABET.indexOf(segment.charAt(characters - 1));
+		segment.setCharAt(characters - 1, TestJws.BASE64_URL_ALPHABET.charAt(last & ~((1 << unusedBits) - 1)));
+		return segment.toString();
+	}
+
+	/**
+	 * A JWT claims set, as UTF-8 JSON text, that carries {@link #MARKER} exactly once, as the whole value of one claim,
+	 * starting at a UTF-8 byte offset of {@code alignment} mod 3:
+	 * {@code {"iss":"https://issuer.example","claim":"sentinel7f3a9c"}}, with the claim's name lengthened to shift the
+	 * offset. The value is the bare marker rather than a full sentinel,
+	 * whose second marker would sit at another alignment and blur which base64 core a test exercised.
+	 *
+	 * @param alignment 0, 1 or 2
+	 * @return the claims text
+	 */
+	public static String sentinelClaimsJson(Integer alignment) {
+		requireNonNull(alignment);
+		if (alignment < 0 || alignment > 2)
+			throw new IllegalArgumentException("An alignment is 0, 1 or 2, not " + alignment);
+		for (int extra = 0; ; ++extra) {
+			String prefix = "{\"iss\":" + JsonText.string(COMPACT_JWT_ISSUER) + ",\"claim" + "x".repeat(extra)
+					+ "\":\"";
+			if (prefix.getBytes(StandardCharsets.UTF_8).length % 3 == alignment)
+				return prefix + MARKER + "\"}";
+		}
+	}
+
+	/**
+	 * A compact JWT whose only sentinel is {@link #sentinelClaimsJson(Integer)}'s claim, so the marker appears only
+	 * base64url-encoded, at a known alignment: the positive control for base64url matching (M2 exit criterion 20). Its
+	 * header is {@code {"alg":"RS256","typ":"JWT"}} and its signature 256 zero octets.
+	 *
+	 * @param alignment the marker's payload byte offset mod 3: 0, 1 or 2
+	 * @return the compact string
+	 */
+	public static String compactJwtWithSentinelClaim(Integer alignment) {
+		String header = JsonText.object(List.of(Map.entry("alg", JsonText.string("RS256")),
+				Map.entry("typ", JsonText.string("JWT"))));
+		return TestJws.base64Url(header) + "." + TestJws.base64Url(sentinelClaimsJson(alignment)) + "."
+				+ TestJws.base64Url(new byte[256]);
+	}
+
+	private static boolean containsBase64Core(String text) {
+		for (String core : BASE64_MARKER_CORES)
+			if (text.contains(core))
+				return true;
+		return false;
+	}
+
+	/**
+	 * For each alignment r of the marker's first byte within a 3-byte base64 group, the characters of its encoding
+	 * that depend on the marker's bits alone: character i covers bits [6i, 6i + 6), and the marker covers
+	 * [8r, 8r + 8·length), whatever the bytes around it.
+	 */
+	private static List<String> encodedMarkers() {
+		byte[] marker = MARKER.getBytes(StandardCharsets.US_ASCII);
+		LinkedHashSet<String> forms = new LinkedHashSet<>();
+		for (Base64.Encoder encoder : List.of(Base64.getUrlEncoder(), Base64.getEncoder())) {
+			for (int alignment = 0; alignment < 3; ++alignment) {
+				byte[] padded = new byte[alignment + marker.length + 3];
+				System.arraycopy(marker, 0, padded, alignment, marker.length);
+				String encoded = encoder.withoutPadding().encodeToString(padded);
+				int first = (8 * alignment + 5) / 6;
+				int last = (8 * (alignment + marker.length) - 6) / 6;
+				forms.add(encoded.substring(first, last + 1));
+			}
+		}
+		forms.add(HexFormat.of().formatHex(marker));
+		return List.copyOf(forms);
 	}
 
 	/**

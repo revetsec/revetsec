@@ -66,9 +66,10 @@ import java.util.TreeSet;
  *   is held to that package's rules in both directions: {@code saml} cannot reach {@code internal.jose}, and
  *   {@code internal.json} cannot reach {@code jose}. Extracting a protocol later stays mechanical.</li>
  *   <li>{@code internal.xml} is used only by {@code saml}, {@code internal.oauth} only by {@code oauth} and
- *   {@code oidc}, and {@code internal.http} only by {@code jose}, {@code oauth}, {@code oidc} and their internal
- *   packages ({@link #RESTRICTED_INTERNAL_PACKAGES}), so the HTTP helper stays out of {@code saml}, {@code scim},
- *   {@code json}, the root package and every other internal package.</li>
+ *   {@code oidc}, and {@code internal.http} only by {@code jose}, {@code oauth}, {@code oidc} and
+ *   {@code internal.oauth} ({@link #RESTRICTED_INTERNAL_PACKAGES}), so the HTTP helper stays out of {@code saml},
+ *   {@code scim}, {@code json}, the root package and every other internal package, {@code internal.jose}
+ *   included.</li>
  *   <li>Every package is in the graph and has a {@code package-info.java} annotated {@code @NullMarked}.</li>
  *   <li>No public or protected signature of an exported type mentions a {@code com.revetsec.internal} type: not
  *   a supertype at any depth (reached through a package-private class, say), not a member it declares or inherits
@@ -120,15 +121,17 @@ final class PackageDependencyTests {
 	 * package by name, not by layer, so an internal package that may use a restricted one is listed in its own right.
 	 * <p>
 	 * {@code internal.http} is for the protocols that fetch over the network: JWKS (jose), token, introspection and
-	 * revocation endpoints (oauth), and discovery and UserInfo (oidc), and for their internal packages
-	 * {@code internal.jose} and {@code internal.oauth}, where that fetching code may live (M1 plan, "Contract-list
-	 * changes" item 3; open question 4 leaves the JWKS fetch's package to M2). Its layer is the root package, which
-	 * every package may use, so without this row {@code saml}, {@code scim} and {@code json} could reach it too.
+	 * revocation endpoints (oauth), and discovery and UserInfo (oidc), and for {@code internal.oauth}, where that
+	 * fetching code may live (M1 plan, "Contract-list changes" item 3). Its layer is the root package, which every
+	 * package may use, so without this row {@code saml}, {@code scim} and {@code json} could reach it too.
+	 * {@code internal.jose} is not listed: it holds only pure, I/O-free JOSE code, and the JWKS fetch and its cache
+	 * live in {@code jose}, next to {@code RemoteJsonWebKeySource} (G8-11). The row bans only this package; other I/O is
+	 * left to review.
 	 */
 	static final Map<String, Set<String>> RESTRICTED_INTERNAL_PACKAGES = Map.of(
 			INTERNAL + ".xml", Set.of(SAML),
 			INTERNAL + ".oauth", Set.of(OAUTH, OIDC),
-			INTERNAL + ".http", Set.of(JOSE, OAUTH, OIDC, INTERNAL + ".jose", INTERNAL + ".oauth"));
+			INTERNAL + ".http", Set.of(JOSE, OAUTH, OIDC, INTERNAL + ".oauth"));
 
 	@Test
 	void mainSourcesRespectPackageDependencyRules() throws IOException {

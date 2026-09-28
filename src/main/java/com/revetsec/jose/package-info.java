@@ -18,7 +18,10 @@
  * JSON Object Signing and Encryption: JWS signature verification, JSON Web Keys and key sets, and JWT claims
  * validation (RFC 7515, RFC 7517, RFC 7519).
  * <p>
- * It depends only on {@code com.revetsec.json} and the root package.
+ * {@link com.revetsec.jose.JwtValidator} validates tokens with keys from a
+ * {@link com.revetsec.jose.StaticJsonWebKeySource} or a {@link com.revetsec.jose.RemoteJsonWebKeySource}.
+ * <p>
+ * It depends only on {@code com.revetsec.json} and the root package, apart from Revetsec's internal packages.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */

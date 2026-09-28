@@ -43,11 +43,15 @@ import java.time.Duration;
  * would throw {@link ExceptionInInitializerError} on first use and {@link NoClassDefFoundError} on every use after
  * that. Only a {@link VirtualMachineError} propagates; {@link HttpExchange} then maps the class's later
  * {@link LinkageError}s to the same kind. The failure itself is not kept: its message could name local paths.
+ * <p>
+ * The class is public only for its test hook, {@link #heldHttpClientForTests()} (M2 plan, G8-4; exit criterion 17):
+ * a test in another package shows through it that components share the one default client. Everything else stays
+ * package-private, and only {@link HttpExchange} obtains the client.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
-final class DefaultHttpClientHolder {
+public final class DefaultHttpClientHolder {
 	/**
 	 * The default client's connect timeout (D36).
 	 */
@@ -81,12 +85,14 @@ final class DefaultHttpClientHolder {
 	}
 
 	/**
-	 * Test hook (exit criterion 14): the held client, so a test can show that two components share one.
+	 * Test hook, public by necessity (M1 exit criterion 14; M2 exit criterion 17): the held client, so a test can show
+	 * that two components share one. Calling it initializes the holder, and so creates the default client, like a
+	 * component's first request. Production code never calls it.
 	 *
 	 * @return the held client, or {@code null} if it could not be created
 	 */
 	@Nullable
-	static HttpClient heldHttpClientForTests() {
+	public static HttpClient heldHttpClientForTests() {
 		return HTTP_CLIENT;
 	}
 
