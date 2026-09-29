@@ -1,0 +1,15 @@
+HTTP/1.1 200 OK
+Cache-Control: max-age=86400, private
+Content-Type: application/json; charset=utf-8
+Strict-Transport-Security: max-age=31536000; includeSubDomains
+X-Content-Type-Options: nosniff
+Access-Control-Allow-Origin: *
+Access-Control-Allow-Methods: GET, OPTIONS
+P3P: CP="DSP CUR OTPi IND OTRi ONL FIN"
+x-ms-request-id: acabce08-9264-4b5b-b2a2-4eb5ada22000
+x-ms-ests-server: 2.1.25283.9 - NCUS ProdSlices
+x-ms-srs: 1.P
+Content-Security-Policy-Report-Only: object-src 'none'; base-uri 'self'; script-src 'self' 'nonce-FBC8RXbJ7TN6d2j8zerG1g' 'unsafe-inline' 'unsafe-eval' https://*.msauth.net https://*.msftauth.net https://*.msftauthimages.net https://*.msauthimages.net https://*.msidentity.com https://*.microsoftonline-p.com https://*.microsoftazuread-sso.com https://*.azureedge.net https://*.outlook.com https://*.office.com https://*.office365.com https://*.microsoft.com https://*.bing.com 'report-sample'; report-uri https://csp.microsoft.com/report/ESTS-UX-All
+X-XSS-Protection: 0
+Date: Sun, 27 Sep 2026 14:06:57 GMT
+Content-Length: 7657

@@ -117,13 +117,27 @@ final class LimitsTests {
 		}
 
 		Assertions.assertEquals(constants, Limits.all());
-		Assertions.assertEquals(42, Limits.all().size());
+		Assertions.assertEquals(49, Limits.all().size());
 
 		Set<String> names = new HashSet<>();
 		for (Limit limit : Limits.all())
 			Assertions.assertTrue(names.add(limit.getName()), limit::getName);
 
 		Assertions.assertThrows(UnsupportedOperationException.class, () -> Limits.all().add(Limits.XML_DEPTH));
+	}
+
+	@Test
+	void discoveryLifetimeAndCooldownMustBeOrdered() {
+		Duration minimum = Duration.ofMinutes(1);
+		Duration fallback = Duration.ofMinutes(10);
+		Duration maximum = Duration.ofHours(6);
+		Limits.requireDiscoveryTimeToLiveOrder(minimum, fallback, maximum, Duration.ofSeconds(30));
+		Assertions.assertThrows(IllegalArgumentException.class, () ->
+				Limits.requireDiscoveryTimeToLiveOrder(fallback, minimum, maximum, Duration.ofSeconds(30)));
+		Assertions.assertThrows(IllegalArgumentException.class, () ->
+				Limits.requireDiscoveryTimeToLiveOrder(minimum, maximum, fallback, Duration.ofSeconds(30)));
+		Assertions.assertThrows(IllegalArgumentException.class, () ->
+				Limits.requireDiscoveryTimeToLiveOrder(minimum, fallback, maximum, Duration.ofMinutes(2)));
 	}
 
 	@Test

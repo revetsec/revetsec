@@ -22,6 +22,33 @@ import com.revetsec.OutboundUriPolicy;
 import com.revetsec.RevetsecException;
 import com.revetsec.SealingKey;
 import com.revetsec.StateSealer;
+import com.revetsec.oauth.AccessToken;
+import com.revetsec.oauth.AuthorizationErrorException;
+import com.revetsec.oauth.AuthorizationRedirect;
+import com.revetsec.oauth.AuthorizationRequestOptions;
+import com.revetsec.oauth.AuthorizationResponse;
+import com.revetsec.oauth.AuthorizationServerMetadata;
+import com.revetsec.oauth.ClientAuthentication;
+import com.revetsec.oauth.ClientCredentialsTokenSource;
+import com.revetsec.oauth.ClientSecretBasicEncoding;
+import com.revetsec.oauth.InMemoryPendingAuthorizationStore;
+import com.revetsec.oauth.IssuerParameterPolicy;
+import com.revetsec.oauth.OAuthClient;
+import com.revetsec.oauth.OAuthEndpoint;
+import com.revetsec.oauth.OAuthErrorResponseException;
+import com.revetsec.oauth.OAuthException;
+import com.revetsec.oauth.OAuthObserver;
+import com.revetsec.oauth.OAuthResponseException;
+import com.revetsec.oauth.OAuthTransportException;
+import com.revetsec.oauth.OAuthValidationException;
+import com.revetsec.oauth.PendingAuthorization;
+import com.revetsec.oauth.PendingAuthorizationSource;
+import com.revetsec.oauth.PendingAuthorizationStore;
+import com.revetsec.oauth.PendingAuthorizationStoreException;
+import com.revetsec.oauth.RefreshToken;
+import com.revetsec.oauth.TokenRequestOptions;
+import com.revetsec.oauth.TokenResponse;
+import com.revetsec.oauth.TokenTypeHint;
 import com.revetsec.json.JsonArray;
 import com.revetsec.json.JsonBoolean;
 import com.revetsec.json.JsonNull;
@@ -85,8 +112,8 @@ import java.util.jar.Manifest;
  * declares {@code Automatic-Module-Name: com.revetsec}, and the module system resolves it under that name.
  * <p>
  * It also calls the public API of the exported packages that hold types, {@code com.revetsec},
- * {@code com.revetsec.json} and {@code com.revetsec.jose}, and uses every public type in them, nested builders and
- * enums included. The JOSE calls validate a JWT the consumer signs itself with a fresh RSA key, against a key set it
+ * {@code com.revetsec.json}, {@code com.revetsec.jose} and {@code com.revetsec.oauth}, and uses every public type in
+ * them, nested builders and enums included. The JOSE calls validate a JWT the consumer signs itself with a fresh RSA key, against a key set it
  * writes, refuse forged, unsigned, malformed and unsupported tokens, and build a remote key source without any I/O.
  * Both consumers compile it with every lint warning an error and with nothing but the Revetsec JAR on the class path,
  * so a build proves that the published signatures resolve without Revetsec's provided-scope annotation JARs
@@ -159,6 +186,7 @@ public final class PackagedConsumer {
 		exerciseStateSealer(json, calledApi);
 		exerciseOutboundUriPolicy(calledApi);
 		exerciseJose(calledApi);
+		exerciseOAuth(calledApi);
 
 		System.out.println("jar=" + jar);
 		System.out.println("automatic-module-name=" + automaticModuleName);
@@ -418,6 +446,56 @@ public final class PackagedConsumer {
 		require(observer.unexpected.isEmpty(), "no key set was fetched or skipped: " + observer.unexpected);
 
 		calledApi.add("com.revetsec.jose");
+	}
+
+	/** Builds a static OAuth client and begins a PKCE flow without contacting an authorization server. */
+	private static void exerciseOAuth(List<String> calledApi) {
+		AuthorizationServerMetadata.Builder metadataBuilder = AuthorizationServerMetadata.withIssuer(ISSUER);
+		AuthorizationServerMetadata metadata = metadataBuilder
+				.authorizationEndpoint(URI.create(ISSUER + "/authorize"))
+				.tokenEndpoint(URI.create(ISSUER + "/token")).build();
+		ClientAuthentication authentication = ClientAuthentication.fromClientSecretBasic("consumer-secret",
+				ClientSecretBasicEncoding.FORM_URLENCODED);
+		OAuthClient.Builder clientBuilder = OAuthClient.withAuthorizationServerMetadata(metadata);
+		OAuthClient client = clientBuilder.clientId("packaged-consumer").clientAuthentication(authentication)
+				.redirectUri(URI.create("https://consumer.example/callback"))
+				.issuerParameterPolicy(IssuerParameterPolicy.METADATA_DRIVEN).observer(OAuthObserver.disabledInstance())
+				.build();
+		AuthorizationRequestOptions.Builder requestBuilder = AuthorizationRequestOptions.builder();
+		AuthorizationRequestOptions options = requestBuilder.scopes(Set.of("read"))
+				.responseMode(AuthorizationRequestOptions.ResponseMode.QUERY).build();
+		AuthorizationRedirect redirect = client.beginAuthorization(options);
+		PendingAuthorization pending = redirect.getPendingAuthorization();
+		require(redirect.getAuthorizationUri().getRawQuery().contains("code_challenge_method=S256")
+				&& pending.getIssuer().equals(ISSUER) && pending.getRequestedScopes().equals(Set.of("read"))
+				&& !redirect.toString().contains("code_challenge"), "OAuth begin uses PKCE and redacts pending state");
+		AuthorizationResponse response = AuthorizationResponse.fromQueryString("code=example&state=opaque");
+		require(response.getCode().equals(Optional.of("example")), "OAuth callback parser exposes the code");
+		TokenRequestOptions.Builder tokenBuilder = TokenRequestOptions.builder();
+		TokenRequestOptions tokenOptions = tokenBuilder.scopes(Set.of("read")).build();
+		require(tokenOptions.getScopes().equals(Optional.of(Set.of("read"))), "OAuth token scope override");
+		ClientCredentialsTokenSource.Builder sourceBuilder = ClientCredentialsTokenSource.withClient(client);
+		ClientCredentialsTokenSource source = sourceBuilder.build();
+		InMemoryPendingAuthorizationStore.Builder storeBuilder = InMemoryPendingAuthorizationStore.builder();
+		PendingAuthorizationStore store = storeBuilder.build();
+		require(source != null && store != null, "OAuth client-side sources build without I/O");
+
+		// Compiling against every exported type also checks signatures that this offline smoke cannot instantiate.
+		Class<?>[] exported = {AccessToken.class, AuthorizationErrorException.class, AuthorizationRedirect.class,
+				AuthorizationRequestOptions.class, AuthorizationRequestOptions.ResponseMode.class,
+				AuthorizationRequestOptions.Builder.class, AuthorizationResponse.class, AuthorizationServerMetadata.class,
+				AuthorizationServerMetadata.Builder.class, ClientAuthentication.class,
+				ClientCredentialsTokenSource.class, ClientCredentialsTokenSource.Builder.class,
+				ClientSecretBasicEncoding.class, InMemoryPendingAuthorizationStore.class,
+				InMemoryPendingAuthorizationStore.Builder.class, IssuerParameterPolicy.class, OAuthClient.class,
+				OAuthClient.Builder.class, OAuthEndpoint.class, OAuthErrorResponseException.class,
+				OAuthException.class, OAuthException.Reason.class, OAuthObserver.class, OAuthResponseException.class,
+				OAuthTransportException.class, OAuthValidationException.class, PendingAuthorization.class,
+				PendingAuthorizationSource.class, PendingAuthorizationStore.class, PendingAuthorizationStoreException.class,
+				RefreshToken.class, TokenRequestOptions.class, TokenRequestOptions.Builder.class, TokenResponse.class,
+				TokenTypeHint.class};
+		require(exported.length == 35, "all OAuth exported types compile from the packaged JAR");
+		calledApi.add("com.revetsec.oauth");
 	}
 
 	private static JoseException refusal(JwtValidator validator, String token) {

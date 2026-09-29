@@ -19,7 +19,8 @@
 	install and deploy are skipped below. It compiles Revetsec's main sources directly
 	(../src/main/java), plus the core test tree (../src/test/java, ../src/test/resources) so that
 	fuzz targets can reuse test helpers and fixtures. The core test tree is filtered: Failsafe ITs
-	(**/*IT.java) and the Testcontainers-backed scripted-IdP classes (com/revetsec/saml/ScriptedIdp*)
+	(**/*IT.java), the Testcontainers-backed scripted-IdP classes (com/revetsec/saml/ScriptedIdp*)
+	and the Netty-backed HTTP/2 harness and its tests
 	are excluded, so nothing here needs Docker or Testcontainers.
 
 	Replay every seed, the module's own and the corpora mapped in below (Jazzer regression mode):
@@ -374,6 +375,8 @@
 						<!-- ScriptedIdpContainer, ScriptedIdpClient, ScriptedIdpSpecs (plan §14.10)
 							 need Testcontainers, which this module does not declare. -->
 						<testExclude>com/revetsec/saml/ScriptedIdp*</testExclude>
+						<testExclude>com/revetsec/testing/OAuthHttp2Server.java</testExclude>
+						<testExclude>com/revetsec/oauth/OAuthHttp2Tests.java</testExclude>
 					</testExcludes>
 				</configuration>
 			</plugin>

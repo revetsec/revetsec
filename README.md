@@ -4,7 +4,7 @@
 
 A zero-dependency Java library for OAuth 2.0 clients and resource servers, OpenID Connect relying parties, JOSE, SAML 2.0 service providers and SCIM 2.0 servers.
 
-**Revetsec is pre-release.** So far it verifies signed JWTs against JSON Web Key Sets; the OAuth, OpenID Connect, SAML and SCIM areas do not exist yet. This README describes what it is being built to do; see [Status](#status) for what exists.
+**Revetsec is pre-release.** It verifies signed JWTs against JSON Web Key Sets and includes an OAuth 2.0 client. OpenID Connect, SAML and SCIM are still being built; see [Status](#status) for what exists.
 
 Revetsec handles the application side of these protocols. It builds outbound requests, parses and validates what comes back, and hands your code a validated result or an exception. Your application keeps its own users, sessions, routes and storage.
 
@@ -136,11 +136,15 @@ try {
 
 Share one validator, and one key source, across threads. By default a token must be signed with RS256 and carry `iss`, `exp` and an expected audience, and its times are checked with 60 seconds of clock skew. `allowedAlgorithms` widens the algorithms (see [supported algorithms](docs/supported-algorithms.md)), and a `JoseObserver` receives each validation, key-set fetch and skipped key. When key-set URLs come from your tenants, see "JSON Web Key Sets" in [SECURITY.md](SECURITY.md).
 
+### OAuth client
+
+`OAuthClient` supports authorization code with PKCE S256, client credentials, refresh and revocation. It accepts static metadata or discovers an authorization server lazily. Browser completion checks the pending browser binding, state, callback route and issuer before token exchange. The [OAuth client guide](docs/oauth-client.md) covers cookie and store setup, concurrent replay, return destinations and the raw-token boundary.
+
 ### Status
 
 Revetsec is **pre-release**. The version is `1.0.0-SNAPSHOT`, and there is no compatibility promise before 1.0.0; see [COMPATIBILITY.md](COMPATIBILITY.md).
 
-The repository holds the build, contract tests, CI configuration and documents (milestone M0), the shared foundations (milestone M1) and JOSE (milestone M2). The foundations are the exception root and error categories, `StateSealer` for sealing short-lived state with key rotation, an outbound URI policy with two presets, and the JSON value model, plus internal parsers and a bounded HTTP helper that the protocol areas use. JOSE is `JwtValidator` with static and remote JSON Web Key Sets, as above. No OAuth, OpenID Connect, SAML or SCIM code exists yet.
+The repository holds the build, contract tests, CI configuration and documents (milestone M0), shared foundations (milestone M1), JOSE (milestone M2) and an OAuth client (milestone M3, still under verification). The foundations include `StateSealer`, an outbound URI policy, a JSON value model and bounded HTTP helper. JOSE has `JwtValidator` with static and remote JSON Web Key Sets. The OAuth client is described above. OpenID Connect, SAML, SCIM and OAuth resource-server code are not yet present.
 
 Revetsec has not been independently audited. Its security evidence is meant to be reproducible by anyone and will be listed in [`docs/`](docs/) as it is produced: conformance logs, the interop matrix, the threat model with its invariant-to-test map, review ledgers, penetration-test notes, and fuzz and mutation reports. So far the [threat model](docs/threat-model.md) maps the invariants of the foundations and JOSE to their tests, and [fuzz/README.md](fuzz/README.md) records local fuzzing runs and planted-defect checks for the fuzz targets; the rest does not exist yet.
 

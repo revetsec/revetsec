@@ -1,6 +1,6 @@
 name: CI
 
-# The M0 to M2 subset of plan §10.3. Jobs that start in a later milestone are listed at the end as
+# The M0 to M3 subset of plan §10.3. Jobs that start in a later milestone are listed at the end as
 # commented stubs, each naming the milestone it starts in.
 #
 # Every action is pinned to a full commit SHA (the trailing comment is the tag it was resolved from with
@@ -445,24 +445,63 @@ jobs:
       - name: Build Javadoc (doclint warnings are errors)
         run: mvn -B -ntp -Dmaven.javadoc.failOnWarnings=true -DskipTests verify
 
+  # Gating from M3. KeycloakOAuthIT starts the digest-pinned Keycloak image, imports the test-only realm and
+  # exercises confidential/public code flows, client credentials, refresh and revocation. Testcontainers owns
+  # container teardown; this ephemeral runner does not need the Ryuk sidecar.
+  integration:
+    name: Integration (Keycloak, JDK 17)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      TESTCONTAINERS_RYUK_DISABLED: 'true'
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Corretto 17
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: corretto
+          java-version: '17'
+          cache: maven
+
+      - name: Run the Keycloak integration tests
+        run: mvn -B -ntp -Pintegration -Dmaven.javadoc.skip=true verify
+
+      - name: Require executed integration cases and zero skips
+        run: |
+          python3 - <<'PY'
+          import glob
+          import sys
+          import xml.etree.ElementTree as ET
+
+          paths = glob.glob('target/failsafe-reports/TEST-*.xml')
+          suites = [ET.parse(path).getroot() for path in paths]
+          executed = sum(int(suite.attrib.get('tests', '0')) for suite in suites)
+          skipped = sum(int(suite.attrib.get('skipped', '0')) for suite in suites)
+          if executed < 2 or skipped:
+              sys.exit(f'Integration count is {executed}; skipped count is {skipped}')
+          print(f'Integration cases executed: {executed}; skipped: {skipped}')
+          PY
+
+      - name: Upload integration reports
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: integration-reports-${{ github.run_id }}-${{ github.run_attempt }}
+          path: target/failsafe-reports
+          if-no-files-found: warn
+          retention-days: 14
+
   # ---------------------------------------------------------------------------------------------------
   # Later milestones (plan §10.3). Uncomment and complete each job when its milestone starts.
   # "[inferred]" marks a start the plan does not fix explicitly.
   # ---------------------------------------------------------------------------------------------------
 
-  # integration: from M3 (Keycloak OAuth legs gating), M4 (OIDC), M5 (node-oidc-provider, at+jwt,
-  # introspection), M7/M8/M8b (scripted-IdP SAML signing, encryption, SLO). PR: one JDK on x86-64;
-  # nightly: all JDKs plus one ubuntu-24.04-arm leg. Images pinned by digest. A post-step fails on any
-  # skipped IT and on fewer *ScriptedIdpIT than interop/scripted-idp/it-floor.txt. No Docker = failure.
-  #
-  # integration:
-  #   name: Integration (JDK ${{ matrix.jdk }}, ${{ matrix.runner }})
-  #   runs-on: ${{ matrix.runner }}
-  #   steps:
-  #     - checkout; setup-java (corretto)
-  #     - build the scripted-IdP image as in scripted-idp-image (load: true, push: false, GHA cache)  # from M7
-  #     - run: mvn -B -ntp -Pintegration -Dmaven.javadoc.skip=true -Dscripted-idp.image="$SCRIPTED_IDP_IMAGE" verify
-  #     - run: fail on skipped tests or an IT count under the floor in target/failsafe-reports/TEST-*.xml
+  # From M4, extend integration with OIDC; from M5, add node-oidc-provider, at+jwt and introspection;
+  # from M7/M8/M8b, add scripted-IdP SAML signing, encryption and SLO, with its IT floor.
 
   # conformance: from M4. OIDF suite release-v5.3.1 (digest-pinned) through the conformance/ Java driver:
   # Basic, Config, Form Post and Refresh RP plans; oidcc-client-test-plan with private_key_jwt from M6.

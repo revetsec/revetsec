@@ -283,6 +283,19 @@ public final class Limits {
 	public static final Limit PENDING_STATE_LIFETIME = Limit.fromDurations("Pending-state lifetime",
 			Duration.ofMinutes(15), Duration.ofMinutes(1), Duration.ofMinutes(60));
 
+	/** Live entries in the one-node pending-authorization store: 1,024 [16, 65,536]. */
+	public static final Limit PENDING_AUTHORIZATION_STORE_ENTRIES = Limit.fromAmounts(
+			"Pending-authorization store entries", Unit.COUNT, 1_024, 16, 65_536);
+
+	/** Charged UTF-8 bytes in the one-node pending-authorization store: 4 MiB [64 KiB, 64 MiB]. */
+	public static final Limit PENDING_AUTHORIZATION_STORE_BYTES = Limit.fromAmounts(
+			"Pending-authorization store bytes", Unit.BYTES, 4L * 1_024 * 1_024,
+			64L * 1_024, 64L * 1_024 * 1_024);
+
+	/** UTF-8 bytes in one opaque pending record: 8 KiB [1 KiB, 64 KiB]. */
+	public static final Limit PENDING_AUTHORIZATION_RECORD_BYTES = Limit.fromAmounts(
+			"Pending-authorization record bytes", Unit.BYTES, 8 * 1_024, 1_024, 64 * 1_024);
+
 	/**
 	 * StateSealer's maximumSealedLength: 3,800 characters [1,024, 16,384]. Checked before any decoding.
 	 */
@@ -329,6 +342,24 @@ public final class Limits {
 	 */
 	public static final Limit JWKS_MAXIMUM_STALENESS = Limit.fromDurations("JWKS maximum staleness",
 			Duration.ofHours(12), Duration.ZERO, Duration.ofHours(24));
+
+	// OAuth authorization-server discovery (M3)
+
+	/** Minimum metadata cache lifetime: 1 min [30 s, 1 h]. */
+	public static final Limit DISCOVERY_MINIMUM_TIME_TO_LIVE = Limit.fromDurations(
+			"Discovery minimum time to live", Duration.ofMinutes(1), Duration.ofSeconds(30), Duration.ofHours(1));
+
+	/** Metadata cache lifetime without usable freshness headers: 10 min [30 s, 24 h]. */
+	public static final Limit DISCOVERY_DEFAULT_TIME_TO_LIVE = Limit.fromDurations(
+			"Discovery default time to live", Duration.ofMinutes(10), Duration.ofSeconds(30), Duration.ofHours(24));
+
+	/** Maximum metadata cache lifetime: 6 h [1 min, 24 h]. */
+	public static final Limit DISCOVERY_MAXIMUM_TIME_TO_LIVE = Limit.fromDurations(
+			"Discovery maximum time to live", Duration.ofHours(6), Duration.ofMinutes(1), Duration.ofHours(24));
+
+	/** Window for the outcome-independent two-flight discovery ceiling: 30 s [1 s, 10 min]. */
+	public static final Limit DISCOVERY_COOLDOWN = Limit.fromDurations(
+			"Discovery cooldown", Duration.ofSeconds(30), Duration.ofSeconds(1), Duration.ofMinutes(10));
 
 	// Client credentials (G5-3)
 
@@ -390,6 +421,9 @@ public final class Limits {
 			SCIM_FILTER_DEPTH,
 			SCIM_FILTER_NODES,
 			PENDING_STATE_LIFETIME,
+			PENDING_AUTHORIZATION_STORE_ENTRIES,
+			PENDING_AUTHORIZATION_STORE_BYTES,
+			PENDING_AUTHORIZATION_RECORD_BYTES,
 			STATE_SEALER_MAXIMUM_SEALED_LENGTH,
 			SEAL_LIFETIME,
 			JWKS_UNKNOWN_KEY_ID_COOLDOWN,
@@ -397,6 +431,10 @@ public final class Limits {
 			JWKS_DEFAULT_TIME_TO_LIVE,
 			JWKS_MAXIMUM_TIME_TO_LIVE,
 			JWKS_MAXIMUM_STALENESS,
+			DISCOVERY_MINIMUM_TIME_TO_LIVE,
+			DISCOVERY_DEFAULT_TIME_TO_LIVE,
+			DISCOVERY_MAXIMUM_TIME_TO_LIVE,
+			DISCOVERY_COOLDOWN,
 			CLIENT_CREDENTIALS_FALLBACK_CACHE_DURATION,
 			CLIENT_CREDENTIALS_MAXIMUM_CACHE_DURATION,
 			CLIENT_CREDENTIALS_RENEW_BEFORE);
@@ -461,12 +499,35 @@ public final class Limits {
 	 * @throws IllegalArgumentException if {@code unknownKeyIdCooldown > minimumTimeToLive}
 	 */
 	public static void requireJwksCooldownWithinMinimumTimeToLive(@NonNull Duration unknownKeyIdCooldown,
-																																@NonNull Duration minimumTimeToLive) {
+																												@NonNull Duration minimumTimeToLive) {
 		requireNonNull(unknownKeyIdCooldown);
 		requireNonNull(minimumTimeToLive);
 
 		if (unknownKeyIdCooldown.compareTo(minimumTimeToLive) > 0)
 			throw new IllegalArgumentException("JWKS unknown-kid cooldown must not exceed the JWKS minimum time to live.");
+	}
+
+	/**
+	 * Checks the discovery cache lifetime order and its two-attempt cooldown window.
+	 *
+	 * @param minimumTimeToLive the minimum cache lifetime
+	 * @param defaultTimeToLive the fallback cache lifetime
+	 * @param maximumTimeToLive the maximum cache lifetime
+	 * @param cooldown the discovery attempt window
+	 * @throws IllegalArgumentException unless minimum is at most default and maximum, and cooldown is at most minimum
+	 */
+	public static void requireDiscoveryTimeToLiveOrder(@NonNull Duration minimumTimeToLive,
+			@NonNull Duration defaultTimeToLive, @NonNull Duration maximumTimeToLive,
+			@NonNull Duration cooldown) {
+		requireNonNull(minimumTimeToLive);
+		requireNonNull(defaultTimeToLive);
+		requireNonNull(maximumTimeToLive);
+		requireNonNull(cooldown);
+		if (minimumTimeToLive.compareTo(defaultTimeToLive) > 0
+				|| defaultTimeToLive.compareTo(maximumTimeToLive) > 0)
+			throw new IllegalArgumentException("Discovery time to live must satisfy minimum <= default <= maximum.");
+		if (cooldown.compareTo(minimumTimeToLive) > 0)
+			throw new IllegalArgumentException("Discovery cooldown must not exceed minimum time to live.");
 	}
 
 	/**

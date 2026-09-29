@@ -269,6 +269,12 @@ final class FrozenLimitsTests {
 			// Pending-state lifetime (G5-6: default 10 -> 15 min).
 			durations("PENDING_STATE_LIFETIME", "Pending-state lifetime", Duration.ofMinutes(15), Duration.ofMinutes(1),
 					Duration.ofMinutes(60), ZERO_REJECTED),
+			amounts("PENDING_AUTHORIZATION_STORE_ENTRIES", "Pending-authorization store entries", Unit.COUNT,
+					1_024, 16, 65_536),
+			amounts("PENDING_AUTHORIZATION_STORE_BYTES", "Pending-authorization store bytes", Unit.BYTES,
+					4 * MIB, 64 * KIB, 64 * MIB),
+			amounts("PENDING_AUTHORIZATION_RECORD_BYTES", "Pending-authorization record bytes", Unit.BYTES,
+					8 * KIB, KIB, 64 * KIB),
 			// StateSealer maximum sealed length, in characters (G5-4: new row).
 			amounts("STATE_SEALER_MAXIMUM_SEALED_LENGTH", "StateSealer maximum sealed length", Unit.CHARACTERS, 3_800,
 					1_024, 16_384),
@@ -286,6 +292,15 @@ final class FrozenLimitsTests {
 					Duration.ofMinutes(1), Duration.ofHours(24), ZERO_REJECTED),
 			durations("JWKS_MAXIMUM_STALENESS", "JWKS maximum staleness", Duration.ofHours(12), Duration.ZERO,
 					Duration.ofHours(24), ZERO_ALLOWED),
+			// M3 gate 9/10: metadata discovery cache and attempt bounds.
+			durations("DISCOVERY_MINIMUM_TIME_TO_LIVE", "Discovery minimum time to live", Duration.ofMinutes(1),
+					Duration.ofSeconds(30), Duration.ofHours(1), ZERO_REJECTED),
+			durations("DISCOVERY_DEFAULT_TIME_TO_LIVE", "Discovery default time to live", Duration.ofMinutes(10),
+					Duration.ofSeconds(30), Duration.ofHours(24), ZERO_REJECTED),
+			durations("DISCOVERY_MAXIMUM_TIME_TO_LIVE", "Discovery maximum time to live", Duration.ofHours(6),
+					Duration.ofMinutes(1), Duration.ofHours(24), ZERO_REJECTED),
+			durations("DISCOVERY_COOLDOWN", "Discovery cooldown", Duration.ofSeconds(30),
+					Duration.ofSeconds(1), Duration.ofMinutes(10), ZERO_REJECTED),
 			// Client credentials fallback / maximum cache duration / renewBefore (G5-3: new rows).
 			durations("CLIENT_CREDENTIALS_FALLBACK_CACHE_DURATION", "Client-credentials fallback cache duration",
 					Duration.ofMinutes(5), Duration.ofSeconds(10), Duration.ofHours(1), ZERO_REJECTED),
@@ -305,7 +320,7 @@ final class FrozenLimitsTests {
 	@Test
 	void theRegistryHoldsExactlyTheApprovedRowsInOrder() throws IllegalAccessException {
 		List<String> approved = APPROVED_ROWS.stream().map(Row::getConstant).toList();
-		Assertions.assertEquals(42, approved.size(), "the plan's table has 42 rows: M1's 40 and G8-10's 2");
+		Assertions.assertEquals(49, approved.size(), "M3 adds seven rows to the previous 42");
 
 		Map<String, Limit> constants = constants();
 		IdentityHashMap<Limit, String> names = new IdentityHashMap<>();

@@ -1,6 +1,6 @@
 # Compatibility Modes
 
-**Status: two modes, both in JOSE.** Revetsec holds its foundations and JWT verification so far, and the modes below are the ones that exist. Each later mode is registered here when it lands, and the registry is complete before 1.0.0.
+**Status: JOSE and OAuth modes.** Revetsec holds its foundations, JWT verification and an OAuth client under M3 verification. The modes below are the ones that exist; the registry is complete before 1.0.0.
 
 A compatibility mode is a named, explicit relaxation that lets Revetsec work with a provider or a deployment that departs from a specification or from Revetsec's defaults. The rules for every mode:
 
@@ -28,10 +28,19 @@ Each entry gives the mode's name, protocol area, effect, conditions and safeguar
 
 ### `acknowledgeUnpatchedRuntime(true)`
 
-- **Where:** `RemoteJsonWebKeySource.Builder` (JOSE).
+- **Where:** `RemoteJsonWebKeySource.Builder` (JOSE) and `OAuthClient.Builder` (OAuth).
 - **Effect:** the source builds and fetches on a Java runtime below Revetsec's minimum for network I/O, 17.0.3 (18.0.1 on Java 18), whose TLS and certificate checks are exposed to CVE-2022-21449 (ECDSA signature verification). Without it, `build()` throws `IllegalStateException` on such a runtime.
-- **Safeguards:** while the runtime is below the minimum, the choice is reported to `JoseObserver.didUseUnpatchedRuntime(runtimeVersion)` when the source is built and on every fetch. On a runtime at or above the minimum, the setting changes nothing and nothing is reported. Revetsec's own ECDSA range check protects the tokens a validator verifies on every runtime; what the setting accepts is the runtime's own TLS. A `StaticJsonWebKeySource` does no I/O and never needs the setting.
-- **Tests:** `jose.RemoteJsonWebKeySourceBuilderTests.theRuntimeFloorIsEnforcedAndAnAcknowledgmentIsObserved` (17.0.2, 18, 17.0.2.0.1 and 17-ea each refused unless acknowledged, and reported at build and on every fetch) and `aRuntimeAtOrAboveTheFloorIsNeverReported`.
+- **Safeguards:** while the runtime is below the minimum, the choice is reported to `JoseObserver.didUseUnpatchedRuntime(runtimeVersion)` when a key source is built and on every fetch, or when an `OAuthClient` is built. On a runtime at or above the minimum, the setting changes nothing and nothing is reported. Revetsec's own ECDSA range check protects the tokens a validator verifies on every runtime; what the setting accepts is the runtime's own TLS. A `StaticJsonWebKeySource` does no I/O and never needs the setting.
+- **Tests:** `jose.RemoteJsonWebKeySourceBuilderTests.theRuntimeFloorIsEnforcedAndAnAcknowledgmentIsObserved` (17.0.2, 18, 17.0.2.0.1 and 17-ea each refused unless acknowledged, and reported at build and on every fetch), `aRuntimeAtOrAboveTheFloorIsNeverReported`, and `oauth.OAuthClientRuntimeFloorTests` (the Java 18.0.0 release is represented by `Runtime.Version.parse("18")`).
+- **Added in:** 1.0.0 (unreleased).
+
+### `ClientSecretBasicEncoding.UNENCODED`
+
+- **Where:** `ClientAuthentication.fromClientSecretBasic(secret, encoding)` (OAuth).
+- **Effect:** the client ID and secret are joined with `:` as supplied before Base64, instead of each being form-encoded as RFC 6749 Appendix B requires. It exists for an explicitly configured provider that expects these bytes. It cannot place a secret in the request URI, and no second client-authentication method is added.
+- **Risk:** some credentials become ambiguous to a provider parser, especially a client ID containing `:`. Use `FORM_URLENCODED`, the default, unless provider evidence requires the alternative.
+- **Safeguards:** the mode is selected per `ClientAuthentication` instance. `OAuthObserver.didUseUnencodedBasic()` is called when its client is built and on every token or revocation request that uses it, with no credential value.
+- **Tests:** `oauth.ClientAuthenticationTests.explicitUnencodedCompatibilityChangesBytes`, `unencodedBasicIsObservedAtBuildAndUse`, and `basicFormEncodesBothFieldsBeforeJoining` (default mode).
 - **Added in:** 1.0.0 (unreleased).
 
 ### Settings that are not compatibility modes

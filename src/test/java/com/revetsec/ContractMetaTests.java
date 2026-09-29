@@ -432,6 +432,8 @@ final class ContractMetaTests {
 				30, 31, 32);
 		expect(expected, "constant-time-comparison", "com/revetsec/StateSealer.java", 24);
 		expect(expected, "constant-time-comparison", "com/revetsec/SealingKey.java", 24);
+		expect(expected, "constant-time-comparison", "com/revetsec/oauth/PendingAuthorizationResolver.java", 22);
+		expect(expected, "byte-comparison", "com/revetsec/oauth/PendingAuthorizationResolver.java", 23);
 		// G7-7: scim and internal.json.
 		expect(expected, "ascii-case-fold", "com/revetsec/scim/CaseFoldFixture.java", 26, 27, 28, 29, 30, 31, 32);
 		expect(expected, "ascii-case-fold", "com/revetsec/internal/json/JsonCaseFoldFixture.java", 19, 27, 28);
@@ -550,6 +552,9 @@ final class ContractMetaTests {
 
 		assertReported(violations, "byte-comparison com/revetsec/internal/jose/ByteComparisonFixture.java:29: compare "
 				+ "bytes through internal.crypto.ConstantTime");
+		assertReported(violations, "byte-comparison com/revetsec/oauth/PendingAuthorizationResolver.java:23: compare "
+				+ "bytes through internal.crypto.ConstantTime");
+		assertNotReported(violations, "PublicIdentifierComparisonFixture");
 		assertReported(violations, "ascii-case-fold com/revetsec/internal/jose/TypeHeaderFixture.java:25: fold case "
 				+ "with internal.json.AsciiCase");
 		assertReported(violations, "jca-provider-argument com/revetsec/internal/jose/ProviderArgumentFixture.java:36: "

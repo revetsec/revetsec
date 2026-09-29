@@ -1,0 +1,19 @@
+Captured 2026-09-27 by a read-only GET of Microsoft's public, unauthenticated metadata endpoints (no account, no token).
+Tenant 72f988bf-86f1-41af-91ab-2d7cd011db47 is Microsoft's own public tenant, used only as an example of a tenant-specific key set.
+
+common-v1-keys.json  Date: Sun, 27 Sep 2026 14:06:56 GMT
+common-v2-keys.json  Date: Sun, 27 Sep 2026 14:06:55 GMT
+common-v2-openid.json  Date: Sun, 27 Sep 2026 14:06:55 GMT
+orgs-v2-keys.json  Date: Sun, 27 Sep 2026 14:06:55 GMT
+tenant-v1-keys.json  Date: Sun, 27 Sep 2026 14:06:57 GMT
+tenant-v2-keys.json  Date: Sun, 27 Sep 2026 14:06:56 GMT
+tenant-v2-openid.json  Date: Sun, 27 Sep 2026 14:06:56 GMT
+
+URLs fetched (HTTP GET, no authentication):
+common-v2-openid.json  https://login.microsoftonline.com/common/v2.0/.well-known/openid-configuration
+common-v2-keys.json    https://login.microsoftonline.com/common/discovery/v2.0/keys
+orgs-v2-keys.json      https://login.microsoftonline.com/organizations/discovery/v2.0/keys
+tenant-v2-openid.json  https://login.microsoftonline.com/72f988bf-86f1-41af-91ab-2d7cd011db47/v2.0/.well-known/openid-configuration
+tenant-v2-keys.json    https://login.microsoftonline.com/72f988bf-86f1-41af-91ab-2d7cd011db47/discovery/v2.0/keys
+common-v1-keys.json    https://login.microsoftonline.com/common/discovery/keys
+tenant-v1-keys.json    https://login.microsoftonline.com/72f988bf-86f1-41af-91ab-2d7cd011db47/discovery/keys

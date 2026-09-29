@@ -1,0 +1,2 @@
+Captured 2026-09-28 by a read-only, unauthenticated GET. Cookies are not saved.
+openid-configuration.json  https://accounts.google.com/.well-known/openid-configuration  final=https://accounts.google.com/.well-known/openid-configuration  Date: Mon, 28 Sep 2026 23:48:47 GMT

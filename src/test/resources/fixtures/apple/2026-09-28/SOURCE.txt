@@ -1,0 +1,2 @@
+Captured 2026-09-28 by a read-only, unauthenticated GET. Cookies are not saved.
+openid-configuration.json  https://appleid.apple.com/.well-known/openid-configuration  final=https://appleid.apple.com/.well-known/openid-configuration  Date: Mon, 28 Sep 2026 23:55:16 GMT

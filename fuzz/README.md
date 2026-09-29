@@ -10,8 +10,9 @@ The module compiles Revetsec's sources directly, the same way Soklet's `fuzz/` d
 - `../src/main/java` as main sources;
 - `../src/test/java` and `../src/test/resources` as test sources and resources, so targets can
   reuse test helpers, fixtures and (from M7) the SAML mutator. Two groups of files are left out:
-  Failsafe integration tests (`**/*IT.java`) and the Testcontainers-backed scripted-IdP classes
-  (`com/revetsec/saml/ScriptedIdp*`). Nothing here needs Docker or Testcontainers.
+  Failsafe integration tests (`**/*IT.java`), the Testcontainers-backed scripted-IdP classes
+  (`com/revetsec/saml/ScriptedIdp*`), and the Netty-backed HTTP/2 harness and tests. Nothing here
+  needs Docker, Testcontainers or Netty.
 
 `build-helper-maven-plugin` cannot filter the test sources it adds, so the compiler's
 `testExcludes` does the filtering. The excluded files stay on javac's source path. If an included
@@ -42,8 +43,8 @@ and a run can fail before any input executes.
 
 M1 deleted the M0 placeholder (`PlaceholderFuzzTests`, which exercised no Revetsec code) and added
 six classes with twelve `@FuzzTest` methods. M2 added five classes with nine methods, for the JOSE
-layer, the fixed-length ECDSA path and the key-set cache lifetime, so there are now eleven classes
-and twenty-one methods. Each method is one ClusterFuzzLite target, named
+layer, the fixed-length ECDSA path and the key-set cache lifetime. M3 added four OAuth input targets,
+so there are now twelve classes and twenty-five methods. Each method is one ClusterFuzzLite target, named
 `<SimpleClassName>_<method>`.
 
 | Class (package) | Method | Input | What it checks |
@@ -69,6 +70,10 @@ and twenty-one methods. Each method is one ClusterFuzzLite target, named
 | `EcdsaFuzzTests` (`internal.crypto`) | `shapeCheckAndDerEncodingAgreeWithTheRangeRuleAndAnX690Reader` | signature octets | For each curve, `EcdsaSignatures.findShapeFailure` gives RFC 7518 section 3.4's verdict (the exact length, then `1 <= r, s <= n - 1` over the curve orders the JDK names). `toDer` refuses a signature of the wrong length and otherwise gives a minimal DER `SEQUENCE` that an X.690 reader written here reads back to `r` and `s`. `SignatureVerifier.verifyEcdsa` decides the shape before it looks at the key (G8-3, CVE-2022-21449). |
 | | `verdictsAgreeWithTheJdksFixedLengthEngine` | `FuzzedDataProvider` | `SignatureVerifier.verifyEcdsa` is `VALID` exactly when the JDK's fixed-length engine (`SHAxxxwithECDSAinP1363Format`, which the main code never uses) accepts a signature of the exact length with `r` and `s` in range, under a key on the curve. Signatures come from the fuzzer, or are signed here and damaged: `r` or `s` set to 0, 1, `n - 1`, `n`, `n + 1`, the field prime or all ones, the high-S twin (which is valid), swapped halves, a byte cut or added, halves padded to another curve's length, or the DER form. Curve and hash are chosen separately. |
 | `CacheLifetimeFuzzTests` (`internal.http`) | `timeToLiveIsTotalClampedAndAgreesWithAnRfc9111Oracle` | header lines | `CacheLifetime.timeToLive` never throws, stays within its bounds, and equals an oracle for its RFC 9111 subset (M2-8 "TTL": list splitting with quoted strings, the `cache-directive` grammar, `no-store`, `no-cache`, `max-age` and its 2<sup>31</sup> cap, `Expires` minus `Date`, `Age`) for three receipt times and three sets of bounds. `HttpDate.parse` and `parseSingleField` agree with a regular-expression reading of RFC 9110 section 5.6.7's three forms and its two-digit-year rule. |
+| `OAuthFuzzTests` (`oauth`) | `callbackKeepsSingletonsAndRedactsInput` | callback query bytes | An accepted callback has at most one of each protocol singleton, never both code and error, and redacts its input; malformed input yields a typed fixed-reason exception. |
+| | `tokenJsonKeepsSecretsOutOfGenericMembers` | token JSON bytes | An accepted access token is printable ASCII, and token members never enter the generic JSON view; malformed or error bodies yield typed exceptions. |
+| | `metadataRequiresExactIssuer` | metadata JSON bytes | An accepted document retains the configured issuer exactly; malformed or mismatched documents yield typed exceptions. Endpoint URI safety is checked when the client loads the document. |
+| | `formBodyRoundTripsUnicodeAndReservedCharacters` | form value bytes | The OAuth writer and query decoder preserve arbitrary Latin-1 code points through UTF-8 form encoding without emitting raw line breaks. |
 
 ### Invariants shared by every target
 
@@ -745,4 +750,3 @@ The same offline build was run on 2026-09-28 with the twenty-one M2 targets:
   and 20-second `run_fuzzer` runs of the two JwtValidator targets executed 71,249 and 12,336
   inputs and found nothing. libFuzzer counted 238 seeds for the first of them, two fewer than its
   zip holds: the two it left out are empty, the `jws` values of Wycheproof's JWS tcIds 13 and 30.
-

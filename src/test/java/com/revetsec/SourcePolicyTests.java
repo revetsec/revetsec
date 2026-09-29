@@ -99,9 +99,10 @@ import java.util.stream.Collectors;
  * <ul>
  *   <li>{@code constant-time-comparison} applies where secrets and key material are handled: {@code internal.crypto},
  *   which holds the sealer's keys and sealed state, HMAC tags and the signature and public-key helpers that JOSE and
- *   SAML share, and {@code StateSealer.java} and {@code SealingKey.java};</li>
- *   <li>{@code byte-comparison} applies to {@code internal.jose}, where most comparisons are of public values, so
- *   {@code String} equality stays allowed and only byte comparisons are confined to {@code ConstantTime};</li>
+ *   SAML share, {@code StateSealer.java}, {@code SealingKey.java}, and OAuth's
+ *   {@code PendingAuthorizationResolver.java}, which checks state and the browser-binding digest;</li>
+ *   <li>{@code byte-comparison} applies to {@code internal.jose} and {@code oauth}, where most string comparisons
+ *   are of public identifiers, so only byte comparisons are confined to {@code ConstantTime};</li>
  *   <li>{@code ascii-case-fold} applies to {@code scim}, {@code internal.json} and {@code internal.jose} (the
  *   {@code typ} media type, M2-4);</li>
  *   <li>{@code jca-provider-argument} applies to {@code internal.jose} and {@code internal.crypto};</li>
@@ -217,12 +218,13 @@ final class SourcePolicyTests {
 	private static final String INTERNAL_ENCODING = "com/revetsec/internal/encoding/";
 	private static final String SAML = "com/revetsec/saml/";
 	private static final String SCIM = "com/revetsec/scim/";
+	private static final String OAUTH = "com/revetsec/oauth/";
 
 	/**
 	 * The files outside {@code internal.crypto} that hold sealing keys or open sealed state (R10).
 	 */
 	private static final Set<String> SEALER_FILES = Set.of("com/revetsec/StateSealer.java",
-			"com/revetsec/SealingKey.java");
+			"com/revetsec/SealingKey.java", OAUTH + "PendingAuthorizationResolver.java");
 
 	/**
 	 * What {@code p1363-signature-name} looks for in a string constant's upper-case form: the suffix of SunEC's
@@ -495,7 +497,7 @@ final class SourcePolicyTests {
 							+ "signature helpers (EcdsaSignatures, EcCurve, EcPublicKeys, RsaPublicKeys, "
 							+ "Ed25519PublicKeys and SignatureVerifier) may also range-check public values with "
 							+ "BigInteger.compareTo (R10, M2-7)"),
-			new Rule(BYTE_COMPARISON, List.of(), path -> path.startsWith(INTERNAL_JOSE),
+			new Rule(BYTE_COMPARISON, List.of(), path -> path.startsWith(INTERNAL_JOSE) || path.startsWith(OAUTH),
 					"compare bytes through internal.crypto.ConstantTime: Arrays and ByteBuffer comparisons return at "
 							+ "the first difference, and ConstantTime is the one caller of MessageDigest.isEqual; String "
 							+ "equality on public JOSE values stays allowed (R10, M2-10)"),
