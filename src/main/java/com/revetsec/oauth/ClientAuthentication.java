@@ -16,6 +16,10 @@
 
 package com.revetsec.oauth;
 
+import com.revetsec.internal.encoding.StrictUtf8;
+import com.revetsec.jose.JwsAlgorithm;
+import java.util.Set;
+
 import com.revetsec.internal.encoding.EncodingException;
 import com.revetsec.internal.encoding.FormUrlEncoding;
 import org.jspecify.annotations.NonNull;
@@ -117,21 +121,44 @@ public final class ClientAuthentication {
 		return this.method == Method.BASIC && this.encoding == ClientSecretBasicEncoding.UNENCODED;
 	}
 
+	void checkHmac(Set<JwsAlgorithm> algorithms) {
+		if (algorithms.isEmpty()) return;
+		if (isPublicClient()) throw new IllegalArgumentException("HMAC ID tokens require confidential client authentication.");
+		checkHmacSecret(readSecret(), algorithms);
+	}
+	private String readSecret() {
+		try { return requireSecret(requireNonNull(this.secretSupplier).get()); }
+		catch (RuntimeException unavailable) { throw new IllegalArgumentException("The client secret is unavailable."); }
+	}
+	private static void checkHmacSecret(String secret, Set<JwsAlgorithm> algorithms) {
+		if (algorithms.isEmpty()) return;
+		byte[] bytes;
+		try { bytes = StrictUtf8.encode(secret); }
+		catch (EncodingException malformed) { throw new IllegalArgumentException("The OIDC client secret contains invalid text."); }
+		try {
+			for (JwsAlgorithm algorithm : algorithms) {
+				int minimum = switch (algorithm) { case HS256 -> 32; case HS384 -> 48; case HS512 -> 64;
+					default -> throw new IllegalArgumentException("Only HMAC algorithms use a client secret."); };
+				if (bytes.length < minimum) throw new IllegalArgumentException("The OIDC client secret is shorter than an allowed HMAC hash.");
+			}
+		} finally { Arrays.fill(bytes, (byte) 0); }
+	}
 	void apply(String clientId, Map<String, String> headers, Map<String, String> form) {
+		applyForOidc(clientId, headers, form, Set.of());
+	}
+	@Nullable String applyForOidc(String clientId, Map<String, String> headers, Map<String, String> form,
+			Set<JwsAlgorithm> hmacAlgorithms) {
 		if (this.method == Method.NONE) {
 			form.put("client_id", clientId);
-			return;
+			if (!hmacAlgorithms.isEmpty()) throw new IllegalArgumentException("HMAC ID tokens require confidential client authentication.");
+			return null;
 		}
-		String secret;
-		try {
-			secret = requireSecret(requireNonNull(this.secretSupplier).get());
-		} catch (RuntimeException supplierFailure) {
-			throw new IllegalArgumentException("The client secret is unavailable.");
-		}
+		String secret = readSecret();
+		checkHmacSecret(secret, hmacAlgorithms);
 		if (this.method == Method.POST) {
 			form.put("client_id", clientId);
 			form.put("client_secret", secret);
-			return;
+			return secret;
 		}
 		try {
 			String idPart = this.encoding == ClientSecretBasicEncoding.FORM_URLENCODED
@@ -148,6 +175,7 @@ public final class ClientAuthentication {
 		} catch (EncodingException exception) {
 			throw new IllegalArgumentException("A client identifier or secret contains invalid text.");
 		}
+		return secret;
 	}
 
 	private static String requireSecret(String value) {

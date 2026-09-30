@@ -49,6 +49,18 @@ import com.revetsec.oauth.RefreshToken;
 import com.revetsec.oauth.TokenRequestOptions;
 import com.revetsec.oauth.TokenResponse;
 import com.revetsec.oauth.TokenTypeHint;
+import com.revetsec.oidc.IdToken;
+import com.revetsec.oidc.OidcAuthentication;
+import com.revetsec.oidc.OidcAuthenticationOptions;
+import com.revetsec.oidc.OidcClient;
+import com.revetsec.oidc.OidcCompatibilityMode;
+import com.revetsec.oidc.OidcException;
+import com.revetsec.oidc.OidcObserver;
+import com.revetsec.oidc.OidcProviderMetadata;
+import com.revetsec.oidc.OidcSessionReference;
+import com.revetsec.oidc.OidcUserInfo;
+import com.revetsec.oidc.OidcValidationException;
+import com.revetsec.oidc.OidcRefreshResult;
 import com.revetsec.json.JsonArray;
 import com.revetsec.json.JsonBoolean;
 import com.revetsec.json.JsonNull;
@@ -112,7 +124,7 @@ import java.util.jar.Manifest;
  * declares {@code Automatic-Module-Name: com.revetsec}, and the module system resolves it under that name.
  * <p>
  * It also calls the public API of the exported packages that hold types, {@code com.revetsec},
- * {@code com.revetsec.json}, {@code com.revetsec.jose} and {@code com.revetsec.oauth}, and uses every public type in
+ * {@code com.revetsec.json}, {@code com.revetsec.jose}, {@code com.revetsec.oauth} and {@code com.revetsec.oidc}, and uses every public type in
  * them, nested builders and enums included. The JOSE calls validate a JWT the consumer signs itself with a fresh RSA key, against a key set it
  * writes, refuse forged, unsigned, malformed and unsupported tokens, and build a remote key source without any I/O.
  * Both consumers compile it with every lint warning an error and with nothing but the Revetsec JAR on the class path,
@@ -187,6 +199,7 @@ public final class PackagedConsumer {
 		exerciseOutboundUriPolicy(calledApi);
 		exerciseJose(calledApi);
 		exerciseOAuth(calledApi);
+		exerciseOidc(calledApi);
 
 		System.out.println("jar=" + jar);
 		System.out.println("automatic-module-name=" + automaticModuleName);
@@ -496,6 +509,54 @@ public final class PackagedConsumer {
 				TokenTypeHint.class};
 		require(exported.length == 35, "all OAuth exported types compile from the packaged JAR");
 		calledApi.add("com.revetsec.oauth");
+	}
+
+	/** Exercises OIDC configuration, pending requests and reference storage without contacting a provider. */
+	private static void exerciseOidc(List<String> calledApi) throws Exception {
+		OidcProviderMetadata.Builder metadataBuilder = OidcProviderMetadata.withIssuer(ISSUER);
+		OidcProviderMetadata metadata = metadataBuilder.authorizationEndpoint(URI.create(ISSUER + "/authorize"))
+				.tokenEndpoint(URI.create(ISSUER + "/token")).jwksUri(URI.create(ISSUER + "/keys"))
+				.userInfoEndpoint(URI.create(ISSUER + "/userinfo")).userInfoSigningAlgValuesSupported(Set.of("RS256")).build();
+		OidcObserver observer = OidcObserver.disabledInstance();
+		OidcClient.Builder clientBuilder = OidcClient.withProviderMetadata(metadata);
+		OidcClient client = clientBuilder.clientId(AUDIENCE).redirectUri(URI.create("https://consumer.example/callback"))
+				.clock(Clock.fixed(NOW, ZoneOffset.UTC)).compatibility(Set.of()).observer(observer).userInfoSignedResponseAlgorithm(JwsAlgorithm.RS256).build();
+		OidcAuthenticationOptions.Builder optionsBuilder = OidcAuthenticationOptions.builder();
+		OidcAuthenticationOptions options = optionsBuilder.scopes(Set.of("email")).maxAge(Duration.ZERO)
+				.responseMode(AuthorizationRequestOptions.ResponseMode.FORM_POST).build();
+		AuthorizationRedirect redirect = client.beginAuthentication(options);
+		require(redirect.getPendingAuthorization().getRequestedScopes().equals(Set.of("openid", "email"))
+				&& redirect.getAuthorizationUri().getRawQuery().contains("response_mode=form_post")
+				&& redirect.getAuthorizationUri().getRawQuery().contains("max_age=0"), "OIDC begin binds options and adds openid");
+		require(metadata.getUserInfoSigningAlgValuesSupported().equals(Optional.of(Set.of("RS256"))), "OIDC UserInfo capabilities");
+
+		JsonObject original = JsonObject.builder().put("iss", ISSUER).put("sub", "consumer-session")
+				.put("aud", AUDIENCE).put("iat", NOW.getEpochSecond()).put("sid", "consumer-sid").build();
+		String nonceDigest = BASE64URL.encodeToString(MessageDigest.getInstance("SHA-256").digest("TEST-ONLY-nonce".getBytes(StandardCharsets.UTF_8)));
+		String storage = JsonObject.builder().put("v", 1L).put("client_id", AUDIENCE).put("claims", original)
+				.put("nonce_digest", nonceDigest).build().toJson();
+		OidcSessionReference reference = OidcSessionReference.fromSerializedForm(storage);
+		byte[] keyBytes = new byte[32]; new SecureRandom().nextBytes(keyBytes);
+		StateSealer sealer = StateSealer.withActiveKey(SealingKey.fromBase64("oidc-consumer", Base64.getEncoder().encodeToString(keyBytes)))
+				.clock(Clock.fixed(NOW, ZoneOffset.UTC)).build(); Arrays.fill(keyBytes, (byte) 0);
+		String sealed = reference.toSealedForm(sealer, "consumer-oidc-session", Duration.ofHours(1));
+		OidcSessionReference opened = OidcSessionReference.fromSealedForm(sealed, sealer, "consumer-oidc-session");
+		require(opened.getSessionId().equals(Optional.of("consumer-sid")) && opened.toSerializedForm().equals(storage)
+				&& !opened.toString().contains("consumer-session"), "OIDC reference storage round trip and redaction");
+		boolean rejected = false;
+		try { OidcSessionReference.fromSerializedForm("{}"); }
+		catch (OidcValidationException exception) {
+			OidcException root = exception; OidcValidationException.Reason reason = exception.getReason();
+			rejected = reason == OidcValidationException.Reason.SESSION_REFERENCE_INVALID && root.getCategory() == ErrorCategory.VALIDATION_FAILURE;
+		}
+		require(rejected, "OIDC reference parser rejects invalid storage with a fixed reason");
+		// Results require provider responses; class references still check their packaged annotation-free signatures.
+		Class<?>[] exported = {IdToken.class, OidcAuthentication.class, OidcAuthenticationOptions.class,
+				OidcAuthenticationOptions.Builder.class, OidcClient.class, OidcClient.Builder.class, OidcException.class,
+				OidcObserver.class, OidcProviderMetadata.class, OidcProviderMetadata.Builder.class, OidcSessionReference.class,
+				OidcUserInfo.class, OidcValidationException.class, OidcValidationException.Reason.class, OidcRefreshResult.class, OidcCompatibilityMode.class};
+		require(exported.length == 16, "all OIDC exported types compile from the packaged JAR");
+		calledApi.add("com.revetsec.oidc");
 	}
 
 	private static JoseException refusal(JwtValidator validator, String token) {

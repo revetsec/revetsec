@@ -91,7 +91,7 @@ final class TokenResponseParser {
 			members.forEach((name, member) -> {
 				if (!SENSITIVE.contains(name)) safe.put(name, member);
 			});
-			return new TokenEndpointPayload(value, tokenType, expiresAt, refreshToken, idToken,
+			return new TokenEndpointPayload(value, tokenType, expiresAt, refreshToken, idToken, members.containsKey("id_token"),
 					scope, scopes, requestStart, JsonObject.fromMembers(safe));
 		} finally {
 			Arrays.fill(body, (byte) 0);

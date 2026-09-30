@@ -118,6 +118,7 @@ final class PublicApiContractTests {
 			"com.revetsec.oidc.IdToken",
 			"com.revetsec.oidc.OidcAuthentication",
 			"com.revetsec.oidc.OidcUserInfo",
+			"com.revetsec.oidc.OidcRefreshResult",
 			"com.revetsec.saml.SamlAuthentication",
 			"com.revetsec.scim.ScimPatchResult");
 
@@ -132,6 +133,7 @@ final class PublicApiContractTests {
 			"com.revetsec.jose.Jwt",
 			"com.revetsec.oidc.IdToken",
 			"com.revetsec.oidc.OidcAuthentication",
+			"com.revetsec.oidc.OidcRefreshResult",
 			"com.revetsec.oidc.OidcClient",
 			"com.revetsec.internal.jose.JwtValidationAccess$Operations");
 

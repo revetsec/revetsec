@@ -17,6 +17,9 @@
 package com.revetsec.oidc;
 
 import com.revetsec.internal.Limits;
+import com.revetsec.internal.ObserverDispatch;
+import com.revetsec.internal.encoding.StrictUtf8;
+import com.revetsec.internal.encoding.EncodingException;
 import com.revetsec.internal.http.Deadline;
 import com.revetsec.internal.jose.JwtValidationAccess;
 import com.revetsec.internal.json.JsonFieldException;
@@ -47,7 +50,7 @@ import java.util.Set;
 import static java.util.Objects.requireNonNull;
 
 /**
- * Internal asymmetric ID-token validation. JOSE authenticates the received bytes and runs the registered-claim
+ * Internal ID-token validation. JOSE authenticates the received bytes and runs the registered-claim
  * checks before this class reads profile claims. Only the final successful check constructs an IdToken.
  * The token endpoint must keep every token internal until this method succeeds.
  */
@@ -63,6 +66,7 @@ final class IdTokenValidator {
 	private final Duration maximumIdTokenAge;
 	private final Clock clock;
 	private final JoseObserver observer;
+	private final boolean hmacEnabled;
 
 	IdTokenValidator(String issuer, String clientId, JsonWebKeySource jsonWebKeySource,
 			Set<JwsAlgorithm> algorithms, Set<String> trustedAudiences, Set<String> trustedAuthorizedParties,
@@ -74,6 +78,13 @@ final class IdTokenValidator {
 	IdTokenValidator(String issuer, String clientId, JsonWebKeySource jsonWebKeySource,
 			Set<JwsAlgorithm> algorithms, Set<String> trustedAudiences, Set<String> trustedAuthorizedParties,
 			Duration clockSkew, Duration maximumIdTokenAge, Clock clock, JoseObserver observer) {
+		this(issuer, clientId, jsonWebKeySource, algorithms, trustedAudiences, trustedAuthorizedParties, clockSkew,
+				maximumIdTokenAge, clock, observer, false);
+	}
+	IdTokenValidator(String issuer, String clientId, JsonWebKeySource jsonWebKeySource,
+			Set<JwsAlgorithm> algorithms, Set<String> trustedAudiences, Set<String> trustedAuthorizedParties,
+			Duration clockSkew, Duration maximumIdTokenAge, Clock clock, JoseObserver observer, boolean hmacEnabled) {
+		this.hmacEnabled = hmacEnabled;
 		this.issuer = requireNonNull(issuer);
 		this.clientId = requireNonNull(clientId);
 		this.jsonWebKeySource = requireNonNull(jsonWebKeySource);
@@ -88,8 +99,15 @@ final class IdTokenValidator {
 				|| this.trustedAudiences.contains("") || this.trustedAuthorizedParties.contains(""))
 			throw new IllegalArgumentException("The ID token validator configuration is invalid.");
 		for (JwsAlgorithm algorithm : this.algorithms)
-			if (algorithm == JwsAlgorithm.HS256 || algorithm == JwsAlgorithm.HS384 || algorithm == JwsAlgorithm.HS512)
+			if (!hmacEnabled && isHmac(algorithm))
 				throw new IllegalArgumentException("This ID token validator requires asymmetric algorithms.");
+	}
+
+	boolean needsPublicKeys() { return this.algorithms.stream().anyMatch(algorithm -> !isHmac(algorithm)); }
+	private static boolean isHmac(JwsAlgorithm algorithm) { return Set.of(JwsAlgorithm.HS256, JwsAlgorithm.HS384, JwsAlgorithm.HS512).contains(algorithm); }
+	private void reportHmacUse() {
+		if (this.observer instanceof OidcObserver oidc)
+			ObserverDispatch.dispatch(oidc, observer -> observer.didUseCompatibilityMode(OidcCompatibilityMode.HMAC_ID_TOKENS));
 	}
 
 	IdToken validate(String compactSerialization, String expectedNonce, String accessToken, String code,
@@ -100,12 +118,30 @@ final class IdTokenValidator {
 
 	IdToken validate(String compactSerialization, String expectedNonce, String accessToken, String code,
 			@Nullable Duration maximumAuthenticationAge, Set<String> requiredAcrValues, @Nullable Deadline deadline) {
+		return validate(compactSerialization, expectedNonce, accessToken, code, maximumAuthenticationAge, requiredAcrValues, deadline, null);
+	}
+	IdToken validate(String compactSerialization, String expectedNonce, String accessToken, String code,
+			@Nullable Duration maximumAuthenticationAge, Set<String> requiredAcrValues, @Nullable Deadline deadline,
+			@Nullable String clientSecret) {
+		return validateProfile(compactSerialization, requireNonNull(expectedNonce), accessToken, requireNonNull(code),
+				maximumAuthenticationAge, requiredAcrValues, deadline, null, clientSecret);
+	}
+
+	IdToken validateRefresh(String compact, OidcSessionReference original, String accessToken, Set<String> acrValues, Deadline deadline) {
+		return validateRefresh(compact, original, accessToken, acrValues, deadline, null);
+	}
+	IdToken validateRefresh(String compact, OidcSessionReference original, String accessToken, Set<String> acrValues,
+			Deadline deadline, @Nullable String clientSecret) {
+		return validateProfile(compact, null, accessToken, null, null, acrValues, deadline, requireNonNull(original), clientSecret);
+	}
+
+	private IdToken validateProfile(String compactSerialization, @Nullable String expectedNonce, String accessToken,
+			@Nullable String code, @Nullable Duration maximumAuthenticationAge, Set<String> requiredAcrValues,
+			@Nullable Deadline deadline, @Nullable OidcSessionReference original, @Nullable String clientSecret) {
 		requireNonNull(compactSerialization);
-		requireNonNull(expectedNonce);
 		requireNonNull(accessToken);
-		requireNonNull(code);
 		Set<String> acrValues = Set.copyOf(requiredAcrValues);
-		if (expectedNonce.isEmpty() || acrValues.contains("")
+		if ((expectedNonce != null && expectedNonce.isEmpty()) || acrValues.contains("")
 				|| (maximumAuthenticationAge != null && maximumAuthenticationAge.isNegative()))
 			throw new IllegalArgumentException("The authenticated OIDC request options are invalid.");
 
@@ -113,19 +149,32 @@ final class IdTokenValidator {
 		// a slow JWKS response extend a token's effective lifetime. Every remaining check shares that snapshot.
 		ValidationClock validationClock = new ValidationClock(this.clock);
 		Jwt jwt;
+		byte @Nullable [] secret = null;
 		try {
+			Set<JwsAlgorithm> asymmetric = new java.util.HashSet<>(this.algorithms);
+			asymmetric.removeIf(IdTokenValidator::isHmac);
+			if (asymmetric.isEmpty()) asymmetric.add(JwsAlgorithm.RS256); // Template only; private profile replaces it.
 			JwtValidator validator = JwtValidator.withIssuer(this.issuer).jsonWebKeySource(this.jsonWebKeySource)
-					.expectedAudiences(Set.of(this.clientId)).allowedAlgorithms(this.algorithms)
+					.expectedAudiences(Set.of(this.clientId)).allowedAlgorithms(asymmetric)
 					.requiredClaims(Set.of("iat")).clockSkew(this.clockSkew)
 					.clock(validationClock).observer(this.observer).build();
-			jwt = deadline == null ? validator.validate(compactSerialization)
+			if (this.hmacEnabled) {
+				if (clientSecret == null) throw failure(OidcValidationException.Reason.HMAC_SECRET_INVALID);
+				secret = StrictUtf8.encode(clientSecret);
+				jwt = JwtValidationAccess.get().validateOidc(validator, compactSerialization, this.algorithms, secret,
+						deadline == null ? () -> Long.MAX_VALUE : deadline::remainingNanos, this::reportHmacUse);
+			} else jwt = deadline == null ? validator.validate(compactSerialization)
 					: JwtValidationAccess.get().validate(validator, compactSerialization, deadline::remainingNanos);
 		} catch (JoseException exception) {
 			throw OidcValidationException.fromJoseReason(exception.getReason());
-		}
+		} catch (EncodingException | IllegalArgumentException invalidSecret) {
+			throw failure(OidcValidationException.Reason.HMAC_SECRET_INVALID);
+		} finally { if (secret != null) Arrays.fill(secret, (byte) 0); }
 		Instant now = validationClock.instant();
 
 		JwtClaims claims = jwt.getClaims();
+		if (isHmac(jwt.getAlgorithm()) && claims.getAudiences().size() != 1)
+			throw failure(OidcValidationException.Reason.HMAC_MULTIPLE_AUDIENCES);
 		for (String audience : claims.getAudiences())
 			if (!audience.equals(this.clientId) && !this.trustedAudiences.contains(audience))
 				throw failure(OidcValidationException.Reason.UNTRUSTED_AUDIENCE);
@@ -136,7 +185,7 @@ final class IdTokenValidator {
 			throw failure(OidcValidationException.Reason.AUTHORIZED_PARTY_MISMATCH);
 
 		Instant issuedAt = claims.getIssuedAt().orElseThrow(() -> failure(OidcValidationException.Reason.MISSING_CLAIM));
-		if (Duration.between(issuedAt, now).compareTo(this.maximumIdTokenAge.plus(this.clockSkew)) > 0)
+		if (original == null && Duration.between(issuedAt, now).compareTo(this.maximumIdTokenAge.plus(this.clockSkew)) > 0)
 			throw failure(OidcValidationException.Reason.TOO_OLD);
 
 		String subject = claims.getSubject().orElse("");
@@ -144,10 +193,10 @@ final class IdTokenValidator {
 			throw failure(OidcValidationException.Reason.INVALID_SUBJECT);
 
 		String nonce = stringClaim(claims, "nonce");
-		if (nonce == null)
-			throw failure(OidcValidationException.Reason.NONCE_MISSING);
-		if (!sameSecret(expectedNonce, nonce))
-			throw failure(OidcValidationException.Reason.NONCE_MISMATCH);
+		if (original == null) {
+			if (nonce == null) throw failure(OidcValidationException.Reason.NONCE_MISSING);
+			if (!sameSecret(requireNonNull(expectedNonce), nonce)) throw failure(OidcValidationException.Reason.NONCE_MISMATCH);
+		}
 
 		String acr = stringClaim(claims, "acr");
 		if (!acrValues.isEmpty() && (acr == null || !acrValues.contains(acr)))
@@ -169,7 +218,9 @@ final class IdTokenValidator {
 
 		checkHash(claims, "at_hash", jwt.getAlgorithm(), accessToken,
 				OidcValidationException.Reason.ACCESS_TOKEN_HASH_MISMATCH);
-		checkHash(claims, "c_hash", jwt.getAlgorithm(), code, OidcValidationException.Reason.CODE_HASH_MISMATCH);
+		if (code != null) checkHash(claims, "c_hash", jwt.getAlgorithm(), code, OidcValidationException.Reason.CODE_HASH_MISMATCH);
+		else if (claims.getClaim("c_hash").isPresent()) throw failure(OidcValidationException.Reason.CODE_HASH_MISMATCH);
+		if (original != null) original.checkContinuity(claims);
 		return new IdToken(jwt);
 	}
 

@@ -1,0 +1,52 @@
+{
+  "release": "release-v5.3.1",
+  "revision": "440eec8",
+  "sourceCommit": "440eec8bac7b12b7389d7ca9cbc459b53507a443",
+  "plans": {
+    "oidcc-client-config-certification-test-plan": [
+      "oidcc-client-test-discovery-openid-config",
+      "oidcc-client-test-discovery-jwks-uri-keys",
+      "oidcc-client-test-discovery-issuer-mismatch",
+      "oidcc-client-test-idtoken-sig-none",
+      "oidcc-client-test-signing-key-rotation-just-before-signing",
+      "oidcc-client-test-signing-key-rotation"
+    ],
+    "oidcc-client-basic-certification-test-plan": [
+      "oidcc-client-test",
+      "oidcc-client-test-invalid-iss",
+      "oidcc-client-test-missing-sub",
+      "oidcc-client-test-invalid-aud",
+      "oidcc-client-test-missing-iat",
+      "oidcc-client-test-kid-absent-single-jwks",
+      "oidcc-client-test-kid-absent-multiple-jwks",
+      "oidcc-client-test-idtoken-sig-rs256",
+      "oidcc-client-test-idtoken-sig-none",
+      "oidcc-client-test-invalid-sig-rs256",
+      "oidcc-client-test-userinfo-invalid-sub",
+      "oidcc-client-test-nonce-invalid",
+      "oidcc-client-test-scope-userinfo-claims",
+      "oidcc-client-test-client-secret-basic"
+    ],
+    "oidcc-client-refreshtoken-test-plan": [
+      "oidcc-client-test-refresh-token",
+      "oidcc-client-test-refresh-token-invalid-issuer",
+      "oidcc-client-test-refresh-token-invalid-sub"
+    ],
+    "oidcc-client-formpost-basic-certification-test-plan": [
+      "oidcc-client-test",
+      "oidcc-client-test-invalid-iss",
+      "oidcc-client-test-missing-sub",
+      "oidcc-client-test-invalid-aud",
+      "oidcc-client-test-missing-iat",
+      "oidcc-client-test-kid-absent-single-jwks",
+      "oidcc-client-test-kid-absent-multiple-jwks",
+      "oidcc-client-test-idtoken-sig-rs256",
+      "oidcc-client-test-idtoken-sig-none",
+      "oidcc-client-test-invalid-sig-rs256",
+      "oidcc-client-test-userinfo-invalid-sub",
+      "oidcc-client-test-nonce-invalid",
+      "oidcc-client-test-scope-userinfo-claims",
+      "oidcc-client-test-client-secret-basic"
+    ]
+  }
+}

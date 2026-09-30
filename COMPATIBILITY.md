@@ -89,7 +89,7 @@ Each adapter depends on Revetsec core and on its framework's API, both `provided
 
 ## Compatibility-mode registry
 
-Every compatibility mode is registered in [docs/compatibility-modes.md](docs/compatibility-modes.md), with its conditions and the release that added it. The OAuth client adds explicit unencoded Basic credentials for providers that require them and the same acknowledged-runtime escape hatch as JOSE.
+Every compatibility mode is registered in [docs/compatibility-modes.md](docs/compatibility-modes.md), with its conditions and the release that added it. The OAuth client adds explicit unencoded Basic credentials for providers that require them and the same acknowledged-runtime escape hatch as JOSE. OIDC adds explicitly allowlisted HMAC ID tokens for confidential clients with sufficient client-secret bytes; the default remains asymmetric RS256.
 
 ### saml2int deviations
 

@@ -69,6 +69,7 @@ public final class OAuthClient {
 
 	@ThreadSafe
 	private static final class OidcOperations implements OidcTransactionAccess.Operations {
+		@Override public void checkHmacAuthentication(ClientAuthentication authentication, Set<com.revetsec.jose.JwsAlgorithm> algorithms) { authentication.checkHmac(algorithms); }
 		@Override public OAuthException endpointFailure(OAuthException.Reason reason) {
 			return switch (reason) {
 				case METADATA_INVALID -> OAuthValidationException.fromReason(reason);
@@ -83,18 +84,24 @@ public final class OAuthClient {
 		@Override public OAuthException endpointStatusFailure(int status, @Nullable Duration retryAfter) {
 			return OAuthErrorResponseException.fromResponse(status, "", Optional.ofNullable(retryAfter));
 		}
+		@Override public OidcTransactionAccess.RefreshCompletion refresh(OAuthClient client, RefreshToken token,
+				TokenRequestOptions options, AuthorizationServerMetadata metadata, Deadline deadline, Set<com.revetsec.jose.JwsAlgorithm> hmacAlgorithms) {
+			TokenEndpointPayload payload = client.refreshPayload(token, options, metadata, deadline, hmacAlgorithms);
+			return new OidcTransactionAccess.RefreshCompletion(payload.idToken(), payload.idTokenPresent(), payload.accessToken(), payload.tokenType(), payload::toTokenResponse, payload.clientSecret());
+		}
+
 		@Override public AuthorizationRedirect begin(OAuthClient client, AuthorizationRequestOptions options,
 				AuthorizationServerMetadata metadata, @Nullable Duration maxAge, Set<String> acrValues) {
 			return client.begin(options, "oidc", metadata, maxAge, acrValues);
 		}
 		@Override public OidcTransactionAccess.Completion complete(OAuthClient client, AuthorizationResponse response,
-				PendingAuthorizationSource source, URI callback, Function<Deadline, AuthorizationServerMetadata> metadata, Deadline deadline) {
-			CodeCompletion completion = client.complete(response, source, callback, "oidc", metadata, deadline);
+				PendingAuthorizationSource source, URI callback, Function<Deadline, AuthorizationServerMetadata> metadata, Deadline deadline, Set<com.revetsec.jose.JwsAlgorithm> hmacAlgorithms) {
+			CodeCompletion completion = client.complete(response, source, callback, "oidc", metadata, deadline, hmacAlgorithms);
 			PendingAuthorization pending = completion.pending();
 			TokenEndpointPayload payload = completion.payload();
 			return new OidcTransactionAccess.Completion(payload.idToken(), payload.accessToken(), payload.tokenType(),
 					completion.code(), requireNonNull(pending.nonce()), pending.maxAge(), pending.acrValues(),
-					() -> payload.toTokenResponse().withApplicationData(pending.getApplicationData()));
+					() -> payload.toTokenResponse().withApplicationData(pending.getApplicationData()), payload.clientSecret());
 		}
 	}
 
@@ -261,6 +268,11 @@ public final class OAuthClient {
 
 	private CodeCompletion complete(AuthorizationResponse response, PendingAuthorizationSource source,
 			URI actualCallbackUri, String kind, Function<Deadline, AuthorizationServerMetadata> metadataSupplier, Deadline deadline) {
+		return complete(response, source, actualCallbackUri, kind, metadataSupplier, deadline, Set.of());
+	}
+	private CodeCompletion complete(AuthorizationResponse response, PendingAuthorizationSource source,
+			URI actualCallbackUri, String kind, Function<Deadline, AuthorizationServerMetadata> metadataSupplier,
+			Deadline deadline, Set<com.revetsec.jose.JwsAlgorithm> hmacAlgorithms) {
 		requireNonNull(response);
 		requireNonNull(source);
 		requireNonNull(actualCallbackUri);
@@ -298,7 +310,7 @@ public final class OAuthClient {
 				.add("code", code).add("redirect_uri", pending.getRedirectUri().toString())
 				.add("code_verifier", pending.verifier()).resources(pending.resources());
 		return new CodeCompletion(pending,
-				tokenPayloadRequest(metadata.getTokenEndpoint(), form, pending.getRequestedScopes(), deadline), code);
+				tokenPayloadRequest(metadata.getTokenEndpoint(), form, pending.getRequestedScopes(), deadline, hmacAlgorithms), code);
 	}
 
 	/**
@@ -336,13 +348,22 @@ public final class OAuthClient {
 		requireNonNull(options);
 		Deadline deadline = Deadline.fromNow(this.totalDeadline);
 		AuthorizationServerMetadata metadata = metadata(deadline);
+		return refreshPayload(refreshToken, options, metadata, deadline).toTokenResponse();
+	}
+
+	private TokenEndpointPayload refreshPayload(RefreshToken refreshToken, TokenRequestOptions options,
+			AuthorizationServerMetadata metadata, Deadline deadline) {
+		return refreshPayload(refreshToken, options, metadata, deadline, Set.of());
+	}
+	private TokenEndpointPayload refreshPayload(RefreshToken refreshToken, TokenRequestOptions options,
+			AuthorizationServerMetadata metadata, Deadline deadline, Set<com.revetsec.jose.JwsAlgorithm> hmacAlgorithms) {
 		OAuthRequestWriter form = new OAuthRequestWriter().add("grant_type", "refresh_token")
 				.add("refresh_token", refreshToken.getValue());
 		options.getScopes().ifPresent(scopes -> {
 			if (!scopes.isEmpty()) form.add("scope", String.join(" ", new TreeSet<>(scopes)));
 		});
 		form.resources(options.getResources()).addAll(options.getAdditionalParameters());
-		return tokenRequest(metadata.getTokenEndpoint(), form, options.getScopes().orElse(null), deadline);
+		return tokenPayloadRequest(metadata.getTokenEndpoint(), form, options.getScopes().orElse(null), deadline, hmacAlgorithms);
 	}
 
 	/**
@@ -380,9 +401,13 @@ public final class OAuthClient {
 
 	private TokenEndpointPayload tokenPayloadRequest(URI endpoint, OAuthRequestWriter form,
 			@Nullable Set<String> requestedScopes, Deadline deadline) {
+		return tokenPayloadRequest(endpoint, form, requestedScopes, deadline, Set.of());
+	}
+	private TokenEndpointPayload tokenPayloadRequest(URI endpoint, OAuthRequestWriter form,
+			@Nullable Set<String> requestedScopes, Deadline deadline, Set<com.revetsec.jose.JwsAlgorithm> hmacAlgorithms) {
 		Map<String, String> headers = new HashMap<>();
 		Map<String, String> authentication = new HashMap<>();
-		this.clientAuthentication.apply(this.clientId, headers, authentication);
+		String secret = this.clientAuthentication.applyForOidc(this.clientId, headers, authentication, hmacAlgorithms);
 		if (this.clientAuthentication.isUnencodedBasic())
 			ObserverDispatch.dispatch(this.observer, OAuthObserver::didUseUnencodedBasic);
 		form.addAll(authentication);
@@ -390,7 +415,7 @@ public final class OAuthClient {
 		RawResponse response = send(endpoint, OAuthEndpoint.TOKEN, ResponseProfile.TOKEN,
 				form.body(), headers, deadline);
 		try {
-			return TokenResponseParser.parsePayload(response, requestStart, requestedScopes);
+			return TokenResponseParser.parsePayload(response, requestStart, requestedScopes).withClientSecret(hmacAlgorithms.isEmpty() ? null : secret);
 		} catch (OAuthException failure) {
 			URI safe = AuthorizationServerCache.reduced(endpoint);
 			ObserverDispatch.dispatch(this.observer, observer -> observer.didFailEndpoint(

@@ -175,6 +175,12 @@ public final class OidcValidationException extends OidcException {
 		USERINFO_ACCESS_TOKEN_EXPIRED("The UserInfo access token has expired."),
 		/** UserInfo names a different subject from the validated ID token. */
 		USERINFO_SUBJECT_MISMATCH("The UserInfo subject does not match."),
+		/** The per-request HMAC client secret is missing, malformed or too short. */
+		HMAC_SECRET_INVALID("The OIDC client secret cannot verify an ID token."),
+		/** A MAC ID token has more than one audience entry. */
+		HMAC_MULTIPLE_AUDIENCES("An HMAC ID token must have exactly one audience."),
+		/** A serialized continuity reference has invalid structure. */
+		SESSION_REFERENCE_INVALID("The OIDC session reference is invalid."),
 		/** A refreshed ID token differs from the original session's continuity claims. */
 		REFRESHED_ID_TOKEN_MISMATCH("The refreshed ID token does not match the original session.");
 

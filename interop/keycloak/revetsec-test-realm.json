@@ -75,6 +75,54 @@
       "attributes": {
         "pkce.code.challenge.method": "S256"
       }
+    },
+    {
+      "clientId": "revetsec-signed-userinfo-client",
+      "name": "revetsec-signed-userinfo-client (TEST ONLY)",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "test-only-signed-userinfo-secret-not-a-real-secret",
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "consentRequired": false,
+      "frontchannelLogout": false,
+      "redirectUris": [
+        "http://localhost:8080/callback",
+        "http://127.0.0.1:8080/callback"
+      ],
+      "webOrigins": [],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "user.info.response.signature.alg": "RS256"
+      }
+    },
+    {
+      "clientId": "revetsec-hmac-client",
+      "name": "revetsec-hmac-client (TEST ONLY)",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "test-only-hmac-client-secret-not-a-real-secret-sssssssssssssssssss",
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "consentRequired": false,
+      "frontchannelLogout": false,
+      "redirectUris": [
+        "http://localhost:8080/callback",
+        "http://127.0.0.1:8080/callback"
+      ],
+      "webOrigins": [],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "id.token.signed.response.alg": "HS256"
+      }
     }
   ],
   "users": [

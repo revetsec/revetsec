@@ -17,6 +17,8 @@
 package com.revetsec.internal.jose;
 
 import com.revetsec.jose.Jwt;
+import com.revetsec.jose.JwsAlgorithm;
+import java.util.Set;
 import com.revetsec.jose.RemoteJsonWebKeySource;
 import com.revetsec.jose.JwtValidator;
 import java.util.function.LongSupplier;
@@ -36,6 +38,8 @@ public final class JwtValidationAccess {
 	public interface Operations {
 		Jwt validate(JwtValidator validator, String compact, LongSupplier remainingNanos);
 		Jwt validateUserInfo(JwtValidator validator, String compact, LongSupplier remainingNanos);
+		Jwt validateOidc(JwtValidator validator, String compact, Set<JwsAlgorithm> algorithms,
+				byte[] secret, LongSupplier remainingNanos, Runnable hmacUsed);
 		void warmUp(RemoteJsonWebKeySource source, LongSupplier remainingNanos);
 	}
 	public static void set(Operations value) {

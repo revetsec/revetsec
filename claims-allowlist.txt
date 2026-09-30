@@ -9,3 +9,5 @@
 
 README.md|Revetsec has not been independently audited.|Required disclosure; states the absence of an audit and makes no claim.
 SECURITY.md|Revetsec has not been independently audited.|Required disclosure; states the absence of an audit and makes no claim.
+
+conformance/README.md|Revetsec has not been independently audited.|Required disclosure; states the absence of an audit and makes no claim.

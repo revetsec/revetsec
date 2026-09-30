@@ -56,6 +56,18 @@ A key is also skipped when its `use` is not `sig`, its `key_ops` does not includ
 
 **Entra's v1.0 and v2.0 tokens each need their own issuer and key set.** A v1.0 token, whose `iss` is `https://sts.windows.net/<tenant>/`, needs a validator with exactly that issuer and a source for the tenant's v1.0 key set, the `jwks_uri` of its v1.0 OpenID configuration. A v2.0 token needs the v2.0 issuer, `https://login.microsoftonline.com/<tenant>/v2.0`, and the v2.0 key set, the `jwks_uri` of `https://login.microsoftonline.com/<tenant>/v2.0/.well-known/openid-configuration`. The tenant's two key sets held the same keys when read, but only the v2.0 keys carry `issuer` members. None of them equals a v1.0 `iss`, and the template matches only a v2.0 `iss`, so a v1.0 token checked against any v2.0 key set, the tenant's own included, passes its signature check and then fails with `KEY_ISSUER_MISMATCH`. An application that accepts both versions needs a validator and a source for each.
 
+## OIDC ID-token algorithms (`OidcClient`)
+
+OIDC defaults to `{RS256}` and accepts the other asymmetric algorithms above only when explicitly allowlisted and advertised by the provider. `idTokenSigningAlgorithms` replaces the default set; it never accepts `none`. Normal signature, type, issuer, audience, nonce and date checks remain required.
+
+| `alg` | Status | Key | Minimum secret bytes / tag bytes |
+|---|---|---|---|
+| `HS256` | `HMAC_ID_TOKENS` compatibility mode and explicit allowlist | Exact confidential client-secret authentication value in UTF-8 | 32 / 32 |
+| `HS384` | Same | Same | 48 / 48 |
+| `HS512` | Same | Same | 64 / 64 |
+
+HMAC never uses a public or symmetric JWK. A rotating supplier's value is captured once for the token POST and reused for its ID token. A multi-valued audience is rejected even when every audience is trusted. See [the compatibility-mode conditions and events](compatibility-modes.md#oidccompatibilitymodehmac_id_tokens). This mode applies to login and returned refresh ID tokens. Signed UserInfo still supports configured asymmetric algorithms only.
+
 ## JCA providers and Java runtimes
 
 Revetsec pins the JCA algorithm names in the table above and never names or passes a provider, so the JCA selects a provider as it always does. Revetsec's own tests run on the JDK's providers. Whether third-party and PKCS #11 providers verify DER-encoded ECDSA, RSASSA-PSS with fixed parameters, Ed25519 and RSA PKCS #1 v1.5 the way the JDK's providers do has not been tested. Revetsec's own checks (the signature shapes, the ECDSA range check, the key rules and the exponent floor above) run before any provider sees the signature or the key, whichever provider it is.
@@ -70,7 +82,7 @@ Remote key sources refuse to build on a runtime older than Java 17.0.3 (18.0.1 o
 
 ## Planned areas
 
-- JWS for OpenID Connect ID tokens and JWT access tokens, with their own allowlists and the provider-advertised sets where a specification defines one
+- JWS for JWT access tokens, with its own allowlist
 - JWS signing for client assertions
 - XML Signature: SignatureMethod, DigestMethod, canonicalization and transforms
 - SAML HTTP-Redirect binding signatures

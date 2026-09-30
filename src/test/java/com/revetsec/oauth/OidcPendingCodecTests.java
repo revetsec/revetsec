@@ -87,22 +87,30 @@ final class OidcPendingCodecTests {
 		OidcTransactionAccess.Operations installed = OidcTransactionAccess.get();
 		assertThrows(IllegalStateException.class, () -> OidcTransactionAccess.set(installed));
 		OidcTransactionAccess.Operations impostor = new OidcTransactionAccess.Operations() {
+			@Override public void checkHmacAuthentication(ClientAuthentication a, Set<com.revetsec.jose.JwsAlgorithm> b) { throw new AssertionError(); }
 			@Override public OAuthException endpointFailure(OAuthException.Reason reason) { throw new AssertionError(); }
 			@Override public OAuthException endpointExchangeFailure(com.revetsec.internal.http.HttpExchangeException failure) { throw new AssertionError(); }
 			@Override public OAuthException endpointStatusFailure(int status, @Nullable Duration retryAfter) { throw new AssertionError(); }
+			@Override public OidcTransactionAccess.RefreshCompletion refresh(OAuthClient client, RefreshToken token, TokenRequestOptions options, AuthorizationServerMetadata metadata, com.revetsec.internal.http.Deadline deadline, Set<com.revetsec.jose.JwsAlgorithm> hmac) { throw new AssertionError(); }
+
 			@Override public AuthorizationRedirect begin(OAuthClient client, AuthorizationRequestOptions options, AuthorizationServerMetadata metadata, @Nullable Duration maxAge, Set<String> acr) { throw new AssertionError(); }
-			@Override public OidcTransactionAccess.Completion complete(OAuthClient client, AuthorizationResponse response, PendingAuthorizationSource source, URI callback, java.util.function.Function<com.revetsec.internal.http.Deadline, AuthorizationServerMetadata> metadata, com.revetsec.internal.http.Deadline deadline) { throw new AssertionError(); }
+			@Override public OidcTransactionAccess.Completion complete(OAuthClient client, AuthorizationResponse response, PendingAuthorizationSource source, URI callback, java.util.function.Function<com.revetsec.internal.http.Deadline, AuthorizationServerMetadata> metadata, com.revetsec.internal.http.Deadline deadline, Set<com.revetsec.jose.JwsAlgorithm> hmac) { throw new AssertionError(); }
 		};
 		assertThrows(IllegalArgumentException.class, () -> OidcTransactionAccess.set(impostor));
-		TokenEndpointPayload payload = new TokenEndpointPayload("sentinel-access", "Bearer", null, null, "sentinel-id", null, Set.of(), NOW, com.revetsec.json.JsonObject.fromMembers(Map.of()));
+		TokenEndpointPayload payload = new TokenEndpointPayload("sentinel-access", "Bearer", null, null, "sentinel-id", true, null, Set.of(), NOW, com.revetsec.json.JsonObject.fromMembers(Map.of()));
 		OidcTransactionAccess.Completion completion = new OidcTransactionAccess.Completion(payload.idToken(), payload.accessToken(), payload.tokenType(), "sentinel-code", "sentinel-nonce", null, Set.of(), payload::toTokenResponse);
 		assertFalse(completion.toString().contains("sentinel")); assertEquals("sentinel-access", completion.releaseTokens().getAccessToken().getValue());
 		assertThrows(IllegalStateException.class, completion::releaseTokens);
+		OidcTransactionAccess.RefreshCompletion refreshed = new OidcTransactionAccess.RefreshCompletion(payload.idToken(), true, payload.accessToken(), payload.tokenType(), payload::toTokenResponse);
+		assertFalse(refreshed.toString().contains("sentinel")); assertTrue(refreshed.idTokenPresent());
+		assertEquals("sentinel-access", refreshed.releaseTokens().getAccessToken().getValue());
+		assertThrows(IllegalStateException.class, refreshed::releaseTokens);
 		com.revetsec.internal.jose.JwtValidationAccess.Operations jwt = com.revetsec.internal.jose.JwtValidationAccess.get();
 		assertThrows(IllegalStateException.class, () -> com.revetsec.internal.jose.JwtValidationAccess.set(jwt));
 		assertThrows(IllegalArgumentException.class, () -> com.revetsec.internal.jose.JwtValidationAccess.set(new com.revetsec.internal.jose.JwtValidationAccess.Operations() {
 			@Override public com.revetsec.jose.Jwt validate(com.revetsec.jose.JwtValidator v, String c, java.util.function.LongSupplier d) { throw new AssertionError(); }
 			@Override public com.revetsec.jose.Jwt validateUserInfo(com.revetsec.jose.JwtValidator v, String c, java.util.function.LongSupplier d) { throw new AssertionError(); }
+			@Override public com.revetsec.jose.Jwt validateOidc(com.revetsec.jose.JwtValidator v, String c, Set<com.revetsec.jose.JwsAlgorithm> a, byte[] s, java.util.function.LongSupplier d, Runnable u) { throw new AssertionError(); }
 			@Override public void warmUp(com.revetsec.jose.RemoteJsonWebKeySource source, java.util.function.LongSupplier d) { throw new AssertionError(); }
 		}));
 	}

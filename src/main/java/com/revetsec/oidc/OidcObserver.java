@@ -36,6 +36,18 @@ public interface OidcObserver extends OAuthObserver {
 	 */
 	static @NonNull OidcObserver disabledInstance() { return DisabledOidcObserver.INSTANCE; }
 	/**
+	 * Called after a client successfully builds with an explicit compatibility mode.
+	 * @param mode enabled mode; no credential is passed
+	 * @since 1.0.0
+	 */
+	default void didEnableCompatibilityMode(@NonNull OidcCompatibilityMode mode) { }
+	/**
+	 * Called when validation uses the mode, including when its signature or later checks fail.
+	 * @param mode used mode; no credential or token is passed
+	 * @since 1.0.0
+	 */
+	default void didUseCompatibilityMode(@NonNull OidcCompatibilityMode mode) { }
+	/**
 	 * Called when an ID token or OIDC token response fails validation, before token release.
 	 * @param exception the same fixed-message exception the caller receives
 	 * @since 1.0.0
@@ -58,4 +70,18 @@ public interface OidcObserver extends OAuthObserver {
 	 * @since 1.0.0
 	 */
 	default void didFetchUserInfo(@NonNull Boolean signed) { }
+	/**
+	 * Called when refresh profile/continuity checks reject. No endpoint credential or rejected claim is passed.
+	 * @param exception fixed-message rejection
+	 * @since 1.0.0
+	 */
+	default void didRejectRefresh(@NonNull OidcValidationException exception) { }
+	/**
+	 * Called after refresh tokens are released following all required ID-token checks.
+	 * @param idTokenReturned whether a new verified ID token was returned
+	 * @param refreshTokenReturned whether the endpoint supplied a replacement refresh token
+	 * @since 1.0.0
+	 */
+	default void didRefreshTokens(@NonNull Boolean idTokenReturned, @NonNull Boolean refreshTokenReturned) { }
+
 }

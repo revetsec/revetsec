@@ -37,27 +37,43 @@ final class TokenEndpointPayload {
 	private final @Nullable Instant expiresAt;
 	private final @Nullable String refreshToken;
 	private final @Nullable String idToken;
+	private final boolean idTokenPresent;
+	private final @Nullable String clientSecret;
 	private final @Nullable String scope;
 	private final @Nullable Set<@NonNull String> grantedScopes;
 	private final @NonNull Instant requestStart;
 	private final @NonNull JsonObject safeParameters;
 
 	TokenEndpointPayload(@NonNull String accessToken, @NonNull String tokenType,
-			@Nullable Instant expiresAt, @Nullable String refreshToken, @Nullable String idToken,
+			@Nullable Instant expiresAt, @Nullable String refreshToken, @Nullable String idToken, boolean idTokenPresent,
 			@Nullable String scope, @Nullable Set<@NonNull String> grantedScopes,
 			@NonNull Instant requestStart, @NonNull JsonObject safeParameters) {
+		this(accessToken, tokenType, expiresAt, refreshToken, idToken, idTokenPresent, scope, grantedScopes,
+				requestStart, safeParameters, null);
+	}
+	private TokenEndpointPayload(String accessToken, String tokenType, @Nullable Instant expiresAt,
+			@Nullable String refreshToken, @Nullable String idToken, boolean idTokenPresent, @Nullable String scope,
+			@Nullable Set<String> grantedScopes, Instant requestStart, JsonObject safeParameters, @Nullable String clientSecret) {
+		this.clientSecret = clientSecret;
 		this.accessToken = requireNonNull(accessToken);
 		this.tokenType = requireNonNull(tokenType);
 		this.expiresAt = expiresAt;
 		this.refreshToken = refreshToken;
-		this.idToken = idToken;
+		this.idToken = idToken; this.idTokenPresent = idTokenPresent;
 		this.scope = scope;
 		this.grantedScopes = grantedScopes == null ? null : Set.copyOf(grantedScopes);
 		this.requestStart = requireNonNull(requestStart);
 		this.safeParameters = requireNonNull(safeParameters);
 	}
 
+	TokenEndpointPayload withClientSecret(@Nullable String secret) {
+		return secret == null ? this : new TokenEndpointPayload(this.accessToken, this.tokenType, this.expiresAt,
+				this.refreshToken, this.idToken, this.idTokenPresent, this.scope, this.grantedScopes, this.requestStart,
+				this.safeParameters, secret);
+	}
+	@Nullable String clientSecret() { return this.clientSecret; }
 	@Nullable String idToken() { return this.idToken; }
+	boolean idTokenPresent() { return this.idTokenPresent; }
 	String accessToken() { return this.accessToken; }
 	String tokenType() { return this.tokenType; }
 

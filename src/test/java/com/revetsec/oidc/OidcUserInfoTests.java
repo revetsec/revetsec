@@ -337,6 +337,56 @@ final class OidcUserInfoTests {
 	private static void pause() { try { new CountDownLatch(1).await(2, TimeUnit.SECONDS); } catch (InterruptedException e) { Thread.currentThread().interrupt(); } }
 	private static void assertRedacted(String text) { for (String value : List.of(ACCESS, REFRESH, SUBJECT, EMAIL)) assertFalse(text.contains(value), "Disclosed test-only sentinel"); }
 	private static String json() { return "{\"sub\":" + JsonText.string(SUBJECT) + "}"; }
+	@Test
+	void userInfoAfterRefreshUsesNewCredentialAndOriginalIdentityWithStoredReference() throws Exception {
+		try (TestHttpsServer server = TestHttpsServer.start()) {
+			OidcClient client = builder(server).build(); OidcAuthentication auth = authenticate(server, client, ACCESS, 0);
+			OidcSessionReference stored = OidcSessionReference.fromSerializedForm(auth.getSessionReference().toSerializedForm());
+			server.script("/token", TestHttpsServer.Script.fromResponse(TestHttpsServer.Response.fromJson(200,
+					"{\"access_token\":\"TEST-ONLY-refreshed-userinfo\",\"token_type\":\"Bearer\",\"expires_in\":300}")));
+			OidcRefreshResult refreshed = client.refresh(auth.getTokens().getRefreshToken().orElseThrow(), stored);
+			respond(server, 200, "application/json", json()); assertEquals(SUBJECT, client.fetchUserInfo(auth, refreshed).getSubject());
+			assertTrue(refreshed.getIdToken().isEmpty()); assertSame(stored, refreshed.getSessionReference());
+			assertEquals(Optional.of("Bearer TEST-ONLY-refreshed-userinfo"), server.getRequests("/userinfo").get(0).getHeader("Authorization"));
+			assertEquals(OidcValidationException.Reason.USERINFO_ACCESS_TOKEN_EXPIRED, assertThrows(OidcValidationException.class, () -> client.fetchUserInfo(auth)).getReason());
+		}
+	}
+
+	@Test
+	void refreshFromAnotherLoginCannotBeAttachedToOriginalIdentityBeforeAnyIo() throws Exception {
+		try (TestHttpsServer server = TestHttpsServer.start()) {
+			AtomicReference<OidcValidationException> rejected = new AtomicReference<>();
+			OidcClient client = builder(server).observer(new OidcObserver() {
+				@Override public void didRejectUserInfo(OidcValidationException failure) { rejected.set(failure); }
+			}).build();
+			OidcAuthentication first = authenticate(server, client, ACCESS, 300), second = authenticate(server, client, ACCESS, 300);
+			server.script("/token", TestHttpsServer.Script.fromResponse(TestHttpsServer.Response.fromJson(200,
+					"{\"access_token\":\"TEST-ONLY-refreshed-userinfo\",\"token_type\":\"Bearer\"}")));
+			OidcRefreshResult refreshed = client.refresh(second.getTokens().getRefreshToken().orElseThrow(), second.getSessionReference());
+			int before = server.getRequests().size();
+			OidcValidationException failure = assertThrows(OidcValidationException.class, () -> lazy(server).build().fetchUserInfo(first, refreshed));
+			assertEquals(OidcValidationException.Reason.USERINFO_AUTHENTICATION_MISMATCH, failure.getReason());
+			OidcValidationException observed = assertThrows(OidcValidationException.class, () -> client.fetchUserInfo(first, refreshed)); assertSame(observed, rejected.get());
+			assertEquals(before, server.getRequests().size()); assertNull(failure.getCause()); assertSafeFailure(failure);
+		}
+	}
+
+	@Test
+	void refreshedUserInfoRetainsSignedPolicyAndSubjectChecks() throws Exception {
+		try (TestHttpsServer server = TestHttpsServer.start()) {
+			OidcClient client = builder(server).userInfoSignedResponseAlgorithm(JwsAlgorithm.RS256).build();
+			OidcAuthentication auth = authenticate(server, client, ACCESS, 300);
+			server.script("/token", TestHttpsServer.Script.fromResponse(TestHttpsServer.Response.fromJson(200,
+					"{\"access_token\":\"TEST-ONLY-refreshed-userinfo\",\"token_type\":\"Bearer\"}")));
+			OidcRefreshResult refreshed = client.refresh(auth.getTokens().getRefreshToken().orElseThrow(), auth.getSessionReference());
+			respond(server, 200, "application/jwt", sign(claims(server), false)); assertTrue(client.fetchUserInfo(auth, refreshed).isSigned());
+			respond(server, 200, "application/json", json());
+			assertEquals(OidcValidationException.Reason.USERINFO_FORMAT_MISMATCH, assertThrows(OidcValidationException.class, () -> client.fetchUserInfo(auth, refreshed)).getReason());
+			Map<String,String> changed = claims(server); changed.put("sub", "\"other\""); respond(server, 200, "application/jwt", sign(changed, false));
+			assertEquals(OidcValidationException.Reason.USERINFO_SUBJECT_MISMATCH, assertThrows(OidcValidationException.class, () -> client.fetchUserInfo(auth, refreshed)).getReason());
+		}
+	}
+
 	private static String keyJson() { return TestJsonWebKeys.withFixture(Fixture.IDP_SIGNING_RSA_2048).kid("key").alg("RS256").toKeySetJson(); }
 	private static StaticJsonWebKeySource keys() { return StaticJsonWebKeySource.fromJsonWebKeySet(JsonWebKeySet.fromJson(keyJson())); }
 	private static OidcProviderMetadata.Builder metadata(TestHttpsServer server) { return OidcProviderMetadata.withIssuer(server.getBaseUri().toString()).authorizationEndpoint(server.uri("/authorize")).tokenEndpoint(server.uri("/token")).jwksUri(server.uri("/jwks")).userInfoEndpoint(server.uri("/userinfo")); }

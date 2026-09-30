@@ -1,6 +1,6 @@
 name: CI
 
-# The M0 to M3 subset of plan §10.3. Jobs that start in a later milestone are listed at the end as
+# The M0 to M4 subset of plan §10.3. Jobs that start in a later milestone are listed at the end as
 # commented stubs, each naming the milestone it starts in.
 #
 # Every action is pinned to a full commit SHA (the trailing comment is the tag it was resolved from with
@@ -446,8 +446,9 @@ jobs:
         run: mvn -B -ntp -Dmaven.javadoc.failOnWarnings=true -DskipTests verify
 
   # Gating from M3. KeycloakOAuthIT starts the digest-pinned Keycloak image, imports the test-only realm and
-  # exercises confidential/public code flows, client credentials, refresh and revocation. Testcontainers owns
-  # container teardown; this ephemeral runner does not need the Ryuk sidecar.
+  # exercises OAuth confidential/public code flows, client credentials, refresh and revocation, plus OIDC
+  # query/form-post login, JSON/signed UserInfo, session persistence/refresh and rejection boundaries. The pinned
+  # provider's realm-key HMAC signature is rejected. Testcontainers owns teardown; this runner needs no Ryuk.
   integration:
     name: Integration (Keycloak, JDK 17)
     runs-on: ubuntu-24.04
@@ -481,9 +482,24 @@ jobs:
           suites = [ET.parse(path).getroot() for path in paths]
           executed = sum(int(suite.attrib.get('tests', '0')) for suite in suites)
           skipped = sum(int(suite.attrib.get('skipped', '0')) for suite in suites)
-          if executed < 2 or skipped:
-              sys.exit(f'Integration count is {executed}; skipped count is {skipped}')
-          print(f'Integration cases executed: {executed}; skipped: {skipped}')
+          required = {
+              'confidentialAndPublicCodeFlowsRefreshAndRevocation',
+              'serviceAccountGetsToken',
+              'confidentialOidcQueryChecksUserInfoAndRefresh',
+              'publicOidcFormPostChecksUserInfoAndRefresh',
+              'confidentialPostOidcFormPostChecksUserInfoAndRefresh',
+              'signedUserInfoChecksConfiguredAlgorithmAndSubject',
+              'signedUserInfoPolicyRejectsRealJsonResponse',
+              'hmacOidcRejectsProviderRealmKeySignature',
+              'wrongOidcCallbackRouteRejectsBeforeTokenPost',
+              'changedAuthorizationNonceRejectsProviderSignedIdToken',
+          }
+          names = {case.attrib.get('name') for suite in suites for case in suite.findall('testcase')}
+          missing = required - names
+          failed = sum(int(suite.attrib.get('failures', '0')) + int(suite.attrib.get('errors', '0')) for suite in suites)
+          if executed < len(required) or skipped or failed or missing:
+              sys.exit(f'Integration count is {executed}; skipped: {skipped}; failed: {failed}; missing: {sorted(missing)}')
+          print(f'Integration cases executed: {executed}; skipped: {skipped}; all required OAuth/OIDC cases present')
           PY
 
       - name: Upload integration reports
@@ -495,22 +511,42 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
+  # Gating. Four local digest-pinned OIDF RP plans; self-run test evidence only.
+  conformance:
+    name: OIDF RP (JDK 17)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Corretto 17
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: corretto
+          java-version: '17'
+          cache: maven
+      - name: Verify evidence guard
+        run: python3 -m unittest discover -s conformance -p 'test_*.py'
+      - name: Run four local RP plans
+        run: python3 conformance/run.py --pull-images --repository-tail "$HOME/.m2/repository" --output "$RUNNER_TEMP/oidf-evidence"
+      - name: Upload OIDF evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: oidf-rp-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/oidf-evidence
+          if-no-files-found: error
+          retention-days: 14
+
   # ---------------------------------------------------------------------------------------------------
   # Later milestones (plan §10.3). Uncomment and complete each job when its milestone starts.
   # "[inferred]" marks a start the plan does not fix explicitly.
   # ---------------------------------------------------------------------------------------------------
 
-  # From M4, extend integration with OIDC; from M5, add node-oidc-provider, at+jwt and introspection;
+  # From M5, add node-oidc-provider, at+jwt and introspection;
   # from M7/M8/M8b, add scripted-IdP SAML signing, encryption and SLO, with its IT floor.
-
-  # conformance: from M4. OIDF suite release-v5.3.1 (digest-pinned) through the conformance/ Java driver:
-  # Basic, Config, Form Post and Refresh RP plans; oidcc-client-test-plan with private_key_jwt from M6.
-  # Nightly + release branches; Basic RP per PR if under ~10 min. Logs archived as artifacts.
-  #
-  # conformance:
-  #   name: OIDF Conformance
-  #   steps:
-  #     - run: mvn -B -ntp -f conformance/pom.xml verify
 
   # mcp-client-auth: from M5 [inferred]. Advisory, nightly. MCP conformance `auth` client scenarios through
   # the Java shim in conformance/, with an expected-failures baseline (CIMD unsupported).

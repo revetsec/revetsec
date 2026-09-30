@@ -62,6 +62,7 @@ public final class OidcClient {
 	private final @Nullable JsonWebKeySource configuredKeySource;
 	private final String clientId;
 	private final Set<JwsAlgorithm> algorithms;
+	private final Set<JwsAlgorithm> hmacAlgorithms;
 	private final Set<String> trustedAudiences;
 	private final Set<String> trustedAuthorizedParties;
 	private final Duration clockSkew;
@@ -79,7 +80,7 @@ public final class OidcClient {
 		this.oauth = oauth; this.issuer = builder.issuer; this.userInfoAlgorithm = builder.userInfoAlgorithm; this.scopes = builder.scopes; this.resources = builder.resources;
 		this.acrValues = builder.acrValues; this.totalDeadline = builder.totalDeadline; this.observer = builder.observer;
 		this.configuredKeySource = builder.keySource; this.clientId = requireNonNull(builder.clientId);
-		this.algorithms = builder.algorithms; this.trustedAudiences = builder.trustedAudiences;
+		this.algorithms = builder.algorithms; this.hmacAlgorithms = hmacAlgorithms(this.algorithms); this.trustedAudiences = builder.trustedAudiences;
 		this.trustedAuthorizedParties = builder.trustedAuthorizedParties; this.clockSkew = builder.clockSkew;
 		this.maximumIdTokenAge = builder.maximumIdTokenAge; this.clock = builder.clock; this.httpClient = builder.httpClient;
 		this.policy = builder.policy; this.allowInsecureLoopback = builder.allowInsecureLoopback;
@@ -117,9 +118,15 @@ public final class OidcClient {
 					.requestTimeout(this.requestTimeout).build();
 			ProviderState found = new ProviderState(metadata, source, new IdTokenValidator(metadata.getIssuer(), this.clientId, source,
 					effectiveAlgorithms(metadata, this.algorithms), this.trustedAudiences, this.trustedAuthorizedParties,
-					this.clockSkew, this.maximumIdTokenAge, this.clock, this.observer));
+					this.clockSkew, this.maximumIdTokenAge, this.clock, this.observer, !this.hmacAlgorithms.isEmpty()));
 			this.state = found; return found;
 		} finally { this.stateLock.unlock(); }
+	}
+	private static Set<JwsAlgorithm> hmacAlgorithms(Set<JwsAlgorithm> algorithms) {
+		Set<JwsAlgorithm> found = new HashSet<>();
+		for (JwsAlgorithm algorithm : algorithms)
+			if (Set.of(JwsAlgorithm.HS256, JwsAlgorithm.HS384, JwsAlgorithm.HS512).contains(algorithm)) found.add(algorithm);
+		return Set.copyOf(found);
 	}
 	private static Set<JwsAlgorithm> effectiveAlgorithms(OidcProviderMetadata metadata, Set<JwsAlgorithm> configured) {
 		Set<JwsAlgorithm> effective = new HashSet<>();
@@ -165,7 +172,7 @@ public final class OidcClient {
 	public void warmUp() {
 		Deadline deadline = Deadline.fromNow(this.totalDeadline);
 		ProviderState provider = provider(deadline);
-		if (provider.source instanceof RemoteJsonWebKeySource remote) com.revetsec.internal.jose.JwtValidationAccess.get().warmUp(remote, deadline::remainingNanos);
+		if ((provider.validator.needsPublicKeys() || this.userInfoAlgorithm != null) && provider.source instanceof RemoteJsonWebKeySource remote) com.revetsec.internal.jose.JwtValidationAccess.get().warmUp(remote, deadline::remainingNanos);
 	}
 	/**
 	 * Starts authentication with the client defaults. This prepares the authorization URL.
@@ -202,7 +209,7 @@ public final class OidcClient {
 		OidcTransactionAccess.Completion completion = OidcTransactionAccess.get().complete(this.oauth,
 				response, source, actualCallbackUri, budget -> {
 					ProviderState provider = provider(budget); selected.set(provider); return provider.metadata.oauthMetadata();
-				}, deadline);
+				}, deadline, this.hmacAlgorithms);
 		ProviderState provider = requireNonNull(selected.get());
 		IdToken token;
 		try {
@@ -211,7 +218,7 @@ public final class OidcClient {
 			if (!completion.tokenType().equalsIgnoreCase("Bearer"))
 				throw OidcValidationException.fromReason(OidcValidationException.Reason.TOKEN_TYPE_UNSUPPORTED);
 			token = provider.validator.validate(compact, completion.nonce(), completion.accessToken(), completion.code(),
-					completion.maxAge(), completion.acrValues(), deadline);
+					completion.maxAge(), completion.acrValues(), deadline, completion.clientSecret());
 		} catch (OidcValidationException failure) {
 			ObserverDispatch.dispatch(this.observer, observer -> observer.didRejectIdToken(failure));
 			throw failure;
@@ -247,6 +254,69 @@ public final class OidcClient {
 		return result;
 	}
 	/**
+	 * Fetches UserInfo using a checked refresh result's access token and the original authenticated identity.
+	 * The result must retain the same original session reference. A parsed session reference alone cannot supply
+	 * identity. All ordinary UserInfo issuer/client, subject, format, lifetime and network checks still apply.
+	 * @param authentication original validated authentication
+	 * @param refreshed checked refresh result for that original session
+	 * @return checked UserInfo
+	 * @since 1.0.0
+	 */
+	public @NonNull OidcUserInfo fetchUserInfo(@NonNull OidcAuthentication authentication, @NonNull OidcRefreshResult refreshed) {
+		requireNonNull(authentication); requireNonNull(refreshed);
+		if (!authentication.getSessionReference().toSerializedForm().equals(refreshed.getSessionReference().toSerializedForm())) {
+			OidcValidationException failure = OidcValidationException.fromReason(OidcValidationException.Reason.USERINFO_AUTHENTICATION_MISMATCH);
+			ObserverDispatch.dispatch(this.observer, observer -> observer.didRejectUserInfo(failure)); throw failure;
+		}
+		return fetchUserInfo(new OidcAuthentication(authentication.getIdToken(), refreshed.getTokens(), authentication.clientId()));
+	}
+	/**
+	 * Sends one refresh POST with default request options. There is no automatic retry. Persist the original session
+	 * reference in trusted storage and serialize refreshes in the application to avoid token-rotation races.
+	 * @param refreshToken current refresh credential
+	 * @param original original session comparison reference, not proof of identity
+	 * @return tokens and optional verified ID token
+	 * @since 1.0.0
+	 */
+	public @NonNull OidcRefreshResult refresh(@NonNull RefreshToken refreshToken, @NonNull OidcSessionReference original) {
+		return refresh(refreshToken, original, TokenRequestOptions.builder().build());
+	}
+	/**
+	 * Sends one refresh POST with scope/resource options. No scope option means no scope field is sent; the caller
+	 * restricts scope requests to the original grant. A returned ID token must preserve original issuer, subject,
+	 * audience and authorized party. Present auth_time and nonce must match the original. Issued-at cannot precede
+	 * the original token; refresh does not apply the login token-age or authentication-age window. A present code
+	 * hash cannot be verified during refresh and is rejected. Tokens remain private until validation completes.
+	 * @param refreshToken current refresh credential
+	 * @param original original session comparison reference
+	 * @param options per-request options
+	 * @return tokens, retained/replacement refresh credential and optional verified ID token
+	 * @since 1.0.0
+	 */
+	public @NonNull OidcRefreshResult refresh(@NonNull RefreshToken refreshToken, @NonNull OidcSessionReference original,
+			@NonNull TokenRequestOptions options) {
+		requireNonNull(refreshToken); requireNonNull(original); requireNonNull(options);
+		Deadline deadline = Deadline.fromNow(this.totalDeadline);
+		@Nullable IdToken verified;
+		OidcTransactionAccess.RefreshCompletion completion;
+		try {
+			original.checkClient(this.issuer, this.clientId);
+			ProviderState provider = provider(deadline);
+			completion = OidcTransactionAccess.get().refresh(this.oauth, refreshToken, options, provider.metadata.oauthMetadata(), deadline, this.hmacAlgorithms);
+			if (!completion.tokenType().equalsIgnoreCase("Bearer")) throw OidcValidationException.fromReason(OidcValidationException.Reason.TOKEN_TYPE_UNSUPPORTED);
+			String compact = completion.idToken();
+			if (completion.idTokenPresent() && compact == null) throw OidcValidationException.fromReason(OidcValidationException.Reason.ID_TOKEN_MALFORMED);
+			verified = compact == null ? null : provider.validator.validateRefresh(compact, original, completion.accessToken(), this.acrValues, deadline, completion.clientSecret());
+		} catch (OidcValidationException failure) {
+			ObserverDispatch.dispatch(this.observer, observer -> observer.didRejectRefresh(failure)); throw failure;
+		}
+		TokenResponse tokens = completion.releaseTokens();
+		OidcRefreshResult result = new OidcRefreshResult(tokens, verified, refreshToken, original);
+		ObserverDispatch.dispatch(this.observer, observer -> observer.didRefreshTokens(result.getIdToken().isPresent(), tokens.getRefreshToken().isPresent()));
+		return result;
+	}
+
+	/**
 	 * Redacts client configuration.
 	 *
 	 * @return a redacted description
@@ -271,6 +341,7 @@ public final class OidcClient {
 		private Set<String> trustedAudiences = Set.of();
 		private Set<String> trustedAuthorizedParties = Set.of();
 		private Set<JwsAlgorithm> algorithms = Set.of(JwsAlgorithm.RS256);
+		private Set<OidcCompatibilityMode> compatibility = Set.of();
 		private @Nullable JsonWebKeySource keySource;
 		private @Nullable JwsAlgorithm userInfoAlgorithm;
 		private Duration clockSkew = Duration.ofSeconds(60);
@@ -363,6 +434,18 @@ public final class OidcClient {
 		 * @since 1.0.0
 		 */
 		public @NonNull Builder idTokenSigningAlgorithms(@Nullable Set<@NonNull JwsAlgorithm> value) { this.algorithms = value == null ? Set.of(JwsAlgorithm.RS256) : Set.copyOf(value); return this; }
+		/**
+		 * Sets the complete per-client compatibility-mode set. Null restores no modes. Enabling HMAC does not change
+		 * the default RS256 allowlist; explicitly name HS algorithms and configure confidential client authentication.
+		 * Secret suppliers are checked once at build and once per credentialed token POST, before I/O. The exact
+		 * secret used for that POST verifies its ID token; a later rotation cannot change the call's key.
+		 * @param value modes, or null to restore the default
+		 * @return this builder
+		 * @since 1.0.0
+		 */
+		public @NonNull Builder compatibility(@Nullable Set<@NonNull OidcCompatibilityMode> value) {
+			this.compatibility = value == null ? Set.of() : Set.copyOf(value); return this;
+		}
 		/**
 		 * Sets the exact registered signed-UserInfo algorithm. Null restores JSON responses. This allowlist is separate
 		 * from the ID-token allowlist; an advertised UserInfo capability set must include it. HMAC compatibility is not
@@ -521,9 +604,10 @@ public final class OidcClient {
 			if (this.clientId == null || this.clientId.isEmpty() || this.redirectUri == null || this.algorithms.isEmpty()
 					|| this.trustedAudiences.contains("") || this.trustedAuthorizedParties.contains(""))
 				throw new IllegalArgumentException("An OIDC client requires a client ID, callback URI and algorithm allowlist.");
-			for (JwsAlgorithm algorithm : this.algorithms)
-				if (Set.of(JwsAlgorithm.HS256, JwsAlgorithm.HS384, JwsAlgorithm.HS512).contains(algorithm))
-					throw new IllegalArgumentException("HMAC ID-token compatibility is not enabled.");
+			Set<JwsAlgorithm> hmac = hmacAlgorithms(this.algorithms);
+			if (!hmac.isEmpty() && !this.compatibility.contains(OidcCompatibilityMode.HMAC_ID_TOKENS))
+				throw new IllegalArgumentException("HMAC ID-token compatibility is not enabled.");
+			OidcTransactionAccess.get().checkHmacAuthentication(this.authentication, hmac);
 			if (this.userInfoAlgorithm != null && Set.of(JwsAlgorithm.HS256, JwsAlgorithm.HS384, JwsAlgorithm.HS512).contains(this.userInfoAlgorithm))
 				throw new IllegalArgumentException("HMAC UserInfo compatibility is not enabled.");
 			Limits.requireDiscoveryTimeToLiveOrder(this.minimumTimeToLive, this.defaultTimeToLive, this.maximumTimeToLive, this.discoveryCooldown);
@@ -536,7 +620,10 @@ public final class OidcClient {
 					.httpClient(this.httpClient).outboundUriPolicy(this.policy).requestTimeout(this.requestTimeout)
 					.totalDeadline(this.totalDeadline).clock(this.clock).observer(this.observer)
 					.allowInsecureLoopback(this.allowInsecureLoopback).acknowledgeUnpatchedRuntime(this.acknowledgeUnpatchedRuntime).build();
-			return new OidcClient(this, oauth);
+			OidcClient client = new OidcClient(this, oauth);
+			for (OidcCompatibilityMode mode : this.compatibility)
+				ObserverDispatch.dispatch(this.observer, observer -> observer.didEnableCompatibilityMode(mode));
+			return client;
 		}
 	}
 }

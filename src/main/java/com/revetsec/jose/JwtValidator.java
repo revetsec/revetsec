@@ -83,6 +83,13 @@ public final class JwtValidator {
 		@Override public Jwt validateUserInfo(JwtValidator validator, String compact, LongSupplier remainingNanos) {
 			return validator.validate(compact, requireNonNull(remainingNanos), validator.claimsPolicy.withOptionalExpiration());
 		}
+		@Override public Jwt validateOidc(JwtValidator validator, String compact, Set<JwsAlgorithm> algorithms,
+				byte[] secret, LongSupplier remainingNanos, Runnable hmacUsed) {
+			JoseHeaderPolicy header = JoseHeaderPolicy.fromSettings(validator.headerPolicy.getMaximumTokenLength(),
+					algorithms, validator.headerPolicy.getAllowedTypes(), validator.headerPolicy.isTypeRequired());
+			return validator.validate(compact, requireNonNull(remainingNanos), validator.claimsPolicy, header,
+					requireNonNull(secret), requireNonNull(hmacUsed));
+		}
 		@Override public void warmUp(RemoteJsonWebKeySource source, LongSupplier remainingNanos) { source.warmUp(remainingNanos); }
 		@Override public Jwt validate(JwtValidator validator, String compact, LongSupplier remainingNanos) {
 			return validator.validate(compact, requireNonNull(remainingNanos));
@@ -164,6 +171,11 @@ public final class JwtValidator {
 	}
 
 	private Jwt validate(String compactSerialization, @Nullable LongSupplier remainingNanos, JwtClaimsPolicy policy) {
+		return validate(compactSerialization, remainingNanos, policy, this.headerPolicy, null, () -> { });
+	}
+
+	private Jwt validate(String compactSerialization, @Nullable LongSupplier remainingNanos, JwtClaimsPolicy policy,
+			JoseHeaderPolicy header, byte @Nullable [] secret, Runnable hmacUsed) {
 		requireNonNull(compactSerialization);
 		long startNanos = System.nanoTime();
 
@@ -173,7 +185,7 @@ public final class JwtValidator {
 		Jwt jwt;
 
 		try {
-			jwt = validateOrThrow(compactSerialization, remainingNanos, policy);
+			jwt = validateOrThrow(compactSerialization, remainingNanos, policy, header, secret, hmacUsed);
 		} catch (JoseException | JsonWebKeySetUnavailableException exception) {
 			Duration elapsed = Duration.ofNanos(System.nanoTime() - startNanos);
 			ObserverDispatch.dispatch(this.observer, observer -> observer.didFailToValidateJwt(exception, elapsed));
@@ -186,9 +198,15 @@ public final class JwtValidator {
 	}
 
 	@NonNull
-	private Jwt validateOrThrow(@NonNull String compactSerialization, @Nullable LongSupplier remainingNanos, JwtClaimsPolicy policy) {
+	private Jwt validateOrThrow(@NonNull String compactSerialization, @Nullable LongSupplier remainingNanos, JwtClaimsPolicy policy,
+			JoseHeaderPolicy header, byte @Nullable [] secret, Runnable hmacUsed) {
 		try {
-			PreparedJws prepared = JwtProcessor.prepare(compactSerialization, this.headerPolicy);
+			PreparedJws prepared = JwtProcessor.prepare(compactSerialization, header);
+			if (Algorithms.familyOf(prepared.getAlgorithm()) == Algorithms.Family.HMAC) {
+				hmacUsed.run();
+				return Jwt.fromVerifiedJwt(JwtProcessor.completeWithSecret(prepared, requireNonNull(secret), policy,
+						this.clock.instant()));
+			}
 			// Key resolution throws only JsonWebKeySetUnavailableException, which is never translated.
 			KeySelection selection = selectKey(prepared.getKeyQuery(), remainingNanos);
 			return Jwt.fromVerifiedJwt(JwtProcessor.complete(prepared, selection, policy,
