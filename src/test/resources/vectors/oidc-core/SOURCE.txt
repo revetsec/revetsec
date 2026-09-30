@@ -1,0 +1,5 @@
+OpenID Connect Core 1.0 incorporating errata set 2.
+URL: https://openid.net/specs/openid-connect-core-1_0-errata2.html
+Captured 2026-09-29. Source SHA-256: 4d016752a645e8a3c259baa4173b5a90cb6c82898ce868fc8444adde262a5aed
+A.3 and A.4 compact ID-token examples and A.7 public RSA key, with display line wrapping removed.
+TEST ONLY public credentials; never use these values to protect real data.

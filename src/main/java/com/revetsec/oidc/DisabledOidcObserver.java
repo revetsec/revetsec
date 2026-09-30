@@ -14,21 +14,10 @@
  * limitations under the License.
  */
 
-package com.revetsec.oauth;
-
-import javax.annotation.concurrent.Immutable;
-
-/**
- * An OAuth endpoint category used in redacted observer events.
- *
- * @author <a href="https://www.revetkn.com">Mark Allen</a>
- * @since 1.0.0
- */
-@Immutable
-public enum OAuthEndpoint {
-	/** Browser authorization endpoint. */ AUTHORIZATION,
-	/** Authorization-server metadata endpoint. */ METADATA,
-	/** Token endpoint. */ TOKEN,
-	/** Token revocation endpoint. */ REVOCATION,
-	/** OpenID Connect UserInfo endpoint. */ USERINFO
+package com.revetsec.oidc;
+import javax.annotation.concurrent.ThreadSafe;
+@ThreadSafe
+final class DisabledOidcObserver implements OidcObserver {
+	static final OidcObserver INSTANCE = new DisabledOidcObserver();
+	private DisabledOidcObserver() { }
 }

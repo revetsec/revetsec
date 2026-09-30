@@ -24,7 +24,7 @@ import java.time.Duration;
 import java.util.Optional;
 
 /**
- * A token or revocation endpoint error. The response body and its prose are never retained.
+ * A token, revocation or UserInfo endpoint error. The response body and its prose are never retained.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  * @since 1.0.0

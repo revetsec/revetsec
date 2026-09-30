@@ -14,21 +14,26 @@
  * limitations under the License.
  */
 
-package com.revetsec.oauth;
+package com.revetsec.oidc;
 
-import javax.annotation.concurrent.Immutable;
+import com.revetsec.ErrorCategory;
+import com.revetsec.RevetsecException;
+import org.jspecify.annotations.NonNull;
+
+import javax.annotation.concurrent.NotThreadSafe;
 
 /**
- * An OAuth endpoint category used in redacted observer events.
+ * An OpenID Connect validation failure. Messages are fixed and contain no tokens, claims or other input.
+ * Applications catch this family; only Revetsec constructs it.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  * @since 1.0.0
  */
-@Immutable
-public enum OAuthEndpoint {
-	/** Browser authorization endpoint. */ AUTHORIZATION,
-	/** Authorization-server metadata endpoint. */ METADATA,
-	/** Token endpoint. */ TOKEN,
-	/** Token revocation endpoint. */ REVOCATION,
-	/** OpenID Connect UserInfo endpoint. */ USERINFO
+@NotThreadSafe
+public abstract sealed class OidcException extends RevetsecException permits OidcValidationException {
+	private static final long serialVersionUID = 1L;
+
+	OidcException(@NonNull String fixedMessage) {
+		super(ErrorCategory.VALIDATION_FAILURE, false, fixedMessage, null);
+	}
 }

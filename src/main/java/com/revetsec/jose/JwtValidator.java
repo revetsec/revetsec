@@ -18,6 +18,8 @@ package com.revetsec.jose;
 
 import com.google.errorprone.annotations.CheckReturnValue;
 import com.revetsec.internal.Limits;
+import com.revetsec.internal.http.Deadline;
+import com.revetsec.internal.jose.JwtValidationAccess;
 import com.revetsec.internal.ObserverDispatch;
 import com.revetsec.internal.jose.Algorithms;
 import com.revetsec.internal.jose.JoseFailure;
@@ -36,6 +38,7 @@ import javax.annotation.concurrent.ThreadSafe;
 import java.time.Clock;
 import java.time.Duration;
 import java.util.Set;
+import java.util.function.LongSupplier;
 
 import static java.util.Objects.requireNonNull;
 
@@ -74,6 +77,18 @@ import static java.util.Objects.requireNonNull;
 @ThreadSafe
 @CheckReturnValue
 public final class JwtValidator {
+	static { JwtValidationAccess.set(new DeadlineOperations()); }
+	@ThreadSafe
+	private static final class DeadlineOperations implements JwtValidationAccess.Operations {
+		@Override public Jwt validateUserInfo(JwtValidator validator, String compact, LongSupplier remainingNanos) {
+			return validator.validate(compact, requireNonNull(remainingNanos), validator.claimsPolicy.withOptionalExpiration());
+		}
+		@Override public void warmUp(RemoteJsonWebKeySource source, LongSupplier remainingNanos) { source.warmUp(remainingNanos); }
+		@Override public Jwt validate(JwtValidator validator, String compact, LongSupplier remainingNanos) {
+			return validator.validate(compact, requireNonNull(remainingNanos));
+		}
+	}
+
 	@NonNull
 	private static final Set<@NonNull JwsAlgorithm> DEFAULT_ALLOWED_ALGORITHMS = Set.of(JwsAlgorithm.RS256);
 	@NonNull
@@ -141,6 +156,14 @@ public final class JwtValidator {
 	 */
 	@NonNull
 	public Jwt validate(@NonNull String compactSerialization) {
+		return validate(compactSerialization, null);
+	}
+
+	private Jwt validate(String compactSerialization, @Nullable LongSupplier remainingNanos) {
+		return validate(compactSerialization, remainingNanos, this.claimsPolicy);
+	}
+
+	private Jwt validate(String compactSerialization, @Nullable LongSupplier remainingNanos, JwtClaimsPolicy policy) {
 		requireNonNull(compactSerialization);
 		long startNanos = System.nanoTime();
 
@@ -150,7 +173,7 @@ public final class JwtValidator {
 		Jwt jwt;
 
 		try {
-			jwt = validateOrThrow(compactSerialization);
+			jwt = validateOrThrow(compactSerialization, remainingNanos, policy);
 		} catch (JoseException | JsonWebKeySetUnavailableException exception) {
 			Duration elapsed = Duration.ofNanos(System.nanoTime() - startNanos);
 			ObserverDispatch.dispatch(this.observer, observer -> observer.didFailToValidateJwt(exception, elapsed));
@@ -163,12 +186,12 @@ public final class JwtValidator {
 	}
 
 	@NonNull
-	private Jwt validateOrThrow(@NonNull String compactSerialization) {
+	private Jwt validateOrThrow(@NonNull String compactSerialization, @Nullable LongSupplier remainingNanos, JwtClaimsPolicy policy) {
 		try {
 			PreparedJws prepared = JwtProcessor.prepare(compactSerialization, this.headerPolicy);
 			// Key resolution throws only JsonWebKeySetUnavailableException, which is never translated.
-			KeySelection selection = selectKey(prepared.getKeyQuery());
-			return Jwt.fromVerifiedJwt(JwtProcessor.complete(prepared, selection, this.claimsPolicy,
+			KeySelection selection = selectKey(prepared.getKeyQuery(), remainingNanos);
+			return Jwt.fromVerifiedJwt(JwtProcessor.complete(prepared, selection, policy,
 					this.clock.instant()));
 		} catch (JoseFailure failure) {
 			throw JoseException.fromReason(failure.getReason());
@@ -176,7 +199,7 @@ public final class JwtValidator {
 	}
 
 	@NonNull
-	private KeySelection selectKey(@NonNull KeyQuery query) {
+	private KeySelection selectKey(@NonNull KeyQuery query, @Nullable LongSupplier remainingNanos) {
 		if (this.jsonWebKeySource instanceof StaticJsonWebKeySource staticSource) {
 			try {
 				return KeySelector.select(staticSource.verificationKeys(), query);
@@ -187,7 +210,9 @@ public final class JwtValidator {
 		}
 
 		// A remote source throws only JsonWebKeySetUnavailableException, which propagates unchanged.
-		return ((RemoteJsonWebKeySource) this.jsonWebKeySource).select(query);
+		RemoteJsonWebKeySource remote = (RemoteJsonWebKeySource) this.jsonWebKeySource;
+		return remainingNanos == null ? remote.select(query) : remote.select(query,
+				Deadline.fromNow(Duration.ofNanos(Math.max(0, remainingNanos.getAsLong()))));
 	}
 
 	/**

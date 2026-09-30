@@ -38,7 +38,8 @@ import static java.util.Objects.requireNonNull;
  * generic validator and later profiles share them: the exact issuer, the expected audiences or any audience, the
  * required claims, and the clock skew.
  * <p>
- * {@code iss} and {@code exp} are always required, and so is {@code aud} unless any audience is accepted; the
+ * {@code iss} is always required, and so is {@code aud} unless any audience is accepted. The default profile
+ * also requires {@code exp}; the internal signed-UserInfo profile validates expiration only when present. The
  * required-claims setting adds names to those.
  * <p>
  * {@link #check(RegisteredClaims, VerificationKey, Instant)} runs the checks in order, and the first failure names the
@@ -59,7 +60,7 @@ import static java.util.Objects.requireNonNull;
  *   {@link JoseException.Reason#MISSING_CLAIM}, and one with no expected audience, compared exactly, is
  *   {@link JoseException.Reason#AUDIENCE_MISMATCH}. Other audiences beside an expected one are allowed (RFC 7519
  *   section 4.1.3).</li>
- *   <li><strong>Time</strong> (step 12), with the clock skew {@code s}: {@code exp} absent is
+ *   <li><strong>Time</strong> (step 12), with the clock skew {@code s}: {@code exp} absent in the default profile is
  *   {@link JoseException.Reason#MISSING_CLAIM}; {@code now >= exp + s} is {@link JoseException.Reason#EXPIRED}
  *   (RFC 7519 section 4.1.4); {@code iat > now + s} is {@link JoseException.Reason#ISSUED_IN_FUTURE}; and
  *   {@code now < nbf - s} is {@link JoseException.Reason#NOT_YET_VALID} (section 4.1.5).</li>
@@ -102,11 +103,13 @@ public final class JwtClaimsPolicy {
 	private final Set<@NonNull String> requiredClaims;
 	@NonNull
 	private final Duration clockSkew;
+	private final boolean expirationRequired;
 
 	private JwtClaimsPolicy(@NonNull String issuer,
 													@Nullable Set<@NonNull String> expectedAudiences,
 													@NonNull Set<@NonNull String> requiredClaims,
-													@NonNull Duration clockSkew) {
+													@NonNull Duration clockSkew, boolean expirationRequired) {
+		this.expirationRequired = expirationRequired;
 		this.issuer = issuer;
 		this.expectedAudiences = expectedAudiences == null ? null : Set.copyOf(expectedAudiences);
 		this.requiredClaims = Set.copyOf(requiredClaims);
@@ -148,7 +151,16 @@ public final class JwtClaimsPolicy {
 		if (clockSkew.isNegative())
 			throw new IllegalArgumentException("The clock skew must not be negative.");
 
-		return new JwtClaimsPolicy(issuer, audiences, claims, clockSkew);
+		return new JwtClaimsPolicy(issuer, audiences, claims, clockSkew, true);
+	}
+
+	/**
+	 * Returns the signed-UserInfo profile: expiry is optional, but validated when present. Only the internal OIDC
+	 * validation bridge selects this profile; exported JWT validation always requires expiry.
+	 * @return the same issuer, audience and claim policy with optional expiration
+	 */
+	public @NonNull JwtClaimsPolicy withOptionalExpiration() {
+		return new JwtClaimsPolicy(this.issuer, this.expectedAudiences, this.requiredClaims, this.clockSkew, false);
 	}
 
 	/**
@@ -255,9 +267,9 @@ public final class JwtClaimsPolicy {
 												 @NonNull Instant now) throws JoseFailure {
 		Instant expiresAt = claims.expiresAt();
 
-		if (expiresAt == null)
+		if (expiresAt == null && this.expirationRequired)
 			throw new JoseFailure(JoseException.Reason.MISSING_CLAIM);
-		if (!now.isBefore(expiresAt.plus(this.clockSkew)))
+		if (expiresAt != null && !now.isBefore(expiresAt.plus(this.clockSkew)))
 			throw new JoseFailure(JoseException.Reason.EXPIRED);
 
 		Instant issuedAt = claims.issuedAt();

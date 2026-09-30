@@ -56,6 +56,19 @@ final class TokenResponseTests {
 	}
 
 	@Test
+	void oidcPayloadKeepsIdTokenInternalUntilValidation() {
+		TokenEndpointPayload payload = TokenResponseParser.parsePayload(raw(200,
+				"{\"access_token\":\"access-secret\",\"token_type\":\"Bearer\",\"id_token\":\"id-secret\"}",
+				Map.of()), START, Set.of("openid"));
+		assertEquals("id-secret", payload.idToken());
+		assertFalse(payload.toString().contains("id-secret"));
+		assertFalse(payload.toString().contains("access-secret"));
+		TokenResponse released = payload.toTokenResponse();
+		assertTrue(released.getParameter("id_token").isEmpty());
+		assertFalse(released.toString().contains("id-secret"));
+	}
+
+	@Test
 	void twoHundredWithErrorIsRemoteErrorAndNoSecretLeaks() {
 		OAuthErrorResponseException error = assertThrows(OAuthErrorResponseException.class, () ->
 				TokenResponseParser.parse(raw(200,

@@ -25,6 +25,7 @@ import org.jspecify.annotations.Nullable;
 import javax.annotation.concurrent.Immutable;
 import java.net.URI;
 import java.time.Instant;
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -58,6 +59,9 @@ public final class PendingAuthorization {
 	private final boolean issuerRequired;
 	private final @NonNull URI authorizationEndpoint;
 	private final @NonNull URI tokenEndpoint;
+	private final @Nullable Duration maxAge;
+	private final @NonNull Set<@NonNull String> acrValues;
+	private final @Nullable String prompt;
 
 	PendingAuthorization(@NonNull String kind, @NonNull String issuer, @NonNull String clientId,
 			@NonNull URI redirectUri, @NonNull String state, @NonNull String verifier, @Nullable String nonce,
@@ -65,6 +69,17 @@ public final class PendingAuthorization {
 			AuthorizationRequestOptions.@NonNull ResponseMode responseMode, @NonNull Instant createdAt,
 			@NonNull Instant expiresAt, @NonNull Map<@NonNull String, @NonNull String> applicationData,
 			boolean issuerRequired, @NonNull URI authorizationEndpoint, @NonNull URI tokenEndpoint) {
+		this(kind, issuer, clientId, redirectUri, state, verifier, nonce, scopes, resources, responseMode, createdAt,
+				expiresAt, applicationData, issuerRequired, authorizationEndpoint, tokenEndpoint, null, Set.of(), null);
+	}
+
+	PendingAuthorization(@NonNull String kind, @NonNull String issuer, @NonNull String clientId,
+			@NonNull URI redirectUri, @NonNull String state, @NonNull String verifier, @Nullable String nonce,
+			@NonNull Set<@NonNull String> scopes, @NonNull List<@NonNull URI> resources,
+			AuthorizationRequestOptions.@NonNull ResponseMode responseMode, @NonNull Instant createdAt,
+			@NonNull Instant expiresAt, @NonNull Map<@NonNull String, @NonNull String> applicationData,
+			boolean issuerRequired, @NonNull URI authorizationEndpoint, @NonNull URI tokenEndpoint,
+			@Nullable Duration maxAge, @NonNull Set<@NonNull String> acrValues, @Nullable String prompt) {
 		this.kind = requireNonNull(kind);
 		this.issuer = requireNonNull(issuer);
 		this.clientId = requireNonNull(clientId);
@@ -81,6 +96,7 @@ public final class PendingAuthorization {
 		this.issuerRequired = issuerRequired;
 		this.authorizationEndpoint = requireNonNull(authorizationEndpoint);
 		this.tokenEndpoint = requireNonNull(tokenEndpoint);
+		this.maxAge = maxAge; this.acrValues = Set.copyOf(acrValues); this.prompt = prompt;
 	}
 
 	/**
@@ -165,6 +181,10 @@ public final class PendingAuthorization {
 				PendingAuthorizationCodec.encode(this, PendingAuthorizationCodec.bindingDigest(browserBinding)),
 				this.expiresAt);
 	}
+
+	@Nullable Duration maxAge() { return this.maxAge; }
+	Set<String> acrValues() { return this.acrValues; }
+	@Nullable String prompt() { return this.prompt; }
 
 	String kind() { return this.kind; }
 	String state() { return this.state; }

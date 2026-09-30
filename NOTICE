@@ -8,6 +8,15 @@ Third-party material in the source repository
 The files below are in the source repository only, as test tooling. None of
 them is in the published JAR.
 
+OpenID Connect Core examples (src/test/resources/vectors/oidc-core/)
+
+The ID-token examples in Appendix A.3 and A.4 and the public RSA key in A.7
+are extracted from OpenID Connect Core 1.0 incorporating errata set 2:
+https://openid.net/specs/openid-connect-core-1_0-errata2.html
+Display line wrapping is removed. SOURCE.txt records the dated source and its
+checksum. These public example credentials are test-only and are not included
+in the published JAR.
+
 OpenID Foundation conformance suite (interop/spike/oidf-compose.yml, adapted)
 
 interop/spike/oidf-compose.yml is adapted from docker-compose-prebuilt.yml in

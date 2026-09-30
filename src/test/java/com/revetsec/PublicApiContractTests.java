@@ -117,6 +117,7 @@ final class PublicApiContractTests {
 			"com.revetsec.oauth.VerifiedAccessToken",
 			"com.revetsec.oidc.IdToken",
 			"com.revetsec.oidc.OidcAuthentication",
+			"com.revetsec.oidc.OidcUserInfo",
 			"com.revetsec.saml.SamlAuthentication",
 			"com.revetsec.scim.ScimPatchResult");
 
@@ -128,7 +129,11 @@ final class PublicApiContractTests {
 	 */
 	static final Set<String> VERIFIED_TYPE_SOURCES = Set.of(
 			"com.revetsec.jose.JwtValidator",
-			"com.revetsec.jose.Jwt");
+			"com.revetsec.jose.Jwt",
+			"com.revetsec.oidc.IdToken",
+			"com.revetsec.oidc.OidcAuthentication",
+			"com.revetsec.oidc.OidcClient",
+			"com.revetsec.internal.jose.JwtValidationAccess$Operations");
 
 	/**
 	 * Binary names of the exported concrete classes approved to be neither final nor sealed (R1). The exemption covers

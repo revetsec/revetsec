@@ -47,6 +47,11 @@ final class TokenResponseParser {
 	}
 
 	static TokenResponse parse(RawResponse response, Instant requestStart, @Nullable Set<String> requestedScopes) {
+		return parsePayload(response, requestStart, requestedScopes).toTokenResponse();
+	}
+
+	static TokenEndpointPayload parsePayload(RawResponse response, Instant requestStart,
+			@Nullable Set<String> requestedScopes) {
 		int status = response.status();
 		if (status != 200) throw error(response, requestStart);
 		byte[] body = response.body();
@@ -76,17 +81,18 @@ final class TokenResponseParser {
 			String tokenType = requiredString(members, "token_type");
 			Instant expiresAt = members.containsKey("expires_in")
 					? expiry(requestStart, members.get("expires_in")) : null;
-			AccessToken accessToken = new AccessToken(value, tokenType, expiresAt);
-			RefreshToken refreshToken = members.containsKey("refresh_token")
-					? RefreshToken.fromValue(requiredString(members, "refresh_token")) : null;
+			String refreshToken = members.containsKey("refresh_token")
+					? requiredString(members, "refresh_token") : null;
+			String idToken = members.get("id_token") instanceof JsonString idTokenValue
+					? idTokenValue.getValue() : null;
 			String scope = members.containsKey("scope") ? requiredString(members, "scope") : null;
 			Set<String> scopes = scope == null ? requestedScopes : scopeSet(scope);
 			Map<String, JsonValue> safe = new LinkedHashMap<>();
 			members.forEach((name, member) -> {
 				if (!SENSITIVE.contains(name)) safe.put(name, member);
 			});
-			return new TokenResponse(accessToken, refreshToken, scope, scopes, requestStart,
-					JsonObject.fromMembers(safe));
+			return new TokenEndpointPayload(value, tokenType, expiresAt, refreshToken, idToken,
+					scope, scopes, requestStart, JsonObject.fromMembers(safe));
 		} finally {
 			Arrays.fill(body, (byte) 0);
 		}

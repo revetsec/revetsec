@@ -138,6 +138,10 @@ public final class RemoteJsonWebKeySource implements JsonWebKeySource {
 		return new Builder(uri);
 	}
 
+	void warmUp(java.util.function.LongSupplier remainingNanos) {
+		this.cache.warmUp(Deadline.fromNow(Duration.ofNanos(Math.max(0, remainingNanos.getAsLong()))));
+	}
+
 	/**
 	 * Fetches the key set now, unless a fresh one is cached (even one with no usable key), so the first validation
 	 * does not wait for it. It waits for a fetch another caller already started instead of starting its own. It

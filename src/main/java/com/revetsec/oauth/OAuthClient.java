@@ -20,6 +20,7 @@ import com.revetsec.OutboundUriPolicy;
 import com.revetsec.internal.HostClassifier;
 import com.revetsec.internal.Limits;
 import com.revetsec.internal.ObserverDispatch;
+import com.revetsec.internal.oauth.OidcTransactionAccess;
 import com.revetsec.internal.http.Deadline;
 import com.revetsec.internal.http.HttpExchange;
 import com.revetsec.internal.http.HttpExchangeException;
@@ -49,6 +50,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.function.Function;
 
 import static java.util.Objects.requireNonNull;
 
@@ -63,6 +65,43 @@ import static java.util.Objects.requireNonNull;
  */
 @ThreadSafe
 public final class OAuthClient {
+	static { OidcTransactionAccess.set(new OidcOperations()); }
+
+	@ThreadSafe
+	private static final class OidcOperations implements OidcTransactionAccess.Operations {
+		@Override public OAuthException endpointFailure(OAuthException.Reason reason) {
+			return switch (reason) {
+				case METADATA_INVALID -> OAuthValidationException.fromReason(reason);
+				case DOCUMENT_MALFORMED -> OAuthResponseException.fromReason(reason);
+				case NETWORK_FAILURE, INTERRUPTED, ATTEMPT_LIMIT -> OAuthTransportException.fromReason(reason, null);
+				default -> throw new IllegalArgumentException("Unsupported endpoint failure reason.");
+			};
+		}
+		@Override public OAuthException endpointExchangeFailure(com.revetsec.internal.http.HttpExchangeException failure) {
+			return OAuthHttpErrors.fromExchange(failure);
+		}
+		@Override public OAuthException endpointStatusFailure(int status, @Nullable Duration retryAfter) {
+			return OAuthErrorResponseException.fromResponse(status, "", Optional.ofNullable(retryAfter));
+		}
+		@Override public AuthorizationRedirect begin(OAuthClient client, AuthorizationRequestOptions options,
+				AuthorizationServerMetadata metadata, @Nullable Duration maxAge, Set<String> acrValues) {
+			return client.begin(options, "oidc", metadata, maxAge, acrValues);
+		}
+		@Override public OidcTransactionAccess.Completion complete(OAuthClient client, AuthorizationResponse response,
+				PendingAuthorizationSource source, URI callback, Function<Deadline, AuthorizationServerMetadata> metadata, Deadline deadline) {
+			CodeCompletion completion = client.complete(response, source, callback, "oidc", metadata, deadline);
+			PendingAuthorization pending = completion.pending();
+			TokenEndpointPayload payload = completion.payload();
+			return new OidcTransactionAccess.Completion(payload.idToken(), payload.accessToken(), payload.tokenType(),
+					completion.code(), requireNonNull(pending.nonce()), pending.maxAge(), pending.acrValues(),
+					() -> payload.toTokenResponse().withApplicationData(pending.getApplicationData()));
+		}
+	}
+
+	private record CodeCompletion(PendingAuthorization pending, TokenEndpointPayload payload, String code) {
+		@Override public String toString() { return "CodeCompletion{credentials=<redacted>}"; }
+	}
+
 	private final @NonNull String issuer;
 	private final @Nullable AuthorizationServerMetadata staticMetadata;
 	private final @Nullable AuthorizationServerCache cache;
@@ -153,9 +192,14 @@ public final class OAuthClient {
 	 */
 	public @NonNull AuthorizationRedirect beginAuthorization(@NonNull AuthorizationRequestOptions options) {
 		requireNonNull(options);
+		if (this.redirectUri == null) throw new IllegalStateException("A redirect URI is required for authorization code flow.");
+		return begin(options, "oauth", metadata(Deadline.fromNow(this.totalDeadline)), null, Set.of());
+	}
+
+	private AuthorizationRedirect begin(AuthorizationRequestOptions options, String kind,
+			AuthorizationServerMetadata metadata, @Nullable Duration maxAge, Set<String> acrValues) {
 		if (this.redirectUri == null)
 			throw new IllegalStateException("A redirect URI is required for authorization code flow.");
-		AuthorizationServerMetadata metadata = metadata(Deadline.fromNow(this.totalDeadline));
 		if (metadata.getCodeChallengeMethodsSupported().isPresent()) {
 			if (!metadata.getCodeChallengeMethodsSupported().orElseThrow().contains("S256"))
 				throw OAuthValidationException.fromReason(OAuthException.Reason.PKCE_UNSUPPORTED);
@@ -173,6 +217,11 @@ public final class OAuthClient {
 				.add("state", state).add("code_challenge", challenge).add("code_challenge_method", "S256");
 		if (!requestedScopes.isEmpty()) query.add("scope", String.join(" ", new TreeSet<>(requestedScopes)));
 		query.resources(requestedResources);
+		if (kind.equals("oidc")) {
+			query.add("nonce", nonce);
+			if (maxAge != null) query.add("max_age", Long.toString(maxAge.getSeconds()));
+			if (!acrValues.isEmpty()) query.add("acr_values", String.join(" ", new TreeSet<>(acrValues)));
+		}
 		if (options.getResponseMode() == AuthorizationRequestOptions.ResponseMode.FORM_POST)
 			query.add("response_mode", "form_post");
 		options.getPrompt().ifPresent(prompt -> query.add("prompt", prompt));
@@ -180,12 +229,12 @@ public final class OAuthClient {
 		query.addAll(options.getAdditionalParameters());
 		URI uri = query.appendTo(metadata.getAuthorizationEndpoint());
 		Instant createdAt = this.clock.instant();
-		PendingAuthorization pending = new PendingAuthorization("oauth", this.issuer, this.clientId, this.redirectUri,
+		PendingAuthorization pending = new PendingAuthorization(kind, this.issuer, this.clientId, this.redirectUri,
 				state, verifier, nonce, requestedScopes, requestedResources, options.getResponseMode(), createdAt,
 				createdAt.plus(this.pendingAuthorizationLifetime), options.getApplicationData(),
 				this.issuerParameterPolicy == IssuerParameterPolicy.REQUIRED
 						|| metadata.isAuthorizationResponseIssuerSupported(), metadata.getAuthorizationEndpoint(),
-				metadata.getTokenEndpoint());
+				metadata.getTokenEndpoint(), maxAge, acrValues, options.getPrompt().orElse(null));
 		URI safe = AuthorizationServerCache.reduced(metadata.getAuthorizationEndpoint());
 		ObserverDispatch.dispatch(this.observer, observer -> observer.didBeginAuthorization(safe));
 		return new AuthorizationRedirect(uri, pending);
@@ -205,14 +254,20 @@ public final class OAuthClient {
 	 */
 	public @NonNull TokenResponse completeAuthorization(@NonNull AuthorizationResponse response,
 			@NonNull PendingAuthorizationSource source, @NonNull URI actualCallbackUri) {
+		CodeCompletion completion = complete(response, source, actualCallbackUri, "oauth",
+				this::metadata, Deadline.fromNow(this.totalDeadline));
+		return completion.payload().toTokenResponse().withApplicationData(completion.pending().getApplicationData());
+	}
+
+	private CodeCompletion complete(AuthorizationResponse response, PendingAuthorizationSource source,
+			URI actualCallbackUri, String kind, Function<Deadline, AuthorizationServerMetadata> metadataSupplier, Deadline deadline) {
 		requireNonNull(response);
 		requireNonNull(source);
 		requireNonNull(actualCallbackUri);
-		Deadline deadline = Deadline.fromNow(this.totalDeadline);
 		PendingAuthorization pending;
 		try {
 			pending = PendingAuthorizationResolver.resolve(source, response.getState().orElse(""), this.clock);
-			if (!pending.kind().equals("oauth"))
+			if (!pending.kind().equals(kind))
 				throw OAuthValidationException.fromReason(OAuthException.Reason.PENDING_AUTHORIZATION_INVALID);
 			if (!pending.getClientId().equals(this.clientId))
 				throw OAuthValidationException.fromReason(OAuthException.Reason.CLIENT_MISMATCH);
@@ -235,15 +290,15 @@ public final class OAuthClient {
 			throw AuthorizationErrorException.fromErrorCode(response.getError().orElseThrow());
 		String code = response.getCode().orElseThrow(() ->
 				OAuthResponseException.fromReason(OAuthException.Reason.CALLBACK_MALFORMED));
-		AuthorizationServerMetadata metadata = metadata(deadline);
+		AuthorizationServerMetadata metadata = metadataSupplier.apply(deadline);
 		if (!metadata.getAuthorizationEndpoint().toString().equals(pending.authorizationEndpoint().toString())
 				|| !metadata.getTokenEndpoint().toString().equals(pending.tokenEndpoint().toString()))
 			throw OAuthValidationException.fromReason(OAuthException.Reason.METADATA_ENDPOINT_DRIFT);
 		OAuthRequestWriter form = new OAuthRequestWriter().add("grant_type", "authorization_code")
 				.add("code", code).add("redirect_uri", pending.getRedirectUri().toString())
 				.add("code_verifier", pending.verifier()).resources(pending.resources());
-		return tokenRequest(metadata.getTokenEndpoint(), form, pending.getRequestedScopes(), deadline)
-				.withApplicationData(pending.getApplicationData());
+		return new CodeCompletion(pending,
+				tokenPayloadRequest(metadata.getTokenEndpoint(), form, pending.getRequestedScopes(), deadline), code);
 	}
 
 	/**
@@ -320,6 +375,11 @@ public final class OAuthClient {
 
 	private TokenResponse tokenRequest(URI endpoint, OAuthRequestWriter form,
 			@Nullable Set<String> requestedScopes, Deadline deadline) {
+		return tokenPayloadRequest(endpoint, form, requestedScopes, deadline).toTokenResponse();
+	}
+
+	private TokenEndpointPayload tokenPayloadRequest(URI endpoint, OAuthRequestWriter form,
+			@Nullable Set<String> requestedScopes, Deadline deadline) {
 		Map<String, String> headers = new HashMap<>();
 		Map<String, String> authentication = new HashMap<>();
 		this.clientAuthentication.apply(this.clientId, headers, authentication);
@@ -330,7 +390,7 @@ public final class OAuthClient {
 		RawResponse response = send(endpoint, OAuthEndpoint.TOKEN, ResponseProfile.TOKEN,
 				form.body(), headers, deadline);
 		try {
-			return TokenResponseParser.parse(response, requestStart, requestedScopes);
+			return TokenResponseParser.parsePayload(response, requestStart, requestedScopes);
 		} catch (OAuthException failure) {
 			URI safe = AuthorizationServerCache.reduced(endpoint);
 			ObserverDispatch.dispatch(this.observer, observer -> observer.didFailEndpoint(

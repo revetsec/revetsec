@@ -206,6 +206,10 @@ final class SourcePolicyTests {
 	 * {@code internal.crypto.SealedStateAccess}.
 	 */
 	static final List<List<String>> MUTABLE_STATIC_ALLOWLIST = rows(new String[][]{
+			{"com.revetsec.internal.jose.JwtValidationAccess", "operations", "M4 shared HTTP deadline: set-once "
+					+ "volatile accessor, locked writes, only JwtValidator's nestmate installs it"},
+			{"com.revetsec.internal.oauth.OidcTransactionAccess", "operations", "M4-3 set-once accessor: volatile, "
+					+ "written under a lock by OAuthClient's nestmate; duplicate or foreign installation rejected"},
 			{"com.revetsec.internal.crypto.SealedStateAccess", "operations", "set-once accessor (G6-10, the JDK "
 					+ "SharedSecrets pattern): volatile, written at most once, under a lock, by StateSealer's static "
 					+ "initializer; a second set throws IllegalStateException"},

@@ -52,7 +52,7 @@ final class PendingAuthorizationCodec {
 
 	static String encode(PendingAuthorization pending, @Nullable String bindingDigest) {
 		JsonObject.Builder builder = JsonObject.builder()
-				.put("v", 1L).put("kind", pending.kind()).put("issuer", pending.getIssuer())
+				.put("v", pending.kind().equals("oidc") ? 2L : 1L).put("kind", pending.kind()).put("issuer", pending.getIssuer())
 				.put("client_id", pending.getClientId()).put("redirect_uri", pending.getRedirectUri().toString())
 				.put("state", pending.state()).put("verifier", pending.verifier())
 				.put("response_mode", pending.responseMode().name())
@@ -64,6 +64,14 @@ final class PendingAuthorizationCodec {
 		String nonce = pending.nonce();
 		if (nonce != null)
 			builder.put("nonce", nonce);
+		if (pending.kind().equals("oidc")) {
+			Duration maxAge = pending.maxAge();
+			if (maxAge != null) builder.put("max_age", maxAge.getSeconds());
+			builder.put("acr_values", JsonArray.fromElements(pending.acrValues().stream().sorted()
+					.map(JsonString::fromValue).toList()));
+			String prompt = pending.prompt();
+			if (prompt != null) builder.put("prompt", prompt);
+		}
 		if (bindingDigest != null)
 			builder.put("binding_digest", bindingDigest);
 		builder.put("scopes", JsonArray.fromElements(pending.getRequestedScopes().stream()
@@ -104,7 +112,7 @@ final class PendingAuthorizationCodec {
 				throw new IllegalArgumentException();
 			Map<String, JsonValue> values = object.getMembers();
 			if (!(values.get("v") instanceof com.revetsec.json.JsonNumber number)
-					|| !number.getLongValueExact().filter(n -> n == 1).isPresent())
+					|| !number.getLongValueExact().filter(n -> n == 1 || n == 2).isPresent())
 				throw new IllegalArgumentException();
 			Instant createdAt = Instant.parse(text(values, "created_at"));
 			Instant expiresAt = Instant.parse(text(values, "expires_at"));
@@ -125,12 +133,38 @@ final class PendingAuthorizationCodec {
 			if (!(required instanceof JsonBoolean requiredBoolean)) throw new IllegalArgumentException();
 			String kind = text(values, "kind");
 			if (!kind.equals("oauth") && !kind.equals("oidc")) throw new IllegalArgumentException();
+			long version = number.getLongValueExact().orElseThrow();
+			String nonce = optionalText(values, "nonce");
+			Duration maxAge = null;
+			Set<String> acrValues = Set.of();
+			String prompt = null;
+			if (kind.equals("oidc")) {
+				if (version != 2 || nonce == null || !scopes.contains("openid")) throw new IllegalArgumentException();
+				if (values.containsKey("max_age")) {
+					if (!(values.get("max_age") instanceof com.revetsec.json.JsonNumber age)) throw new IllegalArgumentException();
+					long seconds = age.getLongValueExact().orElseThrow();
+					if (seconds < 0) throw new IllegalArgumentException();
+					maxAge = Duration.ofSeconds(seconds);
+				}
+				List<String> acrList = strings(values, "acr_values");
+				acrValues = Set.copyOf(acrList);
+				if (acrValues.size() != acrList.size() || acrValues.stream().anyMatch(value -> value.isEmpty()
+						|| value.chars().anyMatch(c -> c <= 0x20 || c >= 0x7F))) throw new IllegalArgumentException();
+				prompt = optionalText(values, "prompt");
+				if (prompt != null) {
+					List<String> prompts = List.of(prompt.split(" ", -1));
+					if (prompts.stream().anyMatch(value -> !Set.of("none", "login", "consent", "select_account").contains(value))
+							|| Set.copyOf(prompts).size() != prompts.size() || (prompts.contains("none") && prompts.size() != 1))
+						throw new IllegalArgumentException();
+				}
+			} else if (version != 1 || values.containsKey("max_age") || values.containsKey("acr_values")
+					|| values.containsKey("prompt")) throw new IllegalArgumentException();
 			PendingAuthorization pending = new PendingAuthorization(kind, text(values, "issuer"),
 					text(values, "client_id"), URI.create(text(values, "redirect_uri")), text(values, "state"),
-					text(values, "verifier"), optionalText(values, "nonce"), scopes, resources,
+					text(values, "verifier"), nonce, scopes, resources,
 					AuthorizationRequestOptions.ResponseMode.valueOf(text(values, "response_mode")),
 					createdAt, expiresAt, app, requiredBoolean.getValue(),
-					URI.create(text(values, "authorization_endpoint")), URI.create(text(values, "token_endpoint")));
+					URI.create(text(values, "authorization_endpoint")), URI.create(text(values, "token_endpoint")), maxAge, acrValues, prompt);
 			return new Decoded(pending, optionalText(values, "binding_digest"));
 		} catch (RuntimeException | EncodingException | com.revetsec.internal.json.JsonParseException exception) {
 			throw OAuthValidationException.fromReason(OAuthException.Reason.PENDING_AUTHORIZATION_INVALID);

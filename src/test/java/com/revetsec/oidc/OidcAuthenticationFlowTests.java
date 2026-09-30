@@ -1,0 +1,297 @@
+/*
+ * Copyright 2026 Revetware LLC.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package com.revetsec.oidc;
+
+import com.revetsec.StateSealer;
+import com.revetsec.internal.encoding.QueryParameters;
+import com.revetsec.internal.oauth.OidcTransactionAccess;
+import com.revetsec.jose.*;
+import com.revetsec.oauth.*;
+import com.revetsec.testing.*;
+import com.revetsec.testing.TestJsonWebKeys.Fixture;
+import com.revetsec.testing.TestJws.Algorithm;
+import com.revetsec.json.*;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestFactory;
+import org.junit.jupiter.api.DynamicTest;
+import org.jspecify.annotations.Nullable;
+import java.net.URI;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+import java.time.*;
+import java.util.*;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
+import java.util.stream.Stream;
+import static org.junit.jupiter.api.Assertions.*;
+
+final class OidcAuthenticationFlowTests {
+	private static final URI CALLBACK = URI.create("https://rp.example/callback");
+	private static final Instant NOW = Instant.parse("2026-09-29T12:00:00Z");
+	private static final String ACCESS = "TEST-ONLY-access-sentinel";
+	private static final String REFRESH = "TEST-ONLY-refresh-sentinel";
+	private static final String CODE = "TEST-ONLY-code-sentinel";
+	private static final Clock CLOCK = Clock.fixed(NOW, ZoneOffset.UTC);
+
+	@Test
+	void buildAndBeginDoNoIoAndEveryFlowGetsFreshSecretsAndOneOpenidScope() throws Exception {
+		try (TestHttpsServer server = TestHttpsServer.start()) {
+			OidcClient client = builder(server).scopes(Set.of("openid", "email")).build();
+			assertEquals(0, server.getRequests().size());
+			AuthorizationRedirect first = client.beginAuthentication(OidcAuthenticationOptions.builder()
+					.scopes(Set.of("openid", "profile")).maxAge(Duration.ZERO).requiredAcrValues(Set.of("urn:2", "urn:1"))
+					.prompt("login consent").loginHint("person+hint@example.test").applicationData(Map.of("return", "/home"))
+					.responseMode(AuthorizationRequestOptions.ResponseMode.FORM_POST).build());
+			QueryParameters query = QueryParameters.parse(first.getAuthorizationUri().getRawQuery());
+			assertEquals(List.of("openid profile"), query.getValues("scope"));
+			assertEquals(List.of("0"), query.getValues("max_age"));
+			assertEquals(List.of("urn:1 urn:2"), query.getValues("acr_values"));
+			assertEquals(List.of("login consent"), query.getValues("prompt"));
+			assertEquals(List.of("form_post"), query.getValues("response_mode"));
+			assertEquals(43, query.getValues("nonce").get(0).length());
+			assertEquals(List.of("S256"), query.getValues("code_challenge_method"));
+			assertEquals(Map.of("return", "/home"), first.getPendingAuthorization().getApplicationData());
+			QueryParameters second = QueryParameters.parse(client.beginAuthentication().getAuthorizationUri().getRawQuery());
+			for (String name : List.of("nonce", "state", "code_challenge")) assertNotEquals(query.getValues(name), second.getValues(name));
+			assertEquals(0, server.getRequests().size());
+		}
+	}
+
+	@TestFactory
+	Stream<DynamicTest> validatesBothPendingSourcesAndQueryOrFormPostBeforeTokenRelease() {
+		return Stream.of("cookie-query", "store-query", "cookie-post", "store-post").map(mode -> DynamicTest.dynamicTest(mode, () -> {
+			try (TestHttpsServer server = TestHttpsServer.start()) {
+				OidcClient client = builder(server).build();
+				boolean post = mode.endsWith("post");
+				AuthorizationRedirect redirect = client.beginAuthentication(OidcAuthenticationOptions.builder()
+						.maxAge(Duration.ZERO).requiredAcrValues(Set.of("urn:mfa"))
+						.responseMode(post ? AuthorizationRequestOptions.ResponseMode.FORM_POST : AuthorizationRequestOptions.ResponseMode.QUERY)
+						.applicationData(Map.of("app", "TEST-ONLY-app-data")).build());
+				Map<String, String> claims = claims(server, nonce(redirect));
+				claims.put("auth_time", Long.toString(NOW.getEpochSecond())); claims.put("acr", "\"urn:mfa\"");
+				claims.put("amr", "[\"pwd\",\"mfa\"]"); claims.put("sid", "\"session-sentinel\"");
+				claims.put("at_hash", JsonText.string(IdTokenHash.hash(JwsAlgorithm.RS256, ACCESS)));
+				claims.put("c_hash", JsonText.string(IdTokenHash.hash(JwsAlgorithm.RS256, CODE)));
+				String token = sign(claims, false); respond(server, "/token", 200, "application/json", response(token, "bEaReR"));
+				PendingAuthorizationSource source;
+				if (mode.startsWith("store")) {
+					InMemoryPendingAuthorizationStore store = InMemoryPendingAuthorizationStore.builder().clock(CLOCK).build();
+					redirect.getPendingAuthorization().saveTo(store, "browser-A"); source = PendingAuthorizationSource.fromStore(store, "browser-A");
+				} else source = sealed(redirect);
+				AuthorizationResponse callback = post ? AuthorizationResponse.fromFormBody(callbackQuery(redirect).getBytes(StandardCharsets.UTF_8), StandardCharsets.UTF_8, null) : callback(redirect);
+				OidcAuthentication authentication = client.completeAuthentication(callback, source, CALLBACK);
+				assertEquals(server.getBaseUri().toString(), authentication.getIssuer()); assertEquals("subject", authentication.getSubject());
+				assertEquals(token, authentication.getIdToken().toCompactSerialization());
+				assertEquals(ACCESS, authentication.getTokens().getAccessToken().getValue());
+				assertEquals(REFRESH, authentication.getTokens().getRefreshToken().orElseThrow().getValue());
+				assertEquals(Set.of("openid"), authentication.getTokens().getGrantedScopes().orElseThrow());
+				assertEquals(Optional.of(NOW), authentication.getAuthenticationTime());
+				assertEquals(Optional.of("urn:mfa"), authentication.getAuthenticationContextClassReference());
+				assertEquals(List.of("pwd", "mfa"), authentication.getAuthenticationMethodReferences());
+				assertEquals(Optional.of("session-sentinel"), authentication.getSessionReference().getSessionId());
+				assertTrue(authentication.getSessionReference().matchesNonce(nonce(redirect)));
+				assertFalse(authentication.getSessionReference().matchesNonce("other"));
+				assertEquals(Map.of("app", "TEST-ONLY-app-data"), authentication.getTokens().getApplicationData());
+				for (String name : List.of("access_token", "refresh_token", "id_token")) assertTrue(authentication.getTokens().getParameter(name).isEmpty());
+				assertEquals(1, server.getRequests().size());
+				String body = new String(server.getRequests().get(0).getBody(), StandardCharsets.UTF_8);
+				QueryParameters form = QueryParameters.parse(body);
+				assertEquals(List.of(CODE), form.getValues("code"));
+				assertEquals(List.of(CALLBACK.toString()), form.getValues("redirect_uri"));
+				assertEquals(43, form.getValues("code_verifier").get(0).length());
+				for (Object value : List.of(authentication, authentication.getIdToken(), authentication.getTokens(),
+						authentication.getSessionReference(), client, redirect.getPendingAuthorization()))
+					assertRedacted(value.toString(), List.of(token, ACCESS, REFRESH, CODE, nonce(redirect), "TEST-ONLY-app-data", "subject", "session-sentinel"));
+				if (mode.startsWith("store")) {
+					assertEquals(OAuthException.Reason.PENDING_AUTHORIZATION_NOT_FOUND, assertThrows(OAuthValidationException.class,
+							() -> client.completeAuthentication(callback, source, CALLBACK)).getReason()); assertEquals(1, server.getRequests().size());
+				}
+			}
+		}));
+	}
+
+	@TestFactory
+	Stream<DynamicTest> rejectsSuccessfulEndpointTokensBeforeCreatingAuthentication() {
+		record Case(String name, OidcValidationException.Reason reason, Consumer<Map<String, String>> change) { }
+		return Stream.of(
+				new Case("signature", OidcValidationException.Reason.ID_TOKEN_SIGNATURE_INVALID, c -> { }),
+				new Case("swapped nonce", OidcValidationException.Reason.NONCE_MISMATCH, c -> c.put("nonce", "\"OTHER-FLOW\"")),
+				new Case("issuer", OidcValidationException.Reason.ISSUER_MISMATCH, c -> c.put("iss", "\"https://attacker.example\"")),
+				new Case("audience", OidcValidationException.Reason.AUDIENCE_MISMATCH, c -> c.put("aud", "\"attacker-client\"")),
+				new Case("max age zero", OidcValidationException.Reason.AUTH_TIME_MISSING, c -> c.remove("auth_time")),
+				new Case("acr", OidcValidationException.Reason.INSUFFICIENT_ACR, c -> c.put("acr", "\"urn:weak\"")),
+				new Case("access hash", OidcValidationException.Reason.ACCESS_TOKEN_HASH_MISMATCH, c -> c.put("at_hash", "\"wrong\"")),
+				new Case("code hash", OidcValidationException.Reason.CODE_HASH_MISMATCH, c -> c.put("c_hash", "\"wrong\"")),
+				new Case("expired", OidcValidationException.Reason.EXPIRED, c -> c.put("exp", Long.toString(NOW.minusSeconds(60).getEpochSecond()))))
+				.map(test -> DynamicTest.dynamicTest(test.name(), () -> {
+					try (TestHttpsServer server = TestHttpsServer.start()) {
+						List<String> events = new ArrayList<>(); AtomicReference<OidcValidationException> observed = new AtomicReference<>();
+						OidcObserver observer = new OidcObserver() {
+							@Override public void didRejectIdToken(OidcValidationException failure) { observed.set(failure); events.add(failure.toString()); throw new IllegalStateException("hook failure"); }
+							@Override public void didCompleteAuthentication() { events.add("completed"); }
+							@Override public void didRequestEndpoint(OAuthEndpoint kind, URI uri, Integer status, Duration elapsed) { events.add(uri.toString()); }
+						};
+						OidcClient client = builder(server).observer(observer).build();
+						AuthorizationRedirect redirect = client.beginAuthentication(OidcAuthenticationOptions.builder().maxAge(Duration.ZERO).requiredAcrValues(Set.of("urn:mfa")).build());
+						Map<String, String> claims = claims(server, nonce(redirect)); claims.put("auth_time", Long.toString(NOW.getEpochSecond())); claims.put("acr", "\"urn:mfa\"");
+						test.change().accept(claims); String token = sign(claims, test.name().equals("signature"));
+						respond(server, "/token", 200, "application/json", response(token, "Bearer"));
+						OidcValidationException failure = assertThrows(OidcValidationException.class, () -> client.completeAuthentication(callback(redirect), sealed(redirect), CALLBACK));
+						assertEquals(test.reason(), failure.getReason()); assertSame(failure, observed.get()); assertFalse(events.contains("completed"));
+						assertNull(failure.getCause()); assertEquals(0, failure.getSuppressed().length);
+						assertRedacted(failure.toString() + events, List.of(token, ACCESS, REFRESH, CODE, nonce(redirect)));
+						assertEquals(1, server.getRequests().size());
+					}
+				}));
+	}
+
+	@Test
+	void idTokenIsRequiredAndBearerTypeIsRequired() throws Exception {
+		try (TestHttpsServer server = TestHttpsServer.start()) {
+			OidcClient client = builder(server).build(); AuthorizationRedirect redirect = client.beginAuthentication();
+			respond(server, "/token", 200, "application/json", response(null, "Bearer"));
+			assertEquals(OidcValidationException.Reason.ID_TOKEN_MISSING, assertThrows(OidcValidationException.class,
+					() -> client.completeAuthentication(callback(redirect), sealed(redirect), CALLBACK)).getReason());
+			respond(server, "/token", 200, "application/json", response(sign(claims(server, nonce(redirect)), false), "DPoP"));
+			assertEquals(OidcValidationException.Reason.TOKEN_TYPE_UNSUPPORTED, assertThrows(OidcValidationException.class,
+					() -> client.completeAuthentication(callback(redirect), sealed(redirect), CALLBACK)).getReason());
+			assertEquals(2, server.getRequests().size());
+		}
+	}
+
+	@Test
+	void flowKindsCannotBePromotedOrDowngradedBeforeCodeExchange() throws Exception {
+		try (TestHttpsServer server = TestHttpsServer.start()) {
+			OidcClient client = builder(server).build(); OAuthClient oauth = OAuthClient.withAuthorizationServerMetadata(metadata(server).oauthMetadata())
+					.clientId("client").clientAuthentication(ClientAuthentication.noneInstance()).redirectUri(CALLBACK).clock(CLOCK).httpClient(TestTls.httpClient()).build();
+			AuthorizationRedirect plain = oauth.beginAuthorization();
+			assertEquals(OAuthException.Reason.PENDING_AUTHORIZATION_INVALID, assertThrows(OAuthValidationException.class,
+					() -> client.completeAuthentication(callback(plain), sealed(plain), CALLBACK)).getReason());
+			AuthorizationRedirect oidc = client.beginAuthentication();
+			assertEquals(OAuthException.Reason.PENDING_AUTHORIZATION_INVALID, assertThrows(OAuthValidationException.class,
+					() -> oauth.completeAuthorization(callback(oidc), sealed(oidc), CALLBACK)).getReason());
+			assertEquals(0, server.getRequests().size());
+		}
+	}
+
+	@Test
+	void localCallbackChecksRejectBeforeCodeOrKeyRequests() throws Exception {
+		try (TestHttpsServer server = TestHttpsServer.start()) {
+			OidcClient client = builder(server).issuerParameterPolicy(IssuerParameterPolicy.REQUIRED).build();
+			AuthorizationRedirect redirect = client.beginAuthentication(); PendingAuthorizationSource source = sealed(redirect);
+			assertEquals(OAuthException.Reason.STATE_MISMATCH, assertThrows(OAuthValidationException.class, () -> client.completeAuthentication(AuthorizationResponse.fromQueryString("state=wrong&code=" + CODE), source, CALLBACK)).getReason());
+			assertEquals(OAuthException.Reason.CALLBACK_URI_MISMATCH, assertThrows(OAuthValidationException.class, () -> client.completeAuthentication(callback(redirect), source, URI.create("https://rp.example/other"))).getReason());
+			assertEquals(OAuthException.Reason.ISSUER_MISSING, assertThrows(OAuthValidationException.class, () -> client.completeAuthentication(callback(redirect), source, CALLBACK)).getReason());
+			assertEquals(OAuthException.Reason.ISSUER_MISMATCH, assertThrows(OAuthValidationException.class, () -> client.completeAuthentication(AuthorizationResponse.fromQueryString(callbackQuery(redirect) + "&iss=https%3A%2F%2Fattacker.example"), source, CALLBACK)).getReason());
+			assertEquals(OAuthException.Reason.RESPONSE_MODE_MISMATCH, assertThrows(OAuthValidationException.class, () -> client.completeAuthentication(AuthorizationResponse.fromFormBody(callbackQuery(redirect).getBytes(StandardCharsets.UTF_8), StandardCharsets.UTF_8, null), source, CALLBACK)).getReason());
+			assertEquals(OAuthException.Reason.CLIENT_MISMATCH, assertThrows(OAuthValidationException.class, () -> builder(server).clientId("different").build().completeAuthentication(callback(redirect), source, CALLBACK)).getReason());
+			OidcProviderMetadata drift = OidcProviderMetadata.withIssuer(server.getBaseUri().toString()).authorizationEndpoint(server.uri("/authorize")).tokenEndpoint(server.uri("/changed")).jwksUri(server.uri("/jwks")).build();
+			OidcClient changed = OidcClient.withProviderMetadata(drift).clientId("client").redirectUri(CALLBACK).clock(CLOCK).httpClient(TestTls.httpClient()).jsonWebKeySource(keys()).build();
+			assertEquals(OAuthException.Reason.METADATA_ENDPOINT_DRIFT, assertThrows(OAuthValidationException.class, () -> changed.completeAuthentication(AuthorizationResponse.fromQueryString(callbackQuery(redirect) + "&iss=" + URLEncoder.encode(server.getBaseUri().toString(), StandardCharsets.UTF_8)), source, CALLBACK)).getReason());
+			assertEquals(0, server.getRequests().size());
+		}
+	}
+
+	@Test
+	void defectiveStateOnlyStoreStillCannotTransferOidcToAnotherBrowser() throws Exception {
+		try (TestHttpsServer server = TestHttpsServer.start()) {
+			OidcClient client = builder(server).build(); AuthorizationRedirect redirect = client.beginAuthentication();
+			AtomicReference<String> saved = new AtomicReference<>();
+			PendingAuthorizationStore broken = new PendingAuthorizationStore() {
+				@Override public void save(String binding, String state, String opaque, Instant expires) { saved.set(opaque); }
+				@Override public Optional<String> consume(String binding, String state) { return Optional.ofNullable(saved.getAndSet(null)); }
+			};
+			redirect.getPendingAuthorization().saveTo(broken, "browser-A");
+			assertEquals(OAuthException.Reason.BROWSER_BINDING_MISMATCH, assertThrows(OAuthValidationException.class,
+					() -> client.completeAuthentication(callback(redirect), PendingAuthorizationSource.fromStore(broken, "browser-B"), CALLBACK)).getReason());
+			assertEquals(0, server.getRequests().size());
+		}
+	}
+
+	@Test
+	void requestAndBuildPoliciesFailClosedAndNullRestoresDefaults() throws Exception {
+		for (String prompt : List.of("none login", "", "unknown", "login login", "login  consent")) assertThrows(IllegalArgumentException.class, () -> OidcAuthenticationOptions.builder().prompt(prompt));
+		for (Duration age : List.of(Duration.ofSeconds(-1), Duration.ofMillis(1))) assertThrows(IllegalArgumentException.class, () -> OidcAuthenticationOptions.builder().maxAge(age));
+		assertThrows(IllegalArgumentException.class, () -> OidcAuthenticationOptions.builder().requiredAcrValues(Set.of("has space")));
+		for (String name : List.of("nonce", "max_age", "acr_values", "state", "code_challenge", "request_uri")) assertThrows(IllegalArgumentException.class, () -> OidcAuthenticationOptions.builder().additionalParameters(Map.of(name, "sentinel")));
+		try (TestHttpsServer server = TestHttpsServer.start()) {
+			assertThrows(IllegalArgumentException.class, () -> builder(server).idTokenSigningAlgorithms(Set.of(JwsAlgorithm.HS256)).build());
+			assertThrows(IllegalArgumentException.class, () -> builder(server).idTokenSigningAlgorithms(Set.of(JwsAlgorithm.ES256)).build());
+			assertThrows(IllegalArgumentException.class, () -> builder(server).clockSkew(Duration.ofMinutes(6)));
+			assertThrows(IllegalArgumentException.class, () -> builder(server).redirectUri(URI.create("http://rp.example/callback")).build());
+			assertThrows(IllegalArgumentException.class, () -> builder(server).trustedAudiences(Set.of("")).build());
+			OidcClient client = builder(server).scopes(Set.of("email")).requiredAcrValues(Set.of("urn:mfa")).build();
+			AuthorizationRedirect redirect = client.beginAuthentication(OidcAuthenticationOptions.builder().scopes(Set.of()).requiredAcrValues(Set.of()).maxAge(Duration.ZERO).maxAge(null).prompt("login").prompt(null).build());
+			QueryParameters query = QueryParameters.parse(redirect.getAuthorizationUri().getRawQuery()); assertEquals(List.of("openid"), query.getValues("scope"));
+			assertTrue(query.getValues("max_age").isEmpty()); assertTrue(query.getValues("acr_values").isEmpty()); assertTrue(query.getValues("prompt").isEmpty());
+			assertEquals(0, server.getRequests().size());
+		}
+	}
+
+	@Test
+	void normalCompletionResolvesRemoteKeysOnlyAfterTokenPost() throws Exception {
+		try (TestHttpsServer server = TestHttpsServer.start()) {
+			java.util.concurrent.atomic.AtomicInteger verified = new java.util.concurrent.atomic.AtomicInteger();
+			OidcClient client = builder(server).jsonWebKeySource(null).observer(new OidcObserver() {
+				@Override public void didValidateJwt(JwsAlgorithm algorithm, Duration elapsed) { verified.incrementAndGet(); }
+			}).build(); AuthorizationRedirect redirect = client.beginAuthentication();
+			respond(server, "/token", 200, "application/json", response(sign(claims(server, nonce(redirect)), false), "Bearer"));
+			respond(server, "/jwks", 200, "application/json", TestJsonWebKeys.withFixture(Fixture.IDP_SIGNING_RSA_2048).kid("key").alg("RS256").toKeySetJson());
+			assertEquals(0, server.getRequests().size()); client.completeAuthentication(callback(redirect), sealed(redirect), CALLBACK);
+			assertEquals(1, verified.get());
+			assertEquals(List.of("/token", "/jwks"), server.getRequests().stream().map(request -> request.getUri().getPath()).toList());
+		}
+	}
+
+	@Test
+	void exhaustedCodeExchangeBudgetCannotStartAFreshJwksLookup() throws Exception {
+		try (TestHttpsServer server = TestHttpsServer.start()) {
+			OidcObserver slow = new OidcObserver() {
+				@Override public void didRequestEndpoint(OAuthEndpoint endpoint, URI uri, Integer status, Duration elapsed) {
+					if (endpoint == OAuthEndpoint.TOKEN) {
+						try { new java.util.concurrent.CountDownLatch(1).await(2, java.util.concurrent.TimeUnit.SECONDS); }
+						catch (InterruptedException interrupted) { Thread.currentThread().interrupt(); }
+					}
+				}
+			};
+			OidcClient client = builder(server).jsonWebKeySource(null).requestTimeout(Duration.ofSeconds(1))
+					.totalDeadline(Duration.ofSeconds(1)).observer(slow).build();
+			AuthorizationRedirect redirect = client.beginAuthentication();
+			respond(server, "/token", 200, "application/json", response(sign(claims(server, nonce(redirect)), false), "Bearer"));
+			JsonWebKeySetUnavailableException failure = assertThrows(JsonWebKeySetUnavailableException.class,
+					() -> client.completeAuthentication(callback(redirect), sealed(redirect), CALLBACK));
+			assertEquals(com.revetsec.ErrorCategory.TRANSPORT, failure.getCategory());
+			assertEquals(1, server.getHitCount("/token")); assertEquals(0, server.getHitCount("/jwks"));
+			assertRedacted(failure.toString(), List.of(ACCESS, REFRESH, CODE, nonce(redirect)));
+		}
+	}
+
+	private static void respond(TestHttpsServer server, String path, int status, String mediaType, String body) { server.script(path, TestHttpsServer.Script.fromResponse(TestHttpsServer.Response.withStatus(status).header("Content-Type", mediaType).body(body.getBytes(StandardCharsets.UTF_8)).build())); }
+	private static OidcClient.Builder builder(TestHttpsServer server) {
+		return OidcClient.withProviderMetadata(metadata(server)).clientId("client").redirectUri(CALLBACK).clock(CLOCK).httpClient(TestTls.httpClient()).jsonWebKeySource(keys());
+	}
+	private static StaticJsonWebKeySource keys() { return StaticJsonWebKeySource.fromJsonWebKeySet(JsonWebKeySet.fromJson(TestJsonWebKeys.withFixture(Fixture.IDP_SIGNING_RSA_2048).kid("key").alg("RS256").toKeySetJson())); }
+	private static OidcProviderMetadata metadata(TestHttpsServer server) { return OidcProviderMetadata.withIssuer(server.getBaseUri().toString()).authorizationEndpoint(server.uri("/authorize")).tokenEndpoint(server.uri("/token")).jwksUri(server.uri("/jwks")).build(); }
+	private static PendingAuthorizationSource sealed(AuthorizationRedirect redirect) { StateSealer sealer = TestSealers.fromFixedKey(); return PendingAuthorizationSource.fromSealedForm(redirect.getPendingAuthorization().toSealedForm(sealer, "oidc"), sealer, "oidc"); }
+	private static String nonce(AuthorizationRedirect redirect) throws Exception { return QueryParameters.parse(redirect.getAuthorizationUri().getRawQuery()).getValues("nonce").get(0); }
+	private static String callbackQuery(AuthorizationRedirect redirect) throws Exception { return "state=" + QueryParameters.parse(redirect.getAuthorizationUri().getRawQuery()).getValues("state").get(0) + "&code=" + CODE; }
+	private static AuthorizationResponse callback(AuthorizationRedirect redirect) throws Exception { return AuthorizationResponse.fromQueryString(callbackQuery(redirect)); }
+	private static Map<String, String> claims(TestHttpsServer server, String nonce) { Map<String, String> claims = new LinkedHashMap<>(); claims.put("iss", JsonText.string(server.getBaseUri().toString())); claims.put("sub", "\"subject\""); claims.put("aud", "\"client\""); claims.put("exp", Long.toString(NOW.plusSeconds(300).getEpochSecond())); claims.put("iat", Long.toString(NOW.getEpochSecond())); claims.put("nonce", JsonText.string(nonce)); return claims; }
+	private static String sign(Map<String, String> claims, boolean forged) { return TestJws.withAlgorithm(Algorithm.RS256).kid("key").payload(JsonText.object(new ArrayList<>(claims.entrySet()))).sign(forged ? Fixture.NEGATIVE_ATTACKER_RSA_2048.getPrivateKey() : Fixture.IDP_SIGNING_RSA_2048.getPrivateKey()); }
+	private static String response(@Nullable String token, String type) { return "{\"access_token\":" + JsonText.string(ACCESS) + ",\"refresh_token\":" + JsonText.string(REFRESH) + ",\"token_type\":" + JsonText.string(type) + (token == null ? "" : ",\"id_token\":" + JsonText.string(token)) + "}"; }
+	private static void assertRedacted(String text, List<String> secrets) { for (String secret : secrets) assertFalse(text.contains(secret), "A string form disclosed a sentinel"); }
+}
