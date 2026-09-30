@@ -60,12 +60,22 @@ final class OidcUserInfoTests {
 			assertEquals(server.getBaseUri().toString(), result.getIssuer()); assertEquals(SUBJECT, result.getSubject());
 			assertEquals(Optional.of(EMAIL), result.getEmail()); assertEquals(Optional.of(true), result.getEmailVerified()); assertFalse(result.isSigned());
 			assertTrue(result.getClaims().toJson().contains(EMAIL)); assertRedacted(result.toString() + events);
+			assertEquals(List.of(server.uri("/userinfo").toString(), "success:false", server.uri("/userinfo").toString(), "success:false"), events);
 			assertEquals(2, server.getHitCount("/userinfo")); assertEquals(0, server.getHitCount("/private")); assertEquals(0, server.getHitCount("/jwks"));
 			for (TestHttpsServer.RecordedRequest request : server.getRequests("/userinfo")) {
 				assertEquals("GET", request.getMethod()); assertEquals(Optional.of("Bearer " + ACCESS), request.getHeader("Authorization"));
 				assertNull(request.getUri().getRawQuery()); assertEquals(0, request.getBody().length);
 			}
 		}
+	}
+
+	@TestFactory
+	Stream<DynamicTest> userInfoSubjectAcceptsTheExactAsciiBounds() {
+		return Stream.of("s".repeat(255), "\u007f", "s".repeat(254) + "\u007f")
+				.map(subject -> DynamicTest.dynamicTest("ASCII subject length " + subject.length(), () -> {
+					byte[] body = ("{\"sub\":" + JsonText.string(subject) + "}").getBytes(StandardCharsets.UTF_8);
+					assertEquals(subject, UserInfoValidator.json(body, subject).findString("sub").orElseThrow());
+				}));
 	}
 
 	@TestFactory

@@ -44,7 +44,7 @@ and a run can fail before any input executes.
 M1 deleted the M0 placeholder (`PlaceholderFuzzTests`, which exercised no Revetsec code) and added
 six classes with twelve `@FuzzTest` methods. M2 added five classes with nine methods, for the JOSE
 layer, the fixed-length ECDSA path and the key-set cache lifetime. M3 added four OAuth input targets,
-so there are now twelve classes and twenty-five methods. Each method is one ClusterFuzzLite target, named
+and M4 added four OIDC targets, so there are now thirteen classes and twenty-nine methods. Each method is one ClusterFuzzLite target, named
 `<SimpleClassName>_<method>`.
 
 | Class (package) | Method | Input | What it checks |
@@ -74,6 +74,18 @@ so there are now twelve classes and twenty-five methods. Each method is one Clus
 | | `tokenJsonKeepsSecretsOutOfGenericMembers` | token JSON bytes | An accepted access token is printable ASCII, and token members never enter the generic JSON view; malformed or error bodies yield typed exceptions. |
 | | `metadataRequiresExactIssuer` | metadata JSON bytes | An accepted document retains the configured issuer exactly; malformed or mismatched documents yield typed exceptions. Endpoint URI safety is checked when the client loads the document. |
 | | `formBodyRoundTripsUnicodeAndReservedCharacters` | form value bytes | The OAuth writer and query decoder preserve arbitrary Latin-1 code points through UTF-8 form encoding without emitting raw line breaks. |
+| `OidcFuzzTests` (`oidc`) | `signedClaimsRespectInitialAndRefreshProfiles` | JSON claim bytes | JDK HMAC signs every input to reach post-signature checks. An independent profile oracle checks exact issuer and single audience, subject, NumericDates/skew, nonce, ACR, authentication age, hashes and refresh continuity; only fixed OIDC exceptions escape. |
+| | `metadataRequiresExactIssuerAndCapabilities` | metadata JSON bytes | Accepted remote metadata keeps exact issuer and required `code`/RS256/subject capabilities. No explicit defaults are applied; URI safety remains the client's separate outbound-policy check. |
+| | `userInfoRequiresTheVerifiedSubject` | UserInfo JSON bytes | Acceptance agrees exactly with a separate check of the verified subject; malformed or different subjects produce fixed OIDC reasons. |
+| | `sessionReferencesRoundTripWithoutCredentials` | reference JSON bytes | Accepted trusted-storage references stay within 64 KiB, round-trip canonically, retain only continuity fields and stay redacted. This parser does not authenticate storage or create identity. |
+
+The M4 semantic seeds under `com/revetsec/oidc/OidcFuzzTestsInputs` use test-only values and a fixed
+2026-09-30 clock. `oidc-seeds.sha256` inventories every authored seed and is checked by
+`FuzzSeedProvenanceTests`. All four targets also receive the two core JSON corpora through Maven
+resource mappings, checked by `FuzzSeedLayoutTests`. The signed-claims target uses an explicit
+HMAC compatibility profile for speed; existing JOSE targets and M4 unit tests cover asymmetric
+signatures and signed UserInfo. It signs arbitrary payload bytes and evaluates both initial
+and refresh profiles; it does not fuzz the browser flow or call a network endpoint.
 
 ### Invariants shared by every target
 

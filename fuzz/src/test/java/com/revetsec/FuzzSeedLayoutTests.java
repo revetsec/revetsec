@@ -64,7 +64,7 @@ final class FuzzSeedLayoutTests {
 	 * The packages whose {@code byte[]} targets read JSON text, so each must be seeded with the core JSON corpus and
 	 * JSONTestSuite.
 	 */
-	private static final Set<String> JSON_TEXT_PACKAGES = Set.of("com.revetsec.json", "com.revetsec.internal.json");
+	private static final Set<String> JSON_TEXT_PACKAGES = Set.of("com.revetsec.json", "com.revetsec.internal.json", "com.revetsec.oidc");
 
 	/**
 	 * The packages whose {@code byte[]} targets must each be listed below as reading JSON text or not, because they
@@ -112,21 +112,20 @@ final class FuzzSeedLayoutTests {
 	/**
 	 * Every target the fuzz pom maps a core corpus into, with the corpora it maps (its {@code testResource} entries).
 	 */
-	private static final Map<String, List<MappedCorpus>> MAPPED_TARGETS = Map.of(
-			"com.revetsec.internal.json.JsonCodecFuzzTests#"
-					+ "parseRejectsOnlyWithJsonParseExceptionAndAcceptsOnlyValuesInsideTheProfile", JSON_TEXT_CORPORA,
-			"com.revetsec.internal.json.JsonCodecFuzzTests#acceptedValuesRoundTripUnderTheMaximumCapProfile",
-			JSON_TEXT_CORPORA,
-			"com.revetsec.internal.json.JsonCodecFuzzTests#scimAcceptsOnlyWhatTheExactNameProfileAccepts",
-			JSON_TEXT_CORPORA,
-			"com.revetsec.json.JsonModelFuzzTests#parsedValuesKeepEqualityUnderReorderingAndRescaling", JSON_TEXT_CORPORA,
-			"com.revetsec.internal.json.Rfc7638FuzzTests#canonicalJwkAgreesWithAnIndependentEncoder", JSON_TEXT_CORPORA,
-			"com.revetsec.internal.pem.PemFuzzTests#pemParsersRejectOnlyWithPemExceptionAndAcceptAtMostOneLabel",
-			PEM_TEXT_CORPORA,
-			"com.revetsec.internal.jose.CompactJwsFuzzTests#headerChecksAgreeWithAnIndependentOracleForP3ToP8",
-			JSON_TEXT_CORPORA,
-			"com.revetsec.internal.jose.JsonWebKeyFuzzTests#keySetDocumentsSkipExactlyTheKeysAnIndependentOracleRefuses",
-			KEY_SET_CORPORA);
+	private static final Map<String, List<MappedCorpus>> MAPPED_TARGETS = Map.ofEntries(
+			Map.entry("com.revetsec.internal.json.JsonCodecFuzzTests#"
+					+ "parseRejectsOnlyWithJsonParseExceptionAndAcceptsOnlyValuesInsideTheProfile", JSON_TEXT_CORPORA),
+			Map.entry("com.revetsec.internal.json.JsonCodecFuzzTests#acceptedValuesRoundTripUnderTheMaximumCapProfile", JSON_TEXT_CORPORA),
+			Map.entry("com.revetsec.internal.json.JsonCodecFuzzTests#scimAcceptsOnlyWhatTheExactNameProfileAccepts", JSON_TEXT_CORPORA),
+			Map.entry("com.revetsec.json.JsonModelFuzzTests#parsedValuesKeepEqualityUnderReorderingAndRescaling", JSON_TEXT_CORPORA),
+			Map.entry("com.revetsec.internal.json.Rfc7638FuzzTests#canonicalJwkAgreesWithAnIndependentEncoder", JSON_TEXT_CORPORA),
+			Map.entry("com.revetsec.internal.pem.PemFuzzTests#pemParsersRejectOnlyWithPemExceptionAndAcceptAtMostOneLabel", PEM_TEXT_CORPORA),
+			Map.entry("com.revetsec.internal.jose.CompactJwsFuzzTests#headerChecksAgreeWithAnIndependentOracleForP3ToP8", JSON_TEXT_CORPORA),
+			Map.entry("com.revetsec.internal.jose.JsonWebKeyFuzzTests#keySetDocumentsSkipExactlyTheKeysAnIndependentOracleRefuses", KEY_SET_CORPORA),
+			Map.entry("com.revetsec.oidc.OidcFuzzTests#signedClaimsRespectInitialAndRefreshProfiles", JSON_TEXT_CORPORA),
+			Map.entry("com.revetsec.oidc.OidcFuzzTests#metadataRequiresExactIssuerAndCapabilities", JSON_TEXT_CORPORA),
+			Map.entry("com.revetsec.oidc.OidcFuzzTests#userInfoRequiresTheVerifiedSubject", JSON_TEXT_CORPORA),
+			Map.entry("com.revetsec.oidc.OidcFuzzTests#sessionReferencesRoundTripWithoutCredentials", JSON_TEXT_CORPORA));
 
 	// A seed directory whose class or method no longer exists (after a rename or a move) is never replayed or zipped.
 	@Test

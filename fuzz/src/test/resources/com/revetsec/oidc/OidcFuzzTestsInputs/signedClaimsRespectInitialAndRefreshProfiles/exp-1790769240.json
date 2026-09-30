@@ -1,0 +1,1 @@
+{"iss":"https://issuer.example","sub":"subject","aud":"client","iat":1790769570,"exp":1790769240,"auth_time":1790769570,"nonce":"test-only-nonce","acr":"urn:mfa"}

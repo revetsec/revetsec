@@ -206,6 +206,60 @@ final class OidcAuthenticationFlowTests {
 		}
 	}
 
+	@TestFactory
+	Stream<DynamicTest> expiredOidcPendingIsRejectedBeforeTokenOrKeyIo() {
+		return Stream.of("sealed", "store").map(mode -> DynamicTest.dynamicTest(mode, () -> {
+			try (TestHttpsServer server = TestHttpsServer.start()) {
+				TestClock clock = TestClock.fromInstant(NOW);
+				OidcClient client = builder(server).clock(clock).build();
+				AuthorizationRedirect redirect = client.beginAuthentication();
+				PendingAuthorizationSource source;
+				if (mode.equals("sealed")) {
+					StateSealer sealer = StateSealer.withActiveKey(TestSealers.fixedKey("oidc-expiry")).clock(clock).build();
+					source = PendingAuthorizationSource.fromSealedForm(redirect.getPendingAuthorization().toSealedForm(sealer, "oidc-expiry"), sealer, "oidc-expiry");
+				} else {
+					// Storage deliberately retains the entry; the OIDC transaction must enforce its own expiry.
+					InMemoryPendingAuthorizationStore store = InMemoryPendingAuthorizationStore.builder().clock(CLOCK).build();
+					redirect.getPendingAuthorization().saveTo(store, "browser");
+					source = PendingAuthorizationSource.fromStore(store, "browser");
+				}
+				clock.advance(Duration.ofMinutes(11));
+				OAuthValidationException failure = assertThrows(OAuthValidationException.class,
+						() -> client.completeAuthentication(callback(redirect), source, CALLBACK));
+				assertEquals(OAuthException.Reason.PENDING_AUTHORIZATION_EXPIRED, failure.getReason());
+				assertEquals(0, server.getRequests().size());
+			}
+		}));
+	}
+
+	@Test
+	void separateProviderClientsNeverPoolRemoteSigningKeys() throws Exception {
+		try (TestHttpsServer first = TestHttpsServer.start(); TestHttpsServer second = TestHttpsServer.start()) {
+			OidcClient firstClient = builder(first).jsonWebKeySource(null).build();
+			OidcClient secondClient = builder(second).jsonWebKeySource(null).build();
+			AuthorizationRedirect secondRedirect = secondClient.beginAuthentication();
+			String secondToken = TestJws.withAlgorithm(Algorithm.RS256).kid("foreign")
+					.payload(JsonText.object(new ArrayList<>(claims(second, nonce(secondRedirect)).entrySet())))
+					.sign(Fixture.IDP_SIGNING_RSA_3072.getPrivateKey());
+			respond(second, "/token", 200, "application/json", response(secondToken, "Bearer"));
+			respond(second, "/jwks", 200, "application/json", TestJsonWebKeys.withFixture(Fixture.IDP_SIGNING_RSA_3072).kid("foreign").alg("RS256").toKeySetJson());
+			assertEquals("subject", secondClient.completeAuthentication(callback(secondRedirect), sealed(secondRedirect), CALLBACK).getSubject());
+			AuthorizationRedirect firstRedirect = firstClient.beginAuthentication();
+			// Even an attacker-controlled claim set naming the first issuer and its pending nonce cannot import the second provider's key.
+			String attack = TestJws.withAlgorithm(Algorithm.RS256).kid("foreign")
+					.payload(JsonText.object(new ArrayList<>(claims(first, nonce(firstRedirect)).entrySet())))
+					.sign(Fixture.IDP_SIGNING_RSA_3072.getPrivateKey());
+			respond(first, "/token", 200, "application/json", response(attack, "Bearer"));
+			respond(first, "/jwks", 200, "application/json", TestJsonWebKeys.withFixture(Fixture.IDP_SIGNING_RSA_2048).kid("key").alg("RS256").toKeySetJson());
+			OidcValidationException failure = assertThrows(OidcValidationException.class,
+					() -> firstClient.completeAuthentication(callback(firstRedirect), sealed(firstRedirect), CALLBACK));
+			assertEquals(OidcValidationException.Reason.ID_TOKEN_SIGNATURE_INVALID, failure.getReason());
+			assertEquals(Optional.of(JoseException.Reason.UNKNOWN_KEY), failure.getJoseReason());
+			assertTrue(first.getHitCount("/jwks") >= 1); assertEquals(1, second.getHitCount("/jwks"));
+			assertNull(failure.getCause()); assertFalse(failure.toString().contains(attack));
+		}
+	}
+
 	@Test
 	void defectiveStateOnlyStoreStillCannotTransferOidcToAnotherBrowser() throws Exception {
 		try (TestHttpsServer server = TestHttpsServer.start()) {
@@ -246,13 +300,15 @@ final class OidcAuthenticationFlowTests {
 	void normalCompletionResolvesRemoteKeysOnlyAfterTokenPost() throws Exception {
 		try (TestHttpsServer server = TestHttpsServer.start()) {
 			java.util.concurrent.atomic.AtomicInteger verified = new java.util.concurrent.atomic.AtomicInteger();
+			java.util.concurrent.atomic.AtomicInteger completed = new java.util.concurrent.atomic.AtomicInteger();
 			OidcClient client = builder(server).jsonWebKeySource(null).observer(new OidcObserver() {
 				@Override public void didValidateJwt(JwsAlgorithm algorithm, Duration elapsed) { verified.incrementAndGet(); }
+				@Override public void didCompleteAuthentication() { completed.incrementAndGet(); throw new IllegalStateException("ignored observer"); }
 			}).build(); AuthorizationRedirect redirect = client.beginAuthentication();
 			respond(server, "/token", 200, "application/json", response(sign(claims(server, nonce(redirect)), false), "Bearer"));
 			respond(server, "/jwks", 200, "application/json", TestJsonWebKeys.withFixture(Fixture.IDP_SIGNING_RSA_2048).kid("key").alg("RS256").toKeySetJson());
 			assertEquals(0, server.getRequests().size()); client.completeAuthentication(callback(redirect), sealed(redirect), CALLBACK);
-			assertEquals(1, verified.get());
+			assertEquals(1, verified.get()); assertEquals(1, completed.get());
 			assertEquals(List.of("/token", "/jwks"), server.getRequests().stream().map(request -> request.getUri().getPath()).toList());
 		}
 	}

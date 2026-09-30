@@ -118,6 +118,16 @@ final class IdTokenValidatorTests {
 	}
 
 	@TestFactory
+	Stream<DynamicTest> asciiSubjectBoundsIncludeDelAndExactly255Characters() {
+		return Stream.of("s".repeat(255), "\u007f", "s".repeat(254) + "\u007f")
+				.map(subject -> DynamicTest.dynamicTest("ASCII subject length " + subject.length(), () -> {
+					Map<String, String> values = claims();
+					values.put("sub", JsonText.string(subject));
+					Assertions.assertEquals(subject, accept(values).getClaims().getSubject().orElseThrow());
+				}));
+	}
+
+	@TestFactory
 	Stream<DynamicTest> everyOidcClaimDefectIsRejected() {
 		record Case(String name, @Nullable String value, OidcValidationException.Reason reason) {}
 		return Stream.of(

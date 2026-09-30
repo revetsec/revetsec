@@ -89,6 +89,7 @@ final class OidcDiscoveryTests {
 		OidcProviderMetadata metadata = OidcProviderMetadata.fromJson("https://issuer.example", json(fields));
 		assertEquals(Set.of("RS256", "FUTURE-ALG", "none", "HS256"), metadata.getIdTokenSigningAlgValuesSupported());
 		assertTrue(metadata.oauthMetadata().isRemotelyDiscovered());
+		assertEquals(Set.of("public"), metadata.getSubjectTypesSupported());
 		for (Set<String> values : List.of(metadata.getSubjectTypesSupported(), metadata.getIdTokenSigningAlgValuesSupported(), metadata.getResponseTypesSupported()))
 			assertThrows(UnsupportedOperationException.class, () -> values.add("unexpected"));
 		assertThrows(OAuthResponseException.class, () -> OidcProviderMetadata.fromJson("https://issuer.example", "{\"issuer\":\"https://issuer.example\",\"issuer\":\"https://issuer.example\"}"));

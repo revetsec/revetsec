@@ -71,6 +71,7 @@ final class OidcSessionReferenceTests {
 		for(String field:List.of("iss","sub","aud","iat")) {
 			cases.add(new Case("missing claim "+field,m->editClaims(m,c->c.remove(field))));cases.add(new Case("wrong type "+field,m->editClaims(m,c->c.put(field,JsonNull.defaultInstance()))));
 		}
+		cases.add(new Case("empty issuer",m->editClaims(m,c->c.put("iss",JsonString.fromValue("")))));
 		cases.add(new Case("empty subject",m->editClaims(m,c->c.put("sub",JsonString.fromValue("")))));cases.add(new Case("long subject",m->editClaims(m,c->c.put("sub",JsonString.fromValue("s".repeat(256))))));cases.add(new Case("unicode subject",m->editClaims(m,c->c.put("sub",JsonString.fromValue("é")))));
 		cases.add(new Case("empty aud",m->editClaims(m,c->c.put("aud",JsonArray.fromElements(List.of())))));cases.add(new Case("mistyped aud element",m->editClaims(m,c->c.put("aud",JsonArray.fromElements(List.of(JsonNumber.fromValue(1L)))))));
 		for(String field:List.of("azp","sid","auth_time"))cases.add(new Case("wrong optional type "+field,m->editClaims(m,c->c.put(field,JsonBoolean.trueInstance()))));
@@ -81,6 +82,40 @@ final class OidcSessionReferenceTests {
 			}
 		}));
 	}
+	@TestFactory
+	Stream<DynamicTest> trustedReferenceSubjectAndStorageByteBoundsAreInclusive() {
+		return Stream.of("s".repeat(255), "\u007f", "s".repeat(254) + "\u007f")
+				.map(subject -> DynamicTest.dynamicTest("ASCII subject length " + subject.length(), () -> {
+					try (TestHttpsServer server = TestHttpsServer.start()) {
+						String storage = OidcRefreshTests.login(server, OidcRefreshTests.builder(server).build(), CLOCK).reference().toSerializedForm();
+						Map<String, JsonValue> fields = new LinkedHashMap<>(parse(storage).getMembers());
+						editClaims(fields, c -> c.put("sub", JsonString.fromValue(subject)));
+						String changed = JsonObject.fromMembers(fields).toJson();
+						assertEquals(changed, OidcSessionReference.fromSerializedForm(changed).toSerializedForm());
+					}
+				}));
+	}
+
+	@Test
+	void trustedStorageAcceptsExactly64KibInAsciiAndUtf8AndRejectsOneByteMore() throws Exception {
+		try (TestHttpsServer server = TestHttpsServer.start()) {
+			String storage = OidcRefreshTests.login(server, OidcRefreshTests.builder(server).build(), CLOCK).reference().toSerializedForm();
+			Map<String, JsonValue> fields = new LinkedHashMap<>(parse(storage).getMembers());
+			for (String character : List.of("s", "é")) {
+				editClaims(fields, c -> c.put("sid", JsonString.fromValue("")));
+				int base = JsonObject.fromMembers(fields).toJson().getBytes(StandardCharsets.UTF_8).length;
+				int width = character.getBytes(StandardCharsets.UTF_8).length;
+				String padding = character.repeat((64 * 1_024 - base) / width) + "s".repeat((64 * 1_024 - base) % width);
+				editClaims(fields, c -> c.put("sid", JsonString.fromValue(padding)));
+				String exact = JsonObject.fromMembers(fields).toJson();
+				assertEquals(64 * 1_024, exact.getBytes(StandardCharsets.UTF_8).length);
+				assertEquals(exact, OidcSessionReference.fromSerializedForm(exact).toSerializedForm());
+				editClaims(fields, c -> c.put("sid", JsonString.fromValue(padding + "s")));
+				assertInvalid(JsonObject.fromMembers(fields).toJson());
+			}
+		}
+	}
+
 	@Test
 	void malformedJsonUtf8ByteLimitsAndDuplicateKeysAreBoundedAndRedacted() throws Exception {
 		for(String value:List.of("", "{}", "[]", "null", "{", "\ud800", "x".repeat(64*1024+1), "\""+"é".repeat(40*1024)+"\"", "{\"v\":1,\"v\":1}"))assertInvalid(value);

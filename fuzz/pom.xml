@@ -275,6 +275,46 @@
 					<include>*.pem</include>
 				</includes>
 			</testResource>
+			<testResource>
+				<directory>${revetsec.core.basedir}/src/test/resources/com/revetsec/internal/json/corpus</directory>
+				<targetPath>com/revetsec/oidc/OidcFuzzTestsInputs/signedClaimsRespectInitialAndRefreshProfiles</targetPath>
+				<includes><include>parse/**</include><include>round-trip/**</include></includes>
+			</testResource>
+			<testResource>
+				<directory>${revetsec.core.basedir}/src/test/resources/vectors/jsontestsuite/test_parsing</directory>
+				<targetPath>com/revetsec/oidc/OidcFuzzTestsInputs/signedClaimsRespectInitialAndRefreshProfiles/jsontestsuite</targetPath>
+				<includes><include>*.json</include></includes>
+			</testResource>
+			<testResource>
+				<directory>${revetsec.core.basedir}/src/test/resources/com/revetsec/internal/json/corpus</directory>
+				<targetPath>com/revetsec/oidc/OidcFuzzTestsInputs/metadataRequiresExactIssuerAndCapabilities</targetPath>
+				<includes><include>parse/**</include><include>round-trip/**</include></includes>
+			</testResource>
+			<testResource>
+				<directory>${revetsec.core.basedir}/src/test/resources/vectors/jsontestsuite/test_parsing</directory>
+				<targetPath>com/revetsec/oidc/OidcFuzzTestsInputs/metadataRequiresExactIssuerAndCapabilities/jsontestsuite</targetPath>
+				<includes><include>*.json</include></includes>
+			</testResource>
+			<testResource>
+				<directory>${revetsec.core.basedir}/src/test/resources/com/revetsec/internal/json/corpus</directory>
+				<targetPath>com/revetsec/oidc/OidcFuzzTestsInputs/userInfoRequiresTheVerifiedSubject</targetPath>
+				<includes><include>parse/**</include><include>round-trip/**</include></includes>
+			</testResource>
+			<testResource>
+				<directory>${revetsec.core.basedir}/src/test/resources/vectors/jsontestsuite/test_parsing</directory>
+				<targetPath>com/revetsec/oidc/OidcFuzzTestsInputs/userInfoRequiresTheVerifiedSubject/jsontestsuite</targetPath>
+				<includes><include>*.json</include></includes>
+			</testResource>
+			<testResource>
+				<directory>${revetsec.core.basedir}/src/test/resources/com/revetsec/internal/json/corpus</directory>
+				<targetPath>com/revetsec/oidc/OidcFuzzTestsInputs/sessionReferencesRoundTripWithoutCredentials</targetPath>
+				<includes><include>parse/**</include><include>round-trip/**</include></includes>
+			</testResource>
+			<testResource>
+				<directory>${revetsec.core.basedir}/src/test/resources/vectors/jsontestsuite/test_parsing</directory>
+				<targetPath>com/revetsec/oidc/OidcFuzzTestsInputs/sessionReferencesRoundTripWithoutCredentials/jsontestsuite</targetPath>
+				<includes><include>*.json</include></includes>
+			</testResource>
 		</testResources>
 
 		<plugins>

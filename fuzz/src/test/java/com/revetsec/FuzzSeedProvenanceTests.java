@@ -66,6 +66,27 @@ final class FuzzSeedProvenanceTests {
 	private static final String GENERATED_PREFIX = "generated-";
 	private static final String WYCHEPROOF_PREFIX = "wycheproof-";
 
+	// M4 semantic seeds are authored here; every file is named in the checked-in SHA-256 manifest.
+	@Test
+	void oidcSemanticSeedsMatchTheirCompleteManifest() throws Exception {
+		Path resources = coreBasedir().resolve(FuzzSeedGenerator.FUZZ_RESOURCES);
+		Path root = resources.resolve("com/revetsec/oidc/OidcFuzzTestsInputs");
+		Set<String> expected = new TreeSet<>();
+		for (String line : Files.readAllLines(resources.resolve("com/revetsec/oidc/oidc-seeds.sha256"))) {
+			Assertions.assertTrue(line.matches("[0-9a-f]{64}  .+"));
+			String relative = line.substring(66);
+			Path file = root.resolve(relative).normalize();
+			Assertions.assertTrue(file.startsWith(root));
+			Assertions.assertTrue(expected.add(relative), "duplicate manifest path");
+			Assertions.assertEquals(line.substring(0, 64), HexFormat.of().formatHex(
+					java.security.MessageDigest.getInstance("SHA-256").digest(Files.readAllBytes(file))), relative);
+		}
+		try (Stream<Path> files = Files.walk(root)) {
+			Assertions.assertEquals(expected, files.filter(Files::isRegularFile)
+					.map(root::relativize).map(Path::toString).collect(Collectors.toCollection(TreeSet::new)));
+		}
+	}
+
 	// NOTICE and M2-9: each Wycheproof-derived seed copies one field out of the vendored files, unmodified.
 	@Test
 	void everyWycheproofSeedIsTheVendoredFieldItsNameGives() throws Exception {
