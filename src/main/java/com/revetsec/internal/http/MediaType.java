@@ -85,7 +85,7 @@ public final class MediaType {
 	 * @throws NullPointerException if {@code fieldValue} is {@code null}
 	 */
 	@NonNull
-	public static Optional<MediaType> parse(@NonNull String fieldValue) {
+	public static Optional<@NonNull MediaType> parse(@NonNull String fieldValue) {
 		requireNonNull(fieldValue);
 
 		int start = 0;
@@ -205,7 +205,7 @@ public final class MediaType {
 	 * @return the charset, or empty
 	 */
 	@NonNull
-	public Optional<String> getCharset() {
+	public Optional<@NonNull String> getCharset() {
 		return Optional.ofNullable(this.parameters.get(CHARSET_PARAMETER));
 	}
 

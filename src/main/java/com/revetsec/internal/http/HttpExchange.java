@@ -586,7 +586,7 @@ public final class HttpExchange {
 
 		@Override
 		@NonNull
-		public BodySubscriber<Void> apply(@NonNull ResponseInfo responseInfo) {
+		public BodySubscriber<@NonNull Void> apply(@NonNull ResponseInfo responseInfo) {
 			try {
 				return subscriberFor(responseInfo.statusCode(), responseInfo.headers());
 			} catch (Throwable t) {
@@ -598,7 +598,7 @@ public final class HttpExchange {
 		}
 
 		@NonNull
-		private BodySubscriber<Void> subscriberFor(int status,
+		private BodySubscriber<@NonNull Void> subscriberFor(int status,
 																														 @NonNull HttpHeaders headers) {
 			if (isRedirect(status))
 				return reject(Kind.REDIRECT);
@@ -633,14 +633,14 @@ public final class HttpExchange {
 		}
 
 		@NonNull
-		private BodySubscriber<Void> reject(@NonNull Kind kind) {
+		private BodySubscriber<@NonNull Void> reject(@NonNull Kind kind) {
 			this.outcome.complete(Outcome.fromKind(kind));
 			cancelExchangeEarly();
 			return new EarlyOutcomeSubscriber();
 		}
 
 		@NonNull
-		private BodySubscriber<Void> dropErrorBody(int status,
+		private BodySubscriber<@NonNull Void> dropErrorBody(int status,
 																														@NonNull HttpHeaders headers,
 																														@Nullable MediaType mediaType) {
 			complete(droppedErrorBody(status, headers, mediaType));
@@ -773,7 +773,7 @@ public final class HttpExchange {
 
 		@Override
 		@NonNull
-		public CompletionStage<Void> getBody() {
+		public CompletionStage<@NonNull Void> getBody() {
 			return this.body.minimalCompletionStage();
 		}
 	}
@@ -962,7 +962,7 @@ public final class HttpExchange {
 
 		@Override
 		@NonNull
-		public CompletionStage<Void> getBody() {
+		public CompletionStage<@NonNull Void> getBody() {
 			return this.body.minimalCompletionStage();
 		}
 

@@ -16,6 +16,7 @@
 
 package com.revetsec.oauth;
 
+import org.jspecify.annotations.NonNull;
 import javax.annotation.concurrent.Immutable;
 
 /**
@@ -33,7 +34,7 @@ public enum TokenTypeHint {
 
 	private final String wireValue;
 
-	TokenTypeHint(String wireValue) { this.wireValue = wireValue; }
+	TokenTypeHint(@NonNull String wireValue) { this.wireValue = wireValue; }
 
-	String wireValue() { return this.wireValue; }
+	@NonNull String wireValue() { return this.wireValue; }
 }

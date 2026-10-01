@@ -1,6 +1,6 @@
 # node-oidc-provider test OP (test-only)
 
-A strict, spec-exact OpenID Provider for Revetsec's Tier-1 interop legs, planned to gate from M5 in CI's `integration` job (see `.github/workflows/ci.yml`). It is built from:
+A strict, spec-exact OpenID Provider for Revetsec's Tier-1 interop legs, gating from M5 in CI's `integration` job (see `.github/workflows/ci.yml`). It is built from:
 
 - [`oidc-provider`](https://github.com/panva/node-oidc-provider) **9.12.2** (MIT, Copyright Filip Skokan), installed unmodified from registry.npmjs.org. `package-lock.json` pins it and its 39 transitive packages with integrity hashes;
 - `server.js`, our own code (Apache-2.0): one test client, one test account, and an auto-login interaction handler;
@@ -39,4 +39,8 @@ Without `TLS_CERT_FILE` and `TLS_KEY_FILE` it serves plain HTTP. `ISSUER` must b
 - **Base image:** change the tag and index digest on the `FROM` line.
 - Either way, re-run `interop/spike/tier1-spike.sh --only node`, which builds the image and runs the headless code-flow smoke check.
 
-The `features` block in `server.js` has placeholders for the M5/M6 strict-spec legs: RFC 9068 JWT access tokens through `resourceIndicators`, RFC 9701 JWT introspection, and PAR/DPoP policy variants.
+M5 enables a separate test mode through `TEST_RESOURCE_MODE=m5`: resource indicators issue strict RFC 9068 JWT access tokens for the configured MCP resource and opaque tokens for a separate introspection resource. Code and client-credentials grants use the provider's real issuance paths. Signing keys rotate when the same local provider restarts; storage resets with that restart.
+
+Node provider 9.12.2 rejects structured JWTs at its introspection and revocation endpoints. Tests preserve that rejection as a provider failure; audience-checked JSON introspection and revocation use the genuine opaque resource. Keycloak separately exercises JWT introspection. No provider implementation is patched or introspection audience check disabled. JWT introspection responses, PAR and DPoP remain later scope.
+
+Integration tests start only under Maven's `integration` profile. Build the local image first, then run `mvn -Pintegration -Dmaven.javadoc.skip=true verify`. To select another locally built image, set `-Drevetsec.nodeProviderImage=<local-image>`; tests require the expected installed provider version and never pull images automatically. TLS uses a fresh SAN-correct test certificate and a scoped trust context. Loopback bindings and test-only credentials do not define a deployment authentication policy.

@@ -24,6 +24,7 @@ import com.revetsec.internal.oauth.OidcTransactionAccess;
 import com.revetsec.oauth.*;
 import com.revetsec.jose.*;
 import com.revetsec.json.JsonObject;
+import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
 import java.net.URI;
@@ -41,17 +42,17 @@ final class UserInfoEndpoint {
 	private final Clock clock;
 	private final OidcObserver observer;
 	private final UserInfoAttemptGate attempts;
-	UserInfoEndpoint(HttpExchange exchange, Duration requestTimeout, Clock clock, OidcObserver observer, UserInfoAttemptGate attempts) {
+	UserInfoEndpoint(@NonNull HttpExchange exchange, @NonNull Duration requestTimeout, @NonNull Clock clock, @NonNull OidcObserver observer, @NonNull UserInfoAttemptGate attempts) {
 		this.exchange = exchange; this.requestTimeout = requestTimeout; this.clock = clock; this.observer = observer; this.attempts = attempts;
 	}
-	static String authorization(AccessToken token, Clock clock) {
+	static @NonNull String authorization(@NonNull AccessToken token, @NonNull Clock clock) {
 		if (token.getExpiresAt().isPresent() && !clock.instant().isBefore(token.getExpiresAt().orElseThrow()))
 			throw OidcValidationException.fromReason(OidcValidationException.Reason.USERINFO_ACCESS_TOKEN_EXPIRED);
 		try { return token.getAuthorizationHeaderValue(); }
 		catch (IllegalStateException invalid) { throw OidcValidationException.fromReason(OidcValidationException.Reason.USERINFO_ACCESS_TOKEN_INVALID); }
 	}
-	OidcUserInfo fetch(OidcProviderMetadata metadata, JsonWebKeySource keys, OidcAuthentication authentication,
-			String clientId, @Nullable JwsAlgorithm signedAlgorithm, Duration skew, Set<String> trustedAudiences, Deadline deadline) {
+	@NonNull OidcUserInfo fetch(@NonNull OidcProviderMetadata metadata, @NonNull JsonWebKeySource keys, @NonNull OidcAuthentication authentication,
+			@NonNull String clientId, @Nullable JwsAlgorithm signedAlgorithm, @NonNull Duration skew, @NonNull Set<@NonNull String> trustedAudiences, @NonNull Deadline deadline) {
 		URI uri = metadata.getUserInfoEndpoint().orElseThrow(() -> OidcValidationException.fromReason(OidcValidationException.Reason.USERINFO_ENDPOINT_UNAVAILABLE));
 		String header = authorization(authentication.getTokens().getAccessToken(), this.clock);
 		UserInfoAttemptGate.Attempt attempt = this.attempts.acquire(deadline, this.requestTimeout);

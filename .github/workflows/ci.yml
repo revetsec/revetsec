@@ -468,7 +468,10 @@ jobs:
           java-version: '17'
           cache: maven
 
-      - name: Run the Keycloak integration tests
+      - name: Build the locked local node-oidc-provider fixture
+        run: docker build --pull=false -t revetsec-interop/node-oidc-provider:local interop/node-oidc-provider
+
+      - name: Run the Keycloak and node-provider integration tests
         run: mvn -B -ntp -Pintegration -Dmaven.javadoc.skip=true verify
 
       - name: Require executed integration cases and zero skips
@@ -496,10 +499,14 @@ jobs:
           }
           names = {case.attrib.get('name') for suite in suites for case in suite.findall('testcase')}
           missing = required - names
+          required_resource_cases = {'com.revetsec.oauth.NodeAccessTokenIT': {'clientCredentialsResourceIndicatorReturnsSuccessResult', 'revocationTurnsIntrospectionInactiveWithoutCaching', 'authorizationCodeResourceIndicatorReturnsStrictProof', 'unconfiguredResourceIndicatorFailsAtActualProvider', 'introspectionChecksAudienceAndPostsForEveryValidation', 'actualProviderKeyRotationRefreshesSameValidatorAndCache', 'structuredJwtIntrospectionIsProviderFailureRatherThanCredentialRejection', 'jwtWrongAudienceReturnsRejectedResultWithoutProof'}, 'com.revetsec.oauth.KeycloakAccessTokenIT': {'introspectionAudienceCheckSendsFreshPostEachTime', 'strictJwtWrongAudienceRejectsBeforeProofRelease', 'namedCompatibilityStillRejectsWrongAudienceBeforeProofRelease', 'enabledAccessTokenHeaderPassesStrictClientCredentials', 'revokedCodeFlowSessionReturnsInactiveOnEveryPost', 'enabledAccessTokenHeaderAndClientIdMapperPassStrictCodeFlow', 'disabledAccessTokenHeaderNeedsNamedCompatibilityAndExtraClaim'}}
+          for classname, methods in required_resource_cases.items():
+              actual = {case.attrib.get('name') for suite in suites for case in suite.findall('testcase') if case.attrib.get('classname') == classname}
+              missing.update(classname + "#" + name for name in methods - actual)
           failed = sum(int(suite.attrib.get('failures', '0')) + int(suite.attrib.get('errors', '0')) for suite in suites)
           if executed < len(required) or skipped or failed or missing:
               sys.exit(f'Integration count is {executed}; skipped: {skipped}; failed: {failed}; missing: {sorted(missing)}')
-          print(f'Integration cases executed: {executed}; skipped: {skipped}; all required OAuth/OIDC cases present')
+          print(f'Integration cases executed: {executed}; skipped: {skipped}; all required OAuth/OIDC/resource cases present')
           PY
 
       - name: Upload integration reports

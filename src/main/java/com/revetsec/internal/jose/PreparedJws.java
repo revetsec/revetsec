@@ -87,6 +87,9 @@ public final class PreparedJws {
 		this.jsonLimits = requireNonNull(jsonLimits);
 	}
 
+	/** Returns the compact input length without releasing its credential. */
+	public int getCompactLength() { return this.compactSerialization.length(); }
+
 	/**
 	 * Returns the header's algorithm.
 	 *

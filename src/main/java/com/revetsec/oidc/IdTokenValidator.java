@@ -34,6 +34,7 @@ import com.revetsec.jose.JwtValidator;
 import com.revetsec.json.JsonArray;
 import com.revetsec.json.JsonString;
 import com.revetsec.json.JsonValue;
+import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.ThreadSafe;
@@ -68,22 +69,22 @@ final class IdTokenValidator {
 	private final JoseObserver observer;
 	private final boolean hmacEnabled;
 
-	IdTokenValidator(String issuer, String clientId, JsonWebKeySource jsonWebKeySource,
-			Set<JwsAlgorithm> algorithms, Set<String> trustedAudiences, Set<String> trustedAuthorizedParties,
-			Duration clockSkew, Duration maximumIdTokenAge, Clock clock) {
+	IdTokenValidator(@NonNull String issuer, @NonNull String clientId, @NonNull JsonWebKeySource jsonWebKeySource,
+			@NonNull Set<@NonNull JwsAlgorithm> algorithms, @NonNull Set<@NonNull String> trustedAudiences, @NonNull Set<@NonNull String> trustedAuthorizedParties,
+			@NonNull Duration clockSkew, @NonNull Duration maximumIdTokenAge, @NonNull Clock clock) {
 		this(issuer, clientId, jsonWebKeySource, algorithms, trustedAudiences, trustedAuthorizedParties, clockSkew,
 				maximumIdTokenAge, clock, JoseObserver.disabledInstance());
 	}
 
-	IdTokenValidator(String issuer, String clientId, JsonWebKeySource jsonWebKeySource,
-			Set<JwsAlgorithm> algorithms, Set<String> trustedAudiences, Set<String> trustedAuthorizedParties,
-			Duration clockSkew, Duration maximumIdTokenAge, Clock clock, JoseObserver observer) {
+	IdTokenValidator(@NonNull String issuer, @NonNull String clientId, @NonNull JsonWebKeySource jsonWebKeySource,
+			@NonNull Set<@NonNull JwsAlgorithm> algorithms, @NonNull Set<@NonNull String> trustedAudiences, @NonNull Set<@NonNull String> trustedAuthorizedParties,
+			@NonNull Duration clockSkew, @NonNull Duration maximumIdTokenAge, @NonNull Clock clock, @NonNull JoseObserver observer) {
 		this(issuer, clientId, jsonWebKeySource, algorithms, trustedAudiences, trustedAuthorizedParties, clockSkew,
 				maximumIdTokenAge, clock, observer, false);
 	}
-	IdTokenValidator(String issuer, String clientId, JsonWebKeySource jsonWebKeySource,
-			Set<JwsAlgorithm> algorithms, Set<String> trustedAudiences, Set<String> trustedAuthorizedParties,
-			Duration clockSkew, Duration maximumIdTokenAge, Clock clock, JoseObserver observer, boolean hmacEnabled) {
+	IdTokenValidator(@NonNull String issuer, @NonNull String clientId, @NonNull JsonWebKeySource jsonWebKeySource,
+			@NonNull Set<@NonNull JwsAlgorithm> algorithms, @NonNull Set<@NonNull String> trustedAudiences, @NonNull Set<@NonNull String> trustedAuthorizedParties,
+			@NonNull Duration clockSkew, @NonNull Duration maximumIdTokenAge, @NonNull Clock clock, @NonNull JoseObserver observer, boolean hmacEnabled) {
 		this.hmacEnabled = hmacEnabled;
 		this.issuer = requireNonNull(issuer);
 		this.clientId = requireNonNull(clientId);
@@ -104,39 +105,39 @@ final class IdTokenValidator {
 	}
 
 	boolean needsPublicKeys() { return this.algorithms.stream().anyMatch(algorithm -> !isHmac(algorithm)); }
-	private static boolean isHmac(JwsAlgorithm algorithm) { return Set.of(JwsAlgorithm.HS256, JwsAlgorithm.HS384, JwsAlgorithm.HS512).contains(algorithm); }
+	private static boolean isHmac(@NonNull JwsAlgorithm algorithm) { return Set.of(JwsAlgorithm.HS256, JwsAlgorithm.HS384, JwsAlgorithm.HS512).contains(algorithm); }
 	private void reportHmacUse() {
 		if (this.observer instanceof OidcObserver oidc)
 			ObserverDispatch.dispatch(oidc, observer -> observer.didUseCompatibilityMode(OidcCompatibilityMode.HMAC_ID_TOKENS));
 	}
 
-	IdToken validate(String compactSerialization, String expectedNonce, String accessToken, String code,
-			@Nullable Duration maximumAuthenticationAge, Set<String> requiredAcrValues) {
+	@NonNull IdToken validate(@NonNull String compactSerialization, @NonNull String expectedNonce, @NonNull String accessToken, @NonNull String code,
+			@Nullable Duration maximumAuthenticationAge, @NonNull Set<@NonNull String> requiredAcrValues) {
 		return validate(compactSerialization, expectedNonce, accessToken, code, maximumAuthenticationAge,
 				requiredAcrValues, null);
 	}
 
-	IdToken validate(String compactSerialization, String expectedNonce, String accessToken, String code,
-			@Nullable Duration maximumAuthenticationAge, Set<String> requiredAcrValues, @Nullable Deadline deadline) {
+	@NonNull IdToken validate(@NonNull String compactSerialization, @NonNull String expectedNonce, @NonNull String accessToken, @NonNull String code,
+			@Nullable Duration maximumAuthenticationAge, @NonNull Set<@NonNull String> requiredAcrValues, @Nullable Deadline deadline) {
 		return validate(compactSerialization, expectedNonce, accessToken, code, maximumAuthenticationAge, requiredAcrValues, deadline, null);
 	}
-	IdToken validate(String compactSerialization, String expectedNonce, String accessToken, String code,
-			@Nullable Duration maximumAuthenticationAge, Set<String> requiredAcrValues, @Nullable Deadline deadline,
+	@NonNull IdToken validate(@NonNull String compactSerialization, @NonNull String expectedNonce, @NonNull String accessToken, @NonNull String code,
+			@Nullable Duration maximumAuthenticationAge, @NonNull Set<@NonNull String> requiredAcrValues, @Nullable Deadline deadline,
 			@Nullable String clientSecret) {
 		return validateProfile(compactSerialization, requireNonNull(expectedNonce), accessToken, requireNonNull(code),
 				maximumAuthenticationAge, requiredAcrValues, deadline, null, clientSecret);
 	}
 
-	IdToken validateRefresh(String compact, OidcSessionReference original, String accessToken, Set<String> acrValues, Deadline deadline) {
+	@NonNull IdToken validateRefresh(@NonNull String compact, @NonNull OidcSessionReference original, @NonNull String accessToken, @NonNull Set<@NonNull String> acrValues, @NonNull Deadline deadline) {
 		return validateRefresh(compact, original, accessToken, acrValues, deadline, null);
 	}
-	IdToken validateRefresh(String compact, OidcSessionReference original, String accessToken, Set<String> acrValues,
-			Deadline deadline, @Nullable String clientSecret) {
+	@NonNull IdToken validateRefresh(@NonNull String compact, @NonNull OidcSessionReference original, @NonNull String accessToken, @NonNull Set<@NonNull String> acrValues,
+			@NonNull Deadline deadline, @Nullable String clientSecret) {
 		return validateProfile(compact, null, accessToken, null, null, acrValues, deadline, requireNonNull(original), clientSecret);
 	}
 
-	private IdToken validateProfile(String compactSerialization, @Nullable String expectedNonce, String accessToken,
-			@Nullable String code, @Nullable Duration maximumAuthenticationAge, Set<String> requiredAcrValues,
+	private @NonNull IdToken validateProfile(@NonNull String compactSerialization, @Nullable String expectedNonce, @NonNull String accessToken,
+			@Nullable String code, @Nullable Duration maximumAuthenticationAge, @NonNull Set<@NonNull String> requiredAcrValues,
 			@Nullable Deadline deadline, @Nullable OidcSessionReference original, @Nullable String clientSecret) {
 		requireNonNull(compactSerialization);
 		requireNonNull(accessToken);
@@ -224,13 +225,13 @@ final class IdTokenValidator {
 		return new IdToken(jwt);
 	}
 
-	private boolean exceedsAuthenticationAge(Instant authenticationTime, Instant now, Duration maximumAge) {
+	private boolean exceedsAuthenticationAge(@NonNull Instant authenticationTime, @NonNull Instant now, @NonNull Duration maximumAge) {
 		// Compare by subtraction to avoid overflow from a caller's very large maximum age.
 		Duration ageAfterSkew = Duration.between(authenticationTime, now).minus(this.clockSkew);
 		return ageAfterSkew.compareTo(maximumAge) > 0;
 	}
 
-	private static void validateAuthenticationMethods(JwtClaims claims) {
+	private static void validateAuthenticationMethods(@NonNull JwtClaims claims) {
 		JsonValue value = claims.getClaim("amr").orElse(null);
 		if (value != null && (!(value instanceof JsonArray array)
 				|| array.getElements().stream().anyMatch(element -> !(element instanceof JsonString))))
@@ -238,7 +239,7 @@ final class IdTokenValidator {
 		stringClaim(claims, "sid");
 	}
 
-	private static @Nullable String stringClaim(JwtClaims claims, String name) {
+	private static @Nullable String stringClaim(@NonNull JwtClaims claims, @NonNull String name) {
 		JsonValue value = claims.getClaim(name).orElse(null);
 		if (value == null)
 			return null;
@@ -247,8 +248,8 @@ final class IdTokenValidator {
 		return string.getValue();
 	}
 
-	private static void checkHash(JwtClaims claims, String name, JwsAlgorithm algorithm, String credential,
-			OidcValidationException.Reason reason) {
+	private static void checkHash(@NonNull JwtClaims claims, @NonNull String name, @NonNull JwsAlgorithm algorithm, @NonNull String credential,
+			OidcValidationException.@NonNull Reason reason) {
 		if (claims.getClaim(name).isEmpty())
 			return;
 		JsonValue value = claims.getClaim(name).orElseThrow();
@@ -262,7 +263,7 @@ final class IdTokenValidator {
 		}
 	}
 
-	private static boolean sameSecret(String expected, String actual) {
+	private static boolean sameSecret(@NonNull String expected, @NonNull String actual) {
 		byte[] expectedBytes = expected.getBytes(StandardCharsets.UTF_8);
 		byte[] actualBytes = actual.getBytes(StandardCharsets.UTF_8);
 		try {
@@ -273,7 +274,7 @@ final class IdTokenValidator {
 		}
 	}
 
-	private static OidcValidationException failure(OidcValidationException.Reason reason) {
+	private static @NonNull OidcValidationException failure(OidcValidationException.@NonNull Reason reason) {
 		return OidcValidationException.fromReason(reason);
 	}
 
@@ -283,22 +284,22 @@ final class IdTokenValidator {
 		private final Clock delegate;
 		private @Nullable Instant snapshot;
 
-		private ValidationClock(Clock delegate) {
+		private ValidationClock(@NonNull Clock delegate) {
 			this.delegate = delegate;
 		}
 
 		@Override
-		public ZoneId getZone() {
+		public @NonNull ZoneId getZone() {
 			return this.delegate.getZone();
 		}
 
 		@Override
-		public Clock withZone(ZoneId zone) {
+		public @NonNull Clock withZone(@NonNull ZoneId zone) {
 			return new ValidationClock(this.delegate.withZone(zone));
 		}
 
 		@Override
-		public Instant instant() {
+		public @NonNull Instant instant() {
 			Instant instant = this.snapshot;
 			if (instant == null) {
 				instant = this.delegate.instant();

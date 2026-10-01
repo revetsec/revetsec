@@ -30,6 +30,41 @@ It provides protocol-specific library APIs rather than one abstraction over ever
 - More test code than production code, at least as many negative tests as positive ones, and every security rule tested with a citation of its spec section or CVE
 - Claims only with evidence that anyone can re-run
 
+### Validation outcomes
+
+Expected input rejections can be handled as immutable sealed results. The existing throwing methods remain available.
+
+| Operation | Result entry point | Outcomes |
+| --- | --- | --- |
+| Access-token validation | `AccessTokenValidator.validateResult` | `Succeeded` with `VerifiedAccessToken`, or `Rejected` with a fixed resource reason and optional JOSE reason |
+| JWT validation | `JwtValidator.validateResult` | `Succeeded` with a checked `Jwt`, or `Rejected` with a fixed JOSE reason |
+| Bearer header parsing | `BearerToken.fromAuthorizationHeaderValuesResult` | `Absent`, `Present` with an unverified credential, or `Malformed` |
+| Sealed application state | `StateSealer.unsealResult` | `Succeeded` with authenticated plaintext, or an opaque `Rejected` |
+| OAuth callback | `OAuthClient.completeAuthorizationResult` | `Succeeded`, checked `access_denied` as `Denied`, or local callback `Rejected` |
+| OIDC callback | `OidcClient.completeAuthenticationResult` | `Succeeded`, `Denied`, `RejectedAuthorization`, or `RejectedIdToken` |
+
+For example, a Java 21+ application can switch over JWT validation results:
+
+```java
+switch (validator.validateResult(compactJwt)) {
+  case JwtValidationResult.Succeeded success ->
+      useValidatedJwt(success.getJwt());
+  case JwtValidationResult.Rejected rejection ->
+      rejectRequest(rejection.getReason());
+  default -> rejectRequest();
+}
+```
+
+The application supplies the handling functions. Java 17 applications can use `instanceof` patterns with the same final getter classes.
+These hierarchies may gain variants, so keep a rejecting default in switches. Only successful validation releases a checked value;
+expired or rejected tokens expose no identity or claims. Parsing a bearer header grants no permission. Sealed-state rejection exposes
+no distinction between expiry, wrong context, unknown key or authentication failure. Result diagnostics redact their data.
+
+Provider, transport, store and configuration failures retain exceptions. Callback `Denied` specifically means a bound `access_denied`
+response; other authorization errors remain exceptions. Completion result methods execute once and preserve atomic-store consumption,
+the sealed-cookie replay boundary and observer behavior. The application clears pending cookies on every outcome and chooses generic
+HTTP errors rather than reflecting detailed validation reasons to a remote caller.
+
 ### Design Non-Goals
 
 - Operating a hosted identity service, OpenID Provider or SAML identity provider
@@ -145,7 +180,7 @@ Share one validator, and one key source, across threads. By default a token must
 
 Revetsec is **pre-release**. The version is `1.0.0-SNAPSHOT`, and there is no compatibility promise before 1.0.0; see [COMPATIBILITY.md](COMPATIBILITY.md).
 
-The repository includes shared foundations, JOSE, an OAuth client and an OpenID Connect relying party. Resource-server work has started with `BearerToken`, `BearerChallenge`, `ProtectedResourceMetadata` and fixed credential-error types; access-token validators and introspection are next. OAuth token issuance, SAML and SCIM remain planned for 1.0.0. The application supplies users, permissions, sessions, routes and durable storage.
+The repository includes shared foundations, JOSE, an OAuth client and an OpenID Connect relying party. Resource-server work has started with `BearerToken`, `BearerChallenge`, `ProtectedResourceMetadata` and fixed credential-error types; strict JWT access-token validation and audience-checked JSON introspection are implemented. OAuth token issuance, SAML and SCIM remain planned for 1.0.0. The application supplies users, permissions, sessions, routes and durable storage. The Soklet adapter now provides raw OAuth callback/redirect and bearer parsing helpers. Applications still choose validators and make permission decisions.
 
 Revetsec has not been independently audited. Its security evidence is meant to be reproducible by anyone and will be listed in [`docs/`](docs/) as it is produced: conformance logs, the interop matrix, the threat model with its invariant-to-test map, review ledgers, penetration-test notes, and fuzz and mutation reports. So far the [threat model](docs/threat-model.md) maps the invariants of the foundations and JOSE to their tests, and [fuzz/README.md](fuzz/README.md) records local fuzzing runs and planted-defect checks for the fuzz targets; the rest does not exist yet.
 
@@ -163,8 +198,18 @@ $ mvn -B -ntp -Dmaven.javadoc.skip=true verify
 
 ### Resource-server protocol helpers
 
-`BearerToken.fromAuthorizationHeaderValues(values)` parses one raw Authorization field into an **unverified** credential. Preserve duplicates: an empty list means absent; malformed or multiple values produce `invalid_request`. Other authentication schemes follow the same strict malformed-input policy. The credential has no public value getter. Parsing grants no identity or permission; resource validators are still being built.
+`BearerToken.fromAuthorizationHeaderValues(values)` parses one raw Authorization field into an **unverified** credential. Preserve duplicates: an empty list means absent; malformed or multiple values produce `invalid_request`. Other authentication schemes follow the same strict malformed-input policy. The credential has no public value getter. Parsing grants no identity or permission; pass the credential to a configured resource validator.
 
 `BearerChallenge.builder().resourceMetadata(metadataUri).build().getHeaderValue()` supplies a bounded initial challenge with no error. Set a trusted realm, fixed error/description or required operation scopes as appropriate; the application chooses the HTTP status. At least one rendered parameter is required. `ProtectedResourceMetadata.withResource(resourceUri)` renders header-only bearer metadata and derives its well-known URI from raw path/query components, preserving the configured identifier. Both are pure helpers with HTTPS defaults and an explicit loopback HTTP option.
 
 `AuthorizationResponse.fromFormBody(body, contentTypeValues, rawQuery)` validates one bounded raw form Content-Type with absent/UTF-8 charset, then applies the existing duplicate and query/body channel checks. The existing Charset overload is retained. Transports that collapse identical physical header values need a trusted edge that rejects duplicate Authorization and Content-Type fields.
+
+### Resource-server validation
+
+`JwtAccessTokenValidator.withIssuer(issuer).expectedAudiences(Set.of(resource)).build()` validates strict RFC 9068 JWT access tokens. It requires an access-token type, exact issuer, intended audience, valid signature, `exp`, `iat`, and nonempty `sub`, `client_id` and `jti`. Its public-key algorithm default is RS256. A supplied key source bypasses discovery; static keys perform no network I/O. Explicit untyped compatibility requires an additional claim and rejects identity-token claims; it does not grant permissions.
+
+`TokenIntrospectionClient.withOAuthClient(confidentialClient).expectedAudiences(Set.of(resource)).build()` inherits the OAuth client's authentication, issuer, HTTP policy, clock and deadlines. Each validation sends one authenticated JSON introspection request. Active and inactive results are uncached; the response must identify the intended audience. Provider errors and outages remain exceptions, with bounded endpoint-wide backoff and one recovery probe.
+
+Both implement `AccessTokenValidator`: use `validate` for exception handling or `validateResult` for sealed outcomes. Only `Succeeded.getAccessToken()` releases checked proof. `VerifiedAccessToken` contains checked claims, optional subject/client ID/expiry, audiences and scopes; it has no incoming-credential getter. Claims are sensitive explicit access. Empty scopes grant no permission, and application code still decides operation, tenant and object authorization.
+
+Role-specific discovery needs only issuer/JWKS for JWT or issuer/introspection endpoint for introspection. The existing OAuth metadata parser still requires authorization and token endpoints. `warmUp()` performs discovery/key loading without validating a credential. Builds perform no I/O and start no threads.

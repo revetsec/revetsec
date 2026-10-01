@@ -92,7 +92,7 @@ public final class AccessToken {
 		return "Bearer " + this.value;
 	}
 
-	private static boolean isSafeBearerToken(String value) {
+	private static boolean isSafeBearerToken(@NonNull String value) {
 		int index = 0;
 		while (index < value.length()) {
 			char c = value.charAt(index);

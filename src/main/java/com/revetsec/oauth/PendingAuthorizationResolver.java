@@ -34,7 +34,7 @@ final class PendingAuthorizationResolver {
 	private PendingAuthorizationResolver() {
 	}
 
-	static PendingAuthorization resolve(@NonNull PendingAuthorizationSource source, @NonNull String callbackState,
+	static @NonNull PendingAuthorization resolve(@NonNull PendingAuthorizationSource source, @NonNull String callbackState,
 			@NonNull Clock clock) {
 		requireNonNull(source);
 		requireNonNull(callbackState);

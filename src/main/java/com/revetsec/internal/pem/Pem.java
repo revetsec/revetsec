@@ -389,7 +389,7 @@ public final class Pem {
 		return out;
 	}
 
-	private static int put(byte @NonNull [] out, int position, int... octets) {
+	private static int put(byte @NonNull [] out, int position, int @NonNull ... octets) {
 		int next = position;
 		for (int octet : octets)
 			out[next++] = (byte) octet;

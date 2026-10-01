@@ -50,18 +50,18 @@ public final class OidcSessionReference {
 	private final String clientId;
 	private final String nonceDigest;
 	private final @Nullable String sessionId;
-	OidcSessionReference(IdToken token, String clientId) {
+	OidcSessionReference(@NonNull IdToken token, @NonNull String clientId) {
 		JsonObject.Builder fields = JsonObject.builder();
 		for (String name : CLAIM_NAMES) token.getClaims().getClaim(name).ifPresent(value -> fields.put(name, value));
 		this.continuityClaims = fields.build(); this.clientId = requireNonNull(clientId);
 		this.nonceDigest = digest(((JsonString) token.getClaims().getClaim("nonce").orElseThrow()).getValue());
 		this.sessionId = token.getClaims().getClaim("sid").map(value -> ((JsonString) value).getValue()).orElse(null);
 	}
-	private OidcSessionReference(JsonObject claims, String clientId, String nonceDigest) {
+	private OidcSessionReference(@NonNull JsonObject claims, @NonNull String clientId, @NonNull String nonceDigest) {
 		this.continuityClaims = claims; this.clientId = clientId; this.nonceDigest = nonceDigest;
 		this.sessionId = claims.findString("sid").orElse(null);
 	}
-	static String digest(String nonce) {
+	static @NonNull String digest(@NonNull String nonce) {
 		byte[] input = nonce.getBytes(StandardCharsets.UTF_8);
 		try {
 			byte[] result = MessageDigest.getInstance("SHA-256").digest(input);
@@ -70,9 +70,9 @@ public final class OidcSessionReference {
 		} catch (NoSuchAlgorithmException impossible) { throw new IllegalStateException("SHA-256 is unavailable."); }
 		finally { Arrays.fill(input, (byte) 0); }
 	}
-	JsonObject continuityClaims() { return this.continuityClaims; }
-	boolean matchesNonce(String nonce) { return ConstantTime.isEqual(this.nonceDigest, digest(nonce)); }
-	boolean matchesOriginalReference(OidcSessionReference other) {
+	@NonNull JsonObject continuityClaims() { return this.continuityClaims; }
+	boolean matchesNonce(@NonNull String nonce) { return ConstantTime.isEqual(this.nonceDigest, digest(nonce)); }
+	boolean matchesOriginalReference(@NonNull OidcSessionReference other) {
 		if (!this.clientId.equals(other.clientId) || !ConstantTime.isEqual(this.nonceDigest, other.nonceDigest)
 				|| !audiences(this.continuityClaims).equals(audiences(other.continuityClaims))) return false;
 		Map<String, JsonValue> original = new HashMap<>(this.continuityClaims.getMembers());
@@ -80,10 +80,10 @@ public final class OidcSessionReference {
 		original.remove("aud"); restored.remove("aud");
 		return original.equals(restored);
 	}
-	void checkClient(String issuer, String clientId) {
+	void checkClient(@NonNull String issuer, @NonNull String clientId) {
 		if (!this.continuityClaims.findString("iss").orElseThrow().equals(issuer) || !this.clientId.equals(clientId)) throw mismatch();
 	}
-	void checkContinuity(JwtClaims claims) {
+	void checkContinuity(@NonNull JwtClaims claims) {
 		try {
 			JsonObject current = claims.toJsonObject();
 			if (!Objects.equals(current.getMembers().get("iss"), this.continuityClaims.getMembers().get("iss"))
@@ -97,8 +97,8 @@ public final class OidcSessionReference {
 			if (current.getMembers().get("nonce") instanceof JsonString nonce && !matchesNonce(nonce.getValue())) throw mismatch();
 		} catch (JsonFieldException invalid) { throw mismatch(); }
 	}
-	private static OidcValidationException mismatch() { return OidcValidationException.fromReason(OidcValidationException.Reason.REFRESHED_ID_TOKEN_MISMATCH); }
-	private static Set<String> audiences(JsonObject claims) {
+	private static @NonNull OidcValidationException mismatch() { return OidcValidationException.fromReason(OidcValidationException.Reason.REFRESHED_ID_TOKEN_MISMATCH); }
+	private static @NonNull Set<@NonNull String> audiences(@NonNull JsonObject claims) {
 		JsonValue value = claims.getMembers().get("aud"); Set<String> result = new HashSet<>();
 		if (value instanceof JsonString text && !text.getValue().isEmpty()) result.add(text.getValue());
 		else if (value instanceof JsonArray array && !array.getElements().isEmpty()) {
@@ -177,7 +177,7 @@ public final class OidcSessionReference {
 	public static @NonNull OidcSessionReference fromSealedForm(@NonNull String sealedForm, @NonNull StateSealer sealer, @NonNull String context) {
 		return fromSerializedForm(requireNonNull(sealer).unseal(requireNonNull(sealedForm), requireNonNull(context)));
 	}
-	private static OidcValidationException invalid() { return OidcValidationException.fromReason(OidcValidationException.Reason.SESSION_REFERENCE_INVALID); }
+	private static @NonNull OidcValidationException invalid() { return OidcValidationException.fromReason(OidcValidationException.Reason.SESSION_REFERENCE_INVALID); }
 	/**
 	 * Returns the original session ID, if present. This reference is not proof of identity.
 	 * @return session ID

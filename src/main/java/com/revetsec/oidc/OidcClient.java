@@ -78,7 +78,7 @@ public final class OidcClient {
 	private final ReentrantLock stateLock = new ReentrantLock();
 	private @Nullable ProviderState state;
 
-	private OidcClient(Builder builder, OAuthClient oauth) {
+	private OidcClient(@NonNull Builder builder, @NonNull OAuthClient oauth) {
 		this.oauth = oauth; this.issuer = builder.issuer; this.userInfoAlgorithm = builder.userInfoAlgorithm; this.scopes = builder.scopes; this.resources = builder.resources;
 		this.acrValues = builder.acrValues; this.totalDeadline = builder.totalDeadline; this.observer = builder.observer;
 		this.configuredKeySource = builder.keySource; this.clientId = requireNonNull(builder.clientId);
@@ -101,12 +101,12 @@ public final class OidcClient {
 					}, System::nanoTime);
 		} else { this.cache = null; stateFor(builder.metadata); }
 	}
-	private ProviderState provider(Deadline deadline) {
+	private @NonNull ProviderState provider(@NonNull Deadline deadline) {
 		if (this.cache != null) return this.cache.get(deadline);
 		this.stateLock.lock();
 		try { return requireNonNull(this.state); } finally { this.stateLock.unlock(); }
 	}
-	private ProviderState stateFor(OidcProviderMetadata metadata) {
+	private @NonNull ProviderState stateFor(@NonNull OidcProviderMetadata metadata) {
 		this.stateLock.lock();
 		try {
 			ProviderState current = this.state;
@@ -124,13 +124,13 @@ public final class OidcClient {
 			this.state = found; return found;
 		} finally { this.stateLock.unlock(); }
 	}
-	private static Set<JwsAlgorithm> hmacAlgorithms(Set<JwsAlgorithm> algorithms) {
+	private static @NonNull Set<@NonNull JwsAlgorithm> hmacAlgorithms(@NonNull Set<@NonNull JwsAlgorithm> algorithms) {
 		Set<JwsAlgorithm> found = new HashSet<>();
 		for (JwsAlgorithm algorithm : algorithms)
 			if (Set.of(JwsAlgorithm.HS256, JwsAlgorithm.HS384, JwsAlgorithm.HS512).contains(algorithm)) found.add(algorithm);
 		return Set.copyOf(found);
 	}
-	private static Set<JwsAlgorithm> effectiveAlgorithms(OidcProviderMetadata metadata, Set<JwsAlgorithm> configured) {
+	private static @NonNull Set<@NonNull JwsAlgorithm> effectiveAlgorithms(@NonNull OidcProviderMetadata metadata, @NonNull Set<@NonNull JwsAlgorithm> configured) {
 		Set<JwsAlgorithm> effective = new HashSet<>();
 		for (JwsAlgorithm algorithm : configured)
 			if (metadata.getIdTokenSigningAlgValuesSupported().contains(algorithm.getWireValue())) effective.add(algorithm);
@@ -138,8 +138,8 @@ public final class OidcClient {
 			throw new IllegalArgumentException("The OIDC provider does not support this client's code-flow policy.");
 		return Set.copyOf(effective);
 	}
-	private static void checkMetadata(OidcProviderMetadata metadata, Set<JwsAlgorithm> configured,
-			OutboundUriPolicy policy, boolean loopback, @Nullable JwsAlgorithm userInfoAlgorithm) {
+	private static void checkMetadata(@NonNull OidcProviderMetadata metadata, @NonNull Set<@NonNull JwsAlgorithm> configured,
+			@NonNull OutboundUriPolicy policy, boolean loopback, @Nullable JwsAlgorithm userInfoAlgorithm) {
 		effectiveAlgorithms(metadata, configured);
 		if (userInfoAlgorithm != null) metadata.getUserInfoSigningAlgValuesSupported().ifPresent(supported -> {
 			if (!supported.contains(userInfoAlgorithm.getWireValue())) throw new IllegalArgumentException("The configured UserInfo signing algorithm is not advertised.");
@@ -150,7 +150,7 @@ public final class OidcClient {
 		metadata.oauthMetadata().getRevocationEndpoint().ifPresent(uri -> UriChecks.requirePermitted(uri, policy, loopback));
 	}
 	@ThreadSafe
-	private record ProviderState(OidcProviderMetadata metadata, JsonWebKeySource source, IdTokenValidator validator) { }
+	private record ProviderState(@NonNull OidcProviderMetadata metadata, @NonNull JsonWebKeySource source, @NonNull IdTokenValidator validator) { }
 	/**
 	 * Starts an OIDC client with lazy issuer-path discovery. Build performs no discovery or key lookup.
 	 * @param issuer exact issuer identifier, without query or fragment
@@ -229,6 +229,44 @@ public final class OidcClient {
 		ObserverDispatch.dispatch(this.observer, OidcObserver::didCompleteAuthentication);
 		return authentication;
 	}
+
+	/**
+	 * Completes authentication once, returning authenticated identity, checked access_denied, rejected callback
+	 * binding, or a rejected ID token. Rejected outcomes release no identity, claims or endpoint credentials.
+	 * Store, metadata, transport, endpoint and invalid HMAC-secret failures remain exceptions. Clear the pending
+	 * cookie on every outcome; the original completion's atomic-consumption and observer behavior is preserved.
+	 * @param response parsed callback
+	 * @param source browser-bound pending source
+	 * @param actualCallbackUri receiving route URI from trusted routing configuration
+	 * @return the authentication outcome
+	 * @since 1.0.0
+	 */
+	@CheckReturnValue
+	public @NonNull OidcAuthenticationResult completeAuthenticationResult(@NonNull AuthorizationResponse response,
+			@NonNull PendingAuthorizationSource source, @NonNull URI actualCallbackUri) {
+		try {
+			return OidcAuthenticationResult.fromAuthentication(completeAuthentication(response, source, actualCallbackUri));
+		} catch (AuthorizationErrorException failure) {
+			if (!failure.getErrorCode().equals(Optional.of("access_denied"))) throw failure;
+			return OidcAuthenticationResult.fromDenial();
+		} catch (OAuthValidationException rejection) {
+			if (!isLocalCallbackRejection(rejection.getReason())) throw rejection;
+			return OidcAuthenticationResult.fromAuthorizationReason(rejection.getReason());
+		} catch (OidcValidationException rejection) {
+			if (rejection.getReason() == OidcValidationException.Reason.HMAC_SECRET_INVALID) throw rejection;
+			return OidcAuthenticationResult.fromIdTokenReason(rejection.getReason(), rejection.getJoseReason().orElse(null));
+		}
+	}
+
+	private static boolean isLocalCallbackRejection(OAuthException.@NonNull Reason reason) {
+		return switch (reason) {
+			case STATE_MISMATCH, BROWSER_BINDING_MISMATCH, PENDING_AUTHORIZATION_INVALID,
+				PENDING_AUTHORIZATION_EXPIRED, PENDING_AUTHORIZATION_NOT_FOUND, CLIENT_MISMATCH,
+				ISSUER_MISMATCH, ISSUER_MISSING, CALLBACK_URI_MISMATCH, RESPONSE_MODE_MISMATCH -> true;
+			default -> false;
+		};
+	}
+
 	/**
 	 * Fetches UserInfo for this client's validated authentication. The access token is sent only in a Bearer header
 	 * to a permitted endpoint; issuer/client binding and safe token form are checked before discovery or UserInfo I/O.
@@ -364,7 +402,7 @@ public final class OidcClient {
 		private Duration defaultTimeToLive = Limits.DISCOVERY_DEFAULT_TIME_TO_LIVE.getDefaultDuration();
 		private Duration maximumTimeToLive = Limits.DISCOVERY_MAXIMUM_TIME_TO_LIVE.getDefaultDuration();
 		private Duration discoveryCooldown = Limits.DISCOVERY_COOLDOWN.getDefaultDuration();
-		private Builder(String issuer, @Nullable OidcProviderMetadata metadata) { this.issuer = requireNonNull(issuer); this.metadata = metadata; }
+		private Builder(@NonNull String issuer, @Nullable OidcProviderMetadata metadata) { this.issuer = requireNonNull(issuer); this.metadata = metadata; }
 		/**
 		 * Sets the registered nonempty client identifier.
 		 *

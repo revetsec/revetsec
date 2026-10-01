@@ -16,6 +16,7 @@
 
 package com.revetsec.oidc;
 
+import org.jspecify.annotations.NonNull;
 import com.revetsec.jose.JwsAlgorithm;
 
 import javax.annotation.concurrent.ThreadSafe;
@@ -33,7 +34,7 @@ final class IdTokenHash {
 	private IdTokenHash() {
 	}
 
-	static String hash(JwsAlgorithm algorithm, String credential) {
+	static @NonNull String hash(@NonNull JwsAlgorithm algorithm, @NonNull String credential) {
 		for (int index = 0; index < credential.length(); ++index)
 			if (credential.charAt(index) > 0x7F)
 				throw new IllegalArgumentException("A hashed credential must be ASCII.");

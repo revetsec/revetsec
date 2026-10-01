@@ -110,7 +110,7 @@ The container runs as uid 65534, so the output directory must be writable by any
 
 - Java 17 language level; tabs for indentation.
 - Every Java source file starts with the Apache License 2.0 header that names `Copyright 2026 Revetware LLC.`, as in the existing sources.
-- Public API follows [NAMING_CONVENTIONS.md](NAMING_CONVENTIONS.md). There are no public records. Every public element carries JSpecify nullness annotations, every exported type carries exactly one of `@ThreadSafe`, `@NotThreadSafe` or `@Immutable`, and every public member has `@since`.
+- Public API follows [NAMING_CONVENTIONS.md](NAMING_CONVENTIONS.md). There are no public records. Every reference parameter and return type carries explicit JSpecify nullness annotations, including internal/private methods, constructors and nested reference types; primitive and void types have no nullability. Every public element follows the API annotation contract, every exported type carries exactly one of `@ThreadSafe`, `@NotThreadSafe` or `@Immutable`, and every public member has `@since`.
 - No compile or runtime dependencies. Build-time dependencies are `provided` or `test` scope.
 - Test classes are named `*Tests`. Tests use a fixed `Clock`, hand-written fakes instead of a mocking library, and no `Thread.sleep`.
 - Build a `@TestFactory`'s dynamic tests in a fixed order, from a `List`, a `LinkedHashMap`, an `EnumMap` or sorted entries, not by iterating a `Map.of`, `Set.of`, `HashMap` or `HashSet`, whose order can differ from one JVM to the next. A dynamic test's ID is its position, and PIT reruns a test by its ID in a fresh JVM, so an order that changes can make it report a mutant as surviving that the tests kill.

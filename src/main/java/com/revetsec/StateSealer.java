@@ -209,6 +209,27 @@ public final class StateSealer {
 		}
 	}
 
+
+	/**
+	 * Opens application state once and returns its authenticated plaintext or one undifferentiated rejection.
+	 * Expiry, wrong context, unknown keys, malformed input and authentication failure expose no differing detail.
+	 * This operation uses the same checks as {@link #unseal(String, String)}.
+	 * @param sealed untrusted sealed state
+	 * @param context trusted application context
+	 * @return the opening outcome
+	 * @throws NullPointerException if either argument is null
+	 * @throws IllegalArgumentException if the context is invalid
+	 * @since 1.0.0
+	 */
+	@CheckReturnValue
+	public @NonNull StateUnsealResult unsealResult(@NonNull String sealed, @NonNull String context) {
+		try {
+			return StateUnsealResult.fromValue(unseal(sealed, context));
+		} catch (InvalidSealedStateException rejection) {
+			return StateUnsealResult.fromRejection();
+		}
+	}
+
 	/**
 	 * Returns a description of this sealer's configuration, which names its key IDs but never renders a key.
 	 *

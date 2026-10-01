@@ -21,6 +21,7 @@ import com.revetsec.internal.oauth.OidcTransactionAccess;
 import com.revetsec.oauth.OAuthException;
 import com.revetsec.oauth.OAuthErrorResponseException;
 import javax.annotation.concurrent.ThreadSafe;
+import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 import java.time.Duration;
 import java.util.concurrent.locks.ReentrantLock;
@@ -42,8 +43,8 @@ final class UserInfoAttemptGate {
 	private int failures;
 	private long failedAtNanos;
 	private long backoffNanos;
-	UserInfoAttemptGate(Duration cooldown, LongSupplier nanoTime) { this.cooldown = cooldown; this.nanoTime = nanoTime; }
-	Attempt acquire(Deadline deadline, Duration requestTimeout) {
+	UserInfoAttemptGate(@NonNull Duration cooldown, @NonNull LongSupplier nanoTime) { this.cooldown = cooldown; this.nanoTime = nanoTime; }
+	@NonNull Attempt acquire(@NonNull Deadline deadline, @NonNull Duration requestTimeout) {
 		this.lock.lock();
 		try {
 			long now = this.nanoTime.getAsLong();
@@ -58,7 +59,7 @@ final class UserInfoAttemptGate {
 			return attempt;
 		} finally { this.lock.unlock(); }
 	}
-	void healthy(Attempt attempt) {
+	void healthy(@NonNull Attempt attempt) {
 		this.lock.lock();
 		try {
 			if (attempt.generation == this.generation && this.failure != null) {
@@ -67,7 +68,7 @@ final class UserInfoAttemptGate {
 			if (this.probe == attempt) this.probe = null;
 		} finally { this.lock.unlock(); }
 	}
-	void failed(Attempt attempt, OAuthException failure) {
+	void failed(@NonNull Attempt attempt, @NonNull OAuthException failure) {
 		this.lock.lock();
 		try {
 			if (attempt.generation == this.generation && failure.isTransient()

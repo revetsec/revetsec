@@ -51,9 +51,9 @@ final class TokenEndpointPayload {
 		this(accessToken, tokenType, expiresAt, refreshToken, idToken, idTokenPresent, scope, grantedScopes,
 				requestStart, safeParameters, null);
 	}
-	private TokenEndpointPayload(String accessToken, String tokenType, @Nullable Instant expiresAt,
+	private TokenEndpointPayload(@NonNull String accessToken, @NonNull String tokenType, @Nullable Instant expiresAt,
 			@Nullable String refreshToken, @Nullable String idToken, boolean idTokenPresent, @Nullable String scope,
-			@Nullable Set<String> grantedScopes, Instant requestStart, JsonObject safeParameters, @Nullable String clientSecret) {
+			@Nullable Set<@NonNull String> grantedScopes, @NonNull Instant requestStart, @NonNull JsonObject safeParameters, @Nullable String clientSecret) {
 		this.clientSecret = clientSecret;
 		this.accessToken = requireNonNull(accessToken);
 		this.tokenType = requireNonNull(tokenType);
@@ -66,7 +66,7 @@ final class TokenEndpointPayload {
 		this.safeParameters = requireNonNull(safeParameters);
 	}
 
-	TokenEndpointPayload withClientSecret(@Nullable String secret) {
+	@NonNull TokenEndpointPayload withClientSecret(@Nullable String secret) {
 		return secret == null ? this : new TokenEndpointPayload(this.accessToken, this.tokenType, this.expiresAt,
 				this.refreshToken, this.idToken, this.idTokenPresent, this.scope, this.grantedScopes, this.requestStart,
 				this.safeParameters, secret);
@@ -74,15 +74,15 @@ final class TokenEndpointPayload {
 	@Nullable String clientSecret() { return this.clientSecret; }
 	@Nullable String idToken() { return this.idToken; }
 	boolean idTokenPresent() { return this.idTokenPresent; }
-	String accessToken() { return this.accessToken; }
-	String tokenType() { return this.tokenType; }
+	@NonNull String accessToken() { return this.accessToken; }
+	@NonNull String tokenType() { return this.tokenType; }
 
-	TokenResponse toTokenResponse() {
+	@NonNull TokenResponse toTokenResponse() {
 		return new TokenResponse(new AccessToken(this.accessToken, this.tokenType, this.expiresAt),
 				this.refreshToken == null ? null : RefreshToken.fromValue(this.refreshToken),
 				this.scope, this.grantedScopes, this.requestStart, this.safeParameters);
 	}
 
 	@Override
-	public String toString() { return "TokenEndpointPayload{credentials=<redacted>}"; }
+	public @NonNull String toString() { return "TokenEndpointPayload{credentials=<redacted>}"; }
 }

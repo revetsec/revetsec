@@ -129,7 +129,7 @@ public abstract class RevetsecException extends RuntimeException {
 		return this.transientFailure;
 	}
 
-	private static String checkedMessage(@NonNull ErrorCategory category,
+	private static @NonNull String checkedMessage(@NonNull ErrorCategory category,
 																			 @NonNull Boolean transientFailure,
 																			 @NonNull String fixedMessage,
 																			 @Nullable Throwable cause) {

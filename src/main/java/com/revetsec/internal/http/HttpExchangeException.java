@@ -170,7 +170,7 @@ public final class HttpExchangeException extends Exception {
 		return this.kind;
 	}
 
-	private static String checkedMessage(@NonNull Kind kind,
+	private static @NonNull String checkedMessage(@NonNull Kind kind,
 																			 @Nullable IOException cause) {
 		requireNonNull(kind);
 

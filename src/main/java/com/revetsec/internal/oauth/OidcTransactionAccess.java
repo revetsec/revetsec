@@ -18,6 +18,7 @@ package com.revetsec.internal.oauth;
 
 import com.revetsec.oauth.*;
 import com.revetsec.jose.JwsAlgorithm;
+import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
 import java.lang.invoke.MethodHandles;
@@ -44,19 +45,19 @@ public final class OidcTransactionAccess {
 
 	@ThreadSafe
 	public interface Operations {
-		void checkHmacAuthentication(ClientAuthentication authentication, Set<JwsAlgorithm> algorithms);
-		OAuthException endpointFailure(OAuthException.Reason reason);
-		OAuthException endpointExchangeFailure(HttpExchangeException failure);
-		OAuthException endpointStatusFailure(int status, @Nullable Duration retryAfter);
-		AuthorizationRedirect begin(OAuthClient client, AuthorizationRequestOptions options,
-				AuthorizationServerMetadata metadata, @Nullable Duration maxAge, Set<String> acrValues);
-		RefreshCompletion refresh(OAuthClient client, RefreshToken token, TokenRequestOptions options,
-				AuthorizationServerMetadata metadata, Deadline deadline, Set<JwsAlgorithm> hmacAlgorithms);
-		Completion complete(OAuthClient client, AuthorizationResponse response, PendingAuthorizationSource source,
-				URI callback, Function<Deadline, AuthorizationServerMetadata> metadata, Deadline deadline, Set<JwsAlgorithm> hmacAlgorithms);
+		void checkHmacAuthentication(@NonNull ClientAuthentication authentication, @NonNull Set<@NonNull JwsAlgorithm> algorithms);
+		@NonNull OAuthException endpointFailure(OAuthException.@NonNull Reason reason);
+		@NonNull OAuthException endpointExchangeFailure(@NonNull HttpExchangeException failure);
+		@NonNull OAuthException endpointStatusFailure(int status, @Nullable Duration retryAfter);
+		@NonNull AuthorizationRedirect begin(@NonNull OAuthClient client, @NonNull AuthorizationRequestOptions options,
+				@NonNull AuthorizationServerMetadata metadata, @Nullable Duration maxAge, @NonNull Set<@NonNull String> acrValues);
+		@NonNull RefreshCompletion refresh(@NonNull OAuthClient client, @NonNull RefreshToken token, @NonNull TokenRequestOptions options,
+				@NonNull AuthorizationServerMetadata metadata, @NonNull Deadline deadline, @NonNull Set<@NonNull JwsAlgorithm> hmacAlgorithms);
+		@NonNull Completion complete(@NonNull OAuthClient client, @NonNull AuthorizationResponse response, @NonNull PendingAuthorizationSource source,
+				@NonNull URI callback, @NonNull Function<@NonNull Deadline, @NonNull AuthorizationServerMetadata> metadata, @NonNull Deadline deadline, @NonNull Set<@NonNull JwsAlgorithm> hmacAlgorithms);
 	}
 
-	public static void set(Operations value) {
+	public static void set(@NonNull Operations value) {
 		requireNonNull(value);
 		if (value.getClass().getNestHost() != OAuthClient.class)
 			throw new IllegalArgumentException("Only OAuthClient installs the OIDC transaction operations.");
@@ -67,7 +68,7 @@ public final class OidcTransactionAccess {
 		} finally { SET_LOCK.unlock(); }
 	}
 
-	public static Operations get() {
+	public static @NonNull Operations get() {
 		try { MethodHandles.lookup().ensureInitialized(OAuthClient.class); }
 		catch (IllegalAccessException impossible) { throw new IllegalStateException("OAuthClient cannot be initialized."); }
 		Operations installed = operations;
@@ -90,12 +91,12 @@ public final class OidcTransactionAccess {
 		private final ReentrantLock lock = new ReentrantLock();
 		private boolean released;
 
-		public Completion(@Nullable String idToken, String accessToken, String tokenType, String code, String nonce,
-				@Nullable Duration maxAge, Set<String> acrValues, Supplier<TokenResponse> release) {
+		public Completion(@Nullable String idToken, @NonNull String accessToken, @NonNull String tokenType, @NonNull String code, @NonNull String nonce,
+				@Nullable Duration maxAge, @NonNull Set<@NonNull String> acrValues, @NonNull Supplier<@NonNull TokenResponse> release) {
 			this(idToken, accessToken, tokenType, code, nonce, maxAge, acrValues, release, null);
 		}
-		public Completion(@Nullable String idToken, String accessToken, String tokenType, String code, String nonce,
-				@Nullable Duration maxAge, Set<String> acrValues, Supplier<TokenResponse> release, @Nullable String clientSecret) {
+		public Completion(@Nullable String idToken, @NonNull String accessToken, @NonNull String tokenType, @NonNull String code, @NonNull String nonce,
+				@Nullable Duration maxAge, @NonNull Set<@NonNull String> acrValues, @NonNull Supplier<@NonNull TokenResponse> release, @Nullable String clientSecret) {
 			this.clientSecret = clientSecret;
 			this.idToken = idToken; this.accessToken = requireNonNull(accessToken);
 			this.tokenType = requireNonNull(tokenType); this.code = requireNonNull(code);
@@ -104,13 +105,13 @@ public final class OidcTransactionAccess {
 		}
 		public @Nullable String clientSecret() { return this.clientSecret; }
 		public @Nullable String idToken() { return this.idToken; }
-		public String accessToken() { return this.accessToken; }
-		public String tokenType() { return this.tokenType; }
-		public String code() { return this.code; }
-		public String nonce() { return this.nonce; }
+		public @NonNull String accessToken() { return this.accessToken; }
+		public @NonNull String tokenType() { return this.tokenType; }
+		public @NonNull String code() { return this.code; }
+		public @NonNull String nonce() { return this.nonce; }
 		public @Nullable Duration maxAge() { return this.maxAge; }
-		public Set<String> acrValues() { return this.acrValues; }
-		public TokenResponse releaseTokens() {
+		public @NonNull Set<@NonNull String> acrValues() { return this.acrValues; }
+		public @NonNull TokenResponse releaseTokens() {
 			this.lock.lock();
 			try {
 				if (this.released) throw new IllegalStateException("The OIDC tokens were already released.");
@@ -118,7 +119,7 @@ public final class OidcTransactionAccess {
 				return this.release.get();
 			} finally { this.lock.unlock(); }
 		}
-		@Override public String toString() { return "Completion{credentials=<redacted>}"; }
+		@Override public @NonNull String toString() { return "Completion{credentials=<redacted>}"; }
 	}
 	/** Credential-bearing refresh handle; public tokens are released only after optional ID-token validation. */
 	@ThreadSafe
@@ -131,11 +132,11 @@ public final class OidcTransactionAccess {
 		private final Supplier<TokenResponse> release;
 		private final ReentrantLock lock = new ReentrantLock();
 		private boolean released;
-		public RefreshCompletion(@Nullable String idToken, boolean idTokenPresent, String accessToken, String tokenType, Supplier<TokenResponse> release) {
+		public RefreshCompletion(@Nullable String idToken, boolean idTokenPresent, @NonNull String accessToken, @NonNull String tokenType, @NonNull Supplier<@NonNull TokenResponse> release) {
 			this(idToken, idTokenPresent, accessToken, tokenType, release, null);
 		}
-		public RefreshCompletion(@Nullable String idToken, boolean idTokenPresent, String accessToken, String tokenType,
-				Supplier<TokenResponse> release, @Nullable String clientSecret) {
+		public RefreshCompletion(@Nullable String idToken, boolean idTokenPresent, @NonNull String accessToken, @NonNull String tokenType,
+				@NonNull Supplier<@NonNull TokenResponse> release, @Nullable String clientSecret) {
 			this.clientSecret = clientSecret;
 			this.idToken = idToken; this.idTokenPresent = idTokenPresent; this.accessToken = requireNonNull(accessToken);
 			this.tokenType = requireNonNull(tokenType); this.release = requireNonNull(release);
@@ -143,16 +144,16 @@ public final class OidcTransactionAccess {
 		public @Nullable String clientSecret() { return this.clientSecret; }
 		public @Nullable String idToken() { return this.idToken; }
 		public boolean idTokenPresent() { return this.idTokenPresent; }
-		public String accessToken() { return this.accessToken; }
-		public String tokenType() { return this.tokenType; }
-		public TokenResponse releaseTokens() {
+		public @NonNull String accessToken() { return this.accessToken; }
+		public @NonNull String tokenType() { return this.tokenType; }
+		public @NonNull TokenResponse releaseTokens() {
 			this.lock.lock();
 			try {
 				if (this.released) throw new IllegalStateException("The OIDC refresh tokens were already released.");
 				this.released = true; return this.release.get();
 			} finally { this.lock.unlock(); }
 		}
-		@Override public String toString() { return "RefreshCompletion{credentials=<redacted>}"; }
+		@Override public @NonNull String toString() { return "RefreshCompletion{credentials=<redacted>}"; }
 	}
 
 }

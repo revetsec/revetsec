@@ -16,6 +16,18 @@
 
 package example;
 
+import com.revetsec.oauth.AccessTokenValidator;
+import com.revetsec.oauth.JwtAccessTokenValidator;
+import com.revetsec.oauth.TokenIntrospectionClient;
+import com.revetsec.oauth.VerifiedAccessToken;
+import com.revetsec.oauth.AccessTokenCompatibilityMode;
+import com.revetsec.oauth.AccessTokenObserver;
+import com.revetsec.oauth.AccessTokenValidationResult;
+import com.revetsec.oidc.OidcAuthenticationResult;
+import com.revetsec.oauth.AuthorizationCompletionResult;
+import com.revetsec.oauth.BearerTokenResult;
+import com.revetsec.jose.JwtValidationResult;
+import com.revetsec.StateUnsealResult;
 import com.revetsec.ErrorCategory;
 import com.revetsec.InvalidSealedStateException;
 import com.revetsec.OutboundUriPolicy;
@@ -200,6 +212,7 @@ public final class PackagedConsumer {
 
 		List<String> calledApi = new ArrayList<>();
 		String json = exerciseJsonModel(calledApi);
+		exerciseResultTypes();
 		exerciseStateSealer(json, calledApi);
 		exerciseOutboundUriPolicy(calledApi);
 		exerciseJose(calledApi);
@@ -257,6 +270,16 @@ public final class PackagedConsumer {
 	 * Seals and opens a value with a fresh random key, and checks that a value sealed for one context fails to open
 	 * for another with {@link InvalidSealedStateException}.
 	 */
+	private static void exerciseResultTypes() {
+		Class<?>[] types = {StateUnsealResult.class, StateUnsealResult.Succeeded.class, StateUnsealResult.Rejected.class,
+				JwtValidationResult.class, JwtValidationResult.Succeeded.class, JwtValidationResult.Rejected.class,
+				BearerTokenResult.class, BearerTokenResult.Absent.class, BearerTokenResult.Present.class, BearerTokenResult.Malformed.class,
+				AuthorizationCompletionResult.class, AuthorizationCompletionResult.Succeeded.class, AuthorizationCompletionResult.Denied.class,
+				AuthorizationCompletionResult.Rejected.class, OidcAuthenticationResult.class, OidcAuthenticationResult.Succeeded.class,
+				OidcAuthenticationResult.Denied.class, OidcAuthenticationResult.RejectedAuthorization.class, OidcAuthenticationResult.RejectedIdToken.class};
+		require(types.length == 19, "all result declarations compile without annotation JARs");
+	}
+
 	private static void exerciseStateSealer(String plaintext, List<String> calledApi) {
 		byte[] keyBytes = new byte[32];
 		new SecureRandom().nextBytes(keyBytes);
@@ -266,6 +289,11 @@ public final class PackagedConsumer {
 		String sealed = sealer.seal(plaintext, SEALING_CONTEXT, Duration.ofMinutes(5));
 
 		require(sealer.unseal(sealed, SEALING_CONTEXT).equals(plaintext), "StateSealer round trip");
+		StateUnsealResult opened = sealer.unsealResult(sealed, SEALING_CONTEXT);
+		require(opened instanceof StateUnsealResult.Succeeded && ((StateUnsealResult.Succeeded) opened).getValue().equals(plaintext),
+				"result opening authenticates plaintext");
+		require(sealer.unsealResult(sealed, "another-context") instanceof StateUnsealResult.Rejected,
+				"result opening rejects another context");
 		require(key.getKeyId().equals("consumer-1")
 				&& !key.toString().contains(Base64.getEncoder().encodeToString(keyBytes)),
 				"SealingKey must render its key ID but never its key");
@@ -375,6 +403,18 @@ public final class PackagedConsumer {
 		String claims = "{\"iss\":\"" + ISSUER + "\",\"sub\":\"user-1\",\"aud\":\"" + AUDIENCE + "\",\"iat\":"
 				+ NOW.getEpochSecond() + ",\"exp\":" + (NOW.getEpochSecond() + 300) + ",\"scope\":\"openid\"}";
 		String token = signRs256(header, claims, keyPair);
+
+        String accessClaims=claims.substring(0,claims.length()-1)+",\"client_id\":\"app\",\"jti\":\"id\"}";
+        String accessCompact=signRs256(header.replace("JWT","at+jwt"),accessClaims,keyPair);
+        JwtAccessTokenValidator.Builder accessBuilder=JwtAccessTokenValidator.withIssuer(ISSUER).expectedAudiences(Set.of(AUDIENCE)).jsonWebKeySource(source).clock(Clock.fixed(NOW,ZoneOffset.UTC)).observer(AccessTokenObserver.disabledInstance());
+        AccessTokenValidator access=accessBuilder.build();((JwtAccessTokenValidator)access).warmUp();
+        AccessTokenValidationResult accessResult=access.validateResult(BearerToken.fromAuthorizationHeaderValues(List.of("Bearer "+accessCompact)).orElseThrow());
+        require(accessResult instanceof AccessTokenValidationResult.Succeeded,"packaged access-token validation");VerifiedAccessToken proof=((AccessTokenValidationResult.Succeeded)accessResult).getAccessToken();
+        require(proof.getIssuer().equals(ISSUER)&&proof.getSubject().equals(Optional.of("user-1"))&&proof.getClientId().equals(Optional.of("app"))&&proof.getScopes().equals(Set.of("openid"))&&proof.getAudiences().equals(List.of(AUDIENCE))&&proof.getExpiresAt().isPresent()&&proof.getClaims().findString("jti").equals(Optional.of("id")),"checked access-token getters");
+        AccessTokenValidationResult bad=access.validateResult(BearerToken.fromAuthorizationHeaderValues(List.of("Bearer malformed")).orElseThrow());require(bad instanceof AccessTokenValidationResult.Rejected&&((AccessTokenValidationResult.Rejected)bad).getReason()==AccessTokenValidationException.Reason.JWT_REJECTED&&((AccessTokenValidationResult.Rejected)bad).getJoseReason().isPresent()&&((AccessTokenValidationResult.Rejected)bad).getBearerError()==BearerError.INVALID_TOKEN,"packaged access-token rejection");
+        OAuthClient confidential=OAuthClient.withAuthorizationServerMetadata(AuthorizationServerMetadata.withIssuer(ISSUER).authorizationEndpoint(URI.create(ISSUER+"/authorize")).tokenEndpoint(URI.create(ISSUER+"/token")).introspectionEndpoint(URI.create(ISSUER+"/inspect")).jwksUri(URI.create(ISSUER+"/keys")).introspectionEndpointAuthMethodsSupported(Set.of("client_secret_basic")).build()).clientId("app").clientAuthentication(ClientAuthentication.fromClientSecretBasic("TEST-ONLY-secret")).build();
+        TokenIntrospectionClient.Builder introspectionBuilder=TokenIntrospectionClient.withOAuthClient(confidential).expectedAudiences(Set.of(AUDIENCE));TokenIntrospectionClient introspection=introspectionBuilder.build();introspection.warmUp();
+        for(Class<?> type:List.of(AccessTokenValidator.class,JwtAccessTokenValidator.class,JwtAccessTokenValidator.Builder.class,TokenIntrospectionClient.class,TokenIntrospectionClient.Builder.class,VerifiedAccessToken.class,AccessTokenObserver.class,AccessTokenCompatibilityMode.class,AccessTokenValidationResult.class,AccessTokenValidationResult.Succeeded.class,AccessTokenValidationResult.Rejected.class))require(type.getName().startsWith("com.revetsec.oauth."),"packaged resource type "+type.getName());
 		Jwt jwt = validator.validate(token);
 		JwtClaims jwtClaims = jwt.getClaims();
 
@@ -389,6 +429,7 @@ public final class PackagedConsumer {
 		require(!jwt.toString().contains(token.substring(0, 20)) && !jwtClaims.toString().contains("user-1"),
 				"Jwt and JwtClaims render neither the token nor a claim");
 		require(observer.validated.equals(List.of(JwsAlgorithm.RS256)), "the observer saw the validation");
+
 
 		// The signed payload swapped for another subject's: the signature no longer matches.
 		String forgedClaims = claims.replace("\"sub\":\"user-1\"", "\"sub\":\"admin\"");
@@ -428,6 +469,13 @@ public final class PackagedConsumer {
 
 		require(observer.failures.equals(List.of(forgery, unsigned, malformed, encrypted)),
 				"the observer saw each refusal, as the very instance thrown");
+
+		JwtValidationResult checked = validator.validateResult(token);
+		require(checked instanceof JwtValidationResult.Succeeded && ((JwtValidationResult.Succeeded) checked).getJwt().toCompactSerialization().equals(token),
+				"result validation exposes only a validated JWT");
+		JwtValidationResult rejected = validator.validateResult("bad.jwt");
+		require(rejected instanceof JwtValidationResult.Rejected && ((JwtValidationResult.Rejected) rejected).getReason() == JoseException.Reason.TOKEN_SYNTAX,
+				"result validation rejects malformed input");
 
 		boolean refusedKeySet = false;
 
@@ -497,6 +545,11 @@ public final class PackagedConsumer {
 		ClientCredentialsTokenSource source = sourceBuilder.build();
 		InMemoryPendingAuthorizationStore.Builder storeBuilder = InMemoryPendingAuthorizationStore.builder();
 		PendingAuthorizationStore store = storeBuilder.build();
+		AuthorizationCompletionResult outcome = client.completeAuthorizationResult(response,
+				PendingAuthorizationSource.fromStore(store, "consumer-browser"), URI.create("https://consumer.example/callback"));
+		require(outcome instanceof AuthorizationCompletionResult.Rejected
+				&& ((AuthorizationCompletionResult.Rejected) outcome).getReason() == OAuthException.Reason.PENDING_AUTHORIZATION_NOT_FOUND,
+				"callback result rejects missing state without network I/O");
 		require(source != null && store != null, "OAuth client-side sources build without I/O");
 
 		// Compiling against every exported type also checks signatures that this offline smoke cannot instantiate.
@@ -509,19 +562,28 @@ public final class PackagedConsumer {
 				InMemoryPendingAuthorizationStore.Builder.class, IssuerParameterPolicy.class, OAuthClient.class,
 				OAuthClient.Builder.class, OAuthEndpoint.class, OAuthErrorResponseException.class,
 				OAuthException.class, OAuthException.Reason.class, OAuthObserver.class, OAuthResponseException.class,
-				BearerToken.class, BearerError.class, BearerChallenge.class, BearerChallenge.Builder.class,
+				BearerToken.class, BearerTokenResult.class, BearerTokenResult.Absent.class, BearerTokenResult.Present.class, BearerTokenResult.Malformed.class,
+				AuthorizationCompletionResult.class, AuthorizationCompletionResult.Succeeded.class, AuthorizationCompletionResult.Denied.class,
+				AuthorizationCompletionResult.Rejected.class, BearerError.class, BearerChallenge.class, BearerChallenge.Builder.class,
 				ProtectedResourceMetadata.class, ProtectedResourceMetadata.Builder.class,
 				AccessTokenValidationException.class, AccessTokenValidationException.Reason.class,
 				OAuthTransportException.class, OAuthValidationException.class, PendingAuthorization.class,
 				PendingAuthorizationSource.class, PendingAuthorizationStore.class, PendingAuthorizationStoreException.class,
 				RefreshToken.class, TokenRequestOptions.class, TokenRequestOptions.Builder.class, TokenResponse.class,
 				TokenTypeHint.class};
-		require(exported.length == 43, "all OAuth exported types compile from the packaged JAR");
+		require(exported.length == 51, "all OAuth exported types compile from the packaged JAR");
 		calledApi.add("com.revetsec.oauth");
 	}
 
 	/** Exercises the pure resource protocol surface and raw callback envelope without annotation JARs or I/O. */
 	private static void exerciseResourceServerProtocols() {
+		require(BearerToken.fromAuthorizationHeaderValuesResult(List.of()) instanceof BearerTokenResult.Absent,
+				"result parsing distinguishes absence");
+		BearerTokenResult parsed = BearerToken.fromAuthorizationHeaderValuesResult(List.of("Bearer TEST-ONLY-credential"), 8192);
+		require(parsed instanceof BearerTokenResult.Present && ((BearerTokenResult.Present) parsed).getToken() != null,
+				"result parsing returns an unverified bearer");
+		require(BearerToken.fromAuthorizationHeaderValuesResult(List.of("Bearer a", "Bearer a")) instanceof BearerTokenResult.Malformed,
+				"result parsing rejects duplicate headers");
 		BearerToken credential = BearerToken.fromAuthorizationHeaderValues(List.of("bEaReR a._~+/=="), 8192).orElseThrow();
 		require(!credential.toString().contains("a._~+/=="), "parsed bearer diagnostic is redacted");
 		require(BearerToken.fromAuthorizationHeaderValues(List.of()).isEmpty(), "missing bearer remains absent");
@@ -595,12 +657,20 @@ public final class PackagedConsumer {
 			rejected = reason == OidcValidationException.Reason.SESSION_REFERENCE_INVALID && root.getCategory() == ErrorCategory.VALIDATION_FAILURE;
 		}
 		require(rejected, "OIDC reference parser rejects invalid storage with a fixed reason");
+		OidcAuthenticationResult outcome = client.completeAuthenticationResult(AuthorizationResponse.fromQueryString("state=missing&code=example"),
+				PendingAuthorizationSource.fromStore(InMemoryPendingAuthorizationStore.builder().clock(Clock.fixed(NOW, ZoneOffset.UTC)).build(), "consumer-browser"),
+				URI.create("https://consumer.example/callback"));
+		require(outcome instanceof OidcAuthenticationResult.RejectedAuthorization
+				&& ((OidcAuthenticationResult.RejectedAuthorization) outcome).getReason() == OAuthException.Reason.PENDING_AUTHORIZATION_NOT_FOUND,
+				"OIDC result rejects missing state before any token or identity release");
 		// Results require provider responses; class references still check their packaged annotation-free signatures.
 		Class<?>[] exported = {IdToken.class, OidcAuthentication.class, OidcAuthenticationOptions.class,
 				OidcAuthenticationOptions.Builder.class, OidcClient.class, OidcClient.Builder.class, OidcException.class,
 				OidcObserver.class, OidcProviderMetadata.class, OidcProviderMetadata.Builder.class, OidcSessionReference.class,
-				OidcUserInfo.class, OidcValidationException.class, OidcValidationException.Reason.class, OidcRefreshResult.class, OidcCompatibilityMode.class};
-		require(exported.length == 16, "all OIDC exported types compile from the packaged JAR");
+				OidcUserInfo.class, OidcValidationException.class, OidcValidationException.Reason.class, OidcRefreshResult.class, OidcCompatibilityMode.class,
+				OidcAuthenticationResult.class, OidcAuthenticationResult.Succeeded.class, OidcAuthenticationResult.Denied.class,
+				OidcAuthenticationResult.RejectedAuthorization.class, OidcAuthenticationResult.RejectedIdToken.class};
+		require(exported.length == 21, "all OIDC exported types compile from the packaged JAR");
 		calledApi.add("com.revetsec.oidc");
 	}
 

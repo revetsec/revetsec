@@ -138,7 +138,7 @@ public final class RemoteJsonWebKeySource implements JsonWebKeySource {
 		return new Builder(uri);
 	}
 
-	void warmUp(java.util.function.LongSupplier remainingNanos) {
+	void warmUp(java.util.function.@NonNull LongSupplier remainingNanos) {
 		this.cache.warmUp(Deadline.fromNow(Duration.ofNanos(Math.max(0, remainingNanos.getAsLong()))));
 	}
 

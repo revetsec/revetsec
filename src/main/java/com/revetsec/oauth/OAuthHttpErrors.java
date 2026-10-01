@@ -16,6 +16,7 @@
 
 package com.revetsec.oauth;
 
+import org.jspecify.annotations.NonNull;
 import com.revetsec.internal.http.HttpExchangeException;
 
 import javax.annotation.concurrent.ThreadSafe;
@@ -26,7 +27,7 @@ import java.io.IOException;
 final class OAuthHttpErrors {
 	private OAuthHttpErrors() { }
 
-	static OAuthException fromExchange(HttpExchangeException exception) {
+	static @NonNull OAuthException fromExchange(@NonNull HttpExchangeException exception) {
 		return switch (exception.getKind()) {
 			case TIMEOUT -> OAuthTransportException.fromReason(OAuthException.Reason.NETWORK_FAILURE, null);
 			case IO -> OAuthTransportException.fromReason(OAuthException.Reason.NETWORK_FAILURE,

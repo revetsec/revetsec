@@ -80,7 +80,7 @@ public final class ObserverDispatch {
 	 * @throws VirtualMachineError  if the hook, or the logging of its failure, throws one
 	 */
 	public static <T> void dispatch(@NonNull T observer,
-																	@NonNull Consumer<? super T> hook) {
+																	@NonNull Consumer<? super @NonNull T> hook) {
 		requireNonNull(observer);
 		requireNonNull(hook);
 

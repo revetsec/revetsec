@@ -25,6 +25,7 @@ import com.revetsec.json.JsonBoolean;
 import com.revetsec.json.JsonObject;
 import com.revetsec.json.JsonString;
 import com.revetsec.json.JsonValue;
+import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.ThreadSafe;
@@ -50,7 +51,7 @@ final class PendingAuthorizationCodec {
 	private PendingAuthorizationCodec() {
 	}
 
-	static String encode(PendingAuthorization pending, @Nullable String bindingDigest) {
+	static @NonNull String encode(@NonNull PendingAuthorization pending, @Nullable String bindingDigest) {
 		JsonObject.Builder builder = JsonObject.builder()
 				.put("v", pending.kind().equals("oidc") ? 2L : 1L).put("kind", pending.kind()).put("issuer", pending.getIssuer())
 				.put("client_id", pending.getClientId()).put("redirect_uri", pending.getRedirectUri().toString())
@@ -97,7 +98,7 @@ final class PendingAuthorizationCodec {
 		return encoded;
 	}
 
-	static Decoded decode(String encoded) {
+	static @NonNull Decoded decode(@NonNull String encoded) {
 		try {
 			byte[] bytes = StrictUtf8.encode(encoded);
 			JsonValue parsed;
@@ -171,18 +172,18 @@ final class PendingAuthorizationCodec {
 		}
 	}
 
-	private static String text(Map<String, JsonValue> values, String name) {
+	private static @NonNull String text(@NonNull Map<@NonNull String, @NonNull JsonValue> values, @NonNull String name) {
 		JsonValue value = values.get(name);
 		if (!(value instanceof JsonString text) || text.getValue().isEmpty()) throw new IllegalArgumentException();
 		return text.getValue();
 	}
 
 	@Nullable
-	private static String optionalText(Map<String, JsonValue> values, String name) {
+	private static String optionalText(@NonNull Map<@NonNull String, @NonNull JsonValue> values, @NonNull String name) {
 		return values.containsKey(name) ? text(values, name) : null;
 	}
 
-	private static List<String> strings(Map<String, JsonValue> values, String name) {
+	private static @NonNull List<@NonNull String> strings(@NonNull Map<@NonNull String, @NonNull JsonValue> values, @NonNull String name) {
 		JsonValue value = values.get(name);
 		if (!(value instanceof JsonArray array)) throw new IllegalArgumentException();
 		List<String> strings = new ArrayList<>();
@@ -193,7 +194,7 @@ final class PendingAuthorizationCodec {
 		return strings;
 	}
 
-	static String bindingDigest(String binding) {
+	static @NonNull String bindingDigest(@NonNull String binding) {
 		if (binding.isEmpty()) throw new IllegalArgumentException("A browser binding must not be empty.");
 		try {
 			byte[] bindingBytes = StrictUtf8.encode(binding);
@@ -214,6 +215,6 @@ final class PendingAuthorizationCodec {
 		}
 	}
 
-	record Decoded(PendingAuthorization pending, @Nullable String bindingDigest) {
+	record Decoded(@NonNull PendingAuthorization pending, @Nullable String bindingDigest) {
 	}
 }

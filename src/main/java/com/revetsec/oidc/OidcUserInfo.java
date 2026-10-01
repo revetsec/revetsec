@@ -37,7 +37,7 @@ public final class OidcUserInfo {
 	private final String issuer;
 	private final JsonObject claims;
 	private final boolean signed;
-	OidcUserInfo(String issuer, JsonObject claims, boolean signed) {
+	OidcUserInfo(@NonNull String issuer, @NonNull JsonObject claims, boolean signed) {
 		this.issuer = requireNonNull(issuer); this.claims = requireNonNull(claims); this.signed = signed;
 	}
 	/**

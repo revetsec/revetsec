@@ -16,6 +16,7 @@
 
 package com.revetsec.oauth;
 
+import com.google.errorprone.annotations.CheckReturnValue;
 import com.revetsec.OutboundUriPolicy;
 import com.revetsec.internal.HostClassifier;
 import com.revetsec.internal.Limits;
@@ -32,7 +33,6 @@ import com.revetsec.internal.http.UriChecks;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
-import com.google.errorprone.annotations.CheckReturnValue;
 import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
 import java.net.URI;
@@ -70,8 +70,8 @@ public final class OAuthClient {
 
 	@ThreadSafe
 	private static final class OidcOperations implements OidcTransactionAccess.Operations {
-		@Override public void checkHmacAuthentication(ClientAuthentication authentication, Set<com.revetsec.jose.JwsAlgorithm> algorithms) { authentication.checkHmac(algorithms); }
-		@Override public OAuthException endpointFailure(OAuthException.Reason reason) {
+		@Override public void checkHmacAuthentication(@NonNull ClientAuthentication authentication, @NonNull Set<com.revetsec.jose.@NonNull JwsAlgorithm> algorithms) { authentication.checkHmac(algorithms); }
+		@Override public @NonNull OAuthException endpointFailure(OAuthException.@NonNull Reason reason) {
 			return switch (reason) {
 				case METADATA_INVALID -> OAuthValidationException.fromReason(reason);
 				case DOCUMENT_MALFORMED -> OAuthResponseException.fromReason(reason);
@@ -79,24 +79,24 @@ public final class OAuthClient {
 				default -> throw new IllegalArgumentException("Unsupported endpoint failure reason.");
 			};
 		}
-		@Override public OAuthException endpointExchangeFailure(com.revetsec.internal.http.HttpExchangeException failure) {
+		@Override public @NonNull OAuthException endpointExchangeFailure(com.revetsec.internal.http.@NonNull HttpExchangeException failure) {
 			return OAuthHttpErrors.fromExchange(failure);
 		}
-		@Override public OAuthException endpointStatusFailure(int status, @Nullable Duration retryAfter) {
+		@Override public @NonNull OAuthException endpointStatusFailure(int status, @Nullable Duration retryAfter) {
 			return OAuthErrorResponseException.fromResponse(status, "", Optional.ofNullable(retryAfter));
 		}
-		@Override public OidcTransactionAccess.RefreshCompletion refresh(OAuthClient client, RefreshToken token,
-				TokenRequestOptions options, AuthorizationServerMetadata metadata, Deadline deadline, Set<com.revetsec.jose.JwsAlgorithm> hmacAlgorithms) {
+		@Override public OidcTransactionAccess.@NonNull RefreshCompletion refresh(@NonNull OAuthClient client, @NonNull RefreshToken token,
+				@NonNull TokenRequestOptions options, @NonNull AuthorizationServerMetadata metadata, @NonNull Deadline deadline, @NonNull Set<com.revetsec.jose.@NonNull JwsAlgorithm> hmacAlgorithms) {
 			TokenEndpointPayload payload = client.refreshPayload(token, options, metadata, deadline, hmacAlgorithms);
 			return new OidcTransactionAccess.RefreshCompletion(payload.idToken(), payload.idTokenPresent(), payload.accessToken(), payload.tokenType(), payload::toTokenResponse, payload.clientSecret());
 		}
 
-		@Override public AuthorizationRedirect begin(OAuthClient client, AuthorizationRequestOptions options,
-				AuthorizationServerMetadata metadata, @Nullable Duration maxAge, Set<String> acrValues) {
+		@Override public @NonNull AuthorizationRedirect begin(@NonNull OAuthClient client, @NonNull AuthorizationRequestOptions options,
+				@NonNull AuthorizationServerMetadata metadata, @Nullable Duration maxAge, @NonNull Set<@NonNull String> acrValues) {
 			return client.begin(options, "oidc", metadata, maxAge, acrValues);
 		}
-		@Override public OidcTransactionAccess.Completion complete(OAuthClient client, AuthorizationResponse response,
-				PendingAuthorizationSource source, URI callback, Function<Deadline, AuthorizationServerMetadata> metadata, Deadline deadline, Set<com.revetsec.jose.JwsAlgorithm> hmacAlgorithms) {
+		@Override public OidcTransactionAccess.@NonNull Completion complete(@NonNull OAuthClient client, @NonNull AuthorizationResponse response,
+				@NonNull PendingAuthorizationSource source, @NonNull URI callback, @NonNull Function<@NonNull Deadline, @NonNull AuthorizationServerMetadata> metadata, @NonNull Deadline deadline, @NonNull Set<com.revetsec.jose.@NonNull JwsAlgorithm> hmacAlgorithms) {
 			CodeCompletion completion = client.complete(response, source, callback, "oidc", metadata, deadline, hmacAlgorithms);
 			PendingAuthorization pending = completion.pending();
 			TokenEndpointPayload payload = completion.payload();
@@ -106,8 +106,8 @@ public final class OAuthClient {
 		}
 	}
 
-	private record CodeCompletion(PendingAuthorization pending, TokenEndpointPayload payload, String code) {
-		@Override public String toString() { return "CodeCompletion{credentials=<redacted>}"; }
+	private record CodeCompletion(@NonNull PendingAuthorization pending, @NonNull TokenEndpointPayload payload, @NonNull String code) {
+		@Override public @NonNull String toString() { return "CodeCompletion{credentials=<redacted>}"; }
 	}
 
 	private final @NonNull String issuer;
@@ -127,6 +127,7 @@ public final class OAuthClient {
 	private final @NonNull Clock clock;
 	private final @NonNull OAuthObserver observer;
 	private final @NonNull SecureRandom random;
+	private final ResourceSettings resourceSettings;
 
 	private OAuthClient(@NonNull Builder builder, @NonNull HttpExchange exchange) {
 		this.issuer = builder.issuer;
@@ -145,6 +146,9 @@ public final class OAuthClient {
 		this.clock = builder.clock;
 		this.observer = builder.observer;
 		this.random = new SecureRandom();
+        this.resourceSettings = new ResourceSettings(this.issuer, this.staticMetadata, exchange, builder.outboundUriPolicy,
+                builder.allowInsecureLoopback, builder.requestTimeout, builder.totalDeadline, builder.clock,
+                builder.minimumTimeToLive, builder.defaultTimeToLive, builder.maximumTimeToLive, builder.discoveryCooldown);
 		this.cache = builder.staticMetadata == null ? new AuthorizationServerCache(URI.create(builder.issuer),
 				exchange, builder.outboundUriPolicy, builder.allowInsecureLoopback, builder.requestTimeout,
 				builder.clock, builder.observer, builder.minimumTimeToLive, builder.defaultTimeToLive,
@@ -204,8 +208,8 @@ public final class OAuthClient {
 		return begin(options, "oauth", metadata(Deadline.fromNow(this.totalDeadline)), null, Set.of());
 	}
 
-	private AuthorizationRedirect begin(AuthorizationRequestOptions options, String kind,
-			AuthorizationServerMetadata metadata, @Nullable Duration maxAge, Set<String> acrValues) {
+	private @NonNull AuthorizationRedirect begin(@NonNull AuthorizationRequestOptions options, @NonNull String kind,
+			@NonNull AuthorizationServerMetadata metadata, @Nullable Duration maxAge, @NonNull Set<@NonNull String> acrValues) {
 		if (this.redirectUri == null)
 			throw new IllegalStateException("A redirect URI is required for authorization code flow.");
 		if (metadata.getCodeChallengeMethodsSupported().isPresent()) {
@@ -267,13 +271,48 @@ public final class OAuthClient {
 		return completion.payload().toTokenResponse().withApplicationData(completion.pending().getApplicationData());
 	}
 
-	private CodeCompletion complete(AuthorizationResponse response, PendingAuthorizationSource source,
-			URI actualCallbackUri, String kind, Function<Deadline, AuthorizationServerMetadata> metadataSupplier, Deadline deadline) {
+
+	/**
+	 * Completes the flow once, returning endpoint tokens, a checked access_denied callback, or a local callback
+	 * security rejection. Other authorization errors and metadata, store, transport and endpoint failures remain
+	 * exceptions. Clear the pending cookie on every outcome. Atomic pending consumption and replay behavior are
+	 * identical to {@link #completeAuthorization(AuthorizationResponse, PendingAuthorizationSource, URI)}.
+	 * @param response parsed callback
+	 * @param source browser-bound pending source
+	 * @param actualCallbackUri receiving route URI from trusted routing configuration
+	 * @return the completion outcome
+	 * @since 1.0.0
+	 */
+	@CheckReturnValue
+	public @NonNull AuthorizationCompletionResult completeAuthorizationResult(@NonNull AuthorizationResponse response,
+			@NonNull PendingAuthorizationSource source, @NonNull URI actualCallbackUri) {
+		try {
+			return AuthorizationCompletionResult.fromTokens(completeAuthorization(response, source, actualCallbackUri));
+		} catch (AuthorizationErrorException failure) {
+			if (!failure.getErrorCode().equals(Optional.of("access_denied"))) throw failure;
+			return AuthorizationCompletionResult.fromDenial();
+		} catch (OAuthValidationException rejection) {
+			if (!isLocalCallbackRejection(rejection.getReason())) throw rejection;
+			return AuthorizationCompletionResult.fromReason(rejection.getReason());
+		}
+	}
+
+	private static boolean isLocalCallbackRejection(OAuthException.@NonNull Reason reason) {
+		return switch (reason) {
+			case STATE_MISMATCH, BROWSER_BINDING_MISMATCH, PENDING_AUTHORIZATION_INVALID,
+				PENDING_AUTHORIZATION_EXPIRED, PENDING_AUTHORIZATION_NOT_FOUND, CLIENT_MISMATCH,
+				ISSUER_MISMATCH, ISSUER_MISSING, CALLBACK_URI_MISMATCH, RESPONSE_MODE_MISMATCH -> true;
+			default -> false;
+		};
+	}
+
+	private @NonNull CodeCompletion complete(@NonNull AuthorizationResponse response, @NonNull PendingAuthorizationSource source,
+			@NonNull URI actualCallbackUri, @NonNull String kind, @NonNull Function<@NonNull Deadline, @NonNull AuthorizationServerMetadata> metadataSupplier, @NonNull Deadline deadline) {
 		return complete(response, source, actualCallbackUri, kind, metadataSupplier, deadline, Set.of());
 	}
-	private CodeCompletion complete(AuthorizationResponse response, PendingAuthorizationSource source,
-			URI actualCallbackUri, String kind, Function<Deadline, AuthorizationServerMetadata> metadataSupplier,
-			Deadline deadline, Set<com.revetsec.jose.JwsAlgorithm> hmacAlgorithms) {
+	private @NonNull CodeCompletion complete(@NonNull AuthorizationResponse response, @NonNull PendingAuthorizationSource source,
+			@NonNull URI actualCallbackUri, @NonNull String kind, @NonNull Function<@NonNull Deadline, @NonNull AuthorizationServerMetadata> metadataSupplier,
+			@NonNull Deadline deadline, @NonNull Set<com.revetsec.jose.@NonNull JwsAlgorithm> hmacAlgorithms) {
 		requireNonNull(response);
 		requireNonNull(source);
 		requireNonNull(actualCallbackUri);
@@ -352,12 +391,12 @@ public final class OAuthClient {
 		return refreshPayload(refreshToken, options, metadata, deadline).toTokenResponse();
 	}
 
-	private TokenEndpointPayload refreshPayload(RefreshToken refreshToken, TokenRequestOptions options,
-			AuthorizationServerMetadata metadata, Deadline deadline) {
+	private @NonNull TokenEndpointPayload refreshPayload(@NonNull RefreshToken refreshToken, @NonNull TokenRequestOptions options,
+			@NonNull AuthorizationServerMetadata metadata, @NonNull Deadline deadline) {
 		return refreshPayload(refreshToken, options, metadata, deadline, Set.of());
 	}
-	private TokenEndpointPayload refreshPayload(RefreshToken refreshToken, TokenRequestOptions options,
-			AuthorizationServerMetadata metadata, Deadline deadline, Set<com.revetsec.jose.JwsAlgorithm> hmacAlgorithms) {
+	private @NonNull TokenEndpointPayload refreshPayload(@NonNull RefreshToken refreshToken, @NonNull TokenRequestOptions options,
+			@NonNull AuthorizationServerMetadata metadata, @NonNull Deadline deadline, @NonNull Set<com.revetsec.jose.@NonNull JwsAlgorithm> hmacAlgorithms) {
 		OAuthRequestWriter form = new OAuthRequestWriter().add("grant_type", "refresh_token")
 				.add("refresh_token", refreshToken.getValue());
 		options.getScopes().ifPresent(scopes -> {
@@ -395,17 +434,17 @@ public final class OAuthClient {
 			throw TokenResponseParser.error(response, requestStart);
 	}
 
-	private TokenResponse tokenRequest(URI endpoint, OAuthRequestWriter form,
-			@Nullable Set<String> requestedScopes, Deadline deadline) {
+	private @NonNull TokenResponse tokenRequest(@NonNull URI endpoint, @NonNull OAuthRequestWriter form,
+			@Nullable Set<@NonNull String> requestedScopes, @NonNull Deadline deadline) {
 		return tokenPayloadRequest(endpoint, form, requestedScopes, deadline).toTokenResponse();
 	}
 
-	private TokenEndpointPayload tokenPayloadRequest(URI endpoint, OAuthRequestWriter form,
-			@Nullable Set<String> requestedScopes, Deadline deadline) {
+	private @NonNull TokenEndpointPayload tokenPayloadRequest(@NonNull URI endpoint, @NonNull OAuthRequestWriter form,
+			@Nullable Set<@NonNull String> requestedScopes, @NonNull Deadline deadline) {
 		return tokenPayloadRequest(endpoint, form, requestedScopes, deadline, Set.of());
 	}
-	private TokenEndpointPayload tokenPayloadRequest(URI endpoint, OAuthRequestWriter form,
-			@Nullable Set<String> requestedScopes, Deadline deadline, Set<com.revetsec.jose.JwsAlgorithm> hmacAlgorithms) {
+	private @NonNull TokenEndpointPayload tokenPayloadRequest(@NonNull URI endpoint, @NonNull OAuthRequestWriter form,
+			@Nullable Set<@NonNull String> requestedScopes, @NonNull Deadline deadline, @NonNull Set<com.revetsec.jose.@NonNull JwsAlgorithm> hmacAlgorithms) {
 		Map<String, String> headers = new HashMap<>();
 		Map<String, String> authentication = new HashMap<>();
 		String secret = this.clientAuthentication.applyForOidc(this.clientId, headers, authentication, hmacAlgorithms);
@@ -425,8 +464,8 @@ public final class OAuthClient {
 		}
 	}
 
-	private RawResponse send(URI endpoint, OAuthEndpoint kind, ResponseProfile profile,
-			String formBody, Map<String, String> headers, Deadline deadline) {
+	private @NonNull RawResponse send(@NonNull URI endpoint, @NonNull OAuthEndpoint kind, @NonNull ResponseProfile profile,
+			@NonNull String formBody, @NonNull Map<@NonNull String, @NonNull String> headers, @NonNull Deadline deadline) {
 		URI safe = AuthorizationServerCache.reduced(endpoint);
 		ObserverDispatch.dispatch(this.observer, observer -> observer.willRequestEndpoint(kind, safe));
 		long started = System.nanoTime();
@@ -445,14 +484,62 @@ public final class OAuthClient {
 		}
 	}
 
-	private AuthorizationServerMetadata metadata(Deadline deadline) {
+	private @NonNull AuthorizationServerMetadata metadata(@NonNull Deadline deadline) {
 		return this.staticMetadata != null ? this.staticMetadata : requireNonNull(this.cache).get(deadline);
 	}
 
-	Clock clock() { return this.clock; }
-	Duration totalDeadline() { return this.totalDeadline; }
+    record ResourceSettings(@NonNull String issuer, @Nullable AuthorizationServerMetadata metadata, @NonNull HttpExchange exchange,
+            @NonNull OutboundUriPolicy policy, boolean allowLoopback, @NonNull Duration requestTimeout, @NonNull Duration totalDeadline, @NonNull Clock clock,
+            @NonNull Duration minimumTtl, @NonNull Duration defaultTtl, @NonNull Duration maximumTtl, @NonNull Duration cooldown) {
+        @Override public @NonNull String toString() { return "ResourceSettings{data=<redacted>}"; }
+    }
+    @NonNull ResourceSettings resourceSettings() { return this.resourceSettings; }
+    void requireIntrospectionAuthentication(@Nullable Set<@NonNull String> methods) {
+        if (this.clientAuthentication.isPublicClient()) throw new IllegalArgumentException("Introspection requires confidential client authentication.");
+        if (methods != null && !methods.contains(this.clientAuthentication.methodName())) throw OAuthValidationException.fromReason(OAuthException.Reason.METADATA_INVALID);
+    }
+    @SuppressWarnings("ReferenceEquality") // Observer delivery deduplicates the same instance, never equal values.
+    @NonNull OAuthObserver resourceObserver(@NonNull AccessTokenObserver resource) {
+        if (resource == this.observer) return resource;
+        return new OAuthObserver() {
+            @Override public void willRequestEndpoint(@NonNull OAuthEndpoint kind, @NonNull URI uri) { endpointObservers(resource, o -> o.willRequestEndpoint(kind, uri)); }
+            @Override public void didRequestEndpoint(@NonNull OAuthEndpoint kind, @NonNull URI uri, @NonNull Integer status, @NonNull Duration elapsed) { endpointObservers(resource, o -> o.didRequestEndpoint(kind, uri, status, elapsed)); }
+            @Override public void didFailEndpoint(@NonNull OAuthEndpoint kind, @NonNull URI uri, @NonNull OAuthException failure, @NonNull Duration elapsed) { endpointObservers(resource, o -> o.didFailEndpoint(kind, uri, failure, elapsed)); }
+        };
+    }
+    @SuppressWarnings("ReferenceEquality") // Distinct observer instances each receive the event.
+    private void endpointObservers(@NonNull OAuthObserver resource, java.util.function.@NonNull Consumer<@NonNull OAuthObserver> hook) {
+        ObserverDispatch.dispatch(this.observer, hook);
+        if (resource != this.observer) ObserverDispatch.dispatch(resource, hook);
+    }
+    @NonNull RawResponse introspectionRequest(@NonNull BearerToken token, @NonNull URI endpoint, @NonNull Deadline deadline, @NonNull AccessTokenObserver resource) {
+        Map<String, String> headers = new HashMap<>(); Map<String, String> authentication = new HashMap<>();
+        this.clientAuthentication.apply(this.clientId, headers, authentication);
+        if (this.clientAuthentication.isUnencodedBasic()) endpointObservers(resource, OAuthObserver::didUseUnencodedBasic);
+        OAuthRequestWriter form = new OAuthRequestWriter().add("token", token.value()).add("token_type_hint", "access_token").addAll(authentication);
+        URI safe = AuthorizationServerCache.reduced(endpoint);
+        endpointObservers(resource, o -> o.willRequestEndpoint(OAuthEndpoint.INTROSPECTION, safe));
+        long started = System.nanoTime();
+        try {
+            RawResponse response = this.exchange.execute(new HttpExchangeRequest(endpoint, ResponseProfile.INTROSPECTION, form.body(), headers,
+                    Limits.HTTP_RESPONSE_BODY_SIZE.getDefaultIntValue(), Limits.HTTP_ERROR_BODY_SIZE.getDefaultIntValue(), this.requestTimeout), deadline);
+            endpointObservers(resource, o -> o.didRequestEndpoint(OAuthEndpoint.INTROSPECTION, safe, response.status(), response.elapsed()));
+            return response;
+        } catch (HttpExchangeException failure) {
+            OAuthException mapped = OAuthHttpErrors.fromExchange(failure);
+            endpointObservers(resource, o -> o.didFailEndpoint(OAuthEndpoint.INTROSPECTION, safe, mapped, Duration.ofNanos(System.nanoTime() - started)));
+            throw mapped;
+        }
+    }
+    void introspectionResponseFailure(@NonNull URI endpoint, @NonNull OAuthException failure, @NonNull Duration elapsed, @NonNull AccessTokenObserver resource) {
+        URI safe = AuthorizationServerCache.reduced(endpoint);
+        endpointObservers(resource, o -> o.didFailEndpoint(OAuthEndpoint.INTROSPECTION, safe, failure, elapsed));
+    }
 
-	private String randomBase64Url() {
+	@NonNull Clock clock() { return this.clock; }
+	@NonNull Duration totalDeadline() { return this.totalDeadline; }
+
+	private @NonNull String randomBase64Url() {
 		byte[] bytes = new byte[32];
 		this.random.nextBytes(bytes);
 		try {
@@ -462,7 +549,7 @@ public final class OAuthClient {
 		}
 	}
 
-	static String challenge(String verifier) {
+	static @NonNull String challenge(@NonNull String verifier) {
 		try {
 			byte[] digest = MessageDigest.getInstance("SHA-256").digest(
 					verifier.getBytes(java.nio.charset.StandardCharsets.US_ASCII));
@@ -745,7 +832,7 @@ public final class OAuthClient {
 			return build(Runtime.version());
 		}
 
-		OAuthClient build(Runtime.Version runtimeVersion) {
+		@NonNull OAuthClient build(Runtime.@NonNull Version runtimeVersion) {
 			RuntimeFloor.require(requireNonNull(runtimeVersion), this.acknowledgeUnpatchedRuntime);
 			if (this.clientId == null || this.clientAuthentication == null)
 				throw new IllegalStateException("A client ID and client authentication strategy are required.");
@@ -773,7 +860,7 @@ public final class OAuthClient {
 			return client;
 		}
 
-		private static void requireCallbackUri(URI uri, boolean allowLoopback) {
+		private static void requireCallbackUri(@NonNull URI uri, boolean allowLoopback) {
 			String scheme = uri.getScheme();
 			String host = uri.getHost();
 			int port = uri.getPort();

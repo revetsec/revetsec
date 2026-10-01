@@ -30,5 +30,6 @@ public enum OAuthEndpoint {
 	/** Authorization-server metadata endpoint. */ METADATA,
 	/** Token endpoint. */ TOKEN,
 	/** Token revocation endpoint. */ REVOCATION,
-	/** OpenID Connect UserInfo endpoint. */ USERINFO
+	/** OpenID Connect UserInfo endpoint. */ USERINFO,
+	/** Token introspection endpoint. */ INTROSPECTION
 }

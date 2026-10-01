@@ -124,7 +124,7 @@ public enum EcCurve {
 	 * @return the curve, or empty if the name is not one of the three
 	 */
 	@NonNull
-	public static Optional<EcCurve> findByName(@NonNull String name) {
+	public static Optional<@NonNull EcCurve> findByName(@NonNull String name) {
 		requireNonNull(name);
 
 		return switch (name) {
@@ -144,7 +144,7 @@ public enum EcCurve {
 	 * @return the curve, or empty if the parameters are not exactly one of the three curves
 	 */
 	@NonNull
-	public static Optional<EcCurve> findByParameterSpec(@NonNull ECParameterSpec parameterSpec) {
+	public static Optional<@NonNull EcCurve> findByParameterSpec(@NonNull ECParameterSpec parameterSpec) {
 		requireNonNull(parameterSpec);
 
 		for (EcCurve curve : values())

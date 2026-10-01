@@ -22,6 +22,7 @@ import java.util.Set;
 import com.revetsec.jose.RemoteJsonWebKeySource;
 import com.revetsec.jose.JwtValidator;
 import java.util.function.LongSupplier;
+import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
 import java.lang.invoke.MethodHandles;
@@ -36,13 +37,14 @@ public final class JwtValidationAccess {
 	private JwtValidationAccess() { }
 	@ThreadSafe
 	public interface Operations {
-		Jwt validate(JwtValidator validator, String compact, LongSupplier remainingNanos);
-		Jwt validateUserInfo(JwtValidator validator, String compact, LongSupplier remainingNanos);
-		Jwt validateOidc(JwtValidator validator, String compact, Set<JwsAlgorithm> algorithms,
-				byte[] secret, LongSupplier remainingNanos, Runnable hmacUsed);
-		void warmUp(RemoteJsonWebKeySource source, LongSupplier remainingNanos);
+		@NonNull Jwt validate(@NonNull JwtValidator validator, @NonNull String compact, @NonNull LongSupplier remainingNanos);
+		@NonNull Jwt validatePrepared(@NonNull JwtValidator validator, @NonNull PreparedJws prepared, @NonNull LongSupplier remainingNanos);
+		@NonNull Jwt validateUserInfo(@NonNull JwtValidator validator, @NonNull String compact, @NonNull LongSupplier remainingNanos);
+		@NonNull Jwt validateOidc(@NonNull JwtValidator validator, @NonNull String compact, @NonNull Set<@NonNull JwsAlgorithm> algorithms,
+				byte @NonNull [] secret, @NonNull LongSupplier remainingNanos, @NonNull Runnable hmacUsed);
+		void warmUp(@NonNull RemoteJsonWebKeySource source, @NonNull LongSupplier remainingNanos);
 	}
-	public static void set(Operations value) {
+	public static void set(@NonNull Operations value) {
 		requireNonNull(value);
 		if (value.getClass().getNestHost() != JwtValidator.class)
 			throw new IllegalArgumentException("Only JwtValidator installs the deadline operations.");
@@ -52,7 +54,7 @@ public final class JwtValidationAccess {
 			operations = value;
 		} finally { SET_LOCK.unlock(); }
 	}
-	public static Operations get() {
+	public static @NonNull Operations get() {
 		try { MethodHandles.lookup().ensureInitialized(JwtValidator.class); }
 		catch (IllegalAccessException impossible) { throw new IllegalStateException("JwtValidator cannot be initialized."); }
 		Operations installed = operations;

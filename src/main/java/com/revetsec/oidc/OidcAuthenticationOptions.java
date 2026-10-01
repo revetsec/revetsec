@@ -43,7 +43,7 @@ public final class OidcAuthenticationOptions {
 	private final @Nullable List<URI> resources;
 	private final @Nullable Set<String> acrValues;
 	private final @Nullable Duration maxAge;
-	private OidcAuthenticationOptions(Builder builder) {
+	private OidcAuthenticationOptions(@NonNull Builder builder) {
 		this.oauth = builder.oauth.build(); this.scopes = builder.scopes; this.resources = builder.resources;
 		this.acrValues = builder.acrValues; this.maxAge = builder.maxAge;
 	}
@@ -103,7 +103,7 @@ public final class OidcAuthenticationOptions {
 	 * @since 1.0.0
 	 */
 	public @NonNull Map<@NonNull String, @NonNull String> getApplicationData() { return this.oauth.getApplicationData(); }
-	AuthorizationRequestOptions transactionOptions(Set<String> defaults, List<URI> defaultResources) {
+	@NonNull AuthorizationRequestOptions transactionOptions(@NonNull Set<@NonNull String> defaults, @NonNull List<@NonNull URI> defaultResources) {
 		Set<String> requested = new HashSet<>(this.scopes == null ? defaults : this.scopes);
 		requested.add("openid");
 		return AuthorizationRequestOptions.builder().scopes(requested)
@@ -111,7 +111,7 @@ public final class OidcAuthenticationOptions {
 				.prompt(this.oauth.getPrompt().orElse(null)).loginHint(this.oauth.getLoginHint().orElse(null))
 				.applicationData(this.oauth.getApplicationData()).additionalParameters(this.oauth.getAdditionalParameters()).build();
 	}
-	static Set<String> requireAcrValues(Set<String> values) {
+	static @NonNull Set<@NonNull String> requireAcrValues(@NonNull Set<@NonNull String> values) {
 		Set<String> copy = Set.copyOf(values);
 		if (copy.stream().anyMatch(value -> value.isEmpty() || value.chars().anyMatch(c -> c <= 0x20 || c >= 0x7F)))
 			throw new IllegalArgumentException("An ACR value contains invalid characters.");

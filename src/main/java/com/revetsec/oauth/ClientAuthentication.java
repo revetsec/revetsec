@@ -116,21 +116,22 @@ public final class ClientAuthentication {
 				ClientSecretBasicEncoding.FORM_URLENCODED);
 	}
 
+	@NonNull String methodName() { return switch (this.method) { case NONE -> "none"; case BASIC -> "client_secret_basic"; case POST -> "client_secret_post"; }; }
 	boolean isPublicClient() { return this.method == Method.NONE; }
 	boolean isUnencodedBasic() {
 		return this.method == Method.BASIC && this.encoding == ClientSecretBasicEncoding.UNENCODED;
 	}
 
-	void checkHmac(Set<JwsAlgorithm> algorithms) {
+	void checkHmac(@NonNull Set<@NonNull JwsAlgorithm> algorithms) {
 		if (algorithms.isEmpty()) return;
 		if (isPublicClient()) throw new IllegalArgumentException("HMAC ID tokens require confidential client authentication.");
 		checkHmacSecret(readSecret(), algorithms);
 	}
-	private String readSecret() {
+	private @NonNull String readSecret() {
 		try { return requireSecret(requireNonNull(this.secretSupplier).get()); }
 		catch (RuntimeException unavailable) { throw new IllegalArgumentException("The client secret is unavailable."); }
 	}
-	private static void checkHmacSecret(String secret, Set<JwsAlgorithm> algorithms) {
+	private static void checkHmacSecret(@NonNull String secret, @NonNull Set<@NonNull JwsAlgorithm> algorithms) {
 		if (algorithms.isEmpty()) return;
 		byte[] bytes;
 		try { bytes = StrictUtf8.encode(secret); }
@@ -143,11 +144,11 @@ public final class ClientAuthentication {
 			}
 		} finally { Arrays.fill(bytes, (byte) 0); }
 	}
-	void apply(String clientId, Map<String, String> headers, Map<String, String> form) {
+	void apply(@NonNull String clientId, @NonNull Map<@NonNull String, @NonNull String> headers, @NonNull Map<@NonNull String, @NonNull String> form) {
 		applyForOidc(clientId, headers, form, Set.of());
 	}
-	@Nullable String applyForOidc(String clientId, Map<String, String> headers, Map<String, String> form,
-			Set<JwsAlgorithm> hmacAlgorithms) {
+	@Nullable String applyForOidc(@NonNull String clientId, @NonNull Map<@NonNull String, @NonNull String> headers, @NonNull Map<@NonNull String, @NonNull String> form,
+			@NonNull Set<@NonNull JwsAlgorithm> hmacAlgorithms) {
 		if (this.method == Method.NONE) {
 			form.put("client_id", clientId);
 			if (!hmacAlgorithms.isEmpty()) throw new IllegalArgumentException("HMAC ID tokens require confidential client authentication.");
@@ -178,7 +179,7 @@ public final class ClientAuthentication {
 		return secret;
 	}
 
-	private static String requireSecret(String value) {
+	private static @NonNull String requireSecret(@NonNull String value) {
 		if (requireNonNull(value).isEmpty())
 			throw new IllegalArgumentException("A client secret must not be empty.");
 		return value;

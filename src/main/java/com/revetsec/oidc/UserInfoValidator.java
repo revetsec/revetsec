@@ -16,6 +16,7 @@
 
 package com.revetsec.oidc;
 
+import org.jspecify.annotations.NonNull;
 import com.revetsec.internal.http.Deadline;
 import com.revetsec.internal.json.JsonCodec;
 import com.revetsec.internal.json.JsonLimits;
@@ -32,15 +33,15 @@ import java.util.Set;
 @ThreadSafe
 final class UserInfoValidator {
 	private UserInfoValidator() { }
-	static JsonObject json(byte[] body, String subject) {
+	static @NonNull JsonObject json(byte @NonNull [] body, @NonNull String subject) {
 		try {
 			JsonValue parsed = JsonCodec.parse(body, JsonLimits.protocolDocument(256 * 1_024));
 			if (!(parsed instanceof JsonObject object)) throw OidcValidationException.fromReason(OidcValidationException.Reason.USERINFO_MALFORMED);
 			checkSubject(object, subject); return object;
 		} catch (JsonParseException invalid) { throw OidcValidationException.fromReason(OidcValidationException.Reason.USERINFO_MALFORMED); }
 	}
-	static JsonObject signed(String compact, String issuer, String clientId, String subject, JwsAlgorithm algorithm,
-			JsonWebKeySource keys, Duration skew, Clock clock, OidcObserver observer, Set<String> trustedAudiences, Deadline deadline) {
+	static @NonNull JsonObject signed(@NonNull String compact, @NonNull String issuer, @NonNull String clientId, @NonNull String subject, @NonNull JwsAlgorithm algorithm,
+			@NonNull JsonWebKeySource keys, @NonNull Duration skew, @NonNull Clock clock, @NonNull OidcObserver observer, @NonNull Set<@NonNull String> trustedAudiences, @NonNull Deadline deadline) {
 		Jwt token;
 		try {
 			JwtValidator validator = JwtValidator.withIssuer(issuer).expectedAudiences(Set.of(clientId))
@@ -53,7 +54,7 @@ final class UserInfoValidator {
 				throw OidcValidationException.fromReason(OidcValidationException.Reason.UNTRUSTED_AUDIENCE);
 		JsonObject claims = token.getClaims().toJsonObject(); checkSubject(claims, subject); return claims;
 	}
-	private static void checkSubject(JsonObject claims, String expected) {
+	private static void checkSubject(@NonNull JsonObject claims, @NonNull String expected) {
 		if (!(claims.getMembers().get("sub") instanceof JsonString text) || text.getValue().isEmpty()
 				|| text.getValue().length() > 255 || text.getValue().chars().anyMatch(c -> c > 0x7F))
 			throw OidcValidationException.fromReason(OidcValidationException.Reason.USERINFO_MALFORMED);

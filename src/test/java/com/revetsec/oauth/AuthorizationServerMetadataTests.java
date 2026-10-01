@@ -97,4 +97,34 @@ final class AuthorizationServerMetadataTests {
 		assertFalse(metadata.isAuthorizationResponseIssuerSupported());
 		assertTrue(metadata.getCodeChallengeMethodsSupported().isEmpty());
 	}
+    @Test void resourceFieldsHaveTypedGettersCopiesAndNullableResets() {
+        String extra=JSON.substring(0,JSON.length()-1)+",\"jwks_uri\":\"https://issuer.example/keys\",\"introspection_endpoint\":\"https://issuer.example/inspect\",\"introspection_endpoint_auth_methods_supported\":[\"client_secret_basic\"]}";
+        AuthorizationServerMetadata m=AuthorizationServerMetadata.fromJson(ISSUER,extra);
+        assertEquals(URI.create("https://issuer.example/keys"),m.getJwksUri().orElseThrow());assertEquals(URI.create("https://issuer.example/inspect"),m.getIntrospectionEndpoint().orElseThrow());assertEquals(Set.of("client_secret_basic"),m.getIntrospectionEndpointAuthMethodsSupported().orElseThrow());
+        Set<String> immutableMethods=m.getIntrospectionEndpointAuthMethodsSupported().orElseThrow();assertThrows(UnsupportedOperationException.class,()->immutableMethods.add("other"));
+        java.util.HashSet<String> methods=new java.util.HashSet<>(Set.of("client_secret_post"));
+        AuthorizationServerMetadata.Builder b=AuthorizationServerMetadata.withIssuer(ISSUER).authorizationEndpoint(m.getAuthorizationEndpoint()).tokenEndpoint(m.getTokenEndpoint()).jwksUri(m.getJwksUri().orElseThrow()).introspectionEndpoint(m.getIntrospectionEndpoint().orElseThrow()).introspectionEndpointAuthMethodsSupported(methods);
+        methods.clear();assertEquals(Set.of("client_secret_post"),b.build().getIntrospectionEndpointAuthMethodsSupported().orElseThrow());
+        m=b.jwksUri(null).introspectionEndpoint(null).introspectionEndpointAuthMethodsSupported(null).build();assertTrue(m.getJwksUri().isEmpty());assertTrue(m.getIntrospectionEndpoint().isEmpty());assertTrue(m.getIntrospectionEndpointAuthMethodsSupported().isEmpty());
+        assertThrows(IllegalArgumentException.class,()->b.introspectionEndpointAuthMethodsSupported(Set.of("")).build());
+        assertThrows(IllegalStateException.class,()->AuthorizationServerMetadata.withIssuer(ISSUER).jwksUri(URI.create("https://issuer.example/keys")).build());
+    }
+    @Test void malformedPresentResourceFieldsAreNotSilentlyOmitted() {
+        for(String field:new String[]{"jwks_uri","introspection_endpoint"}) for(String value:new String[]{"null","42","\"\"","\"%%%\""}) {
+            String document=JSON.substring(0,JSON.length()-1)+",\""+field+"\":"+value+"}";
+            assertThrows(OAuthResponseException.class,()->AuthorizationServerMetadata.fromJson(ISSUER,document));
+        }
+        for(String value:new String[]{"null","42","[null]","[\"\"]","[\"a\",\"a\"]"}) {
+            String document=JSON.substring(0,JSON.length()-1)+",\"introspection_endpoint_auth_methods_supported\":"+value+"}";
+            assertThrows(OAuthResponseException.class,()->AuthorizationServerMetadata.fromJson(ISSUER,document));
+        }
+    }
+    @Test void everyOptionalRequestableResourceEndpointUsesTheClientOutboundPolicy() {
+        for(String field:new String[]{"jwks_uri","introspection_endpoint"}) {
+            String document=JSON.substring(0,JSON.length()-1)+",\""+field+"\":\"http://10.0.0.1/private\"}";
+            AuthorizationServerMetadata m=AuthorizationServerMetadata.fromJson(ISSUER,document);
+            assertThrows(IllegalArgumentException.class,()->OAuthClient.withAuthorizationServerMetadata(m).clientId("client").clientAuthentication(ClientAuthentication.noneInstance()).build());
+        }
+    }
+
 }

@@ -99,6 +99,7 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayDeque;
@@ -1573,6 +1574,9 @@ final class RedactionTests {
 			add(Group.REJECTED_TOKENS, surface + ": the exception", thrownBy(surface, () -> recorded.validate(token)),
 					Check.FAILURE, reason);
 			add(Group.REJECTED_TOKENS, surface + ": the hook arguments", recorder, Check.HOOK_ARGUMENTS);
+			com.revetsec.jose.JwtValidationResult result = validator.apply(JoseObserver.disabledInstance()).validateResult(token);
+			Assertions.assertEquals(reason, Assertions.assertInstanceOf(com.revetsec.jose.JwtValidationResult.Rejected.class, result).getReason());
+			add(Group.REJECTED_TOKENS, surface + ": the result", result, Check.RENDERING);
 
 			RecordingObserver<JoseObserver> throwing = RecordingObserver.fromInterface(JoseObserver.class,
 					() -> new IllegalStateException(HOOK_SECRET));
@@ -1877,6 +1881,9 @@ final class RedactionTests {
 			RecordingObserver<JoseObserver> recorder = RecordingObserver.fromInterface(JoseObserver.class);
 			Jwt jwt = builder.observer(recorder.getObserver()).build().validate(token);
 			add(Group.ACCEPTED_TOKENS, name + ": the Jwt", jwt, Check.RENDERING);
+			com.revetsec.jose.JwtValidationResult result = builder.observer(JoseObserver.disabledInstance()).build().validateResult(token);
+			Assertions.assertEquals(token, Assertions.assertInstanceOf(com.revetsec.jose.JwtValidationResult.Succeeded.class, result).getJwt().toCompactSerialization());
+			add(Group.ACCEPTED_TOKENS, name + ": the result", result, Check.RENDERING);
 			add(Group.ACCEPTED_TOKENS, name + ": its claims", jwt.getClaims(), Check.RENDERING);
 			add(Group.ACCEPTED_TOKENS, name + ": the hook arguments", recorder, Check.HOOK_ARGUMENTS);
 			add(Group.ACCEPTED_TOKENS, name + ": toCompactSerialization() is an explicit emission",
@@ -2014,4 +2021,25 @@ final class RedactionTests {
 			// Nothing to release.
 		}
 	}
+    @Test void resourceProofResultsFailuresAndActualObserverArgumentsAreRedacted() throws Exception {
+        Clock clock=Clock.fixed(NOW,java.time.ZoneOffset.UTC);
+        RecordingObserver<com.revetsec.oauth.AccessTokenObserver> observer=RecordingObserver.fromInterface(com.revetsec.oauth.AccessTokenObserver.class,()->new IllegalStateException(HOOK_SECRET));
+        JsonObject claims=JsonObject.builder().put("iss",ISSUER).put("aud",AUDIENCE).put("sub",SECRET).put("client_id",SECRET).put("jti",SECRET).put("scope","read").put("iat",NOW.getEpochSecond()).put("exp",NOW.plusSeconds(60).getEpochSecond()).put("custom",SECRET).build();
+        String compact=TestJws.withAlgorithm(TestJws.Algorithm.RS256).kid(KEY_ID).typ("at+jwt").payload(claims.toJson()).sign(TestJsonWebKeys.Fixture.IDP_SIGNING_RSA_2048.getPrivateKey());Sentinels.assertPresent(compact);
+        com.revetsec.oauth.JwtAccessTokenValidator.Builder builder=com.revetsec.oauth.JwtAccessTokenValidator.withIssuer(ISSUER).expectedAudiences(Set.of(AUDIENCE)).jsonWebKeySource(StaticJsonWebKeySource.fromJsonWebKeySet(JsonWebKeySet.fromJson(TestJsonWebKeys.keySet(List.of(rsaJwk(KEY_ID)))))).clock(clock).observer(observer.getObserver());
+        com.revetsec.oauth.JwtAccessTokenValidator validator=builder.build();com.revetsec.oauth.BearerToken bearer=com.revetsec.oauth.BearerToken.fromAuthorizationHeaderValues(List.of("Bearer "+compact)).orElseThrow();
+        com.revetsec.oauth.AccessTokenValidationResult result=validator.validateResult(bearer);com.revetsec.oauth.VerifiedAccessToken proof=Assertions.assertInstanceOf(com.revetsec.oauth.AccessTokenValidationResult.Succeeded.class,result).getAccessToken();
+        Sentinels.assertPresent(proof.getClaims());Sentinels.assertAbsent(List.of(builder,validator,bearer,result,proof,observer));
+        com.revetsec.oauth.BearerToken invalid=com.revetsec.oauth.BearerToken.fromAuthorizationHeaderValues(List.of("Bearer "+SECRET)).orElseThrow();Sentinels.assertAbsent(validator.validateResult(invalid));assertRedacted(Assertions.assertThrows(com.revetsec.oauth.AccessTokenValidationException.class,()->validator.validate(invalid)));
+        try(TestHttpsServer server=TestHttpsServer.start()) {
+            String path="/inspect";server.script(path,TestHttpsServer.Script.fromResponse(TestHttpsServer.Response.fromJson(200,"{\"active\":true,\"aud\":"+JsonText.string(AUDIENCE)+",\"sub\":"+JsonText.string(SECRET)+",\"scope\":\"read\",\"custom\":"+JsonText.string(SECRET)+"}")));
+            com.revetsec.oauth.OAuthClient oauth=com.revetsec.oauth.OAuthClient.withAuthorizationServerMetadata(com.revetsec.oauth.AuthorizationServerMetadata.withIssuer(server.getBaseUri().toString()).authorizationEndpoint(server.uri("/authorize")).tokenEndpoint(server.uri("/token")).introspectionEndpoint(server.uri(path+"?secret="+URI_SECRET)).build()).clientId("client").clientAuthentication(com.revetsec.oauth.ClientAuthentication.fromClientSecretBasic(SECRET)).httpClient(TestTls.httpClient()).clock(clock).observer(observer.getObserver()).build();
+            com.revetsec.oauth.TokenIntrospectionClient.Builder ib=com.revetsec.oauth.TokenIntrospectionClient.withOAuthClient(oauth).expectedAudiences(Set.of(AUDIENCE)).observer(observer.getObserver());com.revetsec.oauth.TokenIntrospectionClient client=ib.build();
+            com.revetsec.oauth.AccessTokenValidationResult ir=client.validateResult(invalid);com.revetsec.oauth.VerifiedAccessToken ip=Assertions.assertInstanceOf(com.revetsec.oauth.AccessTokenValidationResult.Succeeded.class,ir).getAccessToken();Sentinels.assertPresent(ip.getClaims());Sentinels.assertAbsent(List.of(ib,client,ir,ip,observer));
+            server.script(path,TestHttpsServer.Script.fromResponse(TestHttpsServer.Response.fromJson(200,"{\"active\":false,\"sub\":"+JsonText.string(SECRET)+"}")));Sentinels.assertAbsent(client.validateResult(invalid));
+            server.script(path,TestHttpsServer.Script.fromResponse(TestHttpsServer.Response.fromJson(401,"{\"error\":\"invalid_client\",\"error_description\":"+JsonText.string(SECRET)+"}")));assertRedacted(Assertions.assertThrows(com.revetsec.oauth.OAuthException.class,()->client.validateResult(invalid)));Sentinels.assertAbsent(observer);
+        }
+        Assertions.assertFalse(this.logRecords.getRecords().isEmpty());Sentinels.assertAbsent(this.logRecords.getRecords());
+    }
+
 }

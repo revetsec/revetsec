@@ -109,6 +109,7 @@ final class OidcPendingCodecTests {
 		assertThrows(IllegalStateException.class, () -> com.revetsec.internal.jose.JwtValidationAccess.set(jwt));
 		assertThrows(IllegalArgumentException.class, () -> com.revetsec.internal.jose.JwtValidationAccess.set(new com.revetsec.internal.jose.JwtValidationAccess.Operations() {
 			@Override public com.revetsec.jose.Jwt validate(com.revetsec.jose.JwtValidator v, String c, java.util.function.LongSupplier d) { throw new AssertionError(); }
+			@Override public com.revetsec.jose.Jwt validatePrepared(com.revetsec.jose.JwtValidator v, com.revetsec.internal.jose.PreparedJws p, java.util.function.LongSupplier d) { throw new AssertionError(); }
 			@Override public com.revetsec.jose.Jwt validateUserInfo(com.revetsec.jose.JwtValidator v, String c, java.util.function.LongSupplier d) { throw new AssertionError(); }
 			@Override public com.revetsec.jose.Jwt validateOidc(com.revetsec.jose.JwtValidator v, String c, Set<com.revetsec.jose.JwsAlgorithm> a, byte[] s, java.util.function.LongSupplier d, Runnable u) { throw new AssertionError(); }
 			@Override public void warmUp(com.revetsec.jose.RemoteJsonWebKeySource source, java.util.function.LongSupplier d) { throw new AssertionError(); }

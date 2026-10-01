@@ -183,18 +183,18 @@ public final class PendingAuthorization {
 	}
 
 	@Nullable Duration maxAge() { return this.maxAge; }
-	Set<String> acrValues() { return this.acrValues; }
+	@NonNull Set<@NonNull String> acrValues() { return this.acrValues; }
 	@Nullable String prompt() { return this.prompt; }
 
-	String kind() { return this.kind; }
-	String state() { return this.state; }
-	String verifier() { return this.verifier; }
+	@NonNull String kind() { return this.kind; }
+	@NonNull String state() { return this.state; }
+	@NonNull String verifier() { return this.verifier; }
 	@Nullable String nonce() { return this.nonce; }
-	List<URI> resources() { return this.resources; }
-	AuthorizationRequestOptions.ResponseMode responseMode() { return this.responseMode; }
+	@NonNull List<@NonNull URI> resources() { return this.resources; }
+	AuthorizationRequestOptions.@NonNull ResponseMode responseMode() { return this.responseMode; }
 	boolean issuerRequired() { return this.issuerRequired; }
-	URI authorizationEndpoint() { return this.authorizationEndpoint; }
-	URI tokenEndpoint() { return this.tokenEndpoint; }
+	@NonNull URI authorizationEndpoint() { return this.authorizationEndpoint; }
+	@NonNull URI tokenEndpoint() { return this.tokenEndpoint; }
 
 	/**
 	 * Redacts all pending secrets and application data.

@@ -26,6 +26,7 @@ import com.revetsec.json.JsonNumber;
 import com.revetsec.json.JsonObject;
 import com.revetsec.json.JsonString;
 import com.revetsec.json.JsonValue;
+import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.ThreadSafe;
@@ -46,12 +47,12 @@ final class TokenResponseParser {
 	private TokenResponseParser() {
 	}
 
-	static TokenResponse parse(RawResponse response, Instant requestStart, @Nullable Set<String> requestedScopes) {
+	static @NonNull TokenResponse parse(@NonNull RawResponse response, @NonNull Instant requestStart, @Nullable Set<@NonNull String> requestedScopes) {
 		return parsePayload(response, requestStart, requestedScopes).toTokenResponse();
 	}
 
-	static TokenEndpointPayload parsePayload(RawResponse response, Instant requestStart,
-			@Nullable Set<String> requestedScopes) {
+	static @NonNull TokenEndpointPayload parsePayload(@NonNull RawResponse response, @NonNull Instant requestStart,
+			@Nullable Set<@NonNull String> requestedScopes) {
 		int status = response.status();
 		if (status != 200) throw error(response, requestStart);
 		byte[] body = response.body();
@@ -98,7 +99,7 @@ final class TokenResponseParser {
 		}
 	}
 
-	static OAuthErrorResponseException error(RawResponse response, Instant requestStart) {
+	static @NonNull OAuthErrorResponseException error(@NonNull RawResponse response, @NonNull Instant requestStart) {
 		if (response.status() == 200)
 			throw new IllegalArgumentException("An endpoint error requires a non-200 status.");
 		byte[] body = response.body();
@@ -120,19 +121,19 @@ final class TokenResponseParser {
 		}
 	}
 
-	private static String safeErrorString(JsonObject object) {
+	private static @NonNull String safeErrorString(@NonNull JsonObject object) {
 		JsonValue error = object.getMembers().get("error");
 		return error instanceof JsonString text ? text.getValue() : "";
 	}
 
-	private static String requiredString(Map<String, JsonValue> members, String name) {
+	private static @NonNull String requiredString(@NonNull Map<@NonNull String, @NonNull JsonValue> members, @NonNull String name) {
 		JsonValue value = members.get(name);
 		if (!(value instanceof JsonString text) || text.getValue().isEmpty())
 			throw OAuthResponseException.fromReason(OAuthException.Reason.DOCUMENT_MALFORMED);
 		return text.getValue();
 	}
 
-	private static boolean isVisibleAscii(String value) {
+	private static boolean isVisibleAscii(@NonNull String value) {
 		for (int index = 0; index < value.length(); index++) {
 			char character = value.charAt(index);
 			if (character < 0x20 || character > 0x7E) return false;
@@ -140,7 +141,7 @@ final class TokenResponseParser {
 		return true;
 	}
 
-	private static Instant expiry(Instant start, JsonValue value) {
+	private static @NonNull Instant expiry(@NonNull Instant start, @NonNull JsonValue value) {
 		String digits;
 		if (value instanceof JsonString text) {
 			digits = text.getValue();
@@ -163,7 +164,7 @@ final class TokenResponseParser {
 		}
 	}
 
-	private static Set<String> scopeSet(String scope) {
+	private static @NonNull Set<@NonNull String> scopeSet(@NonNull String scope) {
 		Set<String> result = new LinkedHashSet<>();
 		for (String token : scope.split(" ", -1)) {
 			if (token.isEmpty() || token.chars().anyMatch(c -> c <= 0x20 || c == 0x22 || c == 0x5C || c >= 0x7F)

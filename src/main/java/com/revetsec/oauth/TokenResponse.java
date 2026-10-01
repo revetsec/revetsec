@@ -69,7 +69,7 @@ public final class TokenResponse {
 		this.applicationData = Map.copyOf(applicationData);
 	}
 
-	TokenResponse withApplicationData(Map<String, String> value) {
+	@NonNull TokenResponse withApplicationData(@NonNull Map<@NonNull String, @NonNull String> value) {
 		return new TokenResponse(this, value);
 	}
 

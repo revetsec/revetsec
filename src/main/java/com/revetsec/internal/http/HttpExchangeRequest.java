@@ -65,7 +65,7 @@ public record HttpExchangeRequest(@NonNull URI uri,
 	 * Header names Revetsec or the JDK sets, in lower case; {@link #headers()} may not name them. They include every
 	 * name the JDK restricts, as of JDK 27: JDK 26 added {@code alt-used}, which it sets itself for HTTP/3.
 	 */
-	private static final Set<String> RESERVED_HEADER_NAMES = Set.of("accept", "accept-encoding", "alt-used",
+	private static final @NonNull Set<@NonNull String> RESERVED_HEADER_NAMES = Set.of("accept", "accept-encoding", "alt-used",
 			"connection", "content-length", "content-type", "expect", "host", "te", "trailer", "transfer-encoding",
 			"upgrade");
 

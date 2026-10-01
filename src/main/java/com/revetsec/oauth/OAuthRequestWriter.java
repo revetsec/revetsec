@@ -16,6 +16,7 @@
 
 package com.revetsec.oauth;
 
+import org.jspecify.annotations.NonNull;
 import com.revetsec.internal.encoding.EncodingException;
 import com.revetsec.internal.encoding.FormUrlEncoding;
 
@@ -30,7 +31,7 @@ import java.util.Map;
 final class OAuthRequestWriter {
 	private final List<String> encodedPairs = new ArrayList<>();
 
-	OAuthRequestWriter add(String name, String value) {
+	@NonNull OAuthRequestWriter add(@NonNull String name, @NonNull String value) {
 		try {
 			this.encodedPairs.add(FormUrlEncoding.encode(name) + "=" + FormUrlEncoding.encode(value));
 		} catch (EncodingException exception) {
@@ -39,19 +40,19 @@ final class OAuthRequestWriter {
 		return this;
 	}
 
-	OAuthRequestWriter addAll(Map<String, String> values) {
+	@NonNull OAuthRequestWriter addAll(@NonNull Map<@NonNull String, @NonNull String> values) {
 		values.forEach(this::add);
 		return this;
 	}
 
-	OAuthRequestWriter resources(List<URI> resources) {
+	@NonNull OAuthRequestWriter resources(@NonNull List<@NonNull URI> resources) {
 		for (URI resource : resources) add("resource", resource.toString());
 		return this;
 	}
 
-	String body() { return String.join("&", this.encodedPairs); }
+	@NonNull String body() { return String.join("&", this.encodedPairs); }
 
-	URI appendTo(URI endpoint) {
+	@NonNull URI appendTo(@NonNull URI endpoint) {
 		String raw = endpoint.toASCIIString();
 		if (this.encodedPairs.isEmpty()) return endpoint;
 		return URI.create(raw + (endpoint.getRawQuery() == null ? "?" : raw.endsWith("?") || raw.endsWith("&") ? "" : "&")

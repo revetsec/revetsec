@@ -73,7 +73,7 @@ public final class JwsVerifier {
 	 * @throws NullPointerException if an argument is {@code null}
 	 */
 	@NonNull
-	public static Optional<VerifyResult> findShapeFailure(@NonNull JwsAlgorithm algorithm,
+	public static Optional<@NonNull VerifyResult> findShapeFailure(@NonNull JwsAlgorithm algorithm,
 																												byte @NonNull [] signature) {
 		requireNonNull(algorithm);
 		requireNonNull(signature);

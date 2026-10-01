@@ -67,7 +67,7 @@ public final class EcdsaSignatures {
 	 * verify, or empty if the shape allows verification (which proves nothing about the signature)
 	 */
 	@NonNull
-	public static Optional<VerifyResult> findShapeFailure(@NonNull EcCurve curve,
+	public static Optional<@NonNull VerifyResult> findShapeFailure(@NonNull EcCurve curve,
 																												byte @NonNull [] signature) {
 		requireNonNull(curve);
 		requireNonNull(signature);

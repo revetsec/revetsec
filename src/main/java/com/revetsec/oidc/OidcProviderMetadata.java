@@ -52,14 +52,14 @@ public final class OidcProviderMetadata {
 	private final Set<String> algorithms;
 	private final Set<String> responseTypes;
 	private final @Nullable Set<String> userInfoAlgorithms;
-	private OidcProviderMetadata(Builder builder) {
+	private OidcProviderMetadata(@NonNull Builder builder) {
 		this.oauth = builder.oauth.build(); this.jwksUri = requireNonNull(builder.jwksUri);
 		this.userInfoEndpoint = builder.userInfoEndpoint; this.subjectTypes = builder.subjectTypes;
 		this.algorithms = builder.algorithms; this.responseTypes = builder.responseTypes;
 		this.userInfoAlgorithms = builder.userInfoAlgorithms == null ? null : Set.copyOf(builder.userInfoAlgorithms);
 	}
-	private OidcProviderMetadata(AuthorizationServerMetadata oauth, URI jwksUri, @Nullable URI userInfo,
-			Set<String> subjects, Set<String> algorithms, Set<String> responses, @Nullable Set<String> userInfoAlgorithms) {
+	private OidcProviderMetadata(@NonNull AuthorizationServerMetadata oauth, @NonNull URI jwksUri, @Nullable URI userInfo,
+			@NonNull Set<@NonNull String> subjects, @NonNull Set<@NonNull String> algorithms, @NonNull Set<@NonNull String> responses, @Nullable Set<@NonNull String> userInfoAlgorithms) {
 		this.oauth = oauth; this.jwksUri = jwksUri; this.userInfoEndpoint = userInfo;
 		this.userInfoAlgorithms = userInfoAlgorithms == null ? null : Set.copyOf(userInfoAlgorithms);
 		this.subjectTypes = Set.copyOf(subjects); this.algorithms = Set.copyOf(algorithms); this.responseTypes = Set.copyOf(responses);
@@ -97,11 +97,11 @@ public final class OidcProviderMetadata {
 			throw OidcTransactionAccess.get().endpointFailure(OAuthException.Reason.DOCUMENT_MALFORMED);
 		} finally { if (bytes != null) Arrays.fill(bytes, (byte) 0); }
 	}
-	private static String requiredString(Map<String, JsonValue> members, String name) {
+	private static @NonNull String requiredString(@NonNull Map<@NonNull String, @NonNull JsonValue> members, @NonNull String name) {
 		if (!(members.get(name) instanceof JsonString text) || text.getValue().isEmpty()) throw new IllegalArgumentException();
 		return text.getValue();
 	}
-	private static Set<String> requiredSet(Map<String, JsonValue> members, String name) {
+	private static @NonNull Set<@NonNull String> requiredSet(@NonNull Map<@NonNull String, @NonNull JsonValue> members, @NonNull String name) {
 		if (!(members.get(name) instanceof JsonArray array) || array.getElements().isEmpty()) throw new IllegalArgumentException();
 		Set<String> values = new LinkedHashSet<>();
 		for (JsonValue item : array.getElements()) {
@@ -117,7 +117,7 @@ public final class OidcProviderMetadata {
 	 * @since 1.0.0
 	 */
 	public static @NonNull Builder withIssuer(@NonNull String issuer) { return new Builder(issuer); }
-	AuthorizationServerMetadata oauthMetadata() { return this.oauth; }
+	@NonNull AuthorizationServerMetadata oauthMetadata() { return this.oauth; }
 	/**
 	 * Returns the exact issuer.
 	 *
@@ -204,7 +204,7 @@ public final class OidcProviderMetadata {
 		private Set<String> algorithms = Set.of("RS256");
 		private Set<String> responseTypes = Set.of("code");
 		private @Nullable Set<String> userInfoAlgorithms;
-		private Builder(String issuer) { this.oauth = AuthorizationServerMetadata.withIssuer(issuer); }
+		private Builder(@NonNull String issuer) { this.oauth = AuthorizationServerMetadata.withIssuer(issuer); }
 		/**
 		 * Sets the authorizationEndpoint.
 		 *

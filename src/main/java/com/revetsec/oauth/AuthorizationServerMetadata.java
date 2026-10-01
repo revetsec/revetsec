@@ -54,9 +54,12 @@ public final class AuthorizationServerMetadata {
 	private final @NonNull String issuer;
 	private final @NonNull URI authorizationEndpoint;
 	private final @NonNull URI tokenEndpoint;
+	private final @Nullable URI jwksUri;
+	private final @Nullable URI introspectionEndpoint;
 	private final @Nullable URI revocationEndpoint;
 	private final @Nullable Set<@NonNull String> codeChallengeMethodsSupported;
 	private final @Nullable Set<@NonNull String> tokenEndpointAuthMethodsSupported;
+	private final @Nullable Set<@NonNull String> introspectionEndpointAuthMethodsSupported;
 	private final boolean authorizationResponseIssuerSupported;
 	private final boolean remotelyDiscovered;
 
@@ -64,9 +67,12 @@ public final class AuthorizationServerMetadata {
 		this.issuer = builder.issuer;
 		this.authorizationEndpoint = requireNonNull(builder.authorizationEndpoint);
 		this.tokenEndpoint = requireNonNull(builder.tokenEndpoint);
+		this.jwksUri = builder.jwksUri;
+		this.introspectionEndpoint = builder.introspectionEndpoint;
 		this.revocationEndpoint = builder.revocationEndpoint;
 		this.codeChallengeMethodsSupported = builder.codeChallengeMethodsSupported;
 		this.tokenEndpointAuthMethodsSupported = builder.tokenEndpointAuthMethodsSupported;
+		this.introspectionEndpointAuthMethodsSupported = builder.introspectionEndpointAuthMethodsSupported;
 		this.authorizationResponseIssuerSupported = builder.authorizationResponseIssuerSupported;
 		this.remotelyDiscovered = remotelyDiscovered;
 	}
@@ -107,12 +113,15 @@ public final class AuthorizationServerMetadata {
 			Builder builder = withIssuer(expectedIssuer)
 					.authorizationEndpoint(URI.create(requiredString(members, "authorization_endpoint")))
 					.tokenEndpoint(URI.create(requiredString(members, "token_endpoint")));
+			if (members.containsKey("jwks_uri")) builder = builder.jwksUri(URI.create(requiredString(members, "jwks_uri")));
+			if (members.containsKey("introspection_endpoint")) builder = builder.introspectionEndpoint(URI.create(requiredString(members, "introspection_endpoint")));
 			if (members.containsKey("revocation_endpoint"))
 				builder = builder.revocationEndpoint(URI.create(requiredString(members, "revocation_endpoint")));
 			if (members.containsKey("code_challenge_methods_supported"))
 				builder = builder.codeChallengeMethodsSupported(stringSet(members.get("code_challenge_methods_supported")));
 			if (members.containsKey("token_endpoint_auth_methods_supported"))
 				builder = builder.tokenEndpointAuthMethodsSupported(stringSet(members.get("token_endpoint_auth_methods_supported")));
+			if (members.containsKey("introspection_endpoint_auth_methods_supported")) builder = builder.introspectionEndpointAuthMethodsSupported(stringSet(members.get("introspection_endpoint_auth_methods_supported")));
 			if (members.containsKey("authorization_response_iss_parameter_supported")) {
 				JsonValue value = members.get("authorization_response_iss_parameter_supported");
 				if (!(value instanceof JsonBoolean booleanValue))
@@ -125,14 +134,14 @@ public final class AuthorizationServerMetadata {
 		}
 	}
 
-	private static String requiredString(Map<String, JsonValue> members, String name) {
+	private static @NonNull String requiredString(@NonNull Map<@NonNull String, @NonNull JsonValue> members, @NonNull String name) {
 		JsonValue value = members.get(name);
 		if (!(value instanceof JsonString text) || text.getValue().isEmpty())
 			throw OAuthResponseException.fromReason(OAuthException.Reason.DOCUMENT_MALFORMED);
 		return text.getValue();
 	}
 
-	private static Set<String> stringSet(JsonValue value) {
+	private static @NonNull Set<@NonNull String> stringSet(@NonNull JsonValue value) {
 		if (!(value instanceof JsonArray array))
 			throw OAuthResponseException.fromReason(OAuthException.Reason.DOCUMENT_MALFORMED);
 		Set<String> strings = new LinkedHashSet<>();
@@ -168,6 +177,16 @@ public final class AuthorizationServerMetadata {
 	 */
 	public @NonNull URI getTokenEndpoint() { return this.tokenEndpoint; }
 
+    /** Returns the optional jwks_uri.
+     * @return endpoint when configured or advertised
+     * @since 1.0.0
+     */
+    public @NonNull Optional<@NonNull URI> getJwksUri() { return Optional.ofNullable(this.jwksUri); }
+    /** Returns the optional introspection_endpoint.
+     * @return endpoint when configured or advertised
+     * @since 1.0.0
+     */
+    public @NonNull Optional<@NonNull URI> getIntrospectionEndpoint() { return Optional.ofNullable(this.introspectionEndpoint); }
 	/**
 	 * Returns the revocation endpoint, when one was advertised or configured.
 	 *
@@ -198,6 +217,11 @@ public final class AuthorizationServerMetadata {
 		return Optional.ofNullable(this.tokenEndpointAuthMethodsSupported);
 	}
 
+    /** Returns introspection endpoint methods separately from token endpoint methods.
+     * @return advertised methods, or empty when absent
+     * @since 1.0.0
+     */
+    public @NonNull Optional<@NonNull Set<@NonNull String>> getIntrospectionEndpointAuthMethodsSupported() { return Optional.ofNullable(this.introspectionEndpointAuthMethodsSupported); }
 	/**
 	 * Returns whether metadata advertised RFC 9207 issuer response support.
 	 *
@@ -228,9 +252,12 @@ public final class AuthorizationServerMetadata {
 		private final @NonNull String issuer;
 		private @Nullable URI authorizationEndpoint;
 		private @Nullable URI tokenEndpoint;
+		private @Nullable URI jwksUri;
+		private @Nullable URI introspectionEndpoint;
 		private @Nullable URI revocationEndpoint;
 		private @Nullable Set<@NonNull String> codeChallengeMethodsSupported;
 		private @Nullable Set<@NonNull String> tokenEndpointAuthMethodsSupported;
+		private @Nullable Set<@NonNull String> introspectionEndpointAuthMethodsSupported;
 		private boolean authorizationResponseIssuerSupported;
 
 		private Builder(@NonNull String issuer) {
@@ -263,6 +290,18 @@ public final class AuthorizationServerMetadata {
 			return this;
 		}
 
+        /** Sets optional jwks_uri.
+         * @param value endpoint, or null to omit
+         * @return this builder
+         * @since 1.0.0
+         */
+        public @NonNull Builder jwksUri(@Nullable URI value) { this.jwksUri = value; return this; }
+        /** Sets optional introspection_endpoint.
+         * @param value endpoint, or null to omit
+         * @return this builder
+         * @since 1.0.0
+         */
+        public @NonNull Builder introspectionEndpoint(@Nullable URI value) { this.introspectionEndpoint = value; return this; }
 		/**
 		 * Sets an optional revocation endpoint.
 		 *
@@ -299,6 +338,12 @@ public final class AuthorizationServerMetadata {
 			return this;
 		}
 
+        /** Sets introspection endpoint client authentication methods.
+         * @param value methods, or null to restore absence
+         * @return this builder
+         * @since 1.0.0
+         */
+        public @NonNull Builder introspectionEndpointAuthMethodsSupported(@Nullable Set<@NonNull String> value) { this.introspectionEndpointAuthMethodsSupported = value == null ? null : AccessTokenClaims.names(value, false); return this; }
 		/**
 		 * Sets whether RFC 9207 issuer response support was advertised.
 		 *
@@ -323,7 +368,7 @@ public final class AuthorizationServerMetadata {
 			return new AuthorizationServerMetadata(this, false);
 		}
 
-		private AuthorizationServerMetadata buildDiscovered() {
+		private @NonNull AuthorizationServerMetadata buildDiscovered() {
 			if (this.authorizationEndpoint == null || this.tokenEndpoint == null)
 				throw OAuthResponseException.fromReason(OAuthException.Reason.DOCUMENT_MALFORMED);
 			return new AuthorizationServerMetadata(this, true);

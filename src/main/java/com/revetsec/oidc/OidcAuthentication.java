@@ -40,11 +40,11 @@ public final class OidcAuthentication {
 	private final IdToken idToken;
 	private final TokenResponse tokens;
 	private final OidcSessionReference sessionReference;
-	OidcAuthentication(IdToken idToken, TokenResponse tokens, String clientId) {
+	OidcAuthentication(@NonNull IdToken idToken, @NonNull TokenResponse tokens, @NonNull String clientId) {
 		this.clientId = java.util.Objects.requireNonNull(clientId);
 		this.idToken = idToken; this.tokens = tokens; this.sessionReference = new OidcSessionReference(idToken, clientId);
 	}
-	String clientId() { return this.clientId; }
+	@NonNull String clientId() { return this.clientId; }
 	/**
 	 * Returns the exact validated issuer.
 	 *

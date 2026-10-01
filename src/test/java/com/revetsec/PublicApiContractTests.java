@@ -114,9 +114,12 @@ final class PublicApiContractTests {
 	static final Set<String> VERIFIED_TYPES = Set.of(
 			"com.revetsec.jose.Jwt",
 			"com.revetsec.jose.JwtClaims",
+			"com.revetsec.jose.JwtValidationResult$Succeeded",
 			"com.revetsec.oauth.VerifiedAccessToken",
+			"com.revetsec.oauth.AccessTokenValidationResult$Succeeded",
 			"com.revetsec.oidc.IdToken",
 			"com.revetsec.oidc.OidcAuthentication",
+			"com.revetsec.oidc.OidcAuthenticationResult$Succeeded",
 			"com.revetsec.oidc.OidcUserInfo",
 			"com.revetsec.oidc.OidcRefreshResult",
 			"com.revetsec.saml.SamlAuthentication",
@@ -129,10 +132,16 @@ final class PublicApiContractTests {
 	 * validation. Each entry is a reviewed decision.
 	 */
 	static final Set<String> VERIFIED_TYPE_SOURCES = Set.of(
+            "com.revetsec.oauth.AccessTokenValidator",
+            "com.revetsec.oauth.JwtAccessTokenValidator",
+            "com.revetsec.oauth.TokenIntrospectionClient",
+            "com.revetsec.oauth.AccessTokenValidationResult$Succeeded",
 			"com.revetsec.jose.JwtValidator",
+			"com.revetsec.jose.JwtValidationResult$Succeeded",
 			"com.revetsec.jose.Jwt",
 			"com.revetsec.oidc.IdToken",
 			"com.revetsec.oidc.OidcAuthentication",
+			"com.revetsec.oidc.OidcAuthenticationResult$Succeeded",
 			"com.revetsec.oidc.OidcRefreshResult",
 			"com.revetsec.oidc.OidcClient",
 			"com.revetsec.internal.jose.JwtValidationAccess$Operations");

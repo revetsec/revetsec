@@ -173,12 +173,12 @@ public final class AuthorizationResponse {
 		return new AuthorizationResponse(Collections.unmodifiableMap(copy), responseMode);
 	}
 
-	private static AuthorizationResponse fromEncoded(String encoded,
-			AuthorizationRequestOptions.ResponseMode responseMode) {
+	private static @NonNull AuthorizationResponse fromEncoded(@NonNull String encoded,
+			AuthorizationRequestOptions.@NonNull ResponseMode responseMode) {
 		return fromParameters(parseEncoded(encoded), null, responseMode);
 	}
 
-	private static Map<String, List<String>> parseEncoded(String encoded) {
+	private static @NonNull Map<@NonNull String, @NonNull List<@NonNull String>> parseEncoded(@NonNull String encoded) {
 		requireNonNull(encoded);
 		if (utf8Length(encoded) > Limits.AUTHORIZATION_RESPONSE_QUERY_SIZE.getDefaultIntValue())
 			throw OAuthResponseException.fromReason(OAuthException.Reason.CALLBACK_MALFORMED);
@@ -189,7 +189,7 @@ public final class AuthorizationResponse {
 		}
 	}
 
-	private static int utf8Length(String value) {
+	private static int utf8Length(@NonNull String value) {
 		try {
 			return StrictUtf8.encode(value).length;
 		} catch (EncodingException exception) {
@@ -197,7 +197,7 @@ public final class AuthorizationResponse {
 		}
 	}
 
-	private @NonNull Optional<@NonNull String> first(String name) {
+	private @NonNull Optional<@NonNull String> first(@NonNull String name) {
 		List<String> list = this.parameters.get(name);
 		return list == null || list.isEmpty() || list.get(0).isEmpty() ? Optional.empty() : Optional.of(list.get(0));
 	}
@@ -245,7 +245,7 @@ public final class AuthorizationResponse {
 		return first("error_description").map(AuthorizationResponse::safeErrorDescription);
 	}
 
-	private static String safeErrorDescription(String raw) {
+	private static @NonNull String safeErrorDescription(@NonNull String raw) {
 		StringBuilder safe = new StringBuilder(Math.min(raw.length(), 1_024));
 		for (int index = 0; index < raw.length() && safe.length() < 1_024; index++) {
 			char value = raw.charAt(index);

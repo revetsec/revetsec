@@ -16,6 +16,7 @@
 
 package com.revetsec.oauth;
 
+import org.jspecify.annotations.NonNull;
 import javax.annotation.concurrent.ThreadSafe;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -28,7 +29,7 @@ final class OAuthCookieNames {
 	private OAuthCookieNames() {
 	}
 
-	static String fromState(String state) {
+	static @NonNull String fromState(@NonNull String state) {
 		if (state == null || state.isEmpty())
 			throw new IllegalArgumentException("A callback state is required for a per-flow cookie name.");
 		try {

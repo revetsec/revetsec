@@ -27,7 +27,7 @@ final class OAuthSafeErrorCode {
 	}
 
 	@Nullable
-	static String fromValue(String value) {
+	static String fromValue(@Nullable String value) {
 		if (value == null || value.isEmpty() || value.length() > 64)
 			return null;
 		for (int i = 0; i < value.length(); i++) {

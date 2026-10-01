@@ -80,18 +80,37 @@ public final class JwtValidator {
 	static { JwtValidationAccess.set(new DeadlineOperations()); }
 	@ThreadSafe
 	private static final class DeadlineOperations implements JwtValidationAccess.Operations {
-		@Override public Jwt validateUserInfo(JwtValidator validator, String compact, LongSupplier remainingNanos) {
+		@Override public @NonNull Jwt validatePrepared(@NonNull JwtValidator validator, @NonNull PreparedJws prepared, @NonNull LongSupplier remainingNanos) {
+            long start = System.nanoTime();
+            try {
+                if (prepared.getCompactLength() > validator.headerPolicy.getMaximumTokenLength()) throw JoseException.fromReason(JoseException.Reason.TOKEN_TOO_LARGE);
+                if (!validator.headerPolicy.getAllowedAlgorithms().contains(prepared.getAlgorithm())) throw JoseException.fromReason(JoseException.Reason.ALGORITHM_NOT_ALLOWED);
+                if (!validator.headerPolicy.allowsType(prepared.findType().orElse(null))) throw JoseException.fromReason(JoseException.Reason.INVALID_TYPE);
+                Jwt jwt = Jwt.fromVerifiedJwt(JwtProcessor.complete(prepared,
+                        validator.selectKey(prepared.getKeyQuery(), requireNonNull(remainingNanos)), validator.claimsPolicy, validator.clock.instant()));
+                ObserverDispatch.dispatch(validator.observer, o -> o.didValidateJwt(jwt.getAlgorithm(), Duration.ofNanos(System.nanoTime() - start)));
+                return jwt;
+            } catch (JoseFailure failure) {
+                JoseException mapped = JoseException.fromReason(failure.getReason());
+                ObserverDispatch.dispatch(validator.observer, o -> o.didFailToValidateJwt(mapped, Duration.ofNanos(System.nanoTime() - start)));
+                throw mapped;
+            } catch (JoseException | JsonWebKeySetUnavailableException failure) {
+                ObserverDispatch.dispatch(validator.observer, o -> o.didFailToValidateJwt(failure, Duration.ofNanos(System.nanoTime() - start)));
+                throw failure;
+            }
+        }
+        @Override public @NonNull Jwt validateUserInfo(@NonNull JwtValidator validator, @NonNull String compact, @NonNull LongSupplier remainingNanos) {
 			return validator.validate(compact, requireNonNull(remainingNanos), validator.claimsPolicy.withOptionalExpiration());
 		}
-		@Override public Jwt validateOidc(JwtValidator validator, String compact, Set<JwsAlgorithm> algorithms,
-				byte[] secret, LongSupplier remainingNanos, Runnable hmacUsed) {
+		@Override public @NonNull Jwt validateOidc(@NonNull JwtValidator validator, @NonNull String compact, @NonNull Set<@NonNull JwsAlgorithm> algorithms,
+				byte @NonNull [] secret, @NonNull LongSupplier remainingNanos, @NonNull Runnable hmacUsed) {
 			JoseHeaderPolicy header = JoseHeaderPolicy.fromSettings(validator.headerPolicy.getMaximumTokenLength(),
 					algorithms, validator.headerPolicy.getAllowedTypes(), validator.headerPolicy.isTypeRequired());
 			return validator.validate(compact, requireNonNull(remainingNanos), validator.claimsPolicy, header,
 					requireNonNull(secret), requireNonNull(hmacUsed));
 		}
-		@Override public void warmUp(RemoteJsonWebKeySource source, LongSupplier remainingNanos) { source.warmUp(remainingNanos); }
-		@Override public Jwt validate(JwtValidator validator, String compact, LongSupplier remainingNanos) {
+		@Override public void warmUp(@NonNull RemoteJsonWebKeySource source, @NonNull LongSupplier remainingNanos) { source.warmUp(remainingNanos); }
+		@Override public @NonNull Jwt validate(@NonNull JwtValidator validator, @NonNull String compact, @NonNull LongSupplier remainingNanos) {
 			return validator.validate(compact, requireNonNull(remainingNanos));
 		}
 	}
@@ -166,16 +185,36 @@ public final class JwtValidator {
 		return validate(compactSerialization, null);
 	}
 
-	private Jwt validate(String compactSerialization, @Nullable LongSupplier remainingNanos) {
+
+	/**
+	 * Validates once and returns a success or a fixed local input rejection. Remote key-source failures remain
+	 * exceptions; no rejected JWT, claims or credential are exposed. The configured validation and observer behavior
+	 * is identical to {@link #validate(String)}.
+	 * @param compactSerialization untrusted compact token
+	 * @return the validation outcome
+	 * @throws NullPointerException if the token is null
+	 * @throws JsonWebKeySetUnavailableException if remote keys are unavailable
+	 * @since 1.0.0
+	 */
+	@CheckReturnValue
+	public @NonNull JwtValidationResult validateResult(@NonNull String compactSerialization) {
+		try {
+			return JwtValidationResult.fromJwt(validate(compactSerialization));
+		} catch (JoseException rejection) {
+			return JwtValidationResult.fromReason(rejection.getReason());
+		}
+	}
+
+	private @NonNull Jwt validate(@NonNull String compactSerialization, @Nullable LongSupplier remainingNanos) {
 		return validate(compactSerialization, remainingNanos, this.claimsPolicy);
 	}
 
-	private Jwt validate(String compactSerialization, @Nullable LongSupplier remainingNanos, JwtClaimsPolicy policy) {
+	private @NonNull Jwt validate(@NonNull String compactSerialization, @Nullable LongSupplier remainingNanos, @NonNull JwtClaimsPolicy policy) {
 		return validate(compactSerialization, remainingNanos, policy, this.headerPolicy, null, () -> { });
 	}
 
-	private Jwt validate(String compactSerialization, @Nullable LongSupplier remainingNanos, JwtClaimsPolicy policy,
-			JoseHeaderPolicy header, byte @Nullable [] secret, Runnable hmacUsed) {
+	private @NonNull Jwt validate(@NonNull String compactSerialization, @Nullable LongSupplier remainingNanos, @NonNull JwtClaimsPolicy policy,
+			@NonNull JoseHeaderPolicy header, byte @Nullable [] secret, @NonNull Runnable hmacUsed) {
 		requireNonNull(compactSerialization);
 		long startNanos = System.nanoTime();
 
@@ -198,8 +237,8 @@ public final class JwtValidator {
 	}
 
 	@NonNull
-	private Jwt validateOrThrow(@NonNull String compactSerialization, @Nullable LongSupplier remainingNanos, JwtClaimsPolicy policy,
-			JoseHeaderPolicy header, byte @Nullable [] secret, Runnable hmacUsed) {
+	private Jwt validateOrThrow(@NonNull String compactSerialization, @Nullable LongSupplier remainingNanos, @NonNull JwtClaimsPolicy policy,
+			@NonNull JoseHeaderPolicy header, byte @Nullable [] secret, @NonNull Runnable hmacUsed) {
 		try {
 			PreparedJws prepared = JwtProcessor.prepare(compactSerialization, header);
 			if (Algorithms.familyOf(prepared.getAlgorithm()) == Algorithms.Family.HMAC) {

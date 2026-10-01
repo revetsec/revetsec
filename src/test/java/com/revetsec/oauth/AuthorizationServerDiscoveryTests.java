@@ -224,4 +224,18 @@ final class AuthorizationServerDiscoveryTests {
 		return TestHttpsServer.Response.withStatus(status).header("Content-Type", "application/json")
 				.body(body).build();
 	}
+    @Test void discoveredUnsafeOptionalResourceEndpointsBlockBrowserClientWarmUp() throws Exception {
+        try(TestHttpsServer server=TestHttpsServer.start()) {
+            String issuer=server.uri("/tenant").toString();
+            for(String field:new String[]{"jwks_uri","introspection_endpoint"}) {
+                String base=metadata(server,issuer,server.uri("/token"));
+                server.script(RFC_PATH,TestHttpsServer.Script.fromResponse(json(200,base.substring(0,base.length()-1)+",\""+field+"\":\"http://10.0.0.1/private\"}")));
+                OAuthClient client=OAuthClient.withIssuer(issuer).clientId("client").clientAuthentication(ClientAuthentication.noneInstance()).httpClient(TestTls.httpClient()).build();
+                assertEquals(OAuthException.Reason.METADATA_INVALID,assertThrows(OAuthValidationException.class,client::warmUp).getReason());
+                assertEquals(0,server.getHitCount("/token"));
+            }
+            assertEquals(2,server.getHitCount(RFC_PATH));
+        }
+    }
+
 }

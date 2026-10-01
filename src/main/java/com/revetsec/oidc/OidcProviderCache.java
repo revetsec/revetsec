@@ -34,6 +34,7 @@ import com.revetsec.internal.http.RawResponse;
 import com.revetsec.internal.http.ResponseProfile;
 import com.revetsec.internal.http.RetryAfter;
 import com.revetsec.internal.http.UriChecks;
+import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.ThreadSafe;
@@ -79,10 +80,10 @@ final class OidcProviderCache<T> {
 	private long failureBackoffNanos;
 	private int consecutiveFailures;
 
-	OidcProviderCache(URI issuer, HttpExchange exchange, OutboundUriPolicy outboundPolicy,
-			boolean allowLoopback, Duration requestTimeout, Clock clock, OAuthObserver observer,
-			Duration minimumTtl, Duration defaultTtl, Duration maximumTtl, Duration cooldown,
-			Function<OidcProviderMetadata, T> validate, LongSupplier nanoTime) {
+	OidcProviderCache(@NonNull URI issuer, @NonNull HttpExchange exchange, @NonNull OutboundUriPolicy outboundPolicy,
+			boolean allowLoopback, @NonNull Duration requestTimeout, @NonNull Clock clock, @NonNull OAuthObserver observer,
+			@NonNull Duration minimumTtl, @NonNull Duration defaultTtl, @NonNull Duration maximumTtl, @NonNull Duration cooldown,
+			@NonNull Function<@NonNull OidcProviderMetadata, @NonNull T> validate, @NonNull LongSupplier nanoTime) {
 		this.issuer = issuer;
 		this.exchange = exchange;
 		this.outboundPolicy = outboundPolicy;
@@ -96,7 +97,7 @@ final class OidcProviderCache<T> {
 		this.cooldown = cooldown; this.validate = validate; this.nanoTime = nanoTime;
 	}
 
-	T get(Deadline deadline) {
+	@NonNull T get(@NonNull Deadline deadline) {
 		Flight<T> mine = null;
 		Flight<T> waitFor = null;
 		long nowNanos = this.nanoTime.getAsLong();
@@ -200,15 +201,15 @@ final class OidcProviderCache<T> {
 		}
 	}
 
-	boolean awaitWaitersForTests(int expected, Duration timeout) throws InterruptedException {
+	boolean awaitWaitersForTests(int expected, @NonNull Duration timeout) throws InterruptedException {
 		long remaining = timeout.toNanos(); this.lock.lock();
 		try {
 			while (this.waiters < expected && remaining > 0) remaining = this.waiterChanged.awaitNanos(remaining);
 			return this.waiters >= expected;
 		} finally { this.lock.unlock(); }
 	}
-	private static <T> T await(CompletableFuture<T> future,
-			Deadline deadline) {
+	private static <T> @NonNull T await(@NonNull CompletableFuture<@NonNull T> future,
+			@NonNull Deadline deadline) {
 		try {
 			long remaining = deadline.remainingNanos();
 			if (remaining <= 0)
@@ -225,7 +226,7 @@ final class OidcProviderCache<T> {
 		}
 	}
 
-	private MetadataSnapshot<T> fetch(Deadline deadline) {
+	private @NonNull MetadataSnapshot<@NonNull T> fetch(@NonNull Deadline deadline) {
 		URI candidate = discoveryUri(this.issuer);
 		if (!UriChecks.isPermitted(candidate, this.outboundPolicy, this.allowLoopback))
 			throw failure(OAuthException.Reason.METADATA_INVALID);
@@ -257,13 +258,13 @@ final class OidcProviderCache<T> {
 			throw failure(OAuthException.Reason.DOCUMENT_MALFORMED);
 		} finally { java.util.Arrays.fill(bytes, (byte) 0); }
 	}
-	static URI discoveryUri(URI issuer) {
+	static @NonNull URI discoveryUri(@NonNull URI issuer) {
 		String value = issuer.toString();
 		return URI.create((value.endsWith("/") ? value.substring(0, value.length() - 1) : value) + "/.well-known/openid-configuration");
 	}
-	private static OAuthException failure(OAuthException.Reason reason) { return OidcTransactionAccess.get().endpointFailure(reason); }
+	private static @NonNull OAuthException failure(OAuthException.@NonNull Reason reason) { return OidcTransactionAccess.get().endpointFailure(reason); }
 
-	static URI reduced(URI uri) {
+	static @NonNull URI reduced(@NonNull URI uri) {
 		String authority = uri.getRawAuthority();
 		if (authority == null)
 			throw new IllegalArgumentException("An endpoint URI needs an authority.");
@@ -274,7 +275,7 @@ final class OidcProviderCache<T> {
 				+ (uri.getRawPath() == null ? "" : uri.getRawPath()));
 	}
 
-	private record MetadataSnapshot<T>(T metadata, Instant fetchedAt, Instant expiresAt) { }
+	private record MetadataSnapshot<T>(@NonNull T metadata, @NonNull Instant fetchedAt, @NonNull Instant expiresAt) { }
 	private static final class Flight<T> {
 		private final CompletableFuture<T> future = new CompletableFuture<>();
 		private final long startedNanos;

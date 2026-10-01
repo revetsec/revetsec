@@ -37,7 +37,7 @@ public final class OidcRefreshResult {
 	private final @Nullable IdToken idToken;
 	private final RefreshToken refreshToken;
 	private final OidcSessionReference original;
-	OidcRefreshResult(TokenResponse tokens, @Nullable IdToken idToken, RefreshToken previous, OidcSessionReference original) {
+	OidcRefreshResult(@NonNull TokenResponse tokens, @Nullable IdToken idToken, @NonNull RefreshToken previous, @NonNull OidcSessionReference original) {
 		this.tokens = requireNonNull(tokens); this.idToken = idToken; this.original = requireNonNull(original);
 		this.refreshToken = tokens.getRefreshToken().orElse(requireNonNull(previous));
 	}

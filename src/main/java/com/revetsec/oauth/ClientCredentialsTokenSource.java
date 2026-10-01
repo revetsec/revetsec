@@ -222,7 +222,7 @@ public final class ClientCredentialsTokenSource {
 		}
 	}
 
-	private static AccessToken await(CompletableFuture<AccessToken> future, Duration deadline) {
+	private static @NonNull AccessToken await(@NonNull CompletableFuture<@NonNull AccessToken> future, @NonNull Duration deadline) {
 		try {
 			return future.get(deadline.toNanos(), TimeUnit.NANOSECONDS);
 		} catch (InterruptedException interrupted) {
@@ -236,7 +236,7 @@ public final class ClientCredentialsTokenSource {
 		}
 	}
 
-	private record Cached(AccessToken token, Instant expiresAt, Instant renewAt) { }
+	private record Cached(@NonNull AccessToken token, @NonNull Instant expiresAt, @NonNull Instant renewAt) { }
 
 	/**
 	 * Configures a source without network I/O.

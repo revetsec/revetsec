@@ -37,7 +37,12 @@ import { readFileSync } from 'node:fs';
 import { generateKeyPairSync, randomBytes } from 'node:crypto';
 import { createServer as createHttpServer } from 'node:http';
 import { createServer as createHttpsServer } from 'node:https';
-import Provider from 'oidc-provider';
+import Provider, { errors } from 'oidc-provider';
+
+// Opt-in M5 resource profile; absent preserves every existing OIDF client setting.
+const resourceMode = process.env.TEST_RESOURCE_MODE === 'm5';
+const testResource = 'https://resource.example.test/mcp';
+const testIntrospectionResource = 'https://resource.example.test/introspection';
 
 const port = Number.parseInt(process.env.PORT ?? '3000', 10);
 const tlsCertFile = process.env.TLS_CERT_FILE;
@@ -83,7 +88,9 @@ const configuration = {
 			client_id: 'revetsec-test-client',
 			client_secret: 'test-only-client-secret-not-a-real-secret',
 			redirect_uris: redirectUris,
-			grant_types: ['authorization_code', 'refresh_token'],
+			grant_types: resourceMode
+				? ['authorization_code', 'refresh_token', 'client_credentials']
+				: ['authorization_code', 'refresh_token'],
 			response_types: ['code'],
 			token_endpoint_auth_method: 'client_secret_basic',
 		},
@@ -107,10 +114,8 @@ const configuration = {
 		devInteractions: { enabled: false },
 		introspection: { enabled: true },
 		revocation: { enabled: true },
-		// Placeholders for later milestones: M5/M6 turn on the
-		// strict-spec legs here, e.g. resourceIndicators with
-		// accessTokenFormat 'jwt' (RFC 9068), jwtIntrospection (RFC 9701),
-		// and PAR/DPoP policy variants.
+		// M5 resource JWTs are enabled only by the explicit resource mode below.
+		// JWT introspection responses, PAR and DPoP policy variants remain later work.
 	},
 	interactions: {
 		url(_ctx, interaction) {
@@ -129,6 +134,27 @@ const configuration = {
 		};
 	},
 };
+
+if (resourceMode) {
+	configuration.scopes = ['openid', 'offline_access', 'read', 'write'];
+	configuration.features.clientCredentials = { enabled: true };
+	configuration.features.resourceIndicators = {
+		enabled: true,
+		async getResourceServerInfo(_ctx, resource) {
+			if (resource !== testResource && resource !== testIntrospectionResource) throw new errors.InvalidTarget();
+			return {
+				scope: 'read write', audience: resource, accessTokenTTL: 300,
+				accessTokenFormat: resource === testResource ? 'jwt' : 'opaque',
+				jwt: resource === testResource ? { sign: { alg: 'RS256' } } : undefined,
+			};
+		},
+	};
+	// These public test-client values authorize only this ephemeral test fixture.
+	configuration.features.introspection.allowedPolicy = async (_ctx, client, token) =>
+		client.clientId === 'revetsec-test-client' && token.clientId === client.clientId;
+	configuration.features.revocation.allowedPolicy = async (_ctx, client, token) =>
+		client.clientId === 'revetsec-test-client' && token.clientId === client.clientId;
+}
 
 const provider = new Provider(issuer, configuration);
 const providerCallback = provider.callback();

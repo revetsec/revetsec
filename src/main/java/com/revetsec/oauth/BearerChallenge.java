@@ -57,7 +57,7 @@ public final class BearerChallenge {
 	@Override
 	public @NonNull String toString() { return "BearerChallenge{parameters=<redacted>}"; }
 
-	private static void requireText(String value, boolean description) {
+	private static void requireText(@NonNull String value, boolean description) {
 		if (value.length() > Limits.BEARER_CHALLENGE_SIZE.getCap())
 			throw new IllegalArgumentException("A challenge parameter is too large.");
 		for (int index = 0; index < value.length(); index++) {
@@ -67,7 +67,7 @@ public final class BearerChallenge {
 		}
 	}
 
-	private static void append(StringBuilder output, String name, String value, int maximum) {
+	private static void append(@NonNull StringBuilder output, @NonNull String name, @NonNull String value, int maximum) {
 		long length = (long) output.length() + (output.length() == 6 ? 1 : 2) + name.length() + 3 + value.length();
 		for (int index = 0; index < value.length(); index++) {
 			char c = value.charAt(index);

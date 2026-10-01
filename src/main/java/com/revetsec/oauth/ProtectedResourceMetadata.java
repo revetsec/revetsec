@@ -108,7 +108,7 @@ public final class ProtectedResourceMetadata {
 	@Override
 	public @NonNull String toString() { return "ProtectedResourceMetadata{configuration=<redacted>}"; }
 
-	static void requireResourceUri(URI uri, boolean allowInsecureLoopback) {
+	static void requireResourceUri(@NonNull URI uri, boolean allowInsecureLoopback) {
 		String scheme = uri.getScheme(); String host = uri.getHost(); int port = uri.getPort();
 		if (scheme == null || uri.isOpaque() || host == null || (port != -1 && (port < 1 || port > 65_535))
 				|| uri.getRawUserInfo() != null || uri.getRawFragment() != null
@@ -118,7 +118,7 @@ public final class ProtectedResourceMetadata {
 					+ "or explicitly allowed loopback HTTP.");
 	}
 
-	static List<String> checkedScopes(@Nullable List<String> values, long maximum) {
+	static @NonNull List<@NonNull String> checkedScopes(@Nullable List<@NonNull String> values, long maximum) {
 		if (values == null) return List.of();
 		if (values.size() > maximum / 3) throw new IllegalArgumentException("The scope list is too large.");
 		LinkedHashSet<String> copy = new LinkedHashSet<>(); long length = 0;
@@ -137,7 +137,7 @@ public final class ProtectedResourceMetadata {
 		return List.copyOf(copy);
 	}
 
-	private static int jsonStringLength(String value) {
+	private static int jsonStringLength(@NonNull String value) {
 		if (value.length() > MAXIMUM_JSON_LENGTH) throw new IllegalArgumentException("Resource metadata is too large.");
 		return JsonString.fromValue(value).toJson().getBytes(StandardCharsets.UTF_8).length;
 	}

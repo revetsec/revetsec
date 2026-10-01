@@ -73,7 +73,7 @@ public final class HttpDate {
 	 * @throws NullPointerException if an argument is {@code null}
 	 */
 	@NonNull
-	public static Optional<Instant> parse(@NonNull String value,
+	public static Optional<@NonNull Instant> parse(@NonNull String value,
 																				@NonNull Instant now) {
 		requireNonNull(value);
 		requireNonNull(now);
@@ -108,7 +108,7 @@ public final class HttpDate {
 	 * @throws NullPointerException if an argument or a value is {@code null}
 	 */
 	@NonNull
-	public static Optional<Instant> parseSingleField(@NonNull List<@NonNull String> fieldValues,
+	public static Optional<@NonNull Instant> parseSingleField(@NonNull List<@NonNull String> fieldValues,
 																									 @NonNull Instant now) {
 		requireNonNull(fieldValues);
 		requireNonNull(now);
@@ -123,7 +123,7 @@ public final class HttpDate {
 	 * {@code Sun, 06 Nov 1994 08:49:37 GMT}: day-name "," SP 2DIGIT SP month SP 4DIGIT SP time SP "GMT".
 	 */
 	@NonNull
-	private static Optional<Instant> imfFixdate(@NonNull String value) {
+	private static Optional<@NonNull Instant> imfFixdate(@NonNull String value) {
 		int dayName = DAY_NAMES.indexOf(value.substring(0, 3));
 		int month = MONTH_NAMES.indexOf(value.substring(8, 11));
 
@@ -140,7 +140,7 @@ public final class HttpDate {
 	 * {@code Sun Nov  6 08:49:37 1994}: day-name SP month SP ( 2DIGIT / ( SP DIGIT ) ) SP time SP 4DIGIT.
 	 */
 	@NonNull
-	private static Optional<Instant> asctimeDate(@NonNull String value) {
+	private static Optional<@NonNull Instant> asctimeDate(@NonNull String value) {
 		int dayName = DAY_NAMES.indexOf(value.substring(0, 3));
 		int month = MONTH_NAMES.indexOf(value.substring(4, 7));
 
@@ -164,7 +164,7 @@ public final class HttpDate {
 	 * {@code Sunday, 06-Nov-94 08:49:37 GMT}: day-name-l "," SP 2DIGIT "-" month "-" 2DIGIT SP time SP "GMT".
 	 */
 	@NonNull
-	private static Optional<Instant> rfc850Date(@NonNull String value,
+	private static Optional<@NonNull Instant> rfc850Date(@NonNull String value,
 																							int comma,
 																							@NonNull Instant now) {
 		int dayName = LONG_DAY_NAMES.indexOf(value.substring(0, comma));
@@ -228,7 +228,7 @@ public final class HttpDate {
 	 * Reads {@code HH:MM:SS} at {@code timeStart} and checks the day name against the date.
 	 */
 	@NonNull
-	private static Optional<Instant> dateTime(int dayNameIndex,
+	private static Optional<@NonNull Instant> dateTime(int dayNameIndex,
 																						int year,
 																						int monthIndex,
 																						int day,

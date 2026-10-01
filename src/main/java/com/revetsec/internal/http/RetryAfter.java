@@ -68,7 +68,7 @@ public final class RetryAfter {
 	 * @throws NullPointerException if an argument is {@code null}
 	 */
 	@NonNull
-	public static Optional<Duration> parse(@NonNull HttpHeaders headers,
+	public static Optional<@NonNull Duration> parse(@NonNull HttpHeaders headers,
 																				 @NonNull Instant now) {
 		requireNonNull(headers);
 		requireNonNull(now);
@@ -84,7 +84,7 @@ public final class RetryAfter {
 	 * @throws NullPointerException if an argument or a value is {@code null}
 	 */
 	@NonNull
-	public static Optional<Duration> parse(@NonNull List<@NonNull String> fieldValues,
+	public static Optional<@NonNull Duration> parse(@NonNull List<@NonNull String> fieldValues,
 																				 @NonNull Instant now) {
 		requireNonNull(fieldValues);
 		requireNonNull(now);
@@ -110,7 +110,7 @@ public final class RetryAfter {
 	}
 
 	@NonNull
-	private static Optional<Duration> delaySeconds(@NonNull String digits) {
+	private static Optional<@NonNull Duration> delaySeconds(@NonNull String digits) {
 		int start = 0;
 
 		while (start < digits.length() - 1 && digits.charAt(start) == '0')

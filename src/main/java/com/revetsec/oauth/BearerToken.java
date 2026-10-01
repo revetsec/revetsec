@@ -16,6 +16,7 @@
 
 package com.revetsec.oauth;
 
+import com.google.errorprone.annotations.CheckReturnValue;
 import com.revetsec.internal.Limits;
 import org.jspecify.annotations.NonNull;
 
@@ -70,39 +71,71 @@ public final class BearerToken {
 	 */
 	public static @NonNull Optional<@NonNull BearerToken> fromAuthorizationHeaderValues(
 			@NonNull List<@NonNull String> values, @NonNull Integer maximumTokenLength) {
+		BearerTokenResult result = fromAuthorizationHeaderValuesResult(values, maximumTokenLength);
+		if (result instanceof BearerTokenResult.Absent) return Optional.empty();
+		if (result instanceof BearerTokenResult.Present present) return Optional.of(present.getToken());
+		throw malformed();
+	}
+
+	/**
+	 * Parses headers using the default limit, returning absent, present or malformed without throwing for input
+	 * rejection. A present credential remains unverified and grants no identity or permission.
+	 * @param values all materialized Authorization values, preserving duplicates
+	 * @return the header parsing outcome
+	 * @throws NullPointerException if the list or its sole value is null
+	 * @since 1.0.0
+	 */
+	@CheckReturnValue
+	public static @NonNull BearerTokenResult fromAuthorizationHeaderValuesResult(@NonNull List<@NonNull String> values) {
+		return fromAuthorizationHeaderValuesResult(values, Limits.BEARER_CREDENTIAL_SIZE.getDefaultIntValue());
+	}
+
+	/**
+	 * Parses headers once with the explicit credential limit. Header grammar and pre-copy bounds are identical to
+	 * {@link #fromAuthorizationHeaderValues(List, Integer)}. No raw credential appears on absent or malformed outcomes.
+	 * @param values all materialized Authorization values, preserving duplicates
+	 * @param maximumTokenLength credential limit from 8 KiB through 1 MiB
+	 * @return the header parsing outcome
+	 * @throws NullPointerException if a required argument is null
+	 * @throws IllegalArgumentException if the configured limit is invalid
+	 * @since 1.0.0
+	 */
+	@CheckReturnValue
+	public static @NonNull BearerTokenResult fromAuthorizationHeaderValuesResult(
+			@NonNull List<@NonNull String> values, @NonNull Integer maximumTokenLength) {
 		requireNonNull(values);
 		int maximum = Limits.BEARER_CREDENTIAL_SIZE.require(requireNonNull(maximumTokenLength));
 		if (values.isEmpty())
-			return Optional.empty();
+			return BearerTokenResult.fromAbsent();
 		if (values.size() != 1)
-			throw malformed();
+			return BearerTokenResult.fromMalformed();
 		String field = requireNonNull(values.get(0));
 		if (field.length() > maximum + PREFIX_ALLOWANCE || field.length() < 8)
-			throw malformed();
+			return BearerTokenResult.fromMalformed();
 		String scheme = "bearer";
 		for (int index = 0; index < scheme.length(); index++) {
 			char c = field.charAt(index);
 			if (c >= 'A' && c <= 'Z') c = (char) (c + ('a' - 'A'));
-			if (c != scheme.charAt(index)) throw malformed();
+			if (c != scheme.charAt(index)) return BearerTokenResult.fromMalformed();
 		}
 		int start = scheme.length();
-		if (field.charAt(start) != ' ') throw malformed();
+		if (field.charAt(start) != ' ') return BearerTokenResult.fromMalformed();
 		while (start < field.length() && field.charAt(start) == ' ') {
-			if (++start > PREFIX_ALLOWANCE) throw malformed();
+			if (++start > PREFIX_ALLOWANCE) return BearerTokenResult.fromMalformed();
 		}
-		if (start == field.length() || field.length() - start > maximum) throw malformed();
+		if (start == field.length() || field.length() - start > maximum) return BearerTokenResult.fromMalformed();
 		boolean padding = false;
 		for (int index = start; index < field.length(); index++) {
 			char c = field.charAt(index);
 			if (c == '=' && index > start) { padding = true; continue; }
 			if (padding || !((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')
 					|| (c >= '0' && c <= '9') || c == '-' || c == '.' || c == '_' || c == '~'
-					|| c == '+' || c == '/')) throw malformed();
+					|| c == '+' || c == '/')) return BearerTokenResult.fromMalformed();
 		}
-		return Optional.of(new BearerToken(field.substring(start)));
+		return BearerTokenResult.fromToken(new BearerToken(field.substring(start)));
 	}
 
-	private static AccessTokenValidationException malformed() {
+	private static @NonNull AccessTokenValidationException malformed() {
 		return AccessTokenValidationException.fromReason(AccessTokenValidationException.Reason.MALFORMED_REQUEST);
 	}
 

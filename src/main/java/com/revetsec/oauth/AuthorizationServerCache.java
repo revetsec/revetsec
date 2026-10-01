@@ -29,6 +29,7 @@ import com.revetsec.internal.http.RawResponse;
 import com.revetsec.internal.http.ResponseProfile;
 import com.revetsec.internal.http.RetryAfter;
 import com.revetsec.internal.http.UriChecks;
+import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.ThreadSafe;
@@ -72,9 +73,9 @@ final class AuthorizationServerCache {
 	private long failureBackoffNanos;
 	private int consecutiveFailures;
 
-	AuthorizationServerCache(URI issuer, HttpExchange exchange, OutboundUriPolicy outboundPolicy,
-			boolean allowLoopback, Duration requestTimeout, Clock clock, OAuthObserver observer,
-			Duration minimumTtl, Duration defaultTtl, Duration maximumTtl, Duration cooldown) {
+	AuthorizationServerCache(@NonNull URI issuer, @NonNull HttpExchange exchange, @NonNull OutboundUriPolicy outboundPolicy,
+			boolean allowLoopback, @NonNull Duration requestTimeout, @NonNull Clock clock, @NonNull OAuthObserver observer,
+			@NonNull Duration minimumTtl, @NonNull Duration defaultTtl, @NonNull Duration maximumTtl, @NonNull Duration cooldown) {
 		this.issuer = issuer;
 		this.exchange = exchange;
 		this.outboundPolicy = outboundPolicy;
@@ -88,7 +89,7 @@ final class AuthorizationServerCache {
 		this.cooldown = cooldown;
 	}
 
-	AuthorizationServerMetadata get(Deadline deadline) {
+	@NonNull AuthorizationServerMetadata get(@NonNull Deadline deadline) {
 		Flight mine = null;
 		Flight waitFor = null;
 		long nowNanos = System.nanoTime();
@@ -175,8 +176,8 @@ final class AuthorizationServerCache {
 		}
 	}
 
-	private static AuthorizationServerMetadata await(CompletableFuture<AuthorizationServerMetadata> future,
-			Deadline deadline) {
+	private static @NonNull AuthorizationServerMetadata await(@NonNull CompletableFuture<@NonNull AuthorizationServerMetadata> future,
+			@NonNull Deadline deadline) {
 		try {
 			long remaining = deadline.remainingNanos();
 			if (remaining <= 0)
@@ -193,7 +194,7 @@ final class AuthorizationServerCache {
 		}
 	}
 
-	private MetadataSnapshot fetch(Deadline deadline) {
+	private @NonNull MetadataSnapshot fetch(@NonNull Deadline deadline) {
 		for (URI candidate : candidates(this.issuer)) {
 			try {
 				UriChecks.requirePermitted(candidate, this.outboundPolicy, this.allowLoopback);
@@ -242,7 +243,7 @@ final class AuthorizationServerCache {
 		throw OAuthErrorResponseException.fromResponse(404, "", java.util.Optional.empty());
 	}
 
-	static List<URI> candidates(URI issuer) {
+	static @NonNull List<@NonNull URI> candidates(@NonNull URI issuer) {
 		String origin = issuer.getScheme() + "://" + issuer.getRawAuthority();
 		String path = issuer.getRawPath() == null ? "" : issuer.getRawPath();
 		String insertedPath = path.endsWith("/") ? path.substring(0, path.length() - 1) : path;
@@ -254,15 +255,17 @@ final class AuthorizationServerCache {
 		return List.copyOf(candidates);
 	}
 
-	static List<URI> allEndpoints(AuthorizationServerMetadata metadata) {
+	static @NonNull List<@NonNull URI> allEndpoints(@NonNull AuthorizationServerMetadata metadata) {
 		List<URI> endpoints = new ArrayList<>();
 		endpoints.add(metadata.getAuthorizationEndpoint());
 		endpoints.add(metadata.getTokenEndpoint());
 		metadata.getRevocationEndpoint().ifPresent(endpoints::add);
+		metadata.getJwksUri().ifPresent(endpoints::add);
+		metadata.getIntrospectionEndpoint().ifPresent(endpoints::add);
 		return endpoints;
 	}
 
-	static URI reduced(URI uri) {
+	static @NonNull URI reduced(@NonNull URI uri) {
 		String authority = uri.getRawAuthority();
 		if (authority == null)
 			throw new IllegalArgumentException("An endpoint URI needs an authority.");
@@ -273,7 +276,7 @@ final class AuthorizationServerCache {
 				+ (uri.getRawPath() == null ? "" : uri.getRawPath()));
 	}
 
-	private record MetadataSnapshot(AuthorizationServerMetadata metadata, Instant expiresAt) { }
+	private record MetadataSnapshot(@NonNull AuthorizationServerMetadata metadata, @NonNull Instant expiresAt) { }
 	private static final class Flight {
 		private final CompletableFuture<AuthorizationServerMetadata> future = new CompletableFuture<>();
 		private final long startedNanos;
