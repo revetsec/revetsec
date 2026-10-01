@@ -19,23 +19,24 @@ Everything `public` or `protected` in the exported packages of the `revetsec` ar
 | `com.revetsec` | shared, protocol-neutral types |
 | `com.revetsec.json` | the immutable JSON value model that appears in public signatures |
 | `com.revetsec.jose` | JWS verification, JWK and JWK Sets, JWT validation |
-| `com.revetsec.oauth` | OAuth 2.0 client (resource server planned) |
+| `com.revetsec.oauth` | OAuth 2.0 client; bearer parsing/challenges/resource metadata (validators planned) |
 | `com.revetsec.oidc` | OpenID Connect relying party |
 | `com.revetsec.saml` | SAML 2.0 service provider |
 | `com.revetsec.scim` | SCIM 2.0 server primitives |
 
 ### Public types so far
 
-Milestone M1 (foundations) added the first public types, milestone M2 added `com.revetsec.jose`, and M3 is adding `com.revetsec.oauth`. The other packages in the table above hold no types yet.
+Milestone M1 (foundations) added the first public types, M2 added `com.revetsec.jose`, M3 added `com.revetsec.oauth`, M4 added `com.revetsec.oidc`, and M5 adds the pure resource-server protocol helpers. SAML and SCIM hold no public types yet.
 
 | Package | Public types | Count |
 | --- | --- | --- |
 | `com.revetsec` | `RevetsecException` (abstract), `ErrorCategory`, `InvalidSealedStateException`, `StateSealer`, `SealingKey`, `OutboundUriPolicy` | 6, plus 1 nested: `StateSealer.Builder` |
 | `com.revetsec.json` | `JsonValue` (sealed), `JsonObject`, `JsonArray`, `JsonString`, `JsonNumber`, `JsonBoolean`, `JsonNull` | 7, plus 1 nested: `JsonObject.Builder` |
 | `com.revetsec.jose` | `JwtValidator`, `Jwt`, `JwtClaims`, `JwsAlgorithm`, `JsonWebKey`, `JsonWebKeySet`, `JsonWebKeySkipReason`, `JsonWebKeySource` (sealed), `StaticJsonWebKeySource`, `RemoteJsonWebKeySource`, `JoseObserver`, `JoseException` (abstract, sealed), `MalformedJoseInputException`, `UnsupportedJoseFeatureException`, `JwtValidationException`, `JsonWebKeySetUnavailableException` | 16, plus 3 nested: `JwtValidator.Builder`, `RemoteJsonWebKeySource.Builder` and the enum `JoseException.Reason` |
-| `com.revetsec.oauth` | `OAuthClient`, `AuthorizationServerMetadata`, `ClientAuthentication`, `ClientSecretBasicEncoding`, `AuthorizationRequestOptions`, `AuthorizationRedirect`, `PendingAuthorization`, `PendingAuthorizationSource`, `PendingAuthorizationStore`, `InMemoryPendingAuthorizationStore`, `AuthorizationResponse`, `TokenResponse`, `AccessToken`, `RefreshToken`, `TokenRequestOptions`, `TokenTypeHint`, `ClientCredentialsTokenSource`, `IssuerParameterPolicy`, `OAuthObserver`, `OAuthEndpoint`, `OAuthException` and six final exception leaves | 27, plus 8 nested: six builders, `AuthorizationRequestOptions.ResponseMode` and `OAuthException.Reason` |
+| `com.revetsec.oauth` | `OAuthClient`, `AuthorizationServerMetadata`, `ClientAuthentication`, `ClientSecretBasicEncoding`, `AuthorizationRequestOptions`, `AuthorizationRedirect`, `PendingAuthorization`, `PendingAuthorizationSource`, `PendingAuthorizationStore`, `InMemoryPendingAuthorizationStore`, `AuthorizationResponse`, `TokenResponse`, `AccessToken`, `RefreshToken`, `TokenRequestOptions`, `TokenTypeHint`, `ClientCredentialsTokenSource`, `IssuerParameterPolicy`, `OAuthObserver`, `OAuthEndpoint`, `OAuthException`, six final OAuth exception leaves, `BearerToken`, `BearerError`, `BearerChallenge`, `ProtectedResourceMetadata`, `AccessTokenValidationException` | 32, plus 11 nested: eight builders, `AuthorizationRequestOptions.ResponseMode`, `OAuthException.Reason` and `AccessTokenValidationException.Reason` |
+| `com.revetsec.oidc` | `OidcClient`, `OidcProviderMetadata`, `OidcAuthenticationOptions`, `IdToken`, `OidcAuthentication`, `OidcSessionReference`, `OidcRefreshResult`, `OidcUserInfo`, `OidcCompatibilityMode`, `OidcObserver`, `OidcException` (abstract, sealed), `OidcValidationException` | 12, plus 4 nested: three builders and `OidcValidationException.Reason` |
 
-`OutboundUriPolicy` has its final shape: two presets, `defaultInstance()` and `publicAddressesOnlyInstance()`, and `permits(URI)`. The addresses and names each preset rejects are dated lists, and adding to them is a security tightening (see below). `JsonValue`'s Javadoc designates its six permitted types for exhaustive matching, so they are frozen within a major version (see below). `JwsAlgorithm`, `JoseException.Reason` and `JsonWebKeySkipReason` are not switch-stable: a later release may add constants, so a `switch` over one needs a default branch. Nor is the sealed `JsonWebKeySource`: a later release may add a permitted implementation.
+`OutboundUriPolicy` has its final shape: two presets, `defaultInstance()` and `publicAddressesOnlyInstance()`, and `permits(URI)`. The addresses and names each preset rejects are dated lists, and adding to them is a security tightening (see below). `JsonValue`'s Javadoc designates its six permitted types for exhaustive matching, so they are frozen within a major version (see below). `JwsAlgorithm`, `JoseException.Reason`, `JsonWebKeySkipReason`, `BearerError` and `AccessTokenValidationException.Reason` are not switch-stable: a later release may add constants, so a `switch` over one needs a default branch. Nor is the sealed `JsonWebKeySource`: a later release may add a permitted implementation.
 
 These are not API:
 
@@ -70,9 +71,9 @@ Each such change is listed under Security in the CHANGELOG, with migration notes
 ## Supported JDKs
 
 * **Source and binary baseline:** Java 17 (`<release>17</release>`). There is no multi-release JAR.
-* **Minimum runtime:** Java 17.0.3, the first Java 17 update with the fixes for CVE-2022-21449 (ECDSA signature verification) and CVE-2022-21476 (XML Signature validation). Networked builders, including `RemoteJsonWebKeySource` and `OAuthClient`, refuse to build on an older runtime, or on Java 18 before 18.0.1, unless the application acknowledges it with `acknowledgeUnpatchedRuntime(true)`, a [compatibility mode](docs/compatibility-modes.md) that is reported to the observer.
+* **Minimum runtime:** Java 17.0.3, the first Java 17 update with the fixes for CVE-2022-21449 (ECDSA signature verification) and CVE-2022-21476 (XML Signature validation). Networked builders, including `RemoteJsonWebKeySource`, `OAuthClient` and `OidcClient`, refuse to build on an older runtime, or on Java 18 before 18.0.1, unless the application acknowledges it with `acknowledgeUnpatchedRuntime(true)`, a [compatibility mode](docs/compatibility-modes.md) that is reported to the observer.
 * **JDK modules:** the JAR uses `java.base`, `java.net.http` (the JDK `HttpClient`, for outbound HTTPS) and `java.logging` (a guarded `FINE` log record when an observer throws). SAML adds `java.xml` and `java.xml.crypto`. A runtime image built with `jlink` needs these modules; the packaged-consumer check runs `jdeps` to keep the list within these five (INV-L1). `jdeps` does not see security providers, which the JDK loads as services: on Java 17 and 21 the elliptic-curve provider, which TLS with EC keys and ECDSA need, is in `jdk.crypto.ec`, so a `jlink` image there needs that module too. On Java 25 and 27, that provider is in `java.base`.
-* **Outbound HTTP:** `RemoteJsonWebKeySource` and `OAuthClient` accept an application's `HttpClient`, which must not follow redirects; `build()` refuses one that does. When none is supplied, Revetsec creates one default client per JVM on first network use, pinned to HTTP/1.1 and never following redirects. That client starts the JDK's own threads; Revetsec's own code starts none. An injected HTTP/2 client has local ALPN, cancellation and protocol-error regression tests on JDK 17 and 27.
+* **Outbound HTTP:** `RemoteJsonWebKeySource`, `OAuthClient` and `OidcClient` accept an application's `HttpClient`, which must not follow redirects; `build()` refuses one that does. When none is supplied, Revetsec creates one default client per JVM on first network use, pinned to HTTP/1.1 and never following redirects. That client starts the JDK's own threads; Revetsec's own code starts none. An injected HTTP/2 client has local ALPN, cancellation and protocol-error regression tests on JDK 17 and 27.
 * **Tested:** CI is configured to build and test on Java 17, 21, 25 and 27 (Amazon Corretto).
 * Revetsec uses no `sun.*` APIs and no `setAccessible` (a source-policy test bans both), so `--add-opens` is never required.
 * The JAR declares `Automatic-Module-Name: com.revetsec`.
@@ -109,4 +110,4 @@ The M3 Keycloak OAuth integration test uses the pinned local 26.7.4 image and a 
 
 ## Conformance suites
 
-None has been run yet. Results will be stated only for suites actually run, with the suite release and the date of the run.
+On 2026-09-30, the local OIDF RP harness ran the four pinned release-v5.3.1 plans on JDK 17 and 21. Each run completed 37 modules: 34 passed and three unsigned-token rejection cases had the suite's documented skip outcome, with no warnings or review findings. [The harness documentation](conformance/README.md) records the release/source and image pins, exact outcome checks and skip dispositions. These are self-run results. Other planned suites have not been run yet.

@@ -16,6 +16,8 @@
 
 package com.revetsec.oidc;
 
+import com.google.errorprone.annotations.CheckReturnValue;
+
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 import javax.annotation.concurrent.Immutable;
@@ -193,8 +195,9 @@ public final class OidcProviderMetadata {
 	 * @since 1.0.0
 	 */
 	@NotThreadSafe
+	@CheckReturnValue
 	public static final class Builder {
-		private final AuthorizationServerMetadata.Builder oauth;
+		private AuthorizationServerMetadata.Builder oauth;
 		private @Nullable URI jwksUri;
 		private @Nullable URI userInfoEndpoint;
 		private Set<String> subjectTypes = Set.of("public");
@@ -205,31 +208,31 @@ public final class OidcProviderMetadata {
 		/**
 		 * Sets the authorizationEndpoint.
 		 *
-		 * @param value endpoint
+		 * @param value endpoint, or null to restore the unset default
 		 * @return this builder
 		 * @since 1.0.0
 		 */
-		public @NonNull Builder authorizationEndpoint(@NonNull URI value) { this.oauth.authorizationEndpoint(value); return this; }
+		public @NonNull Builder authorizationEndpoint(@Nullable URI value) { this.oauth = this.oauth.authorizationEndpoint(value); return this; }
 		/**
 		 * Sets the tokenEndpoint.
 		 *
-		 * @param value endpoint
+		 * @param value endpoint, or null to restore the unset default
 		 * @return this builder
 		 * @since 1.0.0
 		 */
-		public @NonNull Builder tokenEndpoint(@NonNull URI value) { this.oauth.tokenEndpoint(value); return this; }
+		public @NonNull Builder tokenEndpoint(@Nullable URI value) { this.oauth = this.oauth.tokenEndpoint(value); return this; }
 		/**
 		 * Sets the revocationEndpoint.
 		 *
-		 * @param value endpoint
+		 * @param value endpoint, or null to restore the unset default
 		 * @return this builder
 		 * @since 1.0.0
 		 */
-		public @NonNull Builder revocationEndpoint(@NonNull URI value) { this.oauth.revocationEndpoint(value); return this; }
+		public @NonNull Builder revocationEndpoint(@Nullable URI value) { this.oauth = this.oauth.revocationEndpoint(value); return this; }
 		/**
 		 * Sets the jwksUri.
 		 *
-		 * @param value endpoint, or null to clear
+		 * @param value endpoint, or null to restore the unset default, or null to clear
 		 * @return this builder
 		 * @since 1.0.0
 		 */
@@ -237,7 +240,7 @@ public final class OidcProviderMetadata {
 		/**
 		 * Sets the userInfoEndpoint.
 		 *
-		 * @param value endpoint, or null to clear
+		 * @param value endpoint, or null to restore the unset default, or null to clear
 		 * @return this builder
 		 * @since 1.0.0
 		 */
@@ -273,7 +276,7 @@ public final class OidcProviderMetadata {
 		 * @return this builder
 		 * @since 1.0.0
 		 */
-		public @NonNull Builder codeChallengeMethodsSupported(@Nullable Set<@NonNull String> value) { this.oauth.codeChallengeMethodsSupported(value); return this; }
+		public @NonNull Builder codeChallengeMethodsSupported(@Nullable Set<@NonNull String> value) { this.oauth = this.oauth.codeChallengeMethodsSupported(value); return this; }
 		/**
 		 * Replaces the complete advertised tokenEndpointAuthMethodsSupported set.
 		 *
@@ -281,7 +284,7 @@ public final class OidcProviderMetadata {
 		 * @return this builder
 		 * @since 1.0.0
 		 */
-		public @NonNull Builder tokenEndpointAuthMethodsSupported(@Nullable Set<@NonNull String> value) { this.oauth.tokenEndpointAuthMethodsSupported(value); return this; }
+		public @NonNull Builder tokenEndpointAuthMethodsSupported(@Nullable Set<@NonNull String> value) { this.oauth = this.oauth.tokenEndpointAuthMethodsSupported(value); return this; }
 		/**
 		 * Replaces advertised signed-UserInfo algorithms. Null denotes absent advertisement.
 		 * @param value complete supported set, or null
@@ -296,11 +299,11 @@ public final class OidcProviderMetadata {
 		/**
 		 * Sets RFC 9207 callback issuer support.
 		 *
-		 * @param value whether advertised
+		 * @param value whether advertised, or null to restore false
 		 * @return this builder
 		 * @since 1.0.0
 		 */
-		public @NonNull Builder authorizationResponseIssuerSupported(boolean value) { this.oauth.authorizationResponseIssuerSupported(value); return this; }
+		public @NonNull Builder authorizationResponseIssuerSupported(@Nullable Boolean value) { this.oauth = this.oauth.authorizationResponseIssuerSupported(Boolean.TRUE.equals(value)); return this; }
 		/**
 		 * Builds explicit provider metadata without I/O.
 		 *
@@ -308,7 +311,9 @@ public final class OidcProviderMetadata {
 		 * @since 1.0.0
 		 */
 		public @NonNull OidcProviderMetadata build() {
-			if (this.jwksUri == null || this.subjectTypes.isEmpty() || this.algorithms.isEmpty()
+			if (this.jwksUri == null)
+				throw new IllegalStateException("An OIDC provider requires a JWKS URI.");
+			if (this.subjectTypes.isEmpty() || this.algorithms.isEmpty()
 					|| this.responseTypes.isEmpty() || this.algorithms.contains("") || this.responseTypes.contains("")
 					|| this.subjectTypes.stream().anyMatch(type -> !Set.of("public", "pairwise").contains(type)))
 				throw new IllegalArgumentException("The OIDC provider metadata is incomplete or invalid.");

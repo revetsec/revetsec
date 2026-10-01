@@ -64,7 +64,7 @@ public final class OidcUserInfo {
 	 * @return whether signed
 	 * @since 1.0.0
 	 */
-	public boolean isSigned() { return this.signed; }
+	public @NonNull Boolean isSigned() { return this.signed; }
 	/**
 	 * Returns a string email claim, never an account key.
 	 * @return optional email

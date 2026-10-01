@@ -56,7 +56,7 @@ final class PendingAuthorizationStoreTests {
 	@Test
 	void chargesUtf8BytesAndRejectsDuplicateAndOversize() {
 		InMemoryPendingAuthorizationStore store = InMemoryPendingAuthorizationStore.builder()
-				.maximumChargedBytes(64 * 1_024).maximumOpaqueRecordBytes(64 * 1_024)
+				.maximumChargedBytes(64L * 1_024).maximumOpaqueRecordBytes(64 * 1_024)
 				.clock(RewindableClock.fromInstant(START)).build();
 		String record = "€".repeat(13_000); // 39,000 UTF-8 bytes, 13,000 UTF-16 units.
 		store.save("binding", "a", record, START.plusSeconds(60));

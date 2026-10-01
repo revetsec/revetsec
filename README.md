@@ -4,7 +4,7 @@
 
 A zero-dependency Java library for OAuth 2.0 clients and resource servers, OpenID Connect relying parties, JOSE, SAML 2.0 service providers and SCIM 2.0 servers.
 
-**Revetsec is pre-release.** It verifies signed JWTs against JSON Web Key Sets and includes an OAuth 2.0 client. OpenID Connect, SAML and SCIM are still being built; see [Status](#status) for what exists.
+**Revetsec is pre-release.** It verifies signed JWTs against JSON Web Key Sets and includes an OAuth 2.0 client and OpenID Connect relying party. Resource-server validation, OAuth issuance, SAML and SCIM are still being built; see [Status](#status) for what exists.
 
 Revetsec handles the application side of these protocols. It builds outbound requests, parses and validates what comes back, and hands your code a validated result or an exception. Your application keeps its own users, sessions, routes and storage.
 
@@ -16,7 +16,7 @@ Adding single sign-on, API protection or user provisioning to a Java application
 
 Revetsec aims to cover the common application-side needs of these protocols with one artifact and the JDK: one dependency, one version, and one place to report and track security issues.
 
-It is a library, not a framework or an identity server. It has protocol-specific APIs rather than one abstraction over every protocol, and it does not treat an OAuth token response as an authenticated identity.
+It provides protocol-specific library APIs rather than one abstraction over every protocol, and it does not treat an OAuth token response as an authenticated identity.
 
 ### Design Goals
 
@@ -32,7 +32,7 @@ It is a library, not a framework or an identity server. It has protocol-specific
 
 ### Design Non-Goals
 
-- Acting as an OAuth authorization server, OpenID Provider or SAML identity provider
+- Operating a hosted identity service, OpenID Provider or SAML identity provider
 - Implicit, hybrid and resource-owner-password flows, PKCE `plain`, and bearer tokens in query strings
 - SAML Artifact binding, SOAP back-channel, ECP/PAOS, SAML 1.1 and WS-Federation
 - RSA 1.5 and 3DES in XML Encryption, and unauthenticated AES-CBC decryption
@@ -100,6 +100,7 @@ Each adapter lives in its own repository, and its README lists its coordinates. 
 Every area below ships together in a single 1.0.0 release:
 
 - OAuth 2.0 client
+- App-integrated OAuth token issuance, with application-owned users, auth decisions and durable storage
 - OAuth 2.0 resource server
 - OpenID Connect relying party
 - JOSE: JWS verification, JWK and JWK Sets, and JWT validation
@@ -144,7 +145,7 @@ Share one validator, and one key source, across threads. By default a token must
 
 Revetsec is **pre-release**. The version is `1.0.0-SNAPSHOT`, and there is no compatibility promise before 1.0.0; see [COMPATIBILITY.md](COMPATIBILITY.md).
 
-The repository holds the build, contract tests, CI configuration and documents (milestone M0), shared foundations (milestone M1), JOSE (milestone M2) and an OAuth client (milestone M3, still under verification). The foundations include `StateSealer`, an outbound URI policy, a JSON value model and bounded HTTP helper. JOSE has `JwtValidator` with static and remote JSON Web Key Sets. The OAuth client is described above. OpenID Connect, SAML, SCIM and OAuth resource-server code are not yet present.
+The repository includes shared foundations, JOSE, an OAuth client and an OpenID Connect relying party. Resource-server work has started with `BearerToken`, `BearerChallenge`, `ProtectedResourceMetadata` and fixed credential-error types; access-token validators and introspection are next. OAuth token issuance, SAML and SCIM remain planned for 1.0.0. The application supplies users, permissions, sessions, routes and durable storage.
 
 Revetsec has not been independently audited. Its security evidence is meant to be reproducible by anyone and will be listed in [`docs/`](docs/) as it is produced: conformance logs, the interop matrix, the threat model with its invariant-to-test map, review ledgers, penetration-test notes, and fuzz and mutation reports. So far the [threat model](docs/threat-model.md) maps the invariants of the foundations and JOSE to their tests, and [fuzz/README.md](fuzz/README.md) records local fuzzing runs and planted-defect checks for the fuzz targets; the rest does not exist yet.
 
@@ -159,3 +160,11 @@ $ mvn -B -ntp -Dmaven.javadoc.skip=true verify
 ```
 
 [CONTRIBUTING.md](CONTRIBUTING.md) gives the local commands for each check in `ci.yml` that gates a pull request, and names the other workflows. The workflows in [`.github/workflows/`](.github/workflows/) remain the source of truth.
+
+### Resource-server protocol helpers
+
+`BearerToken.fromAuthorizationHeaderValues(values)` parses one raw Authorization field into an **unverified** credential. Preserve duplicates: an empty list means absent; malformed or multiple values produce `invalid_request`. Other authentication schemes follow the same strict malformed-input policy. The credential has no public value getter. Parsing grants no identity or permission; resource validators are still being built.
+
+`BearerChallenge.builder().resourceMetadata(metadataUri).build().getHeaderValue()` supplies a bounded initial challenge with no error. Set a trusted realm, fixed error/description or required operation scopes as appropriate; the application chooses the HTTP status. At least one rendered parameter is required. `ProtectedResourceMetadata.withResource(resourceUri)` renders header-only bearer metadata and derives its well-known URI from raw path/query components, preserving the configured identifier. Both are pure helpers with HTTPS defaults and an explicit loopback HTTP option.
+
+`AuthorizationResponse.fromFormBody(body, contentTypeValues, rawQuery)` validates one bounded raw form Content-Type with absent/UTF-8 charset, then applies the existing duplicate and query/body channel checks. The existing Charset overload is retained. Transports that collapse identical physical header values need a trusted edge that rejects duplicate Authorization and Content-Type fields.

@@ -52,15 +52,15 @@ final class OidcClientZeroThreadTests {
 			ThreadMXBean threads = ManagementFactory.getThreadMXBean();
 			long before = threads.getTotalStartedThreadCount();
 			for (int index = 0; index < 1_000; index++) {
-				OidcClient.withProviderMetadata(metadata)
+				org.junit.jupiter.api.Assertions.assertNotNull(OidcClient.withProviderMetadata(metadata)
 						.clientId("service-" + index)
 						.redirectUri(URI.create("https://rp.example/callback"))
 						.clientAuthentication(ClientAuthentication.fromClientSecretBasic("test-secret"))
 						.userInfoSignedResponseAlgorithm(index % 2 == 0 ? JwsAlgorithm.RS256 : null)
-						.build();
-				OidcClient.withIssuer("https://issuer.example/tenant/")
+						.build());
+				org.junit.jupiter.api.Assertions.assertNotNull(OidcClient.withIssuer("https://issuer.example/tenant/")
 						.clientId("lazy-" + index).redirectUri(URI.create("https://rp.example/callback"))
-						.userInfoSignedResponseAlgorithm(index % 2 == 0 ? JwsAlgorithm.RS256 : null).build();
+						.userInfoSignedResponseAlgorithm(index % 2 == 0 ? JwsAlgorithm.RS256 : null).build());
 			}
 			System.out.println("built 2000 OIDC clients; threads started: "
 					+ (threads.getTotalStartedThreadCount() - before));

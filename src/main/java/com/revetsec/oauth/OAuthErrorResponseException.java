@@ -60,7 +60,7 @@ public final class OAuthErrorResponseException extends OAuthException {
 	 * @return the HTTP status
 	 * @since 1.0.0
 	 */
-	public int getStatus() {
+	public @NonNull Integer getStatus() {
 		return this.status;
 	}
 

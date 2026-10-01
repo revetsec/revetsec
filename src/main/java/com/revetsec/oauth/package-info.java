@@ -15,8 +15,8 @@
  */
 
 /**
- * OAuth 2.0 client flows and resource-server access-token validation (RFC 6749, RFC 7636, RFC 9068,
- * RFC 7662).
+ * OAuth 2.0 client flows and pure bearer presentation, challenge and protected-resource metadata helpers
+ * (RFC 6749, RFC 7636, RFC 6750, RFC 9728). Resource-server validators are still being built.
  * <p>
  * It depends only on {@code com.revetsec.jose}, {@code com.revetsec.json} and the root package.
  *

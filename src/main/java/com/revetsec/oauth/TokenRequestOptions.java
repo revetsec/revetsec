@@ -19,6 +19,7 @@ package com.revetsec.oauth;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
+import com.google.errorprone.annotations.CheckReturnValue;
 import javax.annotation.concurrent.Immutable;
 import javax.annotation.concurrent.NotThreadSafe;
 import java.net.URI;
@@ -27,7 +28,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
-import static java.util.Objects.requireNonNull;
 
 /**
  * Scope, resource and additional form options for one token request. An absent scope set means the refresh request
@@ -98,6 +98,7 @@ public final class TokenRequestOptions {
 	 * @since 1.0.0
 	 */
 	@NotThreadSafe
+	@CheckReturnValue
 	public static final class Builder {
 		private @Nullable Set<@NonNull String> scopes;
 		private @NonNull List<@NonNull URI> resources = List.of();
@@ -127,28 +128,28 @@ public final class TokenRequestOptions {
 		/**
 		 * Replaces the complete ordered resource list.
 		 *
-		 * @param value resources
+		 * @param value resources, or null which restores inheritance
 		 * @return this builder
 		 * @since 1.0.0
 		 */
-		public @NonNull Builder resources(@NonNull List<@NonNull URI> value) {
-			this.resources = List.copyOf(value);
+		public @NonNull Builder resources(@Nullable List<@NonNull URI> value) {
+			this.resources = value == null ? List.of() : List.copyOf(value);
 			for (URI resource : this.resources)
 				if (!resource.isAbsolute() || resource.getFragment() != null)
 					throw new IllegalArgumentException("A resource indicator must be absolute and fragment-free.");
-			this.resourcesOverridden = true;
+			this.resourcesOverridden = value != null;
 			return this;
 		}
 
 		/**
 		 * Replaces the additional nonreserved form parameters.
 		 *
-		 * @param value parameters
+		 * @param value parameters, or null which restores the default
 		 * @return this builder
 		 * @since 1.0.0
 		 */
-		public @NonNull Builder additionalParameters(@NonNull Map<@NonNull String, @NonNull String> value) {
-			Map<String, String> copy = Map.copyOf(value);
+		public @NonNull Builder additionalParameters(@Nullable Map<@NonNull String, @NonNull String> value) {
+			Map<String, String> copy = value == null ? Map.of() : Map.copyOf(value);
 			for (String name : copy.keySet())
 				if (name.isEmpty() || RESERVED.contains(name))
 					throw new IllegalArgumentException("A token request parameter has a reserved name.");

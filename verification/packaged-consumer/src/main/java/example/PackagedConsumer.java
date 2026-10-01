@@ -23,6 +23,11 @@ import com.revetsec.RevetsecException;
 import com.revetsec.SealingKey;
 import com.revetsec.StateSealer;
 import com.revetsec.oauth.AccessToken;
+import com.revetsec.oauth.BearerToken;
+import com.revetsec.oauth.BearerError;
+import com.revetsec.oauth.BearerChallenge;
+import com.revetsec.oauth.ProtectedResourceMetadata;
+import com.revetsec.oauth.AccessTokenValidationException;
 import com.revetsec.oauth.AuthorizationErrorException;
 import com.revetsec.oauth.AuthorizationRedirect;
 import com.revetsec.oauth.AuthorizationRequestOptions;
@@ -463,6 +468,7 @@ public final class PackagedConsumer {
 
 	/** Builds a static OAuth client and begins a PKCE flow without contacting an authorization server. */
 	private static void exerciseOAuth(List<String> calledApi) {
+		exerciseResourceServerProtocols();
 		AuthorizationServerMetadata.Builder metadataBuilder = AuthorizationServerMetadata.withIssuer(ISSUER);
 		AuthorizationServerMetadata metadata = metadataBuilder
 				.authorizationEndpoint(URI.create(ISSUER + "/authorize"))
@@ -503,12 +509,51 @@ public final class PackagedConsumer {
 				InMemoryPendingAuthorizationStore.Builder.class, IssuerParameterPolicy.class, OAuthClient.class,
 				OAuthClient.Builder.class, OAuthEndpoint.class, OAuthErrorResponseException.class,
 				OAuthException.class, OAuthException.Reason.class, OAuthObserver.class, OAuthResponseException.class,
+				BearerToken.class, BearerError.class, BearerChallenge.class, BearerChallenge.Builder.class,
+				ProtectedResourceMetadata.class, ProtectedResourceMetadata.Builder.class,
+				AccessTokenValidationException.class, AccessTokenValidationException.Reason.class,
 				OAuthTransportException.class, OAuthValidationException.class, PendingAuthorization.class,
 				PendingAuthorizationSource.class, PendingAuthorizationStore.class, PendingAuthorizationStoreException.class,
 				RefreshToken.class, TokenRequestOptions.class, TokenRequestOptions.Builder.class, TokenResponse.class,
 				TokenTypeHint.class};
-		require(exported.length == 35, "all OAuth exported types compile from the packaged JAR");
+		require(exported.length == 43, "all OAuth exported types compile from the packaged JAR");
 		calledApi.add("com.revetsec.oauth");
+	}
+
+	/** Exercises the pure resource protocol surface and raw callback envelope without annotation JARs or I/O. */
+	private static void exerciseResourceServerProtocols() {
+		BearerToken credential = BearerToken.fromAuthorizationHeaderValues(List.of("bEaReR a._~+/=="), 8192).orElseThrow();
+		require(!credential.toString().contains("a._~+/=="), "parsed bearer diagnostic is redacted");
+		require(BearerToken.fromAuthorizationHeaderValues(List.of()).isEmpty(), "missing bearer remains absent");
+		try {
+			BearerToken.fromAuthorizationHeaderValues(List.of("Bearer a", "Bearer a"));
+			throw new IllegalStateException("Repeated credential was accepted.");
+		} catch (AccessTokenValidationException error) {
+			require(error.getReason() == AccessTokenValidationException.Reason.MALFORMED_REQUEST
+					&& error.getBearerError() == BearerError.INVALID_REQUEST
+					&& error.getBearerError().getStatusCode() == 400 && error.getJoseReason().isEmpty()
+					&& error.getCause() == null && !error.isTransient(), "fixed malformed bearer verdict");
+		}
+		URI resource = URI.create("https://rs.example/mcp/?q=%2F");
+		ProtectedResourceMetadata.Builder metadataBuilder = ProtectedResourceMetadata.withResource(resource);
+		ProtectedResourceMetadata metadata = metadataBuilder.authorizationServers(List.of("https://as.example"))
+				.scopesSupported(List.of("read", "write", "read")).allowInsecureLoopback(null).build();
+		require(metadata.getResource().toString().equals(resource.toString())
+				&& metadata.getWellKnownUri().toString().equals("https://rs.example/.well-known/oauth-protected-resource/mcp?q=%2F")
+				&& metadata.getAuthorizationServers().equals(List.of("https://as.example"))
+				&& metadata.getScopesSupported().equals(List.of("read", "write"))
+				&& metadata.toJson().contains("\"bearer_methods_supported\":[\"header\"]"), "protected-resource metadata");
+		BearerChallenge.Builder challengeBuilder = BearerChallenge.builder();
+		BearerChallenge challenge = challengeBuilder.realm("api").error(null).errorDescription(null)
+				.scopes(List.of("read")).resourceMetadata(metadata.getWellKnownUri()).maximumHeaderLength(null)
+				.allowInsecureLoopback(null).build();
+		require(challenge.getHeaderValue().startsWith("Bearer realm=\"api\", scope=\"read\"")
+				&& !challenge.getHeaderValue().contains("error="), "initial bearer challenge omits error");
+		require(BearerError.INVALID_TOKEN.getStatusCode() == 401 && BearerError.INVALID_TOKEN.getWireValue().equals("invalid_token")
+				&& BearerError.INSUFFICIENT_SCOPE.getStatusCode() == 403, "bearer error mappings");
+		AuthorizationResponse response = AuthorizationResponse.fromFormBody("state=abc&code=a%2Bb".getBytes(StandardCharsets.UTF_8),
+				List.of("application/x-www-form-urlencoded; charset=utf-8"), "tracking=1");
+		require(response.getCode().equals(Optional.of("a+b")), "raw callback Content-Type envelope");
 	}
 
 	/** Exercises OIDC configuration, pending requests and reference storage without contacting a provider. */

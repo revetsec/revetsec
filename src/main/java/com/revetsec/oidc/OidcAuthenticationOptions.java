@@ -16,6 +16,8 @@
 
 package com.revetsec.oidc;
 
+import com.google.errorprone.annotations.CheckReturnValue;
+
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 import javax.annotation.concurrent.Immutable;
@@ -128,8 +130,9 @@ public final class OidcAuthenticationOptions {
 	 * @since 1.0.0
 	 */
 	@NotThreadSafe
+	@CheckReturnValue
 	public static final class Builder {
-		private final AuthorizationRequestOptions.Builder oauth = AuthorizationRequestOptions.builder();
+		private AuthorizationRequestOptions.Builder oauth = AuthorizationRequestOptions.builder();
 		private @Nullable Set<String> scopes;
 		private @Nullable List<URI> resources;
 		private @Nullable Set<String> acrValues;
@@ -176,7 +179,7 @@ public final class OidcAuthenticationOptions {
 		 * @return this builder
 		 * @since 1.0.0
 		 */
-		public @NonNull Builder prompt(@Nullable String value) { if (value != null) { List<String> prompts = List.of(value.split(" ", -1)); if (prompts.stream().anyMatch(p -> !Set.of("none", "login", "consent", "select_account").contains(p)) || Set.copyOf(prompts).size() != prompts.size() || (prompts.contains("none") && prompts.size() != 1)) throw new IllegalArgumentException("The OIDC prompt is invalid."); } this.oauth.prompt(value); return this; }
+		public @NonNull Builder prompt(@Nullable String value) { if (value != null) { List<String> prompts = List.of(value.split(" ", -1)); if (prompts.stream().anyMatch(p -> !Set.of("none", "login", "consent", "select_account").contains(p)) || Set.copyOf(prompts).size() != prompts.size() || (prompts.contains("none") && prompts.size() != 1)) throw new IllegalArgumentException("The OIDC prompt is invalid."); } this.oauth = this.oauth.prompt(value); return this; }
 		/**
 		 * Sets the login hint. Null restores the default.
 		 *
@@ -184,7 +187,7 @@ public final class OidcAuthenticationOptions {
 		 * @return this builder
 		 * @since 1.0.0
 		 */
-		public @NonNull Builder loginHint(@Nullable String value) { this.oauth.loginHint(value); return this; }
+		public @NonNull Builder loginHint(@Nullable String value) { this.oauth = this.oauth.loginHint(value); return this; }
 		/**
 		 * Sets the complete application data. Null restores the default.
 		 *
@@ -192,7 +195,7 @@ public final class OidcAuthenticationOptions {
 		 * @return this builder
 		 * @since 1.0.0
 		 */
-		public @NonNull Builder applicationData(@Nullable Map<@NonNull String, @NonNull String> value) { this.oauth.applicationData(value == null ? Map.of() : value); return this; }
+		public @NonNull Builder applicationData(@Nullable Map<@NonNull String, @NonNull String> value) { this.oauth = this.oauth.applicationData(value == null ? Map.of() : value); return this; }
 		/**
 		 * Sets the complete nonreserved authorization parameters. Null restores the default.
 		 *
@@ -200,7 +203,7 @@ public final class OidcAuthenticationOptions {
 		 * @return this builder
 		 * @since 1.0.0
 		 */
-		public @NonNull Builder additionalParameters(@Nullable Map<@NonNull String, @NonNull String> value) { this.oauth.additionalParameters(value == null ? Map.of() : value); return this; }
+		public @NonNull Builder additionalParameters(@Nullable Map<@NonNull String, @NonNull String> value) { this.oauth = this.oauth.additionalParameters(value == null ? Map.of() : value); return this; }
 		/**
 		 * Sets callback delivery. Null restores query delivery.
 		 *
@@ -208,7 +211,7 @@ public final class OidcAuthenticationOptions {
 		 * @return this builder
 		 * @since 1.0.0
 		 */
-		public @NonNull Builder responseMode(AuthorizationRequestOptions.@Nullable ResponseMode value) { this.oauth.responseMode(value == null ? AuthorizationRequestOptions.ResponseMode.QUERY : value); return this; }
+		public @NonNull Builder responseMode(AuthorizationRequestOptions.@Nullable ResponseMode value) { this.oauth = this.oauth.responseMode(value == null ? AuthorizationRequestOptions.ResponseMode.QUERY : value); return this; }
 		/**
 		 * Builds immutable login options.
 		 *

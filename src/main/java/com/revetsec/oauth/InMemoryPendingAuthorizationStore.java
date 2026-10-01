@@ -20,7 +20,9 @@ import com.revetsec.internal.Limits;
 import com.revetsec.internal.encoding.EncodingException;
 import com.revetsec.internal.encoding.StrictUtf8;
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
+import com.google.errorprone.annotations.CheckReturnValue;
 import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
 import java.time.Clock;
@@ -192,6 +194,7 @@ public final class InMemoryPendingAuthorizationStore implements PendingAuthoriza
 	 * @since 1.0.0
 	 */
 	@NotThreadSafe
+	@CheckReturnValue
 	public static final class Builder {
 		private int maximumLiveEntries = Limits.PENDING_AUTHORIZATION_STORE_ENTRIES.getDefaultIntValue();
 		private long maximumChargedBytes = Limits.PENDING_AUTHORIZATION_STORE_BYTES.getDefaultValue();
@@ -204,51 +207,48 @@ public final class InMemoryPendingAuthorizationStore implements PendingAuthoriza
 		/**
 		 * Sets the maximum live entry count.
 		 *
-		 * @param value 16 to 65,536
+		 * @param value 16 to 65,536, or null which restores the default
 		 * @return this builder
 		 * @since 1.0.0
 		 */
-		public @NonNull Builder maximumLiveEntries(int value) {
-			Limits.PENDING_AUTHORIZATION_STORE_ENTRIES.require(value);
-			this.maximumLiveEntries = value;
+		public @NonNull Builder maximumLiveEntries(@Nullable Integer value) {
+			this.maximumLiveEntries = value == null ? Limits.PENDING_AUTHORIZATION_STORE_ENTRIES.getDefaultIntValue() : Math.toIntExact(Limits.PENDING_AUTHORIZATION_STORE_ENTRIES.require(value));
 			return this;
 		}
 
 		/**
 		 * Sets the maximum charged UTF-8 bytes across live records.
 		 *
-		 * @param value 64 KiB to 64 MiB
+		 * @param value 64 KiB to 64 MiB, or null which restores the default
 		 * @return this builder
 		 * @since 1.0.0
 		 */
-		public @NonNull Builder maximumChargedBytes(long value) {
-			Limits.PENDING_AUTHORIZATION_STORE_BYTES.require(value);
-			this.maximumChargedBytes = value;
+		public @NonNull Builder maximumChargedBytes(@Nullable Long value) {
+			this.maximumChargedBytes = value == null ? Limits.PENDING_AUTHORIZATION_STORE_BYTES.getDefaultValue() : Limits.PENDING_AUTHORIZATION_STORE_BYTES.require(value);
 			return this;
 		}
 
 		/**
 		 * Sets the maximum UTF-8 bytes in one opaque record.
 		 *
-		 * @param value 1 KiB to 64 KiB
+		 * @param value 1 KiB to 64 KiB, or null which restores the default
 		 * @return this builder
 		 * @since 1.0.0
 		 */
-		public @NonNull Builder maximumOpaqueRecordBytes(int value) {
-			Limits.PENDING_AUTHORIZATION_RECORD_BYTES.require(value);
-			this.maximumOpaqueRecordBytes = value;
+		public @NonNull Builder maximumOpaqueRecordBytes(@Nullable Integer value) {
+			this.maximumOpaqueRecordBytes = value == null ? Limits.PENDING_AUTHORIZATION_RECORD_BYTES.getDefaultIntValue() : Math.toIntExact(Limits.PENDING_AUTHORIZATION_RECORD_BYTES.require(value));
 			return this;
 		}
 
 		/**
 		 * Sets the clock used for expiry checks.
 		 *
-		 * @param value the clock
+		 * @param value the clock, or null which restores the default
 		 * @return this builder
 		 * @since 1.0.0
 		 */
-		public @NonNull Builder clock(@NonNull Clock value) {
-			this.clock = requireNonNull(value);
+		public @NonNull Builder clock(@Nullable Clock value) {
+			this.clock = value == null ? Clock.systemUTC() : value;
 			return this;
 		}
 

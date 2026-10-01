@@ -30,6 +30,7 @@ import com.revetsec.json.JsonValue;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
+import com.google.errorprone.annotations.CheckReturnValue;
 import javax.annotation.concurrent.Immutable;
 import javax.annotation.concurrent.NotThreadSafe;
 import java.net.URI;
@@ -107,16 +108,16 @@ public final class AuthorizationServerMetadata {
 					.authorizationEndpoint(URI.create(requiredString(members, "authorization_endpoint")))
 					.tokenEndpoint(URI.create(requiredString(members, "token_endpoint")));
 			if (members.containsKey("revocation_endpoint"))
-				builder.revocationEndpoint(URI.create(requiredString(members, "revocation_endpoint")));
+				builder = builder.revocationEndpoint(URI.create(requiredString(members, "revocation_endpoint")));
 			if (members.containsKey("code_challenge_methods_supported"))
-				builder.codeChallengeMethodsSupported(stringSet(members.get("code_challenge_methods_supported")));
+				builder = builder.codeChallengeMethodsSupported(stringSet(members.get("code_challenge_methods_supported")));
 			if (members.containsKey("token_endpoint_auth_methods_supported"))
-				builder.tokenEndpointAuthMethodsSupported(stringSet(members.get("token_endpoint_auth_methods_supported")));
+				builder = builder.tokenEndpointAuthMethodsSupported(stringSet(members.get("token_endpoint_auth_methods_supported")));
 			if (members.containsKey("authorization_response_iss_parameter_supported")) {
 				JsonValue value = members.get("authorization_response_iss_parameter_supported");
 				if (!(value instanceof JsonBoolean booleanValue))
 					throw OAuthResponseException.fromReason(OAuthException.Reason.DOCUMENT_MALFORMED);
-				builder.authorizationResponseIssuerSupported(booleanValue.getValue());
+				builder = builder.authorizationResponseIssuerSupported(booleanValue.getValue());
 			}
 			return builder.buildDiscovered();
 		} catch (EncodingException | JsonParseException | IllegalArgumentException exception) {
@@ -203,7 +204,7 @@ public final class AuthorizationServerMetadata {
 	 * @return whether support was advertised
 	 * @since 1.0.0
 	 */
-	public boolean isAuthorizationResponseIssuerSupported() {
+	public @NonNull Boolean isAuthorizationResponseIssuerSupported() {
 		return this.authorizationResponseIssuerSupported;
 	}
 
@@ -213,7 +214,7 @@ public final class AuthorizationServerMetadata {
 	 * @return whether discovered
 	 * @since 1.0.0
 	 */
-	public boolean isRemotelyDiscovered() { return this.remotelyDiscovered; }
+	public @NonNull Boolean isRemotelyDiscovered() { return this.remotelyDiscovered; }
 
 	/**
 	 * Builds manually configured metadata.
@@ -222,6 +223,7 @@ public final class AuthorizationServerMetadata {
 	 * @since 1.0.0
 	 */
 	@NotThreadSafe
+	@CheckReturnValue
 	public static final class Builder {
 		private final @NonNull String issuer;
 		private @Nullable URI authorizationEndpoint;
@@ -240,31 +242,31 @@ public final class AuthorizationServerMetadata {
 		/**
 		 * Sets the authorization endpoint.
 		 *
-		 * @param value endpoint
+		 * @param value endpoint, or null to restore the unset default
 		 * @return this builder
 		 * @since 1.0.0
 		 */
-		public @NonNull Builder authorizationEndpoint(@NonNull URI value) {
-			this.authorizationEndpoint = requireNonNull(value);
+		public @NonNull Builder authorizationEndpoint(@Nullable URI value) {
+			this.authorizationEndpoint = value;
 			return this;
 		}
 
 		/**
 		 * Sets the token endpoint.
 		 *
-		 * @param value endpoint
+		 * @param value endpoint, or null to restore the unset default
 		 * @return this builder
 		 * @since 1.0.0
 		 */
-		public @NonNull Builder tokenEndpoint(@NonNull URI value) {
-			this.tokenEndpoint = requireNonNull(value);
+		public @NonNull Builder tokenEndpoint(@Nullable URI value) {
+			this.tokenEndpoint = value;
 			return this;
 		}
 
 		/**
 		 * Sets an optional revocation endpoint.
 		 *
-		 * @param value endpoint, or null to omit
+		 * @param value endpoint, or null to restore the unset default, or null to omit
 		 * @return this builder
 		 * @since 1.0.0
 		 */
@@ -300,12 +302,12 @@ public final class AuthorizationServerMetadata {
 		/**
 		 * Sets whether RFC 9207 issuer response support was advertised.
 		 *
-		 * @param value whether advertised
+		 * @param value whether advertised, or null which restores the default
 		 * @return this builder
 		 * @since 1.0.0
 		 */
-		public @NonNull Builder authorizationResponseIssuerSupported(boolean value) {
-			this.authorizationResponseIssuerSupported = value;
+		public @NonNull Builder authorizationResponseIssuerSupported(@Nullable Boolean value) {
+			this.authorizationResponseIssuerSupported = Boolean.TRUE.equals(value);
 			return this;
 		}
 
@@ -317,7 +319,7 @@ public final class AuthorizationServerMetadata {
 		 */
 		public @NonNull AuthorizationServerMetadata build() {
 			if (this.authorizationEndpoint == null || this.tokenEndpoint == null)
-				throw new IllegalArgumentException("Authorization and token endpoints are required.");
+				throw new IllegalStateException("Authorization and token endpoints are required.");
 			return new AuthorizationServerMetadata(this, false);
 		}
 

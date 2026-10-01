@@ -243,6 +243,9 @@ final class FrozenLimitsTests {
 					8 * KIB, 2 * KIB, 32 * KIB),
 			amounts("AUTHORIZATION_RESPONSE_QUERY_SIZE", "Authorization-response query size", Unit.BYTES, 32 * KIB,
 					4 * KIB, 128 * KIB),
+			// M5-1 approved bearer credential and rendered challenge limits.
+			amounts("BEARER_CREDENTIAL_SIZE", "Bearer credential size", Unit.BYTES, 64 * KIB, 8 * KIB, MIB),
+			amounts("BEARER_CHALLENGE_SIZE", "Bearer challenge size", Unit.BYTES, 8 * KIB, KIB, 64 * KIB),
 			// SAMLResponse decoded.
 			amounts("SAML_RESPONSE_DECODED_SIZE", "Decoded SAMLResponse size", Unit.BYTES, 256 * KIB, 16 * KIB,
 					4 * MIB),
@@ -320,7 +323,7 @@ final class FrozenLimitsTests {
 	@Test
 	void theRegistryHoldsExactlyTheApprovedRowsInOrder() throws IllegalAccessException {
 		List<String> approved = APPROVED_ROWS.stream().map(Row::getConstant).toList();
-		Assertions.assertEquals(49, approved.size(), "M3 adds seven rows to the previous 42");
+		Assertions.assertEquals(51, approved.size(), "M5 adds two rows to the previous 49");
 
 		Map<String, Limit> constants = constants();
 		IdentityHashMap<Limit, String> names = new IdentityHashMap<>();

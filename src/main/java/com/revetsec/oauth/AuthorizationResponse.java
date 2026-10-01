@@ -17,6 +17,7 @@
 package com.revetsec.oauth;
 
 import com.revetsec.internal.Limits;
+import com.revetsec.internal.http.MediaType;
 import com.revetsec.internal.encoding.EncodingException;
 import com.revetsec.internal.encoding.QueryParameters;
 import com.revetsec.internal.encoding.StrictUtf8;
@@ -92,6 +93,37 @@ public final class AuthorizationResponse {
 		} catch (EncodingException exception) {
 			throw OAuthResponseException.fromReason(OAuthException.Reason.CALLBACK_MALFORMED);
 		}
+	}
+
+	/**
+	 * Parses a form-post callback after validating its raw Content-Type values. Requires exactly one form field,
+	 * with absent or UTF-8 charset and no duplicate MIME parameters. Caps the field at 8,192 characters before
+	 * MIME parsing using the authorization-response parameter default; accepted field characters each occupy one
+	 * ISO-8859-1 octet. Preserve materialized duplicates; identical physical fields lost by a transport must be
+	 * rejected at a trusted edge. Body/query multiplicity and split-channel checks are the same as the Charset overload.
+	 *
+	 * @param body the raw form bytes
+	 * @param contentTypeHeaderValues all materialized Content-Type values
+	 * @param rawQueryOrNull the raw URL query, if any
+	 * @return the untrusted parsed callback
+	 * @throws OAuthResponseException if MIME, size, charset or callback checks fail
+	 * @throws NullPointerException if body, header list or its sole field is null
+	 * @since 1.0.0
+	 */
+	public static @NonNull AuthorizationResponse fromFormBody(byte @NonNull [] body,
+			@NonNull List<@NonNull String> contentTypeHeaderValues, @Nullable String rawQueryOrNull) {
+		requireNonNull(body);
+		requireNonNull(contentTypeHeaderValues);
+		if (contentTypeHeaderValues.size() != 1)
+			throw OAuthResponseException.fromReason(OAuthException.Reason.CALLBACK_MALFORMED);
+		String field = requireNonNull(contentTypeHeaderValues.get(0));
+		if (field.length() > Limits.AUTHORIZATION_RESPONSE_PARAMETER_SIZE.getDefaultIntValue())
+			throw OAuthResponseException.fromReason(OAuthException.Reason.CALLBACK_MALFORMED);
+		MediaType type = MediaType.parse(field).orElseThrow(() ->
+				OAuthResponseException.fromReason(OAuthException.Reason.CALLBACK_MALFORMED));
+		if (!type.getEssence().equals("application/x-www-form-urlencoded") || !type.hasUtf8OrNoCharset())
+			throw OAuthResponseException.fromReason(OAuthException.Reason.CALLBACK_MALFORMED);
+		return fromFormBody(body, StandardCharsets.UTF_8, rawQueryOrNull);
 	}
 
 	/**

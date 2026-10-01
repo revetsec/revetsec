@@ -20,6 +20,7 @@ import com.revetsec.internal.Limits;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
+import com.google.errorprone.annotations.CheckReturnValue;
 import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
 import java.net.URI;
@@ -62,7 +63,7 @@ public final class ClientCredentialsTokenSource {
 	private ClientCredentialsTokenSource(@NonNull Builder builder) {
 		this.client = builder.client;
 		TokenRequestOptions.Builder optionsBuilder = TokenRequestOptions.builder().scopes(builder.scopes);
-		if (builder.resourcesOverridden) optionsBuilder.resources(builder.resources);
+		if (builder.resourcesOverridden) optionsBuilder = optionsBuilder.resources(builder.resources);
 		this.options = optionsBuilder.build();
 		this.fallbackCacheDuration = builder.fallbackCacheDuration;
 		this.maximumCacheDuration = builder.maximumCacheDuration;
@@ -244,6 +245,7 @@ public final class ClientCredentialsTokenSource {
 	 * @since 1.0.0
 	 */
 	@NotThreadSafe
+	@CheckReturnValue
 	public static final class Builder {
 		private final @NonNull OAuthClient client;
 		private @Nullable Set<@NonNull String> scopes;
@@ -270,49 +272,49 @@ public final class ClientCredentialsTokenSource {
 		/**
 		 * Replaces the complete resource list.
 		 *
-		 * @param value resources
+		 * @param value resources, or null which restores inheritance
 		 * @return this builder
 		 * @since 1.0.0
 		 */
-		public @NonNull Builder resources(@NonNull List<@NonNull URI> value) {
+		public @NonNull Builder resources(@Nullable List<@NonNull URI> value) {
 			this.resources = TokenRequestOptions.builder().resources(value).build().getResources();
-			this.resourcesOverridden = true;
+			this.resourcesOverridden = value != null;
 			return this;
 		}
 
 		/**
 		 * Sets the fallback cache lifetime when expires_in is absent.
 		 *
-		 * @param value fallback duration
+		 * @param value fallback duration, or null which restores the default
 		 * @return this builder
 		 * @since 1.0.0
 		 */
-		public @NonNull Builder fallbackCacheDuration(@NonNull Duration value) {
-			this.fallbackCacheDuration = Limits.CLIENT_CREDENTIALS_FALLBACK_CACHE_DURATION.require(value);
+		public @NonNull Builder fallbackCacheDuration(@Nullable Duration value) {
+			this.fallbackCacheDuration = value == null ? Limits.CLIENT_CREDENTIALS_FALLBACK_CACHE_DURATION.getDefaultDuration() : Limits.CLIENT_CREDENTIALS_FALLBACK_CACHE_DURATION.require(value);
 			return this;
 		}
 
 		/**
 		 * Sets the maximum cache lifetime.
 		 *
-		 * @param value maximum duration
+		 * @param value maximum duration, or null which restores the default
 		 * @return this builder
 		 * @since 1.0.0
 		 */
-		public @NonNull Builder maximumCacheDuration(@NonNull Duration value) {
-			this.maximumCacheDuration = Limits.CLIENT_CREDENTIALS_MAXIMUM_CACHE_DURATION.require(value);
+		public @NonNull Builder maximumCacheDuration(@Nullable Duration value) {
+			this.maximumCacheDuration = value == null ? Limits.CLIENT_CREDENTIALS_MAXIMUM_CACHE_DURATION.getDefaultDuration() : Limits.CLIENT_CREDENTIALS_MAXIMUM_CACHE_DURATION.require(value);
 			return this;
 		}
 
 		/**
 		 * Sets the renewal lead time, clipped to half the actual lifetime.
 		 *
-		 * @param value lead time
+		 * @param value lead time, or null which restores the default
 		 * @return this builder
 		 * @since 1.0.0
 		 */
-		public @NonNull Builder renewBefore(@NonNull Duration value) {
-			this.renewBefore = Limits.CLIENT_CREDENTIALS_RENEW_BEFORE.require(value);
+		public @NonNull Builder renewBefore(@Nullable Duration value) {
+			this.renewBefore = value == null ? Limits.CLIENT_CREDENTIALS_RENEW_BEFORE.getDefaultDuration() : Limits.CLIENT_CREDENTIALS_RENEW_BEFORE.require(value);
 			return this;
 		}
 

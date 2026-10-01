@@ -187,6 +187,16 @@ public final class Limits {
 	public static final Limit AUTHORIZATION_RESPONSE_QUERY_SIZE = Limit.fromAmounts(
 			"Authorization-response query size", Unit.BYTES, 32 * KIB, 4 * KIB, 128 * KIB);
 
+	// Bearer presentation and challenges
+
+	/** Maximum bearer credential size, independent of the fixed header prefix allowance. */
+	public static final Limit BEARER_CREDENTIAL_SIZE = Limit.fromAmounts("Bearer credential size", Unit.BYTES,
+			64 * KIB, 8 * KIB, MIB);
+
+	/** Maximum rendered WWW-Authenticate Bearer field size, including escaping. */
+	public static final Limit BEARER_CHALLENGE_SIZE = Limit.fromAmounts("Bearer challenge size", Unit.BYTES,
+			8 * KIB, KIB, 64 * KIB);
+
 	// SAML and XML
 
 	/**
@@ -406,6 +416,8 @@ public final class Limits {
 			JSON_NUMBER_EXPONENT_MAGNITUDE,
 			AUTHORIZATION_RESPONSE_PARAMETER_SIZE,
 			AUTHORIZATION_RESPONSE_QUERY_SIZE,
+			BEARER_CREDENTIAL_SIZE,
+			BEARER_CHALLENGE_SIZE,
 			SAML_RESPONSE_DECODED_SIZE,
 			XML_DEPTH,
 			XML_ATTRIBUTES_PER_ELEMENT,

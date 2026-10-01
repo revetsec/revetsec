@@ -90,7 +90,7 @@
 
 		<!-- Coverage floors (coverage profile), instruction and branch COVEREDRATIO. The critical floor applies to
 		     every package in the critical set: internal.json, internal.crypto, internal.encoding and internal.http
-		     (M1), jose and internal.jose (M2), and internal.xml, oidc and saml, which have no code yet. Each critical
+		     (M1), jose and internal.jose (M2), oidc and internal.oauth (M4), and internal.xml and saml, which have no code yet. Each critical
 		     package with code also has its own floor, set from measured runs.
 
 		     M2 (plan A-6), measured 2026-09-27 and 2026-09-28 on an arm64 Mac with Corretto 17.0.20.1, 21.0.11,
@@ -127,6 +127,10 @@
 		     single-run ratios were bundle 0.96565 / 0.92644 and oauth 0.8843 / 0.6932. The bundle floor moves to
 		     0.96 / 0.92 and oauth gets its own 0.87 / 0.67 floor. The existing M2 package floors remain unchanged.
 
+		     M4 measures the integrated OIDC tree separately on Corretto 17, 21 and 27 at exit. OIDC gets its own
+		     0.92 / 0.85 floor; the shared internal.oauth transaction bridge gets 0.94 / 0.88. The existing bundle,
+		     critical and M1-M3 package floors remain unchanged. Nothing is excluded.
+
 		     Code that runs only in a child JVM (ChildJvm) is never counted, because the child does not get the
 		     JaCoCo agent: the default HTTP client's startup failure, the zero-thread build checks (M1 exit criteria
 		     13 and 14, M2 exit criterion 17), and StateSealer's refusing-provider and failing-SecureRandom tests.
@@ -150,6 +154,10 @@
 		<revetsec.coverage.jose.branch>0.95</revetsec.coverage.jose.branch>
 		<revetsec.coverage.oauth.instruction>0.87</revetsec.coverage.oauth.instruction>
 		<revetsec.coverage.oauth.branch>0.67</revetsec.coverage.oauth.branch>
+		<revetsec.coverage.oidc.instruction>0.92</revetsec.coverage.oidc.instruction>
+		<revetsec.coverage.oidc.branch>0.85</revetsec.coverage.oidc.branch>
+		<revetsec.coverage.internal.oauth.instruction>0.94</revetsec.coverage.internal.oauth.instruction>
+		<revetsec.coverage.internal.oauth.branch>0.88</revetsec.coverage.internal.oauth.branch>
 	</properties>
 
 	<build>
@@ -569,6 +577,7 @@
 												<include>com?revetsec?jose</include>
 												<include>com?revetsec?internal?xml</include>
 												<include>com?revetsec?oidc</include>
+												<include>com?revetsec?internal?oauth</include>
 												<include>com?revetsec?saml</include>
 											</includes>
 											<limits>
@@ -707,6 +716,42 @@
 											<counter>BRANCH</counter>
 											<value>COVEREDRATIO</value>
 											<minimum>${revetsec.coverage.oauth.branch}</minimum>
+										</limit>
+									</limits>
+								</rule>
+								<rule>
+									<element>PACKAGE</element>
+									<includes>
+										<include>com?revetsec?oidc</include>
+									</includes>
+									<limits>
+										<limit>
+											<counter>INSTRUCTION</counter>
+											<value>COVEREDRATIO</value>
+											<minimum>${revetsec.coverage.oidc.instruction}</minimum>
+										</limit>
+										<limit>
+											<counter>BRANCH</counter>
+											<value>COVEREDRATIO</value>
+											<minimum>${revetsec.coverage.oidc.branch}</minimum>
+										</limit>
+									</limits>
+								</rule>
+								<rule>
+									<element>PACKAGE</element>
+									<includes>
+										<include>com?revetsec?internal?oauth</include>
+									</includes>
+									<limits>
+										<limit>
+											<counter>INSTRUCTION</counter>
+											<value>COVEREDRATIO</value>
+											<minimum>${revetsec.coverage.internal.oauth.instruction}</minimum>
+										</limit>
+										<limit>
+											<counter>BRANCH</counter>
+											<value>COVEREDRATIO</value>
+											<minimum>${revetsec.coverage.internal.oauth.branch}</minimum>
 										</limit>
 									</limits>
 								</rule>

@@ -16,6 +16,8 @@
 
 package com.revetsec.oidc;
 
+import com.google.errorprone.annotations.CheckReturnValue;
+
 import com.revetsec.OutboundUriPolicy;
 import com.revetsec.internal.Limits;
 import com.revetsec.internal.ObserverDispatch;
@@ -264,7 +266,7 @@ public final class OidcClient {
 	 */
 	public @NonNull OidcUserInfo fetchUserInfo(@NonNull OidcAuthentication authentication, @NonNull OidcRefreshResult refreshed) {
 		requireNonNull(authentication); requireNonNull(refreshed);
-		if (!authentication.getSessionReference().toSerializedForm().equals(refreshed.getSessionReference().toSerializedForm())) {
+		if (!authentication.getSessionReference().matchesOriginalReference(refreshed.getSessionReference())) {
 			OidcValidationException failure = OidcValidationException.fromReason(OidcValidationException.Reason.USERINFO_AUTHENTICATION_MISMATCH);
 			ObserverDispatch.dispatch(this.observer, observer -> observer.didRejectUserInfo(failure)); throw failure;
 		}
@@ -329,6 +331,7 @@ public final class OidcClient {
 	 * @since 1.0.0
 	 */
 	@NotThreadSafe
+	@CheckReturnValue
 	public static final class Builder {
 		private final String issuer;
 		private final @Nullable OidcProviderMetadata metadata;
@@ -346,7 +349,7 @@ public final class OidcClient {
 		private @Nullable JwsAlgorithm userInfoAlgorithm;
 		private Duration clockSkew = Duration.ofSeconds(60);
 		private Duration maximumIdTokenAge = Duration.ofMinutes(5);
-		private Duration pendingLifetime = Duration.ofMinutes(10);
+		private Duration pendingLifetime = Limits.PENDING_STATE_LIFETIME.getDefaultDuration();
 		private Duration requestTimeout = Duration.ofSeconds(10);
 		private Duration totalDeadline = Duration.ofSeconds(15);
 		private Clock clock = Clock.systemUTC();
@@ -486,7 +489,7 @@ public final class OidcClient {
 		 * @return this builder
 		 * @since 1.0.0
 		 */
-		public @NonNull Builder pendingAuthorizationLifetime(@Nullable Duration value) { this.pendingLifetime = value == null ? Duration.ofMinutes(10) : Limits.PENDING_STATE_LIFETIME.require(value); return this; }
+		public @NonNull Builder pendingAuthorizationLifetime(@Nullable Duration value) { this.pendingLifetime = value == null ? Limits.PENDING_STATE_LIFETIME.getDefaultDuration() : Limits.PENDING_STATE_LIFETIME.require(value); return this; }
 		/**
 		 * Sets the per-exchange timeout.
 		 *
@@ -546,27 +549,27 @@ public final class OidcClient {
 		/**
 		 * Sets whether S256 advertisement is required.
 		 *
-		 * @param value the flag
+		 * @param value the flag, or null to restore false
 		 * @return this builder
 		 * @since 1.0.0
 		 */
-		public @NonNull Builder requirePkceAdvertised(boolean value) { this.requirePkceAdvertised = value; return this; }
+		public @NonNull Builder requirePkceAdvertised(@Nullable Boolean value) { this.requirePkceAdvertised = Boolean.TRUE.equals(value); return this; }
 		/**
 		 * Sets whether plain HTTP is allowed for literal loopback tests.
 		 *
-		 * @param value the flag
+		 * @param value the flag, or null to restore false
 		 * @return this builder
 		 * @since 1.0.0
 		 */
-		public @NonNull Builder allowInsecureLoopback(boolean value) { this.allowInsecureLoopback = value; return this; }
+		public @NonNull Builder allowInsecureLoopback(@Nullable Boolean value) { this.allowInsecureLoopback = Boolean.TRUE.equals(value); return this; }
 		/**
 		 * Sets explicit acknowledgment of runtime risk.
 		 *
-		 * @param value the flag
+		 * @param value the flag, or null to restore false
 		 * @return this builder
 		 * @since 1.0.0
 		 */
-		public @NonNull Builder acknowledgeUnpatchedRuntime(boolean value) { this.acknowledgeUnpatchedRuntime = value; return this; }
+		public @NonNull Builder acknowledgeUnpatchedRuntime(@Nullable Boolean value) { this.acknowledgeUnpatchedRuntime = Boolean.TRUE.equals(value); return this; }
 		/**
 		 * Sets the lowest discovery cache lifetime.
 		 * @param value duration, or null to restore the default
@@ -601,7 +604,9 @@ public final class OidcClient {
 		 * @since 1.0.0
 		 */
 		public @NonNull OidcClient build() {
-			if (this.clientId == null || this.clientId.isEmpty() || this.redirectUri == null || this.algorithms.isEmpty()
+			if (this.clientId == null || this.redirectUri == null)
+				throw new IllegalStateException("An OIDC client requires a client ID and callback URI.");
+			if (this.clientId.isEmpty() || this.algorithms.isEmpty()
 					|| this.trustedAudiences.contains("") || this.trustedAuthorizedParties.contains(""))
 				throw new IllegalArgumentException("An OIDC client requires a client ID, callback URI and algorithm allowlist.");
 			Set<JwsAlgorithm> hmac = hmacAlgorithms(this.algorithms);

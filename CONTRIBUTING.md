@@ -44,26 +44,29 @@ CI runs these gating checks on every pull request (the scripted-IdP image only w
 | Arabic locale | 21 | `REVETSEC_EXPECTED_LOCALE=ar-EG JAVA_TOOL_OPTIONS="-Duser.language=ar -Duser.country=EG" mvn -B -ntp -Dmaven.javadoc.skip=true clean verify` |
 | Error Prone and NullAway | 21 | `mvn -B -ntp -Dmaven.javadoc.skip=true -Pstatic-analysis clean verify` |
 | SpotBugs | 21 | `mvn -B -ntp -Dmaven.javadoc.skip=true -Pspotbugs clean verify` |
-| Keycloak OAuth integration | 17, Docker | `mvn -B -ntp -Dmaven.javadoc.skip=true -Pintegration clean verify` |
+| Keycloak OAuth/OIDC integration | 17 in CI; 17/21 for milestone exit, Docker | `mvn -B -ntp -Dmaven.javadoc.skip=true -Pintegration clean verify` |
+| OIDF RP: four plans, exact module outcomes | 17 in CI; 17/21 for milestone exit, Docker | `python3 conformance/run.py --output /absolute/fresh-output --maven /absolute/path/to/mvn --offline --repository-tail /absolute/read-only-cache` |
 | Fuzz corpus replay: every fuzz target's seeds, in Jazzer's regression mode | 21 | `mvn -B -ntp -f fuzz/pom.xml clean verify` |
 | Javadoc | 17 for Maven, 26 for `javadoc` | `REVETSEC_JAVADOC_HOME=/absolute/path/to/jdk-26 mvn -B -ntp -Dmaven.javadoc.failOnWarnings=true -DskipTests clean verify` |
 | Packaged consumer: Maven | 17, 27 | the commands under [Packaged consumer](#packaged-consumer) |
 | Packaged consumer: Gradle 9.8.0 | 17, 27 | the same commands; one run of the script checks both consumers |
 | Scripted IdP image, only when `interop/scripted-idp/` or `ci.yml` changes | none (Docker, x86-64 and arm64) | the commands under [Scripted IdP image](#scripted-idp-image) |
 
+Milestone exits also run the Python guards under `verification`, `verification/packaged-consumer` and `conformance`, all required replay modes, and their prescribed platform/repeat legs. OIDF requires the exact documented pass/skip dispositions and rejects unexpected REVIEW/warning statuses. Its fresh loopback-only provider runs need ports 8443/8444 available and pinned local images; omit `--pull-images`.
+
 Run them with `clean`, as the table does. CI always starts from a fresh checkout, and Error Prone and NullAway report only while they compile, so a local `verify` after an earlier build can pass without analyzing anything.
 
 In the locale rows, `REVETSEC_EXPECTED_LOCALE` makes `LocaleCanaryTests` check that the forked test JVM really runs in that locale. Without it the canary is skipped, and the build can pass without the locale ever taking effect.
 
-The coverage floors are not a pull-request check: they are checked when a milestone is integrated. To check them yourself, on JDK 17, 21 or 27:
+The coverage floors are not a pull-request check: each full milestone exit measures them separately on JDK 17, 21 and 27. Every floor must pass on every run; do not merge execution files or weaken floors. To check them yourself:
 
 ```shell
 $ mvn -B -ntp -Dmaven.javadoc.skip=true -Pcoverage clean verify
 ```
 
-The `coverage` profile fails the build when the whole JAR, or a package in the critical set (`internal.json`, `internal.crypto`, `internal.encoding`, `internal.http`, `internal.jose`, `jose` and `oauth` so far), falls below its floor. The pom lists each floor with the measurement it came from. Code that runs only in a child JVM, which some tests start, is not counted.
+The `coverage` profile fails the build when the whole JAR, or a package with its own floor (`internal.json`, `internal.crypto`, `internal.encoding`, `internal.http`, `internal.jose`, `jose`, `oauth`, `internal.oauth` and `oidc` so far), falls below its floor. The shared critical minimum also applies to the internal protocol packages, JOSE and OIDC. The pom lists each floor with the measurement it came from. Code that runs only in a child JVM, which some tests start, is not counted.
 
-Mutation testing is not a pull-request check either. PIT mutates the protocol packages as they land, so far `jose`, `internal.jose`, `oauth` and the signature and key classes of `internal.crypto` (the pom's `mutation` profile lists its targets). Its report is evidence for milestone reviews, and at each release candidate every surviving mutant must be killed or explained in writing. To run it:
+Mutation testing is not a pull-request check either. PIT mutates the protocol packages as they land, so far `jose`, `internal.jose`, `oauth`, `internal.oauth`, `oidc` and the signature and key classes of `internal.crypto` (the pom's `mutation` profile lists its targets). Its report is evidence for milestone reviews, and at each release candidate every surviving mutant must be killed or explained in writing. To run it:
 
 ```shell
 $ mvn -B -ntp -Dmaven.javadoc.skip=true -Pmutation clean verify

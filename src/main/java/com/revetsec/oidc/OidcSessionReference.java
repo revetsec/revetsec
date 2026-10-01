@@ -72,6 +72,14 @@ public final class OidcSessionReference {
 	}
 	JsonObject continuityClaims() { return this.continuityClaims; }
 	boolean matchesNonce(String nonce) { return ConstantTime.isEqual(this.nonceDigest, digest(nonce)); }
+	boolean matchesOriginalReference(OidcSessionReference other) {
+		if (!this.clientId.equals(other.clientId) || !ConstantTime.isEqual(this.nonceDigest, other.nonceDigest)
+				|| !audiences(this.continuityClaims).equals(audiences(other.continuityClaims))) return false;
+		Map<String, JsonValue> original = new HashMap<>(this.continuityClaims.getMembers());
+		Map<String, JsonValue> restored = new HashMap<>(other.continuityClaims.getMembers());
+		original.remove("aud"); restored.remove("aud");
+		return original.equals(restored);
+	}
 	void checkClient(String issuer, String clientId) {
 		if (!this.continuityClaims.findString("iss").orElseThrow().equals(issuer) || !this.clientId.equals(clientId)) throw mismatch();
 	}

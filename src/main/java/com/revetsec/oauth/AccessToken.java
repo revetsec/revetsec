@@ -69,7 +69,7 @@ public final class AccessToken {
 	 * @return whether the token type is Bearer
 	 * @since 1.0.0
 	 */
-	public boolean isBearer() { return this.tokenType.equalsIgnoreCase("Bearer"); }
+	public @NonNull Boolean isBearer() { return this.tokenType.equalsIgnoreCase("Bearer"); }
 
 	/**
 	 * Returns the request-start-anchored expiry when the AS supplied one.

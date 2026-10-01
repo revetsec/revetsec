@@ -32,6 +32,7 @@ import com.revetsec.internal.http.UriChecks;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
+import com.google.errorprone.annotations.CheckReturnValue;
 import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
 import java.net.URI;
@@ -491,6 +492,7 @@ public final class OAuthClient {
 	 * @since 1.0.0
 	 */
 	@NotThreadSafe
+	@CheckReturnValue
 	public static final class Builder {
 		private final @NonNull String issuer;
 		private final @Nullable AuthorizationServerMetadata staticMetadata;
@@ -523,24 +525,24 @@ public final class OAuthClient {
 		/**
 		 * Sets the client identifier registered with the authorization server.
 		 *
-		 * @param value nonempty client ID
+		 * @param value nonempty client ID, or null which clears the required setting
 		 * @return this builder
 		 * @since 1.0.0
 		 */
-		public @NonNull Builder clientId(@NonNull String value) {
-			if (requireNonNull(value).isEmpty()) throw new IllegalArgumentException("A client ID must not be empty.");
+		public @NonNull Builder clientId(@Nullable String value) {
+			if (value != null && value.isEmpty()) throw new IllegalArgumentException("A client ID must not be empty.");
 			this.clientId = value; return this;
 		}
 
 		/**
 		 * Sets the client's token-endpoint authentication method.
 		 *
-		 * @param value one client authentication strategy
+		 * @param value one client authentication strategy, or null which clears the required setting
 		 * @return this builder
 		 * @since 1.0.0
 		 */
-		public @NonNull Builder clientAuthentication(@NonNull ClientAuthentication value) {
-			this.clientAuthentication = requireNonNull(value); return this;
+		public @NonNull Builder clientAuthentication(@Nullable ClientAuthentication value) {
+			this.clientAuthentication = value; return this;
 		}
 
 		/**
@@ -555,54 +557,54 @@ public final class OAuthClient {
 		/**
 		 * Sets the scopes used when a request has no scope override.
 		 *
-		 * @param value complete client-default scopes
+		 * @param value complete client-default scopes, or null which restores the default
 		 * @return this builder
 		 * @since 1.0.0
 		 */
-		public @NonNull Builder scopes(@NonNull Set<@NonNull String> value) {
+		public @NonNull Builder scopes(@Nullable Set<@NonNull String> value) {
 			this.scopes = AuthorizationRequestOptions.builder().scopes(value).build().getScopes(); return this;
 		}
 
 		/**
 		 * Sets the default resource indicators for token requests.
 		 *
-		 * @param value complete client-default resources
+		 * @param value complete client-default resources, or null which restores the default
 		 * @return this builder
 		 * @since 1.0.0
 		 */
-		public @NonNull Builder resources(@NonNull List<@NonNull URI> value) {
+		public @NonNull Builder resources(@Nullable List<@NonNull URI> value) {
 			this.resources = AuthorizationRequestOptions.builder().resources(value).build().getResources(); return this;
 		}
 
 		/**
 		 * Sets how the callback issuer parameter is required.
 		 *
-		 * @param value callback issuer policy
+		 * @param value callback issuer policy, or null which restores the default
 		 * @return this builder
 		 * @since 1.0.0
 		 */
-		public @NonNull Builder issuerParameterPolicy(@NonNull IssuerParameterPolicy value) {
-			this.issuerParameterPolicy = requireNonNull(value); return this;
+		public @NonNull Builder issuerParameterPolicy(@Nullable IssuerParameterPolicy value) {
+			this.issuerParameterPolicy = value == null ? IssuerParameterPolicy.METADATA_DRIVEN : value; return this;
 		}
 
 		/**
 		 * Requires metadata to advertise S256 before an authorization flow begins.
 		 *
-		 * @param value whether metadata must advertise S256
+		 * @param value whether metadata must advertise S256, or null which restores the default
 		 * @return this builder
 		 * @since 1.0.0
 		 */
-		public @NonNull Builder requirePkceAdvertised(boolean value) { this.requirePkceAdvertised = value; return this; }
+		public @NonNull Builder requirePkceAdvertised(@Nullable Boolean value) { this.requirePkceAdvertised = Boolean.TRUE.equals(value); return this; }
 
 		/**
 		 * Sets the lifetime of browser-bound pending authorization.
 		 *
-		 * @param value pending lifetime from 1 to 60 minutes
+		 * @param value pending lifetime from 1 to 60 minutes, or null which restores the default
 		 * @return this builder
 		 * @since 1.0.0
 		 */
-		public @NonNull Builder pendingAuthorizationLifetime(@NonNull Duration value) {
-			this.pendingAuthorizationLifetime = Limits.PENDING_STATE_LIFETIME.require(value); return this;
+		public @NonNull Builder pendingAuthorizationLifetime(@Nullable Duration value) {
+			this.pendingAuthorizationLifetime = value == null ? Limits.PENDING_STATE_LIFETIME.getDefaultDuration() : Limits.PENDING_STATE_LIFETIME.require(value); return this;
 		}
 
 		/**
@@ -617,120 +619,120 @@ public final class OAuthClient {
 		/**
 		 * Sets the policy used to approve outbound endpoint URIs.
 		 *
-		 * @param value outbound URI policy
+		 * @param value outbound URI policy, or null which restores the default
 		 * @return this builder
 		 * @since 1.0.0
 		 */
-		public @NonNull Builder outboundUriPolicy(@NonNull OutboundUriPolicy value) {
-			this.outboundUriPolicy = requireNonNull(value); return this;
+		public @NonNull Builder outboundUriPolicy(@Nullable OutboundUriPolicy value) {
+			this.outboundUriPolicy = value == null ? OutboundUriPolicy.defaultInstance() : value; return this;
 		}
 
 		/**
 		 * Sets the timeout for one HTTP exchange.
 		 *
-		 * @param value per-request timeout
+		 * @param value per-request timeout, or null which restores the default
 		 * @return this builder
 		 * @since 1.0.0
 		 */
-		public @NonNull Builder requestTimeout(@NonNull Duration value) {
-			this.requestTimeout = Limits.REQUEST_TIMEOUT.require(value); return this;
+		public @NonNull Builder requestTimeout(@Nullable Duration value) {
+			this.requestTimeout = value == null ? Limits.REQUEST_TIMEOUT.getDefaultDuration() : Limits.REQUEST_TIMEOUT.require(value); return this;
 		}
 
 		/**
 		 * Sets the deadline shared by all exchanges in one public call.
 		 *
-		 * @param value total deadline per public call
+		 * @param value total deadline per public call, or null which restores the default
 		 * @return this builder
 		 * @since 1.0.0
 		 */
-		public @NonNull Builder totalDeadline(@NonNull Duration value) {
-			this.totalDeadline = Limits.TOTAL_DEADLINE.require(value); return this;
+		public @NonNull Builder totalDeadline(@Nullable Duration value) {
+			this.totalDeadline = value == null ? Limits.TOTAL_DEADLINE.getDefaultDuration() : Limits.TOTAL_DEADLINE.require(value); return this;
 		}
 
 		/**
 		 * Sets the clock used for pending state, token expiry and cache freshness.
 		 *
-		 * @param value clock for token expiry and cache freshness
+		 * @param value clock for token expiry and cache freshness, or null which restores the default
 		 * @return this builder
 		 * @since 1.0.0
 		 */
-		public @NonNull Builder clock(@NonNull Clock value) { this.clock = requireNonNull(value); return this; }
+		public @NonNull Builder clock(@Nullable Clock value) { this.clock = value == null ? Clock.systemUTC() : value; return this; }
 
 		/**
 		 * Sets the observer for bounded OAuth events.
 		 *
-		 * @param value observer
+		 * @param value observer, or null which restores the default
 		 * @return this builder
 		 * @since 1.0.0
 		 */
-		public @NonNull Builder observer(@NonNull OAuthObserver value) {
-			this.observer = requireNonNull(value); return this;
+		public @NonNull Builder observer(@Nullable OAuthObserver value) {
+			this.observer = value == null ? OAuthObserver.disabledInstance() : value; return this;
 		}
 
 		/**
 		 * Allows plain HTTP to exact loopback hosts for local tests.
 		 *
-		 * @param value allow plain HTTP to exact loopback hosts for tests
+		 * @param value allow plain HTTP to exact loopback hosts for tests, or null which restores the default
 		 * @return this builder
 		 * @since 1.0.0
 		 */
-		public @NonNull Builder allowInsecureLoopback(boolean value) {
-			this.allowInsecureLoopback = value; return this;
+		public @NonNull Builder allowInsecureLoopback(@Nullable Boolean value) {
+			this.allowInsecureLoopback = Boolean.TRUE.equals(value); return this;
 		}
 
 		/**
 		 * Acknowledges the risk of building on an unpatched runtime.
 		 *
-		 * @param value explicit acknowledgment of an unpatched runtime
+		 * @param value explicit acknowledgment of an unpatched runtime, or null which restores the default
 		 * @return this builder
 		 * @since 1.0.0
 		 */
-		public @NonNull Builder acknowledgeUnpatchedRuntime(boolean value) {
-			this.acknowledgeUnpatchedRuntime = value; return this;
+		public @NonNull Builder acknowledgeUnpatchedRuntime(@Nullable Boolean value) {
+			this.acknowledgeUnpatchedRuntime = Boolean.TRUE.equals(value); return this;
 		}
 
 		/**
 		 * Sets the lowest permitted discovery cache lifetime.
 		 *
-		 * @param value minimum discovery cache lifetime
+		 * @param value minimum discovery cache lifetime, or null which restores the default
 		 * @return this builder
 		 * @since 1.0.0
 		 */
-		public @NonNull Builder minimumTimeToLive(@NonNull Duration value) {
-			this.minimumTimeToLive = Limits.DISCOVERY_MINIMUM_TIME_TO_LIVE.require(value); return this;
+		public @NonNull Builder minimumTimeToLive(@Nullable Duration value) {
+			this.minimumTimeToLive = value == null ? Limits.DISCOVERY_MINIMUM_TIME_TO_LIVE.getDefaultDuration() : Limits.DISCOVERY_MINIMUM_TIME_TO_LIVE.require(value); return this;
 		}
 
 		/**
 		 * Sets the fallback lifetime when discovery supplies no usable cache lifetime.
 		 *
-		 * @param value fallback discovery cache lifetime
+		 * @param value fallback discovery cache lifetime, or null which restores the default
 		 * @return this builder
 		 * @since 1.0.0
 		 */
-		public @NonNull Builder defaultTimeToLive(@NonNull Duration value) {
-			this.defaultTimeToLive = Limits.DISCOVERY_DEFAULT_TIME_TO_LIVE.require(value); return this;
+		public @NonNull Builder defaultTimeToLive(@Nullable Duration value) {
+			this.defaultTimeToLive = value == null ? Limits.DISCOVERY_DEFAULT_TIME_TO_LIVE.getDefaultDuration() : Limits.DISCOVERY_DEFAULT_TIME_TO_LIVE.require(value); return this;
 		}
 
 		/**
 		 * Sets the highest permitted discovery cache lifetime.
 		 *
-		 * @param value maximum discovery cache lifetime
+		 * @param value maximum discovery cache lifetime, or null which restores the default
 		 * @return this builder
 		 * @since 1.0.0
 		 */
-		public @NonNull Builder maximumTimeToLive(@NonNull Duration value) {
-			this.maximumTimeToLive = Limits.DISCOVERY_MAXIMUM_TIME_TO_LIVE.require(value); return this;
+		public @NonNull Builder maximumTimeToLive(@Nullable Duration value) {
+			this.maximumTimeToLive = value == null ? Limits.DISCOVERY_MAXIMUM_TIME_TO_LIVE.getDefaultDuration() : Limits.DISCOVERY_MAXIMUM_TIME_TO_LIVE.require(value); return this;
 		}
 
 		/**
 		 * Sets the cooldown after a failed discovery attempt.
 		 *
-		 * @param value discovery attempt ceiling window
+		 * @param value discovery attempt ceiling window, or null which restores the default
 		 * @return this builder
 		 * @since 1.0.0
 		 */
-		public @NonNull Builder discoveryCooldown(@NonNull Duration value) {
-			this.discoveryCooldown = Limits.DISCOVERY_COOLDOWN.require(value); return this;
+		public @NonNull Builder discoveryCooldown(@Nullable Duration value) {
+			this.discoveryCooldown = value == null ? Limits.DISCOVERY_COOLDOWN.getDefaultDuration() : Limits.DISCOVERY_COOLDOWN.require(value); return this;
 		}
 
 		/**
@@ -746,7 +748,7 @@ public final class OAuthClient {
 		OAuthClient build(Runtime.Version runtimeVersion) {
 			RuntimeFloor.require(requireNonNull(runtimeVersion), this.acknowledgeUnpatchedRuntime);
 			if (this.clientId == null || this.clientAuthentication == null)
-				throw new IllegalArgumentException("A client ID and client authentication strategy are required.");
+				throw new IllegalStateException("A client ID and client authentication strategy are required.");
 			Limits.requireRequestTimeoutWithinTotalDeadline(this.requestTimeout, this.totalDeadline);
 			Limits.requireDiscoveryTimeToLiveOrder(this.minimumTimeToLive, this.defaultTimeToLive,
 					this.maximumTimeToLive, this.discoveryCooldown);

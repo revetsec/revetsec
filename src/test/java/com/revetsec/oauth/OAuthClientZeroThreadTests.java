@@ -25,6 +25,7 @@ import java.net.URI;
 import java.time.Duration;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 final class OAuthClientZeroThreadTests {
 	@Test
@@ -51,7 +52,7 @@ final class OAuthClientZeroThreadTests {
 						.clientId("service-" + index)
 						.clientAuthentication(ClientAuthentication.fromClientSecretBasic("test-secret"))
 						.build();
-				ClientCredentialsTokenSource.withClient(client).build();
+				assertNotNull(ClientCredentialsTokenSource.withClient(client).build());
 			}
 			System.out.println("built 1000 clients and 1000 sources; threads started: "
 					+ (threads.getTotalStartedThreadCount() - before));

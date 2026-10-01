@@ -97,6 +97,55 @@ final class OidcDiscoveryTests {
 				() -> OidcProviderMetadata.fromJson("https://issuer.example/", json(fields))).getReason());
 	}
 	@TestFactory
+	Stream<DynamicTest> metadataEndpointsResetToUnsetDefaults() {
+		return Stream.of("authorization", "token", "revocation").map(endpoint -> DynamicTest.dynamicTest(endpoint, () -> {
+			try (TestHttpsServer server = TestHttpsServer.start()) {
+				OidcProviderMetadata.Builder builder = OidcProviderMetadata.withIssuer(issuer(server))
+						.authorizationEndpoint(server.uri("/authorize")).tokenEndpoint(server.uri("/token"))
+						.revocationEndpoint(server.uri("/revoke")).jwksUri(server.uri("/jwks"));
+				OidcProviderMetadata initial = builder.build();
+				assertEquals(server.uri("/authorize"), initial.oauthMetadata().getAuthorizationEndpoint());
+				assertEquals(server.uri("/token"), initial.oauthMetadata().getTokenEndpoint());
+				assertEquals(Optional.of(server.uri("/revoke")), initial.oauthMetadata().getRevocationEndpoint());
+				switch (endpoint) {
+					case "authorization" -> assertSame(builder, builder.authorizationEndpoint(null));
+					case "token" -> assertSame(builder, builder.tokenEndpoint(null));
+					case "revocation" -> assertSame(builder, builder.revocationEndpoint(null));
+					default -> throw new AssertionError(endpoint);
+				}
+				if (endpoint.equals("revocation")) assertTrue(builder.build().oauthMetadata().getRevocationEndpoint().isEmpty());
+				else assertThrows(IllegalStateException.class, builder::build);
+				assertTrue(server.getRequests().isEmpty());
+			}
+		}));
+	}
+
+	@TestFactory
+	Stream<DynamicTest> explicitProviderCapabilitiesRejectIncompleteOrEmptySecurityConfiguration() {
+		Map<String, java.util.function.Function<OidcProviderMetadata.Builder, OidcProviderMetadata.Builder>> invalid = new LinkedHashMap<>();
+		invalid.put("missing JWKS URI", builder -> builder.jwksUri(null));
+		invalid.put("empty subject types", builder -> builder.subjectTypesSupported(Set.of()));
+		invalid.put("unknown subject type", builder -> builder.subjectTypesSupported(Set.of("future-subject")));
+		invalid.put("empty ID token algorithms", builder -> builder.idTokenSigningAlgValuesSupported(Set.of()));
+		invalid.put("blank ID token algorithm", builder -> builder.idTokenSigningAlgValuesSupported(Set.of("")));
+		invalid.put("empty response types", builder -> builder.responseTypesSupported(Set.of()));
+		invalid.put("blank response type", builder -> builder.responseTypesSupported(Set.of("")));
+		invalid.put("empty UserInfo algorithms", builder -> builder.userInfoSigningAlgValuesSupported(Set.of()));
+		invalid.put("blank UserInfo algorithm", builder -> builder.userInfoSigningAlgValuesSupported(Set.of("")));
+		return invalid.entrySet().stream().map(test -> DynamicTest.dynamicTest(test.getKey(), () -> {
+			try (TestHttpsServer server = TestHttpsServer.start()) {
+				OidcProviderMetadata.Builder builder = OidcProviderMetadata.withIssuer(issuer(server))
+						.authorizationEndpoint(server.uri("/authorize")).tokenEndpoint(server.uri("/token"))
+						.jwksUri(server.uri("/jwks"));
+				if (test.getKey().equals("missing JWKS URI"))
+					assertThrows(IllegalStateException.class, () -> test.getValue().apply(builder).build());
+				else assertThrows(IllegalArgumentException.class, () -> test.getValue().apply(builder).build());
+				assertTrue(server.getRequests().isEmpty());
+			}
+		}));
+	}
+
+	@TestFactory
 	Stream<DynamicTest> validatesEveryKnownEndpointEvenWithInjectedKeys() {
 		return Stream.of("authorization_endpoint", "token_endpoint", "jwks_uri", "userinfo_endpoint", "revocation_endpoint")
 				.map(name -> DynamicTest.dynamicTest(name, () -> {

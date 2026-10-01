@@ -223,13 +223,50 @@ final class OidcAuthenticationFlowTests {
 					redirect.getPendingAuthorization().saveTo(store, "browser");
 					source = PendingAuthorizationSource.fromStore(store, "browser");
 				}
-				clock.advance(Duration.ofMinutes(11));
+				clock.advance(Duration.ofMinutes(16));
 				OAuthValidationException failure = assertThrows(OAuthValidationException.class,
 						() -> client.completeAuthentication(callback(redirect), source, CALLBACK));
 				assertEquals(OAuthException.Reason.PENDING_AUTHORIZATION_EXPIRED, failure.getReason());
 				assertEquals(0, server.getRequests().size());
 			}
 		}));
+	}
+
+	@Test
+	void pendingLifetimeUsesRegistryDefaultAndNullRestoresIt() throws Exception {
+		try (TestHttpsServer server = TestHttpsServer.start()) {
+			Duration expected = Duration.ofMinutes(15);
+			assertEquals(expected, com.revetsec.internal.Limits.PENDING_STATE_LIFETIME.getDefaultDuration());
+			OidcClient.Builder configured = builder(server);
+			PendingAuthorization fresh = configured.build().beginAuthentication().getPendingAuthorization();
+			assertEquals(expected, Duration.between(fresh.getCreatedAt(), fresh.getExpiresAt()));
+			PendingAuthorization overridden = configured.pendingAuthorizationLifetime(Duration.ofMinutes(2)).build().beginAuthentication().getPendingAuthorization();
+			assertEquals(Duration.ofMinutes(2), Duration.between(overridden.getCreatedAt(), overridden.getExpiresAt()));
+			PendingAuthorization reset = configured.pendingAuthorizationLifetime(null).build().beginAuthentication().getPendingAuthorization();
+			assertEquals(expected, Duration.between(reset.getCreatedAt(), reset.getExpiresAt()));
+			assertEquals(0, server.getRequests().size());
+		}
+	}
+
+	@Test
+	void nullableFlagsRestoreStrictDefaults() throws Exception {
+		try (TestHttpsServer server = TestHttpsServer.start()) {
+			OidcProviderMetadata unadvertised = OidcProviderMetadata.withIssuer(server.getBaseUri().toString())
+					.authorizationEndpoint(server.uri("/authorize")).tokenEndpoint(server.uri("/token")).jwksUri(server.uri("/jwks"))
+					.codeChallengeMethodsSupported(null).build();
+			OidcClient.Builder configured = OidcClient.withProviderMetadata(unadvertised).clientId("client").redirectUri(CALLBACK)
+					.clock(CLOCK).httpClient(TestTls.httpClient()).jsonWebKeySource(keys()).requirePkceAdvertised(true);
+			assertEquals(OAuthException.Reason.PKCE_UNSUPPORTED, assertThrows(OAuthValidationException.class, () -> configured.build().beginAuthentication()).getReason());
+			assertNotNull(configured.requirePkceAdvertised(null).acknowledgeUnpatchedRuntime(true).acknowledgeUnpatchedRuntime(null).build().beginAuthentication());
+			assertSame(configured, configured.redirectUri(URI.create("http://127.0.0.1/callback")).allowInsecureLoopback(true));
+			assertNotNull(configured.build());
+			assertThrows(IllegalArgumentException.class, () -> configured.allowInsecureLoopback(null).build());
+			OidcProviderMetadata restored = OidcProviderMetadata.withIssuer(server.getBaseUri().toString())
+					.authorizationEndpoint(server.uri("/authorize")).tokenEndpoint(server.uri("/token")).jwksUri(server.uri("/jwks"))
+					.authorizationResponseIssuerSupported(true).authorizationResponseIssuerSupported(null).build();
+			assertFalse(restored.oauthMetadata().isAuthorizationResponseIssuerSupported());
+			assertEquals(0, server.getRequests().size());
+		}
 	}
 
 	@Test
@@ -294,6 +331,14 @@ final class OidcAuthenticationFlowTests {
 			assertTrue(query.getValues("max_age").isEmpty()); assertTrue(query.getValues("acr_values").isEmpty()); assertTrue(query.getValues("prompt").isEmpty());
 			assertEquals(0, server.getRequests().size());
 		}
+	}
+
+	@TestFactory
+	Stream<DynamicTest> acrValuesRejectEmptyNonAsciiAndControlCharactersBeforeLogin() {
+		return Stream.of("", "\u007f", "urn:mfaé", "urn:mfa\t", "urn:mfa\n")
+				.map(value -> DynamicTest.dynamicTest("invalid ACR " + value.length() + ":" + Integer.toHexString(value.hashCode()),
+						() -> assertThrows(IllegalArgumentException.class,
+								() -> OidcAuthenticationOptions.builder().requiredAcrValues(Set.of(value)))));
 	}
 
 	@Test

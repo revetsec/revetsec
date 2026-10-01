@@ -23,6 +23,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 final class OAuthClientRuntimeFloorTests {
@@ -41,9 +42,15 @@ final class OAuthClientRuntimeFloorTests {
 				observed.add(runtimeVersion);
 			}
 		};
-		builder().observer(observer).acknowledgeUnpatchedRuntime(true).build(Runtime.Version.parse("17.0.2"));
-		builder().observer(observer).acknowledgeUnpatchedRuntime(true).build(Runtime.Version.parse("18"));
+		assertNotNull(builder().observer(observer).acknowledgeUnpatchedRuntime(true).build(Runtime.Version.parse("17.0.2")));
+		assertNotNull(builder().observer(observer).acknowledgeUnpatchedRuntime(true).build(Runtime.Version.parse("18")));
 		assertEquals(List.of("17.0.2", "18"), observed);
+	}
+
+	@Test
+	void acknowledgmentNullResetRestoresRuntimeRefusal() {
+		assertThrows(IllegalStateException.class, () -> builder().acknowledgeUnpatchedRuntime(true)
+				.acknowledgeUnpatchedRuntime(null).build(Runtime.Version.parse("17.0.2")));
 	}
 
 	private static OAuthClient.Builder builder() {

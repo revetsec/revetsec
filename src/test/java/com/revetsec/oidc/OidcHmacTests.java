@@ -50,13 +50,13 @@ final class OidcHmacTests {
 				.map(name -> DynamicTest.dynamicTest(algorithm+":"+name, () -> {
 					try (TestHttpsServer server = TestHttpsServer.start()) {
 						OidcClient.Builder builder = builder(server, algorithm).idTokenSigningAlgorithms(Set.of(algorithm));
-						if (name.equals("disabled")) builder.compatibility(null);
-						else if (name.equals("public")) builder.clientAuthentication(ClientAuthentication.noneInstance());
-						else if (name.equals("short")) builder.clientAuthentication(ClientAuthentication.fromClientSecretPost("s".repeat(length(algorithm)-1)));
-						else if (name.equals("mixed shortest")) builder.idTokenSigningAlgorithms(Set.of(JwsAlgorithm.HS256,JwsAlgorithm.HS512))
+						if (name.equals("disabled")) builder = builder.compatibility(null);
+						else if (name.equals("public")) builder = builder.clientAuthentication(ClientAuthentication.noneInstance());
+						else if (name.equals("short")) builder = builder.clientAuthentication(ClientAuthentication.fromClientSecretPost("s".repeat(length(algorithm)-1)));
+						else if (name.equals("mixed shortest")) builder = builder.idTokenSigningAlgorithms(Set.of(JwsAlgorithm.HS256,JwsAlgorithm.HS512))
 								.clientAuthentication(ClientAuthentication.fromClientSecretPost("s".repeat(32)));
-						else if (name.equals("invalid unicode")) builder.clientAuthentication(ClientAuthentication.fromClientSecretPost("s".repeat(64)+"\ud800"));
-						else if (name.equals("supplier throws")) builder.clientAuthentication(ClientAuthentication.fromClientSecretPost(() -> { throw new IllegalStateException(SECRET); }));
+						else if (name.equals("invalid unicode")) builder = builder.clientAuthentication(ClientAuthentication.fromClientSecretPost("s".repeat(64)+"\ud800"));
+						else if (name.equals("supplier throws")) builder = builder.clientAuthentication(ClientAuthentication.fromClientSecretPost(() -> { throw new IllegalStateException(SECRET); }));
 						IllegalArgumentException failure=assertThrows(IllegalArgumentException.class,builder::build);
 						assertNull(failure.getCause());assertFalse(failure.toString().contains(SECRET));assertEquals(0,server.getRequests().size());
 					}
@@ -180,6 +180,37 @@ final class OidcHmacTests {
 			assertEquals(OAuthException.Reason.METADATA_INVALID,assertThrows(OAuthException.class,unsupported::beginAuthentication).getReason());assertEquals(1,server.getHitCount("/token"));
 			assertThrows(IllegalArgumentException.class,()->builder(server,JwsAlgorithm.HS256).idTokenSigningAlgorithms(Set.of(JwsAlgorithm.HS256)).userInfoSignedResponseAlgorithm(JwsAlgorithm.HS256).build());
 		}
+	}
+
+	@TestFactory
+	Stream<DynamicTest> mixedHmacAndRsaProfilesKeepCodeAndRefreshKeyLookupsWithinDeadline() {
+		return Stream.of("code", "refresh").map(mode -> DynamicTest.dynamicTest(mode, () -> {
+			try (TestHttpsServer server = TestHttpsServer.start()) {
+				OidcObserver slow = new OidcObserver() {
+					@Override public void didRequestEndpoint(OAuthEndpoint endpoint, URI uri, Integer status, Duration elapsed) {
+						if (endpoint == OAuthEndpoint.TOKEN) {
+							try { new java.util.concurrent.CountDownLatch(1).await(2, java.util.concurrent.TimeUnit.SECONDS); }
+							catch (InterruptedException interrupted) { Thread.currentThread().interrupt(); }
+						}
+					}
+				};
+				OidcClient client = builder(server, JwsAlgorithm.HS256).idTokenSigningAlgorithms(Set.of(JwsAlgorithm.HS256, JwsAlgorithm.RS256))
+						.requestTimeout(Duration.ofSeconds(1)).totalDeadline(Duration.ofSeconds(1)).observer(slow).build();
+				AuthorizationRedirect redirect = client.beginAuthentication(); Map<String, String> c = claims(server); c.put("nonce", JsonText.string(nonce(redirect)));
+				String compact = TestJws.withAlgorithm(Algorithm.RS256).kid("key").payload(JsonText.object(new ArrayList<>(c.entrySet())))
+						.sign(TestJsonWebKeys.Fixture.IDP_SIGNING_RSA_2048.getPrivateKey());
+				if (mode.equals("code")) {
+					respond(server, compact); assertThrows(JsonWebKeySetUnavailableException.class, () -> complete(client, redirect));
+				} else {
+					OidcClient originalClient = builder(server, JwsAlgorithm.HS256).build();
+					AuthorizationRedirect originalRedirect = originalClient.beginAuthentication(); c.put("nonce", JsonText.string(nonce(originalRedirect)));
+					respond(server, sign(JwsAlgorithm.HS256, c, SECRET)); OidcAuthentication auth = complete(originalClient, originalRedirect);
+					respond(server, compact); assertThrows(JsonWebKeySetUnavailableException.class,
+							() -> client.refresh(auth.getTokens().getRefreshToken().orElseThrow(), auth.getSessionReference()));
+				}
+				assertEquals(mode.equals("code") ? 1 : 2, server.getHitCount("/token")); assertEquals(0, server.getHitCount("/jwks"));
+			}
+		}));
 	}
 
 	private static int length(JwsAlgorithm algorithm){return switch(algorithm){case HS256->32;case HS384->48;case HS512->64;default->throw new AssertionError();};}

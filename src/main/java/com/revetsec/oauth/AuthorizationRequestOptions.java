@@ -19,6 +19,7 @@ package com.revetsec.oauth;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
+import com.google.errorprone.annotations.CheckReturnValue;
 import javax.annotation.concurrent.Immutable;
 import javax.annotation.concurrent.NotThreadSafe;
 import java.net.URI;
@@ -27,7 +28,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
-import static java.util.Objects.requireNonNull;
 
 /**
  * Per-authorization options. Scope and resource setters replace the complete list for this request; they never add
@@ -168,6 +168,7 @@ public final class AuthorizationRequestOptions {
 	 * @since 1.0.0
 	 */
 	@NotThreadSafe
+	@CheckReturnValue
 	public static final class Builder {
 		private @NonNull Set<@NonNull String> scopes = Set.of();
 		private boolean scopesOverridden;
@@ -185,13 +186,13 @@ public final class AuthorizationRequestOptions {
 		/**
 		 * Replaces the complete requested scope set.
 		 *
-		 * @param value scopes
+		 * @param value scopes, or null which restores inheritance
 		 * @return this builder
 		 * @since 1.0.0
 		 */
-		public @NonNull Builder scopes(@NonNull Set<@NonNull String> value) {
-			this.scopes = Set.copyOf(value);
-			this.scopesOverridden = true;
+		public @NonNull Builder scopes(@Nullable Set<@NonNull String> value) {
+			this.scopes = value == null ? Set.of() : Set.copyOf(value);
+			this.scopesOverridden = value != null;
 			for (String scope : this.scopes)
 				if (scope.isEmpty() || scope.chars().anyMatch(c -> c <= 0x20 || c == 0x22 || c == 0x5C || c >= 0x7F))
 					throw new IllegalArgumentException("A scope contains invalid characters.");
@@ -201,13 +202,13 @@ public final class AuthorizationRequestOptions {
 		/**
 		 * Replaces the complete ordered resource list.
 		 *
-		 * @param value resources
+		 * @param value resources, or null which restores inheritance
 		 * @return this builder
 		 * @since 1.0.0
 		 */
-		public @NonNull Builder resources(@NonNull List<@NonNull URI> value) {
-			this.resources = List.copyOf(value);
-			this.resourcesOverridden = true;
+		public @NonNull Builder resources(@Nullable List<@NonNull URI> value) {
+			this.resources = value == null ? List.of() : List.copyOf(value);
+			this.resourcesOverridden = value != null;
 			for (URI resource : this.resources)
 				if (!resource.isAbsolute() || resource.getFragment() != null)
 					throw new IllegalArgumentException("A resource indicator must be absolute and fragment-free.");
@@ -217,12 +218,12 @@ public final class AuthorizationRequestOptions {
 		/**
 		 * Sets the requested callback delivery mode.
 		 *
-		 * @param value the mode
+		 * @param value the mode, or null which restores the default
 		 * @return this builder
 		 * @since 1.0.0
 		 */
-		public @NonNull Builder responseMode(@NonNull ResponseMode value) {
-			this.responseMode = requireNonNull(value);
+		public @NonNull Builder responseMode(@Nullable ResponseMode value) {
+			this.responseMode = value == null ? ResponseMode.QUERY : value;
 			return this;
 		}
 
@@ -253,24 +254,24 @@ public final class AuthorizationRequestOptions {
 		/**
 		 * Replaces the complete application-data map.
 		 *
-		 * @param value the data
+		 * @param value the data, or null which restores the default
 		 * @return this builder
 		 * @since 1.0.0
 		 */
-		public @NonNull Builder applicationData(@NonNull Map<@NonNull String, @NonNull String> value) {
-			this.applicationData = Map.copyOf(value);
+		public @NonNull Builder applicationData(@Nullable Map<@NonNull String, @NonNull String> value) {
+			this.applicationData = value == null ? Map.of() : Map.copyOf(value);
 			return this;
 		}
 
 		/**
 		 * Replaces the complete additional-parameter map. Reserved OAuth names are rejected.
 		 *
-		 * @param value the parameters
+		 * @param value the parameters, or null which restores the default
 		 * @return this builder
 		 * @since 1.0.0
 		 */
-		public @NonNull Builder additionalParameters(@NonNull Map<@NonNull String, @NonNull String> value) {
-			Map<String, String> copy = Map.copyOf(value);
+		public @NonNull Builder additionalParameters(@Nullable Map<@NonNull String, @NonNull String> value) {
+			Map<String, String> copy = value == null ? Map.of() : Map.copyOf(value);
 			for (String name : copy.keySet())
 				if (RESERVED.contains(name) || name.isEmpty())
 					throw new IllegalArgumentException("An additional authorization parameter has a reserved name.");

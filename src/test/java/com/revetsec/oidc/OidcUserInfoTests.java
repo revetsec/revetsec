@@ -18,6 +18,8 @@ package com.revetsec.oidc;
 
 import com.revetsec.StateSealer;
 import com.revetsec.internal.encoding.QueryParameters;
+import com.revetsec.internal.json.JsonCodec;
+import com.revetsec.internal.json.JsonLimits;
 import com.revetsec.jose.*;
 import com.revetsec.oauth.*;
 import com.revetsec.testing.*;
@@ -298,6 +300,30 @@ final class OidcUserInfoTests {
 	}
 
 	@Test
+	void successfulUserInfoRecoveryClearsBackoffForFollowingRequests() throws Exception {
+		try (TestHttpsServer server = TestHttpsServer.start()) {
+			OidcAuthentication auth = authenticate(server, builder(server).build(), ACCESS, 300);
+			AtomicLong nanos = new AtomicLong();
+			UserInfoAttemptGate gate = new UserInfoAttemptGate(Duration.ofSeconds(1), nanos::get);
+			UserInfoEndpoint endpoint = new UserInfoEndpoint(com.revetsec.internal.http.HttpExchange.fromHttpClient(
+					TestTls.httpClient(), com.revetsec.OutboundUriPolicy.defaultInstance(), false), Duration.ofSeconds(10), CLOCK,
+					OidcObserver.disabledInstance(), gate);
+			OidcProviderMetadata provider = metadata(server).build(); respond(server, 503, "application/json", "{}");
+			OAuthErrorResponseException failure = assertThrows(OAuthErrorResponseException.class, () -> endpoint.fetch(provider, keys(), auth,
+					"client", null, Duration.ZERO, Set.of(), com.revetsec.internal.http.Deadline.fromNow(Duration.ofSeconds(15))));
+			assertSame(failure, assertThrows(OAuthErrorResponseException.class, () -> endpoint.fetch(provider, keys(), auth,
+					"client", null, Duration.ZERO, Set.of(), com.revetsec.internal.http.Deadline.fromNow(Duration.ofSeconds(15)))));
+			assertEquals(1, server.getHitCount("/userinfo")); nanos.addAndGet(Duration.ofSeconds(2).toNanos());
+			for (int call = 0; call < 2; call++) {
+				respond(server, 200, "application/json", json());
+				assertEquals(SUBJECT, endpoint.fetch(provider, keys(), auth, "client", null, Duration.ZERO, Set.of(),
+						com.revetsec.internal.http.Deadline.fromNow(Duration.ofSeconds(15))).getSubject());
+			}
+			assertEquals(3, server.getHitCount("/userinfo"));
+		}
+	}
+
+	@Test
 	void userInfoAlgorithmCapabilitiesAreImmutableAndSeparateFromIdTokenPolicy() throws Exception {
 		try (TestHttpsServer server = TestHttpsServer.start()) {
 			Set<String> algorithms = new HashSet<>(Set.of("ES256")); OidcProviderMetadata metadata = metadata(server).userInfoSigningAlgValuesSupported(algorithms).build(); algorithms.clear();
@@ -381,6 +407,82 @@ final class OidcUserInfoTests {
 		}
 	}
 
+	@TestFactory
+	Stream<DynamicTest> trustedStorageRepresentationChangesRetainOriginalIdentity() {
+		return Stream.of("member order", "singleton audience", "audience order", "numeric scale").map(mode -> DynamicTest.dynamicTest(mode, () -> {
+			try (TestHttpsServer server = TestHttpsServer.start()) {
+				OidcClient client = builder(server).trustedAudiences(Set.of("other")).build();
+				Map<String, String> original = new LinkedHashMap<>();
+				original.put("azp", "\"client\""); original.put("sid", "\"TEST-ONLY-session\"");
+				original.put("auth_time", Long.toString(NOW.getEpochSecond()));
+				if (mode.equals("audience order")) original.put("aud", "[\"client\",\"other\"]");
+				OidcAuthentication auth = authenticate(server, client, ACCESS, 0, original);
+				OidcSessionReference stored = storedReference(auth.getSessionReference(), envelope -> {}, fields -> {
+					switch (mode) {
+						case "member order" -> {
+							List<Map.Entry<String, JsonValue>> entries = new ArrayList<>(fields.entrySet()); Collections.reverse(entries);
+							fields.clear(); for (var entry : entries) fields.put(entry.getKey(), entry.getValue());
+						}
+						case "singleton audience" -> fields.put("aud", JsonArray.fromElements(List.of(JsonString.fromValue("client"))));
+						case "audience order" -> fields.put("aud", JsonArray.fromElements(List.of(JsonString.fromValue("other"), JsonString.fromValue("client"))));
+						case "numeric scale" -> {
+							JsonNumber equivalent = JsonNumber.fromValue(new java.math.BigDecimal(NOW.getEpochSecond() + ".0"));
+							fields.put("iat", equivalent); fields.put("auth_time", equivalent);
+						}
+						default -> throw new AssertionError(mode);
+					}
+				});
+				assertNotEquals(auth.getSessionReference().toSerializedForm(), stored.toSerializedForm());
+				server.script("/token", TestHttpsServer.Script.fromResponse(TestHttpsServer.Response.fromJson(200,
+						"{\"access_token\":\"TEST-ONLY-refreshed-userinfo\",\"token_type\":\"Bearer\",\"expires_in\":300}")));
+				OidcRefreshResult refreshed = client.refresh(auth.getTokens().getRefreshToken().orElseThrow(), stored);
+				respond(server, 200, "application/json", json());
+				assertEquals(SUBJECT, client.fetchUserInfo(auth, refreshed).getSubject());
+				assertEquals(Optional.of("Bearer TEST-ONLY-refreshed-userinfo"), server.getRequests("/userinfo").get(0).getHeader("Authorization"));
+				assertEquals(1, server.getHitCount("/userinfo"));
+			}
+		}));
+	}
+
+	@TestFactory
+	Stream<DynamicTest> everyOriginalContinuityFieldIsRequiredBeforeUserInfoIo() {
+		return Stream.of("client_id", "nonce_digest", "iss", "sub", "aud", "iat", "azp", "auth_time", "sid", "remove azp", "remove auth_time", "remove sid")
+				.map(field -> DynamicTest.dynamicTest(field, () -> {
+					try (TestHttpsServer server = TestHttpsServer.start()) {
+						AtomicReference<OidcValidationException> observed = new AtomicReference<>();
+						OidcClient client = builder(server).trustedAudiences(Set.of("other")).observer(new OidcObserver() {
+							@Override public void didRejectUserInfo(OidcValidationException failure) { observed.set(failure); }
+						}).build();
+						Map<String, String> originalClaims = new LinkedHashMap<>(Map.of("azp", "\"client\"", "sid", "\"TEST-ONLY-session\"", "auth_time", Long.toString(NOW.getEpochSecond())));
+						if (field.equals("client_id")) originalClaims.put("aud", "[\"client\",\"other\"]");
+						OidcAuthentication auth = authenticate(server, client, ACCESS, 300, originalClaims);
+						OidcSessionReference changed = storedReference(auth.getSessionReference(), envelope -> {
+							if (field.equals("client_id")) envelope.put(field, JsonString.fromValue("other"));
+							if (field.equals("nonce_digest")) envelope.put(field, JsonString.fromValue(OidcSessionReference.digest("other nonce")));
+						}, fields -> {
+							if (field.startsWith("remove ")) fields.remove(field.substring(7));
+							else if (field.equals("aud")) fields.put("aud", JsonArray.fromElements(List.of(JsonString.fromValue("client"), JsonString.fromValue("other"))));
+							else if (field.equals("iat") || field.equals("auth_time")) fields.put(field, JsonNumber.fromValue(NOW.plusSeconds(1).getEpochSecond()));
+							else if (!field.equals("nonce_digest") && !field.equals("client_id")) fields.put(field, JsonString.fromValue("other"));
+						});
+						OidcRefreshResult refreshed = new OidcRefreshResult(auth.getTokens(), null, auth.getTokens().getRefreshToken().orElseThrow(), changed);
+						int before = server.getRequests().size();
+						OidcValidationException failure = assertThrows(OidcValidationException.class, () -> client.fetchUserInfo(auth, refreshed));
+						assertEquals(OidcValidationException.Reason.USERINFO_AUTHENTICATION_MISMATCH, failure.getReason());
+						assertSame(failure, observed.get()); assertEquals(before, server.getRequests().size()); assertSafeFailure(failure);
+					}
+					}));
+	}
+
+	private static OidcSessionReference storedReference(OidcSessionReference original, Consumer<Map<String, JsonValue>> changeEnvelope,
+			Consumer<Map<String, JsonValue>> changeClaims) throws Exception {
+		JsonObject parsed = (JsonObject) JsonCodec.parse(original.toSerializedForm().getBytes(StandardCharsets.UTF_8), JsonLimits.protocolDocument(65_536));
+		Map<String, JsonValue> envelope = new LinkedHashMap<>(parsed.getMembers());
+		Map<String, JsonValue> claims = new LinkedHashMap<>(((JsonObject) java.util.Objects.requireNonNull(envelope.get("claims"))).getMembers());
+		changeEnvelope.accept(envelope); changeClaims.accept(claims); envelope.put("claims", JsonObject.fromMembers(claims));
+		return OidcSessionReference.fromSerializedForm(JsonObject.fromMembers(envelope).toJson());
+	}
+
 	@Test
 	void refreshedUserInfoRetainsSignedPolicyAndSubjectChecks() throws Exception {
 		try (TestHttpsServer server = TestHttpsServer.start()) {
@@ -405,8 +507,12 @@ final class OidcUserInfoTests {
 	private static Map<String,String> claims(TestHttpsServer server) { Map<String,String> claims = new LinkedHashMap<>(); claims.put("iss", JsonText.string(server.getBaseUri().toString())); claims.put("sub", JsonText.string(SUBJECT)); claims.put("aud", "\"client\""); return claims; }
 	private static String sign(Map<String,String> claims, boolean forged) { return TestJws.withAlgorithm(Algorithm.RS256).kid("key").payload(JsonText.object(new ArrayList<>(claims.entrySet()))).sign(forged ? Fixture.NEGATIVE_ATTACKER_RSA_2048.getPrivateKey() : Fixture.IDP_SIGNING_RSA_2048.getPrivateKey()); }
 	private static OidcAuthentication authenticate(TestHttpsServer server, OidcClient client, String access, long lifetime) throws Exception {
+		return authenticate(server, client, access, lifetime, Map.of());
+	}
+	private static OidcAuthentication authenticate(TestHttpsServer server, OidcClient client, String access, long lifetime, Map<String, String> additionalClaims) throws Exception {
 		AuthorizationRedirect redirect = client.beginAuthentication(); QueryParameters query = QueryParameters.parse(redirect.getAuthorizationUri().getRawQuery());
 		Map<String,String> claims = claims(server); claims.put("nonce", JsonText.string(query.getValues("nonce").get(0))); claims.put("iat", Long.toString(NOW.getEpochSecond())); claims.put("exp", Long.toString(NOW.plusSeconds(300).getEpochSecond()));
+		claims.putAll(additionalClaims);
 		server.script("/token", TestHttpsServer.Script.fromResponse(TestHttpsServer.Response.fromJson(200, "{\"access_token\":" + JsonText.string(access) + ",\"token_type\":\"Bearer\",\"expires_in\":" + lifetime + ",\"refresh_token\":" + JsonText.string(REFRESH) + ",\"id_token\":" + JsonText.string(sign(claims, false)) + "}")));
 		StateSealer sealer = TestSealers.fromFixedKey(); PendingAuthorizationSource source = PendingAuthorizationSource.fromSealedForm(redirect.getPendingAuthorization().toSealedForm(sealer, "userinfo"), sealer, "userinfo");
 		return client.completeAuthentication(AuthorizationResponse.fromQueryString("state=" + query.getValues("state").get(0) + "&code=TEST-ONLY-code"), source, CALLBACK);
