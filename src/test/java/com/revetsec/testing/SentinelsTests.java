@@ -16,6 +16,8 @@
 
 package com.revetsec.testing;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.internal.json.JsonCodec;
 import com.revetsec.internal.json.JsonLimits;
 import com.revetsec.json.JsonNumber;
@@ -78,7 +80,7 @@ final class SentinelsTests {
 	}
 
 	@TestFactory
-	Stream<DynamicTest> secretRejectsLabelsOutsideItsAlphabet() {
+	@NonNull Stream<@NonNull DynamicTest> secretRejectsLabelsOutsideItsAlphabet() {
 		return Stream.of("", "-leading", "trailing-", "double--hyphen", "Upper", "space here", "\u0131d",
 						"x".repeat(65))
 				.map(label -> DynamicTest.dynamicTest("rejects \"" + label + "\"", () ->
@@ -180,7 +182,7 @@ final class SentinelsTests {
 	}
 
 	@TestFactory
-	Stream<DynamicTest> findsASentinelInEveryKindOfContainerAndRendering() {
+	@NonNull Stream<@NonNull DynamicTest> findsASentinelInEveryKindOfContainerAndRendering() {
 		String secret = Sentinels.AUTHORIZATION_CODE;
 		RecordingObserver<Runnable> observer = RecordingObserver.fromInterface(Runnable.class);
 		observer.getObserver().run();
@@ -207,7 +209,7 @@ final class SentinelsTests {
 		cases.put("chars", secret.toCharArray());
 		cases.put("arbitrary object's toString", new Object() {
 			@Override
-			public String toString() {
+			public @NonNull String toString() {
 				return "rendered " + secret;
 			}
 		});
@@ -236,7 +238,7 @@ final class SentinelsTests {
 	void aRenderingThatThrowsFailsTheWalk() {
 		Object broken = new Object() {
 			@Override
-			public String toString() {
+			public @NonNull String toString() {
 				throw new UnsupportedOperationException("toString is broken");
 			}
 		};
@@ -268,7 +270,7 @@ final class SentinelsTests {
 	}
 
 	@TestFactory
-	Stream<DynamicTest> findsTheMarkerBase64EncodedWhateverItsOffsetAndNeighbors() {
+	@NonNull Stream<@NonNull DynamicTest> findsTheMarkerBase64EncodedWhateverItsOffsetAndNeighbors() {
 		// Each core depends on the marker's bits alone, so any prefix and suffix bytes leave it intact.
 		byte[] marker = Sentinels.MARKER.getBytes(StandardCharsets.US_ASCII);
 		Random random = new Random(20_260_927L);
@@ -301,7 +303,7 @@ final class SentinelsTests {
 	}
 
 	@TestFactory
-	Stream<DynamicTest> positiveControlsFindASentinelClaimAtPayloadOffsetsZeroOneAndTwo() {
+	@NonNull Stream<@NonNull DynamicTest> positiveControlsFindASentinelClaimAtPayloadOffsetsZeroOneAndTwo() {
 		// M2 exit criterion 20: a compact JWT that echoes a sentinel claim carries it only base64url-encoded.
 		return Stream.of(0, 1, 2).map(alignment -> DynamicTest.dynamicTest("offset " + alignment + " mod 3", () -> {
 			String claims = Sentinels.sentinelClaimsJson(alignment);
@@ -330,7 +332,7 @@ final class SentinelsTests {
 	}
 
 	@TestFactory
-	Stream<DynamicTest> aTokenWhoseClaimIsNotTheMarkerIsNotFlagged() {
+	@NonNull Stream<@NonNull DynamicTest> aTokenWhoseClaimIsNotTheMarkerIsNotFlagged() {
 		// The negative control for the positive controls above: one character off, at every alignment. A core covers
 		// only part of the marker's first and last octets, so the change is in the middle.
 		return Stream.of(0, 1, 2).map(alignment -> DynamicTest.dynamicTest("offset " + alignment + " mod 3", () -> {
@@ -382,7 +384,7 @@ final class SentinelsTests {
 	}
 
 	@TestFactory
-	Stream<DynamicTest> compactJwtCarriesSentinelsInTheKidAClaimAndTheSignatureSegment() {
+	@NonNull Stream<@NonNull DynamicTest> compactJwtCarriesSentinelsInTheKidAClaimAndTheSignatureSegment() {
 		return Stream.of(11, 32, 48, 63, 64, 65, 96, 132, 256, 257, 512)
 				.map(octets -> DynamicTest.dynamicTest(octets + " signature octets", () -> {
 					String token = Sentinels.compactJwt("ES256", octets);
@@ -441,7 +443,7 @@ final class SentinelsTests {
 		Assertions.assertEquals(15, Sentinels.signatureSegment(Sentinels.MINIMUM_SIGNATURE_OCTETS).length());
 	}
 
-	private static int offsetMod3(String encoded, byte[] bytes, byte[] marker) {
+	private static int offsetMod3(@NonNull String encoded, byte @NonNull [] bytes, byte @NonNull [] marker) {
 		for (int offset = 0; offset + marker.length <= bytes.length; ++offset) {
 			boolean match = true;
 			for (int index = 0; index < marker.length && match; ++index)
@@ -452,12 +454,12 @@ final class SentinelsTests {
 		throw new AssertionError("no marker in " + encoded);
 	}
 
-	private static JsonObject parse(byte[] json) throws Exception {
+	private static @NonNull JsonObject parse(byte @NonNull [] json) throws Exception {
 		return (JsonObject) JsonCodec.parse(json, JsonLimits.jose(65_536));
 	}
 
 	@SuppressWarnings("unchecked")
-	private static RecordingObserver<Comparable<Object>> comparingObserver() {
+	private static @NonNull RecordingObserver<@NonNull Comparable<@NonNull Object>> comparingObserver() {
 		return RecordingObserver.fromInterface((Class<Comparable<Object>>) (Class<?>) Comparable.class);
 	}
 
@@ -467,16 +469,16 @@ final class SentinelsTests {
 	public static final class FakeJsonString {
 		private final String value;
 
-		FakeJsonString(String value) {
+		FakeJsonString(@NonNull String value) {
 			this.value = value;
 		}
 
-		public String toJson() {
+		public @NonNull String toJson() {
 			return "\"" + this.value + "\"";
 		}
 
 		@Override
-		public String toString() {
+		public @NonNull String toString() {
 			return "FakeJsonString{value=<redacted>}";
 		}
 	}
@@ -485,7 +487,7 @@ final class SentinelsTests {
 	 * A public view of a JSON value, for {@link HiddenJsonValue}.
 	 */
 	public interface JsonRendering {
-		String toJson();
+		@NonNull String toJson();
 	}
 
 	/**
@@ -494,17 +496,17 @@ final class SentinelsTests {
 	private static final class HiddenJsonValue implements JsonRendering {
 		private final String value;
 
-		private HiddenJsonValue(String value) {
+		private HiddenJsonValue(@NonNull String value) {
 			this.value = value;
 		}
 
 		@Override
-		public String toJson() {
+		public @NonNull String toJson() {
 			return "{\"token\":\"" + this.value + "\"}";
 		}
 
 		@Override
-		public String toString() {
+		public @NonNull String toString() {
 			return "HiddenJsonValue{token=<redacted>}";
 		}
 	}

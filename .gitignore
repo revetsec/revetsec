@@ -4,6 +4,8 @@
 /conformance/target/
 /differential/target/
 /examples/target/
+/examples/*/target/
+/.example-inputs/
 /verification/*/target/
 
 # Jazzer's generated working corpus and crash reproducers (seed corpora are committed elsewhere under fuzz/)

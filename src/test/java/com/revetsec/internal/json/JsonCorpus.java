@@ -16,6 +16,8 @@
 
 package com.revetsec.internal.json;
 
+import org.jspecify.annotations.NonNull;
+
 import javax.annotation.concurrent.ThreadSafe;
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -47,7 +49,7 @@ final class JsonCorpus {
 	/**
 	 * The corpus directory.
 	 */
-	static Path root() {
+	static @NonNull Path root() {
 		try {
 			// target/test-classes -> target -> the module root.
 			Path testClasses = Path.of(JsonCorpus.class.getProtectionDomain().getCodeSource().getLocation().toURI());
@@ -70,7 +72,7 @@ final class JsonCorpus {
 	/**
 	 * The bytes of a corpus file, by its path relative to the corpus root (such as {@code parse/array.json}).
 	 */
-	static byte[] read(String relativePath) {
+	static byte @NonNull [] read(@NonNull String relativePath) {
 		try {
 			return Files.readAllBytes(root().resolve(relativePath));
 		} catch (IOException exception) {
@@ -81,7 +83,7 @@ final class JsonCorpus {
 	/**
 	 * Every corpus file except the manifest, as sorted paths relative to the root with {@code /} separators.
 	 */
-	static List<String> files() {
+	static @NonNull List<@NonNull String> files() {
 		Path root = root();
 
 		try (Stream<Path> paths = Files.walk(root)) {

@@ -1,0 +1,21 @@
+{
+  "tag": "2.11.4",
+  "image": "caddy:2.11.4@sha256:0c994536bddb66445885237f1a5dcc1916bccea922661c76b4e9fc24061f9b52",
+  "manifestDigest": "sha256:0c994536bddb66445885237f1a5dcc1916bccea922661c76b4e9fc24061f9b52",
+  "linuxArm64Digest": "sha256:c802bf2721a427e961b9fd6a194c3888a180de9990b43f8530a02bd6be017e17",
+  "officialImagesGitCommit": "fba2853501d36e8a72f946ac8cb7ff64d07e48f2",
+  "latestUpstreamRelease": "2.11.6",
+  "latestReleaseImagePublished": false,
+  "upstreamRelease": "https://github.com/caddyserver/caddy/releases/tag/v2.11.6",
+  "executedAt": "2026-10-01T19:53:21.355029+00:00",
+  "globalTrustMutation": false,
+  "officialImagesSource": "https://raw.githubusercontent.com/docker-library/official-images/master/library/caddy",
+  "latestUpstreamBinary": {
+    "version": "2.11.6",
+    "platform": "mac_arm64",
+    "downloadUrl": "https://github.com/caddyserver/caddy/releases/download/v2.11.6/caddy_2.11.6_mac_arm64.tar.gz",
+    "archiveSha256": "4ad5a757d4ebb880e0a2bb333410a0089f09348d9e74693bcf13be0669675f6e",
+    "checksumsUrl": "https://github.com/caddyserver/caddy/releases/download/v2.11.6/caddy_2.11.6_checksums.txt",
+    "checksumsSha256": "26c88a924222a8efa717d9d80304250c2afa59f5070c259a319d032d66e2a735"
+  }
+}

@@ -16,6 +16,8 @@
 
 package com.revetsec.testing;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.testing.RawTlsServer.ClosedBy;
 import com.revetsec.testing.RawTlsServer.Connection;
 import com.revetsec.testing.RawTlsServer.Outcome;
@@ -463,7 +465,7 @@ final class RawTlsServerTests {
 				() -> Script.builder().trickle(new byte[1], 1, Duration.ZERO));
 	}
 
-	private static Connection onlyConnection(RawTlsServer server) throws InterruptedException {
+	private static @NonNull Connection onlyConnection(@NonNull RawTlsServer server) throws InterruptedException {
 		Assertions.assertTrue(server.awaitConnectionCount(1, WAIT), "no connection arrived");
 		Assertions.assertEquals(1, server.getConnections().size(), () -> server.getConnections().toString());
 		return server.getConnections().get(0);

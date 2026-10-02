@@ -16,6 +16,8 @@
 
 package com.revetsec;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.jose.JwtValidationResult;
 import com.revetsec.oauth.BearerTokenResult;
 import com.revetsec.oauth.AuthorizationCompletionResult;
@@ -53,7 +55,7 @@ final class ResultApiContractTests {
         assertThrows(AssertionError.class, () -> assertRestrictedConstruction(FactoryResult.class));
     }
 
-    private static void assertRestrictedConstruction(Class<?> type) {
+    private static void assertRestrictedConstruction(@NonNull Class<?> type) {
         for (var constructor : type.getDeclaredConstructors())
             assertFalse(Modifier.isPublic(constructor.getModifiers()) || Modifier.isProtected(constructor.getModifiers()));
         for (var method : type.getDeclaredMethods())
@@ -62,6 +64,6 @@ final class ResultApiContractTests {
     private static final class ForgedResult { public ForgedResult() { } }
     private static final class FactoryResult {
         private FactoryResult() { }
-        public static FactoryResult fromValue() { return new FactoryResult(); }
+        public static @NonNull FactoryResult fromValue() { return new FactoryResult(); }
     }
 }

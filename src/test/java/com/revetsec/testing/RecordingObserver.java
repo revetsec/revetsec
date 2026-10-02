@@ -16,6 +16,8 @@
 
 package com.revetsec.testing;
 
+import org.jspecify.annotations.NonNull;
+
 import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.ThreadSafe;
@@ -59,7 +61,7 @@ public final class RecordingObserver<T> {
 	private final List<Call> calls = new CopyOnWriteArrayList<>();
 	private final @Nullable Supplier<? extends Throwable> failure;
 
-	private RecordingObserver(Class<T> observerInterface, @Nullable Supplier<? extends Throwable> failure) {
+	private RecordingObserver(@NonNull Class<@NonNull T> observerInterface, @Nullable Supplier<? extends @NonNull Throwable> failure) {
 		this.observerInterface = observerInterface;
 		this.failure = failure;
 		@Nullable ClassLoader classLoader = observerInterface.getClassLoader();
@@ -76,7 +78,7 @@ public final class RecordingObserver<T> {
 	 * @return a new recorder with no calls
 	 * @throws IllegalArgumentException if {@code observerInterface} is not an interface
 	 */
-	public static <T> RecordingObserver<T> fromInterface(Class<T> observerInterface) {
+	public static <T> @NonNull RecordingObserver<@NonNull T> fromInterface(@NonNull Class<@NonNull T> observerInterface) {
 		requireNonNull(observerInterface);
 		requireInterface(observerInterface);
 		return new RecordingObserver<>(observerInterface, null);
@@ -91,8 +93,8 @@ public final class RecordingObserver<T> {
 	 * @return a new recorder with no calls
 	 * @throws IllegalArgumentException if {@code observerInterface} is not an interface
 	 */
-	public static <T> RecordingObserver<T> fromInterface(Class<T> observerInterface,
-			Supplier<? extends Throwable> failure) {
+	public static <T> @NonNull RecordingObserver<@NonNull T> fromInterface(@NonNull Class<@NonNull T> observerInterface,
+			@NonNull Supplier<? extends @NonNull Throwable> failure) {
 		requireNonNull(observerInterface);
 		requireNonNull(failure);
 		requireInterface(observerInterface);
@@ -104,7 +106,7 @@ public final class RecordingObserver<T> {
 	 *
 	 * @return the observer; the same instance on every call
 	 */
-	public T getObserver() {
+	public @NonNull T getObserver() {
 		return this.observer;
 	}
 
@@ -113,7 +115,7 @@ public final class RecordingObserver<T> {
 	 *
 	 * @return the observer interface
 	 */
-	public Class<T> getObserverInterface() {
+	public @NonNull Class<@NonNull T> getObserverInterface() {
 		return this.observerInterface;
 	}
 
@@ -122,7 +124,7 @@ public final class RecordingObserver<T> {
 	 *
 	 * @return an immutable snapshot
 	 */
-	public List<Call> getCalls() {
+	public @NonNull List<@NonNull Call> getCalls() {
 		return List.copyOf(this.calls);
 	}
 
@@ -132,17 +134,17 @@ public final class RecordingObserver<T> {
 	 * @param methodName the hook's name
 	 * @return an immutable snapshot, empty if there were none
 	 */
-	public List<Call> getCalls(String methodName) {
+	public @NonNull List<@NonNull Call> getCalls(@NonNull String methodName) {
 		requireNonNull(methodName);
 		return this.calls.stream().filter(call -> call.getMethodName().equals(methodName)).toList();
 	}
 
 	@Override
-	public String toString() {
+	public @NonNull String toString() {
 		return "RecordingObserver[" + this.observerInterface.getName() + ", " + this.calls.size() + " call(s)]";
 	}
 
-	private static void requireInterface(Class<?> observerInterface) {
+	private static void requireInterface(@NonNull Class<?> observerInterface) {
 		if (!observerInterface.isInterface() || observerInterface.isAnnotation())
 			throw new IllegalArgumentException(observerInterface.getName() + " is not an interface");
 	}
@@ -157,7 +159,7 @@ public final class RecordingObserver<T> {
 		private final List<@Nullable Object> arguments;
 		private final Thread thread;
 
-		private Call(Method method, List<@Nullable Object> arguments, Thread thread) {
+		private Call(@NonNull Method method, @NonNull List<@Nullable Object> arguments, @NonNull Thread thread) {
 			this.method = method;
 			this.arguments = arguments;
 			this.thread = thread;
@@ -168,7 +170,7 @@ public final class RecordingObserver<T> {
 		 *
 		 * @return the method
 		 */
-		public Method getMethod() {
+		public @NonNull Method getMethod() {
 			return this.method;
 		}
 
@@ -177,7 +179,7 @@ public final class RecordingObserver<T> {
 		 *
 		 * @return the method name
 		 */
-		public String getMethodName() {
+		public @NonNull String getMethodName() {
 			return this.method.getName();
 		}
 
@@ -186,7 +188,7 @@ public final class RecordingObserver<T> {
 		 *
 		 * @return an unmodifiable list that may contain {@code null}
 		 */
-		public List<@Nullable Object> getArguments() {
+		public @NonNull List<@Nullable Object> getArguments() {
 			return this.arguments;
 		}
 
@@ -206,12 +208,12 @@ public final class RecordingObserver<T> {
 		 *
 		 * @return the calling thread
 		 */
-		public Thread getThread() {
+		public @NonNull Thread getThread() {
 			return this.thread;
 		}
 
 		@Override
-		public String toString() {
+		public @NonNull String toString() {
 			// Names only: rendering arguments here could leak what a test asserts is never rendered.
 			return "Call[" + this.method.getDeclaringClass().getSimpleName() + "." + getMethodName() + ", "
 					+ this.arguments.size() + " argument(s)]";
@@ -221,12 +223,12 @@ public final class RecordingObserver<T> {
 	private static final class Handler implements InvocationHandler {
 		private final RecordingObserver<?> recorder;
 
-		private Handler(RecordingObserver<?> recorder) {
+		private Handler(@NonNull RecordingObserver<?> recorder) {
 			this.recorder = recorder;
 		}
 
 		@Override
-		public @Nullable Object invoke(Object proxy, Method method, @Nullable Object @Nullable [] arguments)
+		public @Nullable Object invoke(@NonNull Object proxy, @NonNull Method method, @Nullable Object @Nullable [] arguments)
 				throws Throwable {
 			if (method.getDeclaringClass() == Object.class)
 				return objectMethod(proxy, method, arguments);
@@ -247,7 +249,7 @@ public final class RecordingObserver<T> {
 
 		// A proxy is equal only to itself, as Object.equals would say.
 		@SuppressWarnings("ReferenceEquality")
-		private Object objectMethod(Object proxy, Method method, @Nullable Object @Nullable [] arguments) {
+		private @NonNull Object objectMethod(@NonNull Object proxy, @NonNull Method method, @Nullable Object @Nullable [] arguments) {
 			return switch (method.getName()) {
 				case "equals" -> arguments != null && arguments.length == 1 && arguments[0] == proxy;
 				case "hashCode" -> System.identityHashCode(proxy);
@@ -256,7 +258,7 @@ public final class RecordingObserver<T> {
 			};
 		}
 
-		private static @Nullable Object zeroValue(Class<?> type) {
+		private static @Nullable Object zeroValue(@NonNull Class<?> type) {
 			if (!type.isPrimitive())
 				return null;
 			if (type == boolean.class)

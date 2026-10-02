@@ -16,6 +16,8 @@
 
 package com.revetsec.jose;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.testing.RecordingObserver;
 import com.revetsec.testing.TestJsonWebKeys.Fixture;
 import com.revetsec.testing.TestJws.Algorithm;
@@ -166,7 +168,7 @@ final class JwtValidatorBuilderTests {
 	// R8: the clock skew is within [0, 5 min] (JOSE_CLOCK_SKEW, zero allowed), and the maximum token length within
 	// [8 KiB, 1 MiB] (COMPACT_JWT_SIZE); the edges are accepted and one step past each is refused.
 	@TestFactory
-	Stream<DynamicTest> rangedSettingsAreCheckedAgainstTheirLimitRows() {
+	@NonNull Stream<@NonNull DynamicTest> rangedSettingsAreCheckedAgainstTheirLimitRows() {
 		StaticJsonWebKeySource source = JwtFixtures.source(Fixture.IDP_SIGNING_RSA_2048);
 
 		return Stream.of(

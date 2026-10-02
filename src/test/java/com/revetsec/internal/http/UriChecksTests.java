@@ -16,6 +16,8 @@
 
 package com.revetsec.internal.http;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.OutboundUriPolicy;
 import com.revetsec.internal.http.HttpExchangeException.Kind;
 import com.revetsec.testing.Sentinels;
@@ -64,7 +66,7 @@ final class UriChecksTests {
 	 */
 	private static final Map<String, String> ROWS = rows();
 
-	private static Map<String, String> rows() {
+	private static @NonNull Map<@NonNull String, @NonNull String> rows() {
 		Map<String, String> rows = new LinkedHashMap<>();
 		// G8-9: absolute and hierarchical, with a host URI can parse and a port from 1 to 65535.
 		rows.put("/relative", "NNNN");
@@ -142,7 +144,7 @@ final class UriChecksTests {
 	// two methods agree: requirePermitted returns the URI itself exactly when isPermitted is true, and otherwise throws
 	// IllegalArgumentException.
 	@TestFactory
-	Stream<DynamicTest> everyRowHasItsOutcomeUnderBothPresetsAndBothLoopbackSettings() {
+	@NonNull Stream<@NonNull DynamicTest> everyRowHasItsOutcomeUnderBothPresetsAndBothLoopbackSettings() {
 		List<DynamicTest> tests = new ArrayList<>();
 		for (Map.Entry<String, String> row : ROWS.entrySet())
 			for (int combination = 0; combination < 4; ++combination) {
@@ -166,7 +168,7 @@ final class UriChecksTests {
 	// request (the stand-in client then fails it with IO) exactly when UriChecks permits the URI, and otherwise fails
 	// with URI_REJECTED before the client is asked to send anything.
 	@TestFactory
-	Stream<DynamicTest> theFetchTimeCheckAgreesWithTheBuildTimeCheckOnEveryRow() {
+	@NonNull Stream<@NonNull DynamicTest> theFetchTimeCheckAgreesWithTheBuildTimeCheckOnEveryRow() {
 		List<DynamicTest> tests = new ArrayList<>();
 		for (Map.Entry<String, String> row : ROWS.entrySet())
 			for (int combination = 0; combination < 4; ++combination) {
@@ -242,7 +244,7 @@ final class UriChecksTests {
 	}
 
 	@SuppressWarnings({"NullAway", "TypeParameterUnusedInFormals"})
-	private static <T> T nullValue() {
+	private static <T> @NonNull T nullValue() {
 		@Nullable T value = null;
 		return value;
 	}

@@ -16,6 +16,10 @@
 
 package com.revetsec.internal.crypto;
 
+import org.jspecify.annotations.Nullable;
+
+import org.jspecify.annotations.NonNull;
+
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.DynamicTest;
 import org.junit.jupiter.api.Test;
@@ -34,7 +38,7 @@ import java.util.stream.Stream;
  */
 final class KeyRejectedExceptionTests {
 	@TestFactory
-	Stream<DynamicTest> eachKindHasAFixedMessageAndNoCauseOrStackTrace() {
+	@NonNull Stream<@NonNull DynamicTest> eachKindHasAFixedMessageAndNoCauseOrStackTrace() {
 		return Stream.of(KeyRejectedException.Kind.values()).map(kind -> DynamicTest.dynamicTest(kind.name(), () -> {
 			KeyRejectedException exception = new KeyRejectedException(kind);
 			exception.addSuppressed(new IllegalStateException("suppressed"));
@@ -58,6 +62,8 @@ final class KeyRejectedExceptionTests {
 				.map(KeyRejectedException.Kind::getMessage).collect(Collectors.toSet()).size(), "messages are distinct");
 	}
 
+	// Deliberate null inputs verify runtime rejection.
+	@SuppressWarnings("NullAway")
 	@Test
 	void rejectsANullKind() {
 		Assertions.assertThrows(NullPointerException.class, () -> new KeyRejectedException(nullValue()));
@@ -67,7 +73,7 @@ final class KeyRejectedExceptionTests {
 	 * Hides a {@code null} from NullAway, for the tests that check null handling.
 	 */
 	@SuppressWarnings({"NullAway", "TypeParameterUnusedInFormals"})
-	private static <T> T nullValue() {
+	private static <T> @Nullable T nullValue() {
 		return null;
 	}
 }

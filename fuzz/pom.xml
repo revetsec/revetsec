@@ -315,6 +315,42 @@
 				<targetPath>com/revetsec/oidc/OidcFuzzTestsInputs/sessionReferencesRoundTripWithoutCredentials/jsontestsuite</targetPath>
 				<includes><include>*.json</include></includes>
 			</testResource>
+			<testResource>
+				<directory>${revetsec.core.basedir}/src/test/resources/com/revetsec/internal/json/corpus</directory>
+				<targetPath>com/revetsec/oauth/ResourceServerFuzzTestsInputs/metadataKeepsRolesAndRawResourceIdentifiers</targetPath>
+				<includes><include>parse/**</include><include>round-trip/**</include></includes>
+			</testResource>
+
+			<testResource>
+				<directory>${revetsec.core.basedir}/src/test/resources/vectors/jsontestsuite/test_parsing</directory>
+				<targetPath>com/revetsec/oauth/ResourceServerFuzzTestsInputs/metadataKeepsRolesAndRawResourceIdentifiers/jsontestsuite</targetPath>
+				<includes><include>*.json</include></includes>
+			</testResource>
+
+			<testResource>
+				<directory>${revetsec.core.basedir}/src/test/resources/com/revetsec/internal/json/corpus</directory>
+				<targetPath>com/revetsec/oauth/ResourceServerFuzzTestsInputs/signedAccessTokensRespectStrictAndUntypedProfiles</targetPath>
+				<includes><include>parse/**</include><include>round-trip/**</include></includes>
+			</testResource>
+
+			<testResource>
+				<directory>${revetsec.core.basedir}/src/test/resources/vectors/jsontestsuite/test_parsing</directory>
+				<targetPath>com/revetsec/oauth/ResourceServerFuzzTestsInputs/signedAccessTokensRespectStrictAndUntypedProfiles/jsontestsuite</targetPath>
+				<includes><include>*.json</include></includes>
+			</testResource>
+
+			<testResource>
+				<directory>${revetsec.core.basedir}/src/test/resources/com/revetsec/internal/json/corpus</directory>
+				<targetPath>com/revetsec/oauth/ResourceServerFuzzTestsInputs/introspectionResponsesAreTypedAudienceCheckedAndUncached</targetPath>
+				<includes><include>parse/**</include><include>round-trip/**</include></includes>
+			</testResource>
+
+			<testResource>
+				<directory>${revetsec.core.basedir}/src/test/resources/vectors/jsontestsuite/test_parsing</directory>
+				<targetPath>com/revetsec/oauth/ResourceServerFuzzTestsInputs/introspectionResponsesAreTypedAudienceCheckedAndUncached/jsontestsuite</targetPath>
+				<includes><include>*.json</include></includes>
+			</testResource>
+
 		</testResources>
 
 		<plugins>
@@ -426,15 +462,17 @@
 				<artifactId>maven-surefire-plugin</artifactId>
 				<version>3.6.0</version>
 				<configuration>
-					<!-- Only fuzz targets run here, plus FuzzSeedLayoutTests, which checks that every target's
-						 seed directory and mapped corpora match its class and method names, and FuzzSeedProvenanceTests,
-						 which checks the generated and Wycheproof-derived seeds against their sources. The core test tree is
+					<!-- Fuzz targets run here with FuzzSeedLayoutTests, which checks that every target's
+						 seed directory and mapped corpora match its class and method names, FuzzSeedProvenanceTests,
+						 which checks generated and Wycheproof-derived seeds against their sources, and
+						 FuzzNullabilityContractTests, which attributes all executable fuzz signatures. The core test tree is
 						 compiled in for its helpers, but its *Tests classes (contract tests included) run in the
 						 root build, whose basedir they assume. Fuzz targets are named *FuzzTests; see README.md. -->
 					<includes>
 						<include>**/*FuzzTests.java</include>
 						<include>com/revetsec/FuzzSeedLayoutTests.java</include>
 						<include>com/revetsec/FuzzSeedProvenanceTests.java</include>
+						<include>com/revetsec/FuzzNullabilityContractTests.java</include>
 					</includes>
 					<failIfNoTests>true</failIfNoTests>
 					<systemPropertyVariables>

@@ -16,6 +16,8 @@
 
 package com.revetsec.oidc;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.ErrorCategory;
 import com.revetsec.jose.JsonWebKeySet;
 import com.revetsec.jose.JoseException;
@@ -82,7 +84,7 @@ final class IdTokenValidatorTests {
 	}
 
 	@TestFactory
-	Stream<DynamicTest> hashesUseHalfOfTheIndependentDigestForEverySupportedAlgorithm() {
+	@NonNull Stream<@NonNull DynamicTest> hashesUseHalfOfTheIndependentDigestForEverySupportedAlgorithm() {
 		return Arrays.stream(JwsAlgorithm.values()).map(algorithm -> DynamicTest.dynamicTest(algorithm.name(), () -> {
 			String digestName = switch (algorithm) {
 				case RS256, PS256, ES256, HS256 -> "SHA-256";
@@ -97,7 +99,7 @@ final class IdTokenValidatorTests {
 	}
 
 	@TestFactory
-	Stream<DynamicTest> validatesAsymmetricIdTokensAndTheirHashes() {
+	@NonNull Stream<@NonNull DynamicTest> validatesAsymmetricIdTokensAndTheirHashes() {
 		return Stream.of(
 				Map.entry(Algorithm.RS256, Fixture.IDP_SIGNING_RSA_2048),
 				Map.entry(Algorithm.PS512, Fixture.IDP_SIGNING_RSA_2048),
@@ -118,7 +120,7 @@ final class IdTokenValidatorTests {
 	}
 
 	@TestFactory
-	Stream<DynamicTest> asciiSubjectBoundsIncludeDelAndExactly255Characters() {
+	@NonNull Stream<@NonNull DynamicTest> asciiSubjectBoundsIncludeDelAndExactly255Characters() {
 		return Stream.of("s".repeat(255), "\u007f", "s".repeat(254) + "\u007f")
 				.map(subject -> DynamicTest.dynamicTest("ASCII subject length " + subject.length(), () -> {
 					Map<String, String> values = claims();
@@ -128,8 +130,8 @@ final class IdTokenValidatorTests {
 	}
 
 	@TestFactory
-	Stream<DynamicTest> everyOidcClaimDefectIsRejected() {
-		record Case(String name, @Nullable String value, OidcValidationException.Reason reason) {}
+	@NonNull Stream<@NonNull DynamicTest> everyOidcClaimDefectIsRejected() {
+		record Case(@NonNull String name, @Nullable String value, OidcValidationException.@NonNull Reason reason) {}
 		return Stream.of(
 				new Case("iss", JsonText.string(ISSUER + "/"), OidcValidationException.Reason.ISSUER_MISMATCH),
 				new Case("iss", JsonText.string("https://ISSUER.example.com"), OidcValidationException.Reason.ISSUER_MISMATCH),
@@ -363,7 +365,7 @@ final class IdTokenValidatorTests {
 		Assertions.assertEquals(Optional.of(JoseException.Reason.KEY_ISSUER_MISMATCH), failure.getJoseReason());
 	}
 
-	private static void assertRedactedGraph(OidcValidationException exception, String... credentials)
+	private static void assertRedactedGraph(@NonNull OidcValidationException exception, @NonNull String @NonNull ... credentials)
 			throws IllegalAccessException {
 		Assertions.assertEquals(ErrorCategory.VALIDATION_FAILURE, exception.getCategory());
 		Assertions.assertFalse(exception.isTransient());
@@ -387,27 +389,27 @@ final class IdTokenValidatorTests {
 			}
 	}
 
-	private static IdToken accept(Map<String, String> claims) {
+	private static @NonNull IdToken accept(@NonNull Map<@NonNull String, @NonNull String> claims) {
 		return validator().validate(signed(claims), NONCE, ACCESS, CODE, null, Set.of());
 	}
 
-	private static OidcValidationException assertRejected(OidcValidationException.Reason reason,
-			Map<String, String> claims) {
+	private static @NonNull OidcValidationException assertRejected(OidcValidationException.@NonNull Reason reason,
+			@NonNull Map<@NonNull String, @NonNull String> claims) {
 		return assertFailure(reason, () -> accept(claims));
 	}
 
-	private static OidcValidationException assertFailure(OidcValidationException.Reason reason, Runnable action) {
+	private static @NonNull OidcValidationException assertFailure(OidcValidationException.@NonNull Reason reason, @NonNull Runnable action) {
 		OidcValidationException exception = Assertions.assertThrows(OidcValidationException.class, action::run);
 		Assertions.assertEquals(reason, exception.getReason());
 		return exception;
 	}
 
-	private static IdTokenValidator validator() {
+	private static @NonNull IdTokenValidator validator() {
 		return validator(Fixture.IDP_SIGNING_RSA_2048, Set.of(JwsAlgorithm.RS256), Set.of(), Set.of(), NOW);
 	}
 
-	private static IdTokenValidator validator(Fixture fixture, Set<JwsAlgorithm> algorithms, Set<String> audiences,
-			Set<String> authorizedParties, Instant now) {
+	private static @NonNull IdTokenValidator validator(@NonNull Fixture fixture, @NonNull Set<@NonNull JwsAlgorithm> algorithms, @NonNull Set<@NonNull String> audiences,
+			@NonNull Set<@NonNull String> authorizedParties, @NonNull Instant now) {
 		String key = TestJsonWebKeys.withFixture(fixture).kid("key")
 				.alg(algorithms.iterator().next().getWireValue()).toKeySetJson();
 		return new IdTokenValidator(ISSUER, CLIENT, StaticJsonWebKeySource.fromJsonWebKeySet(JsonWebKeySet.fromJson(key)),
@@ -415,7 +417,7 @@ final class IdTokenValidatorTests {
 				Clock.fixed(now, ZoneOffset.UTC));
 	}
 
-	private static Map<String, String> claims() {
+	private static @NonNull Map<@NonNull String, @NonNull String> claims() {
 		Map<String, String> claims = new LinkedHashMap<>();
 		claims.put("iss", JsonText.string(ISSUER));
 		claims.put("aud", JsonText.string(CLIENT));
@@ -426,19 +428,19 @@ final class IdTokenValidatorTests {
 		return claims;
 	}
 
-	private static String signed(Map<String, String> claims) {
+	private static @NonNull String signed(@NonNull Map<@NonNull String, @NonNull String> claims) {
 		return token(Algorithm.RS256, claims).sign(Fixture.IDP_SIGNING_RSA_2048.getPrivateKey());
 	}
 
-	private static TestJws.Builder token(Algorithm algorithm, Map<String, String> claims) {
+	private static TestJws.@NonNull Builder token(@NonNull Algorithm algorithm, @NonNull Map<@NonNull String, @NonNull String> claims) {
 		return TestJws.withAlgorithm(algorithm).kid("key").payload(claimsText(claims));
 	}
 
-	private static String claimsText(Map<String, String> claims) {
+	private static @NonNull String claimsText(@NonNull Map<@NonNull String, @NonNull String> claims) {
 		return JsonText.object(new ArrayList<>(claims.entrySet()));
 	}
 
-	private static String resource(String name) throws IOException {
+	private static @NonNull String resource(@NonNull String name) throws IOException {
 		try (InputStream input = IdTokenValidatorTests.class.getResourceAsStream("/vectors/oidc-core/" + name)) {
 			if (input == null)
 				throw new IllegalStateException("The OIDC test example is missing.");

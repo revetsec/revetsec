@@ -16,6 +16,8 @@
 
 package com.revetsec.internal.jose;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.internal.encoding.Base64Url;
 import com.revetsec.internal.json.JsonCodec;
 import com.revetsec.internal.json.JsonLimits;
@@ -83,7 +85,7 @@ final class JoseRfcVectorTests {
 
 	// Each public-key example verifies under its key at the JWS layer, and one flipped signature bit refuses it.
 	@TestFactory
-	Stream<DynamicTest> everyPublicKeyExampleVerifiesAndAFlippedBitDoesNot() {
+	@NonNull Stream<@NonNull DynamicTest> everyPublicKeyExampleVerifiesAndAFlippedBitDoesNot() {
 		Map<String, Example> examples = new LinkedHashMap<>();
 		examples.put("RFC 7515 A.4 (ES512)", new Example(RfcJoseExamples.RFC_7515_A4_JWS, RfcJoseExamples.rfc7515A4Key(),
 				JwsAlgorithm.ES512, "Payload", null));
@@ -240,24 +242,24 @@ final class JoseRfcVectorTests {
 				",\"use\":\"enc\"", ""))).keyId());
 	}
 
-	private static PreparedJws prepare(String jws,
-																		 JwsAlgorithm algorithm) throws JoseFailure {
+	private static @NonNull PreparedJws prepare(@NonNull String jws,
+																		 @NonNull JwsAlgorithm algorithm) throws JoseFailure {
 		return JwtProcessor.prepare(jws, JoseHeaderPolicy.fromSettings(64 * 1024, Set.of(algorithm), Set.of("JWT"),
 				false));
 	}
 
-	private static KeyQuery query(Example example) throws JoseFailure {
+	private static @NonNull KeyQuery query(@NonNull Example example) throws JoseFailure {
 		return prepare(example.jws(), example.algorithm()).getKeyQuery();
 	}
 
-	private static JsonObject json(String text) throws Exception {
+	private static @NonNull JsonObject json(@NonNull String text) throws Exception {
 		return (JsonObject) JsonCodec.parse(text.getBytes(StandardCharsets.UTF_8), JsonLimits.jose(64 * 1024));
 	}
 
 	/**
 	 * The token with the lowest bit of its signature's last octet flipped.
 	 */
-	static String flipLastSignatureBit(String jws) throws Exception {
+	static @NonNull String flipLastSignatureBit(@NonNull String jws) throws Exception {
 		int dot = jws.lastIndexOf('.');
 		byte[] signature = Base64Url.decode(jws.substring(dot + 1));
 		signature[signature.length - 1] ^= 1;
@@ -267,7 +269,7 @@ final class JoseRfcVectorTests {
 	/**
 	 * The lowercase hexadecimal SHA-256 of {@code bytes}.
 	 */
-	private static String sha256(byte[] bytes) throws Exception {
+	private static @NonNull String sha256(byte @NonNull [] bytes) throws Exception {
 		return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes));
 	}
 
@@ -275,7 +277,7 @@ final class JoseRfcVectorTests {
 	 * One example: the token, its key's JWK, its algorithm, and its payload text or the SHA-256 of its payload when the
 	 * test checks it.
 	 */
-	private record Example(String jws, String jwk, JwsAlgorithm algorithm, @Nullable String payload,
+	private record Example(@NonNull String jws, @NonNull String jwk, @NonNull JwsAlgorithm algorithm, @Nullable String payload,
 												 @Nullable String payloadSha256) {
 	}
 
@@ -286,21 +288,21 @@ final class JoseRfcVectorTests {
 	 * keys carry no {@code alg} (read 2026-09-28), so the tests drop that member and verify each example under its own
 	 * algorithm alone, as an application holding the RFC's keys would.
 	 */
-	private record JsonWebSignatureFile(VectorFile file) {
-		static JsonWebSignatureFile load() {
+	private record JsonWebSignatureFile(@NonNull VectorFile file) {
+		static @NonNull JsonWebSignatureFile load() {
 			return new JsonWebSignatureFile(WycheproofVectors.fromVendoredFiles().getFile("json_web_signature_test.json"));
 		}
 
-		String jws(int tcId) {
+		@NonNull String jws(int tcId) {
 			return this.file.getTest(tcId).getString("jws");
 		}
 
-		TestGroup group(int tcId) {
+		@NonNull TestGroup group(int tcId) {
 			return this.file.getTest(tcId).getGroup();
 		}
 
-		Example example(int tcId,
-										JwsAlgorithm algorithm) {
+		@NonNull Example example(int tcId,
+										@NonNull JwsAlgorithm algorithm) {
 			Assertions.assertEquals("rfc7520", group(tcId).getJson().findString("comment").orElseThrow());
 			JsonObject.Builder key = JsonObject.builder();
 			group(tcId).getObject("public").getMembers().forEach((name, value) -> {

@@ -16,6 +16,10 @@
 
 package com.revetsec.internal.http;
 
+import org.jspecify.annotations.Nullable;
+
+import org.jspecify.annotations.NonNull;
+
 import com.code_intelligence.jazzer.junit.FuzzTest;
 import com.revetsec.internal.Limits;
 import org.junit.jupiter.api.Assertions;
@@ -119,12 +123,12 @@ public class CacheLifetimeFuzzTests {
 	 * @param input the fuzzed header block: {@code name: value} lines separated by LF
 	 */
 	@FuzzTest(maxDuration = "5m")
-	public void timeToLiveIsTotalClampedAndAgreesWithAnRfc9111Oracle(byte[] input) {
+	public void timeToLiveIsTotalClampedAndAgreesWithAnRfc9111Oracle(byte @NonNull [] input) {
 		requireAgreement(headersOf(new String(input, StandardCharsets.ISO_8859_1)));
 		requireAgreement(headersOf(new String(input, StandardCharsets.UTF_8)));
 	}
 
-	private static void requireAgreement(HttpHeaders headers) {
+	private static void requireAgreement(@NonNull HttpHeaders headers) {
 		for (Instant receivedAt : RECEIVED_AT) {
 			for (List<String> values : headers.map().values()) {
 				for (String value : values)
@@ -153,7 +157,7 @@ public class CacheLifetimeFuzzTests {
 	 * The header block as the JDK client would deliver it: each line split at its first colon, names and values
 	 * trimmed by {@link HttpHeaders#of}, and lines of one name (compared case-insensitively) kept in order.
 	 */
-	private static HttpHeaders headersOf(String text) {
+	private static @NonNull HttpHeaders headersOf(@NonNull String text) {
 		Map<String, List<String>> fields = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
 
 		for (String line : text.split("\n", -1)) {
@@ -178,7 +182,7 @@ public class CacheLifetimeFuzzTests {
 	 * The explicit lifetime after {@code Age}, {@link Duration#ZERO} for every case the subset sends to the minimum, or
 	 * empty for the default.
 	 */
-	private static Optional<Duration> explicitLifetime(HttpHeaders headers, Instant receivedAt) {
+	private static @NonNull Optional<@NonNull Duration> explicitLifetime(@NonNull HttpHeaders headers, @NonNull Instant receivedAt) {
 		CacheControl cacheControl = cacheControl(headers.allValues("Cache-Control"));
 
 		if (cacheControl.minimum)
@@ -217,7 +221,7 @@ public class CacheLifetimeFuzzTests {
 	 * {@code no-store} or {@code no-cache}, a {@code max-age} whose argument is not {@code delta-seconds}, or two
 	 * different {@code max-age} values (after the 2<sup>31</sup> cap) decide the minimum.
 	 */
-	private static CacheControl cacheControl(List<String> lines) {
+	private static @NonNull CacheControl cacheControl(@NonNull List<@NonNull String> lines) {
 		Set<Long> maxAges = new HashSet<>();
 		boolean minimum = false;
 
@@ -261,7 +265,7 @@ public class CacheLifetimeFuzzTests {
 	/**
 	 * Splits a field line at the commas outside quoted strings (RFC 9110 sections 5.6.1 and 5.6.4).
 	 */
-	private static List<String> listElements(String line) {
+	private static @NonNull List<@NonNull String> listElements(@NonNull String line) {
 		List<String> elements = new ArrayList<>();
 		StringBuilder current = new StringBuilder();
 		boolean quoted = false;
@@ -292,7 +296,7 @@ public class CacheLifetimeFuzzTests {
 	/**
 	 * RFC 9110 section 5.6.4: the text of a quoted string, each quoted-pair replaced by its second character.
 	 */
-	private static String unquote(String quoted) {
+	private static @NonNull String unquote(@NonNull String quoted) {
 		StringBuilder text = new StringBuilder();
 
 		for (int index = 0; index < quoted.length(); ++index) {
@@ -307,7 +311,7 @@ public class CacheLifetimeFuzzTests {
 	 * RFC 9111 sections 5.1 and 4.2.3: the first member of the {@code Age} list, over its lines in order, in seconds;
 	 * 0 when it is not {@code delta-seconds} or there is none.
 	 */
-	private static long age(List<String> lines) {
+	private static long age(@NonNull List<@NonNull String> lines) {
 		for (String line : lines)
 			for (String member : line.split(",", -1)) {
 				String trimmed = trimOws(member);
@@ -324,7 +328,7 @@ public class CacheLifetimeFuzzTests {
 	/**
 	 * RFC 9111 section 1.2.2: {@code 1*DIGIT}, where a value above 2<sup>31</sup> counts as 2<sup>31</sup>.
 	 */
-	private static Long deltaSeconds(String value) {
+	private static @Nullable Long deltaSeconds(@NonNull String value) {
 		if (!DELTA_SECONDS.matcher(value).matches())
 			return null;
 
@@ -337,7 +341,7 @@ public class CacheLifetimeFuzzTests {
 	 * second of the next minute. An RFC 850 date's year is the latest year ending in its two digits whose timestamp is no
 	 * more than 50 years after {@code now}, compared to the second.
 	 */
-	private static Optional<Instant> expectedDate(String value, Instant now) {
+	private static @NonNull Optional<@NonNull Instant> expectedDate(@NonNull String value, @NonNull Instant now) {
 		String date = trimOws(value);
 		Matcher imf = IMF_FIXDATE.matcher(date);
 
@@ -380,7 +384,7 @@ public class CacheLifetimeFuzzTests {
 		}
 	}
 
-	private static boolean isAfter(int[] fields, int[] limits) {
+	private static boolean isAfter(int @NonNull [] fields, int @NonNull [] limits) {
 		for (int index = 0; index < fields.length; ++index)
 			if (fields[index] != limits[index])
 				return fields[index] > limits[index];
@@ -388,8 +392,8 @@ public class CacheLifetimeFuzzTests {
 		return false;
 	}
 
-	private static Optional<Instant> instant(int dayName, int year, int month, int day, String hour, String minute,
-																					 String second) {
+	private static @NonNull Optional<@NonNull Instant> instant(int dayName, int year, int month, int day, @NonNull String hour, @NonNull String minute,
+																					 @NonNull String second) {
 		int hours = Integer.parseInt(hour);
 		int minutes = Integer.parseInt(minute);
 		int seconds = Integer.parseInt(second);
@@ -415,7 +419,7 @@ public class CacheLifetimeFuzzTests {
 	/**
 	 * RFC 9110 section 5.6.3: OWS is spaces and horizontal tabs only.
 	 */
-	private static String trimOws(String value) {
+	private static @NonNull String trimOws(@NonNull String value) {
 		int start = 0;
 		int end = value.length();
 
@@ -431,7 +435,7 @@ public class CacheLifetimeFuzzTests {
 	/**
 	 * Folds {@code A-Z} only: a directive name is a token, so nothing else can fold into one (RFC 9111 section 5.2).
 	 */
-	private static String asciiLowerCase(String value) {
+	private static @NonNull String asciiLowerCase(@NonNull String value) {
 		StringBuilder folded = new StringBuilder(value.length());
 
 		for (int index = 0; index < value.length(); ++index) {
@@ -450,7 +454,7 @@ public class CacheLifetimeFuzzTests {
 		private final boolean minimum;
 		private final Long maxAge;
 
-		private CacheControl(boolean minimum, Long maxAge) {
+		private CacheControl(boolean minimum, @Nullable Long maxAge) {
 			this.minimum = minimum;
 			this.maxAge = maxAge;
 		}
@@ -465,13 +469,13 @@ public class CacheLifetimeFuzzTests {
 		private final Duration defaultTimeToLive;
 		private final Duration maximum;
 
-		private Bounds(Duration minimum, Duration defaultTimeToLive, Duration maximum) {
+		private Bounds(@NonNull Duration minimum, @NonNull Duration defaultTimeToLive, @NonNull Duration maximum) {
 			this.minimum = minimum;
 			this.defaultTimeToLive = defaultTimeToLive;
 			this.maximum = maximum;
 		}
 
-		private Duration clamp(Duration lifetime) {
+		private @NonNull Duration clamp(@NonNull Duration lifetime) {
 			if (lifetime.compareTo(this.minimum) < 0)
 				return this.minimum;
 

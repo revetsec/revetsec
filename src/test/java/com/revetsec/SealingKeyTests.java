@@ -16,6 +16,8 @@
 
 package com.revetsec;
 
+import org.jspecify.annotations.NonNull;
+
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.DynamicTest;
 import org.junit.jupiter.api.Test;
@@ -83,7 +85,7 @@ final class SealingKeyTests {
 
 	// G6-9: a kid is 1-64 characters of [A-Za-z0-9._~-].
 	@TestFactory
-	Stream<DynamicTest> acceptsKeyIdsOfOneToSixtyFourUnreservedCharacters() {
+	@NonNull Stream<@NonNull DynamicTest> acceptsKeyIdsOfOneToSixtyFourUnreservedCharacters() {
 		return Stream.of("a", "Z", "0", "2026-09", "prod.v2_rotated~1", "-", "._~-",
 						"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_", "x".repeat(64))
 				.map(keyId -> DynamicTest.dynamicTest(keyId, () -> Assertions.assertEquals(keyId,
@@ -91,7 +93,7 @@ final class SealingKeyTests {
 	}
 
 	@TestFactory
-	Stream<DynamicTest> rejectsEveryOtherKeyIdWithoutEchoingIt() {
+	@NonNull Stream<@NonNull DynamicTest> rejectsEveryOtherKeyIdWithoutEchoingIt() {
 		return Stream.of("", "x".repeat(65), "a b", " a", "a\t", "a/b", "a+b", "a=b", "a:b", "a@b", "a%20", "a\"b",
 						"\u00e9", "\uff21", "\u212a", "a\u0000", "a\n", "\ud800", KEY)
 				.map(keyId -> DynamicTest.dynamicTest("\"" + escape(keyId) + "\"", () -> {
@@ -104,7 +106,7 @@ final class SealingKeyTests {
 
 	// G6-9: exactly 32 bytes as canonical 44-character standard Base64; anything else is rejected, never repaired.
 	@TestFactory
-	Stream<DynamicTest> rejectsEveryOtherKeyEncodingWithoutEchoingIt() {
+	@NonNull Stream<@NonNull DynamicTest> rejectsEveryOtherKeyEncodingWithoutEchoingIt() {
 		return Stream.of(
 				"",
 				KEY.substring(0, 43),
@@ -141,7 +143,7 @@ final class SealingKeyTests {
 
 	// G6-9: a key whose 32 bytes are all the same is a placeholder, such as all zeros.
 	@TestFactory
-	Stream<DynamicTest> rejectsKeysWhoseThirtyTwoBytesAreAllTheSame() {
+	@NonNull Stream<@NonNull DynamicTest> rejectsKeysWhoseThirtyTwoBytesAreAllTheSame() {
 		return Stream.of(0x00, 0x01, 0x41, 0x7f, 0x80, 0xff).map(value -> DynamicTest.dynamicTest(
 				String.format(java.util.Locale.ROOT, "0x%02x", value), () -> {
 					byte[] bytes = new byte[32];
@@ -169,8 +171,8 @@ final class SealingKeyTests {
 				() -> SealingKey.fromBase64("2026-09", KEY).hasSameKeyBytes(null));
 	}
 
-	private static void assertNoEcho(Throwable e,
-																	 String argument) {
+	private static void assertNoEcho(@NonNull Throwable e,
+																	 @NonNull String argument) {
 		if (argument.length() < 4)
 			return;
 
@@ -179,7 +181,7 @@ final class SealingKeyTests {
 		Assertions.assertFalse(e.toString().contains(argument));
 	}
 
-	private static String escape(String value) {
+	private static @NonNull String escape(@NonNull String value) {
 		StringBuilder escaped = new StringBuilder();
 
 		for (char character : value.toCharArray())

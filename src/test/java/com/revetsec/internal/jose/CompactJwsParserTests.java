@@ -16,6 +16,8 @@
 
 package com.revetsec.internal.jose;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.jose.JoseException;
 import com.revetsec.testing.TestJws;
 import org.junit.jupiter.api.Assertions;
@@ -72,7 +74,7 @@ final class CompactJwsParserTests {
 	// Step 2 (RFC 7516 section 7.1): four dots are the JWE compact serialization; every other count but two is
 	// TOKEN_SYNTAX, including 2, 4 and 6 segments.
 	@TestFactory
-	Stream<DynamicTest> theDotCountDecidesTheSerialization() {
+	@NonNull Stream<@NonNull DynamicTest> theDotCountDecidesTheSerialization() {
 		Map<String, JoseException.Reason> cases = new LinkedHashMap<>();
 		cases.put("", JoseException.Reason.TOKEN_SYNTAX);
 		cases.put(HEADER, JoseException.Reason.TOKEN_SYNTAX);
@@ -105,7 +107,7 @@ final class CompactJwsParserTests {
 	// RFC 7515 section 2 and RFC 4648 section 5: only the base64url alphabet, so padding, the standard alphabet,
 	// whitespace, controls and non-ASCII characters are TOKEN_SYNTAX in any segment.
 	@TestFactory
-	Stream<DynamicTest> aCharacterOutsideTheAlphabetIsTokenSyntaxInAnySegment() {
+	@NonNull Stream<@NonNull DynamicTest> aCharacterOutsideTheAlphabetIsTokenSyntaxInAnySegment() {
 		List<String> characters = List.of("=", "+", "/", " ", "\t", "\r", "\n", "\u0000", "%", "\\", "\"", "\u00e9",
 				"\u00a0", "\uff21", "\ud83d\ude00", "\ud800", "\u0660");
 		return characters.stream().flatMap(character -> Stream.of(0, 1, 2).map(segment -> DynamicTest.dynamicTest(
@@ -119,7 +121,7 @@ final class CompactJwsParserTests {
 	// Step 3 (INV-J7): each segment must be the canonical encoding: unused trailing bits set, or a length of 4n + 1,
 	// is TOKEN_SYNTAX in the header, the payload and the signature alike.
 	@TestFactory
-	Stream<DynamicTest> aNonCanonicalSegmentIsTokenSyntax() {
+	@NonNull Stream<@NonNull DynamicTest> aNonCanonicalSegmentIsTokenSyntax() {
 		Map<String, String> cases = new LinkedHashMap<>();
 		cases.put("header with trailing bits", TestJws.withNonCanonicalTrailingBits(HEADER) + "." + PAYLOAD + "."
 				+ SIGNATURE);
@@ -176,13 +178,13 @@ final class CompactJwsParserTests {
 		}
 	}
 
-	private static void assertFailure(JoseException.Reason reason,
-																		String token) {
+	private static void assertFailure(JoseException.@NonNull Reason reason,
+																		@NonNull String token) {
 		assertFailure(reason, token, 100_000);
 	}
 
-	private static void assertFailure(JoseException.Reason reason,
-																		String token,
+	private static void assertFailure(JoseException.@NonNull Reason reason,
+																		@NonNull String token,
 																		int maximumLength) {
 		JoseFailure failure = Assertions.assertThrows(JoseFailure.class, () -> CompactJwsParser.parse(token,
 				maximumLength));

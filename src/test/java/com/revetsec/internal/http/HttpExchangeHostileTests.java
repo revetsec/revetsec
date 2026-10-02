@@ -16,6 +16,8 @@
 
 package com.revetsec.internal.http;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.OutboundUriPolicy;
 import com.revetsec.internal.Limits;
 import com.revetsec.internal.http.HttpExchangeException.Kind;
@@ -89,7 +91,7 @@ final class HttpExchangeHostileTests {
 
 	// Exit criteria 10 and 12: each case on the server it was written for.
 	@TestFactory
-	Stream<DynamicTest> everyRejectionEndsAsExpectedOnItsOwnTransport() {
+	@NonNull Stream<@NonNull DynamicTest> everyRejectionEndsAsExpectedOnItsOwnTransport() {
 		return HostileResponse.rejections().stream()
 				.map(hostileResponse -> DynamicTest.dynamicTest(hostileResponse.getName(), () -> {
 					if (hostileResponse.getTransport() == HostileResponse.Transport.TEST_HTTPS_SERVER)
@@ -101,7 +103,7 @@ final class HttpExchangeHostileTests {
 
 	// Exit criterion 12: every rejection case also runs on RawTlsServer, which sees the client close the connection.
 	@TestFactory
-	Stream<DynamicTest> everyJdkServerRejectionAlsoEndsWithTheClientClosingARawConnection() {
+	@NonNull Stream<@NonNull DynamicTest> everyJdkServerRejectionAlsoEndsWithTheClientClosingARawConnection() {
 		return HostileResponse.rejections().stream()
 				.filter(hostileResponse -> hostileResponse.getTransport() == HostileResponse.Transport.TEST_HTTPS_SERVER)
 				.map(hostileResponse -> DynamicTest.dynamicTest(hostileResponse.getName(),
@@ -150,7 +152,7 @@ final class HttpExchangeHostileTests {
 	// Set fetch requests it, under the JWKS profile and its 256 KiB default body limit, on the transport it names, with
 	// the same client-close and redirect-target checks as above.
 	@TestFactory
-	Stream<DynamicTest> everyJwksRejectionEndsAsExpectedUnderTheJwksProfile() {
+	@NonNull Stream<@NonNull DynamicTest> everyJwksRejectionEndsAsExpectedUnderTheJwksProfile() {
 		return HostileResponse.jwks().stream()
 				.filter(hostileResponse -> !hostileResponse.isPaced())
 				.map(hostileResponse -> DynamicTest.dynamicTest(hostileResponse.getName(), () -> {
@@ -168,7 +170,7 @@ final class HttpExchangeHostileTests {
 	// M2 exit criterion 14 (the tarpit) and M1 exit criterion 11: the paced cases end in TIMEOUT under the JWKS profile
 	// too, by a short deadline, and the server sees the client leave.
 	@TestFactory
-	Stream<DynamicTest> everyJwksTimeoutEndsInTimeoutByAShortDeadline() {
+	@NonNull Stream<@NonNull DynamicTest> everyJwksTimeoutEndsInTimeoutByAShortDeadline() {
 		return HostileResponse.jwks().stream()
 				.filter(HostileResponse::isPaced)
 				.map(hostileResponse -> DynamicTest.dynamicTest(hostileResponse.getName(), () -> {
@@ -239,7 +241,7 @@ final class HttpExchangeHostileTests {
 	// HostileResponse.appliesTo: every case that is not a media-type case keeps its expectation under every profile,
 	// which is what lets M2 and M3 reuse the catalog for their own endpoints.
 	@TestFactory
-	Stream<DynamicTest> everyProfileAgnosticCaseEndsTheSameUnderEveryProfile() {
+	@NonNull Stream<@NonNull DynamicTest> everyProfileAgnosticCaseEndsTheSameUnderEveryProfile() {
 		List<DynamicTest> tests = new ArrayList<>();
 		for (HostileResponse hostileResponse : HostileResponse.rejections())
 			for (ResponseProfile profile : ResponseProfile.values())
@@ -260,7 +262,7 @@ final class HttpExchangeHostileTests {
 	// leave it open until the server closes it, and JDK 26 until the request timeout. So the close is asserted on 27
 	// and later only (HttpExchange's class documentation).
 	@TestFactory
-	Stream<DynamicTest> aDecoratingClientKeepsEveryOutcomeForAContentLengthTheJdkCannotParse() {
+	@NonNull Stream<@NonNull DynamicTest> aDecoratingClientKeepsEveryOutcomeForAContentLengthTheJdkCannotParse() {
 		return HostileResponse.rejections().stream()
 				.filter(hostileResponse -> hostileResponse.getTransport() == HostileResponse.Transport.RAW_TLS_SERVER
 						&& !hostileResponse.getName().startsWith("204") && hasUnparseableContentLength(hostileResponse))
@@ -281,12 +283,12 @@ final class HttpExchangeHostileTests {
 				}));
 	}
 
-	private static boolean hasUnparseableContentLength(HostileResponse hostileResponse) {
+	private static boolean hasUnparseableContentLength(@NonNull HostileResponse hostileResponse) {
 		return List.of("a Content-Length list", "a hexadecimal Content-Length", "a Content-Length too large for a long")
 				.stream().anyMatch(hostileResponse.getName()::endsWith);
 	}
 
-	private static void runOnJdkServer(HostileResponse hostileResponse) throws Exception {
+	private static void runOnJdkServer(@NonNull HostileResponse hostileResponse) throws Exception {
 		TestHttpsServer server = requireNonNullServer(jdkServer);
 		String path = nextPath();
 		hostileResponse.installOn(server, path);
@@ -303,7 +305,7 @@ final class HttpExchangeHostileTests {
 		}
 	}
 
-	private static void runOnRawServer(HostileResponse hostileResponse) throws Exception {
+	private static void runOnRawServer(@NonNull HostileResponse hostileResponse) throws Exception {
 		RawTlsServer server = requireNonNullServer(rawServer);
 		String path = nextPath();
 		hostileResponse.installOn(server, path);
@@ -325,16 +327,16 @@ final class HttpExchangeHostileTests {
 					"the server saw the client abort the body");
 	}
 
-	private static void assertExpectedOutcome(HostileResponse hostileResponse, URI uri) {
+	private static void assertExpectedOutcome(@NonNull HostileResponse hostileResponse, @NonNull URI uri) {
 		assertExpectedOutcome(hostileResponse, hostileResponse.requestFor(uri));
 	}
 
-	private static void assertExpectedOutcome(HostileResponse hostileResponse, HttpExchangeRequest request) {
+	private static void assertExpectedOutcome(@NonNull HostileResponse hostileResponse, @NonNull HttpExchangeRequest request) {
 		assertExpectedOutcome(requireNonNullExchange(exchange), hostileResponse, request);
 	}
 
-	private static void assertExpectedOutcome(HttpExchange httpExchange, HostileResponse hostileResponse,
-			HttpExchangeRequest request) {
+	private static void assertExpectedOutcome(@NonNull HttpExchange httpExchange, @NonNull HostileResponse hostileResponse,
+			@NonNull HttpExchangeRequest request) {
 		Deadline deadline = Deadline.fromNow(Duration.ofSeconds(30));
 
 		if (hostileResponse.getExpectedKind().isPresent()) {
@@ -350,7 +352,7 @@ final class HttpExchangeHostileTests {
 		Assertions.assertEquals(0, response.body().length);
 	}
 
-	private static RawTlsServer.RecordedRequest recordedRequest(RawTlsServer server, String path) {
+	private static RawTlsServer.@NonNull RecordedRequest recordedRequest(@NonNull RawTlsServer server, @NonNull String path) {
 		for (RawTlsServer.RecordedRequest request : server.getRequests())
 			if (request.getPath().equals(path))
 				return request;
@@ -360,7 +362,7 @@ final class HttpExchangeHostileTests {
 	/**
 	 * The request recorded at {@code path}, waiting up to {@link #SERVER_WAIT} for the server to record it.
 	 */
-	private static RawTlsServer.RecordedRequest awaitRecordedRequest(RawTlsServer server, String path)
+	private static RawTlsServer.@NonNull RecordedRequest awaitRecordedRequest(@NonNull RawTlsServer server, @NonNull String path)
 			throws InterruptedException {
 		long deadline = System.nanoTime() + SERVER_WAIT.toNanos();
 		while (server.getRequests().stream().noneMatch(request -> request.getPath().equals(path))) {
@@ -372,7 +374,7 @@ final class HttpExchangeHostileTests {
 		return recordedRequest(server, path);
 	}
 
-	private static RawTlsServer.Connection connectionOf(RawTlsServer server, RawTlsServer.RecordedRequest request) {
+	private static RawTlsServer.@NonNull Connection connectionOf(@NonNull RawTlsServer server, RawTlsServer.@NonNull RecordedRequest request) {
 		for (RawTlsServer.Connection connection : server.getConnections())
 			for (RawTlsServer.RecordedRequest candidate : connection.getRequests())
 				if (candidate == request)
@@ -380,17 +382,17 @@ final class HttpExchangeHostileTests {
 		throw new AssertionError("No connection carried " + request);
 	}
 
-	private static String nextPath() {
+	private static @NonNull String nextPath() {
 		return "/hostile/" + NEXT_PATH.incrementAndGet();
 	}
 
-	private static <T> T requireNonNullServer(@Nullable T server) {
+	private static <T> @NonNull T requireNonNullServer(@Nullable T server) {
 		if (server == null)
 			throw new IllegalStateException("The servers did not start");
 		return server;
 	}
 
-	private static HttpExchange requireNonNullExchange(@Nullable HttpExchange httpExchange) {
+	private static @NonNull HttpExchange requireNonNullExchange(@Nullable HttpExchange httpExchange) {
 		if (httpExchange == null)
 			throw new IllegalStateException("The exchange was not created");
 		return httpExchange;

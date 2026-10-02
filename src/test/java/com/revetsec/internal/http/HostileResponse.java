@@ -16,6 +16,8 @@
 
 package com.revetsec.internal.http;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.internal.Limits;
 import com.revetsec.internal.http.HttpExchangeException.Kind;
 import com.revetsec.testing.RawTlsServer;
@@ -157,7 +159,7 @@ public final class HostileResponse {
 	private final boolean bodyNeverSent;
 	private final @Nullable Pacing pacing;
 
-	private HostileResponse(Builder builder) {
+	private HostileResponse(@NonNull Builder builder) {
 		this.name = requireNonNull(builder.name);
 		this.transport = requireNonNull(builder.transport);
 		this.profile = requireNonNull(builder.profile);
@@ -184,7 +186,7 @@ public final class HostileResponse {
 	/**
 	 * A copy of {@code source} under another name and profile; every byte the server sends stays the same.
 	 */
-	private HostileResponse(HostileResponse source, String name, ResponseProfile profile) {
+	private HostileResponse(@NonNull HostileResponse source, @NonNull String name, @NonNull ResponseProfile profile) {
 		this.name = requireNonNull(name);
 		this.transport = source.transport;
 		this.profile = requireNonNull(profile);
@@ -208,7 +210,7 @@ public final class HostileResponse {
 	 *
 	 * @return the cases, in a fixed order
 	 */
-	public static List<HostileResponse> rejections() {
+	public static @NonNull List<@NonNull HostileResponse> rejections() {
 		List<HostileResponse> cases = new ArrayList<>();
 
 		// G6-7: every 3xx is refused and never followed.
@@ -384,7 +386,7 @@ public final class HostileResponse {
 	 *
 	 * @return the cases, in a fixed order
 	 */
-	public static List<HostileResponse> timeouts() {
+	public static @NonNull List<@NonNull HostileResponse> timeouts() {
 		return List.of(
 				raw("a trickled body", Kind.TIMEOUT)
 						.header("Content-Type", JSON).header("Content-Length", "100000")
@@ -412,7 +414,7 @@ public final class HostileResponse {
 	 *
 	 * @return every case
 	 */
-	public static List<HostileResponse> all() {
+	public static @NonNull List<@NonNull HostileResponse> all() {
 		List<HostileResponse> cases = new ArrayList<>(rejections());
 		cases.addAll(timeouts());
 		return List.copyOf(cases);
@@ -438,7 +440,7 @@ public final class HostileResponse {
 	 *
 	 * @return the cases, in a fixed order, with unique names
 	 */
-	public static List<HostileResponse> jwks() {
+	public static @NonNull List<@NonNull HostileResponse> jwks() {
 		List<HostileResponse> cases = new ArrayList<>();
 
 		for (HostileResponse hostileResponse : rejections())
@@ -493,7 +495,7 @@ public final class HostileResponse {
 	 * @param path the path, starting with {@code /}
 	 * @throws IllegalStateException if the case's transport is {@link Transport#RAW_TLS_SERVER}
 	 */
-	public void installOn(TestHttpsServer server, String path) {
+	public void installOn(@NonNull TestHttpsServer server, @NonNull String path) {
 		requireNonNull(server);
 		requireNonNull(path);
 		if (this.transport != Transport.TEST_HTTPS_SERVER)
@@ -513,7 +515,7 @@ public final class HostileResponse {
 	 * @param server the server
 	 * @param path the path, starting with {@code /}
 	 */
-	public void installOn(RawTlsServer server, String path) {
+	public void installOn(@NonNull RawTlsServer server, @NonNull String path) {
 		requireNonNull(server);
 		requireNonNull(path);
 		server.script(path, rawScript(path));
@@ -525,7 +527,7 @@ public final class HostileResponse {
 	 * @param path the installed path
 	 * @return the redirect target's path
 	 */
-	public static String redirectTargetPath(String path) {
+	public static @NonNull String redirectTargetPath(@NonNull String path) {
 		return requireNonNull(path) + REDIRECT_TARGET_SUFFIX;
 	}
 
@@ -535,7 +537,7 @@ public final class HostileResponse {
 	 * @param uri the installed case's URI
 	 * @return the request
 	 */
-	public HttpExchangeRequest requestFor(URI uri) {
+	public @NonNull HttpExchangeRequest requestFor(@NonNull URI uri) {
 		return HttpExchangeRequest.fromDefaults(uri, this.profile);
 	}
 
@@ -544,7 +546,7 @@ public final class HostileResponse {
 	 *
 	 * @return the name
 	 */
-	public String getName() {
+	public @NonNull String getName() {
 		return this.name;
 	}
 
@@ -553,7 +555,7 @@ public final class HostileResponse {
 	 *
 	 * @return the transport
 	 */
-	public Transport getTransport() {
+	public @NonNull Transport getTransport() {
 		return this.transport;
 	}
 
@@ -562,7 +564,7 @@ public final class HostileResponse {
 	 *
 	 * @return the profile
 	 */
-	public ResponseProfile getProfile() {
+	public @NonNull ResponseProfile getProfile() {
 		return this.profile;
 	}
 
@@ -575,7 +577,7 @@ public final class HostileResponse {
 	 * @param profile the profile the caller's endpoint uses
 	 * @return whether the expectation holds under {@code profile}
 	 */
-	public Boolean appliesTo(ResponseProfile profile) {
+	public @NonNull Boolean appliesTo(@NonNull ResponseProfile profile) {
 		requireNonNull(profile);
 		return this.expectedKind != Kind.MEDIA_TYPE || this.profile == profile;
 	}
@@ -585,7 +587,7 @@ public final class HostileResponse {
 	 *
 	 * @return the expected kind
 	 */
-	public Optional<Kind> getExpectedKind() {
+	public @NonNull Optional<@NonNull Kind> getExpectedKind() {
 		return Optional.ofNullable(this.expectedKind);
 	}
 
@@ -594,7 +596,7 @@ public final class HostileResponse {
 	 *
 	 * @return the expected status
 	 */
-	public Optional<Integer> getExpectedDroppedStatus() {
+	public @NonNull Optional<@NonNull Integer> getExpectedDroppedStatus() {
 		return Optional.ofNullable(this.expectedDroppedStatus);
 	}
 
@@ -603,7 +605,7 @@ public final class HostileResponse {
 	 *
 	 * @return {@code true} for the 3xx cases
 	 */
-	public Boolean isRedirect() {
+	public @NonNull Boolean isRedirect() {
 		return this.redirect;
 	}
 
@@ -612,7 +614,7 @@ public final class HostileResponse {
 	 *
 	 * @return {@code true} for the 12 MiB bodies
 	 */
-	public Boolean isServerAbortObservable() {
+	public @NonNull Boolean isServerAbortObservable() {
 		return this.serverAbortObservable;
 	}
 
@@ -624,7 +626,7 @@ public final class HostileResponse {
 	 *
 	 * @return whether the client close is observable
 	 */
-	public Boolean isClientCloseObservable() {
+	public @NonNull Boolean isClientCloseObservable() {
 		return Runtime.version().feature() >= this.clientCloseObservableFrom;
 	}
 
@@ -633,12 +635,12 @@ public final class HostileResponse {
 	 *
 	 * @return {@code true} for {@link #timeouts()}
 	 */
-	public Boolean isPaced() {
+	public @NonNull Boolean isPaced() {
 		return this.pacing != null;
 	}
 
 	@Override
-	public String toString() {
+	public @NonNull String toString() {
 		return this.name;
 	}
 
@@ -646,13 +648,13 @@ public final class HostileResponse {
 	 * This case under {@link ResponseProfile#JWKS}: itself if it already is, otherwise a copy named with
 	 * {@link #JWKS_NAME_SUFFIX}.
 	 */
-	private HostileResponse underJwks() {
+	private @NonNull HostileResponse underJwks() {
 		if (this.profile == ResponseProfile.JWKS)
 			return this;
 		return new HostileResponse(this, this.name + JWKS_NAME_SUFFIX, ResponseProfile.JWKS);
 	}
 
-	private List<List<String>> headersFor(String path) {
+	private @NonNull List<@NonNull List<@NonNull String>> headersFor(@NonNull String path) {
 		List<List<String>> headersForPath = new ArrayList<>(this.headers);
 		if (this.redirect) {
 			headersForPath.add(List.of("Location", redirectTargetPath(path)));
@@ -661,7 +663,7 @@ public final class HostileResponse {
 		return headersForPath;
 	}
 
-	private byte[] body() {
+	private byte @NonNull [] body() {
 		if (this.jsonBody)
 			return SMALL_JSON.clone();
 		byte[] body = new byte[this.bodyBytes];
@@ -669,7 +671,7 @@ public final class HostileResponse {
 		return body;
 	}
 
-	private RawTlsServer.Script rawScript(String path) {
+	private RawTlsServer.@NonNull Script rawScript(@NonNull String path) {
 		StringBuilder head = new StringBuilder(this.statusLine).append("\r\n");
 		for (List<String> header : headersFor(path))
 			head.append(header.get(0)).append(": ").append(header.get(1)).append("\r\n");
@@ -696,7 +698,7 @@ public final class HostileResponse {
 		return script.build();
 	}
 
-	private static byte[] chunked(byte[] body) {
+	private static byte @NonNull [] chunked(byte @NonNull [] body) {
 		ByteArrayOutputStream chunked = new ByteArrayOutputStream(body.length + body.length / 1024 + 16);
 		for (int offset = 0; offset < body.length; offset += RAW_CHUNK_BYTES) {
 			int length = Math.min(RAW_CHUNK_BYTES, body.length - offset);
@@ -708,11 +710,11 @@ public final class HostileResponse {
 		return chunked.toByteArray();
 	}
 
-	private static Builder onJdkServer(String name, @Nullable Kind expectedKind) {
+	private static @NonNull Builder onJdkServer(@NonNull String name, @Nullable Kind expectedKind) {
 		return new Builder(name, Transport.TEST_HTTPS_SERVER, expectedKind);
 	}
 
-	private static Builder raw(String name, @Nullable Kind expectedKind) {
+	private static @NonNull Builder raw(@NonNull String name, @Nullable Kind expectedKind) {
 		return new Builder(name, Transport.RAW_TLS_SERVER, expectedKind).framing(Framing.VERBATIM);
 	}
 
@@ -738,12 +740,12 @@ public final class HostileResponse {
 		private final PacingKind kind;
 		private final int bodyBytes;
 
-		private Pacing(PacingKind kind, int bodyBytes) {
+		private Pacing(@NonNull PacingKind kind, int bodyBytes) {
 			this.kind = kind;
 			this.bodyBytes = bodyBytes;
 		}
 
-		private RawTlsServer.Script script(RawTlsServer.Script.Builder script, byte[] head) {
+		private RawTlsServer.@NonNull Script script(RawTlsServer.Script.@NonNull Builder script, byte @NonNull [] head) {
 			switch (this.kind) {
 				case TRICKLE_BODY -> {
 					byte[] body = new byte[this.bodyBytes];
@@ -791,89 +793,89 @@ public final class HostileResponse {
 		private boolean bodyNeverSent;
 		private @Nullable Pacing pacing;
 
-		private Builder(String name, Transport transport, @Nullable Kind expectedKind) {
+		private Builder(@NonNull String name, @NonNull Transport transport, @Nullable Kind expectedKind) {
 			this.name = name;
 			this.transport = transport;
 			this.expectedKind = expectedKind;
 		}
 
-		private Builder status(int status, String reason) {
+		private @NonNull Builder status(int status, @NonNull String reason) {
 			this.status = status;
 			this.statusLine = "HTTP/1.1 " + status + " " + reason;
 			return this;
 		}
 
-		private Builder statusLine(String statusLine) {
+		private @NonNull Builder statusLine(@NonNull String statusLine) {
 			this.statusLine = statusLine;
 			this.status = Integer.parseInt(statusLine.split(" ", 3)[1]);
 			return this;
 		}
 
-		private Builder profile(ResponseProfile profile) {
+		private @NonNull Builder profile(@NonNull ResponseProfile profile) {
 			this.profile = profile;
 			return this;
 		}
 
-		private Builder dropped(int status) {
+		private @NonNull Builder dropped(int status) {
 			this.expectedDroppedStatus = status;
 			return this;
 		}
 
-		private Builder header(String name, String value) {
+		private @NonNull Builder header(@NonNull String name, @NonNull String value) {
 			this.headers.add(List.of(name, value));
 			return this;
 		}
 
-		private Builder json() {
+		private @NonNull Builder json() {
 			this.jsonBody = true;
 			this.bodyBytes = SMALL_JSON.length;
 			return this;
 		}
 
-		private Builder body(int bodyBytes) {
+		private @NonNull Builder body(int bodyBytes) {
 			this.jsonBody = false;
 			this.bodyBytes = bodyBytes;
 			return this;
 		}
 
-		private Builder framing(Framing framing) {
+		private @NonNull Builder framing(@NonNull Framing framing) {
 			this.framing = framing;
 			return this;
 		}
 
-		private Builder redirect() {
+		private @NonNull Builder redirect() {
 			this.redirect = true;
 			return this;
 		}
 
-		private Builder bodyNeverSent() {
+		private @NonNull Builder bodyNeverSent() {
 			this.bodyNeverSent = true;
 			return this;
 		}
 
-		private Builder clientCloseNotObservable() {
+		private @NonNull Builder clientCloseNotObservable() {
 			this.clientCloseObservableFrom = Integer.MAX_VALUE;
 			return this;
 		}
 
-		private Builder clientCloseObservableFrom(int feature) {
+		private @NonNull Builder clientCloseObservableFrom(int feature) {
 			this.clientCloseObservableFrom = feature;
 			return this;
 		}
 
-		private Builder pacing(Pacing pacing) {
+		private @NonNull Builder pacing(@NonNull Pacing pacing) {
 			this.pacing = pacing;
 			return this;
 		}
 
-		private HostileResponse build() {
+		private @NonNull HostileResponse build() {
 			if (this.framing == Framing.VERBATIM && this.pacing == null && this.transport == Transport.RAW_TLS_SERVER
 					&& this.headers.stream().noneMatch(header -> isFramingHeader(header.get(0))))
 				throw new IllegalStateException(this.name + ": a verbatim case names its own framing");
 			return new HostileResponse(this);
 		}
 
-		private static boolean isFramingHeader(String name) {
+		private static boolean isFramingHeader(@NonNull String name) {
 			String lowerCase = name.toLowerCase(Locale.ROOT);
 			return lowerCase.equals("content-length") || lowerCase.equals("transfer-encoding");
 		}

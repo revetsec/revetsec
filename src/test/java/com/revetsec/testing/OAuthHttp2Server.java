@@ -16,6 +16,8 @@
 
 package com.revetsec.testing;
 
+import org.jspecify.annotations.NonNull;
+
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
@@ -74,19 +76,19 @@ public final class OAuthHttp2Server implements AutoCloseable {
 		this.stalledFirst = stalledFirst;
 	}
 
-	public static OAuthHttp2Server start(int responseBytes) throws Exception {
+	public static @NonNull OAuthHttp2Server start(int responseBytes) throws Exception {
 		OAuthHttp2Server server = new OAuthHttp2Server(responseBytes, false, false);
 		server.bind();
 		return server;
 	}
 
-	public static OAuthHttp2Server startWithMalformedFirstStatus() throws Exception {
+	public static @NonNull OAuthHttp2Server startWithMalformedFirstStatus() throws Exception {
 		OAuthHttp2Server server = new OAuthHttp2Server(0, true, false);
 		server.bind();
 		return server;
 	}
 
-	public static OAuthHttp2Server startWithStalledFirstBody() throws Exception {
+	public static @NonNull OAuthHttp2Server startWithStalledFirstBody() throws Exception {
 		OAuthHttp2Server server = new OAuthHttp2Server(0, false, true);
 		server.bind();
 		return server;
@@ -104,27 +106,27 @@ public final class OAuthHttp2Server implements AutoCloseable {
 		this.channel = new ServerBootstrap().group(this.boss, this.worker)
 				.channel(NioServerSocketChannel.class)
 				.childHandler(new ChannelInitializer<SocketChannel>() {
-					@Override protected void initChannel(SocketChannel child) {
+					@Override protected void initChannel(@NonNull SocketChannel child) {
 						connections.incrementAndGet();
 						child.pipeline().addLast(ssl.newHandler(child.alloc()));
 						child.pipeline().addLast(new ApplicationProtocolNegotiationHandler("") {
-							@Override protected void configurePipeline(ChannelHandlerContext context, String protocol) {
+							@Override protected void configurePipeline(@NonNull ChannelHandlerContext context, @NonNull String protocol) {
 								if (!ApplicationProtocolNames.HTTP_2.equals(protocol)) {
 									context.close();
 									return;
 								}
 								context.pipeline().addLast(Http2FrameCodecBuilder.forServer().build());
 								context.pipeline().addLast(new Http2MultiplexHandler(new ChannelInitializer<Channel>() {
-									@Override protected void initChannel(Channel stream) {
+									@Override protected void initChannel(@NonNull Channel stream) {
 											streamCountChanged(1);
 										stream.pipeline().addLast(new SimpleChannelInboundHandler<Http2Frame>() {
-											@Override public void channelInactive(ChannelHandlerContext streamContext)
+											@Override public void channelInactive(@NonNull ChannelHandlerContext streamContext)
 													throws Exception {
 												streamCountChanged(-1);
 												super.channelInactive(streamContext);
 											}
-											@Override protected void channelRead0(ChannelHandlerContext streamContext,
-													Http2Frame frame) {
+											@Override protected void channelRead0(@NonNull ChannelHandlerContext streamContext,
+													@NonNull Http2Frame frame) {
 												if (frame instanceof Http2ResetFrame) {
 													resets.incrementAndGet();
 												} else if (frame instanceof Http2HeadersFrame) {
@@ -140,7 +142,7 @@ public final class OAuthHttp2Server implements AutoCloseable {
 				}).bind("127.0.0.1", 0).sync().channel();
 	}
 
-	private void respond(ChannelHandlerContext context, int requestNumber) {
+	private void respond(@NonNull ChannelHandlerContext context, int requestNumber) {
 		if (this.malformedFirst && requestNumber == 1) {
 			context.writeAndFlush(new DefaultHttp2HeadersFrame(new DefaultHttp2Headers()
 					.status("not-a-status"), true));
@@ -167,7 +169,7 @@ public final class OAuthHttp2Server implements AutoCloseable {
 		context.flush();
 	}
 
-	public URI uri(String path) {
+	public @NonNull URI uri(@NonNull String path) {
 		return URI.create("https://localhost:" + ((InetSocketAddress) requireNonNull(this.channel)
 				.localAddress()).getPort() + path);
 	}
@@ -177,7 +179,7 @@ public final class OAuthHttp2Server implements AutoCloseable {
 	public int getConnectionCount() { return this.connections.get(); }
 	public int getOpenStreamCount() { return this.openStreams.get(); }
 
-	public boolean awaitNoOpenStreams(Duration timeout) throws InterruptedException {
+	public boolean awaitNoOpenStreams(@NonNull Duration timeout) throws InterruptedException {
 		long remaining = timeout.toNanos();
 		this.streamLock.lock();
 		try {

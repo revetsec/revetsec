@@ -16,6 +16,8 @@
 
 package com.revetsec.internal.crypto;
 
+import org.jspecify.annotations.Nullable;
+
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -98,6 +100,8 @@ final class AesGcmTests {
 		}
 	}
 
+	// Deliberate null inputs verify runtime rejection.
+	@SuppressWarnings("NullAway")
 	@Test
 	void rejectsKeysAndIvsOfAnyOtherLength() {
 		for (int length : new int[]{0, 16, 24, 31, 33})
@@ -124,7 +128,7 @@ final class AesGcmTests {
 	 * Hides a {@code null} from NullAway, for the tests that check null handling.
 	 */
 	@SuppressWarnings({"NullAway", "TypeParameterUnusedInFormals"})
-	private static <T> T nullValue() {
+	private static <T> @Nullable T nullValue() {
 		return null;
 	}
 }

@@ -16,6 +16,8 @@
 
 package com.revetsec.oauth;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.StateSealer;
 import com.revetsec.testing.TestSealers;
 import com.revetsec.testing.TestHttpsServer;
@@ -56,7 +58,7 @@ final class AuthorizationCompletionResultTests {
         try (TestHttpsServer server = TestHttpsServer.start()) {
             AtomicInteger rejected = new AtomicInteger();
             OAuthClient client = builder(server).observer(new OAuthObserver() {
-                @Override public void didRejectCallback(OAuthValidationException failure) {
+                @Override public void didRejectCallback(@NonNull OAuthValidationException failure) {
                     rejected.incrementAndGet(); throw new IllegalStateException("TEST-ONLY-hook");
                 }
             }).build();
@@ -105,17 +107,17 @@ final class AuthorizationCompletionResultTests {
         }
     }
 
-    private static OAuthClient client(TestHttpsServer server) { return builder(server).build(); }
-    private static OAuthClient.Builder builder(TestHttpsServer server) {
+    private static @NonNull OAuthClient client(@NonNull TestHttpsServer server) { return builder(server).build(); }
+    private static OAuthClient.@NonNull Builder builder(@NonNull TestHttpsServer server) {
         return OAuthClient.withAuthorizationServerMetadata(AuthorizationServerMetadata.withIssuer(server.getBaseUri().toString())
                 .authorizationEndpoint(server.uri("/authorize")).tokenEndpoint(server.uri("/token")).build())
                 .clientId("client").clientAuthentication(ClientAuthentication.noneInstance()).redirectUri(CALLBACK).httpClient(TestTls.httpClient());
     }
-    private static PendingAuthorizationSource sealed(PendingAuthorization pending) {
+    private static @NonNull PendingAuthorizationSource sealed(@NonNull PendingAuthorization pending) {
         StateSealer sealer = TestSealers.fromFixedKey();
         return PendingAuthorizationSource.fromSealedForm(pending.toSealedForm(sealer, "result-api"), sealer, "result-api");
     }
-    private static void respond(TestHttpsServer server, int status, String body) {
+    private static void respond(@NonNull TestHttpsServer server, int status, @NonNull String body) {
         server.script("/token", TestHttpsServer.Script.fromResponse(TestHttpsServer.Response.withStatus(status)
                 .header("Content-Type", "application/json").body(body.getBytes(StandardCharsets.UTF_8)).build()));
     }

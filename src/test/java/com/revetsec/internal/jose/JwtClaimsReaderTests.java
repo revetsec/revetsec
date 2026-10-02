@@ -16,6 +16,8 @@
 
 package com.revetsec.internal.jose;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.internal.json.JsonLimits;
 import com.revetsec.jose.JoseException;
 import org.junit.jupiter.api.Assertions;
@@ -67,7 +69,7 @@ final class JwtClaimsReaderTests {
 	// RFC 7519 section 7.2 steps 9 and 10: a payload that is not a strict UTF-8 JSON object is CLAIMS, the empty
 	// payload included (RFC 7515 allows it at the JWS layer only).
 	@TestFactory
-	Stream<DynamicTest> aPayloadThatIsNotAJsonObjectIsMalformed() {
+	@NonNull Stream<@NonNull DynamicTest> aPayloadThatIsNotAJsonObjectIsMalformed() {
 		return Stream.of("", " ", "[]", "\"claims\"", "1", "null", "{", "{}{}", "{\"iss\":\"a\",\"iss\":\"a\"}",
 				"{\"sub\":\"a\",\"sub\":\"b\"}", "{\"x\":\"\\udc00\"}", "\ufeff{}", "{\"x\":" + "[".repeat(40) + "]".repeat(40)
 						+ "}").map(text -> DynamicTest.dynamicTest("[" + (text.length() > 30 ? text.substring(0, 30) : text) + "]",
@@ -84,7 +86,7 @@ final class JwtClaimsReaderTests {
 	// RFC 7519 sections 4.1.1 to 4.1.7: a registered claim of the wrong type or JSON null is CLAIMS, and aud must be a
 	// string or a non-empty array of strings.
 	@TestFactory
-	Stream<DynamicTest> aRegisteredClaimOfTheWrongTypeIsMalformed() {
+	@NonNull Stream<@NonNull DynamicTest> aRegisteredClaimOfTheWrongTypeIsMalformed() {
 		List<String> members = List.of("\"iss\":null", "\"iss\":1", "\"iss\":[\"a\"]", "\"sub\":null", "\"sub\":{}",
 				"\"jti\":null", "\"jti\":7", "\"aud\":null", "\"aud\":[]", "\"aud\":[123]", "\"aud\":[\"a\",null]",
 				"\"aud\":[[\"a\"]]", "\"aud\":123", "\"aud\":{}", "\"exp\":null", "\"exp\":\"1300819380\"", "\"exp\":true",
@@ -96,7 +98,7 @@ final class JwtClaimsReaderTests {
 	// RFC 7519 section 2: a NumericDate outside years -9999 to 9999 is CLAIMS, 2^63 and huge exponents included, and
 	// is range-checked before any conversion.
 	@TestFactory
-	Stream<DynamicTest> aNumericDateOutOfRangeIsMalformed() {
+	@NonNull Stream<@NonNull DynamicTest> aNumericDateOutOfRangeIsMalformed() {
 		return Stream.of("9223372036854775808", "9223372036854775807", "253402300800", "-377705116801", "1e19",
 				"1e999999", "-1e999999", "1E+100").flatMap(value -> Stream.of("exp", "iat", "nbf").map(name ->
 				DynamicTest.dynamicTest(name + " " + value, () -> assertMalformed(("{\"" + name + "\":" + value + "}")
@@ -112,11 +114,11 @@ final class JwtClaimsReaderTests {
 		Assertions.assertEquals(Instant.EPOCH, read("{\"exp\":1e-100}").expiresAt());
 	}
 
-	private static RegisteredClaims read(String payload) throws JoseFailure {
+	private static @NonNull RegisteredClaims read(@NonNull String payload) throws JoseFailure {
 		return JwtClaimsReader.read(payload.getBytes(StandardCharsets.UTF_8), LIMITS);
 	}
 
-	private static void assertMalformed(byte[] payload) {
+	private static void assertMalformed(byte @NonNull [] payload) {
 		JoseFailure failure = Assertions.assertThrows(JoseFailure.class, () -> JwtClaimsReader.read(payload, LIMITS));
 		Assertions.assertEquals(JoseException.Reason.CLAIMS, failure.getReason());
 	}

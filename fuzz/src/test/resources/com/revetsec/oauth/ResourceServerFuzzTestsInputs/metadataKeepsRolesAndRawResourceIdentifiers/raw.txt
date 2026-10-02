@@ -1,0 +1,1 @@
+https://RESOURCE.example:443/a/../b/%2f/?x=%2F&y=a+b

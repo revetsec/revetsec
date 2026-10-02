@@ -16,6 +16,8 @@
 
 package com.revetsec.internal.http;
 
+import org.jspecify.annotations.NonNull;
+
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.DynamicTest;
@@ -56,7 +58,7 @@ final class HttpDateTests {
 	// RFC 9110 section 5.6.7: its own example in each of the three forms names 1994-11-06T08:49:37Z; asctime pads a
 	// one-digit day with a space, and a zero is read too.
 	@TestFactory
-	Stream<DynamicTest> readsTheThreeFormsOfTheRfcExample() {
+	@NonNull Stream<@NonNull DynamicTest> readsTheThreeFormsOfTheRfcExample() {
 		Instant example = Instant.parse("1994-11-06T08:49:37Z");
 		return Stream.of("Sun, 06 Nov 1994 08:49:37 GMT", "Sunday, 06-Nov-94 08:49:37 GMT", "Sun Nov  6 08:49:37 1994",
 						"Sun Nov 06 08:49:37 1994")
@@ -67,7 +69,7 @@ final class HttpDateTests {
 	// RFC 9110 section 5.6.3: leading and trailing OWS (spaces and horizontal tabs) are not part of the value; other
 	// whitespace is.
 	@TestFactory
-	Stream<DynamicTest> ignoresLeadingAndTrailingOwsOnly() {
+	@NonNull Stream<@NonNull DynamicTest> ignoresLeadingAndTrailingOwsOnly() {
 		Instant example = Instant.parse("1994-11-06T08:49:37Z");
 		Map<String, Optional<Instant>> cases = new LinkedHashMap<>();
 		cases.put("  Sun, 06 Nov 1994 08:49:37 GMT ", Optional.of(example));
@@ -133,7 +135,7 @@ final class HttpDateTests {
 
 	// RFC 9110 section 5.6.7 allows a leap second (:60), read as the first second of the next minute, in every form.
 	@TestFactory
-	Stream<DynamicTest> readsALeapSecondAsTheNextSecond() {
+	@NonNull Stream<@NonNull DynamicTest> readsALeapSecondAsTheNextSecond() {
 		Instant next = Instant.parse("2026-01-01T00:00:00Z");
 		return Stream.of("Wed, 31 Dec 2025 23:59:60 GMT", "Wednesday, 31-Dec-25 23:59:60 GMT",
 						"Wed Dec 31 23:59:60 2025")
@@ -145,7 +147,7 @@ final class HttpDateTests {
 	// does not match the date, impossible dates and times, other zones, misplaced or doubled spaces, other digits,
 	// delay-seconds, and two dates.
 	@TestFactory
-	Stream<DynamicTest> readsNothingElseAsADate() {
+	@NonNull Stream<@NonNull DynamicTest> readsNothingElseAsADate() {
 		return Stream.of("", " ", "0", "3600", "-1", "soon", "\u0661\u0669\u0669\u0664",
 						"sun, 06 Nov 1994 08:49:37 GMT", "SUN, 06 Nov 1994 08:49:37 GMT", "Sun, 06 nov 1994 08:49:37 GMT",
 						"Sun, 06 Nov 1994 08:49:37 gmt", "Sun, 06 Nov 1994 08:49:37 UTC", "Sun, 06 Nov 1994 08:49:37 +0000",
@@ -238,7 +240,7 @@ final class HttpDateTests {
 
 	// RetryAfter reads an HTTP-date exactly as HttpDate does: the delay is the time from now to the date, or zero.
 	@TestFactory
-	Stream<DynamicTest> retryAfterReadsDatesThroughThisParser() {
+	@NonNull Stream<@NonNull DynamicTest> retryAfterReadsDatesThroughThisParser() {
 		return Stream.of("Sun, 27 Sep 2026 12:00:37 GMT", "Sunday, 27-Sep-26 12:00:37 GMT", "Sun Sep 27 12:00:37 2026",
 						"Sun, 06 Nov 1994 08:49:37 GMT", " Sun, 27 Sep 2026 12:01:00 GMT\t", "Mon, 27 Sep 2026 12:00:37 GMT")
 				.map(value -> DynamicTest.dynamicTest(value, () -> Assertions.assertEquals(
@@ -258,7 +260,7 @@ final class HttpDateTests {
 	/**
 	 * {@code Sun, 06 Nov 1994 08:49:37 GMT}, written independently of the parser.
 	 */
-	private static String imfFixdate(LocalDateTime dateTime) {
+	private static @NonNull String imfFixdate(@NonNull LocalDateTime dateTime) {
 		return String.format(Locale.ROOT, "%s, %02d %s %04d %02d:%02d:%02d GMT",
 				DAY_NAMES.get(dateTime.getDayOfWeek().getValue() - 1), dateTime.getDayOfMonth(),
 				MONTH_NAMES.get(dateTime.getMonthValue() - 1), dateTime.getYear(), dateTime.getHour(), dateTime.getMinute(),
@@ -268,7 +270,7 @@ final class HttpDateTests {
 	/**
 	 * {@code Sunday, 06-Nov-94 08:49:37 GMT}.
 	 */
-	private static String rfc850(LocalDateTime dateTime) {
+	private static @NonNull String rfc850(@NonNull LocalDateTime dateTime) {
 		return String.format(Locale.ROOT, "%s, %02d-%s-%02d %02d:%02d:%02d GMT",
 				LONG_DAY_NAMES.get(dateTime.getDayOfWeek().getValue() - 1), dateTime.getDayOfMonth(),
 				MONTH_NAMES.get(dateTime.getMonthValue() - 1), dateTime.getYear() % 100, dateTime.getHour(),
@@ -278,14 +280,14 @@ final class HttpDateTests {
 	/**
 	 * {@code Sun Nov  6 08:49:37 1994}, with a space before a one-digit day.
 	 */
-	private static String asctime(LocalDateTime dateTime) {
+	private static @NonNull String asctime(@NonNull LocalDateTime dateTime) {
 		return String.format(Locale.ROOT, "%s %s %2d %02d:%02d:%02d %04d",
 				DAY_NAMES.get(dateTime.getDayOfWeek().getValue() - 1), MONTH_NAMES.get(dateTime.getMonthValue() - 1),
 				dateTime.getDayOfMonth(), dateTime.getHour(), dateTime.getMinute(), dateTime.getSecond(),
 				dateTime.getYear());
 	}
 
-	private static String escaped(String value) {
+	private static @NonNull String escaped(@NonNull String value) {
 		StringBuilder escaped = new StringBuilder("\"");
 		for (char c : value.toCharArray())
 			escaped.append(c < 0x20 || c > 0x7E ? String.format(Locale.ROOT, "\\u%04x", (int) c)
@@ -294,7 +296,7 @@ final class HttpDateTests {
 	}
 
 	@SuppressWarnings({"NullAway", "TypeParameterUnusedInFormals"})
-	private static <T> T nullValue() {
+	private static <T> @NonNull T nullValue() {
 		@Nullable T value = null;
 		return value;
 	}

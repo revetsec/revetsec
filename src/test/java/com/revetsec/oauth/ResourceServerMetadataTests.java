@@ -16,6 +16,8 @@
 
 package com.revetsec.oauth;
 
+import org.jspecify.annotations.NonNull;
+
 import org.junit.jupiter.api.*;
 import static org.junit.jupiter.api.Assertions.*;
 import com.revetsec.testing.*;
@@ -46,7 +48,7 @@ final class ResourceServerMetadataTests {
         ResourceServerMetadata parsed=ResourceServerMetadata.parse(ISSUER,"{\"issuer\":\"https://issuer.example\",\"introspection_endpoint\":\"https://issuer.example/inspect\",\"introspection_endpoint_auth_methods_supported\":[\"client_secret_post\"]}".getBytes(StandardCharsets.UTF_8),ResourceServerMetadata.Role.INTROSPECTION);
         assertEquals(Set.of("client_secret_post"),parsed.authenticationMethods());assertEquals(ISSUER,parsed.issuer());
     }
-    @TestFactory Stream<DynamicTest> malformedKnownMembersFailClosed() {
+    @TestFactory @NonNull Stream<@NonNull DynamicTest> malformedKnownMembersFailClosed() {
         return Stream.of("[]","{}","{\"issuer\":null}","{\"issuer\":\"https://other.example\",\"jwks_uri\":\"https://issuer.example/key\"}","{\"issuer\":\"https://issuer.example\",\"jwks_uri\":null}","{\"issuer\":\"https://issuer.example\",\"jwks_uri\":\"%%%\"}","{\"issuer\":\"https://issuer.example\",\"jwks_uri\":\"https://issuer.example/key\",\"introspection_endpoint_auth_methods_supported\":[\"a\",\"a\"]}","{\"issuer\":\"https://issuer.example\",\"jwks_uri\":\"https://issuer.example/key\",\"introspection_endpoint_auth_methods_supported\":null}").map(v->DynamicTest.dynamicTest(v,()->assertThrows(OAuthException.class,()->ResourceServerMetadata.parse(ISSUER,v.getBytes(StandardCharsets.UTF_8),ResourceServerMetadata.Role.JWT))));
     }
     @Test void fallbackOnlyOnNotFoundAndIssuerPathsPreserveRawComponents() throws Exception {

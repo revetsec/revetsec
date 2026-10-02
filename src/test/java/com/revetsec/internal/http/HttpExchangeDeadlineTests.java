@@ -16,6 +16,8 @@
 
 package com.revetsec.internal.http;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.OutboundUriPolicy;
 import com.revetsec.internal.http.HttpExchangeException.Kind;
 import com.revetsec.testing.RawTlsServer;
@@ -110,7 +112,7 @@ final class HttpExchangeDeadlineTests {
 	// Exit criterion 11: a trickled body, a stalled chunked body, a stall after the headers, trickled headers and a
 	// silent server each end in TIMEOUT within the total deadline plus 2 s, and the server sees the client leave.
 	@TestFactory
-	Stream<DynamicTest> everyPacedResponseTimesOutByTheTotalDeadline() {
+	@NonNull Stream<@NonNull DynamicTest> everyPacedResponseTimesOutByTheTotalDeadline() {
 		return HostileResponse.timeouts().stream()
 				.map(hostileResponse -> DynamicTest.dynamicTest(hostileResponse.getName(), () -> {
 					RawTlsServer server = required(rawServer);
@@ -155,7 +157,7 @@ final class HttpExchangeDeadlineTests {
 	// M1 plan, algorithm step 2: every request carries timeout(min(requestTimeout, remaining)), so the JDK's own timer
 	// never outlives the call's deadline, and the per-request timeout binds when it is the shorter.
 	@TestFactory
-	Stream<DynamicTest> everyRequestCarriesTheSmallerOfItsTimeoutAndTheTimeLeft() {
+	@NonNull Stream<@NonNull DynamicTest> everyRequestCarriesTheSmallerOfItsTimeoutAndTheTimeLeft() {
 		return Stream.of(
 				new Duration[]{Duration.ofSeconds(7), Duration.ofSeconds(60), Duration.ofSeconds(7)},
 				new Duration[]{Duration.ofSeconds(30), Duration.ofSeconds(2), Duration.ofSeconds(2)}
@@ -179,7 +181,7 @@ final class HttpExchangeDeadlineTests {
 	// Exit criterion 11 and R12 text owed: an exchange started with no deadline left fails with TIMEOUT before any
 	// request is built, so the server never sees a connection.
 	@TestFactory
-	Stream<DynamicTest> anExchangeWithNoTimeLeftFailsBeforeAnyRequestIsBuilt() {
+	@NonNull Stream<@NonNull DynamicTest> anExchangeWithNoTimeLeftFailsBeforeAnyRequestIsBuilt() {
 		return Stream.of(Duration.ZERO, Duration.ofNanos(1)).map(total -> DynamicTest.dynamicTest("total " + total,
 				() -> {
 					TestHttpsServer server = required(jdkServer);
@@ -375,6 +377,8 @@ final class HttpExchangeDeadlineTests {
 	}
 
 	// R11 as amended: a deadline runs on System.nanoTime from its creation and accepts zero, never a negative total.
+	// Deliberate null inputs verify runtime rejection.
+	@SuppressWarnings("NullAway")
 	@Test
 	void aDeadlineCountsDownFromItsTotalAndRejectsNegativeTotals() {
 		Deadline deadline = Deadline.fromNow(Duration.ofHours(1));
@@ -393,19 +397,19 @@ final class HttpExchangeDeadlineTests {
 		Assertions.assertTrue(deadline.toString().startsWith("Deadline{total=PT1H, remaining="), deadline::toString);
 	}
 
-	private static void assertEndedWithin(Duration elapsed, Duration deadline) {
+	private static void assertEndedWithin(@NonNull Duration elapsed, @NonNull Duration deadline) {
 		Assertions.assertTrue(elapsed.compareTo(deadline.plus(SLACK)) <= 0, () -> "took " + elapsed);
 		// Not early either: the exchange ran until its deadline (with a little room for timer granularity).
 		Assertions.assertTrue(elapsed.compareTo(deadline.minus(Duration.ofMillis(50))) >= 0, () -> "took " + elapsed);
 	}
 
-	private static HttpExchangeRequest request(URI uri, ResponseProfile profile, Duration requestTimeout) {
+	private static @NonNull HttpExchangeRequest request(@NonNull URI uri, @NonNull ResponseProfile profile, @NonNull Duration requestTimeout) {
 		HttpExchangeRequest defaults = HttpExchangeRequest.fromDefaults(uri, profile);
 		return new HttpExchangeRequest(uri, profile, null, Map.of(), defaults.maximumBodyBytes(),
 				defaults.maximumErrorBodyBytes(), requestTimeout);
 	}
 
-	private static RawTlsServer.Connection connectionFor(RawTlsServer server, String path) throws InterruptedException {
+	private static RawTlsServer.@NonNull Connection connectionFor(@NonNull RawTlsServer server, @NonNull String path) throws InterruptedException {
 		waitForRequest(server, path);
 		for (RawTlsServer.Connection connection : server.getConnections())
 			for (RawTlsServer.RecordedRequest request : connection.getRequests())
@@ -414,7 +418,7 @@ final class HttpExchangeDeadlineTests {
 		throw new AssertionError("No connection carried " + path);
 	}
 
-	private static void waitForRequest(RawTlsServer server, String path) throws InterruptedException {
+	private static void waitForRequest(@NonNull RawTlsServer server, @NonNull String path) throws InterruptedException {
 		long deadline = System.nanoTime() + SERVER_WAIT.toNanos();
 		while (!hasRequest(server, path)) {
 			long remaining = deadline - System.nanoTime();
@@ -424,18 +428,18 @@ final class HttpExchangeDeadlineTests {
 		}
 	}
 
-	private static boolean hasRequest(RawTlsServer server, String path) {
+	private static boolean hasRequest(@NonNull RawTlsServer server, @NonNull String path) {
 		return server.getRequests().stream().anyMatch(request -> request.getPath().equals(path));
 	}
 
-	private static int countRequests(RawTlsServer server) {
+	private static int countRequests(@NonNull RawTlsServer server) {
 		return server.getRequests().size();
 	}
 
 	/**
 	 * An {@code https} URI on {@code 127.0.0.1} whose port was just released, so connecting to it is refused.
 	 */
-	static URI refusedUri() throws IOException {
+	static @NonNull URI refusedUri() throws IOException {
 		int port;
 		try (ServerSocket serverSocket = new ServerSocket()) {
 			serverSocket.bind(new InetSocketAddress(InetAddress.getByAddress(new byte[]{127, 0, 0, 1}), 0));
@@ -444,22 +448,22 @@ final class HttpExchangeDeadlineTests {
 		return URI.create("https://127.0.0.1:" + port + "/refused");
 	}
 
-	private static String nextPath() {
+	private static @NonNull String nextPath() {
 		return "/deadline/" + NEXT_PATH.incrementAndGet();
 	}
 
-	private static <T> T required(@Nullable T value) {
+	private static <T> @NonNull T required(@Nullable T value) {
 		if (value == null)
 			throw new IllegalStateException("The fixture did not start");
 		return value;
 	}
 
 	@SuppressWarnings("NullAway")
-	private static Duration nullDuration() {
+	private static @Nullable Duration nullDuration() {
 		return null;
 	}
 
-	private static HttpHeaders jsonHeaders() {
+	private static @NonNull HttpHeaders jsonHeaders() {
 		return HttpHeaders.of(Map.of("Content-Type", List.of("application/json"), "Content-Length", List.of("7")),
 				(name, value) -> true);
 	}
@@ -473,64 +477,64 @@ final class HttpExchangeDeadlineTests {
 	static final class DetachedFutureHttpClient extends HttpClient {
 		private final HttpClient delegate;
 
-		DetachedFutureHttpClient(HttpClient delegate) {
+		DetachedFutureHttpClient(@NonNull HttpClient delegate) {
 			this.delegate = delegate;
 		}
 
 		@Override
-		public Optional<CookieHandler> cookieHandler() {
+		public @NonNull Optional<@NonNull CookieHandler> cookieHandler() {
 			return this.delegate.cookieHandler();
 		}
 
 		@Override
-		public Optional<Duration> connectTimeout() {
+		public @NonNull Optional<@NonNull Duration> connectTimeout() {
 			return this.delegate.connectTimeout();
 		}
 
 		@Override
-		public Redirect followRedirects() {
+		public @NonNull Redirect followRedirects() {
 			return this.delegate.followRedirects();
 		}
 
 		@Override
-		public Optional<ProxySelector> proxy() {
+		public @NonNull Optional<@NonNull ProxySelector> proxy() {
 			return this.delegate.proxy();
 		}
 
 		@Override
-		public SSLContext sslContext() {
+		public @NonNull SSLContext sslContext() {
 			return this.delegate.sslContext();
 		}
 
 		@Override
-		public SSLParameters sslParameters() {
+		public @NonNull SSLParameters sslParameters() {
 			return this.delegate.sslParameters();
 		}
 
 		@Override
-		public Optional<Authenticator> authenticator() {
+		public @NonNull Optional<@NonNull Authenticator> authenticator() {
 			return this.delegate.authenticator();
 		}
 
 		@Override
-		public Version version() {
+		public @NonNull Version version() {
 			return this.delegate.version();
 		}
 
 		@Override
-		public Optional<Executor> executor() {
+		public @NonNull Optional<@NonNull Executor> executor() {
 			return this.delegate.executor();
 		}
 
 		@Override
-		public <T> HttpResponse<T> send(HttpRequest request, HttpResponse.BodyHandler<T> responseBodyHandler)
+		public <T> @NonNull HttpResponse<@NonNull T> send(@NonNull HttpRequest request, HttpResponse.@NonNull BodyHandler<@NonNull T> responseBodyHandler)
 				throws IOException, InterruptedException {
 			return this.delegate.send(request, responseBodyHandler);
 		}
 
 		@Override
-		public <T> CompletableFuture<HttpResponse<T>> sendAsync(HttpRequest request,
-				HttpResponse.BodyHandler<T> responseBodyHandler) {
+		public <T> @NonNull CompletableFuture<@NonNull HttpResponse<@NonNull T>> sendAsync(@NonNull HttpRequest request,
+				HttpResponse.@NonNull BodyHandler<@NonNull T> responseBodyHandler) {
 			CompletableFuture<HttpResponse<T>> detached = new CompletableFuture<>();
 			CompletableFuture<HttpResponse<T>> unused = this.delegate.sendAsync(request, responseBodyHandler)
 					.whenComplete((response, failure) -> {
@@ -543,8 +547,8 @@ final class HttpExchangeDeadlineTests {
 		}
 
 		@Override
-		public <T> CompletableFuture<HttpResponse<T>> sendAsync(HttpRequest request,
-				HttpResponse.BodyHandler<T> responseBodyHandler, HttpResponse.PushPromiseHandler<T> pushPromiseHandler) {
+		public <T> @NonNull CompletableFuture<@NonNull HttpResponse<@NonNull T>> sendAsync(@NonNull HttpRequest request,
+				HttpResponse.@NonNull BodyHandler<@NonNull T> responseBodyHandler, HttpResponse.@NonNull PushPromiseHandler<@NonNull T> pushPromiseHandler) {
 			return sendAsync(request, responseBodyHandler);
 		}
 	}
@@ -563,7 +567,7 @@ final class HttpExchangeDeadlineTests {
 			this.started = new CountDownLatch(parallelism);
 		}
 
-		static CommonPoolSaturation start() {
+		static @NonNull CommonPoolSaturation start() {
 			ForkJoinPool pool = ForkJoinPool.commonPool();
 			int parallelism = Math.max(1, pool.getParallelism());
 			CommonPoolSaturation saturation = new CommonPoolSaturation(parallelism);
@@ -578,7 +582,7 @@ final class HttpExchangeDeadlineTests {
 			return saturation;
 		}
 
-		boolean awaitAllWorkersBlocked(Duration timeout) throws InterruptedException {
+		boolean awaitAllWorkersBlocked(@NonNull Duration timeout) throws InterruptedException {
 			return this.started.await(timeout.toNanos(), TimeUnit.NANOSECONDS) && !this.probe.isDone();
 		}
 

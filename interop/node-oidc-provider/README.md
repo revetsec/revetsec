@@ -43,4 +43,14 @@ M5 enables a separate test mode through `TEST_RESOURCE_MODE=m5`: resource indica
 
 Node provider 9.12.2 rejects structured JWTs at its introspection and revocation endpoints. Tests preserve that rejection as a provider failure; audience-checked JSON introspection and revocation use the genuine opaque resource. Keycloak separately exercises JWT introspection. No provider implementation is patched or introspection audience check disabled. JWT introspection responses, PAR and DPoP remain later scope.
 
-Integration tests start only under Maven's `integration` profile. Build the local image first, then run `mvn -Pintegration -Dmaven.javadoc.skip=true verify`. To select another locally built image, set `-Drevetsec.nodeProviderImage=<local-image>`; tests require the expected installed provider version and never pull images automatically. TLS uses a fresh SAN-correct test certificate and a scoped trust context. Loopback bindings and test-only credentials do not define a deployment authentication policy.
+The separate `TEST_RESOURCE_MODE=playground` preset enables real public-client registration and the exact loopback HTTPS resource `TEST_PLAYGROUND_RESOURCE` (default `https://localhost:8443/mcp`). Only `mcp:discover` and `mcp:whoami` resource scopes are configured. `TEST_PLAYGROUND_TOKEN_FORMAT=jwt|opaque` selects actual provider JWT issuance or opaque issuance for audience-checked introspection. The fixed confidential test client may introspect tokens for that exact resource, including dynamically registered public clients; its authorization remains independent of the resource server's audience validation. Set `TEST_BIND_ADDRESS=127.0.0.1` when running Node directly on the host. Docker keeps its internal listener and must publish only an explicit loopback host port. Default OIDF and `m5` profiles are unchanged. See [the unpublished examples](../../examples/README.md) for startup and scoped HTTPS trust.
+
+Integration tests start only under Maven's `integration` profile. Prepare both provider images before running the profile, including on a fresh Docker installation:
+
+```sh
+docker pull quay.io/keycloak/keycloak:26.7.4@sha256:82a77884f3af238beab1e7afd63b5f530e1b5c0590bd7aa60b40a40463e29b2c
+docker build --pull=false -t revetsec-interop/node-oidc-provider:local interop/node-oidc-provider
+mvn -Pintegration -Dmaven.javadoc.skip=true verify
+```
+
+The resource-provider fixtures refuse test-time pulls; CI prepares the same pinned image explicitly before Failsafe starts. To select another locally built node image, set `-Drevetsec.nodeProviderImage=<local-image>`; tests require the expected installed provider version. TLS uses a fresh SAN-correct test certificate and a scoped trust context. Loopback bindings and test-only credentials do not define a deployment authentication policy.

@@ -61,3 +61,21 @@ The `packaged-consumer` job in `.github/workflows/ci.yml` runs the self-tests, d
 - The Gradle consumer reads the installed POM through Gradle's own POM mapping, as Gradle does for any module that publishes no Gradle Module Metadata (`.module` file). Core publishes none; if it ever did, this check would have to consume that file too.
 - One Gradle version is checked: the pinned one.
 - The consumer compile checks only the types `PackagedConsumer` uses, which is why a self-test requires it to use every exported public type. That matters for annotations: javac warns on JDK 17, 21, 25 and 26 (not on 27), and a consumer that compiles with warnings as errors fails, when a class it compiles against carries a provided-scope annotation with an element, such as jsr305's `@GuardedBy("lock")`, on any member, private ones included, and the annotation JAR is absent. Revetsec uses `@GuardedBy` only in internal packages, and the source policy's `provided-annotation-with-element` rule keeps such annotations out of every file in an exported package.
+
+## Explicit executable signatures
+
+`ExecutableNullabilityContractTests` attributes authored core test and Java verification/spike signatures with the
+actual test classpath. The integration profile includes the IT/scripted-IdP sources; ordinary runs mirror Maven's
+compile exclusions. `InternalNullabilityContractTests` retains the calibrated production/array/wildcard/record checks.
+`FuzzNullabilityContractTests` checks every fuzz Java helper and target in both ordinary and main-sources-only replays.
+Reference parameters and returns require exactly one explicit JSpecify meaning at every nested type position.
+Intentional malformed Java fixtures and fixture strings retain their rejection calibrations.
+
+The packaged consumer's canonical source also declares its signatures. Its temporary Maven/Gradle source copy erases
+only JSpecify type-use tokens and imports, preserving Java bodies, comments and literal contents. Both actual consumer
+builds still compile against the Revetsec JAR alone and run without annotation JARs; the rendering has calibrated
+literal-preservation tests.
+
+`render-java-source.py` uses that same literal-preserving renderer for the standalone Keycloak and scripted-IdP
+spike launchers. Their temporary copies remain JDK-only; canonical authored signatures remain explicitly annotated.
+The large core/fuzz signature guard child JVMs have a384MiB heap ceiling and two active processors.

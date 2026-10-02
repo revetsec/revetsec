@@ -16,6 +16,8 @@
 
 package com.revetsec.oauth;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.oidc.*;
 import com.revetsec.internal.oauth.OidcTransactionAccess;
 import com.revetsec.jose.*;
@@ -54,7 +56,7 @@ final class OidcPendingCodecTests {
 		assertEquals(Map.of("app", "sentinel"), decoded.pending().getApplicationData());
 	}
 	@TestFactory
-	Stream<DynamicTest> malformedAuthenticatedOidcRecordsFailBeforeAnyProviderRequest() {
+	@NonNull Stream<@NonNull DynamicTest> malformedAuthenticatedOidcRecordsFailBeforeAnyProviderRequest() {
 		return Stream.of("legacy version", "missing nonce", "empty nonce", "negative age", "fractional age", "string age", "missing acr", "duplicate acr", "invalid acr", "wrong acr type", "bad prompt", "non-openid scope")
 				.map(name -> DynamicTest.dynamicTest(name, () -> {
 					OidcClient client = oidcClient(); PendingAuthorization pending = client.beginAuthentication(OidcAuthenticationOptions.builder().maxAge(Duration.ZERO).requiredAcrValues(Set.of("urn:mfa")).prompt("login").build()).getPendingAuthorization();
@@ -75,8 +77,8 @@ final class OidcPendingCodecTests {
 					};
 					assertNotEquals(encoded, altered); AtomicReference<String> saved = new AtomicReference<>(altered);
 					PendingAuthorizationStore store = new PendingAuthorizationStore() {
-						@Override public void save(String binding, String state, String record, Instant expiry) { saved.set(record); }
-						@Override public Optional<String> consume(String binding, String state) { return Optional.ofNullable(saved.getAndSet(null)); }
+						@Override public void save(@NonNull String binding, @NonNull String state, @NonNull String record, @NonNull Instant expiry) { saved.set(record); }
+						@Override public @NonNull Optional<@NonNull String> consume(@NonNull String binding, @NonNull String state) { return Optional.ofNullable(saved.getAndSet(null)); }
 					};
 					assertEquals(OAuthException.Reason.PENDING_AUTHORIZATION_INVALID, assertThrows(OAuthValidationException.class,
 							() -> client.completeAuthentication(AuthorizationResponse.fromQueryString("state=" + pending.state() + "&code=sentinel-code"), PendingAuthorizationSource.fromStore(store, "browser"), CALLBACK)).getReason());
@@ -87,14 +89,14 @@ final class OidcPendingCodecTests {
 		OidcTransactionAccess.Operations installed = OidcTransactionAccess.get();
 		assertThrows(IllegalStateException.class, () -> OidcTransactionAccess.set(installed));
 		OidcTransactionAccess.Operations impostor = new OidcTransactionAccess.Operations() {
-			@Override public void checkHmacAuthentication(ClientAuthentication a, Set<com.revetsec.jose.JwsAlgorithm> b) { throw new AssertionError(); }
-			@Override public OAuthException endpointFailure(OAuthException.Reason reason) { throw new AssertionError(); }
-			@Override public OAuthException endpointExchangeFailure(com.revetsec.internal.http.HttpExchangeException failure) { throw new AssertionError(); }
-			@Override public OAuthException endpointStatusFailure(int status, @Nullable Duration retryAfter) { throw new AssertionError(); }
-			@Override public OidcTransactionAccess.RefreshCompletion refresh(OAuthClient client, RefreshToken token, TokenRequestOptions options, AuthorizationServerMetadata metadata, com.revetsec.internal.http.Deadline deadline, Set<com.revetsec.jose.JwsAlgorithm> hmac) { throw new AssertionError(); }
+			@Override public void checkHmacAuthentication(@NonNull ClientAuthentication a, @NonNull Set<com.revetsec.jose.@NonNull JwsAlgorithm> b) { throw new AssertionError(); }
+			@Override public @NonNull OAuthException endpointFailure(OAuthException.@NonNull Reason reason) { throw new AssertionError(); }
+			@Override public @NonNull OAuthException endpointExchangeFailure(com.revetsec.internal.http.@NonNull HttpExchangeException failure) { throw new AssertionError(); }
+			@Override public @NonNull OAuthException endpointStatusFailure(int status, @Nullable Duration retryAfter) { throw new AssertionError(); }
+			@Override public OidcTransactionAccess.@NonNull RefreshCompletion refresh(@NonNull OAuthClient client, @NonNull RefreshToken token, @NonNull TokenRequestOptions options, @NonNull AuthorizationServerMetadata metadata, com.revetsec.internal.http.@NonNull Deadline deadline, @NonNull Set<com.revetsec.jose.@NonNull JwsAlgorithm> hmac) { throw new AssertionError(); }
 
-			@Override public AuthorizationRedirect begin(OAuthClient client, AuthorizationRequestOptions options, AuthorizationServerMetadata metadata, @Nullable Duration maxAge, Set<String> acr) { throw new AssertionError(); }
-			@Override public OidcTransactionAccess.Completion complete(OAuthClient client, AuthorizationResponse response, PendingAuthorizationSource source, URI callback, java.util.function.Function<com.revetsec.internal.http.Deadline, AuthorizationServerMetadata> metadata, com.revetsec.internal.http.Deadline deadline, Set<com.revetsec.jose.JwsAlgorithm> hmac) { throw new AssertionError(); }
+			@Override public @NonNull AuthorizationRedirect begin(@NonNull OAuthClient client, @NonNull AuthorizationRequestOptions options, @NonNull AuthorizationServerMetadata metadata, @Nullable Duration maxAge, @NonNull Set<@NonNull String> acr) { throw new AssertionError(); }
+			@Override public OidcTransactionAccess.@NonNull Completion complete(@NonNull OAuthClient client, @NonNull AuthorizationResponse response, @NonNull PendingAuthorizationSource source, @NonNull URI callback, java.util.function.@NonNull Function<com.revetsec.internal.http.@NonNull Deadline, @NonNull AuthorizationServerMetadata> metadata, com.revetsec.internal.http.@NonNull Deadline deadline, @NonNull Set<com.revetsec.jose.@NonNull JwsAlgorithm> hmac) { throw new AssertionError(); }
 		};
 		assertThrows(IllegalArgumentException.class, () -> OidcTransactionAccess.set(impostor));
 		TokenEndpointPayload payload = new TokenEndpointPayload("sentinel-access", "Bearer", null, null, "sentinel-id", true, null, Set.of(), NOW, com.revetsec.json.JsonObject.fromMembers(Map.of()));
@@ -108,14 +110,14 @@ final class OidcPendingCodecTests {
 		com.revetsec.internal.jose.JwtValidationAccess.Operations jwt = com.revetsec.internal.jose.JwtValidationAccess.get();
 		assertThrows(IllegalStateException.class, () -> com.revetsec.internal.jose.JwtValidationAccess.set(jwt));
 		assertThrows(IllegalArgumentException.class, () -> com.revetsec.internal.jose.JwtValidationAccess.set(new com.revetsec.internal.jose.JwtValidationAccess.Operations() {
-			@Override public com.revetsec.jose.Jwt validate(com.revetsec.jose.JwtValidator v, String c, java.util.function.LongSupplier d) { throw new AssertionError(); }
-			@Override public com.revetsec.jose.Jwt validatePrepared(com.revetsec.jose.JwtValidator v, com.revetsec.internal.jose.PreparedJws p, java.util.function.LongSupplier d) { throw new AssertionError(); }
-			@Override public com.revetsec.jose.Jwt validateUserInfo(com.revetsec.jose.JwtValidator v, String c, java.util.function.LongSupplier d) { throw new AssertionError(); }
-			@Override public com.revetsec.jose.Jwt validateOidc(com.revetsec.jose.JwtValidator v, String c, Set<com.revetsec.jose.JwsAlgorithm> a, byte[] s, java.util.function.LongSupplier d, Runnable u) { throw new AssertionError(); }
-			@Override public void warmUp(com.revetsec.jose.RemoteJsonWebKeySource source, java.util.function.LongSupplier d) { throw new AssertionError(); }
+			@Override public com.revetsec.jose.@NonNull Jwt validate(com.revetsec.jose.@NonNull JwtValidator v, @NonNull String c, java.util.function.@NonNull LongSupplier d) { throw new AssertionError(); }
+			@Override public com.revetsec.jose.@NonNull Jwt validatePrepared(com.revetsec.jose.@NonNull JwtValidator v, com.revetsec.internal.jose.@NonNull PreparedJws p, java.util.function.@NonNull LongSupplier d) { throw new AssertionError(); }
+			@Override public com.revetsec.jose.@NonNull Jwt validateUserInfo(com.revetsec.jose.@NonNull JwtValidator v, @NonNull String c, java.util.function.@NonNull LongSupplier d) { throw new AssertionError(); }
+			@Override public com.revetsec.jose.@NonNull Jwt validateOidc(com.revetsec.jose.@NonNull JwtValidator v, @NonNull String c, @NonNull Set<com.revetsec.jose.@NonNull JwsAlgorithm> a, byte @NonNull [] s, java.util.function.@NonNull LongSupplier d, @NonNull Runnable u) { throw new AssertionError(); }
+			@Override public void warmUp(com.revetsec.jose.@NonNull RemoteJsonWebKeySource source, java.util.function.@NonNull LongSupplier d) { throw new AssertionError(); }
 		}));
 	}
-	private static OidcClient oidcClient() {
+	private static @NonNull OidcClient oidcClient() {
 		return OidcClient.withProviderMetadata(OidcProviderMetadata.withIssuer("https://op.example")
 				.authorizationEndpoint(URI.create("https://op.example/authorize")).tokenEndpoint(URI.create("https://op.example/token"))
 				.jwksUri(URI.create("https://op.example/jwks")).build()).clientId("client").redirectUri(CALLBACK).clock(CLOCK).build();

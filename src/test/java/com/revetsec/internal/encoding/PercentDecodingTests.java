@@ -16,6 +16,8 @@
 
 package com.revetsec.internal.encoding;
 
+import org.jspecify.annotations.NonNull;
+
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.DynamicTest;
 import org.junit.jupiter.api.Test;
@@ -34,7 +36,7 @@ import java.util.stream.Stream;
  */
 final class PercentDecodingTests {
 	@TestFactory
-	Stream<DynamicTest> decodesEscapesOfEitherCaseAndLeavesOtherCharactersAlone() {
+	@NonNull Stream<@NonNull DynamicTest> decodesEscapesOfEitherCaseAndLeavesOtherCharactersAlone() {
 		return Stream.of(new String[][]{
 				{"", ""}, {"plain", "plain"}, {"%20", " "}, {"%25", "%"}, {"a%2Fb", "a/b"}, {"a%2fb", "a/b"},
 				{"%41%42%43", "ABC"}, {"caf%C3%A9", "caf\u00E9"}, {"caf%c3%a9", "caf\u00E9"},
@@ -58,7 +60,7 @@ final class PercentDecodingTests {
 	// RFC 3986 section 2.1: '%' must be followed by two hexadecimal digits. Only ASCII digits count:
 	// Character.digit would also accept Arabic-Indic and fullwidth digits.
 	@TestFactory
-	Stream<DynamicTest> rejectsMalformedEscapes() {
+	@NonNull Stream<@NonNull DynamicTest> rejectsMalformedEscapes() {
 		return rejections(EncodingException.Kind.MALFORMED_PERCENT_ENCODING, "%", "%2", "a%", "ab%4", "%G1", "%1G",
 				"%%41", "% 41", "%+1", "%-1", "%\u0663\u0663", "%\uFF11\uFF11", "%4\u00E9", "100%",
 				EncodingFailures.SENTINEL + "%ZZ");
@@ -66,7 +68,7 @@ final class PercentDecodingTests {
 
 	// R7: invalid percent-encoded UTF-8 is rejected; URLDecoder maps each of these to U+FFFD.
 	@TestFactory
-	Stream<DynamicTest> rejectsInvalidUtf8WhereUrlDecoderSubstitutesTheReplacementCharacter() {
+	@NonNull Stream<@NonNull DynamicTest> rejectsInvalidUtf8WhereUrlDecoderSubstitutesTheReplacementCharacter() {
 		return Stream.of("%C3", "%C3%28", "%80", "%BF", "%C0%AF", "%C1%BF", "%E0%80%80", "%ED%A0%80",
 				"%ED%BF%BF", "%F4%90%80%80", "%F5%80%80%80", "%FE", "%FF", "a%E2%82", "%F0%9F%98",
 				EncodingFailures.SENTINEL + "%C3").map(input -> DynamicTest.dynamicTest(input, () -> {
@@ -80,13 +82,13 @@ final class PercentDecodingTests {
 	// Validity is judged on the whole octet sequence, so an escaped lead octet followed by a raw character whose
 	// UTF-8 is not a continuation is rejected, and so is an escaped continuation after raw text.
 	@TestFactory
-	Stream<DynamicTest> judgesUtf8OverTheMixedOctetSequence() {
+	@NonNull Stream<@NonNull DynamicTest> judgesUtf8OverTheMixedOctetSequence() {
 		return rejections(EncodingException.Kind.INVALID_UTF8, "%C3\u00A9", "%E2%82\u00AC", "\u00E9%A9", "%C3a",
 				"a%A9");
 	}
 
 	@TestFactory
-	Stream<DynamicTest> rejectsUnpairedSurrogatesInTheInput() {
+	@NonNull Stream<@NonNull DynamicTest> rejectsUnpairedSurrogatesInTheInput() {
 		return rejections(EncodingException.Kind.UNPAIRED_SURROGATE, "\uD800", "a\uDC00", "%41\uD83D",
 				"\uDE00\uD83D", "%41\uDFFF%42");
 	}
@@ -138,7 +140,7 @@ final class PercentDecodingTests {
 		Assertions.assertThrows(NullPointerException.class, () -> PercentDecoding.decode(null));
 	}
 
-	private static Stream<DynamicTest> rejections(EncodingException.Kind kind, String... inputs) {
+	private static @NonNull Stream<@NonNull DynamicTest> rejections(EncodingException.@NonNull Kind kind, @NonNull String @NonNull ... inputs) {
 		return Stream.of(inputs).map(input -> DynamicTest.dynamicTest(EncodingFailures.describe(input),
 				() -> EncodingFailures.assertRejected(kind, input, () -> PercentDecoding.decode(input))));
 	}

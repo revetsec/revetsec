@@ -1,0 +1,1 @@
+{"active":true,"iss":"http://localhost:1/issuer","aud":"https://resource.example/mcp","sub":"TEST-ONLY-subject","client_id":"TEST-ONLY-client","exp":1790859600,"iat":1790856000,"scope":"read write","token_type":"Bearer","nbf":""}

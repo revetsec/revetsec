@@ -16,6 +16,8 @@
 
 package com.revetsec.internal.encoding;
 
+import org.jspecify.annotations.NonNull;
+
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.DynamicTest;
 import org.junit.jupiter.api.Test;
@@ -61,7 +63,7 @@ final class StrictUtf8Tests {
 
 	// M1 plan: getBytes(UTF_8) maps an unpaired surrogate to '?' (0x3F); the strict encoder rejects it.
 	@TestFactory
-	Stream<DynamicTest> rejectsUnpairedSurrogatesThatGetBytesSilentlyReplaces() {
+	@NonNull Stream<@NonNull DynamicTest> rejectsUnpairedSurrogatesThatGetBytesSilentlyReplaces() {
 		return Stream.of("\uD800", "\uDFFF", "a\uDC00b", "\uDBFF", "x\uD83D", "\uDE00\uD83D", "\uD800\uD800",
 				EncodingFailures.SENTINEL + "\uDC00").map(input -> DynamicTest.dynamicTest(
 				EncodingFailures.describe(input), () -> {
@@ -88,7 +90,7 @@ final class StrictUtf8Tests {
 	// Table 3-7 rows and their classic violations. new String(bytes, UTF_8) maps each of these to U+FFFD; the strict
 	// decoder rejects it instead.
 	@TestFactory
-	Stream<DynamicTest> rejectsIllFormedSequencesInsteadOfReplacingThem() {
+	@NonNull Stream<@NonNull DynamicTest> rejectsIllFormedSequencesInsteadOfReplacingThem() {
 		return Stream.of(
 				"c080", // overlong NUL
 				"c0af", // overlong '/'
@@ -119,7 +121,7 @@ final class StrictUtf8Tests {
 	// Well-formed input decodes as itself, including NUL, noncharacters, the largest code point and a leading
 	// U+FEFF, which is kept (a BOM is data here; callers that forbid one check for it).
 	@TestFactory
-	Stream<DynamicTest> decodesEdgeCasesThatAreWellFormed() {
+	@NonNull Stream<@NonNull DynamicTest> decodesEdgeCasesThatAreWellFormed() {
 		return Stream.of(new String[][]{
 				{"", ""}, {"00", "\u0000"}, {"7f", "\u007F"}, {"c280", "\u0080"}, {"dfbf", "\u07FF"},
 				{"e0a080", "\u0800"}, {"ed9fbf", "\uD7FF"}, {"ee8080", "\uE000"}, {"efbfbd", "\uFFFD"},
@@ -198,7 +200,7 @@ final class StrictUtf8Tests {
 		Assertions.assertThrows(NullPointerException.class, () -> StrictUtf8.isWellFormed(null));
 	}
 
-	private static void assertAgreesWithTheOracle(byte[] bytes) {
+	private static void assertAgreesWithTheOracle(byte @NonNull [] bytes) {
 		boolean wellFormed = Utf8Reference.isWellFormed(bytes);
 		try {
 			String decoded = StrictUtf8.decode(bytes);

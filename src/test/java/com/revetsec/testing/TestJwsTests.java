@@ -16,6 +16,8 @@
 
 package com.revetsec.testing;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.internal.json.JsonCodec;
 import com.revetsec.internal.json.JsonLimits;
 import com.revetsec.json.JsonObject;
@@ -88,7 +90,7 @@ final class TestJwsTests {
 	private static final Map<Algorithm, String> JDK_ENGINES = jdkEngines();
 
 	@TestFactory
-	Stream<DynamicTest> everyAlgorithmSignsWhatTheJdkVerifies() {
+	@NonNull Stream<@NonNull DynamicTest> everyAlgorithmSignsWhatTheJdkVerifies() {
 		return Arrays.stream(Algorithm.values()).map(algorithm -> DynamicTest.dynamicTest(algorithm.name(), () -> {
 			Signed signed = sign(algorithm);
 			String token = signed.toCompactSerialization();
@@ -155,7 +157,7 @@ final class TestJwsTests {
 	}
 
 	@TestFactory
-	Stream<DynamicTest> derVariantIsTheSameEcdsaSignatureInTheFormTheJdkPlainEngineAccepts() {
+	@NonNull Stream<@NonNull DynamicTest> derVariantIsTheSameEcdsaSignatureInTheFormTheJdkPlainEngineAccepts() {
 		// Plan M2 exit criterion 1 (a DER ES256 fixture): an IdP that sends DER instead of R || S (RFC 7518 section
 		// 3.4).
 		return Stream.of(Algorithm.ES256, Algorithm.ES384, Algorithm.ES512)
@@ -192,7 +194,7 @@ final class TestJwsTests {
 	}
 
 	@TestFactory
-	Stream<DynamicTest> ecdsaRangeVariantsSetROrSToExactlyTheNamedValue() {
+	@NonNull Stream<@NonNull DynamicTest> ecdsaRangeVariantsSetROrSToExactlyTheNamedValue() {
 		// Plan M2 exit criterion 6 and CVE-2022-21449: r = 0, r = n, s = n, r = n + 1 and all-zero signatures.
 		List<DynamicTest> tests = new ArrayList<>();
 		for (Algorithm algorithm : List.of(Algorithm.ES256, Algorithm.ES384, Algorithm.ES512)) {
@@ -223,7 +225,7 @@ final class TestJwsTests {
 	}
 
 	@TestFactory
-	Stream<DynamicTest> lengthVariantsWriteSixtyThreeAndSixtyFiveOctetsForEs256AndEd25519() {
+	@NonNull Stream<@NonNull DynamicTest> lengthVariantsWriteSixtyThreeAndSixtyFiveOctetsForEs256AndEd25519() {
 		return Stream.of(Algorithm.ES256, Algorithm.ED25519, Algorithm.EDDSA)
 				.map(algorithm -> DynamicTest.dynamicTest(algorithm.name(), () -> {
 					Signed signed = sign(algorithm);
@@ -243,7 +245,7 @@ final class TestJwsTests {
 	}
 
 	@TestFactory
-	Stream<DynamicTest> aFlippedBitKeepsTheShapeAndFailsJdkVerification() {
+	@NonNull Stream<@NonNull DynamicTest> aFlippedBitKeepsTheShapeAndFailsJdkVerification() {
 		return Arrays.stream(Algorithm.values()).map(algorithm -> DynamicTest.dynamicTest(algorithm.name(), () -> {
 			Signed signed = sign(algorithm);
 			byte[] flipped = signature(signed.withVariant(Variant.FLIPPED_BIT));
@@ -312,7 +314,7 @@ final class TestJwsTests {
 	}
 
 	@TestFactory
-	Stream<DynamicTest> ecdsaOnlyVariantsRefuseOtherAlgorithms() {
+	@NonNull Stream<@NonNull DynamicTest> ecdsaOnlyVariantsRefuseOtherAlgorithms() {
 		List<Variant> ecdsaOnly = List.of(Variant.DER_SIGNATURE, Variant.R_ZERO, Variant.S_ZERO, Variant.R_EQUALS_ORDER,
 				Variant.S_EQUALS_ORDER, Variant.R_ORDER_PLUS_ONE);
 		Signed rsa = sign(Algorithm.RS256);
@@ -518,11 +520,11 @@ final class TestJwsTests {
 		Assertions.assertEquals("QUI", TestJws.base64Url("AB"));
 	}
 
-	private static String engine(Algorithm algorithm) {
+	private static @NonNull String engine(@NonNull Algorithm algorithm) {
 		return Objects.requireNonNull(JDK_ENGINES.get(algorithm), algorithm::name);
 	}
 
-	private static Map<Algorithm, String> jdkEngines() {
+	private static @NonNull Map<@NonNull Algorithm, @NonNull String> jdkEngines() {
 		Map<Algorithm, String> engines = new LinkedHashMap<>();
 		engines.put(Algorithm.RS256, "SHA256withRSA");
 		engines.put(Algorithm.RS384, "SHA384withRSA");
@@ -541,18 +543,18 @@ final class TestJwsTests {
 		return Map.copyOf(engines);
 	}
 
-	private static Signed sign(Algorithm algorithm) {
+	private static @NonNull Signed sign(@NonNull Algorithm algorithm) {
 		TestJws.Builder builder = TestJws.withAlgorithm(algorithm).kid("k-1").typ("JWT").payload(PAYLOAD);
 		return algorithm.getKeyType().equals("oct") ? builder.signed(HMAC_SECRET)
 				: builder.signed(signingKey(algorithm));
 	}
 
-	private static Key signingKey(Algorithm algorithm) {
+	private static @NonNull Key signingKey(@NonNull Algorithm algorithm) {
 		return algorithm.getKeyType().equals("oct") ? new SecretKeySpec(HMAC_SECRET, engine(algorithm))
 				: fixture(algorithm).getPrivateKey();
 	}
 
-	private static Fixture fixture(Algorithm algorithm) {
+	private static @NonNull Fixture fixture(@NonNull Algorithm algorithm) {
 		return switch (algorithm) {
 			case RS256, RS384, RS512, PS256, PS384, PS512 -> Fixture.IDP_SIGNING_RSA_2048;
 			case ES256 -> Fixture.IDP_SIGNING_EC_P256;
@@ -566,7 +568,7 @@ final class TestJwsTests {
 	/**
 	 * Verifies with the JDK's own engine, never through TestJws's signing path.
 	 */
-	private static boolean jdkVerifies(Algorithm algorithm, String signingInput, byte[] signature)
+	private static boolean jdkVerifies(@NonNull Algorithm algorithm, @NonNull String signingInput, byte @NonNull [] signature)
 			throws GeneralSecurityException {
 		byte[] input = signingInput.getBytes(StandardCharsets.US_ASCII);
 		String engine = engine(algorithm);
@@ -589,15 +591,15 @@ final class TestJwsTests {
 		}
 	}
 
-	private static byte[] signature(String token) {
+	private static byte @NonNull [] signature(@NonNull String token) {
 		return Base64.getUrlDecoder().decode(split(token)[2]);
 	}
 
-	private static String[] split(String token) {
+	private static @NonNull String @NonNull [] split(@NonNull String token) {
 		return token.split("\\.", -1);
 	}
 
-	private static String decode(String segment) {
+	private static @NonNull String decode(@NonNull String segment) {
 		return new String(Base64.getUrlDecoder().decode(segment), StandardCharsets.UTF_8);
 	}
 }

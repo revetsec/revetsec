@@ -16,6 +16,8 @@
 
 package com.revetsec.jose;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.internal.jose.TestClaims;
 import com.revetsec.testing.TestJsonWebKeys.Fixture;
 import com.revetsec.testing.TestJws;
@@ -44,7 +46,7 @@ final class JwtValidatorClaimsTests {
 	// Exit criterion 9 (RFC 7519 sections 4.1.4 to 4.1.6): at skews 0, 60 s and 5 minutes, exp is accepted until
 	// exp + skew and EXPIRED from it, and nbf and iat are accepted at now + skew and refused one second later.
 	@TestFactory
-	Stream<DynamicTest> theTimeChecksHoldAtTheirBoundariesForEachSkew() {
+	@NonNull Stream<@NonNull DynamicTest> theTimeChecksHoldAtTheirBoundariesForEachSkew() {
 		return Stream.of(Duration.ZERO, Duration.ofSeconds(60), Duration.ofMinutes(5)).map(skew -> DynamicTest.dynamicTest(
 				"skew " + skew, () -> {
 					JwtValidator validator = JwtFixtures.validator(JwtFixtures.source(Fixture.IDP_SIGNING_RSA_2048))
@@ -176,7 +178,7 @@ final class JwtValidatorClaimsTests {
 	// Exit criterion 10: a key whose issuer member is null, 123, [] or "" is skipped, so it is never usable, for any
 	// iss, including the empty one.
 	@TestFactory
-	Stream<DynamicTest> aKeyWithAMalformedIssuerMemberIsNeverUsable() {
+	@NonNull Stream<@NonNull DynamicTest> aKeyWithAMalformedIssuerMemberIsNeverUsable() {
 		return Stream.of("null", "123", "[]", "\"\"", "{}", "[\"" + JwtFixtures.ISSUER + "\"]").map(member ->
 				DynamicTest.dynamicTest("issuer " + member, () -> {
 					StaticJsonWebKeySource source = JwtFixtures.source(JwtFixtures.jwk(Fixture.IDP_SIGNING_RSA_2048)
@@ -238,15 +240,15 @@ final class JwtValidatorClaimsTests {
 		reject(JoseException.Reason.NOT_YET_VALID, validator, valid.copy().put("exp", later).put("nbf", future));
 	}
 
-	private static Jwt accept(JwtValidator validator,
-													 TestClaims claims) {
+	private static @NonNull Jwt accept(@NonNull JwtValidator validator,
+													 @NonNull TestClaims claims) {
 		return JwtFixtures.assertAccepted(validator, JwtFixtures.signed(Fixture.IDP_SIGNING_RSA_2048, Algorithm.RS256,
 				claims));
 	}
 
-	private static void reject(JoseException.Reason reason,
-														 JwtValidator validator,
-														 TestClaims claims) {
+	private static void reject(JoseException.@NonNull Reason reason,
+														 @NonNull JwtValidator validator,
+														 @NonNull TestClaims claims) {
 		JwtFixtures.assertRejected(reason, validator, JwtFixtures.signed(Fixture.IDP_SIGNING_RSA_2048, Algorithm.RS256,
 				claims));
 	}

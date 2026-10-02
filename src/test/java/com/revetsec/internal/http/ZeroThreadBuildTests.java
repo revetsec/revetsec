@@ -16,6 +16,8 @@
 
 package com.revetsec.internal.http;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.OutboundUriPolicy;
 import com.revetsec.internal.http.StandInNetworkedBuilder.StandInNetworkedComponent;
 import com.revetsec.testing.ChildJvm;
@@ -58,7 +60,7 @@ final class ZeroThreadBuildTests {
 	private static final int BUILDS = 1_000;
 
 	@Test
-	void buildsStartNoThreadAndLoadNoClientAndFirstUsesShareOneDefaultClient(@TempDir Path directory)
+	void buildsStartNoThreadAndLoadNoClientAndFirstUsesShareOneDefaultClient(@TempDir @NonNull Path directory)
 			throws Exception {
 		Path classLoadLog = directory.resolve("class-load.log");
 		ChildJvm.Result result = ChildJvm.withMainClass(BuildChild.class)
@@ -98,7 +100,7 @@ final class ZeroThreadBuildTests {
 	/**
 	 * The binary names in a {@code -Xlog:class+load} log written with the {@code none} decorator, in load order.
 	 */
-	private static List<String> loadedInOrder(Path classLoadLog) throws Exception {
+	private static @NonNull List<@NonNull String> loadedInOrder(@NonNull Path classLoadLog) throws Exception {
 		List<String> names = new ArrayList<>();
 		for (String line : Files.readAllLines(classLoadLog, StandardCharsets.UTF_8)) {
 			int space = line.indexOf(' ');
@@ -134,7 +136,7 @@ final class ZeroThreadBuildTests {
 		 */
 		// Identity is the point: both components must hold the very client the holder's test hook returns.
 		@SuppressWarnings("ReferenceEquality")
-		public static void main(String[] arguments) throws Exception {
+		public static void main(@NonNull String @NonNull [] arguments) throws Exception {
 			URI refused = URI.create(arguments[0]);
 			ThreadMXBean threads = ManagementFactory.getThreadMXBean();
 			// Injected clients are the application's; they exist before the baseline (exit criterion 14). These
@@ -204,7 +206,7 @@ final class ZeroThreadBuildTests {
 					&& first.httpClientForTests() == held && second.httpClientForTests() == held));
 		}
 
-		private static String use(Call call) {
+		private static @NonNull String use(@NonNull Call call) {
 			try {
 				return "status " + call.run().status();
 			} catch (HttpExchangeException e) {
@@ -217,7 +219,7 @@ final class ZeroThreadBuildTests {
 		 */
 		@FunctionalInterface
 		private interface Call {
-			RawResponse run() throws HttpExchangeException;
+			@NonNull RawResponse run() throws HttpExchangeException;
 		}
 	}
 }

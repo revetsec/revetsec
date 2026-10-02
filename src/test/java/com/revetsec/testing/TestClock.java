@@ -16,6 +16,8 @@
 
 package com.revetsec.testing;
 
+import org.jspecify.annotations.NonNull;
+
 import javax.annotation.concurrent.ThreadSafe;
 import java.time.Clock;
 import java.time.Duration;
@@ -49,7 +51,7 @@ public final class TestClock extends Clock {
 	private final AtomicReference<Instant> instant;
 	private final ZoneId zone;
 
-	private TestClock(AtomicReference<Instant> instant, ZoneId zone) {
+	private TestClock(@NonNull AtomicReference<@NonNull Instant> instant, @NonNull ZoneId zone) {
 		this.instant = instant;
 		this.zone = zone;
 	}
@@ -60,7 +62,7 @@ public final class TestClock extends Clock {
 	 * @param instant the starting instant
 	 * @return a new clock
 	 */
-	public static TestClock fromInstant(Instant instant) {
+	public static @NonNull TestClock fromInstant(@NonNull Instant instant) {
 		requireNonNull(instant);
 		return new TestClock(new AtomicReference<>(instant), ZoneOffset.UTC);
 	}
@@ -72,7 +74,7 @@ public final class TestClock extends Clock {
 	 * @return {@code target}
 	 * @throws IllegalArgumentException if {@code target} is earlier than the current instant
 	 */
-	public Instant set(Instant target) {
+	public @NonNull Instant set(@NonNull Instant target) {
 		requireNonNull(target);
 		return this.instant.updateAndGet(current -> {
 			if (target.isBefore(current))
@@ -89,7 +91,7 @@ public final class TestClock extends Clock {
 	 * @throws IllegalArgumentException if {@code duration} is negative
 	 * @throws java.time.DateTimeException if the result is out of {@link Instant}'s range
 	 */
-	public Instant advance(Duration duration) {
+	public @NonNull Instant advance(@NonNull Duration duration) {
 		requireNonNull(duration);
 		if (duration.isNegative())
 			throw new IllegalArgumentException("TestClock is monotonic: cannot advance by " + duration);
@@ -97,7 +99,7 @@ public final class TestClock extends Clock {
 	}
 
 	@Override
-	public Instant instant() {
+	public @NonNull Instant instant() {
 		return requireNonNull(this.instant.get());
 	}
 
@@ -107,7 +109,7 @@ public final class TestClock extends Clock {
 	}
 
 	@Override
-	public ZoneId getZone() {
+	public @NonNull ZoneId getZone() {
 		return this.zone;
 	}
 
@@ -118,13 +120,13 @@ public final class TestClock extends Clock {
 	 * @return this clock if {@code zone} is its own, otherwise a view sharing its instant
 	 */
 	@Override
-	public TestClock withZone(ZoneId zone) {
+	public @NonNull TestClock withZone(@NonNull ZoneId zone) {
 		requireNonNull(zone);
 		return zone.equals(this.zone) ? this : new TestClock(this.instant, zone);
 	}
 
 	@Override
-	public String toString() {
+	public @NonNull String toString() {
 		return "TestClock[" + instant() + "," + this.zone + "]";
 	}
 }

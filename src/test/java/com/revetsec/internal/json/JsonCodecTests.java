@@ -16,6 +16,8 @@
 
 package com.revetsec.internal.json;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.internal.json.JsonParseException.Kind;
 import com.revetsec.json.JsonArray;
 import com.revetsec.json.JsonBoolean;
@@ -342,7 +344,7 @@ final class JsonCodecTests {
 	// documents nest at most 32 deep and SCIM documents 64. N nested empty arrays have depth N; N arrays around a
 	// scalar have depth N + 1.
 	@TestFactory
-	Stream<DynamicTest> enforcesTheExactDepthBoundaryOfEachProfile() {
+	@NonNull Stream<@NonNull DynamicTest> enforcesTheExactDepthBoundaryOfEachProfile() {
 		return Stream.of(new Object[]{"protocol", PROTOCOL, 32}, new Object[]{"scim", SCIM, 64}).flatMap(row -> {
 			String name = (String) row[0];
 			JsonLimits limits = (JsonLimits) row[1];
@@ -441,7 +443,7 @@ final class JsonCodecTests {
 
 	// Soklet: strictJsonParserImplementsTheCompleteJsonNumberGrammar (RFC 8259 section 6).
 	@TestFactory
-	Stream<DynamicTest> implementsTheCompleteNumberGrammar() {
+	@NonNull Stream<@NonNull DynamicTest> implementsTheCompleteNumberGrammar() {
 		Stream<DynamicTest> valid = Stream.of("0", "-0", "1", "-1", "0.0", "-0.1", "1e0", "1E+2", "1e-2", "1.23e4",
 				"1E-0", "0e0", "-0.0e-0", "123456789012345678901234567890").map(number -> DynamicTest.dynamicTest(
 				"accepts " + number, () -> Assertions.assertEquals(JsonNumber.fromValue(new BigDecimal(number)),
@@ -514,7 +516,7 @@ final class JsonCodecTests {
 	// are rejected, in values and member names, under both profiles. The last two are ill-formed UTF-8 (Unicode
 	// Table 3-7), so they fail before tokenizing.
 	@TestFactory
-	Stream<DynamicTest> rejectsLoneSurrogatesEscapedRawAndUtf8Encoded() {
+	@NonNull Stream<@NonNull DynamicTest> rejectsLoneSurrogatesEscapedRawAndUtf8Encoded() {
 		List<DynamicTest> tests = new ArrayList<>();
 
 		for (JsonLimits limits : List.of(PROTOCOL, SCIM)) {
@@ -600,7 +602,7 @@ final class JsonCodecTests {
 	// Exit criterion 3: a repeated name is rejected at every depth either profile allows, inside objects and inside
 	// arrays of objects, at the repeated name's opening quotation mark.
 	@TestFactory
-	Stream<DynamicTest> rejectsDuplicateMembersAtEveryDepth() {
+	@NonNull Stream<@NonNull DynamicTest> rejectsDuplicateMembersAtEveryDepth() {
 		List<DynamicTest> tests = new ArrayList<>();
 
 		for (JsonLimits limits : List.of(PROTOCOL, SCIM)) {
@@ -649,7 +651,7 @@ final class JsonCodecTests {
 	// Exit criterion 3 and G7-7: under SCIM, names that differ only in ASCII case are duplicates at every depth
 	// (id and ID); the protocol profile keeps them apart.
 	@TestFactory
-	Stream<DynamicTest> scimRejectsNamesThatDifferOnlyInAsciiCase() {
+	@NonNull Stream<@NonNull DynamicTest> scimRejectsNamesThatDifferOnlyInAsciiCase() {
 		List<DynamicTest> tests = new ArrayList<>();
 
 		for (int depth : List.of(1, 2, 8, 15, 31, 32, 33, 48, 62, 63)) {
@@ -697,7 +699,7 @@ final class JsonCodecTests {
 	// no cause and nothing suppressed, while no rendering (message, toString, stack trace) contains the sentinel
 	// embedded next to the failing byte.
 	@TestFactory
-	Stream<DynamicTest> everyFailureHasAFixedMessageAndNeverEchoesTheInput() {
+	@NonNull Stream<@NonNull DynamicTest> everyFailureHasAFixedMessageAndNeverEchoesTheInput() {
 		JsonLimits small = new JsonLimits(4_096, 4, 16, 64, 64, 100, false);
 		JsonLimits smallScim = new JsonLimits(4_096, 4, 16, 64, 64, 100, true);
 		String secret = SENTINEL;
@@ -744,7 +746,7 @@ final class JsonCodecTests {
 
 	// G7-3: the offsets each Kind documents.
 	@TestFactory
-	Stream<DynamicTest> reportsTheDocumentedByteOffset() {
+	@NonNull Stream<@NonNull DynamicTest> reportsTheDocumentedByteOffset() {
 		return Stream.of(
 				new Object[]{"", Kind.SYNTAX, 0, "empty input: the input length"},
 				new Object[]{" \n\t\r", Kind.SYNTAX, 4, "only whitespace: the input length"},
@@ -1011,7 +1013,7 @@ final class JsonCodecTests {
 		 * @param arguments unused
 		 * @throws JsonParseException if the codec rejects the input
 		 */
-		public static void main(String[] arguments) throws JsonParseException {
+		public static void main(@NonNull String @NonNull [] arguments) throws JsonParseException {
 			JsonLimits scim = JsonLimits.scim(1_024 * 1_024, 100_000);
 
 			for (String json : List.of(nested(64, ""), nested(63, "0"), nestedObjects(63, "{}"),
@@ -1031,25 +1033,25 @@ final class JsonCodecTests {
 	// Helpers
 	// ---------------------------------------------------------------------------------------------------------------
 
-	private static JsonValue parse(String json, JsonLimits limits) throws JsonParseException {
+	private static @NonNull JsonValue parse(@NonNull String json, @NonNull JsonLimits limits) throws JsonParseException {
 		return JsonCodec.parse(utf8(json), limits);
 	}
 
 	/**
 	 * {@code count} arrays around {@code core}.
 	 */
-	static String nested(int count, String core) {
+	static @NonNull String nested(int count, @NonNull String core) {
 		return "[".repeat(count) + core + "]".repeat(count);
 	}
 
 	/**
 	 * {@code count} objects {@code {"a":...}} around {@code core}; each level adds five bytes before the core.
 	 */
-	static String nestedObjects(int count, String core) {
+	static @NonNull String nestedObjects(int count, @NonNull String core) {
 		return "{\"a\":".repeat(count) + core + "}".repeat(count);
 	}
 
-	private static JsonValue randomValue(Random random, int depthLeft) {
+	private static @NonNull JsonValue randomValue(@NonNull Random random, int depthLeft) {
 		int kind = random.nextInt(depthLeft > 1 ? 8 : 5);
 
 		return switch (kind) {
@@ -1078,7 +1080,7 @@ final class JsonCodecTests {
 		};
 	}
 
-	private static String randomString(Random random) {
+	private static @NonNull String randomString(@NonNull Random random) {
 		String pool = "aZ09 \"\\/\b\f\n\r\t\u0000\u001F\u007F\u00E9\u2028\u2029\uFEFF\uFFFF\uFFFE";
 		StringBuilder value = new StringBuilder();
 
@@ -1092,7 +1094,7 @@ final class JsonCodecTests {
 		return value.toString();
 	}
 
-	private static JsonValue innermost(JsonValue value) {
+	private static @NonNull JsonValue innermost(@NonNull JsonValue value) {
 		JsonValue current = value;
 
 		while (current instanceof JsonObject object && object.getMembers().size() == 1
@@ -1102,7 +1104,7 @@ final class JsonCodecTests {
 		return current;
 	}
 
-	private static int countValues(JsonValue value) {
+	private static int countValues(@NonNull JsonValue value) {
 		int count = 1;
 
 		if (value instanceof JsonObject object)
@@ -1115,7 +1117,7 @@ final class JsonCodecTests {
 		return count;
 	}
 
-	private static byte[] bytes(int... values) {
+	private static byte @NonNull [] bytes(int @NonNull ... values) {
 		byte[] result = new byte[values.length];
 
 		for (int index = 0; index < values.length; ++index)
@@ -1124,7 +1126,7 @@ final class JsonCodecTests {
 		return result;
 	}
 
-	private static byte[] concat(byte[]... parts) {
+	private static byte @NonNull [] concat(byte @NonNull [] @NonNull ... parts) {
 		ByteArrayOutputStream output = new ByteArrayOutputStream();
 
 		for (byte[] part : parts)
@@ -1133,7 +1135,7 @@ final class JsonCodecTests {
 		return output.toByteArray();
 	}
 
-	private static void assertUtf8LikeTheJdk(CharsetDecoder decoder, byte[] input) {
+	private static void assertUtf8LikeTheJdk(@NonNull CharsetDecoder decoder, byte @NonNull [] input) {
 		decoder.reset();
 		ByteBuffer buffer = ByteBuffer.wrap(input);
 		CoderResult result = decoder.decode(buffer, CharBuffer.allocate(input.length + 1), true);

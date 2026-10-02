@@ -16,6 +16,8 @@
 
 package com.revetsec.oauth;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.StateSealer;
 import com.revetsec.internal.encoding.QueryParameters;
 import com.revetsec.testing.TestHttpsServer;
@@ -66,8 +68,8 @@ final class AuthorizationReplayTests {
 		}
 	}
 
-	private static int concurrentCompletions(OAuthClient client, String state,
-			java.util.function.Supplier<PendingAuthorizationSource> source) throws Exception {
+	private static int concurrentCompletions(@NonNull OAuthClient client, @NonNull String state,
+			java.util.function.@NonNull Supplier<@NonNull PendingAuthorizationSource> source) throws Exception {
 		CountDownLatch start = new CountDownLatch(1);
 		ExecutorService executor = Executors.newFixedThreadPool(2);
 		try {
@@ -91,11 +93,11 @@ final class AuthorizationReplayTests {
 		}
 	}
 
-	private static String state(AuthorizationRedirect begin) throws Exception {
+	private static @NonNull String state(@NonNull AuthorizationRedirect begin) throws Exception {
 		return QueryParameters.parse(begin.getAuthorizationUri().getRawQuery()).getValues("state").get(0);
 	}
 
-	private static OAuthClient client(TestHttpsServer server) {
+	private static @NonNull OAuthClient client(@NonNull TestHttpsServer server) {
 		AuthorizationServerMetadata metadata = AuthorizationServerMetadata.withIssuer(server.getBaseUri().toString())
 				.authorizationEndpoint(server.uri("/authorize"))
 				.tokenEndpoint(server.uri("/token"))
@@ -105,7 +107,7 @@ final class AuthorizationReplayTests {
 				.httpClient(TestTls.httpClient()).build();
 	}
 
-	private static TestHttpsServer.Response success() {
+	private static TestHttpsServer.@NonNull Response success() {
 		return TestHttpsServer.Response.withStatus(200).header("Content-Type", "application/json")
 				.body("{\"access_token\":\"token\",\"token_type\":\"Bearer\"}").build();
 	}

@@ -4,11 +4,13 @@
 
 A zero-dependency Java library for OAuth 2.0 clients and resource servers, OpenID Connect relying parties, JOSE, SAML 2.0 service providers and SCIM 2.0 servers.
 
-**Revetsec is pre-release.** It verifies signed JWTs against JSON Web Key Sets and includes an OAuth 2.0 client and OpenID Connect relying party. Resource-server validation, OAuth issuance, SAML and SCIM are still being built; see [Status](#status) for what exists.
+**Revetsec is pre-release.** It verifies signed JWTs against JSON Web Key Sets and includes OAuth 2.0 clients, audience-checked JWT/introspection resource validation and an OpenID Connect relying party. OAuth issuance, SAML and SCIM are still being built; see [Status](#status) for what exists.
 
 Revetsec handles the application side of these protocols. It builds outbound requests, parses and validates what comes back, and hands your code a validated result or an exception. Your application keeps its own users, sessions, routes and storage.
 
 Framework adapters for [Soklet](https://www.soklet.com) and the Servlet API are separate artifacts in their own repositories (see [Installation](#installation)).
+
+[Unpublished runnable examples](examples/README.md) demonstrate OIDC sessions and a Soklet MCP resource server with application-owned storage and authorization decisions. Their local HTTPS/provider setup uses exact source pins and private build/trust directories.
 
 ### Why?
 

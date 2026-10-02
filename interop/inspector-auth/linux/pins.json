@@ -1,0 +1,23 @@
+{
+  "image": "mcr.microsoft.com/playwright@sha256:eff16c30e6f3f4af0a03fa4b706120d5e9b0891c344a27d64559aff5900a4a27",
+  "linuxArm64Manifest": "sha256:a0f4498920a5dbac63196d9140ed738ef00470f27e2e74029abd8850b7bd5717",
+  "releaseUrl": "https://github.com/microsoft/playwright/releases/tag/v1.63.0",
+  "browser": "/ms-playwright/chromium-1243/chrome-linux-arm64/chrome",
+  "node": "24.20.0",
+  "nssTool": {
+    "version": "2:3.98-1ubuntu0.2",
+    "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/n/nss/libnss3-tools_3.98-1ubuntu0.2_arm64.deb",
+    "sha256": "02d5f5e9d7a40d79fd23448b3f4016b7c83113f2b0df9f55efa16a39be33ce97"
+  },
+  "sandboxProfile": {
+    "upstreamUrl": "https://raw.githubusercontent.com/microsoft/playwright/v1.63.0/utils/docker/seccomp_profile.json",
+    "upstreamSha256": "cc3e61cabda6bbc1e53e54d27ba4d55a9d3be829b6dd1a596f4a7b31b1cc7849",
+    "derivation": "clone3 stays denied with errnoENOSYS38 for fallback; chroot permitted inside Chromium namespace; no added capabilities",
+    "globalHostPolicyMutation": false,
+    "upstreamLicense": {
+      "url": "https://raw.githubusercontent.com/microsoft/playwright/v1.63.0/LICENSE",
+      "sha256": "45873d00a0dd243596deb4aa23b2493b3d1f0671921bf2538ea431d7380220eb",
+      "file": "PLAYWRIGHT-LICENSE"
+    }
+  }
+}

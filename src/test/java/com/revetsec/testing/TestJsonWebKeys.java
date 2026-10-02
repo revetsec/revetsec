@@ -16,6 +16,8 @@
 
 package com.revetsec.testing;
 
+import org.jspecify.annotations.NonNull;
+
 import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.Immutable;
@@ -139,7 +141,7 @@ public final class TestJsonWebKeys {
 	 * @param fixture the fixture
 	 * @return a new builder
 	 */
-	public static Builder withFixture(Fixture fixture) {
+	public static @NonNull Builder withFixture(@NonNull Fixture fixture) {
 		return withKeyPair(requireNonNull(fixture).getKeyPair());
 	}
 
@@ -150,7 +152,7 @@ public final class TestJsonWebKeys {
 	 * @return a new builder
 	 * @throws IllegalArgumentException for any other key
 	 */
-	public static Builder withKeyPair(KeyPair keyPair) {
+	public static @NonNull Builder withKeyPair(@NonNull KeyPair keyPair) {
 		requireNonNull(keyPair);
 		return new Builder(publicMembers(keyPair.getPublic()), privateMembers(keyPair.getPrivate()));
 	}
@@ -162,7 +164,7 @@ public final class TestJsonWebKeys {
 	 * @return a new builder
 	 * @throws IllegalArgumentException for any other key
 	 */
-	public static Builder withPublicKey(PublicKey publicKey) {
+	public static @NonNull Builder withPublicKey(@NonNull PublicKey publicKey) {
 		return new Builder(publicMembers(requireNonNull(publicKey)), null);
 	}
 
@@ -173,7 +175,7 @@ public final class TestJsonWebKeys {
 	 * @param x the {@code x} member's base64url text
 	 * @return a new builder
 	 */
-	public static Builder ed25519WithX(String x) {
+	public static @NonNull Builder ed25519WithX(@NonNull String x) {
 		Map<String, String> members = new LinkedHashMap<>();
 		members.put("kty", JsonText.string("OKP"));
 		members.put("crv", JsonText.string("Ed25519"));
@@ -188,7 +190,7 @@ public final class TestJsonWebKeys {
 	 * @param k the {@code k} member's text, such as {@code Sentinels.SYMMETRIC_KEY}
 	 * @return a new builder
 	 */
-	public static Builder octWithK(String k) {
+	public static @NonNull Builder octWithK(@NonNull String k) {
 		Map<String, String> members = new LinkedHashMap<>();
 		members.put("kty", JsonText.string("oct"));
 		members.put("k", JsonText.string(requireNonNull(k)));
@@ -201,7 +203,7 @@ public final class TestJsonWebKeys {
 	 * @param keys each key's JSON text, in order
 	 * @return the key set's JSON text
 	 */
-	public static String keySet(List<String> keys) {
+	public static @NonNull String keySet(@NonNull List<@NonNull String> keys) {
 		return JsonText.object(List.of(Map.entry("keys", JsonText.array(requireNonNull(keys)))));
 	}
 
@@ -214,7 +216,7 @@ public final class TestJsonWebKeys {
 	 * @param publicKey the key
 	 * @return the PEM text
 	 */
-	public static String publicKeyPem(PublicKey publicKey) {
+	public static @NonNull String publicKeyPem(@NonNull PublicKey publicKey) {
 		String body = Base64.getMimeEncoder(64, new byte[]{'\n'})
 				.encodeToString(requireNonNull(publicKey).getEncoded());
 		return "-----BEGIN PUBLIC KEY-----\n" + body + "\n-----END PUBLIC KEY-----\n";
@@ -227,7 +229,7 @@ public final class TestJsonWebKeys {
 	 * @param value the integer, zero or positive
 	 * @return the encoded text
 	 */
-	public static String base64UrlUInt(BigInteger value) {
+	public static @NonNull String base64UrlUInt(@NonNull BigInteger value) {
 		return TestJws.base64Url(unsignedBytes(value));
 	}
 
@@ -239,7 +241,7 @@ public final class TestJsonWebKeys {
 	 * @param octets the length
 	 * @return the encoded text
 	 */
-	public static String base64UrlFixedLength(BigInteger value, Integer octets) {
+	public static @NonNull String base64UrlFixedLength(@NonNull BigInteger value, @NonNull Integer octets) {
 		return TestJws.base64Url(fixedLengthBytes(value, octets));
 	}
 
@@ -249,7 +251,7 @@ public final class TestJsonWebKeys {
 	 * @param value the integer
 	 * @return a new array
 	 */
-	public static byte[] unsignedBytes(BigInteger value) {
+	public static byte @NonNull [] unsignedBytes(@NonNull BigInteger value) {
 		requireNonNull(value);
 		if (value.signum() < 0)
 			throw new IllegalArgumentException("Negative: " + value);
@@ -270,7 +272,7 @@ public final class TestJsonWebKeys {
 	 * @return a new array
 	 * @throws IllegalArgumentException if the value does not fit
 	 */
-	public static byte[] fixedLengthBytes(BigInteger value, Integer octets) {
+	public static byte @NonNull [] fixedLengthBytes(@NonNull BigInteger value, @NonNull Integer octets) {
 		requireNonNull(value);
 		requireNonNull(octets);
 		byte[] minimal = unsignedBytes(value);
@@ -290,7 +292,7 @@ public final class TestJsonWebKeys {
 	 *
 	 * @return a new builder
 	 */
-	public static Builder ecWithShortX() {
+	public static @NonNull Builder ecWithShortX() {
 		KeyPair keyPair = ecKeyPairWithLeadingZeroX();
 		BigInteger x = ((ECPublicKey) keyPair.getPublic()).getW().getAffineX();
 		return withKeyPair(keyPair).member("x", JsonText.string(base64UrlUInt(x)));
@@ -302,7 +304,7 @@ public final class TestJsonWebKeys {
 	 *
 	 * @return a new builder
 	 */
-	public static Builder rsaWithLeadingZeroModulus() {
+	public static @NonNull Builder rsaWithLeadingZeroModulus() {
 		RSAPublicKey publicKey = (RSAPublicKey) Fixture.IDP_SIGNING_RSA_2048.getPublicKey();
 		byte[] minimal = unsignedBytes(publicKey.getModulus());
 		byte[] padded = new byte[minimal.length + 1];
@@ -316,7 +318,7 @@ public final class TestJsonWebKeys {
 	 * @param exponent the {@code e} to write, such as 1, 3, 65535, 65536 or 2^32
 	 * @return a new builder
 	 */
-	public static Builder rsaWithExponent(BigInteger exponent) {
+	public static @NonNull Builder rsaWithExponent(@NonNull BigInteger exponent) {
 		return withFixture(Fixture.IDP_SIGNING_RSA_2048).member("e", JsonText.string(base64UrlUInt(exponent)));
 	}
 
@@ -325,7 +327,7 @@ public final class TestJsonWebKeys {
 	 *
 	 * @return a new builder
 	 */
-	public static Builder rsaWithEvenExponent() {
+	public static @NonNull Builder rsaWithEvenExponent() {
 		return rsaWithExponent(F4.add(BigInteger.ONE));
 	}
 
@@ -335,7 +337,7 @@ public final class TestJsonWebKeys {
 	 *
 	 * @return a new builder
 	 */
-	public static Builder ecOffCurve() {
+	public static @NonNull Builder ecOffCurve() {
 		ECPublicKey publicKey = (ECPublicKey) Fixture.IDP_SIGNING_EC_P256.getPublicKey();
 		BigInteger p = fieldPrime(publicKey.getParams());
 		BigInteger y = publicKey.getW().getAffineY().add(BigInteger.ONE).mod(p);
@@ -348,7 +350,7 @@ public final class TestJsonWebKeys {
 	 *
 	 * @return a new builder
 	 */
-	public static Builder ed25519SmallOrder() {
+	public static @NonNull Builder ed25519SmallOrder() {
 		return ed25519WithX(ed25519PublicKeyEncoding(BigInteger.ONE, false));
 	}
 
@@ -360,7 +362,7 @@ public final class TestJsonWebKeys {
 	 * @param xOdd whether x is odd (the sign bit)
 	 * @return the base64url of the 32 octets
 	 */
-	public static String ed25519PublicKeyEncoding(BigInteger y, Boolean xOdd) {
+	public static @NonNull String ed25519PublicKeyEncoding(@NonNull BigInteger y, @NonNull Boolean xOdd) {
 		requireNonNull(y);
 		requireNonNull(xOdd);
 		if (y.signum() < 0 || y.bitLength() > 255)
@@ -382,7 +384,7 @@ public final class TestJsonWebKeys {
 	 * @return x, or empty if the encoding does not decode: y ≥ p, x² = (y² − 1)/(d·y² + 1) is not a square mod p, or
 	 * x = 0 with the sign bit set
 	 */
-	public static Optional<BigInteger> ed25519DecodeX(BigInteger y, Boolean xOdd) {
+	public static @NonNull Optional<@NonNull BigInteger> ed25519DecodeX(@NonNull BigInteger y, @NonNull Boolean xOdd) {
 		requireNonNull(y);
 		requireNonNull(xOdd);
 		BigInteger p = ED25519_FIELD_PRIME;
@@ -411,7 +413,7 @@ public final class TestJsonWebKeys {
 	 *
 	 * @return the eight {@code x} values as base64url, identity first, in the order 0·T to 7·T
 	 */
-	public static List<String> ed25519SmallOrderPublicKeys() {
+	public static @NonNull List<@NonNull String> ed25519SmallOrderPublicKeys() {
 		return SmallOrderHolder.ENCODINGS;
 	}
 
@@ -422,7 +424,7 @@ public final class TestJsonWebKeys {
 	 *
 	 * @return a new key pair, the same key every time
 	 */
-	public static KeyPair ecKeyPairWithLeadingZeroX() {
+	public static @NonNull KeyPair ecKeyPairWithLeadingZeroX() {
 		ECParameterSpec parameters = TestJws.namedCurveParameters("secp256r1");
 		ShortXHolder holder = ShortXHolder.INSTANCE;
 		try {
@@ -444,7 +446,7 @@ public final class TestJsonWebKeys {
 	 *
 	 * @return a new key pair, the same key every time
 	 */
-	public static KeyPair rocaFingerprintedRsaKeyPair() {
+	public static @NonNull KeyPair rocaFingerprintedRsaKeyPair() {
 		RocaHolder holder = RocaHolder.INSTANCE;
 		BigInteger p = holder.p;
 		BigInteger q = holder.q;
@@ -471,7 +473,7 @@ public final class TestJsonWebKeys {
 	 * @param modulus an RSA modulus
 	 * @return whether N mod m is a power of 65537 mod m for every prime m
 	 */
-	public static Boolean hasRocaFingerprint(BigInteger modulus) {
+	public static @NonNull Boolean hasRocaFingerprint(@NonNull BigInteger modulus) {
 		requireNonNull(modulus);
 		for (BigInteger prime : ROCA_PRIMES) {
 			BigInteger residue = modulus.mod(prime);
@@ -497,7 +499,7 @@ public final class TestJsonWebKeys {
 	 * @param y the y coordinate
 	 * @return whether the point is on the curve (coordinates of p or more never are)
 	 */
-	public static Boolean isOnCurve(ECParameterSpec parameters, BigInteger x, BigInteger y) {
+	public static @NonNull Boolean isOnCurve(@NonNull ECParameterSpec parameters, @NonNull BigInteger x, @NonNull BigInteger y) {
 		requireNonNull(parameters);
 		BigInteger p = fieldPrime(parameters);
 		if (x.signum() < 0 || y.signum() < 0 || x.compareTo(p) >= 0 || y.compareTo(p) >= 0)
@@ -508,11 +510,11 @@ public final class TestJsonWebKeys {
 		return left.equals(right);
 	}
 
-	private static BigInteger fieldPrime(ECParameterSpec parameters) {
+	private static @NonNull BigInteger fieldPrime(@NonNull ECParameterSpec parameters) {
 		return ((ECFieldFp) parameters.getCurve().getField()).getP();
 	}
 
-	private static Map<String, String> publicMembers(PublicKey publicKey) {
+	private static @NonNull Map<@NonNull String, @NonNull String> publicMembers(@NonNull PublicKey publicKey) {
 		Map<String, String> members = new LinkedHashMap<>();
 		if (publicKey instanceof RSAPublicKey rsa) {
 			members.put("kty", JsonText.string("RSA"));
@@ -555,7 +557,7 @@ public final class TestJsonWebKeys {
 		return members;
 	}
 
-	private static Map<String, String> privateMembers(PrivateKey privateKey) {
+	private static @NonNull Map<@NonNull String, @NonNull String> privateMembers(@NonNull PrivateKey privateKey) {
 		Map<String, String> members = new LinkedHashMap<>();
 		if (privateKey instanceof RSAPrivateCrtKey crt) {
 			members.put("d", JsonText.string(base64UrlUInt(crt.getPrivateExponent())));
@@ -581,7 +583,7 @@ public final class TestJsonWebKeys {
 		return members;
 	}
 
-	private static byte[] littleEndianBytes(BigInteger value, int octets) {
+	private static byte @NonNull [] littleEndianBytes(@NonNull BigInteger value, int octets) {
 		byte[] bigEndian = fixedLengthBytes(value, octets);
 		byte[] littleEndian = new byte[octets];
 		for (int index = 0; index < octets; ++index)
@@ -589,7 +591,7 @@ public final class TestJsonWebKeys {
 		return littleEndian;
 	}
 
-	private static int coordinateOctets(ECParameterSpec parameters) {
+	private static int coordinateOctets(@NonNull ECParameterSpec parameters) {
 		return (parameters.getCurve().getField().getFieldSize() + 7) / 8;
 	}
 
@@ -597,7 +599,7 @@ public final class TestJsonWebKeys {
 	 * The JWK name of a NIST curve, matched on all of its parameters: a field size alone would also match other
 	 * curves, such as secp256k1, whose points the JDK's {@code KeyFactory} accepts.
 	 */
-	private static String curveName(ECParameterSpec parameters) {
+	private static @NonNull String curveName(@NonNull ECParameterSpec parameters) {
 		for (Map.Entry<String, String> curve : NIST_CURVES) {
 			ECParameterSpec named = TestJws.namedCurveParameters(curve.getValue());
 			boolean same = parameters.getCurve().equals(named.getCurve())
@@ -610,7 +612,7 @@ public final class TestJsonWebKeys {
 		throw new IllegalArgumentException("Unsupported EC curve: not P-256, P-384 or P-521");
 	}
 
-	private static List<BigInteger> rocaPrimes() {
+	private static @NonNull List<@NonNull BigInteger> rocaPrimes() {
 		List<BigInteger> primes = new ArrayList<>();
 		for (int candidate = 3; candidate <= 167; candidate += 2)
 			if (BigInteger.valueOf(candidate).isProbablePrime(64))
@@ -618,7 +620,7 @@ public final class TestJsonWebKeys {
 		return List.copyOf(primes);
 	}
 
-	private static BigInteger hashToInteger(String label) {
+	private static @NonNull BigInteger hashToInteger(@NonNull String label) {
 		try {
 			return new BigInteger(1,
 					MessageDigest.getInstance("SHA-256").digest(label.getBytes(StandardCharsets.UTF_8)));
@@ -635,7 +637,7 @@ public final class TestJsonWebKeys {
 		private final BigInteger x;
 		private final BigInteger y;
 
-		private Point(BigInteger x, BigInteger y) {
+		private Point(@NonNull BigInteger x, @NonNull BigInteger y) {
 			this.x = x;
 			this.y = y;
 		}
@@ -644,8 +646,8 @@ public final class TestJsonWebKeys {
 	/**
 	 * P + Q on y² = x³ + a·x + b over F_p, affine; {@code null} is the point at infinity.
 	 */
-	private static @Nullable Point weierstrassAdd(@Nullable Point first, @Nullable Point second, BigInteger p,
-			BigInteger a) {
+	private static @Nullable Point weierstrassAdd(@Nullable Point first, @Nullable Point second, @NonNull BigInteger p,
+			@NonNull BigInteger a) {
 		if (first == null)
 			return second;
 		if (second == null)
@@ -664,7 +666,7 @@ public final class TestJsonWebKeys {
 		return new Point(x, y);
 	}
 
-	private static @Nullable Point weierstrassMultiply(BigInteger scalar, Point point, BigInteger p, BigInteger a) {
+	private static @Nullable Point weierstrassMultiply(@NonNull BigInteger scalar, @NonNull Point point, @NonNull BigInteger p, @NonNull BigInteger a) {
 		@Nullable Point result = null;
 		for (int bit = scalar.bitLength() - 1; bit >= 0; --bit) {
 			result = weierstrassAdd(result, result, p, a);
@@ -678,7 +680,7 @@ public final class TestJsonWebKeys {
 	 * P + Q on the twisted Edwards curve −x² + y² = 1 + d·x²·y² (Ed25519); the formula is complete, and the identity
 	 * is (0, 1).
 	 */
-	private static Point edwardsAdd(Point first, Point second) {
+	private static @NonNull Point edwardsAdd(@NonNull Point first, @NonNull Point second) {
 		BigInteger p = ED25519_FIELD_PRIME;
 		BigInteger t = ED25519_D.multiply(first.x).multiply(second.x).multiply(first.y).multiply(second.y).mod(p);
 		BigInteger x = first.x.multiply(second.y).add(first.y.multiply(second.x))
@@ -688,7 +690,7 @@ public final class TestJsonWebKeys {
 		return new Point(x, y);
 	}
 
-	private static Point edwardsMultiply(BigInteger scalar, Point point) {
+	private static @NonNull Point edwardsMultiply(@NonNull BigInteger scalar, @NonNull Point point) {
 		Point result = new Point(BigInteger.ZERO, BigInteger.ONE);
 		for (int bit = scalar.bitLength() - 1; bit >= 0; --bit) {
 			result = edwardsAdd(result, result);
@@ -698,7 +700,7 @@ public final class TestJsonWebKeys {
 		return result;
 	}
 
-	private static boolean isEdwardsIdentity(Point point) {
+	private static boolean isEdwardsIdentity(@NonNull Point point) {
 		return point.x.signum() == 0 && point.y.equals(BigInteger.ONE);
 	}
 
@@ -709,7 +711,7 @@ public final class TestJsonWebKeys {
 	private static final class SmallOrderHolder {
 		private static final List<String> ENCODINGS = compute();
 
-		private static List<String> compute() {
+		private static @NonNull List<@NonNull String> compute() {
 			for (BigInteger y = THREE; ; y = y.add(BigInteger.ONE)) {
 				Optional<BigInteger> x = ed25519DecodeX(y, false);
 				if (x.isEmpty())
@@ -783,7 +785,7 @@ public final class TestJsonWebKeys {
 		 * The first prime k·M + (65537^a mod M) at or after a hash-chosen k, with its top two bits set so the
 		 * product of two has exactly 2,048 bits, and with p − 1 prime to 65537.
 		 */
-		private static BigInteger fingerprintedPrime(BigInteger product, int exponent, String label) {
+		private static @NonNull BigInteger fingerprintedPrime(@NonNull BigInteger product, int exponent, @NonNull String label) {
 			BigInteger residue = F4.modPow(BigInteger.valueOf(exponent), product);
 			BigInteger lowest = BigInteger.TWO.pow(1023).add(BigInteger.TWO.pow(1022));
 			BigInteger k = lowest.divide(product).add(BigInteger.ONE)
@@ -853,7 +855,7 @@ public final class TestJsonWebKeys {
 		private final @Nullable String name;
 		private final String keyAlgorithm;
 
-		Fixture(@Nullable String name, String keyAlgorithm) {
+		Fixture(@Nullable String name, @NonNull String keyAlgorithm) {
 			this.name = name;
 			this.keyAlgorithm = keyAlgorithm;
 		}
@@ -863,7 +865,7 @@ public final class TestJsonWebKeys {
 		 *
 		 * @return {@code RSA}, {@code EC} or {@code OKP}
 		 */
-		public String getKeyType() {
+		public @NonNull String getKeyType() {
 			return "Ed25519".equals(this.keyAlgorithm) ? "OKP" : this.keyAlgorithm;
 		}
 
@@ -872,7 +874,7 @@ public final class TestJsonWebKeys {
 		 *
 		 * @return a new private key object
 		 */
-		public PrivateKey getPrivateKey() {
+		public @NonNull PrivateKey getPrivateKey() {
 			String resource = this.name == null ? "/fixtures/pem/ed25519-key.pem"
 					: "/fixtures/keys/" + this.name + "-key.pem";
 			try {
@@ -888,7 +890,7 @@ public final class TestJsonWebKeys {
 		 *
 		 * @return a new public key object
 		 */
-		public PublicKey getPublicKey() {
+		public @NonNull PublicKey getPublicKey() {
 			Optional<X509Certificate> certificate = getCertificate();
 			if (certificate.isPresent())
 				return certificate.get().getPublicKey();
@@ -906,7 +908,7 @@ public final class TestJsonWebKeys {
 		 *
 		 * @return a new key pair
 		 */
-		public KeyPair getKeyPair() {
+		public @NonNull KeyPair getKeyPair() {
 			return new KeyPair(getPublicKey(), getPrivateKey());
 		}
 
@@ -915,7 +917,7 @@ public final class TestJsonWebKeys {
 		 *
 		 * @return the certificate, or empty for {@link #ED25519}
 		 */
-		public Optional<X509Certificate> getCertificate() {
+		public @NonNull Optional<@NonNull X509Certificate> getCertificate() {
 			if (this.name == null)
 				return Optional.empty();
 			String resource = "/fixtures/keys/" + this.name + "-cert.pem";
@@ -927,7 +929,7 @@ public final class TestJsonWebKeys {
 			}
 		}
 
-		private static byte[] pemBody(String resource, String label) {
+		private static byte @NonNull [] pemBody(@NonNull String resource, @NonNull String label) {
 			String text;
 			try (@Nullable InputStream inputStream = TestJsonWebKeys.class.getResourceAsStream(resource)) {
 				if (inputStream == null)
@@ -964,7 +966,7 @@ public final class TestJsonWebKeys {
 		// In call order; a null value removes the member.
 		private final Map<String, @Nullable String> overrides = new LinkedHashMap<>();
 
-		private Builder(Map<String, String> keyMembers, @Nullable Map<String, String> privateMembers) {
+		private Builder(@NonNull Map<@NonNull String, @NonNull String> keyMembers, @Nullable Map<@NonNull String, @NonNull String> privateMembers) {
 			this.keyMembers = keyMembers;
 			this.privateMembers = privateMembers;
 		}
@@ -975,7 +977,7 @@ public final class TestJsonWebKeys {
 		 * @param kid the key ID, or {@code null} for none
 		 * @return this builder
 		 */
-		public Builder kid(@Nullable String kid) {
+		public @NonNull Builder kid(@Nullable String kid) {
 			this.kid = kid;
 			return this;
 		}
@@ -986,7 +988,7 @@ public final class TestJsonWebKeys {
 		 * @param use such as {@code sig} or {@code enc}, or {@code null} for none
 		 * @return this builder
 		 */
-		public Builder use(@Nullable String use) {
+		public @NonNull Builder use(@Nullable String use) {
 			this.use = use;
 			return this;
 		}
@@ -997,7 +999,7 @@ public final class TestJsonWebKeys {
 		 * @param keyOps such as {@code ["verify"]}, or {@code null} for none
 		 * @return this builder
 		 */
-		public Builder keyOps(@Nullable List<String> keyOps) {
+		public @NonNull Builder keyOps(@Nullable List<@NonNull String> keyOps) {
 			this.keyOps = keyOps == null ? null : List.copyOf(keyOps);
 			return this;
 		}
@@ -1008,7 +1010,7 @@ public final class TestJsonWebKeys {
 		 * @param alg such as {@code RS256}, or {@code null} for none
 		 * @return this builder
 		 */
-		public Builder alg(@Nullable String alg) {
+		public @NonNull Builder alg(@Nullable String alg) {
 			this.alg = alg;
 			return this;
 		}
@@ -1019,7 +1021,7 @@ public final class TestJsonWebKeys {
 		 * @param x5c the chain, or {@code null} for none
 		 * @return this builder
 		 */
-		public Builder x5c(@Nullable List<X509Certificate> x5c) {
+		public @NonNull Builder x5c(@Nullable List<@NonNull X509Certificate> x5c) {
 			this.x5c = x5c == null ? null : List.copyOf(x5c);
 			return this;
 		}
@@ -1030,7 +1032,7 @@ public final class TestJsonWebKeys {
 		 * @param issuer the issuer string, or {@code null} for none
 		 * @return this builder
 		 */
-		public Builder issuer(@Nullable String issuer) {
+		public @NonNull Builder issuer(@Nullable String issuer) {
 			this.issuer = issuer;
 			return this;
 		}
@@ -1043,7 +1045,7 @@ public final class TestJsonWebKeys {
 		 * @return this builder
 		 * @throws IllegalStateException at {@link #toJson()} if the builder has no private key
 		 */
-		public Builder includePrivateMembers(@Nullable Boolean includePrivateMembers) {
+		public @NonNull Builder includePrivateMembers(@Nullable Boolean includePrivateMembers) {
 			this.includePrivateMembers = includePrivateMembers != null && includePrivateMembers;
 			return this;
 		}
@@ -1056,7 +1058,7 @@ public final class TestJsonWebKeys {
 		 * @param rawJsonValue the value as raw JSON text, such as {@code "\"AQAB\""}, {@code null} or {@code 123}
 		 * @return this builder
 		 */
-		public Builder member(String name, String rawJsonValue) {
+		public @NonNull Builder member(@NonNull String name, @NonNull String rawJsonValue) {
 			this.overrides.put(requireNonNull(name), requireNonNull(rawJsonValue));
 			return this;
 		}
@@ -1067,7 +1069,7 @@ public final class TestJsonWebKeys {
 		 * @param name the member name
 		 * @return this builder
 		 */
-		public Builder withoutMember(String name) {
+		public @NonNull Builder withoutMember(@NonNull String name) {
 			this.overrides.put(requireNonNull(name), null);
 			return this;
 		}
@@ -1077,7 +1079,7 @@ public final class TestJsonWebKeys {
 		 *
 		 * @return the JSON object text, with no whitespace
 		 */
-		public String toJson() {
+		public @NonNull String toJson() {
 			Map<String, String> members = new LinkedHashMap<>(this.keyMembers);
 			if (this.includePrivateMembers) {
 				if (this.privateMembers == null)
@@ -1112,11 +1114,11 @@ public final class TestJsonWebKeys {
 		 *
 		 * @return {@code {"keys":[...]}}
 		 */
-		public String toKeySetJson() {
+		public @NonNull String toKeySetJson() {
 			return keySet(List.of(toJson()));
 		}
 
-		private static String standardBase64(X509Certificate certificate) {
+		private static @NonNull String standardBase64(@NonNull X509Certificate certificate) {
 			try {
 				return Base64.getEncoder().encodeToString(certificate.getEncoded());
 			} catch (CertificateEncodingException e) {

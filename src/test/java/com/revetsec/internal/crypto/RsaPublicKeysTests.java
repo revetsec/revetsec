@@ -16,6 +16,8 @@
 
 package com.revetsec.internal.crypto;
 
+import org.jspecify.annotations.NonNull;
+
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.DynamicTest;
@@ -81,7 +83,7 @@ final class RsaPublicKeysTests {
 	// M2-7: e odd and in [65537, 2^32). The floor was 3; e = 3 is the low-exponent forgery setting for a provider that
 	// parses PKCS #1 v1.5 padding (Bleichenbacher, 2006). KeyFactory("RSA") accepts 65536 and 2^64 + 1 itself.
 	@TestFactory
-	Stream<DynamicTest> exponentsOutsideTheOddRangeFrom65537To2Pow32AreRefused() throws GeneralSecurityException {
+	@NonNull Stream<@NonNull DynamicTest> exponentsOutsideTheOddRangeFrom65537To2Pow32AreRefused() throws GeneralSecurityException {
 		byte[] n = unsigned(((RSAPublicKey) Keys.rsa2048().getPublic()).getModulus());
 		BigInteger twoTo32 = BigInteger.ONE.shiftLeft(32);
 		List<BigInteger> refused = List.of(BigInteger.ONE, BigInteger.valueOf(3), BigInteger.valueOf(17),
@@ -101,7 +103,7 @@ final class RsaPublicKeysTests {
 	// Plan section 9.3: 2048 to 16384 bits. KeyFactory("RSA") accepts a 512-bit modulus itself, and 16384 bits is its
 	// own cap too.
 	@TestFactory
-	Stream<DynamicTest> moduliOutside2048To16384BitsAreRefused() {
+	@NonNull Stream<@NonNull DynamicTest> moduliOutside2048To16384BitsAreRefused() {
 		return IntStream.of(512, 1024, 2047, 2048, 2049, 3072, 4096, 16_384, 16_385, 16_392)
 				.mapToObj(bits -> DynamicTest.dynamicTest(bits + " bits", () -> {
 					BigInteger modulus = syntheticModulus(bits);
@@ -189,7 +191,7 @@ final class RsaPublicKeysTests {
 	// modulus that is r mod p and 1 mod every other prime is fingerprinted exactly when r is a power of 65537 mod p.
 	// The subgroups are derived here by listing powers, independently of the class's bit masks.
 	@TestFactory
-	Stream<DynamicTest> everyPrimeAndEveryResidueDecidesTheFingerprint() {
+	@NonNull Stream<@NonNull DynamicTest> everyPrimeAndEveryResidueDecidesTheFingerprint() {
 		List<BigInteger> primes = RsaPublicKeys.ROCA_PRIMES.stream().map(BigInteger::valueOf).toList();
 		BigInteger product = primes.stream().reduce(BigInteger.ONE, BigInteger::multiply);
 		// A large multiple of the product keeps every residue and makes the value modulus-sized.
@@ -270,6 +272,8 @@ final class RsaPublicKeysTests {
 			Assertions.assertTrue(RsaPublicKeys.isWithinSignatureLengthBounds(length), () -> "" + length);
 	}
 
+	// Deliberate null inputs verify runtime rejection.
+	@SuppressWarnings("NullAway")
 	@Test
 	void rejectsNullArguments() {
 		Assertions.assertThrows(NullPointerException.class, () -> RsaPublicKeys.fromComponents(nullValue(), new byte[1]));
@@ -281,7 +285,7 @@ final class RsaPublicKeysTests {
 	/**
 	 * An odd modulus of exactly {@code bits} bits with no special structure, for size checks that never sign.
 	 */
-	static BigInteger syntheticModulus(int bits) {
+	static @NonNull BigInteger syntheticModulus(int bits) {
 		return BigInteger.ONE.shiftLeft(bits - 1).add(BigInteger.valueOf(0x5_2e_76_65_74L).shiftLeft(bits / 3))
 				.add(BigInteger.valueOf(0x7365_6331L)).setBit(0);
 	}
@@ -289,24 +293,24 @@ final class RsaPublicKeysTests {
 	/**
 	 * {@code value} as minimal unsigned big-endian bytes (one zero byte for zero).
 	 */
-	static byte[] unsigned(BigInteger value) {
+	static byte @NonNull [] unsigned(@NonNull BigInteger value) {
 		byte[] bytes = value.toByteArray();
 		return bytes.length > 1 && bytes[0] == 0 ? Arrays.copyOfRange(bytes, 1, bytes.length) : bytes;
 	}
 
-	private static byte[] sign(String algorithm, PrivateKey privateKey) throws GeneralSecurityException {
+	private static byte @NonNull [] sign(@NonNull String algorithm, @NonNull PrivateKey privateKey) throws GeneralSecurityException {
 		Signature signer = Signature.getInstance(algorithm);
 		signer.initSign(privateKey);
 		signer.update(MESSAGE);
 		return signer.sign();
 	}
 
-	private static void assertRejected(KeyRejectedException.Kind kind, byte[] modulus, byte[] exponent) {
+	private static void assertRejected(KeyRejectedException.@NonNull Kind kind, byte @NonNull [] modulus, byte @NonNull [] exponent) {
 		Assertions.assertEquals(kind, Assertions.assertThrows(KeyRejectedException.class,
 				() -> RsaPublicKeys.fromComponents(modulus, exponent)).getKind());
 	}
 
-	private static void assertCheckRejected(KeyRejectedException.Kind kind, RSAPublicKey key) {
+	private static void assertCheckRejected(KeyRejectedException.@NonNull Kind kind, @NonNull RSAPublicKey key) {
 		Assertions.assertEquals(kind, Assertions.assertThrows(KeyRejectedException.class,
 				() -> RsaPublicKeys.checkPublicKey(key)).getKind());
 	}
@@ -315,7 +319,7 @@ final class RsaPublicKeysTests {
 	 * Hides a {@code null} from NullAway, for the tests that check null handling.
 	 */
 	@SuppressWarnings({"NullAway", "TypeParameterUnusedInFormals"})
-	private static <T> T nullValue() {
+	private static <T> @Nullable T nullValue() {
 		return null;
 	}
 
@@ -326,7 +330,7 @@ final class RsaPublicKeysTests {
 		final BigInteger modulus;
 		final PrivateKey privateKey;
 
-		private RocaKey(BigInteger modulus, PrivateKey privateKey) {
+		private RocaKey(@NonNull BigInteger modulus, @NonNull PrivateKey privateKey) {
 			this.modulus = modulus;
 			this.privateKey = privateKey;
 		}
@@ -342,15 +346,15 @@ final class RsaPublicKeysTests {
 		private Keys() {
 		}
 
-		static KeyPair rsa2048() {
+		static @NonNull KeyPair rsa2048() {
 			return RSA_2048;
 		}
 
-		static RocaKey roca() {
+		static @NonNull RocaKey roca() {
 			return ROCA;
 		}
 
-		private static KeyPair generateRsa2048() {
+		private static @NonNull KeyPair generateRsa2048() {
 			try {
 				KeyPairGenerator generator = KeyPairGenerator.getInstance("RSA");
 				generator.initialize(2048);
@@ -364,7 +368,7 @@ final class RsaPublicKeysTests {
 		 * Two 1024-bit primes of the form {@code k * M + (65537^a mod M)}, where {@code M} is 2 times the product of
 		 * the 38 ROCA primes (Nemec et al., CCS 2017, section 2), from a fixed seed, and the 2048-bit key they make.
 		 */
-		private static RocaKey generateRoca() {
+		private static @NonNull RocaKey generateRoca() {
 			Random random = new Random(0x524f4341L);
 			BigInteger primorial = RsaPublicKeys.ROCA_PRIMES.stream().map(BigInteger::valueOf)
 					.reduce(BigInteger.TWO, BigInteger::multiply);
@@ -394,7 +398,7 @@ final class RsaPublicKeysTests {
 		 * primorial's leading digits (about 1.14 * 2^219) put every such prime below 1.15 * 2^1023, and the product of
 		 * two below 2^2047.
 		 */
-		private static BigInteger rocaPrime(Random random, BigInteger primorial) {
+		private static @NonNull BigInteger rocaPrime(@NonNull Random random, @NonNull BigInteger primorial) {
 			BigInteger floor = BigInteger.ONE.shiftLeft(2047).sqrt().add(BigInteger.ONE);
 			BigInteger limit = BigInteger.ONE.shiftLeft(1024);
 			// Multipliers in [smallest, smallest + span) keep k * M + residue inside (floor, limit) for any residue < M.
@@ -434,29 +438,29 @@ final class RsaPublicKeysTests {
 		}
 
 		@Override
-		public BigInteger getModulus() {
+		public @NonNull BigInteger getModulus() {
 			if (this.throwing)
 				throw new IllegalStateException("A key implementation that throws.");
 			return this.modulus;
 		}
 
 		@Override
-		public BigInteger getPublicExponent() {
+		public @NonNull BigInteger getPublicExponent() {
 			return this.exponent;
 		}
 
 		@Override
-		public String getAlgorithm() {
+		public @NonNull String getAlgorithm() {
 			return "RSA";
 		}
 
 		@Override
-		public String getFormat() {
+		public @NonNull String getFormat() {
 			return "X.509";
 		}
 
 		@Override
-		public byte[] getEncoded() {
+		public byte @NonNull [] getEncoded() {
 			return new byte[0];
 		}
 	}

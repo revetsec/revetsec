@@ -16,6 +16,10 @@
 
 package com.revetsec.internal.jose;
 
+import org.jspecify.annotations.Nullable;
+
+import org.jspecify.annotations.NonNull;
+
 import com.code_intelligence.jazzer.junit.FuzzTest;
 import com.revetsec.internal.Limits;
 import com.revetsec.internal.json.JsonCodec;
@@ -112,7 +116,7 @@ public class CompactJwsFuzzTests {
 	 * @param input the fuzzed token, read as ISO-8859-1 so that every byte is one character
 	 */
 	@FuzzTest(maxDuration = "5m")
-	public void compactSerializationsSplitIntoThreeCanonicalSegmentsOrFailInStepOrder(byte[] input) {
+	public void compactSerializationsSplitIntoThreeCanonicalSegmentsOrFailInStepOrder(byte @NonNull [] input) {
 		String token = new String(input, StandardCharsets.ISO_8859_1);
 
 		for (int maximumLength : MAXIMUM_LENGTHS) {
@@ -177,7 +181,7 @@ public class CompactJwsFuzzTests {
 	 * @param header the fuzzed decoded header: JSON text
 	 */
 	@FuzzTest(maxDuration = "5m")
-	public void headerChecksAgreeWithAnIndependentOracleForP3ToP8(byte[] header) {
+	public void headerChecksAgreeWithAnIndependentOracleForP3ToP8(byte @NonNull [] header) {
 		byte[] original = header.clone();
 
 		for (PolicyCase policy : POLICIES) {
@@ -225,7 +229,7 @@ public class CompactJwsFuzzTests {
 	/**
 	 * Steps 1 to 3: size, serialization and canonical base64url.
 	 */
-	private static Split expectedSplit(String token, int maximumLength) {
+	private static @NonNull Split expectedSplit(@NonNull String token, int maximumLength) {
 		if (token.length() > maximumLength)
 			return Split.failing(Reason.TOKEN_TOO_LARGE);
 
@@ -258,7 +262,7 @@ public class CompactJwsFuzzTests {
 	/**
 	 * Steps 1 to 5 under {@code policy}.
 	 */
-	private static Prepared expectedPrepared(String token, PolicyCase policy) {
+	private static @NonNull Prepared expectedPrepared(@NonNull String token, @NonNull PolicyCase policy) {
 		Split split = expectedSplit(token, policy.maximumLength);
 
 		if (split.failure != null)
@@ -280,7 +284,7 @@ public class CompactJwsFuzzTests {
 	 * modulus (256 to 2,048 octets); ECDSA's are twice the coordinate length with {@code r} and {@code s} in
 	 * {@code [1, n - 1]}; Ed25519's are 64 octets; an HMAC tag is the hash length.
 	 */
-	private static boolean hasKeyFreeShape(JwsAlgorithm algorithm, byte[] signature) {
+	private static boolean hasKeyFreeShape(@NonNull JwsAlgorithm algorithm, byte @NonNull [] signature) {
 		return switch (algorithm) {
 			case RS256, RS384, RS512, PS256, PS384, PS512 -> signature.length >= 256 && signature.length <= 2_048;
 			case ES256 -> hasEcdsaShape(signature, 32, CURVE_ORDERS.get(JwsAlgorithm.ES256));
@@ -293,7 +297,7 @@ public class CompactJwsFuzzTests {
 		};
 	}
 
-	private static boolean hasEcdsaShape(byte[] signature, int coordinateLength, BigInteger order) {
+	private static boolean hasEcdsaShape(byte @NonNull [] signature, int coordinateLength, @NonNull BigInteger order) {
 		if (signature.length != 2 * coordinateLength)
 			return false;
 
@@ -305,7 +309,7 @@ public class CompactJwsFuzzTests {
 	/**
 	 * Step 4, P3 to P8, in the plan's order.
 	 */
-	private static HeaderOutcome expectedHeader(byte[] header, PolicyCase policy) {
+	private static @NonNull HeaderOutcome expectedHeader(byte @NonNull [] header, @NonNull PolicyCase policy) {
 		JsonValue parsed;
 
 		try {
@@ -373,7 +377,7 @@ public class CompactJwsFuzzTests {
 	 * RFC 7515 section 4.1.9 (read 2026-09-28): {@code application/} is implied without a {@code /}; the result must be
 	 * a {@code type/subtype} pair of RFC 9110 tokens, compared with ASCII letters folded.
 	 */
-	private static Optional<String> expectedType(String type) {
+	private static @NonNull Optional<@NonNull String> expectedType(@NonNull String type) {
 		String mediaType = type.contains("/") ? type : "application/" + type;
 
 		if (!MEDIA_TYPE.matcher(mediaType).matches())
@@ -393,7 +397,7 @@ public class CompactJwsFuzzTests {
 	 * RFC 4648 section 5 without padding, canonical: no length of the form 4n + 1, and zero bits after the last whole
 	 * octet. Returns {@code null} for anything else.
 	 */
-	private static byte[] decodeBase64Url(String segment) {
+	private static byte @Nullable [] decodeBase64Url(@NonNull String segment) {
 		if (segment.length() % 4 == 1)
 			return null;
 
@@ -420,7 +424,7 @@ public class CompactJwsFuzzTests {
 		return buffer == 0 ? octets.toByteArray() : null;
 	}
 
-	private static void requireFixedShape(JoseFailure failure) {
+	private static void requireFixedShape(@NonNull JoseFailure failure) {
 		Assertions.assertEquals("A JOSE check failed: " + failure.getReason().name() + ".", failure.getMessage(),
 				"a JoseFailure message is not its fixed text");
 		Assertions.assertNull(failure.getCause(), "a JoseFailure has a cause");
@@ -428,7 +432,7 @@ public class CompactJwsFuzzTests {
 		Assertions.assertEquals(0, failure.getStackTrace().length, "a JoseFailure records a stack trace");
 	}
 
-	private static void collectStrings(JsonValue value, List<String> strings) {
+	private static void collectStrings(@NonNull JsonValue value, @NonNull List<@NonNull String> strings) {
 		if (value instanceof JsonString string) {
 			strings.add(string.getValue());
 		} else if (value instanceof JsonObject object) {
@@ -442,7 +446,7 @@ public class CompactJwsFuzzTests {
 		}
 	}
 
-	private static BigInteger order(String curveName) {
+	private static @NonNull BigInteger order(@NonNull String curveName) {
 		try {
 			AlgorithmParameters parameters = AlgorithmParameters.getInstance("EC");
 			parameters.init(new ECGenParameterSpec(curveName));
@@ -463,7 +467,7 @@ public class CompactJwsFuzzTests {
 		private final boolean typeRequired;
 		private final JoseHeaderPolicy policy;
 
-		private PolicyCase(int maximumLength, Set<JwsAlgorithm> algorithms, Set<String> allowedTypes,
+		private PolicyCase(int maximumLength, @NonNull Set<@NonNull JwsAlgorithm> algorithms, @NonNull Set<@NonNull String> allowedTypes,
 											 boolean typeRequired) {
 			this.maximumLength = maximumLength;
 			this.algorithms = Set.copyOf(algorithms);
@@ -489,7 +493,7 @@ public class CompactJwsFuzzTests {
 		private final byte[] signature;
 		private final byte[] signingInput;
 
-		private Split(Reason failure, byte[] header, byte[] payload, byte[] signature, byte[] signingInput) {
+		private Split(@Nullable Reason failure, byte @NonNull [] header, byte @NonNull [] payload, byte @NonNull [] signature, byte @NonNull [] signingInput) {
 			this.failure = failure;
 			this.header = header;
 			this.payload = payload;
@@ -497,7 +501,7 @@ public class CompactJwsFuzzTests {
 			this.signingInput = signingInput;
 		}
 
-		private static Split failing(Reason failure) {
+		private static @NonNull Split failing(@NonNull Reason failure) {
 			return new Split(failure, new byte[0], new byte[0], new byte[0], new byte[0]);
 		}
 	}
@@ -512,14 +516,14 @@ public class CompactJwsFuzzTests {
 		private final String keyId;
 		private final String type;
 
-		private HeaderOutcome(Reason failure, JwsAlgorithm algorithm, String keyId, String type) {
+		private HeaderOutcome(@Nullable Reason failure, @Nullable JwsAlgorithm algorithm, @Nullable String keyId, @Nullable String type) {
 			this.failure = failure;
 			this.algorithm = algorithm;
 			this.keyId = keyId;
 			this.type = type;
 		}
 
-		private static HeaderOutcome failing(Reason failure) {
+		private static @NonNull HeaderOutcome failing(@NonNull Reason failure) {
 			return new HeaderOutcome(failure, null, null, null);
 		}
 	}
@@ -533,13 +537,13 @@ public class CompactJwsFuzzTests {
 		private final Split split;
 		private final HeaderOutcome header;
 
-		private Prepared(Reason failure, Split split, HeaderOutcome header) {
+		private Prepared(@Nullable Reason failure, @Nullable Split split, @Nullable HeaderOutcome header) {
 			this.failure = failure;
 			this.split = split;
 			this.header = header;
 		}
 
-		private static Prepared failing(Reason failure) {
+		private static @NonNull Prepared failing(@NonNull Reason failure) {
 			return new Prepared(failure, null, null);
 		}
 	}

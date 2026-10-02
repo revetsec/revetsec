@@ -16,6 +16,8 @@
 
 package com.revetsec.oauth;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.internal.encoding.QueryParameters;
 import com.revetsec.testing.TestHttpsServer;
 import com.revetsec.testing.TestClock;
@@ -134,11 +136,11 @@ final class ClientCredentialsTokenSourceTests {
 		}
 	}
 
-	private static TestHttpsServer.Response json(String token) {
+	private static TestHttpsServer.@NonNull Response json(@NonNull String token) {
 		return jsonWithExpiry(token, 300);
 	}
 
-	private static TestHttpsServer.Response jsonWithExpiry(String token, int expiresIn) {
+	private static TestHttpsServer.@NonNull Response jsonWithExpiry(@NonNull String token, int expiresIn) {
 		return TestHttpsServer.Response.withStatus(200).header("Content-Type", "application/json")
 				.body("{\"access_token\":\"" + token + "\",\"token_type\":\"Bearer\",\"expires_in\":" + expiresIn + "}")
 				.build();

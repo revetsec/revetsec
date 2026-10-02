@@ -16,6 +16,8 @@
 
 package com.revetsec;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.testing.WycheproofVectors;
 import com.revetsec.testing.WycheproofVectors.Result;
 import com.revetsec.testing.WycheproofVectors.TestGroup;
@@ -541,7 +543,7 @@ final class WycheproofManifestTests {
 	// malformed or misordered line, and a line for the manifest itself are each reported, and manifest problems come
 	// before every other problem.
 	@TestFactory
-	Stream<DynamicTest> reportsEveryStaleOrMalformedManifestLine() {
+	@NonNull Stream<@NonNull DynamicTest> reportsEveryStaleOrMalformedManifestLine() {
 		SortedMap<String, byte[]> tree = sampleTree();
 		String licenseLine = sha256(utf8(SAMPLE_LICENSE)) + "  " + LICENSE;
 		byte[] changedLicense = utf8("license TEXT\n");
@@ -589,7 +591,7 @@ final class WycheproofManifestTests {
 	// A README or other Markdown (which plan 19's claims lint would scan), a file of another kind, a name outside
 	// the upstream naming, a missing LICENSE and a tree with no vector file are each reported.
 	@TestFactory
-	Stream<DynamicTest> reportsEveryFileThatDoesNotBelongAndEveryMissingOne() {
+	@NonNull Stream<@NonNull DynamicTest> reportsEveryFileThatDoesNotBelongAndEveryMissingOne() {
 		SortedMap<String, byte[]> sampleOnly = new TreeMap<>(Map.of(SAMPLE_PATH, utf8(SAMPLE)));
 		SortedMap<String, byte[]> licenseOnly = new TreeMap<>(Map.of(LICENSE, utf8(SAMPLE_LICENSE)));
 
@@ -610,7 +612,7 @@ final class WycheproofManifestTests {
 	// and its table has one row per file in path order, then a total row. A malformed, repeated, misordered, missing
 	// or extra row, and every column that differs from the files, are each reported.
 	@TestFactory
-	Stream<DynamicTest> reportsEveryStaleOrMalformedSourceLine() {
+	@NonNull Stream<@NonNull DynamicTest> reportsEveryStaleOrMalformedSourceLine() {
 		SortedMap<String, byte[]> tree = sampleTree();
 		byte[] sample = utf8(SAMPLE);
 		String licenseRow = "  LICENSE  13  -  -  -  -  " + gitBlobSha1(utf8(SAMPLE_LICENSE));
@@ -704,7 +706,7 @@ final class WycheproofManifestTests {
 	// profile and has the structure the views rely on, down to every test's tcId, comment, flags and result; the
 	// tcIds run from 1 to numberOfTests, each once. Every departure is reported with the file and where in it.
 	@TestFactory
-	Stream<DynamicTest> reportsEveryVectorFileThatIsNotWellFormed() {
+	@NonNull Stream<@NonNull DynamicTest> reportsEveryVectorFileThatIsNotWellFormed() {
 		String at = SAMPLE_PATH + " testGroups[1]";
 		String test = at + ".tests[0]";
 		byte[] bom = {(byte) 0xEF, (byte) 0xBB, (byte) 0xBF};
@@ -773,7 +775,7 @@ final class WycheproofManifestTests {
 	 * an {@link AssertionError} that lists exactly them, so a tree with even one problem hands out no vector, or the
 	 * views when there is none.
 	 */
-	private static DynamicTest treeCase(String name, SortedMap<String, byte[]> tree, String... expected) {
+	private static @NonNull DynamicTest treeCase(@NonNull String name, @NonNull SortedMap<@NonNull String, byte @NonNull []> tree, @NonNull String @NonNull ... expected) {
 		return DynamicTest.dynamicTest(name, () -> {
 			Assertions.assertEquals(List.of(expected), WycheproofVectors.findProblems(tree));
 
@@ -794,19 +796,19 @@ final class WycheproofManifestTests {
 	/**
 	 * A case whose vector file is {@code SAMPLE} with one substring replaced, in a tree that is otherwise consistent.
 	 */
-	private static DynamicTest vectorCase(String name, String from, String to, String... expected) {
+	private static @NonNull DynamicTest vectorCase(@NonNull String name, @NonNull String from, @NonNull String to, @NonNull String @NonNull ... expected) {
 		return vectorCase(name, utf8(replaceOnce(SAMPLE, from, to)), expected);
 	}
 
 	/**
 	 * A case whose vector file has the given content, in a tree that is otherwise consistent.
 	 */
-	private static DynamicTest vectorCase(String name, byte[] content, String... expected) {
+	private static @NonNull DynamicTest vectorCase(@NonNull String name, byte @NonNull [] content, @NonNull String @NonNull ... expected) {
 		return treeCase(name, consistent(new TreeMap<>(Map.of(LICENSE, utf8(SAMPLE_LICENSE), SAMPLE_PATH, content))),
 				expected);
 	}
 
-	private static void assertAbsentMember(String expectedMessage, Executable lookup) {
+	private static void assertAbsentMember(@NonNull String expectedMessage, @NonNull Executable lookup) {
 		NoSuchElementException exception = Assertions.assertThrows(NoSuchElementException.class, lookup);
 		Assertions.assertEquals(expectedMessage, exception.getMessage());
 	}
@@ -814,7 +816,7 @@ final class WycheproofManifestTests {
 	/**
 	 * The consistent synthetic tree: {@code SAMPLE_LICENSE}, {@code SAMPLE}, and their SOURCE.txt and manifest.
 	 */
-	private static SortedMap<String, byte[]> sampleTree() {
+	private static @NonNull SortedMap<@NonNull String, byte @NonNull []> sampleTree() {
 		return consistent(new TreeMap<>(Map.of(LICENSE, utf8(SAMPLE_LICENSE), SAMPLE_PATH, utf8(SAMPLE))));
 	}
 
@@ -822,7 +824,7 @@ final class WycheproofManifestTests {
 	 * A tree the checks accept for well-formed files: the given files, a SOURCE.txt with a Commit: line and a row for
 	 * each of them computed here (independently of the loader: counts come from the JSON text), and a manifest.
 	 */
-	private static SortedMap<String, byte[]> consistent(SortedMap<String, byte[]> files) {
+	private static @NonNull SortedMap<@NonNull String, byte @NonNull []> consistent(@NonNull SortedMap<@NonNull String, byte @NonNull []> files) {
 		StringBuilder source = new StringBuilder("Sample provenance\n\nCommit:  " + SAMPLE_COMMIT + "\n\n");
 		long bytes = 0;
 		long[] totals = new long[4];
@@ -866,7 +868,7 @@ final class WycheproofManifestTests {
 	/**
 	 * The tree with its manifest replaced by one for every other file, sorted by path, in sha256sum format.
 	 */
-	private static SortedMap<String, byte[]> withManifest(SortedMap<String, byte[]> files) {
+	private static @NonNull SortedMap<@NonNull String, byte @NonNull []> withManifest(@NonNull SortedMap<@NonNull String, byte @NonNull []> files) {
 		SortedMap<String, byte[]> tree = new TreeMap<>(files);
 		tree.remove(MANIFEST);
 		StringBuilder manifest = new StringBuilder();
@@ -878,13 +880,13 @@ final class WycheproofManifestTests {
 		return tree;
 	}
 
-	private static SortedMap<String, byte[]> with(SortedMap<String, byte[]> files, String path, byte[] content) {
+	private static @NonNull SortedMap<@NonNull String, byte @NonNull []> with(@NonNull SortedMap<@NonNull String, byte @NonNull []> files, @NonNull String path, byte @NonNull [] content) {
 		SortedMap<String, byte[]> tree = new TreeMap<>(files);
 		tree.put(path, content);
 		return tree;
 	}
 
-	private static SortedMap<String, byte[]> without(SortedMap<String, byte[]> files, String path) {
+	private static @NonNull SortedMap<@NonNull String, byte @NonNull []> without(@NonNull SortedMap<@NonNull String, byte @NonNull []> files, @NonNull String path) {
 		SortedMap<String, byte[]> tree = new TreeMap<>(files);
 		Assertions.assertNotNull(tree.remove(path), path);
 		return tree;
@@ -893,7 +895,7 @@ final class WycheproofManifestTests {
 	/**
 	 * The tree with its manifest's lines edited and nothing else changed.
 	 */
-	private static SortedMap<String, byte[]> editManifest(SortedMap<String, byte[]> files, Consumer<List<String>> edit) {
+	private static @NonNull SortedMap<@NonNull String, byte @NonNull []> editManifest(@NonNull SortedMap<@NonNull String, byte @NonNull []> files, @NonNull Consumer<@NonNull List<@NonNull String>> edit) {
 		return with(files, MANIFEST, utf8(editLines(new String(requireNonNull(files.get(MANIFEST)),
 				StandardCharsets.UTF_8), edit)));
 	}
@@ -901,15 +903,15 @@ final class WycheproofManifestTests {
 	/**
 	 * The tree with SOURCE.txt's lines edited and the manifest regenerated, so only the edit is a problem.
 	 */
-	private static SortedMap<String, byte[]> editSource(SortedMap<String, byte[]> files, Consumer<List<String>> edit) {
+	private static @NonNull SortedMap<@NonNull String, byte @NonNull []> editSource(@NonNull SortedMap<@NonNull String, byte @NonNull []> files, @NonNull Consumer<@NonNull List<@NonNull String>> edit) {
 		return withSourceBytes(files, utf8(editLines(String.join("\n", sourceLines(files)) + "\n", edit)));
 	}
 
-	private static SortedMap<String, byte[]> withSourceBytes(SortedMap<String, byte[]> files, byte[] source) {
+	private static @NonNull SortedMap<@NonNull String, byte @NonNull []> withSourceBytes(@NonNull SortedMap<@NonNull String, byte @NonNull []> files, byte @NonNull [] source) {
 		return withManifest(with(files, SOURCE, source));
 	}
 
-	private static List<String> sourceLines(SortedMap<String, byte[]> files) {
+	private static @NonNull List<@NonNull String> sourceLines(@NonNull SortedMap<@NonNull String, byte @NonNull []> files) {
 		String text = new String(requireNonNull(files.get(SOURCE)), StandardCharsets.UTF_8);
 		return List.of(text.substring(0, text.length() - 1).split("\n", -1));
 	}
@@ -917,7 +919,7 @@ final class WycheproofManifestTests {
 	/**
 	 * Applies an edit to the lines of an LF-terminated text and joins them again with a final LF.
 	 */
-	private static String editLines(String text, Consumer<List<String>> edit) {
+	private static @NonNull String editLines(@NonNull String text, @NonNull Consumer<@NonNull List<@NonNull String>> edit) {
 		List<String> lines = new ArrayList<>(List.of(text.substring(0, text.length() - 1).split("\n", -1)));
 		edit.accept(lines);
 		return lines.stream().map(line -> line + "\n").collect(Collectors.joining());
@@ -926,17 +928,17 @@ final class WycheproofManifestTests {
 	/**
 	 * A sample row with its four counts replaced.
 	 */
-	private static String sampleCounts(String sampleRow, String counts) {
+	private static @NonNull String sampleCounts(@NonNull String sampleRow, @NonNull String counts) {
 		return replaceOnce(sampleRow, "  3  1  1  1  ", "  " + counts + "  ");
 	}
 
-	private static String replaceOnce(String text, String from, String to) {
+	private static @NonNull String replaceOnce(@NonNull String text, @NonNull String from, @NonNull String to) {
 		int index = text.indexOf(from);
 		Assertions.assertTrue(index >= 0 && text.indexOf(from, index + 1) < 0, () -> "exactly one occurrence of " + from);
 		return text.substring(0, index) + to + text.substring(index + from.length());
 	}
 
-	private static long occurrences(String text, String substring) {
+	private static long occurrences(@NonNull String text, @NonNull String substring) {
 		long count = 0;
 
 		for (int index = text.indexOf(substring); index >= 0; index = text.indexOf(substring, index + 1))
@@ -949,29 +951,29 @@ final class WycheproofManifestTests {
 	 * The text with every run of whitespace, line breaks included, replaced by one space, so a phrase matches across
 	 * line wrapping and table padding.
 	 */
-	private static String normalizedWhitespace(String text) {
+	private static @NonNull String normalizedWhitespace(@NonNull String text) {
 		return text.replaceAll("\\s+", " ");
 	}
 
-	private static String doesNotBelong(String path) {
+	private static @NonNull String doesNotBelong(@NonNull String path) {
 		return path + " does not belong here: only LICENSE, SOURCE.txt, MANIFEST.sha256 and testvectors_v1/<name>.json "
 				+ "are vendored";
 	}
 
-	private static String malformedManifestLine(int number) {
+	private static @NonNull String malformedManifestLine(int number) {
 		return MANIFEST + " line " + number + " is malformed (expected <64 lowercase hex digits><two spaces><path>)";
 	}
 
-	private static String malformedCommitLine(int number) {
+	private static @NonNull String malformedCommitLine(int number) {
 		return SOURCE + " line " + number + " is malformed (expected Commit: and 40 lowercase hex digits)";
 	}
 
-	private static String malformedRow(int number) {
+	private static @NonNull String malformedRow(int number) {
 		return SOURCE + " line " + number + " is malformed (expected a file table row: <path> <bytes> <tests> <valid> "
 				+ "<invalid> <acceptable> <git blob SHA-1>, with - for each count of LICENSE, or the total row)";
 	}
 
-	private static Path vendoredDirectory() {
+	private static @NonNull Path vendoredDirectory() {
 		return ContractSupport.repositoryRoot().resolve(WycheproofVectors.RELATIVE_SOURCE);
 	}
 
@@ -979,7 +981,7 @@ final class WycheproofManifestTests {
 	 * Every regular file under {@code root}, by its path relative to {@code root} with {@code /} separators, read here
 	 * rather than through the loader.
 	 */
-	private static SortedMap<String, byte[]> readTree(Path root) throws IOException {
+	private static @NonNull SortedMap<@NonNull String, byte @NonNull []> readTree(@NonNull Path root) throws IOException {
 		SortedMap<String, byte[]> files = new TreeMap<>();
 
 		try (Stream<Path> paths = Files.walk(root)) {
@@ -990,25 +992,25 @@ final class WycheproofManifestTests {
 		return files;
 	}
 
-	private static byte[] utf8(String text) {
+	private static byte @NonNull [] utf8(@NonNull String text) {
 		return text.getBytes(StandardCharsets.UTF_8);
 	}
 
-	private static String sha256(byte[] content) {
+	private static @NonNull String sha256(byte @NonNull [] content) {
 		return HexFormat.of().formatHex(digest("SHA-256", content));
 	}
 
 	/**
 	 * How git names a blob: the SHA-1 of {@code "blob <size>\0"} followed by the content.
 	 */
-	private static String gitBlobSha1(byte[] content) {
+	private static @NonNull String gitBlobSha1(byte @NonNull [] content) {
 		byte[] header = ("blob " + content.length + "\0").getBytes(StandardCharsets.US_ASCII);
 		byte[] blob = Arrays.copyOf(header, header.length + content.length);
 		System.arraycopy(content, 0, blob, header.length, content.length);
 		return HexFormat.of().formatHex(digest("SHA-1", blob));
 	}
 
-	private static byte[] digest(String algorithm, byte[] content) {
+	private static byte @NonNull [] digest(@NonNull String algorithm, byte @NonNull [] content) {
 		try {
 			return MessageDigest.getInstance(algorithm).digest(content);
 		} catch (NoSuchAlgorithmException exception) {

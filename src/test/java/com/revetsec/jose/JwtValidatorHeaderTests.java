@@ -16,6 +16,8 @@
 
 package com.revetsec.jose;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.testing.TestJsonWebKeys;
 import com.revetsec.testing.TestJsonWebKeys.Fixture;
 import com.revetsec.testing.TestJws;
@@ -47,7 +49,7 @@ final class JwtValidatorHeaderTests {
 	// application/JWT are accepted, and Jwt.getType gives the raw value. RFC 7515 section 4.1.9 (read 2026-09-28) makes
 	// typ a media type, case-insensitive, with application/ implied when it has no /.
 	@TestFactory
-	Stream<DynamicTest> theDefaultTypeAcceptsJwtInAnyAsciiCaseOrNoType() {
+	@NonNull Stream<@NonNull DynamicTest> theDefaultTypeAcceptsJwtInAnyAsciiCaseOrNoType() {
 		return Stream.of("JWT", "jwt", "application/JWT", "application/jwt", "Application/Jwt").map(type ->
 				DynamicTest.dynamicTest(type, () -> {
 					Jwt jwt = JwtFixtures.assertAccepted(VALIDATOR, JwtFixtures.token(Algorithm.RS256).typ(type)
@@ -59,7 +61,7 @@ final class JwtValidatorHeaderTests {
 	// RFC 8725 section 3.12: types that mark other JWT profiles are INVALID_TYPE under the default, so an access
 	// token, a logout token or a security event token is never taken for a generic JWT (exit criterion 10).
 	@TestFactory
-	Stream<DynamicTest> typesOfOtherProfilesAreRefused() {
+	@NonNull Stream<@NonNull DynamicTest> typesOfOtherProfilesAreRefused() {
 		return Stream.of("at+jwt", "logout+jwt", "application/secevent+jwt", "application/at+jwt", "JOSE", "JOSE+JSON",
 				"jwt; charset=utf-8", "").map(type -> DynamicTest.dynamicTest("[" + type + "]", () ->
 				JwtFixtures.assertRejected(JoseException.Reason.INVALID_TYPE, VALIDATOR, JwtFixtures.token(Algorithm.RS256)
@@ -104,7 +106,7 @@ final class JwtValidatorHeaderTests {
 	// RFC 7515 section 2 (INV-J7): a validly signed token with padding, the standard alphabet, whitespace or a
 	// non-canonical last character in any segment is TOKEN_SYNTAX, before its signature is looked at.
 	@TestFactory
-	Stream<DynamicTest> aNonCanonicalEncodingOfAValidTokenIsTokenSyntax() {
+	@NonNull Stream<@NonNull DynamicTest> aNonCanonicalEncodingOfAValidTokenIsTokenSyntax() {
 		TestJws.Signed signed = JwtFixtures.token(Algorithm.RS256).signed(Fixture.IDP_SIGNING_RSA_2048.getPrivateKey());
 		JwtFixtures.assertAccepted(VALIDATOR, signed.toCompactSerialization());
 
@@ -129,7 +131,7 @@ final class JwtValidatorHeaderTests {
 	// RFC 7515 section 5.2 step 3 and RFC 8725 section 3.7: a header that is a JSON array, ill-formed UTF-8, has a
 	// BOM, a duplicate alg or a lone surrogate is HEADER, even when the token is otherwise validly signed.
 	@TestFactory
-	Stream<DynamicTest> aHeaderThatIsNotAStrictJsonObjectIsMalformed() {
+	@NonNull Stream<@NonNull DynamicTest> aHeaderThatIsNotAStrictJsonObjectIsMalformed() {
 		Map<String, byte[]> headers = new LinkedHashMap<>();
 		headers.put("a JSON array", bytes("[\"RS256\"]"));
 		headers.put("ill-formed UTF-8", concat(bytes("{\"alg\":\"RS256\",\"x\":\""), new byte[]{(byte) 0xFF},
@@ -206,7 +208,7 @@ final class JwtValidatorHeaderTests {
 	// jwk, jku and x5u (P6), then typ (P7), then cty (P8), then the kid's form, and the first one that fails names the
 	// reason, through its leaf exception.
 	@TestFactory
-	Stream<DynamicTest> theFirstFailingHeaderCheckNamesTheReason() {
+	@NonNull Stream<@NonNull DynamicTest> theFirstFailingHeaderCheckNamesTheReason() {
 		String jku = "\"https://attacker.example.com/jwks\"";
 		List<Map.Entry<String, Map.Entry<JoseException.Reason, TestJws.Builder>>> rows = List.of(
 				row("an algorithm not allowed, and crit", JoseException.Reason.ALGORITHM_NOT_ALLOWED,
@@ -245,16 +247,16 @@ final class JwtValidatorHeaderTests {
 				.headerMember("iss", "\"someone-else\"").sign(Fixture.IDP_SIGNING_RSA_2048.getPrivateKey()));
 	}
 
-	private static Map.Entry<String, Map.Entry<JoseException.Reason, TestJws.Builder>> row(String name,
-			JoseException.Reason reason, TestJws.Builder token) {
+	private static Map.@NonNull Entry<@NonNull String, Map.@NonNull Entry<JoseException.@NonNull Reason, TestJws.@NonNull Builder>> row(@NonNull String name,
+			JoseException.@NonNull Reason reason, TestJws.@NonNull Builder token) {
 		return Map.entry(name, Map.entry(reason, token));
 	}
 
-	private static byte[] bytes(String text) {
+	private static byte @NonNull [] bytes(@NonNull String text) {
 		return text.getBytes(StandardCharsets.UTF_8);
 	}
 
-	private static byte[] concat(byte[]... parts) {
+	private static byte @NonNull [] concat(byte @NonNull [] @NonNull ... parts) {
 		int length = 0;
 		for (byte[] part : parts)
 			length += part.length;

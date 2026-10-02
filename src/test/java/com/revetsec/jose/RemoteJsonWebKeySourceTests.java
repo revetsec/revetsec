@@ -16,6 +16,8 @@
 
 package com.revetsec.jose;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.ErrorCategory;
 import com.revetsec.internal.http.Deadline;
 import com.revetsec.internal.jose.KeySelection;
@@ -110,7 +112,7 @@ final class RemoteJsonWebKeySourceTests {
 	// max-age=999999999 the 6 h maximum, and no header the 10 min default. The key set is fresh one nanosecond before
 	// that and refetched at it.
 	@TestFactory
-	Stream<DynamicTest> theTimeToLiveFollowsCacheControlWithinTheLimits() {
+	@NonNull Stream<@NonNull DynamicTest> theTimeToLiveFollowsCacheControlWithinTheLimits() {
 		return Stream.of(
 				List.of("max-age=5", "PT1M"), List.of("no-store", "PT1M"), List.of("max-age=999999999", "PT6H"),
 				List.of("", "PT10M"), List.of("max-age=3600, must-revalidate", "PT1H"), List.of("no-cache", "PT1M"))
@@ -141,7 +143,7 @@ final class RemoteJsonWebKeySourceTests {
 	// clocks; Expires without a Date counts from receipt on the source's clock; Age is subtracted; and Entra's
 	// max-age=86400, private is clamped to the 6 h maximum.
 	@TestFactory
-	Stream<DynamicTest> theLifetimeUsesTheServersDateOrTheSourcesClock() throws IOException {
+	@NonNull Stream<@NonNull DynamicTest> theLifetimeUsesTheServersDateOrTheSourcesClock() throws IOException {
 		RawTlsServer rawServer = RawTlsServer.start();
 		String body = keySetJson("a");
 		return Stream.of(
@@ -180,7 +182,7 @@ final class RemoteJsonWebKeySourceTests {
 	// 256 KiB limit, and 101 keys is too many; both are MALFORMED_INPUT, not transient, and the previous key set
 	// stays in use.
 	@TestFactory
-	Stream<DynamicTest> anOversizedRefreshFailsAndThePreviousKeySetStaysInUse() {
+	@NonNull Stream<@NonNull DynamicTest> anOversizedRefreshFailsAndThePreviousKeySetStaysInUse() {
 		Response oversized = Response.withStatus(200).header("Content-Type", TestHttpsServer.JWK_SET_MEDIA_TYPE)
 				.body(new byte[300 * 1024]).framing(TestHttpsServer.Framing.CHUNKED).build();
 		Response tooManyKeys = Response.fromJsonWebKeySet(keySetJson(JwksCacheTests.keyIds(101)));
@@ -280,7 +282,7 @@ final class RemoteJsonWebKeySourceTests {
 	// refuse. Each is CONFIGURATION, not transient, with zero requests; the same server records one request for the
 	// permitted URI.
 	@TestFactory
-	Stream<DynamicTest> aUriRefusedAtFetchTimeIsAConfigurationFailureWithNoRequest() {
+	@NonNull Stream<@NonNull DynamicTest> aUriRefusedAtFetchTimeIsAConfigurationFailureWithNoRequest() {
 		return Stream.of("#fragment", "#", "user info").map(variant -> DynamicTest.dynamicTest(variant, () -> {
 			String path = path();
 			server().script(path, Script.fromResponse(Response.fromJsonWebKeySet(keySetJson("a"))));
@@ -343,22 +345,22 @@ final class RemoteJsonWebKeySourceTests {
 		Assertions.assertEquals(1, server().getHitCount(path));
 	}
 
-	private static RemoteJsonWebKeySource.Builder source(String path, TestClock clock) {
+	private static RemoteJsonWebKeySource.@NonNull Builder source(@NonNull String path, @NonNull TestClock clock) {
 		return RemoteJsonWebKeySource.withUri(server().uri(path)).httpClient(client()).clock(clock);
 	}
 
-	private static String path() {
+	private static @NonNull String path() {
 		return "/jwks/" + NEXT_PATH.incrementAndGet();
 	}
 
-	private static TestHttpsServer server() {
+	private static @NonNull TestHttpsServer server() {
 		TestHttpsServer current = server;
 		if (current == null)
 			throw new IllegalStateException("The server did not start");
 		return current;
 	}
 
-	private static HttpClient client() {
+	private static @NonNull HttpClient client() {
 		HttpClient current = client;
 		if (current == null)
 			throw new IllegalStateException("The client was not created");

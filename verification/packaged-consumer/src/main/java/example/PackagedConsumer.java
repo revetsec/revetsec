@@ -16,6 +16,8 @@
 
 package example;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.oauth.AccessTokenValidator;
 import com.revetsec.oauth.JwtAccessTokenValidator;
 import com.revetsec.oauth.TokenIntrospectionClient;
@@ -144,7 +146,9 @@ import java.util.jar.Manifest;
  * {@code com.revetsec.json}, {@code com.revetsec.jose}, {@code com.revetsec.oauth} and {@code com.revetsec.oidc}, and uses every public type in
  * them, nested builders and enums included. The JOSE calls validate a JWT the consumer signs itself with a fresh RSA key, against a key set it
  * writes, refuse forged, unsigned, malformed and unsupported tokens, and build a remote key source without any I/O.
- * Both consumers compile it with every lint warning an error and with nothing but the Revetsec JAR on the class path,
+ * The checked-in source has explicit JSpecify signatures. The verifier removes only those type annotations and
+ * imports from its temporary consumer copy, preserving executable Java and literals. Both consumers compile that
+ * copy with every lint warning an error and with nothing but the Revetsec JAR on the class path,
  * so a build proves that the published signatures resolve without Revetsec's provided-scope annotation JARs
  * (JSpecify, the jsr305 concurrency markers and Error Prone's annotations), and a run proves the calls work without
  * them. It prints {@code public-api=...} only after every call behaved as documented;
@@ -168,7 +172,7 @@ public final class PackagedConsumer {
 		// Entry point only.
 	}
 
-	public static void main(String[] arguments) throws Exception {
+	public static void main(@NonNull String @NonNull [] arguments) throws Exception {
 		ClassLoader classLoader = PackagedConsumer.class.getClassLoader();
 		URL resource = classLoader.getResource(ROOT_PACKAGE_INFO_RESOURCE);
 
@@ -231,7 +235,7 @@ public final class PackagedConsumer {
 	/**
 	 * Builds, reads and writes JSON values through {@code com.revetsec.json}; returns the object's JSON text.
 	 */
-	private static String exerciseJsonModel(List<String> calledApi) {
+	private static @NonNull String exerciseJsonModel(@NonNull List<@NonNull String> calledApi) {
 		JsonObject.Builder builder = JsonObject.builder();
 		JsonObject object = builder
 				.put("iss", "https://issuer.example")
@@ -280,7 +284,7 @@ public final class PackagedConsumer {
 		require(types.length == 19, "all result declarations compile without annotation JARs");
 	}
 
-	private static void exerciseStateSealer(String plaintext, List<String> calledApi) {
+	private static void exerciseStateSealer(@NonNull String plaintext, @NonNull List<@NonNull String> calledApi) {
 		byte[] keyBytes = new byte[32];
 		new SecureRandom().nextBytes(keyBytes);
 		SealingKey key = SealingKey.fromBase64("consumer-1", Base64.getEncoder().encodeToString(keyBytes));
@@ -316,7 +320,7 @@ public final class PackagedConsumer {
 	/**
 	 * Asks both outbound URI policies about DNS names, a private address and a literal cloud metadata address.
 	 */
-	private static void exerciseOutboundUriPolicy(List<String> calledApi) {
+	private static void exerciseOutboundUriPolicy(@NonNull List<@NonNull String> calledApi) {
 		OutboundUriPolicy policy = OutboundUriPolicy.defaultInstance();
 
 		require(policy.permits(URI.create("https://issuer.example/.well-known/openid-configuration")),
@@ -342,7 +346,7 @@ public final class PackagedConsumer {
 	 * forged, unsigned, malformed and unsupported tokens fail with their documented exception and reason, and that the
 	 * observer sees each outcome; and builds a remote key source and a validator over it, which do no I/O.
 	 */
-	private static void exerciseJose(List<String> calledApi) throws Exception {
+	private static void exerciseJose(@NonNull List<@NonNull String> calledApi) throws Exception {
 		require(JwsAlgorithm.findByWireValue("RS256").equals(Optional.of(JwsAlgorithm.RS256))
 						&& JwsAlgorithm.findByWireValue("rs256").isEmpty() && JwsAlgorithm.findByWireValue("none").isEmpty()
 						&& JwsAlgorithm.EDDSA.getWireValue().equals("EdDSA"),
@@ -515,7 +519,7 @@ public final class PackagedConsumer {
 	}
 
 	/** Builds a static OAuth client and begins a PKCE flow without contacting an authorization server. */
-	private static void exerciseOAuth(List<String> calledApi) {
+	private static void exerciseOAuth(@NonNull List<@NonNull String> calledApi) {
 		exerciseResourceServerProtocols();
 		AuthorizationServerMetadata.Builder metadataBuilder = AuthorizationServerMetadata.withIssuer(ISSUER);
 		AuthorizationServerMetadata metadata = metadataBuilder
@@ -619,7 +623,7 @@ public final class PackagedConsumer {
 	}
 
 	/** Exercises OIDC configuration, pending requests and reference storage without contacting a provider. */
-	private static void exerciseOidc(List<String> calledApi) throws Exception {
+	private static void exerciseOidc(@NonNull List<@NonNull String> calledApi) throws Exception {
 		OidcProviderMetadata.Builder metadataBuilder = OidcProviderMetadata.withIssuer(ISSUER);
 		OidcProviderMetadata metadata = metadataBuilder.authorizationEndpoint(URI.create(ISSUER + "/authorize"))
 				.tokenEndpoint(URI.create(ISSUER + "/token")).jwksUri(URI.create(ISSUER + "/keys"))
@@ -674,7 +678,7 @@ public final class PackagedConsumer {
 		calledApi.add("com.revetsec.oidc");
 	}
 
-	private static JoseException refusal(JwtValidator validator, String token) {
+	private static @NonNull JoseException refusal(@NonNull JwtValidator validator, @NonNull String token) {
 		try {
 			validator.validate(token);
 		} catch (JoseException e) {
@@ -686,7 +690,7 @@ public final class PackagedConsumer {
 		throw new IllegalStateException("Public API check failed: a token that must be refused was accepted");
 	}
 
-	private static boolean refusesToBuild(URI jwksUri) {
+	private static boolean refusesToBuild(@NonNull URI jwksUri) {
 		try {
 			RemoteJsonWebKeySource.withUri(jwksUri).build();
 		} catch (IllegalArgumentException e) {
@@ -696,7 +700,7 @@ public final class PackagedConsumer {
 		return false;
 	}
 
-	private static String signRs256(String header, String claims, KeyPair keyPair) throws Exception {
+	private static @NonNull String signRs256(@NonNull String header, @NonNull String claims, @NonNull KeyPair keyPair) throws Exception {
 		String signingInput = base64Url(header) + "." + base64Url(claims);
 		Signature signature = Signature.getInstance("SHA256withRSA");
 		signature.initSign(keyPair.getPrivate());
@@ -704,7 +708,7 @@ public final class PackagedConsumer {
 		return signingInput + "." + BASE64URL.encodeToString(signature.sign());
 	}
 
-	private static String base64Url(String text) {
+	private static @NonNull String base64Url(@NonNull String text) {
 		return BASE64URL.encodeToString(text.getBytes(StandardCharsets.UTF_8));
 	}
 
@@ -712,7 +716,7 @@ public final class PackagedConsumer {
 	 * The big-endian octets of a positive integer with no leading zero octet (RFC 7518 section 6.3.1's
 	 * Base64urlUInt).
 	 */
-	private static byte[] unsignedBytes(BigInteger value) {
+	private static byte @NonNull [] unsignedBytes(@NonNull BigInteger value) {
 		byte[] bytes = value.toByteArray();
 		return bytes.length > 1 && bytes[0] == 0 ? Arrays.copyOfRange(bytes, 1, bytes.length) : bytes;
 	}
@@ -727,12 +731,12 @@ public final class PackagedConsumer {
 		private final List<String> unexpected = new ArrayList<>();
 
 		@Override
-		public void didValidateJwt(JwsAlgorithm algorithm, Duration elapsed) {
+		public void didValidateJwt(@NonNull JwsAlgorithm algorithm, @NonNull Duration elapsed) {
 			this.validated.add(algorithm);
 		}
 
 		@Override
-		public void didFailToValidateJwt(RevetsecException exception, Duration elapsed) {
+		public void didFailToValidateJwt(@NonNull RevetsecException exception, @NonNull Duration elapsed) {
 			this.failures.add(exception);
 
 			if (exception instanceof JsonWebKeySetUnavailableException)
@@ -740,23 +744,23 @@ public final class PackagedConsumer {
 		}
 
 		@Override
-		public void willFetchJsonWebKeySet(URI jwksUri) {
+		public void willFetchJsonWebKeySet(@NonNull URI jwksUri) {
 			this.unexpected.add("willFetchJsonWebKeySet");
 		}
 
 		@Override
-		public void didFailToFetchJsonWebKeySet(URI jwksUri, JsonWebKeySetUnavailableException exception,
-																						Boolean servingStaleKeys, Duration elapsed) {
+		public void didFailToFetchJsonWebKeySet(@NonNull URI jwksUri, @NonNull JsonWebKeySetUnavailableException exception,
+																						@NonNull Boolean servingStaleKeys, @NonNull Duration elapsed) {
 			this.unexpected.add("didFailToFetchJsonWebKeySet");
 		}
 
 		@Override
-		public void didSkipJsonWebKey(URI jwksUri, Integer keyIndex, JsonWebKeySkipReason reason) {
+		public void didSkipJsonWebKey(@NonNull URI jwksUri, @NonNull Integer keyIndex, @NonNull JsonWebKeySkipReason reason) {
 			this.unexpected.add("didSkipJsonWebKey " + reason);
 		}
 	}
 
-	private static void require(boolean condition, String what) {
+	private static void require(boolean condition, @NonNull String what) {
 		if (!condition)
 			throw new IllegalStateException("Public API check failed: " + what);
 	}

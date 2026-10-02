@@ -88,8 +88,12 @@ def selftest(tag, out):
 
 
 def crosscheck(java_home, out, expect_ok=True):
-    result = run([pathlib.Path(java_home) / "bin" / "java", CROSSCHECK, out], check=False,
-                 capture_output=True)
+    # Canonical Java signatures are explicit; the temporary JDK-only copy erases only their annotations.
+    with tempfile.TemporaryDirectory(prefix="revetsec-crosscheck-source-") as temporary:
+        executable = pathlib.Path(temporary) / "Crosscheck.java"
+        run([sys.executable, ROOT.parents[1] / "verification/render-java-source.py", CROSSCHECK, executable])
+        result = run([pathlib.Path(java_home) / "bin" / "java", executable, out], check=False,
+                     capture_output=True)
     print(result.stdout + result.stderr, end="")
     fails = [line.split(":")[0].split()[1] for line in result.stdout.splitlines() if line.startswith("FAIL ")]
     return {"ok": (result.returncode == 0) == expect_ok, "exit": result.returncode, "failed": fails}

@@ -16,6 +16,8 @@
 
 package com.revetsec.internal;
 
+import org.jspecify.annotations.Nullable;
+
 import com.revetsec.internal.Limit.Unit;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -112,6 +114,8 @@ final class LimitTests {
 		Assertions.assertThrows(IllegalStateException.class, NO_DEFAULT_TIME::getDefaultDuration);
 	}
 
+	// Deliberate null inputs verify runtime rejection.
+	@SuppressWarnings("NullAway")
 	@Test
 	void usingTheWrongKindOfAccessorIsABug() {
 		// A duration row is never read as a number, and a size never as a Duration.
@@ -164,7 +168,7 @@ final class LimitTests {
 	}
 
 	@SuppressWarnings("NullAway")
-	private static Duration nullDuration() {
+	private static @Nullable Duration nullDuration() {
 		return null;
 	}
 }

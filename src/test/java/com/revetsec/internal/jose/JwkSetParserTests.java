@@ -16,6 +16,8 @@
 
 package com.revetsec.internal.jose;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.jose.JoseException;
 import com.revetsec.jose.JsonWebKeySkipReason;
 import com.revetsec.testing.JsonText;
@@ -90,7 +92,7 @@ final class JwkSetParserTests {
 	// Document failures (plan "Keys"): not strict JSON, not an object, no keys array, an element of keys that is not
 	// an object; each fails the whole set as KEY_SET, even with usable keys beside it.
 	@TestFactory
-	Stream<DynamicTest> documentFailuresRejectTheWholeSet() {
+	@NonNull Stream<@NonNull DynamicTest> documentFailuresRejectTheWholeSet() {
 		String deep = "{\"keys\":[{\"kty\":\"RSA\",\"x\":" + "[".repeat(40) + "]".repeat(40) + "}]}";
 
 		return Stream.of(
@@ -264,11 +266,11 @@ final class JwkSetParserTests {
 				parse(TestJsonWebKeys.keySet(List.of(RSA, OCT))));
 	}
 
-	private static ParsedKeySet parse(String document) throws JoseFailure {
+	private static @NonNull ParsedKeySet parse(@NonNull String document) throws JoseFailure {
 		return JwkSetParser.parse(document, MAXIMUM_BYTES, MAXIMUM_KEYS);
 	}
 
-	private static void assertKeySetFailure(ThrowingParse parse) {
+	private static void assertKeySetFailure(@NonNull ThrowingParse parse) {
 		JoseFailure failure = Assertions.assertThrows(JoseFailure.class, parse::run);
 		Assertions.assertEquals(JoseException.Reason.KEY_SET, failure.getReason());
 		Assertions.assertNull(failure.getCause());
@@ -278,7 +280,7 @@ final class JwkSetParserTests {
 	/**
 	 * {@code base} with {@code count} copies of {@code filler} inside its empty {@code pad} string.
 	 */
-	private static String pad(String base, int count, char filler) {
+	private static @NonNull String pad(@NonNull String base, int count, char filler) {
 		return base.replace("\"pad\":\"\"", "\"pad\":\"" + String.valueOf(filler).repeat(count) + "\"");
 	}
 

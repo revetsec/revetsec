@@ -16,6 +16,10 @@
 
 package com.revetsec.jose;
 
+import org.jspecify.annotations.Nullable;
+
+import org.jspecify.annotations.NonNull;
+
 import com.code_intelligence.jazzer.junit.FuzzTest;
 import com.revetsec.RevetsecException;
 import com.revetsec.internal.Limits;
@@ -173,7 +177,7 @@ public class JwtValidatorFuzzTests {
 	 * @param input the fuzzed token, read as ISO-8859-1 so that every byte is one character
 	 */
 	@FuzzTest(maxDuration = "5m")
-	public void validateAcceptsOnlyWhatTheJdkVerifiersAccept(byte[] input) {
+	public void validateAcceptsOnlyWhatTheJdkVerifiersAccept(byte @NonNull [] input) {
 		String token = new String(input, StandardCharsets.ISO_8859_1);
 
 		for (ValidatorCase validator : FIXTURE_VALIDATORS)
@@ -191,14 +195,14 @@ public class JwtValidatorFuzzTests {
 	 * @param input the fuzzed signing program
 	 */
 	@FuzzTest(maxDuration = "5m")
-	public void signedTokensAreJudgedLikeTheOracleWhateverTheirHeaderAndClaims(byte[] input) {
+	public void signedTokensAreJudgedLikeTheOracleWhateverTheirHeaderAndClaims(byte @NonNull [] input) {
 		String token = SIGNERS.token(input);
 
 		for (ValidatorCase validator : SIGNED_VALIDATORS)
 			requireAgreement(validator, token);
 	}
 
-	private static void requireAgreement(ValidatorCase validator, String token) {
+	private static void requireAgreement(@NonNull ValidatorCase validator, @NonNull String token) {
 		Outcome expected = expected(validator, token);
 		RecordingObserver.reset();
 		Jwt jwt;
@@ -252,7 +256,7 @@ public class JwtValidatorFuzzTests {
 	 * Each rejection is the class its reason belongs to, with the reason's category and fixed message, no cause, and
 	 * never transient (M2-2).
 	 */
-	private static void requireFixedShape(JoseException exception) {
+	private static void requireFixedShape(@NonNull JoseException exception) {
 		JoseException.Reason reason = exception.getReason();
 		Class<? extends JoseException> expectedClass = switch (reason.category()) {
 			case MALFORMED_INPUT -> MalformedJoseInputException.class;
@@ -270,7 +274,7 @@ public class JwtValidatorFuzzTests {
 	/**
 	 * The oracle: the plan's steps 1 to 15, in order.
 	 */
-	private static Outcome expected(ValidatorCase validator, String token) {
+	private static @NonNull Outcome expected(@NonNull ValidatorCase validator, @NonNull String token) {
 		Config config = validator.config;
 
 		// Steps 1 to 3.
@@ -452,7 +456,7 @@ public class JwtValidatorFuzzTests {
 	 * parameter set (RFC 9864 sections 2.2 and 5, read 2026-09-28); an RSA key without {@code alg} fits only while the
 	 * allowed set holds exactly one RSA algorithm, the token's (RFC 8725 section 3.1, read 2026-09-28).
 	 */
-	private static boolean fits(OracleKey key, JwsAlgorithm algorithm, Set<JwsAlgorithm> allowed) {
+	private static boolean fits(@NonNull OracleKey key, @NonNull JwsAlgorithm algorithm, @NonNull Set<@NonNull JwsAlgorithm> allowed) {
 		String keyType = switch (algorithm) {
 			case RS256, RS384, RS512, PS256, PS384, PS512 -> "RSA";
 			case ES256, ES384, ES512 -> "EC";
@@ -489,7 +493,7 @@ public class JwtValidatorFuzzTests {
 	 * Step 5: RSA signatures of 256 to 2,048 octets; ECDSA's of twice the coordinate length with {@code r} and
 	 * {@code s} in {@code [1, n - 1]}; Ed25519's of 64 octets. The validators allow no HMAC algorithm.
 	 */
-	private static boolean hasKeyFreeShape(JwsAlgorithm algorithm, byte[] signature) {
+	private static boolean hasKeyFreeShape(@NonNull JwsAlgorithm algorithm, byte @NonNull [] signature) {
 		return switch (algorithm) {
 			case RS256, RS384, RS512, PS256, PS384, PS512 -> signature.length >= 256 && signature.length <= 2_048;
 			case ES256 -> hasEcdsaShape(signature, CURVES.get("P-256"));
@@ -500,7 +504,7 @@ public class JwtValidatorFuzzTests {
 		};
 	}
 
-	private static boolean hasEcdsaShape(byte[] signature, ECParameterSpec curve) {
+	private static boolean hasEcdsaShape(byte @NonNull [] signature, @NonNull ECParameterSpec curve) {
 		int length = (((ECFieldFp) curve.getCurve().getField()).getP().bitLength() + 7) / 8;
 
 		if (signature.length != 2 * length)
@@ -514,7 +518,7 @@ public class JwtValidatorFuzzTests {
 	/**
 	 * The JDK's own verifier for {@code algorithm}; any exception is a refusal.
 	 */
-	private static boolean jdkVerifies(JwsAlgorithm algorithm, PublicKey key, byte[] signingInput, byte[] signature) {
+	private static boolean jdkVerifies(@NonNull JwsAlgorithm algorithm, @NonNull PublicKey key, byte @NonNull [] signingInput, byte @NonNull [] signature) {
 		try {
 			Signature verifier = switch (algorithm) {
 				case RS256 -> Signature.getInstance("SHA256withRSA");
@@ -549,7 +553,7 @@ public class JwtValidatorFuzzTests {
 	 * M2-11, for a key whose issuer member is Entra's exact template: a lowercase GUID {@code tid}, and {@code iss}
 	 * equal to the template with it.
 	 */
-	private static boolean isEntraTemplateMatch(Claims claims) {
+	private static boolean isEntraTemplateMatch(@NonNull Claims claims) {
 		return claims.object.getMembers().get("tid") instanceof JsonString tid
 				&& LOWERCASE_GUID.matcher(tid.getValue()).matches()
 				&& claims.issuer.equals("https://login.microsoftonline.com/" + tid.getValue() + "/v2.0");
@@ -559,7 +563,7 @@ public class JwtValidatorFuzzTests {
 	 * RFC 7515 section 4.1.9 (read 2026-09-28): {@code application/} implied without a {@code /}; a
 	 * {@code type/subtype} pair of RFC 9110 tokens, compared with ASCII letters folded.
 	 */
-	private static Optional<String> normalizedType(String type) {
+	private static @NonNull Optional<@NonNull String> normalizedType(@NonNull String type) {
 		String mediaType = type.contains("/") ? type : "application/" + type;
 
 		if (!MEDIA_TYPE.matcher(mediaType).matches())
@@ -575,7 +579,7 @@ public class JwtValidatorFuzzTests {
 		return Optional.of(folded.toString());
 	}
 
-	private static JsonObject jsonObject(byte[] text, int maximumLength) {
+	private static @Nullable JsonObject jsonObject(byte @NonNull [] text, int maximumLength) {
 		try {
 			return JsonCodec.parse(text, JsonLimits.jose(maximumLength)) instanceof JsonObject object ? object : null;
 		} catch (JsonParseException e) {
@@ -586,7 +590,7 @@ public class JwtValidatorFuzzTests {
 	/**
 	 * RFC 4648 section 5 without padding, canonical; {@code null} for anything else.
 	 */
-	private static byte[] decodeBase64Url(String segment) {
+	private static byte @Nullable [] decodeBase64Url(@NonNull String segment) {
 		if (segment.length() % 4 == 1)
 			return null;
 
@@ -613,7 +617,7 @@ public class JwtValidatorFuzzTests {
 		return buffer == 0 ? octets.toByteArray() : null;
 	}
 
-	private static String resource(String name) {
+	private static @NonNull String resource(@NonNull String name) {
 		try (InputStream stream = JwtValidatorFuzzTests.class.getResourceAsStream(name)) {
 			if (stream == null)
 				throw new IllegalStateException("No resource " + name + " next to " + JwtValidatorFuzzTests.class.getName());
@@ -624,7 +628,7 @@ public class JwtValidatorFuzzTests {
 		}
 	}
 
-	private static ECParameterSpec curve(String name) {
+	private static @NonNull ECParameterSpec curve(@NonNull String name) {
 		try {
 			AlgorithmParameters parameters = AlgorithmParameters.getInstance("EC");
 			parameters.init(new ECGenParameterSpec(name));
@@ -637,7 +641,7 @@ public class JwtValidatorFuzzTests {
 	/**
 	 * The three validators over a key set, with the oracle's own reading of its keys.
 	 */
-	private static List<ValidatorCase> validators(String keySet) {
+	private static @NonNull List<@NonNull ValidatorCase> validators(@NonNull String keySet) {
 		JsonWebKeySet set = JsonWebKeySet.fromJson(keySet);
 
 		if (set.getKeys().size() != KEY_SLOTS.size())
@@ -685,8 +689,8 @@ public class JwtValidatorFuzzTests {
 		private final Duration skew;
 		private final int maximumLength;
 
-		private Config(String issuer, Set<String> audiences, Set<JwsAlgorithm> algorithms, Set<String> types,
-									 boolean typeRequired, Set<String> requiredClaims, Duration skew, int maximumLength) {
+		private Config(@NonNull String issuer, @Nullable Set<@NonNull String> audiences, @NonNull Set<@NonNull JwsAlgorithm> algorithms, @NonNull Set<@NonNull String> types,
+									 boolean typeRequired, @NonNull Set<@NonNull String> requiredClaims, @NonNull Duration skew, int maximumLength) {
 			this.issuer = issuer;
 			this.audiences = audiences;
 			this.algorithms = Set.copyOf(algorithms);
@@ -708,7 +712,7 @@ public class JwtValidatorFuzzTests {
 		private final Config config;
 		private final List<OracleKey> keys;
 
-		private ValidatorCase(String name, JwtValidator validator, Config config, List<OracleKey> keys) {
+		private ValidatorCase(@NonNull String name, @NonNull JwtValidator validator, @NonNull Config config, @NonNull List<@NonNull OracleKey> keys) {
 			this.name = name;
 			this.validator = validator;
 			this.config = config;
@@ -728,8 +732,8 @@ public class JwtValidatorFuzzTests {
 		private final String issuer;
 		private final PublicKey publicKey;
 
-		private OracleKey(String keyId, String keyType, String curve, JwsAlgorithm algorithm, String issuer,
-											PublicKey publicKey) {
+		private OracleKey(@Nullable String keyId, @NonNull String keyType, @Nullable String curve, @Nullable JwsAlgorithm algorithm, @Nullable String issuer,
+											@NonNull PublicKey publicKey) {
 			this.keyId = keyId;
 			this.keyType = keyType;
 			this.curve = curve;
@@ -738,7 +742,7 @@ public class JwtValidatorFuzzTests {
 			this.publicKey = publicKey;
 		}
 
-		private static List<OracleKey> readAll(String keySet) {
+		private static @NonNull List<@NonNull OracleKey> readAll(@NonNull String keySet) {
 			try {
 				JsonObject document = (JsonObject) JsonCodec.parse(keySet.getBytes(StandardCharsets.UTF_8),
 						JsonLimits.protocolDocument((int) Limits.JWKS_RESPONSE_BODY_SIZE.getCap()));
@@ -753,7 +757,7 @@ public class JwtValidatorFuzzTests {
 			}
 		}
 
-		private static OracleKey read(Map<String, JsonValue> members) throws GeneralSecurityException {
+		private static @NonNull OracleKey read(@NonNull Map<@NonNull String, @NonNull JsonValue> members) throws GeneralSecurityException {
 			String keyType = string(members, "kty");
 			String curve = members.containsKey("crv") ? string(members, "crv") : null;
 			PublicKey key = switch (keyType) {
@@ -780,11 +784,11 @@ public class JwtValidatorFuzzTests {
 					members.containsKey("issuer") ? string(members, "issuer") : null, key);
 		}
 
-		private static String string(Map<String, JsonValue> members, String name) {
+		private static @NonNull String string(@NonNull Map<@NonNull String, @NonNull JsonValue> members, @NonNull String name) {
 			return ((JsonString) members.get(name)).getValue();
 		}
 
-		private static BigInteger integer(Map<String, JsonValue> members, String name) {
+		private static @NonNull BigInteger integer(@NonNull Map<@NonNull String, @NonNull JsonValue> members, @NonNull String name) {
 			return new BigInteger(1, decodeBase64Url(string(members, name)));
 		}
 	}
@@ -805,8 +809,8 @@ public class JwtValidatorFuzzTests {
 		private final Instant notBefore;
 		private final String jwtId;
 
-		private Claims(JsonObject object, String issuer, String subject, List<String> audiences, Instant expiresAt,
-									 Instant issuedAt, Instant notBefore, String jwtId) {
+		private Claims(@NonNull JsonObject object, @Nullable String issuer, @Nullable String subject, @NonNull List<@NonNull String> audiences, @Nullable Instant expiresAt,
+									 @Nullable Instant issuedAt, @Nullable Instant notBefore, @Nullable String jwtId) {
 			this.object = object;
 			this.issuer = issuer;
 			this.subject = subject;
@@ -820,7 +824,7 @@ public class JwtValidatorFuzzTests {
 		/**
 		 * The claims, or {@code null} if the payload is not a claims set with well-typed registered claims.
 		 */
-		private static Claims read(byte[] payload, int maximumLength) {
+		private static @Nullable Claims read(byte @NonNull [] payload, int maximumLength) {
 			JsonObject object = jsonObject(payload, maximumLength);
 
 			if (object == null)
@@ -856,7 +860,7 @@ public class JwtValidatorFuzzTests {
 					stringOrNull(members, "jti"));
 		}
 
-		private static String stringOrNull(Map<String, JsonValue> members, String name) {
+		private static @Nullable String stringOrNull(@NonNull Map<@NonNull String, @NonNull JsonValue> members, @NonNull String name) {
 			return members.get(name) instanceof JsonString string ? string.getValue() : null;
 		}
 
@@ -864,7 +868,7 @@ public class JwtValidatorFuzzTests {
 		 * RFC 7519 section 2: seconds since the epoch, here from -9999-01-01 to before 10000-01-01, rounded down to a
 		 * nanosecond; {@code null} if absent or not such a number.
 		 */
-		private static Instant numericDate(JsonValue value) {
+		private static @Nullable Instant numericDate(@Nullable JsonValue value) {
 			if (!(value instanceof JsonNumber number))
 				return null;
 
@@ -896,7 +900,7 @@ public class JwtValidatorFuzzTests {
 		private final String type;
 		private final Claims claims;
 
-		private Outcome(JoseException.Reason failure, JwsAlgorithm algorithm, String keyId, String type, Claims claims) {
+		private Outcome(JoseException.@Nullable Reason failure, @Nullable JwsAlgorithm algorithm, @Nullable String keyId, @Nullable String type, @Nullable Claims claims) {
 			this.failure = failure;
 			this.algorithm = algorithm;
 			this.keyId = keyId;
@@ -904,7 +908,7 @@ public class JwtValidatorFuzzTests {
 			this.claims = claims;
 		}
 
-		private static Outcome failing(JoseException.Reason failure) {
+		private static @NonNull Outcome failing(JoseException.@NonNull Reason failure) {
 			return new Outcome(failure, null, null, null, null);
 		}
 	}
@@ -924,7 +928,7 @@ public class JwtValidatorFuzzTests {
 			return EVENTS.get().validations;
 		}
 
-		private static RevetsecException failure() {
+		private static @Nullable RevetsecException failure() {
 			return EVENTS.get().failure;
 		}
 
@@ -933,19 +937,19 @@ public class JwtValidatorFuzzTests {
 		}
 
 		@Override
-		public void didValidateJwt(JwsAlgorithm algorithm, Duration elapsed) {
+		public void didValidateJwt(@NonNull JwsAlgorithm algorithm, @NonNull Duration elapsed) {
 			++EVENTS.get().validations;
 		}
 
 		@Override
-		public void didFailToValidateJwt(RevetsecException exception, Duration elapsed) {
+		public void didFailToValidateJwt(@NonNull RevetsecException exception, @NonNull Duration elapsed) {
 			Events events = EVENTS.get();
 			Assertions.assertNull(events.failure, "a failure was reported twice");
 			events.failure = exception;
 		}
 
 		@Override
-		public void didAcceptAnyAudience(String issuer) {
+		public void didAcceptAnyAudience(@NonNull String issuer) {
 			++EVENTS.get().anyAudience;
 		}
 
@@ -996,7 +1000,7 @@ public class JwtValidatorFuzzTests {
 		 * octets: the signing slot, the signing algorithm among those its key can make, a damage kind and the damage's
 		 * parameter octets.
 		 */
-		private String token(byte[] input) {
+		private @NonNull String token(byte @NonNull [] input) {
 			int firstNul = indexOf(input, 0);
 			byte[] header = firstNul < 0 ? input : Arrays.copyOfRange(input, 0, firstNul);
 			int secondNul = firstNul < 0 ? -1 : indexOf(input, firstNul + 1);
@@ -1051,7 +1055,7 @@ public class JwtValidatorFuzzTests {
 		 * The header's {@code kid} and {@code alg} strings, either {@code null} when absent or the header is not a JSON
 		 * object.
 		 */
-		private static String[] namedKeyAndAlgorithm(byte[] header) {
+		private static @Nullable String @NonNull [] namedKeyAndAlgorithm(byte @NonNull [] header) {
 			try {
 				if (JsonCodec.parse(header, JsonLimits.jose(Limits.COMPACT_JWT_SIZE.getDefaultIntValue()))
 						instanceof JsonObject object)
@@ -1067,7 +1071,7 @@ public class JwtValidatorFuzzTests {
 		/**
 		 * The slot {@code kid} names, or else the first whose key can make {@code alg}, or else the first slot.
 		 */
-		private KeySlot slotFor(String[] named) {
+		private @NonNull KeySlot slotFor(@Nullable String @NonNull [] named) {
 			for (KeySlot slot : KEY_SLOTS)
 				if (named[0] != null && named[0].equals(slot.getKeyId()))
 					return slot;
@@ -1091,7 +1095,7 @@ public class JwtValidatorFuzzTests {
 		/**
 		 * The signing choice {@code alg} asks for: its position in {@link #RSA_ALGORITHMS}, or its hash for ECDSA.
 		 */
-		private static int algorithmChoice(String algorithm) {
+		private static int algorithmChoice(@Nullable String algorithm) {
 			return switch (algorithm == null ? "" : algorithm) {
 				case "RS384", "ES384" -> 1;
 				case "RS512", "ES512" -> 2;
@@ -1106,7 +1110,7 @@ public class JwtValidatorFuzzTests {
 		 * Another key of the same type as {@code slot}'s, of the same size where there is one, so that its signature has
 		 * the right length and fails only on its value.
 		 */
-		private KeyPair otherKeyOfTheSameType(KeySlot slot) {
+		private @NonNull KeyPair otherKeyOfTheSameType(@NonNull KeySlot slot) {
 			PublicKey own = this.keyPairs.get(slot.getFixture()).getPublic();
 			KeyPair sameType = null;
 
@@ -1123,11 +1127,11 @@ public class JwtValidatorFuzzTests {
 			return sameType == null ? this.keyPairs.get(slot.getFixture()) : sameType;
 		}
 
-		private static int control(byte[] controls, int index) {
+		private static int control(byte @NonNull [] controls, int index) {
 			return index < controls.length ? controls[index] & 0xFF : 0;
 		}
 
-		private static int indexOf(byte[] input, int from) {
+		private static int indexOf(byte @NonNull [] input, int from) {
 			for (int index = from; index < input.length; ++index)
 				if (input[index] == 0)
 					return index;
@@ -1135,7 +1139,7 @@ public class JwtValidatorFuzzTests {
 			return -1;
 		}
 
-		private static byte[] sign(PrivateKey key, int choice, byte[] signingInput) {
+		private static byte @NonNull [] sign(@NonNull PrivateKey key, int choice, byte @NonNull [] signingInput) {
 			try {
 				Signature signer;
 
@@ -1173,7 +1177,7 @@ public class JwtValidatorFuzzTests {
 		/**
 		 * {@code s} replaced by {@code n - s}, which verifies too (ECDSA is malleable); other keys' signatures unchanged.
 		 */
-		private static byte[] ecdsaHighS(PublicKey key, byte[] signature) {
+		private static byte @NonNull [] ecdsaHighS(@NonNull PublicKey key, byte @NonNull [] signature) {
 			if (!(key instanceof ECPublicKey ec))
 				return signature;
 
@@ -1188,7 +1192,7 @@ public class JwtValidatorFuzzTests {
 		/**
 		 * {@code r} replaced by {@code value}, or by the curve order when {@code value} is {@code null}.
 		 */
-		private static byte[] ecdsaR(PublicKey key, byte[] signature, BigInteger value) {
+		private static byte @NonNull [] ecdsaR(@NonNull PublicKey key, byte @NonNull [] signature, @Nullable BigInteger value) {
 			if (!(key instanceof ECPublicKey ec))
 				return signature;
 
@@ -1199,7 +1203,7 @@ public class JwtValidatorFuzzTests {
 			return damaged;
 		}
 
-		private static KeyPair generate(String fixture, long seed) {
+		private static @NonNull KeyPair generate(@NonNull String fixture, long seed) {
 			try {
 				KeyPairGenerator generator;
 
@@ -1221,11 +1225,11 @@ public class JwtValidatorFuzzTests {
 			}
 		}
 
-		private static SecureRandom seededRandom() {
+		private static @NonNull SecureRandom seededRandom() {
 			return seededRandom(0);
 		}
 
-		private static SecureRandom seededRandom(long seed) {
+		private static @NonNull SecureRandom seededRandom(long seed) {
 			try {
 				SecureRandom random = SecureRandom.getInstance("SHA1PRNG");
 				random.setSeed(seed);

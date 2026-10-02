@@ -16,6 +16,8 @@
 
 package com.revetsec.internal.json;
 
+import org.jspecify.annotations.NonNull;
+
 import com.code_intelligence.jazzer.junit.FuzzTest;
 import com.revetsec.internal.Limits;
 import com.revetsec.internal.encoding.StrictUtf8;
@@ -98,7 +100,7 @@ public class JsonCodecFuzzTests {
 	 * @param input the fuzzed document
 	 */
 	@FuzzTest(maxDuration = "5m")
-	public void parseRejectsOnlyWithJsonParseExceptionAndAcceptsOnlyValuesInsideTheProfile(byte[] input) {
+	public void parseRejectsOnlyWithJsonParseExceptionAndAcceptsOnlyValuesInsideTheProfile(byte @NonNull [] input) {
 		int jdkMalformedOffset = jdkStrictUtf8MalformedOffset(input);
 		JsonValue maximumValue = null;
 		boolean maximumAccepted = false;
@@ -142,7 +144,7 @@ public class JsonCodecFuzzTests {
 	 * @param input the fuzzed document
 	 */
 	@FuzzTest(maxDuration = "5m")
-	public void acceptedValuesRoundTripUnderTheMaximumCapProfile(byte[] input) throws JsonParseException {
+	public void acceptedValuesRoundTripUnderTheMaximumCapProfile(byte @NonNull [] input) throws JsonParseException {
 		for (JsonLimits limits : PROFILES) {
 			JsonValue value;
 
@@ -185,7 +187,7 @@ public class JsonCodecFuzzTests {
 	 * @param input the fuzzed document
 	 */
 	@FuzzTest(maxDuration = "5m")
-	public void scimAcceptsOnlyWhatTheExactNameProfileAccepts(byte[] input) {
+	public void scimAcceptsOnlyWhatTheExactNameProfileAccepts(byte @NonNull [] input) {
 		JsonValue exactValue = requireScimAgreesWithExactNames(input);
 
 		if (exactValue == null)
@@ -209,7 +211,7 @@ public class JsonCodecFuzzTests {
 	 *
 	 * @return the exact-name profile's value, or {@code null} if it rejected the document
 	 */
-	private static JsonValue requireScimAgreesWithExactNames(byte[] input) {
+	private static @NonNull JsonValue requireScimAgreesWithExactNames(byte @NonNull [] input) {
 		JsonValue scimValue = null;
 		JsonParseException scimFailure = null;
 		JsonValue exactValue = null;
@@ -254,7 +256,7 @@ public class JsonCodecFuzzTests {
 	 * Near misses of an object's first member name that holds a letter: the first such letter with its ASCII case
 	 * flipped, and each non-ASCII letter that Unicode case mapping relates to it.
 	 */
-	private static List<String> nearMissNames(JsonObject object) {
+	private static @NonNull List<@NonNull String> nearMissNames(@NonNull JsonObject object) {
 		for (String name : object.getMembers().keySet()) {
 			for (int index = 0; index < name.length(); ++index) {
 				char letter = name.charAt(index);
@@ -277,11 +279,11 @@ public class JsonCodecFuzzTests {
 		return List.of();
 	}
 
-	private static String withCharacter(String name, int index, char character) {
+	private static @NonNull String withCharacter(@NonNull String name, int index, char character) {
 		return name.substring(0, index) + character + name.substring(index + 1);
 	}
 
-	private static void collectObjects(JsonValue value, List<JsonObject> objects) {
+	private static void collectObjects(@NonNull JsonValue value, @NonNull List<@NonNull JsonObject> objects) {
 		if (value instanceof JsonObject object) {
 			objects.add(object);
 
@@ -296,7 +298,7 @@ public class JsonCodecFuzzTests {
 	/**
 	 * Requires a rejection to respect the documented order of the checks made before tokenizing.
 	 */
-	private static void requirePreTokenizingOrder(JsonParseException exception, byte[] input, JsonLimits limits,
+	private static void requirePreTokenizingOrder(@NonNull JsonParseException exception, byte @NonNull [] input, @NonNull JsonLimits limits,
 																								int jdkMalformedOffset) {
 		Kind kind = exception.getKind();
 
@@ -329,7 +331,7 @@ public class JsonCodecFuzzTests {
 	/**
 	 * Requires an accepted value to lie inside every limit of its profile, measured by an independent walker.
 	 */
-	private static void requireInsideProfile(JsonValue value, JsonLimits limits, int inputLength) {
+	private static void requireInsideProfile(@NonNull JsonValue value, @NonNull JsonLimits limits, int inputLength) {
 		JsonFuzzSupport.Shape shape = JsonFuzzSupport.shapeOf(value);
 
 		Assertions.assertTrue(shape.getDepth() <= limits.getMaxDepth(), "accepted a value deeper than the profile");
@@ -357,7 +359,7 @@ public class JsonCodecFuzzTests {
 	 * numbers: outside strings, a number is a maximal run of {@code -+.0-9eE} that starts with {@code -} or a digit. So
 	 * {@code 1e000...01} with 1,025 characters, or {@code 100e-10001}, whose values are small, must still be rejected.
 	 */
-	private static void requireNumberTextsInsideProfile(byte[] input, JsonLimits limits) {
+	private static void requireNumberTextsInsideProfile(byte @NonNull [] input, @NonNull JsonLimits limits) {
 		int index = 0;
 
 		while (index < input.length) {
@@ -383,7 +385,7 @@ public class JsonCodecFuzzTests {
 		}
 	}
 
-	private static void requireNumberTextInsideProfile(String number, JsonLimits limits) {
+	private static void requireNumberTextInsideProfile(@NonNull String number, @NonNull JsonLimits limits) {
 		Assertions.assertTrue(number.length() <= limits.getMaxNumberLength(),
 				"accepted a number whose text is longer than the profile allows");
 		int exponent = Math.max(number.indexOf('e'), number.indexOf('E'));
@@ -410,7 +412,7 @@ public class JsonCodecFuzzTests {
 				|| octet == 'E';
 	}
 
-	private static void requireWellFormedStrings(JsonValue value) {
+	private static void requireWellFormedStrings(@NonNull JsonValue value) {
 		if (value instanceof JsonObject object) {
 			for (Map.Entry<String, JsonValue> member : object.getMembers().entrySet()) {
 				Assertions.assertTrue(StrictUtf8.isWellFormed(member.getKey()), "a member name is not well-formed");
@@ -424,7 +426,7 @@ public class JsonCodecFuzzTests {
 		}
 	}
 
-	private static boolean startsWithByteOrderMark(byte[] input) {
+	private static boolean startsWithByteOrderMark(byte @NonNull [] input) {
 		return input.length >= 3 && input[0] == (byte) 0xEF && input[1] == (byte) 0xBB && input[2] == (byte) 0xBF;
 	}
 
@@ -432,7 +434,7 @@ public class JsonCodecFuzzTests {
 	 * The offset at which the JDK's strict UTF-8 decoder reports the first malformed sequence, or -1 if it decodes
 	 * the whole input: the independent oracle for {@link Kind#INVALID_UTF8}.
 	 */
-	private static int jdkStrictUtf8MalformedOffset(byte[] input) {
+	private static int jdkStrictUtf8MalformedOffset(byte @NonNull [] input) {
 		CharsetDecoder decoder = StandardCharsets.UTF_8.newDecoder()
 				.onMalformedInput(CodingErrorAction.REPORT)
 				.onUnmappableCharacter(CodingErrorAction.REPORT);

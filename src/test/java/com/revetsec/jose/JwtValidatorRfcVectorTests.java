@@ -16,6 +16,8 @@
 
 package com.revetsec.jose;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.internal.encoding.Base64Url;
 import com.revetsec.internal.jose.RfcJoseExamples;
 import com.revetsec.json.JsonBoolean;
@@ -122,21 +124,21 @@ final class JwtValidatorRfcVectorTests {
 		JwtFixtures.assertRejected(JoseException.Reason.JSON_SERIALIZATION, validator, flattened);
 	}
 
-	private static JwtValidator joe(String jwk,
-																	Set<JwsAlgorithm> algorithms,
-																	Instant now) {
+	private static @NonNull JwtValidator joe(@NonNull String jwk,
+																	@NonNull Set<@NonNull JwsAlgorithm> algorithms,
+																	@NonNull Instant now) {
 		return JwtValidator.withIssuer("joe").jsonWebKeySource(StaticJsonWebKeySource.fromJsonWebKeySet(
 				JsonWebKeySet.fromJson("{\"keys\":[" + jwk + "]}"))).acceptAnyAudience(true).allowedAlgorithms(algorithms)
 				.clock(TestClock.fromInstant(now)).build();
 	}
 
-	private static List<String> segments(String jws) {
+	private static @NonNull List<@NonNull String> segments(@NonNull String jws) {
 		int first = jws.indexOf('.');
 		int second = jws.lastIndexOf('.');
 		return List.of(jws.substring(0, first), jws.substring(first + 1, second), jws.substring(second + 1));
 	}
 
-	private static String flip(String jws) throws Exception {
+	private static @NonNull String flip(@NonNull String jws) throws Exception {
 		int dot = jws.lastIndexOf('.');
 		byte[] signature = Base64Url.decode(jws.substring(dot + 1));
 		signature[signature.length - 1] ^= 1;

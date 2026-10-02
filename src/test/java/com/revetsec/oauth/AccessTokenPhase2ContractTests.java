@@ -16,6 +16,8 @@
 
 package com.revetsec.oauth;
 
+import org.jspecify.annotations.NonNull;
+
 import org.junit.jupiter.api.*;
 import static org.junit.jupiter.api.Assertions.*;
 import com.revetsec.testing.*;
@@ -65,7 +67,7 @@ final class AccessTokenPhase2ContractTests {
     @Test void staticKeysBypassNetworkRuntimeGuardButNetworkedBuildFailsClosed() throws Exception {
         Runtime.Version old=Runtime.Version.parse("17.0.1");JwtAccessTokenValidator staticKeys=jwt().build(old);staticKeys.warmUp();assertNotNull(staticKeys.validate(bearer(token(claims(ISSUER),"at+jwt"))));
         assertThrows(IllegalStateException.class,()->JwtAccessTokenValidator.withIssuer(ISSUER).expectedAudiences(Set.of(AUD)).build(old));
-        AtomicInteger warnings=new AtomicInteger();assertNotNull(JwtAccessTokenValidator.withIssuer(ISSUER).expectedAudiences(Set.of(AUD)).acknowledgeUnpatchedRuntime(true).observer(new AccessTokenObserver(){@Override public void didUseUnpatchedRuntime(String v){warnings.incrementAndGet();}}).build(old));assertEquals(1,warnings.get());
+        AtomicInteger warnings=new AtomicInteger();assertNotNull(JwtAccessTokenValidator.withIssuer(ISSUER).expectedAudiences(Set.of(AUD)).acknowledgeUnpatchedRuntime(true).observer(new AccessTokenObserver(){@Override public void didUseUnpatchedRuntime(@NonNull String v){warnings.incrementAndGet();}}).build(old));assertEquals(1,warnings.get());
         assertThrows(IllegalArgumentException.class,()->JwtAccessTokenValidator.withIssuer("https://issuer.example?bad").expectedAudiences(Set.of(AUD)).build());
         assertThrows(IllegalArgumentException.class,()->JwtAccessTokenValidator.withIssuer("http://10.0.0.1").expectedAudiences(Set.of(AUD)).build());
         try(TestHttpsServer server=TestHttpsServer.start()) {
@@ -92,13 +94,13 @@ final class AccessTokenPhase2ContractTests {
         String compact=token(claims(ISSUER),"at+jwt");PreparedJws prepared=JwtProcessor.prepare(compact,JoseHeaderPolicy.fromSettings(65536,Set.of(JwsAlgorithm.RS256),Set.of("at+jwt"),true));
         JwtValidator mismatch=JwtValidator.withIssuer(ISSUER).jsonWebKeySource(keys()).expectedAudiences(Set.of(AUD)).clock(CLOCK).build();assertEquals(JoseException.Reason.INVALID_TYPE,assertThrows(JoseException.class,()->JwtValidationAccess.get().validatePrepared(mismatch,prepared,()->Duration.ofSeconds(10).toNanos())).getReason());
     }
-    @Test void resourceBuildsStartNoThreadsAndNeverLoadTheDefaultHttpClient(@org.junit.jupiter.api.io.TempDir java.nio.file.Path directory) throws Exception {
+    @Test void resourceBuildsStartNoThreadsAndNeverLoadTheDefaultHttpClient(@org.junit.jupiter.api.io.TempDir java.nio.file.@NonNull Path directory) throws Exception {
         java.nio.file.Path log=directory.resolve("class-load.log");ChildJvm.Result result=ChildJvm.withMainClass(ResourceBuildChild.class).jvmOptions(List.of("-Xlog:class+load=info:file=\""+log+"\":none:filecount=0")).timeout(Duration.ofSeconds(60)).build().run();
         assertEquals(0,result.getExitCode(),result::toString);assertEquals("5000 resource builds; threads started: 0",result.getStandardOutput().strip(),result::toString);String loaded=java.nio.file.Files.readString(log);assertFalse(loaded.contains("jdk.internal.net.http.HttpClientImpl"));assertFalse(loaded.contains("com.revetsec.internal.http.DefaultHttpClientHolder"));assertTrue(loaded.contains(JwtAccessTokenValidator.class.getName()));assertTrue(loaded.contains(TokenIntrospectionClient.class.getName()));
     }
     public static final class ResourceBuildChild {
         private ResourceBuildChild() { }
-        public static void main(String[] arguments) {
+        public static void main(@NonNull String @NonNull [] arguments) {
             StaticJsonWebKeySource staticKeys=keys();RemoteJsonWebKeySource remote=RemoteJsonWebKeySource.withUri(URI.create(ISSUER+"/keys")).build();
             OAuthClient discovered=OAuthClient.withIssuer(ISSUER).clientId("app").clientAuthentication(ClientAuthentication.fromClientSecretBasic(SECRET)).build();
             OAuthClient configured=OAuthClient.withAuthorizationServerMetadata(AuthorizationServerMetadata.withIssuer(ISSUER).authorizationEndpoint(URI.create(ISSUER+"/authorize")).tokenEndpoint(URI.create(ISSUER+"/token")).introspectionEndpoint(URI.create(ISSUER+"/inspect")).build()).clientId("app").clientAuthentication(ClientAuthentication.fromClientSecretBasic(SECRET)).build();

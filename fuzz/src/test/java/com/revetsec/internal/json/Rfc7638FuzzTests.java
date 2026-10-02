@@ -16,6 +16,10 @@
 
 package com.revetsec.internal.json;
 
+import org.jspecify.annotations.Nullable;
+
+import org.jspecify.annotations.NonNull;
+
 import com.code_intelligence.jazzer.junit.FuzzTest;
 import com.revetsec.internal.json.JsonFieldException.Kind;
 import com.revetsec.json.JsonArray;
@@ -67,7 +71,7 @@ public class Rfc7638FuzzTests {
 	 * @param input the fuzzed document
 	 */
 	@FuzzTest(maxDuration = "5m")
-	public void canonicalJwkAgreesWithAnIndependentEncoder(byte[] input) throws JsonParseException {
+	public void canonicalJwkAgreesWithAnIndependentEncoder(byte @NonNull [] input) throws JsonParseException {
 		JsonValue document;
 
 		try {
@@ -106,7 +110,7 @@ public class Rfc7638FuzzTests {
 	 *
 	 * @return the canonical bytes, or {@code null} after the expected failure
 	 */
-	private static byte[] canonicalJwkOrNull(JsonObject jwk, Expected expected) {
+	private static byte @Nullable [] canonicalJwkOrNull(@NonNull JsonObject jwk, @NonNull Expected expected) {
 		try {
 			byte[] canonical = Rfc7638.canonicalJwk(jwk);
 			Assertions.assertNull(expected.failure, () -> "accepted a JWK the oracle rejects with " + expected.failure);
@@ -122,7 +126,7 @@ public class Rfc7638FuzzTests {
 	 * The independent encoder: RFC 7638 section 3 applied directly, in the order of checks {@link Rfc7638} documents
 	 * ({@code kty} first, then each required member in lexicographic order).
 	 */
-	private static Expected expectedCanonicalForm(JsonObject jwk) {
+	private static @NonNull Expected expectedCanonicalForm(@NonNull JsonObject jwk) {
 		Map<String, JsonValue> members = jwk.getMembers();
 		JsonValue keyType = members.get("kty");
 
@@ -161,7 +165,7 @@ public class Rfc7638FuzzTests {
 		return new Expected(null, canonical.append('}').toString().getBytes(StandardCharsets.UTF_8), required);
 	}
 
-	private static JsonObject reversed(JsonObject jwk) {
+	private static @NonNull JsonObject reversed(@NonNull JsonObject jwk) {
 		List<Map.Entry<String, JsonValue>> members = new ArrayList<>(jwk.getMembers().entrySet());
 		Collections.reverse(members);
 		LinkedHashMap<String, JsonValue> reversed = new LinkedHashMap<>();
@@ -175,7 +179,7 @@ public class Rfc7638FuzzTests {
 	/**
 	 * Every object in the document, at any depth: a JWKS's keys, and any object a mutation produces.
 	 */
-	private static void collectObjects(JsonValue value, List<JsonObject> objects) {
+	private static void collectObjects(@NonNull JsonValue value, @NonNull List<@NonNull JsonObject> objects) {
 		if (value instanceof JsonObject object) {
 			objects.add(object);
 
@@ -196,13 +200,13 @@ public class Rfc7638FuzzTests {
 		private final byte[] canonical;
 		private final List<String> members;
 
-		private Expected(Kind failure, byte[] canonical, List<String> members) {
+		private Expected(@Nullable Kind failure, byte @NonNull [] canonical, @NonNull List<@NonNull String> members) {
 			this.failure = failure;
 			this.canonical = canonical;
 			this.members = members;
 		}
 
-		private static Expected failing(Kind failure) {
+		private static @NonNull Expected failing(@NonNull Kind failure) {
 			return new Expected(failure, new byte[0], List.of());
 		}
 	}

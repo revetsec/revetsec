@@ -718,5 +718,37 @@ class GradleReportTests(unittest.TestCase):
         self.assertEqual(VERIFIER.read_gradle_report(path)["gradleVersion"], VERIFIER.GRADLE_VERSION)
 
 
+class AnnotationFreeSourceTests(unittest.TestCase):
+    def test_only_type_annotations_and_imports_are_erased(self):
+        source = '\n'.join([
+            'import org.jspecify.annotations.NonNull;',
+            'import org.jspecify.annotations.Nullable;',
+            'class Consumer {',
+            '  // @NonNull comment survives',
+            '  String literal = "@Nullable literal survives";',
+            '  /* @Nullable block survives */',
+            '  @NonNull java.util.List<@Nullable String> call(String @NonNull [] values) {',
+            '    return java.util.List.of("value");',
+            '  }',
+            '}',
+        ])
+        expected = '\n'.join([
+            'class Consumer {',
+            '  // @NonNull comment survives',
+            '  String literal = "@Nullable literal survives";',
+            '  /* @Nullable block survives */',
+            '  java.util.List<String> call(String [] values) {',
+            '    return java.util.List.of("value");',
+            '  }',
+            '}',
+        ])
+        self.assertEqual(expected, VERIFIER.annotation_free_source(source))
+
+    def test_qualified_tokens_and_text_blocks_preserve_literal_contents(self):
+        source = 'class C { String s = """\n@NonNull literal\n"""; java.lang.@org.jspecify.annotations.NonNull String value() { return s; } }'
+        expected = 'class C { String s = """\n@NonNull literal\n"""; java.lang.String value() { return s; } }'
+        self.assertEqual(expected, VERIFIER.annotation_free_source(source))
+
+
 if __name__ == "__main__":
     unittest.main()

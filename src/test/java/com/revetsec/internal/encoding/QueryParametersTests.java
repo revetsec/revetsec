@@ -16,6 +16,8 @@
 
 package com.revetsec.internal.encoding;
 
+import org.jspecify.annotations.NonNull;
+
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.DynamicTest;
 import org.junit.jupiter.api.Test;
@@ -68,7 +70,7 @@ final class QueryParametersTests {
 
 	// Splitting rules: '&' only; the first '=' separates; no '=' means the empty value; empty pieces are skipped.
 	@TestFactory
-	Stream<DynamicTest> splitsPiecesAsSpecified() {
+	@NonNull Stream<@NonNull DynamicTest> splitsPiecesAsSpecified() {
 		return Stream.of(new Object[][]{
 				{"", List.of()},
 				{"&", List.of()},
@@ -99,7 +101,7 @@ final class QueryParametersTests {
 
 	// One malformed name or value anywhere rejects the whole input; nothing is partially returned.
 	@TestFactory
-	Stream<DynamicTest> rejectsTheWholeInputWhenAnyPieceIsMalformed() {
+	@NonNull Stream<@NonNull DynamicTest> rejectsTheWholeInputWhenAnyPieceIsMalformed() {
 		return Stream.of(new Object[][]{
 				{"code=abc&state=%", EncodingException.Kind.MALFORMED_PERCENT_ENCODING},
 				{"code%G1=abc", EncodingException.Kind.MALFORMED_PERCENT_ENCODING},
@@ -154,7 +156,7 @@ final class QueryParametersTests {
 		Assertions.assertThrows(NullPointerException.class, () -> parameters.getValues(null));
 	}
 
-	private static List<String> render(QueryParameters parameters) {
+	private static @NonNull List<@NonNull String> render(@NonNull QueryParameters parameters) {
 		List<String> rendered = new ArrayList<>();
 		for (QueryParameters.Parameter parameter : parameters.getParameters())
 			rendered.add(parameter.getName() + "=" + parameter.getValue());

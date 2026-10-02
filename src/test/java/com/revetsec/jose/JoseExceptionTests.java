@@ -16,6 +16,8 @@
 
 package com.revetsec.jose;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.ErrorCategory;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.DynamicTest;
@@ -77,7 +79,7 @@ final class JoseExceptionTests {
 	// Each reason builds its own leaf, with the leaf's category, a fixed one-sentence message, no cause, not transient
 	// and nothing suppressed; a leaf refuses another leaf's reasons.
 	@TestFactory
-	Stream<DynamicTest> eachReasonBuildsItsLeafWithAFixedMessage() {
+	@NonNull Stream<@NonNull DynamicTest> eachReasonBuildsItsLeafWithAFixedMessage() {
 		Set<String> messages = new HashSet<>();
 		return Stream.of(JoseException.Reason.values()).map(reason -> DynamicTest.dynamicTest(reason.name(), () -> {
 			Class<? extends JoseException> leaf = PARTITION.entrySet().stream().filter(entry -> entry.getValue()

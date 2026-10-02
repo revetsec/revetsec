@@ -16,6 +16,8 @@
 
 package com.revetsec;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.internal.HostClassifier;
 import com.revetsec.internal.HostClassifier.HostClass;
 import org.jspecify.annotations.Nullable;
@@ -67,14 +69,14 @@ final class OutboundUriPolicyTests {
 		private final HostClass hostClass;
 		private final boolean uriHasHost;
 
-		private Row(String host, HostClass hostClass, boolean uriHasHost) {
+		private Row(@NonNull String host, @NonNull HostClass hostClass, boolean uriHasHost) {
 			this.host = host;
 			this.hostClass = hostClass;
 			this.uriHasHost = uriHasHost;
 		}
 
 		@Override
-		public String toString() {
+		public @NonNull String toString() {
 			return this.host + " -> " + this.hostClass;
 		}
 	}
@@ -101,7 +103,7 @@ final class OutboundUriPolicyTests {
 	 */
 	private static final Map<HostClass, Decision> PRESET_TABLE = presetTable();
 
-	private static Map<HostClass, Decision> presetTable() {
+	private static @NonNull Map<@NonNull HostClass, @NonNull Decision> presetTable() {
 		Map<HostClass, Decision> table = new EnumMap<>(HostClass.class);
 		// M1's rejections, and the two classes G8-6 adds to the default.
 		for (HostClass hostClass : List.of(HostClass.INVALID, HostClass.ANY_LOCAL, HostClass.LINK_LOCAL,
@@ -118,7 +120,7 @@ final class OutboundUriPolicyTests {
 		return Collections.unmodifiableMap(table);
 	}
 
-	private static Row row(String host, HostClass hostClass) {
+	private static @NonNull Row row(@NonNull String host, @NonNull HostClass hostClass) {
 		return new Row(host, hostClass, true);
 	}
 
@@ -126,7 +128,7 @@ final class OutboundUriPolicyTests {
 	 * A row whose host {@link URI} cannot parse, so {@code https://<host>/} is rejected even when the class alone
 	 * would be permitted.
 	 */
-	private static Row withoutUriHost(String host, HostClass hostClass) {
+	private static @NonNull Row withoutUriHost(@NonNull String host, @NonNull HostClass hostClass) {
 		return new Row(host, hostClass, false);
 	}
 
@@ -551,7 +553,7 @@ final class OutboundUriPolicyTests {
 	}
 
 	@TestFactory
-	Stream<DynamicTest> literalRowsAreClassifiedAndAgreeWithTheJdkParser() {
+	@NonNull Stream<@NonNull DynamicTest> literalRowsAreClassifiedAndAgreeWithTheJdkParser() {
 		// M1 exit criterion 15 and M2 exit criterion 18: every literal row agrees with InetAddress.getByName.
 		return LITERAL_ROWS.stream().map(row -> DynamicTest.dynamicTest(row.toString(), () -> {
 			byte @Nullable [] parsed = HostClassifier.parseLiteral(row.host);
@@ -570,7 +572,7 @@ final class OutboundUriPolicyTests {
 	}
 
 	@TestFactory
-	Stream<DynamicTest> hostsThatLookNumericButAreNotStrictLiteralsAreRejected() {
+	@NonNull Stream<@NonNull DynamicTest> hostsThatLookNumericButAreNotStrictLiteralsAreRejected() {
 		// M1 plan A-1: a host made only of digits and dots that does not parse is rejected. Ambiguous forms that the
 		// JDK and BSD inet_aton read differently are rejected too, without asking DNS.
 		return INVALID_ROWS.stream().map(row -> DynamicTest.dynamicTest(row.toString(), () -> {
@@ -601,7 +603,7 @@ final class OutboundUriPolicyTests {
 	}
 
 	@TestFactory
-	Stream<DynamicTest> namesAreClassifiedByTheirTextAndNeverResolved() {
+	@NonNull Stream<@NonNull DynamicTest> namesAreClassifiedByTheirTextAndNeverResolved() {
 		// G8-5 and G8-7: hostnames are never resolved, so a public name that points at a metadata address still
 		// passes; the protection there is https plus an egress proxy on an injected client. Special-use, private-use
 		// and metadata names are recognized by their text.
@@ -762,6 +764,8 @@ final class OutboundUriPolicyTests {
 				OutboundUriPolicy.publicAddressesOnlyInstance().toString());
 	}
 
+	// Deliberate null inputs verify runtime rejection.
+	@SuppressWarnings("NullAway")
 	@Test
 	void aNullUriThrowsNullPointerException() {
 		// Plan R15: misuse throws NPE.
@@ -790,7 +794,7 @@ final class OutboundUriPolicyTests {
 		}
 	}
 
-	private static void assertPresets(Row row) {
+	private static void assertPresets(@NonNull Row row) {
 		URI uri = URI.create("https://" + row.host + "/");
 		Decision decision = PRESET_TABLE.get(row.hostClass);
 
@@ -803,7 +807,7 @@ final class OutboundUriPolicyTests {
 				"publicAddressesOnlyInstance().permits(" + uri + ")");
 	}
 
-	private static void assertPermits(String uri, boolean permittedByDefault, boolean permittedByPublicAddressesOnly) {
+	private static void assertPermits(@NonNull String uri, boolean permittedByDefault, boolean permittedByPublicAddressesOnly) {
 		Assertions.assertEquals(permittedByDefault, OutboundUriPolicy.defaultInstance().permits(URI.create(uri)),
 				"defaultInstance().permits(" + uri + ")");
 		Assertions.assertEquals(permittedByPublicAddressesOnly,
@@ -816,7 +820,7 @@ final class OutboundUriPolicyTests {
 	 * returns IPv4-mapped addresses as {@link Inet4Address}, but keeps the other embedded forms as IPv6 and has no
 	 * predicate for most of Revetsec's classes, so only the overlapping cases are compared.
 	 */
-	private static void assertAgreesWithJdkPredicates(HostClass hostClass, InetAddress jdkAddress) {
+	private static void assertAgreesWithJdkPredicates(@NonNull HostClass hostClass, @NonNull InetAddress jdkAddress) {
 		if (jdkAddress.isLoopbackAddress())
 			Assertions.assertEquals(HostClass.LOOPBACK, hostClass);
 		if (jdkAddress.isLinkLocalAddress())
@@ -835,7 +839,7 @@ final class OutboundUriPolicyTests {
 	/**
 	 * Returns 16 bytes: an IPv6 address as is, an IPv4 address in IPv4-mapped form ({@code ::ffff:a.b.c.d}).
 	 */
-	private static byte[] toSixteenBytes(byte[] address) {
+	private static byte @NonNull [] toSixteenBytes(byte @NonNull [] address) {
 		if (address.length == 16)
 			return address.clone();
 
@@ -848,7 +852,7 @@ final class OutboundUriPolicyTests {
 	}
 
 	@SuppressWarnings("NullAway")
-	private static URI nullUri() {
+	private static @Nullable URI nullUri() {
 		return null;
 	}
 }

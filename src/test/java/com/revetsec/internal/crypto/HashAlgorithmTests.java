@@ -16,6 +16,8 @@
 
 package com.revetsec.internal.crypto;
 
+import org.jspecify.annotations.NonNull;
+
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.DynamicTest;
 import org.junit.jupiter.api.Test;
@@ -37,7 +39,7 @@ import java.util.stream.Stream;
  */
 final class HashAlgorithmTests {
 	@TestFactory
-	Stream<DynamicTest> everyPinnedJcaNameResolvesWithTheDigestsLength() {
+	@NonNull Stream<@NonNull DynamicTest> everyPinnedJcaNameResolvesWithTheDigestsLength() {
 		return Stream.of(HashAlgorithm.values()).map(hash -> DynamicTest.dynamicTest(hash.name(), () -> {
 			Assertions.assertEquals(hash.getLength(), MessageDigest.getInstance(hash.getDigestName()).getDigestLength());
 			Assertions.assertEquals(hash.getLength(), Mac.getInstance(hash.getHmacName()).getMacLength());
@@ -63,7 +65,7 @@ final class HashAlgorithmTests {
 	// RFC 7518 section 3.5: MGF1 with the same hash, and "the size of the salt value is the same size as the hash
 	// function output"; the trailer field is 1 (RFC 8017 section 9.1).
 	@TestFactory
-	Stream<DynamicTest> pssParametersAreFixedByTheHash() {
+	@NonNull Stream<@NonNull DynamicTest> pssParametersAreFixedByTheHash() {
 		return Stream.of(HashAlgorithm.values()).map(hash -> DynamicTest.dynamicTest(hash.name(), () -> {
 			PSSParameterSpec parameters = hash.getPssParameterSpec();
 

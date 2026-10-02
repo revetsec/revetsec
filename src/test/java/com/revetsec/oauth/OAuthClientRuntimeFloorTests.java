@@ -16,6 +16,8 @@
 
 package com.revetsec.oauth;
 
+import org.jspecify.annotations.NonNull;
+
 import org.junit.jupiter.api.Test;
 
 import java.net.URI;
@@ -38,7 +40,7 @@ final class OAuthClientRuntimeFloorTests {
 	void acknowledgmentIsObservedWithOnlyRuntimeVersion() {
 		List<String> observed = new ArrayList<>();
 		OAuthObserver observer = new OAuthObserver() {
-			@Override public void didUseUnpatchedRuntime(String runtimeVersion) {
+			@Override public void didUseUnpatchedRuntime(@NonNull String runtimeVersion) {
 				observed.add(runtimeVersion);
 			}
 		};
@@ -53,7 +55,7 @@ final class OAuthClientRuntimeFloorTests {
 				.acknowledgeUnpatchedRuntime(null).build(Runtime.Version.parse("17.0.2")));
 	}
 
-	private static OAuthClient.Builder builder() {
+	private static OAuthClient.@NonNull Builder builder() {
 		AuthorizationServerMetadata metadata = AuthorizationServerMetadata.withIssuer("https://issuer.example")
 				.authorizationEndpoint(URI.create("https://issuer.example/authorize"))
 				.tokenEndpoint(URI.create("https://issuer.example/token"))

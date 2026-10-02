@@ -16,6 +16,8 @@
 
 package com.revetsec.internal.jose;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.internal.Limits;
 import com.revetsec.internal.crypto.HashAlgorithm;
 import com.revetsec.internal.crypto.Hmac;
@@ -233,7 +235,7 @@ final class WycheproofJoseTests {
 	// algorithm, so the key is skipped) under INV-J3, and 372 and 373 (TOKEN_SYNTAX; INV-J7); JWK tcIds 1 and 4 are
 	// n/a on the HMAC route.
 	@TestFactory
-	Stream<DynamicContainer> runsEveryVectorAsTheManifestExpects() {
+	@NonNull Stream<@NonNull DynamicContainer> runsEveryVectorAsTheManifestExpects() {
 		Run run = Run.load();
 		int feature = Runtime.version().feature();
 
@@ -254,7 +256,7 @@ final class WycheproofJoseTests {
 	// key as Wycheproof writes it, each vector has the outcome of the JWS-layer run, except that every token the HMAC
 	// engine took is rejected, JWK tcIds 1 and 4 included.
 	@TestFactory
-	Stream<DynamicContainer> everyVectorAlsoRunsThroughTheKeySetOnlyPath() {
+	@NonNull Stream<@NonNull DynamicContainer> everyVectorAlsoRunsThroughTheKeySetOnlyPath() {
 		Run run = Run.load();
 
 		return run.files.stream().map(file -> DynamicContainer.dynamicContainer(file.getName(),
@@ -446,8 +448,8 @@ final class WycheproofJoseTests {
 	/**
 	 * A vector's outcome through the JWS layer: {@code accept}, {@code reject:<Reason>} or {@code n/a}.
 	 */
-	private static String observe(TestVector vector,
-																GroupKeys keys) {
+	private static @NonNull String observe(@NonNull TestVector vector,
+																@NonNull GroupKeys keys) {
 		return run(vector, prepared -> isHmac(prepared) ? verifyWithSecret(prepared, keys.privateKeys)
 				: verify(prepared, keys.verification));
 	}
@@ -455,16 +457,16 @@ final class WycheproofJoseTests {
 	/**
 	 * A vector's outcome through the key-set-only path: public, private and symmetric keys, and no secret.
 	 */
-	private static String observeKeySetOnly(TestVector vector,
-																					GroupKeys keys) {
+	private static @NonNull String observeKeySetOnly(@NonNull TestVector vector,
+																					@NonNull GroupKeys keys) {
 		return run(vector, prepared -> verify(prepared, keys.keySetOnly));
 	}
 
 	/**
 	 * Steps 1 to 5, then the rest of a path. Anything but a {@link JoseFailure} thrown fails the test (INV-G1).
 	 */
-	private static String run(TestVector vector,
-														Function<PreparedJws, String> path) {
+	private static @NonNull String run(@NonNull TestVector vector,
+														@NonNull Function<@NonNull PreparedJws, @NonNull String> path) {
 		try {
 			PreparedJws prepared;
 
@@ -485,7 +487,7 @@ final class WycheproofJoseTests {
 	 * Whether the JWS-layer run sends the vector to the HMAC engine: steps 1 to 5 pass, and its algorithm is
 	 * {@code HS*}.
 	 */
-	private static boolean usesTheHmacEngine(TestVector vector) {
+	private static boolean usesTheHmacEngine(@NonNull TestVector vector) {
 		try {
 			return isHmac(prepare(vector.getString("jws")));
 		} catch (JoseFailure failure) {
@@ -496,20 +498,20 @@ final class WycheproofJoseTests {
 	/**
 	 * Steps 1 to 5 under the token's effective algorithm set and {@code JwtValidator}'s default length and types.
 	 */
-	private static PreparedJws prepare(String jws) throws JoseFailure {
+	private static @NonNull PreparedJws prepare(@NonNull String jws) throws JoseFailure {
 		return JwtProcessor.prepare(jws, JoseHeaderPolicy.fromSettings(MAXIMUM_TOKEN_LENGTH, effectiveAlgorithms(jws),
 				Set.of("JWT"), false));
 	}
 
-	private static boolean isHmac(PreparedJws prepared) {
+	private static boolean isHmac(@NonNull PreparedJws prepared) {
 		return Algorithms.familyOf(prepared.getAlgorithm()) == Algorithms.Family.HMAC;
 	}
 
 	/**
 	 * Steps 6 and 7 with a key selected from a parsed key set.
 	 */
-	private static String verify(PreparedJws prepared,
-															 ParsedKeySet keySet) {
+	private static @NonNull String verify(@NonNull PreparedJws prepared,
+															 @NonNull ParsedKeySet keySet) {
 		try {
 			JwtProcessor.verify(prepared, KeySelector.select(keySet.keys(), prepared.getKeyQuery()));
 			return Expectations.ACCEPT;
@@ -522,8 +524,8 @@ final class WycheproofJoseTests {
 	 * Step 7 over a configured HMAC secret: the {@code k} of the group's one symmetric key for the token, once INV-J3's
 	 * checks pass (see the class documentation).
 	 */
-	private static String verifyWithSecret(PreparedJws prepared,
-																				 List<JsonObject> privateKeys) {
+	private static @NonNull String verifyWithSecret(@NonNull PreparedJws prepared,
+																				 @NonNull List<@NonNull JsonObject> privateKeys) {
 		List<JsonObject> symmetric = privateKeys.stream().filter(WycheproofJoseTests::isSymmetric).toList();
 
 		// A key set of symmetric and asymmetric keys together is no single configured secret.
@@ -582,7 +584,7 @@ final class WycheproofJoseTests {
 	 * when present, is {@code sig}; {@code key_ops}, when present, is an array of strings with {@code verify} and,
 	 * alongside {@code use}, nothing but {@code sign} and {@code verify}.
 	 */
-	private static boolean allowsVerification(JsonObject jwk) {
+	private static boolean allowsVerification(@NonNull JsonObject jwk) {
 		Optional<JsonValue> use = jwk.find("use");
 
 		if (use.isPresent() && !use.get().equals(JsonString.fromValue("sig")))
@@ -605,7 +607,7 @@ final class WycheproofJoseTests {
 	 * The token's own {@code alg} when it names a {@link JwsAlgorithm}, and every algorithm otherwise (M2-9). A header
 	 * that does not decode leaves the full set, which is then never consulted: the parser refuses the token first.
 	 */
-	private static Set<JwsAlgorithm> effectiveAlgorithms(String jws) {
+	private static @NonNull Set<@NonNull JwsAlgorithm> effectiveAlgorithms(@NonNull String jws) {
 		int dot = jws.indexOf('.');
 
 		try {
@@ -621,19 +623,19 @@ final class WycheproofJoseTests {
 		return ALL_ALGORITHMS;
 	}
 
-	private static String reject(JoseException.Reason reason) {
+	private static @NonNull String reject(JoseException.@NonNull Reason reason) {
 		return Expectations.REJECT + reason.name();
 	}
 
-	private static boolean isSymmetric(JsonObject jwk) {
+	private static boolean isSymmetric(@NonNull JsonObject jwk) {
 		return jwk.findString("kty").equals(Optional.of(Algorithms.OCT_KEY_TYPE));
 	}
 
-	private static List<String> skips(ParsedKeySet keySet) {
+	private static @NonNull List<@NonNull String> skips(@NonNull ParsedKeySet keySet) {
 		return keySet.skips().stream().map(skip -> skip.index() + " " + skip.reason().name()).toList();
 	}
 
-	private static List<String> thumbprints(List<VerificationKey> keys) {
+	private static @NonNull List<@NonNull String> thumbprints(@NonNull List<@NonNull VerificationKey> keys) {
 		return keys.stream().map(key -> Optional.ofNullable(key.keyId()).orElse("") + " " + key.thumbprintSha256())
 				.toList();
 	}
@@ -641,7 +643,7 @@ final class WycheproofJoseTests {
 	/**
 	 * A group's name in pins and messages: its file and the tcIds of its tests.
 	 */
-	private static String groupName(TestGroup group) {
+	private static @NonNull String groupName(@NonNull TestGroup group) {
 		List<TestVector> tests = group.getTests();
 		return group.getFile().getName() + " tcIds " + tests.get(0).getTcId() + "-" + tests.get(tests.size() - 1)
 				.getTcId();
@@ -650,9 +652,9 @@ final class WycheproofJoseTests {
 	/**
 	 * A JWK with one member set to a JSON value, replacing any it had.
 	 */
-	private static JsonObject with(JsonObject jwk,
-																 String name,
-																 String json) throws JsonParseException {
+	private static @NonNull JsonObject with(@NonNull JsonObject jwk,
+																 @NonNull String name,
+																 @NonNull String json) throws JsonParseException {
 		Map<String, JsonValue> members = new LinkedHashMap<>(jwk.getMembers());
 		members.put(name, JsonCodec.parse(utf8(json), JsonLimits.jose(MAXIMUM_TOKEN_LENGTH)));
 		return JsonObject.fromMembers(members);
@@ -661,14 +663,14 @@ final class WycheproofJoseTests {
 	/**
 	 * A JWK without one member.
 	 */
-	private static JsonObject without(JsonObject jwk,
-																		String name) {
+	private static @NonNull JsonObject without(@NonNull JsonObject jwk,
+																		@NonNull String name) {
 		Map<String, JsonValue> members = new LinkedHashMap<>(jwk.getMembers());
 		Assertions.assertNotNull(members.remove(name), name);
 		return JsonObject.fromMembers(members);
 	}
 
-	private static byte[] utf8(String text) {
+	private static byte @NonNull [] utf8(@NonNull String text) {
 		return text.getBytes(StandardCharsets.UTF_8);
 	}
 
@@ -683,11 +685,11 @@ final class WycheproofJoseTests {
 		private final List<JsonObject> keySetOnlyKeys;
 		private final ParsedKeySet keySetOnly;
 
-		private GroupKeys(List<JsonObject> privateKeys,
-											String verificationJson,
-											ParsedKeySet verification,
-											List<JsonObject> keySetOnlyKeys,
-											ParsedKeySet keySetOnly) {
+		private GroupKeys(@NonNull List<@NonNull JsonObject> privateKeys,
+											@NonNull String verificationJson,
+											@NonNull ParsedKeySet verification,
+											@NonNull List<@NonNull JsonObject> keySetOnlyKeys,
+											@NonNull ParsedKeySet keySetOnly) {
 			this.privateKeys = privateKeys;
 			this.verificationJson = verificationJson;
 			this.verification = verification;
@@ -695,7 +697,7 @@ final class WycheproofJoseTests {
 			this.keySetOnly = keySetOnly;
 		}
 
-		static GroupKeys of(TestGroup group) {
+		static @NonNull GroupKeys of(@NonNull TestGroup group) {
 			List<JsonObject> privateKeys = keys(group.getObject("private"));
 			List<JsonObject> publicKeys = group.findObject("public").map(GroupKeys::keys).orElse(List.of());
 			List<JsonObject> verificationKeys = group.findObject("public").isPresent() ? publicKeys
@@ -710,14 +712,14 @@ final class WycheproofJoseTests {
 		/**
 		 * The keys of a {@code public} or {@code private} member: a JWK Set's {@code keys}, or one JWK.
 		 */
-		private static List<JsonObject> keys(JsonObject member) {
+		private static @NonNull List<@NonNull JsonObject> keys(@NonNull JsonObject member) {
 			if (!(member.find("keys").orElse(null) instanceof JsonArray keys))
 				return List.of(member);
 
 			return keys.getElements().stream().map(key -> (JsonObject) key).toList();
 		}
 
-		private static JsonObject withoutPrivateMembers(JsonObject jwk) {
+		private static @NonNull JsonObject withoutPrivateMembers(@NonNull JsonObject jwk) {
 			JsonObject.Builder builder = JsonObject.builder();
 			jwk.getMembers().forEach((name, value) -> {
 				if (!PRIVATE_MEMBERS.contains(name))
@@ -726,7 +728,7 @@ final class WycheproofJoseTests {
 			return builder.build();
 		}
 
-		private static String keySet(List<JsonObject> keys) {
+		private static @NonNull String keySet(@NonNull List<@NonNull JsonObject> keys) {
 			return JsonObject.builder().put("keys", JsonArray.fromElements(keys)).build().toJson();
 		}
 
@@ -734,8 +736,8 @@ final class WycheproofJoseTests {
 		 * The real key set parser, at {@code JsonWebKeySet.fromJson}'s limits; no vendored key set is a document
 		 * failure.
 		 */
-		private static ParsedKeySet parse(TestGroup group,
-																			String keySet) {
+		private static @NonNull ParsedKeySet parse(@NonNull TestGroup group,
+																			@NonNull String keySet) {
 			try {
 				return JwkSetParser.parse(keySet, Limits.JWKS_RESPONSE_BODY_SIZE.getDefaultIntValue(),
 						Limits.JWKS_KEY_COUNT.getDefaultIntValue());
@@ -752,13 +754,13 @@ final class WycheproofJoseTests {
 		private final List<VectorFile> files;
 		private final Expectations expectations;
 
-		private Run(List<VectorFile> files,
-								Expectations expectations) {
+		private Run(@NonNull List<@NonNull VectorFile> files,
+								@NonNull Expectations expectations) {
 			this.files = files;
 			this.expectations = expectations;
 		}
 
-		static Run load() {
+		static @NonNull Run load() {
 			List<VectorFile> files = WycheproofVectors.fromVendoredFiles().getFiles().stream()
 					.filter(file -> FILES.contains(file.getName())).toList();
 			SortedMap<String, List<Expectations.Vector>> vectors = new TreeMap<>();
@@ -771,7 +773,7 @@ final class WycheproofJoseTests {
 					MANIFEST), vectors, CODES, Set.of()));
 		}
 
-		VectorFile file(String name) {
+		@NonNull VectorFile file(@NonNull String name) {
 			return this.files.stream().filter(file -> file.getName().equals(name)).findFirst().orElseThrow();
 		}
 	}

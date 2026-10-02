@@ -16,6 +16,10 @@
 
 package com.revetsec.json;
 
+import org.jspecify.annotations.Nullable;
+
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.testing.Sentinels;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.DynamicTest;
@@ -75,7 +79,7 @@ final class JsonModelTests {
 	// a 1,024-digit value and values beyond the range of double (which hash as infinity or zero). A stripTrailingZeros
 	// hash would also agree with equality, but costs a scan of every digit on each parse (plan risk "Number cost").
 	@TestFactory
-	Stream<DynamicTest> numbersHashAsTheirNearestDouble() {
+	@NonNull Stream<@NonNull DynamicTest> numbersHashAsTheirNearestDouble() {
 		return Stream.of("0", "-0.000", "1", "1.0", "-1", "2", "0.1", "3.14159265358979323846264338327950288",
 						"1" + "0".repeat(1_023), "1E+100000", "-9.99E-99998", "1E-400", "1E+400", "-1E+400", "4.9E-324",
 						"1.7976931348623157E+308", "123456789012345678901234567890")
@@ -230,7 +234,7 @@ final class JsonModelTests {
 	// Exit criterion 5 and G7-6: factories accept depth 64 and reject 65, where a scalar or an empty container is 1 and
 	// any other container is 1 more than its deepest child (member names add nothing).
 	@TestFactory
-	Stream<DynamicTest> factoriesAcceptDepth64AndRejectDepth65() {
+	@NonNull Stream<@NonNull DynamicTest> factoriesAcceptDepth64AndRejectDepth65() {
 		Function<JsonValue, JsonValue> inArray = value -> JsonArray.fromElements(List.of(value));
 		Function<JsonValue, JsonValue> inObject = value -> JsonObject.fromMembers(Map.of("name", value));
 		Function<JsonValue, JsonValue> inBuiltObject = value -> JsonObject.builder().put("name", value).build();
@@ -340,6 +344,8 @@ final class JsonModelTests {
 	}
 
 	// R15: every factory, builder method and lookup rejects null with NullPointerException.
+	// Deliberate null inputs verify runtime rejection.
+	@SuppressWarnings("NullAway")
 	@Test
 	void rejectsNullEverywhere() {
 		String noString = nullValue();
@@ -513,7 +519,7 @@ final class JsonModelTests {
 
 	// getLongValueExact: whole numbers in the range of long, whatever their scale; nothing else.
 	@TestFactory
-	Stream<DynamicTest> readsLongsExactly() {
+	@NonNull Stream<@NonNull DynamicTest> readsLongsExactly() {
 		Map<String, Optional<Long>> cases = new LinkedHashMap<>();
 		cases.put("0", Optional.of(0L));
 		cases.put("-0.000", Optional.of(0L));
@@ -570,7 +576,7 @@ final class JsonModelTests {
 
 	// Exit criterion 5 and G7-4: toJson() writes BigDecimal.toString(), the canonical form, not the parsed text.
 	@TestFactory
-	Stream<DynamicTest> writesTheCanonicalNumberForm() {
+	@NonNull Stream<@NonNull DynamicTest> writesTheCanonicalNumberForm() {
 		return Stream.of(
 				new String[]{"1e2", "1E+2"}, new String[]{"-0", "0"}, new String[]{"-0.0", "0.0"},
 				new String[]{"1.50", "1.50"}, new String[]{"0.000001", "0.000001"}, new String[]{"1e-6", "0.000001"},
@@ -649,14 +655,14 @@ final class JsonModelTests {
 	// Helpers
 	// ---------------------------------------------------------------------------------------------------------------
 
-	private static void assertInvalid(Executable call) {
+	private static void assertInvalid(@NonNull Executable call) {
 		Assertions.assertThrows(IllegalArgumentException.class, call);
 	}
 
 	/**
 	 * A structurally equal copy built through the factories, so equality is not identity.
 	 */
-	private static JsonValue copy(JsonValue value) {
+	private static @NonNull JsonValue copy(@NonNull JsonValue value) {
 		if (value instanceof JsonObject object) {
 			JsonObject.Builder builder = JsonObject.builder();
 			object.getMembers().forEach((name, member) -> builder.put(name, copy(member)));
@@ -675,13 +681,13 @@ final class JsonModelTests {
 		return value;
 	}
 
-	private static Map<String, JsonValue> mapWith(String name, JsonValue value) {
+	private static @NonNull Map<@NonNull String, @NonNull JsonValue> mapWith(@NonNull String name, @NonNull JsonValue value) {
 		Map<String, JsonValue> map = new HashMap<>();
 		map.put(name, value);
 		return map;
 	}
 
-	private static String abbreviate(String text) {
+	private static @NonNull String abbreviate(@NonNull String text) {
 		return text.length() <= 40 ? text : text.substring(0, 40) + "... (" + text.length() + " characters)";
 	}
 
@@ -689,7 +695,7 @@ final class JsonModelTests {
 	 * Hides a {@code null} from NullAway, for the tests that check null handling (R15).
 	 */
 	@SuppressWarnings({"NullAway", "TypeParameterUnusedInFormals"})
-	private static <T> T nullValue() {
+	private static <T> @Nullable T nullValue() {
 		return null;
 	}
 
@@ -704,7 +710,7 @@ final class JsonModelTests {
 		}
 
 		@Override
-		public String toString() {
+		public @NonNull String toString() {
 			return "1,\"admin\":true";
 		}
 	}
@@ -722,7 +728,7 @@ final class JsonModelTests {
 		}
 
 		@Override
-		public String toString() {
+		public @NonNull String toString() {
 			return this.rendering;
 		}
 	}
@@ -754,7 +760,7 @@ final class JsonModelTests {
 		}
 
 		@Override
-		public String toString() {
+		public @NonNull String toString() {
 			return "1,\"admin\":true";
 		}
 	}
@@ -770,7 +776,7 @@ final class JsonModelTests {
 		}
 
 		@Override
-		public BigInteger unscaledValue() {
+		public @NonNull BigInteger unscaledValue() {
 			return new RendersAsOtherJsonInteger();
 		}
 	}

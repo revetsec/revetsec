@@ -16,6 +16,8 @@
 
 package com.revetsec.jose;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.ErrorCategory;
 import com.revetsec.internal.jose.TestClaims;
 import com.revetsec.testing.TestClock;
@@ -54,7 +56,7 @@ final class JwtFixtures {
 	/**
 	 * A clock stopped at {@link #NOW}.
 	 */
-	static TestClock clock() {
+	static @NonNull TestClock clock() {
 		return TestClock.fromInstant(NOW);
 	}
 
@@ -62,7 +64,7 @@ final class JwtFixtures {
 	 * Valid claims for {@link #NOW}: {@code iss}, {@code aud}, {@code sub}, {@code iat} now, and {@code exp} in five
 	 * minutes.
 	 */
-	static TestClaims claims() {
+	static @NonNull TestClaims claims() {
 		return TestClaims.empty().put("iss", ISSUER).put("sub", "subject-1").put("aud", AUDIENCE)
 				.put("iat", NOW.getEpochSecond()).put("exp", NOW.plus(Duration.ofMinutes(5)).getEpochSecond());
 	}
@@ -70,28 +72,28 @@ final class JwtFixtures {
 	/**
 	 * A JWK for a fixture key with {@code kid} {@code KID}.
 	 */
-	static TestJsonWebKeys.Builder jwk(Fixture fixture) {
+	static TestJsonWebKeys.@NonNull Builder jwk(@NonNull Fixture fixture) {
 		return TestJsonWebKeys.withFixture(fixture).kid(KID);
 	}
 
 	/**
 	 * A static source over one or more JWKs.
 	 */
-	static StaticJsonWebKeySource source(String... jwks) {
+	static @NonNull StaticJsonWebKeySource source(@NonNull String @NonNull ... jwks) {
 		return StaticJsonWebKeySource.fromJsonWebKeySet(JsonWebKeySet.fromJson(TestJsonWebKeys.keySet(List.of(jwks))));
 	}
 
 	/**
 	 * A static source over a fixture key with {@code kid} {@code KID}.
 	 */
-	static StaticJsonWebKeySource source(Fixture fixture) {
+	static @NonNull StaticJsonWebKeySource source(@NonNull Fixture fixture) {
 		return source(jwk(fixture).toJson());
 	}
 
 	/**
 	 * A validator builder for {@link #ISSUER} and {@link #AUDIENCE} at {@link #NOW} over {@code source}.
 	 */
-	static JwtValidator.Builder validator(JsonWebKeySource source) {
+	static JwtValidator.@NonNull Builder validator(@NonNull JsonWebKeySource source) {
 		return JwtValidator.withIssuer(ISSUER).jsonWebKeySource(source).expectedAudiences(Set.of(AUDIENCE))
 				.clock(clock());
 	}
@@ -99,32 +101,32 @@ final class JwtFixtures {
 	/**
 	 * A validator for the fixture key, allowing only {@code algorithm}.
 	 */
-	static JwtValidator validator(Fixture fixture,
-																JwsAlgorithm algorithm) {
+	static @NonNull JwtValidator validator(@NonNull Fixture fixture,
+																@NonNull JwsAlgorithm algorithm) {
 		return validator(source(fixture)).allowedAlgorithms(Set.of(algorithm)).build();
 	}
 
 	/**
 	 * A token builder with {@code kid} {@code KID} and the default claims.
 	 */
-	static TestJws.Builder token(Algorithm algorithm) {
+	static TestJws.@NonNull Builder token(@NonNull Algorithm algorithm) {
 		return TestJws.withAlgorithm(algorithm).kid(KID).payload(claims().toJson());
 	}
 
 	/**
 	 * A token with {@code kid} {@code KID} and {@code claims}, signed by the fixture key.
 	 */
-	static String signed(Fixture fixture,
-											 Algorithm algorithm,
-											 TestClaims claims) {
+	static @NonNull String signed(@NonNull Fixture fixture,
+											 @NonNull Algorithm algorithm,
+											 @NonNull TestClaims claims) {
 		return TestJws.withAlgorithm(algorithm).kid(KID).payload(claims.toJson()).sign(fixture.getPrivateKey());
 	}
 
 	/**
 	 * A token with {@code kid} {@code KID} and the default claims, signed by the fixture key.
 	 */
-	static String signed(Fixture fixture,
-											 Algorithm algorithm) {
+	static @NonNull String signed(@NonNull Fixture fixture,
+											 @NonNull Algorithm algorithm) {
 		return signed(fixture, algorithm, claims());
 	}
 
@@ -132,9 +134,9 @@ final class JwtFixtures {
 	 * Asserts that {@code validator} refuses {@code token} with {@code reason}, through the leaf exception its category
 	 * names, with the reason's fixed message, no cause and no transience (M2-2), and returns the exception.
 	 */
-	static JoseException assertRejected(JoseException.Reason reason,
-																			JwtValidator validator,
-																			String token) {
+	static @NonNull JoseException assertRejected(JoseException.@NonNull Reason reason,
+																			@NonNull JwtValidator validator,
+																			@NonNull String token) {
 		JoseException exception = Assertions.assertThrows(JoseException.class, () -> validator.validate(token));
 		assertReason(reason, exception);
 		return exception;
@@ -144,8 +146,8 @@ final class JwtFixtures {
 	 * Asserts that {@code exception} carries {@code reason} with its leaf, message, category, no cause and no
 	 * transience.
 	 */
-	static void assertReason(JoseException.Reason reason,
-													 JoseException exception) {
+	static void assertReason(JoseException.@NonNull Reason reason,
+													 @NonNull JoseException exception) {
 		Assertions.assertEquals(reason, exception.getReason(), () -> "reason of " + exception);
 		Assertions.assertEquals(leafFor(reason), exception.getClass());
 		Assertions.assertEquals(reason.category(), exception.getCategory());
@@ -157,7 +159,7 @@ final class JwtFixtures {
 	/**
 	 * The leaf class a reason's category belongs to.
 	 */
-	static Class<? extends JoseException> leafFor(JoseException.Reason reason) {
+	static @NonNull Class<? extends @NonNull JoseException> leafFor(JoseException.@NonNull Reason reason) {
 		ErrorCategory category = reason.category();
 		if (category == ErrorCategory.MALFORMED_INPUT)
 			return MalformedJoseInputException.class;
@@ -169,8 +171,8 @@ final class JwtFixtures {
 	/**
 	 * Validates and returns the token, failing the test with the reason if it is refused.
 	 */
-	static Jwt assertAccepted(JwtValidator validator,
-														String token) {
+	static @NonNull Jwt assertAccepted(@NonNull JwtValidator validator,
+														@NonNull String token) {
 		try {
 			return validator.validate(token);
 		} catch (JoseException exception) {
@@ -181,7 +183,7 @@ final class JwtFixtures {
 	/**
 	 * A key set JSON text from several JWK builders.
 	 */
-	static String keySet(TestJsonWebKeys.Builder... keys) {
+	static @NonNull String keySet(TestJsonWebKeys.@NonNull Builder @NonNull ... keys) {
 		List<String> jwks = new ArrayList<>();
 		for (TestJsonWebKeys.Builder key : keys)
 			jwks.add(key.toJson());
@@ -192,7 +194,7 @@ final class JwtFixtures {
 	 * Asserts that a hook's {@code elapsed} argument lies between zero and the time the test measured around the call
 	 * that fired it ({@link System#nanoTime()} read just before and just after the call), and returns it (M2-3).
 	 */
-	static Duration assertElapsedWithin(@Nullable Object elapsed,
+	static @NonNull Duration assertElapsedWithin(@Nullable Object elapsed,
 																			long beforeNanos,
 																			long afterNanos) {
 		Duration duration = Assertions.assertInstanceOf(Duration.class, elapsed);
@@ -205,7 +207,7 @@ final class JwtFixtures {
 	/**
 	 * The epoch second of {@code NOW + offset}.
 	 */
-	static long at(Duration offset) {
+	static long at(@NonNull Duration offset) {
 		return NOW.plus(requireNonNull(offset)).getEpochSecond();
 	}
 }

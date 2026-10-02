@@ -16,6 +16,8 @@
 
 package com.revetsec.oauth;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.OutboundUriPolicy;
 import com.revetsec.internal.encoding.QueryParameters;
 import com.revetsec.oidc.OidcClient;
@@ -162,7 +164,7 @@ final class OAuthBuilderConventionTests {
 	void clientSecurityAndTimingResetsRestoreDefaultsWithoutIo() throws Exception {
 		AtomicInteger observed = new AtomicInteger();
 		OAuthObserver observer = new OAuthObserver() {
-			@Override public void didBeginAuthorization(URI endpoint) { observed.incrementAndGet(); }
+			@Override public void didBeginAuthorization(@NonNull URI endpoint) { observed.incrementAndGet(); }
 		};
 		OAuthClient client = builder(metadata("https://issuer.example"))
 				.redirectUri(CALLBACK).observer(observer).observer(null)
@@ -208,16 +210,16 @@ final class OAuthBuilderConventionTests {
 				() -> AuthorizationServerMetadata.fromJson("https://issuer.example", "{\"issuer\":\"https://issuer.example\"}")).getReason());
 	}
 
-	private static AuthorizationServerMetadata metadata(String issuer) {
+	private static @NonNull AuthorizationServerMetadata metadata(@NonNull String issuer) {
 		return AuthorizationServerMetadata.withIssuer(issuer).authorizationEndpoint(URI.create(issuer + "/auth"))
 				.tokenEndpoint(URI.create(issuer + "/token")).build();
 	}
 
-	private static OAuthClient.Builder builder(AuthorizationServerMetadata metadata) {
+	private static OAuthClient.@NonNull Builder builder(@NonNull AuthorizationServerMetadata metadata) {
 		return OAuthClient.withAuthorizationServerMetadata(metadata).clientId("client").clientAuthentication(ClientAuthentication.fromClientSecretBasic("test-secret"));
 	}
 
-	private static TestHttpsServer.Response token(String value, @Nullable Integer expiry) {
+	private static TestHttpsServer.@NonNull Response token(@NonNull String value, @Nullable Integer expiry) {
 		return TestHttpsServer.Response.withStatus(200).header("Content-Type", "application/json")
 				.body("{\"access_token\":\"" + value + "\",\"token_type\":\"Bearer\"" + (expiry == null ? "" : ",\"expires_in\":" + expiry) + "}").build();
 	}

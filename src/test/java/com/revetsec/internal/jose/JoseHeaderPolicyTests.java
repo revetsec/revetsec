@@ -16,6 +16,8 @@
 
 package com.revetsec.internal.jose;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.internal.json.AsciiCase;
 import com.revetsec.jose.JoseException;
 import com.revetsec.jose.JwsAlgorithm;
@@ -66,7 +68,7 @@ final class JoseHeaderPolicyTests {
 	// ill-formed UTF-8, a lone surrogate escape, a duplicate member, another JSON type, trailing text or nesting past
 	// the depth limit is HEADER.
 	@TestFactory
-	Stream<DynamicTest> aHeaderThatIsNotAStrictJsonObjectIsMalformed() {
+	@NonNull Stream<@NonNull DynamicTest> aHeaderThatIsNotAStrictJsonObjectIsMalformed() {
 		Map<String, byte[]> cases = new LinkedHashMap<>();
 		cases.put("empty", new byte[0]);
 		cases.put("an array", bytes("[\"RS256\"]"));
@@ -103,7 +105,7 @@ final class JoseHeaderPolicyTests {
 
 	// P4: alg missing or not a string is HEADER.
 	@TestFactory
-	Stream<DynamicTest> anAlgThatIsMissingOrNotAStringIsMalformed() {
+	@NonNull Stream<@NonNull DynamicTest> anAlgThatIsMissingOrNotAStringIsMalformed() {
 		return Stream.of("{}", "{\"alg\":null}", "{\"alg\":256}", "{\"alg\":[\"RS256\"]}", "{\"alg\":{}}",
 				"{\"alg\":true}", "{\"ALG\":\"RS256\"}", "{\"typ\":\"JWT\"}").map(json -> DynamicTest.dynamicTest(json,
 				() -> assertFailure(JoseException.Reason.HEADER, DEFAULT, bytes(json))));
@@ -113,7 +115,7 @@ final class JoseHeaderPolicyTests {
 	// case, a case or whitespace variant, the JWE and unsupported names, and an algorithm outside the set are
 	// ALGORITHM_NOT_ALLOWED; the EdDSA/Ed25519 alias never applies to the allowlist.
 	@TestFactory
-	Stream<DynamicTest> anAlgOutsideTheEffectiveSetIsNotAllowed() {
+	@NonNull Stream<@NonNull DynamicTest> anAlgOutsideTheEffectiveSetIsNotAllowed() {
 		Map<String, Set<JwsAlgorithm>> cases = new LinkedHashMap<>();
 		for (String alg : List.of("none", "None", "NONE", "nOnE", "", "rs256", "Rs256", "RS256 ", " RS256", "RS256\u0000",
 				"RS 256", "dir", "RSA1_5", "RSA-OAEP", "PBES2-HS256+A128KW", "ES256K", "ES521", "Ed448", "A128GCM", "HS256",
@@ -134,7 +136,7 @@ final class JoseHeaderPolicyTests {
 	// P5 (RFC 7515 section 4.1.11, RFC 7797): crit, b64 and zip are refused whatever their values, crit first, then
 	// b64, then zip.
 	@TestFactory
-	Stream<DynamicTest> criticalUnencodedAndCompressedHeadersAreUnsupported() {
+	@NonNull Stream<@NonNull DynamicTest> criticalUnencodedAndCompressedHeadersAreUnsupported() {
 		Map<String, JoseException.Reason> cases = new LinkedHashMap<>();
 		for (String value : List.of("[\"exp\"]", "[]", "null", "\"b64\"", "[\"b64\"]"))
 			cases.put("\"crit\":" + value, JoseException.Reason.CRITICAL_HEADER);
@@ -165,7 +167,7 @@ final class JoseHeaderPolicyTests {
 	// P7 (RFC 8725 section 3.11; M2-4): typ absent passes unless a type is required; a typ that is not a string, or
 	// does not normalize into the allowed set, is INVALID_TYPE.
 	@TestFactory
-	Stream<DynamicTest> theTypeIsAMediaTypeComparedIgnoringAsciiCase() {
+	@NonNull Stream<@NonNull DynamicTest> theTypeIsAMediaTypeComparedIgnoringAsciiCase() {
 		Map<String, Boolean> cases = new LinkedHashMap<>();
 		for (String type : List.of("JWT", "jwt", "Jwt", "application/jwt", "application/JWT", "APPLICATION/JWT"))
 			cases.put(type, true);
@@ -233,7 +235,7 @@ final class JoseHeaderPolicyTests {
 	// The checks run in a fixed order, and the first failure names the reason: the JSON, alg, crit/b64/zip, the key
 	// references, typ, cty, then kid.
 	@TestFactory
-	Stream<DynamicTest> theFirstFailingCheckNamesTheReason() {
+	@NonNull Stream<@NonNull DynamicTest> theFirstFailingCheckNamesTheReason() {
 		Map<String, JoseException.Reason> cases = new LinkedHashMap<>();
 		cases.put("{\"crit\":[],\"jwk\":{},\"typ\":1,\"cty\":1,\"kid\":1}", JoseException.Reason.HEADER);
 		cases.put("{\"alg\":\"none\",\"crit\":[],\"jwk\":{},\"typ\":1,\"cty\":1,\"kid\":1}",
@@ -338,11 +340,11 @@ final class JoseHeaderPolicyTests {
 		}
 	}
 
-	private static byte[] bytes(String text) {
+	private static byte @NonNull [] bytes(@NonNull String text) {
 		return text.getBytes(StandardCharsets.UTF_8);
 	}
 
-	private static byte[] concat(byte[]... parts) {
+	private static byte @NonNull [] concat(byte @NonNull [] @NonNull ... parts) {
 		int length = 0;
 		for (byte[] part : parts)
 			length += part.length;
@@ -355,9 +357,9 @@ final class JoseHeaderPolicyTests {
 		return result;
 	}
 
-	private static void assertFailure(JoseException.Reason reason,
-																		JoseHeaderPolicy policy,
-																		byte[] header) {
+	private static void assertFailure(JoseException.@NonNull Reason reason,
+																		@NonNull JoseHeaderPolicy policy,
+																		byte @NonNull [] header) {
 		JoseFailure failure = Assertions.assertThrows(JoseFailure.class, () -> policy.check(header));
 		Assertions.assertEquals(reason, failure.getReason());
 	}

@@ -16,6 +16,10 @@
 
 package com.revetsec.internal.crypto;
 
+import org.jspecify.annotations.Nullable;
+
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.StateSealer;
 import com.revetsec.internal.encoding.Base64Url;
 import com.revetsec.testing.ChildJvm;
@@ -55,6 +59,8 @@ final class SealedStateAccessTests {
 	}
 
 	// G6-10: the accessor is set once, and only with operations StateSealer defined.
+	// Deliberate null inputs verify runtime rejection.
+	@SuppressWarnings("NullAway")
 	@Test
 	void aSecondInstallationThrowsIllegalStateExceptionAndForeignOperationsAreRefused() {
 		SealedStateAccess.Operations installed = SealedStateAccess.get();
@@ -68,7 +74,7 @@ final class SealedStateAccessTests {
 
 	// M1 plan "Internal API": notAfter is expiresAt rounded up to a whole second, and now comes from the caller's clock.
 	@TestFactory
-	Stream<DynamicTest> expiresAtTheFirstWholeSecondAtOrAfterExpiresAt() {
+	@NonNull Stream<@NonNull DynamicTest> expiresAtTheFirstWholeSecondAtOrAfterExpiresAt() {
 		return Stream.of(Duration.ZERO, Duration.ofMillis(1), Duration.ofMillis(999), Duration.ofNanos(1))
 				.map(offset -> DynamicTest.dynamicTest("expiresAt = whole second + " + offset, () -> {
 					StateSealer sealer = TestSealers.fromFixedKey();
@@ -172,6 +178,8 @@ final class SealedStateAccessTests {
 	}
 
 	// Arguments are checked first: NullPointerException or IllegalArgumentException, never UnsealException.
+	// Deliberate null inputs verify runtime rejection.
+	@SuppressWarnings("NullAway")
 	@Test
 	void checksArgumentsFirst() {
 		SealedStateAccess.Operations operations = SealedStateAccess.get();
@@ -207,11 +215,11 @@ final class SealedStateAccessTests {
 				"c", START));
 	}
 
-	private static UnsealException.Kind unsealFailure(StateSealer sealer,
-																										SealedStateType type,
-																										String sealed,
-																										String context,
-																										Clock clock) {
+	private static UnsealException.@NonNull Kind unsealFailure(@NonNull StateSealer sealer,
+																										@NonNull SealedStateType type,
+																										@NonNull String sealed,
+																										@NonNull String context,
+																										@NonNull Clock clock) {
 		UnsealException e = Assertions.assertThrows(UnsealException.class,
 				() -> SealedStateAccess.get().unseal(sealer, type, sealed, context, clock));
 		Assertions.assertNull(e.getCause());
@@ -222,7 +230,7 @@ final class SealedStateAccessTests {
 	 * Hides a {@code null} from NullAway, for the tests that check null handling.
 	 */
 	@SuppressWarnings({"NullAway", "TypeParameterUnusedInFormals"})
-	private static <T> T nullValue() {
+	private static <T> @Nullable T nullValue() {
 		return null;
 	}
 
@@ -231,20 +239,20 @@ final class SealedStateAccessTests {
 	 */
 	static final class ForeignOperations implements SealedStateAccess.Operations {
 		@Override
-		public String seal(StateSealer sealer,
-											 SealedStateType type,
-											 String plaintext,
-											 String context,
-											 Instant expiresAt) {
+		public @NonNull String seal(@NonNull StateSealer sealer,
+											 @NonNull SealedStateType type,
+											 @NonNull String plaintext,
+											 @NonNull String context,
+											 @NonNull Instant expiresAt) {
 			return plaintext;
 		}
 
 		@Override
-		public String unseal(StateSealer sealer,
-												 SealedStateType type,
-												 String sealed,
-												 String context,
-												 Clock clock) {
+		public @NonNull String unseal(@NonNull StateSealer sealer,
+												 @NonNull SealedStateType type,
+												 @NonNull String sealed,
+												 @NonNull String context,
+												 @NonNull Clock clock) {
 			return sealed;
 		}
 	}
@@ -258,7 +266,7 @@ final class SealedStateAccessTests {
 			// Only main runs.
 		}
 
-		public static void main(String[] arguments) throws Exception {
+		public static void main(@NonNull String @NonNull [] arguments) throws Exception {
 			// Nothing has initialized StateSealer, whose static initializer is what installs the operations.
 			Assertions.assertFalse(SealedStateAccess.isInstalled(), "installed before get()");
 

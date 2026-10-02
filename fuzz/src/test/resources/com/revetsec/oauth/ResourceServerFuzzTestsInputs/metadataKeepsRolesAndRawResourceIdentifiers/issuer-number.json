@@ -1,0 +1,1 @@
+{"issuer":42,"jwks_uri":"https://keys.example/jwks","introspection_endpoint":"http://localhost:1/issuer/introspection","introspection_endpoint_auth_methods_supported":["client_secret_basic"]}

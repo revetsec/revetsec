@@ -16,6 +16,8 @@
 
 package com.revetsec.internal.json;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.internal.Limits;
 import com.revetsec.internal.json.JsonParseException.Kind;
 import com.revetsec.json.JsonArray;
@@ -167,7 +169,7 @@ final class JsonTestSuiteTests {
 	// compares them ignoring ASCII case, G7-7), and each fails with DUPLICATE_MEMBER. Every accepted value keeps each
 	// member name the file writes and round-trips under the maximum-cap profile (G7-6).
 	@TestFactory
-	Stream<DynamicContainer> acceptsEveryYFileExceptTheDuplicateMemberDeviations() {
+	@NonNull Stream<@NonNull DynamicContainer> acceptsEveryYFileExceptTheDuplicateMemberDeviations() {
 		Suite suite = Suite.load();
 
 		return PROFILES.stream().map(profile -> DynamicContainer.dynamicContainer(profile.name,
@@ -201,7 +203,7 @@ final class JsonTestSuiteTests {
 	// RFC 8259 and INV-G1: every n_ file is rejected, and the only thing that escapes the codec is a
 	// JsonParseException with its kind's fixed message, no cause and an offset inside the input.
 	@TestFactory
-	Stream<DynamicContainer> rejectsEveryNFileWithAJsonParseExceptionAndNothingElse() {
+	@NonNull Stream<@NonNull DynamicContainer> rejectsEveryNFileWithAJsonParseExceptionAndNothingElse() {
 		Suite suite = Suite.load();
 
 		return PROFILES.stream().map(profile -> DynamicContainer.dynamicContainer(profile.name,
@@ -217,7 +219,7 @@ final class JsonTestSuiteTests {
 	// G7-9: every i_ file has the outcome its I_DECISIONS.txt line records for the profile: accepted (and then it
 	// round-trips, G7-6), or rejected with that exact Kind.
 	@TestFactory
-	Stream<DynamicContainer> decidesEveryIFileAsItsIDecisionsLineRecords() {
+	@NonNull Stream<@NonNull DynamicContainer> decidesEveryIFileAsItsIDecisionsLineRecords() {
 		Suite suite = Suite.load();
 
 		return PROFILES.stream().map(profile -> DynamicContainer.dynamicContainer(profile.name,
@@ -268,7 +270,7 @@ final class JsonTestSuiteTests {
 	// endings. A changed, missing, unlisted or repeated file, a malformed or misordered line, or a line for the
 	// manifest itself is reported.
 	@TestFactory
-	Stream<DynamicTest> reportsEveryStaleOrMalformedManifestLine() {
+	@NonNull Stream<@NonNull DynamicTest> reportsEveryStaleOrMalformedManifestLine() {
 		byte[] license = utf8("MIT\n");
 		byte[] vector = utf8("[]");
 		String licenseLine = sha256(license) + "  LICENSE\n";
@@ -309,7 +311,7 @@ final class JsonTestSuiteTests {
 	// G7-9: DEVIATIONS.txt names y_ files in test_parsing/, one per line, with '#' comments and blank lines ignored.
 	// A file that does not exist, a file that is not a y_ file, a repeated line and a malformed line are reported.
 	@TestFactory
-	Stream<DynamicTest> reportsEveryStaleOrMalformedDeviationsLine() {
+	@NonNull Stream<@NonNull DynamicTest> reportsEveryStaleOrMalformedDeviationsLine() {
 		Set<String> vectors = Set.of("y_a.json", "y_b.json", "n_c.json");
 
 		return Stream.of(
@@ -343,7 +345,7 @@ final class JsonTestSuiteTests {
 	// where an outcome is "accept" or "reject:<Kind>". A line for a file that does not exist or is not an i_ file, an
 	// i_ file with no line, a repeated, misordered or malformed line, and an unknown Kind are reported.
 	@TestFactory
-	Stream<DynamicTest> reportsEveryStaleOrMalformedIDecisionsLine() {
+	@NonNull Stream<@NonNull DynamicTest> reportsEveryStaleOrMalformedIDecisionsLine() {
 		Set<String> vectors = Set.of("i_a.json", "i_b.json", "y_c.json");
 		String lineA = "i_a.json\taccept\treject:DEPTH\n";
 		String lineB = "i_b.json\treject:SYNTAX\taccept\n";
@@ -397,7 +399,7 @@ final class JsonTestSuiteTests {
 	// names within each object only, after unescaping, exactly and ignoring ASCII case only; it ignores anything
 	// inside a string and strings that are not names.
 	@TestFactory
-	Stream<DynamicTest> theIndependentNameScannerComparesNamesPerObjectAfterUnescaping() {
+	@NonNull Stream<@NonNull DynamicTest> theIndependentNameScannerComparesNamesPerObjectAfterUnescaping() {
 		return Stream.of(
 				scanCase("{\"a\":1,\"a\":2}", 2, true, true),
 				scanCase("{\"a\":1,\"b\":{\"a\":2}}", 3, false, false),
@@ -422,7 +424,7 @@ final class JsonTestSuiteTests {
 	 * {@link Throwable} fails the test (INV-G1). Every failure message starts with {@code where}, which names the file
 	 * and the profile.
 	 */
-	private static Result parse(byte[] input, Profile profile, String where) {
+	private static @NonNull Result parse(byte @NonNull [] input, @NonNull Profile profile, @NonNull String where) {
 		Assertions.assertTrue(input.length <= profile.limits.getMaxInputBytes(),
 				() -> where + "the profile's input limit must fit the file, so the parser sees it");
 
@@ -450,7 +452,7 @@ final class JsonTestSuiteTests {
 	 * G7-6: the value's {@code toJson()} text is the codec's own UTF-8 output, and it parses under the maximum-cap
 	 * profile to an equal value with an equal hash and the same text.
 	 */
-	private static void assertRoundTrips(JsonValue value, String where) {
+	private static void assertRoundTrips(@NonNull JsonValue value, @NonNull String where) {
 		String json = value.toJson();
 		byte[] written;
 		JsonValue again;
@@ -481,7 +483,7 @@ final class JsonTestSuiteTests {
 	/**
 	 * Scans a {@code y_} file's member names with {@link NameScan}, which reads only well-formed JSON text.
 	 */
-	private static NameScan scan(byte[] input, String where) {
+	private static @NonNull NameScan scan(byte @NonNull [] input, @NonNull String where) {
 		try {
 			return NameScan.of(input);
 		} catch (CharacterCodingException | RuntimeException exception) {
@@ -492,14 +494,14 @@ final class JsonTestSuiteTests {
 	/**
 	 * The prefix of every failure message about one file under one profile.
 	 */
-	private static String where(String name, Profile profile) {
+	private static @NonNull String where(@NonNull String name, @NonNull Profile profile) {
 		return name + " under the " + profile.name + " profile: ";
 	}
 
 	/**
 	 * The number of members in every object of a value.
 	 */
-	private static int memberCount(JsonValue value) {
+	private static int memberCount(@NonNull JsonValue value) {
 		int count = 0;
 
 		if (value instanceof JsonObject object) {
@@ -522,7 +524,7 @@ final class JsonTestSuiteTests {
 	 * misordered or repeated line, a line for the manifest itself, a listed file that is missing or whose SHA-256
 	 * differs, and a file that is not listed.
 	 */
-	static List<String> manifestProblems(byte[] manifest, SortedMap<String, byte[]> files) {
+	static @NonNull List<@NonNull String> manifestProblems(byte @NonNull [] manifest, @NonNull SortedMap<@NonNull String, byte @NonNull []> files) {
 		List<String> problems = new ArrayList<>();
 		Set<String> listed = new HashSet<>();
 		// ISO-8859-1 maps each byte to one character, so a non-ASCII byte makes its line malformed.
@@ -578,7 +580,7 @@ final class JsonTestSuiteTests {
 	 * The files {@code DEVIATIONS.txt} lists, adding each problem to {@code problems}: a malformed or repeated line, a
 	 * file that does not exist in {@code vectors}, or one that is not a {@code y_} file.
 	 */
-	static Set<String> deviations(byte @Nullable [] content, Set<String> vectors, List<String> problems) {
+	static @NonNull Set<@NonNull String> deviations(byte @Nullable [] content, @NonNull Set<@NonNull String> vectors, @NonNull List<@NonNull String> problems) {
 		Set<String> deviations = new LinkedHashSet<>();
 
 		for (Line line : contentLines(DEVIATIONS, content, problems)) {
@@ -602,7 +604,7 @@ final class JsonTestSuiteTests {
 	 * problem to {@code problems}: a malformed, repeated or misordered line, a file that does not exist in
 	 * {@code vectors} or is not an {@code i_} file, and an {@code i_} file with no line.
 	 */
-	static Map<String, List<String>> decisions(byte @Nullable [] content, Set<String> vectors, List<String> problems) {
+	static @NonNull Map<@NonNull String, @NonNull List<@NonNull String>> decisions(byte @Nullable [] content, @NonNull Set<@NonNull String> vectors, @NonNull List<@NonNull String> problems) {
 		Map<String, List<String>> decisions = new LinkedHashMap<>();
 		String previous = "";
 
@@ -641,7 +643,7 @@ final class JsonTestSuiteTests {
 	 * The lines of a list file that are neither blank nor {@code #} comments, adding a problem if the file is missing,
 	 * is not well-formed UTF-8, contains a carriage return or does not end with a line feed.
 	 */
-	private static List<Line> contentLines(String file, byte @Nullable [] content, List<String> problems) {
+	private static @NonNull List<@NonNull Line> contentLines(@NonNull String file, byte @Nullable [] content, @NonNull List<@NonNull String> problems) {
 		List<Line> lines = new ArrayList<>();
 
 		if (content == null) {
@@ -676,20 +678,20 @@ final class JsonTestSuiteTests {
 		return lines;
 	}
 
-	private static boolean isOutcome(String field) {
+	private static boolean isOutcome(@NonNull String field) {
 		return field.equals(ACCEPT)
 				|| (field.startsWith(REJECT) && KIND_NAMES.contains(field.substring(REJECT.length())));
 	}
 
-	private static String malformedManifestLine(int number) {
+	private static @NonNull String malformedManifestLine(int number) {
 		return MANIFEST + " line " + number + " is malformed (expected <64 lowercase hex digits><two spaces><path>)";
 	}
 
-	private static String malformedDeviationsLine(int number) {
+	private static @NonNull String malformedDeviationsLine(int number) {
 		return DEVIATIONS + " line " + number + " is malformed (expected one file name in test_parsing/)";
 	}
 
-	private static String malformedDecisionsLine(int number) {
+	private static @NonNull String malformedDecisionsLine(int number) {
 		return I_DECISIONS + " line " + number + " is malformed (expected <file><TAB><protocol outcome><TAB><SCIM "
 				+ "outcome>, where an outcome is accept or reject:<Kind>)";
 	}
@@ -698,29 +700,29 @@ final class JsonTestSuiteTests {
 	// Helpers
 	// ---------------------------------------------------------------------------------------------------------------
 
-	private static DynamicTest manifestCase(String name, String manifest, SortedMap<String, byte[]> files,
-																					String... expected) {
+	private static @NonNull DynamicTest manifestCase(@NonNull String name, @NonNull String manifest, @NonNull SortedMap<@NonNull String, byte @NonNull []> files,
+																					@NonNull String @NonNull ... expected) {
 		return DynamicTest.dynamicTest(name, () -> Assertions.assertEquals(List.of(expected),
 				manifestProblems(utf8(manifest), files)));
 	}
 
-	private static DynamicTest deviationsCase(String name, String content, Set<String> vectors, String... expected) {
+	private static @NonNull DynamicTest deviationsCase(@NonNull String name, @NonNull String content, @NonNull Set<@NonNull String> vectors, @NonNull String @NonNull ... expected) {
 		return DynamicTest.dynamicTest(name, () -> assertProblems(
 				problems -> deviations(utf8(content), vectors, problems), expected));
 	}
 
-	private static DynamicTest decisionsCase(String name, String content, Set<String> vectors, String... expected) {
+	private static @NonNull DynamicTest decisionsCase(@NonNull String name, @NonNull String content, @NonNull Set<@NonNull String> vectors, @NonNull String @NonNull ... expected) {
 		return DynamicTest.dynamicTest(name, () -> assertProblems(
 				problems -> decisions(utf8(content), vectors, problems), expected));
 	}
 
-	private static void assertProblems(Consumer<List<String>> check, String... expected) {
+	private static void assertProblems(@NonNull Consumer<@NonNull List<@NonNull String>> check, @NonNull String @NonNull ... expected) {
 		List<String> problems = new ArrayList<>();
 		check.accept(problems);
 		Assertions.assertEquals(List.of(expected), problems);
 	}
 
-	private static DynamicTest scanCase(String json, int names, boolean exactly, boolean ignoringAsciiCase) {
+	private static @NonNull DynamicTest scanCase(@NonNull String json, int names, boolean exactly, boolean ignoringAsciiCase) {
 		return DynamicTest.dynamicTest(json, () -> {
 			NameScan scan = NameScan.of(utf8(json));
 
@@ -730,7 +732,7 @@ final class JsonTestSuiteTests {
 		});
 	}
 
-	private static SortedMap<String, byte[]> files(Object... pathsAndContents) {
+	private static @NonNull SortedMap<@NonNull String, byte @NonNull []> files(@NonNull Object @NonNull ... pathsAndContents) {
 		SortedMap<String, byte[]> files = new TreeMap<>();
 
 		for (int index = 0; index < pathsAndContents.length; index += 2)
@@ -739,11 +741,11 @@ final class JsonTestSuiteTests {
 		return files;
 	}
 
-	private static byte[] utf8(String text) {
+	private static byte @NonNull [] utf8(@NonNull String text) {
 		return text.getBytes(StandardCharsets.UTF_8);
 	}
 
-	private static String sha256(byte[] content) {
+	private static @NonNull String sha256(byte @NonNull [] content) {
 		try {
 			return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(content));
 		} catch (NoSuchAlgorithmException exception) {
@@ -751,7 +753,7 @@ final class JsonTestSuiteTests {
 		}
 	}
 
-	private static int compareUtf8(String first, String second) {
+	private static int compareUtf8(@NonNull String first, @NonNull String second) {
 		return Arrays.compareUnsigned(utf8(first), utf8(second));
 	}
 
@@ -759,7 +761,7 @@ final class JsonTestSuiteTests {
 	 * The vendored directory. Tests read the source directory when they run from a checkout, so the manifest check
 	 * covers exactly what is committed, not a build copy; otherwise they read the copy on the test class path.
 	 */
-	private static Path root() {
+	private static @NonNull Path root() {
 		try {
 			// target/test-classes -> target -> the module root.
 			Path testClasses = Path.of(JsonTestSuiteTests.class.getProtectionDomain().getCodeSource().getLocation()
@@ -783,7 +785,7 @@ final class JsonTestSuiteTests {
 	/**
 	 * Every regular file under {@code root}, by its path relative to {@code root} with {@code /} separators.
 	 */
-	private static SortedMap<String, byte[]> readTree(Path root) {
+	private static @NonNull SortedMap<@NonNull String, byte @NonNull []> readTree(@NonNull Path root) {
 		SortedMap<String, byte[]> files = new TreeMap<>();
 
 		try (Stream<Path> paths = Files.walk(root)) {
@@ -804,7 +806,7 @@ final class JsonTestSuiteTests {
 		private final JsonLimits limits;
 		private final int column;
 
-		private Profile(String name, JsonLimits limits, int column) {
+		private Profile(@NonNull String name, @NonNull JsonLimits limits, int column) {
 			this.name = name;
 			this.limits = limits;
 			this.column = column;
@@ -818,7 +820,7 @@ final class JsonTestSuiteTests {
 		private final String outcome;
 		private final @Nullable JsonValue value;
 
-		private Result(String outcome, @Nullable JsonValue value) {
+		private Result(@NonNull String outcome, @Nullable JsonValue value) {
 			this.outcome = outcome;
 			this.value = value;
 		}
@@ -831,7 +833,7 @@ final class JsonTestSuiteTests {
 		private final int number;
 		private final String text;
 
-		private Line(int number, String text) {
+		private Line(int number, @NonNull String text) {
 			this.number = number;
 			this.text = text;
 		}
@@ -853,7 +855,7 @@ final class JsonTestSuiteTests {
 		 */
 		private final int checkedFiles;
 
-		private Suite(SortedMap<String, byte[]> vectors, Set<String> deviations, Map<String, List<String>> decisions,
+		private Suite(@NonNull SortedMap<@NonNull String, byte @NonNull []> vectors, @NonNull Set<@NonNull String> deviations, @NonNull Map<@NonNull String, @NonNull List<@NonNull String>> decisions,
 									int checkedFiles) {
 			this.vectors = vectors;
 			this.deviations = deviations;
@@ -865,7 +867,7 @@ final class JsonTestSuiteTests {
 		 * Reads the directory, checks the manifest in both directions and both lists, and fails with every problem
 		 * found before any file is parsed.
 		 */
-		static Suite load() {
+		static @NonNull Suite load() {
 			SortedMap<String, byte[]> files = readTree(root());
 			byte[] manifest = files.remove(MANIFEST);
 			List<String> problems = new ArrayList<>();
@@ -894,11 +896,11 @@ final class JsonTestSuiteTests {
 		/**
 		 * The names of the files with a prefix ({@code y_}, {@code n_} or {@code i_}), sorted.
 		 */
-		Stream<String> names(String prefix) {
+		@NonNull Stream<@NonNull String> names(@NonNull String prefix) {
 			return this.vectors.keySet().stream().filter(name -> name.startsWith(prefix));
 		}
 
-		byte[] vector(String name) {
+		byte @NonNull [] vector(@NonNull String name) {
 			return requireNonNull(this.vectors.get(name), name);
 		}
 	}
@@ -919,7 +921,7 @@ final class JsonTestSuiteTests {
 			this.asciiCaseRepeat = asciiCaseRepeat;
 		}
 
-		static NameScan of(byte[] input) throws CharacterCodingException {
+		static @NonNull NameScan of(byte @NonNull [] input) throws CharacterCodingException {
 			String text = StandardCharsets.UTF_8.newDecoder()
 					.onMalformedInput(CodingErrorAction.REPORT)
 					.onUnmappableCharacter(CodingErrorAction.REPORT)
@@ -986,7 +988,7 @@ final class JsonTestSuiteTests {
 		 * Unescapes the string that starts at {@code start} (just past its opening quotation mark) into {@code out},
 		 * and returns the index just past its closing quotation mark.
 		 */
-		private static int readString(String text, int start, StringBuilder out) {
+		private static int readString(@NonNull String text, int start, @NonNull StringBuilder out) {
 			int index = start;
 
 			while (true) {
@@ -1022,7 +1024,7 @@ final class JsonTestSuiteTests {
 		 * Lowercases ASCII letters only, by arithmetic, as {@code AsciiCase} does (it is not called, to keep this scanner
 		 * independent of the codec).
 		 */
-		private static String foldAsciiCase(String name) {
+		private static @NonNull String foldAsciiCase(@NonNull String name) {
 			char[] characters = name.toCharArray();
 
 			for (int index = 0; index < characters.length; ++index)

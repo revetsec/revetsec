@@ -16,6 +16,8 @@
 
 package com.revetsec.jose;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.ErrorCategory;
 import com.revetsec.internal.http.Deadline;
 import com.revetsec.internal.jose.KeySelection;
@@ -89,7 +91,7 @@ final class RemoteJsonWebKeySourceConcurrencyTests {
 	// (a fresh key set without the kid), make exactly one fetch. The server holds the one request until the other 99
 	// callers are waiting for it, then every caller gets the new key.
 	@TestFactory
-	Stream<DynamicTest> oneHundredConcurrentUnknownKeyCallsMakeOneFetch() {
+	@NonNull Stream<@NonNull DynamicTest> oneHundredConcurrentUnknownKeyCallsMakeOneFetch() {
 		return Stream.of(false, true).map(warm -> DynamicTest.dynamicTest(warm ? "warm" : "cold", () -> {
 			try (TestHttpsServer server = TestHttpsServer.start()) {
 				HttpClient client = TestTls.httpClient();
@@ -432,7 +434,7 @@ final class RemoteJsonWebKeySourceConcurrencyTests {
 	// waiter meets the kept cooldown mark. The unknown-key refetch starts 31 s after the first fetch, outside the
 	// ceiling's window, so only the kept mark can hold its waiter back.
 	@TestFactory
-	Stream<DynamicTest> anErrorInTheLeaderPropagatesAndItsWaitersContendAgain() {
+	@NonNull Stream<@NonNull DynamicTest> anErrorInTheLeaderPropagatesAndItsWaitersContendAgain() {
 		return Stream.of(false, true).map(unknownKey -> DynamicTest.dynamicTest(unknownKey ? "unknown key" : "first use",
 				() -> {
 					TestClock clock = TestClock.fromInstant(START);
@@ -574,7 +576,7 @@ final class RemoteJsonWebKeySourceConcurrencyTests {
 	// current one, at the same instant included; a key set received earlier (the clock set back while the leader was
 	// held) is not installed, so the newer key set keeps answering.
 	@TestFactory
-	Stream<DynamicTest> aLateSuccessInstallsItsKeySetOnlyIfItIsNotOlder() {
+	@NonNull Stream<@NonNull DynamicTest> aLateSuccessInstallsItsKeySetOnlyIfItIsNotOlder() {
 		return Stream.of(LateSuccess.values()).map(late -> DynamicTest.dynamicTest(late.description, () -> {
 			RewindableClock clock = RewindableClock.fromInstant(START);
 			CountDownLatch gate = new CountDownLatch(1);
@@ -722,7 +724,7 @@ final class RemoteJsonWebKeySourceConcurrencyTests {
 	 * A source built through the package-private constructor, whose checked settings allow a request timeout below the
 	 * builder's 1 s floor, so that a stuck flight is overdue after half a second instead of 20 s.
 	 */
-	private static RemoteJsonWebKeySource quickSource(MemoryHttpClient client, Clock clock, JoseObserver observer) {
+	private static @NonNull RemoteJsonWebKeySource quickSource(@NonNull MemoryHttpClient client, @NonNull Clock clock, @NonNull JoseObserver observer) {
 		RemoteJsonWebKeySource built = source(client, clock).build();
 		return new RemoteJsonWebKeySource(JwksCacheTests.JWKS_URI, built.httpExchangeForTests(),
 				JwksCacheTests.settings(clock, QUICK_REQUEST_TIMEOUT, observer));
@@ -734,7 +736,7 @@ final class RemoteJsonWebKeySourceConcurrencyTests {
 	 * with. Each earlier call joins the stuck flight and gives up at its deadline with a transient TRANSPORT failure,
 	 * so every wait is a call's own deadline, never a sleep.
 	 */
-	private static Probe probeUntilOverdue(RemoteJsonWebKeySource source, String keyId) {
+	private static @NonNull Probe probeUntilOverdue(@NonNull RemoteJsonWebKeySource source, @NonNull String keyId) {
 		long started = System.nanoTime();
 		while (System.nanoTime() - started < WAIT.toNanos()) {
 			try {
@@ -748,7 +750,7 @@ final class RemoteJsonWebKeySourceConcurrencyTests {
 		throw new AssertionError("The stuck flight never became overdue");
 	}
 
-	private static void interruptSender(List<Call<KeySelection>> calls, Thread sender) {
+	private static void interruptSender(@NonNull List<@NonNull Call<@NonNull KeySelection>> calls, @NonNull Thread sender) {
 		for (Call<KeySelection> call : calls)
 			if (call.thread.equals(sender)) {
 				call.interrupt();
@@ -769,7 +771,7 @@ final class RemoteJsonWebKeySourceConcurrencyTests {
 
 		private final String description;
 
-		LateSuccess(String description) {
+		LateSuccess(@NonNull String description) {
 			this.description = description;
 		}
 	}
@@ -779,11 +781,11 @@ final class RemoteJsonWebKeySourceConcurrencyTests {
 	 */
 	@Immutable
 	private record Probe(@Nullable KeySelection selection, @Nullable JsonWebKeySetUnavailableException failure) {
-		KeySelection requireSelection() {
+		@NonNull KeySelection requireSelection() {
 			return Assertions.assertInstanceOf(KeySelection.class, this.selection, () -> "failed: " + this.failure);
 		}
 
-		JsonWebKeySetUnavailableException requireFailure() {
+		@NonNull JsonWebKeySetUnavailableException requireFailure() {
 			return Assertions.assertInstanceOf(JsonWebKeySetUnavailableException.class, this.failure,
 					() -> "selected: " + this.selection);
 		}
@@ -798,7 +800,7 @@ final class RemoteJsonWebKeySourceConcurrencyTests {
 		private final CompletableFuture<T> result = new CompletableFuture<>();
 		private final AtomicBoolean interruptedAtEnd = new AtomicBoolean();
 
-		private Call(String name, Callable<T> callable) {
+		private Call(@NonNull String name, @NonNull Callable<@NonNull T> callable) {
 			this.thread = new Thread(() -> {
 				try {
 					this.result.complete(callable.call());
@@ -811,7 +813,7 @@ final class RemoteJsonWebKeySourceConcurrencyTests {
 			this.thread.setDaemon(true);
 		}
 
-		static <T> Call<T> start(String name, Callable<T> callable) {
+		static <T> @NonNull Call<@NonNull T> start(@NonNull String name, @NonNull Callable<@NonNull T> callable) {
 			Call<T> call = new Call<>(name, callable);
 			call.thread.start();
 			return call;
@@ -821,7 +823,7 @@ final class RemoteJsonWebKeySourceConcurrencyTests {
 			this.thread.interrupt();
 		}
 
-		T await() throws Exception {
+		@NonNull T await() throws Exception {
 			try {
 				return this.result.get(WAIT.toNanos(), TimeUnit.NANOSECONDS);
 			} catch (ExecutionException e) {
@@ -829,7 +831,7 @@ final class RemoteJsonWebKeySourceConcurrencyTests {
 			}
 		}
 
-		<E extends Throwable> E awaitFailure(Class<E> type) throws Exception {
+		<E extends Throwable> @NonNull E awaitFailure(@NonNull Class<@NonNull E> type) throws Exception {
 			try {
 				T value = this.result.get(WAIT.toNanos(), TimeUnit.NANOSECONDS);
 				throw new AssertionError("The call returned " + value);
@@ -856,11 +858,11 @@ final class RemoteJsonWebKeySourceConcurrencyTests {
 		private final CountDownLatch paused = new CountDownLatch(1);
 		private final CountDownLatch resumed = new CountDownLatch(1);
 
-		private PausingClock(TestClock clock) {
+		private PausingClock(@NonNull TestClock clock) {
 			this.clock = clock;
 		}
 
-		void pauseNextReadingOn(String threadName) {
+		void pauseNextReadingOn(@NonNull String threadName) {
 			this.pausedThreadName.set(threadName);
 		}
 
@@ -873,7 +875,7 @@ final class RemoteJsonWebKeySourceConcurrencyTests {
 		}
 
 		@Override
-		public Instant instant() {
+		public @NonNull Instant instant() {
 			if (this.pausedThreadName.compareAndSet(Thread.currentThread().getName(), null)) {
 				this.paused.countDown();
 				try {
@@ -887,12 +889,12 @@ final class RemoteJsonWebKeySourceConcurrencyTests {
 		}
 
 		@Override
-		public ZoneId getZone() {
+		public @NonNull ZoneId getZone() {
 			return this.clock.getZone();
 		}
 
 		@Override
-		public Clock withZone(ZoneId zone) {
+		public @NonNull Clock withZone(@NonNull ZoneId zone) {
 			throw new UnsupportedOperationException("PausingClock has one zone");
 		}
 	}
@@ -903,7 +905,7 @@ final class RemoteJsonWebKeySourceConcurrencyTests {
 	static final class InjectedError extends Error {
 		private static final long serialVersionUID = 1L;
 
-		InjectedError(String message) {
+		InjectedError(@NonNull String message) {
 			super(message);
 		}
 	}
@@ -931,7 +933,7 @@ final class RemoteJsonWebKeySourceConcurrencyTests {
 		}
 
 		@Override
-		public void willFetchJsonWebKeySet(URI jwksUri) {
+		public void willFetchJsonWebKeySet(@NonNull URI jwksUri) {
 			if (!this.armed.getAndSet(false))
 				return;
 			this.announced.countDown();
@@ -968,7 +970,7 @@ final class RemoteJsonWebKeySourceConcurrencyTests {
 		}
 
 		@Override
-		public void willFetchJsonWebKeySet(URI jwksUri) {
+		public void willFetchJsonWebKeySet(@NonNull URI jwksUri) {
 			if (!this.armed.getAndSet(false))
 				return;
 			this.announced.countDown();
@@ -990,18 +992,18 @@ final class RemoteJsonWebKeySourceConcurrencyTests {
 		private final List<String> results = new java.util.concurrent.CopyOnWriteArrayList<>();
 		volatile @Nullable RemoteJsonWebKeySource source;
 
-		List<String> getResults() {
+		@NonNull List<@NonNull String> getResults() {
 			return List.copyOf(this.results);
 		}
 
 		@Override
-		public void willFetchJsonWebKeySet(URI jwksUri) {
+		public void willFetchJsonWebKeySet(@NonNull URI jwksUri) {
 			this.results.add("willFetchJsonWebKeySet: " + otherThreadDecides());
 		}
 
 		@Override
-		public void didFetchJsonWebKeySet(URI jwksUri, Integer usableKeyCount, Integer skippedKeyCount,
-				Duration timeToLive, Duration elapsed) {
+		public void didFetchJsonWebKeySet(@NonNull URI jwksUri, @NonNull Integer usableKeyCount, @NonNull Integer skippedKeyCount,
+				@NonNull Duration timeToLive, @NonNull Duration elapsed) {
 			this.results.add("didFetchJsonWebKeySet: " + otherThreadDecides());
 		}
 
@@ -1009,7 +1011,7 @@ final class RemoteJsonWebKeySourceConcurrencyTests {
 		 * Another thread asks for a key that is not cached, with a spent deadline: it takes the lock to decide (joining
 		 * the flight, or leading), then fails at once with TRANSPORT. It can return only if the lock is free.
 		 */
-		private String otherThreadDecides() {
+		private @NonNull String otherThreadDecides() {
 			RemoteJsonWebKeySource current = this.source;
 			if (current == null)
 				return "no source";

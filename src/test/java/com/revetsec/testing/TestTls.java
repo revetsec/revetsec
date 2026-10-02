@@ -16,6 +16,8 @@
 
 package com.revetsec.testing;
 
+import org.jspecify.annotations.NonNull;
+
 import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.ThreadSafe;
@@ -84,7 +86,7 @@ public final class TestTls {
 	 *
 	 * @return a new key store holding the server's key and chain
 	 */
-	public static KeyStore serverKeyStore() {
+	public static @NonNull KeyStore serverKeyStore() {
 		return loadPkcs12(SERVER_KEY_STORE_RESOURCE);
 	}
 
@@ -93,7 +95,7 @@ public final class TestTls {
 	 *
 	 * @return a new key store holding only the test CA certificate
 	 */
-	public static KeyStore trustStore() {
+	public static @NonNull KeyStore trustStore() {
 		return loadPkcs12(TRUST_STORE_RESOURCE);
 	}
 
@@ -102,7 +104,7 @@ public final class TestTls {
 	 *
 	 * @return a new, initialized {@code TLS} context
 	 */
-	public static SSLContext serverSslContext() {
+	public static @NonNull SSLContext serverSslContext() {
 		try {
 			KeyManagerFactory keyManagerFactory =
 					KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
@@ -120,7 +122,7 @@ public final class TestTls {
 	 *
 	 * @return a new, initialized {@code TLS} context
 	 */
-	public static SSLContext clientSslContext() {
+	public static @NonNull SSLContext clientSslContext() {
 		try {
 			TrustManagerFactory trustManagerFactory =
 					TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
@@ -141,7 +143,7 @@ public final class TestTls {
 	 *
 	 * @return a new builder
 	 */
-	public static HttpClient.Builder httpClientBuilder() {
+	public static HttpClient.@NonNull Builder httpClientBuilder() {
 		return HttpClient.newBuilder()
 				.sslContext(clientSslContext())
 				.followRedirects(HttpClient.Redirect.NEVER)
@@ -155,11 +157,11 @@ public final class TestTls {
 	 *
 	 * @return a new client that trusts only the test CA and never follows redirects
 	 */
-	public static HttpClient httpClient() {
+	public static @NonNull HttpClient httpClient() {
 		return httpClientBuilder().build();
 	}
 
-	private static KeyStore loadPkcs12(String resource) {
+	private static @NonNull KeyStore loadPkcs12(@NonNull String resource) {
 		try (@Nullable InputStream inputStream = TestTls.class.getResourceAsStream(resource)) {
 			if (inputStream == null)
 				throw new IllegalStateException("Missing TEST ONLY TLS fixture " + resource);

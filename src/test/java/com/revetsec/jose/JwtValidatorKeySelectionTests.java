@@ -16,6 +16,8 @@
 
 package com.revetsec.jose;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.internal.jose.JwkSetParser;
 import com.revetsec.internal.jose.ParsedKeySet;
 import com.revetsec.json.JsonArray;
@@ -60,7 +62,7 @@ final class JwtValidatorKeySelectionTests {
 	// UNKNOWN_KEY, even when signed by that key's own private key (or, for a key that is only a variant of a good key,
 	// by the good key's private key), so no skipped key is ever used for its public half.
 	@TestFactory
-	Stream<DynamicTest> aSkippedKeyNeverVerifiesATokenNamingIt() throws Exception {
+	@NonNull Stream<@NonNull DynamicTest> aSkippedKeyNeverVerifiesATokenNamingIt() throws Exception {
 		Map<String, SkippedCase> cases = new LinkedHashMap<>();
 		PrivateKey rsa = Fixture.IDP_SIGNING_RSA_2048.getPrivateKey();
 		cases.put("a ROCA-fingerprinted modulus", new SkippedCase(TestJsonWebKeys.withKeyPair(
@@ -166,7 +168,7 @@ final class JwtValidatorKeySelectionTests {
 	// RSA-1024 key RSA_KEY_SIZE, tcId 9's e = 1 key RSA_EXPONENT and tcId 22's point EC_POINT_NOT_ON_CURVE, and
 	// each tcId's token is refused: UNKNOWN_KEY, or SIGNATURE_MALFORMED for tcId 8's 128-octet signature.
 	@TestFactory
-	Stream<DynamicTest> wycheproofsInvalidKeysAreSkippedAndTheirTokensRefused() {
+	@NonNull Stream<@NonNull DynamicTest> wycheproofsInvalidKeysAreSkippedAndTheirTokensRefused() {
 		VectorFile file = WycheproofVectors.fromVendoredFiles().getFile("json_web_key_test.json");
 		Map<Integer, List<Object>> expected = new LinkedHashMap<>();
 		expected.put(7, List.of(JsonWebKeySkipReason.WEAK_KEY, JoseException.Reason.UNKNOWN_KEY));
@@ -292,15 +294,15 @@ final class JwtValidatorKeySelectionTests {
 				.kid("another-issuers-key").sign(Fixture.NEGATIVE_ATTACKER_RSA_2048.getPrivateKey()));
 	}
 
-	private static ParsedKeySet parse(String keySet) throws Exception {
+	private static @NonNull ParsedKeySet parse(@NonNull String keySet) throws Exception {
 		return JwkSetParser.parse(keySet, 256 * 1_024, 100);
 	}
 
-	private static JwsAlgorithm jwsAlgorithm(Algorithm algorithm) {
+	private static @NonNull JwsAlgorithm jwsAlgorithm(@NonNull Algorithm algorithm) {
 		return JwsAlgorithm.findByWireValue(algorithm.getWireValue()).orElseThrow();
 	}
 
-	private record SkippedCase(TestJsonWebKeys.Builder jwk, JsonWebKeySkipReason reason, Algorithm algorithm,
-														 PrivateKey signer) {
+	private record SkippedCase(TestJsonWebKeys.@NonNull Builder jwk, @NonNull JsonWebKeySkipReason reason, @NonNull Algorithm algorithm,
+														 @NonNull PrivateKey signer) {
 	}
 }

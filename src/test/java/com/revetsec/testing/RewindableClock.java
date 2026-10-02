@@ -16,6 +16,8 @@
 
 package com.revetsec.testing;
 
+import org.jspecify.annotations.NonNull;
+
 import javax.annotation.concurrent.ThreadSafe;
 import java.time.Clock;
 import java.time.Duration;
@@ -47,7 +49,7 @@ public final class RewindableClock extends Clock {
 	private final AtomicReference<Instant> instant;
 	private final ZoneId zone;
 
-	private RewindableClock(AtomicReference<Instant> instant, ZoneId zone) {
+	private RewindableClock(@NonNull AtomicReference<@NonNull Instant> instant, @NonNull ZoneId zone) {
 		this.instant = instant;
 		this.zone = zone;
 	}
@@ -58,7 +60,7 @@ public final class RewindableClock extends Clock {
 	 * @param instant the starting instant
 	 * @return a new clock
 	 */
-	public static RewindableClock fromInstant(Instant instant) {
+	public static @NonNull RewindableClock fromInstant(@NonNull Instant instant) {
 		requireNonNull(instant);
 		return new RewindableClock(new AtomicReference<>(instant), ZoneOffset.UTC);
 	}
@@ -69,7 +71,7 @@ public final class RewindableClock extends Clock {
 	 * @param target the new instant
 	 * @return {@code target}, as {@link TestClock#set(Instant)} returns it
 	 */
-	public Instant set(Instant target) {
+	public @NonNull Instant set(@NonNull Instant target) {
 		requireNonNull(target);
 		this.instant.set(target);
 		return target;
@@ -82,7 +84,7 @@ public final class RewindableClock extends Clock {
 	 * @return the new instant
 	 * @throws java.time.DateTimeException if the result is out of {@link Instant}'s range; the clock is unchanged
 	 */
-	public Instant advance(Duration duration) {
+	public @NonNull Instant advance(@NonNull Duration duration) {
 		requireNonNull(duration);
 		return this.instant.updateAndGet(current -> current.plus(duration));
 	}
@@ -95,7 +97,7 @@ public final class RewindableClock extends Clock {
 	 * @throws IllegalArgumentException if {@code duration} is negative (use {@link #advance(Duration)})
 	 * @throws java.time.DateTimeException if the result is out of {@link Instant}'s range; the clock is unchanged
 	 */
-	public Instant rewind(Duration duration) {
+	public @NonNull Instant rewind(@NonNull Duration duration) {
 		requireNonNull(duration);
 		if (duration.isNegative())
 			throw new IllegalArgumentException("Rewind by a zero or positive duration, not " + duration);
@@ -103,7 +105,7 @@ public final class RewindableClock extends Clock {
 	}
 
 	@Override
-	public Instant instant() {
+	public @NonNull Instant instant() {
 		return requireNonNull(this.instant.get());
 	}
 
@@ -113,7 +115,7 @@ public final class RewindableClock extends Clock {
 	}
 
 	@Override
-	public ZoneId getZone() {
+	public @NonNull ZoneId getZone() {
 		return this.zone;
 	}
 
@@ -124,13 +126,13 @@ public final class RewindableClock extends Clock {
 	 * @return this clock if {@code zone} is its own, otherwise a view sharing its instant
 	 */
 	@Override
-	public RewindableClock withZone(ZoneId zone) {
+	public @NonNull RewindableClock withZone(@NonNull ZoneId zone) {
 		requireNonNull(zone);
 		return zone.equals(this.zone) ? this : new RewindableClock(this.instant, zone);
 	}
 
 	@Override
-	public String toString() {
+	public @NonNull String toString() {
 		return "RewindableClock[" + instant() + "," + this.zone + "]";
 	}
 }

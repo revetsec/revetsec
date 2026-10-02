@@ -16,6 +16,8 @@
 
 package com.revetsec.internal.jose;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.internal.json.JsonCodec;
 import com.revetsec.internal.json.JsonLimits;
 import com.revetsec.jose.JsonWebKeySkipReason;
@@ -94,7 +96,7 @@ final class JwkParserTests {
 
 	// Every supported key type and curve parses, and the JCA key is the fixture's own key.
 	@TestFactory
-	Stream<DynamicTest> everySupportedKeyTypeAndCurveParsesToTheSameJcaKey() {
+	@NonNull Stream<@NonNull DynamicTest> everySupportedKeyTypeAndCurveParsesToTheSameJcaKey() {
 		return USABLE_FIXTURES.stream().map(fixture -> DynamicTest.dynamicTest(fixture.name(), () -> {
 			VerificationKey key = parse(TestJsonWebKeys.withFixture(fixture).toJson());
 
@@ -153,7 +155,7 @@ final class JwkParserTests {
 
 	// Rule 1: kty must be present and a string.
 	@TestFactory
-	Stream<DynamicTest> aKeyTypeThatIsMissingOrNotAStringIsMalformed() {
+	@NonNull Stream<@NonNull DynamicTest> aKeyTypeThatIsMissingOrNotAStringIsMalformed() {
 		return rows(
 				row("absent", rsa().withoutMember("kty").toJson(), JsonWebKeySkipReason.MALFORMED_KEY),
 				row("null", rsa().member("kty", "null").toJson(), JsonWebKeySkipReason.MALFORMED_KEY),
@@ -163,7 +165,7 @@ final class JwkParserTests {
 
 	// Rule 2: RFC 7517 section 4.1's values are case-sensitive; oct is symmetric, and anything else is unsupported.
 	@TestFactory
-	Stream<DynamicTest> symmetricAndUnknownKeyTypesAreSkippedByType() {
+	@NonNull Stream<@NonNull DynamicTest> symmetricAndUnknownKeyTypesAreSkippedByType() {
 		return rows(
 				row("oct", TestJsonWebKeys.octWithK("GawgguFyGrWKav7AX4VKUg").toJson(), JsonWebKeySkipReason.SYMMETRIC_KEY),
 				row("oct with alg HS256", TestJsonWebKeys.octWithK("GawgguFyGrWKav7AX4VKUg").alg("HS256").use("sig").toJson(),
@@ -180,7 +182,7 @@ final class JwkParserTests {
 	// Rule 3: a key that publishes private or symmetric material is never used, not even for its public half, whatever
 	// the member's value (JSON null included).
 	@TestFactory
-	Stream<DynamicTest> privateOrSymmetricMembersSkipTheKeyWhateverTheirValue() {
+	@NonNull Stream<@NonNull DynamicTest> privateOrSymmetricMembersSkipTheKeyWhateverTheirValue() {
 		List<DynamicTest> tests = new ArrayList<>();
 		for (String name : List.of("d", "p", "q", "dp", "dq", "qi", "oth", "k"))
 			for (String value : List.of("\"AQAB\"", "null", "1", "[]", "\"\""))
@@ -196,7 +198,7 @@ final class JwkParserTests {
 	// Rule 4 (RFC 7517 sections 4.2 and 4.3): use, when present, is exactly "sig"; key_ops, when present, is an array of
 	// strings with "verify"; with both, key_ops holds only sign and verify, so the two agree.
 	@TestFactory
-	Stream<DynamicTest> useAndKeyOperationsMustAllowVerification() {
+	@NonNull Stream<@NonNull DynamicTest> useAndKeyOperationsMustAllowVerification() {
 		return rows(
 				row("use enc", rsa().use("enc").toJson(), JsonWebKeySkipReason.NOT_A_VERIFICATION_KEY),
 				row("use SIG", rsa().use("SIG").toJson(), JsonWebKeySkipReason.NOT_A_VERIFICATION_KEY),
@@ -234,7 +236,7 @@ final class JwkParserTests {
 	// Rule 5: alg, when present, must be a JwsAlgorithm wire value, compared exactly (Wycheproof's ES521, JWE
 	// algorithms, none in any case, and a JSON value that is not a string all fail here).
 	@TestFactory
-	Stream<DynamicTest> algorithmsThatAreNotJwsAlgorithmsAreUnsupported() {
+	@NonNull Stream<@NonNull DynamicTest> algorithmsThatAreNotJwsAlgorithmsAreUnsupported() {
 		return Stream.of("\"ES521\"", "\"RSA-OAEP\"", "\"RSA1_5\"", "\"none\"", "\"None\"", "\"rs256\"", "\"\"",
 						"\"ES256K\"", "\"Ed448\"", "\"A256GCM\"", "256", "null", "true", "[\"RS256\"]")
 				.map(alg -> DynamicTest.dynamicTest("alg " + alg, () -> assertSkipped(
@@ -244,7 +246,7 @@ final class JwkParserTests {
 	// Rule 5: an alg for another key type, or for another supported curve, is a mismatch; every HMAC alg is one,
 	// because a key set never supplies an HMAC key. Matching pairs keep their alg.
 	@TestFactory
-	Stream<DynamicTest> algorithmsForAnotherKeyTypeOrCurveAreMismatched() {
+	@NonNull Stream<@NonNull DynamicTest> algorithmsForAnotherKeyTypeOrCurveAreMismatched() {
 		List<DynamicTest> tests = new ArrayList<>();
 		Map<String, TestJsonWebKeys.Builder> keys = Map.of("RSA", rsa(), "P-256", ec(),
 				"P-384", TestJsonWebKeys.withFixture(Fixture.IDP_SIGNING_EC_P384),
@@ -276,7 +278,7 @@ final class JwkParserTests {
 	// Rule 6: EC keys on P-256, P-384 and P-521 and OKP keys on Ed25519 only, by exact name. An alg for the curve
 	// family does not rescue an unsupported curve: that is rule 6's, not a mismatch.
 	@TestFactory
-	Stream<DynamicTest> curvesRevetsecDoesNotSupportAreSkipped() throws GeneralSecurityException {
+	@NonNull Stream<@NonNull DynamicTest> curvesRevetsecDoesNotSupportAreSkipped() throws GeneralSecurityException {
 		String ed448 = TestJsonWebKeys.withKeyPair(generate("Ed448")).toJson();
 		String x25519 = TestJsonWebKeys.withKeyPair(generate("X25519")).toJson();
 		String x448 = TestJsonWebKeys.withKeyPair(generate("X448")).toJson();
@@ -300,7 +302,7 @@ final class JwkParserTests {
 
 	// Rule 7: kid is a string of 1 to 256 characters.
 	@TestFactory
-	Stream<DynamicTest> keyIdsAreStringsOfOneTo256Characters() {
+	@NonNull Stream<@NonNull DynamicTest> keyIdsAreStringsOfOneTo256Characters() {
 		return rows(
 				row("empty", rsa().kid("").toJson(), JsonWebKeySkipReason.MALFORMED_KEY),
 				row("257 characters", rsa().kid("k".repeat(257)).toJson(), JsonWebKeySkipReason.MALFORMED_KEY),
@@ -316,7 +318,7 @@ final class JwkParserTests {
 	// Rule 7 and INV-C6: an issuer member that is present but not a non-empty string never counts as absent, which
 	// would make the key usable for every issuer.
 	@TestFactory
-	Stream<DynamicTest> anIssuerMemberThatIsNotANonEmptyStringSkipsTheKey() {
+	@NonNull Stream<@NonNull DynamicTest> anIssuerMemberThatIsNotANonEmptyStringSkipsTheKey() {
 		return rows(
 				row("null", rsa().member("issuer", "null").toJson(), JsonWebKeySkipReason.MALFORMED_KEY),
 				row("123", rsa().member("issuer", "123").toJson(), JsonWebKeySkipReason.MALFORMED_KEY),
@@ -332,7 +334,7 @@ final class JwkParserTests {
 	// Rule 7 for RSA (RFC 7518 sections 2 and 6.3.1): n and e are canonical unpadded base64url of minimal unsigned
 	// integers, and n is odd.
 	@TestFactory
-	Stream<DynamicTest> rsaMembersMustBeMinimalCanonicalBase64UrlIntegers() {
+	@NonNull Stream<@NonNull DynamicTest> rsaMembersMustBeMinimalCanonicalBase64UrlIntegers() {
 		RSAPublicKey key = (RSAPublicKey) Fixture.IDP_SIGNING_RSA_2048.getPublicKey();
 		String n = TestJsonWebKeys.base64UrlUInt(key.getModulus());
 
@@ -364,7 +366,7 @@ final class JwkParserTests {
 	// Rule 7 for EC (RFC 7518 section 6.2.1): crv, x and y are present, and the coordinates are exactly the curve's
 	// length, so a producer that trims leading zero octets (31-byte x) is refused rather than given a second thumbprint.
 	@TestFactory
-	Stream<DynamicTest> ecCoordinatesMustBeStringsOfTheCurvesExactLength() {
+	@NonNull Stream<@NonNull DynamicTest> ecCoordinatesMustBeStringsOfTheCurvesExactLength() {
 		ECPublicKey key = (ECPublicKey) Fixture.IDP_SIGNING_EC_P256.getPublicKey();
 		ECPublicKey p384 = (ECPublicKey) Fixture.IDP_SIGNING_EC_P384.getPublicKey();
 		byte[] x = TestJsonWebKeys.fixedLengthBytes(key.getW().getAffineX(), 32);
@@ -391,7 +393,7 @@ final class JwkParserTests {
 	// Rule 7 for Ed25519 (RFC 8037 section 2, RFC 8032 section 5.1.3): x is 32 octets that decode to a curve point, so
 	// an undecodable key is refused here rather than failing at verification.
 	@TestFactory
-	Stream<DynamicTest> ed25519KeysMustDecodeToACurvePoint() {
+	@NonNull Stream<@NonNull DynamicTest> ed25519KeysMustDecodeToACurvePoint() {
 		BigInteger p = TestJsonWebKeys.ED25519_FIELD_PRIME;
 		// Controls: the oracle agrees that these do not decode.
 		Assertions.assertTrue(TestJsonWebKeys.ed25519DecodeX(BigInteger.TWO, false).isEmpty());
@@ -420,7 +422,7 @@ final class JwkParserTests {
 	// Rules 8 and 9 (plan 9.3, M2-7): 2048 to 16384 bits, and e odd from 65537 to below 2^32. KeyFactory("RSA") alone
 	// accepts every one of these.
 	@TestFactory
-	Stream<DynamicTest> rsaModulusSizeAndExponentFollowTheKeyPolicy() {
+	@NonNull Stream<@NonNull DynamicTest> rsaModulusSizeAndExponentFollowTheKeyPolicy() {
 		BigInteger twoTo32 = BigInteger.ONE.shiftLeft(32);
 		BigInteger short2047 = BigInteger.ONE.shiftLeft(2046).setBit(0).setBit(1);
 		BigInteger long16385 = BigInteger.ONE.shiftLeft(16384).setBit(0);
@@ -450,7 +452,7 @@ final class JwkParserTests {
 
 	// Rule 10 (INV-J5): the point is on its curve, with coordinates below the field prime.
 	@TestFactory
-	Stream<DynamicTest> ecPointsOffTheCurveAreSkipped() {
+	@NonNull Stream<@NonNull DynamicTest> ecPointsOffTheCurveAreSkipped() {
 		ECPublicKey key = (ECPublicKey) Fixture.IDP_SIGNING_EC_P256.getPublicKey();
 		BigInteger p = ((ECFieldFp) key.getParams().getCurve().getField()).getP();
 		String zero = JsonText.string(TestJws.base64Url(new byte[32]));
@@ -467,7 +469,7 @@ final class JwkParserTests {
 	// Rule 11: a ROCA-fingerprinted modulus (CVE-2017-15361) and every Ed25519 point of small order, derived from the
 	// curve by the test helper; with the identity key, R = identity, S = 0 verifies every message.
 	@TestFactory
-	Stream<DynamicTest> weakKeysAreSkipped() {
+	@NonNull Stream<@NonNull DynamicTest> weakKeysAreSkipped() {
 		KeyPair roca = TestJsonWebKeys.rocaFingerprintedRsaKeyPair();
 		Assertions.assertTrue(TestJsonWebKeys.hasRocaFingerprint(((RSAPublicKey) roca.getPublic()).getModulus()));
 		List<DynamicTest> tests = new ArrayList<>();
@@ -486,7 +488,7 @@ final class JwkParserTests {
 	// Rule 12 (RFC 7517 section 4.7): the first x5c element is standard base64 of a certificate that parses strictly and
 	// holds the same key; the rest of the chain is not examined.
 	@TestFactory
-	Stream<DynamicTest> x5cMustHoldTheSameKey() {
+	@NonNull Stream<@NonNull DynamicTest> x5cMustHoldTheSameKey() {
 		X509Certificate rsaCertificate = Fixture.IDP_SIGNING_RSA_2048.getCertificate().orElseThrow();
 		X509Certificate otherRsaCertificate = Fixture.SP_SIGNING_RSA_2048.getCertificate().orElseThrow();
 		X509Certificate ecCertificate = Fixture.IDP_SIGNING_EC_P256.getCertificate().orElseThrow();
@@ -565,7 +567,7 @@ final class JwkParserTests {
 
 	// Rules run in order: each pair below breaks two rules, and the earlier one names the reason.
 	@TestFactory
-	Stream<DynamicTest> theFirstFailingRuleNamesTheReason() {
+	@NonNull Stream<@NonNull DynamicTest> theFirstFailingRuleNamesTheReason() {
 		KeyPair roca = TestJsonWebKeys.rocaFingerprintedRsaKeyPair();
 		X509Certificate otherCertificate = Fixture.SP_SIGNING_RSA_2048.getCertificate().orElseThrow();
 
@@ -607,19 +609,19 @@ final class JwkParserTests {
 						.x5c(List.of(otherCertificate)).toJson(), JsonWebKeySkipReason.WEAK_KEY));
 	}
 
-	private static TestJsonWebKeys.Builder rsa() {
+	private static TestJsonWebKeys.@NonNull Builder rsa() {
 		return TestJsonWebKeys.withFixture(Fixture.IDP_SIGNING_RSA_2048);
 	}
 
-	private static TestJsonWebKeys.Builder ec() {
+	private static TestJsonWebKeys.@NonNull Builder ec() {
 		return TestJsonWebKeys.withFixture(Fixture.IDP_SIGNING_EC_P256);
 	}
 
-	private static TestJsonWebKeys.Builder ed25519() {
+	private static TestJsonWebKeys.@NonNull Builder ed25519() {
 		return TestJsonWebKeys.withFixture(Fixture.ED25519);
 	}
 
-	static JsonObject jwk(String json) {
+	static @NonNull JsonObject jwk(@NonNull String json) {
 		try {
 			return (JsonObject) JsonCodec.parse(json.getBytes(StandardCharsets.UTF_8), JsonLimits.protocolDocument(
 					4 * 1024 * 1024));
@@ -628,11 +630,11 @@ final class JwkParserTests {
 		}
 	}
 
-	static VerificationKey parse(String json) throws SkippedKeyException {
+	static @NonNull VerificationKey parse(@NonNull String json) throws SkippedKeyException {
 		return JwkParser.parse(jwk(json));
 	}
 
-	static void assertSkipped(JsonWebKeySkipReason reason, String json) {
+	static void assertSkipped(@NonNull JsonWebKeySkipReason reason, @NonNull String json) {
 		SkippedKeyException exception = Assertions.assertThrows(SkippedKeyException.class, () -> parse(json));
 		Assertions.assertEquals(reason, exception.getReason());
 		Assertions.assertNull(exception.getCause());
@@ -641,7 +643,7 @@ final class JwkParserTests {
 				"a skip's message never holds the key");
 	}
 
-	private static Stream<DynamicTest> rows(Row... rows) {
+	private static @NonNull Stream<@NonNull DynamicTest> rows(@NonNull Row @NonNull ... rows) {
 		return Stream.of(rows).map(row -> DynamicTest.dynamicTest(row.name(), () -> {
 			JsonWebKeySkipReason reason = row.reason();
 			if (reason == null)
@@ -651,14 +653,14 @@ final class JwkParserTests {
 		}));
 	}
 
-	private static Row row(String name, String json, @Nullable JsonWebKeySkipReason reason) {
+	private static @NonNull Row row(@NonNull String name, @NonNull String json, @Nullable JsonWebKeySkipReason reason) {
 		return new Row(name, json, reason);
 	}
 
-	private record Row(String name, String json, @Nullable JsonWebKeySkipReason reason) {
+	private record Row(@NonNull String name, @NonNull String json, @Nullable JsonWebKeySkipReason reason) {
 	}
 
-	private static @Nullable String expectedCurve(PublicKey publicKey) {
+	private static @Nullable String expectedCurve(@NonNull PublicKey publicKey) {
 		if (publicKey instanceof ECPublicKey ec)
 			return switch (ec.getParams().getCurve().getField().getFieldSize()) {
 				case 256 -> "P-256";
@@ -672,7 +674,7 @@ final class JwkParserTests {
 	 * RFC 7638 section 3, computed here apart from Rfc7638: the required members sorted by name, compact, then SHA-256
 	 * and unpadded base64url.
 	 */
-	private static String thumbprintOf(String json) throws Exception {
+	private static @NonNull String thumbprintOf(@NonNull String json) throws Exception {
 		JsonObject object = jwk(json);
 		String keyType = object.findString("kty").orElseThrow();
 		List<String> names = switch (keyType) {
@@ -688,11 +690,11 @@ final class JwkParserTests {
 		return TestJws.base64Url(digest);
 	}
 
-	private static KeyPair generate(String algorithm) throws GeneralSecurityException {
+	private static @NonNull KeyPair generate(@NonNull String algorithm) throws GeneralSecurityException {
 		return KeyPairGenerator.getInstance(algorithm).generateKeyPair();
 	}
 
-	private static byte[] der(X509Certificate certificate) {
+	private static byte @NonNull [] der(@NonNull X509Certificate certificate) {
 		try {
 			return certificate.getEncoded();
 		} catch (GeneralSecurityException e) {
@@ -700,11 +702,11 @@ final class JwkParserTests {
 		}
 	}
 
-	private static String standardBase64(X509Certificate certificate) {
+	private static @NonNull String standardBase64(@NonNull X509Certificate certificate) {
 		return Base64.getEncoder().encodeToString(der(certificate));
 	}
 
-	private static byte[] concat(byte[] first, byte[] second) {
+	private static byte @NonNull [] concat(byte @NonNull [] first, byte @NonNull [] second) {
 		byte[] joined = new byte[first.length + second.length];
 		System.arraycopy(first, 0, joined, 0, first.length);
 		System.arraycopy(second, 0, joined, first.length, second.length);
@@ -718,12 +720,12 @@ final class JwkParserTests {
 		private static final long serialVersionUID = 1L;
 
 		@Override
-		public BigInteger getPublicExponent() {
+		public @NonNull BigInteger getPublicExponent() {
 			throw new IllegalStateException("unavailable");
 		}
 
 		@Override
-		public String getAlgorithm() {
+		public @NonNull String getAlgorithm() {
 			return "RSA";
 		}
 
@@ -738,7 +740,7 @@ final class JwkParserTests {
 		}
 
 		@Override
-		public BigInteger getModulus() {
+		public @NonNull BigInteger getModulus() {
 			throw new IllegalStateException("unavailable");
 		}
 	}

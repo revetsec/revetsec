@@ -16,6 +16,8 @@
 
 package com.revetsec.jose;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.internal.jose.JoseFailure;
 import com.revetsec.internal.jose.JoseHeaderPolicy;
 import com.revetsec.internal.jose.JwtProcessor;
@@ -51,7 +53,7 @@ final class JwtValidatorAlgorithmConfusionTests {
 	// RFC 8725 section 3.2 (exit criterion 4): alg none in any case, with an empty signature or with a real one, is
 	// ALGORITHM_NOT_ALLOWED, whatever else the token holds.
 	@TestFactory
-	Stream<DynamicTest> everySpellingOfNoneIsNotAllowed() {
+	@NonNull Stream<@NonNull DynamicTest> everySpellingOfNoneIsNotAllowed() {
 		byte[] realSignature = JwtFixtures.token(Algorithm.RS256).signed(Fixture.IDP_SIGNING_RSA_2048.getPrivateKey())
 				.getSignature();
 
@@ -67,7 +69,7 @@ final class JwtValidatorAlgorithmConfusionTests {
 	// CVE-2015-9235 (exit criterion 4): an HS256 token MACed with the RSA public key's DER, PEM or JWK bytes, naming
 	// the key's kid, is ALGORITHM_NOT_ALLOWED under {RS256}.
 	@TestFactory
-	Stream<DynamicTest> anHmacKeyedWithThePublicKeyIsNotAllowed() {
+	@NonNull Stream<@NonNull DynamicTest> anHmacKeyedWithThePublicKeyIsNotAllowed() {
 		return publicKeyEncodings().entrySet().stream().flatMap(encoding -> Stream.of(Algorithm.HS256, Algorithm.HS384,
 				Algorithm.HS512).map(hmac -> DynamicTest.dynamicTest(hmac + " keyed with the " + encoding.getKey(), () ->
 				JwtFixtures.assertRejected(JoseException.Reason.ALGORITHM_NOT_ALLOWED, VALIDATOR, TestJws.withAlgorithm(hmac)
@@ -131,7 +133,7 @@ final class JwtValidatorAlgorithmConfusionTests {
 	// key of another type, curve or alg is KEY_ALGORITHM_MISMATCH, even when that key signed it: RS256 naming an EC key,
 	// ES256 naming a P-384 key, and PS256 naming a key whose alg is RS256.
 	@TestFactory
-	Stream<DynamicTest> aKidNamingAKeyOfAnotherAlgorithmIsAMismatch() {
+	@NonNull Stream<@NonNull DynamicTest> aKidNamingAKeyOfAnotherAlgorithmIsAMismatch() {
 		Map<String, Case> cases = new LinkedHashMap<>();
 		cases.put("RS256 naming an EC key", new Case(JwtFixtures.jwk(Fixture.IDP_SIGNING_EC_P256), Algorithm.RS256,
 				Fixture.IDP_SIGNING_RSA_2048, Set.of(JwsAlgorithm.RS256, JwsAlgorithm.ES256)));
@@ -192,7 +194,7 @@ final class JwtValidatorAlgorithmConfusionTests {
 	 * The RSA fixture key's public bytes as an attacker would MAC with them: its SubjectPublicKeyInfo DER, its PEM and
 	 * its JWK JSON.
 	 */
-	private static Map<String, byte[]> publicKeyEncodings() {
+	private static @NonNull Map<@NonNull String, byte @NonNull []> publicKeyEncodings() {
 		PublicKey key = Fixture.IDP_SIGNING_RSA_2048.getPublicKey();
 		Map<String, byte[]> encodings = new LinkedHashMap<>();
 		encodings.put("DER", key.getEncoded());
@@ -201,6 +203,6 @@ final class JwtValidatorAlgorithmConfusionTests {
 		return encodings;
 	}
 
-	private record Case(TestJsonWebKeys.Builder key, Algorithm algorithm, Fixture signer, Set<JwsAlgorithm> allowed) {
+	private record Case(TestJsonWebKeys.@NonNull Builder key, @NonNull Algorithm algorithm, @NonNull Fixture signer, @NonNull Set<@NonNull JwsAlgorithm> allowed) {
 	}
 }

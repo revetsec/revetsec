@@ -16,6 +16,8 @@
 
 package com.revetsec.testing;
 
+import org.jspecify.annotations.NonNull;
+
 import javax.annotation.concurrent.ThreadSafe;
 import java.util.List;
 import java.util.Locale;
@@ -49,7 +51,7 @@ public final class JsonText {
 	 * @param value the string
 	 * @return the quoted literal
 	 */
-	public static String string(String value) {
+	public static @NonNull String string(@NonNull String value) {
 		requireNonNull(value);
 		StringBuilder builder = new StringBuilder(value.length() + 2).append('"');
 		for (int index = 0; index < value.length(); ++index) {
@@ -75,7 +77,7 @@ public final class JsonText {
 	 * @param members each member's name and raw JSON value text
 	 * @return the object text, with no whitespace
 	 */
-	public static String object(List<Map.Entry<String, String>> members) {
+	public static @NonNull String object(@NonNull List<Map.@NonNull Entry<@NonNull String, @NonNull String>> members) {
 		requireNonNull(members);
 		StringBuilder builder = new StringBuilder().append('{');
 		for (Map.Entry<String, String> member : members) {
@@ -92,7 +94,7 @@ public final class JsonText {
 	 * @param elements each element's raw JSON text
 	 * @return the array text, with no whitespace
 	 */
-	public static String array(List<String> elements) {
+	public static @NonNull String array(@NonNull List<@NonNull String> elements) {
 		requireNonNull(elements);
 		return "[" + String.join(",", elements) + "]";
 	}
@@ -103,7 +105,7 @@ public final class JsonText {
 	 * @param values the strings
 	 * @return the array text
 	 */
-	public static String stringArray(List<String> values) {
+	public static @NonNull String stringArray(@NonNull List<@NonNull String> values) {
 		requireNonNull(values);
 		return array(values.stream().map(JsonText::string).toList());
 	}

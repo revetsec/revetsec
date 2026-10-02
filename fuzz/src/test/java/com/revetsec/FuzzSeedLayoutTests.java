@@ -19,6 +19,7 @@ package com.revetsec;
 import com.code_intelligence.jazzer.junit.FuzzTest;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.jspecify.annotations.NonNull;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -89,6 +90,11 @@ final class FuzzSeedLayoutTests {
 			"com.revetsec.jose.JwtValidatorFuzzTests#validateAcceptsOnlyWhatTheJdkVerifiersAccept",
 			"com.revetsec.jose.JwtValidatorFuzzTests#signedTokensAreJudgedLikeTheOracleWhateverTheirHeaderAndClaims");
 
+	private static final Set<String> RESOURCE_JSON_TEXT_TARGETS = Set.of(
+			"com.revetsec.oauth.ResourceServerFuzzTests#metadataKeepsRolesAndRawResourceIdentifiers",
+			"com.revetsec.oauth.ResourceServerFuzzTests#signedAccessTokensRespectStrictAndUntypedProfiles",
+			"com.revetsec.oauth.ResourceServerFuzzTests#introspectionResponsesAreTypedAudienceCheckedAndUncached");
+
 	private static final List<MappedCorpus> JSON_TEXT_CORPORA = List.of(
 			new MappedCorpus("src/test/resources/com/revetsec/internal/json/corpus", "",
 					relative -> relative.startsWith("parse/") || relative.startsWith("round-trip/")),
@@ -125,7 +131,10 @@ final class FuzzSeedLayoutTests {
 			Map.entry("com.revetsec.oidc.OidcFuzzTests#signedClaimsRespectInitialAndRefreshProfiles", JSON_TEXT_CORPORA),
 			Map.entry("com.revetsec.oidc.OidcFuzzTests#metadataRequiresExactIssuerAndCapabilities", JSON_TEXT_CORPORA),
 			Map.entry("com.revetsec.oidc.OidcFuzzTests#userInfoRequiresTheVerifiedSubject", JSON_TEXT_CORPORA),
-			Map.entry("com.revetsec.oidc.OidcFuzzTests#sessionReferencesRoundTripWithoutCredentials", JSON_TEXT_CORPORA));
+			Map.entry("com.revetsec.oidc.OidcFuzzTests#sessionReferencesRoundTripWithoutCredentials", JSON_TEXT_CORPORA),
+			Map.entry("com.revetsec.oauth.ResourceServerFuzzTests#metadataKeepsRolesAndRawResourceIdentifiers", JSON_TEXT_CORPORA),
+			Map.entry("com.revetsec.oauth.ResourceServerFuzzTests#signedAccessTokensRespectStrictAndUntypedProfiles", JSON_TEXT_CORPORA),
+			Map.entry("com.revetsec.oauth.ResourceServerFuzzTests#introspectionResponsesAreTypedAudienceCheckedAndUncached", JSON_TEXT_CORPORA));
 
 	// A seed directory whose class or method no longer exists (after a rename or a move) is never replayed or zipped.
 	@Test
@@ -251,7 +260,7 @@ final class FuzzSeedLayoutTests {
 	 * Every {@code <SimpleClassName>Inputs} directory on the test class path: each lives in its class's package
 	 * directory. The core test tree, which this module compiles in, has none.
 	 */
-	private static List<Path> inputsDirectories(Path root) throws IOException {
+	private static @NonNull List<@NonNull Path> inputsDirectories(@NonNull Path root) throws IOException {
 		try (Stream<Path> paths = Files.walk(root)) {
 			return paths.filter(Files::isDirectory)
 					.filter(path -> !path.equals(root) && path.getFileName().toString().endsWith(INPUTS_SUFFIX))
@@ -264,7 +273,7 @@ final class FuzzSeedLayoutTests {
 	 * Every {@code @FuzzTest} method, as {@code <binary class name>#<method>}, of every top-level {@code *FuzzTests}
 	 * class on the test class path, which is the set {@code build.sh} makes targets of.
 	 */
-	private static Set<String> fuzzTargets(Path root) throws IOException {
+	private static @NonNull Set<@NonNull String> fuzzTargets(@NonNull Path root) throws IOException {
 		Set<String> targets = new TreeSet<>();
 
 		try (Stream<Path> paths = Files.walk(root)) {
@@ -284,7 +293,7 @@ final class FuzzSeedLayoutTests {
 		return targets;
 	}
 
-	private static Set<String> fuzzTestMethodNames(String className) {
+	private static @NonNull Set<@NonNull String> fuzzTestMethodNames(@NonNull String className) {
 		Class<?> type = loadClass(className);
 		return Arrays.stream(type.getDeclaredMethods())
 				.filter(method -> method.isAnnotationPresent(FuzzTest.class))
@@ -296,8 +305,8 @@ final class FuzzSeedLayoutTests {
 	 * A {@code byte[]} target in a JSON package, or a JOSE target on the JSON-text list, reads JSON text, so it is
 	 * seeded with the JSON corpora.
 	 */
-	private static boolean readsJsonText(String target) {
-		if (JOSE_JSON_TEXT_TARGETS.contains(target))
+	private static boolean readsJsonText(@NonNull String target) {
+		if (JOSE_JSON_TEXT_TARGETS.contains(target) || RESOURCE_JSON_TEXT_TARGETS.contains(target))
 			return true;
 
 		return JSON_TEXT_PACKAGES.contains(loadClass(className(target)).getPackageName()) && takesBytes(target);
@@ -306,7 +315,7 @@ final class FuzzSeedLayoutTests {
 	/**
 	 * Whether the target is a public method whose one parameter is {@code byte[]}.
 	 */
-	private static boolean takesBytes(String target) {
+	private static boolean takesBytes(@NonNull String target) {
 		String methodName = target.substring(target.indexOf('#') + 1);
 
 		for (Method method : loadClass(className(target)).getDeclaredMethods())
@@ -317,11 +326,11 @@ final class FuzzSeedLayoutTests {
 		return false;
 	}
 
-	private static String className(String target) {
+	private static @NonNull String className(@NonNull String target) {
 		return target.substring(0, target.indexOf('#'));
 	}
 
-	private static Class<?> loadClass(String className) {
+	private static @NonNull Class<@NonNull ?> loadClass(@NonNull String className) {
 		try {
 			return Class.forName(className, false, FuzzSeedLayoutTests.class.getClassLoader());
 		} catch (ClassNotFoundException e) {
@@ -329,18 +338,18 @@ final class FuzzSeedLayoutTests {
 		}
 	}
 
-	private static Path inputsDirectory(Path root, String target) {
+	private static @NonNull Path inputsDirectory(@NonNull Path root, @NonNull String target) {
 		String className = target.substring(0, target.indexOf('#'));
 		String methodName = target.substring(target.indexOf('#') + 1);
 		return root.resolve(className.replace('.', '/') + INPUTS_SUFFIX).resolve(methodName);
 	}
 
-	private static String className(Path root, Path inputs) {
+	private static @NonNull String className(@NonNull Path root, @NonNull Path inputs) {
 		String relative = root.relativize(inputs).toString().replace('\\', '/');
 		return relative.substring(0, relative.length() - INPUTS_SUFFIX.length()).replace('/', '.');
 	}
 
-	private static long countFiles(Path directory) throws IOException {
+	private static long countFiles(@NonNull Path directory) throws IOException {
 		if (!Files.isDirectory(directory))
 			return 0;
 
@@ -352,7 +361,7 @@ final class FuzzSeedLayoutTests {
 	/**
 	 * The directory the test classes were loaded from: {@code fuzz/target/test-classes}.
 	 */
-	private static Path testClassesRoot() {
+	private static @NonNull Path testClassesRoot() {
 		try {
 			Path root = Path.of(FuzzSeedLayoutTests.class.getProtectionDomain().getCodeSource().getLocation().toURI());
 			Assertions.assertTrue(Files.isDirectory(root), () -> "the test classes are not in a directory: " + root);
@@ -366,7 +375,7 @@ final class FuzzSeedLayoutTests {
 	 * The core checkout the fuzz pom maps its corpora from: the {@code revetsec.core.basedir} Surefire passes, or,
 	 * outside Maven, the checkout that holds {@code fuzz/target/test-classes}.
 	 */
-	private static Path coreBasedir(Path testClassesRoot) {
+	private static @NonNull Path coreBasedir(@NonNull Path testClassesRoot) {
 		String configured = System.getProperty("revetsec.core.basedir");
 		Path core = configured == null || configured.isBlank()
 				? testClassesRoot.getParent().getParent().getParent()
@@ -385,7 +394,7 @@ final class FuzzSeedLayoutTests {
 		private final String target;
 		private final Predicate<String> included;
 
-		private MappedCorpus(String source, String target, Predicate<String> included) {
+		private MappedCorpus(@NonNull String source, @NonNull String target, @NonNull Predicate<@NonNull String> included) {
 			this.source = source;
 			this.target = target;
 			this.included = included;
@@ -394,7 +403,7 @@ final class FuzzSeedLayoutTests {
 		/**
 		 * The included files, as paths relative to the source directory with {@code /} separators.
 		 */
-		private List<String> sourceFiles(Path core) {
+		private @NonNull List<@NonNull String> sourceFiles(@NonNull Path core) {
 			Path directory = core.resolve(this.source);
 
 			try (Stream<Path> paths = Files.walk(directory)) {

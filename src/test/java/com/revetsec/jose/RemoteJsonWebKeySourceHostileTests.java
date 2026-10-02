@@ -16,6 +16,8 @@
 
 package com.revetsec.jose;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.ErrorCategory;
 import com.revetsec.internal.http.Deadline;
 import com.revetsec.internal.http.HostileResponse;
@@ -104,7 +106,7 @@ final class RemoteJsonWebKeySourceHostileTests {
 	// and transience (the JDK's IOException as the cause, for IO only), and a waiter on the same flight the same
 	// category and transience with no cause. A redirect's target is never requested.
 	@TestFactory
-	Stream<DynamicTest> everyHostileJwksResponseGivesItsCategoryToTheLeaderAndItsWaiters() {
+	@NonNull Stream<@NonNull DynamicTest> everyHostileJwksResponseGivesItsCategoryToTheLeaderAndItsWaiters() {
 		return HostileResponse.jwks().stream().map(hostileResponse -> DynamicTest.dynamicTest(hostileResponse.getName(),
 				() -> {
 					String path = path();
@@ -226,7 +228,7 @@ final class RemoteJsonWebKeySourceHostileTests {
 	// one simulated hour, warm and cold: at most 15 requests, at most one unknown-key request per cooldown, and every
 	// held-back call fails at once with TRANSPORT, transient, instead of waiting out its deadline.
 	@TestFactory
-	Stream<DynamicTest> aTarpitStaysWithinTheBackoffScheduleUnderEmbeddedDeadlines() {
+	@NonNull Stream<@NonNull DynamicTest> aTarpitStaysWithinTheBackoffScheduleUnderEmbeddedDeadlines() {
 		return Stream.of(false, true).map(warm -> DynamicTest.dynamicTest(warm ? "warm" : "cold", () -> {
 			String path = path();
 			TestClock clock = TestClock.fromInstant(START);
@@ -266,7 +268,7 @@ final class RemoteJsonWebKeySourceHostileTests {
 		}));
 	}
 
-	private static ErrorCategory expectedCategory(HostileResponse hostileResponse) {
+	private static @NonNull ErrorCategory expectedCategory(@NonNull HostileResponse hostileResponse) {
 		Optional<Kind> kind = hostileResponse.getExpectedKind();
 		if (kind.isEmpty())
 			return ErrorCategory.REMOTE_ERROR;
@@ -278,7 +280,7 @@ final class RemoteJsonWebKeySourceHostileTests {
 		};
 	}
 
-	private static boolean expectedTransience(HostileResponse hostileResponse) {
+	private static boolean expectedTransience(@NonNull HostileResponse hostileResponse) {
 		Optional<Kind> kind = hostileResponse.getExpectedKind();
 		if (kind.isPresent())
 			return kind.get() == Kind.TIMEOUT || kind.get() == Kind.IO;
@@ -286,25 +288,25 @@ final class RemoteJsonWebKeySourceHostileTests {
 		return status == 429 || (status >= 500 && status <= 599);
 	}
 
-	private static String path() {
+	private static @NonNull String path() {
 		return "/hostile-jwks/" + NEXT_PATH.incrementAndGet();
 	}
 
-	private static TestHttpsServer jdkServer() {
+	private static @NonNull TestHttpsServer jdkServer() {
 		TestHttpsServer server = jdkServer;
 		if (server == null)
 			throw new IllegalStateException("The server did not start");
 		return server;
 	}
 
-	private static RawTlsServer rawServer() {
+	private static @NonNull RawTlsServer rawServer() {
 		RawTlsServer server = rawServer;
 		if (server == null)
 			throw new IllegalStateException("The server did not start");
 		return server;
 	}
 
-	private static HttpClient client() {
+	private static @NonNull HttpClient client() {
 		HttpClient current = client;
 		if (current == null)
 			throw new IllegalStateException("The client was not created");
@@ -321,11 +323,11 @@ final class RemoteJsonWebKeySourceHostileTests {
 		private final AtomicInteger successes = new AtomicInteger();
 		private final AtomicInteger failures = new AtomicInteger();
 
-		private AttemptObserver(Clock clock) {
+		private AttemptObserver(@NonNull Clock clock) {
 			this.clock = clock;
 		}
 
-		List<Long> getAttemptSeconds() {
+		@NonNull List<@NonNull Long> getAttemptSeconds() {
 			return List.copyOf(this.attemptSeconds);
 		}
 
@@ -338,20 +340,20 @@ final class RemoteJsonWebKeySourceHostileTests {
 		}
 
 		@Override
-		public void willFetchJsonWebKeySet(URI jwksUri) {
+		public void willFetchJsonWebKeySet(@NonNull URI jwksUri) {
 			Instant now = this.clock.instant();
 			this.attemptSeconds.add(Duration.between(START, now).toSeconds());
 		}
 
 		@Override
-		public void didFetchJsonWebKeySet(URI jwksUri, Integer usableKeyCount, Integer skippedKeyCount,
-				Duration timeToLive, Duration elapsed) {
+		public void didFetchJsonWebKeySet(@NonNull URI jwksUri, @NonNull Integer usableKeyCount, @NonNull Integer skippedKeyCount,
+				@NonNull Duration timeToLive, @NonNull Duration elapsed) {
 			this.successes.incrementAndGet();
 		}
 
 		@Override
-		public void didFailToFetchJsonWebKeySet(URI jwksUri, JsonWebKeySetUnavailableException exception,
-				Boolean servingStaleKeys, Duration elapsed) {
+		public void didFailToFetchJsonWebKeySet(@NonNull URI jwksUri, @NonNull JsonWebKeySetUnavailableException exception,
+				@NonNull Boolean servingStaleKeys, @NonNull Duration elapsed) {
 			this.failures.incrementAndGet();
 		}
 	}
@@ -367,7 +369,7 @@ final class RemoteJsonWebKeySourceHostileTests {
 		private final CountDownLatch gate = new CountDownLatch(1);
 		private final AtomicInteger sendCount = new AtomicInteger();
 
-		private GatedClient(HttpClient delegate) {
+		private GatedClient(@NonNull HttpClient delegate) {
 			this.delegate = delegate;
 		}
 
@@ -384,8 +386,8 @@ final class RemoteJsonWebKeySourceHostileTests {
 		}
 
 		@Override
-		public <T> CompletableFuture<HttpResponse<T>> sendAsync(HttpRequest request,
-				HttpResponse.BodyHandler<T> responseBodyHandler) {
+		public <T> @NonNull CompletableFuture<@NonNull HttpResponse<@NonNull T>> sendAsync(@NonNull HttpRequest request,
+				HttpResponse.@NonNull BodyHandler<@NonNull T> responseBodyHandler) {
 			this.sendCount.incrementAndGet();
 			this.entered.countDown();
 			try {
@@ -399,59 +401,59 @@ final class RemoteJsonWebKeySourceHostileTests {
 		}
 
 		@Override
-		public <T> CompletableFuture<HttpResponse<T>> sendAsync(HttpRequest request,
-				HttpResponse.BodyHandler<T> responseBodyHandler, HttpResponse.PushPromiseHandler<T> pushPromiseHandler) {
+		public <T> @NonNull CompletableFuture<@NonNull HttpResponse<@NonNull T>> sendAsync(@NonNull HttpRequest request,
+				HttpResponse.@NonNull BodyHandler<@NonNull T> responseBodyHandler, HttpResponse.@NonNull PushPromiseHandler<@NonNull T> pushPromiseHandler) {
 			return sendAsync(request, responseBodyHandler);
 		}
 
 		@Override
-		public <T> HttpResponse<T> send(HttpRequest request, HttpResponse.BodyHandler<T> responseBodyHandler)
+		public <T> @NonNull HttpResponse<@NonNull T> send(@NonNull HttpRequest request, HttpResponse.@NonNull BodyHandler<@NonNull T> responseBodyHandler)
 				throws IOException, InterruptedException {
 			return this.delegate.send(request, responseBodyHandler);
 		}
 
 		@Override
-		public Optional<CookieHandler> cookieHandler() {
+		public @NonNull Optional<@NonNull CookieHandler> cookieHandler() {
 			return this.delegate.cookieHandler();
 		}
 
 		@Override
-		public Optional<Duration> connectTimeout() {
+		public @NonNull Optional<@NonNull Duration> connectTimeout() {
 			return this.delegate.connectTimeout();
 		}
 
 		@Override
-		public HttpClient.Redirect followRedirects() {
+		public HttpClient.@NonNull Redirect followRedirects() {
 			return this.delegate.followRedirects();
 		}
 
 		@Override
-		public Optional<ProxySelector> proxy() {
+		public @NonNull Optional<@NonNull ProxySelector> proxy() {
 			return this.delegate.proxy();
 		}
 
 		@Override
-		public SSLContext sslContext() {
+		public @NonNull SSLContext sslContext() {
 			return this.delegate.sslContext();
 		}
 
 		@Override
-		public SSLParameters sslParameters() {
+		public @NonNull SSLParameters sslParameters() {
 			return this.delegate.sslParameters();
 		}
 
 		@Override
-		public Optional<Authenticator> authenticator() {
+		public @NonNull Optional<@NonNull Authenticator> authenticator() {
 			return this.delegate.authenticator();
 		}
 
 		@Override
-		public HttpClient.Version version() {
+		public HttpClient.@NonNull Version version() {
 			return this.delegate.version();
 		}
 
 		@Override
-		public Optional<Executor> executor() {
+		public @NonNull Optional<@NonNull Executor> executor() {
 			return this.delegate.executor();
 		}
 	}

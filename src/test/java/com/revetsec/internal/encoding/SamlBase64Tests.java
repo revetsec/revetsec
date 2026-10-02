@@ -16,6 +16,8 @@
 
 package com.revetsec.internal.encoding;
 
+import org.jspecify.annotations.NonNull;
+
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.DynamicTest;
 import org.junit.jupiter.api.Test;
@@ -56,7 +58,7 @@ final class SamlBase64Tests {
 	// Only SP, HT, CR and LF are removed, wherever they are: around the value, between characters and inside the
 	// padding.
 	@TestFactory
-	Stream<DynamicTest> stripsSpaceTabCarriageReturnAndLineFeedAnywhere() {
+	@NonNull Stream<@NonNull DynamicTest> stripsSpaceTabCarriageReturnAndLineFeedAnywhere() {
 		return Stream.of(" Zm9vYmFy", "Zm9vYmFy\r\n", "\tZm9v\tYmFy\t", "Zm 9v Ym Fy", "Z\nm\r9\tv YmFy",
 				"Zm9vYg=\n=", "Zm9vYg= =", "\r\n\r\nZm9vYmFy\r\n\r\n").map(input -> DynamicTest.dynamicTest(
 				EncodingFailures.describe(input), () -> {
@@ -69,7 +71,7 @@ final class SamlBase64Tests {
 	// Every other whitespace character is outside the alphabet: form feed, vertical tab, NEL, no-break space, the
 	// line and paragraph separators, the ideographic space, the byte-order mark and NUL.
 	@TestFactory
-	Stream<DynamicTest> rejectsEveryOtherWhitespaceCharacter() {
+	@NonNull Stream<@NonNull DynamicTest> rejectsEveryOtherWhitespaceCharacter() {
 		return rejections(EncodingException.Kind.INVALID_CHARACTER, "Zm9v\fYmFy", "Zm9v\u000BYmFy",
 				"Zm9v\u0085YmFy", "Zm9v\u00A0YmFy", "Zm9v\u2028YmFy", "Zm9v\u2029YmFy", "Zm9v\u3000YmFy",
 				"\uFEFFZm9vYmFy", "Zm9v\u0000YmFy", "Zm9v\u001CYmFy");
@@ -78,7 +80,7 @@ final class SamlBase64Tests {
 	// The strict decoder checks for misplaced padding before the alphabet, so the same characters after a '=' are
 	// rejected as PADDING, as the class documentation says. A plain space there is stripped, not rejected.
 	@TestFactory
-	Stream<DynamicTest> rejectsOtherWhitespaceAfterAnEqualsSignAsPadding() {
+	@NonNull Stream<@NonNull DynamicTest> rejectsOtherWhitespaceAfterAnEqualsSignAsPadding() {
 		return rejections(EncodingException.Kind.PADDING, "Zg==\u000B", "Zg==\f", "Zg==\u00A0", "Zg==\u0085",
 				"Zg==\u2028", "Zg==!", "Zg=\u000B=", "Zg==\r\n\u000B", "Zg== \u000B");
 	}
@@ -86,7 +88,7 @@ final class SamlBase64Tests {
 	// The JDK MIME decoder silently skips characters outside the alphabet, so bytes an attacker adds would never be
 	// looked at; Revetsec rejects them (plan 8, 14.6 mime-base64-decoder rule).
 	@TestFactory
-	Stream<DynamicTest> rejectsWhatTheMimeDecoderSilentlySkips() {
+	@NonNull Stream<@NonNull DynamicTest> rejectsWhatTheMimeDecoderSilentlySkips() {
 		return Stream.of("Zm9v!YmFy", "Zm9v<YmFy>", "Zm9v.YmFy", "Zm9v%YmFy", "Zm9v\u00E9YmFy").map(input ->
 				DynamicTest.dynamicTest(EncodingFailures.describe(input), () -> {
 					Assertions.assertArrayEquals("foobar".getBytes(StandardCharsets.US_ASCII),
@@ -132,7 +134,7 @@ final class SamlBase64Tests {
 		Assertions.assertThrows(NullPointerException.class, () -> SamlBase64.decode(null));
 	}
 
-	private static Stream<DynamicTest> rejections(EncodingException.Kind kind, String... inputs) {
+	private static @NonNull Stream<@NonNull DynamicTest> rejections(EncodingException.@NonNull Kind kind, @NonNull String @NonNull ... inputs) {
 		return Stream.of(inputs).map(input -> DynamicTest.dynamicTest(EncodingFailures.describe(input),
 				() -> EncodingFailures.assertRejected(kind, input, () -> SamlBase64.decode(input))));
 	}

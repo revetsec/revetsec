@@ -16,6 +16,8 @@
 
 package com.revetsec.jose;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.OutboundUriPolicy;
 import com.revetsec.internal.http.DefaultHttpClientHolder;
 import com.revetsec.internal.http.HttpExchange;
@@ -78,7 +80,7 @@ final class RemoteJsonWebKeySourceZeroThreadTests {
 	private static final int BUILDS = 1_000;
 
 	@Test
-	void buildsStartNoThreadAndLoadNoClientAndFirstFetchesShareOneDefaultClient(@TempDir Path directory)
+	void buildsStartNoThreadAndLoadNoClientAndFirstFetchesShareOneDefaultClient(@TempDir @NonNull Path directory)
 			throws Exception {
 		Path classLoadLog = directory.resolve("class-load.log");
 		ChildJvm.Result result = ChildJvm.withMainClass(BuildChild.class)
@@ -118,7 +120,7 @@ final class RemoteJsonWebKeySourceZeroThreadTests {
 	/**
 	 * An {@code http} URI on {@code 127.0.0.1} whose port was just released, so connecting to it is refused.
 	 */
-	private static URI refusedUri() throws IOException {
+	private static @NonNull URI refusedUri() throws IOException {
 		int port;
 		try (ServerSocket serverSocket = new ServerSocket()) {
 			serverSocket.bind(new InetSocketAddress(InetAddress.getByAddress(new byte[]{127, 0, 0, 1}), 0));
@@ -130,7 +132,7 @@ final class RemoteJsonWebKeySourceZeroThreadTests {
 	/**
 	 * The binary names in a {@code -Xlog:class+load} log written with the {@code none} decorator, in load order.
 	 */
-	private static List<String> loadedInOrder(Path classLoadLog) throws IOException {
+	private static @NonNull List<@NonNull String> loadedInOrder(@NonNull Path classLoadLog) throws IOException {
 		List<String> names = new ArrayList<>();
 		for (String line : Files.readAllLines(classLoadLog, StandardCharsets.UTF_8)) {
 			int space = line.indexOf(' ');
@@ -166,7 +168,7 @@ final class RemoteJsonWebKeySourceZeroThreadTests {
 		 */
 		// Identity is the point: both sources must hold the very client the holder's test hook returns.
 		@SuppressWarnings("ReferenceEquality")
-		public static void main(String[] arguments) throws Exception {
+		public static void main(@NonNull String @NonNull [] arguments) throws Exception {
 			URI refused = URI.create(arguments[0]);
 			ThreadMXBean threads = ManagementFactory.getThreadMXBean();
 			// Injected clients are the application's; they exist before the baseline. These stand-ins never touch the
@@ -244,7 +246,7 @@ final class RemoteJsonWebKeySourceZeroThreadTests {
 					&& resolved(first) == held && resolved(second) == held));
 		}
 
-		private static String firstFetch(RemoteJsonWebKeySource source) {
+		private static @NonNull String firstFetch(@NonNull RemoteJsonWebKeySource source) {
 			try {
 				source.warmUp();
 				return "fetched";
@@ -253,7 +255,7 @@ final class RemoteJsonWebKeySourceZeroThreadTests {
 			}
 		}
 
-		private static @Nullable HttpClient resolved(RemoteJsonWebKeySource source) {
+		private static @Nullable HttpClient resolved(@NonNull RemoteJsonWebKeySource source) {
 			try {
 				return source.httpExchangeForTests().resolvedHttpClientForTests();
 			} catch (HttpExchangeException e) {
@@ -269,70 +271,70 @@ final class RemoteJsonWebKeySourceZeroThreadTests {
 	static final class StandInClient extends HttpClient {
 		private final HttpClient.Redirect redirect;
 
-		StandInClient(HttpClient.Redirect redirect) {
+		StandInClient(HttpClient.@NonNull Redirect redirect) {
 			this.redirect = redirect;
 		}
 
 		@Override
-		public HttpClient.Redirect followRedirects() {
+		public HttpClient.@NonNull Redirect followRedirects() {
 			return this.redirect;
 		}
 
 		@Override
-		public Optional<CookieHandler> cookieHandler() {
+		public @NonNull Optional<@NonNull CookieHandler> cookieHandler() {
 			return Optional.empty();
 		}
 
 		@Override
-		public Optional<Duration> connectTimeout() {
+		public @NonNull Optional<@NonNull Duration> connectTimeout() {
 			return Optional.empty();
 		}
 
 		@Override
-		public Optional<ProxySelector> proxy() {
+		public @NonNull Optional<@NonNull ProxySelector> proxy() {
 			return Optional.empty();
 		}
 
 		@Override
-		public SSLContext sslContext() {
+		public @NonNull SSLContext sslContext() {
 			throw new UnsupportedOperationException("StandInClient has no TLS context");
 		}
 
 		@Override
-		public SSLParameters sslParameters() {
+		public @NonNull SSLParameters sslParameters() {
 			return new SSLParameters();
 		}
 
 		@Override
-		public Optional<Authenticator> authenticator() {
+		public @NonNull Optional<@NonNull Authenticator> authenticator() {
 			return Optional.empty();
 		}
 
 		@Override
-		public HttpClient.Version version() {
+		public HttpClient.@NonNull Version version() {
 			return HttpClient.Version.HTTP_1_1;
 		}
 
 		@Override
-		public Optional<Executor> executor() {
+		public @NonNull Optional<@NonNull Executor> executor() {
 			return Optional.empty();
 		}
 
 		@Override
-		public <T> HttpResponse<T> send(HttpRequest request, HttpResponse.BodyHandler<T> responseBodyHandler)
+		public <T> @NonNull HttpResponse<@NonNull T> send(@NonNull HttpRequest request, HttpResponse.@NonNull BodyHandler<@NonNull T> responseBodyHandler)
 				throws IOException {
 			throw new IOException("StandInClient sends nothing");
 		}
 
 		@Override
-		public <T> CompletableFuture<HttpResponse<T>> sendAsync(HttpRequest request,
-				HttpResponse.BodyHandler<T> responseBodyHandler) {
+		public <T> @NonNull CompletableFuture<@NonNull HttpResponse<@NonNull T>> sendAsync(@NonNull HttpRequest request,
+				HttpResponse.@NonNull BodyHandler<@NonNull T> responseBodyHandler) {
 			return CompletableFuture.failedFuture(new IOException("StandInClient sends nothing"));
 		}
 
 		@Override
-		public <T> CompletableFuture<HttpResponse<T>> sendAsync(HttpRequest request,
-				HttpResponse.BodyHandler<T> responseBodyHandler, HttpResponse.PushPromiseHandler<T> pushPromiseHandler) {
+		public <T> @NonNull CompletableFuture<@NonNull HttpResponse<@NonNull T>> sendAsync(@NonNull HttpRequest request,
+				HttpResponse.@NonNull BodyHandler<@NonNull T> responseBodyHandler, HttpResponse.@NonNull PushPromiseHandler<@NonNull T> pushPromiseHandler) {
 			return sendAsync(request, responseBodyHandler);
 		}
 	}

@@ -16,6 +16,8 @@
 
 package com.revetsec.internal.http;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.testing.Sentinels;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Assertions;
@@ -40,7 +42,7 @@ import java.util.stream.Stream;
 final class MediaTypeTests {
 	// WP-5a record: every Content-Type the two providers sent, including the non-2xx and revocation ones, parses.
 	@TestFactory
-	Stream<DynamicTest> parsesEveryContentTypeTheProvidersSent() {
+	@NonNull Stream<@NonNull DynamicTest> parsesEveryContentTypeTheProvidersSent() {
 		Map<String, List<String>> observed = new LinkedHashMap<>();
 		observed.put("application/json", List.of("application/json", ""));
 		observed.put("application/json; charset=utf-8", List.of("application/json", "utf-8"));
@@ -62,7 +64,7 @@ final class MediaTypeTests {
 	// RFC 9110 section 8.3.1: type, subtype, parameter names and (for charset) the value compare case-insensitively,
 	// and a quoted-string value equals its token form.
 	@TestFactory
-	Stream<DynamicTest> comparesCaseInsensitivelyAndUnquotes() {
+	@NonNull Stream<@NonNull DynamicTest> comparesCaseInsensitivelyAndUnquotes() {
 		return Stream.of("application/json; charset=UTF-8", "Application/JSON; Charset=utf-8",
 						"APPLICATION/JSON;CHARSET=\"UTF-8\"", "application/json;charset=\"utf-8\"",
 						"application/json ; charset=utf-8", "\t application/json;\tcharset=Utf-8 \t",
@@ -80,7 +82,7 @@ final class MediaTypeTests {
 	// RFC 9110 sections 5.6.2 to 5.6.6: tokens, OWS only around ";", parameter = name "=" value, and quoted-string
 	// escapes. Empty parameters are allowed by the grammar.
 	@TestFactory
-	Stream<DynamicTest> parsesTheGrammar() {
+	@NonNull Stream<@NonNull DynamicTest> parsesTheGrammar() {
 		List<Object[]> cases = List.of(
 				new Object[]{"a/b", "a/b", Map.of()},
 				new Object[]{"a/b;", "a/b", Map.of()},
@@ -103,7 +105,7 @@ final class MediaTypeTests {
 	// RFC 9110 section 8.3.1: anything off the grammar is malformed, and so is a parameter repeated in any case (a
 	// Revetsec rule: two charsets could be read two ways).
 	@TestFactory
-	Stream<DynamicTest> rejectsValuesOffTheGrammar() {
+	@NonNull Stream<@NonNull DynamicTest> rejectsValuesOffTheGrammar() {
 		return Stream.of("", " ", "application", "application/", "/json", "application /json", "application/ json",
 						"application/json json", "application/json, text/plain", "application/json;charset",
 						"application/json;charset=", "application/json; charset = utf-8", "application/json;charset= utf-8",
@@ -118,7 +120,7 @@ final class MediaTypeTests {
 
 	// G6-7: only charset utf-8 (in any ASCII case), or no charset, is accepted; other parameters are ignored.
 	@TestFactory
-	Stream<DynamicTest> acceptsOnlyAUtf8OrAbsentCharset() {
+	@NonNull Stream<@NonNull DynamicTest> acceptsOnlyAUtf8OrAbsentCharset() {
 		Map<String, Boolean> cases = new LinkedHashMap<>();
 		cases.put("application/json", true);
 		cases.put("application/json; charset=utf-8", true);
@@ -139,7 +141,7 @@ final class MediaTypeTests {
 	// G6-7 frozen table: METADATA, TOKEN, INTROSPECTION application/json; JWKS adds application/jwk-set+json;
 	// USERINFO adds application/jwt; REVOCATION is not checked. Every allowed type takes charset absent or utf-8.
 	@TestFactory
-	Stream<DynamicTest> enforcesTheFrozenMediaTypeTable() {
+	@NonNull Stream<@NonNull DynamicTest> enforcesTheFrozenMediaTypeTable() {
 		List<String> candidates = List.of("application/json", "application/jwk-set+json", "application/jwt",
 				"application/jwk+json", "text/plain", "text/html", "application/token-introspection+jwt",
 				"application/jose", "application/octet-stream");
@@ -219,7 +221,7 @@ final class MediaTypeTests {
 		Assertions.assertThrows(UnsupportedOperationException.class, () -> mediaType.getParameters().put("e", "f"));
 	}
 
-	private static String escaped(String value) {
+	private static @NonNull String escaped(@NonNull String value) {
 		StringBuilder escaped = new StringBuilder();
 		for (char c : value.toCharArray())
 			escaped.append(c < 0x20 || c > 0x7E ? String.format(java.util.Locale.ROOT, "\\u%04X", (int) c)
@@ -228,17 +230,17 @@ final class MediaTypeTests {
 	}
 
 	@SuppressWarnings("NullAway")
-	private static String nullString() {
+	private static @NonNull String nullString() {
 		return nullValue();
 	}
 
 	@SuppressWarnings("NullAway")
-	private static MediaType nullMediaType() {
+	private static @NonNull MediaType nullMediaType() {
 		return nullValue();
 	}
 
 	@SuppressWarnings({"NullAway", "TypeParameterUnusedInFormals"})
-	private static <T> T nullValue() {
+	private static <T> @NonNull T nullValue() {
 		@Nullable T value = null;
 		return value;
 	}

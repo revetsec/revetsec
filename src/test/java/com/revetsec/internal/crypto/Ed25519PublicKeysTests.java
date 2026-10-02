@@ -16,6 +16,8 @@
 
 package com.revetsec.internal.crypto;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.internal.encoding.Base64Url;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Assertions;
@@ -67,7 +69,7 @@ final class Ed25519PublicKeysTests {
 	// RFC 8037 appendix A.1 (the public key "x") and A.4 (the EdDSA signature over its signing input), and RFC 8032
 	// section 7.1 tests 1 to 3.
 	@TestFactory
-	Stream<DynamicTest> rfcPublicKeysDecodeAndVerifyTheirSignatures() throws Exception {
+	@NonNull Stream<@NonNull DynamicTest> rfcPublicKeysDecodeAndVerifyTheirSignatures() throws Exception {
 		Map<String, String[]> vectors = new LinkedHashMap<>();
 		vectors.put("RFC 8037 A.4", new String[]{
 				HEX.formatHex(Base64Url.decode("11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo")),
@@ -112,7 +114,7 @@ final class Ed25519PublicKeysTests {
 	// RFC 8032 section 5.1.3: y < p, a square root for x^2 = (y^2 - 1) / (d*y^2 + 1), and never x = 0 with the sign bit
 	// set. Each failure is malformed; the JDK loads all of these and fails only at verification.
 	@TestFactory
-	Stream<DynamicTest> encodingsThatDoNotDecodeAreMalformed() {
+	@NonNull Stream<@NonNull DynamicTest> encodingsThatDoNotDecodeAreMalformed() {
 		Map<String, byte[]> encodings = new LinkedHashMap<>();
 		encodings.put("y = 2 (x^2 is not a square)", encode(BigInteger.TWO, false));
 		encodings.put("y = 2 with the sign bit", encode(BigInteger.TWO, true));
@@ -161,7 +163,7 @@ final class Ed25519PublicKeysTests {
 	// M2-7: every small-order point is weak. Negating x (flipping the sign bit) gives another small-order point, except
 	// where x = 0, which RFC 8032 section 5.1.3 makes malformed.
 	@TestFactory
-	Stream<DynamicTest> smallOrderPointsAreWeak() {
+	@NonNull Stream<@NonNull DynamicTest> smallOrderPointsAreWeak() {
 		return smallOrderPoints().stream().map(point -> DynamicTest.dynamicTest("order " + order(point) + ": "
 				+ HEX.formatHex(point.encode()), () -> {
 			byte[] encoded = point.encode();
@@ -196,7 +198,7 @@ final class Ed25519PublicKeysTests {
 	// Differential: an encoding is malformed exactly when the JDK's verifier cannot decode it (InvalidKeyException at
 	// initVerify); about half of all y values have no x. Every accepted key is the JDK's own point.
 	@TestFactory
-	Stream<DynamicTest> malformedExactlyWhenTheJdkCannotDecodeThePoint() {
+	@NonNull Stream<@NonNull DynamicTest> malformedExactlyWhenTheJdkCannotDecodeThePoint() {
 		Random random = new Random(0x45643235L);
 
 		return Stream.of(false, true).map(signBit -> DynamicTest.dynamicTest("sign bit " + signBit, () -> {
@@ -340,6 +342,8 @@ final class Ed25519PublicKeysTests {
 		Assertions.assertFalse(Ed25519PublicKeys.isEd25519(new NamedParameterSpec("ed25519")));
 	}
 
+	// Deliberate null inputs verify runtime rejection.
+	@SuppressWarnings("NullAway")
 	@Test
 	void rejectsNullArguments() {
 		Assertions.assertThrows(NullPointerException.class, () -> Ed25519PublicKeys.fromEncoded(nullValue()));
@@ -349,7 +353,7 @@ final class Ed25519PublicKeysTests {
 	/**
 	 * The RFC 8032 section 5.1.2 encoding of {@code y} (which may be out of range here) with the sign bit.
 	 */
-	static byte[] encode(BigInteger y, boolean xOdd) {
+	static byte @NonNull [] encode(@NonNull BigInteger y, boolean xOdd) {
 		byte[] bigEndian = EcdsaSignaturesTests.fixed(y, 32);
 		byte[] encoded = new byte[32];
 		for (int index = 0; index < 32; ++index)
@@ -362,7 +366,7 @@ final class Ed25519PublicKeysTests {
 	/**
 	 * A key the JDK builds from an encoding without decoding it.
 	 */
-	static EdECPublicKey rawJdkKey(byte[] encoded) throws GeneralSecurityException {
+	static @NonNull EdECPublicKey rawJdkKey(byte @NonNull [] encoded) throws GeneralSecurityException {
 		boolean xOdd = (encoded[31] & 0x80) != 0;
 		byte[] bigEndian = new byte[32];
 		for (int index = 0; index < 32; ++index)
@@ -376,7 +380,7 @@ final class Ed25519PublicKeysTests {
 	/**
 	 * The eight points of order dividing 8, derived from the curve equation.
 	 */
-	private static List<Point> smallOrderPoints() {
+	private static @NonNull List<@NonNull Point> smallOrderPoints() {
 		BigInteger i = squareRoot(P.subtract(BigInteger.ONE));
 		Assertions.assertNotNull(i, "-1 is a square modulo p, because p = 1 mod 4");
 
@@ -404,7 +408,7 @@ final class Ed25519PublicKeysTests {
 	/**
 	 * The smallest k in 1, 2, 4, 8 with [k]P = identity, by repeated addition; 0 if none.
 	 */
-	private static int order(Point point) {
+	private static int order(@NonNull Point point) {
 		Point multiple = point;
 		for (int k = 1; k <= 8; ++k) {
 			if (multiple.isIdentity())
@@ -417,7 +421,7 @@ final class Ed25519PublicKeysTests {
 	/**
 	 * A square root modulo p by Tonelli-Shanks, or null if {@code value} is not a square.
 	 */
-	private static @Nullable BigInteger squareRoot(BigInteger value) {
+	private static @Nullable BigInteger squareRoot(@NonNull BigInteger value) {
 		BigInteger a = value.mod(P);
 		if (a.signum() == 0)
 			return BigInteger.ZERO;
@@ -459,12 +463,12 @@ final class Ed25519PublicKeysTests {
 		return r;
 	}
 
-	private static void assertCheckRejected(KeyRejectedException.Kind kind, EdECPublicKey key) {
+	private static void assertCheckRejected(KeyRejectedException.@NonNull Kind kind, @NonNull EdECPublicKey key) {
 		Assertions.assertEquals(kind, Assertions.assertThrows(KeyRejectedException.class,
 				() -> Ed25519PublicKeys.checkPublicKey(key)).getKind());
 	}
 
-	private static byte[] filled(int value, int length) {
+	private static byte @NonNull [] filled(int value, int length) {
 		byte[] bytes = new byte[length];
 		Arrays.fill(bytes, (byte) value);
 		return bytes;
@@ -474,7 +478,7 @@ final class Ed25519PublicKeysTests {
 	 * Hides a {@code null} from NullAway, for the tests that check null handling.
 	 */
 	@SuppressWarnings({"NullAway", "TypeParameterUnusedInFormals"})
-	private static <T> T nullValue() {
+	private static <T> @Nullable T nullValue() {
 		return null;
 	}
 
@@ -485,7 +489,7 @@ final class Ed25519PublicKeysTests {
 		private final BigInteger x;
 		private final BigInteger y;
 
-		private Point(BigInteger x, BigInteger y) {
+		private Point(@NonNull BigInteger x, @NonNull BigInteger y) {
 			this.x = x.mod(P);
 			this.y = y.mod(P);
 		}
@@ -501,7 +505,7 @@ final class Ed25519PublicKeysTests {
 		}
 
 		// RFC 8032 section 5.1.4, affine form with a = -1.
-		private Point add(Point other) {
+		private @NonNull Point add(@NonNull Point other) {
 			BigInteger product = D.multiply(this.x).multiply(other.x).multiply(this.y).multiply(other.y).mod(P);
 			BigInteger x3 = this.x.multiply(other.y).add(this.y.multiply(other.x))
 					.multiply(BigInteger.ONE.add(product).modInverse(P));
@@ -510,12 +514,12 @@ final class Ed25519PublicKeysTests {
 			return new Point(x3, y3);
 		}
 
-		private byte[] encode() {
+		private byte @NonNull [] encode() {
 			return Ed25519PublicKeysTests.encode(this.y, this.x.testBit(0));
 		}
 
 		@Override
-		public String toString() {
+		public @NonNull String toString() {
 			return this.x.toString(16) + "," + this.y.toString(16);
 		}
 	}
@@ -538,29 +542,29 @@ final class Ed25519PublicKeysTests {
 		}
 
 		@Override
-		public EdECPoint getPoint() {
+		public @NonNull EdECPoint getPoint() {
 			if (this.throwing)
 				throw new IllegalStateException("A key implementation that throws.");
 			return this.point;
 		}
 
 		@Override
-		public NamedParameterSpec getParams() {
+		public @NonNull NamedParameterSpec getParams() {
 			return this.parameters;
 		}
 
 		@Override
-		public String getAlgorithm() {
+		public @NonNull String getAlgorithm() {
 			return "Ed25519";
 		}
 
 		@Override
-		public String getFormat() {
+		public @NonNull String getFormat() {
 			return "X.509";
 		}
 
 		@Override
-		public byte[] getEncoded() {
+		public byte @NonNull [] getEncoded() {
 			return new byte[0];
 		}
 	}

@@ -16,6 +16,8 @@
 
 package com.revetsec.jose;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.testing.Sentinels;
 import com.revetsec.testing.TestJsonWebKeys.Fixture;
 import com.revetsec.testing.TestJws;
@@ -46,7 +48,7 @@ final class JwtValidatorRobustnessTests {
 	// INV-G1: every single-character mutation of a valid token, for each algorithm family, is refused with a
 	// JoseException, unless it left the token unchanged. Nothing else escapes, and no forged variant is accepted.
 	@TestFactory
-	Stream<DynamicTest> mutatedTokensAreRefusedAndNothingElseEscapes() {
+	@NonNull Stream<@NonNull DynamicTest> mutatedTokensAreRefusedAndNothingElseEscapes() {
 		List<Object[]> cases = List.of(new Object[]{Algorithm.RS256, Fixture.IDP_SIGNING_RSA_2048},
 				new Object[]{Algorithm.PS384, Fixture.IDP_SIGNING_RSA_3072}, new Object[]{Algorithm.ES256,
 						Fixture.IDP_SIGNING_EC_P256}, new Object[]{Algorithm.ES512, Fixture.IDP_SIGNING_EC_P521},
@@ -113,7 +115,7 @@ final class JwtValidatorRobustnessTests {
 	// claims or its signature appears in the message, toString or stack trace, and there is no cause or suppressed
 	// exception to carry them.
 	@TestFactory
-	Stream<DynamicTest> aRefusalRevealsNothingOfTheToken() {
+	@NonNull Stream<@NonNull DynamicTest> aRefusalRevealsNothingOfTheToken() {
 		JwtValidator validator = JwtFixtures.validator(Fixture.IDP_SIGNING_RSA_2048, JwsAlgorithm.RS256);
 		List<String> tokens = new ArrayList<>();
 		tokens.add(Sentinels.compactJwt("RS256", 256));

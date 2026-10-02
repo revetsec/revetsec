@@ -16,6 +16,8 @@
 
 package com.revetsec;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.ContractSupport.SourceAnalysis;
 import org.junit.jupiter.api.Test;
 
@@ -51,11 +53,11 @@ final class BuilderConventionsContractTests {
 				"com.revetsec.BuilderConventionsFixture$Builder#values(java.util.List): property argument must be nullable and boxed").stream().sorted().toList(), violations);
 	}
 
-	static List<String> findViolations(Path sourceRoot) throws IOException {
+	static @NonNull List<@NonNull String> findViolations(@NonNull Path sourceRoot) throws IOException {
 		return ContractSupport.analyze(sourceRoot, BuilderConventionsContractTests::findViolations);
 	}
 
-	private static List<String> findViolations(SourceAnalysis analysis) {
+	private static @NonNull List<@NonNull String> findViolations(@NonNull SourceAnalysis analysis) {
 		List<String> violations = new ArrayList<>();
 		for (TypeElement type : ContractSupport.exportedTypes(analysis)) {
 			String name = analysis.getElements().getBinaryName(type).toString();
@@ -86,7 +88,7 @@ final class BuilderConventionsContractTests {
 		return List.copyOf(violations);
 	}
 
-	private static boolean objectPrimitiveOverride(ExecutableElement method, SourceAnalysis analysis) {
+	private static boolean objectPrimitiveOverride(@NonNull ExecutableElement method, @NonNull SourceAnalysis analysis) {
 		return method.getSimpleName().contentEquals("hashCode") && method.getParameters().isEmpty()
 				|| method.getSimpleName().contentEquals("equals") && method.getParameters().size() == 1
 				&& analysis.getTypes().isSameType(analysis.getTypes().erasure(method.getParameters().get(0).asType()),

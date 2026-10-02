@@ -16,6 +16,8 @@
 
 package com.revetsec.oauth;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.ErrorCategory;
 import org.junit.jupiter.api.Test;
 import java.util.AbstractList;
@@ -62,7 +64,7 @@ final class BearerTokenTests {
 				List.of("Bearer a", "bearer b")));
 		List<String> unreadable = new AbstractList<>() {
 			@Override public int size() { return 2; }
-			@Override public String get(int index) { throw new AssertionError("Multiple fields must not be read."); }
+			@Override public @NonNull String get(int index) { throw new AssertionError("Multiple fields must not be read."); }
 		};
 		assertThrows(AccessTokenValidationException.class, () -> BearerToken.fromAuthorizationHeaderValues(unreadable));
 	}

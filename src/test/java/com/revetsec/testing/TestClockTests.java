@@ -16,6 +16,8 @@
 
 package com.revetsec.testing;
 
+import org.jspecify.annotations.Nullable;
+
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -76,6 +78,8 @@ final class TestClockTests {
 		Assertions.assertEquals(START, clock.instant());
 	}
 
+	// Deliberate null inputs verify runtime rejection.
+	@SuppressWarnings("NullAway")
 	@Test
 	void rejectsNullArguments() {
 		TestClock clock = TestClock.fromInstant(START);
@@ -166,7 +170,7 @@ final class TestClockTests {
 	 * A null of any type, so tests can pass one where the signature says non-null.
 	 */
 	@SuppressWarnings({"NullAway", "TypeParameterUnusedInFormals"})
-	private static <T> T nullValue() {
+	private static <T> @Nullable T nullValue() {
 		return null;
 	}
 }

@@ -16,6 +16,8 @@
 
 package com.revetsec.internal.json;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.internal.Limits;
 import com.revetsec.testing.Sentinels;
 import org.junit.jupiter.api.Assertions;
@@ -71,7 +73,7 @@ final class JsonLimitsTests {
 	// rows it serves: HTTP response, JWKS and error bodies for protocol documents (4 MiB), compact JWTs for JOSE
 	// (1 MiB) and SCIM bodies for SCIM (10 MiB).
 	@TestFactory
-	Stream<DynamicTest> acceptsInputSizesUpToTheOwningRowsCap() {
+	@NonNull Stream<@NonNull DynamicTest> acceptsInputSizesUpToTheOwningRowsCap() {
 		return Stream.of(
 				new Object[]{"protocolDocument", (IntFunction<JsonLimits>) JsonLimits::protocolDocument,
 						Math.max(Limits.HTTP_RESPONSE_BODY_SIZE.getCap(), Limits.JWKS_RESPONSE_BODY_SIZE.getCap())},
@@ -103,6 +105,8 @@ final class JsonLimitsTests {
 	}
 
 	// R15: null arguments throw NullPointerException before any range check.
+	// Deliberate null inputs verify runtime rejection.
+	@SuppressWarnings("NullAway")
 	@Test
 	void rejectsNullArguments() {
 		Integer noInteger = JsonFailures.nullValue();
@@ -152,7 +156,7 @@ final class JsonLimitsTests {
 
 	// Soklet: jsonLimitsRejectUnsafeOrNonPositiveConfigurations. Every limit must be positive.
 	@TestFactory
-	Stream<DynamicTest> rejectsNonPositiveLimits() {
+	@NonNull Stream<@NonNull DynamicTest> rejectsNonPositiveLimits() {
 		return Stream.of(
 				(Runnable) () -> new JsonLimits(0, 1, 1, 1, 1, 1, false),
 				() -> new JsonLimits(1, 0, 1, 1, 1, 1, false),
@@ -195,7 +199,7 @@ final class JsonLimitsTests {
 		Assertions.assertFalse(Sentinels.containsSentinel(description));
 	}
 
-	private static void assertProfile(JsonLimits limits, int inputBytes, int depth, int nodes, int stringLength,
+	private static void assertProfile(@NonNull JsonLimits limits, int inputBytes, int depth, int nodes, int stringLength,
 																		int numberLength, int exponent, boolean asciiCaseVariantNamesRejected) {
 		Assertions.assertEquals(inputBytes, limits.getMaxInputBytes());
 		Assertions.assertEquals(depth, limits.getMaxDepth());
@@ -206,7 +210,7 @@ final class JsonLimitsTests {
 		Assertions.assertEquals(asciiCaseVariantNamesRejected, limits.isAsciiCaseVariantNamesRejected());
 	}
 
-	private static void assertRangeFailure(Supplier<JsonLimits> construction) {
+	private static void assertRangeFailure(@NonNull Supplier<@NonNull JsonLimits> construction) {
 		Assertions.assertThrows(IllegalArgumentException.class, construction::get);
 	}
 }

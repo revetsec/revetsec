@@ -16,6 +16,8 @@
 
 package com.revetsec.oauth;
 
+import org.jspecify.annotations.NonNull;
+
 import org.junit.jupiter.api.*;
 import static org.junit.jupiter.api.Assertions.*;
 import com.revetsec.testing.*;
@@ -41,10 +43,10 @@ final class AccessTokenObserverTests {
     @Test void compatibilityEnableUseAndVerdictsFireOnceAndThrowingHooksAreContained() {
         AtomicInteger enabled=new AtomicInteger(),used=new AtomicInteger(),good=new AtomicInteger(),bad=new AtomicInteger();
         AccessTokenObserver observer=new AccessTokenObserver(){
-            @Override public void didEnableCompatibilityMode(AccessTokenCompatibilityMode m){enabled.incrementAndGet();throw new IllegalStateException("TEST-ONLY-hook");}
-            @Override public void didUseCompatibilityMode(AccessTokenCompatibilityMode m){used.incrementAndGet();throw new IllegalStateException("TEST-ONLY-hook");}
+            @Override public void didEnableCompatibilityMode(@NonNull AccessTokenCompatibilityMode m){enabled.incrementAndGet();throw new IllegalStateException("TEST-ONLY-hook");}
+            @Override public void didUseCompatibilityMode(@NonNull AccessTokenCompatibilityMode m){used.incrementAndGet();throw new IllegalStateException("TEST-ONLY-hook");}
             @Override public void didValidateAccessToken(){good.incrementAndGet();throw new IllegalStateException("TEST-ONLY-hook");}
-            @Override public void didRejectAccessToken(AccessTokenValidationException e){bad.incrementAndGet();redacted(e,"TEST-ONLY-subject");throw new IllegalStateException("TEST-ONLY-hook");}
+            @Override public void didRejectAccessToken(@NonNull AccessTokenValidationException e){bad.incrementAndGet();redacted(e,"TEST-ONLY-subject");throw new IllegalStateException("TEST-ONLY-hook");}
         };
         JwtAccessTokenValidator validator=jwt().compatibility(AccessTokenCompatibilityMode.UNTYPED_ACCESS_TOKENS).requiredClaims(Set.of("app")).observer(observer).build();assertEquals(1,enabled.get());assertEquals(0,used.get());
         Map<String,String> c=claims(ISSUER);c.put("app","true");assertNotNull(validator.validate(bearer(token(c,"JWT"))));assertEquals(1,used.get());assertEquals(1,good.get());
@@ -55,11 +57,11 @@ final class AccessTokenObserverTests {
         try(TestHttpsServer server=TestHttpsServer.start()) {
             AtomicInteger before=new AtomicInteger(),after=new AtomicInteger(),good=new AtomicInteger(),bad=new AtomicInteger(),failure=new AtomicInteger();
             AccessTokenObserver observer=new AccessTokenObserver(){
-                @Override public void willRequestEndpoint(OAuthEndpoint k,URI uri){assertEquals(OAuthEndpoint.INTROSPECTION,k);assertNull(uri.getRawQuery());before.incrementAndGet();throw new IllegalStateException();}
-                @Override public void didRequestEndpoint(OAuthEndpoint k,URI uri,Integer status,Duration elapsed){after.incrementAndGet();}
-                @Override public void didFailEndpoint(OAuthEndpoint k,URI uri,OAuthException e,Duration elapsed){failure.incrementAndGet();redacted(e,SECRET,"opaque");}
+                @Override public void willRequestEndpoint(@NonNull OAuthEndpoint k,@NonNull URI uri){assertEquals(OAuthEndpoint.INTROSPECTION,k);assertNull(uri.getRawQuery());before.incrementAndGet();throw new IllegalStateException();}
+                @Override public void didRequestEndpoint(@NonNull OAuthEndpoint k,@NonNull URI uri,@NonNull Integer status,@NonNull Duration elapsed){after.incrementAndGet();}
+                @Override public void didFailEndpoint(@NonNull OAuthEndpoint k,@NonNull URI uri,@NonNull OAuthException e,@NonNull Duration elapsed){failure.incrementAndGet();redacted(e,SECRET,"opaque");}
                 @Override public void didValidateAccessToken(){good.incrementAndGet();}
-                @Override public void didRejectAccessToken(AccessTokenValidationException e){bad.incrementAndGet();}
+                @Override public void didRejectAccessToken(@NonNull AccessTokenValidationException e){bad.incrementAndGet();}
             };
             OAuthClient oauth=oauth(server).observer(observer).build();TokenIntrospectionClient client=TokenIntrospectionClient.withOAuthClient(oauth).expectedAudiences(Set.of(AUD)).observer(observer).build();
             response(server,"/inspect",200,"application/json",active());assertNotNull(client.validate(bearer("opaque")));assertEquals(1,before.get());assertEquals(1,after.get());assertEquals(1,good.get());
@@ -69,8 +71,8 @@ final class AccessTokenObserverTests {
     }
     @Test void distinctEndpointObserversBothReceiveRequestsButOnlyResourceGetsVerdicts() throws Exception {
         try(TestHttpsServer server=TestHttpsServer.start()) {
-            AtomicInteger app=new AtomicInteger(),resource=new AtomicInteger();OAuthObserver one=new OAuthObserver(){@Override public void didRequestEndpoint(OAuthEndpoint k,URI uri,Integer status,Duration elapsed){app.incrementAndGet();}};
-            AccessTokenObserver two=new AccessTokenObserver(){@Override public void didRequestEndpoint(OAuthEndpoint k,URI uri,Integer status,Duration elapsed){resource.incrementAndGet();}};
+            AtomicInteger app=new AtomicInteger(),resource=new AtomicInteger();OAuthObserver one=new OAuthObserver(){@Override public void didRequestEndpoint(@NonNull OAuthEndpoint k,@NonNull URI uri,@NonNull Integer status,@NonNull Duration elapsed){app.incrementAndGet();}};
+            AccessTokenObserver two=new AccessTokenObserver(){@Override public void didRequestEndpoint(@NonNull OAuthEndpoint k,@NonNull URI uri,@NonNull Integer status,@NonNull Duration elapsed){resource.incrementAndGet();}};
             response(server,"/inspect",200,"application/json",active());TokenIntrospectionClient client=TokenIntrospectionClient.withOAuthClient(oauth(server).observer(one).build()).expectedAudiences(Set.of(AUD)).observer(two).build();assertNotNull(client.validate(bearer("opaque")));assertEquals(1,app.get());assertEquals(1,resource.get());
         }
     }

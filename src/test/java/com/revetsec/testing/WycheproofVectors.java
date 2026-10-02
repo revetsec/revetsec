@@ -16,6 +16,8 @@
 
 package com.revetsec.testing;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.internal.json.JsonCodec;
 import com.revetsec.internal.json.JsonLimits;
 import com.revetsec.internal.json.JsonParseException;
@@ -165,7 +167,7 @@ public final class WycheproofVectors {
 	private final Map<String, VectorFile> filesByName;
 	private final Integer checkedFileCount;
 
-	private WycheproofVectors(String commit, List<VectorFile> files, Integer checkedFileCount) {
+	private WycheproofVectors(@NonNull String commit, @NonNull List<@NonNull VectorFile> files, @NonNull Integer checkedFileCount) {
 		this.commit = commit;
 		this.files = List.copyOf(files);
 		Map<String, VectorFile> filesByName = new LinkedHashMap<>();
@@ -185,7 +187,7 @@ public final class WycheproofVectors {
 	 * @return the checked vectors
 	 * @throws AssertionError if any check fails; its message lists every problem
 	 */
-	public static WycheproofVectors fromVendoredFiles() {
+	public static @NonNull WycheproofVectors fromVendoredFiles() {
 		Path root = root();
 		return fromFiles(readTree(root), root.toString());
 	}
@@ -198,7 +200,7 @@ public final class WycheproofVectors {
 	 * @return the checked vectors
 	 * @throws AssertionError if any check fails; its message lists every problem
 	 */
-	public static WycheproofVectors fromFiles(SortedMap<String, byte[]> files) {
+	public static @NonNull WycheproofVectors fromFiles(@NonNull SortedMap<@NonNull String, byte @NonNull []> files) {
 		return fromFiles(files, "the given tree");
 	}
 
@@ -209,11 +211,11 @@ public final class WycheproofVectors {
 	 * @param files every regular file of the tree, by its path relative to the tree with {@code /} separators
 	 * @return the problems
 	 */
-	public static List<String> findProblems(SortedMap<String, byte[]> files) {
+	public static @NonNull List<@NonNull String> findProblems(@NonNull SortedMap<@NonNull String, byte @NonNull []> files) {
 		return List.copyOf(new Check(requireNonNull(files)).problems);
 	}
 
-	private static WycheproofVectors fromFiles(SortedMap<String, byte[]> files, String location) {
+	private static @NonNull WycheproofVectors fromFiles(@NonNull SortedMap<@NonNull String, byte @NonNull []> files, @NonNull String location) {
 		requireNonNull(files);
 		Check check = new Check(files);
 
@@ -236,7 +238,7 @@ public final class WycheproofVectors {
 	 *
 	 * @return 40 lowercase hex digits
 	 */
-	public String getCommit() {
+	public @NonNull String getCommit() {
 		return this.commit;
 	}
 
@@ -245,7 +247,7 @@ public final class WycheproofVectors {
 	 *
 	 * @return an unmodifiable list
 	 */
-	public List<VectorFile> getFiles() {
+	public @NonNull List<@NonNull VectorFile> getFiles() {
 		return this.files;
 	}
 
@@ -255,7 +257,7 @@ public final class WycheproofVectors {
 	 * @param name the file name in {@code testvectors_v1/}, such as {@code ed25519_test.json}
 	 * @return the file, or empty if no such file is vendored
 	 */
-	public Optional<VectorFile> findFile(String name) {
+	public @NonNull Optional<@NonNull VectorFile> findFile(@NonNull String name) {
 		requireNonNull(name);
 		return Optional.ofNullable(this.filesByName.get(name));
 	}
@@ -267,7 +269,7 @@ public final class WycheproofVectors {
 	 * @return the file
 	 * @throws NoSuchElementException if no such file is vendored
 	 */
-	public VectorFile getFile(String name) {
+	public @NonNull VectorFile getFile(@NonNull String name) {
 		return findFile(name).orElseThrow(() -> new NoSuchElementException("No vendored Wycheproof file " + name));
 	}
 
@@ -276,12 +278,12 @@ public final class WycheproofVectors {
 	 *
 	 * @return the count
 	 */
-	public Integer getCheckedFileCount() {
+	public @NonNull Integer getCheckedFileCount() {
 		return this.checkedFileCount;
 	}
 
 	@Override
-	public String toString() {
+	public @NonNull String toString() {
 		return "WycheproofVectors{commit=" + this.commit + ", files=" + this.files.size() + "}";
 	}
 
@@ -306,7 +308,7 @@ public final class WycheproofVectors {
 
 		private final String wireValue;
 
-		Result(String wireValue) {
+		Result(@NonNull String wireValue) {
 			this.wireValue = wireValue;
 		}
 
@@ -315,7 +317,7 @@ public final class WycheproofVectors {
 		 *
 		 * @return {@code valid}, {@code invalid} or {@code acceptable}
 		 */
-		public String getWireValue() {
+		public @NonNull String getWireValue() {
 			return this.wireValue;
 		}
 
@@ -325,7 +327,7 @@ public final class WycheproofVectors {
 		 * @param wireValue the value of a {@code result} member
 		 * @return the result, or empty if there is none
 		 */
-		public static Optional<Result> findByWireValue(String wireValue) {
+		public static @NonNull Optional<@NonNull Result> findByWireValue(@NonNull String wireValue) {
 			requireNonNull(wireValue);
 			return Arrays.stream(values()).filter(result -> result.wireValue.equals(wireValue)).findFirst();
 		}
@@ -343,7 +345,7 @@ public final class WycheproofVectors {
 		private final List<TestVector> tests;
 		private final Map<Integer, TestVector> testsByTcId;
 
-		private VectorFile(String path, byte[] content, JsonObject json) {
+		private VectorFile(@NonNull String path, byte @NonNull [] content, @NonNull JsonObject json) {
 			this.path = path;
 			this.content = content.clone();
 			this.json = json;
@@ -372,7 +374,7 @@ public final class WycheproofVectors {
 		 *
 		 * @return the name, such as {@code ed25519_test.json}
 		 */
-		public String getName() {
+		public @NonNull String getName() {
 			return this.path.substring(VECTOR_DIRECTORY.length());
 		}
 
@@ -381,7 +383,7 @@ public final class WycheproofVectors {
 		 *
 		 * @return the path, such as {@code testvectors_v1/ed25519_test.json}
 		 */
-		public String getPath() {
+		public @NonNull String getPath() {
 			return this.path;
 		}
 
@@ -390,7 +392,7 @@ public final class WycheproofVectors {
 		 *
 		 * @return the size in bytes
 		 */
-		public Integer getSize() {
+		public @NonNull Integer getSize() {
 			return this.content.length;
 		}
 
@@ -399,7 +401,7 @@ public final class WycheproofVectors {
 		 *
 		 * @return a new array
 		 */
-		public byte[] getContent() {
+		public byte @NonNull [] getContent() {
 			return this.content.clone();
 		}
 
@@ -408,7 +410,7 @@ public final class WycheproofVectors {
 		 *
 		 * @return the top-level object
 		 */
-		public JsonObject getJson() {
+		public @NonNull JsonObject getJson() {
 			return this.json;
 		}
 
@@ -417,7 +419,7 @@ public final class WycheproofVectors {
 		 *
 		 * @return the schema file name, such as {@code eddsa_verify_schema_v1.json}
 		 */
-		public String getSchema() {
+		public @NonNull String getSchema() {
 			return string(this.json, "schema");
 		}
 
@@ -426,7 +428,7 @@ public final class WycheproofVectors {
 		 *
 		 * @return the algorithm, such as {@code ECDSA}, or empty
 		 */
-		public Optional<String> findAlgorithm() {
+		public @NonNull Optional<@NonNull String> findAlgorithm() {
 			return this.json.findString("algorithm");
 		}
 
@@ -435,7 +437,7 @@ public final class WycheproofVectors {
 		 *
 		 * @return the number of tests
 		 */
-		public Integer getNumberOfTests() {
+		public @NonNull Integer getNumberOfTests() {
 			return this.tests.size();
 		}
 
@@ -444,7 +446,7 @@ public final class WycheproofVectors {
 		 *
 		 * @return an unmodifiable list of lines
 		 */
-		public List<String> getHeader() {
+		public @NonNull List<@NonNull String> getHeader() {
 			return this.json.findStringList("header").orElseThrow();
 		}
 
@@ -453,7 +455,7 @@ public final class WycheproofVectors {
 		 *
 		 * @return the notes, by flag
 		 */
-		public JsonObject getNotes() {
+		public @NonNull JsonObject getNotes() {
 			return object(this.json, "notes");
 		}
 
@@ -462,7 +464,7 @@ public final class WycheproofVectors {
 		 *
 		 * @return an unmodifiable list
 		 */
-		public List<TestGroup> getGroups() {
+		public @NonNull List<@NonNull TestGroup> getGroups() {
 			return this.groups;
 		}
 
@@ -471,7 +473,7 @@ public final class WycheproofVectors {
 		 *
 		 * @return an unmodifiable list
 		 */
-		public List<TestVector> getTests() {
+		public @NonNull List<@NonNull TestVector> getTests() {
 			return this.tests;
 		}
 
@@ -481,7 +483,7 @@ public final class WycheproofVectors {
 		 * @param result the verdict
 		 * @return an unmodifiable list
 		 */
-		public List<TestVector> getTests(Result result) {
+		public @NonNull List<@NonNull TestVector> getTests(@NonNull Result result) {
 			requireNonNull(result);
 			return this.tests.stream().filter(test -> test.getResult() == result).toList();
 		}
@@ -492,7 +494,7 @@ public final class WycheproofVectors {
 		 * @param tcId the tcId
 		 * @return the test, or empty if the file has no such tcId
 		 */
-		public Optional<TestVector> findTest(Integer tcId) {
+		public @NonNull Optional<@NonNull TestVector> findTest(@NonNull Integer tcId) {
 			requireNonNull(tcId);
 			return Optional.ofNullable(this.testsByTcId.get(tcId));
 		}
@@ -504,12 +506,12 @@ public final class WycheproofVectors {
 		 * @return the test
 		 * @throws NoSuchElementException if the file has no such tcId
 		 */
-		public TestVector getTest(Integer tcId) {
+		public @NonNull TestVector getTest(@NonNull Integer tcId) {
 			return findTest(tcId).orElseThrow(() -> new NoSuchElementException(getName() + " has no tcId " + tcId));
 		}
 
 		@Override
-		public String toString() {
+		public @NonNull String toString() {
 			return getName();
 		}
 	}
@@ -524,7 +526,7 @@ public final class WycheproofVectors {
 		private final JsonObject json;
 		private final List<TestVector> tests;
 
-		private TestGroup(VectorFile file, Integer index, JsonObject json) {
+		private TestGroup(@NonNull VectorFile file, @NonNull Integer index, @NonNull JsonObject json) {
 			this.file = file;
 			this.index = index;
 			this.json = json;
@@ -541,7 +543,7 @@ public final class WycheproofVectors {
 		 *
 		 * @return the file
 		 */
-		public VectorFile getFile() {
+		public @NonNull VectorFile getFile() {
 			return this.file;
 		}
 
@@ -550,7 +552,7 @@ public final class WycheproofVectors {
 		 *
 		 * @return the zero-based index
 		 */
-		public Integer getIndex() {
+		public @NonNull Integer getIndex() {
 			return this.index;
 		}
 
@@ -559,7 +561,7 @@ public final class WycheproofVectors {
 		 *
 		 * @return the type, such as {@code EcdsaP1363Verify}
 		 */
-		public String getType() {
+		public @NonNull String getType() {
 			return string(this.json, "type");
 		}
 
@@ -568,7 +570,7 @@ public final class WycheproofVectors {
 		 *
 		 * @return the object
 		 */
-		public JsonObject getJson() {
+		public @NonNull JsonObject getJson() {
 			return this.json;
 		}
 
@@ -577,7 +579,7 @@ public final class WycheproofVectors {
 		 *
 		 * @return an unmodifiable list
 		 */
-		public List<TestVector> getTests() {
+		public @NonNull List<@NonNull TestVector> getTests() {
 			return this.tests;
 		}
 
@@ -587,7 +589,7 @@ public final class WycheproofVectors {
 		 * @param name the member name
 		 * @return the value, or empty if the member is absent or not a string
 		 */
-		public Optional<String> findString(String name) {
+		public @NonNull Optional<@NonNull String> findString(@NonNull String name) {
 			return this.json.findString(requireNonNull(name));
 		}
 
@@ -598,7 +600,7 @@ public final class WycheproofVectors {
 		 * @return the value
 		 * @throws NoSuchElementException if the member is absent or not a string
 		 */
-		public String getString(String name) {
+		public @NonNull String getString(@NonNull String name) {
 			return findString(name).orElseThrow(() -> absent(toString(), "string", name));
 		}
 
@@ -608,7 +610,7 @@ public final class WycheproofVectors {
 		 * @param name the member name
 		 * @return the value, or empty if the member is absent, not a number, not whole or out of range
 		 */
-		public Optional<Integer> findInteger(String name) {
+		public @NonNull Optional<@NonNull Integer> findInteger(@NonNull String name) {
 			return integer(this.json, requireNonNull(name));
 		}
 
@@ -619,7 +621,7 @@ public final class WycheproofVectors {
 		 * @return the value
 		 * @throws NoSuchElementException if the member is absent, not a number, not whole or out of range
 		 */
-		public Integer getInteger(String name) {
+		public @NonNull Integer getInteger(@NonNull String name) {
 			return findInteger(name).orElseThrow(() -> absent(toString(), "whole-number", name));
 		}
 
@@ -630,7 +632,7 @@ public final class WycheproofVectors {
 		 * @param name the member name
 		 * @return the value, or empty if the member is absent or not an object
 		 */
-		public Optional<JsonObject> findObject(String name) {
+		public @NonNull Optional<@NonNull JsonObject> findObject(@NonNull String name) {
 			return optionalObject(this.json, requireNonNull(name));
 		}
 
@@ -642,7 +644,7 @@ public final class WycheproofVectors {
 		 * @return the value
 		 * @throws NoSuchElementException if the member is absent or not an object
 		 */
-		public JsonObject getObject(String name) {
+		public @NonNull JsonObject getObject(@NonNull String name) {
 			return findObject(name).orElseThrow(() -> absent(toString(), "object", name));
 		}
 
@@ -654,7 +656,7 @@ public final class WycheproofVectors {
 		 * @throws NoSuchElementException   if the member is absent or not a string
 		 * @throws IllegalArgumentException if the member is not an even-length hex string
 		 */
-		public byte[] getHexBytes(String name) {
+		public byte @NonNull [] getHexBytes(@NonNull String name) {
 			return hex(toString(), name, getString(name));
 		}
 
@@ -664,7 +666,7 @@ public final class WycheproofVectors {
 		 * @return the file name and the group's index, such as {@code ed25519_test.json testGroups[3]}
 		 */
 		@Override
-		public String toString() {
+		public @NonNull String toString() {
 			return this.file.getName() + " testGroups[" + this.index + "]";
 		}
 	}
@@ -677,7 +679,7 @@ public final class WycheproofVectors {
 		private final TestGroup group;
 		private final JsonObject json;
 
-		private TestVector(TestGroup group, JsonObject json) {
+		private TestVector(@NonNull TestGroup group, @NonNull JsonObject json) {
 			this.group = group;
 			this.json = json;
 		}
@@ -687,7 +689,7 @@ public final class WycheproofVectors {
 		 *
 		 * @return the group
 		 */
-		public TestGroup getGroup() {
+		public @NonNull TestGroup getGroup() {
 			return this.group;
 		}
 
@@ -696,7 +698,7 @@ public final class WycheproofVectors {
 		 *
 		 * @return the file
 		 */
-		public VectorFile getFile() {
+		public @NonNull VectorFile getFile() {
 			return this.group.getFile();
 		}
 
@@ -705,7 +707,7 @@ public final class WycheproofVectors {
 		 *
 		 * @return the tcId, from 1 to the file's number of tests
 		 */
-		public Integer getTcId() {
+		public @NonNull Integer getTcId() {
 			return integer(this.json, "tcId").orElseThrow();
 		}
 
@@ -714,7 +716,7 @@ public final class WycheproofVectors {
 		 *
 		 * @return the comment, which may be empty
 		 */
-		public String getComment() {
+		public @NonNull String getComment() {
 			return string(this.json, "comment");
 		}
 
@@ -723,7 +725,7 @@ public final class WycheproofVectors {
 		 *
 		 * @return an unmodifiable list, in file order
 		 */
-		public List<String> getFlags() {
+		public @NonNull List<@NonNull String> getFlags() {
 			return this.json.findStringList("flags").orElseThrow();
 		}
 
@@ -732,7 +734,7 @@ public final class WycheproofVectors {
 		 *
 		 * @return the upstream verdict
 		 */
-		public Result getResult() {
+		public @NonNull Result getResult() {
 			return Result.findByWireValue(string(this.json, "result")).orElseThrow();
 		}
 
@@ -741,7 +743,7 @@ public final class WycheproofVectors {
 		 *
 		 * @return the object
 		 */
-		public JsonObject getJson() {
+		public @NonNull JsonObject getJson() {
 			return this.json;
 		}
 
@@ -751,7 +753,7 @@ public final class WycheproofVectors {
 		 * @param name the member name
 		 * @return the value, or empty if the member is absent or not a string
 		 */
-		public Optional<String> findString(String name) {
+		public @NonNull Optional<@NonNull String> findString(@NonNull String name) {
 			return this.json.findString(requireNonNull(name));
 		}
 
@@ -762,7 +764,7 @@ public final class WycheproofVectors {
 		 * @return the value
 		 * @throws NoSuchElementException if the member is absent or not a string
 		 */
-		public String getString(String name) {
+		public @NonNull String getString(@NonNull String name) {
 			return findString(name).orElseThrow(() -> absent(where(), "string", name));
 		}
 
@@ -774,14 +776,14 @@ public final class WycheproofVectors {
 		 * @throws NoSuchElementException   if the member is absent or not a string
 		 * @throws IllegalArgumentException if the member is not an even-length hex string
 		 */
-		public byte[] getHexBytes(String name) {
+		public byte @NonNull [] getHexBytes(@NonNull String name) {
 			return hex(where(), name, getString(name));
 		}
 
 		/**
 		 * Names the test in lookup failures.
 		 */
-		private String where() {
+		private @NonNull String where() {
 			return getFile().getName() + " tcId " + getTcId();
 		}
 
@@ -792,7 +794,7 @@ public final class WycheproofVectors {
 		 * {@code ed25519_test.json tcId 37 (invalid) [SignatureMalleability]: comment}
 		 */
 		@Override
-		public String toString() {
+		public @NonNull String toString() {
 			return getFile().getName() + " tcId " + getTcId() + " (" + getResult().getWireValue() + ") " + getFlags()
 					+ ": " + getComment();
 		}
@@ -820,7 +822,7 @@ public final class WycheproofVectors {
 
 		private @Nullable String commit;
 
-		private Check(SortedMap<String, byte[]> files) {
+		private Check(@NonNull SortedMap<@NonNull String, byte @NonNull []> files) {
 			SortedMap<String, byte[]> others = new TreeMap<>(files);
 			byte @Nullable [] manifest = others.remove(MANIFEST);
 
@@ -843,7 +845,7 @@ public final class WycheproofVectors {
 				checkSource(source, others);
 		}
 
-		private void checkFileSet(SortedMap<String, byte[]> others) {
+		private void checkFileSet(@NonNull SortedMap<@NonNull String, byte @NonNull []> others) {
 			boolean anyVectorFile = false;
 
 			for (String path : others.keySet()) {
@@ -863,7 +865,7 @@ public final class WycheproofVectors {
 		/**
 		 * Parses a vector file and checks its structure; records it and its counts only if every check passes.
 		 */
-		private void checkVectorFile(String path, byte[] content) {
+		private void checkVectorFile(@NonNull String path, byte @NonNull [] content) {
 			JsonValue value;
 
 			try {
@@ -1002,7 +1004,7 @@ public final class WycheproofVectors {
 		/**
 		 * Checks {@code SOURCE.txt}: its form, its {@code Commit:} line, and its file table against the files.
 		 */
-		private void checkSource(byte[] source, SortedMap<String, byte[]> others) {
+		private void checkSource(byte @NonNull [] source, @NonNull SortedMap<@NonNull String, byte @NonNull []> others) {
 			String text;
 
 			try {
@@ -1129,7 +1131,7 @@ public final class WycheproofVectors {
 		 * Checks the total row against the vector files: their bytes always, their counts only when every vector file
 		 * has counts.
 		 */
-		private void checkTotal(String where, Matcher total, SortedMap<String, byte[]> others) {
+		private void checkTotal(@NonNull String where, @NonNull Matcher total, @NonNull SortedMap<@NonNull String, byte @NonNull []> others) {
 			long bytes = 0;
 			int vectorFiles = 0;
 
@@ -1167,7 +1169,7 @@ public final class WycheproofVectors {
 		/**
 		 * Adds {@code <where> says <subject> <recorded> <unit>, but the files give <actual>} when the two differ.
 		 */
-		private void checkNumber(String where, String subject, String unit, long recorded, long actual) {
+		private void checkNumber(@NonNull String where, @NonNull String subject, @NonNull String unit, long recorded, long actual) {
 			if (recorded != actual)
 				this.problems.add(where + " says " + subject + " " + recorded + " " + unit + ", but the files give "
 						+ actual);
@@ -1196,7 +1198,7 @@ public final class WycheproofVectors {
 	 * misordered or repeated line, a line for the manifest itself, a listed file that is missing or whose SHA-256
 	 * differs, and a file that is not listed.
 	 */
-	private static List<String> manifestProblems(byte[] manifest, SortedMap<String, byte[]> files) {
+	private static @NonNull List<@NonNull String> manifestProblems(byte @NonNull [] manifest, @NonNull SortedMap<@NonNull String, byte @NonNull []> files) {
 		List<String> problems = new ArrayList<>();
 		Set<String> listed = new HashSet<>();
 		// ISO-8859-1 maps each byte to one character, so a non-ASCII byte makes its line malformed.
@@ -1252,30 +1254,30 @@ public final class WycheproofVectors {
 	// Helpers
 	// ---------------------------------------------------------------------------------------------------------------
 
-	private static String string(JsonObject object, String name) {
+	private static @NonNull String string(@NonNull JsonObject object, @NonNull String name) {
 		return object.findString(name).orElseThrow();
 	}
 
-	private static JsonObject object(JsonObject object, String name) {
+	private static @NonNull JsonObject object(@NonNull JsonObject object, @NonNull String name) {
 		return optionalObject(object, name).orElseThrow();
 	}
 
-	private static JsonArray array(JsonObject object, String name) {
+	private static @NonNull JsonArray array(@NonNull JsonObject object, @NonNull String name) {
 		return optionalArray(object, name).orElseThrow();
 	}
 
-	private static Optional<JsonObject> optionalObject(JsonObject object, String name) {
+	private static @NonNull Optional<@NonNull JsonObject> optionalObject(@NonNull JsonObject object, @NonNull String name) {
 		return object.find(name).filter(JsonObject.class::isInstance).map(JsonObject.class::cast);
 	}
 
-	private static Optional<JsonArray> optionalArray(JsonObject object, String name) {
+	private static @NonNull Optional<@NonNull JsonArray> optionalArray(@NonNull JsonObject object, @NonNull String name) {
 		return object.find(name).filter(JsonArray.class::isInstance).map(JsonArray.class::cast);
 	}
 
 	/**
 	 * A whole-number member in the range of {@code int}.
 	 */
-	private static Optional<Integer> integer(JsonObject object, String name) {
+	private static @NonNull Optional<@NonNull Integer> integer(@NonNull JsonObject object, @NonNull String name) {
 		return object.find(name)
 				.filter(JsonNumber.class::isInstance)
 				.map(JsonNumber.class::cast)
@@ -1284,11 +1286,11 @@ public final class WycheproofVectors {
 				.map(Long::intValue);
 	}
 
-	private static NoSuchElementException absent(String where, String kind, String name) {
+	private static @NonNull NoSuchElementException absent(@NonNull String where, @NonNull String kind, @NonNull String name) {
 		return new NoSuchElementException(where + " has no " + kind + " member " + name);
 	}
 
-	private static byte[] hex(String where, String name, String value) {
+	private static byte @NonNull [] hex(@NonNull String where, @NonNull String name, @NonNull String value) {
 		try {
 			return HexFormat.of().parseHex(value);
 		} catch (IllegalArgumentException exception) {
@@ -1297,7 +1299,7 @@ public final class WycheproofVectors {
 		}
 	}
 
-	private static String sha256(byte[] content) {
+	private static @NonNull String sha256(byte @NonNull [] content) {
 		return HexFormat.of().formatHex(digest("SHA-256", content));
 	}
 
@@ -1305,14 +1307,14 @@ public final class WycheproofVectors {
 	 * The git blob SHA-1 of a file's content: the SHA-1 of {@code "blob <size>\0"} followed by the content, which is
 	 * how git names a blob, and how the upstream tree listing identifies each file.
 	 */
-	private static String gitBlobSha1(byte[] content) {
+	private static @NonNull String gitBlobSha1(byte @NonNull [] content) {
 		byte[] prefix = ("blob " + content.length + "\0").getBytes(StandardCharsets.US_ASCII);
 		byte[] blob = Arrays.copyOf(prefix, prefix.length + content.length);
 		System.arraycopy(content, 0, blob, prefix.length, content.length);
 		return HexFormat.of().formatHex(digest("SHA-1", blob));
 	}
 
-	private static byte[] digest(String algorithm, byte[] content) {
+	private static byte @NonNull [] digest(@NonNull String algorithm, byte @NonNull [] content) {
 		try {
 			return MessageDigest.getInstance(algorithm).digest(content);
 		} catch (NoSuchAlgorithmException exception) {
@@ -1320,7 +1322,7 @@ public final class WycheproofVectors {
 		}
 	}
 
-	private static int compareUtf8(String first, String second) {
+	private static int compareUtf8(@NonNull String first, @NonNull String second) {
 		return Arrays.compareUnsigned(first.getBytes(StandardCharsets.UTF_8), second.getBytes(StandardCharsets.UTF_8));
 	}
 
@@ -1328,7 +1330,7 @@ public final class WycheproofVectors {
 	 * The vendored directory. Tests read the source directory when they run from a checkout, so the checks cover
 	 * exactly what is committed, not a build copy; otherwise they read the copy on the test class path.
 	 */
-	private static Path root() {
+	private static @NonNull Path root() {
 		try {
 			// target/test-classes -> target -> the module root.
 			Path testClasses = Path.of(WycheproofVectors.class.getProtectionDomain().getCodeSource().getLocation()
@@ -1353,7 +1355,7 @@ public final class WycheproofVectors {
 	/**
 	 * Every regular file under {@code root}, by its path relative to {@code root} with {@code /} separators.
 	 */
-	private static SortedMap<String, byte[]> readTree(Path root) {
+	private static @NonNull SortedMap<@NonNull String, byte @NonNull []> readTree(@NonNull Path root) {
 		SortedMap<String, byte[]> files = new TreeMap<>();
 
 		try (Stream<Path> paths = Files.walk(root)) {

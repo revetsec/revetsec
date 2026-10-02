@@ -16,6 +16,10 @@
 
 package com.revetsec.internal.crypto;
 
+import org.jspecify.annotations.Nullable;
+
+import org.jspecify.annotations.NonNull;
+
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.DynamicTest;
 import org.junit.jupiter.api.Test;
@@ -42,7 +46,7 @@ final class HmacTests {
 
 	// RFC 4231 section 4: test cases 1 to 4, 6 and 7 (case 5 truncates its output; see the next test).
 	@TestFactory
-	Stream<DynamicTest> computesTheRfc4231TestCases() {
+	@NonNull Stream<@NonNull DynamicTest> computesTheRfc4231TestCases() {
 		byte[] largeKey = filled(0xaa, 131);
 
 		return Stream.of(
@@ -127,7 +131,7 @@ final class HmacTests {
 
 	// RFC 7518 section 3.2: "A key of the same size as the hash output ... or larger MUST be used", counted in octets.
 	@TestFactory
-	Stream<DynamicTest> secretsShorterThanTheHashOutputAreRefusedBeforeTheJca() {
+	@NonNull Stream<@NonNull DynamicTest> secretsShorterThanTheHashOutputAreRefusedBeforeTheJca() {
 		return Stream.of(HashAlgorithm.values()).map(hash -> DynamicTest.dynamicTest(hash.name(), () -> {
 			byte[] message = ascii("message");
 
@@ -160,7 +164,7 @@ final class HmacTests {
 	// RFC 7518 section 3.2 forbids truncated tags; MessageDigest.isEqual calls two empty arrays equal, so the length
 	// check must come first (INV-G8).
 	@TestFactory
-	Stream<DynamicTest> onlyTheExactFullLengthTagVerifies() {
+	@NonNull Stream<@NonNull DynamicTest> onlyTheExactFullLengthTagVerifies() {
 		return Stream.of(HashAlgorithm.values()).map(hash -> DynamicTest.dynamicTest(hash.name(), () -> {
 			byte[] secret = filled(0x5a, hash.getLength());
 			byte[] message = ascii("eyJhbGciOiJIUzI1NiJ9.e30");
@@ -227,6 +231,8 @@ final class HmacTests {
 		Assertions.assertThrows(IllegalArgumentException.class, () -> Hmac.sha256Mac(new byte[0]));
 	}
 
+	// Deliberate null inputs verify runtime rejection.
+	@SuppressWarnings("NullAway")
 	@Test
 	void rejectsNullArguments() {
 		byte[] secret = new byte[64];
@@ -259,13 +265,13 @@ final class HmacTests {
 		Assertions.assertEquals(Hmac.HMAC_SHA256, Hmac.sha256Mac(new byte[1]).getAlgorithm());
 	}
 
-	private static byte[] filled(int value, int length) {
+	private static byte @NonNull [] filled(int value, int length) {
 		byte[] bytes = new byte[length];
 		Arrays.fill(bytes, (byte) value);
 		return bytes;
 	}
 
-	private static byte[] ascii(String value) {
+	private static byte @NonNull [] ascii(@NonNull String value) {
 		return value.getBytes(StandardCharsets.US_ASCII);
 	}
 
@@ -273,7 +279,7 @@ final class HmacTests {
 	 * Hides a {@code null} from NullAway, for the tests that check null handling.
 	 */
 	@SuppressWarnings({"NullAway", "TypeParameterUnusedInFormals"})
-	private static <T> T nullValue() {
+	private static <T> @Nullable T nullValue() {
 		return null;
 	}
 
@@ -288,12 +294,12 @@ final class HmacTests {
 		private final String sha384;
 		private final String sha512;
 
-		private Case(String name,
-								 byte[] key,
-								 byte[] data,
-								 String sha256,
-								 String sha384,
-								 String sha512) {
+		private Case(@NonNull String name,
+								 byte @NonNull [] key,
+								 byte @NonNull [] data,
+								 @NonNull String sha256,
+								 @NonNull String sha384,
+								 @NonNull String sha512) {
 			this.name = name;
 			this.key = key;
 			this.data = data;
@@ -302,7 +308,7 @@ final class HmacTests {
 			this.sha512 = sha512;
 		}
 
-		private String expected(HashAlgorithm hash) {
+		private @NonNull String expected(@NonNull HashAlgorithm hash) {
 			return switch (hash) {
 				case SHA_256 -> this.sha256;
 				case SHA_384 -> this.sha384;

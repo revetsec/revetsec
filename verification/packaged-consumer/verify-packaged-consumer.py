@@ -365,6 +365,60 @@ def java_environment(java_home):
     return environment
 
 
+def annotation_free_source(source):
+    """Erase only JSpecify type tokens/imports outside comments and literals for the dependency-free consumer."""
+    pieces = []
+    position = 0
+    annotation = re.compile(r"@(?:org\.jspecify\.annotations\.)?(?:NonNull|Nullable)\b[ \t]*")
+    annotation_import = re.compile(r"import org\.jspecify\.annotations\.(?:NonNull|Nullable);[ \t]*(?:\r?\n)?")
+    while position < len(source):
+        if source.startswith("//", position):
+            end = source.find("\n", position)
+            end = len(source) if end < 0 else end + 1
+        elif source.startswith("/*", position):
+            end = source.find("*/", position + 2)
+            if end < 0:
+                raise VerificationError("Unterminated Java comment in consumer source")
+            end += 2
+        elif source.startswith('"""', position):
+            end = position + 3
+            while True:
+                end = source.find('"""', end)
+                if end < 0:
+                    raise VerificationError("Unterminated Java text block in consumer source")
+                escapes = 0
+                before = end - 1
+                while before >= position and source[before] == "\\":
+                    escapes += 1
+                    before -= 1
+                if escapes % 2 == 0:
+                    end += 3
+                    break
+                end += 3
+        elif source[position] in ("'", '"'):
+            quote = source[position]
+            end = position + 1
+            while end < len(source):
+                if source[end] == "\\":
+                    end += 2
+                elif source[end] == quote:
+                    end += 1
+                    break
+                else:
+                    end += 1
+        else:
+            match = annotation.match(source, position) or annotation_import.match(source, position)
+            if match:
+                position = match.end()
+                continue
+            pieces.append(source[position])
+            position += 1
+            continue
+        pieces.append(source[position:end])
+        position = end
+    return "".join(pieces)
+
+
 def copy_consumer_sources(names, consumer_directory):
     """Copy the named consumer sources from this directory into a fresh consumer_directory."""
     if consumer_directory.exists():
@@ -376,6 +430,9 @@ def copy_consumer_sources(names, consumer_directory):
             shutil.copytree(source, consumer_directory / name)
         else:
             shutil.copy2(source, consumer_directory / name)
+    for java_source in consumer_directory.rglob("*.java"):
+        canonical = java_source.read_text(encoding="utf-8")
+        java_source.write_text(annotation_free_source(canonical), encoding="utf-8")
 
 
 def build_consumer(maven, java_home, repository, version, work_directory, maven_arguments=()):

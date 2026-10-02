@@ -16,6 +16,8 @@
 
 package com.revetsec.internal.json;
 
+import org.jspecify.annotations.NonNull;
+
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.DynamicTest;
 import org.junit.jupiter.api.Test;
@@ -52,7 +54,7 @@ final class AsciiCaseTests {
 	// G7-7: the letters the JDK's case-insensitive comparisons equate with ASCII letters stay apart here: the
 	// dotless small i (U+0131), the dotted capital I (U+0130), the Kelvin sign (U+212A) and the long s (U+017F).
 	@TestFactory
-	Stream<DynamicTest> keepsNonAsciiCaseVariantsApartThatTheJdkMerges() {
+	@NonNull Stream<@NonNull DynamicTest> keepsNonAsciiCaseVariantsApartThatTheJdkMerges() {
 		return Stream.of(
 				new String[]{"\u0131d", "id"},
 				new String[]{"\u0131d", "ID"},
@@ -94,6 +96,8 @@ final class AsciiCaseTests {
 	}
 
 	// R15: null arguments are misuse.
+	// Deliberate null inputs verify runtime rejection.
+	@SuppressWarnings("NullAway")
 	@Test
 	void rejectsNullArguments() {
 		String nothing = JsonFailures.nullValue();

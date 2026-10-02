@@ -16,6 +16,8 @@
 
 package com.revetsec.internal.crypto;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.internal.encoding.Base64Url;
 import com.revetsec.internal.encoding.EncodingException;
 import com.revetsec.json.JsonObject;
@@ -206,7 +208,7 @@ public final class WycheproofSignatureTests {
 	// x(R) >= n lines, the HMAC key-shorter-than-hash and truncated-tag groups of RFC 7518 section 3.2, the PSS-misc
 	// parameters JOSE does not use, and the e = 3 keys of M2-7), and every acceptable vector (PKCS#1 MissingNull).
 	@TestFactory
-	Stream<DynamicContainer> runsEveryVectorAsTheManifestExpects() {
+	@NonNull Stream<@NonNull DynamicContainer> runsEveryVectorAsTheManifestExpects() {
 		Run run = Run.load();
 		int feature = Runtime.version().feature();
 
@@ -292,7 +294,7 @@ public final class WycheproofSignatureTests {
 	// behind every algorithm the runner uses is named, so a run on another provider describes itself. Each test's
 	// display name carries the provider, and each is printed.
 	@TestFactory
-	Stream<DynamicTest> namesTheProviderThatServesEachAlgorithm() {
+	@NonNull Stream<@NonNull DynamicTest> namesTheProviderThatServesEachAlgorithm() {
 		Map<String, Provider> providers = new LinkedHashMap<>();
 
 		for (VectorFile file : Run.load().files) {
@@ -364,7 +366,7 @@ public final class WycheproofSignatureTests {
 	// are each reported, and so are malformed lines, reasons the runner does not report and rules outside the closed
 	// set. Each problem names its line.
 	@TestFactory
-	Stream<DynamicTest> reportsEveryStaleOrMalformedManifestLine() {
+	@NonNull Stream<@NonNull DynamicTest> reportsEveryStaleOrMalformedManifestLine() {
 		String a = ExpectationsCase.COUNT_A;
 		String b = ExpectationsCase.COUNT_B;
 		String acceptable = "a.json\ttcId=3\tall\taccept\tn";
@@ -455,21 +457,21 @@ public final class WycheproofSignatureTests {
 	/**
 	 * A manifest of the given lines, each ended with a line feed.
 	 */
-	private static String lines(String... lines) {
+	private static @NonNull String lines(@NonNull String @NonNull ... lines) {
 		return Stream.of(lines).map(line -> line + "\n").collect(Collectors.joining());
 	}
 
-	private static String malformed(int number) {
+	private static @NonNull String malformed(int number) {
 		return "M.tsv line " + number + " is malformed (expected <file><TAB><tcId=n or rule:name><TAB><jdk><TAB>"
 				+ "<outcome><TAB><note>)";
 	}
 
-	private static String malformedCount(int number) {
+	private static @NonNull String malformedCount(int number) {
 		return "M.tsv line " + number + " is malformed (expected #count<TAB><file><TAB><jdk><TAB><outcome>=<count>..., "
 				+ "one or more, sorted and distinct)";
 	}
 
-	private static String unlisted(int tcId, int feature) {
+	private static @NonNull String unlisted(int tcId, int feature) {
 		return "M.tsv has no line for a.json tcId " + tcId + ", which is acceptable, on JDK " + feature;
 	}
 
@@ -506,16 +508,16 @@ public final class WycheproofSignatureTests {
 				"a.json\ttcId=5\tall\treject:WRONG_LENGTH\ta pinned reason",
 				"b.json\ttcId=1\tall\tn/a\tnot applicable");
 
-		private static DynamicTest of(String name, String manifest, String... expected) {
+		private static @NonNull DynamicTest of(@NonNull String name, @NonNull String manifest, @NonNull String @NonNull ... expected) {
 			return ofBytes(name, utf8(manifest), expected);
 		}
 
-		private static DynamicTest ofBytes(String name, byte @Nullable [] manifest, String... expected) {
+		private static @NonNull DynamicTest ofBytes(@NonNull String name, byte @Nullable [] manifest, @NonNull String @NonNull ... expected) {
 			return DynamicTest.dynamicTest(name, () -> Assertions.assertEquals(List.of(expected),
 					Expectations.findProblems("M.tsv", manifest, FILES, CODES, RULE_NAMES)));
 		}
 
-		private static byte[] utf8(String text) {
+		private static byte @NonNull [] utf8(@NonNull String text) {
 			return text.getBytes(StandardCharsets.UTF_8);
 		}
 	}
@@ -528,7 +530,7 @@ public final class WycheproofSignatureTests {
 	 * A vector's outcome: {@code accept}, {@code reject:<code>} or {@code n/a}. Anything thrown fails the test (INV-G1:
 	 * the verifiers never throw on untrusted input).
 	 */
-	private static String observe(Setup setup, TestVector vector) {
+	private static @NonNull String observe(@NonNull Setup setup, @NonNull TestVector vector) {
 		if (!setup.applicable)
 			return Expectations.NOT_APPLICABLE;
 
@@ -566,7 +568,7 @@ public final class WycheproofSignatureTests {
 	 * The JCA provider that serves a group's signature algorithm for its key, chosen the way {@link SignatureVerifier}'s
 	 * own {@link Signature} chooses it: at {@code initVerify}.
 	 */
-	private static Provider provider(Setup setup) {
+	private static @NonNull Provider provider(@NonNull Setup setup) {
 		try {
 			Signature signature = Signature.getInstance(setup.algorithmName());
 			signature.initVerify(setup.requireKey());
@@ -583,7 +585,7 @@ public final class WycheproofSignatureTests {
 	/**
 	 * The JCA provider that serves a MAC group's algorithm, for the key of its first test.
 	 */
-	private static Provider macProvider(Setup setup, TestGroup group) {
+	private static @NonNull Provider macProvider(@NonNull Setup setup, @NonNull TestGroup group) {
 		try {
 			Mac mac = Mac.getInstance(setup.algorithmName());
 			mac.init(new SecretKeySpec(group.getTests().get(0).getHexBytes("key"), setup.algorithmName()));
@@ -593,18 +595,18 @@ public final class WycheproofSignatureTests {
 		}
 	}
 
-	private static boolean isPss(TestGroup group) {
+	private static boolean isPss(@NonNull TestGroup group) {
 		return group.getType().equals("RsassaPssVerify");
 	}
 
-	private static boolean isMac(TestGroup group) {
+	private static boolean isMac(@NonNull TestGroup group) {
 		return group.getType().equals("MacTest");
 	}
 
 	/**
 	 * The hash a group names in {@code sha}, which must be one JOSE uses.
 	 */
-	private static HashAlgorithm hash(TestGroup group) {
+	private static @NonNull HashAlgorithm hash(@NonNull TestGroup group) {
 		String sha = group.getString("sha");
 		return Optional.ofNullable(JOSE_HASHES.get(sha)).orElseThrow(() -> new AssertionError(group + ": no JOSE hash "
 				+ sha));
@@ -613,7 +615,7 @@ public final class WycheproofSignatureTests {
 	/**
 	 * The hash of a MAC file, from its {@code algorithm} ({@code HMACSHA256} and so on).
 	 */
-	private static HashAlgorithm macHash(TestGroup group) {
+	private static @NonNull HashAlgorithm macHash(@NonNull TestGroup group) {
 		String algorithm = group.getFile().findAlgorithm().orElse("");
 
 		return switch (algorithm) {
@@ -628,7 +630,7 @@ public final class WycheproofSignatureTests {
 	 * A vector file's {@code BigInt}: hex two's complement (Wycheproof's {@code doc/formats.md}), which must be
 	 * positive here.
 	 */
-	private static BigInteger positive(String hex) {
+	private static @NonNull BigInteger positive(@NonNull String hex) {
 		BigInteger value = new BigInteger(HexFormat.of().parseHex(hex));
 
 		if (value.signum() <= 0)
@@ -640,12 +642,12 @@ public final class WycheproofSignatureTests {
 	/**
 	 * The minimal unsigned big-endian bytes of a positive integer: no leading zero octet.
 	 */
-	private static byte[] unsigned(BigInteger value) {
+	private static byte @NonNull [] unsigned(@NonNull BigInteger value) {
 		byte[] bytes = value.toByteArray();
 		return bytes[0] == 0 ? Arrays.copyOfRange(bytes, 1, bytes.length) : bytes;
 	}
 
-	private static byte[] base64Url(TestGroup group, JsonObject jwk, String member) {
+	private static byte @NonNull [] base64Url(@NonNull TestGroup group, @NonNull JsonObject jwk, @NonNull String member) {
 		try {
 			return Base64Url.decode(jwk.findString(member).orElseThrow(() -> new AssertionError(group + ": the JWK "
 					+ "has no " + member)));
@@ -654,7 +656,7 @@ public final class WycheproofSignatureTests {
 		}
 	}
 
-	private static Set<String> intersection(Set<String> first, Set<String> second) {
+	private static @NonNull Set<@NonNull String> intersection(@NonNull Set<@NonNull String> first, @NonNull Set<@NonNull String> second) {
 		Set<String> intersection = new HashSet<>(first);
 		intersection.retainAll(second);
 		return intersection;
@@ -679,7 +681,7 @@ public final class WycheproofSignatureTests {
 		private final KeyRejectedException.@Nullable Kind refusal;
 		private final boolean applicable;
 
-		private Setup(Family family,
+		private Setup(@NonNull Family family,
 									@Nullable EcCurve curve,
 									@Nullable HashAlgorithm hash,
 									@Nullable PublicKey key,
@@ -693,7 +695,7 @@ public final class WycheproofSignatureTests {
 			this.applicable = applicable;
 		}
 
-		static Setup of(TestGroup group) {
+		static @NonNull Setup of(@NonNull TestGroup group) {
 			return switch (group.getType()) {
 				case "EcdsaP1363Verify" -> ecdsa(group);
 				case "RsassaPkcs1Verify" -> rsa(group, Family.RSA_PKCS1);
@@ -709,7 +711,7 @@ public final class WycheproofSignatureTests {
 		 * ECDSA: {@code publicKey.uncompressed} is {@code 04 || x || y} with fixed-length coordinates; the JWK, where
 		 * the group has one, holds the same point on the same curve.
 		 */
-		private static Setup ecdsa(TestGroup group) {
+		private static @NonNull Setup ecdsa(@NonNull TestGroup group) {
 			JsonObject publicKey = group.getObject("publicKey");
 			String curveName = publicKey.findString("curve").orElse("");
 			EcCurve curve = Arrays.stream(EcCurve.values()).filter(value -> value.getStandardName().equals(curveName))
@@ -748,8 +750,8 @@ public final class WycheproofSignatureTests {
 		 * RSA: {@code publicKey.modulus} and {@code publicExponent} as minimal unsigned integers; the JWK, where the
 		 * group has one, holds the same ones.
 		 */
-		private static Setup rsa(TestGroup group,
-														 Family family) {
+		private static @NonNull Setup rsa(@NonNull TestGroup group,
+														 @NonNull Family family) {
 			JsonObject publicKey = group.getObject("publicKey");
 			byte[] modulus = unsigned(positive(publicKey.findString("modulus").orElse("")));
 			byte[] exponent = unsigned(positive(publicKey.findString("publicExponent").orElse("")));
@@ -770,7 +772,7 @@ public final class WycheproofSignatureTests {
 		/**
 		 * Ed25519: {@code publicKey.pk} is the 32-octet encoding; the JWK, where the group has one, holds the same.
 		 */
-		private static Setup ed25519(TestGroup group) {
+		private static @NonNull Setup ed25519(@NonNull TestGroup group) {
 			JsonObject publicKey = group.getObject("publicKey");
 			Assertions.assertEquals(Optional.of("edwards25519"), publicKey.findString("curve"), () -> group + ": curve");
 			byte[] encoded = HexFormat.of().parseHex(publicKey.findString("pk").orElse(""));
@@ -787,18 +789,18 @@ public final class WycheproofSignatureTests {
 			}
 		}
 
-		PublicKey requireKey() {
+		@NonNull PublicKey requireKey() {
 			return requireNonNull(this.key, "no key");
 		}
 
-		HashAlgorithm requireHash() {
+		@NonNull HashAlgorithm requireHash() {
 			return requireNonNull(this.hash, "no hash");
 		}
 
 		/**
 		 * The JCA name the primitive uses for this group.
 		 */
-		String algorithmName() {
+		@NonNull String algorithmName() {
 			return switch (this.family) {
 				case ECDSA -> requireHash().getEcdsaSignatureName();
 				case RSA_PKCS1 -> requireHash().getRsaSignatureName();
@@ -816,13 +818,13 @@ public final class WycheproofSignatureTests {
 		private final List<VectorFile> files;
 		private final Expectations expectations;
 
-		private Run(List<VectorFile> files,
-								Expectations expectations) {
+		private Run(@NonNull List<@NonNull VectorFile> files,
+								@NonNull Expectations expectations) {
 			this.files = files;
 			this.expectations = expectations;
 		}
 
-		static Run load() {
+		static @NonNull Run load() {
 			List<VectorFile> files = WycheproofVectors.fromVendoredFiles().getFiles().stream()
 					.filter(file -> !JOSE_FILES.contains(file.getName())).toList();
 			SortedMap<String, List<Expectations.Vector>> vectors = new TreeMap<>();
@@ -845,7 +847,7 @@ public final class WycheproofSignatureTests {
 					MANIFEST), vectors, CODES, RULES.keySet()));
 		}
 
-		VectorFile file(String name) {
+		@NonNull VectorFile file(@NonNull String name) {
 			return this.files.stream().filter(file -> file.getName().equals(name)).findFirst().orElseThrow();
 		}
 	}
@@ -933,9 +935,9 @@ public final class WycheproofSignatureTests {
 		private final Map<String, Map<Integer, List<Line>>> linesByVector;
 		private final List<CountLine> countLines;
 
-		private Expectations(Map<String, Map<Integer, Vector>> vectors,
-												 Map<String, Map<Integer, List<Line>>> linesByVector,
-												 List<CountLine> countLines) {
+		private Expectations(@NonNull Map<@NonNull String, @NonNull Map<@NonNull Integer, @NonNull Vector>> vectors,
+												 @NonNull Map<@NonNull String, @NonNull Map<@NonNull Integer, @NonNull List<@NonNull Line>>> linesByVector,
+												 @NonNull List<@NonNull CountLine> countLines) {
 			this.vectors = vectors;
 			this.linesByVector = linesByVector;
 			this.countLines = countLines;
@@ -948,7 +950,7 @@ public final class WycheproofSignatureTests {
 		 * @param result its upstream verdict
 		 * @param rules  the rules of the runner's closed set that select it
 		 */
-		public record Vector(int tcId, Result result, Set<String> rules) {
+		public record Vector(int tcId, @NonNull Result result, @NonNull Set<@NonNull String> rules) {
 			/**
 			 * Copies the rules.
 			 */
@@ -969,11 +971,11 @@ public final class WycheproofSignatureTests {
 		 * @return the checked manifest
 		 * @throws AssertionError if any check fails; its message lists every problem
 		 */
-		public static Expectations fromManifest(String name,
+		public static @NonNull Expectations fromManifest(@NonNull String name,
 																						byte @Nullable [] content,
-																						SortedMap<String, List<Vector>> files,
-																						Set<String> codes,
-																						Set<String> rules) {
+																						@NonNull SortedMap<@NonNull String, @NonNull List<@NonNull Vector>> files,
+																						@NonNull Set<@NonNull String> codes,
+																						@NonNull Set<@NonNull String> rules) {
 			Check check = new Check(name, content, files, codes, rules);
 
 			if (!check.problems.isEmpty())
@@ -992,11 +994,11 @@ public final class WycheproofSignatureTests {
 		 * @param rules   the runner's closed rule set
 		 * @return the problems
 		 */
-		public static List<String> findProblems(String name,
+		public static @NonNull List<@NonNull String> findProblems(@NonNull String name,
 																						byte @Nullable [] content,
-																						SortedMap<String, List<Vector>> files,
-																						Set<String> codes,
-																						Set<String> rules) {
+																						@NonNull SortedMap<@NonNull String, @NonNull List<@NonNull Vector>> files,
+																						@NonNull Set<@NonNull String> codes,
+																						@NonNull Set<@NonNull String> rules) {
 			return List.copyOf(new Check(name, content, files, codes, rules).problems);
 		}
 
@@ -1008,8 +1010,8 @@ public final class WycheproofSignatureTests {
 		 * @param relativeSource the manifest's path relative to the module root, under {@code src/test/resources/}
 		 * @return its bytes, or {@code null} if there is no such file
 		 */
-		public static byte @Nullable [] read(Class<?> anchor,
-																				 String relativeSource) {
+		public static byte @Nullable [] read(@NonNull Class<?> anchor,
+																				 @NonNull String relativeSource) {
 			try {
 				// target/test-classes -> target -> the module root.
 				Path testClasses = Path.of(anchor.getProtectionDomain().getCodeSource().getLocation().toURI());
@@ -1038,7 +1040,7 @@ public final class WycheproofSignatureTests {
 		 * @param feature the Java feature release
 		 * @return {@code accept}, {@code reject:<code>}, {@code n/a}, or {@link #ANY_REJECTION}
 		 */
-		public String outcomeFor(String file,
+		public @NonNull String outcomeFor(@NonNull String file,
 														 int tcId,
 														 int feature) {
 			Vector vector = requireNonNull(requireNonNull(this.vectors.get(file), file).get(tcId), () -> file + " tcId "
@@ -1063,7 +1065,7 @@ public final class WycheproofSignatureTests {
 		 * @param feature the Java feature release, at least {@value #MINIMUM_FEATURE}
 		 * @return the counts, by outcome
 		 */
-		public SortedMap<String, Integer> pinnedCounts(String file,
+		public @NonNull SortedMap<@NonNull String, @NonNull Integer> pinnedCounts(@NonNull String file,
 																									 int feature) {
 			return this.countLines.stream().filter(line -> line.file.equals(file) && line.jdk.contains(feature))
 					.findFirst().map(line -> line.counts)
@@ -1077,8 +1079,8 @@ public final class WycheproofSignatureTests {
 		 * @param observed the observed outcome
 		 * @return whether it is satisfied
 		 */
-		public static boolean satisfies(String expected,
-																		String observed) {
+		public static boolean satisfies(@NonNull String expected,
+																		@NonNull String observed) {
 			return expected.equals(observed) || (expected.equals(ANY_REJECTION) && observed.startsWith(REJECT));
 		}
 
@@ -1090,9 +1092,9 @@ public final class WycheproofSignatureTests {
 		 * @param counts  the counts, by outcome
 		 * @return the line, without a line feed
 		 */
-		public static String countLine(String file,
+		public static @NonNull String countLine(@NonNull String file,
 																	 int feature,
-																	 SortedMap<String, Integer> counts) {
+																	 @NonNull SortedMap<@NonNull String, @NonNull Integer> counts) {
 			return "#count\t" + file + "\t" + feature + "\t" + counts.entrySet().stream()
 					.map(entry -> entry.getKey() + "=" + entry.getValue()).collect(Collectors.joining("\t"));
 		}
@@ -1108,12 +1110,12 @@ public final class WycheproofSignatureTests {
 			/**
 			 * The first release both ranges cover, if any.
 			 */
-			Optional<Integer> firstShared(Range other) {
+			@NonNull Optional<@NonNull Integer> firstShared(@NonNull Range other) {
 				int from = Math.max(this.from, other.from);
 				return from <= Math.min(this.to, other.to) ? Optional.of(from) : Optional.empty();
 			}
 
-			static @Nullable Range parse(String field) {
+			static @Nullable Range parse(@NonNull String field) {
 				Matcher matcher = JDK.matcher(field);
 
 				if (!matcher.matches())
@@ -1131,7 +1133,7 @@ public final class WycheproofSignatureTests {
 			/**
 			 * The first release from {@value #MINIMUM_FEATURE} up that no range covers, if any.
 			 */
-			static Optional<Integer> firstUncovered(List<Range> ranges) {
+			static @NonNull Optional<@NonNull Integer> firstUncovered(@NonNull List<@NonNull Range> ranges) {
 				List<Range> sorted = new ArrayList<>(ranges);
 				sorted.sort(Comparator.comparingInt(Range::from));
 				long next = MINIMUM_FEATURE;
@@ -1149,14 +1151,14 @@ public final class WycheproofSignatureTests {
 		/**
 		 * An expectation line; exactly one of {@code tcId} and {@code rule} is set.
 		 */
-		private record Line(int number, String file, @Nullable Integer tcId, @Nullable String rule, Range jdk,
-												String outcome) {
+		private record Line(int number, @NonNull String file, @Nullable Integer tcId, @Nullable String rule, @NonNull Range jdk,
+												@NonNull String outcome) {
 		}
 
 		/**
 		 * A count line.
 		 */
-		private record CountLine(int number, String file, Range jdk, SortedMap<String, Integer> counts) {
+		private record CountLine(int number, @NonNull String file, @NonNull Range jdk, @NonNull SortedMap<@NonNull String, @NonNull Integer> counts) {
 		}
 
 		/**
@@ -1169,11 +1171,11 @@ public final class WycheproofSignatureTests {
 			private final List<CountLine> countLines = new ArrayList<>();
 			private final List<String> problems = new ArrayList<>();
 
-			private Check(String name,
+			private Check(@NonNull String name,
 										byte @Nullable [] content,
-										SortedMap<String, List<Vector>> files,
-										Set<String> codes,
-										Set<String> rules) {
+										@NonNull SortedMap<@NonNull String, @NonNull List<@NonNull Vector>> files,
+										@NonNull Set<@NonNull String> codes,
+										@NonNull Set<@NonNull String> rules) {
 				this.name = name;
 
 				for (Map.Entry<String, List<Vector>> file : files.entrySet()) {
@@ -1206,7 +1208,7 @@ public final class WycheproofSignatureTests {
 			 * The manifest's lines by 1-based number, after the file-level checks: present, well-formed UTF-8, LF line
 			 * endings only, and a final line feed.
 			 */
-			private SortedMap<Integer, String> lines(byte @Nullable [] content) {
+			private @NonNull SortedMap<@NonNull Integer, @NonNull String> lines(byte @Nullable [] content) {
 				SortedMap<Integer, String> lines = new TreeMap<>();
 
 				if (content == null) {
@@ -1240,10 +1242,10 @@ public final class WycheproofSignatureTests {
 				return lines;
 			}
 
-			private Optional<Line> expectationLine(int number,
-																						 String text,
-																						 Set<String> codes,
-																						 Set<String> rules) {
+			private @NonNull Optional<@NonNull Line> expectationLine(int number,
+																						 @NonNull String text,
+																						 @NonNull Set<@NonNull String> codes,
+																						 @NonNull Set<@NonNull String> rules) {
 				String[] fields = text.split("\t", -1);
 				Matcher tcId = TC_ID.matcher(fields.length == 5 ? fields[1] : "");
 				Matcher rule = RULE.matcher(fields.length == 5 ? fields[1] : "");
@@ -1283,8 +1285,8 @@ public final class WycheproofSignatureTests {
 			}
 
 			private void countLine(int number,
-														 String text,
-														 Set<String> codes) {
+														 @NonNull String text,
+														 @NonNull Set<@NonNull String> codes) {
 				String[] fields = text.split("\t", -1);
 				Range range = fields.length >= 4 ? Range.parse(fields[2]) : null;
 				SortedMap<String, Integer> counts = new TreeMap<>();
@@ -1333,7 +1335,7 @@ public final class WycheproofSignatureTests {
 			 * Records the vectors a line selects, and reports a rule that selects nothing, a line that repeats the
 			 * default, and a rule that changes no outcome.
 			 */
-			private void select(Line line) {
+			private void select(@NonNull Line line) {
 				Map<Integer, Vector> fileVectors = requireNonNull(this.vectors.get(line.file));
 				Integer tcId = line.tcId;
 				String rule = line.rule;
@@ -1362,8 +1364,8 @@ public final class WycheproofSignatureTests {
 			 * Whether an outcome differs from a vector's default: {@code accept} for a valid vector, any rejection for an
 			 * invalid one, and nothing for an acceptable one.
 			 */
-			private static boolean changes(Vector vector,
-																		 String outcome) {
+			private static boolean changes(@NonNull Vector vector,
+																		 @NonNull String outcome) {
 				return switch (vector.result()) {
 					case VALID -> !outcome.equals(ACCEPT);
 					case INVALID -> !outcome.startsWith(REJECT);
@@ -1427,7 +1429,7 @@ public final class WycheproofSignatureTests {
 				}
 			}
 
-			private String prefix(int number) {
+			private @NonNull String prefix(int number) {
 				return this.name + " line " + number;
 			}
 		}

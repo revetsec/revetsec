@@ -1,0 +1,18 @@
+{
+  "version": "2.9.0",
+  "commit": "ae865a19178ddf6f375780a02e9c77c4cf4da184",
+  "integrity": "sha512-77VWBmsA18jdxQ1vqbu8SNRSC2h5uBHyUq6wTmlqEDeVIST7YEVta0OyFCDf/6VSQKbZ3ia7Qb+9bZtlTcB+tw==",
+  "tarball": "https://registry.npmjs.org/@modelcontextprotocol/inspector/-/inspector-2.9.0.tgz",
+  "releaseUrl": "https://github.com/modelcontextprotocol/inspector/releases/tag/2.9.0",
+  "npmUrl": "https://registry.npmjs.org/@modelcontextprotocol%2finspector/2.9.0",
+  "nodeVersion": "24.18.0",
+  "npmVersion": "11.16.0",
+  "lifecycleScripts": false,
+  "packageSha256": "e2b37df0cf4d13cc08fde873522ca77a2f464ee07698e94d3148ddce16696611",
+  "lockSha256": "84093ae9f99aaecf93ca251694d4d1cf245a824aff4393a288203dcbf1179dbc",
+  "installedTreeIdentity": {
+    "files": 8707,
+    "sha256": "bd6a6ce1fbfd77915033621cc30377872ac44b5741685e423abb6f98167442c3"
+  },
+  "nodeExecutable": "/Users/agents/.local/share/fnm/node-versions/v24.18.0/installation/bin/node"
+}

@@ -16,6 +16,8 @@
 
 package com.revetsec.internal.http;
 
+import org.jspecify.annotations.NonNull;
+
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.DynamicTest;
@@ -44,7 +46,7 @@ final class RetryAfterTests {
 	// RFC 9110 section 10.2.3: delay-seconds = 1*DIGIT, leading zeros allowed; values past Integer.MAX_VALUE seconds
 	// are dropped rather than overflowing.
 	@TestFactory
-	Stream<DynamicTest> readsDelaySeconds() {
+	@NonNull Stream<@NonNull DynamicTest> readsDelaySeconds() {
 		Map<String, Optional<Duration>> cases = new LinkedHashMap<>();
 		cases.put("0", Optional.of(Duration.ZERO));
 		cases.put("90", Optional.of(Duration.ofSeconds(90)));
@@ -62,7 +64,7 @@ final class RetryAfterTests {
 	// RFC 9110 section 5.6.7: IMF-fixdate, the obsolete RFC 850 form and asctime all name the same instant; the delay
 	// runs from now, and a date in the past is no delay.
 	@TestFactory
-	Stream<DynamicTest> readsTheThreeHttpDateFormats() {
+	@NonNull Stream<@NonNull DynamicTest> readsTheThreeHttpDateFormats() {
 		Instant example = Instant.parse("1994-11-06T08:49:37Z");
 		Instant justBefore = example.minusSeconds(37);
 		Map<String, Duration> cases = new LinkedHashMap<>();
@@ -134,7 +136,7 @@ final class RetryAfterTests {
 	// digits, lower-case or unknown names, a day name that does not match the date, impossible dates and times, other
 	// zones, and misplaced spaces.
 	@TestFactory
-	Stream<DynamicTest> dropsEverythingElse() {
+	@NonNull Stream<@NonNull DynamicTest> dropsEverythingElse() {
 		return Stream.of("", " ", "-1", "+1", "1.5", "1e3", "120s", "1 20", "0x10", "\u0661\u0662\u0660", "soon",
 						"sun, 06 Nov 1994 08:49:37 GMT", "Sun, 06 nov 1994 08:49:37 GMT", "Sun, 06 Nov 1994 08:49:37 gmt",
 						"Sun, 06 Nov 1994 08:49:37 UTC", "Mon, 06 Nov 1994 08:49:37 GMT", "Sun, 6 Nov 1994 08:49:37 GMT",
@@ -170,12 +172,12 @@ final class RetryAfterTests {
 	}
 
 	@SuppressWarnings("NullAway")
-	private static HttpHeaders nullHeaders() {
+	private static @NonNull HttpHeaders nullHeaders() {
 		return nullValue();
 	}
 
 	@SuppressWarnings({"NullAway", "TypeParameterUnusedInFormals"})
-	private static <T> T nullValue() {
+	private static <T> @NonNull T nullValue() {
 		@Nullable T value = null;
 		return value;
 	}

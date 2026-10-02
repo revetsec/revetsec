@@ -16,6 +16,8 @@
 
 package com.revetsec.oauth;
 
+import org.jspecify.annotations.NonNull;
+
 import org.junit.jupiter.api.*;
 import static org.junit.jupiter.api.Assertions.*;
 import com.revetsec.testing.*;
@@ -39,8 +41,8 @@ import static com.revetsec.oauth.Phase2Fixtures.*;
 /** Endpoint health generation, bounded monotonic backoff and independent deadline-bound recovery waiters. */
 final class IntrospectionFailureGuardTests {
     private static final Duration REQUEST=Duration.ofSeconds(1);
-    private static Deadline deadline(){return Deadline.fromNow(Duration.ofSeconds(10));}
-    private static OAuthException failure(){return OAuthTransportException.fromReason(OAuthException.Reason.NETWORK_FAILURE,null);}
+    private static @NonNull Deadline deadline(){return Deadline.fromNow(Duration.ofSeconds(10));}
+    private static @NonNull OAuthException failure(){return OAuthTransportException.fromReason(OAuthException.Reason.NETWORK_FAILURE,null);}
     @Test void oldSuccessCannotClearNewFailureAndHealthyCallsAreNotThrottled() {
         AtomicLong time=new AtomicLong();IntrospectionFailureGuard guard=new IntrospectionFailureGuard(Duration.ofSeconds(1),time::get);
         var first=guard.acquire(deadline(),REQUEST);var second=guard.acquire(deadline(),REQUEST);var third=guard.acquire(deadline(),REQUEST);

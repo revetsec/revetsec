@@ -16,6 +16,10 @@
 
 package com.revetsec.json;
 
+import org.jspecify.annotations.Nullable;
+
+import org.jspecify.annotations.NonNull;
+
 import com.code_intelligence.jazzer.api.FuzzedDataProvider;
 import com.code_intelligence.jazzer.junit.FuzzTest;
 import com.revetsec.internal.json.JsonCodec;
@@ -89,7 +93,7 @@ public class JsonModelFuzzTests {
 	 * @param data the fuzzed construction program
 	 */
 	@FuzzTest(maxDuration = "5m")
-	public void factoriesAcceptExactlyTheValuesInsideTheModelInvariants(FuzzedDataProvider data) {
+	public void factoriesAcceptExactlyTheValuesInsideTheModelInvariants(@NonNull FuzzedDataProvider data) {
 		Program program = new Program(data);
 		Built built = program.value(4);
 
@@ -106,7 +110,7 @@ public class JsonModelFuzzTests {
 	 * @param input the fuzzed document
 	 */
 	@FuzzTest(maxDuration = "5m")
-	public void parsedValuesKeepEqualityUnderReorderingAndRescaling(byte[] input) {
+	public void parsedValuesKeepEqualityUnderReorderingAndRescaling(byte @NonNull [] input) {
 		JsonValue value;
 
 		try {
@@ -127,7 +131,7 @@ public class JsonModelFuzzTests {
 	/**
 	 * The invariants every value the model holds keeps (G7-5, G7-6, R9).
 	 */
-	private static void requireInvariants(JsonValue value) {
+	private static void requireInvariants(@NonNull JsonValue value) {
 		JsonFuzzSupport.Shape shape = JsonFuzzSupport.shapeOf(value);
 		Assertions.assertTrue(shape.getDepth() <= MAXIMUM_DEPTH, "the model holds a value deeper than 64");
 		Assertions.assertEquals(shape.getDepth(), JsonInvariants.depthOf(value), "the model's depth is wrong");
@@ -160,7 +164,7 @@ public class JsonModelFuzzTests {
 		}
 	}
 
-	private static void requireRedacted(JsonValue value) {
+	private static void requireRedacted(@NonNull JsonValue value) {
 		JsonFuzzSupport.requireRedactedToString(value);
 
 		if (value instanceof JsonObject object)
@@ -175,7 +179,7 @@ public class JsonModelFuzzTests {
 	 * Rebuilds a value through the public factories: object members reversed, arrays in order, strings copied, and
 	 * numbers rescaled by one digit where the digit cap allows, which G7-5 says is the same number.
 	 */
-	private static JsonValue rebuilt(JsonValue value) {
+	private static @NonNull JsonValue rebuilt(@NonNull JsonValue value) {
 		if (value instanceof JsonObject object) {
 			List<Map.Entry<String, JsonValue>> members = new ArrayList<>(object.getMembers().entrySet());
 			Collections.reverse(members);
@@ -224,7 +228,7 @@ public class JsonModelFuzzTests {
 	/**
 	 * The value with the first leaf, in depth-first order, replaced by an unequal one; an empty container is a leaf.
 	 */
-	private static JsonValue withFirstLeafChanged(JsonValue value) {
+	private static @NonNull JsonValue withFirstLeafChanged(@NonNull JsonValue value) {
 		if (value instanceof JsonObject object && !object.getMembers().isEmpty()) {
 			LinkedHashMap<String, JsonValue> members = new LinkedHashMap<>(object.getMembers());
 			Map.Entry<String, JsonValue> first = members.entrySet().iterator().next();
@@ -257,7 +261,7 @@ public class JsonModelFuzzTests {
 	/**
 	 * Arrays are ordered (G7-5): reversing one whose first and last elements differ gives an unequal array.
 	 */
-	private static void requireOrderedArrays(JsonValue value) {
+	private static void requireOrderedArrays(@NonNull JsonValue value) {
 		if (value instanceof JsonArray array) {
 			List<JsonValue> elements = array.getElements();
 
@@ -278,7 +282,7 @@ public class JsonModelFuzzTests {
 	/**
 	 * The {@code find} methods agree with {@link JsonObject#getMembers()}, at every level.
 	 */
-	private static void requireLookupsAgree(JsonValue value) {
+	private static void requireLookupsAgree(@NonNull JsonValue value) {
 		if (value instanceof JsonArray array) {
 			for (JsonValue element : array.getElements())
 				requireLookupsAgree(element);
@@ -314,7 +318,7 @@ public class JsonModelFuzzTests {
 	 * The oracle for {@link JsonNumber#getLongValueExact()}: the value as a long if it is an integer in range, found
 	 * without {@code stripTrailingZeros} (a CPU amplifier on large exponents, M1 plan "Risks").
 	 */
-	private static Optional<Long> exactLong(BigDecimal value) {
+	private static @NonNull Optional<@NonNull Long> exactLong(@NonNull BigDecimal value) {
 		if (value.signum() == 0)
 			return Optional.of(0L);
 
@@ -334,7 +338,7 @@ public class JsonModelFuzzTests {
 		return integer.bitLength() <= 63 ? Optional.of(integer.longValue()) : Optional.empty();
 	}
 
-	private static Optional<List<String>> stringList(JsonValue value) {
+	private static @NonNull Optional<@NonNull List<@NonNull String>> stringList(@NonNull JsonValue value) {
 		if (!(value instanceof JsonArray array))
 			return Optional.empty();
 
@@ -353,7 +357,7 @@ public class JsonModelFuzzTests {
 	/**
 	 * The G7-6 depth by a plain walk, apart from the model's cached depth, which is what the oracle predicts.
 	 */
-	private static int depth(JsonValue value) {
+	private static int depth(@NonNull JsonValue value) {
 		int deepestChild = 0;
 
 		if (value instanceof JsonObject object)
@@ -368,7 +372,7 @@ public class JsonModelFuzzTests {
 		return deepestChild + 1;
 	}
 
-	private static JsonValue nested(JsonValue innermost, int levels, boolean objects) {
+	private static @NonNull JsonValue nested(@NonNull JsonValue innermost, int levels, boolean objects) {
 		JsonValue value = innermost;
 
 		for (int level = 0; level < levels; ++level)
@@ -377,7 +381,7 @@ public class JsonModelFuzzTests {
 		return value;
 	}
 
-	private static String messageOf(Runnable misuse) {
+	private static @NonNull String messageOf(@NonNull Runnable misuse) {
 		try {
 			misuse.run();
 		} catch (IllegalArgumentException e) {
@@ -390,7 +394,7 @@ public class JsonModelFuzzTests {
 	/**
 	 * Whether a string is well-formed UTF-16, by the Character API alone (an oracle apart from StrictUtf8).
 	 */
-	private static boolean isWellFormed(String value) {
+	private static boolean isWellFormed(@NonNull String value) {
 		for (int index = 0; index < value.length(); ++index) {
 			char character = value.charAt(index);
 
@@ -408,7 +412,7 @@ public class JsonModelFuzzTests {
 	 * The message G7-6 requires for a number, or {@code null} if the number is inside the caps. Computed on an exact
 	 * copy, so a subclass's overridden methods play no part.
 	 */
-	private static String numberFailure(BigDecimal value) {
+	private static @Nullable String numberFailure(@NonNull BigDecimal value) {
 		BigDecimal exact = new BigDecimal(value.unscaledValue(), value.scale());
 
 		if (exact.precision() > MAXIMUM_DIGITS)
@@ -420,7 +424,7 @@ public class JsonModelFuzzTests {
 		return null;
 	}
 
-	private static void requireRejection(IllegalArgumentException exception, String expectedMessage) {
+	private static void requireRejection(@NonNull IllegalArgumentException exception, @Nullable String expectedMessage) {
 		Assertions.assertNotNull(expectedMessage, () -> "rejected a value the oracle accepts: " + exception.getMessage());
 		Assertions.assertEquals(expectedMessage, exception.getMessage(), "not the fixed message of the first failed check");
 		Assertions.assertNull(exception.getCause(), "a model IllegalArgumentException has a cause");
@@ -434,7 +438,7 @@ public class JsonModelFuzzTests {
 	private static final class LyingDecimal extends BigDecimal {
 		private static final long serialVersionUID = 1L;
 
-		private LyingDecimal(BigInteger unscaled, int scale) {
+		private LyingDecimal(@NonNull BigInteger unscaled, int scale) {
 			super(unscaled, scale);
 		}
 
@@ -444,7 +448,7 @@ public class JsonModelFuzzTests {
 		}
 
 		@Override
-		public String toString() {
+		public @NonNull String toString() {
 			return "{\"injected\":true}";
 		}
 	}
@@ -456,7 +460,7 @@ public class JsonModelFuzzTests {
 	private static final class Built {
 		private final JsonValue value;
 
-		private Built(JsonValue value) {
+		private Built(@Nullable JsonValue value) {
 			this.value = value;
 		}
 	}
@@ -469,11 +473,11 @@ public class JsonModelFuzzTests {
 		private final FuzzedDataProvider data;
 		private int values;
 
-		private Program(FuzzedDataProvider data) {
+		private Program(@NonNull FuzzedDataProvider data) {
 			this.data = data;
 		}
 
-		private Built value(int depthBudget) {
+		private @NonNull Built value(int depthBudget) {
 			if (++this.values > MAXIMUM_VALUES || this.data.remainingBytes() == 0)
 				return new Built(JsonNull.defaultInstance());
 
@@ -498,7 +502,7 @@ public class JsonModelFuzzTests {
 			};
 		}
 
-		private String text() {
+		private @NonNull String text() {
 			if (this.data.consumeBoolean())
 				return this.data.consumeString(24);
 
@@ -512,7 +516,7 @@ public class JsonModelFuzzTests {
 			return new String(characters);
 		}
 
-		private Built string() {
+		private @NonNull Built string() {
 			String text = text();
 
 			try {
@@ -526,7 +530,7 @@ public class JsonModelFuzzTests {
 			}
 		}
 
-		private BigDecimal decimal() {
+		private @NonNull BigDecimal decimal() {
 			byte[] unscaledBytes = this.data.consumeBytes(this.data.consumeInt(0, MAXIMUM_UNSCALED_BYTES));
 			BigInteger unscaled = unscaledBytes.length == 0 ? BigInteger.ZERO : new BigInteger(unscaledBytes);
 			int scale = this.data.consumeInt();
@@ -537,7 +541,7 @@ public class JsonModelFuzzTests {
 			return new LyingDecimal(unscaled, scale);
 		}
 
-		private Built number() {
+		private @NonNull Built number() {
 			BigDecimal decimal = decimal();
 			String failure = numberFailure(decimal);
 
@@ -556,7 +560,7 @@ public class JsonModelFuzzTests {
 			}
 		}
 
-		private Built array(int depthBudget) {
+		private @NonNull Built array(int depthBudget) {
 			int size = this.data.consumeInt(0, 4);
 			List<JsonValue> elements = new ArrayList<>(size);
 			int deepestChild = 0;
@@ -574,7 +578,7 @@ public class JsonModelFuzzTests {
 					? DEPTH_MESSAGE : null);
 		}
 
-		private Built builderObject(int depthBudget) {
+		private @NonNull Built builderObject(int depthBudget) {
 			JsonObject.Builder builder = JsonObject.builder();
 			JsonFuzzSupport.requireRedactedBuilder(builder);
 			List<String> names = new ArrayList<>();
@@ -592,7 +596,7 @@ public class JsonModelFuzzTests {
 			return new Built(object);
 		}
 
-		private void put(JsonObject.Builder builder, List<String> names, String name, int depthBudget) {
+		private void put(JsonObject.@NonNull Builder builder, @NonNull List<@NonNull String> names, @NonNull String name, int depthBudget) {
 			String nameFailure = !isWellFormed(name) ? SURROGATE_MESSAGE
 					: names.contains(name) ? DUPLICATE_MESSAGE : null;
 			String valueFailure;
@@ -649,7 +653,7 @@ public class JsonModelFuzzTests {
 			}
 		}
 
-		private Built mapObject(int depthBudget) {
+		private @NonNull Built mapObject(int depthBudget) {
 			LinkedHashMap<String, JsonValue> members = new LinkedHashMap<>();
 			String failure = null;
 			int deepestChild = 0;
@@ -685,7 +689,7 @@ public class JsonModelFuzzTests {
 		/**
 		 * Wraps a value in up to 70 singleton arrays or objects, so depth 64 and 65 are both reachable.
 		 */
-		private Built nesting(int depthBudget) {
+		private @NonNull Built nesting(int depthBudget) {
 			Built innermost = value(depthBudget - 1);
 
 			if (innermost.value == null)
@@ -710,7 +714,7 @@ public class JsonModelFuzzTests {
 			return new Built(value);
 		}
 
-		private Built container(Supplier<JsonValue> factory, String expectedFailure) {
+		private @NonNull Built container(@NonNull Supplier<@NonNull JsonValue> factory, @Nullable String expectedFailure) {
 			try {
 				JsonValue value = factory.get();
 				Assertions.assertNull(expectedFailure, "a container factory accepted a value it must reject");

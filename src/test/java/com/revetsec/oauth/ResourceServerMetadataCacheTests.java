@@ -16,6 +16,8 @@
 
 package com.revetsec.oauth;
 
+import org.jspecify.annotations.NonNull;
+
 import org.junit.jupiter.api.*;
 import static org.junit.jupiter.api.Assertions.*;
 import com.revetsec.testing.*;
@@ -116,15 +118,15 @@ final class ResourceServerMetadataCacheTests {
 		}
 	}
 
-    private static ResourceServerMetadataCache<ResourceServerMetadata> cache(TestHttpsServer server,Clock clock,AtomicLong nanos) {
+    private static @NonNull ResourceServerMetadataCache<@NonNull ResourceServerMetadata> cache(@NonNull TestHttpsServer server,@NonNull Clock clock,@NonNull AtomicLong nanos) {
         return new ResourceServerMetadataCache<>(URI.create(issuer(server)),ResourceServerMetadata.Role.JWT,HttpExchange.fromHttpClient(TestTls.httpClient(),OutboundUriPolicy.defaultInstance(),false),
                 OutboundUriPolicy.defaultInstance(),false,Duration.ofSeconds(10),clock,AccessTokenObserver.disabledInstance(),Duration.ofSeconds(30),Duration.ofSeconds(30),Duration.ofSeconds(60),Duration.ofSeconds(30),metadata->metadata,nanos::get);
     }
-    private static Deadline deadline() { return Deadline.fromNow(Duration.ofSeconds(15)); }
-    private static String issuer(TestHttpsServer server) { return server.uri("/tenant/").toString(); }
-    private static Map<String,String> fields(TestHttpsServer server) { return Map.of("issuer",JsonText.string(issuer(server)),"jwks_uri",JsonText.string(server.uri("/jwks").toString())); }
-    private static String json(Map<String,String> fields) { return JsonText.object(new ArrayList<>(fields.entrySet())); }
-    private static void script(TestHttpsServer server,Map<String,String> fields,String cache) { server.script(PATH,TestHttpsServer.Script.fromResponse(TestHttpsServer.Response.withStatus(200).header("Content-Type","application/json").header("Cache-Control",cache).body(json(fields)).build())); }
+    private static @NonNull Deadline deadline() { return Deadline.fromNow(Duration.ofSeconds(15)); }
+    private static @NonNull String issuer(@NonNull TestHttpsServer server) { return server.uri("/tenant/").toString(); }
+    private static @NonNull Map<@NonNull String,@NonNull String> fields(@NonNull TestHttpsServer server) { return Map.of("issuer",JsonText.string(issuer(server)),"jwks_uri",JsonText.string(server.uri("/jwks").toString())); }
+    private static @NonNull String json(@NonNull Map<@NonNull String,@NonNull String> fields) { return JsonText.object(new ArrayList<>(fields.entrySet())); }
+    private static void script(@NonNull TestHttpsServer server,@NonNull Map<@NonNull String,@NonNull String> fields,@NonNull String cache) { server.script(PATH,TestHttpsServer.Script.fromResponse(TestHttpsServer.Response.withStatus(200).header("Content-Type","application/json").header("Cache-Control",cache).body(json(fields)).build())); }
     @Test void publicationHookCannotReplaceCurrentSourceAfterAnOverdueFlight() throws Exception {
         try(TestHttpsServer server=TestHttpsServer.start()) {
             TestHttpsServer.HeldScript held=TestHttpsServer.HeldScript.fromResponse(TestHttpsServer.Response.fromJson(200,json(fields(server))));server.script(PATH,held);

@@ -16,6 +16,8 @@
 
 package com.revetsec.internal.encoding;
 
+import org.jspecify.annotations.NonNull;
+
 /**
  * An independent oracle for UTF-8 well-formedness, written from the Unicode Standard's Table 3-7 ("Well-Formed UTF-8
  * Byte Sequences", chapter 3.9) rather than from any JDK code, so the strict decoders can be checked against
@@ -30,7 +32,7 @@ final class Utf8Reference {
 	/**
 	 * Whether {@code bytes} is a sequence of well-formed UTF-8 code unit sequences.
 	 */
-	static boolean isWellFormed(byte[] bytes) {
+	static boolean isWellFormed(byte @NonNull [] bytes) {
 		int index = 0;
 		while (index < bytes.length) {
 			int first = bytes[index] & 0xFF;

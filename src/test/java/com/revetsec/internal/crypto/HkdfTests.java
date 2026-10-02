@@ -16,6 +16,8 @@
 
 package com.revetsec.internal.crypto;
 
+import org.jspecify.annotations.NonNull;
+
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.DynamicTest;
@@ -52,7 +54,7 @@ final class HkdfTests {
 
 	// RFC 5869 appendix A.1 to A.3, the SHA-256 cases: IKM, salt, info, L, PRK and OKM, in hex.
 	@TestFactory
-	Stream<DynamicTest> derivesTheRfc5869AppendixASha256Vectors() {
+	@NonNull Stream<@NonNull DynamicTest> derivesTheRfc5869AppendixASha256Vectors() {
 		return Stream.of(new Vector("A.1 basic", "0b".repeat(22), "000102030405060708090a0b0c", "f0f1f2f3f4f5f6f7f8f9",
 						42, "077709362c2e32df0ddc3f0dc47bba6390b6c73bb50f9c3122ec844ad7c2b3e5",
 						"3cb25f25faacd57a90434f64d0362f2a2d2d0a90cf1a5a4c5db02d56ecc4c5bf34007208d5b887185865"),
@@ -92,7 +94,7 @@ final class HkdfTests {
 
 	// RFC 5869 section 2.3: L <= 255 * HashLen. Anything else is a programming error, never a truncated key.
 	@TestFactory
-	Stream<DynamicTest> rejectsOutputLengthsOutsideOneTo8160() {
+	@NonNull Stream<@NonNull DynamicTest> rejectsOutputLengthsOutsideOneTo8160() {
 		byte[] pseudorandomKey = new byte[Hkdf.HASH_LENGTH];
 
 		return IntStream.of(Hkdf.MAXIMUM_OUTPUT_LENGTH + 1, 8_192, Integer.MAX_VALUE, 0, -1, Integer.MIN_VALUE)
@@ -127,6 +129,8 @@ final class HkdfTests {
 		Assertions.assertEquals(32, Hkdf.expand(new byte[Hkdf.HASH_LENGTH + 1], new byte[0], 32).length);
 	}
 
+	// Deliberate null inputs verify runtime rejection.
+	@SuppressWarnings("NullAway")
 	@Test
 	void rejectsNullArgumentsAndAnEmptyHmacKey() {
 		Assertions.assertThrows(NullPointerException.class, () -> Hkdf.extract(null, nullValue()));
@@ -144,7 +148,7 @@ final class HkdfTests {
 	// (JEP 510). JDK 17 to 23 lack the class, which is why Hkdf exists; JDK 24 has it only as a preview API (JEP 478),
 	// so the differential skips 24 without asserting anything about it.
 	@Test
-	void matchesJavaxCryptoKdfOnRandomInputsFromJdk25(TestReporter testReporter) throws Exception {
+	void matchesJavaxCryptoKdfOnRandomInputsFromJdk25(@NonNull TestReporter testReporter) throws Exception {
 		int feature = Runtime.version().feature();
 
 		if (feature < 25) {
@@ -185,14 +189,14 @@ final class HkdfTests {
 				Hkdf.expand(pseudorandomKey, new byte[0], Hkdf.MAXIMUM_OUTPUT_LENGTH));
 	}
 
-	private static byte[] bytes(Random random,
+	private static byte @NonNull [] bytes(@NonNull Random random,
 															int length) {
 		byte[] bytes = new byte[length];
 		random.nextBytes(bytes);
 		return bytes;
 	}
 
-	private static String range(int fromInclusive,
+	private static @NonNull String range(int fromInclusive,
 															int toExclusive) {
 		StringBuilder hex = new StringBuilder();
 
@@ -206,7 +210,7 @@ final class HkdfTests {
 	 * Hides a {@code null} from NullAway, for the tests that check null handling.
 	 */
 	@SuppressWarnings({"NullAway", "TypeParameterUnusedInFormals"})
-	private static <T> T nullValue() {
+	private static <T> @Nullable T nullValue() {
 		return null;
 	}
 
@@ -222,13 +226,13 @@ final class HkdfTests {
 		private final String pseudorandomKey;
 		private final String outputKeyingMaterial;
 
-		private Vector(String name,
-									 String inputKeyingMaterial,
-									 String salt,
-									 String info,
+		private Vector(@NonNull String name,
+									 @NonNull String inputKeyingMaterial,
+									 @NonNull String salt,
+									 @NonNull String info,
 									 int length,
-									 String pseudorandomKey,
-									 String outputKeyingMaterial) {
+									 @NonNull String pseudorandomKey,
+									 @NonNull String outputKeyingMaterial) {
 			this.name = name;
 			this.inputKeyingMaterial = inputKeyingMaterial;
 			this.salt = salt;
@@ -266,9 +270,9 @@ final class HkdfTests {
 			this.thenExpand = builderClass.getMethod("thenExpand", byte[].class, int.class);
 		}
 
-		private byte[] derive(byte @Nullable [] salt,
-													byte[] inputKeyingMaterial,
-													byte[] info,
+		private byte @NonNull [] derive(byte @Nullable [] salt,
+													byte @NonNull [] inputKeyingMaterial,
+													byte @NonNull [] info,
 													int length) throws ReflectiveOperationException {
 			Object builder = this.ofExtract.invoke(null);
 			this.addInputKeyingMaterial.invoke(builder, (Object) inputKeyingMaterial);
@@ -280,13 +284,13 @@ final class HkdfTests {
 			return derive(this.thenExpand.invoke(builder, info, length));
 		}
 
-		private byte[] expandOnly(byte[] pseudorandomKey,
-															byte[] info,
+		private byte @NonNull [] expandOnly(byte @NonNull [] pseudorandomKey,
+															byte @NonNull [] info,
 															int length) throws ReflectiveOperationException {
 			return derive(this.expandOnly.invoke(null, new SecretKeySpec(pseudorandomKey, "Generic"), info, length));
 		}
 
-		private byte[] derive(Object parameters) throws ReflectiveOperationException {
+		private byte @NonNull [] derive(@NonNull Object parameters) throws ReflectiveOperationException {
 			try {
 				return (byte[]) this.deriveData.invoke(this.kdf, parameters);
 			} catch (InvocationTargetException e) {

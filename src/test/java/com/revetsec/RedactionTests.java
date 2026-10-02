@@ -16,6 +16,8 @@
 
 package com.revetsec;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.internal.Limit;
 import com.revetsec.internal.Limits;
 import com.revetsec.internal.ObserverDispatch;
@@ -338,7 +340,7 @@ final class RedactionTests {
 	// marker appears only base64url-encoded, at each payload alignment. The walker finds it in the token and in every
 	// rendering that would echo the token; the validator that refuses it echoes nothing.
 	@TestFactory
-	Stream<DynamicTest> theWalkerFindsABase64UrlSentinelClaimAtEachAlignment() {
+	@NonNull Stream<@NonNull DynamicTest> theWalkerFindsABase64UrlSentinelClaimAtEachAlignment() {
 		JwtValidator validator = validator(rsaJwk(KEY_ID)).build();
 		return IntStream.range(0, 3).mapToObj(alignment -> DynamicTest.dynamicTest("alignment " + alignment, () -> {
 			String token = Sentinels.compactJwtWithSentinelClaim(alignment);
@@ -397,7 +399,7 @@ final class RedactionTests {
 
 	// G7-6 and R15: the model's factories reject invalid input with a fixed message that never repeats it.
 	@TestFactory
-	Stream<DynamicTest> jsonModelFailuresDoNotEchoTheirInput() {
+	@NonNull Stream<@NonNull DynamicTest> jsonModelFailuresDoNotEchoTheirInput() {
 		return Stream.of(
 				failure("an unpaired surrogate in a string", IllegalArgumentException.class,
 						() -> JsonString.fromValue(SECRET + "\uD800")),
@@ -418,7 +420,7 @@ final class RedactionTests {
 
 	// G7-3 and exit criterion 2: every codec failure has a fixed message, a Kind and an offset, never the input.
 	@TestFactory
-	Stream<DynamicTest> jsonParseFailuresDoNotEchoTheirInput() {
+	@NonNull Stream<@NonNull DynamicTest> jsonParseFailuresDoNotEchoTheirInput() {
 		String sentinelString = "\"" + SECRET + "\"";
 		return Stream.of(
 				parseFailure(JsonParseException.Kind.SYNTAX, PROTOCOL, utf8("{\"a\":" + sentinelString + " x}")),
@@ -446,7 +448,7 @@ final class RedactionTests {
 
 	// G6-2: field and thumbprint failures carry a Kind and a fixed message, never the member's name or value.
 	@TestFactory
-	Stream<DynamicTest> jsonFieldFailuresDoNotEchoTheirInput() {
+	@NonNull Stream<@NonNull DynamicTest> jsonFieldFailuresDoNotEchoTheirInput() {
 		JsonObject object = JsonObject.builder()
 				.put(SECRET, JsonNumber.fromValue(1L))
 				.put("aud", JsonArray.fromElements(List.of(JsonString.fromValue(SECRET), JsonNumber.fromValue(2L))))
@@ -490,7 +492,7 @@ final class RedactionTests {
 	// G6-8, G6-9 and exit criteria 8 and 9: every sealing, opening and key failure is fixed text, whatever the input
 	// carried, and every failure to open is the one InvalidSealedStateException.
 	@TestFactory
-	Stream<DynamicTest> sealerFailuresDoNotEchoTheirInput() {
+	@NonNull Stream<@NonNull DynamicTest> sealerFailuresDoNotEchoTheirInput() {
 		TestClock clock = TestClock.fromInstant(START);
 		StateSealer sealer = StateSealer.withActiveKey(TestSealers.fixedKey(TestSealers.FIXED_KEY_ID)).clock(clock)
 				.build();
@@ -548,7 +550,7 @@ final class RedactionTests {
 	// G6-2 and exit criterion 6: encoding failures carry a Kind and a fixed message, never the input; parsed query
 	// parameters render redacted.
 	@TestFactory
-	Stream<DynamicTest> encodingFailuresDoNotEchoTheirInput() throws EncodingException {
+	@NonNull Stream<@NonNull DynamicTest> encodingFailuresDoNotEchoTheirInput() throws EncodingException {
 		QueryParameters parameters = QueryParameters.parse("code=" + SECRET + "&" + SECRET + "=state");
 		Assertions.assertEquals(List.of(SECRET), parameters.getValues("code"), "the control: the value is there");
 		Sentinels.assertAbsent(parameters);
@@ -575,7 +577,7 @@ final class RedactionTests {
 
 	// G6-2 and exit criterion 6: PEM failures carry a Kind and a fixed message, never the text, the label or the DER.
 	@TestFactory
-	Stream<DynamicTest> pemFailuresDoNotEchoTheirInput() throws Exception {
+	@NonNull Stream<@NonNull DynamicTest> pemFailuresDoNotEchoTheirInput() throws Exception {
 		String certificatePem = resource("/fixtures/keys/idp-signing-rsa-2048-cert.pem");
 		String privateKeyPem = resource("/fixtures/keys/idp-signing-rsa-2048-key.pem");
 		byte[] certificateDer = Pem.parseCertificate(certificatePem).getEncoded();
@@ -673,7 +675,7 @@ final class RedactionTests {
 	// R9 and R15: a request the helper refuses fails with a fixed message, never the credential it carried in a header
 	// value, a header name or the form body.
 	@TestFactory
-	Stream<DynamicTest> httpRequestMisuseDoesNotEchoCredentials() {
+	@NonNull Stream<@NonNull DynamicTest> httpRequestMisuseDoesNotEchoCredentials() {
 		URI uri = URI.create("https://idp.example/token");
 		Duration timeout = Duration.ofSeconds(10);
 		return Stream.of(
@@ -695,7 +697,7 @@ final class RedactionTests {
 	// G6-2, G6-7 and exit criterion 12: every HTTP failure is its Kind's fixed sentence, with no cause except IO's,
 	// whatever secrets the request or the response carried.
 	@TestFactory
-	Stream<DynamicTest> httpFailuresDoNotEchoTheRequestOrTheResponse() {
+	@NonNull Stream<@NonNull DynamicTest> httpFailuresDoNotEchoTheRequestOrTheResponse() {
 		String jsonWithSecret = "{\"token\":\"" + SECRET + "\"}";
 		return Stream.of(
 				httpFailure("plain http", HttpExchangeException.Kind.URI_REJECTED,
@@ -759,7 +761,7 @@ final class RedactionTests {
 	// itself cannot carry them. This internal failure never reaches a hook; the key-set fetch surfaces check the public
 	// exception that carries such a cause to the real JoseObserver hooks.
 	@TestFactory
-	Stream<DynamicTest> anIoFailureCarriesServerTextOnlyInsideTheJdkCause() {
+	@NonNull Stream<@NonNull DynamicTest> anIoFailureCarriesServerTextOnlyInsideTheJdkCause() {
 		return Stream.of(
 				DynamicTest.dynamicTest("a status line the JDK rejects", () -> assertServerEchoOnlyInCause(
 						raw().uri(scriptRaw(statusLineTheJdkRejects())))),
@@ -791,7 +793,7 @@ final class RedactionTests {
 	// has, one or more for every JoseException.Reason, and neither the exception nor any hook argument nor the log
 	// record of a throwing observer carries one.
 	@TestFactory
-	Stream<DynamicTest> rejectedTokensRevealNothing() {
+	@NonNull Stream<@NonNull DynamicTest> rejectedTokensRevealNothing() {
 		return dynamicTests(Group.REJECTED_TOKENS);
 	}
 
@@ -799,7 +801,7 @@ final class RedactionTests {
 	// and other members, and whose usable key carries them in members it never renders, shows none of them, nor does
 	// anything built over it; a document that fails with a sentinel in it echoes nothing.
 	@TestFactory
-	Stream<DynamicTest> keySetDocumentsRevealNothing() {
+	@NonNull Stream<@NonNull DynamicTest> keySetDocumentsRevealNothing() {
 		return dynamicTests(Group.KEY_SETS);
 	}
 
@@ -808,7 +810,7 @@ final class RedactionTests {
 	// toString, its failures, any hook argument (the skipped keys are named by index) or any log record. The one
 	// allowance is a JDK IOException cause, which may echo the server's text, never the request's.
 	@TestFactory
-	Stream<DynamicTest> keySetFetchesRevealNothing() {
+	@NonNull Stream<@NonNull DynamicTest> keySetFetchesRevealNothing() {
 		return dynamicTests(Group.KEY_SET_FETCHES);
 	}
 
@@ -816,14 +818,14 @@ final class RedactionTests {
 	// claims, nor does any hook argument; the explicit emissions, toCompactSerialization() and toJsonObject(), do carry
 	// them, which shows the sentinels were there.
 	@TestFactory
-	Stream<DynamicTest> acceptedTokensShowTheirContentOnlyOnRequest() {
+	@NonNull Stream<@NonNull DynamicTest> acceptedTokensShowTheirContentOnlyOnRequest() {
 		return dynamicTests(Group.ACCEPTED_TOKENS);
 	}
 
 	// R9, R15 and exit criterion 20: the builders refuse settings that carry a sentinel with fixed messages, the
 	// builders themselves render nothing they hold, and the enums render their names.
 	@TestFactory
-	Stream<DynamicTest> joseConfigurationAndItsRefusalsRevealNothing() {
+	@NonNull Stream<@NonNull DynamicTest> joseConfigurationAndItsRefusalsRevealNothing() {
 		return dynamicTests(Group.CONFIGURATION);
 	}
 
@@ -890,11 +892,11 @@ final class RedactionTests {
 	/**
 	 * A dynamic test that expects {@code executable} to throw {@code type} and asserts the failure is redacted.
 	 */
-	private <T extends Throwable> DynamicTest failure(String name, Class<T> type, Executable executable) {
+	private <T extends Throwable> @NonNull DynamicTest failure(@NonNull String name, @NonNull Class<@NonNull T> type, @NonNull Executable executable) {
 		return DynamicTest.dynamicTest(name, () -> assertRedacted(Assertions.assertThrows(type, executable)));
 	}
 
-	private DynamicTest parseFailure(JsonParseException.Kind kind, JsonLimits limits, byte[] input) {
+	private @NonNull DynamicTest parseFailure(JsonParseException.@NonNull Kind kind, @NonNull JsonLimits limits, byte @NonNull [] input) {
 		String name = kind.name() + (limits.isAsciiCaseVariantNamesRejected() ? " (SCIM profile)" : "");
 		return DynamicTest.dynamicTest(name, () -> {
 			Sentinels.assertPresent(input);
@@ -905,7 +907,7 @@ final class RedactionTests {
 		});
 	}
 
-	private DynamicTest httpFailure(String name, HttpExchangeException.Kind kind, Executable executable) {
+	private @NonNull DynamicTest httpFailure(@NonNull String name, HttpExchangeException.@NonNull Kind kind, @NonNull Executable executable) {
 		return DynamicTest.dynamicTest(kind.name() + ": " + name, () -> {
 			HttpExchangeException failure = Assertions.assertThrows(HttpExchangeException.class, executable);
 			Assertions.assertEquals(kind, failure.getKind());
@@ -914,7 +916,7 @@ final class RedactionTests {
 		});
 	}
 
-	private Stream<DynamicTest> dynamicTests(Group group) {
+	private @NonNull Stream<@NonNull DynamicTest> dynamicTests(@NonNull Group group) {
 		return Objects.requireNonNull(joseSurfaces().get(group)).stream()
 				.map(surface -> DynamicTest.dynamicTest(surface.getName(), () -> verify(surface)));
 	}
@@ -922,7 +924,7 @@ final class RedactionTests {
 	/**
 	 * Checks one JOSE surface as its {@link Check} says.
 	 */
-	private void verify(Surface surface) {
+	private void verify(@NonNull Surface surface) {
 		Object value = surface.getValue();
 		switch (surface.getCheck()) {
 			case PRESENT -> Sentinels.assertPresent(value);
@@ -955,7 +957,7 @@ final class RedactionTests {
 		}
 	}
 
-	private static void assertExpected(@Nullable Object expected, Throwable failure) {
+	private static void assertExpected(@Nullable Object expected, @NonNull Throwable failure) {
 		if (expected instanceof JoseException.Reason reason) {
 			JoseException exception = Assertions.assertInstanceOf(JoseException.class, failure);
 			Assertions.assertEquals(reason, exception.getReason());
@@ -975,7 +977,7 @@ final class RedactionTests {
 	 * public failure, handed to the real {@link JoseObserver} hooks through {@link ObserverDispatch}, is recorded as
 	 * the same instance with no sentinel, while the log record of a hook that throws carries none either.
 	 */
-	private void assertRedacted(Throwable failure) {
+	private void assertRedacted(@NonNull Throwable failure) {
 		Sentinels.assertAbsent(failure);
 		assertSuppressionDisabledOnRevetsecExceptions(failure);
 		Sentinels.assertAbsent(failure);
@@ -988,7 +990,7 @@ final class RedactionTests {
 	 * {@link #assertRedacted(Throwable)} with the documented IO allowance (see the class description): the server's
 	 * text may appear inside the JDK cause, and only there, in the failure and in the hook arguments that carry it.
 	 */
-	private void assertRedactedExceptInsideTheJdkCause(Throwable failure) {
+	private void assertRedactedExceptInsideTheJdkCause(@NonNull Throwable failure) {
 		assertEchoOnlyInsideTheJdkCause(failure);
 		assertSuppressionDisabledOnRevetsecExceptions(failure);
 		assertEchoOnlyInsideTheJdkCause(failure);
@@ -1000,7 +1002,7 @@ final class RedactionTests {
 	/**
 	 * The documented IO allowance for {@link HttpExchangeException}, which never reaches a hook.
 	 */
-	private static void assertServerEchoOnlyInCause(URI uri) {
+	private static void assertServerEchoOnlyInCause(@NonNull URI uri) {
 		HttpExchangeException failure = Assertions.assertThrows(HttpExchangeException.class, () -> execute(uri));
 		Assertions.assertEquals(HttpExchangeException.Kind.IO, failure.getKind());
 		assertEchoOnlyInsideTheJdkCause(failure);
@@ -1011,7 +1013,7 @@ final class RedactionTests {
 	 * every place the walker finds a sentinel is inside that cause, and the only sentinel there is the server's
 	 * {@link #SERVER_ECHO}, never a secret the request carried.
 	 */
-	private static void assertEchoOnlyInsideTheJdkCause(Throwable failure) {
+	private static void assertEchoOnlyInsideTheJdkCause(@NonNull Throwable failure) {
 		IOException cause = Assertions.assertInstanceOf(IOException.class, failure.getCause());
 		for (@Nullable Throwable link = cause; link != null; link = link.getCause()) {
 			String name = link.getClass().getName();
@@ -1037,7 +1039,7 @@ final class RedactionTests {
 	 * Every argument a hook recorded is free of sentinels, except that a failure whose cause is the JDK's
 	 * {@link IOException} gets the IO allowance.
 	 */
-	private static void assertHookArgumentsRedacted(RecordingObserver<?> recorder) {
+	private static void assertHookArgumentsRedacted(@NonNull RecordingObserver<?> recorder) {
 		for (RecordingObserver.Call call : recorder.getCalls()) {
 			Assertions.assertFalse(Sentinels.containsSentinel(call.getMethodName()));
 			for (@Nullable Object argument : call.getArguments()) {
@@ -1058,7 +1060,7 @@ final class RedactionTests {
 	 * and then again to hooks that throw an exception carrying a sentinel, and checks that ObserverDispatch logged each
 	 * contained failure without a sentinel.
 	 */
-	private RecordingObserver<JoseObserver> dispatchToObservers(RevetsecException failure) {
+	private @NonNull RecordingObserver<@NonNull JoseObserver> dispatchToObservers(@NonNull RevetsecException failure) {
 		RecordingObserver<JoseObserver> recorder = RecordingObserver.fromInterface(JoseObserver.class);
 		dispatchFailureHooks(recorder.getObserver(), failure);
 		for (RecordingObserver.Call call : recorder.getCalls())
@@ -1077,7 +1079,7 @@ final class RedactionTests {
 		return recorder;
 	}
 
-	private static void dispatchFailureHooks(JoseObserver observer, RevetsecException failure) {
+	private static void dispatchFailureHooks(@NonNull JoseObserver observer, @NonNull RevetsecException failure) {
 		ObserverDispatch.dispatch(observer, hook -> hook.didFailToValidateJwt(failure, ELAPSED));
 		if (failure instanceof JsonWebKeySetUnavailableException unavailable)
 			ObserverDispatch.dispatch(observer, hook -> hook.didFailToFetchJsonWebKeySet(REPORTED_URI, unavailable,
@@ -1088,25 +1090,25 @@ final class RedactionTests {
 	 * A Revetsec exception has suppression disabled (G6-1), so a secret added as a suppressed exception is dropped.
 	 * JDK exceptions thrown for misuse (R15) are left alone.
 	 */
-	private static void assertSuppressionDisabledOnRevetsecExceptions(Throwable failure) {
+	private static void assertSuppressionDisabledOnRevetsecExceptions(@NonNull Throwable failure) {
 		if (!failure.getClass().getName().startsWith("com.revetsec."))
 			return;
 		failure.addSuppressed(new IllegalStateException(SUPPRESSED_SECRET));
 		Assertions.assertEquals(0, failure.getSuppressed().length, failure.getClass()::getName);
 	}
 
-	private static void assertOnlyInCause(List<String> locations, String root) {
+	private static void assertOnlyInCause(@NonNull List<@NonNull String> locations, @NonNull String root) {
 		for (String location : locations)
 			Assertions.assertTrue(location.equals(root + " (printed stack trace)")
 					|| location.startsWith(root + ".getCause()"), () -> "outside the JDK cause: " + location);
 	}
 
-	private static boolean isJdkClassName(String name) {
+	private static boolean isJdkClassName(@NonNull String name) {
 		return name.startsWith("java.") || name.startsWith("javax.") || name.startsWith("jdk.")
 				|| name.startsWith("sun.");
 	}
 
-	private static String printedStackTrace(Throwable throwable) {
+	private static @NonNull String printedStackTrace(@NonNull Throwable throwable) {
 		StringWriter stringWriter = new StringWriter();
 		try (PrintWriter printWriter = new PrintWriter(stringWriter)) {
 			throwable.printStackTrace(printWriter);
@@ -1118,7 +1120,7 @@ final class RedactionTests {
 	 * Every exported concrete class of {@code com.revetsec.jose}: the public top-level classes and enums declared in
 	 * its sources, and their public or protected nested classes and enums, without interfaces and abstract classes.
 	 */
-	private static List<Class<?>> exportedConcreteJoseClasses() throws IOException, ClassNotFoundException {
+	private static @NonNull List<@NonNull Class<?>> exportedConcreteJoseClasses() throws IOException, ClassNotFoundException {
 		Assertions.assertTrue(ContractSupport.EXPORTED_PACKAGES.contains(JOSE_PACKAGE));
 		Path sources = ContractSupport.repositoryRoot().resolve("src/main/java").resolve(JOSE_PACKAGE.replace('.', '/'));
 		List<Class<?>> exported = new ArrayList<>();
@@ -1135,7 +1137,7 @@ final class RedactionTests {
 				.toList();
 	}
 
-	private static void addExported(Class<?> type, List<Class<?>> exported) {
+	private static void addExported(@NonNull Class<?> type, @NonNull List<@NonNull Class<?>> exported) {
 		exported.add(type);
 		for (Class<?> nested : type.getDeclaredClasses())
 			if (Modifier.isPublic(nested.getModifiers()) || Modifier.isProtected(nested.getModifiers()))
@@ -1146,7 +1148,7 @@ final class RedactionTests {
 	 * Every object the walker renders from {@code root} by itself, reached through the same containers the walker
 	 * follows: collections, maps, arrays, optionals, recorded observers and their calls, and exception causes.
 	 */
-	private static void collectRendered(Object root, List<Object> rendered) {
+	private static void collectRendered(@NonNull Object root, @NonNull List<@NonNull Object> rendered) {
 		Set<Object> visited = Collections.newSetFromMap(new IdentityHashMap<>());
 		Deque<Object> pending = new ArrayDeque<>(List.of(root));
 		while (!pending.isEmpty()) {
@@ -1182,14 +1184,14 @@ final class RedactionTests {
 	/**
 	 * Executes a {@link ResponseProfile#TOKEN} request that carries secrets ({@link #requestWithSecrets}).
 	 */
-	private static RawResponse execute(URI uri) throws HttpExchangeException {
+	private static @NonNull RawResponse execute(@NonNull URI uri) throws HttpExchangeException {
 		return exchange().execute(requestWithSecrets(uri, ResponseProfile.TOKEN, 1_024), deadline());
 	}
 
 	/**
 	 * A POST that carries a secret in its query, its form body and two header values.
 	 */
-	private static HttpExchangeRequest requestWithSecrets(URI uri, ResponseProfile profile, int maximumBodyBytes) {
+	private static @NonNull HttpExchangeRequest requestWithSecrets(@NonNull URI uri, @NonNull ResponseProfile profile, int maximumBodyBytes) {
 		URI withQuery = URI.create(uri + (uri.getRawQuery() == null ? "?" : "&") + "code=" + SECRET);
 		return new HttpExchangeRequest(withQuery, profile, "client_secret=" + Sentinels.CLIENT_SECRET,
 				Map.of("Authorization", "Bearer " + Sentinels.ACCESS_TOKEN, "X-Api-Key", SECRET), maximumBodyBytes,
@@ -1199,7 +1201,7 @@ final class RedactionTests {
 	/**
 	 * A status line the JDK refuses, whose reason phrase is the server's {@link #SERVER_ECHO}.
 	 */
-	private static RawTlsServer.Script statusLineTheJdkRejects() {
+	private static RawTlsServer.@NonNull Script statusLineTheJdkRejects() {
 		return RawTlsServer.Script.fromString("HTTP/1.1 099 " + SERVER_ECHO + "\r\nContent-Length: 0\r\n\r\n");
 	}
 
@@ -1207,7 +1209,7 @@ final class RedactionTests {
 	 * A 200 of {@code contentType} whose body, which starts with the server's {@link #SERVER_ECHO}, the server cuts
 	 * short.
 	 */
-	private static RawTlsServer.Script bodyTheServerCutsShort(String contentType) {
+	private static RawTlsServer.@NonNull Script bodyTheServerCutsShort(@NonNull String contentType) {
 		return RawTlsServer.Script.builder()
 				.write("HTTP/1.1 200 OK\r\nContent-Type: " + contentType + "\r\nContent-Length: 1000\r\n\r\n"
 						+ "{\"keys\":[{\"kid\":\"" + SERVER_ECHO)
@@ -1215,57 +1217,57 @@ final class RedactionTests {
 				.build();
 	}
 
-	private static String scriptJdk(TestHttpsServer.Response response) {
+	private static @NonNull String scriptJdk(TestHttpsServer.@NonNull Response response) {
 		String path = "/redaction-" + NEXT_PATH.incrementAndGet();
 		jdk().script(path, TestHttpsServer.Script.fromResponse(response));
 		return path;
 	}
 
-	private static String scriptRaw(RawTlsServer.Script script) {
+	private static @NonNull String scriptRaw(RawTlsServer.@NonNull Script script) {
 		String path = "/redaction-" + NEXT_PATH.incrementAndGet();
 		raw().script(path, script);
 		return path;
 	}
 
-	private static Deadline deadline() {
+	private static @NonNull Deadline deadline() {
 		return Deadline.fromNow(Duration.ofSeconds(30));
 	}
 
-	private static TestHttpsServer jdk() {
+	private static @NonNull TestHttpsServer jdk() {
 		return Objects.requireNonNull(jdkServer);
 	}
 
-	private static RawTlsServer raw() {
+	private static @NonNull RawTlsServer raw() {
 		return Objects.requireNonNull(rawServer);
 	}
 
-	private static HttpExchange exchange() {
+	private static @NonNull HttpExchange exchange() {
 		return Objects.requireNonNull(exchange);
 	}
 
-	private static HttpClient client() {
+	private static @NonNull HttpClient client() {
 		return Objects.requireNonNull(httpClient);
 	}
 
-	private static String pem(String label, String body) {
+	private static @NonNull String pem(@NonNull String label, @NonNull String body) {
 		return "-----BEGIN " + label + "-----\n" + body + "\n-----END " + label + "-----\n";
 	}
 
-	private static String base64(byte[] bytes) {
+	private static @NonNull String base64(byte @NonNull [] bytes) {
 		return Base64.getMimeEncoder(64, new byte[]{'\n'}).encodeToString(bytes);
 	}
 
-	private static String resource(String path) throws IOException {
+	private static @NonNull String resource(@NonNull String path) throws IOException {
 		try (InputStream inputStream = Objects.requireNonNull(RedactionTests.class.getResourceAsStream(path), path)) {
 			return new String(inputStream.readAllBytes(), StandardCharsets.US_ASCII);
 		}
 	}
 
-	private static byte[] utf8(String text) {
+	private static byte @NonNull [] utf8(@NonNull String text) {
 		return text.getBytes(StandardCharsets.UTF_8);
 	}
 
-	private static byte[] concat(byte[]... parts) {
+	private static byte @NonNull [] concat(byte @NonNull [] @NonNull ... parts) {
 		ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
 		for (byte[] part : parts)
 			outputStream.writeBytes(part);
@@ -1277,7 +1279,7 @@ final class RedactionTests {
 	/**
 	 * The JOSE surfaces, building them on first use.
 	 */
-	private static Map<Group, List<Surface>> joseSurfaces() {
+	private static @NonNull Map<@NonNull Group, @NonNull List<@NonNull Surface>> joseSurfaces() {
 		@Nullable Map<Group, List<Surface>> surfaces = builtJoseSurfaces;
 		if (surfaces == null) {
 			surfaces = new JoseSurfaces(jdk(), raw(), client()).build();
@@ -1289,7 +1291,7 @@ final class RedactionTests {
 	/**
 	 * A JWK for the RSA 2048 fixture key with {@code kid}.
 	 */
-	private static String rsaJwk(String kid) {
+	private static @NonNull String rsaJwk(@NonNull String kid) {
 		return TestJsonWebKeys.withFixture(Fixture.IDP_SIGNING_RSA_2048).kid(kid).toJson();
 	}
 
@@ -1297,7 +1299,7 @@ final class RedactionTests {
 	 * A validator builder for {@link #ISSUER} and {@link #AUDIENCE} at {@link #NOW}, over a static source of
 	 * {@code jwks}.
 	 */
-	private static JwtValidator.Builder validator(String... jwks) {
+	private static JwtValidator.@NonNull Builder validator(@NonNull String @NonNull ... jwks) {
 		return JwtValidator.withIssuer(ISSUER)
 				.jsonWebKeySource(StaticJsonWebKeySource.fromJsonWebKeySet(JsonWebKeySet.fromJson(
 						TestJsonWebKeys.keySet(List.of(jwks)))))
@@ -1308,7 +1310,7 @@ final class RedactionTests {
 	/**
 	 * Valid claims at {@link #NOW}, without a sentinel.
 	 */
-	private static TestClaims claims() {
+	private static @NonNull TestClaims claims() {
 		return TestClaims.empty().put("iss", ISSUER).put("aud", AUDIENCE).put("sub", "subject-1")
 				.put("iat", NOW.getEpochSecond()).put("exp", NOW.plus(Duration.ofMinutes(5)).getEpochSecond());
 	}
@@ -1316,14 +1318,14 @@ final class RedactionTests {
 	/**
 	 * An RS256 token builder with {@code kid} {@link #KEY_ID} and {@code claims}.
 	 */
-	private static TestJws.Builder rs256(TestClaims claims) {
+	private static TestJws.@NonNull Builder rs256(@NonNull TestClaims claims) {
 		return TestJws.withAlgorithm(TestJws.Algorithm.RS256).kid(KEY_ID).payload(claims.toJson());
 	}
 
 	/**
 	 * {@link #rs256(TestClaims)}, signed by the RSA 2048 fixture key.
 	 */
-	private static String signed(TestClaims claims) {
+	private static @NonNull String signed(@NonNull TestClaims claims) {
 		return rs256(claims).sign(Fixture.IDP_SIGNING_RSA_2048.getPrivateKey());
 	}
 
@@ -1391,22 +1393,22 @@ final class RedactionTests {
 		private final Check check;
 		private final @Nullable Object expected;
 
-		private Surface(String name, Object value, Check check, @Nullable Object expected) {
+		private Surface(@NonNull String name, @NonNull Object value, @NonNull Check check, @Nullable Object expected) {
 			this.name = name;
 			this.value = value;
 			this.check = check;
 			this.expected = expected;
 		}
 
-		String getName() {
+		@NonNull String getName() {
 			return this.name;
 		}
 
-		Object getValue() {
+		@NonNull Object getValue() {
 			return this.value;
 		}
 
-		Check getCheck() {
+		@NonNull Check getCheck() {
 			return this.check;
 		}
 
@@ -1421,7 +1423,7 @@ final class RedactionTests {
 	private static final class EchoingFailure extends RevetsecException {
 		private static final long serialVersionUID = 1L;
 
-		private EchoingFailure(IOException cause) {
+		private EchoingFailure(@NonNull IOException cause) {
 			super(ErrorCategory.TRANSPORT, true, "A test failure whose cause echoes input.", cause);
 		}
 	}
@@ -1438,13 +1440,13 @@ final class RedactionTests {
 		private final RecordingHandler records = new RecordingHandler();
 		private final Map<Group, List<Surface>> surfaces = new EnumMap<>(Group.class);
 
-		private JoseSurfaces(TestHttpsServer jdkServer, RawTlsServer rawServer, HttpClient client) {
+		private JoseSurfaces(@NonNull TestHttpsServer jdkServer, @NonNull RawTlsServer rawServer, @NonNull HttpClient client) {
 			this.jdkServer = jdkServer;
 			this.rawServer = rawServer;
 			this.client = client;
 		}
 
-		Map<Group, List<Surface>> build() {
+		@NonNull Map<@NonNull Group, @NonNull List<@NonNull Surface>> build() {
 			@Nullable Level level = this.logger.getLevel();
 			boolean useParentHandlers = this.logger.getUseParentHandlers();
 			this.logger.setUseParentHandlers(false);
@@ -1468,11 +1470,11 @@ final class RedactionTests {
 			return Collections.unmodifiableMap(built);
 		}
 
-		private void add(Group group, String name, Object value, Check check) {
+		private void add(@NonNull Group group, @NonNull String name, @NonNull Object value, @NonNull Check check) {
 			add(group, name, value, check, null);
 		}
 
-		private void add(Group group, String name, Object value, Check check, @Nullable Object expected) {
+		private void add(@NonNull Group group, @NonNull String name, @NonNull Object value, @NonNull Check check, @Nullable Object expected) {
 			this.surfaces.computeIfAbsent(group, key -> new ArrayList<>()).add(new Surface(name, value, check, expected));
 		}
 
@@ -1564,8 +1566,8 @@ final class RedactionTests {
 		 * Validates {@code token} with a recorded observer and with a throwing one, and adds the token (a positive
 		 * control), both failures, the hook arguments and the throwing observer's log records.
 		 */
-		private void rejected(String name, JoseException.Reason reason, Function<JoseObserver, JwtValidator> validator,
-				String token) {
+		private void rejected(@NonNull String name, JoseException.@NonNull Reason reason, @NonNull Function<@NonNull JoseObserver, @NonNull JwtValidator> validator,
+				@NonNull String token) {
 			String surface = reason + ", " + name;
 			add(Group.REJECTED_TOKENS, surface + ": the token carries a sentinel", token, Check.PRESENT);
 
@@ -1733,7 +1735,7 @@ final class RedactionTests {
 		 * validator whose observer throws. A {@link ErrorCategory#TRANSPORT} failure here keeps the JDK's cause, so it
 		 * gets the IO allowance.
 		 */
-		private void fetchFailure(String name, ErrorCategory category, Supplier<URI> target) {
+		private void fetchFailure(@NonNull String name, @NonNull ErrorCategory category, @NonNull Supplier<@NonNull URI> target) {
 			Check failureCheck = category == ErrorCategory.TRANSPORT ? Check.SERVER_ECHO_IN_CAUSE : Check.FAILURE;
 			String surface = category + ", " + name;
 
@@ -1821,28 +1823,28 @@ final class RedactionTests {
 			add(Group.KEY_SET_FETCHES, surface + ": the fetch hook arguments", recorder, Check.HOOK_ARGUMENTS);
 		}
 
-		private URI jdkTarget(TestHttpsServer.Response response) {
+		private @NonNull URI jdkTarget(TestHttpsServer.@NonNull Response response) {
 			String path = "/redaction-jwks-" + NEXT_PATH.incrementAndGet();
 			this.jdkServer.script(path, TestHttpsServer.Script.fromResponse(response));
 			return withSecretQuery(this.jdkServer.uri(path));
 		}
 
-		private URI rawTarget(RawTlsServer.Script script) {
+		private @NonNull URI rawTarget(RawTlsServer.@NonNull Script script) {
 			String path = "/redaction-jwks-" + NEXT_PATH.incrementAndGet();
 			this.rawServer.script(path, script);
 			return withSecretQuery(this.rawServer.uri(path));
 		}
 
-		private static URI withSecretQuery(URI uri) {
+		private static @NonNull URI withSecretQuery(@NonNull URI uri) {
 			return URI.create(uri + "?appid=" + URI_SECRET);
 		}
 
-		private RemoteJsonWebKeySource remoteSource(URI uri, JoseObserver observer) {
+		private @NonNull RemoteJsonWebKeySource remoteSource(@NonNull URI uri, @NonNull JoseObserver observer) {
 			return RemoteJsonWebKeySource.withUri(uri).httpClient(this.client).clock(TestClock.fromInstant(NOW))
 					.observer(observer).build();
 		}
 
-		private static JwtValidator remoteValidator(RemoteJsonWebKeySource source, JoseObserver observer) {
+		private static @NonNull JwtValidator remoteValidator(@NonNull RemoteJsonWebKeySource source, @NonNull JoseObserver observer) {
 			return JwtValidator.withIssuer(ISSUER).jsonWebKeySource(source).expectedAudiences(Set.of(AUDIENCE))
 					.clock(TestClock.fromInstant(NOW)).observer(observer).build();
 		}
@@ -1875,7 +1877,7 @@ final class RedactionTests {
 		 * Validates {@code token} with a recorded observer and adds the Jwt, its claims, the hook arguments and, as
 		 * positive controls, the explicit emissions.
 		 */
-		private void accepted(String name, JwtValidator.Builder builder, String token, boolean encodedOnly) {
+		private void accepted(@NonNull String name, JwtValidator.@NonNull Builder builder, @NonNull String token, boolean encodedOnly) {
 			add(Group.ACCEPTED_TOKENS, name + ": the token carries a sentinel", token,
 					encodedOnly ? Check.ENCODED_ONLY : Check.PRESENT);
 			RecordingObserver<JoseObserver> recorder = RecordingObserver.fromInterface(JoseObserver.class);
@@ -1896,7 +1898,7 @@ final class RedactionTests {
 		 * Valid claims whose only sentinel is the bare {@link Sentinels#MARKER}, as a claim's value, starting at a UTF-8
 		 * byte offset of {@code alignment} mod 3.
 		 */
-		private static String claimsWithMarker(int alignment) {
+		private static @NonNull String claimsWithMarker(int alignment) {
 			for (int extra = 0; ; ++extra) {
 				String prefix = "{\"iss\":" + JsonText.string(ISSUER) + ",\"aud\":" + JsonText.string(AUDIENCE)
 						+ ",\"exp\":" + NOW.plus(Duration.ofMinutes(5)).getEpochSecond() + ",\"claim" + "x".repeat(extra)
@@ -1951,7 +1953,7 @@ final class RedactionTests {
 		 * unknown member), and whose other keys, each skipped, carry them in private and symmetric members and in the
 		 * members that get them skipped.
 		 */
-		private static String sentinelKeySet() {
+		private static @NonNull String sentinelKeySet() {
 			return TestJsonWebKeys.keySet(List.of(
 					TestJsonWebKeys.withFixture(Fixture.IDP_SIGNING_RSA_2048).kid(KEY_ID)
 							.issuer(Sentinels.secret("jwk-issuer")).member("x-note", JsonText.string(SECRET)).toJson(),
@@ -1980,7 +1982,7 @@ final class RedactionTests {
 		/**
 		 * What {@code call} throws, which it must.
 		 */
-		private static Throwable thrownBy(String name, ThrowingSupplier<?> call) {
+		private static @NonNull Throwable thrownBy(@NonNull String name, @NonNull ThrowingSupplier<?> call) {
 			try {
 				call.get();
 				throw new AssertionError(name + ": expected a failure");
@@ -1998,7 +2000,7 @@ final class RedactionTests {
 	private static final class RecordingHandler extends Handler {
 		private final List<LogRecord> records = new CopyOnWriteArrayList<>();
 
-		List<LogRecord> getRecords() {
+		@NonNull List<@NonNull LogRecord> getRecords() {
 			return List.copyOf(this.records);
 		}
 
@@ -2007,7 +2009,7 @@ final class RedactionTests {
 		}
 
 		@Override
-		public void publish(LogRecord record) {
+		public void publish(@NonNull LogRecord record) {
 			this.records.add(record);
 		}
 

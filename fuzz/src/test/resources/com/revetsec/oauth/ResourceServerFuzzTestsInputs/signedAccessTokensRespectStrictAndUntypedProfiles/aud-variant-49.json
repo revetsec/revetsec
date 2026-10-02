@@ -1,0 +1,1 @@
+{"iss":"http://localhost:1/issuer","aud":["","https://resource.example/mcp"],"sub":"TEST-ONLY-subject","client_id":"TEST-ONLY-client","jti":"TEST-ONLY-jti","iat":1790856000,"exp":1790859600,"scope":"read write","app":true}

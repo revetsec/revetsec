@@ -16,6 +16,8 @@
 
 package com.revetsec.jose;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.testing.TestClock;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Assertions;
@@ -43,7 +45,7 @@ final class JwksSettingsTests {
 	// The cache's preconditions: each refused value is IllegalArgumentException, and the edge values pass (zero
 	// lifetimes and staleness, equal times to live, limits of 1).
 	@TestFactory
-	Stream<DynamicTest> eachSettingKeepsTheCachesPreconditions() {
+	@NonNull Stream<@NonNull DynamicTest> eachSettingKeepsTheCachesPreconditions() {
 		return Stream.of(
 				refused("a zero request timeout", settings -> settings.requestTimeout(Duration.ZERO)),
 				refused("a negative request timeout", settings -> settings.requestTimeout(Duration.ofNanos(-1))),
@@ -112,12 +114,12 @@ final class JwksSettingsTests {
 				second, second, 1, 1, null, null));
 	}
 
-	private static DynamicTest refused(String name, Function<Draft, Draft> change) {
+	private static @NonNull DynamicTest refused(@NonNull String name, @NonNull Function<@NonNull Draft, @NonNull Draft> change) {
 		return DynamicTest.dynamicTest(name + " is refused", () -> Assertions.assertThrows(IllegalArgumentException.class,
 				() -> change.apply(new Draft()).build()));
 	}
 
-	private static DynamicTest accepted(String name, Function<Draft, Draft> change) {
+	private static @NonNull DynamicTest accepted(@NonNull String name, @NonNull Function<@NonNull Draft, @NonNull Draft> change) {
 		return DynamicTest.dynamicTest(name + " is accepted", () -> Assertions.assertDoesNotThrow(
 				() -> change.apply(new Draft()).build()));
 	}
@@ -136,40 +138,40 @@ final class JwksSettingsTests {
 		private int maximumKeys = 100;
 		private @Nullable String runtime;
 
-		Draft requestTimeout(Duration value) {
+		@NonNull Draft requestTimeout(@NonNull Duration value) {
 			this.requestTimeout = value;
 			return this;
 		}
 
-		Draft timesToLive(Duration minimum, Duration standard, Duration maximum) {
+		@NonNull Draft timesToLive(@NonNull Duration minimum, @NonNull Duration standard, @NonNull Duration maximum) {
 			this.minimumTimeToLive = minimum;
 			this.defaultTimeToLive = standard;
 			this.maximumTimeToLive = maximum;
 			return this;
 		}
 
-		Draft cooldown(Duration value) {
+		@NonNull Draft cooldown(@NonNull Duration value) {
 			this.cooldown = value;
 			return this;
 		}
 
-		Draft staleness(Duration value) {
+		@NonNull Draft staleness(@NonNull Duration value) {
 			this.staleness = value;
 			return this;
 		}
 
-		Draft limits(int responseBytes, int keys) {
+		@NonNull Draft limits(int responseBytes, int keys) {
 			this.maximumResponseBytes = responseBytes;
 			this.maximumKeys = keys;
 			return this;
 		}
 
-		Draft runtime(String version) {
+		@NonNull Draft runtime(@NonNull String version) {
 			this.runtime = version;
 			return this;
 		}
 
-		JwksSettings build() {
+		@NonNull JwksSettings build() {
 			return new JwksSettings(CLOCK, this.requestTimeout, this.minimumTimeToLive, this.defaultTimeToLive,
 					this.maximumTimeToLive, this.cooldown, this.staleness, this.maximumResponseBytes, this.maximumKeys,
 					JoseObserver.disabledInstance(), this.runtime);

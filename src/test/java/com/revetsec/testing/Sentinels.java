@@ -16,6 +16,8 @@
 
 package com.revetsec.testing;
 
+import org.jspecify.annotations.NonNull;
+
 import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.ThreadSafe;
@@ -266,7 +268,7 @@ public final class Sentinels {
 	 * @return the sentinel
 	 * @throws IllegalArgumentException if {@code label} has another form
 	 */
-	public static String secret(String label) {
+	public static @NonNull String secret(@NonNull String label) {
 		requireNonNull(label);
 		if (label.length() > MAXIMUM_LABEL_LENGTH || !LABEL.matcher(label).matches())
 			throw new IllegalArgumentException("A sentinel label is 1 to " + MAXIMUM_LABEL_LENGTH
@@ -281,7 +283,7 @@ public final class Sentinels {
 	 * @param text the text to check, or {@code null}
 	 * @return {@code true} if a sentinel (or either end of one), plain or encoded, appears in {@code text}
 	 */
-	public static Boolean containsSentinel(@Nullable CharSequence text) {
+	public static @NonNull Boolean containsSentinel(@Nullable CharSequence text) {
 		if (text == null)
 			return false;
 		String string = text.toString();
@@ -311,7 +313,7 @@ public final class Sentinels {
 	 * signature-mismatch path, or another, for the wrong-length path
 	 * @return the compact string
 	 */
-	public static String compactJwt(String algorithm, Integer signatureOctets) {
+	public static @NonNull String compactJwt(@NonNull String algorithm, @NonNull Integer signatureOctets) {
 		requireNonNull(algorithm);
 		String header = JsonText.object(List.of(Map.entry("alg", JsonText.string(algorithm)),
 				Map.entry("typ", JsonText.string("JWT")), Map.entry("kid", JsonText.string(JWT_KEY_ID))));
@@ -331,7 +333,7 @@ public final class Sentinels {
 	 * {@value #MAXIMUM_SIGNATURE_OCTETS}
 	 * @return the segment
 	 */
-	public static String signatureSegment(Integer signatureOctets) {
+	public static @NonNull String signatureSegment(@NonNull Integer signatureOctets) {
 		requireNonNull(signatureOctets);
 		if (signatureOctets < MINIMUM_SIGNATURE_OCTETS || signatureOctets > MAXIMUM_SIGNATURE_OCTETS)
 			throw new IllegalArgumentException("A sentinel signature is " + MINIMUM_SIGNATURE_OCTETS + " to "
@@ -357,7 +359,7 @@ public final class Sentinels {
 	 * @param alignment 0, 1 or 2
 	 * @return the claims text
 	 */
-	public static String sentinelClaimsJson(Integer alignment) {
+	public static @NonNull String sentinelClaimsJson(@NonNull Integer alignment) {
 		requireNonNull(alignment);
 		if (alignment < 0 || alignment > 2)
 			throw new IllegalArgumentException("An alignment is 0, 1 or 2, not " + alignment);
@@ -377,14 +379,14 @@ public final class Sentinels {
 	 * @param alignment the marker's payload byte offset mod 3: 0, 1 or 2
 	 * @return the compact string
 	 */
-	public static String compactJwtWithSentinelClaim(Integer alignment) {
+	public static @NonNull String compactJwtWithSentinelClaim(@NonNull Integer alignment) {
 		String header = JsonText.object(List.of(Map.entry("alg", JsonText.string("RS256")),
 				Map.entry("typ", JsonText.string("JWT"))));
 		return TestJws.base64Url(header) + "." + TestJws.base64Url(sentinelClaimsJson(alignment)) + "."
 				+ TestJws.base64Url(new byte[256]);
 	}
 
-	private static boolean containsBase64Core(String text) {
+	private static boolean containsBase64Core(@NonNull String text) {
 		for (String core : BASE64_MARKER_CORES)
 			if (text.contains(core))
 				return true;
@@ -396,7 +398,7 @@ public final class Sentinels {
 	 * that depend on the marker's bits alone: character i covers bits [6i, 6i + 6), and the marker covers
 	 * [8r, 8r + 8·length), whatever the bytes around it.
 	 */
-	private static List<String> encodedMarkers() {
+	private static @NonNull List<@NonNull String> encodedMarkers() {
 		byte[] marker = MARKER.getBytes(StandardCharsets.US_ASCII);
 		LinkedHashSet<String> forms = new LinkedHashSet<>();
 		for (Base64.Encoder encoder : List.of(Base64.getUrlEncoder(), Base64.getEncoder())) {
@@ -421,7 +423,7 @@ public final class Sentinels {
 	 * @return where each sentinel was found, such as {@code $.getCause().getSuppressed()[0].getMessage()}, in walk
 	 * order; empty if none was
 	 */
-	public static List<String> findIn(@Nullable Object root) {
+	public static @NonNull List<@NonNull String> findIn(@Nullable Object root) {
 		return findIn(root, Set.of(JSON_PACKAGE));
 	}
 
@@ -454,7 +456,7 @@ public final class Sentinels {
 	 * {@link #findIn(Object)} with the packages whose objects are treated as JSON values. Tests of the walker itself
 	 * pass their own package, so they can use stand-in JSON classes.
 	 */
-	static List<String> findIn(@Nullable Object root, Set<String> jsonPackages) {
+	static @NonNull List<@NonNull String> findIn(@Nullable Object root, @NonNull Set<@NonNull String> jsonPackages) {
 		requireNonNull(jsonPackages);
 		return new Walker(jsonPackages).walk(root);
 	}
@@ -468,11 +470,11 @@ public final class Sentinels {
 		private final Deque<Pending> pending = new ArrayDeque<>();
 		private final List<String> locations = new ArrayList<>();
 
-		private Walker(Set<String> jsonPackages) {
+		private Walker(@NonNull Set<@NonNull String> jsonPackages) {
 			this.jsonPackages = Set.copyOf(jsonPackages);
 		}
 
-		private List<String> walk(@Nullable Object root) {
+		private @NonNull List<@NonNull String> walk(@Nullable Object root) {
 			enqueue(root, "$");
 			while (!this.pending.isEmpty()) {
 				Pending next = this.pending.removeFirst();
@@ -481,7 +483,7 @@ public final class Sentinels {
 			return List.copyOf(this.locations);
 		}
 
-		private void enqueue(@Nullable Object value, String path) {
+		private void enqueue(@Nullable Object value, @NonNull String path) {
 			if (value == null)
 				return;
 			if (!(value instanceof CharSequence) && !this.visited.add(value))
@@ -491,12 +493,12 @@ public final class Sentinels {
 			this.pending.addLast(new Pending(value, path));
 		}
 
-		private void check(@Nullable CharSequence text, String path) {
+		private void check(@Nullable CharSequence text, @NonNull String path) {
 			if (containsSentinel(text))
 				this.locations.add(path);
 		}
 
-		private void visit(Object value, String path) {
+		private void visit(@NonNull Object value, @NonNull String path) {
 			if (value instanceof CharSequence text) {
 				check(text, path);
 			} else if (value instanceof Throwable throwable) {
@@ -537,7 +539,7 @@ public final class Sentinels {
 			}
 		}
 
-		private void visitThrowable(Throwable throwable, String path) {
+		private void visitThrowable(@NonNull Throwable throwable, @NonNull String path) {
 			check(throwable.getMessage(), path + ".getMessage()");
 			check(throwable.getLocalizedMessage(), path + ".getLocalizedMessage()");
 			check(throwable.toString(), path + ".toString()");
@@ -548,7 +550,7 @@ public final class Sentinels {
 			enqueue(throwable.getCause(), path + ".getCause()");
 		}
 
-		private void visitLogRecord(LogRecord logRecord, String path) {
+		private void visitLogRecord(@NonNull LogRecord logRecord, @NonNull String path) {
 			check(logRecord.getMessage(), path + ".getMessage()");
 			SimpleFormatter formatter = new SimpleFormatter();
 			check(formatter.formatMessage(logRecord), path + " (formatted message)");
@@ -559,11 +561,11 @@ public final class Sentinels {
 			enqueue(logRecord.getThrown(), path + ".getThrown()");
 		}
 
-		private boolean isJsonValue(Object value) {
+		private boolean isJsonValue(@NonNull Object value) {
 			return this.jsonPackages.contains(value.getClass().getPackageName());
 		}
 
-		private void visitJsonValue(Object value, String path) {
+		private void visitJsonValue(@NonNull Object value, @NonNull String path) {
 			check(value.toString(), path + ".toString()");
 			@Nullable Method toJson = publicNoArgumentMethod(value.getClass(), "toJson");
 			if (toJson == null || toJson.getReturnType() != String.class)
@@ -582,7 +584,7 @@ public final class Sentinels {
 	 * A public no-argument method named {@code name}, looked up on a public class or interface in {@code type}'s
 	 * hierarchy so it can be invoked without access checks failing; {@code null} if there is none.
 	 */
-	private static @Nullable Method publicNoArgumentMethod(Class<?> type, String name) {
+	private static @Nullable Method publicNoArgumentMethod(@NonNull Class<?> type, @NonNull String name) {
 		Deque<Class<?>> candidates = new ArrayDeque<>();
 		candidates.add(type);
 		Set<Class<?>> seen = Collections.newSetFromMap(new IdentityHashMap<>());
@@ -606,7 +608,7 @@ public final class Sentinels {
 		return null;
 	}
 
-	private static String printedStackTrace(Throwable throwable) {
+	private static @NonNull String printedStackTrace(@NonNull Throwable throwable) {
 		StringWriter stringWriter = new StringWriter();
 		try (PrintWriter printWriter = new PrintWriter(stringWriter)) {
 			throwable.printStackTrace(printWriter);
@@ -618,7 +620,7 @@ public final class Sentinels {
 		private final Object value;
 		private final String path;
 
-		private Pending(Object value, String path) {
+		private Pending(@NonNull Object value, @NonNull String path) {
 			this.value = value;
 			this.path = path;
 		}

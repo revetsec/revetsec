@@ -16,6 +16,8 @@
 
 package com.revetsec.oauth;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.internal.encoding.QueryParameters;
 import com.revetsec.testing.TestHttpsServer;
 import com.revetsec.testing.TestTls;
@@ -90,7 +92,7 @@ final class RefreshAndRevocationTests {
 		}
 	}
 
-	private static OAuthClient client(TestHttpsServer server) {
+	private static @NonNull OAuthClient client(@NonNull TestHttpsServer server) {
 		AuthorizationServerMetadata metadata = AuthorizationServerMetadata.withIssuer(server.getBaseUri().toString())
 				.authorizationEndpoint(server.uri("/authorize"))
 				.tokenEndpoint(server.uri("/token"))
@@ -102,7 +104,7 @@ final class RefreshAndRevocationTests {
 				.httpClient(TestTls.httpClient()).build();
 	}
 
-	private static TestHttpsServer.Response json(int status, String body) {
+	private static TestHttpsServer.@NonNull Response json(int status, @NonNull String body) {
 		return TestHttpsServer.Response.withStatus(status).header("Content-Type", "application/json")
 				.body(body).build();
 	}

@@ -16,6 +16,8 @@
 
 package com.revetsec;
 
+import org.jspecify.annotations.NonNull;
+
 import com.google.errorprone.annotations.CheckReturnValue;
 import com.sun.source.tree.CompilationUnitTree;
 import com.sun.source.tree.Tree;
@@ -135,12 +137,12 @@ final class ContractSupport {
 		private final String text;
 		private final BitSet escapedLineTerminators;
 
-		private TranslatedSource(String text, BitSet escapedLineTerminators) {
+		private TranslatedSource(@NonNull String text, @NonNull BitSet escapedLineTerminators) {
 			this.text = text;
 			this.escapedLineTerminators = (BitSet) escapedLineTerminators.clone();
 		}
 
-		String getText() {
+		@NonNull String getText() {
 			return this.text;
 		}
 
@@ -162,8 +164,8 @@ final class ContractSupport {
 		private final List<CompilationUnitTree> compilationUnits;
 		private final Path sourceRoot;
 
-		private SourceAnalysis(DocTrees trees, Elements elements, Types types,
-				List<CompilationUnitTree> compilationUnits, Path sourceRoot) {
+		private SourceAnalysis(@NonNull DocTrees trees, @NonNull Elements elements, @NonNull Types types,
+				@NonNull List<@NonNull CompilationUnitTree> compilationUnits, @NonNull Path sourceRoot) {
 			this.trees = trees;
 			this.elements = elements;
 			this.types = types;
@@ -171,19 +173,19 @@ final class ContractSupport {
 			this.sourceRoot = sourceRoot;
 		}
 
-		DocTrees getTrees() {
+		@NonNull DocTrees getTrees() {
 			return this.trees;
 		}
 
-		Elements getElements() {
+		@NonNull Elements getElements() {
 			return this.elements;
 		}
 
-		Types getTypes() {
+		@NonNull Types getTypes() {
 			return this.types;
 		}
 
-		List<CompilationUnitTree> getCompilationUnits() {
+		@NonNull List<@NonNull CompilationUnitTree> getCompilationUnits() {
 			return this.compilationUnits;
 		}
 
@@ -191,7 +193,7 @@ final class ContractSupport {
 		 * Returns whether {@code type} is declared in one of the analyzed compilation units (not in the JDK or a
 		 * class-path JAR).
 		 */
-		boolean isAnalyzed(TypeElement type) {
+		boolean isAnalyzed(@NonNull TypeElement type) {
 			@Nullable TreePath path = this.trees.getPath(type);
 			return path != null && this.compilationUnits.contains(path.getCompilationUnit());
 		}
@@ -199,21 +201,21 @@ final class ContractSupport {
 		/**
 		 * Returns whether {@code subtype} is {@code supertype} or a subtype of it, ignoring type arguments.
 		 */
-		boolean isSubtype(TypeElement subtype, TypeElement supertype) {
+		boolean isSubtype(@NonNull TypeElement subtype, @NonNull TypeElement supertype) {
 			return this.types.isSubtype(this.types.erasure(subtype.asType()), this.types.erasure(supertype.asType()));
 		}
 
 		/**
 		 * The source file of {@code compilationUnit} relative to the analyzed source root, with {@code /}.
 		 */
-		String relativePath(CompilationUnitTree compilationUnit) {
+		@NonNull String relativePath(@NonNull CompilationUnitTree compilationUnit) {
 			return ContractSupport.relativePath(this.sourceRoot, Path.of(compilationUnit.getSourceFile().toUri()));
 		}
 
 		/**
 		 * The physical line of a source offset in {@code compilationUnit}, or 0 if the position is unknown.
 		 */
-		int lineNumber(CompilationUnitTree compilationUnit, long position) {
+		int lineNumber(@NonNull CompilationUnitTree compilationUnit, long position) {
 			return position < 0 ? 0 : (int) compilationUnit.getLineMap().getLineNumber(position);
 		}
 
@@ -222,7 +224,7 @@ final class ContractSupport {
 		 * constructors, enum {@code values()}/{@code valueOf}, record members). Generated members have no tree or
 		 * no end position; {@code Elements.getOrigin} alone does not flag all of them on JDK 17.
 		 */
-		boolean isSourceAuthored(Element element) {
+		boolean isSourceAuthored(@NonNull Element element) {
 			if (this.elements.getOrigin(element) != Elements.Origin.EXPLICIT)
 				return false;
 			@Nullable TreePath path = this.trees.getPath(element);
@@ -231,7 +233,7 @@ final class ContractSupport {
 			return this.trees.getSourcePositions().getEndPosition(path.getCompilationUnit(), path.getLeaf()) > 0;
 		}
 
-		String location(CompilationUnitTree compilationUnit, Tree tree) {
+		@NonNull String location(@NonNull CompilationUnitTree compilationUnit, @NonNull Tree tree) {
 			long position = this.trees.getSourcePositions().getStartPosition(compilationUnit, tree);
 			return relativePath(compilationUnit) + ":" + lineNumber(compilationUnit, position);
 		}
@@ -241,7 +243,7 @@ final class ContractSupport {
 		 * methods and constructors (constructors use the class's simple name), the simple name otherwise. javac's own
 		 * {@code Element.toString()} renders type-annotated parameters differently across JDKs.
 		 */
-		String describe(Element member) {
+		@NonNull String describe(@NonNull Element member) {
 			if (!(member instanceof ExecutableElement executable))
 				return member.getSimpleName().toString();
 			@Nullable Element enclosingElement = executable.getEnclosingElement();
@@ -257,7 +259,7 @@ final class ContractSupport {
 		 * The erasure of {@code type} as a qualified name without annotations, such as {@code java.util.List} or
 		 * {@code int[]}.
 		 */
-		String erasedName(TypeMirror type) {
+		@NonNull String erasedName(@NonNull TypeMirror type) {
 			TypeMirror erasure = this.types.erasure(type);
 			if (erasure instanceof ArrayType arrayType)
 				return erasedName(arrayType.getComponentType()) + "[]";
@@ -273,7 +275,7 @@ final class ContractSupport {
 	 * Finds the repository root by walking up from the working directory. Maven runs tests from the module root,
 	 * but a tooling module (such as {@code fuzz/}) that reuses these sources runs them from a subdirectory.
 	 */
-	static Path repositoryRoot() {
+	static @NonNull Path repositoryRoot() {
 		Path start = Path.of("").toAbsolutePath().normalize();
 		for (Path candidate = start; candidate != null; candidate = candidate.getParent())
 			if (Files.isRegularFile(candidate.resolve("pom.xml"))
@@ -282,13 +284,13 @@ final class ContractSupport {
 		throw new IllegalStateException("Unable to locate the Revetsec repository root from " + start);
 	}
 
-	static void assertNoViolations(String title, List<String> violations) {
+	static void assertNoViolations(@NonNull String title, @NonNull List<@NonNull String> violations) {
 		Assertions.assertTrue(violations.isEmpty(), () -> title + " (" + violations.size() + "):\n - "
 				+ String.join("\n - ", violations));
 	}
 
 	@CheckReturnValue
-	static List<Path> javaSources(Path sourceRoot) throws IOException {
+	static @NonNull List<@NonNull Path> javaSources(@NonNull Path sourceRoot) throws IOException {
 		if (!Files.isDirectory(sourceRoot))
 			return List.of();
 		try (Stream<Path> paths = Files.walk(sourceRoot)) {
@@ -307,7 +309,7 @@ final class ContractSupport {
 	 * {@link #SKIPPED_DIRECTORY_NAMES}.
 	 */
 	@CheckReturnValue
-	static List<Path> repositoryFiles(Path root) throws IOException {
+	static @NonNull List<@NonNull Path> repositoryFiles(@NonNull Path root) throws IOException {
 		Comparator<Path> byRelativePath = Comparator.comparing(file -> relativePath(root, file));
 		Optional<Set<Path>> gitVisibleFiles = gitVisibleFiles(root);
 		if (gitVisibleFiles.isPresent())
@@ -319,14 +321,14 @@ final class ContractSupport {
 		List<Path> files = new ArrayList<>();
 		Files.walkFileTree(root, new SimpleFileVisitor<>() {
 			@Override
-			public FileVisitResult preVisitDirectory(Path directory, BasicFileAttributes attributes) {
+			public @NonNull FileVisitResult preVisitDirectory(@NonNull Path directory, @NonNull BasicFileAttributes attributes) {
 				if (!directory.equals(root) && SKIPPED_DIRECTORY_NAMES.contains(fileName(directory)))
 					return FileVisitResult.SKIP_SUBTREE;
 				return FileVisitResult.CONTINUE;
 			}
 
 			@Override
-			public FileVisitResult visitFile(Path file, BasicFileAttributes attributes) {
+			public @NonNull FileVisitResult visitFile(@NonNull Path file, @NonNull BasicFileAttributes attributes) {
 				if (attributes.isRegularFile())
 					files.add(file);
 				return FileVisitResult.CONTINUE;
@@ -336,7 +338,7 @@ final class ContractSupport {
 		return List.copyOf(files);
 	}
 
-	private static Optional<Set<Path>> gitVisibleFiles(Path root) {
+	private static @NonNull Optional<@NonNull Set<@NonNull Path>> gitVisibleFiles(@NonNull Path root) {
 		if (!Files.exists(root.resolve(".git")))
 			return Optional.empty();
 		try {
@@ -374,30 +376,30 @@ final class ContractSupport {
 		}
 	}
 
-	private static byte[] readAll(InputStream inputStream) throws IOException {
+	private static byte @NonNull [] readAll(@NonNull InputStream inputStream) throws IOException {
 		ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
 		inputStream.transferTo(outputStream);
 		return outputStream.toByteArray();
 	}
 
-	static String relativePath(Path root, Path file) {
+	static @NonNull String relativePath(@NonNull Path root, @NonNull Path file) {
 		return root.toAbsolutePath().normalize().relativize(file.toAbsolutePath().normalize()).toString()
 				.replace(File.separatorChar, '/');
 	}
 
-	static String fileName(Path path) {
+	static @NonNull String fileName(@NonNull Path path) {
 		Path fileName = path.getFileName();
 		return fileName == null ? "" : fileName.toString();
 	}
 
-	static String lowerCaseFileName(Path path) {
+	static @NonNull String lowerCaseFileName(@NonNull Path path) {
 		return fileName(path).toLowerCase(Locale.ROOT);
 	}
 
 	/**
 	 * Heuristic: a file is text if it has no NUL byte in its first 8 KiB.
 	 */
-	static boolean isProbablyText(byte[] bytes) {
+	static boolean isProbablyText(byte @NonNull [] bytes) {
 		int limit = Math.min(bytes.length, 8192);
 		for (int index = 0; index < limit; ++index)
 			if (bytes[index] == 0)
@@ -405,7 +407,7 @@ final class ContractSupport {
 		return true;
 	}
 
-	static int lineNumber(String content, int offset) {
+	static int lineNumber(@NonNull String content, int offset) {
 		int line = 1;
 		for (int index = 0; index < offset && index < content.length(); ++index)
 			if (content.charAt(index) == '\n')
@@ -420,7 +422,7 @@ final class ContractSupport {
 	 * An escaped line terminator becomes a space, never a real line terminator, so line numbers still count the file's
 	 * physical lines; {@link TranslatedSource#isEscapedLineTerminator(int)} records where it stood.
 	 */
-	static TranslatedSource translateUnicodeEscapes(String source) {
+	static @NonNull TranslatedSource translateUnicodeEscapes(@NonNull String source) {
 		StringBuilder translated = new StringBuilder(source.length());
 		BitSet escapedLineTerminators = new BitSet();
 		int length = source.length();
@@ -455,14 +457,14 @@ final class ContractSupport {
 		return new TranslatedSource(translated.toString(), escapedLineTerminators);
 	}
 
-	private static boolean isHexDigits(String text, int start, int end) {
+	private static boolean isHexDigits(@NonNull String text, int start, int end) {
 		for (int index = start; index < end; ++index)
 			if (Character.digit(text.charAt(index), 16) < 0)
 				return false;
 		return true;
 	}
 
-	private static boolean isLineTerminator(TranslatedSource translatedSource, int index) {
+	private static boolean isLineTerminator(@NonNull TranslatedSource translatedSource, int index) {
 		char c = translatedSource.getText().charAt(index);
 		return c == '\n' || c == '\r' || translatedSource.isEscapedLineTerminator(index);
 	}
@@ -472,7 +474,7 @@ final class ContractSupport {
 	 * preserving line structure, so pattern scans see only live code. An escaped line terminator ends a line comment
 	 * or literal, as in javac, and stays a space.
 	 */
-	static String stripCommentsAndStrings(TranslatedSource translatedSource) {
+	static @NonNull String stripCommentsAndStrings(@NonNull TranslatedSource translatedSource) {
 		return stripCommentsAndStrings(translatedSource, offset -> {
 		});
 	}
@@ -481,7 +483,7 @@ final class ContractSupport {
 	 * {@link #stripCommentsAndStrings(TranslatedSource)} that also passes the offset of each line comment's first
 	 * {@code /} (in live code, not inside another comment or a literal) to {@code lineCommentStarts}.
 	 */
-	static String stripCommentsAndStrings(TranslatedSource translatedSource, IntConsumer lineCommentStarts) {
+	static @NonNull String stripCommentsAndStrings(@NonNull TranslatedSource translatedSource, @NonNull IntConsumer lineCommentStarts) {
 		String source = translatedSource.getText();
 		StringBuilder stripped = new StringBuilder(source.length());
 		int length = source.length();
@@ -548,7 +550,7 @@ final class ContractSupport {
 	 * whose first non-blank characters are {@code ///} (JDK 23+ javadoc renders them even for {@code --release 17}),
 	 * with the {@code ///} prefix blanked. Offsets and line numbers in the result match {@code source}.
 	 */
-	static String javadocText(String source) {
+	static @NonNull String javadocText(@NonNull String source) {
 		char[] masked = new char[source.length()];
 		for (int index = 0; index < masked.length; ++index)
 			masked[index] = source.charAt(index) == '\n' ? '\n' : ' ';
@@ -615,7 +617,7 @@ final class ContractSupport {
 	/**
 	 * Returns whether only spaces and tabs precede {@code index} on its line.
 	 */
-	private static boolean onlyBlanksBefore(String source, int index) {
+	private static boolean onlyBlanksBefore(@NonNull String source, int index) {
 		for (int position = index - 1; position >= 0 && source.charAt(position) != '\n'; --position)
 			if (source.charAt(position) != ' ' && source.charAt(position) != '\t')
 				return false;
@@ -627,7 +629,7 @@ final class ContractSupport {
 	 * processing), with only the provided-scope annotation JARs on the class path, and applies {@code function} to
 	 * the result. Compilation errors fail the calling test.
 	 */
-	static <T> T analyze(Path sourceRoot, Function<SourceAnalysis, T> function) throws IOException {
+	static <T> @NonNull T analyze(@NonNull Path sourceRoot, @NonNull Function<@NonNull SourceAnalysis, @NonNull T> function) throws IOException {
 		List<Path> sources = javaSources(sourceRoot);
 		if (sources.isEmpty())
 			throw new IllegalArgumentException("No Java sources under " + sourceRoot);
@@ -662,7 +664,7 @@ final class ContractSupport {
 	 * Exported types: every public top-level type in an exported package, plus every public or protected type
 	 * nested in one, recursively. These are the types a caller outside Revetsec can name.
 	 */
-	static List<TypeElement> exportedTypes(SourceAnalysis analysis) {
+	static @NonNull List<@NonNull TypeElement> exportedTypes(@NonNull SourceAnalysis analysis) {
 		List<TypeElement> exportedTypes = new ArrayList<>();
 		for (CompilationUnitTree compilationUnit : analysis.getCompilationUnits()) {
 			if (!EXPORTED_PACKAGES.contains(packageName(compilationUnit)))
@@ -677,19 +679,19 @@ final class ContractSupport {
 		return List.copyOf(exportedTypes);
 	}
 
-	private static void appendExportedType(TypeElement type, List<TypeElement> exportedTypes) {
+	private static void appendExportedType(@NonNull TypeElement type, @NonNull List<@NonNull TypeElement> exportedTypes) {
 		exportedTypes.add(type);
 		for (Element enclosed : type.getEnclosedElements())
 			if (enclosed instanceof TypeElement nestedType && isPublicOrProtected(nestedType))
 				appendExportedType(nestedType, exportedTypes);
 	}
 
-	static boolean isPublicOrProtected(Element element) {
+	static boolean isPublicOrProtected(@NonNull Element element) {
 		Set<Modifier> modifiers = element.getModifiers();
 		return modifiers.contains(Modifier.PUBLIC) || modifiers.contains(Modifier.PROTECTED);
 	}
 
-	static String packageName(CompilationUnitTree compilationUnit) {
+	static @NonNull String packageName(@NonNull CompilationUnitTree compilationUnit) {
 		@Nullable Tree packageName = compilationUnit.getPackageName();
 		return packageName == null ? "" : packageName.toString();
 	}
@@ -699,14 +701,14 @@ final class ContractSupport {
 	 * annotations (the provided-scope dependencies), located from the classes themselves so it works under any
 	 * Surefire class-path mode.
 	 */
-	private static String annotationClasspath() {
+	private static @NonNull String annotationClasspath() {
 		return Stream.of(NullMarked.class, ThreadSafe.class, CheckReturnValue.class)
 				.map(ContractSupport::codeSourcePath)
 				.distinct()
 				.collect(Collectors.joining(File.pathSeparator));
 	}
 
-	private static String codeSourcePath(Class<?> type) {
+	private static @NonNull String codeSourcePath(@NonNull Class<?> type) {
 		CodeSource codeSource = type.getProtectionDomain().getCodeSource();
 		@Nullable URL location = codeSource == null ? null : codeSource.getLocation();
 		if (location == null)

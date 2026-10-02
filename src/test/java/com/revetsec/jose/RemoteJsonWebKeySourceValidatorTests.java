@@ -16,6 +16,8 @@
 
 package com.revetsec.jose;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.ErrorCategory;
 import com.revetsec.jose.RemoteJsonWebKeySourceConcurrencyTests.Call;
 import com.revetsec.testing.JsonText;
@@ -95,7 +97,7 @@ final class RemoteJsonWebKeySourceValidatorTests {
 	// nor the jku target sees a request. Positive control: the same source and server, given a well-formed token with
 	// an unknown kid, record exactly one request.
 	@TestFactory
-	Stream<DynamicTest> headerKeyReferencesAreRefusedBeforeAnyRequest() {
+	@NonNull Stream<@NonNull DynamicTest> headerKeyReferencesAreRefusedBeforeAnyRequest() {
 		String attackerJwk = TestJsonWebKeys.withFixture(Fixture.NEGATIVE_ATTACKER_RSA_2048).toJson();
 		return Stream.of("jwk", "jku to another path", "jku to the key-set URI itself", "x5u").map(member ->
 				DynamicTest.dynamicTest(member, () -> {
@@ -136,7 +138,7 @@ final class RemoteJsonWebKeySourceValidatorTests {
 	// unknown kid against a cold remote source, the key-set server sees zero requests for every one. Positive control:
 	// the well-formed token with the same kid makes exactly one.
 	@TestFactory
-	Stream<DynamicTest> malformedSignaturesAreRefusedBeforeAnyRequest() {
+	@NonNull Stream<@NonNull DynamicTest> malformedSignaturesAreRefusedBeforeAnyRequest() {
 		List<DynamicTest> tests = new ArrayList<>();
 		TestJws.Signed es256 = TestJws.withAlgorithm(TestJws.Algorithm.ES256).kid("unknown").payload(claims())
 				.signed(Fixture.IDP_SIGNING_EC_P256.getPrivateKey());
@@ -246,7 +248,7 @@ final class RemoteJsonWebKeySourceValidatorTests {
 	// reaches the source's didFailToFetchJsonWebKeySet and the validator's didFailToValidateJwt. The previous key set
 	// stays in use.
 	@TestFactory
-	Stream<DynamicTest> aMalformedRefreshPropagatesUnchangedAndThePreviousKeySetStays() {
+	@NonNull Stream<@NonNull DynamicTest> aMalformedRefreshPropagatesUnchangedAndThePreviousKeySetStays() {
 		Response tooManyKeys = Response.fromJsonWebKeySet(JwksCacheTests.keySetJson(JwksCacheTests.keyIds(101)));
 		Response oversized = Response.withStatus(200).header("Content-Type", TestHttpsServer.JWK_SET_MEDIA_TYPE)
 				.body(new byte[300 * 1024]).framing(TestHttpsServer.Framing.CHUNKED).build();
@@ -446,7 +448,7 @@ final class RemoteJsonWebKeySourceValidatorTests {
 		Assertions.assertEquals(2, server().getHitCount(path));
 	}
 
-	private static DynamicTest malformedSignatureTest(String name, String malformed, String wellFormed) {
+	private static @NonNull DynamicTest malformedSignatureTest(@NonNull String name, @NonNull String malformed, @NonNull String wellFormed) {
 		return DynamicTest.dynamicTest(name, () -> {
 			String path = path();
 			server().script(path, Script.fromResponse(Response.fromJsonWebKeySet(keySet(Map.of("a",
@@ -463,19 +465,19 @@ final class RemoteJsonWebKeySourceValidatorTests {
 		});
 	}
 
-	private static void assertRejected(JoseException.Reason reason, Executable executable) {
+	private static void assertRejected(JoseException.@NonNull Reason reason, @NonNull Executable executable) {
 		JoseException exception = Assertions.assertThrows(JoseException.class, executable);
 		Assertions.assertEquals(reason, exception.getReason(), exception::toString);
 	}
 
-	private static JwtValidator validator(RemoteJsonWebKeySource source, TestClock clock,
-			Set<JwsAlgorithm> allowedAlgorithms) {
+	private static @NonNull JwtValidator validator(@NonNull RemoteJsonWebKeySource source, @NonNull TestClock clock,
+			@NonNull Set<@NonNull JwsAlgorithm> allowedAlgorithms) {
 		return JwtValidator.withIssuer(ISSUER).jsonWebKeySource(source).expectedAudiences(Set.of(AUDIENCE))
 				.allowedAlgorithms(allowedAlgorithms).clock(clock).build();
 	}
 
-	private static JwtValidator entraValidator(RemoteJsonWebKeySource source, TestClock clock, String issuer,
-			Set<JwsAlgorithm> allowedAlgorithms) {
+	private static @NonNull JwtValidator entraValidator(@NonNull RemoteJsonWebKeySource source, @NonNull TestClock clock, @NonNull String issuer,
+			@NonNull Set<@NonNull JwsAlgorithm> allowedAlgorithms) {
 		return JwtValidator.withIssuer(issuer).jsonWebKeySource(source).expectedAudiences(Set.of(AUDIENCE))
 				.allowedAlgorithms(allowedAlgorithms).clock(clock).build();
 	}
@@ -484,7 +486,7 @@ final class RemoteJsonWebKeySourceValidatorTests {
 	 * An Entra-shaped key: the fixture's public key with {@code use} {@code sig}, its certificate as the {@code x5c},
 	 * the given JWK {@code issuer} member, and no {@code alg}.
 	 */
-	private static String entraKey(Fixture fixture, String keyId, String issuer) {
+	private static @NonNull String entraKey(@NonNull Fixture fixture, @NonNull String keyId, @NonNull String issuer) {
 		return TestJsonWebKeys.withFixture(fixture).kid(keyId).use("sig").x5c(List.of(fixture.getCertificate()
 				.orElseThrow())).issuer(issuer).toJson();
 	}
@@ -493,7 +495,7 @@ final class RemoteJsonWebKeySourceValidatorTests {
 	 * A token for {@code issuer} and the validator's audience, valid for an hour from {@link JwksCacheTests#START}, with
 	 * {@code rawTid} as the raw JSON of its {@code tid} claim, or no {@code tid} when it is {@code null}.
 	 */
-	private static String entraToken(TestJws.Algorithm algorithm, String keyId, Fixture key, String issuer,
+	private static @NonNull String entraToken(TestJws.@NonNull Algorithm algorithm, @NonNull String keyId, @NonNull Fixture key, @NonNull String issuer,
 			@Nullable String rawTid) {
 		List<Map.Entry<String, String>> claims = new ArrayList<>(List.of(
 				Map.entry("iss", JsonText.string(issuer)),
@@ -507,18 +509,18 @@ final class RemoteJsonWebKeySourceValidatorTests {
 		return TestJws.withAlgorithm(algorithm).kid(keyId).payload(JsonText.object(claims)).sign(key.getPrivateKey());
 	}
 
-	private static RemoteJsonWebKeySource.Builder source(String path, TestClock clock) {
+	private static RemoteJsonWebKeySource.@NonNull Builder source(@NonNull String path, @NonNull TestClock clock) {
 		return RemoteJsonWebKeySource.withUri(server().uri(path)).httpClient(client()).clock(clock);
 	}
 
 	/**
 	 * An RS256 token for the validator's issuer and audience, valid for an hour from {@link JwksCacheTests#START}.
 	 */
-	private static String token(@Nullable String keyId, Fixture key) {
+	private static @NonNull String token(@Nullable String keyId, @NonNull Fixture key) {
 		return TestJws.withAlgorithm(TestJws.Algorithm.RS256).kid(keyId).payload(claims()).sign(key.getPrivateKey());
 	}
 
-	private static String claims() {
+	private static @NonNull String claims() {
 		return JsonText.object(List.of(
 				Map.entry("iss", JsonText.string(ISSUER)),
 				Map.entry("sub", JsonText.string("subject")),
@@ -530,25 +532,25 @@ final class RemoteJsonWebKeySourceValidatorTests {
 	/**
 	 * A key set with each fixture's public key under its kid, in kid order, with no {@code alg}.
 	 */
-	private static String keySet(Map<String, Fixture> keys) {
+	private static @NonNull String keySet(@NonNull Map<@NonNull String, @NonNull Fixture> keys) {
 		List<String> jwks = new ArrayList<>();
 		keys.entrySet().stream().sorted(Map.Entry.comparingByKey()).forEach(entry -> jwks.add(TestJsonWebKeys
 				.withFixture(entry.getValue()).kid(entry.getKey()).toJson()));
 		return TestJsonWebKeys.keySet(jwks);
 	}
 
-	private static String path() {
+	private static @NonNull String path() {
 		return "/validator-jwks/" + NEXT_PATH.incrementAndGet();
 	}
 
-	private static TestHttpsServer server() {
+	private static @NonNull TestHttpsServer server() {
 		TestHttpsServer current = server;
 		if (current == null)
 			throw new IllegalStateException("The server did not start");
 		return current;
 	}
 
-	private static HttpClient client() {
+	private static @NonNull HttpClient client() {
 		HttpClient current = client;
 		if (current == null)
 			throw new IllegalStateException("The client was not created");

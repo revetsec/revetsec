@@ -16,6 +16,8 @@
 
 package com.revetsec.internal.http;
 
+import org.jspecify.annotations.NonNull;
+
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.DynamicTest;
@@ -36,7 +38,7 @@ import java.util.stream.Stream;
 final class RuntimeFloorTests {
 	// M1 plan, the RuntimeFloor parse table [verified], plus the neighbours that pin each comparison.
 	@TestFactory
-	Stream<DynamicTest> classifiesThePlansVersionTable() {
+	@NonNull Stream<@NonNull DynamicTest> classifiesThePlansVersionTable() {
 		Map<String, Boolean> belowFloor = new LinkedHashMap<>();
 		// The plan's table.
 		belowFloor.put("17.0.2", true);
@@ -105,12 +107,12 @@ final class RuntimeFloorTests {
 	}
 
 	@SuppressWarnings("NullAway")
-	private static Boolean nullBoolean() {
+	private static @NonNull Boolean nullBoolean() {
 		return nullValue();
 	}
 
 	@SuppressWarnings({"NullAway", "TypeParameterUnusedInFormals"})
-	private static <T> T nullValue() {
+	private static <T> @NonNull T nullValue() {
 		@Nullable T value = null;
 		return value;
 	}

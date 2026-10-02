@@ -16,6 +16,8 @@
 
 package com.revetsec.testing;
 
+import org.jspecify.annotations.NonNull;
+
 import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.Immutable;
@@ -134,7 +136,7 @@ public final class ChildJvm {
 	private final @Nullable ClassPathSource classPathSource;
 	private final List<Class<?>> codeSourceClasses;
 
-	private ChildJvm(Builder builder) {
+	private ChildJvm(@NonNull Builder builder) {
 		this.mainClass = builder.mainClass;
 		this.arguments = builder.arguments;
 		this.jvmOptions = builder.jvmOptions;
@@ -150,7 +152,7 @@ public final class ChildJvm {
 	 * @param mainClass the class whose {@code main} the child runs; a nested class works
 	 * @return a new builder
 	 */
-	public static Builder withMainClass(Class<?> mainClass) {
+	public static @NonNull Builder withMainClass(@NonNull Class<?> mainClass) {
 		return new Builder(mainClass);
 	}
 
@@ -161,7 +163,7 @@ public final class ChildJvm {
 	 * @throws IOException if the child cannot be started or its output cannot be read
 	 * @throws InterruptedException if this thread is interrupted while waiting; the child is killed first
 	 */
-	public Result run() throws IOException, InterruptedException {
+	public @NonNull Result run() throws IOException, InterruptedException {
 		ResolvedClassPath classPath = resolveClassPath(this.mainClass, this.codeSourceClasses, this.classPathSource);
 		Path directory = Files.createTempDirectory("revetsec-child-jvm-");
 		try {
@@ -215,7 +217,7 @@ public final class ChildJvm {
 	 * @throws IllegalStateException if {@code requested} is {@link ClassPathSource#JAVA_CLASS_PATH} and
 	 * {@code java.class.path} does not reach every required location
 	 */
-	static ResolvedClassPath resolveClassPath(Class<?> mainClass, List<Class<?>> codeSourceClasses,
+	static @NonNull ResolvedClassPath resolveClassPath(@NonNull Class<?> mainClass, @NonNull List<@NonNull Class<?>> codeSourceClasses,
 			@Nullable ClassPathSource requested) {
 		return resolveClassPath(mainClass, codeSourceClasses, requested, System.getProperty("java.class.path"));
 	}
@@ -227,7 +229,7 @@ public final class ChildJvm {
 	 * @throws IllegalStateException if {@code requested} is {@link ClassPathSource#JAVA_CLASS_PATH} and
 	 * {@code javaClassPath} does not reach every required location
 	 */
-	static ResolvedClassPath resolveClassPath(Class<?> mainClass, List<Class<?>> codeSourceClasses,
+	static @NonNull ResolvedClassPath resolveClassPath(@NonNull Class<?> mainClass, @NonNull List<@NonNull Class<?>> codeSourceClasses,
 			@Nullable ClassPathSource requested, @Nullable String javaClassPath) {
 		Set<Path> required = requiredLocations(mainClass, codeSourceClasses);
 
@@ -255,7 +257,7 @@ public final class ChildJvm {
 	 * The locations a child that runs {@code mainClass} needs: the code sources of {@code mainClass} and of
 	 * {@code codeSourceClasses}, the test classes (this class's code source) and Revetsec's main classes.
 	 */
-	static Set<Path> requiredLocations(Class<?> mainClass, List<Class<?>> codeSourceClasses) {
+	static @NonNull Set<@NonNull Path> requiredLocations(@NonNull Class<?> mainClass, @NonNull List<@NonNull Class<?>> codeSourceClasses) {
 		Set<Path> required = new LinkedHashSet<>();
 		required.add(codeSource(mainClass));
 		for (Class<?> type : codeSourceClasses)
@@ -271,7 +273,7 @@ public final class ChildJvm {
 	 * Every location a JVM started with {@code -cp classPath} can load from: each entry, plus, for each JAR, the
 	 * entries of its {@code Class-Path} manifest attribute, followed transitively.
 	 */
-	static Set<Path> reachableLocations(String classPath) {
+	static @NonNull Set<@NonNull Path> reachableLocations(@NonNull String classPath) {
 		Set<Path> reachable = new LinkedHashSet<>();
 		Deque<Path> pending = new ArrayDeque<>();
 		for (String entry : PATH_SEPARATOR.split(classPath, -1)) {
@@ -289,7 +291,7 @@ public final class ChildJvm {
 		return reachable;
 	}
 
-	private static List<Path> manifestClassPath(Path jar) {
+	private static @NonNull List<@NonNull Path> manifestClassPath(@NonNull Path jar) {
 		List<Path> entries = new ArrayList<>();
 		try (JarFile jarFile = new JarFile(jar.toFile())) {
 			@Nullable Manifest manifest = jarFile.getManifest();
@@ -315,7 +317,7 @@ public final class ChildJvm {
 	 * A {@code java.class.path} entry as an absolute path, or {@code null} if it is not a usable path (the JVM skips
 	 * such an entry, and so does this check).
 	 */
-	private static @Nullable Path classPathEntry(String entry) {
+	private static @Nullable Path classPathEntry(@NonNull String entry) {
 		try {
 			return Path.of(entry).toAbsolutePath().normalize();
 		} catch (InvalidPathException e) {
@@ -327,7 +329,7 @@ public final class ChildJvm {
 	 * A manifest {@code Class-Path} entry (a URL, relative to the JAR's own) as an absolute path, or {@code null} if it
 	 * does not parse or is not a local file (the JVM ignores such an entry, and so does this check).
 	 */
-	private static @Nullable Path manifestClassPathEntry(URI jar, String entry) {
+	private static @Nullable Path manifestClassPathEntry(@NonNull URI jar, @NonNull String entry) {
 		try {
 			URI resolved = jar.resolve(new URI(entry));
 			return "file".equals(resolved.getScheme()) ? Path.of(resolved).toAbsolutePath().normalize() : null;
@@ -339,7 +341,7 @@ public final class ChildJvm {
 	/**
 	 * The directory or JAR that {@code type} was loaded from.
 	 */
-	static Path codeSource(Class<?> type) {
+	static @NonNull Path codeSource(@NonNull Class<?> type) {
 		@Nullable CodeSource codeSource = type.getProtectionDomain().getCodeSource();
 		@Nullable URL location = codeSource == null ? null : codeSource.getLocation();
 		if (location == null)
@@ -356,7 +358,7 @@ public final class ChildJvm {
 	 * The directory or JAR that holds the class-path resource {@code resourceName}, or {@code null} if it is not on
 	 * the class path.
 	 */
-	static @Nullable Path codeSourceOfResource(String resourceName) {
+	static @Nullable Path codeSourceOfResource(@NonNull String resourceName) {
 		@Nullable ClassLoader classLoader = ChildJvm.class.getClassLoader();
 		@Nullable URL url = classLoader == null ? null : classLoader.getResource(resourceName);
 		if (url == null)
@@ -381,7 +383,7 @@ public final class ChildJvm {
 		return null;
 	}
 
-	private static Path javaExecutable() {
+	private static @NonNull Path javaExecutable() {
 		@Nullable String javaHome = System.getProperty("java.home");
 		if (javaHome == null)
 			throw new IllegalStateException("java.home is not set");
@@ -390,7 +392,7 @@ public final class ChildJvm {
 		return Path.of(javaHome, "bin", windows ? "java.exe" : "java");
 	}
 
-	private static Set<String> loadedClasses(Path classLoadLog) throws IOException {
+	private static @NonNull Set<@NonNull String> loadedClasses(@NonNull Path classLoadLog) throws IOException {
 		// With the "none" decorator each line is "<binary name> source: <where>".
 		Set<String> loadedClasses = new LinkedHashSet<>();
 		for (String line : Files.readAllLines(classLoadLog, StandardCharsets.UTF_8)) {
@@ -402,7 +404,7 @@ public final class ChildJvm {
 		return Set.copyOf(loadedClasses);
 	}
 
-	private static String readCapped(Path file) throws IOException {
+	private static @NonNull String readCapped(@NonNull Path file) throws IOException {
 		try (InputStream inputStream = Files.newInputStream(file)) {
 			return new String(inputStream.readNBytes(MAXIMUM_CAPTURED_BYTES), StandardCharsets.UTF_8);
 		}
@@ -412,7 +414,7 @@ public final class ChildJvm {
 	 * Deletes the capture directory, best effort: a failure here must not hide the run's own outcome, and a leftover
 	 * directory in the temporary area is harmless.
 	 */
-	private static void deleteRecursively(Path directory) {
+	private static void deleteRecursively(@NonNull Path directory) {
 		try (var paths = Files.walk(directory)) {
 			for (Path path : paths.sorted((first, second) -> second.getNameCount() - first.getNameCount()).toList())
 				Files.deleteIfExists(path);
@@ -429,16 +431,16 @@ public final class ChildJvm {
 		private final ClassPathSource source;
 		private final String value;
 
-		ResolvedClassPath(ClassPathSource source, String value) {
+		ResolvedClassPath(@NonNull ClassPathSource source, @NonNull String value) {
 			this.source = source;
 			this.value = value;
 		}
 
-		ClassPathSource getSource() {
+		@NonNull ClassPathSource getSource() {
 			return this.source;
 		}
 
-		String getValue() {
+		@NonNull String getValue() {
 			return this.value;
 		}
 	}
@@ -456,7 +458,7 @@ public final class ChildJvm {
 		private @Nullable ClassPathSource classPathSource;
 		private List<Class<?>> codeSourceClasses = List.of();
 
-		private Builder(Class<?> mainClass) {
+		private Builder(@NonNull Class<?> mainClass) {
 			this.mainClass = requireNonNull(mainClass);
 		}
 
@@ -466,7 +468,7 @@ public final class ChildJvm {
 		 * @param arguments the arguments, or {@code null} for none
 		 * @return this builder
 		 */
-		public Builder arguments(@Nullable List<String> arguments) {
+		public @NonNull Builder arguments(@Nullable List<@NonNull String> arguments) {
 			this.arguments = arguments == null ? List.of() : List.copyOf(arguments);
 			return this;
 		}
@@ -477,7 +479,7 @@ public final class ChildJvm {
 		 * @param jvmOptions the options, or {@code null} for none
 		 * @return this builder
 		 */
-		public Builder jvmOptions(@Nullable List<String> jvmOptions) {
+		public @NonNull Builder jvmOptions(@Nullable List<@NonNull String> jvmOptions) {
 			this.jvmOptions = jvmOptions == null ? List.of() : List.copyOf(jvmOptions);
 			return this;
 		}
@@ -488,7 +490,7 @@ public final class ChildJvm {
 		 * @param classLoadLogging {@code true} to log class loading, or {@code null} for the default, {@code false}
 		 * @return this builder
 		 */
-		public Builder classLoadLogging(@Nullable Boolean classLoadLogging) {
+		public @NonNull Builder classLoadLogging(@Nullable Boolean classLoadLogging) {
 			this.classLoadLogging = classLoadLogging == null ? Boolean.FALSE : classLoadLogging;
 			return this;
 		}
@@ -500,7 +502,7 @@ public final class ChildJvm {
 		 * @return this builder
 		 * @throws IllegalArgumentException if {@code timeout} is zero or negative
 		 */
-		public Builder timeout(@Nullable Duration timeout) {
+		public @NonNull Builder timeout(@Nullable Duration timeout) {
 			if (timeout != null && (timeout.isZero() || timeout.isNegative()))
 				throw new IllegalArgumentException("The timeout must be positive: " + timeout);
 			this.timeout = timeout == null ? DEFAULT_TIMEOUT : timeout;
@@ -513,7 +515,7 @@ public final class ChildJvm {
 		 * @param classPathSource the source, or {@code null} to choose automatically (see {@link ChildJvm})
 		 * @return this builder
 		 */
-		public Builder classPathSource(@Nullable ClassPathSource classPathSource) {
+		public @NonNull Builder classPathSource(@Nullable ClassPathSource classPathSource) {
 			this.classPathSource = classPathSource;
 			return this;
 		}
@@ -526,7 +528,7 @@ public final class ChildJvm {
 		 * @param codeSourceClasses the classes, or {@code null} for none
 		 * @return this builder
 		 */
-		public Builder codeSourceClasses(@Nullable List<Class<?>> codeSourceClasses) {
+		public @NonNull Builder codeSourceClasses(@Nullable List<@NonNull Class<?>> codeSourceClasses) {
 			this.codeSourceClasses = codeSourceClasses == null ? List.of() : List.copyOf(codeSourceClasses);
 			return this;
 		}
@@ -536,7 +538,7 @@ public final class ChildJvm {
 		 *
 		 * @return a new child JVM configuration
 		 */
-		public ChildJvm build() {
+		public @NonNull ChildJvm build() {
 			return new ChildJvm(this);
 		}
 	}
@@ -554,8 +556,8 @@ public final class ChildJvm {
 		private final Set<String> loadedClasses;
 		private final Duration elapsed;
 
-		private Result(List<String> command, ClassPathSource classPathSource, @Nullable Integer exitCode,
-				String standardOutput, String standardError, Set<String> loadedClasses, Duration elapsed) {
+		private Result(@NonNull List<@NonNull String> command, @NonNull ClassPathSource classPathSource, @Nullable Integer exitCode,
+				@NonNull String standardOutput, @NonNull String standardError, @NonNull Set<@NonNull String> loadedClasses, @NonNull Duration elapsed) {
 			this.command = command;
 			this.classPathSource = classPathSource;
 			this.exitCode = exitCode;
@@ -570,7 +572,7 @@ public final class ChildJvm {
 		 *
 		 * @return the command and its arguments
 		 */
-		public List<String> getCommand() {
+		public @NonNull List<@NonNull String> getCommand() {
 			return this.command;
 		}
 
@@ -579,7 +581,7 @@ public final class ChildJvm {
 		 *
 		 * @return the class path source
 		 */
-		public ClassPathSource getClassPathSource() {
+		public @NonNull ClassPathSource getClassPathSource() {
 			return this.classPathSource;
 		}
 
@@ -588,7 +590,7 @@ public final class ChildJvm {
 		 *
 		 * @return {@code true} if the child timed out
 		 */
-		public Boolean isTimedOut() {
+		public @NonNull Boolean isTimedOut() {
 			return this.exitCode == null;
 		}
 
@@ -606,7 +608,7 @@ public final class ChildJvm {
 		 *
 		 * @return the output, at most {@value ChildJvm#MAXIMUM_CAPTURED_BYTES} bytes of it
 		 */
-		public String getStandardOutput() {
+		public @NonNull String getStandardOutput() {
 			return this.standardOutput;
 		}
 
@@ -615,7 +617,7 @@ public final class ChildJvm {
 		 *
 		 * @return the output, at most {@value ChildJvm#MAXIMUM_CAPTURED_BYTES} bytes of it
 		 */
-		public String getStandardError() {
+		public @NonNull String getStandardError() {
 			return this.standardError;
 		}
 
@@ -626,7 +628,7 @@ public final class ChildJvm {
 		 *
 		 * @return the remaining standard error
 		 */
-		public String getStandardErrorWithoutJvmNotices() {
+		public @NonNull String getStandardErrorWithoutJvmNotices() {
 			return this.standardError.lines()
 					.filter(line -> !line.startsWith(JVM_NOTICE_PREFIX_PICKED_UP)
 							&& !line.startsWith(JVM_NOTICE_PREFIX_NOTE))
@@ -639,7 +641,7 @@ public final class ChildJvm {
 		 *
 		 * @return the class names; empty if logging was off
 		 */
-		public Set<String> getLoadedClasses() {
+		public @NonNull Set<@NonNull String> getLoadedClasses() {
 			return this.loadedClasses;
 		}
 
@@ -648,18 +650,18 @@ public final class ChildJvm {
 		 *
 		 * @return the elapsed time
 		 */
-		public Duration getElapsed() {
+		public @NonNull Duration getElapsed() {
 			return this.elapsed;
 		}
 
 		@Override
-		public String toString() {
+		public @NonNull String toString() {
 			return "ChildJvm.Result[exitCode=" + this.exitCode + ", classPathSource=" + this.classPathSource
 					+ ", elapsed=" + this.elapsed + ", stdout=" + abbreviated(this.standardOutput) + ", stderr="
 					+ abbreviated(this.standardError) + "]";
 		}
 
-		private static String abbreviated(String text) {
+		private static @NonNull String abbreviated(@NonNull String text) {
 			return text.length() <= 4_096 ? text : text.substring(0, 4_096) + "... (" + text.length() + " characters)";
 		}
 	}

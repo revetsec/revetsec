@@ -16,6 +16,8 @@
 
 package com.revetsec.oauth;
 
+import org.jspecify.annotations.NonNull;
+
 import org.junit.jupiter.api.*;
 import static org.junit.jupiter.api.Assertions.*;
 import com.revetsec.testing.*;
@@ -64,7 +66,7 @@ final class TokenIntrospectionClientTests {
             assertThrows(IllegalArgumentException.class,()->TokenIntrospectionClient.withOAuthClient(oauth(server).clientAuthentication(ClientAuthentication.noneInstance()).build()).expectedAudiences(Set.of(AUD)).build());
         }
     }
-    @TestFactory Stream<DynamicTest> providerFailuresNeverBecomeCredentialResultsAndDoNotRetry() {
+    @TestFactory @NonNull Stream<@NonNull DynamicTest> providerFailuresNeverBecomeCredentialResultsAndDoNotRetry() {
         return Stream.of(401,429,500,503).map(status->DynamicTest.dynamicTest("status"+status,()-> {
             try(TestHttpsServer server=TestHttpsServer.start()) {
                 response(server,"/inspect",status,"application/json","{\"error\":\"invalid_client\",\"error_description\":\"TEST-ONLY-prose\"}");TokenIntrospectionClient client=inspect(server).build();
@@ -73,7 +75,7 @@ final class TokenIntrospectionClientTests {
             }
         }));
     }
-    @TestFactory Stream<DynamicTest> jsonTransportAndMalformedProviderResponsesRemainExceptions() {
+    @TestFactory @NonNull Stream<@NonNull DynamicTest> jsonTransportAndMalformedProviderResponsesRemainExceptions() {
         return Stream.of(Map.entry("application/token-introspection+jwt","signed.jwt.bytes"),Map.entry("application/json","{\"active\":\"true\"}"),Map.entry("application/json","{\"active\":true,\"active\":false}"),Map.entry("application/json","{\"active\":true,\"aud\":42}"),Map.entry("application/json","{\"active\":true,\"aud\":\"resource\",\"exp\":1.5}")).map(e->DynamicTest.dynamicTest(e.toString(),()-> {
             try(TestHttpsServer server=TestHttpsServer.start()) {
                 response(server,"/inspect",200,e.getKey(),e.getValue());TokenIntrospectionClient client=inspect(server).build();

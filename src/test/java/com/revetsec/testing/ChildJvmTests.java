@@ -16,6 +16,8 @@
 
 package com.revetsec.testing;
 
+import org.jspecify.annotations.NonNull;
+
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -49,7 +51,7 @@ final class ChildJvmTests {
 	private static final String EXIT_PROPERTY = "revetsec.child.exit";
 
 	@Test
-	void runsATrivialMainWithTheTestClassPathAndCapturesItsOutputAndExitCode(TestReporter testReporter)
+	void runsATrivialMainWithTheTestClassPathAndCapturesItsOutputAndExitCode(@NonNull TestReporter testReporter)
 			throws Exception {
 		ChildJvm.Result result = ChildJvm.withMainClass(Echo.class)
 				.jvmOptions(List.of("-D" + MARKER_PROPERTY + "=present", "-D" + EXIT_PROPERTY + "=3"))
@@ -125,7 +127,7 @@ final class ChildJvmTests {
 	}
 
 	@Test
-	void reachesTheEntriesOfAManifestOnlyJarTransitively(@TempDir Path directory) throws IOException {
+	void reachesTheEntriesOfAManifestOnlyJarTransitively(@TempDir @NonNull Path directory) throws IOException {
 		// Surefire's default fork puts one JAR on java.class.path whose manifest lists the real class path.
 		Path classes = Files.createDirectories(directory.resolve("classes"));
 		Path transitive = Files.createDirectories(directory.resolve("transitive"));
@@ -189,7 +191,7 @@ final class ChildJvmTests {
 	}
 
 	@Test
-	void keepsAManifestOnlyJavaClassPathThatReachesEveryRequiredLocation(@TempDir Path directory) throws IOException {
+	void keepsAManifestOnlyJavaClassPathThatReachesEveryRequiredLocation(@TempDir @NonNull Path directory) throws IOException {
 		// Surefire's manifest-only JAR: java.class.path is one JAR whose Class-Path lists the real entries.
 		Set<Path> required = ChildJvm.requiredLocations(Echo.class, List.of());
 		StringBuilder manifestClassPath = new StringBuilder();
@@ -233,7 +235,7 @@ final class ChildJvmTests {
 		Assertions.assertThrows(IllegalArgumentException.class, () -> builder.timeout(Duration.ofSeconds(-1)));
 	}
 
-	private static void writeJar(Path jar, String classPath) throws IOException {
+	private static void writeJar(@NonNull Path jar, @NonNull String classPath) throws IOException {
 		Manifest manifest = new Manifest();
 		manifest.getMainAttributes().put(Attributes.Name.MANIFEST_VERSION, "1.0");
 		if (!classPath.isEmpty())
@@ -243,7 +245,7 @@ final class ChildJvmTests {
 		}
 	}
 
-	private static String normalizeLineEnds(String text) {
+	private static @NonNull String normalizeLineEnds(@NonNull String text) {
 		return text.replace("\r\n", "\n");
 	}
 
@@ -256,7 +258,7 @@ final class ChildJvmTests {
 			// Only main runs.
 		}
 
-		public static void main(String[] arguments) {
+		public static void main(@NonNull String @NonNull [] arguments) {
 			for (String argument : arguments)
 				System.out.println("argument:" + argument);
 			System.err.println("stderr:" + System.getProperty(MARKER_PROPERTY, "absent"));
@@ -274,7 +276,7 @@ final class ChildJvmTests {
 			// Only main runs.
 		}
 
-		public static void main(String[] arguments) {
+		public static void main(@NonNull String @NonNull [] arguments) {
 			Assertions.assertEquals("expected", arguments[0]);
 		}
 	}
@@ -287,7 +289,7 @@ final class ChildJvmTests {
 			// Only main runs.
 		}
 
-		public static void main(String[] arguments) throws InterruptedException {
+		public static void main(@NonNull String @NonNull [] arguments) throws InterruptedException {
 			new CountDownLatch(1).await();
 		}
 	}

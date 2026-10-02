@@ -16,6 +16,8 @@
 
 package com.revetsec;
 
+import org.jspecify.annotations.NonNull;
+
 import com.sun.source.tree.AnnotationTree;
 import com.sun.source.tree.ClassTree;
 import com.sun.source.tree.CompilationUnitTree;
@@ -151,7 +153,7 @@ final class ThreatModelMapTests {
 	// M2-10 item 7 and plan 14.6: every row cites at least one test that exists, every citation in it resolves to a
 	// test class or test method, and the allowlisted row names build checks that exist.
 	@TestFactory
-	Stream<DynamicTest> everyInvariantIsCheckedByATestThatExists() throws IOException {
+	@NonNull Stream<@NonNull DynamicTest> everyInvariantIsCheckedByATestThatExists() throws IOException {
 		Path root = ContractSupport.repositoryRoot();
 		List<String> problems = new ArrayList<>();
 		List<InvariantRow> rows = invariantRows(read(THREAT_MODEL), problems);
@@ -225,7 +227,7 @@ final class ThreatModelMapTests {
 	// part of a Class.method included; a missing class, a missing or non-test method, and a bare method with no class
 	// before it are each a problem; and tokens that only contain a citation, such as String.contentEquals, are ignored.
 	@TestFactory
-	Stream<DynamicTest> theCitationGrammarResolvesExactlyWhatExists() throws IOException {
+	@NonNull Stream<@NonNull DynamicTest> theCitationGrammarResolvesExactlyWhatExists() throws IOException {
 		Path root = ContractSupport.repositoryRoot();
 		List<GrammarCase> cases = List.of(
 				new GrammarCase("a class and a bare method of it", "`FrozenLimitsTests` and its `everyApprovedRowIsPinned`",
@@ -319,7 +321,7 @@ final class ThreatModelMapTests {
 	 * {@code INV-}. A row without its closing {@code |}, or with other than three cells, is reported to
 	 * {@code problems} and left out.
 	 */
-	static List<InvariantRow> invariantRows(String text, List<String> problems) {
+	static @NonNull List<@NonNull InvariantRow> invariantRows(@NonNull String text, @NonNull List<@NonNull String> problems) {
 		List<InvariantRow> rows = new ArrayList<>();
 		int lineNumber = 0;
 		for (String line : text.lines().toList()) {
@@ -347,7 +349,7 @@ final class ThreatModelMapTests {
 	 * heading to the next level-2 heading, in order. A top-level list item there that starts with an ID in another
 	 * form is reported to {@code problems} and left out.
 	 */
-	static List<String> securityInvariantIds(String text, List<String> problems) {
+	static @NonNull List<@NonNull String> securityInvariantIds(@NonNull String text, @NonNull List<@NonNull String> problems) {
 		List<String> ids = new ArrayList<>();
 		boolean inSection = false;
 		int lineNumber = 0;
@@ -371,7 +373,7 @@ final class ThreatModelMapTests {
 	/**
 	 * Every invariant ID a text mentions, in order, each a whole word.
 	 */
-	static List<String> mentionedIds(String text) {
+	static @NonNull List<@NonNull String> mentionedIds(@NonNull String text) {
 		List<String> ids = new ArrayList<>();
 		Matcher matcher = MENTIONED_ID.matcher(text);
 		while (matcher.find())
@@ -379,7 +381,7 @@ final class ThreatModelMapTests {
 		return List.copyOf(ids);
 	}
 
-	private static List<String> artifactProblems(Path root, InvariantRow row, List<String> artifacts) {
+	private static @NonNull List<@NonNull String> artifactProblems(@NonNull Path root, @NonNull InvariantRow row, @NonNull List<@NonNull String> artifacts) {
 		List<String> problems = new ArrayList<>();
 		Set<String> tokens = new LinkedHashSet<>(backtickedTokens(row.getCheckedBy()));
 		for (String artifact : artifacts) {
@@ -404,7 +406,7 @@ final class ThreatModelMapTests {
 		return problems;
 	}
 
-	private static List<String> backtickedTokens(String cell) {
+	private static @NonNull List<@NonNull String> backtickedTokens(@NonNull String cell) {
 		List<String> tokens = new ArrayList<>();
 		Matcher matcher = BACKTICKED.matcher(cell);
 		while (matcher.find())
@@ -412,7 +414,7 @@ final class ThreatModelMapTests {
 		return tokens;
 	}
 
-	private static String read(String relativePath) throws IOException {
+	private static @NonNull String read(@NonNull String relativePath) throws IOException {
 		return Files.readString(ContractSupport.repositoryRoot().resolve(relativePath), StandardCharsets.UTF_8);
 	}
 
@@ -424,21 +426,21 @@ final class ThreatModelMapTests {
 		private final String invariant;
 		private final String checkedBy;
 
-		InvariantRow(String id, String invariant, String checkedBy) {
+		InvariantRow(@NonNull String id, @NonNull String invariant, @NonNull String checkedBy) {
 			this.id = id;
 			this.invariant = invariant;
 			this.checkedBy = checkedBy;
 		}
 
-		String getId() {
+		@NonNull String getId() {
 			return this.id;
 		}
 
-		String getInvariant() {
+		@NonNull String getInvariant() {
 			return this.invariant;
 		}
 
-		String getCheckedBy() {
+		@NonNull String getCheckedBy() {
 			return this.checkedBy;
 		}
 	}
@@ -451,16 +453,16 @@ final class ThreatModelMapTests {
 		private final List<String> resolved;
 		private final List<String> problems;
 
-		CellCheck(List<String> resolved, List<String> problems) {
+		CellCheck(@NonNull List<@NonNull String> resolved, @NonNull List<@NonNull String> problems) {
 			this.resolved = List.copyOf(resolved);
 			this.problems = List.copyOf(problems);
 		}
 
-		List<String> getResolved() {
+		@NonNull List<@NonNull String> getResolved() {
 			return this.resolved;
 		}
 
-		List<String> getProblems() {
+		@NonNull List<@NonNull String> getProblems() {
 			return this.problems;
 		}
 	}
@@ -472,7 +474,7 @@ final class ThreatModelMapTests {
 		private final Path root;
 		private final Map<String, Optional<Set<String>>> testMethodsByClass;
 
-		private TestSources(Path root, Map<String, Optional<Set<String>>> testMethodsByClass) {
+		private TestSources(@NonNull Path root, @NonNull Map<@NonNull String, @NonNull Optional<@NonNull Set<@NonNull String>>> testMethodsByClass) {
 			this.root = root;
 			this.testMethodsByClass = Map.copyOf(testMethodsByClass);
 		}
@@ -480,7 +482,7 @@ final class ThreatModelMapTests {
 		/**
 		 * Parses the source of every class the cells cite; a class whose source is missing maps to empty.
 		 */
-		static TestSources fromCells(Path root, List<String> cells) throws IOException {
+		static @NonNull TestSources fromCells(@NonNull Path root, @NonNull List<@NonNull String> cells) throws IOException {
 			Map<String, Path> sources = new LinkedHashMap<>();
 			Map<String, Optional<Set<String>>> testMethodsByClass = new LinkedHashMap<>();
 			for (String cell : cells) {
@@ -504,7 +506,7 @@ final class ThreatModelMapTests {
 		/**
 		 * Applies the citation grammar to one cell.
 		 */
-		CellCheck check(String cell) {
+		@NonNull CellCheck check(@NonNull String cell) {
 			List<String> resolved = new ArrayList<>();
 			List<String> problems = new ArrayList<>();
 			@Nullable String nearestClass = null;
@@ -540,12 +542,12 @@ final class ThreatModelMapTests {
 			return new CellCheck(resolved, problems);
 		}
 
-		private Optional<Set<String>> testMethods(String className) {
+		private @NonNull Optional<@NonNull Set<@NonNull String>> testMethods(@NonNull String className) {
 			return Objects.requireNonNull(this.testMethodsByClass.get(className),
 					() -> className + " was not read from " + this.root);
 		}
 
-		private static @Nullable Path findSource(Path root, String className) {
+		private static @Nullable Path findSource(@NonNull Path root, @NonNull String className) {
 			for (String sourceRoot : TEST_SOURCE_ROOTS) {
 				Path source = root.resolve(sourceRoot).resolve(className.replace('.', '/') + ".java");
 				if (Files.isRegularFile(source))
@@ -558,7 +560,7 @@ final class ThreatModelMapTests {
 		 * The test methods of each class, by parsing its source file: the methods of the top-level class named like
 		 * the file that carry a test annotation. A class with no test method maps to empty.
 		 */
-		private static Map<String, Optional<Set<String>>> parseTestMethods(Map<String, Path> sources)
+		private static @NonNull Map<@NonNull String, @NonNull Optional<@NonNull Set<@NonNull String>>> parseTestMethods(@NonNull Map<@NonNull String, @NonNull Path> sources)
 				throws IOException {
 			Map<String, Optional<Set<String>>> testMethods = new LinkedHashMap<>();
 			if (sources.isEmpty())
@@ -601,7 +603,7 @@ final class ThreatModelMapTests {
 			return testMethods;
 		}
 
-		private static boolean isTestMethod(MethodTree method) {
+		private static boolean isTestMethod(@NonNull MethodTree method) {
 			for (AnnotationTree annotation : method.getModifiers().getAnnotations()) {
 				Tree type = annotation.getAnnotationType();
 				String simpleName = type instanceof MemberSelectTree memberSelect ? memberSelect.getIdentifier().toString()
@@ -622,22 +624,22 @@ final class ThreatModelMapTests {
 		private final List<String> resolved;
 		private final int problemCount;
 
-		private GrammarCase(String name, String cell, List<String> resolved, int problemCount) {
+		private GrammarCase(@NonNull String name, @NonNull String cell, @NonNull List<@NonNull String> resolved, int problemCount) {
 			this.name = name;
 			this.cell = cell;
 			this.resolved = List.copyOf(resolved);
 			this.problemCount = problemCount;
 		}
 
-		String getName() {
+		@NonNull String getName() {
 			return this.name;
 		}
 
-		String getCell() {
+		@NonNull String getCell() {
 			return this.cell;
 		}
 
-		List<String> getResolved() {
+		@NonNull List<@NonNull String> getResolved() {
 			return this.resolved;
 		}
 

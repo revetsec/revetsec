@@ -572,7 +572,9 @@ keycloak_variant() {
 			local jdk_args=("$scheme://localhost:$host_port/realms/revetsec-test" "$TEST_CLIENT_ID" "$TEST_CLIENT_SECRET"
 				"$TEST_REDIRECT_URI" "$TEST_USERNAME" "$TEST_PASSWORD")
 			[[ "$scheme" == "https" ]] && jdk_args=("${jdk_args[@]}" "$ca")
-			if "$java" "$script_dir/KeycloakJdkLogin.java" "${jdk_args[@]}" >"$work/jdk.log" 2>&1; then
+			# Preserve canonical explicit signatures; the JDK-only executable copy has no annotation dependency.
+			python3 "$script_dir/../../verification/render-java-source.py" "$script_dir/KeycloakJdkLogin.java" "$work/KeycloakJdkLogin.java"
+			if "$java" "$work/KeycloakJdkLogin.java" "${jdk_args[@]}" >"$work/jdk.log" 2>&1; then
 				if [[ "$scheme" == "https" ]]; then
 					record keycloak "jdk login kc-$variant" "$run" "pass" "$(tail -n 1 "$work/jdk.log")"
 				else

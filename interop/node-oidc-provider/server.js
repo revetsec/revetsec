@@ -41,8 +41,19 @@ import Provider, { errors } from 'oidc-provider';
 
 // Opt-in M5 resource profile; absent preserves every existing OIDF client setting.
 const resourceMode = process.env.TEST_RESOURCE_MODE === 'm5';
+const playgroundMode = process.env.TEST_RESOURCE_MODE === 'playground';
 const testResource = 'https://resource.example.test/mcp';
 const testIntrospectionResource = 'https://resource.example.test/introspection';
+const playgroundResource = process.env.TEST_PLAYGROUND_RESOURCE ?? 'https://localhost:8443/mcp';
+const playgroundTokenFormat = process.env.TEST_PLAYGROUND_TOKEN_FORMAT ?? 'jwt';
+if (playgroundMode) {
+	const resource = new URL(playgroundResource);
+	if (resource.protocol !== 'https:' || !['localhost', '127.0.0.1', '[::1]'].includes(resource.hostname)
+		|| resource.username || resource.password || resource.hash || resource.search || resource.pathname !== '/mcp'
+		|| !['jwt', 'opaque'].includes(playgroundTokenFormat)) {
+		throw new Error('Playground requires an exact loopback HTTPS /mcp resource and jwt or opaque tokens');
+	}
+}
 
 const port = Number.parseInt(process.env.PORT ?? '3000', 10);
 const tlsCertFile = process.env.TLS_CERT_FILE;
@@ -88,7 +99,7 @@ const configuration = {
 			client_id: 'revetsec-test-client',
 			client_secret: 'test-only-client-secret-not-a-real-secret',
 			redirect_uris: redirectUris,
-			grant_types: resourceMode
+			grant_types: resourceMode || playgroundMode
 				? ['authorization_code', 'refresh_token', 'client_credentials']
 				: ['authorization_code', 'refresh_token'],
 			response_types: ['code'],
@@ -152,6 +163,30 @@ if (resourceMode) {
 	// These public test-client values authorize only this ephemeral test fixture.
 	configuration.features.introspection.allowedPolicy = async (_ctx, client, token) =>
 		client.clientId === 'revetsec-test-client' && token.clientId === client.clientId;
+	configuration.features.revocation.allowedPolicy = async (_ctx, client, token) =>
+		client.clientId === 'revetsec-test-client' && token.clientId === client.clientId;
+}
+
+// Separate, ephemeral local example preset. DCR and auto-consent are test-only;
+// this is never an authorization-server implementation in Revetsec itself.
+if (playgroundMode) {
+	configuration.scopes = ['openid', 'offline_access', 'mcp:discover', 'mcp:whoami'];
+	configuration.clients[0].scope = configuration.scopes.join(' ');
+	configuration.features.clientCredentials = { enabled: true };
+	configuration.features.registration = { enabled: true };
+	configuration.features.resourceIndicators = {
+		enabled: true,
+		async getResourceServerInfo(_ctx, resource) {
+			if (resource !== playgroundResource) throw new errors.InvalidTarget();
+			return {
+				scope: 'mcp:discover mcp:whoami', audience: resource, accessTokenTTL: 300,
+				accessTokenFormat: playgroundTokenFormat,
+				jwt: playgroundTokenFormat === 'jwt' ? { sign: { alg: 'RS256' } } : undefined,
+			};
+		},
+	};
+	configuration.features.introspection.allowedPolicy = async (_ctx, client, token) =>
+		client.clientId === 'revetsec-test-client' && token.aud === playgroundResource;
 	configuration.features.revocation.allowedPolicy = async (_ctx, client, token) =>
 		client.clientId === 'revetsec-test-client' && token.clientId === client.clientId;
 }
@@ -223,7 +258,13 @@ const server = tlsEnabled
 	? createHttpsServer({ cert: readFileSync(tlsCertFile), key: readFileSync(tlsKeyFile) }, handle)
 	: createHttpServer(handle);
 
-server.listen(port, () => {
+// Host launchers select IPv4 loopback explicitly; Docker exposes only a mapped
+// loopback port, so its existing internal listener remains unchanged by default.
+const bindAddress = process.env.TEST_BIND_ADDRESS;
+if (bindAddress !== undefined && bindAddress !== '127.0.0.1') {
+	throw new Error('The explicit test provider bind address must be IPv4 loopback');
+}
+server.listen(port, bindAddress, () => {
 	console.log(`test-only oidc-provider listening on port ${port}; issuer ${issuer}`);
 });
 

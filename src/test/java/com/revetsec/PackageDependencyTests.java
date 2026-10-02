@@ -16,6 +16,8 @@
 
 package com.revetsec;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.ContractSupport.SourceAnalysis;
 import com.sun.source.tree.CompilationUnitTree;
 import com.sun.source.tree.IdentifierTree;
@@ -152,7 +154,7 @@ final class PackageDependencyTests {
 			assertAcyclic(packageName, new ArrayList<>());
 	}
 
-	private static void assertAcyclic(String packageName, List<String> path) {
+	private static void assertAcyclic(@NonNull String packageName, @NonNull List<@NonNull String> path) {
 		Assertions.assertFalse(path.contains(packageName), () -> "Dependency cycle: " + path + " -> " + packageName);
 		path.add(packageName);
 		for (String dependency : ALLOWED_DEPENDENCIES.getOrDefault(packageName, Set.of()))
@@ -163,13 +165,13 @@ final class PackageDependencyTests {
 	/**
 	 * Checks the Java sources under {@code sourceRoot} and returns one message per violation (empty if none).
 	 */
-	static List<String> findViolations(Path sourceRoot) throws IOException {
+	static @NonNull List<@NonNull String> findViolations(@NonNull Path sourceRoot) throws IOException {
 		if (ContractSupport.javaSources(sourceRoot).isEmpty())
 			return List.of();
 		return ContractSupport.analyze(sourceRoot, PackageDependencyTests::findViolations);
 	}
 
-	private static List<String> findViolations(SourceAnalysis analysis) {
+	private static @NonNull List<@NonNull String> findViolations(@NonNull SourceAnalysis analysis) {
 		Set<String> violations = new TreeSet<>();
 		Set<String> declaredPackages = new TreeSet<>();
 		Set<String> packagesWithPackageInfo = new HashSet<>();
@@ -212,7 +214,7 @@ final class PackageDependencyTests {
 		return List.copyOf(violations);
 	}
 
-	private static void checkDependency(String source, String target, String location, Set<String> violations) {
+	private static void checkDependency(@NonNull String source, @NonNull String target, @NonNull String location, @NonNull Set<@NonNull String> violations) {
 		@Nullable Set<String> restrictedTo = RESTRICTED_INTERNAL_PACKAGES.get(target);
 		if (restrictedTo != null && !restrictedTo.contains(source))
 			violations.add(source + " uses " + target + " (" + location + "): " + target + " may be used only by "
@@ -229,11 +231,11 @@ final class PackageDependencyTests {
 					+ ", not on " + describe(target, targetLayer));
 	}
 
-	private static String describe(String packageName, String layer) {
+	private static @NonNull String describe(@NonNull String packageName, @NonNull String layer) {
 		return packageName.equals(layer) ? packageName : packageName + " (part of " + layer + ")";
 	}
 
-	private static @Nullable String layerOf(String packageName) {
+	private static @Nullable String layerOf(@NonNull String packageName) {
 		if (ALLOWED_DEPENDENCIES.containsKey(packageName))
 			return packageName;
 		return INTERNAL_PACKAGE_LAYERS.get(packageName);
@@ -242,7 +244,7 @@ final class PackageDependencyTests {
 	/**
 	 * Source package to target package to the first location (file:line) of that dependency.
 	 */
-	private static Map<String, Map<String, String>> dependencies(SourceAnalysis analysis, Set<String> knownPackages) {
+	private static @NonNull Map<@NonNull String, @NonNull Map<@NonNull String, @NonNull String>> dependencies(@NonNull SourceAnalysis analysis, @NonNull Set<@NonNull String> knownPackages) {
 		Map<String, Map<String, String>> dependencies = new TreeMap<>();
 
 		for (CompilationUnitTree compilationUnit : analysis.getCompilationUnits()) {
@@ -251,7 +253,7 @@ final class PackageDependencyTests {
 
 			new TreePathScanner<Void, Void>() {
 				@Override
-				public @Nullable Void visitImport(ImportTree node, Void unused) {
+				public @Nullable Void visitImport(@NonNull ImportTree node, @Nullable Void unused) {
 					String name = node.getQualifiedIdentifier().toString();
 					if (name.endsWith(".*"))
 						name = name.substring(0, name.length() - 2);
@@ -260,25 +262,25 @@ final class PackageDependencyTests {
 				}
 
 				@Override
-				public @Nullable Void visitIdentifier(IdentifierTree node, Void unused) {
+				public @Nullable Void visitIdentifier(@NonNull IdentifierTree node, @Nullable Void unused) {
 					recordReference(node);
 					return super.visitIdentifier(node, null);
 				}
 
 				@Override
-				public @Nullable Void visitMemberSelect(MemberSelectTree node, Void unused) {
+				public @Nullable Void visitMemberSelect(@NonNull MemberSelectTree node, @Nullable Void unused) {
 					recordReference(node);
 					return super.visitMemberSelect(node, null);
 				}
 
-				private void recordReference(Tree node) {
+				private void recordReference(@NonNull Tree node) {
 					@Nullable Element element = analysis.getTrees().getElement(getCurrentPath());
 					if (element == null || element.getKind() == ElementKind.PACKAGE)
 						return;
 					record(analysis.getElements().getPackageOf(element).getQualifiedName().toString(), node);
 				}
 
-				private void record(@Nullable String target, Tree node) {
+				private void record(@Nullable String target, @NonNull Tree node) {
 					if (target == null || target.equals(source) || !isRevetsecPackage(target))
 						return;
 					targets.putIfAbsent(target, analysis.location(compilationUnit, node));
@@ -289,11 +291,11 @@ final class PackageDependencyTests {
 		return dependencies;
 	}
 
-	private static boolean isRevetsecPackage(String packageName) {
+	private static boolean isRevetsecPackage(@NonNull String packageName) {
 		return packageName.equals(ROOT) || packageName.startsWith(ROOT + ".");
 	}
 
-	private static @Nullable String owningPackage(String qualifiedName, Set<String> knownPackages) {
+	private static @Nullable String owningPackage(@NonNull String qualifiedName, @NonNull Set<@NonNull String> knownPackages) {
 		@Nullable String best = null;
 		for (String candidate : knownPackages)
 			if ((qualifiedName.equals(candidate) || qualifiedName.startsWith(candidate + "."))
@@ -305,8 +307,8 @@ final class PackageDependencyTests {
 	/**
 	 * No public or protected signature of an exported type may mention an internal type.
 	 */
-	private static void checkSignatures(TypeElement type, Set<TypeElement> exported, SourceAnalysis analysis,
-			Set<String> violations) {
+	private static void checkSignatures(@NonNull TypeElement type, @NonNull Set<@NonNull TypeElement> exported, @NonNull SourceAnalysis analysis,
+			@NonNull Set<@NonNull String> violations) {
 		String typeName = analysis.getElements().getBinaryName(type).toString();
 		Map<String, TypeMirror> signatureTypes = new LinkedHashMap<>();
 		Map<String, Element> annotatedElements = new LinkedHashMap<>();
@@ -368,7 +370,7 @@ final class PackageDependencyTests {
 	/**
 	 * Every supertype of {@code type}, direct or indirect, with type arguments as {@code type} sees them.
 	 */
-	private static List<TypeMirror> allSupertypes(TypeElement type, SourceAnalysis analysis) {
+	private static @NonNull List<@NonNull TypeMirror> allSupertypes(@NonNull TypeElement type, @NonNull SourceAnalysis analysis) {
 		Map<String, TypeMirror> supertypes = new LinkedHashMap<>();
 		Deque<TypeMirror> pending = new ArrayDeque<>(analysis.getTypes().directSupertypes(type.asType()));
 		while (!pending.isEmpty()) {
@@ -383,7 +385,7 @@ final class PackageDependencyTests {
 	 * An annotation appears in the published API when javadoc shows it ({@code @Documented}) or reflection sees it
 	 * ({@code @Retention(RUNTIME)}).
 	 */
-	private static boolean isPublishedAnnotation(TypeElement annotationType) {
+	private static boolean isPublishedAnnotation(@NonNull TypeElement annotationType) {
 		for (AnnotationMirror metaAnnotation : annotationType.getAnnotationMirrors()) {
 			String name = ((TypeElement) metaAnnotation.getAnnotationType().asElement()).getQualifiedName().toString();
 			if (name.equals("java.lang.annotation.Documented"))
@@ -397,11 +399,11 @@ final class PackageDependencyTests {
 		return false;
 	}
 
-	private static boolean isInternal(String packageName) {
+	private static boolean isInternal(@NonNull String packageName) {
 		return packageName.equals(INTERNAL) || packageName.startsWith(INTERNAL + ".");
 	}
 
-	private static void collectInternalTypes(TypeMirror type, SourceAnalysis analysis, Set<String> internalTypes) {
+	private static void collectInternalTypes(@NonNull TypeMirror type, @NonNull SourceAnalysis analysis, @NonNull Set<@NonNull String> internalTypes) {
 		if (type instanceof DeclaredType declaredType) {
 			Element element = declaredType.asElement();
 			String packageName = analysis.getElements().getPackageOf(element).getQualifiedName().toString();

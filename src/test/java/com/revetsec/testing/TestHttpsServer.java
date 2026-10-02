@@ -16,6 +16,8 @@
 
 package com.revetsec.testing;
 
+import org.jspecify.annotations.NonNull;
+
 import com.sun.net.httpserver.Headers;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpsConfigurator;
@@ -112,7 +114,7 @@ public final class TestHttpsServer implements AutoCloseable {
 	private final ReentrantLock lock = new ReentrantLock();
 	private final Condition requestRecordedOrClosed = this.lock.newCondition();
 
-	private TestHttpsServer(HttpsServer server, ExecutorService executor) {
+	private TestHttpsServer(@NonNull HttpsServer server, @NonNull ExecutorService executor) {
 		this.server = server;
 		this.executor = executor;
 		this.baseUri = URI.create("https://127.0.0.1:" + server.getAddress().getPort());
@@ -124,7 +126,7 @@ public final class TestHttpsServer implements AutoCloseable {
 	 * @return the running server; close it when done
 	 * @throws IOException if the server cannot bind
 	 */
-	public static TestHttpsServer start() throws IOException {
+	public static @NonNull TestHttpsServer start() throws IOException {
 		InetSocketAddress address = new InetSocketAddress(InetAddress.getByAddress(new byte[]{127, 0, 0, 1}), 0);
 		HttpsServer server = HttpsServer.create(address, 0);
 		ExecutorService executor = Executors.newCachedThreadPool(new DaemonThreadFactory("revetsec-test-https"));
@@ -149,7 +151,7 @@ public final class TestHttpsServer implements AutoCloseable {
 	 * @param script how to answer
 	 * @return this server
 	 */
-	public TestHttpsServer script(String path, Script script) {
+	public @NonNull TestHttpsServer script(@NonNull String path, @NonNull Script script) {
 		this.scripts.put(requirePath(path), requireNonNull(script));
 		return this;
 	}
@@ -159,7 +161,7 @@ public final class TestHttpsServer implements AutoCloseable {
 	 *
 	 * @return the base URI, with no path
 	 */
-	public URI getBaseUri() {
+	public @NonNull URI getBaseUri() {
 		return this.baseUri;
 	}
 
@@ -169,7 +171,7 @@ public final class TestHttpsServer implements AutoCloseable {
 	 * @param path a raw path starting with {@code /}, optionally with a query
 	 * @return the absolute URI
 	 */
-	public URI uri(String path) {
+	public @NonNull URI uri(@NonNull String path) {
 		return URI.create(this.baseUri + requirePath(path));
 	}
 
@@ -178,7 +180,7 @@ public final class TestHttpsServer implements AutoCloseable {
 	 *
 	 * @return the port
 	 */
-	public Integer getPort() {
+	public @NonNull Integer getPort() {
 		return this.baseUri.getPort();
 	}
 
@@ -188,7 +190,7 @@ public final class TestHttpsServer implements AutoCloseable {
 	 * @param path the exact raw path
 	 * @return the count, zero if none
 	 */
-	public Integer getHitCount(String path) {
+	public @NonNull Integer getHitCount(@NonNull String path) {
 		@Nullable AtomicInteger hitCount = this.hitCounts.get(requireNonNull(path));
 		return hitCount == null ? 0 : hitCount.get();
 	}
@@ -198,7 +200,7 @@ public final class TestHttpsServer implements AutoCloseable {
 	 *
 	 * @return an immutable snapshot
 	 */
-	public List<RecordedRequest> getRequests() {
+	public @NonNull List<@NonNull RecordedRequest> getRequests() {
 		return List.copyOf(this.requests);
 	}
 
@@ -208,7 +210,7 @@ public final class TestHttpsServer implements AutoCloseable {
 	 * @param path the exact raw path
 	 * @return an immutable snapshot
 	 */
-	public List<RecordedRequest> getRequests(String path) {
+	public @NonNull List<@NonNull RecordedRequest> getRequests(@NonNull String path) {
 		requireNonNull(path);
 		return this.requests.stream().filter(request -> request.getPath().equals(path)).toList();
 	}
@@ -221,7 +223,7 @@ public final class TestHttpsServer implements AutoCloseable {
 	 * @return whether at least {@code count} requests were recorded
 	 * @throws InterruptedException if interrupted while waiting
 	 */
-	public Boolean awaitRequestCount(Integer count, Duration timeout) throws InterruptedException {
+	public @NonNull Boolean awaitRequestCount(@NonNull Integer count, @NonNull Duration timeout) throws InterruptedException {
 		requireNonNull(count);
 		long remaining = timeout.toNanos();
 		this.lock.lock();
@@ -254,7 +256,7 @@ public final class TestHttpsServer implements AutoCloseable {
 			request.finish(Outcome.SERVER_CLOSED);
 	}
 
-	private void handle(HttpExchange httpExchange) {
+	private void handle(@NonNull HttpExchange httpExchange) {
 		@Nullable RecordedRequest request = null;
 		try {
 			URI requestUri = httpExchange.getRequestURI();
@@ -296,7 +298,7 @@ public final class TestHttpsServer implements AutoCloseable {
 		}
 	}
 
-	private static void sendServerErrorIfNothingWasSent(HttpExchange httpExchange) {
+	private static void sendServerErrorIfNothingWasSent(@NonNull HttpExchange httpExchange) {
 		if (httpExchange.getResponseCode() != -1)
 			return;
 		try {
@@ -316,7 +318,7 @@ public final class TestHttpsServer implements AutoCloseable {
 		}
 	}
 
-	private static Map<String, List<String>> copyOf(Headers headers) {
+	private static @NonNull Map<@NonNull String, @NonNull List<@NonNull String>> copyOf(@NonNull Headers headers) {
 		Map<String, List<String>> copy = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
 		for (Map.Entry<String, List<String>> header : headers.entrySet())
 			copy.computeIfAbsent(header.getKey(), ignored -> new ArrayList<>()).addAll(header.getValue());
@@ -324,7 +326,7 @@ public final class TestHttpsServer implements AutoCloseable {
 		return Collections.unmodifiableMap(copy);
 	}
 
-	private static String requirePath(String path) {
+	private static @NonNull String requirePath(@NonNull String path) {
 		requireNonNull(path);
 		if (!path.startsWith("/"))
 			throw new IllegalArgumentException("A path starts with /: " + path);
@@ -349,7 +351,7 @@ public final class TestHttpsServer implements AutoCloseable {
 		 * {@link Outcome#SERVER_CLOSED} while closing)
 		 * @throws InterruptedException if interrupted, as {@link TestHttpsServer#close()} does
 		 */
-		void run(Exchange exchange) throws IOException, InterruptedException;
+		void run(@NonNull Exchange exchange) throws IOException, InterruptedException;
 
 		/**
 		 * Always sends {@code response}.
@@ -357,7 +359,7 @@ public final class TestHttpsServer implements AutoCloseable {
 		 * @param response the response
 		 * @return the script
 		 */
-		static Script fromResponse(Response response) {
+		static @NonNull Script fromResponse(@NonNull Response response) {
 			requireNonNull(response);
 			return exchange -> exchange.send(response);
 		}
@@ -369,7 +371,7 @@ public final class TestHttpsServer implements AutoCloseable {
 		 * @param location the {@code Location} header value
 		 * @return the script
 		 */
-		static Script fromRedirect(Integer status, String location) {
+		static @NonNull Script fromRedirect(@NonNull Integer status, @NonNull String location) {
 			return fromResponse(Response.withStatus(status).header("Location", location).build());
 		}
 
@@ -381,7 +383,7 @@ public final class TestHttpsServer implements AutoCloseable {
 		 * @param responses one or more responses, in order
 		 * @return the script
 		 */
-		static Script fromSequence(List<Response> responses) {
+		static @NonNull Script fromSequence(@NonNull List<@NonNull Response> responses) {
 			List<Response> copy = requireResponses(responses);
 			AtomicInteger next = new AtomicInteger();
 			// The index stops at the last response, so it never overflows.
@@ -396,7 +398,7 @@ public final class TestHttpsServer implements AutoCloseable {
 		 * @param responses one or more responses, in order
 		 * @return the script
 		 */
-		static Script fromCycle(List<Response> responses) {
+		static @NonNull Script fromCycle(@NonNull List<@NonNull Response> responses) {
 			List<Response> copy = requireResponses(responses);
 			AtomicInteger next = new AtomicInteger();
 			return exchange -> exchange.send(copy.get(Math.floorMod(next.getAndIncrement(), copy.size())));
@@ -409,11 +411,11 @@ public final class TestHttpsServer implements AutoCloseable {
 		 *
 		 * @return the script
 		 */
-		static Script fromTarpit() {
+		static @NonNull Script fromTarpit() {
 			return Exchange::awaitServerClose;
 		}
 
-		private static List<Response> requireResponses(List<Response> responses) {
+		private static @NonNull List<@NonNull Response> requireResponses(@NonNull List<@NonNull Response> responses) {
 			List<Response> copy = List.copyOf(responses);
 			if (copy.isEmpty())
 				throw new IllegalArgumentException("A script needs at least one response");
@@ -434,7 +436,7 @@ public final class TestHttpsServer implements AutoCloseable {
 		 * @param headers header names and values
 		 * @return the script
 		 */
-		static Script fromStalledResponse(Integer status, Map<String, List<String>> headers) {
+		static @NonNull Script fromStalledResponse(@NonNull Integer status, @NonNull Map<@NonNull String, @NonNull List<@NonNull String>> headers) {
 			requireNonNull(status);
 			Map<String, List<String>> headersCopy = Response.copyHeaders(headers);
 			return exchange -> {
@@ -457,7 +459,7 @@ public final class TestHttpsServer implements AutoCloseable {
 		private final HttpExchange httpExchange;
 		private final RecordedRequest request;
 
-		private Exchange(TestHttpsServer server, HttpExchange httpExchange, RecordedRequest request) {
+		private Exchange(@NonNull TestHttpsServer server, @NonNull HttpExchange httpExchange, @NonNull RecordedRequest request) {
 			this.server = server;
 			this.httpExchange = httpExchange;
 			this.request = request;
@@ -468,7 +470,7 @@ public final class TestHttpsServer implements AutoCloseable {
 		 *
 		 * @return the request
 		 */
-		public RecordedRequest getRequest() {
+		public @NonNull RecordedRequest getRequest() {
 			return this.request;
 		}
 
@@ -477,7 +479,7 @@ public final class TestHttpsServer implements AutoCloseable {
 		 *
 		 * @return the exchange
 		 */
-		public HttpExchange getHttpExchange() {
+		public @NonNull HttpExchange getHttpExchange() {
 			return this.httpExchange;
 		}
 
@@ -487,7 +489,7 @@ public final class TestHttpsServer implements AutoCloseable {
 		 * @param response the response
 		 * @throws IOException if writing fails
 		 */
-		public void send(Response response) throws IOException {
+		public void send(@NonNull Response response) throws IOException {
 			requireNonNull(response);
 			Headers headers = this.httpExchange.getResponseHeaders();
 			response.getHeaders().forEach((name, values) -> values.forEach(value -> headers.add(name, value)));
@@ -528,7 +530,7 @@ public final class TestHttpsServer implements AutoCloseable {
 		private int heldCount;
 		private int arrivalCount;
 
-		private HeldScript(Script script) {
+		private HeldScript(@NonNull Script script) {
 			this.script = script;
 		}
 
@@ -538,7 +540,7 @@ public final class TestHttpsServer implements AutoCloseable {
 		 * @param script what answers each request once released
 		 * @return a new held script
 		 */
-		public static HeldScript fromScript(Script script) {
+		public static @NonNull HeldScript fromScript(@NonNull Script script) {
 			return new HeldScript(requireNonNull(script));
 		}
 
@@ -548,12 +550,12 @@ public final class TestHttpsServer implements AutoCloseable {
 		 * @param response what each request gets once released
 		 * @return a new held script
 		 */
-		public static HeldScript fromResponse(Response response) {
+		public static @NonNull HeldScript fromResponse(@NonNull Response response) {
 			return fromScript(Script.fromResponse(response));
 		}
 
 		@Override
-		public void run(Exchange exchange) throws IOException, InterruptedException {
+		public void run(@NonNull Exchange exchange) throws IOException, InterruptedException {
 			requireNonNull(exchange);
 			this.lock.lock();
 			try {
@@ -591,7 +593,7 @@ public final class TestHttpsServer implements AutoCloseable {
 		 *
 		 * @return whether requests pass through
 		 */
-		public Boolean isReleased() {
+		public @NonNull Boolean isReleased() {
 			this.lock.lock();
 			try {
 				return this.released;
@@ -605,7 +607,7 @@ public final class TestHttpsServer implements AutoCloseable {
 		 *
 		 * @return the count
 		 */
-		public Integer getHeldCount() {
+		public @NonNull Integer getHeldCount() {
 			this.lock.lock();
 			try {
 				return this.heldCount;
@@ -619,7 +621,7 @@ public final class TestHttpsServer implements AutoCloseable {
 		 *
 		 * @return the count
 		 */
-		public Integer getArrivalCount() {
+		public @NonNull Integer getArrivalCount() {
 			this.lock.lock();
 			try {
 				return this.arrivalCount;
@@ -636,7 +638,7 @@ public final class TestHttpsServer implements AutoCloseable {
 		 * @return whether that many were held
 		 * @throws InterruptedException if interrupted while waiting
 		 */
-		public Boolean awaitHeldCount(Integer count, Duration timeout) throws InterruptedException {
+		public @NonNull Boolean awaitHeldCount(@NonNull Integer count, @NonNull Duration timeout) throws InterruptedException {
 			requireNonNull(count);
 			long remaining = timeout.toNanos();
 			this.lock.lock();
@@ -653,7 +655,7 @@ public final class TestHttpsServer implements AutoCloseable {
 		}
 
 		@Override
-		public String toString() {
+		public @NonNull String toString() {
 			return "HeldScript[held=" + getHeldCount() + ", arrivals=" + getArrivalCount() + ", released="
 					+ isReleased() + "]";
 		}
@@ -684,7 +686,7 @@ public final class TestHttpsServer implements AutoCloseable {
 		private final byte[] body;
 		private final Framing framing;
 
-		private Response(Builder builder) {
+		private Response(@NonNull Builder builder) {
 			this.status = builder.status;
 			this.headers = copyHeaders(builder.headers);
 			this.body = builder.body.clone();
@@ -697,7 +699,7 @@ public final class TestHttpsServer implements AutoCloseable {
 		 * @param status the status, 100 to 999
 		 * @return a new builder
 		 */
-		public static Builder withStatus(Integer status) {
+		public static @NonNull Builder withStatus(@NonNull Integer status) {
 			return new Builder(status);
 		}
 
@@ -707,7 +709,7 @@ public final class TestHttpsServer implements AutoCloseable {
 		 * @param status the status, 100 to 999
 		 * @return the response
 		 */
-		public static Response fromStatus(Integer status) {
+		public static @NonNull Response fromStatus(@NonNull Integer status) {
 			return withStatus(status).build();
 		}
 
@@ -718,7 +720,7 @@ public final class TestHttpsServer implements AutoCloseable {
 		 * @param json the body
 		 * @return the response
 		 */
-		public static Response fromJson(Integer status, String json) {
+		public static @NonNull Response fromJson(@NonNull Integer status, @NonNull String json) {
 			return withStatus(status).header("Content-Type", "application/json").body(json).build();
 		}
 
@@ -729,7 +731,7 @@ public final class TestHttpsServer implements AutoCloseable {
 		 * @param json the key set, such as from {@link TestJsonWebKeys#keySet(List)}
 		 * @return the response
 		 */
-		public static Response fromJsonWebKeySet(String json) {
+		public static @NonNull Response fromJsonWebKeySet(@NonNull String json) {
 			return withStatus(200).header("Content-Type", JWK_SET_MEDIA_TYPE).body(requireNonNull(json)).build();
 		}
 
@@ -741,7 +743,7 @@ public final class TestHttpsServer implements AutoCloseable {
 		 * @param cacheControl the {@code Cache-Control} field value
 		 * @return the response
 		 */
-		public static Response fromJsonWebKeySet(String json, String cacheControl) {
+		public static @NonNull Response fromJsonWebKeySet(@NonNull String json, @NonNull String cacheControl) {
 			return withStatus(200).header("Content-Type", JWK_SET_MEDIA_TYPE).header("Cache-Control", cacheControl)
 					.body(requireNonNull(json)).build();
 		}
@@ -754,7 +756,7 @@ public final class TestHttpsServer implements AutoCloseable {
 		 * @param retryAfter the {@code Retry-After} field value: delay seconds or an HTTP-date
 		 * @return the response
 		 */
-		public static Response fromRetryAfter(Integer status, String retryAfter) {
+		public static @NonNull Response fromRetryAfter(@NonNull Integer status, @NonNull String retryAfter) {
 			return withStatus(status).header("Retry-After", retryAfter).build();
 		}
 
@@ -763,7 +765,7 @@ public final class TestHttpsServer implements AutoCloseable {
 		 *
 		 * @return the status
 		 */
-		public Integer getStatus() {
+		public @NonNull Integer getStatus() {
 			return this.status;
 		}
 
@@ -772,7 +774,7 @@ public final class TestHttpsServer implements AutoCloseable {
 		 *
 		 * @return header names and values, in insertion order
 		 */
-		public Map<String, List<String>> getHeaders() {
+		public @NonNull Map<@NonNull String, @NonNull List<@NonNull String>> getHeaders() {
 			return this.headers;
 		}
 
@@ -781,7 +783,7 @@ public final class TestHttpsServer implements AutoCloseable {
 		 *
 		 * @return a copy of the body
 		 */
-		public byte[] getBody() {
+		public byte @NonNull [] getBody() {
 			return this.body.clone();
 		}
 
@@ -790,11 +792,11 @@ public final class TestHttpsServer implements AutoCloseable {
 		 *
 		 * @return the framing
 		 */
-		public Framing getFraming() {
+		public @NonNull Framing getFraming() {
 			return this.framing;
 		}
 
-		private static Map<String, List<String>> copyHeaders(Map<String, List<String>> headers) {
+		private static @NonNull Map<@NonNull String, @NonNull List<@NonNull String>> copyHeaders(@NonNull Map<@NonNull String, @NonNull List<@NonNull String>> headers) {
 			Map<String, List<String>> copy = new LinkedHashMap<>();
 			headers.forEach((name, values) -> copy.put(requireNonNull(name), List.copyOf(values)));
 			return Collections.unmodifiableMap(copy);
@@ -810,7 +812,7 @@ public final class TestHttpsServer implements AutoCloseable {
 			private byte[] body = new byte[0];
 			private Framing framing = Framing.FIXED_LENGTH;
 
-			private Builder(Integer status) {
+			private Builder(@NonNull Integer status) {
 				requireNonNull(status);
 				if (status < 100 || status > 999)
 					throw new IllegalArgumentException("Status out of range: " + status);
@@ -824,7 +826,7 @@ public final class TestHttpsServer implements AutoCloseable {
 			 * @param value the header value
 			 * @return this builder
 			 */
-			public Builder header(String name, String value) {
+			public @NonNull Builder header(@NonNull String name, @NonNull String value) {
 				requireNonNull(name);
 				requireNonNull(value);
 				this.headers.computeIfAbsent(name, ignored -> new ArrayList<>()).add(value);
@@ -837,7 +839,7 @@ public final class TestHttpsServer implements AutoCloseable {
 			 * @param body the body, or {@code null} for none
 			 * @return this builder
 			 */
-			public Builder body(byte @Nullable [] body) {
+			public @NonNull Builder body(byte @Nullable [] body) {
 				this.body = body == null ? new byte[0] : body.clone();
 				return this;
 			}
@@ -848,7 +850,7 @@ public final class TestHttpsServer implements AutoCloseable {
 			 * @param body the body, or {@code null} for none
 			 * @return this builder
 			 */
-			public Builder body(@Nullable String body) {
+			public @NonNull Builder body(@Nullable String body) {
 				this.body = body == null ? new byte[0] : body.getBytes(StandardCharsets.UTF_8);
 				return this;
 			}
@@ -859,7 +861,7 @@ public final class TestHttpsServer implements AutoCloseable {
 			 * @param framing the framing, or {@code null} for {@link Framing#FIXED_LENGTH}
 			 * @return this builder
 			 */
-			public Builder framing(@Nullable Framing framing) {
+			public @NonNull Builder framing(@Nullable Framing framing) {
 				this.framing = framing == null ? Framing.FIXED_LENGTH : framing;
 				return this;
 			}
@@ -869,7 +871,7 @@ public final class TestHttpsServer implements AutoCloseable {
 			 *
 			 * @return the response
 			 */
-			public Response build() {
+			public @NonNull Response build() {
 				return new Response(this);
 			}
 		}
@@ -916,7 +918,7 @@ public final class TestHttpsServer implements AutoCloseable {
 		private final CompletableFuture<Outcome> outcome = new CompletableFuture<>();
 		private final AtomicReference<@Nullable Throwable> scriptFailure = new AtomicReference<>();
 
-		private RecordedRequest(String method, URI uri, String path, Map<String, List<String>> headers, byte[] body) {
+		private RecordedRequest(@NonNull String method, @NonNull URI uri, @NonNull String path, @NonNull Map<@NonNull String, @NonNull List<@NonNull String>> headers, byte @NonNull [] body) {
 			this.method = method;
 			this.uri = uri;
 			this.path = path;
@@ -929,7 +931,7 @@ public final class TestHttpsServer implements AutoCloseable {
 		 *
 		 * @return the method, such as {@code GET}
 		 */
-		public String getMethod() {
+		public @NonNull String getMethod() {
 			return this.method;
 		}
 
@@ -938,7 +940,7 @@ public final class TestHttpsServer implements AutoCloseable {
 		 *
 		 * @return the target
 		 */
-		public URI getUri() {
+		public @NonNull URI getUri() {
 			return this.uri;
 		}
 
@@ -947,7 +949,7 @@ public final class TestHttpsServer implements AutoCloseable {
 		 *
 		 * @return the path
 		 */
-		public String getPath() {
+		public @NonNull String getPath() {
 			return this.path;
 		}
 
@@ -956,7 +958,7 @@ public final class TestHttpsServer implements AutoCloseable {
 		 *
 		 * @return header names and values
 		 */
-		public Map<String, List<String>> getHeaders() {
+		public @NonNull Map<@NonNull String, @NonNull List<@NonNull String>> getHeaders() {
 			return this.headers;
 		}
 
@@ -966,7 +968,7 @@ public final class TestHttpsServer implements AutoCloseable {
 		 * @param name the header name, in any case
 		 * @return the value, or empty if the header is absent
 		 */
-		public Optional<String> getHeader(String name) {
+		public @NonNull Optional<@NonNull String> getHeader(@NonNull String name) {
 			@Nullable List<String> values = this.headers.get(requireNonNull(name));
 			return values == null || values.isEmpty() ? Optional.empty() : Optional.of(values.get(0));
 		}
@@ -976,7 +978,7 @@ public final class TestHttpsServer implements AutoCloseable {
 		 *
 		 * @return a copy of the body
 		 */
-		public byte[] getBody() {
+		public byte @NonNull [] getBody() {
 			return this.body.clone();
 		}
 
@@ -985,7 +987,7 @@ public final class TestHttpsServer implements AutoCloseable {
 		 *
 		 * @return the body text
 		 */
-		public String getBodyAsString() {
+		public @NonNull String getBodyAsString() {
 			return new String(this.body, StandardCharsets.UTF_8);
 		}
 
@@ -996,7 +998,7 @@ public final class TestHttpsServer implements AutoCloseable {
 		 * @return how it ended, or {@link Outcome#UNFINISHED} if it had not ended in time
 		 * @throws InterruptedException if interrupted while waiting
 		 */
-		public Outcome awaitOutcome(Duration timeout) throws InterruptedException {
+		public @NonNull Outcome awaitOutcome(@NonNull Duration timeout) throws InterruptedException {
 			try {
 				return this.outcome.get(timeout.toNanos(), TimeUnit.NANOSECONDS);
 			} catch (TimeoutException e) {
@@ -1011,20 +1013,20 @@ public final class TestHttpsServer implements AutoCloseable {
 		 *
 		 * @return the runtime exception or error, or empty
 		 */
-		public Optional<Throwable> getScriptFailure() {
+		public @NonNull Optional<@NonNull Throwable> getScriptFailure() {
 			return Optional.ofNullable(this.scriptFailure.get());
 		}
 
 		@Override
-		public String toString() {
+		public @NonNull String toString() {
 			return "RecordedRequest[" + this.method + " " + this.uri + "]";
 		}
 
-		private void finish(Outcome outcome) {
+		private void finish(@NonNull Outcome outcome) {
 			this.outcome.complete(outcome);
 		}
 
-		private void recordScriptFailure(Throwable failure) {
+		private void recordScriptFailure(@NonNull Throwable failure) {
 			this.scriptFailure.compareAndSet(null, failure);
 		}
 	}

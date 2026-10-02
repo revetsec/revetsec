@@ -16,6 +16,8 @@
 
 package com.revetsec.oauth;
 
+import org.jspecify.annotations.NonNull;
+
 import com.github.dockerjava.api.model.ExposedPort;
 import com.github.dockerjava.api.model.PortBinding;
 import com.github.dockerjava.api.model.Ports;
@@ -197,9 +199,9 @@ final class KeycloakOAuthIT {
 				.idTokenSigningAlgorithms(Set.of(JwsAlgorithm.HS256))
 				.compatibility(Set.of(OidcCompatibilityMode.HMAC_ID_TOKENS))
 				.observer(new OidcObserver() {
-					@Override public void didUseCompatibilityMode(OidcCompatibilityMode mode) { used.incrementAndGet(); }
+					@Override public void didUseCompatibilityMode(@NonNull OidcCompatibilityMode mode) { used.incrementAndGet(); }
 					@Override public void didCompleteAuthentication() { completed.incrementAndGet(); }
-					@Override public void didRejectIdToken(OidcValidationException failure) { rejected.set(failure); }
+					@Override public void didRejectIdToken(@NonNull OidcValidationException failure) { rejected.set(failure); }
 				}).build();
 		OidcValidationException failure = assertThrows(OidcValidationException.class,
 				() -> authenticate(client, OidcAuthenticationOptions.builder().build(), "hmac-realm-key"));
@@ -212,7 +214,7 @@ final class KeycloakOAuthIT {
 		AtomicInteger tokenPosts = new AtomicInteger();
 		OidcClient client = oidcClient("revetsec-test-client", ClientAuthentication.fromClientSecretBasic(CLIENT_SECRET))
 				.observer(new OidcObserver() {
-					@Override public void willRequestEndpoint(OAuthEndpoint endpoint, URI uri) {
+					@Override public void willRequestEndpoint(@NonNull OAuthEndpoint endpoint, @NonNull URI uri) {
 						if (endpoint == OAuthEndpoint.TOKEN) tokenPosts.incrementAndGet();
 					}
 				}).build();
@@ -233,7 +235,7 @@ final class KeycloakOAuthIT {
 		OidcClient client = oidcClient("revetsec-test-client", ClientAuthentication.fromClientSecretBasic(CLIENT_SECRET))
 				.observer(new OidcObserver() {
 					@Override public void didCompleteAuthentication() { completed.incrementAndGet(); }
-					@Override public void didRejectIdToken(OidcValidationException failure) { rejected.set(failure); }
+					@Override public void didRejectIdToken(@NonNull OidcValidationException failure) { rejected.set(failure); }
 				}).build();
 		AuthorizationRedirect begin = client.beginAuthentication();
 		String originalNonce = QueryParameters.parse(begin.getAuthorizationUri().getRawQuery()).getValues("nonce").get(0);
@@ -248,12 +250,12 @@ final class KeycloakOAuthIT {
 		assertSame(failure, rejected.get()); assertEquals(0, completed.get()); assertNull(failure.getCause());
 	}
 
-	private static OidcClient.Builder oidcClient(String id, ClientAuthentication authentication) {
+	private static OidcClient.@NonNull Builder oidcClient(@NonNull String id, @NonNull ClientAuthentication authentication) {
 		return OidcClient.withIssuer(issuer).clientId(id).clientAuthentication(authentication).redirectUri(CALLBACK)
 				.scopes(Set.of("profile", "email")).httpClient(TestTls.httpClient()).allowInsecureLoopback(true);
 	}
 
-	private static OidcAuthentication authenticate(OidcClient client, OidcAuthenticationOptions options, String context) throws Exception {
+	private static @NonNull OidcAuthentication authenticate(@NonNull OidcClient client, @NonNull OidcAuthenticationOptions options, @NonNull String context) throws Exception {
 		AuthorizationRedirect begin = client.beginAuthentication(options);
 		QueryParameters parameters = QueryParameters.parse(begin.getAuthorizationUri().getRawQuery());
 		assertEquals(1, parameters.getValues("nonce").size());
@@ -271,13 +273,13 @@ final class KeycloakOAuthIT {
 		return auth;
 	}
 
-	private static void checkUserInfo(OidcClient client, OidcAuthentication auth, boolean signed) {
+	private static void checkUserInfo(@NonNull OidcClient client, @NonNull OidcAuthentication auth, boolean signed) {
 		OidcUserInfo info = client.fetchUserInfo(auth);
 		assertEquals(issuer, info.getIssuer()); assertEquals(auth.getSubject(), info.getSubject()); assertEquals(signed, info.isSigned());
 		assertEquals("test-user@example.test", info.getEmail().orElseThrow()); assertTrue(info.getEmailVerified().orElseThrow());
 	}
 
-	private static void checkRefresh(OidcClient client, OidcAuthentication auth) {
+	private static void checkRefresh(@NonNull OidcClient client, @NonNull OidcAuthentication auth) {
 		StateSealer sealer = TestSealers.fromFixedKey();
 		OidcSessionReference original = OidcSessionReference.fromSerializedForm(auth.getSessionReference().toSerializedForm());
 		OidcSessionReference stored = OidcSessionReference.fromSealedForm(original.toSealedForm(sealer, "keycloak-session", Duration.ofMinutes(5)), sealer, "keycloak-session");
@@ -288,7 +290,7 @@ final class KeycloakOAuthIT {
 		assertFalse(result.toString().contains(result.getRefreshToken().getValue()));
 	}
 
-	private static TokenResponse completeCodeFlow(String clientId, ClientAuthentication authentication) throws Exception {
+	private static @NonNull TokenResponse completeCodeFlow(@NonNull String clientId, @NonNull ClientAuthentication authentication) throws Exception {
 		OAuthClient client = client(clientId, authentication);
 		AuthorizationRedirect begin = client.beginAuthorization(AuthorizationRequestOptions.builder().scopes(Set.of("openid")).build());
 		StateSealer sealer = TestSealers.fromFixedKey();
@@ -297,7 +299,7 @@ final class KeycloakOAuthIT {
 				PendingAuthorizationSource.fromSealedForm(sealed, sealer, clientId), CALLBACK);
 	}
 
-	private static HttpResponse<String> login(URI authorization) throws Exception {
+	private static @NonNull HttpResponse<@NonNull String> login(@NonNull URI authorization) throws Exception {
 		HttpClient browser = TestTls.httpClientBuilder().cookieHandler(new CookieManager(null, CookiePolicy.ACCEPT_ALL)).build();
 		HttpResponse<String> page = browser.send(HttpRequest.newBuilder(authorization).GET().build(), HttpResponse.BodyHandlers.ofString());
 		assertEquals(200, page.statusCode());
@@ -309,7 +311,7 @@ final class KeycloakOAuthIT {
 				.POST(HttpRequest.BodyPublishers.ofString(loginBody)).build(), HttpResponse.BodyHandlers.ofString());
 	}
 
-	private static AuthorizationResponse queryResponse(HttpResponse<String> login) {
+	private static @NonNull AuthorizationResponse queryResponse(@NonNull HttpResponse<@NonNull String> login) {
 		assertEquals(302, login.statusCode());
 		URI location = URI.create(login.headers().firstValue("Location").orElseThrow());
 		assertEquals(CALLBACK.getScheme(), location.getScheme()); assertEquals(CALLBACK.getAuthority(), location.getAuthority());
@@ -318,7 +320,7 @@ final class KeycloakOAuthIT {
 	}
 
 	// Test-only parser for the pinned Keycloak theme, not a general HTML implementation. The fixed callback is never visited.
-	private static AuthorizationResponse formPostResponse(HttpResponse<String> login) {
+	private static @NonNull AuthorizationResponse formPostResponse(@NonNull HttpResponse<@NonNull String> login) {
 		assertEquals(200, login.statusCode());
 		Matcher form = POST_FORM.matcher(login.body()); assertTrue(form.find());
 		String opening = form.group().substring(0, form.group().indexOf('>') + 1);
@@ -337,16 +339,16 @@ final class KeycloakOAuthIT {
 		return response;
 	}
 
-	private static String attribute(String tag, String name) {
+	private static @NonNull String attribute(@NonNull String tag, @NonNull String name) {
 		Matcher value = Pattern.compile("\\b" + name + "=[\"']([^\"']*)[\"']", Pattern.CASE_INSENSITIVE).matcher(tag); assertTrue(value.find());
 		return value.group(1).replace("&quot;", "\"").replace("&#39;", "'").replace("&lt;", "<").replace("&gt;", ">").replace("&amp;", "&");
 	}
 
-	private static OAuthClient client(String id, ClientAuthentication authentication) {
+	private static @NonNull OAuthClient client(@NonNull String id, @NonNull ClientAuthentication authentication) {
 		return OAuthClient.withIssuer(issuer).clientId(id).clientAuthentication(authentication)
 				.redirectUri(CALLBACK).scopes(Set.of("openid"))
 				.httpClient(TestTls.httpClient()).allowInsecureLoopback(true).build();
 	}
 
-	private static String encode(String value) { return URLEncoder.encode(value, StandardCharsets.UTF_8); }
+	private static @NonNull String encode(@NonNull String value) { return URLEncoder.encode(value, StandardCharsets.UTF_8); }
 }

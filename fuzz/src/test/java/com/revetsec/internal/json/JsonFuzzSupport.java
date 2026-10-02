@@ -16,6 +16,8 @@
 
 package com.revetsec.internal.json;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.json.JsonArray;
 import com.revetsec.json.JsonNumber;
 import com.revetsec.json.JsonObject;
@@ -59,7 +61,7 @@ public final class JsonFuzzSupport {
 	 *
 	 * @return the profile
 	 */
-	public static JsonLimits maximumCaps() {
+	public static @NonNull JsonLimits maximumCaps() {
 		return JsonLimits.maximumCaps();
 	}
 
@@ -73,7 +75,7 @@ public final class JsonFuzzSupport {
 	 *
 	 * @return the profile
 	 */
-	public static JsonLimits tightLimits() {
+	public static @NonNull JsonLimits tightLimits() {
 		return new JsonLimits(65_536, 3, 12, 6, 6, 3, false);
 	}
 
@@ -84,7 +86,7 @@ public final class JsonFuzzSupport {
 	 * @param limits the profile to copy
 	 * @return the copy with {@code isAsciiCaseVariantNamesRejected() == false}
 	 */
-	public static JsonLimits exactNameTwinOf(JsonLimits limits) {
+	public static @NonNull JsonLimits exactNameTwinOf(@NonNull JsonLimits limits) {
 		return new JsonLimits(limits.getMaxInputBytes(), limits.getMaxDepth(), limits.getMaxNodes(),
 				limits.getMaxStringLength(), limits.getMaxNumberLength(), limits.getMaxExponentMagnitude(), false);
 	}
@@ -97,7 +99,7 @@ public final class JsonFuzzSupport {
 	 * @param exception   the exception
 	 * @param inputLength the length of the rejected input
 	 */
-	public static void requireFixedShape(JsonParseException exception, int inputLength) {
+	public static void requireFixedShape(@NonNull JsonParseException exception, int inputLength) {
 		Assertions.assertNotNull(exception.getKind(), "a JsonParseException has no Kind");
 		Assertions.assertEquals(exception.getKind().getMessage(), exception.getMessage(),
 				"a JsonParseException message is not its Kind's fixed message");
@@ -112,7 +114,7 @@ public final class JsonFuzzSupport {
 	 *
 	 * @param exception the exception
 	 */
-	public static void requireFixedShape(JsonFieldException exception) {
+	public static void requireFixedShape(@NonNull JsonFieldException exception) {
 		Assertions.assertNotNull(exception.getKind(), "a JsonFieldException has no Kind");
 		Assertions.assertEquals(exception.getKind().getMessage(), exception.getMessage(),
 				"a JsonFieldException message is not its Kind's fixed message");
@@ -125,7 +127,7 @@ public final class JsonFuzzSupport {
 	 *
 	 * @param value the value
 	 */
-	public static void requireRedactedToString(Object value) {
+	public static void requireRedactedToString(@NonNull Object value) {
 		String rendered = value.toString();
 		Assertions.assertTrue(REDACTED.matcher(rendered).matches(), () -> "toString() is not redacted: " + rendered);
 	}
@@ -136,7 +138,7 @@ public final class JsonFuzzSupport {
 	 *
 	 * @param builder the builder
 	 */
-	public static void requireRedactedBuilder(JsonObject.Builder builder) {
+	public static void requireRedactedBuilder(JsonObject.@NonNull Builder builder) {
 		Assertions.assertEquals("JsonObject.Builder{members=<redacted>}", builder.toString(),
 				"JsonObject.Builder.toString() is not redacted");
 	}
@@ -147,7 +149,7 @@ public final class JsonFuzzSupport {
 	 * @param value the value
 	 * @return its shape
 	 */
-	public static Shape shapeOf(JsonValue value) {
+	public static @NonNull Shape shapeOf(@NonNull JsonValue value) {
 		Shape.Accumulator accumulator = new Shape.Accumulator();
 		int depth = walk(value, accumulator);
 		return new Shape(depth, accumulator.nodes, accumulator.longestString, accumulator.longestCanonicalNumber,
@@ -162,7 +164,7 @@ public final class JsonFuzzSupport {
 	 * @param name the name
 	 * @return the name with {@code A-Z} mapped to {@code a-z}
 	 */
-	public static String foldAsciiCase(String name) {
+	public static @NonNull String foldAsciiCase(@NonNull String name) {
 		char[] characters = name.toCharArray();
 
 		for (int index = 0; index < characters.length; ++index)
@@ -172,7 +174,7 @@ public final class JsonFuzzSupport {
 		return new String(characters);
 	}
 
-	private static int walk(JsonValue value, Shape.Accumulator accumulator) {
+	private static int walk(@NonNull JsonValue value, Shape.@NonNull Accumulator accumulator) {
 		++accumulator.nodes;
 
 		if (value instanceof JsonObject object) {

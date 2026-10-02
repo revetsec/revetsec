@@ -16,6 +16,10 @@
 
 package com.revetsec.internal.pem;
 
+import org.jspecify.annotations.Nullable;
+
+import org.jspecify.annotations.NonNull;
+
 import com.code_intelligence.jazzer.junit.FuzzTest;
 import org.junit.jupiter.api.Assertions;
 
@@ -62,7 +66,7 @@ public class PemFuzzTests {
 	 * @param input the fuzzed PEM text, read as ISO-8859-1 so every byte is one character
 	 */
 	@FuzzTest(maxDuration = "5m")
-	public void pemParsersRejectOnlyWithPemExceptionAndAcceptAtMostOneLabel(byte[] input) {
+	public void pemParsersRejectOnlyWithPemExceptionAndAcceptAtMostOneLabel(byte @NonNull [] input) {
 		String pem = new String(input, StandardCharsets.ISO_8859_1);
 		boolean certificate = certificate(pem) != null;
 		boolean publicKey = publicKey(pem) != null;
@@ -101,7 +105,7 @@ public class PemFuzzTests {
 	 * @param der the fuzzed DER
 	 */
 	@FuzzTest(maxDuration = "5m")
-	public void derParsersRejectOnlyWithPemExceptionAndAgreeWithTheirArmoredForms(byte[] der) {
+	public void derParsersRejectOnlyWithPemExceptionAndAgreeWithTheirArmoredForms(byte @NonNull [] der) {
 		PemException.Kind framing = framingFailure(der);
 
 		if (framing != null) {
@@ -150,7 +154,7 @@ public class PemFuzzTests {
 	 * minimal and inside the input; {@link PemException.Kind#TRAILING_DATA} if bytes follow it; {@code null} if the
 	 * input is exactly one such {@code SEQUENCE}.
 	 */
-	private static PemException.Kind framingFailure(byte[] der) {
+	private static PemException.@Nullable Kind framingFailure(byte @NonNull [] der) {
 		if (der.length < 2 || (der[0] & 0xFF) != SEQUENCE)
 			return PemException.Kind.MALFORMED_DER;
 
@@ -186,7 +190,7 @@ public class PemFuzzTests {
 	 * section 2): an {@code RSAPrivateKey} or {@code ECPrivateKey} {@code SEQUENCE}, or an EdDSA
 	 * {@code CurvePrivateKey} {@code OCTET STRING}. Walked with the reader below, not with {@link Pem}'s.
 	 */
-	private static void requirePrivateKeyOctetsHoldOneElement(byte[] pkcs8, PrivateKey key) {
+	private static void requirePrivateKeyOctetsHoldOneElement(byte @NonNull [] pkcs8, @NonNull PrivateKey key) {
 		int[] outer = element(pkcs8, 0, pkcs8.length);
 		int[] version = element(pkcs8, outer[1], outer[2]);
 		int[] algorithm = element(pkcs8, version[2], outer[2]);
@@ -203,7 +207,7 @@ public class PemFuzzTests {
 	 * The element at {@code offset} of a structure the parser accepted: its identifier octet and the bounds of its
 	 * contents, from a definite length that must end by {@code limit}.
 	 */
-	private static int[] element(byte[] der, int offset, int limit) {
+	private static int @NonNull [] element(byte @NonNull [] der, int offset, int limit) {
 		Assertions.assertTrue(limit - offset >= 2, "an accepted key holds a truncated element");
 		int tag = der[offset] & 0xFF;
 		int first = der[offset + 1] & 0xFF;
@@ -226,7 +230,7 @@ public class PemFuzzTests {
 	/**
 	 * The body of a block that a parser accepted, decoded here: the Base64 lines between the BEGIN and END lines.
 	 */
-	private static byte[] acceptedBody(String pem) {
+	private static byte @NonNull [] acceptedBody(@NonNull String pem) {
 		int bodyStart = pem.indexOf('\n', pem.indexOf("-----BEGIN ")) + 1;
 		int bodyEnd = pem.lastIndexOf("-----END ");
 		return Base64.getDecoder().decode(pem.substring(bodyStart, bodyEnd).replace("\r", "").replace("\n", ""));
@@ -235,7 +239,7 @@ public class PemFuzzTests {
 	/**
 	 * Parses a certificate, returning {@code null} after a well-formed rejection.
 	 */
-	private static X509Certificate certificate(String pem) {
+	private static @Nullable X509Certificate certificate(@NonNull String pem) {
 		X509Certificate certificate;
 
 		try {
@@ -249,7 +253,7 @@ public class PemFuzzTests {
 		return certificate;
 	}
 
-	private static void requireCertificateRoundTrip(X509Certificate certificate) {
+	private static void requireCertificateRoundTrip(@NonNull X509Certificate certificate) {
 		byte[] encoded = encoded(certificate);
 
 		try {
@@ -264,7 +268,7 @@ public class PemFuzzTests {
 	/**
 	 * Parses a public key, returning {@code null} after a well-formed rejection.
 	 */
-	private static PublicKey publicKey(String pem) {
+	private static @Nullable PublicKey publicKey(@NonNull String pem) {
 		PublicKey key;
 
 		try {
@@ -292,7 +296,7 @@ public class PemFuzzTests {
 	 * Parses a private key, returning {@code null} after a well-formed rejection. The JDK's own PKCS#8 encoding of an
 	 * accepted key is accepted too, and is a fixed point.
 	 */
-	private static PrivateKey privateKey(String pem) {
+	private static @Nullable PrivateKey privateKey(@NonNull String pem) {
 		PrivateKey key;
 
 		try {
@@ -316,14 +320,14 @@ public class PemFuzzTests {
 		return key;
 	}
 
-	private static void requireFixedShape(PemException exception) {
+	private static void requireFixedShape(@NonNull PemException exception) {
 		Assertions.assertNotNull(exception.getKind(), "a PemException has no Kind");
 		Assertions.assertEquals(exception.getKind().getMessage(), exception.getMessage(), "not the Kind's fixed message");
 		Assertions.assertNull(exception.getCause(), "a PemException has a cause");
 		Assertions.assertEquals(0, exception.getSuppressed().length, "a PemException has suppressed exceptions");
 	}
 
-	private static void requireKind(PemException.Kind expected, PemCall call) {
+	private static void requireKind(PemException.@NonNull Kind expected, @NonNull PemCall call) {
 		try {
 			call.run();
 		} catch (PemException e) {
@@ -335,7 +339,7 @@ public class PemFuzzTests {
 		Assertions.fail("a PEM parser accepted text it must reject with " + expected);
 	}
 
-	private static byte[] encoded(X509Certificate certificate) {
+	private static byte @NonNull [] encoded(@NonNull X509Certificate certificate) {
 		try {
 			return certificate.getEncoded();
 		} catch (CertificateEncodingException e) {
@@ -346,7 +350,7 @@ public class PemFuzzTests {
 	/**
 	 * RFC 7468 armor: the label's BEGIN line, Base64 in 64-character lines, and the END line, each ending in LF.
 	 */
-	private static String armor(String label, byte[] der) {
+	private static @NonNull String armor(@NonNull String label, byte @NonNull [] der) {
 		String base64 = Base64.getEncoder().encodeToString(der);
 		StringBuilder pem = new StringBuilder("-----BEGIN ").append(label).append("-----\n");
 

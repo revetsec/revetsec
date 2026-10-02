@@ -16,6 +16,8 @@
 
 package com.revetsec.oidc;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.StateSealer;
 import com.revetsec.OutboundUriPolicy;
 import com.revetsec.internal.http.*;
@@ -59,7 +61,7 @@ final class OidcDiscoveryTests {
 		}
 	}
 	@TestFactory
-	Stream<DynamicTest> rejectsMissingMistypedDuplicateAndMalformedRequiredMembers() {
+	@NonNull Stream<@NonNull DynamicTest> rejectsMissingMistypedDuplicateAndMalformedRequiredMembers() {
 		List<Consumer<Map<String,String>>> changes = new ArrayList<>();
 		for (String name : List.of("issuer", "authorization_endpoint", "token_endpoint", "jwks_uri", "subject_types_supported", "id_token_signing_alg_values_supported", "response_types_supported")) {
 			changes.add(map -> map.remove(name)); changes.add(map -> map.put(name, "null"));
@@ -97,7 +99,7 @@ final class OidcDiscoveryTests {
 				() -> OidcProviderMetadata.fromJson("https://issuer.example/", json(fields))).getReason());
 	}
 	@TestFactory
-	Stream<DynamicTest> metadataEndpointsResetToUnsetDefaults() {
+	@NonNull Stream<@NonNull DynamicTest> metadataEndpointsResetToUnsetDefaults() {
 		return Stream.of("authorization", "token", "revocation").map(endpoint -> DynamicTest.dynamicTest(endpoint, () -> {
 			try (TestHttpsServer server = TestHttpsServer.start()) {
 				OidcProviderMetadata.Builder builder = OidcProviderMetadata.withIssuer(issuer(server))
@@ -121,7 +123,7 @@ final class OidcDiscoveryTests {
 	}
 
 	@TestFactory
-	Stream<DynamicTest> explicitProviderCapabilitiesRejectIncompleteOrEmptySecurityConfiguration() {
+	@NonNull Stream<@NonNull DynamicTest> explicitProviderCapabilitiesRejectIncompleteOrEmptySecurityConfiguration() {
 		Map<String, java.util.function.Function<OidcProviderMetadata.Builder, OidcProviderMetadata.Builder>> invalid = new LinkedHashMap<>();
 		invalid.put("missing JWKS URI", builder -> builder.jwksUri(null));
 		invalid.put("empty subject types", builder -> builder.subjectTypesSupported(Set.of()));
@@ -146,7 +148,7 @@ final class OidcDiscoveryTests {
 	}
 
 	@TestFactory
-	Stream<DynamicTest> validatesEveryKnownEndpointEvenWithInjectedKeys() {
+	@NonNull Stream<@NonNull DynamicTest> validatesEveryKnownEndpointEvenWithInjectedKeys() {
 		return Stream.of("authorization_endpoint", "token_endpoint", "jwks_uri", "userinfo_endpoint", "revocation_endpoint")
 				.map(name -> DynamicTest.dynamicTest(name, () -> {
 					try (TestHttpsServer server = TestHttpsServer.start()) {
@@ -167,7 +169,7 @@ final class OidcDiscoveryTests {
 		}
 	}
 	@TestFactory
-	Stream<DynamicTest> noFallbackAndNoRedirectFollowing() {
+	@NonNull Stream<@NonNull DynamicTest> noFallbackAndNoRedirectFollowing() {
 		return Stream.of(404,405,410,302).map(status -> DynamicTest.dynamicTest("status " + status, () -> {
 			try (TestHttpsServer server = TestHttpsServer.start()) {
 				server.script(PATH, TestHttpsServer.Script.fromResponse(TestHttpsServer.Response.withStatus(status).header("Location", server.uri("/target").toString()).build()));
@@ -332,7 +334,7 @@ final class OidcDiscoveryTests {
 		try (TestHttpsServer server=TestHttpsServer.start()) {
 			RewindableClock clock=RewindableClock.fromInstant(NOW);script(server,fields(server),"max-age=60");
 			OidcObserver slow=new OidcObserver() {
-				@Override public void didRequestEndpoint(OAuthEndpoint kind,URI uri,Integer status,Duration elapsed) {
+				@Override public void didRequestEndpoint(@NonNull OAuthEndpoint kind,@NonNull URI uri,@NonNull Integer status,@NonNull Duration elapsed) {
 					if(kind==OAuthEndpoint.METADATA)try {new CountDownLatch(1).await(2,TimeUnit.SECONDS);}catch(InterruptedException failure){Thread.currentThread().interrupt();}
 				}
 			};
@@ -346,7 +348,7 @@ final class OidcDiscoveryTests {
 		}
 	}
 	@TestFactory
-	Stream<DynamicTest> capturedProvidersParseOfflineWithExactIssuer() {
+	@NonNull Stream<@NonNull DynamicTest> capturedProvidersParseOfflineWithExactIssuer() {
 		return Stream.of("google/2026-09-28/openid-configuration.json","apple/2026-09-28/openid-configuration.json","entra/2026-09-27/tenant-v2-openid.json")
 				.map(path->DynamicTest.dynamicTest(path,()->{
 					String document;try(var input=Objects.requireNonNull(OidcDiscoveryTests.class.getResourceAsStream("/fixtures/"+path))){document=new String(input.readAllBytes(),StandardCharsets.UTF_8);}
@@ -355,30 +357,30 @@ final class OidcDiscoveryTests {
 					assertEquals(issuer,provider.getIssuer());assertTrue(provider.getIdTokenSigningAlgValuesSupported().contains("RS256"));assertTrue(provider.getResponseTypesSupported().contains("code"));
 				}));
 	}
-	private static OidcProviderCache<OidcProviderMetadata> cache(TestHttpsServer server,Clock clock,AtomicLong nanos) {
+	private static @NonNull OidcProviderCache<@NonNull OidcProviderMetadata> cache(@NonNull TestHttpsServer server,@NonNull Clock clock,@NonNull AtomicLong nanos) {
 		return new OidcProviderCache<>(URI.create(issuer(server)),HttpExchange.fromHttpClient(TestTls.httpClient(),OutboundUriPolicy.defaultInstance(),false),
 				OutboundUriPolicy.defaultInstance(),false,Duration.ofSeconds(10),clock,OidcObserver.disabledInstance(),Duration.ofSeconds(30),Duration.ofSeconds(30),Duration.ofSeconds(60),Duration.ofSeconds(30),metadata -> metadata,nanos::get);
 	}
-	private static Deadline deadline() { return Deadline.fromNow(Duration.ofSeconds(15)); }
-	private static String issuer(TestHttpsServer server) { return server.uri("/tenant/").toString(); }
-	private static OidcClient.Builder builder(TestHttpsServer server,Clock clock) { return OidcClient.withIssuer(issuer(server)).clientId(CLIENT).redirectUri(CALLBACK).clock(clock).httpClient(TestTls.httpClient()).jsonWebKeySource(keys()); }
-	private static OidcClient.Builder shortTtl(OidcClient.Builder builder) { return builder.minimumTimeToLive(Duration.ofSeconds(30)).defaultTimeToLive(Duration.ofSeconds(30)).maximumTimeToLive(Duration.ofMinutes(1)).discoveryCooldown(Duration.ofSeconds(1)); }
-	private static JsonWebKeySource keys() { return StaticJsonWebKeySource.fromJsonWebKeySet(JsonWebKeySet.fromJson(keyJson())); }
-	private static String keyJson() { return TestJsonWebKeys.withFixture(TestJsonWebKeys.Fixture.IDP_SIGNING_RSA_2048).kid("key").alg("RS256").toKeySetJson(); }
-	private static Map<String,String> publicFields() {
+	private static @NonNull Deadline deadline() { return Deadline.fromNow(Duration.ofSeconds(15)); }
+	private static @NonNull String issuer(@NonNull TestHttpsServer server) { return server.uri("/tenant/").toString(); }
+	private static OidcClient.@NonNull Builder builder(@NonNull TestHttpsServer server,@NonNull Clock clock) { return OidcClient.withIssuer(issuer(server)).clientId(CLIENT).redirectUri(CALLBACK).clock(clock).httpClient(TestTls.httpClient()).jsonWebKeySource(keys()); }
+	private static OidcClient.@NonNull Builder shortTtl(OidcClient.@NonNull Builder builder) { return builder.minimumTimeToLive(Duration.ofSeconds(30)).defaultTimeToLive(Duration.ofSeconds(30)).maximumTimeToLive(Duration.ofMinutes(1)).discoveryCooldown(Duration.ofSeconds(1)); }
+	private static @NonNull JsonWebKeySource keys() { return StaticJsonWebKeySource.fromJsonWebKeySet(JsonWebKeySet.fromJson(keyJson())); }
+	private static @NonNull String keyJson() { return TestJsonWebKeys.withFixture(TestJsonWebKeys.Fixture.IDP_SIGNING_RSA_2048).kid("key").alg("RS256").toKeySetJson(); }
+	private static @NonNull Map<@NonNull String,@NonNull String> publicFields() {
 		Map<String,String> map=new LinkedHashMap<>(); map.put("issuer",JsonText.string("https://issuer.example"));
 		map.put("authorization_endpoint",JsonText.string("https://issuer.example/auth"));map.put("token_endpoint",JsonText.string("https://issuer.example/token"));map.put("jwks_uri",JsonText.string("https://issuer.example/jwks"));
 		map.put("subject_types_supported","[\"public\"]");map.put("id_token_signing_alg_values_supported","[\"RS256\"]");map.put("response_types_supported","[\"code\"]"); return map;
 	}
-	private static Map<String,String> fields(TestHttpsServer server) {
+	private static @NonNull Map<@NonNull String,@NonNull String> fields(@NonNull TestHttpsServer server) {
 		Map<String,String> map=publicFields();map.put("issuer",JsonText.string(issuer(server)));
 		map.put("authorization_endpoint",JsonText.string(server.uri("/authorize").toString()));map.put("token_endpoint",JsonText.string(server.uri("/token").toString()));map.put("jwks_uri",JsonText.string(server.uri("/jwks").toString()));return map;
 	}
-	private static String json(Map<String,String> fields) { return JsonText.object(new ArrayList<>(fields.entrySet())); }
-	private static void script(TestHttpsServer server,Map<String,String> fields,String cache) { server.script(PATH,TestHttpsServer.Script.fromResponse(TestHttpsServer.Response.withStatus(200).header("Content-Type","application/json").header("Cache-Control",cache).body(json(fields)).build())); }
-	private static String nonce(AuthorizationRedirect redirect) throws Exception { return QueryParameters.parse(redirect.getAuthorizationUri().getRawQuery()).getValues("nonce").get(0); }
-	private static String query(AuthorizationRedirect redirect) throws Exception { return "code=TEST-ONLY-CODE&state="+URLEncoder.encode(QueryParameters.parse(redirect.getAuthorizationUri().getRawQuery()).getValues("state").get(0),StandardCharsets.UTF_8); }
-	private static AuthorizationResponse callback(AuthorizationRedirect redirect) throws Exception { return AuthorizationResponse.fromQueryString(query(redirect)); }
-	private static PendingAuthorizationSource source(AuthorizationRedirect redirect,Clock clock) { StateSealer sealer=StateSealer.withActiveKey(TestSealers.fixedKey("oidc-discovery")).clock(clock).build();String sealed=redirect.getPendingAuthorization().toSealedForm(sealer,"oidc-discovery");return PendingAuthorizationSource.fromSealedForm(sealed,sealer,"oidc-discovery"); }
-	private static String token(String issuer,String nonce,Instant now) { return TestJws.withAlgorithm(TestJws.Algorithm.RS256).kid("key").payload(JsonText.object(List.of(Map.entry("iss",JsonText.string(issuer)),Map.entry("sub","\"subject\""),Map.entry("aud",JsonText.string(CLIENT)),Map.entry("iat",Long.toString(now.getEpochSecond())),Map.entry("exp",Long.toString(now.plusSeconds(300).getEpochSecond())),Map.entry("nonce",JsonText.string(nonce))))).sign(TestJsonWebKeys.Fixture.IDP_SIGNING_RSA_2048.getPrivateKey()); }
+	private static @NonNull String json(@NonNull Map<@NonNull String,@NonNull String> fields) { return JsonText.object(new ArrayList<>(fields.entrySet())); }
+	private static void script(@NonNull TestHttpsServer server,@NonNull Map<@NonNull String,@NonNull String> fields,@NonNull String cache) { server.script(PATH,TestHttpsServer.Script.fromResponse(TestHttpsServer.Response.withStatus(200).header("Content-Type","application/json").header("Cache-Control",cache).body(json(fields)).build())); }
+	private static @NonNull String nonce(@NonNull AuthorizationRedirect redirect) throws Exception { return QueryParameters.parse(redirect.getAuthorizationUri().getRawQuery()).getValues("nonce").get(0); }
+	private static @NonNull String query(@NonNull AuthorizationRedirect redirect) throws Exception { return "code=TEST-ONLY-CODE&state="+URLEncoder.encode(QueryParameters.parse(redirect.getAuthorizationUri().getRawQuery()).getValues("state").get(0),StandardCharsets.UTF_8); }
+	private static @NonNull AuthorizationResponse callback(@NonNull AuthorizationRedirect redirect) throws Exception { return AuthorizationResponse.fromQueryString(query(redirect)); }
+	private static @NonNull PendingAuthorizationSource source(@NonNull AuthorizationRedirect redirect,@NonNull Clock clock) { StateSealer sealer=StateSealer.withActiveKey(TestSealers.fixedKey("oidc-discovery")).clock(clock).build();String sealed=redirect.getPendingAuthorization().toSealedForm(sealer,"oidc-discovery");return PendingAuthorizationSource.fromSealedForm(sealed,sealer,"oidc-discovery"); }
+	private static @NonNull String token(@NonNull String issuer,@NonNull String nonce,@NonNull Instant now) { return TestJws.withAlgorithm(TestJws.Algorithm.RS256).kid("key").payload(JsonText.object(List.of(Map.entry("iss",JsonText.string(issuer)),Map.entry("sub","\"subject\""),Map.entry("aud",JsonText.string(CLIENT)),Map.entry("iat",Long.toString(now.getEpochSecond())),Map.entry("exp",Long.toString(now.plusSeconds(300).getEpochSecond())),Map.entry("nonce",JsonText.string(nonce))))).sign(TestJsonWebKeys.Fixture.IDP_SIGNING_RSA_2048.getPrivateKey()); }
 }

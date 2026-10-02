@@ -16,6 +16,10 @@
 
 package com.revetsec.internal.jose;
 
+import org.jspecify.annotations.Nullable;
+
+import org.jspecify.annotations.NonNull;
+
 import com.code_intelligence.jazzer.api.FuzzedDataProvider;
 import com.code_intelligence.jazzer.junit.FuzzTest;
 import com.revetsec.ErrorCategory;
@@ -142,7 +146,7 @@ public class JsonWebKeyFuzzTests {
 	 * @param document the fuzzed JWK Set document: JSON text
 	 */
 	@FuzzTest(maxDuration = "5m")
-	public void keySetDocumentsSkipExactlyTheKeysAnIndependentOracleRefuses(byte[] document) {
+	public void keySetDocumentsSkipExactlyTheKeysAnIndependentOracleRefuses(byte @NonNull [] document) {
 		byte[] original = document.clone();
 
 		for (SetLimits limits : SET_LIMITS) {
@@ -190,7 +194,7 @@ public class JsonWebKeyFuzzTests {
 	 * @param data the fuzzed choices
 	 */
 	@FuzzTest(maxDuration = "5m")
-	public void keysBuiltFromFuzzedIntegersAgreeWithTheCurveAndThumbprintOracle(FuzzedDataProvider data) {
+	public void keysBuiltFromFuzzedIntegersAgreeWithTheCurveAndThumbprintOracle(@NonNull FuzzedDataProvider data) {
 		Map<String, JsonValue> members = new LinkedHashMap<>();
 
 		switch (data.consumeInt(0, 4)) {
@@ -222,7 +226,7 @@ public class JsonWebKeyFuzzTests {
 		}
 	}
 
-	private static void requireKeyAgreement(JsonObject jwk) {
+	private static void requireKeyAgreement(@NonNull JsonObject jwk) {
 		KeyOutcome expected = expectedKey(jwk);
 
 		try {
@@ -244,7 +248,7 @@ public class JsonWebKeyFuzzTests {
 	 * fuzzing starts, and the Jazzer and JDK of ClusterFuzzLite's base image then fail on a record loaded that early
 	 * ({@code NoSuchFieldError} on one of its own fields). So no method here names a main-code record in its signature.
 	 */
-	private static void requireSameSet(SetOutcome expected, Object parsedKeySet) {
+	private static void requireSameSet(@NonNull SetOutcome expected, @NonNull Object parsedKeySet) {
 		ParsedKeySet parsed = (ParsedKeySet) parsedKeySet;
 		Assertions.assertEquals(expected.keys.size(), parsed.keys().size(), "the usable key count differs");
 		Assertions.assertEquals(expected.skips, parsed.skips(), "the skipped keys or their reasons differ");
@@ -258,7 +262,7 @@ public class JsonWebKeyFuzzTests {
 	 * Compares a key with the oracle's. The parameter is {@link Object}, not {@link VerificationKey}, for the reason
 	 * {@link #requireSameSet} gives.
 	 */
-	private static void requireSameKey(KeyOutcome expected, Object verificationKey) {
+	private static void requireSameKey(@NonNull KeyOutcome expected, @NonNull Object verificationKey) {
 		VerificationKey actual = (VerificationKey) verificationKey;
 		Assertions.assertEquals(expected.keyId, actual.keyId(), "kid");
 		Assertions.assertEquals(expected.keyType, actual.keyType(), "kty");
@@ -275,7 +279,7 @@ public class JsonWebKeyFuzzTests {
 				"toString shows more than the key's public facts");
 	}
 
-	private static void requirePublicApiAgreement(String text, SetOutcome expected) {
+	private static void requirePublicApiAgreement(@NonNull String text, @NonNull SetOutcome expected) {
 		JsonWebKeySet set;
 
 		try {
@@ -325,7 +329,7 @@ public class JsonWebKeyFuzzTests {
 	/**
 	 * RFC 7517 section 5 and the plan's document failures, then each element through the key oracle.
 	 */
-	private static SetOutcome expectedSet(byte[] document, SetLimits limits) {
+	private static @NonNull SetOutcome expectedSet(byte @NonNull [] document, @NonNull SetLimits limits) {
 		if (document.length > limits.bytes)
 			return SetOutcome.FAILED;
 
@@ -363,7 +367,7 @@ public class JsonWebKeyFuzzTests {
 	/**
 	 * The twelve key rules, in order (plan "Keys").
 	 */
-	private static KeyOutcome expectedKey(JsonObject jwk) {
+	private static @NonNull KeyOutcome expectedKey(@NonNull JsonObject jwk) {
 		Map<String, JsonValue> members = jwk.getMembers();
 
 		// 1 and 2.
@@ -472,7 +476,7 @@ public class JsonWebKeyFuzzTests {
 	/**
 	 * Rules 7 to 11 for RSA (RFC 7518 section 6.3.1): minimal {@code n} and {@code e}, then the key policy.
 	 */
-	private static Object rsaMaterial(Map<String, JsonValue> members) {
+	private static @NonNull Object rsaMaterial(@NonNull Map<@NonNull String, @NonNull JsonValue> members) {
 		byte[] modulus = base64UrlMember(members, "n");
 		byte[] exponent = base64UrlMember(members, "e");
 
@@ -501,7 +505,7 @@ public class JsonWebKeyFuzzTests {
 	 * Rules 7 and 10 for EC (RFC 7518 section 6.2.1): the curve's exact coordinate length, then coordinates below
 	 * the field prime and on the curve.
 	 */
-	private static Object ecMaterial(Map<String, JsonValue> members) {
+	private static @NonNull Object ecMaterial(@NonNull Map<@NonNull String, @NonNull JsonValue> members) {
 		if (!(members.get("crv") instanceof JsonString curveName))
 			return JsonWebKeySkipReason.MALFORMED_KEY;
 
@@ -524,7 +528,7 @@ public class JsonWebKeyFuzzTests {
 	/**
 	 * Rules 7 and 11 for Ed25519 (RFC 8037 section 2, RFC 8032 section 5.1.3).
 	 */
-	private static Object ed25519Material(Map<String, JsonValue> members) {
+	private static @NonNull Object ed25519Material(@NonNull Map<@NonNull String, @NonNull JsonValue> members) {
 		if (!(members.get("crv") instanceof JsonString))
 			return JsonWebKeySkipReason.MALFORMED_KEY;
 
@@ -556,7 +560,7 @@ public class JsonWebKeyFuzzTests {
 	 * RFC 8032 section 5.1.3: the {@code x} of the point with this {@code y} and sign, or {@code null} if there is
 	 * none. The square root comes from Atkin's method, not from the RFC's candidate formula.
 	 */
-	private static BigInteger recoverX(BigInteger y, boolean xOdd) {
+	private static @Nullable BigInteger recoverX(@NonNull BigInteger y, boolean xOdd) {
 		BigInteger p = ED25519_P;
 
 		if (y.compareTo(p) >= 0)
@@ -593,7 +597,7 @@ public class JsonWebKeyFuzzTests {
 	 * Whether {@code [8](x, y)} is the neutral element {@code (0, 1)}, by three doublings with the twisted Edwards
 	 * addition law for {@code a = -1} (RFC 8032 section 5.1.4), which is complete on this curve.
 	 */
-	private static boolean hasSmallOrder(BigInteger x, BigInteger y) {
+	private static boolean hasSmallOrder(@NonNull BigInteger x, @NonNull BigInteger y) {
 		BigInteger[] point = {x, y};
 
 		for (int doubling = 0; doubling < 3; ++doubling)
@@ -602,7 +606,7 @@ public class JsonWebKeyFuzzTests {
 		return point[0].signum() == 0 && point[1].equals(BigInteger.ONE);
 	}
 
-	private static BigInteger[] edwardsAdd(BigInteger[] first, BigInteger[] second) {
+	private static @NonNull BigInteger @NonNull [] edwardsAdd(@NonNull BigInteger @NonNull [] first, @NonNull BigInteger @NonNull [] second) {
 		BigInteger p = ED25519_P;
 		BigInteger x1y2 = first[0].multiply(second[1]);
 		BigInteger y1x2 = first[1].multiply(second[0]);
@@ -618,7 +622,7 @@ public class JsonWebKeyFuzzTests {
 	 * The ROCA fingerprint: for every odd prime {@code p} from 3 to 167, {@code n mod p} is a unit whose power by the
 	 * order of 65,537 mod {@code p} is 1, so it lies in the subgroup 65,537 generates.
 	 */
-	private static boolean hasRocaFingerprint(BigInteger n) {
+	private static boolean hasRocaFingerprint(@NonNull BigInteger n) {
 		for (int index = 0; index < ROCA_PRIMES.size(); ++index) {
 			BigInteger p = BigInteger.valueOf(ROCA_PRIMES.get(index));
 			BigInteger residue = n.mod(p);
@@ -633,7 +637,7 @@ public class JsonWebKeyFuzzTests {
 	/**
 	 * For each prime, the multiplicative order of {@code generator} modulo it: the size of the subgroup it generates.
 	 */
-	private static List<BigInteger> subgroupOrders(int generator, List<Integer> primes) {
+	private static @NonNull List<@NonNull BigInteger> subgroupOrders(int generator, @NonNull List<@NonNull Integer> primes) {
 		List<BigInteger> orders = new ArrayList<>();
 
 		for (int prime : primes) {
@@ -652,7 +656,7 @@ public class JsonWebKeyFuzzTests {
 	 * Rule 12: {@code x5c}'s first element is padded Base64 of a certificate that {@link Pem#parseCertificateDer}
 	 * accepts, and whose key is this key by value.
 	 */
-	private static boolean certificateHoldsKey(JsonValue chain, KeyMaterial key) {
+	private static boolean certificateHoldsKey(@NonNull JsonValue chain, @NonNull KeyMaterial key) {
 		if (!(chain instanceof JsonArray certificates) || certificates.getElements().isEmpty()
 				|| !(certificates.getElements().get(0) instanceof JsonString first))
 			return false;
@@ -675,7 +679,7 @@ public class JsonWebKeyFuzzTests {
 	 * SHA-256 and written as unpadded base64url. The values are canonical base64url and curve names, so none needs
 	 * escaping.
 	 */
-	private static String thumbprint(Map<String, JsonValue> members, String keyType) {
+	private static @NonNull String thumbprint(@NonNull Map<@NonNull String, @NonNull JsonValue> members, @NonNull String keyType) {
 		String canonical = switch (keyType) {
 			case "RSA" -> "{\"e\":\"" + string(members, "e") + "\",\"kty\":\"RSA\",\"n\":\"" + string(members, "n") + "\"}";
 			case "EC" -> "{\"crv\":\"" + string(members, "crv") + "\",\"kty\":\"EC\",\"x\":\"" + string(members, "x")
@@ -690,19 +694,19 @@ public class JsonWebKeyFuzzTests {
 		}
 	}
 
-	private static String string(Map<String, JsonValue> members, String name) {
+	private static @NonNull String string(@NonNull Map<@NonNull String, @NonNull JsonValue> members, @NonNull String name) {
 		return ((JsonString) members.get(name)).getValue();
 	}
 
-	private static byte[] base64UrlMember(Map<String, JsonValue> members, String name) {
+	private static byte @Nullable [] base64UrlMember(@NonNull Map<@NonNull String, @NonNull JsonValue> members, @NonNull String name) {
 		return members.get(name) instanceof JsonString string ? decodeBase64Url(string.getValue()) : null;
 	}
 
-	private static boolean isMinimal(byte[] value) {
+	private static boolean isMinimal(byte @NonNull [] value) {
 		return value.length == 1 || (value.length > 1 && value[0] != 0);
 	}
 
-	private static String keyTypeOf(JwsAlgorithm algorithm) {
+	private static @NonNull String keyTypeOf(@NonNull JwsAlgorithm algorithm) {
 		return switch (algorithm) {
 			case RS256, RS384, RS512, PS256, PS384, PS512 -> "RSA";
 			case ES256, ES384, ES512 -> "EC";
@@ -711,7 +715,7 @@ public class JsonWebKeyFuzzTests {
 		};
 	}
 
-	private static String curveOf(JwsAlgorithm algorithm) {
+	private static @NonNull String curveOf(@NonNull JwsAlgorithm algorithm) {
 		return switch (algorithm) {
 			case ES256 -> "P-256";
 			case ES384 -> "P-384";
@@ -721,14 +725,14 @@ public class JsonWebKeyFuzzTests {
 		};
 	}
 
-	private static boolean isSupportedCurve(String keyType, String curve) {
+	private static boolean isSupportedCurve(@NonNull String keyType, @NonNull String curve) {
 		return (keyType.equals("EC") && EC_CURVES.containsKey(curve)) || (keyType.equals("OKP") && curve.equals("Ed25519"));
 	}
 
 	/**
 	 * RFC 4648 section 5 without padding, canonical; {@code null} for anything else.
 	 */
-	private static byte[] decodeBase64Url(String text) {
+	private static byte @Nullable [] decodeBase64Url(@NonNull String text) {
 		if (text.length() % 4 == 1)
 			return null;
 
@@ -738,7 +742,7 @@ public class JsonWebKeyFuzzTests {
 	/**
 	 * RFC 4648 section 4 with its padding required, canonical; {@code null} for anything else.
 	 */
-	private static byte[] decodeBase64(String text) {
+	private static byte @Nullable [] decodeBase64(@NonNull String text) {
 		if (text.length() % 4 != 0)
 			return null;
 
@@ -751,7 +755,7 @@ public class JsonWebKeyFuzzTests {
 		return decodeBits(significant, BASE64_ALPHABET);
 	}
 
-	private static byte[] decodeBits(String text, String alphabet) {
+	private static byte @Nullable [] decodeBits(@NonNull String text, @NonNull String alphabet) {
 		ByteArrayOutputStream octets = new ByteArrayOutputStream();
 		int buffer = 0;
 		int bits = 0;
@@ -775,7 +779,7 @@ public class JsonWebKeyFuzzTests {
 		return buffer == 0 ? octets.toByteArray() : null;
 	}
 
-	private static String encodeBase64Url(byte[] bytes) {
+	private static @NonNull String encodeBase64Url(byte @NonNull [] bytes) {
 		StringBuilder encoded = new StringBuilder();
 		int buffer = 0;
 		int bits = 0;
@@ -800,7 +804,7 @@ public class JsonWebKeyFuzzTests {
 	 * The documented {@code toString} escape: C0 and C1 controls, DEL, the quotation mark, the backslash, the line and
 	 * paragraph separators, the bidirectional formatting characters and unpaired surrogates, as {@code \}{@code uXXXX}.
 	 */
-	private static String escapedKeyId(String keyId) {
+	private static @NonNull String escapedKeyId(@NonNull String keyId) {
 		StringBuilder escaped = new StringBuilder();
 
 		for (int index = 0; index < keyId.length(); ++index) {
@@ -823,7 +827,7 @@ public class JsonWebKeyFuzzTests {
 		return escaped.toString();
 	}
 
-	private static String strictUtf8(byte[] bytes) {
+	private static @Nullable String strictUtf8(byte @NonNull [] bytes) {
 		try {
 			return StandardCharsets.UTF_8.newDecoder().onMalformedInput(CodingErrorAction.REPORT)
 					.onUnmappableCharacter(CodingErrorAction.REPORT).decode(ByteBuffer.wrap(bytes)).toString();
@@ -832,7 +836,7 @@ public class JsonWebKeyFuzzTests {
 		}
 	}
 
-	private static void collectObjects(JsonValue value, List<JsonObject> objects) {
+	private static void collectObjects(@NonNull JsonValue value, @NonNull List<@NonNull JsonObject> objects) {
 		if (value instanceof JsonObject object) {
 			objects.add(object);
 
@@ -844,7 +848,7 @@ public class JsonWebKeyFuzzTests {
 		}
 	}
 
-	private static List<Integer> oddPrimesThrough(int limit) {
+	private static @NonNull List<@NonNull Integer> oddPrimesThrough(int limit) {
 		List<Integer> primes = new ArrayList<>();
 
 		for (int candidate = 3; candidate <= limit; candidate += 2) {
@@ -865,7 +869,7 @@ public class JsonWebKeyFuzzTests {
 	 * smaller order: {@code y = 1} and {@code y = -1} (orders 1 and 2), {@code y = 0} (order 4), and the roots of
 	 * {@code d y^4 + 2 y^2 - 1 = 0} (order 8).
 	 */
-	private static List<BigInteger> smallOrderYCoordinates() {
+	private static @NonNull List<@NonNull BigInteger> smallOrderYCoordinates() {
 		BigInteger p = ED25519_P;
 		List<BigInteger> ys = new ArrayList<>(List.of(BigInteger.ONE, p.subtract(BigInteger.ONE), BigInteger.ZERO));
 		BigInteger root = squareRoot(BigInteger.ONE.add(ED25519_D).mod(p));
@@ -888,7 +892,7 @@ public class JsonWebKeyFuzzTests {
 		return List.copyOf(ys);
 	}
 
-	private static BigInteger squareRoot(BigInteger a) {
+	private static @Nullable BigInteger squareRoot(@NonNull BigInteger a) {
 		BigInteger p = ED25519_P;
 
 		if (a.signum() == 0)
@@ -905,7 +909,7 @@ public class JsonWebKeyFuzzTests {
 
 	// Structure-aware builders for the second target.
 
-	private static void rsaMembers(FuzzedDataProvider data, Map<String, JsonValue> members) {
+	private static void rsaMembers(@NonNull FuzzedDataProvider data, @NonNull Map<@NonNull String, @NonNull JsonValue> members) {
 		members.put("kty", JsonString.fromValue("RSA"));
 		// Choice 0, which an exhausted input gives, is always the ordinary case: here, an odd 2,048-bit modulus and 65537.
 		BigInteger n = switch (data.consumeInt(0, 3)) {
@@ -935,7 +939,7 @@ public class JsonWebKeyFuzzTests {
 	 * A modulus of about {@code bits} bits whose residues modulo every ROCA prime lie in the subgroup 65,537 generates,
 	 * built by the Chinese remainder theorem; optionally one prime gets a residue outside it.
 	 */
-	private static BigInteger rocaModulus(FuzzedDataProvider data) {
+	private static @NonNull BigInteger rocaModulus(@NonNull FuzzedDataProvider data) {
 		int bits = List.of(2_047, 2_048, 3_072, 4_096).get(data.consumeInt(0, 3));
 		int broken = data.consumeBoolean() ? data.consumeInt(0, ROCA_PRIMES.size() - 1) : -1;
 		BigInteger product = BigInteger.ONE;
@@ -962,13 +966,13 @@ public class JsonWebKeyFuzzTests {
 		return n.testBit(0) ? n : n.add(product);
 	}
 
-	private static BigInteger randomModulus(FuzzedDataProvider data, int bits) {
+	private static @NonNull BigInteger randomModulus(@NonNull FuzzedDataProvider data, int bits) {
 		BigInteger n = new BigInteger(1, data.consumeBytes((bits + 7) / 8));
 		n = n.mod(BigInteger.ONE.shiftLeft(bits)).setBit(bits - 1);
 		return data.consumeBoolean() ? n.clearBit(0) : n.setBit(0);
 	}
 
-	private static void ecMembers(FuzzedDataProvider data, Map<String, JsonValue> members, String curveName) {
+	private static void ecMembers(@NonNull FuzzedDataProvider data, @NonNull Map<@NonNull String, @NonNull JsonValue> members, @NonNull String curveName) {
 		NamedCurve curve = EC_CURVES.get(curveName);
 		BigInteger x = new BigInteger(1, data.consumeBytes(curve.coordinateLength)).mod(curve.fieldPrime);
 		BigInteger y = data.consumeBoolean() ? curve.yFor(x) : null;
@@ -1023,7 +1027,7 @@ public class JsonWebKeyFuzzTests {
 		members.put("y", JsonString.fromValue(encodeBase64Url(yBytes)));
 	}
 
-	private static void ed25519Members(FuzzedDataProvider data, Map<String, JsonValue> members) {
+	private static void ed25519Members(@NonNull FuzzedDataProvider data, @NonNull Map<@NonNull String, @NonNull JsonValue> members) {
 		BigInteger y = switch (data.consumeInt(0, 4)) {
 			case 1 -> ED25519_SMALL_ORDER_Y.get(data.consumeInt(0, ED25519_SMALL_ORDER_Y.size() - 1));
 			case 2 -> ED25519_P.add(BigInteger.valueOf(data.consumeInt(0, 18)));
@@ -1046,7 +1050,7 @@ public class JsonWebKeyFuzzTests {
 		members.put("x", JsonString.fromValue(encodeBase64Url(Arrays.copyOf(encoded, length))));
 	}
 
-	private static void optionalMembers(FuzzedDataProvider data, Map<String, JsonValue> members) {
+	private static void optionalMembers(@NonNull FuzzedDataProvider data, @NonNull Map<@NonNull String, @NonNull JsonValue> members) {
 		int choices = data.consumeInt(0, 255);
 
 		if ((choices & 1) != 0)
@@ -1096,11 +1100,11 @@ public class JsonWebKeyFuzzTests {
 	}
 
 	@SafeVarargs
-	private static <T> T pick(FuzzedDataProvider data, T... values) {
+	private static <T> @NonNull T pick(@NonNull FuzzedDataProvider data, @NonNull T @NonNull ... values) {
 		return values[data.consumeInt(0, values.length - 1)];
 	}
 
-	private static JsonValue fuzzedString(FuzzedDataProvider data) {
+	private static @NonNull JsonValue fuzzedString(@NonNull FuzzedDataProvider data) {
 		try {
 			return JsonString.fromValue(data.consumeString(300));
 		} catch (IllegalArgumentException e) {
@@ -1109,7 +1113,7 @@ public class JsonWebKeyFuzzTests {
 		}
 	}
 
-	private static JsonArray strings(String... values) {
+	private static @NonNull JsonArray strings(@NonNull String @NonNull ... values) {
 		List<JsonValue> elements = new ArrayList<>();
 
 		for (String value : values)
@@ -1121,7 +1125,7 @@ public class JsonWebKeyFuzzTests {
 	/**
 	 * An unsigned integer as base64url: minimal, with a leading zero octet, or empty.
 	 */
-	private static String encodeInteger(FuzzedDataProvider data, BigInteger value) {
+	private static @NonNull String encodeInteger(@NonNull FuzzedDataProvider data, @NonNull BigInteger value) {
 		byte[] minimal = value.toByteArray();
 
 		if (minimal.length > 1 && minimal[0] == 0)
@@ -1134,7 +1138,7 @@ public class JsonWebKeyFuzzTests {
 		};
 	}
 
-	private static byte[] concat(byte[] first, byte[] second) {
+	private static byte @NonNull [] concat(byte @NonNull [] first, byte @NonNull [] second) {
 		byte[] joined = Arrays.copyOf(first, first.length + second.length);
 		System.arraycopy(second, 0, joined, first.length, second.length);
 		return joined;
@@ -1143,7 +1147,7 @@ public class JsonWebKeyFuzzTests {
 	/**
 	 * {@code value} big-endian in exactly {@code length} octets, keeping the low octets of a larger value.
 	 */
-	private static byte[] fixedLength(BigInteger value, int length) {
+	private static byte @NonNull [] fixedLength(@NonNull BigInteger value, int length) {
 		byte[] bytes = value.toByteArray();
 		byte[] fixed = new byte[Math.max(length, 0)];
 
@@ -1178,7 +1182,7 @@ public class JsonWebKeyFuzzTests {
 		private final List<KeyOutcome> keys;
 		private final List<ParsedKeySet.Skip> skips;
 
-		private SetOutcome(boolean failed, List<KeyOutcome> keys, List<ParsedKeySet.Skip> skips) {
+		private SetOutcome(boolean failed, @NonNull List<@NonNull KeyOutcome> keys, @NonNull List<ParsedKeySet.@NonNull Skip> skips) {
 			this.failed = failed;
 			this.keys = List.copyOf(keys);
 			this.skips = List.copyOf(skips);
@@ -1200,8 +1204,8 @@ public class JsonWebKeyFuzzTests {
 		private final String thumbprint;
 		private final KeyMaterial material;
 
-		private KeyOutcome(JsonWebKeySkipReason skip, String keyId, String keyType, String curve, JwsAlgorithm algorithm,
-											 String use, String issuer, String thumbprint, KeyMaterial material) {
+		private KeyOutcome(@Nullable JsonWebKeySkipReason skip, @Nullable String keyId, @Nullable String keyType, @Nullable String curve, @Nullable JwsAlgorithm algorithm,
+											 @Nullable String use, @Nullable String issuer, @Nullable String thumbprint, @Nullable KeyMaterial material) {
 			this.skip = skip;
 			this.keyId = keyId;
 			this.keyType = keyType;
@@ -1213,7 +1217,7 @@ public class JsonWebKeyFuzzTests {
 			this.material = material;
 		}
 
-		private static KeyOutcome skipped(JsonWebKeySkipReason skip) {
+		private static @NonNull KeyOutcome skipped(@NonNull JsonWebKeySkipReason skip) {
 			return new KeyOutcome(skip, null, null, null, null, null, null, null, null);
 		}
 	}
@@ -1229,7 +1233,7 @@ public class JsonWebKeyFuzzTests {
 		private final BigInteger second;
 		private final boolean xOdd;
 
-		private KeyMaterial(String curve, NamedCurve ecCurve, BigInteger first, BigInteger second, boolean xOdd) {
+		private KeyMaterial(@Nullable String curve, @Nullable NamedCurve ecCurve, @NonNull BigInteger first, @Nullable BigInteger second, boolean xOdd) {
 			this.curve = curve;
 			this.ecCurve = ecCurve;
 			this.first = first;
@@ -1237,19 +1241,19 @@ public class JsonWebKeyFuzzTests {
 			this.xOdd = xOdd;
 		}
 
-		private static KeyMaterial rsa(BigInteger n, BigInteger e) {
+		private static @NonNull KeyMaterial rsa(@NonNull BigInteger n, @NonNull BigInteger e) {
 			return new KeyMaterial(null, null, n, e, false);
 		}
 
-		private static KeyMaterial ec(String curve, NamedCurve ecCurve, BigInteger x, BigInteger y) {
+		private static @NonNull KeyMaterial ec(@NonNull String curve, @NonNull NamedCurve ecCurve, @NonNull BigInteger x, @NonNull BigInteger y) {
 			return new KeyMaterial(curve, ecCurve, x, y, false);
 		}
 
-		private static KeyMaterial ed25519(BigInteger y, boolean xOdd) {
+		private static @NonNull KeyMaterial ed25519(@NonNull BigInteger y, boolean xOdd) {
 			return new KeyMaterial("Ed25519", null, y, null, xOdd);
 		}
 
-		private boolean isSameKey(PublicKey key) {
+		private boolean isSameKey(@NonNull PublicKey key) {
 			try {
 				if (this.curve == null)
 					return key instanceof RSAPublicKey rsa && rsa.getModulus().equals(this.first)
@@ -1276,13 +1280,13 @@ public class JsonWebKeyFuzzTests {
 		private final BigInteger fieldPrime;
 		private final int coordinateLength;
 
-		private NamedCurve(ECParameterSpec parameters) {
+		private NamedCurve(@NonNull ECParameterSpec parameters) {
 			this.parameters = parameters;
 			this.fieldPrime = ((ECFieldFp) parameters.getCurve().getField()).getP();
 			this.coordinateLength = (this.fieldPrime.bitLength() + 7) / 8;
 		}
 
-		private static NamedCurve fromJdkName(String name) {
+		private static @NonNull NamedCurve fromJdkName(@NonNull String name) {
 			try {
 				AlgorithmParameters parameters = AlgorithmParameters.getInstance("EC");
 				parameters.init(new ECGenParameterSpec(name));
@@ -1296,7 +1300,7 @@ public class JsonWebKeyFuzzTests {
 		 * SEC 1 section 3.2.2.1's point check for an affine point: both coordinates in {@code [0, p)} and
 		 * {@code y^2 = x^3 + ax + b}.
 		 */
-		private boolean isOnCurve(BigInteger x, BigInteger y) {
+		private boolean isOnCurve(@NonNull BigInteger x, @NonNull BigInteger y) {
 			BigInteger p = this.fieldPrime;
 
 			if (x.compareTo(p) >= 0 || y.compareTo(p) >= 0)
@@ -1311,7 +1315,7 @@ public class JsonWebKeyFuzzTests {
 		/**
 		 * A {@code y} with {@code (x, y)} on the curve, or {@code null}; every curve here has {@code p = 3 mod 4}.
 		 */
-		private BigInteger yFor(BigInteger x) {
+		private @Nullable BigInteger yFor(@NonNull BigInteger x) {
 			BigInteger p = this.fieldPrime;
 			BigInteger right = x.pow(3).add(this.parameters.getCurve().getA().multiply(x))
 					.add(this.parameters.getCurve().getB()).mod(p);
@@ -1319,15 +1323,15 @@ public class JsonWebKeyFuzzTests {
 			return y.multiply(y).mod(p).equals(right) ? y : null;
 		}
 
-		private BigInteger generatorX() {
+		private @NonNull BigInteger generatorX() {
 			return this.parameters.getGenerator().getAffineX();
 		}
 
-		private BigInteger generatorY() {
+		private @NonNull BigInteger generatorY() {
 			return this.parameters.getGenerator().getAffineY();
 		}
 
-		private boolean describes(ECParameterSpec other) {
+		private boolean describes(@Nullable ECParameterSpec other) {
 			return other != null && other.getCurve().equals(this.parameters.getCurve())
 					&& other.getGenerator().equals(this.parameters.getGenerator())
 					&& other.getOrder().equals(this.parameters.getOrder())

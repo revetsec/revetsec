@@ -16,6 +16,8 @@
 
 package com.revetsec.oidc;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.StateSealer;
 import com.revetsec.internal.encoding.QueryParameters;
 import com.revetsec.internal.json.JsonCodec;
@@ -53,8 +55,8 @@ final class OidcUserInfoTests {
 		try (TestHttpsServer server = TestHttpsServer.start()) {
 			List<String> events = new ArrayList<>();
 			OidcClient client = builder(server).observer(new OidcObserver() {
-				@Override public void willRequestEndpoint(OAuthEndpoint endpoint, URI uri) { if (endpoint == OAuthEndpoint.USERINFO) { events.add(uri.toString()); throw new IllegalStateException("ignored hook"); } }
-				@Override public void didFetchUserInfo(Boolean signed) { events.add("success:" + signed); throw new IllegalStateException("ignored hook"); }
+				@Override public void willRequestEndpoint(@NonNull OAuthEndpoint endpoint, @NonNull URI uri) { if (endpoint == OAuthEndpoint.USERINFO) { events.add(uri.toString()); throw new IllegalStateException("ignored hook"); } }
+				@Override public void didFetchUserInfo(@NonNull Boolean signed) { events.add("success:" + signed); throw new IllegalStateException("ignored hook"); }
 			}).build();
 			OidcAuthentication authentication = authenticate(server, client, ACCESS, 300);
 			respond(server, 200, "application/json; charset=UTF-8", "{\"sub\":" + JsonText.string(SUBJECT) + ",\"email\":" + JsonText.string(EMAIL) + ",\"email_verified\":true,\"_claim_names\":{\"phone_number\":\"src\"},\"_claim_sources\":{\"src\":{\"endpoint\":" + JsonText.string(server.uri("/private").toString()) + "}}}");
@@ -72,7 +74,7 @@ final class OidcUserInfoTests {
 	}
 
 	@TestFactory
-	Stream<DynamicTest> userInfoSubjectAcceptsTheExactAsciiBounds() {
+	@NonNull Stream<@NonNull DynamicTest> userInfoSubjectAcceptsTheExactAsciiBounds() {
 		return Stream.of("s".repeat(255), "\u007f", "s".repeat(254) + "\u007f")
 				.map(subject -> DynamicTest.dynamicTest("ASCII subject length " + subject.length(), () -> {
 					byte[] body = ("{\"sub\":" + JsonText.string(subject) + "}").getBytes(StandardCharsets.UTF_8);
@@ -81,8 +83,8 @@ final class OidcUserInfoTests {
 	}
 
 	@TestFactory
-	Stream<DynamicTest> malformedOrMismatchedJsonNeverReleasesClaims() {
-		record Case(String body, OidcValidationException.Reason reason) { }
+	@NonNull Stream<@NonNull DynamicTest> malformedOrMismatchedJsonNeverReleasesClaims() {
+		record Case(@NonNull String body, OidcValidationException.@NonNull Reason reason) { }
 		List<Case> cases = new ArrayList<>();
 		for (String body : List.of("{}", "{\"sub\":null}", "{\"sub\":1}", "{\"sub\":[]}", "{\"sub\":\"\"}", "{\"sub\":\"é\"}", "{\"sub\":" + JsonText.string("s".repeat(256)) + "}", "[]", "null", "{", "{\"sub\":" + JsonText.string(SUBJECT) + ",\"sub\":" + JsonText.string(SUBJECT) + "}")) cases.add(new Case(body, OidcValidationException.Reason.USERINFO_MALFORMED));
 		cases.add(new Case("{\"sub\":\"other\",\"secret\":" + JsonText.string(ACCESS) + "}", OidcValidationException.Reason.USERINFO_SUBJECT_MISMATCH));
@@ -91,8 +93,8 @@ final class OidcUserInfoTests {
 			try (TestHttpsServer server = TestHttpsServer.start()) {
 				AtomicReference<OidcValidationException> observed = new AtomicReference<>(); AtomicInteger success = new AtomicInteger();
 				OidcClient client = builder(server).observer(new OidcObserver() {
-					@Override public void didRejectUserInfo(OidcValidationException failure) { observed.set(failure); throw new IllegalStateException(ACCESS); }
-					@Override public void didFetchUserInfo(Boolean signed) { success.incrementAndGet(); }
+					@Override public void didRejectUserInfo(@NonNull OidcValidationException failure) { observed.set(failure); throw new IllegalStateException(ACCESS); }
+					@Override public void didFetchUserInfo(@NonNull Boolean signed) { success.incrementAndGet(); }
 				}).build(); OidcAuthentication authentication = authenticate(server, client, ACCESS, 300);
 				Case test = cases.get(i); respond(server, 200, "application/json", test.body());
 				OidcValidationException failure = assertThrows(OidcValidationException.class, () -> client.fetchUserInfo(authentication));
@@ -133,8 +135,8 @@ final class OidcUserInfoTests {
 	}
 
 	@TestFactory
-	Stream<DynamicTest> rejectsSignedClaimAndSignatureFailuresWithSafeOidcAndJoseReasons() {
-		record Case(String name, OidcValidationException.Reason reason, Consumer<Map<String,String>> change) { }
+	@NonNull Stream<@NonNull DynamicTest> rejectsSignedClaimAndSignatureFailuresWithSafeOidcAndJoseReasons() {
+		record Case(@NonNull String name, OidcValidationException.@NonNull Reason reason, @NonNull Consumer<@NonNull Map<@NonNull String,@NonNull String>> change) { }
 		return Stream.of(
 			new Case("signature", OidcValidationException.Reason.USERINFO_SIGNATURE_INVALID, c -> {}),
 			new Case("issuer absent", OidcValidationException.Reason.MISSING_CLAIM, c -> c.remove("iss")),
@@ -163,7 +165,7 @@ final class OidcUserInfoTests {
 	}
 
 	@TestFactory
-	Stream<DynamicTest> rejectsRemoteHeaderAndWrongAlgorithmBeforeKeyIo() {
+	@NonNull Stream<@NonNull DynamicTest> rejectsRemoteHeaderAndWrongAlgorithmBeforeKeyIo() {
 		return Stream.of("at+jwt", "jku", "crit", "none", "wrong alg", "JWE").map(name -> DynamicTest.dynamicTest(name, () -> {
 			try (TestHttpsServer server = TestHttpsServer.start()) {
 				OidcAuthentication auth = authenticate(server, builder(server).build(), ACCESS, 300);
@@ -217,7 +219,7 @@ final class OidcUserInfoTests {
 			assertEquals(OidcValidationException.Reason.USERINFO_ACCESS_TOKEN_EXPIRED, assertThrows(OidcValidationException.class, () -> lazy(server).clock(clock).build().fetchUserInfo(expired)).getReason()); assertEquals(0, server.getHitCount(DISCOVERY));
 			TestClock advancing = TestClock.fromInstant(NOW); OidcAuthentication fresh = authenticate(server, builder(server).clock(advancing).build(), ACCESS, 1); discovery(server, null);
 			OidcClient client = lazy(server).clock(advancing).observer(new OidcObserver() {
-				@Override public void didRequestEndpoint(OAuthEndpoint endpoint, URI uri, Integer status, Duration elapsed) { if (endpoint == OAuthEndpoint.METADATA) advancing.advance(Duration.ofSeconds(1)); }
+				@Override public void didRequestEndpoint(@NonNull OAuthEndpoint endpoint, @NonNull URI uri, @NonNull Integer status, @NonNull Duration elapsed) { if (endpoint == OAuthEndpoint.METADATA) advancing.advance(Duration.ofSeconds(1)); }
 			}).build();
 			assertEquals(OidcValidationException.Reason.USERINFO_ACCESS_TOKEN_EXPIRED, assertThrows(OidcValidationException.class, () -> client.fetchUserInfo(fresh)).getReason()); assertEquals(1, server.getHitCount(DISCOVERY)); assertEquals(0, server.getHitCount("/userinfo"));
 		}
@@ -240,7 +242,7 @@ final class OidcUserInfoTests {
 	}
 
 	@TestFactory
-	Stream<DynamicTest> malformedAdvertisedUserInfoAlgorithmsHaveNoDefaults() {
+	@NonNull Stream<@NonNull DynamicTest> malformedAdvertisedUserInfoAlgorithmsHaveNoDefaults() {
 		return Stream.of("null", "[]", "[1]", "[\"RS256\",\"RS256\"]", "[\"\"]", "\"RS256\"").map(value -> DynamicTest.dynamicTest(value, () -> {
 			try (TestHttpsServer server = TestHttpsServer.start()) {
 				OidcAuthentication auth = authenticate(server, builder(server).build(), ACCESS, 300); discovery(server, value);
@@ -255,7 +257,7 @@ final class OidcUserInfoTests {
 			OidcAuthentication auth = authenticate(server, builder(server).build(), ACCESS, 300); TestClock clock = TestClock.fromInstant(NOW);
 			server.script("/jwks", TestHttpsServer.Script.fromResponse(TestHttpsServer.Response.fromJsonWebKeySet(keyJson())));
 			OidcClient client = builder(server).jsonWebKeySource(null).clock(clock).clockSkew(Duration.ZERO).userInfoSignedResponseAlgorithm(JwsAlgorithm.RS256).observer(new OidcObserver() {
-				@Override public void didFetchJsonWebKeySet(URI uri, Integer usable, Integer skipped, Duration ttl, Duration elapsed) { clock.advance(Duration.ofSeconds(2)); }
+				@Override public void didFetchJsonWebKeySet(@NonNull URI uri, @NonNull Integer usable, @NonNull Integer skipped, @NonNull Duration ttl, @NonNull Duration elapsed) { clock.advance(Duration.ofSeconds(2)); }
 			}).build();
 			Map<String,String> claims = claims(server); claims.put("exp", Long.toString(NOW.plusSeconds(1).getEpochSecond())); respond(server, 200, "application/jwt", sign(claims, false));
 			assertEquals(OidcValidationException.Reason.EXPIRED, assertThrows(OidcValidationException.class, () -> client.fetchUserInfo(auth)).getReason());
@@ -268,7 +270,7 @@ final class OidcUserInfoTests {
 		try (TestHttpsServer server = TestHttpsServer.start()) {
 			OidcAuthentication auth = authenticate(server, builder(server).build(), ACCESS, 300); respond(server, 200, "application/jwt", sign(claims(server), false));
 			OidcClient client = builder(server).jsonWebKeySource(null).userInfoSignedResponseAlgorithm(JwsAlgorithm.RS256).requestTimeout(Duration.ofSeconds(1)).totalDeadline(Duration.ofSeconds(1)).observer(new OidcObserver() {
-				@Override public void didRequestEndpoint(OAuthEndpoint endpoint, URI uri, Integer status, Duration elapsed) { if (endpoint == OAuthEndpoint.USERINFO) pause(); }
+				@Override public void didRequestEndpoint(@NonNull OAuthEndpoint endpoint, @NonNull URI uri, @NonNull Integer status, @NonNull Duration elapsed) { if (endpoint == OAuthEndpoint.USERINFO) pause(); }
 			}).build();
 			assertThrows(JsonWebKeySetUnavailableException.class, () -> client.fetchUserInfo(auth)); assertEquals(0, server.getHitCount("/jwks")); assertEquals(1, server.getHitCount("/userinfo"));
 		}
@@ -279,14 +281,14 @@ final class OidcUserInfoTests {
 		try (TestHttpsServer server = TestHttpsServer.start()) {
 			OidcAuthentication auth = authenticate(server, builder(server).build(), ACCESS, 300); discovery(server, null);
 			OidcClient client = lazy(server).requestTimeout(Duration.ofSeconds(1)).totalDeadline(Duration.ofSeconds(1)).observer(new OidcObserver() {
-				@Override public void didRequestEndpoint(OAuthEndpoint endpoint, URI uri, Integer status, Duration elapsed) { if (endpoint == OAuthEndpoint.METADATA) pause(); }
+				@Override public void didRequestEndpoint(@NonNull OAuthEndpoint endpoint, @NonNull URI uri, @NonNull Integer status, @NonNull Duration elapsed) { if (endpoint == OAuthEndpoint.METADATA) pause(); }
 			}).build();
 			assertEquals(OAuthException.Reason.NETWORK_FAILURE, assertThrows(OAuthException.class, () -> client.fetchUserInfo(auth)).getReason()); assertEquals(0, server.getHitCount("/userinfo"));
 		}
 	}
 
 	@TestFactory
-	Stream<DynamicTest> endpointStatusProseAndChallengesAreNotRetainedAndTransientFailuresAreBounded() {
+	@NonNull Stream<@NonNull DynamicTest> endpointStatusProseAndChallengesAreNotRetainedAndTransientFailuresAreBounded() {
 		return Stream.of(401, 403, 429, 503).map(status -> DynamicTest.dynamicTest("HTTP " + status, () -> {
 			try (TestHttpsServer server = TestHttpsServer.start()) {
 				OidcClient client = builder(server).build(); OidcAuthentication auth = authenticate(server, client, ACCESS, 300);
@@ -358,7 +360,7 @@ final class OidcUserInfoTests {
 		}
 	}
 
-	private static void assertSafeFailure(OidcValidationException failure) throws IllegalAccessException {
+	private static void assertSafeFailure(@NonNull OidcValidationException failure) throws IllegalAccessException {
 		assertNull(failure.getCause()); failure.addSuppressed(new IllegalStateException(ACCESS)); assertEquals(0, failure.getSuppressed().length); assertRedacted(failure.toString());
 		for (Class<?> type = failure.getClass(); type != RuntimeException.class; type = type.getSuperclass()) {
 			for (var field : type.getDeclaredFields()) {
@@ -371,8 +373,8 @@ final class OidcUserInfoTests {
 	}
 
 	private static void pause() { try { new CountDownLatch(1).await(2, TimeUnit.SECONDS); } catch (InterruptedException e) { Thread.currentThread().interrupt(); } }
-	private static void assertRedacted(String text) { for (String value : List.of(ACCESS, REFRESH, SUBJECT, EMAIL)) assertFalse(text.contains(value), "Disclosed test-only sentinel"); }
-	private static String json() { return "{\"sub\":" + JsonText.string(SUBJECT) + "}"; }
+	private static void assertRedacted(@NonNull String text) { for (String value : List.of(ACCESS, REFRESH, SUBJECT, EMAIL)) assertFalse(text.contains(value), "Disclosed test-only sentinel"); }
+	private static @NonNull String json() { return "{\"sub\":" + JsonText.string(SUBJECT) + "}"; }
 	@Test
 	void userInfoAfterRefreshUsesNewCredentialAndOriginalIdentityWithStoredReference() throws Exception {
 		try (TestHttpsServer server = TestHttpsServer.start()) {
@@ -393,7 +395,7 @@ final class OidcUserInfoTests {
 		try (TestHttpsServer server = TestHttpsServer.start()) {
 			AtomicReference<OidcValidationException> rejected = new AtomicReference<>();
 			OidcClient client = builder(server).observer(new OidcObserver() {
-				@Override public void didRejectUserInfo(OidcValidationException failure) { rejected.set(failure); }
+				@Override public void didRejectUserInfo(@NonNull OidcValidationException failure) { rejected.set(failure); }
 			}).build();
 			OidcAuthentication first = authenticate(server, client, ACCESS, 300), second = authenticate(server, client, ACCESS, 300);
 			server.script("/token", TestHttpsServer.Script.fromResponse(TestHttpsServer.Response.fromJson(200,
@@ -408,7 +410,7 @@ final class OidcUserInfoTests {
 	}
 
 	@TestFactory
-	Stream<DynamicTest> trustedStorageRepresentationChangesRetainOriginalIdentity() {
+	@NonNull Stream<@NonNull DynamicTest> trustedStorageRepresentationChangesRetainOriginalIdentity() {
 		return Stream.of("member order", "singleton audience", "audience order", "numeric scale").map(mode -> DynamicTest.dynamicTest(mode, () -> {
 			try (TestHttpsServer server = TestHttpsServer.start()) {
 				OidcClient client = builder(server).trustedAudiences(Set.of("other")).build();
@@ -445,13 +447,13 @@ final class OidcUserInfoTests {
 	}
 
 	@TestFactory
-	Stream<DynamicTest> everyOriginalContinuityFieldIsRequiredBeforeUserInfoIo() {
+	@NonNull Stream<@NonNull DynamicTest> everyOriginalContinuityFieldIsRequiredBeforeUserInfoIo() {
 		return Stream.of("client_id", "nonce_digest", "iss", "sub", "aud", "iat", "azp", "auth_time", "sid", "remove azp", "remove auth_time", "remove sid")
 				.map(field -> DynamicTest.dynamicTest(field, () -> {
 					try (TestHttpsServer server = TestHttpsServer.start()) {
 						AtomicReference<OidcValidationException> observed = new AtomicReference<>();
 						OidcClient client = builder(server).trustedAudiences(Set.of("other")).observer(new OidcObserver() {
-							@Override public void didRejectUserInfo(OidcValidationException failure) { observed.set(failure); }
+							@Override public void didRejectUserInfo(@NonNull OidcValidationException failure) { observed.set(failure); }
 						}).build();
 						Map<String, String> originalClaims = new LinkedHashMap<>(Map.of("azp", "\"client\"", "sid", "\"TEST-ONLY-session\"", "auth_time", Long.toString(NOW.getEpochSecond())));
 						if (field.equals("client_id")) originalClaims.put("aud", "[\"client\",\"other\"]");
@@ -474,8 +476,8 @@ final class OidcUserInfoTests {
 					}));
 	}
 
-	private static OidcSessionReference storedReference(OidcSessionReference original, Consumer<Map<String, JsonValue>> changeEnvelope,
-			Consumer<Map<String, JsonValue>> changeClaims) throws Exception {
+	private static @NonNull OidcSessionReference storedReference(@NonNull OidcSessionReference original, @NonNull Consumer<@NonNull Map<@NonNull String, @NonNull JsonValue>> changeEnvelope,
+			@NonNull Consumer<@NonNull Map<@NonNull String, @NonNull JsonValue>> changeClaims) throws Exception {
 		JsonObject parsed = (JsonObject) JsonCodec.parse(original.toSerializedForm().getBytes(StandardCharsets.UTF_8), JsonLimits.protocolDocument(65_536));
 		Map<String, JsonValue> envelope = new LinkedHashMap<>(parsed.getMembers());
 		Map<String, JsonValue> claims = new LinkedHashMap<>(((JsonObject) java.util.Objects.requireNonNull(envelope.get("claims"))).getMembers());
@@ -499,17 +501,17 @@ final class OidcUserInfoTests {
 		}
 	}
 
-	private static String keyJson() { return TestJsonWebKeys.withFixture(Fixture.IDP_SIGNING_RSA_2048).kid("key").alg("RS256").toKeySetJson(); }
-	private static StaticJsonWebKeySource keys() { return StaticJsonWebKeySource.fromJsonWebKeySet(JsonWebKeySet.fromJson(keyJson())); }
-	private static OidcProviderMetadata.Builder metadata(TestHttpsServer server) { return OidcProviderMetadata.withIssuer(server.getBaseUri().toString()).authorizationEndpoint(server.uri("/authorize")).tokenEndpoint(server.uri("/token")).jwksUri(server.uri("/jwks")).userInfoEndpoint(server.uri("/userinfo")); }
-	private static OidcClient.Builder builder(TestHttpsServer server) { return OidcClient.withProviderMetadata(metadata(server).build()).clientId("client").redirectUri(CALLBACK).clock(CLOCK).httpClient(TestTls.httpClient()).jsonWebKeySource(keys()); }
-	private static OidcClient.Builder lazy(TestHttpsServer server) { return OidcClient.withIssuer(server.getBaseUri().toString()).clientId("client").redirectUri(CALLBACK).clock(CLOCK).httpClient(TestTls.httpClient()).jsonWebKeySource(keys()); }
-	private static Map<String,String> claims(TestHttpsServer server) { Map<String,String> claims = new LinkedHashMap<>(); claims.put("iss", JsonText.string(server.getBaseUri().toString())); claims.put("sub", JsonText.string(SUBJECT)); claims.put("aud", "\"client\""); return claims; }
-	private static String sign(Map<String,String> claims, boolean forged) { return TestJws.withAlgorithm(Algorithm.RS256).kid("key").payload(JsonText.object(new ArrayList<>(claims.entrySet()))).sign(forged ? Fixture.NEGATIVE_ATTACKER_RSA_2048.getPrivateKey() : Fixture.IDP_SIGNING_RSA_2048.getPrivateKey()); }
-	private static OidcAuthentication authenticate(TestHttpsServer server, OidcClient client, String access, long lifetime) throws Exception {
+	private static @NonNull String keyJson() { return TestJsonWebKeys.withFixture(Fixture.IDP_SIGNING_RSA_2048).kid("key").alg("RS256").toKeySetJson(); }
+	private static @NonNull StaticJsonWebKeySource keys() { return StaticJsonWebKeySource.fromJsonWebKeySet(JsonWebKeySet.fromJson(keyJson())); }
+	private static OidcProviderMetadata.@NonNull Builder metadata(@NonNull TestHttpsServer server) { return OidcProviderMetadata.withIssuer(server.getBaseUri().toString()).authorizationEndpoint(server.uri("/authorize")).tokenEndpoint(server.uri("/token")).jwksUri(server.uri("/jwks")).userInfoEndpoint(server.uri("/userinfo")); }
+	private static OidcClient.@NonNull Builder builder(@NonNull TestHttpsServer server) { return OidcClient.withProviderMetadata(metadata(server).build()).clientId("client").redirectUri(CALLBACK).clock(CLOCK).httpClient(TestTls.httpClient()).jsonWebKeySource(keys()); }
+	private static OidcClient.@NonNull Builder lazy(@NonNull TestHttpsServer server) { return OidcClient.withIssuer(server.getBaseUri().toString()).clientId("client").redirectUri(CALLBACK).clock(CLOCK).httpClient(TestTls.httpClient()).jsonWebKeySource(keys()); }
+	private static @NonNull Map<@NonNull String,@NonNull String> claims(@NonNull TestHttpsServer server) { Map<String,String> claims = new LinkedHashMap<>(); claims.put("iss", JsonText.string(server.getBaseUri().toString())); claims.put("sub", JsonText.string(SUBJECT)); claims.put("aud", "\"client\""); return claims; }
+	private static @NonNull String sign(@NonNull Map<@NonNull String,@NonNull String> claims, boolean forged) { return TestJws.withAlgorithm(Algorithm.RS256).kid("key").payload(JsonText.object(new ArrayList<>(claims.entrySet()))).sign(forged ? Fixture.NEGATIVE_ATTACKER_RSA_2048.getPrivateKey() : Fixture.IDP_SIGNING_RSA_2048.getPrivateKey()); }
+	private static @NonNull OidcAuthentication authenticate(@NonNull TestHttpsServer server, @NonNull OidcClient client, @NonNull String access, long lifetime) throws Exception {
 		return authenticate(server, client, access, lifetime, Map.of());
 	}
-	private static OidcAuthentication authenticate(TestHttpsServer server, OidcClient client, String access, long lifetime, Map<String, String> additionalClaims) throws Exception {
+	private static @NonNull OidcAuthentication authenticate(@NonNull TestHttpsServer server, @NonNull OidcClient client, @NonNull String access, long lifetime, @NonNull Map<@NonNull String, @NonNull String> additionalClaims) throws Exception {
 		AuthorizationRedirect redirect = client.beginAuthentication(); QueryParameters query = QueryParameters.parse(redirect.getAuthorizationUri().getRawQuery());
 		Map<String,String> claims = claims(server); claims.put("nonce", JsonText.string(query.getValues("nonce").get(0))); claims.put("iat", Long.toString(NOW.getEpochSecond())); claims.put("exp", Long.toString(NOW.plusSeconds(300).getEpochSecond()));
 		claims.putAll(additionalClaims);
@@ -517,6 +519,6 @@ final class OidcUserInfoTests {
 		StateSealer sealer = TestSealers.fromFixedKey(); PendingAuthorizationSource source = PendingAuthorizationSource.fromSealedForm(redirect.getPendingAuthorization().toSealedForm(sealer, "userinfo"), sealer, "userinfo");
 		return client.completeAuthentication(AuthorizationResponse.fromQueryString("state=" + query.getValues("state").get(0) + "&code=TEST-ONLY-code"), source, CALLBACK);
 	}
-	private static void respond(TestHttpsServer server, int status, String media, String body) { server.script("/userinfo", TestHttpsServer.Script.fromResponse(TestHttpsServer.Response.withStatus(status).header("Content-Type", media).body(body).build())); }
-	private static void discovery(TestHttpsServer server, @Nullable String algorithms) { server.script(DISCOVERY, TestHttpsServer.Script.fromResponse(TestHttpsServer.Response.fromJson(200, "{\"issuer\":" + JsonText.string(server.getBaseUri().toString()) + ",\"authorization_endpoint\":" + JsonText.string(server.uri("/authorize").toString()) + ",\"token_endpoint\":" + JsonText.string(server.uri("/token").toString()) + ",\"jwks_uri\":" + JsonText.string(server.uri("/jwks").toString()) + ",\"userinfo_endpoint\":" + JsonText.string(server.uri("/userinfo").toString()) + ",\"subject_types_supported\":[\"public\"],\"id_token_signing_alg_values_supported\":[\"RS256\"],\"response_types_supported\":[\"code\"]" + (algorithms == null ? "" : ",\"userinfo_signing_alg_values_supported\":" + algorithms) + "}"))); }
+	private static void respond(@NonNull TestHttpsServer server, int status, @NonNull String media, @NonNull String body) { server.script("/userinfo", TestHttpsServer.Script.fromResponse(TestHttpsServer.Response.withStatus(status).header("Content-Type", media).body(body).build())); }
+	private static void discovery(@NonNull TestHttpsServer server, @Nullable String algorithms) { server.script(DISCOVERY, TestHttpsServer.Script.fromResponse(TestHttpsServer.Response.fromJson(200, "{\"issuer\":" + JsonText.string(server.getBaseUri().toString()) + ",\"authorization_endpoint\":" + JsonText.string(server.uri("/authorize").toString()) + ",\"token_endpoint\":" + JsonText.string(server.uri("/token").toString()) + ",\"jwks_uri\":" + JsonText.string(server.uri("/jwks").toString()) + ",\"userinfo_endpoint\":" + JsonText.string(server.uri("/userinfo").toString()) + ",\"subject_types_supported\":[\"public\"],\"id_token_signing_alg_values_supported\":[\"RS256\"],\"response_types_supported\":[\"code\"]" + (algorithms == null ? "" : ",\"userinfo_signing_alg_values_supported\":" + algorithms) + "}"))); }
 }

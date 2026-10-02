@@ -16,6 +16,8 @@
 
 package com.revetsec.oauth;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.StateSealer;
 import com.revetsec.internal.encoding.FormUrlEncoding;
 import com.revetsec.internal.encoding.QueryParameters;
@@ -215,12 +217,12 @@ final class AuthorizationServerDiscoveryTests {
 		}
 	}
 
-	private static String metadata(TestHttpsServer server, String issuer, URI tokenEndpoint) {
+	private static @NonNull String metadata(@NonNull TestHttpsServer server, @NonNull String issuer, @NonNull URI tokenEndpoint) {
 		return "{\"issuer\":\"" + issuer + "\",\"authorization_endpoint\":\""
 				+ server.uri("/authorize") + "\",\"token_endpoint\":\"" + tokenEndpoint + "\"}";
 	}
 
-	private static TestHttpsServer.Response json(int status, String body) {
+	private static TestHttpsServer.@NonNull Response json(int status, @NonNull String body) {
 		return TestHttpsServer.Response.withStatus(status).header("Content-Type", "application/json")
 				.body(body).build();
 	}

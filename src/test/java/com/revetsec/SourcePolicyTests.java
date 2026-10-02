@@ -16,6 +16,8 @@
 
 package com.revetsec;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.ContractSupport.SourceAnalysis;
 import com.sun.source.tree.AnnotationTree;
 import com.sun.source.tree.BinaryTree;
@@ -328,7 +330,7 @@ final class SourcePolicyTests {
 		private final Predicate<String> appliesTo;
 		private final String reason;
 
-		Rule(String id, List<String> alternatives, Predicate<String> appliesTo, String reason) {
+		Rule(@NonNull String id, @NonNull List<@NonNull String> alternatives, @NonNull Predicate<@NonNull String> appliesTo, @NonNull String reason) {
 			this.id = id;
 			this.alternatives = List.copyOf(alternatives);
 			this.patterns = alternatives.stream().map(regex -> Pattern.compile(regex, Pattern.MULTILINE)).toList();
@@ -336,11 +338,11 @@ final class SourcePolicyTests {
 			this.reason = reason;
 		}
 
-		String getId() {
+		@NonNull String getId() {
 			return this.id;
 		}
 
-		String alternativeId(int index) {
+		@NonNull String alternativeId(int index) {
 			return this.id + " /" + this.alternatives.get(index) + "/";
 		}
 	}
@@ -358,11 +360,11 @@ final class SourcePolicyTests {
 		private final int minimumParameters;
 		private final int maximumParameters;
 
-		MemberBan(String ruleId, String owner, String names) {
+		MemberBan(@NonNull String ruleId, @NonNull String owner, @NonNull String names) {
 			this(ruleId, owner, names, 0, Integer.MAX_VALUE);
 		}
 
-		MemberBan(String ruleId, String owner, String names, int minimumParameters, int maximumParameters) {
+		MemberBan(@NonNull String ruleId, @NonNull String owner, @NonNull String names, int minimumParameters, int maximumParameters) {
 			this.ruleId = ruleId;
 			this.owner = owner;
 			this.names = Pattern.compile(names);
@@ -370,7 +372,7 @@ final class SourcePolicyTests {
 			this.maximumParameters = maximumParameters;
 		}
 
-		String alternativeId() {
+		@NonNull String alternativeId() {
 			return this.ruleId + " " + this.owner + "#/" + this.names.pattern() + "/ with " + this.minimumParameters
 					+ (this.maximumParameters == Integer.MAX_VALUE ? " or more" : " to " + this.maximumParameters)
 					+ " parameters";
@@ -384,12 +386,12 @@ final class SourcePolicyTests {
 		private final String ruleId;
 		private final String owner;
 
-		SupertypeBan(String ruleId, String owner) {
+		SupertypeBan(@NonNull String ruleId, @NonNull String owner) {
 			this.ruleId = ruleId;
 			this.owner = owner;
 		}
 
-		String alternativeId() {
+		@NonNull String alternativeId() {
 			return this.ruleId + " class extending or implementing " + this.owner;
 		}
 	}
@@ -405,11 +407,11 @@ final class SourcePolicyTests {
 		private final String alternativeId;
 		private final String subject;
 
-		Detection(String ruleId, String path, int line, String alternativeId) {
+		Detection(@NonNull String ruleId, @NonNull String path, int line, @NonNull String alternativeId) {
 			this(ruleId, path, line, alternativeId, "");
 		}
 
-		Detection(String ruleId, String path, int line, String alternativeId, String subject) {
+		Detection(@NonNull String ruleId, @NonNull String path, int line, @NonNull String alternativeId, @NonNull String subject) {
 			this.ruleId = ruleId;
 			this.path = path;
 			this.line = line;
@@ -420,18 +422,18 @@ final class SourcePolicyTests {
 		/**
 		 * {@code <rule> <path>:<line>}, the prefix of the violation message.
 		 */
-		String getKey() {
+		@NonNull String getKey() {
 			return this.ruleId + " " + this.path + ":" + this.line;
 		}
 
-		String getAlternativeId() {
+		@NonNull String getAlternativeId() {
 			return this.alternativeId;
 		}
 
 		/**
 		 * {@code <key>: [<subjects>: ]<reason>}, where {@code subjects} are the fields reported on this line.
 		 */
-		String getMessage(Collection<String> subjects) {
+		@NonNull String getMessage(@NonNull Collection<@NonNull String> subjects) {
 			return getKey() + ": " + (subjects.isEmpty() ? "" : String.join(", ", subjects) + ": ")
 					+ rule(this.ruleId).reason;
 		}
@@ -645,11 +647,11 @@ final class SourcePolicyTests {
 	private static final Map<String, Rule> RULES_BY_ID = MAIN_SOURCE_RULES.stream()
 			.collect(Collectors.toMap(Rule::getId, rule -> rule, (first, second) -> first, LinkedHashMap::new));
 
-	private static boolean everywhere(String relativePath) {
+	private static boolean everywhere(@NonNull String relativePath) {
 		return true;
 	}
 
-	private static boolean handlesSealingKeys(String relativePath) {
+	private static boolean handlesSealingKeys(@NonNull String relativePath) {
 		return relativePath.startsWith(INTERNAL_CRYPTO) || SEALER_FILES.contains(relativePath);
 	}
 
@@ -657,7 +659,7 @@ final class SourcePolicyTests {
 	 * The rows of an allowlist written as a {@code String[][]} literal, which, unlike an argument list, allows a
 	 * trailing comma.
 	 */
-	private static List<List<String>> rows(String[][] rows) {
+	private static @NonNull List<@NonNull List<@NonNull String>> rows(@NonNull String @NonNull [] @NonNull [] rows) {
 		return Arrays.stream(rows).map(row -> List.of(row)).toList();
 	}
 
@@ -714,7 +716,7 @@ final class SourcePolicyTests {
 	 * Applies every source-policy check to the Java files under {@code sourceRoot}, with
 	 * {@link #MUTABLE_STATIC_ALLOWLIST}.
 	 */
-	static List<String> findViolations(Path sourceRoot) throws IOException {
+	static @NonNull List<@NonNull String> findViolations(@NonNull Path sourceRoot) throws IOException {
 		return findViolations(sourceRoot, MUTABLE_STATIC_ALLOWLIST);
 	}
 
@@ -725,7 +727,7 @@ final class SourcePolicyTests {
 	 * {@code mutable-static} names every reported field on the line before the reason, in source order and separated
 	 * by {@code ", "}. A message for each malformed, repeated or stale allowlist row follows, in row order.
 	 */
-	static List<String> findViolations(Path sourceRoot, List<List<String>> mutableStaticAllowlist)
+	static @NonNull List<@NonNull String> findViolations(@NonNull Path sourceRoot, @NonNull List<@NonNull List<@NonNull String>> mutableStaticAllowlist)
 			throws IOException {
 		List<Detection> detections = findUnfilteredDetections(sourceRoot);
 		Map<String, Detection> byKey = new LinkedHashMap<>();
@@ -750,8 +752,8 @@ final class SourcePolicyTests {
 	 * reports in {@code detections} (a misspelled class, such as the canonical {@code Outer.Nested}, a renamed or
 	 * removed field, or one that is no longer mutable).
 	 */
-	private static List<String> findMutableStaticAllowlistProblems(List<List<String>> allowlist,
-			List<Detection> detections) {
+	private static @NonNull List<@NonNull String> findMutableStaticAllowlistProblems(@NonNull List<@NonNull List<@NonNull String>> allowlist,
+			@NonNull List<@NonNull Detection> detections) {
 		Set<String> reportedFields = detections.stream()
 				.filter(detection -> detection.ruleId.equals(MUTABLE_STATIC))
 				.map(detection -> detection.subject)
@@ -777,11 +779,11 @@ final class SourcePolicyTests {
 		return List.copyOf(problems);
 	}
 
-	private static boolean isWellFormedAllowlistRow(List<String> row) {
+	private static boolean isWellFormedAllowlistRow(@NonNull List<@NonNull String> row) {
 		return row.size() == 3 && row.stream().noneMatch(value -> value.isBlank() || !value.strip().equals(value));
 	}
 
-	private static String allowlistedField(List<String> row) {
+	private static @NonNull String allowlistedField(@NonNull List<@NonNull String> row) {
 		return row.get(0) + "#" + row.get(1);
 	}
 
@@ -789,7 +791,7 @@ final class SourcePolicyTests {
 	 * {@code detections} without the {@code mutable-static} ones for fields that a well-formed row of
 	 * {@code allowlist} names. A malformed row exempts nothing.
 	 */
-	private static List<Detection> withoutAllowlisted(List<Detection> detections, List<List<String>> allowlist) {
+	private static @NonNull List<@NonNull Detection> withoutAllowlisted(@NonNull List<@NonNull Detection> detections, @NonNull List<@NonNull List<@NonNull String>> allowlist) {
 		Set<String> allowlisted = allowlist.stream()
 				.filter(SourcePolicyTests::isWellFormedAllowlistRow)
 				.map(SourcePolicyTests::allowlistedField)
@@ -800,7 +802,7 @@ final class SourcePolicyTests {
 				.toList();
 	}
 
-	private static Rule rule(String ruleId) {
+	private static @NonNull Rule rule(@NonNull String ruleId) {
 		@Nullable Rule rule = RULES_BY_ID.get(ruleId);
 		if (rule == null)
 			throw new IllegalStateException("Unknown source-policy rule " + ruleId);
@@ -810,7 +812,7 @@ final class SourcePolicyTests {
 	/**
 	 * Every alternative ID a detection can carry: each regular expression, each table entry, and the special checks.
 	 */
-	static List<String> alternativeIds() {
+	static @NonNull List<@NonNull String> alternativeIds() {
 		List<String> alternativeIds = new ArrayList<>();
 		for (Rule rule : MAIN_SOURCE_RULES)
 			for (int index = 0; index < rule.alternatives.size(); ++index)
@@ -831,12 +833,12 @@ final class SourcePolicyTests {
 	 * findings for fields that {@code mutableStaticAllowlist} exempts. A line can be found by more than one
 	 * alternative; {@link #findViolations(Path, List)} reports it once.
 	 */
-	static List<Detection> findDetections(Path sourceRoot, List<List<String>> mutableStaticAllowlist)
+	static @NonNull List<@NonNull Detection> findDetections(@NonNull Path sourceRoot, @NonNull List<@NonNull List<@NonNull String>> mutableStaticAllowlist)
 			throws IOException {
 		return withoutAllowlisted(findUnfilteredDetections(sourceRoot), mutableStaticAllowlist);
 	}
 
-	private static List<Detection> findUnfilteredDetections(Path sourceRoot) throws IOException {
+	private static @NonNull List<@NonNull Detection> findUnfilteredDetections(@NonNull Path sourceRoot) throws IOException {
 		List<Path> sources = ContractSupport.javaSources(sourceRoot);
 		if (sources.isEmpty())
 			return List.of();
@@ -879,7 +881,7 @@ final class SourcePolicyTests {
 	 * {@code mutable-static}, {@code provided-annotation-with-element}, {@code p1363-signature-name},
 	 * {@code jca-provider-argument}, {@code for-tests-call} and the package location of each file.
 	 */
-	private static List<Detection> findAttributedDetections(SourceAnalysis analysis) {
+	private static @NonNull List<@NonNull Detection> findAttributedDetections(@NonNull SourceAnalysis analysis) {
 		List<Detection> detections = new ArrayList<>();
 		Map<MemberBan, TypeElement> memberBanOwners = new LinkedHashMap<>();
 		for (MemberBan ban : MEMBER_BANS)
@@ -911,7 +913,7 @@ final class SourcePolicyTests {
 
 			new TreePathScanner<Void, Void>() {
 				@Override
-				public @Nullable Void visitClass(ClassTree node, Void unused) {
+				public @Nullable Void visitClass(@NonNull ClassTree node, @Nullable Void unused) {
 					@Nullable Element element = analysis.getTrees().getElement(getCurrentPath());
 					if (element instanceof TypeElement type && type.getNestingKind() != NestingKind.ANONYMOUS)
 						for (Map.Entry<SupertypeBan, TypeElement> ban : supertypeBanOwners.entrySet())
@@ -921,20 +923,20 @@ final class SourcePolicyTests {
 				}
 
 				@Override
-				public @Nullable Void visitMethod(MethodTree node, Void unused) {
+				public @Nullable Void visitMethod(@NonNull MethodTree node, @Nullable Void unused) {
 					if (node.getModifiers().getFlags().contains(Modifier.SYNCHRONIZED))
 						detect(SYNCHRONIZED, node, SYNCHRONIZED_METHOD_ALTERNATIVE);
 					return super.visitMethod(node, null);
 				}
 
 				@Override
-				public @Nullable Void visitSynchronized(SynchronizedTree node, Void unused) {
+				public @Nullable Void visitSynchronized(@NonNull SynchronizedTree node, @Nullable Void unused) {
 					detect(SYNCHRONIZED, node, SYNCHRONIZED_STATEMENT_ALTERNATIVE);
 					return super.visitSynchronized(node, null);
 				}
 
 				@Override
-				public @Nullable Void visitMethodInvocation(MethodInvocationTree node, Void unused) {
+				public @Nullable Void visitMethodInvocation(@NonNull MethodInvocationTree node, @Nullable Void unused) {
 					// javac's generated default constructors call super() without source; the class check covers them.
 					if (isWritten(node)) {
 						ExpressionTree methodSelect = node.getMethodSelect();
@@ -949,7 +951,7 @@ final class SourcePolicyTests {
 				}
 
 				@Override
-				public @Nullable Void visitNewClass(NewClassTree node, Void unused) {
+				public @Nullable Void visitNewClass(@NonNull NewClassTree node, @Nullable Void unused) {
 					if (isWritten(node))
 						checkMember(analysis.getTrees().getElement(getCurrentPath()),
 								positions.getStartPosition(compilationUnit, node));
@@ -957,7 +959,7 @@ final class SourcePolicyTests {
 				}
 
 				@Override
-				public @Nullable Void visitMemberReference(MemberReferenceTree node, Void unused) {
+				public @Nullable Void visitMemberReference(@NonNull MemberReferenceTree node, @Nullable Void unused) {
 					if (isWritten(node))
 						checkMember(analysis.getTrees().getElement(getCurrentPath()),
 								positions.getStartPosition(compilationUnit, node));
@@ -965,7 +967,7 @@ final class SourcePolicyTests {
 				}
 
 				@Override
-				public @Nullable Void visitVariable(VariableTree node, Void unused) {
+				public @Nullable Void visitVariable(@NonNull VariableTree node, @Nullable Void unused) {
 					// Interface constants are implicitly static and final: the element's modifiers include both, and
 					// the tree's do not.
 					if (analysis.getTrees().getElement(getCurrentPath()) instanceof VariableElement field
@@ -984,7 +986,7 @@ final class SourcePolicyTests {
 				}
 
 				@Override
-				public @Nullable Void visitAnnotation(AnnotationTree node, Void unused) {
+				public @Nullable Void visitAnnotation(@NonNull AnnotationTree node, @Nullable Void unused) {
 					if (exportedPackage && analysis.getTrees().getElement(new TreePath(getCurrentPath(),
 							node.getAnnotationType())) instanceof TypeElement annotationType
 							&& isProvidedScope(annotationType, analysis)
@@ -995,7 +997,7 @@ final class SourcePolicyTests {
 
 				// A literal that is an operand of a string concatenation is checked with its run, in visitBinary.
 				@Override
-				public @Nullable Void visitLiteral(LiteralTree node, Void unused) {
+				public @Nullable Void visitLiteral(@NonNull LiteralTree node, @Nullable Void unused) {
 					if (node.getValue() instanceof String value
 							&& !isConcatenationOperand(getCurrentPath(), analysis, string))
 						checkSignatureName(value, node);
@@ -1005,7 +1007,7 @@ final class SourcePolicyTests {
 				// A string concatenation is checked once, from its outermost +, one run of constant operands at a
 				// time; the scan still descends into it, for the literals in method calls and other operands.
 				@Override
-				public @Nullable Void visitBinary(BinaryTree node, Void unused) {
+				public @Nullable Void visitBinary(@NonNull BinaryTree node, @Nullable Void unused) {
 					TreePath path = getCurrentPath();
 					if (isStringConcatenation(path, analysis, string)
 							&& !isConcatenationOperand(path, analysis, string))
@@ -1014,12 +1016,12 @@ final class SourcePolicyTests {
 					return super.visitBinary(node, null);
 				}
 
-				private void checkSignatureName(String constant, Tree node) {
+				private void checkSignatureName(@NonNull String constant, @NonNull Tree node) {
 					if (constant.toUpperCase(Locale.ROOT).contains(P1363_SIGNATURE_SUFFIX))
 						detect(P1363_SIGNATURE_NAME, node, P1363_SIGNATURE_NAME_ALTERNATIVE);
 				}
 
-				private boolean isWritten(Tree node) {
+				private boolean isWritten(@NonNull Tree node) {
 					return positions.getEndPosition(compilationUnit, node) >= 0;
 				}
 
@@ -1050,15 +1052,15 @@ final class SourcePolicyTests {
 						detect(JCA_PROVIDER_ARGUMENT, position, JCA_PROVIDER_NAME_ALTERNATIVE);
 				}
 
-				private void detect(String ruleId, Tree node, String alternativeId) {
+				private void detect(@NonNull String ruleId, @NonNull Tree node, @NonNull String alternativeId) {
 					detect(ruleId, positions.getStartPosition(compilationUnit, node), alternativeId);
 				}
 
-				private void detect(String ruleId, long position, String alternativeId) {
+				private void detect(@NonNull String ruleId, long position, @NonNull String alternativeId) {
 					detect(ruleId, position, alternativeId, "");
 				}
 
-				private void detect(String ruleId, long position, String alternativeId, String subject) {
+				private void detect(@NonNull String ruleId, long position, @NonNull String alternativeId, @NonNull String subject) {
 					@Nullable Rule rule = RULES_BY_ID.get(ruleId);
 					if (rule != null && rule.appliesTo.test(relativePath))
 						detections.add(new Detection(ruleId, relativePath,
@@ -1078,7 +1080,7 @@ final class SourcePolicyTests {
 		private final List<TypeElement> stringBuilders;
 		private final List<TypeElement> collections;
 
-		private MutableStaticCheck(SourceAnalysis analysis) {
+		private MutableStaticCheck(@NonNull SourceAnalysis analysis) {
 			this.analysis = analysis;
 			this.stringBuilders = List.of(ownerType(analysis, "java.lang.StringBuilder"),
 					ownerType(analysis, "java.lang.StringBuffer"));
@@ -1093,7 +1095,7 @@ final class SourcePolicyTests {
 		 * an initializer and each value it can take is exempt: the null literal, or an empty array or an immutable
 		 * collection factory call respectively.
 		 */
-		Set<String> alternativeIds(VariableElement field, TreePath fieldPath) {
+		@NonNull Set<@NonNull String> alternativeIds(@NonNull VariableElement field, @NonNull TreePath fieldPath) {
 			if (!field.getModifiers().contains(Modifier.FINAL))
 				return Set.of(MUTABLE_STATIC_NON_FINAL_ALTERNATIVE);
 
@@ -1116,7 +1118,7 @@ final class SourcePolicyTests {
 		 * collection or map type is exempt when {@code values} (the values that have this type) are not empty and each
 		 * one is exempt.
 		 */
-		private void addMutableKinds(TypeMirror type, List<TreePath> values, Set<String> alternativeIds) {
+		private void addMutableKinds(@NonNull TypeMirror type, @NonNull List<@NonNull TreePath> values, @NonNull Set<@NonNull String> alternativeIds) {
 			if (type.getKind() == TypeKind.ARRAY && !allExempt(values, MutableStaticCheck::isEmptyArray))
 				alternativeIds.add(MUTABLE_STATIC_ARRAY_ALTERNATIVE);
 			// The null type (a null literal) is a subtype of every reference type, and a primitive holds no shared
@@ -1134,7 +1136,7 @@ final class SourcePolicyTests {
 		/**
 		 * Returns whether there is at least one value and each one is the null literal or passes {@code exempt}.
 		 */
-		private static boolean allExempt(List<TreePath> values, Predicate<TreePath> exempt) {
+		private static boolean allExempt(@NonNull List<@NonNull TreePath> values, @NonNull Predicate<@NonNull TreePath> exempt) {
 			return !values.isEmpty() && values.stream().allMatch(value ->
 					value.getLeaf().getKind() == Tree.Kind.NULL_LITERAL || exempt.test(value));
 		}
@@ -1143,7 +1145,7 @@ final class SourcePolicyTests {
 		 * The values the expression at {@code initializer} can take: the expression itself without parentheses and
 		 * casts, or, for a conditional or switch expression, the values of each of its branches, recursively.
 		 */
-		private static List<TreePath> values(TreePath initializer) {
+		private static @NonNull List<@NonNull TreePath> values(@NonNull TreePath initializer) {
 			List<TreePath> values = new ArrayList<>();
 			Deque<TreePath> pending = new ArrayDeque<>(List.of(initializer));
 			while (!pending.isEmpty()) {
@@ -1165,18 +1167,18 @@ final class SourcePolicyTests {
 		 * {@code case ... ->} rule that is an expression, and the value of each {@code yield} that belongs to this
 		 * switch rather than to a switch expression nested in it.
 		 */
-		private static List<TreePath> switchResults(TreePath switchExpression) {
+		private static @NonNull List<@NonNull TreePath> switchResults(@NonNull TreePath switchExpression) {
 			List<TreePath> results = new ArrayList<>();
 			new TreePathScanner<Void, Void>() {
 				// Identity on purpose: descend into this switch expression only, never into one nested in it.
 				@Override
 				@SuppressWarnings("ReferenceEquality")
-				public @Nullable Void visitSwitchExpression(SwitchExpressionTree node, Void unused) {
+				public @Nullable Void visitSwitchExpression(@NonNull SwitchExpressionTree node, @Nullable Void unused) {
 					return node == switchExpression.getLeaf() ? super.visitSwitchExpression(node, null) : null;
 				}
 
 				@Override
-				public @Nullable Void visitCase(CaseTree node, Void unused) {
+				public @Nullable Void visitCase(@NonNull CaseTree node, @Nullable Void unused) {
 					if (node.getCaseKind() == CaseTree.CaseKind.RULE && node.getBody() instanceof ExpressionTree body) {
 						results.add(new TreePath(getCurrentPath(), body));
 						return null;
@@ -1185,7 +1187,7 @@ final class SourcePolicyTests {
 				}
 
 				@Override
-				public @Nullable Void visitYield(YieldTree node, Void unused) {
+				public @Nullable Void visitYield(@NonNull YieldTree node, @Nullable Void unused) {
 					results.add(new TreePath(getCurrentPath(), node.getValue()));
 					return null;
 				}
@@ -1193,7 +1195,7 @@ final class SourcePolicyTests {
 			return List.copyOf(results);
 		}
 
-		private static TreePath withoutParenthesesOrCasts(TreePath expression) {
+		private static @NonNull TreePath withoutParenthesesOrCasts(@NonNull TreePath expression) {
 			TreePath current = expression;
 			while (true) {
 				Tree leaf = current.getLeaf();
@@ -1210,7 +1212,7 @@ final class SourcePolicyTests {
 		 * Returns whether {@code value} creates an array with no elements: {@code new T[0]...},
 		 * {@code new T[]}<code>{}</code> or <code>{}</code>.
 		 */
-		private static boolean isEmptyArray(TreePath value) {
+		private static boolean isEmptyArray(@NonNull TreePath value) {
 			if (!(value.getLeaf() instanceof NewArrayTree newArray))
 				return false;
 			List<? extends ExpressionTree> dimensions = newArray.getDimensions();
@@ -1225,7 +1227,7 @@ final class SourcePolicyTests {
 		 * Returns whether {@code type} is declared in {@code java.util.concurrent.atomic}, or extends or implements a
 		 * type that is.
 		 */
-		private boolean isAtomic(TypeMirror type) {
+		private boolean isAtomic(@NonNull TypeMirror type) {
 			Deque<TypeMirror> pending = new ArrayDeque<>(List.of(type));
 			while (!pending.isEmpty()) {
 				TypeMirror current = pending.removeFirst();
@@ -1239,7 +1241,7 @@ final class SourcePolicyTests {
 			return false;
 		}
 
-		private boolean isSubtypeOfAny(TypeMirror type, List<TypeElement> supertypes) {
+		private boolean isSubtypeOfAny(@NonNull TypeMirror type, @NonNull List<@NonNull TypeElement> supertypes) {
 			return supertypes.stream().anyMatch(supertype -> this.analysis.getTypes().isSubtype(
 					this.analysis.getTypes().erasure(type), this.analysis.getTypes().erasure(supertype.asType())));
 		}
@@ -1248,7 +1250,7 @@ final class SourcePolicyTests {
 		 * Returns whether {@code value} calls {@code List}, {@code Set} or {@code Map} {@code .of},
 		 * {@code .ofEntries} or {@code .copyOf}, resolved by javac, so a look-alike class does not qualify.
 		 */
-		private boolean isImmutableCollectionFactoryCall(TreePath value) {
+		private boolean isImmutableCollectionFactoryCall(@NonNull TreePath value) {
 			if (!(value.getLeaf() instanceof MethodInvocationTree invocation))
 				return false;
 			@Nullable Element method = this.analysis.getTrees().getElement(
@@ -1265,12 +1267,12 @@ final class SourcePolicyTests {
 	 * neither in the analyzed sources nor in a JDK module ({@link ContractSupport#analyze} puts only the JSpecify, jsr305
 	 * and Error Prone annotation JARs there).
 	 */
-	private static boolean isProvidedScope(TypeElement annotationType, SourceAnalysis analysis) {
+	private static boolean isProvidedScope(@NonNull TypeElement annotationType, @NonNull SourceAnalysis analysis) {
 		@Nullable ModuleElement module = analysis.getElements().getModuleOf(annotationType);
 		return module != null && module.isUnnamed() && !analysis.isAnalyzed(annotationType);
 	}
 
-	private static boolean isSubtype(TypeMirror type, TypeElement supertype, SourceAnalysis analysis) {
+	private static boolean isSubtype(@NonNull TypeMirror type, @NonNull TypeElement supertype, @NonNull SourceAnalysis analysis) {
 		return analysis.getTypes().isSubtype(analysis.getTypes().erasure(type),
 				analysis.getTypes().erasure(supertype.asType()));
 	}
@@ -1279,7 +1281,7 @@ final class SourcePolicyTests {
 	 * Returns whether {@code element} is declared in {@code compilationUnit}, the file being checked. A member of the
 	 * JDK or of a class-path JAR is declared in no analyzed file, so it is never declared in the calling one.
 	 */
-	private static boolean isDeclaredIn(Element element, CompilationUnitTree compilationUnit, SourceAnalysis analysis) {
+	private static boolean isDeclaredIn(@NonNull Element element, @NonNull CompilationUnitTree compilationUnit, @NonNull SourceAnalysis analysis) {
 		@Nullable TreePath path = analysis.getTrees().getPath(element);
 		return path != null && path.getCompilationUnit().equals(compilationUnit);
 	}
@@ -1292,8 +1294,8 @@ final class SourcePolicyTests {
 	 * lists, so no list of method names or packages is needed; a {@code String} it never pairs with a provider (an
 	 * algorithm, a mechanism type) is not a provider's name.
 	 */
-	private static boolean takesProviderName(ExecutableElement executable, TypeElement declaringType,
-			TypeElement provider, TypeElement string, SourceAnalysis analysis) {
+	private static boolean takesProviderName(@NonNull ExecutableElement executable, @NonNull TypeElement declaringType,
+			@NonNull TypeElement provider, @NonNull TypeElement string, @NonNull SourceAnalysis analysis) {
 		List<? extends VariableElement> parameters = executable.getParameters();
 		if (parameters.stream().noneMatch(parameter -> isSubtype(parameter.asType(), string, analysis)))
 			return false;
@@ -1316,7 +1318,7 @@ final class SourcePolicyTests {
 	 * Returns whether the expression at {@code expression} is a string concatenation: a {@code +} whose type is
 	 * {@code String}. Numeric addition, such as the {@code 1 + 2} in {@code 1 + 2 + "x"}, is not.
 	 */
-	private static boolean isStringConcatenation(TreePath expression, SourceAnalysis analysis, TypeElement string) {
+	private static boolean isStringConcatenation(@NonNull TreePath expression, @NonNull SourceAnalysis analysis, @NonNull TypeElement string) {
 		if (expression.getLeaf().getKind() != Tree.Kind.PLUS)
 			return false;
 		@Nullable TypeMirror type = analysis.getTrees().getTypeMirror(expression);
@@ -1327,7 +1329,7 @@ final class SourcePolicyTests {
 	 * Returns whether the expression at {@code expression}, inside any parentheses, is an operand of a string
 	 * concatenation.
 	 */
-	private static boolean isConcatenationOperand(TreePath expression, SourceAnalysis analysis, TypeElement string) {
+	private static boolean isConcatenationOperand(@NonNull TreePath expression, @NonNull SourceAnalysis analysis, @NonNull TypeElement string) {
 		@Nullable TreePath parent = expression.getParentPath();
 		while (parent != null && parent.getLeaf() instanceof ParenthesizedTree)
 			parent = parent.getParentPath();
@@ -1341,8 +1343,8 @@ final class SourcePolicyTests {
 	 * {@code (a + "b") + "c"} and {@code a + ("b" + "c")} both hold the run {@code "bc"}. An operand that is not a
 	 * literal or a constant variable (a variable, a call, a numeric subexpression) ends a run.
 	 */
-	private static List<Map.Entry<Tree, String>> constantRuns(TreePath concatenation, SourceAnalysis analysis,
-			TypeElement string) {
+	private static @NonNull List<Map.@NonNull Entry<@NonNull Tree, @NonNull String>> constantRuns(@NonNull TreePath concatenation, @NonNull SourceAnalysis analysis,
+			@NonNull TypeElement string) {
 		List<TreePath> operands = new ArrayList<>();
 		collectConcatenationOperands(concatenation, analysis, string, operands);
 		List<Map.Entry<Tree, String>> runs = new ArrayList<>();
@@ -1366,8 +1368,8 @@ final class SourcePolicyTests {
 		return List.copyOf(runs);
 	}
 
-	private static void collectConcatenationOperands(TreePath expression, SourceAnalysis analysis, TypeElement string,
-			List<TreePath> operands) {
+	private static void collectConcatenationOperands(@NonNull TreePath expression, @NonNull SourceAnalysis analysis, @NonNull TypeElement string,
+			@NonNull List<@NonNull TreePath> operands) {
 		TreePath current = expression;
 		while (current.getLeaf() instanceof ParenthesizedTree parenthesized)
 			current = new TreePath(current, parenthesized.getExpression());
@@ -1384,7 +1386,7 @@ final class SourcePolicyTests {
 	 * {@code null} included) or a constant variable; otherwise {@code null}. A numeric subexpression such as
 	 * {@code (1000 + 363)} is not folded.
 	 */
-	private static @Nullable String constantOperand(TreePath operand, SourceAnalysis analysis) {
+	private static @Nullable String constantOperand(@NonNull TreePath operand, @NonNull SourceAnalysis analysis) {
 		Tree leaf = operand.getLeaf();
 		if (leaf instanceof LiteralTree literal)
 			return String.valueOf(literal.getValue());
@@ -1396,7 +1398,7 @@ final class SourcePolicyTests {
 		return null;
 	}
 
-	private static TypeElement ownerType(SourceAnalysis analysis, String qualifiedName) {
+	private static @NonNull TypeElement ownerType(@NonNull SourceAnalysis analysis, @NonNull String qualifiedName) {
 		@Nullable TypeElement owner = analysis.getElements().getTypeElement(qualifiedName);
 		if (owner == null)
 			throw new IllegalStateException("A source-policy ban names " + qualifiedName
@@ -1411,7 +1413,7 @@ final class SourcePolicyTests {
 	 * finds ASCII inside DER or other binary data, and again with NUL bytes removed, which finds ASCII text encoded
 	 * as UTF-16; they report the path alone.
 	 */
-	static List<String> findBannedHostnames(Path repositoryRoot) throws IOException {
+	static @NonNull List<@NonNull String> findBannedHostnames(@NonNull Path repositoryRoot) throws IOException {
 		List<String> violations = new ArrayList<>();
 		for (Path file : ContractSupport.repositoryFiles(repositoryRoot)) {
 			String relativePath = ContractSupport.relativePath(repositoryRoot, file);
@@ -1439,7 +1441,7 @@ final class SourcePolicyTests {
 		return List.copyOf(violations);
 	}
 
-	private static String withoutNulBytes(byte[] bytes) {
+	private static @NonNull String withoutNulBytes(byte @NonNull [] bytes) {
 		ByteArrayOutputStream outputStream = new ByteArrayOutputStream(bytes.length);
 		for (byte value : bytes)
 			if (value != 0)
@@ -1447,7 +1449,7 @@ final class SourcePolicyTests {
 		return new String(outputStream.toByteArray(), StandardCharsets.ISO_8859_1);
 	}
 
-	private static byte[] decodeBase64(String body) {
+	private static byte @NonNull [] decodeBase64(@NonNull String body) {
 		try {
 			return Base64.getDecoder().decode(body.replaceAll("\\s+", ""));
 		} catch (IllegalArgumentException e) {
@@ -1455,7 +1457,7 @@ final class SourcePolicyTests {
 		}
 	}
 
-	private static boolean containsBannedHostname(byte[] bytes) {
+	private static boolean containsBannedHostname(byte @NonNull [] bytes) {
 		return BANNED_HOSTNAME.matcher(new String(bytes, StandardCharsets.ISO_8859_1)).find()
 				|| BANNED_HOSTNAME.matcher(withoutNulBytes(bytes)).find();
 	}
@@ -1463,7 +1465,7 @@ final class SourcePolicyTests {
 	/**
 	 * Returns the Java files under {@code sourceRoot} that do not begin with {@link ContractSupport#LICENSE_HEADER}.
 	 */
-	static List<String> findMissingLicenseHeaders(Path sourceRoot) throws IOException {
+	static @NonNull List<@NonNull String> findMissingLicenseHeaders(@NonNull Path sourceRoot) throws IOException {
 		List<String> violations = new ArrayList<>();
 		for (Path file : ContractSupport.javaSources(sourceRoot)) {
 			String content = Files.readString(file, StandardCharsets.UTF_8).replace("\r\n", "\n");
@@ -1476,7 +1478,7 @@ final class SourcePolicyTests {
 	/**
 	 * Visible for {@link ContractMetaTests}: the alternative IDs grouped by violation key.
 	 */
-	static Map<String, List<String>> alternativeIdsByKey(List<Detection> detections) {
+	static @NonNull Map<@NonNull String, @NonNull List<@NonNull String>> alternativeIdsByKey(@NonNull List<@NonNull Detection> detections) {
 		return detections.stream().collect(Collectors.groupingBy(Detection::getKey, LinkedHashMap::new,
 				Collectors.mapping(Detection::getAlternativeId,
 						Collectors.collectingAndThen(Collectors.toList(), ids -> ids.stream().distinct().sorted()
@@ -1486,7 +1488,7 @@ final class SourcePolicyTests {
 	/**
 	 * Visible for {@link ContractMetaTests}: rule IDs in declaration order.
 	 */
-	static List<String> ruleIds() {
+	static @NonNull List<@NonNull String> ruleIds() {
 		return MAIN_SOURCE_RULES.stream().map(Rule::getId).toList();
 	}
 }

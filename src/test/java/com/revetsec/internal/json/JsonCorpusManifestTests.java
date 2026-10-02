@@ -16,6 +16,8 @@
 
 package com.revetsec.internal.json;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.json.JsonArray;
 import com.revetsec.json.JsonObject;
 import com.revetsec.json.JsonValue;
@@ -130,7 +132,7 @@ final class JsonCorpusManifestTests {
 	// WP-1: each protocol-shaped seed parses under the profile it stands for (and the other default profile), and
 	// round-trips through the maximum-cap profile.
 	@TestFactory
-	Stream<DynamicTest> protocolShapedSeedsParseUnderTheirProfileAndRoundTrip() {
+	@NonNull Stream<@NonNull DynamicTest> protocolShapedSeedsParseUnderTheirProfileAndRoundTrip() {
 		return SEEDS.entrySet().stream().sorted(Map.Entry.comparingByKey()).map(seed -> DynamicTest.dynamicTest(
 				seed.getKey(), () -> {
 					byte[] input = JsonCorpus.read(seed.getKey());
@@ -162,7 +164,7 @@ final class JsonCorpusManifestTests {
 		Assertions.assertEquals(List.of("RSA", "EC", "OKP"), keyTypes);
 	}
 
-	private static int compareUtf8(String first, String second) {
+	private static int compareUtf8(@NonNull String first, @NonNull String second) {
 		return Arrays.compareUnsigned(first.getBytes(StandardCharsets.UTF_8), second.getBytes(StandardCharsets.UTF_8));
 	}
 }

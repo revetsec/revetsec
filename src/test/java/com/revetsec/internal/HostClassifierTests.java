@@ -16,6 +16,8 @@
 
 package com.revetsec.internal;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.internal.HostClassifier.HostClass;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Assertions;
@@ -64,7 +66,7 @@ import java.util.stream.Stream;
  */
 final class HostClassifierTests {
 	@TestFactory
-	Stream<DynamicTest> ipv4FormsParseToTheJdkValue() {
+	@NonNull Stream<@NonNull DynamicTest> ipv4FormsParseToTheJdkValue() {
 		// The JDK's numeric forms: 1 to 4 decimal parts, the last filling the remaining bytes.
 		Map<String, String> forms = Map.ofEntries(
 				Map.entry("0", "0.0.0.0"),
@@ -84,7 +86,7 @@ final class HostClassifierTests {
 	}
 
 	@TestFactory
-	Stream<DynamicTest> malformedIpv4FormsAreNotLiterals() {
+	@NonNull Stream<@NonNull DynamicTest> malformedIpv4FormsAreNotLiterals() {
 		// Out of range, too many parts, empty parts, leading zeros (ambiguous with BSD octal), signs and other digits.
 		List<String> forms = List.of("", ".", "..", "1.", ".1", "1..1", "1.2.3.4.", "1.2.3.4.5", "256.0.0.0",
 				"0.256.0.0", "1.2.3.256", "1.2.65536", "1.16777216", "4294967296", "99999999999", "18446744073709551616",
@@ -98,7 +100,7 @@ final class HostClassifierTests {
 	}
 
 	@TestFactory
-	Stream<DynamicTest> ipv6FormsParse() {
+	@NonNull Stream<@NonNull DynamicTest> ipv6FormsParse() {
 		// RFC 4291 section 2.2: the three text forms, including "::" standing for a single group.
 		Map<String, String> forms = Map.ofEntries(
 				Map.entry("[::]", "0:0:0:0:0:0:0:0"),
@@ -122,7 +124,7 @@ final class HostClassifierTests {
 	}
 
 	@TestFactory
-	Stream<DynamicTest> malformedIpv6FormsAreInvalid() {
+	@NonNull Stream<@NonNull DynamicTest> malformedIpv6FormsAreInvalid() {
 		// Every one of these is rejected: bad compression, too many or too few groups, groups over four digits, a
 		// bad IPv4 tail, zone IDs, missing brackets and non-ASCII digits.
 		List<String> forms = List.of("[]", "[", "]", "[:]", "[:::]", "[::::]", "[1:::2]", "[1::2::3]", "[:1::]",
@@ -142,7 +144,7 @@ final class HostClassifierTests {
 	}
 
 	@TestFactory
-	Stream<DynamicTest> hostnamesFollowRfc1123Syntax() {
+	@NonNull Stream<@NonNull DynamicTest> hostnamesFollowRfc1123Syntax() {
 		String label63 = "a".repeat(63);
 		// 4 labels of 63 plus 3 dots is 255 characters; trimming to 253 keeps it valid.
 		String name253 = String.join(".", label63, label63, label63, "a".repeat(61));
@@ -195,7 +197,7 @@ final class HostClassifierTests {
 	}
 
 	@TestFactory
-	Stream<DynamicTest> localhostNamesAreRecognizedInAsciiCaseOnly() {
+	@NonNull Stream<@NonNull DynamicTest> localhostNamesAreRecognizedInAsciiCaseOnly() {
 		// RFC 6761 section 6.3. The comparison folds ASCII only: the Kelvin sign or a dotless i never matches.
 		Map<String, HostClass> hosts = Map.ofEntries(
 				Map.entry("localhost", HostClass.LOCALHOST_NAME),
@@ -215,7 +217,7 @@ final class HostClassifierTests {
 	}
 
 	@TestFactory
-	Stream<DynamicTest> specialUseAndPrivateUseNamesAreLocalNames() {
+	@NonNull Stream<@NonNull DynamicTest> specialUseAndPrivateUseNamesAreLocalNames() {
 		// G8-5. Every suffix in the plan's list, each confirmed on 2026-09-27: "local.", "home.arpa.", "test.",
 		// "invalid.", "example.", "onion." and "alt." are in the IANA Special-Use Domain Names registry (RFC 6762,
 		// 8375, 6761, 7686 and 9476), and ICANN Board resolution 2024.07.29.06 reserves ".INTERNAL" for private use.
@@ -256,7 +258,7 @@ final class HostClassifierTests {
 	}
 
 	@TestFactory
-	Stream<DynamicTest> reverseZoneAndLocallyServedArpaNamesAreLocalNames() {
+	@NonNull Stream<@NonNull DynamicTest> reverseZoneAndLocallyServedArpaNamesAreLocalNames() {
 		// The owner's decisions of 2026-09-27, in the forms a caller would meet: reverse-mapping names for private,
 		// loopback, link-local and NAT64-discovery addresses (the registry's own reverse-zone entries among them), a
 		// full IPv6 nibble name, the DNS-SD and designated-resolver names, and the NAT64 discovery name itself, in any
@@ -286,7 +288,7 @@ final class HostClassifierTests {
 	}
 
 	@TestFactory
-	Stream<DynamicTest> everyNameUnderArpaIsALocalName() {
+	@NonNull Stream<@NonNull DynamicTest> everyNameUnderArpaIsALocalName() {
 		// The owner's decision of 2026-09-27: arpa is reserved for Internet infrastructure (RFC 3172), so every name
 		// under it is local, whether or not the IANA Special-Use Domain Names registry lists it. That includes G8-5's
 		// home.arpa, the registry entries the earlier per-zone list left out (eap.arpa, the deprecated eap-noob.arpa
@@ -328,7 +330,7 @@ final class HostClassifierTests {
 	}
 
 	@TestFactory
-	Stream<DynamicTest> singleLabelNamesAreLocalNames() {
+	@NonNull Stream<@NonNull DynamicTest> singleLabelNamesAreLocalNames() {
 		// G8-5: a resolver may complete a single label with its search domains onto an internal host, so every
 		// single-label name is local, with or without its trailing dot. "evilinternal" is local for that reason alone:
 		// it is not under ".internal", which "idp.evilinternal" shows.
@@ -347,7 +349,7 @@ final class HostClassifierTests {
 	}
 
 	@TestFactory
-	Stream<DynamicTest> metadataNamesAndNamesUnderThemWinOverLocalNames() {
+	@NonNull Stream<@NonNull DynamicTest> metadataNamesAndNamesUnderThemWinOverLocalNames() {
 		// G8-5 precedence: METADATA_NAME wins over LOCAL_NAME, in any ASCII case and with one trailing dot. Like every
 		// name class, it uses M1's localhost matching: the name itself and every name under it, on a label boundary
 		// only, so a look-alike or a name that merely starts with a metadata name keeps its own class.
@@ -413,7 +415,7 @@ final class HostClassifierTests {
 	 * ({@code OutboundUriPolicyTests} pins both presets for each).
 	 */
 	@TestFactory
-	Stream<DynamicTest> cloudMetadataEndpointsAreTheConfirmedOnes() {
+	@NonNull Stream<@NonNull DynamicTest> cloudMetadataEndpointsAreTheConfirmedOnes() {
 		Map<String, HostClass> hosts = Map.ofEntries(
 				Map.entry("100.100.100.200", HostClass.CLOUD_METADATA),
 				Map.entry("168.63.129.16", HostClass.CLOUD_METADATA),
@@ -438,7 +440,7 @@ final class HostClassifierTests {
 	}
 
 	@TestFactory
-	Stream<DynamicTest> eachIpv6MetadataAddressMatchesOnlyItsOwnPrefixAndLastGroup() {
+	@NonNull Stream<@NonNull DynamicTest> eachIpv6MetadataAddressMatchesOnlyItsOwnPrefixAndLastGroup() {
 		// Each IPv6 metadata address is one exact address: its own first two groups, then zeros, then its own last
 		// group. Every row here differs from one of them in one group or digit, or pairs one provider's first groups
 		// with the other's, and stays in its block's class (fc00::/7 is unique local).
@@ -453,7 +455,7 @@ final class HostClassifierTests {
 	}
 
 	@TestFactory
-	Stream<DynamicTest> embeddedIpv4FollowsTheG85Precedence() {
+	@NonNull Stream<@NonNull DynamicTest> embeddedIpv4FollowsTheG85Precedence() {
 		// G8-5: an IPv4-mapped literal is judged as the IPv4 address inside it, which the JDK turns into an
 		// Inet4Address. NAT64 Well-Known Prefix literals also take the IPv4 address's class, global included. The
 		// IPv4-compatible and IPv4-translated forms, which the JDK keeps as IPv6, take the IPv4 address's class unless
@@ -506,7 +508,7 @@ final class HostClassifierTests {
 	}
 
 	@TestFactory
-	Stream<DynamicTest> ipv4SpecialPurposeBlocksFollowTheIanaRegistry() {
+	@NonNull Stream<@NonNull DynamicTest> ipv4SpecialPurposeBlocksFollowTheIanaRegistry() {
 		// The IANA IPv4 Special-Purpose Address Registry, every entry, as retrieved on 2026-09-27: the block, its
 		// "Globally Reachable" value, and the class of its first and last address. A block marked not globally
 		// reachable never classifies as OTHER_ADDRESS, and one marked globally reachable always does. The deprecated
@@ -549,7 +551,7 @@ final class HostClassifierTests {
 	}
 
 	@TestFactory
-	Stream<DynamicTest> ipv6SpecialPurposeBlocksFollowTheIanaRegistryAndTheAllowlist() {
+	@NonNull Stream<@NonNull DynamicTest> ipv6SpecialPurposeBlocksFollowTheIanaRegistryAndTheAllowlist() {
 		// The IANA IPv6 Special-Purpose Address Registry, every entry, as retrieved on 2026-09-27: the block, its
 		// "Globally Reachable" value, and the class of its first and last address. Where G8-5 departs from the
 		// registry, the row says so.
@@ -646,7 +648,7 @@ final class HostClassifierTests {
 	// addresses, off the host, so they are not loopback literals. Every literal row is compared with InetAddress, which
 	// parses a literal without a resolver.
 	@TestFactory
-	Stream<DynamicTest> loopbackLiteralsAreExactlyTheOnesTheJdkConnectsToAsLoopback() {
+	@NonNull Stream<@NonNull DynamicTest> loopbackLiteralsAreExactlyTheOnesTheJdkConnectsToAsLoopback() {
 		Map<String, Boolean> hosts = Map.ofEntries(
 				Map.entry("127.0.0.1", true),
 				Map.entry("127.1", true),
@@ -692,7 +694,7 @@ final class HostClassifierTests {
 	}
 
 	@TestFactory
-	Stream<DynamicTest> plainHttpLoopbackHostsAreLoopbackLiteralsAndExactlyLocalhost() {
+	@NonNull Stream<@NonNull DynamicTest> plainHttpLoopbackHostsAreLoopbackLiteralsAndExactlyLocalhost() {
 		// G8-7: under allowInsecureLoopback(true), plain http goes only to a loopback literal the JDK connects to as
 		// loopback, or to exactly "localhost" in any ASCII case with no trailing dot. The JDK sends names under
 		// .localhost, and "localhost.", to the platform resolver like any other name. The comparison folds ASCII
@@ -743,6 +745,8 @@ final class HostClassifierTests {
 		Assertions.assertNotSame(first, second);
 	}
 
+	// Deliberate null inputs verify runtime rejection.
+	@SuppressWarnings("NullAway")
 	@Test
 	void nullHostsThrowNullPointerException() {
 		Assertions.assertThrows(NullPointerException.class, () -> HostClassifier.classify(nullString()));
@@ -763,8 +767,8 @@ final class HostClassifierTests {
 		private final HostClass firstClass;
 		private final HostClass lastClass;
 
-		private RegistryRow(String block, @Nullable Boolean globallyReachable, String firstHost, String lastHost,
-				HostClass firstClass, HostClass lastClass) {
+		private RegistryRow(@NonNull String block, @Nullable Boolean globallyReachable, @NonNull String firstHost, @NonNull String lastHost,
+				@NonNull HostClass firstClass, @NonNull HostClass lastClass) {
 			this.block = block;
 			this.globallyReachable = globallyReachable;
 			this.firstHost = firstHost;
@@ -783,7 +787,7 @@ final class HostClassifierTests {
 		}
 
 		@Override
-		public String toString() {
+		public @NonNull String toString() {
 			return this.block + " (" + this.firstHost + " .. " + this.lastHost + ")";
 		}
 	}
@@ -791,8 +795,8 @@ final class HostClassifierTests {
 	/**
 	 * A dotted-quad block {@code a.b.c.d/n}: its first and last addresses as dotted quads.
 	 */
-	private static RegistryRow ipv4Row(String block, @Nullable Boolean globallyReachable, HostClass firstClass,
-			HostClass lastClass) {
+	private static @NonNull RegistryRow ipv4Row(@NonNull String block, @Nullable Boolean globallyReachable, @NonNull HostClass firstClass,
+			@NonNull HostClass lastClass) {
 		String[] parts = block.split("/", -1);
 		byte @Nullable [] base = HostClassifier.parseLiteral(parts[0]);
 		Assertions.assertNotNull(base, block);
@@ -807,8 +811,8 @@ final class HostClassifierTests {
 	/**
 	 * An IPv6 block {@code address/n}: its first and last addresses in full bracketed form.
 	 */
-	private static RegistryRow ipv6Row(String block, @Nullable Boolean globallyReachable, HostClass firstClass,
-			HostClass lastClass) {
+	private static @NonNull RegistryRow ipv6Row(@NonNull String block, @Nullable Boolean globallyReachable, @NonNull HostClass firstClass,
+			@NonNull HostClass lastClass) {
 		String[] parts = block.split("/", -1);
 		byte @Nullable [] base = HostClassifier.parseLiteral("[" + parts[0] + "]");
 		Assertions.assertNotNull(base, block);
@@ -820,12 +824,12 @@ final class HostClassifierTests {
 		return new RegistryRow(block, globallyReachable, fullIpv6(first), fullIpv6(last), firstClass, lastClass);
 	}
 
-	private static String dottedQuad(long value) {
+	private static @NonNull String dottedQuad(long value) {
 		return ((value >>> 24) & 0xFF) + "." + ((value >>> 16) & 0xFF) + "." + ((value >>> 8) & 0xFF) + "."
 				+ (value & 0xFF);
 	}
 
-	private static String fullIpv6(BigInteger value) {
+	private static @NonNull String fullIpv6(@NonNull BigInteger value) {
 		StringBuilder text = new StringBuilder("[");
 		for (int i = 7; i >= 0; --i) {
 			text.append(Integer.toHexString(value.shiftRight(16 * i).intValue() & 0xFFFF));
@@ -837,7 +841,7 @@ final class HostClassifierTests {
 	/**
 	 * The two 16-bit groups of a dotted quad, in hexadecimal: {@code 169.254.169.254} is {@code a9fe:a9fe}.
 	 */
-	private static String hextets(String dottedQuad) {
+	private static @NonNull String hextets(@NonNull String dottedQuad) {
 		byte @Nullable [] address = HostClassifier.parseLiteral(dottedQuad);
 		Assertions.assertNotNull(address);
 		return Integer.toHexString(((address[0] & 0xFF) << 8) | (address[1] & 0xFF)) + ":"
@@ -847,7 +851,7 @@ final class HostClassifierTests {
 	/**
 	 * Returns 16 bytes: an IPv6 address as is, an IPv4 address in IPv4-mapped form ({@code ::ffff:a.b.c.d}).
 	 */
-	private static byte[] toSixteenBytes(byte @Nullable [] address) {
+	private static byte @NonNull [] toSixteenBytes(byte @Nullable [] address) {
 		Assertions.assertNotNull(address);
 		if (address.length == 16)
 			return address.clone();
@@ -860,13 +864,13 @@ final class HostClassifierTests {
 		return mapped;
 	}
 
-	private static String dotted(byte @Nullable [] address) {
+	private static @NonNull String dotted(byte @Nullable [] address) {
 		Assertions.assertNotNull(address);
 		Assertions.assertEquals(4, address.length);
 		return (address[0] & 0xFF) + "." + (address[1] & 0xFF) + "." + (address[2] & 0xFF) + "." + (address[3] & 0xFF);
 	}
 
-	private static String groups(byte @Nullable [] address) {
+	private static @NonNull String groups(byte @Nullable [] address) {
 		Assertions.assertNotNull(address);
 		Assertions.assertEquals(16, address.length);
 		StringBuilder text = new StringBuilder();
@@ -879,7 +883,7 @@ final class HostClassifierTests {
 	}
 
 	@SuppressWarnings("NullAway")
-	private static String nullString() {
+	private static @Nullable String nullString() {
 		return null;
 	}
 
@@ -887,7 +891,7 @@ final class HostClassifierTests {
 	 * The table's rows in key order, so that its dynamic tests have the same order and numbering in every JVM (PIT
 	 * reselects a dynamic test by its position, and {@code Map.of} iterates in a per-JVM order).
 	 */
-	private static <V> Stream<Map.Entry<String, V>> inKeyOrder(Map<String, V> table) {
+	private static <V> @NonNull Stream<Map.@NonNull Entry<@NonNull String, @NonNull V>> inKeyOrder(@NonNull Map<@NonNull String, @NonNull V> table) {
 		return table.entrySet().stream().sorted(Map.Entry.comparingByKey());
 	}
 }

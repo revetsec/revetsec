@@ -16,6 +16,8 @@
 
 package com.revetsec.oauth;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.testing.ChildJvm;
 import org.junit.jupiter.api.Test;
 
@@ -40,7 +42,7 @@ final class OAuthClientZeroThreadTests {
 	public static final class BuildChild {
 		private BuildChild() { }
 
-		public static void main(String[] arguments) {
+		public static void main(@NonNull String @NonNull [] arguments) {
 			AuthorizationServerMetadata metadata = AuthorizationServerMetadata.withIssuer("https://issuer.example")
 					.authorizationEndpoint(URI.create("https://issuer.example/authorize"))
 					.tokenEndpoint(URI.create("https://issuer.example/token"))

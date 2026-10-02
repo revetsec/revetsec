@@ -16,6 +16,8 @@
 
 package com.revetsec.internal.http;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.OutboundUriPolicy;
 import com.revetsec.internal.Limits;
 import org.jspecify.annotations.Nullable;
@@ -51,7 +53,7 @@ final class StandInNetworkedBuilder {
 	private @Nullable Boolean acknowledgeUnpatchedRuntime;
 	private Runtime.Version runtimeVersion = Runtime.version();
 
-	private StandInNetworkedBuilder(URI issuer) {
+	private StandInNetworkedBuilder(@NonNull URI issuer) {
 		this.issuer = requireNonNull(issuer);
 	}
 
@@ -61,36 +63,36 @@ final class StandInNetworkedBuilder {
 	 * @param issuer the issuer, an absolute {@code https} URI
 	 * @return a new builder
 	 */
-	static StandInNetworkedBuilder withIssuer(URI issuer) {
+	static @NonNull StandInNetworkedBuilder withIssuer(@NonNull URI issuer) {
 		return new StandInNetworkedBuilder(issuer);
 	}
 
-	StandInNetworkedBuilder httpClient(@Nullable HttpClient httpClient) {
+	@NonNull StandInNetworkedBuilder httpClient(@Nullable HttpClient httpClient) {
 		this.httpClient = httpClient;
 		return this;
 	}
 
-	StandInNetworkedBuilder outboundUriPolicy(@Nullable OutboundUriPolicy outboundUriPolicy) {
+	@NonNull StandInNetworkedBuilder outboundUriPolicy(@Nullable OutboundUriPolicy outboundUriPolicy) {
 		this.outboundUriPolicy = outboundUriPolicy;
 		return this;
 	}
 
-	StandInNetworkedBuilder requestTimeout(@Nullable Duration requestTimeout) {
+	@NonNull StandInNetworkedBuilder requestTimeout(@Nullable Duration requestTimeout) {
 		this.requestTimeout = requestTimeout;
 		return this;
 	}
 
-	StandInNetworkedBuilder totalDeadline(@Nullable Duration totalDeadline) {
+	@NonNull StandInNetworkedBuilder totalDeadline(@Nullable Duration totalDeadline) {
 		this.totalDeadline = totalDeadline;
 		return this;
 	}
 
-	StandInNetworkedBuilder allowInsecureLoopback(@Nullable Boolean allowInsecureLoopback) {
+	@NonNull StandInNetworkedBuilder allowInsecureLoopback(@Nullable Boolean allowInsecureLoopback) {
 		this.allowInsecureLoopback = allowInsecureLoopback;
 		return this;
 	}
 
-	StandInNetworkedBuilder acknowledgeUnpatchedRuntime(@Nullable Boolean acknowledgeUnpatchedRuntime) {
+	@NonNull StandInNetworkedBuilder acknowledgeUnpatchedRuntime(@Nullable Boolean acknowledgeUnpatchedRuntime) {
 		this.acknowledgeUnpatchedRuntime = acknowledgeUnpatchedRuntime;
 		return this;
 	}
@@ -99,7 +101,7 @@ final class StandInNetworkedBuilder {
 	 * The internal version seam for the runtime floor (plan M1: "behind an internal version seam so it can be
 	 * tested").
 	 */
-	StandInNetworkedBuilder runtimeVersion(Runtime.Version runtimeVersion) {
+	@NonNull StandInNetworkedBuilder runtimeVersion(Runtime.@NonNull Version runtimeVersion) {
 		this.runtimeVersion = requireNonNull(runtimeVersion);
 		return this;
 	}
@@ -112,7 +114,7 @@ final class StandInNetworkedBuilder {
 	 *                                  injected client follows redirects
 	 * @throws IllegalStateException    if the runtime is below the floor and the risk was not acknowledged
 	 */
-	StandInNetworkedComponent build() {
+	@NonNull StandInNetworkedComponent build() {
 		Duration requestTimeoutValue = Limits.REQUEST_TIMEOUT.require(this.requestTimeout == null
 				? Limits.REQUEST_TIMEOUT.getDefaultDuration() : this.requestTimeout);
 		Duration totalDeadlineValue = Limits.TOTAL_DEADLINE.require(this.totalDeadline == null
@@ -147,8 +149,8 @@ final class StandInNetworkedBuilder {
 		private final Duration requestTimeout;
 		private final Duration totalDeadline;
 
-		private StandInNetworkedComponent(URI issuer, HttpExchange exchange, Duration requestTimeout,
-				Duration totalDeadline) {
+		private StandInNetworkedComponent(@NonNull URI issuer, @NonNull HttpExchange exchange, @NonNull Duration requestTimeout,
+				@NonNull Duration totalDeadline) {
 			this.issuer = issuer;
 			this.exchange = exchange;
 			this.requestTimeout = requestTimeout;
@@ -161,7 +163,7 @@ final class StandInNetworkedBuilder {
 		 * @return the response
 		 * @throws HttpExchangeException if the exchange failed
 		 */
-		RawResponse fetchMetadata() throws HttpExchangeException {
+		@NonNull RawResponse fetchMetadata() throws HttpExchangeException {
 			return fetchMetadata(Deadline.fromNow(this.totalDeadline));
 		}
 
@@ -172,7 +174,7 @@ final class StandInNetworkedBuilder {
 		 * @return the response
 		 * @throws HttpExchangeException if the exchange failed
 		 */
-		RawResponse fetchMetadata(Deadline deadline) throws HttpExchangeException {
+		@NonNull RawResponse fetchMetadata(@NonNull Deadline deadline) throws HttpExchangeException {
 			HttpExchangeRequest request = new HttpExchangeRequest(this.issuer, ResponseProfile.METADATA, null, Map.of(),
 					Limits.HTTP_RESPONSE_BODY_SIZE.getDefaultIntValue(), Limits.HTTP_ERROR_BODY_SIZE.getDefaultIntValue(),
 					this.requestTimeout);
@@ -185,7 +187,7 @@ final class StandInNetworkedBuilder {
 		 * @return the client
 		 * @throws HttpExchangeException if the default client is unavailable
 		 */
-		HttpClient httpClientForTests() throws HttpExchangeException {
+		@NonNull HttpClient httpClientForTests() throws HttpExchangeException {
 			return this.exchange.resolveHttpClient();
 		}
 	}

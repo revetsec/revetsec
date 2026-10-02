@@ -16,6 +16,8 @@
 
 package com.revetsec;
 
+import org.jspecify.annotations.NonNull;
+
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.DynamicTest;
@@ -54,7 +56,7 @@ final class RevetsecExceptionTests {
 	private static final class TestLeafException extends RevetsecException {
 		private static final long serialVersionUID = 1L;
 
-		TestLeafException(ErrorCategory category, Boolean transientFailure, String fixedMessage,
+		TestLeafException(@NonNull ErrorCategory category, @NonNull Boolean transientFailure, @NonNull String fixedMessage,
 				@Nullable Throwable cause) {
 			super(category, transientFailure, fixedMessage, cause);
 		}
@@ -143,7 +145,7 @@ final class RevetsecExceptionTests {
 	}
 
 	@TestFactory
-	Stream<DynamicTest> onlyTransportAndRemoteErrorMayBeTransient() {
+	@NonNull Stream<@NonNull DynamicTest> onlyTransportAndRemoteErrorMayBeTransient() {
 		// M1 plan G6-3: transience is a function of category plus cause; MALFORMED_INPUT, VALIDATION_FAILURE,
 		// CONFIGURATION and UNSUPPORTED are never transient.
 		return Arrays.stream(ErrorCategory.values()).map(category -> DynamicTest.dynamicTest(category.name(), () -> {
@@ -165,7 +167,7 @@ final class RevetsecExceptionTests {
 	}
 
 	@TestFactory
-	Stream<DynamicTest> onlyATransportFailureMayKeepAnIoExceptionCause() {
+	@NonNull Stream<@NonNull DynamicTest> onlyATransportFailureMayKeepAnIoExceptionCause() {
 		// M1 plan, layering: a cause is kept only on a TRANSPORT failure from Kind.IO, and it is the JDK IOException.
 		return Arrays.stream(ErrorCategory.values()).map(category -> DynamicTest.dynamicTest(category.name(), () -> {
 			if (category == ErrorCategory.TRANSPORT) {
@@ -190,6 +192,8 @@ final class RevetsecExceptionTests {
 		}));
 	}
 
+	// Deliberate null inputs verify runtime rejection.
+	@SuppressWarnings("NullAway")
 	@Test
 	void nullArgumentsThrowNullPointerException() {
 		// Plan R15: misuse throws NPE, never a RevetsecException.
@@ -275,7 +279,7 @@ final class RevetsecExceptionTests {
 		Assertions.assertInstanceOf(IOException.class, transportCopy.getCause());
 	}
 
-	private static Object roundTrip(Object value) throws IOException, ClassNotFoundException {
+	private static @NonNull Object roundTrip(@NonNull Object value) throws IOException, ClassNotFoundException {
 		ByteArrayOutputStream bytes = new ByteArrayOutputStream();
 
 		try (ObjectOutputStream output = new ObjectOutputStream(bytes)) {
@@ -291,7 +295,7 @@ final class RevetsecExceptionTests {
 	 * Hides a {@code null} from NullAway, for the tests that check the constructor's null handling.
 	 */
 	@SuppressWarnings({"NullAway", "TypeParameterUnusedInFormals"})
-	private static <T> T nullValue() {
+	private static <T> @Nullable T nullValue() {
 		return null;
 	}
 }

@@ -16,6 +16,8 @@
 
 package com.revetsec.jose;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.ErrorCategory;
 import com.revetsec.internal.http.Deadline;
 import com.revetsec.internal.jose.KeyQuery;
@@ -92,7 +94,7 @@ final class JwksCacheTests {
 	// M2-8: the cap is max(cooldown, min(10 x cooldown, 10 min)), with no row of its own. A cooldown above 10 min, which
 	// only settings a later milestone checks itself could hold, is its own cap.
 	@TestFactory
-	Stream<DynamicTest> theBackoffCapIsTenCooldownsWithinTenMinutes() {
+	@NonNull Stream<@NonNull DynamicTest> theBackoffCapIsTenCooldownsWithinTenMinutes() {
 		return Stream.of(
 				List.of(Duration.ofSeconds(1), Duration.ofSeconds(10)),
 				List.of(Duration.ofSeconds(30), Duration.ofSeconds(300)),
@@ -124,7 +126,7 @@ final class JwksCacheTests {
 
 	// M2-8, decay not reset: one step less per full cap interval without a failure, never below zero.
 	@TestFactory
-	Stream<DynamicTest> theFailureCountFallsByOnePerFullCapInterval() {
+	@NonNull Stream<@NonNull DynamicTest> theFailureCountFallsByOnePerFullCapInterval() {
 		Duration cap = Duration.ofMinutes(5);
 		return Stream.of(
 				List.of(5, 0, 5), List.of(5, 299, 5), List.of(5, 300, 4), List.of(5, 599, 4), List.of(5, 600, 3),
@@ -161,7 +163,7 @@ final class JwksCacheTests {
 
 	// G6-4, M2-3: hooks and toString see the URI cut to scheme, host, port and path.
 	@TestFactory
-	Stream<DynamicTest> theReportedUriIsCutToSchemeHostPortAndPath() {
+	@NonNull Stream<@NonNull DynamicTest> theReportedUriIsCutToSchemeHostPortAndPath() {
 		return Stream.of(
 				List.of("https://jwks.example.com/tenant/keys?appid=1", "https://jwks.example.com/tenant/keys"),
 				List.of("https://user:secret@jwks.example.com:8443/k?q#f", "https://jwks.example.com:8443/k"),
@@ -310,7 +312,7 @@ final class JwksCacheTests {
 	// M2-8: a Retry-After on a 429 or a 503 may raise the current step, up to the cap; on any other status, and when it
 	// asks for less, the step stands.
 	@TestFactory
-	Stream<DynamicTest> retryAfterRaisesAStepUpToTheCapOnlyOn429And503() {
+	@NonNull Stream<@NonNull DynamicTest> retryAfterRaisesAStepUpToTheCapOnlyOn429And503() {
 		return Stream.of(
 				List.of("503", "100", "100"), List.of("429", "100", "100"), List.of("503", "100000", "300"),
 				List.of("429", "10", "30"), List.of("500", "100", "30"), List.of("502", "100", "30"),
@@ -801,7 +803,7 @@ final class JwksCacheTests {
 	// The plan's category table: each response and exchange failure maps to its category and transience, the leader
 	// keeps the JDK's IOException only for an I/O failure, and a failure hook receives the very instance thrown.
 	@TestFactory
-	Stream<DynamicTest> eachFailureMapsToItsCategoryAndTransience() {
+	@NonNull Stream<@NonNull DynamicTest> eachFailureMapsToItsCategoryAndTransience() {
 		byte[] keySet = keySetJson("a").getBytes(StandardCharsets.UTF_8);
 		return Stream.of(
 				new FailureCase("404", Answer.fromStatus(404), ErrorCategory.REMOTE_ERROR, false),
@@ -1013,11 +1015,11 @@ final class JwksCacheTests {
 
 	// ----- Shared helpers -----
 
-	static RemoteJsonWebKeySource.Builder source(HttpClient client, Clock clock) {
+	static RemoteJsonWebKeySource.@NonNull Builder source(@NonNull HttpClient client, @NonNull Clock clock) {
 		return RemoteJsonWebKeySource.withUri(JWKS_URI).httpClient(client).clock(clock);
 	}
 
-	static JwksSettings settings(Clock clock, JoseObserver observer) {
+	static @NonNull JwksSettings settings(@NonNull Clock clock, @NonNull JoseObserver observer) {
 		return settings(clock, Duration.ofSeconds(10), observer);
 	}
 
@@ -1025,7 +1027,7 @@ final class JwksCacheTests {
 	 * The default settings with another request timeout, which these checked settings allow below the builder's 1 s
 	 * floor.
 	 */
-	static JwksSettings settings(Clock clock, Duration requestTimeout, JoseObserver observer) {
+	static @NonNull JwksSettings settings(@NonNull Clock clock, @NonNull Duration requestTimeout, @NonNull JoseObserver observer) {
 		return new JwksSettings(clock, requestTimeout, Duration.ofMinutes(1), Duration.ofMinutes(10), Duration.ofHours(6),
 				COOLDOWN, Duration.ofHours(12), 256 * 1024, 100, observer, null);
 	}
@@ -1034,14 +1036,14 @@ final class JwksCacheTests {
 	 * An answer that throws an {@link InjectedError} once the request is sent, which cuts the fetch short: it counts as
 	 * an attempt, keeps any cooldown mark and starts no backoff.
 	 */
-	static Answer cutShort() {
+	static @NonNull Answer cutShort() {
 		return Answer.throwingAfter(new CountDownLatch(0), () -> new InjectedError("cut short"));
 	}
 
 	/**
 	 * The call fails with the {@link InjectedError} of {@link #cutShort()}.
 	 */
-	static void assertCutShort(Executable executable) {
+	static void assertCutShort(@NonNull Executable executable) {
 		Assertions.assertEquals("cut short", Assertions.assertThrows(InjectedError.class, executable).getMessage());
 	}
 
@@ -1049,7 +1051,7 @@ final class JwksCacheTests {
 	 * A source over a client that answers {@code json} with no {@code Content-Length}, built with the given key and
 	 * body limits ({@code null} keeps a default).
 	 */
-	private static RemoteJsonWebKeySource limited(String json, @Nullable Integer maximumKeys,
+	private static @NonNull RemoteJsonWebKeySource limited(@NonNull String json, @Nullable Integer maximumKeys,
 			@Nullable Integer maximumResponseBytes) {
 		MemoryHttpClient client = MemoryHttpClient.answering(Answer.fromJson(200, null, json));
 		return source(client, TestClock.fromInstant(START)).maximumKeys(maximumKeys)
@@ -1060,7 +1062,7 @@ final class JwksCacheTests {
 	 * {@code json}, an object, with insignificant whitespace before its closing brace to make it exactly {@code bytes}
 	 * UTF-8 octets long.
 	 */
-	private static String paddedTo(String json, int bytes) {
+	private static @NonNull String paddedTo(@NonNull String json, int bytes) {
 		int length = json.getBytes(StandardCharsets.UTF_8).length;
 		Assertions.assertTrue(json.endsWith("}") && length <= bytes, "cannot pad to " + bytes);
 		String padded = json.substring(0, json.length() - 1) + " ".repeat(bytes - length) + "}";
@@ -1068,15 +1070,15 @@ final class JwksCacheTests {
 		return padded;
 	}
 
-	static KeyQuery rs256(@Nullable String keyId) {
+	static @NonNull KeyQuery rs256(@Nullable String keyId) {
 		return new KeyQuery(JwsAlgorithm.RS256, keyId, Set.of(JwsAlgorithm.RS256));
 	}
 
-	static KeySelection select(RemoteJsonWebKeySource source, @Nullable String keyId) {
+	static @NonNull KeySelection select(@NonNull RemoteJsonWebKeySource source, @Nullable String keyId) {
 		return source.select(rs256(keyId));
 	}
 
-	static List<String> keyIds(int count) {
+	static @NonNull List<@NonNull String> keyIds(int count) {
 		List<String> keyIds = new ArrayList<>();
 		for (int index = 1; index <= count; ++index)
 			keyIds.add("k-" + index);
@@ -1086,19 +1088,19 @@ final class JwksCacheTests {
 	/**
 	 * A key set of the 2048-bit RSA fixture key under each kid, with no {@code alg}.
 	 */
-	static String keySetJson(String... keyIds) {
+	static @NonNull String keySetJson(@NonNull String @NonNull ... keyIds) {
 		return keySetJson(List.of(keyIds));
 	}
 
-	static String keySetJson(List<String> keyIds) {
+	static @NonNull String keySetJson(@NonNull List<@NonNull String> keyIds) {
 		List<String> keys = new ArrayList<>();
 		for (String keyId : keyIds)
 			keys.add(TestJsonWebKeys.withFixture(Fixture.IDP_SIGNING_RSA_2048).kid(keyId).toJson());
 		return TestJsonWebKeys.keySet(keys);
 	}
 
-	static JsonWebKeySetUnavailableException assertUnavailable(ErrorCategory category, boolean transientFailure,
-			Executable executable) {
+	static @NonNull JsonWebKeySetUnavailableException assertUnavailable(@NonNull ErrorCategory category, boolean transientFailure,
+			@NonNull Executable executable) {
 		JsonWebKeySetUnavailableException exception = Assertions.assertThrows(JsonWebKeySetUnavailableException.class,
 				executable);
 		Assertions.assertEquals(category, exception.getCategory(), exception::toString);
@@ -1113,7 +1115,7 @@ final class JwksCacheTests {
 		private final ErrorCategory category;
 		private final boolean transientFailure;
 
-		private FailureCase(String name, Answer answer, ErrorCategory category, boolean transientFailure) {
+		private FailureCase(@NonNull String name, @NonNull Answer answer, @NonNull ErrorCategory category, boolean transientFailure) {
 			this.name = name;
 			this.answer = answer;
 			this.category = category;
@@ -1133,8 +1135,8 @@ final class JwksCacheTests {
 		private final @Nullable Supplier<? extends Error> error;
 		private final @Nullable CountDownLatch gate;
 
-		private Answer(Kind kind, int status, Map<String, List<String>> headers, byte[] body,
-				@Nullable Supplier<? extends Error> error, @Nullable CountDownLatch gate) {
+		private Answer(@NonNull Kind kind, int status, @NonNull Map<@NonNull String, @NonNull List<@NonNull String>> headers, byte @NonNull [] body,
+				@Nullable Supplier<? extends @NonNull Error> error, @Nullable CountDownLatch gate) {
 			this.kind = kind;
 			this.status = status;
 			this.headers = Map.copyOf(headers);
@@ -1146,22 +1148,22 @@ final class JwksCacheTests {
 		/**
 		 * A response with {@code status}, the given headers and an empty body.
 		 */
-		static Answer fromStatus(int status) {
+		static @NonNull Answer fromStatus(int status) {
 			return fromStatus(status, Map.of());
 		}
 
-		static Answer fromStatus(int status, Map<String, List<String>> headers) {
+		static @NonNull Answer fromStatus(int status, @NonNull Map<@NonNull String, @NonNull List<@NonNull String>> headers) {
 			return new Answer(Kind.RESPOND, status, headers, new byte[0], null, null);
 		}
 
-		static Answer fromBytes(int status, Map<String, List<String>> headers, byte[] body) {
+		static @NonNull Answer fromBytes(int status, @NonNull Map<@NonNull String, @NonNull List<@NonNull String>> headers, byte @NonNull [] body) {
 			return new Answer(Kind.RESPOND, status, headers, body, null, null);
 		}
 
 		/**
 		 * A response with the JWK Set media type, an optional {@code Cache-Control} and {@code json} as its body.
 		 */
-		static Answer fromJson(int status, @Nullable String cacheControl, String json) {
+		static @NonNull Answer fromJson(int status, @Nullable String cacheControl, @NonNull String json) {
 			Map<String, List<String>> headers = new LinkedHashMap<>();
 			headers.put("Content-Type", List.of(JWK_SET_MEDIA_TYPE));
 			if (cacheControl != null)
@@ -1172,21 +1174,21 @@ final class JwksCacheTests {
 		/**
 		 * A 200 key set of the RSA fixture key under each kid ({@link #keySetJson(String...)}).
 		 */
-		static Answer fromKeySet(@Nullable String cacheControl, String... keyIds) {
+		static @NonNull Answer fromKeySet(@Nullable String cacheControl, @NonNull String @NonNull ... keyIds) {
 			return fromJson(200, cacheControl, keySetJson(keyIds));
 		}
 
 		/**
 		 * The exchange fails with an {@link IOException}, as a refused connection does.
 		 */
-		static Answer failingWithIo() {
+		static @NonNull Answer failingWithIo() {
 			return new Answer(Kind.FAIL_WITH_IO, 0, Map.of(), new byte[0], null, null);
 		}
 
 		/**
 		 * Nothing arrives until the test calls {@link MemoryHttpClient#releaseHeld(Answer)}.
 		 */
-		static Answer holding() {
+		static @NonNull Answer holding() {
 			return new Answer(Kind.HOLD, 0, Map.of(), new byte[0], null, null);
 		}
 
@@ -1194,7 +1196,7 @@ final class JwksCacheTests {
 		 * {@code sendAsync} waits for {@code gate} (uninterruptibly), then throws the error: an {@link Error} that
 		 * leaves the leader after the exchange began.
 		 */
-		static Answer throwingAfter(CountDownLatch gate, Supplier<? extends Error> error) {
+		static @NonNull Answer throwingAfter(@NonNull CountDownLatch gate, @NonNull Supplier<? extends @NonNull Error> error) {
 			return new Answer(Kind.THROW, 0, Map.of(), new byte[0], requireNonNull(error), requireNonNull(gate));
 		}
 
@@ -1203,13 +1205,13 @@ final class JwksCacheTests {
 		 * {@link Kind#RESPOND} answer: a leader held inside the exchange, where no deadline reaches it, whose response
 		 * arrives only when the test lets it.
 		 */
-		static Answer respondingAfter(CountDownLatch gate, Answer response) {
+		static @NonNull Answer respondingAfter(@NonNull CountDownLatch gate, @NonNull Answer response) {
 			if (response.kind != Kind.RESPOND)
 				throw new IllegalArgumentException("A gated answer responds");
 			return new Answer(Kind.GATED, response.status, response.headers, response.body, null, requireNonNull(gate));
 		}
 
-		HttpHeaders headers() {
+		@NonNull HttpHeaders headers() {
 			return HttpHeaders.of(this.headers, (name, value) -> true);
 		}
 
@@ -1240,18 +1242,18 @@ final class JwksCacheTests {
 		private final List<Thread> senders = new ArrayList<>();
 		private final List<Held<?>> held = new ArrayList<>();
 
-		private MemoryHttpClient(Answer answer) {
+		private MemoryHttpClient(@NonNull Answer answer) {
 			this.answer = answer;
 		}
 
-		static MemoryHttpClient answering(Answer answer) {
+		static @NonNull MemoryHttpClient answering(@NonNull Answer answer) {
 			return new MemoryHttpClient(requireNonNull(answer));
 		}
 
 		/**
 		 * Replaces the answer for requests that arrive from now on.
 		 */
-		void answer(Answer answer) {
+		void answer(@NonNull Answer answer) {
 			requireNonNull(answer);
 			this.lock.lock();
 			try {
@@ -1270,7 +1272,7 @@ final class JwksCacheTests {
 			}
 		}
 
-		List<HttpRequest> getRequests() {
+		@NonNull List<@NonNull HttpRequest> getRequests() {
 			this.lock.lock();
 			try {
 				return List.copyOf(this.requests);
@@ -1282,7 +1284,7 @@ final class JwksCacheTests {
 		/**
 		 * The thread that sent each request, in order: the leader of each flight.
 		 */
-		List<Thread> getSenders() {
+		@NonNull List<@NonNull Thread> getSenders() {
 			this.lock.lock();
 			try {
 				return List.copyOf(this.senders);
@@ -1294,7 +1296,7 @@ final class JwksCacheTests {
 		/**
 		 * Waits until at least {@code count} requests have been sent, the timeout passes, or the thread is interrupted.
 		 */
-		boolean awaitSendCount(int count, Duration timeout) throws InterruptedException {
+		boolean awaitSendCount(int count, @NonNull Duration timeout) throws InterruptedException {
 			long remaining = timeout.toNanos();
 			this.lock.lock();
 			try {
@@ -1314,7 +1316,7 @@ final class JwksCacheTests {
 		 * it answered: a request its caller gave up on (its future cancelled, as an interrupted or timed-out exchange
 		 * does) is dropped instead.
 		 */
-		int releaseHeld(Answer response) {
+		int releaseHeld(@NonNull Answer response) {
 			List<Held<?>> released;
 			this.lock.lock();
 			try {
@@ -1351,8 +1353,8 @@ final class JwksCacheTests {
 		}
 
 		@Override
-		public <T> CompletableFuture<HttpResponse<T>> sendAsync(HttpRequest request,
-				HttpResponse.BodyHandler<T> responseBodyHandler) {
+		public <T> @NonNull CompletableFuture<@NonNull HttpResponse<@NonNull T>> sendAsync(@NonNull HttpRequest request,
+				HttpResponse.@NonNull BodyHandler<@NonNull T> responseBodyHandler) {
 			Answer current;
 			CompletableFuture<HttpResponse<T>> future = new CompletableFuture<>();
 			this.lock.lock();
@@ -1388,7 +1390,7 @@ final class JwksCacheTests {
 		/**
 		 * Waits for {@code gate} whatever interrupts arrive, then sets the interrupt flag again if one did.
 		 */
-		private static void awaitUninterruptibly(CountDownLatch gate) {
+		private static void awaitUninterruptibly(@NonNull CountDownLatch gate) {
 			boolean interrupted = false;
 			while (gate.getCount() > 0) {
 				try {
@@ -1402,18 +1404,18 @@ final class JwksCacheTests {
 		}
 
 		@Override
-		public <T> CompletableFuture<HttpResponse<T>> sendAsync(HttpRequest request,
-				HttpResponse.BodyHandler<T> responseBodyHandler, HttpResponse.PushPromiseHandler<T> pushPromiseHandler) {
+		public <T> @NonNull CompletableFuture<@NonNull HttpResponse<@NonNull T>> sendAsync(@NonNull HttpRequest request,
+				HttpResponse.@NonNull BodyHandler<@NonNull T> responseBodyHandler, HttpResponse.@NonNull PushPromiseHandler<@NonNull T> pushPromiseHandler) {
 			return sendAsync(request, responseBodyHandler);
 		}
 
 		@Override
-		public <T> HttpResponse<T> send(HttpRequest request, HttpResponse.BodyHandler<T> responseBodyHandler)
+		public <T> @NonNull HttpResponse<@NonNull T> send(@NonNull HttpRequest request, HttpResponse.@NonNull BodyHandler<@NonNull T> responseBodyHandler)
 				throws IOException {
 			throw new IOException("MemoryHttpClient only sends asynchronously");
 		}
 
-		private static <T> void deliver(HttpResponse.BodyHandler<T> handler, Answer response) {
+		private static <T> void deliver(HttpResponse.@NonNull BodyHandler<@NonNull T> handler, @NonNull Answer response) {
 			HttpResponse.BodySubscriber<T> subscriber = handler.apply(new Info(response.status, response.headers()));
 			subscriber.onSubscribe(new Flow.Subscription() {
 				@Override
@@ -1432,27 +1434,27 @@ final class JwksCacheTests {
 		}
 
 		@Override
-		public Optional<CookieHandler> cookieHandler() {
+		public @NonNull Optional<@NonNull CookieHandler> cookieHandler() {
 			return Optional.empty();
 		}
 
 		@Override
-		public Optional<Duration> connectTimeout() {
+		public @NonNull Optional<@NonNull Duration> connectTimeout() {
 			return Optional.empty();
 		}
 
 		@Override
-		public HttpClient.Redirect followRedirects() {
+		public HttpClient.@NonNull Redirect followRedirects() {
 			return HttpClient.Redirect.NEVER;
 		}
 
 		@Override
-		public Optional<ProxySelector> proxy() {
+		public @NonNull Optional<@NonNull ProxySelector> proxy() {
 			return Optional.empty();
 		}
 
 		@Override
-		public SSLContext sslContext() {
+		public @NonNull SSLContext sslContext() {
 			try {
 				return SSLContext.getDefault();
 			} catch (NoSuchAlgorithmException e) {
@@ -1461,22 +1463,22 @@ final class JwksCacheTests {
 		}
 
 		@Override
-		public SSLParameters sslParameters() {
+		public @NonNull SSLParameters sslParameters() {
 			return new SSLParameters();
 		}
 
 		@Override
-		public Optional<Authenticator> authenticator() {
+		public @NonNull Optional<@NonNull Authenticator> authenticator() {
 			return Optional.empty();
 		}
 
 		@Override
-		public HttpClient.Version version() {
+		public HttpClient.@NonNull Version version() {
 			return HttpClient.Version.HTTP_1_1;
 		}
 
 		@Override
-		public Optional<Executor> executor() {
+		public @NonNull Optional<@NonNull Executor> executor() {
 			return Optional.empty();
 		}
 
@@ -1488,12 +1490,12 @@ final class JwksCacheTests {
 			private final HttpResponse.BodyHandler<T> handler;
 			private final CompletableFuture<HttpResponse<T>> future;
 
-			private Held(HttpResponse.BodyHandler<T> handler, CompletableFuture<HttpResponse<T>> future) {
+			private Held(HttpResponse.@NonNull BodyHandler<@NonNull T> handler, @NonNull CompletableFuture<@NonNull HttpResponse<@NonNull T>> future) {
 				this.handler = handler;
 				this.future = future;
 			}
 
-			boolean deliver(Answer response) {
+			boolean deliver(@NonNull Answer response) {
 				if (this.future.isCancelled())
 					return false;
 				MemoryHttpClient.deliver(this.handler, response);
@@ -1514,7 +1516,7 @@ final class JwksCacheTests {
 			private final int status;
 			private final HttpHeaders headers;
 
-			private Info(int status, HttpHeaders headers) {
+			private Info(int status, @NonNull HttpHeaders headers) {
 				this.status = status;
 				this.headers = headers;
 			}
@@ -1525,12 +1527,12 @@ final class JwksCacheTests {
 			}
 
 			@Override
-			public HttpHeaders headers() {
+			public @NonNull HttpHeaders headers() {
 				return this.headers;
 			}
 
 			@Override
-			public HttpClient.Version version() {
+			public HttpClient.@NonNull Version version() {
 				return HttpClient.Version.HTTP_1_1;
 			}
 		}

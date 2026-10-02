@@ -16,6 +16,8 @@
 
 package com.revetsec.testing;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.testing.TestHttpsServer.HeldScript;
 import com.revetsec.testing.TestHttpsServer.Outcome;
 import com.revetsec.testing.TestHttpsServer.RecordedRequest;
@@ -212,7 +214,7 @@ final class TestHttpsServerTests {
 	}
 
 	@TestFactory
-	Stream<DynamicTest> aScriptThatThrowsAnswers500AndIsRecordedAsFailed() {
+	@NonNull Stream<@NonNull DynamicTest> aScriptThatThrowsAnswers500AndIsRecordedAsFailed() {
 		// A failed JUnit assertion inside a script is an Error; it must be recorded like a runtime exception, not lost.
 		Map<String, Throwable> failures = new LinkedHashMap<>();
 		failures.put("runtime exception", new IllegalStateException("script bug"));
@@ -451,7 +453,7 @@ final class TestHttpsServerTests {
 		Assertions.assertEquals(Outcome.SERVER_CLOSED, tarpitted.awaitOutcome(WAIT));
 	}
 
-	private static HttpResponse<String> get(HttpClient client, URI uri) throws IOException, InterruptedException {
+	private static @NonNull HttpResponse<@NonNull String> get(@NonNull HttpClient client, @NonNull URI uri) throws IOException, InterruptedException {
 		return client.send(HttpRequest.newBuilder(uri).build(), HttpResponse.BodyHandlers.ofString());
 	}
 

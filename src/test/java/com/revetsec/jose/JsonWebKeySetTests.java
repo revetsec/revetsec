@@ -16,6 +16,8 @@
 
 package com.revetsec.jose;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.ErrorCategory;
 import com.revetsec.testing.JsonText;
 import com.revetsec.testing.TestJsonWebKeys;
@@ -72,7 +74,7 @@ final class JsonWebKeySetTests {
 	// Document failures are MalformedJoseInputException with KEY_SET: MALFORMED_INPUT, not transient, no cause, and a
 	// fixed message that never holds the document.
 	@TestFactory
-	Stream<DynamicTest> documentFailuresAreMalformedInputWithTheKeySetReason() {
+	@NonNull Stream<@NonNull DynamicTest> documentFailuresAreMalformedInputWithTheKeySetReason() {
 		return Stream.of("", "{", "[]", "{}", "{\"keys\":{}}", "{\"keys\":[1]}", "{\"keys\":[],\"keys\":[]}",
 						"{\"keys\":[\"" + (char) 0xD800 + "\"]}")
 				.map(document -> DynamicTest.dynamicTest(JsonText.string(document), () -> {
@@ -189,7 +191,7 @@ final class JsonWebKeySetTests {
 		Assertions.assertNotEquals(key, set);
 	}
 
-	private static JsonWebKey only(String keyJson) {
+	private static @NonNull JsonWebKey only(@NonNull String keyJson) {
 		List<JsonWebKey> keys = JsonWebKeySet.fromJson(TestJsonWebKeys.keySet(List.of(keyJson))).getKeys();
 		Assertions.assertEquals(1, keys.size(), keyJson);
 		return keys.get(0);

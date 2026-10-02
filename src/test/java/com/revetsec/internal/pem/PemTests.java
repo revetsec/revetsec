@@ -16,6 +16,8 @@
 
 package com.revetsec.internal.pem;
 
+import org.jspecify.annotations.NonNull;
+
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.DynamicTest;
 import org.junit.jupiter.api.Test;
@@ -104,7 +106,7 @@ final class PemTests {
 
 	// Every M0 certificate parses, equals what the JDK parses from the same PEM, and round-trips.
 	@TestFactory
-	Stream<DynamicTest> parsesEveryM0Certificate() {
+	@NonNull Stream<@NonNull DynamicTest> parsesEveryM0Certificate() {
 		return M0_KEYS.stream().map(name -> DynamicTest.dynamicTest(name, () -> {
 			String pem = keysFixture(name + "-cert.pem");
 			X509Certificate certificate = Pem.parseCertificate(pem);
@@ -119,7 +121,7 @@ final class PemTests {
 	// Every M0 PKCS#8 key parses to the key the JDK builds from the same DER, and it pairs with its certificate.
 	// PEM parsing does no key policy: the negative RSA-1024 key parses too (the policy is the caller's).
 	@TestFactory
-	Stream<DynamicTest> parsesEveryM0Pkcs8PrivateKey() {
+	@NonNull Stream<@NonNull DynamicTest> parsesEveryM0Pkcs8PrivateKey() {
 		return M0_KEYS.stream().map(name -> DynamicTest.dynamicTest(name, () -> {
 			String pem = keysFixture(name + "-key.pem");
 			PrivateKey key = Pem.parsePrivateKey(pem);
@@ -213,7 +215,7 @@ final class PemTests {
 	// Plan G10: encrypted PEM is rejected in both forms: PKCS#8 ENCRYPTED PRIVATE KEY and OpenSSL's legacy
 	// Proc-Type: 4,ENCRYPTED header (RFC 1421), whichever private-key label carries it.
 	@TestFactory
-	Stream<DynamicTest> rejectsEncryptedPrivateKeys() {
+	@NonNull Stream<@NonNull DynamicTest> rejectsEncryptedPrivateKeys() {
 		String legacyPkcs8 = """
 				-----BEGIN PRIVATE KEY-----
 				Proc-Type: 4,ENCRYPTED
@@ -243,7 +245,7 @@ final class PemTests {
 	// Plan 8: "the JDK ignores trailing DER bytes (observed)". The certificate factory accepts both fixtures, a
 	// trailing zero byte and a second whole certificate after the first; Revetsec rejects both.
 	@TestFactory
-	Stream<DynamicTest> rejectsTrailingBytesAfterACertificateThatTheJdkIgnores() {
+	@NonNull Stream<@NonNull DynamicTest> rejectsTrailingBytesAfterACertificateThatTheJdkIgnores() {
 		return Stream.of("rsa-2048-cert-trailing-byte.pem", "rsa-2048-cert-appended-certificate.pem").map(name ->
 				DynamicTest.dynamicTest(name, () -> {
 					String pem = pemFixture(name);
@@ -259,7 +261,7 @@ final class PemTests {
 	// JDK 17's key factories accept trailing bytes after SubjectPublicKeyInfo and PKCS#8 (21 and later reject them),
 	// so the check cannot be left to the JDK.
 	@TestFactory
-	Stream<DynamicTest> rejectsTrailingBytesAfterEveryKeyForm() {
+	@NonNull Stream<@NonNull DynamicTest> rejectsTrailingBytesAfterEveryKeyForm() {
 		return Stream.of(
 				new Object[]{"PUBLIC KEY", der(pemFixture("rsa-2048-public.pem"))},
 				new Object[]{"PRIVATE KEY", der(keysFixture("idp-signing-ec-p256-key.pem"))},
@@ -276,7 +278,7 @@ final class PemTests {
 	// EdDSA key on every JDK and after an EC key before 27, so without Revetsec's check the result would depend on
 	// the JDK; Revetsec rejects them on every JDK.
 	@TestFactory
-	Stream<DynamicTest> rejectsTrailingBytesAfterTheKeyInsidePkcs8() {
+	@NonNull Stream<@NonNull DynamicTest> rejectsTrailingBytesAfterTheKeyInsidePkcs8() {
 		List<byte[]> extras = List.of(hex("00"), hex("0500"), hex("3000"),
 				SENTINEL.getBytes(StandardCharsets.US_ASCII));
 		return Stream.of(
@@ -296,7 +298,7 @@ final class PemTests {
 
 	// RFC 3279, RFC 5480 and RFC 8410 parameter rules, and algorithms outside RSA, EC and EdDSA.
 	@TestFactory
-	Stream<DynamicTest> rejectsUnsupportedAlgorithmsAndParameters() {
+	@NonNull Stream<@NonNull DynamicTest> rejectsUnsupportedAlgorithmsAndParameters() {
 		byte[] rsaSpki = der(pemFixture("rsa-2048-public.pem"));
 		byte[] rsaBitString = Arrays.copyOfRange(rsaSpki, 19, rsaSpki.length);
 		byte[] edSpki = der(pemFixture("ed25519-public.pem"));
@@ -356,7 +358,7 @@ final class PemTests {
 	// EC key whose last octet has those bits clear (half of all keys) would have a second encoding. Pem refuses the
 	// count itself, for EdDSA too, before any JDK sees the key.
 	@TestFactory
-	Stream<DynamicTest> rejectsAPublicKeyBitStringWithUnusedBits() {
+	@NonNull Stream<@NonNull DynamicTest> rejectsAPublicKeyBitStringWithUnusedBits() {
 		List<DynamicTest> tests = new ArrayList<>();
 		for (Object[] fixture : List.of(new Object[]{"rsa-2048-public.pem", 23}, new Object[]{"ec-p256-public.pem", 25},
 				new Object[]{"ed25519-public.pem", 11}))
@@ -379,7 +381,7 @@ final class PemTests {
 	// The JDK accepts each variant here as the same key and returns the input unchanged from getEncoded(), so only a
 	// key rebuilt from the modulus and exponent shows it is not the DER encoding.
 	@TestFactory
-	Stream<DynamicTest> rejectsRsaPublicKeysThatAreNotTheDerEncodingOfTheirValues() {
+	@NonNull Stream<@NonNull DynamicTest> rejectsRsaPublicKeysThatAreNotTheDerEncodingOfTheirValues() {
 		byte[] spki = der(pemFixture("rsa-2048-public.pem"));
 		List<byte[]> integers = children(Arrays.copyOfRange(spki, 24, spki.length));
 		byte[] modulus = content(integers.get(0));
@@ -412,7 +414,7 @@ final class PemTests {
 	// little-endian with the sign of x cleared) is not below the field prime. The JDK accepts such a key and refuses it
 	// only when it is first used, so Pem refuses it, while p - 1 still parses.
 	@TestFactory
-	Stream<DynamicTest> rejectsEdDsaPublicKeysWhoseYIsNotBelowTheFieldPrime() throws Exception {
+	@NonNull Stream<@NonNull DynamicTest> rejectsEdDsaPublicKeysWhoseYIsNotBelowTheFieldPrime() throws Exception {
 		BigInteger p25519 = BigInteger.TWO.pow(255).subtract(BigInteger.valueOf(19));
 		BigInteger p448 = BigInteger.TWO.pow(448).subtract(BigInteger.TWO.pow(224)).subtract(BigInteger.ONE);
 		byte[] ed25519 = der(pemFixture("ed25519-public.pem"));
@@ -447,7 +449,7 @@ final class PemTests {
 
 	// X.690 section 10.1: definite, minimal lengths only; one outer SEQUENCE; no BER.
 	@TestFactory
-	Stream<DynamicTest> rejectsDerThatIsNotStrict() {
+	@NonNull Stream<@NonNull DynamicTest> rejectsDerThatIsNotStrict() {
 		byte[] certificate = der(keysFixture("idp-signing-rsa-2048-cert.pem"));
 		byte[] content = Arrays.copyOfRange(certificate, 4, certificate.length);
 		byte[] length = Arrays.copyOfRange(certificate, 2, 4);
@@ -472,7 +474,7 @@ final class PemTests {
 
 	// The key structures are checked field by field before the JDK sees them.
 	@TestFactory
-	Stream<DynamicTest> rejectsKeyStructuresOfTheWrongShape() {
+	@NonNull Stream<@NonNull DynamicTest> rejectsKeyStructuresOfTheWrongShape() {
 		byte[] rsaSpki = der(pemFixture("rsa-2048-public.pem"));
 		byte[] rsaBitString = Arrays.copyOfRange(rsaSpki, 19, rsaSpki.length);
 		byte[] rsaPkcs8 = der(keysFixture("idp-signing-rsa-2048-key.pem"));
@@ -517,7 +519,7 @@ final class PemTests {
 
 	// Well-formed structures whose contents the JDK refuses get one fixed message, never the JDK's.
 	@TestFactory
-	Stream<DynamicTest> reportsMaterialTheJdkRejectsWithAFixedMessage() {
+	@NonNull Stream<@NonNull DynamicTest> reportsMaterialTheJdkRejectsWithAFixedMessage() {
 		byte[] ecSpki = der(pemFixture("ec-p256-public.pem"));
 		byte[] ecBitString = Arrays.copyOfRange(ecSpki, 23, ecSpki.length);
 		byte[] sentinel = SENTINEL.getBytes(StandardCharsets.US_ASCII);
@@ -549,7 +551,7 @@ final class PemTests {
 
 	// RFC 7468 armor, strictly: exactly one block, matching labels, boundary lines of their own, no headers.
 	@TestFactory
-	Stream<DynamicTest> rejectsMalformedArmor() {
+	@NonNull Stream<@NonNull DynamicTest> rejectsMalformedArmor() {
 		String pem = keysFixture("idp-signing-ec-p256-cert.pem");
 		String body = pem.substring(pem.indexOf('\n') + 1, pem.indexOf("-----END"));
 		return Stream.of(
@@ -600,7 +602,7 @@ final class PemTests {
 
 	// Inside the body only CR and LF are removed; the rest must be canonical padded Base64.
 	@TestFactory
-	Stream<DynamicTest> rejectsBodiesThatAreNotCanonicalBase64() {
+	@NonNull Stream<@NonNull DynamicTest> rejectsBodiesThatAreNotCanonicalBase64() {
 		// The first M0 certificate whose DER length is not a multiple of three, so its encoding ends in padding and has
 		// trailing bits that must be zero. Which one it is depends on the signatures, which change whenever the keys
 		// are regenerated.
@@ -633,7 +635,7 @@ final class PemTests {
 	// Each operation accepts only its own labels. SEC1 and encrypted labels are explained only where a private key
 	// was expected.
 	@TestFactory
-	Stream<DynamicTest> rejectsLabelsTheOperationDoesNotAccept() {
+	@NonNull Stream<@NonNull DynamicTest> rejectsLabelsTheOperationDoesNotAccept() {
 		return Stream.of(
 				new String[]{"PRIVATE KEY", "CERTIFICATE"},
 				new String[]{"PRIVATE KEY", "PUBLIC KEY"},
@@ -660,7 +662,7 @@ final class PemTests {
 	}
 
 	@TestFactory
-	Stream<DynamicTest> everyKindHasItsFixedOneSentenceMessageAndNoCause() {
+	@NonNull Stream<@NonNull DynamicTest> everyKindHasItsFixedOneSentenceMessageAndNoCause() {
 		Assertions.assertEquals(EnumSet.allOf(PemException.Kind.class), MESSAGES.keySet());
 		return Stream.of(PemException.Kind.values()).map(kind -> DynamicTest.dynamicTest(kind.name(), () -> {
 			PemException exception = new PemException(kind);
@@ -687,7 +689,7 @@ final class PemTests {
 		Assertions.assertThrows(NullPointerException.class, () -> Pem.parsePrivateKey(null));
 	}
 
-	private static Object parse(String label, String pem) throws PemException {
+	private static @NonNull Object parse(@NonNull String label, @NonNull String pem) throws PemException {
 		return switch (label) {
 			case "CERTIFICATE" -> Pem.parseCertificate(pem);
 			case "PUBLIC KEY" -> Pem.parsePublicKey(pem);
@@ -700,7 +702,7 @@ final class PemTests {
 	 * nothing suppressed, and no trace of the sentinel or of any recognizable line of {@code input} in its message,
 	 * {@code toString()} or stack trace (R9).
 	 */
-	private static void assertRejected(PemException.Kind kind, String input, Executable action) {
+	private static void assertRejected(PemException.@NonNull Kind kind, @NonNull String input, @NonNull Executable action) {
 		PemException exception = Assertions.assertThrows(PemException.class, action, () -> "expected " + kind);
 		Assertions.assertEquals(kind, exception.getKind());
 		Assertions.assertEquals(MESSAGES.get(kind), exception.getMessage());
@@ -718,7 +720,7 @@ final class PemTests {
 		}
 	}
 
-	private static void assertPairs(PrivateKey privateKey, PublicKey publicKey) throws GeneralSecurityException {
+	private static void assertPairs(@NonNull PrivateKey privateKey, @NonNull PublicKey publicKey) throws GeneralSecurityException {
 		String algorithm;
 		if (privateKey.getAlgorithm().equals("RSA"))
 			algorithm = "SHA256withRSA";
@@ -737,15 +739,15 @@ final class PemTests {
 		Assertions.assertTrue(verifier.verify(signature), "the private key pairs with the public key");
 	}
 
-	private static String keysFixture(String name) {
+	private static @NonNull String keysFixture(@NonNull String name) {
 		return resource("/fixtures/keys/" + name);
 	}
 
-	private static String pemFixture(String name) {
+	private static @NonNull String pemFixture(@NonNull String name) {
 		return resource("/fixtures/pem/" + name);
 	}
 
-	private static String resource(String path) {
+	private static @NonNull String resource(@NonNull String path) {
 		try (InputStream input = Objects.requireNonNull(PemTests.class.getResourceAsStream(path), path)) {
 			return new String(input.readAllBytes(), StandardCharsets.US_ASCII);
 		} catch (IOException e) {
@@ -757,32 +759,32 @@ final class PemTests {
 	 * The DER inside a PEM text, decoded here with the JDK's lenient MIME decoder so the expectations do not depend
 	 * on the code under test.
 	 */
-	private static byte[] der(String pem) {
+	private static byte @NonNull [] der(@NonNull String pem) {
 		return Base64.getMimeDecoder().decode(pem.lines().filter(line -> !line.startsWith("-----"))
 				.collect(Collectors.joining()));
 	}
 
-	private static String pem(String label, byte[] der) {
+	private static @NonNull String pem(@NonNull String label, byte @NonNull [] der) {
 		return "-----BEGIN " + label + "-----\n"
 				+ Base64.getMimeEncoder(64, new byte[]{'\n'}).encodeToString(der) + (der.length == 0 ? "" : "\n")
 				+ "-----END " + label + "-----\n";
 	}
 
-	private static byte[] hex(String hex) {
+	private static byte @NonNull [] hex(@NonNull String hex) {
 		return HexFormat.of().parseHex(hex);
 	}
 
 	/**
 	 * An RSA SubjectPublicKeyInfo around {@code rsaPublicKey}, with no unused bits.
 	 */
-	private static byte[] rsaSpki(byte[] rsaPublicKey) {
+	private static byte @NonNull [] rsaSpki(byte @NonNull [] rsaPublicKey) {
 		return tlv(0x30, hex(RSA_ALGORITHM), tlv(0x03, hex("00"), rsaPublicKey));
 	}
 
 	/**
 	 * The content octets of one DER element.
 	 */
-	private static byte[] content(byte[] element) {
+	private static byte @NonNull [] content(byte @NonNull [] element) {
 		int[] header = header(element, 0);
 		return Arrays.copyOfRange(element, header[0], header[0] + header[1]);
 	}
@@ -790,7 +792,7 @@ final class PemTests {
 	/**
 	 * {@code value} as {@code length} little-endian octets (RFC 8032 section 5.1.2).
 	 */
-	private static byte[] littleEndian(BigInteger value, int length) {
+	private static byte @NonNull [] littleEndian(@NonNull BigInteger value, int length) {
 		byte[] bigEndian = value.toByteArray();
 		byte[] result = new byte[length];
 		for (int index = 0; index < length && index < bigEndian.length; ++index)
@@ -798,13 +800,13 @@ final class PemTests {
 		return result;
 	}
 
-	private static byte[] withSignBit(byte[] littleEndian) {
+	private static byte @NonNull [] withSignBit(byte @NonNull [] littleEndian) {
 		byte[] result = littleEndian.clone();
 		result[result.length - 1] |= (byte) 0x80;
 		return result;
 	}
 
-	private static byte[] concat(byte[]... parts) {
+	private static byte @NonNull [] concat(byte @NonNull [] @NonNull ... parts) {
 		int length = 0;
 		for (byte[] part : parts)
 			length += part.length;
@@ -820,7 +822,7 @@ final class PemTests {
 	/**
 	 * {@code pkcs8} rebuilt with {@code extra} appended inside its {@code privateKey} OCTET STRING, after the key.
 	 */
-	private static byte[] withPrivateKeyOctets(byte[] pkcs8, byte[] extra) {
+	private static byte @NonNull [] withPrivateKeyOctets(byte @NonNull [] pkcs8, byte @NonNull [] extra) {
 		List<byte[]> fields = children(pkcs8);
 		byte[] key = children(fields.get(2)).get(0);
 		fields.set(2, tlv(0x04, key, extra));
@@ -830,7 +832,7 @@ final class PemTests {
 	/**
 	 * The elements inside one DER element, read here rather than with {@link Der}; the list can be modified.
 	 */
-	private static List<byte[]> children(byte[] element) {
+	private static @NonNull List<byte @NonNull []> children(byte @NonNull [] element) {
 		List<byte[]> children = new ArrayList<>();
 		int[] outer = header(element, 0);
 		int position = outer[0];
@@ -845,7 +847,7 @@ final class PemTests {
 	/**
 	 * The content offset and length of the element at {@code offset}: {start, length}.
 	 */
-	private static int[] header(byte[] der, int offset) {
+	private static int @NonNull [] header(byte @NonNull [] der, int offset) {
 		int first = der[offset + 1] & 0xFF;
 		if (first < 0x80)
 			return new int[]{offset + 2, first};
@@ -858,7 +860,7 @@ final class PemTests {
 	/**
 	 * One DER element with a minimal definite length, written here rather than with {@link Der}.
 	 */
-	private static byte[] tlv(int tag, byte[]... contents) {
+	private static byte @NonNull [] tlv(int tag, byte @NonNull [] @NonNull ... contents) {
 		byte[] content = concat(contents);
 		int length = content.length;
 		byte[] header;

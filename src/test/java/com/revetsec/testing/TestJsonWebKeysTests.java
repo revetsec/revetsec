@@ -16,6 +16,8 @@
 
 package com.revetsec.testing;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.internal.json.JsonCodec;
 import com.revetsec.internal.json.JsonLimits;
 import com.revetsec.json.JsonArray;
@@ -86,7 +88,7 @@ final class TestJsonWebKeysTests {
 	private static final String ED25519_SPKI_PREFIX = "302a300506032b6570032100";
 
 	@TestFactory
-	Stream<DynamicTest> everyFixtureKeyPairSignsAndVerifiesWithTheJdk() {
+	@NonNull Stream<@NonNull DynamicTest> everyFixtureKeyPairSignsAndVerifiesWithTheJdk() {
 		return Arrays.stream(Fixture.values()).map(fixture -> DynamicTest.dynamicTest(fixture.name(), () -> {
 			KeyPair keyPair = fixture.getKeyPair();
 			Assertions.assertTrue(jdkSignsAndVerifies(keyPair));
@@ -100,7 +102,7 @@ final class TestJsonWebKeysTests {
 	}
 
 	@TestFactory
-	Stream<DynamicTest> publicJwksRebuildTheSameKeyAtTheRequiredEncodings() {
+	@NonNull Stream<@NonNull DynamicTest> publicJwksRebuildTheSameKeyAtTheRequiredEncodings() {
 		return Arrays.stream(Fixture.values()).map(fixture -> DynamicTest.dynamicTest(fixture.name(), () -> {
 			PublicKey publicKey = fixture.getPublicKey();
 			JsonObject jwk = parse(TestJsonWebKeys.withFixture(fixture).toJson());
@@ -142,7 +144,7 @@ final class TestJsonWebKeysTests {
 	}
 
 	@TestFactory
-	Stream<DynamicTest> privateJwksCarryMembersThatRebuildTheSamePrivateKey() {
+	@NonNull Stream<@NonNull DynamicTest> privateJwksCarryMembersThatRebuildTheSamePrivateKey() {
 		return Arrays.stream(Fixture.values()).map(fixture -> DynamicTest.dynamicTest(fixture.name(), () -> {
 			PrivateKey privateKey = fixture.getPrivateKey();
 			JsonObject jwk = parse(TestJsonWebKeys.withFixture(fixture).includePrivateMembers(true).kid("k").toJson());
@@ -185,7 +187,7 @@ final class TestJsonWebKeysTests {
 	}
 
 	@TestFactory
-	Stream<DynamicTest> x5cHoldsTheFixtureCertificateInStandardBase64() {
+	@NonNull Stream<@NonNull DynamicTest> x5cHoldsTheFixtureCertificateInStandardBase64() {
 		return Arrays.stream(Fixture.values()).filter(fixture -> fixture != Fixture.ED25519)
 				.map(fixture -> DynamicTest.dynamicTest(fixture.name(), () -> {
 					X509Certificate certificate = fixture.getCertificate().orElseThrow();
@@ -241,7 +243,7 @@ final class TestJsonWebKeysTests {
 	}
 
 	@TestFactory
-	Stream<DynamicTest> publicKeyPemMatchesWhatOpenSslWroteForTheSameKey() throws Exception {
+	@NonNull Stream<@NonNull DynamicTest> publicKeyPemMatchesWhatOpenSslWroteForTheSameKey() throws Exception {
 		// The fixtures/pem public keys are `openssl pkey -pubout` of these fixtures (that directory's README). The
 		// RSA and EC keys come from their certificates; the Ed25519 key, whose fixture reads ed25519-public.pem
 		// itself, is derived here from its private seed instead, so the comparison is not circular.
@@ -510,7 +512,7 @@ final class TestJsonWebKeysTests {
 	}
 
 	@TestFactory
-	Stream<DynamicTest> okpKeysOnOtherCurvesCarryTheRawKeysTheJdkEncodes() {
+	@NonNull Stream<@NonNull DynamicTest> okpKeysOnOtherCurvesCarryTheRawKeysTheJdkEncodes() {
 		// RFC 8037 section 2 and plan M2-7 key check 6 (exit criterion 7: Ed448 and X25519 are UNSUPPORTED_CURVE).
 		Map<String, Integer> octets = new LinkedHashMap<>();
 		octets.put("Ed448", 57);
@@ -538,7 +540,7 @@ final class TestJsonWebKeysTests {
 	}
 
 	@TestFactory
-	Stream<DynamicTest> edwardsKeysCarryTheParityOfXInTheTopBitOfTheLastOctet() {
+	@NonNull Stream<@NonNull DynamicTest> edwardsKeysCarryTheParityOfXInTheTopBitOfTheLastOctet() {
 		// RFC 8032 sections 5.1.2 and 5.2.2. Keys come from fixed seeds, so every run meets both parities of x.
 		Map<String, Integer> octets = new LinkedHashMap<>();
 		octets.put("Ed25519", 32);
@@ -584,7 +586,7 @@ final class TestJsonWebKeysTests {
 		Assertions.assertEquals("not base64url!", string(jwk, "x"));
 	}
 
-	private static boolean jdkSignsAndVerifies(KeyPair keyPair) throws Exception {
+	private static boolean jdkSignsAndVerifies(@NonNull KeyPair keyPair) throws Exception {
 		String algorithm = switch (keyPair.getPublic().getAlgorithm()) {
 			case "RSA" -> "SHA256withRSA";
 			case "EC" -> "SHA256withECDSA";
@@ -605,7 +607,7 @@ final class TestJsonWebKeysTests {
 	 * subgroup's order t (Z_m^* is cyclic, so the subgroup of order t is exactly {r : r^t = 1}), unlike the helper's
 	 * enumeration.
 	 */
-	private static boolean inSubgroupOfF4(BigInteger value) {
+	private static boolean inSubgroupOfF4(@NonNull BigInteger value) {
 		for (int prime = 3; prime <= 167; prime += 2) {
 			BigInteger m = BigInteger.valueOf(prime);
 			if (!m.isProbablePrime(64))
@@ -620,7 +622,7 @@ final class TestJsonWebKeysTests {
 		return true;
 	}
 
-	private static boolean onWeierstrassCurve(ECParameterSpec parameters, BigInteger x, BigInteger y) {
+	private static boolean onWeierstrassCurve(@NonNull ECParameterSpec parameters, @NonNull BigInteger x, @NonNull BigInteger y) {
 		BigInteger p = ((ECFieldFp) parameters.getCurve().getField()).getP();
 		BigInteger right = x.multiply(x).multiply(x).add(parameters.getCurve().getA().multiply(x))
 				.add(parameters.getCurve().getB()).mod(p);
@@ -631,7 +633,7 @@ final class TestJsonWebKeysTests {
 	 * Decodes an RFC 8032 point encoding by brute-force square root check, independently of the helper: x² is taken
 	 * from the curve equation and x found with Euler's criterion and Tonelli-free exponentiation for p ≡ 5 (mod 8).
 	 */
-	private static BigInteger[] decodePoint(String encoding) {
+	private static @NonNull BigInteger @NonNull [] decodePoint(@NonNull String encoding) {
 		byte[] littleEndian = Base64.getUrlDecoder().decode(encoding);
 		boolean xOdd = (littleEndian[31] & 0x80) != 0;
 		byte[] bigEndian = new byte[32];
@@ -654,7 +656,7 @@ final class TestJsonWebKeysTests {
 		return new BigInteger[]{candidate, y};
 	}
 
-	private static boolean onEdwardsCurve(BigInteger[] point) {
+	private static boolean onEdwardsCurve(@NonNull BigInteger @NonNull [] point) {
 		BigInteger p = TestJsonWebKeys.ED25519_FIELD_PRIME;
 		BigInteger xx = point[0].multiply(point[0]).mod(p);
 		BigInteger yy = point[1].multiply(point[1]).mod(p);
@@ -667,7 +669,7 @@ final class TestJsonWebKeysTests {
 	 * 2P on −x² + y² = 1 + d·x²·y², by the dedicated doubling formula (RFC 8032 section 5.1.4's doubling, in affine
 	 * form): x3 = 2xy / (y² − x²), y3 = (y² + x²) / (2 − y² + x²).
 	 */
-	private static BigInteger[] edwardsDouble(BigInteger[] point) {
+	private static @NonNull BigInteger @NonNull [] edwardsDouble(@NonNull BigInteger @NonNull [] point) {
 		BigInteger p = TestJsonWebKeys.ED25519_FIELD_PRIME;
 		BigInteger x = point[0];
 		BigInteger y = point[1];
@@ -678,35 +680,35 @@ final class TestJsonWebKeysTests {
 		return new BigInteger[]{x3, y3};
 	}
 
-	private static boolean isIdentity(BigInteger[] point) {
+	private static boolean isIdentity(@NonNull BigInteger @NonNull [] point) {
 		return point[0].signum() == 0 && point[1].equals(BigInteger.ONE);
 	}
 
-	private static JsonObject parse(String json) throws Exception {
+	private static @NonNull JsonObject parse(@NonNull String json) throws Exception {
 		return (JsonObject) JsonCodec.parse(json.getBytes(StandardCharsets.UTF_8),
 				JsonLimits.protocolDocument(1 << 20));
 	}
 
-	private static String string(JsonObject object, String name) {
+	private static @NonNull String string(@NonNull JsonObject object, @NonNull String name) {
 		return ((JsonString) object.find(name).orElseThrow()).getValue();
 	}
 
-	private static byte[] decodeMember(JsonObject object, String name) {
+	private static byte @NonNull [] decodeMember(@NonNull JsonObject object, @NonNull String name) {
 		return Base64.getUrlDecoder().decode(string(object, name));
 	}
 
-	private static BigInteger integer(JsonObject object, String name) {
+	private static @NonNull BigInteger integer(@NonNull JsonObject object, @NonNull String name) {
 		return new BigInteger(1, decodeMember(object, name));
 	}
 
-	private static String resourceText(String resource) throws IOException {
+	private static @NonNull String resourceText(@NonNull String resource) throws IOException {
 		try (InputStream inputStream = Objects.requireNonNull(
 				TestJsonWebKeysTests.class.getResourceAsStream(resource), resource)) {
 			return new String(inputStream.readAllBytes(), StandardCharsets.US_ASCII);
 		}
 	}
 
-	private static KeyPair ed25519KeyPairFromFixtureSeed() throws Exception {
+	private static @NonNull KeyPair ed25519KeyPairFromFixtureSeed() throws Exception {
 		return keyPairFromSeed("Ed25519", ((EdECPrivateKey) Fixture.ED25519.getPrivateKey()).getBytes().orElseThrow());
 	}
 
@@ -714,7 +716,7 @@ final class TestJsonWebKeysTests {
 	 * A JDK EdDSA key pair whose private key is exactly {@code seed}: the key generator draws its seed from the
 	 * random source in a single call (RFC 8032 sections 5.1.5 and 5.2.5), and this source returns {@code seed}.
 	 */
-	private static KeyPair keyPairFromSeed(String curve, byte[] seed) throws Exception {
+	private static @NonNull KeyPair keyPairFromSeed(@NonNull String curve, byte @NonNull [] seed) throws Exception {
 		KeyPairGenerator generator = KeyPairGenerator.getInstance(curve);
 		generator.initialize(new NamedParameterSpec(curve), new FixedSecureRandom(seed));
 		KeyPair keyPair = generator.generateKeyPair();
@@ -722,7 +724,7 @@ final class TestJsonWebKeysTests {
 		return keyPair;
 	}
 
-	private static byte[] sha512(String label) throws Exception {
+	private static byte @NonNull [] sha512(@NonNull String label) throws Exception {
 		return MessageDigest.getInstance("SHA-512").digest(label.getBytes(StandardCharsets.UTF_8));
 	}
 
@@ -734,19 +736,19 @@ final class TestJsonWebKeysTests {
 
 		private final byte[] bytes;
 
-		private FixedSecureRandom(byte[] bytes) {
+		private FixedSecureRandom(byte @NonNull [] bytes) {
 			this.bytes = bytes.clone();
 		}
 
 		@Override
-		public void nextBytes(byte[] output) {
+		public void nextBytes(byte @NonNull [] output) {
 			if (output.length != this.bytes.length)
 				throw new IllegalStateException("Asked for " + output.length + " bytes, not " + this.bytes.length);
 			System.arraycopy(this.bytes, 0, output, 0, output.length);
 		}
 	}
 
-	private static byte[] concat(byte[] first, byte[] second) {
+	private static byte @NonNull [] concat(byte @NonNull [] first, byte @NonNull [] second) {
 		byte[] result = Arrays.copyOf(first, first.length + second.length);
 		System.arraycopy(second, 0, result, first.length, second.length);
 		return result;

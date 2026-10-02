@@ -16,6 +16,8 @@
 
 package com.revetsec.oauth;
 
+import org.jspecify.annotations.NonNull;
+
 import org.junit.jupiter.api.*;
 import static org.junit.jupiter.api.Assertions.*;
 import com.revetsec.testing.*;
@@ -42,27 +44,27 @@ final class Phase2Fixtures {
     static final Instant NOW=Instant.parse("2026-10-01T12:00:00Z");
     static final Clock CLOCK=Clock.fixed(NOW,ZoneOffset.UTC);
     private Phase2Fixtures() { }
-    static Map<String,String> claims(String issuer) {
+    static @NonNull Map<@NonNull String,@NonNull String> claims(@NonNull String issuer) {
         Map<String,String> c=new LinkedHashMap<>(); c.put("iss",JsonText.string(issuer));c.put("sub","\"TEST-ONLY-subject\"");c.put("aud",JsonText.string(AUD));
         c.put("exp",Long.toString(NOW.plusSeconds(300).getEpochSecond()));c.put("iat",Long.toString(NOW.getEpochSecond()));c.put("client_id","\"TEST-ONLY-client\"");c.put("jti","\"TEST-ONLY-jti\"");c.put("scope","\"read write\"");return c;
     }
-    static String token(Map<String,String> claims,@Nullable String typ) {
+    static @NonNull String token(@NonNull Map<@NonNull String,@NonNull String> claims,@Nullable String typ) {
         return TestJws.withAlgorithm(TestJws.Algorithm.RS256).kid("key").typ(typ).payload(JsonText.object(new ArrayList<>(claims.entrySet()))).sign(TestJsonWebKeys.Fixture.IDP_SIGNING_RSA_2048.getPrivateKey());
     }
-    static String keyJson() { return TestJsonWebKeys.withFixture(TestJsonWebKeys.Fixture.IDP_SIGNING_RSA_2048).kid("key").alg("RS256").toKeySetJson(); }
-    static StaticJsonWebKeySource keys() { return StaticJsonWebKeySource.fromJsonWebKeySet(JsonWebKeySet.fromJson(keyJson())); }
-    static BearerToken bearer(String token) { return BearerToken.fromAuthorizationHeaderValues(List.of("Bearer "+token),1_048_576).orElseThrow(); }
-    static JwtAccessTokenValidator.Builder jwt() { return JwtAccessTokenValidator.withIssuer(ISSUER).expectedAudiences(Set.of(AUD)).jsonWebKeySource(keys()).clock(CLOCK).clockSkew(Duration.ZERO); }
-    static RawResponse raw(int status,String json) { return new RawResponse(status,HttpHeaders.of(Map.of(),(a,b)->true),json.getBytes(StandardCharsets.UTF_8),null,false,Duration.ZERO); }
-    static void response(TestHttpsServer server,String path,int status,String type,String json) {
+    static @NonNull String keyJson() { return TestJsonWebKeys.withFixture(TestJsonWebKeys.Fixture.IDP_SIGNING_RSA_2048).kid("key").alg("RS256").toKeySetJson(); }
+    static @NonNull StaticJsonWebKeySource keys() { return StaticJsonWebKeySource.fromJsonWebKeySet(JsonWebKeySet.fromJson(keyJson())); }
+    static @NonNull BearerToken bearer(@NonNull String token) { return BearerToken.fromAuthorizationHeaderValues(List.of("Bearer "+token),1_048_576).orElseThrow(); }
+    static JwtAccessTokenValidator.@NonNull Builder jwt() { return JwtAccessTokenValidator.withIssuer(ISSUER).expectedAudiences(Set.of(AUD)).jsonWebKeySource(keys()).clock(CLOCK).clockSkew(Duration.ZERO); }
+    static @NonNull RawResponse raw(int status,@NonNull String json) { return new RawResponse(status,HttpHeaders.of(Map.of(),(a,b)->true),json.getBytes(StandardCharsets.UTF_8),null,false,Duration.ZERO); }
+    static void response(@NonNull TestHttpsServer server,@NonNull String path,int status,@NonNull String type,@NonNull String json) {
         server.script(path,TestHttpsServer.Script.fromResponse(TestHttpsServer.Response.withStatus(status).header("Content-Type",type).body(json).build()));
     }
-    static OAuthClient.Builder oauth(TestHttpsServer server) {
+    static OAuthClient.@NonNull Builder oauth(@NonNull TestHttpsServer server) {
         return OAuthClient.withAuthorizationServerMetadata(AuthorizationServerMetadata.withIssuer(server.getBaseUri().toString())
                 .authorizationEndpoint(server.uri("/authorize")).tokenEndpoint(server.uri("/token")).introspectionEndpoint(server.uri("/inspect")).build())
                 .clientId("client").clientAuthentication(ClientAuthentication.fromClientSecretBasic(SECRET)).clock(CLOCK).httpClient(TestTls.httpClient());
     }
-    static TokenIntrospectionClient.Builder inspect(TestHttpsServer server) { return TokenIntrospectionClient.withOAuthClient(oauth(server).build()).expectedAudiences(Set.of(AUD)).clockSkew(Duration.ZERO); }
-    static String active() { return "{\"active\":true,\"aud\":\"resource\",\"scope\":\"read write\"}"; }
-    static void redacted(Object value,String...secrets) { for(String secret:secrets) assertFalse(value.toString().contains(secret),value.getClass().getSimpleName()); }
+    static TokenIntrospectionClient.@NonNull Builder inspect(@NonNull TestHttpsServer server) { return TokenIntrospectionClient.withOAuthClient(oauth(server).build()).expectedAudiences(Set.of(AUD)).clockSkew(Duration.ZERO); }
+    static @NonNull String active() { return "{\"active\":true,\"aud\":\"resource\",\"scope\":\"read write\"}"; }
+    static void redacted(@NonNull Object value,@NonNull String @NonNull ...secrets) { for(String secret:secrets) assertFalse(value.toString().contains(secret),value.getClass().getSimpleName()); }
 }

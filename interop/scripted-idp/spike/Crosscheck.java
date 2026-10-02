@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+import org.jspecify.annotations.NonNull;
+
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.w3c.dom.Node;
@@ -90,13 +92,13 @@ public final class Crosscheck {
 	private final X509Certificate idpRsa;
 	private final PrivateKey spKey;
 
-	private Crosscheck(Path dir) throws Exception {
+	private Crosscheck(@NonNull Path dir) throws Exception {
 		this.dir = dir;
 		this.idpRsa = certificate("idp-rsa-2048");
 		this.spKey = KeyFactory.getInstance("RSA").generatePrivate(new PKCS8EncodedKeySpec(pem(dir.resolve("keys/sp-rsa-2048.key"))));
 	}
 
-	public static void main(String[] args) throws Exception {
+	public static void main(@NonNull String @NonNull [] args) throws Exception {
 		if (args.length != 1) {
 			System.err.println("usage: java spike/Crosscheck.java <selftest-output-dir>");
 			System.exit(2);
@@ -127,7 +129,7 @@ public final class Crosscheck {
 		System.exit(failures == 0 ? 0 : 1);
 	}
 
-	private String case1() throws Exception {
+	private @NonNull String case1() throws Exception {
 		Document document = document("case1-response-assertion-rsa-sha256.xml");
 		Element response = document.getDocumentElement();
 		verify(response, idpRsa, RSA_SHA256, SHA256, true);
@@ -135,7 +137,7 @@ public final class Crosscheck {
 		return "Response and Assertion signatures valid (secure validation on)";
 	}
 
-	private String case2() throws Exception {
+	private @NonNull String case2() throws Exception {
 		Element assertion = child(document("case2-assertion-rsa-sha1.xml").getDocumentElement(), SAML, "Assertion");
 		String secure;
 
@@ -150,7 +152,7 @@ public final class Crosscheck {
 		return "RSA-SHA1 signature valid with secure validation off; " + secure;
 	}
 
-	private String case3() throws Exception {
+	private @NonNull String case3() throws Exception {
 		List<String> details = new ArrayList<>();
 		String[][] variants = {{"256", ECDSA_SHA256, SHA256}, {"384", ECDSA_SHA384, SHA384}, {"521", ECDSA_SHA512, SHA512}};
 
@@ -166,16 +168,16 @@ public final class Crosscheck {
 		return "valid (secure validation on): " + String.join(", ", details);
 	}
 
-	private String case4() throws Exception {
+	private @NonNull String case4() throws Exception {
 		return encryptedAssertion("case4-encrypted-assertion-gcm-rsa-oaep-sha256-mgf1sha256.xml", RSA_OAEP_11, "_a4")
 				+ " (OAEP SHA-256/MGF1-SHA256; default SHA-1 OAEP params rejected)";
 	}
 
-	private String case5() throws Exception {
+	private @NonNull String case5() throws Exception {
 		return encryptedAssertion("case5-encrypted-assertion-gcm-rsa-1_5.xml", RSA_1_5, "_a5") + " (PKCS#1 v1.5)";
 	}
 
-	private String case6() throws Exception {
+	private @NonNull String case6() throws Exception {
 		Element assertion = child(document("case6-encrypted-id-gcm-rsa-oaep-sha256-mgf1sha256.xml").getDocumentElement(), SAML, "Assertion");
 		verify(assertion, idpRsa, RSA_SHA256, SHA256, true);
 		Element encryptedId = child(child(assertion, SAML, "Subject"), SAML, "EncryptedID");
@@ -185,13 +187,13 @@ public final class Crosscheck {
 		return "Assertion signature valid; EncryptedID decrypted to a standalone saml:NameID";
 	}
 
-	private String signxmlSmoke() throws Exception {
+	private @NonNull String signxmlSmoke() throws Exception {
 		Element response = document("extra-signxml-assertion-rsa-sha256.xml").getDocumentElement();
 		verify(child(response, SAML, "Assertion"), idpRsa, RSA_SHA256, SHA256, true);
 		return "signxml Assertion signature valid (secure validation on)";
 	}
 
-	private String encryptedAssertion(String file, String keyTransport, String assertionId) throws Exception {
+	private @NonNull String encryptedAssertion(@NonNull String file, @NonNull String keyTransport, @NonNull String assertionId) throws Exception {
 		Element encryptedAssertion = child(document(file).getDocumentElement(), SAML, "EncryptedAssertion");
 		Document plaintext = parse(decrypt(child(encryptedAssertion, XENC, "EncryptedData"), keyTransport));
 		Element assertion = plaintext.getDocumentElement();
@@ -205,7 +207,7 @@ public final class Crosscheck {
 	/**
 	 * Verifies the enveloped signature that is a direct child of {@code signed}, with a fixed trusted key.
 	 */
-	private static byte[] verify(Element signed, X509Certificate certificate, String signatureMethod, String digestMethod,
+	private static byte @NonNull [] verify(@NonNull Element signed, @NonNull X509Certificate certificate, @NonNull String signatureMethod, @NonNull String digestMethod,
 			boolean secureValidation) throws Exception {
 		String id = signed.getAttribute("ID");
 		check(signed.getOwnerDocument().getElementById(id) == signed, "ID " + id + " does not resolve to the signed element");
@@ -238,7 +240,7 @@ public final class Crosscheck {
 	/**
 	 * Decrypts an inline-EncryptedKey, AES-256-GCM EncryptedData by hand with JCA.
 	 */
-	private byte[] decrypt(Element encryptedData, String keyTransport) throws Exception {
+	private byte @NonNull [] decrypt(@NonNull Element encryptedData, @NonNull String keyTransport) throws Exception {
 		check(AES256_GCM.equals(child(encryptedData, XENC, "EncryptionMethod").getAttribute("Algorithm")), "data algorithm is not aes256-gcm");
 		Element encryptedKey = child(child(encryptedData, DS, "KeyInfo"), XENC, "EncryptedKey");
 		Element method = child(encryptedKey, XENC, "EncryptionMethod");
@@ -277,19 +279,19 @@ public final class Crosscheck {
 		return aes.doFinal(data, 12, data.length - 12);
 	}
 
-	private Document document(String file) throws Exception {
+	private @NonNull Document document(@NonNull String file) throws Exception {
 		Document document = parse(Files.readAllBytes(dir.resolve(file)));
 		registerIds(document);
 		return document;
 	}
 
-	private X509Certificate certificate(String name) throws Exception {
+	private @NonNull X509Certificate certificate(@NonNull String name) throws Exception {
 		try (InputStream in = Files.newInputStream(dir.resolve("keys/" + name + ".crt"))) {
 			return (X509Certificate) CertificateFactory.getInstance("X.509").generateCertificate(in);
 		}
 	}
 
-	private static Document parse(byte[] xml) throws Exception {
+	private static @NonNull Document parse(byte @NonNull [] xml) throws Exception {
 		DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
 		factory.setNamespaceAware(true);
 		factory.setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true);
@@ -302,7 +304,7 @@ public final class Crosscheck {
 	/**
 	 * Registers {@code ID} as the ID attribute of every SAML element, which XMLDSig reference resolution needs.
 	 */
-	private static void registerIds(Document document) {
+	private static void registerIds(@NonNull Document document) {
 		NodeList elements = document.getElementsByTagNameNS("*", "*");
 
 		for (int i = 0; i < elements.getLength(); i++) {
@@ -314,7 +316,7 @@ public final class Crosscheck {
 		}
 	}
 
-	private static Element child(Element parent, String namespace, String localName) {
+	private static @NonNull Element child(@NonNull Element parent, @NonNull String namespace, @NonNull String localName) {
 		Element found = null;
 
 		for (Node node = parent.getFirstChild(); node != null; node = node.getNextSibling()) {
@@ -328,16 +330,16 @@ public final class Crosscheck {
 		return found;
 	}
 
-	private static byte[] cipherValue(Element parent) {
+	private static byte @NonNull [] cipherValue(@NonNull Element parent) {
 		return Base64.getMimeDecoder().decode(child(child(parent, XENC, "CipherData"), XENC, "CipherValue").getTextContent());
 	}
 
-	private static byte[] pem(Path path) throws Exception {
+	private static byte @NonNull [] pem(@NonNull Path path) throws Exception {
 		String text = Files.readString(path, StandardCharsets.US_ASCII);
 		return Base64.getMimeDecoder().decode(text.replaceAll("-----[A-Z ]+-----", ""));
 	}
 
-	private static void check(boolean condition, String message) {
+	private static void check(boolean condition, @NonNull String message) {
 		if (!condition)
 			throw new IllegalStateException(message);
 	}

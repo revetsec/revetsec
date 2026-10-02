@@ -16,6 +16,8 @@
 
 package com.revetsec.internal.json;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.json.JsonNumber;
 import com.revetsec.json.JsonObject;
 import org.junit.jupiter.api.Assertions;
@@ -101,7 +103,7 @@ final class JsonFieldsTests {
 	// M1 plan: the NumericDate range is checked against years -9999 to 9999 before any conversion, at exact
 	// boundaries, with every representation of the same value treated alike.
 	@TestFactory
-	Stream<DynamicTest> boundsNumericDatesToYearsMinus9999Through9999() {
+	@NonNull Stream<@NonNull DynamicTest> boundsNumericDatesToYearsMinus9999Through9999() {
 		Instant earliest = OffsetDateTime.of(-9999, 1, 1, 0, 0, 0, 0, ZoneOffset.UTC).toInstant();
 		Instant latest = OffsetDateTime.of(9999, 12, 31, 23, 59, 59, 999_999_999, ZoneOffset.UTC).toInstant();
 
@@ -157,6 +159,8 @@ final class JsonFieldsTests {
 	}
 
 	// R15: null arguments are misuse.
+	// Deliberate null inputs verify runtime rejection.
+	@SuppressWarnings("NullAway")
 	@Test
 	void rejectsNullArguments() throws Exception {
 		JsonObject claims = claims();
@@ -171,15 +175,15 @@ final class JsonFieldsTests {
 		Assertions.assertThrows(NullPointerException.class, () -> JsonFields.numericDate(claims, noName));
 	}
 
-	private static String abbreviate(String text) {
+	private static @NonNull String abbreviate(@NonNull String text) {
 		return text.length() <= 40 ? text : text.substring(0, 40) + "... (" + text.length() + " characters)";
 	}
 
-	private static JsonObject claims() throws JsonParseException {
+	private static @NonNull JsonObject claims() throws JsonParseException {
 		return object(CLAIMS);
 	}
 
-	private static JsonObject object(String json) throws JsonParseException {
+	private static @NonNull JsonObject object(@NonNull String json) throws JsonParseException {
 		return (JsonObject) JsonCodec.parse(utf8(json), JsonLimits.jose(64 * 1_024));
 	}
 }

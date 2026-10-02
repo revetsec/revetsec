@@ -16,6 +16,9 @@
 
 package example;
 
+import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
+
 import com.revetsec.*;
 import com.revetsec.internal.json.JsonCodec;
 import com.revetsec.internal.json.JsonLimits;
@@ -60,7 +63,7 @@ public final class OidfDriver {
     final Path output;
     final StateSealer sealer;
     final List<JsonValue> outcomes = new ArrayList<>();
-    OidfDriver(Path cert, Path output) throws Exception {
+    OidfDriver(@NonNull Path cert, @NonNull Path output) throws Exception {
         this.output = output; Files.createDirectories(output);
         KeyStore store = KeyStore.getInstance(KeyStore.getDefaultType()); store.load(null, null);
         try (var in = Files.newInputStream(cert)) { store.setCertificateEntry("local-suite", CertificateFactory.getInstance("X.509").generateCertificate(in)); }
@@ -70,7 +73,7 @@ public final class OidfDriver {
         byte[] key = new byte[32]; new SecureRandom().nextBytes(key);
         this.sealer = StateSealer.withActiveKey(SealingKey.fromBase64("local-run", Base64.getEncoder().encodeToString(key))).build(); Arrays.fill(key, (byte)0);
     }
-    public static void main(String[] args) throws Exception {
+    public static void main(@NonNull String @NonNull [] args) throws Exception {
         if (args.length != 2) throw new IllegalArgumentException("Usage: OidfDriver certificate output-directory");
         new OidfDriver(Path.of(args[0]), Path.of(args[1])).run();
     }
@@ -83,7 +86,7 @@ public final class OidfDriver {
         check(outcomes.stream().allMatch(v -> ((JsonObject)v).findBoolean("accepted").orElse(false)), "OIDF gate failed; see module evidence");
         System.out.println("Completed 37 module runs.");
     }
-    void runPlan(String plan) throws Exception {
+    void runPlan(@NonNull String plan) throws Exception {
         Path dir = output.resolve(plan); Files.createDirectories(dir);
         var variants = JsonObject.builder().put("client_registration", "static_client").put("request_type", "plain_http_request");
         if (plan.contains("config") || plan.contains("refreshtoken")) variants.put("response_mode", "default").put("client_auth_type", "client_secret_basic");
@@ -99,7 +102,7 @@ public final class OidfDriver {
         save(dir.resolve("plan-final.json"), api("GET", "/api/plan/"+planId, null));
         byte[] export = request("GET", BASE.resolve("/api/plan/export/"+planId), null).body(); Files.write(dir.resolve("suite-export.zip"), export);
     }
-    void runModule(String planId, JsonObject module, Path dir) throws Exception {
+    void runModule(@NonNull String planId, @NonNull JsonObject module, @NonNull Path dir) throws Exception {
         String name = text(module,"testModule"); Path evidence = dir.resolve(name); Files.createDirectories(evidence);
         JsonObject created = object(api("POST", "/api/runner?test="+name+"&plan="+planId, null)); save(evidence.resolve("created.json"), created);
         String id = text(created,"id");
@@ -155,7 +158,7 @@ public final class OidfDriver {
         System.out.println(name+" suite="+status+"/"+result+" RP="+rp+(detail.isEmpty()?"":":"+detail)+" accepted="+accepted);
         if (!status.equals("FINISHED")) api("DELETE", "/api/runner/"+id,null);
     }
-    OidcAuthentication login(OidcClient client, boolean form) throws Exception {
+    @NonNull OidcAuthentication login(@NonNull OidcClient client, boolean form) throws Exception {
         var options = OidcAuthenticationOptions.builder();
         if (form) options.responseMode(AuthorizationRequestOptions.ResponseMode.FORM_POST);
         AuthorizationRedirect begin = client.beginAuthentication(options.build());
@@ -180,33 +183,33 @@ public final class OidfDriver {
         }
         return client.completeAuthentication(response,PendingAuthorizationSource.fromSealedForm(sealed,sealer,"oidf-callback"),CALLBACK);
     }
-    static String attribute(String tag,String name) {
+    static @NonNull String attribute(@NonNull String tag,@NonNull String name) {
         Matcher value=Pattern.compile("\\b"+name+"=[\"']([^\"']*)[\"']",Pattern.CASE_INSENSITIVE).matcher(tag);
         check(value.find(),"Missing form attribute");
         return value.group(1).replace("&quot;","\"").replace("&#39;","'").replace("&lt;","<").replace("&gt;",">").replace("&amp;","&");
     }
-    JsonObject waitFor(String id,Set<String> states,int seconds) throws Exception {
+    @NonNull JsonObject waitFor(@NonNull String id,@NonNull Set<@NonNull String> states,int seconds) throws Exception {
         long deadline=System.nanoTime()+Duration.ofSeconds(seconds).toNanos(); JsonObject info;
         do { info=object(api("GET","/api/info/"+id,null)); if(states.contains(text(info,"status"))) return info; Thread.sleep(100); } while(System.nanoTime()<deadline);
         return info;
     }
-    JsonValue api(String method,String path,JsonObject body) throws Exception {
+    @NonNull JsonValue api(@NonNull String method,@NonNull String path,@Nullable JsonObject body) throws Exception {
         HttpResponse<byte[]> response=request(method,BASE.resolve(path),body==null?null:JsonCodec.toUtf8Bytes(body));
         return parse(response.body());
     }
-    HttpResponse<byte[]> request(String method,URI uri,byte[] body) throws Exception {
+    @NonNull HttpResponse<byte @NonNull []> request(@NonNull String method,@NonNull URI uri,byte @Nullable [] body) throws Exception {
         check(uri.getScheme().equals(BASE.getScheme()) && uri.getAuthority().equals(BASE.getAuthority()),"Request outside local suite");
         var request=HttpRequest.newBuilder(uri).timeout(Duration.ofSeconds(10)).method(method,body==null?HttpRequest.BodyPublishers.noBody():HttpRequest.BodyPublishers.ofByteArray(body));
         if (method.equals("POST")) request.header("Content-Type","application/json");
         var response=http.send(request.build(),HttpResponse.BodyHandlers.ofByteArray());
         check(response.statusCode()>=200 && response.statusCode()<400,"Suite HTTP status "+response.statusCode()); return response;
     }
-    static JsonValue parse(byte[] body) throws Exception { return JsonCodec.parse(body,JsonLimits.protocolDocument(4*1024*1024)); }
-    static JsonObject object(JsonValue value) { check(value instanceof JsonObject,"Expected object"); return (JsonObject)value; }
-    static JsonArray array(JsonObject value,String name) { return (JsonArray)value.getMembers().get(name); }
-    static String text(JsonObject value,String name) { return value.findString(name).orElseThrow(()->new IllegalStateException("Missing field "+name)); }
-    static String json(JsonValue value) { return new String(JsonCodec.toUtf8Bytes(value),StandardCharsets.UTF_8); }
-    static void save(Path path,JsonValue value) throws Exception { Files.write(path,JsonCodec.toUtf8Bytes(value)); }
-    static String encode(String value) { return URLEncoder.encode(value,StandardCharsets.UTF_8); }
-    static void check(boolean value,String message) { if(!value) throw new IllegalStateException(message); }
+    static @NonNull JsonValue parse(byte @NonNull [] body) throws Exception { return JsonCodec.parse(body,JsonLimits.protocolDocument(4*1024*1024)); }
+    static @NonNull JsonObject object(@NonNull JsonValue value) { check(value instanceof JsonObject,"Expected object"); return (JsonObject)value; }
+    static @Nullable JsonArray array(@NonNull JsonObject value,@NonNull String name) { return (JsonArray)value.getMembers().get(name); }
+    static @NonNull String text(@NonNull JsonObject value,@NonNull String name) { return value.findString(name).orElseThrow(()->new IllegalStateException("Missing field "+name)); }
+    static @NonNull String json(@NonNull JsonValue value) { return new String(JsonCodec.toUtf8Bytes(value),StandardCharsets.UTF_8); }
+    static void save(@NonNull Path path,@NonNull JsonValue value) throws Exception { Files.write(path,JsonCodec.toUtf8Bytes(value)); }
+    static @NonNull String encode(@NonNull String value) { return URLEncoder.encode(value,StandardCharsets.UTF_8); }
+    static void check(boolean value,@NonNull String message) { if(!value) throw new IllegalStateException(message); }
 }

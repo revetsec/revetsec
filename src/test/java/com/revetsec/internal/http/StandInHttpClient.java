@@ -16,6 +16,8 @@
 
 package com.revetsec.internal.http;
 
+import org.jspecify.annotations.NonNull;
+
 import javax.annotation.concurrent.ThreadSafe;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLParameters;
@@ -52,7 +54,7 @@ final class StandInHttpClient extends HttpClient {
 		this(HttpClient.Redirect.NEVER);
 	}
 
-	StandInHttpClient(HttpClient.Redirect redirect) {
+	StandInHttpClient(HttpClient.@NonNull Redirect redirect) {
 		this.redirect = requireNonNull(redirect);
 	}
 
@@ -66,27 +68,27 @@ final class StandInHttpClient extends HttpClient {
 	}
 
 	@Override
-	public Optional<CookieHandler> cookieHandler() {
+	public @NonNull Optional<@NonNull CookieHandler> cookieHandler() {
 		return Optional.empty();
 	}
 
 	@Override
-	public Optional<Duration> connectTimeout() {
+	public @NonNull Optional<@NonNull Duration> connectTimeout() {
 		return Optional.empty();
 	}
 
 	@Override
-	public HttpClient.Redirect followRedirects() {
+	public HttpClient.@NonNull Redirect followRedirects() {
 		return this.redirect;
 	}
 
 	@Override
-	public Optional<ProxySelector> proxy() {
+	public @NonNull Optional<@NonNull ProxySelector> proxy() {
 		return Optional.empty();
 	}
 
 	@Override
-	public SSLContext sslContext() {
+	public @NonNull SSLContext sslContext() {
 		try {
 			return SSLContext.getDefault();
 		} catch (NoSuchAlgorithmException e) {
@@ -95,42 +97,42 @@ final class StandInHttpClient extends HttpClient {
 	}
 
 	@Override
-	public SSLParameters sslParameters() {
+	public @NonNull SSLParameters sslParameters() {
 		return new SSLParameters();
 	}
 
 	@Override
-	public Optional<Authenticator> authenticator() {
+	public @NonNull Optional<@NonNull Authenticator> authenticator() {
 		return Optional.empty();
 	}
 
 	@Override
-	public HttpClient.Version version() {
+	public HttpClient.@NonNull Version version() {
 		return HttpClient.Version.HTTP_1_1;
 	}
 
 	@Override
-	public Optional<Executor> executor() {
+	public @NonNull Optional<@NonNull Executor> executor() {
 		return Optional.empty();
 	}
 
 	@Override
-	public <T> HttpResponse<T> send(HttpRequest request, HttpResponse.BodyHandler<T> responseBodyHandler)
+	public <T> @NonNull HttpResponse<@NonNull T> send(@NonNull HttpRequest request, HttpResponse.@NonNull BodyHandler<@NonNull T> responseBodyHandler)
 			throws IOException {
 		this.sendCount.incrementAndGet();
 		throw new IOException("StandInHttpClient sends nothing");
 	}
 
 	@Override
-	public <T> CompletableFuture<HttpResponse<T>> sendAsync(HttpRequest request,
-			HttpResponse.BodyHandler<T> responseBodyHandler) {
+	public <T> @NonNull CompletableFuture<@NonNull HttpResponse<@NonNull T>> sendAsync(@NonNull HttpRequest request,
+			HttpResponse.@NonNull BodyHandler<@NonNull T> responseBodyHandler) {
 		this.sendCount.incrementAndGet();
 		return CompletableFuture.failedFuture(new IOException("StandInHttpClient sends nothing"));
 	}
 
 	@Override
-	public <T> CompletableFuture<HttpResponse<T>> sendAsync(HttpRequest request,
-			HttpResponse.BodyHandler<T> responseBodyHandler, HttpResponse.PushPromiseHandler<T> pushPromiseHandler) {
+	public <T> @NonNull CompletableFuture<@NonNull HttpResponse<@NonNull T>> sendAsync(@NonNull HttpRequest request,
+			HttpResponse.@NonNull BodyHandler<@NonNull T> responseBodyHandler, HttpResponse.@NonNull PushPromiseHandler<@NonNull T> pushPromiseHandler) {
 		return sendAsync(request, responseBodyHandler);
 	}
 }

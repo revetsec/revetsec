@@ -16,6 +16,8 @@
 
 package com.revetsec.internal;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.internal.Limit.Unit;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.DynamicTest;
@@ -43,7 +45,7 @@ final class LimitsTests {
 	private static final long MIB = 1_024 * KIB;
 
 	@TestFactory
-	Stream<DynamicTest> everyRowAcceptsItsFloorAndCapAndRejectsZeroAndOutOfRangeValues() {
+	@NonNull Stream<@NonNull DynamicTest> everyRowAcceptsItsFloorAndCapAndRejectsZeroAndOutOfRangeValues() {
 		// Plan R8: values outside [floor, cap] throw IllegalArgumentException; zero only where the floor is zero.
 		return Limits.all().stream().map(limit -> DynamicTest.dynamicTest(limit.getName(), () -> {
 			if (limit.getUnit() == Unit.DURATION) {
@@ -315,7 +317,7 @@ final class LimitsTests {
 				() -> Limits.requireFallbackWithinMaximumCacheDuration(fallbackCap, maximumFloor));
 	}
 
-	private static void requireOutOfRange(Limit limit) {
+	private static void requireOutOfRange(@NonNull Limit limit) {
 		if (limit.getUnit() == Unit.DURATION)
 			limit.require(limit.getCapDuration().plusSeconds(1));
 		else

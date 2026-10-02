@@ -16,6 +16,8 @@
 
 package com.revetsec.testing;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.json.JsonObject;
 import org.jspecify.annotations.Nullable;
 
@@ -104,7 +106,7 @@ public final class TestJws {
 	 * @param algorithm the signing algorithm
 	 * @return a new builder
 	 */
-	public static Builder withAlgorithm(Algorithm algorithm) {
+	public static @NonNull Builder withAlgorithm(@NonNull Algorithm algorithm) {
 		return new Builder(requireNonNull(algorithm));
 	}
 
@@ -114,7 +116,7 @@ public final class TestJws {
 	 *
 	 * @return a new builder
 	 */
-	public static Builder builder() {
+	public static @NonNull Builder builder() {
 		return new Builder(null);
 	}
 
@@ -124,7 +126,7 @@ public final class TestJws {
 	 * @param bytes the bytes
 	 * @return the encoded text
 	 */
-	public static String base64Url(byte[] bytes) {
+	public static @NonNull String base64Url(byte @NonNull [] bytes) {
 		return BASE64_URL.encodeToString(requireNonNull(bytes));
 	}
 
@@ -135,7 +137,7 @@ public final class TestJws {
 	 * @return the encoded text
 	 * @throws IllegalArgumentException if {@code text} has an unpaired surrogate
 	 */
-	public static String base64Url(String text) {
+	public static @NonNull String base64Url(@NonNull String text) {
 		return base64Url(utf8(text));
 	}
 
@@ -147,7 +149,7 @@ public final class TestJws {
 	 * @return a new array
 	 * @throws IllegalArgumentException if {@code text} has an unpaired surrogate
 	 */
-	static byte[] utf8(String text) {
+	static byte @NonNull [] utf8(@NonNull String text) {
 		requireNonNull(text);
 		try {
 			ByteBuffer encoded = StandardCharsets.UTF_8.newEncoder()
@@ -169,7 +171,7 @@ public final class TestJws {
 	 * @param segments the segments, in order
 	 * @return the joined text
 	 */
-	public static String compact(String... segments) {
+	public static @NonNull String compact(@NonNull String @NonNull ... segments) {
 		for (String segment : segments)
 			requireNonNull(segment);
 		return String.join(".", segments);
@@ -182,7 +184,7 @@ public final class TestJws {
 	 * @param segment a base64url segment
 	 * @return the padded text
 	 */
-	public static String padded(String segment) {
+	public static @NonNull String padded(@NonNull String segment) {
 		requireNonNull(segment);
 		int remainder = segment.length() % 4;
 		return segment + (remainder == 0 ? "=" : "=".repeat(4 - remainder));
@@ -197,7 +199,7 @@ public final class TestJws {
 	 * @throws IllegalStateException if the segment's length is a multiple of 4, so its last character has no unused
 	 * bits
 	 */
-	public static String withNonCanonicalTrailingBits(String segment) {
+	public static @NonNull String withNonCanonicalTrailingBits(@NonNull String segment) {
 		requireNonNull(segment);
 		int remainder = segment.length() % 4;
 		if (remainder != 2 && remainder != 3)
@@ -220,7 +222,7 @@ public final class TestJws {
 	 * @param coordinateOctets the length of each half: 32, 48 or 66 for P-256, P-384 and P-521
 	 * @return a new array of {@code 2 × coordinateOctets} octets
 	 */
-	public static byte[] ecdsaSignature(BigInteger r, BigInteger s, Integer coordinateOctets) {
+	public static byte @NonNull [] ecdsaSignature(@NonNull BigInteger r, @NonNull BigInteger s, @NonNull Integer coordinateOctets) {
 		requireNonNull(coordinateOctets);
 		byte[] signature = new byte[2 * coordinateOctets];
 		System.arraycopy(fixedLength(r, coordinateOctets), 0, signature, 0, coordinateOctets);
@@ -234,7 +236,7 @@ public final class TestJws {
 	 * @param signature {@code R || S}, of even length
 	 * @return r
 	 */
-	public static BigInteger ecdsaR(byte[] signature) {
+	public static @NonNull BigInteger ecdsaR(byte @NonNull [] signature) {
 		requireEvenLength(signature);
 		return new BigInteger(1, Arrays.copyOfRange(signature, 0, signature.length / 2));
 	}
@@ -245,7 +247,7 @@ public final class TestJws {
 	 * @param signature {@code R || S}, of even length
 	 * @return s
 	 */
-	public static BigInteger ecdsaS(byte[] signature) {
+	public static @NonNull BigInteger ecdsaS(byte @NonNull [] signature) {
 		requireEvenLength(signature);
 		return new BigInteger(1, Arrays.copyOfRange(signature, signature.length / 2, signature.length));
 	}
@@ -258,7 +260,7 @@ public final class TestJws {
 	 * @param signature {@code R || S}, of even length
 	 * @return a new array holding the DER encoding
 	 */
-	public static byte[] derEncodedEcdsaSignature(byte[] signature) {
+	public static byte @NonNull [] derEncodedEcdsaSignature(byte @NonNull [] signature) {
 		byte[] r = ecdsaR(signature).toByteArray();
 		byte[] s = ecdsaS(signature).toByteArray();
 		ByteArrayOutputStream content = new ByteArrayOutputStream();
@@ -275,7 +277,7 @@ public final class TestJws {
 	 * @param algorithm ES256, ES384 or ES512
 	 * @return n
 	 */
-	public static BigInteger curveOrder(Algorithm algorithm) {
+	public static @NonNull BigInteger curveOrder(@NonNull Algorithm algorithm) {
 		return curveParameters(algorithm).getOrder();
 	}
 
@@ -285,7 +287,7 @@ public final class TestJws {
 	 * @param algorithm ES256, ES384 or ES512
 	 * @return the curve's field, coefficients, generator and order
 	 */
-	public static ECParameterSpec curveParameters(Algorithm algorithm) {
+	public static @NonNull ECParameterSpec curveParameters(@NonNull Algorithm algorithm) {
 		requireNonNull(algorithm);
 		if (algorithm.family != Family.EC)
 			throw new IllegalArgumentException(algorithm + " is not an ECDSA algorithm");
@@ -302,7 +304,7 @@ public final class TestJws {
 	 * @throws IllegalArgumentException if {@code signingInput} is not ASCII, which {@code String.getBytes} would
 	 * silently turn into {@code ?}
 	 */
-	public static byte[] signature(Algorithm algorithm, Key key, String signingInput) {
+	public static byte @NonNull [] signature(@NonNull Algorithm algorithm, @NonNull Key key, @NonNull String signingInput) {
 		requireNonNull(algorithm);
 		requireNonNull(key);
 		requireNonNull(signingInput);
@@ -329,13 +331,13 @@ public final class TestJws {
 		}
 	}
 
-	private static void requireEvenLength(byte[] signature) {
+	private static void requireEvenLength(byte @NonNull [] signature) {
 		requireNonNull(signature);
 		if (signature.length == 0 || signature.length % 2 != 0)
 			throw new IllegalArgumentException("An R || S signature has a positive, even length: " + signature.length);
 	}
 
-	private static byte[] fixedLength(BigInteger value, int octets) {
+	private static byte @NonNull [] fixedLength(@NonNull BigInteger value, int octets) {
 		requireNonNull(value);
 		if (value.signum() < 0 || value.bitLength() > 8 * octets)
 			throw new IllegalArgumentException("Does not fit in " + octets + " octets: " + value);
@@ -346,7 +348,7 @@ public final class TestJws {
 		return fixed;
 	}
 
-	private static void writeDer(ByteArrayOutputStream output, int tag, byte[] content) {
+	private static void writeDer(@NonNull ByteArrayOutputStream output, int tag, byte @NonNull [] content) {
 		output.write(tag);
 		int length = content.length;
 		if (length < 0x80) {
@@ -362,7 +364,7 @@ public final class TestJws {
 		output.writeBytes(content);
 	}
 
-	static ECParameterSpec namedCurveParameters(String jcaCurveName) {
+	static @NonNull ECParameterSpec namedCurveParameters(@NonNull String jcaCurveName) {
 		try {
 			AlgorithmParameters parameters = AlgorithmParameters.getInstance("EC");
 			parameters.init(new ECGenParameterSpec(jcaCurveName));
@@ -455,7 +457,7 @@ public final class TestJws {
 		// PS* only: the digest for the hash and MGF1. The salt is as long as the digest.
 		private final @Nullable String pssDigest;
 
-		Algorithm(String wireValue, String jcaName, Family family, @Nullable String curve, @Nullable String jcaCurve,
+		Algorithm(@NonNull String wireValue, @NonNull String jcaName, @NonNull Family family, @Nullable String curve, @Nullable String jcaCurve,
 				@Nullable String pssDigest) {
 			this.wireValue = wireValue;
 			this.jcaName = jcaName;
@@ -470,7 +472,7 @@ public final class TestJws {
 		 *
 		 * @return the wire value
 		 */
-		public String getWireValue() {
+		public @NonNull String getWireValue() {
 			return this.wireValue;
 		}
 
@@ -479,7 +481,7 @@ public final class TestJws {
 		 *
 		 * @return the JCA name
 		 */
-		public String getJcaName() {
+		public @NonNull String getJcaName() {
 			return this.jcaName;
 		}
 
@@ -488,7 +490,7 @@ public final class TestJws {
 		 *
 		 * @return the {@code kty}
 		 */
-		public String getKeyType() {
+		public @NonNull String getKeyType() {
 			return switch (this.family) {
 				case RSA -> "RSA";
 				case EC -> "EC";
@@ -502,7 +504,7 @@ public final class TestJws {
 		 *
 		 * @return {@code P-256}, {@code P-384}, {@code P-521} or {@code Ed25519}; empty for RSA and HMAC
 		 */
-		public Optional<String> getCurve() {
+		public @NonNull Optional<@NonNull String> getCurve() {
 			return Optional.ofNullable(this.curve);
 		}
 
@@ -512,7 +514,7 @@ public final class TestJws {
 		 *
 		 * @return new parameters, or empty for any other algorithm
 		 */
-		public Optional<PSSParameterSpec> getPssParameters() {
+		public @NonNull Optional<@NonNull PSSParameterSpec> getPssParameters() {
 			@Nullable String digest = this.pssDigest;
 			if (digest == null)
 				return Optional.empty();
@@ -531,7 +533,7 @@ public final class TestJws {
 		 * @return 64, 96 or 132 for ES*, 64 for Ed25519 and EdDSA, 32, 48 or 64 for HS*; empty for RS* and PS*,
 		 * whose signatures are as long as the modulus
 		 */
-		public Optional<Integer> getSignatureLength() {
+		public @NonNull Optional<@NonNull Integer> getSignatureLength() {
 			return switch (this) {
 				case ES256, ED25519, EDDSA, HS512 -> Optional.of(64);
 				case ES384 -> Optional.of(96);
@@ -548,7 +550,7 @@ public final class TestJws {
 		 * @param key a key of this algorithm's family
 		 * @return the length in octets: the modulus length for RS* and PS*, {@link #getSignatureLength()} otherwise
 		 */
-		public Integer signatureLength(Key key) {
+		public @NonNull Integer signatureLength(@NonNull Key key) {
 			requireNonNull(key);
 			if (this.family == Family.RSA) {
 				if (!(key instanceof RSAKey rsaKey))
@@ -672,7 +674,7 @@ public final class TestJws {
 		 * {@code alg} member for {@link TestJws#builder()}
 		 * @return this builder
 		 */
-		public Builder alg(@Nullable String alg) {
+		public @NonNull Builder alg(@Nullable String alg) {
 			this.alg = alg;
 			return this;
 		}
@@ -683,7 +685,7 @@ public final class TestJws {
 		 * @param kid the key ID, or {@code null} for none
 		 * @return this builder
 		 */
-		public Builder kid(@Nullable String kid) {
+		public @NonNull Builder kid(@Nullable String kid) {
 			this.kid = kid;
 			return this;
 		}
@@ -694,7 +696,7 @@ public final class TestJws {
 		 * @param typ the type, such as {@code JWT}, or {@code null} for none
 		 * @return this builder
 		 */
-		public Builder typ(@Nullable String typ) {
+		public @NonNull Builder typ(@Nullable String typ) {
 			this.typ = typ;
 			return this;
 		}
@@ -709,7 +711,7 @@ public final class TestJws {
 		 * @return this builder
 		 * @throws IllegalArgumentException if {@code rawJsonValue} has an unpaired surrogate
 		 */
-		public Builder headerMember(String name, String rawJsonValue) {
+		public @NonNull Builder headerMember(@NonNull String name, @NonNull String rawJsonValue) {
 			utf8(rawJsonValue);
 			this.headerMembers.add(Map.entry(requireNonNull(name), rawJsonValue));
 			return this;
@@ -723,7 +725,7 @@ public final class TestJws {
 		 * @return this builder
 		 * @throws IllegalArgumentException if {@code json} has an unpaired surrogate
 		 */
-		public Builder header(@Nullable String json) {
+		public @NonNull Builder header(@Nullable String json) {
 			this.header = json == null ? null : utf8(json);
 			return this;
 		}
@@ -734,7 +736,7 @@ public final class TestJws {
 		 * @param bytes the header bytes, or {@code null} to build the header from the other settings
 		 * @return this builder
 		 */
-		public Builder headerBytes(byte @Nullable [] bytes) {
+		public @NonNull Builder headerBytes(byte @Nullable [] bytes) {
 			this.header = bytes == null ? null : bytes.clone();
 			return this;
 		}
@@ -746,7 +748,7 @@ public final class TestJws {
 		 * @return this builder
 		 * @throws IllegalArgumentException if {@code text} has an unpaired surrogate
 		 */
-		public Builder payload(@Nullable String text) {
+		public @NonNull Builder payload(@Nullable String text) {
 			this.payload = text == null ? new byte[0] : utf8(text);
 			return this;
 		}
@@ -757,7 +759,7 @@ public final class TestJws {
 		 * @param bytes the payload, or {@code null} for an empty one
 		 * @return this builder
 		 */
-		public Builder payloadBytes(byte @Nullable [] bytes) {
+		public @NonNull Builder payloadBytes(byte @Nullable [] bytes) {
 			this.payload = bytes == null ? new byte[0] : bytes.clone();
 			return this;
 		}
@@ -768,7 +770,7 @@ public final class TestJws {
 		 * @param claims the claims
 		 * @return this builder
 		 */
-		public Builder claims(JsonObject claims) {
+		public @NonNull Builder claims(@NonNull JsonObject claims) {
 			return payload(requireNonNull(claims).toJson());
 		}
 
@@ -777,7 +779,7 @@ public final class TestJws {
 		 *
 		 * @return the segment
 		 */
-		public String headerSegment() {
+		public @NonNull String headerSegment() {
 			return base64Url(headerBytes());
 		}
 
@@ -786,7 +788,7 @@ public final class TestJws {
 		 *
 		 * @return the segment
 		 */
-		public String payloadSegment() {
+		public @NonNull String payloadSegment() {
 			return base64Url(this.payload);
 		}
 
@@ -795,7 +797,7 @@ public final class TestJws {
 		 *
 		 * @return the signing input
 		 */
-		public String signingInput() {
+		public @NonNull String signingInput() {
 			return headerSegment() + "." + payloadSegment();
 		}
 
@@ -806,7 +808,7 @@ public final class TestJws {
 		 * @return the compact serialization
 		 * @throws IllegalStateException if the builder came from {@link TestJws#builder()}
 		 */
-		public String sign(Key key) {
+		public @NonNull String sign(@NonNull Key key) {
 			return signed(key).toCompactSerialization();
 		}
 
@@ -817,7 +819,7 @@ public final class TestJws {
 		 * @param secret the HMAC key, at least one octet (the JDK refuses an empty key)
 		 * @return the compact serialization
 		 */
-		public String sign(byte[] secret) {
+		public @NonNull String sign(byte @NonNull [] secret) {
 			return signed(secret).toCompactSerialization();
 		}
 
@@ -827,7 +829,7 @@ public final class TestJws {
 		 * @param key a private key of the algorithm's family, or a secret key for HS*
 		 * @return the signed token
 		 */
-		public Signed signed(Key key) {
+		public @NonNull Signed signed(@NonNull Key key) {
 			Algorithm signingAlgorithm = requireAlgorithm();
 			String signingInput = signingInput();
 			return new Signed(signingAlgorithm, signingInput, signature(signingAlgorithm, key, signingInput));
@@ -839,7 +841,7 @@ public final class TestJws {
 		 * @param secret the HMAC key, at least one octet
 		 * @return the signed token
 		 */
-		public Signed signed(byte[] secret) {
+		public @NonNull Signed signed(byte @NonNull [] secret) {
 			Algorithm signingAlgorithm = requireAlgorithm();
 			if (signingAlgorithm.family != Family.HMAC)
 				throw new IllegalStateException(signingAlgorithm + " does not sign with a byte secret");
@@ -852,7 +854,7 @@ public final class TestJws {
 		 * @param signature the raw signature bytes, possibly empty
 		 * @return the compact serialization
 		 */
-		public String withSignature(byte[] signature) {
+		public @NonNull String withSignature(byte @NonNull [] signature) {
 			return signingInput() + "." + base64Url(requireNonNull(signature));
 		}
 
@@ -862,7 +864,7 @@ public final class TestJws {
 		 * @param segment the signature segment text
 		 * @return the compact serialization
 		 */
-		public String withSignatureSegment(String segment) {
+		public @NonNull String withSignatureSegment(@NonNull String segment) {
 			return signingInput() + "." + requireNonNull(segment);
 		}
 
@@ -871,17 +873,17 @@ public final class TestJws {
 		 *
 		 * @return the compact serialization
 		 */
-		public String unsigned() {
+		public @NonNull String unsigned() {
 			return signingInput() + ".";
 		}
 
-		private Algorithm requireAlgorithm() {
+		private @NonNull Algorithm requireAlgorithm() {
 			if (this.algorithm == null)
 				throw new IllegalStateException("A builder from TestJws.builder() has no signing algorithm");
 			return this.algorithm;
 		}
 
-		private byte[] headerBytes() {
+		private byte @NonNull [] headerBytes() {
 			if (this.header != null)
 				return this.header.clone();
 			List<Map.Entry<String, String>> members = new ArrayList<>();
@@ -910,7 +912,7 @@ public final class TestJws {
 		private final String signingInput;
 		private final byte[] signature;
 
-		private Signed(Algorithm algorithm, String signingInput, byte[] signature) {
+		private Signed(@NonNull Algorithm algorithm, @NonNull String signingInput, byte @NonNull [] signature) {
 			this.algorithm = algorithm;
 			this.signingInput = signingInput;
 			this.signature = signature.clone();
@@ -921,7 +923,7 @@ public final class TestJws {
 		 *
 		 * @return the algorithm
 		 */
-		public Algorithm getAlgorithm() {
+		public @NonNull Algorithm getAlgorithm() {
 			return this.algorithm;
 		}
 
@@ -930,7 +932,7 @@ public final class TestJws {
 		 *
 		 * @return the signing input
 		 */
-		public String getSigningInput() {
+		public @NonNull String getSigningInput() {
 			return this.signingInput;
 		}
 
@@ -939,7 +941,7 @@ public final class TestJws {
 		 *
 		 * @return the segment
 		 */
-		public String getHeaderSegment() {
+		public @NonNull String getHeaderSegment() {
 			return this.signingInput.substring(0, this.signingInput.indexOf('.'));
 		}
 
@@ -948,7 +950,7 @@ public final class TestJws {
 		 *
 		 * @return the segment
 		 */
-		public String getPayloadSegment() {
+		public @NonNull String getPayloadSegment() {
 			return this.signingInput.substring(this.signingInput.indexOf('.') + 1);
 		}
 
@@ -957,7 +959,7 @@ public final class TestJws {
 		 *
 		 * @return a copy of the signature bytes
 		 */
-		public byte[] getSignature() {
+		public byte @NonNull [] getSignature() {
 			return this.signature.clone();
 		}
 
@@ -966,7 +968,7 @@ public final class TestJws {
 		 *
 		 * @return the segment
 		 */
-		public String getSignatureSegment() {
+		public @NonNull String getSignatureSegment() {
 			return base64Url(this.signature);
 		}
 
@@ -975,7 +977,7 @@ public final class TestJws {
 		 *
 		 * @return the token
 		 */
-		public String toCompactSerialization() {
+		public @NonNull String toCompactSerialization() {
 			return this.signingInput + "." + getSignatureSegment();
 		}
 
@@ -985,7 +987,7 @@ public final class TestJws {
 		 * @param signature the raw signature bytes, possibly empty
 		 * @return the compact serialization
 		 */
-		public String withSignature(byte[] signature) {
+		public @NonNull String withSignature(byte @NonNull [] signature) {
 			return this.signingInput + "." + base64Url(requireNonNull(signature));
 		}
 
@@ -995,7 +997,7 @@ public final class TestJws {
 		 * @param segment the signature segment text
 		 * @return the compact serialization
 		 */
-		public String withSignatureSegment(String segment) {
+		public @NonNull String withSignatureSegment(@NonNull String segment) {
 			return this.signingInput + "." + requireNonNull(segment);
 		}
 
@@ -1006,7 +1008,7 @@ public final class TestJws {
 		 * @return the compact serialization
 		 * @throws IllegalStateException if the variant does not apply to this algorithm or signature length
 		 */
-		public String withVariant(Variant variant) {
+		public @NonNull String withVariant(@NonNull Variant variant) {
 			requireNonNull(variant);
 			if (ECDSA_ONLY_VARIANTS.contains(variant) && this.algorithm.family != Family.EC)
 				throw new IllegalStateException(variant + " applies to ECDSA signatures, not " + this.algorithm);
@@ -1041,12 +1043,12 @@ public final class TestJws {
 			};
 		}
 
-		private String withEcdsa(BigInteger r, BigInteger s) {
+		private @NonNull String withEcdsa(@NonNull BigInteger r, @NonNull BigInteger s) {
 			return withSignature(ecdsaSignature(r, s, this.signature.length / 2));
 		}
 
 		@Override
-		public String toString() {
+		public @NonNull String toString() {
 			return "TestJws.Signed[" + toCompactSerialization() + "]";
 		}
 	}

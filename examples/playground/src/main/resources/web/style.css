@@ -1,0 +1,28 @@
+/*
+ * Copyright 2026 Revetware LLC.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+:root { color-scheme: light dark; font-family: system-ui, sans-serif; line-height: 1.5; }
+body { margin: 0; background: #14212b; color: #edf3f5; }
+main { max-width: 950px; margin: 2rem auto; padding: 0 1.5rem; }
+section { margin: 1.5rem 0; padding: 1.5rem; background: #20323e; border-radius: .5rem; }
+h1, h2, h3 { line-height: 1.2; }
+label { display: block; margin: .8rem 0; }
+input:not([type=checkbox]), select, textarea { display: block; box-sizing: border-box; width: 100%; max-width: 100%; padding: .5rem; margin-top: .3rem; }
+textarea { min-height: 6rem; }
+button { cursor: pointer; padding: .65rem 1rem; margin: .3rem 0; }
+button:disabled { cursor: default; }
+pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 1rem; background: #14212b; }
+.banner { border-left: .25rem solid #f1bb57; padding: .5rem 1rem; }
+a { color: #7bdce8; }

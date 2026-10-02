@@ -1,0 +1,26 @@
+<!--
+ * Copyright 2026 Revetware LLC.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ -->
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Revetsec Playground</title><link rel="stylesheet" href="/style.css"><script src="/app.js" defer></script></head>
+<body><main><header><h1>Revetsec Playground</h1><p class="banner">Local developer demonstration. Revetsec has not been independently audited.</p></header>
+<section><h2>Trusted provider selection</h2><p>Only local HTTPS serves this page. Secrets remain in environment variables or local files. Hosted presets provide setup guidance; their compatibility is unrun.</p>
+<label>Preset <select id="preset"><option value="keycloak">Local Keycloak</option><option value="node">Local node provider</option><option value="generic">Generic OIDC</option><option value="google">Google instructions</option><option value="entra">Entra instructions</option><option value="okta">Okta instructions</option><option value="auth0">Auth0 instructions</option></select></label><p id="preset-note"></p>
+<form id="configuration"><label>Issuer <input name="issuer" required maxlength="512"></label><label>OIDC/introspection client ID <input name="clientId" required maxlength="128"></label><label>Secret reference (env:NAME, file:/absolute/path, or none for a public OIDC client) <input name="secretReference" required maxlength="512" autocomplete="off"></label><label>Probe client ID <input name="probeClientId" required maxlength="128"></label><label>Probe secret reference <input name="probeSecretReference" required maxlength="512" autocomplete="off"></label><label>Resource validation <select name="strategy"><option value="jwt">Strict RFC 9068 JWT</option><option value="introspection">Audience-checked uncached JSON introspection</option></select></label><button>Select configuration</button></form>
+<p id="resource"></p><a href="/.well-known/oauth-protected-resource/mcp">Protected resource metadata</a><p>The MCP listener accepts Authorization headers only. Every message receives an admission check. The trusted edge must reject identical duplicate physical Authorization fields.</p></section>
+<section><h2>OIDC browser session</h2><form id="login" action="/oidc/begin" method="post"><input type="hidden" name="csrf"><label>Pending mode <select name="mode"><option value="atomic">Atomic pending store</option><option value="sealed">Sealed cookie</option></select></label><label>Callback <select name="responseMode"><option value="query">GET query</option><option value="form_post">Cross-site form_post</option></select></label><label><input type="checkbox" name="capture" value="true" id="capture"> Opt-in one synthetic local replay journal</label><button>Begin login</button></form><p>Successful OIDC authentication rotates the app session and CSRF token. Cookies are Secure, HttpOnly and __Host-prefixed. The replay journal preserves original browser/source binding and expires with the original pending flow.</p><button id="replay" disabled>Attempt journal replay once</button><p>Atomic mode rejects locally before another code POST. Sealed mode relies on the authorization server's single-use code; concurrent replay can race.</p><pre id="identity">No browser identity</pre></section>
+<section><h2>MCP client-credentials probe</h2><p>Requests mcp:discover and mcp:whoami for the exact resource, then invokes the local/self whoami tool. One app-controlled invalidation/retry is permitted after an HTTP 401; provider failures are unavailable.</p><button id="probe">Run probe</button></section>
+<section><h2>Transient token inspection</h2><p>This local CSRF-protected call uses the normal selected validator. The input is cleared before the request completes; it is never stored or echoed. Rejected credentials release no identity. alg/typ label candidates are explicitly unverified; no kid, raw header or unverified claims are shown.</p><form id="inspection"><label>Credential <textarea id="credential" maxlength="8192" autocomplete="off" spellcheck="false"></textarea></label><button>Inspect once</button></form></section>
+<section><h2>Safe result</h2><pre id="result" role="status"></pre><h3>Bounded app events</h3><pre id="events"></pre></section></main></body></html>

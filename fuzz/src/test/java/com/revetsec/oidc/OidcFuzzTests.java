@@ -16,6 +16,10 @@
 
 package com.revetsec.oidc;
 
+import org.jspecify.annotations.Nullable;
+
+import org.jspecify.annotations.NonNull;
+
 import com.code_intelligence.jazzer.junit.FuzzTest;
 import com.revetsec.internal.json.JsonCodec;
 import com.revetsec.internal.json.JsonLimits;
@@ -67,7 +71,7 @@ public class OidcFuzzTests {
 
 	/** Signs arbitrary claim bytes with JDK HMAC so mutation reaches the post-signature OIDC checks. */
 	@FuzzTest(maxDuration = "5m")
-	public void signedClaimsRespectInitialAndRefreshProfiles(byte[] input) {
+	public void signedClaimsRespectInitialAndRefreshProfiles(byte @NonNull [] input) {
 		String token = sign(input);
 		JsonObject claims = object(input, JsonLimits.jose(65_536));
 		for (boolean refresh : List.of(false, true)) {
@@ -88,7 +92,7 @@ public class OidcFuzzTests {
 
 	/** Remote metadata must retain the exact issuer and required capabilities, without explicit defaults. */
 	@FuzzTest(maxDuration = "5m")
-	public void metadataRequiresExactIssuerAndCapabilities(byte[] input) {
+	public void metadataRequiresExactIssuerAndCapabilities(byte @NonNull [] input) {
 		String text = new String(input, StandardCharsets.ISO_8859_1);
 		try {
 			OidcProviderMetadata accepted = OidcProviderMetadata.fromJson(ISSUER, text);
@@ -107,7 +111,7 @@ public class OidcFuzzTests {
 
 	/** JSON UserInfo accepts exactly objects with an ASCII subject equal to the verified subject. */
 	@FuzzTest(maxDuration = "5m")
-	public void userInfoRequiresTheVerifiedSubject(byte[] input) {
+	public void userInfoRequiresTheVerifiedSubject(byte @NonNull [] input) {
 		JsonObject claims = object(input, JsonLimits.protocolDocument(256 * 1_024));
 		boolean expected = claims != null && SUBJECT.equals(text(claims.getMembers().get("sub")));
 		try {
@@ -123,7 +127,7 @@ public class OidcFuzzTests {
 
 	/** A trusted-storage reference stays bounded, canonical and redacted, and retains no credentials. */
 	@FuzzTest(maxDuration = "5m")
-	public void sessionReferencesRoundTripWithoutCredentials(byte[] input) {
+	public void sessionReferencesRoundTripWithoutCredentials(byte @NonNull [] input) {
 		try {
 			OidcSessionReference reference = OidcSessionReference.fromSerializedForm(
 					new String(input, StandardCharsets.ISO_8859_1));
@@ -145,12 +149,12 @@ public class OidcFuzzTests {
 	}
 
 	// Uses the separately fuzzed JSON codec for syntax only. All profile rules below are evaluated here.
-	private static JsonObject object(byte[] input, JsonLimits limits) {
+	private static @Nullable JsonObject object(byte @NonNull [] input, @NonNull JsonLimits limits) {
 		try { return JsonCodec.parse(input, limits) instanceof JsonObject value ? value : null; }
 		catch (JsonParseException rejected) { return null; }
 	}
 
-	private static boolean acceptsClaims(JsonObject object, boolean refresh) {
+	private static boolean acceptsClaims(@Nullable JsonObject object, boolean refresh) {
 		if (object == null) return false;
 		Map<String, JsonValue> c = object.getMembers();
 		if (!ISSUER.equals(text(c.get("iss"))) || !asciiSubject(text(c.get("sub")))) return false;
@@ -184,14 +188,14 @@ public class OidcFuzzTests {
 				&& auth != null && !auth.isBefore(NOW.minusSeconds(180)) && hashMatches(c, "c_hash", "code");
 	}
 
-	private static String text(JsonValue value) { return value instanceof JsonString s ? s.getValue() : null; }
-	private static boolean asciiSubject(String subject) {
+	private static @Nullable String text(@Nullable JsonValue value) { return value instanceof JsonString s ? s.getValue() : null; }
+	private static boolean asciiSubject(@Nullable String subject) {
 		return subject != null && !subject.isEmpty() && subject.length() <= 255
 				&& subject.chars().allMatch(c -> c <= 127);
 	}
 
 	// NumericDate range and nanosecond floor, written with decimal arithmetic rather than JsonFields.
-	private static Instant date(JsonValue value) {
+	private static @Nullable Instant date(@Nullable JsonValue value) {
 		if (!(value instanceof JsonNumber n)) return null;
 		BigDecimal seconds = n.getValue();
 		if (seconds.compareTo(BigDecimal.valueOf(-377_705_116_800L)) < 0
@@ -203,7 +207,7 @@ public class OidcFuzzTests {
 		return Instant.ofEpochSecond(whole.longValueExact(), nanos.remainder(BigDecimal.valueOf(1_000_000_000)).longValueExact());
 	}
 
-	private static boolean hashMatches(Map<String, JsonValue> c, String name, String credential) {
+	private static boolean hashMatches(@NonNull Map<@NonNull String, @NonNull JsonValue> c, @NonNull String name, @NonNull String credential) {
 		if (!c.containsKey(name)) return true;
 		try {
 			byte[] hash = MessageDigest.getInstance("SHA-256").digest(credential.getBytes(StandardCharsets.US_ASCII));
@@ -211,13 +215,13 @@ public class OidcFuzzTests {
 		} catch (GeneralSecurityException impossible) { throw new AssertionError(impossible); }
 	}
 
-	private static void fixedFailure(OidcValidationException rejected) {
+	private static void fixedFailure(@NonNull OidcValidationException rejected) {
 		Assertions.assertNull(rejected.getCause());
 		Assertions.assertEquals(0, rejected.getSuppressed().length);
 		Assertions.assertEquals(OidcValidationException.fromReason(rejected.getReason()).getMessage(), rejected.getMessage());
 	}
 
-	private static String sign(byte[] claims) {
+	private static @NonNull String sign(byte @NonNull [] claims) {
 		String header = Base64.getUrlEncoder().withoutPadding().encodeToString("{\"alg\":\"HS256\",\"typ\":\"JWT\"}".getBytes(StandardCharsets.US_ASCII));
 		String input = header + "." + Base64.getUrlEncoder().withoutPadding().encodeToString(claims);
 		try {
@@ -227,7 +231,7 @@ public class OidcFuzzTests {
 		} catch (GeneralSecurityException impossible) { throw new AssertionError(impossible); }
 	}
 
-	private static IdTokenValidator validator() {
+	private static @NonNull IdTokenValidator validator() {
 		try {
 			// HMAC never reads this source. The template still requires a valid public-key source.
 			KeyPairGenerator generator = KeyPairGenerator.getInstance("RSA"); generator.initialize(2048);
@@ -242,7 +246,7 @@ public class OidcFuzzTests {
 		} catch (GeneralSecurityException impossible) { throw new AssertionError(impossible); }
 	}
 
-	private static OidcSessionReference original() {
+	private static @NonNull OidcSessionReference original() {
 		String claims = "{\"iss\":\"" + ISSUER + "\",\"sub\":\"subject\",\"aud\":\"client\",\"iat\":" + ORIGINAL_IAT
 				+ ",\"exp\":" + (NOW.getEpochSecond() + 300) + ",\"auth_time\":" + ORIGINAL_IAT
 				+ ",\"nonce\":\"" + NONCE + "\",\"acr\":\"urn:mfa\"}";

@@ -16,6 +16,10 @@
 
 package com.revetsec.testing;
 
+import org.jspecify.annotations.Nullable;
+
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.internal.json.JsonCodec;
 import com.revetsec.internal.json.JsonLimits;
 import com.revetsec.json.JsonString;
@@ -60,7 +64,7 @@ final class JsonTextTests {
 	}
 
 	@TestFactory
-	Stream<DynamicTest> stringsWithoutUnpairedSurrogatesRoundTripThroughAStrictParser() {
+	@NonNull Stream<@NonNull DynamicTest> stringsWithoutUnpairedSurrogatesRoundTripThroughAStrictParser() {
 		List<String> values = List.of("", "plain", "a\"b\\c", "\u0000\u001f\u007f", "\u00e9\u2028\u2029",
 				"\uD83D\uDE00", Sentinels.CLIENT_SECRET);
 		return values.stream().map(value -> DynamicTest.dynamicTest(Arrays.toString(value.toCharArray()), () -> {
@@ -97,23 +101,23 @@ final class JsonTextTests {
 	private static final class NullValueEntry implements Map.Entry<String, String> {
 		private final String key;
 
-		private NullValueEntry(String key) {
+		private NullValueEntry(@NonNull String key) {
 			this.key = key;
 		}
 
 		@Override
-		public String getKey() {
+		public @NonNull String getKey() {
 			return this.key;
 		}
 
 		@Override
 		@SuppressWarnings("NullAway")
-		public String getValue() {
+		public @Nullable String getValue() {
 			return null;
 		}
 
 		@Override
-		public String setValue(String value) {
+		public @NonNull String setValue(@Nullable String value) {
 			throw new UnsupportedOperationException();
 		}
 	}

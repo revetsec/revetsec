@@ -16,6 +16,8 @@
 
 package com.revetsec.internal.jose;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.internal.crypto.HashAlgorithm;
 import com.revetsec.internal.crypto.Hmac;
 import com.revetsec.internal.crypto.VerifyResult;
@@ -65,7 +67,7 @@ final class JwtProcessorTests {
 	// selected key (which names its alg, since several RSA algorithms are allowed), then its claims checked, giving a
 	// VerifiedJwt with the token as received.
 	@TestFactory
-	Stream<DynamicTest> everyPublicKeyAlgorithmCompletesThePipeline() {
+	@NonNull Stream<@NonNull DynamicTest> everyPublicKeyAlgorithmCompletesThePipeline() {
 		Map<Algorithm, Fixture> fixtures = Map.ofEntries(Map.entry(Algorithm.RS256, Fixture.IDP_SIGNING_RSA_2048),
 				Map.entry(Algorithm.RS384, Fixture.IDP_SIGNING_RSA_3072), Map.entry(Algorithm.RS512,
 						Fixture.IDP_SIGNING_RSA_2048), Map.entry(Algorithm.PS256, Fixture.IDP_SIGNING_RSA_2048),
@@ -242,7 +244,7 @@ final class JwtProcessorTests {
 	// with the algorithm's hash (SHA-256 for Ed25519 and EdDSA), so an engine without the guard would call it valid; each
 	// HMAC algorithm accepts the same inputs.
 	@TestFactory
-	Stream<DynamicTest> theSecretEngineRefusesEveryNonHmacAlgorithm() {
+	@NonNull Stream<@NonNull DynamicTest> theSecretEngineRefusesEveryNonHmacAlgorithm() {
 		byte[] secret = new byte[64];
 		Arrays.fill(secret, (byte) 0x5a);
 		byte[] signingInput = "eyJhbGciOiJSUzI1NiJ9.eyJpc3MiOiJ4In0".getBytes(StandardCharsets.US_ASCII);
@@ -306,30 +308,30 @@ final class JwtProcessorTests {
 				verified.toString());
 	}
 
-	private static TestClaims claims() {
+	private static @NonNull TestClaims claims() {
 		return TestClaims.empty().put("iss", ISSUER).put("aud", "api").put("exp", NOW.getEpochSecond() + 300);
 	}
 
-	private static JoseHeaderPolicy policy(Set<JwsAlgorithm> algorithms) {
+	private static @NonNull JoseHeaderPolicy policy(@NonNull Set<@NonNull JwsAlgorithm> algorithms) {
 		return JoseHeaderPolicy.fromSettings(65_536, algorithms, Set.of("JWT"), false);
 	}
 
-	private static PreparedJws prepared(Fixture fixture,
-																			Algorithm algorithm,
+	private static @NonNull PreparedJws prepared(@NonNull Fixture fixture,
+																			@NonNull Algorithm algorithm,
 																			@Nullable String kid) throws JoseFailure {
 		String token = TestJws.withAlgorithm(algorithm).kid(kid).payload(claims().toJson()).sign(fixture.getPrivateKey());
 		return JwtProcessor.prepare(token, policy(Set.of(JwsAlgorithm.findByWireValue(algorithm.getWireValue())
 				.orElseThrow())));
 	}
 
-	static VerificationKey key(TestJsonWebKeys.Builder jwk) throws Exception {
+	static @NonNull VerificationKey key(TestJsonWebKeys.@NonNull Builder jwk) throws Exception {
 		return JwkParser.parse((JsonObject) JsonCodec.parse(jwk.toJson().getBytes(StandardCharsets.UTF_8),
 				JsonLimits.jose(65_536)));
 	}
 
-	private static void assertVerifyFails(JoseException.Reason reason,
-																				PreparedJws prepared,
-																				KeySelection selection) {
+	private static void assertVerifyFails(JoseException.@NonNull Reason reason,
+																				@NonNull PreparedJws prepared,
+																				@NonNull KeySelection selection) {
 		JoseFailure failure = Assertions.assertThrows(JoseFailure.class, () -> JwtProcessor.verify(prepared, selection));
 		Assertions.assertEquals(reason, failure.getReason());
 		JoseFailure completeFailure = Assertions.assertThrows(JoseFailure.class, () -> JwtProcessor.complete(prepared,
@@ -337,8 +339,8 @@ final class JwtProcessorTests {
 		Assertions.assertEquals(reason, completeFailure.getReason());
 	}
 
-	private static void assertPrepareFails(JoseException.Reason reason,
-																				 String token) {
+	private static void assertPrepareFails(JoseException.@NonNull Reason reason,
+																				 @NonNull String token) {
 		JoseFailure failure = Assertions.assertThrows(JoseFailure.class, () -> JwtProcessor.prepare(token,
 				policy(Set.of(JwsAlgorithm.ES256))));
 		Assertions.assertEquals(reason, failure.getReason());

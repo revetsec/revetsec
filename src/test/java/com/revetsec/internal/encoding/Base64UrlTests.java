@@ -16,6 +16,8 @@
 
 package com.revetsec.internal.encoding;
 
+import org.jspecify.annotations.NonNull;
+
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.DynamicTest;
 import org.junit.jupiter.api.Test;
@@ -37,7 +39,7 @@ final class Base64UrlTests {
 
 	// RFC 4648 section 10 test vectors, written in the base64url alphabet without padding.
 	@TestFactory
-	Stream<DynamicTest> encodesAndDecodesTheRfc4648Vectors() {
+	@NonNull Stream<@NonNull DynamicTest> encodesAndDecodesTheRfc4648Vectors() {
 		return Stream.of(new String[][]{
 				{"", ""}, {"f", "Zg"}, {"fo", "Zm8"}, {"foo", "Zm9v"}, {"foob", "Zm9vYg"}, {"fooba", "Zm9vYmE"},
 				{"foobar", "Zm9vYmFy"}
@@ -59,7 +61,7 @@ final class Base64UrlTests {
 
 	// RFC 7515 section 2: base64url "with all trailing '=' characters omitted"; INV-J7.
 	@TestFactory
-	Stream<DynamicTest> rejectsPaddingAnywhere() {
+	@NonNull Stream<@NonNull DynamicTest> rejectsPaddingAnywhere() {
 		return rejections(EncodingException.Kind.PADDING, "Zg==", "Zg=", "Zm8=", "Zm9v====", "=", "==", "Zm9v=Zm9v",
 				"=Zm9v", EncodingFailures.SENTINEL + "==");
 	}
@@ -67,7 +69,7 @@ final class Base64UrlTests {
 	// RFC 4648 section 5 alphabet only: the standard alphabet's '+' and '/', whitespace and every non-ASCII
 	// character, including letters and digits outside ASCII, are rejected.
 	@TestFactory
-	Stream<DynamicTest> rejectsCharactersOutsideTheAlphabet() {
+	@NonNull Stream<@NonNull DynamicTest> rejectsCharactersOutsideTheAlphabet() {
 		return rejections(EncodingException.Kind.INVALID_CHARACTER, "Zm9+", "Zm9/", "Zm 9v", "Zm9v\n", "Zm9v\r\n",
 				"\tZm9v", "Zm9.", "Zm9\u00E9", "Zm9\u0000", "\uFF3Am9v", "Zm9\u0663", "Zm\uD83D\uDE00", "Zm9\uD800",
 				"Zm9v\u00A0", EncodingFailures.SENTINEL + "+");
@@ -75,7 +77,7 @@ final class Base64UrlTests {
 
 	// RFC 4648 section 4: a final quantum has 2 or 3 characters, never 1, so a length of 4n + 1 encodes nothing.
 	@TestFactory
-	Stream<DynamicTest> rejectsLengthsNoOctetStringEncodesTo() {
+	@NonNull Stream<@NonNull DynamicTest> rejectsLengthsNoOctetStringEncodesTo() {
 		return rejections(EncodingException.Kind.INVALID_LENGTH, "A", "AAAAA", "Zm9vY", "Zm9vYmFyZ",
 				EncodingFailures.SENTINEL + "A");
 	}
@@ -178,7 +180,7 @@ final class Base64UrlTests {
 		Assertions.assertThrows(NullPointerException.class, () -> Base64Url.encode(null));
 	}
 
-	private static Stream<DynamicTest> rejections(EncodingException.Kind kind, String... inputs) {
+	private static @NonNull Stream<@NonNull DynamicTest> rejections(EncodingException.@NonNull Kind kind, @NonNull String @NonNull ... inputs) {
 		return Stream.of(inputs).map(input -> DynamicTest.dynamicTest(EncodingFailures.describe(input),
 				() -> EncodingFailures.assertRejected(kind, input, () -> Base64Url.decode(input))));
 	}

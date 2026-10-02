@@ -16,6 +16,8 @@
 
 package com.revetsec.jose;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.internal.Limits;
 import com.revetsec.internal.encoding.Base64Url;
 import com.revetsec.internal.json.JsonCodec;
@@ -165,7 +167,7 @@ final class CapturedProviderKeySetTests {
 	// The captures are exactly the files MANIFEST.sha256 lists, with the listed SHA-256 values, in both directions;
 	// each is a discovery document, a key set, or an ID or access token; and every one is replayed by a test below.
 	@TestFactory
-	Stream<DynamicTest> theCapturesMatchTheirManifestsAndAreEachReplayed() {
+	@NonNull Stream<@NonNull DynamicTest> theCapturesMatchTheirManifestsAndAreEachReplayed() {
 		return CAPTURES.stream().map(capture -> DynamicTest.dynamicTest(capture.name(), () -> {
 			Map<String, String> manifest = new TreeMap<>();
 			for (String line : text(capture, "MANIFEST.sha256").lines().toList()) {
@@ -208,7 +210,7 @@ final class CapturedProviderKeySetTests {
 	// The public JsonWebKeySet holds the same keys, each a signing key (use sig) with a kid, and a static source takes
 	// the set.
 	@TestFactory
-	Stream<DynamicTest> everyCapturedKeySetLoadsWithItsPinnedKeysAndSkips() {
+	@NonNull Stream<@NonNull DynamicTest> everyCapturedKeySetLoadsWithItsPinnedKeysAndSkips() {
 		return KEY_SETS.stream().map(keySet -> DynamicTest.dynamicTest(keySet.toString(), () -> {
 			ParsedKeySet parsed = JwkSetParser.parse(bytes(keySet.capture(), keySet.file()),
 					Limits.JWKS_RESPONSE_BODY_SIZE.getDefaultIntValue(), Limits.JWKS_KEY_COUNT.getDefaultIntValue());
@@ -236,7 +238,7 @@ final class CapturedProviderKeySetTests {
 	// Ed25519 x is 32 octets (RFC 8037 section 2). Keycloak also sends an x5c chain with each RSA key; none of its
 	// signing keys was skipped, so check 12 found each chain's first certificate to hold the same key.
 	@TestFactory
-	Stream<DynamicTest> publishedKeysUseMinimalOrFixedLengthEncodingsAndNoPrivateMembers() {
+	@NonNull Stream<@NonNull DynamicTest> publishedKeysUseMinimalOrFixedLengthEncodingsAndNoPrivateMembers() {
 		return KEY_SETS.stream().map(keySet -> DynamicTest.dynamicTest(keySet.toString(), () -> {
 			int certificates = 0;
 			for (JsonObject key : rawKeys(keySet)) {
@@ -298,7 +300,7 @@ final class CapturedProviderKeySetTests {
 	// and exp are as captured (iat inside the capture run; Keycloak's tokens live 5 minutes, node-oidc-provider's 1
 	// hour; neither sends nbf).
 	@TestFactory
-	Stream<DynamicTest> everyCapturedTokenVerifiesAtItsCaptureTime() {
+	@NonNull Stream<@NonNull DynamicTest> everyCapturedTokenVerifiesAtItsCaptureTime() {
 		return TOKENS.stream().map(token -> DynamicTest.dynamicTest(token.toString(), () -> {
 			String compact = text(token.capture(), token.file());
 			StaticJsonWebKeySource source = source(token.capture(), token.keySet());
@@ -328,7 +330,7 @@ final class CapturedProviderKeySetTests {
 	// Time checks at each captured token's own exp (plan "JOSE semantics" step 12): at the default 60 s skew the token
 	// is accepted at exp + 59 s and EXPIRED from exp + 60 s; with no skew it is accepted at exp - 1 s and EXPIRED at exp.
 	@TestFactory
-	Stream<DynamicTest> everyCapturedTokenExpiresOnceTheClockReachesExpPlusTheSkew() {
+	@NonNull Stream<@NonNull DynamicTest> everyCapturedTokenExpiresOnceTheClockReachesExpPlusTheSkew() {
 		return TOKENS.stream().map(token -> DynamicTest.dynamicTest(token.toString(), () -> {
 			String compact = text(token.capture(), token.file());
 			StaticJsonWebKeySource source = source(token.capture(), token.keySet());
@@ -346,7 +348,7 @@ final class CapturedProviderKeySetTests {
 	// Time checks at each captured token's own iat (plan "JOSE semantics" step 12): at the default 60 s skew a clock
 	// 60 s behind the producer's still accepts the token, and one 61 s behind gives ISSUED_IN_FUTURE.
 	@TestFactory
-	Stream<DynamicTest> everyCapturedTokenIsIssuedInTheFutureForAClockMoreThanTheSkewBehind() {
+	@NonNull Stream<@NonNull DynamicTest> everyCapturedTokenIsIssuedInTheFutureForAClockMoreThanTheSkewBehind() {
 		return TOKENS.stream().map(token -> DynamicTest.dynamicTest(token.toString(), () -> {
 			String compact = text(token.capture(), token.file());
 			StaticJsonWebKeySource source = source(token.capture(), token.keySet());
@@ -363,7 +365,7 @@ final class CapturedProviderKeySetTests {
 	// its payload JSON, which leaves the claims unchanged but not the signed bytes (SIGNATURE_MISMATCH, plan M2-6), and
 	// for a validator configured with the issuer plus a trailing slash (ISSUER_MISMATCH, exact comparison).
 	@TestFactory
-	Stream<DynamicTest> everyCapturedTokenFailsWithAnotherKeySetAChangedByteOrAnotherIssuer() {
+	@NonNull Stream<@NonNull DynamicTest> everyCapturedTokenFailsWithAnotherKeySetAChangedByteOrAnotherIssuer() {
 		return TOKENS.stream().map(token -> DynamicTest.dynamicTest(token.toString(), () -> {
 			String compact = text(token.capture(), token.file());
 			StaticJsonWebKeySource source = source(token.capture(), token.keySet());
@@ -424,7 +426,7 @@ final class CapturedProviderKeySetTests {
 		List<String> acceptedAnyAudience = new ArrayList<>();
 		JoseObserver observer = new JoseObserver() {
 			@Override
-			public void didAcceptAnyAudience(String issuer) {
+			public void didAcceptAnyAudience(@NonNull String issuer) {
 				acceptedAnyAudience.add(issuer);
 			}
 		};
@@ -440,7 +442,7 @@ final class CapturedProviderKeySetTests {
 	// G8-2 and INV-J3: both providers put alg on every RSA key, so each RSA-signed token still verifies when all six RSA
 	// algorithms are allowed; an alg-less RSA key, as Microsoft Entra ID publishes, would then fit none of them.
 	@TestFactory
-	Stream<DynamicTest> rsaKeysThatCarryAlgStayUsableWhenEveryRsaAlgorithmIsAllowed() {
+	@NonNull Stream<@NonNull DynamicTest> rsaKeysThatCarryAlgStayUsableWhenEveryRsaAlgorithmIsAllowed() {
 		return TOKENS.stream().filter(token -> RSA_ALGORITHMS.contains(token.algorithm())).map(token ->
 				DynamicTest.dynamicTest(token.toString(), () -> {
 					StaticJsonWebKeySource source = source(token.capture(), token.keySet());
@@ -455,7 +457,7 @@ final class CapturedProviderKeySetTests {
 	// and so on) keeps its signature's length, so it passes the shape check, and its key then does not fit:
 	// KEY_ALGORITHM_MISMATCH, with no signature check under the wrong padding.
 	@TestFactory
-	Stream<DynamicTest> anRsaTokenRelabelledToTheOtherRsaPaddingIsAKeyAlgorithmMismatch() {
+	@NonNull Stream<@NonNull DynamicTest> anRsaTokenRelabelledToTheOtherRsaPaddingIsAKeyAlgorithmMismatch() {
 		return TOKENS.stream().filter(token -> RSA_ALGORITHMS.contains(token.algorithm())).map(token ->
 				DynamicTest.dynamicTest(token.toString(), () -> {
 					String wireValue = token.algorithm().getWireValue();
@@ -525,7 +527,7 @@ final class CapturedProviderKeySetTests {
 	// validates with no further request until the lifetime ends, and didSkipJsonWebKey reports each skipped key by its
 	// index on every fetch (plan "Exceptions, transience and observers").
 	@TestFactory
-	Stream<DynamicTest> everyCapturedKeySetFetchedWithItsCapturedHeadersLoadsAndLivesAsTheyDirect() throws IOException {
+	@NonNull Stream<@NonNull DynamicTest> everyCapturedKeySetFetchedWithItsCapturedHeadersLoadsAndLivesAsTheyDirect() throws IOException {
 		RawTlsServer server = RawTlsServer.start();
 		HttpClient client = TestTls.httpClient();
 		return KEY_SETS.stream().map(keySet -> DynamicTest.dynamicTest(keySet.toString(), () -> {
@@ -571,7 +573,7 @@ final class CapturedProviderKeySetTests {
 	// Each discovery document names its issuer and key set, and advertises every algorithm its captured tokens use.
 	// Keycloak also advertises HS256, HS384 and HS512, which JwtValidator never allows (G8-2).
 	@TestFactory
-	Stream<DynamicTest> theDiscoveryDocumentsNameTheIssuerKeySetAndAdvertisedAlgorithms() {
+	@NonNull Stream<@NonNull DynamicTest> theDiscoveryDocumentsNameTheIssuerKeySetAndAdvertisedAlgorithms() {
 		return DISCOVERY_DOCUMENTS.stream().map(document -> DynamicTest.dynamicTest(document.toString(), () -> {
 			JsonObject json = (JsonObject) JsonCodec.parse(bytes(document.capture(), document.file()),
 					JsonLimits.protocolDocument(Limits.HTTP_RESPONSE_BODY_SIZE.getDefaultIntValue()));
@@ -592,7 +594,7 @@ final class CapturedProviderKeySetTests {
 	// sub test-user and nothing else about the user; Keycloak's give a random subject UUID with the user's fixed test
 	// name and address.
 	@TestFactory
-	Stream<DynamicTest> theTokensNameOnlyTheSyntheticTestUser() {
+	@NonNull Stream<@NonNull DynamicTest> theTokensNameOnlyTheSyntheticTestUser() {
 		return TOKENS.stream().map(token -> DynamicTest.dynamicTest(token.toString(), () -> {
 			StaticJsonWebKeySource source = source(token.capture(), token.keySet());
 			JsonObject claims = JwtFixtures.assertAccepted(validator(token, source, token.capture().finishedAt())
@@ -614,7 +616,7 @@ final class CapturedProviderKeySetTests {
 		}));
 	}
 
-	private static List<TokenCase> tokens() {
+	private static @NonNull List<@NonNull TokenCase> tokens() {
 		List<TokenCase> tokens = new ArrayList<>();
 		tokens.add(new TokenCase(KEYCLOAK, "default-rs256-id-token.jwt", KEYCLOAK_DEFAULT_ISSUER, JwsAlgorithm.RS256,
 				TEST_CLIENT, "JWT", KEYCLOAK_ID_TOKEN_CLAIMS));
@@ -640,7 +642,7 @@ final class CapturedProviderKeySetTests {
 		return List.copyOf(tokens);
 	}
 
-	private static Set<String> keycloakAdvertisedAlgorithms() {
+	private static @NonNull Set<@NonNull String> keycloakAdvertisedAlgorithms() {
 		return Set.of("RS256", "RS384", "RS512", "PS256", "PS384", "PS512", "ES256", "ES384", "ES512", "EdDSA", "HS256",
 				"HS384", "HS512");
 	}
@@ -649,9 +651,9 @@ final class CapturedProviderKeySetTests {
 	 * A validator builder for the token's issuer and audience (any audience when the token has none) over
 	 * {@code source}, with a clock stopped at {@code now}.
 	 */
-	private static JwtValidator.Builder validator(TokenCase token,
-																								JsonWebKeySource source,
-																								Instant now) {
+	private static JwtValidator.@NonNull Builder validator(@NonNull TokenCase token,
+																								@NonNull JsonWebKeySource source,
+																								@NonNull Instant now) {
 		JwtValidator.Builder builder = JwtValidator.withIssuer(token.issuer()).jsonWebKeySource(source).clock(
 				TestClock.fromInstant(now));
 		String audience = token.audience();
@@ -661,9 +663,9 @@ final class CapturedProviderKeySetTests {
 	/**
 	 * A validator for the token's own algorithm at {@code now}, with {@code clockSkew} ({@code null} for the default).
 	 */
-	private static JwtValidator atTime(TokenCase token,
-																		 StaticJsonWebKeySource source,
-																		 Instant now,
+	private static @NonNull JwtValidator atTime(@NonNull TokenCase token,
+																		 @NonNull StaticJsonWebKeySource source,
+																		 @NonNull Instant now,
 																		 @Nullable Duration clockSkew) {
 		return validator(token, source, now).allowedAlgorithms(Set.of(token.algorithm())).clockSkew(clockSkew).build();
 	}
@@ -671,8 +673,8 @@ final class CapturedProviderKeySetTests {
 	/**
 	 * The token's claims, as validated at its capture time.
 	 */
-	private static JwtClaims claimsAtCapture(TokenCase token,
-																					 StaticJsonWebKeySource source) throws IOException {
+	private static @NonNull JwtClaims claimsAtCapture(@NonNull TokenCase token,
+																					 @NonNull StaticJsonWebKeySource source) throws IOException {
 		return JwtFixtures.assertAccepted(atTime(token, source, token.capture().finishedAt(), null), text(token.capture(),
 				token.file())).getClaims();
 	}
@@ -680,33 +682,33 @@ final class CapturedProviderKeySetTests {
 	/**
 	 * The arguments of each recorded call to {@code hook}, in call order.
 	 */
-	private static List<List<@Nullable Object>> arguments(RecordingObserver<JoseObserver> observer,
-																												String hook) {
+	private static @NonNull List<@NonNull List<@Nullable Object>> arguments(@NonNull RecordingObserver<@NonNull JoseObserver> observer,
+																												@NonNull String hook) {
 		return observer.getCalls(hook).stream().map(RecordingObserver.Call::getArguments).toList();
 	}
 
-	private static StaticJsonWebKeySource source(Capture capture,
-																							 String keySet) throws IOException {
+	private static @NonNull StaticJsonWebKeySource source(@NonNull Capture capture,
+																							 @NonNull String keySet) throws IOException {
 		return StaticJsonWebKeySource.fromJsonWebKeySet(JsonWebKeySet.fromJson(text(capture, keySet)));
 	}
 
 	/**
 	 * Describes a usable key by its type, its modulus size or curve, and its {@code alg}.
 	 */
-	private static String describe(VerificationKey key) {
+	private static @NonNull String describe(@NonNull VerificationKey key) {
 		String size = key.publicKey() instanceof RSAPublicKey rsa ? String.valueOf(rsa.getModulus().bitLength())
 				: requireNonNull(key.curve());
 		JwsAlgorithm algorithm = key.algorithm();
 		return key.keyType() + " " + size + " " + (algorithm == null ? "(no alg)" : algorithm.getWireValue());
 	}
 
-	private static KeySetCase keySet(Capture capture,
-																	 String file) {
+	private static @NonNull KeySetCase keySet(@NonNull Capture capture,
+																	 @NonNull String file) {
 		return KEY_SETS.stream().filter(keySet -> keySet.capture().equals(capture) && keySet.file().equals(file))
 				.findFirst().orElseThrow();
 	}
 
-	private static List<JsonObject> rawKeys(KeySetCase keySet) throws Exception {
+	private static @NonNull List<@NonNull JsonObject> rawKeys(@NonNull KeySetCase keySet) throws Exception {
 		JsonObject document = (JsonObject) JsonCodec.parse(bytes(keySet.capture(), keySet.file()),
 				JsonLimits.protocolDocument(Limits.JWKS_RESPONSE_BODY_SIZE.getDefaultIntValue()));
 		List<JsonObject> keys = new ArrayList<>();
@@ -715,19 +717,19 @@ final class CapturedProviderKeySetTests {
 		return keys;
 	}
 
-	private static byte[] decoded(JsonObject key,
-																String member) throws Exception {
+	private static byte @NonNull [] decoded(@NonNull JsonObject key,
+																@NonNull String member) throws Exception {
 		return Base64Url.decode(key.findString(member).orElseThrow());
 	}
 
-	private static Path directory(Capture capture) throws URISyntaxException {
+	private static @NonNull Path directory(@NonNull Capture capture) throws URISyntaxException {
 		URL url = CapturedProviderKeySetTests.class.getResource(capture.directory());
 		Assertions.assertNotNull(url, capture.directory());
 		return Path.of(url.toURI());
 	}
 
-	private static byte[] bytes(Capture capture,
-															String name) throws IOException {
+	private static byte @NonNull [] bytes(@NonNull Capture capture,
+															@NonNull String name) throws IOException {
 		try (@Nullable InputStream stream = CapturedProviderKeySetTests.class.getResourceAsStream(capture.directory()
 				+ name)) {
 			if (stream == null)
@@ -736,8 +738,8 @@ final class CapturedProviderKeySetTests {
 		}
 	}
 
-	private static String text(Capture capture,
-														 String name) throws IOException {
+	private static @NonNull String text(@NonNull Capture capture,
+														 @NonNull String name) throws IOException {
 		return new String(bytes(capture, name), StandardCharsets.UTF_8);
 	}
 
@@ -746,25 +748,25 @@ final class CapturedProviderKeySetTests {
 	 * {@code Content-Type} and {@code Cache-Control} header lines its key-set responses carried (SOURCE.txt), and the
 	 * lifetime those headers give a remote source.
 	 */
-	private record Capture(String name, String directory, Instant startedAt, Instant finishedAt, Duration lifetime,
-												 String keySetHeaders, Duration keySetTimeToLive) {
+	private record Capture(@NonNull String name, @NonNull String directory, @NonNull Instant startedAt, @NonNull Instant finishedAt, @NonNull Duration lifetime,
+												 @NonNull String keySetHeaders, @NonNull Duration keySetTimeToLive) {
 		@Override
-		public String toString() {
+		public @NonNull String toString() {
 			return this.name;
 		}
 	}
 
-	private record KeySetCase(Capture capture, String file, List<String> keys, List<ParsedKeySet.Skip> skips,
+	private record KeySetCase(@NonNull Capture capture, @NonNull String file, @NonNull List<@NonNull String> keys, @NonNull List<ParsedKeySet.@NonNull Skip> skips,
 														int certificates) {
 		@Override
-		public String toString() {
+		public @NonNull String toString() {
 			return this.capture.name() + " " + this.file;
 		}
 	}
 
-	private record DiscoveryCase(Capture capture, String file, String issuer, String jwksUri, Set<String> advertised) {
+	private record DiscoveryCase(@NonNull Capture capture, @NonNull String file, @NonNull String issuer, @NonNull String jwksUri, @NonNull Set<@NonNull String> advertised) {
 		@Override
-		public String toString() {
+		public @NonNull String toString() {
 			return this.capture.name() + " " + this.file;
 		}
 	}
@@ -773,14 +775,14 @@ final class CapturedProviderKeySetTests {
 	 * One captured token: its issuer, algorithm, audience ({@code null} for none), {@code typ} header ({@code null} for
 	 * none) and claim names; its key set is its scenario's.
 	 */
-	private record TokenCase(Capture capture, String file, String issuer, JwsAlgorithm algorithm,
-													 @Nullable String audience, @Nullable String type, Set<String> claimNames) {
-		String keySet() {
+	private record TokenCase(@NonNull Capture capture, @NonNull String file, @NonNull String issuer, @NonNull JwsAlgorithm algorithm,
+													 @Nullable String audience, @Nullable String type, @NonNull Set<@NonNull String> claimNames) {
+		@NonNull String keySet() {
 			return this.file.substring(0, this.file.indexOf('-')) + "-jwks.json";
 		}
 
 		@Override
-		public String toString() {
+		public @NonNull String toString() {
 			return this.capture.name() + " " + this.file;
 		}
 	}

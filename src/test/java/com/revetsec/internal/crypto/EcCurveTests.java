@@ -16,6 +16,10 @@
 
 package com.revetsec.internal.crypto;
 
+import org.jspecify.annotations.Nullable;
+
+import org.jspecify.annotations.NonNull;
+
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.DynamicTest;
 import org.junit.jupiter.api.Test;
@@ -46,7 +50,7 @@ import java.util.stream.Stream;
 final class EcCurveTests {
 	// SEC 2 version 2: the JDK's own named-curve parameters are the independent source for Revetsec's constants.
 	@TestFactory
-	Stream<DynamicTest> parametersEqualTheJdkNamedCurves() {
+	@NonNull Stream<@NonNull DynamicTest> parametersEqualTheJdkNamedCurves() {
 		return Stream.of(EcCurve.values()).map(curve -> DynamicTest.dynamicTest(curve.name(), () -> {
 			ECParameterSpec jdk = jdkParameters(curve);
 			ECParameterSpec ours = curve.getParameterSpec();
@@ -82,6 +86,8 @@ final class EcCurveTests {
 	}
 
 	// RFC 7518 section 6.2.1.1: "P-256", "P-384" and "P-521", case-sensitive; secp256k1 is not a JOSE ES curve.
+	// Deliberate null inputs verify runtime rejection.
+	@SuppressWarnings("NullAway")
 	@Test
 	void findsCurvesByTheirExactNameOnly() {
 		Assertions.assertEquals(Optional.of(EcCurve.P_256), EcCurve.findByName("P-256"));
@@ -97,7 +103,7 @@ final class EcCurveTests {
 	// A key's parameters identify its curve only when the field, both coefficients, the base point, its order and the
 	// cofactor all match; a curve that differs in any one of them is another curve.
 	@TestFactory
-	Stream<DynamicTest> parameterMatchingComparesEveryField() {
+	@NonNull Stream<@NonNull DynamicTest> parameterMatchingComparesEveryField() {
 		EcCurve curve = EcCurve.P_256;
 		ECParameterSpec base = curve.getParameterSpec();
 		EllipticCurve field = base.getCurve();
@@ -127,6 +133,8 @@ final class EcCurveTests {
 				}));
 	}
 
+	// Deliberate null inputs verify runtime rejection.
+	@SuppressWarnings("NullAway")
 	@Test
 	void noParametersDescribeNoCurve() {
 		for (EcCurve curve : EcCurve.values())
@@ -137,7 +145,7 @@ final class EcCurveTests {
 
 	// Keys the JDK generates on each curve carry parameters that identify exactly that curve, never another.
 	@TestFactory
-	Stream<DynamicTest> jdkGeneratedKeysIdentifyTheirCurve() {
+	@NonNull Stream<@NonNull DynamicTest> jdkGeneratedKeysIdentifyTheirCurve() {
 		return Stream.of(EcCurve.values()).map(curve -> DynamicTest.dynamicTest(curve.name(), () -> {
 			KeyPairGenerator generator = KeyPairGenerator.getInstance("EC");
 			generator.initialize(new ECGenParameterSpec(curve.getStandardName()));
@@ -152,7 +160,7 @@ final class EcCurveTests {
 
 	// INV-J5: 0 <= x, y < p and the curve equation; x = p is the same residue as 0 but is not a field element.
 	@TestFactory
-	Stream<DynamicTest> onCurveCheckBoundsBothCoordinatesByTheFieldPrime() {
+	@NonNull Stream<@NonNull DynamicTest> onCurveCheckBoundsBothCoordinatesByTheFieldPrime() {
 		return Stream.of(EcCurve.values()).map(curve -> DynamicTest.dynamicTest(curve.name(), () -> {
 			ECPoint g = curve.getParameterSpec().getGenerator();
 			BigInteger p = curve.getFieldPrime();
@@ -178,7 +186,7 @@ final class EcCurveTests {
 	// The bounds at their exact edges: b is a square on all three curves, so (0, sqrt(b)) is a point, and x = p is its
 	// residue but not a field element. (No point has y = 0: with cofactor 1 there is no point of order 2.)
 	@TestFactory
-	Stream<DynamicTest> onCurveCheckAcceptsZeroAndRefusesTheFieldPrimeItself() {
+	@NonNull Stream<@NonNull DynamicTest> onCurveCheckAcceptsZeroAndRefusesTheFieldPrimeItself() {
 		return Stream.of(EcCurve.values()).map(curve -> DynamicTest.dynamicTest(curve.name(), () -> {
 			BigInteger p = curve.getFieldPrime();
 			BigInteger y = squareRootOfB(curve);
@@ -194,7 +202,7 @@ final class EcCurveTests {
 	 * A square root of {@code b} modulo {@code p}, as {@code b^((p + 1) / 4)}, which works because {@code p = 3 mod 4}
 	 * on all three curves; the test fails if {@code b} is not a square.
 	 */
-	static BigInteger squareRootOfB(EcCurve curve) {
+	static @NonNull BigInteger squareRootOfB(@NonNull EcCurve curve) {
 		BigInteger p = curve.getFieldPrime();
 		Assertions.assertEquals(3, p.mod(BigInteger.valueOf(4)).intValueExact());
 		BigInteger root = curve.getB().modPow(p.add(BigInteger.ONE).shiftRight(2), p);
@@ -202,6 +210,8 @@ final class EcCurveTests {
 		return root;
 	}
 
+	// Deliberate null inputs verify runtime rejection.
+	@SuppressWarnings("NullAway")
 	@Test
 	void onCurveCheckRejectsNullCoordinates() {
 		Assertions.assertThrows(NullPointerException.class, () -> EcCurve.P_256.isOnCurve(nullValue(), BigInteger.ONE));
@@ -221,7 +231,7 @@ final class EcCurveTests {
 		}
 	}
 
-	private static ECParameterSpec jdkParameters(EcCurve curve) throws GeneralSecurityException {
+	private static @NonNull ECParameterSpec jdkParameters(@NonNull EcCurve curve) throws GeneralSecurityException {
 		AlgorithmParameters parameters = AlgorithmParameters.getInstance("EC");
 		parameters.init(new ECGenParameterSpec(curve.getStandardName()));
 		return parameters.getParameterSpec(ECParameterSpec.class);
@@ -231,7 +241,7 @@ final class EcCurveTests {
 	 * Hides a {@code null} from NullAway, for the tests that check null handling.
 	 */
 	@SuppressWarnings({"NullAway", "TypeParameterUnusedInFormals"})
-	private static <T> T nullValue() {
+	private static <T> @Nullable T nullValue() {
 		return null;
 	}
 
@@ -239,7 +249,7 @@ final class EcCurveTests {
 		private final String name;
 		private final ECParameterSpec parameterSpec;
 
-		private Variant(String name, ECParameterSpec parameterSpec) {
+		private Variant(@NonNull String name, @NonNull ECParameterSpec parameterSpec) {
 			this.name = name;
 			this.parameterSpec = parameterSpec;
 		}

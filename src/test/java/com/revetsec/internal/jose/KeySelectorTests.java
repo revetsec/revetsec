@@ -16,6 +16,8 @@
 
 package com.revetsec.internal.jose;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.jose.JwsAlgorithm;
 import com.revetsec.testing.TestJsonWebKeys;
 import com.revetsec.testing.TestJsonWebKeys.Fixture;
@@ -208,7 +210,7 @@ final class KeySelectorTests {
 	// algorithms of its type and curve, and otherwise is a mismatch with a kid and unknown without one. No key from a
 	// key set ever fits an HMAC algorithm.
 	@TestFactory
-	Stream<DynamicTest> everyKeyFitsExactlyTheAlgorithmsOfItsTypeAndCurve() throws SkippedKeyException {
+	@NonNull Stream<@NonNull DynamicTest> everyKeyFitsExactlyTheAlgorithmsOfItsTypeAndCurve() throws SkippedKeyException {
 		// In enum order, so the dynamic tests have the same order and numbering in every JVM.
 		Map<Fixture, Set<JwsAlgorithm>> fits = new EnumMap<>(Map.of(
 				Fixture.IDP_SIGNING_RSA_2048, EnumSet.of(JwsAlgorithm.RS256, JwsAlgorithm.RS384, JwsAlgorithm.RS512,
@@ -304,7 +306,7 @@ final class KeySelectorTests {
 		Assertions.assertNotEquals(found, rsa);
 	}
 
-	private static VerificationKey key(Fixture fixture, @Nullable String kid, @Nullable String alg)
+	private static @NonNull VerificationKey key(@NonNull Fixture fixture, @Nullable String kid, @Nullable String alg)
 			throws SkippedKeyException {
 		TestJsonWebKeys.Builder builder = TestJsonWebKeys.withFixture(fixture);
 		if (kid != null)
@@ -314,17 +316,17 @@ final class KeySelectorTests {
 		return JwkParserTests.parse(builder.toJson());
 	}
 
-	private static KeyQuery query(JwsAlgorithm algorithm, @Nullable String kid, JwsAlgorithm... allowed) {
+	private static @NonNull KeyQuery query(@NonNull JwsAlgorithm algorithm, @Nullable String kid, @NonNull JwsAlgorithm @NonNull ... allowed) {
 		return new KeyQuery(algorithm, kid, Set.of(allowed));
 	}
 
-	private static void assertFound(VerificationKey expected, List<VerificationKey> keys, KeyQuery query) {
+	private static void assertFound(@NonNull VerificationKey expected, @NonNull List<@NonNull VerificationKey> keys, @NonNull KeyQuery query) {
 		KeySelection selection = KeySelector.select(keys, query);
 		Assertions.assertEquals(KeySelection.Kind.FOUND, selection.getKind(), query::toString);
 		Assertions.assertSame(expected, selection.findKey().orElseThrow());
 	}
 
-	private static void assertKind(KeySelection.Kind kind, List<VerificationKey> keys, KeyQuery query) {
+	private static void assertKind(KeySelection.@NonNull Kind kind, @NonNull List<@NonNull VerificationKey> keys, @NonNull KeyQuery query) {
 		KeySelection selection = KeySelector.select(keys, query);
 		Assertions.assertEquals(kind, selection.getKind(), query::toString);
 		Assertions.assertTrue(selection.findKey().isEmpty());

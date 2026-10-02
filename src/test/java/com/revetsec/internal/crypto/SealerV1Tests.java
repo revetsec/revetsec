@@ -16,6 +16,10 @@
 
 package com.revetsec.internal.crypto;
 
+import org.jspecify.annotations.Nullable;
+
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.internal.encoding.Base64Url;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.DynamicTest;
@@ -79,7 +83,7 @@ final class SealerV1Tests {
 
 	// Exit criterion 7: the StateSealer v1 KAT is byte-identical on every JDK.
 	@TestFactory
-	Stream<DynamicTest> sealsTheNormativeKnownAnswerVectorsByteForByte() {
+	@NonNull Stream<@NonNull DynamicTest> sealsTheNormativeKnownAnswerVectorsByteForByte() {
 		return VECTORS.stream().map(vector -> DynamicTest.dynamicTest(vector.name, () -> {
 			SealerV1.Key key = SealerV1.Key.fromMasterKey(vector.keyId, vector.masterKey);
 			String sealed = SealerV1.seal(key, vector.type, vector.context, vector.notAfter,
@@ -111,7 +115,7 @@ final class SealerV1Tests {
 	}
 
 	@TestFactory
-	Stream<DynamicTest> opensTheKnownAnswerVectorsUntilTheirNotAfter() {
+	@NonNull Stream<@NonNull DynamicTest> opensTheKnownAnswerVectorsUntilTheirNotAfter() {
 		return VECTORS.stream().map(vector -> DynamicTest.dynamicTest(vector.name, () -> {
 			Map<String, SealerV1.Key> keys = Map.of(vector.keyId, SealerV1.Key.fromMasterKey(vector.keyId,
 					vector.masterKey));
@@ -188,7 +192,7 @@ final class SealerV1Tests {
 
 	// The unseal order (M1 plan): each step's failure is INVALID, with the same fixed message and no cause.
 	@TestFactory
-	Stream<DynamicTest> rejectsEachMalformedValueAsInvalid() throws Exception {
+	@NonNull Stream<@NonNull DynamicTest> rejectsEachMalformedValueAsInvalid() throws Exception {
 		Vector vector = VECTORS.get(0);
 		byte[] authentic = Base64Url.decode(vector.sealed);
 		Map<String, SealerV1.Key> keys = Map.of(vector.keyId, SealerV1.Key.fromMasterKey(vector.keyId,
@@ -239,7 +243,7 @@ final class SealerV1Tests {
 
 	// Step 6: the context is bound into the AAD, compared as UTF-8 bytes.
 	@TestFactory
-	Stream<DynamicTest> rejectsAnyOtherContext() {
+	@NonNull Stream<@NonNull DynamicTest> rejectsAnyOtherContext() {
 		Vector vector = VECTORS.get(0);
 
 		return Stream.of("Google", "google ", " google", "googl", "google\u0000", "g\u043e\u043egle", "microsoft")
@@ -330,7 +334,7 @@ final class SealerV1Tests {
 	void turnsAnUnexpectedRuntimeExceptionIntoInvalid() {
 		Map<String, SealerV1.Key> throwingKeys = new AbstractMap<>() {
 			@Override
-			public Set<Entry<String, SealerV1.Key>> entrySet() {
+			public @NonNull Set<@NonNull Entry<@NonNull String, SealerV1.@NonNull Key>> entrySet() {
 				throw new IllegalStateException("lookup failed");
 			}
 		};
@@ -340,6 +344,8 @@ final class SealerV1Tests {
 	}
 
 	// Arguments are checked first: NullPointerException or IllegalArgumentException, never UnsealException.
+	// Deliberate null inputs verify runtime rejection.
+	@SuppressWarnings("NullAway")
 	@Test
 	void checksArgumentsBeforeAnyStep() throws Exception {
 		SealerV1.Key key = SealerV1.Key.fromMasterKey("k", sequence(1, 32, 1));
@@ -391,6 +397,8 @@ final class SealerV1Tests {
 	}
 
 	// G6-9: key IDs are 1-64 characters of [A-Za-z0-9._~-]; master keys are exactly 32 bytes.
+	// Deliberate null inputs verify runtime rejection.
+	@SuppressWarnings("NullAway")
 	@Test
 	void acceptsOnlyValidKeyIdsAndThirtyTwoByteMasterKeys() throws GeneralSecurityException {
 		for (String keyId : List.of("a", "2026-09", KEY_ID_64, "._~-", "Z9"))
@@ -426,6 +434,8 @@ final class SealerV1Tests {
 	}
 
 	// UnsealException carries a fixed message per kind, no cause, nothing suppressed and no stack trace.
+	// Deliberate null inputs verify runtime rejection.
+	@SuppressWarnings("NullAway")
 	@Test
 	void unsealExceptionsHaveFixedMessagesAndNoCauseSuppressionOrStackTrace() {
 		UnsealException invalid = new UnsealException(UnsealException.Kind.INVALID);
@@ -444,7 +454,7 @@ final class SealerV1Tests {
 	/**
 	 * The plan's formulas transcribed with raw JCA calls, independent of {@link SealerV1} and {@link Hkdf}.
 	 */
-	private static String referenceSeal(Vector vector) throws GeneralSecurityException {
+	private static @NonNull String referenceSeal(@NonNull Vector vector) throws GeneralSecurityException {
 		byte[] keyId = vector.keyId.getBytes(StandardCharsets.US_ASCII);
 		byte[] label = vector.type.getLabel().getBytes(StandardCharsets.US_ASCII);
 		byte[] context = vector.context.getBytes(StandardCharsets.UTF_8);
@@ -471,32 +481,32 @@ final class SealerV1Tests {
 		return Base64.getUrlEncoder().withoutPadding().encodeToString(concatenate(header, ciphertext));
 	}
 
-	private static void assertInvalid(UnsealException e) {
+	private static void assertInvalid(@NonNull UnsealException e) {
 		Assertions.assertEquals(UnsealException.Kind.INVALID, e.getKind());
 		Assertions.assertEquals("The sealed state is invalid.", e.getMessage());
 		Assertions.assertNull(e.getCause());
 		Assertions.assertEquals(0, e.getSuppressed().length);
 	}
 
-	private static UnsealException.Kind kindOf(Opening opening) {
+	private static UnsealException.@NonNull Kind kindOf(@NonNull Opening opening) {
 		return Assertions.assertThrows(UnsealException.class, opening::open).getKind();
 	}
 
 	/**
 	 * Changes the last character of an unpadded base64url value so that its unused trailing bits are not zero.
 	 */
-	private static String nonCanonical(String sealed) {
+	private static @NonNull String nonCanonical(@NonNull String sealed) {
 		Assertions.assertNotEquals(0, sealed.length() % 4, "the vector must have unused trailing bits");
 		char last = sealed.charAt(sealed.length() - 1);
 		String alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
 		return sealed.substring(0, sealed.length() - 1) + alphabet.charAt(alphabet.indexOf(last) ^ 1);
 	}
 
-	private static String encode(byte[] bytes) {
+	private static @NonNull String encode(byte @NonNull [] bytes) {
 		return Base64Url.encode(bytes);
 	}
 
-	private static byte[] with(byte[] bytes,
+	private static byte @NonNull [] with(byte @NonNull [] bytes,
 														 int index,
 														 int value) {
 		byte[] copy = bytes.clone();
@@ -504,7 +514,7 @@ final class SealerV1Tests {
 		return copy;
 	}
 
-	private static byte[] sequence(int start,
+	private static byte @NonNull [] sequence(int start,
 																 int count,
 																 int step) {
 		byte[] bytes = new byte[count];
@@ -515,22 +525,22 @@ final class SealerV1Tests {
 		return bytes;
 	}
 
-	private static byte[] filled(int value,
+	private static byte @NonNull [] filled(int value,
 															 int count) {
 		byte[] bytes = new byte[count];
 		Arrays.fill(bytes, (byte) value);
 		return bytes;
 	}
 
-	private static byte[] bytes(String ascii) {
+	private static byte @NonNull [] bytes(@NonNull String ascii) {
 		return ascii.getBytes(StandardCharsets.US_ASCII);
 	}
 
-	private static byte[] u32(int value) {
+	private static byte @NonNull [] u32(int value) {
 		return ByteBuffer.allocate(4).putInt(value).array();
 	}
 
-	private static byte[] concatenate(byte[]... parts) {
+	private static byte @NonNull [] concatenate(byte @NonNull [] @NonNull ... parts) {
 		ByteArrayOutputStream output = new ByteArrayOutputStream();
 
 		for (byte[] part : parts)
@@ -543,7 +553,7 @@ final class SealerV1Tests {
 	 * Hides a {@code null} from NullAway, for the tests that check null handling.
 	 */
 	@SuppressWarnings({"NullAway", "TypeParameterUnusedInFormals"})
-	private static <T> T nullValue() {
+	private static <T> @Nullable T nullValue() {
 		return null;
 	}
 
@@ -570,16 +580,16 @@ final class SealerV1Tests {
 		private final byte[] iv;
 		private final String sealed;
 
-		private Vector(String name,
-									 byte[] masterKey,
-									 String keyId,
-									 SealedStateType type,
-									 String context,
+		private Vector(@NonNull String name,
+									 byte @NonNull [] masterKey,
+									 @NonNull String keyId,
+									 @NonNull SealedStateType type,
+									 @NonNull String context,
 									 long notAfter,
-									 String plaintext,
-									 byte[] salt,
-									 byte[] iv,
-									 String sealed) {
+									 @NonNull String plaintext,
+									 byte @NonNull [] salt,
+									 byte @NonNull [] iv,
+									 @NonNull String sealed) {
 			this.name = name;
 			this.masterKey = masterKey;
 			this.keyId = keyId;

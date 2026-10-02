@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+import org.jspecify.annotations.NonNull;
+
 import java.io.InputStream;
 import java.net.CookieManager;
 import java.net.CookiePolicy;
@@ -49,7 +51,7 @@ import javax.net.ssl.TrustManagerFactory;
 public class KeycloakJdkLogin {
 	private static final Pattern LOGIN_FORM = Pattern.compile("<form[^>]*id=\"kc-form-login\"[^>]*action=\"([^\"]+)\"", Pattern.DOTALL);
 
-	public static void main(String[] args) throws Exception {
+	public static void main(@NonNull String @NonNull [] args) throws Exception {
 		if (args.length < 6) {
 			System.err.println("usage: java KeycloakJdkLogin.java <realm-issuer> <client-id> <client-secret> <redirect-uri> <username> <password> [ca.pem]");
 			System.exit(64);
@@ -112,7 +114,7 @@ public class KeycloakJdkLogin {
 		System.out.println("ok: JDK " + Runtime.version().feature() + " java.net.http + CookieManager login form, code exchange returned an id_token");
 	}
 
-	private static SSLContext trusting(Path caPem) throws Exception {
+	private static @NonNull SSLContext trusting(@NonNull Path caPem) throws Exception {
 		KeyStore trustStore = KeyStore.getInstance("PKCS12");
 		trustStore.load(null, null);
 		try (InputStream in = Files.newInputStream(caPem)) {
@@ -125,17 +127,17 @@ public class KeycloakJdkLogin {
 		return context;
 	}
 
-	private static String randomToken(SecureRandom random, int bytes) {
+	private static @NonNull String randomToken(@NonNull SecureRandom random, int bytes) {
 		byte[] value = new byte[bytes];
 		random.nextBytes(value);
 		return Base64.getUrlEncoder().withoutPadding().encodeToString(value);
 	}
 
-	private static String encode(String value) {
+	private static @NonNull String encode(@NonNull String value) {
 		return URLEncoder.encode(value, StandardCharsets.UTF_8);
 	}
 
-	private static void fail(String message) {
+	private static void fail(@NonNull String message) {
 		System.out.println("FAIL: JDK " + Runtime.version().feature() + ": " + message);
 		System.exit(1);
 	}

@@ -16,6 +16,8 @@
 
 package com.revetsec.oidc;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.*;
 import com.revetsec.internal.encoding.QueryParameters;
 import com.revetsec.jose.*;
@@ -44,7 +46,7 @@ final class OidcHmacTests {
 	private static final String SECRET = "TEST-ONLY-hmac-secret-" + "s".repeat(43);
 
 	@TestFactory
-	Stream<DynamicTest> optInRequiresConfidentialAuthenticationAndUtf8HashLength() {
+	@NonNull Stream<@NonNull DynamicTest> optInRequiresConfidentialAuthenticationAndUtf8HashLength() {
 		return Stream.of(JwsAlgorithm.HS256, JwsAlgorithm.HS384, JwsAlgorithm.HS512).flatMap(algorithm ->
 				Stream.of("disabled", "public", "short", "mixed shortest", "invalid unicode", "supplier throws")
 				.map(name -> DynamicTest.dynamicTest(algorithm+":"+name, () -> {
@@ -64,7 +66,7 @@ final class OidcHmacTests {
 	}
 
 	@TestFactory
-	Stream<DynamicTest> eachHmacAlgorithmUsesExactUtf8SecretWithBasicOrPostAndNoKeys() {
+	@NonNull Stream<@NonNull DynamicTest> eachHmacAlgorithmUsesExactUtf8SecretWithBasicOrPostAndNoKeys() {
 		return Stream.of(JwsAlgorithm.HS256,JwsAlgorithm.HS384,JwsAlgorithm.HS512).flatMap(algorithm -> Stream.of("basic","post")
 				.map(method -> DynamicTest.dynamicTest(algorithm+":"+method,()->{
 					try(TestHttpsServer server=TestHttpsServer.start()) {
@@ -91,9 +93,9 @@ final class OidcHmacTests {
 			AtomicInteger calls=new AtomicInteger();AtomicReference<String> current=new AtomicReference<>(SECRET);List<String> events=new ArrayList<>();
 			OidcClient client=builder(server,JwsAlgorithm.HS256).clientAuthentication(ClientAuthentication.fromClientSecretPost(()->{calls.incrementAndGet();return current.get();}))
 					.observer(new OidcObserver(){
-						@Override public void didEnableCompatibilityMode(OidcCompatibilityMode mode){events.add("build:"+mode);throw new IllegalStateException(SECRET);}
-						@Override public void didUseCompatibilityMode(OidcCompatibilityMode mode){events.add("use:"+mode);throw new IllegalStateException(SECRET);}
-						@Override public void didRequestEndpoint(OAuthEndpoint endpoint,URI uri,Integer status,Duration elapsed){if(endpoint==OAuthEndpoint.TOKEN)current.set(SECRET+"rotated");}
+						@Override public void didEnableCompatibilityMode(@NonNull OidcCompatibilityMode mode){events.add("build:"+mode);throw new IllegalStateException(SECRET);}
+						@Override public void didUseCompatibilityMode(@NonNull OidcCompatibilityMode mode){events.add("use:"+mode);throw new IllegalStateException(SECRET);}
+						@Override public void didRequestEndpoint(@NonNull OAuthEndpoint endpoint,@NonNull URI uri,@NonNull Integer status,@NonNull Duration elapsed){if(endpoint==OAuthEndpoint.TOKEN)current.set(SECRET+"rotated");}
 					}).build();
 			assertEquals(1,calls.get());AuthorizationRedirect redirect=client.beginAuthentication();Map<String,String> claims=claims(server);claims.put("nonce",JsonText.string(nonce(redirect)));respond(server,sign(JwsAlgorithm.HS256,claims,SECRET));
 			OidcAuthentication auth=complete(client,redirect);assertEquals(2,calls.get());
@@ -104,8 +106,8 @@ final class OidcHmacTests {
 	}
 
 	@TestFactory
-	Stream<DynamicTest> hmacStillChecksClaimsHashesSignatureAndExactAudience() {
-		record Case(String name,OidcValidationException.Reason reason,Consumer<Map<String,String>> change){}
+	@NonNull Stream<@NonNull DynamicTest> hmacStillChecksClaimsHashesSignatureAndExactAudience() {
+		record Case(@NonNull String name,OidcValidationException.@NonNull Reason reason,@NonNull Consumer<@NonNull Map<@NonNull String,@NonNull String>> change){}
 		return Stream.of(
 			new Case("bad signature",OidcValidationException.Reason.ID_TOKEN_SIGNATURE_INVALID,c->{}),
 			new Case("issuer",OidcValidationException.Reason.ISSUER_MISMATCH,c->c.put("iss","\"https://attacker.example\"")),
@@ -124,9 +126,9 @@ final class OidcHmacTests {
 			try(TestHttpsServer server=TestHttpsServer.start()) {
 				AtomicInteger used=new AtomicInteger(),completed=new AtomicInteger();AtomicReference<OidcValidationException> observed=new AtomicReference<>();
 				OidcClient client=builder(server,JwsAlgorithm.HS256).trustedAudiences(Set.of("trusted")).observer(new OidcObserver(){
-					@Override public void didUseCompatibilityMode(OidcCompatibilityMode mode){used.incrementAndGet();}
+					@Override public void didUseCompatibilityMode(@NonNull OidcCompatibilityMode mode){used.incrementAndGet();}
 					@Override public void didCompleteAuthentication(){completed.incrementAndGet();}
-					@Override public void didRejectIdToken(OidcValidationException failure){observed.set(failure);}
+					@Override public void didRejectIdToken(@NonNull OidcValidationException failure){observed.set(failure);}
 				}).build();AuthorizationRedirect redirect=client.beginAuthentication(OidcAuthenticationOptions.builder().maxAge(Duration.ZERO).build());Map<String,String> claims=claims(server);claims.put("nonce",JsonText.string(nonce(redirect)));test.change().accept(claims);String compact=sign(JwsAlgorithm.HS256,claims,test.name().equals("bad signature")?SECRET+"wrong":SECRET);respond(server,compact);
 				OidcValidationException failure=assertThrows(OidcValidationException.class,()->complete(client,redirect));assertEquals(test.reason(),failure.getReason());assertSame(failure,observed.get());assertEquals(1,used.get());assertEquals(0,completed.get());assertSafe(failure,compact);assertEquals(0,server.getHitCount("/jwks"));
 			}
@@ -147,7 +149,7 @@ final class OidcHmacTests {
 	}
 
 	@TestFactory
-	Stream<DynamicTest> rsaDerPemAndJwkBytesAreNeverHmacKeys() {
+	@NonNull Stream<@NonNull DynamicTest> rsaDerPemAndJwkBytesAreNeverHmacKeys() {
 		return Stream.of("der","pem","jwk").map(encoding->DynamicTest.dynamicTest(encoding,()->{
 			try(TestHttpsServer server=TestHttpsServer.start()) {
 				OidcClient client=builder(server,JwsAlgorithm.HS256).idTokenSigningAlgorithms(Set.of(JwsAlgorithm.RS256,JwsAlgorithm.HS256)).build();AuthorizationRedirect redirect=client.beginAuthentication();Map<String,String> claims=claims(server);claims.put("nonce",JsonText.string(nonce(redirect)));
@@ -162,7 +164,7 @@ final class OidcHmacTests {
 	@Test
 	void mixedAllowlistUsesPublicKeysOnlyForRsaAndModeDoesNotChangeDefaults() throws Exception {
 		try(TestHttpsServer server=TestHttpsServer.start()) {
-			AtomicInteger used=new AtomicInteger();OidcClient client=builder(server,JwsAlgorithm.HS256).idTokenSigningAlgorithms(Set.of(JwsAlgorithm.RS256,JwsAlgorithm.HS256)).jsonWebKeySource(keys()).observer(new OidcObserver(){@Override public void didUseCompatibilityMode(OidcCompatibilityMode mode){used.incrementAndGet();}}).build();
+			AtomicInteger used=new AtomicInteger();OidcClient client=builder(server,JwsAlgorithm.HS256).idTokenSigningAlgorithms(Set.of(JwsAlgorithm.RS256,JwsAlgorithm.HS256)).jsonWebKeySource(keys()).observer(new OidcObserver(){@Override public void didUseCompatibilityMode(@NonNull OidcCompatibilityMode mode){used.incrementAndGet();}}).build();
 			AuthorizationRedirect redirect=client.beginAuthentication();Map<String,String> claims=claims(server);claims.put("nonce",JsonText.string(nonce(redirect)));respond(server,TestJws.withAlgorithm(Algorithm.RS256).kid("key").payload(JsonText.object(new ArrayList<>(claims.entrySet()))).sign(TestJsonWebKeys.Fixture.IDP_SIGNING_RSA_2048.getPrivateKey()));assertEquals(SUBJECT,complete(client,redirect).getSubject());assertEquals(0,used.get());
 			OidcClient defaults=builder(server,JwsAlgorithm.HS256).idTokenSigningAlgorithms(null).clientAuthentication(ClientAuthentication.noneInstance()).build();AuthorizationRedirect pending=defaults.beginAuthentication();claims.put("nonce",JsonText.string(nonce(pending)));respond(server,sign(JwsAlgorithm.HS256,claims,SECRET));assertEquals(OidcValidationException.Reason.ALGORITHM_NOT_ALLOWED,assertThrows(OidcValidationException.class,()->complete(defaults,pending)).getReason());
 			for(JwsAlgorithm hmac:List.of(JwsAlgorithm.HS256,JwsAlgorithm.HS384,JwsAlgorithm.HS512))assertThrows(IllegalArgumentException.class,()->JwtValidator.withIssuer(server.getBaseUri().toString()).expectedAudiences(Set.of("client")).jsonWebKeySource(keys()).allowedAlgorithms(Set.of(hmac)).build());
@@ -183,11 +185,11 @@ final class OidcHmacTests {
 	}
 
 	@TestFactory
-	Stream<DynamicTest> mixedHmacAndRsaProfilesKeepCodeAndRefreshKeyLookupsWithinDeadline() {
+	@NonNull Stream<@NonNull DynamicTest> mixedHmacAndRsaProfilesKeepCodeAndRefreshKeyLookupsWithinDeadline() {
 		return Stream.of("code", "refresh").map(mode -> DynamicTest.dynamicTest(mode, () -> {
 			try (TestHttpsServer server = TestHttpsServer.start()) {
 				OidcObserver slow = new OidcObserver() {
-					@Override public void didRequestEndpoint(OAuthEndpoint endpoint, URI uri, Integer status, Duration elapsed) {
+					@Override public void didRequestEndpoint(@NonNull OAuthEndpoint endpoint, @NonNull URI uri, @NonNull Integer status, @NonNull Duration elapsed) {
 						if (endpoint == OAuthEndpoint.TOKEN) {
 							try { new java.util.concurrent.CountDownLatch(1).await(2, java.util.concurrent.TimeUnit.SECONDS); }
 							catch (InterruptedException interrupted) { Thread.currentThread().interrupt(); }
@@ -213,13 +215,13 @@ final class OidcHmacTests {
 		}));
 	}
 
-	private static int length(JwsAlgorithm algorithm){return switch(algorithm){case HS256->32;case HS384->48;case HS512->64;default->throw new AssertionError();};}
-	private static OidcClient.Builder builder(TestHttpsServer server,JwsAlgorithm algorithm){return OidcClient.withProviderMetadata(OidcProviderMetadata.withIssuer(server.getBaseUri().toString()).authorizationEndpoint(server.uri("/authorize")).tokenEndpoint(server.uri("/token")).jwksUri(server.uri("/jwks")).idTokenSigningAlgValuesSupported(Set.of("RS256","HS256","HS384","HS512")).build()).clientId("client").redirectUri(CALLBACK).clock(CLOCK).clockSkew(Duration.ZERO).httpClient(TestTls.httpClient()).clientAuthentication(ClientAuthentication.fromClientSecretPost(SECRET)).idTokenSigningAlgorithms(Set.of(algorithm)).compatibility(Set.of(OidcCompatibilityMode.HMAC_ID_TOKENS));}
-	private static StaticJsonWebKeySource keys(){return StaticJsonWebKeySource.fromJsonWebKeySet(JsonWebKeySet.fromJson(TestJsonWebKeys.withFixture(TestJsonWebKeys.Fixture.IDP_SIGNING_RSA_2048).kid("key").alg("RS256").toKeySetJson()));}
-	private static Map<String,String> claims(TestHttpsServer server){Map<String,String> c=new LinkedHashMap<>();c.put("iss",JsonText.string(server.getBaseUri().toString()));c.put("sub",JsonText.string(SUBJECT));c.put("aud","\"client\"");c.put("iat",Long.toString(NOW.getEpochSecond()));c.put("exp",Long.toString(NOW.plusSeconds(300).getEpochSecond()));c.put("auth_time",Long.toString(NOW.getEpochSecond()));return c;}
-	private static String nonce(AuthorizationRedirect redirect)throws Exception{return QueryParameters.parse(redirect.getAuthorizationUri().getRawQuery()).getValues("nonce").get(0);}
-	private static String sign(JwsAlgorithm algorithm,Map<String,String> claims,String secret){return TestJws.withAlgorithm(Algorithm.valueOf(algorithm.name())).payload(JsonText.object(new ArrayList<>(claims.entrySet()))).sign(secret.getBytes(StandardCharsets.UTF_8));}
-	private static void respond(TestHttpsServer server,@Nullable String compact){server.script("/token",TestHttpsServer.Script.fromResponse(TestHttpsServer.Response.fromJson(200,"{\"access_token\":"+JsonText.string(ACCESS)+",\"token_type\":\"Bearer\",\"refresh_token\":"+JsonText.string(REFRESH)+(compact==null?"":",\"id_token\":"+JsonText.string(compact))+"}")));}
-	private static OidcAuthentication complete(OidcClient client,AuthorizationRedirect redirect)throws Exception{return client.completeAuthentication(AuthorizationResponse.fromQueryString("state="+QueryParameters.parse(redirect.getAuthorizationUri().getRawQuery()).getValues("state").get(0)+"&code="+CODE),PendingAuthorizationSource.fromSealedForm(redirect.getPendingAuthorization().toSealedForm(StateSealer.withActiveKey(TestSealers.fixedKey("hmac")).clock(CLOCK).build(),"hmac-pending"),StateSealer.withActiveKey(TestSealers.fixedKey("hmac")).clock(CLOCK).build(),"hmac-pending"),CALLBACK);}
-	private static void assertSafe(OidcValidationException failure,String compact){assertNull(failure.getCause());failure.addSuppressed(new IllegalStateException(SECRET));assertEquals(0,failure.getSuppressed().length);for(String input:List.of(SECRET,ACCESS,REFRESH,SUBJECT,compact))assertFalse(failure.toString().contains(input));}
+	private static int length(@NonNull JwsAlgorithm algorithm){return switch(algorithm){case HS256->32;case HS384->48;case HS512->64;default->throw new AssertionError();};}
+	private static OidcClient.@NonNull Builder builder(@NonNull TestHttpsServer server,@NonNull JwsAlgorithm algorithm){return OidcClient.withProviderMetadata(OidcProviderMetadata.withIssuer(server.getBaseUri().toString()).authorizationEndpoint(server.uri("/authorize")).tokenEndpoint(server.uri("/token")).jwksUri(server.uri("/jwks")).idTokenSigningAlgValuesSupported(Set.of("RS256","HS256","HS384","HS512")).build()).clientId("client").redirectUri(CALLBACK).clock(CLOCK).clockSkew(Duration.ZERO).httpClient(TestTls.httpClient()).clientAuthentication(ClientAuthentication.fromClientSecretPost(SECRET)).idTokenSigningAlgorithms(Set.of(algorithm)).compatibility(Set.of(OidcCompatibilityMode.HMAC_ID_TOKENS));}
+	private static @NonNull StaticJsonWebKeySource keys(){return StaticJsonWebKeySource.fromJsonWebKeySet(JsonWebKeySet.fromJson(TestJsonWebKeys.withFixture(TestJsonWebKeys.Fixture.IDP_SIGNING_RSA_2048).kid("key").alg("RS256").toKeySetJson()));}
+	private static @NonNull Map<@NonNull String,@NonNull String> claims(@NonNull TestHttpsServer server){Map<String,String> c=new LinkedHashMap<>();c.put("iss",JsonText.string(server.getBaseUri().toString()));c.put("sub",JsonText.string(SUBJECT));c.put("aud","\"client\"");c.put("iat",Long.toString(NOW.getEpochSecond()));c.put("exp",Long.toString(NOW.plusSeconds(300).getEpochSecond()));c.put("auth_time",Long.toString(NOW.getEpochSecond()));return c;}
+	private static @NonNull String nonce(@NonNull AuthorizationRedirect redirect)throws Exception{return QueryParameters.parse(redirect.getAuthorizationUri().getRawQuery()).getValues("nonce").get(0);}
+	private static @NonNull String sign(@NonNull JwsAlgorithm algorithm,@NonNull Map<@NonNull String,@NonNull String> claims,@NonNull String secret){return TestJws.withAlgorithm(Algorithm.valueOf(algorithm.name())).payload(JsonText.object(new ArrayList<>(claims.entrySet()))).sign(secret.getBytes(StandardCharsets.UTF_8));}
+	private static void respond(@NonNull TestHttpsServer server,@Nullable String compact){server.script("/token",TestHttpsServer.Script.fromResponse(TestHttpsServer.Response.fromJson(200,"{\"access_token\":"+JsonText.string(ACCESS)+",\"token_type\":\"Bearer\",\"refresh_token\":"+JsonText.string(REFRESH)+(compact==null?"":",\"id_token\":"+JsonText.string(compact))+"}")));}
+	private static @NonNull OidcAuthentication complete(@NonNull OidcClient client,@NonNull AuthorizationRedirect redirect)throws Exception{return client.completeAuthentication(AuthorizationResponse.fromQueryString("state="+QueryParameters.parse(redirect.getAuthorizationUri().getRawQuery()).getValues("state").get(0)+"&code="+CODE),PendingAuthorizationSource.fromSealedForm(redirect.getPendingAuthorization().toSealedForm(StateSealer.withActiveKey(TestSealers.fixedKey("hmac")).clock(CLOCK).build(),"hmac-pending"),StateSealer.withActiveKey(TestSealers.fixedKey("hmac")).clock(CLOCK).build(),"hmac-pending"),CALLBACK);}
+	private static void assertSafe(@NonNull OidcValidationException failure,@NonNull String compact){assertNull(failure.getCause());failure.addSuppressed(new IllegalStateException(SECRET));assertEquals(0,failure.getSuppressed().length);for(String input:List.of(SECRET,ACCESS,REFRESH,SUBJECT,compact))assertFalse(failure.toString().contains(input));}
 }

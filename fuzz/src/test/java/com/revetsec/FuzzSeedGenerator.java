@@ -16,6 +16,10 @@
 
 package com.revetsec;
 
+import org.jspecify.annotations.Nullable;
+
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.internal.json.JsonCodec;
 import com.revetsec.internal.json.JsonLimits;
 import com.revetsec.internal.json.JsonParseException;
@@ -174,7 +178,7 @@ public final class FuzzSeedGenerator {
 	 * @param arguments the core checkout's path, {@code .} by default
 	 * @throws Exception if a fixture or vector cannot be read, or a seed cannot be written
 	 */
-	public static void main(String[] arguments) throws Exception {
+	public static void main(@NonNull String @NonNull [] arguments) throws Exception {
 		Path core = Path.of(arguments.length > 0 ? arguments[0] : ".").toAbsolutePath().normalize();
 		Path resources = core.resolve(FUZZ_RESOURCES);
 
@@ -199,7 +203,7 @@ public final class FuzzSeedGenerator {
 	 * @throws PemException             if a fixture does not parse
 	 * @throws JsonParseException       if a vector file does not parse
 	 */
-	public static List<Seed> seeds(Path core) throws IOException, GeneralSecurityException, PemException,
+	public static @NonNull List<@NonNull Seed> seeds(@NonNull Path core) throws IOException, GeneralSecurityException, PemException,
 			JsonParseException {
 		Fixtures fixtures = new Fixtures(core);
 		List<Seed> seeds = new ArrayList<>();
@@ -218,12 +222,12 @@ public final class FuzzSeedGenerator {
 	 * @param fixtures the fixtures
 	 * @return the key set's JSON text
 	 */
-	private static String fixtureKeySet(Fixtures fixtures) {
+	private static @NonNull String fixtureKeySet(@NonNull Fixtures fixtures) {
 		return JwtValidatorFuzzSupport.keySetJson(JwtValidatorFuzzSupport.KEY_SLOTS, fixtures::publicKey,
 				fixtures::certificate);
 	}
 
-	private static void tokenSeeds(Fixtures fixtures, List<Seed> seeds) throws GeneralSecurityException {
+	private static void tokenSeeds(@NonNull Fixtures fixtures, @NonNull List<@NonNull Seed> seeds) throws GeneralSecurityException {
 		String claims = claims("\"iss\":\"" + JwtValidatorFuzzSupport.ISSUER + "\"", "\"sub\":\"fuzz-subject\"",
 				"\"aud\":\"" + JwtValidatorFuzzSupport.AUDIENCE + "\"", CLIENT, "\"iat\":" + (NOW - 60),
 				"\"nbf\":" + (NOW - 60), "\"exp\":" + (NOW + 3_600), TOKEN_ID);
@@ -403,7 +407,7 @@ public final class FuzzSeedGenerator {
 	 * {@code segmentLength} characters, or {@code null} if no length does: n octets encode to 4n/3 characters rounded
 	 * up, which is never 1 more than a multiple of 4.
 	 */
-	private static String paddedClaims(int segmentLength, String... members) {
+	private static @Nullable String paddedClaims(int segmentLength, @NonNull String @NonNull ... members) {
 		if (segmentLength % 4 == 1)
 			return null;
 
@@ -422,7 +426,7 @@ public final class FuzzSeedGenerator {
 		return claims;
 	}
 
-	private static void keySetSeeds(Fixtures fixtures, List<Seed> seeds) throws GeneralSecurityException {
+	private static void keySetSeeds(@NonNull Fixtures fixtures, @NonNull List<@NonNull Seed> seeds) throws GeneralSecurityException {
 		seeds.add(Seed.exact(KEY_SET_SEEDS + "generated-fixture-key-set.json", utf8(fixtureKeySet(fixtures))));
 
 		List<String> withCertificates = new ArrayList<>();
@@ -524,7 +528,7 @@ public final class FuzzSeedGenerator {
 	/**
 	 * Copies the listed fields out of the vendored Wycheproof files.
 	 */
-	private static void wycheproofSeeds(Path core, List<Seed> seeds) throws IOException, JsonParseException {
+	private static void wycheproofSeeds(@NonNull Path core, @NonNull List<@NonNull Seed> seeds) throws IOException, JsonParseException {
 		Vectors jws = Vectors.read(core, "json_web_signature");
 
 		for (int testId : JWS_TEST_IDS) {
@@ -557,7 +561,7 @@ public final class FuzzSeedGenerator {
 		}
 	}
 
-	private static String header(String algorithm, String keyId, String type) {
+	private static @NonNull String header(@NonNull String algorithm, @Nullable String keyId, @Nullable String type) {
 		StringBuilder header = new StringBuilder("{\"alg\":\"").append(algorithm).append('"');
 
 		if (keyId != null)
@@ -569,18 +573,18 @@ public final class FuzzSeedGenerator {
 		return header.append('}').toString();
 	}
 
-	private static String claims(String... members) {
+	private static @NonNull String claims(@NonNull String @NonNull ... members) {
 		return "{" + String.join(",", members) + "}";
 	}
 
-	private static String keySet(List<String> keys) {
+	private static @NonNull String keySet(@NonNull List<@NonNull String> keys) {
 		return "{\"keys\":[" + String.join(",", keys) + "]}";
 	}
 
 	/**
 	 * A public key as a JWK, with {@code extra} members before its key members.
 	 */
-	private static String jwk(PublicKey key, String extra) {
+	private static @NonNull String jwk(@NonNull PublicKey key, @NonNull String extra) {
 		String prefix = extra.isEmpty() ? "" : extra + ",";
 
 		if (key instanceof RSAPublicKey rsa)
@@ -598,7 +602,7 @@ public final class FuzzSeedGenerator {
 		return okpJwkWithMembers(prefix, point.getY(), point.isXOdd());
 	}
 
-	private static String ecJwk(String keyId, byte[] x, byte[] y) {
+	private static @NonNull String ecJwk(@NonNull String keyId, byte @NonNull [] x, byte @NonNull [] y) {
 		return "{\"kty\":\"EC\",\"kid\":\"" + keyId + "\",\"crv\":\"P-256\",\"x\":\"" + base64Url(x) + "\",\"y\":\""
 				+ base64Url(y) + "\"}";
 	}
@@ -607,11 +611,11 @@ public final class FuzzSeedGenerator {
 	 * An Ed25519 JWK whose {@code x} is the RFC 8032 section 5.1.2 encoding of {@code y} (its low 255 bits) and the
 	 * sign bit.
 	 */
-	private static String okpJwk(String keyId, BigInteger y, boolean xOdd) {
+	private static @NonNull String okpJwk(@NonNull String keyId, @NonNull BigInteger y, boolean xOdd) {
 		return okpJwkWithMembers("\"kid\":\"" + keyId + "\",", y, xOdd);
 	}
 
-	private static String okpJwkWithMembers(String prefix, BigInteger y, boolean xOdd) {
+	private static @NonNull String okpJwkWithMembers(@NonNull String prefix, @NonNull BigInteger y, boolean xOdd) {
 		byte[] bigEndian = fixed(y, 32);
 		byte[] encoded = new byte[32];
 
@@ -622,7 +626,7 @@ public final class FuzzSeedGenerator {
 		return "{\"kty\":\"OKP\"," + prefix + "\"crv\":\"Ed25519\",\"x\":\"" + base64Url(encoded) + "\"}";
 	}
 
-	private static String rsaJwk(String keyId, BigInteger modulus) {
+	private static @NonNull String rsaJwk(@NonNull String keyId, @NonNull BigInteger modulus) {
 		return "{\"kty\":\"RSA\",\"kid\":\"" + keyId + "\",\"n\":\"" + base64Url(unsigned(modulus)) + "\",\"e\":\"AQAB\"}";
 	}
 
@@ -630,7 +634,7 @@ public final class FuzzSeedGenerator {
 	 * An odd modulus of exactly {@code bits} bits, from SHA-256 over {@code label} and a block counter, so that it is
 	 * the same in every run.
 	 */
-	private static BigInteger oddModulus(String label, int bits) throws GeneralSecurityException {
+	private static @NonNull BigInteger oddModulus(@NonNull String label, int bits) throws GeneralSecurityException {
 		byte[] octets = new byte[(bits + 7) / 8];
 
 		for (int block = 0; block * 32 < octets.length; ++block) {
@@ -645,7 +649,7 @@ public final class FuzzSeedGenerator {
 	 * An odd 2,048-bit modulus whose residue modulo every ROCA prime lies in the subgroup that 65,537 generates (a power
 	 * of 65,537), built by the Chinese remainder theorem, except that the prime at {@code broken} divides it.
 	 */
-	private static BigInteger rocaModulus(int broken) {
+	private static @NonNull BigInteger rocaModulus(int broken) {
 		BigInteger product = BigInteger.ONE;
 
 		for (int prime : ROCA_PRIMES)
@@ -676,7 +680,7 @@ public final class FuzzSeedGenerator {
 	 * root of the curve's {@code b}: the point {@code (0, y)} is on the curve, but its {@code x} is not below the prime
 	 * (SEC 1 section 2.3.5). Every NIST prime is 3 modulo 4, so the root is {@code b^((p + 1) / 4)}.
 	 */
-	private static String pointWithTheFieldPrimeForX(PublicKey fixture) {
+	private static @NonNull String pointWithTheFieldPrimeForX(@NonNull PublicKey fixture) {
 		ECParameterSpec parameters = ((ECPublicKey) fixture).getParams();
 		BigInteger p = ((ECFieldFp) parameters.getCurve().getField()).getP();
 		BigInteger b = parameters.getCurve().getB();
@@ -696,7 +700,7 @@ public final class FuzzSeedGenerator {
 	 * with {@code y = 0}, so {@code x^2 = -y^2}, which with the curve equation gives {@code d y^4 + 2 y^2 - 1 = 0}
 	 * (RFC 8032 section 5.1).
 	 */
-	private static List<BigInteger> orderEightY(BigInteger p) {
+	private static @NonNull List<@NonNull BigInteger> orderEightY(@NonNull BigInteger p) {
 		BigInteger d = p.subtract(BigInteger.valueOf(121_665)).multiply(BigInteger.valueOf(121_666).modInverse(p)).mod(p);
 		BigInteger root = squareRoot(BigInteger.ONE.add(d).mod(p), p);
 
@@ -713,7 +717,7 @@ public final class FuzzSeedGenerator {
 	/**
 	 * A square root modulo a prime {@code p = 5 mod 8} by Atkin's method, or {@code null} if {@code a} is not a square.
 	 */
-	private static BigInteger squareRoot(BigInteger a, BigInteger p) {
+	private static @Nullable BigInteger squareRoot(@NonNull BigInteger a, @NonNull BigInteger p) {
 		if (!a.modPow(p.subtract(BigInteger.ONE).shiftRight(1), p).equals(BigInteger.ONE))
 			return a.signum() == 0 ? BigInteger.ZERO : null;
 
@@ -723,12 +727,12 @@ public final class FuzzSeedGenerator {
 		return a.multiply(v).multiply(i.subtract(BigInteger.ONE)).mod(p);
 	}
 
-	private static byte[] unsigned(BigInteger value) {
+	private static byte @NonNull [] unsigned(@NonNull BigInteger value) {
 		byte[] bytes = value.toByteArray();
 		return bytes.length > 1 && bytes[0] == 0 ? Arrays.copyOfRange(bytes, 1, bytes.length) : bytes;
 	}
 
-	private static byte[] fixed(BigInteger value, int length) {
+	private static byte @NonNull [] fixed(@NonNull BigInteger value, int length) {
 		byte[] bytes = value.toByteArray();
 		byte[] fixed = new byte[length];
 
@@ -738,14 +742,14 @@ public final class FuzzSeedGenerator {
 		return fixed;
 	}
 
-	private static byte[] concat(byte[] first, byte[] second) {
+	private static byte @NonNull [] concat(byte @NonNull [] first, byte @NonNull [] second) {
 		byte[] joined = Arrays.copyOf(first, first.length + second.length);
 		System.arraycopy(second, 0, joined, first.length, second.length);
 		return joined;
 	}
 
 	@SafeVarargs
-	private static List<Integer> concat(List<Integer>... lists) {
+	private static @NonNull List<@NonNull Integer> concat(@NonNull List<@NonNull Integer> @NonNull ... lists) {
 		List<Integer> joined = new ArrayList<>();
 
 		for (List<Integer> list : lists)
@@ -754,15 +758,15 @@ public final class FuzzSeedGenerator {
 		return List.copyOf(joined);
 	}
 
-	private static String base64Url(byte[] bytes) {
+	private static @NonNull String base64Url(byte @NonNull [] bytes) {
 		return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
 	}
 
-	private static String base64(byte[] bytes) {
+	private static @NonNull String base64(byte @NonNull [] bytes) {
 		return Base64.getEncoder().encodeToString(bytes);
 	}
 
-	private static byte[] utf8(String text) {
+	private static byte @NonNull [] utf8(@NonNull String text) {
 		return text.getBytes(StandardCharsets.UTF_8);
 	}
 
@@ -775,7 +779,7 @@ public final class FuzzSeedGenerator {
 	 * @param key       the fixture's public key
 	 * @return whether the signature verifies
 	 */
-	public static boolean verifies(String token, String algorithm, PublicKey key) {
+	public static boolean verifies(@NonNull String token, @NonNull String algorithm, @NonNull PublicKey key) {
 		try {
 			String signingInput = token.substring(0, token.lastIndexOf('.'));
 			Signature verifier = engine(algorithm);
@@ -788,7 +792,7 @@ public final class FuzzSeedGenerator {
 		}
 	}
 
-	private static Signature engine(String algorithm) throws GeneralSecurityException {
+	private static @NonNull Signature engine(@NonNull String algorithm) throws GeneralSecurityException {
 		return switch (algorithm) {
 			case "RS256" -> Signature.getInstance("SHA256withRSA");
 			case "RS384" -> Signature.getInstance("SHA384withRSA");
@@ -801,7 +805,7 @@ public final class FuzzSeedGenerator {
 		};
 	}
 
-	private static void parameters(Signature engine, String algorithm) throws GeneralSecurityException {
+	private static void parameters(@NonNull Signature engine, @NonNull String algorithm) throws GeneralSecurityException {
 		switch (algorithm) {
 			case "PS256" -> engine.setParameter(new PSSParameterSpec("SHA-256", "MGF1", MGF1ParameterSpec.SHA256, 32, 1));
 			case "PS384" -> engine.setParameter(new PSSParameterSpec("SHA-384", "MGF1", MGF1ParameterSpec.SHA384, 48, 1));
@@ -827,30 +831,30 @@ public final class FuzzSeedGenerator {
 		private final Fixtures fixtures;
 		private final List<Seed> seeds;
 
-		private TokenFactory(Fixtures fixtures, List<Seed> seeds) {
+		private TokenFactory(@NonNull Fixtures fixtures, @NonNull List<@NonNull Seed> seeds) {
 			this.fixtures = fixtures;
 			this.seeds = seeds;
 		}
 
-		private void one(String name, String header, String claims, String signer) throws GeneralSecurityException {
+		private void one(@NonNull String name, @NonNull String header, @NonNull String claims, @NonNull String signer) throws GeneralSecurityException {
 			add(name, header, claims, signer, Damage.NONE, false);
 		}
 
-		private void one(String name, String header, String claims, String signer, Damage damage)
+		private void one(@NonNull String name, @NonNull String header, @NonNull String claims, @NonNull String signer, @NonNull Damage damage)
 				throws GeneralSecurityException {
 			add(name, header, claims, signer, damage, false);
 		}
 
-		private void both(String name, String header, String claims, String signer) throws GeneralSecurityException {
+		private void both(@NonNull String name, @NonNull String header, @NonNull String claims, @NonNull String signer) throws GeneralSecurityException {
 			add(name, header, claims, signer, Damage.NONE, true);
 		}
 
-		private void both(String name, String header, String claims, String signer, Damage damage)
+		private void both(@NonNull String name, @NonNull String header, @NonNull String claims, @NonNull String signer, @NonNull Damage damage)
 				throws GeneralSecurityException {
 			add(name, header, claims, signer, damage, true);
 		}
 
-		private void add(String name, String header, String claims, String signer, Damage damage, boolean compactToo)
+		private void add(@NonNull String name, @NonNull String header, @NonNull String claims, @NonNull String signer, @NonNull Damage damage, boolean compactToo)
 				throws GeneralSecurityException {
 			String algorithm = header.substring(8, header.indexOf('"', 8));
 			String headerSegment = base64Url(utf8(header));
@@ -899,7 +903,7 @@ public final class FuzzSeedGenerator {
 				this.seeds.add(seed.at(COMPACT_SEEDS + "generated-" + name + ".txt"));
 		}
 
-		private byte[] sign(String algorithm, String signer, String signingInput) throws GeneralSecurityException {
+		private byte @NonNull [] sign(@NonNull String algorithm, @NonNull String signer, @NonNull String signingInput) throws GeneralSecurityException {
 			byte[] input = signingInput.getBytes(StandardCharsets.US_ASCII);
 
 			if (algorithm.equals("HS256")) {
@@ -928,7 +932,7 @@ public final class FuzzSeedGenerator {
 		/**
 		 * The minimal DER form of a fixed-length ECDSA signature (X.690), which JOSE forbids.
 		 */
-		private static byte[] der(byte[] signature) {
+		private static byte @NonNull [] der(byte @NonNull [] signature) {
 			int half = signature.length / 2;
 			byte[] r = new BigInteger(1, Arrays.copyOfRange(signature, 0, half)).toByteArray();
 			byte[] s = new BigInteger(1, Arrays.copyOfRange(signature, half, signature.length)).toByteArray();
@@ -959,7 +963,7 @@ public final class FuzzSeedGenerator {
 		private final Map<String, PublicKey> publicKeys = new LinkedHashMap<>();
 		private final Map<String, X509Certificate> certificates = new LinkedHashMap<>();
 
-		private Fixtures(Path core) throws IOException, PemException {
+		private Fixtures(@NonNull Path core) throws IOException, PemException {
 			Path keys = core.resolve("src/test/resources/fixtures/keys");
 
 			for (String name : WITH_CERTIFICATES) {
@@ -974,19 +978,19 @@ public final class FuzzSeedGenerator {
 			this.publicKeys.put("ed25519", Pem.parsePublicKey(Files.readString(pem.resolve("ed25519-public.pem"))));
 		}
 
-		private PrivateKey privateKey(String name) {
+		private @NonNull PrivateKey privateKey(@NonNull String name) {
 			return require(this.privateKeys, name);
 		}
 
-		private PublicKey publicKey(String name) {
+		private @NonNull PublicKey publicKey(@NonNull String name) {
 			return require(this.publicKeys, name);
 		}
 
-		private X509Certificate certificate(String name) {
+		private @Nullable X509Certificate certificate(@NonNull String name) {
 			return this.certificates.get(name);
 		}
 
-		private static <T> T require(Map<String, T> values, String name) {
+		private static <T> @NonNull T require(@NonNull Map<@NonNull String, @NonNull T> values, @NonNull String name) {
 			T value = values.get(name);
 
 			if (value == null)
@@ -1003,7 +1007,7 @@ public final class FuzzSeedGenerator {
 	public static final class Vectors {
 		private final JsonObject document;
 
-		private Vectors(JsonObject document) {
+		private Vectors(@NonNull JsonObject document) {
 			this.document = document;
 		}
 
@@ -1016,7 +1020,7 @@ public final class FuzzSeedGenerator {
 		 * @throws IOException        if it cannot be read
 		 * @throws JsonParseException if it does not parse
 		 */
-		public static Vectors read(Path core, String stem) throws IOException, JsonParseException {
+		public static @NonNull Vectors read(@NonNull Path core, @NonNull String stem) throws IOException, JsonParseException {
 			byte[] bytes = Files.readAllBytes(core.resolve(WYCHEPROOF_VECTORS).resolve(stem + "_test.json"));
 			return new Vectors((JsonObject) JsonCodec.parse(bytes, JsonLimits.protocolDocument(4 * 1024 * 1024)));
 		}
@@ -1028,7 +1032,7 @@ public final class FuzzSeedGenerator {
 		 * @param field  the member name
 		 * @return the value
 		 */
-		public String testString(int testId, String field) {
+		public @NonNull String testString(int testId, @NonNull String field) {
 			return ((JsonString) test(testId).getMembers().get(field)).getValue();
 		}
 
@@ -1039,7 +1043,7 @@ public final class FuzzSeedGenerator {
 		 * @param field  the member name
 		 * @return the value, or empty
 		 */
-		public Optional<JsonValue> groupMember(int testId, String field) {
+		public @NonNull Optional<@NonNull JsonValue> groupMember(int testId, @NonNull String field) {
 			return Optional.ofNullable(group(testId).getMembers().get(field));
 		}
 
@@ -1050,12 +1054,12 @@ public final class FuzzSeedGenerator {
 		 * @param field  the member name
 		 * @return the value, or empty if neither has it
 		 */
-		public Optional<JsonValue> field(int testId, String field) {
+		public @NonNull Optional<@NonNull JsonValue> field(int testId, @NonNull String field) {
 			JsonValue value = test(testId).getMembers().get(field);
 			return value != null ? Optional.of(value) : groupMember(testId, field);
 		}
 
-		private JsonObject test(int testId) {
+		private @NonNull JsonObject test(int testId) {
 			for (JsonValue group : groups())
 				for (JsonValue test : ((JsonArray) ((JsonObject) group).getMembers().get("tests")).getElements())
 					if (tcId((JsonObject) test) == testId)
@@ -1064,7 +1068,7 @@ public final class FuzzSeedGenerator {
 			throw new IllegalArgumentException("No tcId " + testId);
 		}
 
-		private JsonObject group(int testId) {
+		private @NonNull JsonObject group(int testId) {
 			for (JsonValue group : groups())
 				for (JsonValue test : ((JsonArray) ((JsonObject) group).getMembers().get("tests")).getElements())
 					if (tcId((JsonObject) test) == testId)
@@ -1073,11 +1077,11 @@ public final class FuzzSeedGenerator {
 			throw new IllegalArgumentException("No tcId " + testId);
 		}
 
-		private List<JsonValue> groups() {
+		private @NonNull List<@NonNull JsonValue> groups() {
 			return ((JsonArray) this.document.getMembers().get("testGroups")).getElements();
 		}
 
-		private static int tcId(JsonObject test) {
+		private static int tcId(@NonNull JsonObject test) {
 			return ((JsonNumber) test.getMembers().get("tcId")).getValue().intValueExact();
 		}
 	}
@@ -1095,7 +1099,7 @@ public final class FuzzSeedGenerator {
 		private final String algorithm;
 		private final PublicKey key;
 
-		private Seed(String path, byte[] bytes, Check check, String algorithm, PublicKey key) {
+		private Seed(@NonNull String path, byte @NonNull [] bytes, @NonNull Check check, @Nullable String algorithm, @Nullable PublicKey key) {
 			this.path = path;
 			this.bytes = bytes.clone();
 			this.check = check;
@@ -1103,19 +1107,19 @@ public final class FuzzSeedGenerator {
 			this.key = key;
 		}
 
-		private static Seed exact(String path, byte[] bytes) {
+		private static @NonNull Seed exact(@NonNull String path, byte @NonNull [] bytes) {
 			return new Seed(path, bytes, Check.EXACT, null, null);
 		}
 
-		private static Seed signed(String path, byte[] bytes, String algorithm, PublicKey key) {
+		private static @NonNull Seed signed(@NonNull String path, byte @NonNull [] bytes, @NonNull String algorithm, @NonNull PublicKey key) {
 			return new Seed(path, bytes, Check.SIGNATURE_VERIFIES, algorithm, key);
 		}
 
-		private static Seed sameSigningInput(String path, byte[] bytes) {
+		private static @NonNull Seed sameSigningInput(@NonNull String path, byte @NonNull [] bytes) {
 			return new Seed(path, bytes, Check.SAME_SIGNING_INPUT, null, null);
 		}
 
-		private Seed at(String otherPath) {
+		private @NonNull Seed at(@NonNull String otherPath) {
 			return new Seed(otherPath, this.bytes, this.check, this.algorithm, this.key);
 		}
 
@@ -1124,7 +1128,7 @@ public final class FuzzSeedGenerator {
 		 *
 		 * @return the relative path
 		 */
-		public String getPath() {
+		public @NonNull String getPath() {
 			return this.path;
 		}
 
@@ -1133,7 +1137,7 @@ public final class FuzzSeedGenerator {
 		 *
 		 * @return a new array
 		 */
-		public byte[] getBytes() {
+		public byte @NonNull [] getBytes() {
 			return this.bytes.clone();
 		}
 
@@ -1142,7 +1146,7 @@ public final class FuzzSeedGenerator {
 		 *
 		 * @return the check
 		 */
-		public Check getCheck() {
+		public @NonNull Check getCheck() {
 			return this.check;
 		}
 
@@ -1152,7 +1156,7 @@ public final class FuzzSeedGenerator {
 		 * @param token the committed token
 		 * @return whether it verifies
 		 */
-		public boolean verifies(String token) {
+		public boolean verifies(@NonNull String token) {
 			return FuzzSeedGenerator.verifies(token, this.algorithm, this.key);
 		}
 

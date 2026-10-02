@@ -16,6 +16,8 @@
 
 package com.revetsec.internal.crypto;
 
+import org.jspecify.annotations.NonNull;
+
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.DynamicTest;
 import org.junit.jupiter.api.Test;
@@ -57,7 +59,7 @@ final class ConstantTimeTests {
 	// Strings compare as UTF-16 code units: both bytes of each unit count, and unpaired surrogates stay distinct
 	// (String.getBytes(UTF_8) would map every one of them to '?').
 	@TestFactory
-	Stream<DynamicTest> stringsAreEqualExactlyWhenTheyHoldTheSameCodeUnits() {
+	@NonNull Stream<@NonNull DynamicTest> stringsAreEqualExactlyWhenTheyHoldTheSameCodeUnits() {
 		return Stream.of(new String[][]{
 				{"", ""}, {"state", "state"}, {"state", "State"}, {"state", "state "}, {"state", "stat"},
 				{"a\u0000", "a"}, {"\u0100", "\u0001"}, {"\u0001", "\u0100"}, {"\ud800", "\udc00"}, {"\ud800", "?"},
@@ -80,7 +82,7 @@ final class ConstantTimeTests {
 		Assertions.assertArrayEquals(new byte[]{5, 6, 7}, second);
 	}
 
-	private static String escape(String value) {
+	private static @NonNull String escape(@NonNull String value) {
 		StringBuilder escaped = new StringBuilder();
 
 		for (char character : value.toCharArray())

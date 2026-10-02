@@ -44,7 +44,7 @@ and a run can fail before any input executes.
 M1 deleted the M0 placeholder (`PlaceholderFuzzTests`, which exercised no Revetsec code) and added
 six classes with twelve `@FuzzTest` methods. M2 added five classes with nine methods, for the JOSE
 layer, the fixed-length ECDSA path and the key-set cache lifetime. M3 added four OAuth input targets,
-and M4 added four OIDC targets, so there are now thirteen classes and twenty-nine methods. Each method is one ClusterFuzzLite target, named
+M4 added four OIDC targets, and M5 adds six resource-server targets, so there are now fourteen classes and thirty-five methods. Each method is one ClusterFuzzLite target, named
 `<SimpleClassName>_<method>`.
 
 | Class (package) | Method | Input | What it checks |
@@ -79,6 +79,13 @@ and M4 added four OIDC targets, so there are now thirteen classes and twenty-nin
 | | `userInfoRequiresTheVerifiedSubject` | UserInfo JSON bytes | Acceptance agrees exactly with a separate check of the verified subject; malformed or different subjects produce fixed OIDC reasons. |
 | | `sessionReferencesRoundTripWithoutCredentials` | reference JSON bytes | Accepted trusted-storage references stay within 64 KiB, round-trip canonically, retain only continuity fields and stay redacted. This parser does not authenticate storage or create identity. |
 
+| `ResourceServerFuzzTests` (`oauth`) | `bearerPresentationMatchesTheHeaderGrammar` | Authorization field bytes | A separate RFC 6750 regexp oracle checks scheme, one to 58 spaces, b64token, trailing padding and configured 8 KiB credential/64-byte prefix caps. Empty, single and identical-duplicate lists exercise throwing and result APIs; no parsed credential is called verified. |
+| | `challengesEscapeAndBoundTrustedParameters` | trusted parameter bytes | Separate printable-ASCII, description and quoted-string rendering rules check exact escaping and the 1 KiB post-expansion field cap. Input controls/non-ASCII and quote/backslash description values reject. |
+| | `formPostMimeMatchesIndependentFieldGrammar` | raw MIME field bytes | A separate quote-aware field grammar checks one form field, empty parameters, case-insensitive names, duplicate parameters, quoted-pairs and absent/UTF-8 charset. A fixed synthetic callback isolates MIME from callback parsing; duplicate fields always reject. |
+| | `metadataKeepsRolesAndRawResourceIdentifiers` | metadata JSON or resource URI bytes | Separate role projection rules check exact issuer, required role endpoint syntax and optional authentication-method typing/uniqueness. Configured protected-resource values retain raw path/query/case/dot segments, derive the well-known location without normalization, deduplicate configured lists and stay within the JSON cap. Foundational `HostClassifier` supplies the separately tested loopback classification; endpoint fetching/SSRF/DNS are outside this target. |
+| | `signedAccessTokensRespectStrictAndUntypedProfiles` | JSON claim bytes | JDK Ed25519 signs arbitrary input under typed, absent, JWT and unrelated explicit profiles. A separate claim oracle checks issuer, audience, required typed claims, NumericDates and zero-skew edges, confirmation refusal, scope grammar, the extra compatibility claim and untyped identity-claim substitution. Both accepted and rejected verdicts are checked. |
+| | `introspectionResponsesAreTypedAudienceCheckedAndUncached` | JSON response bytes | The public client uses an offline synthetic `HttpClient`, with no socket or executor. A separate oracle distinguishes malformed provider documents from local inactive/profile rejection and verified proof. Each syntactically valid first response is followed by a fresh inactive response to the same credential; two authenticated POSTs and an inactive second verdict prove the client did not reuse the first proof. |
+
 The M4 semantic seeds under `com/revetsec/oidc/OidcFuzzTestsInputs` use test-only values and a fixed
 2026-09-30 clock. `oidc-seeds.sha256` inventories every authored seed and is checked by
 `FuzzSeedProvenanceTests`. All four targets also receive the two core JSON corpora through Maven
@@ -86,6 +93,18 @@ resource mappings, checked by `FuzzSeedLayoutTests`. The signed-claims target us
 HMAC compatibility profile for speed; existing JOSE targets and M4 unit tests cover asymmetric
 signatures and signed UserInfo. It signs arbitrary payload bytes and evaluates both initial
 and refresh profiles; it does not fuzz the browser flow or call a network endpoint.
+
+
+The M5 resource-server seeds use only synthetic test values and a fixed 2026-10-01 clock.
+`com/revetsec/oauth/resource-server-seeds.sha256` inventories all 236 authored seeds; the complete
+path set and bytes are checked by `FuzzSeedProvenanceTests`. The role-metadata, signed-profile and
+introspection targets also receive both complete core JSON corpora through resource mappings,
+checked by `FuzzSeedLayoutTests`. The Ed25519 key is ephemeral and generated within each target
+JVM; curated inputs hold claim bytes, never a private key or a pre-signed production credential.
+No core test helper is needed in the main-sources-only build. The synthetic HTTP transport delivers
+bodies directly to the normal public client's body subscriber without network requests, and
+records method, endpoint, authentication presence and request count. Real TLS, provider clocks,
+backoff/races and opaque-token revocation remain core regression/integration checks.
 
 ### Invariants shared by every target
 
@@ -214,6 +233,7 @@ sources fill it.
 | `vectors/jsontestsuite/test_parsing/`: JSONTestSuite at `1ef36fa0`, one file name containing `#` | 318 | the same five methods (`jsontestsuite/`) |
 | `com/revetsec/internal/json/corpus/`, `vectors/jsontestsuite/test_parsing/` (the same files) | 30 and 318 | the two JOSE JSON-text methods, `CompactJwsFuzzTests#headerChecksAgreeWithAnIndependentOracleForP3ToP8` and `JsonWebKeyFuzzTests#keySetDocumentsSkipExactlyTheKeysAnIndependentOracleRefuses` |
 | `com/revetsec/jose/entra/2026-09-27/*-keys.json`: the captured Entra key sets, with `x5c` chains and templated `issuer` members | 5 | `JsonWebKeyFuzzTests#keySetDocumentsSkipExactlyTheKeysAnIndependentOracleRefuses` (`entra/`) |
+| `com/revetsec/internal/json/corpus/`, `vectors/jsontestsuite/test_parsing/` | 30 and 318 | all four OIDC JSON methods and the three M5 role-metadata, signed-profile and introspection JSON methods |
 | `fixtures/pem/` and `fixtures/keys/`: the TEST ONLY PEM fixtures | 33 | `PemFuzzTests#pemParsersRejectOnlyWithPemExceptionAndAcceptAtMostOneLabel` (`fixtures-pem/`, `fixtures-keys/`) |
 
 The core build checks the two JSON corpora against their SHA-256 manifests
@@ -762,3 +782,11 @@ The same offline build was run on 2026-09-28 with the twenty-one M2 targets:
   and 20-second `run_fuzzer` runs of the two JwtValidator targets executed 71,249 and 12,336
   inputs and found nothing. libFuzzer counted 238 seeds for the first of them, two fewer than its
   zip holds: the two it left out are empty, the `jws` values of Wycheproof's JWS tcIds 13 and 30.
+
+### Explicit helper signatures
+
+`FuzzNullabilityContractTests` attributes every authored fuzz Java source with the actual replay classpath. Both normal
+and main-sources-only builds enforce explicit JSpecify on reference parameters and returns, including arrays, generic
+arguments, wildcard bounds, constructors and record components. Nullable oracle alternatives and optional fixture
+members retain their actual meaning. Primitive/void types are exempt. This guard is an ordinary regression test; the
+35 semantic fuzz target inventory is unchanged.

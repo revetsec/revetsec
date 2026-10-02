@@ -16,6 +16,8 @@
 
 package com.revetsec.internal.http;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.OutboundUriPolicy;
 import com.revetsec.internal.Limits;
 import com.revetsec.testing.RawTlsServer;
@@ -97,7 +99,7 @@ final class CacheLifetimeTests {
 	// unfolds, so no-store wins. One expectation was mistyped when the table was first measured and is corrected here:
 	// max-age=3600 with Age: 3500 leaves 100 s, above the 1 min minimum.
 	@TestFactory
-	Stream<DynamicTest> thePlansHeaderTableHoldsThroughTheJdkClient() {
+	@NonNull Stream<@NonNull DynamicTest> thePlansHeaderTableHoldsThroughTheJdkClient() {
 		Map<String, Row> rows = new LinkedHashMap<>();
 		rows.put("absent", new Row("", 600));
 		rows.put("max-age=5 (below the minimum)", new Row("Cache-Control: max-age=5\r\n", 60));
@@ -154,7 +156,7 @@ final class CacheLifetimeTests {
 	// three HTTP-date forms; a repeated or invalid Expires, or one at or before Date, gives the minimum; max-age makes
 	// Expires irrelevant, even an invalid one; Age's first list member is subtracted from an explicit lifetime only.
 	@TestFactory
-	Stream<DynamicTest> everyDateExpiresAndAgeCaseHoldsThroughTheJdkClient() {
+	@NonNull Stream<@NonNull DynamicTest> everyDateExpiresAndAgeCaseHoldsThroughTheJdkClient() {
 		Map<String, Row> rows = new LinkedHashMap<>();
 		rows.put("Expires in two hours and no Date: counted from the receipt time", new Row(EXPIRES_IN_TWO_HOURS, 7200));
 		rows.put("Expires, and Date an hour later than the receipt time",
@@ -217,7 +219,7 @@ final class CacheLifetimeTests {
 	// minimum; max-age is delta-seconds (section 1.2.2), capped at 2^31; every other directive is ignored. The bounds
 	// here are 1 s, 777 s (the default) and 2^40 s, so the rule that decided shows in the result.
 	@TestFactory
-	Stream<DynamicTest> cacheControlFollowsTheRfc9111Grammar() {
+	@NonNull Stream<@NonNull DynamicTest> cacheControlFollowsTheRfc9111Grammar() {
 		long minimum = RULE_MINIMUM.toSeconds();
 		long defaultSeconds = RULE_DEFAULT.toSeconds();
 		long cap = CacheLifetime.MAXIMUM_DELTA_SECONDS;
@@ -304,7 +306,7 @@ final class CacheLifetimeTests {
 	// exactly one valid Expires; Date only when it is one valid line; Age's first member, only for an explicit
 	// lifetime, never below zero.
 	@TestFactory
-	Stream<DynamicTest> expiresDateAndAgeFollowRfc9111() {
+	@NonNull Stream<@NonNull DynamicTest> expiresDateAndAgeFollowRfc9111() {
 		String date = "Sat, 26 Sep 2026 12:00:00 GMT";
 		String later = "Sat, 26 Sep 2026 12:10:00 GMT";
 		long minimum = RULE_MINIMUM.toSeconds();
@@ -514,7 +516,7 @@ final class CacheLifetimeTests {
 		}
 	}
 
-	private static long capped(String digits) {
+	private static long capped(@NonNull String digits) {
 		long value = 0;
 		for (int i = 0; i < digits.length() && value <= CacheLifetime.MAXIMUM_DELTA_SECONDS; ++i)
 			value = value * 10 + (digits.charAt(i) - '0');
@@ -524,7 +526,7 @@ final class CacheLifetimeTests {
 	/**
 	 * The model's Age: the first non-empty list member if it is all digits, capped; otherwise zero.
 	 */
-	private static long firstAgeMember(List<String> age) {
+	private static long firstAgeMember(@NonNull List<@NonNull String> age) {
 		for (String line : age)
 			for (String member : line.split(",", -1)) {
 				String trimmed = member.strip();
@@ -535,11 +537,11 @@ final class CacheLifetimeTests {
 		return 0;
 	}
 
-	private static Duration clamp(Duration value, Duration minimum, Duration maximum) {
+	private static @NonNull Duration clamp(@NonNull Duration value, @NonNull Duration minimum, @NonNull Duration maximum) {
 		return value.compareTo(minimum) < 0 ? minimum : value.compareTo(maximum) > 0 ? maximum : value;
 	}
 
-	private static String randomCase(Random random, String text) {
+	private static @NonNull String randomCase(@NonNull Random random, @NonNull String text) {
 		StringBuilder result = new StringBuilder(text.length());
 		boolean quoted = false;
 		for (int index = 0; index < text.length(); ++index) {
@@ -551,11 +553,11 @@ final class CacheLifetimeTests {
 		return result.toString();
 	}
 
-	private static Duration ruleTimeToLive(HttpHeaders headers) {
+	private static @NonNull Duration ruleTimeToLive(@NonNull HttpHeaders headers) {
 		return CacheLifetime.timeToLive(headers, RECEIVED_AT, RULE_MINIMUM, RULE_DEFAULT, RULE_MAXIMUM);
 	}
 
-	private static HttpHeaders headers(String name, List<String> values) {
+	private static @NonNull HttpHeaders headers(@NonNull String name, @NonNull List<@NonNull String> values) {
 		return HttpHeaders.of(values.isEmpty() ? Map.of() : Map.of(name, values), (fieldName, value) -> true);
 	}
 
@@ -563,7 +565,7 @@ final class CacheLifetimeTests {
 	 * Sends a 200 JWKS response with {@code headerLines} as exact bytes and computes its lifetime from the headers the
 	 * JDK client hands over, under the JWKS rows' defaults.
 	 */
-	private static Duration timeToLiveThroughTheJdk(String headerLines) throws Exception {
+	private static @NonNull Duration timeToLiveThroughTheJdk(@NonNull String headerLines) throws Exception {
 		RawTlsServer rawServer = required(server);
 		String path = "/ttl/" + NEXT_PATH.incrementAndGet();
 		rawServer.script(path, RawTlsServer.Script.builder()
@@ -579,21 +581,21 @@ final class CacheLifetimeTests {
 		return CacheLifetime.timeToLive(response.headers(), RECEIVED_AT, MINIMUM, DEFAULT, MAXIMUM);
 	}
 
-	private static String escaped(String value) {
+	private static @NonNull String escaped(@NonNull String value) {
 		StringBuilder escaped = new StringBuilder();
 		for (char c : value.toCharArray())
 			escaped.append(c < 0x20 || c > 0x7E ? String.format(Locale.ROOT, "\\u%04x", (int) c) : String.valueOf(c));
 		return escaped.length() > 120 ? escaped.substring(0, 120) + "..." : escaped.toString();
 	}
 
-	private static <T> T required(@Nullable T value) {
+	private static <T> @NonNull T required(@Nullable T value) {
 		if (value == null)
 			throw new IllegalStateException("The fixture did not start");
 		return value;
 	}
 
 	@SuppressWarnings({"NullAway", "TypeParameterUnusedInFormals"})
-	private static <T> T nullValue() {
+	private static <T> @NonNull T nullValue() {
 		@Nullable T value = null;
 		return value;
 	}
@@ -601,6 +603,6 @@ final class CacheLifetimeTests {
 	/**
 	 * One header-table row: the header lines to send and the lifetime expected, in seconds.
 	 */
-	private record Row(String headerLines, long expectedSeconds) {
+	private record Row(@NonNull String headerLines, long expectedSeconds) {
 	}
 }

@@ -16,6 +16,8 @@
 
 package com.revetsec.internal.http;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.testing.TestTls;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Assertions;
@@ -36,7 +38,7 @@ import java.util.stream.Stream;
 final class HttpClientChecksTests {
 	// G6-5: real JDK clients, built the way an application would.
 	@TestFactory
-	Stream<DynamicTest> refusesAClientThatFollowsRedirects() {
+	@NonNull Stream<@NonNull DynamicTest> refusesAClientThatFollowsRedirects() {
 		return Stream.of(HttpClient.Redirect.NORMAL, HttpClient.Redirect.ALWAYS)
 				.map(redirect -> DynamicTest.dynamicTest(redirect.name(), () -> {
 					HttpClient httpClient = TestTls.httpClientBuilder().followRedirects(redirect).build();
@@ -70,7 +72,7 @@ final class HttpClientChecksTests {
 	}
 
 	@SuppressWarnings({"NullAway", "TypeParameterUnusedInFormals"})
-	private static <T> T nullValue() {
+	private static <T> @NonNull T nullValue() {
 		@Nullable T value = null;
 		return value;
 	}

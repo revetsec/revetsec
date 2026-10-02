@@ -16,6 +16,8 @@
 
 package com.revetsec.oidc;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.oauth.ClientAuthentication;
 import com.revetsec.jose.JwsAlgorithm;
 
@@ -42,7 +44,7 @@ final class OidcClientZeroThreadTests {
 	public static final class BuildChild {
 		private BuildChild() { }
 
-		public static void main(String[] arguments) {
+		public static void main(@NonNull String @NonNull [] arguments) {
 			OidcProviderMetadata metadata = OidcProviderMetadata.withIssuer("https://issuer.example")
 					.authorizationEndpoint(URI.create("https://issuer.example/authorize"))
 					.tokenEndpoint(URI.create("https://issuer.example/token"))

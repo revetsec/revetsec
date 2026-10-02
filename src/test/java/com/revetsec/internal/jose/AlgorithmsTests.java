@@ -16,6 +16,8 @@
 
 package com.revetsec.internal.jose;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.internal.crypto.EcCurve;
 import com.revetsec.internal.crypto.HashAlgorithm;
 import com.revetsec.jose.JwsAlgorithm;
@@ -61,7 +63,7 @@ final class AlgorithmsTests {
 
 	// RFC 7518 section 3.1, RFC 8037 section 3.1 and RFC 9864: the table covers every constant, and each answer matches.
 	@TestFactory
-	Stream<DynamicTest> everyAlgorithmMapsToItsFamilyKeyTypeCurveHashAndLength() {
+	@NonNull Stream<@NonNull DynamicTest> everyAlgorithmMapsToItsFamilyKeyTypeCurveHashAndLength() {
 		Assertions.assertEquals(List.of(JwsAlgorithm.values()), TABLE.stream().map(Row::algorithm).toList());
 
 		return TABLE.stream().map(row -> DynamicTest.dynamicTest(row.algorithm().getWireValue(), () -> {
@@ -92,7 +94,7 @@ final class AlgorithmsTests {
 		Assertions.assertEquals(Optional.empty(), Algorithms.findSoleRsaAlgorithm(EnumSet.allOf(JwsAlgorithm.class)));
 	}
 
-	private record Row(JwsAlgorithm algorithm, Algorithms.Family family, String keyType, @Nullable String curveName,
+	private record Row(@NonNull JwsAlgorithm algorithm, Algorithms.@NonNull Family family, @NonNull String keyType, @Nullable String curveName,
 										 @Nullable EcCurve curve, @Nullable HashAlgorithm hash, @Nullable Integer signatureLength) {
 	}
 }

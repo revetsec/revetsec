@@ -16,6 +16,8 @@
 
 package com.revetsec.internal.crypto;
 
+import org.jspecify.annotations.NonNull;
+
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.DynamicTest;
@@ -49,7 +51,7 @@ final class EcdsaSignaturesTests {
 
 	// G8-3 and INV-J5: exact length, then 1 <= r, s <= n - 1, with no key and no JCA call; CVE-2022-21449 is r = s = 0.
 	@TestFactory
-	Stream<DynamicTest> theEdgeTableGivesItsShapeResultWithoutAKey() {
+	@NonNull Stream<@NonNull DynamicTest> theEdgeTableGivesItsShapeResultWithoutAKey() {
 		return Stream.of(EcCurve.values()).flatMap(curve -> {
 			Fixture fixture = Fixture.forCurve(curve);
 			int length = curve.getCoordinateLength();
@@ -109,7 +111,7 @@ final class EcdsaSignaturesTests {
 	// X.690 section 8.3.2: an INTEGER's content is minimal two's complement; section 10.1: definite lengths in the
 	// fewest octets. Each value is read back by a strict reader and equals r and s.
 	@TestFactory
-	Stream<DynamicTest> derEncodingIsMinimalAndRoundTrips() {
+	@NonNull Stream<@NonNull DynamicTest> derEncodingIsMinimalAndRoundTrips() {
 		return Stream.of(EcCurve.values()).map(curve -> DynamicTest.dynamicTest(curve.name(), () -> {
 			BigInteger n = curve.getOrder();
 			int length = curve.getCoordinateLength();
@@ -145,7 +147,7 @@ final class EcdsaSignaturesTests {
 	// The JDK's DER signer emits minimal DER; decoding it to r || s and re-encoding gives the same bytes, and the
 	// SEQUENCE takes the one-octet long form exactly when its content reaches 128 octets (only on P-521).
 	@TestFactory
-	Stream<DynamicTest> derEncodingEqualsTheJdksOwnDerSignatures() {
+	@NonNull Stream<@NonNull DynamicTest> derEncodingEqualsTheJdksOwnDerSignatures() {
 		return Stream.of(EcCurve.values()).map(curve -> DynamicTest.dynamicTest(curve.name(), () -> {
 			Fixture fixture = Fixture.forCurve(curve);
 			Signature signer = Signature.getInstance(fixture.hash.getEcdsaSignatureName());
@@ -198,6 +200,8 @@ final class EcdsaSignaturesTests {
 						() -> curve + " " + length);
 	}
 
+	// Deliberate null inputs verify runtime rejection.
+	@SuppressWarnings("NullAway")
 	@Test
 	void rejectsNullArguments() {
 		Assertions.assertThrows(NullPointerException.class, () -> EcdsaSignatures.findShapeFailure(nullValue(),
@@ -211,7 +215,7 @@ final class EcdsaSignaturesTests {
 	/**
 	 * The hash JOSE pairs with each curve (RFC 7518 section 3.4).
 	 */
-	static HashAlgorithm hashFor(EcCurve curve) {
+	static @NonNull HashAlgorithm hashFor(@NonNull EcCurve curve) {
 		return switch (curve) {
 			case P_256 -> HashAlgorithm.SHA_256;
 			case P_384 -> HashAlgorithm.SHA_384;
@@ -222,14 +226,14 @@ final class EcdsaSignaturesTests {
 	/**
 	 * The fixed-length form {@code r || s} of two non-negative values that fit the curve's coordinate length.
 	 */
-	static byte[] raw(EcCurve curve, BigInteger r, BigInteger s) {
+	static byte @NonNull [] raw(@NonNull EcCurve curve, @NonNull BigInteger r, @NonNull BigInteger s) {
 		return concat(fixed(r, curve.getCoordinateLength()), fixed(s, curve.getCoordinateLength()));
 	}
 
 	/**
 	 * {@code value} as exactly {@code length} unsigned big-endian bytes.
 	 */
-	static byte[] fixed(BigInteger value, int length) {
+	static byte @NonNull [] fixed(@NonNull BigInteger value, int length) {
 		byte[] bytes = value.toByteArray();
 
 		if (bytes.length > length) {
@@ -243,7 +247,7 @@ final class EcdsaSignaturesTests {
 		return padded;
 	}
 
-	static byte[] concat(byte[]... parts) {
+	static byte @NonNull [] concat(byte @NonNull [] @NonNull ... parts) {
 		int length = 0;
 		for (byte[] part : parts)
 			length += part.length;
@@ -262,7 +266,7 @@ final class EcdsaSignaturesTests {
 	 * A strict DER reader for {@code SEQUENCE { INTEGER, INTEGER }} with non-negative values, which fails the test on
 	 * anything X.690's DER rules forbid.
 	 */
-	static List<BigInteger> readStrictDer(byte[] der) {
+	static @NonNull List<@NonNull BigInteger> readStrictDer(byte @NonNull [] der) {
 		Assertions.assertTrue(der.length >= 2, "too short");
 		Assertions.assertEquals(0x30, der[0] & 0xff, "SEQUENCE tag");
 
@@ -302,7 +306,7 @@ final class EcdsaSignaturesTests {
 	 * Hides a {@code null} from NullAway, for the tests that check null handling.
 	 */
 	@SuppressWarnings({"NullAway", "TypeParameterUnusedInFormals"})
-	private static <T> T nullValue() {
+	private static <T> @Nullable T nullValue() {
 		return null;
 	}
 
@@ -318,7 +322,7 @@ final class EcdsaSignaturesTests {
 		final BigInteger r;
 		final BigInteger s;
 
-		private Fixture(HashAlgorithm hash, KeyPair keyPair, byte[] signature, byte[] derSignature, int length) {
+		private Fixture(@NonNull HashAlgorithm hash, @NonNull KeyPair keyPair, byte @NonNull [] signature, byte @NonNull [] derSignature, int length) {
 			this.hash = hash;
 			this.keyPair = keyPair;
 			this.publicKey = keyPair.getPublic();
@@ -328,7 +332,7 @@ final class EcdsaSignaturesTests {
 			this.s = new BigInteger(1, Arrays.copyOfRange(signature, length, 2 * length));
 		}
 
-		static Fixture forCurve(EcCurve curve) {
+		static @NonNull Fixture forCurve(@NonNull EcCurve curve) {
 			HashAlgorithm hash = hashFor(curve);
 
 			try {
@@ -361,7 +365,7 @@ final class EcdsaSignaturesTests {
 		private final @Nullable VerifyResult shapeFailure;
 		private final @Nullable VerifyResult verification;
 
-		private Row(String name, byte[] signature, @Nullable VerifyResult shapeFailure,
+		private Row(@NonNull String name, byte @NonNull [] signature, @Nullable VerifyResult shapeFailure,
 								@Nullable VerifyResult verification) {
 			this.name = name;
 			this.signature = signature;

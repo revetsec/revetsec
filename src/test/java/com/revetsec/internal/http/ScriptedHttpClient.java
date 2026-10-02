@@ -16,6 +16,8 @@
 
 package com.revetsec.internal.http;
 
+import org.jspecify.annotations.NonNull;
+
 import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.Immutable;
@@ -97,7 +99,7 @@ final class ScriptedHttpClient extends HttpClient {
 	private final RecordingSubscription subscription = new RecordingSubscription();
 	private final AtomicReference<@Nullable HttpRequest> lastRequest = new AtomicReference<>();
 
-	private ScriptedHttpClient(Behavior behavior, int status, @Nullable HttpHeaders headers, boolean futureThrows) {
+	private ScriptedHttpClient(@NonNull Behavior behavior, int status, @Nullable HttpHeaders headers, boolean futureThrows) {
 		this.behavior = requireNonNull(behavior);
 		this.status = status;
 		this.headers = headers;
@@ -110,7 +112,7 @@ final class ScriptedHttpClient extends HttpClient {
 	 * @param behavior {@link Behavior#THROW_FROM_SEND_ASYNC} or {@link Behavior#RETURN_NULL_FROM_SEND_ASYNC}
 	 * @return the client
 	 */
-	static ScriptedHttpClient failingBeforeAnyResponse(Behavior behavior) {
+	static @NonNull ScriptedHttpClient failingBeforeAnyResponse(@NonNull Behavior behavior) {
 		if (behavior == Behavior.RESPOND_AND_STALL)
 			throw new IllegalArgumentException("Use respondingAndStalling");
 		return new ScriptedHttpClient(behavior, 200, null, false);
@@ -123,7 +125,7 @@ final class ScriptedHttpClient extends HttpClient {
 	 * @param headers the headers the body handler sees, or {@code null} to make reading them fail
 	 * @return the client
 	 */
-	static ScriptedHttpClient respondingAndStalling(int status, @Nullable HttpHeaders headers) {
+	static @NonNull ScriptedHttpClient respondingAndStalling(int status, @Nullable HttpHeaders headers) {
 		return new ScriptedHttpClient(Behavior.RESPOND_AND_STALL, status, headers, false);
 	}
 
@@ -138,7 +140,7 @@ final class ScriptedHttpClient extends HttpClient {
 	 * @param headers  the headers the body handler sees, for {@link Behavior#RESPOND_AND_STALL}
 	 * @return the client
 	 */
-	static ScriptedHttpClient withAFutureThatThrows(Behavior behavior, int status, @Nullable HttpHeaders headers) {
+	static @NonNull ScriptedHttpClient withAFutureThatThrows(@NonNull Behavior behavior, int status, @Nullable HttpHeaders headers) {
 		if (behavior == Behavior.THROW_FROM_SEND_ASYNC || behavior == Behavior.RETURN_NULL_FROM_SEND_ASYNC)
 			throw new IllegalArgumentException("That behavior returns no future");
 		return new ScriptedHttpClient(behavior, status, headers, true);
@@ -150,7 +152,7 @@ final class ScriptedHttpClient extends HttpClient {
 	 * @return the request
 	 * @throws IllegalStateException if nothing was sent
 	 */
-	HttpRequest getLastRequest() {
+	@NonNull HttpRequest getLastRequest() {
 		HttpRequest request = this.lastRequest.get();
 		if (request == null)
 			throw new IllegalStateException("Nothing was sent");
@@ -162,32 +164,32 @@ final class ScriptedHttpClient extends HttpClient {
 	 *
 	 * @return the recording subscription
 	 */
-	RecordingSubscription getSubscription() {
+	@NonNull RecordingSubscription getSubscription() {
 		return this.subscription;
 	}
 
 	@Override
-	public Optional<CookieHandler> cookieHandler() {
+	public @NonNull Optional<@NonNull CookieHandler> cookieHandler() {
 		return Optional.empty();
 	}
 
 	@Override
-	public Optional<Duration> connectTimeout() {
+	public @NonNull Optional<@NonNull Duration> connectTimeout() {
 		return Optional.empty();
 	}
 
 	@Override
-	public HttpClient.Redirect followRedirects() {
+	public HttpClient.@NonNull Redirect followRedirects() {
 		return HttpClient.Redirect.NEVER;
 	}
 
 	@Override
-	public Optional<ProxySelector> proxy() {
+	public @NonNull Optional<@NonNull ProxySelector> proxy() {
 		return Optional.empty();
 	}
 
 	@Override
-	public SSLContext sslContext() {
+	public @NonNull SSLContext sslContext() {
 		try {
 			return SSLContext.getDefault();
 		} catch (NoSuchAlgorithmException e) {
@@ -196,35 +198,35 @@ final class ScriptedHttpClient extends HttpClient {
 	}
 
 	@Override
-	public SSLParameters sslParameters() {
+	public @NonNull SSLParameters sslParameters() {
 		return new SSLParameters();
 	}
 
 	@Override
-	public Optional<Authenticator> authenticator() {
+	public @NonNull Optional<@NonNull Authenticator> authenticator() {
 		return Optional.empty();
 	}
 
 	@Override
-	public HttpClient.Version version() {
+	public HttpClient.@NonNull Version version() {
 		return HttpClient.Version.HTTP_1_1;
 	}
 
 	@Override
-	public Optional<Executor> executor() {
+	public @NonNull Optional<@NonNull Executor> executor() {
 		return Optional.empty();
 	}
 
 	@Override
-	public <T> HttpResponse<T> send(HttpRequest request, HttpResponse.BodyHandler<T> responseBodyHandler)
+	public <T> @NonNull HttpResponse<@NonNull T> send(@NonNull HttpRequest request, HttpResponse.@NonNull BodyHandler<@NonNull T> responseBodyHandler)
 			throws IOException {
 		throw new IOException("ScriptedHttpClient only sends asynchronously");
 	}
 
 	@Override
 	@SuppressWarnings("NullAway")
-	public <T> CompletableFuture<HttpResponse<T>> sendAsync(HttpRequest request,
-			HttpResponse.BodyHandler<T> responseBodyHandler) {
+	public <T> @NonNull CompletableFuture<@NonNull HttpResponse<@NonNull T>> sendAsync(@NonNull HttpRequest request,
+			HttpResponse.@NonNull BodyHandler<@NonNull T> responseBodyHandler) {
 		this.lastRequest.set(request);
 		switch (this.behavior) {
 			case THROW_FROM_SEND_ASYNC -> throw new IllegalStateException("ScriptedHttpClient failed to send");
@@ -250,7 +252,7 @@ final class ScriptedHttpClient extends HttpClient {
 		throw new IllegalStateException("Unknown behavior " + this.behavior);
 	}
 
-	private <T> CompletableFuture<HttpResponse<T>> newFuture() {
+	private <T> @NonNull CompletableFuture<@NonNull HttpResponse<@NonNull T>> newFuture() {
 		return this.futureThrows ? new ThrowingFuture<>() : new CompletableFuture<>();
 	}
 
@@ -272,8 +274,8 @@ final class ScriptedHttpClient extends HttpClient {
 	}
 
 	@Override
-	public <T> CompletableFuture<HttpResponse<T>> sendAsync(HttpRequest request,
-			HttpResponse.BodyHandler<T> responseBodyHandler, HttpResponse.PushPromiseHandler<T> pushPromiseHandler) {
+	public <T> @NonNull CompletableFuture<@NonNull HttpResponse<@NonNull T>> sendAsync(@NonNull HttpRequest request,
+			HttpResponse.@NonNull BodyHandler<@NonNull T> responseBodyHandler, HttpResponse.@NonNull PushPromiseHandler<@NonNull T> pushPromiseHandler) {
 		return sendAsync(request, responseBodyHandler);
 	}
 
@@ -334,12 +336,12 @@ final class ScriptedHttpClient extends HttpClient {
 
 		@Override
 		@SuppressWarnings("NullAway")
-		public HttpHeaders headers() {
+		public @NonNull HttpHeaders headers() {
 			return this.headers;
 		}
 
 		@Override
-		public HttpClient.Version version() {
+		public HttpClient.@NonNull Version version() {
 			return HttpClient.Version.HTTP_1_1;
 		}
 	}

@@ -16,6 +16,10 @@
 
 package com.revetsec.internal.crypto;
 
+import org.jspecify.annotations.Nullable;
+
+import org.jspecify.annotations.NonNull;
+
 import com.code_intelligence.jazzer.api.FuzzedDataProvider;
 import com.code_intelligence.jazzer.junit.FuzzTest;
 import org.junit.jupiter.api.Assertions;
@@ -86,7 +90,7 @@ public class EcdsaFuzzTests {
 	 * @param signature the fuzzed signature
 	 */
 	@FuzzTest(maxDuration = "5m")
-	public void shapeCheckAndDerEncodingAgreeWithTheRangeRuleAndAnX690Reader(byte[] signature) {
+	public void shapeCheckAndDerEncodingAgreeWithTheRangeRuleAndAnX690Reader(byte @NonNull [] signature) {
 		byte[] original = signature.clone();
 
 		for (Curve curve : CURVES) {
@@ -129,7 +133,7 @@ public class EcdsaFuzzTests {
 	 * @param data the fuzzed choices
 	 */
 	@FuzzTest(maxDuration = "5m")
-	public void verdictsAgreeWithTheJdksFixedLengthEngine(FuzzedDataProvider data) {
+	public void verdictsAgreeWithTheJdksFixedLengthEngine(@NonNull FuzzedDataProvider data) {
 		Curve curve = data.pickValue(CURVES);
 		HashAlgorithm hash = data.consumeBoolean() ? data.pickValue(HASHES) : curve.hash;
 		KeyPair signer = data.pickValue(curve.keyPairs);
@@ -181,7 +185,7 @@ public class EcdsaFuzzTests {
 	/**
 	 * RFC 7518 section 3.4: exactly twice the coordinate length, then {@code 1 <= r, s <= n - 1}.
 	 */
-	private static Optional<VerifyResult> expectedShape(Curve curve, byte[] signature) {
+	private static @NonNull Optional<@NonNull VerifyResult> expectedShape(@NonNull Curve curve, byte @NonNull [] signature) {
 		if (signature.length != curve.signatureLength)
 			return Optional.of(VerifyResult.WRONG_LENGTH);
 
@@ -197,7 +201,7 @@ public class EcdsaFuzzTests {
 	/**
 	 * The JDK's fixed-length engine: {@code true} or {@code false}, or {@code null} if it threw.
 	 */
-	private static Boolean fixedLengthVerdict(HashAlgorithm hash, PublicKey key, byte[] message, byte[] signature) {
+	private static @Nullable Boolean fixedLengthVerdict(@NonNull HashAlgorithm hash, @NonNull PublicKey key, byte @NonNull [] message, byte @NonNull [] signature) {
 		try {
 			Signature engine = Signature.getInstance(FIXED_LENGTH_ENGINES.get(hash));
 			engine.initVerify(key);
@@ -208,8 +212,8 @@ public class EcdsaFuzzTests {
 		}
 	}
 
-	private static byte[] mutated(Curve curve, byte[] signature, FuzzedDataProvider data, HashAlgorithm hash,
-																PrivateKey signer, byte[] message) {
+	private static byte @NonNull [] mutated(@NonNull Curve curve, byte @NonNull [] signature, @NonNull FuzzedDataProvider data, @NonNull HashAlgorithm hash,
+																@NonNull PrivateKey signer, byte @NonNull [] message) {
 		int length = curve.coordinateLength;
 		BigInteger r = curve.r(signature);
 		BigInteger s = curve.s(signature);
@@ -238,7 +242,7 @@ public class EcdsaFuzzTests {
 	/**
 	 * A value for {@code r} or {@code s} at or just past an edge of its range, or from the fuzzer.
 	 */
-	private static BigInteger special(Curve curve, FuzzedDataProvider data) {
+	private static @NonNull BigInteger special(@NonNull Curve curve, @NonNull FuzzedDataProvider data) {
 		return switch (data.consumeInt(0, 7)) {
 			case 0 -> BigInteger.ZERO;
 			case 1 -> BigInteger.ONE;
@@ -251,7 +255,7 @@ public class EcdsaFuzzTests {
 		};
 	}
 
-	private static byte[] sign(String engineName, PrivateKey key, byte[] message, long seed) {
+	private static byte @NonNull [] sign(@NonNull String engineName, @NonNull PrivateKey key, byte @NonNull [] message, long seed) {
 		try {
 			Signature engine = Signature.getInstance(engineName);
 			engine.initSign(key, seededRandom(seed));
@@ -262,7 +266,7 @@ public class EcdsaFuzzTests {
 		}
 	}
 
-	private static SecureRandom seededRandom(long seed) {
+	private static @NonNull SecureRandom seededRandom(long seed) {
 		try {
 			SecureRandom random = SecureRandom.getInstance("SHA1PRNG");
 			random.setSeed(seed);
@@ -272,7 +276,7 @@ public class EcdsaFuzzTests {
 		}
 	}
 
-	private static KeyPair generate(String algorithm, String curveName, long seed) {
+	private static @NonNull KeyPair generate(@NonNull String algorithm, @Nullable String curveName, long seed) {
 		try {
 			KeyPairGenerator generator = KeyPairGenerator.getInstance(algorithm);
 
@@ -301,7 +305,7 @@ public class EcdsaFuzzTests {
 		private final HashAlgorithm hash;
 		private final List<KeyPair> keyPairs;
 
-		private Curve(EcCurve ecCurve, ECParameterSpec parameters, HashAlgorithm hash, List<KeyPair> keyPairs) {
+		private Curve(@NonNull EcCurve ecCurve, @NonNull ECParameterSpec parameters, @NonNull HashAlgorithm hash, @NonNull List<@NonNull KeyPair> keyPairs) {
 			this.ecCurve = ecCurve;
 			this.parameters = parameters;
 			this.order = parameters.getOrder();
@@ -312,7 +316,7 @@ public class EcdsaFuzzTests {
 			this.keyPairs = List.copyOf(keyPairs);
 		}
 
-		private static Curve named(EcCurve ecCurve, String jdkName, HashAlgorithm hash, long seed) {
+		private static @NonNull Curve named(@NonNull EcCurve ecCurve, @NonNull String jdkName, @NonNull HashAlgorithm hash, long seed) {
 			try {
 				AlgorithmParameters parameters = AlgorithmParameters.getInstance("EC");
 				parameters.init(new ECGenParameterSpec(jdkName));
@@ -323,25 +327,25 @@ public class EcdsaFuzzTests {
 			}
 		}
 
-		private BigInteger r(byte[] signature) {
+		private @NonNull BigInteger r(byte @NonNull [] signature) {
 			return new BigInteger(1, Arrays.copyOfRange(signature, 0, this.coordinateLength));
 		}
 
-		private BigInteger s(byte[] signature) {
+		private @NonNull BigInteger s(byte @NonNull [] signature) {
 			return new BigInteger(1, Arrays.copyOfRange(signature, this.coordinateLength, 2 * this.coordinateLength));
 		}
 
 		/**
 		 * {@code r || s}, each big-endian in {@code length} octets, keeping the low octets of a larger value.
 		 */
-		private byte[] fixedLength(BigInteger r, BigInteger s, int length) {
+		private byte @NonNull [] fixedLength(@NonNull BigInteger r, @NonNull BigInteger s, int length) {
 			byte[] signature = new byte[2 * length];
 			put(r, signature, 0, length);
 			put(s, signature, length, length);
 			return signature;
 		}
 
-		private static void put(BigInteger value, byte[] target, int offset, int length) {
+		private static void put(@NonNull BigInteger value, byte @NonNull [] target, int offset, int length) {
 			byte[] bytes = value.toByteArray();
 
 			for (int index = 0; index < length && index < bytes.length; ++index)
@@ -351,7 +355,7 @@ public class EcdsaFuzzTests {
 		/**
 		 * Whether {@code other} is this curve: the same field, coefficients, generator, order and cofactor.
 		 */
-		private boolean describes(ECParameterSpec other) {
+		private boolean describes(@Nullable ECParameterSpec other) {
 			return other != null && other.getCurve().equals(this.parameters.getCurve())
 					&& other.getGenerator().equals(this.parameters.getGenerator())
 					&& other.getOrder().equals(this.parameters.getOrder())
@@ -368,11 +372,11 @@ public class EcdsaFuzzTests {
 		private final byte[] der;
 		private int position;
 
-		private DerReader(byte[] der) {
+		private DerReader(byte @NonNull [] der) {
 			this.der = der;
 		}
 
-		private static BigInteger[] readSignature(byte[] der) {
+		private static @NonNull BigInteger @NonNull [] readSignature(byte @NonNull [] der) {
 			DerReader reader = new DerReader(der);
 			Assertions.assertEquals(0x30, reader.next(), "the DER form is not a SEQUENCE");
 			int length = reader.length();
@@ -414,7 +418,7 @@ public class EcdsaFuzzTests {
 		/**
 		 * X.690 section 8.3: at least one content octet, and no leading 0x00 or 0xFF that the next octet makes redundant.
 		 */
-		private BigInteger integer() {
+		private @NonNull BigInteger integer() {
 			Assertions.assertEquals(0x02, next(), "an element that is not an INTEGER");
 			int length = length();
 			Assertions.assertTrue(length >= 1 && this.position + length <= this.der.length, "a bad INTEGER length");

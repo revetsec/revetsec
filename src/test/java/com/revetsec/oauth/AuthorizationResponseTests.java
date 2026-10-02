@@ -16,6 +16,8 @@
 
 package com.revetsec.oauth;
 
+import org.jspecify.annotations.NonNull;
+
 import org.junit.jupiter.api.Test;
 
 import java.nio.charset.StandardCharsets;
@@ -135,7 +137,7 @@ final class AuthorizationResponseTests {
 		assertThrows(OAuthResponseException.class, () -> AuthorizationResponse.fromFormBody(body, List.of(parameters.toString()), null));
 		List<String> unreadable = new java.util.AbstractList<>() {
 			@Override public int size() { return 2; }
-			@Override public String get(int index) { throw new AssertionError("Cardinality must precede field access."); }
+			@Override public @NonNull String get(int index) { throw new AssertionError("Cardinality must precede field access."); }
 		};
 		assertThrows(OAuthResponseException.class, () -> AuthorizationResponse.fromFormBody(body, unreadable, null));
 	}

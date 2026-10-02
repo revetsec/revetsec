@@ -16,6 +16,8 @@
 
 package com.revetsec.jose;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.internal.crypto.VerifyResult;
 import com.revetsec.internal.encoding.Base64Url;
 import com.revetsec.internal.jose.JwsVerifier;
@@ -58,7 +60,7 @@ final class JwtValidatorSignatureShapeTests {
 	// CVE-2022-21449 (exit criterion 6): r = 0, s = 0, r = n, s = n, r = n + 1 and an all-zero signature are
 	// SIGNATURE_MALFORMED before the key is resolved, and the internal engine reports OUT_OF_RANGE.
 	@TestFactory
-	Stream<DynamicTest> ecdsaValuesOutsideTheOrderAreMalformedBeforeKeyResolution() {
+	@NonNull Stream<@NonNull DynamicTest> ecdsaValuesOutsideTheOrderAreMalformedBeforeKeyResolution() {
 		List<DynamicTest> tests = new ArrayList<>();
 		for (Algorithm algorithm : List.of(Algorithm.ES256, Algorithm.ES384, Algorithm.ES512))
 			for (Variant variant : List.of(Variant.R_ZERO, Variant.S_ZERO, Variant.R_EQUALS_ORDER, Variant.S_EQUALS_ORDER,
@@ -72,7 +74,7 @@ final class JwtValidatorSignatureShapeTests {
 	// DER encoding an IdP might send included, one octet short or long, or empty, is SIGNATURE_MALFORMED before key
 	// resolution, with WRONG_LENGTH.
 	@TestFactory
-	Stream<DynamicTest> ecdsaSignaturesOfTheWrongLengthAreMalformed() {
+	@NonNull Stream<@NonNull DynamicTest> ecdsaSignaturesOfTheWrongLengthAreMalformed() {
 		List<DynamicTest> tests = new ArrayList<>();
 		for (Algorithm algorithm : List.of(Algorithm.ES256, Algorithm.ES384, Algorithm.ES512))
 			for (Variant variant : List.of(Variant.DER_SIGNATURE, Variant.ONE_OCTET_SHORT, Variant.ONE_OCTET_LONG,
@@ -124,7 +126,7 @@ final class JwtValidatorSignatureShapeTests {
 	// RFC 8037 section 3.1: an Ed25519 or EdDSA signature must be exactly 64 octets; 63, 65 (which the JDK 17 engine
 	// alone accepts, Wycheproof Ed25519 tcId 37) and 0 are SIGNATURE_MALFORMED before key resolution.
 	@TestFactory
-	Stream<DynamicTest> ed25519SignaturesMustBeSixtyFourOctets() {
+	@NonNull Stream<@NonNull DynamicTest> ed25519SignaturesMustBeSixtyFourOctets() {
 		return Stream.of(Algorithm.ED25519, Algorithm.EDDSA).flatMap(algorithm -> Stream.of(Variant.ONE_OCTET_SHORT,
 				Variant.ONE_OCTET_LONG, Variant.EMPTY_SIGNATURE).map(variant -> DynamicTest.dynamicTest(algorithm + " "
 				+ variant, () -> assertMalformedBeforeKeyResolution(algorithm, Fixture.ED25519, variant,
@@ -135,7 +137,7 @@ final class JwtValidatorSignatureShapeTests {
 	// length the key policy allows, so it is SIGNATURE_MALFORMED before key resolution, with WRONG_LENGTH, and a
 	// garbage signature never reaches a key set.
 	@TestFactory
-	Stream<DynamicTest> rsaSignaturesOutsideTheModulusBoundAreMalformedBeforeKeyResolution() {
+	@NonNull Stream<@NonNull DynamicTest> rsaSignaturesOutsideTheModulusBoundAreMalformedBeforeKeyResolution() {
 		return Stream.of(Algorithm.RS256, Algorithm.PS256, Algorithm.RS512, Algorithm.PS384).flatMap(algorithm -> Stream.of(
 				0, 1, 255, 2_049).map(length -> DynamicTest.dynamicTest(algorithm + " " + length + " octets", () -> {
 			String token = JwtFixtures.token(algorithm).kid("unknown-kid").withSignature(new byte[length]);
@@ -166,7 +168,7 @@ final class JwtValidatorSignatureShapeTests {
 	// A signature of the right shape but the wrong value is SIGNATURE_MISMATCH, for every algorithm (tri-state safe:
 	// the JCA's false is never success).
 	@TestFactory
-	Stream<DynamicTest> aFlippedBitIsASignatureMismatchForEveryAlgorithm() {
+	@NonNull Stream<@NonNull DynamicTest> aFlippedBitIsASignatureMismatchForEveryAlgorithm() {
 		Map<Algorithm, Fixture> fixtures = new LinkedHashMap<>(EC);
 		fixtures.put(Algorithm.RS256, Fixture.IDP_SIGNING_RSA_2048);
 		fixtures.put(Algorithm.RS384, Fixture.IDP_SIGNING_RSA_3072);
@@ -189,7 +191,7 @@ final class JwtValidatorSignatureShapeTests {
 	// ECDSA signatures are malleable: with s replaced by n - s the signature still verifies on the JDK, so a
 	// signature's bytes never identify a token (no cache may key on them).
 	@TestFactory
-	Stream<DynamicTest> ecdsaSignaturesAreMalleableInS() {
+	@NonNull Stream<@NonNull DynamicTest> ecdsaSignaturesAreMalleableInS() {
 		return EC.entrySet().stream().map(entry -> DynamicTest.dynamicTest(entry.getKey().getWireValue(), () -> {
 			TestJws.Signed signed = JwtFixtures.token(entry.getKey()).signed(entry.getValue().getPrivateKey());
 			byte[] signature = signed.getSignature();
@@ -204,10 +206,10 @@ final class JwtValidatorSignatureShapeTests {
 		}));
 	}
 
-	private static void assertMalformedBeforeKeyResolution(Algorithm algorithm,
-																												 Fixture fixture,
-																												 Variant variant,
-																												 VerifyResult engineResult) throws Exception {
+	private static void assertMalformedBeforeKeyResolution(@NonNull Algorithm algorithm,
+																												 @NonNull Fixture fixture,
+																												 @NonNull Variant variant,
+																												 @NonNull VerifyResult engineResult) throws Exception {
 		JwtValidator validator = validator(fixture, algorithm);
 		TestJws.Signed known = JwtFixtures.token(algorithm).signed(fixture.getPrivateKey());
 		TestJws.Signed unknown = JwtFixtures.token(algorithm).kid("unknown-kid").signed(fixture.getPrivateKey());
@@ -223,12 +225,12 @@ final class JwtValidatorSignatureShapeTests {
 				.orElseThrow());
 	}
 
-	private static JwtValidator validator(Fixture fixture,
-																				Algorithm algorithm) {
+	private static @NonNull JwtValidator validator(@NonNull Fixture fixture,
+																				@NonNull Algorithm algorithm) {
 		return JwtFixtures.validator(fixture, jwsAlgorithm(algorithm));
 	}
 
-	private static JwsAlgorithm jwsAlgorithm(Algorithm algorithm) {
+	private static @NonNull JwsAlgorithm jwsAlgorithm(@NonNull Algorithm algorithm) {
 		return JwsAlgorithm.findByWireValue(algorithm.getWireValue()).orElseThrow();
 	}
 }

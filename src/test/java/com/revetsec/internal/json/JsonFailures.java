@@ -16,6 +16,10 @@
 
 package com.revetsec.internal.json;
 
+import org.jspecify.annotations.Nullable;
+
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.testing.Sentinels;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.function.Executable;
@@ -75,7 +79,7 @@ final class JsonFailures {
 	private JsonFailures() {
 	}
 
-	static byte[] utf8(String text) {
+	static byte @NonNull [] utf8(@NonNull String text) {
 		return text.getBytes(StandardCharsets.UTF_8);
 	}
 
@@ -83,8 +87,8 @@ final class JsonFailures {
 	 * Parses {@code input}, which must be rejected with {@code kind} at {@code offset} (unless {@link #ANY_OFFSET}), the
 	 * fixed message, no cause, nothing suppressed and no sentinel in any rendering.
 	 */
-	static JsonParseException assertRejected(JsonParseException.Kind kind, int offset, byte[] input,
-																					 JsonLimits limits) {
+	static @NonNull JsonParseException assertRejected(JsonParseException.@NonNull Kind kind, int offset, byte @NonNull [] input,
+																					 @NonNull JsonLimits limits) {
 		JsonParseException exception = Assertions.assertThrows(JsonParseException.class,
 				() -> JsonCodec.parse(input, limits), () -> "expected " + kind + " for " + describe(input));
 		Assertions.assertEquals(kind, exception.getKind(), () -> "kind for " + describe(input));
@@ -98,8 +102,8 @@ final class JsonFailures {
 		return exception;
 	}
 
-	static JsonParseException assertRejected(JsonParseException.Kind kind, int offset, String input,
-																					 JsonLimits limits) {
+	static @NonNull JsonParseException assertRejected(JsonParseException.@NonNull Kind kind, int offset, @NonNull String input,
+																					 @NonNull JsonLimits limits) {
 		return assertRejected(kind, offset, utf8(input), limits);
 	}
 
@@ -107,14 +111,14 @@ final class JsonFailures {
 	 * Runs {@code action}, which must throw a {@link JsonFieldException} of {@code kind} with the fixed message, no
 	 * cause, nothing suppressed and no sentinel in any rendering.
 	 */
-	static JsonFieldException assertFieldRejected(JsonFieldException.Kind kind, Executable action) {
+	static @NonNull JsonFieldException assertFieldRejected(JsonFieldException.@NonNull Kind kind, @NonNull Executable action) {
 		JsonFieldException exception = Assertions.assertThrows(JsonFieldException.class, action);
 		Assertions.assertEquals(kind, exception.getKind());
 		assertFixedAndSilent(exception, requireNonNull(FIELD_MESSAGES.get(kind)));
 		return exception;
 	}
 
-	private static void assertFixedAndSilent(Exception exception, String message) {
+	private static void assertFixedAndSilent(@NonNull Exception exception, @NonNull String message) {
 		Assertions.assertEquals(message, exception.getMessage());
 		Assertions.assertNull(exception.getCause());
 		Assertions.assertEquals(0, exception.getSuppressed().length);
@@ -127,14 +131,14 @@ final class JsonFailures {
 	 * Hides a {@code null} from NullAway, for the tests that check null handling (R15).
 	 */
 	@SuppressWarnings({"NullAway", "TypeParameterUnusedInFormals"})
-	static <T> T nullValue() {
+	static <T> @Nullable T nullValue() {
 		return null;
 	}
 
 	/**
 	 * A printable description of a test input for assertion messages (test output only).
 	 */
-	static String describe(byte[] input) {
+	static @NonNull String describe(byte @NonNull [] input) {
 		StringBuilder description = new StringBuilder("\"");
 		int shown = Math.min(input.length, 80);
 

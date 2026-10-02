@@ -16,6 +16,8 @@
 
 package com.revetsec.oauth;
 
+import org.jspecify.annotations.NonNull;
+
 import org.junit.jupiter.api.*;
 import static org.junit.jupiter.api.Assertions.*;
 import com.revetsec.testing.*;
@@ -38,7 +40,7 @@ import static com.revetsec.oauth.Phase2Fixtures.*;
 
 /** RFC9068 sections2.1,2.2,4; RFC7519 sections4.1.3--6; explicit untyped substitution boundary. */
 final class JwtAccessTokenValidatorTests {
-    @TestFactory Stream<DynamicTest> strictTypesAndCaseFolding() {
+    @TestFactory @NonNull Stream<@NonNull DynamicTest> strictTypesAndCaseFolding() {
         return Stream.of("at+jwt","application/at+jwt","AT+JWT","APPLICATION/AT+JWT").map(t->DynamicTest.dynamicTest(t,()-> {
             VerifiedAccessToken result=jwt().build().validate(bearer(token(claims(ISSUER),t)));
             assertEquals(ISSUER,result.getIssuer());assertEquals(Set.of("read","write"),result.getScopes());assertEquals(List.of(AUD),result.getAudiences());
@@ -46,7 +48,7 @@ final class JwtAccessTokenValidatorTests {
             redacted(result,"TEST-ONLY-client","TEST-ONLY-subject","read","jti");
         }));
     }
-    @TestFactory Stream<DynamicTest> strictAndCompatibilityNeverAcceptOtherExplicitProfiles() {
+    @TestFactory @NonNull Stream<@NonNull DynamicTest> strictAndCompatibilityNeverAcceptOtherExplicitProfiles() {
         return Stream.of("JWT","application/jwt","logout+jwt","secevent+jwt","dpop+jwt","id_token+jwt","").map(t->DynamicTest.dynamicTest("type="+t,()-> {
             Map<String,String> c=claims(ISSUER);c.put("app","true");
             assertInstanceOf(AccessTokenValidationResult.Rejected.class,jwt().build().validateResult(bearer(token(c,t))));
@@ -64,20 +66,20 @@ final class JwtAccessTokenValidatorTests {
         c.put("iat",Long.toString(NOW.getEpochSecond()));c.remove("exp");assertInstanceOf(AccessTokenValidationResult.Rejected.class,validator.validateResult(bearer(token(c,"JWT"))));
         assertInstanceOf(AccessTokenValidationResult.Rejected.class,jwt().build().validateResult(bearer(token(claims(ISSUER),null))));
     }
-    @TestFactory Stream<DynamicTest> identityClaimsRejectEvenWhenNull() {
+    @TestFactory @NonNull Stream<@NonNull DynamicTest> identityClaimsRejectEvenWhenNull() {
         return Stream.of("nonce","at_hash","c_hash","auth_time").flatMap(n->Stream.of("null","\"TEST-ONLY-identity\"").map(v->DynamicTest.dynamicTest(n+v,()-> {
             Map<String,String> c=claims(ISSUER);c.put("app","true");c.put(n,v);
             AccessTokenValidationResult.Rejected rejected=assertInstanceOf(AccessTokenValidationResult.Rejected.class,jwt().compatibility(AccessTokenCompatibilityMode.UNTYPED_ACCESS_TOKENS).requiredClaims(Set.of("app")).build().validateResult(bearer(token(c,"JWT"))));
             assertEquals(AccessTokenValidationException.Reason.UNTYPED_IDENTITY_CLAIM_PRESENT,rejected.getReason());redacted(rejected,"TEST-ONLY-identity","TEST-ONLY-subject");
         })));
     }
-    @TestFactory Stream<DynamicTest> requiredClaimsAreTypedPresentAndNonempty() {
+    @TestFactory @NonNull Stream<@NonNull DynamicTest> requiredClaimsAreTypedPresentAndNonempty() {
         return Stream.of("iss","aud","sub","client_id","jti","exp","iat").flatMap(n->Stream.of("absent","null","42","\"\"").filter(v->!(v.equals("42")&&Set.of("exp","iat").contains(n))).map(v->DynamicTest.dynamicTest(n+v,()-> {
             Map<String,String> c=claims(ISSUER);if(v.equals("absent"))c.remove(n);else c.put(n,v);
             assertInstanceOf(AccessTokenValidationResult.Rejected.class,jwt().build().validateResult(bearer(token(c,"at+jwt"))));
         })));
     }
-    @TestFactory Stream<DynamicTest> audienceIssuerConfirmationAndRequiredClaimFailuresReleaseNoProof() {
+    @TestFactory @NonNull Stream<@NonNull DynamicTest> audienceIssuerConfirmationAndRequiredClaimFailuresReleaseNoProof() {
         return Stream.of(Map.entry("aud","\"other\""),Map.entry("iss","\"https://other.example\""),Map.entry("cnf","null"),Map.entry("cnf","{}"),Map.entry("app","null")).map(e->DynamicTest.dynamicTest(e.toString(),()-> {
             Map<String,String> c=claims(ISSUER);c.put(e.getKey(),e.getValue());
             assertInstanceOf(AccessTokenValidationResult.Rejected.class,jwt().requiredClaims(e.getKey().equals("app")?Set.of("app"):Set.of()).build().validateResult(bearer(token(c,"at+jwt"))));
@@ -93,7 +95,7 @@ final class JwtAccessTokenValidatorTests {
         c=claims(ISSUER);c.put("nbf",Long.toString(NOW.plusSeconds(2).getEpochSecond()));assertInstanceOf(AccessTokenValidationResult.Rejected.class,skew.validateResult(bearer(token(c,"at+jwt"))));
         c=claims(ISSUER);c.put("exp",NOW.plusSeconds(1).getEpochSecond()+".5");assertNotNull(jwt().build().validate(bearer(token(c,"at+jwt"))));
     }
-    @TestFactory Stream<DynamicTest> scopeFormsAreExplicitAndInvalidFormsReject() {
+    @TestFactory @NonNull Stream<@NonNull DynamicTest> scopeFormsAreExplicitAndInvalidFormsReject() {
         return Stream.of("null","42","[\"read\",null]","\"read  write\"","\"read\\twrite\"",JsonText.string("read "+(char)34+"bad")).map(v->DynamicTest.dynamicTest(v,()-> {
             Map<String,String> c=claims(ISSUER);c.put("scope",v);assertInstanceOf(AccessTokenValidationResult.Rejected.class,jwt().build().validateResult(bearer(token(c,"at+jwt"))));
             c.remove("scope");c.put("scp",v);assertInstanceOf(AccessTokenValidationResult.Rejected.class,jwt().scopeClaimName("scp").build().validateResult(bearer(token(c,"at+jwt"))));
@@ -127,7 +129,7 @@ final class JwtAccessTokenValidatorTests {
             assertThrows(JsonWebKeySetUnavailableException.class,()->validator.validateResult(bearer(token(claims(ISSUER),"at+jwt"))));assertEquals(1,server.getRequests().size());
         }
     }
-    @TestFactory Stream<DynamicTest> explicitlyConfiguredPublicKeyAlgorithmsUseTheExistingEngine() {
+    @TestFactory @NonNull Stream<@NonNull DynamicTest> explicitlyConfiguredPublicKeyAlgorithmsUseTheExistingEngine() {
         return Stream.of(TestJws.Algorithm.RS256,TestJws.Algorithm.PS256,TestJws.Algorithm.ES256,TestJws.Algorithm.ES384,TestJws.Algorithm.ES512,TestJws.Algorithm.EDDSA,TestJws.Algorithm.ED25519).map(a->DynamicTest.dynamicTest(a.name(),()->{
             TestJsonWebKeys.Fixture f=switch(a) {case ES256->TestJsonWebKeys.Fixture.IDP_SIGNING_EC_P256;case ES384->TestJsonWebKeys.Fixture.IDP_SIGNING_EC_P384;case ES512->TestJsonWebKeys.Fixture.IDP_SIGNING_EC_P521;case EDDSA,ED25519->TestJsonWebKeys.Fixture.ED25519;default->TestJsonWebKeys.Fixture.IDP_SIGNING_RSA_2048;};
             JwsAlgorithm algorithm=JwsAlgorithm.valueOf(a.name());StaticJsonWebKeySource source=StaticJsonWebKeySource.fromJsonWebKeySet(JsonWebKeySet.fromJson(TestJsonWebKeys.withFixture(f).kid("key").alg(a.getWireValue()).toKeySetJson()));

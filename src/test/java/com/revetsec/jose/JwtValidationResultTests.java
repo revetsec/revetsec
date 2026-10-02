@@ -16,6 +16,8 @@
 
 package com.revetsec.jose;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.testing.TestJsonWebKeys.Fixture;
 import com.revetsec.testing.TestJws.Algorithm;
 import com.revetsec.testing.TestHttpsServer;
@@ -33,10 +35,10 @@ final class JwtValidationResultTests {
         AtomicInteger successes = new AtomicInteger();
         AtomicInteger failures = new AtomicInteger();
         JoseObserver observer = new JoseObserver() {
-            @Override public void didValidateJwt(JwsAlgorithm algorithm, Duration elapsed) {
+            @Override public void didValidateJwt(@NonNull JwsAlgorithm algorithm, @NonNull Duration elapsed) {
                 successes.incrementAndGet(); throw new IllegalStateException("TEST-ONLY-hook");
             }
-            @Override public void didFailToValidateJwt(RevetsecException exception, Duration elapsed) {
+            @Override public void didFailToValidateJwt(@NonNull RevetsecException exception, @NonNull Duration elapsed) {
                 failures.incrementAndGet(); throw new IllegalStateException("TEST-ONLY-hook");
             }
         };

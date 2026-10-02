@@ -16,6 +16,8 @@
 
 package com.revetsec.internal.crypto;
 
+import org.jspecify.annotations.NonNull;
+
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.DynamicTest;
@@ -47,7 +49,7 @@ final class EcPublicKeysTests {
 	// A JDK key's fixed-length coordinates rebuild the same key, and it verifies the JDK's signature. P-521's 66-byte
 	// coordinates always start with seven zero bits, so that curve always exercises leading zero octets.
 	@TestFactory
-	Stream<DynamicTest> fixedLengthCoordinatesRebuildTheJdksKey() {
+	@NonNull Stream<@NonNull DynamicTest> fixedLengthCoordinatesRebuildTheJdksKey() {
 		return Stream.of(EcCurve.values()).map(curve -> DynamicTest.dynamicTest(curve.name(), () -> {
 			EcdsaSignaturesTests.Fixture fixture = EcdsaSignaturesTests.Fixture.forCurve(curve);
 			ECPublicKey jdkKey = (ECPublicKey) fixture.publicKey;
@@ -72,7 +74,7 @@ final class EcPublicKeysTests {
 	// so a 31-byte x (the form a producer that trims leading zero octets sends) and a zero-padded 33-byte x are
 	// malformed, even when the value is on the curve.
 	@TestFactory
-	Stream<DynamicTest> coordinatesOfAnyOtherLengthAreMalformed() {
+	@NonNull Stream<@NonNull DynamicTest> coordinatesOfAnyOtherLengthAreMalformed() {
 		return Stream.of(EcCurve.values()).map(curve -> DynamicTest.dynamicTest(curve.name(), () -> {
 			int length = curve.getCoordinateLength();
 			ECPoint g = curve.getParameterSpec().getGenerator();
@@ -98,7 +100,7 @@ final class EcPublicKeysTests {
 
 	// INV-J5: 0 <= x, y < p and y^2 = x^3 + a*x + b, in BigInteger, before KeyFactory (which accepts off-curve points).
 	@TestFactory
-	Stream<DynamicTest> pointsOffTheCurveOrOutsideTheFieldAreRefused() {
+	@NonNull Stream<@NonNull DynamicTest> pointsOffTheCurveOrOutsideTheFieldAreRefused() {
 		return Stream.of(EcCurve.values()).map(curve -> DynamicTest.dynamicTest(curve.name(), () -> {
 			int length = curve.getCoordinateLength();
 			BigInteger p = curve.getFieldPrime();
@@ -142,7 +144,7 @@ final class EcPublicKeysTests {
 	// The JCA builds keys from off-curve SPKI encodings, so certificate and PEM keys get the same check (plan section
 	// 8; the JCA builds the off-curve key below without complaint).
 	@TestFactory
-	Stream<DynamicTest> spkiKeysOffTheCurveAreRefused() {
+	@NonNull Stream<@NonNull DynamicTest> spkiKeysOffTheCurveAreRefused() {
 		return Stream.of(EcCurve.values()).map(curve -> DynamicTest.dynamicTest(curve.name(), () -> {
 			ECPublicKey jdkKey = (ECPublicKey) generate(curve).getPublic();
 			byte[] encoded = jdkKey.getEncoded();
@@ -202,6 +204,8 @@ final class EcPublicKeysTests {
 				new UnusualEcKey(curve.getParameterSpec(), ECPoint.POINT_INFINITY, false));
 	}
 
+	// Deliberate null inputs verify runtime rejection.
+	@SuppressWarnings("NullAway")
 	@Test
 	void rejectsNullArguments() throws GeneralSecurityException {
 		ECPublicKey key = (ECPublicKey) generate(EcCurve.P_256).getPublic();
@@ -217,18 +221,18 @@ final class EcPublicKeysTests {
 				nullValue()));
 	}
 
-	private static KeyPair generate(EcCurve curve) throws GeneralSecurityException {
+	private static @NonNull KeyPair generate(@NonNull EcCurve curve) throws GeneralSecurityException {
 		KeyPairGenerator generator = KeyPairGenerator.getInstance("EC");
 		generator.initialize(new ECGenParameterSpec(curve.getStandardName()));
 		return generator.generateKeyPair();
 	}
 
-	private static void assertRejected(KeyRejectedException.Kind kind, EcCurve curve, byte[] x, byte[] y) {
+	private static void assertRejected(KeyRejectedException.@NonNull Kind kind, @NonNull EcCurve curve, byte @NonNull [] x, byte @NonNull [] y) {
 		Assertions.assertEquals(kind, Assertions.assertThrows(KeyRejectedException.class,
 				() -> EcPublicKeys.fromCoordinates(curve, x, y)).getKind(), () -> curve + " " + x.length + "/" + y.length);
 	}
 
-	private static void assertCheckRejected(KeyRejectedException.Kind kind, ECPublicKey key) {
+	private static void assertCheckRejected(KeyRejectedException.@NonNull Kind kind, @NonNull ECPublicKey key) {
 		Assertions.assertEquals(kind, Assertions.assertThrows(KeyRejectedException.class,
 				() -> EcPublicKeys.checkPublicKey(EcCurve.P_256, key)).getKind());
 	}
@@ -237,7 +241,7 @@ final class EcPublicKeysTests {
 	 * Hides a {@code null} from NullAway, for the tests that check null handling.
 	 */
 	@SuppressWarnings({"NullAway", "TypeParameterUnusedInFormals"})
-	private static <T> T nullValue() {
+	private static <T> @Nullable T nullValue() {
 		return null;
 	}
 
@@ -259,29 +263,29 @@ final class EcPublicKeysTests {
 		}
 
 		@Override
-		public ECPoint getW() {
+		public @NonNull ECPoint getW() {
 			if (this.throwing)
 				throw new IllegalStateException("A key implementation that throws.");
 			return this.point;
 		}
 
 		@Override
-		public ECParameterSpec getParams() {
+		public @NonNull ECParameterSpec getParams() {
 			return this.parameters;
 		}
 
 		@Override
-		public String getAlgorithm() {
+		public @NonNull String getAlgorithm() {
 			return "EC";
 		}
 
 		@Override
-		public String getFormat() {
+		public @NonNull String getFormat() {
 			return "X.509";
 		}
 
 		@Override
-		public byte[] getEncoded() {
+		public byte @NonNull [] getEncoded() {
 			return new byte[0];
 		}
 	}

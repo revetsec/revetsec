@@ -16,6 +16,8 @@
 
 package com.revetsec.testing;
 
+import org.jspecify.annotations.NonNull;
+
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -217,13 +219,13 @@ final class RecordingObserverTests {
 	 * {@code Optional}, and a failure hook that receives the caller's exception.
 	 */
 	interface ExampleObserver {
-		default void willFetch(URI uri) {
+		default void willFetch(@NonNull URI uri) {
 		}
 
-		default void didFetch(URI uri, Duration duration, Integer status) {
+		default void didFetch(@NonNull URI uri, @NonNull Duration duration, @NonNull Integer status) {
 		}
 
-		default void didFailToFetch(URI uri, Duration duration, @Nullable RuntimeException exception) {
+		default void didFailToFetch(@NonNull URI uri, @NonNull Duration duration, @Nullable RuntimeException exception) {
 		}
 
 		default void didStop() {
@@ -238,7 +240,7 @@ final class RecordingObserverTests {
 	 * Methods that return values, to cover the proxy's other paths.
 	 */
 	interface ValueObserver {
-		default String describe() {
+		default @NonNull String describe() {
 			return "default description";
 		}
 

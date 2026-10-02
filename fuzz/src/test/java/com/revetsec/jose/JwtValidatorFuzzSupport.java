@@ -16,6 +16,10 @@
 
 package com.revetsec.jose;
 
+import org.jspecify.annotations.Nullable;
+
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.internal.json.JsonCodec;
 import com.revetsec.json.JsonArray;
 import com.revetsec.json.JsonObject;
@@ -151,7 +155,7 @@ public final class JwtValidatorFuzzSupport {
 	 * @param bytes the octets
 	 * @return the encoding
 	 */
-	public static String encodeBase64Url(byte[] bytes) {
+	public static @NonNull String encodeBase64Url(byte @NonNull [] bytes) {
 		return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
 	}
 
@@ -165,8 +169,8 @@ public final class JwtValidatorFuzzSupport {
 	 * @param certificates each fixture name's certificate, or {@code null} if it has none
 	 * @return the JSON text
 	 */
-	public static String keySetJson(List<KeySlot> slots, Function<String, PublicKey> keys,
-																	Function<String, X509Certificate> certificates) {
+	public static @NonNull String keySetJson(@NonNull List<@NonNull KeySlot> slots, @NonNull Function<@NonNull String, @NonNull PublicKey> keys,
+																	@NonNull Function<@NonNull String, @Nullable X509Certificate> certificates) {
 		List<JsonValue> elements = new ArrayList<>();
 
 		for (KeySlot slot : slots) {
@@ -230,7 +234,7 @@ public final class JwtValidatorFuzzSupport {
 				StandardCharsets.UTF_8);
 	}
 
-	private static byte[] unsigned(BigInteger value) {
+	private static byte @NonNull [] unsigned(@NonNull BigInteger value) {
 		byte[] bytes = value.toByteArray();
 		return bytes.length > 1 && bytes[0] == 0 ? Arrays.copyOfRange(bytes, 1, bytes.length) : bytes;
 	}
@@ -242,7 +246,7 @@ public final class JwtValidatorFuzzSupport {
 	 * @param length the length
 	 * @return a new array
 	 */
-	public static byte[] fixedLength(BigInteger value, int length) {
+	public static byte @NonNull [] fixedLength(@NonNull BigInteger value, int length) {
 		byte[] bytes = value.toByteArray();
 		byte[] fixed = new byte[length];
 
@@ -267,8 +271,8 @@ public final class JwtValidatorFuzzSupport {
 		private final List<String> keyOperations;
 		private final boolean withCertificate;
 
-		private KeySlot(String keyId, String fixture, String algorithm, String issuer, String use,
-										List<String> keyOperations, boolean withCertificate) {
+		private KeySlot(@Nullable String keyId, @NonNull String fixture, @Nullable String algorithm, @Nullable String issuer, @Nullable String use,
+										@Nullable List<@NonNull String> keyOperations, boolean withCertificate) {
 			this.keyId = keyId;
 			this.fixture = fixture;
 			this.algorithm = algorithm;
@@ -283,7 +287,7 @@ public final class JwtValidatorFuzzSupport {
 		 *
 		 * @return the key ID, or {@code null} for the slot without one
 		 */
-		public String getKeyId() {
+		public @Nullable String getKeyId() {
 			return this.keyId;
 		}
 
@@ -293,7 +297,7 @@ public final class JwtValidatorFuzzSupport {
 		 *
 		 * @return the fixture name
 		 */
-		public String getFixture() {
+		public @NonNull String getFixture() {
 			return this.fixture;
 		}
 
@@ -302,7 +306,7 @@ public final class JwtValidatorFuzzSupport {
 		 *
 		 * @return the wire value, or empty
 		 */
-		public Optional<String> getAlgorithm() {
+		public @NonNull Optional<@NonNull String> getAlgorithm() {
 			return Optional.ofNullable(this.algorithm);
 		}
 
@@ -311,7 +315,7 @@ public final class JwtValidatorFuzzSupport {
 		 *
 		 * @return the issuer, or empty
 		 */
-		public Optional<String> getIssuer() {
+		public @NonNull Optional<@NonNull String> getIssuer() {
 			return Optional.ofNullable(this.issuer);
 		}
 	}

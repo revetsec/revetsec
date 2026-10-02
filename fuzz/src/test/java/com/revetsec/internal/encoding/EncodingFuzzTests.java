@@ -16,6 +16,10 @@
 
 package com.revetsec.internal.encoding;
 
+import org.jspecify.annotations.Nullable;
+
+import org.jspecify.annotations.NonNull;
+
 import com.code_intelligence.jazzer.junit.FuzzTest;
 import com.revetsec.internal.encoding.EncodingException.Kind;
 import org.junit.jupiter.api.Assertions;
@@ -68,7 +72,7 @@ public class EncodingFuzzTests {
 	 * @param input the fuzzed text (read as ISO-8859-1, so every byte is one character) and octets
 	 */
 	@FuzzTest(maxDuration = "5m")
-	public void base64DecodersAcceptExactlyTheCanonicalEncodings(byte[] input) {
+	public void base64DecodersAcceptExactlyTheCanonicalEncodings(byte @NonNull [] input) {
 		String text = new String(input, StandardCharsets.ISO_8859_1);
 
 		requireOutcome(expectedBase64(text, URL_ALPHABET, false), () -> Base64Url.decode(text));
@@ -100,7 +104,7 @@ public class EncodingFuzzTests {
 	 * @param input the fuzzed octets, also read as text in which CESU-8 surrogate sequences become unpaired surrogates
 	 */
 	@FuzzTest(maxDuration = "5m")
-	public void urlAndUtf8CodecsMatchTheirOraclesExactly(byte[] input) {
+	public void urlAndUtf8CodecsMatchTheirOraclesExactly(byte @NonNull [] input) {
 		String jdkStrict = jdkStrictUtf8(input);
 		requireOutcome(jdkStrict == null ? Expected.failing(Kind.INVALID_UTF8) : Expected.string(jdkStrict),
 				() -> StrictUtf8.decode(input));
@@ -124,7 +128,7 @@ public class EncodingFuzzTests {
 		requireQuery(text);
 	}
 
-	private static void requireFormEncoding(String text, boolean wellFormed) {
+	private static void requireFormEncoding(@NonNull String text, boolean wellFormed) {
 		String encoded;
 
 		try {
@@ -151,7 +155,7 @@ public class EncodingFuzzTests {
 	 * skipped, the first {@code =} separating name from value, both form-decoded) or the Kind of the first piece that
 	 * fails; accepted parameters survive re-encoding, and the lookups agree with the list.
 	 */
-	private static void requireQuery(String text) {
+	private static void requireQuery(@NonNull String text) {
 		List<String[]> expected = new ArrayList<>();
 		Kind expectedFailure = null;
 
@@ -222,7 +226,7 @@ public class EncodingFuzzTests {
 	/**
 	 * The RFC 4648 oracle: the Kind of the first failed check, in the order the decoders document, or the octets.
 	 */
-	private static Expected expectedBase64(String text, String alphabet, boolean paddingRequired) {
+	private static @NonNull Expected expectedBase64(@NonNull String text, @NonNull String alphabet, boolean paddingRequired) {
 		int padding = 0;
 
 		for (int index = 0; index < text.length(); ++index) {
@@ -268,7 +272,7 @@ public class EncodingFuzzTests {
 	/**
 	 * Decodes unpadded Base64 text over {@code alphabet} by hand, six bits per character.
 	 */
-	private static byte[] decodeBase64(String text, String alphabet) {
+	private static byte @NonNull [] decodeBase64(@NonNull String text, @NonNull String alphabet) {
 		ByteArrayOutputStream octets = new ByteArrayOutputStream();
 		int buffer = 0;
 		int bits = 0;
@@ -286,7 +290,7 @@ public class EncodingFuzzTests {
 		return octets.toByteArray();
 	}
 
-	private static String withoutSamlWhitespace(String text) {
+	private static @NonNull String withoutSamlWhitespace(@NonNull String text) {
 		StringBuilder stripped = new StringBuilder(text.length());
 
 		for (int index = 0; index < text.length(); ++index) {
@@ -303,7 +307,7 @@ public class EncodingFuzzTests {
 	 * Base64 wrapped as SAML senders do: a leading space, then lines of a width derived from the input, separated by
 	 * CRLF, LF or a tab in turn.
 	 */
-	private static String wrapped(String base64, int seed) {
+	private static @NonNull String wrapped(@NonNull String base64, int seed) {
 		int width = 1 + seed % 76;
 		String[] separators = {"\r\n", "\n", "\t"};
 		StringBuilder wrapped = new StringBuilder(" ");
@@ -320,7 +324,7 @@ public class EncodingFuzzTests {
 	 * escape ({@link Kind#MALFORMED_PERCENT_ENCODING}: {@code %} not followed by two ASCII hex digits) or unpaired
 	 * surrogate; then decode the octets strictly ({@link Kind#INVALID_UTF8}).
 	 */
-	private static Expected expectedPercentDecoding(String text, boolean plusIsSpace) {
+	private static @NonNull Expected expectedPercentDecoding(@NonNull String text, boolean plusIsSpace) {
 		ByteArrayOutputStream octets = new ByteArrayOutputStream();
 
 		for (int index = 0; index < text.length(); ++index) {
@@ -363,7 +367,7 @@ public class EncodingFuzzTests {
 	/**
 	 * The JDK's strict UTF-8 decoding, or {@code null} if the octets are not well-formed UTF-8.
 	 */
-	private static String jdkStrictUtf8(byte[] octets) {
+	private static @Nullable String jdkStrictUtf8(byte @NonNull [] octets) {
 		try {
 			CharBuffer decoded = StandardCharsets.UTF_8.newDecoder()
 					.onMalformedInput(CodingErrorAction.REPORT)
@@ -386,7 +390,7 @@ public class EncodingFuzzTests {
 	 * three-byte sequences for U+D800 to U+DFFF (CESU-8), become their characters, so unpaired surrogates appear; any
 	 * other octet becomes the ISO-8859-1 character of the same value.
 	 */
-	private static String textWithSurrogates(byte[] octets) {
+	private static @NonNull String textWithSurrogates(byte @NonNull [] octets) {
 		StringBuilder text = new StringBuilder(octets.length);
 		int index = 0;
 
@@ -426,7 +430,7 @@ public class EncodingFuzzTests {
 		return text.toString();
 	}
 
-	private static boolean continuations(byte[] octets, int lead, int count) {
+	private static boolean continuations(byte @NonNull [] octets, int lead, int count) {
 		if (lead + count >= octets.length)
 			return false;
 
@@ -440,7 +444,7 @@ public class EncodingFuzzTests {
 	/**
 	 * Well-formed UTF-16 by the Character API alone.
 	 */
-	private static boolean isWellFormed(String text) {
+	private static boolean isWellFormed(@NonNull String text) {
 		for (int index = 0; index < text.length(); ++index) {
 			char character = text.charAt(index);
 
@@ -454,7 +458,7 @@ public class EncodingFuzzTests {
 		return true;
 	}
 
-	private static void requireOutcome(Expected expected, Codec codec) {
+	private static void requireOutcome(@NonNull Expected expected, @NonNull Codec codec) {
 		Object actual;
 
 		try {
@@ -474,7 +478,7 @@ public class EncodingFuzzTests {
 			Assertions.assertEquals(expected.string, actual, "a codec returned the wrong string");
 	}
 
-	private static void requireFixedShape(EncodingException exception) {
+	private static void requireFixedShape(@NonNull EncodingException exception) {
 		Assertions.assertNotNull(exception.getKind(), "an EncodingException has no Kind");
 		Assertions.assertEquals(exception.getKind().getMessage(), exception.getMessage(), "not the Kind's fixed message");
 		Assertions.assertNull(exception.getCause(), "an EncodingException has a cause");
@@ -486,7 +490,7 @@ public class EncodingFuzzTests {
 	 */
 	@FunctionalInterface
 	private interface Codec {
-		Object run() throws EncodingException;
+		@NonNull Object run() throws EncodingException;
 	}
 
 	/**
@@ -498,21 +502,21 @@ public class EncodingFuzzTests {
 		private final byte[] bytes;
 		private final String string;
 
-		private Expected(Kind failure, byte[] bytes, String string) {
+		private Expected(@Nullable Kind failure, byte @Nullable [] bytes, @Nullable String string) {
 			this.failure = failure;
 			this.bytes = bytes;
 			this.string = string;
 		}
 
-		private static Expected failing(Kind failure) {
+		private static @NonNull Expected failing(@NonNull Kind failure) {
 			return new Expected(failure, null, null);
 		}
 
-		private static Expected bytes(byte[] bytes) {
+		private static @NonNull Expected bytes(byte @NonNull [] bytes) {
 			return new Expected(null, bytes, null);
 		}
 
-		private static Expected string(String string) {
+		private static @NonNull Expected string(@NonNull String string) {
 			return new Expected(null, null, string);
 		}
 	}

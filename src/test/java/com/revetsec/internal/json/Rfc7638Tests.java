@@ -16,6 +16,8 @@
 
 package com.revetsec.internal.json;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.json.JsonArray;
 import com.revetsec.json.JsonObject;
 import com.revetsec.json.JsonString;
@@ -129,7 +131,7 @@ final class Rfc7638Tests {
 	// differently cased key type, and a value JSON would have to escape (for which no thumbprint is defined) are
 	// rejected with a fixed message that never echoes the key.
 	@TestFactory
-	Stream<DynamicTest> rejectsKeysWithoutAWellDefinedThumbprint() {
+	@NonNull Stream<@NonNull DynamicTest> rejectsKeysWithoutAWellDefinedThumbprint() {
 		return Stream.of(
 				new Object[]{"no kty", "{\"n\":\"" + SENTINEL + "\",\"e\":\"AQAB\"}", JsonFieldException.Kind.MISSING},
 				new Object[]{"RSA without n", "{\"kty\":\"RSA\",\"e\":\"" + SENTINEL + "\"}",
@@ -161,6 +163,8 @@ final class Rfc7638Tests {
 	}
 
 	// R15: a null key is misuse.
+	// Deliberate null inputs verify runtime rejection.
+	@SuppressWarnings("NullAway")
 	@Test
 	void rejectsANullKey() {
 		JsonObject noKey = JsonFailures.nullValue();
@@ -179,11 +183,11 @@ final class Rfc7638Tests {
 		Assertions.assertEquals(JsonString.fromValue("\u007F\u2028 "), jwk.getMembers().get("k"));
 	}
 
-	private static JsonObject jwk(String json) throws JsonParseException {
+	private static @NonNull JsonObject jwk(@NonNull String json) throws JsonParseException {
 		return (JsonObject) JsonCodec.parse(utf8(json), JsonLimits.jose(64 * 1_024));
 	}
 
-	private static String thumbprint(byte[] canonical) throws NoSuchAlgorithmException {
+	private static @NonNull String thumbprint(byte @NonNull [] canonical) throws NoSuchAlgorithmException {
 		return Base64.getUrlEncoder().withoutPadding().encodeToString(MessageDigest.getInstance("SHA-256")
 				.digest(canonical));
 	}

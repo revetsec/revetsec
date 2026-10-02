@@ -16,6 +16,8 @@
 
 package com.revetsec.oauth;
 
+import org.jspecify.annotations.NonNull;
+
 import com.code_intelligence.jazzer.junit.FuzzTest;
 import com.revetsec.internal.encoding.QueryParameters;
 import com.revetsec.internal.http.RawResponse;
@@ -42,7 +44,7 @@ public class OAuthFuzzTests {
 	 * @param input raw callback query bytes
 	 */
 	@FuzzTest(maxDuration = "5m")
-	public void callbackKeepsSingletonsAndRedactsInput(byte[] input) {
+	public void callbackKeepsSingletonsAndRedactsInput(byte @NonNull [] input) {
 		String query = new String(input, StandardCharsets.ISO_8859_1);
 		try {
 			AuthorizationResponse response = AuthorizationResponse.fromQueryString(query);
@@ -63,7 +65,7 @@ public class OAuthFuzzTests {
 	 * @param input token-response body bytes
 	 */
 	@FuzzTest(maxDuration = "5m")
-	public void tokenJsonKeepsSecretsOutOfGenericMembers(byte[] input) {
+	public void tokenJsonKeepsSecretsOutOfGenericMembers(byte @NonNull [] input) {
 		RawResponse raw = new RawResponse(200, HttpHeaders.of(Map.of(), (name, value) -> true), input.clone(),
 				null, false, Duration.ZERO);
 		try {
@@ -86,7 +88,7 @@ public class OAuthFuzzTests {
 	 * @param input metadata JSON bytes
 	 */
 	@FuzzTest(maxDuration = "5m")
-	public void metadataRequiresExactIssuer(byte[] input) {
+	public void metadataRequiresExactIssuer(byte @NonNull [] input) {
 		String json = new String(input, StandardCharsets.ISO_8859_1);
 		try {
 			AuthorizationServerMetadata metadata = AuthorizationServerMetadata.fromJson(ISSUER, json);
@@ -106,7 +108,7 @@ public class OAuthFuzzTests {
 	 * @param input form value bytes
 	 */
 	@FuzzTest(maxDuration = "5m")
-	public void formBodyRoundTripsUnicodeAndReservedCharacters(byte[] input) throws Exception {
+	public void formBodyRoundTripsUnicodeAndReservedCharacters(byte @NonNull [] input) throws Exception {
 		String value = new String(input, StandardCharsets.ISO_8859_1);
 		String body = new OAuthRequestWriter().add("value", value).body();
 		Assertions.assertEquals(List.of(value), QueryParameters.parse(body).getValues("value"));

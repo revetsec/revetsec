@@ -16,6 +16,8 @@
 
 package com.revetsec.internal.jose;
 
+import org.jspecify.annotations.NonNull;
+
 /**
  * Examples transcribed from the IETF JOSE RFCs, shared by the JWS-layer and validator-level vector tests. Only public
  * key material and signed examples are transcribed, and each pair is self-checking: every token verifies under its key
@@ -159,7 +161,7 @@ public final class RfcJoseExamples {
 	 *
 	 * @return the JWK's JSON text
 	 */
-	public static String rfc7515A2Key() {
+	public static @NonNull String rfc7515A2Key() {
 		return "{\"kty\":\"RSA\",\"n\":\"" + RFC_7515_A2_MODULUS + "\",\"e\":\"AQAB\"}";
 	}
 
@@ -168,7 +170,7 @@ public final class RfcJoseExamples {
 	 *
 	 * @return the JWK's JSON text
 	 */
-	public static String rfc7515A3Key() {
+	public static @NonNull String rfc7515A3Key() {
 		return "{\"kty\":\"EC\",\"crv\":\"P-256\",\"x\":\"" + RFC_7515_A3_X + "\",\"y\":\"" + RFC_7515_A3_Y + "\"}";
 	}
 
@@ -177,7 +179,7 @@ public final class RfcJoseExamples {
 	 *
 	 * @return the JWK's JSON text
 	 */
-	public static String rfc7515A4Key() {
+	public static @NonNull String rfc7515A4Key() {
 		return "{\"kty\":\"EC\",\"crv\":\"P-521\",\"x\":\"" + RFC_7515_A4_X + "\",\"y\":\"" + RFC_7515_A4_Y + "\"}";
 	}
 
@@ -186,7 +188,7 @@ public final class RfcJoseExamples {
 	 *
 	 * @return the JWK's JSON text
 	 */
-	public static String rfc8037A2Key() {
+	public static @NonNull String rfc8037A2Key() {
 		return "{\"kty\":\"OKP\",\"crv\":\"Ed25519\",\"x\":\"" + RFC_8037_A2_X + "\"}";
 	}
 }

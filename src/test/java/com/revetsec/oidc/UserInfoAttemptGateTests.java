@@ -16,6 +16,8 @@
 
 package com.revetsec.oidc;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.internal.http.Deadline;
 import com.revetsec.internal.oauth.OidcTransactionAccess;
 import com.revetsec.oauth.*;
@@ -26,8 +28,8 @@ import static org.junit.jupiter.api.Assertions.*;
 
 final class UserInfoAttemptGateTests {
 	private static final Duration REQUEST = Duration.ofSeconds(1);
-	private static Deadline deadline() { return Deadline.fromNow(Duration.ofSeconds(10)); }
-	private static OAuthException failure() { return OidcTransactionAccess.get().endpointFailure(OAuthException.Reason.NETWORK_FAILURE); }
+	private static @NonNull Deadline deadline() { return Deadline.fromNow(Duration.ofSeconds(10)); }
+	private static @NonNull OAuthException failure() { return OidcTransactionAccess.get().endpointFailure(OAuthException.Reason.NETWORK_FAILURE); }
 	@Test
 	void concurrentHealthyCompletionDoesNotMaskANewFailureAndOldSuccessCannotClearIt() {
 		AtomicLong time = new AtomicLong(); UserInfoAttemptGate gate = new UserInfoAttemptGate(Duration.ofSeconds(1), time::get);

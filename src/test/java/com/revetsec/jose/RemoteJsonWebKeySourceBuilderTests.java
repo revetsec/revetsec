@@ -16,6 +16,8 @@
 
 package com.revetsec.jose;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.OutboundUriPolicy;
 import com.revetsec.internal.Limit;
 import com.revetsec.internal.Limits;
@@ -53,7 +55,7 @@ final class RemoteJsonWebKeySourceBuilderTests {
 	// Exit criterion 19: each setting accepts its row's floor and cap and refuses one unit outside either, with
 	// IllegalArgumentException; null restores the default (the StateSealer.Builder convention).
 	@TestFactory
-	Stream<DynamicTest> everySettingIsCheckedAgainstItsRow() {
+	@NonNull Stream<@NonNull DynamicTest> everySettingIsCheckedAgainstItsRow() {
 		List<DynamicTest> tests = new ArrayList<>();
 		addDurationRow(tests, Limits.REQUEST_TIMEOUT, RemoteJsonWebKeySource.Builder::requestTimeout);
 		// The cooldown may not exceed the minimum time to live, which is raised with it past its default of 1 minute.
@@ -122,7 +124,7 @@ final class RemoteJsonWebKeySourceBuilderTests {
 	// IllegalStateException unless acknowledged (18.0.0 is spelled "18"); when acknowledged, didUseUnpatchedRuntime
 	// fires at build() and on every fetch; 17.0.3, 18.0.1 and 21 build without it, acknowledged or not.
 	@TestFactory
-	Stream<DynamicTest> theRuntimeFloorIsEnforcedAndAnAcknowledgmentIsObserved() {
+	@NonNull Stream<@NonNull DynamicTest> theRuntimeFloorIsEnforcedAndAnAcknowledgmentIsObserved() {
 		// Runtime.Version spells 18.0.0 as "18": trailing zero components are not allowed.
 		return Stream.of("17.0.2", "18", "17.0.2.0.1", "17-ea").map(version -> DynamicTest.dynamicTest(version, () -> {
 			Runtime.Version runtime = Runtime.Version.parse(version);
@@ -154,7 +156,7 @@ final class RemoteJsonWebKeySourceBuilderTests {
 	}
 
 	@TestFactory
-	Stream<DynamicTest> aRuntimeAtOrAboveTheFloorIsNeverReported() {
+	@NonNull Stream<@NonNull DynamicTest> aRuntimeAtOrAboveTheFloorIsNeverReported() {
 		return Stream.of(FLOOR_17, Runtime.Version.parse("18.0.1"), Runtime.Version.parse("21.0.1"))
 				.map(runtime -> DynamicTest.dynamicTest(runtime.toString(), () -> {
 					for (@Nullable Boolean acknowledged : new Boolean[]{null, false, true}) {
@@ -170,7 +172,7 @@ final class RemoteJsonWebKeySourceBuilderTests {
 
 	// G6-5: an injected client that follows redirects is refused at build() with IAE; NEVER is accepted.
 	@TestFactory
-	Stream<DynamicTest> anInjectedClientMustNeverFollowRedirects() {
+	@NonNull Stream<@NonNull DynamicTest> anInjectedClientMustNeverFollowRedirects() {
 		return Stream.of(HttpClient.Redirect.values()).map(redirect -> DynamicTest.dynamicTest(redirect.name(), () -> {
 			HttpClient client = new RedirectPolicyClient(redirect);
 			if (redirect == HttpClient.Redirect.NEVER)
@@ -186,7 +188,7 @@ final class RemoteJsonWebKeySourceBuilderTests {
 	// localhost when allowed, G8-7), and pass the outbound URI policy; a query is allowed. A refusal is IAE whose
 	// message names the check and never the URI.
 	@TestFactory
-	Stream<DynamicTest> theUriIsCheckedAtBuild() {
+	@NonNull Stream<@NonNull DynamicTest> theUriIsCheckedAtBuild() {
 		return Stream.of(
 				new UriCase("keys", OutboundUriPolicy.defaultInstance(), false, "absolute"),
 				new UriCase("urn:example:keys", OutboundUriPolicy.defaultInstance(), false, "absolute"),
@@ -321,20 +323,20 @@ final class RemoteJsonWebKeySourceBuilderTests {
 		Assertions.assertThrows(NullPointerException.class, () -> builder().build(null));
 	}
 
-	private static RemoteJsonWebKeySource.Builder builder() {
+	private static RemoteJsonWebKeySource.@NonNull Builder builder() {
 		return RemoteJsonWebKeySource.withUri(URI_OK);
 	}
 
-	private static String message(Throwable throwable) {
+	private static @NonNull String message(@NonNull Throwable throwable) {
 		return String.valueOf(throwable.getMessage());
 	}
 
-	private static List<List<@Nullable Object>> arguments(RecordingObserver<JoseObserver> observer, String hook) {
+	private static @NonNull List<@NonNull List<@Nullable Object>> arguments(@NonNull RecordingObserver<@NonNull JoseObserver> observer, @NonNull String hook) {
 		return observer.getCalls(hook).stream().map(RecordingObserver.Call::getArguments).toList();
 	}
 
-	private static void addDurationRow(List<DynamicTest> tests, Limit row,
-			BiFunction<RemoteJsonWebKeySource.Builder, @Nullable Duration, RemoteJsonWebKeySource.Builder> setter) {
+	private static void addDurationRow(@NonNull List<@NonNull DynamicTest> tests, @NonNull Limit row,
+			@NonNull BiFunction<RemoteJsonWebKeySource.@NonNull Builder, @Nullable Duration, RemoteJsonWebKeySource.@NonNull Builder> setter) {
 		Duration floor = row.getFloorDuration();
 		Duration cap = row.getCapDuration();
 		tests.add(DynamicTest.dynamicTest(row.getName() + ": floor and cap accepted, null restores the default", () -> {
@@ -353,8 +355,8 @@ final class RemoteJsonWebKeySourceBuilderTests {
 		}));
 	}
 
-	private static void addAmountRow(List<DynamicTest> tests, Limit row,
-			BiFunction<RemoteJsonWebKeySource.Builder, @Nullable Integer, RemoteJsonWebKeySource.Builder> setter) {
+	private static void addAmountRow(@NonNull List<@NonNull DynamicTest> tests, @NonNull Limit row,
+			@NonNull BiFunction<RemoteJsonWebKeySource.@NonNull Builder, @Nullable Integer, RemoteJsonWebKeySource.@NonNull Builder> setter) {
 		int floor = Math.toIntExact(row.getFloor());
 		int cap = Math.toIntExact(row.getCap());
 		tests.add(DynamicTest.dynamicTest(row.getName() + ": floor and cap accepted, null restores the default", () -> {
@@ -370,11 +372,11 @@ final class RemoteJsonWebKeySourceBuilderTests {
 		}));
 	}
 
-	private static Duration max(Duration first, Duration second) {
+	private static @NonNull Duration max(@NonNull Duration first, @NonNull Duration second) {
 		return first.compareTo(second) >= 0 ? first : second;
 	}
 
-	private static Duration min(Duration first, Duration second) {
+	private static @NonNull Duration min(@NonNull Duration first, @NonNull Duration second) {
 		return first.compareTo(second) <= 0 ? first : second;
 	}
 
@@ -388,7 +390,7 @@ final class RemoteJsonWebKeySourceBuilderTests {
 		private final Boolean insecureLoopback;
 		private final @Nullable String failedCheck;
 
-		private UriCase(String uri, OutboundUriPolicy policy, Boolean insecureLoopback, @Nullable String failedCheck) {
+		private UriCase(@NonNull String uri, @NonNull OutboundUriPolicy policy, @NonNull Boolean insecureLoopback, @Nullable String failedCheck) {
 			this.uri = uri;
 			this.policy = policy;
 			this.insecureLoopback = insecureLoopback;
@@ -403,71 +405,71 @@ final class RemoteJsonWebKeySourceBuilderTests {
 		private final HttpClient.Redirect redirect;
 		private final MemoryHttpClient delegate = MemoryHttpClient.answering(Answer.fromStatus(500));
 
-		private RedirectPolicyClient(HttpClient.Redirect redirect) {
+		private RedirectPolicyClient(HttpClient.@NonNull Redirect redirect) {
 			this.redirect = redirect;
 		}
 
 		@Override
-		public HttpClient.Redirect followRedirects() {
+		public HttpClient.@NonNull Redirect followRedirects() {
 			return this.redirect;
 		}
 
 		@Override
-		public java.util.Optional<java.net.CookieHandler> cookieHandler() {
+		public java.util.@NonNull Optional<java.net.@NonNull CookieHandler> cookieHandler() {
 			return this.delegate.cookieHandler();
 		}
 
 		@Override
-		public java.util.Optional<Duration> connectTimeout() {
+		public java.util.@NonNull Optional<@NonNull Duration> connectTimeout() {
 			return this.delegate.connectTimeout();
 		}
 
 		@Override
-		public java.util.Optional<java.net.ProxySelector> proxy() {
+		public java.util.@NonNull Optional<java.net.@NonNull ProxySelector> proxy() {
 			return this.delegate.proxy();
 		}
 
 		@Override
-		public javax.net.ssl.SSLContext sslContext() {
+		public javax.net.ssl.@NonNull SSLContext sslContext() {
 			return this.delegate.sslContext();
 		}
 
 		@Override
-		public javax.net.ssl.SSLParameters sslParameters() {
+		public javax.net.ssl.@NonNull SSLParameters sslParameters() {
 			return this.delegate.sslParameters();
 		}
 
 		@Override
-		public java.util.Optional<java.net.Authenticator> authenticator() {
+		public java.util.@NonNull Optional<java.net.@NonNull Authenticator> authenticator() {
 			return this.delegate.authenticator();
 		}
 
 		@Override
-		public HttpClient.Version version() {
+		public HttpClient.@NonNull Version version() {
 			return this.delegate.version();
 		}
 
 		@Override
-		public java.util.Optional<java.util.concurrent.Executor> executor() {
+		public java.util.@NonNull Optional<java.util.concurrent.@NonNull Executor> executor() {
 			return this.delegate.executor();
 		}
 
 		@Override
-		public <T> java.net.http.HttpResponse<T> send(java.net.http.HttpRequest request,
-				java.net.http.HttpResponse.BodyHandler<T> responseBodyHandler) throws java.io.IOException {
+		public <T> java.net.http.@NonNull HttpResponse<@NonNull T> send(java.net.http.@NonNull HttpRequest request,
+				java.net.http.HttpResponse.@NonNull BodyHandler<@NonNull T> responseBodyHandler) throws java.io.IOException {
 			return this.delegate.send(request, responseBodyHandler);
 		}
 
 		@Override
-		public <T> java.util.concurrent.CompletableFuture<java.net.http.HttpResponse<T>> sendAsync(
-				java.net.http.HttpRequest request, java.net.http.HttpResponse.BodyHandler<T> responseBodyHandler) {
+		public <T> java.util.concurrent.@NonNull CompletableFuture<java.net.http.@NonNull HttpResponse<@NonNull T>> sendAsync(
+				java.net.http.@NonNull HttpRequest request, java.net.http.HttpResponse.@NonNull BodyHandler<@NonNull T> responseBodyHandler) {
 			return this.delegate.sendAsync(request, responseBodyHandler);
 		}
 
 		@Override
-		public <T> java.util.concurrent.CompletableFuture<java.net.http.HttpResponse<T>> sendAsync(
-				java.net.http.HttpRequest request, java.net.http.HttpResponse.BodyHandler<T> responseBodyHandler,
-				java.net.http.HttpResponse.PushPromiseHandler<T> pushPromiseHandler) {
+		public <T> java.util.concurrent.@NonNull CompletableFuture<java.net.http.@NonNull HttpResponse<@NonNull T>> sendAsync(
+				java.net.http.@NonNull HttpRequest request, java.net.http.HttpResponse.@NonNull BodyHandler<@NonNull T> responseBodyHandler,
+				java.net.http.HttpResponse.@NonNull PushPromiseHandler<@NonNull T> pushPromiseHandler) {
 			return this.delegate.sendAsync(request, responseBodyHandler, pushPromiseHandler);
 		}
 	}

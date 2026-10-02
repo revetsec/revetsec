@@ -16,6 +16,8 @@
 
 package com.revetsec.oauth;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.SealingKey;
 import com.revetsec.internal.http.RawResponse;
 import com.revetsec.testing.TestHttpsServer;
@@ -55,8 +57,8 @@ final class OAuthRedactionTests {
 					.build()));
 			List<String> observed = new ArrayList<>();
 			OAuthObserver observer = new OAuthObserver() {
-				@Override public void didFailEndpoint(OAuthEndpoint endpoint, URI uri,
-						OAuthException failure, Duration elapsed) {
+				@Override public void didFailEndpoint(@NonNull OAuthEndpoint endpoint, @NonNull URI uri,
+						@NonNull OAuthException failure, @NonNull Duration elapsed) {
 					observed.add(endpoint + " " + uri + " " + failure);
 				}
 			};

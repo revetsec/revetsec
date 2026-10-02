@@ -16,6 +16,8 @@
 
 package com.revetsec.internal.jose;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.internal.json.JsonCodec;
 import com.revetsec.internal.json.JsonLimits;
 import com.revetsec.jose.JoseException;
@@ -103,7 +105,7 @@ final class JwtClaimsPolicyTests {
 	// M2-11 negatives: the tid must be a whole lowercase GUID string and must substitute into the template to give
 	// exactly iss; otherwise KEY_ISSUER_MISMATCH, never a pass.
 	@TestFactory
-	Stream<DynamicTest> entrasTemplateNeedsAMatchingLowercaseTenantId() {
+	@NonNull Stream<@NonNull DynamicTest> entrasTemplateNeedsAMatchingLowercaseTenantId() {
 		Map<String, @Nullable String> tids = new LinkedHashMap<>();
 		tids.put("absent", null);
 		tids.put("a number", "123");
@@ -131,7 +133,7 @@ final class JwtClaimsPolicyTests {
 	// M2-11: the tid must be a lowercase GUID even when substituting it would give iss exactly: a configured issuer
 	// that holds an uppercase or braced GUID, a domain name, or path characters never makes the template match.
 	@TestFactory
-	Stream<DynamicTest> theTenantIdMustBeAGuidEvenWhenTheSubstitutionMatches() {
+	@NonNull Stream<@NonNull DynamicTest> theTenantIdMustBeAGuidEvenWhenTheSubstitutionMatches() {
 		return Stream.of(TENANT.toUpperCase(Locale.ROOT), "{" + TENANT + "}", "contoso.onmicrosoft.com",
 				TENANT + "/v2.0/..", "common", TENANT.substring(1)).map(tid -> DynamicTest.dynamicTest(tid, () -> {
 			String issuer = JwtClaimsPolicy.ENTRA_ISSUER_PREFIX + tid + JwtClaimsPolicy.ENTRA_ISSUER_SUFFIX;
@@ -145,7 +147,7 @@ final class JwtClaimsPolicyTests {
 	// M2-11: only the exact template bytes are a template; another host, placeholder spelling, a doubled placeholder,
 	// a trailing slash or an extra path is compared literally with iss, and so fails.
 	@TestFactory
-	Stream<DynamicTest> onlyTheExactTemplateIsATemplate() {
+	@NonNull Stream<@NonNull DynamicTest> onlyTheExactTemplateIsATemplate() {
 		List<String> lookAlikes = List.of("https://login.microsoftonline.us/{tenantid}/v2.0",
 				"https://login.microsoftonline.com/{TENANTID}/v2.0", "https://login.microsoftonline.com/{tid}/v2.0",
 				"https://login.microsoftonline.com/{tenantid}{tenantid}/v2.0",
@@ -187,7 +189,7 @@ final class JwtClaimsPolicyTests {
 	// discovery document publishes it, never gets a template-keyed key to verify a token whose iss is the template,
 	// whatever its tid, because no tid substitutes into the template to give the template back.
 	@TestFactory
-	Stream<DynamicTest> theTemplateItselfIsNeverALiteralIssuer() {
+	@NonNull Stream<@NonNull DynamicTest> theTemplateItselfIsNeverALiteralIssuer() {
 		String template = JwtClaimsPolicy.ENTRA_ISSUER_TEMPLATE;
 		JwtClaimsPolicy policy = JwtClaimsPolicy.fromSettings(template, Set.of("api"), Set.of(), Duration.ZERO);
 		Map<String, @Nullable String> tids = new LinkedHashMap<>();
@@ -252,7 +254,7 @@ final class JwtClaimsPolicyTests {
 	// Step 12 (RFC 7519 sections 4.1.4 to 4.1.6): with skew s, exp + s - 1 s passes and exp + s is EXPIRED; nbf and
 	// iat at now + s pass and at now + s + 1 s fail; at skews 0, 60 s and 5 minutes.
 	@TestFactory
-	Stream<DynamicTest> theTimeChecksHoldAtTheirBoundariesForEverySkew() {
+	@NonNull Stream<@NonNull DynamicTest> theTimeChecksHoldAtTheirBoundariesForEverySkew() {
 		return Stream.of(Duration.ZERO, Duration.ofSeconds(60), Duration.ofMinutes(5)).map(skew -> DynamicTest.dynamicTest(
 				"skew " + skew, () -> {
 					JwtClaimsPolicy policy = JwtClaimsPolicy.fromSettings(ISSUER, Set.of("api"), Set.of(), skew);
@@ -376,48 +378,48 @@ final class JwtClaimsPolicyTests {
 				+ "clockSkew=PT0S}", JwtClaimsPolicy.fromSettings(ISSUER, null, Set.of(), Duration.ZERO).toString());
 	}
 
-	private static TestClaims base() {
+	private static @NonNull TestClaims base() {
 		return TestClaims.empty().put("iss", ISSUER).put("aud", "api").put("exp", NOW.getEpochSecond() + 300);
 	}
 
-	private static TestClaims entra(String issuer) {
+	private static @NonNull TestClaims entra(@NonNull String issuer) {
 		return base().put("iss", issuer);
 	}
 
-	private static String withoutAudience() {
+	private static @NonNull String withoutAudience() {
 		return "{\"iss\":\"" + ISSUER + "\",\"exp\":" + (NOW.getEpochSecond() + 300) + "}";
 	}
 
-	private static String withAudience(String audience) {
+	private static @NonNull String withAudience(@NonNull String audience) {
 		return "{\"iss\":\"" + ISSUER + "\",\"aud\":" + audience + ",\"exp\":" + (NOW.getEpochSecond() + 300) + "}";
 	}
 
-	private static String withExpiry(String expiry) {
+	private static @NonNull String withExpiry(@NonNull String expiry) {
 		return "{\"iss\":\"" + ISSUER + "\",\"aud\":\"api\",\"exp\":" + expiry + "}";
 	}
 
-	private static String with(String members) {
+	private static @NonNull String with(@NonNull String members) {
 		return "{\"iss\":\"" + ISSUER + "\",\"aud\":\"api\",\"exp\":" + (NOW.getEpochSecond() + 300) + "," + members + "}";
 	}
 
-	private static RegisteredClaims claims(TestClaims claims) throws JoseFailure {
+	private static @NonNull RegisteredClaims claims(@NonNull TestClaims claims) throws JoseFailure {
 		return claims(claims.toJson());
 	}
 
-	private static RegisteredClaims claims(String json) throws JoseFailure {
+	private static @NonNull RegisteredClaims claims(@NonNull String json) throws JoseFailure {
 		return JwtClaimsReader.read(json.getBytes(StandardCharsets.UTF_8), JsonLimits.jose(65_536));
 	}
 
-	private static VerificationKey key(@Nullable String issuer) throws Exception {
+	private static @NonNull VerificationKey key(@Nullable String issuer) throws Exception {
 		VerificationKey key = JwkParser.parse((JsonObject) JsonCodec.parse(TestJsonWebKeys.withFixture(
 				Fixture.IDP_SIGNING_RSA_2048).kid("k").toJson().getBytes(StandardCharsets.UTF_8), JsonLimits.jose(65_536)));
 		return new VerificationKey(key.keyId(), key.keyType(), key.curve(), JwsAlgorithm.RS256, key.use(), issuer,
 				key.thumbprintSha256(), key.publicKey());
 	}
 
-	private static void assertReason(JoseException.Reason reason,
-																	 JwtClaimsPolicy policy,
-																	 String json,
+	private static void assertReason(JoseException.@NonNull Reason reason,
+																	 @NonNull JwtClaimsPolicy policy,
+																	 @NonNull String json,
 																	 @Nullable VerificationKey key) throws JoseFailure {
 		RegisteredClaims claims = claims(json);
 		JoseFailure failure = Assertions.assertThrows(JoseFailure.class, () -> policy.check(claims, key, NOW));

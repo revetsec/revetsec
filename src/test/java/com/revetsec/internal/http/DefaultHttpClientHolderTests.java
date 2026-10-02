@@ -16,6 +16,8 @@
 
 package com.revetsec.internal.http;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.ErrorCategory;
 import com.revetsec.OutboundUriPolicy;
 import com.revetsec.testing.ChildJvm;
@@ -159,7 +161,7 @@ final class DefaultHttpClientHolderTests {
 		 */
 		// Identity is the point: the hook must return the very client the holder hands out.
 		@SuppressWarnings("ReferenceEquality")
-		public static void main(String[] arguments) {
+		public static void main(@NonNull String @NonNull [] arguments) {
 			URI refused = URI.create(arguments[0]);
 			HttpExchange component = HttpExchange.fromHttpClient(null, OutboundUriPolicy.defaultInstance(), false);
 
@@ -183,7 +185,7 @@ final class DefaultHttpClientHolderTests {
 			System.out.println("held client: " + (held == null ? "none" : held == fromHolder ? "same" : "different"));
 		}
 
-		private static String outcome(HttpExchange component, URI uri) {
+		private static @NonNull String outcome(@NonNull HttpExchange component, @NonNull URI uri) {
 			try {
 				RawResponse response = component.execute(HttpExchangeRequest.fromDefaults(uri, ResponseProfile.TOKEN),
 						Deadline.fromNow(Duration.ofSeconds(20)));

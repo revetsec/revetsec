@@ -16,6 +16,8 @@
 
 package com.revetsec.internal;
 
+import org.jspecify.annotations.NonNull;
+
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
@@ -60,7 +62,7 @@ final class ObserverDispatchTests {
 	private static final class ThrowingObserver implements TestObserver {
 		private final Throwable failure;
 
-		private ThrowingObserver(Throwable failure) {
+		private ThrowingObserver(@NonNull Throwable failure) {
 			this.failure = failure;
 		}
 
@@ -77,7 +79,7 @@ final class ObserverDispatchTests {
 		private final List<LogRecord> records = new CopyOnWriteArrayList<>();
 
 		@Override
-		public void publish(LogRecord record) {
+		public void publish(@NonNull LogRecord record) {
 			this.records.add(record);
 		}
 
@@ -99,12 +101,12 @@ final class ObserverDispatchTests {
 		private final Throwable failure;
 		private final AtomicInteger publishCalls = new AtomicInteger();
 
-		private ThrowingHandler(Throwable failure) {
+		private ThrowingHandler(@NonNull Throwable failure) {
 			this.failure = failure;
 		}
 
 		@Override
-		public void publish(LogRecord record) {
+		public void publish(@NonNull LogRecord record) {
 			this.publishCalls.incrementAndGet();
 			ObserverDispatchTests.<RuntimeException>sneakyThrow(this.failure);
 		}
@@ -175,7 +177,7 @@ final class ObserverDispatchTests {
 	}
 
 	@TestFactory
-	Stream<DynamicTest> aThrowingHookIsContained() {
+	@NonNull Stream<@NonNull DynamicTest> aThrowingHookIsContained() {
 		// Exit criterion 15: a throwing observer and an Error are contained. Only VirtualMachineError escapes.
 		List<Throwable> failures = List.of(new IllegalStateException(SENTINEL), new NullPointerException(SENTINEL),
 				new AssertionError(SENTINEL), new LinkageError(SENTINEL), new ExceptionInInitializerError(SENTINEL),
@@ -187,7 +189,7 @@ final class ObserverDispatchTests {
 	}
 
 	@TestFactory
-	Stream<DynamicTest> aVirtualMachineErrorFromTheHookIsRethrownUnchanged() {
+	@NonNull Stream<@NonNull DynamicTest> aVirtualMachineErrorFromTheHookIsRethrownUnchanged() {
 		// M1 plan G6-4: VirtualMachineError is rethrown, because the JVM may not be able to continue.
 		List<VirtualMachineError> errors = List.of(new OutOfMemoryError(SENTINEL), new StackOverflowError(SENTINEL),
 				new InternalError(SENTINEL), new UnknownError(SENTINEL));
@@ -235,7 +237,7 @@ final class ObserverDispatchTests {
 	}
 
 	@TestFactory
-	Stream<DynamicTest> aThrowingLogHandlerIsContained() {
+	@NonNull Stream<@NonNull DynamicTest> aThrowingLogHandlerIsContained() {
 		// Exit criterion 15: a throwing java.util.logging handler is contained, so logging can never fail the call.
 		List<Throwable> failures = List.of(new IllegalStateException(SENTINEL), new AssertionError(SENTINEL),
 				new Error(SENTINEL), new Exception(SENTINEL));
@@ -276,6 +278,8 @@ final class ObserverDispatchTests {
 		Assertions.assertTrue(Thread.interrupted(), "the interrupt flag was not restored");
 	}
 
+	// Deliberate null inputs verify runtime rejection.
+	@SuppressWarnings("NullAway")
 	@Test
 	void nullArgumentsThrowNullPointerException() {
 		// Plan R15: misuse throws NPE; it is Revetsec's own bug, never contained.
@@ -285,13 +289,13 @@ final class ObserverDispatchTests {
 		}, nullValue()));
 	}
 
-	private RecordingHandler recordAtLevel(Level level) {
+	private @NonNull RecordingHandler recordAtLevel(@NonNull Level level) {
 		RecordingHandler handler = new RecordingHandler();
 		addHandlerAtLevel(handler, level);
 		return handler;
 	}
 
-	private void addHandlerAtLevel(Handler handler, Level level) {
+	private void addHandlerAtLevel(@NonNull Handler handler, @NonNull Level level) {
 		handler.setLevel(Level.ALL);
 		this.logger.setLevel(level);
 		this.logger.addHandler(handler);
@@ -305,7 +309,7 @@ final class ObserverDispatchTests {
 	}
 
 	@SuppressWarnings("unchecked")
-	private static <T extends Throwable> void sneakyThrow(Throwable throwable) throws T {
+	private static <T extends Throwable> void sneakyThrow(@NonNull Throwable throwable) throws T {
 		throw (T) throwable;
 	}
 
@@ -313,7 +317,7 @@ final class ObserverDispatchTests {
 	 * Hides a {@code null} from NullAway, for the tests that check null handling.
 	 */
 	@SuppressWarnings({"NullAway", "TypeParameterUnusedInFormals"})
-	private static <T> T nullValue() {
+	private static <T> @Nullable T nullValue() {
 		return null;
 	}
 }

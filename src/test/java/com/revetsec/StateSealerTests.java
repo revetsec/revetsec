@@ -16,6 +16,10 @@
 
 package com.revetsec;
 
+import org.jspecify.annotations.Nullable;
+
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.internal.crypto.SealedStateAccess;
 import com.revetsec.internal.crypto.SealedStateType;
 import com.revetsec.internal.crypto.UnsealException;
@@ -156,7 +160,7 @@ final class StateSealerTests {
 
 	// Exit criterion 8: the wrong context. Contexts compare exactly, as UTF-8 bytes.
 	@TestFactory
-	Stream<DynamicTest> theWrongContextGivesTheIdenticalFailure() {
+	@NonNull Stream<@NonNull DynamicTest> theWrongContextGivesTheIdenticalFailure() {
 		StateSealer sealer = TestSealers.fromFixedKey();
 		String sealed = sealer.seal(PLAINTEXT, "google", HOUR);
 
@@ -238,7 +242,7 @@ final class StateSealerTests {
 	// Exit criterion 8: expiry at the boundary now == notAfter, sealing at .000, .001 and .999 s. notAfter is the
 	// sealing time rounded up to a whole second plus the lifetime's whole seconds.
 	@TestFactory
-	Stream<DynamicTest> aValueExpiresExactlyAtNotAfter() {
+	@NonNull Stream<@NonNull DynamicTest> aValueExpiresExactlyAtNotAfter() {
 		List<Duration> offsets = List.of(Duration.ZERO, Duration.ofMillis(1), Duration.ofMillis(999));
 		List<Duration> lifetimes = List.of(Duration.ofSeconds(1), Duration.ofSeconds(60), Duration.ofMillis(60_999),
 				Duration.ofMinutes(15), Duration.ofDays(400));
@@ -347,6 +351,8 @@ final class StateSealerTests {
 
 	// Exit criterion 9: null or out-of-range arguments throw NullPointerException or IllegalArgumentException, never
 	// InvalidSealedStateException.
+	// Deliberate null inputs verify runtime rejection.
+	@SuppressWarnings("NullAway")
 	@Test
 	void nullOrOutOfRangeArgumentsThrowNullPointerOrIllegalArgumentException() {
 		StateSealer sealer = TestSealers.fromFixedKey();
@@ -387,6 +393,8 @@ final class StateSealerTests {
 	}
 
 	// Exit criterion 9 and G6-9: the builder rejects duplicate key IDs or key bytes and more than 16 verification keys.
+	// Deliberate null inputs verify runtime rejection.
+	@SuppressWarnings("NullAway")
 	@Test
 	void theBuilderRejectsKeyViolations() {
 		SealingKey active = TestSealers.fixedKey("active");
@@ -577,9 +585,9 @@ final class StateSealerTests {
 	 * message, category and transience, no cause, nothing suppressed, the same stack trace down to this class's own
 	 * call, and no echo of the input.
 	 */
-	private static void assertUniformFailure(StateSealer sealer,
-																					 String sealed,
-																					 String context) {
+	private static void assertUniformFailure(@NonNull StateSealer sealer,
+																					 @NonNull String sealed,
+																					 @NonNull String context) {
 		InvalidSealedStateException e = failureOf(sealer, sealed, context);
 		InvalidSealedStateException reference = failureOf(sealer, "", CONTEXT);
 
@@ -598,16 +606,16 @@ final class StateSealerTests {
 	/**
 	 * The one call site every failure in this class goes through, so their stack traces can be compared.
 	 */
-	private static InvalidSealedStateException failureOf(StateSealer sealer,
-																											 String sealed,
-																											 String context) {
+	private static @NonNull InvalidSealedStateException failureOf(@NonNull StateSealer sealer,
+																											 @NonNull String sealed,
+																											 @NonNull String context) {
 		return Assertions.assertThrows(InvalidSealedStateException.class, () -> sealer.unseal(sealed, context));
 	}
 
 	/**
 	 * The frames from where the exception was created down to {@link #failureOf}.
 	 */
-	private static List<StackTraceElement> throwSite(Throwable e) {
+	private static @NonNull List<@NonNull StackTraceElement> throwSite(@NonNull Throwable e) {
 		StackTraceElement[] trace = e.getStackTrace();
 
 		for (int index = 0; index < trace.length; ++index)
@@ -622,7 +630,7 @@ final class StateSealerTests {
 	 * differs from it. A single seal of this length lacks both about once in 110 tries (measured: 0.89% of 200,000),
 	 * which made a test that sealed once fail at random; 64 tries all lacking both has a probability below 10^-130.
 	 */
-	private static String sealWithAUrlSafeCharacter(StateSealer sealer) {
+	private static @NonNull String sealWithAUrlSafeCharacter(@NonNull StateSealer sealer) {
 		for (int attempt = 0; attempt < 64; ++attempt) {
 			String sealed = sealer.seal(PLAINTEXT, CONTEXT, HOUR);
 
@@ -633,7 +641,7 @@ final class StateSealerTests {
 		throw new AssertionError("64 sealed values in a row had neither '-' nor '_'");
 	}
 
-	private static String keyIdOf(String sealed) {
+	private static @NonNull String keyIdOf(@NonNull String sealed) {
 		try {
 			byte[] bytes = Base64Url.decode(sealed);
 			return new String(bytes, 2, bytes[1], StandardCharsets.US_ASCII);
@@ -645,22 +653,22 @@ final class StateSealerTests {
 	/**
 	 * Changes the last character of an unpadded base64url value so that its unused trailing bits are not zero.
 	 */
-	private static String nonCanonical(String sealed) {
+	private static @NonNull String nonCanonical(@NonNull String sealed) {
 		Assertions.assertNotEquals(0, sealed.length() % 4, "the value must have unused trailing bits");
 		String alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
 		char last = sealed.charAt(sealed.length() - 1);
 		return sealed.substring(0, sealed.length() - 1) + alphabet.charAt(alphabet.indexOf(last) ^ 1);
 	}
 
-	private static byte[] concatenate(byte[] first,
-																		byte[] second) {
+	private static byte @NonNull [] concatenate(byte @NonNull [] first,
+																		byte @NonNull [] second) {
 		ByteArrayOutputStream output = new ByteArrayOutputStream();
 		output.writeBytes(first);
 		output.writeBytes(second);
 		return output.toByteArray();
 	}
 
-	private static String escape(String value) {
+	private static @NonNull String escape(@NonNull String value) {
 		StringBuilder escaped = new StringBuilder();
 
 		for (char character : value.toCharArray())
@@ -674,7 +682,7 @@ final class StateSealerTests {
 	 * Hides a {@code null} from NullAway, for the tests that check null handling.
 	 */
 	@SuppressWarnings({"NullAway", "TypeParameterUnusedInFormals"})
-	private static <T> T nullValue() {
+	private static <T> @Nullable T nullValue() {
 		return null;
 	}
 
@@ -693,7 +701,7 @@ final class StateSealerTests {
 			// Only main runs.
 		}
 
-		public static void main(String[] arguments) throws GeneralSecurityException {
+		public static void main(@NonNull String @NonNull [] arguments) throws GeneralSecurityException {
 			StateSealer earlier = TestSealers.fromFixedKey();
 			String sealed = earlier.seal("x", CONTEXT, HOUR);
 
@@ -750,7 +758,7 @@ final class StateSealerTests {
 		 * Whether a new AES/GCM/NoPadding cipher, obtained the way {@code AesGcm} obtains one, comes from the named
 		 * provider. If not, prints {@link #PROVIDER_IGNORED} and the provider the JDK chose.
 		 */
-		private static boolean selects(String providerName) throws GeneralSecurityException {
+		private static boolean selects(@NonNull String providerName) throws GeneralSecurityException {
 			String selected = Cipher.getInstance("AES/GCM/NoPadding").getProvider().getName();
 
 			if (selected.equals(providerName))
@@ -776,7 +784,7 @@ final class StateSealerTests {
 			// Only main runs.
 		}
 
-		public static void main(String[] arguments) {
+		public static void main(@NonNull String @NonNull [] arguments) {
 			Security.insertProviderAt(new FailingRandomProvider(), 1);
 			Assertions.assertEquals(FailingRandomProvider.NAME, new SecureRandom().getProvider().getName());
 
@@ -810,15 +818,15 @@ final class StateSealerTests {
 			System.out.flush();
 		}
 
-		private static void assertRefused(Executable seal) {
+		private static void assertRefused(@NonNull Executable seal) {
 			IllegalStateException refused = Assertions.assertThrows(IllegalStateException.class, seal);
 			Assertions.assertEquals("The cryptographic provider refused to seal.", refused.getMessage());
 			ProviderException cause = Assertions.assertInstanceOf(ProviderException.class, refused.getCause());
 			Assertions.assertEquals(FailingRandom.DRAW_FAILURE, cause.getMessage());
 		}
 
-		private static boolean hasCause(Throwable throwable,
-																		String message) {
+		private static boolean hasCause(@NonNull Throwable throwable,
+																		@NonNull String message) {
 			for (Throwable cause = throwable.getCause(); cause != null; cause = cause.getCause())
 				if (cause instanceof ProviderException && message.equals(cause.getMessage()))
 					return true;
@@ -861,12 +869,12 @@ final class StateSealerTests {
 		}
 
 		@Override
-		protected void engineSetSeed(byte[] seed) {
+		protected void engineSetSeed(byte @NonNull [] seed) {
 			this.delegate.setSeed(seed);
 		}
 
 		@Override
-		protected void engineNextBytes(byte[] bytes) {
+		protected void engineNextBytes(byte @NonNull [] bytes) {
 			if (REMAINING_DRAWS.getAndDecrement() <= 0)
 				throw new ProviderException(DRAW_FAILURE);
 
@@ -874,7 +882,7 @@ final class StateSealerTests {
 		}
 
 		@Override
-		protected byte[] engineGenerateSeed(int length) {
+		protected byte @NonNull [] engineGenerateSeed(int length) {
 			return this.delegate.generateSeed(length);
 		}
 	}
@@ -885,8 +893,8 @@ final class StateSealerTests {
 	public static final class TestProvider extends Provider {
 		private static final long serialVersionUID = 1L;
 
-		TestProvider(String name,
-								 Class<? extends CipherSpi> implementation) {
+		TestProvider(@NonNull String name,
+								 @NonNull Class<? extends @NonNull CipherSpi> implementation) {
 			super(name, "1.0", "Revetsec test provider");
 			put("Cipher.AES/GCM/NoPadding", implementation.getName());
 		}
@@ -901,12 +909,12 @@ final class StateSealerTests {
 		}
 
 		@Override
-		protected void engineSetMode(String mode) {
+		protected void engineSetMode(@NonNull String mode) {
 			// Accepted.
 		}
 
 		@Override
-		protected void engineSetPadding(String padding) {
+		protected void engineSetPadding(@NonNull String padding) {
 			// Accepted.
 		}
 
@@ -921,73 +929,73 @@ final class StateSealerTests {
 		}
 
 		@Override
-		protected byte[] engineGetIV() {
+		protected byte @NonNull [] engineGetIV() {
 			return new byte[12];
 		}
 
 		@Override
-		protected AlgorithmParameters engineGetParameters() {
+		protected @NonNull AlgorithmParameters engineGetParameters() {
 			throw new UnsupportedOperationException();
 		}
 
 		@Override
 		protected void engineInit(int mode,
-															Key key,
-															SecureRandom random) {
+															@NonNull Key key,
+															@NonNull SecureRandom random) {
 			// Accepted.
 		}
 
 		@Override
 		protected void engineInit(int mode,
-															Key key,
-															AlgorithmParameterSpec parameters,
-															SecureRandom random) {
+															@NonNull Key key,
+															@NonNull AlgorithmParameterSpec parameters,
+															@NonNull SecureRandom random) {
 			// Accepted.
 		}
 
 		@Override
 		protected void engineInit(int mode,
-															Key key,
-															AlgorithmParameters parameters,
-															SecureRandom random) {
+															@NonNull Key key,
+															@NonNull AlgorithmParameters parameters,
+															@NonNull SecureRandom random) {
 			// Accepted.
 		}
 
 		@Override
-		protected void engineUpdateAAD(byte[] input,
+		protected void engineUpdateAAD(byte @NonNull [] input,
 																	 int offset,
 																	 int length) {
 			// Accepted.
 		}
 
 		@Override
-		protected byte[] engineUpdate(byte[] input,
+		protected byte @NonNull [] engineUpdate(byte @NonNull [] input,
 																	int offset,
 																	int length) {
 			throw new ProviderException("refused");
 		}
 
 		@Override
-		protected int engineUpdate(byte[] input,
+		protected int engineUpdate(byte @NonNull [] input,
 															 int offset,
 															 int length,
-															 byte[] output,
+															 byte @NonNull [] output,
 															 int outputOffset) {
 			throw new ProviderException("refused");
 		}
 
 		@Override
-		protected byte[] engineDoFinal(byte[] input,
+		protected byte @NonNull [] engineDoFinal(byte @NonNull [] input,
 																	 int offset,
 																	 int length) throws AEADBadTagException {
 			throw new ProviderException("refused");
 		}
 
 		@Override
-		protected int engineDoFinal(byte[] input,
+		protected int engineDoFinal(byte @NonNull [] input,
 																int offset,
 																int length,
-																byte[] output,
+																byte @NonNull [] output,
 																int outputOffset) {
 			throw new ProviderException("refused");
 		}
@@ -1004,12 +1012,12 @@ final class StateSealerTests {
 		}
 
 		@Override
-		protected void engineSetMode(String mode) {
+		protected void engineSetMode(@NonNull String mode) {
 			// Only GCM is registered.
 		}
 
 		@Override
-		protected void engineSetPadding(String padding) {
+		protected void engineSetPadding(@NonNull String padding) {
 			// Only NoPadding is registered.
 		}
 
@@ -1024,78 +1032,78 @@ final class StateSealerTests {
 		}
 
 		@Override
-		protected byte[] engineGetIV() {
+		protected byte @NonNull [] engineGetIV() {
 			return this.delegate.getIV();
 		}
 
 		@Override
-		protected AlgorithmParameters engineGetParameters() {
+		protected @NonNull AlgorithmParameters engineGetParameters() {
 			return this.delegate.getParameters();
 		}
 
 		@Override
 		protected void engineInit(int mode,
-															Key key,
-															SecureRandom random) throws InvalidKeyException {
+															@NonNull Key key,
+															@NonNull SecureRandom random) throws InvalidKeyException {
 			this.delegate.init(mode, key, random);
 		}
 
 		@Override
 		protected void engineInit(int mode,
-															Key key,
-															AlgorithmParameterSpec parameters,
-															SecureRandom random) throws InvalidKeyException, InvalidAlgorithmParameterException {
+															@NonNull Key key,
+															@NonNull AlgorithmParameterSpec parameters,
+															@NonNull SecureRandom random) throws InvalidKeyException, InvalidAlgorithmParameterException {
 			this.delegate.init(mode, key, parameters, random);
 		}
 
 		@Override
 		protected void engineInit(int mode,
-															Key key,
-															AlgorithmParameters parameters,
-															SecureRandom random) throws InvalidKeyException, InvalidAlgorithmParameterException {
+															@NonNull Key key,
+															@NonNull AlgorithmParameters parameters,
+															@NonNull SecureRandom random) throws InvalidKeyException, InvalidAlgorithmParameterException {
 			this.delegate.init(mode, key, parameters, random);
 		}
 
 		@Override
-		protected void engineUpdateAAD(byte[] input,
+		protected void engineUpdateAAD(byte @NonNull [] input,
 																	 int offset,
 																	 int length) {
 			this.delegate.updateAAD(input, offset, length);
 		}
 
 		@Override
-		protected void engineUpdateAAD(ByteBuffer input) {
+		protected void engineUpdateAAD(@NonNull ByteBuffer input) {
 			this.delegate.updateAAD(input);
 		}
 
 		@Override
-		protected byte[] engineUpdate(byte[] input,
+		protected byte @NonNull [] engineUpdate(byte @NonNull [] input,
 																	int offset,
 																	int length) {
 			return this.delegate.update(input, offset, length);
 		}
 
 		@Override
-		protected int engineUpdate(byte[] input,
+		protected int engineUpdate(byte @NonNull [] input,
 															 int offset,
 															 int length,
-															 byte[] output,
+															 byte @NonNull [] output,
 															 int outputOffset) throws ShortBufferException {
 			return this.delegate.update(input, offset, length, output, outputOffset);
 		}
 
 		@Override
-		protected byte[] engineDoFinal(byte[] input,
+		protected byte @NonNull [] engineDoFinal(byte @NonNull [] input,
 																	 int offset,
 																	 int length) throws IllegalBlockSizeException, BadPaddingException {
 			return this.delegate.doFinal(input, offset, length);
 		}
 
 		@Override
-		protected int engineDoFinal(byte[] input,
+		protected int engineDoFinal(byte @NonNull [] input,
 																int offset,
 																int length,
-																byte[] output,
+																byte @NonNull [] output,
 																int outputOffset)
 				throws ShortBufferException, IllegalBlockSizeException, BadPaddingException {
 			return this.delegate.doFinal(input, offset, length, output, outputOffset);
@@ -1112,14 +1120,14 @@ final class StateSealerTests {
 		}
 
 		@Override
-		protected void engineUpdateAAD(byte[] input,
+		protected void engineUpdateAAD(byte @NonNull [] input,
 																	 int offset,
 																	 int length) {
 			// The defect under test: the additional authenticated data is dropped.
 		}
 
 		@Override
-		protected void engineUpdateAAD(ByteBuffer input) {
+		protected void engineUpdateAAD(@NonNull ByteBuffer input) {
 			// The defect under test: the additional authenticated data is dropped.
 			input.position(input.limit());
 		}
@@ -1138,9 +1146,9 @@ final class StateSealerTests {
 
 		@Override
 		protected void engineInit(int mode,
-															Key key,
-															AlgorithmParameterSpec parameters,
-															SecureRandom random) throws InvalidKeyException, InvalidAlgorithmParameterException {
+															@NonNull Key key,
+															@NonNull AlgorithmParameterSpec parameters,
+															@NonNull SecureRandom random) throws InvalidKeyException, InvalidAlgorithmParameterException {
 			// The defect under test: the caller's IV is replaced.
 			super.engineInit(mode, key, parameters instanceof GCMParameterSpec gcm
 					? new GCMParameterSpec(gcm.getTLen(), OWN_IV) : parameters, random);
@@ -1159,14 +1167,14 @@ final class StateSealerTests {
 
 		@Override
 		protected void engineInit(int mode,
-															Key key,
-															AlgorithmParameterSpec parameters,
-															SecureRandom random) {
+															@NonNull Key key,
+															@NonNull AlgorithmParameterSpec parameters,
+															@NonNull SecureRandom random) {
 			this.encrypting = mode == Cipher.ENCRYPT_MODE;
 		}
 
 		@Override
-		protected byte[] engineDoFinal(byte[] input,
+		protected byte @NonNull [] engineDoFinal(byte @NonNull [] input,
 																	 int offset,
 																	 int length) throws AEADBadTagException {
 			if (this.encrypting)

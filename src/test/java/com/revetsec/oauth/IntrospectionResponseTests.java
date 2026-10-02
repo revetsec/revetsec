@@ -16,6 +16,8 @@
 
 package com.revetsec.oauth;
 
+import org.jspecify.annotations.NonNull;
+
 import org.junit.jupiter.api.*;
 import static org.junit.jupiter.api.Assertions.*;
 import com.revetsec.testing.*;
@@ -38,7 +40,7 @@ import static com.revetsec.oauth.Phase2Fixtures.*;
 
 /** RFC7662 section2.2 and approved G11 audience boundary; no positive/inactive credential cache. */
 final class IntrospectionResponseTests {
-    private static VerifiedAccessToken validate(String json) { return IntrospectionResponse.parse(raw(200,json),NOW).validate(ISSUER,Set.of(AUD),Set.of(),NOW,Duration.ZERO); }
+    private static @NonNull VerifiedAccessToken validate(@NonNull String json) { return IntrospectionResponse.parse(raw(200,json),NOW).validate(ISSUER,Set.of(AUD),Set.of(),NOW,Duration.ZERO); }
     @Test void activeResponseRequiresAudienceAndAbsentIssuerNamesAuthoritativeAs() {
         VerifiedAccessToken proof=validate(active());assertEquals(ISSUER,proof.getIssuer());assertTrue(proof.getSubject().isEmpty());assertTrue(proof.getClientId().isEmpty());assertTrue(proof.getExpiresAt().isEmpty());assertFalse(proof.getClaims().getMembers().containsKey("iss"));
         assertEquals(Set.of("read","write"),proof.getScopes());redacted(proof,"resource","read","write");
@@ -47,14 +49,14 @@ final class IntrospectionResponseTests {
         assertEquals(List.of("other",AUD),validate("{\"active\":true,\"aud\":[\"other\",\"resource\"]}").getAudiences());
         assertEquals(AccessTokenValidationException.Reason.INACTIVE,assertThrows(AccessTokenValidationException.class,()->validate("{\"active\":false,\"sub\":42}")).getReason());
     }
-    @TestFactory Stream<DynamicTest> activeMustBeJsonBoolean() { return Stream.of("{}","[]","{\"active\":null}","{\"active\":\"true\"}","{\"active\":1}","{\"active\":true,\"active\":false}","garbage").map(v->DynamicTest.dynamicTest(v,()->assertThrows(OAuthResponseException.class,()->validate(v)))); }
-    @TestFactory Stream<DynamicTest> malformedTypedMembersAreProviderFailures() {
+    @TestFactory @NonNull Stream<@NonNull DynamicTest> activeMustBeJsonBoolean() { return Stream.of("{}","[]","{\"active\":null}","{\"active\":\"true\"}","{\"active\":1}","{\"active\":true,\"active\":false}","garbage").map(v->DynamicTest.dynamicTest(v,()->assertThrows(OAuthResponseException.class,()->validate(v)))); }
+    @TestFactory @NonNull Stream<@NonNull DynamicTest> malformedTypedMembersAreProviderFailures() {
         return Stream.of("aud","iss","sub","client_id","scope","token_type","exp","iat","nbf").flatMap(n->Stream.of("null","{}","42.5").map(v->DynamicTest.dynamicTest(n+v,()-> {
             String json="{\"active\":true,"+(n.equals("aud")?"":"\"aud\":\"resource\",")+JsonText.string(n)+":"+v+"}";
             assertThrows(OAuthResponseException.class,()->validate(json));
         })));
     }
-    @TestFactory Stream<DynamicTest> timestampsAreIntegralNumbersInInstantRange() {
+    @TestFactory @NonNull Stream<@NonNull DynamicTest> timestampsAreIntegralNumbersInInstantRange() {
         return Stream.of("exp","iat","nbf").flatMap(n->Stream.of("\"1800000000\"","1e999","999999999999999999999999","31556889864403200").map(v->DynamicTest.dynamicTest(n+v,()->assertThrows(OAuthResponseException.class,()->validate("{\"active\":true,\"aud\":\"resource\","+JsonText.string(n)+":"+v+"}")))));
     }
     @Test void exactTimeBoundariesAndTypedOptionalClaims() {
@@ -66,7 +68,7 @@ final class IntrospectionResponseTests {
         VerifiedAccessToken proof=validate("{\"active\":true,\"aud\":\"resource\",\"iss\":\"https://issuer.example\",\"sub\":\"TEST-ONLY-sub\",\"client_id\":\"TEST-ONLY-client\",\"token_type\":\"bEaReR\",\"scope\":\"\",\"exp\":"+(now+30)+".0}");
         assertEquals(Optional.of("TEST-ONLY-sub"),proof.getSubject());assertEquals(Optional.of("TEST-ONLY-client"),proof.getClientId());assertTrue(proof.getScopes().isEmpty());assertEquals(Optional.of(NOW.plusSeconds(30)),proof.getExpiresAt());
     }
-    @TestFactory Stream<DynamicTest> localPolicyRejectionNeverReleasesClaims() {
+    @TestFactory @NonNull Stream<@NonNull DynamicTest> localPolicyRejectionNeverReleasesClaims() {
         return Stream.of(Map.entry("iss","\"https://other.example\""),Map.entry("cnf","null"),Map.entry("cnf","{}"),Map.entry("token_type","\"DPoP\""),Map.entry("scope","\"read  write\"")).map(e->DynamicTest.dynamicTest(e.toString(),()->assertThrows(AccessTokenValidationException.class,()->validate("{\"active\":true,\"aud\":\"resource\","+JsonText.string(e.getKey())+":"+e.getValue()+"}"))));
     }
     @Test void requiredClaimsArePresenceChecksAndUnknownClaimsRemainExplicitSensitiveAccess() {

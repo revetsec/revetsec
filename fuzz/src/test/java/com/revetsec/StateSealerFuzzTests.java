@@ -16,6 +16,10 @@
 
 package com.revetsec;
 
+import org.jspecify.annotations.Nullable;
+
+import org.jspecify.annotations.NonNull;
+
 import com.code_intelligence.jazzer.api.FuzzedDataProvider;
 import com.code_intelligence.jazzer.junit.FuzzTest;
 import com.revetsec.internal.Limits;
@@ -111,7 +115,7 @@ public class StateSealerFuzzTests {
 	 * @param input the fuzzed sealed value, read as ISO-8859-1 so every byte is one character
 	 */
 	@FuzzTest(maxDuration = "5m")
-	public void unsealRejectsEverythingButAuthenticValuesWithOneFixedException(byte[] input) throws UnsealException {
+	public void unsealRejectsEverythingButAuthenticValuesWithOneFixedException(byte @NonNull [] input) throws UnsealException {
 		String sealed = new String(input, StandardCharsets.ISO_8859_1);
 		String opened;
 
@@ -152,7 +156,7 @@ public class StateSealerFuzzTests {
 	 * @param data the fuzzed plaintext, context, label, lifetime and edit
 	 */
 	@FuzzTest(maxDuration = "5m")
-	public void sealedValuesOpenOnlyUnchangedUnderTheirOwnLabelContextAndTime(FuzzedDataProvider data)
+	public void sealedValuesOpenOnlyUnchangedUnderTheirOwnLabelContextAndTime(@NonNull FuzzedDataProvider data)
 			throws UnsealException {
 		String plaintext = data.consumeBoolean() ? data.consumeString(3_000) : characters(data, 16);
 		String context = data.consumeBoolean() ? CONTEXT : characters(data, 260);
@@ -220,8 +224,8 @@ public class StateSealerFuzzTests {
 	 *
 	 * @return the notAfter the value holds
 	 */
-	private static long requireAuthenticValueIsBound(String sealed, SealedStateType type, String context,
-																									 String plaintext, long notAfter) throws UnsealException {
+	private static long requireAuthenticValueIsBound(@NonNull String sealed, @NonNull SealedStateType type, @NonNull String context,
+																									 @NonNull String plaintext, long notAfter) throws UnsealException {
 		Clock beforeNotAfter = beforeNotAfter(notAfter);
 		Assertions.assertEquals(plaintext, ACCESS.unseal(SEALER, type, sealed, context, beforeNotAfter),
 				"an authentic value did not open before its notAfter");
@@ -264,7 +268,7 @@ public class StateSealerFuzzTests {
 	 *
 	 * @return the notAfter the value holds, in epoch seconds
 	 */
-	private static long independentlyOpened(String sealed, SealedStateType type, String context, String plaintext) {
+	private static long independentlyOpened(@NonNull String sealed, @NonNull SealedStateType type, @NonNull String context, @NonNull String plaintext) {
 		byte[] bytes = Base64.getUrlDecoder().decode(sealed);
 		int keyIdLength = bytes[1] & 0xFF;
 		byte[] masterKey = MASTER_KEYS.get(new String(bytes, 2, keyIdLength, StandardCharsets.US_ASCII));
@@ -297,13 +301,13 @@ public class StateSealerFuzzTests {
 		}
 	}
 
-	private static byte[] hmacSha256(byte[] key, byte[] message) throws GeneralSecurityException {
+	private static byte @NonNull [] hmacSha256(byte @NonNull [] key, byte @NonNull [] message) throws GeneralSecurityException {
 		Mac mac = Mac.getInstance("HmacSHA256");
 		mac.init(new SecretKeySpec(key, "HmacSHA256"));
 		return mac.doFinal(message);
 	}
 
-	private static byte[] concatenated(byte[]... parts) {
+	private static byte @NonNull [] concatenated(byte @NonNull [] @NonNull ... parts) {
 		ByteArrayOutputStream bytes = new ByteArrayOutputStream();
 
 		for (byte[] part : parts)
@@ -312,18 +316,18 @@ public class StateSealerFuzzTests {
 		return bytes.toByteArray();
 	}
 
-	private static byte[] u32(int value) {
+	private static byte @NonNull [] u32(int value) {
 		return ByteBuffer.allocate(Integer.BYTES).putInt(value).array();
 	}
 
-	private static byte[] ascii(String value) {
+	private static byte @NonNull [] ascii(@NonNull String value) {
 		return value.getBytes(StandardCharsets.US_ASCII);
 	}
 
 	/**
 	 * A value that some label opens is opened by that label only; one that no label opens stays closed.
 	 */
-	private static void requireOpensOnlyUnderItsOwnLabel(String sealed, SealedStateType type) throws UnsealException {
+	private static void requireOpensOnlyUnderItsOwnLabel(@NonNull String sealed, @NonNull SealedStateType type) throws UnsealException {
 		String opened;
 
 		try {
@@ -345,7 +349,7 @@ public class StateSealerFuzzTests {
 	 * Requires the internal path to fail: {@link UnsealException.Kind#INVALID} when {@code invalid} is set, otherwise
 	 * INVALID or EXPIRED, where EXPIRED is allowed only for a value that opens at an earlier time.
 	 */
-	private static void requireInternalFailure(String sealed, SealedStateType type, String context, Clock clock,
+	private static void requireInternalFailure(@NonNull String sealed, @NonNull SealedStateType type, @NonNull String context, @NonNull Clock clock,
 																						 boolean invalid) throws UnsealException {
 		try {
 			ACCESS.unseal(SEALER, type, sealed, context, clock);
@@ -368,7 +372,7 @@ public class StateSealerFuzzTests {
 	 * Requires an authentic value to have expired at {@code clock}: {@link UnsealException.Kind#EXPIRED}, which the
 	 * internal path reports only after authentication.
 	 */
-	private static void requireExpired(String sealed, SealedStateType type, String context, Clock clock) {
+	private static void requireExpired(@NonNull String sealed, @NonNull SealedStateType type, @NonNull String context, @NonNull Clock clock) {
 		try {
 			ACCESS.unseal(SEALER, type, sealed, context, clock);
 		} catch (UnsealException e) {
@@ -380,7 +384,7 @@ public class StateSealerFuzzTests {
 		Assertions.fail("a value opened at or after its notAfter");
 	}
 
-	private static void requirePublicFailure(String sealed, String context) {
+	private static void requirePublicFailure(@NonNull String sealed, @NonNull String context) {
 		try {
 			SEALER.unseal(sealed, context);
 		} catch (InvalidSealedStateException e) {
@@ -391,7 +395,7 @@ public class StateSealerFuzzTests {
 		Assertions.fail("the public path opened a value it must reject");
 	}
 
-	private static void requireUniformFailure(InvalidSealedStateException exception) {
+	private static void requireUniformFailure(@NonNull InvalidSealedStateException exception) {
 		Assertions.assertEquals(REFERENCE_FAILURE.getMessage(), exception.getMessage(), "not the fixed message");
 		Assertions.assertNull(exception.getCause(), "the failure has a cause");
 		Assertions.assertEquals(0, exception.getSuppressed().length, "the failure has suppressed exceptions");
@@ -401,13 +405,13 @@ public class StateSealerFuzzTests {
 				"the failure's stack trace depends on which step failed");
 	}
 
-	private static void requireFixedShape(UnsealException exception) {
+	private static void requireFixedShape(@NonNull UnsealException exception) {
 		Assertions.assertEquals(exception.getKind().getMessage(), exception.getMessage(), "not the Kind's message");
 		Assertions.assertNull(exception.getCause(), "an UnsealException has a cause");
 		Assertions.assertEquals(0, exception.getSuppressed().length, "an UnsealException has suppressed exceptions");
 	}
 
-	private static void requireSealFailure(IllegalArgumentException exception, String expectedMessage) {
+	private static void requireSealFailure(@NonNull IllegalArgumentException exception, @Nullable String expectedMessage) {
 		Assertions.assertNotNull(expectedMessage, () -> "seal rejected valid arguments: " + exception.getMessage());
 		Assertions.assertEquals(expectedMessage, exception.getMessage(), "not the first failed check's message");
 	}
@@ -416,7 +420,7 @@ public class StateSealerFuzzTests {
 	 * The message of the first check {@code seal} must fail, in its documented order, or {@code null}. A {@code null}
 	 * lifetime means the internal path, which takes an expiry instead.
 	 */
-	private static String expectedSealFailure(String plaintext, String context, Duration lifetime) {
+	private static @Nullable String expectedSealFailure(@NonNull String plaintext, @NonNull String context, @Nullable Duration lifetime) {
 		if (context.isEmpty() || context.length() > 256 || !isWellFormed(context))
 			return CONTEXT_MESSAGE;
 
@@ -441,7 +445,7 @@ public class StateSealerFuzzTests {
 		return null;
 	}
 
-	private static long expectedSealedLength(String plaintext) {
+	private static long expectedSealedLength(@NonNull String plaintext) {
 		return sealedLength(plaintext.getBytes(StandardCharsets.UTF_8).length);
 	}
 
@@ -459,7 +463,7 @@ public class StateSealerFuzzTests {
 	 * a code unit off the front could leave an unpaired surrogate, which is an invalid context, not another one (found
 	 * by this target).
 	 */
-	private static String otherContext(String context) {
+	private static @NonNull String otherContext(@NonNull String context) {
 		if (context.length() < 256)
 			return context + "x";
 
@@ -472,13 +476,13 @@ public class StateSealerFuzzTests {
 	 * its lowest bit flipped. The flip never crosses a boundary of the UTF-8 length classes (U+0080, U+0800, U+10000)
 	 * or the surrogate range, which all start at even code points, and U+10FFFF becomes U+10FFFE.
 	 */
-	private static String sameLengthOtherContext(String context) {
+	private static @NonNull String sameLengthOtherContext(@NonNull String context) {
 		int first = context.codePointAt(0);
 		return new StringBuilder(context.length()).appendCodePoint(first ^ 1)
 				.append(context, Character.charCount(first), context.length()).toString();
 	}
 
-	private static boolean opens(StateSealer sealer, String sealed, SealedStateType type, String context, Clock clock) {
+	private static boolean opens(@NonNull StateSealer sealer, @NonNull String sealed, @NonNull SealedStateType type, @NonNull String context, @NonNull Clock clock) {
 		try {
 			ACCESS.unseal(sealer, type, sealed, context, clock);
 			return true;
@@ -492,19 +496,19 @@ public class StateSealerFuzzTests {
 	/**
 	 * The key ID in an authentic value's header: version byte, key ID length, key ID.
 	 */
-	private static String keyIdOf(String sealed) {
+	private static @NonNull String keyIdOf(@NonNull String sealed) {
 		byte[] bytes = Base64.getUrlDecoder().decode(sealed);
 		return new String(bytes, 2, bytes[1] & 0xFF, StandardCharsets.US_ASCII);
 	}
 
-	private static Clock beforeNotAfter(long notAfter) {
+	private static @NonNull Clock beforeNotAfter(long notAfter) {
 		return Clock.fixed(Instant.ofEpochSecond(notAfter - 1, 999_999_999), ZoneOffset.UTC);
 	}
 
 	/**
 	 * One fuzzed edit: replace, insert or delete a character, truncate, or append.
 	 */
-	private static String edited(String sealed, FuzzedDataProvider data) {
+	private static @NonNull String edited(@NonNull String sealed, @NonNull FuzzedDataProvider data) {
 		int position = data.consumeInt(0, sealed.length() - 1);
 		char character = data.consumeBoolean() ? data.consumeChar() : ALPHABET.charAt(data.consumeInt(0, 63));
 
@@ -521,7 +525,7 @@ public class StateSealerFuzzTests {
 	 * Up to {@code maximum} characters from {@link FuzzedDataProvider#consumeChar()}, which can be any UTF-16 code unit,
 	 * unpaired surrogates included.
 	 */
-	private static String characters(FuzzedDataProvider data, int maximum) {
+	private static @NonNull String characters(@NonNull FuzzedDataProvider data, int maximum) {
 		char[] characters = new char[data.consumeInt(0, maximum)];
 
 		for (int index = 0; index < characters.length; ++index)
@@ -530,7 +534,7 @@ public class StateSealerFuzzTests {
 		return new String(characters);
 	}
 
-	private static boolean isWellFormed(String value) {
+	private static boolean isWellFormed(@NonNull String value) {
 		for (int index = 0; index < value.length(); ++index) {
 			char character = value.charAt(index);
 
@@ -547,7 +551,7 @@ public class StateSealerFuzzTests {
 	/**
 	 * The frames from the top of the stack down to {@code StateSealer.unseal}, which the caller does not affect.
 	 */
-	private static StackTraceElement[] sealerFrames(Throwable throwable) {
+	private static @NonNull StackTraceElement @NonNull [] sealerFrames(@NonNull Throwable throwable) {
 		StackTraceElement[] frames = throwable.getStackTrace();
 
 		for (int index = 0; index < frames.length; ++index)
@@ -558,7 +562,7 @@ public class StateSealerFuzzTests {
 		return frames;
 	}
 
-	private static InvalidSealedStateException referenceFailure() {
+	private static @NonNull InvalidSealedStateException referenceFailure() {
 		try {
 			SEALER.unseal("", CONTEXT);
 		} catch (InvalidSealedStateException e) {
@@ -568,7 +572,7 @@ public class StateSealerFuzzTests {
 		throw new IllegalStateException("The empty string opened.");
 	}
 
-	private static String sealMessage(String plaintext, String context, Duration lifetime) {
+	private static @NonNull String sealMessage(@NonNull String plaintext, @NonNull String context, @NonNull Duration lifetime) {
 		try {
 			SEALER.seal(plaintext, context, lifetime);
 		} catch (IllegalArgumentException e) {
@@ -578,11 +582,11 @@ public class StateSealerFuzzTests {
 		throw new IllegalStateException("A known-bad seal succeeded.");
 	}
 
-	private static SealingKey fuzzOnlyKey(String keyId, int firstByte) {
+	private static @NonNull SealingKey fuzzOnlyKey(@NonNull String keyId, int firstByte) {
 		return SealingKey.fromBase64(keyId, Base64.getEncoder().encodeToString(fuzzOnlyKeyBytes(firstByte)));
 	}
 
-	private static byte[] fuzzOnlyKeyBytes(int firstByte) {
+	private static byte @NonNull [] fuzzOnlyKeyBytes(int firstByte) {
 		byte[] key = new byte[32];
 
 		for (int index = 0; index < key.length; ++index)

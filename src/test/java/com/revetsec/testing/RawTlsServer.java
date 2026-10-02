@@ -16,6 +16,8 @@
 
 package com.revetsec.testing;
 
+import org.jspecify.annotations.NonNull;
+
 import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.Immutable;
@@ -139,8 +141,8 @@ public final class RawTlsServer implements AutoCloseable {
 	private final ReentrantLock lock = new ReentrantLock();
 	private final Condition changed = this.lock.newCondition();
 
-	private RawTlsServer(ServerSocket serverSocket, SSLSocketFactory socketFactory, ExecutorService executor,
-			ScheduledExecutorService scheduler, Duration handshakeTimeout) {
+	private RawTlsServer(@NonNull ServerSocket serverSocket, @NonNull SSLSocketFactory socketFactory, @NonNull ExecutorService executor,
+			@NonNull ScheduledExecutorService scheduler, @NonNull Duration handshakeTimeout) {
 		this.serverSocket = serverSocket;
 		this.socketFactory = socketFactory;
 		this.executor = executor;
@@ -155,14 +157,14 @@ public final class RawTlsServer implements AutoCloseable {
 	 * @return the running server; close it when done
 	 * @throws IOException if the server cannot bind
 	 */
-	public static RawTlsServer start() throws IOException {
+	public static @NonNull RawTlsServer start() throws IOException {
 		return start(HANDSHAKE_TIMEOUT);
 	}
 
 	/**
 	 * {@link #start()} with another handshake timeout, so a test can see a silent client dropped quickly.
 	 */
-	static RawTlsServer start(Duration handshakeTimeout) throws IOException {
+	static @NonNull RawTlsServer start(@NonNull Duration handshakeTimeout) throws IOException {
 		requireNonNull(handshakeTimeout);
 		if (handshakeTimeout.isNegative() || handshakeTimeout.toMillis() < 1)
 			throw new IllegalArgumentException("The handshake timeout must be at least 1 ms: " + handshakeTimeout);
@@ -191,7 +193,7 @@ public final class RawTlsServer implements AutoCloseable {
 	 * @param script how to answer
 	 * @return this server
 	 */
-	public RawTlsServer script(String path, Script script) {
+	public @NonNull RawTlsServer script(@NonNull String path, @NonNull Script script) {
 		this.scripts.put(requirePath(path), new ScriptCycle(List.of(requireNonNull(script))));
 		return this;
 	}
@@ -205,7 +207,7 @@ public final class RawTlsServer implements AutoCloseable {
 	 * @param scripts one or more scripts, in order
 	 * @return this server
 	 */
-	public RawTlsServer scriptCycle(String path, List<Script> scripts) {
+	public @NonNull RawTlsServer scriptCycle(@NonNull String path, @NonNull List<@NonNull Script> scripts) {
 		List<Script> copy = List.copyOf(scripts);
 		if (copy.isEmpty())
 			throw new IllegalArgumentException("A cycle needs at least one script");
@@ -218,7 +220,7 @@ public final class RawTlsServer implements AutoCloseable {
 	 *
 	 * @return the base URI, with no path
 	 */
-	public URI getBaseUri() {
+	public @NonNull URI getBaseUri() {
 		return this.baseUri;
 	}
 
@@ -228,7 +230,7 @@ public final class RawTlsServer implements AutoCloseable {
 	 * @param path a path starting with {@code /}, optionally with a query
 	 * @return the absolute URI
 	 */
-	public URI uri(String path) {
+	public @NonNull URI uri(@NonNull String path) {
 		return URI.create(this.baseUri + requirePath(path));
 	}
 
@@ -237,7 +239,7 @@ public final class RawTlsServer implements AutoCloseable {
 	 *
 	 * @return the port
 	 */
-	public Integer getPort() {
+	public @NonNull Integer getPort() {
 		return this.baseUri.getPort();
 	}
 
@@ -249,7 +251,7 @@ public final class RawTlsServer implements AutoCloseable {
 	 * @param path the exact path
 	 * @return the count, zero if none
 	 */
-	public Integer getHitCount(String path) {
+	public @NonNull Integer getHitCount(@NonNull String path) {
 		@Nullable AtomicInteger hitCount = this.hitCounts.get(requireNonNull(path));
 		return hitCount == null ? 0 : hitCount.get();
 	}
@@ -259,7 +261,7 @@ public final class RawTlsServer implements AutoCloseable {
 	 *
 	 * @return an immutable snapshot
 	 */
-	public List<Connection> getConnections() {
+	public @NonNull List<@NonNull Connection> getConnections() {
 		return List.copyOf(this.connections);
 	}
 
@@ -268,7 +270,7 @@ public final class RawTlsServer implements AutoCloseable {
 	 *
 	 * @return an immutable snapshot
 	 */
-	public List<RecordedRequest> getRequests() {
+	public @NonNull List<@NonNull RecordedRequest> getRequests() {
 		return List.copyOf(this.requests);
 	}
 
@@ -280,7 +282,7 @@ public final class RawTlsServer implements AutoCloseable {
 	 * @return whether at least {@code count} connections were accepted
 	 * @throws InterruptedException if interrupted while waiting
 	 */
-	public Boolean awaitConnectionCount(Integer count, Duration timeout) throws InterruptedException {
+	public @NonNull Boolean awaitConnectionCount(@NonNull Integer count, @NonNull Duration timeout) throws InterruptedException {
 		return awaitSize(this.connections, count, timeout);
 	}
 
@@ -292,7 +294,7 @@ public final class RawTlsServer implements AutoCloseable {
 	 * @return whether at least {@code count} requests were recorded
 	 * @throws InterruptedException if interrupted while waiting
 	 */
-	public Boolean awaitRequestCount(Integer count, Duration timeout) throws InterruptedException {
+	public @NonNull Boolean awaitRequestCount(@NonNull Integer count, @NonNull Duration timeout) throws InterruptedException {
 		return awaitSize(this.requests, count, timeout);
 	}
 
@@ -315,7 +317,7 @@ public final class RawTlsServer implements AutoCloseable {
 		signalWaiters();
 	}
 
-	private Boolean awaitSize(List<?> list, Integer count, Duration timeout) throws InterruptedException {
+	private @NonNull Boolean awaitSize(@NonNull List<?> list, @NonNull Integer count, @NonNull Duration timeout) throws InterruptedException {
 		requireNonNull(count);
 		long remaining = timeout.toNanos();
 		this.lock.lock();
@@ -368,7 +370,7 @@ public final class RawTlsServer implements AutoCloseable {
 		}
 	}
 
-	private void serve(Connection connection) {
+	private void serve(@NonNull Connection connection) {
 		@Nullable RecordedRequest request = null;
 		try {
 			SSLSocket sslSocket = connection.sslSocket;
@@ -431,8 +433,8 @@ public final class RawTlsServer implements AutoCloseable {
 	 * Runs {@code script}'s steps and records the response's outcome; returns who closed the connection, or
 	 * {@code null} if it stays open for another request. A failure propagates, and the caller records it.
 	 */
-	private @Nullable ClosedBy perform(Script script, RecordedRequest request, SSLSocket sslSocket,
-			InputStream inputStream, OutputStream outputStream) throws IOException, InterruptedException {
+	private @Nullable ClosedBy perform(@NonNull Script script, @NonNull RecordedRequest request, @NonNull SSLSocket sslSocket,
+			@NonNull InputStream inputStream, @NonNull OutputStream outputStream) throws IOException, InterruptedException {
 		for (Step step : script.steps) {
 			switch (step.kind) {
 				case WRITE -> {
@@ -466,7 +468,7 @@ public final class RawTlsServer implements AutoCloseable {
 	 * Reads and discards until end of stream, which means the client closed the connection. A read failure
 	 * propagates, and the caller decides who closed it.
 	 */
-	private static void readToEnd(InputStream inputStream) throws IOException {
+	private static void readToEnd(@NonNull InputStream inputStream) throws IOException {
 		byte[] buffer = new byte[8 * 1024];
 		int read;
 		do {
@@ -474,7 +476,7 @@ public final class RawTlsServer implements AutoCloseable {
 		} while (read >= 0);
 	}
 
-	private void trickle(Step step, OutputStream outputStream) throws IOException, InterruptedException {
+	private void trickle(@NonNull Step step, @NonNull OutputStream outputStream) throws IOException, InterruptedException {
 		byte[] bytes = step.bytes;
 		if (bytes.length == 0)
 			return;
@@ -520,7 +522,7 @@ public final class RawTlsServer implements AutoCloseable {
 	 * Reads one request head and body, counting the hit as soon as the request line is known; {@code null} if the
 	 * client closed the connection before sending a byte.
 	 */
-	private @Nullable RecordedRequest readRequest(InputStream inputStream) throws IOException {
+	private @Nullable RecordedRequest readRequest(@NonNull InputStream inputStream) throws IOException {
 		ByteArrayOutputStream head = new ByteArrayOutputStream();
 		int matched = 0;
 		while (matched < 4) {
@@ -564,7 +566,7 @@ public final class RawTlsServer implements AutoCloseable {
 		return new RecordedRequest(headText, requestLine, Collections.unmodifiableMap(headers), body);
 	}
 
-	private static byte[] readBody(InputStream inputStream, Map<String, List<String>> headers) throws IOException {
+	private static byte @NonNull [] readBody(@NonNull InputStream inputStream, @NonNull Map<@NonNull String, @NonNull List<@NonNull String>> headers) throws IOException {
 		BoundedBody body = new BoundedBody();
 		@Nullable List<String> transferEncoding = headers.get("Transfer-Encoding");
 		if (transferEncoding != null
@@ -609,7 +611,7 @@ public final class RawTlsServer implements AutoCloseable {
 		return body.toByteArray();
 	}
 
-	private static String readLine(InputStream inputStream) throws IOException {
+	private static @NonNull String readLine(@NonNull InputStream inputStream) throws IOException {
 		ByteArrayOutputStream line = new ByteArrayOutputStream();
 		while (true) {
 			int value = inputStream.read();
@@ -628,7 +630,7 @@ public final class RawTlsServer implements AutoCloseable {
 	/**
 	 * Whether {@code failure} is, or was caused by, a socket read timing out (a JDK may wrap the timeout).
 	 */
-	private static boolean isTimeout(Throwable failure) {
+	private static boolean isTimeout(@NonNull Throwable failure) {
 		Set<Throwable> seen = Collections.newSetFromMap(new IdentityHashMap<>());
 		for (@Nullable Throwable current = failure; current != null && seen.add(current); current = current.getCause())
 			if (current instanceof SocketTimeoutException)
@@ -639,7 +641,7 @@ public final class RawTlsServer implements AutoCloseable {
 	/**
 	 * The request target: the request line between its first and last spaces, or empty if it has no such part.
 	 */
-	private static String targetOf(String requestLine) {
+	private static @NonNull String targetOf(@NonNull String requestLine) {
 		int first = requestLine.indexOf(' ');
 		int last = requestLine.lastIndexOf(' ');
 		return first < 0 || last <= first ? "" : requestLine.substring(first + 1, last);
@@ -648,7 +650,7 @@ public final class RawTlsServer implements AutoCloseable {
 	/**
 	 * The target's path: the target up to any {@code ?}.
 	 */
-	private static String pathOf(String target) {
+	private static @NonNull String pathOf(@NonNull String target) {
 		int query = target.indexOf('?');
 		return query < 0 ? target : target.substring(0, query);
 	}
@@ -664,7 +666,7 @@ public final class RawTlsServer implements AutoCloseable {
 		}
 	}
 
-	private static String requirePath(String path) {
+	private static @NonNull String requirePath(@NonNull String path) {
 		requireNonNull(path);
 		if (!path.startsWith("/"))
 			throw new IllegalArgumentException("A path starts with /: " + path);
@@ -679,11 +681,11 @@ public final class RawTlsServer implements AutoCloseable {
 		private final List<Script> scripts;
 		private final AtomicInteger next = new AtomicInteger();
 
-		private ScriptCycle(List<Script> scripts) {
+		private ScriptCycle(@NonNull List<@NonNull Script> scripts) {
 			this.scripts = scripts;
 		}
 
-		private Script next() {
+		private @NonNull Script next() {
 			return this.scripts.get(Math.floorMod(this.next.getAndIncrement(), this.scripts.size()));
 		}
 	}
@@ -741,7 +743,7 @@ public final class RawTlsServer implements AutoCloseable {
 		private final List<RecordedRequest> requests = new CopyOnWriteArrayList<>();
 		private final CompletableFuture<ClosedBy> closedBy = new CompletableFuture<>();
 
-		private Connection(Socket socket, SSLSocket sslSocket) {
+		private Connection(@NonNull Socket socket, @NonNull SSLSocket sslSocket) {
 			this.socket = socket;
 			this.sslSocket = sslSocket;
 		}
@@ -751,7 +753,7 @@ public final class RawTlsServer implements AutoCloseable {
 		 *
 		 * @return an immutable snapshot
 		 */
-		public List<RecordedRequest> getRequests() {
+		public @NonNull List<@NonNull RecordedRequest> getRequests() {
 			return List.copyOf(this.requests);
 		}
 
@@ -763,7 +765,7 @@ public final class RawTlsServer implements AutoCloseable {
 		 * @throws InterruptedException if interrupted while waiting
 		 * @throws IllegalStateException if the connection handler failed
 		 */
-		public Optional<ClosedBy> awaitClose(Duration timeout) throws InterruptedException {
+		public @NonNull Optional<@NonNull ClosedBy> awaitClose(@NonNull Duration timeout) throws InterruptedException {
 			try {
 				return Optional.of(this.closedBy.get(timeout.toNanos(), TimeUnit.NANOSECONDS));
 			} catch (TimeoutException e) {
@@ -782,22 +784,22 @@ public final class RawTlsServer implements AutoCloseable {
 		 * @return {@code true} if the client closed the connection
 		 * @throws InterruptedException if interrupted while waiting
 		 */
-		public Boolean awaitClientClose(Duration timeout) throws InterruptedException {
+		public @NonNull Boolean awaitClientClose(@NonNull Duration timeout) throws InterruptedException {
 			return awaitClose(timeout).filter(closedBy -> closedBy == ClosedBy.CLIENT).isPresent();
 		}
 
 		@Override
-		public String toString() {
+		public @NonNull String toString() {
 			String state = !this.closedBy.isDone() ? "open"
 					: this.closedBy.isCompletedExceptionally() ? "failed" : "closed by " + this.closedBy.join();
 			return "RawTlsServer.Connection[" + this.requests.size() + " request(s), " + state + "]";
 		}
 
-		private void finish(ClosedBy who) {
+		private void finish(@NonNull ClosedBy who) {
 			this.closedBy.complete(who);
 		}
 
-		private void fail(RuntimeException failure) {
+		private void fail(@NonNull RuntimeException failure) {
 			this.closedBy.completeExceptionally(failure);
 		}
 
@@ -818,7 +820,7 @@ public final class RawTlsServer implements AutoCloseable {
 		private final byte[] body;
 		private final CompletableFuture<Outcome> outcome = new CompletableFuture<>();
 
-		private RecordedRequest(String head, String requestLine, Map<String, List<String>> headers, byte[] body) {
+		private RecordedRequest(@NonNull String head, @NonNull String requestLine, @NonNull Map<@NonNull String, @NonNull List<@NonNull String>> headers, byte @NonNull [] body) {
 			this.head = head;
 			this.requestLine = requestLine;
 			this.headers = headers;
@@ -830,7 +832,7 @@ public final class RawTlsServer implements AutoCloseable {
 		 *
 		 * @return the head
 		 */
-		public String getHead() {
+		public @NonNull String getHead() {
 			return this.head;
 		}
 
@@ -839,7 +841,7 @@ public final class RawTlsServer implements AutoCloseable {
 		 *
 		 * @return the request line
 		 */
-		public String getRequestLine() {
+		public @NonNull String getRequestLine() {
 			return this.requestLine;
 		}
 
@@ -848,7 +850,7 @@ public final class RawTlsServer implements AutoCloseable {
 		 *
 		 * @return the method
 		 */
-		public String getMethod() {
+		public @NonNull String getMethod() {
 			int space = this.requestLine.indexOf(' ');
 			return space < 0 ? this.requestLine : this.requestLine.substring(0, space);
 		}
@@ -858,7 +860,7 @@ public final class RawTlsServer implements AutoCloseable {
 		 *
 		 * @return the target, such as {@code /token?x=1}
 		 */
-		public String getTarget() {
+		public @NonNull String getTarget() {
 			return targetOf(this.requestLine);
 		}
 
@@ -867,7 +869,7 @@ public final class RawTlsServer implements AutoCloseable {
 		 *
 		 * @return the path
 		 */
-		public String getPath() {
+		public @NonNull String getPath() {
 			return pathOf(getTarget());
 		}
 
@@ -876,7 +878,7 @@ public final class RawTlsServer implements AutoCloseable {
 		 *
 		 * @return header names and values
 		 */
-		public Map<String, List<String>> getHeaders() {
+		public @NonNull Map<@NonNull String, @NonNull List<@NonNull String>> getHeaders() {
 			return this.headers;
 		}
 
@@ -886,7 +888,7 @@ public final class RawTlsServer implements AutoCloseable {
 		 * @param name the header name, in any case
 		 * @return the value, or empty if the header is absent
 		 */
-		public Optional<String> getHeader(String name) {
+		public @NonNull Optional<@NonNull String> getHeader(@NonNull String name) {
 			@Nullable List<String> values = this.headers.get(requireNonNull(name));
 			return values == null || values.isEmpty() ? Optional.empty() : Optional.of(values.get(0));
 		}
@@ -897,7 +899,7 @@ public final class RawTlsServer implements AutoCloseable {
 		 *
 		 * @return a copy of the body
 		 */
-		public byte[] getBody() {
+		public byte @NonNull [] getBody() {
 			return this.body.clone();
 		}
 
@@ -909,7 +911,7 @@ public final class RawTlsServer implements AutoCloseable {
 		 * @throws InterruptedException if interrupted while waiting
 		 * @throws IllegalStateException if the connection handler failed
 		 */
-		public Outcome awaitOutcome(Duration timeout) throws InterruptedException {
+		public @NonNull Outcome awaitOutcome(@NonNull Duration timeout) throws InterruptedException {
 			try {
 				return this.outcome.get(timeout.toNanos(), TimeUnit.NANOSECONDS);
 			} catch (TimeoutException e) {
@@ -920,15 +922,15 @@ public final class RawTlsServer implements AutoCloseable {
 		}
 
 		@Override
-		public String toString() {
+		public @NonNull String toString() {
 			return "RawTlsServer.RecordedRequest[" + this.requestLine + "]";
 		}
 
-		private void finish(Outcome outcome) {
+		private void finish(@NonNull Outcome outcome) {
 			this.outcome.complete(outcome);
 		}
 
-		private void fail(RuntimeException failure) {
+		private void fail(@NonNull RuntimeException failure) {
 			this.outcome.completeExceptionally(failure);
 		}
 	}
@@ -941,7 +943,7 @@ public final class RawTlsServer implements AutoCloseable {
 	public static final class Script {
 		private final List<Step> steps;
 
-		private Script(List<Step> steps) {
+		private Script(@NonNull List<@NonNull Step> steps) {
 			this.steps = List.copyOf(steps);
 		}
 
@@ -950,7 +952,7 @@ public final class RawTlsServer implements AutoCloseable {
 		 *
 		 * @return a new builder
 		 */
-		public static Builder builder() {
+		public static @NonNull Builder builder() {
 			return new Builder();
 		}
 
@@ -960,7 +962,7 @@ public final class RawTlsServer implements AutoCloseable {
 		 * @param bytes the whole response
 		 * @return the script
 		 */
-		public static Script fromBytes(byte[] bytes) {
+		public static @NonNull Script fromBytes(byte @NonNull [] bytes) {
 			return builder().write(bytes).build();
 		}
 
@@ -971,7 +973,7 @@ public final class RawTlsServer implements AutoCloseable {
 		 * @param text the whole response, with explicit {@code \r\n} line ends
 		 * @return the script
 		 */
-		public static Script fromString(String text) {
+		public static @NonNull Script fromString(@NonNull String text) {
 			return builder().write(text).build();
 		}
 
@@ -993,7 +995,7 @@ public final class RawTlsServer implements AutoCloseable {
 			 * @param bytes the bytes
 			 * @return this builder
 			 */
-			public Builder write(byte[] bytes) {
+			public @NonNull Builder write(byte @NonNull [] bytes) {
 				return add(new Step(StepKind.WRITE, bytes.clone(), 0, Duration.ZERO));
 			}
 
@@ -1004,7 +1006,7 @@ public final class RawTlsServer implements AutoCloseable {
 			 * @return this builder
 			 * @throws IllegalArgumentException if a character is above U+00FF
 			 */
-			public Builder write(String text) {
+			public @NonNull Builder write(@NonNull String text) {
 				requireNonNull(text);
 				for (int index = 0; index < text.length(); ++index)
 					if (text.charAt(index) > 0xFF)
@@ -1021,7 +1023,7 @@ public final class RawTlsServer implements AutoCloseable {
 			 * @param interval the pause between writes, positive
 			 * @return this builder
 			 */
-			public Builder trickle(byte[] bytes, Integer chunkSize, Duration interval) {
+			public @NonNull Builder trickle(byte @NonNull [] bytes, @NonNull Integer chunkSize, @NonNull Duration interval) {
 				requireNonNull(chunkSize);
 				requireNonNull(interval);
 				if (chunkSize < 1)
@@ -1036,7 +1038,7 @@ public final class RawTlsServer implements AutoCloseable {
 			 *
 			 * @return this builder
 			 */
-			public Builder stall() {
+			public @NonNull Builder stall() {
 				return add(new Step(StepKind.STALL, new byte[0], 0, Duration.ZERO));
 			}
 
@@ -1046,7 +1048,7 @@ public final class RawTlsServer implements AutoCloseable {
 			 *
 			 * @return this builder
 			 */
-			public Builder endOfStream() {
+			public @NonNull Builder endOfStream() {
 				return add(new Step(StepKind.END_OF_STREAM, new byte[0], 0, Duration.ZERO));
 			}
 
@@ -1055,7 +1057,7 @@ public final class RawTlsServer implements AutoCloseable {
 			 *
 			 * @return this builder
 			 */
-			public Builder closeConnection() {
+			public @NonNull Builder closeConnection() {
 				return add(new Step(StepKind.CLOSE, new byte[0], 0, Duration.ZERO));
 			}
 
@@ -1064,11 +1066,11 @@ public final class RawTlsServer implements AutoCloseable {
 			 *
 			 * @return the script
 			 */
-			public Script build() {
+			public @NonNull Script build() {
 				return new Script(this.steps);
 			}
 
-			private Builder add(Step step) {
+			private @NonNull Builder add(@NonNull Step step) {
 				if (!this.steps.isEmpty() && this.steps.get(this.steps.size() - 1).kind.isTerminal())
 					throw new IllegalStateException("No step may follow " + this.steps.get(this.steps.size() - 1).kind);
 				this.steps.add(step);
@@ -1096,7 +1098,7 @@ public final class RawTlsServer implements AutoCloseable {
 		private final int chunkSize;
 		private final Duration interval;
 
-		private Step(StepKind kind, byte[] bytes, int chunkSize, Duration interval) {
+		private Step(@NonNull StepKind kind, byte @NonNull [] bytes, int chunkSize, @NonNull Duration interval) {
 			this.kind = kind;
 			this.bytes = bytes;
 			this.chunkSize = chunkSize;
@@ -1111,7 +1113,7 @@ public final class RawTlsServer implements AutoCloseable {
 	private static final class BoundedBody {
 		private final ByteArrayOutputStream kept = new ByteArrayOutputStream();
 
-		private void copyFrom(InputStream inputStream, long length) throws IOException {
+		private void copyFrom(@NonNull InputStream inputStream, long length) throws IOException {
 			byte[] buffer = new byte[8 * 1024];
 			long remaining = length;
 			while (remaining > 0) {
@@ -1125,7 +1127,7 @@ public final class RawTlsServer implements AutoCloseable {
 			}
 		}
 
-		private byte[] toByteArray() {
+		private byte @NonNull [] toByteArray() {
 			return this.kept.toByteArray();
 		}
 	}
@@ -1136,7 +1138,7 @@ public final class RawTlsServer implements AutoCloseable {
 	private static final class MalformedRequestException extends IOException {
 		private static final long serialVersionUID = 1L;
 
-		private MalformedRequestException(String message) {
+		private MalformedRequestException(@NonNull String message) {
 			super(message);
 		}
 	}

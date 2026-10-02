@@ -16,6 +16,8 @@
 
 package com.revetsec.internal.encoding;
 
+import org.jspecify.annotations.NonNull;
+
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.function.Executable;
 
@@ -57,7 +59,7 @@ final class EncodingFailures {
 	 * cause, nothing suppressed, and no trace of {@code input} (when it is long enough to be recognizable) or of
 	 * {@link #SENTINEL} in its message, {@code toString()} or stack trace.
 	 */
-	static EncodingException assertRejected(EncodingException.Kind kind, String input, Executable action) {
+	static @NonNull EncodingException assertRejected(EncodingException.@NonNull Kind kind, @NonNull String input, @NonNull Executable action) {
 		EncodingException exception = Assertions.assertThrows(EncodingException.class, action,
 				() -> "expected " + kind + " for " + describe(input));
 		Assertions.assertEquals(kind, exception.getKind(), () -> "kind for " + describe(input));
@@ -68,7 +70,7 @@ final class EncodingFailures {
 		return exception;
 	}
 
-	static void assertNoEcho(Throwable throwable, String input) {
+	static void assertNoEcho(@NonNull Throwable throwable, @NonNull String input) {
 		StringWriter stackTrace = new StringWriter();
 		throwable.printStackTrace(new PrintWriter(stackTrace));
 		for (String rendering : new String[]{String.valueOf(throwable.getMessage()), throwable.toString(),
@@ -83,7 +85,7 @@ final class EncodingFailures {
 	/**
 	 * A printable description of a test input for assertion messages (test output only).
 	 */
-	static String describe(String input) {
+	static @NonNull String describe(@NonNull String input) {
 		StringBuilder description = new StringBuilder("\"");
 		input.codePoints().forEach(codePoint -> {
 			if (codePoint >= 0x20 && codePoint < 0x7F)

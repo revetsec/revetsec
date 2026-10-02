@@ -16,6 +16,8 @@
 
 package com.revetsec.testing;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.SealingKey;
 import com.revetsec.StateSealer;
 
@@ -64,7 +66,7 @@ public final class TestSealers {
 	 *
 	 * @return a new sealer
 	 */
-	public static StateSealer fromFixedKey() {
+	public static @NonNull StateSealer fromFixedKey() {
 		return fromFixedKeys(FIXED_KEY_ID, List.of());
 	}
 
@@ -77,8 +79,8 @@ public final class TestSealers {
 	 *                           {@code activeKeyId}
 	 * @return a new sealer
 	 */
-	public static StateSealer fromFixedKeys(String activeKeyId,
-																					List<String> verificationKeyIds) {
+	public static @NonNull StateSealer fromFixedKeys(@NonNull String activeKeyId,
+																					@NonNull List<@NonNull String> verificationKeyIds) {
 		requireNonNull(activeKeyId);
 		requireNonNull(verificationKeyIds);
 
@@ -99,7 +101,7 @@ public final class TestSealers {
 	 * @param keyId a valid key ID
 	 * @return a new sealing key
 	 */
-	public static SealingKey fixedKey(String keyId) {
+	public static @NonNull SealingKey fixedKey(@NonNull String keyId) {
 		requireNonNull(keyId);
 		return SealingKey.fromBase64(keyId, Base64.getEncoder().encodeToString(fixedKeyBytes(keyId)));
 	}
@@ -110,7 +112,7 @@ public final class TestSealers {
 	 * @param keyId a key ID
 	 * @return a new array holding the key's bytes
 	 */
-	public static byte[] fixedKeyBytes(String keyId) {
+	public static byte @NonNull [] fixedKeyBytes(@NonNull String keyId) {
 		requireNonNull(keyId);
 
 		try {

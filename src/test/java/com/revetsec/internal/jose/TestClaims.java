@@ -16,6 +16,8 @@
 
 package com.revetsec.internal.jose;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.testing.JsonText;
 
 import java.util.ArrayList;
@@ -43,7 +45,7 @@ public final class TestClaims {
 	 *
 	 * @return a new builder
 	 */
-	public static TestClaims empty() {
+	public static @NonNull TestClaims empty() {
 		return new TestClaims();
 	}
 
@@ -54,7 +56,7 @@ public final class TestClaims {
 	 * @param value the string
 	 * @return this builder
 	 */
-	public TestClaims put(String name, String value) {
+	public @NonNull TestClaims put(@NonNull String name, @NonNull String value) {
 		return raw(name, JsonText.string(requireNonNull(value)));
 	}
 
@@ -65,7 +67,7 @@ public final class TestClaims {
 	 * @param value the number
 	 * @return this builder
 	 */
-	public TestClaims put(String name, long value) {
+	public @NonNull TestClaims put(@NonNull String name, long value) {
 		return raw(name, Long.toString(value));
 	}
 
@@ -76,7 +78,7 @@ public final class TestClaims {
 	 * @param rawJsonText the value's JSON text
 	 * @return this builder
 	 */
-	public TestClaims raw(String name, String rawJsonText) {
+	public @NonNull TestClaims raw(@NonNull String name, @NonNull String rawJsonText) {
 		this.members.put(requireNonNull(name), requireNonNull(rawJsonText));
 		return this;
 	}
@@ -87,7 +89,7 @@ public final class TestClaims {
 	 * @param name the member name
 	 * @return this builder
 	 */
-	public TestClaims remove(String name) {
+	public @NonNull TestClaims remove(@NonNull String name) {
 		this.members.remove(requireNonNull(name));
 		return this;
 	}
@@ -97,7 +99,7 @@ public final class TestClaims {
 	 *
 	 * @return a new builder with the same members
 	 */
-	public TestClaims copy() {
+	public @NonNull TestClaims copy() {
 		TestClaims copy = new TestClaims();
 		copy.members.putAll(this.members);
 		return copy;
@@ -108,13 +110,13 @@ public final class TestClaims {
 	 *
 	 * @return a JSON object, members in order
 	 */
-	public String toJson() {
+	public @NonNull String toJson() {
 		List<Map.Entry<String, String>> entries = new ArrayList<>(this.members.entrySet());
 		return JsonText.object(entries);
 	}
 
 	@Override
-	public String toString() {
+	public @NonNull String toString() {
 		return toJson();
 	}
 }

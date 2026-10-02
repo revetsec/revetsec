@@ -16,6 +16,8 @@
 
 package com.revetsec.oidc;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.*;
 import com.revetsec.internal.json.*;
 import com.revetsec.json.*;
@@ -60,8 +62,8 @@ final class OidcSessionReferenceTests {
 		}
 	}
 	@TestFactory
-	Stream<DynamicTest> invalidSchemaDuplicatesVersionClaimTypesAndNonceDigestUseOneFixedReason() {
-		record Case(String name,Consumer<Map<String,JsonValue>> edit){}
+	@NonNull Stream<@NonNull DynamicTest> invalidSchemaDuplicatesVersionClaimTypesAndNonceDigestUseOneFixedReason() {
+		record Case(@NonNull String name,@NonNull Consumer<@NonNull Map<@NonNull String,@NonNull JsonValue>> edit){}
 		List<Case> cases=new ArrayList<>();
 		for(String field:List.of("v","client_id","claims","nonce_digest")) {
 			cases.add(new Case("missing "+field,m->m.remove(field)));cases.add(new Case("null "+field,m->m.put(field,JsonNull.defaultInstance())));
@@ -83,7 +85,7 @@ final class OidcSessionReferenceTests {
 		}));
 	}
 	@TestFactory
-	Stream<DynamicTest> trustedReferenceSubjectAndStorageByteBoundsAreInclusive() {
+	@NonNull Stream<@NonNull DynamicTest> trustedReferenceSubjectAndStorageByteBoundsAreInclusive() {
 		return Stream.of("s".repeat(255), "\u007f", "s".repeat(254) + "\u007f")
 				.map(subject -> DynamicTest.dynamicTest("ASCII subject length " + subject.length(), () -> {
 					try (TestHttpsServer server = TestHttpsServer.start()) {
@@ -120,7 +122,7 @@ final class OidcSessionReferenceTests {
 	void malformedJsonUtf8ByteLimitsAndDuplicateKeysAreBoundedAndRedacted() throws Exception {
 		for(String value:List.of("", "{}", "[]", "null", "{", "\ud800", "x".repeat(64*1024+1), "\""+"é".repeat(40*1024)+"\"", "{\"v\":1,\"v\":1}"))assertInvalid(value);
 	}
-	private static JsonObject parse(String value)throws Exception{return (JsonObject)JsonCodec.parse(value.getBytes(StandardCharsets.UTF_8),JsonLimits.protocolDocument(64*1024));}
-	private static void editClaims(Map<String,JsonValue> envelope,Consumer<Map<String,JsonValue>> edit){Map<String,JsonValue> claims=new LinkedHashMap<>(((JsonObject)Objects.requireNonNull(envelope.get("claims"))).getMembers());edit.accept(claims);envelope.put("claims",JsonObject.fromMembers(claims));}
-	private static void assertInvalid(String value){OidcValidationException failure=assertThrows(OidcValidationException.class,()->OidcSessionReference.fromSerializedForm(value));assertEquals(OidcValidationException.Reason.SESSION_REFERENCE_INVALID,failure.getReason());assertNull(failure.getCause());failure.addSuppressed(new IllegalArgumentException(value));assertEquals(0,failure.getSuppressed().length);assertFalse(failure.toString().contains("TEST-ONLY"));assertEquals("The OIDC session reference is invalid.",failure.getMessage());}
+	private static @NonNull JsonObject parse(@NonNull String value)throws Exception{return (JsonObject)JsonCodec.parse(value.getBytes(StandardCharsets.UTF_8),JsonLimits.protocolDocument(64*1024));}
+	private static void editClaims(@NonNull Map<@NonNull String,@NonNull JsonValue> envelope,@NonNull Consumer<@NonNull Map<@NonNull String,@NonNull JsonValue>> edit){Map<String,JsonValue> claims=new LinkedHashMap<>(((JsonObject)Objects.requireNonNull(envelope.get("claims"))).getMembers());edit.accept(claims);envelope.put("claims",JsonObject.fromMembers(claims));}
+	private static void assertInvalid(@NonNull String value){OidcValidationException failure=assertThrows(OidcValidationException.class,()->OidcSessionReference.fromSerializedForm(value));assertEquals(OidcValidationException.Reason.SESSION_REFERENCE_INVALID,failure.getReason());assertNull(failure.getCause());failure.addSuppressed(new IllegalArgumentException(value));assertEquals(0,failure.getSuppressed().length);assertFalse(failure.toString().contains("TEST-ONLY"));assertEquals("The OIDC session reference is invalid.",failure.getMessage());}
 }

@@ -16,6 +16,8 @@
 
 package com.revetsec.internal.crypto;
 
+import org.jspecify.annotations.NonNull;
+
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.DynamicTest;
@@ -65,7 +67,7 @@ final class SignatureVerifierTests {
 
 	// RFC 8017 section 8.2.2: the signature is exactly k octets; anything else, any change, and another hash fail.
 	@TestFactory
-	Stream<DynamicTest> rsaPkcs1VerifiesOnlyTheExactSignature() {
+	@NonNull Stream<@NonNull DynamicTest> rsaPkcs1VerifiesOnlyTheExactSignature() {
 		KeyPair keyPair = RsaPublicKeysTests.Keys.rsa2048();
 		PublicKey key = keyPair.getPublic();
 		BigInteger modulus = ((RSAPublicKey) key).getModulus();
@@ -102,7 +104,7 @@ final class SignatureVerifierTests {
 	// RFC 7518 section 3.5: PS* uses MGF1 with the same hash and a salt as long as the hash output. The parameters
 	// come from the algorithm, never from the signature, so a signature made with any other parameters fails.
 	@TestFactory
-	Stream<DynamicTest> rsaPssVerifiesOnlyWithTheFixedParameters() {
+	@NonNull Stream<@NonNull DynamicTest> rsaPssVerifiesOnlyWithTheFixedParameters() {
 		KeyPair keyPair = RsaPublicKeysTests.Keys.rsa2048();
 		PublicKey key = keyPair.getPublic();
 
@@ -134,7 +136,7 @@ final class SignatureVerifierTests {
 	// RFC 8017 section 8.2.2 step 1 and section 8.1.2 step 1: k is the modulus length in whole bytes, so a 2,049-bit
 	// modulus takes 257-byte signatures (and PSS's encoded message is one byte shorter than k).
 	@TestFactory
-	Stream<DynamicTest> rsaSignaturesAreAsLongAsTheModulusRoundedUpToWholeBytes() throws Exception {
+	@NonNull Stream<@NonNull DynamicTest> rsaSignaturesAreAsLongAsTheModulusRoundedUpToWholeBytes() throws Exception {
 		KeyPairGenerator generator = KeyPairGenerator.getInstance("RSA");
 		generator.initialize(2049);
 		KeyPair keyPair = generator.generateKeyPair();
@@ -215,7 +217,7 @@ final class SignatureVerifierTests {
 	// The helpers take the curve and the hash separately; binding them is the protocol's job (RFC 7518 section 3.4
 	// binds P-256 to SHA-256 and so on). A key on another curve never verifies, whatever its signature.
 	@TestFactory
-	Stream<DynamicTest> ecdsaVerifiesInCurveAndHashTerms() {
+	@NonNull Stream<@NonNull DynamicTest> ecdsaVerifiesInCurveAndHashTerms() {
 		return Stream.of(EcCurve.values()).map(curve -> DynamicTest.dynamicTest(curve.name(), () -> {
 			EcdsaSignaturesTests.Fixture fixture = EcdsaSignaturesTests.Fixture.forCurve(curve);
 
@@ -253,7 +255,7 @@ final class SignatureVerifierTests {
 	// DER form, so only the curve check refuses it. It also keeps the range check tied to the key's own order
 	// (CVE-2022-21449 on runtimes without their own check).
 	@TestFactory
-	Stream<DynamicTest> ecdsaRefusesASignatureZeroPaddedToAnotherCurvesLength() {
+	@NonNull Stream<@NonNull DynamicTest> ecdsaRefusesASignatureZeroPaddedToAnotherCurvesLength() {
 		return Stream.of(new EcCurve[]{EcCurve.P_256, EcCurve.P_384}, new EcCurve[]{EcCurve.P_256, EcCurve.P_521},
 				new EcCurve[]{EcCurve.P_384, EcCurve.P_521}).map(pair -> DynamicTest.dynamicTest(pair[0] + " as " + pair[1],
 				() -> {
@@ -281,7 +283,7 @@ final class SignatureVerifierTests {
 	// signature, the result is VALID exactly when the oracle accepts. Out-of-range values are OUT_OF_RANGE, which the
 	// oracle on current runtimes rejects too. The unchanged and high-S rows (120 of 300) are valid.
 	@TestFactory
-	Stream<DynamicTest> ecdsaAgreesWithTheJdksFixedLengthVerifier() {
+	@NonNull Stream<@NonNull DynamicTest> ecdsaAgreesWithTheJdksFixedLengthVerifier() {
 		return Stream.of(EcCurve.values()).map(curve -> DynamicTest.dynamicTest(curve.name(), () -> {
 			EcdsaSignaturesTests.Fixture fixture = EcdsaSignaturesTests.Fixture.forCurve(curve);
 			Random random = new Random(0x45434453L + curve.getCoordinateLength());
@@ -435,7 +437,7 @@ final class SignatureVerifierTests {
 	// checked ones that surface only at verification; for each, a control showing the JDK still throws it, and the
 	// Revetsec path that never lets it out.
 	@TestFactory
-	Stream<DynamicTest> theInvG1InventoryOfJcaExceptionsNeverEscapes() {
+	@NonNull Stream<@NonNull DynamicTest> theInvG1InventoryOfJcaExceptionsNeverEscapes() {
 		EcCurve p256 = EcCurve.P_256;
 		ECPoint g = p256.getParameterSpec().getGenerator();
 		BigInteger wideX = g.getAffineX().add(p256.getFieldPrime());
@@ -481,6 +483,8 @@ final class SignatureVerifierTests {
 				}));
 	}
 
+	// Deliberate null inputs verify runtime rejection.
+	@SuppressWarnings("NullAway")
 	@Test
 	void rejectsNullArguments() {
 		PublicKey rsa = RsaPublicKeysTests.Keys.rsa2048().getPublic();
@@ -517,7 +521,7 @@ final class SignatureVerifierTests {
 				nullValue()));
 	}
 
-	private static byte[] sign(String algorithm, @Nullable AlgorithmParameterSpec parameters, PrivateKey privateKey)
+	private static byte @NonNull [] sign(@NonNull String algorithm, @Nullable AlgorithmParameterSpec parameters, @NonNull PrivateKey privateKey)
 			throws GeneralSecurityException {
 		Signature signer = Signature.getInstance(algorithm);
 		signer.initSign(privateKey);
@@ -530,11 +534,11 @@ final class SignatureVerifierTests {
 	/**
 	 * Signs {@link #MESSAGE} with the JDK's fixed-length ECDSA signer, a test oracle that main code never uses.
 	 */
-	private static byte[] signFixedLength(HashAlgorithm hash, PrivateKey privateKey) throws GeneralSecurityException {
+	private static byte @NonNull [] signFixedLength(@NonNull HashAlgorithm hash, @NonNull PrivateKey privateKey) throws GeneralSecurityException {
 		return sign(hash.getEcdsaSignatureName() + "inP1363Format", null, privateKey);
 	}
 
-	private static boolean verifyFixedLength(HashAlgorithm hash, PublicKey key, byte[] message, byte[] signature) {
+	private static boolean verifyFixedLength(@NonNull HashAlgorithm hash, @NonNull PublicKey key, byte @NonNull [] message, byte @NonNull [] signature) {
 		try {
 			Signature verifier = Signature.getInstance(hash.getEcdsaSignatureName() + "inP1363Format");
 			verifier.initVerify(key);
@@ -545,7 +549,7 @@ final class SignatureVerifierTests {
 		}
 	}
 
-	private static KeyPair generate(String algorithm) {
+	private static @NonNull KeyPair generate(@NonNull String algorithm) {
 		try {
 			return KeyPairGenerator.getInstance(algorithm).generateKeyPair();
 		} catch (GeneralSecurityException exception) {
@@ -553,7 +557,7 @@ final class SignatureVerifierTests {
 		}
 	}
 
-	private static byte[] changed(byte[] value) {
+	private static byte @NonNull [] changed(byte @NonNull [] value) {
 		byte[] copy = value.clone();
 		copy[copy.length / 2] ^= 0x01;
 		return copy;
@@ -563,7 +567,7 @@ final class SignatureVerifierTests {
 	 * Hides a {@code null} from NullAway, for the tests that check null handling.
 	 */
 	@SuppressWarnings({"NullAway", "TypeParameterUnusedInFormals"})
-	private static <T> T nullValue() {
+	private static <T> @Nullable T nullValue() {
 		return null;
 	}
 
@@ -576,8 +580,8 @@ final class SignatureVerifierTests {
 		private final Executable control;
 		private final Executable guard;
 
-		private InventoryRow(String name, Class<? extends Throwable> controlException, Executable control,
-												 Executable guard) {
+		private InventoryRow(@NonNull String name, @NonNull Class<? extends @NonNull Throwable> controlException, @NonNull Executable control,
+												 @NonNull Executable guard) {
 			this.name = name;
 			this.controlException = controlException;
 			this.control = control;
@@ -592,27 +596,27 @@ final class SignatureVerifierTests {
 		private static final long serialVersionUID = 1L;
 
 		@Override
-		public ECPoint getW() {
+		public @NonNull ECPoint getW() {
 			return EcCurve.P_256.getParameterSpec().getGenerator();
 		}
 
 		@Override
-		public ECParameterSpec getParams() {
+		public @NonNull ECParameterSpec getParams() {
 			throw new IllegalStateException("A key implementation that throws.");
 		}
 
 		@Override
-		public String getAlgorithm() {
+		public @NonNull String getAlgorithm() {
 			return "EC";
 		}
 
 		@Override
-		public String getFormat() {
+		public @NonNull String getFormat() {
 			return "X.509";
 		}
 
 		@Override
-		public byte[] getEncoded() {
+		public byte @NonNull [] getEncoded() {
 			return new byte[0];
 		}
 	}

@@ -16,6 +16,8 @@
 
 package com.revetsec.oauth;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.internal.encoding.QueryParameters;
 import org.junit.jupiter.api.Test;
 
@@ -158,12 +160,12 @@ final class AuthorizationRequestTests {
 				OAuthClient.challenge("dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"));
 	}
 
-	private static OAuthClient client(AuthorizationServerMetadata metadata) {
+	private static @NonNull OAuthClient client(@NonNull AuthorizationServerMetadata metadata) {
 		return OAuthClient.withAuthorizationServerMetadata(metadata).clientId("client")
 				.clientAuthentication(ClientAuthentication.noneInstance()).redirectUri(CALLBACK).build();
 	}
 
-	private static AuthorizationServerMetadata metadata() {
+	private static @NonNull AuthorizationServerMetadata metadata() {
 		return AuthorizationServerMetadata.withIssuer("https://issuer.example")
 				.authorizationEndpoint(URI.create("https://issuer.example/authorize?existing=1"))
 				.tokenEndpoint(URI.create("https://issuer.example/token"))

@@ -16,6 +16,8 @@
 
 package com.revetsec.internal.encoding;
 
+import org.jspecify.annotations.NonNull;
+
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.DynamicTest;
 import org.junit.jupiter.api.Test;
@@ -55,7 +57,7 @@ final class FormUrlEncodingTests {
 	// The unreserved set is A-Z, a-z, 0-9, '*', '-', '.' and '_'; a space becomes '+', everything else %XX with
 	// uppercase digits.
 	@TestFactory
-	Stream<DynamicTest> encodesEachCharacterClassAsSpecified() {
+	@NonNull Stream<@NonNull DynamicTest> encodesEachCharacterClassAsSpecified() {
 		return Stream.of(new String[][]{
 				{"", ""}, {"AZaz09*-._", "AZaz09*-._"}, {" ", "+"}, {"~", "%7E"}, {"+", "%2B"}, {"/", "%2F"},
 				{"=", "%3D"}, {"&", "%26"}, {"%", "%25"}, {"\u0000", "%00"}, {"\u007F", "%7F"}, {"\u00E9", "%C3%A9"},
@@ -86,7 +88,7 @@ final class FormUrlEncodingTests {
 
 	// URLEncoder writes an unpaired surrogate as "%3F", so two different strings encode alike; Revetsec rejects it.
 	@TestFactory
-	Stream<DynamicTest> rejectsUnpairedSurrogatesThatUrlEncoderReplaces() {
+	@NonNull Stream<@NonNull DynamicTest> rejectsUnpairedSurrogatesThatUrlEncoderReplaces() {
 		return Stream.of("\uD800", "a\uDC00", "\uDE00\uD83D", EncodingFailures.SENTINEL + "\uD83D").map(input ->
 				DynamicTest.dynamicTest(EncodingFailures.describe(input), () -> {
 					Assertions.assertTrue(URLEncoder.encode(input, StandardCharsets.UTF_8).contains("%3F"));
@@ -106,7 +108,7 @@ final class FormUrlEncodingTests {
 	}
 
 	@TestFactory
-	Stream<DynamicTest> rejectsMalformedEscapesWhenDecoding() {
+	@NonNull Stream<@NonNull DynamicTest> rejectsMalformedEscapesWhenDecoding() {
 		return Stream.of("%", "a+%2", "%G0", "+%+", EncodingFailures.SENTINEL + "%x").map(input ->
 				DynamicTest.dynamicTest(EncodingFailures.describe(input), () ->
 						EncodingFailures.assertRejected(EncodingException.Kind.MALFORMED_PERCENT_ENCODING, input,
@@ -115,7 +117,7 @@ final class FormUrlEncodingTests {
 
 	// R7: invalid UTF-8 is rejected, never mapped to U+FFFD as URLDecoder does.
 	@TestFactory
-	Stream<DynamicTest> rejectsInvalidUtf8WhenDecoding() {
+	@NonNull Stream<@NonNull DynamicTest> rejectsInvalidUtf8WhenDecoding() {
 		return Stream.of("%C3", "+%C3+", "%C0%AF", "%ED%A0%80", "%FF", "state=" + EncodingFailures.SENTINEL + "%80")
 				.map(input -> DynamicTest.dynamicTest(input, () -> {
 					Assertions.assertTrue(URLDecoder.decode(input, StandardCharsets.UTF_8).contains("\uFFFD"));

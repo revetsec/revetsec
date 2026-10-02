@@ -16,6 +16,8 @@
 
 package com.revetsec.oauth;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.internal.http.RawResponse;
 import org.junit.jupiter.api.Test;
 
@@ -141,7 +143,7 @@ final class TokenResponseTests {
 		}
 	}
 
-	private static RawResponse raw(int status, String body, Map<String, List<String>> fields) {
+	private static @NonNull RawResponse raw(int status, @NonNull String body, @NonNull Map<@NonNull String, @NonNull List<@NonNull String>> fields) {
 		return new RawResponse(status, HttpHeaders.of(fields, (name, value) -> true),
 				body.getBytes(StandardCharsets.UTF_8), null, false, Duration.ZERO);
 	}

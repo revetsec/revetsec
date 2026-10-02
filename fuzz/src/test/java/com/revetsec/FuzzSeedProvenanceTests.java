@@ -25,6 +25,7 @@ import com.revetsec.json.JsonString;
 import com.revetsec.json.JsonValue;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.jspecify.annotations.NonNull;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -73,6 +74,27 @@ final class FuzzSeedProvenanceTests {
 		Path root = resources.resolve("com/revetsec/oidc/OidcFuzzTestsInputs");
 		Set<String> expected = new TreeSet<>();
 		for (String line : Files.readAllLines(resources.resolve("com/revetsec/oidc/oidc-seeds.sha256"))) {
+			Assertions.assertTrue(line.matches("[0-9a-f]{64}  .+"));
+			String relative = line.substring(66);
+			Path file = root.resolve(relative).normalize();
+			Assertions.assertTrue(file.startsWith(root));
+			Assertions.assertTrue(expected.add(relative), "duplicate manifest path");
+			Assertions.assertEquals(line.substring(0, 64), HexFormat.of().formatHex(
+					java.security.MessageDigest.getInstance("SHA-256").digest(Files.readAllBytes(file))), relative);
+		}
+		try (Stream<Path> files = Files.walk(root)) {
+			Assertions.assertEquals(expected, files.filter(Files::isRegularFile)
+					.map(root::relativize).map(Path::toString).collect(Collectors.toCollection(TreeSet::new)));
+		}
+	}
+
+	// M5 authored semantic inputs are synthetic and completely inventoried, including binary edge cases.
+	@Test
+	void resourceServerSemanticSeedsMatchTheirCompleteManifest() throws Exception {
+		Path resources = coreBasedir().resolve(FuzzSeedGenerator.FUZZ_RESOURCES);
+		Path root = resources.resolve("com/revetsec/oauth/ResourceServerFuzzTestsInputs");
+		Set<String> expected = new TreeSet<>();
+		for (String line : Files.readAllLines(resources.resolve("com/revetsec/oauth/resource-server-seeds.sha256"))) {
 			Assertions.assertTrue(line.matches("[0-9a-f]{64}  .+"));
 			String relative = line.substring(66);
 			Path file = root.resolve(relative).normalize();
@@ -168,7 +190,7 @@ final class FuzzSeedProvenanceTests {
 				+ "make yet");
 	}
 
-	private static void requireSameSigningInput(Seed seed, byte[] actual) {
+	private static void requireSameSigningInput(@NonNull Seed seed, byte @NonNull [] actual) {
 		String expected = new String(seed.getBytes(), StandardCharsets.US_ASCII);
 		String committed = new String(actual, StandardCharsets.US_ASCII);
 		Assertions.assertEquals(expected.substring(0, expected.lastIndexOf('.')),
@@ -179,7 +201,7 @@ final class FuzzSeedProvenanceTests {
 	/**
 	 * Every seed file under {@code fuzz/src/test/resources} whose name starts with {@code prefix}.
 	 */
-	private static List<Path> seedFiles(Path core, String prefix) throws IOException {
+	private static @NonNull List<@NonNull Path> seedFiles(@NonNull Path core, @NonNull String prefix) throws IOException {
 		try (Stream<Path> paths = Files.walk(core.resolve(FuzzSeedGenerator.FUZZ_RESOURCES))) {
 			return paths.filter(Files::isRegularFile)
 					.filter(path -> path.getFileName().toString().startsWith(prefix))
@@ -192,7 +214,7 @@ final class FuzzSeedProvenanceTests {
 	 * The core checkout: the {@code revetsec.core.basedir} Surefire passes, or else the parent of the working
 	 * directory, which Maven sets to {@code fuzz/}.
 	 */
-	private static Path coreBasedir() {
+	private static @NonNull Path coreBasedir() {
 		String configured = System.getProperty("revetsec.core.basedir");
 		Path core = (configured == null || configured.isBlank() ? Path.of("..") : Path.of(configured)).toAbsolutePath()
 				.normalize();

@@ -16,6 +16,8 @@
 
 package com.revetsec.testing;
 
+import org.jspecify.annotations.NonNull;
+
 import javax.annotation.concurrent.ThreadSafe;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -33,12 +35,12 @@ final class DaemonThreadFactory implements ThreadFactory {
 	private final String namePrefix;
 	private final AtomicInteger nextNumber = new AtomicInteger(1);
 
-	DaemonThreadFactory(String namePrefix) {
+	DaemonThreadFactory(@NonNull String namePrefix) {
 		this.namePrefix = requireNonNull(namePrefix);
 	}
 
 	@Override
-	public Thread newThread(Runnable runnable) {
+	public @NonNull Thread newThread(@NonNull Runnable runnable) {
 		Thread thread = new Thread(runnable, this.namePrefix + "-" + this.nextNumber.getAndIncrement());
 		thread.setDaemon(true);
 		return thread;

@@ -16,6 +16,8 @@
 
 package com.revetsec.internal.encoding;
 
+import org.jspecify.annotations.NonNull;
+
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.DynamicTest;
 import org.junit.jupiter.api.TestFactory;
@@ -32,7 +34,7 @@ import java.util.stream.Stream;
  */
 final class EncodingExceptionTests {
 	@TestFactory
-	Stream<DynamicTest> everyKindHasItsFixedOneSentenceMessageAndNoCause() {
+	@NonNull Stream<@NonNull DynamicTest> everyKindHasItsFixedOneSentenceMessageAndNoCause() {
 		Assertions.assertEquals(EnumSet.allOf(EncodingException.Kind.class), EncodingFailures.MESSAGES.keySet(),
 				"every kind has a spelled-out expected message");
 		return Stream.of(EncodingException.Kind.values()).map(kind -> DynamicTest.dynamicTest(kind.name(), () -> {
@@ -49,7 +51,7 @@ final class EncodingExceptionTests {
 
 	// G6-1: suppression is disabled, and a cause can never be attached later.
 	@TestFactory
-	Stream<DynamicTest> suppressionIsDisabledAndTheCauseIsFixed() {
+	@NonNull Stream<@NonNull DynamicTest> suppressionIsDisabledAndTheCauseIsFixed() {
 		return Stream.of(EncodingException.Kind.values()).map(kind -> DynamicTest.dynamicTest(kind.name(), () -> {
 			EncodingException exception = new EncodingException(kind);
 			exception.addSuppressed(new IllegalStateException(EncodingFailures.SENTINEL));

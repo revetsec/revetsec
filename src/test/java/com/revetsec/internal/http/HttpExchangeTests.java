@@ -16,6 +16,8 @@
 
 package com.revetsec.internal.http;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.ErrorCategory;
 import com.revetsec.OutboundUriPolicy;
 import com.revetsec.internal.Limits;
@@ -117,7 +119,7 @@ final class HttpExchangeTests {
 
 	// G6-7 and R12: every request sends its profile's Accept and Accept-Encoding: identity; a GET has no body.
 	@TestFactory
-	Stream<DynamicTest> sendsTheProfilesAcceptAndAcceptEncodingIdentity() {
+	@NonNull Stream<@NonNull DynamicTest> sendsTheProfilesAcceptAndAcceptEncodingIdentity() {
 		return Arrays.stream(ResponseProfile.values()).map(profile -> DynamicTest.dynamicTest(profile.name(), () -> {
 			String path = script(TestHttpsServer.Response.withStatus(200)
 					.header("Content-Type", profile == ResponseProfile.USERINFO ? "application/jwt" : "application/json")
@@ -162,7 +164,7 @@ final class HttpExchangeTests {
 	// record): charset absent or utf-8 on every allowlisted type, compared case-insensitively (RFC 9110 section
 	// 8.3.1).
 	@TestFactory
-	Stream<DynamicTest> acceptsEveryAllowlistedMediaTypeTheProvidersSend() {
+	@NonNull Stream<@NonNull DynamicTest> acceptsEveryAllowlistedMediaTypeTheProvidersSend() {
 		List<Object[]> cases = new ArrayList<>();
 		for (ResponseProfile profile : List.of(ResponseProfile.METADATA, ResponseProfile.TOKEN,
 				ResponseProfile.INTROSPECTION, ResponseProfile.JWKS, ResponseProfile.USERINFO))
@@ -188,7 +190,7 @@ final class HttpExchangeTests {
 	// Results > Phase 1: REVOCATION skips the whole media-type step (RFC 7009 section 2.2), count included; Keycloak
 	// answers 200 with no Content-Type and node-oidc-provider text/plain.
 	@TestFactory
-	Stream<DynamicTest> revocationSkipsTheWholeMediaTypeStep() {
+	@NonNull Stream<@NonNull DynamicTest> revocationSkipsTheWholeMediaTypeStep() {
 		return Stream.of(
 				TestHttpsServer.Response.fromStatus(200),
 				TestHttpsServer.Response.withStatus(200).header("Content-Type", "text/plain; charset=utf-8").body("OK")
@@ -209,7 +211,7 @@ final class HttpExchangeTests {
 	// G6-3 and G5-5: a non-2xx is not an exception: its status, headers and body (within the error limit) come back
 	// unchecked for media type, so the protocol can read an OAuth error, WWW-Authenticate or Retry-After.
 	@TestFactory
-	Stream<DynamicTest> returnsNon2xxResponsesWithTheirStatusHeadersAndBody() {
+	@NonNull Stream<@NonNull DynamicTest> returnsNon2xxResponsesWithTheirStatusHeadersAndBody() {
 		return Stream.of(
 				TestHttpsServer.Response.withStatus(400).header("Content-Type", "application/json")
 						.body("{\"error\":\"invalid_grant\"}").build(),
@@ -237,7 +239,7 @@ final class HttpExchangeTests {
 	// R8 and G5-5: a body exactly at its limit is read, one byte more is refused (TOO_LARGE on a 2xx, dropped with the
 	// status kept otherwise), whether the length is declared or streamed.
 	@TestFactory
-	Stream<DynamicTest> readsABodyAtItsLimitAndRefusesOneByteMore() {
+	@NonNull Stream<@NonNull DynamicTest> readsABodyAtItsLimitAndRefusesOneByteMore() {
 		int limit = 20_000;
 		List<DynamicTest> tests = new ArrayList<>();
 		for (TestHttpsServer.Framing framing : TestHttpsServer.Framing.values())
@@ -330,7 +332,7 @@ final class HttpExchangeTests {
 	// RFC 9112 sections 6.3 and 7.1: a body that ends before its Content-Length, or a chunked body cut off before its
 	// last chunk, is IO with the JDK's IOException kept as the cause (G6-2), never a short body returned as whole.
 	@TestFactory
-	Stream<DynamicTest> aBodyCutShortByTheServerIsIo() {
+	@NonNull Stream<@NonNull DynamicTest> aBodyCutShortByTheServerIsIo() {
 		return Stream.of(
 				"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 100\r\n\r\n{\"a\":",
 				"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nTransfer-Encoding: chunked\r\n\r\n5\r\n{\"a\":\r\n",
@@ -351,7 +353,7 @@ final class HttpExchangeTests {
 	// INV-G1 and M1 plan, "Risks": an injected client that throws from sendAsync, or returns null, gives IO; nothing
 	// but HttpExchangeException leaves execute.
 	@TestFactory
-	Stream<DynamicTest> anInjectedClientThatFailsToSendGivesIo() {
+	@NonNull Stream<@NonNull DynamicTest> anInjectedClientThatFailsToSendGivesIo() {
 		return Stream.of(ScriptedHttpClient.Behavior.THROW_FROM_SEND_ASYNC,
 						ScriptedHttpClient.Behavior.RETURN_NULL_FROM_SEND_ASYNC)
 				.map(behavior -> DynamicTest.dynamicTest(behavior.name(), () -> {
@@ -370,7 +372,7 @@ final class HttpExchangeTests {
 	// execute contains that, so the caller still gets the exchange's own kind: a timeout, a transport failure, or a
 	// rejection the server chose (a 302), and nothing but HttpExchangeException leaves execute.
 	@TestFactory
-	Stream<DynamicTest> aFutureThatThrowsFromIsDoneOrCancelStillGivesTheExchangesOwnKind() {
+	@NonNull Stream<@NonNull DynamicTest> aFutureThatThrowsFromIsDoneOrCancelStillGivesTheExchangesOwnKind() {
 		HttpHeaders redirect = HttpHeaders.of(Map.of("Location", List.of("https://example.com/elsewhere")),
 				(name, value) -> true);
 		return Stream.of(
@@ -393,7 +395,7 @@ final class HttpExchangeTests {
 	// M1 plan, "Checks in apply()": a status outside 100 to 999, which the JDK never passes on but an injected client
 	// might, is FRAMING, and the body handler's subscriber cancels at once so nothing is read.
 	@TestFactory
-	Stream<DynamicTest> aStatusOutsideTheHttpRangeIsFramingAndReadsNothing() {
+	@NonNull Stream<@NonNull DynamicTest> aStatusOutsideTheHttpRangeIsFramingAndReadsNothing() {
 		return Stream.of(0, 42, 99, 1_000, -200).map(status -> DynamicTest.dynamicTest("status " + status, () -> {
 			ScriptedHttpClient scripted = ScriptedHttpClient.respondingAndStalling(status, HttpHeaders.of(
 					Map.of("Content-Type", List.of("application/json")), (name, value) -> true));
@@ -430,7 +432,7 @@ final class HttpExchangeTests {
 	// information or fragment, is sent; everything else is URI_REJECTED before the client is asked to send anything.
 	// The fragment rows are new in M2: the fetch runs the same UriChecks as a builder's build().
 	@TestFactory
-	Stream<DynamicTest> rejectsUrisBeforeSendingAnything() {
+	@NonNull Stream<@NonNull DynamicTest> rejectsUrisBeforeSendingAnything() {
 		return Stream.of("http://example.com/", "http://127.0.0.1:1/", "http://[::1]:1/", "http://localhost:1/",
 						"ftp://example.com/", "ws://example.com/", "/relative", "mailto:someone@example.com",
 						"https://user:secret@example.com/", "https://user@example.com/", "https://example.com:0/",
@@ -455,7 +457,7 @@ final class HttpExchangeTests {
 	// R12: https to any permitted host is sent (the scheme compares case-insensitively), and loopback http only when
 	// the component allows it. The stand-in client fails every send with IO, which proves the URI passed.
 	@TestFactory
-	Stream<DynamicTest> sendsHttpsAndAllowedLoopbackHttp() {
+	@NonNull Stream<@NonNull DynamicTest> sendsHttpsAndAllowedLoopbackHttp() {
 		return Stream.of(
 				new Object[]{"https://example.com/", false},
 				new Object[]{"HTTPS://Example.COM:443/x?y=z", false},
@@ -489,7 +491,7 @@ final class HttpExchangeTests {
 	// as IPv6 and connects off the host, so plain http to them is refused even when loopback is allowed. https to them
 	// stays permitted, as the policy decides.
 	@TestFactory
-	Stream<DynamicTest> refusesPlainHttpToEmbeddedLoopbackForms() {
+	@NonNull Stream<@NonNull DynamicTest> refusesPlainHttpToEmbeddedLoopbackForms() {
 		return Stream.of("http://[::127.0.0.1]:1/", "http://[::7f00:1]:1/", "http://[::127.1.2.3]:1/",
 						"http://[64:ff9b::127.0.0.1]:1/", "http://[64:ff9b::7f00:1]:1/", "http://[::ffff:0:127.0.0.1]:1/")
 				.map(uri -> DynamicTest.dynamicTest(uri, () -> {
@@ -515,7 +517,7 @@ final class HttpExchangeTests {
 	// .localhost, and localhost. with its trailing dot, to the platform resolver, so they may leave the host; plain http
 	// to them is refused, while https to them stays permitted, as the default policy decides.
 	@TestFactory
-	Stream<DynamicTest> refusesPlainHttpToLocalhostNamesOtherThanExactlyLocalhost() {
+	@NonNull Stream<@NonNull DynamicTest> refusesPlainHttpToLocalhostNamesOtherThanExactlyLocalhost() {
 		return Stream.of("http://api.localhost:1/", "http://a.b.localhost:1/", "http://localhost.:1/",
 						"http://LOCALHOST.:1/", "http://API.LOCALHOST:1/")
 				.map(uri -> DynamicTest.dynamicTest(uri, () -> {
@@ -581,7 +583,7 @@ final class HttpExchangeTests {
 
 	// G6-5: an injected client that follows redirects is refused when the component is created.
 	@TestFactory
-	Stream<DynamicTest> refusesAnInjectedClientThatFollowsRedirects() {
+	@NonNull Stream<@NonNull DynamicTest> refusesAnInjectedClientThatFollowsRedirects() {
 		return Stream.of(HttpClient.Redirect.NORMAL, HttpClient.Redirect.ALWAYS)
 				.map(redirect -> DynamicTest.dynamicTest(redirect.name(), () -> Assertions.assertThrows(
 						IllegalArgumentException.class, () -> HttpExchange.fromHttpClient(new StandInHttpClient(redirect),
@@ -687,7 +689,7 @@ final class HttpExchangeTests {
 	// HttpExchangeRequest refuses headers Revetsec or the JDK owns, values the JDK would reject or that could split a
 	// header, non-ASCII form bodies, negative limits and non-positive timeouts.
 	@TestFactory
-	Stream<DynamicTest> requestsRefuseMalformedComponents() {
+	@NonNull Stream<@NonNull DynamicTest> requestsRefuseMalformedComponents() {
 		URI uri = URI.create("https://example.com/");
 		List<Map<String, String>> badHeaders = new ArrayList<>();
 		for (String reserved : List.of("Accept", "accept-encoding", "Alt-Used", "Connection", "Content-Length",
@@ -730,7 +732,7 @@ final class HttpExchangeTests {
 	// never reaches execute, where the JDK's IllegalArgumentException would surface as URI_REJECTED. JDK 26 added
 	// alt-used; on 17 to 25 it would go on the wire. Run on every JDK leg, this catches the next name a JDK adds.
 	@TestFactory
-	Stream<DynamicTest> requestsRefuseEveryHeaderNameTheJdkRestricts() {
+	@NonNull Stream<@NonNull DynamicTest> requestsRefuseEveryHeaderNameTheJdkRestricts() {
 		URI uri = URI.create("https://example.com/");
 		List<String> candidates = List.of("Connection", "Content-Length", "Expect", "Host", "Upgrade", "Alt-Used",
 				"Alt-Svc", "Keep-Alive", "Proxy-Connection", "Proxy-Authorization", "TE", "Trailer", "Transfer-Encoding",
@@ -804,48 +806,48 @@ final class HttpExchangeTests {
 		Assertions.assertEquals(first, copied);
 	}
 
-	private static RawResponse execute(HttpExchangeRequest request) throws HttpExchangeException {
+	private static @NonNull RawResponse execute(@NonNull HttpExchangeRequest request) throws HttpExchangeException {
 		HttpExchange httpExchange = exchange;
 		if (httpExchange == null)
 			throw new IllegalStateException("The exchange was not created");
 		return httpExchange.execute(request, Deadline.fromNow(LONG));
 	}
 
-	private static HttpExchangeException assertFails(HttpExchangeRequest request) {
+	private static @NonNull HttpExchangeException assertFails(@NonNull HttpExchangeRequest request) {
 		return Assertions.assertThrows(HttpExchangeException.class, () -> execute(request));
 	}
 
-	private static HttpExchangeRequest limited(URI uri, int bodyLimit, int errorBodyLimit) {
+	private static @NonNull HttpExchangeRequest limited(@NonNull URI uri, int bodyLimit, int errorBodyLimit) {
 		return new HttpExchangeRequest(uri, ResponseProfile.TOKEN, null, Map.of(), bodyLimit, errorBodyLimit, LONG);
 	}
 
-	private static MediaType requiredMediaType(RawResponse response) {
+	private static @NonNull MediaType requiredMediaType(@NonNull RawResponse response) {
 		MediaType mediaType = response.mediaType();
 		if (mediaType == null)
 			throw new AssertionError("No media type on " + response);
 		return mediaType;
 	}
 
-	private static String script(TestHttpsServer.Response response) {
+	private static @NonNull String script(TestHttpsServer.@NonNull Response response) {
 		String path = "/exchange/" + NEXT_PATH.incrementAndGet();
 		jdk().script(path, TestHttpsServer.Script.fromResponse(response));
 		return path;
 	}
 
-	private static byte[] randomBytes(int length, long seed) {
+	private static byte @NonNull [] randomBytes(int length, long seed) {
 		byte[] bytes = new byte[length];
 		new Random(seed).nextBytes(bytes);
 		return bytes;
 	}
 
-	private static TestHttpsServer jdk() {
+	private static @NonNull TestHttpsServer jdk() {
 		TestHttpsServer server = jdkServer;
 		if (server == null)
 			throw new IllegalStateException("The server did not start");
 		return server;
 	}
 
-	private static RawTlsServer raw() {
+	private static @NonNull RawTlsServer raw() {
 		RawTlsServer server = rawServer;
 		if (server == null)
 			throw new IllegalStateException("The server did not start");
@@ -861,7 +863,7 @@ final class HttpExchangeTests {
 		private final RuntimeException partner = new RuntimeException("partner", this);
 
 		@Override
-		public Throwable getCause() {
+		public @NonNull Throwable getCause() {
 			return this.partner;
 		}
 	}

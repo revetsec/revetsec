@@ -16,6 +16,8 @@
 
 package com.revetsec.oauth;
 
+import org.jspecify.annotations.NonNull;
+
 import org.junit.jupiter.api.Test;
 
 import java.io.InputStream;
@@ -57,7 +59,7 @@ final class CapturedAuthorizationServerMetadataTests {
 						fixture("entra/2026-09-27/common-v2-openid.json"))).getReason());
 	}
 
-	private static String fixture(String name) throws Exception {
+	private static @NonNull String fixture(@NonNull String name) throws Exception {
 		try (InputStream input = CapturedAuthorizationServerMetadataTests.class.getResourceAsStream(
 				"/fixtures/" + name)) {
 			if (input == null) throw new IllegalStateException("A captured metadata fixture is missing.");

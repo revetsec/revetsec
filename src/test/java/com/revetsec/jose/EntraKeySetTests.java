@@ -16,6 +16,8 @@
 
 package com.revetsec.jose;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.internal.Limits;
 import com.revetsec.internal.json.JsonCodec;
 import com.revetsec.internal.json.JsonLimits;
@@ -128,7 +130,7 @@ final class EntraKeySetTests {
 	// M2-11: all five captured key sets load with zero skipped keys (so rule 12's x5c check passes on every key), and
 	// every key is an RSA-2048 signing key with e = 65537, a kid and no alg, with the issuer members of the table.
 	@TestFactory
-	Stream<DynamicTest> everyCapturedKeySetLoadsWithNoKeySkipped() {
+	@NonNull Stream<@NonNull DynamicTest> everyCapturedKeySetLoadsWithNoKeySkipped() {
 		return KEY_SETS.stream().map(capture -> DynamicTest.dynamicTest(capture.file(), () -> {
 			ParsedKeySet parsed = JwkSetParser.parse(bytes(capture.file()),
 					Limits.JWKS_RESPONSE_BODY_SIZE.getDefaultIntValue(), Limits.JWKS_KEY_COUNT.getDefaultIntValue());
@@ -175,7 +177,7 @@ final class EntraKeySetTests {
 	// G8-2 and M2-11: Entra's keys carry no alg, so each fits RS256 under the default {RS256}, and none fits once a
 	// second RSA algorithm is allowed; a token with the key's kid then gets KEY_ALGORITHM_MISMATCH, never a refresh.
 	@TestFactory
-	Stream<DynamicTest> entraKeysFitOnlyWhileOneRsaAlgorithmIsAllowed() {
+	@NonNull Stream<@NonNull DynamicTest> entraKeysFitOnlyWhileOneRsaAlgorithmIsAllowed() {
 		return KEY_SETS.stream().map(capture -> DynamicTest.dynamicTest(capture.file(), () -> {
 			List<VerificationKey> keys = JsonWebKeySet.fromJson(resource(capture.file())).verificationKeys();
 
@@ -212,7 +214,7 @@ final class EntraKeySetTests {
 	// M2-11 negatives on the templated key: a tid that is absent, not a string, uppercase, braced or not a GUID, and
 	// another tenant's tid while iss is the configured issuer, are KEY_ISSUER_MISMATCH, after the signature verified.
 	@TestFactory
-	Stream<DynamicTest> theTemplatedKeyNeedsTheTokensOwnLowercaseTenantId() {
+	@NonNull Stream<@NonNull DynamicTest> theTemplatedKeyNeedsTheTokensOwnLowercaseTenantId() {
 		Map<String, @Nullable String> tids = new LinkedHashMap<>();
 		tids.put("tid absent", null);
 		tids.put("tid a number", "72988");
@@ -260,7 +262,7 @@ final class EntraKeySetTests {
 	// login.microsoftonline.us, spelled {TENANTID}, with the placeholder doubled, or with a trailing slash, is compared
 	// literally, so it is KEY_ISSUER_MISMATCH.
 	@TestFactory
-	Stream<DynamicTest> lookAlikeTemplatesAreLiteral() {
+	@NonNull Stream<@NonNull DynamicTest> lookAlikeTemplatesAreLiteral() {
 		return Stream.of("https://login.microsoftonline.us/{tenantid}/v2.0",
 				"https://login.microsoftonline.com/{TENANTID}/v2.0",
 				"https://login.microsoftonline.com/{tenantid}{tenantid}/v2.0",
@@ -278,7 +280,7 @@ final class EntraKeySetTests {
 	// discovery document publishes it, never lets the templated key verify a token whose iss is the template, whatever
 	// its tid.
 	@TestFactory
-	Stream<DynamicTest> theTemplateItselfIsNeverALiteralIssuer() {
+	@NonNull Stream<@NonNull DynamicTest> theTemplateItselfIsNeverALiteralIssuer() {
 		Map<String, @Nullable String> tids = new LinkedHashMap<>();
 		tids.put("tid absent", null);
 		tids.put("tid not a GUID", "\"NOT-A-GUID\"");
@@ -297,7 +299,7 @@ final class EntraKeySetTests {
 	// token finds its key, passes its signature check, and then fails with KEY_ISSUER_MISMATCH: each token version
 	// needs its own key set, and an application that accepts both needs one validator for each.
 	@TestFactory
-	Stream<DynamicTest> aVersionOneTokenVerifiesOnlyWithTheVersionOneKeySet() throws Exception {
+	@NonNull Stream<@NonNull DynamicTest> aVersionOneTokenVerifiesOnlyWithTheVersionOneKeySet() throws Exception {
 		Assertions.assertEquals(keyIds("tenant-v1-keys.json"), keyIds("tenant-v2-keys.json"), "the same keys");
 		Map<String, @Nullable String> keyIssuers = new LinkedHashMap<>();
 		keyIssuers.put("a v1.0 key, with no issuer member", null);
@@ -341,8 +343,8 @@ final class EntraKeySetTests {
 	 * tenant's key and the consumer tenant's key, all RSA with {@code use} {@code sig}, an {@code x5c} and no
 	 * {@code alg}.
 	 */
-	private static JwtValidator validator(String issuer,
-																				Set<JwsAlgorithm> algorithms) {
+	private static @NonNull JwtValidator validator(@NonNull String issuer,
+																				@NonNull Set<@NonNull JwsAlgorithm> algorithms) {
 		String keySet = JwtFixtures.keySet(entraKey(Fixture.IDP_SIGNING_RSA_2048, "templated", TEMPLATE),
 				entraKey(Fixture.IDP_SIGNING_RSA_3072, "tenant", TENANT_ISSUER),
 				entraKey(Fixture.SP_SIGNING_RSA_2048, "consumer", CONSUMER_ISSUER));
@@ -352,22 +354,22 @@ final class EntraKeySetTests {
 				.clock(JwtFixtures.clock()).build();
 	}
 
-	private static TestJsonWebKeys.Builder entraKey(Fixture fixture,
-																									String kid,
-																									String issuer) {
+	private static TestJsonWebKeys.@NonNull Builder entraKey(@NonNull Fixture fixture,
+																									@NonNull String kid,
+																									@NonNull String issuer) {
 		return TestJsonWebKeys.withFixture(fixture).kid(kid).use("sig").x5c(List.of(fixture.getCertificate()
 				.orElseThrow())).issuer(issuer);
 	}
 
-	private static String token(String kid,
-															Fixture fixture,
-															String issuer,
+	private static @NonNull String token(@NonNull String kid,
+															@NonNull Fixture fixture,
+															@NonNull String issuer,
 															@Nullable String tid) {
 		return TestJws.withAlgorithm(Algorithm.RS256).kid(kid).typ("JWT").payload(claims(issuer, tid)).sign(
 				fixture.getPrivateKey());
 	}
 
-	private static String claims(String issuer,
+	private static @NonNull String claims(@NonNull String issuer,
 															 @Nullable String tid) {
 		TestClaims claims = TestClaims.empty().put("aud", APPLICATION).put("iss", issuer).put("iat",
 				JwtFixtures.NOW.getEpochSecond()).put("exp", JwtFixtures.NOW.getEpochSecond() + 3_600).put("ver", "2.0");
@@ -376,18 +378,18 @@ final class EntraKeySetTests {
 		return claims.toJson();
 	}
 
-	private static Set<String> keyIds(String capture) throws IOException {
+	private static @NonNull Set<@NonNull String> keyIds(@NonNull String capture) throws IOException {
 		return JsonWebKeySet.fromJson(resource(capture)).getKeys().stream().map(key -> key.getKeyId().orElseThrow())
 				.collect(Collectors.toCollection(TreeSet::new));
 	}
 
-	private static Path directory() throws URISyntaxException {
+	private static @NonNull Path directory() throws URISyntaxException {
 		URL url = EntraKeySetTests.class.getResource(DIRECTORY);
 		Assertions.assertNotNull(url, DIRECTORY);
 		return Path.of(url.toURI());
 	}
 
-	private static byte[] bytes(String name) throws IOException {
+	private static byte @NonNull [] bytes(@NonNull String name) throws IOException {
 		try (@Nullable InputStream stream = EntraKeySetTests.class.getResourceAsStream(DIRECTORY + name)) {
 			if (stream == null)
 				throw new IllegalStateException("Missing capture " + name);
@@ -395,15 +397,15 @@ final class EntraKeySetTests {
 		}
 	}
 
-	private static String resource(String name) throws IOException {
+	private static @NonNull String resource(@NonNull String name) throws IOException {
 		return new String(bytes(name), StandardCharsets.UTF_8);
 	}
 
-	private static JsonObject json(String name) throws Exception {
+	private static @NonNull JsonObject json(@NonNull String name) throws Exception {
 		return (JsonObject) JsonCodec.parse(bytes(name), JsonLimits.protocolDocument(
 				Limits.HTTP_RESPONSE_BODY_SIZE.getDefaultIntValue()));
 	}
 
-	private record Capture(String file, int keyCount, Map<String, Integer> issuers) {
+	private record Capture(@NonNull String file, int keyCount, @NonNull Map<@NonNull String, @NonNull Integer> issuers) {
 	}
 }

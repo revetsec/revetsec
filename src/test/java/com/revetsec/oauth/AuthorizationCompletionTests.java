@@ -16,6 +16,8 @@
 
 package com.revetsec.oauth;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.StateSealer;
 import com.revetsec.internal.encoding.QueryParameters;
 import com.revetsec.testing.TestSealers;
@@ -100,10 +102,10 @@ final class AuthorizationCompletionTests {
 			String state = QueryParameters.parse(redirect.getAuthorizationUri().getRawQuery()).getValues("state").get(0);
 			PendingAuthorizationStore defective = new PendingAuthorizationStore() {
 				private @Nullable String record;
-				@Override public void save(String binding, String key, String opaque, Instant expiry) {
+				@Override public void save(@NonNull String binding, @NonNull String key, @NonNull String opaque, @NonNull Instant expiry) {
 					this.record = opaque;
 				}
-				@Override public Optional<String> consume(String binding, String key) {
+				@Override public @NonNull Optional<@NonNull String> consume(@NonNull String binding, @NonNull String key) {
 					String found = this.record;
 					this.record = null;
 					return Optional.ofNullable(found);
@@ -271,7 +273,7 @@ final class AuthorizationCompletionTests {
 		}
 	}
 
-	private static OAuthClient loopbackClient(TestHttpsServer server) {
+	private static @NonNull OAuthClient loopbackClient(@NonNull TestHttpsServer server) {
 		AuthorizationServerMetadata metadata = AuthorizationServerMetadata.withIssuer(server.getBaseUri().toString())
 				.authorizationEndpoint(server.uri("/authorize"))
 				.tokenEndpoint(server.uri("/token"))
@@ -281,7 +283,7 @@ final class AuthorizationCompletionTests {
 				.httpClient(TestTls.httpClient()).build();
 	}
 
-	private static OAuthClient client(boolean issuerAdvertised) {
+	private static @NonNull OAuthClient client(boolean issuerAdvertised) {
 		AuthorizationServerMetadata metadata = AuthorizationServerMetadata.withIssuer("https://issuer.example")
 				.authorizationEndpoint(URI.create("https://issuer.example/auth"))
 				.tokenEndpoint(URI.create("https://issuer.example/token"))
@@ -290,12 +292,12 @@ final class AuthorizationCompletionTests {
 				.clientAuthentication(ClientAuthentication.noneInstance()).redirectUri(CALLBACK).build();
 	}
 
-	private static OAuthClient clientWithIssuer(String issuer) {
+	private static @NonNull OAuthClient clientWithIssuer(@NonNull String issuer) {
 		return OAuthClient.withAuthorizationServerMetadata(metadata(issuer)).clientId("client")
 				.clientAuthentication(ClientAuthentication.noneInstance()).redirectUri(CALLBACK).build();
 	}
 
-	private static AuthorizationServerMetadata metadata(String issuer) {
+	private static @NonNull AuthorizationServerMetadata metadata(@NonNull String issuer) {
 		return AuthorizationServerMetadata.withIssuer(issuer)
 				.authorizationEndpoint(URI.create(issuer + "/auth"))
 				.tokenEndpoint(URI.create(issuer + "/token")).build();

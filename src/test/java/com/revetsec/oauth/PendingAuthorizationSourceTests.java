@@ -16,6 +16,8 @@
 
 package com.revetsec.oauth;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.StateSealer;
 import com.revetsec.testing.RewindableClock;
 import com.revetsec.testing.TestSealers;
@@ -113,10 +115,10 @@ final class PendingAuthorizationSourceTests {
 		PendingAuthorization pending = pending("state-A");
 		PendingAuthorizationStore defective = new PendingAuthorizationStore() {
 			private @Nullable String record;
-			@Override public void save(String binding, String state, String opaque, Instant expiry) {
+			@Override public void save(@NonNull String binding, @NonNull String state, @NonNull String opaque, @NonNull Instant expiry) {
 				this.record = opaque;
 			}
-			@Override public Optional<String> consume(String binding, String state) {
+			@Override public @NonNull Optional<@NonNull String> consume(@NonNull String binding, @NonNull String state) {
 				String value = this.record;
 				this.record = null;
 				return Optional.ofNullable(value);
@@ -145,7 +147,7 @@ final class PendingAuthorizationSourceTests {
 				PendingAuthorizationSource.fromStore(store, "browser-A"), "state-B", clock));
 	}
 
-	private static PendingAuthorization pending(String state) {
+	private static @NonNull PendingAuthorization pending(@NonNull String state) {
 		return new PendingAuthorization("oauth", "https://issuer.example", "client",
 				URI.create("https://app.example/callback"), state, "verifier", null,
 				Set.of("openid"), List.of(URI.create("https://api.example")),
