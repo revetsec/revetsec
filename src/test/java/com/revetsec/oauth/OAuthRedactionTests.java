@@ -97,4 +97,19 @@ final class OAuthRedactionTests {
 				assertFalse(rendered.contains(secret), () -> "A secret was rendered in an OAuth diagnostic surface.");
 		}
 	}
+	@Test void assertionSnapshotsAndConfigurationFailureStacksRedactAppIdentifiersAndCauses() {
+		String marker = "TEST-ONLY-private-identifier";
+		com.revetsec.jose.JwsSigner signer = com.revetsec.jose.JwsSigner.fromRsaKeyPair(com.revetsec.testing.TestJsonWebKeys.Fixture.IDP_SIGNING_RSA_2048.getPrivateKey(),
+				com.revetsec.testing.TestJsonWebKeys.Fixture.IDP_SIGNING_RSA_2048.getPublicKey(),com.revetsec.jose.JwsAlgorithm.PS256);
+		ClientAssertionSigningKey.Builder builder = ClientAssertionSigningKey.withSigner(signer).keyId(marker).certificateSha256Thumbprint(new byte[32]);
+		ClientAssertionSigningKey key = builder.build(); assertEquals(marker,key.getKeyId().orElseThrow());
+		ClientAuthentication.PrivateKeyJwtBuilder authenticationBuilder = ClientAuthentication.withPrivateKeyJwt(budget -> { throw new IllegalStateException(marker); });
+		for (Object value : List.of(key,builder,authenticationBuilder,authenticationBuilder.build())) assertFalse(value.toString().contains(marker));
+		for (OAuthException.Reason reason : List.of(OAuthException.Reason.CLIENT_ASSERTION_KEY_UNAVAILABLE,OAuthException.Reason.CLIENT_ASSERTION_SIGNING_FAILED,
+				OAuthException.Reason.CLIENT_ASSERTION_KEY_PAIR_MISMATCH,OAuthException.Reason.CLIENT_ASSERTION_ENDPOINT_MISMATCH,OAuthException.Reason.ISSUER_POLICY_UNAVAILABLE)) {
+			OAuthConfigurationException failure = OAuthConfigurationException.fromReason(reason); failure.addSuppressed(new IllegalStateException(marker));
+			StringWriter stack = new StringWriter(); failure.printStackTrace(new PrintWriter(stack)); assertFalse(stack.toString().contains(marker)); assertEquals(0,failure.getSuppressed().length);
+		}
+	}
+
 }

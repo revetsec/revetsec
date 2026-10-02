@@ -10,6 +10,10 @@ Nothing has been released. The version is `1.0.0-SNAPSHOT`, and there is no comp
 
 ### Added
 
+- Generated OAuth `private_key_jwt` assertions: immutable rotating key snapshots, per-role metadata, issuer or explicit endpoint audiences, original operation deadlines and preparation failure observation.
+
+- Shared RSA signing (`JwsSigner`): PS256/RS256/RS384, checked public-key snapshots, exact bounded JSON claims and pair verification before credential output. Explicit `warmUp` performs a noncredential probe; factories perform no signing. Opaque application-owned private keys are retained without export. Fixed `JwsSigningException` reasons distinguish provider unavailability, pair mismatch and exhausted budgets. OAuth assertion integration is implemented; issuance remains planned.
+
 - JOSE (milestone M2): verification of signed JWTs against JSON Web Key Sets.
   - `com.revetsec.jose`, 16 public types:
     - `JwtValidator`: validates a JWT in the JWS compact serialization for one issuer. By default it allows RS256 alone, `typ` absent or `JWT`, 60 s of clock skew and tokens up to 64 KiB, and requires `iss`, `exp` and an expected audience. It never accepts `none`, an HMAC algorithm, a key or key URL in the header (`jwk`, `jku`, `x5u`), `crit`, `b64`, `zip`, `cty`, an encrypted or JSON-serialized token, or a token with a `cnf` claim. A malformed signature is refused before any key is looked up;

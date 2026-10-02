@@ -398,6 +398,10 @@ public final class Limits {
 	public static final Limit CLIENT_CREDENTIALS_RENEW_BEFORE = Limit.fromDurations("Client-credentials renewBefore",
 			Duration.ofSeconds(60), Duration.ZERO, Duration.ofMinutes(10));
 
+	/** OAuth client assertion lifetime: 60 s [1 s, 300 s], with exact whole seconds. */
+	public static final Limit CLIENT_ASSERTION_LIFETIME = Limit.fromDurations("Client assertion lifetime",
+			Duration.ofSeconds(60), Duration.ofSeconds(1), Duration.ofSeconds(300));
+
 	private static final List<Limit> ALL = List.of(
 			HTTP_RESPONSE_BODY_SIZE,
 			JWKS_RESPONSE_BODY_SIZE,
@@ -449,7 +453,8 @@ public final class Limits {
 			DISCOVERY_COOLDOWN,
 			CLIENT_CREDENTIALS_FALLBACK_CACHE_DURATION,
 			CLIENT_CREDENTIALS_MAXIMUM_CACHE_DURATION,
-			CLIENT_CREDENTIALS_RENEW_BEFORE);
+			CLIENT_CREDENTIALS_RENEW_BEFORE,
+			CLIENT_ASSERTION_LIFETIME);
 
 	private Limits() {
 		// Constants and static helpers only.

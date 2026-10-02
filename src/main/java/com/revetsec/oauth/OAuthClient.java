@@ -342,7 +342,9 @@ public final class OAuthClient {
 			throw AuthorizationErrorException.fromErrorCode(response.getError().orElseThrow());
 		String code = response.getCode().orElseThrow(() ->
 				OAuthResponseException.fromReason(OAuthException.Reason.CALLBACK_MALFORMED));
-		AuthorizationServerMetadata metadata = metadataSupplier.apply(deadline);
+		AuthorizationServerMetadata metadata;
+		try { metadata = metadataSupplier.apply(deadline); }
+		catch (OAuthException failure) { assertionMetadataFailure(OAuthEndpoint.TOKEN, failure, this.observer); throw failure; }
 		if (!metadata.getAuthorizationEndpoint().toString().equals(pending.authorizationEndpoint().toString())
 				|| !metadata.getTokenEndpoint().toString().equals(pending.tokenEndpoint().toString()))
 			throw OAuthValidationException.fromReason(OAuthException.Reason.METADATA_ENDPOINT_DRIFT);
@@ -350,7 +352,7 @@ public final class OAuthClient {
 				.add("code", code).add("redirect_uri", pending.getRedirectUri().toString())
 				.add("code_verifier", pending.verifier()).resources(pending.resources());
 		return new CodeCompletion(pending,
-				tokenPayloadRequest(metadata.getTokenEndpoint(), form, pending.getRequestedScopes(), deadline, hmacAlgorithms), code);
+				tokenPayloadRequest(metadata, form, pending.getRequestedScopes(), deadline, hmacAlgorithms), code);
 	}
 
 	/**
@@ -365,13 +367,13 @@ public final class OAuthClient {
 		if (this.clientAuthentication.isPublicClient())
 			throw new IllegalStateException("A public client cannot request client credentials.");
 		Deadline deadline = Deadline.fromNow(this.totalDeadline);
-		AuthorizationServerMetadata metadata = metadata(deadline);
+		AuthorizationServerMetadata metadata = assertionMetadata(deadline, OAuthEndpoint.TOKEN);
 		Set<String> requestedScopes = options.getScopes().orElse(this.scopes);
 		OAuthRequestWriter form = new OAuthRequestWriter().add("grant_type", "client_credentials");
 		if (!requestedScopes.isEmpty()) form.add("scope", String.join(" ", new TreeSet<>(requestedScopes)));
 		form.resources(options.resourcesOverridden() ? options.getResources() : this.resources)
 				.addAll(options.getAdditionalParameters());
-		return tokenRequest(metadata.getTokenEndpoint(), form, requestedScopes, deadline);
+		return tokenRequest(metadata, form, requestedScopes, deadline);
 	}
 
 	/**
@@ -387,7 +389,7 @@ public final class OAuthClient {
 		requireNonNull(refreshToken);
 		requireNonNull(options);
 		Deadline deadline = Deadline.fromNow(this.totalDeadline);
-		AuthorizationServerMetadata metadata = metadata(deadline);
+		AuthorizationServerMetadata metadata = assertionMetadata(deadline, OAuthEndpoint.TOKEN);
 		return refreshPayload(refreshToken, options, metadata, deadline).toTokenResponse();
 	}
 
@@ -403,7 +405,7 @@ public final class OAuthClient {
 			if (!scopes.isEmpty()) form.add("scope", String.join(" ", new TreeSet<>(scopes)));
 		});
 		form.resources(options.getResources()).addAll(options.getAdditionalParameters());
-		return tokenPayloadRequest(metadata.getTokenEndpoint(), form, options.getScopes().orElse(null), deadline, hmacAlgorithms);
+		return tokenPayloadRequest(metadata, form, options.getScopes().orElse(null), deadline, hmacAlgorithms);
 	}
 
 	/**
@@ -417,43 +419,53 @@ public final class OAuthClient {
 		if (requireNonNull(token).isEmpty()) throw new IllegalArgumentException("A token must not be empty.");
 		requireNonNull(hint);
 		Deadline deadline = Deadline.fromNow(this.totalDeadline);
-		AuthorizationServerMetadata metadata = metadata(deadline);
+		AuthorizationServerMetadata metadata = assertionMetadata(deadline, OAuthEndpoint.REVOCATION);
 		URI endpoint = metadata.getRevocationEndpoint().orElseThrow(() ->
 				new IllegalStateException("The authorization server has no revocation endpoint."));
 		Map<String, String> headers = new HashMap<>();
 		Map<String, String> authentication = new HashMap<>();
-		this.clientAuthentication.apply(this.clientId, headers, authentication);
+		ClientAssertionPreparation.Prepared assertion = prepareAuthentication(new ResourceServerMetadata(this.issuer, endpoint,
+				metadata.getRevocationEndpointAuthMethodsSupported().orElse(null), metadata.getRevocationEndpointAuthSigningAlgValuesSupported().orElse(null),
+				metadata.getTokenEndpoint()), OAuthEndpoint.REVOCATION, deadline, this.observer);
+		if (assertion == null) this.clientAuthentication.apply(this.clientId, headers, authentication);
+		else addAssertion(authentication, assertion);
 		if (this.clientAuthentication.isUnencodedBasic())
 			ObserverDispatch.dispatch(this.observer, OAuthObserver::didUseUnencodedBasic);
 		OAuthRequestWriter form = new OAuthRequestWriter().add("token", token)
 				.add("token_type_hint", hint.wireValue()).addAll(authentication);
 		Instant requestStart = this.clock.instant();
 		RawResponse response = send(endpoint, OAuthEndpoint.REVOCATION, ResponseProfile.REVOCATION,
-				form.body(), headers, deadline);
+				form.body(), headers, deadline, assertion);
 		if (response.status() != 200)
 			throw TokenResponseParser.error(response, requestStart);
 	}
 
-	private @NonNull TokenResponse tokenRequest(@NonNull URI endpoint, @NonNull OAuthRequestWriter form,
+	private @NonNull TokenResponse tokenRequest(@NonNull AuthorizationServerMetadata metadata, @NonNull OAuthRequestWriter form,
 			@Nullable Set<@NonNull String> requestedScopes, @NonNull Deadline deadline) {
-		return tokenPayloadRequest(endpoint, form, requestedScopes, deadline).toTokenResponse();
+		return tokenPayloadRequest(metadata, form, requestedScopes, deadline).toTokenResponse();
 	}
 
-	private @NonNull TokenEndpointPayload tokenPayloadRequest(@NonNull URI endpoint, @NonNull OAuthRequestWriter form,
+	private @NonNull TokenEndpointPayload tokenPayloadRequest(@NonNull AuthorizationServerMetadata metadata, @NonNull OAuthRequestWriter form,
 			@Nullable Set<@NonNull String> requestedScopes, @NonNull Deadline deadline) {
-		return tokenPayloadRequest(endpoint, form, requestedScopes, deadline, Set.of());
+		return tokenPayloadRequest(metadata, form, requestedScopes, deadline, Set.of());
 	}
-	private @NonNull TokenEndpointPayload tokenPayloadRequest(@NonNull URI endpoint, @NonNull OAuthRequestWriter form,
+	private @NonNull TokenEndpointPayload tokenPayloadRequest(@NonNull AuthorizationServerMetadata metadata, @NonNull OAuthRequestWriter form,
 			@Nullable Set<@NonNull String> requestedScopes, @NonNull Deadline deadline, @NonNull Set<com.revetsec.jose.@NonNull JwsAlgorithm> hmacAlgorithms) {
+		URI endpoint = metadata.getTokenEndpoint();
 		Map<String, String> headers = new HashMap<>();
 		Map<String, String> authentication = new HashMap<>();
-		String secret = this.clientAuthentication.applyForOidc(this.clientId, headers, authentication, hmacAlgorithms);
+		ClientAssertionPreparation.Prepared assertion = prepareAuthentication(new ResourceServerMetadata(this.issuer, endpoint,
+				metadata.getTokenEndpointAuthMethodsSupported().orElse(null), metadata.getTokenEndpointAuthSigningAlgValuesSupported().orElse(null),
+				metadata.getTokenEndpoint()), OAuthEndpoint.TOKEN, deadline, this.observer);
+		String secret;
+		if (assertion == null) secret = this.clientAuthentication.applyForOidc(this.clientId, headers, authentication, hmacAlgorithms);
+		else { addAssertion(authentication, assertion); secret = null; }
 		if (this.clientAuthentication.isUnencodedBasic())
 			ObserverDispatch.dispatch(this.observer, OAuthObserver::didUseUnencodedBasic);
 		form.addAll(authentication);
 		Instant requestStart = this.clock.instant();
 		RawResponse response = send(endpoint, OAuthEndpoint.TOKEN, ResponseProfile.TOKEN,
-				form.body(), headers, deadline);
+				form.body(), headers, deadline, assertion);
 		try {
 			return TokenResponseParser.parsePayload(response, requestStart, requestedScopes).withClientSecret(hmacAlgorithms.isEmpty() ? null : secret);
 		} catch (OAuthException failure) {
@@ -465,23 +477,58 @@ public final class OAuthClient {
 	}
 
 	private @NonNull RawResponse send(@NonNull URI endpoint, @NonNull OAuthEndpoint kind, @NonNull ResponseProfile profile,
-			@NonNull String formBody, @NonNull Map<@NonNull String, @NonNull String> headers, @NonNull Deadline deadline) {
+			@NonNull String formBody, @NonNull Map<@NonNull String, @NonNull String> headers, @NonNull Deadline deadline,
+			ClientAssertionPreparation.@Nullable Prepared assertion) {
 		URI safe = AuthorizationServerCache.reduced(endpoint);
 		ObserverDispatch.dispatch(this.observer, observer -> observer.willRequestEndpoint(kind, safe));
 		long started = System.nanoTime();
 		try {
+			ClientAssertionPreparation.checkReady(assertion, this.clock, deadline);
 			RawResponse response = this.exchange.execute(new HttpExchangeRequest(endpoint, profile, formBody, headers,
 					Limits.HTTP_RESPONSE_BODY_SIZE.getDefaultIntValue(),
 					Limits.HTTP_ERROR_BODY_SIZE.getDefaultIntValue(), this.requestTimeout), deadline);
 			ObserverDispatch.dispatch(this.observer, observer -> observer.didRequestEndpoint(
 					kind, safe, response.status(), response.elapsed()));
 			return response;
+		} catch (OAuthException failure) {
+			Duration elapsed = Duration.ofNanos(System.nanoTime() - started);
+			ObserverDispatch.dispatch(this.observer, observer -> observer.didFailEndpoint(kind, safe, failure, elapsed));
+			throw failure;
 		} catch (HttpExchangeException failure) {
 			OAuthException mapped = OAuthHttpErrors.fromExchange(failure);
 			Duration elapsed = Duration.ofNanos(System.nanoTime() - started);
 			ObserverDispatch.dispatch(this.observer, observer -> observer.didFailEndpoint(kind, safe, mapped, elapsed));
 			throw mapped;
 		}
+	}
+
+	private @NonNull AuthorizationServerMetadata assertionMetadata(@NonNull Deadline deadline, @NonNull OAuthEndpoint role) {
+		try { return metadata(deadline); }
+		catch (OAuthException failure) { assertionMetadataFailure(role, failure, this.observer); throw failure; }
+	}
+	void assertionMetadataFailure(@NonNull OAuthEndpoint role, @NonNull OAuthException failure, @NonNull OAuthObserver targetObserver) {
+		if (!this.clientAuthentication.isPrivateKeyJwt()) return;
+		useAssertionAudience(targetObserver);
+		ObserverDispatch.dispatch(targetObserver, observer -> observer.didFailClientAssertionPreparation(role, failure));
+	}
+	private void useAssertionAudience(@NonNull OAuthObserver targetObserver) {
+		if (this.clientAuthentication.assertionAudience() == ClientAssertionAudience.TOKEN_ENDPOINT)
+			ObserverDispatch.dispatch(targetObserver, observer -> observer.didUseClientAssertionAudience(ClientAssertionAudience.TOKEN_ENDPOINT));
+	}
+	private ClientAssertionPreparation.@Nullable Prepared prepareAuthentication(@NonNull ResourceServerMetadata target,
+			@NonNull OAuthEndpoint role, @NonNull Deadline deadline, @NonNull OAuthObserver targetObserver) {
+		if (!this.clientAuthentication.isPrivateKeyJwt()) return null;
+		useAssertionAudience(targetObserver);
+		try { return ClientAssertionPreparation.prepare(this.clientAuthentication, this.clientId, target, role, this.resourceSettings, this.random, deadline); }
+		catch (OAuthException failure) {
+			ObserverDispatch.dispatch(targetObserver, observer -> observer.didFailClientAssertionPreparation(role, failure));
+			throw failure;
+		}
+	}
+	private void addAssertion(@NonNull Map<@NonNull String, @NonNull String> form, ClientAssertionPreparation.@NonNull Prepared assertion) {
+		form.put("client_id", this.clientId);
+		form.put("client_assertion_type", "urn:ietf:params:oauth:client-assertion-type:jwt-bearer");
+		form.put("client_assertion", assertion.value());
 	}
 
 	private @NonNull AuthorizationServerMetadata metadata(@NonNull Deadline deadline) {
@@ -496,7 +543,7 @@ public final class OAuthClient {
     @NonNull ResourceSettings resourceSettings() { return this.resourceSettings; }
     void requireIntrospectionAuthentication(@Nullable Set<@NonNull String> methods) {
         if (this.clientAuthentication.isPublicClient()) throw new IllegalArgumentException("Introspection requires confidential client authentication.");
-        if (methods != null && !methods.contains(this.clientAuthentication.methodName())) throw OAuthValidationException.fromReason(OAuthException.Reason.METADATA_INVALID);
+        if (!this.clientAuthentication.isPrivateKeyJwt() && methods != null && !methods.contains(this.clientAuthentication.methodName())) throw OAuthValidationException.fromReason(OAuthException.Reason.METADATA_INVALID);
     }
     @SuppressWarnings("ReferenceEquality") // Observer delivery deduplicates the same instance, never equal values.
     @NonNull OAuthObserver resourceObserver(@NonNull AccessTokenObserver resource) {
@@ -505,6 +552,8 @@ public final class OAuthClient {
             @Override public void willRequestEndpoint(@NonNull OAuthEndpoint kind, @NonNull URI uri) { endpointObservers(resource, o -> o.willRequestEndpoint(kind, uri)); }
             @Override public void didRequestEndpoint(@NonNull OAuthEndpoint kind, @NonNull URI uri, @NonNull Integer status, @NonNull Duration elapsed) { endpointObservers(resource, o -> o.didRequestEndpoint(kind, uri, status, elapsed)); }
             @Override public void didFailEndpoint(@NonNull OAuthEndpoint kind, @NonNull URI uri, @NonNull OAuthException failure, @NonNull Duration elapsed) { endpointObservers(resource, o -> o.didFailEndpoint(kind, uri, failure, elapsed)); }
+            @Override public void didUseClientAssertionAudience(@NonNull ClientAssertionAudience audience) { endpointObservers(resource, o -> o.didUseClientAssertionAudience(audience)); }
+            @Override public void didFailClientAssertionPreparation(@NonNull OAuthEndpoint kind, @NonNull OAuthException failure) { endpointObservers(resource, o -> o.didFailClientAssertionPreparation(kind, failure)); }
         };
     }
     @SuppressWarnings("ReferenceEquality") // Distinct observer instances each receive the event.
@@ -512,20 +561,27 @@ public final class OAuthClient {
         ObserverDispatch.dispatch(this.observer, hook);
         if (resource != this.observer) ObserverDispatch.dispatch(resource, hook);
     }
-    @NonNull RawResponse introspectionRequest(@NonNull BearerToken token, @NonNull URI endpoint, @NonNull Deadline deadline, @NonNull AccessTokenObserver resource) {
+    @NonNull RawResponse introspectionRequest(@NonNull BearerToken token, @NonNull ResourceServerMetadata target, @NonNull Deadline deadline, @NonNull AccessTokenObserver resource) {
         Map<String, String> headers = new HashMap<>(); Map<String, String> authentication = new HashMap<>();
-        this.clientAuthentication.apply(this.clientId, headers, authentication);
+        URI endpoint = target.endpoint();
+        ClientAssertionPreparation.Prepared assertion = prepareAuthentication(target, OAuthEndpoint.INTROSPECTION, deadline, resourceObserver(resource));
+        if (assertion == null) this.clientAuthentication.apply(this.clientId, headers, authentication);
+        else addAssertion(authentication, assertion);
         if (this.clientAuthentication.isUnencodedBasic()) endpointObservers(resource, OAuthObserver::didUseUnencodedBasic);
         OAuthRequestWriter form = new OAuthRequestWriter().add("token", token.value()).add("token_type_hint", "access_token").addAll(authentication);
         URI safe = AuthorizationServerCache.reduced(endpoint);
         endpointObservers(resource, o -> o.willRequestEndpoint(OAuthEndpoint.INTROSPECTION, safe));
         long started = System.nanoTime();
         try {
+            ClientAssertionPreparation.checkReady(assertion, this.clock, deadline);
             RawResponse response = this.exchange.execute(new HttpExchangeRequest(endpoint, ResponseProfile.INTROSPECTION, form.body(), headers,
                     Limits.HTTP_RESPONSE_BODY_SIZE.getDefaultIntValue(), Limits.HTTP_ERROR_BODY_SIZE.getDefaultIntValue(), this.requestTimeout), deadline);
             endpointObservers(resource, o -> o.didRequestEndpoint(OAuthEndpoint.INTROSPECTION, safe, response.status(), response.elapsed()));
             return response;
-        } catch (HttpExchangeException failure) {
+        } catch (OAuthException failure) {
+            endpointObservers(resource, o -> o.didFailEndpoint(OAuthEndpoint.INTROSPECTION, safe, failure, Duration.ofNanos(System.nanoTime() - started)));
+            throw failure;
+		} catch (HttpExchangeException failure) {
             OAuthException mapped = OAuthHttpErrors.fromExchange(failure);
             endpointObservers(resource, o -> o.didFailEndpoint(OAuthEndpoint.INTROSPECTION, safe, mapped, Duration.ofNanos(System.nanoTime() - started)));
             throw mapped;
@@ -852,6 +908,8 @@ public final class OAuthClient {
 			HttpExchange exchange = HttpExchange.fromHttpClient(this.httpClient, this.outboundUriPolicy,
 					this.allowInsecureLoopback);
 			OAuthClient client = new OAuthClient(this, exchange);
+			if (this.clientAuthentication.isPrivateKeyJwt() && this.clientAuthentication.assertionAudience() == ClientAssertionAudience.TOKEN_ENDPOINT)
+				ObserverDispatch.dispatch(this.observer, observer -> observer.didEnableClientAssertionAudience(ClientAssertionAudience.TOKEN_ENDPOINT));
 			if (this.clientAuthentication.isUnencodedBasic())
 				ObserverDispatch.dispatch(this.observer, OAuthObserver::didUseUnencodedBasic);
 			if (RuntimeFloor.isBelowFloor(runtimeVersion) && this.acknowledgeUnpatchedRuntime)

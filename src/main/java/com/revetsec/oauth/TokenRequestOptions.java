@@ -40,7 +40,7 @@ import java.util.Set;
 @Immutable
 public final class TokenRequestOptions {
 	private static final Set<String> RESERVED = Set.of("grant_type", "code", "redirect_uri", "code_verifier",
-			"refresh_token", "client_id", "client_secret", "scope", "resource", "token", "token_type_hint");
+			"refresh_token", "client_assertion", "client_assertion_type", "client_id", "client_secret", "scope", "resource", "token", "token_type_hint");
 	private final @Nullable Set<@NonNull String> scopes;
 	private final @NonNull List<@NonNull URI> resources;
 	private final boolean resourcesOverridden;

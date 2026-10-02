@@ -60,6 +60,10 @@ public final class AuthorizationServerMetadata {
 	private final @Nullable Set<@NonNull String> codeChallengeMethodsSupported;
 	private final @Nullable Set<@NonNull String> tokenEndpointAuthMethodsSupported;
 	private final @Nullable Set<@NonNull String> introspectionEndpointAuthMethodsSupported;
+	private final @Nullable Set<@NonNull String> tokenEndpointAuthSigningAlgValuesSupported;
+	private final @Nullable Set<@NonNull String> revocationEndpointAuthMethodsSupported;
+	private final @Nullable Set<@NonNull String> revocationEndpointAuthSigningAlgValuesSupported;
+	private final @Nullable Set<@NonNull String> introspectionEndpointAuthSigningAlgValuesSupported;
 	private final boolean authorizationResponseIssuerSupported;
 	private final boolean remotelyDiscovered;
 
@@ -73,6 +77,10 @@ public final class AuthorizationServerMetadata {
 		this.codeChallengeMethodsSupported = builder.codeChallengeMethodsSupported;
 		this.tokenEndpointAuthMethodsSupported = builder.tokenEndpointAuthMethodsSupported;
 		this.introspectionEndpointAuthMethodsSupported = builder.introspectionEndpointAuthMethodsSupported;
+		this.tokenEndpointAuthSigningAlgValuesSupported = builder.tokenEndpointAuthSigningAlgValuesSupported;
+		this.revocationEndpointAuthMethodsSupported = builder.revocationEndpointAuthMethodsSupported;
+		this.revocationEndpointAuthSigningAlgValuesSupported = builder.revocationEndpointAuthSigningAlgValuesSupported;
+		this.introspectionEndpointAuthSigningAlgValuesSupported = builder.introspectionEndpointAuthSigningAlgValuesSupported;
 		this.authorizationResponseIssuerSupported = builder.authorizationResponseIssuerSupported;
 		this.remotelyDiscovered = remotelyDiscovered;
 	}
@@ -122,6 +130,10 @@ public final class AuthorizationServerMetadata {
 			if (members.containsKey("token_endpoint_auth_methods_supported"))
 				builder = builder.tokenEndpointAuthMethodsSupported(stringSet(members.get("token_endpoint_auth_methods_supported")));
 			if (members.containsKey("introspection_endpoint_auth_methods_supported")) builder = builder.introspectionEndpointAuthMethodsSupported(stringSet(members.get("introspection_endpoint_auth_methods_supported")));
+			if (members.containsKey("token_endpoint_auth_signing_alg_values_supported")) builder = builder.tokenEndpointAuthSigningAlgValuesSupported(stringSet(members.get("token_endpoint_auth_signing_alg_values_supported")));
+			if (members.containsKey("revocation_endpoint_auth_methods_supported")) builder = builder.revocationEndpointAuthMethodsSupported(stringSet(members.get("revocation_endpoint_auth_methods_supported")));
+			if (members.containsKey("revocation_endpoint_auth_signing_alg_values_supported")) builder = builder.revocationEndpointAuthSigningAlgValuesSupported(stringSet(members.get("revocation_endpoint_auth_signing_alg_values_supported")));
+			if (members.containsKey("introspection_endpoint_auth_signing_alg_values_supported")) builder = builder.introspectionEndpointAuthSigningAlgValuesSupported(stringSet(members.get("introspection_endpoint_auth_signing_alg_values_supported")));
 			if (members.containsKey("authorization_response_iss_parameter_supported")) {
 				JsonValue value = members.get("authorization_response_iss_parameter_supported");
 				if (!(value instanceof JsonBoolean booleanValue))
@@ -223,6 +235,30 @@ public final class AuthorizationServerMetadata {
      */
     public @NonNull Optional<@NonNull Set<@NonNull String>> getIntrospectionEndpointAuthMethodsSupported() { return Optional.ofNullable(this.introspectionEndpointAuthMethodsSupported); }
 	/**
+	 * Returns the optional token_endpoint_auth_signing_alg_values_supported role policy, retaining absent versus empty and unknown names.
+	 * @return advertised or configured names when present
+	 * @since 1.0.0
+	 */
+	public @NonNull Optional<@NonNull Set<@NonNull String>> getTokenEndpointAuthSigningAlgValuesSupported() { return Optional.ofNullable(this.tokenEndpointAuthSigningAlgValuesSupported); }
+	/**
+	 * Returns the optional revocation_endpoint_auth_methods_supported role policy, retaining absent versus empty and unknown names.
+	 * @return advertised or configured names when present
+	 * @since 1.0.0
+	 */
+	public @NonNull Optional<@NonNull Set<@NonNull String>> getRevocationEndpointAuthMethodsSupported() { return Optional.ofNullable(this.revocationEndpointAuthMethodsSupported); }
+	/**
+	 * Returns the optional revocation_endpoint_auth_signing_alg_values_supported role policy, retaining absent versus empty and unknown names.
+	 * @return advertised or configured names when present
+	 * @since 1.0.0
+	 */
+	public @NonNull Optional<@NonNull Set<@NonNull String>> getRevocationEndpointAuthSigningAlgValuesSupported() { return Optional.ofNullable(this.revocationEndpointAuthSigningAlgValuesSupported); }
+	/**
+	 * Returns the optional introspection_endpoint_auth_signing_alg_values_supported role policy, retaining absent versus empty and unknown names.
+	 * @return advertised or configured names when present
+	 * @since 1.0.0
+	 */
+	public @NonNull Optional<@NonNull Set<@NonNull String>> getIntrospectionEndpointAuthSigningAlgValuesSupported() { return Optional.ofNullable(this.introspectionEndpointAuthSigningAlgValuesSupported); }
+	/**
 	 * Returns whether metadata advertised RFC 9207 issuer response support.
 	 *
 	 * @return whether support was advertised
@@ -259,6 +295,54 @@ public final class AuthorizationServerMetadata {
 		private @Nullable Set<@NonNull String> tokenEndpointAuthMethodsSupported;
 		private @Nullable Set<@NonNull String> introspectionEndpointAuthMethodsSupported;
 		private boolean authorizationResponseIssuerSupported;
+
+		private @Nullable Set<@NonNull String> tokenEndpointAuthSigningAlgValuesSupported;
+
+		/**
+		 * Replaces the complete token_endpoint_auth_signing_alg_values_supported role policy, preserving an empty set.
+		 * @param value names, or null to restore absence
+		 * @return this builder
+		 * @since 1.0.0
+		 */
+		public @NonNull Builder tokenEndpointAuthSigningAlgValuesSupported(@Nullable Set<@NonNull String> value) {
+			this.tokenEndpointAuthSigningAlgValuesSupported = value == null ? null : AccessTokenClaims.names(value, false); return this;
+		}
+
+		private @Nullable Set<@NonNull String> revocationEndpointAuthMethodsSupported;
+
+		/**
+		 * Replaces the complete revocation_endpoint_auth_methods_supported role policy, preserving an empty set.
+		 * @param value names, or null to restore absence
+		 * @return this builder
+		 * @since 1.0.0
+		 */
+		public @NonNull Builder revocationEndpointAuthMethodsSupported(@Nullable Set<@NonNull String> value) {
+			this.revocationEndpointAuthMethodsSupported = value == null ? null : AccessTokenClaims.names(value, false); return this;
+		}
+
+		private @Nullable Set<@NonNull String> revocationEndpointAuthSigningAlgValuesSupported;
+
+		/**
+		 * Replaces the complete revocation_endpoint_auth_signing_alg_values_supported role policy, preserving an empty set.
+		 * @param value names, or null to restore absence
+		 * @return this builder
+		 * @since 1.0.0
+		 */
+		public @NonNull Builder revocationEndpointAuthSigningAlgValuesSupported(@Nullable Set<@NonNull String> value) {
+			this.revocationEndpointAuthSigningAlgValuesSupported = value == null ? null : AccessTokenClaims.names(value, false); return this;
+		}
+
+		private @Nullable Set<@NonNull String> introspectionEndpointAuthSigningAlgValuesSupported;
+
+		/**
+		 * Replaces the complete introspection_endpoint_auth_signing_alg_values_supported role policy, preserving an empty set.
+		 * @param value names, or null to restore absence
+		 * @return this builder
+		 * @since 1.0.0
+		 */
+		public @NonNull Builder introspectionEndpointAuthSigningAlgValuesSupported(@Nullable Set<@NonNull String> value) {
+			this.introspectionEndpointAuthSigningAlgValuesSupported = value == null ? null : AccessTokenClaims.names(value, false); return this;
+		}
 
 		private Builder(@NonNull String issuer) {
 			if (requireNonNull(issuer).isEmpty())

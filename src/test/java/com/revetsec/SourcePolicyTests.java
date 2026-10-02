@@ -107,7 +107,7 @@ import java.util.stream.Collectors;
  *   are of public identifiers, so only byte comparisons are confined to {@code ConstantTime};</li>
  *   <li>{@code ascii-case-fold} applies to {@code scim}, {@code internal.json} and {@code internal.jose} (the
  *   {@code typ} media type, M2-4);</li>
- *   <li>{@code jca-provider-argument} applies to {@code internal.jose} and {@code internal.crypto};</li>
+ *   <li>{@code jca-provider-argument} applies to {@code internal.jose}, {@code internal.crypto} and the public {@code JwsSigner};</li>
  *   <li>{@code raw-base64url-decoder} applies everywhere except {@code internal.encoding}, and {@code logging}
  *   everywhere except {@link #OBSERVER_DISPATCH};</li>
  *   <li>{@code provided-annotation-with-element} applies to files whose declared package is exported (see
@@ -535,7 +535,8 @@ final class SourcePolicyTests {
 							+ "and range checks; SunEC's P1363 form accepts signatures that are too short, so it stays a "
 							+ "test oracle (G8-3, INV-J5)"),
 			new Rule(JCA_PROVIDER_ARGUMENT, List.of(),
-					path -> path.startsWith(INTERNAL_JOSE) || path.startsWith(INTERNAL_CRYPTO),
+					path -> path.startsWith(INTERNAL_JOSE) || path.startsWith(INTERNAL_CRYPTO)
+							|| path.equals("com/revetsec/jose/JwsSigner.java"),
 					"name the algorithm and let the JCA choose the provider: algorithm names are pinned and providers "
 							+ "are not, so Revetsec works with any JCA provider, including hardware-backed and "
 							+ "approved-mode ones (INV-G10)"),

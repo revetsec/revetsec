@@ -79,3 +79,7 @@ literal-preservation tests.
 `render-java-source.py` uses that same literal-preserving renderer for the standalone Keycloak and scripted-IdP
 spike launchers. Their temporary copies remain JDK-only; canonical authored signatures remain explicitly annotated.
 The large core/fuzz signature guard child JVMs have a384MiB heap ceiling and two active processors.
+
+The packaged consumer also exercises all three `JwsSigner` algorithms, exact payload bytes, checked public-key getters, explicit noncredential warm-up and fixed budget failure. Its independent JCA verification runs against the built JAR without annotation dependencies.
+
+The packaged consumer exercises the assertion signing-key/provider/authentication builders, identifier/digest copying and role metadata getters without annotation dependencies. Actual assertion POST behavior and independent JCA verification run in `ClientAssertionTests`; full private-key provider qualification remains pending.

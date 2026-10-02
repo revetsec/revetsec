@@ -55,6 +55,8 @@ import com.revetsec.jose.JsonWebKeySet;
 import com.revetsec.jose.JsonWebKeySetUnavailableException;
 import com.revetsec.jose.JsonWebKeySkipReason;
 import com.revetsec.jose.JwsAlgorithm;
+import com.revetsec.jose.JwsSigner;
+import com.revetsec.jose.JwsSigningException;
 import com.revetsec.jose.Jwt;
 import com.revetsec.jose.JwtValidator;
 import com.revetsec.jose.RemoteJsonWebKeySource;
@@ -106,6 +108,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Base64;
 import java.util.Collection;
 import java.util.Collections;
@@ -960,6 +963,9 @@ final class RedactionTests {
 	private static void assertExpected(@Nullable Object expected, @NonNull Throwable failure) {
 		if (expected instanceof JoseException.Reason reason) {
 			JoseException exception = Assertions.assertInstanceOf(JoseException.class, failure);
+			Assertions.assertEquals(reason, exception.getReason());
+		} else if (expected instanceof JwsSigningException.Reason reason) {
+			JwsSigningException exception = Assertions.assertInstanceOf(JwsSigningException.class, failure);
 			Assertions.assertEquals(reason, exception.getReason());
 		} else if (expected instanceof ErrorCategory category) {
 			JsonWebKeySetUnavailableException exception = Assertions.assertInstanceOf(
@@ -1908,9 +1914,41 @@ final class RedactionTests {
 			}
 		}
 
+		/** Walks signer renderings and each actual failure with sentinel-bearing signing inputs. */
+		private void signing() {
+			JwsSigner signer = JwsSigner.fromRsaKeyPair(Fixture.IDP_SIGNING_RSA_2048.getPrivateKey(),
+					Fixture.IDP_SIGNING_RSA_2048.getPublicKey(), JwsAlgorithm.PS256);
+			byte[] payload = utf8("{\"sub\":\"" + SECRET + "\"}");
+			byte[] digest = Arrays.copyOf(utf8(SECRET), 32);
+			String compact = signer.toCompactSerialization("at+jwt", KEY_ID, digest, payload, Duration.ofSeconds(10));
+			add(Group.CONFIGURATION, "signer is redacted after credential emission", signer, Check.RENDERING);
+			add(Group.CONFIGURATION, "signer compact serialization is an explicit emission", compact, Check.PRESENT);
+			add(Group.CONFIGURATION, "every JwsSigningException.Reason", List.of(JwsSigningException.Reason.values()), Check.RENDERING);
+			add(Group.CONFIGURATION, "signer budget exception with sentinel claims and identifiers",
+					thrownBy("signer exhausted budget", () -> signer.toCompactSerialization("JWT", KEY_ID, digest, payload, Duration.ZERO)),
+					Check.FAILURE, JwsSigningException.Reason.BUDGET_EXHAUSTED);
+			JwsSigner mismatch = JwsSigner.fromRsaKeyPair(Fixture.IDP_SIGNING_RSA_2048.getPrivateKey(),
+					Fixture.NEGATIVE_ATTACKER_RSA_2048.getPublicKey(), JwsAlgorithm.RS256);
+			add(Group.CONFIGURATION, "signer mismatched-pair exception with sentinel claims and identifiers",
+					thrownBy("signer pair mismatch", () -> mismatch.toCompactSerialization("JWT", KEY_ID, digest, payload, Duration.ofSeconds(10))),
+					Check.FAILURE, JwsSigningException.Reason.KEY_PAIR_MISMATCH);
+			JwsSigner unavailable = JwsSigner.fromRsaKeyPair(new java.security.PrivateKey() {
+				private static final long serialVersionUID = 1L;
+				@Override public @NonNull String getAlgorithm() { return "RSA"; }
+				@Override public @Nullable String getFormat() { return null; }
+				@Override public byte @Nullable [] getEncoded() { return null; }
+				@Override public @NonNull String toString() { return SECRET; }
+			},
+					Fixture.IDP_SIGNING_RSA_2048.getPublicKey(), JwsAlgorithm.RS256);
+			add(Group.CONFIGURATION, "signer unavailable exception with sentinel claims and identifiers",
+					thrownBy("signer unavailable", () -> unavailable.toCompactSerialization("JWT", KEY_ID, digest, payload, Duration.ofSeconds(10))),
+					Check.FAILURE, JwsSigningException.Reason.SIGNING_UNAVAILABLE);
+		}
+
 		// -- Configuration --
 
 		private void configuration() {
+			signing();
 			add(Group.CONFIGURATION, "every JwsAlgorithm", List.of(JwsAlgorithm.values()), Check.RENDERING);
 			add(Group.CONFIGURATION, "every JsonWebKeySkipReason", List.of(JsonWebKeySkipReason.values()),
 					Check.RENDERING);

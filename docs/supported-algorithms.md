@@ -29,6 +29,22 @@ Each table has three kinds of entry:
 - **The signature's shape is checked before any key is looked up,** so a malformed signature never causes a key set fetch. An ECDSA signature must be exactly 64, 96 or 132 octets, with r and s from 1 to n - 1, the check for CVE-2022-21449; Revetsec makes it itself, on every Java runtime and with any provider. An Ed25519 signature must be 64 octets. An RSA signature must be 256 to 2,048 octets, the modulus lengths the key rules allow, and after the key is selected exactly its modulus length. Anything else is `SIGNATURE_MALFORMED`.
 - **Why DER for ECDSA.** Revetsec checks the fixed-length form itself and then verifies through the standard `SHAxxxwithECDSA` names, which works with any JCA provider, including hardware-backed and approved-mode ones. The exact-length check is needed either way: the JDK's own fixed-length (P1363) verifier accepts some signatures that are too short, and without the check a zero-padded signature would verify through DER.
 
+## Bounded RSA signing (`JwsSigner`)
+
+The application supplies a private key and an inspectable RSA public key. `fromRsaKeyPair` checks and snapshots the public modulus and exponent under the key rules below; it performs no signing or provider probe. It retains the private key without exporting it. `warmUp(Duration)` explicitly signs and verifies a fixed noncredential probe.
+
+| Algorithm | JCA signature | Parameters |
+| --- | --- | --- |
+| `PS256` | `RSASSA-PSS` | SHA-256, MGF1 with SHA-256, salt length 32, trailer 1 |
+| `RS256` | `SHA256withRSA` | RSA PKCS #1 v1.5 with SHA-256 |
+| `RS384` | `SHA384withRSA` | RSA PKCS #1 v1.5 with SHA-384 |
+
+Other algorithms are refused by the factory. Every operation uses a fresh signing engine and verifies the output with the checked public projection before returning it. The JCA selects providers; Revetsec neither names one nor retries another algorithm when a key or provider refuses signing. Provider-backed, nonexportable private keys can be supplied when the selected provider supports the operation; real hardware-provider compatibility remains unproven.
+
+The signer owns `alg` and `typ`, accepts only `client-authentication+jwt`, `JWT` or `at+jwt`, and may include `kid` and a 32-byte SHA-256 certificate digest as `x5t#S256`. That digest is of the DER certificate, not a JWK thumbprint. Claims must be a strict UTF-8 JSON object with no duplicate members, at most 32 KiB, and are signed exactly as supplied. Header input is bounded to 4 KiB and compact output to 64 KiB; these fixed signer caps do not change validator limits.
+
+`toCompactSerialization` explicitly releases a credential. It does not validate the application's claim meaning, authenticate a user or make an authorization decision. Signer renderings and fixed `JwsSigningException` diagnostics contain no key, header identifier, claims or credential. Exhausted time budgets discard output. Providers run synchronously on the caller thread and must cooperate: Revetsec cannot interrupt a hung provider, and a caller with an original deadline must recheck it after this operation.
+
 ## Keys (JSON Web Keys)
 
 A key set is parsed key by key. A key that breaks a rule is skipped, with a `JsonWebKeySkipReason` that a remote key source reports to `JoseObserver.didSkipJsonWebKey`, and is never used, not even for its public half. Only the document itself (not JSON, no `keys` array, an element of `keys` that is not an object, too large, too many keys) fails a key set.
@@ -83,7 +99,7 @@ Remote key sources refuse to build on a runtime older than Java 17.0.3 (18.0.1 o
 ## Planned areas
 
 - JWS for JWT access tokens, with its own allowlist
-- JWS signing for client assertions
+- OAuth private_key_jwt integration with the shared RSA signer
 - XML Signature: SignatureMethod, DigestMethod, canonicalization and transforms
 - SAML HTTP-Redirect binding signatures
 - XML Encryption: content encryption and key transport

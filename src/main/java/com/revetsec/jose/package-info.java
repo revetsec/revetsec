@@ -15,11 +15,15 @@
  */
 
 /**
- * JSON Object Signing and Encryption: JWS signature verification, JSON Web Keys and key sets, and JWT claims
+ * JSON Object Signing and Encryption: JWS signature verification and bounded RSA signing, JSON Web Keys and key sets, and JWT claims
  * validation (RFC 7515, RFC 7517, RFC 7519).
  * <p>
  * {@link com.revetsec.jose.JwtValidator} validates tokens with keys from a
  * {@link com.revetsec.jose.StaticJsonWebKeySource} or a {@link com.revetsec.jose.RemoteJsonWebKeySource}.
+ * <p>
+ * {@link com.revetsec.jose.JwsSigner} signs exact bounded JSON claims with an application-owned RSA private key
+ * and verifies every output against its checked public projection before releasing a credential. Signing does
+ * not validate claim meaning or grant permission.
  * <p>
  * It depends only on {@code com.revetsec.json} and the root package, apart from Revetsec's internal packages.
  *

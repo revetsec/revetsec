@@ -61,7 +61,7 @@ final class BuilderConventionsContractTests {
 		List<String> violations = new ArrayList<>();
 		for (TypeElement type : ContractSupport.exportedTypes(analysis)) {
 			String name = analysis.getElements().getBinaryName(type).toString();
-			boolean builder = type.getSimpleName().contentEquals("Builder");
+			boolean builder = type.getSimpleName().toString().endsWith("Builder");
 			if (builder && type.getAnnotationMirrors().stream().noneMatch(annotation ->
 					annotation.getAnnotationType().toString().equals("com.google.errorprone.annotations.CheckReturnValue")))
 				violations.add(name + ": missing CheckReturnValue");

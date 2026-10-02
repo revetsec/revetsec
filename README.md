@@ -4,7 +4,7 @@
 
 A zero-dependency Java library for OAuth 2.0 clients and resource servers, OpenID Connect relying parties, JOSE, SAML 2.0 service providers and SCIM 2.0 servers.
 
-**Revetsec is pre-release.** It verifies signed JWTs against JSON Web Key Sets and includes OAuth 2.0 clients, audience-checked JWT/introspection resource validation and an OpenID Connect relying party. OAuth issuance, SAML and SCIM are still being built; see [Status](#status) for what exists.
+**Revetsec is pre-release.** It verifies signed JWTs against JSON Web Key Sets, provides bounded RSA signing and includes OAuth 2.0 clients, audience-checked JWT/introspection resource validation and an OpenID Connect relying party. OAuth issuance, SAML and SCIM are still being built; see [Status](#status) for what exists.
 
 Revetsec handles the application side of these protocols. It builds outbound requests, parses and validates what comes back, and hands your code a validated result or an exception. Your application keeps its own users, sessions, routes and storage.
 
@@ -140,7 +140,7 @@ Every area below ships together in a single 1.0.0 release:
 - App-integrated OAuth token issuance, with application-owned users, auth decisions and durable storage
 - OAuth 2.0 resource server
 - OpenID Connect relying party
-- JOSE: JWS verification, JWK and JWK Sets, and JWT validation
+- JOSE: JWS verification, bounded RSA signing, JWK and JWK Sets, and JWT validation
 - SAML 2.0 service provider for Web Browser SSO, including encrypted assertions and front-channel Single Logout
 - SCIM 2.0 server primitives
 
@@ -176,7 +176,13 @@ Share one validator, and one key source, across threads. By default a token must
 
 ### OAuth client
 
-`OAuthClient` supports authorization code with PKCE S256, client credentials, refresh and revocation. It accepts static metadata or discovers an authorization server lazily. Browser completion checks the pending browser binding, state, callback route and issuer before token exchange. The [OAuth client guide](docs/oauth-client.md) covers cookie and store setup, concurrent replay, return destinations and the raw-token boundary.
+`OAuthClient` supports authorization code with PKCE S256, client credentials, refresh, revocation and generated private-key assertions. It accepts static metadata or discovers an authorization server lazily. Browser completion checks the pending browser binding, state, callback route and issuer before token exchange. The [OAuth client guide](docs/oauth-client.md) covers cookie and store setup, concurrent replay, return destinations and the raw-token boundary.
+
+### RSA signing
+
+`JwsSigner.fromRsaKeyPair(privateKey, publicKey, JwsAlgorithm.PS256)` creates a reusable signer with a checked public-key snapshot. It retains an application-owned private key without exporting it. Call `warmUp(remainingBudget)` for an explicit noncredential pair probe. `toCompactSerialization(type, keyId, certificateSha256Thumbprint, claimsUtf8, remainingBudget)` signs an exact, bounded JSON object and verifies each output before releasing the compact credential.
+
+PS256, RS256 and RS384 are supported. The optional 32-byte thumbprint is the SHA-256 digest of a DER certificate. The application supplies claims and remains responsible for their meaning. A provider failure, mismatched pair or exhausted budget produces a fixed `JwsSigningException`; it emits no partial credential. JCA providers must cooperate with synchronous time budgets. See [algorithms and bounds](docs/supported-algorithms.md#bounded-rsa-signing-jwssigner). OAuth private_key_jwt integration and token issuance are still being built.
 
 ### Status
 
@@ -215,3 +221,5 @@ $ mvn -B -ntp -Dmaven.javadoc.skip=true verify
 Both implement `AccessTokenValidator`: use `validate` for exception handling or `validateResult` for sealed outcomes. Only `Succeeded.getAccessToken()` releases checked proof. `VerifiedAccessToken` contains checked claims, optional subject/client ID/expiry, audiences and scopes; it has no incoming-credential getter. Claims are sensitive explicit access. Empty scopes grant no permission, and application code still decides operation, tenant and object authorization.
 
 Role-specific discovery needs only issuer/JWKS for JWT or issuer/introspection endpoint for introspection. The existing OAuth metadata parser still requires authorization and token endpoints. `warmUp()` performs discovery/key loading without validating a credential. Builds perform no I/O and start no threads.
+
+Generated OAuth `private_key_jwt` authentication uses `ClientAssertionSigningKey` and a caller-thread `ClientAssertionKeyProvider`. See [the OAuth client guide](docs/oauth-client.md#private-key-client-assertions) for role metadata, audience compatibility and deadline rules. Hosted private-key qualification remains pending.

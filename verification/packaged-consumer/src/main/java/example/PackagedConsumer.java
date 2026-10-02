@@ -48,6 +48,10 @@ import com.revetsec.oauth.AuthorizationRequestOptions;
 import com.revetsec.oauth.AuthorizationResponse;
 import com.revetsec.oauth.AuthorizationServerMetadata;
 import com.revetsec.oauth.ClientAuthentication;
+import com.revetsec.oauth.ClientAssertionAudience;
+import com.revetsec.oauth.ClientAssertionKeyProvider;
+import com.revetsec.oauth.ClientAssertionSigningKey;
+import com.revetsec.oauth.OAuthConfigurationException;
 import com.revetsec.oauth.ClientCredentialsTokenSource;
 import com.revetsec.oauth.ClientSecretBasicEncoding;
 import com.revetsec.oauth.InMemoryPendingAuthorizationStore;
@@ -95,6 +99,8 @@ import com.revetsec.jose.JsonWebKeySetUnavailableException;
 import com.revetsec.jose.JsonWebKeySkipReason;
 import com.revetsec.jose.JsonWebKeySource;
 import com.revetsec.jose.JwsAlgorithm;
+import com.revetsec.jose.JwsSigner;
+import com.revetsec.jose.JwsSigningException;
 import com.revetsec.jose.Jwt;
 import com.revetsec.jose.JwtClaims;
 import com.revetsec.jose.JwtValidationException;
@@ -121,6 +127,8 @@ import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.security.Signature;
 import java.security.interfaces.RSAPublicKey;
+import java.security.spec.MGF1ParameterSpec;
+import java.security.spec.PSSParameterSpec;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -407,6 +415,7 @@ public final class PackagedConsumer {
 		String claims = "{\"iss\":\"" + ISSUER + "\",\"sub\":\"user-1\",\"aud\":\"" + AUDIENCE + "\",\"iat\":"
 				+ NOW.getEpochSecond() + ",\"exp\":" + (NOW.getEpochSecond() + 300) + ",\"scope\":\"openid\"}";
 		String token = signRs256(header, claims, keyPair);
+		exerciseSigner(keyPair, claims);
 
         String accessClaims=claims.substring(0,claims.length()-1)+",\"client_id\":\"app\",\"jti\":\"id\"}";
         String accessCompact=signRs256(header.replace("JWT","at+jwt"),accessClaims,keyPair);
@@ -560,7 +569,9 @@ public final class PackagedConsumer {
 		Class<?>[] exported = {AccessToken.class, AuthorizationErrorException.class, AuthorizationRedirect.class,
 				AuthorizationRequestOptions.class, AuthorizationRequestOptions.ResponseMode.class,
 				AuthorizationRequestOptions.Builder.class, AuthorizationResponse.class, AuthorizationServerMetadata.class,
-				AuthorizationServerMetadata.Builder.class, ClientAuthentication.class,
+				AuthorizationServerMetadata.Builder.class, ClientAuthentication.class, ClientAuthentication.PrivateKeyJwtBuilder.class,
+				ClientAssertionAudience.class, ClientAssertionKeyProvider.class, ClientAssertionSigningKey.class,
+				ClientAssertionSigningKey.Builder.class, OAuthConfigurationException.class,
 				ClientCredentialsTokenSource.class, ClientCredentialsTokenSource.Builder.class,
 				ClientSecretBasicEncoding.class, InMemoryPendingAuthorizationStore.class,
 				InMemoryPendingAuthorizationStore.Builder.class, IssuerParameterPolicy.class, OAuthClient.class,
@@ -575,7 +586,7 @@ public final class PackagedConsumer {
 				PendingAuthorizationSource.class, PendingAuthorizationStore.class, PendingAuthorizationStoreException.class,
 				RefreshToken.class, TokenRequestOptions.class, TokenRequestOptions.Builder.class, TokenResponse.class,
 				TokenTypeHint.class};
-		require(exported.length == 51, "all OAuth exported types compile from the packaged JAR");
+		require(exported.length == 57, "all OAuth exported types compile from the packaged JAR");
 		calledApi.add("com.revetsec.oauth");
 	}
 
@@ -698,6 +709,63 @@ public final class PackagedConsumer {
 		}
 
 		return false;
+	}
+
+	/** Exercises all signer algorithms through the public JAR with an independent JCA verifier. */
+	private static void exerciseSigner(@NonNull KeyPair keyPair, @NonNull String claims) throws Exception {
+		for (JwsAlgorithm algorithm : List.of(JwsAlgorithm.PS256, JwsAlgorithm.RS256, JwsAlgorithm.RS384)) {
+			JwsSigner signer = JwsSigner.fromRsaKeyPair(keyPair.getPrivate(), keyPair.getPublic(), algorithm);
+			require(signer.getAlgorithm() == algorithm
+					&& ((RSAPublicKey) signer.getPublicKey()).getModulus().equals(((RSAPublicKey) keyPair.getPublic()).getModulus()),
+					"signer exposes only its selected algorithm and checked public projection");
+			signer.warmUp(Duration.ofSeconds(10));
+			String compact = signer.toCompactSerialization("JWT", KEY_ID, null,
+					claims.getBytes(StandardCharsets.UTF_8), Duration.ofSeconds(10));
+			String[] parts = compact.split("\\.");
+			require(parts.length == 3 && new String(Base64.getUrlDecoder().decode(parts[1]), StandardCharsets.UTF_8).equals(claims),
+					"signer preserves exact accepted claims bytes");
+			String name = algorithm == JwsAlgorithm.PS256 ? "RSASSA-PSS"
+					: algorithm == JwsAlgorithm.RS256 ? "SHA256withRSA" : "SHA384withRSA";
+			Signature verifier = Signature.getInstance(name);
+			verifier.initVerify(keyPair.getPublic());
+			if (algorithm == JwsAlgorithm.PS256)
+				verifier.setParameter(new PSSParameterSpec("SHA-256", "MGF1", MGF1ParameterSpec.SHA256, 32, 1));
+			verifier.update((parts[0] + "." + parts[1]).getBytes(StandardCharsets.US_ASCII));
+			require(verifier.verify(Base64.getUrlDecoder().decode(parts[2])), "independent signer verification");
+			require(!signer.toString().contains(compact), "signer rendering excludes its credential");
+			try {
+				signer.warmUp(Duration.ZERO);
+				throw new AssertionError("zero signing budget accepted");
+			} catch (JwsSigningException failure) {
+				require(failure.getReason() == JwsSigningException.Reason.BUDGET_EXHAUSTED
+						&& failure.getCategory() == ErrorCategory.TRANSPORT && failure.isTransient()
+						&& failure.getCause() == null, "fixed signer budget failure");
+			}
+		}
+		require(JwsSigningException.Reason.values().length == 3, "signer reason inventory");
+		JwsSigner signer = JwsSigner.fromRsaKeyPair(keyPair.getPrivate(), keyPair.getPublic(), JwsAlgorithm.PS256);
+		ClientAssertionSigningKey.Builder keyBuilder = ClientAssertionSigningKey.withSigner(signer);
+		byte[] digest = new byte[32]; digest[0] = 7;
+		ClientAssertionSigningKey key = keyBuilder.keyId(KEY_ID).certificateSha256Thumbprint(digest).build();
+		digest[0] = 8;
+		require(key.getKeyId().equals(Optional.of(KEY_ID)) && key.getCertificateSha256Thumbprint().orElseThrow()[0] == 7, "assertion key snapshot getters");
+		key.getCertificateSha256Thumbprint().orElseThrow()[0] = 9;
+		require(key.getCertificateSha256Thumbprint().orElseThrow()[0] == 7, "assertion key getter copies");
+		ClientAssertionKeyProvider provider = ClientAssertionKeyProvider.fromKey(key);
+		require(provider.getSigningKey(Duration.ofSeconds(1)) == key, "fixed assertion key provider");
+		ClientAuthentication.PrivateKeyJwtBuilder authenticationBuilder = ClientAuthentication.withPrivateKeyJwt(provider);
+		ClientAuthentication authentication = authenticationBuilder.audience(ClientAssertionAudience.TOKEN_ENDPOINT).audience(null)
+				.assertionLifetime(Duration.ofSeconds(1)).assertionLifetime(null).build();
+		require(ClientAuthentication.fromPrivateKeyJwt(provider) != null && !authentication.toString().contains(KEY_ID), "assertion factories and redaction");
+		AuthorizationServerMetadata role = AuthorizationServerMetadata.withIssuer(ISSUER).authorizationEndpoint(URI.create(ISSUER+"/a"))
+				.tokenEndpoint(URI.create(ISSUER+"/t")).tokenEndpointAuthMethodsSupported(Set.of("private_key_jwt"))
+				.tokenEndpointAuthSigningAlgValuesSupported(Set.of("PS256")).revocationEndpointAuthMethodsSupported(Set.of("private_key_jwt"))
+				.revocationEndpointAuthSigningAlgValuesSupported(Set.of("RS384")).introspectionEndpointAuthSigningAlgValuesSupported(Set.of()).build();
+		require(role.getTokenEndpointAuthSigningAlgValuesSupported().equals(Optional.of(Set.of("PS256")))
+				&& role.getRevocationEndpointAuthMethodsSupported().equals(Optional.of(Set.of("private_key_jwt")))
+				&& role.getRevocationEndpointAuthSigningAlgValuesSupported().equals(Optional.of(Set.of("RS384")))
+				&& role.getIntrospectionEndpointAuthSigningAlgValuesSupported().equals(Optional.of(Set.of())), "assertion role metadata projections");
+		OAuthClient.withAuthorizationServerMetadata(role).clientId("consumer").clientAuthentication(authentication).build();
 	}
 
 	private static @NonNull String signRs256(@NonNull String header, @NonNull String claims, @NonNull KeyPair keyPair) throws Exception {

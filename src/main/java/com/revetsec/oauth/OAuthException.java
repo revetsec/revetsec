@@ -37,7 +37,7 @@ import static java.util.Objects.requireNonNull;
 @NotThreadSafe
 public abstract sealed class OAuthException extends RevetsecException permits AuthorizationErrorException,
 		OAuthErrorResponseException, OAuthValidationException, OAuthResponseException, OAuthTransportException,
-		PendingAuthorizationStoreException {
+		PendingAuthorizationStoreException, OAuthConfigurationException {
 	private static final long serialVersionUID = 1L;
 	/** Stable public failure reason. */
 	private final @NonNull Reason reason;
@@ -119,7 +119,17 @@ public abstract sealed class OAuthException extends RevetsecException permits Au
 		/** A cache attempt ceiling temporarily held back the request. */
 		ATTEMPT_LIMIT(ErrorCategory.TRANSPORT, "The authorization server request is temporarily held back."),
 		/** The default HTTP client could not be constructed. */
-		HTTP_CLIENT_UNAVAILABLE(ErrorCategory.CONFIGURATION, "The HTTP client is unavailable.");
+		HTTP_CLIENT_UNAVAILABLE(ErrorCategory.CONFIGURATION, "The HTTP client is unavailable."),
+		/** The configured assertion key could not be selected. */
+		CLIENT_ASSERTION_KEY_UNAVAILABLE(ErrorCategory.CONFIGURATION, "The client assertion key is unavailable."),
+		/** The configured assertion could not be signed or has invalid timing. */
+		CLIENT_ASSERTION_SIGNING_FAILED(ErrorCategory.CONFIGURATION, "The client assertion could not be prepared."),
+		/** The assertion private and public keys do not form a pair. */
+		CLIENT_ASSERTION_KEY_PAIR_MISMATCH(ErrorCategory.CONFIGURATION, "The client assertion key pair does not match."),
+		/** The asserted endpoint or its authentication metadata does not match the configured trust. */
+		CLIENT_ASSERTION_ENDPOINT_MISMATCH(ErrorCategory.CONFIGURATION, "The client assertion endpoint configuration does not match."),
+		/** The application issuer policy is unavailable. */
+		ISSUER_POLICY_UNAVAILABLE(ErrorCategory.CONFIGURATION, "The issuer policy is unavailable.");
 
 		private final @NonNull ErrorCategory category;
 		private final @NonNull String message;

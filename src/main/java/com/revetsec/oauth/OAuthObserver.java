@@ -98,4 +98,25 @@ public interface OAuthObserver extends JoseObserver {
 	 * @since 1.0.0
 	 */
 	default void didUseUnencodedBasic() { }
+	/**
+	 * Called once after a client successfully enables endpoint-audience assertion compatibility.
+	 * @param audience TOKEN_ENDPOINT compatibility selection
+	 * @since 1.0.0
+	 */
+	default void didEnableClientAssertionAudience(@NonNull ClientAssertionAudience audience) { }
+	/**
+	 * Called when endpoint-audience compatibility is selected for an actual assertion operation, including failure.
+	 * @param audience TOKEN_ENDPOINT compatibility selection
+	 * @since 1.0.0
+	 */
+	default void didUseClientAssertionAudience(@NonNull ClientAssertionAudience audience) { }
+	/**
+	 * Called once for assertion preparation failure before any endpoint will event. The same fixed-message
+	 * exception is received by the caller; no assertion or key is passed.
+	 * @param endpoint selected POST role
+	 * @param exception preparation failure
+	 * @since 1.0.0
+	 */
+	default void didFailClientAssertionPreparation(@NonNull OAuthEndpoint endpoint, @NonNull OAuthException exception) { }
+
 }

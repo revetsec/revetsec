@@ -117,6 +117,36 @@ public final class OidcProviderMetadata {
 	 * @since 1.0.0
 	 */
 	public static @NonNull Builder withIssuer(@NonNull String issuer) { return new Builder(issuer); }
+	/**
+	 * Returns the optional token_endpoint_auth_signing_alg_values_supported role policy without enabling unknown names.
+	 * @return names when present, retaining empty versus absent
+	 * @since 1.0.0
+	 */
+	public @NonNull Optional<@NonNull Set<@NonNull String>> getTokenEndpointAuthSigningAlgValuesSupported() { return this.oauth.getTokenEndpointAuthSigningAlgValuesSupported(); }
+	/**
+	 * Returns the optional revocation_endpoint_auth_methods_supported role policy without enabling unknown names.
+	 * @return names when present, retaining empty versus absent
+	 * @since 1.0.0
+	 */
+	public @NonNull Optional<@NonNull Set<@NonNull String>> getRevocationEndpointAuthMethodsSupported() { return this.oauth.getRevocationEndpointAuthMethodsSupported(); }
+	/**
+	 * Returns the optional revocation_endpoint_auth_signing_alg_values_supported role policy without enabling unknown names.
+	 * @return names when present, retaining empty versus absent
+	 * @since 1.0.0
+	 */
+	public @NonNull Optional<@NonNull Set<@NonNull String>> getRevocationEndpointAuthSigningAlgValuesSupported() { return this.oauth.getRevocationEndpointAuthSigningAlgValuesSupported(); }
+	/**
+	 * Returns the optional introspection_endpoint_auth_signing_alg_values_supported role policy without enabling unknown names.
+	 * @return names when present, retaining empty versus absent
+	 * @since 1.0.0
+	 */
+	public @NonNull Optional<@NonNull Set<@NonNull String>> getIntrospectionEndpointAuthSigningAlgValuesSupported() { return this.oauth.getIntrospectionEndpointAuthSigningAlgValuesSupported(); }
+	/**
+	 * Returns the optional introspection_endpoint_auth_methods_supported role policy without enabling unknown names.
+	 * @return names when present, retaining empty versus absent
+	 * @since 1.0.0
+	 */
+	public @NonNull Optional<@NonNull Set<@NonNull String>> getIntrospectionEndpointAuthMethodsSupported() { return this.oauth.getIntrospectionEndpointAuthMethodsSupported(); }
 	@NonNull AuthorizationServerMetadata oauthMetadata() { return this.oauth; }
 	/**
 	 * Returns the exact issuer.
@@ -204,6 +234,41 @@ public final class OidcProviderMetadata {
 		private Set<String> algorithms = Set.of("RS256");
 		private Set<String> responseTypes = Set.of("code");
 		private @Nullable Set<String> userInfoAlgorithms;
+		/**
+		 * Replaces the complete token_endpoint_auth_signing_alg_values_supported role policy.
+		 * @param value names, or null to restore absence
+		 * @return this builder
+		 * @since 1.0.0
+		 */
+		public @NonNull Builder tokenEndpointAuthSigningAlgValuesSupported(@Nullable Set<@NonNull String> value) { this.oauth = this.oauth.tokenEndpointAuthSigningAlgValuesSupported(value); return this; }
+		/**
+		 * Replaces the complete revocation_endpoint_auth_methods_supported role policy.
+		 * @param value names, or null to restore absence
+		 * @return this builder
+		 * @since 1.0.0
+		 */
+		public @NonNull Builder revocationEndpointAuthMethodsSupported(@Nullable Set<@NonNull String> value) { this.oauth = this.oauth.revocationEndpointAuthMethodsSupported(value); return this; }
+		/**
+		 * Replaces the complete revocation_endpoint_auth_signing_alg_values_supported role policy.
+		 * @param value names, or null to restore absence
+		 * @return this builder
+		 * @since 1.0.0
+		 */
+		public @NonNull Builder revocationEndpointAuthSigningAlgValuesSupported(@Nullable Set<@NonNull String> value) { this.oauth = this.oauth.revocationEndpointAuthSigningAlgValuesSupported(value); return this; }
+		/**
+		 * Replaces the complete introspection_endpoint_auth_signing_alg_values_supported role policy.
+		 * @param value names, or null to restore absence
+		 * @return this builder
+		 * @since 1.0.0
+		 */
+		public @NonNull Builder introspectionEndpointAuthSigningAlgValuesSupported(@Nullable Set<@NonNull String> value) { this.oauth = this.oauth.introspectionEndpointAuthSigningAlgValuesSupported(value); return this; }
+		/**
+		 * Replaces the complete introspection_endpoint_auth_methods_supported role policy.
+		 * @param value names, or null to restore absence
+		 * @return this builder
+		 * @since 1.0.0
+		 */
+		public @NonNull Builder introspectionEndpointAuthMethodsSupported(@Nullable Set<@NonNull String> value) { this.oauth = this.oauth.introspectionEndpointAuthMethodsSupported(value); return this; }
 		private Builder(@NonNull String issuer) { this.oauth = AuthorizationServerMetadata.withIssuer(issuer); }
 		/**
 		 * Sets the authorizationEndpoint.

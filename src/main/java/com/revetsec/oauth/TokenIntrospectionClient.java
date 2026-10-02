@@ -55,7 +55,7 @@ public final class TokenIntrospectionClient implements AccessTokenValidator {
 	private final AccessTokenObserver observer;
 
 	@Nullable
-	private final URI endpoint;
+	private final ResourceServerMetadata target;
 
 	@Nullable
 	private final ResourceServerMetadataCache<ResourceServerMetadata> cache;
@@ -72,22 +72,37 @@ public final class TokenIntrospectionClient implements AccessTokenValidator {
 		this.observer = builder.observer;
 		this.guard = new IntrospectionFailureGuard(this.settings.cooldown(), System::nanoTime);
 		AuthorizationServerMetadata configured = this.settings.metadata();
-		this.endpoint = builder.introspectionEndpoint != null ? builder.introspectionEndpoint : configured == null ? null : configured.getIntrospectionEndpoint().orElse(null);
-		if (this.endpoint != null) {
-			UriChecks.requirePermitted(this.endpoint, this.settings.policy(), this.settings.allowLoopback());
-			this.client.requireIntrospectionAuthentication(configured == null ? null : configured.getIntrospectionEndpointAuthMethodsSupported().orElse(null));
+		URI endpoint = builder.introspectionEndpoint != null ? builder.introspectionEndpoint : configured == null ? null : configured.getIntrospectionEndpoint().orElse(null);
+		if (endpoint != null) {
+			UriChecks.requirePermitted(endpoint, this.settings.policy(), this.settings.allowLoopback());
+			// Only metadata for the same endpoint governs an explicit override's role policy.
+			boolean applicable = configured != null && configured.getIntrospectionEndpoint().map(uri -> ClientAssertionPreparation.sameEndpoint(uri, endpoint)).orElse(false);
+			Set<String> methods = applicable ? requireNonNull(configured).getIntrospectionEndpointAuthMethodsSupported().orElse(null) : null;
+			Set<String> algorithms = applicable ? requireNonNull(configured).getIntrospectionEndpointAuthSigningAlgValuesSupported().orElse(null) : null;
+			this.client.requireIntrospectionAuthentication(methods);
+			this.target = new ResourceServerMetadata(this.settings.issuer(), endpoint, methods, algorithms,
+					configured == null ? null : configured.getTokenEndpoint());
 			this.cache = null;
-		} else
+		} else {
+			this.target = null;
 			this.cache = new ResourceServerMetadataCache<>(URI.create(this.settings.issuer()), ResourceServerMetadata.Role.INTROSPECTION, this.settings.exchange(), this.settings.policy(), this.settings.allowLoopback(), this.settings.requestTimeout(), this.settings.clock(), this.client.resourceObserver(this.observer), this.settings.minimumTtl(), this.settings.defaultTtl(), this.settings.maximumTtl(), this.settings.cooldown(), metadata -> {
 				if (!UriChecks.isPermitted(metadata.endpoint(), this.settings.policy(), this.settings.allowLoopback()))
 					throw OAuthValidationException.fromReason(OAuthException.Reason.METADATA_INVALID);
 				this.client.requireIntrospectionAuthentication(metadata.authenticationMethods());
 				return metadata;
 			}, System::nanoTime);
+		}
 	}
 
-	private @NonNull URI endpoint(@NonNull Deadline deadline) {
-		return this.endpoint != null ? this.endpoint : requireNonNull(this.cache).get(deadline).endpoint();
+	private @NonNull ResourceServerMetadata endpoint(@NonNull Deadline deadline) {
+		return this.target != null ? this.target : requireNonNull(this.cache).get(deadline);
+	}
+	private @NonNull ResourceServerMetadata assertionTarget(@NonNull Deadline deadline) {
+		try { return endpoint(deadline); }
+		catch (OAuthException failure) {
+			this.client.assertionMetadataFailure(OAuthEndpoint.INTROSPECTION, failure, this.client.resourceObserver(this.observer));
+			throw failure;
+		}
 	}
 
 	/**
@@ -124,7 +139,7 @@ public final class TokenIntrospectionClient implements AccessTokenValidator {
 		try {
 			if (token.value().length() > this.maximumTokenLength)
 				throw AccessTokenValidationException.fromReason(AccessTokenValidationException.Reason.MALFORMED_REQUEST);
-			URI target = endpoint(deadline);
+			ResourceServerMetadata target = assertionTarget(deadline);
 			IntrospectionFailureGuard.Attempt attempt = this.guard.acquire(deadline, this.settings.requestTimeout());
 			IntrospectionResponse parsed;
 			long started = System.nanoTime();
@@ -138,7 +153,7 @@ public final class TokenIntrospectionClient implements AccessTokenValidator {
 			} catch (OAuthException failure) {
 				this.guard.failed(attempt, failure);
 				if (receivedResponse)
-					this.client.introspectionResponseFailure(target, failure, Duration.ofNanos(System.nanoTime() - started), this.observer);
+					this.client.introspectionResponseFailure(target.endpoint(), failure, Duration.ofNanos(System.nanoTime() - started), this.observer);
 				throw failure;
 			} catch (RuntimeException misuse) {
 				this.guard.abandon(attempt);

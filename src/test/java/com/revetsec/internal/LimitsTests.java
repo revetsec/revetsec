@@ -119,7 +119,7 @@ final class LimitsTests {
 		}
 
 		Assertions.assertEquals(constants, Limits.all());
-		Assertions.assertEquals(51, Limits.all().size());
+		Assertions.assertEquals(52, Limits.all().size());
 
 		Set<String> names = new HashSet<>();
 		for (Limit limit : Limits.all())

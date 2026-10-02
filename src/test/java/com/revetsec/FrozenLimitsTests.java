@@ -312,7 +312,9 @@ final class FrozenLimitsTests {
 			durations("CLIENT_CREDENTIALS_MAXIMUM_CACHE_DURATION", "Client-credentials maximum cache duration",
 					Duration.ofHours(24), Duration.ofMinutes(1), Duration.ofHours(24), ZERO_REJECTED),
 			durations("CLIENT_CREDENTIALS_RENEW_BEFORE", "Client-credentials renewBefore", Duration.ofSeconds(60),
-					Duration.ZERO, Duration.ofMinutes(10), ZERO_ALLOWED));
+					Duration.ZERO, Duration.ofMinutes(10), ZERO_ALLOWED),
+			durations("CLIENT_ASSERTION_LIFETIME", "Client assertion lifetime", Duration.ofSeconds(60),
+					Duration.ofSeconds(1), Duration.ofSeconds(300), ZERO_REJECTED));
 
 	/**
 	 * The three rows that permit zero (M1 plan, "Limits registry": "Zero is allowed only for maximum staleness and
@@ -325,7 +327,7 @@ final class FrozenLimitsTests {
 	@Test
 	void theRegistryHoldsExactlyTheApprovedRowsInOrder() throws IllegalAccessException {
 		List<String> approved = APPROVED_ROWS.stream().map(Row::getConstant).toList();
-		Assertions.assertEquals(51, approved.size(), "M5 adds two rows to the previous 49");
+		Assertions.assertEquals(52, approved.size(), "M6 adds the client assertion lifetime row");
 
 		Map<String, Limit> constants = constants();
 		IdentityHashMap<Limit, String> names = new IdentityHashMap<>();

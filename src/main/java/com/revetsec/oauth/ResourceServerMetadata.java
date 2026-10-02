@@ -42,10 +42,19 @@ final class ResourceServerMetadata {
 	@Nullable
 	private final Set<String> authenticationMethods;
 
+	private final @Nullable Set<@NonNull String> signingAlgorithms;
+	private final @Nullable URI tokenEndpoint;
+
 	ResourceServerMetadata(@NonNull String issuer, @NonNull URI endpoint, @Nullable Set<@NonNull String> methods) {
+		this(issuer, endpoint, methods, null, null);
+	}
+	ResourceServerMetadata(@NonNull String issuer, @NonNull URI endpoint, @Nullable Set<@NonNull String> methods,
+			@Nullable Set<@NonNull String> algorithms, @Nullable URI tokenEndpoint) {
 		this.issuer = issuer;
 		this.endpoint = endpoint;
-		this.authenticationMethods = methods;
+		this.authenticationMethods = methods == null ? null : Set.copyOf(methods);
+		this.signingAlgorithms = algorithms == null ? null : Set.copyOf(algorithms);
+		this.tokenEndpoint = tokenEndpoint;
 	}
 
 	@NonNull String issuer() {
@@ -61,6 +70,9 @@ final class ResourceServerMetadata {
 		return this.authenticationMethods;
 	}
 
+	@Nullable Set<@NonNull String> signingAlgorithms() { return this.signingAlgorithms; }
+	@Nullable URI tokenEndpoint() { return this.tokenEndpoint; }
+
 	static @NonNull ResourceServerMetadata parse(@NonNull String issuer, byte @NonNull [] bytes, @NonNull Role role) {
 		try {
 			JsonValue value = JsonCodec.parse(bytes, JsonLimits.protocolDocument(Limits.HTTP_RESPONSE_BODY_SIZE.getDefaultIntValue()));
@@ -70,21 +82,25 @@ final class ResourceServerMetadata {
 			if (!issuer.equals(actual))
 				throw OAuthValidationException.fromReason(OAuthException.Reason.ISSUER_MISMATCH);
 			URI endpoint = URI.create(text(object, role == Role.JWT ? "jwks_uri" : "introspection_endpoint"));
-			Set<String> methods = null;
-			if (object.getMembers().containsKey("introspection_endpoint_auth_methods_supported")) {
-				if (!(object.getMembers().get("introspection_endpoint_auth_methods_supported") instanceof JsonArray array))
-					throw malformed();
-				Set<String> parsed = new LinkedHashSet<>();
-				for (JsonValue element : array.getElements()) {
-					if (!(element instanceof JsonString string) || string.getValue().isEmpty() || !parsed.add(string.getValue()))
-						throw malformed();
-				}
-				methods = Set.copyOf(parsed);
-			}
-			return new ResourceServerMetadata(issuer, endpoint, methods);
+			Set<String> methods = optionalNames(object, "introspection_endpoint_auth_methods_supported");
+			Set<String> algorithms = role == Role.INTROSPECTION
+					? optionalNames(object, "introspection_endpoint_auth_signing_alg_values_supported") : null;
+			URI tokenEndpoint = role == Role.INTROSPECTION && object.getMembers().containsKey("token_endpoint")
+					? URI.create(text(object, "token_endpoint")) : null;
+			return new ResourceServerMetadata(issuer, endpoint, methods, algorithms, tokenEndpoint);
 		} catch (JsonParseException | IllegalArgumentException failure) {
 			throw malformed();
 		}
+	}
+
+	private static @Nullable Set<@NonNull String> optionalNames(@NonNull JsonObject object, @NonNull String name) {
+		if (!object.getMembers().containsKey(name)) return null;
+		if (!(object.getMembers().get(name) instanceof JsonArray array)) throw malformed();
+		Set<String> parsed = new LinkedHashSet<>();
+		for (JsonValue element : array.getElements()) {
+			if (!(element instanceof JsonString string) || string.getValue().isEmpty() || !parsed.add(string.getValue())) throw malformed();
+		}
+		return Set.copyOf(parsed);
 	}
 
 	private static @NonNull String text(@NonNull JsonObject claims, @NonNull String name) {

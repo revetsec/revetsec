@@ -1,6 +1,6 @@
 # OAuth client guide
 
-**Pre-release.** `com.revetsec.oauth` supplies authorization code with PKCE S256, client credentials, refresh and revocation. It returns raw credentials; a token response is never proof of who a user is. OpenID Connect identity validation arrives separately.
+**Pre-release.** `com.revetsec.oauth` supplies authorization code with PKCE S256, client credentials, refresh and revocation. It returns raw credentials; a token response is never proof of who a user is. Use `OidcClient` for OpenID Connect identity validation.
 
 ## Browser authorization
 
@@ -44,3 +44,26 @@ Authorization code always uses a fresh S256 PKCE verifier. Metadata that explici
 The client refuses token and metadata redirects, enforces HTTPS endpoints and bounded request and response sizes, and never retries an authorization-code exchange, refresh or revocation automatically. `ClientCredentialsTokenSource` caches a service token, renews through a single caller and lets the application invalidate an exact rejected token instance. Keep the client secret, authorization code, state, verifier and tokens out of application logs. `toString()` methods redact them; explicit token getters return the credential to the caller.
 
 Captured public metadata for Google, Apple and tenant-specific Microsoft Entra is under `src/test/resources/fixtures/`. Tenant-specific Entra issuers work with exact metadata comparison; `common` and `organizations` template issuers need the later multi-tenant policy. The offline Keycloak integration test covers confidential and public code flows, client credentials, refresh and revocation. A live GitHub token-endpoint probe has not been run because no OAuth app/client ID was provided; HTTP-200 error parsing uses a synthetic test response.
+
+## Private-key client assertions
+
+The application owns registration, private keys and rotation. Revetsec prepares a fresh signed assertion for each actual token, refresh, code, revocation or introspection POST:
+
+```java
+JwsSigner signer = JwsSigner.fromRsaKeyPair(privateKey, publicKey, JwsAlgorithm.PS256);
+ClientAssertionSigningKey key = ClientAssertionSigningKey.withSigner(signer)
+    .keyId(registeredKeyId)
+    .build();
+ClientAuthentication authentication = ClientAuthentication.fromPrivateKeyJwt(
+    ClientAssertionKeyProvider.fromKey(key));
+```
+
+`ClientAssertionSigningKey` requires a key ID or exactly 32 bytes of SHA-256 certificate digest, optionally both. Its builder intentionally has no `fromSigner` convenience: the signer alone cannot satisfy the identifier requirement. A rotating `ClientAssertionKeyProvider` returns one immutable signer/header snapshot per POST on the caller's thread and must cooperate with its remaining budget. Builds, cached service tokens and waiting callers make no key callback. RSA signing accepts PS256, RS256 and RS384; the selected algorithm must match any applicable advertised role list. There is no negotiation or authentication fallback.
+
+The default assertion has `typ=client-authentication+jwt`, sole `aud` equal to the exact configured issuer, `iss=sub=clientId`, whole-second `iat=nbf`, a 60-second `exp` and a fresh 32-byte random `jti`. `withPrivateKeyJwt(provider)` allows exact whole-second lifetime in [1, 300]. Explicit `audience(ClientAssertionAudience.TOKEN_ENDPOINT)` compatibility uses `typ=JWT` and the exact actual POST URI, including the revocation or introspection target and its query escaping. Every asserted POST must have the configured issuer's scheme, ASCII host and effective port; a present cross-origin token endpoint also fails introspection preparation.
+
+Token and revocation metadata with absent authentication methods defaults to Basic and therefore cannot authorize private-key assertions. Configure or advertise `private_key_jwt` for each applicable role. Introspection-only explicit configuration may omit its method/algorithm lists; it needs no browser, token or JWKS discovery. An override of another introspection endpoint does not inherit that other endpoint's lists. The same endpoint retains its lists across host case, explicit default port and percent-escape hex case changes; its actual assertion audience still preserves the supplied URI string. Missing signing algorithms mean the explicitly configured signer represents an out-of-band registered credential; present empty or excluding lists fail closed. ID-token algorithms do not authorize client assertions.
+
+The form contains `client_id`, the fixed `client_assertion_type` and `client_assertion`; no Basic header or `client_secret` is sent. Private-key client authentication cannot be used with HMAC ID tokens. Key and signing failures are fixed-message `OAuthConfigurationException` instances without application/provider causes. Deadline failures remain transport exceptions. None becomes an invalid-user result. A preparation failure fires `didFailClientAssertionPreparation` before the credential endpoint's HTTP lifecycle; expiry or deadline exhaustion after `willRequestEndpoint` fires only `didFailEndpoint`. No automatic assertion regeneration or retry occurs. The original operation deadline covers discovery, key selection, signing and transport; provider/JCA execution is cooperative. Do not log assertion bodies or explicit identifier/digest getters.
+
+Hosted private-key provider qualification is still pending. Existing provider integration results cover the earlier authentication methods.

@@ -453,6 +453,7 @@ final class ContractMetaTests {
 		expect(expected, "jca-provider-argument", "com/revetsec/internal/jose/ProviderArgumentFixture.java", 36, 37, 38,
 				39, 40, 41, 42, 43, 44, 50, 51, 52, 53, 54, 55);
 		expect(expected, "jca-provider-argument", SIGNATURE_NAME_FIXTURE, 49);
+		expect(expected, "jca-provider-argument", "com/revetsec/jose/JwsSigner.java", 28, 31);
 		// M2-10 item 3: everywhere, in string constants and (line 63, an enum constant) in identifiers.
 		expect(expected, "p1363-signature-name", SIGNATURE_NAME_FIXTURE, 33, 36, 37, 38, 39, 40, 42, 44, 45, 46, 47,
 				63);

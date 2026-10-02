@@ -18,6 +18,10 @@ package com.revetsec.oauth;
 
 import com.revetsec.internal.encoding.StrictUtf8;
 import com.revetsec.jose.JwsAlgorithm;
+import com.revetsec.internal.Limits;
+import com.google.errorprone.annotations.CheckReturnValue;
+import java.time.Duration;
+import javax.annotation.concurrent.NotThreadSafe;
 import java.util.Set;
 
 import com.revetsec.internal.encoding.EncodingException;
@@ -44,18 +48,24 @@ import static java.util.Objects.requireNonNull;
  */
 @ThreadSafe
 public final class ClientAuthentication {
-	private enum Method { NONE, BASIC, POST }
+	private enum Method { NONE, BASIC, POST, PRIVATE_KEY_JWT }
 	private static final ClientAuthentication NONE = new ClientAuthentication(Method.NONE, null,
 			ClientSecretBasicEncoding.FORM_URLENCODED);
 	private final @NonNull Method method;
 	private final @Nullable Supplier<@NonNull String> secretSupplier;
 	private final @NonNull ClientSecretBasicEncoding encoding;
+	private final @Nullable ClientAssertionKeyProvider keyProvider;
+	private final @NonNull ClientAssertionAudience assertionAudience;
+	private final @NonNull Duration assertionLifetime;
 
 	private ClientAuthentication(@NonNull Method method, @Nullable Supplier<@NonNull String> secretSupplier,
 			@NonNull ClientSecretBasicEncoding encoding) {
 		this.method = method;
 		this.secretSupplier = secretSupplier;
 		this.encoding = encoding;
+		this.keyProvider = null;
+		this.assertionAudience = ClientAssertionAudience.ISSUER;
+		this.assertionLifetime = Limits.CLIENT_ASSERTION_LIFETIME.getDefaultDuration();
 	}
 
 	/**
@@ -116,7 +126,85 @@ public final class ClientAuthentication {
 				ClientSecretBasicEncoding.FORM_URLENCODED);
 	}
 
-	@NonNull String methodName() { return switch (this.method) { case NONE -> "none"; case BASIC -> "client_secret_basic"; case POST -> "client_secret_post"; }; }
+	private ClientAuthentication(@NonNull PrivateKeyJwtBuilder builder) {
+		this.method = Method.PRIVATE_KEY_JWT;
+		this.secretSupplier = null;
+		this.encoding = ClientSecretBasicEncoding.FORM_URLENCODED;
+		this.keyProvider = builder.keyProvider;
+		this.assertionAudience = builder.audience;
+		this.assertionLifetime = builder.lifetime;
+	}
+	/**
+	 * Selects generated private-key assertions with the issuer audience and 60-second lifetime.
+	 * @param keyProvider thread-safe cooperative key provider
+	 * @return the strategy
+	 * @since 1.0.0
+	 */
+	@CheckReturnValue
+	public static @NonNull ClientAuthentication fromPrivateKeyJwt(@NonNull ClientAssertionKeyProvider keyProvider) {
+		return withPrivateKeyJwt(keyProvider).build();
+	}
+	/**
+	 * Starts private-key assertion configuration without selecting a key or signing.
+	 * @param keyProvider thread-safe cooperative key provider
+	 * @return the builder
+	 * @since 1.0.0
+	 */
+	@CheckReturnValue
+	public static @NonNull PrivateKeyJwtBuilder withPrivateKeyJwt(@NonNull ClientAssertionKeyProvider keyProvider) {
+		return new PrivateKeyJwtBuilder(keyProvider);
+	}
+	boolean isPrivateKeyJwt() { return this.method == Method.PRIVATE_KEY_JWT; }
+	@NonNull ClientAssertionKeyProvider keyProvider() { return requireNonNull(this.keyProvider); }
+	@NonNull ClientAssertionAudience assertionAudience() { return this.assertionAudience; }
+	@NonNull Duration assertionLifetime() { return this.assertionLifetime; }
+
+	/**
+	 * Configures assertion audience and lifetime. Building makes no application callback or signing call.
+	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
+	 * @since 1.0.0
+	 */
+	@NotThreadSafe @CheckReturnValue
+	public static final class PrivateKeyJwtBuilder {
+		private final @NonNull ClientAssertionKeyProvider keyProvider;
+		private @NonNull ClientAssertionAudience audience = ClientAssertionAudience.ISSUER;
+		private @NonNull Duration lifetime = Limits.CLIENT_ASSERTION_LIFETIME.getDefaultDuration();
+		private PrivateKeyJwtBuilder(@NonNull ClientAssertionKeyProvider keyProvider) { this.keyProvider = requireNonNull(keyProvider); }
+		/**
+		 * Selects the sole assertion audience. Endpoint compatibility uses the actual outgoing POST URI.
+		 * @param value audience, or null to restore ISSUER
+		 * @return this builder
+		 * @since 1.0.0
+		 */
+		public @NonNull PrivateKeyJwtBuilder audience(@Nullable ClientAssertionAudience value) {
+			this.audience = value == null ? ClientAssertionAudience.ISSUER : value; return this;
+		}
+		/**
+		 * Replaces assertion lifetime with exact whole seconds in [1, 300].
+		 * @param value lifetime, or null to restore 60 seconds
+		 * @return this builder
+		 * @since 1.0.0
+		 */
+		public @NonNull PrivateKeyJwtBuilder assertionLifetime(@Nullable Duration value) {
+			if (value != null && value.getNano() != 0) throw new IllegalArgumentException("The assertion lifetime must contain exact whole seconds.");
+			this.lifetime = value == null ? Limits.CLIENT_ASSERTION_LIFETIME.getDefaultDuration() : Limits.CLIENT_ASSERTION_LIFETIME.require(value);
+			return this;
+		}
+		/**
+		 * Builds without key selection or signing.
+		 * @return strategy
+		 * @since 1.0.0
+		 */
+		public @NonNull ClientAuthentication build() { return new ClientAuthentication(this); }
+		/**
+		 * Redacts configured keys and identifiers.
+		 * @return redacted description
+		 * @since 1.0.0
+		 */
+		@Override public @NonNull String toString() { return "ClientAuthentication.PrivateKeyJwtBuilder{key=<redacted>}"; }
+	}
+
+	@NonNull String methodName() { return switch (this.method) { case NONE -> "none"; case BASIC -> "client_secret_basic"; case POST -> "client_secret_post"; case PRIVATE_KEY_JWT -> "private_key_jwt"; }; }
 	boolean isPublicClient() { return this.method == Method.NONE; }
 	boolean isUnencodedBasic() {
 		return this.method == Method.BASIC && this.encoding == ClientSecretBasicEncoding.UNENCODED;
@@ -124,7 +212,7 @@ public final class ClientAuthentication {
 
 	void checkHmac(@NonNull Set<@NonNull JwsAlgorithm> algorithms) {
 		if (algorithms.isEmpty()) return;
-		if (isPublicClient()) throw new IllegalArgumentException("HMAC ID tokens require confidential client authentication.");
+		if (isPublicClient() || isPrivateKeyJwt()) throw new IllegalArgumentException("HMAC ID tokens require confidential client authentication.");
 		checkHmacSecret(readSecret(), algorithms);
 	}
 	private @NonNull String readSecret() {
@@ -154,6 +242,7 @@ public final class ClientAuthentication {
 			if (!hmacAlgorithms.isEmpty()) throw new IllegalArgumentException("HMAC ID tokens require confidential client authentication.");
 			return null;
 		}
+		if (isPrivateKeyJwt()) throw new IllegalStateException("Client assertions require endpoint preparation.");
 		String secret = readSecret();
 		checkHmacSecret(secret, hmacAlgorithms);
 		if (this.method == Method.POST) {
