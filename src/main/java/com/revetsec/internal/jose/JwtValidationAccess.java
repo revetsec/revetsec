@@ -42,6 +42,9 @@ public final class JwtValidationAccess {
 		@NonNull Jwt validateUserInfo(@NonNull JwtValidator validator, @NonNull String compact, @NonNull LongSupplier remainingNanos);
 		@NonNull Jwt validateOidc(@NonNull JwtValidator validator, @NonNull String compact, @NonNull Set<@NonNull JwsAlgorithm> algorithms,
 				byte @NonNull [] secret, @NonNull LongSupplier remainingNanos, @NonNull Runnable hmacUsed);
+		@NonNull Jwt validateMicrosoftEntra(@NonNull JwtValidator validator, @NonNull String compact, @NonNull LongSupplier remainingNanos);
+		@NonNull Jwt validateMicrosoftEntraUserInfo(@NonNull JwtValidator validator, @NonNull String compact,
+				@NonNull String verifiedTenantIssuer, @NonNull LongSupplier remainingNanos);
 		void warmUp(@NonNull RemoteJsonWebKeySource source, @NonNull LongSupplier remainingNanos);
 	}
 	public static void set(@NonNull Operations value) {

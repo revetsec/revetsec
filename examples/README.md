@@ -1,6 +1,6 @@
 # Revetsec examples
 
-Two unpublished standalone projects use packaged core, adapter and Soklet artifacts:
+Two unpublished Soklet projects use packaged core, adapter and framework artifacts. A separate [RSA/OIDC recipe project](rsa-oidc/README.md) uses the current authored core only, with private-key authentication and synthetic Entra captures:
 
 | Project | Demonstrates | Soklet |
 |---|---|---|

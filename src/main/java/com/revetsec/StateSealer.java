@@ -464,6 +464,10 @@ public final class StateSealer {
 	 */
 	@ThreadSafe
 	private static final class SealedStateOperations implements SealedStateAccess.Operations {
+  @Override public @NonNull Integer getMaximumSealedLength(@NonNull StateSealer sealer) {
+   return requireNonNull(sealer).maximumSealedLength;
+  }
+
 		@Override
 		@NonNull
 		public String seal(@NonNull StateSealer sealer,

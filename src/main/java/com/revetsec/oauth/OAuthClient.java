@@ -75,6 +75,7 @@ public final class OAuthClient {
 			return switch (reason) {
 				case METADATA_INVALID -> OAuthValidationException.fromReason(reason);
 				case DOCUMENT_MALFORMED -> OAuthResponseException.fromReason(reason);
+				case ISSUER_POLICY_UNAVAILABLE -> OAuthConfigurationException.fromReason(reason);
 				case NETWORK_FAILURE, INTERRUPTED, ATTEMPT_LIMIT -> OAuthTransportException.fromReason(reason, null);
 				default -> throw new IllegalArgumentException("Unsupported endpoint failure reason.");
 			};

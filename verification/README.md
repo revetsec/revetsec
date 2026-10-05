@@ -83,3 +83,5 @@ The large core/fuzz signature guard child JVMs have a384MiB heap ceiling and two
 The packaged consumer also exercises all three `JwsSigner` algorithms, exact payload bytes, checked public-key getters, explicit noncredential warm-up and fixed budget failure. Its independent JCA verification runs against the built JAR without annotation dependencies.
 
 The packaged consumer exercises the assertion signing-key/provider/authentication builders, identifier/digest copying and role metadata getters without annotation dependencies. Actual assertion POST behavior and independent JCA verification run in `ClientAssertionTests`; full private-key provider qualification remains pending.
+
+The packaged consumer also calls `OidcIssuerPolicy` factories, the nullable/reset issuer-policy setter, selected metadata parser, advertised-issuer accessor and default observer hooks without annotation JARs. The parser/build callback is a rejecting sentinel, proving these local operations do not call it. Real local TLS Entra identity/UserInfo/refresh paths are covered by `OidcIssuerPolicyTests`; hosted acceptance is unproven.

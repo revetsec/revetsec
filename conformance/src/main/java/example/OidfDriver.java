@@ -24,6 +24,10 @@ import com.revetsec.internal.json.JsonCodec;
 import com.revetsec.internal.json.JsonLimits;
 import com.revetsec.json.*;
 import com.revetsec.jose.RemoteJsonWebKeySource;
+import com.revetsec.jose.JwsSigner;
+import com.revetsec.jose.JwsAlgorithm;
+import java.math.BigInteger;
+import java.security.interfaces.RSAPublicKey;
 import com.revetsec.oauth.*;
 import com.revetsec.oidc.*;
 import javax.net.ssl.*;
@@ -45,12 +49,18 @@ public final class OidfDriver {
     static final String SECRET = "test-only-revetsec-rp-secret";
     static final List<String> PLANS = List.of("oidcc-client-basic-certification-test-plan",
         "oidcc-client-config-certification-test-plan", "oidcc-client-formpost-basic-certification-test-plan",
-        "oidcc-client-refreshtoken-test-plan");
+        "oidcc-client-refreshtoken-test-plan", "oidcc-client-test-plan");
+    static final String COMPREHENSIVE = "oidcc-client-test-plan";
+    static final Set<String> PROFILE_EXCLUDED = Set.of("oidcc-client-test-userinfo-bearer-body",
+        "oidcc-client-test-aggregated-claims", "oidcc-client-test-distributed-claims",
+        "oidcc-client-test-discovery-webfinger-acct", "oidcc-client-test-discovery-webfinger-url");
     static final Map<String, Set<String>> REJECTIONS = Map.ofEntries(
         Map.entry("oidcc-client-test-invalid-iss", Set.of("ISSUER_MISMATCH")),
         Map.entry("oidcc-client-test-missing-sub", Set.of("MISSING_CLAIM", "INVALID_SUBJECT")),
         Map.entry("oidcc-client-test-invalid-aud", Set.of("AUDIENCE_MISMATCH")),
         Map.entry("oidcc-client-test-missing-iat", Set.of("MISSING_CLAIM")),
+        Map.entry("oidcc-client-test-missing-aud", Set.of("MISSING_CLAIM")),
+        Map.entry("oidcc-client-test-invalid-sig-es256", Set.of("ID_TOKEN_SIGNATURE_INVALID")),
         Map.entry("oidcc-client-test-kid-absent-multiple-jwks", Set.of("ID_TOKEN_SIGNATURE_INVALID:AMBIGUOUS_KEY")),
         Map.entry("oidcc-client-test-idtoken-sig-none", Set.of("ALGORITHM_NOT_ALLOWED")),
         Map.entry("oidcc-client-test-invalid-sig-rs256", Set.of("ID_TOKEN_SIGNATURE_INVALID")),
@@ -62,8 +72,10 @@ public final class OidfDriver {
     final HttpClient http;
     final Path output;
     final StateSealer sealer;
+    final JsonObject manifest;
     final List<JsonValue> outcomes = new ArrayList<>();
-    OidfDriver(@NonNull Path cert, @NonNull Path output) throws Exception {
+    OidfDriver(@NonNull Path cert, @NonNull Path output, @NonNull Path manifest) throws Exception {
+        this.manifest = object(parse(Files.readAllBytes(manifest)));
         this.output = output; Files.createDirectories(output);
         KeyStore store = KeyStore.getInstance(KeyStore.getDefaultType()); store.load(null, null);
         try (var in = Files.newInputStream(cert)) { store.setCertificateEntry("local-suite", CertificateFactory.getInstance("X.509").generateCertificate(in)); }
@@ -74,35 +86,56 @@ public final class OidfDriver {
         this.sealer = StateSealer.withActiveKey(SealingKey.fromBase64("local-run", Base64.getEncoder().encodeToString(key))).build(); Arrays.fill(key, (byte)0);
     }
     public static void main(@NonNull String @NonNull [] args) throws Exception {
-        if (args.length != 2) throw new IllegalArgumentException("Usage: OidfDriver certificate output-directory");
-        new OidfDriver(Path.of(args[0]), Path.of(args[1])).run();
+        if (args.length != 3) throw new IllegalArgumentException("Usage: OidfDriver certificate output-directory plans-manifest");
+        new OidfDriver(Path.of(args[0]), Path.of(args[1]), Path.of(args[2])).run();
     }
     void run() throws Exception {
         JsonObject server = object(api("GET", "/api/server", null)); save(output.resolve("server.json"), server);
         check(text(server,"tag").equals("release-v5.3.1") && text(server,"revision").equals("440eec8"), "Unexpected suite revision");
         for (String plan : PLANS) runPlan(plan);
         save(output.resolve("outcomes.json"), JsonArray.fromElements(outcomes));
-        check(outcomes.size() == 37, "Unexpected module count");
+        check(outcomes.size() == 60, "Unexpected module count");
         check(outcomes.stream().allMatch(v -> ((JsonObject)v).findBoolean("accepted").orElse(false)), "OIDF gate failed; see module evidence");
-        System.out.println("Completed 37 module runs.");
+        System.out.println("Completed 60 module runs; five comprehensive modules are source-selected out of profile.");
     }
     void runPlan(@NonNull String plan) throws Exception {
         Path dir = output.resolve(plan); Files.createDirectories(dir);
         var variants = JsonObject.builder().put("client_registration", "static_client").put("request_type", "plain_http_request");
         if (plan.contains("config") || plan.contains("refreshtoken")) variants.put("response_mode", "default").put("client_auth_type", "client_secret_basic");
-        if (plan.contains("refreshtoken")) variants.put("response_type", "code");
+        if (plan.contains("refreshtoken") || plan.equals(COMPREHENSIVE)) variants.put("response_type", "code");
+        if (plan.equals(COMPREHENSIVE)) variants.put("response_mode", "default").put("client_auth_type", "private_key_jwt");
         JsonObject variant = variants.build();
+        ClientAssertionSigningKey assertionKey = null;
+        var registration = JsonObject.builder().put("client_id", CLIENT).put("client_secret", SECRET).put("redirect_uri", CALLBACK.toString());
+        if (plan.equals(COMPREHENSIVE)) {
+            KeyPairGenerator generator = KeyPairGenerator.getInstance("RSA"); generator.initialize(2048);
+            KeyPair pair = generator.generateKeyPair(); RSAPublicKey publicKey = (RSAPublicKey)pair.getPublic();
+            String kid = "local-"+UUID.randomUUID();
+            JsonObject jwk = JsonObject.builder().put("kty", "RSA").put("kid", kid).put("use", "sig").put("alg", "RS256")
+                .put("n", unsigned(publicKey.getModulus())).put("e", unsigned(publicKey.getPublicExponent())).build();
+            JsonObject jwks = JsonObject.builder().put("keys", JsonArray.fromElements(List.of(jwk))).build();
+            registration.put("jwks", jwks).put("token_endpoint_auth_signing_alg", "RS256");
+            save(dir.resolve("public-registration.json"), jwks);
+            assertionKey = ClientAssertionSigningKey.withSigner(JwsSigner.fromRsaKeyPair(pair.getPrivate(), pair.getPublic(), JwsAlgorithm.RS256)).keyId(kid).build();
+        }
         JsonObject config = JsonObject.builder().put("alias", "revetsec-"+UUID.randomUUID()).put("description", "Local Revetsec RP test")
-            .put("waitTimeoutSeconds", 3L).put("client", JsonObject.builder().put("client_id", CLIENT).put("client_secret", SECRET)
-            .put("redirect_uri", CALLBACK.toString()).build()).build();
+            .put("waitTimeoutSeconds", 3L).put("client", registration.build()).build();
         JsonObject created = object(api("POST", "/api/plan?planName="+plan+"&variant="+encode(json(variant)), config));
         save(dir.resolve("created.json"), created);
+        JsonArray expected = array(object(manifest.getMembers().get("plans")), plan);
+        List<String> names = array(created,"modules").getElements().stream().map(entry -> text(object(entry),"testModule")).toList();
+        List<String> wanted = expected.getElements().stream().map(entry -> ((JsonString)entry).getValue()).toList();
+        check(names.equals(wanted), "Unknown or reordered suite modules");
         String planId = text(created,"id");
-        for (JsonValue entry : array(created,"modules").getElements()) runModule(planId, object(entry), dir);
+        for (JsonValue entry : array(created,"modules").getElements()) {
+            JsonObject module = object(entry);
+            if (plan.equals(COMPREHENSIVE) && PROFILE_EXCLUDED.contains(text(module,"testModule"))) continue;
+            runModule(planId, module, dir, assertionKey);
+        }
         save(dir.resolve("plan-final.json"), api("GET", "/api/plan/"+planId, null));
         byte[] export = request("GET", BASE.resolve("/api/plan/export/"+planId), null).body(); Files.write(dir.resolve("suite-export.zip"), export);
     }
-    void runModule(@NonNull String planId, @NonNull JsonObject module, @NonNull Path dir) throws Exception {
+    void runModule(@NonNull String planId, @NonNull JsonObject module, @NonNull Path dir, @Nullable ClientAssertionSigningKey assertionKey) throws Exception {
         String name = text(module,"testModule"); Path evidence = dir.resolve(name); Files.createDirectories(evidence);
         JsonObject created = object(api("POST", "/api/runner?test="+name+"&plan="+planId, null)); save(evidence.resolve("created.json"), created);
         String id = text(created,"id");
@@ -114,13 +147,18 @@ public final class OidfDriver {
             JsonObject running = object(api("GET", "/api/runner/"+id, null)); save(evidence.resolve("runner.json"), running);
             String issuer = text(object(running.getMembers().get("exposed")),"issuer");
             check(issuer.startsWith(BASE.toString()+"/test/"), "Issuer outside local suite");
-            OidcClient.Builder builder = OidcClient.withIssuer(issuer).clientId(CLIENT).clientAuthentication(ClientAuthentication.fromClientSecretBasic(SECRET))
+            boolean privateKey = assertionKey != null && !name.equals("oidcc-client-test-client-secret-basic");
+            ClientAuthentication authentication = privateKey ? ClientAuthentication.fromPrivateKeyJwt(ClientAssertionKeyProvider.fromKey(assertionKey))
+                : ClientAuthentication.fromClientSecretBasic(SECRET);
+            OidcClient.Builder builder = OidcClient.withIssuer(issuer).clientId(CLIENT).clientAuthentication(authentication)
                 .redirectUri(CALLBACK).scopes(Set.of("profile", "email", "address", "phone")).httpClient(http).allowInsecureLoopback(true);
             if (name.contains("signing-key-rotation")) {
                 JsonObject metadata = object(parse(request("GET", URI.create(text(object(running.getMembers().get("exposed")), "discoveryUrl")),null).body()));
                 builder.jsonWebKeySource(RemoteJsonWebKeySource.withUri(URI.create(text(metadata,"jwks_uri"))).httpClient(http)
                     .unknownKeyRefreshCooldown(Duration.ofSeconds(1)).build());
             }
+            if (name.equals("oidcc-client-test-invalid-sig-es256")) builder.idTokenSigningAlgorithms(Set.of(JwsAlgorithm.ES256));
+            if (name.equals("oidcc-client-test-userinfo-signed")) builder.userInfoSignedResponseAlgorithm(JwsAlgorithm.RS256);
             OidcClient client = builder.build();
             boolean form = module.getMembers().get("variant") instanceof JsonObject selected && selected.findString("response_mode").orElse("default").equals("form_post");
             if (name.equals("oidcc-client-test-discovery-openid-config")) { client.beginAuthentication(); rp = "SUCCESS"; }
@@ -153,6 +191,7 @@ public final class OidfDriver {
         // Any non-success suite outcome requires an explicit source-based disposition (filled below after inspection).
         boolean accepted = rejectedCorrectly && status.equals("FINISHED") && (result.equals("PASSED") || (result.equals("SKIPPED") && name.equals("oidcc-client-test-idtoken-sig-none")));
         JsonObject outcome = JsonObject.builder().put("plan",dir.getFileName().toString()).put("module",name).put("id",id)
+            .put("effectiveAuth", assertionKey != null && !name.equals("oidcc-client-test-client-secret-basic") ? "private_key_jwt" : "client_secret_basic")
             .put("status",status).put("result",result).put("rp",rp).put("detail",detail).put("accepted",accepted).build();
         outcomes.add(outcome); save(evidence.resolve("outcome.json"),outcome);
         System.out.println(name+" suite="+status+"/"+result+" RP="+rp+(detail.isEmpty()?"":":"+detail)+" accepted="+accepted);
@@ -182,6 +221,11 @@ public final class OidfDriver {
             response = AuthorizationResponse.fromFormBody(body.toString().getBytes(StandardCharsets.UTF_8),StandardCharsets.UTF_8,null);
         }
         return client.completeAuthentication(response,PendingAuthorizationSource.fromSealedForm(sealed,sealer,"oidf-callback"),CALLBACK);
+    }
+    static @NonNull String unsigned(@NonNull BigInteger value) {
+        byte[] bytes = value.toByteArray();
+        if (bytes[0] == 0) bytes = Arrays.copyOfRange(bytes, 1, bytes.length);
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
     }
     static @NonNull String attribute(@NonNull String tag,@NonNull String name) {
         Matcher value=Pattern.compile("\\b"+name+"=[\"']([^\"']*)[\"']",Pattern.CASE_INSENSITIVE).matcher(tag);

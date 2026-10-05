@@ -31,6 +31,7 @@
 //                               (default http(s)://localhost:PORT)
 //   TLS_CERT_FILE, TLS_KEY_FILE PEM server certificate and key; when both are
 //                               set the server speaks HTTPS only
+//   TEST_ASSERTION_CLIENTS_FILE public-only static registrations for M6 tests
 //   TEST_CLIENT_REDIRECT_URIS   comma-separated redirect URIs for the test client
 
 import { readFileSync } from 'node:fs';
@@ -146,6 +147,22 @@ const configuration = {
 	},
 };
 
+// M6 registrations contain only independently generated public JWKs. Private keys stay in the Java driver.
+const assertionClients = process.env.TEST_ASSERTION_CLIENTS_FILE
+	? JSON.parse(readFileSync(process.env.TEST_ASSERTION_CLIENTS_FILE, 'utf8')) : [];
+if (!Array.isArray(assertionClients) || assertionClients.some((client) =>
+	client.client_secret !== undefined || client.token_endpoint_auth_method !== 'private_key_jwt'
+	|| !Array.isArray(client.jwks?.keys) || client.jwks.keys.some((key) =>
+		['d', 'p', 'q', 'dp', 'dq', 'qi', 'oth'].some((field) => field in key)))) {
+	throw new Error('M6 clients require public-only keys and private_key_jwt authentication');
+}
+configuration.clients.push(...assertionClients);
+if (assertionClients.length) {
+	// RS384 is supported by the pinned dependency but absent from its default enabledJWA subset.
+	configuration.enabledJWA = { clientAuthSigningAlgValues: ['RS256', 'RS384', 'PS256'] };
+}
+const resourceClientIds = new Set(configuration.clients.map((client) => client.client_id));
+
 if (resourceMode) {
 	configuration.scopes = ['openid', 'offline_access', 'read', 'write'];
 	configuration.features.clientCredentials = { enabled: true };
@@ -162,9 +179,9 @@ if (resourceMode) {
 	};
 	// These public test-client values authorize only this ephemeral test fixture.
 	configuration.features.introspection.allowedPolicy = async (_ctx, client, token) =>
-		client.clientId === 'revetsec-test-client' && token.clientId === client.clientId;
+		resourceClientIds.has(client.clientId) && token.clientId === client.clientId;
 	configuration.features.revocation.allowedPolicy = async (_ctx, client, token) =>
-		client.clientId === 'revetsec-test-client' && token.clientId === client.clientId;
+		resourceClientIds.has(client.clientId) && token.clientId === client.clientId;
 }
 
 // Separate, ephemeral local example preset. DCR and auto-consent are test-only;

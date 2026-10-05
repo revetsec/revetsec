@@ -73,6 +73,12 @@ public final class SealedStateAccess {
 	 */
 	@ThreadSafe
 	public interface Operations {
+  /** Returns the configured sealed ASCII length cap without crypto, callbacks or I/O.
+   * @param sealer the configured sealer
+   * @return its validated maximum sealed length
+   */
+  @NonNull Integer getMaximumSealedLength(@NonNull StateSealer sealer);
+
 		/**
 		 * Seals {@code plaintext} under {@code type} with the sealer's active key.
 		 * <p>

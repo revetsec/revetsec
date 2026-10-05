@@ -4,11 +4,23 @@ All notable changes to Revetsec are recorded in this file.
 
 Each release gets a `## X.Y.Z (YYYY-MM-DD)` heading with Added, Changed, Fixed, Security and Migration Notes sections as needed. A security fix names its GHSA or CVE ID. Changes that reject previously accepted insecure input, or that remove an algorithm from a default, are listed under Security (see the security-tightening policy in [COMPATIBILITY.md](COMPATIBILITY.md)).
 
+- Add bounded OAuth issuer store carriers, atomic commit contracts and internal sealed record/read-set foundation.
+
+- Add the explicit fixed Microsoft Entra common/organizations OIDC issuer policy, authenticated tenant predicate, advertised-issuer accessor and tenant-bound UserInfo/refresh checks. Hosted Entra acceptance remains unproven.
+
 ## Unreleased
 
 Nothing has been released. The version is `1.0.0-SNAPSHOT`, and there is no compatibility promise before 1.0.0.
 
 ### Added
+- Internal OAuth issuer store coordination: typed permanent issuer/subject fences, checked revocation epochs and clock high-water updates, single-use complete read-set barriers, and bounded conflict reloads under one cooperative deadline. Unknown commits fail without automatic replay. Tests use controlled two-coordinator interleavings over a single-process test double; durable backend and credential engine integration remain pending.
+
+
+- Implement internal bounded OAuth issuer parsing, registered Basic authentication and exact redirect/resource/scope admission. Public issuance endpoints remain under implementation.
+- Start OAuth authorization-server application contracts: registered clients, Basic secret-verifier policy, authorization decisions and restricted grant context. Issuance endpoints remain under implementation.
+
+- Selected comprehensive OIDF private-key client profile: exact registered public JWKS and raw assertion checks, with explicit unsupported-profile exclusions and the suite's mandatory Basic exception.
+- Local private-key integration checks against pinned Keycloak 26.7.4 and node-oidc-provider 9.12.2: independent registrations, RS256/RS384/PS256, both audiences, all POST roles and wrong-key/algorithm rejection. Keycloak revocation in endpoint audience mode is a documented provider limitation.
 
 - Generated OAuth `private_key_jwt` assertions: immutable rotating key snapshots, per-role metadata, issuer or explicit endpoint audiences, original operation deadlines and preparation failure observation.
 

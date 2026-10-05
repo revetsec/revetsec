@@ -114,6 +114,8 @@ final class OidcPendingCodecTests {
 			@Override public com.revetsec.jose.@NonNull Jwt validatePrepared(com.revetsec.jose.@NonNull JwtValidator v, com.revetsec.internal.jose.@NonNull PreparedJws p, java.util.function.@NonNull LongSupplier d) { throw new AssertionError(); }
 			@Override public com.revetsec.jose.@NonNull Jwt validateUserInfo(com.revetsec.jose.@NonNull JwtValidator v, @NonNull String c, java.util.function.@NonNull LongSupplier d) { throw new AssertionError(); }
 			@Override public com.revetsec.jose.@NonNull Jwt validateOidc(com.revetsec.jose.@NonNull JwtValidator v, @NonNull String c, @NonNull Set<com.revetsec.jose.@NonNull JwsAlgorithm> a, byte @NonNull [] s, java.util.function.@NonNull LongSupplier d, @NonNull Runnable u) { throw new AssertionError(); }
+			@Override public com.revetsec.jose.@NonNull Jwt validateMicrosoftEntra(com.revetsec.jose.@NonNull JwtValidator v, @NonNull String c, java.util.function.@NonNull LongSupplier d) { throw new AssertionError(); }
+			@Override public com.revetsec.jose.@NonNull Jwt validateMicrosoftEntraUserInfo(com.revetsec.jose.@NonNull JwtValidator v, @NonNull String c, @NonNull String i, java.util.function.@NonNull LongSupplier d) { throw new AssertionError(); }
 			@Override public void warmUp(com.revetsec.jose.@NonNull RemoteJsonWebKeySource source, java.util.function.@NonNull LongSupplier d) { throw new AssertionError(); }
 		}));
 	}

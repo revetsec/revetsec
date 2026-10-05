@@ -62,6 +62,26 @@ import java.util.stream.Stream;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 final class FuzzSeedProvenanceTests {
+	@Test
+	void m6SemanticSeedsMatchTheirCompleteNonemptyManifest() throws Exception {
+		Path resources = coreBasedir().resolve(FuzzSeedGenerator.FUZZ_RESOURCES);
+		Set<String> expected = new TreeSet<>();
+		for (String line : Files.readAllLines(resources.resolve("com/revetsec/m6-seeds.sha256"))) {
+			Assertions.assertTrue(line.matches("[0-9a-f]{64}  .+"));
+			String relative = line.substring(66); Path file = resources.resolve(relative).normalize();
+			Assertions.assertTrue(file.startsWith(resources)); Assertions.assertTrue(expected.add(relative));
+			byte[] bytes = Files.readAllBytes(file); Assertions.assertTrue(bytes.length >= 7);
+			Assertions.assertEquals(line.substring(0, 64), HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256").digest(bytes)));
+		}
+		Set<String> actual = new TreeSet<>();
+		for (String root : List.of("jose/JwsSignerFuzzTestsInputs", "oauth/ClientAssertionFuzzTestsInputs", "oidc/EntraIssuerFuzzTestsInputs")) {
+			try (Stream<Path> files = Files.walk(resources.resolve("com/revetsec/" + root))) {
+				actual.addAll(files.filter(Files::isRegularFile).map(resources::relativize).map(Path::toString).collect(Collectors.toSet()));
+			}
+		}
+		Assertions.assertEquals(expected, actual); Assertions.assertEquals(126, actual.size());
+	}
+
 	private static final Pattern WYCHEPROOF_SEED = Pattern.compile(
 			"wycheproof-([a-z0-9_]+)-tc([0-9]+)-(jws|sig|public|private)\\.(txt|bin|json)");
 	private static final String GENERATED_PREFIX = "generated-";

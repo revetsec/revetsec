@@ -86,10 +86,10 @@ def main():
                 raise TimeoutError("Local suite did not become ready")
             (temp / "hosts").write_text("127.0.0.1 localhost.emobix.co.uk localhost\n")
             classpath = str(HERE / "target/classes") + os.pathsep + str(CORE / "target/revetsec-1.0.0-SNAPSHOT.jar")
-            call([str(java_home / "bin/java"), "-Djdk.net.hosts.file=" + str(temp / "hosts"), "-cp", classpath, "example.OidfDriver", str(temp / "suite.crt"), str(output / "suite")], "driver.log")
+            call([str(java_home / "bin/java"), "-Djdk.net.hosts.file=" + str(temp / "hosts"), "-cp", classpath, "example.OidfDriver", str(temp / "suite.crt"), str(output / "suite"), str(HERE / "plans.json")], "driver.log")
             dispositions = verify(output / "suite")
             (output / "suite/dispositions.json").write_text(json.dumps(dispositions, indent=2) + "\n")
-            print("OIDF gate passed: 37 modules (34 passed, 3 documented unsigned-token skips)")
+            print("OIDF gate passed: 60 executed modules, four documented unsigned-token skips, five source-selected comprehensive profile exclusions")
         finally:
             if attempted:
                 try:

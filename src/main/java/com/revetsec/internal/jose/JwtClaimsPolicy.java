@@ -104,11 +104,19 @@ public final class JwtClaimsPolicy {
 	@NonNull
 	private final Duration clockSkew;
 	private final boolean expirationRequired;
+	private final boolean microsoftEntra;
+	private final @Nullable String boundTenantIssuer;
 
 	private JwtClaimsPolicy(@NonNull String issuer,
 													@Nullable Set<@NonNull String> expectedAudiences,
 													@NonNull Set<@NonNull String> requiredClaims,
 													@NonNull Duration clockSkew, boolean expirationRequired) {
+		this(issuer, expectedAudiences, requiredClaims, clockSkew, expirationRequired, false, null);
+	}
+	private JwtClaimsPolicy(@NonNull String issuer, @Nullable Set<@NonNull String> expectedAudiences,
+			@NonNull Set<@NonNull String> requiredClaims, @NonNull Duration clockSkew, boolean expirationRequired,
+			boolean microsoftEntra, @Nullable String boundTenantIssuer) {
+		this.microsoftEntra = microsoftEntra; this.boundTenantIssuer = boundTenantIssuer;
 		this.expirationRequired = expirationRequired;
 		this.issuer = issuer;
 		this.expectedAudiences = expectedAudiences == null ? null : Set.copyOf(expectedAudiences);
@@ -197,8 +205,35 @@ public final class JwtClaimsPolicy {
 		}
 	}
 
+	/** Dedicated fixed Entra profile selected only by the existing OIDC validation bridge. */
+	public @NonNull JwtClaimsPolicy withMicrosoftEntraIssuer(@Nullable String trustedTenantIssuer) {
+		if (trustedTenantIssuer == null) {
+			if (!this.issuer.equals(ENTRA_ISSUER_PREFIX + "common" + ENTRA_ISSUER_SUFFIX)
+					&& !this.issuer.equals(ENTRA_ISSUER_PREFIX + "organizations" + ENTRA_ISSUER_SUFFIX)) throw new IllegalArgumentException("Invalid Entra trust issuer.");
+		} else if (trustedTenantIssuer.length() != ENTRA_ISSUER_PREFIX.length() + GUID_LENGTH + ENTRA_ISSUER_SUFFIX.length()
+				|| !trustedTenantIssuer.equals(this.issuer) || !trustedTenantIssuer.startsWith(ENTRA_ISSUER_PREFIX)
+				|| !trustedTenantIssuer.endsWith(ENTRA_ISSUER_SUFFIX)
+				|| !isLowercaseGuid(trustedTenantIssuer.substring(ENTRA_ISSUER_PREFIX.length(), trustedTenantIssuer.length() - ENTRA_ISSUER_SUFFIX.length())))
+			throw new IllegalArgumentException("Invalid verified tenant issuer.");
+		return new JwtClaimsPolicy(this.issuer, this.expectedAudiences, this.requiredClaims, this.clockSkew, this.expirationRequired, true, trustedTenantIssuer);
+	}
+	private void checkMicrosoftEntraIssuer(@NonNull RegisteredClaims claims, @Nullable String keyIssuer) throws JoseFailure {
+		String actual = claims.issuer();
+		JsonValue tidValue = claims.claims().getMembers().get(TENANT_ID_CLAIM);
+		if (this.boundTenantIssuer == null) {
+			if (!(tidValue instanceof JsonString tid) || !isLowercaseGuid(tid.getValue())
+					|| !(ENTRA_ISSUER_PREFIX + tid.getValue() + ENTRA_ISSUER_SUFFIX).equals(actual)) throw new JoseFailure(JoseException.Reason.ISSUER_MISMATCH);
+		} else {
+			if (!this.boundTenantIssuer.equals(actual)) throw new JoseFailure(JoseException.Reason.ISSUER_MISMATCH);
+			if (tidValue != null && (!(tidValue instanceof JsonString tid) || !isLowercaseGuid(tid.getValue())
+					|| !(ENTRA_ISSUER_PREFIX + tid.getValue() + ENTRA_ISSUER_SUFFIX).equals(actual))) throw new JoseFailure(JoseException.Reason.ISSUER_MISMATCH);
+		}
+		if (keyIssuer == null || !(keyIssuer.equals(actual) || keyIssuer.equals(ENTRA_ISSUER_TEMPLATE)))
+			throw new JoseFailure(JoseException.Reason.KEY_ISSUER_MISMATCH);
+	}
 	private void checkIssuer(@NonNull RegisteredClaims claims,
 													 @Nullable String keyIssuer) throws JoseFailure {
+		if (this.microsoftEntra) { checkMicrosoftEntraIssuer(claims, keyIssuer); return; }
 		String issuer = claims.issuer();
 
 		if (issuer == null)

@@ -22,6 +22,7 @@ import com.revetsec.oauth.TokenResponse;
 import com.revetsec.json.JsonArray;
 import com.revetsec.json.JsonString;
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 import javax.annotation.concurrent.Immutable;
 import java.time.Instant;
 import java.util.List;
@@ -37,14 +38,22 @@ import java.util.Optional;
 @Immutable
 public final class OidcAuthentication {
 	private final String clientId;
+	private final @Nullable Object owner;
 	private final IdToken idToken;
 	private final TokenResponse tokens;
 	private final OidcSessionReference sessionReference;
 	OidcAuthentication(@NonNull IdToken idToken, @NonNull TokenResponse tokens, @NonNull String clientId) {
+		this(idToken, tokens, clientId, null);
+	}
+	OidcAuthentication(@NonNull IdToken idToken, @NonNull TokenResponse tokens, @NonNull String clientId, @Nullable Object owner) {
+		this.owner = owner;
 		this.clientId = java.util.Objects.requireNonNull(clientId);
 		this.idToken = idToken; this.tokens = tokens; this.sessionReference = new OidcSessionReference(idToken, clientId);
 	}
 	@NonNull String clientId() { return this.clientId; }
+	@SuppressWarnings("ReferenceEquality") // A private client capability requires identical ownership, never value equality.
+	boolean belongsTo(@NonNull Object owner) { return this.owner == owner; }
+	@NonNull OidcAuthentication withTokens(@NonNull TokenResponse tokens) { return new OidcAuthentication(this.idToken, tokens, this.clientId, this.owner); }
 	/**
 	 * Returns the exact validated issuer.
 	 *

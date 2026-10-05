@@ -84,4 +84,16 @@ public interface OidcObserver extends OAuthObserver {
 	 */
 	default void didRefreshTokens(@NonNull Boolean idTokenReturned, @NonNull Boolean refreshTokenReturned) { }
 
+	/**
+	 * Called once after successful build selects the fixed Entra issuer policy.
+	 * @since 1.0.0
+	 */
+	default void didEnableMicrosoftEntraMultiTenant() { }
+	/**
+	 * Called when Entra ID-token validation or an authenticated UserInfo tenant check uses the selected policy,
+	 * including rejected outcomes. No tenant or credential is supplied.
+	 * @since 1.0.0
+	 */
+	default void didUseMicrosoftEntraMultiTenant() { }
+
 }

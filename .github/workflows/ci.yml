@@ -509,6 +509,44 @@ jobs:
             ${{ runner.temp }}/revetsec-examples/examples/*/target/nullability-audit.json
           if-no-files-found: warn
 
+  rsa-oidc-examples:
+    name: RSA/OIDC examples (JDK ${{ matrix.java }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        java: ['17', '27']
+    steps:
+      - name: Check out current examples
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Corretto
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: corretto
+          java-version: ${{ matrix.java }}
+
+      - name: Compile and run current-core RSA/OIDC examples
+        run: |
+          python3 examples/rsa-oidc/build.py --work "$RUNNER_TEMP/revetsec-rsa-examples" \
+            --maven "$(command -v mvn)" --java-home "$JAVA_HOME" \
+            --core-source "$GITHUB_WORKSPACE"
+
+      - name: Upload example evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: rsa-oidc-examples-${{ matrix.java }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/revetsec-rsa-examples/*.json
+            ${{ runner.temp }}/revetsec-rsa-examples/*.log
+            ${{ runner.temp }}/revetsec-rsa-examples/example/target/surefire-reports/
+            ${{ runner.temp }}/revetsec-rsa-examples/example/target/nullability-audit.json
+          if-no-files-found: warn
+
   # Gating from M3. KeycloakOAuthIT starts the digest-pinned Keycloak image, imports the test-only realm and
   # exercises OAuth confidential/public code flows, client credentials, refresh and revocation, plus OIDC
   # query/form-post login, JSON/signed UserInfo, session persistence/refresh and rejection boundaries. The pinned
@@ -587,7 +625,7 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
-  # Gating. Four local digest-pinned OIDF RP plans; self-run test evidence only.
+  # Gating. Four inherited OIDF plans plus the selected private-key comprehensive profile; self-run evidence only.
   conformance:
     name: OIDF RP (JDK 17)
     runs-on: ubuntu-24.04

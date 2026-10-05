@@ -86,6 +86,7 @@ final class PackageDependencyTests {
 	private static final String JSON = "com.revetsec.json";
 	private static final String JOSE = "com.revetsec.jose";
 	private static final String OAUTH = "com.revetsec.oauth";
+	private static final String SERVER = "com.revetsec.oauth.server";
 	private static final String OIDC = "com.revetsec.oidc";
 	private static final String SAML = "com.revetsec.saml";
 	private static final String SCIM = "com.revetsec.scim";
@@ -100,6 +101,7 @@ final class PackageDependencyTests {
 			JSON, Set.of(ROOT),
 			JOSE, Set.of(JSON, ROOT),
 			OAUTH, Set.of(JOSE, JSON, ROOT),
+			SERVER, Set.of(OAUTH, JOSE, JSON, ROOT),
 			OIDC, Set.of(OAUTH, JOSE, JSON, ROOT),
 			SAML, Set.of(ROOT),
 			SCIM, Set.of(JSON, ROOT));
@@ -123,7 +125,7 @@ final class PackageDependencyTests {
 	 * package by name, not by layer, so an internal package that may use a restricted one is listed in its own right.
 	 * <p>
 	 * {@code internal.http} is for the protocols that fetch over the network: JWKS (jose), token, introspection and
-	 * revocation endpoints (oauth), and discovery and UserInfo (oidc), and for {@code internal.oauth}, where that
+	 * revocation endpoints (oauth), and discovery and UserInfo (oidc), and issuer ingress/deadline checks ({@code oauth.server}), and for {@code internal.oauth}, where that
 	 * fetching code may live (M1 plan, "Contract-list changes" item 3). Its layer is the root package, which every
 	 * package may use, so without this row {@code saml}, {@code scim} and {@code json} could reach it too.
 	 * {@code internal.jose} is not listed: it holds only pure, I/O-free JOSE code, and the JWKS fetch and its cache
@@ -133,7 +135,7 @@ final class PackageDependencyTests {
 	static final Map<String, Set<String>> RESTRICTED_INTERNAL_PACKAGES = Map.of(
 			INTERNAL + ".xml", Set.of(SAML),
 			INTERNAL + ".oauth", Set.of(OAUTH, OIDC),
-			INTERNAL + ".http", Set.of(JOSE, OAUTH, OIDC, INTERNAL + ".oauth"));
+			INTERNAL + ".http", Set.of(JOSE, OAUTH, OIDC, SERVER, INTERNAL + ".oauth"));
 
 	@Test
 	void mainSourcesRespectPackageDependencyRules() throws IOException {

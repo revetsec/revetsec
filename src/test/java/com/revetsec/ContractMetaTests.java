@@ -48,7 +48,7 @@ import java.util.stream.Stream;
 final class ContractMetaTests {
 	private static final String BANNED_CALLS = "com/revetsec/BannedCallsFixture.java";
 	private static final String INTERNAL_HTTP_USERS = "com.revetsec.internal.http may be used only by "
-			+ "[com.revetsec.internal.oauth, com.revetsec.jose, com.revetsec.oauth, com.revetsec.oidc]";
+			+ "[com.revetsec.internal.oauth, com.revetsec.jose, com.revetsec.oauth, com.revetsec.oauth.server, com.revetsec.oidc]";
 	private static final String SIGNATURE_NAME_FIXTURE = "com/revetsec/internal/crypto/SignatureNameFixture.java";
 	private static final String PROVIDED_ANNOTATION_FIXTURE = "com/revetsec/ProvidedAnnotationFixture.java";
 	private static final String TEST_HOOK_CALLER_FIXTURE = "com/revetsec/jose/TestHookCallerFixture.java";

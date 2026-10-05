@@ -16,6 +16,9 @@
 package com.revetsec.oauth;
 
 import com.revetsec.StateSealer;
+import com.revetsec.internal.json.JsonCodec;
+import com.revetsec.internal.json.JsonLimits;
+import com.revetsec.json.*;
 import com.revetsec.testing.TestSealers;
 import com.github.dockerjava.api.model.ExposedPort;
 import com.github.dockerjava.api.model.PortBinding;
@@ -68,7 +71,9 @@ final class ResourceProviderFixturesIT implements AutoCloseable {
 	private final @NonNull GenericContainer<?> container;
 	private final @NonNull String issuer;
 
-	private ResourceProviderFixturesIT(boolean node) throws Exception {
+	private ResourceProviderFixturesIT(boolean node) throws Exception { this(node, null); }
+
+	private ResourceProviderFixturesIT(boolean node, @Nullable JsonArray assertionClients) throws Exception {
 		this.tlsDirectory = Files.createTempDirectory("revetsec-resource-provider-tls-");
 		Path storeFile = this.tlsDirectory.resolve("server.p12");
 		Process keytool = new ProcessBuilder(Path.of(System.getProperty("java.home"), "bin", "keytool").toString(),
@@ -101,11 +106,32 @@ final class ResourceProviderFixturesIT implements AutoCloseable {
 			this.container.withEnv("ISSUER", this.issuer).withEnv("TEST_RESOURCE_MODE", "m5")
 					.withEnv("TLS_CERT_FILE", "/tmp/provider-cert.pem").withEnv("TLS_KEY_FILE", "/tmp/provider-key.pem")
 					.withCopyFileToContainer(MountableFile.forHostPath(Path.of("interop/node-oidc-provider/server.js").toAbsolutePath()), "/app/server.js");
+			if (assertionClients != null) {
+				Path clients = this.tlsDirectory.resolve("assertion-clients.json");
+				Files.write(clients, JsonCodec.toUtf8Bytes(assertionClients));
+				this.container.withEnv("TEST_ASSERTION_CLIENTS_FILE", "/tmp/assertion-clients.json")
+						.withCopyFileToContainer(MountableFile.forHostPath(clients), "/tmp/assertion-clients.json");
+			}
 		} else {
 			this.container.withCopyFileToContainer(MountableFile.forClasspathResource("interop/m5/keycloak-resource-realm.json"),
 					"/opt/keycloak/data/import/revetsec-resource-test-realm.json")
 					.withCommand("start", "--db=dev-file", "--hostname-strict=false", "--http-enabled=false",
 							"--https-certificate-file=/tmp/provider-cert.pem", "--https-certificate-key-file=/tmp/provider-key.pem", "--import-realm");
+			if (assertionClients != null) {
+				JsonObject realm;
+				try (var input = requireNonNull(ResourceProviderFixturesIT.class.getResourceAsStream("/interop/m5/keycloak-resource-realm.json"))) {
+					realm = (JsonObject) JsonCodec.parse(input.readAllBytes(), JsonLimits.protocolDocument(1024 * 1024));
+				}
+				var combined = new java.util.ArrayList<JsonValue>(((JsonArray) realm.getMembers().get("clients")).getElements());
+				combined.addAll(assertionClients.getElements());
+				var replacement = JsonObject.builder();
+				for (var entry : realm.getMembers().entrySet())
+					replacement.put(entry.getKey(), entry.getKey().equals("clients") ? JsonArray.fromElements(combined) : entry.getValue());
+				Path importFile = this.tlsDirectory.resolve("assertion-realm.json");
+				Files.write(importFile, JsonCodec.toUtf8Bytes(replacement.build()));
+				this.container.withCopyFileToContainer(MountableFile.forHostPath(importFile),
+						"/opt/keycloak/data/import/revetsec-resource-test-realm.json");
+			}
 		}
 		try {
 			this.container.start();
@@ -123,6 +149,8 @@ final class ResourceProviderFixturesIT implements AutoCloseable {
 
 	static @NonNull ResourceProviderFixturesIT fromNode() throws Exception { return new ResourceProviderFixturesIT(true); }
 	static @NonNull ResourceProviderFixturesIT fromKeycloak() throws Exception { return new ResourceProviderFixturesIT(false); }
+	static @NonNull ResourceProviderFixturesIT fromNode(@NonNull JsonArray clients) throws Exception { return new ResourceProviderFixturesIT(true, requireNonNull(clients)); }
+	static @NonNull ResourceProviderFixturesIT fromKeycloak(@NonNull JsonArray clients) throws Exception { return new ResourceProviderFixturesIT(false, requireNonNull(clients)); }
 	@NonNull String issuer() { return this.issuer; }
 	@NonNull HttpClient httpClient() { return httpClientBuilder().build(); }
 	private HttpClient.@NonNull Builder httpClientBuilder() {
@@ -149,9 +177,12 @@ final class ResourceProviderFixturesIT implements AutoCloseable {
 				.scopes(Set.of("read")).build());
 	}
 	@NonNull TokenResponse codeFlow(@NonNull OAuthClient client, boolean node) throws Exception {
+		return codeFlow(client, node, Set.of("openid", "read"));
+	}
+	@NonNull TokenResponse codeFlow(@NonNull OAuthClient client, boolean node, @NonNull Set<@NonNull String> scopes) throws Exception {
 		AuthorizationRequestOptions options = node
-				? AuthorizationRequestOptions.builder().scopes(Set.of("openid", "read")).resources(List.of(URI.create(RESOURCE))).build()
-				: AuthorizationRequestOptions.builder().scopes(Set.of("openid", "read")).build();
+				? AuthorizationRequestOptions.builder().scopes(scopes).prompt(scopes.contains("offline_access") ? "consent" : null).resources(List.of(URI.create(RESOURCE))).build()
+				: AuthorizationRequestOptions.builder().scopes(scopes).prompt(scopes.contains("offline_access") ? "consent" : null).build();
 		AuthorizationRedirect begin = client.beginAuthorization(options);
 		HttpClient browser = httpClientBuilder().cookieHandler(new CookieManager(null, CookiePolicy.ACCEPT_ALL)).build();
 		URI next = begin.getAuthorizationUri();

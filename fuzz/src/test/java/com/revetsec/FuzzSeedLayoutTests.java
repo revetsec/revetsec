@@ -85,6 +85,7 @@ final class FuzzSeedLayoutTests {
 	 * The JOSE {@code byte[]} targets that read something else: compact serializations and signing programs.
 	 */
 	private static final Set<String> JOSE_OTHER_TARGETS = Set.of(
+			"com.revetsec.jose.JwsSignerFuzzTests#signingMatchesIndependentGrammarAndSignature",
 			"com.revetsec.internal.jose.CompactJwsFuzzTests#"
 					+ "compactSerializationsSplitIntoThreeCanonicalSegmentsOrFailInStepOrder",
 			"com.revetsec.jose.JwtValidatorFuzzTests#validateAcceptsOnlyWhatTheJdkVerifiersAccept",
@@ -306,6 +307,8 @@ final class FuzzSeedLayoutTests {
 	 * seeded with the JSON corpora.
 	 */
 	private static boolean readsJsonText(@NonNull String target) {
+		// This target consumes bounded model control bytes, not raw metadata JSON.
+		if (target.equals("com.revetsec.oidc.EntraIssuerFuzzTests#entraMatchesMetadataKeyTenantAndSessionModel")) return false;
 		if (JOSE_JSON_TEXT_TARGETS.contains(target) || RESOURCE_JSON_TEXT_TARGETS.contains(target))
 			return true;
 

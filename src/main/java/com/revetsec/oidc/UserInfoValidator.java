@@ -42,12 +42,17 @@ final class UserInfoValidator {
 	}
 	static @NonNull JsonObject signed(@NonNull String compact, @NonNull String issuer, @NonNull String clientId, @NonNull String subject, @NonNull JwsAlgorithm algorithm,
 			@NonNull JsonWebKeySource keys, @NonNull Duration skew, @NonNull Clock clock, @NonNull OidcObserver observer, @NonNull Set<@NonNull String> trustedAudiences, @NonNull Deadline deadline) {
+		return signed(compact, issuer, clientId, subject, algorithm, keys, skew, clock, observer, trustedAudiences, deadline, false);
+	}
+	static @NonNull JsonObject signed(@NonNull String compact, @NonNull String issuer, @NonNull String clientId, @NonNull String subject, @NonNull JwsAlgorithm algorithm,
+			@NonNull JsonWebKeySource keys, @NonNull Duration skew, @NonNull Clock clock, @NonNull OidcObserver observer, @NonNull Set<@NonNull String> trustedAudiences, @NonNull Deadline deadline, boolean microsoftEntra) {
 		Jwt token;
 		try {
 			JwtValidator validator = JwtValidator.withIssuer(issuer).expectedAudiences(Set.of(clientId))
 					.jsonWebKeySource(keys).allowedAlgorithms(Set.of(algorithm)).requiredClaims(Set.of("sub"))
 					.clockSkew(skew).clock(clock).observer(observer).build();
-			token = JwtValidationAccess.get().validateUserInfo(validator, compact, deadline::remainingNanos);
+			token = microsoftEntra ? JwtValidationAccess.get().validateMicrosoftEntraUserInfo(validator, compact, issuer, deadline::remainingNanos)
+					: JwtValidationAccess.get().validateUserInfo(validator, compact, deadline::remainingNanos);
 		} catch (JoseException invalid) { throw OidcValidationException.fromUserInfoJoseReason(invalid.getReason()); }
 		for (String audience : token.getClaims().getAudiences())
 			if (!audience.equals(clientId) && !trustedAudiences.contains(audience))

@@ -49,7 +49,9 @@ public enum SealedStateType {
 	/**
 	 * Application data sealed through the public {@code StateSealer} API: {@code revetsec/app/v1}.
 	 */
-	APP("revetsec/app/v1");
+	APP("revetsec/app/v1"),
+ /** Authenticated issuer persistence records: revetsec/as-record/v1. */
+ AS_RECORD("revetsec/as-record/v1");
 
 	@NonNull
 	private final String label;

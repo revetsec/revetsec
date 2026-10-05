@@ -121,6 +121,8 @@ public final class OidcValidationException extends OidcException {
 		ALGORITHM_NOT_ALLOWED("The OIDC token algorithm is not allowed."),
 		/** The issuer or key-issuer binding does not match. */
 		ISSUER_MISMATCH("The OIDC issuer does not match."),
+		/** The verified Entra tenant is denied by the application. */
+		TENANT_NOT_ALLOWED("The OIDC tenant is not allowed."),
 		/** The audience does not include the configured client. */
 		AUDIENCE_MISMATCH("The OIDC audience does not match."),
 		/** Another audience is not explicitly trusted. */

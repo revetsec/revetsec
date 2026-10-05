@@ -109,6 +109,13 @@ public final class JwtValidator {
 			return validator.validate(compact, requireNonNull(remainingNanos), validator.claimsPolicy, header,
 					requireNonNull(secret), requireNonNull(hmacUsed));
 		}
+		@Override public @NonNull Jwt validateMicrosoftEntra(@NonNull JwtValidator validator, @NonNull String compact, @NonNull LongSupplier remainingNanos) {
+			return validator.validate(compact, requireNonNull(remainingNanos), validator.claimsPolicy.withMicrosoftEntraIssuer(null));
+		}
+		@Override public @NonNull Jwt validateMicrosoftEntraUserInfo(@NonNull JwtValidator validator, @NonNull String compact,
+				@NonNull String verifiedTenantIssuer, @NonNull LongSupplier remainingNanos) {
+			return validator.validate(compact, requireNonNull(remainingNanos), validator.claimsPolicy.withOptionalExpiration().withMicrosoftEntraIssuer(requireNonNull(verifiedTenantIssuer)));
+		}
 		@Override public void warmUp(@NonNull RemoteJsonWebKeySource source, @NonNull LongSupplier remainingNanos) { source.warmUp(remainingNanos); }
 		@Override public @NonNull Jwt validate(@NonNull JwtValidator validator, @NonNull String compact, @NonNull LongSupplier remainingNanos) {
 			return validator.validate(compact, requireNonNull(remainingNanos));

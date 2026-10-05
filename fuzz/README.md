@@ -790,3 +790,7 @@ and main-sources-only builds enforce explicit JSpecify on reference parameters a
 arguments, wildcard bounds, constructors and record components. Nullable oracle alternatives and optional fixture
 members retain their actual meaning. Primitive/void types are exempt. This guard is an ordinary regression test; the
 35 semantic fuzz target inventory is unchanged.
+
+## M6 semantic models
+
+Three targets model bounded RSA signing grammar, client assertion role/clock/deadline/key snapshots, and Entra metadata/signature/key issuer/tenant/session continuity. Original JCA keys provide independent signing and verification. They require no core test helpers or network. Each input starts with unsigned control bytes (missing bytes are zero); remaining signing bytes supply bounded Latin-1 text. `m6-semantic-seeds.json` records every authored nonempty seed, its controls and SHA-256. Keys are generated once per JVM and never saved. Live campaign evidence is private planning data; seed replay alone is not live qualification.

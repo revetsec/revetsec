@@ -238,6 +238,8 @@ final class SealedStateAccessTests {
 	 * Operations that {@code StateSealer} did not define, which {@link SealedStateAccess#set} must refuse.
 	 */
 	static final class ForeignOperations implements SealedStateAccess.Operations {
+  @Override public @NonNull Integer getMaximumSealedLength(@NonNull StateSealer sealer) { return 3800; }
+
 		@Override
 		public @NonNull String seal(@NonNull StateSealer sealer,
 											 @NonNull SealedStateType type,

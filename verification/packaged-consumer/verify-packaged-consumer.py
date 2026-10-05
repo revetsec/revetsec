@@ -83,7 +83,7 @@ CONSUMER_MAIN_CLASS = "example.PackagedConsumer"
 PUBLIC_API_LINE_PREFIX = "public-api="
 # The groups of public API calls PackagedConsumer makes, in order; its public-api= line names each (M1, WP-10b;
 # com.revetsec.jose from M2, com.revetsec.oauth from M3 and com.revetsec.oidc from M4).
-PUBLIC_API_CALLS = ("com.revetsec.json", "StateSealer", "OutboundUriPolicy", "com.revetsec.jose", "com.revetsec.oauth", "com.revetsec.oidc")
+PUBLIC_API_CALLS = ("com.revetsec.json", "StateSealer", "OutboundUriPolicy", "com.revetsec.jose", "com.revetsec.oauth", "com.revetsec.oidc", "com.revetsec.oauth.server")
 MAVEN_CONSUMER_SOURCES = ("pom.xml", "src")
 GRADLE_CONSUMER_SOURCES = ("build.gradle", "settings.gradle", "src")
 

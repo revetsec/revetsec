@@ -18,6 +18,18 @@ package example;
 
 import org.jspecify.annotations.NonNull;
 
+import com.revetsec.oauth.server.OAuthClientSecretVerifier;
+import com.revetsec.oauth.server.OAuthServerClientRepository;
+import com.revetsec.oauth.server.OAuthAuthorizationServerStore;
+import com.revetsec.oauth.server.OAuthStoreKey;
+import com.revetsec.oauth.server.OAuthStoreEntry;
+import com.revetsec.oauth.server.OAuthStoreTransaction;
+import com.revetsec.oauth.server.OAuthStoreCommitStatus;
+import com.revetsec.oauth.server.OAuthServerClientRegistration;
+import com.revetsec.oauth.server.OAuthServerClientAuthentication;
+import com.revetsec.oauth.server.OAuthAuthorizationDecision;
+import com.revetsec.oauth.server.OAuthGrantPolicy;
+import com.revetsec.oauth.server.OAuthGrantContext;
 import com.revetsec.oauth.AccessTokenValidator;
 import com.revetsec.oauth.JwtAccessTokenValidator;
 import com.revetsec.oauth.TokenIntrospectionClient;
@@ -79,6 +91,7 @@ import com.revetsec.oidc.OidcClient;
 import com.revetsec.oidc.OidcCompatibilityMode;
 import com.revetsec.oidc.OidcException;
 import com.revetsec.oidc.OidcObserver;
+import com.revetsec.oidc.OidcIssuerPolicy;
 import com.revetsec.oidc.OidcProviderMetadata;
 import com.revetsec.oidc.OidcSessionReference;
 import com.revetsec.oidc.OidcUserInfo;
@@ -137,6 +150,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Base64;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
@@ -230,6 +244,9 @@ public final class PackagedConsumer {
 		exerciseJose(calledApi);
 		exerciseOAuth(calledApi);
 		exerciseOidc(calledApi);
+		exerciseIssuerApplicationContracts();
+		exerciseIssuerStorageCarriers();
+		calledApi.add("com.revetsec.oauth.server");
 
 		System.out.println("jar=" + jar);
 		System.out.println("automatic-module-name=" + automaticModuleName);
@@ -243,6 +260,54 @@ public final class PackagedConsumer {
 	/**
 	 * Builds, reads and writes JSON values through {@code com.revetsec.json}; returns the object's JSON text.
 	 */
+	private static void exerciseIssuerApplicationContracts() {
+		String resource = "https://resource.example/mcp";
+		OAuthClientSecretVerifier verifier = (id, bytes, budget) -> id.equals("resource-client") && bytes.length == 1 && bytes[0] == 42;
+		OAuthServerClientAuthentication authentication = OAuthServerClientAuthentication.fromClientSecretVerifier(verifier);
+		OAuthServerClientRegistration.Builder clientBuilder = OAuthServerClientRegistration.withClientId("resource-client")
+				.authorizationCodePermitted(false).authentication(authentication).introspectionResources(Set.of(resource)).configurationVersion("v1");
+		OAuthServerClientRegistration client = clientBuilder.build();
+		OAuthServerClientRepository repository = (id, budget) -> id.equals(client.getClientId()) ? Optional.of(client) : Optional.empty();
+		OAuthAuthorizationDecision.Builder decisionBuilder = OAuthAuthorizationDecision.withSubject("app-subject")
+				.authorizedScopesByResource(Map.of(resource, Set.of("read")));
+		OAuthAuthorizationDecision decision = decisionBuilder.build();
+		OAuthGrantPolicy policy = (context, budget) -> decisionForGrant(context);
+		if (!verifier.verifiesClientSecret("resource-client", new byte[]{42}, Duration.ofSeconds(1))
+				|| repository.findRegisteredClient("resource-client", Duration.ofSeconds(1)).orElseThrow() != client
+				|| decision.isDenied() || decision.isRefreshTokenPermitted() || !OAuthAuthorizationDecision.deniedInstance().isDenied()
+				|| client.isAuthorizationCodePermitted() || !client.getRedirectUris().isEmpty()
+				|| OAuthServerClientAuthentication.publicClientInstance() == authentication || policy == null)
+			throw new IllegalStateException("Issuer application contracts did not retain configuration.");
+	}
+	private static void exerciseIssuerStorageCarriers() {
+  String nonce = "A".repeat(43);
+  OAuthStoreKey key = OAuthStoreKey.fromStoredForm("revetsec:as:1:" + nonce + ":CODE:" + nonce);
+  OAuthStoreEntry entry = OAuthStoreEntry.fromStoredForm(key, nonce, Instant.ofEpochSecond(2_000_000_000L), "opaque");
+  OAuthAuthorizationServerStore store = new OAuthAuthorizationServerStore() {
+   @Override public @NonNull Optional<@NonNull OAuthStoreEntry> read(@NonNull OAuthStoreKey address, @NonNull Duration budget) {
+    return address.equals(key) ? Optional.of(entry) : Optional.empty();
+   }
+   @Override public @NonNull OAuthStoreCommitStatus commit(@NonNull OAuthStoreTransaction transaction, @NonNull Duration budget) {
+    for (OAuthStoreTransaction.Condition condition : transaction.getConditions()) {
+     condition.getKey().getStorageKey(); condition.getExpectedVersion();
+    }
+    for (OAuthStoreTransaction.Mutation mutation : transaction.getMutations()) {
+     mutation.getKey(); mutation.getKind(); mutation.getEntry();
+    }
+    return OAuthStoreCommitStatus.UNKNOWN;
+   }
+  };
+  if (store.read(key, Duration.ofSeconds(1)).orElseThrow() != entry || entry.getKey().getKind() != OAuthStoreKey.Kind.CODE
+    || !entry.getVersion().equals(nonce) || entry.getRetainUntil().getEpochSecond() != 2_000_000_000L
+    || !entry.toSealedForm().equals("opaque") || OAuthStoreTransaction.Mutation.Kind.values().length != 2
+    || OAuthStoreCommitStatus.values().length != 3) throw new IllegalStateException("Storage carrier linkage failed.");
+ }
+	private static @NonNull OAuthAuthorizationDecision decisionForGrant(@NonNull OAuthGrantContext context) {
+		return OAuthAuthorizationDecision.withSubject(context.getSubject())
+				.authorizedScopesByResource(context.getAuthorizedScopesByResource())
+				.refreshTokenPermitted(context.isRefreshTokenPermitted()).build();
+	}
+
 	private static @NonNull String exerciseJsonModel(@NonNull List<@NonNull String> calledApi) {
 		JsonObject.Builder builder = JsonObject.builder();
 		JsonObject object = builder
@@ -642,7 +707,23 @@ public final class PackagedConsumer {
 		OidcObserver observer = OidcObserver.disabledInstance();
 		OidcClient.Builder clientBuilder = OidcClient.withProviderMetadata(metadata);
 		OidcClient client = clientBuilder.clientId(AUDIENCE).redirectUri(URI.create("https://consumer.example/callback"))
-				.clock(Clock.fixed(NOW, ZoneOffset.UTC)).compatibility(Set.of()).observer(observer).userInfoSignedResponseAlgorithm(JwsAlgorithm.RS256).build();
+				.clock(Clock.fixed(NOW, ZoneOffset.UTC)).issuerPolicy(OidcIssuerPolicy.exactInstance()).issuerPolicy(null)
+				.compatibility(Set.of()).observer(observer).userInfoSignedResponseAlgorithm(JwsAlgorithm.RS256).build();
+		require(metadata.getAdvertisedIssuer().equals(ISSUER), "explicit OIDC advertised issuer");
+		OidcIssuerPolicy entra = OidcIssuerPolicy.fromMicrosoftEntraMultiTenant(tenant -> { throw new AssertionError("build or parser called tenant policy"); });
+		String common = "https://login.microsoftonline.com/common/v2.0";
+		String template = "https://login.microsoftonline.com/{tenantid}/v2.0";
+		String discovery = JsonObject.builder().put("issuer", template)
+				.put("authorization_endpoint", common + "/authorize").put("token_endpoint", common + "/token")
+				.put("jwks_uri", common + "/keys").put("response_types_supported", JsonArray.fromElements(List.of(JsonString.fromValue("code"))))
+				.put("subject_types_supported", JsonArray.fromElements(List.of(JsonString.fromValue("public"))))
+				.put("id_token_signing_alg_values_supported", JsonArray.fromElements(List.of(JsonString.fromValue("RS256")))).build().toJson();
+		OidcProviderMetadata selected = OidcProviderMetadata.fromJson(common, discovery, entra);
+		require(selected.getIssuer().equals(common) && selected.getAdvertisedIssuer().equals(template), "Entra configured and advertised issuers remain distinct");
+		OidcClient selectedClient = OidcClient.withProviderMetadata(selected).issuerPolicy(entra).clientId(AUDIENCE)
+				.redirectUri(URI.create("https://consumer.example/callback")).build();
+		require(selectedClient.toString().contains("<redacted>") && entra.toString().contains("<redacted>"), "Entra configuration builds locally and redacts predicate");
+		observer.didEnableMicrosoftEntraMultiTenant(); observer.didUseMicrosoftEntraMultiTenant();
 		OidcAuthenticationOptions.Builder optionsBuilder = OidcAuthenticationOptions.builder();
 		OidcAuthenticationOptions options = optionsBuilder.scopes(Set.of("email")).maxAge(Duration.ZERO)
 				.responseMode(AuthorizationRequestOptions.ResponseMode.FORM_POST).build();
@@ -679,13 +760,13 @@ public final class PackagedConsumer {
 				&& ((OidcAuthenticationResult.RejectedAuthorization) outcome).getReason() == OAuthException.Reason.PENDING_AUTHORIZATION_NOT_FOUND,
 				"OIDC result rejects missing state before any token or identity release");
 		// Results require provider responses; class references still check their packaged annotation-free signatures.
-		Class<?>[] exported = {IdToken.class, OidcAuthentication.class, OidcAuthenticationOptions.class,
+		Class<?>[] exported = {OidcIssuerPolicy.class, IdToken.class, OidcAuthentication.class, OidcAuthenticationOptions.class,
 				OidcAuthenticationOptions.Builder.class, OidcClient.class, OidcClient.Builder.class, OidcException.class,
 				OidcObserver.class, OidcProviderMetadata.class, OidcProviderMetadata.Builder.class, OidcSessionReference.class,
 				OidcUserInfo.class, OidcValidationException.class, OidcValidationException.Reason.class, OidcRefreshResult.class, OidcCompatibilityMode.class,
 				OidcAuthenticationResult.class, OidcAuthenticationResult.Succeeded.class, OidcAuthenticationResult.Denied.class,
 				OidcAuthenticationResult.RejectedAuthorization.class, OidcAuthenticationResult.RejectedIdToken.class};
-		require(exported.length == 21, "all OIDC exported types compile from the packaged JAR");
+		require(exported.length == 22, "all OIDC exported types compile from the packaged JAR");
 		calledApi.add("com.revetsec.oidc");
 	}
 

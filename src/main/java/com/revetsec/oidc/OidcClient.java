@@ -37,6 +37,7 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.*;
 import static java.util.Objects.requireNonNull;
 
@@ -54,6 +55,8 @@ public final class OidcClient {
 	private final @Nullable OidcProviderCache<ProviderState> cache;
 	private final OAuthClient oauth;
 	private final String issuer;
+	private final OidcIssuerPolicy issuerPolicy;
+	private final Object proofOwner = new Object();
 	private final @Nullable JwsAlgorithm userInfoAlgorithm;
 	private final UserInfoEndpoint userInfo;
 	private final Set<String> scopes;
@@ -79,7 +82,7 @@ public final class OidcClient {
 	private @Nullable ProviderState state;
 
 	private OidcClient(@NonNull Builder builder, @NonNull OAuthClient oauth) {
-		this.oauth = oauth; this.issuer = builder.issuer; this.userInfoAlgorithm = builder.userInfoAlgorithm; this.scopes = builder.scopes; this.resources = builder.resources;
+		this.issuerPolicy = builder.issuerPolicy; this.oauth = oauth; this.issuer = builder.issuer; this.userInfoAlgorithm = builder.userInfoAlgorithm; this.scopes = builder.scopes; this.resources = builder.resources;
 		this.acrValues = builder.acrValues; this.totalDeadline = builder.totalDeadline; this.observer = builder.observer;
 		this.configuredKeySource = builder.keySource; this.clientId = requireNonNull(builder.clientId);
 		this.algorithms = builder.algorithms; this.hmacAlgorithms = hmacAlgorithms(this.algorithms); this.trustedAudiences = builder.trustedAudiences;
@@ -94,11 +97,11 @@ public final class OidcClient {
 					this.allowInsecureLoopback), this.policy, this.allowInsecureLoopback, this.requestTimeout, this.clock,
 					this.observer, builder.minimumTimeToLive, builder.defaultTimeToLive, builder.maximumTimeToLive,
 					builder.discoveryCooldown, metadata -> {
-						try { checkMetadata(metadata, this.algorithms, this.policy, this.allowInsecureLoopback, this.userInfoAlgorithm); return stateFor(metadata); }
+						try { this.issuerPolicy.checkMetadata(metadata); checkMetadata(metadata, this.algorithms, this.policy, this.allowInsecureLoopback, this.userInfoAlgorithm); return stateFor(metadata); }
 						catch (IllegalArgumentException invalid) {
 							throw OidcTransactionAccess.get().endpointFailure(OAuthException.Reason.METADATA_INVALID);
 						}
-					}, System::nanoTime);
+					}, System::nanoTime, this.issuerPolicy);
 		} else { this.cache = null; stateFor(builder.metadata); }
 	}
 	private @NonNull ProviderState provider(@NonNull Deadline deadline) {
@@ -120,7 +123,7 @@ public final class OidcClient {
 					.requestTimeout(this.requestTimeout).build();
 			ProviderState found = new ProviderState(metadata, source, new IdTokenValidator(metadata.getIssuer(), this.clientId, source,
 					effectiveAlgorithms(metadata, this.algorithms), this.trustedAudiences, this.trustedAuthorizedParties,
-					this.clockSkew, this.maximumIdTokenAge, this.clock, this.observer, !this.hmacAlgorithms.isEmpty()));
+					this.clockSkew, this.maximumIdTokenAge, this.clock, this.observer, !this.hmacAlgorithms.isEmpty(), this.issuerPolicy));
 			this.state = found; return found;
 		} finally { this.stateLock.unlock(); }
 	}
@@ -225,7 +228,7 @@ public final class OidcClient {
 			ObserverDispatch.dispatch(this.observer, observer -> observer.didRejectIdToken(failure));
 			throw failure;
 		}
-		OidcAuthentication authentication = new OidcAuthentication(token, completion.releaseTokens(), this.clientId);
+		OidcAuthentication authentication = new OidcAuthentication(token, completion.releaseTokens(), this.clientId, this.proofOwner);
 		ObserverDispatch.dispatch(this.observer, OidcObserver::didCompleteAuthentication);
 		return authentication;
 	}
@@ -281,12 +284,20 @@ public final class OidcClient {
 		requireNonNull(authentication); Deadline deadline = Deadline.fromNow(this.totalDeadline);
 		OidcUserInfo result;
 		try {
-			if (!this.issuer.equals(authentication.getIssuer()) || !this.clientId.equals(authentication.clientId()))
+			if (!this.clientId.equals(authentication.clientId()) || (this.issuerPolicy.isMicrosoftEntra()
+					? !authentication.belongsTo(this.proofOwner) || OidcIssuerPolicy.tenantFromIssuer(authentication.getIssuer()) == null
+					: !this.issuer.equals(authentication.getIssuer())))
 				throw OidcValidationException.fromReason(OidcValidationException.Reason.USERINFO_AUTHENTICATION_MISMATCH);
+			if (this.issuerPolicy.isMicrosoftEntra()) {
+				ObserverDispatch.dispatch(this.observer, OidcObserver::didUseMicrosoftEntraMultiTenant);
+				Instant before = OidcIssuerPolicy.readClock(this.clock);
+				this.issuerPolicy.checkTenant(requireNonNull(OidcIssuerPolicy.tenantFromIssuer(authentication.getIssuer())), deadline);
+				if (OidcIssuerPolicy.readClock(this.clock).isBefore(before)) throw OidcTransactionAccess.get().endpointFailure(OAuthException.Reason.ISSUER_POLICY_UNAVAILABLE);
+			}
 			UserInfoEndpoint.authorization(authentication.getTokens().getAccessToken(), this.clock);
 			ProviderState provider = provider(deadline);
 			result = this.userInfo.fetch(provider.metadata, provider.source, authentication, this.clientId, this.userInfoAlgorithm,
-					this.clockSkew, this.trustedAudiences, deadline);
+					this.clockSkew, this.trustedAudiences, deadline, this.issuerPolicy);
 		} catch (OidcValidationException failure) {
 			ObserverDispatch.dispatch(this.observer, observer -> observer.didRejectUserInfo(failure)); throw failure;
 		}
@@ -308,7 +319,7 @@ public final class OidcClient {
 			OidcValidationException failure = OidcValidationException.fromReason(OidcValidationException.Reason.USERINFO_AUTHENTICATION_MISMATCH);
 			ObserverDispatch.dispatch(this.observer, observer -> observer.didRejectUserInfo(failure)); throw failure;
 		}
-		return fetchUserInfo(new OidcAuthentication(authentication.getIdToken(), refreshed.getTokens(), authentication.clientId()));
+		return fetchUserInfo(authentication.withTokens(refreshed.getTokens()));
 	}
 	/**
 	 * Sends one refresh POST with default request options. There is no automatic retry. Persist the original session
@@ -340,7 +351,8 @@ public final class OidcClient {
 		@Nullable IdToken verified;
 		OidcTransactionAccess.RefreshCompletion completion;
 		try {
-			original.checkClient(this.issuer, this.clientId);
+			if (this.issuerPolicy.isMicrosoftEntra()) original.checkMicrosoftEntraClient(this.clientId);
+			else original.checkClient(this.issuer, this.clientId);
 			ProviderState provider = provider(deadline);
 			completion = OidcTransactionAccess.get().refresh(this.oauth, refreshToken, options, provider.metadata.oauthMetadata(), deadline, this.hmacAlgorithms);
 			if (!completion.tokenType().equalsIgnoreCase("Bearer")) throw OidcValidationException.fromReason(OidcValidationException.Reason.TOKEN_TYPE_UNSUPPORTED);
@@ -394,6 +406,7 @@ public final class OidcClient {
 		private @Nullable HttpClient httpClient;
 		private OutboundUriPolicy policy = OutboundUriPolicy.defaultInstance();
 		private OidcObserver observer = OidcObserver.disabledInstance();
+		private OidcIssuerPolicy issuerPolicy = OidcIssuerPolicy.exactInstance();
 		private IssuerParameterPolicy issuerParameterPolicy = IssuerParameterPolicy.METADATA_DRIVEN;
 		private boolean requirePkceAdvertised;
 		private boolean allowInsecureLoopback;
@@ -497,7 +510,8 @@ public final class OidcClient {
 		 */
 		public @NonNull Builder userInfoSignedResponseAlgorithm(@Nullable JwsAlgorithm value) { this.userInfoAlgorithm = value; return this; }
 		/**
-		 * Sets the advanced signing-key source; share only within the same issuer trust boundary.
+		 * Sets the advanced signing-key source; share only within the same exact issuer trust boundary,
+		 * or with the same Entra issuer-policy instance. Distinct tenant callbacks are not equivalent.
 		 *
 		 * @param value value, or null to restore the default
 		 * @return this builder
@@ -577,6 +591,14 @@ public final class OidcClient {
 		 */
 		public @NonNull Builder observer(@Nullable OidcObserver value) { this.observer = value == null ? OidcObserver.disabledInstance() : value; return this; }
 		/**
+		 * Selects exact validation or the fixed Entra common/organizations policy. Null restores exact validation.
+		 * Build performs no tenant callback, key lookup or network request. HMAC ID tokens are incompatible.
+		 * @param value selected issuer policy, or null to restore exact
+		 * @return this builder
+		 * @since 1.0.0
+		 */
+		public @NonNull Builder issuerPolicy(@Nullable OidcIssuerPolicy value) { this.issuerPolicy = value == null ? OidcIssuerPolicy.exactInstance() : value; return this; }
+		/**
 		 * Sets the callback issuer policy.
 		 *
 		 * @param value value, or null to restore the default
@@ -647,7 +669,10 @@ public final class OidcClient {
 			if (this.clientId.isEmpty() || this.algorithms.isEmpty()
 					|| this.trustedAudiences.contains("") || this.trustedAuthorizedParties.contains(""))
 				throw new IllegalArgumentException("An OIDC client requires a client ID, callback URI and algorithm allowlist.");
+			this.issuerPolicy.checkConfiguredIssuer(this.issuer);
+			if (this.metadata != null) this.issuerPolicy.checkMetadata(this.metadata);
 			Set<JwsAlgorithm> hmac = hmacAlgorithms(this.algorithms);
+			if (this.issuerPolicy.isMicrosoftEntra() && !hmac.isEmpty()) throw new IllegalArgumentException("Entra issuer policy requires asymmetric ID tokens.");
 			if (!hmac.isEmpty() && !this.compatibility.contains(OidcCompatibilityMode.HMAC_ID_TOKENS))
 				throw new IllegalArgumentException("HMAC ID-token compatibility is not enabled.");
 			OidcTransactionAccess.get().checkHmacAuthentication(this.authentication, hmac);
@@ -664,6 +689,7 @@ public final class OidcClient {
 					.totalDeadline(this.totalDeadline).clock(this.clock).observer(this.observer)
 					.allowInsecureLoopback(this.allowInsecureLoopback).acknowledgeUnpatchedRuntime(this.acknowledgeUnpatchedRuntime).build();
 			OidcClient client = new OidcClient(this, oauth);
+			if (this.issuerPolicy.isMicrosoftEntra()) ObserverDispatch.dispatch(this.observer, OidcObserver::didEnableMicrosoftEntraMultiTenant);
 			for (OidcCompatibilityMode mode : this.compatibility)
 				ObserverDispatch.dispatch(this.observer, observer -> observer.didEnableCompatibilityMode(mode));
 			return client;

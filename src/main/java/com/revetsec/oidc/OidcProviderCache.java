@@ -58,6 +58,7 @@ final class OidcProviderCache<T> {
 	private final ReentrantLock lock = new ReentrantLock();
 	private final ArrayDeque<Long> attemptTimes = new ArrayDeque<>();
 	private final URI issuer;
+	private final OidcIssuerPolicy issuerPolicy;
 	private final HttpExchange exchange;
 	private final OutboundUriPolicy outboundPolicy;
 	private final boolean allowLoopback;
@@ -84,6 +85,13 @@ final class OidcProviderCache<T> {
 			boolean allowLoopback, @NonNull Duration requestTimeout, @NonNull Clock clock, @NonNull OAuthObserver observer,
 			@NonNull Duration minimumTtl, @NonNull Duration defaultTtl, @NonNull Duration maximumTtl, @NonNull Duration cooldown,
 			@NonNull Function<@NonNull OidcProviderMetadata, @NonNull T> validate, @NonNull LongSupplier nanoTime) {
+		this(issuer, exchange, outboundPolicy, allowLoopback, requestTimeout, clock, observer, minimumTtl, defaultTtl, maximumTtl, cooldown, validate, nanoTime, OidcIssuerPolicy.exactInstance());
+	}
+	OidcProviderCache(@NonNull URI issuer, @NonNull HttpExchange exchange, @NonNull OutboundUriPolicy outboundPolicy,
+			boolean allowLoopback, @NonNull Duration requestTimeout, @NonNull Clock clock, @NonNull OAuthObserver observer,
+			@NonNull Duration minimumTtl, @NonNull Duration defaultTtl, @NonNull Duration maximumTtl, @NonNull Duration cooldown,
+			@NonNull Function<@NonNull OidcProviderMetadata, @NonNull T> validate, @NonNull LongSupplier nanoTime, @NonNull OidcIssuerPolicy issuerPolicy) {
+		this.issuerPolicy = issuerPolicy;
 		this.issuer = issuer;
 		this.exchange = exchange;
 		this.outboundPolicy = outboundPolicy;
@@ -249,7 +257,7 @@ final class OidcProviderCache<T> {
 		try {
 			if (response.status() != 200)
 				throw OidcTransactionAccess.get().endpointStatusFailure(response.status(), RetryAfter.parse(response.headers(), this.clock.instant()).orElse(null));
-			OidcProviderMetadata metadata = OidcProviderMetadata.fromJson(this.issuer.toString(), StrictUtf8.decode(bytes));
+			OidcProviderMetadata metadata = OidcProviderMetadata.fromJson(this.issuer.toString(), StrictUtf8.decode(bytes), this.issuerPolicy);
 			T checked = this.validate.apply(metadata);
 			Instant now = this.clock.instant();
 			Duration lifetime = CacheLifetime.timeToLive(response.headers(), now, this.minimumTtl, this.defaultTtl, this.maximumTtl);

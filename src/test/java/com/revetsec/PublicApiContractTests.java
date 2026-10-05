@@ -57,7 +57,7 @@ import java.util.stream.Collectors;
 /**
  * Source-inventory contracts for Revetsec's exported API (plan R1, R2, R17, R20, 14.6), adapted from Soklet.
  * <p>
- * For every exported type (public top-level types in the seven exported packages, and their public or protected
+ * For every exported type (public top-level types in the eight exported packages, and their public or protected
  * nested types):
  * <ul>
  *   <li>it is not a record;</li>

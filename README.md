@@ -178,11 +178,15 @@ Share one validator, and one key source, across threads. By default a token must
 
 `OAuthClient` supports authorization code with PKCE S256, client credentials, refresh, revocation and generated private-key assertions. It accepts static metadata or discovers an authorization server lazily. Browser completion checks the pending browser binding, state, callback route and issuer before token exchange. The [OAuth client guide](docs/oauth-client.md) covers cookie and store setup, concurrent replay, return destinations and the raw-token boundary.
 
+### OAuth authorization-server application contracts
+
+Registered-client lookup, secret verification, immutable registrations, app authorization decisions and continuing grant-policy contracts are implemented in `com.revetsec.oauth.server`. See the [application-contract guide](docs/oauth-server-application-contracts.md). Endpoint operations, token issuance, durable transactions and client-metadata transport remain under implementation.
+
 ### RSA signing
 
 `JwsSigner.fromRsaKeyPair(privateKey, publicKey, JwsAlgorithm.PS256)` creates a reusable signer with a checked public-key snapshot. It retains an application-owned private key without exporting it. Call `warmUp(remainingBudget)` for an explicit noncredential pair probe. `toCompactSerialization(type, keyId, certificateSha256Thumbprint, claimsUtf8, remainingBudget)` signs an exact, bounded JSON object and verifies each output before releasing the compact credential.
 
-PS256, RS256 and RS384 are supported. The optional 32-byte thumbprint is the SHA-256 digest of a DER certificate. The application supplies claims and remains responsible for their meaning. A provider failure, mismatched pair or exhausted budget produces a fixed `JwsSigningException`; it emits no partial credential. JCA providers must cooperate with synchronous time budgets. See [algorithms and bounds](docs/supported-algorithms.md#bounded-rsa-signing-jwssigner). OAuth private_key_jwt integration and token issuance are still being built.
+PS256, RS256 and RS384 are supported. The optional 32-byte thumbprint is the SHA-256 digest of a DER certificate. The application supplies claims and remains responsible for their meaning. A checked JCA exception or provider `RuntimeException`, mismatched pair or exhausted budget produces a fixed `JwsSigningException`; it emits no partial credential. Provider `Error` values propagate after buffer cleanup, following the library’s unexpected-error boundary. JCA providers must cooperate with synchronous time budgets. See [algorithms and bounds](docs/supported-algorithms.md#bounded-rsa-signing-jwssigner). OAuth clients support private_key_jwt; token issuance is planned for 1.0.0.
 
 ### Status
 
@@ -223,3 +227,7 @@ Both implement `AccessTokenValidator`: use `validate` for exception handling or 
 Role-specific discovery needs only issuer/JWKS for JWT or issuer/introspection endpoint for introspection. The existing OAuth metadata parser still requires authorization and token endpoints. `warmUp()` performs discovery/key loading without validating a credential. Builds perform no I/O and start no threads.
 
 Generated OAuth `private_key_jwt` authentication uses `ClientAssertionSigningKey` and a caller-thread `ClientAssertionKeyProvider`. See [the OAuth client guide](docs/oauth-client.md#private-key-client-assertions) for role metadata, audience compatibility and deadline rules. Hosted private-key qualification remains pending.
+
+### Microsoft Entra issuer policy
+
+OIDC clients can explicitly select the fixed public-cloud `common` or `organizations` v2.0 issuer policy with an application-owned allowed-tenant predicate. The engine verifies the token signature and the actual tenant/issuer/JWK binding before invoking that predicate. The authenticated account key remains the actual tenant issuer and subject. See [the issuer policy guide](docs/oidc-issuer-policy.md) for metadata, UserInfo and refresh behavior. Local synthetic tests cover this path; hosted Entra sign-in remains unproven.

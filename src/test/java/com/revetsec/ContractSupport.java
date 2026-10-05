@@ -104,13 +104,14 @@ final class ContractSupport {
 			""";
 
 	/**
-	 * The seven exported (API) packages. Every other package is under {@code com.revetsec.internal} and is not API.
+	 * The eight exported (API) packages. Every other package is under {@code com.revetsec.internal} and is not API.
 	 */
 	static final Set<String> EXPORTED_PACKAGES = Set.of(
 			"com.revetsec",
 			"com.revetsec.json",
 			"com.revetsec.jose",
 			"com.revetsec.oauth",
+			"com.revetsec.oauth.server",
 			"com.revetsec.oidc",
 			"com.revetsec.saml",
 			"com.revetsec.scim");

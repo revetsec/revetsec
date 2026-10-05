@@ -68,6 +68,7 @@ final class IdTokenValidator {
 	private final Clock clock;
 	private final JoseObserver observer;
 	private final boolean hmacEnabled;
+	private final OidcIssuerPolicy issuerPolicy;
 
 	IdTokenValidator(@NonNull String issuer, @NonNull String clientId, @NonNull JsonWebKeySource jsonWebKeySource,
 			@NonNull Set<@NonNull JwsAlgorithm> algorithms, @NonNull Set<@NonNull String> trustedAudiences, @NonNull Set<@NonNull String> trustedAuthorizedParties,
@@ -85,6 +86,13 @@ final class IdTokenValidator {
 	IdTokenValidator(@NonNull String issuer, @NonNull String clientId, @NonNull JsonWebKeySource jsonWebKeySource,
 			@NonNull Set<@NonNull JwsAlgorithm> algorithms, @NonNull Set<@NonNull String> trustedAudiences, @NonNull Set<@NonNull String> trustedAuthorizedParties,
 			@NonNull Duration clockSkew, @NonNull Duration maximumIdTokenAge, @NonNull Clock clock, @NonNull JoseObserver observer, boolean hmacEnabled) {
+		this(issuer, clientId, jsonWebKeySource, algorithms, trustedAudiences, trustedAuthorizedParties, clockSkew, maximumIdTokenAge, clock, observer, hmacEnabled, OidcIssuerPolicy.exactInstance());
+	}
+	IdTokenValidator(@NonNull String issuer, @NonNull String clientId, @NonNull JsonWebKeySource jsonWebKeySource,
+			@NonNull Set<@NonNull JwsAlgorithm> algorithms, @NonNull Set<@NonNull String> trustedAudiences, @NonNull Set<@NonNull String> trustedAuthorizedParties,
+			@NonNull Duration clockSkew, @NonNull Duration maximumIdTokenAge, @NonNull Clock clock, @NonNull JoseObserver observer, boolean hmacEnabled, @NonNull OidcIssuerPolicy issuerPolicy) {
+		this.issuerPolicy = requireNonNull(issuerPolicy); this.issuerPolicy.checkConfiguredIssuer(issuer);
+		if (issuerPolicy.isMicrosoftEntra() && (hmacEnabled || algorithms.stream().anyMatch(IdTokenValidator::isHmac))) throw new IllegalArgumentException("Entra issuer policy requires asymmetric ID tokens.");
 		this.hmacEnabled = hmacEnabled;
 		this.issuer = requireNonNull(issuer);
 		this.clientId = requireNonNull(clientId);
@@ -146,6 +154,9 @@ final class IdTokenValidator {
 				|| (maximumAuthenticationAge != null && maximumAuthenticationAge.isNegative()))
 			throw new IllegalArgumentException("The authenticated OIDC request options are invalid.");
 
+		if (this.issuerPolicy.isMicrosoftEntra() && this.observer instanceof OidcObserver oidc)
+			ObserverDispatch.dispatch(oidc, OidcObserver::didUseMicrosoftEntraMultiTenant);
+		if (this.issuerPolicy.isMicrosoftEntra()) OidcIssuerPolicy.checkDeadline(deadline);
 		// Capture time when JOSE asks for it, after any remote key lookup. Freezing it before that lookup would let
 		// a slow JWKS response extend a token's effective lifetime. Every remaining check shares that snapshot.
 		ValidationClock validationClock = new ValidationClock(this.clock);
@@ -164,7 +175,9 @@ final class IdTokenValidator {
 				secret = StrictUtf8.encode(clientSecret);
 				jwt = JwtValidationAccess.get().validateOidc(validator, compactSerialization, this.algorithms, secret,
 						deadline == null ? () -> Long.MAX_VALUE : deadline::remainingNanos, this::reportHmacUse);
-			} else jwt = deadline == null ? validator.validate(compactSerialization)
+			} else if (this.issuerPolicy.isMicrosoftEntra()) jwt = JwtValidationAccess.get().validateMicrosoftEntra(validator, compactSerialization,
+					deadline == null ? () -> Long.MAX_VALUE : deadline::remainingNanos);
+			else jwt = deadline == null ? validator.validate(compactSerialization)
 					: JwtValidationAccess.get().validate(validator, compactSerialization, deadline::remainingNanos);
 		} catch (JoseException exception) {
 			throw OidcValidationException.fromJoseReason(exception.getReason());
@@ -222,6 +235,14 @@ final class IdTokenValidator {
 		if (code != null) checkHash(claims, "c_hash", jwt.getAlgorithm(), code, OidcValidationException.Reason.CODE_HASH_MISMATCH);
 		else if (claims.getClaim("c_hash").isPresent()) throw failure(OidcValidationException.Reason.CODE_HASH_MISMATCH);
 		if (original != null) original.checkContinuity(claims);
+		if (this.issuerPolicy.isMicrosoftEntra()) {
+			Instant before = OidcIssuerPolicy.readClock(this.clock);
+			OidcIssuerPolicy.checkTime(claims, before, now, this.clockSkew);
+			String tenant = requireNonNull(OidcIssuerPolicy.tenantFromIssuer(claims.getIssuer().orElseThrow()));
+			this.issuerPolicy.checkTenant(tenant, deadline);
+			OidcIssuerPolicy.checkTime(claims, OidcIssuerPolicy.readClock(this.clock), before, this.clockSkew);
+			OidcIssuerPolicy.checkDeadline(deadline);
+		}
 		return new IdToken(jwt);
 	}
 

@@ -14,3 +14,5 @@ conformance/README.md|Revetsec has not been independently audited.|Required disc
 
 examples/README.md|Revetsec has not been independently audited.|Required disclosure; states the absence of an audit and makes no claim.
 examples/playground/src/main/resources/web/index.html|Revetsec has not been independently audited.|Required disclosure; states the absence of an audit and makes no claim.
+docs/oidc-issuer-policy.md|Revetsec has not been independently audited.|Required disclosure; states the absence of an audit and makes no claim.
+examples/rsa-oidc/README.md|Revetsec has not been independently audited.|Required disclosure; states the absence of an audit and makes no claim.

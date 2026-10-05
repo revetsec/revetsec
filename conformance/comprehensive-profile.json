@@ -1,0 +1,326 @@
+{
+  "plan": "oidcc-client-test-plan",
+  "sourceCommit": "440eec8bac7b12b7389d7ca9cbc459b53507a443",
+  "planSourceSha256": "cf7a8a7b260117bb766aa9ffd6a7d00ba16ef1c3b774b2559ecaf6482e629d18",
+  "variant": {
+    "client_auth_type": "private_key_jwt",
+    "client_registration": "static_client",
+    "request_type": "plain_http_request",
+    "response_type": "code",
+    "response_mode": "default"
+  },
+  "modules": [
+    {
+      "module": "oidcc-client-test",
+      "class": "OIDCCClientTest",
+      "sourceFile": "OIDCCClientTest.java",
+      "sourceSha256": "d1ed53341ce192a812353b3e860b6b5631ecdea5d7edbc7f9462c7939114fa5b",
+      "selection": "RUN",
+      "reason": "selected supported profile"
+    },
+    {
+      "module": "oidcc-client-test-nonce-invalid",
+      "class": "OIDCCClientTestNonceInvalid",
+      "sourceFile": "OIDCCClientTestNonceInvalid.java",
+      "sourceSha256": "f79746639fe02742cca67bbe46fac8b8dba61887be6e1ccc2343565f89cc81f0",
+      "selection": "RUN",
+      "reason": "selected supported profile"
+    },
+    {
+      "module": "oidcc-client-test-client-secret-basic",
+      "class": "OIDCCClientTestClientSecretBasic",
+      "sourceFile": "OIDCCClientTestClientSecretBasic.java",
+      "sourceSha256": "7f3bd04a46ca8c9e5a3a4da6e8d2375de41f291067e70592bcc4e67f3ad1eb42",
+      "selection": "RUN",
+      "reason": "selected supported profile"
+    },
+    {
+      "module": "oidcc-client-test-scope-userinfo-claims",
+      "class": "OIDCCClientTestScopeUserInfoClaims",
+      "sourceFile": "OIDCCClientTestScopeUserInfoClaims.java",
+      "sourceSha256": "554195ee725d6f202b1dcfd0e07370eebc0fcfc767363500c92d12816f46c375",
+      "selection": "RUN",
+      "reason": "selected supported profile"
+    },
+    {
+      "module": "oidcc-client-test-kid-absent-single-jwks",
+      "class": "OIDCCClientTestKidAbsentSingleJwks",
+      "sourceFile": "OIDCCClientTestKidAbsentSingleJwks.java",
+      "sourceSha256": "a5018540563d8b2f63539088b31bee64863caf442e1e838a08a8f396ff11eebe",
+      "selection": "RUN",
+      "reason": "selected supported profile"
+    },
+    {
+      "module": "oidcc-client-test-kid-absent-multiple-jwks",
+      "class": "OIDCCClientTestKidAbsentMultipleMatchingKeysInJwks",
+      "sourceFile": "OIDCCClientTestKidAbsentMultipleMatchingKeysInJwks.java",
+      "sourceSha256": "3120769af2deeb42a8298b615e67cda1af4c3ec52261934b539109c7c0bcf9b0",
+      "selection": "RUN",
+      "reason": "selected supported profile"
+    },
+    {
+      "module": "oidcc-client-test-missing-iat",
+      "class": "OIDCCClientTestMissingIatInIdToken",
+      "sourceFile": "OIDCCClientTestMissingIatInIdToken.java",
+      "sourceSha256": "ba73406cea71c45d8ac711271c82fa95f31d4b77d2e31eca2e489efd2f932de6",
+      "selection": "RUN",
+      "reason": "selected supported profile"
+    },
+    {
+      "module": "oidcc-client-test-missing-aud",
+      "class": "OIDCCClientTestMissingAudInIdToken",
+      "sourceFile": "OIDCCClientTestMissingAudInIdToken.java",
+      "sourceSha256": "792d63100d2f9f825c2e53fe9ab37650222d8d16e5e9fcea6852124c476ba063",
+      "selection": "RUN",
+      "reason": "selected supported profile"
+    },
+    {
+      "module": "oidcc-client-test-invalid-aud",
+      "class": "OIDCCClientTestInvalidAudInIdToken",
+      "sourceFile": "OIDCCClientTestInvalidAudInIdToken.java",
+      "sourceSha256": "a00ac0b6b0c67a44043b94c3403d494eac2b67e0fb09fee12cc65e940a29cfeb",
+      "selection": "RUN",
+      "reason": "selected supported profile"
+    },
+    {
+      "module": "oidcc-client-test-idtoken-sig-none",
+      "class": "OIDCCClientTestIdTokenSigAlgNone",
+      "sourceFile": "OIDCCClientTestIdTokenSigAlgNone.java",
+      "sourceSha256": "9ce2e3ae3352ff75a02d735f03479a75269e7cb06753ffdec81e32d922c71331",
+      "selection": "RUN",
+      "reason": "selected supported profile"
+    },
+    {
+      "module": "oidcc-client-test-idtoken-sig-rs256",
+      "class": "OIDCCClientTestIdTokenSignedUsingRS256",
+      "sourceFile": "OIDCCClientTestIdTokenSignedUsingRS256.java",
+      "sourceSha256": "95fc9fbaf7e16235992f7608ee65ef8a7891025401c70ae047a789b9f564fae1",
+      "selection": "RUN",
+      "reason": "selected supported profile"
+    },
+    {
+      "module": "oidcc-client-test-missing-sub",
+      "class": "OIDCCClientTestMissingSubInIdToken",
+      "sourceFile": "OIDCCClientTestMissingSubInIdToken.java",
+      "sourceSha256": "c696c2c8c09a181be4226d85a9b36d5ddea6b10631440195b6fe1b120e1d9ca5",
+      "selection": "RUN",
+      "reason": "selected supported profile"
+    },
+    {
+      "module": "oidcc-client-test-invalid-sig-rs256",
+      "class": "OIDCCClientTestInvalidIdTokenSignatureWithRS256",
+      "sourceFile": "OIDCCClientTestInvalidIdTokenSignatureWithRS256.java",
+      "sourceSha256": "4a035732e9b9888dee477e1cd6a2bcbb9e95e75132ccd52e4c8d4082e83a79df",
+      "selection": "RUN",
+      "reason": "selected supported profile"
+    },
+    {
+      "module": "oidcc-client-test-invalid-iss",
+      "class": "OIDCCClientTestInvalidIssuerInIdToken",
+      "sourceFile": "OIDCCClientTestInvalidIssuerInIdToken.java",
+      "sourceSha256": "a44e215aeffa2e716f3dec46385051e2d80c5d31918545b1d74aa2728c3f426c",
+      "selection": "RUN",
+      "reason": "selected supported profile"
+    },
+    {
+      "module": "oidcc-client-test-userinfo-invalid-sub",
+      "class": "OIDCCClientTestInvalidSubInUserinfoResponse",
+      "sourceFile": "OIDCCClientTestInvalidSubInUserinfoResponse.java",
+      "sourceSha256": "b8be0ee36995be5d04ce34c8abea831f4de624b3eec95c5d826b4dfe82ac494d",
+      "selection": "RUN",
+      "reason": "selected supported profile"
+    },
+    {
+      "module": "oidcc-client-test-userinfo-bearer-header",
+      "class": "OIDCCClientTestUserinfoBearerHeader",
+      "sourceFile": "OIDCCClientTestUserinfoBearerHeader.java",
+      "sourceSha256": "b1644fdda52adac02457833e9aaff12cfd93aaa9cbc21887764a73ace1397418",
+      "selection": "RUN",
+      "reason": "selected supported profile"
+    },
+    {
+      "module": "oidcc-client-test-userinfo-bearer-body",
+      "class": "OIDCCClientTestUserinfoBearerBody",
+      "sourceFile": "OIDCCClientTestUserinfoBearerBody.java",
+      "sourceSha256": "852ec1512d67385ac2e452148543691c08e81944614804104dcdb0ffa9d46a67",
+      "selection": "PROFILE_EXCLUDED",
+      "reason": "The supported UserInfo profile sends bearer credentials only in the Authorization header."
+    },
+    {
+      "module": "oidcc-client-test-nonce-unless-code-flow",
+      "class": "OIDCCClientTestNonce",
+      "sourceFile": "OIDCCClientTestNonce.java",
+      "sourceSha256": "32147b0f46a78fece1a9901de8ba6e865321c4fdc3733c4f9dd761499f6726bb",
+      "selection": "VARIANT_EXCLUDED",
+      "reason": "ResponseType=code"
+    },
+    {
+      "module": "oidcc-client-test-missing-chash",
+      "class": "OIDCCClientTestMissingCHashInIdToken",
+      "sourceFile": "OIDCCClientTestMissingCHashInIdToken.java",
+      "sourceSha256": "137bbf45b4105bdf76a403ce034ced1eb12a9cf7ba2ad18f980b09494a5dfb28",
+      "selection": "VARIANT_EXCLUDED",
+      "reason": "ResponseType=code"
+    },
+    {
+      "module": "oidcc-client-test-invalid-chash",
+      "class": "OIDCCClientTestInvalidCHashInIdToken",
+      "sourceFile": "OIDCCClientTestInvalidCHashInIdToken.java",
+      "sourceSha256": "b9bb3aad91f4dd5733934be5662d9776ceb5be31adb0d27e3f9ad6023712c8df",
+      "selection": "VARIANT_EXCLUDED",
+      "reason": "ResponseType=code"
+    },
+    {
+      "module": "oidcc-client-test-invalid-athash",
+      "class": "OIDCCClientTestInvalidAtHashInIdToken",
+      "sourceFile": "OIDCCClientTestInvalidAtHashInIdToken.java",
+      "sourceSha256": "e2cfa7ee162e17ef20637b599d1d8aaab5bfc9117eea6abb5a8dd7d0c519a21d",
+      "selection": "VARIANT_EXCLUDED",
+      "reason": "ResponseType=code"
+    },
+    {
+      "module": "oidcc-client-test-missing-athash",
+      "class": "OIDCCClientTestMissingAtHashInIdToken",
+      "sourceFile": "OIDCCClientTestMissingAtHashInIdToken.java",
+      "sourceSha256": "2db780dcfee375734a9268f6e6e905ebd5ca5b3dfc07dea6b63ae358aeff21b7",
+      "selection": "VARIANT_EXCLUDED",
+      "reason": "ResponseType=code"
+    },
+    {
+      "module": "oidcc-client-test-form-post-error",
+      "class": "OIDCCClientTestFormPostError",
+      "sourceFile": "OIDCCClientTestFormPostError.java",
+      "sourceSha256": "ce635ea5702d93be341ed24b95e6f908541caa34dad61fd73a14241be4fe264b",
+      "selection": "VARIANT_EXCLUDED",
+      "reason": "ResponseMode=default"
+    },
+    {
+      "module": "oidcc-client-test-invalid-sig-hs256",
+      "class": "OIDCCClientTestInvalidIdTokenSignatureWithHS256",
+      "sourceFile": "OIDCCClientTestInvalidIdTokenSignatureWithHS256.java",
+      "sourceSha256": "201fd5799960148a394229ad0c6566f95290b9350ae572877e04ce38aa4c620f",
+      "selection": "VARIANT_EXCLUDED",
+      "reason": "OIDCCClientAuthType=private_key_jwt"
+    },
+    {
+      "module": "oidcc-client-test-invalid-sig-es256",
+      "class": "OIDCCClientTestInvalidIdTokenSignatureWithES256",
+      "sourceFile": "OIDCCClientTestInvalidIdTokenSignatureWithES256.java",
+      "sourceSha256": "d4b1e148f62e5f414028c203a00a7a6b44969adea51bf3bb519504134b8f82d8",
+      "selection": "RUN",
+      "reason": "selected supported profile"
+    },
+    {
+      "module": "oidcc-client-test-aggregated-claims",
+      "class": "OIDCCClientTestAggregatedClaims",
+      "sourceFile": "OIDCCClientTestAggregatedClaims.java",
+      "sourceSha256": "78845bbdf9bc9abc99fe9a6185b1124169b9b9133f4c0cdc505741693a7e1296",
+      "selection": "PROFILE_EXCLUDED",
+      "reason": "Aggregated claim resolution is outside the selected client profile; returning a carrier does not establish support."
+    },
+    {
+      "module": "oidcc-client-test-distributed-claims",
+      "class": "OIDCCClientTestDistributedClaims",
+      "sourceFile": "OIDCCClientTestDistributedClaims.java",
+      "sourceSha256": "66a7672f24515fdf214c5c8638dcc53156e2a7dcc6b8319db9375d28001fcd27",
+      "selection": "PROFILE_EXCLUDED",
+      "reason": "Distributed claim retrieval is outside the selected client profile."
+    },
+    {
+      "module": "oidcc-client-test-mtls-endpoint-aliases",
+      "class": "OIDCCClientTestMtlsEndpointAliases",
+      "sourceFile": "OIDCCClientTestMtlsEndpointAliases.java",
+      "sourceSha256": "9a913b24ccbe5b6f531b89d322be6b372ec3371f7f5e3d7ca64438feccff6bc2",
+      "selection": "VARIANT_EXCLUDED",
+      "reason": "OIDCCClientAuthType=private_key_jwt"
+    },
+    {
+      "module": "oidcc-client-test-discovery-openid-config",
+      "class": "OIDCCClientTestDiscoveryOpenIDConfiguration",
+      "sourceFile": "OIDCCClientTestDiscoveryOpenIDConfiguration.java",
+      "sourceSha256": "d5560e5ccbdc2abd30cfd12ba3a9b82ebd9f9b5215185addea9fd3fb754a8817",
+      "selection": "RUN",
+      "reason": "selected supported profile"
+    },
+    {
+      "module": "oidcc-client-test-discovery-jwks-uri-keys",
+      "class": "OIDCCClientTestDiscoveryJwksUriKeys",
+      "sourceFile": "OIDCCClientTestDiscoveryJwksUriKeys.java",
+      "sourceSha256": "7bf9c8dfe01a10a07889f2a3571d0095f35ed1e5d74a5977700fe6ef2c3cb0f1",
+      "selection": "RUN",
+      "reason": "selected supported profile"
+    },
+    {
+      "module": "oidcc-client-test-discovery-issuer-mismatch",
+      "class": "OIDCCClientTestDiscoveryIssuerMismatch",
+      "sourceFile": "OIDCCClientTestDiscoveryIssuerMismatch.java",
+      "sourceSha256": "e2c68fa19c4c1d4e167b425a7306e41913ecc1b7da07c7add3114e4af0080254",
+      "selection": "RUN",
+      "reason": "selected supported profile"
+    },
+    {
+      "module": "oidcc-client-test-signing-key-rotation-just-before-signing",
+      "class": "OIDCCClientTestSigningKeyRotationJustBeforeSigning",
+      "sourceFile": "OIDCCClientTestSigningKeyRotationJustBeforeSigning.java",
+      "sourceSha256": "a2511e7968f3f9cc1d5a60d06ba7705c8593a3a996511b5a54a2ce87d2288a9e",
+      "selection": "RUN",
+      "reason": "selected supported profile"
+    },
+    {
+      "module": "oidcc-client-test-signing-key-rotation",
+      "class": "OIDCCClientTestSigningKeyRotation",
+      "sourceFile": "OIDCCClientTestSigningKeyRotation.java",
+      "sourceSha256": "8024d6e276fa618de65c1aa4dc3d830ac6b91e08ec0046d2ddff974d78bf0dc9",
+      "selection": "RUN",
+      "reason": "selected supported profile"
+    },
+    {
+      "module": "oidcc-client-test-discovery-webfinger-acct",
+      "class": "OIDCCClientTestDiscoveryWebfingerAcct",
+      "sourceFile": "OIDCCClientTestDiscoveryWebfingerAcct.java",
+      "sourceSha256": "0297458ba6b46e11b90b6363fa879cf13c676e09803322cdd0f02fb965b7fe4f",
+      "selection": "PROFILE_EXCLUDED",
+      "reason": "WebFinger discovery is outside the selected fixed-issuer client profile."
+    },
+    {
+      "module": "oidcc-client-test-discovery-webfinger-url",
+      "class": "OIDCCClientTestDiscoveryWebfingerURL",
+      "sourceFile": "OIDCCClientTestDiscoveryWebfingerURL.java",
+      "sourceSha256": "64ccc1e8ebcb851117d1492e238692579c0384c7e5b5912c515cafcc76be8a55",
+      "selection": "PROFILE_EXCLUDED",
+      "reason": "WebFinger discovery is outside the selected fixed-issuer client profile."
+    },
+    {
+      "module": "oidcc-client-test-dynamic-registration",
+      "class": "OIDCCClientTestDynamicRegistration",
+      "sourceFile": "OIDCCClientTestDynamicRegistration.java",
+      "sourceSha256": "b56d2e4a163d8a5d0630ac829e0f152c0824dc28cf693445301d30982eb6e1c8",
+      "selection": "VARIANT_EXCLUDED",
+      "reason": "ClientRegistration=static_client"
+    },
+    {
+      "module": "oidcc-client-test-request-uri-signed-rs256",
+      "class": "OIDCCClientTestRequestUriSignedWithRS256",
+      "sourceFile": "OIDCCClientTestRequestUriSignedWithRS256.java",
+      "sourceSha256": "1dae11ed2c3399bf0538e32c468be6e42fef61fc1df4311dc75fc1a86549200e",
+      "selection": "VARIANT_EXCLUDED",
+      "reason": "ClientRequestType=plain_http_request"
+    },
+    {
+      "module": "oidcc-client-test-request-uri-signed-none",
+      "class": "OIDCCClientTestRequestUriSignedWithNone",
+      "sourceFile": "OIDCCClientTestRequestUriSignedWithNone.java",
+      "sourceSha256": "2151815e50dbac32112b31554305865d7495c5b022d454cfb91588de1eb7f061",
+      "selection": "VARIANT_EXCLUDED",
+      "reason": "ClientRequestType=plain_http_request"
+    },
+    {
+      "module": "oidcc-client-test-userinfo-signed",
+      "class": "OIDCCClientTestSignedUserinfo",
+      "sourceFile": "OIDCCClientTestSignedUserinfo.java",
+      "sourceSha256": "3cbd36267b1315f8a80d0746fa5e76b82fb5d19417c56c15c8e8499191b6ce26",
+      "selection": "RUN",
+      "reason": "selected supported profile"
+    }
+  ]
+}

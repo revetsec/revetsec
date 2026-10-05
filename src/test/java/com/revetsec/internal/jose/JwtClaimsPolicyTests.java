@@ -59,6 +59,30 @@ final class JwtClaimsPolicyTests {
 	private static final JwtClaimsPolicy POLICY = JwtClaimsPolicy.fromSettings(ISSUER, Set.of("api"), Set.of(),
 			Duration.ofSeconds(60));
 
+	@TestFactory
+	@NonNull Stream<@NonNull DynamicTest> selectedEntraProfileRejectsUntrustedInternalIssuerBindings() {
+		record Case(@NonNull String name, @NonNull String configured, @Nullable String bound) { }
+		String foreign = TENANT_ISSUER.replace("login.microsoftonline.com", "evil.microsoftonline.com");
+		String suffix = TENANT_ISSUER.replace("/v2.0", "/v2.x");
+		String uppercase = TENANT_ISSUER.replace(TENANT, TENANT.toUpperCase(Locale.ROOT));
+		return Stream.of(new Case("unsupported trust", ISSUER, null),
+				new Case("short binding", TENANT_ISSUER, "short"),
+				new Case("different configured issuer", ISSUER, TENANT_ISSUER),
+				new Case("foreign host", foreign, foreign), new Case("wrong suffix", suffix, suffix),
+				new Case("uppercase tenant", uppercase, uppercase))
+				.map(row -> DynamicTest.dynamicTest(row.name(), () -> Assertions.assertThrows(IllegalArgumentException.class,
+						() -> JwtClaimsPolicy.fromSettings(row.configured(), Set.of("api"), Set.of(), Duration.ZERO)
+								.withMicrosoftEntraIssuer(row.bound()))));
+	}
+
+	@Test
+	void signedUserInfoBindingRejectsMalformedPresentTenant() throws Exception {
+		JwtClaimsPolicy policy = JwtClaimsPolicy.fromSettings(TENANT_ISSUER, Set.of("api"), Set.of(), Duration.ZERO)
+				.withOptionalExpiration().withMicrosoftEntraIssuer(TENANT_ISSUER);
+		assertReason(JoseException.Reason.ISSUER_MISMATCH, policy,
+				entra(TENANT_ISSUER).put("tid", "short").toJson(), key(JwtClaimsPolicy.ENTRA_ISSUER_TEMPLATE));
+	}
+
 	// Valid claims pass, with or without a key, and with a key whose issuer member equals iss.
 	@Test
 	void validClaimsPass() throws Exception {

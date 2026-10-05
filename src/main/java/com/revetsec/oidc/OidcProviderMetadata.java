@@ -46,6 +46,7 @@ import com.revetsec.json.*;
 @Immutable
 public final class OidcProviderMetadata {
 	private final AuthorizationServerMetadata oauth;
+	private final String advertisedIssuer;
 	private final URI jwksUri;
 	private final @Nullable URI userInfoEndpoint;
 	private final Set<String> subjectTypes;
@@ -53,14 +54,14 @@ public final class OidcProviderMetadata {
 	private final Set<String> responseTypes;
 	private final @Nullable Set<String> userInfoAlgorithms;
 	private OidcProviderMetadata(@NonNull Builder builder) {
-		this.oauth = builder.oauth.build(); this.jwksUri = requireNonNull(builder.jwksUri);
+		this.oauth = builder.oauth.build(); this.advertisedIssuer = this.oauth.getIssuer(); this.jwksUri = requireNonNull(builder.jwksUri);
 		this.userInfoEndpoint = builder.userInfoEndpoint; this.subjectTypes = builder.subjectTypes;
 		this.algorithms = builder.algorithms; this.responseTypes = builder.responseTypes;
 		this.userInfoAlgorithms = builder.userInfoAlgorithms == null ? null : Set.copyOf(builder.userInfoAlgorithms);
 	}
 	private OidcProviderMetadata(@NonNull AuthorizationServerMetadata oauth, @NonNull URI jwksUri, @Nullable URI userInfo,
-			@NonNull Set<@NonNull String> subjects, @NonNull Set<@NonNull String> algorithms, @NonNull Set<@NonNull String> responses, @Nullable Set<@NonNull String> userInfoAlgorithms) {
-		this.oauth = oauth; this.jwksUri = jwksUri; this.userInfoEndpoint = userInfo;
+			@NonNull Set<@NonNull String> subjects, @NonNull Set<@NonNull String> algorithms, @NonNull Set<@NonNull String> responses, @Nullable Set<@NonNull String> userInfoAlgorithms, @NonNull String advertisedIssuer) {
+		this.advertisedIssuer = advertisedIssuer; this.oauth = oauth; this.jwksUri = jwksUri; this.userInfoEndpoint = userInfo;
 		this.userInfoAlgorithms = userInfoAlgorithms == null ? null : Set.copyOf(userInfoAlgorithms);
 		this.subjectTypes = Set.copyOf(subjects); this.algorithms = Set.copyOf(algorithms); this.responseTypes = Set.copyOf(responses);
 	}
@@ -75,14 +76,38 @@ public final class OidcProviderMetadata {
 	 * @since 1.0.0
 	 */
 	public static @NonNull OidcProviderMetadata fromJson(@NonNull String expectedIssuer, @NonNull String json) {
-		requireNonNull(expectedIssuer); requireNonNull(json);
-		AuthorizationServerMetadata oauth = AuthorizationServerMetadata.fromJson(expectedIssuer, json);
+		return fromJson(expectedIssuer, json, OidcIssuerPolicy.exactInstance());
+	}
+	/**
+	 * Parses bounded metadata using exact issuer validation or the selected fixed Entra template.
+	 * getIssuer retains configured trust; getAdvertisedIssuer retains the received issuer string.
+	 * @param expectedIssuer configured trust issuer
+	 * @param json metadata JSON
+	 * @param issuerPolicy selected fixed issuer policy; no predicate runs during parsing
+	 * @return checked metadata, not identity
+	 * @throws NullPointerException if an argument is null
+	 * @since 1.0.0
+	 */
+	@CheckReturnValue
+	public static @NonNull OidcProviderMetadata fromJson(@NonNull String expectedIssuer, @NonNull String json, @NonNull OidcIssuerPolicy issuerPolicy) {
+		requireNonNull(expectedIssuer); requireNonNull(json); requireNonNull(issuerPolicy);
+		issuerPolicy.checkConfiguredIssuer(expectedIssuer);
+		@Nullable AuthorizationServerMetadata exact = issuerPolicy.isMicrosoftEntra() ? null : AuthorizationServerMetadata.fromJson(expectedIssuer, json);
 		byte @Nullable [] bytes = null;
 		try {
 			bytes = StrictUtf8.encode(json);
 			JsonValue parsed = JsonCodec.parse(bytes, JsonLimits.protocolDocument(Limits.HTTP_RESPONSE_BODY_SIZE.getDefaultIntValue()));
 			if (!(parsed instanceof JsonObject object)) throw new IllegalArgumentException();
 			Map<String, JsonValue> members = object.getMembers();
+			String advertisedIssuer = requiredString(members, "issuer");
+			AuthorizationServerMetadata oauth;
+			if (issuerPolicy.isMicrosoftEntra()) {
+				if (!OidcIssuerPolicy.TEMPLATE.equals(advertisedIssuer)) throw new IllegalArgumentException();
+				JsonObject.Builder projection = JsonObject.builder();
+				for (Map.Entry<String, JsonValue> member : members.entrySet())
+					if (!member.getKey().equals("issuer")) projection = projection.put(member.getKey(), member.getValue());
+				oauth = AuthorizationServerMetadata.fromJson(expectedIssuer, projection.put("issuer", expectedIssuer).build().toJson());
+			} else oauth = requireNonNull(exact);
 			URI jwks = URI.create(requiredString(members, "jwks_uri"));
 			URI userInfo = members.containsKey("userinfo_endpoint") ? URI.create(requiredString(members, "userinfo_endpoint")) : null;
 			Set<String> subjects = requiredSet(members, "subject_types_supported");
@@ -92,7 +117,7 @@ public final class OidcProviderMetadata {
 				throw new IllegalArgumentException();
 			Set<String> userInfoAlgorithms = members.containsKey("userinfo_signing_alg_values_supported")
 					? requiredSet(members, "userinfo_signing_alg_values_supported") : null;
-			return new OidcProviderMetadata(oauth, jwks, userInfo, subjects, algorithms, responses, userInfoAlgorithms);
+			return new OidcProviderMetadata(oauth, jwks, userInfo, subjects, algorithms, responses, userInfoAlgorithms, advertisedIssuer);
 		} catch (EncodingException | JsonParseException | IllegalArgumentException invalid) {
 			throw OidcTransactionAccess.get().endpointFailure(OAuthException.Reason.DOCUMENT_MALFORMED);
 		} finally { if (bytes != null) Arrays.fill(bytes, (byte) 0); }
@@ -155,6 +180,12 @@ public final class OidcProviderMetadata {
 	 * @since 1.0.0
 	 */
 	public @NonNull String getIssuer() { return this.oauth.getIssuer(); }
+	/**
+	 * Returns the exact issuer string advertised by parsed metadata, or the configured issuer for explicit metadata.
+	 * @return advertised issuer, possibly the selected Entra template
+	 * @since 1.0.0
+	 */
+	public @NonNull String getAdvertisedIssuer() { return this.advertisedIssuer; }
 	/**
 	 * Returns the authorization endpoint.
 	 *

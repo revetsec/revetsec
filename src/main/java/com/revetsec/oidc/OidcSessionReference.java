@@ -80,6 +80,9 @@ public final class OidcSessionReference {
 		original.remove("aud"); restored.remove("aud");
 		return original.equals(restored);
 	}
+	void checkMicrosoftEntraClient(@NonNull String clientId) {
+		if (!this.clientId.equals(clientId) || OidcIssuerPolicy.tenantFromIssuer(this.continuityClaims.findString("iss").orElseThrow()) == null) throw mismatch();
+	}
 	void checkClient(@NonNull String issuer, @NonNull String clientId) {
 		if (!this.continuityClaims.findString("iss").orElseThrow().equals(issuer) || !this.clientId.equals(clientId)) throw mismatch();
 	}
