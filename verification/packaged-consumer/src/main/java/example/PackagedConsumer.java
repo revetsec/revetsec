@@ -19,6 +19,7 @@ package example;
 import org.jspecify.annotations.NonNull;
 
 import com.revetsec.oauth.server.OAuthServerResponse;
+import com.revetsec.oauth.server.OAuthAuthorizationServer;
 import com.revetsec.oauth.server.OAuthServerInteraction;
 import com.revetsec.oauth.server.OAuthAuthorizationResult;
 import com.revetsec.oauth.server.OAuthTokenResult;
@@ -342,7 +343,7 @@ public final class PackagedConsumer {
 	}
 
 	/**
-	 * Builds, reads and writes JSON values through {@code com.revetsec.json}; returns the object's JSON text.
+	 * Exercises issuer keys and the public authorization-server builder without application storage I/O.
 	 */
 	private static void exerciseIssuerKeys() throws Exception {
 		KeyPairGenerator generator = KeyPairGenerator.getInstance("RSA");
@@ -361,6 +362,19 @@ public final class PackagedConsumer {
 				&& snapshot.getGeneration().equals("consumer-generation") && snapshot.getPublishedAt().equals(NOW.minusSeconds(120))
 				&& snapshot.getRetirementNotBefore().isEmpty(), "issuer snapshot projections and null resets");
 		require(!key.toString().contains(KEY_ID) && !snapshot.toString().contains(KEY_ID), "issuer key redaction");
+  byte[] sealBytes=new byte[32];for(int i=0;i<sealBytes.length;i++)sealBytes[i]=(byte)(i+1);
+  OAuthAuthorizationServer server=OAuthAuthorizationServer.withIssuer(ISSUER)
+   .authorizationEndpoint(URI.create(ISSUER+"/authorize")).tokenEndpoint(URI.create(ISSUER+"/token")).jsonWebKeySetEndpoint(URI.create(ISSUER+"/jwks"))
+   .clientRepository((id,budget)->Optional.empty()).store(new OAuthAuthorizationServerStore(){
+    @Override public @NonNull Optional<@NonNull OAuthStoreEntry> read(@NonNull OAuthStoreKey address,@NonNull Duration budget){throw new AssertionError("build touched store");}
+    @Override public @NonNull OAuthStoreCommitStatus commit(@NonNull OAuthStoreTransaction transaction,@NonNull Duration budget){throw new AssertionError("build touched store");}
+   }).signingKeys(provider).stateSealer(StateSealer.withActiveKey(SealingKey.fromBase64("consumer-issuer",Base64.getEncoder().encodeToString(sealBytes))).build())
+   .resources(Map.of("https://resource.example/mcp",Set.of("read"))).grantPolicy((context,budget)->OAuthAuthorizationDecision.deniedInstance()).clock(Clock.fixed(NOW,ZoneOffset.UTC)).build();
+  require(server.getIssuer().equals(ISSUER) && server.getTokenEndpoint().toString().equals(ISSUER+"/token") && server.getAuthorizationEndpoint()!=null
+   && server.getJsonWebKeySetEndpoint()!=null && server.getRevocationEndpoint().isEmpty() && server.getIntrospectionEndpoint().isEmpty(),"public issuer builder/getters without I/O");
+  require(server.metadataResponse("GET").getStatusCode()==200 && server.jsonWebKeySetResponse("HEAD").getStatusCode()==200,"public metadata/JWKS endpoints");
+  require(server.tokenResult("GET",null,new byte[0],Map.of()) instanceof OAuthTokenResult.Rejected,"public bounded method result");
+
 	}
 
 	private static void exerciseIssuerApplicationContracts() {

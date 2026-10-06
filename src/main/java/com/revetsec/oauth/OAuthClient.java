@@ -70,6 +70,10 @@ public final class OAuthClient {
 
 	@ThreadSafe
 	private static final class OidcOperations implements OidcTransactionAccess.Operations {
+  @Override public @NonNull VerifiedAccessToken validateAccessToken(@NonNull JwtAccessTokenValidator validator,@NonNull BearerToken token,@NonNull Deadline deadline) {
+   return validator.validate(token,deadline);
+  }
+  @Override public @NonNull String bearerValue(@NonNull BearerToken token) {return requireNonNull(token).value();}
 		@Override public void checkHmacAuthentication(@NonNull ClientAuthentication authentication, @NonNull Set<com.revetsec.jose.@NonNull JwsAlgorithm> algorithms) { authentication.checkHmac(algorithms); }
 		@Override public @NonNull OAuthException endpointFailure(OAuthException.@NonNull Reason reason) {
 			return switch (reason) {

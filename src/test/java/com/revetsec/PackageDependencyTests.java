@@ -134,7 +134,7 @@ final class PackageDependencyTests {
 	 */
 	static final Map<String, Set<String>> RESTRICTED_INTERNAL_PACKAGES = Map.of(
 			INTERNAL + ".xml", Set.of(SAML),
-			INTERNAL + ".oauth", Set.of(OAUTH, OIDC),
+			INTERNAL + ".oauth", Set.of(OAUTH, OIDC, SERVER),
 			INTERNAL + ".http", Set.of(JOSE, OAUTH, OIDC, SERVER, INTERNAL + ".oauth"));
 
 	@Test

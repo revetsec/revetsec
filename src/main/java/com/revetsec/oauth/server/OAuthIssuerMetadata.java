@@ -37,6 +37,11 @@ final class OAuthIssuerMetadata {
  OAuthIssuerMetadata(@NonNull URI issuer,@NonNull URI authorization,@NonNull URI token,@NonNull URI jwks,
    @Nullable URI revocation,@Nullable URI introspection,boolean refresh,boolean insecureLoopback,
    @NonNull Set<@NonNull String> scopes,@NonNull Duration freshness,int bodyCap,int headerCap) {
+  this(issuer,authorization,token,jwks,revocation,introspection,refresh,insecureLoopback,scopes,freshness,bodyCap,headerCap,false);
+ }
+ OAuthIssuerMetadata(@NonNull URI issuer,@NonNull URI authorization,@NonNull URI token,@NonNull URI jwks,
+   @Nullable URI revocation,@Nullable URI introspection,boolean refresh,boolean insecureLoopback,
+   @NonNull Set<@NonNull String> scopes,@NonNull Duration freshness,int bodyCap,int headerCap,boolean cimd) {
   endpoint(issuer,insecureLoopback);endpoint(authorization,insecureLoopback);endpoint(token,insecureLoopback);endpoint(jwks,insecureLoopback);
   if(issuer.getRawQuery()!=null || bodyCap<4096 || bodyCap>131072 || headerCap<1024 || headerCap>65536) throw OAuthStoreFormat.invalid();
   this.freshness=OAuthGrantRetention.duration(freshness,Duration.ZERO,Duration.ofMinutes(5));this.bodyCap=bodyCap;this.headerCap=headerCap;
@@ -57,6 +62,7 @@ final class OAuthIssuerMetadata {
     .put("revocation_endpoint_auth_methods_supported",array(List.of("none","client_secret_basic"))); }
   if(introspection!=null) { endpoint(introspection,insecureLoopback);builder.put("introspection_endpoint",introspection.toString())
     .put("introspection_endpoint_auth_methods_supported",array(List.of("client_secret_basic"))); }
+  if(cimd) builder.put("client_id_metadata_document_supported",true);
   this.metadata=builder.build();
  }
  private static void endpoint(@NonNull URI value,boolean insecureLoopback) {

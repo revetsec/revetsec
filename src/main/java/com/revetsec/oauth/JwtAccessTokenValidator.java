@@ -148,8 +148,12 @@ public final class JwtAccessTokenValidator implements AccessTokenValidator {
 	@CheckReturnValue
 	@NonNull
 	public VerifiedAccessToken validate(@NonNull BearerToken token) {
-		requireNonNull(token);
-		Deadline deadline = Deadline.fromNow(this.settings.totalDeadline);
+  return validate(token,Deadline.fromNow(this.settings.totalDeadline));
+ }
+ /** Shared issuer transaction path; no new deadline or public proof factory. */
+ @NonNull VerifiedAccessToken validate(@NonNull BearerToken token,@NonNull Deadline deadline) {
+  requireNonNull(token);requireNonNull(deadline);
+  checkBudget(deadline);
 		try {
 			if (token.value().length() > this.settings.maximumTokenLength)
 				throw AccessTokenValidationException.fromReason(AccessTokenValidationException.Reason.MALFORMED_REQUEST);
@@ -180,6 +184,7 @@ public final class JwtAccessTokenValidator implements AccessTokenValidator {
 			}
 			Set<String> scopes = AccessTokenClaims.scopes(claims.getMembers().get(this.settings.scopeClaimName), this.settings.scopeClaimName.equals("scp"));
 			VerifiedAccessToken result = new VerifiedAccessToken(this.settings.issuer, subject, client, scopes, jwt.getClaims().getAudiences(), jwt.getClaims().getExpiresAt().orElse(null), claims);
+   checkBudget(deadline);
 			ObserverDispatch.dispatch(this.settings.observer, AccessTokenObserver::didValidateAccessToken);
 			return result;
 		} catch (AccessTokenValidationException rejection) {
@@ -187,6 +192,11 @@ public final class JwtAccessTokenValidator implements AccessTokenValidator {
 			throw rejection;
 		}
 	}
+
+ private static void checkBudget(@NonNull Deadline deadline) {
+  if(Thread.currentThread().isInterrupted()) throw OAuthTransportException.fromReason(OAuthException.Reason.INTERRUPTED,null);
+  if(deadline.isExpired()) throw OAuthTransportException.fromReason(OAuthException.Reason.NETWORK_FAILURE,null);
+ }
 
 	/**
 	 * Returns a local credential verdict; provider failures remain exceptions.

@@ -58,6 +58,11 @@ final class OAuthStoreCoordinator {
 		OAuthStoreEntry entry = seal(key, initialIssuer(now()));
 		return submit(reads.transaction(List.of(OAuthStoreTransaction.Mutation.fromPut(entry))), deadline);
 	}
+	/** Explicit initialization outcome for management only, never credential admission. */
+	@NonNull OAuthStoreCommitStatus initializeFreshIssuerResult(@NonNull Deadline deadline) {
+		try {return initializeFreshIssuer(deadline);}
+		catch(OAuthStoreFailure failure) {if(failure.reason()==COMMIT_OUTCOME_UNKNOWN) return OAuthStoreCommitStatus.UNKNOWN;throw failure;}
+	}
 	/** Established operation: a missing permanent issuer fence is a configuration fault, never initialization. */
 	@NonNull Session begin(@NonNull Deadline deadline) { return new Session(deadline); }
 	/** Explicit first registration only; established status/revocation must use Session.subject instead. */
@@ -90,6 +95,30 @@ final class OAuthStoreCoordinator {
 			if (session.commit(List.of(), next) == OAuthStoreCommitStatus.COMMITTED) return next;
 		}
 		throw failure(UNAVAILABLE);
+	}
+	/** One CAS maintenance attempt; caller reconciles UNKNOWN rather than retrying it automatically. */
+	@NonNull OAuthStoreCommitStatus reseal(@NonNull OAuthStoreKey key, @NonNull Deadline deadline) {
+		requireNonNull(key);
+		if (!OAuthStoreFormat.namespace(key).equals(OAuthStoreFormat.namespace(this.codec.issuerKey()))) throw OAuthStoreFormat.invalid();
+		Instant time = now(); OAuthStoreReadSet reads = new OAuthStoreReadSet();
+		Optional<OAuthStoreEntry> issuerEntry = read(this.codec.issuerKey(), deadline);
+		OAuthStoreFence issuer = decode(issuerEntry.orElseThrow(() -> failure(CORRUPT_STATE)), time);
+		if (time.isBefore(issuer.highWater())) throw failure(UNAVAILABLE);
+		reads.observe(this.codec.issuerKey(), issuerEntry);
+		Optional<OAuthStoreEntry> entry = key.equals(this.codec.issuerKey()) ? issuerEntry : read(key, deadline);
+		if (entry.isEmpty() || !time.isBefore(entry.orElseThrow().getRetainUntil())) return OAuthStoreCommitStatus.CONFLICT;
+		reads.observe(key, entry); OAuthStoreEntry old = entry.orElseThrow();
+		com.revetsec.json.JsonObject payload = crypto(() -> this.codec.open(old, Clock.fixed(time, java.time.ZoneOffset.UTC)));
+		if (key.getKind() == OAuthStoreKey.Kind.ISSUER_STATE || key.getKind() == OAuthStoreKey.Kind.SUBJECT_STATE)
+			crypto(() -> OAuthStoreFence.decode(payload, key.getKind()));
+  else {
+   OAuthServerIngressLimits limits=new OAuthServerIngressLimits(65536,65536,65536,4096,4096,1024,64,128,128);
+   String name=key.getStorageKey();String id=name.substring(name.lastIndexOf(':')+1);
+   OAuthAuthorizationRecord record=crypto(() -> OAuthAuthorizationRecord.decode(key.getKind(),id,payload,limits,this.maximumSubjectLength));
+   if(!record.retention().equals(old.getRetainUntil())) throw failure(CORRUPT_STATE);
+  }
+		OAuthStoreEntry replacement = crypto(() -> this.codec.seal(key, old.getRetainUntil(), payload.toJson()));
+		return submit(reads.transaction(List.of(OAuthStoreTransaction.Mutation.fromPut(replacement))), deadline, true);
 	}
 	private @NonNull OAuthStoreKey subjectKey(@NonNull String subject) {
 		OAuthServerConfiguration.text(subject, this.maximumSubjectLength);
@@ -133,12 +162,15 @@ final class OAuthStoreCoordinator {
 		return entry;
 	}
 	private @NonNull OAuthStoreCommitStatus submit(@NonNull OAuthStoreTransaction transaction, @NonNull Deadline deadline) {
+  return submit(transaction, deadline, false);
+ }
+ private @NonNull OAuthStoreCommitStatus submit(@NonNull OAuthStoreTransaction transaction, @NonNull Deadline deadline, boolean allowUnknown) {
 		OAuthStoreCommitStatus status;
 		try { status = this.store.commit(transaction, remaining(deadline)); }
 		catch (VirtualMachineError fatal) { throw fatal; }
 		catch (Throwable exception) { throw callbackFailure(exception); }
 		// Uncertainty remains uncertainty even if the callback also exhausted its cooperative budget.
-		if (status == OAuthStoreCommitStatus.UNKNOWN) throw failure(COMMIT_OUTCOME_UNKNOWN);
+		if (status == OAuthStoreCommitStatus.UNKNOWN) { if (allowUnknown) return status; throw failure(COMMIT_OUTCOME_UNKNOWN); }
 		remaining(deadline);
 		if (status == null) throw failure(UNAVAILABLE);
 		return status;

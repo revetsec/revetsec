@@ -148,7 +148,8 @@ final class PublicApiContractTests {
 			"com.revetsec.oidc.OidcAuthenticationResult$Succeeded",
 			"com.revetsec.oidc.OidcRefreshResult",
 			"com.revetsec.oidc.OidcClient",
-			"com.revetsec.internal.jose.JwtValidationAccess$Operations");
+			"com.revetsec.internal.jose.JwtValidationAccess$Operations",
+            "com.revetsec.internal.oauth.OidcTransactionAccess$Operations");
 
 	/**
 	 * Binary names of the exported concrete classes approved to be neither final nor sealed (R1). The exemption covers

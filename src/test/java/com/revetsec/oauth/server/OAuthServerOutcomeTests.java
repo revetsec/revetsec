@@ -205,7 +205,7 @@ final class OAuthServerOutcomeTests {
    @Override public void didRejectEndpoint(@NonNull Endpoint e,OAuthServerException.@NonNull Reason reason,@Nullable Integer status,@NonNull Duration elapsed) {assertSame(caller,Thread.currentThread());assertSame(endpoint,e);assertEquals(ACCESS_DENIED,reason);events.add("rejected");}
    @Override public void didFailToHandleEndpoint(@NonNull Endpoint e,@NonNull OAuthServerException f,@NonNull Duration elapsed) {assertSame(caller,Thread.currentThread());assertSame(endpoint,e);assertEquals(COMMIT_OUTCOME_UNKNOWN,f.getReason());events.add("failed");}
   };
-  Integer status=switch(endpoint){case ACCESS_TOKEN_VALIDATION,GRANT_REVOCATION,SUBJECT_REVOCATION,ISSUER_REVOCATION,STORE_RESEAL -> null;default -> 200;};
+  Integer status=switch(endpoint){case ACCESS_TOKEN_VALIDATION,GRANT_REVOCATION,SUBJECT_REVOCATION,ISSUER_REVOCATION,STORE_RESEAL,ISSUER_INITIALIZATION,SUBJECT_REGISTRATION -> null;default -> 200;};
   OAuthServerObservation ok=new OAuthServerObservation(observer,endpoint);ok.succeeded(status);
   assertThrows(IllegalStateException.class,()->ok.succeeded(status));assertThrows(IllegalStateException.class,()->ok.rejected(ACCESS_DENIED,status));assertThrows(IllegalStateException.class,()->ok.failed(failure(COMMIT_OUTCOME_UNKNOWN,false)));
   new OAuthServerObservation(observer,endpoint).rejected(ACCESS_DENIED,status);new OAuthServerObservation(observer,endpoint).failed(failure(COMMIT_OUTCOME_UNKNOWN,false));

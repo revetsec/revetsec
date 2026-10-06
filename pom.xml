@@ -302,6 +302,10 @@
 		<revetsec.coverage.as.exception.reason.branch>1.000000</revetsec.coverage.as.exception.reason.branch>
 		<revetsec.coverage.as.issuer.rejection.instruction>1.000000</revetsec.coverage.as.issuer.rejection.instruction>
 		<revetsec.coverage.as.issuer.rejection.branch>1.000000</revetsec.coverage.as.issuer.rejection.branch>
+		<revetsec.coverage.as.engine.instruction>0.970000</revetsec.coverage.as.engine.instruction>
+		<revetsec.coverage.as.engine.branch>0.950000</revetsec.coverage.as.engine.branch>
+		<revetsec.coverage.as.engine.builder.instruction>0.990000</revetsec.coverage.as.engine.builder.instruction>
+		<revetsec.coverage.as.engine.builder.branch>0.900000</revetsec.coverage.as.engine.builder.branch>
 	</properties>
 
 	<build>
@@ -1472,6 +1476,22 @@
 									<limits>
 										<limit><counter>INSTRUCTION</counter><value>COVEREDRATIO</value><minimum>${revetsec.coverage.as.issuer.rejection.instruction}</minimum></limit>
 										<limit><counter>BRANCH</counter><value>COVEREDRATIO</value><minimum>${revetsec.coverage.as.issuer.rejection.branch}</minimum></limit>
+									</limits>
+								</rule>
+								<rule>
+									<element>CLASS</element>
+									<includes><include>com?revetsec?oauth?server?OAuthAuthorizationServer</include></includes>
+									<limits>
+										<limit><counter>INSTRUCTION</counter><value>COVEREDRATIO</value><minimum>${revetsec.coverage.as.engine.instruction}</minimum></limit>
+										<limit><counter>BRANCH</counter><value>COVEREDRATIO</value><minimum>${revetsec.coverage.as.engine.branch}</minimum></limit>
+									</limits>
+								</rule>
+								<rule>
+									<element>CLASS</element>
+									<includes><include>com?revetsec?oauth?server?OAuthAuthorizationServer?Builder</include></includes>
+									<limits>
+										<limit><counter>INSTRUCTION</counter><value>COVEREDRATIO</value><minimum>${revetsec.coverage.as.engine.builder.instruction}</minimum></limit>
+										<limit><counter>BRANCH</counter><value>COVEREDRATIO</value><minimum>${revetsec.coverage.as.engine.builder.branch}</minimum></limit>
 									</limits>
 								</rule>
 						</rules>

@@ -72,6 +72,14 @@ final class OAuthServerRequest {
 		} catch (EncodingException failure) { throw invalid(); }
 		return new OAuthServerRequest(endpoint, parameters, headers.get("authorization"));
 	}
+	/** Same aggregate admission as parse, with the public fixed method verdict. */
+	static @NonNull OAuthServerRequest parseForServer(@NonNull Endpoint endpoint,@NonNull String method,@Nullable String query,
+		byte @NonNull [] body,@NonNull Map<@NonNull String,@NonNull List<@NonNull String>> headers,@NonNull OAuthServerIngressLimits limits) {
+		if(body.length>limits.bodyBytes || query!=null && query.length()>limits.queryLength) throw invalid();
+		headers(headers,limits.headerBytes);
+		if(!method.equals(endpoint==Endpoint.AUTHORIZATION ? "GET" : "POST")) throw OAuthServerValidationException.fromReason(OAuthServerException.Reason.METHOD_NOT_ALLOWED);
+		return parse(endpoint,method,query,body,headers,limits);
+	}
 	private static int parameters(@NonNull String raw, @NonNull Map<@NonNull String, @NonNull String> target,
 			@NonNull OAuthServerIngressLimits limits, boolean queryOnPost, int previousFields) throws EncodingException {
 		// Count before creating the first decoded parameter. Unknown extensions consume the same limits.

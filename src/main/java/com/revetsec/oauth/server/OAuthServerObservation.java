@@ -48,7 +48,7 @@ final class OAuthServerObservation {
 	}
 	private void finish(@Nullable Integer status) {
 		boolean http=switch(this.endpoint) {
-			case ACCESS_TOKEN_VALIDATION,GRANT_REVOCATION,SUBJECT_REVOCATION,ISSUER_REVOCATION,STORE_RESEAL -> false;
+			case ACCESS_TOKEN_VALIDATION,GRANT_REVOCATION,SUBJECT_REVOCATION,ISSUER_REVOCATION,STORE_RESEAL,ISSUER_INITIALIZATION,SUBJECT_REGISTRATION -> false;
 			default -> true;
 		};
 		if (http ? status==null || status<100 || status>599 : status!=null) throw OAuthStoreFormat.invalid();

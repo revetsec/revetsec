@@ -73,6 +73,8 @@ public interface OAuthServerObserver {
 	@Immutable enum Endpoint {
 		/** Browser interaction work. */ AUTHORIZATION,
 		/** Code or refresh exchange. */ TOKEN,
+		/** Explicit fresh deployment initialization. */ ISSUER_INITIALIZATION,
+		/** Explicit first subject registration. */ SUBJECT_REGISTRATION,
 		/** Credential revocation. */ REVOCATION,
 		/** Registered-resource introspection. */ INTROSPECTION,
 		/** Public issuer metadata. */ METADATA,

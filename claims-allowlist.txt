@@ -16,3 +16,6 @@ examples/README.md|Revetsec has not been independently audited.|Required disclos
 examples/playground/src/main/resources/web/index.html|Revetsec has not been independently audited.|Required disclosure; states the absence of an audit and makes no claim.
 docs/oidc-issuer-policy.md|Revetsec has not been independently audited.|Required disclosure; states the absence of an audit and makes no claim.
 examples/rsa-oidc/README.md|Revetsec has not been independently audited.|Required disclosure; states the absence of an audit and makes no claim.
+
+src/main/java/com/revetsec/oauth/server/OAuthAuthorizationServer.java|Revetsec has not been independently audited.|Required negative audit statement; no audit claim.
+examples/self-issued/README.md|Revetsec has not been independently audited.|Required disclosure; states the absence of an audit and makes no claim.

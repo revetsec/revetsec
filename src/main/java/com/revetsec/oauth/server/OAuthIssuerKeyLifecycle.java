@@ -34,6 +34,7 @@ import static java.util.Objects.requireNonNull;
 /** Observed consistency guard, not a durable key history or proof of external publication. No positive token cache. */
 final class OAuthIssuerKeyLifecycle {
  private final @NonNull OAuthIssuerKeyProvider provider;
+ private final boolean publicBoundary;
  private final @NonNull Clock clock;
  private final @NonNull Duration freshness;
  private final @NonNull OAuthGrantRetention retention;
@@ -43,6 +44,11 @@ final class OAuthIssuerKeyLifecycle {
  private @Nullable Instant lastNow;
  OAuthIssuerKeyLifecycle(@NonNull OAuthIssuerKeyProvider provider,@NonNull Clock clock,@NonNull Duration freshness,
    @NonNull OAuthGrantRetention retention) {
+  this(provider,clock,freshness,retention,false);
+ }
+ OAuthIssuerKeyLifecycle(@NonNull OAuthIssuerKeyProvider provider,@NonNull Clock clock,@NonNull Duration freshness,
+   @NonNull OAuthGrantRetention retention,boolean publicBoundary) {
+  this.publicBoundary=publicBoundary;
   this.provider=requireNonNull(provider);this.clock=requireNonNull(clock);
   this.freshness=OAuthGrantRetention.duration(freshness,Duration.ZERO,Duration.ofMinutes(5));this.retention=requireNonNull(retention);
  }
@@ -112,18 +118,21 @@ final class OAuthIssuerKeyLifecycle {
    if(boundary!=null && boundary.isBefore(this.retention.accessRetention(expiry))) throw unavailable();
    OAuthServerClientAdmission.remaining(deadline);return result;
   } catch(VirtualMachineError fatal) { throw fatal; }
-  catch(Throwable fault) { if(fault instanceof InterruptedException) Thread.currentThread().interrupt();throw unavailable(); }
+  catch(Throwable fault) { if(fault instanceof InterruptedException) Thread.currentThread().interrupt();throw signingFailure(); }
  }
  void warmUp(@NonNull Deadline deadline) {
   OAuthIssuerKeySnapshot selected=snapshot(deadline);
   try { selected.getActiveKey().signer().warmUp(OAuthServerClientAdmission.remaining(deadline));snapshot(deadline); }
   catch(VirtualMachineError fatal) { throw fatal; }
-  catch(Throwable fault) { if(fault instanceof InterruptedException) Thread.currentThread().interrupt();throw unavailable(); }
+  catch(Throwable fault) { if(fault instanceof InterruptedException) Thread.currentThread().interrupt();throw signingFailure(); }
  }
  @NonNull StaticJsonWebKeySource verificationKeys(@NonNull Deadline deadline) {
   OAuthIssuerKeySnapshot keys=snapshot(deadline);
   StaticJsonWebKeySource result=StaticJsonWebKeySource.fromJsonWebKeySet(JsonWebKeySet.fromJson(OAuthIssuerPublicKeys.jwks(keys.getVerificationKeys()).toJson()));
   OAuthServerClientAdmission.remaining(deadline);return result;
+ }
+ private @NonNull RuntimeException signingFailure() {
+  return this.publicBoundary ? OAuthServerSigningException.fromReason(OAuthServerException.Reason.SIGNING_FAILED) : unavailable();
  }
  private static @NonNull OAuthServerAdmissionFailure unavailable() {
   return new OAuthServerAdmissionFailure(OAuthServerAdmissionFailure.Reason.INFRASTRUCTURE);

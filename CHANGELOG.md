@@ -4,6 +4,10 @@ All notable changes to Revetsec are recorded in this file.
 
 Each release gets a `## X.Y.Z (YYYY-MM-DD)` heading with Added, Changed, Fixed, Security and Migration Notes sections as needed. A security fix names its GHSA or CVE ID. Changes that reject previously accepted insecure input, or that remove an algorithm from a default, are listed under Security (see the security-tightening policy in [COMPATIBILITY.md](COMPATIBILITY.md)).
 
+- Added an unpublished self-issued Soklet MCP example with app-owned login/consent, bounded volatile storage, issuance and online revocation checks.
+
+- Added the public OAuth authorization-server builder and endpoint operations, initial consent policy recheck, M5 plus authoritative online validation, explicit first-use initialization, and authenticated reseal maintenance. Application storage/domain interfaces remain pluggable.
+
 - Add internal authenticated client metadata cache records, conservative HTTP freshness, and bounded synchronous fetch coordination through the pinned HTTPS transport. Cache reuse remains optional and separate from issuer credential transitions.
 
 - Add bounded OAuth issuer store carriers, atomic commit contracts and internal sealed record/read-set foundation.

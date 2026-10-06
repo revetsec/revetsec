@@ -45,6 +45,10 @@ public final class OidcTransactionAccess {
 
 	@ThreadSafe
 	public interface Operations {
+  /** Existing OAuth proof validation under the caller's original shrinking transaction deadline. */
+  @NonNull VerifiedAccessToken validateAccessToken(@NonNull JwtAccessTokenValidator validator,@NonNull BearerToken token,@NonNull Deadline deadline);
+  /** Credential extraction stays in the nonexported protocol bridge, never in the public holder API. */
+  @NonNull String bearerValue(@NonNull BearerToken token);
 		void checkHmacAuthentication(@NonNull ClientAuthentication authentication, @NonNull Set<@NonNull JwsAlgorithm> algorithms);
 		@NonNull OAuthException endpointFailure(OAuthException.@NonNull Reason reason);
 		@NonNull OAuthException endpointExchangeFailure(@NonNull HttpExchangeException failure);

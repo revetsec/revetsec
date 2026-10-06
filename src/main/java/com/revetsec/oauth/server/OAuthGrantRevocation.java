@@ -21,6 +21,9 @@ import com.revetsec.jose.StaticJsonWebKeySource;
 import com.revetsec.json.JsonObject;
 import org.jspecify.annotations.NonNull;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.function.Function;
 import static java.util.Objects.requireNonNull;
 import static com.revetsec.oauth.server.OAuthStoreFailure.Reason.*;
 
@@ -40,6 +43,16 @@ final class OAuthGrantRevocation {
  }
  @NonNull OAuthStatusResponse revoke(@NonNull OAuthServerRequest request, @NonNull OAuthServerClientRepository clients,
    @NonNull StaticJsonWebKeySource keys, @NonNull Deadline deadline) {
+  return revokeSelected(request, d -> OAuthServerClientSelection.registered(OAuthServerClientAdmission.authenticate(request, clients, d, this.limits)), keys, deadline);
+ }
+ @NonNull OAuthStatusResponse revoke(@NonNull OAuthServerRequest request, @NonNull OAuthServerClientSelection clients,
+   @NonNull Map<@NonNull String, @NonNull Set<@NonNull String>> resources,
+   @NonNull StaticJsonWebKeySource keys, @NonNull Deadline deadline) {
+  return revokeSelected(request, d -> clients.authenticate(request, resources, d), keys, deadline);
+ }
+ private @NonNull OAuthStatusResponse revokeSelected(@NonNull OAuthServerRequest request,
+   @NonNull Function<@NonNull Deadline, OAuthServerClientSelection.@NonNull Selected> clients,
+   @NonNull StaticJsonWebKeySource keys, @NonNull Deadline deadline) {
   if (request.endpoint() != OAuthServerRequest.Endpoint.REVOCATION) throw OAuthServerRequest.invalid();
   requireNonNull(keys);
   String token = request.required("token");
@@ -47,7 +60,8 @@ final class OAuthGrantRevocation {
   // Hints never choose authority; this profile's raw refresh grammar and compact JWT grammar are disjoint.
   boolean refresh = token.indexOf('.') < 0;
   for (int attempt = 0; attempt < this.attempts; attempt++) {
-   OAuthServerClientRegistration client = OAuthServerClientAdmission.authenticate(request, clients, deadline, this.limits);
+   OAuthServerClientSelection.Selected selectedClient = clients.apply(deadline);
+   OAuthServerClientRegistration client = selectedClient.client();
    String id; JsonObject claims = null;
    try {
     if (refresh) id = OAuthServerCredential.refreshDigest(token);
@@ -67,7 +81,7 @@ final class OAuthGrantRevocation {
    OAuthStoreFence subject = session.subject(grant.text("subject"));
    String resource = request.value("resource");
    boolean owned = grant.text("clientId").equals(client.getClientId())
-    && OAuthAuthorizationRecord.equalDigest(grant.text("clientHash"), OAuthAuthorizationRecord.clientFingerprint(client))
+    && OAuthAuthorizationRecord.equalDigest(grant.text("clientHash"), selectedClient.fingerprint())
     && (resource == null || resource.equals(grant.text("resource")))
     && credential.matchesIssuer(session.issuer()) && grant.matchesSubject(subject)
     && (claims == null || this.status.matches(claims, credential, grant.text("resource")));

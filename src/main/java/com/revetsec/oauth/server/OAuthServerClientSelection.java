@@ -30,8 +30,14 @@ final class OAuthServerClientSelection {
  private final @NonNull OAuthServerClientRepository repository;
  private final @NonNull OAuthServerIngressLimits limits;
  private final @Nullable OAuthClientMetadataFetcher metadata;
+ private final boolean publicBoundary;
  OAuthServerClientSelection(@NonNull OAuthServerClientRepository repository, @NonNull OAuthServerIngressLimits limits,
    @Nullable OAuthClientMetadataFetcher metadata) {
+  this(repository,limits,metadata,false);
+ }
+ OAuthServerClientSelection(@NonNull OAuthServerClientRepository repository,@NonNull OAuthServerIngressLimits limits,
+   @Nullable OAuthClientMetadataFetcher metadata,boolean publicBoundary) {
+  this.publicBoundary=publicBoundary;
   this.repository = requireNonNull(repository); this.limits = requireNonNull(limits); this.metadata = metadata;
  }
  @NonNull Selected authorization(@NonNull String id,
@@ -57,7 +63,12 @@ final class OAuthServerClientSelection {
   if (registered.isPresent()) return registered(registered.orElseThrow());
   OAuthClientMetadataFetcher fetcher = this.metadata;
   if (fetcher == null) throw OAuthServerClientAdmission.failure(INVALID_CLIENT);
-  OAuthClientMetadataDocument document = fresh ? fetcher.fresh(id, deadline) : fetcher.reusable(id, deadline);
+  OAuthClientMetadataDocument document;
+  try {document = fresh ? fetcher.fresh(id, deadline) : fetcher.reusable(id, deadline);}
+  catch(OAuthServerAdmissionFailure failure) {
+   if(this.publicBoundary && failure.reason()==OAuthServerAdmissionFailure.Reason.INFRASTRUCTURE) throw OAuthServerTransportException.fromReason(OAuthServerException.Reason.CLIENT_METADATA_UNAVAILABLE,false);
+   throw failure;
+  }
   OAuthServerClientAdmission.remaining(deadline);
   // Remote scope/software/key declarations grant no permission. This is only a configured request ceiling.
   OAuthServerClientRegistration client = OAuthServerClientRegistration.withClientId(id)

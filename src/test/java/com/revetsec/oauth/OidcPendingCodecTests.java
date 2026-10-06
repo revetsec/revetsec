@@ -89,6 +89,8 @@ final class OidcPendingCodecTests {
 		OidcTransactionAccess.Operations installed = OidcTransactionAccess.get();
 		assertThrows(IllegalStateException.class, () -> OidcTransactionAccess.set(installed));
 		OidcTransactionAccess.Operations impostor = new OidcTransactionAccess.Operations() {
+   @Override public @NonNull VerifiedAccessToken validateAccessToken(@NonNull JwtAccessTokenValidator validator,@NonNull BearerToken token,com.revetsec.internal.http.@NonNull Deadline deadline) {throw new AssertionError();}
+   @Override public @NonNull String bearerValue(@NonNull BearerToken token) {throw new AssertionError();}
 			@Override public void checkHmacAuthentication(@NonNull ClientAuthentication a, @NonNull Set<com.revetsec.jose.@NonNull JwsAlgorithm> b) { throw new AssertionError(); }
 			@Override public @NonNull OAuthException endpointFailure(OAuthException.@NonNull Reason reason) { throw new AssertionError(); }
 			@Override public @NonNull OAuthException endpointExchangeFailure(com.revetsec.internal.http.@NonNull HttpExchangeException failure) { throw new AssertionError(); }

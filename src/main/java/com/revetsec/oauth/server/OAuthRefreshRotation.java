@@ -143,6 +143,7 @@ final class OAuthRefreshRotation {
    @NonNull Instant issued, @NonNull Instant expires, @NonNull Set<@NonNull String> scopes, @Nullable String refresh, @NonNull Deadline deadline) {
   try { return this.encoder.prepare(grant, jti, issued, expires, scopes, refresh, deadline); }
   catch (VirtualMachineError fatal) { throw fatal; }
+  catch (OAuthServerException failure) {throw failure;}
   catch (Throwable failure) { if (failure instanceof InterruptedException) Thread.currentThread().interrupt(); throw OAuthServerClientAdmission.failure(INFRASTRUCTURE); }
  }
  private boolean terminate(OAuthStoreCoordinator.@NonNull Session session, @NonNull OAuthStoreKey key,
