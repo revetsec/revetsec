@@ -18,6 +18,7 @@ package com.revetsec.oauth.server;
 
 import com.revetsec.internal.http.Deadline;
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -165,11 +166,19 @@ final class OAuthStoreCoordinator {
 		private final @NonNull OAuthStoreFence issuer;
 		private final @NonNull Instant observedNow;
 		private boolean finished;
+		private @Nullable Instant validBefore;
 		private Session(@NonNull Deadline deadline) {
 			this.deadline = requireNonNull(deadline); remaining(deadline);
 			OAuthStoreEntry entry = read(codec.issuerKey()).orElseThrow(() -> failure(CORRUPT_STATE));
 			this.observedNow = now(); this.issuer = decode(entry, this.observedNow);
 			if (this.observedNow.isBefore(this.issuer.highWater())) throw failure(UNAVAILABLE);
+		}
+		/** Cooperative operation validity boundary, checked immediately before/after the backend returns. */
+		void requireBefore(@NonNull Instant expires) {
+			checkOpen(); requireNonNull(expires);
+			Instant previous = this.validBefore;
+			if (previous == null || expires.isBefore(previous)) this.validBefore = expires;
+			checkedNow();
 		}
 		@NonNull OAuthStoreFence issuer() { checkOpen(); return this.issuer; }
 		@NonNull Instant effectiveNow() { checkOpen(); return this.observedNow; }
@@ -205,7 +214,9 @@ final class OAuthStoreCoordinator {
 		}
 		private @NonNull Instant checkedNow() {
 			Instant time = now();
-			if (time.isBefore(this.observedNow) || time.isBefore(this.issuer.highWater())) throw failure(UNAVAILABLE);
+			Instant boundary = this.validBefore;
+			if (time.isBefore(this.observedNow) || time.isBefore(this.issuer.highWater())
+				|| boundary != null && !time.isBefore(boundary)) throw failure(UNAVAILABLE);
 			return time;
 		}
 		private @NonNull OAuthStoreCommitStatus finish(@NonNull List<OAuthStoreTransaction.@NonNull Mutation> mutations) {

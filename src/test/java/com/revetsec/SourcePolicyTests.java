@@ -1470,7 +1470,12 @@ final class SourcePolicyTests {
 		List<String> violations = new ArrayList<>();
 		for (Path file : ContractSupport.javaSources(sourceRoot)) {
 			String content = Files.readString(file, StandardCharsets.UTF_8).replace("\r\n", "\n");
-			if (!content.startsWith(ContractSupport.LICENSE_HEADER))
+			// The copied Soklet implementation retains its upstream copyright years.
+			boolean sokletHeader = ContractSupport.relativePath(sourceRoot, file)
+					.equals("com/revetsec/internal/ConcurrentLruMap.java")
+					&& content.startsWith(ContractSupport.LICENSE_HEADER.replace(
+							"Copyright 2026 Revetware LLC.", "Copyright 2022-2026 Revetware LLC."));
+			if (!content.startsWith(ContractSupport.LICENSE_HEADER) && !sokletHeader)
 				violations.add(ContractSupport.relativePath(sourceRoot, file));
 		}
 		return List.copyOf(violations);

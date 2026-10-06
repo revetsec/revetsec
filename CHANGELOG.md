@@ -4,6 +4,8 @@ All notable changes to Revetsec are recorded in this file.
 
 Each release gets a `## X.Y.Z (YYYY-MM-DD)` heading with Added, Changed, Fixed, Security and Migration Notes sections as needed. A security fix names its GHSA or CVE ID. Changes that reject previously accepted insecure input, or that remove an algorithm from a default, are listed under Security (see the security-tightening policy in [COMPATIBILITY.md](COMPATIBILITY.md)).
 
+- Add internal authenticated client metadata cache records, conservative HTTP freshness, and bounded synchronous fetch coordination through the pinned HTTPS transport. Cache reuse remains optional and separate from issuer credential transitions.
+
 - Add bounded OAuth issuer store carriers, atomic commit contracts and internal sealed record/read-set foundation.
 
 - Add the explicit fixed Microsoft Entra common/organizations OIDC issuer policy, authenticated tenant predicate, advertised-issuer accessor and tenant-bound UserInfo/refresh checks. Hosted Entra acceptance remains unproven.
@@ -13,6 +15,20 @@ Each release gets a `## X.Y.Z (YYYY-MM-DD)` heading with Added, Changed, Fixed, 
 Nothing has been released. The version is `1.0.0-SNAPSHOT`, and there is no compatibility promise before 1.0.0.
 
 ### Added
+- Restricted OAuth issuer interaction/result/exception/observer contracts and safe local HTTP failure mapping. Public server builder and endpoint wiring follow separately.
+- Restricted immutable `OAuthServerResponse` with explicit credential-bearing Location/body emission, no Location in ordinary headers, bounded defensive copies and fixed redacted diagnostics. Internal endpoint preparation now retains this response; public server routing remains pending.
+- The remaining22 approved issuer limit rows and pure internal checked settings, including nullable default resets, lifetime/deadline ordering and sealer-cap alignment. Public server-builder setters remain pending.
+- Internal typed canonical authorization-code/refresh handles, separate ledger digests of their full wire spelling, and bounded303 consent responses prepared before atomic approval/denial commit.
+- Pluggable OAuth client-metadata cache storage with bounded opaque carriers, atomic version checks, a bounded in-memory default and metadata-policy builder injection. Authenticated cache and issuer-flow integration remain under implementation.
+- Internal numeric-peer-pinned HTTPS transport using JDK nonblocking TCP/TLS, original-hostname verification and locally validated certificate chains without secondary retrieval. Client-metadata cache and issuer integration remain under implementation.
+- Internal copied-address admission and bounded HTTP/1.1 metadata response parsing for the pinned HTTPS transport. Live TCP/TLS and distributed cache integration remain under implementation.
+- Opt-in client metadata policy and trusted bounded address resolver contracts, with strict internal public-client document admission. The dedicated pinned HTTPS transport and public issuer integration remain under implementation.
+- Application-owned issuer signing-key and immutable lifecycle snapshot/provider APIs, with internal publication/retirement checks and public-only RFC 8414 metadata/JWKS preparation. Public authorization-server endpoints remain under implementation.
+- Internal whole-grant access/refresh revocation and registered confidential resource-only introspection: complete atomic barriers, fixed inactive responses, precommit bounded bytes and fail-closed uncertain outcomes. Public endpoints remain under implementation.
+- Internal strict OAuth refresh rotation: atomic replacement and issued-jti records, full-grant invalidation on bound used-token replay, original grant scopes and fixed lifetime/retention pins, fresh continuing policy, and response release only after COMMITTED. Public refresh endpoints remain under implementation.
+- Internal OAuth issuer token status: fixed RS256 at+jwt verification, exact issuance/grant binding and authoritative condition-only read-set admission. Revocation and missing issuance reject; unknown commits and backend corruption remain infrastructure failures. Public issuer validation and refresh endpoints remain under implementation.
+- Internal OAuth code exchange: current registered-client authentication, S256 and exact grant binding, continuing policy checks, precommit RS256 access JWT and bounded retained response bytes, atomic issued-jti/initial refresh records with pinned retention, and bound replay grant revocation. Public endpoints and key lifecycle remain under implementation; internal online status admission is implemented.
+- Internal OAuth consent ledger: bounded typed interaction/code/pending-grant records, browser and client security binding, atomic approval/denial, no duplicate code return, and checked retention arithmetic. Public issuance endpoints remain under implementation.
 - Internal OAuth issuer store coordination: typed permanent issuer/subject fences, checked revocation epochs and clock high-water updates, single-use complete read-set barriers, and bounded conflict reloads under one cooperative deadline. Unknown commits fail without automatic replay. Tests use controlled two-coordinator interleavings over a single-process test double; durable backend and credential engine integration remain pending.
 
 
@@ -65,3 +81,5 @@ Nothing has been released. The version is `1.0.0-SNAPSHOT`, and there is no comp
 Nothing below was ever released; each item rejects input that milestone M1 accepted, so it is listed here, as the security-tightening policy requires.
 
 - `OutboundUriPolicy.defaultInstance()` also rejects more of the cloud metadata endpoints known as of 2026-09-27 (100.100.100.200, 168.63.129.16, fd00:ec2::23 and fd20:ce::254, and the names `metadata.google.internal` and `metadata.goog` and every name under them), the RFC 8215 local-use NAT64 prefix 64:ff9b:1::/48, and IPv4-translated literals around a rejected IPv4 address.
+
+- Internal issuer client selection now checks exact registrations first and fetches fresh CIMD metadata for each code/refresh attempt before authoritative credential reads or consumption. Source-separated security fingerprints bind consent and grants; metadata scopes remain untrusted and app approval remains required.

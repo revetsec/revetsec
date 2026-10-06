@@ -39,6 +39,7 @@ public final class JwtValidationAccess {
 	public interface Operations {
 		@NonNull Jwt validate(@NonNull JwtValidator validator, @NonNull String compact, @NonNull LongSupplier remainingNanos);
 		@NonNull Jwt validatePrepared(@NonNull JwtValidator validator, @NonNull PreparedJws prepared, @NonNull LongSupplier remainingNanos);
+		@NonNull Jwt validateIssuerRevocation(@NonNull JwtValidator validator, @NonNull String compact, @NonNull LongSupplier remainingNanos);
 		@NonNull Jwt validateUserInfo(@NonNull JwtValidator validator, @NonNull String compact, @NonNull LongSupplier remainingNanos);
 		@NonNull Jwt validateOidc(@NonNull JwtValidator validator, @NonNull String compact, @NonNull Set<@NonNull JwsAlgorithm> algorithms,
 				byte @NonNull [] secret, @NonNull LongSupplier remainingNanos, @NonNull Runnable hmacUsed);

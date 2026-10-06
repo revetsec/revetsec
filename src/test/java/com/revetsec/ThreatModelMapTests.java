@@ -234,9 +234,9 @@ final class ThreatModelMapTests {
 						List.of("FrozenLimitsTests", "FrozenLimitsTests.everyApprovedRowIsPinned"), 0),
 				new GrammarCase("a Class.method citation and a bare method after it",
 						"`FrozenLimitsTests.theRegistryHoldsExactlyTheApprovedRowsInOrder` and "
-								+ "`zeroIsAllowedForExactlyTheThreeZeroRows`",
+								+ "`zeroIsAllowedForExactlyTheApprovedZeroRows`",
 						List.of("FrozenLimitsTests.theRegistryHoldsExactlyTheApprovedRowsInOrder",
-								"FrozenLimitsTests.zeroIsAllowedForExactlyTheThreeZeroRows"), 0),
+								"FrozenLimitsTests.zeroIsAllowedForExactlyTheApprovedZeroRows"), 0),
 				new GrammarCase("a qualified class", "`internal.LimitsTests`", List.of("internal.LimitsTests"), 0),
 				new GrammarCase("a fuzz target", "`internal.json.JsonCodecFuzzTests`",
 						List.of("internal.json.JsonCodecFuzzTests"), 0),

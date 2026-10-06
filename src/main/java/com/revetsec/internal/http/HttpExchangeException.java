@@ -100,9 +100,10 @@ public final class HttpExchangeException extends Exception {
 		 * {@link ErrorCategory#CONFIGURATION}.
 		 */
 		URI_REJECTED(ErrorCategory.VALIDATION_FAILURE, false, "The request URI is not permitted."),
-		/**
-		 * No client was injected, and the process-wide default client could not be created in this runtime.
-		 */
+		/** The specialized pinned HTTPS context cannot provide its required local certificate checks. */
+		PINNED_TLS_UNAVAILABLE(ErrorCategory.CONFIGURATION, false,
+				"The pinned HTTPS TLS context is unavailable."),
+		/** The process-wide default HTTP client is unavailable. */
 		DEFAULT_CLIENT_UNAVAILABLE(ErrorCategory.CONFIGURATION, false,
 				"The default HttpClient could not be created in this runtime.");
 

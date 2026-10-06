@@ -32,10 +32,14 @@ import java.util.Optional;
 import static java.util.Objects.requireNonNull;
 import static com.revetsec.oauth.server.OAuthServerAdmissionFailure.Reason.*;
 
-/** Registered-only admission. Unknown clients remain unknown; the later CIMD boundary owns eligible URL lookup. */
+/** Registry-only lookup/authentication. OAuthServerClientSelection owns eligible metadata fallback. */
 final class OAuthServerClientAdmission {
 	private OAuthServerClientAdmission() {}
 	static @NonNull OAuthServerClientRegistration registered(@NonNull String id,
+			@NonNull OAuthServerClientRepository repository, @NonNull Deadline deadline, @NonNull OAuthServerIngressLimits limits) {
+		return findRegistered(id, repository, deadline, limits).orElseThrow(() -> failure(INVALID_CLIENT));
+	}
+	static @NonNull Optional<@NonNull OAuthServerClientRegistration> findRegistered(@NonNull String id,
 			@NonNull OAuthServerClientRepository repository, @NonNull Deadline deadline, @NonNull OAuthServerIngressLimits limits) {
 		requireNonNull(repository); requireNonNull(deadline); requireNonNull(limits);
 		try { OAuthServerConfiguration.text(id, limits.clientIdLength); }
@@ -46,7 +50,8 @@ final class OAuthServerClientAdmission {
 		catch (Throwable exception) { throw infrastructure(exception); }
 		remaining(deadline);
 		if (found == null) throw failure(INFRASTRUCTURE);
-		OAuthServerClientRegistration client = found.orElseThrow(() -> failure(INVALID_CLIENT));
+		if (found.isEmpty()) return Optional.empty();
+		OAuthServerClientRegistration client = found.orElseThrow();
 		if (!id.equals(client.getClientId())) throw failure(INFRASTRUCTURE);
 		if (client.getRedirectUris().size() > limits.redirects || client.getAllowedScopesByResource().size() > limits.resources
 				|| client.getIntrospectionResources().size() > limits.resources) throw failure(INFRASTRUCTURE);
@@ -54,7 +59,7 @@ final class OAuthServerClientAdmission {
 			if (scopes.size() > limits.scopes) throw failure(INFRASTRUCTURE);
 			for (String scope : scopes) if (scope.length() > limits.scopeLength) throw failure(INFRASTRUCTURE);
 		}
-		return client;
+		return Optional.of(client);
 	}
 	static @NonNull OAuthServerClientRegistration authenticate(@NonNull OAuthServerRequest request,
 			@NonNull OAuthServerClientRepository repository, @NonNull Deadline deadline, @NonNull OAuthServerIngressLimits limits) {

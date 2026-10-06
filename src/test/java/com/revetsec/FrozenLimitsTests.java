@@ -314,20 +314,48 @@ final class FrozenLimitsTests {
 			durations("CLIENT_CREDENTIALS_RENEW_BEFORE", "Client-credentials renewBefore", Duration.ofSeconds(60),
 					Duration.ZERO, Duration.ofMinutes(10), ZERO_ALLOWED),
 			durations("CLIENT_ASSERTION_LIFETIME", "Client assertion lifetime", Duration.ofSeconds(60),
-					Duration.ofSeconds(1), Duration.ofSeconds(300), ZERO_REJECTED));
+					Duration.ofSeconds(1), Duration.ofSeconds(300), ZERO_REJECTED),
+			amounts("CIMD_MAXIMUM_DOCUMENT_BYTES", "CIMD maximum document bytes", Unit.BYTES, 5120, 1024, 5120),
+			amounts("CIMD_MAXIMUM_CACHE_ENTRIES", "CIMD maximum cache entries", Unit.COUNT, 128, 1, 4096),
+			durations("CIMD_MAXIMUM_FRESHNESS", "CIMD maximum freshness", Duration.ofSeconds(300), Duration.ZERO, Duration.ofHours(1), ZERO_ALLOWED),
+			amounts("CIMD_MAXIMUM_CONCURRENT_FETCHES", "CIMD maximum concurrent fetches", Unit.COUNT, 8, 1, 64),
+			amounts("CIMD_MAXIMUM_RESOLVED_ADDRESSES", "CIMD maximum resolved addresses", Unit.COUNT, 16, 1, 64),
+			durations("AS_AUTHORIZATION_INTERACTION_LIFETIME", "Issuer authorizationInteractionLifetime", Duration.ofMinutes(15), Duration.ofMinutes(1), Duration.ofHours(1), ZERO_REJECTED),
+			durations("AS_AUTHORIZATION_CODE_LIFETIME", "Issuer authorizationCodeLifetime", Duration.ofMinutes(2), Duration.ofSeconds(30), Duration.ofMinutes(10), ZERO_REJECTED),
+			durations("AS_ACCESS_TOKEN_LIFETIME", "Issuer accessTokenLifetime", Duration.ofMinutes(5), Duration.ofSeconds(30), Duration.ofMinutes(15), ZERO_REJECTED),
+			durations("AS_REFRESH_TOKEN_IDLE_LIFETIME", "Issuer refreshTokenIdleLifetime", Duration.ofHours(24), Duration.ofMinutes(5), Duration.ofDays(7), ZERO_REJECTED),
+			durations("AS_REFRESH_TOKEN_ABSOLUTE_LIFETIME", "Issuer refreshTokenAbsoluteLifetime", Duration.ofDays(7), Duration.ofHours(1), Duration.ofDays(30), ZERO_REJECTED),
+			durations("AS_CLOCK_SKEW", "Issuer clockSkew", Duration.ofSeconds(30), Duration.ZERO, Duration.ofSeconds(60), ZERO_ALLOWED),
+			durations("AS_TOTAL_DEADLINE", "Issuer totalDeadline", Duration.ofSeconds(10), Duration.ofSeconds(1), Duration.ofSeconds(60), ZERO_REJECTED),
+			durations("AS_REQUEST_TIMEOUT", "Issuer requestTimeout", Duration.ofSeconds(5), Duration.ofSeconds(1), Duration.ofSeconds(30), ZERO_REJECTED),
+			durations("AS_PUBLIC_METADATA_FRESHNESS", "Issuer publicMetadataFreshness", Duration.ofSeconds(60), Duration.ZERO, Duration.ofMinutes(5), ZERO_ALLOWED),
+			amounts("AS_MAXIMUM_REQUEST_BODY_BYTES", "Issuer maximumRequestBodyBytes", Unit.BYTES, 16384, 1024, 65536),
+			amounts("AS_MAXIMUM_RAW_QUERY_LENGTH", "Issuer maximumRawQueryLength", Unit.CHARACTERS, 16384, 1024, 65536),
+			amounts("AS_MAXIMUM_HEADER_BYTES", "Issuer maximumHeaderBytes", Unit.BYTES, 16384, 1024, 65536),
+			amounts("AS_MAXIMUM_RESPONSE_BODY_BYTES", "Issuer maximumResponseBodyBytes", Unit.BYTES, 32768, 4096, 131072),
+			amounts("AS_MAXIMUM_STORE_RECORD_BYTES", "Issuer maximumStoreRecordBytes", Unit.BYTES, 3800, 1024, 16384),
+			amounts("AS_MAXIMUM_STORE_COMMIT_ATTEMPTS", "Issuer maximumStoreCommitAttempts", Unit.COUNT, 3, 1, 8),
+			amounts("AS_MAXIMUM_RESOURCES", "Issuer maximumResources", Unit.COUNT, 64, 1, 1024),
+			amounts("AS_MAXIMUM_REDIRECT_URIS", "Issuer maximumRedirectUris", Unit.COUNT, 32, 1, 64),
+			amounts("AS_MAXIMUM_SCOPES_PER_RESOURCE", "Issuer maximumScopesPerResource", Unit.COUNT, 32, 1, 128),
+			amounts("AS_MAXIMUM_SCOPE_LENGTH", "Issuer maximumScopeLength", Unit.CHARACTERS, 128, 1, 128),
+			amounts("AS_MAXIMUM_STATE_LENGTH", "Issuer maximumStateLength", Unit.CHARACTERS, 1024, 128, 4096),
+			amounts("AS_MAXIMUM_CLIENT_ID_LENGTH", "Issuer maximumClientIdLength", Unit.CHARACTERS, 2048, 256, 4096),
+			amounts("AS_MAXIMUM_SUBJECT_LENGTH", "Issuer maximumSubjectLength", Unit.CHARACTERS, 255, 16, 1024));
+
 
 	/**
-	 * The three rows that permit zero (M1 plan, "Limits registry": "Zero is allowed only for maximum staleness and
-	 * renewBefore"; G8-10 adds the JOSE clock skew as the third).
+	 * The approved rows that permit zero (M1 plan, "Limits registry": "Zero is allowed only for maximum staleness and
+	 * renewBefore"; G8-10 adds the JOSE clock skew as the third; AS1-C1 adds CIMD maximum freshness as the fourth).
 	 */
 	private static final Set<String> ZERO_ROWS = Set.of("JWKS_MAXIMUM_STALENESS", "CLIENT_CREDENTIALS_RENEW_BEFORE",
-			"JOSE_CLOCK_SKEW");
+			"JOSE_CLOCK_SKEW", "CIMD_MAXIMUM_FRESHNESS", "AS_CLOCK_SKEW", "AS_PUBLIC_METADATA_FRESHNESS");
 
 	// Gates 5 and 8: the registry holds exactly the approved rows, as public constants, in the transcribed order.
 	@Test
 	void theRegistryHoldsExactlyTheApprovedRowsInOrder() throws IllegalAccessException {
 		List<String> approved = APPROVED_ROWS.stream().map(Row::getConstant).toList();
-		Assertions.assertEquals(52, approved.size(), "M6 adds the client assertion lifetime row");
+		Assertions.assertEquals(79, approved.size(), "AS1-A3 adds the remaining22 approved issuer rows");
 
 		Map<String, Limit> constants = constants();
 		IdentityHashMap<Limit, String> names = new IdentityHashMap<>();
@@ -345,11 +373,11 @@ final class FrozenLimitsTests {
 				() -> Limits.all().add(Limits.HTTP_RESPONSE_BODY_SIZE));
 	}
 
-	// G8-10: zero is allowed for exactly three rows, the JWKS maximum staleness, renewBefore and the JOSE clock skew,
+	// The approved zero rows are JWKS maximum staleness, renewBefore, JOSE clock skew and CIMD freshness,
 	// and no other constant permits it.
 	@Test
-	void zeroIsAllowedForExactlyTheThreeZeroRows() throws IllegalAccessException {
-		Assertions.assertEquals(3, ZERO_ROWS.size());
+	void zeroIsAllowedForExactlyTheApprovedZeroRows() throws IllegalAccessException {
+		Assertions.assertEquals(6, ZERO_ROWS.size());
 		Assertions.assertEquals(ZERO_ROWS, APPROVED_ROWS.stream().filter(Row::isZeroAllowed).map(Row::getConstant)
 				.collect(Collectors.toSet()));
 		Assertions.assertEquals(ZERO_ROWS, constants().entrySet().stream()

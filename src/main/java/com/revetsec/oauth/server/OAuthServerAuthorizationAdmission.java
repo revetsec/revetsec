@@ -34,22 +34,30 @@ import static com.revetsec.oauth.server.OAuthServerAdmissionFailure.Reason.*;
 /** Exact registered redirect/resource/scope selection; produces no Location, interaction or credential. */
 final class OAuthServerAuthorizationAdmission {
 	private final @NonNull OAuthServerClientRegistration client;
-	private final @NonNull String redirect, resource, challenge;
+	private final @NonNull String redirect, resource, challenge, fingerprint;
 	private final @Nullable String state;
 	private final @NonNull Set<@NonNull String> scopes;
-	private OAuthServerAuthorizationAdmission(@NonNull OAuthServerClientRegistration client, @NonNull String redirect,
+	private OAuthServerAuthorizationAdmission(@NonNull OAuthServerClientRegistration client, @NonNull String fingerprint, @NonNull String redirect,
 			@NonNull String resource, @NonNull String challenge, @Nullable String state, @NonNull Set<@NonNull String> scopes) {
-		this.client = client; this.redirect = redirect; this.resource = resource; this.challenge = challenge;
+		this.client = client; this.fingerprint = fingerprint; this.redirect = redirect; this.resource = resource; this.challenge = challenge;
 		this.state = state; this.scopes = Set.copyOf(scopes);
 	}
 	static @NonNull OAuthServerAuthorizationAdmission admit(@NonNull OAuthServerRequest request,
 			@NonNull OAuthServerClientRepository repository, @NonNull Deadline deadline,
 			@NonNull Map<@NonNull String, @NonNull Set<@NonNull String>> serverResources,
 			@NonNull OAuthServerIngressLimits limits, boolean nativeLoopback, boolean localhostInterop) {
+		return admit(request, new OAuthServerClientSelection(repository, limits, null), deadline, serverResources,
+				limits, nativeLoopback, localhostInterop);
+	}
+	static @NonNull OAuthServerAuthorizationAdmission admit(@NonNull OAuthServerRequest request,
+			@NonNull OAuthServerClientSelection selection, @NonNull Deadline deadline,
+			@NonNull Map<@NonNull String, @NonNull Set<@NonNull String>> serverResources,
+			@NonNull OAuthServerIngressLimits limits, boolean nativeLoopback, boolean localhostInterop) {
 		requireNonNull(request); requireNonNull(serverResources);
 		serverResources = checkedServerResources(serverResources, limits);
 		if (request.endpoint() != OAuthServerRequest.Endpoint.AUTHORIZATION) throw OAuthServerRequest.invalid();
-		OAuthServerClientRegistration client = OAuthServerClientAdmission.registered(request.required("client_id"), repository, deadline, limits);
+		OAuthServerClientSelection.Selected selected = selection.authorization(request.required("client_id"), serverResources, deadline);
+		OAuthServerClientRegistration client = selected.client();
 		if (!client.isAuthorizationCodePermitted()) throw failure(UNAUTHORIZED_CLIENT);
 		String redirect = request.required("redirect_uri");
 		if (!matchesRedirect(client, redirect, nativeLoopback, localhostInterop)) throw OAuthServerRequest.invalid();
@@ -59,9 +67,9 @@ final class OAuthServerAuthorizationAdmission {
 		if (!request.required("code_challenge_method").equals("S256") || !challenge(challenge)) throw OAuthServerRequest.invalid();
 		String resource = request.required("resource");
 		Set<String> scopes = selectScopes(resource, request.value("scope"), client, serverResources, limits);
-		return new OAuthServerAuthorizationAdmission(client, redirect, resource, challenge, request.value("state"), scopes);
+		return new OAuthServerAuthorizationAdmission(client, selected.fingerprint(), redirect, resource, challenge, request.value("state"), scopes);
 	}
-	private static @NonNull Map<@NonNull String, @NonNull Set<@NonNull String>> checkedServerResources(
+	static @NonNull Map<@NonNull String, @NonNull Set<@NonNull String>> checkedServerResources(
 			@NonNull Map<@NonNull String, @NonNull Set<@NonNull String>> resources, @NonNull OAuthServerIngressLimits limits) {
 		Map<String, Set<String>> checked = OAuthServerConfiguration.resources(resources, limits.resources);
 		for (Set<String> scopes : checked.values()) {
@@ -132,6 +140,7 @@ final class OAuthServerAuthorizationAdmission {
 		else throw failure(UNSUPPORTED_GRANT_TYPE);
 		request.required("resource");
 	}
+	@NonNull String fingerprint() { return this.fingerprint; }
 	@NonNull OAuthServerClientRegistration client() { return this.client; }
 	@NonNull String redirect() { return this.redirect; }
 	@NonNull String resource() { return this.resource; }

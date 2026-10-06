@@ -603,6 +603,7 @@ final class HttpExchangeTests {
 		table.put(Kind.FRAMING, List.of(ErrorCategory.MALFORMED_INPUT, false));
 		table.put(Kind.MEDIA_TYPE, List.of(ErrorCategory.MALFORMED_INPUT, false));
 		table.put(Kind.URI_REJECTED, List.of(ErrorCategory.VALIDATION_FAILURE, false));
+		table.put(Kind.PINNED_TLS_UNAVAILABLE, List.of(ErrorCategory.CONFIGURATION, false));
 		table.put(Kind.DEFAULT_CLIENT_UNAVAILABLE, List.of(ErrorCategory.CONFIGURATION, false));
 
 		Assertions.assertEquals(List.of(Kind.values()), List.copyOf(table.keySet()), "every kind is in the table");

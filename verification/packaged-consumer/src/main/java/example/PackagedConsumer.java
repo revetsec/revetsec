@@ -18,6 +18,31 @@ package example;
 
 import org.jspecify.annotations.NonNull;
 
+import com.revetsec.oauth.server.OAuthServerResponse;
+import com.revetsec.oauth.server.OAuthServerInteraction;
+import com.revetsec.oauth.server.OAuthAuthorizationResult;
+import com.revetsec.oauth.server.OAuthTokenResult;
+import com.revetsec.oauth.server.OAuthRevocationResult;
+import com.revetsec.oauth.server.OAuthIntrospectionResult;
+import com.revetsec.oauth.server.OAuthIssuerAccessTokenResult;
+import com.revetsec.oauth.server.OAuthServerException;
+import com.revetsec.oauth.server.OAuthServerValidationException;
+import com.revetsec.oauth.server.OAuthServerStoreException;
+import com.revetsec.oauth.server.OAuthServerTransportException;
+import com.revetsec.oauth.server.OAuthServerConfigurationException;
+import com.revetsec.oauth.server.OAuthServerSigningException;
+import com.revetsec.oauth.server.OAuthServerObserver;
+
+import com.revetsec.oauth.server.OAuthIssuerSigningKey;
+import com.revetsec.oauth.server.OAuthIssuerKeySnapshot;
+import com.revetsec.oauth.server.OAuthIssuerKeyProvider;
+import com.revetsec.oauth.server.OAuthClientMetadataPolicy;
+import com.revetsec.oauth.server.InMemoryOAuthClientMetadataCache;
+import com.revetsec.oauth.server.OAuthClientMetadataCache;
+import com.revetsec.oauth.server.OAuthClientMetadataCacheKey;
+import com.revetsec.oauth.server.OAuthClientMetadataCacheEntry;
+import com.revetsec.oauth.server.OAuthClientMetadataCacheException;
+import com.revetsec.oauth.server.OAuthClientMetadataAddressResolver;
 import com.revetsec.oauth.server.OAuthClientSecretVerifier;
 import com.revetsec.oauth.server.OAuthServerClientRepository;
 import com.revetsec.oauth.server.OAuthAuthorizationServerStore;
@@ -195,6 +220,64 @@ public final class PackagedConsumer {
 	}
 
 	public static void main(@NonNull String @NonNull [] arguments) throws Exception {
+  require(OAuthServerResponse.class.getConstructors().length == 0, "server response restricted construction");
+  require(OAuthServerResponse.class.getDeclaredMethod("getStatusCode").getReturnType() == Integer.class
+    && OAuthServerResponse.class.getDeclaredMethod("getHeaders").getReturnType() == Map.class
+    && OAuthServerResponse.class.getDeclaredMethod("getLocationWithCredentials").getReturnType() == Optional.class
+    && OAuthServerResponse.class.getDeclaredMethod("toHttpBodyWithCredentials").getReturnType() == byte[].class,
+    "server response annotation-free exported method signatures");
+  OAuthClientMetadataAddressResolver metadataResolver = (hostname, remainingBudget) -> List.of();
+  OAuthClientMetadataPolicy.Builder metadataBuilder = OAuthClientMetadataPolicy.withAddressResolver(metadataResolver);
+  OAuthClientMetadataPolicy metadataPolicy = metadataBuilder.allowedOrigins(Set.of(URI.create("https://consumer.example.com")))
+   .allowedOrigins(null).maximumDocumentBytes(1024).maximumDocumentBytes(null).maximumCacheEntries(1).maximumCacheEntries(null)
+   .maximumFreshness(Duration.ZERO).maximumFreshness(null).maximumConcurrentFetches(1).maximumConcurrentFetches(null)
+   .maximumResolvedAddresses(1).maximumResolvedAddresses(null).addressResolver(metadataResolver).build();
+  if (!metadataPolicy.getEnabled() || metadataPolicy.getAllowedOrigins().isPresent()
+   || metadataPolicy.getAddressResolver().orElseThrow() != metadataResolver || metadataPolicy.getMaximumDocumentBytes() != 5120
+   || metadataPolicy.getMaximumCacheEntries() != 128 || !metadataPolicy.getMaximumFreshness().equals(Duration.ofSeconds(300))
+   || metadataPolicy.getMaximumConcurrentFetches() != 8 || metadataPolicy.getMaximumResolvedAddresses() != 16
+   || OAuthClientMetadataPolicy.disabledInstance().getEnabled() || !OAuthClientMetadataPolicy.fromAddressResolver(metadataResolver).getEnabled())
+   throw new AssertionError("CIMD policy contract");
+
+  InMemoryOAuthClientMetadataCache localCache = InMemoryOAuthClientMetadataCache.fromMaximumEntries(2);
+  OAuthClientMetadataCache cache = localCache;
+  String cacheDigest = Base64.getUrlEncoder().withoutPadding().encodeToString(new byte[32]);
+  OAuthClientMetadataCacheKey cacheKey = OAuthClientMetadataCacheKey.fromStoredForm("revetsec:cimd-cache:1:" + cacheDigest + ":" + cacheDigest);
+  OAuthClientMetadataCacheEntry cacheEntry = OAuthClientMetadataCacheEntry.fromStoredForm(cacheKey, cacheDigest, NOW, "storage-only-test-carrier");
+  require(localCache.getMaximumEntries() == 2 && InMemoryOAuthClientMetadataCache.fromDefaults().getMaximumEntries() == 128,
+    "cache defaults and explicit local capacity");
+  require(cache.read(cacheKey, Duration.ofSeconds(1)).isEmpty()
+    && cache.compareAndSet(cacheKey, null, cacheEntry, Duration.ofSeconds(1))
+    && cache.read(cacheKey, Duration.ofSeconds(1)).orElseThrow().getVersion().equals(cacheDigest)
+    && cacheEntry.getKey().equals(cacheKey) && cacheEntry.getExpiresAt().equals(NOW)
+    && cacheEntry.toSealedForm().equals("storage-only-test-carrier"), "opaque cache storage round trip");
+  require(metadataBuilder.cache(cache).build().getCache().orElseThrow() == cache
+    && metadataBuilder.cache(null).build().getCache().isEmpty(), "custom cache selection and deferred reset");
+  require(cache.compareAndSet(cacheKey, cacheDigest, null, Duration.ofSeconds(1))
+    && cache.read(cacheKey, Duration.ofSeconds(1)).isEmpty(), "exact-version cache deletion");
+  OAuthClientMetadataCacheException cacheFailure = OAuthClientMetadataCacheException.fromReason(OAuthClientMetadataCacheException.Reason.UNAVAILABLE);
+  require(cacheFailure.getReason() == OAuthClientMetadataCacheException.Reason.UNAVAILABLE
+    && cacheFailure.getCategory() == ErrorCategory.TRANSPORT && cacheFailure.isTransient()
+    && cacheFailure.getCause() == null, "fixed cache provider failure");
+
+
+  for(Class<?> issuerContract:List.of(OAuthServerInteraction.class,OAuthAuthorizationResult.class,OAuthTokenResult.class,
+    OAuthRevocationResult.class,OAuthIntrospectionResult.class,OAuthIssuerAccessTokenResult.class,OAuthServerException.class,
+    OAuthServerValidationException.class,OAuthServerStoreException.class,OAuthServerTransportException.class,
+    OAuthServerConfigurationException.class,OAuthServerSigningException.class)) {
+   for(var constructor:issuerContract.getDeclaredConstructors()) require(!java.lang.reflect.Modifier.isPublic(constructor.getModifiers())
+     && !java.lang.reflect.Modifier.isProtected(constructor.getModifiers()),"restricted issuer construction");
+   for(var method:issuerContract.getDeclaredMethods()) require(!(java.lang.reflect.Modifier.isPublic(method.getModifiers())
+     && java.lang.reflect.Modifier.isStatic(method.getModifiers())),"restricted issuer factories");
+  }
+  OAuthServerObserver issuerObserver=OAuthServerObserver.disabledInstance();
+  require(issuerObserver==OAuthServerObserver.disabledInstance(),"shared disabled issuer observer");
+  issuerObserver.willHandleEndpoint(OAuthServerObserver.Endpoint.TOKEN);
+  issuerObserver.didHandleEndpoint(OAuthServerObserver.Endpoint.TOKEN,200,Duration.ZERO);
+  issuerObserver.didRejectEndpoint(OAuthServerObserver.Endpoint.TOKEN,OAuthServerException.Reason.INVALID_GRANT,400,Duration.ZERO);
+  require(OAuthIssuerAccessTokenResult.class.isSealed() && OAuthServerException.class.isSealed(),"sealed issuer contracts");
+
+
 		ClassLoader classLoader = PackagedConsumer.class.getClassLoader();
 		URL resource = classLoader.getResource(ROOT_PACKAGE_INFO_RESOURCE);
 
@@ -246,6 +329,7 @@ public final class PackagedConsumer {
 		exerciseOidc(calledApi);
 		exerciseIssuerApplicationContracts();
 		exerciseIssuerStorageCarriers();
+		exerciseIssuerKeys();
 		calledApi.add("com.revetsec.oauth.server");
 
 		System.out.println("jar=" + jar);
@@ -260,6 +344,25 @@ public final class PackagedConsumer {
 	/**
 	 * Builds, reads and writes JSON values through {@code com.revetsec.json}; returns the object's JSON text.
 	 */
+	private static void exerciseIssuerKeys() throws Exception {
+		KeyPairGenerator generator = KeyPairGenerator.getInstance("RSA");
+		generator.initialize(2048);
+		KeyPair pair = generator.generateKeyPair();
+		OAuthIssuerSigningKey key = OAuthIssuerSigningKey.fromKeyPair(KEY_ID, pair.getPrivate(), pair.getPublic());
+		OAuthIssuerKeySnapshot.Builder builder = OAuthIssuerKeySnapshot.withActiveKey(key);
+		OAuthIssuerKeySnapshot snapshot = builder.generation("consumer-generation").publishedAt(NOW.minusSeconds(120))
+				.verificationKeys(Map.of(KEY_ID, pair.getPublic())).verificationKeys(null)
+				.retirementNotBefore(Map.of(KEY_ID, NOW.plusSeconds(600))).retirementNotBefore(null).build();
+		OAuthIssuerKeyProvider provider = OAuthIssuerKeyProvider.fromSnapshot(snapshot);
+		require(provider.getSnapshot(Duration.ofSeconds(1)) == snapshot && snapshot.getActiveKey() == key,
+				"fixed issuer key provider and immutable active holder");
+		require(key.getKeyId().equals(KEY_ID) && key.getPublicKey() != null
+				&& snapshot.getVerificationKeys().keySet().equals(Set.of(KEY_ID))
+				&& snapshot.getGeneration().equals("consumer-generation") && snapshot.getPublishedAt().equals(NOW.minusSeconds(120))
+				&& snapshot.getRetirementNotBefore().isEmpty(), "issuer snapshot projections and null resets");
+		require(!key.toString().contains(KEY_ID) && !snapshot.toString().contains(KEY_ID), "issuer key redaction");
+	}
+
 	private static void exerciseIssuerApplicationContracts() {
 		String resource = "https://resource.example/mcp";
 		OAuthClientSecretVerifier verifier = (id, bytes, budget) -> id.equals("resource-client") && bytes.length == 1 && bytes[0] == 42;
@@ -909,8 +1012,37 @@ public final class PackagedConsumer {
 		}
 	}
 
+ private static byte @NonNull [] issuerBodyWithCredentials(@NonNull OAuthServerResponse response) {
+  require(response.getStatusCode() >= 100 && !response.getHeaders().containsKey("Location"), "server response ordinary fields");
+  Optional<URI> location = response.getLocationWithCredentials();
+  require(location.isEmpty() || location.orElseThrow().isAbsolute(), "server response redirect signature");
+  require(response.toString().equals("OAuthServerResponse{<redacted>}"), "server response diagnostic boundary");
+  return response.toHttpBodyWithCredentials();
+ }
+
 	private static void require(boolean condition, @NonNull String what) {
 		if (!condition)
 			throw new IllegalStateException("Public API check failed: " + what);
 	}
+
+ // Compile the restricted result accessors against the packaged JAR; public engine production follows separately.
+ private static void issuerOutcomes(@NonNull OAuthAuthorizationResult authorization,@NonNull OAuthTokenResult token,
+   @NonNull OAuthRevocationResult revocation,@NonNull OAuthIntrospectionResult introspection,@NonNull OAuthIssuerAccessTokenResult validation) {
+  if(authorization instanceof OAuthAuthorizationResult.InteractionRequired required) {
+   OAuthServerInteraction interaction=required.getInteraction();require(!interaction.getInteractionValue().isEmpty()
+    && !interaction.getClientId().isEmpty() && interaction.getClientName()!=null && interaction.getRedirectUri().isAbsolute()
+    && !interaction.getRequestedScopesByResource().isEmpty() && interaction.getExpiresAt()!=null,"restricted pending view");
+  } else if(authorization instanceof OAuthAuthorizationResult.Completed completed) require(completed.getResponse()!=null,"completed response");
+  else if(authorization instanceof OAuthAuthorizationResult.Denied denied) require(denied.getResponse()!=null,"denial response");
+  else if(authorization instanceof OAuthAuthorizationResult.Rejected rejected) require(rejected.getReason()!=null&&rejected.getResponse()!=null,"authorization rejection");
+  if(token instanceof OAuthTokenResult.Succeeded ok) require(ok.getResponse()!=null,"token response");
+  else if(token instanceof OAuthTokenResult.Rejected bad) require(bad.getReason()!=null&&bad.getResponse()!=null,"token rejection");
+  if(revocation instanceof OAuthRevocationResult.Succeeded ok) require(ok.getResponse()!=null,"revocation response");
+  else if(revocation instanceof OAuthRevocationResult.Rejected bad) require(bad.getReason()!=null&&bad.getResponse()!=null,"revocation rejection");
+  if(introspection instanceof OAuthIntrospectionResult.Succeeded ok) require(ok.getResponse()!=null,"introspection response");
+  else if(introspection instanceof OAuthIntrospectionResult.Rejected bad) require(bad.getReason()!=null&&bad.getResponse()!=null,"introspection rejection");
+  if(validation instanceof OAuthIssuerAccessTokenResult.Succeeded ok) require(ok.getAccessToken()!=null,"issuer proof");
+  else if(validation instanceof OAuthIssuerAccessTokenResult.Rejected bad) require(bad.getReason()!=null&&bad.getAccessTokenReason()!=null
+    && bad.getJoseReason()!=null&&bad.getBearerError()!=null,"issuer rejection without proof");
+ }
 }

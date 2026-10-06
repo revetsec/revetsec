@@ -1085,7 +1085,7 @@ final class JwksCache {
 				case TOO_LARGE, CONTENT_ENCODING, FRAMING, MEDIA_TYPE ->
 						failed(new Failure(ErrorCategory.MALFORMED_INPUT, false), null, null);
 				// The URI was checked at build(), so URI_REJECTED is an unreachable backstop (G8-9).
-				case URI_REJECTED, DEFAULT_CLIENT_UNAVAILABLE ->
+				case URI_REJECTED, DEFAULT_CLIENT_UNAVAILABLE, PINNED_TLS_UNAVAILABLE ->
 						failed(new Failure(ErrorCategory.CONFIGURATION, false), null, null);
 			};
 		}

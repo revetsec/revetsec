@@ -33,7 +33,7 @@ final class OAuthHttpErrors {
 			case IO -> OAuthTransportException.fromReason(OAuthException.Reason.NETWORK_FAILURE,
 					exception.getCause() instanceof IOException io ? io : null);
 			case INTERRUPTED -> OAuthTransportException.fromReason(OAuthException.Reason.INTERRUPTED, null);
-			case DEFAULT_CLIENT_UNAVAILABLE -> OAuthTransportException.fromReason(
+			case DEFAULT_CLIENT_UNAVAILABLE, PINNED_TLS_UNAVAILABLE -> OAuthTransportException.fromReason(
 					OAuthException.Reason.HTTP_CLIENT_UNAVAILABLE, null);
 			case URI_REJECTED -> OAuthValidationException.fromReason(OAuthException.Reason.METADATA_INVALID);
 			case REDIRECT -> OAuthResponseException.fromReason(OAuthException.Reason.REDIRECT_NOT_FOLLOWED);

@@ -119,6 +119,7 @@ final class PublicApiContractTests {
 			"com.revetsec.jose.JwtValidationResult$Succeeded",
 			"com.revetsec.oauth.VerifiedAccessToken",
 			"com.revetsec.oauth.AccessTokenValidationResult$Succeeded",
+            "com.revetsec.oauth.server.OAuthIssuerAccessTokenResult$Succeeded",
 			"com.revetsec.oidc.IdToken",
 			"com.revetsec.oidc.OidcAuthentication",
 			"com.revetsec.oidc.OidcAuthenticationResult$Succeeded",
@@ -138,6 +139,7 @@ final class PublicApiContractTests {
             "com.revetsec.oauth.JwtAccessTokenValidator",
             "com.revetsec.oauth.TokenIntrospectionClient",
             "com.revetsec.oauth.AccessTokenValidationResult$Succeeded",
+            "com.revetsec.oauth.server.OAuthIssuerAccessTokenResult$Succeeded",
 			"com.revetsec.jose.JwtValidator",
 			"com.revetsec.jose.JwtValidationResult$Succeeded",
 			"com.revetsec.jose.Jwt",
@@ -168,10 +170,11 @@ final class PublicApiContractTests {
 	 * Public or protected static methods of exported exceptions that applications may call to create one, as
 	 * {@code Outer$Nested#method(erased parameter types)} (M1 plan, "Contract-list changes" item 2; G6-1). Revetsec
 	 * creates its exceptions through package-private factories, so any other public or protected static method on an
-	 * exported exception is reported. Each entry is a reviewed decision; there are none before M9's
-	 * {@code ScimException}.
+	 * exported exception is reported. The metadata-cache provider factory accepts a fixed reason only,
+	 * without backend messages or causes.
 	 */
-	static final Set<String> APP_CONSTRUCTIBLE_EXCEPTION_FACTORIES = Set.of();
+	static final Set<String> APP_CONSTRUCTIBLE_EXCEPTION_FACTORIES = Set.of(
+			"com.revetsec.oauth.server.OAuthClientMetadataCacheException#fromReason(com.revetsec.oauth.server.OAuthClientMetadataCacheException.Reason)");
 
 	private static final Set<String> THREAD_SAFETY_MARKERS = Set.of(
 			"javax.annotation.concurrent.ThreadSafe",

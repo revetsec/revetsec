@@ -39,9 +39,9 @@ import static java.util.Objects.requireNonNull;
  * scalar or empty container as 1 and each enclosing container as one more (M1 plan G7-6), and the exponent row
  * bounds the magnitude of the adjusted decimal exponent.
  * <p>
- * <strong>Zero</strong> is permitted only by three rows: {@link #JWKS_MAXIMUM_STALENESS} (never serve a stale key
+ * <strong>Zero</strong> is permitted by the following rows: {@link #JWKS_MAXIMUM_STALENESS} (never serve a stale key
  * set), {@link #CLIENT_CREDENTIALS_RENEW_BEFORE} (renew only at expiry) and {@link #JOSE_CLOCK_SKEW} (compare times
- * exactly). Every other row rejects zero and negative values.
+ * exactly), and {@link #CIMD_MAXIMUM_FRESHNESS} (never reuse metadata). {@link #AS_CLOCK_SKEW} and {@link #AS_PUBLIC_METADATA_FRESHNESS} also permit zero. Every other row rejects zero and negative values.
  * <p>
  * <strong>Internal rows.</strong> The JSON structural rows other than {@link #SCIM_JSON_NODES} are fixed in 1.0.0:
  * the codec's profiles use their defaults, and their floors bind only if a row is ever made configurable.
@@ -402,6 +402,65 @@ public final class Limits {
 	public static final Limit CLIENT_ASSERTION_LIFETIME = Limit.fromDurations("Client assertion lifetime",
 			Duration.ofSeconds(60), Duration.ofSeconds(1), Duration.ofSeconds(300));
 
+
+	// Opt-in issuer client metadata limits.
+	/** Opt-in CIMD maximum document bytes: default 5120, inclusive interval [1024, 5120]. */
+	public static final Limit CIMD_MAXIMUM_DOCUMENT_BYTES = Limit.fromAmounts("CIMD maximum document bytes", Unit.BYTES, 5120, 1024, 5120);
+	/** Opt-in CIMD maximum cache entries: default 128, inclusive interval [1, 4096]. */
+	public static final Limit CIMD_MAXIMUM_CACHE_ENTRIES = Limit.fromAmounts("CIMD maximum cache entries", Unit.COUNT, 128, 1, 4096);
+	/** Opt-in CIMD maximum freshness: default Duration.ofSeconds(300), inclusive interval [Duration.ZERO, Duration.ofHours(1)]. */
+	public static final Limit CIMD_MAXIMUM_FRESHNESS = Limit.fromDurations("CIMD maximum freshness", Duration.ofSeconds(300), Duration.ZERO, Duration.ofHours(1));
+	/** Opt-in CIMD maximum concurrent fetches: default 8, inclusive interval [1, 64]. */
+	public static final Limit CIMD_MAXIMUM_CONCURRENT_FETCHES = Limit.fromAmounts("CIMD maximum concurrent fetches", Unit.COUNT, 8, 1, 64);
+	/** Opt-in CIMD maximum resolved addresses: default 16, inclusive interval [1, 64]. */
+	public static final Limit CIMD_MAXIMUM_RESOLVED_ADDRESSES = Limit.fromAmounts("CIMD maximum resolved addresses", Unit.COUNT, 16, 1, 64);
+
+	// Approved AS1 issuer rows; consumers are internal until the public server builder is wired.
+	/** Issuer authorizationInteractionLifetime: default Duration.ofMinutes(15), inclusive interval [Duration.ofMinutes(1), Duration.ofHours(1)]. */
+	public static final Limit AS_AUTHORIZATION_INTERACTION_LIFETIME = Limit.fromDurations("Issuer authorizationInteractionLifetime", Duration.ofMinutes(15), Duration.ofMinutes(1), Duration.ofHours(1));
+	/** Issuer authorizationCodeLifetime: default Duration.ofMinutes(2), inclusive interval [Duration.ofSeconds(30), Duration.ofMinutes(10)]. */
+	public static final Limit AS_AUTHORIZATION_CODE_LIFETIME = Limit.fromDurations("Issuer authorizationCodeLifetime", Duration.ofMinutes(2), Duration.ofSeconds(30), Duration.ofMinutes(10));
+	/** Issuer accessTokenLifetime: default Duration.ofMinutes(5), inclusive interval [Duration.ofSeconds(30), Duration.ofMinutes(15)]. */
+	public static final Limit AS_ACCESS_TOKEN_LIFETIME = Limit.fromDurations("Issuer accessTokenLifetime", Duration.ofMinutes(5), Duration.ofSeconds(30), Duration.ofMinutes(15));
+	/** Issuer refreshTokenIdleLifetime: default Duration.ofHours(24), inclusive interval [Duration.ofMinutes(5), Duration.ofDays(7)]. */
+	public static final Limit AS_REFRESH_TOKEN_IDLE_LIFETIME = Limit.fromDurations("Issuer refreshTokenIdleLifetime", Duration.ofHours(24), Duration.ofMinutes(5), Duration.ofDays(7));
+	/** Issuer refreshTokenAbsoluteLifetime: default Duration.ofDays(7), inclusive interval [Duration.ofHours(1), Duration.ofDays(30)]. */
+	public static final Limit AS_REFRESH_TOKEN_ABSOLUTE_LIFETIME = Limit.fromDurations("Issuer refreshTokenAbsoluteLifetime", Duration.ofDays(7), Duration.ofHours(1), Duration.ofDays(30));
+	/** Issuer clockSkew: default Duration.ofSeconds(30), inclusive interval [Duration.ZERO, Duration.ofSeconds(60)]. */
+	public static final Limit AS_CLOCK_SKEW = Limit.fromDurations("Issuer clockSkew", Duration.ofSeconds(30), Duration.ZERO, Duration.ofSeconds(60));
+	/** Issuer totalDeadline: default Duration.ofSeconds(10), inclusive interval [Duration.ofSeconds(1), Duration.ofSeconds(60)]. */
+	public static final Limit AS_TOTAL_DEADLINE = Limit.fromDurations("Issuer totalDeadline", Duration.ofSeconds(10), Duration.ofSeconds(1), Duration.ofSeconds(60));
+	/** Issuer requestTimeout: default Duration.ofSeconds(5), inclusive interval [Duration.ofSeconds(1), Duration.ofSeconds(30)]. */
+	public static final Limit AS_REQUEST_TIMEOUT = Limit.fromDurations("Issuer requestTimeout", Duration.ofSeconds(5), Duration.ofSeconds(1), Duration.ofSeconds(30));
+	/** Issuer publicMetadataFreshness: default Duration.ofSeconds(60), inclusive interval [Duration.ZERO, Duration.ofMinutes(5)]. */
+	public static final Limit AS_PUBLIC_METADATA_FRESHNESS = Limit.fromDurations("Issuer publicMetadataFreshness", Duration.ofSeconds(60), Duration.ZERO, Duration.ofMinutes(5));
+	/** Issuer maximumRequestBodyBytes: default 16384, inclusive interval [1024, 65536]. */
+	public static final Limit AS_MAXIMUM_REQUEST_BODY_BYTES = Limit.fromAmounts("Issuer maximumRequestBodyBytes", Unit.BYTES, 16384, 1024, 65536);
+	/** Issuer maximumRawQueryLength: default 16384, inclusive interval [1024, 65536]. */
+	public static final Limit AS_MAXIMUM_RAW_QUERY_LENGTH = Limit.fromAmounts("Issuer maximumRawQueryLength", Unit.CHARACTERS, 16384, 1024, 65536);
+	/** Issuer maximumHeaderBytes: default 16384, inclusive interval [1024, 65536]. */
+	public static final Limit AS_MAXIMUM_HEADER_BYTES = Limit.fromAmounts("Issuer maximumHeaderBytes", Unit.BYTES, 16384, 1024, 65536);
+	/** Issuer maximumResponseBodyBytes: default 32768, inclusive interval [4096, 131072]. */
+	public static final Limit AS_MAXIMUM_RESPONSE_BODY_BYTES = Limit.fromAmounts("Issuer maximumResponseBodyBytes", Unit.BYTES, 32768, 4096, 131072);
+	/** Issuer maximumStoreRecordBytes: default 3800, inclusive interval [1024, 16384]. */
+	public static final Limit AS_MAXIMUM_STORE_RECORD_BYTES = Limit.fromAmounts("Issuer maximumStoreRecordBytes", Unit.BYTES, 3800, 1024, 16384);
+	/** Issuer maximumStoreCommitAttempts: default 3, inclusive interval [1, 8]. */
+	public static final Limit AS_MAXIMUM_STORE_COMMIT_ATTEMPTS = Limit.fromAmounts("Issuer maximumStoreCommitAttempts", Unit.COUNT, 3, 1, 8);
+	/** Issuer maximumResources: default 64, inclusive interval [1, 1024]. */
+	public static final Limit AS_MAXIMUM_RESOURCES = Limit.fromAmounts("Issuer maximumResources", Unit.COUNT, 64, 1, 1024);
+	/** Issuer maximumRedirectUris: default 32, inclusive interval [1, 64]. */
+	public static final Limit AS_MAXIMUM_REDIRECT_URIS = Limit.fromAmounts("Issuer maximumRedirectUris", Unit.COUNT, 32, 1, 64);
+	/** Issuer maximumScopesPerResource: default 32, inclusive interval [1, 128]. */
+	public static final Limit AS_MAXIMUM_SCOPES_PER_RESOURCE = Limit.fromAmounts("Issuer maximumScopesPerResource", Unit.COUNT, 32, 1, 128);
+	/** Issuer maximumScopeLength: default 128, inclusive interval [1, 128]. */
+	public static final Limit AS_MAXIMUM_SCOPE_LENGTH = Limit.fromAmounts("Issuer maximumScopeLength", Unit.CHARACTERS, 128, 1, 128);
+	/** Issuer maximumStateLength: default 1024, inclusive interval [128, 4096]. */
+	public static final Limit AS_MAXIMUM_STATE_LENGTH = Limit.fromAmounts("Issuer maximumStateLength", Unit.CHARACTERS, 1024, 128, 4096);
+	/** Issuer maximumClientIdLength: default 2048, inclusive interval [256, 4096]. */
+	public static final Limit AS_MAXIMUM_CLIENT_ID_LENGTH = Limit.fromAmounts("Issuer maximumClientIdLength", Unit.CHARACTERS, 2048, 256, 4096);
+	/** Issuer maximumSubjectLength: default 255, inclusive interval [16, 1024]. */
+	public static final Limit AS_MAXIMUM_SUBJECT_LENGTH = Limit.fromAmounts("Issuer maximumSubjectLength", Unit.CHARACTERS, 255, 16, 1024);
+
 	private static final List<Limit> ALL = List.of(
 			HTTP_RESPONSE_BODY_SIZE,
 			JWKS_RESPONSE_BODY_SIZE,
@@ -454,7 +513,29 @@ public final class Limits {
 			CLIENT_CREDENTIALS_FALLBACK_CACHE_DURATION,
 			CLIENT_CREDENTIALS_MAXIMUM_CACHE_DURATION,
 			CLIENT_CREDENTIALS_RENEW_BEFORE,
-			CLIENT_ASSERTION_LIFETIME);
+			CLIENT_ASSERTION_LIFETIME, CIMD_MAXIMUM_DOCUMENT_BYTES, CIMD_MAXIMUM_CACHE_ENTRIES, CIMD_MAXIMUM_FRESHNESS, CIMD_MAXIMUM_CONCURRENT_FETCHES, CIMD_MAXIMUM_RESOLVED_ADDRESSES,
+			AS_AUTHORIZATION_INTERACTION_LIFETIME,
+			AS_AUTHORIZATION_CODE_LIFETIME,
+			AS_ACCESS_TOKEN_LIFETIME,
+			AS_REFRESH_TOKEN_IDLE_LIFETIME,
+			AS_REFRESH_TOKEN_ABSOLUTE_LIFETIME,
+			AS_CLOCK_SKEW,
+			AS_TOTAL_DEADLINE,
+			AS_REQUEST_TIMEOUT,
+			AS_PUBLIC_METADATA_FRESHNESS,
+			AS_MAXIMUM_REQUEST_BODY_BYTES,
+			AS_MAXIMUM_RAW_QUERY_LENGTH,
+			AS_MAXIMUM_HEADER_BYTES,
+			AS_MAXIMUM_RESPONSE_BODY_BYTES,
+			AS_MAXIMUM_STORE_RECORD_BYTES,
+			AS_MAXIMUM_STORE_COMMIT_ATTEMPTS,
+			AS_MAXIMUM_RESOURCES,
+			AS_MAXIMUM_REDIRECT_URIS,
+			AS_MAXIMUM_SCOPES_PER_RESOURCE,
+			AS_MAXIMUM_SCOPE_LENGTH,
+			AS_MAXIMUM_STATE_LENGTH,
+			AS_MAXIMUM_CLIENT_ID_LENGTH,
+			AS_MAXIMUM_SUBJECT_LENGTH);
 
 	private Limits() {
 		// Constants and static helpers only.

@@ -99,6 +99,9 @@ public final class JwtValidator {
                 throw failure;
             }
         }
+        @Override public @NonNull Jwt validateIssuerRevocation(@NonNull JwtValidator validator, @NonNull String compact, @NonNull LongSupplier remainingNanos) {
+			return validator.validate(compact, requireNonNull(remainingNanos), validator.claimsPolicy.forIssuerRevocation());
+		}
         @Override public @NonNull Jwt validateUserInfo(@NonNull JwtValidator validator, @NonNull String compact, @NonNull LongSupplier remainingNanos) {
 			return validator.validate(compact, requireNonNull(remainingNanos), validator.claimsPolicy.withOptionalExpiration());
 		}

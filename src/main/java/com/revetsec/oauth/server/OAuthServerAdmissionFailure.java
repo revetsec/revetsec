@@ -21,7 +21,7 @@ import org.jspecify.annotations.NonNull;
 /** Internal fixed classification; the future endpoint boundary translates it without retaining remote data. */
 final class OAuthServerAdmissionFailure extends RuntimeException {
 	private static final long serialVersionUID = 1L;
-	enum Reason { INVALID_REQUEST, INVALID_CLIENT, UNAUTHORIZED_CLIENT, INVALID_SCOPE, INVALID_TARGET,
+	enum Reason { INVALID_TOKEN, INVALID_GRANT, INVALID_REQUEST, INVALID_CLIENT, UNAUTHORIZED_CLIENT, INVALID_SCOPE, INVALID_TARGET,
 		UNSUPPORTED_RESPONSE_TYPE, UNSUPPORTED_GRANT_TYPE, INFRASTRUCTURE }
 	private final @NonNull Reason reason;
 	OAuthServerAdmissionFailure(@NonNull Reason reason) {

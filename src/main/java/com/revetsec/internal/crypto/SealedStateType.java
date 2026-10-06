@@ -51,7 +51,9 @@ public enum SealedStateType {
 	 */
 	APP("revetsec/app/v1"),
  /** Authenticated issuer persistence records: revetsec/as-record/v1. */
- AS_RECORD("revetsec/as-record/v1");
+ AS_RECORD("revetsec/as-record/v1"),
+ /** Optional authenticated client metadata cache, distinct from application/issuer persistence. */
+ AS_CLIENT_METADATA_CACHE("revetsec/as-client-metadata-cache/v1");
 
 	@NonNull
 	private final String label;

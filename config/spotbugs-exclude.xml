@@ -2,9 +2,32 @@
 <!--
 	SpotBugs + FindSecBugs exclusions for the spotbugs profile.
 
-	There are none. Every exclusion added later must be as narrow as possible (a pattern plus a class and
+	Every exclusion must be as narrow as possible (a pattern plus a class and
 	method, not a whole category) and carry a comment saying why the finding is a false positive or an
 	accepted risk.
 -->
 <FindBugsFilter>
+	<!-- Cleanup deliberately preserves the checked operation failure and fixed diagnostics.
+	     The socket/selector closure is always attempted; a late IOException cannot expose remote text
+	     or turn cleanup into a new operation outcome. Local closure tests check resource release. -->
+	<Match>
+		<Bug pattern="DE_MIGHT_IGNORE"/>
+		<Class name="com.revetsec.internal.http.PinnedTlsChannel"/>
+		<Method name="close" signature="()V"/>
+	</Match>
+	<!-- The copied Soklet map retains its upstream non-final class/throwing capacity constructors.
+	     The Revetsec default constructs the concrete map only after validating capacity, passes no
+	     listener and keeps it private; constructor state contains no entries, credentials or core
+	     references. A failed external subclass construction cannot recover a Revetsec-owned cache.
+	     Keep this exclusion on these two constructors only; provenance pins the unchanged bodies. -->
+	<Match>
+		<Bug pattern="CT_CONSTRUCTOR_THROW"/>
+		<Class name="com.revetsec.internal.ConcurrentLruMap"/>
+		<Method name="&lt;init&gt;" signature="(I)V"/>
+	</Match>
+	<Match>
+		<Bug pattern="CT_CONSTRUCTOR_THROW"/>
+		<Class name="com.revetsec.internal.ConcurrentLruMap"/>
+		<Method name="&lt;init&gt;" signature="(ILjava/util/function/BiConsumer;)V"/>
+	</Match>
 </FindBugsFilter>

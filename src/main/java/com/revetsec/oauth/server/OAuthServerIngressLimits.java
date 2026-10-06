@@ -18,7 +18,7 @@ package com.revetsec.oauth.server;
 
 import org.jspecify.annotations.NonNull;
 
-/** Pure internal settings, pending their approved server-builder registry rows. No public limit is claimed yet. */
+/** Pure internal ingress view of the approved issuer registry. Public builder wiring remains pending. */
 final class OAuthServerIngressLimits {
 	final int bodyBytes, queryLength, headerBytes, stateLength, clientIdLength;
 	final int resources, redirects, scopes, scopeLength;
@@ -35,7 +35,7 @@ final class OAuthServerIngressLimits {
 		this.scopeLength = checked(scopeLength, 1, 128);
 	}
 	static @NonNull OAuthServerIngressLimits fromDefaults() {
-		return new OAuthServerIngressLimits(16384, 16384, 16384, 1024, 2048, 64, 32, 32, 128);
+		return OAuthServerSettings.builder().build(false, 3800).ingress();
 	}
 	private static int checked(int value, int minimum, int maximum) {
 		if (value < minimum || value > maximum) throw new IllegalArgumentException("Invalid issuer ingress limit.");

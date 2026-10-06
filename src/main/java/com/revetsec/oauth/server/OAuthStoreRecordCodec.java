@@ -67,6 +67,7 @@ final class OAuthStoreRecordCodec {
  @NonNull OAuthStoreKey key(OAuthStoreKey.@NonNull Kind kind, @NonNull String identifier) {
   return OAuthStoreFormat.key(this.namespace, kind, identifier);
  }
+ @NonNull String issuer() { return this.issuer; }
  @NonNull OAuthStoreKey issuerKey() { return key(OAuthStoreKey.Kind.ISSUER_STATE, this.namespace); }
  @NonNull OAuthStoreKey subjectKey(@NonNull String subject) {
   requireNonNull(subject);

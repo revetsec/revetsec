@@ -74,6 +74,23 @@ public final class Deadline {
 	}
 
 	/**
+	 * Restricts the remaining time without moving this deadline's original absolute cutoff.
+	 * The returned deadline uses the same monotonic start and expires at the earlier cutoff.
+	 * @param maximumRemaining zero or positive remaining allowance
+	 * @return the restricted deadline
+	 */
+	public @NonNull Deadline boundedBy(@NonNull Duration maximumRemaining) {
+		requireNonNull(maximumRemaining);
+		if (maximumRemaining.isNegative()) throw new IllegalArgumentException("A remaining allowance must not be negative.");
+		long maximum;
+		try { maximum = maximumRemaining.toNanos(); }
+		catch (ArithmeticException failure) { maximum = Long.MAX_VALUE; }
+		long elapsed = System.nanoTime() - this.startNanos;
+		long cutoff = maximum > Long.MAX_VALUE - elapsed ? Long.MAX_VALUE : elapsed + maximum;
+		return new Deadline(this.startNanos, Math.min(this.totalNanos, cutoff));
+	}
+
+	/**
 	 * The time left, in nanoseconds: zero or negative once the deadline has passed.
 	 *
 	 * @return the nanoseconds left

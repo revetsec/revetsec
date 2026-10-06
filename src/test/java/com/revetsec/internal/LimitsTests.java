@@ -95,13 +95,13 @@ final class LimitsTests {
 	}
 
 	@Test
-	void zeroIsAllowedOnlyForTheJoseClockSkewMaximumStalenessAndRenewBefore() {
+	void zeroIsAllowedOnlyForTheApprovedZeroRows() {
 		// M1 plan, Limits registry: "Zero is allowed only for maximum staleness and renewBefore." G8-10 adds the JOSE
-		// clock skew (R11: "configurable 0-5 min") as the third zero row, in registry order.
+		// clock skew (R11: "configurable 0-5 min") as the third zero row. AS1-C1 adds CIMD maximum freshness.
 		List<Limit> zeroAllowed = Limits.all().stream().filter(Limit::isZeroAllowed).toList();
 
 		Assertions.assertEquals(List.of(Limits.JOSE_CLOCK_SKEW, Limits.JWKS_MAXIMUM_STALENESS,
-				Limits.CLIENT_CREDENTIALS_RENEW_BEFORE), zeroAllowed);
+				Limits.CLIENT_CREDENTIALS_RENEW_BEFORE, Limits.CIMD_MAXIMUM_FRESHNESS, Limits.AS_CLOCK_SKEW, Limits.AS_PUBLIC_METADATA_FRESHNESS), zeroAllowed);
 	}
 
 	@Test
@@ -119,7 +119,7 @@ final class LimitsTests {
 		}
 
 		Assertions.assertEquals(constants, Limits.all());
-		Assertions.assertEquals(52, Limits.all().size());
+		Assertions.assertEquals(79, Limits.all().size());
 
 		Set<String> names = new HashSet<>();
 		for (Limit limit : Limits.all())

@@ -104,6 +104,7 @@ public final class JwtClaimsPolicy {
 	@NonNull
 	private final Duration clockSkew;
 	private final boolean expirationRequired;
+	private final boolean timeAdmission;
 	private final boolean microsoftEntra;
 	private final @Nullable String boundTenantIssuer;
 
@@ -116,6 +117,12 @@ public final class JwtClaimsPolicy {
 	private JwtClaimsPolicy(@NonNull String issuer, @Nullable Set<@NonNull String> expectedAudiences,
 			@NonNull Set<@NonNull String> requiredClaims, @NonNull Duration clockSkew, boolean expirationRequired,
 			boolean microsoftEntra, @Nullable String boundTenantIssuer) {
+		this(issuer, expectedAudiences, requiredClaims, clockSkew, expirationRequired, microsoftEntra, boundTenantIssuer, true);
+	}
+	private JwtClaimsPolicy(@NonNull String issuer, @Nullable Set<@NonNull String> expectedAudiences,
+			@NonNull Set<@NonNull String> requiredClaims, @NonNull Duration clockSkew, boolean expirationRequired,
+			boolean microsoftEntra, @Nullable String boundTenantIssuer, boolean timeAdmission) {
+		this.timeAdmission = timeAdmission;
 		this.microsoftEntra = microsoftEntra; this.boundTenantIssuer = boundTenantIssuer;
 		this.expirationRequired = expirationRequired;
 		this.issuer = issuer;
@@ -172,6 +179,17 @@ public final class JwtClaimsPolicy {
 	}
 
 	/**
+	 * Internal issuer revocation only: recognize a retained credential without granting time admission.
+	 * Signature, claim types, issuer/key issuer, audience, required claims and confirmation checks remain.
+	 * The issuer must separately prove exact persisted issuance, ownership and current revocation fences.
+	 * @return the revocation recognition policy
+	 */
+	public @NonNull JwtClaimsPolicy forIssuerRevocation() {
+		return new JwtClaimsPolicy(this.issuer, this.expectedAudiences, this.requiredClaims, this.clockSkew,
+			this.expirationRequired, false, null, false);
+	}
+
+	/**
 	 * Checks a verified token's claims (steps 10 to 14 in the class documentation).
 	 *
 	 * @param claims the claims, with their registered claims read
@@ -194,7 +212,7 @@ public final class JwtClaimsPolicy {
 			step = JoseException.Reason.AUDIENCE_MISMATCH;
 			checkAudience(claims);
 			step = JoseException.Reason.EXPIRED;
-			checkTime(claims, now);
+			if (this.timeAdmission) checkTime(claims, now);
 			step = JoseException.Reason.MISSING_CLAIM;
 			checkRequiredClaims(claims);
 			step = JoseException.Reason.CONFIRMATION_NOT_VERIFIED;
