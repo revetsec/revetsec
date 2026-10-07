@@ -1,0 +1,773 @@
+{
+  "format": "revetsec-as1-g3-semantic-seeds-v1",
+  "seeds": [
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerRefreshFuzzTestsInputs/refreshFamilyAndStatusTransitionsRemainAtomic/client0-resource0-scenario00.bin",
+      "bytes": 4,
+      "sha256": "df3f619804a92fdb4057192dc43dd748ea778adc52bc498ce80524c014b81119",
+      "controls": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "meaning": "successful rotation preserves old and new access status; client slot 0; resource slot 0; scope slot 0"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerRefreshFuzzTestsInputs/refreshFamilyAndStatusTransitionsRemainAtomic/client0-resource0-scenario01.bin",
+      "bytes": 4,
+      "sha256": "4afc7d98518180331a55e2f7b2d03f93c15d1c24afc976cdfb5737e02a190203",
+      "controls": [
+        0,
+        0,
+        1,
+        1
+      ],
+      "meaning": "used refresh replay terminates the complete family; client slot 0; resource slot 0; scope slot 1"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerRefreshFuzzTestsInputs/refreshFamilyAndStatusTransitionsRemainAtomic/client0-resource0-scenario02.bin",
+      "bytes": 4,
+      "sha256": "313588ae36b23498c072b8718f9a3614d9e52b444cdcea74ecd49c93044741b3",
+      "controls": [
+        0,
+        0,
+        2,
+        0
+      ],
+      "meaning": "trusted grant revocation invalidates access and refresh; client slot 0; resource slot 0; scope slot 0"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerRefreshFuzzTestsInputs/refreshFamilyAndStatusTransitionsRemainAtomic/client0-resource0-scenario03.bin",
+      "bytes": 4,
+      "sha256": "9ae2db1bcb6ab73c882b0cb881ae0c72eb9babd20ccc439bc70ff78d08018c4e",
+      "controls": [
+        0,
+        0,
+        3,
+        1
+      ],
+      "meaning": "subject fence advancement invalidates access and refresh; client slot 0; resource slot 0; scope slot 1"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerRefreshFuzzTestsInputs/refreshFamilyAndStatusTransitionsRemainAtomic/client0-resource0-scenario04.bin",
+      "bytes": 4,
+      "sha256": "72034de8a594b12de51205feba7ade26899d8425e81eac7f8c296bf974a51c60",
+      "controls": [
+        0,
+        0,
+        4,
+        0
+      ],
+      "meaning": "issuer fence advancement invalidates access and refresh; client slot 0; resource slot 0; scope slot 0"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerRefreshFuzzTestsInputs/refreshFamilyAndStatusTransitionsRemainAtomic/client0-resource0-scenario05.bin",
+      "bytes": 4,
+      "sha256": "5884d7bf5cfbd9477337b1164c7ecf8f6bfca020f8c76c830e1884133b810eb2",
+      "controls": [
+        0,
+        0,
+        5,
+        1
+      ],
+      "meaning": "wrong client leaves the legitimate family usable; client slot 0; resource slot 0; scope slot 1"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerRefreshFuzzTestsInputs/refreshFamilyAndStatusTransitionsRemainAtomic/client0-resource0-scenario06.bin",
+      "bytes": 4,
+      "sha256": "ab6dd45f1c3a7f5f98b3f5facd25bc0fd899b0d1b9629a7fd59fba9444015981",
+      "controls": [
+        0,
+        0,
+        6,
+        0
+      ],
+      "meaning": "wrong resource leaves the legitimate family usable; client slot 0; resource slot 0; scope slot 0"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerRefreshFuzzTestsInputs/refreshFamilyAndStatusTransitionsRemainAtomic/client0-resource0-scenario07.bin",
+      "bytes": 4,
+      "sha256": "bc452a5c0116677f3083d8b8a2e6fb11e50a993c668699c5d49ee7470ab14d8b",
+      "controls": [
+        0,
+        0,
+        7,
+        1
+      ],
+      "meaning": "request scope narrowing affects one access token only; client slot 0; resource slot 0; scope slot 1"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerRefreshFuzzTestsInputs/refreshFamilyAndStatusTransitionsRemainAtomic/client0-resource0-scenario08.bin",
+      "bytes": 4,
+      "sha256": "c9c7e8c63836a93f6d8c04598b6503d2863a2df7b86366157178234175704dcc",
+      "controls": [
+        0,
+        0,
+        8,
+        0
+      ],
+      "meaning": "policy denial terminates the family; client slot 0; resource slot 0; scope slot 0"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerRefreshFuzzTestsInputs/refreshFamilyAndStatusTransitionsRemainAtomic/client0-resource0-scenario09.bin",
+      "bytes": 4,
+      "sha256": "ba9b2138f1fe40ef6de23beef5ccc778a87bb656f234eb397d1f772e17c1b742",
+      "controls": [
+        0,
+        0,
+        9,
+        1
+      ],
+      "meaning": "policy narrowing terminates the family; client slot 0; resource slot 0; scope slot 1"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerRefreshFuzzTestsInputs/refreshFamilyAndStatusTransitionsRemainAtomic/client0-resource0-scenario10.bin",
+      "bytes": 4,
+      "sha256": "88a40875579d215eaf9b58b0326c4240e1bf2eec724a01e979a331da932208ea",
+      "controls": [
+        0,
+        0,
+        10,
+        0
+      ],
+      "meaning": "store conflicts reload the complete rotation read set; client slot 0; resource slot 0; scope slot 0"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerRefreshFuzzTestsInputs/refreshFamilyAndStatusTransitionsRemainAtomic/client0-resource0-scenario11.bin",
+      "bytes": 4,
+      "sha256": "13658337de8f75d83f9a682053c501d0c9fa94fbd7366230dc5599856c435b6c",
+      "controls": [
+        0,
+        0,
+        11,
+        1
+      ],
+      "meaning": "refresh idle expiry rejects without a credential; client slot 0; resource slot 0; scope slot 1"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerRefreshFuzzTestsInputs/refreshFamilyAndStatusTransitionsRemainAtomic/client0-resource0-scenario12.bin",
+      "bytes": 4,
+      "sha256": "ba32336e7da3ec72d56bc4e5c4face5a12fa388b04c5fe2f475ff8cf6d94aab6",
+      "controls": [
+        0,
+        0,
+        12,
+        0
+      ],
+      "meaning": "oldest replay terminates a multiply rotated family; client slot 0; resource slot 0; scope slot 0"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerRefreshFuzzTestsInputs/refreshFamilyAndStatusTransitionsRemainAtomic/client0-resource0-scenario13.bin",
+      "bytes": 4,
+      "sha256": "e2a48416a65d68db1a7963d6c69451cf148077fd3e57fcbaa6010e6bd00969e5",
+      "controls": [
+        0,
+        0,
+        13,
+        1
+      ],
+      "meaning": "refresh endpoint revocation terminates the grant; client slot 0; resource slot 0; scope slot 1"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerRefreshFuzzTestsInputs/refreshFamilyAndStatusTransitionsRemainAtomic/client0-resource0-scenario14.bin",
+      "bytes": 4,
+      "sha256": "c3368003a90ef7e3fc26bd8c8f7cbe34ec03d60aecf7042ce2971556974b0075",
+      "controls": [
+        0,
+        0,
+        14,
+        0
+      ],
+      "meaning": "access endpoint revocation terminates the grant; client slot 0; resource slot 0; scope slot 0"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerRefreshFuzzTestsInputs/refreshFamilyAndStatusTransitionsRemainAtomic/client0-resource0-scenario15.bin",
+      "bytes": 4,
+      "sha256": "7cf60302a3035f26fc20d3a9e06bbfb60075f12de33fc00b075dd799849e686b",
+      "controls": [
+        0,
+        0,
+        15,
+        1
+      ],
+      "meaning": "wrong-owner used replay is harmless before exact replay terminates the family; client slot 0; resource slot 0; scope slot 1"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerRefreshFuzzTestsInputs/refreshFamilyAndStatusTransitionsRemainAtomic/client0-resource1-scenario00.bin",
+      "bytes": 4,
+      "sha256": "bf5e8ffa51a9e748985800c1d3d7f1a2a6ae7435136593ca8d9637e3f87c699c",
+      "controls": [
+        0,
+        1,
+        0,
+        0
+      ],
+      "meaning": "successful rotation preserves old and new access status; client slot 0; resource slot 1; scope slot 0"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerRefreshFuzzTestsInputs/refreshFamilyAndStatusTransitionsRemainAtomic/client0-resource1-scenario01.bin",
+      "bytes": 4,
+      "sha256": "cbd95ae5ef8810691e3fc7efb7c39ef9ffb661135d858aa0ccc81fc74a0160ae",
+      "controls": [
+        0,
+        1,
+        1,
+        1
+      ],
+      "meaning": "used refresh replay terminates the complete family; client slot 0; resource slot 1; scope slot 1"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerRefreshFuzzTestsInputs/refreshFamilyAndStatusTransitionsRemainAtomic/client0-resource1-scenario02.bin",
+      "bytes": 4,
+      "sha256": "856aaf43b61beefd07691ab6e60cd50522b8c08721f6570dba877c5222745b04",
+      "controls": [
+        0,
+        1,
+        2,
+        0
+      ],
+      "meaning": "trusted grant revocation invalidates access and refresh; client slot 0; resource slot 1; scope slot 0"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerRefreshFuzzTestsInputs/refreshFamilyAndStatusTransitionsRemainAtomic/client0-resource1-scenario03.bin",
+      "bytes": 4,
+      "sha256": "9932d68d693026a8f8ff41b35a2f4dfee25bdc1e7c3a4da1de7990832e272c94",
+      "controls": [
+        0,
+        1,
+        3,
+        1
+      ],
+      "meaning": "subject fence advancement invalidates access and refresh; client slot 0; resource slot 1; scope slot 1"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerRefreshFuzzTestsInputs/refreshFamilyAndStatusTransitionsRemainAtomic/client0-resource1-scenario04.bin",
+      "bytes": 4,
+      "sha256": "c762d6d7463222cc3976806cadcc1ad592bd3ac9068ae68303e14407bc58d569",
+      "controls": [
+        0,
+        1,
+        4,
+        0
+      ],
+      "meaning": "issuer fence advancement invalidates access and refresh; client slot 0; resource slot 1; scope slot 0"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerRefreshFuzzTestsInputs/refreshFamilyAndStatusTransitionsRemainAtomic/client0-resource1-scenario05.bin",
+      "bytes": 4,
+      "sha256": "01c940b2b3a5383b8c8fd49ef277c815b32fbdf5dc5f0321dd49f9a676081977",
+      "controls": [
+        0,
+        1,
+        5,
+        1
+      ],
+      "meaning": "wrong client leaves the legitimate family usable; client slot 0; resource slot 1; scope slot 1"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerRefreshFuzzTestsInputs/refreshFamilyAndStatusTransitionsRemainAtomic/client0-resource1-scenario06.bin",
+      "bytes": 4,
+      "sha256": "4b7f1f6d95f0399a22a777e55a6f3381095679a764c62122cd5d38634dcc74b7",
+      "controls": [
+        0,
+        1,
+        6,
+        0
+      ],
+      "meaning": "wrong resource leaves the legitimate family usable; client slot 0; resource slot 1; scope slot 0"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerRefreshFuzzTestsInputs/refreshFamilyAndStatusTransitionsRemainAtomic/client0-resource1-scenario07.bin",
+      "bytes": 4,
+      "sha256": "5ada9eec47cce7e7a7a89c3b2f28c05ce1309c4b6f1d327e6516f9c49f0367be",
+      "controls": [
+        0,
+        1,
+        7,
+        1
+      ],
+      "meaning": "request scope narrowing affects one access token only; client slot 0; resource slot 1; scope slot 1"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerRefreshFuzzTestsInputs/refreshFamilyAndStatusTransitionsRemainAtomic/client0-resource1-scenario08.bin",
+      "bytes": 4,
+      "sha256": "393d4cce58475a41ed42f7c0e6cc2b75f728d90fa5e9ee2b7cfba758d3af11a5",
+      "controls": [
+        0,
+        1,
+        8,
+        0
+      ],
+      "meaning": "policy denial terminates the family; client slot 0; resource slot 1; scope slot 0"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerRefreshFuzzTestsInputs/refreshFamilyAndStatusTransitionsRemainAtomic/client0-resource1-scenario09.bin",
+      "bytes": 4,
+      "sha256": "9bdf6642c2b23a38cba6f5491b35fc9655f6173b4a61ac52da09b9877c6a6956",
+      "controls": [
+        0,
+        1,
+        9,
+        1
+      ],
+      "meaning": "policy narrowing terminates the family; client slot 0; resource slot 1; scope slot 1"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerRefreshFuzzTestsInputs/refreshFamilyAndStatusTransitionsRemainAtomic/client0-resource1-scenario10.bin",
+      "bytes": 4,
+      "sha256": "90389afd826fb9315b4c00164a3e00840dd87963b3a591a1e4fe776c0ab58a41",
+      "controls": [
+        0,
+        1,
+        10,
+        0
+      ],
+      "meaning": "store conflicts reload the complete rotation read set; client slot 0; resource slot 1; scope slot 0"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerRefreshFuzzTestsInputs/refreshFamilyAndStatusTransitionsRemainAtomic/client0-resource1-scenario11.bin",
+      "bytes": 4,
+      "sha256": "bf332f16bb257c26494c9cddeb29c26b37b71dc11dea5864871ff0c5a5c4fd34",
+      "controls": [
+        0,
+        1,
+        11,
+        1
+      ],
+      "meaning": "refresh idle expiry rejects without a credential; client slot 0; resource slot 1; scope slot 1"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerRefreshFuzzTestsInputs/refreshFamilyAndStatusTransitionsRemainAtomic/client0-resource1-scenario12.bin",
+      "bytes": 4,
+      "sha256": "7de73cf106fa36d8714514bb81fb36df4fe3055535f6534bc0bda127f3e0361d",
+      "controls": [
+        0,
+        1,
+        12,
+        0
+      ],
+      "meaning": "oldest replay terminates a multiply rotated family; client slot 0; resource slot 1; scope slot 0"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerRefreshFuzzTestsInputs/refreshFamilyAndStatusTransitionsRemainAtomic/client0-resource1-scenario13.bin",
+      "bytes": 4,
+      "sha256": "5ab5035e8c772a76a0649bbbd0e76eb7f6d987a0be5377daa9d16d37f5de2fe6",
+      "controls": [
+        0,
+        1,
+        13,
+        1
+      ],
+      "meaning": "refresh endpoint revocation terminates the grant; client slot 0; resource slot 1; scope slot 1"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerRefreshFuzzTestsInputs/refreshFamilyAndStatusTransitionsRemainAtomic/client0-resource1-scenario14.bin",
+      "bytes": 4,
+      "sha256": "3e71af8e474000bd4820cad2785ae714d7dd2a7a512578b5c68622ee792de4b4",
+      "controls": [
+        0,
+        1,
+        14,
+        0
+      ],
+      "meaning": "access endpoint revocation terminates the grant; client slot 0; resource slot 1; scope slot 0"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerRefreshFuzzTestsInputs/refreshFamilyAndStatusTransitionsRemainAtomic/client0-resource1-scenario15.bin",
+      "bytes": 4,
+      "sha256": "c21db2d9a47cf0782a2485d5d88eddf881d293a5b54c3a8828c3eafbebb50df6",
+      "controls": [
+        0,
+        1,
+        15,
+        1
+      ],
+      "meaning": "wrong-owner used replay is harmless before exact replay terminates the family; client slot 0; resource slot 1; scope slot 1"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerRefreshFuzzTestsInputs/refreshFamilyAndStatusTransitionsRemainAtomic/client1-resource0-scenario00.bin",
+      "bytes": 4,
+      "sha256": "67abdd721024f0ff4e0b3f4c2fc13bc5bad42d0b7851d456d88d203d15aaa450",
+      "controls": [
+        1,
+        0,
+        0,
+        0
+      ],
+      "meaning": "successful rotation preserves old and new access status; client slot 1; resource slot 0; scope slot 0"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerRefreshFuzzTestsInputs/refreshFamilyAndStatusTransitionsRemainAtomic/client1-resource0-scenario01.bin",
+      "bytes": 4,
+      "sha256": "52a5c4a10657220cac05c63adfa923c7771c55d868a58ee360eb3d1511985c3e",
+      "controls": [
+        1,
+        0,
+        1,
+        1
+      ],
+      "meaning": "used refresh replay terminates the complete family; client slot 1; resource slot 0; scope slot 1"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerRefreshFuzzTestsInputs/refreshFamilyAndStatusTransitionsRemainAtomic/client1-resource0-scenario02.bin",
+      "bytes": 4,
+      "sha256": "7b11c1133330cd161071bf23a0c9b6ce5320a8f3a0f83620035a72be46df4104",
+      "controls": [
+        1,
+        0,
+        2,
+        0
+      ],
+      "meaning": "trusted grant revocation invalidates access and refresh; client slot 1; resource slot 0; scope slot 0"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerRefreshFuzzTestsInputs/refreshFamilyAndStatusTransitionsRemainAtomic/client1-resource0-scenario03.bin",
+      "bytes": 4,
+      "sha256": "42d1b15731201afbc1213b05732bdcd8548041977585823f8ef588fc97bf07aa",
+      "controls": [
+        1,
+        0,
+        3,
+        1
+      ],
+      "meaning": "subject fence advancement invalidates access and refresh; client slot 1; resource slot 0; scope slot 1"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerRefreshFuzzTestsInputs/refreshFamilyAndStatusTransitionsRemainAtomic/client1-resource0-scenario04.bin",
+      "bytes": 4,
+      "sha256": "2bcaacd479f84e756b4e0bfc445f9fed054ec579c51b6b98b10ccc36e3c96403",
+      "controls": [
+        1,
+        0,
+        4,
+        0
+      ],
+      "meaning": "issuer fence advancement invalidates access and refresh; client slot 1; resource slot 0; scope slot 0"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerRefreshFuzzTestsInputs/refreshFamilyAndStatusTransitionsRemainAtomic/client1-resource0-scenario05.bin",
+      "bytes": 4,
+      "sha256": "254b909a4d306a60b686963cf833d5b638ec1e605df617e1abbd22cb4c27e4ef",
+      "controls": [
+        1,
+        0,
+        5,
+        1
+      ],
+      "meaning": "wrong client leaves the legitimate family usable; client slot 1; resource slot 0; scope slot 1"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerRefreshFuzzTestsInputs/refreshFamilyAndStatusTransitionsRemainAtomic/client1-resource0-scenario06.bin",
+      "bytes": 4,
+      "sha256": "8a12133ee3586861d9ff17884217fd833c632dfdf970de5bcf94716ed6f9df29",
+      "controls": [
+        1,
+        0,
+        6,
+        0
+      ],
+      "meaning": "wrong resource leaves the legitimate family usable; client slot 1; resource slot 0; scope slot 0"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerRefreshFuzzTestsInputs/refreshFamilyAndStatusTransitionsRemainAtomic/client1-resource0-scenario07.bin",
+      "bytes": 4,
+      "sha256": "00ee79a164a651e104cd279db9e9e862c72ccc1f8856e4b987de3f04ea4e4282",
+      "controls": [
+        1,
+        0,
+        7,
+        1
+      ],
+      "meaning": "request scope narrowing affects one access token only; client slot 1; resource slot 0; scope slot 1"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerRefreshFuzzTestsInputs/refreshFamilyAndStatusTransitionsRemainAtomic/client1-resource0-scenario08.bin",
+      "bytes": 4,
+      "sha256": "3ae95dd4fee75ea4fc56378db6b5e89c6cbfb0c52dda3a0f109301d28470e47a",
+      "controls": [
+        1,
+        0,
+        8,
+        0
+      ],
+      "meaning": "policy denial terminates the family; client slot 1; resource slot 0; scope slot 0"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerRefreshFuzzTestsInputs/refreshFamilyAndStatusTransitionsRemainAtomic/client1-resource0-scenario09.bin",
+      "bytes": 4,
+      "sha256": "400b40905ccaf3fbeb41f6b23eb7b0dff303c27f07cc3aba3229fb71455514e4",
+      "controls": [
+        1,
+        0,
+        9,
+        1
+      ],
+      "meaning": "policy narrowing terminates the family; client slot 1; resource slot 0; scope slot 1"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerRefreshFuzzTestsInputs/refreshFamilyAndStatusTransitionsRemainAtomic/client1-resource0-scenario10.bin",
+      "bytes": 4,
+      "sha256": "89916027efc4b0881ff6dbd67dcb075935cc53b1f31b3fe3876c56879ac5177b",
+      "controls": [
+        1,
+        0,
+        10,
+        0
+      ],
+      "meaning": "store conflicts reload the complete rotation read set; client slot 1; resource slot 0; scope slot 0"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerRefreshFuzzTestsInputs/refreshFamilyAndStatusTransitionsRemainAtomic/client1-resource0-scenario11.bin",
+      "bytes": 4,
+      "sha256": "f74e9770de96a06b89db0d77fbc4af2cb8501008a26a340c08e118274bc01022",
+      "controls": [
+        1,
+        0,
+        11,
+        1
+      ],
+      "meaning": "refresh idle expiry rejects without a credential; client slot 1; resource slot 0; scope slot 1"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerRefreshFuzzTestsInputs/refreshFamilyAndStatusTransitionsRemainAtomic/client1-resource0-scenario12.bin",
+      "bytes": 4,
+      "sha256": "85228e4f221dac6cb7208305cb66bac9ebfab79969a7be0000d97a89adf61739",
+      "controls": [
+        1,
+        0,
+        12,
+        0
+      ],
+      "meaning": "oldest replay terminates a multiply rotated family; client slot 1; resource slot 0; scope slot 0"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerRefreshFuzzTestsInputs/refreshFamilyAndStatusTransitionsRemainAtomic/client1-resource0-scenario13.bin",
+      "bytes": 4,
+      "sha256": "f17b8a6c378e99ffe8358e3f6ec090781694f314fa2603c3a2adfdf9341f5878",
+      "controls": [
+        1,
+        0,
+        13,
+        1
+      ],
+      "meaning": "refresh endpoint revocation terminates the grant; client slot 1; resource slot 0; scope slot 1"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerRefreshFuzzTestsInputs/refreshFamilyAndStatusTransitionsRemainAtomic/client1-resource0-scenario14.bin",
+      "bytes": 4,
+      "sha256": "8c61bd1e4dda481eb30daeae862d25ced8e18668943f33dd4eb8bdf37c2c7c91",
+      "controls": [
+        1,
+        0,
+        14,
+        0
+      ],
+      "meaning": "access endpoint revocation terminates the grant; client slot 1; resource slot 0; scope slot 0"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerRefreshFuzzTestsInputs/refreshFamilyAndStatusTransitionsRemainAtomic/client1-resource0-scenario15.bin",
+      "bytes": 4,
+      "sha256": "d48f08ef55367c1493ad53004fe024c3a7258d727b26c3eacb15145b2c758deb",
+      "controls": [
+        1,
+        0,
+        15,
+        1
+      ],
+      "meaning": "wrong-owner used replay is harmless before exact replay terminates the family; client slot 1; resource slot 0; scope slot 1"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerRefreshFuzzTestsInputs/refreshFamilyAndStatusTransitionsRemainAtomic/client1-resource1-scenario00.bin",
+      "bytes": 4,
+      "sha256": "a0454a24dd4bc418448ca19320519ea3fe544fa1a910868b62ca210614f119f8",
+      "controls": [
+        1,
+        1,
+        0,
+        0
+      ],
+      "meaning": "successful rotation preserves old and new access status; client slot 1; resource slot 1; scope slot 0"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerRefreshFuzzTestsInputs/refreshFamilyAndStatusTransitionsRemainAtomic/client1-resource1-scenario01.bin",
+      "bytes": 4,
+      "sha256": "27ecd0a598e76f8a2fd264d427df0a119903e8eae384e478902541756f089dd1",
+      "controls": [
+        1,
+        1,
+        1,
+        1
+      ],
+      "meaning": "used refresh replay terminates the complete family; client slot 1; resource slot 1; scope slot 1"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerRefreshFuzzTestsInputs/refreshFamilyAndStatusTransitionsRemainAtomic/client1-resource1-scenario02.bin",
+      "bytes": 4,
+      "sha256": "efe91dd6237dda2cd6f1b9cc31f1a69161366b9e5fe14d697d4a3a6841a92634",
+      "controls": [
+        1,
+        1,
+        2,
+        0
+      ],
+      "meaning": "trusted grant revocation invalidates access and refresh; client slot 1; resource slot 1; scope slot 0"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerRefreshFuzzTestsInputs/refreshFamilyAndStatusTransitionsRemainAtomic/client1-resource1-scenario03.bin",
+      "bytes": 4,
+      "sha256": "b0a99e4eafe58fb79b91461a12b6f8a952e5d26e605c37398ffcce14aed77e77",
+      "controls": [
+        1,
+        1,
+        3,
+        1
+      ],
+      "meaning": "subject fence advancement invalidates access and refresh; client slot 1; resource slot 1; scope slot 1"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerRefreshFuzzTestsInputs/refreshFamilyAndStatusTransitionsRemainAtomic/client1-resource1-scenario04.bin",
+      "bytes": 4,
+      "sha256": "264977f929ae2cffdb2d67db05b3c525dfed76d27701beebe8216a4056353620",
+      "controls": [
+        1,
+        1,
+        4,
+        0
+      ],
+      "meaning": "issuer fence advancement invalidates access and refresh; client slot 1; resource slot 1; scope slot 0"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerRefreshFuzzTestsInputs/refreshFamilyAndStatusTransitionsRemainAtomic/client1-resource1-scenario05.bin",
+      "bytes": 4,
+      "sha256": "3747c72945cd94802a04c216682b4221d9dfd7e6a41498a716d45dbbbffc5615",
+      "controls": [
+        1,
+        1,
+        5,
+        1
+      ],
+      "meaning": "wrong client leaves the legitimate family usable; client slot 1; resource slot 1; scope slot 1"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerRefreshFuzzTestsInputs/refreshFamilyAndStatusTransitionsRemainAtomic/client1-resource1-scenario06.bin",
+      "bytes": 4,
+      "sha256": "2e0031de0e8c1d2a80a8a47ba42b48de1ceac937a7f7fe0f0a71f06c87c48fc7",
+      "controls": [
+        1,
+        1,
+        6,
+        0
+      ],
+      "meaning": "wrong resource leaves the legitimate family usable; client slot 1; resource slot 1; scope slot 0"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerRefreshFuzzTestsInputs/refreshFamilyAndStatusTransitionsRemainAtomic/client1-resource1-scenario07.bin",
+      "bytes": 4,
+      "sha256": "76e9e95a62d97f02b46efe1b4580159f69fdab15c2f4a92997e99e5f2ef45a1b",
+      "controls": [
+        1,
+        1,
+        7,
+        1
+      ],
+      "meaning": "request scope narrowing affects one access token only; client slot 1; resource slot 1; scope slot 1"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerRefreshFuzzTestsInputs/refreshFamilyAndStatusTransitionsRemainAtomic/client1-resource1-scenario08.bin",
+      "bytes": 4,
+      "sha256": "d398dfcc4278e3383cbc04fdafd6c1e4f0ac3c3e196bea59aa0819578f3ff968",
+      "controls": [
+        1,
+        1,
+        8,
+        0
+      ],
+      "meaning": "policy denial terminates the family; client slot 1; resource slot 1; scope slot 0"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerRefreshFuzzTestsInputs/refreshFamilyAndStatusTransitionsRemainAtomic/client1-resource1-scenario09.bin",
+      "bytes": 4,
+      "sha256": "271e9f2e60cf7f4b38d47e78aa87754f38b5a8e575e3e662e62654952f1c08fa",
+      "controls": [
+        1,
+        1,
+        9,
+        1
+      ],
+      "meaning": "policy narrowing terminates the family; client slot 1; resource slot 1; scope slot 1"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerRefreshFuzzTestsInputs/refreshFamilyAndStatusTransitionsRemainAtomic/client1-resource1-scenario10.bin",
+      "bytes": 4,
+      "sha256": "5eaa46a25ef89efb176e4c0cbd04b75c49c9068d2613ff25eedb191334ba9efa",
+      "controls": [
+        1,
+        1,
+        10,
+        0
+      ],
+      "meaning": "store conflicts reload the complete rotation read set; client slot 1; resource slot 1; scope slot 0"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerRefreshFuzzTestsInputs/refreshFamilyAndStatusTransitionsRemainAtomic/client1-resource1-scenario11.bin",
+      "bytes": 4,
+      "sha256": "1fb6603a3abff524b6f86564f61ce627b95c5a3c76ec493ceb801826398e7ee6",
+      "controls": [
+        1,
+        1,
+        11,
+        1
+      ],
+      "meaning": "refresh idle expiry rejects without a credential; client slot 1; resource slot 1; scope slot 1"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerRefreshFuzzTestsInputs/refreshFamilyAndStatusTransitionsRemainAtomic/client1-resource1-scenario12.bin",
+      "bytes": 4,
+      "sha256": "6c2fe3617fac0ec87b31ede436843f3de4c9322caffb3ca294efba3e10e3248a",
+      "controls": [
+        1,
+        1,
+        12,
+        0
+      ],
+      "meaning": "oldest replay terminates a multiply rotated family; client slot 1; resource slot 1; scope slot 0"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerRefreshFuzzTestsInputs/refreshFamilyAndStatusTransitionsRemainAtomic/client1-resource1-scenario13.bin",
+      "bytes": 4,
+      "sha256": "5da6d342aea6d635116418fea7aa899fc52fd15082804ad32f876204e77e3c92",
+      "controls": [
+        1,
+        1,
+        13,
+        1
+      ],
+      "meaning": "refresh endpoint revocation terminates the grant; client slot 1; resource slot 1; scope slot 1"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerRefreshFuzzTestsInputs/refreshFamilyAndStatusTransitionsRemainAtomic/client1-resource1-scenario14.bin",
+      "bytes": 4,
+      "sha256": "5ee2a33354aeedf6c5a6232aa7aa129485e41db9b369ed629dd91e71b9a29488",
+      "controls": [
+        1,
+        1,
+        14,
+        0
+      ],
+      "meaning": "access endpoint revocation terminates the grant; client slot 1; resource slot 1; scope slot 0"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerRefreshFuzzTestsInputs/refreshFamilyAndStatusTransitionsRemainAtomic/client1-resource1-scenario15.bin",
+      "bytes": 4,
+      "sha256": "1d8ffa374b35195eccdf999fb81b66e96258fd9d2552d6f4f1ff0af477801381",
+      "controls": [
+        1,
+        1,
+        15,
+        1
+      ],
+      "meaning": "wrong-owner used replay is harmless before exact replay terminates the family; client slot 1; resource slot 1; scope slot 1"
+    }
+  ]
+}

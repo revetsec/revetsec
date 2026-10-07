@@ -70,6 +70,7 @@ final class OAuthClientMetadataCacheTests {
         assertNotEquals(key, key(6));
         assertNotEquals(key, null);
         assertNotEquals(key, "other");
+        assertEquals(key.getStorageKey().hashCode(), key.hashCode());
         var e = entry(5, 7);
         var rebuilt =
                 OAuthClientMetadataCacheEntry.fromStoredForm(
@@ -78,6 +79,8 @@ final class OAuthClientMetadataCacheTests {
         assertEquals(nonce(7), rebuilt.getVersion());
         assertEquals(Instant.ofEpochSecond(2000000000), rebuilt.getExpiresAt());
         assertEquals("encrypted-test-envelope", rebuilt.toSealedForm());
+        assertEquals("OAuthClientMetadataCacheKey{address=<redacted>}", key.toString());
+        assertEquals("OAuthClientMetadataCacheEntry{record=<redacted>}", e.toString());
         assertFalse(key.toString().contains(key.getStorageKey()));
         assertFalse(e.toString().contains(e.toSealedForm()));
         assertFalse(e.toString().contains(e.getVersion()));
@@ -291,6 +294,7 @@ final class OAuthClientMetadataCacheTests {
         assertFalse(cache.compareAndSet(key(1), nonce(11), entry(1, 12), WAIT));
         assertTrue(cache.compareAndSet(key(1), null, null, WAIT));
         assertTrue(cache.compareAndSet(key(1), null, entry(1, 13), WAIT));
+        assertEquals("InMemoryOAuthClientMetadataCache{storage=<redacted>}", cache.toString());
         assertFalse(cache.toString().contains(nonce(13)));
     }
 

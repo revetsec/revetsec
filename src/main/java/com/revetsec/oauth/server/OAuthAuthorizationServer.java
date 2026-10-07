@@ -82,7 +82,8 @@ public final class OAuthAuthorizationServer {
  private final @NonNull OAuthGrantRevocation revocation;
  private final @NonNull OAuthResourceIntrospection introspection;
  private final @NonNull OAuthIssuerMetadata metadata;
- private OAuthAuthorizationServer(@NonNull Builder b) {
+ private OAuthAuthorizationServer(@NonNull Builder b) { this(b, Runtime.version()); }
+ private OAuthAuthorizationServer(@NonNull Builder b, Runtime.@NonNull Version runtimeVersion) {
   this.issuer=b.issuer; this.authorizationEndpoint=required(b.authorizationEndpoint); this.tokenEndpoint=required(b.tokenEndpoint);
   this.jsonWebKeySetEndpoint=required(b.jsonWebKeySetEndpoint); this.revocationEndpoint=b.revocationEndpoint; this.introspectionEndpoint=b.introspectionEndpoint;
   this.repository=required(b.clientRepository); this.policy=required(b.grantPolicy); OAuthAuthorizationServerStore store=required(b.store);
@@ -98,7 +99,7 @@ public final class OAuthAuthorizationServer {
   if(this.revocationEndpoint!=null) checkRoute(issuerUri,this.revocationEndpoint,b.allowInsecureLoopback,routes);
   if(this.introspectionEndpoint!=null) checkRoute(issuerUri,this.introspectionEndpoint,b.allowInsecureLoopback,routes);
   OAuthClientMetadataPolicy metadataPolicy=b.clientMetadataPolicy;
-  if(metadataPolicy.getEnabled()) RuntimeFloor.require(b.acknowledgeUnpatchedRuntime);
+  if(metadataPolicy.getEnabled()) RuntimeFloor.require(runtimeVersion,b.acknowledgeUnpatchedRuntime);
   OAuthClientMetadataFetcher fetcher=metadataPolicy.getEnabled() ? new OAuthClientMetadataFetcher(this.issuer,sealer,metadataPolicy,this.limits,
    this.nativeLoopback,this.localhost,b.outboundUriPolicy,this.clock,this.settings.requestTimeout) : null;
   this.clients=new OAuthServerClientSelection(this.repository,this.limits,fetcher,true);

@@ -30,6 +30,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -111,9 +112,16 @@ final class OAuthServerIngressTests {
 		fails(INVALID_REQUEST, () -> query("x=" + "a".repeat(LIMITS.queryLength) + "%"));
 		fails(INVALID_REQUEST, () -> OAuthServerRequest.parse(TOKEN, "POST", null, new byte[LIMITS.bodyBytes + 1], headers(null), LIMITS));
 		assertNotNull(query("x=" + "a".repeat(LIMITS.queryLength - 2)));
+		byte[] exactBody = ("x=" + "a".repeat(LIMITS.bodyBytes - 2)).getBytes(StandardCharsets.UTF_8);
+		assertNotNull(OAuthServerRequest.parseForServer(TOKEN, "POST", null, exactBody, headers(null), LIMITS));
+		assertNotNull(OAuthServerRequest.parseForServer(AUTHORIZATION, "GET",
+				"x=" + "a".repeat(LIMITS.queryLength - 2), new byte[0], Map.of(), LIMITS));
 		assertNotNull(query("x=1&".repeat(127) + "x=1")); fails(INVALID_REQUEST, () -> query("x=1&".repeat(128) + "x=1"));
+		assertNotNull(query("&".repeat(64) + "x=1&".repeat(127) + "x=1"));
+		assertEquals("client", query("&client_id=client").required("client_id"));
 		assertNotNull(OAuthServerRequest.parse(TOKEN, "POST", "x=1&".repeat(64), "x=1&".repeat(64).getBytes(StandardCharsets.UTF_8), headers(null), LIMITS));
 		fails(INVALID_REQUEST, () -> OAuthServerRequest.parse(TOKEN, "POST", "x=1&".repeat(65), "x=1&".repeat(64).getBytes(StandardCharsets.UTF_8), headers(null), LIMITS));
+		fails(INVALID_REQUEST, () -> query("&" + "x=1&".repeat(128) + "x=1"));
 	}
 	@Test void stateAndClientCapsApplyToRawSpellingBeforeDecode() {
 		assertEquals("a".repeat(1024), query("state=" + "a".repeat(1024)).value("state"));
@@ -154,11 +162,34 @@ final class OAuthServerIngressTests {
 		List<String> sixtyFour = new ArrayList<>(); for (int i = 0; i < 64; i++) sixtyFour.add("x");
 		assertNotNull(OAuthServerRequest.parse(AUTHORIZATION, "GET", null, new byte[0], Map.of("X", sixtyFour), LIMITS));
 		sixtyFour.add("x"); fails(INVALID_REQUEST, () -> OAuthServerRequest.parse(AUTHORIZATION, "GET", null, new byte[0], Map.of("X", sixtyFour), LIMITS));
+		Map<String, List<String>> distinct = new LinkedHashMap<>();
+		for (int i = 0; i < 64; i++) distinct.put("X" + i, List.of("x"));
+		assertNotNull(OAuthServerRequest.parse(AUTHORIZATION, "GET", null, new byte[0], distinct, LIMITS));
+		distinct.put("X64", List.of("x"));
+		fails(INVALID_REQUEST, () -> OAuthServerRequest.parse(AUTHORIZATION, "GET", null, new byte[0], distinct, LIMITS));
+		List<String> sixtyThree = new ArrayList<>(); for (int i = 0; i < 63; i++) sixtyThree.add("x");
+		assertNotNull(OAuthServerRequest.parse(AUTHORIZATION, "GET", null, new byte[0], Map.of("A", List.of("x"), "B", sixtyThree), LIMITS));
 		assertNotNull(OAuthServerRequest.parse(AUTHORIZATION, "GET", null, new byte[0], Map.of("X", List.of("a".repeat(16377))), LIMITS));
 		fails(INVALID_REQUEST, () -> OAuthServerRequest.parse(AUTHORIZATION, "GET", null, new byte[0], Map.of("X", List.of("a".repeat(16378))), LIMITS));
+		Map<String, List<String>> splitExact = new LinkedHashMap<>();
+		splitExact.put("A", List.of("x")); splitExact.put("B", List.of("a".repeat(16371)));
+		assertNotNull(OAuthServerRequest.parse(AUTHORIZATION, "GET", null, new byte[0], splitExact, LIMITS));
+		Map<String, List<String>> splitOverflow = new LinkedHashMap<>(splitExact);
+		splitOverflow.put("B", List.of("a".repeat(16372)));
+		fails(INVALID_REQUEST, () -> OAuthServerRequest.parse(AUTHORIZATION, "GET", null, new byte[0], splitOverflow, LIMITS));
+		List<String> firstSixtyFour = new ArrayList<>(); for (int i = 0; i < 64; i++) firstSixtyFour.add("");
+		Map<String, List<String>> sixtyFiveSplit = new LinkedHashMap<>();
+		sixtyFiveSplit.put("A", firstSixtyFour); sixtyFiveSplit.put("B", List.of(""));
+		fails(INVALID_REQUEST, () -> OAuthServerRequest.parse(AUTHORIZATION, "GET", null, new byte[0], sixtyFiveSplit, LIMITS));
 		for (String bad : List.of("x\r\nInjected: 1", "x\0", "x\u007f", "x✓"))
 			fails(INVALID_REQUEST, () -> OAuthServerRequest.parse(AUTHORIZATION, "GET", null, new byte[0], Map.of("X", List.of(bad)), LIMITS));
 		fails(INVALID_REQUEST, () -> OAuthServerRequest.parse(AUTHORIZATION, "GET", null, new byte[0], Map.of("Bad Name", List.of("x")), LIMITS));
+	}
+	@Test void headerNameTokenGrammarIncludesEveryAlphanumericEdgeAndFirstPunctuation() {
+		for (char edge : new char[]{'A', 'Z', 'a', 'z', '0', '9', '!', '`'})
+			assertNotNull(OAuthServerRequest.parse(AUTHORIZATION, "GET", null, new byte[0], Map.of("X" + edge, List.of("x")), LIMITS));
+		for (char outside : new char[]{'@', '[', '{', '/', ':'})
+			fails(INVALID_REQUEST, () -> OAuthServerRequest.parse(AUTHORIZATION, "GET", null, new byte[0], Map.of("X" + outside, List.of("x")), LIMITS));
 	}
 	@Test void basicPercentDecodingUsesExactIdAndZeroesSecretAfterSuccess() {
 		String id = "id:+ ✓"; byte[] expected = "s:+ ✓".getBytes(StandardCharsets.UTF_8);
@@ -272,6 +303,8 @@ final class OAuthServerIngressTests {
 			assertFalse(OAuthServerAuthorizationAdmission.challenge(bad));
 		OAuthServerAuthorizationAdmission.requireTokenGrant(post("grant_type=authorization_code&code=x&code_verifier=" + "a".repeat(43) + "&resource=r", null));
 		OAuthServerAuthorizationAdmission.requireTokenGrant(post("grant_type=authorization_code&code=x&code_verifier=" + "-._~".repeat(32) + "&resource=r", null));
+		for (char edge : new char[]{'a', 'z', 'A', 'Z', '0', '9'})
+			OAuthServerAuthorizationAdmission.requireTokenGrant(post("grant_type=authorization_code&code=x&code_verifier=" + String.valueOf(edge).repeat(43) + "&resource=r", null));
 		OAuthServerAuthorizationAdmission.requireTokenGrant(post("grant_type=refresh_token&refresh_token=x&resource=r", null));
 		for (String bad : List.of("a".repeat(42), "a".repeat(129), "a".repeat(42) + "+", "a".repeat(42) + "✓"))
 			fails(INVALID_REQUEST, () -> OAuthServerAuthorizationAdmission.requireTokenGrant(post("grant_type=authorization_code&code=x&code_verifier=" + encode(bad) + "&resource=r", null)));
@@ -308,6 +341,32 @@ final class OAuthServerIngressTests {
 		var longScope = OAuthServerClientRegistration.withClientId("client").redirectUris(List.of(URI.create(REDIRECT)))
 				.allowedScopesByResource(Map.of(RESOURCE, Set.of("long"))).configurationVersion("v1").build();
 		fails(INFRASTRUCTURE, () -> OAuthServerClientAdmission.registered("client", repository(longScope), deadline(), narrow));
+	}
+	@Test void trustedConfigurationCapsAndGrammarAreInclusiveAtEveryEdge() {
+		var narrow = new OAuthServerIngressLimits(1024, 1024, 1024, 128, 256, 1, 1, 2, 3);
+		Map<String, Set<String>> exactResources = Map.of(RESOURCE, Set.of("aaa", "bbb"));
+		assertEquals(exactResources, OAuthServerAuthorizationAdmission.checkedServerResources(exactResources, narrow));
+		var exactIntrospection = OAuthServerClientRegistration.withClientId("client").authorizationCodePermitted(false)
+				.authentication(OAuthServerClientAuthentication.fromClientSecretVerifier((id, secret, budget) -> true))
+				.introspectionResources(Set.of(RESOURCE)).configurationVersion("v1").build();
+		assertSame(exactIntrospection, OAuthServerClientAdmission.registered("client", repository(exactIntrospection), deadline(), narrow));
+		var exactScopes = OAuthServerClientRegistration.withClientId("client").redirectUris(List.of(URI.create(REDIRECT)))
+				.allowedScopesByResource(exactResources).configurationVersion("v1").build();
+		assertEquals(Set.of("aaa", "bbb"), OAuthServerAuthorizationAdmission.selectScopes(
+				RESOURCE, "aaa bbb", exactScopes, exactResources, narrow));
+		assertEquals(2, OAuthServerConfiguration.utf8Length("\u0080"));
+		assertEquals(3, OAuthServerConfiguration.utf8Length("\u0800"));
+		assertEquals(4, OAuthServerConfiguration.utf8Length("\uD83D\uDE00"));
+		String maximum = "x".repeat(OAuthServerConfiguration.MAXIMUM_CONFIGURATION_BYTES);
+		assertEquals(OAuthServerConfiguration.MAXIMUM_CONFIGURATION_BYTES, OAuthServerConfiguration.addBytes(0, maximum));
+		assertThrows(IllegalArgumentException.class, () -> OAuthServerConfiguration.addBytes(1, maximum));
+		assertEquals("!", OAuthServerConfiguration.scope("!")); assertEquals("~", OAuthServerConfiguration.scope("~"));
+		assertThrows(IllegalArgumentException.class, () -> OAuthServerConfiguration.scope(" "));
+		assertThrows(IllegalArgumentException.class, () -> OAuthServerConfiguration.scope("\u007f"));
+		assertEquals(List.of(URI.create("https://client.example:65535/cb")),
+				OAuthServerConfiguration.redirects(List.of(URI.create("https://client.example:65535/cb"))));
+		assertThrows(IllegalArgumentException.class, () ->
+				OAuthServerConfiguration.redirects(List.of(URI.create("https://client.example/cb?&code=x"))));
 	}
 	@Test void parsedRequestIsIndependentOfMutableEdgeContainers() {
 		byte[] body = "client_id=client".getBytes(StandardCharsets.UTF_8); var rawHeaders = headers(basic("client:secret"));
@@ -351,10 +410,24 @@ final class OAuthServerIngressTests {
 		assertSame(value, OAuthServerClientAdmission.authenticate(post("", basic("client:%3a%2b")), repository(value), deadline(), LIMITS));
 		assertArrayEquals(new byte[2], retained.get());
 	}
+	@Test void basicComponentAndHexEdgesRemainStrictAndInclusive() {
+		var narrow = new OAuthServerIngressLimits(1024, 1024, 1024, 128, 256, 64, 32, 32, 128);
+		String exactId = "i".repeat(256);
+		var exact = client(exactId, (id, secret, budget) -> id.equals(exactId) && java.util.Arrays.equals(secret, new byte[]{'s'}));
+		assertSame(exact, OAuthServerClientAdmission.authenticate(post("", basic(exactId + ":s")), repository(exact), deadline(), narrow));
+		AtomicReference<byte[]> retainedEdges = new AtomicReference<>();
+		var edges = client("09afAF??", (id, secret, budget) -> { retainedEdges.set(secret.clone()); return id.equals("09afAF??"); });
+		assertSame(edges, OAuthServerClientAdmission.authenticate(post("", basic("%30%39%61%66%41%46%3f%3F:%03%30%39%61%66%41%46%7F\u007f")),
+				repository(edges), deadline(), LIMITS));
+		assertArrayEquals(new byte[]{3, '0', '9', 'a', 'f', 'A', 'F', 0x7f, 0x7f}, retainedEdges.get());
+		fails(INVALID_CLIENT, () -> OAuthServerClientAdmission.authenticate(post("", basic("client:%A")),
+				repository(client("client", (id, secret, budget) -> true)), deadline(), LIMITS));
+	}
 	@Test void headerMapAndNameCapsRejectBeforeNormalization() {
 		Map<String, List<String>> raw = new HashMap<>(); for (int i = 0; i < 65; i++) raw.put("X" + i, List.of("x"));
 		fails(INVALID_REQUEST, () -> OAuthServerRequest.parse(AUTHORIZATION, "GET", null, new byte[0], raw, LIMITS));
 		fails(INVALID_REQUEST, () -> OAuthServerRequest.parse(AUTHORIZATION, "GET", null, new byte[0], Map.of("", List.of("x")), LIMITS));
+		assertNotNull(OAuthServerRequest.parse(AUTHORIZATION, "GET", null, new byte[0], Map.of("X".repeat(16384), List.of()), LIMITS));
 		fails(INVALID_REQUEST, () -> OAuthServerRequest.parse(AUTHORIZATION, "GET", null, new byte[0], Map.of("X".repeat(16385), List.of("x")), LIMITS));
 		assertNotNull(OAuthServerRequest.parse(AUTHORIZATION, "GET", null, new byte[0], Map.of("X", List.of("\tÿ")), LIMITS));
 	}

@@ -96,6 +96,9 @@ final class OAuthIssuerKeysTests {
   assertEquals(0,calls.get());assertEquals(0,privateKey.encodings);assertEquals("private-identifier",key.getKeyId());
   assertEquals("private-generation",snapshot.getGeneration());assertEquals(NOW.minusSeconds(120),snapshot.getPublishedAt());assertSame(key,snapshot.getActiveKey());
   assertEquals(Set.of("private-identifier"),snapshot.getVerificationKeys().keySet());
+  assertEquals("OAuthIssuerSigningKey{<redacted>}",key.toString());
+  assertEquals("OAuthIssuerKeySnapshot{<redacted>}",snapshot.toString());
+  assertEquals("OAuthIssuerKeyLifecycle{<redacted>}",lifecycle.toString());
   for(Object value:List.of(key,snapshot,key.getPublicKey(),lifecycle)) assertFalse(value.toString().contains("private-"));
   unavailable(()->lifecycle.warmUp(deadline()));assertEquals(0,privateKey.encodings);
  }
@@ -199,6 +202,31 @@ final class OAuthIssuerKeysTests {
   current.set(snapshot(key("b",B),"g3",NOW,Map.of(),Map.of()));unavailable(()->life.snapshot(deadline()));
   clock.now=NOW.plusSeconds(400);assertEquals(Set.of("b"),life.snapshot(deadline()).getVerificationKeys().keySet());
  }
+ @Test void laterShorterIssuanceCannotReduceAnEarlierKeyReservation() {
+  AtomicReference<OAuthIssuerKeySnapshot> current=new AtomicReference<>(
+   snapshot(key("a",A),"g1",NOW.minusSeconds(120),Map.of(),Map.of()));
+  var life=lifecycle(budget->requireNonNull(current.get()),Clock.fixed(NOW,ZoneOffset.UTC));
+  assertNotNull(life.sign(claims(),NOW.plusSeconds(300),deadline()));
+  assertNotNull(life.sign(claims(),NOW.plusSeconds(200),deadline()));
+  current.set(snapshot(key("b",B),"g2",NOW.minusSeconds(60),Map.of("a",A.getPublicKey()),
+   Map.of("a",NOW.plusSeconds(350))));
+  unavailable(()->life.snapshot(deadline()));
+ }
+ @Test void aKeyRetiredAtTheCurrentInstantCannotBePublishedAsActive() {
+  var retired=snapshot(key("a",A),"g1",NOW.minusSeconds(120),Map.of(),Map.of("a",NOW));
+  unavailable(()->lifecycle(retired).snapshot(deadline()));
+ }
+ @Test void anUnreservedVerificationKeyCanRetireAtItsDeclaredBoundary() {
+  MutableClock clock=new MutableClock(NOW);
+  AtomicReference<OAuthIssuerKeySnapshot> current=new AtomicReference<>(
+   snapshot(key("b",B),"g1",NOW.minusSeconds(120),Map.of("a",A.getPublicKey()),
+    Map.of("a",NOW.plusSeconds(100))));
+  var life=lifecycle(budget->requireNonNull(current.get()),clock);
+  assertEquals(2,life.snapshot(deadline()).getVerificationKeys().size());
+  current.set(snapshot(key("b",B),"g2",NOW.minusSeconds(60),Map.of(),Map.of()));
+  clock.now=NOW.plusSeconds(100);
+  assertEquals(Set.of("b"),life.snapshot(deadline()).getVerificationKeys().keySet());
+ }
  @TestFactory @NonNull Stream<@NonNull DynamicTest> contradictoryGenerationsFailClosed() {
   List<DynamicTest> tests=new ArrayList<>();
   List<OAuthIssuerKeySnapshot> wrong=List.of(
@@ -247,6 +275,15 @@ final class OAuthIssuerKeysTests {
    unavailable(()->lifecycle(budget->{count.incrementAndGet();return initial();},Clock.fixed(NOW,ZoneOffset.UTC)).snapshot(deadline()));assertEquals(0,count.get());assertTrue(Thread.currentThread().isInterrupted()); }finally{Thread.interrupted();}}));
   return tests.stream();
  }
+ @TestFactory @NonNull Stream<@NonNull DynamicTest> interruptedSigningAndWarmupRestoreTheFlag() {
+  return Stream.of("sign","warmUp").map(operation->test(operation,()->{
+   var life=lifecycle(initial());
+   try {
+    InterruptingSignatureProvider.around(()->{if(operation.equals("sign"))unavailable(()->life.sign(claims(),NOW.plusSeconds(300),deadline()));else unavailable(()->life.warmUp(deadline()));});
+    assertTrue(Thread.currentThread().isInterrupted());
+   } finally {Thread.interrupted();}
+  }));
+ }
  @SuppressWarnings("unchecked") private static <E extends Throwable> void raise(@NonNull Throwable fault) throws E { throw (E)fault; }
  private static @NonNull OAuthIssuerMetadata metadata(@NonNull String issuer,boolean refresh,boolean extra,@NonNull Set<@NonNull String> scopes,
    @NonNull Duration freshness,int bodyCap,int headerCap,boolean loopback) {
@@ -276,7 +313,8 @@ final class OAuthIssuerKeysTests {
    var head=jwks ? metadata.jwks("HEAD",life,deadline()) : metadata.metadata("HEAD",deadline());
    assertEquals(0,head.body().length);assertArrayEquals(get.headers(),head.headers());String header=new String(get.headers(),StandardCharsets.US_ASCII);
    assertTrue(header.contains("public, max-age=60, must-revalidate"));assertTrue(header.contains("ETag: \""));assertTrue(header.contains("Content-Length: "+get.body().length));
-   byte[] body=get.body();body[0]=0;assertNotEquals(0,get.body()[0]);byte[] headers=get.headers();headers[0]=0;assertNotEquals(0,get.headers()[0]);assertFalse(get.toString().contains(ISSUER));
+   byte[] body=get.body();body[0]=0;assertNotEquals(0,get.body()[0]);byte[] headers=get.headers();headers[0]=0;assertNotEquals(0,get.headers()[0]);
+   assertEquals("OAuthPublicMetadataResponse{<redacted>}",get.toString());assertFalse(get.toString().contains(ISSUER));
   }
  }
  @TestFactory @NonNull Stream<@NonNull DynamicTest> metadataFailuresAndMethods() {

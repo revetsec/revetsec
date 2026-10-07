@@ -30,6 +30,7 @@ final class OAuthServerCredential {
  private OAuthServerCredential() {}
  static @NonNull String code(@NonNull String nonce) { OAuthStoreFormat.nonce(nonce); return CODE + nonce; }
  static @NonNull String refresh(@NonNull String nonce) { OAuthStoreFormat.nonce(nonce); return REFRESH + nonce; }
+ static boolean isRefresh(@NonNull String value) { return requireNonNull(value).startsWith(REFRESH); }
  static @NonNull String codeDigest(@NonNull String value) { return digest(value, CODE); }
  static @NonNull String refreshDigest(@NonNull String value) { return digest(value, REFRESH); }
  private static @NonNull String digest(@NonNull String value, @NonNull String prefix) {

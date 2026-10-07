@@ -63,6 +63,32 @@ final class IssuerSocketTests {
    assertEquals(401,client.send(builder.build(),HttpResponse.BodyHandlers.discarding()).statusCode());
   }
  }
+ @Test void proxyAuthorityReachesAdmissionWhileOtherAuthoritiesRemainRejected() throws Exception {
+  int hp=port(),mp=port();while(mp==hp)mp=port();var base=IssuerApplicationTests.config(hp,mp);
+  var config=new IssuerConfig(URI.create("https://localhost:"+hp),URI.create("https://issuer.example:"+mp+"/mcp"),base.redirect,hp,mp,base.loginKey,base.clientKey,base.resourceKey,false);
+  var app=new IssuerResources(config,Clock.systemUTC());
+  try(var soklet=Soklet.fromConfig(IssuerPlayground.sokletConfig(app))) {
+   soklet.start();
+   String authority=config.resource.getRawAuthority();
+   String missing=rawMcp(mp,authority,null);assertTrue(missing.startsWith("HTTP/1.1 401 "),missing.split("\r\n",2)[0]);assertTrue(missing.toLowerCase(java.util.Locale.ROOT).contains("www-authenticate:"));
+   String access=IssuerApplicationTests.scalar(IssuerApplicationTests.issued(app,"mcp:discover mcp:whoami"),"access_token");
+   assertTrue(rawMcp(mp,authority,access).startsWith("HTTP/1.1 200 "));
+   assertTrue(rawMcp(mp,"localhost:"+mp,access).startsWith("HTTP/1.1 403 "));
+   assertTrue(rawMcp(mp,"127.0.0.1:"+mp,access).startsWith("HTTP/1.1 403 "));
+   assertTrue(rawMcp(mp,"issuer.example:"+hp,access).startsWith("HTTP/1.1 421 "));
+   assertTrue(rawMcp(mp,"unregistered.example:"+mp,access).startsWith("HTTP/1.1 421 "));
+  }
+ }
+ private static @NonNull String rawMcp(int port,@NonNull String authority,@Nullable String access) throws Exception {
+  String body="{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"whoami\",\"arguments\":{}}}";
+  try(var socket=new java.net.Socket(InetAddress.getByName("127.0.0.1"),port)) {
+   socket.setSoTimeout(5000);
+   String request="POST /mcp HTTP/1.1\r\nHost: "+authority+"\r\nContent-Type: application/json\r\nAccept: application/json, text/event-stream\r\nMCP-Protocol-Version: 2025-11-25\r\nConnection: close\r\nContent-Length: "+body.getBytes(StandardCharsets.UTF_8).length+"\r\n"+(access==null?"":"Authorization: Bearer "+access+"\r\n")+"\r\n"+body;
+   socket.getOutputStream().write(request.getBytes(StandardCharsets.UTF_8));socket.getOutputStream().flush();
+   byte[] response=socket.getInputStream().readNBytes(16_384);assertTrue(response.length<16_384);
+   return new String(response,StandardCharsets.UTF_8);
+  }
+ }
  private static @NonNull String flow(@NonNull String html) {
   var match=Pattern.compile("name='flow' value='([A-Za-z0-9_-]{43})'").matcher(html);assertTrue(match.find());return match.group(1);
  }

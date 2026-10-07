@@ -59,6 +59,7 @@ public final class ClientCredentialsTokenSource {
 	private @Nullable OAuthException lastFailure;
 	private long lastFailureNanos;
 	private int failureCount;
+	private @Nullable Instant lastClock;
 
 	private ClientCredentialsTokenSource(@NonNull Builder builder) {
 		this.client = builder.client;
@@ -105,7 +106,7 @@ public final class ClientCredentialsTokenSource {
 		this.lock.lock();
 		try {
 			Instant now = this.clock.instant();
-			old = this.cached;
+			old = currentCached(now);
 			if (old != null && now.isBefore(old.renewAt) && now.isBefore(old.expiresAt))
 				return old.token;
 			if (this.flight != null) {
@@ -128,9 +129,10 @@ public final class ClientCredentialsTokenSource {
 			AccessToken shared = await(waitFor, this.client.totalDeadline());
 			this.lock.lock();
 			try {
-				Cached current = this.cached;
+				Instant now = this.clock.instant();
+				Cached current = currentCached(now);
 				if (current != null && current.token == shared
-						&& this.clock.instant().isBefore(current.expiresAt)) return shared;
+						&& now.isBefore(current.expiresAt)) return shared;
 			} finally {
 				this.lock.unlock();
 			}
@@ -148,7 +150,7 @@ public final class ClientCredentialsTokenSource {
 			if (lifetime.compareTo(this.maximumCacheDuration) > 0) lifetime = this.maximumCacheDuration;
 			Duration lead = Limits.clientCredentialsRenewalLeadTime(this.renewBefore, lifetime);
 			AccessToken token = response.getAccessToken();
-			Cached fresh = new Cached(token, now.plus(lifetime), now.plus(lifetime).minus(lead));
+			Cached fresh = new Cached(token, now, now.plus(lifetime), now.plus(lifetime).minus(lead));
 			this.lock.lock();
 			try {
 				if (this.flight == leader) {
@@ -171,8 +173,9 @@ public final class ClientCredentialsTokenSource {
 					this.lastFailure = failure;
 					this.lastFailureNanos = System.nanoTime();
 					this.failureCount = Math.min(5, this.failureCount + 1);
-					Cached current = this.cached;
-					if (current != null && this.clock.instant().isBefore(current.expiresAt))
+					Instant now = this.clock.instant();
+					Cached current = currentCached(now);
+					if (current != null && now.isBefore(current.expiresAt))
 						fallback = current.token;
 				}
 			} finally {
@@ -200,6 +203,18 @@ public final class ClientCredentialsTokenSource {
 			leader.completeExceptionally(safe);
 			throw safe;
 		}
+	}
+
+	// Called only under lock. A backward clock step must not make an earlier token usable again.
+	private @Nullable Cached currentCached(@NonNull Instant now) {
+		boolean rollback = this.lastClock != null && now.isBefore(this.lastClock);
+		this.lastClock = now;
+		Cached current = this.cached;
+		if (current != null && (rollback || now.isBefore(current.fetchedAt))) {
+			this.cached = null;
+			return null;
+		}
+		return current;
 	}
 
 	/**
@@ -236,7 +251,8 @@ public final class ClientCredentialsTokenSource {
 		}
 	}
 
-	private record Cached(@NonNull AccessToken token, @NonNull Instant expiresAt, @NonNull Instant renewAt) { }
+	private record Cached(@NonNull AccessToken token, @NonNull Instant fetchedAt, @NonNull Instant expiresAt,
+			@NonNull Instant renewAt) { }
 
 	/**
 	 * Configures a source without network I/O.

@@ -1,0 +1,39 @@
+# Copyright 2026 Revetware LLC. Apache-2.0. Owned local verification edge only.
+{
+ admin off
+ auto_https off
+ servers {
+  protocols h1 h2
+ }
+}
+{$REVETSEC_ISSUER_ORIGIN} {
+ bind ::1
+ tls {$REVETSEC_TLS_CERT} {$REVETSEC_TLS_KEY}
+ route {
+  @ambiguous expression `{http.request.header.Authorization}.contains(",") || {http.request.header.Origin}.contains(",") || {http.request.header.Content-Type}.contains(",") || {http.request.header.Cookie}.contains(",")`
+  respond @ambiguous "" 400
+  @mcp path /mcp /mcp/* /mcp-second /mcp-second/*
+  handle @mcp {
+   reverse_proxy 127.0.0.1:8090
+  }
+  handle {
+   reverse_proxy 127.0.0.1:8088
+  }
+ }
+}
+
+{$REVETSEC_BROWSER_TLS_ORIGIN} {
+ bind ::1
+ tls {$REVETSEC_TLS_CERT} {$REVETSEC_TLS_KEY}
+ reverse_proxy 127.0.0.1:6274
+}
+
+# BEGIN OPTIONAL CIMD
+https://cimd.example.com:6277 {
+ bind 8.8.8.8
+ tls {$REVETSEC_TLS_CERT} {$REVETSEC_TLS_KEY}
+ reverse_proxy 127.0.0.1:6278 {
+  header_up X-Fixture-Tls-Sni {http.request.tls.server_name}
+ }
+}
+# END OPTIONAL CIMD

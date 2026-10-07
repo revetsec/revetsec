@@ -51,7 +51,7 @@ public final class IssuerResources {
         KeyPairGenerator generator=KeyPairGenerator.getInstance("RSA");generator.initialize(2048);KeyPair pair=generator.generateKeyPair();
         OAuthIssuerKeyProvider keys=OAuthIssuerKeyProvider.fromSnapshot(OAuthIssuerKeySnapshot.withActiveKey(
                 OAuthIssuerSigningKey.fromKeyPair(LocalInputs.randomId(),pair.getPrivate(),pair.getPublic())).generation(LocalInputs.randomId()).publishedAt(clock.instant()).build());
-        Map<String,Set<String>> resources=Map.of(config.resource.toString(),IssuerConfig.SCOPES);
+        Map<String,Set<String>> resources=config.resources();
         OAuthServerClientAuthentication confidential=OAuthServerClientAuthentication.fromClientSecretVerifier((id,secret,budget) -> {
             if(budget.isZero() || budget.isNegative() || Thread.currentThread().isInterrupted()) return false;
             String expected=id.equals("demo-confidential")?config.clientKey:id.equals("resource-client")?config.resourceKey:"";
@@ -64,7 +64,7 @@ public final class IssuerResources {
                 .clientName("Local confidential client").redirectUris(List.of(config.redirect)).allowedScopesByResource(resources).refreshTokenPermitted(true)
                 .authentication(confidential).configurationVersion("demo-v1").build();
         OAuthServerClientRegistration resourceClient=OAuthServerClientRegistration.withClientId("resource-client")
-                .authorizationCodePermitted(false).authentication(confidential).introspectionResources(Set.of(config.resource.toString()))
+                .authorizationCodePermitted(false).authentication(confidential).introspectionResources(resources.keySet())
                 .configurationVersion("demo-v1").build();
         Map<String,OAuthServerClientRegistration> clients=Map.of("demo-public",publicClient,"demo-confidential",privateClient,"resource-client",resourceClient);
         StateSealer sealer=StateSealer.withActiveKey(SealingKey.fromBase64("demo-seal",Base64.getEncoder().encodeToString(LocalInputs.randomBytes()))).build();
@@ -78,7 +78,7 @@ public final class IssuerResources {
                         ? OAuthAuthorizationDecision.withSubject(context.getSubject()).authorizedScopesByResource(context.getAuthorizedScopesByResource())
                                 .refreshTokenPermitted(context.isRefreshTokenPermitted()).build()
                         : OAuthAuthorizationDecision.deniedInstance())
-                .clock(clock).clockSkew(Duration.ZERO).publicMetadataFreshness(Duration.ZERO).accessTokenLifetime(Duration.ofMinutes(2)).refreshTokensEnabled(true)
+                .clientMetadataPolicy(config.metadataPolicy).clock(clock).clockSkew(Duration.ZERO).publicMetadataFreshness(Duration.ZERO).accessTokenLifetime(Duration.ofMinutes(2)).refreshTokensEnabled(true)
                 .allowInsecureLoopback(config.loopback).allowNativeLoopbackRedirects(true).build();
         // This app deliberately creates a fresh volatile store and keys; never use this as a recovery recipe.
         if(server.initializeFreshIssuer()!=OAuthStoreCommitStatus.COMMITTED) throw new IllegalStateException("Fresh demo store initialization failed.");
@@ -101,7 +101,15 @@ public final class IssuerResources {
     @GET("/.well-known/oauth-protected-resource/mcp")
     public @NonNull MarshaledResponse resourceMetadata(@NonNull Request request) {
         if(!issuerHost(request)) return fixed(403,"Request denied.");
-        return json(ProtectedResourceMetadata.withResource(config.resource).authorizationServers(List.of(config.origin.toString()))
+        return resourceMetadataFor(config.resource);
+    }
+    @GET("/.well-known/oauth-protected-resource/mcp-second")
+    public @NonNull MarshaledResponse secondResourceMetadata(@NonNull Request request) {
+        if(!issuerHost(request)) return fixed(403,"Request denied.");
+        return config.secondResourceEnabled?resourceMetadataFor(config.resource.resolve("/mcp-second")):fixed(404,"Resource not configured.");
+    }
+    private @NonNull MarshaledResponse resourceMetadataFor(@NonNull URI resource) {
+        return json(ProtectedResourceMetadata.withResource(resource).authorizationServers(List.of(config.origin.toString()))
                 .scopesSupported(IssuerConfig.SCOPES.stream().sorted().toList()).allowInsecureLoopback(config.loopback).build().toJson());
     }
     @GET("/authorize") public @NonNull MarshaledResponse authorize(@NonNull Request request) {
@@ -190,7 +198,8 @@ public final class IssuerResources {
         if(!session.authenticated) return page("Demo login",details+"<form method='post' action='/login'>"+csrf
                 +"<label>Local demo access key <input type='password' name='key' autocomplete='off' maxlength='43' required></label><button>Sign in</button></form>");
         return page("Consent",details+"<form method='post' action='/consent'>"+csrf
-                +"<button name='decision' value='approve'>Approve</button><button name='decision' value='deny'>Deny</button></form>");
+                +"<button name='decision' value='approve'>Approve</button><button name='decision' value='deny'>Deny</button></form>").copy().headers(headers -> headers.put("Content-Security-Policy",Set.of(
+                        "default-src 'none'; form-action 'self'"+("[::1]".equals(interaction.getRedirectUri().getHost())?"":" "+interaction.getRedirectUri().getScheme()+"://"+interaction.getRedirectUri().getRawAuthority())+"; frame-ancestors 'none'; base-uri 'none'"))).finish();
     }
     private @NonNull MarshaledResponse authorizationResponse(@NonNull OAuthAuthorizationResult result) {
         OAuthServerResponse response;
@@ -198,6 +207,13 @@ public final class IssuerResources {
         else if(result instanceof OAuthAuthorizationResult.Denied r) response=r.getResponse();
         else if(result instanceof OAuthAuthorizationResult.Rejected r) response=r.getResponse();
         else throw new IllegalStateException("Interaction requires application rendering.");
+        // CSP host-source cannot express an IPv6 literal. An explicit link is a normal
+        // navigation, so consent forms stay same-origin without a broad HTTP exception.
+        URI destination=response.getLocationWithCredentials().orElse(null);
+        if(destination!=null && destination.getScheme().equals("http") && "[::1]".equals(destination.getHost()))
+            return page("Return to application","<p>Return to the checked application to finish authorization.</p><a id='native-return' rel='noreferrer' href='"
+                    +LocalInputs.html(destination.toString())+"'>Return to application</a>").copy()
+                    .headers(headers -> headers.put("Referrer-Policy",Set.of("no-referrer"))).finish();
         return SokletOAuthAuthorizationServer.responseFor(response);
     }
     private @NonNull MarshaledResponse failure(@NonNull OAuthServerException failure) {return SokletOAuthAuthorizationServer.responseFor(server.responseForFailure(failure));}
@@ -210,7 +226,8 @@ public final class IssuerResources {
     private static @NonNull MarshaledResponse json(@NonNull String text) {return response(200,text,"application/json");}
     private static @NonNull MarshaledResponse page(@NonNull String title,@NonNull String content) {
         return response(200,"<!doctype html><html lang='en'><head><meta charset='utf-8'><title>"+LocalInputs.html(title)
-                +"</title></head><body><h1>"+LocalInputs.html(title)+"</h1>"+content+"</body></html>","text/html; charset=UTF-8");
+                +"</title></head><body><h1>"+LocalInputs.html(title)+"</h1>"+content+"</body></html>","text/html; charset=UTF-8")
+                .copy().headers(headers -> headers.put("Referrer-Policy",Set.of("same-origin"))).finish();
     }
     private static @NonNull MarshaledResponse response(int status,@NonNull String text,@NonNull String type) {
         return MarshaledResponse.withStatusCode(status).headers(Map.of("Content-Type",Set.of(type),"Cache-Control",Set.of("no-store"),

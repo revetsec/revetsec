@@ -1,0 +1,3845 @@
+{
+  "format": "revetsec-as1-g4-semantic-seeds-v1",
+  "seeds": [
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-000.bin",
+      "bytes": 7,
+      "sha256": "837885c8f8091aeaeb9ec3c3f85a6ff470a415e610b8ba3e49f9b33c9cf9d619",
+      "controls": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "meaning": "active key 0; client 0; resource 0; scope set 0; subject form 0; authorization-code issuance; lifetime 0; bounded suffix 0"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-001.bin",
+      "bytes": 11,
+      "sha256": "561fc7c9a493b9ce84b9872db84e6f762174cca6d17cd445f7448987bd286843",
+      "controls": [
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        3
+      ],
+      "meaning": "active key 1; client 0; resource 0; scope set 0; subject form 0; authorization-code issuance; lifetime 3; bounded suffix 1"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-002.bin",
+      "bytes": 15,
+      "sha256": "e665d2eb3468f1eb6a304e5391edcb18f92d6baf57a543d491893405e8ca54ac",
+      "controls": [
+        0,
+        1,
+        0,
+        0,
+        0,
+        1,
+        2
+      ],
+      "meaning": "active key 0; client 1; resource 0; scope set 0; subject form 0; refresh rotation; lifetime 2; bounded suffix 2"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-003.bin",
+      "bytes": 23,
+      "sha256": "7222d03a16ef9b9642a7daa929c1c631af043681c3d5b0682a3e17df72d92d87",
+      "controls": [
+        1,
+        1,
+        0,
+        0,
+        0,
+        1,
+        1
+      ],
+      "meaning": "active key 1; client 1; resource 0; scope set 0; subject form 0; refresh rotation; lifetime 1; bounded suffix 3"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-004.bin",
+      "bytes": 7,
+      "sha256": "5de16aef7fb6985446959d10ab9984ed7c1d9d05db7277410184084add4518d6",
+      "controls": [
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0
+      ],
+      "meaning": "active key 0; client 0; resource 1; scope set 0; subject form 0; authorization-code issuance; lifetime 0; bounded suffix 0"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-005.bin",
+      "bytes": 11,
+      "sha256": "9b61a5a2e269f0bd995f7c49c7bdb1a62f0014ee39202683af44d0e6bc69b860",
+      "controls": [
+        1,
+        0,
+        1,
+        0,
+        0,
+        0,
+        3
+      ],
+      "meaning": "active key 1; client 0; resource 1; scope set 0; subject form 0; authorization-code issuance; lifetime 3; bounded suffix 1"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-006.bin",
+      "bytes": 15,
+      "sha256": "1e5fedf6ee37ce6a75bfb087dc53b2efa7de4dc2e6cdd0c10716e71d34b6781c",
+      "controls": [
+        0,
+        1,
+        1,
+        0,
+        0,
+        1,
+        2
+      ],
+      "meaning": "active key 0; client 1; resource 1; scope set 0; subject form 0; refresh rotation; lifetime 2; bounded suffix 2"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-007.bin",
+      "bytes": 23,
+      "sha256": "44434de90b82f05b994101988161884a02c7a56b5824bda6bdf6f89fb0a47393",
+      "controls": [
+        1,
+        1,
+        1,
+        0,
+        0,
+        1,
+        2
+      ],
+      "meaning": "active key 1; client 1; resource 1; scope set 0; subject form 0; refresh rotation; lifetime 2; bounded suffix 3"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-008.bin",
+      "bytes": 7,
+      "sha256": "42914870192ae213631c6de8430e480cab11b189feef173409454b178b2d6ca3",
+      "controls": [
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        1
+      ],
+      "meaning": "active key 0; client 0; resource 0; scope set 1; subject form 0; authorization-code issuance; lifetime 1; bounded suffix 0"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-009.bin",
+      "bytes": 11,
+      "sha256": "8e92fccbe814d38e159178500dd6a9e59d83bfac67fa45e5e5267191c4736d7a",
+      "controls": [
+        1,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0
+      ],
+      "meaning": "active key 1; client 0; resource 0; scope set 1; subject form 0; authorization-code issuance; lifetime 0; bounded suffix 1"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-010.bin",
+      "bytes": 15,
+      "sha256": "a5627dcdc1bfa9f68700f41372c31c9d5543d96360ca20ac7225959201918cbb",
+      "controls": [
+        0,
+        1,
+        0,
+        1,
+        0,
+        1,
+        3
+      ],
+      "meaning": "active key 0; client 1; resource 0; scope set 1; subject form 0; refresh rotation; lifetime 3; bounded suffix 2"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-011.bin",
+      "bytes": 23,
+      "sha256": "a2763ca64d670d3aca8a2e7f8ebcb3867db18fc6aa830684af2e6140101da385",
+      "controls": [
+        1,
+        1,
+        0,
+        1,
+        0,
+        1,
+        2
+      ],
+      "meaning": "active key 1; client 1; resource 0; scope set 1; subject form 0; refresh rotation; lifetime 2; bounded suffix 3"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-012.bin",
+      "bytes": 7,
+      "sha256": "f52591e5fb66ea7935352ab0c9580e1dfd486a951b70dd7fc4635357d8b10805",
+      "controls": [
+        0,
+        0,
+        1,
+        1,
+        0,
+        0,
+        1
+      ],
+      "meaning": "active key 0; client 0; resource 1; scope set 1; subject form 0; authorization-code issuance; lifetime 1; bounded suffix 0"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-013.bin",
+      "bytes": 11,
+      "sha256": "38fcdab561741633cdcdb0c24312d64a02d938efd1e9727cf40429a9fc518f60",
+      "controls": [
+        1,
+        0,
+        1,
+        1,
+        0,
+        0,
+        0
+      ],
+      "meaning": "active key 1; client 0; resource 1; scope set 1; subject form 0; authorization-code issuance; lifetime 0; bounded suffix 1"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-014.bin",
+      "bytes": 15,
+      "sha256": "f2d39dec6171653171dc9f5578c63851ea3f973cfb7968946dd129c7375405f3",
+      "controls": [
+        0,
+        1,
+        1,
+        1,
+        0,
+        1,
+        0
+      ],
+      "meaning": "active key 0; client 1; resource 1; scope set 1; subject form 0; refresh rotation; lifetime 0; bounded suffix 2"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-015.bin",
+      "bytes": 23,
+      "sha256": "a21b09396a6d04172b58f79ee9defc9501c66509e394963732cbd10cab444cec",
+      "controls": [
+        1,
+        1,
+        1,
+        1,
+        0,
+        1,
+        3
+      ],
+      "meaning": "active key 1; client 1; resource 1; scope set 1; subject form 0; refresh rotation; lifetime 3; bounded suffix 3"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-016.bin",
+      "bytes": 7,
+      "sha256": "b8350ba3d3ba89b5596caa73417d51360b09dd8d9a6b741cbcf1dfe01a56889c",
+      "controls": [
+        0,
+        0,
+        0,
+        2,
+        0,
+        1,
+        2
+      ],
+      "meaning": "active key 0; client 0; resource 0; scope set 2; subject form 0; refresh rotation; lifetime 2; bounded suffix 0"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-017.bin",
+      "bytes": 11,
+      "sha256": "f8439a47b70190d4d9794b73cea4af36df2961cce967f5f68f963b7dba98def3",
+      "controls": [
+        1,
+        0,
+        0,
+        2,
+        0,
+        1,
+        1
+      ],
+      "meaning": "active key 1; client 0; resource 0; scope set 2; subject form 0; refresh rotation; lifetime 1; bounded suffix 1"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-018.bin",
+      "bytes": 15,
+      "sha256": "dd6426d758386c41d00ad58178ebbb75e161547373e2583005c0fa8a2675fff8",
+      "controls": [
+        0,
+        1,
+        0,
+        2,
+        0,
+        0,
+        0
+      ],
+      "meaning": "active key 0; client 1; resource 0; scope set 2; subject form 0; authorization-code issuance; lifetime 0; bounded suffix 2"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-019.bin",
+      "bytes": 23,
+      "sha256": "a93d41d77c3e54e9c710ca740634e891acccf470e990851a3ec0a5b289d8befb",
+      "controls": [
+        1,
+        1,
+        0,
+        2,
+        0,
+        0,
+        3
+      ],
+      "meaning": "active key 1; client 1; resource 0; scope set 2; subject form 0; authorization-code issuance; lifetime 3; bounded suffix 3"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-020.bin",
+      "bytes": 7,
+      "sha256": "91325331a558946f408c0c7a5ad50ad698c64a5df0fa719db8a14cdb9d35dd8b",
+      "controls": [
+        0,
+        0,
+        1,
+        2,
+        0,
+        1,
+        2
+      ],
+      "meaning": "active key 0; client 0; resource 1; scope set 2; subject form 0; refresh rotation; lifetime 2; bounded suffix 0"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-021.bin",
+      "bytes": 11,
+      "sha256": "6825946a769c0c1e49a08ad0c43c7cf3a1b6ee03de75a47a08954b7b6cc24f3e",
+      "controls": [
+        1,
+        0,
+        1,
+        2,
+        0,
+        1,
+        2
+      ],
+      "meaning": "active key 1; client 0; resource 1; scope set 2; subject form 0; refresh rotation; lifetime 2; bounded suffix 1"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-022.bin",
+      "bytes": 15,
+      "sha256": "dbb8d7a8b0d72073cebf8e0ca26da8b0eead6e864cd5eb88faeb288359d5bb9a",
+      "controls": [
+        0,
+        1,
+        1,
+        2,
+        0,
+        0,
+        1
+      ],
+      "meaning": "active key 0; client 1; resource 1; scope set 2; subject form 0; authorization-code issuance; lifetime 1; bounded suffix 2"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-023.bin",
+      "bytes": 23,
+      "sha256": "f0d4514eaa70b2784afb09c1e8e97b17d85894f934c51ad02727f6965ea198f2",
+      "controls": [
+        1,
+        1,
+        1,
+        2,
+        0,
+        0,
+        0
+      ],
+      "meaning": "active key 1; client 1; resource 1; scope set 2; subject form 0; authorization-code issuance; lifetime 0; bounded suffix 3"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-024.bin",
+      "bytes": 7,
+      "sha256": "32defb8f53c219156f579f3b6d00af8f1bb8c1a11499d9a9bc43082a1880f2b8",
+      "controls": [
+        0,
+        0,
+        0,
+        3,
+        0,
+        1,
+        3
+      ],
+      "meaning": "active key 0; client 0; resource 0; scope set 3; subject form 0; refresh rotation; lifetime 3; bounded suffix 0"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-025.bin",
+      "bytes": 11,
+      "sha256": "250dd45acfae4e1337b5f83b70e2bcfa0258d867f02e452b25607be6dc3646a0",
+      "controls": [
+        1,
+        0,
+        0,
+        3,
+        0,
+        1,
+        2
+      ],
+      "meaning": "active key 1; client 0; resource 0; scope set 3; subject form 0; refresh rotation; lifetime 2; bounded suffix 1"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-026.bin",
+      "bytes": 15,
+      "sha256": "548f19eeb2719db18bdcaf82056b07bdfefac6a7b6920578745797728eb3522a",
+      "controls": [
+        0,
+        1,
+        0,
+        3,
+        0,
+        0,
+        1
+      ],
+      "meaning": "active key 0; client 1; resource 0; scope set 3; subject form 0; authorization-code issuance; lifetime 1; bounded suffix 2"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-027.bin",
+      "bytes": 23,
+      "sha256": "e7302a6afb876cc9bcbc11b3f6c62be30f0e064b7172a13400d4a6f70d12d73e",
+      "controls": [
+        1,
+        1,
+        0,
+        3,
+        0,
+        0,
+        0
+      ],
+      "meaning": "active key 1; client 1; resource 0; scope set 3; subject form 0; authorization-code issuance; lifetime 0; bounded suffix 3"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-028.bin",
+      "bytes": 7,
+      "sha256": "594713dc8f67b62bb2547dc557110809e3a937a85fd073c1fbf77538efc013c2",
+      "controls": [
+        0,
+        0,
+        1,
+        3,
+        0,
+        1,
+        0
+      ],
+      "meaning": "active key 0; client 0; resource 1; scope set 3; subject form 0; refresh rotation; lifetime 0; bounded suffix 0"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-029.bin",
+      "bytes": 11,
+      "sha256": "42fc46520310cb84bd5f48aa79176064c2193bd055001ccf89151a0e86c53a94",
+      "controls": [
+        1,
+        0,
+        1,
+        3,
+        0,
+        1,
+        3
+      ],
+      "meaning": "active key 1; client 0; resource 1; scope set 3; subject form 0; refresh rotation; lifetime 3; bounded suffix 1"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-030.bin",
+      "bytes": 15,
+      "sha256": "62af613d4935abc613747cc2cc469399c4d5aa0d6228ea30d50a416f129ca5c5",
+      "controls": [
+        0,
+        1,
+        1,
+        3,
+        0,
+        0,
+        2
+      ],
+      "meaning": "active key 0; client 1; resource 1; scope set 3; subject form 0; authorization-code issuance; lifetime 2; bounded suffix 2"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-031.bin",
+      "bytes": 23,
+      "sha256": "00047b4aea80b376cec503f3afad56d030506d35d2a6cc057f5b4edcff8bad71",
+      "controls": [
+        1,
+        1,
+        1,
+        3,
+        0,
+        0,
+        1
+      ],
+      "meaning": "active key 1; client 1; resource 1; scope set 3; subject form 0; authorization-code issuance; lifetime 1; bounded suffix 3"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-032.bin",
+      "bytes": 7,
+      "sha256": "ac82e3cd5011c942105aa13776bd49aa98bde66665a3e1228801ae7f5f60aafa",
+      "controls": [
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0
+      ],
+      "meaning": "active key 0; client 0; resource 0; scope set 0; subject form 1; authorization-code issuance; lifetime 0; bounded suffix 0"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-033.bin",
+      "bytes": 11,
+      "sha256": "68aaa1d18e414bd312abff09e4bedaf2ab2f19d46f7f8ca8c81e84a1bf07a064",
+      "controls": [
+        1,
+        0,
+        0,
+        0,
+        1,
+        0,
+        3
+      ],
+      "meaning": "active key 1; client 0; resource 0; scope set 0; subject form 1; authorization-code issuance; lifetime 3; bounded suffix 1"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-034.bin",
+      "bytes": 15,
+      "sha256": "bfb527716592a5eb18bfec4028e016041bbf003fb9c3ab002ce48640032bde4b",
+      "controls": [
+        0,
+        1,
+        0,
+        0,
+        1,
+        1,
+        2
+      ],
+      "meaning": "active key 0; client 1; resource 0; scope set 0; subject form 1; refresh rotation; lifetime 2; bounded suffix 2"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-035.bin",
+      "bytes": 23,
+      "sha256": "02986ce024a379e68311d5d24fd8d4af15b94543e519cffcb5f6e911ade1359d",
+      "controls": [
+        1,
+        1,
+        0,
+        0,
+        1,
+        1,
+        2
+      ],
+      "meaning": "active key 1; client 1; resource 0; scope set 0; subject form 1; refresh rotation; lifetime 2; bounded suffix 3"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-036.bin",
+      "bytes": 7,
+      "sha256": "69934aa2cfc5bfff3cb27031b2dc7ec74be7b676af3ce2d129d66b3c53307227",
+      "controls": [
+        0,
+        0,
+        1,
+        0,
+        1,
+        0,
+        1
+      ],
+      "meaning": "active key 0; client 0; resource 1; scope set 0; subject form 1; authorization-code issuance; lifetime 1; bounded suffix 0"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-037.bin",
+      "bytes": 11,
+      "sha256": "09d971c12753d75a7f489ddc2fc62c562acb161fd3cb8971fdade3405f71e219",
+      "controls": [
+        1,
+        0,
+        1,
+        0,
+        1,
+        0,
+        0
+      ],
+      "meaning": "active key 1; client 0; resource 1; scope set 0; subject form 1; authorization-code issuance; lifetime 0; bounded suffix 1"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-038.bin",
+      "bytes": 15,
+      "sha256": "7bc46579feb26cc2d3eff0b21bc149c49e02429a86a8a1a9de07717a249b2e19",
+      "controls": [
+        0,
+        1,
+        1,
+        0,
+        1,
+        1,
+        3
+      ],
+      "meaning": "active key 0; client 1; resource 1; scope set 0; subject form 1; refresh rotation; lifetime 3; bounded suffix 2"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-039.bin",
+      "bytes": 23,
+      "sha256": "801faaf72e4ea1497cdc3cf586c270744b4f8e2d05fa32dcad7c26f5954c2a09",
+      "controls": [
+        1,
+        1,
+        1,
+        0,
+        1,
+        1,
+        2
+      ],
+      "meaning": "active key 1; client 1; resource 1; scope set 0; subject form 1; refresh rotation; lifetime 2; bounded suffix 3"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-040.bin",
+      "bytes": 7,
+      "sha256": "f7272c8a3105428ab43430602886703a0e87467436dedd0ecc868180eaee2824",
+      "controls": [
+        0,
+        0,
+        0,
+        1,
+        1,
+        0,
+        1
+      ],
+      "meaning": "active key 0; client 0; resource 0; scope set 1; subject form 1; authorization-code issuance; lifetime 1; bounded suffix 0"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-041.bin",
+      "bytes": 11,
+      "sha256": "1905e42ea5d748e9991c4392754f04a2d1b0fb823a7e188cc496f1b2dde3c79e",
+      "controls": [
+        1,
+        0,
+        0,
+        1,
+        1,
+        0,
+        0
+      ],
+      "meaning": "active key 1; client 0; resource 0; scope set 1; subject form 1; authorization-code issuance; lifetime 0; bounded suffix 1"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-042.bin",
+      "bytes": 15,
+      "sha256": "3d602f6c74b0578e0fef62616152e71467402f27cb9a550d3144307c3003ccaa",
+      "controls": [
+        0,
+        1,
+        0,
+        1,
+        1,
+        1,
+        0
+      ],
+      "meaning": "active key 0; client 1; resource 0; scope set 1; subject form 1; refresh rotation; lifetime 0; bounded suffix 2"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-043.bin",
+      "bytes": 23,
+      "sha256": "2d11b5037b4b9bdef702501653cb3bc5c24af95c28d59ea97c939979e243e12a",
+      "controls": [
+        1,
+        1,
+        0,
+        1,
+        1,
+        1,
+        3
+      ],
+      "meaning": "active key 1; client 1; resource 0; scope set 1; subject form 1; refresh rotation; lifetime 3; bounded suffix 3"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-044.bin",
+      "bytes": 7,
+      "sha256": "6be6ed5c1cd46f5c3f33a126d2055b338ed91c9e785408fb7d4f2d9d14222a2b",
+      "controls": [
+        0,
+        0,
+        1,
+        1,
+        1,
+        0,
+        2
+      ],
+      "meaning": "active key 0; client 0; resource 1; scope set 1; subject form 1; authorization-code issuance; lifetime 2; bounded suffix 0"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-045.bin",
+      "bytes": 11,
+      "sha256": "aa5b3b80814bdee4edae69c2e86687cd85548081dbc9f87749063854436ce6db",
+      "controls": [
+        1,
+        0,
+        1,
+        1,
+        1,
+        0,
+        1
+      ],
+      "meaning": "active key 1; client 0; resource 1; scope set 1; subject form 1; authorization-code issuance; lifetime 1; bounded suffix 1"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-046.bin",
+      "bytes": 15,
+      "sha256": "455eace4067379a6a2ed413958fb71eedd815e8916c8a8d2176ca9e85b981e50",
+      "controls": [
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0
+      ],
+      "meaning": "active key 0; client 1; resource 1; scope set 1; subject form 1; refresh rotation; lifetime 0; bounded suffix 2"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-047.bin",
+      "bytes": 23,
+      "sha256": "61f26f3cc1f1a5e55c2086430fa6763ff2ca5437f207dbed23d92e16455ed7f5",
+      "controls": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        3
+      ],
+      "meaning": "active key 1; client 1; resource 1; scope set 1; subject form 1; refresh rotation; lifetime 3; bounded suffix 3"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-048.bin",
+      "bytes": 7,
+      "sha256": "87111b8b624d626d2e279b10563f34048c8ca323a7b1a8ddeab0c5ef1a472658",
+      "controls": [
+        0,
+        0,
+        0,
+        2,
+        1,
+        1,
+        2
+      ],
+      "meaning": "active key 0; client 0; resource 0; scope set 2; subject form 1; refresh rotation; lifetime 2; bounded suffix 0"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-049.bin",
+      "bytes": 11,
+      "sha256": "61986be620592f04fbc7fec3deb9d68dc3b552ce1f5f9c8fd669a3fa59372557",
+      "controls": [
+        1,
+        0,
+        0,
+        2,
+        1,
+        1,
+        2
+      ],
+      "meaning": "active key 1; client 0; resource 0; scope set 2; subject form 1; refresh rotation; lifetime 2; bounded suffix 1"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-050.bin",
+      "bytes": 15,
+      "sha256": "eb4c8e6131306442f9496b8cd27de6c88c01549e8fa71f668f3e2d1b9c07376d",
+      "controls": [
+        0,
+        1,
+        0,
+        2,
+        1,
+        0,
+        1
+      ],
+      "meaning": "active key 0; client 1; resource 0; scope set 2; subject form 1; authorization-code issuance; lifetime 1; bounded suffix 2"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-051.bin",
+      "bytes": 23,
+      "sha256": "80a3736afd6cca4c56ca1dc50b7bb79ac42f1faef2fc5a6d2ae05b1d71bb4c27",
+      "controls": [
+        1,
+        1,
+        0,
+        2,
+        1,
+        0,
+        0
+      ],
+      "meaning": "active key 1; client 1; resource 0; scope set 2; subject form 1; authorization-code issuance; lifetime 0; bounded suffix 3"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-052.bin",
+      "bytes": 7,
+      "sha256": "c79d58176079cc11d01194c0fedea89b7c13bf881720ebd6707a9d4b1f5647e7",
+      "controls": [
+        0,
+        0,
+        1,
+        2,
+        1,
+        1,
+        3
+      ],
+      "meaning": "active key 0; client 0; resource 1; scope set 2; subject form 1; refresh rotation; lifetime 3; bounded suffix 0"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-053.bin",
+      "bytes": 11,
+      "sha256": "a29252c15e1794fb445e9ae59460d614803d249b39056b2da3c3cf57217946ec",
+      "controls": [
+        1,
+        0,
+        1,
+        2,
+        1,
+        1,
+        2
+      ],
+      "meaning": "active key 1; client 0; resource 1; scope set 2; subject form 1; refresh rotation; lifetime 2; bounded suffix 1"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-054.bin",
+      "bytes": 15,
+      "sha256": "9f5cfb92718e7958be8a3e53e1e130c4b69055668263ee1ccc18ead9437f659e",
+      "controls": [
+        0,
+        1,
+        1,
+        2,
+        1,
+        0,
+        1
+      ],
+      "meaning": "active key 0; client 1; resource 1; scope set 2; subject form 1; authorization-code issuance; lifetime 1; bounded suffix 2"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-055.bin",
+      "bytes": 23,
+      "sha256": "7f9d50efddd1fae62a6583d6d450f5ea3a4ef22b76c3d7f0145cb485545226bd",
+      "controls": [
+        1,
+        1,
+        1,
+        2,
+        1,
+        0,
+        0
+      ],
+      "meaning": "active key 1; client 1; resource 1; scope set 2; subject form 1; authorization-code issuance; lifetime 0; bounded suffix 3"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-056.bin",
+      "bytes": 7,
+      "sha256": "fa691c305658d3c4f42901aada3d406e739761fcd96975104201795514407f7c",
+      "controls": [
+        0,
+        0,
+        0,
+        3,
+        1,
+        1,
+        0
+      ],
+      "meaning": "active key 0; client 0; resource 0; scope set 3; subject form 1; refresh rotation; lifetime 0; bounded suffix 0"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-057.bin",
+      "bytes": 11,
+      "sha256": "ef13bea7b4d5ab68a6af99b29b01cb3eae8d64865247d17b5ee51a6e4ffd15f1",
+      "controls": [
+        1,
+        0,
+        0,
+        3,
+        1,
+        1,
+        3
+      ],
+      "meaning": "active key 1; client 0; resource 0; scope set 3; subject form 1; refresh rotation; lifetime 3; bounded suffix 1"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-058.bin",
+      "bytes": 15,
+      "sha256": "c12a60058cbe85476348a3de1b6f38976b5b73577af7f51e18c6e03df74a516b",
+      "controls": [
+        0,
+        1,
+        0,
+        3,
+        1,
+        0,
+        2
+      ],
+      "meaning": "active key 0; client 1; resource 0; scope set 3; subject form 1; authorization-code issuance; lifetime 2; bounded suffix 2"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-059.bin",
+      "bytes": 23,
+      "sha256": "32e8dec876693fdc90ca847ca54410a0b0b02f945c81ddc8ff98ca58f6a272b9",
+      "controls": [
+        1,
+        1,
+        0,
+        3,
+        1,
+        0,
+        1
+      ],
+      "meaning": "active key 1; client 1; resource 0; scope set 3; subject form 1; authorization-code issuance; lifetime 1; bounded suffix 3"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-060.bin",
+      "bytes": 7,
+      "sha256": "038cf620436114b752601b8385ba7e3d49e61ba9caec292b6711d045ed78393c",
+      "controls": [
+        0,
+        0,
+        1,
+        3,
+        1,
+        1,
+        0
+      ],
+      "meaning": "active key 0; client 0; resource 1; scope set 3; subject form 1; refresh rotation; lifetime 0; bounded suffix 0"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-061.bin",
+      "bytes": 11,
+      "sha256": "ad0afbd5dac7b902cbaaaba29dada281778944dc98e5fa8203d04767816b428c",
+      "controls": [
+        1,
+        0,
+        1,
+        3,
+        1,
+        1,
+        3
+      ],
+      "meaning": "active key 1; client 0; resource 1; scope set 3; subject form 1; refresh rotation; lifetime 3; bounded suffix 1"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-062.bin",
+      "bytes": 15,
+      "sha256": "3a9b21e3a55c2a10567e6bae79b3a890a7464770f6fee6cdf0aeb35eff5bf2a1",
+      "controls": [
+        0,
+        1,
+        1,
+        3,
+        1,
+        0,
+        2
+      ],
+      "meaning": "active key 0; client 1; resource 1; scope set 3; subject form 1; authorization-code issuance; lifetime 2; bounded suffix 2"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-063.bin",
+      "bytes": 23,
+      "sha256": "b0fb6203d9bcf38984ea810813e71203466763ef147a2f70c2d32c0613d58405",
+      "controls": [
+        1,
+        1,
+        1,
+        3,
+        1,
+        0,
+        2
+      ],
+      "meaning": "active key 1; client 1; resource 1; scope set 3; subject form 1; authorization-code issuance; lifetime 2; bounded suffix 3"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-064.bin",
+      "bytes": 7,
+      "sha256": "6304884263ffb42c84c0ca2b3366683268036ac8188550e2cb4c4814a5770064",
+      "controls": [
+        0,
+        0,
+        0,
+        0,
+        2,
+        0,
+        1
+      ],
+      "meaning": "active key 0; client 0; resource 0; scope set 0; subject form 2; authorization-code issuance; lifetime 1; bounded suffix 0"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-065.bin",
+      "bytes": 11,
+      "sha256": "bbb04e7d7225cc4e5f57d5a3a971dd645e1b301f1cc1126ae3a631f77a7da1de",
+      "controls": [
+        1,
+        0,
+        0,
+        0,
+        2,
+        0,
+        0
+      ],
+      "meaning": "active key 1; client 0; resource 0; scope set 0; subject form 2; authorization-code issuance; lifetime 0; bounded suffix 1"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-066.bin",
+      "bytes": 15,
+      "sha256": "d368fdce127555e911fa3f90b4111abc964be7e4d30460f8d880ce8b9d8d49a3",
+      "controls": [
+        0,
+        1,
+        0,
+        0,
+        2,
+        1,
+        3
+      ],
+      "meaning": "active key 0; client 1; resource 0; scope set 0; subject form 2; refresh rotation; lifetime 3; bounded suffix 2"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-067.bin",
+      "bytes": 23,
+      "sha256": "27fef1710990348fce625673bb7ace0540bb4bc8878f1ca56b30021115706ed6",
+      "controls": [
+        1,
+        1,
+        0,
+        0,
+        2,
+        1,
+        2
+      ],
+      "meaning": "active key 1; client 1; resource 0; scope set 0; subject form 2; refresh rotation; lifetime 2; bounded suffix 3"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-068.bin",
+      "bytes": 7,
+      "sha256": "aee5af3f1ff8c09e5ee478fc529647fccb591b1109b9955bbd9dd40e6c450fb3",
+      "controls": [
+        0,
+        0,
+        1,
+        0,
+        2,
+        0,
+        1
+      ],
+      "meaning": "active key 0; client 0; resource 1; scope set 0; subject form 2; authorization-code issuance; lifetime 1; bounded suffix 0"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-069.bin",
+      "bytes": 11,
+      "sha256": "ea5530849149f4995c015525f438afaf14287d0b147d7ba03da23f1904f51294",
+      "controls": [
+        1,
+        0,
+        1,
+        0,
+        2,
+        0,
+        0
+      ],
+      "meaning": "active key 1; client 0; resource 1; scope set 0; subject form 2; authorization-code issuance; lifetime 0; bounded suffix 1"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-070.bin",
+      "bytes": 15,
+      "sha256": "360adf41e5c091345541d210f249fa0428220eeea855d6a31cef93ebbb3fe62d",
+      "controls": [
+        0,
+        1,
+        1,
+        0,
+        2,
+        1,
+        0
+      ],
+      "meaning": "active key 0; client 1; resource 1; scope set 0; subject form 2; refresh rotation; lifetime 0; bounded suffix 2"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-071.bin",
+      "bytes": 23,
+      "sha256": "dc7a1f323ed576d99507be655c824d339665b325b54a0f92c82eb56f5e560365",
+      "controls": [
+        1,
+        1,
+        1,
+        0,
+        2,
+        1,
+        3
+      ],
+      "meaning": "active key 1; client 1; resource 1; scope set 0; subject form 2; refresh rotation; lifetime 3; bounded suffix 3"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-072.bin",
+      "bytes": 7,
+      "sha256": "7866d15a0590e870861b52ab9409cbeee517f56449b544459d458eb5e42c9323",
+      "controls": [
+        0,
+        0,
+        0,
+        1,
+        2,
+        0,
+        2
+      ],
+      "meaning": "active key 0; client 0; resource 0; scope set 1; subject form 2; authorization-code issuance; lifetime 2; bounded suffix 0"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-073.bin",
+      "bytes": 11,
+      "sha256": "062064bc27c29ca3c31e32fe7cc9d5cf5ba9a76a554ea726c6b98146a1ba1efe",
+      "controls": [
+        1,
+        0,
+        0,
+        1,
+        2,
+        0,
+        1
+      ],
+      "meaning": "active key 1; client 0; resource 0; scope set 1; subject form 2; authorization-code issuance; lifetime 1; bounded suffix 1"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-074.bin",
+      "bytes": 15,
+      "sha256": "677b4aa7f221d411d4df13b6b1a4836b9600759b3487728759e1cf25523bc967",
+      "controls": [
+        0,
+        1,
+        0,
+        1,
+        2,
+        1,
+        0
+      ],
+      "meaning": "active key 0; client 1; resource 0; scope set 1; subject form 2; refresh rotation; lifetime 0; bounded suffix 2"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-075.bin",
+      "bytes": 23,
+      "sha256": "35f46ba0f1b467595e44d54f119b210e6dc7e1b8d8faee05f448db328024f4af",
+      "controls": [
+        1,
+        1,
+        0,
+        1,
+        2,
+        1,
+        3
+      ],
+      "meaning": "active key 1; client 1; resource 0; scope set 1; subject form 2; refresh rotation; lifetime 3; bounded suffix 3"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-076.bin",
+      "bytes": 7,
+      "sha256": "461b58b42a60a437cad740b2554bfc0ad503da40fab9f827c171f42dbbcdf6b5",
+      "controls": [
+        0,
+        0,
+        1,
+        1,
+        2,
+        0,
+        2
+      ],
+      "meaning": "active key 0; client 0; resource 1; scope set 1; subject form 2; authorization-code issuance; lifetime 2; bounded suffix 0"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-077.bin",
+      "bytes": 11,
+      "sha256": "f95aed6d311533e74b81b0c233678d405248769e81188b81919f3b7b349d9360",
+      "controls": [
+        1,
+        0,
+        1,
+        1,
+        2,
+        0,
+        2
+      ],
+      "meaning": "active key 1; client 0; resource 1; scope set 1; subject form 2; authorization-code issuance; lifetime 2; bounded suffix 1"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-078.bin",
+      "bytes": 15,
+      "sha256": "c4916a4577807062854421bbf89e9492cf74a579b5ad981dd6ffc7362940eb74",
+      "controls": [
+        0,
+        1,
+        1,
+        1,
+        2,
+        1,
+        1
+      ],
+      "meaning": "active key 0; client 1; resource 1; scope set 1; subject form 2; refresh rotation; lifetime 1; bounded suffix 2"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-079.bin",
+      "bytes": 23,
+      "sha256": "a57f69677258ac7d8daa0653041a7a5f6813c001d2ce6a0e48f370ca4274cc77",
+      "controls": [
+        1,
+        1,
+        1,
+        1,
+        2,
+        1,
+        0
+      ],
+      "meaning": "active key 1; client 1; resource 1; scope set 1; subject form 2; refresh rotation; lifetime 0; bounded suffix 3"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-080.bin",
+      "bytes": 7,
+      "sha256": "977d2d4d89267d547727461337a979e789cd445fac74b5c6daa3e85f6af17abc",
+      "controls": [
+        0,
+        0,
+        0,
+        2,
+        2,
+        1,
+        3
+      ],
+      "meaning": "active key 0; client 0; resource 0; scope set 2; subject form 2; refresh rotation; lifetime 3; bounded suffix 0"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-081.bin",
+      "bytes": 11,
+      "sha256": "8ffff7416caaf9c84714ff46fa4c7915b093a7d4121646049e4b331d44f8121f",
+      "controls": [
+        1,
+        0,
+        0,
+        2,
+        2,
+        1,
+        2
+      ],
+      "meaning": "active key 1; client 0; resource 0; scope set 2; subject form 2; refresh rotation; lifetime 2; bounded suffix 1"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-082.bin",
+      "bytes": 15,
+      "sha256": "2dfd44b1adf3f30071da1145b406d4307084b3720b227caec25597d94bcb5a9b",
+      "controls": [
+        0,
+        1,
+        0,
+        2,
+        2,
+        0,
+        1
+      ],
+      "meaning": "active key 0; client 1; resource 0; scope set 2; subject form 2; authorization-code issuance; lifetime 1; bounded suffix 2"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-083.bin",
+      "bytes": 23,
+      "sha256": "d85c227d743b3a5b602632f61b793d719e704497b59e38b90345e58127c8c42d",
+      "controls": [
+        1,
+        1,
+        0,
+        2,
+        2,
+        0,
+        0
+      ],
+      "meaning": "active key 1; client 1; resource 0; scope set 2; subject form 2; authorization-code issuance; lifetime 0; bounded suffix 3"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-084.bin",
+      "bytes": 7,
+      "sha256": "ea00619e1de169bc461210c33017c60e5ffde7e7766020c0b59b077ea39c935d",
+      "controls": [
+        0,
+        0,
+        1,
+        2,
+        2,
+        1,
+        0
+      ],
+      "meaning": "active key 0; client 0; resource 1; scope set 2; subject form 2; refresh rotation; lifetime 0; bounded suffix 0"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-085.bin",
+      "bytes": 11,
+      "sha256": "01dabd50f9f8e18be663a6417db166d074612b59da8537a8f57dde15f745efab",
+      "controls": [
+        1,
+        0,
+        1,
+        2,
+        2,
+        1,
+        3
+      ],
+      "meaning": "active key 1; client 0; resource 1; scope set 2; subject form 2; refresh rotation; lifetime 3; bounded suffix 1"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-086.bin",
+      "bytes": 15,
+      "sha256": "b394c0660f3c99aa639b845901c8479e587f7677d68a0ff53e46089799d1289e",
+      "controls": [
+        0,
+        1,
+        1,
+        2,
+        2,
+        0,
+        2
+      ],
+      "meaning": "active key 0; client 1; resource 1; scope set 2; subject form 2; authorization-code issuance; lifetime 2; bounded suffix 2"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-087.bin",
+      "bytes": 23,
+      "sha256": "502ef5e2cf98f8d13db84db04a76215f0f48151ca641b63ecc5c2f570b6d39bb",
+      "controls": [
+        1,
+        1,
+        1,
+        2,
+        2,
+        0,
+        1
+      ],
+      "meaning": "active key 1; client 1; resource 1; scope set 2; subject form 2; authorization-code issuance; lifetime 1; bounded suffix 3"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-088.bin",
+      "bytes": 7,
+      "sha256": "aa3283e05cae1345090a86287afb29b697e10b63a3aa48d7fdaa7db54d4ff0ee",
+      "controls": [
+        0,
+        0,
+        0,
+        3,
+        2,
+        1,
+        0
+      ],
+      "meaning": "active key 0; client 0; resource 0; scope set 3; subject form 2; refresh rotation; lifetime 0; bounded suffix 0"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-089.bin",
+      "bytes": 11,
+      "sha256": "35659f0f266207e024b02c77456776694023a94892eee29bf3edfd9e3481bd45",
+      "controls": [
+        1,
+        0,
+        0,
+        3,
+        2,
+        1,
+        3
+      ],
+      "meaning": "active key 1; client 0; resource 0; scope set 3; subject form 2; refresh rotation; lifetime 3; bounded suffix 1"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-090.bin",
+      "bytes": 15,
+      "sha256": "d99aa552dcde6a940994526da269b36fa2c0d4849df2b9c04ef1e65078ca89be",
+      "controls": [
+        0,
+        1,
+        0,
+        3,
+        2,
+        0,
+        2
+      ],
+      "meaning": "active key 0; client 1; resource 0; scope set 3; subject form 2; authorization-code issuance; lifetime 2; bounded suffix 2"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-091.bin",
+      "bytes": 23,
+      "sha256": "88f2d1b7ae0d5db2037f41b92947e44c010eb7b9e34a5730ec063e60356e60e1",
+      "controls": [
+        1,
+        1,
+        0,
+        3,
+        2,
+        0,
+        2
+      ],
+      "meaning": "active key 1; client 1; resource 0; scope set 3; subject form 2; authorization-code issuance; lifetime 2; bounded suffix 3"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-092.bin",
+      "bytes": 7,
+      "sha256": "25f34f7f1d003d3075ef23f316eeef34b6a1c353a14205b2a6aa894c4e1af8e2",
+      "controls": [
+        0,
+        0,
+        1,
+        3,
+        2,
+        1,
+        1
+      ],
+      "meaning": "active key 0; client 0; resource 1; scope set 3; subject form 2; refresh rotation; lifetime 1; bounded suffix 0"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-093.bin",
+      "bytes": 11,
+      "sha256": "fc0472dc7417c95d1362a364707fe4ee5e17f5a0a4ee21144dc0b9e7f7e600a0",
+      "controls": [
+        1,
+        0,
+        1,
+        3,
+        2,
+        1,
+        0
+      ],
+      "meaning": "active key 1; client 0; resource 1; scope set 3; subject form 2; refresh rotation; lifetime 0; bounded suffix 1"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-094.bin",
+      "bytes": 15,
+      "sha256": "c5b552dfff5de1b1dc677f5f1535d2d1a7e54a258f8a1dde7069451f771c910e",
+      "controls": [
+        0,
+        1,
+        1,
+        3,
+        2,
+        0,
+        3
+      ],
+      "meaning": "active key 0; client 1; resource 1; scope set 3; subject form 2; authorization-code issuance; lifetime 3; bounded suffix 2"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-095.bin",
+      "bytes": 23,
+      "sha256": "37a5b87f83d9e3143acf6ca5c960fdd7fd455f0d49f13af512d3acd6e52b61c0",
+      "controls": [
+        1,
+        1,
+        1,
+        3,
+        2,
+        0,
+        2
+      ],
+      "meaning": "active key 1; client 1; resource 1; scope set 3; subject form 2; authorization-code issuance; lifetime 2; bounded suffix 3"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-096.bin",
+      "bytes": 7,
+      "sha256": "76bd7df76e72784763b09a82f9fc2e05455f554f1c2e0ba3ddc5a9688a46e461",
+      "controls": [
+        0,
+        0,
+        0,
+        0,
+        3,
+        0,
+        1
+      ],
+      "meaning": "active key 0; client 0; resource 0; scope set 0; subject form 3; authorization-code issuance; lifetime 1; bounded suffix 0"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-097.bin",
+      "bytes": 11,
+      "sha256": "bc3bb5d6fcb2d7d1f02917cfa5431bbd775987f6e116d866443cf3f70d3948d5",
+      "controls": [
+        1,
+        0,
+        0,
+        0,
+        3,
+        0,
+        0
+      ],
+      "meaning": "active key 1; client 0; resource 0; scope set 0; subject form 3; authorization-code issuance; lifetime 0; bounded suffix 1"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-098.bin",
+      "bytes": 15,
+      "sha256": "982a7a36d776138ad6dc865ec10f445d759dc6621171bacb29386e0033998822",
+      "controls": [
+        0,
+        1,
+        0,
+        0,
+        3,
+        1,
+        0
+      ],
+      "meaning": "active key 0; client 1; resource 0; scope set 0; subject form 3; refresh rotation; lifetime 0; bounded suffix 2"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-099.bin",
+      "bytes": 23,
+      "sha256": "2627b5eecd36e6726764a19674bda2f155614255b129fc7c79f8628ae23a722c",
+      "controls": [
+        1,
+        1,
+        0,
+        0,
+        3,
+        1,
+        3
+      ],
+      "meaning": "active key 1; client 1; resource 0; scope set 0; subject form 3; refresh rotation; lifetime 3; bounded suffix 3"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-100.bin",
+      "bytes": 7,
+      "sha256": "df8419e4b2f90c3e9581c53299f49bf3c6585e71b15ecb98a8ff7d7295885009",
+      "controls": [
+        0,
+        0,
+        1,
+        0,
+        3,
+        0,
+        2
+      ],
+      "meaning": "active key 0; client 0; resource 1; scope set 0; subject form 3; authorization-code issuance; lifetime 2; bounded suffix 0"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-101.bin",
+      "bytes": 11,
+      "sha256": "34e2e0346761f5e2a25aa3840a00b40776a7cb635c76c340d7756047d74c68dd",
+      "controls": [
+        1,
+        0,
+        1,
+        0,
+        3,
+        0,
+        1
+      ],
+      "meaning": "active key 1; client 0; resource 1; scope set 0; subject form 3; authorization-code issuance; lifetime 1; bounded suffix 1"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-102.bin",
+      "bytes": 15,
+      "sha256": "4d8486477dfdcb3c89409149e736a793b1a8c648205778616991acdd62a1d788",
+      "controls": [
+        0,
+        1,
+        1,
+        0,
+        3,
+        1,
+        0
+      ],
+      "meaning": "active key 0; client 1; resource 1; scope set 0; subject form 3; refresh rotation; lifetime 0; bounded suffix 2"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-103.bin",
+      "bytes": 23,
+      "sha256": "0286c4cff6d2d78521d199521f02bb43eb570bc76e293ddc1dad243234d04889",
+      "controls": [
+        1,
+        1,
+        1,
+        0,
+        3,
+        1,
+        3
+      ],
+      "meaning": "active key 1; client 1; resource 1; scope set 0; subject form 3; refresh rotation; lifetime 3; bounded suffix 3"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-104.bin",
+      "bytes": 7,
+      "sha256": "9e308360d84ab9cb885d1b552914a2b52b6925c5646c1954039db665f9031940",
+      "controls": [
+        0,
+        0,
+        0,
+        1,
+        3,
+        0,
+        2
+      ],
+      "meaning": "active key 0; client 0; resource 0; scope set 1; subject form 3; authorization-code issuance; lifetime 2; bounded suffix 0"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-105.bin",
+      "bytes": 11,
+      "sha256": "f81ade08f96a447ca2857ba3be4baba98ad88f027559dd9076757b1ff2f3b2b0",
+      "controls": [
+        1,
+        0,
+        0,
+        1,
+        3,
+        0,
+        2
+      ],
+      "meaning": "active key 1; client 0; resource 0; scope set 1; subject form 3; authorization-code issuance; lifetime 2; bounded suffix 1"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-106.bin",
+      "bytes": 15,
+      "sha256": "d3252f58224497ef13abfb22b79a9efc5674d0de0d082c5dbd3ea767d7718213",
+      "controls": [
+        0,
+        1,
+        0,
+        1,
+        3,
+        1,
+        1
+      ],
+      "meaning": "active key 0; client 1; resource 0; scope set 1; subject form 3; refresh rotation; lifetime 1; bounded suffix 2"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-107.bin",
+      "bytes": 23,
+      "sha256": "6536db4e4511bec156e032d4f643bb2af1b883530e912b9f9c1993fff01f3858",
+      "controls": [
+        1,
+        1,
+        0,
+        1,
+        3,
+        1,
+        0
+      ],
+      "meaning": "active key 1; client 1; resource 0; scope set 1; subject form 3; refresh rotation; lifetime 0; bounded suffix 3"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-108.bin",
+      "bytes": 7,
+      "sha256": "de5b030c624106a166a83ed4b4dce232886c72c5e6e30b7b6625dd77b3935288",
+      "controls": [
+        0,
+        0,
+        1,
+        1,
+        3,
+        0,
+        3
+      ],
+      "meaning": "active key 0; client 0; resource 1; scope set 1; subject form 3; authorization-code issuance; lifetime 3; bounded suffix 0"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-109.bin",
+      "bytes": 11,
+      "sha256": "fad630caf45aa51a1c75813e622c43c808def78e22a1f6dd9fdd13038aad737d",
+      "controls": [
+        1,
+        0,
+        1,
+        1,
+        3,
+        0,
+        2
+      ],
+      "meaning": "active key 1; client 0; resource 1; scope set 1; subject form 3; authorization-code issuance; lifetime 2; bounded suffix 1"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-110.bin",
+      "bytes": 15,
+      "sha256": "f5fca2f7013bad69999a5733a9aa4ac1e1931d5b9650322a2416e9c72adf08de",
+      "controls": [
+        0,
+        1,
+        1,
+        1,
+        3,
+        1,
+        1
+      ],
+      "meaning": "active key 0; client 1; resource 1; scope set 1; subject form 3; refresh rotation; lifetime 1; bounded suffix 2"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-111.bin",
+      "bytes": 23,
+      "sha256": "fe73edff5035d169394ccd829d0b5bac6e5fa224fc36ec918b84ac3ad1255531",
+      "controls": [
+        1,
+        1,
+        1,
+        1,
+        3,
+        1,
+        0
+      ],
+      "meaning": "active key 1; client 1; resource 1; scope set 1; subject form 3; refresh rotation; lifetime 0; bounded suffix 3"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-112.bin",
+      "bytes": 7,
+      "sha256": "fc466ec5e759379aca43f4821c8510854614e9034a7d5a6b692bd90f5dc1f6b2",
+      "controls": [
+        0,
+        0,
+        0,
+        2,
+        3,
+        1,
+        0
+      ],
+      "meaning": "active key 0; client 0; resource 0; scope set 2; subject form 3; refresh rotation; lifetime 0; bounded suffix 0"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-113.bin",
+      "bytes": 11,
+      "sha256": "a64fd3b68ac6b48cd1f9a0852ed5623d59e9cf0e06785d9a5820c71959d95d49",
+      "controls": [
+        1,
+        0,
+        0,
+        2,
+        3,
+        1,
+        3
+      ],
+      "meaning": "active key 1; client 0; resource 0; scope set 2; subject form 3; refresh rotation; lifetime 3; bounded suffix 1"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-114.bin",
+      "bytes": 15,
+      "sha256": "f2d02ae1f2e02001b4f2a68881e5017b47154016b689997a0cfcac28f3a3be43",
+      "controls": [
+        0,
+        1,
+        0,
+        2,
+        3,
+        0,
+        2
+      ],
+      "meaning": "active key 0; client 1; resource 0; scope set 2; subject form 3; authorization-code issuance; lifetime 2; bounded suffix 2"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-115.bin",
+      "bytes": 23,
+      "sha256": "650b4fceb1da37c4afab8aa549ca7f4095d9d6b4acf71f63906d3ef9f4cdce3d",
+      "controls": [
+        1,
+        1,
+        0,
+        2,
+        3,
+        0,
+        1
+      ],
+      "meaning": "active key 1; client 1; resource 0; scope set 2; subject form 3; authorization-code issuance; lifetime 1; bounded suffix 3"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-116.bin",
+      "bytes": 7,
+      "sha256": "2cac58b8eeae1527bda2e20a0baf5585bd8d4496770b9b997b3b9f01370b87ac",
+      "controls": [
+        0,
+        0,
+        1,
+        2,
+        3,
+        1,
+        0
+      ],
+      "meaning": "active key 0; client 0; resource 1; scope set 2; subject form 3; refresh rotation; lifetime 0; bounded suffix 0"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-117.bin",
+      "bytes": 11,
+      "sha256": "1e4d99f7c6f78ae9ef784b16cacdf5e36b6cc36c9915ab41ea8f23f1b0a52852",
+      "controls": [
+        1,
+        0,
+        1,
+        2,
+        3,
+        1,
+        3
+      ],
+      "meaning": "active key 1; client 0; resource 1; scope set 2; subject form 3; refresh rotation; lifetime 3; bounded suffix 1"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-118.bin",
+      "bytes": 15,
+      "sha256": "42a727cd0b3d99daac2d6696c4976477da7759d467e0a46be7ae03b1dfcc9e7b",
+      "controls": [
+        0,
+        1,
+        1,
+        2,
+        3,
+        0,
+        2
+      ],
+      "meaning": "active key 0; client 1; resource 1; scope set 2; subject form 3; authorization-code issuance; lifetime 2; bounded suffix 2"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-119.bin",
+      "bytes": 23,
+      "sha256": "b2dca500deedddea15c2321bb72094cbfd67569e3418b30c5c7c7c4e9c4c55d5",
+      "controls": [
+        1,
+        1,
+        1,
+        2,
+        3,
+        0,
+        2
+      ],
+      "meaning": "active key 1; client 1; resource 1; scope set 2; subject form 3; authorization-code issuance; lifetime 2; bounded suffix 3"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-120.bin",
+      "bytes": 7,
+      "sha256": "a95ac6a63dbfbcec6856ce57a506c9a3057fc02149dce98c5b1e0b416d23d7ff",
+      "controls": [
+        0,
+        0,
+        0,
+        3,
+        3,
+        1,
+        1
+      ],
+      "meaning": "active key 0; client 0; resource 0; scope set 3; subject form 3; refresh rotation; lifetime 1; bounded suffix 0"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-121.bin",
+      "bytes": 11,
+      "sha256": "c95d8812c695f5ff6abc73dad1d0b763f3df4b98882d09553ea2fd30baa02015",
+      "controls": [
+        1,
+        0,
+        0,
+        3,
+        3,
+        1,
+        0
+      ],
+      "meaning": "active key 1; client 0; resource 0; scope set 3; subject form 3; refresh rotation; lifetime 0; bounded suffix 1"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-122.bin",
+      "bytes": 15,
+      "sha256": "44772ab54fdce0b6ab7bbb2e1c2929efddffd669f112d05ab801a8fecc71f556",
+      "controls": [
+        0,
+        1,
+        0,
+        3,
+        3,
+        0,
+        3
+      ],
+      "meaning": "active key 0; client 1; resource 0; scope set 3; subject form 3; authorization-code issuance; lifetime 3; bounded suffix 2"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-123.bin",
+      "bytes": 23,
+      "sha256": "868aa02e9be246967937ad54cf87d5072c5cbf3f28fcb332f55ad9a05a893d9a",
+      "controls": [
+        1,
+        1,
+        0,
+        3,
+        3,
+        0,
+        2
+      ],
+      "meaning": "active key 1; client 1; resource 0; scope set 3; subject form 3; authorization-code issuance; lifetime 2; bounded suffix 3"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-124.bin",
+      "bytes": 7,
+      "sha256": "8ae9ca09a0282e3af7ab4027d08027aaa75fca47eae3d8d2a09a5bcc999f1c7f",
+      "controls": [
+        0,
+        0,
+        1,
+        3,
+        3,
+        1,
+        1
+      ],
+      "meaning": "active key 0; client 0; resource 1; scope set 3; subject form 3; refresh rotation; lifetime 1; bounded suffix 0"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-125.bin",
+      "bytes": 11,
+      "sha256": "e16895793c78f49309aa606b0962d6554f7c1246859a178d06f5f85b558a3a63",
+      "controls": [
+        1,
+        0,
+        1,
+        3,
+        3,
+        1,
+        0
+      ],
+      "meaning": "active key 1; client 0; resource 1; scope set 3; subject form 3; refresh rotation; lifetime 0; bounded suffix 1"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-126.bin",
+      "bytes": 15,
+      "sha256": "0776ab05164d02aaa3962436f04a35e077a7da5e9bcc7dccb8c84a2fb16c0919",
+      "controls": [
+        0,
+        1,
+        1,
+        3,
+        3,
+        0,
+        0
+      ],
+      "meaning": "active key 0; client 1; resource 1; scope set 3; subject form 3; authorization-code issuance; lifetime 0; bounded suffix 2"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-127.bin",
+      "bytes": 23,
+      "sha256": "7c23ac368db63d22f471d7f9ed51c7145c0ecea396ddb1d9f999976cfcecdda5",
+      "controls": [
+        1,
+        1,
+        1,
+        3,
+        3,
+        0,
+        3
+      ],
+      "meaning": "active key 1; client 1; resource 1; scope set 3; subject form 3; authorization-code issuance; lifetime 3; bounded suffix 3"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-128.bin",
+      "bytes": 7,
+      "sha256": "ab206a4402c3a5774d88985879b5ace544ade79aea9f1e5e2dc6ba2f0352150f",
+      "controls": [
+        0,
+        0,
+        0,
+        0,
+        4,
+        0,
+        2
+      ],
+      "meaning": "active key 0; client 0; resource 0; scope set 0; subject form 4; authorization-code issuance; lifetime 2; bounded suffix 0"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-129.bin",
+      "bytes": 11,
+      "sha256": "782361c27910d5d14e3e2a40d4820936640807f5815c1d4602caf5ff5be5c7e4",
+      "controls": [
+        1,
+        0,
+        0,
+        0,
+        4,
+        0,
+        1
+      ],
+      "meaning": "active key 1; client 0; resource 0; scope set 0; subject form 4; authorization-code issuance; lifetime 1; bounded suffix 1"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-130.bin",
+      "bytes": 15,
+      "sha256": "57bf6b265cb6a4f96bba3ede4659e0130eaa60205c1e09d8b7f4ae07647698fe",
+      "controls": [
+        0,
+        1,
+        0,
+        0,
+        4,
+        1,
+        0
+      ],
+      "meaning": "active key 0; client 1; resource 0; scope set 0; subject form 4; refresh rotation; lifetime 0; bounded suffix 2"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-131.bin",
+      "bytes": 23,
+      "sha256": "ab96633a932daa2693a831dae036efad981ad7d199892d62f558d7a95733efed",
+      "controls": [
+        1,
+        1,
+        0,
+        0,
+        4,
+        1,
+        3
+      ],
+      "meaning": "active key 1; client 1; resource 0; scope set 0; subject form 4; refresh rotation; lifetime 3; bounded suffix 3"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-132.bin",
+      "bytes": 7,
+      "sha256": "b32f4f20c794240e78f22805a91b0c889b4df55381f2788e6727bd25a27f5ab0",
+      "controls": [
+        0,
+        0,
+        1,
+        0,
+        4,
+        0,
+        2
+      ],
+      "meaning": "active key 0; client 0; resource 1; scope set 0; subject form 4; authorization-code issuance; lifetime 2; bounded suffix 0"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-133.bin",
+      "bytes": 11,
+      "sha256": "8b5e68027ffe28e4c61417793989cfddf2dc21c40e7fb3c97c6023d1cb13eb4c",
+      "controls": [
+        1,
+        0,
+        1,
+        0,
+        4,
+        0,
+        2
+      ],
+      "meaning": "active key 1; client 0; resource 1; scope set 0; subject form 4; authorization-code issuance; lifetime 2; bounded suffix 1"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-134.bin",
+      "bytes": 15,
+      "sha256": "7cc0f280cb673c6f853bc6cfeacb9bca75f15095bbcf65916e1505352cc22b92",
+      "controls": [
+        0,
+        1,
+        1,
+        0,
+        4,
+        1,
+        1
+      ],
+      "meaning": "active key 0; client 1; resource 1; scope set 0; subject form 4; refresh rotation; lifetime 1; bounded suffix 2"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-135.bin",
+      "bytes": 23,
+      "sha256": "e2a6338ed688f72e0e826b9a47acf65f6db4f408a46e064d1e7aec350cdb8a89",
+      "controls": [
+        1,
+        1,
+        1,
+        0,
+        4,
+        1,
+        0
+      ],
+      "meaning": "active key 1; client 1; resource 1; scope set 0; subject form 4; refresh rotation; lifetime 0; bounded suffix 3"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-136.bin",
+      "bytes": 7,
+      "sha256": "7a4ca6385005a956aba3134fac35a7bcb56d745f272ca87e121458b4545fc8f3",
+      "controls": [
+        0,
+        0,
+        0,
+        1,
+        4,
+        0,
+        3
+      ],
+      "meaning": "active key 0; client 0; resource 0; scope set 1; subject form 4; authorization-code issuance; lifetime 3; bounded suffix 0"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-137.bin",
+      "bytes": 11,
+      "sha256": "4b63f446feedcc5a0d9ecbd5abaab089cc5ab4dbe84eec27ba4867c610fabee0",
+      "controls": [
+        1,
+        0,
+        0,
+        1,
+        4,
+        0,
+        2
+      ],
+      "meaning": "active key 1; client 0; resource 0; scope set 1; subject form 4; authorization-code issuance; lifetime 2; bounded suffix 1"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-138.bin",
+      "bytes": 15,
+      "sha256": "e3bc5b739d014beb9605b597f613740a5da58a4474838b72c2fbb24e313cf838",
+      "controls": [
+        0,
+        1,
+        0,
+        1,
+        4,
+        1,
+        1
+      ],
+      "meaning": "active key 0; client 1; resource 0; scope set 1; subject form 4; refresh rotation; lifetime 1; bounded suffix 2"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-139.bin",
+      "bytes": 23,
+      "sha256": "12cc7b2ae86fb9e66cb95d4a33596f8fd919f17fb6cd3502b86188036ff9c76a",
+      "controls": [
+        1,
+        1,
+        0,
+        1,
+        4,
+        1,
+        0
+      ],
+      "meaning": "active key 1; client 1; resource 0; scope set 1; subject form 4; refresh rotation; lifetime 0; bounded suffix 3"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-140.bin",
+      "bytes": 7,
+      "sha256": "c0d1237a40eba39f1b80d0f5c6d623ff8e94e7917c36656ef2bb7765a0a848f4",
+      "controls": [
+        0,
+        0,
+        1,
+        1,
+        4,
+        0,
+        0
+      ],
+      "meaning": "active key 0; client 0; resource 1; scope set 1; subject form 4; authorization-code issuance; lifetime 0; bounded suffix 0"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-141.bin",
+      "bytes": 11,
+      "sha256": "caafb229a1efe1e78781438ffa885cf7d6a5bed1f061f60b9da74b8912d27de0",
+      "controls": [
+        1,
+        0,
+        1,
+        1,
+        4,
+        0,
+        3
+      ],
+      "meaning": "active key 1; client 0; resource 1; scope set 1; subject form 4; authorization-code issuance; lifetime 3; bounded suffix 1"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-142.bin",
+      "bytes": 15,
+      "sha256": "e0497fb04e66403e8d3908fc283648d8a764fdbc3c353f2b0a203edd3ffcea79",
+      "controls": [
+        0,
+        1,
+        1,
+        1,
+        4,
+        1,
+        2
+      ],
+      "meaning": "active key 0; client 1; resource 1; scope set 1; subject form 4; refresh rotation; lifetime 2; bounded suffix 2"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-143.bin",
+      "bytes": 23,
+      "sha256": "5c241ced630c6de59befdcb904c8ef9dfe6e328c6e266e846f5c2c10beceb70d",
+      "controls": [
+        1,
+        1,
+        1,
+        1,
+        4,
+        1,
+        1
+      ],
+      "meaning": "active key 1; client 1; resource 1; scope set 1; subject form 4; refresh rotation; lifetime 1; bounded suffix 3"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-144.bin",
+      "bytes": 7,
+      "sha256": "b1994e8a1a7277ae1c0bbe1e8158a718034e9587b9bce3de55bc5c919ca5fc9e",
+      "controls": [
+        0,
+        0,
+        0,
+        2,
+        4,
+        1,
+        0
+      ],
+      "meaning": "active key 0; client 0; resource 0; scope set 2; subject form 4; refresh rotation; lifetime 0; bounded suffix 0"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-145.bin",
+      "bytes": 11,
+      "sha256": "099461daefe0970cb88a606072807055813e4044a3295ce6a2f475865df61d38",
+      "controls": [
+        1,
+        0,
+        0,
+        2,
+        4,
+        1,
+        3
+      ],
+      "meaning": "active key 1; client 0; resource 0; scope set 2; subject form 4; refresh rotation; lifetime 3; bounded suffix 1"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-146.bin",
+      "bytes": 15,
+      "sha256": "a0154cc7cc581fe28ab51d166f7012497ade0c7fc58bc98c446e9a00a8eb205a",
+      "controls": [
+        0,
+        1,
+        0,
+        2,
+        4,
+        0,
+        2
+      ],
+      "meaning": "active key 0; client 1; resource 0; scope set 2; subject form 4; authorization-code issuance; lifetime 2; bounded suffix 2"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-147.bin",
+      "bytes": 23,
+      "sha256": "e645565b36a387c27a70bd32e762dfffab2f521508c473540a9d76aed19cd8e5",
+      "controls": [
+        1,
+        1,
+        0,
+        2,
+        4,
+        0,
+        2
+      ],
+      "meaning": "active key 1; client 1; resource 0; scope set 2; subject form 4; authorization-code issuance; lifetime 2; bounded suffix 3"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-148.bin",
+      "bytes": 7,
+      "sha256": "b3942aabf362d08e1c3289c263912cf88305809380fb349ceecf8016efd63336",
+      "controls": [
+        0,
+        0,
+        1,
+        2,
+        4,
+        1,
+        1
+      ],
+      "meaning": "active key 0; client 0; resource 1; scope set 2; subject form 4; refresh rotation; lifetime 1; bounded suffix 0"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-149.bin",
+      "bytes": 11,
+      "sha256": "07751394cebf80d8b6839c4677d62ac1f6ecf7526acfe78820d1cd5ddc9b96bf",
+      "controls": [
+        1,
+        0,
+        1,
+        2,
+        4,
+        1,
+        0
+      ],
+      "meaning": "active key 1; client 0; resource 1; scope set 2; subject form 4; refresh rotation; lifetime 0; bounded suffix 1"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-150.bin",
+      "bytes": 15,
+      "sha256": "1c1bfbc97721b92faabc05ecb3813874af4523c177a67fcfe9c3178a288e868b",
+      "controls": [
+        0,
+        1,
+        1,
+        2,
+        4,
+        0,
+        3
+      ],
+      "meaning": "active key 0; client 1; resource 1; scope set 2; subject form 4; authorization-code issuance; lifetime 3; bounded suffix 2"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-151.bin",
+      "bytes": 23,
+      "sha256": "6ef8064af16542c6e9e728b570f9fdb746c4e0b1d17747dbe9a6a724a99e05ca",
+      "controls": [
+        1,
+        1,
+        1,
+        2,
+        4,
+        0,
+        2
+      ],
+      "meaning": "active key 1; client 1; resource 1; scope set 2; subject form 4; authorization-code issuance; lifetime 2; bounded suffix 3"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-152.bin",
+      "bytes": 7,
+      "sha256": "8e732160e21b914a0d640891cc348ff5fa5bce96e5166e2322561d17bf0fb1e8",
+      "controls": [
+        0,
+        0,
+        0,
+        3,
+        4,
+        1,
+        1
+      ],
+      "meaning": "active key 0; client 0; resource 0; scope set 3; subject form 4; refresh rotation; lifetime 1; bounded suffix 0"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-153.bin",
+      "bytes": 11,
+      "sha256": "1062994a52b58b78a754e0e1108ab6ecf63aa67877bad156f6b8e1edad57ef1c",
+      "controls": [
+        1,
+        0,
+        0,
+        3,
+        4,
+        1,
+        0
+      ],
+      "meaning": "active key 1; client 0; resource 0; scope set 3; subject form 4; refresh rotation; lifetime 0; bounded suffix 1"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-154.bin",
+      "bytes": 15,
+      "sha256": "590964cb7849a4efd88befefe08022a1cdd9aeda5831d4b9b9fc723df67b2b82",
+      "controls": [
+        0,
+        1,
+        0,
+        3,
+        4,
+        0,
+        0
+      ],
+      "meaning": "active key 0; client 1; resource 0; scope set 3; subject form 4; authorization-code issuance; lifetime 0; bounded suffix 2"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-155.bin",
+      "bytes": 23,
+      "sha256": "916d328ef5281e1887864b9412301fc432c3cd50bccfb5b1fd3dc83f14b00c05",
+      "controls": [
+        1,
+        1,
+        0,
+        3,
+        4,
+        0,
+        3
+      ],
+      "meaning": "active key 1; client 1; resource 0; scope set 3; subject form 4; authorization-code issuance; lifetime 3; bounded suffix 3"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-156.bin",
+      "bytes": 7,
+      "sha256": "9efb7116cb8302ce043c39224fc07c46a6b71896e699cc5c5c73ef51bf4f32a2",
+      "controls": [
+        0,
+        0,
+        1,
+        3,
+        4,
+        1,
+        2
+      ],
+      "meaning": "active key 0; client 0; resource 1; scope set 3; subject form 4; refresh rotation; lifetime 2; bounded suffix 0"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-157.bin",
+      "bytes": 11,
+      "sha256": "3c6d9a0d075a8d8dc946e2950f83e9b37d44a130b0702021c03c0fcc6445843c",
+      "controls": [
+        1,
+        0,
+        1,
+        3,
+        4,
+        1,
+        1
+      ],
+      "meaning": "active key 1; client 0; resource 1; scope set 3; subject form 4; refresh rotation; lifetime 1; bounded suffix 1"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-158.bin",
+      "bytes": 15,
+      "sha256": "3be2266b5ee7a94af1686b37f9c360d6965b8138d3536943b179e1ce42df84bb",
+      "controls": [
+        0,
+        1,
+        1,
+        3,
+        4,
+        0,
+        0
+      ],
+      "meaning": "active key 0; client 1; resource 1; scope set 3; subject form 4; authorization-code issuance; lifetime 0; bounded suffix 2"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-159.bin",
+      "bytes": 23,
+      "sha256": "c9aea9b3d62e09315c9596e64a5e032abed3c41c7bd4ec89b8d75271e8bab2fd",
+      "controls": [
+        1,
+        1,
+        1,
+        3,
+        4,
+        0,
+        3
+      ],
+      "meaning": "active key 1; client 1; resource 1; scope set 3; subject form 4; authorization-code issuance; lifetime 3; bounded suffix 3"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-160.bin",
+      "bytes": 7,
+      "sha256": "6ed7aa31affc5276498c352b03a2d9e96e135ed346c9e60244fcedfd90ed50d4",
+      "controls": [
+        0,
+        0,
+        0,
+        0,
+        5,
+        0,
+        2
+      ],
+      "meaning": "active key 0; client 0; resource 0; scope set 0; subject form 5; authorization-code issuance; lifetime 2; bounded suffix 0"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-161.bin",
+      "bytes": 11,
+      "sha256": "c115ba2352ae748b4a151ac421c0f10331864c68082a9281fbb7379542b8fe48",
+      "controls": [
+        1,
+        0,
+        0,
+        0,
+        5,
+        0,
+        2
+      ],
+      "meaning": "active key 1; client 0; resource 0; scope set 0; subject form 5; authorization-code issuance; lifetime 2; bounded suffix 1"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-162.bin",
+      "bytes": 15,
+      "sha256": "1e184b81963e6d3dad85f107cff6b0cd3e6a19d061277d362c94772280a40adf",
+      "controls": [
+        0,
+        1,
+        0,
+        0,
+        5,
+        1,
+        1
+      ],
+      "meaning": "active key 0; client 1; resource 0; scope set 0; subject form 5; refresh rotation; lifetime 1; bounded suffix 2"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-163.bin",
+      "bytes": 23,
+      "sha256": "73dadd843f4bfed022edd5becdb22d88deb929dda4ad934a88d6c15c435781d2",
+      "controls": [
+        1,
+        1,
+        0,
+        0,
+        5,
+        1,
+        0
+      ],
+      "meaning": "active key 1; client 1; resource 0; scope set 0; subject form 5; refresh rotation; lifetime 0; bounded suffix 3"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-164.bin",
+      "bytes": 7,
+      "sha256": "0afcfbb4d0d848fdb1c5ad3ccbd3425a92d7cbcc5cad93f456c3d57dea0dd9c0",
+      "controls": [
+        0,
+        0,
+        1,
+        0,
+        5,
+        0,
+        3
+      ],
+      "meaning": "active key 0; client 0; resource 1; scope set 0; subject form 5; authorization-code issuance; lifetime 3; bounded suffix 0"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-165.bin",
+      "bytes": 11,
+      "sha256": "41a08d2125c2104b5ca599a3786b9e058cc4993edf329eeeab2cb57062608555",
+      "controls": [
+        1,
+        0,
+        1,
+        0,
+        5,
+        0,
+        2
+      ],
+      "meaning": "active key 1; client 0; resource 1; scope set 0; subject form 5; authorization-code issuance; lifetime 2; bounded suffix 1"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-166.bin",
+      "bytes": 15,
+      "sha256": "aabab2f173831229513d8243ff66f58d3c6d7017145727121cd3478cd1fe3c34",
+      "controls": [
+        0,
+        1,
+        1,
+        0,
+        5,
+        1,
+        1
+      ],
+      "meaning": "active key 0; client 1; resource 1; scope set 0; subject form 5; refresh rotation; lifetime 1; bounded suffix 2"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-167.bin",
+      "bytes": 23,
+      "sha256": "0ff3886371e8881800674ae15e4479c090c096c59253251d4804a9b2ae1c1c1c",
+      "controls": [
+        1,
+        1,
+        1,
+        0,
+        5,
+        1,
+        0
+      ],
+      "meaning": "active key 1; client 1; resource 1; scope set 0; subject form 5; refresh rotation; lifetime 0; bounded suffix 3"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-168.bin",
+      "bytes": 7,
+      "sha256": "296c258a724ebb1d4832f8a54407c95d9b97021e632a57b1856c46fe1bcd7c03",
+      "controls": [
+        0,
+        0,
+        0,
+        1,
+        5,
+        0,
+        0
+      ],
+      "meaning": "active key 0; client 0; resource 0; scope set 1; subject form 5; authorization-code issuance; lifetime 0; bounded suffix 0"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-169.bin",
+      "bytes": 11,
+      "sha256": "6f800c51d026be30c0411b9ea2d4a2e47687124b0f2a8d1d3d50839ac73aa58b",
+      "controls": [
+        1,
+        0,
+        0,
+        1,
+        5,
+        0,
+        3
+      ],
+      "meaning": "active key 1; client 0; resource 0; scope set 1; subject form 5; authorization-code issuance; lifetime 3; bounded suffix 1"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-170.bin",
+      "bytes": 15,
+      "sha256": "59d5f82a8892802f36501c8cc455d65818b3b5d0c9175ac06a10a78e1fd9cd1a",
+      "controls": [
+        0,
+        1,
+        0,
+        1,
+        5,
+        1,
+        2
+      ],
+      "meaning": "active key 0; client 1; resource 0; scope set 1; subject form 5; refresh rotation; lifetime 2; bounded suffix 2"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-171.bin",
+      "bytes": 23,
+      "sha256": "6e82ce138475abc4e1383984d17ceb544e43ba4c7bc0f718d3aadea937d6103d",
+      "controls": [
+        1,
+        1,
+        0,
+        1,
+        5,
+        1,
+        1
+      ],
+      "meaning": "active key 1; client 1; resource 0; scope set 1; subject form 5; refresh rotation; lifetime 1; bounded suffix 3"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-172.bin",
+      "bytes": 7,
+      "sha256": "5ba7d3331cbf619cdc8e7f79916af5073d70bbdcd9b81c5ff8fee3e57da0f821",
+      "controls": [
+        0,
+        0,
+        1,
+        1,
+        5,
+        0,
+        0
+      ],
+      "meaning": "active key 0; client 0; resource 1; scope set 1; subject form 5; authorization-code issuance; lifetime 0; bounded suffix 0"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-173.bin",
+      "bytes": 11,
+      "sha256": "27cfcea5f8227eba3d4f26a6b6d813163a3eb3f000b38ba4c1f36d0c43e985d7",
+      "controls": [
+        1,
+        0,
+        1,
+        1,
+        5,
+        0,
+        3
+      ],
+      "meaning": "active key 1; client 0; resource 1; scope set 1; subject form 5; authorization-code issuance; lifetime 3; bounded suffix 1"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-174.bin",
+      "bytes": 15,
+      "sha256": "f6f8f87d1222a28d40985fb3e90c551ef4674608d0715c6ebaebed2126526774",
+      "controls": [
+        0,
+        1,
+        1,
+        1,
+        5,
+        1,
+        2
+      ],
+      "meaning": "active key 0; client 1; resource 1; scope set 1; subject form 5; refresh rotation; lifetime 2; bounded suffix 2"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-175.bin",
+      "bytes": 23,
+      "sha256": "a27134af01a129f979e0a5109217cf16cb22210eac5edd89b7a2426e5bef3bd1",
+      "controls": [
+        1,
+        1,
+        1,
+        1,
+        5,
+        1,
+        2
+      ],
+      "meaning": "active key 1; client 1; resource 1; scope set 1; subject form 5; refresh rotation; lifetime 2; bounded suffix 3"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-176.bin",
+      "bytes": 7,
+      "sha256": "a6fddcc9d877d08f6d092249cc711d929d535b5641a9177381368e0897e183d8",
+      "controls": [
+        0,
+        0,
+        0,
+        2,
+        5,
+        1,
+        1
+      ],
+      "meaning": "active key 0; client 0; resource 0; scope set 2; subject form 5; refresh rotation; lifetime 1; bounded suffix 0"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-177.bin",
+      "bytes": 11,
+      "sha256": "03c3e3e680d3cf83ae97301c4be16d0a4d9d78441da8fa8cf01bc24f440cb720",
+      "controls": [
+        1,
+        0,
+        0,
+        2,
+        5,
+        1,
+        0
+      ],
+      "meaning": "active key 1; client 0; resource 0; scope set 2; subject form 5; refresh rotation; lifetime 0; bounded suffix 1"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-178.bin",
+      "bytes": 15,
+      "sha256": "4c97a049a96a13168b517db58c3cf9fbe710e076ca4b3711d23f9ff3adf3a8e6",
+      "controls": [
+        0,
+        1,
+        0,
+        2,
+        5,
+        0,
+        3
+      ],
+      "meaning": "active key 0; client 1; resource 0; scope set 2; subject form 5; authorization-code issuance; lifetime 3; bounded suffix 2"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-179.bin",
+      "bytes": 23,
+      "sha256": "8aa6067f35a860a94146c3c8d697b62f8efb497892bda31f3010cec32849647d",
+      "controls": [
+        1,
+        1,
+        0,
+        2,
+        5,
+        0,
+        2
+      ],
+      "meaning": "active key 1; client 1; resource 0; scope set 2; subject form 5; authorization-code issuance; lifetime 2; bounded suffix 3"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-180.bin",
+      "bytes": 7,
+      "sha256": "129534412e6f5a29ba59e8c3e0244300c01a9a1563dfdd034492b9a3ab5f875e",
+      "controls": [
+        0,
+        0,
+        1,
+        2,
+        5,
+        1,
+        1
+      ],
+      "meaning": "active key 0; client 0; resource 1; scope set 2; subject form 5; refresh rotation; lifetime 1; bounded suffix 0"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-181.bin",
+      "bytes": 11,
+      "sha256": "6bd64e4ded0a3a0e96921937a9b18038dde2fa24f5e1e03f03eae6a9caf9fcc1",
+      "controls": [
+        1,
+        0,
+        1,
+        2,
+        5,
+        1,
+        0
+      ],
+      "meaning": "active key 1; client 0; resource 1; scope set 2; subject form 5; refresh rotation; lifetime 0; bounded suffix 1"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-182.bin",
+      "bytes": 15,
+      "sha256": "f35641188ca9b63f23e596b89e2dcfca1a8b2c962600ef71b862075cbeb7f033",
+      "controls": [
+        0,
+        1,
+        1,
+        2,
+        5,
+        0,
+        0
+      ],
+      "meaning": "active key 0; client 1; resource 1; scope set 2; subject form 5; authorization-code issuance; lifetime 0; bounded suffix 2"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-183.bin",
+      "bytes": 23,
+      "sha256": "74487b5476e76d6392f0815129a055b78c5a931e840a8d425afb549d09b6239d",
+      "controls": [
+        1,
+        1,
+        1,
+        2,
+        5,
+        0,
+        3
+      ],
+      "meaning": "active key 1; client 1; resource 1; scope set 2; subject form 5; authorization-code issuance; lifetime 3; bounded suffix 3"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-184.bin",
+      "bytes": 7,
+      "sha256": "73356cb5c1f0b2e159c89428b8f445f9cd112d4a21aea72dce32f523153f76bf",
+      "controls": [
+        0,
+        0,
+        0,
+        3,
+        5,
+        1,
+        2
+      ],
+      "meaning": "active key 0; client 0; resource 0; scope set 3; subject form 5; refresh rotation; lifetime 2; bounded suffix 0"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-185.bin",
+      "bytes": 11,
+      "sha256": "1a083b78fb237cbf73a795b35272e15c08a9bfe2f1f18de0a02f9c2d82bd23c5",
+      "controls": [
+        1,
+        0,
+        0,
+        3,
+        5,
+        1,
+        1
+      ],
+      "meaning": "active key 1; client 0; resource 0; scope set 3; subject form 5; refresh rotation; lifetime 1; bounded suffix 1"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-186.bin",
+      "bytes": 15,
+      "sha256": "ccc8be7d9cd2dabbd3138b053c32af96635efcff8fb56d5299fdd8ed330750e0",
+      "controls": [
+        0,
+        1,
+        0,
+        3,
+        5,
+        0,
+        0
+      ],
+      "meaning": "active key 0; client 1; resource 0; scope set 3; subject form 5; authorization-code issuance; lifetime 0; bounded suffix 2"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-187.bin",
+      "bytes": 23,
+      "sha256": "e29fd4e9239e912db84259774c42cef68a3c1dbeef97594999da1ac7e6efa0df",
+      "controls": [
+        1,
+        1,
+        0,
+        3,
+        5,
+        0,
+        3
+      ],
+      "meaning": "active key 1; client 1; resource 0; scope set 3; subject form 5; authorization-code issuance; lifetime 3; bounded suffix 3"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-188.bin",
+      "bytes": 7,
+      "sha256": "7ba36daa00181dca07afb6bee046ea75f6a5a44d2a6259b3647865e14b54ab92",
+      "controls": [
+        0,
+        0,
+        1,
+        3,
+        5,
+        1,
+        2
+      ],
+      "meaning": "active key 0; client 0; resource 1; scope set 3; subject form 5; refresh rotation; lifetime 2; bounded suffix 0"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-189.bin",
+      "bytes": 11,
+      "sha256": "0f10b272f978dc4daa6b931e523ffc22a54d3c56e94ac497bfead916fc1be3a8",
+      "controls": [
+        1,
+        0,
+        1,
+        3,
+        5,
+        1,
+        2
+      ],
+      "meaning": "active key 1; client 0; resource 1; scope set 3; subject form 5; refresh rotation; lifetime 2; bounded suffix 1"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-190.bin",
+      "bytes": 15,
+      "sha256": "a6113389699858f487103ce8366f5c15293c1f24c40c4373d19cd47fbe51c5fb",
+      "controls": [
+        0,
+        1,
+        1,
+        3,
+        5,
+        0,
+        1
+      ],
+      "meaning": "active key 0; client 1; resource 1; scope set 3; subject form 5; authorization-code issuance; lifetime 1; bounded suffix 2"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-191.bin",
+      "bytes": 23,
+      "sha256": "d952645b4a6f5b49d85d0999d901e30c6a37a7dca7fda3481b591bb6813ca615",
+      "controls": [
+        1,
+        1,
+        1,
+        3,
+        5,
+        0,
+        0
+      ],
+      "meaning": "active key 1; client 1; resource 1; scope set 3; subject form 5; authorization-code issuance; lifetime 0; bounded suffix 3"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-192.bin",
+      "bytes": 7,
+      "sha256": "9e5aecef086dd6c3790e390e82849e21b3f9d1a4ae537393fe886e7a00010353",
+      "controls": [
+        0,
+        0,
+        0,
+        0,
+        6,
+        0,
+        3
+      ],
+      "meaning": "active key 0; client 0; resource 0; scope set 0; subject form 6; authorization-code issuance; lifetime 3; bounded suffix 0"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-193.bin",
+      "bytes": 11,
+      "sha256": "e1b9782588e4b2e723740d9dcc21f4af220f7e5b9bc451484459d7b2f61cbd93",
+      "controls": [
+        1,
+        0,
+        0,
+        0,
+        6,
+        0,
+        2
+      ],
+      "meaning": "active key 1; client 0; resource 0; scope set 0; subject form 6; authorization-code issuance; lifetime 2; bounded suffix 1"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-194.bin",
+      "bytes": 15,
+      "sha256": "b02771f6d31cb03573192e27ba1d4bac9758a7a2ee5c86d1540781cee3b09bba",
+      "controls": [
+        0,
+        1,
+        0,
+        0,
+        6,
+        1,
+        1
+      ],
+      "meaning": "active key 0; client 1; resource 0; scope set 0; subject form 6; refresh rotation; lifetime 1; bounded suffix 2"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-195.bin",
+      "bytes": 23,
+      "sha256": "7931617a74b21d7aa2b9b3d7a26fb7eb5877923b781c98e2c692b6017f171486",
+      "controls": [
+        1,
+        1,
+        0,
+        0,
+        6,
+        1,
+        0
+      ],
+      "meaning": "active key 1; client 1; resource 0; scope set 0; subject form 6; refresh rotation; lifetime 0; bounded suffix 3"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-196.bin",
+      "bytes": 7,
+      "sha256": "e44fe7ac4ebbf4154b182095587ccaa6c03e9435e719ce977e93d243e5dd3210",
+      "controls": [
+        0,
+        0,
+        1,
+        0,
+        6,
+        0,
+        0
+      ],
+      "meaning": "active key 0; client 0; resource 1; scope set 0; subject form 6; authorization-code issuance; lifetime 0; bounded suffix 0"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-197.bin",
+      "bytes": 11,
+      "sha256": "feca6cb902eeb0dd2e6d8ab5e4f50fc0aed79961703090a9f5e4f6f8b89a51cd",
+      "controls": [
+        1,
+        0,
+        1,
+        0,
+        6,
+        0,
+        3
+      ],
+      "meaning": "active key 1; client 0; resource 1; scope set 0; subject form 6; authorization-code issuance; lifetime 3; bounded suffix 1"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-198.bin",
+      "bytes": 15,
+      "sha256": "2d6dd62fd37a47b0d8fcc96d9da80edccb6a5763d5f69d3bd4508a527f8df815",
+      "controls": [
+        0,
+        1,
+        1,
+        0,
+        6,
+        1,
+        2
+      ],
+      "meaning": "active key 0; client 1; resource 1; scope set 0; subject form 6; refresh rotation; lifetime 2; bounded suffix 2"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-199.bin",
+      "bytes": 23,
+      "sha256": "1a22464bb6c63b7c55db76f9894bb7fd6939a42f8a5c8b320d9195eb5dfd5800",
+      "controls": [
+        1,
+        1,
+        1,
+        0,
+        6,
+        1,
+        1
+      ],
+      "meaning": "active key 1; client 1; resource 1; scope set 0; subject form 6; refresh rotation; lifetime 1; bounded suffix 3"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-200.bin",
+      "bytes": 7,
+      "sha256": "df6ff99ca3d21275812a564f22ba7125993fd5a632f35bf8c77bca234329c0d1",
+      "controls": [
+        0,
+        0,
+        0,
+        1,
+        6,
+        0,
+        0
+      ],
+      "meaning": "active key 0; client 0; resource 0; scope set 1; subject form 6; authorization-code issuance; lifetime 0; bounded suffix 0"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-201.bin",
+      "bytes": 11,
+      "sha256": "f87d898d76588d010938304a83184989fa23c43b7270bd07bfc98668ebd60f7f",
+      "controls": [
+        1,
+        0,
+        0,
+        1,
+        6,
+        0,
+        3
+      ],
+      "meaning": "active key 1; client 0; resource 0; scope set 1; subject form 6; authorization-code issuance; lifetime 3; bounded suffix 1"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-202.bin",
+      "bytes": 15,
+      "sha256": "2315078dd2dc6efa0cbe57fd9f4c2a7d3ad17178357d13cef527cd055f800009",
+      "controls": [
+        0,
+        1,
+        0,
+        1,
+        6,
+        1,
+        2
+      ],
+      "meaning": "active key 0; client 1; resource 0; scope set 1; subject form 6; refresh rotation; lifetime 2; bounded suffix 2"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-203.bin",
+      "bytes": 23,
+      "sha256": "b3576daa689f939c382c0672364ddcb65211d3a4942efabef0a0dbf20178c0fa",
+      "controls": [
+        1,
+        1,
+        0,
+        1,
+        6,
+        1,
+        2
+      ],
+      "meaning": "active key 1; client 1; resource 0; scope set 1; subject form 6; refresh rotation; lifetime 2; bounded suffix 3"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-204.bin",
+      "bytes": 7,
+      "sha256": "0d8aab60ebde583f5ae5b87be8b329e1b6a14114ebf64b74d409446563179128",
+      "controls": [
+        0,
+        0,
+        1,
+        1,
+        6,
+        0,
+        1
+      ],
+      "meaning": "active key 0; client 0; resource 1; scope set 1; subject form 6; authorization-code issuance; lifetime 1; bounded suffix 0"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-205.bin",
+      "bytes": 11,
+      "sha256": "fb151ec5a387fef2a96c7a87e7479b0e753b07b47fc21135d5addcfb7e3f4149",
+      "controls": [
+        1,
+        0,
+        1,
+        1,
+        6,
+        0,
+        0
+      ],
+      "meaning": "active key 1; client 0; resource 1; scope set 1; subject form 6; authorization-code issuance; lifetime 0; bounded suffix 1"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-206.bin",
+      "bytes": 15,
+      "sha256": "42badca57f15a0883cf310fb9a0078003f7164b13f7748a914440cae99ed6d82",
+      "controls": [
+        0,
+        1,
+        1,
+        1,
+        6,
+        1,
+        3
+      ],
+      "meaning": "active key 0; client 1; resource 1; scope set 1; subject form 6; refresh rotation; lifetime 3; bounded suffix 2"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-207.bin",
+      "bytes": 23,
+      "sha256": "a5d2be955b76dbb43638009af1d93433c4570205e94a64f38da6a93090f6b7ec",
+      "controls": [
+        1,
+        1,
+        1,
+        1,
+        6,
+        1,
+        2
+      ],
+      "meaning": "active key 1; client 1; resource 1; scope set 1; subject form 6; refresh rotation; lifetime 2; bounded suffix 3"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-208.bin",
+      "bytes": 7,
+      "sha256": "6d66180c7e1ce1f186102ec497161db229246f1d3bfb0dd1db1d4dcd2bb8710a",
+      "controls": [
+        0,
+        0,
+        0,
+        2,
+        6,
+        1,
+        1
+      ],
+      "meaning": "active key 0; client 0; resource 0; scope set 2; subject form 6; refresh rotation; lifetime 1; bounded suffix 0"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-209.bin",
+      "bytes": 11,
+      "sha256": "6761ca73eb59045af3ee430a77ade7041590a9955716e5f1db3c30f78d9d8bc2",
+      "controls": [
+        1,
+        0,
+        0,
+        2,
+        6,
+        1,
+        0
+      ],
+      "meaning": "active key 1; client 0; resource 0; scope set 2; subject form 6; refresh rotation; lifetime 0; bounded suffix 1"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-210.bin",
+      "bytes": 15,
+      "sha256": "923fe4b3ca360812b6fe41af3e41928021e9830a00f74c6ff3deff377b97aa4c",
+      "controls": [
+        0,
+        1,
+        0,
+        2,
+        6,
+        0,
+        0
+      ],
+      "meaning": "active key 0; client 1; resource 0; scope set 2; subject form 6; authorization-code issuance; lifetime 0; bounded suffix 2"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-211.bin",
+      "bytes": 23,
+      "sha256": "6684375d35faf2eeeadb6ace7ac9de5187f0bc2b035041e900851a0bfe5e07a6",
+      "controls": [
+        1,
+        1,
+        0,
+        2,
+        6,
+        0,
+        3
+      ],
+      "meaning": "active key 1; client 1; resource 0; scope set 2; subject form 6; authorization-code issuance; lifetime 3; bounded suffix 3"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-212.bin",
+      "bytes": 7,
+      "sha256": "2769f6dcda30082ee95ab9a9bde18b3d530cedc2adadbfc80046eed274c10dbd",
+      "controls": [
+        0,
+        0,
+        1,
+        2,
+        6,
+        1,
+        2
+      ],
+      "meaning": "active key 0; client 0; resource 1; scope set 2; subject form 6; refresh rotation; lifetime 2; bounded suffix 0"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-213.bin",
+      "bytes": 11,
+      "sha256": "f45feacc98d9c3a84b700045f3c3d7fef7adbb019b7eef01a9c72ed56cf5e318",
+      "controls": [
+        1,
+        0,
+        1,
+        2,
+        6,
+        1,
+        1
+      ],
+      "meaning": "active key 1; client 0; resource 1; scope set 2; subject form 6; refresh rotation; lifetime 1; bounded suffix 1"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-214.bin",
+      "bytes": 15,
+      "sha256": "79ab2753d9b4119ad567e1f536a595119b28524a61deed039f5301d747e3fbb3",
+      "controls": [
+        0,
+        1,
+        1,
+        2,
+        6,
+        0,
+        0
+      ],
+      "meaning": "active key 0; client 1; resource 1; scope set 2; subject form 6; authorization-code issuance; lifetime 0; bounded suffix 2"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-215.bin",
+      "bytes": 23,
+      "sha256": "4c0c55544c021c167f90a20a10dbf7b6e62f594a4e5b2d09a70de25a0b726bab",
+      "controls": [
+        1,
+        1,
+        1,
+        2,
+        6,
+        0,
+        3
+      ],
+      "meaning": "active key 1; client 1; resource 1; scope set 2; subject form 6; authorization-code issuance; lifetime 3; bounded suffix 3"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-216.bin",
+      "bytes": 7,
+      "sha256": "20063b77c600344e0f1570b306ee5055e1f67fd6320d558745431771c0e64485",
+      "controls": [
+        0,
+        0,
+        0,
+        3,
+        6,
+        1,
+        2
+      ],
+      "meaning": "active key 0; client 0; resource 0; scope set 3; subject form 6; refresh rotation; lifetime 2; bounded suffix 0"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-217.bin",
+      "bytes": 11,
+      "sha256": "a8130f9c3f341bf92d530527a89528fc8803d5ba155fe9638964cb31b080f47c",
+      "controls": [
+        1,
+        0,
+        0,
+        3,
+        6,
+        1,
+        2
+      ],
+      "meaning": "active key 1; client 0; resource 0; scope set 3; subject form 6; refresh rotation; lifetime 2; bounded suffix 1"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-218.bin",
+      "bytes": 15,
+      "sha256": "ce0f3670cf7a749a4b658db2923e1b749b78edfbdafea2d3b1077445fe9a38e2",
+      "controls": [
+        0,
+        1,
+        0,
+        3,
+        6,
+        0,
+        1
+      ],
+      "meaning": "active key 0; client 1; resource 0; scope set 3; subject form 6; authorization-code issuance; lifetime 1; bounded suffix 2"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-219.bin",
+      "bytes": 23,
+      "sha256": "8587bfdebfe0ebde59f6f2c3561e4f98232366b6c69b661fb98087568542f65c",
+      "controls": [
+        1,
+        1,
+        0,
+        3,
+        6,
+        0,
+        0
+      ],
+      "meaning": "active key 1; client 1; resource 0; scope set 3; subject form 6; authorization-code issuance; lifetime 0; bounded suffix 3"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-220.bin",
+      "bytes": 7,
+      "sha256": "6e60683221e147dd87da85509dee82faad57dcb557a57a94e650735ce954d1e8",
+      "controls": [
+        0,
+        0,
+        1,
+        3,
+        6,
+        1,
+        3
+      ],
+      "meaning": "active key 0; client 0; resource 1; scope set 3; subject form 6; refresh rotation; lifetime 3; bounded suffix 0"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-221.bin",
+      "bytes": 11,
+      "sha256": "ecdff79158bc1a65ff839897911acb230df54238381c4f2370d366f6accdd8db",
+      "controls": [
+        1,
+        0,
+        1,
+        3,
+        6,
+        1,
+        2
+      ],
+      "meaning": "active key 1; client 0; resource 1; scope set 3; subject form 6; refresh rotation; lifetime 2; bounded suffix 1"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-222.bin",
+      "bytes": 15,
+      "sha256": "13585e27244f9e7927ab6dd2509a5eed4ea107302bff812b20ff5fdddf9b2e4e",
+      "controls": [
+        0,
+        1,
+        1,
+        3,
+        6,
+        0,
+        1
+      ],
+      "meaning": "active key 0; client 1; resource 1; scope set 3; subject form 6; authorization-code issuance; lifetime 1; bounded suffix 2"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-223.bin",
+      "bytes": 23,
+      "sha256": "03ef70122980c47276939267221e80ac5094e6e2195293ef731907aa7997bc8d",
+      "controls": [
+        1,
+        1,
+        1,
+        3,
+        6,
+        0,
+        0
+      ],
+      "meaning": "active key 1; client 1; resource 1; scope set 3; subject form 6; authorization-code issuance; lifetime 0; bounded suffix 3"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-224.bin",
+      "bytes": 7,
+      "sha256": "6ec88b502aabf6578250893146b1e265b0395cd6803ffb1a6984341491e23ca3",
+      "controls": [
+        0,
+        0,
+        0,
+        0,
+        7,
+        0,
+        0
+      ],
+      "meaning": "active key 0; client 0; resource 0; scope set 0; subject form 7; authorization-code issuance; lifetime 0; bounded suffix 0"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-225.bin",
+      "bytes": 11,
+      "sha256": "d97e824d642c537923df6d2571c40856b901d7eeba9500eb3bf6e4bcd737a452",
+      "controls": [
+        1,
+        0,
+        0,
+        0,
+        7,
+        0,
+        3
+      ],
+      "meaning": "active key 1; client 0; resource 0; scope set 0; subject form 7; authorization-code issuance; lifetime 3; bounded suffix 1"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-226.bin",
+      "bytes": 15,
+      "sha256": "808ee0c1a76c68349366deeb503e19d7ee6ebe7ce57550135adcac6355b1a862",
+      "controls": [
+        0,
+        1,
+        0,
+        0,
+        7,
+        1,
+        2
+      ],
+      "meaning": "active key 0; client 1; resource 0; scope set 0; subject form 7; refresh rotation; lifetime 2; bounded suffix 2"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-227.bin",
+      "bytes": 23,
+      "sha256": "9c62da55084f32d89db94ea2e9a3f3b5feeea5e6e984b6b0e368f3151ce1524c",
+      "controls": [
+        1,
+        1,
+        0,
+        0,
+        7,
+        1,
+        1
+      ],
+      "meaning": "active key 1; client 1; resource 0; scope set 0; subject form 7; refresh rotation; lifetime 1; bounded suffix 3"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-228.bin",
+      "bytes": 7,
+      "sha256": "2ea39758d242e66c99f66cf9756c36abd76cc22f399bf979a938411fa6006710",
+      "controls": [
+        0,
+        0,
+        1,
+        0,
+        7,
+        0,
+        0
+      ],
+      "meaning": "active key 0; client 0; resource 1; scope set 0; subject form 7; authorization-code issuance; lifetime 0; bounded suffix 0"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-229.bin",
+      "bytes": 11,
+      "sha256": "3b5ec2f8710f164e85f8426c57d2c6a35f1f8cb48ad97fae40bee96b7e6235f1",
+      "controls": [
+        1,
+        0,
+        1,
+        0,
+        7,
+        0,
+        3
+      ],
+      "meaning": "active key 1; client 0; resource 1; scope set 0; subject form 7; authorization-code issuance; lifetime 3; bounded suffix 1"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-230.bin",
+      "bytes": 15,
+      "sha256": "a4d134eb89a5d54c2b36511dafc1a8c840b33b6c3bbe64fe07323d8e13009ae7",
+      "controls": [
+        0,
+        1,
+        1,
+        0,
+        7,
+        1,
+        2
+      ],
+      "meaning": "active key 0; client 1; resource 1; scope set 0; subject form 7; refresh rotation; lifetime 2; bounded suffix 2"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-231.bin",
+      "bytes": 23,
+      "sha256": "ed1684a8e9e51a2b74dc8d8f27c5375fb46650688db008286515e5e135533179",
+      "controls": [
+        1,
+        1,
+        1,
+        0,
+        7,
+        1,
+        2
+      ],
+      "meaning": "active key 1; client 1; resource 1; scope set 0; subject form 7; refresh rotation; lifetime 2; bounded suffix 3"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-232.bin",
+      "bytes": 7,
+      "sha256": "1698a590d32ab7440f51c5bf798208c76cec848c69fc04965dcaeb72f68ede4f",
+      "controls": [
+        0,
+        0,
+        0,
+        1,
+        7,
+        0,
+        1
+      ],
+      "meaning": "active key 0; client 0; resource 0; scope set 1; subject form 7; authorization-code issuance; lifetime 1; bounded suffix 0"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-233.bin",
+      "bytes": 11,
+      "sha256": "9961aebeb44d5708791c21facd90629e1118754887f1f1d54376cc3556777ba6",
+      "controls": [
+        1,
+        0,
+        0,
+        1,
+        7,
+        0,
+        0
+      ],
+      "meaning": "active key 1; client 0; resource 0; scope set 1; subject form 7; authorization-code issuance; lifetime 0; bounded suffix 1"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-234.bin",
+      "bytes": 15,
+      "sha256": "b48c88d6c08ef9866dcf216627717bfa800990277b2930ba1885e90274e43b02",
+      "controls": [
+        0,
+        1,
+        0,
+        1,
+        7,
+        1,
+        3
+      ],
+      "meaning": "active key 0; client 1; resource 0; scope set 1; subject form 7; refresh rotation; lifetime 3; bounded suffix 2"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-235.bin",
+      "bytes": 23,
+      "sha256": "0c710837286e9b6c143fa2837801045849787792703a30da90f6dc74285eb1c7",
+      "controls": [
+        1,
+        1,
+        0,
+        1,
+        7,
+        1,
+        2
+      ],
+      "meaning": "active key 1; client 1; resource 0; scope set 1; subject form 7; refresh rotation; lifetime 2; bounded suffix 3"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-236.bin",
+      "bytes": 7,
+      "sha256": "2a9d9c4fea5d066fa6aed757c81bfc30e3fa6db14b15cfebb72667b9ecf9bcb8",
+      "controls": [
+        0,
+        0,
+        1,
+        1,
+        7,
+        0,
+        1
+      ],
+      "meaning": "active key 0; client 0; resource 1; scope set 1; subject form 7; authorization-code issuance; lifetime 1; bounded suffix 0"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-237.bin",
+      "bytes": 11,
+      "sha256": "07a6edc33f40bc7434d21cab39f6fa6804101f035b2023c414e4481112dc2ded",
+      "controls": [
+        1,
+        0,
+        1,
+        1,
+        7,
+        0,
+        0
+      ],
+      "meaning": "active key 1; client 0; resource 1; scope set 1; subject form 7; authorization-code issuance; lifetime 0; bounded suffix 1"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-238.bin",
+      "bytes": 15,
+      "sha256": "0aa7c132b635fd126a272722ea6745aef6510c6757c6346487394d02737afc4f",
+      "controls": [
+        0,
+        1,
+        1,
+        1,
+        7,
+        1,
+        0
+      ],
+      "meaning": "active key 0; client 1; resource 1; scope set 1; subject form 7; refresh rotation; lifetime 0; bounded suffix 2"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-239.bin",
+      "bytes": 23,
+      "sha256": "3d10d98ef6114098f37b8b6c09ddcede100a6cf550b4e5180484275c2a367b46",
+      "controls": [
+        1,
+        1,
+        1,
+        1,
+        7,
+        1,
+        3
+      ],
+      "meaning": "active key 1; client 1; resource 1; scope set 1; subject form 7; refresh rotation; lifetime 3; bounded suffix 3"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-240.bin",
+      "bytes": 7,
+      "sha256": "923282899addaf912b8c12aa2b6a3c54236c59490e70fbbd6dcc3e5e5927ea6a",
+      "controls": [
+        0,
+        0,
+        0,
+        2,
+        7,
+        1,
+        2
+      ],
+      "meaning": "active key 0; client 0; resource 0; scope set 2; subject form 7; refresh rotation; lifetime 2; bounded suffix 0"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-241.bin",
+      "bytes": 11,
+      "sha256": "b937dbebddd43ab953d5a9f9a760748ce1f998343b8ebb74cd632bad778301d6",
+      "controls": [
+        1,
+        0,
+        0,
+        2,
+        7,
+        1,
+        1
+      ],
+      "meaning": "active key 1; client 0; resource 0; scope set 2; subject form 7; refresh rotation; lifetime 1; bounded suffix 1"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-242.bin",
+      "bytes": 15,
+      "sha256": "d5df7ced65595ac7e876150376de479d042865411d6eac0d6ffc2dd6aef21719",
+      "controls": [
+        0,
+        1,
+        0,
+        2,
+        7,
+        0,
+        0
+      ],
+      "meaning": "active key 0; client 1; resource 0; scope set 2; subject form 7; authorization-code issuance; lifetime 0; bounded suffix 2"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-243.bin",
+      "bytes": 23,
+      "sha256": "d12971655e1772273f002e01e88944053b30a2278d21c2c91023277a069f6afd",
+      "controls": [
+        1,
+        1,
+        0,
+        2,
+        7,
+        0,
+        3
+      ],
+      "meaning": "active key 1; client 1; resource 0; scope set 2; subject form 7; authorization-code issuance; lifetime 3; bounded suffix 3"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-244.bin",
+      "bytes": 7,
+      "sha256": "2ab1cb555bd9a73f05dd08175d3011f697ed0ac27f83d96b0765be98acc39170",
+      "controls": [
+        0,
+        0,
+        1,
+        2,
+        7,
+        1,
+        2
+      ],
+      "meaning": "active key 0; client 0; resource 1; scope set 2; subject form 7; refresh rotation; lifetime 2; bounded suffix 0"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-245.bin",
+      "bytes": 11,
+      "sha256": "206c34d4352951bffbc655f91fcd847df05b8735f79052088c0ba8aaca621989",
+      "controls": [
+        1,
+        0,
+        1,
+        2,
+        7,
+        1,
+        2
+      ],
+      "meaning": "active key 1; client 0; resource 1; scope set 2; subject form 7; refresh rotation; lifetime 2; bounded suffix 1"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-246.bin",
+      "bytes": 15,
+      "sha256": "8dcab25e90eb0965ad3d4f01e0a512895743d62d4ac8035bb4f6bd67f11ea759",
+      "controls": [
+        0,
+        1,
+        1,
+        2,
+        7,
+        0,
+        1
+      ],
+      "meaning": "active key 0; client 1; resource 1; scope set 2; subject form 7; authorization-code issuance; lifetime 1; bounded suffix 2"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-247.bin",
+      "bytes": 23,
+      "sha256": "fffda7f646a54540782a5c7be15249d1208983ed72d66a276a6e20dca237a8a5",
+      "controls": [
+        1,
+        1,
+        1,
+        2,
+        7,
+        0,
+        0
+      ],
+      "meaning": "active key 1; client 1; resource 1; scope set 2; subject form 7; authorization-code issuance; lifetime 0; bounded suffix 3"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-248.bin",
+      "bytes": 7,
+      "sha256": "10fc7e1d72ba542fcbef4a1e113e226ede29c74c7bf0fbf2890f4dc0f28efda2",
+      "controls": [
+        0,
+        0,
+        0,
+        3,
+        7,
+        1,
+        3
+      ],
+      "meaning": "active key 0; client 0; resource 0; scope set 3; subject form 7; refresh rotation; lifetime 3; bounded suffix 0"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-249.bin",
+      "bytes": 11,
+      "sha256": "b85bf0e369e64466de06b17c8cbcdfb5e2988d91680076e25b75bdd372fc1e44",
+      "controls": [
+        1,
+        0,
+        0,
+        3,
+        7,
+        1,
+        2
+      ],
+      "meaning": "active key 1; client 0; resource 0; scope set 3; subject form 7; refresh rotation; lifetime 2; bounded suffix 1"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-250.bin",
+      "bytes": 15,
+      "sha256": "46ee81023d79c4674a672d56b374aa84be3990a915647b536f12901f286b9dfe",
+      "controls": [
+        0,
+        1,
+        0,
+        3,
+        7,
+        0,
+        1
+      ],
+      "meaning": "active key 0; client 1; resource 0; scope set 3; subject form 7; authorization-code issuance; lifetime 1; bounded suffix 2"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-251.bin",
+      "bytes": 23,
+      "sha256": "5c24b844c61c01c5950f8b0da298f24439eb9db417e8d8b3a9e99e0f9263d2b9",
+      "controls": [
+        1,
+        1,
+        0,
+        3,
+        7,
+        0,
+        0
+      ],
+      "meaning": "active key 1; client 1; resource 0; scope set 3; subject form 7; authorization-code issuance; lifetime 0; bounded suffix 3"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-252.bin",
+      "bytes": 7,
+      "sha256": "4eaef1fcedb47ae639ffedd0ebc9350d6a2eea13d4fc825bee7c37700b527465",
+      "controls": [
+        0,
+        0,
+        1,
+        3,
+        7,
+        1,
+        0
+      ],
+      "meaning": "active key 0; client 0; resource 1; scope set 3; subject form 7; refresh rotation; lifetime 0; bounded suffix 0"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-253.bin",
+      "bytes": 11,
+      "sha256": "1c4f67be31226cc0679908bf275b7052124c19fd6454bb0e527bcfe70e5ebae1",
+      "controls": [
+        1,
+        0,
+        1,
+        3,
+        7,
+        1,
+        3
+      ],
+      "meaning": "active key 1; client 0; resource 1; scope set 3; subject form 7; refresh rotation; lifetime 3; bounded suffix 1"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-254.bin",
+      "bytes": 15,
+      "sha256": "92e393912d0a8c5a9626cb660f05044ee8438b7b023e59e491653a7c0953f408",
+      "controls": [
+        0,
+        1,
+        1,
+        3,
+        7,
+        0,
+        2
+      ],
+      "meaning": "active key 0; client 1; resource 1; scope set 3; subject form 7; authorization-code issuance; lifetime 2; bounded suffix 2"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs/accessTokensMatchFixedProfileAndIndependentSignature/profile-255.bin",
+      "bytes": 23,
+      "sha256": "5adb8093f6b0450932cc3ef8eb7c53ffa41d064ff199a2b10334fa7b6918c8e4",
+      "controls": [
+        1,
+        1,
+        1,
+        3,
+        7,
+        0,
+        1
+      ],
+      "meaning": "active key 1; client 1; resource 1; scope set 3; subject form 7; authorization-code issuance; lifetime 1; bounded suffix 3"
+    }
+  ]
+}

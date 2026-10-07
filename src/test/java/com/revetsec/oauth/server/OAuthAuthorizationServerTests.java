@@ -30,6 +30,7 @@ import com.revetsec.jose.StaticJsonWebKeySource;
 import com.revetsec.jose.JsonWebKeySet;
 import com.revetsec.oauth.BearerToken;
 import com.revetsec.oauth.JwtAccessTokenValidator;
+import com.revetsec.oauth.OAuthTransportFailureFixture;
 import com.revetsec.testing.TestJsonWebKeys;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
@@ -39,6 +40,7 @@ import org.junit.jupiter.api.DynamicTest;
 import org.junit.jupiter.api.function.Executable;
 import java.net.URI;
 import java.net.InetAddress;
+import java.lang.reflect.InvocationTargetException;
 import java.nio.charset.StandardCharsets;
 import java.security.PrivateKey;
 import java.time.Clock;
@@ -47,6 +49,7 @@ import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.AbstractMap;
 import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -97,6 +100,19 @@ final class OAuthAuthorizationServerTests {
     if(this.policyFault!=null) raise(this.policyFault);OAuthGrantPolicy policy=this.override;
     return policy==null ? decision(context.getSubject(),requireNonNull(context.getAuthorizedScopesByResource().get(RESOURCE)),context.isRefreshTokenPermitted()) : policy.authorizeGrant(context,budget);})
    .refreshTokensEnabled(true);
+ }
+ private static @NonNull OAuthAuthorizationServer constructForRuntime(OAuthAuthorizationServer.@NonNull Builder builder,
+   Runtime.@NonNull Version version) {
+  try {
+   var constructor=OAuthAuthorizationServer.class.getDeclaredConstructor(OAuthAuthorizationServer.Builder.class,Runtime.Version.class);
+   constructor.setAccessible(true);
+   return constructor.newInstance(builder,version);
+  } catch(InvocationTargetException failure) {
+   Throwable cause=requireNonNull(failure.getCause());
+   if(cause instanceof RuntimeException unchecked) throw unchecked;
+   if(cause instanceof Error fatal) throw fatal;
+   throw new AssertionError(cause);
+  } catch(ReflectiveOperationException failure) { throw new AssertionError(failure); }
  }
  private static @NonNull OAuthServerClientRegistration resourceClient() {
   return OAuthServerClientRegistration.withClientId("resource").configurationVersion("r1").authorizationCodePermitted(false)
@@ -242,6 +258,57 @@ final class OAuthAuthorizationServerTests {
   assertInstanceOf(OAuthIssuerAccessTokenResult.Succeeded.class,this.server.validateAccessTokenResult(bearer(token),RESOURCE));this.store.conflicts=1;assertEquals(OAuthStoreCommitStatus.CONFLICT,this.server.resealStoreEntry(this.store.rows.keySet().iterator().next()));
   OAuthStoreKey absent=OAuthStoreFormat.key(OAuthStoreFormat.namespace(this.store.rows.keySet().iterator().next()),OAuthStoreKey.Kind.GRANT,"A".repeat(43));assertEquals(OAuthStoreCommitStatus.CONFLICT,this.server.resealStoreEntry(absent));
  }
+ @Test void resealCannotCommitAcrossAnIssuerFenceAdvance() {
+  issued();OAuthStoreKey access=this.store.rows.keySet().stream()
+   .filter(key->key.getKind()==OAuthStoreKey.Kind.ACCESS_TOKEN).findFirst().orElseThrow();
+  OAuthStoreEntry original=requireNonNull(this.store.rows.get(access));
+  this.store.beforeCommit=this.server::revokeAllGrants;
+  assertEquals(OAuthStoreCommitStatus.CONFLICT,this.server.resealStoreEntry(access));
+  assertSame(original,this.store.rows.get(access));
+ }
+ @Test void resealRejectsAuthenticatedButMalformedPermanentFencePayload() {
+  issued();OAuthStoreKey subject=this.store.rows.keySet().stream()
+   .filter(key->key.getKind()==OAuthStoreKey.Kind.SUBJECT_STATE).findFirst().orElseThrow();
+  OAuthStoreEntry old=requireNonNull(this.store.rows.get(subject));
+  OAuthStoreRecordCodec codec=new OAuthStoreRecordCodec(ISSUER,sealer(),3800);
+  this.store.rows.put(subject,codec.seal(subject,old.getRetainUntil(),"{}"));
+  OAuthServerStoreException failure=assertThrows(OAuthServerStoreException.class,
+   ()->this.server.resealStoreEntry(subject));
+  assertEquals(STORE_CORRUPT,failure.getReason());
+ }
+ @Test void authorizationBeginCannotReleaseAnInteractionAfterItsCommitExpiry() {
+  initialized();this.store.beforeCommit=()->this.clock.time=NOW.plusSeconds(900);
+  OAuthServerStoreException failure=assertThrows(OAuthServerStoreException.class,this::begin);
+  assertEquals(STORE_UNAVAILABLE,failure.getReason());
+ }
+ @Test void authorizationClientLookupBarrierRetainsTheInteractionExpiry() {
+  initialized();OAuthServerInteraction interaction=begin();
+  this.store.beforeCommit=()->this.clock.time=NOW.plusSeconds(900);
+  OAuthServerStoreException failure=assertThrows(OAuthServerStoreException.class,
+   ()->this.server.resumeAuthorizationResult(interaction.getInteractionValue(),BROWSER));
+  assertEquals(STORE_UNAVAILABLE,failure.getReason());
+ }
+ @Test void authorizationResumeBarrierRetainsTheInteractionExpiry() {
+  initialized();OAuthServerInteraction interaction=begin();
+  this.server=builder().clientRepository((id,budget)->{
+   this.store.beforeCommit=()->this.clock.time=NOW.plusSeconds(900);
+   return Optional.of(this.client);
+  }).build();
+  OAuthServerStoreException failure=assertThrows(OAuthServerStoreException.class,
+   ()->this.server.resumeAuthorizationResult(interaction.getInteractionValue(),BROWSER));
+  assertEquals(STORE_UNAVAILABLE,failure.getReason());
+ }
+ @Test void authorizationDenialCannotCommitAfterItsInteractionExpiry() {
+  initialized();OAuthServerInteraction interaction=begin();
+  this.server=builder().clientRepository((id,budget)->{
+   this.store.beforeCommit=()->this.clock.time=NOW.plusSeconds(900);
+   return Optional.of(this.client);
+  }).build();
+  OAuthServerStoreException failure=assertThrows(OAuthServerStoreException.class,
+   ()->this.server.completeAuthorizationResult(interaction.getInteractionValue(),BROWSER,
+    OAuthAuthorizationDecision.deniedInstance()));
+  assertEquals(STORE_UNAVAILABLE,failure.getReason());
+ }
  @TestFactory @NonNull Stream<@NonNull DynamicTest> missingOrCorruptPermanentStateNeverInitializesOnTraffic() {
   return Stream.of("issuer","subject","corrupt","warm-up").map(which->test(which,()->{
    var f=new OAuthAuthorizationServerTests();JsonObject one=f.issued();String token=one.findString("access_token").orElseThrow();int size=f.store.rows.size();
@@ -276,6 +343,12 @@ final class OAuthAuthorizationServerTests {
   assertThrows(IllegalStateException.class,()->revoke("unknown"));assertThrows(IllegalStateException.class,()->introspect("unknown"));
   assertEquals(UNSUPPORTED_GRANT_TYPE,assertInstanceOf(OAuthTokenResult.Rejected.class,rotate("rsr1_"+BROWSER)).getReason());
   assertThrows(IllegalStateException.class,()->builder().revocationEndpoint(null).build());
+ }
+ @Test void optionalRoutesMustShareTheIssuerAuthority() {
+  assertThrows(IllegalArgumentException.class,()->builder()
+   .revocationEndpoint(URI.create("https://other.example/revoke")).build());
+  assertThrows(IllegalArgumentException.class,()->builder()
+   .introspectionEndpoint(URI.create("https://other.example/introspect")).build());
  }
  @TestFactory @NonNull Stream<@NonNull DynamicTest> builderRequiredNullsAreMissingRatherThanFallbacks() {
   Map<String,Function<OAuthAuthorizationServer.@NonNull Builder,OAuthAuthorizationServer.@NonNull Builder>> clear=Map.of("authorization",b->b.authorizationEndpoint(null),"token",b->b.tokenEndpoint(null),"jwks",b->b.jsonWebKeySetEndpoint(null),"clients",b->b.clientRepository(null),"store",b->b.store(null),"keys",b->b.signingKeys(null),"sealer",b->b.stateSealer(null),"resources",b->b.resources(null),"policy",b->b.grantPolicy(null));
@@ -320,8 +393,16 @@ final class OAuthAuthorizationServerTests {
  }
  @Test void cimdOptInBuildDoesNotResolveAndPublicMetadataAdvertisesOnlyEnabledSupport() {
   AtomicInteger lookups=new AtomicInteger();OAuthClientMetadataPolicy policy=OAuthClientMetadataPolicy.fromAddressResolver((host,budget)->{lookups.incrementAndGet();return List.of(InetAddress.getLoopbackAddress());});
-  this.server=builder().clientMetadataPolicy(policy).clientRepository((id,b)->Optional.empty()).build();assertEquals(0,lookups.get());assertTrue(json(this.server.metadataResponse("GET")).findBoolean("client_id_metadata_document_supported").orElseThrow());assertEquals(0,lookups.get());
+  this.server=builder().clientMetadataPolicy(policy).outboundUriPolicy(null).clientRepository((id,b)->Optional.empty()).build();assertEquals(0,lookups.get());assertTrue(json(this.server.metadataResponse("GET")).findBoolean("client_id_metadata_document_supported").orElseThrow());assertEquals(0,lookups.get());
   this.client=client("https://client.example.com/metadata");OAuthServerTransportException failure=assertThrows(OAuthServerTransportException.class,()->begin());assertEquals(CLIENT_METADATA_UNAVAILABLE,failure.getReason());assertFalse(failure.isTransient());assertEquals(1,lookups.get());
+ }
+ @Test void enabledClientMetadataConstructionRequiresAcknowledgmentOnUnpatchedRuntime() {
+  OAuthClientMetadataPolicy enabled=OAuthClientMetadataPolicy.fromAddressResolver((host,budget)->List.of());
+  Runtime.Version old=Runtime.Version.parse("17.0.2");
+  assertNotNull(constructForRuntime(builder(),old));
+  assertThrows(IllegalStateException.class,()->constructForRuntime(builder().clientMetadataPolicy(enabled),old));
+  assertNotNull(constructForRuntime(builder().clientMetadataPolicy(enabled).acknowledgeUnpatchedRuntime(true),old));
+  assertNotNull(constructForRuntime(builder().clientMetadataPolicy(enabled),Runtime.Version.parse("17.0.3")));
  }
  @TestFactory @NonNull Stream<@NonNull DynamicTest> callbacksPreserveInterruptionAndFatalVmErrors() {
   return Stream.of(false,true).map(fatal->test("policy"+fatal,()->{
@@ -341,6 +422,104 @@ final class OAuthAuthorizationServerTests {
   this.store.unknownAfter=true;assertThrows(OAuthServerStoreException.class,()->this.server.revokeSubject("subject"));
   assertEquals(0,events.size()%2);for(int i=0;i<events.size();i+=2){assertTrue(events.get(i).startsWith("will:"));assertFalse(events.get(i+1).startsWith("will:"));assertEquals(events.get(i).substring(5),events.get(i+1).substring(events.get(i+1).indexOf(':')+1));}
   assertTrue(events.contains("failed:SUBJECT_REVOCATION"));assertTrue(events.contains("rejected:METADATA"));
+ }
+ @Test void observerReportsEachPublicRejectionReason() {
+  List<String> rejections=new ArrayList<>();
+  OAuthServerObserver observer=new OAuthServerObserver(){
+   @Override public void didRejectEndpoint(@NonNull Endpoint kind,OAuthServerException.@NonNull Reason reason,
+      @Nullable Integer status,@NonNull Duration elapsed){rejections.add(kind+":"+reason);}
+  };
+  this.server=builder().observer(observer).build();
+  initialized();
+  assertInstanceOf(OAuthAuthorizationResult.Rejected.class,
+   this.server.beginAuthorizationResult("GET","invalid=1",new byte[0],Map.of(),BROWSER));
+  OAuthServerInteraction interaction=begin();
+  assertInstanceOf(OAuthAuthorizationResult.Denied.class,this.server.completeAuthorizationResult(
+   interaction.getInteractionValue(),BROWSER,OAuthAuthorizationDecision.deniedInstance()));
+  assertInstanceOf(OAuthTokenResult.Rejected.class,this.server.tokenResult("GET",null,new byte[0],Map.of()));
+  assertInstanceOf(OAuthRevocationResult.Rejected.class,this.server.revokeResult("GET",null,new byte[0],Map.of()));
+  assertInstanceOf(OAuthIntrospectionResult.Rejected.class,this.server.introspectionResult("GET",null,new byte[0],Map.of()));
+  assertInstanceOf(OAuthIssuerAccessTokenResult.Rejected.class,
+   this.server.validateAccessTokenResult(bearer("malformed"),RESOURCE));
+  assertEquals(405,this.server.metadataResponse("POST").getStatusCode());
+  assertEquals(List.of("AUTHORIZATION:MALFORMED_REQUEST","AUTHORIZATION:ACCESS_DENIED",
+   "TOKEN:METHOD_NOT_ALLOWED","REVOCATION:METHOD_NOT_ALLOWED","INTROSPECTION:METHOD_NOT_ALLOWED",
+   "ACCESS_TOKEN_VALIDATION:TOKEN_REVOKED","METADATA:METHOD_NOT_ALLOWED"),rejections);
+ }
+ @Test void transportFaultFromCallerHeadersStillCompletesTheObserverEvent() {
+  List<String> events=new ArrayList<>();
+  OAuthServerObserver observer=new OAuthServerObserver(){
+   @Override public void willHandleEndpoint(@NonNull Endpoint kind){events.add("will:"+kind);}
+   @Override public void didFailToHandleEndpoint(@NonNull Endpoint kind,@NonNull OAuthServerException failure,
+     @NonNull Duration elapsed){events.add("failed:"+kind+":"+failure.getReason());}
+  };
+  this.server=builder().observer(observer).build();
+  Map<String,List<String>> headers=new AbstractMap<>(){
+   @Override public @NonNull Set<Map.@NonNull Entry<@NonNull String,@NonNull List<@NonNull String>>> entrySet(){
+    throw OAuthTransportFailureFixture.networkFailure();
+   }
+  };
+  OAuthServerStoreException failure=assertThrows(OAuthServerStoreException.class,
+   ()->this.server.tokenResult("POST",null,new byte[0],headers));
+  assertEquals(STORE_UNAVAILABLE,failure.getReason());
+  assertEquals(List.of("will:TOKEN","failed:TOKEN:STORE_UNAVAILABLE"),events);
+ }
+ @Test void invalidBasicTokenClientReceivesAnHttpAuthenticationChallenge() {
+  this.server=builder().clientRepository((id,budget)->Optional.empty()).build();
+  Map<String,List<String>> headers=new LinkedHashMap<>(headers());
+  headers.put("Authorization",List.of("Basic "+Base64.getEncoder().encodeToString(bytes("unknown:secret"))));
+  byte[] body=bytes(form(Map.of("grant_type","authorization_code","resource",RESOURCE,
+   "code","rsc1_"+BROWSER,"code_verifier",VERIFIER)));
+  OAuthTokenResult.Rejected rejected=assertInstanceOf(OAuthTokenResult.Rejected.class,
+   this.server.tokenResult("POST",null,body,headers));
+  assertEquals(INVALID_CLIENT,rejected.getReason());
+  assertEquals(401,rejected.getResponse().getStatusCode());
+  assertEquals(List.of("Basic realm=\"oauth\""),
+   rejected.getResponse().getHeaders().get("WWW-Authenticate"));
+ }
+ @Test void accessTokenAtTheExactIngressLengthReachesValidation() {
+  this.server=builder().maximumRequestBodyBytes(4096).build();
+  initialized();
+  OAuthIssuerAccessTokenResult.Rejected rejected=assertInstanceOf(OAuthIssuerAccessTokenResult.Rejected.class,
+   this.server.validateAccessTokenResult(bearer("a".repeat(4096)),RESOURCE));
+  assertEquals(TOKEN_REVOKED,rejected.getReason());
+ }
+ @Test @SuppressWarnings("NullAway") // Deliberately invalid caller input must fail before an observer event.
+ void nullHttpMethodNeverStartsAnEndpointObservation() {
+  AtomicInteger events=new AtomicInteger();
+  OAuthServerObserver observer=new OAuthServerObserver(){
+   @Override public void willHandleEndpoint(@NonNull Endpoint kind){events.incrementAndGet();}
+  };
+  this.server=builder().observer(observer).build();
+  assertThrows(NullPointerException.class,()->this.server.beginAuthorizationResult(null,null,new byte[0],Map.of(),BROWSER));
+  assertThrows(NullPointerException.class,()->this.server.tokenResult(null,null,new byte[0],Map.of()));
+  assertThrows(NullPointerException.class,()->this.server.revokeResult(null,null,new byte[0],Map.of()));
+  assertThrows(NullPointerException.class,()->this.server.introspectionResult(null,null,new byte[0],Map.of()));
+  assertThrows(IllegalArgumentException.class,()->this.server.revokeGrant("bad"));
+  assertEquals(0,events.get());
+ }
+ @Test void infrastructureAndSigningFailuresFinishTheirObserverEvents() {
+  List<String> failures=new ArrayList<>();
+  OAuthServerObserver observer=new OAuthServerObserver(){
+   @Override public void didFailToHandleEndpoint(@NonNull Endpoint kind,@NonNull OAuthServerException failure,
+      @NonNull Duration elapsed){failures.add(kind+":"+failure.getReason());}
+  };
+  this.server=builder().observer(observer).build();
+  initialized();
+  OAuthServerInteraction interaction=begin();
+  this.policyFault=new IllegalStateException("fixture");
+  assertThrows(OAuthServerConfigurationException.class,()->this.server.completeAuthorizationResult(
+   interaction.getInteractionValue(),BROWSER,decision("subject",Set.of("read"),false)));
+  this.policyFault=null;
+  assertEquals(List.of("AUTHORIZATION:CONFIGURATION_INVALID"),failures);
+
+  String code=code();
+  OAuthIssuerSigningKey opaque=OAuthIssuerSigningKey.fromKeyPair("key",new OpaquePrivate(),KEY.getPublicKey());
+  OAuthIssuerKeySnapshot snapshot=OAuthIssuerKeySnapshot.withActiveKey(opaque)
+   .generation("g1").publishedAt(NOW.minusSeconds(120)).build();
+  this.server=builder().signingKeys(OAuthIssuerKeyProvider.fromSnapshot(snapshot)).observer(observer).build();
+  assertThrows(OAuthServerSigningException.class,()->redeem(code));
+  assertEquals(List.of("AUTHORIZATION:CONFIGURATION_INVALID","TOKEN:SIGNING_FAILED"),failures);
  }
  @Test void localM5BridgeNeverResetsAnExpiredParentBudget() {
   var snapshot=keys();StaticJsonWebKeySource source=StaticJsonWebKeySource.fromJsonWebKeySet(JsonWebKeySet.fromJson(OAuthIssuerPublicKeys.jwks(snapshot.getVerificationKeys()).toJson()));
@@ -400,7 +579,7 @@ final class OAuthAuthorizationServerTests {
   }));
  }
  @Test void clientLookupBarrierConflictExhaustionAndPolicyDenialConflictsAreBounded() {
-  initialized();var interaction=begin();this.store.conflicts=8;assertEquals(STORE_UNAVAILABLE,assertThrows(OAuthServerStoreException.class,()->this.server.resumeAuthorizationResult(interaction.getInteractionValue(),BROWSER)).getReason());
+  initialized();var interaction=begin();int commits=this.store.commits;this.store.conflicts=8;assertEquals(STORE_UNAVAILABLE,assertThrows(OAuthServerStoreException.class,()->this.server.resumeAuthorizationResult(interaction.getInteractionValue(),BROWSER)).getReason());assertEquals(commits+3,this.store.commits);
   this.store.conflicts=0;AtomicInteger calls=new AtomicInteger();this.override=(context,budget)->{if(calls.incrementAndGet()==1)this.store.conflicts=1;return OAuthAuthorizationDecision.deniedInstance();};
   assertInstanceOf(OAuthAuthorizationResult.Denied.class,this.server.completeAuthorizationResult(interaction.getInteractionValue(),BROWSER,decision("subject",Set.of("read"),false)));assertEquals(2,calls.get());
  }

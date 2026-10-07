@@ -794,3 +794,31 @@ members retain their actual meaning. Primitive/void types are exempt. This guard
 ## M6 semantic models
 
 Three targets model bounded RSA signing grammar, client assertion role/clock/deadline/key snapshots, and Entra metadata/signature/key issuer/tenant/session continuity. Original JCA keys provide independent signing and verification. They require no core test helpers or network. Each input starts with unsigned control bytes (missing bytes are zero); remaining signing bytes supply bounded Latin-1 text. `m6-semantic-seeds.json` records every authored nonempty seed, its controls and SHA-256. Keys are generated once per JVM and never saved. Live campaign evidence is private planning data; seed replay alone is not live qualification.
+
+## AS1 issuer models
+
+Two issuer targets bring the current inventory to37. `IssuerIngressFuzzTests.rawRequestsMatchIndependentGrammar` compares four endpoint grammars, raw header occurrences, aggregate caps, strict percent/UTF-8 decoding and query/body selection with an independent split/byte-stream/JDK decoder oracle. Its generated MIME variants are enumerated; this is not an arbitrary MIME differential.
+
+`IssuerCodeFuzzTests.codeTransitionsRespectBindingsAndSingleUse` drives the public engine through consent and public/Basic confidential code redemption, two exact resources, scope narrowing, client/version/return/S256 binding, expiry, denial, conflict retry and consumed-code replay. Original JCA signatures and exact issued claims are checked; wrong-binding replay leaves the winner active, valid replay invalidates it and never returns a second credential. The bounded atomic test store is process-local, with no durability or distributed-store claim. Keys are generated once per JVM and never saved. Neither model uses core test helpers or network access.
+
+Inputs use four unsigned control bytes (missing bytes zero). Ingress tail is bounded to8192 bytes; code tail to256 bytes before an independent SHA-256 verifier derivation. `as1-semantic-seeds.json` inventories all244 nonempty authored seeds with controls, meanings and SHA-256. Three ordinary calibration tests pin the S256/resource/reuse assertions. Replay is distinct from live campaigns; dated qualification and planted production defects remain private planning evidence.
+
+## AS1-G2 CIMD and store models
+
+`CimdFuzzTests.metadataCachePeerAndFramingRemainBound` combines enumerated CIMD JSON admission with authenticated cache address/version/expiry/namespace checks and an offline helper for copied public numeric answers, strict HTTP/1.1 response framing, and conservative freshness. It performs no DNS lookup or socket operation.
+
+`IssuerStoreFuzzTests.recordsAuthenticateNamespaceVersionRetentionAndPayload` exercises all seven record kinds, canonical stored-form reconstruction, issuer and subject namespace derivation, authenticated address/version/retention/ciphertext bindings, expiry, sealer separation, and object-only payloads.
+
+Both targets use four unsigned control bytes and a bounded synthetic tail. `as1-g2-semantic-seeds.json` inventories all 140 nonempty seeds with controls, meanings, and SHA-256. These models provide process-local semantic assurance; they make no durable/distributed-store or external-network claim.
+
+## AS1-G3 refresh and status model
+
+`IssuerRefreshFuzzTests.refreshFamilyAndStatusTransitionsRemainAtomic` drives the public issuer engine through rotation, exact client/resource/scope binding, request-only scope narrowing, policy continuation, expiry, conflict retry, endpoint/trusted revocation, used-token replay and fresh issuer/subject/grant status admission. Successful rotations preserve one family; a valid used-token replay terminates it. Wrong-owner and wrong-resource attempts do not consume the token or invalidate the legitimate family. The model checks signed access tokens only through public credential responses and validates every proof through the uncached public access-token API.
+
+Inputs use four unsigned control bytes. `as1-g3-semantic-seeds.json` inventories all 64 nonempty seeds with controls, meanings and SHA-256. Ordinary calibration tests pin used-refresh rejection plus subject and grant invalidation. The bounded atomic test store is process-local; this target makes no durability, distributed-store or external-network claim. One fixed-JWT-signing target family plus PIT disposition and final issuer gates remain pending.
+
+## AS1-G4 issuer signing differential
+
+`IssuerSigningFuzzTests.accessTokensMatchFixedProfileAndIndependentSignature` drives authorization-code and refresh issuance through the public engine. It checks the exact eight-claim access-token profile and JSON types, active key ID, fixed RS256/`at+jwt` header, sorted scope, lifetime arithmetic, strict UTF-8, unique rotation `jti`, online proof admission, and the five-field token response. JCA verifies the exact compact signing input using the original active public key and rejects the retained key. The public JWKS is checked against the original RSA modulus/exponent and exact public-only fields for both active and retained keys.
+
+Inputs use seven unsigned control bytes plus a bounded subject suffix. `as1-g4-semantic-seeds.json` inventories all 256 nonempty authored seeds with controls, meanings and SHA-256. A fixed-profile ordinary test calibrates private wrong-type and wrong-audience production plants. The bounded atomic test store is process-local; this target makes no durability, distributed-store or external-network claim. All six planned semantic target families now have nonempty corpora; PIT disposition and final issuer gates remain pending.

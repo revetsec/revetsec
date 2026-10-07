@@ -22,6 +22,7 @@ import com.revetsec.internal.encoding.QueryParameters;
 import com.revetsec.testing.TestHttpsServer;
 import com.revetsec.testing.TestClock;
 import com.revetsec.testing.TestTls;
+import com.revetsec.testing.RewindableClock;
 import org.junit.jupiter.api.Test;
 
 import java.net.URI;
@@ -39,6 +40,30 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 final class ClientCredentialsTokenSourceTests {
+	@Test
+	void clockRollbackInvalidatesCachedClientCredentialsToken() throws Exception {
+		try (TestHttpsServer server = TestHttpsServer.start()) {
+			server.script("/token", TestHttpsServer.Script.fromSequence(List.of(json("first"), json("replacement"))));
+			RewindableClock clock = RewindableClock.fromInstant(Instant.parse("2026-09-28T12:00:00Z"));
+			OAuthClient client = OAuthClient.withAuthorizationServerMetadata(
+					AuthorizationServerMetadata.withIssuer(server.getBaseUri().toString())
+							.authorizationEndpoint(server.uri("/auth")).tokenEndpoint(server.uri("/token")).build())
+					.clientId("client").clientAuthentication(ClientAuthentication.fromClientSecretBasic("secret"))
+					.httpClient(TestTls.httpClient()).clock(clock).build();
+			ClientCredentialsTokenSource source = ClientCredentialsTokenSource.withClient(client).build();
+			AccessToken first = source.getAccessToken();
+			clock.advance(Duration.ofSeconds(5));
+			assertSame(first, source.getAccessToken());
+			clock.rewind(Duration.ofSeconds(1));
+			AccessToken replacement = source.getAccessToken();
+			assertEquals("replacement", replacement.getValue());
+			assertEquals(2, server.getHitCount("/token"));
+			clock.advance(Duration.ofSeconds(1));
+			assertSame(replacement, source.getAccessToken());
+			assertEquals(2, server.getHitCount("/token"));
+		}
+	}
+
 	@Test
 	void explicitEmptyResourcesClearClientDefaultsForDirectAndCachedRequests() throws Exception {
 		try (TestHttpsServer server = TestHttpsServer.start()) {
@@ -86,6 +111,29 @@ final class ClientCredentialsTokenSourceTests {
 			source.invalidate(first);
 			assertEquals("replacement", source.getAccessToken().getValue());
 			assertEquals(3, server.getHitCount("/token"));
+		}
+	}
+
+	@Test
+	void clockRollbackCannotServeOldTokenDuringRenewalBackoff() throws Exception {
+		try (TestHttpsServer server = TestHttpsServer.start()) {
+			server.script("/token", TestHttpsServer.Script.fromSequence(List.of(
+					jsonWithExpiry("first", 60),
+					TestHttpsServer.Response.withStatus(503).header("Content-Type", "application/json")
+							.body("{\"error\":\"server_error\"}").build())));
+			RewindableClock clock = RewindableClock.fromInstant(Instant.parse("2026-09-28T12:00:00Z"));
+			OAuthClient client = OAuthClient.withAuthorizationServerMetadata(
+					AuthorizationServerMetadata.withIssuer(server.getBaseUri().toString())
+							.authorizationEndpoint(server.uri("/auth")).tokenEndpoint(server.uri("/token")).build())
+					.clientId("client").clientAuthentication(ClientAuthentication.fromClientSecretBasic("secret"))
+					.httpClient(TestTls.httpClient()).clock(clock).build();
+			ClientCredentialsTokenSource source = ClientCredentialsTokenSource.withClient(client).build();
+			AccessToken first = source.getAccessToken();
+			clock.advance(Duration.ofSeconds(40));
+			assertSame(first, source.getAccessToken());
+			clock.rewind(Duration.ofSeconds(1));
+			assertThrows(OAuthException.class, source::getAccessToken);
+			assertEquals(2, server.getHitCount("/token"));
 		}
 	}
 

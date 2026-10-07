@@ -239,6 +239,7 @@ final class OAuthServerApplicationContractsTests {
 	}
 	@Test void deniedDecisionAndExplicitEmptyGrantRemainDistinct() {
 		var denied = OAuthAuthorizationDecision.deniedInstance();
+		assertEquals("OAuthAuthorizationDecision{decision=<redacted>}", denied.toString());
 		assertTrue(denied.isDenied()); assertEquals(Optional.empty(), denied.getSubject());
 		assertEquals(Map.of(), denied.getAuthorizedScopesByResource()); assertFalse(denied.isRefreshTokenPermitted());
 		var empty = OAuthAuthorizationDecision.withSubject("subject").authorizedScopesByResource(Map.of(RESOURCE, Set.of())).build();
@@ -251,6 +252,7 @@ final class OAuthServerApplicationContractsTests {
 	@Test void decisionRequiredResetAndDeepSnapshots() {
 		Set<String> scopes = new LinkedHashSet<>(Set.of("read")); Map<String, Set<String>> map = new HashMap<>(); map.put(RESOURCE, scopes);
 		var builder = OAuthAuthorizationDecision.withSubject("subject"); assertThrows(IllegalStateException.class, builder::build);
+		assertEquals("OAuthAuthorizationDecision.Builder{decision=<redacted>}", builder.toString());
 		assertSame(builder, builder.authorizedScopesByResource(map).refreshTokenPermitted(true)); map.clear(); scopes.clear();
 		var value = builder.build(); assertTrue(value.isRefreshTokenPermitted());
 		assertSame(builder, builder.authorizedScopesByResource(null).refreshTokenPermitted(null)); assertThrows(IllegalStateException.class, builder::build);
@@ -265,6 +267,7 @@ final class OAuthServerApplicationContractsTests {
 		var value = registration().authentication(auth).introspectionResources(Set.of(RESOURCE)).build();
 		Sentinels.assertAbsent(value); Sentinels.assertAbsent(auth); assertEquals(0, calls.get());
 		assertTrue(auth.isConfidential()); assertSame(verifier, auth.verifier());
+		assertEquals("OAuthServerClientAuthentication{configuration=<redacted>}", auth.toString());
 		assertFalse(OAuthServerClientAuthentication.publicClientInstance().isConfidential());
 		assertNull(OAuthServerClientAuthentication.publicClientInstance().verifier());
 	}
@@ -274,6 +277,7 @@ final class OAuthServerApplicationContractsTests {
 		map.clear(); scopes.clear(); assertEquals("subject", context.getSubject()); assertEquals("client", context.getClientId());
 		assertEquals("authorization_code", context.getGrantType()); assertEquals("grant-handle", context.getGrantValue());
 		assertTrue(context.isRefreshTokenPermitted()); assertEquals(Map.of(RESOURCE, Set.of("read")), context.getAuthorizedScopesByResource());
+		assertEquals("OAuthGrantContext{grant=<redacted>}", context.toString());
 		assertThrows(UnsupportedOperationException.class, () -> context.getAuthorizedScopesByResource().getOrDefault(RESOURCE, Set.of()).clear());
 		assertTrue(java.util.Arrays.stream(OAuthGrantContext.class.getDeclaredConstructors()).allMatch(c -> Modifier.isPrivate(c.getModifiers())));
 		assertTrue(java.util.Arrays.stream(OAuthGrantContext.class.getDeclaredMethods()).noneMatch(m -> Modifier.isPublic(m.getModifiers())
@@ -300,6 +304,8 @@ final class OAuthServerApplicationContractsTests {
 				.clientName(secret).configurationVersion(secret);
 		var decisionBuilder = OAuthAuthorizationDecision.withSubject(secret).authorizedScopesByResource(Map.of(resource, Set.of(secret)));
 		var context = OAuthGrantContext.fromCheckedGrant(secret, secret, "authorization_code", secret, Map.of(resource, Set.of(secret)), true);
+		assertEquals("OAuthServerClientRegistration.Builder{configuration=<redacted>}", builder.toString());
+		assertEquals("OAuthServerClientRegistration{configuration=<redacted>}", builder.build().toString());
 		for (Object value : List.of(builder, builder.build(), auth, decisionBuilder, decisionBuilder.build(), context,
 				OAuthAuthorizationDecision.deniedInstance(), OAuthServerClientAuthentication.publicClientInstance())) Sentinels.assertAbsent(value);
 		assertEquals(secret, context.getGrantValue()); // Privileged management release; never a diagnostic serialization.

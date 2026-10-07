@@ -72,6 +72,7 @@ final class AuthorizationServerCache {
 	private long lastFailureNanos;
 	private long failureBackoffNanos;
 	private int consecutiveFailures;
+	private @Nullable Instant lastClock;
 
 	AuthorizationServerCache(@NonNull URI issuer, @NonNull HttpExchange exchange, @NonNull OutboundUriPolicy outboundPolicy,
 			boolean allowLoopback, @NonNull Duration requestTimeout, @NonNull Clock clock, @NonNull OAuthObserver observer,
@@ -95,8 +96,14 @@ final class AuthorizationServerCache {
 		long nowNanos = System.nanoTime();
 		this.lock.lock();
 		try {
-			if (this.snapshot != null && this.clock.instant().isBefore(this.snapshot.expiresAt))
-				return this.snapshot.metadata;
+			Instant now = this.clock.instant();
+			boolean rollback = this.lastClock != null && now.isBefore(this.lastClock);
+			this.lastClock = now;
+			if (this.snapshot != null) {
+				if (!rollback && !now.isBefore(this.snapshot.fetchedAt) && now.isBefore(this.snapshot.expiresAt))
+					return this.snapshot.metadata;
+				this.snapshot = null;
+			}
 			if (this.flight != null && nowNanos - this.flight.startedNanos > this.flight.overdueAfterNanos) {
 				this.flight.future.completeExceptionally(OAuthTransportException.fromReason(
 						OAuthException.Reason.NETWORK_FAILURE, null));
@@ -233,7 +240,7 @@ final class AuthorizationServerCache {
 				Instant now = this.clock.instant();
 				Duration lifetime = CacheLifetime.timeToLive(response.headers(), now, this.minimumTtl,
 						this.defaultTtl, this.maximumTtl);
-				return new MetadataSnapshot(metadata, now.plus(lifetime));
+				return new MetadataSnapshot(metadata, now, now.plus(lifetime));
 			} catch (EncodingException invalid) {
 				throw OAuthResponseException.fromReason(OAuthException.Reason.DOCUMENT_MALFORMED);
 			} finally {
@@ -276,7 +283,8 @@ final class AuthorizationServerCache {
 				+ (uri.getRawPath() == null ? "" : uri.getRawPath()));
 	}
 
-	private record MetadataSnapshot(@NonNull AuthorizationServerMetadata metadata, @NonNull Instant expiresAt) { }
+	private record MetadataSnapshot(@NonNull AuthorizationServerMetadata metadata, @NonNull Instant fetchedAt,
+			@NonNull Instant expiresAt) { }
 	private static final class Flight {
 		private final CompletableFuture<AuthorizationServerMetadata> future = new CompletableFuture<>();
 		private final long startedNanos;

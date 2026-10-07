@@ -1,0 +1,1685 @@
+{
+  "schema": 1,
+  "seeds": [
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/CimdFuzzTestsInputs/metadataCachePeerAndFramingRemainBound/document-00-cache-00.bin",
+      "bytes": 12,
+      "controls": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "meaning": "CIMD document mode 0, cache mode 0, peer/framing modes derived",
+      "sha256": "7bb08cd24cdb71717c0e5e4433d425695e1e4875cf897f939b0a29f95665aad6"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/CimdFuzzTestsInputs/metadataCachePeerAndFramingRemainBound/document-00-cache-01.bin",
+      "bytes": 12,
+      "controls": [
+        0,
+        1,
+        1,
+        1
+      ],
+      "meaning": "CIMD document mode 0, cache mode 1, peer/framing modes derived",
+      "sha256": "579ff7a2b9aaee4fa57a0a3fee2c76ae489253bf94747c84210c4d6f49a0507f"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/CimdFuzzTestsInputs/metadataCachePeerAndFramingRemainBound/document-00-cache-02.bin",
+      "bytes": 12,
+      "controls": [
+        0,
+        2,
+        2,
+        2
+      ],
+      "meaning": "CIMD document mode 0, cache mode 2, peer/framing modes derived",
+      "sha256": "79aa4f36f9f0172f781d96492f575f797572ce42b51257ab3e2430133f56b6c8"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/CimdFuzzTestsInputs/metadataCachePeerAndFramingRemainBound/document-00-cache-03.bin",
+      "bytes": 12,
+      "controls": [
+        0,
+        3,
+        3,
+        3
+      ],
+      "meaning": "CIMD document mode 0, cache mode 3, peer/framing modes derived",
+      "sha256": "ed584a09eee46da172d8d3be9e12213d0732c588638a77d513dcf21d6dfe60bf"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/CimdFuzzTestsInputs/metadataCachePeerAndFramingRemainBound/document-00-cache-04.bin",
+      "bytes": 12,
+      "controls": [
+        0,
+        4,
+        4,
+        4
+      ],
+      "meaning": "CIMD document mode 0, cache mode 4, peer/framing modes derived",
+      "sha256": "8b71992c349cf1f36f0e31f3ef25b2c96c0b24a0cb77439cdf2a5670993c34bd"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/CimdFuzzTestsInputs/metadataCachePeerAndFramingRemainBound/document-00-cache-05.bin",
+      "bytes": 12,
+      "controls": [
+        0,
+        5,
+        5,
+        5
+      ],
+      "meaning": "CIMD document mode 0, cache mode 5, peer/framing modes derived",
+      "sha256": "552f0156dca7a2ad458ecfcd37ac07a6d377c32133efbbf13853f98679983de2"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/CimdFuzzTestsInputs/metadataCachePeerAndFramingRemainBound/document-00-cache-06.bin",
+      "bytes": 12,
+      "controls": [
+        0,
+        6,
+        6,
+        6
+      ],
+      "meaning": "CIMD document mode 0, cache mode 6, peer/framing modes derived",
+      "sha256": "d624f661a381ddea5d6208f493313ed03636810743c535f65177d45e1ab08e91"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/CimdFuzzTestsInputs/metadataCachePeerAndFramingRemainBound/document-01-cache-00.bin",
+      "bytes": 12,
+      "controls": [
+        1,
+        0,
+        1,
+        3
+      ],
+      "meaning": "CIMD document mode 1, cache mode 0, peer/framing modes derived",
+      "sha256": "58115fd6baabe84891c84494aa5735858cf62fb0981b540bb1206171afa6de92"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/CimdFuzzTestsInputs/metadataCachePeerAndFramingRemainBound/document-01-cache-01.bin",
+      "bytes": 12,
+      "controls": [
+        1,
+        1,
+        2,
+        4
+      ],
+      "meaning": "CIMD document mode 1, cache mode 1, peer/framing modes derived",
+      "sha256": "87125ddc6e142af42015a5fc36a8b2b169e673faa99d62faa43f22f2a7d37d3e"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/CimdFuzzTestsInputs/metadataCachePeerAndFramingRemainBound/document-01-cache-02.bin",
+      "bytes": 12,
+      "controls": [
+        1,
+        2,
+        3,
+        5
+      ],
+      "meaning": "CIMD document mode 1, cache mode 2, peer/framing modes derived",
+      "sha256": "eddd107561c091fa2c8a370af81b4962ce18b4b16624d3547548f91a61f44e18"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/CimdFuzzTestsInputs/metadataCachePeerAndFramingRemainBound/document-01-cache-03.bin",
+      "bytes": 12,
+      "controls": [
+        1,
+        3,
+        4,
+        6
+      ],
+      "meaning": "CIMD document mode 1, cache mode 3, peer/framing modes derived",
+      "sha256": "bb15d46b494d31851ca0da0051a75db4cc1959d1822a42aa23d74a54ff945711"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/CimdFuzzTestsInputs/metadataCachePeerAndFramingRemainBound/document-01-cache-04.bin",
+      "bytes": 12,
+      "controls": [
+        1,
+        4,
+        5,
+        7
+      ],
+      "meaning": "CIMD document mode 1, cache mode 4, peer/framing modes derived",
+      "sha256": "83712a17e3726fa8fab2a3461c4ca47c57cab9c68fb2e1d7ca755eae6bb38cc1"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/CimdFuzzTestsInputs/metadataCachePeerAndFramingRemainBound/document-01-cache-05.bin",
+      "bytes": 12,
+      "controls": [
+        1,
+        5,
+        6,
+        8
+      ],
+      "meaning": "CIMD document mode 1, cache mode 5, peer/framing modes derived",
+      "sha256": "f82db5ec6a66d390ac822d4df0f5aa0225188867007b1d3a8606c1589a2d472b"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/CimdFuzzTestsInputs/metadataCachePeerAndFramingRemainBound/document-01-cache-06.bin",
+      "bytes": 12,
+      "controls": [
+        1,
+        6,
+        0,
+        9
+      ],
+      "meaning": "CIMD document mode 1, cache mode 6, peer/framing modes derived",
+      "sha256": "0779abd6f9620962434ead543cfac5f8aeedab5ad48ea01d8678b9f90a7b34f3"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/CimdFuzzTestsInputs/metadataCachePeerAndFramingRemainBound/document-02-cache-00.bin",
+      "bytes": 12,
+      "controls": [
+        2,
+        0,
+        2,
+        6
+      ],
+      "meaning": "CIMD document mode 2, cache mode 0, peer/framing modes derived",
+      "sha256": "99d5b2ec4bc1b9f944f3758b0202e32d1e4f243bfba1daa0edb63917465266bc"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/CimdFuzzTestsInputs/metadataCachePeerAndFramingRemainBound/document-02-cache-01.bin",
+      "bytes": 12,
+      "controls": [
+        2,
+        1,
+        3,
+        7
+      ],
+      "meaning": "CIMD document mode 2, cache mode 1, peer/framing modes derived",
+      "sha256": "740b6fb5f71bd479391f7a8d22ff6b6877725d0015188e18a27e6f69a7d99f03"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/CimdFuzzTestsInputs/metadataCachePeerAndFramingRemainBound/document-02-cache-02.bin",
+      "bytes": 12,
+      "controls": [
+        2,
+        2,
+        4,
+        8
+      ],
+      "meaning": "CIMD document mode 2, cache mode 2, peer/framing modes derived",
+      "sha256": "e19346302ad1de4e6a61e0e92e0b37c6bb02473012eee25d67d7a2e4c5d55223"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/CimdFuzzTestsInputs/metadataCachePeerAndFramingRemainBound/document-02-cache-03.bin",
+      "bytes": 12,
+      "controls": [
+        2,
+        3,
+        5,
+        9
+      ],
+      "meaning": "CIMD document mode 2, cache mode 3, peer/framing modes derived",
+      "sha256": "a34ccd2d88b7d6413236591b786530adb36e3b76b17f2fba573f6ad2de5595b2"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/CimdFuzzTestsInputs/metadataCachePeerAndFramingRemainBound/document-02-cache-04.bin",
+      "bytes": 12,
+      "controls": [
+        2,
+        4,
+        6,
+        0
+      ],
+      "meaning": "CIMD document mode 2, cache mode 4, peer/framing modes derived",
+      "sha256": "0975f4bb2339556633d6ab9eefda07b1b26a29ab51380074689bf3c4f5c7a405"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/CimdFuzzTestsInputs/metadataCachePeerAndFramingRemainBound/document-02-cache-05.bin",
+      "bytes": 12,
+      "controls": [
+        2,
+        5,
+        0,
+        1
+      ],
+      "meaning": "CIMD document mode 2, cache mode 5, peer/framing modes derived",
+      "sha256": "5f44a1c21655a84e253eaf9ee2d0e36e941ea4634761078ee195b6d5e190dc7d"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/CimdFuzzTestsInputs/metadataCachePeerAndFramingRemainBound/document-02-cache-06.bin",
+      "bytes": 12,
+      "controls": [
+        2,
+        6,
+        1,
+        2
+      ],
+      "meaning": "CIMD document mode 2, cache mode 6, peer/framing modes derived",
+      "sha256": "8f0b641a93fd812bac415feef99b85c7094798168a7f94f6f7c9d4c67095d652"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/CimdFuzzTestsInputs/metadataCachePeerAndFramingRemainBound/document-03-cache-00.bin",
+      "bytes": 12,
+      "controls": [
+        3,
+        0,
+        3,
+        9
+      ],
+      "meaning": "CIMD document mode 3, cache mode 0, peer/framing modes derived",
+      "sha256": "e10f9ff80a1f63be502744a02017ab7e7c4c1c5346b2ef102bb80cb1ef2a3609"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/CimdFuzzTestsInputs/metadataCachePeerAndFramingRemainBound/document-03-cache-01.bin",
+      "bytes": 12,
+      "controls": [
+        3,
+        1,
+        4,
+        0
+      ],
+      "meaning": "CIMD document mode 3, cache mode 1, peer/framing modes derived",
+      "sha256": "e1967c9b4bf8b2e7360f989717d69a7ab652dd1f73006b8369440835c5bb2a7a"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/CimdFuzzTestsInputs/metadataCachePeerAndFramingRemainBound/document-03-cache-02.bin",
+      "bytes": 12,
+      "controls": [
+        3,
+        2,
+        5,
+        1
+      ],
+      "meaning": "CIMD document mode 3, cache mode 2, peer/framing modes derived",
+      "sha256": "cee10f5b7657c678cc87deca14497cc02679f6ab3eedb3d4bd4db021b996e30c"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/CimdFuzzTestsInputs/metadataCachePeerAndFramingRemainBound/document-03-cache-03.bin",
+      "bytes": 12,
+      "controls": [
+        3,
+        3,
+        6,
+        2
+      ],
+      "meaning": "CIMD document mode 3, cache mode 3, peer/framing modes derived",
+      "sha256": "38e3371dd33ae4ce9ce4600d84f5638dd8549f88862061ed33d2bcae26f1b39a"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/CimdFuzzTestsInputs/metadataCachePeerAndFramingRemainBound/document-03-cache-04.bin",
+      "bytes": 12,
+      "controls": [
+        3,
+        4,
+        0,
+        3
+      ],
+      "meaning": "CIMD document mode 3, cache mode 4, peer/framing modes derived",
+      "sha256": "e6cc1a582310f8e66e9ab03f9e05e5c5779d976f3eb56a8a251062fbd3293d51"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/CimdFuzzTestsInputs/metadataCachePeerAndFramingRemainBound/document-03-cache-05.bin",
+      "bytes": 12,
+      "controls": [
+        3,
+        5,
+        1,
+        4
+      ],
+      "meaning": "CIMD document mode 3, cache mode 5, peer/framing modes derived",
+      "sha256": "758c6357192d3f15acc8c96c847b950e58c9f5be7c54765820065bfc29e21910"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/CimdFuzzTestsInputs/metadataCachePeerAndFramingRemainBound/document-03-cache-06.bin",
+      "bytes": 12,
+      "controls": [
+        3,
+        6,
+        2,
+        5
+      ],
+      "meaning": "CIMD document mode 3, cache mode 6, peer/framing modes derived",
+      "sha256": "cdb343e21385aa0d6f603dbe28c49f6fb542bea6e3e66aa5e7ea75680d0a95c7"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/CimdFuzzTestsInputs/metadataCachePeerAndFramingRemainBound/document-04-cache-00.bin",
+      "bytes": 12,
+      "controls": [
+        4,
+        0,
+        4,
+        2
+      ],
+      "meaning": "CIMD document mode 4, cache mode 0, peer/framing modes derived",
+      "sha256": "d6877fd941be9c3c3de4ab3a7acb0065a16c0b2bb490aebe3f682a2fb9189d39"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/CimdFuzzTestsInputs/metadataCachePeerAndFramingRemainBound/document-04-cache-01.bin",
+      "bytes": 12,
+      "controls": [
+        4,
+        1,
+        5,
+        3
+      ],
+      "meaning": "CIMD document mode 4, cache mode 1, peer/framing modes derived",
+      "sha256": "7dd7a3bfd56dfc44a61bc401590406fc5ae1580e0297571c337e68b1fb171ee0"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/CimdFuzzTestsInputs/metadataCachePeerAndFramingRemainBound/document-04-cache-02.bin",
+      "bytes": 12,
+      "controls": [
+        4,
+        2,
+        6,
+        4
+      ],
+      "meaning": "CIMD document mode 4, cache mode 2, peer/framing modes derived",
+      "sha256": "2a3b48a98ee6ffbb1d4cb4819039f11fb41b1b8c786cf7447b9882a42b9edb32"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/CimdFuzzTestsInputs/metadataCachePeerAndFramingRemainBound/document-04-cache-03.bin",
+      "bytes": 12,
+      "controls": [
+        4,
+        3,
+        0,
+        5
+      ],
+      "meaning": "CIMD document mode 4, cache mode 3, peer/framing modes derived",
+      "sha256": "73ae742c13c40dfb6a90d4eded51c886376c7d5cdc897b8eed6a9b3b3eaf1735"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/CimdFuzzTestsInputs/metadataCachePeerAndFramingRemainBound/document-04-cache-04.bin",
+      "bytes": 12,
+      "controls": [
+        4,
+        4,
+        1,
+        6
+      ],
+      "meaning": "CIMD document mode 4, cache mode 4, peer/framing modes derived",
+      "sha256": "d5f2418a12435372577845fe919e9c56fac3b84d3cf0f68d998e308e4d8e45f3"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/CimdFuzzTestsInputs/metadataCachePeerAndFramingRemainBound/document-04-cache-05.bin",
+      "bytes": 12,
+      "controls": [
+        4,
+        5,
+        2,
+        7
+      ],
+      "meaning": "CIMD document mode 4, cache mode 5, peer/framing modes derived",
+      "sha256": "ab99346e94ec6083dd120a83174f13c5d1297d80239a56c09e2f380dbfd21531"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/CimdFuzzTestsInputs/metadataCachePeerAndFramingRemainBound/document-04-cache-06.bin",
+      "bytes": 12,
+      "controls": [
+        4,
+        6,
+        3,
+        8
+      ],
+      "meaning": "CIMD document mode 4, cache mode 6, peer/framing modes derived",
+      "sha256": "bfc5b9b880a12f3536b2ee9be5e43f5f3f8b38c2661a8a58668bcbd630fde5f2"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/CimdFuzzTestsInputs/metadataCachePeerAndFramingRemainBound/document-05-cache-00.bin",
+      "bytes": 12,
+      "controls": [
+        5,
+        0,
+        5,
+        5
+      ],
+      "meaning": "CIMD document mode 5, cache mode 0, peer/framing modes derived",
+      "sha256": "cf206dba2889f3fb02298440d166ed1f106ec81e36d6a6db6bdb8227a378b63d"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/CimdFuzzTestsInputs/metadataCachePeerAndFramingRemainBound/document-05-cache-01.bin",
+      "bytes": 12,
+      "controls": [
+        5,
+        1,
+        6,
+        6
+      ],
+      "meaning": "CIMD document mode 5, cache mode 1, peer/framing modes derived",
+      "sha256": "607e33605fe8bef0434609a5fce853c830835a9ce8cb8865838c9c9bd51b464c"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/CimdFuzzTestsInputs/metadataCachePeerAndFramingRemainBound/document-05-cache-02.bin",
+      "bytes": 12,
+      "controls": [
+        5,
+        2,
+        0,
+        7
+      ],
+      "meaning": "CIMD document mode 5, cache mode 2, peer/framing modes derived",
+      "sha256": "3dd47f463fd14e4585d7366377179ab04427c61b0257520655a3affa46173e9d"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/CimdFuzzTestsInputs/metadataCachePeerAndFramingRemainBound/document-05-cache-03.bin",
+      "bytes": 12,
+      "controls": [
+        5,
+        3,
+        1,
+        8
+      ],
+      "meaning": "CIMD document mode 5, cache mode 3, peer/framing modes derived",
+      "sha256": "fd119725194ee81ed56c03622d06193b2080e3fc304fb6e118ae15420c72b178"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/CimdFuzzTestsInputs/metadataCachePeerAndFramingRemainBound/document-05-cache-04.bin",
+      "bytes": 12,
+      "controls": [
+        5,
+        4,
+        2,
+        9
+      ],
+      "meaning": "CIMD document mode 5, cache mode 4, peer/framing modes derived",
+      "sha256": "4bb6cd0cc928fa608ee5d8bcb0f2456dc0df0dafa9fb1c321671a830773b1a8a"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/CimdFuzzTestsInputs/metadataCachePeerAndFramingRemainBound/document-05-cache-05.bin",
+      "bytes": 12,
+      "controls": [
+        5,
+        5,
+        3,
+        0
+      ],
+      "meaning": "CIMD document mode 5, cache mode 5, peer/framing modes derived",
+      "sha256": "cd08894afd237c9fdfff6c400f73debbd3bc57fb6b8247e79e4d7c5f24ddc3af"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/CimdFuzzTestsInputs/metadataCachePeerAndFramingRemainBound/document-05-cache-06.bin",
+      "bytes": 12,
+      "controls": [
+        5,
+        6,
+        4,
+        1
+      ],
+      "meaning": "CIMD document mode 5, cache mode 6, peer/framing modes derived",
+      "sha256": "922d69e98a5fb02629b6c4815c57ae7dc4da6717c813e30c64969bbb8e8089a8"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/CimdFuzzTestsInputs/metadataCachePeerAndFramingRemainBound/document-06-cache-00.bin",
+      "bytes": 12,
+      "controls": [
+        6,
+        0,
+        6,
+        8
+      ],
+      "meaning": "CIMD document mode 6, cache mode 0, peer/framing modes derived",
+      "sha256": "fcba148a1c92b950810c59d286768e6657d65f0b3e7f3f262ee0fed54455a9ef"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/CimdFuzzTestsInputs/metadataCachePeerAndFramingRemainBound/document-06-cache-01.bin",
+      "bytes": 12,
+      "controls": [
+        6,
+        1,
+        0,
+        9
+      ],
+      "meaning": "CIMD document mode 6, cache mode 1, peer/framing modes derived",
+      "sha256": "afa6ebce4644003fbbe3d53a4014e6f11544a45e17a479db5972c134e1ef0722"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/CimdFuzzTestsInputs/metadataCachePeerAndFramingRemainBound/document-06-cache-02.bin",
+      "bytes": 12,
+      "controls": [
+        6,
+        2,
+        1,
+        0
+      ],
+      "meaning": "CIMD document mode 6, cache mode 2, peer/framing modes derived",
+      "sha256": "1bc7b5be2d8a8bc8f86a45f4097db1650724cdd4c88c39a4df456be7eb0d472c"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/CimdFuzzTestsInputs/metadataCachePeerAndFramingRemainBound/document-06-cache-03.bin",
+      "bytes": 12,
+      "controls": [
+        6,
+        3,
+        2,
+        1
+      ],
+      "meaning": "CIMD document mode 6, cache mode 3, peer/framing modes derived",
+      "sha256": "326dab5cb324f791b502ebf35f24bd3afa8f96f0961f9d4a261d2a21f470ba76"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/CimdFuzzTestsInputs/metadataCachePeerAndFramingRemainBound/document-06-cache-04.bin",
+      "bytes": 12,
+      "controls": [
+        6,
+        4,
+        3,
+        2
+      ],
+      "meaning": "CIMD document mode 6, cache mode 4, peer/framing modes derived",
+      "sha256": "b10c78a8123b6e92422ea64ade4e88f92ab5507cb31a8cffeed52cb165760fd0"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/CimdFuzzTestsInputs/metadataCachePeerAndFramingRemainBound/document-06-cache-05.bin",
+      "bytes": 12,
+      "controls": [
+        6,
+        5,
+        4,
+        3
+      ],
+      "meaning": "CIMD document mode 6, cache mode 5, peer/framing modes derived",
+      "sha256": "cb64a9aa0bb2b480802de063fb9cfc6ac1ace78b27fd4e66514b0c4fe99dd209"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/CimdFuzzTestsInputs/metadataCachePeerAndFramingRemainBound/document-06-cache-06.bin",
+      "bytes": 12,
+      "controls": [
+        6,
+        6,
+        5,
+        4
+      ],
+      "meaning": "CIMD document mode 6, cache mode 6, peer/framing modes derived",
+      "sha256": "a3e3e5c129c7121b4659b8bd2be1678c785962986d41b0b575f11d18bf92ebfe"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/CimdFuzzTestsInputs/metadataCachePeerAndFramingRemainBound/document-07-cache-00.bin",
+      "bytes": 12,
+      "controls": [
+        7,
+        0,
+        0,
+        1
+      ],
+      "meaning": "CIMD document mode 7, cache mode 0, peer/framing modes derived",
+      "sha256": "2f0681fdcaefe3d3aaaaf21ed0fca58941447c30403ad56b3ce33ea3c01ca70e"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/CimdFuzzTestsInputs/metadataCachePeerAndFramingRemainBound/document-07-cache-01.bin",
+      "bytes": 12,
+      "controls": [
+        7,
+        1,
+        1,
+        2
+      ],
+      "meaning": "CIMD document mode 7, cache mode 1, peer/framing modes derived",
+      "sha256": "2921360420c88b016ca40a97e19d3ed24b3ea2392d96048c1b468eabba9b2c9e"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/CimdFuzzTestsInputs/metadataCachePeerAndFramingRemainBound/document-07-cache-02.bin",
+      "bytes": 12,
+      "controls": [
+        7,
+        2,
+        2,
+        3
+      ],
+      "meaning": "CIMD document mode 7, cache mode 2, peer/framing modes derived",
+      "sha256": "0bd5e0f1947bc629ad2472a161062538053075ae9675e141276be6529d7ea538"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/CimdFuzzTestsInputs/metadataCachePeerAndFramingRemainBound/document-07-cache-03.bin",
+      "bytes": 12,
+      "controls": [
+        7,
+        3,
+        3,
+        4
+      ],
+      "meaning": "CIMD document mode 7, cache mode 3, peer/framing modes derived",
+      "sha256": "7fe97940b13a0e3db180dbdf7dca5c6bd22ce5f862e8c596c4adac21da57c6f3"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/CimdFuzzTestsInputs/metadataCachePeerAndFramingRemainBound/document-07-cache-04.bin",
+      "bytes": 12,
+      "controls": [
+        7,
+        4,
+        4,
+        5
+      ],
+      "meaning": "CIMD document mode 7, cache mode 4, peer/framing modes derived",
+      "sha256": "36f88c073438ab2cb2e447e48cb426023bb8497262248b785185ec9bf7922d2a"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/CimdFuzzTestsInputs/metadataCachePeerAndFramingRemainBound/document-07-cache-05.bin",
+      "bytes": 12,
+      "controls": [
+        7,
+        5,
+        5,
+        6
+      ],
+      "meaning": "CIMD document mode 7, cache mode 5, peer/framing modes derived",
+      "sha256": "309ec1f85ac9af7807e1772e4130abc82f739d078f38664ddb4ae99ea728751a"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/CimdFuzzTestsInputs/metadataCachePeerAndFramingRemainBound/document-07-cache-06.bin",
+      "bytes": 12,
+      "controls": [
+        7,
+        6,
+        6,
+        7
+      ],
+      "meaning": "CIMD document mode 7, cache mode 6, peer/framing modes derived",
+      "sha256": "dba728d3722e677d79fe80d53bb1f6d3be0ff33ad19dcb47f7c8ed3ce45461b5"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/CimdFuzzTestsInputs/metadataCachePeerAndFramingRemainBound/document-08-cache-00.bin",
+      "bytes": 12,
+      "controls": [
+        8,
+        0,
+        1,
+        4
+      ],
+      "meaning": "CIMD document mode 8, cache mode 0, peer/framing modes derived",
+      "sha256": "f1a187cadbc9b28800eb4dbfd3693f8da8d14293906afcfbad0060cb9b311cee"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/CimdFuzzTestsInputs/metadataCachePeerAndFramingRemainBound/document-08-cache-01.bin",
+      "bytes": 12,
+      "controls": [
+        8,
+        1,
+        2,
+        5
+      ],
+      "meaning": "CIMD document mode 8, cache mode 1, peer/framing modes derived",
+      "sha256": "4e1b1e22c806430193863e9a99ac60ed8dd7a8871ef6ea7c102581ce18d09653"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/CimdFuzzTestsInputs/metadataCachePeerAndFramingRemainBound/document-08-cache-02.bin",
+      "bytes": 12,
+      "controls": [
+        8,
+        2,
+        3,
+        6
+      ],
+      "meaning": "CIMD document mode 8, cache mode 2, peer/framing modes derived",
+      "sha256": "cae93c0622b8e45e6e0dac5c7373472ec514036fa84c9927988d02e3f1a83948"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/CimdFuzzTestsInputs/metadataCachePeerAndFramingRemainBound/document-08-cache-03.bin",
+      "bytes": 12,
+      "controls": [
+        8,
+        3,
+        4,
+        7
+      ],
+      "meaning": "CIMD document mode 8, cache mode 3, peer/framing modes derived",
+      "sha256": "83a69c2da6037d2ed6c408a4d65a079359cb9b096ce7d3871dd6414ac86823b8"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/CimdFuzzTestsInputs/metadataCachePeerAndFramingRemainBound/document-08-cache-04.bin",
+      "bytes": 12,
+      "controls": [
+        8,
+        4,
+        5,
+        8
+      ],
+      "meaning": "CIMD document mode 8, cache mode 4, peer/framing modes derived",
+      "sha256": "0afe0079d739c52ba912f0e635c1be22a674bea92233156fcfc8bd104bbc0f86"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/CimdFuzzTestsInputs/metadataCachePeerAndFramingRemainBound/document-08-cache-05.bin",
+      "bytes": 12,
+      "controls": [
+        8,
+        5,
+        6,
+        9
+      ],
+      "meaning": "CIMD document mode 8, cache mode 5, peer/framing modes derived",
+      "sha256": "ace63870cb818397b72a5cea78f9ccee8ad10b05363e775edacdfcbe2970d0d4"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/CimdFuzzTestsInputs/metadataCachePeerAndFramingRemainBound/document-08-cache-06.bin",
+      "bytes": 12,
+      "controls": [
+        8,
+        6,
+        0,
+        0
+      ],
+      "meaning": "CIMD document mode 8, cache mode 6, peer/framing modes derived",
+      "sha256": "8d7a545e997766c1c8f17b8bfe8a79836d7ba165021e0db339e0bcd8399a0963"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/CimdFuzzTestsInputs/metadataCachePeerAndFramingRemainBound/document-09-cache-00.bin",
+      "bytes": 12,
+      "controls": [
+        9,
+        0,
+        2,
+        7
+      ],
+      "meaning": "CIMD document mode 9, cache mode 0, peer/framing modes derived",
+      "sha256": "dfcc0577466507bf60735c18ef07a07b854afa8cdbb3e13c30ebbdd46af7ad9d"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/CimdFuzzTestsInputs/metadataCachePeerAndFramingRemainBound/document-09-cache-01.bin",
+      "bytes": 12,
+      "controls": [
+        9,
+        1,
+        3,
+        8
+      ],
+      "meaning": "CIMD document mode 9, cache mode 1, peer/framing modes derived",
+      "sha256": "782f5e950748b3ed5a73059f6aeb108fba867b7518fcec24b1d325c8d70c1d9e"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/CimdFuzzTestsInputs/metadataCachePeerAndFramingRemainBound/document-09-cache-02.bin",
+      "bytes": 12,
+      "controls": [
+        9,
+        2,
+        4,
+        9
+      ],
+      "meaning": "CIMD document mode 9, cache mode 2, peer/framing modes derived",
+      "sha256": "f27f2dd6ef97fbfc5c2406faf28534e20bbd9f118966ef664483c551adfdada0"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/CimdFuzzTestsInputs/metadataCachePeerAndFramingRemainBound/document-09-cache-03.bin",
+      "bytes": 12,
+      "controls": [
+        9,
+        3,
+        5,
+        0
+      ],
+      "meaning": "CIMD document mode 9, cache mode 3, peer/framing modes derived",
+      "sha256": "21b292000e0e8225e9e319465d375e12fe3db74fb62ad8430da16799f5d37dd2"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/CimdFuzzTestsInputs/metadataCachePeerAndFramingRemainBound/document-09-cache-04.bin",
+      "bytes": 12,
+      "controls": [
+        9,
+        4,
+        6,
+        1
+      ],
+      "meaning": "CIMD document mode 9, cache mode 4, peer/framing modes derived",
+      "sha256": "12c446245c252a7053ebd740b82476639f8ee7961780777acd03f0dbe3ac3fd3"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/CimdFuzzTestsInputs/metadataCachePeerAndFramingRemainBound/document-09-cache-05.bin",
+      "bytes": 12,
+      "controls": [
+        9,
+        5,
+        0,
+        2
+      ],
+      "meaning": "CIMD document mode 9, cache mode 5, peer/framing modes derived",
+      "sha256": "e81ff98102674d9a9446e830621e7173ba8671b1a42d61d06919a25d8f7cbcb4"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/CimdFuzzTestsInputs/metadataCachePeerAndFramingRemainBound/document-09-cache-06.bin",
+      "bytes": 12,
+      "controls": [
+        9,
+        6,
+        1,
+        3
+      ],
+      "meaning": "CIMD document mode 9, cache mode 6, peer/framing modes derived",
+      "sha256": "5780af5fa68ae18c6ab0fcf770c4f037c51389e78c9f23377b1b43c169c297f2"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/CimdFuzzTestsInputs/metadataCachePeerAndFramingRemainBound/document-10-cache-00.bin",
+      "bytes": 13,
+      "controls": [
+        10,
+        0,
+        3,
+        0
+      ],
+      "meaning": "CIMD document mode 10, cache mode 0, peer/framing modes derived",
+      "sha256": "37f3c8b989b9336ccfeaaecc1c7013364556d1e5f72b253375cae4d4cd18d476"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/CimdFuzzTestsInputs/metadataCachePeerAndFramingRemainBound/document-10-cache-01.bin",
+      "bytes": 13,
+      "controls": [
+        10,
+        1,
+        4,
+        1
+      ],
+      "meaning": "CIMD document mode 10, cache mode 1, peer/framing modes derived",
+      "sha256": "affcd72ed785fd41a1a037d756f641b3cec5d3b3ee272b54bb3f707a0f3eeb00"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/CimdFuzzTestsInputs/metadataCachePeerAndFramingRemainBound/document-10-cache-02.bin",
+      "bytes": 13,
+      "controls": [
+        10,
+        2,
+        5,
+        2
+      ],
+      "meaning": "CIMD document mode 10, cache mode 2, peer/framing modes derived",
+      "sha256": "72027ecd52f862f9b62531052b47810392b87f701351072895ba426d8f61b5dc"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/CimdFuzzTestsInputs/metadataCachePeerAndFramingRemainBound/document-10-cache-03.bin",
+      "bytes": 13,
+      "controls": [
+        10,
+        3,
+        6,
+        3
+      ],
+      "meaning": "CIMD document mode 10, cache mode 3, peer/framing modes derived",
+      "sha256": "1b8c41e5bfddb8d0b549b8be5647db27cfc4a6ce875ff74621c1fa75fef05495"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/CimdFuzzTestsInputs/metadataCachePeerAndFramingRemainBound/document-10-cache-04.bin",
+      "bytes": 13,
+      "controls": [
+        10,
+        4,
+        0,
+        4
+      ],
+      "meaning": "CIMD document mode 10, cache mode 4, peer/framing modes derived",
+      "sha256": "3a8db0c3d3686f03361925c6728f921b827940acfd7bf89fa84ffbbde2b0cd03"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/CimdFuzzTestsInputs/metadataCachePeerAndFramingRemainBound/document-10-cache-05.bin",
+      "bytes": 13,
+      "controls": [
+        10,
+        5,
+        1,
+        5
+      ],
+      "meaning": "CIMD document mode 10, cache mode 5, peer/framing modes derived",
+      "sha256": "5ab74825ad2f0ac340270cb811bbd3da3aeacc5771ee8ea2e6e10d1aa922ae27"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/CimdFuzzTestsInputs/metadataCachePeerAndFramingRemainBound/document-10-cache-06.bin",
+      "bytes": 13,
+      "controls": [
+        10,
+        6,
+        2,
+        6
+      ],
+      "meaning": "CIMD document mode 10, cache mode 6, peer/framing modes derived",
+      "sha256": "fb67f6988417001fbbc7d185af5a29b50c9db800bc751cc4b445da5df0e334b3"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerStoreFuzzTestsInputs/recordsAuthenticateNamespaceVersionRetentionAndPayload/kind-00-mutation-00.bin",
+      "bytes": 13,
+      "controls": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "meaning": "store kind 0, authenticated substitution mode 0",
+      "sha256": "4cc8c92529abd967a01ab9b1963271a6e2fcf7189f1f08702218086da76cb3f5"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerStoreFuzzTestsInputs/recordsAuthenticateNamespaceVersionRetentionAndPayload/kind-00-mutation-01.bin",
+      "bytes": 13,
+      "controls": [
+        0,
+        1,
+        1,
+        1
+      ],
+      "meaning": "store kind 0, authenticated substitution mode 1",
+      "sha256": "d4e1056ba701b316b1c8cce247ee9c6557de57ef31f31849a5f8a870bd823f4c"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerStoreFuzzTestsInputs/recordsAuthenticateNamespaceVersionRetentionAndPayload/kind-00-mutation-02.bin",
+      "bytes": 13,
+      "controls": [
+        0,
+        2,
+        2,
+        2
+      ],
+      "meaning": "store kind 0, authenticated substitution mode 2",
+      "sha256": "3b53f815080d34ba6c984eb177dfe303f7b4cfab3ed6732012c9f60aac1d394d"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerStoreFuzzTestsInputs/recordsAuthenticateNamespaceVersionRetentionAndPayload/kind-00-mutation-03.bin",
+      "bytes": 13,
+      "controls": [
+        0,
+        3,
+        3,
+        3
+      ],
+      "meaning": "store kind 0, authenticated substitution mode 3",
+      "sha256": "9b344d2c6aa8e730b7b1cd838b7a6ecfadb39735286f1792e865d6248a1b419b"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerStoreFuzzTestsInputs/recordsAuthenticateNamespaceVersionRetentionAndPayload/kind-00-mutation-04.bin",
+      "bytes": 13,
+      "controls": [
+        0,
+        4,
+        4,
+        4
+      ],
+      "meaning": "store kind 0, authenticated substitution mode 4",
+      "sha256": "d43b4e1560ab1ca9deac5af7ff68967360c5ca1d7a80b28d5acb7428ff14b447"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerStoreFuzzTestsInputs/recordsAuthenticateNamespaceVersionRetentionAndPayload/kind-00-mutation-05.bin",
+      "bytes": 13,
+      "controls": [
+        0,
+        5,
+        5,
+        5
+      ],
+      "meaning": "store kind 0, authenticated substitution mode 5",
+      "sha256": "d6e8446d9f804aec0d0e0aa5f7ef1cbc820b2b9cd65af52ebfeef497b5e8b176"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerStoreFuzzTestsInputs/recordsAuthenticateNamespaceVersionRetentionAndPayload/kind-00-mutation-06.bin",
+      "bytes": 13,
+      "controls": [
+        0,
+        6,
+        6,
+        6
+      ],
+      "meaning": "store kind 0, authenticated substitution mode 6",
+      "sha256": "c67a6ad0c58fe5ae9e46345bceac54741bc2cc8f3e79fae867b51bb35f1640af"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerStoreFuzzTestsInputs/recordsAuthenticateNamespaceVersionRetentionAndPayload/kind-00-mutation-07.bin",
+      "bytes": 13,
+      "controls": [
+        0,
+        7,
+        0,
+        7
+      ],
+      "meaning": "store kind 0, authenticated substitution mode 7",
+      "sha256": "143dcc63c7804cf2afcd8b6c52722ae6a02ad72f6eaa2e28eb368ae5747a1bd2"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerStoreFuzzTestsInputs/recordsAuthenticateNamespaceVersionRetentionAndPayload/kind-00-mutation-08.bin",
+      "bytes": 13,
+      "controls": [
+        0,
+        8,
+        1,
+        8
+      ],
+      "meaning": "store kind 0, authenticated substitution mode 8",
+      "sha256": "2cfc1d14418669845ed7f74c4d6eff4b60a36d0da9157fb0142a595f4409e876"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerStoreFuzzTestsInputs/recordsAuthenticateNamespaceVersionRetentionAndPayload/kind-01-mutation-00.bin",
+      "bytes": 13,
+      "controls": [
+        1,
+        0,
+        1,
+        2
+      ],
+      "meaning": "store kind 1, authenticated substitution mode 0",
+      "sha256": "0a2f92a29afb7011c45c6a24da9b1feeafebc84c8611dcd11183d59a4c0217db"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerStoreFuzzTestsInputs/recordsAuthenticateNamespaceVersionRetentionAndPayload/kind-01-mutation-01.bin",
+      "bytes": 13,
+      "controls": [
+        1,
+        1,
+        2,
+        3
+      ],
+      "meaning": "store kind 1, authenticated substitution mode 1",
+      "sha256": "f9ba80bf30c2e50b91b241908534b6e93da102c1e359351b1307e50eaf9a948c"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerStoreFuzzTestsInputs/recordsAuthenticateNamespaceVersionRetentionAndPayload/kind-01-mutation-02.bin",
+      "bytes": 13,
+      "controls": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "meaning": "store kind 1, authenticated substitution mode 2",
+      "sha256": "6ab847f1004ec62df32d7e65ea4803ff22577ef3a62d6379c542c087d188572b"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerStoreFuzzTestsInputs/recordsAuthenticateNamespaceVersionRetentionAndPayload/kind-01-mutation-03.bin",
+      "bytes": 13,
+      "controls": [
+        1,
+        3,
+        4,
+        5
+      ],
+      "meaning": "store kind 1, authenticated substitution mode 3",
+      "sha256": "89ee198f67e61f093b2767ec268e6d6f1160affd7db38f79b774a5a6595c5ab8"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerStoreFuzzTestsInputs/recordsAuthenticateNamespaceVersionRetentionAndPayload/kind-01-mutation-04.bin",
+      "bytes": 13,
+      "controls": [
+        1,
+        4,
+        5,
+        6
+      ],
+      "meaning": "store kind 1, authenticated substitution mode 4",
+      "sha256": "7f7f2761993078cc3b6cd8dda9e07ea49c33e42d732108e711ed7f3c85b7b9a2"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerStoreFuzzTestsInputs/recordsAuthenticateNamespaceVersionRetentionAndPayload/kind-01-mutation-05.bin",
+      "bytes": 13,
+      "controls": [
+        1,
+        5,
+        6,
+        7
+      ],
+      "meaning": "store kind 1, authenticated substitution mode 5",
+      "sha256": "f86bfefe908541a58464069aea373f80055f96c33b469aadc0379825c2031e93"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerStoreFuzzTestsInputs/recordsAuthenticateNamespaceVersionRetentionAndPayload/kind-01-mutation-06.bin",
+      "bytes": 13,
+      "controls": [
+        1,
+        6,
+        0,
+        8
+      ],
+      "meaning": "store kind 1, authenticated substitution mode 6",
+      "sha256": "d31c033d2b963cf797797bda857576a8301beda6538ac343a04a0fe34b6acc5b"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerStoreFuzzTestsInputs/recordsAuthenticateNamespaceVersionRetentionAndPayload/kind-01-mutation-07.bin",
+      "bytes": 13,
+      "controls": [
+        1,
+        7,
+        1,
+        9
+      ],
+      "meaning": "store kind 1, authenticated substitution mode 7",
+      "sha256": "1a9a446652ca149e2968108078081af3f84c0fb8cfc5ba7e8485d605cf3ef356"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerStoreFuzzTestsInputs/recordsAuthenticateNamespaceVersionRetentionAndPayload/kind-01-mutation-08.bin",
+      "bytes": 13,
+      "controls": [
+        1,
+        8,
+        2,
+        0
+      ],
+      "meaning": "store kind 1, authenticated substitution mode 8",
+      "sha256": "03bf37a0a11037168f3089a6342605b22db2296a8b03d13f3935a6b5afe3a394"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerStoreFuzzTestsInputs/recordsAuthenticateNamespaceVersionRetentionAndPayload/kind-02-mutation-00.bin",
+      "bytes": 13,
+      "controls": [
+        2,
+        0,
+        2,
+        4
+      ],
+      "meaning": "store kind 2, authenticated substitution mode 0",
+      "sha256": "c8951845a71d82f8e6db46fd468e9941d07d5cede46d78c453abc079dce7304c"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerStoreFuzzTestsInputs/recordsAuthenticateNamespaceVersionRetentionAndPayload/kind-02-mutation-01.bin",
+      "bytes": 13,
+      "controls": [
+        2,
+        1,
+        3,
+        5
+      ],
+      "meaning": "store kind 2, authenticated substitution mode 1",
+      "sha256": "4cbad2cc061036fabddabc44f40182db4f9a4f9d0aa357676f27d980051533e0"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerStoreFuzzTestsInputs/recordsAuthenticateNamespaceVersionRetentionAndPayload/kind-02-mutation-02.bin",
+      "bytes": 13,
+      "controls": [
+        2,
+        2,
+        4,
+        6
+      ],
+      "meaning": "store kind 2, authenticated substitution mode 2",
+      "sha256": "9139128ee33a0668a443788e77e880e86db52152d4831b1e5a923b03ccb1520d"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerStoreFuzzTestsInputs/recordsAuthenticateNamespaceVersionRetentionAndPayload/kind-02-mutation-03.bin",
+      "bytes": 13,
+      "controls": [
+        2,
+        3,
+        5,
+        7
+      ],
+      "meaning": "store kind 2, authenticated substitution mode 3",
+      "sha256": "1924fcb31c7e9e849b8e8a9b5467e04780baaf03db61a1f2935501e8fba9a095"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerStoreFuzzTestsInputs/recordsAuthenticateNamespaceVersionRetentionAndPayload/kind-02-mutation-04.bin",
+      "bytes": 13,
+      "controls": [
+        2,
+        4,
+        6,
+        8
+      ],
+      "meaning": "store kind 2, authenticated substitution mode 4",
+      "sha256": "7a5af9b66d96c38c91c1399f743754255834357e3e89f4c8ce72dfd6b26e89f0"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerStoreFuzzTestsInputs/recordsAuthenticateNamespaceVersionRetentionAndPayload/kind-02-mutation-05.bin",
+      "bytes": 13,
+      "controls": [
+        2,
+        5,
+        0,
+        9
+      ],
+      "meaning": "store kind 2, authenticated substitution mode 5",
+      "sha256": "83e14d3f124ef9ca292d37dac1316c673cdbb59c41f2ed1ab55a5fb9fcb5465f"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerStoreFuzzTestsInputs/recordsAuthenticateNamespaceVersionRetentionAndPayload/kind-02-mutation-06.bin",
+      "bytes": 13,
+      "controls": [
+        2,
+        6,
+        1,
+        0
+      ],
+      "meaning": "store kind 2, authenticated substitution mode 6",
+      "sha256": "d6cbeb3194018d283db7d649647dad5662555d8507ce1bb5ccda00cc3801666c"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerStoreFuzzTestsInputs/recordsAuthenticateNamespaceVersionRetentionAndPayload/kind-02-mutation-07.bin",
+      "bytes": 13,
+      "controls": [
+        2,
+        7,
+        2,
+        1
+      ],
+      "meaning": "store kind 2, authenticated substitution mode 7",
+      "sha256": "3208f8a8ca1b2461c718fe792cf41cf315377a2b20da90a2c8c82559a0b15132"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerStoreFuzzTestsInputs/recordsAuthenticateNamespaceVersionRetentionAndPayload/kind-02-mutation-08.bin",
+      "bytes": 13,
+      "controls": [
+        2,
+        8,
+        3,
+        2
+      ],
+      "meaning": "store kind 2, authenticated substitution mode 8",
+      "sha256": "7cc30d2a8fbc138916d791c36f0faeeb22ca2935d6f18d0ce1ede51ebe5b2c8e"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerStoreFuzzTestsInputs/recordsAuthenticateNamespaceVersionRetentionAndPayload/kind-03-mutation-00.bin",
+      "bytes": 13,
+      "controls": [
+        3,
+        0,
+        3,
+        6
+      ],
+      "meaning": "store kind 3, authenticated substitution mode 0",
+      "sha256": "9629ebe3bafb2abe79c3db473c0c5b56d18522fef4d160701ec7b01f34fb011c"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerStoreFuzzTestsInputs/recordsAuthenticateNamespaceVersionRetentionAndPayload/kind-03-mutation-01.bin",
+      "bytes": 13,
+      "controls": [
+        3,
+        1,
+        4,
+        7
+      ],
+      "meaning": "store kind 3, authenticated substitution mode 1",
+      "sha256": "2ba0c15e6097d47fe9fa91b2e3f5b63e228affb2d13964915c04a31abe68a35a"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerStoreFuzzTestsInputs/recordsAuthenticateNamespaceVersionRetentionAndPayload/kind-03-mutation-02.bin",
+      "bytes": 13,
+      "controls": [
+        3,
+        2,
+        5,
+        8
+      ],
+      "meaning": "store kind 3, authenticated substitution mode 2",
+      "sha256": "b3cdf04130056509e71978c244a824bafbd83fa87ecb64ecc39881e79d57a41e"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerStoreFuzzTestsInputs/recordsAuthenticateNamespaceVersionRetentionAndPayload/kind-03-mutation-03.bin",
+      "bytes": 13,
+      "controls": [
+        3,
+        3,
+        6,
+        9
+      ],
+      "meaning": "store kind 3, authenticated substitution mode 3",
+      "sha256": "9d3b0c4047b600c537b3c8ccde8117ea7f12b060af337a3fccf617193c78328d"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerStoreFuzzTestsInputs/recordsAuthenticateNamespaceVersionRetentionAndPayload/kind-03-mutation-04.bin",
+      "bytes": 13,
+      "controls": [
+        3,
+        4,
+        0,
+        0
+      ],
+      "meaning": "store kind 3, authenticated substitution mode 4",
+      "sha256": "bef5adcaecbc82ee1478b66d953ecc10094ae2af2d87ccacd3012153d537c37d"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerStoreFuzzTestsInputs/recordsAuthenticateNamespaceVersionRetentionAndPayload/kind-03-mutation-05.bin",
+      "bytes": 13,
+      "controls": [
+        3,
+        5,
+        1,
+        1
+      ],
+      "meaning": "store kind 3, authenticated substitution mode 5",
+      "sha256": "eaf8108400edfc1285bf73928e73e6c7a6238f1f3b9c0c347316b2ebfd53102d"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerStoreFuzzTestsInputs/recordsAuthenticateNamespaceVersionRetentionAndPayload/kind-03-mutation-06.bin",
+      "bytes": 13,
+      "controls": [
+        3,
+        6,
+        2,
+        2
+      ],
+      "meaning": "store kind 3, authenticated substitution mode 6",
+      "sha256": "f872c42c2526b75a323102373b1c76db46bbb47752c13e9b54f686ebf98cc85b"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerStoreFuzzTestsInputs/recordsAuthenticateNamespaceVersionRetentionAndPayload/kind-03-mutation-07.bin",
+      "bytes": 13,
+      "controls": [
+        3,
+        7,
+        3,
+        3
+      ],
+      "meaning": "store kind 3, authenticated substitution mode 7",
+      "sha256": "517e1fe4f51e1726199c263bfe75e47d573d48a2b989894eb1d572b0ecea1921"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerStoreFuzzTestsInputs/recordsAuthenticateNamespaceVersionRetentionAndPayload/kind-03-mutation-08.bin",
+      "bytes": 13,
+      "controls": [
+        3,
+        8,
+        4,
+        4
+      ],
+      "meaning": "store kind 3, authenticated substitution mode 8",
+      "sha256": "f5da7931d8b31e277e49278ccff6ab36aa411db2e4f2064d60974d2602c71aea"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerStoreFuzzTestsInputs/recordsAuthenticateNamespaceVersionRetentionAndPayload/kind-04-mutation-00.bin",
+      "bytes": 13,
+      "controls": [
+        4,
+        0,
+        4,
+        8
+      ],
+      "meaning": "store kind 4, authenticated substitution mode 0",
+      "sha256": "971828d348f0cbd174ac6a2d029bd5bde8531d87869b494ee024b45d9b7fbe9b"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerStoreFuzzTestsInputs/recordsAuthenticateNamespaceVersionRetentionAndPayload/kind-04-mutation-01.bin",
+      "bytes": 13,
+      "controls": [
+        4,
+        1,
+        5,
+        9
+      ],
+      "meaning": "store kind 4, authenticated substitution mode 1",
+      "sha256": "81ca3668aee3aed70a326d9a7329fb6f4889d15363d623239e7376546cfd7e92"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerStoreFuzzTestsInputs/recordsAuthenticateNamespaceVersionRetentionAndPayload/kind-04-mutation-02.bin",
+      "bytes": 13,
+      "controls": [
+        4,
+        2,
+        6,
+        0
+      ],
+      "meaning": "store kind 4, authenticated substitution mode 2",
+      "sha256": "5ac06882587988651ceef58a08a22c70d8e21e94acfedd22a6e7cb4406be5896"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerStoreFuzzTestsInputs/recordsAuthenticateNamespaceVersionRetentionAndPayload/kind-04-mutation-03.bin",
+      "bytes": 13,
+      "controls": [
+        4,
+        3,
+        0,
+        1
+      ],
+      "meaning": "store kind 4, authenticated substitution mode 3",
+      "sha256": "131d0e75ccc86fce5d4834d600b85a07019439c8bfa62512330ead2380080167"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerStoreFuzzTestsInputs/recordsAuthenticateNamespaceVersionRetentionAndPayload/kind-04-mutation-04.bin",
+      "bytes": 13,
+      "controls": [
+        4,
+        4,
+        1,
+        2
+      ],
+      "meaning": "store kind 4, authenticated substitution mode 4",
+      "sha256": "6b214d1c152fabe82fb4324cda419ad148e56e5d43b4ab93fe1453bf7b1f019e"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerStoreFuzzTestsInputs/recordsAuthenticateNamespaceVersionRetentionAndPayload/kind-04-mutation-05.bin",
+      "bytes": 13,
+      "controls": [
+        4,
+        5,
+        2,
+        3
+      ],
+      "meaning": "store kind 4, authenticated substitution mode 5",
+      "sha256": "efbf2a46ad2efb255c5d5ebd0cc0fb0c610dd8c428ea06ee502735159abd719f"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerStoreFuzzTestsInputs/recordsAuthenticateNamespaceVersionRetentionAndPayload/kind-04-mutation-06.bin",
+      "bytes": 13,
+      "controls": [
+        4,
+        6,
+        3,
+        4
+      ],
+      "meaning": "store kind 4, authenticated substitution mode 6",
+      "sha256": "490bbeb62a247cf326d4bfdb05f38abf41016644c89744af20acf4dddb9bdf2c"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerStoreFuzzTestsInputs/recordsAuthenticateNamespaceVersionRetentionAndPayload/kind-04-mutation-07.bin",
+      "bytes": 13,
+      "controls": [
+        4,
+        7,
+        4,
+        5
+      ],
+      "meaning": "store kind 4, authenticated substitution mode 7",
+      "sha256": "7313b7861d1e6d7800487511ba98cd0ef276fdf5dff511bbff427bbd42213c35"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerStoreFuzzTestsInputs/recordsAuthenticateNamespaceVersionRetentionAndPayload/kind-04-mutation-08.bin",
+      "bytes": 13,
+      "controls": [
+        4,
+        8,
+        5,
+        6
+      ],
+      "meaning": "store kind 4, authenticated substitution mode 8",
+      "sha256": "387ba97778a5e6c21c5337727f19ac7deeebd554dbb5f9405721e884d7675d29"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerStoreFuzzTestsInputs/recordsAuthenticateNamespaceVersionRetentionAndPayload/kind-05-mutation-00.bin",
+      "bytes": 13,
+      "controls": [
+        5,
+        0,
+        5,
+        0
+      ],
+      "meaning": "store kind 5, authenticated substitution mode 0",
+      "sha256": "4d3ab7f26bd5658f208b87c620387f49dd2d7dc7ad145442f2bc971d78a150a0"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerStoreFuzzTestsInputs/recordsAuthenticateNamespaceVersionRetentionAndPayload/kind-05-mutation-01.bin",
+      "bytes": 13,
+      "controls": [
+        5,
+        1,
+        6,
+        1
+      ],
+      "meaning": "store kind 5, authenticated substitution mode 1",
+      "sha256": "c28ee84bed985d1383c30c74fb742878cd99e1a941db2870f11bfe4332a2af83"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerStoreFuzzTestsInputs/recordsAuthenticateNamespaceVersionRetentionAndPayload/kind-05-mutation-02.bin",
+      "bytes": 13,
+      "controls": [
+        5,
+        2,
+        0,
+        2
+      ],
+      "meaning": "store kind 5, authenticated substitution mode 2",
+      "sha256": "37ba632c87f71d31abf8f4deea51f45118cf1b0b5672df559556331377332f35"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerStoreFuzzTestsInputs/recordsAuthenticateNamespaceVersionRetentionAndPayload/kind-05-mutation-03.bin",
+      "bytes": 13,
+      "controls": [
+        5,
+        3,
+        1,
+        3
+      ],
+      "meaning": "store kind 5, authenticated substitution mode 3",
+      "sha256": "0e6e94456d47b712dc05c32aacaa0b911e01148279044e091c453d5a8acfa455"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerStoreFuzzTestsInputs/recordsAuthenticateNamespaceVersionRetentionAndPayload/kind-05-mutation-04.bin",
+      "bytes": 13,
+      "controls": [
+        5,
+        4,
+        2,
+        4
+      ],
+      "meaning": "store kind 5, authenticated substitution mode 4",
+      "sha256": "b240f30c66f0abec39768254bac7da38c6c6dd848f3cbd9f3e63f70cd1e2590b"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerStoreFuzzTestsInputs/recordsAuthenticateNamespaceVersionRetentionAndPayload/kind-05-mutation-05.bin",
+      "bytes": 13,
+      "controls": [
+        5,
+        5,
+        3,
+        5
+      ],
+      "meaning": "store kind 5, authenticated substitution mode 5",
+      "sha256": "4bb8c1d3971c11dcd57db99ba86bd371860e3a018ff0f0c70996831671545d3d"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerStoreFuzzTestsInputs/recordsAuthenticateNamespaceVersionRetentionAndPayload/kind-05-mutation-06.bin",
+      "bytes": 13,
+      "controls": [
+        5,
+        6,
+        4,
+        6
+      ],
+      "meaning": "store kind 5, authenticated substitution mode 6",
+      "sha256": "d80c816efb76de825892ced6a3d113e92ed223050ccd4618cac6dda4daf0f291"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerStoreFuzzTestsInputs/recordsAuthenticateNamespaceVersionRetentionAndPayload/kind-05-mutation-07.bin",
+      "bytes": 13,
+      "controls": [
+        5,
+        7,
+        5,
+        7
+      ],
+      "meaning": "store kind 5, authenticated substitution mode 7",
+      "sha256": "65df606181c2b630d90ada1196c372fce6203e9f6d96297d30d14637fac58e94"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerStoreFuzzTestsInputs/recordsAuthenticateNamespaceVersionRetentionAndPayload/kind-05-mutation-08.bin",
+      "bytes": 13,
+      "controls": [
+        5,
+        8,
+        6,
+        8
+      ],
+      "meaning": "store kind 5, authenticated substitution mode 8",
+      "sha256": "3907f84b0ac30356203a753ea3eada8ab55eb63e78b4a641c8e8ce8f444a0ad5"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerStoreFuzzTestsInputs/recordsAuthenticateNamespaceVersionRetentionAndPayload/kind-06-mutation-00.bin",
+      "bytes": 13,
+      "controls": [
+        6,
+        0,
+        6,
+        2
+      ],
+      "meaning": "store kind 6, authenticated substitution mode 0",
+      "sha256": "e4d21fff1a26beeede643d0107575487cec32f035957b12854c521baef7dc4c7"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerStoreFuzzTestsInputs/recordsAuthenticateNamespaceVersionRetentionAndPayload/kind-06-mutation-01.bin",
+      "bytes": 13,
+      "controls": [
+        6,
+        1,
+        0,
+        3
+      ],
+      "meaning": "store kind 6, authenticated substitution mode 1",
+      "sha256": "fe87945b87684ef605e08039a2d753e48bc4546938d1e122dca857a1aa8ec2df"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerStoreFuzzTestsInputs/recordsAuthenticateNamespaceVersionRetentionAndPayload/kind-06-mutation-02.bin",
+      "bytes": 13,
+      "controls": [
+        6,
+        2,
+        1,
+        4
+      ],
+      "meaning": "store kind 6, authenticated substitution mode 2",
+      "sha256": "6996a3d16216556eae9772875a126775ca1201fb46a8e4cd6adf34c00a00e077"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerStoreFuzzTestsInputs/recordsAuthenticateNamespaceVersionRetentionAndPayload/kind-06-mutation-03.bin",
+      "bytes": 13,
+      "controls": [
+        6,
+        3,
+        2,
+        5
+      ],
+      "meaning": "store kind 6, authenticated substitution mode 3",
+      "sha256": "f96e78b826cf152cee6cc9a49fa2598ddc7f924d1665b0bf11b6d42ba572f102"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerStoreFuzzTestsInputs/recordsAuthenticateNamespaceVersionRetentionAndPayload/kind-06-mutation-04.bin",
+      "bytes": 13,
+      "controls": [
+        6,
+        4,
+        3,
+        6
+      ],
+      "meaning": "store kind 6, authenticated substitution mode 4",
+      "sha256": "4f1fd969ad83e8f3dacdebdc02bc20219311555725064397fcdcf0cce0974030"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerStoreFuzzTestsInputs/recordsAuthenticateNamespaceVersionRetentionAndPayload/kind-06-mutation-05.bin",
+      "bytes": 13,
+      "controls": [
+        6,
+        5,
+        4,
+        7
+      ],
+      "meaning": "store kind 6, authenticated substitution mode 5",
+      "sha256": "8c47dc7e8f1840f26ac7454afa0e805958e76e4d61287368b6453301d41f7f8d"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerStoreFuzzTestsInputs/recordsAuthenticateNamespaceVersionRetentionAndPayload/kind-06-mutation-06.bin",
+      "bytes": 13,
+      "controls": [
+        6,
+        6,
+        5,
+        8
+      ],
+      "meaning": "store kind 6, authenticated substitution mode 6",
+      "sha256": "889888336eaef31e90f217ad62f126186f50b8b7e13d297c095724d31d359b24"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerStoreFuzzTestsInputs/recordsAuthenticateNamespaceVersionRetentionAndPayload/kind-06-mutation-07.bin",
+      "bytes": 13,
+      "controls": [
+        6,
+        7,
+        6,
+        9
+      ],
+      "meaning": "store kind 6, authenticated substitution mode 7",
+      "sha256": "6c5934981d73ff78f82143ab35dcddd25d97dd2162be236914f5498201d214eb"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerStoreFuzzTestsInputs/recordsAuthenticateNamespaceVersionRetentionAndPayload/kind-06-mutation-08.bin",
+      "bytes": 13,
+      "controls": [
+        6,
+        8,
+        0,
+        0
+      ],
+      "meaning": "store kind 6, authenticated substitution mode 8",
+      "sha256": "54119a05213ae6cd9725abe6462232d3f16eb02a2641786e49021dff4b6e7a98"
+    }
+  ]
+}

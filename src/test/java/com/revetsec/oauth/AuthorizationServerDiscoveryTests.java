@@ -74,6 +74,31 @@ final class AuthorizationServerDiscoveryTests {
 	}
 
 	@Test
+	void clockRollbackInvalidatesCachedAuthorizationServerMetadata() throws Exception {
+		try (TestHttpsServer server = TestHttpsServer.start()) {
+			String issuer = server.uri("/tenant").toString();
+			RewindableClock clock = RewindableClock.fromInstant(Instant.parse("2026-09-28T12:00:00Z"));
+			server.script(RFC_PATH, TestHttpsServer.Script.fromResponse(json(200,
+					metadata(server, issuer, server.uri("/token-a")))));
+			OAuthClient client = OAuthClient.withIssuer(issuer).clientId("client")
+					.clientAuthentication(ClientAuthentication.noneInstance())
+					.httpClient(TestTls.httpClient()).clock(clock)
+					.minimumTimeToLive(Duration.ofSeconds(30)).defaultTimeToLive(Duration.ofSeconds(30))
+					.maximumTimeToLive(Duration.ofMinutes(1)).discoveryCooldown(Duration.ofSeconds(1)).build();
+			client.warmUp();
+			assertEquals(1, server.getHitCount(RFC_PATH));
+			clock.rewind(Duration.ofSeconds(1));
+			server.script(RFC_PATH, TestHttpsServer.Script.fromResponse(json(200,
+					metadata(server, issuer, server.uri("/token-b")))));
+			client.warmUp();
+			assertEquals(2, server.getHitCount(RFC_PATH));
+			clock.advance(Duration.ofSeconds(1));
+			client.warmUp();
+			assertEquals(2, server.getHitCount(RFC_PATH));
+		}
+	}
+
+	@Test
 	void discoveryStopsAfterTwoFreshnessDrivenFlightsInOneCooldownWindow() throws Exception {
 		try (TestHttpsServer server = TestHttpsServer.start()) {
 			String issuer = server.uri("/tenant").toString();

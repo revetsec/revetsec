@@ -113,7 +113,8 @@ final class OAuthServerOutcomeTests {
   assertFalse(failure.isTransient());assertEquals(unavailable,failure(reason,true).isTransient());
   assertNull(failure.getCause());failure.addSuppressed(new IllegalArgumentException("TEST-ONLY-sensitive-cause"));assertEquals(0,failure.getSuppressed().length);
   assertThrows(IllegalStateException.class,()->failure.initCause(new RuntimeException("TEST-ONLY-sensitive-cause")));
-  assertFalse(requireNonNull(failure.getMessage()).contains("TEST-ONLY"));assertFalse(failure.toString().contains("TEST-ONLY"));
+  assertFalse(requireNonNull(failure.getMessage()).contains("TEST-ONLY"));
+  assertEquals("OAuthServerException{"+reason+"}",failure.toString());assertFalse(failure.toString().contains("TEST-ONLY"));
   if(reason==COMMIT_OUTCOME_UNKNOWN) {assertEquals(ErrorCategory.TRANSPORT,failure.getCategory());assertFalse(failure.isTransient());}
   if(reason==STORE_CORRUPT||reason==CONFIGURATION_INVALID||reason==SIGNING_FAILED) assertEquals(ErrorCategory.CONFIGURATION,failure.getCategory());
   if(validation(reason)) {

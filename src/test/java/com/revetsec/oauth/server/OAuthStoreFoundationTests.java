@@ -92,6 +92,16 @@ class OAuthStoreFoundationTests {
   rejected(() -> OAuthStoreEntry.fromStoredForm(key(OAuthStoreKey.Kind.CODE), VERSION, NOW, "é"));
   rejected(() -> OAuthStoreEntry.fromStoredForm(key(OAuthStoreKey.Kind.CODE), VERSION, NOW, ""));
  }
+ @Test void internalStorageGrammarChecksEachNonceAndAsciiBoundaryDirectly() {
+  OAuthStoreFormat.nonce(NONCE);
+  rejected(()->OAuthStoreFormat.nonce("A".repeat(21)+"!"+"A".repeat(21)));
+  OAuthStoreFormat.sealed("\u007f",1);
+  rejected(()->OAuthStoreFormat.sealed("\u0080",1));
+  OAuthStoreKey key=key(OAuthStoreKey.Kind.CODE);
+  assertEquals(key.getStorageKey().hashCode(),key.hashCode());
+  assertEquals(Optional.of(VERSION),OAuthStoreTransaction.Condition.fromVersion(key,VERSION).getExpectedVersion());
+  rejected(()->OAuthStoreTransaction.Condition.fromVersion(key,"A".repeat(21)+"!"+"A".repeat(21)));
+ }
  @Test void permanentFencesAndFiniteRetentionAreDistinct() {
   for (OAuthStoreKey.Kind kind : List.of(OAuthStoreKey.Kind.ISSUER_STATE, OAuthStoreKey.Kind.SUBJECT_STATE)) {
    assertEquals(OAuthStoreFormat.PERMANENT, entry(key(kind)).getRetainUntil());

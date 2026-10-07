@@ -98,18 +98,81 @@ final class IssuerApplicationTests {
   var app=app();SokletSimulator.run(IssuerPlayground.sokletConfig(app),sim->{
    var login=sim.performHttpRequest(request(app,HttpMethod.GET,"/authorize?"+query(app,"demo-public","mcp:discover mcp:whoami"),null,null));
    assertEquals(200,login.getMarshaledResponse().getStatusCode());var response=login.getMarshaledResponse();
+   assertEquals(Set.of("same-origin"),response.getHeaders().get("Referrer-Policy"));
    var cookie=response.getCookies().iterator().next();String old=cookie.getName()+"="+cookie.getValue().orElseThrow();var session=app.sessions.find(request(app,HttpMethod.GET,"/",null,old)).orElseThrow();String binding=session.binding;
    assertTrue(text(response).contains("Demo login"));assertFalse(text(response).contains(app.config.loginKey));assertFalse(text(response).contains(session.pending.get().handle));
    var post=request(app,HttpMethod.POST,"/login",form(Map.of("csrf",session.csrf,"flow",session.pending.get().nonce,"key",app.config.loginKey)),old);
    assertEquals(403,sim.performHttpRequest(post.copy().headers(h->h.remove("Origin")).finish()).getMarshaledResponse().getStatusCode());
+   assertEquals(403,sim.performHttpRequest(post.copy().headers(h->h.put("Origin",Set.of("null"))).finish()).getMarshaledResponse().getStatusCode());
    var rotated=sim.performHttpRequest(post).getMarshaledResponse();assertEquals(303,rotated.getStatusCode());
    var newCookie=rotated.getCookies().iterator().next();String current=newCookie.getName()+"="+newCookie.getValue().orElseThrow();var authenticated=app.sessions.find(request(app,HttpMethod.GET,"/",null,current)).orElseThrow();
    assertEquals(binding,authenticated.binding);assertNotEquals(session.id,authenticated.id);assertNotEquals(session.csrf,authenticated.csrf);assertTrue(app.sessions.find(request(app,HttpMethod.GET,"/",null,old)).isEmpty());
+   var consentPage=sim.performHttpRequest(request(app,HttpMethod.GET,"/consent",null,current)).getMarshaledResponse();
+   assertEquals(Set.of("same-origin"),consentPage.getHeaders().get("Referrer-Policy"));
+   assertTrue(consentPage.getHeaders().get("Content-Security-Policy").iterator().next().contains("form-action 'self' https://client.example;"));
    var consent=request(app,HttpMethod.POST,"/consent",form(Map.of("csrf",authenticated.csrf,"flow",authenticated.pending.get().nonce,"decision","approve")),current);
    assertEquals(403,sim.performHttpRequest(consent.copy().body(("csrf="+authenticated.csrf+"&decision=approve&subject=attacker").getBytes(StandardCharsets.UTF_8)).finish()).getMarshaledResponse().getStatusCode());
-   var complete=sim.performHttpRequest(consent).getMarshaledResponse();assertEquals(303,complete.getStatusCode());String location=complete.getHeaders().get("Location").iterator().next();assertTrue(location.startsWith(app.config.redirect+"&code="));
+   assertEquals(403,sim.performHttpRequest(consent.copy().headers(h->h.put("Origin",Set.of("null"))).finish()).getMarshaledResponse().getStatusCode());
+   var complete=sim.performHttpRequest(consent).getMarshaledResponse();assertEquals(303,complete.getStatusCode());assertEquals(Set.of("no-referrer"),complete.getHeaders().get("Referrer-Policy"));String location=complete.getHeaders().get("Location").iterator().next();assertTrue(location.startsWith(app.config.redirect+"&code="));
    assertEquals(403,sim.performHttpRequest(consent).getMarshaledResponse().getStatusCode());
    String code=location.substring(location.indexOf("code=")+5,location.indexOf("&state="));assertEquals(200,redeem(app,"demo-public",code,null).getStatusCode());
+  });
+ }
+ @Test void nativePortConsentUsesCheckedReturnAndCodeRedemptionKeepsExactPort() throws Exception {
+  URI registered=URI.create("http://127.0.0.1:6273/oauth/callback"),actual=URI.create("http://127.0.0.1:6274/oauth/callback");
+  var base=config(8089,8090);var config=new IssuerConfig(base.origin,base.resource,registered,URI.create("http://127.0.0.1:6274"),8089,8090,base.loginKey,base.clientKey,base.resourceKey,true);
+  var app=new IssuerResources(config,Clock.systemUTC());var session=app.sessions.begin();session.authenticated=true;String cookie="RevetsecIssuerDev="+session.id;
+  String selected=query(app,"demo-public","mcp:discover").replace(URLEncoder.encode(registered.toString(),StandardCharsets.UTF_8),URLEncoder.encode(actual.toString(),StandardCharsets.UTF_8));
+  for(String invalid:List.of("http://localhost:6274/oauth/callback","http://127.0.0.1:6274/other","http://127.0.0.1:6274/oauth/callback?extra=1")) {
+   var rejected=app.authorize(request(app,HttpMethod.GET,"/authorize?"+selected.replace(URLEncoder.encode(actual.toString(),StandardCharsets.UTF_8),URLEncoder.encode(invalid,StandardCharsets.UTF_8)),null,cookie));
+   assertEquals(400,rejected.getStatusCode());assertFalse(rejected.getHeaders().containsKey("Location"));
+  }
+  var consent=app.authorize(request(app,HttpMethod.GET,"/authorize?"+selected,null,cookie));assertEquals(200,consent.getStatusCode());
+  assertTrue(text(consent).contains(actual.toString()));String csp=consent.getHeaders().get("Content-Security-Policy").iterator().next();
+  assertTrue(csp.contains("form-action 'self' http://127.0.0.1:6274;"));assertFalse(csp.contains(":6273"));
+  var completed=app.complete(request(app,HttpMethod.POST,"/consent",form(Map.of("csrf",session.csrf,"flow",session.pending.get().nonce,"decision","approve")),cookie));
+  assertEquals(303,completed.getStatusCode());assertEquals(Set.of("no-referrer"),completed.getHeaders().get("Referrer-Policy"));
+  String location=completed.getHeaders().get("Location").iterator().next();assertTrue(location.startsWith(actual+"?code="));
+  String code=location.substring(location.indexOf("code=")+5,location.indexOf("&state="));assertEquals(400,redeem(app,"demo-public",code,null).getStatusCode());
+  var redeemed=app.token(request(app,HttpMethod.POST,"/token",form(Map.of("grant_type","authorization_code","client_id","demo-public","code",code,"code_verifier",VERIFIER,"redirect_uri",actual.toString(),"resource",app.config.resource.toString())),null));
+  assertEquals(200,redeemed.getStatusCode());
+ }
+ @Test void ipv6NativeReturnUsesCheckedLinkAndKeepsConsentFormsSameOrigin() throws Exception {
+  URI registered=URI.create("http://[::1]:6273/oauth/callback"),actual=URI.create("http://[::1]:43123/oauth/callback");
+  for(String decision:List.of("approve","deny")) {
+   var base=config(8089,8090);var config=new IssuerConfig(base.origin,base.resource,registered,base.origin,8089,8090,base.loginKey,base.clientKey,base.resourceKey,true);
+   var app=new IssuerResources(config,Clock.systemUTC());var session=app.sessions.begin();session.authenticated=true;String cookie="RevetsecIssuerDev="+session.id;
+   String selected=query(app,"demo-public","mcp:discover").replace(URLEncoder.encode(registered.toString(),StandardCharsets.UTF_8),URLEncoder.encode(actual.toString(),StandardCharsets.UTF_8));
+   var consent=app.authorize(request(app,HttpMethod.GET,"/authorize?"+selected,null,cookie));assertEquals(200,consent.getStatusCode());assertTrue(text(consent).contains(actual.toString()));
+   assertEquals(Set.of("default-src 'none'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'"),consent.getHeaders().get("Content-Security-Policy"));
+   var post=request(app,HttpMethod.POST,"/consent",form(Map.of("csrf",session.csrf,"flow",session.pending.get().nonce,"decision",decision)),cookie);
+   assertEquals(403,app.complete(post.copy().headers(h->h.put("Origin",Set.of(actual.getScheme()+"://"+actual.getRawAuthority()))).finish()).getStatusCode());
+   var completed=app.complete(post);assertEquals(200,completed.getStatusCode());assertFalse(completed.getHeaders().containsKey("Location"));
+   assertEquals(Set.of("no-referrer"),completed.getHeaders().get("Referrer-Policy"));assertEquals(Set.of("no-store"),completed.getHeaders().get("Cache-Control"));
+   assertEquals(Set.of("default-src 'none'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'"),completed.getHeaders().get("Content-Security-Policy"));
+   String body=text(completed),marker="id='native-return' rel='noreferrer' href='";assertTrue(body.contains(marker));
+   String location=body.substring(body.indexOf(marker)+marker.length(),body.indexOf("'",body.indexOf(marker)+marker.length())).replace("&amp;","&");
+   URI returned=URI.create(location);assertEquals(actual.getScheme(),returned.getScheme());assertEquals(actual.getRawAuthority(),returned.getRawAuthority());assertEquals(actual.getRawPath(),returned.getRawPath());
+   assertTrue(location.contains("state=client-state"));assertFalse(body.contains(app.config.clientKey));assertFalse(body.contains(session.csrf));assertEquals(403,app.complete(post).getStatusCode());
+   if(decision.equals("approve")) {
+    assertTrue(location.startsWith(actual+"?code="));String code=location.substring(location.indexOf("code=")+5,location.indexOf("&state="));assertEquals(400,redeem(app,"demo-public",code,null).getStatusCode());
+    assertEquals(200,app.token(request(app,HttpMethod.POST,"/token",form(Map.of("grant_type","authorization_code","client_id","demo-public","code",code,"code_verifier",VERIFIER,"redirect_uri",actual.toString(),"resource",app.config.resource.toString())),null)).getStatusCode());
+   }else {assertTrue(location.contains("error=access_denied"));assertFalse(location.contains("code="));}
+  }
+ }
+ @Test void browserCorsOriginIsExplicitWithoutChangingControlPostOriginPolicy() throws Exception {
+  var base=config(8089,8090);URI browser=URI.create("http://127.0.0.1:6274"),registered=URI.create("http://127.0.0.1:6273/oauth/callback");
+  assertEquals(URI.create("https://client.example"),base.browserOrigin);
+  for(String invalid:List.of("http://client.example","https://client.example/path","https://client.example?x=1","https://client.example#x","https://user@client.example","https://client.example:0"))
+   assertThrows(IllegalArgumentException.class,()->new IssuerConfig(base.origin,base.resource,registered,URI.create(invalid),8089,8090,base.loginKey,base.clientKey,base.resourceKey,true));
+  var app=new IssuerResources(new IssuerConfig(base.origin,base.resource,registered,browser,8089,8090,base.loginKey,base.clientKey,base.resourceKey,true),Clock.systemUTC());
+  SokletSimulator.run(IssuerPlayground.sokletConfig(app),sim->{
+   var metadata=request(app,HttpMethod.GET,"/.well-known/oauth-authorization-server",null,null);
+   var allowed=sim.performHttpRequest(metadata.copy().headers(h->h.put("Origin",Set.of(browser.toString()))).finish()).getMarshaledResponse();
+   assertEquals(200,allowed.getStatusCode());assertEquals(Set.of(browser.toString()),allowed.getHeaders().get("Access-Control-Allow-Origin"));
+   var excluded=sim.performHttpRequest(metadata.copy().headers(h->h.put("Origin",Set.of("http://127.0.0.1:6273"))).finish()).getMarshaledResponse();
+   assertFalse(excluded.getHeaders().containsKey("Access-Control-Allow-Origin"));
+   assertEquals(403,sim.performHttpRequest(request(app,HttpMethod.POST,"/login","csrf=wrong&flow=wrong&key=wrong",null).copy().headers(h->h.put("Origin",Set.of(browser.toString()))).finish()).getMarshaledResponse().getStatusCode());
   });
  }
  @TestFactory @NonNull Stream<@NonNull DynamicTest> hostileControlFormsCannotSelectAppIdentityOrBypassCsrf() {
@@ -151,6 +214,31 @@ final class IssuerApplicationTests {
    app.revoke(request(app,HttpMethod.POST,"/revoke",form(Map.of("client_id","demo-public","token",wide)),null));assertEquals(401,call(sim,app,wide,"tools/call","whoami","{}").getStatusCode());
   });
  }
+ @Test void configuredSecondResourceRequiresItsOwnGrantAndChallengesWithItsOwnMetadata() throws Exception {
+  var base=config(8089,8090);var cfg=new IssuerConfig(base.origin,base.resource,base.redirect,base.browserOrigin,8089,8090,base.loginKey,base.clientKey,base.resourceKey,true,true);
+  var app=new IssuerResources(cfg,Clock.systemUTC());URI second=cfg.resource.resolve("/mcp-second");
+  assertEquals(Set.of(cfg.resource.toString(),second.toString()),cfg.resources().keySet());assertTrue(base.resourceForEndpoint("/mcp-second").isEmpty());
+  assertEquals(404,new IssuerResources(base,Clock.systemUTC()).secondResourceMetadata(request(app,HttpMethod.GET,"/.well-known/oauth-protected-resource/mcp-second",null,null)).getStatusCode());
+  assertTrue(text(app.secondResourceMetadata(request(app,HttpMethod.GET,"/.well-known/oauth-protected-resource/mcp-second",null,null))).contains(second.toString()));
+  String firstToken=scalar(issued(app,"mcp:discover mcp:whoami"),"access_token"),binding=LocalInputs.randomId();
+  String q=query(app,"demo-public","mcp:discover mcp:whoami").replace(URLEncoder.encode(cfg.resource.toString(),StandardCharsets.UTF_8),URLEncoder.encode(second.toString(),StandardCharsets.UTF_8));
+  var interaction=assertInstanceOf(OAuthAuthorizationResult.InteractionRequired.class,app.server.beginAuthorizationResult("GET",q,new byte[0],Map.of(),binding)).getInteraction();
+  assertEquals(Set.of(second.toString()),interaction.getRequestedScopesByResource().keySet());
+  var completion=assertInstanceOf(OAuthAuthorizationResult.Completed.class,app.server.completeAuthorizationResult(interaction.getInteractionValue(),binding,OAuthAuthorizationDecision.withSubject(IssuerConfig.SUBJECT).authorizedScopesByResource(interaction.getRequestedScopesByResource()).refreshTokenPermitted(true).build()));
+  String location=completion.getResponse().getLocationWithCredentials().orElseThrow().toString(),code=location.substring(location.indexOf("code=")+5,location.indexOf("&state="));
+  var redeemed=app.token(request(app,HttpMethod.POST,"/token",form(Map.of("grant_type","authorization_code","client_id","demo-public","code",code,"code_verifier",VERIFIER,"redirect_uri",cfg.redirect.toString(),"resource",second.toString())),null));
+  assertEquals(200,redeemed.getStatusCode());String secondToken=scalar(text(redeemed),"access_token");
+  SokletSimulator.run(IssuerPlayground.sokletConfig(app),sim->{
+   for(String method:List.of("tools/list","tools/call"))for(String target:List.of("/mcp","/mcp-second"))for(String source:List.of("/mcp","/mcp-second")) {
+    String token=source.equals("/mcp")?firstToken:secondToken;Request req=mcpRequest(app,token,method,method.equals("tools/call")?"whoami":null,"{}").copy().path(target).finish();
+    try(var pending=sim.startMcpRequest(req)) {
+     var response=pending.awaitResponse(Duration.ofSeconds(5)).orElseThrow();assertEquals(target.equals(source)?200:401,response.getStatusCode());
+     if(!target.equals(source)) {String header=response.getHeaders().get("WWW-Authenticate").iterator().next();assertTrue(header.contains("error=\"invalid_token\""));assertTrue(header.contains("resource_metadata=\""+cfg.origin+"/.well-known/oauth-protected-resource"+target+"\""));}
+    }
+   }
+  });
+  assertEquals(List.of(second.toString()),assertInstanceOf(OAuthIssuerAccessTokenResult.Succeeded.class,app.server.validateAccessTokenResult(bearer(secondToken),second.toString())).getAccessToken().getAudiences());
+ }
  @Test void expiresAndWrongResourceAreRejectedWithoutAnOfflineShortcut() throws Exception {
   var clock=new MutableClock();var app=new IssuerResources(config(8089,8090),clock);String token=scalar(issued(app,"mcp:discover mcp:whoami"),"access_token");
   assertThrows(IllegalArgumentException.class,()->app.server.validateAccessTokenResult(bearer(token),"https://wrong.example/mcp"));
@@ -164,6 +252,28 @@ final class IssuerApplicationTests {
   assertEquals(403,app.login(valid.copy().headers(h->h.put("Cookie",Set.of(cookie+"; "+cookie))).finish()).getStatusCode());
   assertEquals(403,app.login(valid.copy().headers(h->h.put("Content-Encoding",Set.of("gzip"))).finish()).getStatusCode());
   assertEquals(403,app.login(request(app,HttpMethod.POST,"/login?csrf="+session.csrf,form(Map.of("csrf",session.csrf,"flow",session.pending.get().nonce,"key",app.config.loginKey)),cookie)).getStatusCode());
+ }
+ @Test void metadataIsDefaultOffAndFixedMappingDoesNotResolveDns() throws Exception {
+  assertFalse(IssuerConfig.metadataPolicy(Map.of()).getEnabled());
+  var disabled=app();assertFalse(text(disabled.metadata(request(disabled,HttpMethod.GET,"/",null,null))).contains("client_id_metadata_document_supported"));
+  URI origin=URI.create("https://cimd.example.com:6277");
+  var policy=IssuerConfig.metadataPolicy(Map.of("REVETSEC_ISSUER_CIMD_ORIGIN",origin.toString(),"REVETSEC_ISSUER_CIMD_ADDRESS","8.8.8.8"));
+  assertTrue(policy.getEnabled());assertEquals(Set.of(origin),policy.getAllowedOrigins().orElseThrow());assertTrue(policy.getCache().isEmpty());
+  var resolver=policy.getAddressResolver().orElseThrow();
+  assertEquals("8.8.8.8",resolver.resolve("CIMD.EXAMPLE.COM",Duration.ofSeconds(1)).get(0).getHostAddress());
+  assertThrows(IllegalArgumentException.class,()->resolver.resolve("other.example.com",Duration.ofSeconds(1)));
+  assertThrows(IllegalArgumentException.class,()->resolver.resolve("cimd.example.com",Duration.ZERO));
+  var c=config(8089,8090);
+  var enabled=new IssuerResources(new IssuerConfig(c.origin,c.resource,c.redirect,c.browserOrigin,c.httpPort,c.mcpPort,c.loginKey,c.clientKey,c.resourceKey,c.loopback,false,policy),Clock.systemUTC());
+  assertTrue(text(enabled.metadata(request(enabled,HttpMethod.GET,"/",null,null))).contains("\"client_id_metadata_document_supported\":true"));
+ }
+ @Test void metadataRequiresPairedStrictTrustedConfiguration() {
+  assertThrows(IllegalArgumentException.class,()->IssuerConfig.metadataPolicy(Map.of("REVETSEC_ISSUER_CIMD_ORIGIN","https://cimd.example.com:6277")));
+  assertThrows(IllegalArgumentException.class,()->IssuerConfig.metadataPolicy(Map.of("REVETSEC_ISSUER_CIMD_ADDRESS","8.8.8.8")));
+  for(String numeric:List.of("8.8.8","8.8.8.256","008.8.8.8","cimd.example.com","8.8.8.8 ","8.8.8.8:6277"))
+   assertThrows(IllegalArgumentException.class,()->IssuerConfig.metadataPolicy(Map.of("REVETSEC_ISSUER_CIMD_ORIGIN","https://cimd.example.com:6277","REVETSEC_ISSUER_CIMD_ADDRESS",numeric)));
+  for(String origin:List.of("http://cimd.example.com:6277","https://127.0.0.1:6277","https://cimd.example.com:6277/client.json"))
+   assertThrows(IllegalArgumentException.class,()->IssuerConfig.metadataPolicy(Map.of("REVETSEC_ISSUER_CIMD_ORIGIN",origin,"REVETSEC_ISSUER_CIMD_ADDRESS","8.8.8.8")));
  }
  @Test void malformedPrivateKeyFileAndMissingFreshNamespaceAreRejected() throws Exception {
   assertThrows(IllegalArgumentException.class,()->IssuerConfig.fromEnvironment(Map.of()));

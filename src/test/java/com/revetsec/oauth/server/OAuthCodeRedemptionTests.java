@@ -179,6 +179,12 @@ final class OAuthCodeRedemptionTests {
  @Test void fullBoundUsedReplayStillRevokesAfterOriginalCodeExpiry() {
   String code=code(true);redeem(code);this.clock.time=NOW.plusSeconds(121);invalid(()->redeem(code));assertEquals("REVOKED",record(OAuthStoreKey.Kind.GRANT).text("status"));
  }
+ @Test void usedReplayRejectsOnTheOnlyCommittedAttempt() {
+  String code=code(true);redeem(code);
+  var once=engine(true,signer(),1);
+  invalid(()->once.redeem(request(code,Map.of()),(id,b)->Optional.of(client()),resources(),allow(),deadline()));
+  assertEquals("REVOKED",record(OAuthStoreKey.Kind.GRANT).text("status"));
+ }
  @Test void unusedExpiredCodeNeverIssuesOrCallsPolicy() {
   String code=code(true);this.clock.time=record(OAuthStoreKey.Kind.CODE).expires();int count=this.store.commits;invalid(()->this.first.redeem(request(code,Map.of()),(id,b)->Optional.of(client()),resources(),(c,b)->{fail("No expired policy call");return OAuthAuthorizationDecision.deniedInstance();},deadline()));assertEquals(count,this.store.commits);
  }
@@ -195,6 +201,15 @@ final class OAuthCodeRedemptionTests {
  @Test void codeExchangeCannotSilentlyIgnoreScopeOrRefreshGrant() {
   String code=code(false);var e=assertThrows(OAuthServerAdmissionFailure.class,()->this.first.redeem(request(code,Map.of("scope","read")),(id,b)->Optional.of(client()),resources(),allow(),deadline()));assertEquals(OAuthServerAdmissionFailure.Reason.INVALID_REQUEST,e.reason());
   e=assertThrows(OAuthServerAdmissionFailure.class,()->this.first.redeem(request(code,Map.of("grant_type","refresh_token","refresh_token",OTHER)),(id,b)->Optional.of(client()),resources(),allow(),deadline()));assertEquals(OAuthServerAdmissionFailure.Reason.INVALID_REQUEST,e.reason());
+ }
+ @Test void missingCodeExchangeResourceIsRejectedBeforeClientLookupOrStoreRead() {
+  String code=code(false);int reads=this.store.reads;int[] lookups={0};
+  OAuthServerAdmissionFailure failure=assertThrows(OAuthServerAdmissionFailure.class,
+   ()->this.first.redeem(request(code,Map.of("resource","")),(id,budget)->{
+    lookups[0]++;return Optional.of(client());
+   },resources(),allow(),deadline()));
+  assertEquals(OAuthServerAdmissionFailure.Reason.INVALID_REQUEST,failure.reason());
+  assertEquals(0,lookups[0]);assertEquals(reads,this.store.reads);
  }
  @Test void publicUnknownClientAndBasicFailureDoNotReadOrMutateGrant() {
   String code=code(false);int reads=this.store.reads;assertThrows(OAuthServerAdmissionFailure.class,()->this.first.redeem(request(code,Map.of()),(id,b)->Optional.empty(),resources(),allow(),deadline()));assertEquals(reads,this.store.reads);
@@ -228,6 +243,16 @@ final class OAuthCodeRedemptionTests {
    invalid(()->t.first.redeem(request(code,Map.of()),(id,b)->Optional.of(client()),resources,policy,deadline()));assertEquals("DENIED",t.record(OAuthStoreKey.Kind.GRANT).text("status"));assertEquals("CANCELLED",t.record(OAuthStoreKey.Kind.CODE).text("status"));invalid(()->t.redeem(code));assertFalse(t.store.rows.keySet().stream().anyMatch(k->k.getKind()==OAuthStoreKey.Kind.ACCESS_TOKEN));
   }));
  }
+ @TestFactory @NonNull Stream<@NonNull DynamicTest> removedAuthorityRejectsOnTheOnlyCommittedAttempt() {
+  return Stream.of("resource","empty").map(mode->DynamicTest.dynamicTest(mode,()->{
+   var t=new OAuthCodeRedemptionTests();String code=t.code(true);var once=t.engine(true,signer(),1);
+   Map<String,Set<String>> current=mode.equals("resource")?Map.of("https://other.example/mcp",Set.of("read")):resources();
+   OAuthGrantPolicy policy=(c,b)->decision("subject",mode.equals("empty")?Set.of():Set.of("read"),false);
+   invalid(()->once.redeem(request(code,Map.of()),(id,b)->Optional.of(client()),current,policy,deadline()));
+   assertEquals("DENIED",t.record(OAuthStoreKey.Kind.GRANT).text("status"));
+   assertEquals("CANCELLED",t.record(OAuthStoreKey.Kind.CODE).text("status"));
+  }));
+ }
  @Test void deniedPolicyConflictReloadsAndCannotTerminateDifferentGeneration() {
   String code=code(false);this.store.conflicts=1;invalid(()->this.first.redeem(request(code,Map.of()),(id,b)->Optional.of(client()),resources(),(c,b)->OAuthAuthorizationDecision.deniedInstance(),deadline()));assertEquals("DENIED",record(OAuthStoreKey.Kind.GRANT).text("status"));
  }
@@ -245,9 +270,24 @@ final class OAuthCodeRedemptionTests {
  @Test void signerFailureBeforeCommitPreservesUnusedCode() {
   String code=code(false);var failing=JwsSigner.fromRsaKeyPair(new RefusingPrivateKey(),KEY.getPublicKey(),JwsAlgorithm.RS256);int commits=this.store.commits;unavailable(()->engine(false,failing,3).redeem(request(code,Map.of()),(id,b)->Optional.of(client()),resources(),allow(),deadline()));assertEquals(commits,this.store.commits);assertNotNull(redeem(code));
  }
+ @Test void interruptedSignerBeforeCommitRestoresFlagAndPreservesUnusedCode() {
+  String code=code(false);int commits=this.store.commits;
+  try {InterruptingSignatureProvider.around(()->unavailable(()->engine(false,signer(),3).redeem(request(code,Map.of()),(id,b)->Optional.of(client()),resources(),allow(),deadline())));assertTrue(Thread.currentThread().isInterrupted());assertEquals(commits,this.store.commits);}
+  finally {Thread.interrupted();}
+  assertNotNull(redeem(code));
+ }
  @Test void preparedCredentialsCannotBeReleasedAfterCommitValidityBoundary() {
   String code=code(false);Instant expiry=record(OAuthStoreKey.Kind.CODE).expires();this.store.afterCommit=()->this.clock.time=expiry;
   failed(OAuthStoreFailure.Reason.UNAVAILABLE,()->redeem(code));assertEquals("USED",record(OAuthStoreKey.Kind.CODE).text("status"));invalid(()->redeem(code));assertEquals("REVOKED",record(OAuthStoreKey.Kind.GRANT).text("status"));
+ }
+ @Test void shortAccessTokenExpiryCannotBePassedBySlowCommit() {
+  String code=code(false);this.store.afterCommit=()->this.clock.time=NOW.plusSeconds(31);
+  var shortLived=new OAuthCodeRedemption(this.coordinator,this.codec,LIMITS,this.retention,
+   new OAuthTokenResponse.Encoder(ISSUER,"key",signer(),32768,16384),Duration.ofSeconds(30),false,
+   Duration.ofDays(1),Duration.ofDays(7),3,255);
+  failed(OAuthStoreFailure.Reason.UNAVAILABLE,
+   ()->shortLived.redeem(request(code,Map.of()),(id,b)->Optional.of(client()),resources(),allow(),deadline()));
+  assertEquals("USED",record(OAuthStoreKey.Kind.CODE).text("status"));
  }
  @Test void policyCannotPushOperationPastCodeExpiryOrOriginalDeadline() {
   String code=code(false);Instant expiry=record(OAuthStoreKey.Kind.CODE).expires();int commits=this.store.commits;
@@ -322,6 +362,28 @@ final class OAuthCodeRedemptionTests {
   }));
  }
  @Test void expiredReplayRetentionHasNoCredentialAuthority() {String code=code(true);redeem(code);this.clock.time=record(OAuthStoreKey.Kind.GRANT).horizon();int commits=this.store.commits;invalid(()->redeem(code));assertEquals(commits,this.store.commits);}
+ @Test void usedReplayCannotCommitAfterGrantRetentionWhenCodeIsRetainedLonger() {
+  String code=code(true);redeem(code);Instant grantHorizon=record(OAuthStoreKey.Kind.GRANT).horizon();
+  Instant extended=grantHorizon.plusSeconds(60);OAuthStoreEntry old=entry(OAuthStoreKey.Kind.CODE);
+  JsonObject payload=changed(payload(OAuthStoreKey.Kind.CODE),"horizon",JsonNumber.fromValue(extended.getEpochSecond()));
+  this.store.rows.put(old.getKey(),this.codec.seal(old.getKey(),extended,payload.toJson()));
+  var wrapper=new OAuthAuthorizationServerStore(){
+   @Override public @NonNull Optional<@NonNull OAuthStoreEntry> read(@NonNull OAuthStoreKey key,@NonNull Duration budget){
+    if(key.getKind()==OAuthStoreKey.Kind.SUBJECT_STATE)OAuthCodeRedemptionTests.this.clock.time=grantHorizon;
+    return store.read(key,budget);
+   }
+   @Override public @NonNull OAuthStoreCommitStatus commit(@NonNull OAuthStoreTransaction tx,@NonNull Duration budget){return store.commit(tx,budget);}
+  };
+  var coordinator=new OAuthStoreCoordinator(wrapper,this.codec,this.clock,3,255);
+  var engine=new OAuthCodeRedemption(coordinator,this.codec,LIMITS,this.retention,
+   new OAuthTokenResponse.Encoder(ISSUER,"key",signer(),32768,16384),Duration.ofMinutes(5),true,
+   Duration.ofDays(1),Duration.ofDays(7),1,255);
+  int commits=this.store.commits;
+  failed(OAuthStoreFailure.Reason.UNAVAILABLE,
+   ()->engine.redeem(request(code,Map.of()),(id,b)->Optional.of(client()),resources(),allow(),deadline()));
+  assertEquals(commits,this.store.commits);this.clock.time=NOW;
+  assertEquals("ACTIVE",record(OAuthStoreKey.Kind.GRANT).text("status"));
+ }
  @Test void usedCodeWithPendingGrantOrShortenedHorizonIsCorrupt() {
   String code=code(true);JsonObject pending=payload(OAuthStoreKey.Kind.GRANT);redeem(code);replace(OAuthStoreKey.Kind.GRANT,pending);failed(OAuthStoreFailure.Reason.CORRUPT_STATE,()->redeem(code));
  }

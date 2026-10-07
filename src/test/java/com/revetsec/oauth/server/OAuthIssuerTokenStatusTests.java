@@ -206,6 +206,13 @@ final class OAuthIssuerTokenStatusTests {
   }));
  }
  @Test void fatalStoreErrorsPropagate() {String jwt=issued();TestFatal error=new TestFatal();this.store.fault=error;assertSame(error,assertThrows(TestFatal.class,()->validate(jwt)));}
+ @Test void interruptedSignatureVerificationRestoresTheCallerFlag() {
+  String jwt=issued();int reads=this.store.reads;
+  try {
+   InterruptingSignatureProvider.around(()->failed(OAuthStoreFailure.Reason.UNAVAILABLE,()->validate(jwt)));
+   assertTrue(Thread.currentThread().isInterrupted());assertEquals(reads,this.store.reads);
+  } finally {Thread.interrupted();}
+ }
  @Test void deadlineAndExistingInterruptionAreCheckedBeforeCryptoOrBackend() {
   String jwt=issued();int count=this.store.reads;unavailable(()->status().validate(jwt,RESOURCE,keys(),Deadline.fromNow(Duration.ZERO)));assertEquals(count,this.store.reads);
   Thread.currentThread().interrupt();try{unavailable(()->validate(jwt));assertTrue(Thread.currentThread().isInterrupted());}finally{Thread.interrupted();}

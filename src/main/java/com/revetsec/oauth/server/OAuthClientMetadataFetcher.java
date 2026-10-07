@@ -42,6 +42,18 @@ final class OAuthClientMetadataFetcher {
  @FunctionalInterface interface Transport {
   @NonNull RawResponse fetch(@NonNull URI uri, @NonNull Deadline deadline) throws HttpExchangeException;
  }
+ private static final class PinnedTransport implements Transport {
+  private final @NonNull OAuthClientMetadataPolicy policy;
+  private final @NonNull Duration requestTimeout;
+  private PinnedTransport(@NonNull OAuthClientMetadataPolicy policy, @NonNull Duration requestTimeout) {
+   this.policy=requireNonNull(policy);this.requestTimeout=requireNonNull(requestTimeout);
+   if(requestTimeout.isNegative() || requestTimeout.isZero()) throw OAuthServerConfiguration.invalid();
+  }
+  @Override public @NonNull RawResponse fetch(@NonNull URI uri, @NonNull Deadline deadline) throws HttpExchangeException {
+   return PinnedHttpsTransport.fetch(uri,this.policy.getAddressResolver().orElseThrow()::resolve,
+    this.policy.getMaximumResolvedAddresses(),this.policy.getMaximumDocumentBytes(),this.requestTimeout,deadline);
+  }
+ }
  private final @NonNull OAuthClientMetadataPolicy policy;
  private final @NonNull OAuthClientMetadataCache cache;
  private final @NonNull OAuthClientMetadataCacheCodec codec;
@@ -55,11 +67,7 @@ final class OAuthClientMetadataFetcher {
  OAuthClientMetadataFetcher(@NonNull String issuer, @NonNull StateSealer sealer, @NonNull OAuthClientMetadataPolicy policy,
    @NonNull OAuthServerIngressLimits limits, boolean nativeLoopback, boolean localhost,
    @NonNull OutboundUriPolicy outbound, @NonNull Clock clock, @NonNull Duration requestTimeout) {
-  this(issuer, sealer, policy, limits, nativeLoopback, localhost, outbound, clock,
-    (uri, deadline) -> PinnedHttpsTransport.fetch(uri, policy.getAddressResolver().orElseThrow()::resolve,
-      policy.getMaximumResolvedAddresses(), policy.getMaximumDocumentBytes(), requestTimeout, deadline));
-  requireNonNull(requestTimeout);
-  if (requestTimeout.isNegative() || requestTimeout.isZero()) throw OAuthServerConfiguration.invalid();
+  this(issuer, sealer, policy, limits, nativeLoopback, localhost, outbound, clock,new PinnedTransport(policy,requestTimeout));
  }
  // Package-private deterministic transport seam; production constructor always selects the pinned driver.
  OAuthClientMetadataFetcher(@NonNull String issuer, @NonNull StateSealer sealer, @NonNull OAuthClientMetadataPolicy policy,

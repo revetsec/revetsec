@@ -1,0 +1,2947 @@
+{
+  "scope": "AS1-G1 first two target families; synthetic material only",
+  "controls": {
+    "ingress": [
+      "endpoint AUTHORIZATION/TOKEN/REVOCATION/INTROSPECTION",
+      "method exact/wrong/lowercase/OPTIONS",
+      "form style0..17",
+      "header variant0..17"
+    ],
+    "code": [
+      "public/confidential",
+      "first/second resource",
+      "read/read+write",
+      "valid/wrong S256/wrong resource/other client/wrong return/client version/expired/denied/narrowed/malformed verifier/conflict"
+    ]
+  },
+  "seeds": [
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e0-s0.bin",
+      "controls": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "meaning": "endpoint=0, form style=0",
+      "sha256": "f6b4f89ed099053ed23d89cc805dd4c00b176d0e0c595c6600b92ad205804b73",
+      "bytes": 17
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e0-s1.bin",
+      "controls": [
+        0,
+        0,
+        1,
+        0
+      ],
+      "meaning": "endpoint=0, form style=1",
+      "sha256": "5846d6d648c1944766421357848c1c306275486eb3697a8b0f1b5af137eb9fde",
+      "bytes": 17
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e0-s2.bin",
+      "controls": [
+        0,
+        0,
+        2,
+        0
+      ],
+      "meaning": "endpoint=0, form style=2",
+      "sha256": "9b0d554ae1182c47131913504585ad3e7baf3d4092cfa8a63fbd0a2ce72687db",
+      "bytes": 17
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e0-s3.bin",
+      "controls": [
+        0,
+        0,
+        3,
+        0
+      ],
+      "meaning": "endpoint=0, form style=3",
+      "sha256": "b1b1433701870c92c105a5aa83db0465dc362a5d69c0aa4df1d352b78abf9618",
+      "bytes": 17
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e0-s4.bin",
+      "controls": [
+        0,
+        0,
+        4,
+        0
+      ],
+      "meaning": "endpoint=0, form style=4",
+      "sha256": "7bc45878bc7d7ec1cbfe585ed13819367f60a680cc9f91c13eb4021dd70f489a",
+      "bytes": 17
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e0-s5.bin",
+      "controls": [
+        0,
+        0,
+        5,
+        0
+      ],
+      "meaning": "endpoint=0, form style=5",
+      "sha256": "83961a406ebbb65110f41c5b711bb95ebcec045bce9c95df88f188f412d99c70",
+      "bytes": 17
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e0-s6.bin",
+      "controls": [
+        0,
+        0,
+        6,
+        0
+      ],
+      "meaning": "endpoint=0, form style=6",
+      "sha256": "3bb0e81352a69b9922189c3b980ed6ac927d2f3ee0ca7b894aeae55f48b39a83",
+      "bytes": 17
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e0-s7.bin",
+      "controls": [
+        0,
+        0,
+        7,
+        0
+      ],
+      "meaning": "endpoint=0, form style=7",
+      "sha256": "a4cd6d01606f7dc8da2de80d417a9e1e369f3c5a43c1eff4e62a82f718bbe0cf",
+      "bytes": 17
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e0-s8.bin",
+      "controls": [
+        0,
+        0,
+        8,
+        0
+      ],
+      "meaning": "endpoint=0, form style=8",
+      "sha256": "0bd46fb46f4c7d88cb36139a1405365b190d1f3b3ec907b9c03ff62876bf6a56",
+      "bytes": 17
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e0-s9.bin",
+      "controls": [
+        0,
+        0,
+        9,
+        0
+      ],
+      "meaning": "endpoint=0, form style=9",
+      "sha256": "35aee2e936919e09613abfda858aa8db5a0977d25defa929d69904ddef2d8653",
+      "bytes": 17
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e0-s10.bin",
+      "controls": [
+        0,
+        0,
+        10,
+        0
+      ],
+      "meaning": "endpoint=0, form style=10",
+      "sha256": "ba7883e0db71c27fbdea417ea8efd086f31713320b4cbd6834655092fa12fc54",
+      "bytes": 17
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e0-s11.bin",
+      "controls": [
+        0,
+        0,
+        11,
+        0
+      ],
+      "meaning": "endpoint=0, form style=11",
+      "sha256": "47a4b5e4eec57f46a53f762a916f3b9687b416a23311a21c53c6825e26821dac",
+      "bytes": 17
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e0-s12.bin",
+      "controls": [
+        0,
+        0,
+        12,
+        0
+      ],
+      "meaning": "endpoint=0, form style=12",
+      "sha256": "8e22b9d2326dff7e68aa3dc1914b39f6a59da61051e8347232b3c7e02512d33f",
+      "bytes": 17
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e0-s13.bin",
+      "controls": [
+        0,
+        0,
+        13,
+        0
+      ],
+      "meaning": "endpoint=0, form style=13",
+      "sha256": "24dc39507917df0ff40bd1906800767ba7f727eefd4f61ef4341cddba1cd1587",
+      "bytes": 17
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e0-s14.bin",
+      "controls": [
+        0,
+        0,
+        14,
+        0
+      ],
+      "meaning": "endpoint=0, form style=14",
+      "sha256": "c7ca7eea0e6fbb16d5bcfdef5dc7ba3827b84cd31a053e2d10219fadeb0762de",
+      "bytes": 17
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e0-s15.bin",
+      "controls": [
+        0,
+        0,
+        15,
+        0
+      ],
+      "meaning": "endpoint=0, form style=15",
+      "sha256": "419152dc0aff8cfca7df36eaa828343ec3c19a8cbb3e9289bda2a5c5975a170a",
+      "bytes": 17
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e0-s16.bin",
+      "controls": [
+        0,
+        0,
+        16,
+        0
+      ],
+      "meaning": "endpoint=0, form style=16",
+      "sha256": "34a98c2de7acabe331904fbe93ad497a622c879fde107acd1fc1ebae1ff00dee",
+      "bytes": 17
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e0-s17.bin",
+      "controls": [
+        0,
+        0,
+        17,
+        0
+      ],
+      "meaning": "endpoint=0, form style=17",
+      "sha256": "e71dcab95f8c464c572ccba2b98e2399183419a82c6a8c2375955211034ad74c",
+      "bytes": 17
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e0-h0.bin",
+      "controls": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "meaning": "endpoint=0, header variant=0",
+      "sha256": "df3f619804a92fdb4057192dc43dd748ea778adc52bc498ce80524c014b81119",
+      "bytes": 4
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e0-h1.bin",
+      "controls": [
+        0,
+        0,
+        0,
+        1
+      ],
+      "meaning": "endpoint=0, header variant=1",
+      "sha256": "b40711a88c7039756fb8a73827eabe2c0fe5a0346ca7e0a104adc0fc764f528d",
+      "bytes": 4
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e0-h2.bin",
+      "controls": [
+        0,
+        0,
+        0,
+        2
+      ],
+      "meaning": "endpoint=0, header variant=2",
+      "sha256": "433ebf5bc03dffa38536673207a21281612cef5faa9bc7a4d5b9be2fdb12cf1a",
+      "bytes": 4
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e0-h3.bin",
+      "controls": [
+        0,
+        0,
+        0,
+        3
+      ],
+      "meaning": "endpoint=0, header variant=3",
+      "sha256": "88185d128d9922e0e6bcd32b07b6c7f20f27968eab447a1d8d1cdf250f79f7d3",
+      "bytes": 4
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e0-h4.bin",
+      "controls": [
+        0,
+        0,
+        0,
+        4
+      ],
+      "meaning": "endpoint=0, header variant=4",
+      "sha256": "1bc5d0e3df0ea12c4d0078668d14924f95106bbe173e196de50fe13a900b0937",
+      "bytes": 4
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e0-h5.bin",
+      "controls": [
+        0,
+        0,
+        0,
+        5
+      ],
+      "meaning": "endpoint=0, header variant=5",
+      "sha256": "221f8af2372a95064f2ef7d7712216a9ab46e7ef98482fd237e106f83eaa7569",
+      "bytes": 4
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e0-h6.bin",
+      "controls": [
+        0,
+        0,
+        0,
+        6
+      ],
+      "meaning": "endpoint=0, header variant=6",
+      "sha256": "b253668f6b59f1ff28522831931e4d3c5a3de533965af22e961735437c0172cb",
+      "bytes": 4
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e0-h7.bin",
+      "controls": [
+        0,
+        0,
+        0,
+        7
+      ],
+      "meaning": "endpoint=0, header variant=7",
+      "sha256": "1561ade0621c5acf44b780521f95a1e0b19b4e5032945b860c4032fc28a3a23b",
+      "bytes": 4
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e0-h8.bin",
+      "controls": [
+        0,
+        0,
+        0,
+        8
+      ],
+      "meaning": "endpoint=0, header variant=8",
+      "sha256": "17eb70034b5b71092521d184c5e7b069d47de657e51aef2be11a00c115036943",
+      "bytes": 4
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e0-h9.bin",
+      "controls": [
+        0,
+        0,
+        0,
+        9
+      ],
+      "meaning": "endpoint=0, header variant=9",
+      "sha256": "3b28a6c3766c6295adad976d349705ef49393fbfdebe4facb5862d2cdfa285d3",
+      "bytes": 4
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e0-h10.bin",
+      "controls": [
+        0,
+        0,
+        0,
+        10
+      ],
+      "meaning": "endpoint=0, header variant=10",
+      "sha256": "e084a105a7b7d599b8346d3cba5ac51b756d7e29c7ef77fd9eff31fdeae31389",
+      "bytes": 4
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e0-h11.bin",
+      "controls": [
+        0,
+        0,
+        0,
+        11
+      ],
+      "meaning": "endpoint=0, header variant=11",
+      "sha256": "390b36a09502b05d4f8c27aea2636c6b7fd05b27d742ed32074ffea1f888ebe4",
+      "bytes": 4
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e0-h12.bin",
+      "controls": [
+        0,
+        0,
+        0,
+        12
+      ],
+      "meaning": "endpoint=0, header variant=12",
+      "sha256": "c22ceee66b8ab104483c83053173b33f992dd4fcb457284c60ef9d699a1c7059",
+      "bytes": 4
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e0-h13.bin",
+      "controls": [
+        0,
+        0,
+        0,
+        13
+      ],
+      "meaning": "endpoint=0, header variant=13",
+      "sha256": "8092fe01b9ce31a49ce380fc2fe1ee6b6b7d5c15c5f1ecb6ad98c60c4273a435",
+      "bytes": 4
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e0-h14.bin",
+      "controls": [
+        0,
+        0,
+        0,
+        14
+      ],
+      "meaning": "endpoint=0, header variant=14",
+      "sha256": "7fde8eebf388fcff667a89be60430cc6e198b1a78cb603a39cdd09885a3336e3",
+      "bytes": 4
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e0-h15.bin",
+      "controls": [
+        0,
+        0,
+        0,
+        15
+      ],
+      "meaning": "endpoint=0, header variant=15",
+      "sha256": "9246be1e9ba9f5de5baf766a256eb725e9a7551fb93d7faa793c938e0f41de35",
+      "bytes": 4
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e0-h16.bin",
+      "controls": [
+        0,
+        0,
+        0,
+        16
+      ],
+      "meaning": "endpoint=0, header variant=16",
+      "sha256": "5085cb99dbe1e374ccd321e5b58182d2c42cf4840c68cfab17b0618a8285e7d6",
+      "bytes": 4
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e0-h17.bin",
+      "controls": [
+        0,
+        0,
+        0,
+        17
+      ],
+      "meaning": "endpoint=0, header variant=17",
+      "sha256": "8e00d1c0c8ffe94540e534e256d4589be3e3865dc0559a732697aef38a364e83",
+      "bytes": 4
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e0-m1.bin",
+      "controls": [
+        0,
+        1,
+        0,
+        0
+      ],
+      "meaning": "endpoint=0, wrong method=1",
+      "sha256": "bf5e8ffa51a9e748985800c1d3d7f1a2a6ae7435136593ca8d9637e3f87c699c",
+      "bytes": 4
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e0-m2.bin",
+      "controls": [
+        0,
+        2,
+        0,
+        0
+      ],
+      "meaning": "endpoint=0, wrong method=2",
+      "sha256": "bc3817c13bc4e6f192a840895fa937d252db153efb89bb14a6c2ddf1f9c55409",
+      "bytes": 4
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e0-m3.bin",
+      "controls": [
+        0,
+        3,
+        0,
+        0
+      ],
+      "meaning": "endpoint=0, wrong method=3",
+      "sha256": "9a904afcf32ac63d93dfe3f45782d647227171f0e08d8d94b41da5aa858ddb58",
+      "bytes": 4
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e1-s0.bin",
+      "controls": [
+        1,
+        0,
+        0,
+        0
+      ],
+      "meaning": "endpoint=1, form style=0",
+      "sha256": "476b9692ef718b9a6db935e2162dda8d97ed9b3b5a5c7f2448bf48b0f9120de0",
+      "bytes": 17
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e1-s1.bin",
+      "controls": [
+        1,
+        0,
+        1,
+        0
+      ],
+      "meaning": "endpoint=1, form style=1",
+      "sha256": "e06609d78d387e5a6b5f23304a67a4137697cc388307474a85a9f543f3c94c14",
+      "bytes": 17
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e1-s2.bin",
+      "controls": [
+        1,
+        0,
+        2,
+        0
+      ],
+      "meaning": "endpoint=1, form style=2",
+      "sha256": "dc9c9e5b9fca00bf9e30cfbb84352b2c099f1e4dd10ea148358e29436ea7ac9d",
+      "bytes": 17
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e1-s3.bin",
+      "controls": [
+        1,
+        0,
+        3,
+        0
+      ],
+      "meaning": "endpoint=1, form style=3",
+      "sha256": "e2f1c23279a2a6d4fd6248337962f6fa9ae245611b8c79b2ccfb66683bccf365",
+      "bytes": 17
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e1-s4.bin",
+      "controls": [
+        1,
+        0,
+        4,
+        0
+      ],
+      "meaning": "endpoint=1, form style=4",
+      "sha256": "d6ba6fe84e012253e5fb973fba9ca3315b5c5e7c8ce62f782f42e5dc146d7405",
+      "bytes": 17
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e1-s5.bin",
+      "controls": [
+        1,
+        0,
+        5,
+        0
+      ],
+      "meaning": "endpoint=1, form style=5",
+      "sha256": "c897099c556dfcc5be9223e0da895807578d251b35ffeb2f34e5b7d5f6f46c55",
+      "bytes": 17
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e1-s6.bin",
+      "controls": [
+        1,
+        0,
+        6,
+        0
+      ],
+      "meaning": "endpoint=1, form style=6",
+      "sha256": "c1ac41ce21c17ad0c0f58f57418a1431f37866c4e178fa0bbff75020d8c5bd53",
+      "bytes": 17
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e1-s7.bin",
+      "controls": [
+        1,
+        0,
+        7,
+        0
+      ],
+      "meaning": "endpoint=1, form style=7",
+      "sha256": "3d6b677313e13f83f8693ef5b9ee8be4d8521f7f3ac0a2a1e64bfb6f536d403e",
+      "bytes": 17
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e1-s8.bin",
+      "controls": [
+        1,
+        0,
+        8,
+        0
+      ],
+      "meaning": "endpoint=1, form style=8",
+      "sha256": "60eb873ceb21078d2e07072a2f1ceb51845e964a4338ec423b7a1eb0461224b3",
+      "bytes": 17
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e1-s9.bin",
+      "controls": [
+        1,
+        0,
+        9,
+        0
+      ],
+      "meaning": "endpoint=1, form style=9",
+      "sha256": "ba9f49bf1df25aa0529705a1341a31d197c2b36029301015f3f7894c3dfd70e6",
+      "bytes": 17
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e1-s10.bin",
+      "controls": [
+        1,
+        0,
+        10,
+        0
+      ],
+      "meaning": "endpoint=1, form style=10",
+      "sha256": "2e2ad221257ddf698edb22f58138d983a3ba2ee78ee737a5cb114b01fd9b9ad6",
+      "bytes": 17
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e1-s11.bin",
+      "controls": [
+        1,
+        0,
+        11,
+        0
+      ],
+      "meaning": "endpoint=1, form style=11",
+      "sha256": "a75b7194ff678a281667473ffaf2f955a3c600f60384cee7571eb872f008f702",
+      "bytes": 17
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e1-s12.bin",
+      "controls": [
+        1,
+        0,
+        12,
+        0
+      ],
+      "meaning": "endpoint=1, form style=12",
+      "sha256": "163e1c327642ed59a2ed1ce62fcd127e495c5fbf63204a4b093c130a6705682c",
+      "bytes": 17
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e1-s13.bin",
+      "controls": [
+        1,
+        0,
+        13,
+        0
+      ],
+      "meaning": "endpoint=1, form style=13",
+      "sha256": "94043c0b7e385e413c0265a541546f18f282b32c7fb702ca3933927387410e23",
+      "bytes": 17
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e1-s14.bin",
+      "controls": [
+        1,
+        0,
+        14,
+        0
+      ],
+      "meaning": "endpoint=1, form style=14",
+      "sha256": "26c62b98b795eb2d1956c09a867fc1bffb226419648dbdf190132dd0ff1699e4",
+      "bytes": 17
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e1-s15.bin",
+      "controls": [
+        1,
+        0,
+        15,
+        0
+      ],
+      "meaning": "endpoint=1, form style=15",
+      "sha256": "0a882453ea7d807bc5b2119b29910fea1e799865d23d24ca3247198bc77a5a68",
+      "bytes": 17
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e1-s16.bin",
+      "controls": [
+        1,
+        0,
+        16,
+        0
+      ],
+      "meaning": "endpoint=1, form style=16",
+      "sha256": "1f1f19e9f23229f822c0dad909edab267353de70c031003fa6560a926bf2dcfe",
+      "bytes": 17
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e1-s17.bin",
+      "controls": [
+        1,
+        0,
+        17,
+        0
+      ],
+      "meaning": "endpoint=1, form style=17",
+      "sha256": "560545057696eda5234820ddb7dee8f7f07751f3636b11d104e2e2cad089b7a4",
+      "bytes": 17
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e1-h0.bin",
+      "controls": [
+        1,
+        0,
+        0,
+        0
+      ],
+      "meaning": "endpoint=1, header variant=0",
+      "sha256": "67abdd721024f0ff4e0b3f4c2fc13bc5bad42d0b7851d456d88d203d15aaa450",
+      "bytes": 4
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e1-h1.bin",
+      "controls": [
+        1,
+        0,
+        0,
+        1
+      ],
+      "meaning": "endpoint=1, header variant=1",
+      "sha256": "afa7518106309c22d325df6d2663249d158d2f36f1976269d6d4104d9198a108",
+      "bytes": 4
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e1-h2.bin",
+      "controls": [
+        1,
+        0,
+        0,
+        2
+      ],
+      "meaning": "endpoint=1, header variant=2",
+      "sha256": "b8c177e7f68d7e3bb1af685a154e213b3a35e4ef97c353788306539653026357",
+      "bytes": 4
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e1-h3.bin",
+      "controls": [
+        1,
+        0,
+        0,
+        3
+      ],
+      "meaning": "endpoint=1, header variant=3",
+      "sha256": "5ff5707083f723261f882343025fa3a9e9fabcfe37f2ca7606f7e4f9e6500627",
+      "bytes": 4
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e1-h4.bin",
+      "controls": [
+        1,
+        0,
+        0,
+        4
+      ],
+      "meaning": "endpoint=1, header variant=4",
+      "sha256": "e760612caa62e8fd7c850601b6158d006eed003e6413bd7fe784013fed9bbcca",
+      "bytes": 4
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e1-h5.bin",
+      "controls": [
+        1,
+        0,
+        0,
+        5
+      ],
+      "meaning": "endpoint=1, header variant=5",
+      "sha256": "ecbf0f7e70775e3fc28e9caa36529e03b8d365f99219289c822af6e41b069ea4",
+      "bytes": 4
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e1-h6.bin",
+      "controls": [
+        1,
+        0,
+        0,
+        6
+      ],
+      "meaning": "endpoint=1, header variant=6",
+      "sha256": "1b014ec40493083271f198b08d5f267975e12e32c42f2c3d2940c1410b211da8",
+      "bytes": 4
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e1-h7.bin",
+      "controls": [
+        1,
+        0,
+        0,
+        7
+      ],
+      "meaning": "endpoint=1, header variant=7",
+      "sha256": "8b527cc5da9fdbf2ca2bf7bfb57a94eb5b9fe1e66e9701fef0fa31ed1f593696",
+      "bytes": 4
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e1-h8.bin",
+      "controls": [
+        1,
+        0,
+        0,
+        8
+      ],
+      "meaning": "endpoint=1, header variant=8",
+      "sha256": "ec2981e8d0a1e7b4ab42fea2f0edd308d68fc25147bb3ccc62b62038b8e8e3d5",
+      "bytes": 4
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e1-h9.bin",
+      "controls": [
+        1,
+        0,
+        0,
+        9
+      ],
+      "meaning": "endpoint=1, header variant=9",
+      "sha256": "c2664a31ea5922c2b938a2bb5587c148cb6b69acb37043deca200029c4583c1a",
+      "bytes": 4
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e1-h10.bin",
+      "controls": [
+        1,
+        0,
+        0,
+        10
+      ],
+      "meaning": "endpoint=1, header variant=10",
+      "sha256": "f5f360698e44cfa4fe91b6d2eb149c97880caa174e95f01cfadc3cb6757eacdb",
+      "bytes": 4
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e1-h11.bin",
+      "controls": [
+        1,
+        0,
+        0,
+        11
+      ],
+      "meaning": "endpoint=1, header variant=11",
+      "sha256": "bd0c331b28d4ec2f19c6fffef79c502674305f45cf9b740fd91a7a29e0626385",
+      "bytes": 4
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e1-h12.bin",
+      "controls": [
+        1,
+        0,
+        0,
+        12
+      ],
+      "meaning": "endpoint=1, header variant=12",
+      "sha256": "b83347d1f2ad8e03cc77901188176237b35c0690ed94d20a52e0bfa2f78b4a79",
+      "bytes": 4
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e1-h13.bin",
+      "controls": [
+        1,
+        0,
+        0,
+        13
+      ],
+      "meaning": "endpoint=1, header variant=13",
+      "sha256": "09b231e59d65aed7a4a35f42e58746626153af19fe741547fcf70e329599c5d5",
+      "bytes": 4
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e1-h14.bin",
+      "controls": [
+        1,
+        0,
+        0,
+        14
+      ],
+      "meaning": "endpoint=1, header variant=14",
+      "sha256": "40b2def95cf53eeedd7a73085b8b73af0d3497cfd2e0c237fd1c001f42ed5077",
+      "bytes": 4
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e1-h15.bin",
+      "controls": [
+        1,
+        0,
+        0,
+        15
+      ],
+      "meaning": "endpoint=1, header variant=15",
+      "sha256": "f92df6c61d81a4ed4d69431683dbd8252073849b91e5540663057556dbf1e5d7",
+      "bytes": 4
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e1-h16.bin",
+      "controls": [
+        1,
+        0,
+        0,
+        16
+      ],
+      "meaning": "endpoint=1, header variant=16",
+      "sha256": "aa9c4f2142e5d435cf04a3abaf674cb54fec6eb83a1592e448b6e2be28e49d7f",
+      "bytes": 4
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e1-h17.bin",
+      "controls": [
+        1,
+        0,
+        0,
+        17
+      ],
+      "meaning": "endpoint=1, header variant=17",
+      "sha256": "022ea11a51af9f447c737d576a90726911e78c04cabfd7f488eabc6d1e0abf5a",
+      "bytes": 4
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e1-m1.bin",
+      "controls": [
+        1,
+        1,
+        0,
+        0
+      ],
+      "meaning": "endpoint=1, wrong method=1",
+      "sha256": "a0454a24dd4bc418448ca19320519ea3fe544fa1a910868b62ca210614f119f8",
+      "bytes": 4
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e1-m2.bin",
+      "controls": [
+        1,
+        2,
+        0,
+        0
+      ],
+      "meaning": "endpoint=1, wrong method=2",
+      "sha256": "d81fe96dc500bc43e1cd5800bef9d72b3d030bdb7e860e10c522e4246b30bd93",
+      "bytes": 4
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e1-m3.bin",
+      "controls": [
+        1,
+        3,
+        0,
+        0
+      ],
+      "meaning": "endpoint=1, wrong method=3",
+      "sha256": "bdc6b505699ec73faf2aa3f2078addb252f902b06a0af81f12f6d9e1f8b60b1f",
+      "bytes": 4
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e2-s0.bin",
+      "controls": [
+        2,
+        0,
+        0,
+        0
+      ],
+      "meaning": "endpoint=2, form style=0",
+      "sha256": "5e625f4e4f04db56712007070ddd94f017e5a380195ab4d9bc749015510527ea",
+      "bytes": 17
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e2-s1.bin",
+      "controls": [
+        2,
+        0,
+        1,
+        0
+      ],
+      "meaning": "endpoint=2, form style=1",
+      "sha256": "041a2057f72bc7f6c0f1c7e6e6882d00f3a63f551ffc41eb4f6db3e3ddcae8c4",
+      "bytes": 17
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e2-s2.bin",
+      "controls": [
+        2,
+        0,
+        2,
+        0
+      ],
+      "meaning": "endpoint=2, form style=2",
+      "sha256": "d484a9b2b408a6c0b0d2e80c5b1f92a1b7fc172d2f391a07d4c00717288ded23",
+      "bytes": 17
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e2-s3.bin",
+      "controls": [
+        2,
+        0,
+        3,
+        0
+      ],
+      "meaning": "endpoint=2, form style=3",
+      "sha256": "22e65ecd284ad0b2220c2152f79d8592fd476b53b4e56f7fff5d25831fa112b2",
+      "bytes": 17
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e2-s4.bin",
+      "controls": [
+        2,
+        0,
+        4,
+        0
+      ],
+      "meaning": "endpoint=2, form style=4",
+      "sha256": "8440f6e12429f7731250d693560fc2bf6be6cb4ea42126841a9f536b557a5e9f",
+      "bytes": 17
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e2-s5.bin",
+      "controls": [
+        2,
+        0,
+        5,
+        0
+      ],
+      "meaning": "endpoint=2, form style=5",
+      "sha256": "28bf770f60fc8a4254635b7977690490611694c90c5053f024969925905132f3",
+      "bytes": 17
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e2-s6.bin",
+      "controls": [
+        2,
+        0,
+        6,
+        0
+      ],
+      "meaning": "endpoint=2, form style=6",
+      "sha256": "7a87594317458ea4df04882e7f47aa90aa191672eba550de6d8dee8aa0c467e1",
+      "bytes": 17
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e2-s7.bin",
+      "controls": [
+        2,
+        0,
+        7,
+        0
+      ],
+      "meaning": "endpoint=2, form style=7",
+      "sha256": "ec1cfbfe2f3d48b57b101be32453683d5253d4a2b24b93160588b282af6e02b7",
+      "bytes": 17
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e2-s8.bin",
+      "controls": [
+        2,
+        0,
+        8,
+        0
+      ],
+      "meaning": "endpoint=2, form style=8",
+      "sha256": "872a846def2e7366f48ae897b2c25f2adf84bf9e23b8c119ed75c1b106345274",
+      "bytes": 17
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e2-s9.bin",
+      "controls": [
+        2,
+        0,
+        9,
+        0
+      ],
+      "meaning": "endpoint=2, form style=9",
+      "sha256": "9d51d8d75ad62e0c4fd12675c81854d0d88eafdf700d95256949e5748651061a",
+      "bytes": 17
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e2-s10.bin",
+      "controls": [
+        2,
+        0,
+        10,
+        0
+      ],
+      "meaning": "endpoint=2, form style=10",
+      "sha256": "6b71c51c1a0ca998637a972b7da6325cff4c5df9ac6d91846ae9c38f868a40d1",
+      "bytes": 17
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e2-s11.bin",
+      "controls": [
+        2,
+        0,
+        11,
+        0
+      ],
+      "meaning": "endpoint=2, form style=11",
+      "sha256": "4469f79d6251324cd31e48cfbca1bdf0c16769e1457fc59f290aa0371e491dfa",
+      "bytes": 17
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e2-s12.bin",
+      "controls": [
+        2,
+        0,
+        12,
+        0
+      ],
+      "meaning": "endpoint=2, form style=12",
+      "sha256": "60ac45f190a3db903f64dd6633069fc42cdbd183af881b95a178cb88ca4956a8",
+      "bytes": 17
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e2-s13.bin",
+      "controls": [
+        2,
+        0,
+        13,
+        0
+      ],
+      "meaning": "endpoint=2, form style=13",
+      "sha256": "7e8353c10f0f8e2848ec5718d440ead343669b918cdac6c4e6c102b4dc1e6386",
+      "bytes": 17
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e2-s14.bin",
+      "controls": [
+        2,
+        0,
+        14,
+        0
+      ],
+      "meaning": "endpoint=2, form style=14",
+      "sha256": "6d4692e4e11938ac191609427a568fa6e2a9f89c57afabed271962476bd067e1",
+      "bytes": 17
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e2-s15.bin",
+      "controls": [
+        2,
+        0,
+        15,
+        0
+      ],
+      "meaning": "endpoint=2, form style=15",
+      "sha256": "cafb05d2be5e50b586fa2ed487dddc7364dd6232469218aec96113f378d23426",
+      "bytes": 17
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e2-s16.bin",
+      "controls": [
+        2,
+        0,
+        16,
+        0
+      ],
+      "meaning": "endpoint=2, form style=16",
+      "sha256": "e00fa0a6c71af1bd1f814202922e61500dfacbf3ad8ba3e2df629465b6378cf0",
+      "bytes": 17
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e2-s17.bin",
+      "controls": [
+        2,
+        0,
+        17,
+        0
+      ],
+      "meaning": "endpoint=2, form style=17",
+      "sha256": "bb9c641e2768884aead710713f5ecfa64a7efa1d71d167c3a6e2f7e5dabb8e60",
+      "bytes": 17
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e2-h0.bin",
+      "controls": [
+        2,
+        0,
+        0,
+        0
+      ],
+      "meaning": "endpoint=2, header variant=0",
+      "sha256": "26b25d457597a7b0463f9620f666dd10aa2c4373a505967c7c8d70922a2d6ece",
+      "bytes": 4
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e2-h1.bin",
+      "controls": [
+        2,
+        0,
+        0,
+        1
+      ],
+      "meaning": "endpoint=2, header variant=1",
+      "sha256": "ffc22fec512b91211c1d8bf3777304fa89db911d3cf8c23f97c5b6637e4a2b0a",
+      "bytes": 4
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e2-h2.bin",
+      "controls": [
+        2,
+        0,
+        0,
+        2
+      ],
+      "meaning": "endpoint=2, header variant=2",
+      "sha256": "dc5cc439c2e345bf3115b63d95e29e4b3478aa78b05db20c3ffd1d0dcbccd905",
+      "bytes": 4
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e2-h3.bin",
+      "controls": [
+        2,
+        0,
+        0,
+        3
+      ],
+      "meaning": "endpoint=2, header variant=3",
+      "sha256": "03b5bf729d0648d9665991e83665787d72cd6b8bcd39b6b8466c5fe678c45f98",
+      "bytes": 4
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e2-h4.bin",
+      "controls": [
+        2,
+        0,
+        0,
+        4
+      ],
+      "meaning": "endpoint=2, header variant=4",
+      "sha256": "588c85db67e2e331bf05dd98b2f7124f5fc3767d242c36045b422eebb3b04863",
+      "bytes": 4
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e2-h5.bin",
+      "controls": [
+        2,
+        0,
+        0,
+        5
+      ],
+      "meaning": "endpoint=2, header variant=5",
+      "sha256": "2bfb5ed5897f29abbec666612dc847cb1cf2dfe4d3aa6a01dff2f282345d97d5",
+      "bytes": 4
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e2-h6.bin",
+      "controls": [
+        2,
+        0,
+        0,
+        6
+      ],
+      "meaning": "endpoint=2, header variant=6",
+      "sha256": "9bf0ac8f9b4fe8ebf0ca2e3a73c750508d82ca93b6eea81aea3a7aed8d1d33e5",
+      "bytes": 4
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e2-h7.bin",
+      "controls": [
+        2,
+        0,
+        0,
+        7
+      ],
+      "meaning": "endpoint=2, header variant=7",
+      "sha256": "b70f208d2f932ae9d44f03d32799372c86e0298977c77bb78d9ebe4615c42f0a",
+      "bytes": 4
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e2-h8.bin",
+      "controls": [
+        2,
+        0,
+        0,
+        8
+      ],
+      "meaning": "endpoint=2, header variant=8",
+      "sha256": "6b2dc21e02f2ba0a5406a4e59dd07ce7e508f1b2b9ec273be29428e2eda70527",
+      "bytes": 4
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e2-h9.bin",
+      "controls": [
+        2,
+        0,
+        0,
+        9
+      ],
+      "meaning": "endpoint=2, header variant=9",
+      "sha256": "90ca01f46050b5c7e47f94b28a609c690d9686631a749ce0fe80494dfea43426",
+      "bytes": 4
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e2-h10.bin",
+      "controls": [
+        2,
+        0,
+        0,
+        10
+      ],
+      "meaning": "endpoint=2, header variant=10",
+      "sha256": "810de8c4582a517e04dc0e0bafcbeda933cd7598007b015788d1f7239c3e1a1b",
+      "bytes": 4
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e2-h11.bin",
+      "controls": [
+        2,
+        0,
+        0,
+        11
+      ],
+      "meaning": "endpoint=2, header variant=11",
+      "sha256": "bc2cf9e88d83707be550a38a2f0c396fc4724722f1abed1cf7fee5f7ca947ca5",
+      "bytes": 4
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e2-h12.bin",
+      "controls": [
+        2,
+        0,
+        0,
+        12
+      ],
+      "meaning": "endpoint=2, header variant=12",
+      "sha256": "37d3f0f8e79ebbd3652c9e2182f56a20b6d2629684db0f72f47270221436435c",
+      "bytes": 4
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e2-h13.bin",
+      "controls": [
+        2,
+        0,
+        0,
+        13
+      ],
+      "meaning": "endpoint=2, header variant=13",
+      "sha256": "1b9999433fffb828a476c7ce710153f92b94a975cf2b6b0f1e0926b3c913ce20",
+      "bytes": 4
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e2-h14.bin",
+      "controls": [
+        2,
+        0,
+        0,
+        14
+      ],
+      "meaning": "endpoint=2, header variant=14",
+      "sha256": "4238839f1fb1dda04f944c45644727d73f5c09dc6e78ccb949955be4d339eda0",
+      "bytes": 4
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e2-h15.bin",
+      "controls": [
+        2,
+        0,
+        0,
+        15
+      ],
+      "meaning": "endpoint=2, header variant=15",
+      "sha256": "6c861c9d883c5abbde69ca91627fafb1bd8acd9d622e55716a905d7c6fe67acc",
+      "bytes": 4
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e2-h16.bin",
+      "controls": [
+        2,
+        0,
+        0,
+        16
+      ],
+      "meaning": "endpoint=2, header variant=16",
+      "sha256": "ac898427d6060312eb5e6fa85431a80b28c0dc122462739ac74b07a9d1d0abde",
+      "bytes": 4
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e2-h17.bin",
+      "controls": [
+        2,
+        0,
+        0,
+        17
+      ],
+      "meaning": "endpoint=2, header variant=17",
+      "sha256": "cbc4257d4b6f4644300bcbecc32640b9f9925a64c1dbfaf8ff8b2a806da9b0c5",
+      "bytes": 4
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e2-m1.bin",
+      "controls": [
+        2,
+        1,
+        0,
+        0
+      ],
+      "meaning": "endpoint=2, wrong method=1",
+      "sha256": "7255b3ce83a75f4d6f13513f56db57229ed61a0775438923799f7050c505ecda",
+      "bytes": 4
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e2-m2.bin",
+      "controls": [
+        2,
+        2,
+        0,
+        0
+      ],
+      "meaning": "endpoint=2, wrong method=2",
+      "sha256": "5a3e80a37915b1601c363acd1601df7ef257d5d32c664004a2ec0484a4f60628",
+      "bytes": 4
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e2-m3.bin",
+      "controls": [
+        2,
+        3,
+        0,
+        0
+      ],
+      "meaning": "endpoint=2, wrong method=3",
+      "sha256": "3c7a246021bffd30e44bb63887f5ea8e6b87b5dae4db1110fabe67c1683200d0",
+      "bytes": 4
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e3-s0.bin",
+      "controls": [
+        3,
+        0,
+        0,
+        0
+      ],
+      "meaning": "endpoint=3, form style=0",
+      "sha256": "c8e51f5f250e08de659f1f7a2f6f615e66139e0b726face687a2648b7a90e3fd",
+      "bytes": 17
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e3-s1.bin",
+      "controls": [
+        3,
+        0,
+        1,
+        0
+      ],
+      "meaning": "endpoint=3, form style=1",
+      "sha256": "8a8ff6b37764dca6c0bccd01046bf2c4bc76aa686bd1c6b547f123936e70c95f",
+      "bytes": 17
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e3-s2.bin",
+      "controls": [
+        3,
+        0,
+        2,
+        0
+      ],
+      "meaning": "endpoint=3, form style=2",
+      "sha256": "722b1cbb7f76b6dc48e08b2688dcddad3d570dfa3b6ae6880a185fd2e1fa3db5",
+      "bytes": 17
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e3-s3.bin",
+      "controls": [
+        3,
+        0,
+        3,
+        0
+      ],
+      "meaning": "endpoint=3, form style=3",
+      "sha256": "06d481d850cfa67c591be6d5d55f8f302ee2fda86ec71f43cb4e294d65d8826d",
+      "bytes": 17
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e3-s4.bin",
+      "controls": [
+        3,
+        0,
+        4,
+        0
+      ],
+      "meaning": "endpoint=3, form style=4",
+      "sha256": "b4a313f2abbd03676673427cc0ec23cf68b6ae0bb200f72f572bb0369ae2ceb5",
+      "bytes": 17
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e3-s5.bin",
+      "controls": [
+        3,
+        0,
+        5,
+        0
+      ],
+      "meaning": "endpoint=3, form style=5",
+      "sha256": "08727b793796b5be3a474912f96a1a4cff2538b7233567be9812a29f287c423e",
+      "bytes": 17
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e3-s6.bin",
+      "controls": [
+        3,
+        0,
+        6,
+        0
+      ],
+      "meaning": "endpoint=3, form style=6",
+      "sha256": "bac21a5660d4ee433f2813f01ff3703f595b09ac5b5322b08b9441ccf4503245",
+      "bytes": 17
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e3-s7.bin",
+      "controls": [
+        3,
+        0,
+        7,
+        0
+      ],
+      "meaning": "endpoint=3, form style=7",
+      "sha256": "74596daba51cf32394f6e205a690f6476c1e3be1976824131c51d39fce7ded83",
+      "bytes": 17
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e3-s8.bin",
+      "controls": [
+        3,
+        0,
+        8,
+        0
+      ],
+      "meaning": "endpoint=3, form style=8",
+      "sha256": "5dc936c5284c41df1a2d57e4e85ee0a5732af08dc62ac465854e5840b23b33e5",
+      "bytes": 17
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e3-s9.bin",
+      "controls": [
+        3,
+        0,
+        9,
+        0
+      ],
+      "meaning": "endpoint=3, form style=9",
+      "sha256": "a5f9aa51502facca72f6cd2873beb54fbaae19f5d12f41844ba89b7bf9edb710",
+      "bytes": 17
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e3-s10.bin",
+      "controls": [
+        3,
+        0,
+        10,
+        0
+      ],
+      "meaning": "endpoint=3, form style=10",
+      "sha256": "cff4379a0d7a9241a14f22f6dd5317f753cc9f6e17c93e9e889a956918f194e3",
+      "bytes": 17
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e3-s11.bin",
+      "controls": [
+        3,
+        0,
+        11,
+        0
+      ],
+      "meaning": "endpoint=3, form style=11",
+      "sha256": "5b6c3edcd6d42dd68232dd86ef75cd0069c9e212074497114294b19a858f77c9",
+      "bytes": 17
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e3-s12.bin",
+      "controls": [
+        3,
+        0,
+        12,
+        0
+      ],
+      "meaning": "endpoint=3, form style=12",
+      "sha256": "abf16e4e83d81c3f38fd31d98faebaa1da26b700fd31620e38d6bff2f5190294",
+      "bytes": 17
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e3-s13.bin",
+      "controls": [
+        3,
+        0,
+        13,
+        0
+      ],
+      "meaning": "endpoint=3, form style=13",
+      "sha256": "51a3bca75889d43c92ad0ee12e7765f86a60e1d6faa21d295109aa81db8bc659",
+      "bytes": 17
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e3-s14.bin",
+      "controls": [
+        3,
+        0,
+        14,
+        0
+      ],
+      "meaning": "endpoint=3, form style=14",
+      "sha256": "20b773b439dd8f67a63b66014476f19ea650e8b77442e81fd721f0f21a31bf8e",
+      "bytes": 17
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e3-s15.bin",
+      "controls": [
+        3,
+        0,
+        15,
+        0
+      ],
+      "meaning": "endpoint=3, form style=15",
+      "sha256": "59446ebd659c16e3a9efaf5ba03815244f7b9cc07986bc8b26475f4764a8e7a0",
+      "bytes": 17
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e3-s16.bin",
+      "controls": [
+        3,
+        0,
+        16,
+        0
+      ],
+      "meaning": "endpoint=3, form style=16",
+      "sha256": "86ddec5a985b1728da07e586e534723580167eec0260048c8037035e132d8a4c",
+      "bytes": 17
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e3-s17.bin",
+      "controls": [
+        3,
+        0,
+        17,
+        0
+      ],
+      "meaning": "endpoint=3, form style=17",
+      "sha256": "0777bc2612faf5b69b1367743eaa9a671d2041f919361199f919196f4e579eff",
+      "bytes": 17
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e3-h0.bin",
+      "controls": [
+        3,
+        0,
+        0,
+        0
+      ],
+      "meaning": "endpoint=3, header variant=0",
+      "sha256": "9d9f290527a6be626a8f5985b26e19b237b44872b03631811df4416fc1713178",
+      "bytes": 4
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e3-h1.bin",
+      "controls": [
+        3,
+        0,
+        0,
+        1
+      ],
+      "meaning": "endpoint=3, header variant=1",
+      "sha256": "1df67094a69d5ec42ab63719d9a92392e7962b1e60c36b24ccda7f1a95bcfbb3",
+      "bytes": 4
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e3-h2.bin",
+      "controls": [
+        3,
+        0,
+        0,
+        2
+      ],
+      "meaning": "endpoint=3, header variant=2",
+      "sha256": "d454b0a90b8a4aec611956def7e56cf9d123833951596007ff2a382102f2f862",
+      "bytes": 4
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e3-h3.bin",
+      "controls": [
+        3,
+        0,
+        0,
+        3
+      ],
+      "meaning": "endpoint=3, header variant=3",
+      "sha256": "5daf15b9427f77223a8a11d417ec5c85823449f99182a1b11f92b2763aa37b9e",
+      "bytes": 4
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e3-h4.bin",
+      "controls": [
+        3,
+        0,
+        0,
+        4
+      ],
+      "meaning": "endpoint=3, header variant=4",
+      "sha256": "b6db583453f7c1547ae2cc692fe633d60e651c5b5f12d9b3a82d9eb82347d8c3",
+      "bytes": 4
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e3-h5.bin",
+      "controls": [
+        3,
+        0,
+        0,
+        5
+      ],
+      "meaning": "endpoint=3, header variant=5",
+      "sha256": "6a1f41586c866e819bc4ab3da637e738b6097074683d0a8bc09dc79594bf2582",
+      "bytes": 4
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e3-h6.bin",
+      "controls": [
+        3,
+        0,
+        0,
+        6
+      ],
+      "meaning": "endpoint=3, header variant=6",
+      "sha256": "b392eca29fd73f2be12d77948bd6fa3122b7753cedf5f7adde4aedccde43535e",
+      "bytes": 4
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e3-h7.bin",
+      "controls": [
+        3,
+        0,
+        0,
+        7
+      ],
+      "meaning": "endpoint=3, header variant=7",
+      "sha256": "0e53212f9675ee58e525804dc0a2d101839589bb3dff921ecf61b9e1f809856c",
+      "bytes": 4
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e3-h8.bin",
+      "controls": [
+        3,
+        0,
+        0,
+        8
+      ],
+      "meaning": "endpoint=3, header variant=8",
+      "sha256": "3a1863deda495cf6bdefda6059e7ad0af4fcff6f48996eafae54be23ba74d572",
+      "bytes": 4
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e3-h9.bin",
+      "controls": [
+        3,
+        0,
+        0,
+        9
+      ],
+      "meaning": "endpoint=3, header variant=9",
+      "sha256": "22e4074bf3744bcde89b60e8f61b28a7e0c6480617016bf7419a4e11f260d965",
+      "bytes": 4
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e3-h10.bin",
+      "controls": [
+        3,
+        0,
+        0,
+        10
+      ],
+      "meaning": "endpoint=3, header variant=10",
+      "sha256": "f9c9ce5d13cf6c2c8a12bdfa2aadcc80379e7efa268f0e57ffbff2bbeee17de4",
+      "bytes": 4
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e3-h11.bin",
+      "controls": [
+        3,
+        0,
+        0,
+        11
+      ],
+      "meaning": "endpoint=3, header variant=11",
+      "sha256": "d520ba0498c52239c94793c7393c1fa1f64c54798bb0a81dacb531caffe0a879",
+      "bytes": 4
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e3-h12.bin",
+      "controls": [
+        3,
+        0,
+        0,
+        12
+      ],
+      "meaning": "endpoint=3, header variant=12",
+      "sha256": "eb6fa5cf071e15db8f60d94c4ede1c9ee8c26f1d9902ecbe459c94f7833e0c05",
+      "bytes": 4
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e3-h13.bin",
+      "controls": [
+        3,
+        0,
+        0,
+        13
+      ],
+      "meaning": "endpoint=3, header variant=13",
+      "sha256": "2e9f68ea353dffc91b3663a6a5d9f1f670d474e0ca046317d19fac6ea4c63db1",
+      "bytes": 4
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e3-h14.bin",
+      "controls": [
+        3,
+        0,
+        0,
+        14
+      ],
+      "meaning": "endpoint=3, header variant=14",
+      "sha256": "2781f38f7ff96d301755ac20635ddd1e62ff17a140e19bf75a0eb70811c826fa",
+      "bytes": 4
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e3-h15.bin",
+      "controls": [
+        3,
+        0,
+        0,
+        15
+      ],
+      "meaning": "endpoint=3, header variant=15",
+      "sha256": "f1a04a53890299c1f94faa52ded74c2bdc99cf0027c9e629c478d1b199af3736",
+      "bytes": 4
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e3-h16.bin",
+      "controls": [
+        3,
+        0,
+        0,
+        16
+      ],
+      "meaning": "endpoint=3, header variant=16",
+      "sha256": "582b77b8c04e833b8806a27d7ea6db75213c8cc832fde6a07a3043b228fb62ff",
+      "bytes": 4
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e3-h17.bin",
+      "controls": [
+        3,
+        0,
+        0,
+        17
+      ],
+      "meaning": "endpoint=3, header variant=17",
+      "sha256": "1f6519c09e2429753be5198bc193e851c3e7595f3b5b60dcb86d48d21dd8f13c",
+      "bytes": 4
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e3-m1.bin",
+      "controls": [
+        3,
+        1,
+        0,
+        0
+      ],
+      "meaning": "endpoint=3, wrong method=1",
+      "sha256": "7fbda10ac6e27c20fe902dbf066f1155b22acaf5037cbc48188b8bc3b09e7a7c",
+      "bytes": 4
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e3-m2.bin",
+      "controls": [
+        3,
+        2,
+        0,
+        0
+      ],
+      "meaning": "endpoint=3, wrong method=2",
+      "sha256": "160d85956957306c9b49de4cec3b5349a68802aea67a54233c53d0e9c9968b6f",
+      "bytes": 4
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/e3-m3.bin",
+      "controls": [
+        3,
+        3,
+        0,
+        0
+      ],
+      "meaning": "endpoint=3, wrong method=3",
+      "sha256": "355ebec2cf87301230fa2d98306efb0cee60ac86032de39d66e3599d73d6ff96",
+      "bytes": 4
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerCodeFuzzTestsInputs/codeTransitionsRespectBindingsAndSingleUse/c0-r0-s0-m0.bin",
+      "controls": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "meaning": "client=0, resource=0, scopes=0, transition=0",
+      "sha256": "c9d65222ab0a6cd59f453bed9d2b72d46b602086583ab2078d9163cc262e0837",
+      "bytes": 27
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerCodeFuzzTestsInputs/codeTransitionsRespectBindingsAndSingleUse/c0-r0-s0-m1.bin",
+      "controls": [
+        0,
+        0,
+        0,
+        1
+      ],
+      "meaning": "client=0, resource=0, scopes=0, transition=1",
+      "sha256": "9c4d13108a3aee106d527270ff1f2570def35a4c9a185aa525fdf2bf35865883",
+      "bytes": 27
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerCodeFuzzTestsInputs/codeTransitionsRespectBindingsAndSingleUse/c0-r0-s0-m2.bin",
+      "controls": [
+        0,
+        0,
+        0,
+        2
+      ],
+      "meaning": "client=0, resource=0, scopes=0, transition=2",
+      "sha256": "031f57ef7c7268e1aa187e7f938b471af86863f693f3b13be57210d200bc00e3",
+      "bytes": 27
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerCodeFuzzTestsInputs/codeTransitionsRespectBindingsAndSingleUse/c0-r0-s0-m3.bin",
+      "controls": [
+        0,
+        0,
+        0,
+        3
+      ],
+      "meaning": "client=0, resource=0, scopes=0, transition=3",
+      "sha256": "1233161b3724605a834916170f1a8e95a980e1908bafab450d76a7e5556a4e68",
+      "bytes": 27
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerCodeFuzzTestsInputs/codeTransitionsRespectBindingsAndSingleUse/c0-r0-s0-m4.bin",
+      "controls": [
+        0,
+        0,
+        0,
+        4
+      ],
+      "meaning": "client=0, resource=0, scopes=0, transition=4",
+      "sha256": "21a97f46e3b5b925073fc69e2edbd265d942a72e1fdf61a3f45d3f71fa0e512b",
+      "bytes": 27
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerCodeFuzzTestsInputs/codeTransitionsRespectBindingsAndSingleUse/c0-r0-s0-m5.bin",
+      "controls": [
+        0,
+        0,
+        0,
+        5
+      ],
+      "meaning": "client=0, resource=0, scopes=0, transition=5",
+      "sha256": "c8d28b2d73352b8b3103cc5fd2a80ded5e452fafce5d96db8331eb59eb9b2f00",
+      "bytes": 27
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerCodeFuzzTestsInputs/codeTransitionsRespectBindingsAndSingleUse/c0-r0-s0-m6.bin",
+      "controls": [
+        0,
+        0,
+        0,
+        6
+      ],
+      "meaning": "client=0, resource=0, scopes=0, transition=6",
+      "sha256": "9ab3803d1a63fbedecd5acd4c6bbc1c551800e0b622a6624b20a421197c5b05d",
+      "bytes": 27
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerCodeFuzzTestsInputs/codeTransitionsRespectBindingsAndSingleUse/c0-r0-s0-m7.bin",
+      "controls": [
+        0,
+        0,
+        0,
+        7
+      ],
+      "meaning": "client=0, resource=0, scopes=0, transition=7",
+      "sha256": "4b22f2dc42ae46e7a3d2a00118046a494729507580182be4eaeee64d932a0812",
+      "bytes": 27
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerCodeFuzzTestsInputs/codeTransitionsRespectBindingsAndSingleUse/c0-r0-s0-m8.bin",
+      "controls": [
+        0,
+        0,
+        0,
+        8
+      ],
+      "meaning": "client=0, resource=0, scopes=0, transition=8",
+      "sha256": "2d69c38f603e0df206af4e1935907d16df63818ea85a264b1675c363c4390071",
+      "bytes": 27
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerCodeFuzzTestsInputs/codeTransitionsRespectBindingsAndSingleUse/c0-r0-s0-m9.bin",
+      "controls": [
+        0,
+        0,
+        0,
+        9
+      ],
+      "meaning": "client=0, resource=0, scopes=0, transition=9",
+      "sha256": "0bb37c602da664b07f48ef594bde4b90a334270f50b57417209d1046535b922d",
+      "bytes": 27
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerCodeFuzzTestsInputs/codeTransitionsRespectBindingsAndSingleUse/c0-r0-s0-m10.bin",
+      "controls": [
+        0,
+        0,
+        0,
+        10
+      ],
+      "meaning": "client=0, resource=0, scopes=0, transition=10",
+      "sha256": "1b30ee9acc00819db477109fd8215bf21ae60c9f84add31b313a7a1f97a0f95d",
+      "bytes": 27
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerCodeFuzzTestsInputs/codeTransitionsRespectBindingsAndSingleUse/c0-r0-s1-m0.bin",
+      "controls": [
+        0,
+        0,
+        1,
+        0
+      ],
+      "meaning": "client=0, resource=0, scopes=1, transition=0",
+      "sha256": "5d49830a1af495775b1f3868a9a14db2ffffa954c107f96caf682c306e77a124",
+      "bytes": 27
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerCodeFuzzTestsInputs/codeTransitionsRespectBindingsAndSingleUse/c0-r0-s1-m1.bin",
+      "controls": [
+        0,
+        0,
+        1,
+        1
+      ],
+      "meaning": "client=0, resource=0, scopes=1, transition=1",
+      "sha256": "aba142bcbc6b95e7a00e3ec4147cec936b7fb8b0a6732346a54e05aa23c028c8",
+      "bytes": 27
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerCodeFuzzTestsInputs/codeTransitionsRespectBindingsAndSingleUse/c0-r0-s1-m2.bin",
+      "controls": [
+        0,
+        0,
+        1,
+        2
+      ],
+      "meaning": "client=0, resource=0, scopes=1, transition=2",
+      "sha256": "a39dce23cdf386227937b068b6ae1a6949f495a8a4653d467bc7796888384490",
+      "bytes": 27
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerCodeFuzzTestsInputs/codeTransitionsRespectBindingsAndSingleUse/c0-r0-s1-m3.bin",
+      "controls": [
+        0,
+        0,
+        1,
+        3
+      ],
+      "meaning": "client=0, resource=0, scopes=1, transition=3",
+      "sha256": "ed01a2b9372407c97389e568b8974bf85b1729b3fbdf5d4bd114fc6a7bb7df3b",
+      "bytes": 27
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerCodeFuzzTestsInputs/codeTransitionsRespectBindingsAndSingleUse/c0-r0-s1-m4.bin",
+      "controls": [
+        0,
+        0,
+        1,
+        4
+      ],
+      "meaning": "client=0, resource=0, scopes=1, transition=4",
+      "sha256": "943f5526f602e55a5faa9816985715ef783c0a8fbda6f5c4c6963992e7afd3bf",
+      "bytes": 27
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerCodeFuzzTestsInputs/codeTransitionsRespectBindingsAndSingleUse/c0-r0-s1-m5.bin",
+      "controls": [
+        0,
+        0,
+        1,
+        5
+      ],
+      "meaning": "client=0, resource=0, scopes=1, transition=5",
+      "sha256": "e93b63ae6a7a8c34aa006bc638e3390e65abdff15c56f037bd927c3045c4df5f",
+      "bytes": 27
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerCodeFuzzTestsInputs/codeTransitionsRespectBindingsAndSingleUse/c0-r0-s1-m6.bin",
+      "controls": [
+        0,
+        0,
+        1,
+        6
+      ],
+      "meaning": "client=0, resource=0, scopes=1, transition=6",
+      "sha256": "540d8ec48ab464c1a4a102966821fb98e667b383f951b773d4f49325e8bdde28",
+      "bytes": 27
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerCodeFuzzTestsInputs/codeTransitionsRespectBindingsAndSingleUse/c0-r0-s1-m7.bin",
+      "controls": [
+        0,
+        0,
+        1,
+        7
+      ],
+      "meaning": "client=0, resource=0, scopes=1, transition=7",
+      "sha256": "3d2a9b8608a30ac872ec341c7ffee99b31822b7d72466ba79d3da8bbaae81e30",
+      "bytes": 27
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerCodeFuzzTestsInputs/codeTransitionsRespectBindingsAndSingleUse/c0-r0-s1-m8.bin",
+      "controls": [
+        0,
+        0,
+        1,
+        8
+      ],
+      "meaning": "client=0, resource=0, scopes=1, transition=8",
+      "sha256": "950495507d3f6d544cc94e3dcc2fdecb3ac421167f402837ba5909a691f6ce27",
+      "bytes": 27
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerCodeFuzzTestsInputs/codeTransitionsRespectBindingsAndSingleUse/c0-r0-s1-m9.bin",
+      "controls": [
+        0,
+        0,
+        1,
+        9
+      ],
+      "meaning": "client=0, resource=0, scopes=1, transition=9",
+      "sha256": "9698065b4775804c6299e8bc6affbe956b5b8e2c8451d6885784df0a1378399b",
+      "bytes": 27
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerCodeFuzzTestsInputs/codeTransitionsRespectBindingsAndSingleUse/c0-r0-s1-m10.bin",
+      "controls": [
+        0,
+        0,
+        1,
+        10
+      ],
+      "meaning": "client=0, resource=0, scopes=1, transition=10",
+      "sha256": "378fcd2308b74b849c27b875166b449bff130a63cab0c9f6a1300ba0c6ed3f45",
+      "bytes": 27
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerCodeFuzzTestsInputs/codeTransitionsRespectBindingsAndSingleUse/c0-r1-s0-m0.bin",
+      "controls": [
+        0,
+        1,
+        0,
+        0
+      ],
+      "meaning": "client=0, resource=1, scopes=0, transition=0",
+      "sha256": "2446d5e34f5db0c5f59493ae5414bf1edec131a90cad523605ce10358512b383",
+      "bytes": 27
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerCodeFuzzTestsInputs/codeTransitionsRespectBindingsAndSingleUse/c0-r1-s0-m1.bin",
+      "controls": [
+        0,
+        1,
+        0,
+        1
+      ],
+      "meaning": "client=0, resource=1, scopes=0, transition=1",
+      "sha256": "b942b28cb14b90888f9dea1c39efad62a26500434280a61cc5fb3c8452ca4c9a",
+      "bytes": 27
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerCodeFuzzTestsInputs/codeTransitionsRespectBindingsAndSingleUse/c0-r1-s0-m2.bin",
+      "controls": [
+        0,
+        1,
+        0,
+        2
+      ],
+      "meaning": "client=0, resource=1, scopes=0, transition=2",
+      "sha256": "0c8fdb5ad38b3672a7cb61296a93020c93d500b0dd55abe12bf8dfc1154a67ea",
+      "bytes": 27
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerCodeFuzzTestsInputs/codeTransitionsRespectBindingsAndSingleUse/c0-r1-s0-m3.bin",
+      "controls": [
+        0,
+        1,
+        0,
+        3
+      ],
+      "meaning": "client=0, resource=1, scopes=0, transition=3",
+      "sha256": "1db16a368b6eaf3da49b9355ebc11f8fa76052a7c87be9a78a2c963936e28445",
+      "bytes": 27
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerCodeFuzzTestsInputs/codeTransitionsRespectBindingsAndSingleUse/c0-r1-s0-m4.bin",
+      "controls": [
+        0,
+        1,
+        0,
+        4
+      ],
+      "meaning": "client=0, resource=1, scopes=0, transition=4",
+      "sha256": "21d10a4b1a0bb2dece8d8e5c6180a453638c2592ced8094c0e2a417741266eed",
+      "bytes": 27
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerCodeFuzzTestsInputs/codeTransitionsRespectBindingsAndSingleUse/c0-r1-s0-m5.bin",
+      "controls": [
+        0,
+        1,
+        0,
+        5
+      ],
+      "meaning": "client=0, resource=1, scopes=0, transition=5",
+      "sha256": "023814635d01c443ac564b1e6ac3d513c0775d8b7e3a5206f700c575c949695c",
+      "bytes": 27
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerCodeFuzzTestsInputs/codeTransitionsRespectBindingsAndSingleUse/c0-r1-s0-m6.bin",
+      "controls": [
+        0,
+        1,
+        0,
+        6
+      ],
+      "meaning": "client=0, resource=1, scopes=0, transition=6",
+      "sha256": "93cd792c60fdb002ba109afb43519a39b3aa050fd4a3438c8bf52af8a5555d10",
+      "bytes": 27
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerCodeFuzzTestsInputs/codeTransitionsRespectBindingsAndSingleUse/c0-r1-s0-m7.bin",
+      "controls": [
+        0,
+        1,
+        0,
+        7
+      ],
+      "meaning": "client=0, resource=1, scopes=0, transition=7",
+      "sha256": "07201b071f0ba1cc08eb7921a9a0ca6285403b225adddc5497f99c0d8068189f",
+      "bytes": 27
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerCodeFuzzTestsInputs/codeTransitionsRespectBindingsAndSingleUse/c0-r1-s0-m8.bin",
+      "controls": [
+        0,
+        1,
+        0,
+        8
+      ],
+      "meaning": "client=0, resource=1, scopes=0, transition=8",
+      "sha256": "87d3708228c9b18a23f957094e285f190d328abb8ee5a9ffe1fae36cc79fcfe6",
+      "bytes": 27
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerCodeFuzzTestsInputs/codeTransitionsRespectBindingsAndSingleUse/c0-r1-s0-m9.bin",
+      "controls": [
+        0,
+        1,
+        0,
+        9
+      ],
+      "meaning": "client=0, resource=1, scopes=0, transition=9",
+      "sha256": "27b9852de0e082d11ef14c2e149a3c72606fc543638658c0ffca8bb02819cd85",
+      "bytes": 27
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerCodeFuzzTestsInputs/codeTransitionsRespectBindingsAndSingleUse/c0-r1-s0-m10.bin",
+      "controls": [
+        0,
+        1,
+        0,
+        10
+      ],
+      "meaning": "client=0, resource=1, scopes=0, transition=10",
+      "sha256": "8321eb3058d4e4b54838a648e7431d46d129671da39631ba1f8d49c7273c458a",
+      "bytes": 27
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerCodeFuzzTestsInputs/codeTransitionsRespectBindingsAndSingleUse/c0-r1-s1-m0.bin",
+      "controls": [
+        0,
+        1,
+        1,
+        0
+      ],
+      "meaning": "client=0, resource=1, scopes=1, transition=0",
+      "sha256": "725e17f51f4b41c0e6979240698e8c656dd2a73f37769b8feda30fa689187a44",
+      "bytes": 27
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerCodeFuzzTestsInputs/codeTransitionsRespectBindingsAndSingleUse/c0-r1-s1-m1.bin",
+      "controls": [
+        0,
+        1,
+        1,
+        1
+      ],
+      "meaning": "client=0, resource=1, scopes=1, transition=1",
+      "sha256": "9b22d08d9d96fde9d34ba3eb18cdcfdc3670cb05a4a90a26e260a26ff3be52c4",
+      "bytes": 27
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerCodeFuzzTestsInputs/codeTransitionsRespectBindingsAndSingleUse/c0-r1-s1-m2.bin",
+      "controls": [
+        0,
+        1,
+        1,
+        2
+      ],
+      "meaning": "client=0, resource=1, scopes=1, transition=2",
+      "sha256": "156603edf93e3b3fa6fd7569370798a9af8f7bdd5d1614c2917032204dd4eb40",
+      "bytes": 27
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerCodeFuzzTestsInputs/codeTransitionsRespectBindingsAndSingleUse/c0-r1-s1-m3.bin",
+      "controls": [
+        0,
+        1,
+        1,
+        3
+      ],
+      "meaning": "client=0, resource=1, scopes=1, transition=3",
+      "sha256": "6565c8df849c1d9ed64541f36bf4f6c7cef09798ca32d6120341f44a703ba6ed",
+      "bytes": 27
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerCodeFuzzTestsInputs/codeTransitionsRespectBindingsAndSingleUse/c0-r1-s1-m4.bin",
+      "controls": [
+        0,
+        1,
+        1,
+        4
+      ],
+      "meaning": "client=0, resource=1, scopes=1, transition=4",
+      "sha256": "ecac75d943f52a4b3c2443dd5e1b15766e93aabd6e2933d83b333b55797836a2",
+      "bytes": 27
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerCodeFuzzTestsInputs/codeTransitionsRespectBindingsAndSingleUse/c0-r1-s1-m5.bin",
+      "controls": [
+        0,
+        1,
+        1,
+        5
+      ],
+      "meaning": "client=0, resource=1, scopes=1, transition=5",
+      "sha256": "e61902faedad372b35d6f71f99f32c8b76a74b5c36a918afc9ad2f87bcfbc699",
+      "bytes": 27
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerCodeFuzzTestsInputs/codeTransitionsRespectBindingsAndSingleUse/c0-r1-s1-m6.bin",
+      "controls": [
+        0,
+        1,
+        1,
+        6
+      ],
+      "meaning": "client=0, resource=1, scopes=1, transition=6",
+      "sha256": "6acbfe55531baaeb57229687a4c59d9363e80945ffc0a53eb3fef9ac2ff3ac20",
+      "bytes": 27
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerCodeFuzzTestsInputs/codeTransitionsRespectBindingsAndSingleUse/c0-r1-s1-m7.bin",
+      "controls": [
+        0,
+        1,
+        1,
+        7
+      ],
+      "meaning": "client=0, resource=1, scopes=1, transition=7",
+      "sha256": "8dc53807c0c18fb68a9396c8084598b0869ae335c762cb0df84cc2b452f7bc9a",
+      "bytes": 27
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerCodeFuzzTestsInputs/codeTransitionsRespectBindingsAndSingleUse/c0-r1-s1-m8.bin",
+      "controls": [
+        0,
+        1,
+        1,
+        8
+      ],
+      "meaning": "client=0, resource=1, scopes=1, transition=8",
+      "sha256": "b0fe06ca3a55b239df2ee5e480f6de143cfc2f35605e2b4c3fb521ec74b0417b",
+      "bytes": 27
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerCodeFuzzTestsInputs/codeTransitionsRespectBindingsAndSingleUse/c0-r1-s1-m9.bin",
+      "controls": [
+        0,
+        1,
+        1,
+        9
+      ],
+      "meaning": "client=0, resource=1, scopes=1, transition=9",
+      "sha256": "178405e55954a033854e566caf41702b419a80a18c79d37a678e371d2e0c0cdc",
+      "bytes": 27
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerCodeFuzzTestsInputs/codeTransitionsRespectBindingsAndSingleUse/c0-r1-s1-m10.bin",
+      "controls": [
+        0,
+        1,
+        1,
+        10
+      ],
+      "meaning": "client=0, resource=1, scopes=1, transition=10",
+      "sha256": "4e5e961dc92bc3e1db3fdd415e3405ff3f4ab5626b5bf08a4e14abe2477006aa",
+      "bytes": 27
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerCodeFuzzTestsInputs/codeTransitionsRespectBindingsAndSingleUse/c1-r0-s0-m0.bin",
+      "controls": [
+        1,
+        0,
+        0,
+        0
+      ],
+      "meaning": "client=1, resource=0, scopes=0, transition=0",
+      "sha256": "1f56099d50ec641d2f5aae5491b933d238cfef794e917699f81456f3ec613f62",
+      "bytes": 27
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerCodeFuzzTestsInputs/codeTransitionsRespectBindingsAndSingleUse/c1-r0-s0-m1.bin",
+      "controls": [
+        1,
+        0,
+        0,
+        1
+      ],
+      "meaning": "client=1, resource=0, scopes=0, transition=1",
+      "sha256": "a16e1b281dee7a17b4c78a6f86e44f127f9ac8b33c3d262f877a7768ddce7736",
+      "bytes": 27
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerCodeFuzzTestsInputs/codeTransitionsRespectBindingsAndSingleUse/c1-r0-s0-m2.bin",
+      "controls": [
+        1,
+        0,
+        0,
+        2
+      ],
+      "meaning": "client=1, resource=0, scopes=0, transition=2",
+      "sha256": "60fd6e6532dad58a1f89efa050e043f2860d28465893d49a6af44ddbf56389d4",
+      "bytes": 27
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerCodeFuzzTestsInputs/codeTransitionsRespectBindingsAndSingleUse/c1-r0-s0-m3.bin",
+      "controls": [
+        1,
+        0,
+        0,
+        3
+      ],
+      "meaning": "client=1, resource=0, scopes=0, transition=3",
+      "sha256": "df4edc4d0d57f312f3e044f5849a6559bb2a4c3ae93019918c85295274982796",
+      "bytes": 27
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerCodeFuzzTestsInputs/codeTransitionsRespectBindingsAndSingleUse/c1-r0-s0-m4.bin",
+      "controls": [
+        1,
+        0,
+        0,
+        4
+      ],
+      "meaning": "client=1, resource=0, scopes=0, transition=4",
+      "sha256": "4b97ea45aa9cb9caee780947a0c52f82a4137fc3a0e457d39c2de6cc48b4fbe5",
+      "bytes": 27
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerCodeFuzzTestsInputs/codeTransitionsRespectBindingsAndSingleUse/c1-r0-s0-m5.bin",
+      "controls": [
+        1,
+        0,
+        0,
+        5
+      ],
+      "meaning": "client=1, resource=0, scopes=0, transition=5",
+      "sha256": "7a13f73c4605627fe35cb93af35ea23c6e2d51d5f178d6bd8ba381bb45a59c79",
+      "bytes": 27
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerCodeFuzzTestsInputs/codeTransitionsRespectBindingsAndSingleUse/c1-r0-s0-m6.bin",
+      "controls": [
+        1,
+        0,
+        0,
+        6
+      ],
+      "meaning": "client=1, resource=0, scopes=0, transition=6",
+      "sha256": "fb7010b5629b1cb0bf2d5ba04870dd24c79419aa87a645f9e9f7be507054c6c7",
+      "bytes": 27
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerCodeFuzzTestsInputs/codeTransitionsRespectBindingsAndSingleUse/c1-r0-s0-m7.bin",
+      "controls": [
+        1,
+        0,
+        0,
+        7
+      ],
+      "meaning": "client=1, resource=0, scopes=0, transition=7",
+      "sha256": "d51373438f76d15f93a5a032683b5aed8d8f64f4e37d46706703497f11173241",
+      "bytes": 27
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerCodeFuzzTestsInputs/codeTransitionsRespectBindingsAndSingleUse/c1-r0-s0-m8.bin",
+      "controls": [
+        1,
+        0,
+        0,
+        8
+      ],
+      "meaning": "client=1, resource=0, scopes=0, transition=8",
+      "sha256": "333a050499d827fb7f8d4469838d7876a350076079f1ee703318729b820340e7",
+      "bytes": 27
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerCodeFuzzTestsInputs/codeTransitionsRespectBindingsAndSingleUse/c1-r0-s0-m9.bin",
+      "controls": [
+        1,
+        0,
+        0,
+        9
+      ],
+      "meaning": "client=1, resource=0, scopes=0, transition=9",
+      "sha256": "0d8dbfb0cc0958ce97894c26fee045712d50d23d3c626379a4f63a70fa1697dd",
+      "bytes": 27
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerCodeFuzzTestsInputs/codeTransitionsRespectBindingsAndSingleUse/c1-r0-s0-m10.bin",
+      "controls": [
+        1,
+        0,
+        0,
+        10
+      ],
+      "meaning": "client=1, resource=0, scopes=0, transition=10",
+      "sha256": "c87ffaf8371664609d4cccb27a2370f44afc7a3823106dde47a26c3768aa7136",
+      "bytes": 27
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerCodeFuzzTestsInputs/codeTransitionsRespectBindingsAndSingleUse/c1-r0-s1-m0.bin",
+      "controls": [
+        1,
+        0,
+        1,
+        0
+      ],
+      "meaning": "client=1, resource=0, scopes=1, transition=0",
+      "sha256": "643681eea48e3e4a871582c66afd6b08b00543c38970f48586627670e92c6bdf",
+      "bytes": 27
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerCodeFuzzTestsInputs/codeTransitionsRespectBindingsAndSingleUse/c1-r0-s1-m1.bin",
+      "controls": [
+        1,
+        0,
+        1,
+        1
+      ],
+      "meaning": "client=1, resource=0, scopes=1, transition=1",
+      "sha256": "a1a3cce01b388125911ff8fe71040e9a7b0f189ba17887be12dc26ed00082001",
+      "bytes": 27
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerCodeFuzzTestsInputs/codeTransitionsRespectBindingsAndSingleUse/c1-r0-s1-m2.bin",
+      "controls": [
+        1,
+        0,
+        1,
+        2
+      ],
+      "meaning": "client=1, resource=0, scopes=1, transition=2",
+      "sha256": "892b4663aca43a3f797d0420314d8f90521ad2e1d4aca2e842e4be88bc8246c1",
+      "bytes": 27
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerCodeFuzzTestsInputs/codeTransitionsRespectBindingsAndSingleUse/c1-r0-s1-m3.bin",
+      "controls": [
+        1,
+        0,
+        1,
+        3
+      ],
+      "meaning": "client=1, resource=0, scopes=1, transition=3",
+      "sha256": "2ba6963cb730c4dac451e8b35fe9f9ed9aee6b87c6e1d754552476d9b6db66c5",
+      "bytes": 27
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerCodeFuzzTestsInputs/codeTransitionsRespectBindingsAndSingleUse/c1-r0-s1-m4.bin",
+      "controls": [
+        1,
+        0,
+        1,
+        4
+      ],
+      "meaning": "client=1, resource=0, scopes=1, transition=4",
+      "sha256": "64e45d99ddf6e757971db5344eaa3b5c159c3911bf262e04bc6c049c21d58293",
+      "bytes": 27
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerCodeFuzzTestsInputs/codeTransitionsRespectBindingsAndSingleUse/c1-r0-s1-m5.bin",
+      "controls": [
+        1,
+        0,
+        1,
+        5
+      ],
+      "meaning": "client=1, resource=0, scopes=1, transition=5",
+      "sha256": "6180c72b02102ff487dcadc0e17b6a083e5cc27f2f599bc06f73cb08530f1e45",
+      "bytes": 27
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerCodeFuzzTestsInputs/codeTransitionsRespectBindingsAndSingleUse/c1-r0-s1-m6.bin",
+      "controls": [
+        1,
+        0,
+        1,
+        6
+      ],
+      "meaning": "client=1, resource=0, scopes=1, transition=6",
+      "sha256": "f29a96592cf056f7bf4909131d837144f731f5285b5ab9873ee0303f352c4c8d",
+      "bytes": 27
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerCodeFuzzTestsInputs/codeTransitionsRespectBindingsAndSingleUse/c1-r0-s1-m7.bin",
+      "controls": [
+        1,
+        0,
+        1,
+        7
+      ],
+      "meaning": "client=1, resource=0, scopes=1, transition=7",
+      "sha256": "299224bde41764ee9b82eb0126b3f947ea5fc7deb7578dfa69c716a6c99c8ff1",
+      "bytes": 27
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerCodeFuzzTestsInputs/codeTransitionsRespectBindingsAndSingleUse/c1-r0-s1-m8.bin",
+      "controls": [
+        1,
+        0,
+        1,
+        8
+      ],
+      "meaning": "client=1, resource=0, scopes=1, transition=8",
+      "sha256": "78ce6c6ea90301ff15569290227c5b10b830365a0d8b6989f433d680e31330fd",
+      "bytes": 27
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerCodeFuzzTestsInputs/codeTransitionsRespectBindingsAndSingleUse/c1-r0-s1-m9.bin",
+      "controls": [
+        1,
+        0,
+        1,
+        9
+      ],
+      "meaning": "client=1, resource=0, scopes=1, transition=9",
+      "sha256": "1cc7b885c0f745f695993acc35be25569c01d1126f5d1939dce95aef6cd33f9a",
+      "bytes": 27
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerCodeFuzzTestsInputs/codeTransitionsRespectBindingsAndSingleUse/c1-r0-s1-m10.bin",
+      "controls": [
+        1,
+        0,
+        1,
+        10
+      ],
+      "meaning": "client=1, resource=0, scopes=1, transition=10",
+      "sha256": "29dfc0f54f5c65782a9d14c91c30f0f23ee9081e2d610dd72f717078165bef75",
+      "bytes": 27
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerCodeFuzzTestsInputs/codeTransitionsRespectBindingsAndSingleUse/c1-r1-s0-m0.bin",
+      "controls": [
+        1,
+        1,
+        0,
+        0
+      ],
+      "meaning": "client=1, resource=1, scopes=0, transition=0",
+      "sha256": "cdb06b482e9adcba9e7d4d59a23229829db198e1d463f8f8be380df25b4f085c",
+      "bytes": 27
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerCodeFuzzTestsInputs/codeTransitionsRespectBindingsAndSingleUse/c1-r1-s0-m1.bin",
+      "controls": [
+        1,
+        1,
+        0,
+        1
+      ],
+      "meaning": "client=1, resource=1, scopes=0, transition=1",
+      "sha256": "fc30befae86383181aeb63ba89e0a9cd4745bb10df4a2ecbcb4df40eb54c27c1",
+      "bytes": 27
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerCodeFuzzTestsInputs/codeTransitionsRespectBindingsAndSingleUse/c1-r1-s0-m2.bin",
+      "controls": [
+        1,
+        1,
+        0,
+        2
+      ],
+      "meaning": "client=1, resource=1, scopes=0, transition=2",
+      "sha256": "1c8c3498849a9de170579a61a7efc53bf7e662475e3cb53747561972bb3e55ca",
+      "bytes": 27
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerCodeFuzzTestsInputs/codeTransitionsRespectBindingsAndSingleUse/c1-r1-s0-m3.bin",
+      "controls": [
+        1,
+        1,
+        0,
+        3
+      ],
+      "meaning": "client=1, resource=1, scopes=0, transition=3",
+      "sha256": "b4c7245de8150f2822128f0d29e63704850e2807260b511bfb09f6a50d7cc612",
+      "bytes": 27
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerCodeFuzzTestsInputs/codeTransitionsRespectBindingsAndSingleUse/c1-r1-s0-m4.bin",
+      "controls": [
+        1,
+        1,
+        0,
+        4
+      ],
+      "meaning": "client=1, resource=1, scopes=0, transition=4",
+      "sha256": "8bcdbed4a51912f5b471d36eade70a9bef8d903c484cc9e79e24b2960af19a85",
+      "bytes": 27
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerCodeFuzzTestsInputs/codeTransitionsRespectBindingsAndSingleUse/c1-r1-s0-m5.bin",
+      "controls": [
+        1,
+        1,
+        0,
+        5
+      ],
+      "meaning": "client=1, resource=1, scopes=0, transition=5",
+      "sha256": "5067fb408becff3227c96bf1584bfee0a5642aa20c25d76da6face342690a6e0",
+      "bytes": 27
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerCodeFuzzTestsInputs/codeTransitionsRespectBindingsAndSingleUse/c1-r1-s0-m6.bin",
+      "controls": [
+        1,
+        1,
+        0,
+        6
+      ],
+      "meaning": "client=1, resource=1, scopes=0, transition=6",
+      "sha256": "7481dcba7b609d6f2b9b0ab17bb2ca28adc05ef2bcbb2d82cbcfdf9b9ed60737",
+      "bytes": 27
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerCodeFuzzTestsInputs/codeTransitionsRespectBindingsAndSingleUse/c1-r1-s0-m7.bin",
+      "controls": [
+        1,
+        1,
+        0,
+        7
+      ],
+      "meaning": "client=1, resource=1, scopes=0, transition=7",
+      "sha256": "c4aa3fef4a089dc6b95387866d0cd00015a395791a99af0d9fb44b1f20f4c557",
+      "bytes": 27
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerCodeFuzzTestsInputs/codeTransitionsRespectBindingsAndSingleUse/c1-r1-s0-m8.bin",
+      "controls": [
+        1,
+        1,
+        0,
+        8
+      ],
+      "meaning": "client=1, resource=1, scopes=0, transition=8",
+      "sha256": "6a690b1289c449b227d7f7c32c4de1d4b0ed0a23f73f7463289ca6db012691cd",
+      "bytes": 27
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerCodeFuzzTestsInputs/codeTransitionsRespectBindingsAndSingleUse/c1-r1-s0-m9.bin",
+      "controls": [
+        1,
+        1,
+        0,
+        9
+      ],
+      "meaning": "client=1, resource=1, scopes=0, transition=9",
+      "sha256": "47a0f324233c0fe8f4d30a27c3a99abbb62ceaf30e34a1dc6db9ef4c6a7c76b0",
+      "bytes": 27
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerCodeFuzzTestsInputs/codeTransitionsRespectBindingsAndSingleUse/c1-r1-s0-m10.bin",
+      "controls": [
+        1,
+        1,
+        0,
+        10
+      ],
+      "meaning": "client=1, resource=1, scopes=0, transition=10",
+      "sha256": "b3e814ca7a50f9e1bd924e4bc7cfd33b77a599adf0b9717f61676b2e11c18486",
+      "bytes": 27
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerCodeFuzzTestsInputs/codeTransitionsRespectBindingsAndSingleUse/c1-r1-s1-m0.bin",
+      "controls": [
+        1,
+        1,
+        1,
+        0
+      ],
+      "meaning": "client=1, resource=1, scopes=1, transition=0",
+      "sha256": "584dd68902b9d93c2fb860b44e1d63aef9858e2443223f16cda17367b96b8013",
+      "bytes": 27
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerCodeFuzzTestsInputs/codeTransitionsRespectBindingsAndSingleUse/c1-r1-s1-m1.bin",
+      "controls": [
+        1,
+        1,
+        1,
+        1
+      ],
+      "meaning": "client=1, resource=1, scopes=1, transition=1",
+      "sha256": "fd8cff15960d76c8bb92b52ca0396cbfa46468943c7b7b0ad901d3fb3ee47cb5",
+      "bytes": 27
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerCodeFuzzTestsInputs/codeTransitionsRespectBindingsAndSingleUse/c1-r1-s1-m2.bin",
+      "controls": [
+        1,
+        1,
+        1,
+        2
+      ],
+      "meaning": "client=1, resource=1, scopes=1, transition=2",
+      "sha256": "aa71c157690a289a1970b84846651ce87b30a1dda4cff17ceee563547395177c",
+      "bytes": 27
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerCodeFuzzTestsInputs/codeTransitionsRespectBindingsAndSingleUse/c1-r1-s1-m3.bin",
+      "controls": [
+        1,
+        1,
+        1,
+        3
+      ],
+      "meaning": "client=1, resource=1, scopes=1, transition=3",
+      "sha256": "77da8b2e069aa9eac5adef4859deac11faf0a24a84c24ad93975307b09ac69bb",
+      "bytes": 27
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerCodeFuzzTestsInputs/codeTransitionsRespectBindingsAndSingleUse/c1-r1-s1-m4.bin",
+      "controls": [
+        1,
+        1,
+        1,
+        4
+      ],
+      "meaning": "client=1, resource=1, scopes=1, transition=4",
+      "sha256": "b2d0c8134cd823cd1ceeac127e746f9c41b4499b58dd4c8e31829ee2e97db224",
+      "bytes": 27
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerCodeFuzzTestsInputs/codeTransitionsRespectBindingsAndSingleUse/c1-r1-s1-m5.bin",
+      "controls": [
+        1,
+        1,
+        1,
+        5
+      ],
+      "meaning": "client=1, resource=1, scopes=1, transition=5",
+      "sha256": "509cb90006c5350a3f4092641d85b76e111bfc12d5cecd7a41252d7cebddb29b",
+      "bytes": 27
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerCodeFuzzTestsInputs/codeTransitionsRespectBindingsAndSingleUse/c1-r1-s1-m6.bin",
+      "controls": [
+        1,
+        1,
+        1,
+        6
+      ],
+      "meaning": "client=1, resource=1, scopes=1, transition=6",
+      "sha256": "245ea16593c666f3824008d921ad406328a8510ef42913077c1eebff10ba06cb",
+      "bytes": 27
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerCodeFuzzTestsInputs/codeTransitionsRespectBindingsAndSingleUse/c1-r1-s1-m7.bin",
+      "controls": [
+        1,
+        1,
+        1,
+        7
+      ],
+      "meaning": "client=1, resource=1, scopes=1, transition=7",
+      "sha256": "a908afb16a077927f215071a088216ccf0564e995f34c18d31fcac0c277a3b14",
+      "bytes": 27
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerCodeFuzzTestsInputs/codeTransitionsRespectBindingsAndSingleUse/c1-r1-s1-m8.bin",
+      "controls": [
+        1,
+        1,
+        1,
+        8
+      ],
+      "meaning": "client=1, resource=1, scopes=1, transition=8",
+      "sha256": "dcadc95db498069fa8c20924f1d6bc03d7130129a0afc40bf77eb36606a831c2",
+      "bytes": 27
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerCodeFuzzTestsInputs/codeTransitionsRespectBindingsAndSingleUse/c1-r1-s1-m9.bin",
+      "controls": [
+        1,
+        1,
+        1,
+        9
+      ],
+      "meaning": "client=1, resource=1, scopes=1, transition=9",
+      "sha256": "20582bab41d3096b2cca176f3763d89324e6cea7fa04ecc08b9ab986e384b714",
+      "bytes": 27
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerCodeFuzzTestsInputs/codeTransitionsRespectBindingsAndSingleUse/c1-r1-s1-m10.bin",
+      "controls": [
+        1,
+        1,
+        1,
+        10
+      ],
+      "meaning": "client=1, resource=1, scopes=1, transition=10",
+      "sha256": "77638f457d632328ec385ebcbf5fa5e2516dc6d3a1a36c90229f7b0ef04dc93f",
+      "bytes": 27
+    }
+  ]
+}

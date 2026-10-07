@@ -38,7 +38,9 @@ final class IssuerAdmission implements McpAdmissionController {
     IssuerAdmission(@NonNull IssuerResources app) {this.app=app;}
     @Override public @NonNull McpAdmissionDecision admit(@NonNull McpAdmissionContext context) {
         Request request=context.getRequest();
-        if(!LocalInputs.headers(request,"Host").equals(List.of(app.config.resource.getRawAuthority()))) return fixed(403,"Operation not permitted");
+        URI resource=app.config.resourceForEndpoint(context.getEndpoint().getPath()).orElse(null);
+        if(resource==null) return fixed(403,"Operation not permitted");
+        if(!LocalInputs.headers(request,"Host").equals(List.of(resource.getRawAuthority()))) return fixed(403,"Operation not permitted");
         List<String> origins=LocalInputs.headers(request,"Origin");
         if(!origins.isEmpty() && !origins.equals(List.of(app.config.origin.toString()))) return fixed(403,"Operation not permitted");
         String scope=switch(context.getOperationType()) {
@@ -49,16 +51,16 @@ final class IssuerAdmission implements McpAdmissionController {
         if(scope==null) return fixed(403,"Operation not permitted");
         try {
             Optional<BearerToken> token=SokletBearer.bearerTokenFor(request);
-            if(token.isEmpty()) return challenge(401,null,scope);
-            OAuthIssuerAccessTokenResult result=app.server.validateAccessTokenResult(token.orElseThrow(),app.config.resource.toString());
-            if(!(result instanceof OAuthIssuerAccessTokenResult.Succeeded success)) return challenge(401,((OAuthIssuerAccessTokenResult.Rejected)result).getBearerError(),scope);
+            if(token.isEmpty()) return challenge(401,null,scope,resource);
+            OAuthIssuerAccessTokenResult result=app.server.validateAccessTokenResult(token.orElseThrow(),resource.toString());
+            if(!(result instanceof OAuthIssuerAccessTokenResult.Succeeded success)) return challenge(401,((OAuthIssuerAccessTokenResult.Rejected)result).getBearerError(),scope,resource);
             VerifiedAccessToken proof=success.getAccessToken();
-            if(!proof.getIssuer().equals(app.config.origin.toString()) || !proof.getAudiences().contains(app.config.resource.toString())) return challenge(401,BearerError.INVALID_TOKEN,scope);
-            if(!proof.getScopes().contains(scope)) return challenge(403,BearerError.INSUFFICIENT_SCOPE,scope);
+            if(!proof.getIssuer().equals(app.config.origin.toString()) || !proof.getAudiences().contains(resource.toString())) return challenge(401,BearerError.INVALID_TOKEN,scope,resource);
+            if(!proof.getScopes().contains(scope)) return challenge(403,BearerError.INSUFFICIENT_SCOPE,scope,resource);
             String partition=partition(proof.getSubject().orElseThrow());
             return McpAdmissionDecision.accepted(McpAdmissionIdentity.withRateLimitPartitionKey(partition).authorizationPartitionKey(partition)
                     .principal(new Principal(proof,partition)).build());
-        } catch(AccessTokenValidationException malformed) {return challenge(400,BearerError.INVALID_REQUEST,scope);}
+        } catch(AccessTokenValidationException malformed) {return challenge(400,BearerError.INVALID_REQUEST,scope,resource);}
         catch(OAuthServerException unavailable) {return fixed(503,"Validation service unavailable");}
     }
     private @NonNull String partition(@NonNull String subject) {
@@ -67,8 +69,8 @@ final class IssuerAdmission implements McpAdmissionController {
             return Base64.getUrlEncoder().withoutPadding().encodeToString(mac.doFinal(subject.getBytes(StandardCharsets.UTF_8)));
         } catch(java.security.GeneralSecurityException unavailable) {throw new IllegalStateException("Partition service unavailable.");}
     }
-    private @NonNull McpAdmissionDecision challenge(int status,@Nullable BearerError error,@NonNull String scope) {
-        BearerChallenge.Builder b=BearerChallenge.builder().resourceMetadata(app.config.origin.resolve("/.well-known/oauth-protected-resource/mcp")).scopes(List.of(scope)).allowInsecureLoopback(app.config.loopback);
+    private @NonNull McpAdmissionDecision challenge(int status,@Nullable BearerError error,@NonNull String scope,@NonNull URI resource) {
+        BearerChallenge.Builder b=BearerChallenge.builder().resourceMetadata(app.config.origin.resolve("/.well-known/oauth-protected-resource"+resource.getRawPath())).scopes(List.of(scope)).allowInsecureLoopback(app.config.loopback);
         if(error!=null) b.error(error);
         return McpAdmissionDecision.rejected(McpAdmissionRejection.withStatusCodeAndError(status,McpJsonRpcError.fromApplication(-31901,"Credential or permission required"))
                 .headers(Map.of("WWW-Authenticate",List.of(b.build().getHeaderValue()))).build());

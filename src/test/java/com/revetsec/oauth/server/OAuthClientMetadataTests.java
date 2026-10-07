@@ -131,7 +131,7 @@ final class OAuthClientMetadataTests {
    .map(id->DynamicTest.dynamicTest(id,()->assertThrows(IllegalArgumentException.class,()->OAuthClientMetadataUri.clientId(id,policy(),2048))));
  }
  @Test void eligibleIdsKeepExactIdentityAndQuerySpelling() {
-  for(String id:List.of(ID,"https://client.example.com/","https://client.example.com:443/doc?x=1+2","HTTPS://CLIENT.EXAMPLE.COM/a%2Bb"))
+  for(String id:List.of(ID,"https://client.example.com/","https://client.example.com:443/doc?x=1+2","https://client.example.com:65535/doc","HTTPS://CLIENT.EXAMPLE.COM/a%2Bb"))
    assertEquals(id,OAuthClientMetadataUri.clientId(id,policy(),2048).toString());
   assertThrows(IllegalArgumentException.class,()->OAuthClientMetadataUri.clientId(ID,OAuthClientMetadataPolicy.disabledInstance(),2048));
   assertThrows(IllegalArgumentException.class,()->OAuthClientMetadataUri.clientId("https://client.example.com/"+"a".repeat(2048),policy(),2048));
@@ -139,7 +139,10 @@ final class OAuthClientMetadataTests {
  @Test void validDocumentDoesNotGrantAuthorityOrExposeDiagnostics() {
   var d=parse(BASE);assertEquals(ID,d.clientId());assertEquals("Display",d.clientName());assertEquals(List.of(URI.create("https://client.example.com/callback")),d.redirectUris());
   assertFalse(d.nativeApplication());assertFalse(d.refreshTokenPermitted());assertEquals(43,d.fingerprint().length());
-  assertThrows(UnsupportedOperationException.class,()->d.redirectUris().clear());assertFalse(d.toString().contains(ID));assertFalse(policy().toString().contains("example"));
+  assertThrows(UnsupportedOperationException.class,()->d.redirectUris().clear());
+  assertEquals("OAuthClientMetadataDocument{metadata=redacted}",d.toString());
+  assertEquals("OAuthClientMetadataPolicy{enabled=true, configuration=redacted}",policy().toString());
+  assertFalse(d.toString().contains(ID));assertFalse(policy().toString().contains("example"));
  }
  @TestFactory @NonNull Stream<@NonNull DynamicTest> requiredMembersAndWrongTypes() {
   List<DynamicTest> result=new ArrayList<>();for(String field:List.of("client_id","client_name","redirect_uris","token_endpoint_auth_method")) {

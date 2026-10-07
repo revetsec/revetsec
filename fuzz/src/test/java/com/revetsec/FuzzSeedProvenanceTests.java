@@ -63,6 +63,118 @@ import java.util.stream.Stream;
  */
 final class FuzzSeedProvenanceTests {
 	@Test
+	void issuerG4SemanticSeedsMatchCompleteControlsAndChecksums() throws Exception {
+		Path fuzz = coreBasedir().resolve("fuzz");
+		Path resources = fuzz.resolve("src/test/resources");
+		com.revetsec.json.JsonObject manifest = (com.revetsec.json.JsonObject) JsonCodec.parse(
+			Files.readAllBytes(fuzz.resolve("as1-g4-semantic-seeds.json")), com.revetsec.internal.json.JsonLimits.protocolDocument(262144));
+		com.revetsec.json.JsonArray entries = (com.revetsec.json.JsonArray) manifest.find("seeds").orElseThrow();
+		Set<String> expected = new TreeSet<>(), actual = new TreeSet<>();
+		for (com.revetsec.json.JsonValue entry : entries.getElements()) {
+			com.revetsec.json.JsonObject item = (com.revetsec.json.JsonObject) entry;
+			String relative = item.findString("path").orElseThrow(); Path file = fuzz.resolve(relative).normalize();
+			Assertions.assertTrue(file.startsWith(resources)); Assertions.assertTrue(expected.add(relative));
+			byte[] bytes = Files.readAllBytes(file); Assertions.assertTrue(bytes.length >= 7 && bytes.length <= 23);
+			Assertions.assertEquals(item.findLong("bytes").orElseThrow().intValue(), bytes.length);
+			Assertions.assertEquals(item.findString("sha256").orElseThrow(), HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256").digest(bytes)));
+			com.revetsec.json.JsonArray controls = (com.revetsec.json.JsonArray) item.find("controls").orElseThrow();
+			Assertions.assertEquals(7, controls.getElements().size());
+			for (int i = 0; i < 7; i++) Assertions.assertEquals(((com.revetsec.json.JsonNumber) controls.getElements().get(i)).getValue().intValueExact(), Byte.toUnsignedInt(bytes[i]));
+			Assertions.assertFalse(item.findString("meaning").orElseThrow().isBlank());
+		}
+		Path root = resources.resolve("com/revetsec/oauth/server/IssuerSigningFuzzTestsInputs");
+		try (Stream<Path> files = Files.walk(root)) {
+			actual.addAll(files.filter(Files::isRegularFile).map(fuzz::relativize).map(Path::toString).collect(Collectors.toSet()));
+		}
+		Assertions.assertEquals(expected, actual); Assertions.assertEquals(256, actual.size());
+	}
+
+	@Test
+	void issuerG3SemanticSeedsMatchCompleteControlsAndChecksums() throws Exception {
+		Path fuzz = coreBasedir().resolve("fuzz");
+		Path resources = fuzz.resolve("src/test/resources");
+		com.revetsec.json.JsonObject manifest = (com.revetsec.json.JsonObject) JsonCodec.parse(
+			Files.readAllBytes(fuzz.resolve("as1-g3-semantic-seeds.json")), com.revetsec.internal.json.JsonLimits.protocolDocument(262144));
+		com.revetsec.json.JsonArray entries = (com.revetsec.json.JsonArray) manifest.find("seeds").orElseThrow();
+		Set<String> expected = new TreeSet<>(), actual = new TreeSet<>();
+		for (com.revetsec.json.JsonValue entry : entries.getElements()) {
+			com.revetsec.json.JsonObject item = (com.revetsec.json.JsonObject) entry;
+			String relative = item.findString("path").orElseThrow(); Path file = fuzz.resolve(relative).normalize();
+			Assertions.assertTrue(file.startsWith(resources)); Assertions.assertTrue(expected.add(relative));
+			byte[] bytes = Files.readAllBytes(file); Assertions.assertEquals(4, bytes.length);
+			Assertions.assertEquals(item.findLong("bytes").orElseThrow().intValue(), bytes.length);
+			Assertions.assertEquals(item.findString("sha256").orElseThrow(), HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256").digest(bytes)));
+			com.revetsec.json.JsonArray controls = (com.revetsec.json.JsonArray) item.find("controls").orElseThrow();
+			Assertions.assertEquals(4, controls.getElements().size());
+			for (int i = 0; i < 4; i++) Assertions.assertEquals(((com.revetsec.json.JsonNumber) controls.getElements().get(i)).getValue().intValueExact(), Byte.toUnsignedInt(bytes[i]));
+			Assertions.assertFalse(item.findString("meaning").orElseThrow().isBlank());
+		}
+		Path root = resources.resolve("com/revetsec/oauth/server/IssuerRefreshFuzzTestsInputs");
+		try (Stream<Path> files = Files.walk(root)) {
+			actual.addAll(files.filter(Files::isRegularFile).map(fuzz::relativize).map(Path::toString).collect(Collectors.toSet()));
+		}
+		Assertions.assertEquals(expected, actual); Assertions.assertEquals(64, actual.size());
+	}
+
+	@Test
+	void issuerG2SemanticSeedsMatchCompleteControlsAndChecksums() throws Exception {
+		Path fuzz = coreBasedir().resolve("fuzz");
+		Path resources = fuzz.resolve("src/test/resources");
+		com.revetsec.json.JsonObject manifest = (com.revetsec.json.JsonObject) JsonCodec.parse(
+			Files.readAllBytes(fuzz.resolve("as1-g2-semantic-seeds.json")), com.revetsec.internal.json.JsonLimits.protocolDocument(262144));
+		com.revetsec.json.JsonArray entries = (com.revetsec.json.JsonArray) manifest.find("seeds").orElseThrow();
+		Set<String> expected = new TreeSet<>(), actual = new TreeSet<>();
+		for (com.revetsec.json.JsonValue entry : entries.getElements()) {
+			com.revetsec.json.JsonObject item = (com.revetsec.json.JsonObject) entry;
+			String relative = item.findString("path").orElseThrow(); Path file = fuzz.resolve(relative).normalize();
+			Assertions.assertTrue(file.startsWith(resources)); Assertions.assertTrue(expected.add(relative));
+			byte[] bytes = Files.readAllBytes(file); Assertions.assertTrue(bytes.length >= 4);
+			Assertions.assertEquals(item.findLong("bytes").orElseThrow().intValue(), bytes.length);
+			Assertions.assertEquals(item.findString("sha256").orElseThrow(), HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256").digest(bytes)));
+			com.revetsec.json.JsonArray controls = (com.revetsec.json.JsonArray) item.find("controls").orElseThrow();
+			Assertions.assertEquals(4, controls.getElements().size());
+			for (int i = 0; i < 4; i++) Assertions.assertEquals(((com.revetsec.json.JsonNumber) controls.getElements().get(i)).getValue().intValueExact(), Byte.toUnsignedInt(bytes[i]));
+			Assertions.assertFalse(item.findString("meaning").orElseThrow().isBlank());
+		}
+		for (String root : List.of("CimdFuzzTestsInputs", "IssuerStoreFuzzTestsInputs"))
+			try (Stream<Path> files = Files.walk(resources.resolve("com/revetsec/oauth/server/" + root))) {
+				actual.addAll(files.filter(Files::isRegularFile).map(fuzz::relativize).map(Path::toString).collect(Collectors.toSet()));
+			}
+		Assertions.assertEquals(expected, actual); Assertions.assertEquals(140, actual.size());
+	}
+
+	@Test
+	void issuerSemanticSeedsMatchCompleteControlsAndChecksums() throws Exception {
+		Path fuzz = coreBasedir().resolve("fuzz");
+		Path resources = fuzz.resolve("src/test/resources");
+		com.revetsec.json.JsonObject manifest = (com.revetsec.json.JsonObject) JsonCodec.parse(
+			Files.readAllBytes(fuzz.resolve("as1-semantic-seeds.json")), com.revetsec.internal.json.JsonLimits.protocolDocument(262144));
+		com.revetsec.json.JsonArray entries = (com.revetsec.json.JsonArray) manifest.find("seeds").orElseThrow();
+		Set<String> expected = new TreeSet<>();
+		Set<String> actual = new TreeSet<>();
+		for (com.revetsec.json.JsonValue entry : entries.getElements()) {
+			com.revetsec.json.JsonObject item = (com.revetsec.json.JsonObject) entry;
+			String relative = item.findString("path").orElseThrow();
+			Path file = fuzz.resolve(relative).normalize();
+			Assertions.assertTrue(file.startsWith(resources));
+			Assertions.assertTrue(expected.add(relative), "duplicate authored seed path");
+			byte[] bytes = Files.readAllBytes(file); Assertions.assertTrue(bytes.length >= 4);
+			Assertions.assertEquals(item.findLong("bytes").orElseThrow().intValue(), bytes.length);
+			Assertions.assertEquals(item.findString("sha256").orElseThrow(), HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256").digest(bytes)));
+			com.revetsec.json.JsonArray controls = (com.revetsec.json.JsonArray) item.find("controls").orElseThrow();
+			Assertions.assertEquals(4, controls.getElements().size());
+			for (int i = 0; i < 4; i++) Assertions.assertEquals(((com.revetsec.json.JsonNumber) controls.getElements().get(i)).getValue().intValueExact(), Byte.toUnsignedInt(bytes[i]));
+			Assertions.assertFalse(item.findString("meaning").orElseThrow().isBlank());
+		}
+		for (String root : List.of("IssuerIngressFuzzTestsInputs", "IssuerCodeFuzzTestsInputs")) {
+			try (Stream<Path> files = Files.walk(resources.resolve("com/revetsec/oauth/server/" + root))) {
+				actual.addAll(files.filter(Files::isRegularFile).map(fuzz::relativize).map(Path::toString).collect(Collectors.toSet()));
+			}
+		}
+		Assertions.assertEquals(expected, actual); Assertions.assertEquals(244, actual.size());
+	}
+
+	@Test
 	void m6SemanticSeedsMatchTheirCompleteNonemptyManifest() throws Exception {
 		Path resources = coreBasedir().resolve(FuzzSeedGenerator.FUZZ_RESOURCES);
 		Set<String> expected = new TreeSet<>();

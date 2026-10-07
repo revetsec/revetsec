@@ -57,8 +57,9 @@ final class OAuthGrantRevocation {
   requireNonNull(keys);
   String token = request.required("token");
   OAuthStatusResponse response = OAuthStatusResponse.revocation(this.bodyCap, this.headerCap);
-  // Hints never choose authority; this profile's raw refresh grammar and compact JWT grammar are disjoint.
-  boolean refresh = token.indexOf('.') < 0;
+  // Hints never choose authority. Only the typed refresh prefix selects the raw credential parser;
+  // every other token follows the compact JWT parser, including malformed leading-dot values.
+  boolean refresh = OAuthServerCredential.isRefresh(token);
   for (int attempt = 0; attempt < this.attempts; attempt++) {
    OAuthServerClientSelection.Selected selectedClient = clients.apply(deadline);
    OAuthServerClientRegistration client = selectedClient.client();

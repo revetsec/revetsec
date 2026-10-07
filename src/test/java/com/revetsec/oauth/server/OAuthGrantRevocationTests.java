@@ -18,6 +18,7 @@ package com.revetsec.oauth.server;
 
 import com.revetsec.SealingKey;
 import com.revetsec.StateSealer;
+import com.revetsec.InterruptingSealingProvider;
 import com.revetsec.internal.encoding.FormUrlEncoding;
 import com.revetsec.internal.http.Deadline;
 import com.revetsec.internal.json.JsonCodec;
@@ -221,7 +222,7 @@ final class OAuthGrantRevocationTests {
   })));
  }
  @TestFactory @NonNull Stream<@NonNull DynamicTest> unknownCredentialsHaveOneResponseAndNoStateChange() {
-  return Stream.of("random", "A".repeat(43), "x.y.z", "x".repeat(16000)).map(raw->test("length="+raw.length(),()->{
+  return Stream.of("random", "A".repeat(43), "x.y.z", ".x.y", "rsr1_", "x".repeat(16000)).map(raw->test(raw,()->{
    var f=new OAuthGrantRevocationTests();f.issued();var before=Map.copyOf(f.store.rows);ordinary(f.revoke(raw));assertEquals(before,f.store.rows);inactive(f.introspect(raw));assertEquals(before,f.store.rows);
   }));
  }
@@ -244,7 +245,11 @@ final class OAuthGrantRevocationTests {
   String jwt=token(issued());var response=introspect(jwt);var json=json(response.body());assertTrue(json.findBoolean("active").orElseThrow());assertEquals("Bearer",json.findString("token_type").orElseThrow());
   assertEquals(Set.of("active","token_type","iss","sub","aud","client_id","iat","exp","jti","scope"),json.getMembers().keySet());for(var member:claims(jwt).getMembers().entrySet())assertEquals(member.getValue(),json.getMembers().get(member.getKey()));
   var t=requireNonNull(this.store.lastTransaction);assertEquals(4,t.getConditions().size());assertTrue(t.getMutations().isEmpty());String headers=new String(response.headers(),StandardCharsets.UTF_8);assertTrue(headers.contains("Content-Length: "+response.body().length+"\r\n"));assertTrue(headers.contains("no-store"));assertTrue(headers.contains("no-cache"));
-  var bytes=response.body();bytes[0]=0;assertNotEquals(0,response.body()[0]);var h=response.headers();h[0]=0;assertNotEquals(0,response.headers()[0]);assertFalse(response.toString().contains("subject"));assertFalse(introspection().toString().contains("subject"));assertFalse(revocations(3).toString().contains("subject"));
+  var bytes=response.body();bytes[0]=0;assertNotEquals(0,response.body()[0]);var h=response.headers();h[0]=0;assertNotEquals(0,response.headers()[0]);
+  assertEquals("OAuthStatusResponse{<redacted>}",response.toString());
+  assertEquals("OAuthResourceIntrospection{<redacted>}",introspection().toString());
+  assertEquals("OAuthGrantRevocation{<redacted>}",revocations(3).toString());
+  assertFalse(response.toString().contains("subject"));assertFalse(introspection().toString().contains("subject"));assertFalse(revocations(3).toString().contains("subject"));
  }
  @TestFactory @NonNull Stream<@NonNull DynamicTest> unauthorizedIntrospectionCallersHaveNoStoreOrClaimAccess() {
   return Stream.of("public","wrong-secret","wrong-resource","browser","unknown").map(kind->test(kind,()->{
@@ -374,7 +379,38 @@ final class OAuthGrantRevocationTests {
   var one=issued();var before=Map.copyOf(this.store.rows);for(String t:List.of(refresh(one),"bad"))admission(OAuthServerAdmissionFailure.Reason.INVALID_CLIENT,()->revocations(3).revoke(endpoint(OAuthServerRequest.Endpoint.REVOCATION,t,Map.of(),null),(id,b)->Optional.empty(),keys(),deadline()));assertEquals(before,this.store.rows);
  }
  @Test void trustedConflictExhaustionIsUnavailableAndNeverAdvancesEpoch() {
-  issued();String id=record(OAuthStoreKey.Kind.GRANT).text("id");var before=Map.copyOf(this.store.rows);this.store.conflicts=5;failed(OAuthStoreFailure.Reason.UNAVAILABLE,()->revocations(3).revokeGrant(id,deadline()));assertEquals(before,this.store.rows);
+  issued();String id=record(OAuthStoreKey.Kind.GRANT).text("id");var before=Map.copyOf(this.store.rows);int commits=this.store.commits;this.store.conflicts=5;failed(OAuthStoreFailure.Reason.UNAVAILABLE,()->revocations(3).revokeGrant(id,deadline()));assertEquals(before,this.store.rows);assertEquals(commits+3,this.store.commits);
+ }
+ @Test void publicRevocationConflictExhaustionUsesExactlyThreeAttempts() {
+  var one=issued();int commits=this.store.commits;this.store.conflicts=5;
+  failed(OAuthStoreFailure.Reason.UNAVAILABLE,()->revoke(refresh(one)));
+  assertEquals(commits+3,this.store.commits);
+ }
+ @Test void trustedRevocationRequiresThePermanentSubjectFence() {
+  issued();String id=record(OAuthStoreKey.Kind.GRANT).text("id");
+  var before=entry(OAuthStoreKey.Kind.GRANT);remove(OAuthStoreKey.Kind.SUBJECT_STATE);
+  failed(OAuthStoreFailure.Reason.CORRUPT_STATE,()->revocations(3).revokeGrant(id,deadline()));
+  assertSame(before,entry(OAuthStoreKey.Kind.GRANT));
+ }
+ @Test void trustedRevocationCannotReturnSuccessAfterGrantRetentionExpiresDuringCommit() {
+  issued();OAuthAuthorizationRecord grant=record(OAuthStoreKey.Kind.GRANT);
+  this.store.beforeCommit=()->this.clock.time=grant.retention();
+  failed(OAuthStoreFailure.Reason.UNAVAILABLE,
+   ()->revocations(3).revokeGrant(grant.text("id"),deadline()));
+ }
+ @Test void interruptedGrantResealRestoresCallerFlagWithoutCommittingRevocation() {
+  issued();String id=record(OAuthStoreKey.Kind.GRANT).text("id");int commits=this.store.commits;
+  try {
+   InterruptingSealingProvider.around(()->failed(OAuthStoreFailure.Reason.CORRUPT_STATE,
+    ()->revocations(3).revokeGrant(id,deadline())));
+   assertTrue(Thread.currentThread().isInterrupted());assertEquals(commits,this.store.commits);
+  } finally {Thread.interrupted();}
+  assertEquals("ACTIVE",record(OAuthStoreKey.Kind.GRANT).text("status"));
+ }
+ @Test void publicRevocationCannotReturnSuccessAfterCredentialRetentionExpiresDuringCommit() {
+  var one=issued();OAuthAuthorizationRecord access=record(OAuthStoreKey.Kind.ACCESS_TOKEN);
+  this.store.beforeCommit=()->this.clock.time=access.retention();
+  failed(OAuthStoreFailure.Reason.UNAVAILABLE,()->revoke(token(one)));
  }
  @Test void falseRefreshHeadAfterRacingRotationCannotLoseWinnerRevocation() {
   var one=issued();OAuthTokenResponse[] winner={one};this.store.beforeCommit=()->winner[0]=rotate(refresh(one));ordinary(revoke(refresh(one)));invalid(()->validate(token(winner[0])));admission(OAuthServerAdmissionFailure.Reason.INVALID_GRANT,()->rotate(refresh(winner[0])));

@@ -79,6 +79,27 @@ class OAuthClientMetadataFetchTests {
    @NonNull Clock clock,OAuthClientMetadataFetcher.@NonNull Transport transport) {
   return new OAuthClientMetadataFetcher(ISSUER,sealer,policy,OAuthServerIngressLimits.fromDefaults(),false,false,OutboundUriPolicy.defaultInstance(),clock,transport);
  }
+ @Test void productionTransportInvokesPinnedResolverBeforeRejectingPrivateAddress() {
+  AtomicInteger resolutions=new AtomicInteger();
+  OAuthClientMetadataPolicy enabled=OAuthClientMetadataPolicy.fromAddressResolver((host,budget)->{
+   assertEquals("client.example.com",host);resolutions.incrementAndGet();
+   return List.of(java.net.InetAddress.getLoopbackAddress());
+  });
+  OAuthClientMetadataFetcher fetcher=new OAuthClientMetadataFetcher(ISSUER,sealer(),enabled,
+   OAuthServerIngressLimits.fromDefaults(),false,false,OutboundUriPolicy.defaultInstance(),Clock.fixed(NOW,ZoneOffset.UTC),Duration.ofSeconds(1));
+  infrastructure(()->fetcher.reusable(ID,deadline()));
+  assertEquals(1,resolutions.get());
+ }
+ @Test void nullTransportResultFailsClosedBeforeCaching() {
+  InMemoryOAuthClientMetadataCache cache=InMemoryOAuthClientMetadataCache.fromMaximumEntries(8);
+  OAuthClientMetadataPolicy enabled=policy(cache);
+  OAuthClientMetadataFetcher.Transport absent=new OAuthClientMetadataFetcher.Transport() {
+   @SuppressWarnings("NullAway") @Override public @NonNull RawResponse fetch(@NonNull URI uri,@NonNull Deadline budget) {return null;}
+  };
+  OAuthClientMetadataFetcher fetcher=fetcher(sealer(),enabled,Clock.fixed(NOW,ZoneOffset.UTC),absent);
+  infrastructure(()->fetcher.reusable(ID,deadline()));
+  assertTrue(cache.read(codec(sealer(),enabled).key(ID),Duration.ofSeconds(1)).isEmpty());
+ }
  private static void infrastructure(org.junit.jupiter.api.function.@NonNull Executable operation) {
   OAuthServerAdmissionFailure failure=assertThrows(OAuthServerAdmissionFailure.class,operation);
   assertEquals(OAuthServerAdmissionFailure.Reason.INFRASTRUCTURE,failure.reason());assertNull(failure.getCause());
@@ -89,7 +110,8 @@ class OAuthClientMetadataFetchTests {
   OAuthClientMetadataCacheEntry entry=codec.seal(ID,body("display"),NOW,NOW.plusSeconds(120));
   OAuthClientMetadataCacheEntry copy=OAuthClientMetadataCacheEntry.fromStoredForm(OAuthClientMetadataCacheKey.fromStoredForm(entry.getKey().getStorageKey()),entry.getVersion(),entry.getExpiresAt(),entry.toSealedForm());
   var cached=codec.open(ID,copy,NOW.plusSeconds(1)).orElseThrow();assertEquals("display",cached.document().clientName());
-  assertEquals(NOW,cached.fetchedAt());assertEquals(NOW.plusSeconds(120),cached.expiresAt());assertFalse(cached.toString().contains("display"));
+  assertEquals(NOW,cached.fetchedAt());assertEquals(NOW.plusSeconds(120),cached.expiresAt());
+  assertEquals("CachedClientMetadata{metadata=redacted}",cached.toString());assertFalse(cached.toString().contains("display"));
   assertEquals(codec.key(ID),codec(sealer(),policy(null)).key(ID));
   assertNotEquals(codec.key(ID),codec.key("https://CLIENT.example.com/metadata"));
   assertNotEquals(codec.key(ID),codec.key(ID+"?a=1"));
@@ -232,6 +254,15 @@ class OAuthClientMetadataFetchTests {
    @Override public @NonNull Boolean compareAndSet(@NonNull OAuthClientMetadataCacheKey k,@Nullable String v,@Nullable OAuthClientMetadataCacheEntry e,@NonNull Duration b){throw new IllegalStateException("backend diagnostic");}
   };
   assertEquals("fresh",fetcher(sealer(),policy(bad),Clock.fixed(NOW,ZoneOffset.UTC),(u,d)->response("fresh")).reusable(ID,deadline()).clientName());
+ }
+ @Test void interruptedOptionalWriteAbortsReleaseAndRestoresTheFlag() {
+  OAuthClientMetadataCache interrupted=new OAuthClientMetadataCache(){
+   @Override public @NonNull Optional<@NonNull OAuthClientMetadataCacheEntry> read(@NonNull OAuthClientMetadataCacheKey key,@NonNull Duration budget){return Optional.empty();}
+   @Override public @NonNull Boolean compareAndSet(@NonNull OAuthClientMetadataCacheKey key,@Nullable String version,@Nullable OAuthClientMetadataCacheEntry replacement,@NonNull Duration budget){throw OAuthClientMetadataCacheException.fromReason(OAuthClientMetadataCacheException.Reason.INTERRUPTED);}
+  };
+  var f=fetcher(sealer(),policy(interrupted),Clock.fixed(NOW,ZoneOffset.UTC),(u,d)->response("fresh"));
+  try {infrastructure(()->f.reusable(ID,deadline()));assertTrue(Thread.currentThread().isInterrupted());}
+  finally {Thread.interrupted();}
  }
  @Test void originalDeadlineAndInterruptAreCheckedAroundCallbacks() {
   AtomicInteger calls=new AtomicInteger();var f=fetcher(sealer(),policy(null),Clock.fixed(NOW,ZoneOffset.UTC),(u,d)->{calls.incrementAndGet();return response("fresh");});

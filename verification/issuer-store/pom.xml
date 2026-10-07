@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Copyright 2026 Revetware LLC. Apache-2.0. Unpublished fixture only. -->
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+ <modelVersion>4.0.0</modelVersion><groupId>com.revetsec.verification</groupId><artifactId>issuer-store</artifactId><version>1.0.0-SNAPSHOT</version>
+ <properties><maven.compiler.release>17</maven.compiler.release><project.build.sourceEncoding>UTF-8</project.build.sourceEncoding><project.build.outputTimestamp>2026-10-06T12:00:00Z</project.build.outputTimestamp><maven.install.skip>true</maven.install.skip><maven.deploy.skip>true</maven.deploy.skip></properties>
+ <dependencies>
+  <dependency><groupId>com.pyranid</groupId><artifactId>pyranid</artifactId><version>4.7.0</version></dependency>
+  <dependency><groupId>com.revetsec</groupId><artifactId>revetsec</artifactId><version>1.0.0-SNAPSHOT</version></dependency>
+  <dependency><groupId>org.postgresql</groupId><artifactId>postgresql</artifactId><version>42.7.13</version><scope>runtime</scope></dependency>
+  <dependency><groupId>org.jspecify</groupId><artifactId>jspecify</artifactId><version>1.0.1</version><scope>provided</scope></dependency>
+ </dependencies>
+ <build><plugins>
+  <plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-compiler-plugin</artifactId><version>3.16.0</version><configuration><proc>none</proc><parameters>true</parameters><failOnWarning>true</failOnWarning><compilerArgs><arg>-Xlint:all,-serial</arg></compilerArgs></configuration></plugin>
+  <plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-jar-plugin</artifactId><version>3.5.1</version></plugin>
+ </plugins></build>
+</project>

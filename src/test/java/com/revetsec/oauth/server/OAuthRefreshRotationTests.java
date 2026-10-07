@@ -223,6 +223,25 @@ final class OAuthRefreshRotationTests {
    invalid(()->engine.rotate(refreshRequest(old,Map.of("scope","read")),(id,b)->Optional.of(client()),resources,policy,deadline()));assertEquals("REVOKED",t.record(OAuthStoreKey.Kind.GRANT).text("status"));inactive(()->t.validate(token(initial)));assertEquals(1,t.store.rows.keySet().stream().filter(k->k.getKind()==OAuthStoreKey.Kind.ACCESS_TOKEN).count());
   }));
  }
+ @TestFactory @NonNull Stream<@NonNull DynamicTest> removedAuthorityRejectsOnTheOnlyCommittedAttempt() {
+  return Stream.of("serverMissing","narrow").map(mode->DynamicTest.dynamicTest(mode,()->{
+   var t=new OAuthRefreshRotationTests();String old=refresh(t.issued());
+   var once=t.rotation(true,Duration.ofMinutes(5),t.retention,signer(),1);
+   Map<String,Set<String>> current=mode.equals("serverMissing")?Map.of("https://other.example/mcp",Set.of("read")):resources();
+   OAuthGrantPolicy policy=(c,b)->decision("subject",mode.equals("narrow")?Set.of("read"):Set.of("read","write"),true);
+   invalid(()->once.rotate(refreshRequest(old,Map.of()),(id,b)->Optional.of(client()),current,policy,deadline()));
+   assertEquals("REVOKED",t.record(OAuthStoreKey.Kind.GRANT).text("status"));
+  }));
+ }
+ @Test void missingRefreshResourceIsRejectedBeforeClientLookupOrStoreRead() {
+  String old=refresh(issued());int reads=this.store.reads;int[] lookups={0};
+  OAuthServerAdmissionFailure failure=assertThrows(OAuthServerAdmissionFailure.class,
+   ()->rotation().rotate(refreshRequest(old,Map.of("resource","")),(id,budget)->{
+    lookups[0]++;return Optional.of(client());
+   },resources(),allow(),deadline()));
+  assertEquals(OAuthServerAdmissionFailure.Reason.INVALID_REQUEST,failure.reason());
+  assertEquals(0,lookups[0]);assertEquals(reads,this.store.reads);
+ }
  @TestFactory @SuppressWarnings("NullAway") @NonNull Stream<@NonNull DynamicTest> nullFaultIdentityAndWideningPolicyHaveNoMutations() {
   return Stream.of("null","fault","subject","widen","resource","twoResources","interrupt","fatal").map(mode->DynamicTest.dynamicTest(mode,()->{
    var t=new OAuthRefreshRotationTests();String old=refresh(t.issued());var before=Map.copyOf(t.store.rows);TestFatal fatal=new TestFatal();
@@ -252,6 +271,12 @@ final class OAuthRefreshRotationTests {
  @Test void signatureFailureLeavesRefreshUsableAndRestoresNoGuessedState() {
   String old=refresh(issued());var before=Map.copyOf(this.store.rows);var broken=JwsSigner.fromRsaKeyPair(new RefusingPrivateKey(),KEY.getPublicKey(),JwsAlgorithm.RS256);
   unavailable(()->rotation(true,Duration.ofMinutes(5),this.retention,broken,3).rotate(refreshRequest(old,Map.of()),(id,b)->Optional.of(client()),resources(),allow(),deadline()));assertEquals(before,this.store.rows);assertNotNull(rotate(old));
+ }
+ @Test void interruptedSignerLeavesRefreshUsableAndRestoresTheFlag() {
+  String old=refresh(issued());var before=Map.copyOf(this.store.rows);
+  try {InterruptingSignatureProvider.around(()->unavailable(()->rotation(true,Duration.ofMinutes(5),this.retention,signer(),3).rotate(refreshRequest(old,Map.of()),(id,b)->Optional.of(client()),resources(),allow(),deadline())));assertTrue(Thread.currentThread().isInterrupted());assertEquals(before,this.store.rows);}
+  finally {Thread.interrupted();}
+  assertNotNull(rotate(old));
  }
  @TestFactory @NonNull Stream<@NonNull DynamicTest> epochAndIncarnationChangesPreventIssuanceAndDestructiveReuse() {
   return Stream.of("issuerEpoch","subjectEpoch","issuerIncarnation","subjectIncarnation").flatMap(mode->Stream.of(false,true).map(used->DynamicTest.dynamicTest(mode+" used="+used,()->{
@@ -283,6 +308,16 @@ final class OAuthRefreshRotationTests {
  @Test void lateCommitDoesNotReturnCredentialsAndLaterReplayRevokesAppliedWinner() {
   String old=refresh(issued());Instant expiry=refreshRecord(old).expires();this.store.afterCommit=()->this.clock.time=expiry;
   failed(OAuthStoreFailure.Reason.UNAVAILABLE,()->rotate(old));assertEquals("USED",refreshRecord(old).text("status"));invalid(()->rotate(old));assertEquals("REVOKED",record(OAuthStoreKey.Kind.GRANT).text("status"));
+ }
+ @Test void accessExpiryCannotBePassedBySlowRefreshCommit() {
+  String old=refresh(issued());this.store.afterCommit=()->this.clock.time=NOW.plusSeconds(301);
+  failed(OAuthStoreFailure.Reason.UNAVAILABLE,()->rotate(old));
+  assertEquals("USED",refreshRecord(old).text("status"));
+ }
+ @Test void nearIdleExpiryCannotBePassedBySlowRefreshCommit() {
+  String old=refresh(issued());Instant idle=refreshRecord(old).expires();
+  this.clock.time=idle.minusSeconds(30);this.store.afterCommit=()->this.clock.time=idle;
+  failed(OAuthStoreFailure.Reason.UNAVAILABLE,()->rotate(old));
  }
  @Test void issuerRevocationDuringCommitConflictsAndCannotIssue() {
   String old=refresh(issued());this.store.beforeCommit=()->this.coordinator.revokeAll(deadline());invalid(()->rotate(old));assertEquals("ACTIVE",refreshRecord(old).text("status"));

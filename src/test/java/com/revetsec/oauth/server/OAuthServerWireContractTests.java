@@ -58,26 +58,27 @@ final class OAuthServerWireContractTests {
     OAuthServerSettings.Builder builder = compatible();
     if (name.equals("authorizationInteractionLifetime")) builder.authorizationCodeLifetime(Duration.ofSeconds(30));
     if (name.equals("totalDeadline")) builder.requestTimeout(Duration.ofSeconds(1));
-    set(builder, name, value, duration);
+    assertSame(builder, set(builder, name, value, duration));
     OAuthServerSettings settings = builder.build(false, 16384);
     assertEquals(value, OAuthServerSettings.class.getDeclaredField(name).get(settings));
    }));
    List<Object> rejected = duration ? List.of(row.getFloorDuration().minusNanos(1), row.getCapDuration().plusNanos(1))
     : List.of((int)row.getFloor()-1, (int)row.getCap()+1, Integer.MIN_VALUE, Integer.MAX_VALUE);
    for (Object value : rejected) tests.add(DynamicTest.dynamicTest(name+" rejects "+value, () -> {
-    OAuthServerSettings.Builder builder = compatible(); set(builder, name, value, duration);
+    OAuthServerSettings.Builder builder = compatible(); assertSame(builder, set(builder, name, value, duration));
     assertThrows(IllegalArgumentException.class, () -> builder.build(false, 16384));
    }));
    tests.add(DynamicTest.dynamicTest(name+" null resets exact default", () -> {
-    OAuthServerSettings.Builder builder = OAuthServerSettings.builder(); set(builder, name, accepted.get(0), duration);
-    set(builder, name, null, duration); OAuthServerSettings settings = builder.build(false, 3800);
+    OAuthServerSettings.Builder builder = OAuthServerSettings.builder(); assertSame(builder, set(builder, name, accepted.get(0), duration));
+    assertSame(builder, set(builder, name, null, duration)); OAuthServerSettings settings = builder.build(false, 3800);
     assertEquals(duration ? row.getDefaultDuration() : row.getDefaultIntValue(), OAuthServerSettings.class.getDeclaredField(name).get(settings));
    }));
   }
   assertEquals(158, tests.size()); return tests.stream();
  }
- private static void set(OAuthServerSettings.@NonNull Builder builder, @NonNull String name, @Nullable Object value, boolean duration) throws Exception {
-  try { OAuthServerSettings.Builder.class.getDeclaredMethod(name, duration ? Duration.class : Integer.class).invoke(builder, value); }
+ private static OAuthServerSettings.@NonNull Builder set(OAuthServerSettings.@NonNull Builder builder, @NonNull String name, @Nullable Object value, boolean duration) throws Exception {
+  try { return (OAuthServerSettings.Builder)requireNonNull(OAuthServerSettings.Builder.class
+    .getDeclaredMethod(name, duration ? Duration.class : Integer.class).invoke(builder, value)); }
   catch (InvocationTargetException failure) { throw new AssertionError(failure.getCause()); }
  }
  @Test void crossFieldOrderingAndExactEqualityAreChecked() {
@@ -107,6 +108,10 @@ final class OAuthServerWireContractTests {
  @Test void completeTypedSpellingSeparatesCodeAndRefreshLedgerKeys() throws Exception {
   String code=OAuthServerCredential.code(NONCE),refresh=OAuthServerCredential.refresh(NONCE);
   assertEquals("rsc1_"+NONCE,code);assertEquals("rsr1_"+NONCE,refresh);assertNotEquals(OAuthServerCredential.codeDigest(code),OAuthServerCredential.refreshDigest(refresh));
+  assertTrue(OAuthServerCredential.isRefresh(refresh));
+  assertFalse(OAuthServerCredential.isRefresh(code));
+  assertFalse(OAuthServerCredential.isRefresh(".x.y"));
+  assertFalse(OAuthServerCredential.isRefresh("x.y.z"));
   String oracle=java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(java.security.MessageDigest.getInstance("SHA-256").digest(code.getBytes(StandardCharsets.US_ASCII)));
   assertEquals(oracle,OAuthServerCredential.codeDigest(code));
   assertThrows(IllegalArgumentException.class,()->OAuthServerCredential.codeDigest(refresh));assertThrows(IllegalArgumentException.class,()->OAuthServerCredential.refreshDigest(code));
@@ -160,6 +165,13 @@ final class OAuthServerWireContractTests {
   for(String uri:List.of("/relative","https://client.example/#fragment","https://u@client.example/")) cases.add(DynamicTest.dynamicTest("unsafe Location "+uri,()->assertThrows(IllegalArgumentException.class,()->OAuthServerResponse.prepare(303,OAuthServerResponse.privateHeaders(0),URI.create(uri),new byte[0],4096,1024))));
   return cases.stream();
  }
+ @Test void responseAsciiBoundariesRemainPrintableAndLocationSafe() {
+  var headers=OAuthServerResponse.privateHeaders(0);headers.put("ETag",List.of(" !~ "));
+  assertEquals(List.of(" !~ "),OAuthServerResponse.prepare(200,headers,null,new byte[0],4096,1024).getHeaders().get("ETag"));
+  URI location=URI.create("https://client.example/!~");
+  assertEquals(location,OAuthServerResponse.prepare(303,OAuthServerResponse.privateHeaders(0),location,new byte[0],4096,1024)
+   .getLocationWithCredentials().orElseThrow());
+ }
  @Test void responsePolicyAndSingleHeaderValuesAreRequired() {
   var headers=OAuthServerResponse.privateHeaders(0);headers.remove("Referrer-Policy");assertThrows(IllegalArgumentException.class,()->OAuthServerResponse.prepare(200,headers,null,new byte[0],4096,1024));
   headers.put("Referrer-Policy",List.of("no-referrer"));headers.put("ETag",List.of());assertThrows(IllegalArgumentException.class,()->OAuthServerResponse.prepare(200,headers,null,new byte[0],4096,1024));
@@ -182,6 +194,7 @@ final class OAuthServerWireContractTests {
  }
  @Test void loopbackIssuerIsExplicitAndDiagnosticsAreFixed() {
   assertThrows(IllegalArgumentException.class,()->new OAuthAuthorizationResponseEncoder(URI.create("http://127.0.0.1"),false,4096,1024,1024));
+  assertEquals("OAuthAuthorizationResponseEncoder{<redacted>}",new OAuthAuthorizationResponseEncoder(URI.create("https://issuer.example:65535"),false,4096,1024,1024).toString());
   assertEquals("OAuthAuthorizationResponseEncoder{<redacted>}",new OAuthAuthorizationResponseEncoder(URI.create("http://127.0.0.1"),true,4096,1024,1024).toString());
  }
 }

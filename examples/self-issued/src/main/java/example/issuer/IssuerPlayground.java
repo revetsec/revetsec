@@ -35,19 +35,23 @@ public final class IssuerPlayground {
     }
     static @NonNull SokletConfig sokletConfig(@NonNull IssuerResources app) {
         Set<McpProtocolVersion> versions=Set.of(McpProtocolVersion.V2025_06_18,McpProtocolVersion.V2025_11_25,McpProtocolVersion.V2026_07_28);
-        McpToolRegistration<McpJsonObject> tool=McpToolRegistration.withName("whoami",versions).jsonObjectArguments()
+        McpToolRegistration<McpJsonObject> tool=McpToolRegistration.withName("whoami",versions).inputSchema(McpJsonObject.builder().put("type","object").put("properties",McpJsonObject.builder()
+                        .put("tenant",McpJsonObject.builder().put("type","string").put("default","local").build())
+                        .put("object",McpJsonObject.builder().put("type","string").put("default","self").build()).build())
+                        .put("additionalProperties",false).build())
                 .handler((context,args,features) -> whoami(context,args.getRawArguments()))
                 .description("Return an application-redacted checked identity for local/self only").build();
-        McpEndpoint endpoint=McpEndpoint.withPath("/mcp",McpImplementation.withNameAndVersion("Self-issued Revetsec Playground","1.0.0").build(),versions)
-                .toolRegistrations(List.of(tool)).build();
+        List<McpEndpoint> endpoints=app.config.resources().keySet().stream().sorted().map(java.net.URI::create)
+                .map(resource->McpEndpoint.withPath(resource.getRawPath(),McpImplementation.withNameAndVersion("Self-issued Revetsec Playground","1.0.0").build(),versions)
+                        .toolRegistrations(List.of(tool)).build()).toList();
         McpServer mcp=McpServer.withPort(app.config.mcpPort).host("127.0.0.1")
-                .endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint))).admissionController(new IssuerAdmission(app))
+                .endpointRegistry(McpEndpointRegistry.fromEndpoints(endpoints)).admissionController(new IssuerAdmission(app))
                 .toolRateLimiter(McpRateLimiter.fromInMemoryDefaults()).allowedHosts(Set.of(app.config.resource.getHost()))
                 .corsAuthorizer(CorsAuthorizer.fromWhitelistedOrigins(Set.of(app.config.origin.toString())))
                 .requestTimeout(Duration.ofSeconds(8)).requestHandlerConcurrency(8).requestHandlerQueueCapacity(16).maximumRequestSizeInBytes(16_384).build();
         HttpServer http=HttpServer.withPort(app.config.httpPort).host("127.0.0.1").maximumRequestBodySizeInBytes(16_384)
                 .maximumRequestSizeInBytes(32_768).requestHandlerTimeout(Duration.ofSeconds(15)).requestHandlerConcurrency(8).requestHandlerQueueCapacity(16).build();
-        String clientOrigin=app.config.redirect.getScheme()+"://"+app.config.redirect.getRawAuthority();
+        String clientOrigin=app.config.browserOrigin.toString();
         return SokletConfig.withHttpServer(http).mcpServer(mcp).resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(IssuerResources.class)))
                 .instanceProvider(new InstanceProvider() {
                     @Override public <@NonNull T> @NonNull T provide(@NonNull Class<@NonNull T> type) {
