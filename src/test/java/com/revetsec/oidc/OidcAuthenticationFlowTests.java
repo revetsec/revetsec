@@ -305,8 +305,8 @@ final class OidcAuthenticationFlowTests {
 			OidcClient client = builder(server).build(); AuthorizationRedirect redirect = client.beginAuthentication();
 			AtomicReference<String> saved = new AtomicReference<>();
 			PendingAuthorizationStore broken = new PendingAuthorizationStore() {
-				@Override public void save(@NonNull String binding, @NonNull String state, @NonNull String opaque, @NonNull Instant expires) { saved.set(opaque); }
-				@Override public @NonNull Optional<@NonNull String> consume(@NonNull String binding, @NonNull String state) { return Optional.ofNullable(saved.getAndSet(null)); }
+				@Override public void save(@NonNull String binding, @NonNull String state, @NonNull String opaque, @NonNull Instant expires, @NonNull Duration remaining) { saved.set(opaque); }
+				@Override public @NonNull Optional<@NonNull String> consume(@NonNull String binding, @NonNull String state, @NonNull Duration remaining) { return Optional.ofNullable(saved.getAndSet(null)); }
 			};
 			redirect.getPendingAuthorization().saveTo(broken, "browser-A");
 			assertEquals(OAuthException.Reason.BROWSER_BINDING_MISMATCH, assertThrows(OAuthValidationException.class,

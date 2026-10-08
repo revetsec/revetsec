@@ -61,8 +61,9 @@ import static java.util.Objects.requireNonNull;
  * a time, and decides when a fetch may start (M2 plan, "RemoteJsonWebKeySource algorithm"; G8-4, G8-8, M2-8).
  * <p>
  * <strong>State.</strong> The snapshot (the parsed keys, when they were fetched, when they expire and until when they
- * may still answer while refreshes fail) is immutable and published through a volatile field, so a call whose key is
- * in a fresh snapshot takes no lock. Everything else is guarded by {@link #lock}: the fetch in progress (the flight);
+ * may still answer while refreshes fail) is immutable and published through a volatile field. A short lock protects
+ * each clock observation so an observed rollback invalidates even a snapshot still inside its original TTL.
+ * Everything else is guarded by {@link #lock}: the fetch in progress (the flight);
  * the start of the last unknown-key refetch that sent its request (the cooldown mark); the starts of the last two
  * attempts of any kind (the ceiling); and the negative cache (when the last failure happened, the consecutive failure
  * count, the current backoff step and the failure's category). The lock is never held while an observer runs, while
@@ -175,6 +176,10 @@ final class JwksCache {
 	@Nullable
 	private volatile Snapshot snapshot;
 
+	// Guarded by lock: the last observed wall-clock instant.
+	@Nullable
+	private Instant lastClock;
+
 	// Guarded by lock: the fetch in progress, or null.
 	@Nullable
 	private Flight flight;
@@ -235,17 +240,22 @@ final class JwksCache {
 		requireNonNull(query);
 		requireNonNull(deadline);
 
-		// The fast path: a volatile read and a key lookup, with no lock.
-		@Nullable Snapshot current = this.snapshot;
-
-		if (current != null && current.isFresh(this.settings.clock().instant())) {
-			KeySelection selection = KeySelector.select(current.keys(), query);
-
-			if (selection.getKind() != KeySelection.Kind.UNKNOWN)
-				return selection;
+		@Nullable Snapshot observed = this.snapshot;
+		Instant now = this.settings.clock().instant();
+		@Nullable Snapshot current;
+		this.lock.lock();
+		try {
+			current = observeClock(now);
+			if (current != null && current.isFresh(now)) {
+				KeySelection selection = KeySelector.select(current.keys(), query);
+				if (current != observed || selection.getKind() != KeySelection.Kind.UNKNOWN)
+					return selection;
+			}
+		} finally {
+			this.lock.unlock();
 		}
 
-		return requireNonNull(resolve(query, deadline, current));
+		return requireNonNull(resolve(query, deadline, observed));
 	}
 
 	/**
@@ -257,12 +267,38 @@ final class JwksCache {
 	 */
 	void warmUp(@NonNull Deadline deadline) {
 		requireNonNull(deadline);
-		@Nullable Snapshot current = this.snapshot;
+		@Nullable Snapshot observed = this.snapshot;
+		Instant now = this.settings.clock().instant();
+		@Nullable Snapshot current;
+		this.lock.lock();
+		try {
+			current = observeClock(now);
+			if (current != null && current.isFresh(now))
+				return;
+		} finally {
+			this.lock.unlock();
+		}
 
-		if (current != null && current.isFresh(this.settings.clock().instant()))
-			return;
+		resolve(null, deadline, observed);
+	}
 
-		resolve(null, deadline, current);
+	// Called under lock. An observed rollback invalidates cached keys even inside their original TTL.
+	private @Nullable Snapshot observeClock(@NonNull Instant now) {
+		boolean rollback = this.lastClock != null && now.isBefore(this.lastClock);
+		this.lastClock = now;
+		if (rollback)
+			this.snapshot = null;
+		return this.snapshot;
+	}
+
+	private @Nullable KeySelection currentStaleSelection(@Nullable KeyQuery query) {
+		this.lock.lock();
+		try {
+			Instant now = this.settings.clock().instant();
+			return staleSelection(observeClock(now), query, now);
+		} finally {
+			this.lock.unlock();
+		}
 	}
 
 	/**
@@ -347,7 +383,7 @@ final class JwksCache {
 						}
 						case FAILED -> {
 							@Nullable KeySelection stale = decision.trigger == Trigger.EXPIRED
-									? staleSelection(this.snapshot, query, this.settings.clock().instant()) : null;
+									? currentStaleSelection(query) : null;
 
 							if (stale != null)
 								return stale;
@@ -377,7 +413,7 @@ final class JwksCache {
 
 		try {
 			Instant now = this.settings.clock().instant();
-			@Nullable Snapshot current = this.snapshot;
+			@Nullable Snapshot current = observeClock(now);
 
 			// Rule 1: another caller's fetch completed since this call read the snapshot. The call rechecks against the new
 			// snapshot and never fetches, so a key still missing from it is final for the call, as if it had joined that
@@ -576,7 +612,7 @@ final class JwksCache {
 				JsonWebKeySetUnavailableException exception = JsonWebKeySetUnavailableException.fromCategory(
 						failure.category, failure.transientFailure, outcome.cause);
 				@Nullable KeySelection stale = trigger == Trigger.EXPIRED
-						? staleSelection(this.snapshot, query, this.settings.clock().instant()) : null;
+						? currentStaleSelection(query) : null;
 				ObserverDispatch.dispatch(observer, hook -> hook.didFailToFetchJsonWebKeySet(this.reportedUri, exception,
 						stale != null, elapsed));
 

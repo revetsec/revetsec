@@ -9,6 +9,8 @@ Two unpublished Soklet projects use packaged core, adapter and framework artifac
 
 A separate [self-issued MCP Playground](self-issued/README.md) uses current core/helper sources for app-owned OAuth issuance and online MCP validation with bounded volatile sessions/storage. Its matching CI pins await pushed revisions.
 
+The standalone [PostgreSQL pending-authorization example](postgresql-pending-store/README.md) shows an application-owned shared store for OAuth/OIDC callbacks using Pyranid. It is outside the core reactor and is not a managed database service.
+
 The examples are outside the core reactor. `pins.json` records already-pushed core/helper revisions and the exact framework source. They do not publish artifacts. Revetsec has not been independently audited.
 
 ## Build

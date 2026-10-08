@@ -631,6 +631,25 @@ final class JwksCacheTests {
 		Assertions.assertEquals(3, client.getSendCount());
 	}
 
+	@Test
+	void aSmallClockRollbackCannotKeepAnOldKeySetFresh() {
+		RewindableClock clock = RewindableClock.fromInstant(START);
+		MemoryHttpClient client = MemoryHttpClient.answering(Answer.fromKeySet("max-age=60", "a"));
+		RemoteJsonWebKeySource source = source(client, clock).build();
+		Assertions.assertEquals(KeySelection.Kind.FOUND, select(source, "a").getKind());
+		clock.advance(Duration.ofSeconds(5));
+		Assertions.assertEquals(KeySelection.Kind.FOUND, select(source, "a").getKind());
+		Assertions.assertEquals(1, client.getSendCount());
+		client.answer(Answer.fromKeySet("max-age=60", "b"));
+		clock.rewind(Duration.ofSeconds(1));
+		Assertions.assertEquals(KeySelection.Kind.UNKNOWN, select(source, "a").getKind());
+		Assertions.assertEquals(2, client.getSendCount(), "an observed rollback invalidates even a fresh window");
+		Assertions.assertEquals(KeySelection.Kind.FOUND, select(source, "b").getKind());
+		clock.advance(Duration.ofSeconds(1));
+		Assertions.assertEquals(KeySelection.Kind.FOUND, select(source, "b").getKind());
+		Assertions.assertEquals(2, client.getSendCount());
+	}
+
 	// M2-8: a clock set back never extends a cooldown or a backoff. A failed unknown-key refetch leaves both a cooldown
 	// mark and a backoff; with the clock set back before them, a window whose start is in the future has passed, so the
 	// next unknown key fetches at once from the still-fresh key set.

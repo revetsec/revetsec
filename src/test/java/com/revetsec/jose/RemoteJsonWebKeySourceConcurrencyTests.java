@@ -245,12 +245,10 @@ final class RemoteJsonWebKeySourceConcurrencyTests {
 		Assertions.assertEquals(1, client.getSendCount());
 	}
 
-	// Plan "Outcomes": when a refresh fails, an EXPIRED caller whose usable key set holds its key is served stale,
-	// waiters as well as the leader. A waiter normally never gets there, because rule 2 serves it without waiting, so
-	// the key set is made usable only while the flight runs: the clock is set back before the fetch time when the
-	// callers decide, and forward again before the refresh fails.
+	// A snapshot invalidated by an observed clock rollback cannot become stale-usable again after the clock recovers.
+	// A failed replacement fetch therefore fails the leader and waiter instead of serving the old key.
 	@Test
-	void anExpiredWaiterIsServedStaleWhenTheFlightItJoinedFails() throws Exception {
+	void aRollbackInvalidatedSnapshotCannotServeAWaiterAfterRefreshFailure() throws Exception {
 		RewindableClock clock = RewindableClock.fromInstant(START);
 		MemoryHttpClient client = MemoryHttpClient.answering(Answer.fromKeySet(null, "a"));
 		RecordingObserver<JoseObserver> observer = RecordingObserver.fromInterface(JoseObserver.class);
@@ -266,9 +264,11 @@ final class RemoteJsonWebKeySourceConcurrencyTests {
 		clock.advance(Duration.ofSeconds(2));
 		Assertions.assertEquals(1, client.failHeld());
 
-		Assertions.assertEquals(KeySelection.Kind.FOUND, leader.await().getKind());
-		Assertions.assertEquals(KeySelection.Kind.FOUND, waiter.await().getKind());
-		Assertions.assertEquals(true, observer.getCalls("didFailToFetchJsonWebKeySet").get(0).getArgument(2));
+		Assertions.assertEquals(ErrorCategory.TRANSPORT,
+				leader.awaitFailure(JsonWebKeySetUnavailableException.class).getCategory());
+		Assertions.assertEquals(ErrorCategory.TRANSPORT,
+				waiter.awaitFailure(JsonWebKeySetUnavailableException.class).getCategory());
+		Assertions.assertEquals(false, observer.getCalls("didFailToFetchJsonWebKeySet").get(0).getArgument(2));
 		Assertions.assertEquals(2, client.getSendCount());
 	}
 

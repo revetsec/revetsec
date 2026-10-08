@@ -469,9 +469,27 @@ public final class PackagedConsumer {
 				JwtValidationResult.class, JwtValidationResult.Succeeded.class, JwtValidationResult.Rejected.class,
 				BearerTokenResult.class, BearerTokenResult.Absent.class, BearerTokenResult.Present.class, BearerTokenResult.Malformed.class,
 				AuthorizationCompletionResult.class, AuthorizationCompletionResult.Succeeded.class, AuthorizationCompletionResult.Denied.class,
-				AuthorizationCompletionResult.Rejected.class, OidcAuthenticationResult.class, OidcAuthenticationResult.Succeeded.class,
-				OidcAuthenticationResult.Denied.class, OidcAuthenticationResult.RejectedAuthorization.class, OidcAuthenticationResult.RejectedIdToken.class};
-		require(types.length == 19, "all result declarations compile without annotation JARs");
+				AuthorizationCompletionResult.Rejected.class, AuthorizationCompletionResult.Failed.class,
+				OidcAuthenticationResult.class, OidcAuthenticationResult.Succeeded.class,
+				OidcAuthenticationResult.Denied.class, OidcAuthenticationResult.RejectedAuthorization.class,
+				OidcAuthenticationResult.RejectedIdToken.class, OidcAuthenticationResult.Failed.class};
+		require(types.length == 21, "all result declarations compile without annotation JARs");
+	}
+
+	private static @NonNull PendingAuthorizationStore unavailablePendingStore() {
+		return new PendingAuthorizationStore() {
+			@Override
+			public void save(@NonNull String browserBinding, @NonNull String state, @NonNull String opaqueRecord,
+					@NonNull Instant expiresAt, @NonNull Duration remaining) {
+				throw new IllegalStateException("test store unavailable");
+			}
+
+			@Override
+			public @NonNull Optional<@NonNull String> consume(@NonNull String browserBinding, @NonNull String state,
+					@NonNull Duration remaining) {
+				throw new IllegalStateException("test store unavailable");
+			}
+		};
 	}
 
 	private static void exerciseStateSealer(@NonNull String plaintext, @NonNull List<@NonNull String> calledApi) {
@@ -745,6 +763,12 @@ public final class PackagedConsumer {
 		require(outcome instanceof AuthorizationCompletionResult.Rejected
 				&& ((AuthorizationCompletionResult.Rejected) outcome).getReason() == OAuthException.Reason.PENDING_AUTHORIZATION_NOT_FOUND,
 				"callback result rejects missing state without network I/O");
+		AuthorizationCompletionResult unavailable = client.completeAuthorizationResult(response,
+				PendingAuthorizationSource.fromStore(unavailablePendingStore(), "consumer-browser"),
+				URI.create("https://consumer.example/callback"));
+		require(unavailable instanceof AuthorizationCompletionResult.Failed
+				&& ((AuthorizationCompletionResult.Failed) unavailable).getReason() == OAuthException.Reason.PENDING_AUTHORIZATION_STORE_UNAVAILABLE,
+				"callback result reports pending-store failure without network I/O");
 		require(source != null && store != null, "OAuth client-side sources build without I/O");
 
 		// Compiling against every exported type also checks signatures that this offline smoke cannot instantiate.
@@ -761,14 +785,15 @@ public final class PackagedConsumer {
 				OAuthException.class, OAuthException.Reason.class, OAuthObserver.class, OAuthResponseException.class,
 				BearerToken.class, BearerTokenResult.class, BearerTokenResult.Absent.class, BearerTokenResult.Present.class, BearerTokenResult.Malformed.class,
 				AuthorizationCompletionResult.class, AuthorizationCompletionResult.Succeeded.class, AuthorizationCompletionResult.Denied.class,
-				AuthorizationCompletionResult.Rejected.class, BearerError.class, BearerChallenge.class, BearerChallenge.Builder.class,
+				AuthorizationCompletionResult.Rejected.class, AuthorizationCompletionResult.Failed.class,
+				BearerError.class, BearerChallenge.class, BearerChallenge.Builder.class,
 				ProtectedResourceMetadata.class, ProtectedResourceMetadata.Builder.class,
 				AccessTokenValidationException.class, AccessTokenValidationException.Reason.class,
 				OAuthTransportException.class, OAuthValidationException.class, PendingAuthorization.class,
 				PendingAuthorizationSource.class, PendingAuthorizationStore.class, PendingAuthorizationStoreException.class,
 				RefreshToken.class, TokenRequestOptions.class, TokenRequestOptions.Builder.class, TokenResponse.class,
 				TokenTypeHint.class};
-		require(exported.length == 57, "all OAuth exported types compile from the packaged JAR");
+		require(exported.length == 58, "all OAuth exported types compile from the packaged JAR");
 		calledApi.add("com.revetsec.oauth");
 	}
 
@@ -876,14 +901,22 @@ public final class PackagedConsumer {
 		require(outcome instanceof OidcAuthenticationResult.RejectedAuthorization
 				&& ((OidcAuthenticationResult.RejectedAuthorization) outcome).getReason() == OAuthException.Reason.PENDING_AUTHORIZATION_NOT_FOUND,
 				"OIDC result rejects missing state before any token or identity release");
+		OidcAuthenticationResult unavailable = client.completeAuthenticationResult(
+				AuthorizationResponse.fromQueryString("state=missing&code=example"),
+				PendingAuthorizationSource.fromStore(unavailablePendingStore(), "consumer-browser"),
+				URI.create("https://consumer.example/callback"));
+		require(unavailable instanceof OidcAuthenticationResult.Failed
+				&& ((OidcAuthenticationResult.Failed) unavailable).getReason() == OAuthException.Reason.PENDING_AUTHORIZATION_STORE_UNAVAILABLE,
+				"OIDC result reports pending-store failure before token or identity release");
 		// Results require provider responses; class references still check their packaged annotation-free signatures.
 		Class<?>[] exported = {OidcIssuerPolicy.class, IdToken.class, OidcAuthentication.class, OidcAuthenticationOptions.class,
 				OidcAuthenticationOptions.Builder.class, OidcClient.class, OidcClient.Builder.class, OidcException.class,
 				OidcObserver.class, OidcProviderMetadata.class, OidcProviderMetadata.Builder.class, OidcSessionReference.class,
 				OidcUserInfo.class, OidcValidationException.class, OidcValidationException.Reason.class, OidcRefreshResult.class, OidcCompatibilityMode.class,
 				OidcAuthenticationResult.class, OidcAuthenticationResult.Succeeded.class, OidcAuthenticationResult.Denied.class,
-				OidcAuthenticationResult.RejectedAuthorization.class, OidcAuthenticationResult.RejectedIdToken.class};
-		require(exported.length == 22, "all OIDC exported types compile from the packaged JAR");
+				OidcAuthenticationResult.RejectedAuthorization.class, OidcAuthenticationResult.RejectedIdToken.class,
+				OidcAuthenticationResult.Failed.class};
+		require(exported.length == 23, "all OIDC exported types compile from the packaged JAR");
 		calledApi.add("com.revetsec.oidc");
 	}
 

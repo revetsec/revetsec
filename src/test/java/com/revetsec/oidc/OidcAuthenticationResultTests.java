@@ -74,6 +74,28 @@ final class OidcAuthenticationResultTests {
         }
     }
 
+    @Test
+    void pendingStoreFaultReturnsFixedFailureWithoutIdentityOrTokenPost() throws Exception {
+        try (TestHttpsServer server = TestHttpsServer.start()) {
+            OidcClient client = builder(server).build();
+            AuthorizationRedirect redirect = client.beginAuthentication();
+            PendingAuthorizationStore broken = new PendingAuthorizationStore() {
+                @Override public void save(@NonNull String binding, @NonNull String state, @NonNull String opaque,
+                                           @NonNull Instant expiry, @NonNull Duration remaining) { }
+                @Override public @NonNull Optional<@NonNull String> consume(@NonNull String binding, @NonNull String state,
+                                                                             @NonNull Duration remaining) {
+                    throw new IllegalStateException("TEST-ONLY-secret-provider-detail");
+                }
+            };
+            PendingAuthorizationSource source = PendingAuthorizationSource.fromStore(broken, "browser");
+            OidcAuthenticationResult.Failed result = assertInstanceOf(OidcAuthenticationResult.Failed.class,
+                    client.completeAuthenticationResult(callback(redirect), source, CALLBACK));
+            assertEquals(OAuthException.Reason.PENDING_AUTHORIZATION_STORE_UNAVAILABLE, result.getReason());
+            assertRedacted(result.toString(), List.of(ACCESS, REFRESH, CODE, "TEST-ONLY-secret-provider-detail"));
+            assertEquals(0, server.getRequests().size());
+        }
+    }
+
     @TestFactory
     @NonNull Stream<@NonNull DynamicTest> rejectedIdTokensNeverReleaseEndpointTokensOrIdentity() {
         return Stream.of("expiry", "nonce", "signature").map(kind -> DynamicTest.dynamicTest(kind, () -> {

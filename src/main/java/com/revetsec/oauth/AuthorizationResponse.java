@@ -29,6 +29,7 @@ import java.net.URI;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -141,23 +142,39 @@ public final class AuthorizationResponse {
 		requireNonNull(values);
 		requireNonNull(responseMode);
 		Map<String, List<String>> copy = new LinkedHashMap<>();
+		int maximumQuerySize = Limits.AUTHORIZATION_RESPONSE_QUERY_SIZE.getDefaultIntValue();
+		int maximumParameterSize = Limits.AUTHORIZATION_RESPONSE_PARAMETER_SIZE.getDefaultIntValue();
+		if (values.size() > maximumQuerySize)
+			throw OAuthResponseException.fromReason(OAuthException.Reason.CALLBACK_MALFORMED);
 		long aggregate = 0;
+		long parameterCount = 0;
 		for (Map.Entry<String, List<String>> entry : values.entrySet()) {
 			String name = requireNonNull(entry.getKey());
-			List<String> list = List.copyOf(requireNonNull(entry.getValue()));
-			if (SINGLETONS.contains(name) && list.size() > 1)
+			List<String> supplied = requireNonNull(entry.getValue());
+			if (supplied.size() > maximumQuerySize - parameterCount || name.length() > maximumParameterSize)
 				throw OAuthResponseException.fromReason(OAuthException.Reason.CALLBACK_MALFORMED);
-			for (String value : list) {
+			parameterCount += supplied.size();
+			if (SINGLETONS.contains(name) && supplied.size() > 1)
+				throw OAuthResponseException.fromReason(OAuthException.Reason.CALLBACK_MALFORMED);
+			List<String> list = new ArrayList<>(supplied.size());
+			for (String value : supplied) {
+				requireNonNull(value);
+				if ((long) name.length() + value.length() > maximumParameterSize)
+					throw OAuthResponseException.fromReason(OAuthException.Reason.CALLBACK_MALFORMED);
 				long size = (long) utf8Length(name) + utf8Length(value);
-				if (size > Limits.AUTHORIZATION_RESPONSE_PARAMETER_SIZE.getDefaultIntValue())
+				if (size > maximumParameterSize || size > maximumQuerySize - aggregate)
 					throw OAuthResponseException.fromReason(OAuthException.Reason.CALLBACK_MALFORMED);
 				aggregate += size;
+				list.add(value);
 			}
-			copy.put(name, list);
+			copy.put(name, List.copyOf(list));
 		}
 		if (rawQueryOrNull != null && responseMode == AuthorizationRequestOptions.ResponseMode.FORM_POST) {
 			Map<String, List<String>> query = parseEncoded(rawQueryOrNull);
 			for (Map.Entry<String, List<String>> entry : query.entrySet()) {
+				if (entry.getValue().size() > maximumQuerySize - parameterCount)
+					throw OAuthResponseException.fromReason(OAuthException.Reason.CALLBACK_MALFORMED);
+				parameterCount += entry.getValue().size();
 				if (SINGLETONS.contains(entry.getKey()))
 					throw OAuthResponseException.fromReason(OAuthException.Reason.CALLBACK_MALFORMED);
 				if (copy.containsKey(entry.getKey()))
@@ -190,8 +207,15 @@ public final class AuthorizationResponse {
 	}
 
 	private static int utf8Length(@NonNull String value) {
+		if (value.length() > Limits.AUTHORIZATION_RESPONSE_QUERY_SIZE.getDefaultIntValue())
+			throw OAuthResponseException.fromReason(OAuthException.Reason.CALLBACK_MALFORMED);
 		try {
-			return StrictUtf8.encode(value).length;
+			byte[] encoded = StrictUtf8.encode(value);
+			try {
+				return encoded.length;
+			} finally {
+				Arrays.fill(encoded, (byte) 0);
+			}
 		} catch (EncodingException exception) {
 			throw OAuthResponseException.fromReason(OAuthException.Reason.CALLBACK_MALFORMED);
 		}

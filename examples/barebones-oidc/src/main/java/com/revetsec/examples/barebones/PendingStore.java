@@ -26,6 +26,8 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.ReentrantLock;
 import static java.util.Objects.requireNonNull;
 
 /** Single-process application storage; no worker, live eviction or cross-node replay guarantee. */
@@ -35,6 +37,7 @@ final class PendingStore implements PendingAuthorizationStore {
     private final int maximumEntries;
     private final long maximumBytes;
     private final @NonNull Map<@NonNull Key, @NonNull Entry> entries = new HashMap<>();
+    private final @NonNull ReentrantLock lock = new ReentrantLock();
     private long bytes;
 
     PendingStore(@NonNull Clock clock, int maximumEntries, long maximumBytes) {
@@ -46,45 +49,67 @@ final class PendingStore implements PendingAuthorizationStore {
     }
 
     @Override
-    public synchronized void save(@NonNull String binding, @NonNull String state, @NonNull String record,
-                                  @NonNull Instant expiresAt) {
+    public void save(@NonNull String binding, @NonNull String state, @NonNull String record,
+                                  @NonNull Instant expiresAt, @NonNull Duration remaining) {
+        long cutoff = cutoff(remaining);
         requireNonNull(binding); requireNonNull(state); requireNonNull(record); requireNonNull(expiresAt);
         if (binding.isEmpty() || binding.length() > 128 || state.isEmpty() || state.length() > 128
                 || record.isEmpty() || record.length() > 65_536)
             throw new IllegalArgumentException("Invalid pending record");
-        Instant now = this.clock.instant();
-        if (!expiresAt.isAfter(now) || expiresAt.isAfter(now.plus(Duration.ofMinutes(15))))
-            throw new IllegalArgumentException("Invalid pending expiry");
-        prune();
-        Key key = new Key(binding, state);
-        if (this.entries.containsKey(key)) throw new IllegalArgumentException("Duplicate pending record");
-        long charged = record.getBytes(StandardCharsets.UTF_8).length + binding.length() + state.length();
-        if (charged > 65_792 || this.entries.size() >= this.maximumEntries
-                || charged > this.maximumBytes - this.bytes)
-            throw new CapacityException();
-        this.entries.put(key, new Entry(record, expiresAt, now, charged));
-        this.bytes += charged;
+        acquire(cutoff);
+        try {
+            if (System.nanoTime() - cutoff >= 0) throw unavailable();
+            Instant now = this.clock.instant();
+            if (!expiresAt.isAfter(now) || expiresAt.isAfter(now.plus(Duration.ofMinutes(15))))
+                throw new IllegalArgumentException("Invalid pending expiry");
+            pruneLocked();
+            if (System.nanoTime() - cutoff >= 0) throw unavailable();
+            Key key = new Key(binding, state);
+            if (this.entries.containsKey(key)) throw new IllegalArgumentException("Duplicate pending record");
+            long charged = record.getBytes(StandardCharsets.UTF_8).length + binding.length() + state.length();
+            if (charged > 65_792 || this.entries.size() >= this.maximumEntries
+                    || charged > this.maximumBytes - this.bytes)
+                throw new CapacityException();
+            this.entries.put(key, new Entry(record, expiresAt, now, charged));
+            this.bytes += charged;
+        } finally { this.lock.unlock(); }
     }
 
     @Override
-    public synchronized @NonNull Optional<@NonNull String> consume(@NonNull String binding, @NonNull String state) {
+    public @NonNull Optional<@NonNull String> consume(@NonNull String binding, @NonNull String state,
+                                                      @NonNull Duration remaining) {
         requireNonNull(binding); requireNonNull(state);
-        prune();
-        Entry entry = this.entries.remove(new Key(binding, state));
-        if (entry == null) return Optional.empty();
-        this.bytes -= entry.bytes();
-        return Optional.of(entry.record());
+        long cutoff = cutoff(remaining);
+        acquire(cutoff);
+        try {
+            if (System.nanoTime() - cutoff >= 0) throw unavailable();
+            pruneLocked();
+            if (System.nanoTime() - cutoff >= 0) throw unavailable();
+            Entry entry = this.entries.remove(new Key(binding, state));
+            if (entry == null) return Optional.empty();
+            this.bytes -= entry.bytes();
+            return Optional.of(entry.record());
+        } finally { this.lock.unlock(); }
     }
 
-    synchronized void discardBinding(@NonNull String binding) {
-        this.entries.entrySet().removeIf(entry -> {
-            if (!entry.getKey().binding().equals(binding)) return false;
-            this.bytes -= entry.getValue().bytes();
-            return true;
-        });
+    void discardBinding(@NonNull String binding) {
+        this.lock.lock();
+        try {
+            this.entries.entrySet().removeIf(entry -> {
+                if (!entry.getKey().binding().equals(binding)) return false;
+                this.bytes -= entry.getValue().bytes();
+                return true;
+            });
+        } finally { this.lock.unlock(); }
     }
 
-    synchronized void prune() {
+    void prune() {
+        this.lock.lock();
+        try { pruneLocked(); }
+        finally { this.lock.unlock(); }
+    }
+
+    private void pruneLocked() {
         Instant now = this.clock.instant();
         Iterator<Map.Entry<Key, Entry>> iterator = this.entries.entrySet().iterator();
         while (iterator.hasNext()) {
@@ -96,7 +121,30 @@ final class PendingStore implements PendingAuthorizationStore {
         }
     }
 
-    synchronized int size() { prune(); return this.entries.size(); }
+    int size() {
+        this.lock.lock();
+        try { pruneLocked(); return this.entries.size(); }
+        finally { this.lock.unlock(); }
+    }
+
+    private static long cutoff(@NonNull Duration remaining) {
+        if (requireNonNull(remaining).isNegative() || remaining.isZero()) throw unavailable();
+        long nanos;
+        try { nanos = remaining.toNanos(); }
+        catch (ArithmeticException overflow) { nanos = Long.MAX_VALUE; }
+        return System.nanoTime() + Math.min(nanos, TimeUnit.MINUTES.toNanos(1));
+    }
+
+    private void acquire(long cutoff) {
+        try {
+            if (!this.lock.tryLock(Math.max(0, cutoff - System.nanoTime()), TimeUnit.NANOSECONDS)) throw unavailable();
+        } catch (InterruptedException failure) {
+            Thread.currentThread().interrupt();
+            throw unavailable();
+        }
+    }
+
+    private static @NonNull IllegalStateException unavailable() { return new IllegalStateException("Pending store unavailable"); }
 
     static final class CapacityException extends RuntimeException {
         private static final long serialVersionUID = 1L;

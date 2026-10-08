@@ -19,6 +19,7 @@ package com.revetsec.oauth;
 import org.jspecify.annotations.NonNull;
 
 import com.revetsec.StateSealer;
+import com.revetsec.internal.http.Deadline;
 import com.revetsec.testing.RewindableClock;
 import com.revetsec.testing.TestSealers;
 import org.junit.jupiter.api.Test;
@@ -31,11 +32,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static java.util.Objects.requireNonNull;
 
 final class PendingAuthorizationSourceTests {
 	private static final Instant START = Instant.parse("2026-09-28T12:00:00Z");
@@ -52,6 +56,7 @@ final class PendingAuthorizationSourceTests {
 				PendingAuthorizationSource.fromSealedForm(sealed, sealer, "provider-A"), "state-A", clock);
 		assertEquals(pending.getRedirectUri(), opened.getRedirectUri());
 		assertEquals(pending.getApplicationData(), opened.getApplicationData());
+		assertTrue(opened.toString().startsWith("PendingAuthorization{"));
 		assertFalse(opened.toString().contains("state-A"));
 		assertEquals(OAuthException.Reason.PENDING_AUTHORIZATION_INVALID,
 				assertThrows(OAuthValidationException.class, () -> PendingAuthorizationResolver.resolve(
@@ -115,10 +120,10 @@ final class PendingAuthorizationSourceTests {
 		PendingAuthorization pending = pending("state-A");
 		PendingAuthorizationStore defective = new PendingAuthorizationStore() {
 			private @Nullable String record;
-			@Override public void save(@NonNull String binding, @NonNull String state, @NonNull String opaque, @NonNull Instant expiry) {
+			@Override public void save(@NonNull String binding, @NonNull String state, @NonNull String opaque, @NonNull Instant expiry, @NonNull Duration remaining) {
 				this.record = opaque;
 			}
-			@Override public @NonNull Optional<@NonNull String> consume(@NonNull String binding, @NonNull String state) {
+			@Override public @NonNull Optional<@NonNull String> consume(@NonNull String binding, @NonNull String state, @NonNull Duration remaining) {
 				String value = this.record;
 				this.record = null;
 				return Optional.ofNullable(value);
@@ -145,6 +150,99 @@ final class PendingAuthorizationSourceTests {
 		clock.advance(Duration.ofMinutes(15));
 		assertThrows(OAuthValidationException.class, () -> PendingAuthorizationResolver.resolve(
 				PendingAuthorizationSource.fromStore(store, "browser-A"), "state-B", clock));
+	}
+
+	@Test
+	void customStoreReceivesPositiveBudgetsAndSpentDeadlineDoesNotConsume() {
+		AtomicReference<Duration> savedBudget = new AtomicReference<>();
+		AtomicReference<Duration> consumedBudget = new AtomicReference<>();
+		AtomicReference<String> saved = new AtomicReference<>();
+		AtomicInteger consumes = new AtomicInteger();
+		PendingAuthorizationStore store = new PendingAuthorizationStore() {
+			@Override public void save(@NonNull String binding, @NonNull String state, @NonNull String opaque,
+					@NonNull Instant expiry, @NonNull Duration remaining) {
+				savedBudget.set(remaining); saved.set(opaque);
+			}
+			@Override public @NonNull Optional<@NonNull String> consume(@NonNull String binding, @NonNull String state,
+					@NonNull Duration remaining) {
+				consumedBudget.set(remaining); consumes.incrementAndGet(); return Optional.ofNullable(saved.getAndSet(null));
+			}
+		};
+		pending("state-A").saveTo(store, "browser-A", Duration.ofSeconds(2));
+		Duration saveRemaining = requireNonNull(savedBudget.get());
+		assertTrue(saveRemaining.compareTo(Duration.ZERO) > 0);
+		assertTrue(saveRemaining.compareTo(Duration.ofSeconds(2)) <= 0);
+		PendingAuthorizationSource source = PendingAuthorizationSource.fromStore(store, "browser-A");
+		assertEquals(OAuthException.Reason.PENDING_AUTHORIZATION_STORE_UNAVAILABLE,
+				assertThrows(PendingAuthorizationStoreException.class, () -> PendingAuthorizationResolver.resolve(
+					source, "state-A", RewindableClock.fromInstant(START), Deadline.fromNow(Duration.ZERO))).getReason());
+		assertEquals(0, consumes.get());
+		assertEquals("state-A", PendingAuthorizationResolver.resolve(source, "state-A",
+				RewindableClock.fromInstant(START), Deadline.fromNow(Duration.ofSeconds(2))).state());
+		assertEquals(1, consumes.get());
+		Duration consumeRemaining = requireNonNull(consumedBudget.get());
+		assertTrue(consumeRemaining.compareTo(Duration.ZERO) > 0);
+		assertTrue(consumeRemaining.compareTo(Duration.ofSeconds(2)) <= 0);
+	}
+
+	@Test
+	void customStoreFaultsUseFixedReasonWithoutProviderText() {
+		PendingAuthorizationStore broken = new PendingAuthorizationStore() {
+			@Override public void save(@NonNull String binding, @NonNull String state, @NonNull String opaque,
+					@NonNull Instant expiry, @NonNull Duration remaining) {
+				throw new IllegalStateException("TEST-ONLY-secret-store-detail");
+			}
+			@Override public @NonNull Optional<@NonNull String> consume(@NonNull String binding, @NonNull String state,
+					@NonNull Duration remaining) {
+				throw new IllegalStateException("TEST-ONLY-secret-store-detail");
+			}
+		};
+		PendingAuthorizationStoreException save = assertThrows(PendingAuthorizationStoreException.class,
+				() -> pending("state-A").saveTo(broken, "browser-A", Duration.ofSeconds(2)));
+		assertEquals(OAuthException.Reason.PENDING_AUTHORIZATION_STORE_UNAVAILABLE, save.getReason());
+		assertFalse(save.toString().contains("TEST-ONLY-secret-store-detail"));
+		assertFalse(Thread.currentThread().isInterrupted());
+		PendingAuthorizationStoreException consume = assertThrows(PendingAuthorizationStoreException.class,
+				() -> PendingAuthorizationResolver.resolve(PendingAuthorizationSource.fromStore(broken, "browser-A"),
+					"state-A", RewindableClock.fromInstant(START), Deadline.fromNow(Duration.ofSeconds(2))));
+		assertEquals(OAuthException.Reason.PENDING_AUTHORIZATION_STORE_UNAVAILABLE, consume.getReason());
+		assertFalse(consume.toString().contains("TEST-ONLY-secret-store-detail"));
+		assertFalse(Thread.currentThread().isInterrupted());
+	}
+
+	@Test
+	void interruptedStoreFaultsRestoreCallerInterruptWithoutReleasingPendingData() {
+		PendingAuthorizationStore interrupted = new PendingAuthorizationStore() {
+			@Override public void save(@NonNull String binding, @NonNull String state, @NonNull String opaque,
+					@NonNull Instant expiry, @NonNull Duration remaining) {
+				throwUnchecked(new InterruptedException("TEST-ONLY-store-interrupted"));
+			}
+			@Override public @NonNull Optional<@NonNull String> consume(@NonNull String binding, @NonNull String state,
+					@NonNull Duration remaining) {
+				throwUnchecked(new InterruptedException("TEST-ONLY-store-interrupted"));
+				return Optional.empty();
+			}
+		};
+		assertFalse(Thread.currentThread().isInterrupted());
+		try {
+			PendingAuthorizationStoreException save = assertThrows(PendingAuthorizationStoreException.class,
+					() -> pending("state-A").saveTo(interrupted, "browser-A", Duration.ofSeconds(2)));
+			assertEquals(OAuthException.Reason.PENDING_AUTHORIZATION_STORE_UNAVAILABLE, save.getReason());
+			assertTrue(Thread.currentThread().isInterrupted());
+			Thread.interrupted();
+			PendingAuthorizationStoreException consume = assertThrows(PendingAuthorizationStoreException.class,
+					() -> PendingAuthorizationResolver.resolve(PendingAuthorizationSource.fromStore(interrupted, "browser-A"),
+							"state-A", RewindableClock.fromInstant(START), Deadline.fromNow(Duration.ofSeconds(2))));
+			assertEquals(OAuthException.Reason.PENDING_AUTHORIZATION_STORE_UNAVAILABLE, consume.getReason());
+			assertTrue(Thread.currentThread().isInterrupted());
+		} finally {
+			Thread.interrupted();
+		}
+	}
+
+	@SuppressWarnings("unchecked")
+	private static <E extends Throwable> void throwUnchecked(@NonNull Throwable failure) throws E {
+		throw (E) failure;
 	}
 
 	private static @NonNull PendingAuthorization pending(@NonNull String state) {

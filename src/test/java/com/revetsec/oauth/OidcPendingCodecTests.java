@@ -77,8 +77,8 @@ final class OidcPendingCodecTests {
 					};
 					assertNotEquals(encoded, altered); AtomicReference<String> saved = new AtomicReference<>(altered);
 					PendingAuthorizationStore store = new PendingAuthorizationStore() {
-						@Override public void save(@NonNull String binding, @NonNull String state, @NonNull String record, @NonNull Instant expiry) { saved.set(record); }
-						@Override public @NonNull Optional<@NonNull String> consume(@NonNull String binding, @NonNull String state) { return Optional.ofNullable(saved.getAndSet(null)); }
+						@Override public void save(@NonNull String binding, @NonNull String state, @NonNull String record, @NonNull Instant expiry, @NonNull Duration remaining) { saved.set(record); }
+						@Override public @NonNull Optional<@NonNull String> consume(@NonNull String binding, @NonNull String state, @NonNull Duration remaining) { return Optional.ofNullable(saved.getAndSet(null)); }
 					};
 					assertEquals(OAuthException.Reason.PENDING_AUTHORIZATION_INVALID, assertThrows(OAuthValidationException.class,
 							() -> client.completeAuthentication(AuthorizationResponse.fromQueryString("state=" + pending.state() + "&code=sentinel-code"), PendingAuthorizationSource.fromStore(store, "browser"), CALLBACK)).getReason());

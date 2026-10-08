@@ -24,7 +24,7 @@ import javax.annotation.concurrent.NotThreadSafe;
 import static java.util.Objects.requireNonNull;
 
 /**
- * The local pending-authorization store cannot admit a record. The fixed reason and message never include input or credentials.
+ * A pending-authorization store could not complete an operation. The fixed reason and message never include input or credentials.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  * @since 1.0.0

@@ -102,10 +102,10 @@ final class AuthorizationCompletionTests {
 			String state = QueryParameters.parse(redirect.getAuthorizationUri().getRawQuery()).getValues("state").get(0);
 			PendingAuthorizationStore defective = new PendingAuthorizationStore() {
 				private @Nullable String record;
-				@Override public void save(@NonNull String binding, @NonNull String key, @NonNull String opaque, @NonNull Instant expiry) {
+				@Override public void save(@NonNull String binding, @NonNull String key, @NonNull String opaque, @NonNull Instant expiry, @NonNull Duration remaining) {
 					this.record = opaque;
 				}
-				@Override public @NonNull Optional<@NonNull String> consume(@NonNull String binding, @NonNull String key) {
+				@Override public @NonNull Optional<@NonNull String> consume(@NonNull String binding, @NonNull String key, @NonNull Duration remaining) {
 					String found = this.record;
 					this.record = null;
 					return Optional.ofNullable(found);

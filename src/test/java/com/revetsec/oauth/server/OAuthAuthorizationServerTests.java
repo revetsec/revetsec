@@ -281,6 +281,15 @@ final class OAuthAuthorizationServerTests {
   OAuthServerStoreException failure=assertThrows(OAuthServerStoreException.class,this::begin);
   assertEquals(STORE_UNAVAILABLE,failure.getReason());
  }
+ @Test void malformedBrowserBindingDoesNotCallTheApplicationClientRepository() {
+  AtomicInteger lookups=new AtomicInteger();
+  this.server=builder().clientRepository((id,budget)->{lookups.incrementAndGet();return Optional.of(this.client);}).build();
+  OAuthAuthorizationResult.Rejected rejected=assertInstanceOf(OAuthAuthorizationResult.Rejected.class,
+   this.server.beginAuthorizationResult("GET",query(),new byte[0],Map.of(),"invalid"));
+  assertEquals(MALFORMED_REQUEST,rejected.getReason());
+  assertEquals(0,lookups.get());
+  assertTrue(this.store.rows.isEmpty());
+ }
  @Test void authorizationClientLookupBarrierRetainsTheInteractionExpiry() {
   initialized();OAuthServerInteraction interaction=begin();
   this.store.beforeCommit=()->this.clock.time=NOW.plusSeconds(900);

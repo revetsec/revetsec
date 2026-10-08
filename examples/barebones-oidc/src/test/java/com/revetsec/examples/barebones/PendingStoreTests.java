@@ -23,6 +23,14 @@ import java.util.concurrent.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 final class PendingStoreTests {
+	@Test
+	void exhaustedBudgetLeavesRecordAvailableForAValidConsume() {
+		var clock = new OidcApplicationTests.MutableClock();
+		PendingStore store = new PendingStore(clock, 16, 65_536);
+		store.save("browser", "state", "opaque", clock.instant().plusSeconds(60), Duration.ofSeconds(2));
+		assertThrows(IllegalStateException.class, () -> store.consume("browser", "state", Duration.ZERO));
+		assertEquals(Optional.of("opaque"), store.consume("browser", "state", Duration.ofSeconds(2)));
+	}
     @Test
     void atomicConsumeHasOneWinnerAndBindingCannotBeSwapped() throws Exception {
         var clock = new OidcApplicationTests.MutableClock();

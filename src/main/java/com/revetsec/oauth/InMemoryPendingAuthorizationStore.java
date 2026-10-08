@@ -17,6 +17,7 @@
 package com.revetsec.oauth;
 
 import com.revetsec.internal.Limits;
+import com.revetsec.internal.http.Deadline;
 import com.revetsec.internal.encoding.EncodingException;
 import com.revetsec.internal.encoding.StrictUtf8;
 import org.jspecify.annotations.NonNull;
@@ -33,13 +34,16 @@ import java.util.Iterator;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Arrays;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantLock;
 
 import static java.util.Objects.requireNonNull;
 
 /**
  * A bounded, single-process pending-authorization store. It starts no worker thread; expiry is removed lazily on
- * saves and consumes. A full store refuses a new login without evicting another live login. Use a durable shared
+ * saves and consumes. An observed backward clock step cannot revive a record past an earlier observed expiry.
+ * A full store refuses a new login without evicting another live login. Use a durable shared
  * {@link PendingAuthorizationStore} when callbacks may land on other nodes or after a restart.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
@@ -53,7 +57,8 @@ public final class InMemoryPendingAuthorizationStore implements PendingAuthoriza
 	private final long maximumChargedBytes;
 	private final int maximumOpaqueRecordBytes;
 	private final @NonNull Clock clock;
-	private long chargedBytes;
+	private final @NonNull AtomicLong chargedBytes = new AtomicLong();
+	private @Nullable Instant lastObserved;
 
 	private InMemoryPendingAuthorizationStore(@NonNull Builder builder) {
 		this.maximumLiveEntries = builder.maximumLiveEntries;
@@ -89,11 +94,13 @@ public final class InMemoryPendingAuthorizationStore implements PendingAuthoriza
 	 * @param state the authorization state
 	 * @param opaqueRecord the opaque record
 	 * @param expiresAt its exact expiry
+	 * @param remaining positive time left for this operation
 	 * @since 1.0.0
 	 */
 	@Override
 	public void save(@NonNull String browserBinding, @NonNull String state, @NonNull String opaqueRecord,
-			@NonNull Instant expiresAt) {
+			@NonNull Instant expiresAt, @NonNull Duration remaining) {
+		Deadline deadline = deadline(remaining);
 		checkLookupInputs(browserBinding, state);
 		requireNonNull(opaqueRecord);
 		requireNonNull(expiresAt);
@@ -107,20 +114,24 @@ public final class InMemoryPendingAuthorizationStore implements PendingAuthoriza
 		if (charged > this.maximumChargedBytes)
 			throw new IllegalArgumentException("A pending record exceeds the store byte limit.");
 
-		this.lock.lock();
+		acquire(deadline);
 		try {
-			Instant now = this.clock.instant();
+			if (deadline.isExpired()) throw unavailable();
+			Instant clockNow = this.clock.instant();
+			if (deadline.isExpired()) throw unavailable();
+			Instant now = observedTime(clockNow);
 			if (!expiresAt.isAfter(now) || expiresAt.isAfter(now.plus(Duration.ofMinutes(60))))
 				throw new IllegalArgumentException("A pending record expiry must be within 60 minutes.");
 			pruneExpired(now);
+			if (deadline.isExpired()) throw unavailable();
 			Key key = new Key(browserBinding, state);
 			if (this.entries.containsKey(key))
 				throw new IllegalArgumentException("A live pending record already exists.");
 			if (this.entries.size() >= this.maximumLiveEntries
-					|| charged > this.maximumChargedBytes - this.chargedBytes)
+					|| charged > this.maximumChargedBytes - this.chargedBytes.get())
 				throw PendingAuthorizationStoreException.fromReason(OAuthException.Reason.CAPACITY_EXCEEDED);
 			this.entries.put(key, new Entry(opaqueRecord, expiresAt, charged));
-			this.chargedBytes += charged;
+			this.chargedBytes.addAndGet(charged);
 		} finally {
 			this.lock.unlock();
 		}
@@ -131,22 +142,57 @@ public final class InMemoryPendingAuthorizationStore implements PendingAuthoriza
 	 *
 	 * @param browserBinding the browser-specific binding
 	 * @param state the authorization state
+	 * @param remaining positive time left for this operation
 	 * @return the record when it was still live
 	 * @since 1.0.0
 	 */
 	@Override
-	public @NonNull Optional<@NonNull String> consume(@NonNull String browserBinding, @NonNull String state) {
+	public @NonNull Optional<@NonNull String> consume(@NonNull String browserBinding, @NonNull String state,
+			@NonNull Duration remaining) {
+		Deadline deadline = deadline(remaining);
 		checkLookupInputs(browserBinding, state);
-		this.lock.lock();
+		acquire(deadline);
 		try {
+			if (deadline.isExpired()) throw unavailable();
+			Instant clockNow = this.clock.instant();
+			if (deadline.isExpired()) throw unavailable();
+			Instant now = observedTime(clockNow);
 			Entry removed = this.entries.remove(new Key(browserBinding, state));
 			if (removed == null)
 				return Optional.empty();
-			this.chargedBytes -= removed.chargedBytes;
-			return this.clock.instant().isBefore(removed.expiresAt) ? Optional.of(removed.record) : Optional.empty();
+			this.chargedBytes.addAndGet(-removed.chargedBytes);
+			return now.isBefore(removed.expiresAt) ? Optional.of(removed.record) : Optional.empty();
 		} finally {
 			this.lock.unlock();
 		}
+	}
+
+	private static @NonNull Deadline deadline(@NonNull Duration remaining) {
+		if (requireNonNull(remaining).isNegative() || remaining.isZero()) throw unavailable();
+		return Deadline.fromNow(remaining);
+	}
+
+	private void acquire(@NonNull Deadline deadline) {
+		try {
+			if (deadline.isExpired() || !this.lock.tryLock(Math.max(0, deadline.remainingNanos()), TimeUnit.NANOSECONDS))
+				throw unavailable();
+		} catch (InterruptedException failure) {
+			Thread.currentThread().interrupt();
+			throw unavailable();
+		}
+	}
+
+	private static @NonNull PendingAuthorizationStoreException unavailable() {
+		return PendingAuthorizationStoreException.fromReason(OAuthException.Reason.PENDING_AUTHORIZATION_STORE_UNAVAILABLE);
+	}
+
+	private @NonNull Instant observedTime(@NonNull Instant now) {
+		Instant previous = this.lastObserved;
+		if (previous == null || now.isAfter(previous)) {
+			this.lastObserved = now;
+			return now;
+		}
+		return previous;
 	}
 
 	private void pruneExpired(@NonNull Instant now) {
@@ -154,7 +200,7 @@ public final class InMemoryPendingAuthorizationStore implements PendingAuthoriza
 		while (iterator.hasNext()) {
 			Entry entry = iterator.next().getValue();
 			if (!now.isBefore(entry.expiresAt)) {
-				this.chargedBytes -= entry.chargedBytes;
+				this.chargedBytes.addAndGet(-entry.chargedBytes);
 				iterator.remove();
 			}
 		}

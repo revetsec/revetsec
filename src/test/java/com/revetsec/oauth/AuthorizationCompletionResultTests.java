@@ -25,6 +25,8 @@ import com.revetsec.testing.TestTls;
 import org.junit.jupiter.api.Test;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
 import static org.junit.jupiter.api.Assertions.*;
@@ -104,6 +106,33 @@ final class AuthorizationCompletionResultTests {
             assertTrue(assertThrows(OAuthErrorResponseException.class,
                     () -> client.completeAuthorizationResult(response, source, CALLBACK)).isTransient());
             assertEquals(1, server.getRequests().size());
+        }
+    }
+
+    @Test
+    void pendingStoreFaultReturnsFixedFailureWithoutTokenPost() throws Exception {
+        try (TestHttpsServer server = TestHttpsServer.start()) {
+            OAuthClient client = client(server);
+            PendingAuthorization pending = client.beginAuthorization().getPendingAuthorization();
+            PendingAuthorizationStore broken = new PendingAuthorizationStore() {
+                @Override public void save(@NonNull String binding, @NonNull String state, @NonNull String opaque,
+                                           @NonNull Instant expiry, @NonNull Duration remaining) { }
+                @Override public @NonNull Optional<@NonNull String> consume(@NonNull String binding, @NonNull String state,
+                                                                             @NonNull Duration remaining) {
+                    throw new IllegalStateException("TEST-ONLY-secret-provider-detail");
+                }
+            };
+            PendingAuthorizationSource source = PendingAuthorizationSource.fromStore(broken, "browser");
+            AuthorizationResponse response = AuthorizationResponse.fromQueryString("state=" + pending.state() + "&code=TEST-ONLY-code");
+            AuthorizationCompletionResult.Failed result = assertInstanceOf(AuthorizationCompletionResult.Failed.class,
+                    client.completeAuthorizationResult(response, source, CALLBACK));
+            assertEquals(OAuthException.Reason.PENDING_AUTHORIZATION_STORE_UNAVAILABLE, result.getReason());
+            assertFalse(result.toString().contains("TEST-ONLY-secret-provider-detail"));
+            assertEquals(0, server.getRequests().size());
+            assertEquals(OAuthException.Reason.PENDING_AUTHORIZATION_STORE_UNAVAILABLE,
+                    assertThrows(PendingAuthorizationStoreException.class,
+                            () -> client.completeAuthorization(response, source, CALLBACK)).getReason());
+            assertEquals(0, server.getRequests().size());
         }
     }
 

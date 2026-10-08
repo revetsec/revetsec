@@ -19,6 +19,7 @@ package com.revetsec.oauth;
 import com.revetsec.StateSealer;
 import com.revetsec.internal.crypto.SealedStateAccess;
 import com.revetsec.internal.crypto.SealedStateType;
+import com.revetsec.internal.http.Deadline;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
@@ -170,16 +171,43 @@ public final class PendingAuthorization {
 
 	/**
 	 * Saves the complete record with a digest of the browser binding. The store receives its exact expiry and must
-	 * consume atomically.
+	 * consume atomically. This convenience overload supplies a five-second budget.
 	 *
 	 * @param store the store
 	 * @param browserBinding a browser-specific secret
 	 * @since 1.0.0
 	 */
 	public void saveTo(@NonNull PendingAuthorizationStore store, @NonNull String browserBinding) {
-		requireNonNull(store).save(requireNonNull(browserBinding), this.state,
-				PendingAuthorizationCodec.encode(this, PendingAuthorizationCodec.bindingDigest(browserBinding)),
-				this.expiresAt);
+		saveTo(store, browserBinding, Duration.ofSeconds(5));
+	}
+
+	/**
+	 * Saves the complete browser-bound record within the supplied operation budget.
+	 * @param store the store
+	 * @param browserBinding browser-specific secret
+	 * @param remaining positive time left for this operation
+	 * @since 1.0.0
+	 */
+	public void saveTo(@NonNull PendingAuthorizationStore store, @NonNull String browserBinding,
+			@NonNull Duration remaining) {
+		requireNonNull(store);
+		requireNonNull(browserBinding);
+		if (browserBinding.isEmpty()) throw new IllegalArgumentException("A browser binding must not be empty.");
+		Deadline deadline = Deadline.fromNow(requireNonNull(remaining));
+		if (deadline.isExpired()) throw PendingAuthorizationStoreException.fromReason(OAuthException.Reason.PENDING_AUTHORIZATION_STORE_UNAVAILABLE);
+		String encoded = PendingAuthorizationCodec.encode(this, PendingAuthorizationCodec.bindingDigest(browserBinding));
+		try {
+			if (deadline.isExpired()) throw PendingAuthorizationStoreException.fromReason(OAuthException.Reason.PENDING_AUTHORIZATION_STORE_UNAVAILABLE);
+			store.save(browserBinding, this.state, encoded, this.expiresAt, deadline.remaining());
+			if (deadline.isExpired()) throw PendingAuthorizationStoreException.fromReason(OAuthException.Reason.PENDING_AUTHORIZATION_STORE_UNAVAILABLE);
+		} catch (VirtualMachineError fatal) {
+			throw fatal;
+		} catch (PendingAuthorizationStoreException failure) {
+			throw failure;
+		} catch (Throwable failure) {
+			if (failure instanceof InterruptedException) Thread.currentThread().interrupt();
+			throw PendingAuthorizationStoreException.fromReason(OAuthException.Reason.PENDING_AUTHORIZATION_STORE_UNAVAILABLE);
+		}
 	}
 
 	@Nullable Duration maxAge() { return this.maxAge; }

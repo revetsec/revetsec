@@ -236,7 +236,8 @@ public final class OidcClient {
 	/**
 	 * Completes authentication once, returning authenticated identity, checked access_denied, rejected callback
 	 * binding, or a rejected ID token. Rejected outcomes release no identity, claims or endpoint credentials.
-	 * Store, metadata, transport, endpoint and invalid HMAC-secret failures remain exceptions. Clear the pending
+	 * Pending-store failures return a fixed failure result. Metadata, transport, endpoint and invalid HMAC-secret
+	 * failures remain exceptions. Clear the pending
 	 * cookie on every outcome; the original completion's atomic-consumption and observer behavior is preserved.
 	 * @param response parsed callback
 	 * @param source browser-bound pending source
@@ -255,6 +256,8 @@ public final class OidcClient {
 		} catch (OAuthValidationException rejection) {
 			if (!isLocalCallbackRejection(rejection.getReason())) throw rejection;
 			return OidcAuthenticationResult.fromAuthorizationReason(rejection.getReason());
+		} catch (com.revetsec.oauth.PendingAuthorizationStoreException failure) {
+			return OidcAuthenticationResult.fromStoreFailure(failure.getReason());
 		} catch (OidcValidationException rejection) {
 			if (rejection.getReason() == OidcValidationException.Reason.HMAC_SECRET_INVALID) throw rejection;
 			return OidcAuthenticationResult.fromIdTokenReason(rejection.getReason(), rejection.getJoseReason().orElse(null));

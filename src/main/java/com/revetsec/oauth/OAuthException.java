@@ -99,6 +99,8 @@ public abstract sealed class OAuthException extends RevetsecException permits Au
 		TOKEN_EXPIRED(ErrorCategory.VALIDATION_FAILURE, "The token has expired."),
 		/** The in-memory store has reached a configured live capacity. */
 		CAPACITY_EXCEEDED(ErrorCategory.CONFIGURATION, "The pending-authorization store is full."),
+		/** The pending-authorization store failed or exceeded the remaining operation budget. */
+		PENDING_AUTHORIZATION_STORE_UNAVAILABLE(ErrorCategory.CONFIGURATION, "The pending-authorization store is unavailable."),
 		/** A callback has duplicate, conflicting or malformed parameters. */
 		CALLBACK_MALFORMED(ErrorCategory.MALFORMED_INPUT, "The authorization response is malformed."),
 		/** A metadata or token JSON document is malformed. */

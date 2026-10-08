@@ -279,8 +279,8 @@ public final class OAuthClient {
 
 	/**
 	 * Completes the flow once, returning endpoint tokens, a checked access_denied callback, or a local callback
-	 * security rejection. Other authorization errors and metadata, store, transport and endpoint failures remain
-	 * exceptions. Clear the pending cookie on every outcome. Atomic pending consumption and replay behavior are
+	 * security rejection, or a fixed pending-store failure. Other authorization errors and metadata, transport and
+	 * endpoint failures remain exceptions. Clear the pending cookie on every outcome. Atomic consumption and replay behavior are
 	 * identical to {@link #completeAuthorization(AuthorizationResponse, PendingAuthorizationSource, URI)}.
 	 * @param response parsed callback
 	 * @param source browser-bound pending source
@@ -299,6 +299,8 @@ public final class OAuthClient {
 		} catch (OAuthValidationException rejection) {
 			if (!isLocalCallbackRejection(rejection.getReason())) throw rejection;
 			return AuthorizationCompletionResult.fromReason(rejection.getReason());
+		} catch (PendingAuthorizationStoreException failure) {
+			return AuthorizationCompletionResult.fromStoreFailure(failure.getReason());
 		}
 	}
 
@@ -323,7 +325,7 @@ public final class OAuthClient {
 		requireNonNull(actualCallbackUri);
 		PendingAuthorization pending;
 		try {
-			pending = PendingAuthorizationResolver.resolve(source, response.getState().orElse(""), this.clock);
+			pending = PendingAuthorizationResolver.resolve(source, response.getState().orElse(""), this.clock, deadline);
 			if (!pending.kind().equals(kind))
 				throw OAuthValidationException.fromReason(OAuthException.Reason.PENDING_AUTHORIZATION_INVALID);
 			if (!pending.getClientId().equals(this.clientId))

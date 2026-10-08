@@ -34,7 +34,7 @@ import java.util.Optional;
  * @since 1.0.0
  */
 @Immutable
-public abstract sealed class OidcAuthenticationResult permits OidcAuthenticationResult.Succeeded, OidcAuthenticationResult.Denied, OidcAuthenticationResult.RejectedAuthorization, OidcAuthenticationResult.RejectedIdToken {
+public abstract sealed class OidcAuthenticationResult permits OidcAuthenticationResult.Succeeded, OidcAuthenticationResult.Denied, OidcAuthenticationResult.RejectedAuthorization, OidcAuthenticationResult.RejectedIdToken, OidcAuthenticationResult.Failed {
 	OidcAuthenticationResult() { }
 
 	static @NonNull OidcAuthenticationResult fromAuthentication(@NonNull OidcAuthentication authentication) {
@@ -51,6 +51,10 @@ public abstract sealed class OidcAuthenticationResult permits OidcAuthentication
 
 	static @NonNull OidcAuthenticationResult fromIdTokenReason(OidcValidationException.@NonNull Reason reason, JoseException.@Nullable Reason joseReason) {
 		return new RejectedIdToken(requireNonNull(reason), joseReason);
+	}
+
+	static @NonNull OidcAuthenticationResult fromStoreFailure(OAuthException.@NonNull Reason reason) {
+		return new Failed(requireNonNull(reason));
 	}
 
 	/**
@@ -133,5 +137,23 @@ public abstract sealed class OidcAuthenticationResult permits OidcAuthentication
 		 * @since 1.0.0
 		 */
 		public @NonNull Optional<JoseException.@NonNull Reason> getJoseReason() { return Optional.ofNullable(this.joseReason); }
+	}
+
+	/**
+	 * The pending store did not complete its operation. No identity or token value is released.
+	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
+	 * @since 1.0.0
+	 */
+	@Immutable
+	public static final class Failed extends OidcAuthenticationResult {
+		private final OAuthException.@NonNull Reason reason;
+		private Failed(OAuthException.@NonNull Reason reason) { this.reason = reason; }
+
+		/**
+		 * Returns the fixed store-failure reason.
+		 * @return reason
+		 * @since 1.0.0
+		 */
+		public OAuthException.@NonNull Reason getReason() { return this.reason; }
 	}
 }

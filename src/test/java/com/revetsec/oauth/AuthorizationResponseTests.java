@@ -142,6 +142,19 @@ final class AuthorizationResponseTests {
 		assertThrows(OAuthResponseException.class, () -> AuthorizationResponse.fromFormBody(body, unreadable, null));
 	}
 
+	@Test
+	void parsedCallbackCardinalityIsRejectedBeforeCopyingValues() {
+		List<String> unreadable = new java.util.AbstractList<>() {
+			@Override public int size() { return 32_769; }
+			@Override public @NonNull String get(int index) {
+				throw new AssertionError("Oversized parsed callbacks must be rejected before value access.");
+			}
+		};
+		assertEquals(OAuthException.Reason.CALLBACK_MALFORMED, assertThrows(OAuthResponseException.class,
+				() -> AuthorizationResponse.fromParameters(Map.of("extra", unreadable), null,
+						AuthorizationRequestOptions.ResponseMode.QUERY)).getReason());
+	}
+
 	// Deliberate programmer misuse, with a cast to select the new overload.
 	@SuppressWarnings("NullAway")
 	@Test void rawMimeRequiredNullInputsAreProgrammingErrors() {

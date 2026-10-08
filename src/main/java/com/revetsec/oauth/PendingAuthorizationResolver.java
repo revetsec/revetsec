@@ -20,10 +20,12 @@ import com.revetsec.internal.crypto.SealedStateAccess;
 import com.revetsec.internal.crypto.SealedStateType;
 import com.revetsec.internal.crypto.UnsealException;
 import com.revetsec.internal.crypto.ConstantTime;
+import com.revetsec.internal.http.Deadline;
 import org.jspecify.annotations.NonNull;
 
 import javax.annotation.concurrent.ThreadSafe;
 import java.time.Clock;
+import java.time.Duration;
 import java.util.Optional;
 
 import static java.util.Objects.requireNonNull;
@@ -36,14 +38,32 @@ final class PendingAuthorizationResolver {
 
 	static @NonNull PendingAuthorization resolve(@NonNull PendingAuthorizationSource source, @NonNull String callbackState,
 			@NonNull Clock clock) {
+		return resolve(source, callbackState, clock, Deadline.fromNow(Duration.ofSeconds(5)));
+	}
+
+	static @NonNull PendingAuthorization resolve(@NonNull PendingAuthorizationSource source, @NonNull String callbackState,
+			@NonNull Clock clock, @NonNull Deadline deadline) {
 		requireNonNull(source);
 		requireNonNull(callbackState);
 		requireNonNull(clock);
+		requireNonNull(deadline);
 		if (callbackState.isEmpty())
 			throw OAuthValidationException.fromReason(OAuthException.Reason.STATE_MISMATCH);
 		String encoded;
 		if (source.store() != null) {
-			Optional<String> consumed = source.store().consume(requireNonNull(source.browserBinding()), callbackState);
+			Optional<String> consumed;
+			try {
+				if (deadline.isExpired()) throw PendingAuthorizationStoreException.fromReason(OAuthException.Reason.PENDING_AUTHORIZATION_STORE_UNAVAILABLE);
+				consumed = requireNonNull(source.store().consume(requireNonNull(source.browserBinding()), callbackState, deadline.remaining()));
+				if (deadline.isExpired()) throw PendingAuthorizationStoreException.fromReason(OAuthException.Reason.PENDING_AUTHORIZATION_STORE_UNAVAILABLE);
+			} catch (VirtualMachineError fatal) {
+				throw fatal;
+			} catch (PendingAuthorizationStoreException failure) {
+				throw failure;
+			} catch (Throwable failure) {
+				if (failure instanceof InterruptedException) Thread.currentThread().interrupt();
+				throw PendingAuthorizationStoreException.fromReason(OAuthException.Reason.PENDING_AUTHORIZATION_STORE_UNAVAILABLE);
+			}
 			if (consumed.isEmpty())
 				throw OAuthValidationException.fromReason(OAuthException.Reason.PENDING_AUTHORIZATION_NOT_FOUND);
 			encoded = consumed.get();

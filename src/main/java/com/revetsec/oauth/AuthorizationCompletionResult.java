@@ -21,7 +21,8 @@ import javax.annotation.concurrent.Immutable;
 import static java.util.Objects.requireNonNull;
 
 /**
- * The outcome of OAuth callback completion. Transport, store, metadata and endpoint failures remain exceptions.
+ * The outcome of OAuth callback completion. A pending-store failure has a fixed, value-free result;
+ * other transport, metadata and endpoint failures remain exceptions.
  * <p>
  * Applications receive these outcomes from the corresponding operation; they cannot construct them.
  * Value accessors exist only on the variant that owns a value. Diagnostic text contains no input or result data.
@@ -31,7 +32,7 @@ import static java.util.Objects.requireNonNull;
  * @since 1.0.0
  */
 @Immutable
-public abstract sealed class AuthorizationCompletionResult permits AuthorizationCompletionResult.Succeeded, AuthorizationCompletionResult.Denied, AuthorizationCompletionResult.Rejected {
+public abstract sealed class AuthorizationCompletionResult permits AuthorizationCompletionResult.Succeeded, AuthorizationCompletionResult.Denied, AuthorizationCompletionResult.Rejected, AuthorizationCompletionResult.Failed {
 	AuthorizationCompletionResult() { }
 
 	static @NonNull AuthorizationCompletionResult fromTokens(@NonNull TokenResponse tokens) {
@@ -44,6 +45,10 @@ public abstract sealed class AuthorizationCompletionResult permits Authorization
 
 	static @NonNull AuthorizationCompletionResult fromReason(OAuthException.@NonNull Reason reason) {
 		return new Rejected(requireNonNull(reason));
+	}
+
+	static @NonNull AuthorizationCompletionResult fromStoreFailure(OAuthException.@NonNull Reason reason) {
+		return new Failed(requireNonNull(reason));
 	}
 
 	/**
@@ -96,6 +101,24 @@ public abstract sealed class AuthorizationCompletionResult permits Authorization
 
 		/**
 		 * Returns the fixed local authorization rejection reason.
+		 * @return reason
+		 * @since 1.0.0
+		 */
+		public OAuthException.@NonNull Reason getReason() { return this.reason; }
+	}
+
+	/**
+	 * The pending store did not complete its operation. No token value is released.
+	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
+	 * @since 1.0.0
+	 */
+	@Immutable
+	public static final class Failed extends AuthorizationCompletionResult {
+		private final OAuthException.@NonNull Reason reason;
+		private Failed(OAuthException.@NonNull Reason reason) { this.reason = reason; }
+
+		/**
+		 * Returns the fixed store-failure reason.
 		 * @return reason
 		 * @since 1.0.0
 		 */
