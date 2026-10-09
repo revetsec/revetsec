@@ -15,6 +15,8 @@
  */
 package example.issuer;
 
+import com.revetsec.SealingKey;
+import com.revetsec.StateSealer;
 import com.revetsec.oauth.BearerToken;
 import com.revetsec.oauth.server.*;
 import com.soklet.*;
@@ -68,6 +70,42 @@ final class IssuerApplicationTests {
  }
  static @NonNull String issued(@NonNull IssuerResources app,@NonNull String scopes) {var response=redeem(app,"demo-public",code(app,"demo-public",scopes),null);assertEquals(200,response.getStatusCode());return text(response);}
  static @NonNull BearerToken bearer(@NonNull String token) {return BearerToken.fromAuthorizationHeaderValues(List.of("Bearer "+token)).orElseThrow();}
+ static @NonNull OAuthIssuerKeyProvider signingKeys(@NonNull Clock clock) throws Exception {
+  var generator=java.security.KeyPairGenerator.getInstance("RSA");generator.initialize(2048);var pair=generator.generateKeyPair();
+  return OAuthIssuerKeyProvider.fromSnapshot(OAuthIssuerKeySnapshot.withActiveKey(OAuthIssuerSigningKey.fromKeyPair(
+    LocalInputs.randomId(),pair.getPrivate(),pair.getPublic())).generation(LocalInputs.randomId()).publishedAt(clock.instant()).build());
+ }
+ static @NonNull StateSealer sealer() {
+  return StateSealer.withActiveKey(SealingKey.fromBase64("test-seal",Base64.getEncoder().encodeToString(LocalInputs.randomBytes()))).build();
+ }
+ @Test void establishedStartupRetainsGrantAndRefreshAcrossApplicationInstances() throws Exception {
+  var clock=Clock.systemUTC();var config=config(8089,8090);var store=new VolatileStore(clock,2048,4_194_304);
+  var keys=signingKeys(clock);var sealing=sealer();
+  var first=new IssuerResources(config,clock,store,keys,sealing,IssuerResources.StartupMode.FRESH);
+  String firstPair=issued(first,"mcp:discover mcp:whoami");String access=scalar(firstPair,"access_token");
+  String refresh=scalar(firstPair,"refresh_token");
+  var established=new IssuerResources(config,clock,store,keys,sealing,IssuerResources.StartupMode.ESTABLISHED);
+  assertInstanceOf(OAuthIssuerAccessTokenResult.Succeeded.class,
+    established.server.validateAccessTokenResult(bearer(access),config.resource.toString()));
+  String refreshForm=form(Map.of("grant_type","refresh_token","client_id","demo-public",
+    "resource",config.resource.toString(),"refresh_token",refresh));
+  var rotated=established.token(request(established,HttpMethod.POST,"/token",refreshForm,null));
+  assertEquals(200,rotated.getStatusCode());
+  String next=scalar(text(rotated),"access_token");
+  assertInstanceOf(OAuthIssuerAccessTokenResult.Succeeded.class,
+    first.server.validateAccessTokenResult(bearer(next),config.resource.toString()));
+  assertThrows(IllegalStateException.class,
+    ()->new IssuerResources(config,clock,store,keys,sealing,IssuerResources.StartupMode.FRESH));
+ }
+ @Test void establishedStartupRejectsMissingFenceAndWrongSealingKey() throws Exception {
+  var clock=Clock.systemUTC();var config=config(8089,8090);var store=new VolatileStore(clock,2048,4_194_304);
+  var keys=signingKeys(clock);var sealing=sealer();
+  assertThrows(OAuthServerStoreException.class,
+    ()->new IssuerResources(config,clock,store,keys,sealing,IssuerResources.StartupMode.ESTABLISHED));
+  new IssuerResources(config,clock,store,keys,sealing,IssuerResources.StartupMode.FRESH);
+  assertThrows(OAuthServerStoreException.class,
+    ()->new IssuerResources(config,clock,store,keys,sealer(),IssuerResources.StartupMode.ESTABLISHED));
+ }
  @Test void publicAndConfidentialClientsUsePkceAndNoCredentialLeaksInRedirectPage() throws Exception {
   var app=app();for(String client:List.of("demo-public","demo-confidential")) {
    String code=code(app,client,"mcp:discover mcp:whoami");

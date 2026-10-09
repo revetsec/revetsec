@@ -25,6 +25,11 @@ import com.revetsec.oauth.OAuthClient;
 import com.revetsec.oauth.PendingAuthorizationSource;
 import com.revetsec.oauth.PendingAuthorizationStore;
 import com.revetsec.oauth.PendingAuthorizationStoreException;
+import com.revetsec.jose.JwsAlgorithm;
+import com.revetsec.oidc.OidcAuthenticationResult;
+import com.revetsec.oidc.OidcClient;
+import com.revetsec.oidc.OidcCompatibilityMode;
+import com.revetsec.oidc.OidcProviderMetadata;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
@@ -42,6 +47,7 @@ import java.sql.SQLException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Properties;
+import java.util.Set;
 
 /** Executable cross-JVM probe. The runner keeps emitted state in memory and does not archive it. */
 public final class PendingStoreProbe {
@@ -49,7 +55,7 @@ public final class PendingStoreProbe {
 	private static final @NonNull URI CALLBACK = URI.create("https://consumer.example/callback");
 	private PendingStoreProbe() { }
 
-	private static @NonNull Connection connection(@NonNull Duration remaining) throws java.sql.SQLException {
+	static @NonNull Connection connection(@NonNull Duration remaining) throws java.sql.SQLException {
 		int seconds = Math.max(1, (int) Math.min(30, (remaining.toMillis() + 999) / 1_000));
 		Properties properties = new Properties();
 		properties.setProperty("user", System.getenv("REVETSEC_TEST_DB_USER"));
@@ -70,7 +76,7 @@ public final class PendingStoreProbe {
 				1_024, 8 * 1_024, 4L * 1_024 * 1_024);
 	}
 
-	private static @NonNull Connection commitAcknowledgementLost(@NonNull Duration remaining) throws SQLException {
+	static @NonNull Connection commitAcknowledgementLost(@NonNull Duration remaining) throws SQLException {
 		Connection physical = connection(remaining);
 		return (Connection) Proxy.newProxyInstance(Connection.class.getClassLoader(),
 				new Class<?>[] { Connection.class }, new java.lang.reflect.InvocationHandler() {
@@ -107,6 +113,36 @@ public final class PendingStoreProbe {
 				.totalDeadline(Duration.ofSeconds(3)).build();
 	}
 
+	private static @NonNull OidcClient oidcClient(@NonNull String issuer) {
+		URI base = URI.create(issuer);
+		OidcProviderMetadata metadata = OidcProviderMetadata.withIssuer(issuer)
+				.authorizationEndpoint(base.resolve("/authorize"))
+				.tokenEndpoint(base.resolve("/token"))
+				.jwksUri(base.resolve("/jwks"))
+				.idTokenSigningAlgValuesSupported(Set.of("HS256")).build();
+		String secret = java.util.Objects.requireNonNull(System.getenv("REVETSEC_TEST_OIDC_SECRET"));
+		return OidcClient.withProviderMetadata(metadata).clientId("distributed-oidc-probe")
+				.clientAuthentication(ClientAuthentication.fromClientSecretPost(secret)).redirectUri(CALLBACK)
+				.idTokenSigningAlgorithms(Set.of(JwsAlgorithm.HS256))
+				.compatibility(Set.of(OidcCompatibilityMode.HMAC_ID_TOKENS))
+				.allowInsecureLoopback(true).requestTimeout(Duration.ofSeconds(1))
+				.totalDeadline(Duration.ofSeconds(3)).build();
+	}
+
+	private static @NonNull OidcClient rsaOidcClient(@NonNull String issuer) {
+		URI base = URI.create(issuer);
+		OidcProviderMetadata metadata = OidcProviderMetadata.withIssuer(issuer)
+				.authorizationEndpoint(base.resolve("/authorize"))
+				.tokenEndpoint(base.resolve("/token"))
+				.jwksUri(base.resolve("/jwks"))
+				.idTokenSigningAlgValuesSupported(Set.of("RS256")).build();
+		return OidcClient.withProviderMetadata(metadata).clientId("distributed-rsa-probe")
+				.clientAuthentication(ClientAuthentication.noneInstance()).redirectUri(CALLBACK)
+				.idTokenSigningAlgorithms(Set.of(JwsAlgorithm.RS256))
+				.allowInsecureLoopback(true).requestTimeout(Duration.ofSeconds(1))
+				.totalDeadline(Duration.ofSeconds(3)).build();
+	}
+
 	private static @NonNull String queryValue(@NonNull AuthorizationRedirect redirect, @NonNull String name) {
 		for (String part : redirect.getAuthorizationUri().getRawQuery().split("&")) {
 			String[] pair = part.split("=", 2);
@@ -133,6 +169,30 @@ public final class PendingStoreProbe {
 	private static @NonNull String codeCallback(@NonNull String state, @NonNull String binding,
 			@NonNull String issuer) {
 		return codeCallback(state, binding, issuer, store());
+	}
+
+	private static @NonNull String oidcCallback(@NonNull String state, @NonNull String binding,
+			@NonNull String issuer) {
+		return oidcCallback(state, binding, issuer, false);
+	}
+
+	private static @NonNull String oidcCallback(@NonNull String state, @NonNull String binding,
+			@NonNull String issuer, boolean rsa) {
+		AuthorizationResponse response = AuthorizationResponse.fromQueryString("state=" + state + "&code=test-only-code");
+		OidcAuthenticationResult result = (rsa ? rsaOidcClient(issuer) : oidcClient(issuer)).completeAuthenticationResult(response,
+				PendingAuthorizationSource.fromStore(store(), binding), CALLBACK);
+		if (result instanceof OidcAuthenticationResult.Succeeded succeeded) {
+			if (!succeeded.getAuthentication().getSubject().equals("synthetic-subject")
+					|| !succeeded.getAuthentication().getTokens().getAccessToken().getValue().equals("test-only-token"))
+				throw new IllegalStateException("Unexpected synthetic OIDC authentication.");
+			return "AUTHENTICATED";
+		}
+		if (result instanceof OidcAuthenticationResult.RejectedAuthorization rejected)
+			return "REJECTED:" + rejected.getReason();
+		if (result instanceof OidcAuthenticationResult.RejectedIdToken rejected)
+			return "REJECTED_ID_TOKEN:" + rejected.getReason();
+		if (result instanceof OidcAuthenticationResult.Failed failed) return "FAILED:" + failed.getReason();
+		throw new IllegalStateException("Unexpected OIDC callback result.");
 	}
 
 	private static @NonNull String codeCallback(@NonNull String state, @NonNull String binding,
@@ -208,6 +268,36 @@ public final class PendingStoreProbe {
 				if (System.in.read() == -1) throw new IllegalStateException("Race signal missing.");
 				System.out.println(codeCallback(args[1], args[2], args[3]));
 			}
+			case "issue-oidc" -> {
+				AuthorizationRedirect redirect = oidcClient(args[2]).beginAuthentication();
+				redirect.getPendingAuthorization().saveTo(store, args[1], Duration.ofSeconds(3));
+				if (!queryValue(redirect, "code_challenge_method").equals("S256"))
+					throw new IllegalStateException("Unexpected OIDC PKCE method.");
+				System.out.println(state(redirect) + "\t" + queryValue(redirect, "code_challenge")
+						+ "\t" + queryValue(redirect, "nonce"));
+			}
+			case "callback-oidc" -> System.out.println(oidcCallback(args[1], args[2], args[3]));
+			case "callback-oidc-race" -> {
+				System.out.println("READY");
+				System.out.flush();
+				if (System.in.read() == -1) throw new IllegalStateException("Race signal missing.");
+				System.out.println(oidcCallback(args[1], args[2], args[3]));
+			}
+			case "issue-oidc-rsa" -> {
+				AuthorizationRedirect redirect = rsaOidcClient(args[2]).beginAuthentication();
+				redirect.getPendingAuthorization().saveTo(store, args[1], Duration.ofSeconds(3));
+				if (!queryValue(redirect, "code_challenge_method").equals("S256"))
+					throw new IllegalStateException("Unexpected RSA OIDC PKCE method.");
+				System.out.println(state(redirect) + "\t" + queryValue(redirect, "code_challenge")
+						+ "\t" + queryValue(redirect, "nonce"));
+			}
+			case "callback-oidc-rsa" -> System.out.println(oidcCallback(args[1], args[2], args[3], true));
+			case "callback-oidc-rsa-race" -> {
+				System.out.println("READY");
+				System.out.flush();
+				if (System.in.read() == -1) throw new IllegalStateException("Race signal missing.");
+				System.out.println(oidcCallback(args[1], args[2], args[3], true));
+			}
 			case "hold" -> hold();
 			case "duplicate" -> {
 				String key = "duplicate-" + System.nanoTime();
@@ -222,8 +312,8 @@ public final class PendingStoreProbe {
 			}
 			case "expiry" -> {
 				String key = "expiry-" + System.nanoTime();
-				store.save("browser", key, "record", Instant.now().plusMillis(250), Duration.ofSeconds(3));
-				Thread.sleep(400);
+				store.save("browser", key, "record", Instant.now().plusSeconds(2), Duration.ofSeconds(3));
+				Thread.sleep(2_200);
 				if (store.consume("browser", key, Duration.ofSeconds(3)).isPresent())
 					throw new IllegalStateException("Expired record returned.");
 				System.out.println("EXPIRED_ABSENT");

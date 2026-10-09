@@ -17,7 +17,6 @@
 package example.pending;
 
 import com.pyranid.Database;
-import com.pyranid.DatabaseException;
 import com.pyranid.DatabaseType;
 import com.pyranid.TransactionIsolation;
 import com.pyranid.TransactionOptions;
@@ -27,11 +26,6 @@ import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.ThreadSafe;
-import javax.sql.DataSource;
-import java.io.PrintWriter;
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
-import java.lang.reflect.Proxy;
 import java.nio.ByteBuffer;
 import java.nio.CharBuffer;
 import java.nio.charset.CharacterCodingException;
@@ -40,16 +34,12 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.sql.SQLFeatureNotSupportedException;
-import java.sql.Statement;
+import java.sql.Timestamp;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.Optional;
-import java.util.logging.Logger;
 
 import static java.util.Objects.requireNonNull;
 
@@ -68,6 +58,13 @@ public final class PostgresqlPendingAuthorizationStore implements PendingAuthori
 	private final int maximumLiveEntries;
 	private final int maximumOpaqueRecordBytes;
 	private final long maximumChargedBytes;
+
+	/** Database rows mapped by Pyranid. */
+	public record PendingRow(@NonNull String opaqueRecord, long expiresSeconds, int expiresNanos) {
+		@Override public @NonNull String toString() { return "PendingRow{<redacted>}"; }
+	}
+	public record ClockRow(long observedSeconds, int observedNanos) { }
+	public record UsageRow(long total, long charged) { }
 
 	/** The application must bound connection acquisition by the supplied budget and return only a primary connection. */
 	@FunctionalInterface
@@ -102,7 +99,7 @@ public final class PostgresqlPendingAuthorizationStore implements PendingAuthori
 				if (recordBytes.length == 0 || recordBytes.length > this.maximumOpaqueRecordBytes)
 					throw new IllegalArgumentException("The pending record exceeds its byte limit.");
 				int charge = recordBytes.length + key.length;
-				SaveOutcome result = transaction(deadline, connection -> save(connection, key, opaqueRecord,
+				SaveOutcome result = transaction(deadline, database -> save(database, key, opaqueRecord,
 						expiresAt, charge, deadline));
 				if (result == SaveOutcome.DUPLICATE)
 					throw new IllegalArgumentException("A live pending record already exists.");
@@ -124,151 +121,108 @@ public final class PostgresqlPendingAuthorizationStore implements PendingAuthori
 		long deadline = deadline(remaining);
 		byte[] key = key(browserBinding, state);
 		try {
-			return transaction(deadline, connection -> consume(connection, key, deadline));
+			return transaction(deadline, database -> consume(database, key, deadline));
 		} finally {
 			Arrays.fill(key, (byte) 0);
 		}
 	}
 
-	private @NonNull SaveOutcome save(@NonNull Connection connection, byte @NonNull [] key,
+	private @NonNull SaveOutcome save(@NonNull Database database, byte @NonNull [] key,
 			@NonNull String record, @NonNull Instant expiresAt, int charge, long deadline) throws SQLException {
-		Instant now = observe(connection, deadline);
+		Instant now = observe(database, deadline);
 		Duration lifetime = Duration.between(now, expiresAt);
 		if (lifetime.isNegative() || lifetime.isZero() || lifetime.compareTo(MAXIMUM_LIFETIME) > 0)
 			return SaveOutcome.INVALID_EXPIRY;
-		bound(connection, deadline);
-		try (PreparedStatement statement = connection.prepareStatement("DELETE FROM pending_authorization "
-				+ "WHERE namespace=? AND (expires_seconds<? OR (expires_seconds=? AND expires_nanos<=?))")) {
-			statement.setString(1, this.namespace);
-			statement.setLong(2, now.getEpochSecond());
-			statement.setLong(3, now.getEpochSecond());
-			statement.setInt(4, now.getNano());
-			statement.executeUpdate();
-		}
-		bound(connection, deadline);
-		try (PreparedStatement statement = connection.prepareStatement(
-				"SELECT 1 FROM pending_authorization WHERE namespace=? AND storage_key=?")) {
-			statement.setString(1, this.namespace);
-			statement.setBytes(2, key);
-			try (ResultSet result = statement.executeQuery()) {
-				if (result.next()) return SaveOutcome.DUPLICATE;
-			}
-		}
-		bound(connection, deadline);
-		try (PreparedStatement statement = connection.prepareStatement(
-				"SELECT count(*),coalesce(sum(charged_bytes),0) FROM pending_authorization WHERE namespace=?")) {
-			statement.setString(1, this.namespace);
-			try (ResultSet result = statement.executeQuery()) {
-				if (!result.next() || result.getLong(1) >= this.maximumLiveEntries
-						|| result.getLong(2) > this.maximumChargedBytes - charge)
-					return SaveOutcome.CAPACITY;
-			}
-		}
-		bound(connection, deadline);
-		try (PreparedStatement statement = connection.prepareStatement("INSERT INTO pending_authorization "
-				+ "(namespace,storage_key,opaque_record,expires_seconds,expires_nanos,charged_bytes) VALUES (?,?,?,?,?,?)")) {
-			statement.setString(1, this.namespace);
-			statement.setBytes(2, key);
-			statement.setString(3, record);
-			statement.setLong(4, expiresAt.getEpochSecond());
-			statement.setInt(5, expiresAt.getNano());
-			statement.setInt(6, charge);
-			if (statement.executeUpdate() != 1) throw new SQLException("Pending insert did not affect one row.");
-		}
+		bound(database, deadline);
+		database.query("DELETE FROM pending_authorization WHERE namespace=:namespace "
+				+ "AND (expires_seconds<:seconds OR (expires_seconds=:seconds AND expires_nanos<=:nanos))")
+				.bind("namespace", this.namespace).bind("seconds", now.getEpochSecond())
+				.bind("nanos", now.getNano()).execute();
+		bound(database, deadline);
+		if (database.query("SELECT 1 FROM pending_authorization WHERE namespace=:namespace AND storage_key=:key")
+				.bind("namespace", this.namespace).bind("key", key).fetchObject(Integer.class).isPresent())
+			return SaveOutcome.DUPLICATE;
+		bound(database, deadline);
+		UsageRow usage = database.query("SELECT count(*) AS total,coalesce(sum(charged_bytes),0) AS charged "
+				+ "FROM pending_authorization WHERE namespace=:namespace")
+				.bind("namespace", this.namespace).fetchObject(UsageRow.class).orElseThrow();
+		if (usage.total() >= this.maximumLiveEntries || usage.charged() > this.maximumChargedBytes - charge)
+			return SaveOutcome.CAPACITY;
+		bound(database, deadline);
+		if (database.query("INSERT INTO pending_authorization "
+				+ "(namespace,storage_key,opaque_record,expires_seconds,expires_nanos,charged_bytes) "
+				+ "VALUES (:namespace,:key,:record,:seconds,:nanos,:charge)")
+				.bind("namespace", this.namespace).bind("key", key).bind("record", record)
+				.bind("seconds", expiresAt.getEpochSecond()).bind("nanos", expiresAt.getNano())
+				.bind("charge", charge).execute() != 1)
+			throw new SQLException("Pending insert did not affect one row.");
 		return SaveOutcome.SAVED;
 	}
 
-	private @NonNull Optional<@NonNull String> consume(@NonNull Connection connection, byte @NonNull [] key,
+	private @NonNull Optional<@NonNull String> consume(@NonNull Database database, byte @NonNull [] key,
 			long deadline) throws SQLException {
-		Instant now = observe(connection, deadline);
-		String record;
-		Instant expiresAt;
-		bound(connection, deadline);
-		try (PreparedStatement statement = connection.prepareStatement("SELECT opaque_record,expires_seconds,expires_nanos "
-				+ "FROM pending_authorization WHERE namespace=? AND storage_key=?")) {
-			statement.setString(1, this.namespace);
-			statement.setBytes(2, key);
-			try (ResultSet result = statement.executeQuery()) {
-				if (!result.next()) return Optional.empty();
-				record = result.getString(1);
-				expiresAt = Instant.ofEpochSecond(result.getLong(2), result.getInt(3));
-			}
-		}
-		bound(connection, deadline);
-		try (PreparedStatement statement = connection.prepareStatement(
-				"DELETE FROM pending_authorization WHERE namespace=? AND storage_key=?")) {
-			statement.setString(1, this.namespace);
-			statement.setBytes(2, key);
-			if (statement.executeUpdate() != 1) throw new SQLException("Pending consume did not affect one row.");
-		}
-		return now.isBefore(expiresAt) ? Optional.of(record) : Optional.empty();
+		Instant now = observe(database, deadline);
+		bound(database, deadline);
+		Optional<PendingRow> found = database.query("SELECT opaque_record,expires_seconds,expires_nanos "
+				+ "FROM pending_authorization WHERE namespace=:namespace AND storage_key=:key")
+				.bind("namespace", this.namespace).bind("key", key).fetchObject(PendingRow.class);
+		if (found.isEmpty()) return Optional.empty();
+		bound(database, deadline);
+		if (database.query("DELETE FROM pending_authorization WHERE namespace=:namespace AND storage_key=:key")
+				.bind("namespace", this.namespace).bind("key", key).execute() != 1)
+			throw new SQLException("Pending consume did not affect one row.");
+		PendingRow row = found.orElseThrow();
+		Instant expiresAt = Instant.ofEpochSecond(row.expiresSeconds(), row.expiresNanos());
+		return now.isBefore(expiresAt) ? Optional.of(row.opaqueRecord()) : Optional.empty();
 	}
 
-	private @NonNull Instant observe(@NonNull Connection connection, long deadline) throws SQLException {
-		bound(connection, deadline);
-		Instant previous;
-		try (PreparedStatement statement = connection.prepareStatement("SELECT observed_seconds,observed_nanos "
-				+ "FROM pending_authorization_clock WHERE namespace=? FOR UPDATE")) {
-			statement.setString(1, this.namespace);
-			try (ResultSet result = statement.executeQuery()) {
-				if (!result.next()) throw new SQLException("Missing pending-store clock fence.");
-				previous = Instant.ofEpochSecond(result.getLong(1), result.getInt(2));
-			}
-		}
-		bound(connection, deadline);
-		Instant observed;
-		try (Statement statement = connection.createStatement();
-				ResultSet result = statement.executeQuery("SELECT clock_timestamp()")) {
-			if (!result.next()) throw new SQLException("Missing database time.");
-			observed = result.getTimestamp(1).toInstant();
-		}
+	private @NonNull Instant observe(@NonNull Database database, long deadline) throws SQLException {
+		bound(database, deadline);
+		ClockRow clock = database.query("SELECT observed_seconds,observed_nanos FROM pending_authorization_clock "
+				+ "WHERE namespace=:namespace FOR UPDATE")
+				.bind("namespace", this.namespace).fetchObject(ClockRow.class)
+				.orElseThrow(() -> new SQLException("Missing pending-store clock fence."));
+		Instant previous = Instant.ofEpochSecond(clock.observedSeconds(), clock.observedNanos());
+		bound(database, deadline);
+		Instant observed = database.query("SELECT clock_timestamp()")
+				.fetchObject(Timestamp.class).orElseThrow(() -> new SQLException("Missing database time.")).toInstant();
 		Instant now = observed.isAfter(previous) ? observed : previous;
-		bound(connection, deadline);
-		try (PreparedStatement statement = connection.prepareStatement("UPDATE pending_authorization_clock "
-				+ "SET observed_seconds=?,observed_nanos=? WHERE namespace=?")) {
-			statement.setLong(1, now.getEpochSecond());
-			statement.setInt(2, now.getNano());
-			statement.setString(3, this.namespace);
-			if (statement.executeUpdate() != 1) throw new SQLException("Missing pending-store clock fence.");
-		}
+		bound(database, deadline);
+		if (database.query("UPDATE pending_authorization_clock SET observed_seconds=:seconds,"
+				+ "observed_nanos=:nanos WHERE namespace=:namespace")
+				.bind("seconds", now.getEpochSecond()).bind("nanos", now.getNano())
+				.bind("namespace", this.namespace).execute() != 1)
+			throw new SQLException("Missing pending-store clock fence.");
 		return now;
 	}
 
 	private <@NonNull T> @NonNull T transaction(long deadline, @NonNull Operation<@NonNull T> operation) {
-		Database database = Database.withDataSource(new DeadlineDataSource(this.source, deadline))
+		Database database = Database.withDataSource(new PostgresqlPyranidDataSource(this.source::open, deadline))
 				.databaseType(DatabaseType.POSTGRESQL).build();
 		Completion completion = new Completion();
 		Holder<T> candidate = new Holder<>();
 		try {
 			Optional<T> result = database.transaction(TransactionOptions.withIsolation(TransactionIsolation.READ_COMMITTED).build(), () -> {
 				database.currentTransaction().orElseThrow().addPostTransactionOperation(value -> completion.result = value);
-				return database.useRawConnection(connection -> {
-					bound(connection, deadline);
-					try (Statement statement = connection.createStatement()) {
-						statement.execute("SET LOCAL synchronous_commit=on");
-					}
-					T prepared = operation.apply(connection);
-					candidate.value = prepared;
-					bound(connection, deadline);
-					return Optional.of(prepared);
-				});
+				bound(database, deadline);
+				database.query("SELECT set_config('synchronous_commit', 'on', true)")
+						.fetchObject(String.class).orElseThrow();
+				T prepared = operation.apply(database);
+				candidate.value = prepared;
+				bound(database, deadline);
+				return Optional.of(prepared);
 			});
 			if (completion.result != TransactionResult.COMMITTED || expired(deadline)) throw unavailable();
 			return result.orElseThrow(PostgresqlPendingAuthorizationStore::unavailable);
-		} catch (DatabaseException failure) {
+		} catch (RuntimeException failure) {
 			if (completion.result == TransactionResult.COMMITTED && candidate.value != null && !expired(deadline))
 				return candidate.value;
-			throw unavailable();
-		} catch (RuntimeException failure) {
 			throw unavailable();
 		}
 	}
 
-	private static void bound(@NonNull Connection connection, long deadline) throws SQLException {
-		int milliseconds = milliseconds(deadline);
-		try (Statement statement = connection.createStatement()) {
-			statement.execute("SET LOCAL statement_timeout='" + milliseconds + "ms'");
-		}
+	private static void bound(@NonNull Database database, long deadline) throws SQLException {
+		PostgresqlPyranidDataSource.bound(database, deadline);
 	}
 
 	private static long deadline(@NonNull Duration remaining) {
@@ -281,12 +235,6 @@ public final class PostgresqlPendingAuthorizationStore implements PendingAuthori
 
 	private static boolean expired(long deadline) {
 		return deadline - System.nanoTime() <= 0 || Thread.currentThread().isInterrupted();
-	}
-
-	private static int milliseconds(long deadline) {
-		long nanoseconds = deadline - System.nanoTime();
-		if (nanoseconds <= 0 || Thread.currentThread().isInterrupted()) throw unavailable();
-		return (int) Math.max(1, Math.min(60_000, (nanoseconds + 999_999) / 1_000_000));
 	}
 
 	private static @NonNull IllegalStateException unavailable() {
@@ -336,7 +284,7 @@ public final class PostgresqlPendingAuthorizationStore implements PendingAuthori
 	private enum SaveOutcome { SAVED, DUPLICATE, CAPACITY, INVALID_EXPIRY }
 	@FunctionalInterface
 	private interface Operation<@NonNull T> {
-		@NonNull T apply(@NonNull Connection connection) throws SQLException;
+		@NonNull T apply(@NonNull Database database) throws SQLException;
 	}
 	private static final class Completion {
 		private @Nullable TransactionResult result;
@@ -345,55 +293,4 @@ public final class PostgresqlPendingAuthorizationStore implements PendingAuthori
 		private @Nullable T value;
 	}
 
-	/** DataSource facade for one operation; connection acquisition remains the application's responsibility. */
-	private static final class DeadlineDataSource implements DataSource {
-		private final @NonNull ConnectionSource source;
-		private final long deadline;
-		private DeadlineDataSource(@NonNull ConnectionSource source, long deadline) {
-			this.source = source;
-			this.deadline = deadline;
-		}
-		@Override public @NonNull Connection getConnection() throws SQLException {
-			long nanoseconds = this.deadline - System.nanoTime();
-			if (nanoseconds <= 0 || Thread.currentThread().isInterrupted()) throw unavailable();
-			Connection physical = requireNonNull(this.source.open(Duration.ofNanos(nanoseconds)));
-			try {
-				if (expired(this.deadline)) throw unavailable();
-				physical.setNetworkTimeout(Runnable::run, milliseconds(this.deadline));
-				return (Connection) Proxy.newProxyInstance(Connection.class.getClassLoader(),
-						new Class<?>[] { Connection.class }, new java.lang.reflect.InvocationHandler() {
-							@Override public @Nullable Object invoke(@NonNull Object proxy, @NonNull Method method,
-									@Nullable Object @Nullable [] arguments) throws Throwable {
-								String name = method.getName();
-								if (!name.equals("close") && !name.equals("rollback") && !name.equals("isClosed")
-										&& !name.equals("abort"))
-									physical.setNetworkTimeout(Runnable::run, milliseconds(DeadlineDataSource.this.deadline));
-								try { return method.invoke(physical, arguments); }
-								catch (InvocationTargetException failure) { throw failure.getCause(); }
-							}
-						});
-			} catch (SQLException | RuntimeException failure) {
-				try { physical.close(); } catch (SQLException ignored) { }
-				throw failure;
-			}
-		}
-		@Override public @NonNull Connection getConnection(@Nullable String user, @Nullable String password) throws SQLException {
-			throw new SQLFeatureNotSupportedException("Use the configured connection source.");
-		}
-		@Override public @Nullable PrintWriter getLogWriter() { return null; }
-		@Override public void setLogWriter(@Nullable PrintWriter writer) throws SQLException {
-			throw new SQLFeatureNotSupportedException("No database credential logging.");
-		}
-		@Override public void setLoginTimeout(int seconds) throws SQLException {
-			throw new SQLFeatureNotSupportedException("Use the operation budget.");
-		}
-		@Override public int getLoginTimeout() { return 0; }
-		@Override public @NonNull Logger getParentLogger() throws SQLFeatureNotSupportedException {
-			throw new SQLFeatureNotSupportedException("No database credential logging.");
-		}
-		@Override public <@NonNull T> @NonNull T unwrap(@NonNull Class<@NonNull T> type) throws SQLException {
-			throw new SQLFeatureNotSupportedException("No unwrap.");
-		}
-		@Override public boolean isWrapperFor(@NonNull Class<?> type) { return false; }
-	}
 }

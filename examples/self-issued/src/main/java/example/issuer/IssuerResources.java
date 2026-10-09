@@ -40,17 +40,23 @@ import org.jspecify.annotations.Nullable;
 
 /** App-owned routes, fixed demo account and consent. Library results are emitted without re-serialization. */
 public final class IssuerResources {
+    enum StartupMode { FRESH, ESTABLISHED }
     final IssuerConfig config;
     final OAuthAuthorizationServer server;
     final BrowserSessions sessions;
+    final StartupMode startupMode;
     IssuerResources(@NonNull IssuerConfig config,@NonNull Clock clock) throws java.security.GeneralSecurityException {
         this(config,clock,new VolatileStore(clock,2048,4_194_304));
     }
     IssuerResources(@NonNull IssuerConfig config,@NonNull Clock clock,@NonNull OAuthAuthorizationServerStore store) throws java.security.GeneralSecurityException {
-        this.config=config;this.sessions=new BrowserSessions(clock,64,config.origin.getScheme().equals("https"));
-        KeyPairGenerator generator=KeyPairGenerator.getInstance("RSA");generator.initialize(2048);KeyPair pair=generator.generateKeyPair();
-        OAuthIssuerKeyProvider keys=OAuthIssuerKeyProvider.fromSnapshot(OAuthIssuerKeySnapshot.withActiveKey(
-                OAuthIssuerSigningKey.fromKeyPair(LocalInputs.randomId(),pair.getPrivate(),pair.getPublic())).generation(LocalInputs.randomId()).publishedAt(clock.instant()).build());
+        this(config,clock,store,freshSigningKeys(clock),freshSealer(),StartupMode.FRESH);
+    }
+    IssuerResources(@NonNull IssuerConfig config,@NonNull Clock clock,@NonNull OAuthAuthorizationServerStore store,
+            @NonNull OAuthIssuerKeyProvider keys,@NonNull StateSealer sealer,@NonNull StartupMode startupMode) {
+        this.config=java.util.Objects.requireNonNull(config);
+        this.startupMode=java.util.Objects.requireNonNull(startupMode);
+        java.util.Objects.requireNonNull(store);java.util.Objects.requireNonNull(keys);java.util.Objects.requireNonNull(sealer);
+        this.sessions=new BrowserSessions(clock,64,config.origin.getScheme().equals("https"));
         Map<String,Set<String>> resources=config.resources();
         OAuthServerClientAuthentication confidential=OAuthServerClientAuthentication.fromClientSecretVerifier((id,secret,budget) -> {
             if(budget.isZero() || budget.isNegative() || Thread.currentThread().isInterrupted()) return false;
@@ -67,7 +73,6 @@ public final class IssuerResources {
                 .authorizationCodePermitted(false).authentication(confidential).introspectionResources(resources.keySet())
                 .configurationVersion("demo-v1").build();
         Map<String,OAuthServerClientRegistration> clients=Map.of("demo-public",publicClient,"demo-confidential",privateClient,"resource-client",resourceClient);
-        StateSealer sealer=StateSealer.withActiveKey(SealingKey.fromBase64("demo-seal",Base64.getEncoder().encodeToString(LocalInputs.randomBytes()))).build();
         this.server=OAuthAuthorizationServer.withIssuer(config.origin.toString())
                 .authorizationEndpoint(config.origin.resolve("/authorize")).tokenEndpoint(config.origin.resolve("/token"))
                 .jsonWebKeySetEndpoint(config.origin.resolve("/jwks")).revocationEndpoint(config.origin.resolve("/revoke"))
@@ -80,14 +85,27 @@ public final class IssuerResources {
                         : OAuthAuthorizationDecision.deniedInstance())
                 .clientMetadataPolicy(config.metadataPolicy).clock(clock).clockSkew(Duration.ZERO).publicMetadataFreshness(Duration.ZERO).accessTokenLifetime(Duration.ofMinutes(2)).refreshTokensEnabled(true)
                 .allowInsecureLoopback(config.loopback).allowNativeLoopbackRedirects(true).build();
-        // This app deliberately creates a fresh volatile store and keys; never use this as a recovery recipe.
-        if(server.initializeFreshIssuer()!=OAuthStoreCommitStatus.COMMITTED) throw new IllegalStateException("Fresh demo store initialization failed.");
-        server.establishNewSubject(IssuerConfig.SUBJECT);server.warmUp();
+        if(startupMode==StartupMode.FRESH) {
+            if(server.initializeFreshIssuer()!=OAuthStoreCommitStatus.COMMITTED) throw new IllegalStateException("Fresh demo store initialization failed.");
+            server.establishNewSubject(IssuerConfig.SUBJECT);
+        }
+        server.warmUp();
+    }
+    private static @NonNull OAuthIssuerKeyProvider freshSigningKeys(@NonNull Clock clock) throws java.security.GeneralSecurityException {
+        KeyPairGenerator generator=KeyPairGenerator.getInstance("RSA");generator.initialize(2048);KeyPair pair=generator.generateKeyPair();
+        return OAuthIssuerKeyProvider.fromSnapshot(OAuthIssuerKeySnapshot.withActiveKey(
+                OAuthIssuerSigningKey.fromKeyPair(LocalInputs.randomId(),pair.getPrivate(),pair.getPublic())).generation(LocalInputs.randomId()).publishedAt(clock.instant()).build());
+    }
+    private static @NonNull StateSealer freshSealer() {
+        return StateSealer.withActiveKey(SealingKey.fromBase64("demo-seal",Base64.getEncoder().encodeToString(LocalInputs.randomBytes()))).build();
     }
     @GET("/") public @NonNull MarshaledResponse index(@NonNull Request request) {
         if(!issuerHost(request)) return fixed(403,"Request denied.");
+        String state=startupMode==StartupMode.FRESH
+                ?"This local application has one demo account and new issuer state. The default launcher uses a volatile store and discards sessions, keys and grants at restart."
+                :"This local application has one demo account. Browser sessions are process-local; issuer grants use the supplied store and keys.";
         return page("Self-issued MCP Playground","<p>Use a preregistered OAuth client with <code>demo-public</code> or <code>demo-confidential</code>. "
-                +"This local application has one demo account and a volatile store. Restart discards every session, key and grant.</p>");
+                +state+"</p>");
     }
     @GET("/.well-known/oauth-authorization-server") @HEAD("/.well-known/oauth-authorization-server")
     public @NonNull MarshaledResponse metadata(@NonNull Request request) {
