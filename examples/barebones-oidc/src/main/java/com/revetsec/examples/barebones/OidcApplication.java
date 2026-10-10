@@ -132,11 +132,11 @@ public final class OidcApplication {
         if (!hostAllowed(request) || !headerAbsentOr(request, "Origin", this.origin.toString()))
             return failure(400, "Invalid request");
         Session session = sessionFor(request);
-        Set<ResponseCookie> cookies = Set.of();
+        List<ResponseCookie> cookies = List.of();
         if (session == null) {
             session = addSession(null);
             if (session == null) return failure(503, "Please try again later");
-            cookies = Set.of(cookie(SESSION_COOKIE, session.id, SESSION_AGE));
+            cookies = List.of(cookie(SESSION_COOKIE, session.id, SESSION_AGE));
         }
         String identity = session.identity == null ? "Signed out" : "Signed in as " + escape(session.identity);
         String action = session.identity == null ? "login" : "logout";
@@ -145,11 +145,11 @@ public final class OidcApplication {
                 + "<form method=\"post\" action=\"/" + action + "\"><input type=\"hidden\" name=\"csrf\" value=\""
                 + session.csrf + "\"><button>" + (action.equals("login") ? "Sign in" : "Sign out")
                 + "</button></form><p>This example uses process-local storage.</p></html>";
-        Map<String, Set<String>> htmlHeaders = new HashMap<>(headers("text/html; charset=UTF-8"));
+        Map<String, List<String>> htmlHeaders = new HashMap<>(headers("text/html; charset=UTF-8"));
         // Browsers need the same-origin document referrer to send a non-null Origin on navigation POST forms.
-        htmlHeaders.put("Referrer-Policy", Set.of("same-origin"));
+        htmlHeaders.put("Referrer-Policy", List.of("same-origin"));
         // Some browsers apply form-action to redirect destinations. Only the configured provider origin is added.
-        htmlHeaders.put("Content-Security-Policy", Set.of("default-src 'none'; form-action 'self' "
+        htmlHeaders.put("Content-Security-Policy", List.of("default-src 'none'; form-action 'self' "
                 + this.issuerOrigin + "; frame-ancestors 'none'; base-uri 'none'"));
         return Response.withStatusCode(200).headers(htmlHeaders).cookies(cookies).body(html).build();
     }
@@ -198,7 +198,7 @@ public final class OidcApplication {
     public @NonNull Response formCallback(@NonNull Request request) { return complete(request); }
 
     private @NonNull Response complete(@NonNull Request request) {
-        Set<ResponseCookie> deletion = Set.of(cookie(PENDING_COOKIE, "", Duration.ZERO));
+        List<ResponseCookie> deletion = List.of(cookie(PENDING_COOKIE, "", Duration.ZERO));
         Session session = sessionFor(request);
         String binding = cookieValue(request, PENDING_COOKIE);
         if (!hostAllowed(request) || session == null || binding == null
@@ -315,7 +315,7 @@ public final class OidcApplication {
 
     private static @NonNull List<@NonNull String> values(@NonNull Request request, @NonNull String name) {
         List<String> result = new ArrayList<>();
-        for (Map.Entry<String, Set<String>> entry : request.getHeaders().entrySet())
+        for (Map.Entry<String, List<String>> entry : request.getHeaders().entrySet())
             if (name.equalsIgnoreCase(entry.getKey())) result.addAll(entry.getValue());
         return result;
     }
@@ -330,7 +330,7 @@ public final class OidcApplication {
     }
 
     private static @Nullable String cookieValue(@NonNull Request request, @NonNull String name) {
-        // Parse raw materialized fields ourselves: Soklet cookie sets lose identical duplicate pairs.
+        // Parse raw fields ourselves so duplicate cookie pairs cannot be normalized away.
         List<String> values = values(request, "Cookie");
         if (values.size() != 1 || values.get(0).length() > 2048) return null;
         String found = null;
@@ -377,14 +377,14 @@ public final class OidcApplication {
                 .replace("\"", "&quot;").replace("'", "&#39;");
     }
 
-    private static @NonNull Map<@NonNull String, @NonNull Set<@NonNull String>> headers(@NonNull String contentType) {
-        return Map.of("Content-Type", Set.of(contentType), "Cache-Control", Set.of("no-store"),
-                "Referrer-Policy", Set.of("no-referrer"), "X-Content-Type-Options", Set.of("nosniff"),
-                "Content-Security-Policy", Set.of("default-src 'none'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'"));
+    private static @NonNull Map<@NonNull String, @NonNull List<@NonNull String>> headers(@NonNull String contentType) {
+        return Map.of("Content-Type", List.of(contentType), "Cache-Control", List.of("no-store"),
+                "Referrer-Policy", List.of("no-referrer"), "X-Content-Type-Options", List.of("nosniff"),
+                "Content-Security-Policy", List.of("default-src 'none'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'"));
     }
 
-    private static @NonNull Response failure(int status, @NonNull String text) { return failure(status, text, Set.of()); }
-    private static @NonNull Response failure(int status, @NonNull String text, @NonNull Set<@NonNull ResponseCookie> cookies) {
+    private static @NonNull Response failure(int status, @NonNull String text) { return failure(status, text, List.of()); }
+    private static @NonNull Response failure(int status, @NonNull String text, @NonNull List<@NonNull ResponseCookie> cookies) {
         return Response.withStatusCode(status).headers(headers("text/plain; charset=UTF-8")).cookies(cookies).body(text).build();
     }
 

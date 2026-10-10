@@ -42,13 +42,13 @@ final class OidcApplicationTests {
                     MutableClock clock = new MutableClock();
                     try (SyntheticOidcProvider provider = new SyntheticOidcProvider(clock)) {
                         OidcApplication app = provider.application(8, 8, mode);
-                        Soklet.runSimulator(app.configuration(18080), simulator -> {
+                        SokletSimulator.run(app.configuration(18080), simulator -> {
                             Browser browser = new Browser(simulator);
                             Flow flow = begin(provider, browser);
                             String oldSession = browser.cookies.get(OidcApplication.SESSION_COOKIE);
                             HttpRequestResult completed = browser.callback(flow.query, mode, null);
                             assertEquals(302, status(completed));
-                            assertEquals(Set.of("no-referrer"), completed.getMarshaledResponse().getHeaders().get("Referrer-Policy"));
+                            assertEquals(List.of("no-referrer"), completed.getMarshaledResponse().getHeaders().get("Referrer-Policy"));
                             assertEquals("https://localhost:8443/", location(completed).toString());
                             assertNotEquals(oldSession, browser.cookies.get(OidcApplication.SESSION_COOKIE));
                             assertFalse(browser.cookies.containsKey(OidcApplication.PENDING_COOKIE));
@@ -108,7 +108,7 @@ final class OidcApplicationTests {
                             Flow flow = begin(provider, browser);
                             String query = flow.query;
                             AuthorizationRequestOptions.ResponseMode mode = AuthorizationRequestOptions.ResponseMode.QUERY;
-                            Map<String, Set<String>> extra = new HashMap<>();
+                            Map<String, List<String>> extra = new HashMap<>();
                             switch (name) {
                                 case "state" -> query = "state=wrong&code=TEST-ONLY-code-1";
                                 case "duplicate" -> query += "&state=duplicate";
@@ -116,17 +116,17 @@ final class OidcApplicationTests {
                                 case "missing-binding" -> browser.cookies.remove(OidcApplication.PENDING_COOKIE);
                                 case "wrong-binding" -> browser.cookies.put(OidcApplication.PENDING_COOKIE, "A".repeat(43));
                                 case "wrong-session" -> browser.cookies.put(OidcApplication.SESSION_COOKIE, "B".repeat(43));
-                                case "wrong-origin" -> extra.put("Origin", Set.of("https://attacker.example"));
-                                case "wrong-host" -> extra.put("Host", Set.of("attacker.example"));
+                                case "wrong-origin" -> extra.put("Origin", List.of("https://attacker.example"));
+                                case "wrong-host" -> extra.put("Host", List.of("attacker.example"));
                                 case "mode" -> mode = AuthorizationRequestOptions.ResponseMode.FORM_POST;
                                 case "post-query" -> mode = AuthorizationRequestOptions.ResponseMode.FORM_POST;
                                 case "post-type" -> { mode = AuthorizationRequestOptions.ResponseMode.FORM_POST;
-                                    extra.put("Content-Type", Set.of("text/plain")); }
+                                    extra.put("Content-Type", List.of("text/plain")); }
                                 default -> throw new IllegalStateException("Unknown test case");
                             }
                             HttpRequestResult response = name.equals("post-query")
                                     ? browser.send(HttpMethod.POST, "/callback?code=query-conflict", query,
-                                            Map.of("Content-Type", Set.of("application/x-www-form-urlencoded")))
+                                            Map.of("Content-Type", List.of("application/x-www-form-urlencoded")))
                                     : browser.callback(query, mode, extra);
                             assertEquals(400, status(response));
                             assertEquals(name.equals("wrong-host") ? "Invalid request" : "Sign in failed", body(response));
@@ -147,8 +147,8 @@ final class OidcApplicationTests {
                 assertEquals(403, status(browser.post("/login", "csrf=wrong", "https://localhost:8443")));
                 assertEquals(403, status(browser.post("/login", "csrf=" + csrf + "&csrf=" + csrf, "https://localhost:8443")));
                 assertEquals(403, status(browser.post("/login?extra=1", "csrf=" + csrf, "https://localhost:8443")));
-                assertEquals(400, status(browser.send(HttpMethod.GET, "/", null, Map.of("Host", Set.of("attacker.example")))));
-                assertEquals(400, status(browser.send(HttpMethod.GET, "/", null, Map.of("Host", Set.of("localhost:8443", "attacker.example")))));
+                assertEquals(400, status(browser.send(HttpMethod.GET, "/", null, Map.of("Host", List.of("attacker.example")))));
+                assertEquals(400, status(browser.send(HttpMethod.GET, "/", null, Map.of("Host", List.of("localhost:8443", "attacker.example")))));
                 assertEquals(403, status(browser.post("/logout", "csrf=" + csrf, "https://attacker.example")));
                 assertEquals(0, provider.tokenPosts.get());
                 HttpRequestResult valid = browser.post("/login", "csrf=" + csrf, "https://localhost:8443");
@@ -183,7 +183,7 @@ final class OidcApplicationTests {
         MutableClock clock = new MutableClock();
         try (SyntheticOidcProvider provider = new SyntheticOidcProvider(clock)) {
             OidcApplication app = provider.application(2, 1, AuthorizationRequestOptions.ResponseMode.QUERY);
-            Soklet.runSimulator(app.configuration(18080), simulator -> {
+            SokletSimulator.run(app.configuration(18080), simulator -> {
                 Browser first = new Browser(simulator); Browser second = new Browser(simulator); Browser third = new Browser(simulator);
                 begin(provider, first);
                 HttpRequestResult home = second.get("/");
@@ -202,7 +202,7 @@ final class OidcApplicationTests {
         MutableClock clock = new MutableClock();
         try (SyntheticOidcProvider provider = new SyntheticOidcProvider(clock)) {
             OidcApplication app = provider.application(1024, 8, AuthorizationRequestOptions.ResponseMode.QUERY);
-            Soklet.runSimulator(app.configuration(18080), simulator -> {
+            SokletSimulator.run(app.configuration(18080), simulator -> {
                 Browser last = new Browser(simulator);
                 HttpRequestResult lastHome = last.get("/");
                 for (int index = 1; index < 512; index++) assertEquals(200, status(new Browser(simulator).get("/")));
@@ -223,7 +223,7 @@ final class OidcApplicationTests {
                 Flow flow = begin(provider, browser);
                 HttpRequestResult response = browser.callback(flow.query, AuthorizationRequestOptions.ResponseMode.QUERY, null);
                 assertEquals(503, status(response)); assertEquals("Please try again later", body(response));
-                assertEquals(Set.of("no-referrer"), response.getMarshaledResponse().getHeaders().get("Referrer-Policy"));
+                assertEquals(List.of("no-referrer"), response.getMarshaledResponse().getHeaders().get("Referrer-Policy"));
                 assertEquals(1, provider.tokenPosts.get()); assertEquals(1, provider.keyGets.get()); // warmUp only
                 assertFalse(browser.cookies.containsKey(OidcApplication.PENDING_COOKIE));
             });
@@ -235,7 +235,7 @@ final class OidcApplicationTests {
         MutableClock clock = new MutableClock();
         try (SyntheticOidcProvider provider = new SyntheticOidcProvider(clock)) {
             OidcApplication app = provider.application(8, 8, AuthorizationRequestOptions.ResponseMode.QUERY);
-            Soklet.runSimulator(app.configuration(18080), simulator -> {
+            SokletSimulator.run(app.configuration(18080), simulator -> {
                 Browser original = new Browser(simulator); Flow flow = begin(provider, original);
                 Browser first = new Browser(simulator); first.cookies.putAll(original.cookies);
                 Browser second = new Browser(simulator); second.cookies.putAll(original.cookies);
@@ -260,7 +260,7 @@ final class OidcApplicationTests {
         MutableClock clock = new MutableClock();
         try (SyntheticOidcProvider provider = new SyntheticOidcProvider(clock)) {
             OidcApplication app = provider.application(8, 8, AuthorizationRequestOptions.ResponseMode.QUERY);
-            Soklet.runSimulator(app.configuration(18080), simulator -> {
+            SokletSimulator.run(app.configuration(18080), simulator -> {
                 Browser first = new Browser(simulator); Flow flow = begin(provider, first);
                 Browser second = new Browser(simulator); Flow other = begin(provider, second);
                 String firstBinding = first.cookies.get(OidcApplication.PENDING_COOKIE);
@@ -271,7 +271,7 @@ final class OidcApplicationTests {
                         + "; " + OidcApplication.SESSION_COOKIE + "=" + first.cookies.get(OidcApplication.SESSION_COOKIE)
                         + "; " + OidcApplication.PENDING_COOKIE + "=" + firstBinding;
                 assertEquals(400, status(first.callback(flow.query, AuthorizationRequestOptions.ResponseMode.QUERY,
-                        Map.of("Cookie", Set.of(duplicateCookie)))));
+                        Map.of("Cookie", List.of(duplicateCookie)))));
                 assertEquals(0, provider.tokenPosts.get());
                 first.cookies.put(OidcApplication.PENDING_COOKIE, firstBinding);
                 assertEquals(302, status(first.callback(flow.query, AuthorizationRequestOptions.ResponseMode.QUERY, null)));
@@ -292,11 +292,11 @@ final class OidcApplicationTests {
             for (String origin : List.of("http://localhost:8443", "https://0.0.0.0:8443", "https://public.example",
                     "https://user@localhost:8443", "https://localhost:8443/path", "https://localhost:8443/?x=1", "https://localhost:8443/#x"))
                 assertThrows(IllegalArgumentException.class, () -> OidcApplication.checkedOrigin(URI.create(origin)));
-            Soklet.runSimulator(app.configuration(18080), simulator -> {
+            SokletSimulator.run(app.configuration(18080), simulator -> {
                 Browser browser = new Browser(simulator); HttpRequestResult home = browser.get("/");
-                Map<String, Set<String>> headers = home.getMarshaledResponse().getHeaders();
-                assertEquals(Set.of("no-store"), headers.get("Cache-Control"));
-                assertEquals(Set.of("same-origin"), headers.get("Referrer-Policy"));
+                Map<String, List<String>> headers = home.getMarshaledResponse().getHeaders();
+                assertEquals(List.of("no-store"), headers.get("Cache-Control"));
+                assertEquals(List.of("same-origin"), headers.get("Referrer-Policy"));
                 assertTrue(headers.get("Content-Security-Policy").iterator().next().contains("default-src 'none'"));
                 ResponseCookie cookie = home.getMarshaledResponse().getCookies().iterator().next();
                 assertTrue(cookie.getName().startsWith("__Host-")); assertTrue(cookie.getSecure()); assertTrue(cookie.getHttpOnly());
@@ -310,13 +310,13 @@ final class OidcApplicationTests {
     private static void with(@NonNull SyntheticOidcProvider provider, @NonNull MutableClock clock,
                              @NonNull Consumer<@NonNull Browser> test) {
         OidcApplication app = provider.application(8, 8, AuthorizationRequestOptions.ResponseMode.QUERY);
-        Soklet.runSimulator(app.configuration(18080), simulator -> test.accept(new Browser(simulator)));
+        SokletSimulator.run(app.configuration(18080), simulator -> test.accept(new Browser(simulator)));
     }
     private static @NonNull Flow begin(@NonNull SyntheticOidcProvider provider, @NonNull Browser browser) {
         HttpRequestResult home = browser.get("/"); assertEquals(200, status(home));
         HttpRequestResult redirect = browser.post("/login", "csrf=" + csrf(home), "https://localhost:8443");
         assertEquals(302, status(redirect));
-        assertEquals(Set.of("no-referrer"), redirect.getMarshaledResponse().getHeaders().get("Referrer-Policy"));
+        assertEquals(List.of("no-referrer"), redirect.getMarshaledResponse().getHeaders().get("Referrer-Policy"));
         return new Flow(provider.authorize(location(redirect)));
     }
     private static int status(@NonNull HttpRequestResult response) { return response.getMarshaledResponse().getStatusCode(); }
@@ -348,24 +348,24 @@ final class OidcApplicationTests {
         Browser(@NonNull Simulator simulator) { this.simulator = simulator; }
         @NonNull HttpRequestResult get(@NonNull String path) { return send(HttpMethod.GET, path, null, Map.of()); }
         @NonNull HttpRequestResult post(@NonNull String path, @NonNull String body, @Nullable String origin) {
-            Map<String, Set<String>> headers = new HashMap<>();
-            headers.put("Content-Type", Set.of("application/x-www-form-urlencoded"));
-            if (origin != null) headers.put("Origin", Set.of(origin));
+            Map<String, List<String>> headers = new HashMap<>();
+            headers.put("Content-Type", List.of("application/x-www-form-urlencoded"));
+            if (origin != null) headers.put("Origin", List.of(origin));
             return send(HttpMethod.POST, path, body, headers);
         }
         @NonNull HttpRequestResult callback(@NonNull String query, AuthorizationRequestOptions.@NonNull ResponseMode mode,
-                                            @Nullable Map<@NonNull String, @NonNull Set<@NonNull String>> overrides) {
-            Map<String, Set<String>> headers = new HashMap<>();
+                                            @Nullable Map<@NonNull String, @NonNull List<@NonNull String>> overrides) {
+            Map<String, List<String>> headers = new HashMap<>();
             if (mode == AuthorizationRequestOptions.ResponseMode.FORM_POST)
-                headers.put("Content-Type", Set.of("application/x-www-form-urlencoded"));
+                headers.put("Content-Type", List.of("application/x-www-form-urlencoded"));
             if (overrides != null) headers.putAll(overrides);
             return mode == AuthorizationRequestOptions.ResponseMode.QUERY ? send(HttpMethod.GET, "/callback?" + query, null, headers)
                     : send(HttpMethod.POST, "/callback", query, headers);
         }
         @NonNull HttpRequestResult send(@NonNull HttpMethod method, @NonNull String path, @Nullable String body,
-                                        @NonNull Map<@NonNull String, @NonNull Set<@NonNull String>> overrides) {
-            Map<String, Set<String>> headers = new HashMap<>(); headers.put("Host", Set.of("localhost:8443"));
-            if (!this.cookies.isEmpty()) headers.put("Cookie", Set.of(String.join("; ", this.cookies.entrySet().stream()
+                                        @NonNull Map<@NonNull String, @NonNull List<@NonNull String>> overrides) {
+            Map<String, List<String>> headers = new HashMap<>(); headers.put("Host", List.of("localhost:8443"));
+            if (!this.cookies.isEmpty()) headers.put("Cookie", List.of(String.join("; ", this.cookies.entrySet().stream()
                     .map(entry -> entry.getKey() + "=" + entry.getValue()).toList())));
             headers.putAll(overrides);
             Request.RawBuilder builder = Request.withRawUrl(method, path).headers(headers);

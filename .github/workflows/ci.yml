@@ -463,7 +463,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: revetsec/revetsec
-          ref: c4c9b09b6814f3c894088a02e21d03b44f8f59da
+          ref: f047c5d1e5c25206e0d27e3f3d5bdc932055fc7b
           path: .example-inputs/core
           persist-credentials: false
 
@@ -479,7 +479,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: soklet/soklet
-          ref: bf9046f5384c367dfa2ddee2105f2f1ed3e4c8d1
+          ref: 8e1c689b729eb4cc45ffec1a1aed9668d07ffb10
           path: .example-inputs/framework
           persist-credentials: false
 

@@ -148,6 +148,67 @@ import com.revetsec.jose.MalformedJoseInputException;
 import com.revetsec.jose.RemoteJsonWebKeySource;
 import com.revetsec.jose.StaticJsonWebKeySource;
 import com.revetsec.jose.UnsupportedJoseFeatureException;
+import com.revetsec.saml.InMemoryPendingSamlAuthenticationStore;
+import com.revetsec.saml.InMemorySamlReplayCache;
+import com.revetsec.saml.PendingSamlAuthentication;
+import com.revetsec.saml.PendingSamlAuthenticationSource;
+import com.revetsec.saml.PendingSamlAuthenticationStore;
+import com.revetsec.saml.PendingSamlLogout;
+import com.revetsec.saml.PendingSamlLogoutSource;
+import com.revetsec.saml.SamlAttribute;
+import com.revetsec.saml.SamlAttributeValue;
+import com.revetsec.saml.SamlAuthentication;
+import com.revetsec.saml.SamlAuthenticationRequestOptions;
+import com.revetsec.saml.SamlAuthenticationRequestResult;
+import com.revetsec.saml.SamlAuthenticationResult;
+import com.revetsec.saml.SamlCompatibilityMode;
+import com.revetsec.saml.SamlCredential;
+import com.revetsec.saml.SamlIdentityProvider;
+import com.revetsec.saml.SamlIdentityProviderMetadata;
+import com.revetsec.saml.SamlIdentityProviderMetadataResult;
+import com.revetsec.saml.SamlLogoutRedirectResult;
+import com.revetsec.saml.SamlLogoutRequest;
+import com.revetsec.saml.SamlLogoutRequestResult;
+import com.revetsec.saml.SamlLogoutResponseRedirectResult;
+import com.revetsec.saml.SamlLogoutResult;
+import com.revetsec.saml.SamlLogoutStatus;
+import com.revetsec.saml.SamlNameId;
+import com.revetsec.saml.SamlPendingConsumeResult;
+import com.revetsec.saml.SamlPendingSaveResult;
+import com.revetsec.saml.SamlPostBindingMessage;
+import com.revetsec.saml.SamlPostBindingParseResult;
+import com.revetsec.saml.SamlPostForm;
+import com.revetsec.saml.SamlRedirectBindingMessage;
+import com.revetsec.saml.SamlRedirectBindingParseResult;
+import com.revetsec.saml.SamlReplayCache;
+import com.revetsec.saml.SamlServiceProvider;
+import com.revetsec.saml.SamlServiceProviderMetadata;
+import com.revetsec.saml.SamlServiceProviderMetadataResult;
+import com.revetsec.saml.SamlSessionReference;
+import com.revetsec.saml.SamlSubjectKey;
+import com.revetsec.webauthn.InMemoryWebAuthnStore;
+import com.revetsec.webauthn.WebAuthnAccountDisableResult;
+import com.revetsec.webauthn.WebAuthnAuthentication;
+import com.revetsec.webauthn.WebAuthnAuthenticationRequestResult;
+import com.revetsec.webauthn.WebAuthnAuthenticationResult;
+import com.revetsec.webauthn.WebAuthnBrowserRequest;
+import com.revetsec.webauthn.WebAuthnCredentialListResult;
+import com.revetsec.webauthn.WebAuthnCredentialRemovalResult;
+import com.revetsec.webauthn.WebAuthnRecoveryGate;
+import com.revetsec.webauthn.WebAuthnRegistration;
+import com.revetsec.webauthn.WebAuthnRegistrationOptions;
+import com.revetsec.webauthn.WebAuthnRegistrationRequestResult;
+import com.revetsec.webauthn.WebAuthnRegistrationResult;
+import com.revetsec.webauthn.WebAuthnRejectionReason;
+import com.revetsec.webauthn.WebAuthnRelyingParty;
+import com.revetsec.webauthn.WebAuthnSettings;
+import com.revetsec.webauthn.WebAuthnStore;
+import com.revetsec.webauthn.WebAuthnStoreCommitResult;
+import com.revetsec.webauthn.WebAuthnStoreEntry;
+import com.revetsec.webauthn.WebAuthnStoreKey;
+import com.revetsec.webauthn.WebAuthnStoreReadResult;
+import com.revetsec.webauthn.WebAuthnStoreSnapshot;
+import com.revetsec.webauthn.WebAuthnStoreWrite;
 
 import java.lang.module.ModuleDescriptor;
 import java.lang.module.ModuleFinder;
@@ -190,9 +251,8 @@ import java.util.jar.Manifest;
  * It checks what any consumer can observe: the root package is on the class path and comes from a JAR, that JAR
  * declares {@code Automatic-Module-Name: com.revetsec}, and the module system resolves it under that name.
  * <p>
- * It also calls the public API of the exported packages that hold types, {@code com.revetsec},
- * {@code com.revetsec.json}, {@code com.revetsec.jose}, {@code com.revetsec.oauth} and {@code com.revetsec.oidc}, and uses every public type in
- * them, nested builders and enums included. The JOSE calls validate a JWT the consumer signs itself with a fresh RSA key, against a key set it
+ * It also checks the public API of every exported package and uses every public type, nested builders and enums
+ * included. The JOSE calls validate a JWT the consumer signs itself with a fresh RSA key, against a key set it
  * writes, refuse forged, unsigned, malformed and unsupported tokens, and build a remote key source without any I/O.
  * The checked-in source has explicit JSpecify signatures. The verifier removes only those type annotations and
  * imports from its temporary consumer copy, preserving executable Java and literals. Both consumers compile that
@@ -332,6 +392,28 @@ public final class PackagedConsumer {
 		exerciseIssuerStorageCarriers();
 		exerciseIssuerKeys();
 		calledApi.add("com.revetsec.oauth.server");
+		exerciseExportedTypes("com.revetsec.saml", new Class<?>[] {
+				InMemoryPendingSamlAuthenticationStore.class, InMemorySamlReplayCache.class, PendingSamlAuthentication.class, PendingSamlAuthenticationSource.class,
+				PendingSamlAuthenticationStore.class, PendingSamlLogout.class, PendingSamlLogoutSource.class, SamlAttribute.class,
+				SamlAttributeValue.class, SamlAuthentication.class, SamlAuthenticationRequestOptions.class, SamlAuthenticationRequestResult.class,
+				SamlAuthenticationResult.class, SamlCompatibilityMode.class, SamlCredential.class, SamlIdentityProvider.class,
+				SamlIdentityProviderMetadata.class, SamlIdentityProviderMetadataResult.class, SamlLogoutRedirectResult.class, SamlLogoutRequest.class,
+				SamlLogoutRequestResult.class, SamlLogoutResponseRedirectResult.class, SamlLogoutResult.class, SamlLogoutStatus.class,
+				SamlNameId.class, SamlPendingConsumeResult.class, SamlPendingSaveResult.class, SamlPostBindingMessage.class,
+				SamlPostBindingParseResult.class, SamlPostForm.class, SamlRedirectBindingMessage.class, SamlRedirectBindingParseResult.class,
+				SamlReplayCache.class, SamlServiceProvider.class, SamlServiceProviderMetadata.class, SamlServiceProviderMetadataResult.class,
+				SamlSessionReference.class, SamlSubjectKey.class
+		});
+		calledApi.add("com.revetsec.saml");
+		exerciseExportedTypes("com.revetsec.webauthn", new Class<?>[] {
+				InMemoryWebAuthnStore.class, WebAuthnAccountDisableResult.class, WebAuthnAuthentication.class, WebAuthnAuthenticationRequestResult.class,
+				WebAuthnAuthenticationResult.class, WebAuthnBrowserRequest.class, WebAuthnCredentialListResult.class, WebAuthnCredentialRemovalResult.class,
+				WebAuthnRecoveryGate.class, WebAuthnRegistration.class, WebAuthnRegistrationOptions.class, WebAuthnRegistrationRequestResult.class,
+				WebAuthnRegistrationResult.class, WebAuthnRejectionReason.class, WebAuthnRelyingParty.class, WebAuthnSettings.class,
+				WebAuthnStore.class, WebAuthnStoreCommitResult.class, WebAuthnStoreEntry.class, WebAuthnStoreKey.class,
+				WebAuthnStoreReadResult.class, WebAuthnStoreSnapshot.class, WebAuthnStoreWrite.class
+		});
+		calledApi.add("com.revetsec.webauthn");
 
 		System.out.println("jar=" + jar);
 		System.out.println("automatic-module-name=" + automaticModuleName);
@@ -340,6 +422,11 @@ public final class PackagedConsumer {
 		System.out.println("runtime=" + Runtime.version());
 		System.out.println("error-categories=" + Arrays.toString(ErrorCategory.values()));
 		System.out.println("public-api=" + String.join(",", calledApi));
+	}
+
+	private static void exerciseExportedTypes(@NonNull String packageName, @NonNull Class<?> @NonNull [] types) {
+		for (Class<?> type : types)
+			require(type.getPackageName().equals(packageName), "packaged public type " + type.getName());
 	}
 
 	/**

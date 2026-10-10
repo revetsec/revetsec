@@ -81,9 +81,10 @@ REQUIRED_ENTRIES = ("META-INF/MANIFEST.MF", "META-INF/LICENSE", "META-INF/NOTICE
 CONSUMER_MAIN_CLASS = "example.PackagedConsumer"
 # PackagedConsumer prints this line last, and only after every public API call behaved as documented.
 PUBLIC_API_LINE_PREFIX = "public-api="
-# The groups of public API calls PackagedConsumer makes, in order; its public-api= line names each (M1, WP-10b;
-# com.revetsec.jose from M2, com.revetsec.oauth from M3 and com.revetsec.oidc from M4).
-PUBLIC_API_CALLS = ("com.revetsec.json", "StateSealer", "OutboundUriPolicy", "com.revetsec.jose", "com.revetsec.oauth", "com.revetsec.oidc", "com.revetsec.oauth.server")
+# The groups of public API checks PackagedConsumer makes, in order; its public-api= line names each.
+PUBLIC_API_CALLS = ("com.revetsec.json", "StateSealer", "OutboundUriPolicy", "com.revetsec.jose",
+                    "com.revetsec.oauth", "com.revetsec.oidc", "com.revetsec.oauth.server",
+                    "com.revetsec.saml", "com.revetsec.webauthn")
 MAVEN_CONSUMER_SOURCES = ("pom.xml", "src")
 GRADLE_CONSUMER_SOURCES = ("build.gradle", "settings.gradle", "src")
 

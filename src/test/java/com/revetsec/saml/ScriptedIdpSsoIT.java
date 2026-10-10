@@ -664,7 +664,7 @@ final class ScriptedIdpSsoIT {
             checkEncryptedOracleFixture(fixture.name(), fixture.credential(), fixture.cbc());
     }
 
-    private static @NonNull List<EncryptedFixture> encryptedFixtures() {
+    private static @NonNull List<@NonNull EncryptedFixture> encryptedFixtures() {
         List<EncryptedFixture> fixtures = new ArrayList<>();
         for (String data : List.of("aes128-gcm", "aes192-gcm", "aes256-gcm"))
             for (String transport : List.of("rsa-oaep-sha256-mgf1sha256", "rsa-oaep-mgf1p"))

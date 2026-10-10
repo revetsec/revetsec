@@ -16,7 +16,7 @@
 -->
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
  <modelVersion>4.0.0</modelVersion><groupId>com.revetsec.examples</groupId><artifactId>revetsec-barebones-oidc</artifactId><version>1.0.0-SNAPSHOT</version><name>Revetsec barebones-oidc (unpublished example)</name>
- <properties><maven.compiler.release>17</maven.compiler.release><project.build.sourceEncoding>UTF-8</project.build.sourceEncoding><project.build.outputTimestamp>2026-10-01T00:00:00Z</project.build.outputTimestamp><maven.install.skip>true</maven.install.skip><maven.deploy.skip>true</maven.deploy.skip><soklet.version>3.5.1</soklet.version><revetsec.version>1.0.0-SNAPSHOT</revetsec.version></properties>
+ <properties><maven.compiler.release>17</maven.compiler.release><project.build.sourceEncoding>UTF-8</project.build.sourceEncoding><project.build.outputTimestamp>2026-10-01T00:00:00Z</project.build.outputTimestamp><maven.install.skip>true</maven.install.skip><maven.deploy.skip>true</maven.deploy.skip><soklet.version>4.0.0</soklet.version><revetsec.version>1.0.0-SNAPSHOT</revetsec.version></properties>
  <dependencies>
   <dependency><groupId>com.revetsec</groupId><artifactId>revetsec</artifactId><version>${revetsec.version}</version></dependency>
   <dependency><groupId>com.revetsec</groupId><artifactId>revetsec-soklet</artifactId><version>${revetsec.version}</version></dependency>

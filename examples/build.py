@@ -107,7 +107,7 @@ def main():
             '<project xmlns="http://maven.apache.org/POM/4.0.0"><modelVersion>4.0.0</modelVersion>'
             '<groupId>com.soklet</groupId><artifactId>soklet</artifactId><version>4.0.0</version></project>')
     result = {"pins": PINS, "builtWithJava": str(args.java_home), "examples": {}}
-    for name, framework_version in [("barebones-oidc", "3.5.1"), ("playground", "4.0.0")]:
+    for name in ("barebones-oidc", "playground"):
         example = args.work / "examples" / name
         shutil.copytree(ROOT / "examples" / name, example,
                         ignore=shutil.ignore_patterns("target", "__pycache__"))
@@ -126,13 +126,12 @@ def main():
             audit_classpath.read_text(), str(checker), str(source_list), str(audit_classpath),
             str(example / "target/nullability-audit.json")], example)
         dependencies = [Path(x) for x in (example / "target/runtime-classpath.txt").read_text().strip().split(os.pathsep)]
-        expected = {"revetsec-1.0.0-SNAPSHOT.jar", "revetsec-soklet-1.0.0-SNAPSHOT.jar",
-                    "soklet-" + framework_version + ".jar"}
+        expected = {"revetsec-1.0.0-SNAPSHOT.jar", "revetsec-soklet-1.0.0-SNAPSHOT.jar", "soklet-4.0.0.jar"}
         if len(dependencies) != 3 or {x.name for x in dependencies} != expected:
             raise RuntimeError("Unexpected runtime dependencies for " + name)
         framework_dependency = next(x for x in dependencies if x.name.startswith("soklet-"))
-        if framework_version == "3.5.1" and sha(framework_dependency) != PINS["minimumFramework"]["jar_sha256"]:
-            raise RuntimeError("Minimum framework artifact changed")
+        if sha(framework_dependency) != PINS["framework"]["jar_sha256"]:
+            raise RuntimeError("Pinned framework artifact changed")
         artifacts = [*dependencies, *sorted((example / "target").glob("*.jar"))]
         result["examples"][name] = {"directory": str(example), "runtimeDependencies": [str(x) for x in dependencies],
                                     "nullability": json.loads((example / "target/nullability-audit.json").read_text()),
