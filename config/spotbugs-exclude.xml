@@ -30,4 +30,39 @@
 		<Class name="com.revetsec.internal.ConcurrentLruMap"/>
 		<Method name="&lt;init&gt;" signature="(ILjava/util/function/BiConsumer;)V"/>
 	</Match>
+	<!-- SAML verification must dereference the very same DOM nodes that were parsed and structurally checked.
+	     Cloning these internal-only nodes to appease EI_EXPOSE_REP would break identity-bound XML Signature checks.
+	     The SP package alone consumes these references; no checked identity is released from them. -->
+	<Match>
+		<Bug pattern="EI_EXPOSE_REP"/>
+		<Class name="com.revetsec.internal.xml.SecureXmlParser$Result$Accepted"/>
+		<Method name="getDocument" signature="()Lorg/w3c/dom/Document;"/>
+	</Match>
+	<Match>
+		<Bug pattern="EI_EXPOSE_REP"/>
+		<Class name="com.revetsec.internal.xml.SamlResponseStructure$Shape"/>
+		<Method name="~get(Response|Issuer|ResponseSignature|Status|Assertion|EncryptedAssertion)"/>
+	</Match>
+	<!-- The digest comparisons select fixed public XMLDSig algorithm URIs before verification;
+	     they never compare a secret digest value. The remaining signature proof is done by JDK XMLDSig. -->
+	<Match>
+		<Bug pattern="UNSAFE_HASH_EQUALS"/>
+		<Class name="com.revetsec.internal.xml.EnvelopedSignatureVerifier"/>
+		<Method name="inspectSignature"/>
+	</Match>
+	<!-- The exact verified DOM element must remain identical to the node later used for SAML semantics.
+	     Cloning it would discard that signed-node binding; this is an internal-only result. -->
+	<Match>
+		<Bug pattern="EI_EXPOSE_REP"/>
+		<Class name="com.revetsec.internal.xml.EnvelopedSignatureVerifier$Verified"/>
+		<Method name="getElement" signature="()Lorg/w3c/dom/Element;"/>
+	</Match>
+	<!-- The form action and fields originate from Revetsec's bounded request builder. The renderer
+	     escapes every attribute string before concatenation; the optional script nonce is validated
+	     against a strict ASCII allowlist. SpotBugs cannot follow those local validation methods. -->
+	<Match>
+		<Bug pattern="POTENTIAL_XML_INJECTION"/>
+		<Class name="com.revetsec.saml.SamlPostForm"/>
+		<Method name="toHtml"/>
+	</Match>
 </FindBugsFilter>

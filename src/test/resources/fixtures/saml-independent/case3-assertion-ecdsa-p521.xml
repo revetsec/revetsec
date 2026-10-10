@@ -1,0 +1,34 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<samlp:Response xmlns:samlp="urn:oasis:names:tc:SAML:2.0:protocol" xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion" ID="_r3-p521" Version="2.0" IssueInstant="2026-09-01T00:00:00Z" Destination="https://sp.test/acs"><saml:Issuer>https://idp.scripted-idp.test/</saml:Issuer><samlp:Status><samlp:StatusCode Value="urn:oasis:names:tc:SAML:2.0:status:Success"/></samlp:Status><saml:Assertion ID="_a3-p521" Version="2.0" IssueInstant="2026-09-01T00:00:00Z"><saml:Issuer>https://idp.scripted-idp.test/</saml:Issuer><ds:Signature xmlns:ds="http://www.w3.org/2000/09/xmldsig#">
+<ds:SignedInfo>
+<ds:CanonicalizationMethod Algorithm="http://www.w3.org/2001/10/xml-exc-c14n#"/>
+<ds:SignatureMethod Algorithm="http://www.w3.org/2001/04/xmldsig-more#ecdsa-sha512"/>
+<ds:Reference URI="#_a3-p521">
+<ds:Transforms>
+<ds:Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"/>
+<ds:Transform Algorithm="http://www.w3.org/2001/10/xml-exc-c14n#"/>
+</ds:Transforms>
+<ds:DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha512"/>
+<ds:DigestValue>g7aTfHZIrtDe6wZtmT9Qe7RA0GL1iQsABiSafXI90drp907PNx0r7jOYYbp1zxQU
+7H0gYljHWcMkan7Y2H2cTg==</ds:DigestValue>
+</ds:Reference>
+</ds:SignedInfo>
+<ds:SignatureValue>AfyeUTa/SYRUg3vbgKyI3fhumDGMuSEvRYG4EsmILNSz8HVPBMKhDbFohrb6zhAg
+5Cf/xr6pISmb5puxAwRe/JHYAAwRR31POsNOrGVwA3yIx6oRZDpR3/FrL2QvP1nl
+GgTssdLAjjIXzQrJyDye/Swsvq5uNpP2k+MHOk65ZtmMvkRa</ds:SignatureValue>
+<ds:KeyInfo>
+<ds:X509Data>
+<ds:X509Certificate>MIIB1TCCATegAwIBAgIUZo5T+1hDe8AruPyIdTwfx6UoDLkwCgYIKoZIzj0EAwIw
+FjEUMBIGA1UEAwwLaWRwLWVjLXA1MjEwHhcNMjYwMTAxMDAwMDAwWhcNMzYwMTAx
+MDAwMDAwWjAWMRQwEgYDVQQDDAtpZHAtZWMtcDUyMTCBmzAQBgcqhkjOPQIBBgUr
+gQQAIwOBhgAEAcrgy4zzV+vemCysFyhlXR9HtR8VNro9VNNk7CVTeg3Z0usqFhx/
+QXErVsNqBFp3R3qinZaMKGdySyQDV793HB7YAXLQCWPixzpuctFZvgGdIa3C8dqF
+4ftAGQa0cT+nlTg9uU5ZgSwC1576nOwHEQSTD8g7dy/d6Ij0hfTQs+FJnz/poyAw
+HjAMBgNVHRMBAf8EAjAAMA4GA1UdDwEB/wQEAwIHgDAKBggqhkjOPQQDAgOBiwAw
+gYcCQgHnw3OHuKYtZduCZj6ZLLrf5XWj3SxEht4d7z/tjoH7rwNaqBtRncvffk80
+dJ8QfLpszFZFXXLaLFu/3A5z+FWu0QJBTt7f9MAOfHjStVm+HE5y4g2+6bpWnv5x
+Yzp0qBegg+Vlbq8eG9oMkMilyvMsEKnn1KjC9R0f4/vmW+kwugokzYQ=
+</ds:X509Certificate>
+</ds:X509Data>
+</ds:KeyInfo>
+</ds:Signature><saml:Subject><saml:NameID Format="urn:oasis:names:tc:SAML:2.0:nameid-format:persistent" NameQualifier="https://idp.scripted-idp.test/" SPNameQualifier="https://sp.test/Selftest">user-3</saml:NameID><saml:SubjectConfirmation Method="urn:oasis:names:tc:SAML:2.0:cm:bearer"><saml:SubjectConfirmationData Recipient="https://sp.test/acs" NotOnOrAfter="2026-09-01T00:05:00Z"/></saml:SubjectConfirmation></saml:Subject><saml:Conditions NotBefore="2026-09-01T00:00:00Z" NotOnOrAfter="2026-09-01T00:05:00Z"><saml:AudienceRestriction><saml:Audience>https://sp.test/Selftest</saml:Audience></saml:AudienceRestriction></saml:Conditions><saml:AuthnStatement AuthnInstant="2026-09-01T00:00:00Z" SessionIndex="_session-1"><saml:AuthnContext><saml:AuthnContextClassRef>urn:oasis:names:tc:SAML:2.0:ac:classes:PasswordProtectedTransport</saml:AuthnContextClassRef></saml:AuthnContext></saml:AuthnStatement><saml:AttributeStatement><saml:Attribute Name="urn:oid:0.9.2342.19200300.100.1.3" FriendlyName="mail" NameFormat="urn:oasis:names:tc:SAML:2.0:attrname-format:uri"><saml:AttributeValue>user@example.test</saml:AttributeValue></saml:Attribute></saml:AttributeStatement></saml:Assertion></samlp:Response>

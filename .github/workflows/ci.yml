@@ -1,6 +1,6 @@
 name: CI
 
-# The M0 to M4 subset of plan §10.3. Jobs that start in a later milestone are listed at the end as
+# Active plan §10.3 gates. Jobs still awaiting a later milestone are listed at the end as
 # commented stubs, each naming the milestone it starts in.
 #
 # Every action is pinned to a full commit SHA (the trailing comment is the tag it was resolved from with
@@ -578,7 +578,10 @@ jobs:
       - name: Build the locked local node-oidc-provider fixture
         run: docker build --pull=false -t revetsec-interop/node-oidc-provider:local interop/node-oidc-provider
 
-      - name: Run the Keycloak and node-provider integration tests
+      - name: Build the locked local scripted-IdP fixture
+        run: docker build --pull=false -t revetsec-scripted-idp:local interop/scripted-idp
+
+      - name: Run the Keycloak, node-provider and scripted-IdP integration tests
         run: mvn -B -ntp -Pintegration -Dmaven.javadoc.skip=true verify
 
       - name: Require executed integration cases and zero skips
@@ -610,6 +613,19 @@ jobs:
           for classname, methods in required_resource_cases.items():
               actual = {case.attrib.get('name') for suite in suites for case in suite.findall('testcase') if case.attrib.get('classname') == classname}
               missing.update(classname + "#" + name for name in methods - actual)
+          saml_class = 'com.revetsec.saml.ScriptedIdpSsoIT'
+          saml_expected = {'libxmlsecVerdictsAndSpPolicyStaySeparateAcrossSignedPlacements',
+                           'signedStructureCorpusHasIndependentSignatureProof',
+                           'signedAttributeCorpusHasIndependentSignatureProof',
+                           'signedIdentityShapeCorpusHasIndependentSignatureProof',
+                           'signedBoundaryShapeCorpusHasIndependentSignatureProof',
+                           'libxmlsecDecryptionMatchesRevetsecAcrossGcmAndCbcMatrix',
+                           'libxmlsecSeparatesEncryptedEnvelopeMutationsFromCiphertext',
+                           'encryptedPolicyNegativesStayRejected',
+                           'independentRedirectLogoutRequestSignerSeparatesWireAndSemanticFailures',
+                           'independentRedirectLogoutResponseSignerPreservesPendingUntilValidResult'}
+          saml_actual = {case.attrib.get('name') for suite in suites for case in suite.findall('testcase') if case.attrib.get('classname') == saml_class}
+          missing.update(saml_class + '#' + name for name in saml_expected - saml_actual)
           failed = sum(int(suite.attrib.get('failures', '0')) + int(suite.attrib.get('errors', '0')) for suite in suites)
           if executed < len(required) or skipped or failed or missing:
               sys.exit(f'Integration count is {executed}; skipped: {skipped}; failed: {failed}; missing: {sorted(missing)}')
@@ -622,6 +638,88 @@ jobs:
         with:
           name: integration-reports-${{ github.run_id }}-${{ github.run_attempt }}
           path: target/failsafe-reports
+          if-no-files-found: warn
+          retention-days: 14
+
+  # Gating RC-2 slice. Direct OpenSAML 5.2.2 and Spring Security 7 whole-SP
+  # comparators live in a test-only module, outside the published core graph.
+  differential:
+    name: Differential (SAML, JDK 17)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Corretto 17
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: corretto
+          java-version: '17'
+          cache: maven
+
+      - name: Install the current core for the isolated comparator
+        run: mvn -B -ntp -DskipTests -Dmaven.javadoc.skip=true install
+
+      - name: Compare Revetsec with Spring Security and OpenSAML
+        run: mvn -B -ntp -f differential/pom.xml verify
+
+      - name: Require the SAML comparator cases and zero skips
+        run: |
+          python3 - <<'PY'
+          import glob
+          import sys
+          import xml.etree.ElementTree as ET
+
+          suites = [ET.parse(path).getroot() for path in glob.glob('differential/target/surefire-reports/TEST-*.xml')]
+          required = {
+              'com.revetsec.differential.SpringSamlComparatorTests': {
+                  'signedPlacementsAgreeOnIdentityAndSignedTampering',
+                  'wrapperMutationsNeverReleaseAttackerIdentity',
+                  'legacySha1NeedsExplicitRevetsecCompatibility',
+                  'encryptedAssertionsAgreeOnIdentity',
+                  'cbcRequiresRevetsecOptInAndSignedResponse',
+                  'encryptedNegativesDoNotReleaseAttackerIdentity'},
+              'com.revetsec.differential.OpenSamlSpComparatorTests': {
+                  'signedPlacementsResolveOnlyTheTrustedIdentity',
+                  'legacySha1NeedsExplicitRevetsecCompatibility',
+                  'wrapperAndNamespaceMutationsNeverReleaseAnIdentity',
+                  'encryptedAssertionsAndEncryptedIdResolveTrustedIdentity',
+                  'encryptedNegativesAndUnsignedResponseDoNotAuthenticate',
+                  'encryptedWrapperMatrixNeverReleasesAttackerIdentity',
+                  'validlySignedAmbiguousResponsesShowIdentitySelectionDifferences',
+                  'assertionSignedAmbiguitiesKeepParserVerdictsPinned',
+                  'signedSchemaInstanceHintsKeepParserVerdictsPinned',
+                  'signedIdentityShapeKeepsParserSelectionPinned',
+                  'signedBearerAndConditionsShapeKeepsParserSelectionPinned'},
+              'com.revetsec.differential.OpenSamlLogoutComparatorTests': {
+                  'idpInitiatedLogoutRequestsAgreeOnSignedSemantics',
+                  'spInitiatedLogoutResponsesAgreeOnSignedSemantics',
+                  'equivalentRelayEncodingInvalidatesBothBindingSignatures'}}
+          missing = set()
+          for classname, expected in required.items():
+              actual = {case.attrib.get('name') for suite in suites
+                        for case in suite.findall('testcase')
+                        if case.attrib.get('classname') == classname}
+              missing.update(classname + '#' + name for name in expected - actual)
+          skipped = sum(int(suite.attrib.get('skipped', '0')) for suite in suites)
+          failed = sum(int(suite.attrib.get('failures', '0')) + int(suite.attrib.get('errors', '0'))
+                       for suite in suites)
+          if not suites or missing or skipped or failed:
+              sys.exit(f'SAML differential missing: {sorted(missing)}; '
+                       f'skipped: {skipped}; failed: {failed}')
+          print(f'SAML comparator methods required: {sum(map(len, required.values()))}; '
+                f'skipped: {skipped}')
+          PY
+
+      - name: Upload SAML differential reports
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: saml-differential-reports-${{ github.run_id }}-${{ github.run_attempt }}
+          path: differential/target/surefire-reports
           if-no-files-found: warn
           retention-days: 14
 
@@ -685,6 +783,5 @@ jobs:
 
   # scim: from M11. Gating on PR. scim2-tester (hash-pinned) against the examples/ server.
 
-  # differential: from RC-1 (JOSE, JSON gating), RC-2 (SAML, with the scripted IdP's libxmlsec1 oracle via
-  # the same image pre-step and -Dscripted-idp.image), RC-3 (SCIM). PR touching saml/jose/scim/internal.json
-  # + nightly: `mvn -B -ntp -f differential/pom.xml verify`. Any unexplained divergence blocks.
+  # differential additions: RC-1 JOSE/JSON and RC-3 SCIM remain open. RC-2 still needs
+  # the remaining SLO, XSW, Fragile-Lock and structure-aware comparison matrix.

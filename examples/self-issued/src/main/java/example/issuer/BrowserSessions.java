@@ -28,7 +28,7 @@ import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 /** Bounded app sessions; login rotates the cookie/CSRF while retaining the independent browser binding. */
-final class BrowserSessions {
+final class BrowserSessions implements BrowserSessionStore {
     private static final Duration LIFETIME=Duration.ofMinutes(10);
     private final Map<String,Session> entries=new LinkedHashMap<>();
     private final Clock clock;
@@ -40,28 +40,38 @@ final class BrowserSessions {
         this.clock=clock;this.capacity=capacity;this.secure=secure;
         this.cookieName=secure?"__Host-RevetsecIssuer":"RevetsecIssuerDev";
     }
-    synchronized @NonNull Session begin() {
+    @Override public synchronized @NonNull Session begin() {
         cleanup();if(entries.size()>=capacity) throw new IllegalStateException("Session store full.");
         Session s=new Session(LocalInputs.randomId(),LocalInputs.randomId(),LocalInputs.randomId(),clock.instant().plus(LIFETIME));
         entries.put(s.id,s);return s;
     }
-    synchronized @NonNull Optional<@NonNull Session> find(@NonNull Request request) {
+    @Override public synchronized @NonNull Optional<@NonNull Session> find(@NonNull Request request) {
         cleanup();return Optional.ofNullable(entries.get(LocalInputs.cookie(request,cookieName)));
     }
-    synchronized @NonNull Session login(@NonNull Session previous,@NonNull Pending selected) {
-        cleanup();if(entries.remove(previous.id)!=previous) throw new IllegalStateException("Session expired.");
+    @Override public synchronized void replacePending(@NonNull Session session,@NonNull Pending pending) {
+        cleanup();if(entries.get(session.id)!=session) throw new IllegalStateException("Session expired.");
+        session.pending.set(pending);
+    }
+    @Override public synchronized @NonNull Session login(@NonNull Session previous,@NonNull Pending selected) {
+        cleanup();if(entries.get(previous.id)!=previous || previous.pending.get()!=selected)
+            throw new IllegalStateException("Session expired.");
+        entries.remove(previous.id);
         Session s=new Session(LocalInputs.randomId(),LocalInputs.randomId(),previous.binding,clock.instant().plus(LIFETIME));
         s.pending.set(selected);s.authenticated=true;previous.pending.set(null);entries.put(s.id,s);return s;
     }
-    synchronized void remove(@NonNull Session session) {entries.remove(session.id);session.authenticated=false;session.pending.set(null);}
+    @Override public synchronized boolean claimPending(@NonNull Session session,@NonNull Pending selected) {
+        cleanup();return entries.get(session.id)==session && session.pending.compareAndSet(selected,null);
+    }
+    @Override public synchronized void remove(@NonNull Session session) {entries.remove(session.id);session.authenticated=false;session.pending.set(null);}
     private void cleanup() {entries.values().removeIf(s -> !clock.instant().isBefore(s.expires));}
-    @NonNull ResponseCookie cookie(@NonNull Session s) {
+    @Override public @NonNull ResponseCookie cookie(@NonNull Session s) {
         return ResponseCookie.with(cookieName,s.id).path("/").secure(secure).httpOnly(true)
                 .sameSite(ResponseCookie.SameSite.LAX).maxAge(LIFETIME).build();
     }
     static final class Pending {
         final String handle,nonce;
         Pending(@NonNull String handle) {this.handle=handle;this.nonce=LocalInputs.randomId();}
+        Pending(@NonNull String handle,@NonNull String nonce) {this.handle=handle;this.nonce=nonce;}
         @Override public @NonNull String toString() {return "IssuerPending{<redacted>}";}
     }
     static final class Session {

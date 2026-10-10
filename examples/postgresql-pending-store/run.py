@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+from concurrent.futures import ThreadPoolExecutor
 import hashlib
 from http.client import HTTPConnection
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -81,6 +82,7 @@ def main() -> None:
                    ROOT / "src/test/java/example/pending/RsaFixtureSigner.java"]
         if app_lane:
             sources.extend(sorted((APP_ROOT / "src/main/java/example/issuer").glob("*.java")))
+            sources.append(ROOT / "src/test/java/example/issuer/PostgresqlBrowserSessions.java")
             sources.append(ROOT / "src/test/java/example/issuer/PostgresqlIssuerApplicationProbe.java")
         compiled = subprocess.run([str(args.java_home / "bin/javac"), "--release", "17", "-proc:none", "-Xlint:all",
                                    "-Werror", "-cp", os.pathsep.join(map(str, paths)), "-d", str(classes),
@@ -144,6 +146,9 @@ def main() -> None:
                    "-d", "pending_fixture", input_text="INSERT INTO issuer_store_namespace(namespace) "
                    "VALUES ('fixture_issuer'),('fixture_issuer_unknown'),('fixture_issuer_fence'),"
                    "('fixture_issuer_app');\n")
+            docker("exec", "-i", name, "psql", "-X", "-q", "-v", "ON_ERROR_STOP=1", "-U", "postgres",
+                   "-d", "pending_fixture", input_text="INSERT INTO issuer_browser_namespace"
+                   "(namespace,observed_seconds,observed_nanos) VALUES ('fixture_issuer_browser',0,0);\n")
 
             def db_env() -> dict[str, str]:
                 port = int(docker("port", name, "5432/tcp").rsplit(":", 1)[1])
@@ -267,10 +272,42 @@ def main() -> None:
                 check(app_rotated_refresh != app_refresh, "application-refresh-credential-changed")
                 check(run_app("established-active", app_rotated_access) == "ACTIVE",
                       "application-new-token-active-across-jvms")
+                check(run_app("browser-smoke") == "BROWSER_SMOKE",
+                      "application-shared-browser-store-smoke")
+                browser_created = re.fullmatch(r"SESSION:([A-Za-z0-9_-]{43})",run_app("browser-create"))
+                check(browser_created is not None,"application-shared-browser-race-created")
+                assert browser_created is not None
+                browser_id = browser_created.group(1)
+                browser_contenders = [subprocess.Popen([str(args.java_home / "bin/java"), "-cp", classpath,
+                                      "example.issuer.PostgresqlIssuerApplicationProbe", "browser-claim", browser_id],
+                                      env=current_db_env, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                      stderr=subprocess.PIPE, text=True) for _ in range(2)]
+                try:
+                    check(all(proc.stdout is not None and proc.stdout.readline().strip() == "READY"
+                              for proc in browser_contenders),"application-shared-browser-race-ready")
+                    for proc in browser_contenders:
+                        assert proc.stdin is not None
+                        proc.stdin.write("go\n")
+                        proc.stdin.flush()
+                    browser_outcomes = []
+                    for proc in browser_contenders:
+                        output, _ = proc.communicate(timeout=15)
+                        check(proc.returncode == 0,"application-shared-browser-race-jvm")
+                        browser_outcomes.append(output.strip())
+                    check(sorted(browser_outcomes) == ["FALSE","TRUE"],
+                          "application-shared-browser-claim-single-winner")
+                finally:
+                    for proc in browser_contenders:
+                        if proc.poll() is None:
+                            proc.kill()
+                            proc.wait(timeout=5)
+                check(run_app("browser-pending",browser_id) == "NONE",
+                      "application-shared-browser-claim-persists")
 
                 def issuer_http(method: str, path: str, body: bytes | None = None,
-                                headers: dict[str, str] | None = None) -> tuple[int, dict[str, str], bytes]:
-                    connection = HTTPConnection("127.0.0.1", app_http_port, timeout=10)
+                                headers: dict[str, str] | None = None,
+                                port: int = app_http_port, host: str = "127.0.0.1") -> tuple[int, dict[str, str], bytes]:
+                    connection = HTTPConnection(host, port, timeout=10)
                     try:
                         connection.request(method, path, body=body, headers=headers or {})
                         response = connection.getresponse()
@@ -340,6 +377,8 @@ def main() -> None:
                         check(response.status == 200 and "Checked identity partition" in body
                               and app_rotated_access not in body and "demo-user" not in body,
                               "application-established-mcp-accepts-persisted-token")
+                    first_partition = re.search(r"Checked identity partition: ([A-Za-z0-9_-]{43});", body)
+                    check(first_partition is not None, "application-admission-partition-present")
                     check(token_key_id(app_rotated_access) == "fixture",
                           "application-first-generation-signed-token")
                     key_generation("g2")
@@ -440,6 +479,135 @@ def main() -> None:
                     http_code = codes[0]
                     status, _, _ = issuer_http("POST", "/consent", consent_body, consent_headers)
                     check(status == 403, "application-http-consent-single-use")
+                    second_env = dict(current_db_env, REVETSEC_TEST_ISSUER_BIND_HOST="::1")
+                    second_server = subprocess.Popen([str(args.java_home / "bin/java"), "-cp", classpath,
+                                                      "example.issuer.PostgresqlIssuerApplicationProbe", "serve"],
+                                                     env=second_env, stdin=subprocess.PIPE,
+                                                     stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                    try:
+                        check(second_server.stdout is not None
+                              and bool(select.select([second_server.stdout], [], [], 10)[0])
+                              and second_server.stdout.readline().strip() == "READY",
+                              "application-second-live-soklet-ready")
+
+                        def second_http(method: str, path: str, body: bytes | None = None,
+                                        headers: dict[str, str] | None = None) -> tuple[int, dict[str, str], bytes]:
+                            return issuer_http(method, path, body,
+                                               {**(headers or {}), "Host": "127.0.0.1:" + str(app_http_port)},
+                                               app_http_port, "::1")
+
+                        status, _, page = issuer_http("GET", "/authorize?" + authorization,
+                                                      headers={"Cookie": rotated_cookie})
+                        live_fields = hidden_fields(page)
+                        check(status == 200 and b"Consent" in page,
+                              "application-live-nodes-start-authorization")
+                        status, _, page = second_http("GET", "/consent",
+                                                      headers={"Cookie": rotated_cookie})
+                        check(status == 200 and b"Consent" in page
+                              and hidden_fields(page) == live_fields,
+                              "application-live-nodes-share-browser-consent")
+                        live_body = urlencode({**live_fields, "decision": "approve"}).encode("ascii")
+                        status, headers, _ = second_http("POST", "/consent", live_body, consent_headers)
+                        live_callback = urlsplit(headers.get("location", ""))
+                        live_codes = parse_qs(live_callback.query).get("code", [])
+                        check(status == 303 and live_callback.scheme == "https"
+                              and live_callback.netloc == "client.example" and len(live_codes) == 1,
+                              "application-live-second-node-issues-code")
+                        code_body_live = urlencode({"grant_type": "authorization_code", "client_id": "demo-public",
+                                                    "code": live_codes[0],
+                                                    "code_verifier": "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk",
+                                                    "resource": resource,
+                                                    "redirect_uri": "https://client.example/cb"}).encode("ascii")
+                        status, _, content = issuer_http("POST", "/token", code_body_live,
+                                                         {"Content-Type": "application/x-www-form-urlencoded"})
+                        live_access = json.loads(content).get("access_token", "")
+                        check(status == 200 and bool(re.fullmatch(r"[A-Za-z0-9_.-]+", live_access)),
+                              "application-live-cross-node-code-redeemed")
+                        status, _, content = issuer_http("POST", "/mcp", mcp_body,
+                            {**mcp_headers, "Authorization": "Bearer " + live_access,
+                             "Host": "127.0.0.1:" + str(app_mcp_port)}, app_mcp_port, "::1")
+                        check(status == 200 and b"Checked identity partition" in content
+                              and live_access.encode("ascii") not in content,
+                              "application-live-second-node-admits-token")
+                        status, _, _ = second_http("POST", "/consent", live_body, consent_headers)
+                        check(status == 403, "application-live-second-node-rejects-consent-replay")
+
+                        status, _, page = issuer_http("GET", "/authorize?" + authorization,
+                                                      headers={"Cookie": rotated_cookie})
+                        race_fields = hidden_fields(page)
+                        check(status == 200 and b"Consent" in page,
+                              "application-live-consent-race-created")
+                        status, _, page = second_http("GET", "/consent",
+                                                      headers={"Cookie": rotated_cookie})
+                        check(status == 200 and hidden_fields(page) == race_fields,
+                              "application-live-consent-race-visible-on-both")
+                        race_body = urlencode({**race_fields, "decision": "approve"}).encode("ascii")
+                        barrier = threading.Barrier(2)
+
+                        def race_claim(host: str) -> tuple[int, dict[str, str], bytes]:
+                            barrier.wait(timeout=5)
+                            return issuer_http("POST", "/consent", race_body,
+                                {**consent_headers, "Host": "127.0.0.1:" + str(app_http_port)}, app_http_port, host)
+
+                        with ThreadPoolExecutor(max_workers=2) as pool:
+                            first = pool.submit(race_claim, "127.0.0.1")
+                            second = pool.submit(race_claim, "::1")
+                            race_outcomes = [first.result(timeout=20), second.result(timeout=20)]
+                        check(sorted(result[0] for result in race_outcomes) == [303, 403]
+                              and all(b"code=" not in result[2] for result in race_outcomes),
+                              "application-live-consent-race-one-winner")
+                        winner = next(result for result in race_outcomes if result[0] == 303)
+                        race_callback = urlsplit(winner[1].get("location", ""))
+                        race_codes = parse_qs(race_callback.query).get("code", [])
+                        check(race_callback.scheme == "https" and race_callback.netloc == "client.example"
+                              and len(race_codes) == 1,
+                              "application-live-consent-race-checked-callback")
+                        race_code_body = urlencode({"grant_type": "authorization_code", "client_id": "demo-public",
+                                                   "code": race_codes[0],
+                                                   "code_verifier": "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk",
+                                                   "resource": resource,
+                                                   "redirect_uri": "https://client.example/cb"}).encode("ascii")
+                        status, _, content = second_http("POST", "/token", race_code_body,
+                            {"Content-Type": "application/x-www-form-urlencoded"})
+                        race_access = json.loads(content).get("access_token", "")
+                        check(status == 200 and bool(re.fullmatch(r"[A-Za-z0-9_.-]+", race_access)),
+                              "application-live-consent-race-code-redeemed")
+                        docker("stop", name)
+                        try:
+                            for node, route in (("first", issuer_http), ("second", second_http)):
+                                status, _, content = route("GET", "/consent",
+                                                           headers={"Cookie": rotated_cookie})
+                                check(status == 503 and b"code=" not in content,
+                                      "application-live-" + node + "-browser-outage-unavailable")
+                            for node, host in (("first", "127.0.0.1"), ("second", "::1")):
+                                status, response_headers, content = issuer_http("POST", "/mcp", mcp_body,
+                                    {**mcp_headers, "Authorization": "Bearer " + live_access,
+                                     "Host": "127.0.0.1:" + str(app_mcp_port)}, app_mcp_port, host)
+                                check(status == 503 and "www-authenticate" not in response_headers
+                                      and live_access.encode("ascii") not in content,
+                                      "application-live-" + node + "-mcp-outage-unavailable")
+                        finally:
+                            docker("start", name)
+                            ready()
+                            current_db_env = db_env()
+                    finally:
+                        if second_server.stdin is not None:
+                            second_server.stdin.close()
+                        try:
+                            second_server.wait(timeout=5)
+                        except subprocess.TimeoutExpired:
+                            second_server.kill()
+                            second_server.wait(timeout=5)
+                        if second_server.stdout is not None:
+                            second_server.stdout.close()
+                        if second_server.stderr is not None:
+                            second_server.stderr.close()
+                        check(second_server.returncode == 0, "application-second-live-soklet-stopped")
+                    status, _, page = issuer_http("GET", "/authorize?" + authorization,
+                                                   headers={"Cookie": rotated_cookie})
+                    check(status == 200 and b"Consent" in page,
+                          "application-shared-session-starts-next-consent")
+                    pending_restart_fields = hidden_fields(page)
                 finally:
                     if server.stdin is not None:
                         server.stdin.close()
@@ -465,8 +633,23 @@ def main() -> None:
                           and bool(select.select([server.stdout], [], [], 10)[0])
                           and server.stdout.readline().strip() == "READY",
                           "application-restarted-soklet-ready")
-                    status, _, _ = issuer_http("GET", "/consent", headers={"Cookie": rotated_cookie})
-                    check(status == 403, "application-restart-discards-browser-session")
+                    status, _, _ = issuer_http("GET", "/consent", headers={"Cookie": first_cookie})
+                    check(status == 403, "application-restart-keeps-rotated-cookie-invalid")
+                    status, _, page = issuer_http("GET", "/consent", headers={"Cookie": rotated_cookie})
+                    check(status == 200 and b"Consent" in page
+                          and hidden_fields(page) == pending_restart_fields,
+                          "application-restart-retains-browser-session-and-consent")
+                    resumed_body = urlencode({**pending_restart_fields, "decision": "approve"}).encode("ascii")
+                    status, headers, _ = issuer_http("POST", "/consent", resumed_body, consent_headers)
+                    resumed_callback = urlsplit(headers.get("location", ""))
+                    resumed_codes = parse_qs(resumed_callback.query).get("code", [])
+                    check(status == 303 and resumed_callback.scheme == "https"
+                          and resumed_callback.netloc == "client.example"
+                          and len(resumed_codes) == 1
+                          and bool(re.fullmatch(r"[A-Za-z0-9_-]+", resumed_codes[0])),
+                          "application-cross-jvm-consent-issues-code")
+                    status, _, _ = issuer_http("POST", "/consent", resumed_body, consent_headers)
+                    check(status == 403, "application-cross-jvm-consent-single-use")
                     code_body = urlencode({"grant_type": "authorization_code", "client_id": "demo-public",
                                            "code": http_code,
                                            "code_verifier": "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk",
@@ -481,6 +664,16 @@ def main() -> None:
                           and bool(re.fullmatch(r"[A-Za-z0-9_.-]+", issued.get("refresh_token", "")))
                           and headers.get("cache-control") == "no-store",
                           "application-http-code-redeemed-after-restart")
+                    resumed_code_body = urlencode({"grant_type": "authorization_code", "client_id": "demo-public",
+                                           "code": resumed_codes[0],
+                                           "code_verifier": "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk",
+                                           "resource": resource,
+                                           "redirect_uri": "https://client.example/cb"}).encode("ascii")
+                    status, _, resumed_content = issuer_http("POST", "/token", resumed_code_body,
+                        {"Content-Type": "application/x-www-form-urlencoded"})
+                    resumed_token = json.loads(resumed_content).get("access_token", "")
+                    check(status == 200 and bool(re.fullmatch(r"[A-Za-z0-9_.-]+", resumed_token)),
+                          "application-cross-jvm-consent-code-redeemed")
                     mcp_headers["Authorization"] = "Bearer " + http_access
                     with opener.open(Request(mcp_url, data=mcp_body, headers=mcp_headers,
                                              method="POST"), timeout=5) as response:
@@ -488,6 +681,8 @@ def main() -> None:
                         check(response.status == 200 and "Checked identity partition" in body
                               and http_access not in body and "demo-user" not in body,
                               "application-restarted-mcp-accepts-http-code-token")
+                        check(first_partition.group(1) in body,
+                              "application-admission-partition-stable-across-jvms")
 
                     introspect_body = urlencode({"token": http_access}).encode("ascii")
                     introspect_headers = {"Content-Type": "application/x-www-form-urlencoded",
@@ -497,6 +692,10 @@ def main() -> None:
                                               "resource": resource}).encode("ascii")
                     docker("stop", name)
                     try:
+                        status, _, content = issuer_http("GET", "/consent",
+                                                          headers={"Cookie": rotated_cookie})
+                        check(status == 503 and b"code=" not in content,
+                              "application-browser-session-outage-is-unavailable")
                         try:
                             opener.open(Request(mcp_url, data=mcp_body, headers=mcp_headers,
                                                 method="POST"), timeout=10)

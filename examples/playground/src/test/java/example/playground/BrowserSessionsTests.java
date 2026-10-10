@@ -21,6 +21,7 @@ import com.soklet.Request;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneId;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import org.jspecify.annotations.NonNull;
@@ -78,10 +79,10 @@ final class BrowserSessionsTests {
                 BrowserSessions.COOKIE + "=" + session.id + "; flow=first; flow=first",
                 BrowserSessions.COOKIE + "=" + session.id + "; invalid",
                 "x=" + "x".repeat(8192))) {
-            Request request = Request.withPath(HttpMethod.GET, "/").headers(Map.of("Cookie", Set.of(raw))).build();
+            Request request = Request.withPath(HttpMethod.GET, "/").headers(Map.of("Cookie", List.of(raw))).build();
             assertTrue(sessions.find(request).isEmpty());
         }
-        assertTrue(sessions.find(Request.withPath(HttpMethod.GET, "/").headers(Map.of("Cookie", Set.of(
+        assertTrue(sessions.find(Request.withPath(HttpMethod.GET, "/").headers(Map.of("Cookie", List.of(
                 BrowserSessions.COOKIE + "=" + session.id, "other=value"))).build()).isEmpty());
         assertSame(session, sessions.find(request(session.id)).orElseThrow());
     }
@@ -102,7 +103,7 @@ final class BrowserSessionsTests {
     }
 
     private static @NonNull Request request(@NonNull String id) {
-        return Request.withPath(HttpMethod.GET, "/").headers(Map.of("Cookie", Set.of(BrowserSessions.COOKIE + "=" + id))).build();
+        return Request.withPath(HttpMethod.GET, "/").headers(Map.of("Cookie", List.of(BrowserSessions.COOKIE + "=" + id))).build();
     }
     static final class MutableClock extends Clock {
         Instant now = Instant.parse("2026-10-01T00:00:00Z");

@@ -53,9 +53,12 @@ XENC11 = "http://www.w3.org/2009/xmlenc11#"
 EXC_C14N = "http://www.w3.org/2001/10/xml-exc-c14n#"
 AES256_GCM = XENC11 + "aes256-gcm"
 RSA_OAEP_11 = XENC11 + "rsa-oaep"
+RSA_OAEP_MGF1P = XENC + "rsa-oaep-mgf1p"
 RSA_1_5 = XENC + "rsa-1_5"
 OAEP_DIGEST_SHA256 = XENC + "sha256"
+OAEP_DIGEST_SHA1 = DS + "sha1"
 MGF1_SHA256 = XENC11 + "mgf1sha256"
+MGF1_SHA1 = XENC11 + "mgf1sha1"
 
 C = xmlsec.constants
 SIGNATURE_URIS = {
@@ -91,6 +94,22 @@ class Credential:
         self.key_pem = private_key.private_bytes(
             serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8, serialization.NoEncryption())
         self.cert_pem = _self_signed(name, private_key).public_bytes(serialization.Encoding.PEM)
+
+    @classmethod
+    def from_files(cls, name, directory):
+        """Load the fixed, public TEST ONLY key pair mounted by the integration harness."""
+        credential = object.__new__(cls)
+        credential.name = name
+        credential.key_pem = (directory / f"{name}-key.pem").read_bytes()
+        credential.cert_pem = (directory / f"{name}-cert.pem").read_bytes()
+        credential.private_key = serialization.load_pem_private_key(credential.key_pem, password=None)
+        certificate = x509.load_pem_x509_certificate(credential.cert_pem)
+        if credential.private_key.public_key().public_bytes(
+                serialization.Encoding.DER, serialization.PublicFormat.SubjectPublicKeyInfo) != \
+                certificate.public_key().public_bytes(
+                    serialization.Encoding.DER, serialization.PublicFormat.SubjectPublicKeyInfo):
+            raise ValueError("test key and certificate differ")
+        return credential
 
     def xmlsec_private_key(self):
         key = xmlsec.Key.from_memory(self.key_pem, C.KeyDataFormatPem)
@@ -193,10 +212,10 @@ def wrapped(wrapper_tag, plaintext_element):
 
 # --- libxmlsec1 operations -------------------------------------------------------------
 
-def xmlsec_sign(element, credential, signature_method, digest_method):
+def xmlsec_sign(element, credential, signature_method, digest_method, insert_at=1):
     """Enveloped signature over element (by its ID), placed right after its saml:Issuer."""
     signature = xmlsec.template.create(element, C.TransformExclC14N, signature_method, ns="ds")
-    element.insert(1, signature)
+    element.insert(insert_at, signature)
     reference = xmlsec.template.add_reference(signature, digest_method, uri="#" + element.get("ID"))
     xmlsec.template.add_transform(reference, C.TransformEnveloped)
     xmlsec.template.add_transform(reference, C.TransformExclC14N)
@@ -226,15 +245,19 @@ def xmlsec_verify(signed_element, credential, signature_method, digest_method):
     return base64.b64decode(signature.findtext(_q(DS, "SignatureValue")))
 
 
-def encrypted_data_template(key_transport):
+def encrypted_data_template(key_transport, data_algorithm=AES256_GCM,
+                            oaep_digest=None, oaep_mgf=None):
     """A hand-built EncryptedData template; python-xmlsec has no helper for xmlenc11#rsa-oaep."""
     data = _root(XENC, "EncryptedData", {"xenc": XENC, "ds": DS}, Type=XENC + "Element")
-    _sub(data, XENC, "EncryptionMethod", Algorithm=AES256_GCM)
+    _sub(data, XENC, "EncryptionMethod", Algorithm=data_algorithm)
     encrypted_key = _sub(_sub(data, DS, "KeyInfo"), XENC, "EncryptedKey")
     method = _sub(encrypted_key, XENC, "EncryptionMethod", Algorithm=key_transport)
     if key_transport == RSA_OAEP_11:
-        _sub(method, DS, "DigestMethod", Algorithm=OAEP_DIGEST_SHA256)
-        etree.SubElement(method, _q(XENC11, "MGF"), nsmap={"xenc11": XENC11}).set("Algorithm", MGF1_SHA256)
+        _sub(method, DS, "DigestMethod", Algorithm=oaep_digest or OAEP_DIGEST_SHA256)
+        etree.SubElement(method, _q(XENC11, "MGF"), nsmap={"xenc11": XENC11}).set(
+            "Algorithm", oaep_mgf or MGF1_SHA256)
+    elif oaep_digest is not None:
+        _sub(method, DS, "DigestMethod", Algorithm=oaep_digest)
     _sub(_sub(encrypted_key, XENC, "CipherData"), XENC, "CipherValue")
     _sub(_sub(data, XENC, "CipherData"), XENC, "CipherValue")
     return data
@@ -251,13 +274,21 @@ def signxml_sign(element, credential):
                        reference_uri=element.get("ID"), id_attribute="ID")
 
 
-def xmlsec_encrypt(wrapper, key_transport, recipient):
-    """Replaces the wrapper's only child with EncryptedData (AES-256-GCM, key for recipient)."""
+def xmlsec_encrypt(wrapper, key_transport, recipient, data_algorithm=AES256_GCM,
+                   oaep_digest=None, oaep_mgf=None):
+    """Replaces the wrapper's only child with EncryptedData (AES-GCM, key for recipient)."""
+    bits = {XENC11 + "aes128-gcm": 128, XENC11 + "aes192-gcm": 192,
+            XENC11 + "aes256-gcm": 256,
+            XENC + "aes128-cbc": 128, XENC + "aes192-cbc": 192,
+            XENC + "aes256-cbc": 256}.get(data_algorithm)
+    if bits is None:
+        raise ValueError("unsupported data algorithm")
     manager = xmlsec.KeysManager()
     manager.add_key(recipient.xmlsec_certificate())
     context = xmlsec.EncryptionContext(manager)
-    context.key = xmlsec.Key.generate(C.KeyDataAes, 256, C.KeyDataTypeSession)
-    context.encrypt_xml(encrypted_data_template(key_transport), wrapper[0])
+    context.key = xmlsec.Key.generate(C.KeyDataAes, bits, C.KeyDataTypeSession)
+    context.encrypt_xml(encrypted_data_template(key_transport, data_algorithm,
+                        oaep_digest, oaep_mgf), wrapper[0])
     return wrapper
 
 

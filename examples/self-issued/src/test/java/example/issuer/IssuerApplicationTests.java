@@ -80,11 +80,11 @@ final class IssuerApplicationTests {
  }
  @Test void establishedStartupRetainsGrantAndRefreshAcrossApplicationInstances() throws Exception {
   var clock=Clock.systemUTC();var config=config(8089,8090);var store=new VolatileStore(clock,2048,4_194_304);
-  var keys=signingKeys(clock);var sealing=sealer();
-  var first=new IssuerResources(config,clock,store,keys,sealing,IssuerResources.StartupMode.FRESH);
+  var keys=signingKeys(clock);var sealing=sealer();byte[] partitionKey=LocalInputs.randomBytes();
+  var first=new IssuerResources(config,clock,store,keys,sealing,IssuerResources.StartupMode.FRESH,partitionKey);
   String firstPair=issued(first,"mcp:discover mcp:whoami");String access=scalar(firstPair,"access_token");
   String refresh=scalar(firstPair,"refresh_token");
-  var established=new IssuerResources(config,clock,store,keys,sealing,IssuerResources.StartupMode.ESTABLISHED);
+  var established=new IssuerResources(config,clock,store,keys,sealing,IssuerResources.StartupMode.ESTABLISHED,partitionKey);
   assertInstanceOf(OAuthIssuerAccessTokenResult.Succeeded.class,
     established.server.validateAccessTokenResult(bearer(access),config.resource.toString()));
   String refreshForm=form(Map.of("grant_type","refresh_token","client_id","demo-public",
@@ -95,16 +95,18 @@ final class IssuerApplicationTests {
   assertInstanceOf(OAuthIssuerAccessTokenResult.Succeeded.class,
     first.server.validateAccessTokenResult(bearer(next),config.resource.toString()));
   assertThrows(IllegalStateException.class,
-    ()->new IssuerResources(config,clock,store,keys,sealing,IssuerResources.StartupMode.FRESH));
+    ()->new IssuerResources(config,clock,store,keys,sealing,IssuerResources.StartupMode.FRESH,partitionKey));
+  assertThrows(IllegalArgumentException.class,
+    ()->new IssuerResources(config,clock,store,keys,sealing,IssuerResources.StartupMode.ESTABLISHED));
  }
  @Test void establishedStartupRejectsMissingFenceAndWrongSealingKey() throws Exception {
   var clock=Clock.systemUTC();var config=config(8089,8090);var store=new VolatileStore(clock,2048,4_194_304);
-  var keys=signingKeys(clock);var sealing=sealer();
+  var keys=signingKeys(clock);var sealing=sealer();byte[] partitionKey=LocalInputs.randomBytes();
   assertThrows(OAuthServerStoreException.class,
-    ()->new IssuerResources(config,clock,store,keys,sealing,IssuerResources.StartupMode.ESTABLISHED));
-  new IssuerResources(config,clock,store,keys,sealing,IssuerResources.StartupMode.FRESH);
+    ()->new IssuerResources(config,clock,store,keys,sealing,IssuerResources.StartupMode.ESTABLISHED,partitionKey));
+  new IssuerResources(config,clock,store,keys,sealing,IssuerResources.StartupMode.FRESH,partitionKey);
   assertThrows(OAuthServerStoreException.class,
-    ()->new IssuerResources(config,clock,store,keys,sealer(),IssuerResources.StartupMode.ESTABLISHED));
+    ()->new IssuerResources(config,clock,store,keys,sealer(),IssuerResources.StartupMode.ESTABLISHED,partitionKey));
  }
  @Test void publicAndConfidentialClientsUsePkceAndNoCredentialLeaksInRedirectPage() throws Exception {
   var app=app();for(String client:List.of("demo-public","demo-confidential")) {
@@ -220,7 +222,9 @@ final class IssuerApplicationTests {
   }));
  }
  @Test void sessionCapAndExpiryNeverEvictAuthenticatedStateToAdmitNewSession() {
-  var clock=new MutableClock();var sessions=new BrowserSessions(clock,1,true);var first=sessions.begin();var rotated=sessions.login(first,new BrowserSessions.Pending("synthetic"));
+  var clock=new MutableClock();var sessions=new BrowserSessions(clock,1,true);var first=sessions.begin();
+  var pending=new BrowserSessions.Pending("synthetic");sessions.replacePending(first,pending);
+  var rotated=sessions.login(first,pending);
   assertThrows(IllegalStateException.class,sessions::begin);var cookie=sessions.cookie(rotated);assertEquals("__Host-RevetsecIssuer",cookie.getName());assertTrue(cookie.getSecure());assertTrue(cookie.getHttpOnly());
   clock.now=clock.now.plusSeconds(601);assertDoesNotThrow(sessions::begin);assertEquals("IssuerSession{<redacted>}",rotated.toString());
  }

@@ -1,0 +1,3348 @@
+{
+  "cases": {
+    "assertion-ec256-encrypted-id": {
+      "sha256": "1b4e65d38f9d762bc6ec2baa5a549fccfceb85bdf8109b9b8eefdf8d6a568dda",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "encryption": {
+          "assertion": false,
+          "name_id": true
+        },
+        "ids": {
+          "assertion": "_mint_assertion_4",
+          "response": "_mint_response_4"
+        },
+        "signing": {
+          "algorithm": "ecdsa-sha256",
+          "engine": "xmlsec",
+          "placement": "assertion"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "assertion-ec384": {
+      "sha256": "eba0de6600092560679e9b2d4b832fef49976cdcb00748903099479a8cc31aeb",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "encryption": {
+          "assertion": false,
+          "name_id": false
+        },
+        "ids": {
+          "assertion": "_mint_assertion_5",
+          "response": "_mint_response_5"
+        },
+        "signing": {
+          "algorithm": "ecdsa-sha384",
+          "engine": "xmlsec",
+          "placement": "assertion"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "assertion-ec521": {
+      "sha256": "a1b031da09b6d12b9f7b00b2f059d7da2398017ccfc3ce1fb7857f0ec6d1e1d7",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "encryption": {
+          "assertion": false,
+          "name_id": false
+        },
+        "ids": {
+          "assertion": "_mint_assertion_6",
+          "response": "_mint_response_6"
+        },
+        "signing": {
+          "algorithm": "ecdsa-sha512",
+          "engine": "xmlsec",
+          "placement": "assertion"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "assertion-rsa-sha1": {
+      "sha256": "68823d0bcebf7d18b7f4cfd81aaf6f0703b9097bc4f942b854790f8f4a3c4c9c",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "encryption": {
+          "assertion": false,
+          "name_id": false
+        },
+        "ids": {
+          "assertion": "_mint_assertion_8",
+          "response": "_mint_response_8"
+        },
+        "signing": {
+          "algorithm": "rsa-sha1",
+          "engine": "xmlsec",
+          "placement": "assertion"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "assertion-rsa512-encrypted": {
+      "sha256": "5086553a58ae23c3e9c05ffcb8b5cfaf3f178ca4028a1ed591d47dde8c2982b2",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "encryption": {
+          "assertion": true,
+          "name_id": false
+        },
+        "ids": {
+          "assertion": "_mint_assertion_3",
+          "response": "_mint_response_3"
+        },
+        "signing": {
+          "algorithm": "rsa-sha512",
+          "engine": "xmlsec",
+          "placement": "assertion"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "assertion-signxml": {
+      "sha256": "ba4374e0ad9cbbb3ef53ab771070e05318577b8baf63f2f87f7b4c4fbeabf83e",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "encryption": {
+          "assertion": false,
+          "name_id": false
+        },
+        "ids": {
+          "assertion": "_mint_assertion_7",
+          "response": "_mint_response_7"
+        },
+        "signing": {
+          "algorithm": "rsa-sha256",
+          "engine": "signxml",
+          "placement": "assertion"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "both-rsa384": {
+      "sha256": "290297efeb463c80148238693728c76f35144e6dd8a8567ad8bafc066b887588",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "encryption": {
+          "assertion": false,
+          "name_id": false
+        },
+        "ids": {
+          "assertion": "_mint_assertion_2",
+          "response": "_mint_response_2"
+        },
+        "signing": {
+          "algorithm": "rsa-sha384",
+          "engine": "xmlsec",
+          "placement": "both"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "digest-rsa256-sha1": {
+      "sha256": "76b68a2edbb3670d9060203c704fda9e1218a820dc50df610e520308a85b31e3",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "ids": {
+          "assertion": "_mint_assertion_75",
+          "response": "_mint_response_75"
+        },
+        "signing": {
+          "algorithm": "rsa-sha256",
+          "digest": "sha1",
+          "engine": "xmlsec",
+          "placement": "response"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "encrypted-aes128-cbc-assertion": {
+      "sha256": "32f56d9375d69996b5ca026e9cde291a78249e9d1300fe95d58bbb9e366496d8",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "encryption": {
+          "assertion": true,
+          "data_algorithm": "aes128-cbc",
+          "key_transport": "rsa-oaep-mgf1p"
+        },
+        "ids": {
+          "assertion": "_mint_assertion_20",
+          "response": "_mint_response_20"
+        },
+        "signing": {
+          "algorithm": "rsa-sha256",
+          "placement": "assertion"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "encrypted-aes128-cbc-response": {
+      "sha256": "006fc9781f7d7a683b283583cbf16353a23601b3dad19b27adce51cbdadfd407",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "encryption": {
+          "assertion": true,
+          "data_algorithm": "aes128-cbc",
+          "key_transport": "rsa-oaep-mgf1p"
+        },
+        "ids": {
+          "assertion": "_mint_assertion_17",
+          "response": "_mint_response_17"
+        },
+        "signing": {
+          "algorithm": "rsa-sha256",
+          "placement": "response"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "encrypted-aes128-gcm-rsa-oaep-mgf1p": {
+      "sha256": "a509d714e5c62f81901048b72bfb6253f752f324a80aa8677f45dcd0e997db2c",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "encryption": {
+          "assertion": true,
+          "data_algorithm": "aes128-gcm",
+          "key_transport": "rsa-oaep-mgf1p"
+        },
+        "ids": {
+          "assertion": "_mint_assertion_12",
+          "response": "_mint_response_12"
+        },
+        "signing": {
+          "algorithm": "rsa-sha256",
+          "engine": "xmlsec",
+          "placement": "both"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "encrypted-aes128-gcm-rsa-oaep-sha256-mgf1sha256": {
+      "sha256": "e2361ee112b78c9b2236315ad9fa5cd508adb5b567e0e85e6dcf3c79292fb283",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "encryption": {
+          "assertion": true,
+          "data_algorithm": "aes128-gcm",
+          "key_transport": "rsa-oaep-sha256-mgf1sha256"
+        },
+        "ids": {
+          "assertion": "_mint_assertion_11",
+          "response": "_mint_response_11"
+        },
+        "signing": {
+          "algorithm": "rsa-sha256",
+          "engine": "xmlsec",
+          "placement": "both"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "encrypted-aes192-cbc-response": {
+      "sha256": "a0f266dc76ccb61909706d2a3629f4c1db268f4afa2e84f670fe0bdd8154e665",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "encryption": {
+          "assertion": true,
+          "data_algorithm": "aes192-cbc",
+          "key_transport": "rsa-oaep-mgf1p"
+        },
+        "ids": {
+          "assertion": "_mint_assertion_18",
+          "response": "_mint_response_18"
+        },
+        "signing": {
+          "algorithm": "rsa-sha256",
+          "placement": "response"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "encrypted-aes192-gcm-rsa-oaep-mgf1p": {
+      "sha256": "1ac603369963747b79373dba24402a9aab85273b7c207c3de5313c6d29ef8e5a",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "encryption": {
+          "assertion": true,
+          "data_algorithm": "aes192-gcm",
+          "key_transport": "rsa-oaep-mgf1p"
+        },
+        "ids": {
+          "assertion": "_mint_assertion_14",
+          "response": "_mint_response_14"
+        },
+        "signing": {
+          "algorithm": "rsa-sha256",
+          "engine": "xmlsec",
+          "placement": "both"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "encrypted-aes192-gcm-rsa-oaep-sha256-mgf1sha256": {
+      "sha256": "979120345f4594ef212d7a710ada52c7100c1d712de97f3e2e7800cc94d83763",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "encryption": {
+          "assertion": true,
+          "data_algorithm": "aes192-gcm",
+          "key_transport": "rsa-oaep-sha256-mgf1sha256"
+        },
+        "ids": {
+          "assertion": "_mint_assertion_13",
+          "response": "_mint_response_13"
+        },
+        "signing": {
+          "algorithm": "rsa-sha256",
+          "engine": "xmlsec",
+          "placement": "both"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "encrypted-aes256-cbc-response": {
+      "sha256": "f180c25854193702f5df6ccf7a7d1c6a01e8ddff2e49b5ab80d7e91f78e3501a",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "encryption": {
+          "assertion": true,
+          "data_algorithm": "aes256-cbc",
+          "key_transport": "rsa-oaep-mgf1p"
+        },
+        "ids": {
+          "assertion": "_mint_assertion_19",
+          "response": "_mint_response_19"
+        },
+        "signing": {
+          "algorithm": "rsa-sha256",
+          "placement": "response"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "encrypted-aes256-gcm-rsa-oaep-mgf1p": {
+      "sha256": "b832c10ae26668f72d2060addd9d70f915a7a5ec92d7c24ebfcb3d9ed4164fd0",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "encryption": {
+          "assertion": true,
+          "data_algorithm": "aes256-gcm",
+          "key_transport": "rsa-oaep-mgf1p"
+        },
+        "ids": {
+          "assertion": "_mint_assertion_16",
+          "response": "_mint_response_16"
+        },
+        "signing": {
+          "algorithm": "rsa-sha256",
+          "engine": "xmlsec",
+          "placement": "both"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "encrypted-aes256-gcm-rsa-oaep-sha256-mgf1sha256": {
+      "sha256": "3f2e2b928e868db2506b9ae437ed6364941020c6338100cb761fdeb58fa4ff4a",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "encryption": {
+          "assertion": true,
+          "data_algorithm": "aes256-gcm",
+          "key_transport": "rsa-oaep-sha256-mgf1sha256"
+        },
+        "ids": {
+          "assertion": "_mint_assertion_15",
+          "response": "_mint_response_15"
+        },
+        "signing": {
+          "algorithm": "rsa-sha256",
+          "engine": "xmlsec",
+          "placement": "both"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "encrypted-id-sibling-implicit": {
+      "producer_content_sha256": "6b875843233fe3d81274f3bf39355071fc482901b6a941186a6805d3d88f3ca6",
+      "sha256": "01a70eb960947cc3ec073303beb61b9bd97b3c596118b9d82639d8cef2e55238",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "encryption": {
+          "assertion": false,
+          "data_algorithm": "aes256-gcm",
+          "extra_encrypted_keys": 0,
+          "key_placement": "sibling-implicit",
+          "key_transport": "rsa-oaep-sha256-mgf1sha256",
+          "name_id": true
+        },
+        "ids": {
+          "assertion": "_mint_assertion_116",
+          "response": "_mint_response_116"
+        },
+        "signing": {
+          "algorithm": "rsa-sha256",
+          "engine": "xmlsec",
+          "placement": "assertion"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "encrypted-id-sibling-retrieval": {
+      "producer_content_sha256": "6b875843233fe3d81274f3bf39355071fc482901b6a941186a6805d3d88f3ca6",
+      "sha256": "3f861d697ba33fb0942d2b314156ce424c9c69bb7f90a82bcd5fb662a33640a2",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "encryption": {
+          "assertion": false,
+          "data_algorithm": "aes256-gcm",
+          "extra_encrypted_keys": 0,
+          "key_placement": "sibling-retrieval",
+          "key_transport": "rsa-oaep-sha256-mgf1sha256",
+          "name_id": true
+        },
+        "ids": {
+          "assertion": "_mint_assertion_115",
+          "response": "_mint_response_115"
+        },
+        "signing": {
+          "algorithm": "rsa-sha256",
+          "engine": "xmlsec",
+          "placement": "assertion"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "key-sibling-implicit": {
+      "producer_content_sha256": "6b875843233fe3d81274f3bf39355071fc482901b6a941186a6805d3d88f3ca6",
+      "sha256": "99ca102b489528b8cba2c01638630b319bb5b92f1994f4498fa3ea98a573975f",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "encryption": {
+          "assertion": true,
+          "data_algorithm": "aes256-gcm",
+          "extra_encrypted_keys": 0,
+          "key_placement": "sibling-implicit",
+          "key_transport": "rsa-oaep-sha256-mgf1sha256",
+          "name_id": false
+        },
+        "ids": {
+          "assertion": "_mint_assertion_113",
+          "response": "_mint_response_113"
+        },
+        "signing": {
+          "algorithm": "rsa-sha256",
+          "engine": "xmlsec",
+          "placement": "both"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "key-sibling-implicit-multi": {
+      "producer_content_sha256": "6b875843233fe3d81274f3bf39355071fc482901b6a941186a6805d3d88f3ca6",
+      "sha256": "85ddc5b6824d84c03beb954b2e7e81a92267de008dc2b3ec61b405e24c433cd0",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "encryption": {
+          "assertion": true,
+          "data_algorithm": "aes256-gcm",
+          "extra_encrypted_keys": 1,
+          "key_placement": "sibling-implicit",
+          "key_transport": "rsa-oaep-sha256-mgf1sha256",
+          "name_id": false
+        },
+        "ids": {
+          "assertion": "_mint_assertion_114",
+          "response": "_mint_response_114"
+        },
+        "signing": {
+          "algorithm": "rsa-sha256",
+          "engine": "xmlsec",
+          "placement": "both"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "key-sibling-retrieval": {
+      "producer_content_sha256": "6b875843233fe3d81274f3bf39355071fc482901b6a941186a6805d3d88f3ca6",
+      "sha256": "d0d15878c484c56a79ce2c605f9adb3d4db7756ec192ef67edd4add760f4369d",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "encryption": {
+          "assertion": true,
+          "data_algorithm": "aes256-gcm",
+          "extra_encrypted_keys": 0,
+          "key_placement": "sibling-retrieval",
+          "key_transport": "rsa-oaep-sha256-mgf1sha256",
+          "name_id": false
+        },
+        "ids": {
+          "assertion": "_mint_assertion_112",
+          "response": "_mint_response_112"
+        },
+        "signing": {
+          "algorithm": "rsa-sha256",
+          "engine": "xmlsec",
+          "placement": "both"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "matrix-assertion-ecdsa-sha256-sha256": {
+      "sha256": "5229ee02effccf3eb90186e70239ae1f8b1868f2d4b27a91bad33a7755c19016",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "ids": {
+          "assertion": "_mint_assertion_48",
+          "response": "_mint_response_48"
+        },
+        "signing": {
+          "algorithm": "ecdsa-sha256",
+          "digest": "sha256",
+          "engine": "xmlsec",
+          "placement": "assertion"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "matrix-assertion-ecdsa-sha256-sha384": {
+      "sha256": "b65d9855f1c1570f43650ba6d67deb16d2356079a0314aaabd3faf904cff6764",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "ids": {
+          "assertion": "_mint_assertion_49",
+          "response": "_mint_response_49"
+        },
+        "signing": {
+          "algorithm": "ecdsa-sha256",
+          "digest": "sha384",
+          "engine": "xmlsec",
+          "placement": "assertion"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "matrix-assertion-ecdsa-sha256-sha512": {
+      "sha256": "804f239293cac252b30be2351d7eecb0a8900e2d34c54213475744e86fe40d3e",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "ids": {
+          "assertion": "_mint_assertion_50",
+          "response": "_mint_response_50"
+        },
+        "signing": {
+          "algorithm": "ecdsa-sha256",
+          "digest": "sha512",
+          "engine": "xmlsec",
+          "placement": "assertion"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "matrix-assertion-ecdsa-sha384-sha256": {
+      "sha256": "3aa6880c0c26f8f7fb30d1d81c5290a7305e5ce85f096db3048252a97da54939",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "ids": {
+          "assertion": "_mint_assertion_51",
+          "response": "_mint_response_51"
+        },
+        "signing": {
+          "algorithm": "ecdsa-sha384",
+          "digest": "sha256",
+          "engine": "xmlsec",
+          "placement": "assertion"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "matrix-assertion-ecdsa-sha384-sha384": {
+      "sha256": "2e684c084c9d9111a91b9a490833c5d10c1730e3d2317dcbaa385b9b543a8109",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "ids": {
+          "assertion": "_mint_assertion_52",
+          "response": "_mint_response_52"
+        },
+        "signing": {
+          "algorithm": "ecdsa-sha384",
+          "digest": "sha384",
+          "engine": "xmlsec",
+          "placement": "assertion"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "matrix-assertion-ecdsa-sha384-sha512": {
+      "sha256": "ccdcbd7a5b8d7b62b305334a76f8404004807310711ebcaef6769bdc02280739",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "ids": {
+          "assertion": "_mint_assertion_53",
+          "response": "_mint_response_53"
+        },
+        "signing": {
+          "algorithm": "ecdsa-sha384",
+          "digest": "sha512",
+          "engine": "xmlsec",
+          "placement": "assertion"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "matrix-assertion-ecdsa-sha512-sha256": {
+      "sha256": "27daa6c4f7b6e4c63833010311a375227507872c4f5cf142ea34230498f1d5ff",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "ids": {
+          "assertion": "_mint_assertion_54",
+          "response": "_mint_response_54"
+        },
+        "signing": {
+          "algorithm": "ecdsa-sha512",
+          "digest": "sha256",
+          "engine": "xmlsec",
+          "placement": "assertion"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "matrix-assertion-ecdsa-sha512-sha384": {
+      "sha256": "1bc2062cee1feea239034319a0cdcc322192afccb0196ae2ead4a2c696e6ca9f",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "ids": {
+          "assertion": "_mint_assertion_55",
+          "response": "_mint_response_55"
+        },
+        "signing": {
+          "algorithm": "ecdsa-sha512",
+          "digest": "sha384",
+          "engine": "xmlsec",
+          "placement": "assertion"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "matrix-assertion-ecdsa-sha512-sha512": {
+      "sha256": "3b3ade090915e452faa6dc8d27395ed08a04bf1d58d41aa18e07fe056d007ff2",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "ids": {
+          "assertion": "_mint_assertion_56",
+          "response": "_mint_response_56"
+        },
+        "signing": {
+          "algorithm": "ecdsa-sha512",
+          "digest": "sha512",
+          "engine": "xmlsec",
+          "placement": "assertion"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "matrix-assertion-rsa-sha256-sha256": {
+      "sha256": "55788a13588bb2e65295d1094ea2365a06ce8c8c3ed11444b202c884f1260020",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "ids": {
+          "assertion": "_mint_assertion_39",
+          "response": "_mint_response_39"
+        },
+        "signing": {
+          "algorithm": "rsa-sha256",
+          "digest": "sha256",
+          "engine": "xmlsec",
+          "placement": "assertion"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "matrix-assertion-rsa-sha256-sha384": {
+      "sha256": "af2ef9855516270b03a4a335eb830e7d151fc4b60e595e5b8443202e523011a3",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "ids": {
+          "assertion": "_mint_assertion_40",
+          "response": "_mint_response_40"
+        },
+        "signing": {
+          "algorithm": "rsa-sha256",
+          "digest": "sha384",
+          "engine": "xmlsec",
+          "placement": "assertion"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "matrix-assertion-rsa-sha256-sha512": {
+      "sha256": "c2b65318711b73c9957d8c506dcad7874bc6b9c4900bf715c2fa2c760cb0c184",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "ids": {
+          "assertion": "_mint_assertion_41",
+          "response": "_mint_response_41"
+        },
+        "signing": {
+          "algorithm": "rsa-sha256",
+          "digest": "sha512",
+          "engine": "xmlsec",
+          "placement": "assertion"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "matrix-assertion-rsa-sha384-sha256": {
+      "sha256": "7e761494c5105078a65059769d1583f211fd6011a7b03a02523631268e1428e8",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "ids": {
+          "assertion": "_mint_assertion_42",
+          "response": "_mint_response_42"
+        },
+        "signing": {
+          "algorithm": "rsa-sha384",
+          "digest": "sha256",
+          "engine": "xmlsec",
+          "placement": "assertion"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "matrix-assertion-rsa-sha384-sha384": {
+      "sha256": "81b918f5bb56196951000035a298aea118dd7b528228679acfc31fb704157525",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "ids": {
+          "assertion": "_mint_assertion_43",
+          "response": "_mint_response_43"
+        },
+        "signing": {
+          "algorithm": "rsa-sha384",
+          "digest": "sha384",
+          "engine": "xmlsec",
+          "placement": "assertion"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "matrix-assertion-rsa-sha384-sha512": {
+      "sha256": "62022b3f732e4f5bb67e7ab26b363b7e640bbc8a658ce02d80f61afd5c0686a5",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "ids": {
+          "assertion": "_mint_assertion_44",
+          "response": "_mint_response_44"
+        },
+        "signing": {
+          "algorithm": "rsa-sha384",
+          "digest": "sha512",
+          "engine": "xmlsec",
+          "placement": "assertion"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "matrix-assertion-rsa-sha512-sha256": {
+      "sha256": "31fbdb0312786268465abb8cef0e3a23fb6d1bd705b09dff6337b85d04659480",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "ids": {
+          "assertion": "_mint_assertion_45",
+          "response": "_mint_response_45"
+        },
+        "signing": {
+          "algorithm": "rsa-sha512",
+          "digest": "sha256",
+          "engine": "xmlsec",
+          "placement": "assertion"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "matrix-assertion-rsa-sha512-sha384": {
+      "sha256": "8e64fadb9039213ebd3032e772164db9628180df26487e1ef45b3428ae63d673",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "ids": {
+          "assertion": "_mint_assertion_46",
+          "response": "_mint_response_46"
+        },
+        "signing": {
+          "algorithm": "rsa-sha512",
+          "digest": "sha384",
+          "engine": "xmlsec",
+          "placement": "assertion"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "matrix-assertion-rsa-sha512-sha512": {
+      "sha256": "1585d4004e45f064ee8dc51006161f7b79260749de5c2051ac4533d9df4ef5b6",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "ids": {
+          "assertion": "_mint_assertion_47",
+          "response": "_mint_response_47"
+        },
+        "signing": {
+          "algorithm": "rsa-sha512",
+          "digest": "sha512",
+          "engine": "xmlsec",
+          "placement": "assertion"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "matrix-both-ecdsa-sha256-sha256": {
+      "sha256": "2b4a5fd5758af9e81e6171f1a0b771a1e970acfe14a79ff87d4c20a1bb2a53b2",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "ids": {
+          "assertion": "_mint_assertion_66",
+          "response": "_mint_response_66"
+        },
+        "signing": {
+          "algorithm": "ecdsa-sha256",
+          "digest": "sha256",
+          "engine": "xmlsec",
+          "placement": "both"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "matrix-both-ecdsa-sha256-sha384": {
+      "sha256": "7643e2c0ea935ecd4915cd35ceb34410482703417a2b155d05fd177c16c00fb6",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "ids": {
+          "assertion": "_mint_assertion_67",
+          "response": "_mint_response_67"
+        },
+        "signing": {
+          "algorithm": "ecdsa-sha256",
+          "digest": "sha384",
+          "engine": "xmlsec",
+          "placement": "both"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "matrix-both-ecdsa-sha256-sha512": {
+      "sha256": "c3f705ddd7e32883bae21849512524382c9461554357712cbee72a95392822a3",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "ids": {
+          "assertion": "_mint_assertion_68",
+          "response": "_mint_response_68"
+        },
+        "signing": {
+          "algorithm": "ecdsa-sha256",
+          "digest": "sha512",
+          "engine": "xmlsec",
+          "placement": "both"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "matrix-both-ecdsa-sha384-sha256": {
+      "sha256": "873d57f9ba341c98aebeb93f0e8c3167b1bd120704bf5ba3fcd4b1e00b5a9eac",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "ids": {
+          "assertion": "_mint_assertion_69",
+          "response": "_mint_response_69"
+        },
+        "signing": {
+          "algorithm": "ecdsa-sha384",
+          "digest": "sha256",
+          "engine": "xmlsec",
+          "placement": "both"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "matrix-both-ecdsa-sha384-sha384": {
+      "sha256": "ce9763b61e8e0fda899215a5b19224a12880486e6a4a5f0ac9f19ee463ad45f0",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "ids": {
+          "assertion": "_mint_assertion_70",
+          "response": "_mint_response_70"
+        },
+        "signing": {
+          "algorithm": "ecdsa-sha384",
+          "digest": "sha384",
+          "engine": "xmlsec",
+          "placement": "both"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "matrix-both-ecdsa-sha384-sha512": {
+      "sha256": "dbb3857bd503714f5777f3e039947ad497931a6763446b1aab19c16e7238b900",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "ids": {
+          "assertion": "_mint_assertion_71",
+          "response": "_mint_response_71"
+        },
+        "signing": {
+          "algorithm": "ecdsa-sha384",
+          "digest": "sha512",
+          "engine": "xmlsec",
+          "placement": "both"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "matrix-both-ecdsa-sha512-sha256": {
+      "sha256": "604f9a5dc6fdf201279c3c82ebc77b0ca79d013f6651a6dbce145a3e939c2f4e",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "ids": {
+          "assertion": "_mint_assertion_72",
+          "response": "_mint_response_72"
+        },
+        "signing": {
+          "algorithm": "ecdsa-sha512",
+          "digest": "sha256",
+          "engine": "xmlsec",
+          "placement": "both"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "matrix-both-ecdsa-sha512-sha384": {
+      "sha256": "bca97e5494aad730d0f6ea748ba177c67a1cc3afa5a4f74d080ab9d3507cef61",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "ids": {
+          "assertion": "_mint_assertion_73",
+          "response": "_mint_response_73"
+        },
+        "signing": {
+          "algorithm": "ecdsa-sha512",
+          "digest": "sha384",
+          "engine": "xmlsec",
+          "placement": "both"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "matrix-both-ecdsa-sha512-sha512": {
+      "sha256": "98f8161143bb5f43473fc5bdf911eb6b481fda5b2c6fd905b8de61d828bf0a5b",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "ids": {
+          "assertion": "_mint_assertion_74",
+          "response": "_mint_response_74"
+        },
+        "signing": {
+          "algorithm": "ecdsa-sha512",
+          "digest": "sha512",
+          "engine": "xmlsec",
+          "placement": "both"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "matrix-both-rsa-sha256-sha256": {
+      "sha256": "d7a05498bb8e8131a99d8dafdc7f9c966762eac03a06d7718873d56b54e30f33",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "ids": {
+          "assertion": "_mint_assertion_57",
+          "response": "_mint_response_57"
+        },
+        "signing": {
+          "algorithm": "rsa-sha256",
+          "digest": "sha256",
+          "engine": "xmlsec",
+          "placement": "both"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "matrix-both-rsa-sha256-sha384": {
+      "sha256": "f575ba6dd92e4946ed7ff8a20257b31767354886a56af92077cd8fcf04bccfe8",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "ids": {
+          "assertion": "_mint_assertion_58",
+          "response": "_mint_response_58"
+        },
+        "signing": {
+          "algorithm": "rsa-sha256",
+          "digest": "sha384",
+          "engine": "xmlsec",
+          "placement": "both"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "matrix-both-rsa-sha256-sha512": {
+      "sha256": "0c5d52f1a39e172d3c581c07fe7c7410003be86860fb1f4ec1c2efbbee48b295",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "ids": {
+          "assertion": "_mint_assertion_59",
+          "response": "_mint_response_59"
+        },
+        "signing": {
+          "algorithm": "rsa-sha256",
+          "digest": "sha512",
+          "engine": "xmlsec",
+          "placement": "both"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "matrix-both-rsa-sha384-sha256": {
+      "sha256": "013ce90a896d5f2d0b2f20388e7b0bc523552ffe10013ca51bb3a60cf8614a38",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "ids": {
+          "assertion": "_mint_assertion_60",
+          "response": "_mint_response_60"
+        },
+        "signing": {
+          "algorithm": "rsa-sha384",
+          "digest": "sha256",
+          "engine": "xmlsec",
+          "placement": "both"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "matrix-both-rsa-sha384-sha384": {
+      "sha256": "612858de141cba908c006d1c40450db26b39b8cce9a70f347ffd04a5e8f8583e",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "ids": {
+          "assertion": "_mint_assertion_61",
+          "response": "_mint_response_61"
+        },
+        "signing": {
+          "algorithm": "rsa-sha384",
+          "digest": "sha384",
+          "engine": "xmlsec",
+          "placement": "both"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "matrix-both-rsa-sha384-sha512": {
+      "sha256": "072120e2b8c626bb37846bde820850895b37d2e5990701c314d2bc6661b9721f",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "ids": {
+          "assertion": "_mint_assertion_62",
+          "response": "_mint_response_62"
+        },
+        "signing": {
+          "algorithm": "rsa-sha384",
+          "digest": "sha512",
+          "engine": "xmlsec",
+          "placement": "both"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "matrix-both-rsa-sha512-sha256": {
+      "sha256": "c6ccbda87e9fcb7e4774faadcd712c2211fc0f3778de179ac926e3bd6c2327f4",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "ids": {
+          "assertion": "_mint_assertion_63",
+          "response": "_mint_response_63"
+        },
+        "signing": {
+          "algorithm": "rsa-sha512",
+          "digest": "sha256",
+          "engine": "xmlsec",
+          "placement": "both"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "matrix-both-rsa-sha512-sha384": {
+      "sha256": "c9b15688d9e1a8ae73ab881b6dfb196411f76694681d605825ab0897c00fcce8",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "ids": {
+          "assertion": "_mint_assertion_64",
+          "response": "_mint_response_64"
+        },
+        "signing": {
+          "algorithm": "rsa-sha512",
+          "digest": "sha384",
+          "engine": "xmlsec",
+          "placement": "both"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "matrix-both-rsa-sha512-sha512": {
+      "sha256": "b8549055c806f1b4c93cb61918fe29af71e03c7c2c24e1bd5b8d1ae4d6ef844d",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "ids": {
+          "assertion": "_mint_assertion_65",
+          "response": "_mint_response_65"
+        },
+        "signing": {
+          "algorithm": "rsa-sha512",
+          "digest": "sha512",
+          "engine": "xmlsec",
+          "placement": "both"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "matrix-response-ecdsa-sha256-sha256": {
+      "sha256": "8c9fa99e7d072224f43e5348f9eebfacb0682eaac75471909ae8289b47b3e23b",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "ids": {
+          "assertion": "_mint_assertion_30",
+          "response": "_mint_response_30"
+        },
+        "signing": {
+          "algorithm": "ecdsa-sha256",
+          "digest": "sha256",
+          "engine": "xmlsec",
+          "placement": "response"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "matrix-response-ecdsa-sha256-sha384": {
+      "sha256": "303ec2e45a65bc79abf8cd96adefc849594d1329cc57d5138f9352f3ebcd2b57",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "ids": {
+          "assertion": "_mint_assertion_31",
+          "response": "_mint_response_31"
+        },
+        "signing": {
+          "algorithm": "ecdsa-sha256",
+          "digest": "sha384",
+          "engine": "xmlsec",
+          "placement": "response"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "matrix-response-ecdsa-sha256-sha512": {
+      "sha256": "629bbce8ca2f59aae0f924b73f3c0bce04b7884dd29576a87f2f3d5943829b2e",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "ids": {
+          "assertion": "_mint_assertion_32",
+          "response": "_mint_response_32"
+        },
+        "signing": {
+          "algorithm": "ecdsa-sha256",
+          "digest": "sha512",
+          "engine": "xmlsec",
+          "placement": "response"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "matrix-response-ecdsa-sha384-sha256": {
+      "sha256": "61f9da91bf0bd72562eeeaa86b560aa0994ec4ac66816c0b2ea4c282e578d226",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "ids": {
+          "assertion": "_mint_assertion_33",
+          "response": "_mint_response_33"
+        },
+        "signing": {
+          "algorithm": "ecdsa-sha384",
+          "digest": "sha256",
+          "engine": "xmlsec",
+          "placement": "response"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "matrix-response-ecdsa-sha384-sha384": {
+      "sha256": "0a594092471b1310f8982b21fdb4fe79f87ffd8ef84aff7308801b510ed57e44",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "ids": {
+          "assertion": "_mint_assertion_34",
+          "response": "_mint_response_34"
+        },
+        "signing": {
+          "algorithm": "ecdsa-sha384",
+          "digest": "sha384",
+          "engine": "xmlsec",
+          "placement": "response"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "matrix-response-ecdsa-sha384-sha512": {
+      "sha256": "05b41267648553f848168af7d14509a9ebdceebfeaa7cc540761ef398e8e49c4",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "ids": {
+          "assertion": "_mint_assertion_35",
+          "response": "_mint_response_35"
+        },
+        "signing": {
+          "algorithm": "ecdsa-sha384",
+          "digest": "sha512",
+          "engine": "xmlsec",
+          "placement": "response"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "matrix-response-ecdsa-sha512-sha256": {
+      "sha256": "cab043da4d709c9132ae8b2b601998e568e4fbc67f92366e7fee2ff697c1263d",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "ids": {
+          "assertion": "_mint_assertion_36",
+          "response": "_mint_response_36"
+        },
+        "signing": {
+          "algorithm": "ecdsa-sha512",
+          "digest": "sha256",
+          "engine": "xmlsec",
+          "placement": "response"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "matrix-response-ecdsa-sha512-sha384": {
+      "sha256": "dbb1a8f35751bdbe8d41d48723eb4374c079bf1ad7ca522e4ca82c07296138cc",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "ids": {
+          "assertion": "_mint_assertion_37",
+          "response": "_mint_response_37"
+        },
+        "signing": {
+          "algorithm": "ecdsa-sha512",
+          "digest": "sha384",
+          "engine": "xmlsec",
+          "placement": "response"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "matrix-response-ecdsa-sha512-sha512": {
+      "sha256": "7894aa3f5295149db54c602d825c95aa1042ca294bbb41e44a24c85b3c74052d",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "ids": {
+          "assertion": "_mint_assertion_38",
+          "response": "_mint_response_38"
+        },
+        "signing": {
+          "algorithm": "ecdsa-sha512",
+          "digest": "sha512",
+          "engine": "xmlsec",
+          "placement": "response"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "matrix-response-rsa-sha256-sha256": {
+      "sha256": "0afa81fc14b2c73b8ce3cd5f6225458fd7124f2eb0963e442388ee506ab8be83",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "ids": {
+          "assertion": "_mint_assertion_21",
+          "response": "_mint_response_21"
+        },
+        "signing": {
+          "algorithm": "rsa-sha256",
+          "digest": "sha256",
+          "engine": "xmlsec",
+          "placement": "response"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "matrix-response-rsa-sha256-sha384": {
+      "sha256": "f6102e85ecbc168e60f4eccbe28537fa0ce7e06c65eae79358942da1d32e01e0",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "ids": {
+          "assertion": "_mint_assertion_22",
+          "response": "_mint_response_22"
+        },
+        "signing": {
+          "algorithm": "rsa-sha256",
+          "digest": "sha384",
+          "engine": "xmlsec",
+          "placement": "response"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "matrix-response-rsa-sha256-sha512": {
+      "sha256": "921fb51d481454d810081fbf97e6c335988ec3e71e10e753aea6729d95b566ef",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "ids": {
+          "assertion": "_mint_assertion_23",
+          "response": "_mint_response_23"
+        },
+        "signing": {
+          "algorithm": "rsa-sha256",
+          "digest": "sha512",
+          "engine": "xmlsec",
+          "placement": "response"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "matrix-response-rsa-sha384-sha256": {
+      "sha256": "2242494461784565c1d6aaa03240c84d93c52cee66b223af44e567754c93d881",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "ids": {
+          "assertion": "_mint_assertion_24",
+          "response": "_mint_response_24"
+        },
+        "signing": {
+          "algorithm": "rsa-sha384",
+          "digest": "sha256",
+          "engine": "xmlsec",
+          "placement": "response"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "matrix-response-rsa-sha384-sha384": {
+      "sha256": "bcb3396b02f427582b7479f41be33a620d9f624981ac593337e1ec849513c914",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "ids": {
+          "assertion": "_mint_assertion_25",
+          "response": "_mint_response_25"
+        },
+        "signing": {
+          "algorithm": "rsa-sha384",
+          "digest": "sha384",
+          "engine": "xmlsec",
+          "placement": "response"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "matrix-response-rsa-sha384-sha512": {
+      "sha256": "c315276511a04b7e7dc1a01ca4d0ab77bacddaca5baa0b309d8053aff450b89e",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "ids": {
+          "assertion": "_mint_assertion_26",
+          "response": "_mint_response_26"
+        },
+        "signing": {
+          "algorithm": "rsa-sha384",
+          "digest": "sha512",
+          "engine": "xmlsec",
+          "placement": "response"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "matrix-response-rsa-sha512-sha256": {
+      "sha256": "7c43b5004beb385b9211f90d66fedd3e5a21fbcf4c6e17954d1ff65f11d85d31",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "ids": {
+          "assertion": "_mint_assertion_27",
+          "response": "_mint_response_27"
+        },
+        "signing": {
+          "algorithm": "rsa-sha512",
+          "digest": "sha256",
+          "engine": "xmlsec",
+          "placement": "response"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "matrix-response-rsa-sha512-sha384": {
+      "sha256": "03662d01434f6f8b7c4b3aa552917117b4ce08c742c6bd6579edbdb2fc7ff5c2",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "ids": {
+          "assertion": "_mint_assertion_28",
+          "response": "_mint_response_28"
+        },
+        "signing": {
+          "algorithm": "rsa-sha512",
+          "digest": "sha384",
+          "engine": "xmlsec",
+          "placement": "response"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "matrix-response-rsa-sha512-sha512": {
+      "sha256": "619cdc5424ac52ed31a7b718f9848ebc90c6260f027af7a98ece7729254ff793",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "ids": {
+          "assertion": "_mint_assertion_29",
+          "response": "_mint_response_29"
+        },
+        "signing": {
+          "algorithm": "rsa-sha512",
+          "digest": "sha512",
+          "engine": "xmlsec",
+          "placement": "response"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "negative-cipher-bit-flip": {
+      "producer_content_sha256": "c801ce07c605845f85d003758200d0c75757da861ca45a6b67b36edf7d817940",
+      "sha256": "f391cee88493de6ee8e102c2ca166860739b7910d85b1562b7071373f3186858",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "encryption": {
+          "assertion": true,
+          "data_algorithm": "aes256-gcm",
+          "key_transport": "rsa-oaep-sha256-mgf1sha256",
+          "variant": "cipher-bit-flip"
+        },
+        "ids": {
+          "assertion": "_mint_assertion_120",
+          "response": "_mint_response_120"
+        },
+        "signing": {
+          "algorithm": "rsa-sha256",
+          "engine": "xmlsec",
+          "placement": "both"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "negative-mgf-under-mgf1p": {
+      "producer_content_sha256": "c801ce07c605845f85d003758200d0c75757da861ca45a6b67b36edf7d817940",
+      "sha256": "c26b79da995186c12bc385abe4c2e62eeb1634e323bb6b297cf62a1a1af6b3b8",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "encryption": {
+          "assertion": true,
+          "data_algorithm": "aes256-gcm",
+          "key_transport": "rsa-oaep-mgf1p",
+          "variant": "mgf-under-mgf1p"
+        },
+        "ids": {
+          "assertion": "_mint_assertion_118",
+          "response": "_mint_response_118"
+        },
+        "signing": {
+          "algorithm": "rsa-sha256",
+          "engine": "xmlsec",
+          "placement": "both"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "negative-nonempty-oaep-params": {
+      "producer_content_sha256": "c801ce07c605845f85d003758200d0c75757da861ca45a6b67b36edf7d817940",
+      "sha256": "f9f087b2c51ed595013af4adeabeca380a4ff325369295a33fb51eac3a624878",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "encryption": {
+          "assertion": true,
+          "data_algorithm": "aes256-gcm",
+          "key_transport": "rsa-oaep-sha256-mgf1sha256",
+          "variant": "nonempty-oaep-params"
+        },
+        "ids": {
+          "assertion": "_mint_assertion_119",
+          "response": "_mint_response_119"
+        },
+        "signing": {
+          "algorithm": "rsa-sha256",
+          "engine": "xmlsec",
+          "placement": "both"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "negative-rsa-1_5": {
+      "producer_content_sha256": "c801ce07c605845f85d003758200d0c75757da861ca45a6b67b36edf7d817940",
+      "sha256": "1a8ca127ccb090f3b16a40e26008318be15dc69d6efb101daa222588578c4ec2",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "encryption": {
+          "assertion": true,
+          "data_algorithm": "aes256-gcm",
+          "key_transport": "rsa-1_5",
+          "variant": "none"
+        },
+        "ids": {
+          "assertion": "_mint_assertion_117",
+          "response": "_mint_response_117"
+        },
+        "signing": {
+          "algorithm": "rsa-sha256",
+          "engine": "xmlsec",
+          "placement": "both"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "oaep-aes128-gcm-rsa-oaep-mgf1p-sha1-assertion": {
+      "producer_content_sha256": "72301b74e20e31b355e07e7460e336d62d93396725269d33b9ffba9d16bac575",
+      "sha256": "375e699996d25e9f9c115c072e2dcc890505ac9587edb317339f3824a08ef28d",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "encryption": {
+          "assertion": true,
+          "data_algorithm": "aes128-gcm",
+          "key_transport": "rsa-oaep-mgf1p-sha1"
+        },
+        "ids": {
+          "assertion": "_mint_assertion_77",
+          "response": "_mint_response_77"
+        },
+        "signing": {
+          "algorithm": "rsa-sha256",
+          "engine": "xmlsec",
+          "placement": "assertion"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "oaep-aes128-gcm-rsa-oaep-mgf1p-sha1-both": {
+      "producer_content_sha256": "72301b74e20e31b355e07e7460e336d62d93396725269d33b9ffba9d16bac575",
+      "sha256": "20fb9fa3eb0357c32eb2e9b73ece146d2b9bac79b55e9a325184e79d3882eb54",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "encryption": {
+          "assertion": true,
+          "data_algorithm": "aes128-gcm",
+          "key_transport": "rsa-oaep-mgf1p-sha1"
+        },
+        "ids": {
+          "assertion": "_mint_assertion_78",
+          "response": "_mint_response_78"
+        },
+        "signing": {
+          "algorithm": "rsa-sha256",
+          "engine": "xmlsec",
+          "placement": "both"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "oaep-aes128-gcm-rsa-oaep-mgf1p-sha1-response": {
+      "producer_content_sha256": "72301b74e20e31b355e07e7460e336d62d93396725269d33b9ffba9d16bac575",
+      "sha256": "1f2db50c1685449452bbc9798e48f78642c9d30d4b46010fbfa990d5aa9f1a19",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "encryption": {
+          "assertion": true,
+          "data_algorithm": "aes128-gcm",
+          "key_transport": "rsa-oaep-mgf1p-sha1"
+        },
+        "ids": {
+          "assertion": "_mint_assertion_76",
+          "response": "_mint_response_76"
+        },
+        "signing": {
+          "algorithm": "rsa-sha256",
+          "engine": "xmlsec",
+          "placement": "response"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "oaep-aes128-gcm-rsa-oaep-mgf1p-sha256-assertion": {
+      "producer_content_sha256": "72301b74e20e31b355e07e7460e336d62d93396725269d33b9ffba9d16bac575",
+      "sha256": "4814627ad661a970822561eb67ff21695d5ea2f8f9cb87f67a055969f627e3a4",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "encryption": {
+          "assertion": true,
+          "data_algorithm": "aes128-gcm",
+          "key_transport": "rsa-oaep-mgf1p-sha256"
+        },
+        "ids": {
+          "assertion": "_mint_assertion_80",
+          "response": "_mint_response_80"
+        },
+        "signing": {
+          "algorithm": "rsa-sha256",
+          "engine": "xmlsec",
+          "placement": "assertion"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "oaep-aes128-gcm-rsa-oaep-mgf1p-sha256-both": {
+      "producer_content_sha256": "72301b74e20e31b355e07e7460e336d62d93396725269d33b9ffba9d16bac575",
+      "sha256": "1753400f704b61231da09a519fe41a98e6c09cb2a360b0400443098537cc5c19",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "encryption": {
+          "assertion": true,
+          "data_algorithm": "aes128-gcm",
+          "key_transport": "rsa-oaep-mgf1p-sha256"
+        },
+        "ids": {
+          "assertion": "_mint_assertion_81",
+          "response": "_mint_response_81"
+        },
+        "signing": {
+          "algorithm": "rsa-sha256",
+          "engine": "xmlsec",
+          "placement": "both"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "oaep-aes128-gcm-rsa-oaep-mgf1p-sha256-response": {
+      "producer_content_sha256": "72301b74e20e31b355e07e7460e336d62d93396725269d33b9ffba9d16bac575",
+      "sha256": "6a85928a17321ad1501fb78d23adcbf7caf8cb2957926e1dcfd74cb1c7aed100",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "encryption": {
+          "assertion": true,
+          "data_algorithm": "aes128-gcm",
+          "key_transport": "rsa-oaep-mgf1p-sha256"
+        },
+        "ids": {
+          "assertion": "_mint_assertion_79",
+          "response": "_mint_response_79"
+        },
+        "signing": {
+          "algorithm": "rsa-sha256",
+          "engine": "xmlsec",
+          "placement": "response"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "oaep-aes128-gcm-rsa-oaep-sha1-mgf1sha1-assertion": {
+      "producer_content_sha256": "72301b74e20e31b355e07e7460e336d62d93396725269d33b9ffba9d16bac575",
+      "sha256": "771428ede47dfccda5921aa25fa94170eb156cbd9042636902b2c65a12b2e7c5",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "encryption": {
+          "assertion": true,
+          "data_algorithm": "aes128-gcm",
+          "key_transport": "rsa-oaep-sha1-mgf1sha1"
+        },
+        "ids": {
+          "assertion": "_mint_assertion_83",
+          "response": "_mint_response_83"
+        },
+        "signing": {
+          "algorithm": "rsa-sha256",
+          "engine": "xmlsec",
+          "placement": "assertion"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "oaep-aes128-gcm-rsa-oaep-sha1-mgf1sha1-both": {
+      "producer_content_sha256": "72301b74e20e31b355e07e7460e336d62d93396725269d33b9ffba9d16bac575",
+      "sha256": "b2ba5775f90d683f248373a9ea153f6ca5c78f9fddfae27d0fcfa20317e2cf89",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "encryption": {
+          "assertion": true,
+          "data_algorithm": "aes128-gcm",
+          "key_transport": "rsa-oaep-sha1-mgf1sha1"
+        },
+        "ids": {
+          "assertion": "_mint_assertion_84",
+          "response": "_mint_response_84"
+        },
+        "signing": {
+          "algorithm": "rsa-sha256",
+          "engine": "xmlsec",
+          "placement": "both"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "oaep-aes128-gcm-rsa-oaep-sha1-mgf1sha1-response": {
+      "producer_content_sha256": "72301b74e20e31b355e07e7460e336d62d93396725269d33b9ffba9d16bac575",
+      "sha256": "2876676ba7a157858cf5f3ab68ade14e89f9803469469e6db50d09fccf44b917",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "encryption": {
+          "assertion": true,
+          "data_algorithm": "aes128-gcm",
+          "key_transport": "rsa-oaep-sha1-mgf1sha1"
+        },
+        "ids": {
+          "assertion": "_mint_assertion_82",
+          "response": "_mint_response_82"
+        },
+        "signing": {
+          "algorithm": "rsa-sha256",
+          "engine": "xmlsec",
+          "placement": "response"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "oaep-aes128-gcm-rsa-oaep-sha256-mgf1sha1-assertion": {
+      "producer_content_sha256": "72301b74e20e31b355e07e7460e336d62d93396725269d33b9ffba9d16bac575",
+      "sha256": "4fffdf99f9d6c220714ddceba0608f253cc09563e8e53dc52313c84066abb378",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "encryption": {
+          "assertion": true,
+          "data_algorithm": "aes128-gcm",
+          "key_transport": "rsa-oaep-sha256-mgf1sha1"
+        },
+        "ids": {
+          "assertion": "_mint_assertion_86",
+          "response": "_mint_response_86"
+        },
+        "signing": {
+          "algorithm": "rsa-sha256",
+          "engine": "xmlsec",
+          "placement": "assertion"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "oaep-aes128-gcm-rsa-oaep-sha256-mgf1sha1-both": {
+      "producer_content_sha256": "72301b74e20e31b355e07e7460e336d62d93396725269d33b9ffba9d16bac575",
+      "sha256": "90c650736f93ff9c43ca9690333f8f99abf384365159a28b6eb90d0f645de909",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "encryption": {
+          "assertion": true,
+          "data_algorithm": "aes128-gcm",
+          "key_transport": "rsa-oaep-sha256-mgf1sha1"
+        },
+        "ids": {
+          "assertion": "_mint_assertion_87",
+          "response": "_mint_response_87"
+        },
+        "signing": {
+          "algorithm": "rsa-sha256",
+          "engine": "xmlsec",
+          "placement": "both"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "oaep-aes128-gcm-rsa-oaep-sha256-mgf1sha1-response": {
+      "producer_content_sha256": "72301b74e20e31b355e07e7460e336d62d93396725269d33b9ffba9d16bac575",
+      "sha256": "0086d58901e1afe12bd19fdc63bc9fb95cc6f52e91c8e86629c8e90aa938cf74",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "encryption": {
+          "assertion": true,
+          "data_algorithm": "aes128-gcm",
+          "key_transport": "rsa-oaep-sha256-mgf1sha1"
+        },
+        "ids": {
+          "assertion": "_mint_assertion_85",
+          "response": "_mint_response_85"
+        },
+        "signing": {
+          "algorithm": "rsa-sha256",
+          "engine": "xmlsec",
+          "placement": "response"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "oaep-aes192-gcm-rsa-oaep-mgf1p-sha1-assertion": {
+      "producer_content_sha256": "72301b74e20e31b355e07e7460e336d62d93396725269d33b9ffba9d16bac575",
+      "sha256": "a346329cd35dc975ddf7486fcdd50efa55ffe847592aaa27a031acbdd699e599",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "encryption": {
+          "assertion": true,
+          "data_algorithm": "aes192-gcm",
+          "key_transport": "rsa-oaep-mgf1p-sha1"
+        },
+        "ids": {
+          "assertion": "_mint_assertion_89",
+          "response": "_mint_response_89"
+        },
+        "signing": {
+          "algorithm": "rsa-sha256",
+          "engine": "xmlsec",
+          "placement": "assertion"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "oaep-aes192-gcm-rsa-oaep-mgf1p-sha1-both": {
+      "producer_content_sha256": "72301b74e20e31b355e07e7460e336d62d93396725269d33b9ffba9d16bac575",
+      "sha256": "d13771fdc620702244399cbe47c00f3e8032fc21a5a192669660c1545da382bf",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "encryption": {
+          "assertion": true,
+          "data_algorithm": "aes192-gcm",
+          "key_transport": "rsa-oaep-mgf1p-sha1"
+        },
+        "ids": {
+          "assertion": "_mint_assertion_90",
+          "response": "_mint_response_90"
+        },
+        "signing": {
+          "algorithm": "rsa-sha256",
+          "engine": "xmlsec",
+          "placement": "both"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "oaep-aes192-gcm-rsa-oaep-mgf1p-sha1-response": {
+      "producer_content_sha256": "72301b74e20e31b355e07e7460e336d62d93396725269d33b9ffba9d16bac575",
+      "sha256": "0d2b9583033f36195c0c0a67d82717be980b38feddd2910d556447a5a8eb122e",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "encryption": {
+          "assertion": true,
+          "data_algorithm": "aes192-gcm",
+          "key_transport": "rsa-oaep-mgf1p-sha1"
+        },
+        "ids": {
+          "assertion": "_mint_assertion_88",
+          "response": "_mint_response_88"
+        },
+        "signing": {
+          "algorithm": "rsa-sha256",
+          "engine": "xmlsec",
+          "placement": "response"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "oaep-aes192-gcm-rsa-oaep-mgf1p-sha256-assertion": {
+      "producer_content_sha256": "72301b74e20e31b355e07e7460e336d62d93396725269d33b9ffba9d16bac575",
+      "sha256": "5b6d97c287272708ad5518c517e306ad3ce7eb7d4e41e085cc00f94ad8272f0b",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "encryption": {
+          "assertion": true,
+          "data_algorithm": "aes192-gcm",
+          "key_transport": "rsa-oaep-mgf1p-sha256"
+        },
+        "ids": {
+          "assertion": "_mint_assertion_92",
+          "response": "_mint_response_92"
+        },
+        "signing": {
+          "algorithm": "rsa-sha256",
+          "engine": "xmlsec",
+          "placement": "assertion"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "oaep-aes192-gcm-rsa-oaep-mgf1p-sha256-both": {
+      "producer_content_sha256": "72301b74e20e31b355e07e7460e336d62d93396725269d33b9ffba9d16bac575",
+      "sha256": "a40dda8c300b5a5c5ea3c38e6c0887336d4ea4d9f91374733be3a269a19dba3d",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "encryption": {
+          "assertion": true,
+          "data_algorithm": "aes192-gcm",
+          "key_transport": "rsa-oaep-mgf1p-sha256"
+        },
+        "ids": {
+          "assertion": "_mint_assertion_93",
+          "response": "_mint_response_93"
+        },
+        "signing": {
+          "algorithm": "rsa-sha256",
+          "engine": "xmlsec",
+          "placement": "both"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "oaep-aes192-gcm-rsa-oaep-mgf1p-sha256-response": {
+      "producer_content_sha256": "72301b74e20e31b355e07e7460e336d62d93396725269d33b9ffba9d16bac575",
+      "sha256": "b2ce5b1cf1cb78cf4c01dca070b2d511165c2bff46634538c374408e477e3a19",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "encryption": {
+          "assertion": true,
+          "data_algorithm": "aes192-gcm",
+          "key_transport": "rsa-oaep-mgf1p-sha256"
+        },
+        "ids": {
+          "assertion": "_mint_assertion_91",
+          "response": "_mint_response_91"
+        },
+        "signing": {
+          "algorithm": "rsa-sha256",
+          "engine": "xmlsec",
+          "placement": "response"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "oaep-aes192-gcm-rsa-oaep-sha1-mgf1sha1-assertion": {
+      "producer_content_sha256": "72301b74e20e31b355e07e7460e336d62d93396725269d33b9ffba9d16bac575",
+      "sha256": "a488a203efeb733d75fda99a0d5805f3d2e9ed82c5055789c04b20550d76f1bb",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "encryption": {
+          "assertion": true,
+          "data_algorithm": "aes192-gcm",
+          "key_transport": "rsa-oaep-sha1-mgf1sha1"
+        },
+        "ids": {
+          "assertion": "_mint_assertion_95",
+          "response": "_mint_response_95"
+        },
+        "signing": {
+          "algorithm": "rsa-sha256",
+          "engine": "xmlsec",
+          "placement": "assertion"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "oaep-aes192-gcm-rsa-oaep-sha1-mgf1sha1-both": {
+      "producer_content_sha256": "72301b74e20e31b355e07e7460e336d62d93396725269d33b9ffba9d16bac575",
+      "sha256": "b59ee97de1c2929ea8c6b5888daad8b8f50e835edc73460ddd37c7cdec59bbf8",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "encryption": {
+          "assertion": true,
+          "data_algorithm": "aes192-gcm",
+          "key_transport": "rsa-oaep-sha1-mgf1sha1"
+        },
+        "ids": {
+          "assertion": "_mint_assertion_96",
+          "response": "_mint_response_96"
+        },
+        "signing": {
+          "algorithm": "rsa-sha256",
+          "engine": "xmlsec",
+          "placement": "both"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "oaep-aes192-gcm-rsa-oaep-sha1-mgf1sha1-response": {
+      "producer_content_sha256": "72301b74e20e31b355e07e7460e336d62d93396725269d33b9ffba9d16bac575",
+      "sha256": "7d19c60967522fe239af980eb5f0278648b3650d541fa400f1b82bb8284615a7",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "encryption": {
+          "assertion": true,
+          "data_algorithm": "aes192-gcm",
+          "key_transport": "rsa-oaep-sha1-mgf1sha1"
+        },
+        "ids": {
+          "assertion": "_mint_assertion_94",
+          "response": "_mint_response_94"
+        },
+        "signing": {
+          "algorithm": "rsa-sha256",
+          "engine": "xmlsec",
+          "placement": "response"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "oaep-aes192-gcm-rsa-oaep-sha256-mgf1sha1-assertion": {
+      "producer_content_sha256": "72301b74e20e31b355e07e7460e336d62d93396725269d33b9ffba9d16bac575",
+      "sha256": "225b90aeb79893ac9f83172bc142a74f4b968d0755d055d74e459103a59d256b",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "encryption": {
+          "assertion": true,
+          "data_algorithm": "aes192-gcm",
+          "key_transport": "rsa-oaep-sha256-mgf1sha1"
+        },
+        "ids": {
+          "assertion": "_mint_assertion_98",
+          "response": "_mint_response_98"
+        },
+        "signing": {
+          "algorithm": "rsa-sha256",
+          "engine": "xmlsec",
+          "placement": "assertion"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "oaep-aes192-gcm-rsa-oaep-sha256-mgf1sha1-both": {
+      "producer_content_sha256": "72301b74e20e31b355e07e7460e336d62d93396725269d33b9ffba9d16bac575",
+      "sha256": "a2e51ddccfd60baeb1a5e3ae997703b1ef98d704eb526d8dcfbaa39533748422",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "encryption": {
+          "assertion": true,
+          "data_algorithm": "aes192-gcm",
+          "key_transport": "rsa-oaep-sha256-mgf1sha1"
+        },
+        "ids": {
+          "assertion": "_mint_assertion_99",
+          "response": "_mint_response_99"
+        },
+        "signing": {
+          "algorithm": "rsa-sha256",
+          "engine": "xmlsec",
+          "placement": "both"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "oaep-aes192-gcm-rsa-oaep-sha256-mgf1sha1-response": {
+      "producer_content_sha256": "72301b74e20e31b355e07e7460e336d62d93396725269d33b9ffba9d16bac575",
+      "sha256": "c41654e31c12180d1bba9f87e6793b64a48117ba68622e8538ef1999daaf23cc",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "encryption": {
+          "assertion": true,
+          "data_algorithm": "aes192-gcm",
+          "key_transport": "rsa-oaep-sha256-mgf1sha1"
+        },
+        "ids": {
+          "assertion": "_mint_assertion_97",
+          "response": "_mint_response_97"
+        },
+        "signing": {
+          "algorithm": "rsa-sha256",
+          "engine": "xmlsec",
+          "placement": "response"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "oaep-aes256-gcm-rsa-oaep-mgf1p-sha1-assertion": {
+      "producer_content_sha256": "72301b74e20e31b355e07e7460e336d62d93396725269d33b9ffba9d16bac575",
+      "sha256": "eaffdffa5f7f39ec0231d4b932f6cb733d67c8e4d793ff74583261558d769ba4",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "encryption": {
+          "assertion": true,
+          "data_algorithm": "aes256-gcm",
+          "key_transport": "rsa-oaep-mgf1p-sha1"
+        },
+        "ids": {
+          "assertion": "_mint_assertion_101",
+          "response": "_mint_response_101"
+        },
+        "signing": {
+          "algorithm": "rsa-sha256",
+          "engine": "xmlsec",
+          "placement": "assertion"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "oaep-aes256-gcm-rsa-oaep-mgf1p-sha1-both": {
+      "producer_content_sha256": "72301b74e20e31b355e07e7460e336d62d93396725269d33b9ffba9d16bac575",
+      "sha256": "d2fcd898795c41b927e41b562d88e0466fe6caeca25bae463856004f096d63a3",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "encryption": {
+          "assertion": true,
+          "data_algorithm": "aes256-gcm",
+          "key_transport": "rsa-oaep-mgf1p-sha1"
+        },
+        "ids": {
+          "assertion": "_mint_assertion_102",
+          "response": "_mint_response_102"
+        },
+        "signing": {
+          "algorithm": "rsa-sha256",
+          "engine": "xmlsec",
+          "placement": "both"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "oaep-aes256-gcm-rsa-oaep-mgf1p-sha1-response": {
+      "producer_content_sha256": "72301b74e20e31b355e07e7460e336d62d93396725269d33b9ffba9d16bac575",
+      "sha256": "1425abc94a3cdb0e66f8d842d00a9b24f643c49eeab30d99ac0a915028f37252",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "encryption": {
+          "assertion": true,
+          "data_algorithm": "aes256-gcm",
+          "key_transport": "rsa-oaep-mgf1p-sha1"
+        },
+        "ids": {
+          "assertion": "_mint_assertion_100",
+          "response": "_mint_response_100"
+        },
+        "signing": {
+          "algorithm": "rsa-sha256",
+          "engine": "xmlsec",
+          "placement": "response"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "oaep-aes256-gcm-rsa-oaep-mgf1p-sha256-assertion": {
+      "producer_content_sha256": "72301b74e20e31b355e07e7460e336d62d93396725269d33b9ffba9d16bac575",
+      "sha256": "5a91d1ffbf32f2c2ddf854100b2d1455e412da17b802e315f456490dce44ae5e",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "encryption": {
+          "assertion": true,
+          "data_algorithm": "aes256-gcm",
+          "key_transport": "rsa-oaep-mgf1p-sha256"
+        },
+        "ids": {
+          "assertion": "_mint_assertion_104",
+          "response": "_mint_response_104"
+        },
+        "signing": {
+          "algorithm": "rsa-sha256",
+          "engine": "xmlsec",
+          "placement": "assertion"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "oaep-aes256-gcm-rsa-oaep-mgf1p-sha256-both": {
+      "producer_content_sha256": "72301b74e20e31b355e07e7460e336d62d93396725269d33b9ffba9d16bac575",
+      "sha256": "6dd252c61d3f4b3ca46f09827bd32404abb054a707db7aaee8eba416b2911bc6",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "encryption": {
+          "assertion": true,
+          "data_algorithm": "aes256-gcm",
+          "key_transport": "rsa-oaep-mgf1p-sha256"
+        },
+        "ids": {
+          "assertion": "_mint_assertion_105",
+          "response": "_mint_response_105"
+        },
+        "signing": {
+          "algorithm": "rsa-sha256",
+          "engine": "xmlsec",
+          "placement": "both"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "oaep-aes256-gcm-rsa-oaep-mgf1p-sha256-response": {
+      "producer_content_sha256": "72301b74e20e31b355e07e7460e336d62d93396725269d33b9ffba9d16bac575",
+      "sha256": "c54b3a958bb814c5b195a64324a9d93b6543ca2cd0c638c4075a27709ab1c7f3",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "encryption": {
+          "assertion": true,
+          "data_algorithm": "aes256-gcm",
+          "key_transport": "rsa-oaep-mgf1p-sha256"
+        },
+        "ids": {
+          "assertion": "_mint_assertion_103",
+          "response": "_mint_response_103"
+        },
+        "signing": {
+          "algorithm": "rsa-sha256",
+          "engine": "xmlsec",
+          "placement": "response"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "oaep-aes256-gcm-rsa-oaep-sha1-mgf1sha1-assertion": {
+      "producer_content_sha256": "72301b74e20e31b355e07e7460e336d62d93396725269d33b9ffba9d16bac575",
+      "sha256": "ad8d2337a6253d7aedd8608abd57dbfef8ed8858c11ccea59050dbdbbaf1cbba",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "encryption": {
+          "assertion": true,
+          "data_algorithm": "aes256-gcm",
+          "key_transport": "rsa-oaep-sha1-mgf1sha1"
+        },
+        "ids": {
+          "assertion": "_mint_assertion_107",
+          "response": "_mint_response_107"
+        },
+        "signing": {
+          "algorithm": "rsa-sha256",
+          "engine": "xmlsec",
+          "placement": "assertion"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "oaep-aes256-gcm-rsa-oaep-sha1-mgf1sha1-both": {
+      "producer_content_sha256": "72301b74e20e31b355e07e7460e336d62d93396725269d33b9ffba9d16bac575",
+      "sha256": "b29fbaf6d8369a64e20a8f06a6d930d802ae0f0a04bd5b15fbc9509cb4ffd200",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "encryption": {
+          "assertion": true,
+          "data_algorithm": "aes256-gcm",
+          "key_transport": "rsa-oaep-sha1-mgf1sha1"
+        },
+        "ids": {
+          "assertion": "_mint_assertion_108",
+          "response": "_mint_response_108"
+        },
+        "signing": {
+          "algorithm": "rsa-sha256",
+          "engine": "xmlsec",
+          "placement": "both"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "oaep-aes256-gcm-rsa-oaep-sha1-mgf1sha1-response": {
+      "producer_content_sha256": "72301b74e20e31b355e07e7460e336d62d93396725269d33b9ffba9d16bac575",
+      "sha256": "94b3863f98874e04f9f7586549366eaeb29ebc6b5b63d297c5731a457db194b7",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "encryption": {
+          "assertion": true,
+          "data_algorithm": "aes256-gcm",
+          "key_transport": "rsa-oaep-sha1-mgf1sha1"
+        },
+        "ids": {
+          "assertion": "_mint_assertion_106",
+          "response": "_mint_response_106"
+        },
+        "signing": {
+          "algorithm": "rsa-sha256",
+          "engine": "xmlsec",
+          "placement": "response"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "oaep-aes256-gcm-rsa-oaep-sha256-mgf1sha1-assertion": {
+      "producer_content_sha256": "72301b74e20e31b355e07e7460e336d62d93396725269d33b9ffba9d16bac575",
+      "sha256": "fe8f192b68e498b0289e6deb65a0293368b6f66283179a727a93020c277644f0",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "encryption": {
+          "assertion": true,
+          "data_algorithm": "aes256-gcm",
+          "key_transport": "rsa-oaep-sha256-mgf1sha1"
+        },
+        "ids": {
+          "assertion": "_mint_assertion_110",
+          "response": "_mint_response_110"
+        },
+        "signing": {
+          "algorithm": "rsa-sha256",
+          "engine": "xmlsec",
+          "placement": "assertion"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "oaep-aes256-gcm-rsa-oaep-sha256-mgf1sha1-both": {
+      "producer_content_sha256": "72301b74e20e31b355e07e7460e336d62d93396725269d33b9ffba9d16bac575",
+      "sha256": "8ab5329d1bb93fe0619b19f3b2d382e0bb7e7375c98d0ef18b796d409264110c",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "encryption": {
+          "assertion": true,
+          "data_algorithm": "aes256-gcm",
+          "key_transport": "rsa-oaep-sha256-mgf1sha1"
+        },
+        "ids": {
+          "assertion": "_mint_assertion_111",
+          "response": "_mint_response_111"
+        },
+        "signing": {
+          "algorithm": "rsa-sha256",
+          "engine": "xmlsec",
+          "placement": "both"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "oaep-aes256-gcm-rsa-oaep-sha256-mgf1sha1-response": {
+      "producer_content_sha256": "72301b74e20e31b355e07e7460e336d62d93396725269d33b9ffba9d16bac575",
+      "sha256": "9ac945e61bcbbb7e54d9d7cc07ed825b19417b653545816177a84f9278eb000f",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "encryption": {
+          "assertion": true,
+          "data_algorithm": "aes256-gcm",
+          "key_transport": "rsa-oaep-sha256-mgf1sha1"
+        },
+        "ids": {
+          "assertion": "_mint_assertion_109",
+          "response": "_mint_response_109"
+        },
+        "signing": {
+          "algorithm": "rsa-sha256",
+          "engine": "xmlsec",
+          "placement": "response"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "response-rsa256": {
+      "sha256": "b1d606117154ccee7c3a01900fbd7d439cc42e1e862a63d15c4aefb290deafb9",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "encryption": {
+          "assertion": false,
+          "name_id": false
+        },
+        "ids": {
+          "assertion": "_mint_assertion_1",
+          "response": "_mint_response_1"
+        },
+        "signing": {
+          "algorithm": "rsa-sha256",
+          "engine": "xmlsec",
+          "placement": "response"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "unsigned": {
+      "sha256": "3f98cc46dda20352513158ed0f24cd38d4ae9e6d815b4012a66d5c8bd19d51de",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "encryption": {
+          "assertion": false,
+          "name_id": false
+        },
+        "ids": {
+          "assertion": "_mint_assertion_9",
+          "response": "_mint_response_9"
+        },
+        "signing": {
+          "algorithm": "rsa-sha256",
+          "engine": "xmlsec",
+          "placement": "none"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    },
+    "unsigned-encrypted": {
+      "sha256": "3be58e2a243c141afeed0086afd8e89d6f6e4360fae0b10b8909acbdfc6851e9",
+      "spec": {
+        "clock": {
+          "now": "2026-09-01T00:00:00Z"
+        },
+        "encryption": {
+          "assertion": true,
+          "name_id": false
+        },
+        "ids": {
+          "assertion": "_mint_assertion_10",
+          "response": "_mint_response_10"
+        },
+        "signing": {
+          "algorithm": "rsa-sha256",
+          "engine": "xmlsec",
+          "placement": "none"
+        },
+        "sp": {
+          "acs_url": "https://sp.test/acs",
+          "entity_id": "https://sp.test/Selftest"
+        },
+        "subject": {
+          "name_id": "minted-user"
+        }
+      }
+    }
+  },
+  "versions": {
+    "alpine": "3.24.2",
+    "contentSha256": "cf69a553871f50fb1e1220d71d3411e801a8220a9dcdb413f85a9d248f1ab1ee",
+    "libxml2": {
+      "lxml": {
+        "compiled": "2.14.6",
+        "runtime": "2.14.6"
+      },
+      "xmlsec": {
+        "compiled": "2.14.6",
+        "runtime": "2.14.6"
+      }
+    },
+    "libxmlsec1": "1.3.9",
+    "libxslt": {
+      "lxml": "1.1.43"
+    },
+    "machine": "aarch64",
+    "openssl": {
+      "cryptography": "OpenSSL 4.0.2 25 Aug 2026",
+      "python-ssl": "OpenSSL 3.5.8 25 Aug 2026",
+      "xmlsec": "3.6.0"
+    },
+    "packages": {
+      "certifi": "2026.7.22",
+      "cffi": "2.1.1",
+      "cryptography": "50.0.1",
+      "lxml": "6.0.2",
+      "pycparser": "3.0",
+      "signxml": "5.1.0",
+      "xmlsec": "1.3.17"
+    },
+    "python": "3.13.15"
+  }
+}

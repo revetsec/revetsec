@@ -27,9 +27,9 @@ import static java.util.Objects.requireNonNull;
 /**
  * The resource bounds of one {@link JsonCodec#parse(byte[], JsonLimits)} call: a profile (M1 plan, gates 5 and 7).
  * <p>
- * <strong>Profiles.</strong> Every structural value comes from a JSON row of {@link Limits}, which R8 keeps internal
- * in 1.0.0: the profiles use the rows' defaults, except that SCIM's node count is the caller's setting of the one
- * public JSON row, {@link Limits#SCIM_JSON_NODES} (G5-4 and G5-5).
+ * <strong>Profiles.</strong> The protocol, JOSE and SCIM structural values come from JSON rows of {@link Limits},
+ * which R8 keeps internal in 1.0.0; SCIM's node count uses the caller's setting of the one public JSON row,
+ * {@link Limits#SCIM_JSON_NODES} (G5-4 and G5-5). WebAuthn client data uses its separately selected tight profile.
  * <table>
  *   <caption>Profiles</caption>
  *   <tr><th>Profile</th><th>Input bytes</th><th>Depth</th><th>Nodes</th><th>String</th><th>Number</th>
@@ -38,6 +38,10 @@ import static java.util.Objects.requireNonNull;
  *   <td>1 Mi</td><td>1,024</td><td>10,000</td><td>exact</td></tr>
  *   <tr><td>{@link #jose(Integer)}</td><td>caller, 1 B to 1 MiB</td><td>32</td><td>100,000</td><td>1 Mi</td>
  *   <td>1,024</td><td>10,000</td><td>exact</td></tr>
+ *   <tr><td>{@link #webauthnClientData(Integer)}</td><td>caller, 1 B to 16 KiB</td><td>16</td><td>256</td>
+ *   <td>16 Ki</td><td>128</td><td>1,000</td><td>exact</td></tr>
+ *   <tr><td>{@link #webauthnResponse(Integer)}</td><td>caller, 1 B to 256 KiB</td><td>16</td><td>512</td>
+ *   <td>256 Ki</td><td>128</td><td>1,000</td><td>exact</td></tr>
  *   <tr><td>{@link #scim(Integer, Integer)}</td><td>caller, 1 B to 10 MiB</td><td>64</td>
  *   <td>caller, 1,000 to 1,000,000</td><td>1 Mi</td><td>1,024</td><td>10,000</td><td>ASCII case folded</td></tr>
  *   <tr><td>maximum caps (tests only)</td><td>unbounded</td><td>64</td><td>1,000,000</td><td>4 Mi</td><td>4,096</td>
@@ -47,7 +51,8 @@ import static java.util.Objects.requireNonNull;
  *   <li><strong>Input bytes</strong> is the body or JWT limit that owns the document (G5-5): the caller passes that
  *   row's validated setting. The profile accepts any setting from 1 byte up to the largest cap of the rows it serves
  *   (the HTTP response, JWKS and error-body rows for protocol documents, the compact-JWT row for JOSE, the SCIM body
- *   row for SCIM) and rejects the rest. A smaller value only makes the parse stricter.</li>
+ *   row for SCIM, or the WebAuthn client-data and raw-response caps) and rejects the rest. A smaller value only
+ *   makes the parse stricter.</li>
  *   <li><strong>Depth</strong> uses the G7-6 convention: a scalar or an empty container is 1, and any other container
  *   is 1 more than its deepest child. Member names add nothing.</li>
  *   <li><strong>Nodes</strong> counts every value, the root and containers included; member names do not count.</li>
@@ -109,6 +114,11 @@ public final class JsonLimits {
 	 */
 	static final int SCIM_INPUT_BYTES_CAP = cap(Limits.SCIM_BODY_SIZE.getCap());
 
+	/** The WebAuthn client-data ceiling selected for the initial relying-party profile. */
+	static final int WEBAUTHN_CLIENT_DATA_INPUT_BYTES_CAP = 16 * 1_024;
+	/** The WebAuthn raw response-body ceiling selected for the initial relying-party profile. */
+	static final int WEBAUTHN_RESPONSE_INPUT_BYTES_CAP = 256 * 1_024;
+
 	private final int maxInputBytes;
 	private final int maxDepth;
 	private final int maxNodes;
@@ -145,6 +155,34 @@ public final class JsonLimits {
 				Limits.JSON_DEPTH_PROTOCOL.getDefaultIntValue(), Limits.JSON_NODES.getDefaultIntValue(),
 				Limits.JSON_STRING_LENGTH.getDefaultIntValue(), Limits.JSON_NUMBER_LENGTH.getDefaultIntValue(),
 				Limits.JSON_NUMBER_EXPONENT_MAGNITUDE.getDefaultIntValue(), false);
+	}
+
+	/**
+	 * The bounded profile for WebAuthn {@code clientDataJSON}. Unknown members remain parseable within these bounds.
+	 *
+	 * @param maxInputBytes the configured client-data limit, from 1 byte to 16 KiB
+	 * @return the profile
+	 * @throws NullPointerException if {@code maxInputBytes} is {@code null}
+	 * @throws IllegalArgumentException if {@code maxInputBytes} is out of range
+	 * @since 1.0.0
+	 */
+	public static @NonNull JsonLimits webauthnClientData(@NonNull Integer maxInputBytes) {
+		return new JsonLimits(requireInputBytes(maxInputBytes, WEBAUTHN_CLIENT_DATA_INPUT_BYTES_CAP),
+				16, 256, WEBAUTHN_CLIENT_DATA_INPUT_BYTES_CAP, 128, 1_000, false);
+	}
+
+	/**
+	 * The bounded profile for a WebAuthn browser {@code credential.toJSON()} response body.
+	 *
+	 * @param maxInputBytes the configured raw response-body limit, from 1 byte to 256 KiB
+	 * @return the profile
+	 * @throws NullPointerException if {@code maxInputBytes} is {@code null}
+	 * @throws IllegalArgumentException if {@code maxInputBytes} is out of range
+	 * @since 1.0.0
+	 */
+	public static @NonNull JsonLimits webauthnResponse(@NonNull Integer maxInputBytes) {
+		return new JsonLimits(requireInputBytes(maxInputBytes, WEBAUTHN_RESPONSE_INPUT_BYTES_CAP),
+				16, 512, WEBAUTHN_RESPONSE_INPUT_BYTES_CAP, 128, 1_000, false);
 	}
 
 	/**

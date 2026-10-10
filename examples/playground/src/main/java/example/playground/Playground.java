@@ -35,7 +35,9 @@ public final class Playground {
         SafeViews views = new SafeViews(LocalSecrets.randomBytes());
         BrowserSessions sessions = new BrowserSessions(Clock.systemUTC(), 128);
         PlaygroundOidc oidc = new PlaygroundOidc(sessions, views, Clock.systemUTC());
-        PlaygroundResources resources = new PlaygroundResources(config, sessions, views, oidc, http);
+        PlaygroundSaml saml = PlaygroundSaml.fromEnvironment(System.getenv(), config, sessions, views,
+                Clock.systemUTC());
+        PlaygroundResources resources = new PlaygroundResources(config, sessions, views, oidc, http, saml);
         try (Soklet soklet = Soklet.fromConfig(sokletConfig(config, resources, views))) {
             Runtime.getRuntime().addShutdownHook(new Thread(soklet::close, "playground-shutdown"));
             soklet.start();

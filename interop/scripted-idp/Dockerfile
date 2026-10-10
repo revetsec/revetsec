@@ -48,6 +48,7 @@ RUN pip install --require-hashes --only-binary=:all: --no-deps -r requirements.t
  && pip check
 
 COPY scripted_idp ./scripted_idp
+COPY schemas ./schemas
 RUN python -m compileall -q scripted_idp
 
 USER 65534:65534

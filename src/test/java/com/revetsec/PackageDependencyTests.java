@@ -90,6 +90,7 @@ final class PackageDependencyTests {
 	private static final String OIDC = "com.revetsec.oidc";
 	private static final String SAML = "com.revetsec.saml";
 	private static final String SCIM = "com.revetsec.scim";
+	private static final String WEBAUTHN = "com.revetsec.webauthn";
 	private static final String INTERNAL = "com.revetsec.internal";
 	private static final String NULL_MARKED = "org.jspecify.annotations.NullMarked";
 
@@ -104,7 +105,8 @@ final class PackageDependencyTests {
 			SERVER, Set.of(OAUTH, JOSE, JSON, ROOT),
 			OIDC, Set.of(OAUTH, JOSE, JSON, ROOT),
 			SAML, Set.of(ROOT),
-			SCIM, Set.of(JSON, ROOT));
+			SCIM, Set.of(JSON, ROOT),
+			WEBAUTHN, Set.of(JSON, ROOT));
 
 	/**
 	 * The exported package each internal package serves. An internal package follows its owner's rules.
@@ -118,7 +120,8 @@ final class PackageDependencyTests {
 			INTERNAL + ".json", JSON,
 			INTERNAL + ".jose", JOSE,
 			INTERNAL + ".oauth", OAUTH,
-			INTERNAL + ".xml", SAML);
+			INTERNAL + ".xml", SAML,
+			INTERNAL + ".webauthn", WEBAUTHN);
 
 	/**
 	 * Internal packages that only the listed packages may use (besides themselves). The check matches the importing
@@ -135,7 +138,8 @@ final class PackageDependencyTests {
 	static final Map<String, Set<String>> RESTRICTED_INTERNAL_PACKAGES = Map.of(
 			INTERNAL + ".xml", Set.of(SAML),
 			INTERNAL + ".oauth", Set.of(OAUTH, OIDC, SERVER),
-			INTERNAL + ".http", Set.of(JOSE, OAUTH, OIDC, SERVER, INTERNAL + ".oauth"));
+			INTERNAL + ".http", Set.of(JOSE, OAUTH, OIDC, SERVER, INTERNAL + ".oauth"),
+			INTERNAL + ".webauthn", Set.of(WEBAUTHN));
 
 	@Test
 	void mainSourcesRespectPackageDependencyRules() throws IOException {

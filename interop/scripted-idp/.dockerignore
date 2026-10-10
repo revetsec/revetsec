@@ -2,4 +2,6 @@
 *
 !requirements.txt
 !scripted_idp
+!schemas
+!schemas/*.xsd
 **/__pycache__

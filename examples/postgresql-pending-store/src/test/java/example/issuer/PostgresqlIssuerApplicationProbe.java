@@ -126,7 +126,13 @@ public final class PostgresqlIssuerApplicationProbe {
                 httpPort,mcpPort,"A".repeat(43),"B".repeat(42)+"A","C".repeat(42)+"A",true);
         PostgresqlIssuerStore store=new PostgresqlIssuerStore("fixture_issuer_app",
                 PostgresqlIssuerApplicationProbe::connection,256);
-        return new IssuerResources(config,clock,store,keys,sealer,mode);
+        byte[] partitionKey=Files.readAllBytes(directory.resolve("partition.key"));
+        StateSealer browserSealer=StateSealer.withActiveKey(SealingKey.fromBase64("fixture",encoded))
+                .clock(clock).build();
+        BrowserSessionStore browserSessions=new PostgresqlBrowserSessions("fixture_issuer_browser",
+                PostgresqlIssuerApplicationProbe::connection,clock,browserSealer,64,false);
+        try {return new IssuerResources(config,clock,store,keys,sealer,mode,partitionKey,browserSessions);}
+        finally {java.util.Arrays.fill(partitionKey,(byte)0);}
     }
 
     private static @NonNull String form(@NonNull Map<@NonNull String,@NonNull String> values) {
@@ -206,9 +212,39 @@ public final class PostgresqlIssuerApplicationProbe {
                 System.out.println(token(app,Map.of("grant_type","refresh_token","client_id","demo-public",
                         "refresh_token",args[1],"resource",app.config.resource.toString())));
             }
+            case "browser-smoke" -> {
+                IssuerResources app=app(IssuerResources.StartupMode.ESTABLISHED,false);
+                BrowserSessions.Session session=app.sessions.begin();
+                app.sessions.replacePending(session,new BrowserSessions.Pending("fixture"));
+                app.sessions.remove(session);
+                System.out.println("BROWSER_SMOKE");
+            }
+            case "browser-create" -> {
+                IssuerResources app=app(IssuerResources.StartupMode.ESTABLISHED,false);
+                BrowserSessions.Session initial=app.sessions.begin();
+                BrowserSessions.Pending selected=new BrowserSessions.Pending("fixture");
+                app.sessions.replacePending(initial,selected);
+                BrowserSessions.Session authenticated=app.sessions.login(initial,selected);
+                System.out.println("SESSION:"+authenticated.id);
+            }
+            case "browser-claim","browser-pending" -> {
+                IssuerResources app=app(IssuerResources.StartupMode.ESTABLISHED,false);
+                Request request=Request.withRawUrl(HttpMethod.GET,"/")
+                        .headers(Map.of("Cookie",Set.of("RevetsecIssuerDev="+args[1]))).build();
+                BrowserSessions.Session session=app.sessions.find(request).orElseThrow();
+                BrowserSessions.Pending selected=session.pending.get();
+                if(args[0].equals("browser-pending")) {
+                    System.out.println(selected==null?"NONE":"PENDING");return;
+                }
+                if(selected==null) throw new IllegalStateException("Missing browser race fixture.");
+                System.out.println("READY");System.out.flush();
+                if(System.in.read()==-1) throw new IllegalStateException("Missing browser race release.");
+                System.out.println(app.sessions.claimPending(session,selected)?"TRUE":"FALSE");
+            }
             case "serve" -> {
                 IssuerResources app=app(IssuerResources.StartupMode.ESTABLISHED,false);
-                try(Soklet soklet=Soklet.fromConfig(IssuerPlayground.sokletConfig(app))) {
+                try(Soklet soklet=Soklet.fromConfig(IssuerPlayground.sokletConfig(app,
+                        System.getenv().getOrDefault("REVETSEC_TEST_ISSUER_BIND_HOST","127.0.0.1")))) {
                     soklet.start();
                     System.out.println("READY");System.out.flush();
                     if(System.in.read()==-1)return;

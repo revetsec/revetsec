@@ -86,6 +86,15 @@ M4 added four OIDC targets, and M5 adds six resource-server targets, so there ar
 | | `signedAccessTokensRespectStrictAndUntypedProfiles` | JSON claim bytes | JDK Ed25519 signs arbitrary input under typed, absent, JWT and unrelated explicit profiles. A separate claim oracle checks issuer, audience, required typed claims, NumericDates and zero-skew edges, confirmation refusal, scope grammar, the extra compatibility claim and untyped identity-claim substitution. Both accepted and rejected verdicts are checked. |
 | | `introspectionResponsesAreTypedAudienceCheckedAndUncached` | JSON response bytes | The public client uses an offline synthetic `HttpClient`, with no socket or executor. A separate oracle distinguishes malformed provider documents from local inactive/profile rejection and verified proof. Each syntactically valid first response is followed by a fresh inactive response to the same credential; two authenticated POSTs and an inactive second verdict prove the client did not reuse the first proof. |
 
+The SAML targets in `SamlFuzzTests` cover raw HTTP-POST form bytes, raw HTTP-Redirect query bytes
+and inflation, bounded IdP metadata XML, and structure-aware changes to signed and encrypted SAML
+responses. The last target starts from scripted-IdP fixtures signed with a pinned test key and requires every successful
+authentication to retain the fixture's exact subject, attributes, signature coverage and encryption
+status. Its input selects the fixture and mutation; verification certificates and the test
+decryption key remain in the fixture tree. The four targets have curated seeds under
+`com/revetsec/saml/SamlFuzzTestsInputs`, including an accepted binding and metadata document and
+all fixture/mutation selections. They use no network service.
+
 The M4 semantic seeds under `com/revetsec/oidc/OidcFuzzTestsInputs` use test-only values and a fixed
 2026-09-30 clock. `oidc-seeds.sha256` inventories every authored seed and is checked by
 `FuzzSeedProvenanceTests`. All four targets also receive the two core JSON corpora through Maven
@@ -391,6 +400,33 @@ corpus input through the target's own choice sequence.
 
 `fuzz/.gitattributes` marks `src/test/resources/**` as `-text`, because seeds hold CR, LF, NUL,
 invalid UTF-8 and DER, and git must never rewrite them.
+
+The two `WebAuthnFuzzTests` targets exercise the initial passkey parser profile. One feeds raw
+CBOR and constructs bounded `none` attestation carriers in both member orders, checking copied
+authenticator data and rejection of missing, non-minimal, indefinite, nonempty-statement, truncated
+and trailing forms. The other derives fresh challenge bytes from each input, verifies exact browser
+client-data binding for registration and authentication, and rejects altered type, origin, challenge,
+cross-origin and duplicate-key fields. These are parser and binding checks; they do not exercise a
+full relying-party ceremony, physical authenticator or authoritative store. Each target has its own
+small seed and can be run separately with the single-method command below.
+
+`WebAuthnCeremonyFuzzTests` drives two stateful targets through the public relying-party API and
+its bounded in-memory store. Each input selects a security-field change and a credential ID; the
+targets build ordinary browser JSON and an Ed25519 key generated only in the target JVM. Rejected
+registration and assertion attempts must leave the original ceremony usable; confirmed success
+must be single-use. Authentication also checks a stale nonzero signature counter, account-pinned
+reauthentication purpose, rejection of a pending assertion after server-side credential removal,
+and permanent reservation of the removed credential ID. Twenty-one authored seeds cover every
+selected change. A corrupted Ed25519 signature may produce either `Rejected` or `Unavailable`
+when the JDK reports provider failure, but never a proof. These tests do not replace durable-store,
+cross-JVM, independent authenticator or physical-key evidence.
+
+A third ceremony target selects ES256, Ed25519 or RS256 with one seed for each algorithm. It
+constructs the corresponding COSE public key from a JDK-generated test key, rejects an incorrect
+reported algorithm before accepting enrollment, and rejects a correctly encoded signature over
+different client-data bytes before accepting the exact signed assertion. It then rejects replay.
+This covers the public registration-to-stored-key-to-assertion path for all three algorithms; key
+generation and signing remain synthetic JDK fixtures, not independent authenticator evidence.
 
 ## Writing a target
 

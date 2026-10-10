@@ -69,6 +69,22 @@ final class JsonLimitsTests {
 		Assertions.assertEquals(Limits.JSON_DEPTH_SCIM.getDefaultIntValue(), limits.getMaxDepth());
 	}
 
+	@Test
+	void webauthnClientDataUsesItsBoundedProfile() {
+		assertProfile(JsonLimits.webauthnClientData(8 * KIB), 8 * KIB, 16, 256, 16 * KIB, 128, 1_000,
+				false);
+		assertProfile(JsonLimits.webauthnClientData(16 * KIB), 16 * KIB, 16, 256, 16 * KIB, 128, 1_000,
+				false);
+		assertRangeFailure(() -> JsonLimits.webauthnClientData(0));
+		assertRangeFailure(() -> JsonLimits.webauthnClientData(16 * KIB + 1));
+		assertProfile(JsonLimits.webauthnResponse(64 * KIB), 64 * KIB, 16, 512, 256 * KIB, 128, 1_000,
+				false);
+		assertProfile(JsonLimits.webauthnResponse(256 * KIB), 256 * KIB, 16, 512, 256 * KIB, 128, 1_000,
+				false);
+		assertRangeFailure(() -> JsonLimits.webauthnResponse(0));
+		assertRangeFailure(() -> JsonLimits.webauthnResponse(256 * KIB + 1));
+	}
+
 	// G5-5: each profile's input size is the body or JWT limit that owns it, from 1 byte up to the largest cap of the
 	// rows it serves: HTTP response, JWKS and error bodies for protocol documents (4 MiB), compact JWTs for JOSE
 	// (1 MiB) and SCIM bodies for SCIM (10 MiB).
@@ -115,6 +131,8 @@ final class JsonLimitsTests {
 
 		Assertions.assertThrows(NullPointerException.class, () -> JsonLimits.protocolDocument(noInteger));
 		Assertions.assertThrows(NullPointerException.class, () -> JsonLimits.jose(noInteger));
+		Assertions.assertThrows(NullPointerException.class, () -> JsonLimits.webauthnClientData(noInteger));
+		Assertions.assertThrows(NullPointerException.class, () -> JsonLimits.webauthnResponse(noInteger));
 		Assertions.assertThrows(NullPointerException.class, () -> JsonLimits.scim(noInteger, 100_000));
 		Assertions.assertThrows(NullPointerException.class, () -> JsonLimits.scim(MIB, noInteger));
 		Assertions.assertThrows(NullPointerException.class, () -> JsonCodec.parse(noBytes, JsonLimits.jose(1)));
@@ -145,6 +163,8 @@ final class JsonLimitsTests {
 		Assertions.assertEquals(100_000, JsonLimits.MODEL_MAXIMUM_EXPONENT_MAGNITUDE);
 
 		for (JsonLimits limits : List.of(JsonLimits.protocolDocument(4 * MIB), JsonLimits.jose(MIB),
+				JsonLimits.webauthnClientData(16 * KIB),
+				JsonLimits.webauthnResponse(256 * KIB),
 				JsonLimits.scim(10 * MIB, 1_000_000), JsonLimits.maximumCaps())) {
 			Assertions.assertTrue(limits.getMaxDepth() <= JsonLimits.MODEL_MAXIMUM_DEPTH, limits::toString);
 			Assertions.assertTrue(limits.getMaxNumberLength() <= JsonLimits.MODEL_MAXIMUM_NUMBER_DIGITS,

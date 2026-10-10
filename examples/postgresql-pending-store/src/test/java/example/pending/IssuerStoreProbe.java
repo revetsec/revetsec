@@ -90,6 +90,10 @@ public final class IssuerStoreProbe {
 		Files.writeString(directory.resolve("sealer.txt"),
 				Base64.getEncoder().encodeToString(sealing), StandardCharsets.US_ASCII);
 		java.util.Arrays.fill(sealing, (byte) 0);
+		byte[] partition = new byte[32];
+		new SecureRandom().nextBytes(partition);
+		Files.write(directory.resolve("partition.key"), partition);
+		java.util.Arrays.fill(partition, (byte) 0);
 		System.out.println("KEYS_READY");
 	}
 

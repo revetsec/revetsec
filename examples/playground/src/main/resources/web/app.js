@@ -35,6 +35,13 @@ async function refresh() {
     byId('configuration').elements[name].value = state[name];
   }
   byId('login').elements.csrf.value = csrf;
+  byId('saml-login').elements.csrf.value = csrf;
+  byId('saml-logout').elements.csrf.value = csrf;
+  byId('saml-status').textContent = state.samlAvailable
+    ? `Configured connection: ${state.samlConnection}.` : 'SAML is disabled until trusted local metadata and SP keys are configured.';
+  byId('saml-login').querySelector('button').disabled = !state.samlAvailable;
+  byId('saml-logout').querySelector('button').disabled = !state.samlAvailable || !state.identity || state.identity.method !== 'SAML';
+  byId('saml-negative').disabled = !state.samlAvailable;
   byId('resource').textContent = `Exact resource: ${state.resource}. Loopback HTTP exception: ${state.loopbackHttp ? 'explicitly enabled' : 'disabled'}.`;
   byId('identity').textContent = state.identity ? JSON.stringify(state.identity, null, 2) : 'No browser identity';
   byId('events').textContent = state.events.join('\n');
@@ -64,6 +71,12 @@ byId('inspection').addEventListener('submit', async event => {
 });
 byId('probe').addEventListener('click', async () => { await post('/api/probe', '', 'application/x-www-form-urlencoded'); });
 byId('replay').addEventListener('click', async () => { await post('/api/replay', '', 'application/x-www-form-urlencoded'); });
+byId('saml-negative').addEventListener('click', async () => {
+  const response = await fetch('/saml/acs', {method: 'POST', credentials: 'same-origin', cache: 'no-store',
+    headers: {'Content-Type': 'application/x-www-form-urlencoded'}, body: 'SAMLResponse=%25'});
+  show({httpStatus: response.status, outcome: response.ok ? 'Unexpected acceptance' : 'Malformed SAML POST rejected'});
+  await refresh();
+});
 byId('preset').addEventListener('change', event => {
   const preset = event.target.value;
   byId('preset-note').textContent = presetNotes[preset];

@@ -34,6 +34,19 @@ public final class IssuerPlayground {
         }
     }
     static @NonNull SokletConfig sokletConfig(@NonNull IssuerResources app) {
+        return sokletConfig(app,McpRateLimiter.fromInMemoryDefaults());
+    }
+    static @NonNull SokletConfig sokletConfig(@NonNull IssuerResources app,@NonNull McpRateLimiter toolRateLimiter) {
+        return sokletConfig(app,toolRateLimiter,"127.0.0.1");
+    }
+    static @NonNull SokletConfig sokletConfig(@NonNull IssuerResources app,@NonNull String listenHost) {
+        return sokletConfig(app,McpRateLimiter.fromInMemoryDefaults(),listenHost);
+    }
+    private static @NonNull SokletConfig sokletConfig(@NonNull IssuerResources app,@NonNull McpRateLimiter toolRateLimiter,
+            @NonNull String listenHost) {
+        java.util.Objects.requireNonNull(app);
+        java.util.Objects.requireNonNull(toolRateLimiter);
+        if(!Set.of("127.0.0.1","::1").contains(listenHost)) throw new IllegalArgumentException("Issuer listen address rejected.");
         Set<McpProtocolVersion> versions=Set.of(McpProtocolVersion.V2025_06_18,McpProtocolVersion.V2025_11_25,McpProtocolVersion.V2026_07_28);
         McpToolRegistration<McpJsonObject> tool=McpToolRegistration.withName("whoami",versions).inputSchema(McpJsonObject.builder().put("type","object").put("properties",McpJsonObject.builder()
                         .put("tenant",McpJsonObject.builder().put("type","string").put("default","local").build())
@@ -44,12 +57,12 @@ public final class IssuerPlayground {
         List<McpEndpoint> endpoints=app.config.resources().keySet().stream().sorted().map(java.net.URI::create)
                 .map(resource->McpEndpoint.withPath(resource.getRawPath(),McpImplementation.withNameAndVersion("Self-issued Revetsec Playground","1.0.0").build(),versions)
                         .toolRegistrations(List.of(tool)).build()).toList();
-        McpServer mcp=McpServer.withPort(app.config.mcpPort).host("127.0.0.1")
+        McpServer mcp=McpServer.withPort(app.config.mcpPort).host(listenHost)
                 .endpointRegistry(McpEndpointRegistry.fromEndpoints(endpoints)).admissionController(new IssuerAdmission(app))
-                .toolRateLimiter(McpRateLimiter.fromInMemoryDefaults()).allowedHosts(Set.of(app.config.resource.getHost()))
+                .toolRateLimiter(toolRateLimiter).allowedHosts(Set.of(app.config.resource.getHost()))
                 .corsAuthorizer(CorsAuthorizer.fromWhitelistedOrigins(Set.of(app.config.origin.toString())))
                 .requestTimeout(Duration.ofSeconds(8)).requestHandlerConcurrency(8).requestHandlerQueueCapacity(16).maximumRequestSizeInBytes(16_384).build();
-        HttpServer http=HttpServer.withPort(app.config.httpPort).host("127.0.0.1").maximumRequestBodySizeInBytes(16_384)
+        HttpServer http=HttpServer.withPort(app.config.httpPort).host(listenHost).maximumRequestBodySizeInBytes(16_384)
                 .maximumRequestSizeInBytes(32_768).requestHandlerTimeout(Duration.ofSeconds(15)).requestHandlerConcurrency(8).requestHandlerQueueCapacity(16).build();
         String clientOrigin=app.config.browserOrigin.toString();
         return SokletConfig.withHttpServer(http).mcpServer(mcp).resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(IssuerResources.class)))

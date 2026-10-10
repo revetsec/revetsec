@@ -43,8 +43,9 @@ public final class IssuerResources {
     enum StartupMode { FRESH, ESTABLISHED }
     final IssuerConfig config;
     final OAuthAuthorizationServer server;
-    final BrowserSessions sessions;
+    final BrowserSessionStore sessions;
     final StartupMode startupMode;
+    final byte @NonNull [] admissionPartitionKey;
     IssuerResources(@NonNull IssuerConfig config,@NonNull Clock clock) throws java.security.GeneralSecurityException {
         this(config,clock,new VolatileStore(clock,2048,4_194_304));
     }
@@ -53,10 +54,23 @@ public final class IssuerResources {
     }
     IssuerResources(@NonNull IssuerConfig config,@NonNull Clock clock,@NonNull OAuthAuthorizationServerStore store,
             @NonNull OAuthIssuerKeyProvider keys,@NonNull StateSealer sealer,@NonNull StartupMode startupMode) {
+        this(config,clock,store,keys,sealer,startupMode,freshPartitionKey(startupMode));
+    }
+    IssuerResources(@NonNull IssuerConfig config,@NonNull Clock clock,@NonNull OAuthAuthorizationServerStore store,
+            @NonNull OAuthIssuerKeyProvider keys,@NonNull StateSealer sealer,@NonNull StartupMode startupMode,
+            byte @NonNull [] admissionPartitionKey) {
+        this(config,clock,store,keys,sealer,startupMode,admissionPartitionKey,
+                new BrowserSessions(clock,64,config.origin.getScheme().equals("https")));
+    }
+    IssuerResources(@NonNull IssuerConfig config,@NonNull Clock clock,@NonNull OAuthAuthorizationServerStore store,
+            @NonNull OAuthIssuerKeyProvider keys,@NonNull StateSealer sealer,@NonNull StartupMode startupMode,
+            byte @NonNull [] admissionPartitionKey,@NonNull BrowserSessionStore sessions) {
         this.config=java.util.Objects.requireNonNull(config);
         this.startupMode=java.util.Objects.requireNonNull(startupMode);
         java.util.Objects.requireNonNull(store);java.util.Objects.requireNonNull(keys);java.util.Objects.requireNonNull(sealer);
-        this.sessions=new BrowserSessions(clock,64,config.origin.getScheme().equals("https"));
+        if(java.util.Objects.requireNonNull(admissionPartitionKey).length!=32) throw new IllegalArgumentException("Admission partition key must be 32 bytes.");
+        this.admissionPartitionKey=admissionPartitionKey.clone();
+        this.sessions=java.util.Objects.requireNonNull(sessions);
         Map<String,Set<String>> resources=config.resources();
         OAuthServerClientAuthentication confidential=OAuthServerClientAuthentication.fromClientSecretVerifier((id,secret,budget) -> {
             if(budget.isZero() || budget.isNegative() || Thread.currentThread().isInterrupted()) return false;
@@ -99,11 +113,15 @@ public final class IssuerResources {
     private static @NonNull StateSealer freshSealer() {
         return StateSealer.withActiveKey(SealingKey.fromBase64("demo-seal",Base64.getEncoder().encodeToString(LocalInputs.randomBytes()))).build();
     }
+    private static byte @NonNull [] freshPartitionKey(@NonNull StartupMode mode) {
+        if(mode!=StartupMode.FRESH) throw new IllegalArgumentException("Established issuer requires an application-owned admission partition key.");
+        return LocalInputs.randomBytes();
+    }
     @GET("/") public @NonNull MarshaledResponse index(@NonNull Request request) {
         if(!issuerHost(request)) return fixed(403,"Request denied.");
         String state=startupMode==StartupMode.FRESH
                 ?"This local application has one demo account and new issuer state. The default launcher uses a volatile store and discards sessions, keys and grants at restart."
-                :"This local application has one demo account. Browser sessions are process-local; issuer grants use the supplied store and keys.";
+                :"This local application has one demo account. Browser sessions, issuer grants and keys use the supplied application backends.";
         return page("Self-issued MCP Playground","<p>Use a preregistered OAuth client with <code>demo-public</code> or <code>demo-confidential</code>. "
                 +state+"</p>");
     }
@@ -136,55 +154,63 @@ public final class IssuerResources {
             BrowserSessions.Session session=sessions.find(request).orElseGet(sessions::begin);
             OAuthAuthorizationResult result=SokletOAuthAuthorizationServer.beginAuthorizationResultFor(server,request,session.binding);
             if(result instanceof OAuthAuthorizationResult.InteractionRequired required) {
-                session.pending.set(new BrowserSessions.Pending(required.getInteraction().getInteractionValue()));
+                sessions.replacePending(session,new BrowserSessions.Pending(required.getInteraction().getInteractionValue()));
                 return view(session).copy().cookies(Set.of(sessions.cookie(session))).finish();
             }
             return authorizationResponse(result);
         } catch(OAuthServerException failure) {return failure(failure);}
+        catch(BrowserSessionUnavailableException unavailable) {return fixed(503,"Local application unavailable.");}
         catch(IllegalStateException full) {return fixed(503,"Local application unavailable.");}
     }
     @GET("/consent") public @NonNull MarshaledResponse consent(@NonNull Request request) {
         if(!issuerHost(request)) return fixed(403,"Request denied.");
-        BrowserSessions.Session session=sessions.find(request).orElse(null);if(session==null) return fixed(403,"Request denied.");
-        try {return view(session);} catch(OAuthServerException failure) {return failure(failure);}
+        try {
+            BrowserSessions.Session session=sessions.find(request).orElse(null);
+            return session==null?fixed(403,"Request denied."):view(session);
+        } catch(OAuthServerException failure) {return failure(failure);}
+        catch(BrowserSessionUnavailableException unavailable) {return fixed(503,"Local application unavailable.");}
     }
     @POST("/login") public @NonNull MarshaledResponse login(@NonNull Request request) {
         if(!sameOrigin(request)) return fixed(403,"Request denied.");
-        BrowserSessions.Session session=sessions.find(request).orElse(null);if(session==null) return fixed(403,"Request denied.");
         try {
+            BrowserSessions.Session session=sessions.find(request).orElse(null);if(session==null) return fixed(403,"Request denied.");
             BrowserSessions.Pending selected=session.pending.get();
             Map<String,String> form=LocalInputs.form(request,Set.of("csrf","flow","key"));
             if(selected==null || !LocalInputs.matches(selected.nonce,form.get("flow")) || !LocalInputs.matches(session.csrf,form.get("csrf")) || !LocalInputs.matches(config.loginKey,form.get("key"))) return fixed(403,"Request denied.");
             BrowserSessions.Session rotated=sessions.login(session,selected);
             return localRedirect("/consent").copy().cookies(Set.of(sessions.cookie(rotated))).finish();
         } catch(IllegalArgumentException bad) {return fixed(403,"Request denied.");}
+        catch(BrowserSessionUnavailableException unavailable) {return fixed(503,"Local application unavailable.");}
         catch(IllegalStateException expired) {return fixed(403,"Request denied.");}
     }
     @POST("/consent") public @NonNull MarshaledResponse complete(@NonNull Request request) {
         if(!sameOrigin(request)) return fixed(403,"Request denied.");
-        BrowserSessions.Session session=sessions.find(request).orElse(null);
-        if(session==null || !session.authenticated) return fixed(403,"Request denied.");
         try {
+            BrowserSessions.Session session=sessions.find(request).orElse(null);
+            if(session==null || !session.authenticated) return fixed(403,"Request denied.");
             BrowserSessions.Pending selected=session.pending.get();
             Map<String,String> form=LocalInputs.form(request,Set.of("csrf","flow","decision"));
             if(selected==null || !LocalInputs.matches(selected.nonce,form.get("flow")) || !LocalInputs.matches(session.csrf,form.get("csrf")) || !Set.of("approve","deny").contains(form.getOrDefault("decision",""))) return fixed(403,"Request denied.");
+            if(!sessions.claimPending(session,selected)) return fixed(403,"Request denied.");
             OAuthAuthorizationResult checked=server.resumeAuthorizationResult(selected.handle,session.binding);
             if(!(checked instanceof OAuthAuthorizationResult.InteractionRequired required)) return authorizationResponse(checked);
             OAuthAuthorizationDecision decision=form.get("decision").equals("deny")?OAuthAuthorizationDecision.deniedInstance()
                     :OAuthAuthorizationDecision.withSubject(IssuerConfig.SUBJECT).authorizedScopesByResource(required.getInteraction().getRequestedScopesByResource())
                             .refreshTokenPermitted(true).build();
             OAuthAuthorizationResult result=server.completeAuthorizationResult(selected.handle,session.binding,decision);
-            session.pending.compareAndSet(selected,null);return authorizationResponse(result);
+            return authorizationResponse(result);
         } catch(IllegalArgumentException bad) {return fixed(403,"Request denied.");}
+        catch(BrowserSessionUnavailableException unavailable) {return fixed(503,"Local application unavailable.");}
         catch(OAuthServerException failure) {return failure(failure);}
     }
     @POST("/logout") public @NonNull MarshaledResponse logout(@NonNull Request request) {
         if(!sameOrigin(request)) return fixed(403,"Request denied.");
-        BrowserSessions.Session session=sessions.find(request).orElse(null);if(session==null) return fixed(403,"Request denied.");
         try {
+            BrowserSessions.Session session=sessions.find(request).orElse(null);if(session==null) return fixed(403,"Request denied.");
             if(!LocalInputs.matches(session.csrf,LocalInputs.form(request,Set.of("csrf")).get("csrf"))) return fixed(403,"Request denied.");
             sessions.remove(session);return fixed(200,"Browser session ended; issued grants require OAuth revocation.");
         } catch(IllegalArgumentException bad) {return fixed(403,"Request denied.");}
+        catch(BrowserSessionUnavailableException unavailable) {return fixed(503,"Local application unavailable.");}
     }
     @POST("/token") public @NonNull MarshaledResponse token(@NonNull Request request) {
         if(!issuerHost(request)) return fixed(403,"Request denied.");

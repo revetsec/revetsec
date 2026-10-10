@@ -1,0 +1,1 @@
+SAMLRequest=%ZZ&SigAlg=x&Signature=AAAA

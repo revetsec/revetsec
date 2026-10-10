@@ -28,6 +28,7 @@ import java.net.URI;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.Base64;
+import java.util.List;
 import java.util.Set;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
@@ -80,12 +81,12 @@ final class PlaygroundOidc {
             ResponseCookie clear = clearCookie(flow.cookieName);
             try {
                 if (!clock.instant().isBefore(flow.expires))
-                    return PlaygroundResources.fixed(400, "Pending authorization expired.").copy().cookies(Set.of(clear)).finish();
+                    return PlaygroundResources.fixed(400, "Pending authorization expired.").copy().cookies(List.of(clear)).finish();
                 AuthorizationResponse response = SokletOAuth.authorizationResponseFor(request);
                 // The selected cookie is still required even in store mode; no state-only source is accepted.
                 String browserCookie = BrowserSessions.cookieValue(request, flow.cookieName).orElse("");
                 if (!response.getPerFlowCookieName().equals(flow.cookieName) || !browserCookie.equals(flow.cookieValue))
-                    return PlaygroundResources.fixed(400, "Browser binding is required.").copy().cookies(Set.of(clear)).finish();
+                    return PlaygroundResources.fixed(400, "Browser binding is required.").copy().cookies(List.of(clear)).finish();
                 PendingAuthorizationSource source = flow.sealed
                         ? PendingAuthorizationSource.fromSealedForm(browserCookie, sealer, flow.context)
                         : PendingAuthorizationSource.fromStore(pending, session.binding);
@@ -99,7 +100,7 @@ final class PlaygroundOidc {
                         flow.expires, flow.sealed);
                 OidcAuthenticationResult result = flow.client.completeAuthenticationResult(response, source, flow.callback);
                 if (!(result instanceof OidcAuthenticationResult.Succeeded authenticated))
-                    return PlaygroundResources.fixed(400, "Authentication rejected.").copy().cookies(Set.of(clear)).finish();
+                    return PlaygroundResources.fixed(400, "Authentication rejected.").copy().cookies(List.of(clear)).finish();
                 OidcAuthentication authentication = authenticated.getAuthentication();
                 JsonObject identity = JsonObject.builder().put("issuer", authentication.getIssuer())
                         .put("subject", views.partition(authentication.getIssuer(), authentication.getSubject(), "local"))
@@ -109,11 +110,11 @@ final class PlaygroundOidc {
             } catch (com.revetsec.RevetsecException failure) {
                 if (failure instanceof OAuthResponseException responseFailure
                         && responseFailure.getReason() == OAuthException.Reason.CALLBACK_MALFORMED)
-                    return PlaygroundResources.fixed(400, "Callback rejected.").copy().cookies(Set.of(clear)).finish();
+                    return PlaygroundResources.fixed(400, "Callback rejected.").copy().cookies(List.of(clear)).finish();
                 return PlaygroundResources.fixed(503, "Authentication service unavailable.")
-                        .copy().cookies(Set.of(clear)).finish();
+                        .copy().cookies(List.of(clear)).finish();
             } catch (IllegalArgumentException failure) {
-                return PlaygroundResources.fixed(400, "Callback rejected.").copy().cookies(Set.of(clear)).finish();
+                return PlaygroundResources.fixed(400, "Callback rejected.").copy().cookies(List.of(clear)).finish();
             }
         }
     }

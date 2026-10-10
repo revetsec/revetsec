@@ -16,6 +16,9 @@
 package example.playground;
 
 import com.revetsec.json.JsonObject;
+import com.revetsec.saml.SamlLogoutRequest;
+import com.revetsec.saml.SamlNameId;
+import com.revetsec.saml.SamlSessionReference;
 import com.soklet.Request;
 import com.soklet.ResponseCookie;
 import java.nio.charset.StandardCharsets;
@@ -80,7 +83,7 @@ final class BrowserSessions {
                 clock.instant().plus(LIFETIME));
         rotated.identity = identity;
         rotated.journal = old.journal;
-        old.flow = null; old.journal = null;
+        old.flow = null; old.journal = null; old.samlReference = null;
         entries.put(rotated.id, rotated);
         return rotated;
     }
@@ -94,13 +97,40 @@ final class BrowserSessions {
             PlaygroundOidc.Journal journal = session.journal;
             if (flow != null && !now.isBefore(flow.expires)) session.flow = null;
             if (journal != null && !now.isBefore(journal.expires)) session.journal = null;
+            PlaygroundSaml.Flow samlFlow = session.samlFlow;
+            PlaygroundSaml.LogoutFlow samlLogout = session.samlLogout;
+            if (samlFlow != null && !now.isBefore(samlFlow.expires)) session.samlFlow = null;
+            if (samlLogout != null && !now.isBefore(samlLogout.expires)) session.samlLogout = null;
         }
+    }
+
+    synchronized int endMatchingSamlSessions(@NonNull SamlLogoutRequest request) {
+        cleanup();
+        int ended = 0;
+        for (Session session : entries.values()) {
+            SamlSessionReference reference = session.samlReference;
+            if (reference == null || !reference.getIdentityProviderConnectionId()
+                    .equals(request.getIdentityProviderConnectionId())
+                    || !sameNameId(reference.getNameId(), request.getNameId())) continue;
+            if (!request.getSessionIndexes().isEmpty()
+                    && reference.getSessionIndex().filter(request.getSessionIndexes()::contains).isEmpty()) continue;
+            session.identity = null;
+            session.samlReference = null;
+            ended++;
+        }
+        return ended;
+    }
+
+    private static boolean sameNameId(@NonNull SamlNameId left, @NonNull SamlNameId right) {
+        return left.getValue().equals(right.getValue()) && left.getFormat().equals(right.getFormat())
+                && left.getNameQualifier().equals(right.getNameQualifier())
+                && left.getSpNameQualifier().equals(right.getSpNameQualifier());
     }
 
     synchronized int size() { cleanup(); return entries.size(); }
     synchronized long chargedBytes() { cleanup(); return entries.size() * SESSION_CHARGE_BYTES; }
 
-    /** Parse the raw field once, before Soklet's Set-valued cookie-pair convenience map loses duplicates. */
+    /** Parse the raw field once, before a cookie-pair convenience map loses duplicate names. */
     static @NonNull Optional<@NonNull String> cookieValue(@NonNull Request request, @NonNull String selectedName) {
         java.util.List<String> fields = PlaygroundAdmission.headerValues(request, "Cookie");
         if (fields.size() != 1 || fields.get(0).length() > 8192) return Optional.empty();
@@ -144,9 +174,12 @@ final class BrowserSessions {
         final String csrf;
         final String binding;
         final Instant expires;
-        @Nullable JsonObject identity;
+        volatile @Nullable JsonObject identity;
         volatile PlaygroundOidc.@Nullable Flow flow;
         volatile PlaygroundOidc.@Nullable Journal journal;
+        volatile PlaygroundSaml.@Nullable Flow samlFlow;
+        volatile PlaygroundSaml.@Nullable LogoutFlow samlLogout;
+        volatile @Nullable SamlSessionReference samlReference;
         Session(@NonNull String id, @NonNull String csrf, @NonNull String binding, @NonNull Instant expires) {
             this.id = id; this.csrf = csrf; this.binding = binding; this.expires = expires;
         }

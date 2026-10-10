@@ -1,0 +1,74 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<samlp:Response xmlns:samlp="urn:oasis:names:tc:SAML:2.0:protocol" xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion" ID="_mint_response_74" Version="2.0" IssueInstant="2026-09-01T00:00:00Z" Destination="https://sp.test/acs"><saml:Issuer>https://idp.scripted-idp.test/</saml:Issuer><ds:Signature xmlns:ds="http://www.w3.org/2000/09/xmldsig#">
+<ds:SignedInfo>
+<ds:CanonicalizationMethod Algorithm="http://www.w3.org/2001/10/xml-exc-c14n#"/>
+<ds:SignatureMethod Algorithm="http://www.w3.org/2001/04/xmldsig-more#ecdsa-sha512"/>
+<ds:Reference URI="#_mint_response_74">
+<ds:Transforms>
+<ds:Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"/>
+<ds:Transform Algorithm="http://www.w3.org/2001/10/xml-exc-c14n#"/>
+</ds:Transforms>
+<ds:DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha512"/>
+<ds:DigestValue>qFCYw1NX7GSOOAJXoHMpJQ2k0OqNnSyl3OCnKALdx4Bp16Bz4Q9SaZZ/8A+6+B3a
+0Imw65m3dBkzraAsAh2LSQ==</ds:DigestValue>
+</ds:Reference>
+</ds:SignedInfo>
+<ds:SignatureValue>AfhhY1IgRWHH4R3Igd2fxJobaiGwmX5vLoeW3Wo9ujG+f/IxvrjwHBy/T18+/Wq+
+tfCxxiB5Vfh/WevTTe0eDcQrAf7yNx8imwZnN8sCZoEDXsqk1p5coayoD8iD6z6A
+W4ToJBk1j+wfK5cknk71+5tz/npk8WK2kPz9oZ4h5CdTTmEn</ds:SignatureValue>
+<ds:KeyInfo>
+<ds:X509Data>
+<ds:X509Certificate>MIICbTCCAc6gAwIBAgICB9UwCgYIKoZIzj0EAwQwWjErMCkGA1UECgwiUmV2ZXRT
+ZWMgdGVzdCBmaXh0dXJlcyAtIFRFU1QgT05MWTErMCkGA1UEAwwiUmV2ZXRTZWMg
+dGVzdCBJZFAgc2lnbmluZyBFQyBQLTUyMTAgFw0yNjAxMDEwMDAwMDBaGA8yMTI2
+MDEwMTAwMDAwMFowWjErMCkGA1UECgwiUmV2ZXRTZWMgdGVzdCBmaXh0dXJlcyAt
+IFRFU1QgT05MWTErMCkGA1UEAwwiUmV2ZXRTZWMgdGVzdCBJZFAgc2lnbmluZyBF
+QyBQLTUyMTCBmzAQBgcqhkjOPQIBBgUrgQQAIwOBhgAEAMF3jOOoTv3Iz+dqCj5K
+FgllIlF70+1BuK2ESTW/dvTM8xfQeNJMohTsGhHROrn330IFgzsHpIVDGGdSNj64
+R44yAe0ORo/gBnKj6NPY6VnhMFwO/zvaUDGjGAwjCC3z9ektoQqFR/wnP5pVsdom
+Z27GXsIcb9YYz2yoazjUnoy451G1oz8wPTAMBgNVHRMBAf8EAjAAMA4GA1UdDwEB
+/wQEAwIHgDAdBgNVHQ4EFgQU46zA8eEDp0EeVyzzTZgAu+0rhFEwCgYIKoZIzj0E
+AwQDgYwAMIGIAkIAt7EppQiKN+vfHwwui9PP1NF8m6sjG1uFiBHOKn2e/22RWBUi
+2N9M6EutO2l6oZWtk6EcZJQQ0o2L4+0tr0X5QWICQgHMGKeUCbgAv/rZ2erihCj4
+yWp2GLWbwun/Z7V8zh7IjqPomK3vmluqB8wOb7pL7LGw5bAUe54LumYY7cnFgUD6
+gA==
+</ds:X509Certificate>
+</ds:X509Data>
+</ds:KeyInfo>
+</ds:Signature><samlp:Status><samlp:StatusCode Value="urn:oasis:names:tc:SAML:2.0:status:Success"/></samlp:Status><saml:Assertion ID="_mint_assertion_74" Version="2.0" IssueInstant="2026-09-01T00:00:00Z"><saml:Issuer>https://idp.scripted-idp.test/</saml:Issuer><ds:Signature xmlns:ds="http://www.w3.org/2000/09/xmldsig#">
+<ds:SignedInfo>
+<ds:CanonicalizationMethod Algorithm="http://www.w3.org/2001/10/xml-exc-c14n#"/>
+<ds:SignatureMethod Algorithm="http://www.w3.org/2001/04/xmldsig-more#ecdsa-sha512"/>
+<ds:Reference URI="#_mint_assertion_74">
+<ds:Transforms>
+<ds:Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"/>
+<ds:Transform Algorithm="http://www.w3.org/2001/10/xml-exc-c14n#"/>
+</ds:Transforms>
+<ds:DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha512"/>
+<ds:DigestValue>tgAcHAo7jqtBqfXd9mr6caX74gZtEaUXadZTyHtivGmdobdOwd6BQlaYp2FBzIGA
+G9dTPb9p+YBOYM/1HDLvAw==</ds:DigestValue>
+</ds:Reference>
+</ds:SignedInfo>
+<ds:SignatureValue>ARfNv7bv5N77iwVsJfortwR4YVqfeGkkI1Cy8ioo2S0gZ+SeJcuPx2PoEhRXz4m4
+0X0pSZ6PEqG3bzp9VtiDdZdiAHG3dnpZp/ecmw++wXGXxe3VCNZgMyS1SNgwQUHG
+M2t/ZeczN0K4lWd2SH+xewXoMxK6zkc0DziMOydm0FXmPUS4</ds:SignatureValue>
+<ds:KeyInfo>
+<ds:X509Data>
+<ds:X509Certificate>MIICbTCCAc6gAwIBAgICB9UwCgYIKoZIzj0EAwQwWjErMCkGA1UECgwiUmV2ZXRT
+ZWMgdGVzdCBmaXh0dXJlcyAtIFRFU1QgT05MWTErMCkGA1UEAwwiUmV2ZXRTZWMg
+dGVzdCBJZFAgc2lnbmluZyBFQyBQLTUyMTAgFw0yNjAxMDEwMDAwMDBaGA8yMTI2
+MDEwMTAwMDAwMFowWjErMCkGA1UECgwiUmV2ZXRTZWMgdGVzdCBmaXh0dXJlcyAt
+IFRFU1QgT05MWTErMCkGA1UEAwwiUmV2ZXRTZWMgdGVzdCBJZFAgc2lnbmluZyBF
+QyBQLTUyMTCBmzAQBgcqhkjOPQIBBgUrgQQAIwOBhgAEAMF3jOOoTv3Iz+dqCj5K
+FgllIlF70+1BuK2ESTW/dvTM8xfQeNJMohTsGhHROrn330IFgzsHpIVDGGdSNj64
+R44yAe0ORo/gBnKj6NPY6VnhMFwO/zvaUDGjGAwjCC3z9ektoQqFR/wnP5pVsdom
+Z27GXsIcb9YYz2yoazjUnoy451G1oz8wPTAMBgNVHRMBAf8EAjAAMA4GA1UdDwEB
+/wQEAwIHgDAdBgNVHQ4EFgQU46zA8eEDp0EeVyzzTZgAu+0rhFEwCgYIKoZIzj0E
+AwQDgYwAMIGIAkIAt7EppQiKN+vfHwwui9PP1NF8m6sjG1uFiBHOKn2e/22RWBUi
+2N9M6EutO2l6oZWtk6EcZJQQ0o2L4+0tr0X5QWICQgHMGKeUCbgAv/rZ2erihCj4
+yWp2GLWbwun/Z7V8zh7IjqPomK3vmluqB8wOb7pL7LGw5bAUe54LumYY7cnFgUD6
+gA==
+</ds:X509Certificate>
+</ds:X509Data>
+</ds:KeyInfo>
+</ds:Signature><saml:Subject><saml:NameID Format="urn:oasis:names:tc:SAML:2.0:nameid-format:persistent" NameQualifier="https://idp.scripted-idp.test/" SPNameQualifier="https://sp.test/Selftest">minted-user</saml:NameID><saml:SubjectConfirmation Method="urn:oasis:names:tc:SAML:2.0:cm:bearer"><saml:SubjectConfirmationData Recipient="https://sp.test/acs" NotOnOrAfter="2026-09-01T00:05:00Z"/></saml:SubjectConfirmation></saml:Subject><saml:Conditions NotBefore="2026-08-31T23:59:00Z" NotOnOrAfter="2026-09-01T00:05:00Z"><saml:AudienceRestriction><saml:Audience>https://sp.test/Selftest</saml:Audience></saml:AudienceRestriction></saml:Conditions><saml:AuthnStatement AuthnInstant="2026-09-01T00:00:00Z" SessionIndex="_session-1"><saml:AuthnContext><saml:AuthnContextClassRef>urn:oasis:names:tc:SAML:2.0:ac:classes:PasswordProtectedTransport</saml:AuthnContextClassRef></saml:AuthnContext></saml:AuthnStatement></saml:Assertion></samlp:Response>

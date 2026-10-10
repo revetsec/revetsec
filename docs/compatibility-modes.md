@@ -1,12 +1,12 @@
 # Compatibility Modes
 
-**Status: JOSE, OAuth and OIDC modes.** Revetsec holds its foundations, JWT verification and an OAuth client under M3 verification. The modes below are the ones that exist; the registry is complete before 1.0.0.
+**Status: pre-release.** The registry below describes implemented JOSE, OAuth, OIDC and SAML switches. SAML interoperability and release qualification are still in progress.
 
 A compatibility mode is a named, explicit relaxation that lets Revetsec work with a provider or a deployment that departs from a specification or from Revetsec's defaults. The rules for every mode:
 
 - It is off by default.
 - It is set per instance: per client, per identity provider or per tenant, never globally.
-- It is reported to the observer when the configured object is built and every time the mode is used.
+- Observer reporting is required at the 1.0.0 API freeze. The SAML observer hookup remains open.
 - It has an entry on this page, and tests cover both the enabled and the disabled state.
 - It is never switched on by detecting a provider automatically.
 - Named presets bundle modes for one provider. A preset only widens what is accepted, and every change to a preset is recorded in the CHANGELOG.
@@ -54,6 +54,30 @@ Each entry gives the mode's name, protocol area, effect, conditions and safeguar
 - **Tests:** `oidc.OidcHmacTests`: `optInRequiresConfidentialAuthenticationAndUtf8HashLength`, `eachHmacAlgorithmUsesExactUtf8SecretWithBasicOrPostAndNoKeys`, `supplierSnapshotSurvivesRotationAndIsReadOnceAtBuildAndOncePerPost`, `hmacStillChecksClaimsHashesSignatureAndExactAudience`, `hmacRefreshRetainsOriginalNonceAndRejectsSubjectDriftBeforeTokenRelease`, `rsaDerPemAndJwkBytesAreNeverHmacKeys`, `mixedAllowlistUsesPublicKeysOnlyForRsaAndModeDoesNotChangeDefaults`, and `lazyDiscoveryIntersectsHmacAndWarmUpFetchesNoJwks`.
 - **Added in:** 1.0.0 (unreleased).
 
+### `SamlCompatibilityMode.SHA1_SIGNATURES`
+
+- **Where:** `SamlIdentityProvider.Builder.compatibility(Set<SamlCompatibilityMode>)` for one approved IdP connection.
+- **Effect:** accepts RSA-SHA1 XML and Redirect signatures from that connection. The default rejects them. It does not enable HMAC, unsigned responses or RSA1_5 key transport.
+- **Risk:** SHA-1 collision resistance is broken. Use this mode only for a partner that cannot be upgraded yet, with a dedicated connection and short migration plan.
+- **Tests:** `saml.SamlIndependentFixtureTests`, `saml.SamlScriptedMintedFixtureTests` and `saml.SamlXswMutationTests` exercise the default and selected path.
+- **Added in:** 1.0.0 (unreleased).
+
+### `SamlCompatibilityMode.AES_CBC_ENCRYPTION`
+
+- **Where:** the same per-IdP builder.
+- **Effect:** permits AES-CBC assertion decryption only after a trusted IdP signature covers the whole Response. It never accepts CBC solely under an Assertion signature. SP metadata advertises GCM, not CBC.
+- **Risk:** CBC encryption does not authenticate the ciphertext. Prefer changing the IdP to GCM or to sign the whole Response before enabling this mode.
+- **Tests:** `saml.SamlScriptedMintedFixtureTests` covers AES-128/192/256-CBC, the default rejection, and an unsigned-Response negative.
+- **Added in:** 1.0.0 (unreleased).
+
+### `SamlCompatibilityMode.UNSOLICITED_RESPONSES`
+
+- **Where:** the same per-IdP builder; `allowUnsolicitedResponses(true)` is the equivalent older spelling during pre-release development.
+- **Effect:** allows IdP-initiated POST SSO without a pending AuthnRequest. RelayState is rejected and the response age is capped at two minutes before clock skew. Signature, issuer, destination, audience, bearer, replay and subject checks still apply.
+- **Risk:** there is no initiating browser request to bind. The application must apply its own session and account-linking policy.
+- **Tests:** `saml.SamlIndependentFixtureTests` and `saml.SamlScriptedMintedFixtureTests` replay fixed-clock unsolicited assertions; `saml.SamlServiceProviderTests` exercises the disabled path.
+- **Added in:** 1.0.0 (unreleased).
+
 ### Settings that are not compatibility modes
 
 - **`JwtValidator.Builder.allowedAlgorithms`** chooses among Revetsec's own algorithms (see [supported algorithms](supported-algorithms.md)); it cannot add `none` or an HMAC algorithm.
@@ -61,4 +85,4 @@ Each entry gives the mode's name, protocol area, effect, conditions and safeguar
 
 ## saml2int deviations
 
-The SAML service provider is being designed against the SP requirements of the saml2int profile (v2.0). Each deviation from it will be listed here with its reason.
+The SAML service provider is being checked against the SP requirements of the saml2int profile (v2.0). Its metadata parser accepts metadata without `validUntil` because application-approved static metadata may omit it; when `validUntil` is present, expiry is enforced. A complete requirement-by-requirement deviations list remains an RC-2 release item.

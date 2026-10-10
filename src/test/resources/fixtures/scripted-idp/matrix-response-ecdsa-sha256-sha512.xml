@@ -1,0 +1,34 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<samlp:Response xmlns:samlp="urn:oasis:names:tc:SAML:2.0:protocol" xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion" ID="_mint_response_32" Version="2.0" IssueInstant="2026-09-01T00:00:00Z" Destination="https://sp.test/acs"><saml:Issuer>https://idp.scripted-idp.test/</saml:Issuer><ds:Signature xmlns:ds="http://www.w3.org/2000/09/xmldsig#">
+<ds:SignedInfo>
+<ds:CanonicalizationMethod Algorithm="http://www.w3.org/2001/10/xml-exc-c14n#"/>
+<ds:SignatureMethod Algorithm="http://www.w3.org/2001/04/xmldsig-more#ecdsa-sha256"/>
+<ds:Reference URI="#_mint_response_32">
+<ds:Transforms>
+<ds:Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"/>
+<ds:Transform Algorithm="http://www.w3.org/2001/10/xml-exc-c14n#"/>
+</ds:Transforms>
+<ds:DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha512"/>
+<ds:DigestValue>wgOPlLF7GdWAm34oIkK1HkbrCF9bs280haMiL8UmYoRaHDNsXjJXm2z5th5frLew
+xmTfPsSWou6PISsIwhvj+Q==</ds:DigestValue>
+</ds:Reference>
+</ds:SignedInfo>
+<ds:SignatureValue>PH8izsOuJ2DGdRMqaNurr6hWCUXq4lathX4juCd1HjrDKd5BFL0EUgab/BKotntj
+LZ8W+Z4wUSzZR2OGUCQ0TQ==</ds:SignatureValue>
+<ds:KeyInfo>
+<ds:X509Data>
+<ds:X509Certificate>MIIB5DCCAYugAwIBAgICB9MwCgYIKoZIzj0EAwIwWjErMCkGA1UECgwiUmV2ZXRT
+ZWMgdGVzdCBmaXh0dXJlcyAtIFRFU1QgT05MWTErMCkGA1UEAwwiUmV2ZXRTZWMg
+dGVzdCBJZFAgc2lnbmluZyBFQyBQLTI1NjAgFw0yNjAxMDEwMDAwMDBaGA8yMTI2
+MDEwMTAwMDAwMFowWjErMCkGA1UECgwiUmV2ZXRTZWMgdGVzdCBmaXh0dXJlcyAt
+IFRFU1QgT05MWTErMCkGA1UEAwwiUmV2ZXRTZWMgdGVzdCBJZFAgc2lnbmluZyBF
+QyBQLTI1NjBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABGwLqpomqzHXozLk8I+Q
+oAMVMh9aV5CpJvoHm3NiFwU6g0BDf54n7xqhF0Z8XfTarFH+zJNsAwVCBIChQ5X8
+V9ejPzA9MAwGA1UdEwEB/wQCMAAwDgYDVR0PAQH/BAQDAgeAMB0GA1UdDgQWBBSL
+SeWU9+0SsAM5IBNbLXWYSNqahTAKBggqhkjOPQQDAgNHADBEAiBHBatcQTK5hHH8
+dMZzZkRfV5qmf4zFimEMTRot+rZHJAIgJiUarblm7bxbTxooH3dZZKeJgwMUUdX9
+RvNxvF7vE1A=
+</ds:X509Certificate>
+</ds:X509Data>
+</ds:KeyInfo>
+</ds:Signature><samlp:Status><samlp:StatusCode Value="urn:oasis:names:tc:SAML:2.0:status:Success"/></samlp:Status><saml:Assertion ID="_mint_assertion_32" Version="2.0" IssueInstant="2026-09-01T00:00:00Z"><saml:Issuer>https://idp.scripted-idp.test/</saml:Issuer><saml:Subject><saml:NameID Format="urn:oasis:names:tc:SAML:2.0:nameid-format:persistent" NameQualifier="https://idp.scripted-idp.test/" SPNameQualifier="https://sp.test/Selftest">minted-user</saml:NameID><saml:SubjectConfirmation Method="urn:oasis:names:tc:SAML:2.0:cm:bearer"><saml:SubjectConfirmationData Recipient="https://sp.test/acs" NotOnOrAfter="2026-09-01T00:05:00Z"/></saml:SubjectConfirmation></saml:Subject><saml:Conditions NotBefore="2026-08-31T23:59:00Z" NotOnOrAfter="2026-09-01T00:05:00Z"><saml:AudienceRestriction><saml:Audience>https://sp.test/Selftest</saml:Audience></saml:AudienceRestriction></saml:Conditions><saml:AuthnStatement AuthnInstant="2026-09-01T00:00:00Z" SessionIndex="_session-1"><saml:AuthnContext><saml:AuthnContextClassRef>urn:oasis:names:tc:SAML:2.0:ac:classes:PasswordProtectedTransport</saml:AuthnContextClassRef></saml:AuthnContext></saml:AuthnStatement></saml:Assertion></samlp:Response>

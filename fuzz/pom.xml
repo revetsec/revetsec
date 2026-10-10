@@ -149,6 +149,21 @@
 			<testResource>
 				<directory>src/test/resources</directory>
 			</testResource>
+			<!-- The SAML fuzz target also runs under main-sources-only, which omits the core test-resource
+				 tree. Bring in only its independently minted XML and test-only credentials. -->
+			<testResource>
+				<directory>${revetsec.core.basedir}/src/test/resources/fixtures</directory>
+				<targetPath>fixtures</targetPath>
+				<includes>
+					<include>keys/idp-signing-rsa-2048-cert.pem</include>
+					<include>saml-independent/keys/sp-rsa-2048.key</include>
+					<include>saml-independent/keys/sp-rsa-2048.crt</include>
+					<include>saml-independent/keys/idp-rsa-2048.crt</include>
+					<include>saml-independent/case4-encrypted-assertion-gcm-rsa-oaep-sha256-mgf1sha256.xml</include>
+					<include>scripted-idp/assertion-signxml.xml</include>
+					<include>scripted-idp/matrix-response-rsa-sha256-sha256.xml</include>
+				</includes>
+			</testResource>
 			<testResource>
 				<directory>${revetsec.core.basedir}/src/test/resources/com/revetsec/internal/json/corpus</directory>
 				<targetPath>com/revetsec/internal/json/JsonCodecFuzzTestsInputs/parseRejectsOnlyWithJsonParseExceptionAndAcceptsOnlyValuesInsideTheProfile</targetPath>

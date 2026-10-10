@@ -5,11 +5,13 @@ Two unpublished Soklet projects use packaged core, adapter and framework artifac
 | Project | Demonstrates | Soklet |
 |---|---|---|
 | [barebones-oidc](barebones-oidc/README.md) | OIDC login and an application-owned session | Official 3.5.1 |
-| [playground](playground/README.md) | OIDC login, JWT/introspection MCP `whoami`, resource metadata, scope and application permissions, client credentials and transient inspection | Source-built 4.0.0 |
+| [playground](playground/README.md) | OIDC and SAML browser sessions, JWT/introspection MCP `whoami`, resource metadata, scope and application permissions, client credentials and transient inspection | Source-built 4.0.0 |
 
 A separate [self-issued MCP Playground](self-issued/README.md) uses current core/helper sources for app-owned OAuth issuance and online MCP validation with bounded volatile sessions/storage. Its matching CI pins await pushed revisions.
 
-The standalone [PostgreSQL storage examples](postgresql-pending-store/README.md) show application-owned shared pending-authorization storage, an optional CIMD cache, and an authoritative issuer store, all using Pyranid. They are outside the core reactor and are not a managed database service.
+The [Soklet passkey browser demo](passkeys-soklet/README.md) exercises registration, discoverable sign-in, account-pinned reauthentication and credential management with an explicitly selected volatile WebAuthn store and exact HTTPS DNS origin.
+
+The standalone [PostgreSQL storage examples](postgresql-pending-store/README.md) show application-owned shared pending-authorization storage, an optional CIMD cache, an authoritative issuer store and a WebAuthn store, all using Pyranid. They are outside the core reactor and are not a managed database service.
 
 The examples are outside the core reactor. `pins.json` records already-pushed core/helper revisions and the exact framework source. They do not publish artifacts. Revetsec has not been independently audited.
 

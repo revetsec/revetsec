@@ -16,6 +16,7 @@
 package example.issuer;
 
 import com.soklet.Soklet;
+import com.soklet.McpRateLimitDecision;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.URI;
@@ -26,6 +27,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Duration;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Pattern;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
@@ -39,8 +41,11 @@ final class IssuerSocketTests {
  }
  @Test void localHttpClientPerformsBrowserCodeExchangeMcpAdmissionAndRevocation() throws Exception {
   int hp=port(),mp=port();while(mp==hp)mp=port();var config=IssuerApplicationTests.config(hp,mp);var app=new IssuerResources(config,Clock.systemUTC());
+  var acquired=new AtomicInteger();
   var client=HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).followRedirects(HttpClient.Redirect.NEVER).build();
-  try(var soklet=Soklet.fromConfig(IssuerPlayground.sokletConfig(app))) {
+  try(var soklet=Soklet.fromConfig(IssuerPlayground.sokletConfig(app,context -> {
+   acquired.incrementAndGet();return McpRateLimitDecision.allowed();
+  }))) {
    soklet.start();
    var metadata=send(client,config.origin.resolve("/.well-known/oauth-authorization-server"),"GET",null,null,null);
    assertEquals(200,metadata.statusCode());assertTrue(metadata.body().contains(config.origin.toString()));
@@ -59,6 +64,7 @@ final class IssuerSocketTests {
    var builder=HttpRequest.newBuilder(config.resource).timeout(Duration.ofSeconds(5)).POST(HttpRequest.BodyPublishers.ofByteArray(request.getBody().orElseThrow()));
    request.getHeaders().forEach((name,values)->{if(!name.equalsIgnoreCase("Host"))values.forEach(value->builder.header(name,value));});
    var call=client.send(builder.build(),HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));assertEquals(200,call.statusCode());assertTrue(call.body().contains("Checked identity partition"));assertFalse(call.body().contains(access));assertFalse(call.body().contains(IssuerConfig.SUBJECT));
+   assertTrue(acquired.get()>0);
    assertEquals(200,send(client,config.origin.resolve("/revoke"),"POST",IssuerApplicationTests.form(Map.of("client_id","demo-public","token",access)),null,null).statusCode());
    assertEquals(401,client.send(builder.build(),HttpResponse.BodyHandlers.discarding()).statusCode());
   }

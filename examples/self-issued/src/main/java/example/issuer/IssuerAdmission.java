@@ -34,8 +34,11 @@ import org.jspecify.annotations.Nullable;
 /** Every MCP operation validates online, then performs independent scope/tool/tenant/object authorization. */
 final class IssuerAdmission implements McpAdmissionController {
     private final IssuerResources app;
-    private final byte[] partitionKey=LocalInputs.randomBytes();
-    IssuerAdmission(@NonNull IssuerResources app) {this.app=app;}
+    private final byte @NonNull [] partitionKey;
+    IssuerAdmission(@NonNull IssuerResources app) {
+        this.app=java.util.Objects.requireNonNull(app);
+        this.partitionKey=app.admissionPartitionKey.clone();
+    }
     @Override public @NonNull McpAdmissionDecision admit(@NonNull McpAdmissionContext context) {
         Request request=context.getRequest();
         URI resource=app.config.resourceForEndpoint(context.getEndpoint().getPath()).orElse(null);

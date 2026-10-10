@@ -67,18 +67,18 @@ final class PlaygroundProbeTests {
                 new PlaygroundOidc(sessions, views, Clock.systemUTC()), HttpClient.newHttpClient(), fixture.validator(calls));
         SokletSimulator.run(Playground.sokletConfig(config, resources, views), simulator -> {
             assertEquals(200, simulator.performHttpRequest(Request.withPath(HttpMethod.GET, "/")
-                    .headers(Map.of("Host", Set.of("127.0.0.1:8443"))).build()).getResponse().orElseThrow().getStatusCode());
+                    .headers(Map.of("Host", List.of("127.0.0.1:8443"))).build()).getResponse().orElseThrow().getStatusCode());
             Request admittedTransport = fixture.request(null, "tools/call", "whoami", "{}", false)
-                    .copy().headers(headers -> headers.put("Origin", Set.of("https://127.0.0.1:8443"))).finish();
+                    .copy().headers(headers -> headers.put("Origin", List.of("https://127.0.0.1:8443"))).finish();
             try (McpSimulation simulation = simulator.startMcpRequest(admittedTransport)) {
                 assertEquals(401, simulation.awaitResponse(Duration.ofSeconds(3)).orElseThrow().getStatusCode());
             }
             try (McpSimulation simulation = simulator.startMcpRequest(admittedTransport.copy()
-                    .headers(headers -> headers.put("Origin", Set.of("https://foreign.example"))).finish())) {
+                    .headers(headers -> headers.put("Origin", List.of("https://foreign.example"))).finish())) {
                 assertEquals(403, simulation.awaitResponse(Duration.ofSeconds(3)).orElseThrow().getStatusCode());
             }
             try (McpSimulation simulation = simulator.startMcpRequest(admittedTransport.copy()
-                    .headers(headers -> headers.put("Host", Set.of("foreign.example:8081"))).finish())) {
+                    .headers(headers -> headers.put("Host", List.of("foreign.example:8081"))).finish())) {
                 assertEquals(421, simulation.awaitResponse(Duration.ofSeconds(3)).orElseThrow().getStatusCode());
             }
             assertEquals(0, calls.get());
@@ -175,8 +175,8 @@ final class PlaygroundProbeTests {
                 new PlaygroundOidc(sessions, views, Clock.systemUTC()), fixture.http);
         BrowserSessions.Session session = sessions.begin();
         Request request = Request.withPath(HttpMethod.POST, "/api/probe")
-                .headers(Map.of("Host", Set.of(config.origin.getAuthority()), "Origin", Set.of(config.origin.toString()),
-                        "Cookie", Set.of(BrowserSessions.COOKIE + "=" + session.id), "X-CSRF-Token", Set.of(session.csrf)))
+                .headers(Map.of("Host", List.of(config.origin.getAuthority()), "Origin", List.of(config.origin.toString()),
+                        "Cookie", List.of(BrowserSessions.COOKIE + "=" + session.id), "X-CSRF-Token", List.of(session.csrf)))
                 .build();
         AtomicReference<@NonNull Response> received = new AtomicReference<>();
         SokletSimulator.run(Playground.sokletConfig(config, resources, views), simulator ->

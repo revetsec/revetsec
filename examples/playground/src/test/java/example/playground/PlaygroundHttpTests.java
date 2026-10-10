@@ -20,6 +20,7 @@ import com.soklet.*;
 import java.net.http.HttpClient;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -38,9 +39,9 @@ final class PlaygroundHttpTests {
                     new PlaygroundOidc(sessions, views, Clock.systemUTC()), HttpClient.newHttpClient());
             BrowserSessions.Session session = sessions.begin();
             Request valid = Request.withPath(HttpMethod.POST, "/oidc/begin")
-                    .headers(Map.of("Host", Set.of("localhost:8443"), "Origin", Set.of("https://localhost:8443"),
-                            "Cookie", Set.of(BrowserSessions.COOKIE + "=" + session.id),
-                            "Content-Type", Set.of("application/x-www-form-urlencoded")))
+                    .headers(Map.of("Host", List.of("localhost:8443"), "Origin", List.of("https://localhost:8443"),
+                            "Cookie", List.of(BrowserSessions.COOKIE + "=" + session.id),
+                            "Content-Type", List.of("application/x-www-form-urlencoded")))
                     .body(("csrf=" + session.csrf + "&mode=atomic&responseMode=query").getBytes(StandardCharsets.US_ASCII)).build();
             assertEquals("/oidc/begin", valid.getResourcePath().getPath());
             assertNotEquals("/oidc/begin", valid.getResourcePath().toString());
@@ -55,8 +56,8 @@ final class PlaygroundHttpTests {
                 }
                 for (String header : Set.of("Content-Type", "X-CSRF-Token")) {
                     Response denied = simulator.performHttpRequest(valid.copy().headers(headers -> headers.put(header,
-                            header.equals("Content-Type") ? Set.of("application/x-www-form-urlencoded", "text/plain")
-                                    : Set.of(session.csrf, "wrong"))).finish()).getResponse().orElseThrow();
+                            header.equals("Content-Type") ? List.of("application/x-www-form-urlencoded", "text/plain")
+                                    : List.of(session.csrf, "wrong"))).finish()).getResponse().orElseThrow();
                     assertEquals(403, denied.getStatusCode());
                     assertNull(session.flow);
                 }
@@ -65,7 +66,7 @@ final class PlaygroundHttpTests {
                 assertEquals(0, provider.requests.get());
                 Response redirect = simulator.performHttpRequest(valid).getResponse().orElseThrow();
                 assertEquals(302, redirect.getStatusCode());
-                assertEquals(Set.of("no-referrer"), redirect.getHeaders().get("Referrer-Policy"));
+                assertEquals(List.of("no-referrer"), redirect.getHeaders().get("Referrer-Policy"));
                 assertTrue(redirect.getHeaders().get("Location").iterator().next().startsWith(provider.issuer + "/auth?"));
                 assertTrue(redirect.getHeaders().get("Location").iterator().next().contains("code_challenge_method=S256"));
                 assertNotNull(session.flow);
@@ -84,8 +85,8 @@ final class PlaygroundHttpTests {
                 new PlaygroundOidc(sessions, views, Clock.systemUTC()), HttpClient.newHttpClient(), fixture.validator(calls));
         SokletSimulator.run(Playground.sokletConfig(fixture.config(), resources, views), simulator -> {
             for (String path : Set.of("/api/config", "/api/probe", "/api/inspect", "/api/replay")) {
-                for (Map<String, Set<String>> headers : Set.of(Map.of("Host", Set.of("localhost:8443")),
-                        Map.of("Host", Set.of("localhost:8443"), "Origin", Set.of("https://foreign.example")))) {
+                for (Map<String, List<String>> headers : Set.of(Map.of("Host", List.of("localhost:8443")),
+                        Map.of("Host", List.of("localhost:8443"), "Origin", List.of("https://foreign.example")))) {
                     Response denied = simulator.performHttpRequest(Request.withPath(HttpMethod.POST, path).headers(headers).build())
                             .getResponse().orElseThrow();
                     assertEquals(403, denied.getStatusCode());
@@ -93,19 +94,19 @@ final class PlaygroundHttpTests {
             }
             BrowserSessions.Session session = sessions.begin();
             Response nullOrigin = simulator.performHttpRequest(Request.withPath(HttpMethod.POST, "/oidc/begin")
-                    .headers(Map.of("Host", Set.of("localhost:8443"), "Origin", Set.of("null"),
-                            "Cookie", Set.of(BrowserSessions.COOKIE + "=" + session.id),
-                            "Content-Type", Set.of("application/x-www-form-urlencoded")))
+                    .headers(Map.of("Host", List.of("localhost:8443"), "Origin", List.of("null"),
+                            "Cookie", List.of(BrowserSessions.COOKIE + "=" + session.id),
+                            "Content-Type", List.of("application/x-www-form-urlencoded")))
                     .body(("csrf=" + session.csrf).getBytes(StandardCharsets.US_ASCII)).build()).getResponse().orElseThrow();
             assertEquals(403, nullOrigin.getStatusCode());
-            assertEquals(Set.of("no-referrer"), nullOrigin.getHeaders().get("Referrer-Policy"));
+            assertEquals(List.of("no-referrer"), nullOrigin.getHeaders().get("Referrer-Policy"));
             assertEquals(403, resources.inspect(control(session, "wrong", "opaque")).getStatusCode());
             assertEquals(403, resources.inspect(control(null, session.csrf, "opaque")).getStatusCode());
             assertEquals(0, calls.get());
             String valid = fixture.jwt(fixture.issuer, fixture.resource, "mcp:whoami", 60, false);
             Response accepted = simulator.performHttpRequest(control(session, session.csrf, valid)).getResponse().orElseThrow();
             assertEquals(200, accepted.getStatusCode());
-            assertEquals(Set.of("no-referrer"), accepted.getHeaders().get("Referrer-Policy"));
+            assertEquals(List.of("no-referrer"), accepted.getHeaders().get("Referrer-Policy"));
             assertFalse(accepted.getBody().orElseThrow().toString().contains(valid));
             assertFalse(accepted.getBody().orElseThrow().toString().contains("synthetic-private-subject"));
             assertEquals(1, calls.get());
@@ -136,11 +137,11 @@ final class PlaygroundHttpTests {
         SokletSimulator.run(fixture.application(fixture.validator(new AtomicInteger())), simulator -> {
             for (String path : Set.of("/", "/app.js", "/style.css", "/api/session", "/.well-known/oauth-protected-resource/mcp")) {
                 Response response = simulator.performHttpRequest(Request.withPath(HttpMethod.GET, path)
-                        .headers(Map.of("Host", Set.of("localhost:8443"))).build()).getResponse().orElseThrow();
+                        .headers(Map.of("Host", List.of("localhost:8443"))).build()).getResponse().orElseThrow();
                 assertEquals(200, response.getStatusCode());
                 assertTrue(response.getHeaders().containsKey("Content-Security-Policy"));
-                assertEquals(Set.of("no-store"), response.getHeaders().get("Cache-Control"));
-                assertEquals(Set.of(path.equals("/") ? "same-origin" : "no-referrer"),
+                assertEquals(List.of("no-store"), response.getHeaders().get("Cache-Control"));
+                assertEquals(List.of(path.equals("/") ? "same-origin" : "no-referrer"),
                         response.getHeaders().get("Referrer-Policy"));
                 String body = response.getBody().orElseThrow().toString();
                 assertFalse(body.contains("localStorage")); assertFalse(body.contains("sessionStorage")); assertFalse(body.contains("innerHTML"));
@@ -151,18 +152,18 @@ final class PlaygroundHttpTests {
                 }
             }
             assertEquals(403, simulator.performHttpRequest(Request.withPath(HttpMethod.GET, "/api/session")
-                    .headers(Map.of("Host", Set.of("foreign.example"))).build()).getResponse().orElseThrow().getStatusCode());
+                    .headers(Map.of("Host", List.of("foreign.example"))).build()).getResponse().orElseThrow().getStatusCode());
             assertEquals(404, simulator.performHttpRequest(Request.withPath(HttpMethod.GET, "/../../file")
-                    .headers(Map.of("Host", Set.of("localhost:8443"))).build()).getMarshaledResponse().getStatusCode());
+                    .headers(Map.of("Host", List.of("localhost:8443"))).build()).getMarshaledResponse().getStatusCode());
         });
         assertEquals("&lt;script&gt;&amp;&quot;&#39;", SafeViews.html("<script>&\"'"));
     }
 
     static @NonNull Request control(BrowserSessions.@Nullable Session session, @NonNull String csrf, @NonNull String credential) {
-        Map<String, Set<String>> headers = new java.util.LinkedHashMap<>();
-        headers.put("Host", Set.of("localhost:8443")); headers.put("Origin", Set.of("https://localhost:8443"));
-        headers.put("X-CSRF-Token", Set.of(csrf)); headers.put("Content-Type", Set.of("text/plain; charset=UTF-8"));
-        if (session != null) headers.put("Cookie", Set.of(BrowserSessions.COOKIE + "=" + session.id));
+        Map<String, List<String>> headers = new java.util.LinkedHashMap<>();
+        headers.put("Host", List.of("localhost:8443")); headers.put("Origin", List.of("https://localhost:8443"));
+        headers.put("X-CSRF-Token", List.of(csrf)); headers.put("Content-Type", List.of("text/plain; charset=UTF-8"));
+        if (session != null) headers.put("Cookie", List.of(BrowserSessions.COOKIE + "=" + session.id));
         return Request.withPath(HttpMethod.POST, "/api/inspect").headers(headers).body(credential.getBytes(StandardCharsets.UTF_8)).build();
     }
 }

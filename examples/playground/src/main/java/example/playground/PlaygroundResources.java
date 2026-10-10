@@ -46,19 +46,32 @@ public final class PlaygroundResources {
     private final BrowserSessions sessions;
     private final SafeViews views;
     private final PlaygroundOidc oidc;
+    private final @Nullable PlaygroundSaml saml;
     private final HttpClient http;
     private final ArrayDeque<@NonNull AppEvent> events = new ArrayDeque<>();
     private volatile PlaygroundAdmission.RuntimeProfile profile;
 
     PlaygroundResources(@NonNull PlaygroundConfig config, @NonNull BrowserSessions sessions,
             @NonNull SafeViews views, @NonNull PlaygroundOidc oidc, @NonNull HttpClient http) {
-        this(config, sessions, views, oidc, http, config.validator(http));
+        this(config, sessions, views, oidc, http, config.validator(http), null);
+    }
+
+    PlaygroundResources(@NonNull PlaygroundConfig config, @NonNull BrowserSessions sessions,
+            @NonNull SafeViews views, @NonNull PlaygroundOidc oidc, @NonNull HttpClient http,
+            @Nullable PlaygroundSaml saml) {
+        this(config, sessions, views, oidc, http, config.validator(http), saml);
     }
 
     PlaygroundResources(@NonNull PlaygroundConfig config, @NonNull BrowserSessions sessions,
             @NonNull SafeViews views, @NonNull PlaygroundOidc oidc, @NonNull HttpClient http,
             PlaygroundAdmission.@NonNull TokenValidator validator) {
-        this.sessions = sessions; this.views = views; this.oidc = oidc; this.http = http;
+        this(config, sessions, views, oidc, http, validator, null);
+    }
+
+    PlaygroundResources(@NonNull PlaygroundConfig config, @NonNull BrowserSessions sessions,
+            @NonNull SafeViews views, @NonNull PlaygroundOidc oidc, @NonNull HttpClient http,
+            PlaygroundAdmission.@NonNull TokenValidator validator, @Nullable PlaygroundSaml saml) {
+        this.sessions = sessions; this.views = views; this.oidc = oidc; this.http = http; this.saml = saml;
         profile = new PlaygroundAdmission.RuntimeProfile(config, validator);
     }
 
@@ -80,10 +93,12 @@ public final class PlaygroundResources {
                         .put("probeClientId", profile.config.probeClientId)
                         .put("probeSecretReference", profile.config.probeSecretReference)
                         .put("loopbackHttp", profile.config.loopbackHttp).put("replayEnabled", profile.config.replayEnabled)
+                        .put("samlAvailable", saml != null)
+                        .put("samlConnection", saml == null ? "" : saml.connectionId())
                         .put("journalAvailable", session.journal != null)
                         .put("events", SafeViews.scopes(eventSnapshot()));
                 if (session.identity != null) view.put("identity", session.identity);
-                return json(200, view.build()).copy().cookies(Set.of(BrowserSessions.cookie(session))).finish();
+                return json(200, view.build()).copy().cookies(List.of(BrowserSessions.cookie(session))).finish();
             }
         } catch (IllegalStateException full) { return fixed(503, "Local session store is full."); }
     }
@@ -133,6 +148,32 @@ public final class PlaygroundResources {
         if (!PlaygroundAdmission.trusted(request, profile.config, true)) return fixed(403, "Request denied.");
         event("OIDC callback received");
         return oidc.callback(profile.config, request);
+    }
+
+    @GET("/saml/metadata") public @NonNull Response samlMetadata(@NonNull Request request) {
+        return saml == null ? fixed(404, "SAML is not configured.") : saml.metadata(request);
+    }
+
+    @POST("/saml/begin") public @NonNull Response samlBegin(@NonNull Request request) {
+        BrowserSessions.Session session = controlSession(request);
+        if (session == null) return fixed(403, "Request denied.");
+        if (saml == null) return fixed(404, "SAML is not configured.");
+        return saml.begin(session);
+    }
+
+    @POST("/saml/acs") public @NonNull Response samlAcs(@NonNull Request request) {
+        return saml == null ? fixed(404, "SAML is not configured.") : saml.callback(request);
+    }
+
+    @POST("/saml/logout") public @NonNull Response samlBeginLogout(@NonNull Request request) {
+        BrowserSessions.Session session = controlSession(request);
+        if (session == null) return fixed(403, "Request denied.");
+        if (saml == null) return fixed(404, "SAML is not configured.");
+        return saml.beginLogout(session);
+    }
+
+    @GET("/saml/slo") public @NonNull Response samlLogoutCallback(@NonNull Request request) {
+        return saml == null ? fixed(404, "SAML is not configured.") : saml.logoutCallback(request);
     }
 
     @POST("/api/replay") public @NonNull Response replay(@NonNull Request request) {
@@ -215,7 +256,8 @@ public final class PlaygroundResources {
         if (session == null) return null;
         List<String> headers = PlaygroundAdmission.headerValues(request, "X-CSRF-Token");
         String candidate = headers.size() == 1 ? headers.get(0) : null;
-        if (request.getResourcePath().getPath().equals("/oidc/begin") && headers.isEmpty()) {
+        if (Set.of("/oidc/begin", "/saml/begin", "/saml/logout")
+                .contains(request.getResourcePath().getPath()) && headers.isEmpty()) {
             try { candidate = formValues(request).get("csrf"); } catch (RuntimeException bad) { return null; }
         }
         return BrowserSessions.csrfMatches(session, candidate) ? session : null;
@@ -305,11 +347,12 @@ public final class PlaygroundResources {
             if (name.equals("index.html")) {
                 java.net.URI provider = java.net.URI.create(profile.config.issuer);
                 String action = provider.getScheme() + "://" + provider.getRawAuthority();
+                String samlAction = saml == null ? "" : " " + saml.identityProviderOrigin();
                 return response.copy().headers(headers -> {
-                    headers.put("Referrer-Policy", Set.of("same-origin"));
-                    headers.put("Content-Security-Policy", Set.of(
+                    headers.put("Referrer-Policy", List.of("same-origin"));
+                    headers.put("Content-Security-Policy", List.of(
                             "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; form-action 'self' "
-                                    + action + "; base-uri 'none'; frame-ancestors 'none'"));
+                                    + action + samlAction + "; base-uri 'none'; frame-ancestors 'none'"));
                 }).finish();
             }
             return response;
@@ -338,9 +381,9 @@ public final class PlaygroundResources {
     static @NonNull Response json(int status, @NonNull JsonObject body) { return response(status, body.toJson(), "application/json; charset=UTF-8"); }
     static @NonNull Response fixed(int status, @NonNull String message) { return json(status, JsonObject.builder().put("outcome", message).build()); }
     private static @NonNull Response response(int status, @NonNull String body, @NonNull String type) {
-        return Response.withStatusCode(status).body(body).headers(Map.of("Content-Type", Set.of(type),
-                "Cache-Control", Set.of("no-store"), "Referrer-Policy", Set.of("no-referrer"),
-                "X-Content-Type-Options", Set.of("nosniff"), "Content-Security-Policy", Set.of(
+        return Response.withStatusCode(status).body(body).headers(Map.of("Content-Type", List.of(type),
+                "Cache-Control", List.of("no-store"), "Referrer-Policy", List.of("no-referrer"),
+                "X-Content-Type-Options", List.of("nosniff"), "Content-Security-Policy", List.of(
                     "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'"))).build();
     }
 }

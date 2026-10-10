@@ -36,3 +36,45 @@ The signed-UserInfo client's fixed test-only secret is `test-only-signed-userinf
 **Pinned-provider HMAC limit:** Keycloak 26.7.4's `DefaultTokenManager.encode` selects the algorithm's `SignatureProvider.signer()`. Its MAC signer selects the realm's active signing key, rather than this client's secret. Revetsec's OIDC HMAC mode verifies with the exact request-authentication `client_secret` and rejects this token with `ID_TOKEN_SIGNATURE_INVALID`, without releasing identity or endpoint credentials. Use asymmetric ID tokens with this provider. This negative integration case supplements the positive client-secret HMAC cases in `OidcHmacTests`; it does not establish HMAC compatibility with Keycloak.
 
 The headless test browser submits the real login form, handles secure session cookies over TLS and stops at the fixed registered callback. Query responses are parsed from Keycloak's redirect. Form-post responses are taken from Keycloak's actual HTML form, encoded into a UTF-8 POST body and passed to the core form-body parser; the harness checks the exact action and POST mode and never contacts the callback URL. The HTML parser is test-only and deliberately tied to the pinned theme. Separate negatives prove that a changed callback route sends no token POST, a changed authorization nonce rejects the provider-signed token, and configured signed UserInfo cannot downgrade to the provider's JSON response.
+
+## SAML service provider integration
+
+`KeycloakSamlIT` uses the same pinned, loopback-only TLS container and a test-only SAML
+client with `https://sp.test/KeycloakSamlIT` as its entity ID. The client signs its
+Responses, encrypts assertions to the public test SP certificate, and exposes Redirect
+Single Logout at `https://sp.test/logout`. The corresponding private key remains in the
+Revetsec test process; it is not mounted into Keycloak. The browser driver checks
+SP-initiated and explicitly enabled IdP-initiated POST SSO, AES-256-GCM/RSA-OAEP
+assertion decryption, and Redirect logout in both directions. It submits Keycloak's
+actual login and logout confirmation forms and verifies the returned SAML messages
+through the core service provider. The broader SAML release matrix is still open.
+
+`run_playground_browser.sh` starts a disposable browser fixture after the current core
+and Soklet adapter JARs and Playground classes have been built. Set `SOKLET_JAR` to the
+checksum-pinned Soklet 4.0.0 JAR and `BROWSER_SECCOMP` to the private derived profile
+from [the browser setup](../inspector-auth/linux/README.md), then run
+`bash interop/keycloak/run_playground_browser.sh` from the core repository. The runner
+uses only locally cached images, prints a bounded JSON result, and removes its owned
+containers and temporary realm/metadata directory. `playground_browser_probe.mjs`
+drives the actual app in sandboxed Chromium. Its `--network none` fixture uses
+Keycloak at `https://localhost:8444`, Caddy at
+`https://localhost:9443`, and the Playground on loopback HTTP behind Caddy. It adds a
+**temporary copy** of the SAML client to the imported test realm with entity ID
+`https://localhost:9443/saml/metadata`, POST ACS
+`https://localhost:9443/saml/acs`, Redirect logout
+`https://localhost:9443/saml/slo`, and `saml.client.signature=true`; the runner does
+this without changing the shared realm fixture. It feeds Keycloak's HTTPS
+metadata from that isolated namespace to the Playground as an approved local file,
+using the test SP signing/decryption certificate and private key. Mount the same test
+CA into Keycloak, the edge, a Java trust store and the browser's private NSS store.
+The browser container uses the pinned Inspector image, nonroot `pwuser`, the derived
+Playwright seccomp profile and no certificate or sandbox bypass. The probe checks two
+encrypted POST logins,
+the secure app session cookie, SP logout with a Keycloak SAMLResponse, and Keycloak
+logout with a signed LogoutRequest and the app's SAMLResponse. It emits only bounded
+route/status facts and cleans up its private browser profile.
+
+Chromium 153 sends `Origin: null` on Keycloak's automatic cross-site POST to the
+ACS. The Playground permits this opaque origin only on its SAML ACS, where the
+sealed pending browser state and full response validation remain required. It does
+not add `null` to the general CORS allowlist or to application form endpoints.

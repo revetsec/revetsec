@@ -1,4 +1,4 @@
--- Apply through an application migration before serving OAuth/OIDC callbacks.
+-- Apply through an application migration before serving OAuth/OIDC or WebAuthn traffic.
 -- The namespace clock row is an authoritative fence. Never recreate it on request traffic.
 CREATE TABLE pending_authorization_clock (
     namespace text PRIMARY KEY,
@@ -61,3 +61,57 @@ CREATE TABLE issuer_store_entry (
 
 -- For a new issuer namespace only, before initialization and serving traffic:
 -- INSERT INTO issuer_store_namespace(namespace) VALUES ('my_issuer');
+
+-- Optional authoritative WebAuthn store. Every participating node, including account
+-- management, must lock the provisioned namespace row before reading or writing. Retain
+-- credential tombstones and account fences; do not TTL-delete live protocol state.
+CREATE SEQUENCE webauthn_store_version_seq AS bigint NO CYCLE;
+
+CREATE TABLE webauthn_store_namespace (
+    namespace text PRIMARY KEY
+);
+
+CREATE TABLE webauthn_store_entry (
+    namespace text NOT NULL REFERENCES webauthn_store_namespace(namespace),
+    storage_key text COLLATE "C" NOT NULL CHECK (char_length(storage_key) BETWEEN 1 AND 640),
+    kind text COLLATE "C" NOT NULL,
+    version bigint NOT NULL CHECK (version > 0),
+    sealed_form text COLLATE "C" NOT NULL CHECK (octet_length(sealed_form) BETWEEN 1 AND 350000),
+    PRIMARY KEY (namespace, storage_key)
+);
+
+-- Optional application recovery marker used by the local WebAuthn fixture. Its matching
+-- epoch and sealing-key fingerprint must also be retained in an independent durable control
+-- plane outside the restored database snapshot.
+CREATE TABLE webauthn_recovery_epoch (
+    namespace text PRIMARY KEY REFERENCES webauthn_store_namespace(namespace),
+    epoch text COLLATE "C" NOT NULL CHECK (octet_length(epoch) = 43),
+    sealer_digest text COLLATE "C" NOT NULL CHECK (octet_length(sealer_digest) = 43)
+);
+
+-- Provision only a new namespace before WebAuthn traffic:
+-- INSERT INTO webauthn_store_namespace(namespace) VALUES ('my_passkeys');
+
+-- Optional application browser sessions for a multi-process issuer example. The same provisioned
+-- namespace row serializes creation, login rotation, pending replacement, consent claim and logout.
+-- Store only SHA-256 of the random cookie ID; the app-sealed row binds that hash and namespace.
+CREATE TABLE issuer_browser_namespace (
+    namespace text PRIMARY KEY,
+    observed_seconds bigint NOT NULL,
+    observed_nanos integer NOT NULL CHECK (observed_nanos BETWEEN 0 AND 999999999)
+);
+
+CREATE TABLE issuer_browser_session (
+    namespace text NOT NULL REFERENCES issuer_browser_namespace(namespace),
+    session_key bytea NOT NULL CHECK (octet_length(session_key) = 32),
+    sealed_form text COLLATE "C" NOT NULL CHECK (octet_length(sealed_form) BETWEEN 1 AND 3800),
+    expires_seconds bigint NOT NULL,
+    expires_nanos integer NOT NULL CHECK (expires_nanos BETWEEN 0 AND 999999999),
+    PRIMARY KEY (namespace, session_key)
+);
+
+CREATE INDEX issuer_browser_session_expiry ON issuer_browser_session(namespace,expires_seconds,expires_nanos);
+
+-- For a new browser namespace only, before admitting browser traffic:
+-- INSERT INTO issuer_browser_namespace(namespace,observed_seconds,observed_nanos)
+-- VALUES ('my_issuer_browser',0,0);

@@ -1,0 +1,52 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<samlp:Response xmlns:samlp="urn:oasis:names:tc:SAML:2.0:protocol" xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion" ID="_mint_response_27" Version="2.0" IssueInstant="2026-09-01T00:00:00Z" Destination="https://sp.test/acs"><saml:Issuer>https://idp.scripted-idp.test/</saml:Issuer><ds:Signature xmlns:ds="http://www.w3.org/2000/09/xmldsig#">
+<ds:SignedInfo>
+<ds:CanonicalizationMethod Algorithm="http://www.w3.org/2001/10/xml-exc-c14n#"/>
+<ds:SignatureMethod Algorithm="http://www.w3.org/2001/04/xmldsig-more#rsa-sha512"/>
+<ds:Reference URI="#_mint_response_27">
+<ds:Transforms>
+<ds:Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"/>
+<ds:Transform Algorithm="http://www.w3.org/2001/10/xml-exc-c14n#"/>
+</ds:Transforms>
+<ds:DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"/>
+<ds:DigestValue>PoZP+mojXUlIv7UJGujaRRypYj52MozdAgSvhULEoc4=</ds:DigestValue>
+</ds:Reference>
+</ds:SignedInfo>
+<ds:SignatureValue>aiCtURPg2VtEl/sipYfAyYE2LHFGJgyledxYjlitXCVLGip/7aOiWXIPoXPEdfC3
+BySvq2ih8Rdq9+0041vHT8yKZeZoBP8cHIbi/BU0ewrb87ErckN8RA9g80zzIdX5
+xg/Ww9RV7GGJoFAzjCVdi0xWts3s1cQS6NGtL00S3J6q3sPgt02VkwkmBH6yrN0d
+FWNRaw/I2tUIEOBHJy0nO3K4T0rdX3DDvdgCLv1aGCCabsb9X5CoDWoXIgvrLIht
+iM/2ezrSkStaLiSZdfEsWwfaT/AHbEyGwzWddqYExOKcF9xyES8NH2Ojm315behB
+84Xh27qgyrTgswytEwCb11lJI0JdgpSfgwXsP0M7FpN1jyVkUzKwhvutHkNEbrr3
+u0BZ03On9SaOClvXPL0movtNCs+2z+zT6Ivhl+JDIGsHTbU96tgwAeJ0R5GBD/Ew
+5rGLD2ha/D0yjeEDNLm/YF/IwbNAwgzQdCr9OgsATKHr9UtVFs0pxwu7Fuao2uOi</ds:SignatureValue>
+<ds:KeyInfo>
+<ds:X509Data>
+<ds:X509Certificate>MIIEcTCCAtmgAwIBAgICB9IwDQYJKoZIhvcNAQELBQAwWjErMCkGA1UECgwiUmV2
+ZXRTZWMgdGVzdCBmaXh0dXJlcyAtIFRFU1QgT05MWTErMCkGA1UEAwwiUmV2ZXRT
+ZWMgdGVzdCBJZFAgc2lnbmluZyBSU0EtMzA3MjAgFw0yNjAxMDEwMDAwMDBaGA8y
+MTI2MDEwMTAwMDAwMFowWjErMCkGA1UECgwiUmV2ZXRTZWMgdGVzdCBmaXh0dXJl
+cyAtIFRFU1QgT05MWTErMCkGA1UEAwwiUmV2ZXRTZWMgdGVzdCBJZFAgc2lnbmlu
+ZyBSU0EtMzA3MjCCAaIwDQYJKoZIhvcNAQEBBQADggGPADCCAYoCggGBANAM3RAS
+B9vGC/tCVJDp97s4G89sjq7tgU6zZVzYfzrhi7jxoN2vPqLc5vsklDFUQoyGgst4
+b49VayuJxWkr/L70H3K6gLgVBD1SNVGTSNYXcuFq7Wk5ql24TBFcqd+cYsLcnbKj
+uqXiHOO48AQGsh31P/B7iuXiBj3Q6i+AIlTxs5GY+dXEx/U/zcAM/4MoDMV3+BKf
++RhAtXEjFYMF0nK8X/1EJQF/0bbvSYbpr7K502IfQYKB+9T7+P5LOgNPbi0UxuKK
+FluqbY1BNFWecuik/seAQiR+rUqgnNQ0565fp4S8oOh1SbcdOUvk+iakHzZGETyg
+7BW0sR0kCwFzgtMe8cbGyFci20CxLHyYR7zX5uB/8EnkvGIh3oGMH9vBDjVcHeyJ
+hLCjRr40+0upecnNMCrvpf8Fj+2NxTa3TqmJVRykXNrzTbbNzYsRprtSuprstWyP
+DjJiyHIoHXA1QZ5sLHP5yoSzD/+HluzKXZWXnTVxchvCMLZa0HCnPMSj7QIDAQAB
+oz8wPTAMBgNVHRMBAf8EAjAAMA4GA1UdDwEB/wQEAwIHgDAdBgNVHQ4EFgQUNu7J
+aZmoC9reb4d0dlTvT+fmPTowDQYJKoZIhvcNAQELBQADggGBAJ+8aahswVJGQXxb
+NHT3mmBueOQlplpGB8mkRp4CHNkjQdPHsMAlCXnKBhv+naHLiEKOV7x/og4UVbWm
+HyIh92lNIWppXTzx6TQ6js0LS8JrsBa96rCI+JVd9fRzwfxJKD9gfgmpkJwvEULc
+X7439qE4rceY07oAXYoz700k9TqZPOBlMQuDovwY27kop09x4C8cpUNMfdj1HDZB
++qqprGDCyHs5+XZSpEPr6GYboozjhllz/nXNzsVG4YMB6mUrchwblyqKOwjRp9ei
+/22NWJP+nnJFxA3+OdgwQ909jqJXyxSf5mOWRIy0nurIr7M+jPFHa+lCt4ctwJrq
+8ezyu+ybbIZaDhpQkQ0VndYSw0z3gvLVIcu7dFVqtcz+SfVo72CX3c4xu1vLPDHx
+jXb3Yw/qSgIhvf3TUAobD8Y9mXVb5ys7thlSuIB7+sfZMZ1bt2LWzNj8ewwG+BhN
+M8BtJUhCT2wxmkR6bOd+HSeGWGeSx/vLP1wE/qByhOmhujy6Ng==
+</ds:X509Certificate>
+</ds:X509Data>
+</ds:KeyInfo>
+</ds:Signature><samlp:Status><samlp:StatusCode Value="urn:oasis:names:tc:SAML:2.0:status:Success"/></samlp:Status><saml:Assertion ID="_mint_assertion_27" Version="2.0" IssueInstant="2026-09-01T00:00:00Z"><saml:Issuer>https://idp.scripted-idp.test/</saml:Issuer><saml:Subject><saml:NameID Format="urn:oasis:names:tc:SAML:2.0:nameid-format:persistent" NameQualifier="https://idp.scripted-idp.test/" SPNameQualifier="https://sp.test/Selftest">minted-user</saml:NameID><saml:SubjectConfirmation Method="urn:oasis:names:tc:SAML:2.0:cm:bearer"><saml:SubjectConfirmationData Recipient="https://sp.test/acs" NotOnOrAfter="2026-09-01T00:05:00Z"/></saml:SubjectConfirmation></saml:Subject><saml:Conditions NotBefore="2026-08-31T23:59:00Z" NotOnOrAfter="2026-09-01T00:05:00Z"><saml:AudienceRestriction><saml:Audience>https://sp.test/Selftest</saml:Audience></saml:AudienceRestriction></saml:Conditions><saml:AuthnStatement AuthnInstant="2026-09-01T00:00:00Z" SessionIndex="_session-1"><saml:AuthnContext><saml:AuthnContextClassRef>urn:oasis:names:tc:SAML:2.0:ac:classes:PasswordProtectedTransport</saml:AuthnContextClassRef></saml:AuthnContext></saml:AuthnStatement></saml:Assertion></samlp:Response>

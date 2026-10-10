@@ -121,11 +121,11 @@ final class PlaygroundAdmissionTests {
         SokletSimulator.run(fixture.application(fixture.validator(calls)), simulator -> {
             String token = fixture.jwt(fixture.issuer, fixture.resource, "mcp:whoami", 60, false);
             Request request = fixture.request("Bearer " + token, "tools/call", "whoami", "{}", false);
-            for (Map<String, Set<String>> headers : List.of(
-                    Map.of("Host", Set.of("foreign.example:8081"), "Authorization", Set.of("Bearer " + token), "Content-Type", Set.of("application/json")),
-                    Map.of("Host", Set.of("127.0.0.1:8081"), "Origin", Set.of("https://foreign.example"), "Authorization", Set.of("Bearer " + token), "Content-Type", Set.of("application/json")),
-                    Map.of("Host", Set.of("127.0.0.1:8081"), "Authorization", Set.of("Bearer " + token, "Bearer other"), "Content-Type", Set.of("application/json")))) {
-                Map<String, Set<String>> exact = new java.util.LinkedHashMap<>(request.getHeaders());
+            for (Map<String, List<String>> headers : List.of(
+                    Map.of("Host", List.of("foreign.example:8081"), "Authorization", List.of("Bearer " + token), "Content-Type", List.of("application/json")),
+                    Map.of("Host", List.of("127.0.0.1:8081"), "Origin", List.of("https://foreign.example"), "Authorization", List.of("Bearer " + token), "Content-Type", List.of("application/json")),
+                    Map.of("Host", List.of("127.0.0.1:8081"), "Authorization", List.of("Bearer " + token, "Bearer other"), "Content-Type", List.of("application/json")))) {
+                Map<String, List<String>> exact = new java.util.LinkedHashMap<>(request.getHeaders());
                 exact.putAll(headers);
                 try (McpSimulation simulation = simulator.startMcpRequest(request.copy().headers(exact).finish())) {
                     assertEquals(headers.containsKey("Origin") ? 403 : headers.get("Host").contains("foreign.example:8081") ? 421 : 400,
@@ -150,7 +150,7 @@ final class PlaygroundAdmissionTests {
 
     @Test void setsCannotRecoverIdenticalPhysicalHeadersAndBodyTokensAreNotMcpTransport() throws Exception {
         Fixtures fixture = new Fixtures();
-        Request collapsed = Request.withPath(HttpMethod.POST, "/mcp").headers(Map.of("Authorization", Set.of("Bearer opaque"))).build();
+        Request collapsed = Request.withPath(HttpMethod.POST, "/mcp").headers(Map.of("Authorization", List.of("Bearer opaque"))).build();
         assertTrue(com.revetsec.soklet.SokletBearer.bearerTokenFor(collapsed).isPresent());
         SokletSimulator.run(fixture.application(fixture.validator(new AtomicInteger())), simulator -> {
             McpSimulationResponse response = fixture.call(simulator, null, "tools/call", "whoami", "{\"token\":\"opaque\"}", false);
@@ -186,14 +186,14 @@ final class PlaygroundAdmissionTests {
         SokletSimulator.run(fixture.application(fixture.validator(calls)), simulator -> {
             String body = "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-11-25\","
                     + "\"capabilities\":{},\"clientInfo\":{\"name\":\"synthetic-client\",\"version\":\"1\"}}}";
-            Map<String, Set<String>> headers = new java.util.LinkedHashMap<>();
-            headers.put("Host", Set.of("127.0.0.1:8081")); headers.put("Content-Type", Set.of("application/json"));
-            headers.put("Accept", Set.of("application/json, text/event-stream")); headers.put("Mcp-Method", Set.of("initialize"));
+            Map<String, List<String>> headers = new java.util.LinkedHashMap<>();
+            headers.put("Host", List.of("127.0.0.1:8081")); headers.put("Content-Type", List.of("application/json"));
+            headers.put("Accept", List.of("application/json, text/event-stream")); headers.put("Mcp-Method", List.of("initialize"));
             Request initialize = Request.withPath(HttpMethod.POST, "/mcp").headers(headers).body(body.getBytes(StandardCharsets.UTF_8)).build();
             try (McpSimulation simulation = simulator.startMcpRequest(initialize)) {
                 assertEquals(401, simulation.awaitResponse(Duration.ofSeconds(3)).orElseThrow().getStatusCode());
             }
-            headers.put("Authorization", Set.of("Bearer " + fixture.jwt(fixture.issuer, fixture.resource, "mcp:discover", 60, false)));
+            headers.put("Authorization", List.of("Bearer " + fixture.jwt(fixture.issuer, fixture.resource, "mcp:discover", 60, false)));
             try (McpSimulation simulation = simulator.startMcpRequest(initialize.copy().headers(headers).finish())) {
                 McpSimulationResponse response = simulation.awaitResponse(Duration.ofSeconds(3)).orElseThrow();
                 assertEquals(200, response.getStatusCode()); assertTrue(Fixtures.body(response).contains("2025-11-25"));
@@ -290,13 +290,13 @@ final class PlaygroundAdmissionTests {
             String params = tool == null ? "{\"_meta\":{\"io.modelcontextprotocol/protocolVersion\":\"2026-07-28\",\"io.modelcontextprotocol/clientCapabilities\":{}}}"
                     : "{\"_meta\":{\"io.modelcontextprotocol/protocolVersion\":\"2026-07-28\",\"io.modelcontextprotocol/clientCapabilities\":{}},\"name\":\"" + tool + "\",\"arguments\":" + arguments + "}";
             String body = "{\"jsonrpc\":\"2.0\"," + id + "\"method\":\"" + method + "\",\"params\":" + params + "}";
-            Map<String, Set<String>> headers = new java.util.LinkedHashMap<>();
-            headers.put("Host", Set.of("127.0.0.1:8081")); headers.put("Content-Type", Set.of("application/json"));
-            headers.put("Accept", Set.of("application/json, text/event-stream"));
-            headers.put("MCP-Protocol-Version", Set.of("2026-07-28"));
-            headers.put("Mcp-Method", Set.of(method));
-            if (tool != null) headers.put("Mcp-Name", Set.of(tool));
-            if (authorization != null) headers.put("Authorization", Set.of(authorization));
+            Map<String, List<String>> headers = new java.util.LinkedHashMap<>();
+            headers.put("Host", List.of("127.0.0.1:8081")); headers.put("Content-Type", List.of("application/json"));
+            headers.put("Accept", List.of("application/json, text/event-stream"));
+            headers.put("MCP-Protocol-Version", List.of("2026-07-28"));
+            headers.put("Mcp-Method", List.of(method));
+            if (tool != null) headers.put("Mcp-Name", List.of(tool));
+            if (authorization != null) headers.put("Authorization", List.of(authorization));
             return Request.withPath(HttpMethod.POST, "/mcp").headers(headers).body(body.getBytes(StandardCharsets.UTF_8)).build();
         }
         @NonNull McpSimulationResponse call(@NonNull Simulator simulator, @Nullable String auth, @NonNull String method,

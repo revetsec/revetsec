@@ -94,6 +94,8 @@ def main():
         framework = copy_source("framework", args.framework_source, require_exact=True)
         run("framework-install", command + ["-Dmaven.test.skip=true", "clean", "install"], framework)
         framework_jar = framework / "target/soklet-4.0.0.jar"
+        if sha(framework_jar) != PINS["framework"]["jar_sha256"]:
+            raise RuntimeError("Framework source build does not match its recorded artifact pin")
     else:
         framework_jar = args.framework_jar.resolve()
         if sha(framework_jar) != PINS["framework"]["jar_sha256"]:

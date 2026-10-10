@@ -8,6 +8,14 @@ Third-party material in the source repository
 The files below are in the source repository only, as test tooling. None of
 them is in the published JAR.
 
+OASIS SAML and W3C XML schemas (interop/scripted-idp/schemas/)
+
+Six unmodified OASIS/W3C schema files are copied into the unpublished scripted
+IdP test image for offline validation of Revetsec-generated SAML messages.
+interop/scripted-idp/schemas/SOURCES.md records the official URLs and exact
+SHA-256 values. The XMLDSig schema includes an Internet Society and W3C
+copyright notice and points to https://www.w3.org/Consortium/Legal/.
+
 OpenID Connect Core examples (src/test/resources/vectors/oidc-core/)
 
 The ID-token examples in Appendix A.3 and A.4 and the public RSA key in A.7

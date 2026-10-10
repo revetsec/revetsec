@@ -28,6 +28,7 @@ import java.net.http.HttpClient;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -54,7 +55,7 @@ final class PlaygroundOidcTests {
             OidcClient client = config.oidcClient(HttpClient.newHttpClient());
             Response redirect = oidc.begin(config, client, original, sealed, formPost, true);
             assertEquals(302, redirect.getStatusCode());
-            assertEquals(Set.of("no-referrer"), redirect.getHeaders().get("Referrer-Policy"));
+            assertEquals(List.of("no-referrer"), redirect.getHeaders().get("Referrer-Policy"));
             URI auth = URI.create(redirect.getHeaders().get("Location").iterator().next());
             Map<String, String> parameters = Provider.parameters(auth.getRawQuery());
             provider.nonce = parameters.get("nonce");
@@ -64,25 +65,25 @@ final class PlaygroundOidcTests {
             Instant pendingExpires = original.flow.expires;
             String callback = "code=synthetic-code&state=" + Provider.escape(parameters.get("state"))
                     + "&iss=" + Provider.escape(provider.issuer);
-            Map<String, Set<String>> headers = new java.util.LinkedHashMap<>();
-            headers.put("Host", Set.of("localhost:8443"));
-            headers.put("Cookie", Set.of(BrowserSessions.COOKIE + "=" + original.id + "; " + cookie.getName() + "=" + cookie.getValue().orElseThrow()));
+            Map<String, List<String>> headers = new java.util.LinkedHashMap<>();
+            headers.put("Host", List.of("localhost:8443"));
+            headers.put("Cookie", List.of(BrowserSessions.COOKIE + "=" + original.id + "; " + cookie.getName() + "=" + cookie.getValue().orElseThrow()));
             if (formPost) {
-                headers.put("Origin", Set.of(provider.issuer));
-                headers.put("Content-Type", Set.of("application/x-www-form-urlencoded"));
+                headers.put("Origin", List.of(provider.issuer));
+                headers.put("Content-Type", List.of("application/x-www-form-urlencoded"));
             }
             Request request = Request.withRawUrl(formPost ? HttpMethod.POST : HttpMethod.GET,
                     formPost ? "/oidc/callback" : "/oidc/callback?" + callback).headers(headers)
                     .body(formPost ? callback.getBytes(StandardCharsets.UTF_8) : null).build();
             Response completed = oidc.callback(config, request);
             assertEquals(302, completed.getStatusCode());
-            assertEquals(Set.of("no-referrer"), completed.getHeaders().get("Referrer-Policy"));
+            assertEquals(List.of("no-referrer"), completed.getHeaders().get("Referrer-Policy"));
             assertEquals(1, provider.posts.get());
             ResponseCookie rotatedCookie = completed.getCookies().stream().filter(c -> c.getName().equals(BrowserSessions.COOKIE)).findFirst().orElseThrow();
             String rotatedId = rotatedCookie.getValue().orElseThrow();
             assertNotEquals(original.id, rotatedId);
-            assertTrue(sessions.find(Request.withPath(HttpMethod.GET, "/").headers(Map.of("Cookie", Set.of(BrowserSessions.COOKIE + "=" + original.id))).build()).isEmpty());
-            BrowserSessions.Session rotated = sessions.find(Request.withPath(HttpMethod.GET, "/").headers(Map.of("Cookie", Set.of(BrowserSessions.COOKIE + "=" + rotatedId))).build()).orElseThrow();
+            assertTrue(sessions.find(Request.withPath(HttpMethod.GET, "/").headers(Map.of("Cookie", List.of(BrowserSessions.COOKIE + "=" + original.id))).build()).isEmpty());
+            BrowserSessions.Session rotated = sessions.find(Request.withPath(HttpMethod.GET, "/").headers(Map.of("Cookie", List.of(BrowserSessions.COOKIE + "=" + rotatedId))).build()).orElseThrow();
             assertNotNull(rotated.identity); assertNotNull(rotated.journal);
             assertEquals(pendingExpires, rotated.journal.expires);
             assertEquals(BrowserSessions.SESSION_CHARGE_BYTES, sessions.chargedBytes());
@@ -135,16 +136,16 @@ final class PlaygroundOidcTests {
             Response redirect = oidc.begin(config, config.oidcClient(HttpClient.newHttpClient()), original, false, false, true);
             Map<String, String> fields = Provider.parameters(URI.create(redirect.getHeaders().get("Location").iterator().next()).getRawQuery());
             String path = "/oidc/callback?code=synthetic-code&state=" + Provider.escape(fields.get("state")) + "&iss=" + Provider.escape(provider.issuer);
-            Request wrongBrowser = Request.withRawUrl(HttpMethod.GET, path).headers(Map.of("Cookie", Set.of(BrowserSessions.COOKIE + "=" + foreign.id))).build();
+            Request wrongBrowser = Request.withRawUrl(HttpMethod.GET, path).headers(Map.of("Cookie", List.of(BrowserSessions.COOKIE + "=" + foreign.id))).build();
             Response rejectedCallback = oidc.callback(config, wrongBrowser);
             assertEquals(400, rejectedCallback.getStatusCode());
-            assertEquals(Set.of("no-referrer"), rejectedCallback.getHeaders().get("Referrer-Policy"));
+            assertEquals(List.of("no-referrer"), rejectedCallback.getHeaders().get("Referrer-Policy"));
             ResponseCookie flowCookie = redirect.getCookies().iterator().next();
             String duplicate = BrowserSessions.COOKIE + "=" + original.id + "; " + flowCookie.getName() + "=" + flowCookie.getValue().orElseThrow()
                     + "; " + flowCookie.getName() + "=" + flowCookie.getValue().orElseThrow();
-            assertEquals(400, oidc.callback(config, Request.withRawUrl(HttpMethod.GET, path).headers(Map.of("Cookie", Set.of(duplicate))).build()).getStatusCode());
+            assertEquals(400, oidc.callback(config, Request.withRawUrl(HttpMethod.GET, path).headers(Map.of("Cookie", List.of(duplicate))).build()).getStatusCode());
             assertEquals(0, provider.posts.get());
-            Request missingCookie = Request.withRawUrl(HttpMethod.GET, path).headers(Map.of("Cookie", Set.of(BrowserSessions.COOKIE + "=" + original.id))).build();
+            Request missingCookie = Request.withRawUrl(HttpMethod.GET, path).headers(Map.of("Cookie", List.of(BrowserSessions.COOKIE + "=" + original.id))).build();
             assertEquals(400, oidc.callback(config, missingCookie).getStatusCode());
             assertEquals(0, provider.posts.get()); assertNull(original.journal); assertNull(foreign.journal);
         }

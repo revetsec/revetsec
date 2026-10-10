@@ -43,6 +43,10 @@ public enum SealedStateType {
 	 */
 	PENDING_SAML("revetsec/pending-saml/v1"),
 	/**
+	 * Pending SAML front-channel logout state, separate from pending login.
+	 */
+	PENDING_SAML_LOGOUT("revetsec/pending-saml-logout/v1"),
+	/**
 	 * An OpenID Connect session reference: {@code revetsec/oidc-session/v1}.
 	 */
 	OIDC_SESSION("revetsec/oidc-session/v1"),
@@ -53,7 +57,9 @@ public enum SealedStateType {
  /** Authenticated issuer persistence records: revetsec/as-record/v1. */
  AS_RECORD("revetsec/as-record/v1"),
  /** Optional authenticated client metadata cache, distinct from application/issuer persistence. */
- AS_CLIENT_METADATA_CACHE("revetsec/as-client-metadata-cache/v1");
+ AS_CLIENT_METADATA_CACHE("revetsec/as-client-metadata-cache/v1"),
+ /** Authenticated WebAuthn authoritative-store records, separate from application and issuer state. */
+ WEBAUTHN_RECORD("revetsec/webauthn-record/v1");
 
 	@NonNull
 	private final String label;

@@ -123,6 +123,32 @@
         "pkce.code.challenge.method": "S256",
         "id.token.signed.response.alg": "HS256"
       }
+    },
+    {
+      "clientId": "https://sp.test/KeycloakSamlIT",
+      "name": "Revetsec SAML test SP (TEST ONLY)",
+      "enabled": true,
+      "protocol": "saml",
+      "standardFlowEnabled": true,
+      "frontchannelLogout": true,
+      "consentRequired": false,
+      "redirectUris": ["https://sp.test/acs"],
+      "attributes": {
+        "saml_assertion_consumer_url_post": "https://sp.test/acs",
+        "saml.client.signature": "false",
+        "saml.server.signature": "true",
+        "saml.encrypt": "true",
+        "saml.encryption.certificate": "MIIDdTCCAl2gAwIBAgICCJowDQYJKoZIhvcNAQELBQAwXDErMCkGA1UECgwiUmV2ZXRTZWMgdGVzdCBmaXh0dXJlcyAtIFRFU1QgT05MWTEtMCsGA1UEAwwkUmV2ZXRTZWMgdGVzdCBTUCBlbmNyeXB0aW9uIFJTQS0yMDQ4MCAXDTI2MDEwMTAwMDAwMFoYDzIxMjYwMTAxMDAwMDAwWjBcMSswKQYDVQQKDCJSZXZldFNlYyB0ZXN0IGZpeHR1cmVzIC0gVEVTVCBPTkxZMS0wKwYDVQQDDCRSZXZldFNlYyB0ZXN0IFNQIGVuY3J5cHRpb24gUlNBLTIwNDgwggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQDNFzQC6lq0BmT5X9AcEzOZvOtk6DDiRJusnCbzb9FGD6CTppw2kEOQkzXRkiW1Xwbqdvys7JI15kGvbWVa35z4WJPfTJwSAY5hhAhp9q8LW/vaZd6s1o4wneL0uugG64PBhinjYcXL91torc2JrQKoK8iIBpDSBLOc2SU8+z46Pvc8R9dPBykFp3a9QsP2XJM/JwOWoBbpb8hkpWPELUMVha6P0iHSNPnakx6iBnCFCGY6EUvjHhBpIqkikpu7p86D1QDEbE65SoWlAk7mE5MF38iEt62Il/sE8mcgbEoBwVqLO1Af/vTsCGPNxA00MC/WR3q1Xk7K5yRVMetwqjkHAgMBAAGjPzA9MAwGA1UdEwEB/wQCMAAwDgYDVR0PAQH/BAQDAgUgMB0GA1UdDgQWBBQBqkbxv8B+E+2h0qmzFFbyhxoL0DANBgkqhkiG9w0BAQsFAAOCAQEAPBcQRKW4KgFGQqkkJBo13s+ukdPgtXTgNGD0Cx3X6dN6s4lyBblNOSAdRs46ksI3BI/s9igzf8pBRVFwJZ9hzb/pT90+s5P5WoDNG4p31sXmOkVgnHO53vdNQJkedqbLsbCxfpTBlE436ZoR9gR4p+je6gT9BkV47zlJXwwaZ6tAn1oDeZL3nul+JpjOX5mKlY0DAf+eElA/8gPNGO7fDp9VsJkBFBpvuAtK9EzfOHrrBU9kc+/nNXoHmV1JdG6UdXoSAzlae+FRKMqzM9zBYMpHto80SUA5c1BiPmGsabhXjNGtZ/6QTq8Uf7f49n9U1t6bD/QnGb/Ei+TlyOMfOA==",
+        "saml.signing.certificate": "MIIDdTCCAl2gAwIBAgICCJowDQYJKoZIhvcNAQELBQAwXDErMCkGA1UECgwiUmV2ZXRTZWMgdGVzdCBmaXh0dXJlcyAtIFRFU1QgT05MWTEtMCsGA1UEAwwkUmV2ZXRTZWMgdGVzdCBTUCBlbmNyeXB0aW9uIFJTQS0yMDQ4MCAXDTI2MDEwMTAwMDAwMFoYDzIxMjYwMTAxMDAwMDAwWjBcMSswKQYDVQQKDCJSZXZldFNlYyB0ZXN0IGZpeHR1cmVzIC0gVEVTVCBPTkxZMS0wKwYDVQQDDCRSZXZldFNlYyB0ZXN0IFNQIGVuY3J5cHRpb24gUlNBLTIwNDgwggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQDNFzQC6lq0BmT5X9AcEzOZvOtk6DDiRJusnCbzb9FGD6CTppw2kEOQkzXRkiW1Xwbqdvys7JI15kGvbWVa35z4WJPfTJwSAY5hhAhp9q8LW/vaZd6s1o4wneL0uugG64PBhinjYcXL91torc2JrQKoK8iIBpDSBLOc2SU8+z46Pvc8R9dPBykFp3a9QsP2XJM/JwOWoBbpb8hkpWPELUMVha6P0iHSNPnakx6iBnCFCGY6EUvjHhBpIqkikpu7p86D1QDEbE65SoWlAk7mE5MF38iEt62Il/sE8mcgbEoBwVqLO1Af/vTsCGPNxA00MC/WR3q1Xk7K5yRVMetwqjkHAgMBAAGjPzA9MAwGA1UdEwEB/wQCMAAwDgYDVR0PAQH/BAQDAgUgMB0GA1UdDgQWBBQBqkbxv8B+E+2h0qmzFFbyhxoL0DANBgkqhkiG9w0BAQsFAAOCAQEAPBcQRKW4KgFGQqkkJBo13s+ukdPgtXTgNGD0Cx3X6dN6s4lyBblNOSAdRs46ksI3BI/s9igzf8pBRVFwJZ9hzb/pT90+s5P5WoDNG4p31sXmOkVgnHO53vdNQJkedqbLsbCxfpTBlE436ZoR9gR4p+je6gT9BkV47zlJXwwaZ6tAn1oDeZL3nul+JpjOX5mKlY0DAf+eElA/8gPNGO7fDp9VsJkBFBpvuAtK9EzfOHrrBU9kc+/nNXoHmV1JdG6UdXoSAzlae+FRKMqzM9zBYMpHto80SUA5c1BiPmGsabhXjNGtZ/6QTq8Uf7f49n9U1t6bD/QnGb/Ei+TlyOMfOA==",
+        "saml_single_logout_service_url_redirect": "https://sp.test/logout",
+        "saml.assertion.signature": "false",
+        "saml.force.post.binding": "true",
+        "saml.authnstatement": "true",
+        "saml.signature.algorithm": "RSA_SHA256",
+        "saml_name_id_format": "persistent",
+        "saml_force_name_id_format": "true",
+        "saml_idp_initiated_sso_url_name": "revetsec-unsolicited"
+      }
     }
   ],
   "users": [

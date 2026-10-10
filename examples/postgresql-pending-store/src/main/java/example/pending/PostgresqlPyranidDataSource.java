@@ -33,21 +33,21 @@ import java.util.logging.Logger;
 import static java.util.Objects.requireNonNull;
 
 /** One operation's budget-bound connection facade for Pyranid-managed transactions. */
-final class PostgresqlPyranidDataSource implements DataSource {
+public final class PostgresqlPyranidDataSource implements DataSource {
 	@FunctionalInterface
-	interface ConnectionSource {
+	public interface ConnectionSource {
 		@NonNull Connection open(@NonNull Duration remaining) throws SQLException;
 	}
 
 	private final @NonNull ConnectionSource source;
 	private final long deadline;
 
-	PostgresqlPyranidDataSource(@NonNull ConnectionSource source, long deadline) {
+	public PostgresqlPyranidDataSource(@NonNull ConnectionSource source, long deadline) {
 		this.source = requireNonNull(source);
 		this.deadline = deadline;
 	}
 
-	static long remainingNanos(long deadline) throws SQLException {
+	public static long remainingNanos(long deadline) throws SQLException {
 		long nanos = deadline - System.nanoTime();
 		if (nanos <= 0 || Thread.currentThread().isInterrupted())
 			throw new SQLException("PostgreSQL operation budget expired.");
@@ -59,7 +59,7 @@ final class PostgresqlPyranidDataSource implements DataSource {
 		return (int) Math.max(1, Math.min(60_000, (nanos + 999_999) / 1_000_000));
 	}
 
-	static void bound(@NonNull Database database, long deadline) throws SQLException {
+	public static void bound(@NonNull Database database, long deadline) throws SQLException {
 		String timeout = milliseconds(deadline) + "ms";
 		database.query("SELECT set_config('statement_timeout', :timeout, true)")
 				.bind("timeout", timeout).fetchObject(String.class).orElseThrow();
