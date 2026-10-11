@@ -17,9 +17,12 @@ package com.revetsec.saml;
 
 import com.revetsec.StateSealer;
 import com.revetsec.internal.pem.Pem;
+import com.revetsec.internal.xml.SecureXmlParser;
+import com.revetsec.internal.xml.XmlEncryptionDecryptor;
 import com.revetsec.testing.TestSealers;
 import org.jspecify.annotations.NonNull;
 import org.junit.jupiter.api.Test;
+import org.w3c.dom.Element;
 import javax.crypto.Cipher;
 import javax.crypto.KeyGenerator;
 import javax.crypto.SecretKey;
@@ -42,14 +45,68 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.Base64;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 final class SamlEncryptionTests {
     private static final @NonNull Clock CLOCK = Clock.fixed(Instant.parse("2026-10-09T00:01:00Z"), ZoneOffset.UTC);
+
+    @Test void decryptedAssertionCannotReuseAnIdentifierFromTheSignedEnvelope() throws Exception {
+        KeyPairGenerator generator = KeyPairGenerator.getInstance("RSA");
+        generator.initialize(2048);
+        KeyPair idpSigning = generator.generateKeyPair();
+        SamlCredential decryption = credential();
+        String plain = SamlResponseSemanticsTests.BASE;
+        int begin = plain.indexOf("<a:Assertion");
+        int end = plain.indexOf("</a:Assertion>") + "</a:Assertion>".length();
+        String assertion = plain.substring(begin, end).replaceFirst("<a:Assertion",
+                "<a:Assertion xmlns:a='urn:oasis:names:tc:SAML:2.0:assertion'");
+        for (String collision : List.of(
+                assertion.replace("ID='_assertion'", "ID='_response'"),
+                assertion.replace("<a:NameID>alice</a:NameID>",
+                        "<a:NameID Id='_response'>alice</a:NameID>"))) {
+            String response = plain.substring(0, begin) + encryptedAssertion(collision, decryption)
+                    + plain.substring(end);
+            String signed = SamlResponseSemanticsTests.signedXml(response, true, false,
+                    idpSigning.getPrivate());
+            SamlInboundResponse.Accepted parsed = assertInstanceOf(SamlInboundResponse.Accepted.class,
+                    SamlInboundResponse.parse(message(signed, "relay")));
+            SamlInboundResponse.SignatureRejected rejected = assertInstanceOf(
+                    SamlInboundResponse.SignatureRejected.class,
+                    SamlInboundResponse.verifySuccessSignatures(parsed, List.of(idpSigning.getPublic()),
+                            List.of(decryption.privateKey()), false, new SecureRandom()));
+            assertEquals("DECRYPTION", rejected.reason());
+        }
+    }
+
+    @Test void clearAndEncryptedNameIdsCannotShareOneSignedSubject() throws Exception {
+        KeyPairGenerator generator = KeyPairGenerator.getInstance("RSA");
+        generator.initialize(2048);
+        KeyPair idpSigning = generator.generateKeyPair();
+        SamlCredential decryption = credential();
+        String encryptedNameId = encryptedAssertion(
+                "<a:NameID xmlns:a='urn:oasis:names:tc:SAML:2.0:assertion'>alice</a:NameID>",
+                decryption).replace("EncryptedAssertion", "EncryptedID");
+        String mixed = SamlResponseSemanticsTests.BASE.replace(
+                "<a:NameID>alice</a:NameID>",
+                "<a:NameID>alice</a:NameID>" + encryptedNameId);
+        String signed = SamlResponseSemanticsTests.signedXml(mixed, true, false,
+                idpSigning.getPrivate());
+        SamlInboundResponse.Accepted parsed = assertInstanceOf(SamlInboundResponse.Accepted.class,
+                SamlInboundResponse.parse(message(signed, "relay")));
+        SamlInboundResponse.SignatureRejected rejected = assertInstanceOf(
+                SamlInboundResponse.SignatureRejected.class,
+                SamlInboundResponse.verifySuccessSignatures(parsed, List.of(idpSigning.getPublic()),
+                        List.of(decryption.privateKey()), false, new SecureRandom()));
+        assertEquals("DECRYPTION", rejected.reason());
+    }
 
     @Test void pemCredentialLoaderUsesStrictParserAndPairsTheKey() throws Exception {
         String key;
@@ -195,6 +252,215 @@ final class SamlEncryptionTests {
                 sp.completeAuthenticationResult(message(SamlResponseSemanticsTests.signedXml(response,
                         true, false, idpSigning.getPrivate()), pending.getRelayStateHandle()), source, idp));
         assertTrue(success.getAuthentication().isAssertionEncrypted());
+    }
+
+    @Test void encryptionBoundaryRejectsCiphertextTamperingAndUnsupportedKeyDescriptions() throws Exception {
+        SamlCredential credential = credential();
+        byte[] plaintext = "<a:Assertion xmlns:a='urn:oasis:names:tc:SAML:2.0:assertion' ID='_test'/>"
+                .getBytes(StandardCharsets.UTF_8);
+        String encrypted = encryptedAssertion(new String(plaintext, StandardCharsets.UTF_8), credential);
+        SecureRandom random = new SecureRandom();
+        List<PrivateKey> keys = List.of(credential.privateKey());
+        assertArrayEquals(plaintext, XmlEncryptionDecryptor.decrypt(encryptedElement(encrypted), keys,
+                false, false, random));
+        assertNull(XmlEncryptionDecryptor.decrypt(encryptedElement(encrypted), List.of(),
+                true, true, random));
+
+        int keyStart = encrypted.indexOf("<xenc:EncryptedKey>");
+        int keyEnd = encrypted.indexOf("</xenc:EncryptedKey>", keyStart)
+                + "</xenc:EncryptedKey>".length();
+        String wrappedKey = encrypted.substring(keyStart, keyEnd);
+        String siblingKey = encrypted.replace("<ds:KeyInfo>" + wrappedKey + "</ds:KeyInfo>",
+                "<ds:KeyInfo/>").replace("</a:EncryptedAssertion>",
+                wrappedKey + "</a:EncryptedAssertion>");
+        assertArrayEquals(plaintext, XmlEncryptionDecryptor.decrypt(encryptedElement(siblingKey), keys,
+                false, false, random));
+        assertNull(XmlEncryptionDecryptor.decrypt(encryptedElement(siblingKey.replace(
+                        "<ds:KeyInfo/>", "<ds:KeyInfo/><ds:KeyInfo/>")), keys,
+                false, false, random));
+        for (int length : List.of(1, 256)) {
+            String id = "x".repeat(length);
+            String referenced = siblingKey.replace("<xenc:EncryptedKey>",
+                            "<xenc:EncryptedKey Id='" + id + "'>")
+                    .replace("<ds:KeyInfo/>", "<ds:KeyInfo><ds:RetrievalMethod "
+                            + "Type='http://www.w3.org/2001/04/xmlenc#EncryptedKey' "
+                            + "URI='#" + id + "'/></ds:KeyInfo>");
+            assertArrayEquals(plaintext, XmlEncryptionDecryptor.decrypt(encryptedElement(referenced), keys,
+                    false, false, random), "reference length " + length);
+            if (length == 256)
+                assertNull(XmlEncryptionDecryptor.decrypt(encryptedElement(referenced.replace(
+                        "URI='#" + id + "'", "URI='#" + id + "x'").replace(
+                        "Id='" + id + "'", "Id='" + id + "x'")), keys,
+                        false, false, random));
+        }
+
+        int start = encrypted.lastIndexOf("<xenc:CipherValue>") + "<xenc:CipherValue>".length();
+        int end = encrypted.indexOf("</xenc:CipherValue>", start);
+        byte[] damaged = Base64.getDecoder().decode(encrypted.substring(start, end));
+        damaged[damaged.length - 1] ^= 1;
+        String altered = encrypted.substring(0, start) + Base64.getEncoder().encodeToString(damaged)
+                + encrypted.substring(end);
+        assertNull(XmlEncryptionDecryptor.decrypt(encryptedElement(altered), keys,
+                true, true, random));
+
+        for (String invalid : List.of(
+                encrypted.replace("aes128-gcm", "aes128-ccm"),
+                encrypted.replace("rsa-oaep'", "rsa-1_5'"),
+                encrypted.replace("xmlenc#sha256", "xmlenc#sha512"),
+                encrypted.replace("mgf1sha256", "mgf1sha512"),
+                encrypted.replace("</xenc:EncryptionMethod><xenc:CipherData>",
+                        "<xenc:OAEPparams>YQ==</xenc:OAEPparams></xenc:EncryptionMethod><xenc:CipherData>"),
+                encrypted.replace("</xenc:EncryptionMethod><xenc:CipherData>",
+                        "<xenc:OAEPparams/><xenc:OAEPparams/></xenc:EncryptionMethod><xenc:CipherData>"),
+                encrypted.replace("</xenc:CipherValue></xenc:CipherData></xenc:EncryptedData>",
+                        "</xenc:CipherValue><xenc:CipherValue>AA==</xenc:CipherValue>"
+                                + "</xenc:CipherData></xenc:EncryptedData>"))) {
+            assertNotEquals(encrypted, invalid);
+            assertNull(XmlEncryptionDecryptor.decrypt(encryptedElement(invalid), keys,
+                    true, true, random), invalid);
+        }
+
+        String cbc = encryptedAssertion(new String(plaintext, StandardCharsets.UTF_8), credential, true);
+        assertNull(XmlEncryptionDecryptor.decrypt(encryptedElement(cbc), keys,
+                false, true, random));
+        assertNull(XmlEncryptionDecryptor.decrypt(encryptedElement(cbc), keys,
+                true, false, random));
+        assertArrayEquals(plaintext, XmlEncryptionDecryptor.decrypt(encryptedElement(cbc), keys,
+                true, true, random));
+    }
+
+    @Test void retrievalMethodCannotSelectAnAmbiguousOrExternalWrappedKey() throws Exception {
+        SamlCredential credential = credential();
+        String encrypted = encryptedAssertion("<a:Assertion ID='_checked'/>", credential);
+        int keyStart = encrypted.indexOf("<xenc:EncryptedKey>");
+        int keyEnd = encrypted.indexOf("</xenc:EncryptedKey>", keyStart)
+                + "</xenc:EncryptedKey>".length();
+        String key = encrypted.substring(keyStart, keyEnd)
+                .replace("<xenc:EncryptedKey>", "<xenc:EncryptedKey Id='_wrapped'>");
+        String reference = "<ds:RetrievalMethod Type='http://www.w3.org/2001/04/xmlenc#EncryptedKey' "
+                + "URI='#_wrapped'/>";
+        String referenced = encrypted.substring(0, keyStart) + reference
+                + encrypted.substring(keyEnd).replace("</a:EncryptedAssertion>",
+                        key + "</a:EncryptedAssertion>");
+        String anonymousKey = key.replace(" Id='_wrapped'", "");
+        assertArrayEquals("<a:Assertion ID='_checked'/>".getBytes(StandardCharsets.UTF_8),
+                XmlEncryptionDecryptor.decrypt(encryptedElement(referenced),
+                        List.of(credential.privateKey()), false, false, new SecureRandom()));
+        String eightKeys = referenced.replace("</a:EncryptedAssertion>",
+                anonymousKey.repeat(7) + "</a:EncryptedAssertion>");
+        assertArrayEquals("<a:Assertion ID='_checked'/>".getBytes(StandardCharsets.UTF_8),
+                XmlEncryptionDecryptor.decrypt(encryptedElement(eightKeys),
+                        List.of(credential.privateKey()), false, false, new SecureRandom()));
+        String eightReferences = referenced.replace(reference, reference.repeat(8));
+        assertArrayEquals("<a:Assertion ID='_checked'/>".getBytes(StandardCharsets.UTF_8),
+                XmlEncryptionDecryptor.decrypt(encryptedElement(eightReferences),
+                        List.of(credential.privateKey()), false, false, new SecureRandom()));
+
+        List<String> invalidCases = List.of(
+                referenced.replace("URI='#_wrapped'", "URI='#missing'"),
+                referenced.replace("URI='#_wrapped'", "URI='https://example.test/key'"),
+                referenced.replace("URI='#_wrapped'", "URI='#'"),
+                referenced.replace("EncryptedKey' URI=", "EncryptedData' URI="),
+                referenced.replace(reference, "<ds:KeyName>_wrapped</ds:KeyName>"),
+                referenced.replace(reference, reference.replace("/>", "><xenc:CipherData/></ds:RetrievalMethod>")),
+                referenced.replace(reference, reference.repeat(9)),
+                referenced.replace("</a:EncryptedAssertion>",
+                        anonymousKey.repeat(8) + "</a:EncryptedAssertion>"));
+        for (int index = 0; index < invalidCases.size(); index++) {
+            String invalid = invalidCases.get(index);
+            assertNotEquals(referenced, invalid);
+            SecureXmlParser.Result parsed = SecureXmlParser.parseResponse(invalid.replaceFirst(
+                    "<a:EncryptedAssertion ",
+                    "<a:EncryptedAssertion xmlns:a='urn:oasis:names:tc:SAML:2.0:assertion' ")
+                    .getBytes(StandardCharsets.UTF_8));
+            Element wrapper = assertInstanceOf(SecureXmlParser.Result.Accepted.class, parsed,
+                    "case " + index).getDocument().getDocumentElement();
+            assertNull(XmlEncryptionDecryptor.decrypt(wrapper, List.of(credential.privateKey()),
+                    false, false, new SecureRandom()), "case " + index);
+        }
+        String duplicateId = referenced.replace("</a:EncryptedAssertion>",
+                key + "</a:EncryptedAssertion>");
+        assertInstanceOf(SecureXmlParser.Result.Rejected.class,
+                SecureXmlParser.parseResponse(duplicateId.replaceFirst("<a:EncryptedAssertion ",
+                        "<a:EncryptedAssertion xmlns:a='urn:oasis:names:tc:SAML:2.0:assertion' ")
+                        .getBytes(StandardCharsets.UTF_8)));
+    }
+
+    @Test void wrappedKeyBase64IsBoundedBeforeWhitespaceRemoval() throws Exception {
+        SamlCredential credential = credential();
+        byte[] plaintext = "<a:Assertion ID='_bounded'/>".getBytes(StandardCharsets.UTF_8);
+        String encrypted = encryptedAssertion(new String(plaintext, StandardCharsets.UTF_8), credential);
+        String open = "<xenc:CipherValue>";
+        int start = encrypted.indexOf(open) + open.length();
+        int end = encrypted.indexOf("</xenc:CipherValue>", start);
+        int maximumEncodedLength = 4 * 8192 / 3 + 16;
+        String wrapped = encrypted.substring(start, end);
+        String prefix = encrypted.substring(0, start);
+        String suffix = encrypted.substring(end);
+        String atLimit = prefix + " ".repeat(maximumEncodedLength - wrapped.length())
+                + wrapped + suffix;
+        String overLimit = prefix + " ".repeat(maximumEncodedLength - wrapped.length() + 1)
+                + wrapped + suffix;
+        List<PrivateKey> keys = List.of(credential.privateKey());
+        assertArrayEquals(plaintext, XmlEncryptionDecryptor.decrypt(encryptedElement(atLimit), keys,
+                false, false, new SecureRandom()));
+        assertNull(XmlEncryptionDecryptor.decrypt(encryptedElement(overLimit), keys,
+                false, false, new SecureRandom()));
+    }
+
+    @Test void gcmCiphertextAcceptsItsExactByteCapAndRejectsOneMore() throws Exception {
+        SamlCredential credential = credential();
+        List<PrivateKey> keys = List.of(credential.privateKey());
+        SecureRandom random = new SecureRandom();
+        // The wire value includes a 12-byte IV and a 16-byte GCM tag.
+        String atLimit = "A".repeat(131072 - 12 - 16);
+        assertArrayEquals(atLimit.getBytes(StandardCharsets.UTF_8),
+                XmlEncryptionDecryptor.decrypt(encryptedElement(encryptedAssertion(atLimit, credential)),
+                        keys, false, false, random));
+        assertNull(XmlEncryptionDecryptor.decrypt(encryptedElement(encryptedAssertion(atLimit + "A", credential)),
+                keys, false, false, random));
+    }
+
+    @Test void minimumCiphertextsAndKeyRolloverKeepOpaqueFailureWork() throws Exception {
+        SamlCredential credential = credential();
+        String gcm = encryptedAssertion("", credential);
+        String cbc = encryptedAssertion("", credential, true);
+        PrivateKey key = credential.privateKey();
+        SecureRandom random = new SecureRandom();
+        assertArrayEquals(new byte[0], XmlEncryptionDecryptor.decrypt(encryptedElement(gcm),
+                List.of(key), false, false, random));
+        assertArrayEquals(new byte[0], XmlEncryptionDecryptor.decrypt(encryptedElement(cbc),
+                List.of(key), true, true, random));
+        assertArrayEquals("fifteen-char-xx".getBytes(StandardCharsets.UTF_8),
+                XmlEncryptionDecryptor.decrypt(encryptedElement(encryptedAssertion(
+                        "fifteen-char-xx", credential, true)), List.of(key), true, true, random));
+        assertArrayEquals(new byte[0], XmlEncryptionDecryptor.decrypt(encryptedElement(gcm),
+                List.of(key, key, key, key), false, false, random));
+        assertNull(XmlEncryptionDecryptor.decrypt(encryptedElement(gcm),
+                List.of(key, key, key, key, key), false, false, random));
+
+        KeyPairGenerator generator = KeyPairGenerator.getInstance("RSA");
+        generator.initialize(2048);
+        PrivateKey unrelated = generator.generateKeyPair().getPrivate();
+        AtomicInteger substitutions = new AtomicInteger();
+        SecureRandom substituteRandom = new SecureRandom() {
+            @Override public void nextBytes(byte @NonNull [] bytes) {
+                assertEquals(16, bytes.length, "AES-128 substitute CEK must retain the selected key length");
+                substitutions.incrementAndGet();
+                java.util.Arrays.fill(bytes, (byte) 0x5A);
+            }
+        };
+        assertNull(XmlEncryptionDecryptor.decrypt(encryptedElement(gcm), List.of(unrelated),
+                false, false, substituteRandom));
+        assertEquals(1, substitutions.get(), "failed unwrap must still do substituted content work");
+    }
+
+    private static @NonNull Element encryptedElement(@NonNull String xml) {
+        return assertInstanceOf(SecureXmlParser.Result.Accepted.class,
+                SecureXmlParser.parseResponse(xml.replaceFirst("<a:EncryptedAssertion ",
+                        "<a:EncryptedAssertion xmlns:a='urn:oasis:names:tc:SAML:2.0:assertion' ")
+                        .getBytes(StandardCharsets.UTF_8)))
+                .getDocument().getDocumentElement();
     }
 
     private static @NonNull String encryptedAssertion(@NonNull String assertion,

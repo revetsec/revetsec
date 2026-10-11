@@ -37,13 +37,20 @@ public final class SamlNameId {
     private final @Nullable String format;
     private final @Nullable String nameQualifier;
     private final @Nullable String spNameQualifier;
+    private final @Nullable String spProvidedId;
 
     SamlNameId(@NonNull String value, @Nullable String format, @Nullable String nameQualifier,
             @Nullable String spNameQualifier) {
+        this(value, format, nameQualifier, spNameQualifier, null);
+    }
+
+    SamlNameId(@NonNull String value, @Nullable String format, @Nullable String nameQualifier,
+            @Nullable String spNameQualifier, @Nullable String spProvidedId) {
         this.value = value;
         this.format = format;
         this.nameQualifier = nameQualifier;
         this.spNameQualifier = spNameQualifier;
+        this.spProvidedId = spProvidedId;
     }
 
     /**
@@ -75,6 +82,14 @@ public final class SamlNameId {
      */
     public @NonNull Optional<@NonNull String> getSpNameQualifier() { return Optional.ofNullable(spNameQualifier); }
     /**
+     * Returns the SPProvidedID when the IdP supplied one. This attribute is retained for
+     * exact NameID matching and outbound Single Logout.
+     *
+     * @return optional SPProvidedID
+     * @since 1.0.0
+     */
+    public @NonNull Optional<@NonNull String> getSpProvidedId() { return Optional.ofNullable(spProvidedId); }
+    /**
      * Reports whether the format explicitly marks this identifier transient.
      *
      * @return true for transient
@@ -93,4 +108,5 @@ public final class SamlNameId {
     @Nullable String rawFormat() { return format; }
     @Nullable String rawNameQualifier() { return nameQualifier; }
     @Nullable String rawSpNameQualifier() { return spNameQualifier; }
+    @Nullable String rawSpProvidedId() { return spProvidedId; }
 }

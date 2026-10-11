@@ -30,10 +30,8 @@ import java.util.Base64;
 import java.util.List;
 import java.util.regex.Pattern;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
-import static org.junit.jupiter.api.Assertions.fail;
 
 /** Wrapping and identity mutations across the independently signed RSA/ECDSA fixture matrix. */
 final class SamlXswMutationTests {
@@ -43,7 +41,7 @@ final class SamlXswMutationTests {
     private static final @NonNull Pattern SIGNATURE = Pattern.compile(
             "<ds:Signature\\b[^>]*>.*?</ds:Signature>", Pattern.DOTALL);
 
-    @Test void wrappingAndIdentityInjectionsNeverReleaseAttackerFields() throws Exception {
+    @Test void wrappingAndIdentityInjectionsAreRejectedAcrossSignedFixtures() throws Exception {
         List<String> seeds = new ArrayList<>(List.of(
                 "assertion-signxml", "assertion-ec384", "assertion-rsa-sha1"));
         for (String placement : List.of("response", "assertion", "both"))
@@ -55,8 +53,8 @@ final class SamlXswMutationTests {
             boolean sha1 = name.endsWith("sha1");
             String certificate = certificateFor(name);
             String original = resource("scripted-idp/" + name + ".xml");
-            SamlAuthentication baseline = assertInstanceOf(SamlAuthenticationResult.Succeeded.class,
-                    check(original, certificate, sha1)).getAuthentication();
+            assertInstanceOf(SamlAuthenticationResult.Succeeded.class,
+                    check(original, certificate, sha1), name + " baseline");
             String assertion = section(original, "<saml:Assertion ", "</saml:Assertion>");
             String attacker = SIGNATURE.matcher(assertion).replaceFirst("")
                     .replace("minted-user", "attacker-user")
@@ -89,7 +87,6 @@ final class SamlXswMutationTests {
             mutants.add(original.replace("<samlp:Status>",
                     "<samlp:Status><samlp:StatusCode Value=\"urn:oasis:names:tc:SAML:2.0:status:Success\"/>"
                     + "</samlp:Status><samlp:Status>"));
-            int fragileLockStart = mutants.size();
             // PortSwigger's Fragile Lock classes: namespace-qualified ID pollution, a copied
             // Signature under an extension with xml:xmlns confusion, and relative-namespace
             // canonicalization with an attacker-controlled sibling Assertion.
@@ -108,46 +105,8 @@ final class SamlXswMutationTests {
             for (int index = 0; index < mutants.size(); index++) {
                 assertNotEquals(original, mutants.get(index), name + ":" + index + " did not mutate XML");
                 SamlAuthenticationResult result = check(mutants.get(index), certificate, sha1);
-                if (index >= fragileLockStart)
-                    assertInstanceOf(SamlAuthenticationResult.Rejected.class, result,
-                            name + ":" + index + " must reject the polluted envelope");
-                if (result instanceof SamlAuthenticationResult.Succeeded succeeded) {
-                    SamlAuthentication authentication = succeeded.getAuthentication();
-                    assertEquals(baseline.getIdentityProviderConnectionId(),
-                            authentication.getIdentityProviderConnectionId(), name + ":" + index);
-                    assertEquals(baseline.getIdentityProviderEntityId(),
-                            authentication.getIdentityProviderEntityId(), name + ":" + index);
-                    assertEquals(baseline.getAssertionId(), authentication.getAssertionId(),
-                            name + ":" + index);
-                    assertEquals(baseline.getNameId().orElseThrow().getValue(),
-                            authentication.getNameId().orElseThrow().getValue(), name + ":" + index);
-                    assertEquals(baseline.getNameId().orElseThrow().getFormat(),
-                            authentication.getNameId().orElseThrow().getFormat(), name + ":" + index);
-                    assertEquals(baseline.getNameId().orElseThrow().getNameQualifier(),
-                            authentication.getNameId().orElseThrow().getNameQualifier(), name + ":" + index);
-                    assertEquals(baseline.getNameId().orElseThrow().getSpNameQualifier(),
-                            authentication.getNameId().orElseThrow().getSpNameQualifier(), name + ":" + index);
-                    assertEquals(baseline.getSubjectKey().orElseThrow().toStableString(),
-                            authentication.getSubjectKey().orElseThrow().toStableString(), name + ":" + index);
-                    assertEquals(baseline.getSubjectId(), authentication.getSubjectId(), name + ":" + index);
-                    assertEquals(baseline.getPairwiseId(), authentication.getPairwiseId(), name + ":" + index);
-                    assertEquals(baseline.getAuthnInstant(), authentication.getAuthnInstant(),
-                            name + ":" + index);
-                    assertEquals(baseline.getSessionIndex(), authentication.getSessionIndex(),
-                            name + ":" + index);
-                    assertEquals(baseline.getSessionNotOnOrAfter(), authentication.getSessionNotOnOrAfter(),
-                            name + ":" + index);
-                    assertEquals(baseline.getAuthnContextClassRef(), authentication.getAuthnContextClassRef(),
-                            name + ":" + index);
-                    assertEquals(baseline.getAttributes(), authentication.getAttributes(),
-                            name + ":" + index);
-                    assertEquals(baseline.isResponseSigned(), authentication.isResponseSigned(),
-                            name + ":" + index);
-                    assertEquals(baseline.isAssertionSigned(), authentication.isAssertionSigned(),
-                            name + ":" + index);
-                } else if (!(result instanceof SamlAuthenticationResult.Rejected)) {
-                    fail(name + ":" + index + " produced " + result);
-                }
+                assertInstanceOf(SamlAuthenticationResult.Rejected.class, result,
+                        name + ":" + index + " must reject the mutated envelope");
             }
         }
     }

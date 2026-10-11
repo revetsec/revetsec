@@ -1,10 +1,20 @@
 # SAML service provider integration
 
 Revetsec prepares SAML requests and checks POST responses and Redirect logout messages.
+If JVM-global XML-signature secure validation is disabled, the SP builder fails unless the
+application explicitly calls `acknowledgeGlobalSecureValidationDisabled(true)`. This choice
+is reported to `SamlObserver` at build time. Revetsec sets secure validation on each
+verification context and enforces its signature allowlists even when the JVM policy differs.
 The application owns its users, account links, browser sessions, pending-state transport,
 and the decision to end a session. SAML support is pre-release; the scripted IdP and a
 pinned Keycloak container exercise browser flows, while RC-2 interoperability and
 hostile-input work is still open.
+
+Configure `SamlServiceProvider.Builder.observer(SamlObserver)` to receive one start and
+one terminal event for each service-provider operation. Events contain fixed operation and
+outcome kinds plus monotonic elapsed time; they never include XML, identities, connection
+IDs, request IDs or browser state. Hooks run on the caller's thread, outside replay-store
+calls, and a hook failure cannot change a SAML result. The default observer does nothing.
 
 ## Trust and account identity
 
@@ -13,6 +23,12 @@ Approve an IdP connection in application configuration. Parse its metadata local
 source or a pinned metadata signature, then build `SamlIdentityProvider` with an
 application-assigned `connectionId`. The metadata's entity ID is supplied by the IdP and
 must not be the tenant or account namespace.
+Metadata signing keys use one direct `ds:X509Certificate` per `md:KeyDescriptor`;
+publish rollover keys in separate descriptors. Certificate contents must be text-only
+Base64 of exactly one certificate with a minimally encoded outer DER sequence.
+When a pinned signature covers only the selected entity inside an aggregate, Revetsec
+ignores expiry on the unsigned aggregate; only a verified aggregate signature can
+authenticate that parent's `validUntil`.
 
 Use `(connectionId, SamlSubjectKey)` as the application account key. A persistent NameID
 produces a subject key. Scope-authorized `subject-id` or `pairwise-id` can also produce one;
@@ -22,7 +38,7 @@ application's authorization policy.
 
 `SamlAttribute.getTypedValues()` preserves the order and shape of each value. Text
 values appear in `getValues()`; a sole nested `saml:NameID` is exposed with its
-qualifiers, while other element content remains opaque `COMPLEX`. Neither complex
+qualifiers and `SPProvidedID`, while other element content remains opaque `COMPLEX`. Neither complex
 content nor a mixed text/complex identifier is promoted to a stable subject ID.
 An `AttributeValue` declared nil or with a non-string `xsi:type` also stays opaque;
 an explicit XML Schema string type remains text. Applications never receive the
@@ -30,9 +46,11 @@ raw XML for an opaque value.
 Revetsec also requires the checked Assertion to declare SAML version 2.0 and
 rejects nilled or misdeclared NameID, Issuer, Audience and authentication-context
 scalars. Subject and authentication-statement children must follow the supported
-SAML order before identity is released. Each accepted bearer confirmation must have one
+SAML order before identity is released. An `AuthnStatement` must include its required
+`AuthnContext`; a signed statement without one is rejected before replay admission.
+Each accepted bearer confirmation must have one
 unambiguous binding and a forward time window; a redundant confirmation NameID
-must match the Subject NameID and all its qualifiers. Conditions, audience
+must match the Subject NameID, its qualifiers and `SPProvidedID`. Conditions, audience
 restrictions, OneTimeUse and ProxyRestriction must have supported types and
 children. ProxyRestriction applies to downstream proxying; it is not treated as
 an audience restriction for this SP.
@@ -69,6 +87,11 @@ options in pending state and checks the returned assertion against them. RelaySt
 an opaque correlation handle, never a return URL. Validate application data as a local
 route before using it for a redirect.
 
+A request-bound non-success IdP response produces `StatusReceived` only when the
+Response, Issuer and Status have the supported SAML shape. `isAuthenticated()` is
+true only when the IdP signature covers that Response. Malformed status structures
+are rejected and never promoted to a provider status result.
+
 IdP-initiated SSO is disabled by default. A selected IdP connection can enable
 `SamlCompatibilityMode.UNSOLICITED_RESPONSES`; Revetsec then rejects RelayState and
 applies a shorter response-age bound. Apply explicit application session and account
@@ -87,14 +110,49 @@ with RSA-OAEP is the preferred profile. `AES_CBC_ENCRYPTION` is a per-IdP compat
 mode and requires a verified signature over the whole Response before CBC decryption.
 RSA1_5 key transport is rejected.
 
+Some IdPs prioritize the SP metadata's advertised GCM algorithms over their own
+CBC setting. In the Shibboleth 5.2.3 capture, the generated metadata selected
+GCM even with Shibboleth configured for CBC. A CBC-only connection therefore
+needs an explicitly approved IdP-facing metadata variant without those algorithm
+hints, while retaining the same SP entity ID, signing certificate, encryption
+certificate and ACS. Keep CBC enabled only for that connection and require a
+signed Response; do not change the default generated metadata for other IdPs.
+The SimpleSAMLphp 2.5.0 capture demonstrates a signed CBC Response that works
+with this per-IdP opt-in. Its assertion-signed CBC Response with no outer
+Response signature is rejected, even when CBC is enabled.
+
 For SP-initiated logout, call `beginLogoutResult(idp, sessionReference)`, retain its
-pending logout state, and send the signed Redirect. At the logout endpoint, parse the
-raw query with `SamlRedirectBindingMessage.fromRawQueryResult` and call
-`completeLogoutResult`. End the application session only after the checked result.
+pending logout state, **end the local application session before sending** the signed
+Redirect, and send it. A failed or missing IdP return must not restore that session.
+At the logout endpoint, parse the raw query with
+`SamlRedirectBindingMessage.fromRawQueryResult` and call `completeLogoutResult` to
+report the IdP outcome and clear pending state. The Playground follows this order.
+For stored pending state, an invalid Redirect signature is rejected before the pending
+record is consumed; a valid response still consumes the record once.
 For an IdP-initiated LogoutRequest, call `acceptLogoutRequestResult`, match its NameID
 qualifiers and SessionIndex against stored `SamlSessionReference`s within the same
 connection ID, end only matching sessions, then call `respondToLogoutRequestResult`.
 An unmatched SessionIndex ends no application session.
+The pinned SimpleSAMLphp 2.5.0 interoperability capture exercises both directions
+against a real IdP. Revetsec accepts its signed IdP-initiated LogoutRequest and
+the IdP accepts Revetsec's signed LogoutResponse. Revetsec also sends a signed
+SP-initiated LogoutRequest that the IdP accepts; Revetsec accepts the IdP's
+signed LogoutResponse. Both captured SSO sessions and logout messages are
+replayed with their identity, request and RelayState bindings in offline tests.
+Both logout entry points verify the Redirect signature and require the supported SAML
+element order and types before accepting identity fields or status. Nilled fields,
+unexpected direct text and nested status codes are rejected. The supported logout
+profile uses Issuer, NameID and optional SessionIndex elements in a request, and
+Issuer followed by a single flat StatusCode in a response. A response may also carry
+the standard optional StatusMessage and StatusDetail in order; these fields do not
+change the checked outcome or expose IdP text through the result.
+Protocol and assertion IDs must be XML NCNames. Logout request and response replay
+entries use separate message-kind domains, even when the IdP reuses an ID.
+IdP Redirect SSO and logout endpoints may carry their own query fields. Revetsec
+preserves those fields ahead of the signed SAML binding fields. POST SSO actions may
+also carry ordinary query fields. All three paths reject binding-field name collisions,
+empty field names, unencoded spaces, decoded control characters, and malformed percent-encoding or UTF-8
+in names or values.
 
 The Soklet adapter's `SokletSaml` and both Servlet adapters' `ServletSaml` pass raw
 request fields to core and write prepared Redirect/form responses. The

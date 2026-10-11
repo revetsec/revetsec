@@ -135,13 +135,10 @@ public final class EnvelopedSignatureVerifier {
             @NonNull Element signed, @NonNull Element signature,
             @NonNull List<@NonNull PublicKey> trustedKeys, boolean allowSha1) {
         String id = signed.getAttributeNS(null, "ID");
-        if (!signed.hasAttributeNS(null, "ID") || !ncName(id)) return new Rejected(Reason.REFERENCE);
+        if (!signed.hasAttributeNS(null, "ID") || !XmlNcName.valid(id)) return new Rejected(Reason.REFERENCE);
         SignatureShape prechecked = inspectSignature(signature, id, allowSha1);
         if (prechecked == null) return new Rejected(Reason.SIGNATURE_SHAPE);
 
-        String globalSecureValidation = System.getProperty(SECURE_VALIDATION);
-        if (globalSecureValidation != null && !"true".equalsIgnoreCase(globalSecureValidation))
-            return Unavailable.INSTANCE;
         XMLSignatureFactory factory;
         try {
             factory = XMLSignatureFactory.getInstance("DOM", "XMLDSig");
@@ -320,37 +317,6 @@ public final class EnvelopedSignatureVerifier {
         }
     }
 
-    private static boolean ncName(@NonNull String value) {
-        if (value.isEmpty()) return false;
-        int codePoint = value.codePointAt(0);
-        if (!nameStart(codePoint)) return false;
-        for (int position = Character.charCount(codePoint); position < value.length(); position += Character.charCount(codePoint)) {
-            codePoint = value.codePointAt(position);
-            if (!nameStart(codePoint) && codePoint != '-' && codePoint != '.'
-                    && !(codePoint >= '0' && codePoint <= '9') && codePoint != 0xB7
-                    && !(codePoint >= 0x300 && codePoint <= 0x36F)
-                    && !(codePoint >= 0x203F && codePoint <= 0x2040)) return false;
-        }
-        return true;
-    }
-
-    private static boolean nameStart(int codePoint) {
-        return codePoint == '_' || (codePoint >= 'A' && codePoint <= 'Z')
-                || (codePoint >= 'a' && codePoint <= 'z')
-                || (codePoint >= 0xC0 && codePoint <= 0xD6)
-                || (codePoint >= 0xD8 && codePoint <= 0xF6)
-                || (codePoint >= 0xF8 && codePoint <= 0x2FF)
-                || (codePoint >= 0x370 && codePoint <= 0x37D)
-                || (codePoint >= 0x37F && codePoint <= 0x1FFF)
-                || (codePoint >= 0x200C && codePoint <= 0x200D)
-                || (codePoint >= 0x2070 && codePoint <= 0x218F)
-                || (codePoint >= 0x2C00 && codePoint <= 0x2FEF)
-                || (codePoint >= 0x3001 && codePoint <= 0xD7FF)
-                || (codePoint >= 0xF900 && codePoint <= 0xFDCF)
-                || (codePoint >= 0xFDF0 && codePoint <= 0xFFFD)
-                || (codePoint >= 0x10000 && codePoint <= 0xEFFFF);
-    }
-
     private static boolean postcheck(@NonNull XMLSignature signature, @NonNull String id,
             @NonNull SignatureShape shape) {
         if (!signature.getObjects().isEmpty()
@@ -368,7 +334,7 @@ public final class EnvelopedSignatureVerifier {
         return true;
     }
 
-    private static boolean digestInputStartsWith(@Nullable InputStream stream, @NonNull Element signed)
+    static boolean digestInputStartsWith(@Nullable InputStream stream, @NonNull Element signed)
             throws IOException {
         if (stream == null) return false;
         byte[] prefix = ("<" + signed.getTagName()).getBytes(StandardCharsets.UTF_8);

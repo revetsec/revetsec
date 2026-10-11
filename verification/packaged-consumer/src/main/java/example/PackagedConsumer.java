@@ -182,6 +182,7 @@ import com.revetsec.saml.SamlRedirectBindingMessage;
 import com.revetsec.saml.SamlRedirectBindingParseResult;
 import com.revetsec.saml.SamlReplayCache;
 import com.revetsec.saml.SamlServiceProvider;
+import com.revetsec.saml.SamlObserver;
 import com.revetsec.saml.SamlServiceProviderMetadata;
 import com.revetsec.saml.SamlServiceProviderMetadataResult;
 import com.revetsec.saml.SamlSessionReference;
@@ -401,7 +402,7 @@ public final class PackagedConsumer {
 				SamlLogoutRequestResult.class, SamlLogoutResponseRedirectResult.class, SamlLogoutResult.class, SamlLogoutStatus.class,
 				SamlNameId.class, SamlPendingConsumeResult.class, SamlPendingSaveResult.class, SamlPostBindingMessage.class,
 				SamlPostBindingParseResult.class, SamlPostForm.class, SamlRedirectBindingMessage.class, SamlRedirectBindingParseResult.class,
-				SamlReplayCache.class, SamlServiceProvider.class, SamlServiceProviderMetadata.class, SamlServiceProviderMetadataResult.class,
+				SamlReplayCache.class, SamlObserver.class, SamlServiceProvider.class, SamlServiceProviderMetadata.class, SamlServiceProviderMetadataResult.class,
 				SamlSessionReference.class, SamlSubjectKey.class
 		});
 		calledApi.add("com.revetsec.saml");

@@ -31,6 +31,8 @@ import java.time.ZoneOffset;
 import java.time.Duration;
 import java.util.Base64;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 import javax.xml.crypto.dsig.XMLSignatureFactory;
 import javax.xml.crypto.dsig.dom.DOMValidateContext;
 import org.w3c.dom.Element;
@@ -143,6 +145,9 @@ final class SamlServiceProviderTests {
                 .getNameQualifier().orElseThrow());
         assertTrue(identity.getSubjectKey().orElseThrow().toStableString().contains("alice"));
         assertTrue(identity.getSubjectKey().orElseThrow().toString().contains("<redacted>"));
+        assertTrue(!SamlSubjectKey.fromPersistentNameId(new SamlNameId("alice", SamlNameId.PERSISTENT,
+                "https://idp.example.test/", "https://sp.example.test/", "sp-original"))
+                .toStableString().equals(identity.getSubjectKey().orElseThrow().toStableString()));
     }
 
     @Test void pendingFailurePrecedesXmlParsingAndCannotReleaseIdentity() throws Exception {
@@ -223,6 +228,59 @@ final class SamlServiceProviderTests {
                 .replace("2026-10-09T00:00:00Z", "2026-10-09T00:01:00Z")
                 .replace("status:Success", "status:AuthnFailed");
         xml = xml.substring(0, xml.indexOf("<a:Assertion")) + "</p:Response>";
+        String status = "<p:Status><p:StatusCode "
+                + "Value='urn:oasis:names:tc:SAML:2.0:status:AuthnFailed'/></p:Status>";
+        assertTrue(xml.contains(status));
+        for (String malformedStatus : List.of(
+                "<p:Status>unexpected<p:StatusCode "
+                        + "Value='urn:oasis:names:tc:SAML:2.0:status:AuthnFailed'/></p:Status>",
+                "<p:Status><p:StatusCode "
+                        + "Value='urn:oasis:names:tc:SAML:2.0:status:AuthnFailed'>"
+                        + "<p:StatusCode Value='urn:oasis:names:tc:SAML:2.0:status:Success'/>"
+                        + "</p:StatusCode></p:Status>",
+                "<p:Status xmlns:xsi='http://www.w3.org/2001/XMLSchema-instance' "
+                        + "xsi:nil='true'><p:StatusCode "
+                        + "Value='urn:oasis:names:tc:SAML:2.0:status:AuthnFailed'/></p:Status>",
+                "<p:Status><p:StatusCode "
+                        + "Value='urn:oasis:names:tc:SAML:2.0:status:AuthnFailed'/>"
+                        + "<p:StatusMessage>first</p:StatusMessage>"
+                        + "<p:StatusMessage>second</p:StatusMessage></p:Status>",
+                "<p:Status><p:StatusCode "
+                        + "Value='urn:oasis:names:tc:SAML:2.0:status:AuthnFailed'/>"
+                        + "<p:StatusDetail/><p:StatusMessage>out of order</p:StatusMessage></p:Status>")) {
+            assertEquals(SamlAuthenticationResult.Reason.MESSAGE,
+                    assertInstanceOf(SamlAuthenticationResult.Rejected.class,
+                            sp.completeAuthenticationResult(message(xml.replace(status, malformedStatus),
+                                    pending.getRelayStateHandle()), source, idp)).getReason());
+        }
+        for (String malformedResponse : List.of(
+                xml.replace(" InResponseTo='", " xmlns:xsi='http://www.w3.org/2001/XMLSchema-instance' "
+                        + "xsi:nil='true' InResponseTo='"),
+                xml.replace("</p:Response>", "&#x2003;</p:Response>"))) {
+            assertEquals(SamlAuthenticationResult.Reason.MESSAGE,
+                    assertInstanceOf(SamlAuthenticationResult.Rejected.class,
+                            sp.completeAuthenticationResult(message(malformedResponse,
+                                    pending.getRelayStateHandle()), source, idp)).getReason());
+        }
+        for (String malformedIssuer : List.of(
+                "<a:Issuer xmlns:xsi='http://www.w3.org/2001/XMLSchema-instance' "
+                        + "xsi:nil='true'>" + IDP + "</a:Issuer>",
+                "<a:Issuer Format='urn:example:wrong'>" + IDP + "</a:Issuer>")) {
+            assertEquals(SamlAuthenticationResult.Reason.ISSUER,
+                    assertInstanceOf(SamlAuthenticationResult.Rejected.class,
+                            sp.completeAuthenticationResult(message(xml.replace(
+                                    "<a:Issuer>" + IDP + "</a:Issuer>", malformedIssuer),
+                                    pending.getRelayStateHandle()), source, idp)).getReason());
+        }
+        String duplicateMessage = xml.replace(status, "<p:Status><p:StatusCode "
+                + "Value='urn:oasis:names:tc:SAML:2.0:status:AuthnFailed'/>"
+                + "<p:StatusMessage>first</p:StatusMessage>"
+                + "<p:StatusMessage>second</p:StatusMessage></p:Status>");
+        assertEquals(SamlAuthenticationResult.Reason.MESSAGE,
+                assertInstanceOf(SamlAuthenticationResult.Rejected.class,
+                        sp.completeAuthenticationResult(message(SamlResponseSemanticsTests.signedXml(
+                                duplicateMessage, true, false, key.getPrivate()),
+                                pending.getRelayStateHandle()), source, idp)).getReason());
         SamlAuthenticationResult.StatusReceived unsigned = assertInstanceOf(
                 SamlAuthenticationResult.StatusReceived.class,
                 sp.completeAuthenticationResult(message(xml, pending.getRelayStateHandle()), source, idp));
@@ -233,6 +291,16 @@ final class SamlServiceProviderTests {
                 sp.completeAuthenticationResult(message(SamlResponseSemanticsTests.signedXml(xml, true,
                         false, key.getPrivate()), pending.getRelayStateHandle()), source, idp));
         assertTrue(signed.isAuthenticated());
+        String withDetail = xml.replace(status, "<p:Status><p:StatusCode "
+                + "Value='urn:oasis:names:tc:SAML:2.0:status:AuthnFailed'/>"
+                + "<p:StatusMessage>Partner detail</p:StatusMessage>"
+                + "<p:StatusDetail><x:Hint xmlns:x='urn:example:status'/></p:StatusDetail>"
+                + "</p:Status>");
+        assertEquals(SamlAuthenticationResult.StatusCode.AUTHN_FAILED,
+                assertInstanceOf(SamlAuthenticationResult.StatusReceived.class,
+                        sp.completeAuthenticationResult(message(SamlResponseSemanticsTests.signedXml(
+                                withDetail, true, false, key.getPrivate()), pending.getRelayStateHandle()),
+                                source, idp)).getStatusCode());
         String wrong = xml.replace(pending.getRequestId(), "_different");
         assertEquals(SamlAuthenticationResult.Reason.REQUEST_BINDING,
                 assertInstanceOf(SamlAuthenticationResult.Rejected.class,
@@ -266,6 +334,80 @@ final class SamlServiceProviderTests {
         assertTrue(XMLSignatureFactory.getInstance("DOM").unmarshalXMLSignature(context).validate(context));
     }
 
+    @Test void nonSuccessStatusKeepsEveryClassificationAndEnvelopeBoundary() throws Exception {
+        KeyPair key = rsa();
+        SamlServiceProvider sp = SamlServiceProvider.withEntityId(SP)
+                .assertionConsumerServiceUrl(ACS).replayCache(InMemorySamlReplayCache.withLimit(CLOCK, 4))
+                .clock(CLOCK).build();
+        SamlIdentityProvider idp = SamlIdentityProvider.withEntityId(IDP).connectionId("status-boundary")
+                .redirectSingleSignOnService(URI.create("https://idp.example.test/sso"))
+                .signingKeys(List.of(key.getPublic())).build();
+        PendingSamlAuthentication pending = assertInstanceOf(SamlAuthenticationRequestResult.Prepared.class,
+                sp.beginAuthenticationResult(idp)).getPendingAuthentication();
+        StateSealer sealer = StateSealer.withActiveKey(TestSealers.fixedKey("saml-status-boundary"))
+                .clock(CLOCK).build();
+        PendingSamlAuthenticationSource source = PendingSamlAuthenticationSource.fromSealedForm(
+                pending.toSealedForm(sealer, "status-cookie"), sealer, "status-cookie");
+        String base = SamlResponseSemanticsTests.BASE.replace("_request", pending.getRequestId())
+                .replace("2026-10-09T00:00:00Z", "2026-10-09T00:01:00Z")
+                .replace("status:Success", "status:AuthnFailed");
+        base = base.substring(0, base.indexOf("<a:Assertion")) + "</p:Response>";
+        for (Map.Entry<String, SamlAuthenticationResult.StatusCode> entry : Map.ofEntries(
+                Map.entry("AuthnFailed", SamlAuthenticationResult.StatusCode.AUTHN_FAILED),
+                Map.entry("NoAuthnContext", SamlAuthenticationResult.StatusCode.NO_AUTHN_CONTEXT),
+                Map.entry("RequestDenied", SamlAuthenticationResult.StatusCode.REQUEST_DENIED),
+                Map.entry("Requester", SamlAuthenticationResult.StatusCode.REQUESTER),
+                Map.entry("Responder", SamlAuthenticationResult.StatusCode.RESPONDER),
+                Map.entry("VersionMismatch", SamlAuthenticationResult.StatusCode.VERSION_MISMATCH),
+                Map.entry("UnknownPartnerStatus", SamlAuthenticationResult.StatusCode.OTHER)).entrySet()) {
+            String xml = base.replace("status:AuthnFailed", "status:" + entry.getKey());
+            SamlAuthenticationResult.StatusReceived result = assertInstanceOf(
+                    SamlAuthenticationResult.StatusReceived.class,
+                    sp.completeAuthenticationResult(message(xml, pending.getRelayStateHandle()), source, idp),
+                    entry.getKey());
+            assertEquals(entry.getValue(), result.getStatusCode(), entry.getKey());
+        }
+        String status = "<p:Status><p:StatusCode "
+                + "Value='urn:oasis:names:tc:SAML:2.0:status:AuthnFailed'/></p:Status>";
+        String signedWithoutDestination = SamlResponseSemanticsTests.signedXml(
+                base.replace(" Destination='" + ACS + "'", ""), true, false, key.getPrivate());
+        assertEquals(SamlAuthenticationResult.Reason.REQUEST_BINDING,
+                assertInstanceOf(SamlAuthenticationResult.Rejected.class,
+                        sp.completeAuthenticationResult(message(base.replace(pending.getRequestId(), "_wrong"),
+                                pending.getRelayStateHandle()), source, idp)).getReason());
+        for (String xml : List.of(
+                base.replace("<a:Issuer>" + IDP + "</a:Issuer>", "<a:Issuer>https://other.test/</a:Issuer>"),
+                base.replace("<a:Issuer>" + IDP + "</a:Issuer>", "")))
+            assertEquals(SamlAuthenticationResult.Reason.ISSUER,
+                    assertInstanceOf(SamlAuthenticationResult.Rejected.class,
+                            sp.completeAuthenticationResult(message(xml, pending.getRelayStateHandle()),
+                                    source, idp)).getReason());
+        assertEquals(SamlAuthenticationResult.Reason.DESTINATION,
+                assertInstanceOf(SamlAuthenticationResult.Rejected.class,
+                        sp.completeAuthenticationResult(message(base.replace(ACS.toString(),
+                                "https://other.test/acs"), pending.getRelayStateHandle()), source, idp))
+                        .getReason());
+        assertEquals(SamlAuthenticationResult.Reason.RESPONSE_AGE,
+                assertInstanceOf(SamlAuthenticationResult.Rejected.class,
+                        sp.completeAuthenticationResult(message(base.replace("2026-10-09T00:01:00Z",
+                                "2026-10-09T00:20:00Z"), pending.getRelayStateHandle()), source, idp))
+                        .getReason());
+        assertEquals(SamlAuthenticationResult.Reason.RESPONSE_AGE,
+                assertInstanceOf(SamlAuthenticationResult.Rejected.class,
+                        sp.completeAuthenticationResult(message(base.replace("2026-10-09T00:01:00Z",
+                                "2026-10-08T23:00:00Z"), pending.getRelayStateHandle()), source, idp))
+                        .getReason());
+        assertEquals(SamlAuthenticationResult.Reason.MESSAGE,
+                assertInstanceOf(SamlAuthenticationResult.Rejected.class,
+                        sp.completeAuthenticationResult(message(base.replace(status, status.replace(
+                                "status:AuthnFailed", "status:Success")), pending.getRelayStateHandle()),
+                                source, idp)).getReason());
+        assertEquals(SamlAuthenticationResult.Reason.DESTINATION,
+                assertInstanceOf(SamlAuthenticationResult.Rejected.class,
+                        sp.completeAuthenticationResult(message(signedWithoutDestination,
+                                pending.getRelayStateHandle()), source, idp)).getReason());
+    }
+
     @Test void requestPolicySurvivesSealAndChecksFreshnessAndContext() throws Exception {
         KeyPair key = rsa();
         SamlServiceProvider sp = SamlServiceProvider.withEntityId(SP)
@@ -292,11 +434,7 @@ final class SamlServiceProviderTests {
         PendingSamlAuthenticationSource source = PendingSamlAuthenticationSource.fromSealedForm(
                 pending.toSealedForm(sealer, "saml-cookie"), sealer, "saml-cookie");
         String valid = SamlResponseSemanticsTests.BASE.replace("_request", pending.getRequestId())
-                .replace("2026-10-09T00:00:00Z", "2026-10-09T00:01:00Z")
-                .replace("<a:AuthnStatement AuthnInstant='2026-10-09T00:01:00Z'/>",
-                        "<a:AuthnStatement AuthnInstant='2026-10-09T00:01:00Z'>"
-                        + "<a:AuthnContext><a:AuthnContextClassRef>urn:example:password"
-                        + "</a:AuthnContextClassRef></a:AuthnContext></a:AuthnStatement>");
+                .replace("2026-10-09T00:00:00Z", "2026-10-09T00:01:00Z");
         String stale = valid.replace("AuthnInstant='2026-10-09T00:01:00Z'",
                 "AuthnInstant='2026-10-08T23:50:00Z'");
         assertEquals(SamlAuthenticationResult.Reason.AUTHN_STATEMENT,
@@ -349,6 +487,42 @@ final class SamlServiceProviderTests {
         assertTrue(success.getAuthentication().isUnsolicited());
     }
 
+    @Test void unsolicitedLoginHonorsTheShorterOfConfiguredAndTwoMinuteResponseAge() throws Exception {
+        KeyPair key = rsa();
+        AtomicInteger writes = new AtomicInteger();
+        SamlReplayCache replay = (replayKey, expiry, remaining) -> {
+            writes.incrementAndGet();
+            return SamlReplayCache.MarkResult.MARKED;
+        };
+        SamlIdentityProvider idp = SamlIdentityProvider.withEntityId(IDP).connectionId("age-boundary")
+                .redirectSingleSignOnService(URI.create("https://idp.example.test/sso"))
+                .signingKeys(List.of(key.getPublic())).allowUnsolicitedResponses(true).build();
+        String response = SamlResponseSemanticsTests.BASE.replace(" InResponseTo='_request'", "");
+        SamlServiceProvider longLimit = SamlServiceProvider.withEntityId(SP)
+                .assertionConsumerServiceUrl(ACS).replayCache(replay)
+                .clock(CLOCK).clockSkew(Duration.ZERO).maximumResponseAge(Duration.ofMinutes(5)).build();
+        String old = response.replace("2026-10-09T00:00:00Z", "2026-10-08T23:58:00Z");
+        assertEquals(SamlAuthenticationResult.Reason.RESPONSE_AGE,
+                assertInstanceOf(SamlAuthenticationResult.Rejected.class,
+                        longLimit.completeUnsolicitedAuthenticationResult(unsolicitedMessage(
+                                SamlResponseSemanticsTests.signedXml(old, true, false, key.getPrivate())),
+                                idp)).getReason());
+        assertEquals(0, writes.get());
+
+        SamlServiceProvider shortLimit = SamlServiceProvider.withEntityId(SP)
+                .assertionConsumerServiceUrl(ACS).replayCache(replay)
+                .clock(CLOCK).clockSkew(Duration.ZERO).maximumResponseAge(Duration.ofSeconds(30)).build();
+        String recent = SamlResponseSemanticsTests.signedXml(response, true, false, key.getPrivate());
+        assertEquals(SamlAuthenticationResult.Reason.RESPONSE_AGE,
+                assertInstanceOf(SamlAuthenticationResult.Rejected.class,
+                        shortLimit.completeUnsolicitedAuthenticationResult(unsolicitedMessage(recent),
+                                idp)).getReason());
+        assertEquals(0, writes.get());
+        assertInstanceOf(SamlAuthenticationResult.Succeeded.class,
+                longLimit.completeUnsolicitedAuthenticationResult(unsolicitedMessage(recent), idp));
+        assertEquals(1, writes.get());
+    }
+
     @Test void signedAttributesAndSessionFieldsAreReleasedTogether() throws Exception {
         KeyPair key = rsa();
         SamlServiceProvider sp = SamlServiceProvider.withEntityId(SP)
@@ -363,7 +537,8 @@ final class SamlServiceProviderTests {
                 .clock(CLOCK).build();
         String xml = SamlResponseSemanticsTests.BASE.replace("_request", pending.getRequestId())
                 .replace("2026-10-09T00:00:00Z", "2026-10-09T00:01:00Z")
-                .replace("<a:AuthnStatement AuthnInstant='2026-10-09T00:01:00Z'/>",
+                .replace(SamlResponseSemanticsTests.AUTHN.replace("2026-10-09T00:00:00Z",
+                                "2026-10-09T00:01:00Z"),
                         "<a:AuthnStatement AuthnInstant='2026-10-09T00:01:00Z' SessionIndex='session-123' "
                         + "SessionNotOnOrAfter='2026-10-09T01:00:00Z'>"
                         + "<a:AuthnContext><a:AuthnContextClassRef>urn:example:mfa</a:AuthnContextClassRef>"
@@ -387,6 +562,15 @@ final class SamlServiceProviderTests {
                 .replace("+", "%2B").replace("/", "%2F").replace("=", "%3D");
         return assertInstanceOf(SamlPostBindingParseResult.Parsed.class,
                 SamlPostBindingMessage.fromFormBodyResult(("SAMLResponse=" + encoded + "&RelayState=" + relay)
+                        .getBytes(StandardCharsets.UTF_8), List.of("application/x-www-form-urlencoded"), null))
+                .getMessage();
+    }
+
+    private static @NonNull SamlPostBindingMessage unsolicitedMessage(@NonNull String xml) {
+        String encoded = Base64.getEncoder().encodeToString(xml.getBytes(StandardCharsets.UTF_8))
+                .replace("+", "%2B").replace("/", "%2F").replace("=", "%3D");
+        return assertInstanceOf(SamlPostBindingParseResult.Parsed.class,
+                SamlPostBindingMessage.fromFormBodyResult(("SAMLResponse=" + encoded)
                         .getBytes(StandardCharsets.UTF_8), List.of("application/x-www-form-urlencoded"), null))
                 .getMessage();
     }

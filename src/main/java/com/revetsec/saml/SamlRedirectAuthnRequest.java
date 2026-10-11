@@ -16,6 +16,8 @@
 
 package com.revetsec.saml;
 
+import com.revetsec.internal.encoding.EncodingException;
+import com.revetsec.internal.encoding.PercentDecoding;
 import com.revetsec.internal.xml.SecureXmlParser;
 import com.revetsec.internal.xml.SamlXmlWriter;
 import org.jspecify.annotations.NonNull;
@@ -36,7 +38,6 @@ import org.w3c.dom.Element;
 import org.w3c.dom.Node;
 import java.io.ByteArrayOutputStream;
 import java.net.URI;
-import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 import java.security.PrivateKey;
@@ -154,6 +155,7 @@ final class SamlRedirectAuthnRequest {
         requireNonNull(options);
         if (spEntityId.isEmpty() || spEntityId.length() > 2048 || !https(acs)
                 || !https(identityProviderEndpoint) || identityProviderEndpoint.getRawFragment() != null
+                || !safeEndpointQuery(identityProviderEndpoint.getRawQuery())
                 || lifetime.isZero() || lifetime.isNegative() || lifetime.compareTo(Duration.ofMinutes(15)) > 0
                 || (signingKey == null && signingRequired)
                 || (signingKey != null && (!(signingKey instanceof RSAPrivateKey rsa)
@@ -298,19 +300,32 @@ final class SamlRedirectAuthnRequest {
                 && uri.getRawUserInfo() == null;
     }
 
-    private static boolean safeEndpointQuery(@Nullable String rawQuery) {
+    static boolean safeEndpointQuery(@Nullable String rawQuery) {
         if (rawQuery == null) return true;
-        if (rawQuery.length() > 2048) return false;
+        if (rawQuery.isEmpty() || rawQuery.length() > 2048) return false;
         for (String field : rawQuery.split("&", -1)) {
+            if (field.isEmpty()) return false;
             int equals = field.indexOf('=');
             String rawName = equals < 0 ? field : field.substring(0, equals);
             String name;
-            try { name = URLDecoder.decode(rawName, StandardCharsets.UTF_8); }
-            catch (IllegalArgumentException exception) { return false; }
-            if (name.equals("SAMLRequest") || name.equals("SAMLResponse") || name.equals("RelayState")
+            try {
+                name = PercentDecoding.decode(rawName);
+                if (equals >= 0 && containsControl(PercentDecoding.decode(field.substring(equals + 1))))
+                    return false;
+            }
+            catch (EncodingException exception) { return false; }
+            if (name.isEmpty() || containsControl(name)
+                    || name.equals("SAMLRequest") || name.equals("SAMLResponse")
+                    || name.equals("RelayState")
                     || name.equals("SigAlg") || name.equals("Signature")) return false;
         }
         return true;
+    }
+
+    private static boolean containsControl(@NonNull String value) {
+        for (int index = 0; index < value.length(); index++)
+            if (Character.isISOControl(value.charAt(index))) return true;
+        return false;
     }
 
     sealed interface Result permits Prepared, PostPrepared, Rejected, Unavailable { }

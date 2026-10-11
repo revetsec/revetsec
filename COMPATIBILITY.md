@@ -26,7 +26,7 @@ Everything `public` or `protected` in the exported packages of the `revetsec` ar
 
 ### Public types so far
 
-Milestone M1 (foundations) added the first public types, M2 added `com.revetsec.jose`, M3 added `com.revetsec.oauth`, M4 added `com.revetsec.oidc`, and M5 adds resource-server protocol helpers, both resource validators and additive sealed validation outcomes. M6-A adds the shared RSA signer and its fixed failure type. M6-B adds generated OAuth private_key_jwt authentication. M6-C adds the fixed Entra common/organizations issuer policy. SAML and SCIM hold no public types yet.
+Milestone M1 (foundations) added the first public types, M2 added `com.revetsec.jose`, M3 added `com.revetsec.oauth`, M4 added `com.revetsec.oidc`, and M5 added resource-server protocol helpers. M6 added RSA signing and client authentication. The SAML service-provider API is present and remains pre-release; SCIM is still planned. The table is a package overview, not an exhaustive current member inventory.
 
 | Package | Public types | Count |
 | --- | --- | --- |
@@ -35,6 +35,7 @@ Milestone M1 (foundations) added the first public types, M2 added `com.revetsec.
 | `com.revetsec.jose` | `JwtValidator`, `Jwt`, `JwtClaims`, `JwsAlgorithm`, `JsonWebKey`, `JsonWebKeySet`, `JsonWebKeySkipReason`, `JsonWebKeySource` (sealed), `StaticJsonWebKeySource`, `RemoteJsonWebKeySource`, `JoseObserver`, `JoseException` (abstract, sealed), `MalformedJoseInputException`, `UnsupportedJoseFeatureException`, `JwtValidationException`, `JsonWebKeySetUnavailableException`, `JwtValidationResult`, `JwsSigner`, `JwsSigningException` | 19, plus 6 nested: two builders, `JoseException.Reason`, `JwsSigningException.Reason` and two validation result variants |
 | `com.revetsec.oauth` | `OAuthClient`, `AuthorizationServerMetadata`, `ClientAuthentication`, `ClientAssertionAudience`, `ClientAssertionKeyProvider`, `ClientAssertionSigningKey`, `OAuthConfigurationException`, `ClientSecretBasicEncoding`, `AuthorizationRequestOptions`, `AuthorizationRedirect`, `PendingAuthorization`, `PendingAuthorizationSource`, `PendingAuthorizationStore`, `InMemoryPendingAuthorizationStore`, `AuthorizationResponse`, `TokenResponse`, `AccessToken`, `RefreshToken`, `TokenRequestOptions`, `TokenTypeHint`, `ClientCredentialsTokenSource`, `IssuerParameterPolicy`, `OAuthObserver`, `OAuthEndpoint`, `OAuthException`, six final OAuth exception leaves, `BearerToken`, `BearerError`, `BearerChallenge`, `ProtectedResourceMetadata`, `AccessTokenValidationException`, `BearerTokenResult`, `AuthorizationCompletionResult`, `AccessTokenValidator`, `JwtAccessTokenValidator`, `TokenIntrospectionClient`, `VerifiedAccessToken`, `AccessTokenCompatibilityMode`, `AccessTokenObserver`, `AccessTokenValidationResult` | 45, plus 23 nested: twelve builders, three enums and eight result variants |
 | `com.revetsec.oidc` | `OidcClient`, `OidcProviderMetadata`, `OidcAuthenticationOptions`, `IdToken`, `OidcAuthentication`, `OidcSessionReference`, `OidcRefreshResult`, `OidcUserInfo`, `OidcCompatibilityMode`, `OidcObserver`, `OidcIssuerPolicy`, `OidcException` (abstract, sealed), `OidcValidationException`, `OidcAuthenticationResult` | 14, plus 8 nested: three builders, `OidcValidationException.Reason` and four authentication result variants |
+| `com.revetsec.saml` | `SamlServiceProvider`, `SamlIdentityProvider`, metadata and credential types, signed binding messages, authentication and logout results, subject/session types, replay and pending-state interfaces and defaults | 39 top-level types, plus nested builders and result variants; see [the SAML SP guide](docs/saml-sp.md) |
 
 `OutboundUriPolicy` has its final shape: two presets, `defaultInstance()` and `publicAddressesOnlyInstance()`, and `permits(URI)`. The addresses and names each preset rejects are dated lists, and adding to them is a security tightening (see below). `JsonValue`'s Javadoc designates its six permitted types for exhaustive matching, so they are frozen within a major version (see below). `JwsAlgorithm`, `JwsSigningException.Reason`, `JoseException.Reason`, `JsonWebKeySkipReason`, `AccessTokenCompatibilityMode`, `BearerError` and `AccessTokenValidationException.Reason` are not switch-stable: a later release may add constants, so a `switch` over one needs a default branch. Nor are the sealed `JsonWebKeySource`, `AccessTokenValidator` and operation result hierarchies: a later release may add permitted implementations or outcomes. Result switches need a rejecting default. Result payload accessors exist only on their appropriate variant; applications cannot construct outcomes. Existing throwing entry points remain available, and infrastructure/configuration failures retain exceptions.
 
@@ -94,11 +95,21 @@ Every compatibility mode is registered in [docs/compatibility-modes.md](docs/com
 
 ### saml2int deviations
 
-Not yet written. The SAML service provider's deviations from the saml2int SP requirements will be listed in [docs/compatibility-modes.md](docs/compatibility-modes.md#saml2int-deviations), each with its reason.
+The SAML service provider's [saml2int SP checklist and deviations](docs/compatibility-modes.md#saml2int-deviations) distinguish library behavior from application deployment obligations. The listed deviations prevent an unqualified profile claim.
 
 ## Interop matrix
 
-Not yet written. It will be a dated provider matrix, modeled on Pyranid's table of wire-compatible databases. Each row will name the provider and version observed, say whether its CI leg gates or is advisory, carry an "observed on YYYY-MM-DD" date, and list divergences. Any combination found unsafe will carry an explicit warning.
+The SAML SP matrix below records local results on 2026-10-11. These are test-partner observations on the current, uncommitted checkout; hosted CI must run again after the source is pushed. The scripted partner and Keycloak are gating legs. SimpleSAMLphp and the Shibboleth capture are advisory evidence, with checked-in offline replay fixtures.
+
+| SAML partner | Observed behavior | Limits |
+|---|---|---|
+| Scripted IdP (pinned libxmlsec1/signxml image), gating | 17 integration cases passed for signed browser SSO, encryption, metadata and Redirect logout; 7 live libxmlsec differential cases passed. | Our test partner supplies hostile variants; it is not an independent product. |
+| Keycloak 26.7.4, gating | 3 local cases passed: SP Redirect login, explicitly enabled IdP-initiated login, and signed IdP-initiated logout. | These cases do not establish every Keycloak encryption or SLO configuration. |
+| Shibboleth IdP 5.2.3, dispatch capture | Fresh GCM and signed-Response CBC captures replayed through the SP (4 tests). The CBC profile requires a connection-specific opt-in and metadata variant. | Local capture passed; the RC-2 hosted dispatch and manual review remain. |
+| SimpleSAMLphp 2.5.0, advisory | Fresh signed CBC Response accepted with opt-in; CBC under an unsigned Response rejected; both signed Redirect logout directions accepted (5 replay tests). | The IdP process is restarted between signing modes because it caches SP metadata. |
+| Entra, Okta and Google SAML IdPs | No account-backed capture as of 2026-10-11. | Explicitly unproven; the release plan treats absent accounts as optional rows. |
+
+The [SAML SP guide](docs/saml-sp.md) describes deployment requirements and the supported binding/encryption profiles. Differential, fuzz, mutation, manual pentest and review evidence still gates RC-2.
 
 Evidence for a first row exists: Microsoft Entra ID's public key sets and discovery documents, as read on 2026-09-27, are kept as test fixtures, and every key in them loads with none skipped. Verifying a token Entra itself signed needs an Entra account, so that part of the row is unproven so far. Entra's keys carry no `alg`, so a validator that allows two RSA algorithms cannot use them (see [docs/supported-algorithms.md](docs/supported-algorithms.md)).
 

@@ -124,7 +124,8 @@ final class BrowserSessions {
     private static boolean sameNameId(@NonNull SamlNameId left, @NonNull SamlNameId right) {
         return left.getValue().equals(right.getValue()) && left.getFormat().equals(right.getFormat())
                 && left.getNameQualifier().equals(right.getNameQualifier())
-                && left.getSpNameQualifier().equals(right.getSpNameQualifier());
+                && left.getSpNameQualifier().equals(right.getSpNameQualifier())
+                && left.getSpProvidedId().equals(right.getSpProvidedId());
     }
 
     synchronized int size() { cleanup(); return entries.size(); }

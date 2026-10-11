@@ -40,6 +40,7 @@ import org.opensaml.core.config.InitializationService;
 import org.opensaml.core.xml.config.XMLObjectProviderRegistrySupport;
 import org.opensaml.messaging.context.MessageContext;
 import org.opensaml.messaging.handler.MessageHandlerException;
+import org.opensaml.messaging.decoder.MessageDecodingException;
 import org.opensaml.saml.common.SAMLVersion;
 import org.opensaml.saml.common.messaging.context.SAMLPeerEntityContext;
 import org.opensaml.saml.common.messaging.context.SAMLProtocolContext;
@@ -105,6 +106,12 @@ final class OpenSamlLogoutComparatorTests {
             "response-valid", "response-wrong-destination", "response-wrong-correlation",
             "response-wrong-issuer", "response-stale-issue", "response-duplicate-status",
             "response-empty-status");
+    private static final @NonNull List<@NonNull String> REQUEST_SHAPE_CASES = List.of(
+            "request-nameid-before-issuer", "request-session-before-nameid",
+            "request-nilled-nameid", "request-nilled-session", "request-root-text");
+    private static final @NonNull List<@NonNull String> RESPONSE_SHAPE_CASES = List.of(
+            "response-status-before-issuer", "response-nilled-status",
+            "response-nested-failure", "response-root-text");
 
     @BeforeAll static void initializeOpenSaml() throws Exception {
         InitializationService.initialize();
@@ -158,6 +165,29 @@ final class OpenSamlLogoutComparatorTests {
             else
                 assertInstanceOf(SamlLogoutResult.Rejected.class,
                         revetsecResponse(changed), name + " Revetsec");
+        }
+    }
+
+    @Test void independentlySignedLogoutShapesCannotPromoteIdentityOrSuccess() throws Exception {
+        // The fixture generator checks these shapes against the offline OASIS XSD.
+        // OpenSAML's Redirect handler is a signature oracle here, not an XSD validator.
+        for (String name : REQUEST_SHAPE_CASES) {
+            String query = fixture(name);
+            if (name.equals("request-root-text"))
+                assertThrows(MessageDecodingException.class, () -> verifiedMessage(query),
+                        name + " OpenSAML decode");
+            else assertInstanceOf(LogoutRequest.class, verifiedMessage(query), name + " OpenSAML decode");
+            assertInstanceOf(SamlLogoutRequestResult.Rejected.class,
+                    revetsecRequest(query), name + " Revetsec policy");
+        }
+        for (String name : RESPONSE_SHAPE_CASES) {
+            String query = fixture(name);
+            if (name.equals("response-root-text"))
+                assertThrows(MessageDecodingException.class, () -> verifiedMessage(query),
+                        name + " OpenSAML decode");
+            else assertInstanceOf(LogoutResponse.class, verifiedMessage(query), name + " OpenSAML decode");
+            assertInstanceOf(SamlLogoutResult.Rejected.class,
+                    revetsecResponse(query), name + " Revetsec policy");
         }
     }
 
@@ -340,7 +370,7 @@ final class OpenSamlLogoutComparatorTests {
                 StandardCharsets.US_ASCII)) {
             corpus.load(input);
         }
-        assertEquals(14, corpus.size(), "SLO corpus changed");
+        assertEquals(23, corpus.size(), "SLO corpus changed");
         String query = corpus.getProperty(name);
         if (query == null || query.isEmpty()) throw new IllegalArgumentException("Missing SLO fixture: " + name);
         return query;

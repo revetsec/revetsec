@@ -17,16 +17,15 @@ package com.revetsec.saml;
 
 import com.revetsec.internal.xml.SecureXmlParser;
 import com.revetsec.internal.xml.EnvelopedSignatureVerifier;
+import com.revetsec.internal.pem.Pem;
+import com.revetsec.internal.pem.PemException;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 import org.w3c.dom.Element;
 import org.w3c.dom.Node;
 
 import javax.annotation.concurrent.Immutable;
-import java.io.ByteArrayInputStream;
 import java.net.URI;
-import java.security.cert.CertificateException;
-import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
 import java.security.PublicKey;
 import java.time.Clock;
@@ -151,11 +150,9 @@ public final class SamlIdentityProviderMetadata {
         if (root == null) return SamlIdentityProviderMetadataResult.Rejected.INSTANCE;
         Element entity = root;
         Instant aggregateLimit = null;
-        if (is(root, MD, "EntitiesDescriptor")) {
+        boolean aggregate = is(root, MD, "EntitiesDescriptor");
+        if (aggregate) {
             if (expectedEntityId == null || expectedEntityId.isEmpty())
-                return SamlIdentityProviderMetadataResult.Rejected.INSTANCE;
-            aggregateLimit = validity(root, now);
-            if (root.hasAttributeNS(null, "validUntil") && aggregateLimit == null)
                 return SamlIdentityProviderMetadataResult.Rejected.INSTANCE;
             entity = null;
             boolean aggregateSignature = false;
@@ -183,6 +180,7 @@ public final class SamlIdentityProviderMetadata {
         if (entityId.isEmpty() || entityId.length() > 2048
                 || (expectedEntityId != null && !expectedEntityId.equals(entityId)))
             return SamlIdentityProviderMetadataResult.Rejected.INSTANCE;
+        boolean aggregateCovered = trustedMetadataKeys == null;
         if (trustedMetadataKeys != null) {
             Element signed = !root.isSameNode(entity) && directSignature(root) ? root : entity;
             EnvelopedSignatureVerifier.Result proof = EnvelopedSignatureVerifier.verifyMetadata(
@@ -190,6 +188,13 @@ public final class SamlIdentityProviderMetadata {
             if (proof instanceof EnvelopedSignatureVerifier.Unavailable)
                 return SamlIdentityProviderMetadataResult.Unavailable.INSTANCE;
             if (!(proof instanceof EnvelopedSignatureVerifier.Verified))
+                return SamlIdentityProviderMetadataResult.Rejected.INSTANCE;
+            aggregateCovered = signed.isSameNode(root);
+        }
+        if (aggregate && aggregateCovered) {
+            // An entity signature does not authenticate validity on its enclosing aggregate.
+            aggregateLimit = validity(root, now);
+            if (root.hasAttributeNS(null, "validUntil") && aggregateLimit == null)
                 return SamlIdentityProviderMetadataResult.Rejected.INSTANCE;
         }
         Instant entityLimit = validity(entity, now);
@@ -289,22 +294,17 @@ public final class SamlIdentityProviderMetadata {
     private static @Nullable X509Certificate certificate(@NonNull Element descriptor) {
         Element keyInfo = onlyChild(descriptor, DS, "KeyInfo");
         Element data = keyInfo == null ? null : onlyChild(keyInfo, DS, "X509Data");
-        Element encoded = null;
-        if (data != null) for (Node child = data.getFirstChild(); child != null; child = child.getNextSibling()) {
-            if (child instanceof Element certificate && is(certificate, DS, "X509Certificate")) {
-                encoded = certificate;
-                break;
-            }
-        }
+        Element encoded = data == null ? null : onlyChild(data, DS, "X509Certificate");
         if (encoded == null) return null;
-        String value = encoded.getTextContent().replaceAll("[ \\t\\r\\n]", "");
+        String content = textOnly(encoded);
+        if (content == null) return null;
+        String value = content.replaceAll("[ \\t\\r\\n]", "");
         if (value.isEmpty() || value.length() > 32768) return null;
         try {
             byte[] der = Base64.getDecoder().decode(value);
             if (der.length > 24576) return null;
-            return (X509Certificate) CertificateFactory.getInstance("X.509")
-                    .generateCertificate(new ByteArrayInputStream(der));
-        } catch (IllegalArgumentException | CertificateException exception) { return null; }
+            return Pem.parseCertificateDer(der);
+        } catch (IllegalArgumentException | PemException exception) { return null; }
     }
 
     private static @Nullable Element onlyChild(@NonNull Element parent, @NonNull String namespace,

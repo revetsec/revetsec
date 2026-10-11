@@ -140,6 +140,9 @@ public final class XmlEncryptionDecryptor {
     private static @Nullable KeyMethod keyMethod(@NonNull Element wrapped) {
         Element method = unique(wrapped, ENC, "EncryptionMethod");
         if (method == null) return null;
+        // These children are optional, but a duplicate must not select the default OAEP parameters.
+        if (multiple(method, DS, "DigestMethod") || multiple(method, ENC11, "MGF")
+                || multiple(method, ENC, "OAEPparams")) return null;
         String algorithm = method.getAttributeNS(null, "Algorithm");
         if (!algorithm.equals(ENC + "rsa-oaep-mgf1p") && !algorithm.equals(ENC11 + "rsa-oaep"))
             return null;
@@ -196,6 +199,8 @@ public final class XmlEncryptionDecryptor {
 
     private static boolean readKeyInfo(@NonNull Element parent,
             @NonNull List<@NonNull Element> inline, @NonNull List<@NonNull String> references) {
+        // A duplicate is different from an absent KeyInfo when sibling keys are available.
+        if (multiple(parent, DS, "KeyInfo")) return false;
         Element info = unique(parent, DS, "KeyInfo");
         if (info == null) return true;
         for (Node child = info.getFirstChild(); child != null; child = child.getNextSibling()) {
@@ -241,6 +246,18 @@ public final class XmlEncryptionDecryptor {
             }
         }
         return match;
+    }
+
+    private static boolean multiple(@NonNull Element parent, @NonNull String namespace,
+            @NonNull String local) {
+        boolean found = false;
+        for (Node child = parent.getFirstChild(); child != null; child = child.getNextSibling()) {
+            if (child instanceof Element element && is(element, namespace, local)) {
+                if (found) return true;
+                found = true;
+            }
+        }
+        return false;
     }
 
     private static boolean is(@NonNull Element value, @NonNull String namespace, @NonNull String local) {

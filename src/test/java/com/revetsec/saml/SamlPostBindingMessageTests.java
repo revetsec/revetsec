@@ -39,5 +39,17 @@ final class SamlPostBindingMessageTests {
                         SamlPostBindingMessage.fromFormBodyResult(
                                 "SAMLResponse=AA%3D%3D&SAMLResponse=AA%3D%3D".getBytes(StandardCharsets.UTF_8),
                                 List.of("application/x-www-form-urlencoded"), null)).getReason());
+        assertEquals(SamlPostBindingParseResult.Reason.PARAMETERS,
+                assertInstanceOf(SamlPostBindingParseResult.Rejected.class,
+                        SamlPostBindingMessage.fromFormBodyResult(
+                                "SAMLResponse=PHgvPg%3D%3D&&RelayState=opaque"
+                                        .getBytes(StandardCharsets.UTF_8),
+                                List.of("application/x-www-form-urlencoded"), null)).getReason());
+        assertEquals(SamlPostBindingParseResult.Reason.QUERY,
+                assertInstanceOf(SamlPostBindingParseResult.Rejected.class,
+                        SamlPostBindingMessage.fromFormBodyResult(
+                                "SAMLResponse=PHgvPg%3D%3D".getBytes(StandardCharsets.UTF_8),
+                                List.of("application/x-www-form-urlencoded"), "tenant=one\u007f"))
+                        .getReason());
     }
 }

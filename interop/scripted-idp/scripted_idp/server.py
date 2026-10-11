@@ -91,6 +91,13 @@ def _param_pairs(raw):
     return result
 
 
+def _endpoint_binding_query(raw):
+    """Separate the one test-owned static endpoint field from SAML binding octets."""
+    if raw.startswith("tenant=one&"):
+        return raw[len("tenant=one&"):], "?tenant=one"
+    return raw, ""
+
+
 def _request_xml(raw, binding):
     if binding == "redirect":
         parameters = _param_pairs(raw)
@@ -203,9 +210,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
         elif path.path == "/metadata":
             self._metadata(path.query)
         elif path.path == "/sso":
-            self._sso(path.query, "redirect")
+            binding_query, endpoint_suffix = _endpoint_binding_query(path.query)
+            self._sso(binding_query, "redirect", endpoint_suffix)
         elif path.path == "/slo":
-            self._slo(path.query)
+            binding_query, endpoint_suffix = _endpoint_binding_query(path.query)
+            self._slo(binding_query, endpoint_suffix)
         else:
             self._send_json(404, {"error": "not found"})
 
@@ -319,12 +328,15 @@ class Handler(http.server.BaseHTTPRequestHandler):
             except (InputError, mint.SpecError, ValueError) as exception:
                 self._send_json(400, {"error": str(exception)})
             return
-        if self.path == "/sso":
+        if path.path == "/sso":
             try:
+                if path.query not in ("", "tenant=one"):
+                    raise InputError("invalid POST endpoint query")
                 body = self._body()
                 if self.headers.get_content_type() != "application/x-www-form-urlencoded":
                     raise InputError("invalid POST binding content type")
-                self._sso(body.decode("ascii"), "post")
+                self._sso(body.decode("ascii"), "post",
+                          "?tenant=one" if path.query else "")
             except (InputError, UnicodeError) as exception:
                 self._send_json(400, {"error": str(exception)})
             return
@@ -358,7 +370,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 raise InputError("one absolute now and optional variant required")
             variant = params.get("variant", ["default"])[0]
             if variant not in ("default", "rollover", "aggregate", "expired", "scopes",
-                               "no-slo", "signed", "aggregate-signed"):
+                               "no-slo", "signed", "aggregate-signed", "query-endpoints"):
                 raise InputError("unknown metadata variant")
             now = mint._instant(params["now"][0]).replace(microsecond=0)
             with self.server.state_lock:
@@ -397,16 +409,17 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 etree.SubElement(extensions, x._q(shibmd, "Scope")).text = "example.test"
                 etree.SubElement(extensions, x._q(shibmd, "Scope"), regexp="true").text = ".*"
                 role.insert(0, extensions)
+            endpoint_suffix = "?tenant=one" if variant == "query-endpoints" else ""
             if variant != "no-slo":
                 etree.SubElement(role, x._q(md, "SingleLogoutService"),
                                  Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect",
-                                 Location=base_url + "/slo")
+                                 Location=base_url + "/slo" + endpoint_suffix)
             etree.SubElement(role, x._q(md, "SingleSignOnService"),
                              Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect",
-                             Location=base_url + "/sso")
+                             Location=base_url + "/sso" + endpoint_suffix)
             etree.SubElement(role, x._q(md, "SingleSignOnService"),
                              Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST",
-                             Location=base_url + "/sso")
+                             Location=base_url + "/sso" + endpoint_suffix)
             if variant == "signed":
                 x.xmlsec_sign(descriptor, x.Credential.from_files("idp-signing-rsa-2048",
                               self.server.key_directory), x.C.TransformRsaSha256,
@@ -435,7 +448,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         except (InputError, mint.SpecError, ValueError) as exception:
             self._send_json(400, {"error": str(exception)})
 
-    def _sso(self, raw, binding):
+    def _sso(self, raw, binding, endpoint_suffix):
         try:
             root, parameters, serialized = _request_xml(raw, binding)
             if not schema.validate(self.server.schemas, "authn_request", root):
@@ -446,7 +459,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 base_url = self.server.base_url
             if sp is None or base_url is None:
                 raise InputError("SP or IdP URL is not configured")
-            if root.get("Destination") != base_url + "/sso":
+            if root.get("Destination") != base_url + "/sso" + endpoint_suffix:
                 raise InputError("wrong AuthnRequest destination")
             if root.get("AssertionConsumerServiceURL") != sp["acs_url"]:
                 raise InputError("wrong AuthnRequest ACS")
@@ -490,7 +503,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         except (InputError, mint.SpecError, ValueError) as exception:
             self._send_json(400, {"error": str(exception)})
 
-    def _slo(self, raw):
+    def _slo(self, raw, endpoint_suffix):
         try:
             parameters = _param_pairs(raw)
             if "SigAlg" not in parameters or "Signature" not in parameters:
@@ -502,16 +515,18 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 base_url = self.server.base_url
             if sp is None or "slo_url" not in sp or base_url is None:
                 raise InputError("SP logout endpoint is not registered")
-            if root.get("Destination") != base_url + "/slo":
+            if root.get("Destination") != base_url + "/slo" + endpoint_suffix:
                 raise InputError("wrong logout destination")
             certificate = sp.get("signing_certificate_pem")
             if certificate is None:
                 raise InputError("SP signing certificate is missing")
             _verify_redirect(parameters, certificate)
+            if not schema.validate(self.server.schemas, "authn_request", root):
+                raise InputError("SAML logout message fails OASIS schema")
             with self.server.state_lock:
                 self.server.received.append({"entity_id": issuer, "binding": "redirect-slo",
                                              "xml": payload.decode("utf-8"),
-                                             "signature_valid": True})
+                                             "signature_valid": True, "schema_valid": True})
                 armed = self.server.armed_slo.pop(issuer, None) if field == "SAMLRequest" else None
                 issued = self.server.issued_slo.pop(issuer, None) if field == "SAMLResponse" else None
             if field == "SAMLResponse":

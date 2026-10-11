@@ -1,6 +1,6 @@
 # Threat Model
 
-**Status: foundations, JOSE and the M3 OAuth client.** Revetsec holds its shared foundations (milestone M1), signed-JWT verification against JSON Web Key Sets (milestone M2), and an OAuth client under M3 verification. OpenID Connect, SAML and SCIM are still to come. This page grows as each protocol area lands, and it is complete before 1.0.0.
+**Status: pre-release.** This map covers the shared foundations, signed-JWT verification, the OAuth client boundary and the implemented SAML service-provider invariants. The SAML RC-2 assurance gates remain open. This page grows as the remaining protocol and release checks land.
 
 ## Actors
 
@@ -78,6 +78,32 @@ The M3 OAuth mapping below is in progress. It records the implemented boundary a
 | INV-O7 | Basic encodes client ID and secret separately before Base64; secrets stay out of observer URI and exception messages. | `oauth.ClientAuthenticationTests.basicFormEncodesBothFieldsBeforeJoining`, `supplierFailureDoesNotExposeItsMessageOrCause` |
 | INV-O8 | `OAuthClient` returns raw token wrappers and no identity result. `TokenResponse` excludes `id_token` and other credential members from its generic JSON accessors. | `oauth.TokenResponseTests.successUsesRequestScopesAndHidesAllTokenMembers`; `PublicApiContractTests` |
 | INV-O9 | Metadata issuer equals the configured issuer and discovered endpoints pass the outbound URI policy. Tenant-specific Entra metadata loads; common template issuer fails exact comparison. | `oauth.AuthorizationServerMetadataTests`, `oauth.AuthorizationServerDiscoveryTests`, `oauth.CapturedAuthorizationServerMetadataTests` |
+
+### SAML service provider
+
+The rows describe the current SP implementation. Partner interoperability and manual pentest evidence remain separate release gates; see [COMPATIBILITY.md](../COMPATIBILITY.md).
+
+| ID | Invariant, and its scope so far | Checked by |
+|---|---|---|
+| INV-S1 | The SAML XML parser refuses DTDs and uses the same parsed DOM for signature verification and value extraction. | `internal.xml.SecureXmlParserTests`; `internal.xml.EnvelopedSignatureVerifierTests` |
+| INV-S2 | A version 2.0 Response has a single direct Assertion or EncryptedAssertion on success and no hidden second assertion anywhere in the document. | `internal.xml.SamlResponseStructureTests`; `saml.SamlSignedStructureCorpusTests` |
+| INV-S3 | The document-wide ID scan rejects duplicates; verification registers only the selected element's ID and checks that DOM resolves that exact element. | `internal.xml.SecureXmlParserTests`; `internal.xml.EnvelopedSignatureVerifierTests`; `saml.SamlXswMutationTests` |
+| INV-S4 | A signature must be a direct child at its SAML position, with one same-element fragment reference, approved transforms and algorithms, and safe KeyInfo shape. | `internal.xml.EnvelopedSignatureVerifierTests`; `saml.SamlXswMutationTests` |
+| INV-S5 | Authenticated values come from the verified element; unsigned Response fields can reject but cannot establish identity or satisfy a binding. | `saml.SamlServiceProviderTests`; `saml.SamlResponseSemanticsTests`; `saml.SamlXswMutationTests` |
+| INV-S6 | Verification uses configured IdP keys, including bounded rollover, and never trusts a message's KeyInfo as a key source. | `internal.xml.EnvelopedSignatureVerifierTests`; `saml.SamlIdentityProviderMetadataTests` |
+| INV-S7 | Every present signature verifies, the consumed assertion has signature coverage, and cached digest input begins with the covered element's QName. | `internal.xml.EnvelopedSignatureVerifierTests`; `saml.SamlEncryptionTests`; `saml.SamlXswMutationTests` |
+| INV-S8 | Security-sensitive scalar values reject element children; complex AttributeValue content is distinguished from text and exposes a nested NameID only through its typed result. | `saml.SamlResponseSemanticsTests`; `saml.SamlServiceProviderTests` |
+| INV-S9 | At least one bearer SubjectConfirmation binds the ACS, expiry and initiating request when one exists. | `saml.SamlResponseSemanticsTests`; `saml.SamlServiceProviderTests` |
+| INV-S10 | Conditions enforce their time window, every AudienceRestriction names this SP, and unknown conditions fail closed. | `saml.SamlResponseSemanticsTests`; `saml.SamlServiceProviderTests` |
+| INV-S11 | Issuers, destination, IdP connection, browser pending state and RelayState match their configured or initiated values. | `saml.SamlServiceProviderTests`; `saml.PendingSamlAuthenticationCodecTests`; `saml.InMemoryPendingSamlAuthenticationStoreTests` |
+| INV-S12 | A required replay cache keys assertion acceptance by SP and IdP connection, computes bounded expiry, and writes only after all other checks. | `saml.InMemorySamlReplayCacheTests`; `saml.SamlServiceProviderTests`; `saml.SamlScriptedMintedFixtureTests` |
+| INV-S13 | Unsolicited responses are disabled by default; an enabled path is explicit and never treats RelayState as a redirect destination. | `saml.SamlServiceProviderTests`; `saml.SamlIndependentFixtureTests` |
+| INV-S14 | GCM decryption authenticates its tag. CBC requires an explicitly permitted IdP and a verified Response signature covering the ciphertext. Decryption failures do not expose an oracle reason. | `saml.SamlEncryptionTests`; `saml.SamlScriptedMintedFixtureTests`; `saml.SimpleSamlCapturedResponseTests` |
+| INV-S15 | SSO responses use bounded POST decoding; logout messages use bounded Redirect decoding. | `saml.SamlPostBindingDecoderTests`; `saml.SamlRedirectBindingMessageTests`; `saml.SamlLogoutRequestTests` |
+| INV-S16 | Request XML and HTML form output use escaping writers and require an HTTPS form action. | `saml.SamlRedirectAuthnRequestTests`; `saml.SamlPostBindingMessageTests` |
+| INV-S17 | A disabled JVM-global XML-signature secure-validation setting requires explicit builder acknowledgment and is observed; Revetsec still pins the verification context and its own signature allowlists. | `saml.SamlConfigurationBoundaryTests.disabledGlobalSignatureValidationRequiresAnObservedAcknowledgment`; `internal.xml.EnvelopedSignatureVerifierTests.explicitVerificationContextWorksWithGlobalSecureValidationDisabled` |
+| INV-S18 | Message-content traversal avoids XPath and `getElementsByTagName`. | `saml.SamlXswMutationTests`; `SourcePolicyTests` |
+| INV-S19 | Logout accepts only signed HTTP-Redirect messages, verifies the raw query signature, binds issuer, destination, expiry and pending response, and rejects replay. | `saml.SamlRedirectBindingMessageTests`; `saml.SamlLogoutRequestTests`; `saml.SamlServiceProviderTests`; `saml.SimpleSamlCapturedLogoutTests` |
 
 ### Packaging
 

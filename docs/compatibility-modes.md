@@ -6,7 +6,6 @@ A compatibility mode is a named, explicit relaxation that lets Revetsec work wit
 
 - It is off by default.
 - It is set per instance: per client, per identity provider or per tenant, never globally.
-- Observer reporting is required at the 1.0.0 API freeze. The SAML observer hookup remains open.
 - It has an entry on this page, and tests cover both the enabled and the disabled state.
 - It is never switched on by detecting a provider automatically.
 - Named presets bundle modes for one provider. A preset only widens what is accepted, and every change to a preset is recorded in the CHANGELOG.
@@ -54,6 +53,15 @@ Each entry gives the mode's name, protocol area, effect, conditions and safeguar
 - **Tests:** `oidc.OidcHmacTests`: `optInRequiresConfidentialAuthenticationAndUtf8HashLength`, `eachHmacAlgorithmUsesExactUtf8SecretWithBasicOrPostAndNoKeys`, `supplierSnapshotSurvivesRotationAndIsReadOnceAtBuildAndOncePerPost`, `hmacStillChecksClaimsHashesSignatureAndExactAudience`, `hmacRefreshRetainsOriginalNonceAndRejectsSubjectDriftBeforeTokenRelease`, `rsaDerPemAndJwkBytesAreNeverHmacKeys`, `mixedAllowlistUsesPublicKeysOnlyForRsaAndModeDoesNotChangeDefaults`, and `lazyDiscoveryIntersectsHmacAndWarmUpFetchesNoJwks`.
 - **Added in:** 1.0.0 (unreleased).
 
+### `acknowledgeGlobalSecureValidationDisabled(true)`
+
+- **Where:** `SamlServiceProvider.Builder` (SAML).
+- **Effect:** permits building an SP when `org.jcp.xml.dsig.secureValidation` is globally set to a value other than `true`. Without acknowledgment, `build()` fails. Revetsec still sets secure validation explicitly on each XML-signature verification context, except where the IdP's explicit RSA-SHA1 compatibility mode requires it to be disabled for that signature; its own signature shape and algorithm allowlists apply in either case.
+- **Risk:** other XML-signature consumers in the same JVM may inherit the disabled global setting. Audit them separately.
+- **Safeguards:** false or null clears the acknowledgment. `SamlObserver.didAcknowledgeGlobalSecureValidationDisabled()` reports its use after a successful build without carrying the property value or message data.
+- **Tests:** `saml.SamlConfigurationBoundaryTests.disabledGlobalSignatureValidationRequiresAnObservedAcknowledgment` and `internal.xml.EnvelopedSignatureVerifierTests.explicitVerificationContextWorksWithGlobalSecureValidationDisabled`.
+- **Added in:** 1.0.0 (unreleased).
+
 ### `SamlCompatibilityMode.SHA1_SIGNATURES`
 
 - **Where:** `SamlIdentityProvider.Builder.compatibility(Set<SamlCompatibilityMode>)` for one approved IdP connection.
@@ -67,7 +75,7 @@ Each entry gives the mode's name, protocol area, effect, conditions and safeguar
 - **Where:** the same per-IdP builder.
 - **Effect:** permits AES-CBC assertion decryption only after a trusted IdP signature covers the whole Response. It never accepts CBC solely under an Assertion signature. SP metadata advertises GCM, not CBC.
 - **Risk:** CBC encryption does not authenticate the ciphertext. Prefer changing the IdP to GCM or to sign the whole Response before enabling this mode.
-- **Tests:** `saml.SamlScriptedMintedFixtureTests` covers AES-128/192/256-CBC, the default rejection, and an unsigned-Response negative.
+- **Tests:** `saml.SamlScriptedMintedFixtureTests` covers AES-128/192/256-CBC, the default rejection, and an unsigned-Response negative. `saml.SimpleSamlCapturedResponseTests` replays real SimpleSAMLphp 2.5.0 signed and assertion-only CBC Responses.
 - **Added in:** 1.0.0 (unreleased).
 
 ### `SamlCompatibilityMode.UNSOLICITED_RESPONSES`
@@ -85,4 +93,65 @@ Each entry gives the mode's name, protocol area, effect, conditions and safeguar
 
 ## saml2int deviations
 
-The SAML service provider is being checked against the SP requirements of the saml2int profile (v2.0). Its metadata parser accepts metadata without `validUntil` because application-approved static metadata may omit it; when `validUntil` is present, expiry is enforced. A complete requirement-by-requirement deviations list remains an RC-2 release item.
+This checklist uses the [Kantara saml2int v2.0 deployment profile](https://kantarainitiative.github.io/SAMLprofiles/saml2int.html), version 2.00, 2019-12-09. It covers the common requirements and the SP requirements; the IdP requirements do not apply to Revetsec's SP. **Library** means the core API supplies the capability. **Deployment** means the application or operator must enforce the requirement. **Deviation** means the current SP profile does not meet the requirement as written. Library capability alone is not a claim that a deployment conforms. The application must review its IdP configuration, metadata publication, user interface, and session lifecycle.
+
+| Requirement | Disposition for a Revetsec SP deployment |
+| --- | --- |
+| SDP-G01 | Library: three-minute default skew, configurable through five minutes. Set three to five minutes for a profile deployment; the API also permits less. |
+| SDP-G02 | Deviation: emitted entity IDs and echoed NameIDs can exceed 256 characters. Limit application-configured entity IDs and accepted partner identifiers to 256 for this profile. |
+| SDP-G03 | Library: outbound protocol XML writers do not emit DTDs. |
+| SDP-G04 | Deployment: configure an absolute SP entity ID no longer than 256 characters. The general builder accepts longer and non-URI identifiers. |
+| SDP-MD01 | Deviation: IdP metadata consumption and refresh are application-owned; Revetsec does not automate periodic federation metadata management. The application must refresh trusted metadata and provision endpoints, keys, and policy from it. |
+| SDP-MD02 | Deployment: obtain metadata over authenticated TLS or use the pinned-signature `fromXmlResult` overload. The unsigned overload assumes application-approved bytes; it does not authenticate their origin. Keep metadata trust keys independent of IdP message-signing keys. |
+| SDP-MD03 | Deviation: approved static IdP metadata without a trusted `validUntil` is accepted. The parser checks expiry on the selected entity and on an aggregate only when its signature is verified or the application supplied approved bytes. An unsigned aggregate around a separately signed entity cannot set that entity's expiry. A strict deployment must reject missing or overlong trusted validity before configuring an IdP. |
+| SDP-MD04 | Deployment: `SamlServiceProviderMetadata` produces a descriptor; publication, stable rollover, and authenticated distribution belong to the application. |
+| SDP-MD05 | Library: published signing and encryption keys use X.509 certificates in `KeyDescriptor` elements. |
+| SDP-MD06 | Library: configured RSA credentials and IdP signing keys require at least 2048 bits. |
+| SDP-MD07 | Library: accepted EC signing keys require at least 256 bits; SP credentials currently use RSA. |
+| SDP-MD08 | Deviation when no decryption credential is configured: generated SP metadata then has no encryption certificate. Supply a decryption credential for this profile. |
+| SDP-MD09 | Deviation: generated SP metadata has no `mdui:UIInfo`, `DisplayName`, `Logo`, or `PrivacyStatementURL`. Publish an enriched, reviewed descriptor for a strict federation. |
+| SDP-MD10 | Deployment: if metadata is enriched with a logo, use HTTPS or an inline `data:` URI. The generator has no logo field. |
+| SDP-MD11 | Deviation: generated SP metadata has no technical `ContactPerson`/`EmailAddress`. Add these during publication. |
+| SDP-MD12 | IdP-only requirement; not applicable to an SP. |
+| SDP-ALG01 | Library for incoming messages: SHA-256 XML signatures, AES-GCM assertion decryption, and RSA-OAEP are supported. The SP emits RSA-SHA256 Redirect signatures. The opt-in SHA-1 and AES-CBC modes are outside this profile. |
+| SDP-SP01 | Library: SP-initiated browser SSO is implemented; the deviations below limit a strict saml2int claim. |
+| SDP-SP02 | Library: `beginAuthenticationResult` emits HTTP-Redirect AuthnRequests. `beginPostAuthenticationResult` is an additional mode; choose Redirect for this profile. |
+| SDP-SP03 | Deployment: send the returned redirect as a top-level browser navigation, not in a frame. |
+| SDP-SP04 | Library: AuthnRequests emit `NameIDPolicy` with `AllowCreate="true"` and no `Format`. |
+| SDP-SP05 | Library: AuthnRequests contain `AssertionConsumerServiceURL`, not `AssertionConsumerServiceIndex`. |
+| SDP-SP06 | Library: the request URL is the same configured ACS URL that the metadata generator emits. Publish that exact URL. |
+| SDP-SP07 | Library: `RequestedAuthnContext` is omitted by default; configured class references use `Comparison="exact"`. |
+| SDP-SP08 | Library: `completeAuthenticationResult` accepts HTTP-POST SAML responses. |
+| SDP-SP09 | Deployment: the builder requires an HTTPS ACS URL; the application must actually serve the ACS over TLS. |
+| SDP-SP10 | Library when decryption credentials are configured: `EncryptedAssertion` decryption is supported. |
+| SDP-SP11 | Library: a request-bound non-success Response yields a fixed `StatusReceived` result after structural and request checks. |
+| SDP-SP12 | Deployment: show a useful local support message when the application cannot map or authorize an otherwise valid assertion. Revetsec does not render UI or disclose untrusted IdP status text. |
+| SDP-SP13 | Deviation: successful assertions currently require a `NameID` in `Subject`. An attribute-only subject is rejected. |
+| SDP-SP14 | Library: checked `subject-id` and `pairwise-id` attributes are exposed and may form stable subject keys when their scopes are approved. Legacy persistent NameID is also supported. |
+| SDP-SP15 | Deviation: generated SP metadata does not signal subject-identifier requirements through `mdattr:EntityAttributes`. Enrich metadata for this profile. |
+| SDP-SP16 | Library and deployment: use `(connectionId, SamlSubjectKey)` as the account key; the connection ID separates IdPs, and scoped subject identifiers are released only after scope approval. |
+| SDP-SP17 | Deployment: configure each IdP's authorized identifier scopes from trusted policy or trusted third-party metadata. Revetsec can read literal `shibmd:Scope`, but the application decides whether that metadata is trusted. |
+| SDP-SP18 | Deployment: use appropriate display attributes for UI; Revetsec does not assume opaque subject IDs are display names. |
+| SDP-SP19 | Library: SAML attributes preserve multiple values. Application code must respect each attribute's external definition. |
+| SDP-SP20 | Deployment: select among approved IdP connections for each resource or policy. The core does not bind an application resource to one IdP. |
+| SDP-SP21 | Library and deployment: SP-initiated SSO and sealed `applicationData` can preserve an application-owned return location. The application validates and resumes deep links. |
+| SDP-SP22 | Deployment: preservation of a POST body across login is application-owned and is not implemented by the SAML core. |
+| SDP-SP23 | Deployment: implement IdP discovery for users when offering deep links. |
+| SDP-SP24 | Library: Redirect Single Logout is optional and implemented. |
+| SDP-SP25 | Library: SP LogoutRequests use HTTP-Redirect. |
+| SDP-SP26 | Library: inbound IdP LogoutRequests use HTTP-Redirect. |
+| SDP-SP27 | Deployment: issue logout redirects as top-level browser navigation. |
+| SDP-SP28 | Library: SP LogoutRequests are signed. |
+| SDP-SP29 | Partial: the standard NameID fields, including `SPProvidedID`, are retained and written in outbound LogoutRequests. Arbitrary extra XML attributes and lexical namespace details are not retained; partners needing those are outside this logout profile. |
+| SDP-SP30 | Library: the outbound LogoutRequest NameID is cleartext. |
+| SDP-SP31 | Library: LogoutResponses use HTTP-Redirect. |
+| SDP-SP32 | Library: inbound LogoutResponses use HTTP-Redirect. |
+| SDP-SP33 | Library: SP LogoutResponses are signed. |
+| SDP-SP34 | Deployment: end the local session before sending the LogoutRequest, even if the IdP never returns. The Playground does this. |
+| SDP-SP35 | Deployment: never invoke SLO solely because a local session idled out. |
+| SDP-SP36 | Deployment: use distinct SP entity IDs and metadata where virtual hosts maintain distinct sessions. |
+| SDP-SP37 | Library: an IdP connection can hold multiple message-signing keys for rollover. |
+| SDP-SP38 | Library: the SP can configure multiple decryption credentials for rollover. |
+| SDP-SP39 | Deviation: the generated descriptor has ACS and configured key/logout endpoints but lacks UIInfo, privacy, technical contact, and subject-identifier signaling. It is a starting point for application-owned federation metadata publication, not a complete saml2int descriptor. |
+
+In particular, the missing metadata extensions and `NameID`-required success path prevent an unqualified saml2int conformance claim. The supported product claim is SAML 2.0 browser SSO aligned with the profile **with these deviations**. RC-2 still requires the live interoperability, differential, fuzz, mutation, and pentest evidence in the release plan.

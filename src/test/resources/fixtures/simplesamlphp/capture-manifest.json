@@ -1,0 +1,16 @@
+{
+  "image": "cirrusid/simplesamlphp:v2.5.0",
+  "digest": "sha256:9ae050473c68ce13c5451839cb64257eaa17be3a4d2c9a3f87996bbe0cebb0aa",
+  "files": {
+    "cbc-assertion-signed-pending.txt": "a8ad51d7f3b5ac56a6f03b31eb933e9dc93e72ddba397381f1edfb47ed8f4baa",
+    "cbc-assertion-signed-redirect-url.txt": "c9445c00c1babd23f8ae585027b60455d6259ebdb7156cbbb23cfb7df3098c53",
+    "cbc-assertion-signed-request.xml": "651b9f9180fa9445b7015aff5724f4ff652e5dcc75997ffee1d498ef1bcd6339",
+    "cbc-assertion-signed-response.xml": "4ff30c5f40b24de240b7d24be52a704f6e16366cb6e556c270bca491e9f17b11",
+    "cbc-assertion-signed-sp-metadata.xml": "8828b9fd95f4a6c0b743de0e6adc6d4849033d1d9f95b581ac65f3d6966a2a76",
+    "cbc-response-signed-pending.txt": "bbecd5da056d9a9592c9f3a79906c210186bdfb4b5136eaf0668712dac028028",
+    "cbc-response-signed-redirect-url.txt": "c0214d929a21bae09cad7710296de470e350afeb0fd0aa6f8bce13f90a386174",
+    "cbc-response-signed-request.xml": "bf838ad091425a82ec2664b258c638c2292d1968f99515f052d3b42921841040",
+    "cbc-response-signed-response.xml": "b7535d8bfecb9107be0a84e6e2ba88abdb45efd7f423abeefa58a7209d989cfd",
+    "cbc-response-signed-sp-metadata.xml": "8828b9fd95f4a6c0b743de0e6adc6d4849033d1d9f95b581ac65f3d6966a2a76"
+  }
+}

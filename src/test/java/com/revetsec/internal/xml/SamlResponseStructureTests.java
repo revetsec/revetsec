@@ -21,6 +21,7 @@ import org.junit.jupiter.api.Test;
 import org.w3c.dom.Element;
 
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -81,6 +82,41 @@ final class SamlResponseStructureTests {
                 + "<old:Assertion xmlns:old='urn:oasis:names:tc:SAML:1.0:assertion'/></a:Assertion>" + CLOSE);
         rejected(OPEN + SUCCESS + "<foreign:Assertion xmlns:foreign='urn:foreign'/>" + CLOSE);
         rejected(OPEN.replace("Version='2.0'", "Version='1.1'") + SUCCESS + ASSERTION + CLOSE);
+        rejected(OPEN.replace("ID='_response'", "ID='bad:response'") + SUCCESS + ASSERTION + CLOSE);
+    }
+
+    @Test void rejectsEveryProtocolOrderAndNestedIdentityAmbiguity() {
+        List<String> mutations = List.of(
+                OPEN.replace("p:Response", "p:WrongResponse") + SUCCESS + ASSERTION + CLOSE.replace(
+                        "p:Response", "p:WrongResponse"),
+                OPEN.replace("IssueInstant='2026-10-09T00:00:00Z'", "") + SUCCESS + ASSERTION + CLOSE,
+                OPEN + "<a:Issuer>idp</a:Issuer><a:Issuer>second</a:Issuer>" + SUCCESS + ASSERTION + CLOSE,
+                OPEN + "<p:Extensions/><p:Extensions/>" + SUCCESS + ASSERTION + CLOSE,
+                OPEN + "<p:Extensions/><ds:Signature/>" + SUCCESS + ASSERTION + CLOSE,
+                OPEN + SUCCESS + SUCCESS + ASSERTION + CLOSE,
+                OPEN + SUCCESS + "<p:Extensions/>" + ASSERTION + CLOSE,
+                OPEN + SUCCESS + ASSERTION + "<ds:Signature/>" + CLOSE,
+                OPEN + SUCCESS + "<a:EncryptedAssertion/><a:EncryptedAssertion/>" + CLOSE,
+                OPEN + SUCCESS + "<a:Assertion ID='_assertion'><a:EncryptedAssertion/>"
+                        + "</a:Assertion>" + CLOSE,
+                OPEN + SUCCESS + "<a:Assertion ID='_assertion'><ds:Signature/><ds:Signature/>"
+                        + "</a:Assertion>" + CLOSE,
+                OPEN + SUCCESS + "<a:Assertion ID='_assertion'>"
+                        + "<old:Status xmlns:old='urn:oasis:names:tc:SAML:1.0:protocol'/>"
+                        + "</a:Assertion>" + CLOSE,
+                OPEN + SUCCESS + "<a:Assertion ID='_assertion' xmlns:evil=':bad'/>" + CLOSE,
+                OPEN + SUCCESS + "<a:Assertion ID='_assertion' p:ID='_spoof'/>" + CLOSE,
+                OPEN + "<p:Status/>" + CLOSE,
+                OPEN + "<p:Status><p:StatusCode/></p:Status>" + CLOSE,
+                OPEN + "<p:Status/>" + ASSERTION + CLOSE,
+                OPEN + "<p:Status><p:StatusCode Value='urn:oasis:names:tc:SAML:2.0:status:Success'/>"
+                        + "<p:StatusCode Value='urn:oasis:names:tc:SAML:2.0:status:Success'/></p:Status>"
+                        + ASSERTION + CLOSE,
+                OPEN + "<p:Status><p:StatusCode/></p:Status>" + ASSERTION + CLOSE);
+        for (int i = 0; i < mutations.size(); i++) {
+            assertSame(SamlResponseStructure.Rejected.INSTANCE, inspect(mutations.get(i)),
+                    "shape case " + i);
+        }
     }
 
     private static void rejected(@NonNull String xml) {

@@ -58,24 +58,23 @@ final class SamlPostBindingDecoder {
         while (start < body.length) {
             int end = start;
             while (end < body.length && body[end] != '&') end++;
-            if (end > start) {
-                if (++parameters > 2) return new Rejected(Reason.PARAMETERS);
-                int separator = start;
-                while (separator < end && body[separator] != '=') separator++;
-                if (separator == end) return new Rejected(Reason.PARAMETERS);
-                @Nullable String name = decodeComponent(body, start, separator);
-                @Nullable String value = decodeComponent(body, separator + 1, end);
-                if (name == null || value == null) return new Rejected(Reason.FORM_ENCODING);
-                if (name.equals("SAMLResponse")) {
-                    if (encodedResponse != null) return new Rejected(Reason.PARAMETERS);
-                    encodedResponse = value;
-                } else if (name.equals("RelayState")) {
-                    if (relayState != null) return new Rejected(Reason.PARAMETERS);
-                    relayState = value;
-                } else return new Rejected(Reason.PARAMETERS);
-            }
+            if (end == start || ++parameters > 2) return new Rejected(Reason.PARAMETERS);
+            int separator = start;
+            while (separator < end && body[separator] != '=') separator++;
+            if (separator == end) return new Rejected(Reason.PARAMETERS);
+            @Nullable String name = decodeComponent(body, start, separator);
+            @Nullable String value = decodeComponent(body, separator + 1, end);
+            if (name == null || value == null) return new Rejected(Reason.FORM_ENCODING);
+            if (name.equals("SAMLResponse")) {
+                if (encodedResponse != null) return new Rejected(Reason.PARAMETERS);
+                encodedResponse = value;
+            } else if (name.equals("RelayState")) {
+                if (relayState != null) return new Rejected(Reason.PARAMETERS);
+                relayState = value;
+            } else return new Rejected(Reason.PARAMETERS);
             start = end + 1;
         }
+        if (body[body.length - 1] == '&') return new Rejected(Reason.PARAMETERS);
         if (encodedResponse == null || encodedResponse.isEmpty()) return new Rejected(Reason.PARAMETERS);
         if (relayState != null && relayState.getBytes(StandardCharsets.UTF_8).length > 80)
             return new Rejected(Reason.RELAY_STATE_SIZE);
@@ -116,7 +115,7 @@ final class SamlPostBindingDecoder {
         byte[] bytes = new byte[rawQuery.length()];
         for (int i = 0; i < rawQuery.length(); i++) {
             char ch = rawQuery.charAt(i);
-            if (ch > 0x7f || ch < 0x20) return false;
+            if (ch > 0x7e || ch <= 0x20) return false;
             bytes[i] = (byte) ch;
         }
         int start = 0;

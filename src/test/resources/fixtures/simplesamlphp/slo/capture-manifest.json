@@ -1,0 +1,20 @@
+{
+  "image": "cirrusid/simplesamlphp:v2.5.0",
+  "digest": "sha256:9ae050473c68ce13c5451839cb64257eaa17be3a4d2c9a3f87996bbe0cebb0aa",
+  "files": {
+    "login-pending.txt": "cf8c2a1a8360bd9dd802e413c8fbf19261d703ceda21c42782f5dcf1bf906a14",
+    "login-redirect-url.txt": "c727a335854d760a488ed9692d16a41066d448108cc57b7ed803e4589a78effb",
+    "login-response.xml": "91fa35fc23e4d2f5fdcdb0a44048849d8f9f1cb77b4bac75fd9673b5314f18da",
+    "logout-final-url.txt": "a4380a5c2ab9ab23d226936474b78385246d945904fd5aea152901418a56bda7",
+    "logout-request-session.txt": "d49dffb9545af54059b02d76e5dd55a33879083267f77e550215c07f5a8ccd9e",
+    "logout-request-url.txt": "50bf848bc0034a63ad07510fe7b01a77bd00351c645ad1c89891cfdeb0ab5f6b",
+    "logout-request.xml": "f59fbf6df6845d19f8c93693ba2faf89c88ddf47a49351d1993c5e748a8bb540",
+    "logout-response-url.txt": "a9c97a422b7ef458c981bca45dddd57650f1fa23045c1014dbb587307a00e892",
+    "sp-initiated-login-pending.txt": "c05e40b0ce649be861bbba765b85b31f8cbab4702c72dd0bf180979e33441028",
+    "sp-initiated-login-response.xml": "8f21ed74b945415e0903d5938e917d8f8f37e0bb263c02d4eb0d416d9e5f164e",
+    "sp-initiated-request-url.txt": "ab14721b9402523835f05747c548d49cdee93d9b556f9f473e0ddc64e82daaee",
+    "sp-initiated-response-url.txt": "3c9873f9ab5a1af08d1771073e7ae62461e79d7b49d979e11a5345b9bbfa0aaa",
+    "sp-initiated-response.xml": "78a5c6f85fed7d2329725ea2f10775b68ccd5d82e210fab142f3a99e6c19b86f",
+    "sp-initiated-session.txt": "745ce2e952921aa63fe897dfbd3d722cdb45b1bb673daa199692a4de2ec6bdbe"
+  }
+}

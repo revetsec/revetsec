@@ -20,6 +20,7 @@ import com.revetsec.internal.json.JsonCodec;
 import com.revetsec.internal.json.JsonLimits;
 import com.revetsec.internal.pem.Pem;
 import com.revetsec.json.JsonObject;
+import com.revetsec.json.JsonArray;
 import com.revetsec.testing.TestSealers;
 import com.revetsec.testing.TestTls;
 import org.jspecify.annotations.NonNull;
@@ -262,6 +263,105 @@ final class ScriptedIdpSsoIT {
         HttpResponse<String> verifiedResponse = client.send(HttpRequest.newBuilder(
                 answer.getRedirectUri()).GET().build(), HttpResponse.BodyHandlers.ofString());
         assertEquals(200, verifiedResponse.statusCode(), verifiedResponse.body());
+        HttpResponse<String> logoutReceipts = client.send(HttpRequest.newBuilder(
+                URI.create(base + "/control/received")).GET().build(),
+                HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, logoutReceipts.statusCode());
+        JsonObject receiptBody = assertInstanceOf(JsonObject.class, JsonCodec.parse(
+                logoutReceipts.body().getBytes(StandardCharsets.UTF_8), JsonLimits.protocolDocument(64_000)));
+        JsonArray entries = assertInstanceOf(JsonArray.class, receiptBody.find("received").orElseThrow());
+        long schemaValidLogoutMessages = entries.getElements().stream()
+                .filter(value -> value instanceof JsonObject entry
+                        && "redirect-slo".equals(entry.findString("binding").orElse(null))
+                        && entry.findBoolean("schema_valid").orElse(false))
+                .count();
+        assertTrue(schemaValidLogoutMessages >= 2, "both SP logout directions must pass the OASIS XSD");
+    }
+
+    @Test void queryfulMetadataEndpointsWorkAcrossRedirectPostAndLogout() throws Exception {
+        HttpResponse<String> metadataResponse = client.send(HttpRequest.newBuilder(URI.create(base
+                + "/metadata?now=2026-09-01T00%3A00%3A00Z&variant=query-endpoints"))
+                .GET().build(), HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, metadataResponse.statusCode(), metadataResponse.body());
+        SamlIdentityProviderMetadata metadata = assertInstanceOf(
+                SamlIdentityProviderMetadataResult.Parsed.class,
+                SamlIdentityProviderMetadata.fromXmlResult(metadataResponse.body()
+                        .getBytes(StandardCharsets.UTF_8), "https://idp.scripted-idp.test/", CLOCK))
+                .getMetadata();
+        assertEquals(URI.create(base + "/sso?tenant=one"),
+                metadata.getRedirectSingleSignOnService().orElseThrow());
+        assertEquals(URI.create(base + "/sso?tenant=one"),
+                metadata.getPostSingleSignOnService().orElseThrow());
+        assertEquals(URI.create(base + "/slo?tenant=one"),
+                metadata.getRedirectSingleLogoutService().orElseThrow());
+        SamlIdentityProvider identityProvider = SamlIdentityProvider.withMetadata(metadata)
+                .connectionId("scripted-query-endpoints").build();
+        SamlCredential signing = SamlCredential.fromPem(
+                Files.readString(Path.of("src/test/resources/fixtures/keys/sp-signing-rsa-2048-key.pem")),
+                Files.readString(Path.of("src/test/resources/fixtures/keys/sp-signing-rsa-2048-cert.pem")));
+        SamlServiceProvider sp = SamlServiceProvider.withEntityId(SP_ENTITY)
+                .assertionConsumerServiceUrl(ACS).singleLogoutServiceUrl(SLO)
+                .signingCredential(signing)
+                .replayCache(InMemorySamlReplayCache.withLimit(CLOCK, 32))
+                .clock(CLOCK).build();
+        StateSealer sealer = StateSealer.withActiveKey(TestSealers.fixedKey("saml-query-endpoints"))
+                .clock(CLOCK).build();
+
+        arm(false);
+        SamlAuthenticationRequestResult.Prepared redirect = assertInstanceOf(
+                SamlAuthenticationRequestResult.Prepared.class,
+                sp.beginAuthenticationResult(identityProvider));
+        assertTrue(redirect.getRedirectUri().getRawQuery().startsWith("tenant=one&SAMLRequest="));
+        HttpResponse<String> redirectPage = client.send(HttpRequest.newBuilder(redirect.getRedirectUri())
+                .GET().build(), HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, redirectPage.statusCode(), redirectPage.body());
+        assertInstanceOf(SamlAuthenticationResult.Succeeded.class,
+                sp.completeAuthenticationResult(responseMessage(redirectPage.body()),
+                        PendingSamlAuthenticationSource.fromSealedForm(
+                                redirect.getPendingAuthentication().toSealedForm(sealer, "query-sso"),
+                                sealer, "query-sso"), identityProvider));
+
+        arm(false);
+        SamlAuthenticationRequestResult.PostPrepared post = assertInstanceOf(
+                SamlAuthenticationRequestResult.PostPrepared.class,
+                sp.beginPostAuthenticationResult(identityProvider));
+        assertEquals(URI.create(base + "/sso?tenant=one"), post.getPostForm().getAction());
+        StringBuilder form = new StringBuilder();
+        for (var field : post.getPostForm().getFields().entrySet()) {
+            if (!form.isEmpty()) form.append('&');
+            form.append(URLEncoder.encode(field.getKey(), StandardCharsets.UTF_8))
+                    .append('=').append(URLEncoder.encode(field.getValue(), StandardCharsets.UTF_8));
+        }
+        HttpResponse<String> postPage = client.send(HttpRequest.newBuilder(post.getPostForm().getAction())
+                .header("Content-Type", "application/x-www-form-urlencoded")
+                .POST(HttpRequest.BodyPublishers.ofString(form.toString())).build(),
+                HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, postPage.statusCode(), postPage.body());
+        SamlAuthenticationResult.Succeeded authenticated = assertInstanceOf(
+                SamlAuthenticationResult.Succeeded.class,
+                sp.completeAuthenticationResult(responseMessage(postPage.body()),
+                        PendingSamlAuthenticationSource.fromSealedForm(
+                                post.getPendingAuthentication().toSealedForm(sealer, "query-post"),
+                                sealer, "query-post"), identityProvider));
+
+        assertEquals(200, json("PUT", "/control/armed/slo", JsonObject.builder()
+                .put("entity_id", SP_ENTITY)
+                .put("clock", JsonObject.builder().put("now", "2026-09-01T00:00:00Z").build())
+                .build()).statusCode());
+        SamlLogoutRedirectResult.Prepared logout = assertInstanceOf(
+                SamlLogoutRedirectResult.Prepared.class,
+                sp.beginLogoutResult(identityProvider,
+                        authenticated.getAuthentication().getSessionReference()));
+        assertTrue(logout.getRedirectUri().getRawQuery().startsWith("tenant=one&SAMLRequest="));
+        HttpResponse<String> logoutPage = client.send(HttpRequest.newBuilder(logout.getRedirectUri())
+                .GET().build(), HttpResponse.BodyHandlers.ofString());
+        assertEquals(302, logoutPage.statusCode(), logoutPage.body());
+        SamlRedirectBindingMessage logoutResponse = redirectMessage(URI.create(
+                logoutPage.headers().firstValue("Location").orElseThrow()).getRawQuery());
+        assertInstanceOf(SamlLogoutResult.Succeeded.class, sp.completeLogoutResult(logoutResponse,
+                PendingSamlLogoutSource.fromSealedForm(
+                        logout.getPendingLogout().toSealedForm(sealer, "query-slo"),
+                        sealer, "query-slo"), identityProvider));
     }
 
     @Test void independentRedirectLogoutRequestSignerSeparatesWireAndSemanticFailures() throws Exception {
@@ -332,6 +432,45 @@ final class ScriptedIdpSsoIT {
         assertEquals(List.of("session-123"), accepted.getSessionIndexes());
         assertInstanceOf(SamlLogoutRequestResult.Rejected.class,
                 sp.acceptLogoutRequestResult(original, identityProvider));
+    }
+
+    @Test void signedMalformedSpLogoutMessagesFailPartnerSchema() throws Exception {
+        SamlCredential signing = SamlCredential.fromPem(
+                Files.readString(Path.of("src/test/resources/fixtures/keys/sp-signing-rsa-2048-key.pem")),
+                Files.readString(Path.of("src/test/resources/fixtures/keys/sp-signing-rsa-2048-cert.pem")));
+        URI destination = URI.create(base + "/slo");
+        SamlSessionReference session = new SamlSessionReference("scripted-slo-schema",
+                "https://idp.scripted-idp.test/", new SamlNameId("schema-user",
+                        SamlNameId.PERSISTENT, "https://idp.scripted-idp.test/", null),
+                "session-123", null);
+        URI request = java.util.Objects.requireNonNull(SamlRedirectLogout.request(destination,
+                SP_ENTITY, session, "_schema_request", "schema-relay", CLOCK.instant(),
+                signing.privateKey()));
+        String requestXml = new String(redirectMessage(request.getRawQuery()).xml(), StandardCharsets.UTF_8);
+        String wrongRequestOrder = requestXml.replace("<a:NameID",
+                "<p:SessionIndex>attacker</p:SessionIndex><a:NameID");
+        assertNotEquals(requestXml, wrongRequestOrder);
+        URI malformedRequest = SamlRedirectLogout.sign(destination, "SAMLRequest",
+                wrongRequestOrder.getBytes(StandardCharsets.UTF_8), "schema-relay", signing.privateKey());
+        HttpResponse<String> rejectedRequest = client.send(HttpRequest.newBuilder(malformedRequest).GET().build(),
+                HttpResponse.BodyHandlers.ofString());
+        assertEquals(400, rejectedRequest.statusCode());
+        assertTrue(rejectedRequest.body().contains("SAML logout message fails OASIS schema"));
+
+        URI response = java.util.Objects.requireNonNull(SamlRedirectLogout.response(destination,
+                SP_ENTITY, "_schema_response", "_pending", "schema-relay", CLOCK.instant(),
+                SamlLogoutStatus.SUCCESS, signing.privateKey()));
+        String responseXml = new String(redirectMessage(response.getRawQuery()).xml(), StandardCharsets.UTF_8);
+        String wrongResponseOrder = responseXml.replace("<a:Issuer>",
+                "<p:Status><p:StatusCode Value='urn:oasis:names:tc:SAML:2.0:status:Success'/>"
+                        + "</p:Status><a:Issuer>");
+        assertNotEquals(responseXml, wrongResponseOrder);
+        URI malformedResponse = SamlRedirectLogout.sign(destination, "SAMLResponse",
+                wrongResponseOrder.getBytes(StandardCharsets.UTF_8), "schema-relay", signing.privateKey());
+        HttpResponse<String> rejectedResponse = client.send(HttpRequest.newBuilder(malformedResponse).GET().build(),
+                HttpResponse.BodyHandlers.ofString());
+        assertEquals(400, rejectedResponse.statusCode());
+        assertTrue(rejectedResponse.body().contains("SAML logout message fails OASIS schema"));
     }
 
     @Test void independentRedirectLogoutResponseSignerPreservesPendingUntilValidResult() throws Exception {
@@ -405,6 +544,113 @@ final class ScriptedIdpSsoIT {
                 sp.completeLogoutResult(original, pending, identityProvider));
         assertInstanceOf(SamlLogoutResult.Rejected.class,
                 sp.completeLogoutResult(original, pending, identityProvider));
+    }
+
+    @Test void independentSignerChecksLogoutStatusMessageAndDetail() throws Exception {
+        SamlIdentityProvider identityProvider = logoutIdentityProvider();
+        SamlCredential signing = SamlCredential.fromPem(
+                Files.readString(Path.of("src/test/resources/fixtures/keys/sp-signing-rsa-2048-key.pem")),
+                Files.readString(Path.of("src/test/resources/fixtures/keys/sp-signing-rsa-2048-cert.pem")));
+        SamlServiceProvider sp = SamlServiceProvider.withEntityId(SP_ENTITY)
+                .assertionConsumerServiceUrl(ACS).singleLogoutServiceUrl(SLO)
+                .signingCredential(signing)
+                .replayCache(InMemorySamlReplayCache.withLimit(CLOCK, 32))
+                .clock(CLOCK).build();
+        StateSealer sealer = StateSealer.withActiveKey(TestSealers.fixedKey("slo-status-extras"))
+                .clock(CLOCK).build();
+        SamlSessionReference session = new SamlSessionReference(identityProvider.getConnectionId(),
+                identityProvider.getEntityId(), new SamlNameId("status-user",
+                        SamlNameId.PERSISTENT, identityProvider.getEntityId(), null),
+                "session-123", null);
+        for (int index = 0; index < 2; index++) {
+            SamlLogoutRedirectResult.Prepared begin = assertInstanceOf(
+                    SamlLogoutRedirectResult.Prepared.class, sp.beginLogoutResult(identityProvider, session));
+            String relay = begin.getPendingLogout().getRelayStateHandle();
+            String sealed = begin.getPendingLogout().toSealedForm(sealer, "slo-status-cookie");
+            PendingSamlLogoutSource pending = PendingSamlLogoutSource.fromSealedForm(
+                    sealed, sealer, "slo-status-cookie");
+            String code = index == 0 ? "Success" : "Responder";
+            String status = "<p:Status><p:StatusCode Value='urn:oasis:names:tc:SAML:2.0:status:"
+                    + code + "'/><p:StatusMessage>Partner detail</p:StatusMessage>"
+                    + "<p:StatusDetail><x:Hint xmlns:x='urn:example:status'/></p:StatusDetail>"
+                    + "</p:Status>";
+            String xml = "<p:LogoutResponse xmlns:p='urn:oasis:names:tc:SAML:2.0:protocol' "
+                    + "xmlns:a='urn:oasis:names:tc:SAML:2.0:assertion' "
+                    + "ID='_status_extras_" + index + "' Version='2.0' "
+                    + "IssueInstant='2026-09-01T00:01:00Z' Destination='" + SLO + "' "
+                    + "InResponseTo='" + begin.getPendingLogout().getRequestId() + "'>"
+                    + "<a:Issuer>" + identityProvider.getEntityId() + "</a:Issuer>"
+                    + status + "</p:LogoutResponse>";
+            SamlRedirectBindingMessage malformed = signLogoutFixture(xml.replace(
+                    "</p:Status>", "<p:StatusMessage>duplicate</p:StatusMessage></p:Status>"),
+                    SLO, relay);
+            assertTrue(malformed.verify(identityProvider.signingKeys()));
+            assertInstanceOf(SamlLogoutResult.Rejected.class,
+                    sp.completeLogoutResult(malformed, pending, identityProvider));
+            SamlRedirectBindingMessage valid = signLogoutFixture(xml, SLO, relay);
+            assertTrue(valid.verify(identityProvider.signingKeys()));
+            assertEquals(index == 0 ? SamlLogoutResult.Succeeded.INSTANCE
+                            : SamlLogoutResult.StatusReceived.NON_SUCCESS,
+                    sp.completeLogoutResult(valid, pending, identityProvider));
+        }
+    }
+
+    @Test void independentSignerKeepsNonSuccessSsoStatusGrammarAndCoverage() throws Exception {
+        SamlIdentityProvider identityProvider = logoutIdentityProvider();
+        SamlServiceProvider sp = SamlServiceProvider.withEntityId(SP_ENTITY)
+                .assertionConsumerServiceUrl(ACS)
+                .replayCache(InMemorySamlReplayCache.withLimit(CLOCK, 16))
+                .clock(CLOCK).build();
+        SamlAuthenticationRequestResult.Prepared begin = assertInstanceOf(
+                SamlAuthenticationRequestResult.Prepared.class,
+                sp.beginAuthenticationResult(identityProvider));
+        StateSealer sealer = StateSealer.withActiveKey(TestSealers.fixedKey("sso-status-oracle"))
+                .clock(CLOCK).build();
+        PendingSamlAuthenticationSource pending = PendingSamlAuthenticationSource.fromSealedForm(
+                begin.getPendingAuthentication().toSealedForm(sealer, "sso-status-oracle"),
+                sealer, "sso-status-oracle");
+        String status = "<p:Status><p:StatusCode "
+                + "Value='urn:oasis:names:tc:SAML:2.0:status:Responder'/>"
+                + "<p:StatusMessage>Partner detail</p:StatusMessage>"
+                + "<p:StatusDetail><x:Hint xmlns:x='urn:example:status'/></p:StatusDetail>";
+        for (boolean malformed : List.of(true, false)) {
+            String xml = "<p:Response xmlns:p='urn:oasis:names:tc:SAML:2.0:protocol' "
+                    + "xmlns:a='urn:oasis:names:tc:SAML:2.0:assertion' "
+                    + "ID='_independent_sso_status' Version='2.0' "
+                    + "IssueInstant='2026-09-01T00:01:00Z' Destination='" + ACS + "' "
+                    + "InResponseTo='" + begin.getPendingAuthentication().getRequestId() + "'>"
+                    + "<a:Issuer>" + identityProvider.getEntityId() + "</a:Issuer>"
+                    + status + (malformed ? "<p:StatusMessage>duplicate</p:StatusMessage>" : "")
+                    + "</p:Status></p:Response>";
+            HttpResponse<String> signed = json("POST", "/control/sign", JsonObject.builder()
+                    .put("clock", JsonObject.builder().put("now", "2026-09-01T00:00:00Z").build())
+                    .put("xml", xml).put("target_id", "_independent_sso_status")
+                    .put("signing", JsonObject.builder().put("algorithm", "rsa-sha256").build())
+                    .build());
+            assertEquals(200, signed.statusCode(), signed.body());
+            String signedXml = assertInstanceOf(JsonObject.class, JsonCodec.parse(
+                    signed.body().getBytes(StandardCharsets.UTF_8), JsonLimits.protocolDocument(128_000)))
+                    .findString("xml").orElseThrow();
+            assertTrue(oracleValid(signedXml, "_independent_sso_status", "idp-signing-rsa-2048"));
+            String form = "SAMLResponse=" + URLEncoder.encode(Base64.getEncoder().encodeToString(
+                    signedXml.getBytes(StandardCharsets.UTF_8)), StandardCharsets.UTF_8)
+                    + "&RelayState=" + URLEncoder.encode(
+                            begin.getPendingAuthentication().getRelayStateHandle(), StandardCharsets.UTF_8);
+            SamlPostBindingMessage message = assertInstanceOf(SamlPostBindingParseResult.Parsed.class,
+                    SamlPostBindingMessage.fromFormBodyResult(form.getBytes(StandardCharsets.US_ASCII),
+                            List.of("application/x-www-form-urlencoded"), null)).getMessage();
+            SamlAuthenticationResult result = sp.completeAuthenticationResult(message, pending,
+                    identityProvider);
+            if (malformed) {
+                assertEquals(SamlAuthenticationResult.Reason.MESSAGE,
+                        assertInstanceOf(SamlAuthenticationResult.Rejected.class, result).getReason());
+            } else {
+                SamlAuthenticationResult.StatusReceived received = assertInstanceOf(
+                        SamlAuthenticationResult.StatusReceived.class, result);
+                assertEquals(SamlAuthenticationResult.StatusCode.RESPONDER, received.getStatusCode());
+                assertTrue(received.isAuthenticated());
+            }
+        }
     }
 
     private static @NonNull SamlIdentityProvider logoutIdentityProvider() throws Exception {

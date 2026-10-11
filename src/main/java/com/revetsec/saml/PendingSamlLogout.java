@@ -74,7 +74,7 @@ public final class PendingSamlLogout {
         try {
             SamlPendingSaveResult result = store.save(browserBinding, record.relayState(), sealed,
                     record.expiresAt(), remaining);
-            return result == null || System.nanoTime() - started >= remaining.toNanos()
+            return result == null || SamlPendingBudget.exhausted(started, remaining)
                     ? SamlPendingSaveResult.INDETERMINATE : result;
         } catch (RuntimeException exception) { return SamlPendingSaveResult.INDETERMINATE; }
     }

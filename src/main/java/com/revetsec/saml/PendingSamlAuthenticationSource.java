@@ -95,7 +95,7 @@ public final class PendingSamlAuthenticationSource {
             long started = System.nanoTime();
             try { consumed = store.consume(Objects.requireNonNull(browserBinding), relayState, budget); }
             catch (RuntimeException exception) { return Indeterminate.INSTANCE; }
-            if (consumed == null || System.nanoTime() - started >= budget.toNanos()) return Indeterminate.INSTANCE;
+            if (consumed == null || SamlPendingBudget.exhausted(started, budget)) return Indeterminate.INSTANCE;
             if (consumed instanceof SamlPendingConsumeResult.Missing) return Rejected.INSTANCE;
             if (consumed instanceof SamlPendingConsumeResult.Unavailable) return Unavailable.INSTANCE;
             if (consumed instanceof SamlPendingConsumeResult.Indeterminate) return Indeterminate.INSTANCE;

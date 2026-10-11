@@ -1,0 +1,65 @@
+name: SimpleSAMLphp SAML capture
+
+# Advisory real-product interoperability evidence; run manually before RC-2.
+on:
+  schedule:
+    - cron: '39 5 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  capture:
+    name: SimpleSAMLphp 2.5.0 CBC and SLO
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Corretto 17
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: corretto
+          java-version: '17'
+          cache: maven
+
+      - name: Build current core classes and tests
+        run: mvn -B -ntp -Dmaven.javadoc.skip=true -DskipTests test-compile
+
+      - name: Pull the pinned SimpleSAMLphp image
+        run: docker pull cirrusid/simplesamlphp:v2.5.0
+
+      - name: Capture signed and unsigned CBC Responses
+        run: python3 interop/simplesamlphp/capture.py --output "${RUNNER_TEMP}/simplesamlphp-capture"
+
+      - name: Capture signed logout in both directions
+        run: python3 interop/simplesamlphp/capture_slo.py --output "${RUNNER_TEMP}/simplesamlphp-slo"
+
+      - name: Replay fresh captures through the SP
+        run: >-
+          mvn -B -ntp -Dmaven.javadoc.skip=true
+          -Dtest=SimpleSamlCapturedResponseTests,SimpleSamlCapturedLogoutTests
+          "-Drevetsec.simplesamlphp.fixtures=${RUNNER_TEMP}/simplesamlphp-capture"
+          "-Drevetsec.simplesamlphp.slo.fixtures=${RUNNER_TEMP}/simplesamlphp-slo"
+          test
+
+      - name: Upload advisory capture evidence and test report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: simplesamlphp-capture-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/simplesamlphp-capture
+            ${{ runner.temp }}/simplesamlphp-slo
+            target/surefire-reports/TEST-com.revetsec.saml.SimpleSamlCapturedResponseTests.xml
+            target/surefire-reports/TEST-com.revetsec.saml.SimpleSamlCapturedLogoutTests.xml
+          if-no-files-found: warn
+          retention-days: 30

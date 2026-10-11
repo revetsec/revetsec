@@ -29,9 +29,12 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static java.util.Objects.requireNonNull;
 
@@ -92,12 +95,111 @@ final class InMemorySamlReplayCacheTests {
         }
     }
 
+    @Test void lockTimeoutDoesNotAdmitAndCacheRecoversWhenHolderFinishes() throws Exception {
+        BlockingClock clock = new BlockingClock(START);
+        SamlReplayCache cache = InMemorySamlReplayCache.withLimit(clock, 2);
+        Instant expiry = START.plusSeconds(60);
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            Future<SamlReplayCache.MarkResult> holder = executor.submit(() ->
+                    cache.markIfAbsent("holder", expiry, Duration.ofSeconds(30)));
+            assertTrue(clock.entered.await(1, TimeUnit.SECONDS));
+            Future<SamlReplayCache.MarkResult> waiter = executor.submit(() ->
+                    cache.markIfAbsent("waiter", expiry, Duration.ofMillis(40)));
+            assertEquals(SamlReplayCache.MarkResult.UNAVAILABLE,
+                    waiter.get(1, TimeUnit.SECONDS));
+            clock.release.countDown();
+            assertEquals(SamlReplayCache.MarkResult.MARKED, holder.get(1, TimeUnit.SECONDS));
+            assertEquals(SamlReplayCache.MarkResult.MARKED,
+                    cache.markIfAbsent("waiter", expiry, BUDGET));
+        } finally {
+            clock.release.countDown();
+            executor.shutdownNow();
+        }
+    }
+
+    @Test void interruptedLockWaitPreservesInterruptAndDoesNotAdmit() throws Exception {
+        BlockingClock clock = new BlockingClock(START);
+        SamlReplayCache cache = InMemorySamlReplayCache.withLimit(clock, 2);
+        Instant expiry = START.plusSeconds(60);
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        AtomicReference<SamlReplayCache.MarkResult> waiterResult = new AtomicReference<>();
+        AtomicBoolean interruptedAfter = new AtomicBoolean();
+        Thread waiter = new Thread(() -> {
+            waiterResult.set(cache.markIfAbsent("waiter", expiry, BUDGET));
+            interruptedAfter.set(Thread.currentThread().isInterrupted());
+        });
+        try {
+            Future<SamlReplayCache.MarkResult> holder = executor.submit(() ->
+                    cache.markIfAbsent("holder", expiry, Duration.ofSeconds(30)));
+            assertTrue(clock.entered.await(1, TimeUnit.SECONDS));
+            waiter.start();
+            long parkedBy = System.nanoTime() + TimeUnit.SECONDS.toNanos(1);
+            while (waiter.getState() != Thread.State.TIMED_WAITING && System.nanoTime() < parkedBy)
+                Thread.sleep(1);
+            assertEquals(Thread.State.TIMED_WAITING, waiter.getState());
+            waiter.interrupt();
+            waiter.join(1_000);
+            assertFalse(waiter.isAlive());
+            assertEquals(SamlReplayCache.MarkResult.UNAVAILABLE, waiterResult.get());
+            assertTrue(interruptedAfter.get());
+            clock.release.countDown();
+            assertEquals(SamlReplayCache.MarkResult.MARKED, holder.get(1, TimeUnit.SECONDS));
+            assertEquals(SamlReplayCache.MarkResult.MARKED,
+                    cache.markIfAbsent("waiter", expiry, BUDGET));
+        } finally {
+            waiter.interrupt();
+            clock.release.countDown();
+            executor.shutdownNow();
+            if (waiter.isAlive()) waiter.join(1_000);
+        }
+    }
+
+    @Test void failedClockDoesNotAdmitAndRecoveryCanAdmit() {
+        MutableClock clock = new MutableClock(START);
+        SamlReplayCache cache = InMemorySamlReplayCache.withLimit(clock, 1);
+        Instant expiry = START.plusSeconds(60);
+        clock.fail();
+        assertEquals(SamlReplayCache.MarkResult.UNAVAILABLE,
+                cache.markIfAbsent("key", expiry, BUDGET));
+        clock.recover();
+        assertEquals(SamlReplayCache.MarkResult.MARKED,
+                cache.markIfAbsent("key", expiry, BUDGET));
+    }
+
     private static final class MutableClock extends Clock {
         private final @NonNull AtomicReference<@NonNull Instant> value;
+        private final @NonNull AtomicBoolean failing = new AtomicBoolean();
         private MutableClock(@NonNull Instant initial) { value = new AtomicReference<>(initial); }
         private void set(@NonNull Instant instant) { value.set(instant); }
+        private void fail() { failing.set(true); }
+        private void recover() { failing.set(false); }
         @Override public @NonNull ZoneId getZone() { return ZoneOffset.UTC; }
         @Override public @NonNull Clock withZone(@NonNull ZoneId zone) { return Clock.fixed(value.get(), zone); }
-        @Override public @NonNull Instant instant() { return requireNonNull(value.get()); }
+        @Override public @NonNull Instant instant() {
+            if (failing.get()) throw new IllegalStateException("clock unavailable");
+            return requireNonNull(value.get());
+        }
+    }
+
+    private static final class BlockingClock extends Clock {
+        private final @NonNull Instant value;
+        private final @NonNull CountDownLatch entered = new CountDownLatch(1);
+        private final @NonNull CountDownLatch release = new CountDownLatch(1);
+
+        private BlockingClock(@NonNull Instant value) { this.value = value; }
+
+        @Override public @NonNull ZoneId getZone() { return ZoneOffset.UTC; }
+        @Override public @NonNull Clock withZone(@NonNull ZoneId zone) { return Clock.fixed(value, zone); }
+        @Override public @NonNull Instant instant() {
+            entered.countDown();
+            try {
+                if (!release.await(10, TimeUnit.SECONDS)) throw new IllegalStateException("clock not released");
+            } catch (InterruptedException exception) {
+                Thread.currentThread().interrupt();
+                throw new IllegalStateException("clock interrupted", exception);
+            }
+            return value;
+        }
     }
 }

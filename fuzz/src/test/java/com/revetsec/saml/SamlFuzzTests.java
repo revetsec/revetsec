@@ -91,7 +91,7 @@ public final class SamlFuzzTests {
 
     /** Arbitrary XML either stays untrusted or yields bounded, locally parsed metadata. */
     @FuzzTest(maxDuration = "5m")
-    public void metadataParsingCannotApproveAnUntrustedDescriptor(byte @NonNull [] input) {
+    public void metadataParsingCannotApproveAnUntrustedDescriptor(byte @NonNull [] input) throws Exception {
         SecureXmlParser.Result xml = SecureXmlParser.parseMetadata(input);
         if (xml instanceof SecureXmlParser.Result.Accepted accepted)
             Assertions.assertNotNull(accepted.getDocument().getDocumentElement());
@@ -104,13 +104,26 @@ public final class SamlFuzzTests {
         if (result instanceof SamlIdentityProviderMetadataResult.Parsed parsed) {
             SamlIdentityProviderMetadata metadata = parsed.getMetadata();
             Assertions.assertFalse(metadata.getEntityId().isEmpty());
+            Assertions.assertTrue(metadata.getEntityId().length() <= 2048);
             Assertions.assertFalse(metadata.getSigningCertificates().isEmpty());
+            Assertions.assertTrue(metadata.getSigningCertificates().size() <= 8);
+            for (var certificate : metadata.getSigningCertificates())
+                Assertions.assertTrue(certificate.getEncoded().length <= 24576);
+            Assertions.assertTrue(metadata.getAuthorizedIdentifierScopes().size() <= 32);
+            for (String scope : metadata.getAuthorizedIdentifierScopes()) {
+                Assertions.assertFalse(scope.isEmpty());
+                Assertions.assertTrue(scope.length() <= 255);
+            }
             Assertions.assertTrue(metadata.getRedirectSingleSignOnService().isPresent()
                     || metadata.getPostSingleSignOnService().isPresent());
-            Assertions.assertTrue(metadata.getRedirectSingleSignOnService()
-                    .map(uri -> "https".equalsIgnoreCase(uri.getScheme())).orElse(true));
-            Assertions.assertTrue(metadata.getPostSingleSignOnService()
-                    .map(uri -> "https".equalsIgnoreCase(uri.getScheme())).orElse(true));
+            for (URI endpoint : List.of(metadata.getRedirectSingleSignOnService(),
+                    metadata.getPostSingleSignOnService(), metadata.getRedirectSingleLogoutService())
+                    .stream().flatMap(java.util.Optional::stream).toList()) {
+                Assertions.assertEquals("https", endpoint.getScheme().toLowerCase(java.util.Locale.ROOT));
+                Assertions.assertNotNull(endpoint.getHost());
+                Assertions.assertNull(endpoint.getRawUserInfo());
+                Assertions.assertNull(endpoint.getRawFragment());
+            }
         } else Assertions.assertTrue(result instanceof SamlIdentityProviderMetadataResult.Rejected
                 || result instanceof SamlIdentityProviderMetadataResult.Unavailable);
     }

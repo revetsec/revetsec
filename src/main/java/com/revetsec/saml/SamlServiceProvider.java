@@ -19,6 +19,8 @@ package com.revetsec.saml;
 import com.revetsec.internal.xml.EnvelopedSignatureVerifier;
 import com.revetsec.internal.xml.SamlResponseStructure;
 import com.revetsec.internal.xml.SecureXmlParser;
+import com.revetsec.internal.xml.XmlNcName;
+import com.revetsec.internal.ObserverDispatch;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 import com.google.errorprone.annotations.CheckReturnValue;
@@ -33,6 +35,7 @@ import java.security.SecureRandom;
 import java.security.interfaces.RSAPrivateKey;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
+import java.time.DateTimeException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Objects;
@@ -40,6 +43,8 @@ import java.util.List;
 import java.util.Base64;
 import java.nio.ByteBuffer;
 import java.security.NoSuchAlgorithmException;
+import java.util.function.Function;
+import java.util.function.Supplier;
 import org.w3c.dom.Element;
 import org.w3c.dom.Node;
 
@@ -53,6 +58,8 @@ import org.w3c.dom.Node;
  */
 @ThreadSafe
 public final class SamlServiceProvider {
+    private static final @NonNull String XML_DSIG_SECURE_VALIDATION =
+            "org.jcp.xml.dsig.secureValidation";
     private final @NonNull String entityId;
     private final @NonNull URI assertionConsumerServiceUrl;
     private final @Nullable URI singleLogoutServiceUrl;
@@ -66,6 +73,7 @@ public final class SamlServiceProvider {
     private final @NonNull Duration maximumResponseAge;
     private final @NonNull Duration pendingLifetime;
     private final @NonNull Duration replayBudget;
+    private final @NonNull SamlObserver observer;
 
     private SamlServiceProvider(@NonNull Builder builder) {
         this.entityId = builder.entityId;
@@ -81,6 +89,7 @@ public final class SamlServiceProvider {
         this.maximumResponseAge = builder.maximumResponseAge;
         this.pendingLifetime = builder.pendingLifetime;
         this.replayBudget = builder.replayBudget;
+        this.observer = builder.observer;
     }
 
     /**
@@ -117,6 +126,13 @@ public final class SamlServiceProvider {
      * @since 1.0.0
      */
     public @NonNull SamlAuthenticationRequestResult beginAuthenticationResult(
+            @NonNull SamlIdentityProvider identityProvider,
+            @NonNull SamlAuthenticationRequestOptions options) {
+        return observed(SamlObserver.Operation.BEGIN_AUTHENTICATION,
+                () -> beginAuthenticationInternal(identityProvider, options), SamlServiceProvider::outcome);
+    }
+
+    private @NonNull SamlAuthenticationRequestResult beginAuthenticationInternal(
             @NonNull SamlIdentityProvider identityProvider,
             @NonNull SamlAuthenticationRequestOptions options) {
         Objects.requireNonNull(identityProvider);
@@ -160,6 +176,13 @@ public final class SamlServiceProvider {
     public @NonNull SamlAuthenticationRequestResult beginPostAuthenticationResult(
             @NonNull SamlIdentityProvider identityProvider,
             @NonNull SamlAuthenticationRequestOptions options) {
+        return observed(SamlObserver.Operation.BEGIN_POST_AUTHENTICATION,
+                () -> beginPostAuthenticationInternal(identityProvider, options), SamlServiceProvider::outcome);
+    }
+
+    private @NonNull SamlAuthenticationRequestResult beginPostAuthenticationInternal(
+            @NonNull SamlIdentityProvider identityProvider,
+            @NonNull SamlAuthenticationRequestOptions options) {
         Objects.requireNonNull(identityProvider);
         Objects.requireNonNull(options);
         URI endpoint = identityProvider.postSingleSignOnService();
@@ -190,6 +213,14 @@ public final class SamlServiceProvider {
      * @since 1.0.0
      */
     public @NonNull SamlAuthenticationResult completeAuthenticationResult(@NonNull SamlPostBindingMessage message,
+            @NonNull PendingSamlAuthenticationSource pendingSource,
+            @NonNull SamlIdentityProvider identityProvider) {
+        return observed(SamlObserver.Operation.COMPLETE_AUTHENTICATION,
+                () -> completeAuthenticationInternal(message, pendingSource, identityProvider),
+                SamlServiceProvider::outcome);
+    }
+
+    private @NonNull SamlAuthenticationResult completeAuthenticationInternal(@NonNull SamlPostBindingMessage message,
             @NonNull PendingSamlAuthenticationSource pendingSource,
             @NonNull SamlIdentityProvider identityProvider) {
         Objects.requireNonNull(message);
@@ -261,6 +292,13 @@ public final class SamlServiceProvider {
      */
     public @NonNull SamlAuthenticationResult completeUnsolicitedAuthenticationResult(
             @NonNull SamlPostBindingMessage message, @NonNull SamlIdentityProvider identityProvider) {
+        return observed(SamlObserver.Operation.COMPLETE_UNSOLICITED_AUTHENTICATION,
+                () -> completeUnsolicitedAuthenticationInternal(message, identityProvider),
+                SamlServiceProvider::outcome);
+    }
+
+    private @NonNull SamlAuthenticationResult completeUnsolicitedAuthenticationInternal(
+            @NonNull SamlPostBindingMessage message, @NonNull SamlIdentityProvider identityProvider) {
         Objects.requireNonNull(message);
         Objects.requireNonNull(identityProvider);
         if (!identityProvider.allowUnsolicitedResponses() || message.relayState() != null)
@@ -312,6 +350,13 @@ public final class SamlServiceProvider {
     public @NonNull SamlLogoutRequestResult acceptLogoutRequestResult(
             @NonNull SamlRedirectBindingMessage message,
             @NonNull SamlIdentityProvider identityProvider) {
+        return observed(SamlObserver.Operation.ACCEPT_LOGOUT_REQUEST,
+                () -> acceptLogoutRequestInternal(message, identityProvider), SamlServiceProvider::outcome);
+    }
+
+    private @NonNull SamlLogoutRequestResult acceptLogoutRequestInternal(
+            @NonNull SamlRedirectBindingMessage message,
+            @NonNull SamlIdentityProvider identityProvider) {
         Objects.requireNonNull(message);
         Objects.requireNonNull(identityProvider);
         URI logoutEndpoint = singleLogoutServiceUrl;
@@ -326,17 +371,19 @@ public final class SamlServiceProvider {
         Element root = accepted.getDocument().getDocumentElement();
         if (root == null || !SamlResponseStructure.PROTOCOL.equals(root.getNamespaceURI())
                 || !"LogoutRequest".equals(root.getLocalName())
+                || !SamlResponseSemantics.scalarDeclarationAllowed(root,
+                        SamlResponseStructure.PROTOCOL, "LogoutRequestType")
                 || !"2.0".equals(root.getAttributeNS(null, "Version"))
                 || !logoutEndpoint.toASCIIString().equals(root.getAttributeNS(null, "Destination")))
             return SamlLogoutRequestResult.Rejected.INSTANCE;
         String id = root.getAttributeNS(null, "ID");
-        if (id.isEmpty() || id.length() > 256) return SamlLogoutRequestResult.Rejected.INSTANCE;
+        if (id.length() > 256 || !XmlNcName.valid(id)) return SamlLogoutRequestResult.Rejected.INSTANCE;
         Instant now;
         try { now = clock.instant(); }
         catch (RuntimeException exception) { return SamlLogoutRequestResult.Unavailable.INSTANCE; }
         Instant issued = SamlDateTime.parse(root.getAttributeNS(null, "IssueInstant"));
-        if (issued == null || issued.isAfter(now.plus(clockSkew))
-                || now.isAfter(issued.plus(maximumResponseAge).plus(clockSkew)))
+        Instant replayExpiry = logoutReplayExpiry(issued, now);
+        if (replayExpiry == null)
             return SamlLogoutRequestResult.Rejected.INSTANCE;
         if (root.hasAttributeNS(null, "NotOnOrAfter")) {
             Instant expires = SamlDateTime.parse(root.getAttributeNS(null, "NotOnOrAfter"));
@@ -345,18 +392,31 @@ public final class SamlServiceProvider {
         Element issuer = null;
         Element nameId = null;
         List<String> sessionIndexes = new ArrayList<>();
+        int phase = 0;
         for (Node child = root.getFirstChild(); child != null; child = child.getNextSibling()) {
-            if (!(child instanceof Element element)) continue;
+            if (!(child instanceof Element element)) {
+                if (!ignorableStructuralNode(child)) return SamlLogoutRequestResult.Rejected.INSTANCE;
+                continue;
+            }
             if (SamlResponseStructure.ASSERTION.equals(element.getNamespaceURI())
                     && "Issuer".equals(element.getLocalName())) {
-                if (issuer != null) return SamlLogoutRequestResult.Rejected.INSTANCE;
+                if (phase != 0 || !SamlResponseSemantics.scalarDeclarationAllowed(element,
+                        SamlResponseStructure.ASSERTION, "NameIDType"))
+                    return SamlLogoutRequestResult.Rejected.INSTANCE;
                 issuer = element;
+                phase = 1;
             } else if (SamlResponseStructure.ASSERTION.equals(element.getNamespaceURI())
                     && "NameID".equals(element.getLocalName())) {
-                if (nameId != null) return SamlLogoutRequestResult.Rejected.INSTANCE;
+                if (phase != 1 || !SamlResponseSemantics.scalarDeclarationAllowed(element,
+                        SamlResponseStructure.ASSERTION, "NameIDType"))
+                    return SamlLogoutRequestResult.Rejected.INSTANCE;
                 nameId = element;
+                phase = 2;
             } else if (SamlResponseStructure.PROTOCOL.equals(element.getNamespaceURI())
                     && "SessionIndex".equals(element.getLocalName())) {
+                if (phase != 2 || !SamlResponseSemantics.scalarDeclarationAllowed(element,
+                        "http://www.w3.org/2001/XMLSchema", "string"))
+                    return SamlLogoutRequestResult.Rejected.INSTANCE;
                 String value = textOnly(element);
                 if (value == null || value.isEmpty() || value.length() > 2048
                         || sessionIndexes.size() >= 32) return SamlLogoutRequestResult.Rejected.INSTANCE;
@@ -374,12 +434,13 @@ public final class SamlServiceProvider {
         String nameFormat = optionalNameIdField(nameId, "Format");
         String nameQualifier = optionalNameIdField(nameId, "NameQualifier");
         String spQualifier = optionalNameIdField(nameId, "SPNameQualifier");
-        if (longField(nameFormat) || longField(nameQualifier) || longField(spQualifier))
+        String spProvidedId = optionalNameIdField(nameId, "SPProvidedID");
+        if (longField(nameFormat) || longField(nameQualifier) || longField(spQualifier)
+                || longField(spProvidedId))
             return SamlLogoutRequestResult.Rejected.INSTANCE;
         String replayKey;
-        try { replayKey = logoutReplayKey(identityProvider, id); }
+        try { replayKey = logoutReplayKey(identityProvider, SamlRedirectBindingMessage.Kind.REQUEST, id); }
         catch (NoSuchAlgorithmException exception) { return SamlLogoutRequestResult.Unavailable.INSTANCE; }
-        Instant replayExpiry = issued.plus(maximumResponseAge).plus(clockSkew);
         SamlReplayCache.MarkResult mark;
         try { mark = replayCache.markIfAbsent(replayKey, replayExpiry, replayBudget); }
         catch (RuntimeException exception) { return SamlLogoutRequestResult.Indeterminate.INSTANCE; }
@@ -391,12 +452,14 @@ public final class SamlServiceProvider {
             return SamlLogoutRequestResult.Unavailable.INSTANCE;
         return new SamlLogoutRequestResult.Accepted(new SamlLogoutRequest(identityProvider.getConnectionId(),
                 entityId, identityProvider.getEntityId(), id, message.relayState(),
-                new SamlNameId(name, nameFormat, nameQualifier, spQualifier), sessionIndexes));
+                new SamlNameId(name, nameFormat, nameQualifier, spQualifier, spProvidedId), sessionIndexes));
     }
 
     /**
      * Begins signed SP-initiated front-channel logout for a stored session reference.
-     * The application saves the returned pending state in the initiating browser.
+     * The application saves the returned pending state in the initiating browser and ends its
+     * local session before sending the redirect. A missing or failed IdP return never restores
+     * that session.
      *
      * @param identityProvider approved IdP connection
      * @param session checked reference retained with the application session
@@ -405,10 +468,17 @@ public final class SamlServiceProvider {
      */
     public @NonNull SamlLogoutRedirectResult beginLogoutResult(@NonNull SamlIdentityProvider identityProvider,
             @NonNull SamlSessionReference session) {
+        return observed(SamlObserver.Operation.BEGIN_LOGOUT,
+                () -> beginLogoutInternal(identityProvider, session), SamlServiceProvider::outcome);
+    }
+
+    private @NonNull SamlLogoutRedirectResult beginLogoutInternal(@NonNull SamlIdentityProvider identityProvider,
+            @NonNull SamlSessionReference session) {
         Objects.requireNonNull(identityProvider);
         Objects.requireNonNull(session);
         URI destination = identityProvider.redirectSingleLogoutService();
         if (singleLogoutServiceUrl == null || destination == null || signingKey == null
+                || !safeLogoutEndpointQuery(destination)
                 || !identityProvider.getConnectionId().equals(session.getIdentityProviderConnectionId())
                 || !identityProvider.getEntityId().equals(session.getIdentityProviderEntityId()))
             return SamlLogoutRedirectResult.Rejected.CONFIGURATION;
@@ -440,9 +510,21 @@ public final class SamlServiceProvider {
     public @NonNull SamlLogoutResult completeLogoutResult(@NonNull SamlRedirectBindingMessage message,
             @NonNull PendingSamlLogoutSource pendingSource,
             @NonNull SamlIdentityProvider identityProvider) {
+        return observed(SamlObserver.Operation.COMPLETE_LOGOUT,
+                () -> completeLogoutInternal(message, pendingSource, identityProvider),
+                SamlServiceProvider::outcome);
+    }
+
+    private @NonNull SamlLogoutResult completeLogoutInternal(@NonNull SamlRedirectBindingMessage message,
+            @NonNull PendingSamlLogoutSource pendingSource,
+            @NonNull SamlIdentityProvider identityProvider) {
         Objects.requireNonNull(message);
         Objects.requireNonNull(pendingSource);
         Objects.requireNonNull(identityProvider);
+        if (message.getKind() != SamlRedirectBindingMessage.Kind.RESPONSE
+                || singleLogoutServiceUrl == null
+                || !message.verify(identityProvider.signingKeys(), identityProvider.allowSha1Signatures()))
+            return SamlLogoutResult.Rejected.INSTANCE;
         PendingSamlLogoutSource.Resolution resolved = pendingSource.resolve(clock, message.relayState(), replayBudget);
         if (resolved instanceof PendingSamlLogoutSource.Rejected) return SamlLogoutResult.Rejected.INSTANCE;
         if (resolved instanceof PendingSamlLogoutSource.Unavailable) return SamlLogoutResult.Unavailable.INSTANCE;
@@ -452,15 +534,12 @@ public final class SamlServiceProvider {
         Instant now;
         try { now = clock.instant(); }
         catch (RuntimeException exception) { return SamlLogoutResult.Unavailable.INSTANCE; }
-        if (message.getKind() != SamlRedirectBindingMessage.Kind.RESPONSE
-                || singleLogoutServiceUrl == null || !entityId.equals(pending.spEntityId())
+        if (!entityId.equals(pending.spEntityId())
                 || !singleLogoutServiceUrl.toASCIIString().equals(pending.acs())
                 || !identityProvider.getConnectionId().equals(pending.connectionId())
                 || !identityProvider.getEntityId().equals(pending.idpEntityId())
                 || !now.isBefore(pending.expiresAt())
                 || !sameHandle(pending.relayState(), message.relayState()))
-            return SamlLogoutResult.Rejected.INSTANCE;
-        if (!message.verify(identityProvider.signingKeys(), identityProvider.allowSha1Signatures()))
             return SamlLogoutResult.Rejected.INSTANCE;
         SecureXmlParser.Result parsed = SecureXmlParser.parseResponse(message.xml());
         if (parsed instanceof SecureXmlParser.Result.Unavailable) return SamlLogoutResult.Unavailable.INSTANCE;
@@ -468,53 +547,58 @@ public final class SamlServiceProvider {
         Element root = accepted.getDocument().getDocumentElement();
         if (root == null || !SamlResponseStructure.PROTOCOL.equals(root.getNamespaceURI())
                 || !"LogoutResponse".equals(root.getLocalName())
+                || !SamlResponseSemantics.scalarDeclarationAllowed(root,
+                        SamlResponseStructure.PROTOCOL, "StatusResponseType")
                 || !"2.0".equals(root.getAttributeNS(null, "Version"))
                 || !singleLogoutServiceUrl.toASCIIString().equals(root.getAttributeNS(null, "Destination"))
                 || !pending.requestId().equals(root.getAttributeNS(null, "InResponseTo")))
             return SamlLogoutResult.Rejected.INSTANCE;
         String responseId = root.getAttributeNS(null, "ID");
-        if (responseId.isEmpty() || responseId.length() > 256) return SamlLogoutResult.Rejected.INSTANCE;
+        if (responseId.length() > 256 || !XmlNcName.valid(responseId))
+            return SamlLogoutResult.Rejected.INSTANCE;
         Instant issued = SamlDateTime.parse(root.getAttributeNS(null, "IssueInstant"));
-        if (issued == null || issued.isAfter(now.plus(clockSkew))
-                || now.isAfter(issued.plus(maximumResponseAge).plus(clockSkew)))
+        Instant replayExpiry = logoutReplayExpiry(issued, now);
+        if (replayExpiry == null)
             return SamlLogoutResult.Rejected.INSTANCE;
         Element issuer = null;
         Element status = null;
+        int phase = 0;
         for (Node child = root.getFirstChild(); child != null; child = child.getNextSibling()) {
-            if (!(child instanceof Element element)) continue;
+            if (!(child instanceof Element element)) {
+                if (!ignorableStructuralNode(child)) return SamlLogoutResult.Rejected.INSTANCE;
+                continue;
+            }
             if (SamlResponseStructure.ASSERTION.equals(element.getNamespaceURI())
                     && "Issuer".equals(element.getLocalName())) {
-                if (issuer != null) return SamlLogoutResult.Rejected.INSTANCE;
+                if (phase != 0 || !SamlResponseSemantics.scalarDeclarationAllowed(element,
+                        SamlResponseStructure.ASSERTION, "NameIDType"))
+                    return SamlLogoutResult.Rejected.INSTANCE;
                 issuer = element;
+                phase = 1;
             } else if (SamlResponseStructure.PROTOCOL.equals(element.getNamespaceURI())
                     && "Status".equals(element.getLocalName())) {
-                if (status != null) return SamlLogoutResult.Rejected.INSTANCE;
+                if (phase != 1)
+                    return SamlLogoutResult.Rejected.INSTANCE;
                 status = element;
+                phase = 2;
             } else return SamlLogoutResult.Rejected.INSTANCE;
         }
         if (issuer == null || status == null || !identityProvider.getEntityId().equals(textOnly(issuer)))
             return SamlLogoutResult.Rejected.INSTANCE;
-        Element code = null;
-        for (Node child = status.getFirstChild(); child != null; child = child.getNextSibling()) {
-            if (!(child instanceof Element element)) continue;
-            if (code != null || !SamlResponseStructure.PROTOCOL.equals(element.getNamespaceURI())
-                    || !"StatusCode".equals(element.getLocalName())) return SamlLogoutResult.Rejected.INSTANCE;
-            code = element;
-        }
-        if (code == null || code.getAttributeNS(null, "Value").isEmpty())
-            return SamlLogoutResult.Rejected.INSTANCE;
+        String code = SamlResponseSemantics.flatStatusCode(status);
+        if (code == null) return SamlLogoutResult.Rejected.INSTANCE;
         String replayKey;
-        try { replayKey = logoutReplayKey(identityProvider, "response:" + responseId); }
+        try { replayKey = logoutReplayKey(identityProvider, SamlRedirectBindingMessage.Kind.RESPONSE,
+                responseId); }
         catch (NoSuchAlgorithmException exception) { return SamlLogoutResult.Unavailable.INSTANCE; }
         SamlReplayCache.MarkResult mark;
-        try { mark = replayCache.markIfAbsent(replayKey,
-                issued.plus(maximumResponseAge).plus(clockSkew), replayBudget); }
+        try { mark = replayCache.markIfAbsent(replayKey, replayExpiry, replayBudget); }
         catch (RuntimeException exception) { return SamlLogoutResult.Indeterminate.INSTANCE; }
         if (mark == null || mark == SamlReplayCache.MarkResult.INDETERMINATE)
             return SamlLogoutResult.Indeterminate.INSTANCE;
         if (mark == SamlReplayCache.MarkResult.ALREADY_PRESENT) return SamlLogoutResult.Rejected.INSTANCE;
         if (mark != SamlReplayCache.MarkResult.MARKED) return SamlLogoutResult.Unavailable.INSTANCE;
-        return SamlLogoutStatus.SUCCESS.uri().equals(code.getAttributeNS(null, "Value"))
+        return SamlLogoutStatus.SUCCESS.uri().equals(code)
                 ? SamlLogoutResult.Succeeded.INSTANCE : SamlLogoutResult.StatusReceived.NON_SUCCESS;
     }
 
@@ -531,11 +615,20 @@ public final class SamlServiceProvider {
     public @NonNull SamlLogoutResponseRedirectResult respondToLogoutRequestResult(
             @NonNull SamlLogoutRequest request, @NonNull SamlIdentityProvider identityProvider,
             @NonNull SamlLogoutStatus status) {
+        return observed(SamlObserver.Operation.RESPOND_TO_LOGOUT_REQUEST,
+                () -> respondToLogoutRequestInternal(request, identityProvider, status),
+                SamlServiceProvider::outcome);
+    }
+
+    private @NonNull SamlLogoutResponseRedirectResult respondToLogoutRequestInternal(
+            @NonNull SamlLogoutRequest request, @NonNull SamlIdentityProvider identityProvider,
+            @NonNull SamlLogoutStatus status) {
         Objects.requireNonNull(request);
         Objects.requireNonNull(identityProvider);
         Objects.requireNonNull(status);
         URI destination = identityProvider.redirectSingleLogoutService();
         if (singleLogoutServiceUrl == null || signingKey == null || destination == null
+                || !safeLogoutEndpointQuery(destination)
                 || !entityId.equals(request.spEntityId())
                 || !identityProvider.getConnectionId().equals(request.getIdentityProviderConnectionId())
                 || !identityProvider.getEntityId().equals(request.idpEntityId()))
@@ -549,11 +642,80 @@ public final class SamlServiceProvider {
         } catch (RuntimeException exception) { return SamlLogoutResponseRedirectResult.Unavailable.INSTANCE; }
     }
 
-    private @NonNull String logoutReplayKey(@NonNull SamlIdentityProvider idp, @NonNull String requestId)
+    private <T> @NonNull T observed(SamlObserver.@NonNull Operation operation,
+            @NonNull Supplier<@NonNull T> work,
+            @NonNull Function<@NonNull T, SamlObserver.@NonNull Outcome> classify) {
+        long started = System.nanoTime();
+        ObserverDispatch.dispatch(observer, value -> value.willHandleOperation(operation));
+        try {
+            T result = work.get();
+            SamlObserver.Outcome outcome = classify.apply(result);
+            Duration elapsed = Duration.ofNanos(Math.max(0, System.nanoTime() - started));
+            ObserverDispatch.dispatch(observer, value -> value.didHandleOperation(operation, outcome, elapsed));
+            return result;
+        } catch (RuntimeException exception) {
+            Duration elapsed = Duration.ofNanos(Math.max(0, System.nanoTime() - started));
+            ObserverDispatch.dispatch(observer, value -> value.didHandleOperation(
+                    operation, SamlObserver.Outcome.FAILED, elapsed));
+            throw exception;
+        }
+    }
+
+    private static SamlObserver.@NonNull Outcome outcome(@NonNull SamlAuthenticationRequestResult result) {
+        if (result instanceof SamlAuthenticationRequestResult.Prepared
+                || result instanceof SamlAuthenticationRequestResult.PostPrepared)
+            return SamlObserver.Outcome.SUCCEEDED;
+        if (result instanceof SamlAuthenticationRequestResult.Rejected) return SamlObserver.Outcome.REJECTED;
+        if (result instanceof SamlAuthenticationRequestResult.Unavailable) return SamlObserver.Outcome.UNAVAILABLE;
+        throw new IllegalStateException("Unclassified SAML authentication request result");
+    }
+
+    private static SamlObserver.@NonNull Outcome outcome(@NonNull SamlAuthenticationResult result) {
+        if (result instanceof SamlAuthenticationResult.Succeeded) return SamlObserver.Outcome.SUCCEEDED;
+        if (result instanceof SamlAuthenticationResult.StatusReceived) return SamlObserver.Outcome.STATUS_RECEIVED;
+        if (result instanceof SamlAuthenticationResult.Rejected) return SamlObserver.Outcome.REJECTED;
+        if (result instanceof SamlAuthenticationResult.Unavailable) return SamlObserver.Outcome.UNAVAILABLE;
+        if (result instanceof SamlAuthenticationResult.Indeterminate) return SamlObserver.Outcome.INDETERMINATE;
+        throw new IllegalStateException("Unclassified SAML authentication result");
+    }
+
+    private static SamlObserver.@NonNull Outcome outcome(@NonNull SamlLogoutRequestResult result) {
+        if (result instanceof SamlLogoutRequestResult.Accepted) return SamlObserver.Outcome.SUCCEEDED;
+        if (result instanceof SamlLogoutRequestResult.Rejected) return SamlObserver.Outcome.REJECTED;
+        if (result instanceof SamlLogoutRequestResult.Unavailable) return SamlObserver.Outcome.UNAVAILABLE;
+        if (result instanceof SamlLogoutRequestResult.Indeterminate) return SamlObserver.Outcome.INDETERMINATE;
+        throw new IllegalStateException("Unclassified SAML logout request result");
+    }
+
+    private static SamlObserver.@NonNull Outcome outcome(@NonNull SamlLogoutRedirectResult result) {
+        if (result instanceof SamlLogoutRedirectResult.Prepared) return SamlObserver.Outcome.SUCCEEDED;
+        if (result instanceof SamlLogoutRedirectResult.Rejected) return SamlObserver.Outcome.REJECTED;
+        if (result instanceof SamlLogoutRedirectResult.Unavailable) return SamlObserver.Outcome.UNAVAILABLE;
+        throw new IllegalStateException("Unclassified SAML logout redirect result");
+    }
+
+    private static SamlObserver.@NonNull Outcome outcome(@NonNull SamlLogoutResult result) {
+        if (result instanceof SamlLogoutResult.Succeeded) return SamlObserver.Outcome.SUCCEEDED;
+        if (result instanceof SamlLogoutResult.StatusReceived) return SamlObserver.Outcome.STATUS_RECEIVED;
+        if (result instanceof SamlLogoutResult.Rejected) return SamlObserver.Outcome.REJECTED;
+        if (result instanceof SamlLogoutResult.Unavailable) return SamlObserver.Outcome.UNAVAILABLE;
+        if (result instanceof SamlLogoutResult.Indeterminate) return SamlObserver.Outcome.INDETERMINATE;
+        throw new IllegalStateException("Unclassified SAML logout result");
+    }
+
+    private static SamlObserver.@NonNull Outcome outcome(@NonNull SamlLogoutResponseRedirectResult result) {
+        if (result instanceof SamlLogoutResponseRedirectResult.Prepared) return SamlObserver.Outcome.SUCCEEDED;
+        if (result instanceof SamlLogoutResponseRedirectResult.Rejected) return SamlObserver.Outcome.REJECTED;
+        if (result instanceof SamlLogoutResponseRedirectResult.Unavailable) return SamlObserver.Outcome.UNAVAILABLE;
+        throw new IllegalStateException("Unclassified SAML logout response result");
+    }
+
+    private @NonNull String logoutReplayKey(@NonNull SamlIdentityProvider idp,
+            SamlRedirectBindingMessage.@NonNull Kind kind, @NonNull String messageId)
             throws NoSuchAlgorithmException {
         MessageDigest digest = MessageDigest.getInstance("SHA-256");
-        for (String value : List.of("saml-logout-request", entityId, idp.getConnectionId(),
-                idp.getEntityId(), requestId)) {
+        for (String value : List.of("saml-logout-replay", kind.name(), entityId, idp.getConnectionId(),
+                idp.getEntityId(), messageId)) {
             byte[] bytes = value.getBytes(StandardCharsets.UTF_8);
             digest.update(ByteBuffer.allocate(4).putInt(bytes.length).array());
             digest.update(bytes);
@@ -561,9 +723,23 @@ public final class SamlServiceProvider {
         return Base64.getUrlEncoder().withoutPadding().encodeToString(digest.digest());
     }
 
+    private @Nullable Instant logoutReplayExpiry(@Nullable Instant issued, @NonNull Instant now) {
+        if (issued == null) return null;
+        Instant latestIssue = plus(now, clockSkew);
+        Instant ageEnd = plus(issued, maximumResponseAge);
+        Instant expiry = ageEnd == null ? null : plus(ageEnd, clockSkew);
+        if (latestIssue == null || expiry == null || issued.isAfter(latestIssue)
+                || !now.isBefore(expiry)) return null;
+        return expiry;
+    }
+
+    private static @Nullable Instant plus(@NonNull Instant instant, @NonNull Duration duration) {
+        try { return instant.plus(duration); }
+        catch (DateTimeException | ArithmeticException exception) { return null; }
+    }
+
     private static @Nullable String optionalNameIdField(@NonNull Element nameId, @NonNull String field) {
-        String value = nameId.getAttributeNS(null, field);
-        return value.isEmpty() ? null : value;
+        return nameId.hasAttributeNS(null, field) ? nameId.getAttributeNS(null, field) : null;
     }
 
     private static boolean longField(@Nullable String value) {
@@ -577,10 +753,17 @@ public final class SamlServiceProvider {
         if (shape.getEncryptedAssertion() != null)
             return new SamlAuthenticationResult.Rejected(SamlAuthenticationResult.Reason.MESSAGE);
         Element response = shape.getResponse();
+        if (!SamlResponseSemantics.validResponseEnvelope(response))
+            return new SamlAuthenticationResult.Rejected(SamlAuthenticationResult.Reason.MESSAGE);
         if (!pending.requestId().equals(response.getAttributeNS(null, "InResponseTo")))
             return new SamlAuthenticationResult.Rejected(SamlAuthenticationResult.Reason.REQUEST_BINDING);
         Element issuer = shape.getIssuer();
-        if (issuer == null || !idp.getEntityId().equals(textOnly(issuer)))
+        if (issuer == null || !SamlResponseSemantics.scalarDeclarationAllowed(issuer,
+                SamlResponseStructure.ASSERTION, "NameIDType")
+                || (!issuer.getAttributeNS(null, "Format").isEmpty()
+                    && !"urn:oasis:names:tc:SAML:2.0:nameid-format:entity".equals(
+                            issuer.getAttributeNS(null, "Format")))
+                || !idp.getEntityId().equals(textOnly(issuer)))
             return new SamlAuthenticationResult.Rejected(SamlAuthenticationResult.Reason.ISSUER);
         String destination = response.getAttributeNS(null, "Destination");
         if (!destination.isEmpty() && !assertionConsumerServiceUrl.toASCIIString().equals(destination))
@@ -595,12 +778,15 @@ public final class SamlServiceProvider {
         if (authenticated && destination.isEmpty())
             return new SamlAuthenticationResult.Rejected(SamlAuthenticationResult.Reason.DESTINATION);
         Instant issued = SamlDateTime.parse(response.getAttributeNS(null, "IssueInstant"));
-        if (issued == null || issued.isAfter(now.plus(clockSkew))
-                || now.isAfter(issued.plus(maximumResponseAge).plus(clockSkew)))
+        Instant latestIssue = plus(now, clockSkew);
+        Instant ageEnd = issued == null ? null : plus(issued, maximumResponseAge);
+        Instant expiry = ageEnd == null ? null : plus(ageEnd, clockSkew);
+        if (issued == null || latestIssue == null || expiry == null
+                || issued.isAfter(latestIssue) || now.isAfter(expiry))
             return new SamlAuthenticationResult.Rejected(SamlAuthenticationResult.Reason.RESPONSE_AGE);
-        String code = shape.getStatus().getElementsByTagNameNS(SamlResponseStructure.PROTOCOL,
-                "StatusCode").item(0) instanceof Element element
-                ? element.getAttributeNS(null, "Value") : "";
+        String code = SamlResponseSemantics.flatStatusCode(shape.getStatus());
+        if (code == null || SamlLogoutStatus.SUCCESS.uri().equals(code))
+            return new SamlAuthenticationResult.Rejected(SamlAuthenticationResult.Reason.MESSAGE);
         SamlAuthenticationResult.StatusCode classification = switch (code) {
             case "urn:oasis:names:tc:SAML:2.0:status:AuthnFailed" ->
                     SamlAuthenticationResult.StatusCode.AUTHN_FAILED;
@@ -628,6 +814,19 @@ public final class SamlServiceProvider {
         return text.toString();
     }
 
+    private static boolean ignorableStructuralNode(@NonNull Node node) {
+        if (node.getNodeType() == Node.COMMENT_NODE || node.getNodeType() == Node.PROCESSING_INSTRUCTION_NODE)
+            return true;
+        if (node.getNodeType() != Node.TEXT_NODE) return false;
+        String value = node.getNodeValue();
+        if (value == null) return false;
+        for (int index = 0; index < value.length(); index++) {
+            char character = value.charAt(index);
+            if (character != ' ' && character != '\t' && character != '\r' && character != '\n') return false;
+        }
+        return true;
+    }
+
     private static SamlAuthenticationResult.@NonNull Reason map(SamlResponseSemantics.@NonNull Reason reason) {
         return switch (reason) {
             case PENDING -> SamlAuthenticationResult.Reason.PENDING;
@@ -649,6 +848,11 @@ public final class SamlServiceProvider {
     private static boolean sameHandle(@NonNull String expected, @Nullable String actual) {
         return actual != null && MessageDigest.isEqual(expected.getBytes(StandardCharsets.UTF_8),
                 actual.getBytes(StandardCharsets.UTF_8));
+    }
+
+    private static boolean safeLogoutEndpointQuery(@NonNull URI endpoint) {
+        String query = endpoint.getRawQuery();
+        return query == null || (!query.isEmpty() && SamlRedirectAuthnRequest.safeEndpointQuery(query));
     }
 
     @Nullable SamlCredential signingCredential() { return signingCredential; }
@@ -690,6 +894,8 @@ public final class SamlServiceProvider {
         private @NonNull Duration maximumResponseAge = Duration.ofMinutes(5);
         private @NonNull Duration pendingLifetime = Duration.ofMinutes(5);
         private @NonNull Duration replayBudget = Duration.ofSeconds(5);
+        private @NonNull SamlObserver observer = SamlObserver.disabledInstance();
+        private boolean acknowledgeGlobalSecureValidationDisabled;
 
         private Builder(@NonNull String entityId) { this.entityId = entityId; }
 
@@ -830,12 +1036,45 @@ public final class SamlServiceProvider {
         }
 
         /**
+         * Configures redacted caller-thread SAML events; null restores the disabled observer.
+         *
+         * @param value observer, or null to disable events
+         * @return this builder
+         * @since 1.0.0
+         */
+        @CheckReturnValue public @NonNull Builder observer(@Nullable SamlObserver value) {
+            this.observer = value == null ? SamlObserver.disabledInstance() : value;
+            return this;
+        }
+
+        /**
+         * Acknowledges that this JVM globally disables XML-signature secure validation. Revetsec
+         * still sets secure validation on each verification context and enforces its own signature
+         * shape and algorithm allowlists. The setting is reported to the observer at build time.
+         *
+         * @param value true to acknowledge; false or null restores the safe default
+         * @return this builder
+         * @since 1.0.0
+         */
+        @CheckReturnValue public @NonNull Builder acknowledgeGlobalSecureValidationDisabled(
+                @Nullable Boolean value) {
+            this.acknowledgeGlobalSecureValidationDisabled = Boolean.TRUE.equals(value);
+            return this;
+        }
+
+        /**
          * Returns this value.
          *
          * @return immutable SP configuration
          * @since 1.0.0
          */
         public @NonNull SamlServiceProvider build() {
+            String globalSecureValidation = System.getProperty(XML_DSIG_SECURE_VALIDATION);
+            boolean globallyDisabled = globalSecureValidation != null
+                    && !"true".equalsIgnoreCase(globalSecureValidation);
+            if (globallyDisabled && !acknowledgeGlobalSecureValidationDisabled)
+                throw new IllegalStateException("Global XML signature secure validation is disabled; "
+                        + "set acknowledgeGlobalSecureValidationDisabled(true) to accept this runtime");
             URI acs = assertionConsumerServiceUrl;
             if (acs == null || !"https".equalsIgnoreCase(acs.getScheme()) || acs.getHost() == null
                     || acs.getRawUserInfo() != null || acs.getRawFragment() != null)
@@ -862,7 +1101,11 @@ public final class SamlServiceProvider {
                     || replayBudget.compareTo(Duration.ofMillis(1)) < 0
                     || replayBudget.compareTo(Duration.ofSeconds(30)) > 0)
                 throw new IllegalStateException("Invalid SAML time policy");
-            return new SamlServiceProvider(this);
+            SamlServiceProvider provider = new SamlServiceProvider(this);
+            if (globallyDisabled)
+                ObserverDispatch.dispatch(observer,
+                        SamlObserver::didAcknowledgeGlobalSecureValidationDisabled);
+            return provider;
         }
     }
 }

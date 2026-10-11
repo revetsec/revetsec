@@ -122,53 +122,45 @@ final class OpenSamlSpComparatorTests {
         assertRevetsecIdentity(xml, "idp-signing-rsa-2048", true, false, "legacy SHA1");
     }
 
-    @Test void wrapperAndNamespaceMutationsNeverReleaseAnIdentity() throws Exception {
-        for (String fixture : modernFixtures()) {
-            String xml = fixture(fixture);
-            String assertion = section(xml, "<saml:Assertion ", "</saml:Assertion>");
-            String attacker = Pattern.compile("<ds:Signature\\b[^>]*>.*?</ds:Signature>", Pattern.DOTALL)
-                    .matcher(assertion).replaceFirst("")
-                    .replace("minted-user", "attacker-user")
-                    .replace(id(xml, "saml:Assertion"), "_attacker_assertion");
-            Matcher signature = Pattern.compile("<ds:Signature\\b[^>]*>.*?</ds:Signature>",
-                    Pattern.DOTALL).matcher(xml);
-            assertTrue(signature.find(), fixture + " signature missing");
-            List<String> mutations = List.of(
-                    xml.replace(assertion, attacker + assertion),
-                    xml.replace("<samlp:Status>",
-                            "<samlp:Extensions>" + attacker + "</samlp:Extensions><samlp:Status>"),
-                    xml.replace(ACS, "https://attacker.example.test/acs"),
-                    xml.replace("<samlp:Status>",
-                            "<samlp:Status><samlp:StatusCode Value='" + StatusCode.SUCCESS
-                                    + "'/></samlp:Status><samlp:Status>"),
-                    xml.replace("<samlp:Response ",
-                            "<samlp:Response samlp:ID='_attacker_response' "),
-                    xml.replace("<saml:Assertion ",
-                            "<saml:Assertion saml:ID='_attacker_assertion' "),
-                    xml.replace("<samlp:Status>",
-                            "<samlp:Extensions><Parent xmlns='http://www.w3.org/2000/09/xmldsig#'>"
-                                    + "<Child xml:xmlns='#other'>" + signature.group()
-                                    + "</Child></Parent></samlp:Extensions><samlp:Status>"),
-                    xml.replace("<samlp:Response ", "<samlp:Response xmlns:ns='1' ")
-                            .replace(assertion, attacker + assertion),
-                    xml.replace("minted-user", "minted-<!-- -->attacker"));
-            for (int index = 0; index < mutations.size(); index++) {
-                String candidate = mutations.get(index);
-                assertNotEquals(xml, candidate, fixture + " mutation " + index + " is inert");
-                boolean assertionOnly = fixture.startsWith("matrix-assertion-")
-                        || fixture.equals("assertion-signxml") || fixture.equals("assertion-ec384");
-                // OpenSAML ignores two unsigned Extensions changes when it validates the
-                // original signed Assertion. Revetsec rejects the whole envelope.
-                if (assertionOnly && (index == 1 || index == 6))
-                    assertEquals("minted-user", authenticate(candidate, signingCredential(fixture)),
-                            fixture + " mutation " + index);
-                else
-                    assertThrows(Exception.class,
-                            () -> authenticate(candidate, signingCredential(fixture)),
-                            fixture + " mutation " + index);
+    @Test void fullSignedXswAndFragileLockMatrixPinsIndependentSpVerdicts() throws Exception {
+        List<String> fixtures = new ArrayList<>(modernFixtures());
+        fixtures.add("assertion-rsa-sha1");
+        assertEquals(57, fixtures.size(), "signed fixture matrix changed");
+        Set<String> openSamlUnsignedEnvelopeAcceptances = Set.of(
+                "attacker-extension", "copied-signature-extension");
+        Set<String> springUnsignedEnvelopeAcceptances = Set.of(
+                "attacker-extension", "copied-signature-extension", "duplicate-status");
+        for (String name : fixtures) {
+            String original = fixture(name);
+            String credential = signingCredential(name);
+            boolean legacySha1 = name.equals("assertion-rsa-sha1");
+            boolean assertionOnly = name.startsWith("matrix-assertion-")
+                    || name.equals("assertion-signxml") || name.equals("assertion-ec384")
+                    || legacySha1;
+            List<SignedSamlMutationMatrix.Mutation> mutations = SignedSamlMutationMatrix.from(original);
+            assertEquals(19, mutations.size(), name + " mutation matrix changed");
+            assertEquals("minted-user", authenticate(original, credential), name + " OpenSAML baseline");
+            assertEquals("minted-user", SpringSamlComparatorTests.spring(original, credential)
+                    .getName(), name + " Spring baseline");
+            assertRevetsecIdentity(original, credential, legacySha1, false, name + " Revetsec baseline");
+            for (SignedSamlMutationMatrix.Mutation mutation : mutations) {
+                String label = name + ":" + mutation.name();
+                assertNotEquals(original, mutation.xml(), label + " is inert");
                 assertInstanceOf(SamlAuthenticationResult.Rejected.class,
-                        revetsec(candidate, signingCredential(fixture), false, false),
-                        fixture + " mutation " + index + " Revetsec");
+                        revetsec(mutation.xml(), credential, legacySha1, false),
+                        label + " Revetsec");
+                String openSamlIdentity = null;
+                try { openSamlIdentity = authenticate(mutation.xml(), credential); }
+                catch (Exception ignored) { }
+                assertEquals(assertionOnly && openSamlUnsignedEnvelopeAcceptances.contains(mutation.name())
+                                ? "minted-user" : null,
+                        openSamlIdentity, label + " OpenSAML");
+                String springIdentity = null;
+                try { springIdentity = SpringSamlComparatorTests.spring(mutation.xml(), credential).getName(); }
+                catch (Exception ignored) { }
+                assertEquals(assertionOnly && springUnsignedEnvelopeAcceptances.contains(mutation.name())
+                                ? "minted-user" : null,
+                        springIdentity, label + " Spring");
             }
         }
     }
@@ -459,7 +451,7 @@ final class OpenSamlSpComparatorTests {
         }
     }
 
-    private static @NonNull List<String> encryptedFixtures() {
+    static @NonNull List<String> encryptedFixtures() {
         List<String> fixtures = new ArrayList<>();
         for (String data : List.of("aes128-gcm", "aes192-gcm", "aes256-gcm"))
             for (String transport : List.of("rsa-oaep-sha256-mgf1sha256", "rsa-oaep-mgf1p"))
@@ -476,7 +468,7 @@ final class OpenSamlSpComparatorTests {
         return List.copyOf(fixtures);
     }
 
-    private static @NonNull String encryptedSigningCredential(@NonNull String name) {
+    static @NonNull String encryptedSigningCredential(@NonNull String name) {
         if (name.equals("assertion-rsa512-encrypted")) return "idp-signing-rsa-3072";
         if (name.equals("assertion-ec256-encrypted-id")) return "idp-signing-ec-p256";
         return "idp-signing-rsa-2048";
@@ -525,7 +517,7 @@ final class OpenSamlSpComparatorTests {
                 label + " Revetsec identity");
     }
 
-    private static @NonNull SamlAuthenticationResult revetsec(@NonNull String xml,
+    static @NonNull SamlAuthenticationResult revetsec(@NonNull String xml,
             @NonNull String signingKey, boolean sha1, boolean cbc) throws Exception {
         SamlServiceProvider provider = SamlServiceProvider.withEntityId(SP)
                 .assertionConsumerServiceUrl(URI.create(ACS))
@@ -669,7 +661,7 @@ final class OpenSamlSpComparatorTests {
         return count;
     }
 
-    private static @NonNull List<String> modernFixtures() {
+    static @NonNull List<String> modernFixtures() {
         List<String> fixtures = new ArrayList<>(List.of("assertion-signxml", "assertion-ec384"));
         for (String placement : List.of("response", "assertion", "both"))
             for (String algorithm : List.of("rsa-sha256", "rsa-sha384", "rsa-sha512",
@@ -679,11 +671,11 @@ final class OpenSamlSpComparatorTests {
         return List.copyOf(fixtures);
     }
 
-    private static @NonNull String fixture(@NonNull String name) throws Exception {
+    static @NonNull String fixture(@NonNull String name) throws Exception {
         return Files.readString(FIXTURES.resolve("scripted-idp/" + name + ".xml"));
     }
 
-    private static @NonNull String signingCredential(@NonNull String fixture) {
+    static @NonNull String signingCredential(@NonNull String fixture) {
         if (fixture.contains("ecdsa-sha256")) return "idp-signing-ec-p256";
         if (fixture.contains("ecdsa-sha384") || fixture.equals("assertion-ec384"))
             return "idp-signing-ec-p384";
@@ -693,7 +685,7 @@ final class OpenSamlSpComparatorTests {
         return "idp-signing-rsa-2048";
     }
 
-    private static @NonNull String section(@NonNull String xml, @NonNull String opening,
+    static @NonNull String section(@NonNull String xml, @NonNull String opening,
             @NonNull String closing) {
         int start = xml.indexOf(opening);
         int end = xml.indexOf(closing, start);
@@ -701,7 +693,7 @@ final class OpenSamlSpComparatorTests {
         return xml.substring(start, end + closing.length());
     }
 
-    private static @NonNull String id(@NonNull String xml, @NonNull String element) {
+    static @NonNull String id(@NonNull String xml, @NonNull String element) {
         Matcher matcher = Pattern.compile("<" + element + "\\b[^>]*\\bID=\"([^\"]+)\"")
                 .matcher(xml);
         assertTrue(matcher.find(), "fixture ID missing: " + element);

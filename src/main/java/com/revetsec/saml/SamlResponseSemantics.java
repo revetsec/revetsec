@@ -18,6 +18,7 @@ package com.revetsec.saml;
 
 import com.revetsec.internal.xml.EnvelopedSignatureVerifier;
 import com.revetsec.internal.xml.SamlResponseStructure;
+import com.revetsec.internal.xml.XmlNcName;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 import org.w3c.dom.Element;
@@ -172,7 +173,8 @@ final class SamlResponseSemantics {
         SamlResponseStructure.Shape shape = signed.shape();
         Element response = shape.getResponse();
         Element assertion = shape.getAssertion();
-        if (assertion == null || !sameNode(assertion.getParentNode(), response))
+        if (!validResponseEnvelope(response) || assertion == null
+                || !sameNode(assertion.getParentNode(), response))
             return new Rejected(Reason.ASSERTION_SHAPE);
         EnvelopedSignatureVerifier.Verified responseProof = signed.response();
         EnvelopedSignatureVerifier.Verified assertionProof = signed.assertion();
@@ -212,7 +214,8 @@ final class SamlResponseSemantics {
         }
 
         String assertionId = assertion.getAttributeNS(null, "ID");
-        if (assertionId.isEmpty() || assertionId.length() > 256) return new Rejected(Reason.ASSERTION_SHAPE);
+        if (assertionId.length() > 256 || !XmlNcName.valid(assertionId))
+            return new Rejected(Reason.ASSERTION_SHAPE);
         SubjectCheck subject = inspectSubject(assertion);
         if (subject == null) return new Rejected(Reason.SUBJECT);
         Instant bearerEnd = validBearerEnd(subject.confirmations(), subject.nameId(), expected, now);
@@ -266,10 +269,38 @@ final class SamlResponseSemantics {
                 && (format.isEmpty() || ENTITY_FORMAT.equals(format)) && expected.equals(value);
     }
 
+    static boolean validResponseEnvelope(@NonNull Element response) {
+        return scalarDeclarationAllowed(response, PROTOCOL, "ResponseType")
+                && !hasNonWhitespaceDirectText(response);
+    }
+
     private static boolean successStatus(@NonNull Element status) {
-        Element code = unique(status, PROTOCOL, "StatusCode");
-        return code != null && children(code).isEmpty()
-                && SUCCESS.equals(code.getAttributeNS(null, "Value"));
+        return SUCCESS.equals(flatStatusCode(status));
+    }
+
+    static @Nullable String flatStatusCode(@NonNull Element status) {
+        if (!scalarDeclarationAllowed(status, PROTOCOL, "StatusType")
+                || hasNonWhitespaceDirectText(status)) return null;
+        int phase = 0;
+        String value = null;
+        for (Element child : children(status)) {
+            if (phase == 0 && is(child, PROTOCOL, "StatusCode")) {
+                if (!scalarDeclarationAllowed(child, PROTOCOL, "StatusCodeType")
+                        || !children(child).isEmpty() || hasNonWhitespaceDirectText(child)) return null;
+                value = child.getAttributeNS(null, "Value");
+                if (value.isEmpty()) return null;
+                phase = 1;
+            } else if (phase == 1 && is(child, PROTOCOL, "StatusMessage")) {
+                if (!scalarDeclarationAllowed(child, XSD, "string")
+                        || !children(child).isEmpty()) return null;
+                phase = 2;
+            } else if ((phase == 1 || phase == 2) && is(child, PROTOCOL, "StatusDetail")) {
+                if (!scalarDeclarationAllowed(child, PROTOCOL, "StatusDetailType")
+                        || hasNonWhitespaceDirectText(child)) return null;
+                phase = 3;
+            } else return null;
+        }
+        return value;
     }
 
     private static boolean validIssueInstant(@NonNull Instant issued, @NonNull Instant ageEnd,
@@ -300,16 +331,22 @@ final class SamlResponseSemantics {
         if (!scalarDeclarationAllowed(nameId, ASSERTION, "NameIDType")) return null;
         String value = leaf(nameId);
         if (value == null || value.isEmpty() || value.length() > 4096) return null;
-        String format = optionalAttribute(nameId, "Format");
-        String nameQualifier = optionalAttribute(nameId, "NameQualifier");
-        String spNameQualifier = optionalAttribute(nameId, "SPNameQualifier");
-        if (tooLong(format) || tooLong(nameQualifier) || tooLong(spNameQualifier)) return null;
-        return new SamlNameId(value, format, nameQualifier, spNameQualifier);
+        String format = nameIdAttribute(nameId, "Format");
+        String nameQualifier = nameIdAttribute(nameId, "NameQualifier");
+        String spNameQualifier = nameIdAttribute(nameId, "SPNameQualifier");
+        String spProvidedId = nameIdAttribute(nameId, "SPProvidedID");
+        if (tooLong(format) || tooLong(nameQualifier) || tooLong(spNameQualifier)
+                || tooLong(spProvidedId)) return null;
+        return new SamlNameId(value, format, nameQualifier, spNameQualifier, spProvidedId);
     }
 
     private static @Nullable String optionalAttribute(@NonNull Element element, @NonNull String name) {
         String value = element.getAttributeNS(null, name);
         return value.isEmpty() ? null : value;
+    }
+
+    private static @Nullable String nameIdAttribute(@NonNull Element element, @NonNull String name) {
+        return element.hasAttributeNS(null, name) ? element.getAttributeNS(null, name) : null;
     }
 
     private static boolean tooLong(@Nullable String value) { return value != null && value.length() > 2048; }
@@ -368,7 +405,8 @@ final class SamlResponseSemantics {
         return left.getValue().equals(right.getValue())
                 && java.util.Objects.equals(left.rawFormat(), right.rawFormat())
                 && java.util.Objects.equals(left.rawNameQualifier(), right.rawNameQualifier())
-                && java.util.Objects.equals(left.rawSpNameQualifier(), right.rawSpNameQualifier());
+                && java.util.Objects.equals(left.rawSpNameQualifier(), right.rawSpNameQualifier())
+                && java.util.Objects.equals(left.rawSpProvidedId(), right.rawSpProvidedId());
     }
 
     private static @Nullable ConditionsCheck inspectConditions(@NonNull Element assertion,
@@ -454,49 +492,52 @@ final class SamlResponseSemantics {
             boolean localitySeen = false;
             for (Element statementChild : children(child)) {
                 if (is(statementChild, ASSERTION, "SubjectLocality")) {
-                    if (localitySeen || context != null || !children(statementChild).isEmpty()) return null;
+                    if (localitySeen || context != null
+                            || !scalarDeclarationAllowed(statementChild, ASSERTION, "SubjectLocalityType")
+                            || !children(statementChild).isEmpty()
+                            || hasNonWhitespaceDirectText(statementChild)) return null;
                     localitySeen = true;
                 } else if (is(statementChild, ASSERTION, "AuthnContext")) {
                     if (context != null) return null;
                     context = statementChild;
                 } else return null;
             }
+            if (context == null || !scalarDeclarationAllowed(context, ASSERTION, "AuthnContextType")
+                    || hasNonWhitespaceDirectText(context)) return null;
             String contextClassRef = null;
-            if (context != null) {
-                // The SAML 2.0 assertion schema permits ClassRef followed by one
-                // Decl/DeclRef, or a Decl/DeclRef alone, then authorities.
-                int contextPosition = 0;
-                for (Element contextChild : children(context)) {
-                    if (is(contextChild, ASSERTION, "AuthnContextClassRef")) {
-                        if (contextPosition != 0) return null;
-                        if (!scalarDeclarationAllowed(contextChild, XSD, "anyURI")) return null;
-                        contextClassRef = leaf(contextChild);
-                        if (contextClassRef == null || contextClassRef.isEmpty()
-                                || contextClassRef.length() > 2048) return null;
-                        contextPosition = 1;
-                    } else if (is(contextChild, ASSERTION, "AuthnContextDecl")
-                            || is(contextChild, ASSERTION, "AuthnContextDeclRef")) {
-                        if (contextPosition > 1) return null;
-                        if (is(contextChild, ASSERTION, "AuthnContextDeclRef")) {
-                            if (!scalarDeclarationAllowed(contextChild, XSD, "anyURI")) return null;
-                            String value = leaf(contextChild);
-                            if (value == null || value.isEmpty() || value.length() > 2048)
-                                return null;
-                        }
-                        contextPosition = 2;
-                    } else if (is(contextChild, ASSERTION, "AuthenticatingAuthority")) {
-                        if (contextPosition == 0) return null;
+            // The SAML 2.0 assertion schema permits ClassRef followed by one
+            // Decl/DeclRef, or a Decl/DeclRef alone, then authorities.
+            int contextPosition = 0;
+            for (Element contextChild : children(context)) {
+                if (is(contextChild, ASSERTION, "AuthnContextClassRef")) {
+                    if (contextPosition != 0) return null;
+                    if (!scalarDeclarationAllowed(contextChild, XSD, "anyURI")) return null;
+                    contextClassRef = leaf(contextChild);
+                    if (contextClassRef == null || contextClassRef.isEmpty()
+                            || contextClassRef.length() > 2048) return null;
+                    contextPosition = 1;
+                } else if (is(contextChild, ASSERTION, "AuthnContextDecl")
+                        || is(contextChild, ASSERTION, "AuthnContextDeclRef")) {
+                    if (contextPosition > 1) return null;
+                    if (is(contextChild, ASSERTION, "AuthnContextDeclRef")) {
                         if (!scalarDeclarationAllowed(contextChild, XSD, "anyURI")) return null;
                         String value = leaf(contextChild);
                         if (value == null || value.isEmpty() || value.length() > 2048)
                             return null;
-                        contextPosition = 3;
-                    } else {
-                        return null;
                     }
+                    contextPosition = 2;
+                } else if (is(contextChild, ASSERTION, "AuthenticatingAuthority")) {
+                    if (contextPosition == 0) return null;
+                    if (!scalarDeclarationAllowed(contextChild, XSD, "anyURI")) return null;
+                    String value = leaf(contextChild);
+                    if (value == null || value.isEmpty() || value.length() > 2048)
+                        return null;
+                    contextPosition = 3;
+                } else {
+                    return null;
                 }
-                if (contextPosition == 0) return null;
             }
+            if (contextPosition == 0) return null;
             checked = new AuthenticationCheck(instant, sessionIndex, sessionEnd, contextClassRef);
         }
         return checked;
@@ -611,7 +652,7 @@ final class SamlResponseSemantics {
         return scalarDeclarationAllowed(value, XSD, "string");
     }
 
-    private static boolean scalarDeclarationAllowed(@NonNull Element element,
+    static boolean scalarDeclarationAllowed(@NonNull Element element,
             @NonNull String typeNamespace, @NonNull String typeLocalName) {
         if (element.hasAttributeNS(XSI, "nil")) {
             String nil = element.getAttributeNS(XSI, "nil");
@@ -703,8 +744,15 @@ final class SamlResponseSemantics {
 
     private static boolean hasNonWhitespaceDirectText(@NonNull Element element) {
         for (Node node = element.getFirstChild(); node != null; node = node.getNextSibling()) {
-            if ((node.getNodeType() == Node.TEXT_NODE || node.getNodeType() == Node.CDATA_SECTION_NODE)
-                    && !node.getNodeValue().isBlank()) return true;
+            if (node.getNodeType() != Node.TEXT_NODE && node.getNodeType() != Node.CDATA_SECTION_NODE)
+                continue;
+            String value = node.getNodeValue();
+            if (value == null) return true;
+            for (int index = 0; index < value.length(); index++) {
+                char character = value.charAt(index);
+                if (character != ' ' && character != '\t' && character != '\r' && character != '\n')
+                    return true;
+            }
         }
         return false;
     }

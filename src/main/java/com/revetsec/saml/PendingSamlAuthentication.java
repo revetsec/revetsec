@@ -107,7 +107,7 @@ public final class PendingSamlAuthentication {
         long started = System.nanoTime();
         try {
             SamlPendingSaveResult result = store.save(browserBinding, relayState, record, expiresAt, remaining);
-            if (result == null || System.nanoTime() - started >= remaining.toNanos())
+            if (result == null || SamlPendingBudget.exhausted(started, remaining))
                 return SamlPendingSaveResult.INDETERMINATE;
             return result;
         } catch (RuntimeException exception) { return SamlPendingSaveResult.INDETERMINATE; }

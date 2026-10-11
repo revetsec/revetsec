@@ -115,14 +115,19 @@ final class SamlRedirectLogout {
             xml.writeAttribute("NameQualifier", nameId.getNameQualifier().orElseThrow());
         if (nameId.getSpNameQualifier().isPresent())
             xml.writeAttribute("SPNameQualifier", nameId.getSpNameQualifier().orElseThrow());
+        if (nameId.getSpProvidedId().isPresent())
+            xml.writeAttribute("SPProvidedID", nameId.getSpProvidedId().orElseThrow());
         xml.writeCharacters(nameId.getValue());
         xml.writeEndElement();
     }
 
-    private static @NonNull URI sign(@NonNull URI destination, @NonNull String field,
+    static @NonNull URI sign(@NonNull URI destination, @NonNull String field,
             byte @NonNull [] xml, @Nullable String relay, @NonNull PrivateKey key)
             throws GeneralSecurityException {
-        if (xml.length > 16384 || destination.getRawQuery() != null) throw new IllegalArgumentException();
+        String endpointQuery = destination.getRawQuery();
+        if (xml.length > 16384 || (endpointQuery != null
+                && (endpointQuery.isEmpty() || !SamlRedirectAuthnRequest.safeEndpointQuery(endpointQuery))))
+            throw new IllegalArgumentException();
         Deflater deflater = new Deflater(Deflater.DEFAULT_COMPRESSION, true);
         byte[] output = new byte[16384];
         int count;
@@ -140,7 +145,7 @@ final class SamlRedirectLogout {
         signer.initSign(key);
         signer.update(signed.getBytes(StandardCharsets.US_ASCII));
         String query = signed + "&Signature=" + percent(Base64.getEncoder().encodeToString(signer.sign()));
-        return URI.create(destination.toASCIIString() + "?" + query);
+        return URI.create(destination.toASCIIString() + (endpointQuery == null ? "?" : "&") + query);
     }
 
     static @NonNull String id(@NonNull SecureRandom random) {

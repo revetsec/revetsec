@@ -40,6 +40,7 @@ public final class SamlSubjectKey {
         add(encoded, nameId.getValue());
         add(encoded, nameId.rawNameQualifier());
         add(encoded, nameId.rawSpNameQualifier());
+        if (nameId.rawSpProvidedId() != null) add(encoded, nameId.rawSpProvidedId());
         return new SamlSubjectKey(encoded.toString());
     }
 

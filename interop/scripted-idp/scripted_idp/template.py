@@ -31,7 +31,9 @@ from . import selftest as x
 
 
 MAX_XML = 256 * 1024
-KEY_NAMES = frozenset(name for name, _, _ in mint.SIGNATURES.values())
+KEY_NAMES = frozenset(name for name, _, _ in mint.SIGNATURES.values()) | {
+    "shibboleth-capture",
+}
 ORACLE_KEY_ENV = "SCRIPTED_IDP_ORACLE_DECRYPTION_KEY"
 
 

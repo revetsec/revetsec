@@ -50,7 +50,8 @@ public final class SamlResponseStructure {
         requireNonNull(document);
         Element root = document.getDocumentElement();
         if (root == null || !is(root, PROTOCOL, "Response") || !"2.0".equals(root.getAttribute("Version"))
-                || root.getAttributeNS(null, "ID").isEmpty() || root.getAttributeNS(null, "IssueInstant").isEmpty())
+                || !XmlNcName.valid(root.getAttributeNS(null, "ID"))
+                || root.getAttributeNS(null, "IssueInstant").isEmpty())
             return Rejected.INSTANCE;
         Element issuer = null;
         Element responseSignature = null;

@@ -1,0 +1,17 @@
+{
+  "image": "i2incommon/shib-idp:5.2.3_20260824_rocky10_multiarch",
+  "digest": "sha256:bb6bbf1cfe935d20cb2d312e121fc6540cd367d18eee40ea263592c873efc7e5",
+  "files": {
+    "cbc-pending.txt": "21c68453337e70fdc20aa54953a396e247061974714e43039b3a53e143592e55",
+    "cbc-redirect-url.txt": "aaa2b3607f093b55e030ccc58248a83dfc581ac96900c7dc247118e41b0b0303",
+    "cbc-request.xml": "f4b87da9ad6d52c9f14f088f78d6f4403bf0a931aadd420fd4a623bb1d566f60",
+    "cbc-response.xml": "fc37502311c060ee066b55fa13df17109bc331799d5e18bd72d96b7fcb72c465",
+    "cbc-sp-metadata.xml": "7a0541d7d016f2478ec858a00694339a023cd9d5796addf5801cdd3d415ea992",
+    "gcm-pending.txt": "03fc9a08b1e09b9130093ce32b83545125bd555f1758329696222f9c6d2946a7",
+    "gcm-redirect-url.txt": "6221fc8d18c989354087d99e8d3d80c340036264db1915d3040346eb8e638cbb",
+    "gcm-request.xml": "031381de7b67ddfb392f3df1495c5d667744cae6fd854ca7b8351ddb63e6948f",
+    "gcm-response.xml": "11558063a72720f542d6581939027f38d14327462e41b6f2359bc352c3fde666",
+    "gcm-sp-metadata.xml": "c6a1d0cc3125304059f856c7cb63ac681e5c5387e3dfa14ebc25574b5b09b86f",
+    "idp-signing.crt": "795367b4a5883dd6ae539d911c72c813e84d75f29c903f0be78d338947fcbb03"
+  }
+}

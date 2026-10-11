@@ -92,7 +92,7 @@ public final class PendingSamlLogoutSource {
             long started = System.nanoTime();
             try { consumed = store.consume(Objects.requireNonNull(browserBinding), relay, budget); }
             catch (RuntimeException exception) { return Indeterminate.INSTANCE; }
-            if (consumed == null || System.nanoTime() - started >= budget.toNanos())
+            if (consumed == null || SamlPendingBudget.exhausted(started, budget))
                 return Indeterminate.INSTANCE;
             if (consumed instanceof SamlPendingConsumeResult.Missing) return Rejected.INSTANCE;
             if (consumed instanceof SamlPendingConsumeResult.Unavailable) return Unavailable.INSTANCE;

@@ -95,6 +95,18 @@ decryption key remain in the fixture tree. The four targets have curated seeds u
 `com/revetsec/saml/SamlFuzzTestsInputs`, including an accepted binding and metadata document and
 all fixture/mutation selections. They use no network service.
 
+The metadata corpus also includes `certificate-size-limit.xml`, a valid IdP
+descriptor with the certificate-only 24,576-byte DER fixture (exactly 32,768
+Base64 characters). The accepted-result oracle checks certificate count/size,
+entity ID and scope bounds, and HTTPS endpoint host, user-info and fragment
+constraints.
+
+`SamlLogoutFuzzTests` selects from the 23 Python-signed Redirect logout queries, then
+tries unchanged, equivalent RelayState encoding, duplicate SigAlg and a changed signed
+octet. Only the unchanged valid request may release the fixed NameID/SessionIndex;
+only the unchanged valid response may complete the sealed pending logout. All other
+cases must reject. The target uses a fresh replay cache for each trial and no network.
+
 The M4 semantic seeds under `com/revetsec/oidc/OidcFuzzTestsInputs` use test-only values and a fixed
 2026-09-30 clock. `oidc-seeds.sha256` inventories every authored seed and is checked by
 `FuzzSeedProvenanceTests`. All four targets also receive the two core JSON corpora through Maven

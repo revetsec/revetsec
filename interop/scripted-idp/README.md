@@ -59,19 +59,28 @@ independent oracle outcomes.
 
 `GET /metadata?now=<UTC>&variant=<name>` offers `default`, `rollover` (two signing
 certificates), `aggregate` (entity selection), `expired`, `scopes` (one literal and one
-ignored regexp scope), `no-slo`, `signed`, and `aggregate-signed`. The Java interop test
-parses every variant and pins the signing key for both signed forms.
+ignored regexp scope), `no-slo`, `signed`, `aggregate-signed`, and `query-endpoints`.
+The last variant puts the fixed `tenant=one` field on both SSO bindings and the SLO
+endpoint; the partner strips only that exact prefix before verifying the SAML binding
+octets and checks the full queryful XML Destination. The Java interop test exercises
+all three browser flows and pins the signing key for both signed metadata forms.
 
 `PUT /control/sps` optionally accepts `metadata_xml`. The partner validates it offline
 against the official SAML metadata XSD and checks its entity, ACS and SLO locations
 against the registration. `/sso` checks every inbound AuthnRequest against the official
-protocol XSD before accepting it. `GET /control/received` records `schema_valid:true`
-for these checks. Vendored source URLs and hashes are in `schemas/SOURCES.md`.
+protocol XSD before accepting it. `/slo` checks signed SP LogoutRequests and
+LogoutResponses against the same protocol XSD before accepting them. `GET
+/control/received` records `schema_valid:true` for these checks. Vendored source
+URLs and hashes are in `schemas/SOURCES.md`.
 `POST /control/logout-sign` signs supplied LogoutRequest or LogoutResponse XML
 over the exact HTTP-Redirect query octets for hostile SP acceptance tests. It is
 a test control, not an application logout endpoint.
 `mint_slo_corpus.py` uses the same pinned signer and fixed test key to regenerate
-the 14 offline Redirect queries compared with OpenSAML in `differential/`.
+the 23 offline Redirect queries compared with OpenSAML in `differential/`. The nine
+additional signed shape cases pin element order, nilled identity/status fields,
+unexpected text and a nested failure beneath an outer Success. The generator
+checks the malformed shapes against the vendored OASIS protocol XSD; the nested
+status is schema-valid but outside Revetsec's documented SLO profile.
 `mint_signed_structure_corpus.py` signs one clean and 14 deliberately ambiguous
 Response templates, then verifies each with the libxmlsec oracle. The checked-in
 fixtures live in `src/test/resources/fixtures/scripted-idp/signed-structure/`.

@@ -22,14 +22,44 @@ import com.soklet.ResponseCookie;
 import com.soklet.SokletSimulator;
 import java.io.IOException;
 import java.net.http.HttpClient;
+import java.net.URI;
+import java.net.URLDecoder;
+import java.net.URLEncoder;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.security.KeyFactory;
+import java.security.PrivateKey;
+import java.security.Signature;
+import java.security.spec.PKCS8EncodedKeySpec;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.Base64;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import java.util.zip.Deflater;
+import java.util.zip.Inflater;
+import javax.xml.crypto.dsig.CanonicalizationMethod;
+import javax.xml.crypto.dsig.DigestMethod;
+import javax.xml.crypto.dsig.Reference;
+import javax.xml.crypto.dsig.SignatureMethod;
+import javax.xml.crypto.dsig.Transform;
+import javax.xml.crypto.dsig.XMLSignatureFactory;
+import javax.xml.crypto.dsig.dom.DOMSignContext;
+import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.transform.OutputKeys;
+import javax.xml.transform.Transformer;
+import javax.xml.transform.TransformerFactory;
+import javax.xml.transform.dom.DOMSource;
+import javax.xml.transform.stream.StreamResult;
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
+import org.w3c.dom.Node;
 import org.jspecify.annotations.NonNull;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -150,6 +180,167 @@ final class PlaygroundSamlTests {
                     .getResponse().orElseThrow();
             assertEquals(400, rejected.getStatusCode());
         });
+    }
+
+    @Test void verifiedLogoutWithAnotherSessionIndexDoesNotEndTheBrowserSession() throws Exception {
+        Fixture fixture = fixture();
+        BrowserSessions.Session initial = fixture.sessions.begin();
+        Response begun = fixture.resources.samlBegin(form("/saml/begin", initial, "csrf=" + initial.csrf));
+        assertEquals(302, begun.getStatusCode());
+        String requestId = outboundRequestId(begun.getHeaders().get("Location").get(0));
+        ResponseCookie pendingCookie = begun.getCookies().get(0);
+        String assertion = "<a:Assertion ID='_playground-assertion' Version='2.0' "
+                + "IssueInstant='2026-10-10T00:00:00Z'>"
+                + "<a:Issuer>https://idp.example.test/</a:Issuer>"
+                + "<a:Subject><a:NameID Format='urn:oasis:names:tc:SAML:2.0:nameid-format:persistent' "
+                + "NameQualifier='https://idp.example.test/'>alice</a:NameID>"
+                + "<a:SubjectConfirmation Method='urn:oasis:names:tc:SAML:2.0:cm:bearer'>"
+                + "<a:SubjectConfirmationData Recipient='https://localhost:8443/saml/acs' "
+                + "InResponseTo='" + requestId + "' NotOnOrAfter='2026-10-10T00:05:00Z'/>"
+                + "</a:SubjectConfirmation></a:Subject>"
+                + "<a:Conditions NotBefore='2026-10-09T23:59:00Z' NotOnOrAfter='2026-10-10T00:05:00Z'>"
+                + "<a:AudienceRestriction><a:Audience>https://localhost:8443/saml/metadata</a:Audience>"
+                + "</a:AudienceRestriction></a:Conditions>"
+                + "<a:AuthnStatement AuthnInstant='2026-10-10T00:00:00Z' SessionIndex='session-123'>"
+                + "<a:AuthnContext><a:AuthnContextClassRef>urn:example:password"
+                + "</a:AuthnContextClassRef></a:AuthnContext></a:AuthnStatement>"
+                + "</a:Assertion>";
+        String responseXml = "<p:Response xmlns:p='urn:oasis:names:tc:SAML:2.0:protocol' "
+                + "xmlns:a='urn:oasis:names:tc:SAML:2.0:assertion' "
+                + "ID='_playground-response' Version='2.0' IssueInstant='2026-10-10T00:00:00Z' "
+                + "Destination='https://localhost:8443/saml/acs' InResponseTo='" + requestId + "'>"
+                + "<a:Issuer>https://idp.example.test/</a:Issuer>"
+                + "<p:Status><p:StatusCode Value='urn:oasis:names:tc:SAML:2.0:status:Success'/></p:Status>"
+                + assertion + "</p:Response>";
+        String signed = signedResponse(responseXml, idpPrivateKey());
+        String formBody = "SAMLResponse=" + URLEncoder.encode(
+                Base64.getEncoder().encodeToString(signed.getBytes(StandardCharsets.UTF_8)),
+                StandardCharsets.UTF_8) + "&RelayState="
+                + URLEncoder.encode(outboundRelayState(begun.getHeaders().get("Location").get(0)),
+                        StandardCharsets.UTF_8);
+        Request callback = Request.withPath(HttpMethod.POST, "/saml/acs")
+                .headers(Map.of("Host", List.of("localhost:8443"),
+                        "Origin", List.of("https://idp.example.test"),
+                        "Cookie", List.of(BrowserSessions.COOKIE + "=" + initial.id + "; "
+                                + pendingCookie.getName() + "=" + pendingCookie.getValue().orElseThrow()),
+                        "Content-Type", List.of("application/x-www-form-urlencoded")))
+                .body(formBody.getBytes(StandardCharsets.US_ASCII)).build();
+        Response completed = fixture.resources.samlAcs(callback);
+        assertEquals(302, completed.getStatusCode());
+        ResponseCookie browserCookie = completed.getCookies().stream()
+                .filter(cookie -> cookie.getName().equals(BrowserSessions.COOKIE)).findFirst().orElseThrow();
+        BrowserSessions.Session loggedIn = fixture.sessions.find(Request.withPath(HttpMethod.GET, "/")
+                .headers(Map.of("Cookie", List.of(BrowserSessions.COOKIE + "="
+                        + browserCookie.getValue().orElseThrow()))).build()).orElseThrow();
+        assertNotNull(loggedIn.identity);
+        assertEquals("session-123", loggedIn.samlReference.getSessionIndex().orElseThrow());
+
+        Response unmatched = fixture.resources.samlLogoutCallback(signedLogoutRequest(
+                "_unmatched-playground-logout", "session-other", idpPrivateKey()));
+        assertEquals(302, unmatched.getStatusCode());
+        assertNotNull(loggedIn.identity);
+        assertNotNull(loggedIn.samlReference);
+
+        Response matched = fixture.resources.samlLogoutCallback(signedLogoutRequest(
+                "_matched-playground-logout", "session-123", idpPrivateKey()));
+        assertEquals(302, matched.getStatusCode());
+        assertNull(loggedIn.identity);
+        assertNull(loggedIn.samlReference);
+    }
+
+    private static @NonNull String outboundRequestId(@NonNull String redirect) throws Exception {
+        String query = URI.create(redirect).getRawQuery();
+        String encoded = query.substring("SAMLRequest=".length(), query.indexOf('&'));
+        byte[] compressed = Base64.getDecoder().decode(URLDecoder.decode(encoded, StandardCharsets.UTF_8));
+        Inflater inflater = new Inflater(true);
+        try {
+            inflater.setInput(compressed);
+            byte[] output = new byte[16_384];
+            int length = inflater.inflate(output);
+            assertTrue(inflater.finished());
+            Matcher matcher = Pattern.compile("\\bID=\"([^\"]+)\"").matcher(
+                    new String(output, 0, length, StandardCharsets.UTF_8));
+            assertTrue(matcher.find());
+            return matcher.group(1);
+        } finally { inflater.end(); }
+    }
+
+    private static @NonNull String outboundRelayState(@NonNull String redirect) {
+        String query = URI.create(redirect).getRawQuery();
+        String field = query.substring(query.indexOf("&RelayState=") + "&RelayState=".length());
+        int end = field.indexOf('&');
+        return URLDecoder.decode(end < 0 ? field : field.substring(0, end), StandardCharsets.UTF_8);
+    }
+
+    private static @NonNull PrivateKey idpPrivateKey() throws Exception {
+        String pem = resource("idp-signing-rsa-2048-key.pem");
+        String encoded = pem.replace("-----BEGIN PRIVATE KEY-----", "")
+                .replace("-----END PRIVATE KEY-----", "").replaceAll("\\s", "");
+        return KeyFactory.getInstance("RSA").generatePrivate(new PKCS8EncodedKeySpec(
+                Base64.getDecoder().decode(encoded)));
+    }
+
+    private static @NonNull String signedResponse(@NonNull String xml, @NonNull PrivateKey key) throws Exception {
+        DocumentBuilderFactory parser = DocumentBuilderFactory.newDefaultInstance();
+        parser.setNamespaceAware(true);
+        parser.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+        Document document = parser.newDocumentBuilder().parse(new ByteArrayInputStream(
+                xml.getBytes(StandardCharsets.UTF_8)));
+        Element root = document.getDocumentElement();
+        root.setIdAttributeNS(null, "ID", true);
+        XMLSignatureFactory factory = XMLSignatureFactory.getInstance("DOM", "XMLDSig");
+        Reference reference = factory.newReference("#" + root.getAttribute("ID"),
+                factory.newDigestMethod(DigestMethod.SHA256, null),
+                List.of(factory.newTransform(Transform.ENVELOPED,
+                                (javax.xml.crypto.dsig.spec.TransformParameterSpec) null),
+                        factory.newTransform(CanonicalizationMethod.EXCLUSIVE,
+                                (javax.xml.crypto.dsig.spec.TransformParameterSpec) null)), null, null);
+        var signedInfo = factory.newSignedInfo(factory.newCanonicalizationMethod(
+                        CanonicalizationMethod.EXCLUSIVE,
+                        (javax.xml.crypto.dsig.spec.C14NMethodParameterSpec) null),
+                factory.newSignatureMethod(SignatureMethod.RSA_SHA256, null), List.of(reference));
+        DOMSignContext context = new DOMSignContext(key, root);
+        context.setDefaultNamespacePrefix("ds");
+        Node afterIssuer = root.getFirstChild().getNextSibling();
+        if (afterIssuer != null) context.setNextSibling(afterIssuer);
+        factory.newXMLSignature(signedInfo, null).sign(context);
+        Transformer writer = TransformerFactory.newDefaultInstance().newTransformer();
+        writer.setOutputProperty(OutputKeys.OMIT_XML_DECLARATION, "yes");
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+        writer.transform(new DOMSource(document), new StreamResult(bytes));
+        return bytes.toString(StandardCharsets.UTF_8);
+    }
+
+    private static @NonNull Request signedLogoutRequest(@NonNull String id, @NonNull String sessionIndex,
+            @NonNull PrivateKey key) throws Exception {
+        String xml = "<p:LogoutRequest xmlns:p='urn:oasis:names:tc:SAML:2.0:protocol' "
+                + "xmlns:a='urn:oasis:names:tc:SAML:2.0:assertion' ID='" + id + "' Version='2.0' "
+                + "IssueInstant='2026-10-10T00:00:00Z' Destination='https://localhost:8443/saml/slo'>"
+                + "<a:Issuer>https://idp.example.test/</a:Issuer>"
+                + "<a:NameID Format='urn:oasis:names:tc:SAML:2.0:nameid-format:persistent' "
+                + "NameQualifier='https://idp.example.test/'>alice</a:NameID>"
+                + "<p:SessionIndex>" + sessionIndex + "</p:SessionIndex></p:LogoutRequest>";
+        Deflater compressor = new Deflater(Deflater.DEFAULT_COMPRESSION, true);
+        byte[] compressed = new byte[8192];
+        int length;
+        try {
+            compressor.setInput(xml.getBytes(StandardCharsets.UTF_8));
+            compressor.finish();
+            length = compressor.deflate(compressed);
+            assertTrue(compressor.finished());
+        } finally { compressor.end(); }
+        String signed = "SAMLRequest=" + URLEncoder.encode(Base64.getEncoder().encodeToString(
+                java.util.Arrays.copyOf(compressed, length)), StandardCharsets.UTF_8)
+                + "&SigAlg=" + URLEncoder.encode(
+                        "http://www.w3.org/2001/04/xmldsig-more#rsa-sha256", StandardCharsets.UTF_8);
+        Signature signature = Signature.getInstance("SHA256withRSA");
+        signature.initSign(key);
+        signature.update(signed.getBytes(StandardCharsets.US_ASCII));
+        String query = signed + "&Signature=" + URLEncoder.encode(
+                Base64.getEncoder().encodeToString(signature.sign()), StandardCharsets.UTF_8);
+        return Request.withRawUrl(HttpMethod.GET, "/saml/slo?" + query)
+                .headers(Map.of("Host", List.of("localhost:8443"),
+                        "Origin", List.of("https://idp.example.test"))).build();
     }
 
     private @NonNull Fixture fixture() throws IOException {

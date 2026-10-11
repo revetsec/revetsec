@@ -19,7 +19,9 @@
 import argparse
 import pathlib
 
-from scripted_idp import slo
+from lxml import etree
+
+from scripted_idp import schema, slo
 
 
 SP = "https://sp.test/Selftest"
@@ -27,12 +29,48 @@ SLO = "https://sp.test/logout"
 IDP = "https://idp.scripted-idp.test/"
 RELAY = "AAAAAAAAAAAAAAAAAAAAAA"  # Base64url of the SP test's sixteen zero bytes.
 SP_REQUEST_ID = "_" + "00" * 20
+PROTOCOL = "urn:oasis:names:tc:SAML:2.0:protocol"
+ASSERTION = "urn:oasis:names:tc:SAML:2.0:assertion"
+XSI = "http://www.w3.org/2001/XMLSchema-instance"
 
 
 def _changed(original, replacement):
     if original == replacement:
         raise ValueError("SLO corpus mutation was inert")
     return replacement
+
+
+def _swap_children(xml, first, second):
+    root = etree.fromstring(xml.encode("utf-8"))
+    children = list(root)
+    children[first], children[second] = children[second], children[first]
+    root[:] = children
+    return etree.tostring(root, encoding="unicode")
+
+
+def _nilled(xml, namespace, local_name):
+    root = etree.fromstring(xml.encode("utf-8"))
+    target = root.find(f"{{{namespace}}}{local_name}")
+    if target is None:
+        raise ValueError(f"missing SLO fixture element: {local_name}")
+    target.set(f"{{{XSI}}}nil", "true")
+    return etree.tostring(root, encoding="unicode")
+
+
+def _root_text(xml):
+    root = etree.fromstring(xml.encode("utf-8"))
+    root.text = "attacker-text"
+    return etree.tostring(root, encoding="unicode")
+
+
+def _nested_failure(xml):
+    root = etree.fromstring(xml.encode("utf-8"))
+    code = root.find(f"{{{PROTOCOL}}}Status/{{{PROTOCOL}}}StatusCode")
+    if code is None:
+        raise ValueError("missing SLO status code")
+    etree.SubElement(code, f"{{{PROTOCOL}}}StatusCode",
+                     Value="urn:oasis:names:tc:SAML:2.0:status:Responder")
+    return etree.tostring(root, encoding="unicode")
 
 
 def main():
@@ -74,6 +112,11 @@ def main():
             "</p:LogoutRequest>", "<a:NameID>attacker</a:NameID></p:LogoutRequest>")),
         "request-unknown-extension": _changed(request_xml, request_xml.replace(
             "</p:LogoutRequest>", "<p:Extensions/></p:LogoutRequest>")),
+        "request-nameid-before-issuer": _swap_children(request_xml, 0, 1),
+        "request-session-before-nameid": _swap_children(request_xml, 1, 2),
+        "request-nilled-nameid": _nilled(request_xml, ASSERTION, "NameID"),
+        "request-nilled-session": _nilled(request_xml, PROTOCOL, "SessionIndex"),
+        "request-root-text": _root_text(request_xml),
         "response-valid": response_xml,
         "response-wrong-destination": _changed(response_xml, response_xml.replace(
             SLO, "https://sp.test/wrong-logout")),
@@ -88,7 +131,20 @@ def main():
             "status:Success'/></p:Status></p:LogoutResponse>")),
         "response-empty-status": _changed(response_xml, response_xml.replace(
             "Value='urn:oasis:names:tc:SAML:2.0:status:Success'", "Value=''")),
+        "response-status-before-issuer": _swap_children(response_xml, 0, 1),
+        "response-nilled-status": _nilled(response_xml, PROTOCOL, "Status"),
+        "response-nested-failure": _nested_failure(response_xml),
+        "response-root-text": _root_text(response_xml),
     }
+    official_schema = schema.load()["authn_request"]
+    for name in ("request-nameid-before-issuer", "request-session-before-nameid",
+                 "request-nilled-nameid", "request-nilled-session", "request-root-text",
+                 "response-status-before-issuer", "response-nilled-status", "response-root-text"):
+        if official_schema.validate(etree.fromstring(candidates[name].encode("utf-8"))):
+            raise ValueError(f"hostile SLO shape unexpectedly passes OASIS XSD: {name}")
+    if not official_schema.validate(etree.fromstring(
+            candidates["response-nested-failure"].encode("utf-8"))):
+        raise ValueError("nested SLO status should be valid XSD but rejected by the SP profile")
     lines = ["# Python cryptography RSA-SHA256 Redirect signatures from the pinned scripted IdP.",
              "# Regenerate inside its image with this script and the fixed test key directory."]
     for name, xml in candidates.items():

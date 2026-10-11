@@ -2,7 +2,8 @@
 
 This is a test-only Maven project. It compares Revetsec with two separate SAML
 service-provider paths: Spring Security 7.0.7's provider and a direct OpenSAML
-5.2.2 harness. The direct harness uses OpenSAML parsing, signature profile and
+5.2.2 harness, plus a live libxmlsec1 cryptographic oracle in the scripted IdP
+container. The direct harness uses OpenSAML parsing, signature profile and
 cryptographic validation, decryption, and native assertion validation, then checks
 the fixture's Response binding and subject identity. Those libraries are absent
 from Revetsec's published core POM and runtime classpath.
@@ -11,6 +12,7 @@ Run from the repository root with JDK 17:
 
 ```sh
 mvn -B -ntp -DskipTests -Dmaven.javadoc.skip=true install
+docker build --pull=false -t revetsec-scripted-idp:local interop/scripted-idp
 mvn -B -ntp -f differential/pom.xml verify
 ```
 
@@ -19,6 +21,48 @@ cache; it does not publish it. The comparator reads checked-in fixtures signed
 by the scripted IdP's pinned test key. The test uses a replay-only clock skew based on the
 fixture date, so its results cover signed identity and XML structure, **not**
 expiration policy.
+
+The live libxmlsec1 leg verifies the signed Response/Assertion
+matrix, rejects modified signed identities, decrypts all 47 positive GCM/CBC
+fixtures, confirms that decryptable CBC without a signed Response is rejected,
+and confirms that a valid Assertion signature inside an ambiguous unsigned
+wrapper cannot release the added identity. The container receives
+test-only keys and a pinned local TLS trust store. Its verdict is cryptographic;
+Revetsec's SP result supplies the identity and protocol-policy verdict.
+For every modern signed fixture, four additional structural mutations are
+checked against libxmlsec: an attacker Assertion sibling, an attacker
+Extensions Assertion, a changed destination, and a duplicate Status. The
+original Assertion signature remains valid when the Response was unsigned;
+the signed Response variants lose their outer signature. Revetsec rejects all
+224 mutated envelopes.
+The same libxmlsec oracle verifies the real Shibboleth 5.2.3 GCM and CBC
+Response signatures against its captured public certificate, decrypts both
+assertions, and rejects tampering of each signed Destination. Revetsec's offline
+SP tests separately check acceptance, CBC opt-in, correlation and replay.
+The SimpleSAMLphp 2.5.0 CBC captures provide another producer: libxmlsec
+verifies its signed Response, decrypts both CBC assertions, and verifies the
+signature inside the encrypted assertion of the unsigned-Response variant.
+Revetsec's offline SP tests accept the first only with CBC opt-in and reject
+the second even with that opt-in.
+The two signed Shibboleth captures and signed SimpleSAMLphp capture each also
+receive five envelope attacks: a plaintext attacker Assertion sibling, an
+attacker Assertion in Extensions, a second encrypted carrier, a second Status,
+and a changed Destination. The independent libxmlsec oracle rejects all 15
+changed Response signatures. The offline Revetsec SP tests reject the same 15
+documents and then accept each untouched capture through the same pending
+authentication and replay state. This is real-producer envelope coverage, not
+the full RC-2 cross-product or an independent SP comparison for these captures.
+An additional six real-provider ciphertext probes flip one Base64 character in
+the wrapped key or encrypted data of each signed capture. libxmlsec rejects both
+GCM decryptions and finds every changed outer Response signature invalid. CBC
+decryption can either fail or produce altered plaintext; the signed Response is
+the required integrity boundary. Revetsec's offline tests reject those probes
+and nine further key, ciphertext and algorithm edits per capture.
+For the unsigned SimpleSAMLphp capture, libxmlsec can still decrypt the
+Assertion and verify its inner signature after adding a plaintext sibling,
+adding an Extensions Assertion, or changing the outer Destination. Revetsec
+rejects all three because that valid inner signature does not authorize the
+changed unsigned envelope.
 
 The 19 signed bearer/Conditions shape fixtures pin another policy boundary.
 Revetsec accepts four controls and rejects 15 malformed signed variants.
@@ -29,14 +73,22 @@ NameID that Revetsec rejects. The direct OpenSAML path rejects the valid
 OneTimeUse/ProxyRestriction control under its configured assertion-validator
 policy; Revetsec treats it as a terminal SP login.
 
-For the 56 modern-signature fixtures, all three SP paths accept the original identity and
-reject signed NameID tampering. Revetsec rejects all nine wrapper/namespace
-mutations. Spring accepts three unsigned wrapper changes in assertion-only
-responses (an extension, a second Status and a copied signature under an
-extension), but returns the original signed identity in each case. This is a
-documented policy difference, not an attacker identity release. Spring also
-accepts the legacy RSA-SHA1 fixture by default; Revetsec accepts it only when
-`SHA1_SIGNATURES` compatibility is explicitly enabled.
+For the 56 modern-signature fixtures, all three SP paths accept the original
+identity and reject signed NameID tampering. The expanded signed-envelope
+matrix runs 19 named XSW, Fragile Lock and structure mutations against those
+fixtures plus the SHA-1 compatibility fixture: 1,083 changed documents.
+Revetsec rejects every one. The direct OpenSAML path accepts only two unsigned
+Extensions changes for assertion-only signatures; Spring accepts those two
+and a duplicate Status. Every accepted result retains the original signed
+`minted-user` identity. Spring accepts the legacy RSA-SHA1 fixture by default;
+Revetsec requires explicit `SHA1_SIGNATURES` compatibility.
+
+The libxmlsec1 oracle checks the same 1,083 documents against the original
+signed target. Ten mutation types leave an assertion-only signature
+cryptographically valid while Revetsec rejects the changed envelope; no
+changed Response-signed target remains valid. Duplicate IDs and a removed
+signed Assertion fail the oracle's input selection before cryptographic
+verification. These per-mutation verdicts are pinned in the differential tests.
 
 The encrypted comparison covers 47 positive fixtures: GCM/OAEP data and key
 transport combinations, three signed CBC responses, an encrypted assertion
@@ -55,10 +107,7 @@ that the three engines enforce identical acceptance rules.
 
 The direct OpenSAML harness accepts RSA1_5, malformed MGF under mgf1p, and
 assertion-only CBC with the original signed identity. It rejects unsigned
-encrypted responses, nonempty OAEPparams and corrupted ciphertext. Across 56
-modern signed fixtures and nine wrapper/namespace mutations, its only accepted
-mutations are two unsigned Extensions changes in assertion-only responses; both
-retain the original signed identity. Revetsec rejects those changes. The harness
+encrypted responses, nonempty OAEPparams and corrupted ciphertext. The harness
 uses a fixed fixture clock for its own expiry checks; the OpenSAML assertion
 validator receives a replay-only skew, so this differential leg is not expiry
 policy evidence.
@@ -146,6 +195,8 @@ those conditions automatically. The fixtures come from
 `interop/scripted-idp/mint_slo_corpus.py` and use a deterministic test-only SP
 pending ID and RelayState.
 
-The remaining RC-2 assurance is open: the full XSW/Fragile-Lock and
-structure-aware mutation matrix, fuzz/pentest,
-calibrated review, real-product captures and the final API freeze.
+The remaining RC-2 assurance is open: extension of the full mutation
+cross-product to encrypted and real-product fixture families, manual pentest,
+calibrated review, hosted Shibboleth dispatch run, other real-product rows and
+the final API freeze. The signed-envelope matrix and local fuzz campaigns do
+not replace those gates.
