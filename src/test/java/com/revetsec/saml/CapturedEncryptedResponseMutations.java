@@ -17,6 +17,7 @@ package com.revetsec.saml;
 
 import org.jspecify.annotations.NonNull;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /** Envelope attacks applied to independently captured, encrypted provider responses. */
@@ -42,15 +43,73 @@ final class CapturedEncryptedResponseMutations {
         String duplicateStatus = status + "<" + protocolPrefix + ":StatusCode "
                 + "Value='urn:oasis:names:tc:SAML:2.0:status:Success'/></"
                 + protocolPrefix + ":Status>" + status;
-        return List.of(
+        String statusEnd = "</" + protocolPrefix + ":Status>";
+        String responseStart = "<" + protocolPrefix + ":Response ";
+        String responseEnd = "</" + protocolPrefix + ":Response>";
+        String issuerStart = "<" + assertionPrefix + ":Issuer";
+        int issuerOpening = xml.indexOf(issuerStart);
+        int issuerContent = xml.indexOf('>', issuerOpening) + 1;
+        String issuerEnd = "</" + assertionPrefix + ":Issuer>";
+        int issuerClosing = xml.indexOf(issuerEnd, issuerContent);
+        if (issuerOpening < 0 || issuerContent == 0 || issuerClosing < 0)
+            throw new IllegalArgumentException("Response Issuer missing");
+        String issuer = xml.substring(issuerContent, issuerClosing);
+        String signatureStart = "<ds:Signature";
+        int signatureOpening = xml.indexOf(signatureStart);
+        int signatureClosing = xml.indexOf("</ds:Signature>", signatureOpening);
+        if ((signatureOpening < 0) != (signatureClosing < 0))
+            throw new IllegalArgumentException("Incomplete Response Signature");
+        String attackerIssuer = "<" + assertionPrefix + ":Issuer xmlns:" + assertionPrefix
+                + "='urn:oasis:names:tc:SAML:2.0:assertion'>https://attacker.example.test/</"
+                + assertionPrefix + ":Issuer>";
+        List<Mutation> mutations = new ArrayList<>(List.of(
                 new Mutation("attacker-sibling", xml.replace(carrier, attacker + carrier)),
+                new Mutation("attacker-after-carrier", xml.replace(carrier, carrier + attacker)),
+                new Mutation("attacker-sibling-end", xml.replace(responseEnd,
+                        attacker + responseEnd)),
                 new Mutation("attacker-extension", xml.replace(status,
                         "<" + protocolPrefix + ":Extensions>" + attacker + "</"
                                 + protocolPrefix + ":Extensions>" + status)),
                 new Mutation("duplicate-carrier", xml.replace(carrier, carrier + carrier)),
                 new Mutation("duplicate-status", xml.replace(status, duplicateStatus)),
+                new Mutation("duplicate-status-code", xml.replace(statusEnd,
+                        "<" + protocolPrefix + ":StatusCode Value='"
+                                + "urn:oasis:names:tc:SAML:2.0:status:Success'/>" + statusEnd)),
+                new Mutation("failure-status", xml.replace(
+                        "urn:oasis:names:tc:SAML:2.0:status:Success",
+                        "urn:oasis:names:tc:SAML:2.0:status:Responder")),
+                new Mutation("missing-status", xml.replaceFirst("(?s)<" + protocolPrefix
+                        + ":Status>.*?</" + protocolPrefix + ":Status>", "")),
+                new Mutation("missing-destination", xml.replace(
+                        "Destination=\"https://sp.example.test/acs\"", "")),
                 new Mutation("destination-tamper", xml.replace("https://sp.example.test/acs",
-                        "https://attacker.example.test/acs")));
+                        "https://attacker.example.test/acs")),
+                new Mutation("issuer-tamper", xml.replace(issuer,
+                        "https://attacker.example.test/")),
+                new Mutation("unexpected-in-response-to", xml.replaceFirst(
+                        "InResponseTo=\"[^\"]+\"", "InResponseTo=\"_attacker_request\"")),
+                new Mutation("qualified-response-id", xml.replace(responseStart,
+                        responseStart + "xmlns:attacker='https://attacker.example.test/ns' "
+                                + "attacker:ID='not-the-signed-ID' ")),
+                new Mutation("relative-namespace-sibling", xml.replace(responseStart,
+                        responseStart + "xmlns:ns='1' ").replace(carrier, attacker + carrier)),
+                new Mutation("duplicate-issuer", xml.replace(status, attackerIssuer + status)),
+                new Mutation("wrong-namespace-status", xml.replace(status,
+                        "<Status xmlns='https://attacker.example.test/ns'>")
+                        .replace(statusEnd, "</Status>"))));
+        if (signatureOpening >= 0) {
+            String signature = xml.substring(signatureOpening,
+                    signatureClosing + "</ds:Signature>".length());
+            String copiedSignature = "<" + protocolPrefix + ":Extensions>"
+                    + "<Parent xmlns='http://www.w3.org/2000/09/xmldsig#'>"
+                    + "<Child xml:xmlns='#other'>" + signature + "</Child></Parent></"
+                    + protocolPrefix + ":Extensions>";
+            mutations.add(new Mutation("copied-signature-extension", xml.replace(status,
+                    copiedSignature + status)));
+            mutations.add(new Mutation("copied-signature-direct", xml.replace(status,
+                    signature + status)));
+        }
+        return List.copyOf(mutations);
     }
 
     /** Edits real provider ciphertext and XML Encryption fields without re-signing the response. */

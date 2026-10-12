@@ -97,10 +97,13 @@ final class SimpleSamlCapturedResponseTests {
         SamlServiceProvider provider = serviceProvider(clock);
         SamlIdentityProvider idp = identityProvider(true);
         PendingSamlAuthenticationSource pending = pending(clock, snapshot);
+        List<CapturedEncryptedResponseMutations.Mutation> envelope =
+                CapturedEncryptedResponseMutations.from(original, "samlp", "saml");
+        assertEquals(19, envelope.size(), "signed captured envelope matrix");
         for (CapturedEncryptedResponseMutations.Mutation mutation :
-                Stream.concat(CapturedEncryptedResponseMutations.from(original, "samlp", "saml")
-                                .stream(), CapturedEncryptedResponseMutations.cryptographicFrom(original)
-                                .stream()).toList()) {
+                Stream.concat(envelope.stream(),
+                        CapturedEncryptedResponseMutations.cryptographicFrom(original).stream())
+                        .toList()) {
             assertNotEquals(original, mutation.xml(), mutation.name() + " must change the capture");
             assertInstanceOf(SamlAuthenticationResult.Rejected.class,
                     provider.completeAuthenticationResult(message(mutation.xml(), snapshot.get(1)),
@@ -118,10 +121,13 @@ final class SimpleSamlCapturedResponseTests {
         SamlServiceProvider provider = serviceProvider(clock);
         SamlIdentityProvider idp = identityProvider(true);
         PendingSamlAuthenticationSource pending = pending(clock, snapshot);
+        List<CapturedEncryptedResponseMutations.Mutation> envelope =
+                CapturedEncryptedResponseMutations.from(original, "samlp", "saml");
+        assertEquals(17, envelope.size(), "assertion-only captured envelope matrix");
         for (CapturedEncryptedResponseMutations.Mutation mutation :
-                Stream.concat(CapturedEncryptedResponseMutations.from(original, "samlp", "saml")
-                                .stream(), CapturedEncryptedResponseMutations.cryptographicFrom(original)
-                                .stream()).toList()) {
+                Stream.concat(envelope.stream(),
+                        CapturedEncryptedResponseMutations.cryptographicFrom(original).stream())
+                        .toList()) {
             assertNotEquals(original, mutation.xml(), mutation.name() + " must change the capture");
             assertInstanceOf(SamlAuthenticationResult.Rejected.class,
                     provider.completeAuthenticationResult(message(mutation.xml(), snapshot.get(1)),

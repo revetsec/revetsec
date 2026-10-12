@@ -39,6 +39,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.KeyStore;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Pattern;
 
@@ -239,6 +240,110 @@ final class LibxmlsecOracleComparatorTests {
                 "decryptable CBC without a signed Response must not authenticate");
     }
 
+    @Test void encryptedWrapperMatrixKeepsOracleSignatureCoverageSeparateFromSpPolicy()
+            throws Exception {
+        List<String> fixtures = OpenSamlSpComparatorTests.encryptedFixtures();
+        assertEquals(47, fixtures.size(), "encrypted fixture matrix changed");
+        int outerInvalid = 0;
+        int outerInputRejected = 0;
+        int innerValid = 0;
+        int innerInvalid = 0;
+        int innerInputRejected = 0;
+        for (String fixture : fixtures) {
+            String original = OpenSamlSpComparatorTests.fixture(fixture);
+            String credential = OpenSamlSpComparatorTests.encryptedSigningCredential(fixture);
+            boolean encryptedId = fixture.equals("assertion-ec256-encrypted-id");
+            boolean assertionOnly = fixture.endsWith("-assertion")
+                    || fixture.equals("assertion-rsa512-encrypted") || encryptedId;
+            String targetId = assertionOnly && !encryptedId ? "" : OpenSamlSpComparatorTests.id(
+                    original, encryptedId ? "saml:Assertion" : "samlp:Response");
+            if (!assertionOnly) {
+                JsonObject baseline = verify(original, targetId, credential);
+                assertTrue(baseline.findBoolean("valid").orElseThrow(), fixture + " outer baseline");
+                assertTrue(baseline.findBoolean("covers_target").orElseThrow(), fixture + " outer target");
+            } else if (encryptedId) {
+                JsonObject baseline = verify(original, targetId, credential);
+                assertTrue(baseline.findBoolean("valid").orElseThrow(), fixture + " assertion baseline");
+            }
+            List<OpenSamlSpComparatorTests.Mutation> mutations =
+                    OpenSamlSpComparatorTests.encryptedMutations(original, fixture);
+            assertEquals(19, mutations.size(), fixture + " mutation matrix changed");
+            for (OpenSamlSpComparatorTests.Mutation mutation : mutations) {
+                String label = fixture + ":" + mutation.name();
+                assertNotEquals(original, mutation.xml(), label + " is inert");
+                if (!assertionOnly) {
+                    HttpResponse<String> response = request("/control/oracle/verify",
+                            JsonObject.builder().put("clock", JsonObject.builder().put("now", NOW).build())
+                                    .put("xml", mutation.xml()).put("target_id", targetId)
+                                    .put("credential", credential).build(), "POST");
+                    if (response.statusCode() == 400) {
+                        outerInputRejected++;
+                        continue;
+                    }
+                    assertEquals(200, response.statusCode(), label + " oracle: " + response.body());
+                    JsonObject proof = assertInstanceOf(JsonObject.class, JsonCodec.parse(
+                            response.body().getBytes(StandardCharsets.UTF_8),
+                            JsonLimits.protocolDocument(128_000)));
+                    assertFalse(proof.findBoolean("valid").orElseThrow(), label + " outer signature");
+                    outerInvalid++;
+                } else if (encryptedId) {
+                    HttpResponse<String> response = request("/control/oracle/verify",
+                            JsonObject.builder().put("clock", JsonObject.builder().put("now", NOW).build())
+                                    .put("xml", mutation.xml()).put("target_id", targetId)
+                                    .put("credential", credential).build(), "POST");
+                    if (response.statusCode() == 400) {
+                        assertEquals("duplicate-carrier", mutation.name(), label + " input rejection");
+                        innerInputRejected++;
+                        continue;
+                    }
+                    assertEquals(200, response.statusCode(), label + " oracle: " + response.body());
+                    JsonObject proof = assertInstanceOf(JsonObject.class, JsonCodec.parse(
+                            response.body().getBytes(StandardCharsets.UTF_8),
+                            JsonLimits.protocolDocument(128_000)));
+                    boolean expectedValid = !mutation.name().equals("relative-namespace-sibling")
+                            && !mutation.name().equals("destination")
+                            && !mutation.name().equals("issuer-tamper");
+                    assertEquals(expectedValid, proof.findBoolean("valid").orElseThrow(),
+                            label + " inner signature");
+                    if (expectedValid)
+                        assertTrue(proof.findBoolean("covers_target").orElseThrow(), label + " target");
+                    if (expectedValid) innerValid++;
+                    else innerInvalid++;
+                } else {
+                    HttpResponse<String> response = request("/control/oracle/decrypt",
+                            JsonObject.builder().put("clock", JsonObject.builder().put("now", NOW).build())
+                                    .put("xml", mutation.xml()).build(), "POST");
+                    if (response.statusCode() == 400) {
+                        assertEquals("duplicate-carrier", mutation.name(), label + " input rejection");
+                        innerInputRejected++;
+                        continue;
+                    }
+                    assertEquals(200, response.statusCode(), label + " decrypt: " + response.body());
+                    JsonObject decrypted = assertInstanceOf(JsonObject.class, JsonCodec.parse(
+                            response.body().getBytes(StandardCharsets.UTF_8),
+                            JsonLimits.protocolDocument(128_000)));
+                    assertTrue(decrypted.findBoolean("valid").orElseThrow(), label + " ciphertext");
+                    String assertion = decrypted.findString("xml").orElseThrow();
+                    String assertionId = Pattern.compile("\\bID=\"([^\"]+)\"").matcher(assertion)
+                            .results().findFirst().orElseThrow().group(1);
+                    JsonObject proof = verify(assertion, assertionId, credential);
+                    boolean expectedValid = !mutation.name().equals("relative-namespace-sibling");
+                    assertEquals(expectedValid, proof.findBoolean("valid").orElseThrow(),
+                            label + " inner signature");
+                    if (expectedValid)
+                        assertTrue(proof.findBoolean("covers_target").orElseThrow(), label + " target");
+                    if (expectedValid) innerValid++;
+                    else innerInvalid++;
+                }
+            }
+        }
+        assertEquals(627, outerInvalid, "signed Response mutations invalidate the outer signature");
+        assertEquals(0, outerInputRejected, "all signed Response mutations reach signature verification");
+        assertEquals(236, innerValid, "unsigned outer edits can preserve the inner signature");
+        assertEquals(16, innerInvalid, "relative namespace and signed EncryptedID edits invalidate it");
+        assertEquals(14, innerInputRejected, "duplicate carriers have ambiguous oracle input");
+    }
+
     @Test void validAssertionSignatureCannotPromoteUnsignedExtensionIdentity() throws Exception {
         for (String fixture : OpenSamlSpComparatorTests.modernFixtures()) {
             if (!fixture.startsWith("matrix-assertion-")) continue;
@@ -368,7 +473,7 @@ final class LibxmlsecOracleComparatorTests {
             assertTrue(verify(xml, responseId, credential).findBoolean("valid").orElseThrow(),
                     fixture + " baseline signature");
             List<String> mutations = capturedEncryptedEnvelopeMutations(xml, protocol, assertion);
-            assertEquals(5, mutations.size(), fixture + " mutation count");
+            assertEquals(19, mutations.size(), fixture + " mutation count");
             for (int index = 0; index < mutations.size(); index++) {
                 String changed = mutations.get(index);
                 String label = fixture + " mutation " + index;
@@ -377,7 +482,6 @@ final class LibxmlsecOracleComparatorTests {
                         .put("clock", JsonObject.builder().put("now", NOW).build())
                         .put("xml", changed).put("target_id", responseId)
                         .put("credential", credential).build(), "POST");
-                if (response.statusCode() == 400) continue;
                 assertEquals(200, response.statusCode(), label + " oracle: " + response.body());
                 JsonObject proof = assertInstanceOf(JsonObject.class, JsonCodec.parse(
                         response.body().getBytes(StandardCharsets.UTF_8),
@@ -424,18 +528,30 @@ final class LibxmlsecOracleComparatorTests {
         String xml = Files.readString(FIXTURES.resolve(
                 "simplesamlphp/cbc-assertion-signed-response.xml"));
         List<String> mutations = capturedEncryptedEnvelopeMutations(xml, "samlp", "saml");
-        for (int index : List.of(0, 1, 4)) {
+        assertEquals(17, mutations.size(), "unsigned captured envelope matrix");
+        for (int index = 0; index < mutations.size(); index++) {
             String changed = mutations.get(index);
-            JsonObject decrypted = post("/control/oracle/decrypt", JsonObject.builder()
+            assertNotEquals(xml, changed, "mutation " + index + " is inert");
+            HttpResponse<String> response = request("/control/oracle/decrypt", JsonObject.builder()
                     .put("clock", JsonObject.builder().put("now", NOW).build())
-                    .put("xml", changed).build());
+                    .put("xml", changed).build(), "POST");
+            if (index == 2) {
+                assertEquals(400, response.statusCode(), "duplicate carrier is ambiguous");
+                continue;
+            }
+            assertEquals(200, response.statusCode(), "mutation " + index + " decrypt response");
+            JsonObject decrypted = assertInstanceOf(JsonObject.class, JsonCodec.parse(
+                    response.body().getBytes(StandardCharsets.UTF_8),
+                    JsonLimits.protocolDocument(128_000)));
             assertTrue(decrypted.findBoolean("valid").orElseThrow(), "mutation " + index + " decrypts");
             String assertion = decrypted.findString("xml").orElseThrow();
             String assertionId = Pattern.compile("\\bID=\"([^\"]+)\"").matcher(assertion)
                     .results().findFirst().orElseThrow().group(1);
             JsonObject proof = verify(assertion, assertionId, "idp-signing-rsa-2048");
-            assertTrue(proof.findBoolean("valid").orElseThrow(), "mutation " + index + " inner signature");
-            assertTrue(proof.findBoolean("covers_target").orElseThrow(), "mutation " + index + " target");
+            assertEquals(index != 14, proof.findBoolean("valid").orElseThrow(),
+                    "mutation " + index + " inner signature");
+            if (index != 14)
+                assertTrue(proof.findBoolean("covers_target").orElseThrow(), "mutation " + index + " target");
         }
     }
 
@@ -454,7 +570,25 @@ final class LibxmlsecOracleComparatorTests {
                 + ":Issuer><" + assertion + ":Subject><" + assertion
                 + ":NameID>attacker-user</" + assertion + ":NameID></" + assertion
                 + ":Subject></" + assertion + ":Assertion>";
-        return List.of(
+        String statusEnd = "</" + protocol + ":Status>";
+        String responseStart = "<" + protocol + ":Response ";
+        String responseEnd = "</" + protocol + ":Response>";
+        String issuerStart = "<" + assertion + ":Issuer";
+        int issuerOpening = xml.indexOf(issuerStart);
+        int issuerContent = xml.indexOf('>', issuerOpening) + 1;
+        String issuerEnd = "</" + assertion + ":Issuer>";
+        int issuerClosing = xml.indexOf(issuerEnd, issuerContent);
+        if (issuerOpening < 0 || issuerContent == 0 || issuerClosing < 0)
+            throw new IllegalArgumentException("Response Issuer missing");
+        String issuer = xml.substring(issuerContent, issuerClosing);
+        int signatureOpening = xml.indexOf("<ds:Signature");
+        int signatureClosing = xml.indexOf("</ds:Signature>", signatureOpening);
+        if ((signatureOpening < 0) != (signatureClosing < 0))
+            throw new IllegalArgumentException("Incomplete Response Signature");
+        String attackerIssuer = "<" + assertion + ":Issuer xmlns:" + assertion
+                + "='urn:oasis:names:tc:SAML:2.0:assertion'>https://attacker.example.test/</"
+                + assertion + ":Issuer>";
+        List<String> mutations = new ArrayList<>(List.of(
                 xml.replace(carrier, attacker + carrier),
                 xml.replace(status, "<" + protocol + ":Extensions>" + attacker
                         + "</" + protocol + ":Extensions>" + status),
@@ -462,7 +596,36 @@ final class LibxmlsecOracleComparatorTests {
                 xml.replace(status, status + "<" + protocol + ":StatusCode "
                         + "Value='urn:oasis:names:tc:SAML:2.0:status:Success'/></"
                         + protocol + ":Status>" + status),
-                xml.replace("https://sp.example.test/acs", "https://attacker.example.test/acs"));
+                xml.replace("https://sp.example.test/acs", "https://attacker.example.test/acs"),
+                xml.replace(carrier, carrier + attacker),
+                xml.replace(responseEnd, attacker + responseEnd),
+                xml.replace(statusEnd, "<" + protocol + ":StatusCode Value='"
+                        + "urn:oasis:names:tc:SAML:2.0:status:Success'/>" + statusEnd),
+                xml.replace("urn:oasis:names:tc:SAML:2.0:status:Success",
+                        "urn:oasis:names:tc:SAML:2.0:status:Responder"),
+                xml.replaceFirst("(?s)<" + protocol + ":Status>.*?</" + protocol + ":Status>", ""),
+                xml.replace("Destination=\"https://sp.example.test/acs\"", ""),
+                xml.replace(issuer, "https://attacker.example.test/"),
+                xml.replaceFirst("InResponseTo=\"[^\"]+\"", "InResponseTo=\"_attacker_request\""),
+                xml.replace(responseStart, responseStart
+                        + "xmlns:attacker='https://attacker.example.test/ns' "
+                        + "attacker:ID='not-the-signed-ID' "),
+                xml.replace(responseStart, responseStart + "xmlns:ns='1' ")
+                        .replace(carrier, attacker + carrier),
+                xml.replace(status, attackerIssuer + status),
+                xml.replace(status, "<Status xmlns='https://attacker.example.test/ns'>")
+                        .replace(statusEnd, "</Status>")));
+        if (signatureOpening >= 0) {
+            String signature = xml.substring(signatureOpening,
+                    signatureClosing + "</ds:Signature>".length());
+            String copiedSignature = "<" + protocol + ":Extensions>"
+                    + "<Parent xmlns='http://www.w3.org/2000/09/xmldsig#'>"
+                    + "<Child xml:xmlns='#other'>" + signature + "</Child></Parent></"
+                    + protocol + ":Extensions>";
+            mutations.add(xml.replace(status, copiedSignature + status));
+            mutations.add(xml.replace(status, signature + status));
+        }
+        return List.copyOf(mutations);
     }
 
     private static @NonNull String flipCapturedCipherValue(@NonNull String xml, int ordinal) {

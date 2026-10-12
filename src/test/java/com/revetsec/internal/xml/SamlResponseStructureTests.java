@@ -61,6 +61,14 @@ final class SamlResponseStructureTests {
                 inspect(OPEN + SUCCESS + "<a:EncryptedAssertion/>" + CLOSE));
     }
 
+    @Test void rejectsDuplicatedStatusCodesEvenOnAnErrorWithoutAssertion() {
+        String duplicated = "<p:Status><p:StatusCode "
+                + "Value='urn:oasis:names:tc:SAML:2.0:status:Responder'/>"
+                + "<p:StatusCode Value='urn:oasis:names:tc:SAML:2.0:status:Success'/>"
+                + "</p:Status>";
+        rejected(OPEN + duplicated + CLOSE);
+    }
+
     @Test void rejectsWrappedDuplicatedAndMisorderedAssertions() {
         rejected(OPEN + SUCCESS + "<p:Extensions>" + ASSERTION + "</p:Extensions>" + CLOSE);
         rejected(OPEN + SUCCESS + ASSERTION + "<a:Assertion ID='_second'/>" + CLOSE);

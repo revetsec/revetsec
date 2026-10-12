@@ -116,10 +116,13 @@ final class ShibbolethCapturedResponseTests {
             SamlServiceProvider provider = serviceProvider(clock);
             SamlIdentityProvider idp = identityProvider(mode.equals("cbc"));
             PendingSamlAuthenticationSource pending = pending(clock, snapshot);
+            List<CapturedEncryptedResponseMutations.Mutation> envelope =
+                    CapturedEncryptedResponseMutations.from(original, "saml2p", "saml2");
+            assertEquals(19, envelope.size(), mode + " captured envelope matrix");
             for (CapturedEncryptedResponseMutations.Mutation mutation :
-                    Stream.concat(CapturedEncryptedResponseMutations.from(original, "saml2p", "saml2")
-                                    .stream(), CapturedEncryptedResponseMutations.cryptographicFrom(original)
-                                    .stream()).toList()) {
+                    Stream.concat(envelope.stream(),
+                            CapturedEncryptedResponseMutations.cryptographicFrom(original).stream())
+                            .toList()) {
                 String label = mode + ":" + mutation.name();
                 assertNotEquals(original, mutation.xml(), label + " must change the capture");
                 assertInstanceOf(SamlAuthenticationResult.Rejected.class,

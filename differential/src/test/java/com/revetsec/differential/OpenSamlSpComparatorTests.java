@@ -16,10 +16,12 @@
 package com.revetsec.differential;
 
 import com.revetsec.saml.InMemorySamlReplayCache;
+import com.revetsec.saml.SamlAuthentication;
 import com.revetsec.saml.SamlAuthenticationResult;
 import com.revetsec.saml.SamlCompatibilityMode;
 import com.revetsec.saml.SamlCredential;
 import com.revetsec.saml.SamlIdentityProvider;
+import com.revetsec.saml.SamlNameId;
 import com.revetsec.saml.SamlPostBindingMessage;
 import com.revetsec.saml.SamlPostBindingParseResult;
 import com.revetsec.saml.SamlServiceProvider;
@@ -442,13 +444,6 @@ final class OpenSamlSpComparatorTests {
     }
 
     @Test void encryptedWrapperMatrixNeverReleasesAttackerIdentity() throws Exception {
-        String signedTemplate = fixture("assertion-signxml");
-        String templateAssertion = section(signedTemplate, "<saml:Assertion ", "</saml:Assertion>");
-        String attacker = Pattern.compile("<ds:Signature\\b[^>]*>.*?</ds:Signature>", Pattern.DOTALL)
-                .matcher(templateAssertion).replaceFirst("")
-                .replace("minted-user", "attacker-user")
-                .replace(id(signedTemplate, "saml:Assertion"), "_attacker_assertion");
-        String copiedSignature = section(signedTemplate, "<ds:Signature ", "</ds:Signature>");
         List<String> fixtures = encryptedFixtures();
         assertEquals(47, fixtures.size(), "encrypted fixture matrix changed");
         for (String name : fixtures) {
@@ -458,11 +453,11 @@ final class OpenSamlSpComparatorTests {
             boolean assertionOnly = name.endsWith("-assertion")
                     || name.equals("assertion-rsa512-encrypted")
                     || name.equals("assertion-ec256-encrypted-id");
-            String carrier = name.equals("assertion-ec256-encrypted-id")
-                    ? section(xml, "<saml:Assertion ", "</saml:Assertion>")
-                    : section(xml, "<saml:EncryptedAssertion>", "</saml:EncryptedAssertion>");
             assertEquals("minted-user", authenticate(xml, signingKey), name + " baseline OpenSAML");
-            assertRevetsecIdentity(xml, signingKey, false, cbc, name + " baseline");
+            SamlAuthentication baseline = assertInstanceOf(SamlAuthenticationResult.Succeeded.class,
+                    revetsec(xml, signingKey, false, cbc), name + " baseline Revetsec")
+                    .getAuthentication();
+            assertEquals("minted-user", baseline.getNameId().orElseThrow().getValue(), name);
             if (assertionOnly && !name.equals("assertion-ec256-encrypted-id"))
                 assertThrows(Exception.class,
                         () -> SpringSamlComparatorTests.spring(xml, signingKey),
@@ -470,22 +465,31 @@ final class OpenSamlSpComparatorTests {
             else
                 assertEquals("minted-user", SpringSamlComparatorTests.spring(xml, signingKey)
                         .getName(), name + " Spring baseline");
-            for (Mutation mutation : encryptedMutations(xml, carrier, attacker, copiedSignature)) {
+            for (Mutation mutation : encryptedMutations(xml, name)) {
                 String label = name + ":" + mutation.name();
                 assertNotEquals(xml, mutation.xml(), label + " is inert");
-                assertInstanceOf(SamlAuthenticationResult.Rejected.class,
-                        revetsec(mutation.xml(), signingKey, false, cbc),
-                        label + " Revetsec");
+                if (assertionOnly && mutation.name().equals("missing-destination"))
+                    assertSameAuthentication(baseline,
+                            assertInstanceOf(SamlAuthenticationResult.Succeeded.class,
+                                    revetsec(mutation.xml(), signingKey, false, cbc),
+                                    label + " Revetsec acceptance").getAuthentication(), label);
+                else
+                    assertInstanceOf(SamlAuthenticationResult.Rejected.class,
+                            revetsec(mutation.xml(), signingKey, false, cbc),
+                            label + " Revetsec");
                 boolean extension = mutation.name().equals("attacker-extension")
                         || mutation.name().equals("copied-signature-extension");
-                if (assertionOnly && extension)
+                if (assertionOnly && (extension || mutation.name().equals("duplicate-status-code")))
                     assertEquals("minted-user", authenticate(mutation.xml(), signingKey),
                             label + " OpenSAML identity");
                 else
                     assertThrows(Exception.class, () -> authenticate(mutation.xml(), signingKey),
                             label + " OpenSAML");
                 boolean springAccepts = name.equals("assertion-ec256-encrypted-id")
-                        && (extension || mutation.name().equals("duplicate-status"));
+                        && (extension || mutation.name().equals("duplicate-status")
+                                || mutation.name().equals("missing-status")
+                                || mutation.name().equals("missing-destination")
+                                || mutation.name().equals("duplicate-status-code"));
                 if (springAccepts)
                     assertEquals("minted-user", SpringSamlComparatorTests.spring(
                             mutation.xml(), signingKey).getName(), label + " Spring identity");
@@ -520,11 +524,21 @@ final class OpenSamlSpComparatorTests {
         return "idp-signing-rsa-2048";
     }
 
-    private static @NonNull List<Mutation> encryptedMutations(@NonNull String xml,
-            @NonNull String carrier, @NonNull String attacker, @NonNull String signature) {
+    static @NonNull List<Mutation> encryptedMutations(@NonNull String xml,
+            @NonNull String name) throws Exception {
+        String signedTemplate = fixture("assertion-signxml");
+        String templateAssertion = section(signedTemplate, "<saml:Assertion ", "</saml:Assertion>");
+        String attacker = Pattern.compile("<ds:Signature\\b[^>]*>.*?</ds:Signature>", Pattern.DOTALL)
+                .matcher(templateAssertion).replaceFirst("")
+                .replace("minted-user", "attacker-user")
+                .replace(id(signedTemplate, "saml:Assertion"), "_attacker_assertion");
+        String copiedSignature = section(signedTemplate, "<ds:Signature ", "</ds:Signature>");
+        String carrier = name.equals("assertion-ec256-encrypted-id")
+                ? section(xml, "<saml:Assertion ", "</saml:Assertion>")
+                : section(xml, "<saml:EncryptedAssertion>", "</saml:EncryptedAssertion>");
         String extension = "<samlp:Extensions>" + attacker + "</samlp:Extensions>";
         String copied = "<samlp:Extensions><Parent xmlns='http://www.w3.org/2000/09/xmldsig#'>"
-                + "<Child xml:xmlns='#other'>" + signature + "</Child></Parent></samlp:Extensions>";
+                + "<Child xml:xmlns='#other'>" + copiedSignature + "</Child></Parent></samlp:Extensions>";
         return List.of(
                 new Mutation("attacker-before-carrier", xml.replace(carrier, attacker + carrier)),
                 new Mutation("attacker-after-carrier", xml.replace(carrier, carrier + attacker)),
@@ -542,10 +556,78 @@ final class OpenSamlSpComparatorTests {
                 new Mutation("relative-namespace-sibling", xml.replace("<samlp:Response ",
                         "<samlp:Response xmlns:ns='1' ").replace(carrier, attacker + carrier)),
                 new Mutation("duplicate-issuer", xml.replace("<samlp:Status>",
-                        "<saml:Issuer>https://attacker.example.test/</saml:Issuer><samlp:Status>")));
+                        "<saml:Issuer>https://attacker.example.test/</saml:Issuer><samlp:Status>")),
+                new Mutation("attacker-sibling-end", xml.replace("</samlp:Response>",
+                        attacker + "</samlp:Response>")),
+                new Mutation("issuer-tamper", xml.replace(IDP, "https://attacker.example.test/")),
+                new Mutation("failure-status", xml.replace(StatusCode.SUCCESS,
+                        "urn:oasis:names:tc:SAML:2.0:status:Responder")),
+                new Mutation("missing-status", xml.replaceFirst(
+                        "(?s)<samlp:Status>.*?</samlp:Status>", "")),
+                new Mutation("missing-destination", xml.replace("Destination=\"" + ACS + "\"", "")),
+                new Mutation("unexpected-in-response-to", xml.replace("<samlp:Response ",
+                        "<samlp:Response InResponseTo='_attacker_request' ")),
+                new Mutation("duplicate-status-code", xml.replace("</samlp:Status>",
+                        "<samlp:StatusCode Value='" + StatusCode.SUCCESS
+                                + "'/></samlp:Status>")),
+                new Mutation("copied-signature-direct", xml.replace("<samlp:Status>",
+                        copiedSignature + "<samlp:Status>")),
+                new Mutation("wrong-namespace-status", xml.replace("<samlp:Status>",
+                        "<Status xmlns='https://attacker.example.test/ns'>")
+                        .replace("</samlp:Status>", "</Status>")));
     }
 
-    private record Mutation(@NonNull String name, @NonNull String xml) { }
+    record Mutation(@NonNull String name, @NonNull String xml) { }
+
+    private static void assertSameAuthentication(@NonNull SamlAuthentication expected,
+            @NonNull SamlAuthentication actual, @NonNull String label) {
+        assertEquals(expected.getIdentityProviderConnectionId(), actual.getIdentityProviderConnectionId(), label);
+        assertEquals(expected.getIdentityProviderEntityId(), actual.getIdentityProviderEntityId(), label);
+        assertEquals(expected.getAssertionId(), actual.getAssertionId(), label);
+        assertSameNameId(expected.getNameId().orElseThrow(), actual.getNameId().orElseThrow(), label);
+        assertEquals(expected.getSubjectKey().map(key -> key.toStableString()),
+                actual.getSubjectKey().map(key -> key.toStableString()), label);
+        assertEquals(expected.getSubjectId(), actual.getSubjectId(), label);
+        assertEquals(expected.getPairwiseId(), actual.getPairwiseId(), label);
+        assertEquals(expected.getAuthnInstant(), actual.getAuthnInstant(), label);
+        assertEquals(expected.getSessionIndex(), actual.getSessionIndex(), label);
+        assertEquals(expected.getSessionNotOnOrAfter(), actual.getSessionNotOnOrAfter(), label);
+        assertEquals(expected.getAuthnContextClassRef(), actual.getAuthnContextClassRef(), label);
+        assertEquals(expected.getAssertionExpiresAt(), actual.getAssertionExpiresAt(), label);
+        assertEquals(expected.isResponseSigned(), actual.isResponseSigned(), label);
+        assertEquals(expected.isAssertionSigned(), actual.isAssertionSigned(), label);
+        assertEquals(expected.isAssertionEncrypted(), actual.isAssertionEncrypted(), label);
+        assertEquals(expected.isUnsolicited(), actual.isUnsolicited(), label);
+        assertEquals(expected.getAttributes().size(), actual.getAttributes().size(), label);
+        for (int index = 0; index < expected.getAttributes().size(); index++) {
+            var left = expected.getAttributes().get(index);
+            var right = actual.getAttributes().get(index);
+            assertEquals(left.getName(), right.getName(), label);
+            assertEquals(left.getNameFormat(), right.getNameFormat(), label);
+            assertEquals(left.getFriendlyName(), right.getFriendlyName(), label);
+            assertEquals(left.getValues(), right.getValues(), label);
+            assertEquals(left.getTypedValues().size(), right.getTypedValues().size(), label);
+            for (int value = 0; value < left.getTypedValues().size(); value++) {
+                var leftValue = left.getTypedValues().get(value);
+                var rightValue = right.getTypedValues().get(value);
+                assertEquals(leftValue.getKind(), rightValue.getKind(), label);
+                assertEquals(leftValue.getText(), rightValue.getText(), label);
+                if (leftValue.getNameId().isPresent())
+                    assertSameNameId(leftValue.getNameId().orElseThrow(),
+                            rightValue.getNameId().orElseThrow(), label);
+                else assertTrue(rightValue.getNameId().isEmpty(), label);
+            }
+        }
+    }
+
+    private static void assertSameNameId(@NonNull SamlNameId expected, @NonNull SamlNameId actual,
+            @NonNull String label) {
+        assertEquals(expected.getValue(), actual.getValue(), label);
+        assertEquals(expected.getFormat(), actual.getFormat(), label);
+        assertEquals(expected.getNameQualifier(), actual.getNameQualifier(), label);
+        assertEquals(expected.getSpNameQualifier(), actual.getSpNameQualifier(), label);
+        assertEquals(expected.getSpProvidedId(), actual.getSpProvidedId(), label);
+    }
 
     private static void comparePositive(@NonNull String name, @NonNull String credential,
             boolean cbc) throws Exception {

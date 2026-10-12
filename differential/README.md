@@ -45,24 +45,28 @@ signature inside the encrypted assertion of the unsigned-Response variant.
 Revetsec's offline SP tests accept the first only with CBC opt-in and reject
 the second even with that opt-in.
 The two signed Shibboleth captures and signed SimpleSAMLphp capture each also
-receive five envelope attacks: a plaintext attacker Assertion sibling, an
-attacker Assertion in Extensions, a second encrypted carrier, a second Status,
-and a changed Destination. The independent libxmlsec oracle rejects all 15
-changed Response signatures. The offline Revetsec SP tests reject the same 15
-documents and then accept each untouched capture through the same pending
-authentication and replay state. This is real-producer envelope coverage, not
-the full RC-2 cross-product or an independent SP comparison for these captures.
+receive 19 envelope attacks: plaintext attacker siblings and Extensions,
+copied signatures, duplicate carriers, issuer and Status changes, missing or
+changed Destination, unexpected request correlation, qualified IDs and
+relative namespaces. The independent libxmlsec oracle parses all 57 changed
+documents and finds every outer Response signature invalid. The offline
+Revetsec SP tests reject the same 57 documents and then accept each untouched
+capture through the same pending authentication and replay state. The unsigned
+SimpleSAMLphp capture receives the 17 attacks that do not require copying a
+Response signature; Revetsec rejects them all under CBC opt-in. This is
+real-producer envelope coverage, not the full RC-2 cross-product or an
+independent SP comparison for these captures.
 An additional six real-provider ciphertext probes flip one Base64 character in
 the wrapped key or encrypted data of each signed capture. libxmlsec rejects both
 GCM decryptions and finds every changed outer Response signature invalid. CBC
 decryption can either fail or produce altered plaintext; the signed Response is
 the required integrity boundary. Revetsec's offline tests reject those probes
 and nine further key, ciphertext and algorithm edits per capture.
-For the unsigned SimpleSAMLphp capture, libxmlsec can still decrypt the
-Assertion and verify its inner signature after adding a plaintext sibling,
-adding an Extensions Assertion, or changing the outer Destination. Revetsec
-rejects all three because that valid inner signature does not authorize the
-changed unsigned envelope.
+For the unsigned SimpleSAMLphp capture, libxmlsec checks all 17 applicable
+envelope edits. One duplicate-carrier case is rejected as ambiguous oracle
+input; 16 decrypt. Of those, 15 retain the valid inner signature and one
+relative-namespace edit invalidates it. Revetsec rejects all 17 because the
+inner signature does not authorize a changed unsigned envelope or unsigned CBC.
 
 The 19 signed bearer/Conditions shape fixtures pin another policy boundary.
 Revetsec accepts four controls and rejects 15 malformed signed variants.
@@ -123,16 +127,20 @@ uses a fixed fixture clock for its own expiry checks; the OpenSAML assertion
 validator receives a replay-only skew, so this differential leg is not expiry
 policy evidence.
 
-The encrypted wrapper matrix adds ten structure mutations to each of the 47
-positive encrypted fixtures: attacker siblings and Extensions, a duplicate
-encrypted carrier, destination and Status edits, qualified Response ID, copied
-signature, relative namespace and duplicate issuer. Revetsec rejects all 470
-mutated responses. Direct OpenSAML accepts two unsigned Extensions changes in
-each of 14 assertion-signed fixtures (28 acceptances); Spring accepts three
-unsigned envelope changes in the EncryptedID fixture. Every acceptance returns
-the original signed `minted-user` identity. The test pins each verdict by
-fixture and mutation, including Spring's rejection of 13 assertion-only
-encrypted baselines.
+The encrypted wrapper matrix applies 19 structure mutations to each of the 47
+positive encrypted fixtures: 893 changed documents. It covers attacker siblings
+and Extensions, duplicate carriers, status and issuer changes, missing or changed
+Destination, unexpected request correlation, copied signatures, qualified IDs,
+and relative namespaces. Revetsec rejects 879. It accepts 14 unsigned-Response
+cases with a missing Destination; every identity-bearing field and signature flag
+matches the untouched fixture. Direct OpenSAML accepts 42 unsigned-envelope
+changes and Spring accepts six in the EncryptedID fixture. Every acceptance
+retains the original signed `minted-user`. Spring still rejects 13 assertion-only
+encrypted baselines. The separate libxmlsec1 oracle pins all 893 mutations:
+627 changed signed Responses have invalid outer signatures; 236 unsigned-envelope
+edits retain a valid inner signature; 16 invalidate the inner signature; and 14
+duplicate-carrier cases fail its input selection before signature verification.
+Those cryptographic verdicts do not substitute for the whole-SP policy checks.
 
 The Docker-backed integration gate separately runs libxmlsec over three
 envelope probes for each of the same 47 fixtures. Adding an attacker Assertion

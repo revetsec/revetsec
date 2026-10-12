@@ -735,9 +735,13 @@ jobs:
                   'signedFixturesAndTamperingAgreeWithIndependentOracle',
                   'attackerSignaturesRemainValidButCannotBorrowTheTrustedKey',
                   'encryptedFixturesDecryptInIndependentOracleAndRevetsec',
+                  'encryptedWrapperMatrixKeepsOracleSignatureCoverageSeparateFromSpPolicy',
                   'validAssertionSignatureCannotPromoteUnsignedExtensionIdentity',
                   'structuralMutationsDistinguishOuterAndInnerSignatureCoverage',
                   'realShibbolethSignaturesAndCiphertextsAgreeWithLibxmlsec',
+                  'realProviderEncryptedEnvelopeAttacksInvalidateSignedResponses',
+                  'realProviderCiphertextTamperingSeparatesGcmIntegrityFromCbcSignaturePolicy',
+                  'unsignedSimpleSamlEnvelopeEditsLeaveOnlyTheInnerSignatureValid',
                   'realSimpleSamlCbcCryptographyAndSignaturePlacementAgreeWithLibxmlsec'}}
           missing = set()
           for classname, expected in required.items():

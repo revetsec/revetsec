@@ -133,6 +133,14 @@ final class SecureXmlParserTests {
                 SecureXmlParser.parse(xml, xml.length, 1, 1, 0, 1));
     }
 
+    @Test void oneByteAtTheMinimumInputBudgetReachesXmlParsing() {
+        byte[] malformed = bytes("x");
+        SecureXmlParser.Result.Rejected rejected = assertInstanceOf(
+                SecureXmlParser.Result.Rejected.class,
+                SecureXmlParser.parse(malformed, 1, 1, 1, 0, 1));
+        assertEquals(SecureXmlParser.Reason.MALFORMED, rejected.getReason());
+    }
+
     @Test void acceptsAnAttributeNameAtTheExactConfiguredLength() {
         String unprefixed = "<r abc='value'/>";
         assertInstanceOf(SecureXmlParser.Result.Accepted.class,

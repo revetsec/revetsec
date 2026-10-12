@@ -32,6 +32,30 @@ provider; single-call removal mutations do not necessarily change an admitted
 document while the other defenses are active. They remain open for an explicit
 source and fault-model disposition, not counted as assertion kills.
 
+A focused JDK 21 parser rerun on 2026-10-12 uses a one-byte malformed input at
+the minimum accepted input budget. It kills the two line-78/84 boundary mutants
+in the prior inventory. The focused `SecureXmlParser` report is 35 killed, 11
+survived and two with no coverage out of 48; the remaining survivors remove
+JAXP/SAX security configuration calls. This focused result does not update the
+earlier whole-package totals or dispose of the defense controls.
+
+A separate focused `SamlResponseStructure` rerun adds an error Response with
+two conflicting `StatusCode` children and no Assertion. It kills the line-159
+false-return mutant that could otherwise classify that malformed error as a
+valid status-only shape. The report is 107 killed, five survived and one with
+no coverage out of 113. The five surviving changes are equivalent on the
+reachable tree: changing the Assertion or EncryptedAssertion counters from
+increment to decrement (lines 114/118), subtraction or a constant true at the
+final count (line 142), and changing `<` to `<=` in the second order check
+(line 91). `inspect` already rejects a second direct identity carrier before
+the walk; a nested carrier fails the node/parent check. A repeated non-carrier
+position is rejected by the first order check, and a repeated carrier is
+rejected while scanning its child. The uncovered line-124 return requires a
+root Signature that differs from the unique direct Signature selected by
+`inspect`; a second direct Signature is rejected before the walk. These are
+source-reachability dispositions for this class, not new assertion kills or a
+disposition of the other `internal.xml` classes.
+
 The POST decoder's eight survivors preserve the same parsed result: they alter
 rejection paths for a trailing or empty query segment, an already invalid MIME
 parameter, or a third field after the only two permitted names; one allocates
@@ -67,13 +91,14 @@ mutation inventory but do not yet justify every survivor or uncovered branch.
 This file does not close the manual pentest, calibrated review, hosted
 Shibboleth capture or RC-2 mutation disposition gate.
 
-Additional focused evidence from the same checkout: three signed real-provider
-encrypted responses (Shibboleth GCM and CBC, SimpleSAMLphp CBC) now pass an
+Additional focused evidence, expanded on 2026-10-12: three signed real-provider
+encrypted responses (Shibboleth GCM and CBC, SimpleSAMLphp CBC) pass an
 isolated decryptor baseline and an 11-edit ciphertext/key/algorithm matrix.
-The end-to-end matrix applies all 11 edits plus five envelope attacks to those
-three captures and to SimpleSAMLphp's unsigned Response with an encrypted,
-signed assertion: 64 rejection checks, with the three original signed captures
-still accepted afterward. CBC ciphertext is malleable at the decryption layer;
+The end-to-end matrix applies those 11 edits plus 19 envelope attacks to each
+signed capture, and 11 edits plus 17 applicable envelope attacks to
+SimpleSAMLphp's unsigned Response with an encrypted, signed assertion: 118
+rejection checks, with the three original signed captures still accepted
+afterward. CBC ciphertext is malleable at the decryption layer;
 its integrity check is the signed Response, which the end-to-end matrix also
 exercises. A deterministic substitute key keeps the isolated CBC failure cases
 repeatable. The focused decryptor PIT run has 127/139 killed, 11 survivors and
@@ -116,6 +141,12 @@ runs completed without a finding: signed/encrypted structure (16,356), metadata
 seed/mutation selection limit this evidence; a reviewed longer campaign and
 the remaining RC-2 assurance actions are still open.
 
+The expanded differential suite was rerun in full on 2026-10-12 after the
+encrypted-wrapper and real-capture additions: JDK 17 `verify` passed 34/34
+tests, zero failures, errors or skips. This supersedes the 31-test count for
+the differential module only; it does not close the separate manual or hosted
+RC-2 gates.
+
 The metadata certificate boundary now has a certificate-only DER fixture at
 exactly 24,576 bytes (32,768 unpadded Base64 characters), with a noncritical
 unknown extension. The parser accepts it and rejects an over-limit value.
@@ -145,3 +176,12 @@ replay passed six cases, followed by a three-minute live run of 592,952 inputs
 with no finding. This is a focused metadata campaign; parser, walker,
 decryptor, inflate and structure-aware targets retain their earlier runs and
 the broader RC-2 campaign remains open.
+
+On 2026-10-12, the pinned `i2incommon/shib-idp:5.2.3_20260824_rocky10_multiarch`
+image (`sha256:bb6bbf1cfe935d20cb2d312e121fc6540cd367d18eee40ea263592c873efc7e5`)
+produced a fresh local GCM and a fresh CBC capture in a private scratch
+directory. The JDK 17 `ShibbolethCapturedResponseTests` replay accepted both
+and passed 5/5 tests with `revetsec.shibboleth.fixtures` pointing to that
+directory. This qualifies the local recapture path only. The required GitHub
+`workflow_dispatch` recapture, committed-fixture check and hosted replay remain
+open until the owner pushes the current checkout and the workflow runs.
