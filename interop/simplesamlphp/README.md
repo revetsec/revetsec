@@ -15,7 +15,9 @@ The script captures two AES-128-CBC/RSA-OAEP-MGF1P Responses:
 
 The capture restarts the IdP between signing modes because SimpleSAMLphp caches
 remote SP metadata in the running process. Both modes are checked against fresh
-container state.
+container state. Each launch uses a unique name so the next mode does not race
+Docker's asynchronous removal of the stopped container. Startup failures include
+Docker's error output.
 
 Run from the repository root with `JAVA_HOME` selecting JDK 17:
 

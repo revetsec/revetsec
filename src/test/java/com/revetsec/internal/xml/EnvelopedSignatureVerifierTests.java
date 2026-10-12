@@ -16,6 +16,7 @@
 
 package com.revetsec.internal.xml;
 
+import com.revetsec.internal.pem.Pem;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
@@ -42,12 +43,15 @@ import javax.xml.transform.stream.StreamResult;
 import java.io.ByteArrayOutputStream;
 import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.security.Provider;
 import java.security.PublicKey;
 import java.security.Security;
 import java.security.spec.ECGenParameterSpec;
+import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 
@@ -227,6 +231,32 @@ final class EnvelopedSignatureVerifierTests {
                 original.shape(), EnvelopedSignatureVerifier.Target.RESPONSE,
                 List.of(rsa(2048).getPublic(), key.getPublic()));
         assertInstanceOf(EnvelopedSignatureVerifier.Verified.class, rollover);
+    }
+
+    @Test void embeddedAttackerCertificateCannotBecomeATrustAnchor() throws Exception {
+        Path keys = Path.of("src/test/resources/fixtures/keys");
+        String attackerName = "negative-attacker-rsa-2048";
+        var attackerCertificate = Pem.parseCertificate(Files.readString(
+                keys.resolve(attackerName + "-cert.pem")));
+        KeyPair attacker = new KeyPair(attackerCertificate.getPublicKey(), Pem.parsePrivateKey(
+                Files.readString(keys.resolve(attackerName + "-key.pem"))));
+        var trustedCertificate = Pem.parseCertificate(Files.readString(
+                keys.resolve("idp-signing-rsa-2048-cert.pem")));
+        String signed = new String(signed(attacker, EnvelopedSignatureVerifier.Target.RESPONSE,
+                SignatureMethod.RSA_SHA256), StandardCharsets.UTF_8);
+        String embeddedCertificate = Base64.getEncoder().encodeToString(attackerCertificate.getEncoded());
+        String forged = signed.replace("</ds:Signature>",
+                "<ds:KeyInfo><ds:X509Data><ds:X509Certificate>" + embeddedCertificate
+                        + "</ds:X509Certificate></ds:X509Data></ds:KeyInfo></ds:Signature>");
+        assertTrue(forged.contains(embeddedCertificate));
+        Fixture fixture = fixture(forged);
+        // The signature is valid under the attacker's advertised key.
+        assertInstanceOf(EnvelopedSignatureVerifier.Verified.class,
+                verify(fixture, EnvelopedSignatureVerifier.Target.RESPONSE, attacker.getPublic()));
+        // The SP must use its configured IdP key, not the certificate inside the message.
+        assertEquals(EnvelopedSignatureVerifier.Reason.INVALID_SIGNATURE,
+                rejected(verify(fixture, EnvelopedSignatureVerifier.Target.RESPONSE,
+                        trustedCertificate.getPublicKey())));
     }
 
     @Test void rejectsWrongReferenceDisallowedAlgorithmsAndObjectsBeforeValidation() throws Exception {

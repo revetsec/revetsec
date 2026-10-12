@@ -83,6 +83,17 @@ and a duplicate Status. Every accepted result retains the original signed
 `minted-user` identity. Spring accepts the legacy RSA-SHA1 fixture by default;
 Revetsec requires explicit `SHA1_SIGNATURES` compatibility.
 
+The forged-KeyInfo corpus re-signs Response, Assertion, and both placements with
+a separate test-only attacker key and an `attacker-user` NameID. It advertises
+either the attacker certificate or the genuine IdP certificate in `KeyInfo`.
+OpenSAML, Spring, and Revetsec reject every forged document when configured with
+the genuine IdP key; the attacker-certificate variants succeed under an explicitly
+configured attacker key. All three SP paths also accept the misleading-KeyInfo
+variants under that attacker key. The separate libxmlsec1 oracle verifies all
+eight signatures with the attacker certificate and rejects all eight with the
+genuine certificate. This distinguishes a valid hostile signature from an
+untrusted signer and checks that embedded `KeyInfo` cannot become a trust anchor.
+
 The libxmlsec1 oracle checks the same 1,083 documents against the original
 signed target. Ten mutation types leave an assertion-only signature
 cryptographically valid while Revetsec rejects the changed envelope; no

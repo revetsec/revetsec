@@ -79,6 +79,8 @@ final class LibxmlsecOracleComparatorTests {
             copy(started, "fixtures/keys/" + key, "/run/keys/" + key);
         copy(started, "fixtures/shibboleth/idp-signing.crt",
                 "/run/keys/shibboleth-capture-cert.pem");
+        copy(started, "fixtures/keys/negative-attacker-rsa-2048-cert.pem",
+                "/run/keys/negative-attacker-rsa-2048-cert.pem");
         started.start();
         container = started;
         base = "https://" + started.getHost() + ":" + started.getMappedPort(8443);
@@ -132,6 +134,30 @@ final class LibxmlsecOracleComparatorTests {
                     OpenSamlSpComparatorTests.revetsec(tampered, credential, false, false),
                     fixture + " tampered Revetsec");
         }
+    }
+
+    @Test void attackerSignaturesRemainValidButCannotBorrowTheTrustedKey() throws Exception {
+        for (ForgedKeyInfoCorpus.Placement placement : ForgedKeyInfoCorpus.Placement.values()) {
+            for (boolean advertiseTrusted : List.of(false, true)) {
+                String xml = ForgedKeyInfoCorpus.attackerSigned(placement, advertiseTrusted);
+                String label = placement + ":" + (advertiseTrusted ? "trusted" : "attacker")
+                        + " KeyInfo";
+                if (placement != ForgedKeyInfoCorpus.Placement.ASSERTION)
+                    assertAttackerSignature(xml, "samlp:Response", label + " Response");
+                if (placement != ForgedKeyInfoCorpus.Placement.RESPONSE)
+                    assertAttackerSignature(xml, "saml:Assertion", label + " Assertion");
+            }
+        }
+    }
+
+    private static void assertAttackerSignature(@NonNull String xml, @NonNull String element,
+            @NonNull String label) throws Exception {
+        String targetId = OpenSamlSpComparatorTests.id(xml, element);
+        JsonObject attacker = verify(xml, targetId, ForgedKeyInfoCorpus.ATTACKER);
+        assertTrue(attacker.findBoolean("valid").orElseThrow(), label + " attacker key");
+        assertTrue(attacker.findBoolean("covers_target").orElseThrow(), label + " target");
+        assertFalse(verify(xml, targetId, ForgedKeyInfoCorpus.TRUSTED)
+                .findBoolean("valid").orElseThrow(), label + " configured IdP key");
     }
 
     @Test void fullSignedMutationMatrixSeparatesSignatureValidityFromSpPolicy() throws Exception {

@@ -20,6 +20,7 @@ import subprocess
 import tempfile
 import time
 from urllib.parse import parse_qs, urlencode, urljoin, urlparse
+import uuid
 import xml.etree.ElementTree as ET
 import zlib
 
@@ -129,7 +130,9 @@ def signing_mode(directory: Path, response_signed: bool) -> None:
 
 
 def start_idp(directory: Path) -> tuple[str, int]:
-    name = f"revetsec-simplesaml-{os.getpid()}"
+    # docker stop can return before --rm releases the old container's name.
+    # Each signing mode must start without waiting for that asynchronous removal.
+    name = f"revetsec-simplesaml-{os.getpid()}-{uuid.uuid4().hex}"
     command = ["docker", "run", "--rm", "-d", "--name", name,
                "-p", "127.0.0.1::443", "-e", "SSP_ENABLE_IDP=true",
                "-e", "SSP_SECRET_SALT=revetsec-test-salt",
@@ -141,7 +144,12 @@ def start_idp(directory: Path) -> tuple[str, int]:
               ("saml20-sp-remote.php", "/var/simplesamlphp/metadata/saml20-sp-remote.php"))
     for source, target in mounts:
         command.extend(("--mount", f"type=bind,source={directory / source},target={target},readonly"))
-    checked(*command, IMAGE)
+    try:
+        checked(*command, IMAGE)
+    except subprocess.CalledProcessError as exception:
+        raise RuntimeError(
+            f"SimpleSAMLphp container startup failed (exit {exception.returncode}):\n"
+            f"{exception.stderr.strip()}") from exception
     try:
         published = checked("docker", "port", name, "443/tcp").strip()
         if not published.startswith("127.0.0.1:"):

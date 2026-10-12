@@ -16,12 +16,33 @@
 package com.revetsec.saml;
 
 import com.revetsec.internal.pem.Pem;
+import com.revetsec.internal.xml.EnvelopedSignatureVerifier;
+import com.revetsec.internal.xml.SamlResponseStructure;
+import com.revetsec.internal.xml.SecureXmlParser;
 import org.jspecify.annotations.NonNull;
 import org.junit.jupiter.api.Test;
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
 
+import javax.xml.crypto.dsig.CanonicalizationMethod;
+import javax.xml.crypto.dsig.DigestMethod;
+import javax.xml.crypto.dsig.Reference;
+import javax.xml.crypto.dsig.SignatureMethod;
+import javax.xml.crypto.dsig.SignedInfo;
+import javax.xml.crypto.dsig.Transform;
+import javax.xml.crypto.dsig.XMLSignatureFactory;
+import javax.xml.crypto.dsig.dom.DOMSignContext;
+import javax.xml.transform.OutputKeys;
+import javax.xml.transform.TransformerFactory;
+import javax.xml.transform.dom.DOMSource;
+import javax.xml.transform.stream.StreamResult;
+
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -30,6 +51,7 @@ import java.util.Base64;
 import java.util.List;
 import java.util.regex.Pattern;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 
@@ -40,6 +62,63 @@ final class SamlXswMutationTests {
     private static final @NonNull String IDP = "https://idp.scripted-idp.test/";
     private static final @NonNull Pattern SIGNATURE = Pattern.compile(
             "<ds:Signature\\b[^>]*>.*?</ds:Signature>", Pattern.DOTALL);
+
+    @Test void attackerSignedResponseWithEmbeddedCertificateIsRejectedByTheSp() throws Exception {
+        String original = resource("scripted-idp/matrix-response-rsa-sha256-sha256.xml");
+        assertInstanceOf(SamlAuthenticationResult.Succeeded.class,
+                check(original, "idp-signing-rsa-2048-cert.pem", false));
+        Path keys = Path.of("src/test/resources/fixtures/keys");
+        String attackerName = "negative-attacker-rsa-2048";
+        var certificate = Pem.parseCertificate(Files.readString(keys.resolve(attackerName + "-cert.pem")));
+        var privateKey = Pem.parsePrivateKey(Files.readString(keys.resolve(attackerName + "-key.pem")));
+        Document document = assertInstanceOf(SecureXmlParser.Result.Accepted.class,
+                SecureXmlParser.parseResponse(original.getBytes(StandardCharsets.UTF_8))).getDocument();
+        Element response = document.getDocumentElement();
+        Element oldSignature = assertInstanceOf(Element.class, response.getElementsByTagNameNS(
+                "http://www.w3.org/2000/09/xmldsig#", "Signature").item(0));
+        response.removeChild(oldSignature);
+        Element nameId = assertInstanceOf(Element.class, response.getElementsByTagNameNS(
+                "urn:oasis:names:tc:SAML:2.0:assertion", "NameID").item(0));
+        nameId.setTextContent("attacker-user");
+        response.setIdAttributeNS(null, "ID", true);
+        XMLSignatureFactory factory = XMLSignatureFactory.getInstance("DOM", "XMLDSig");
+        Reference reference = factory.newReference("#" + response.getAttribute("ID"),
+                factory.newDigestMethod(DigestMethod.SHA256, null), List.of(
+                        factory.newTransform(Transform.ENVELOPED,
+                                (javax.xml.crypto.dsig.spec.TransformParameterSpec) null),
+                        factory.newTransform(CanonicalizationMethod.EXCLUSIVE,
+                                (javax.xml.crypto.dsig.spec.TransformParameterSpec) null)), null, null);
+        SignedInfo signedInfo = factory.newSignedInfo(factory.newCanonicalizationMethod(
+                        CanonicalizationMethod.EXCLUSIVE,
+                        (javax.xml.crypto.dsig.spec.C14NMethodParameterSpec) null),
+                factory.newSignatureMethod(SignatureMethod.RSA_SHA256, null), List.of(reference));
+        var keyInfo = factory.getKeyInfoFactory().newKeyInfo(List.of(
+                factory.getKeyInfoFactory().newX509Data(List.of(certificate))));
+        DOMSignContext context = new DOMSignContext(privateKey, response);
+        context.setDefaultNamespacePrefix("ds");
+        context.setNextSibling(response.getFirstChild().getNextSibling());
+        factory.newXMLSignature(signedInfo, keyInfo).sign(context);
+        var transformer = TransformerFactory.newDefaultInstance().newTransformer();
+        transformer.setOutputProperty(OutputKeys.OMIT_XML_DECLARATION, "yes");
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        transformer.transform(new DOMSource(document), new StreamResult(output));
+        byte[] forged = output.toByteArray();
+        SecureXmlParser.Result.Accepted parsed = assertInstanceOf(SecureXmlParser.Result.Accepted.class,
+                SecureXmlParser.parseResponse(forged));
+        SamlResponseStructure.Accepted shape = assertInstanceOf(SamlResponseStructure.Accepted.class,
+                SamlResponseStructure.inspect(parsed.getDocument()));
+        assertInstanceOf(EnvelopedSignatureVerifier.Verified.class,
+                EnvelopedSignatureVerifier.verify(parsed, shape.getShape(),
+                        EnvelopedSignatureVerifier.Target.RESPONSE, List.of(certificate.getPublicKey())));
+        SamlAuthenticationResult.Succeeded attackerControl = assertInstanceOf(
+                SamlAuthenticationResult.Succeeded.class,
+                check(new String(forged, StandardCharsets.UTF_8),
+                        "negative-attacker-rsa-2048-cert.pem", false));
+        assertEquals("attacker-user", attackerControl.getAuthentication()
+                .getNameId().orElseThrow().getValue());
+        assertInstanceOf(SamlAuthenticationResult.Rejected.class,
+                check(new String(forged, StandardCharsets.UTF_8), "idp-signing-rsa-2048-cert.pem", false));
+    }
 
     @Test void wrappingAndIdentityInjectionsAreRejectedAcrossSignedFixtures() throws Exception {
         List<String> seeds = new ArrayList<>(List.of(

@@ -715,6 +715,7 @@ jobs:
                   'encryptedNegativesDoNotReleaseAttackerIdentity'},
               'com.revetsec.differential.OpenSamlSpComparatorTests': {
                   'signedPlacementsResolveOnlyTheTrustedIdentity',
+                  'forgedKeyInfoCannotMakeAnAttackerSignatureTrusted',
                   'legacySha1NeedsExplicitRevetsecCompatibility',
                   'wrapperAndNamespaceMutationsNeverReleaseAnIdentity',
                   'encryptedAssertionsAndEncryptedIdResolveTrustedIdentity',
@@ -732,6 +733,7 @@ jobs:
                   'independentlySignedLogoutShapesCannotPromoteIdentityOrSuccess'},
               'com.revetsec.differential.LibxmlsecOracleComparatorTests': {
                   'signedFixturesAndTamperingAgreeWithIndependentOracle',
+                  'attackerSignaturesRemainValidButCannotBorrowTheTrustedKey',
                   'encryptedFixturesDecryptInIndependentOracleAndRevetsec',
                   'validAssertionSignatureCannotPromoteUnsignedExtensionIdentity',
                   'structuralMutationsDistinguishOuterAndInnerSignatureCoverage',

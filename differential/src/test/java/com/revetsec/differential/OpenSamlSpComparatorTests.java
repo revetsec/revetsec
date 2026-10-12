@@ -114,6 +114,52 @@ final class OpenSamlSpComparatorTests {
         }
     }
 
+    @Test void forgedKeyInfoCannotMakeAnAttackerSignatureTrusted() throws Exception {
+        for (ForgedKeyInfoCorpus.Placement placement : ForgedKeyInfoCorpus.Placement.values()) {
+            String label = placement.name();
+            String original = fixture("matrix-" + label.toLowerCase(java.util.Locale.ROOT)
+                    + "-rsa-sha256-sha256");
+            assertEquals("minted-user", authenticate(original, ForgedKeyInfoCorpus.TRUSTED), label);
+
+            String attackerAdvertised = ForgedKeyInfoCorpus.attackerSigned(placement, false);
+            assertEquals("attacker-user", authenticate(attackerAdvertised,
+                    ForgedKeyInfoCorpus.ATTACKER), label + " OpenSAML attacker control");
+            assertEquals("attacker-user", SpringSamlComparatorTests.spring(attackerAdvertised,
+                    ForgedKeyInfoCorpus.ATTACKER).getName(), label + " Spring attacker control");
+            assertEquals("attacker-user", assertInstanceOf(SamlAuthenticationResult.Succeeded.class,
+                    revetsec(attackerAdvertised, ForgedKeyInfoCorpus.ATTACKER, false, false),
+                    label + " Revetsec attacker control").getAuthentication()
+                    .getNameId().orElseThrow().getValue());
+            assertThrows(Exception.class, () -> authenticate(attackerAdvertised,
+                    ForgedKeyInfoCorpus.TRUSTED), label + " OpenSAML untrusted certificate");
+            assertThrows(Exception.class, () -> SpringSamlComparatorTests.spring(attackerAdvertised,
+                    ForgedKeyInfoCorpus.TRUSTED), label + " Spring untrusted certificate");
+            assertInstanceOf(SamlAuthenticationResult.Rejected.class,
+                    revetsec(attackerAdvertised, ForgedKeyInfoCorpus.TRUSTED, false, false),
+                    label + " Revetsec untrusted certificate");
+
+            String trustedAdvertised = ForgedKeyInfoCorpus.attackerSigned(placement, true);
+            assertNotEquals(attackerAdvertised, trustedAdvertised,
+                    label + " KeyInfo certificate must change");
+            assertEquals("attacker-user", authenticate(trustedAdvertised,
+                    ForgedKeyInfoCorpus.ATTACKER), label + " OpenSAML misleading KeyInfo control");
+            assertEquals("attacker-user", SpringSamlComparatorTests.spring(trustedAdvertised,
+                    ForgedKeyInfoCorpus.ATTACKER).getName(),
+                    label + " Spring misleading KeyInfo control");
+            assertEquals("attacker-user", assertInstanceOf(SamlAuthenticationResult.Succeeded.class,
+                    revetsec(trustedAdvertised, ForgedKeyInfoCorpus.ATTACKER, false, false),
+                    label + " Revetsec misleading KeyInfo control").getAuthentication()
+                    .getNameId().orElseThrow().getValue());
+            assertThrows(Exception.class, () -> authenticate(trustedAdvertised,
+                    ForgedKeyInfoCorpus.TRUSTED), label + " OpenSAML misleading KeyInfo");
+            assertThrows(Exception.class, () -> SpringSamlComparatorTests.spring(trustedAdvertised,
+                    ForgedKeyInfoCorpus.TRUSTED), label + " Spring misleading KeyInfo");
+            assertInstanceOf(SamlAuthenticationResult.Rejected.class,
+                    revetsec(trustedAdvertised, ForgedKeyInfoCorpus.TRUSTED, false, false),
+                    label + " Revetsec misleading KeyInfo");
+        }
+    }
+
     @Test void legacySha1NeedsExplicitRevetsecCompatibility() throws Exception {
         String xml = fixture("assertion-rsa-sha1");
         assertEquals("minted-user", authenticate(xml, "idp-signing-rsa-2048"));
