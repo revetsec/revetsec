@@ -15,10 +15,13 @@
  */
 package com.revetsec.saml;
 
+import com.revetsec.internal.xml.SecureXmlParser;
 import org.jspecify.annotations.NonNull;
 import org.junit.jupiter.api.Test;
+import org.w3c.dom.Element;
 
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.KeyPair;
@@ -27,11 +30,15 @@ import java.time.Clock;
 import java.time.Duration;
 import java.util.Collections;
 import java.util.List;
+import java.util.stream.IntStream;
 import java.util.function.UnaryOperator;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 final class SamlConfigurationBoundaryTests {
     private static final @NonNull String SP = "https://sp.example.test/saml";
@@ -159,6 +166,68 @@ final class SamlConfigurationBoundaryTests {
         assertThrows(IllegalStateException.class, () -> validIdp(strong)
                 .authorizedIdentifierScopes(Collections.nCopies(33, "example.test")).build());
         assertDoesNotThrow(() -> validIdp(strong).authorizedIdentifierScopes(List.of("example.test")).build());
+    }
+
+    @Test void idpConnectionAndAuthorizedScopeLimitsAcceptTheirExactMaxima() throws Exception {
+        KeyPair strong = rsa(2048);
+        assertEquals(256, validIdp(strong).connectionId("c".repeat(256)).build().getConnectionId().length());
+        assertThrows(IllegalStateException.class,
+                () -> validIdp(strong).connectionId("c".repeat(257)).build());
+
+        List<String> scopes = IntStream.range(0, 32).mapToObj(i -> "scope" + i).toList();
+        assertEquals(scopes, validIdp(strong).authorizedIdentifierScopes(scopes)
+                .build().authorizedIdentifierScopes());
+        assertThrows(IllegalStateException.class,
+                () -> validIdp(strong).authorizedIdentifierScopes(IntStream.range(0, 33)
+                        .mapToObj(i -> "scope" + i).toList()).build());
+        assertEquals(List.of("s".repeat(255)), validIdp(strong)
+                .authorizedIdentifierScopes(List.of("s".repeat(255)))
+                .build().authorizedIdentifierScopes());
+        assertThrows(IllegalStateException.class,
+                () -> validIdp(strong).authorizedIdentifierScopes(List.of("s".repeat(256))).build());
+    }
+
+    @Test void requestContextCountAndUriLengthAcceptTheirExactMaxima() {
+        String context = "urn:example:" + "x".repeat(512 - "urn:example:".length());
+        assertEquals(512, context.length());
+        assertEquals(List.of(context), SamlAuthenticationRequestOptions.builder()
+                .requestedAuthnContextClassRefs(List.of(context)).build()
+                .getRequestedAuthnContextClassRefs());
+        assertThrows(IllegalArgumentException.class, () -> SamlAuthenticationRequestOptions.builder()
+                .requestedAuthnContextClassRefs(List.of(context + "x")));
+        assertEquals(8, SamlAuthenticationRequestOptions.builder()
+                .requestedAuthnContextClassRefs(Collections.nCopies(8, "urn:example:password"))
+                .build().getRequestedAuthnContextClassRefs().size());
+        assertThrows(IllegalArgumentException.class, () -> SamlAuthenticationRequestOptions.builder()
+                .requestedAuthnContextClassRefs(Collections.nCopies(9, "urn:example:password")));
+    }
+
+    @Test void browserBindingAcceptsItsExactMaximumButRejectsTheNextCharacter() {
+        assertTrue(SamlPendingBinding.context("application", "b".repeat(4096))
+                .startsWith("application|saml-store-v1|"));
+        assertThrows(IllegalArgumentException.class,
+                () -> SamlPendingBinding.context("application", "b".repeat(4097)));
+    }
+
+    @Test void postFormRejectsHostileNonceAndEscapesActionAndFields() {
+        SamlPostForm form = new SamlPostForm(URI.create("https://idp.example.test/post?a=1&b=2"),
+                "request\"<&'", "relay\"<&'");
+        String html = form.toHtml(null);
+        assertTrue(html.contains("action=\"https://idp.example.test/post?a=1&amp;b=2\""));
+        assertTrue(html.contains("request&quot;&lt;&amp;&#39;"));
+        assertTrue(html.contains("relay&quot;&lt;&amp;&#39;"));
+        assertThrows(IllegalArgumentException.class, () -> form.toHtml("bad\" onload=\"alert(1)"));
+        assertTrue(form.toHtml("abcdefghijklmnop").contains("nonce=\"abcdefghijklmnop\""));
+    }
+
+    @Test void malformedXsiTypeCannotSupplyAnEmptyNamespacePrefix() {
+        String xml = "<v xmlns='http://www.w3.org/2001/XMLSchema' "
+                + "xmlns:xsi='http://www.w3.org/2001/XMLSchema-instance' xsi:type=':string'>x</v>";
+        Element value = assertInstanceOf(SecureXmlParser.Result.Accepted.class,
+                SecureXmlParser.parseResponse(xml.getBytes(StandardCharsets.UTF_8)))
+                .getDocument().getDocumentElement();
+        assertTrue(!SamlResponseSemantics.scalarDeclarationAllowed(value,
+                "http://www.w3.org/2001/XMLSchema", "string"));
     }
 
     private static SamlServiceProvider.@NonNull Builder validSp() {

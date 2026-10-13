@@ -24,8 +24,12 @@ final class SamlPendingBudget {
     private SamlPendingBudget() { }
 
     static boolean exhausted(long started, @NonNull Duration budget) {
-        long elapsed = System.nanoTime() - started;
-        return Thread.currentThread().isInterrupted() || elapsed < 0
+        return exhaustedAt(started, System.nanoTime(), Thread.currentThread().isInterrupted(), budget);
+    }
+
+    static boolean exhaustedAt(long started, long finished, boolean interrupted, @NonNull Duration budget) {
+        long elapsed = finished - started;
+        return interrupted || elapsed < 0
                 || Duration.ofNanos(elapsed).compareTo(budget) >= 0;
     }
 }

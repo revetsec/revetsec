@@ -112,6 +112,47 @@ final class SamlObserverTests {
         assertInstanceOf(SamlAuthenticationRequestResult.Prepared.class, reset.beginAuthenticationResult(idp));
     }
 
+    @Test void everyLogoutAndNonSuccessLoginResultHasItsExactObserverOutcome() {
+        SamlObserver.Outcome success = SamlObserver.Outcome.SUCCEEDED;
+        SamlObserver.Outcome rejected = SamlObserver.Outcome.REJECTED;
+        SamlObserver.Outcome unavailable = SamlObserver.Outcome.UNAVAILABLE;
+        SamlObserver.Outcome indeterminate = SamlObserver.Outcome.INDETERMINATE;
+        SamlObserver.Outcome status = SamlObserver.Outcome.STATUS_RECEIVED;
+
+        assertEquals(status, SamlServiceProvider.outcome(new SamlAuthenticationResult.StatusReceived(
+                SamlAuthenticationResult.StatusCode.AUTHN_FAILED, true)));
+        assertEquals(rejected, SamlServiceProvider.outcome(new SamlAuthenticationResult.Rejected(
+                SamlAuthenticationResult.Reason.SIGNATURE)));
+        assertEquals(unavailable, SamlServiceProvider.outcome(SamlAuthenticationResult.Unavailable.INSTANCE));
+        assertEquals(indeterminate, SamlServiceProvider.outcome(SamlAuthenticationResult.Indeterminate.INSTANCE));
+
+        SamlLogoutRequest request = new SamlLogoutRequest("tenant-secret", SP, IDP, "_request", null,
+                new SamlNameId("checked-user", null, null, null), List.of("_session"));
+        assertEquals(success, SamlServiceProvider.outcome(new SamlLogoutRequestResult.Accepted(request)));
+        assertEquals(rejected, SamlServiceProvider.outcome(SamlLogoutRequestResult.Rejected.INSTANCE));
+        assertEquals(unavailable, SamlServiceProvider.outcome(SamlLogoutRequestResult.Unavailable.INSTANCE));
+        assertEquals(indeterminate, SamlServiceProvider.outcome(SamlLogoutRequestResult.Indeterminate.INSTANCE));
+
+        PendingSamlAuthentication pending = new PendingSamlAuthentication(SP, "_request", "relay",
+                "tenant-secret", IDP, "https://sp.example.test/acs", CLOCK.instant(),
+                CLOCK.instant().plusSeconds(300));
+        assertEquals(success, SamlServiceProvider.outcome(new SamlLogoutRedirectResult.Prepared(
+                URI.create("https://idp.example.test/slo"), new PendingSamlLogout(pending))));
+        assertEquals(rejected, SamlServiceProvider.outcome(SamlLogoutRedirectResult.Rejected.CONFIGURATION));
+        assertEquals(unavailable, SamlServiceProvider.outcome(SamlLogoutRedirectResult.Unavailable.INSTANCE));
+
+        assertEquals(success, SamlServiceProvider.outcome(SamlLogoutResult.Succeeded.INSTANCE));
+        assertEquals(status, SamlServiceProvider.outcome(SamlLogoutResult.StatusReceived.NON_SUCCESS));
+        assertEquals(rejected, SamlServiceProvider.outcome(SamlLogoutResult.Rejected.INSTANCE));
+        assertEquals(unavailable, SamlServiceProvider.outcome(SamlLogoutResult.Unavailable.INSTANCE));
+        assertEquals(indeterminate, SamlServiceProvider.outcome(SamlLogoutResult.Indeterminate.INSTANCE));
+
+        assertEquals(success, SamlServiceProvider.outcome(new SamlLogoutResponseRedirectResult.Prepared(
+                URI.create("https://idp.example.test/slo?SAMLResponse=redacted"))));
+        assertEquals(rejected, SamlServiceProvider.outcome(SamlLogoutResponseRedirectResult.Rejected.INSTANCE));
+        assertEquals(unavailable, SamlServiceProvider.outcome(SamlLogoutResponseRedirectResult.Unavailable.INSTANCE));
+    }
+
     @Test @SuppressWarnings("NullAway") // Deliberate required-argument misuse.
     void unexpectedRuntimeFailureIsObservedThenRethrownWithoutItsMessage() throws Exception {
         KeyPair key = rsa();

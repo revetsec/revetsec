@@ -1,12 +1,15 @@
 # Shibboleth IdP 5.2.3 encrypted response captures
 
-Captured on 2026-10-12 by [GitHub Actions run 38311798191](https://github.com/revetsec/revetsec/actions/runs/38311798191)
+Captured on 2026-10-13 UTC by [GitHub Actions run 38337905483](https://github.com/revetsec/revetsec/actions/runs/38337905483)
 from `i2incommon/shib-idp:5.2.3_20260824_rocky10_multiarch`
 (pulled manifest digest `sha256:bb6bbf1cfe935d20cb2d312e121fc6540cd367d18eee40ea263592c873efc7e5`).
-The artifact `shibboleth-capture-38311798191-1` had SHA-256
-`5be33cf755163f298e54db0ba101203c224f3b9b4298bb0ae19de19e8f8acbf4`;
-each imported file was checked against its captured manifest. The hosted
-Corretto 17 replay passed 5/5 tests on source `e52e162dcdcbc4706321b275f4da12ead9db832d`.
+The artifact `shibboleth-capture-38337905483-1` had SHA-256
+`99d922fb2c00124cf9f80f55f9f90dd6560817fad55867f148ebee7eb25d1ddc`;
+each imported file was checked against its captured manifest. The artifact's
+hosted Corretto 17 report passed all six required replay tests with zero skips.
+The local checkout at receipt was `2c8c901a692e8f62fe8289f672d737aea3e79b4a`.
+The same six methods passed locally against the downloaded artifact before
+its files replaced the prior checked-in capture.
 The unmodified image ran on a loopback published port with a test-only local password
 validator. Its entity ID was `https://idp.example.org/idp/shibboleth`. No external
 account or production credential was used.

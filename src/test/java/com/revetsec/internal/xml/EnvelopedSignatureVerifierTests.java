@@ -106,6 +106,60 @@ final class EnvelopedSignatureVerifierTests {
         }
     }
 
+    @Test void sha1SignatureWithSha256DigestRequiresExplicitCompatibilityContext() throws Exception {
+        KeyPair key = rsa(2048);
+        Fixture fixture = fixture(signed(key, EnvelopedSignatureVerifier.Target.RESPONSE,
+                SignatureMethod.RSA_SHA1, DigestMethod.SHA256));
+        assertEquals(EnvelopedSignatureVerifier.Reason.SIGNATURE_SHAPE,
+                rejected(verify(fixture, EnvelopedSignatureVerifier.Target.RESPONSE, key.getPublic())));
+        assertInstanceOf(EnvelopedSignatureVerifier.Verified.class,
+                EnvelopedSignatureVerifier.verify(fixture.parsed(), fixture.shape(),
+                        EnvelopedSignatureVerifier.Target.RESPONSE, List.of(key.getPublic()), true));
+    }
+
+    @Test void absentAssertionAndUnsignedMetadataRemainTypedAndDocumentBound() throws Exception {
+        KeyPair key = rsa(2048);
+        String statusOnlyError = XML.substring(0, XML.indexOf("<a:Assertion"))
+                .replace("status:Success", "status:Responder") + "</p:Response>";
+        Fixture response = fixture(statusOnlyError);
+        assertSame(EnvelopedSignatureVerifier.Absent.INSTANCE,
+                verify(response, EnvelopedSignatureVerifier.Target.ASSERTION, key.getPublic()));
+
+        String metadata = "<m:EntityDescriptor xmlns:m='urn:oasis:names:tc:SAML:2.0:metadata' "
+                + "entityID='https://idp.example.test/'/>";
+        SecureXmlParser.Result.Accepted first = assertInstanceOf(SecureXmlParser.Result.Accepted.class,
+                SecureXmlParser.parseMetadata(metadata.getBytes(StandardCharsets.UTF_8)));
+        SecureXmlParser.Result.Accepted second = assertInstanceOf(SecureXmlParser.Result.Accepted.class,
+                SecureXmlParser.parseMetadata(metadata.getBytes(StandardCharsets.UTF_8)));
+        Element descriptor = first.getDocument().getDocumentElement();
+        assertSame(EnvelopedSignatureVerifier.Absent.INSTANCE,
+                EnvelopedSignatureVerifier.verifyMetadata(first, descriptor, List.of(key.getPublic())));
+        assertEquals(EnvelopedSignatureVerifier.Reason.DOCUMENT_MISMATCH,
+                rejected(EnvelopedSignatureVerifier.verifyMetadata(first,
+                        second.getDocument().getDocumentElement(), List.of(key.getPublic()))));
+    }
+
+    @Test void signedMetadataWithoutIdAndMalformedSignatureValueFailClosed() throws Exception {
+        KeyPair key = rsa(2048);
+        String metadata = "<m:EntityDescriptor xmlns:m='urn:oasis:names:tc:SAML:2.0:metadata' "
+                + "xmlns:ds='http://www.w3.org/2000/09/xmldsig#' "
+                + "entityID='https://idp.example.test/'><ds:Signature/></m:EntityDescriptor>";
+        SecureXmlParser.Result.Accepted descriptor = assertInstanceOf(SecureXmlParser.Result.Accepted.class,
+                SecureXmlParser.parseMetadata(metadata.getBytes(StandardCharsets.UTF_8)));
+        assertEquals(EnvelopedSignatureVerifier.Reason.REFERENCE,
+                rejected(EnvelopedSignatureVerifier.verifyMetadata(descriptor,
+                        descriptor.getDocument().getDocumentElement(), List.of(key.getPublic()))));
+
+        String signedXml = new String(signed(key, EnvelopedSignatureVerifier.Target.RESPONSE,
+                SignatureMethod.RSA_SHA256), StandardCharsets.UTF_8);
+        String malformed = signedXml.replaceFirst("(?s)<ds:SignatureValue>.*?</ds:SignatureValue>",
+                "<ds:SignatureValue>not-base64!</ds:SignatureValue>");
+        assertFalse(signedXml.equals(malformed));
+        assertEquals(EnvelopedSignatureVerifier.Reason.INVALID_SIGNATURE,
+                rejected(verify(fixture(malformed), EnvelopedSignatureVerifier.Target.RESPONSE,
+                        key.getPublic())));
+    }
+
     @Test void missingPinnedXmlDsigProviderFailsClosed() throws Exception {
         KeyPair key = rsa(2048);
         Fixture fixture = fixture(signed(key, EnvelopedSignatureVerifier.Target.RESPONSE,

@@ -157,8 +157,12 @@ public final class InMemoryPendingSamlAuthenticationStore implements PendingSaml
         }
     }
 
-    private static boolean expired(long deadline) {
-        return Thread.currentThread().isInterrupted() || deadline - System.nanoTime() <= 0;
+    static boolean expired(long deadline) {
+        return expiredAt(deadline, System.nanoTime(), Thread.currentThread().isInterrupted());
+    }
+
+    static boolean expiredAt(long deadline, long now, boolean interrupted) {
+        return interrupted || deadline - now <= 0;
     }
 
     /**

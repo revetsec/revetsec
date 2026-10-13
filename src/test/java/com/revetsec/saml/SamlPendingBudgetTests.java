@@ -27,11 +27,24 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 final class SamlPendingBudgetTests {
     private static final @NonNull Clock CLOCK = Clock.fixed(Instant.parse("2026-10-09T00:01:00Z"), ZoneOffset.UTC);
     private static final @NonNull Duration LARGE_BUDGET = Duration.ofSeconds(Long.MAX_VALUE);
+
+    @Test void elapsedBudgetBoundaryAndClockRegressionAreExact() {
+        Duration budget = Duration.ofNanos(10);
+        assertFalse(SamlPendingBudget.exhaustedAt(100, 100, false, budget));
+        assertFalse(SamlPendingBudget.exhaustedAt(100, 109, false, budget));
+        assertTrue(SamlPendingBudget.exhaustedAt(100, 110, false, budget));
+        assertTrue(SamlPendingBudget.exhaustedAt(100, 99, false, budget));
+        assertTrue(SamlPendingBudget.exhaustedAt(100, 100, true, budget));
+        assertTrue(SamlPendingBudget.exhausted(System.nanoTime() - Duration.ofSeconds(1).toNanos(),
+                Duration.ofMillis(1)));
+    }
 
     @Test void largePositiveBudgetPreservesCompletedLoginSaveAndConsume() {
         PendingSamlAuthentication pending = pending();

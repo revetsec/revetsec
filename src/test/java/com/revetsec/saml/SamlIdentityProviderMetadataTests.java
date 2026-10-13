@@ -47,6 +47,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 final class SamlIdentityProviderMetadataTests {
     private static final @NonNull Clock CLOCK = Clock.fixed(Instant.parse("2026-10-09T00:00:00Z"), ZoneOffset.UTC);
@@ -432,6 +433,7 @@ final class SamlIdentityProviderMetadataTests {
                 Pem.parsePrivateKey(keyPem), certificate);
         SamlServiceProvider sp = SamlServiceProvider.withEntityId("https://sp.example.test/saml")
                 .assertionConsumerServiceUrl(URI.create("https://sp.example.test/acs"))
+                .singleLogoutServiceUrl(URI.create("https://sp.example.test/slo"))
                 .replayCache(InMemorySamlReplayCache.withLimit(CLOCK, 4))
                 .signingCredential(credential).clock(CLOCK).build();
         String xml = assertInstanceOf(SamlServiceProviderMetadataResult.Generated.class,
@@ -441,6 +443,12 @@ final class SamlIdentityProviderMetadataTests {
                 .getDocument().getElementsByTagNameNS("urn:oasis:names:tc:SAML:2.0:metadata",
                         "KeyDescriptor").getLength());
         assertEquals(false, xml.contains("use=\"encryption\""));
+        assertEquals(1, assertInstanceOf(SecureXmlParser.Result.Accepted.class,
+                SecureXmlParser.parseMetadata(xml.getBytes(StandardCharsets.UTF_8)))
+                .getDocument().getElementsByTagNameNS("urn:oasis:names:tc:SAML:2.0:metadata",
+                        "SingleLogoutService").getLength());
+        assertTrue(xml.contains("Location=\"https://sp.example.test/slo\""));
+        assertTrue(xml.contains("Binding=\"urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect\""));
     }
 
     private static @NonNull String certificate() throws Exception {

@@ -39,6 +39,14 @@ final class InMemoryPendingSamlAuthenticationStoreTests {
     private static final @NonNull Instant START = Instant.parse("2026-10-09T00:00:00Z");
     private static final @NonNull Duration BUDGET = Duration.ofSeconds(1);
 
+    @Test void monotonicDeadlineIsClosedAtTheExactNanosecond() {
+        assertTrue(InMemoryPendingSamlAuthenticationStore.expired(System.nanoTime() - 1));
+        assertFalse(InMemoryPendingSamlAuthenticationStore.expiredAt(100, 99, false));
+        assertTrue(InMemoryPendingSamlAuthenticationStore.expiredAt(100, 100, false));
+        assertTrue(InMemoryPendingSamlAuthenticationStore.expiredAt(100, 101, false));
+        assertTrue(InMemoryPendingSamlAuthenticationStore.expiredAt(100, 99, true));
+    }
+
     @Test void consumesOncePrunesExpiryAndKeepsCompoundKeysUnambiguous() {
         MutableClock clock = new MutableClock(START);
         InMemoryPendingSamlAuthenticationStore store = InMemoryPendingSamlAuthenticationStore.withLimit(clock, 2);

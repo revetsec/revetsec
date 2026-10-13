@@ -273,14 +273,20 @@ final class LibxmlsecOracleComparatorTests {
                 if (mutation.xml().equals(original)) continue;
                 mutations++;
                 String label = name + ":" + mutation.name();
-                String expected = encrypted
-                        ? mutation.name().equals("duplicate-carrier") ? "rejected-input"
-                        : encryptedAssertion && mutation.name().equals("relative-namespace-sibling")
-                        || !encryptedAssertion && encryptedIdSignatureBreaks.contains(mutation.name())
-                        ? "invalid-signature" : "valid"
-                        : signedInputRejections.contains(mutation.name()) ? "rejected-input"
-                        : !responseSigned && assertionSignatureSurvivors.contains(mutation.name())
-                        ? "valid" : "invalid-signature";
+                String expected;
+                if (encrypted) {
+                    if (mutation.name().equals("duplicate-carrier")) expected = "rejected-input";
+                    else if ((encryptedAssertion
+                            && mutation.name().equals("relative-namespace-sibling"))
+                            || (!encryptedAssertion
+                            && encryptedIdSignatureBreaks.contains(mutation.name())))
+                        expected = "invalid-signature";
+                    else expected = "valid";
+                } else if (signedInputRejections.contains(mutation.name())) {
+                    expected = "rejected-input";
+                } else if (!responseSigned && assertionSignatureSurvivors.contains(mutation.name())) {
+                    expected = "valid";
+                } else expected = "invalid-signature";
                 String candidate = mutation.xml();
                 if (encryptedAssertion) {
                     HttpResponse<String> decrypted = request("/control/oracle/decrypt",

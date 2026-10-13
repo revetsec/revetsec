@@ -439,3 +439,196 @@ all 219 prior identities: 196 `KILLED`, seven `SURVIVED`, sixteen
 test passes 1/1. Report: `/private/tmp/revetsec-rc2-verifier-ec-mutations.xml`.
 The 23 remaining verifier actions retain their open status pending source
 disposition or further tests.
+
+The valid signed `AuthnStatement` control now asserts that the exact
+`SessionNotOnOrAfter` reaches both `SamlAuthentication` and its
+`SamlSessionReference`. A scoped JDK 21 PIT run of
+`SamlResponseSemantics*` with the service-provider and semantics tests kills
+the formerly surviving `Accepted.sessionNotOnOrAfter` null-return action at
+line 128. That selection examined 510 mutations; its 480 killed, 13 survived
+and 17 uncovered totals do not replace the full-package PIT result because
+other SAML tests were omitted. Report:
+`/private/tmp/revetsec-rc2-session-expiry-mutations.xml`.
+
+An exact source audit of the remaining `internal.xml` PIT survivors finds these
+accepted-input equivalences. The controls stay in production as layered
+defenses; this disposition concerns one-at-a-time PIT removals only.
+
+| Class and exact survivor location | Disposition |
+| --- | --- |
+| `EnvelopedSignatureVerifier.digestInputStartsWith` 343/344 false-return and 345 true-return | The first two branches already return `false`; the final branch already returns `true`. The four-way short/mismatched/exact-prefix test runs, and these three replacements are bytecode-equivalent at their return sites. |
+| `EnvelopedSignatureVerifier.verifyMetadata` 128 increment-to-decrement | The only use of `index` is the `index != 0` check at line 125. The first element leaves zero before the check; every later element has a nonzero index in either direction. The bounded parser prevents integer wraparound. |
+| `EnvelopedSignatureVerifier.postcheck` 330 negated loop condition | `inspectSignature` already checked the single Reference and its one or two ordered transforms at lines 238–245, and `postcheck` checks their count at line 329. Skipping this second algorithm loop cannot admit a transform rejected by the precheck. |
+| `EnvelopedSignatureVerifier.verifySignedElement` 164 removed URI dereferencer | The precheck requires exactly `#` plus the signed element's NCName ID; the parser rejects duplicate ID-like values, the DOM ID table is checked against that same node before and after validation, and the digest input must begin with that node's QName. The JDK default same-document dereference cannot select an alternate accepted target under these checks. |
+| `SecureXmlParser` 91–96, 99–100, 111–113 | Removing one parser-hardening call leaves the independent DOCTYPE prohibition, no-external-entity settings, resolver, lexical DTD rejection, no schema/stylesheet request, and input/tree limits. The default namespace-aware SAX factory has XInclude off. The test suite rejects DTDs, entities, processing instructions and malformed XML and checks preserved namespace declarations. The error-handler removal does not turn a fatal parse error into an accepted document. |
+| `SamlXmlWriter` 36–38, 40 | The input is a library-built DOM sent through an identity transformer; it contains no stylesheet or external source to load. Removing one factory hardening call has no accepted-output effect with the other guards. Without the explicit encoding setter, Corretto 17 and 21 default transformers still emitted UTF-8 for a non-ASCII DOM in a local check. |
+
+The verifier's `SECURE_VALIDATION` conditional mutation at line 161 is now
+killed by a valid RSA-SHA1 signature over a SHA-256-digested Response. The
+control rejects without compatibility and verifies with it, distinguishing
+the signature-algorithm branch from the digest-algorithm branch. Focused JDK 17
+and 21 tests pass 23/23; scoped JDK 21 PIT marks line 161 `KILLED` in
+`/private/tmp/revetsec-rc2-sha1-mixed-mutations.xml`. Its single-class test
+selection leaves some other actions uncovered, so it does not replace the
+whole-package counts. The other `NO_COVERAGE` actions and SAML package
+survivors remain open. This table does not close the PIT gate.
+
+The Redirect binding's DER canonicalizer is now package-accessible solely for
+same-package tests; the public SAML API is unchanged. Direct tests cover the
+smallest positive `(r,s)` DER pair, a P-256 full-width integer requiring one
+sign-padding byte, and a P-521 sequence with exactly 128 content bytes in
+long-form length encoding. Focused JDK 21 PIT matched all 184 earlier
+`SamlRedirectBindingMessage` identities and killed three previously surviving
+boundaries: line 180's minimum DER length, line 183's 128-byte long-form
+threshold, and line 190's one-byte integer minimum. Its selected test class
+produced 173 killed, ten survived and one uncovered; the narrower test
+selection does not replace full-package PIT. Report:
+`/private/tmp/revetsec-rc2-der-boundary-mutations.xml`.
+
+One further direct DER case supplies a second INTEGER length byte with no
+corresponding value byte. The production parser returns `null` before any
+array access. The arithmetic mutation at line 190 instead skips that bound
+and throws, so the same-package test kills it; the JDK 17 and 21 focused
+tests pass 34/34 across the verifier and Redirect test classes. The scoped
+407-mutant rerun records the exact action as `KILLED` in
+`/private/tmp/revetsec-rc2-typed-der-mutations.xml`. That run also kills three
+previously uncovered verifier return substitutions: absent Assertion at line
+97, wrong-document metadata at line 119, and unsigned metadata at line 130.
+It does not replace a full-package rerun.
+
+The remaining Redirect parser survivors from the prior full-package report
+have these accepted-input or cleanup dispositions, pending the current full
+rerun:
+
+| Exact location | Disposition |
+| --- | --- |
+| `fromRawQueryResult` 78 | The boundary changes treatment of a one-character field name. Every permitted name has at least six characters; unknown names fail the immediately following allowlist. |
+| `canonicalEcdsaSignature` 183, 184, 188 and 194 | The minimum eight-byte sequence makes the 183 position-equals-length case unreachable. A short-form 128-byte sequence at 184, an INTEGER header with no bytes at 188, or an unnecessary sign pad admitted at 194 all fail the final DER re-encoding equality or the subsequent length/shape check. |
+| `inflate` 217 and 218 | The 131,072-byte cap is a multiple of the 4,096-byte output buffer. With the entire compressed input supplied up front, the inflater fills each buffer until it finishes or cannot continue. At exactly the cap, the 217 boundary variant asks for zero bytes and is rejected; the 218 arithmetic variant reaches the outer cap guard before a further full buffer. Exact-cap acceptance and cap-plus-one rejection have direct tests. |
+| `inflate` 224 | Removing `Inflater.end()` does not change a parsed result but leaks native inflater state until reclamation. The cleanup call remains required and is source-reviewed as resource hygiene. |
+| `percent` 236 | The surviving boundary treats a zero high hex nibble as invalid. Such a decoded octet is below 16 and fails the later printable-ASCII check for every field, so no accepted query changes. |
+
+The arithmetic DER action at line 190 is excluded from this disposition
+because the new test kills it. No claim is made that these source arguments
+replace a full SAML-package mutation inventory.
+
+## Current complete XML rerun
+
+On the current test source, the complete JDK 21 `internal.xml.*` run passes
+17,692 core tests (one expected locale skip) and examines all 667 XML
+mutations: 610 `KILLED`, 35 `SURVIVED`, and 22 `NO_COVERAGE`. All 667 exact
+class/method/descriptor/line/mutator/index/block identities match the preceding
+complete run. Five formerly uncovered verifier result branches changed to
+`KILLED`: absent Assertion (97), wrong-document metadata (119), unsigned
+metadata (130), signed element without an ID (138), and malformed XML
+`SignatureValue` (184). No prior kill regressed. Raw report:
+`/private/tmp/revetsec-rc2-final-xml-mutations.xml`.
+
+The residual raw XML results are not 57 demonstrated vulnerabilities. The
+six verifier survivors, five Response-structure survivors, eleven parser
+configuration survivors and four writer survivors have the source arguments
+above. The decryptor's nine survivors consist of the modulo-16 equivalent
+at line 113 (`encrypted.length - 16` and `encrypted.length + 16` have the same
+remainder), five plaintext/CEK/ciphertext buffer-wipe removals at lines
+121/125/129/134/136, and three `null`-to-empty-list substitutions at
+`keyCandidates` 179/182/194; both list outcomes are rejected by the caller.
+The cleanup and hardening calls remain in production. The following table
+accounts for all 22 uncovered XML actions without treating them as kills.
+
+| Uncovered identity group | Source disposition and test limit |
+| --- | --- |
+| `EnvelopedSignatureVerifier.keyMatches` 303, `namedCurve` 316 | The fallback 303 applies to a signature algorithm/key-type mismatch; passing such a key to JDK XMLDSig cannot validate that signature, though a mutated branch could change the rejection reason. The 316 exception requires the pinned JDK EC provider to fail initialization of one of its three supported named curves. Neither is counted as an assertion kill. |
+| `EnvelopedSignatureVerifier.postcheck` 325/329/332 | `inspectSignature` has already checked the sole Reference, algorithm and transform order on the same DOM used by Revetsec's synchronous SSO path; JDK unmarshalling of that node supplies the same properties. A contradictory post-unmarshal object is not constructible through the pinned provider. |
+| `EnvelopedSignatureVerifier.verifySignedElement` 149/154/173/177/179/189 | These require, respectively, a null default JDK URI dereferencer; a document ID lookup contradicting the parser's unique-ID check immediately after `setIdAttributeNS`; unmarshalling that contradicts the prechecked signature; a validated signature whose cached digest input does not start with its exact signed QName; an ID-table change during one synchronous validation; or an outer JDK runtime fault. The pinned JDK/DOM path did not reach them. A return-null mutant in a reachable fault path would violate the sealed-result contract, so this is a provider/fault-model limit rather than a claim of universal equivalence. |
+| `XmlEncryptionDecryptor.keyCandidates` 191 | This branch needs two sibling wrapped keys with the same referenced `Id`, which the parser's global ID-like-value uniqueness check rejects before decryption. `null` and empty candidates both fail the caller's admission check. |
+| `SamlResponseStructure.allDescendantsHaveSafeShape` 124 | It requires a root Signature distinct from the one selected by the direct-child inspection. A second root Signature is rejected before the descendant walk. |
+| `SecureXmlParser.parse` 104/115 and `DomBuilder.characters` 222/223 | The pinned JDK accepts the parser configuration; a malformed document with no root throws before the post-parse null check. SAX rejects non-whitespace outside the document element before delivering it to `characters`; whitespace there is permitted by either branch. These are provider and well-formedness reachability limits. |
+| Three result/shape `toString` replacements | The covered protocol APIs never use diagnostic `toString` output to select identity, signature, replay, or authorization decisions. No security outcome is affected by those diagnostic-only substitutions. |
+
+This table records why the uncovered branches did not fire on the pinned JDK
+and which public-result fault behaviors remain untested. It does not convert
+them into assertion kills or establish the same behavior on arbitrary XML
+providers. The SAML-package rerun and manual gate are separate.
+
+## Current complete SAML rerun
+
+The combined checkout passed 17,698 core tests on Corretto 17 and 21 (one
+expected locale skip on each). The complete JDK 21 `saml.*` PIT run examined
+2,504 mutations: 2,235 `KILLED`, 97 `SURVIVED`, 170 `NO_COVERAGE`, and two
+`TIMED_OUT`. PIT's aggregate display says 2,237 killed because it includes the
+two timeouts; the XML statuses above distinguish them. Report:
+`/private/tmp/revetsec-rc2-final-combined-saml-mutations.xml`.
+
+Against the immediately preceding complete SAML report, 2,495 exact mutation
+identities match and eight `SURVIVED` actions became `KILLED`, with no killed
+identity regressing. Exact boundary tests account for two requested
+AuthnContext limits, three IdP connection/scope limits, the pending browser
+binding limit, the CSP nonce guard, and HTML form escaping. The internal
+pending-budget seam replaced seven old bytecode identities with nine new ones;
+all nine new actions were killed. The direct test covers the exact elapsed
+deadline, one nanosecond before it, a backward clock, and interruption. These
+are tests of implementation boundaries, not a change to the public SAML API.
+
+The remaining 97 survivors and 170 uncovered actions still require exact
+justification or stronger tests; the source/reachability arguments above cover
+only the identities they name. They are not assertion kills. The two timeout
+identities remain nonterminating mutants. This complete rerun does not by
+itself close the RC-2 PIT assurance gate or the manual pentest.
+
+The same combined source passed the configured Corretto 21 Error Prone,
+NullAway, SpotBugs and FindSecBugs `verify` profile with 17,698 tests, zero
+failures/errors, one expected skip, and no static findings. After a local
+Corretto 17 core install, the complete `differential` module passed 43/43
+tests across OpenSAML, Spring and the libxmlsec oracle, with no skips. These
+are local checks; a hosted workflow on the final pushed revision is separate.
+
+## Final observer and deadline continuation
+
+The next complete Corretto 21 SAML run passed 17,701 core tests (one expected
+locale skip) and examined 2,508 mutations: 2,271 `KILLED`, 81 `SURVIVED`,
+154 `NO_COVERAGE`, and two `TIMED_OUT`. Of 2,492 exact identities shared with
+the preceding complete report, fifteen survivors and fifteen uncovered actions
+became kills; no prior kill regressed. The cache deadline seams replaced twelve
+old identities with sixteen new ones. Report:
+`/private/tmp/revetsec-rc2-final-cache-saml-mutations.xml`.
+
+A subsequent focused full-test-selection run on the two in-memory stores and
+SP metadata matched all 177 of their prior identities. It killed the two new
+`expired` false-return wrappers and the newly reached SLO `Binding`
+attribute omission, with no kill regression. The **composite** final-source
+inventory is 2,274 `KILLED`, 78 `SURVIVED`, 154 `NO_COVERAGE`, and two
+`TIMED_OUT` out of 2,508. This is a complete run plus a focused continuation,
+not another complete-package PIT run. Focused report:
+`/private/tmp/revetsec-rc2-final-three-mutations.xml`.
+
+All 78 residual survivors have the following exact-location source
+dispositions. These are not assertion kills; production guards and cleanup
+calls remain in place.
+
+| Class (count) | Source disposition |
+| --- | --- |
+| `SamlResponseSemantics` (11) | At 435, only zero versus nonzero audience-restriction count matters. At 426, an adjusted-time overflow can reject or fail closed, not release identity. At 741, null versus empty nested leaf is rejected by issuer, NameID and audience callers; AttributeValue calls `leaf` only without element children. The 571/576/582/598 order boundaries require an absent Subject or Issuer already rejected before release. At 772, `sameNode` receives only the parser/verifier's private proof over one DOM. At 664, an empty `xsi:type` prefix resolves to no required namespace. At 680, a trailing `@` cannot pass the nonempty configured scope allowlist. |
+| `SamlServiceProvider` (6) | At 322, the two-minute age cap is identical at equality. At 820/822/823, non-element SLO node handling can change rejection or availability, while the signed Redirect query and checked element/session binding still prevent identity release. At 653/657, only the redacted observer elapsed time changes. |
+| `SamlRedirectBindingMessage` (9), `SamlPostBindingDecoder` (8) | The exact DER, query, percent, inflate, MIME and field-shape arguments appear above. No changed accepted identity-bearing binding results. Removed `Inflater.end()` at Redirect 224 is retained resource cleanup. |
+| `SamlRedirectAuthnRequest` (12) | `deflate` 273/274 changes outbound availability under a zero-output/provider or oversized-buffer state; 281 removes resource cleanup. At 287, only initial builder capacity changes. At 313, later empty/reserved-name checks remain. At 215, the JDK signer chooses a different XML prefix. Writer calls 251/253/255/256/257/259 are redundant for normal pinned-provider output, but retained for portability. None is inbound identity admission. |
+| `SamlRedirectLogout` (11), `SamlServiceProviderMetadata` (5) | The surviving writer end/flush/close removals affect outbound output or lifecycle; positive SLO/metadata tests parse the output. The calls stay explicit. Redirect logout 139 removes only `Deflater.end()`. |
+| `PendingSamlAuthenticationCodec` (5) | At 99, a relaxed early Base64 estimate is still bounded by the whole 8,192-character seal and decoded-byte check at 103. Empty-for-null substitutions at 99/102/103/107 fail required field, date, context or application-data validation afterward. |
+| `SamlInboundResponse` (3) | At 142, a counter is consumed only as `clearIds != 0`. At 121/163, removed plaintext wipes cannot be observed through a public result; the wipes remain source-reviewed security hygiene, not equivalents. |
+| `InMemoryPendingSamlAuthenticationStore` (2), `InMemorySamlReplayCache` (2) | Pending 144 and replay 88 select the same 30-second cap at equality. Pending 153 and replay 92 can attempt a zero-wait lock, but post-lock expiration prevents record release or mutation. Exact deadline and interruption are directly tested. |
+| `SamlAuthenticationResult.Succeeded` and `.Rejected` (2), `SamlDateTime` (1), `SamlIdentityProviderMetadata` (1) | The result `toString` changes affect redacted diagnostics only. DateTime 55 selects the same nine digits at exactly nine fractional digits. Metadata `textOnly` 330 maps nested content to empty text, which certificate and Scope callers reject like null. |
+
+These source arguments cover all 78 survivor identities in the composite
+report. They do not turn the 154 uncovered actions or two timeouts into kills,
+and are limited to the pinned JDK/provider and checked admission paths.
+The manual pentest and hosted final-revision workflow remain separate RC-2
+decisions.
+
+The exact checkout after this continuation passed Corretto 17 `clean verify`
+with 17,701 tests, zero failures/errors and the expected locale skip. It also
+passed Corretto 21 `-Pstatic-analysis,spotbugs verify` with the same test count
+and no SpotBugs/FindSecBugs findings. After a local Corretto 17 install of
+that build, the `differential` module passed all 43 tests with zero skips.
+The local logs are `/private/tmp/revetsec-rc2-final-source-jdk17.log`,
+`/private/tmp/revetsec-rc2-final-source-static.log`, and
+`/private/tmp/revetsec-rc2-final-source-differential.log`. These checks do not
+replace the hosted workflow on the owner's final pushed revision.

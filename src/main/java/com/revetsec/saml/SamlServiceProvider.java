@@ -670,7 +670,7 @@ public final class SamlServiceProvider {
         throw new IllegalStateException("Unclassified SAML authentication request result");
     }
 
-    private static SamlObserver.@NonNull Outcome outcome(@NonNull SamlAuthenticationResult result) {
+    static SamlObserver.@NonNull Outcome outcome(@NonNull SamlAuthenticationResult result) {
         if (result instanceof SamlAuthenticationResult.Succeeded) return SamlObserver.Outcome.SUCCEEDED;
         if (result instanceof SamlAuthenticationResult.StatusReceived) return SamlObserver.Outcome.STATUS_RECEIVED;
         if (result instanceof SamlAuthenticationResult.Rejected) return SamlObserver.Outcome.REJECTED;
@@ -679,7 +679,7 @@ public final class SamlServiceProvider {
         throw new IllegalStateException("Unclassified SAML authentication result");
     }
 
-    private static SamlObserver.@NonNull Outcome outcome(@NonNull SamlLogoutRequestResult result) {
+    static SamlObserver.@NonNull Outcome outcome(@NonNull SamlLogoutRequestResult result) {
         if (result instanceof SamlLogoutRequestResult.Accepted) return SamlObserver.Outcome.SUCCEEDED;
         if (result instanceof SamlLogoutRequestResult.Rejected) return SamlObserver.Outcome.REJECTED;
         if (result instanceof SamlLogoutRequestResult.Unavailable) return SamlObserver.Outcome.UNAVAILABLE;
@@ -687,14 +687,14 @@ public final class SamlServiceProvider {
         throw new IllegalStateException("Unclassified SAML logout request result");
     }
 
-    private static SamlObserver.@NonNull Outcome outcome(@NonNull SamlLogoutRedirectResult result) {
+    static SamlObserver.@NonNull Outcome outcome(@NonNull SamlLogoutRedirectResult result) {
         if (result instanceof SamlLogoutRedirectResult.Prepared) return SamlObserver.Outcome.SUCCEEDED;
         if (result instanceof SamlLogoutRedirectResult.Rejected) return SamlObserver.Outcome.REJECTED;
         if (result instanceof SamlLogoutRedirectResult.Unavailable) return SamlObserver.Outcome.UNAVAILABLE;
         throw new IllegalStateException("Unclassified SAML logout redirect result");
     }
 
-    private static SamlObserver.@NonNull Outcome outcome(@NonNull SamlLogoutResult result) {
+    static SamlObserver.@NonNull Outcome outcome(@NonNull SamlLogoutResult result) {
         if (result instanceof SamlLogoutResult.Succeeded) return SamlObserver.Outcome.SUCCEEDED;
         if (result instanceof SamlLogoutResult.StatusReceived) return SamlObserver.Outcome.STATUS_RECEIVED;
         if (result instanceof SamlLogoutResult.Rejected) return SamlObserver.Outcome.REJECTED;
@@ -703,7 +703,7 @@ public final class SamlServiceProvider {
         throw new IllegalStateException("Unclassified SAML logout result");
     }
 
-    private static SamlObserver.@NonNull Outcome outcome(@NonNull SamlLogoutResponseRedirectResult result) {
+    static SamlObserver.@NonNull Outcome outcome(@NonNull SamlLogoutResponseRedirectResult result) {
         if (result instanceof SamlLogoutResponseRedirectResult.Prepared) return SamlObserver.Outcome.SUCCEEDED;
         if (result instanceof SamlLogoutResponseRedirectResult.Rejected) return SamlObserver.Outcome.REJECTED;
         if (result instanceof SamlLogoutResponseRedirectResult.Unavailable) return SamlObserver.Outcome.UNAVAILABLE;

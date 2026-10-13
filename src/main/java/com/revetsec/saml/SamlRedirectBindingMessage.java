@@ -170,7 +170,7 @@ public final class SamlRedirectBindingMessage {
         return false;
     }
 
-    private static byte @Nullable [] canonicalEcdsaSignature(byte @NonNull [] value,
+    static byte @Nullable [] canonicalEcdsaSignature(byte @NonNull [] value,
             @NonNull EcCurve curve) {
         if (value.length == curve.getSignatureLength()) {
             if (EcdsaSignatures.findShapeFailure(curve, value).isPresent()) return null;

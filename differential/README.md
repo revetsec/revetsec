@@ -247,8 +247,8 @@ malformed-shape cases with their separate exact verdicts above. Applying the
 same matrix to them yields 1,232 effective changed envelopes. Revetsec rejects
 all 1,232. OpenSAML accepts 60 and Spring accepts 96; each acceptance selects
 the same identity as its original fixture. No rejected fixture gains an
-accepted attacker identity under a comparator. The plan's all-fixture applicability
-review outside these five families is still open.
+accepted attacker identity under a comparator. The other fixture families and
+their applicable mutation sets are mapped in the audit below.
 
 The Docker-backed SLO matrix uses Python cryptography to sign live
 IdP-initiated LogoutRequests and SP-initiated LogoutResponses, including 12
@@ -272,9 +272,34 @@ those conditions automatically. The fixtures come from
 `interop/scripted-idp/mint_slo_corpus.py` and use a deterministic test-only SP
 pending ID and RelayState.
 
-The remaining RC-2 assurance is open: an applicability-complete
-fixture-by-mutation cross-product beyond the four real-product encrypted SSO
-captures and scripted signed/encrypted corpus, the full Fragile Lock
-precondition, mutation-survivor dispositions,
-maintainer review and the final API freeze. The hosted Shibboleth dispatch and
-its offline replay have run; the imported hosted fixtures are uncommitted.
+## RC-2 mutation applicability audit
+
+The comparator's XSW, Fragile Lock and structure mutation cross-products use
+the protocol message and trusted-signature precondition of each family:
+
+| Fixture family | Applicable mutated documents | Boundary checked |
+| --- | ---: | --- |
+| 61 trusted signed SSO controls, including SHA-1 compatibility and standalone RSA/EC algorithms | 1,159 | All 19 signed-envelope edits through both whole-SP paths and libxmlsec on the original signed target. |
+| Five signed semantic/structure corpora: 30 accepted and 65 already rejected originals | 568 + 1,232 effective edits | The 19-name matrix omits inert substitutions; all changed documents run through both whole-SP paths, with accepted identities compared to each original. |
+| 47 positive encrypted controls and five additional signed sibling-key controls | 893 + 95 | All 19 encrypted-wrapper edits; libxmlsec checks the original signed target and the whole-SP paths check identity. |
+| Six rejected encrypted originals | 114 | All 19 wrapper edits are checked for unexpected acceptance of an already rejected baseline. |
+| Three signed real-product captures and one unsigned, assertion-signed CBC capture | 57 + 17 | All 19 signed-Response edits; the unsigned capture takes the 17 edits that do not require copying a Response signature. |
+| Nine separately minted libxmlsec/signxml controls | 171 | All 19 applicable edits with each fixture's own allowlisted signing certificate and separate decryption key. |
+| Eight forged-KeyInfo documents | Separate trust-anchor matrix | Each attacker signature validates under the attacker key and fails under the trusted IdP key. Adding XSW to an already untrusted signer does not create the trusted-signature precondition; this family is checked for signer confusion instead. |
+| Redirect SLO request/response corpus | Separate 14-document binding matrix and 12 signed semantic edits | POST-binding XSW templates do not apply to raw signed Redirect query octets; the SLO matrix checks query tampering, signed XML semantics, correlation and replay. |
+
+Metadata XML and unsigned parsing fixtures do not carry a trusted SSO identity
+signature for an XSW comparison. Their structure, signature and parser
+boundaries are covered in the core metadata and XML tests. This table records
+which mutation families were applied or excluded; it does not claim that a
+cryptographic oracle enforces Revetsec's application policy.
+
+The local applicability audit and 43-method comparator pass are complete;
+the current uncommitted comparator additions still need hosted CI on the
+owner's pushed revision. The full validly signed
+void-canonicalization variant was not reproduced; its source-backed
+non-applicability disposition was accepted by the owner and is recorded in the
+manual report. The calibrated reviews, hosted Shibboleth replay, owner review
+of the verifier repair, and public SAML API freeze are complete. PIT
+dispositions and the broader live-interception manual gate remain open. The
+latest hosted fixtures are imported locally and still need the owner's commit.

@@ -29,6 +29,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.Duration;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
@@ -99,8 +100,15 @@ final class SamlServiceProviderTests {
     @Test void sealedBrowserLoginCompletesOnlyAfterSignatureAndReplayAdmission() throws Exception {
         KeyPair key = rsa();
         SamlReplayCache replay = InMemorySamlReplayCache.withLimit(CLOCK, 4);
+        AtomicReference<SamlObserver.Outcome> completionOutcome = new AtomicReference<>();
+        SamlObserver observer = new SamlObserver() {
+            @Override public void didHandleOperation(@NonNull Operation operation,
+                    @NonNull Outcome outcome, @NonNull Duration elapsed) {
+                if (operation == Operation.COMPLETE_AUTHENTICATION) completionOutcome.set(outcome);
+            }
+        };
         SamlServiceProvider sp = SamlServiceProvider.withEntityId(SP)
-                .assertionConsumerServiceUrl(ACS).replayCache(replay).clock(CLOCK).build();
+                .assertionConsumerServiceUrl(ACS).replayCache(replay).clock(CLOCK).observer(observer).build();
         SamlIdentityProvider idp = SamlIdentityProvider.withEntityId(IDP)
                 .connectionId("tenant-one").redirectSingleSignOnService(URI.create("https://idp.example.test/sso"))
                 .signingKeys(List.of(key.getPublic())).build();
@@ -119,12 +127,65 @@ final class SamlServiceProviderTests {
                 false, key.getPrivate()), pending.getRelayStateHandle());
         SamlAuthenticationResult.Succeeded success = assertInstanceOf(SamlAuthenticationResult.Succeeded.class,
                 sp.completeAuthenticationResult(message, source, idp));
+        assertEquals(SamlObserver.Outcome.SUCCEEDED, completionOutcome.get());
         assertEquals("alice", success.getAuthentication().getNameId().orElseThrow().getValue());
+        assertEquals(false, success.getAuthentication().isUnsolicited());
         assertTrue(success.getAuthentication().getSubjectKey().isEmpty());
         assertEquals("tenant-one", success.getAuthentication().getIdentityProviderConnectionId());
         assertEquals(SamlAuthenticationResult.Reason.REPLAYED,
                 assertInstanceOf(SamlAuthenticationResult.Rejected.class,
                         sp.completeAuthenticationResult(message, source, idp)).getReason());
+    }
+
+    @Test void signedResponseCannotSatisfyIdpSignedAssertionRequirement() throws Exception {
+        KeyPair key = rsa();
+        SamlServiceProvider sp = SamlServiceProvider.withEntityId(SP)
+                .assertionConsumerServiceUrl(ACS).replayCache(InMemorySamlReplayCache.withLimit(CLOCK, 4))
+                .clock(CLOCK).build();
+        SamlIdentityProvider strict = SamlIdentityProvider.withEntityId(IDP)
+                .connectionId("signed-assertion-policy")
+                .redirectSingleSignOnService(URI.create("https://idp.example.test/sso"))
+                .signingKeys(List.of(key.getPublic())).requireSignedAssertions(true).build();
+        SamlIdentityProvider responseSigned = SamlIdentityProvider.withEntityId(IDP)
+                .connectionId("signed-assertion-policy")
+                .redirectSingleSignOnService(URI.create("https://idp.example.test/sso"))
+                .signingKeys(List.of(key.getPublic())).build();
+        PendingSamlAuthentication pending = assertInstanceOf(SamlAuthenticationRequestResult.Prepared.class,
+                sp.beginAuthenticationResult(strict)).getPendingAuthentication();
+        StateSealer sealer = StateSealer.withActiveKey(TestSealers.fixedKey("saml-assertion-policy"))
+                .clock(CLOCK).build();
+        PendingSamlAuthenticationSource source = PendingSamlAuthenticationSource.fromSealedForm(
+                pending.toSealedForm(sealer, "saml-cookie"), sealer, "saml-cookie");
+        String xml = SamlResponseSemanticsTests.BASE.replace("_request", pending.getRequestId())
+                .replace("2026-10-09T00:00:00Z", "2026-10-09T00:01:00Z");
+        SamlPostBindingMessage responseOnly = message(SamlResponseSemanticsTests.signedXml(
+                xml, true, false, key.getPrivate()), pending.getRelayStateHandle());
+        assertEquals(SamlAuthenticationResult.Reason.SIGNATURE,
+                assertInstanceOf(SamlAuthenticationResult.Rejected.class,
+                        sp.completeAuthenticationResult(responseOnly, source, strict)).getReason());
+        assertInstanceOf(SamlAuthenticationResult.Succeeded.class,
+                sp.completeAuthenticationResult(responseOnly, source, responseSigned));
+    }
+
+    @Test void idpRequestSignaturePolicyRejectsUnsignedBeginWithoutSpKey() throws Exception {
+        KeyPair key = rsa();
+        SamlServiceProvider sp = SamlServiceProvider.withEntityId(SP)
+                .assertionConsumerServiceUrl(ACS).replayCache(InMemorySamlReplayCache.withLimit(CLOCK, 4))
+                .clock(CLOCK).build();
+        SamlIdentityProvider requiresSignedRequests = SamlIdentityProvider.withEntityId(IDP)
+                .connectionId("signed-request-policy")
+                .redirectSingleSignOnService(URI.create("https://idp.example.test/sso"))
+                .signingKeys(List.of(key.getPublic())).wantAuthnRequestsSigned(true).build();
+        SamlIdentityProvider permitsUnsignedRequests = SamlIdentityProvider.withEntityId(IDP)
+                .connectionId("signed-request-policy")
+                .redirectSingleSignOnService(URI.create("https://idp.example.test/sso"))
+                .signingKeys(List.of(key.getPublic())).build();
+        assertEquals(SamlAuthenticationRequestResult.Rejected.CONFIGURATION,
+                sp.beginAuthenticationResult(requiresSignedRequests));
+        SamlAuthenticationRequestResult.Prepared unsigned = assertInstanceOf(
+                SamlAuthenticationRequestResult.Prepared.class,
+                sp.beginAuthenticationResult(permitsUnsignedRequests));
+        assertTrue(!unsigned.getRedirectUri().toASCIIString().contains("Signature="));
     }
 
     @Test void persistentNameIdKeepsQualifiersInStableSubjectKey() throws Exception {
@@ -564,6 +625,10 @@ final class SamlServiceProviderTests {
         SamlAuthentication identity = success.getAuthentication();
         assertEquals(List.of("Engineering"), identity.getAttributeValues("department"));
         assertEquals("session-123", identity.getSessionReference().getSessionIndex().orElseThrow());
+        assertEquals(Instant.parse("2026-10-09T01:00:00Z"),
+                identity.getSessionNotOnOrAfter().orElseThrow());
+        assertEquals(identity.getSessionNotOnOrAfter(),
+                identity.getSessionReference().getSessionNotOnOrAfter());
         assertEquals("urn:example:mfa", identity.getAuthnContextClassRef().orElseThrow());
     }
 

@@ -33,6 +33,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -41,6 +42,16 @@ import static java.util.Objects.requireNonNull;
 final class InMemorySamlReplayCacheTests {
     private static final @NonNull Duration BUDGET = Duration.ofSeconds(5);
     private static final @NonNull Instant START = Instant.parse("2026-10-09T00:00:00Z");
+
+    @Test void maximumCapacityAndExactMonotonicDeadlineAreAcceptedPrecisely() {
+        assertDoesNotThrow(() -> InMemorySamlReplayCache.withLimit(
+                Clock.fixed(START, ZoneOffset.UTC), 1_000_000));
+        assertTrue(InMemorySamlReplayCache.expired(System.nanoTime() - 1));
+        assertFalse(InMemorySamlReplayCache.expiredAt(100, 99, false));
+        assertTrue(InMemorySamlReplayCache.expiredAt(100, 100, false));
+        assertTrue(InMemorySamlReplayCache.expiredAt(100, 101, false));
+        assertTrue(InMemorySamlReplayCache.expiredAt(100, 99, true));
+    }
 
     @Test void refusesLiveEvictionAndReclaimsExpiredEntries() {
         MutableClock clock = new MutableClock(START);

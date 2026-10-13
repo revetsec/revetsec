@@ -1,9 +1,12 @@
-# RC-2 SAML public API freeze candidate — 2026-10-12
+# RC-2 SAML public API freeze — 2026-10-12
 
-**Status: proposed for maintainer review; not frozen.** This inventory is for
+**Status: owner reviewed and frozen on 2026-10-12.** This inventory is for
 the current uncommitted checkout after importing the hosted Shibboleth
-captures. It covers `com.revetsec.saml` in the core JAR. The current RC-2 code
-change is confined to `com.revetsec.internal.xml`; no public SAML declaration
+captures. It covers `com.revetsec.saml` in the core JAR. The RC-2 production
+fix is in `com.revetsec.internal.xml`; a Redirect signature canonicalizer also
+became package-accessible for same-package boundary tests. The internal
+pending-budget and cache deadline calculations, plus observer result
+classification, gained package-private test seams. No public SAML declaration
 changed in this slice.
 
 The package has 39 public top-level types: 22 final classes, 11 sealed result
@@ -37,9 +40,14 @@ rollover. Metadata-signature verification retains its separate one-through-four
 trust-anchor limit. The [integration guide](../saml-sp.md) describes these
 limits, the CBC opt-in, pending-state rules, and login/logout ownership.
 
-The current full core suite passed 17,685/17,685 tests on both Corretto 17
-and 21, with one intentional locale skip per run. RC-2 still needs the manual
-pentest disposition, PIT survivor review, differential cross-product, and
-maintainer review of the `internal.xml` key-limit diff. The seven-target local
+The current complete Corretto 17 and 21 core suites each passed 17,701 tests,
+with one intentional locale skip per run.
+RC-2 still needs the manual
+pentest disposition and PIT survivor review. The owner reviewed and confirmed
+the `internal.xml` key-limit diff.
+The 43-method differential comparator now
+covers the separately keyed corpus with libxmlsec. The seven-target local
 fuzz campaign and 91-seed replay are recorded in the mutation triage ledger.
-This candidate does not claim those gates or the API freeze are complete.
+The owner confirmed this public API inventory and the message-signing-key
+limit repair. The API freeze is complete; this note does not claim the
+remaining RC-2 gates are complete.

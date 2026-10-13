@@ -15,6 +15,7 @@
  */
 package com.revetsec.saml;
 
+import com.revetsec.internal.crypto.EcCurve;
 import org.jspecify.annotations.NonNull;
 import org.junit.jupiter.api.Test;
 import java.net.URI;
@@ -34,12 +35,49 @@ import java.util.List;
 import java.util.Map;
 import java.util.zip.Deflater;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 final class SamlRedirectBindingMessageTests {
+    @Test void canonicalDerAcceptsExactMinimumAndLongFormLengthBoundaries() {
+        byte[] smallestPositivePair = {0x30, 0x06, 0x02, 0x01, 0x01, 0x02, 0x01, 0x01};
+        assertArrayEquals(smallestPositivePair, SamlRedirectBindingMessage
+                .canonicalEcdsaSignature(smallestPositivePair, EcCurve.P_256));
+
+        byte[] paddedFullWidth = new byte[40];
+        paddedFullWidth[0] = 0x30;
+        paddedFullWidth[1] = 38;
+        paddedFullWidth[2] = 0x02;
+        paddedFullWidth[3] = 33;
+        paddedFullWidth[5] = (byte) 0x80;
+        paddedFullWidth[37] = 0x02;
+        paddedFullWidth[38] = 0x01;
+        paddedFullWidth[39] = 0x01;
+        assertArrayEquals(paddedFullWidth, SamlRedirectBindingMessage
+                .canonicalEcdsaSignature(paddedFullWidth, EcCurve.P_256));
+
+        byte[] longForm128 = new byte[131];
+        longForm128[0] = 0x30;
+        longForm128[1] = (byte) 0x81;
+        longForm128[2] = (byte) 0x80;
+        longForm128[3] = 0x02;
+        longForm128[4] = 62;
+        longForm128[5] = 0x01;
+        longForm128[67] = 0x02;
+        longForm128[68] = 62;
+        longForm128[69] = 0x01;
+        assertArrayEquals(longForm128, SamlRedirectBindingMessage
+                .canonicalEcdsaSignature(longForm128, EcCurve.P_521));
+
+        byte[] missingSecondIntegerByte = {0x30, 0x06, 0x02, 0x02, 0x01, 0x01, 0x02, 0x01};
+        assertNull(SamlRedirectBindingMessage.canonicalEcdsaSignature(
+                missingSecondIntegerByte, EcCurve.P_256));
+    }
+
     @Test void verifiesRawQueryAndRejectsAmbiguousInputs() throws Exception {
         KeyPairGenerator generator = KeyPairGenerator.getInstance("RSA");
         generator.initialize(2048);
