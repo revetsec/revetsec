@@ -23,12 +23,17 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 final class InMemoryPendingSamlAuthenticationStoreTests {
     private static final @NonNull Instant START = Instant.parse("2026-10-09T00:00:00Z");
@@ -82,6 +87,7 @@ final class InMemoryPendingSamlAuthenticationStoreTests {
     @Test void invalidInputsAndFailingClockDoNotCreatePendingState() {
         MutableClock clock = new MutableClock(START);
         InMemoryPendingSamlAuthenticationStore store = InMemoryPendingSamlAuthenticationStore.withLimit(clock, 1);
+        InMemoryPendingSamlAuthenticationStore.withLimit(clock, 1_000_000);
         assertThrows(IllegalArgumentException.class, () -> InMemoryPendingSamlAuthenticationStore.withLimit(clock, 0));
         assertThrows(IllegalArgumentException.class, () -> InMemoryPendingSamlAuthenticationStore.withLimit(clock, 1_000_001));
         assertThrows(IllegalArgumentException.class,
@@ -95,6 +101,125 @@ final class InMemoryPendingSamlAuthenticationStoreTests {
                 store.save("browser", "handle", "sealed", START.plusSeconds(60), BUDGET));
         assertInstanceOf(SamlPendingConsumeResult.Unavailable.class,
                 store.consume("browser", "handle", BUDGET));
+    }
+
+    @Test void blockedStoreHonorsConsumerBudgetWithoutReleasingOrStealingRecord()
+            throws Exception {
+        BlockingClock clock = new BlockingClock();
+        InMemoryPendingSamlAuthenticationStore store =
+                InMemoryPendingSamlAuthenticationStore.withLimit(clock, 1);
+        AtomicReference<SamlPendingSaveResult> saved = new AtomicReference<>();
+        AtomicReference<SamlPendingConsumeResult> consumed = new AtomicReference<>();
+        AtomicReference<Throwable> failure = new AtomicReference<>();
+        CountDownLatch consumerDone = new CountDownLatch(1);
+        Thread writer = new Thread(() -> {
+            try { saved.set(store.save("browser", "handle", "sealed", START.plusSeconds(60),
+                    Duration.ofSeconds(5))); }
+            catch (Throwable thrown) { failure.set(thrown); }
+        });
+        Thread consumer = new Thread(() -> {
+            try { consumed.set(store.consume("browser", "handle", Duration.ofMillis(50))); }
+            catch (Throwable thrown) { failure.set(thrown); }
+            finally { consumerDone.countDown(); }
+        });
+        writer.start();
+        try {
+            assertTrue(clock.entered.await(3, TimeUnit.SECONDS));
+            consumer.start();
+            assertTrue(consumerDone.await(2, TimeUnit.SECONDS),
+                    "The consumer must finish while the writer still holds the lock");
+            assertInstanceOf(SamlPendingConsumeResult.Unavailable.class, consumed.get());
+            assertNull(failure.get());
+        } finally {
+            clock.release.countDown();
+            writer.join(3_000);
+            if (consumer.isAlive()) consumer.join(3_000);
+        }
+        assertFalse(writer.isAlive());
+        assertFalse(consumer.isAlive());
+        assertEquals(SamlPendingSaveResult.SAVED, saved.get());
+        assertNull(failure.get());
+        assertEquals("sealed", assertInstanceOf(SamlPendingConsumeResult.Consumed.class,
+                store.consume("browser", "handle", BUDGET)).getSealedRecord());
+        AtomicReference<SamlPendingSaveResult> nextSave = new AtomicReference<>();
+        Thread nextWriter = new Thread(() -> nextSave.set(store.save("other", "handle", "next",
+                START.plusSeconds(60), BUDGET)));
+        nextWriter.start();
+        nextWriter.join(3_000);
+        assertFalse(nextWriter.isAlive());
+        assertEquals(SamlPendingSaveResult.SAVED, nextSave.get(),
+                "A consumed record must release the lock for another thread");
+    }
+
+    @Test void interruptedConsumerPreservesItsInterruptAndLeavesPendingRecordUntouched()
+            throws Exception {
+        BlockingClock clock = new BlockingClock();
+        InMemoryPendingSamlAuthenticationStore store =
+                InMemoryPendingSamlAuthenticationStore.withLimit(clock, 1);
+        AtomicReference<SamlPendingSaveResult> saved = new AtomicReference<>();
+        AtomicReference<SamlPendingConsumeResult> consumed = new AtomicReference<>();
+        AtomicReference<Throwable> failure = new AtomicReference<>();
+        AtomicBoolean consumerInterrupted = new AtomicBoolean();
+        Thread writer = new Thread(() -> {
+            try { saved.set(store.save("browser", "handle", "sealed", START.plusSeconds(60),
+                    Duration.ofSeconds(5))); }
+            catch (Throwable thrown) { failure.set(thrown); }
+        });
+        Thread consumer = new Thread(() -> {
+            try { consumed.set(store.consume("browser", "handle", Duration.ofSeconds(5))); }
+            catch (Throwable thrown) { failure.set(thrown); }
+            finally { consumerInterrupted.set(Thread.currentThread().isInterrupted()); }
+        });
+        writer.start();
+        try {
+            assertTrue(clock.entered.await(3, TimeUnit.SECONDS));
+            consumer.start();
+            long observationDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(2);
+            while (consumer.getState() != Thread.State.TIMED_WAITING
+                    && System.nanoTime() < observationDeadline)
+                Thread.sleep(1);
+            assertEquals(Thread.State.TIMED_WAITING, consumer.getState(),
+                    "The consumer must be waiting for the held store lock");
+            consumer.interrupt();
+            consumer.join(3_000);
+            assertFalse(consumer.isAlive());
+            assertInstanceOf(SamlPendingConsumeResult.Unavailable.class, consumed.get());
+            assertTrue(consumerInterrupted.get(), "The consumer's interrupt flag must survive");
+            assertNull(failure.get());
+        } finally {
+            clock.release.countDown();
+            writer.join(3_000);
+            if (consumer.isAlive()) {
+                consumer.interrupt();
+                consumer.join(3_000);
+            }
+        }
+        assertFalse(writer.isAlive());
+        assertEquals(SamlPendingSaveResult.SAVED, saved.get());
+        assertEquals("sealed", assertInstanceOf(SamlPendingConsumeResult.Consumed.class,
+                store.consume("browser", "handle", BUDGET)).getSealedRecord());
+    }
+
+    private static final class BlockingClock extends Clock {
+        private final @NonNull CountDownLatch entered = new CountDownLatch(1);
+        private final @NonNull CountDownLatch release = new CountDownLatch(1);
+        private final @NonNull AtomicBoolean first = new AtomicBoolean(true);
+
+        @Override public @NonNull ZoneId getZone() { return ZoneOffset.UTC; }
+
+        @Override public @NonNull Clock withZone(@NonNull ZoneId zone) { return this; }
+
+        @Override public @NonNull Instant instant() {
+            if (first.compareAndSet(true, false)) {
+                entered.countDown();
+                try { release.await(); }
+                catch (InterruptedException exception) {
+                    Thread.currentThread().interrupt();
+                    throw new IllegalStateException(exception);
+                }
+            }
+            return START;
+        }
     }
 
     private static final class MutableClock extends Clock {

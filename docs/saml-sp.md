@@ -23,6 +23,9 @@ Approve an IdP connection in application configuration. Parse its metadata local
 source or a pinned metadata signature, then build `SamlIdentityProvider` with an
 application-assigned `connectionId`. The metadata's entity ID is supplied by the IdP and
 must not be the tenant or account namespace.
+An IdP connection accepts one through eight trusted message-signing keys for
+rollover. Metadata-signature verification has a separate one-through-four
+trust-key limit; the application selects those anchors separately.
 Metadata signing keys use one direct `ds:X509Certificate` per `md:KeyDescriptor`;
 publish rollover keys in separate descriptors. Certificate contents must be text-only
 Base64 of exactly one certificate with a minimally encoded outer DER sequence.

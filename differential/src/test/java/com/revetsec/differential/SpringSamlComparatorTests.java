@@ -30,6 +30,7 @@ import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.saml2.core.Saml2X509Credential;
 import org.springframework.security.saml2.provider.service.authentication.OpenSaml5AuthenticationProvider;
 import org.springframework.security.saml2.provider.service.authentication.Saml2AuthenticationToken;
+import org.springframework.security.saml2.provider.service.authentication.Saml2RedirectAuthenticationRequest;
 import org.springframework.security.saml2.provider.service.registration.RelyingPartyRegistration;
 
 import java.net.URI;
@@ -314,9 +315,17 @@ final class SpringSamlComparatorTests {
 
     static @NonNull Authentication spring(@NonNull String xml,
             @NonNull String certificateName) throws Exception {
-        Saml2X509Credential credential = Saml2X509Credential.verification(certificate(certificateName));
-        Saml2X509Credential decryptingCredential = Saml2X509Credential.decryption(decryptionKey(),
-                certificate("sp-encryption-rsa-2048"));
+        return springWithKeys(xml, certificate(certificateName),
+                certificate("sp-encryption-rsa-2048"), decryptionKey());
+    }
+
+    static @NonNull Authentication springWithKeys(@NonNull String xml,
+            @NonNull X509Certificate signingCertificate,
+            @NonNull X509Certificate decryptionCertificate,
+            @NonNull PrivateKey decryptionPrivateKey) throws Exception {
+        Saml2X509Credential credential = Saml2X509Credential.verification(signingCertificate);
+        Saml2X509Credential decryptingCredential = Saml2X509Credential.decryption(
+                decryptionPrivateKey, decryptionCertificate);
         RelyingPartyRegistration registration = RelyingPartyRegistration.withRegistrationId("scripted")
                 .entityId("https://sp.test/Selftest")
                 .assertionConsumerServiceLocation("https://sp.test/acs")
@@ -335,6 +344,34 @@ final class SpringSamlComparatorTests {
         Authentication authentication = provider.authenticate(
                 new Saml2AuthenticationToken(registration, xml, null));
         return java.util.Objects.requireNonNull(authentication);
+    }
+
+    static @NonNull Authentication springCaptured(@NonNull String xml,
+            @NonNull X509Certificate signingCertificate, @NonNull String sp,
+            @NonNull String acs, @NonNull String idp, @NonNull String sso,
+            @NonNull String requestId,
+            @NonNull String relayState, @NonNull String encodedRequest,
+            @NonNull Instant observed) throws Exception {
+        Saml2X509Credential verification = Saml2X509Credential.verification(signingCertificate);
+        Saml2X509Credential decryption = Saml2X509Credential.decryption(decryptionKey(),
+                certificate("sp-encryption-rsa-2048"));
+        RelyingPartyRegistration registration = RelyingPartyRegistration.withRegistrationId("shibboleth-capture")
+                .entityId(sp).assertionConsumerServiceLocation(acs)
+                .decryptionX509Credentials(credentials -> credentials.add(decryption))
+                .assertingPartyMetadata(party -> party.entityId(idp)
+                        .singleSignOnServiceLocation(sso)
+                        .verificationX509Credentials(credentials -> credentials.add(verification)))
+                .build();
+        Saml2RedirectAuthenticationRequest request = Saml2RedirectAuthenticationRequest
+                .withRelyingPartyRegistration(registration).id(requestId)
+                .relayState(relayState).samlRequest(encodedRequest).build();
+        OpenSaml5AuthenticationProvider provider = new OpenSaml5AuthenticationProvider();
+        Duration replaySkew = Duration.between(observed, Instant.now())
+                .abs().plus(Duration.ofMinutes(5));
+        provider.setAssertionValidator(OpenSaml5AuthenticationProvider.AssertionValidator.builder()
+                .clockSkew(replaySkew).build());
+        return java.util.Objects.requireNonNull(provider.authenticate(
+                new Saml2AuthenticationToken(registration, xml, request)));
     }
 
     private static @NonNull X509Certificate certificate(@NonNull String name) throws Exception {

@@ -706,6 +706,10 @@ jobs:
 
           suites = [ET.parse(path).getroot() for path in glob.glob('differential/target/surefire-reports/TEST-*.xml')]
           required = {
+              'com.revetsec.differential.CapturedProviderSpComparatorTests': {
+                  'hostedShibbolethCapturesAndEnvelopeMutationsPreserveSpIdentity',
+                  'capturedSimpleSamlSignedCbcAndEnvelopeMutationsPreserveSpIdentity',
+                  'capturedSimpleSamlAssertionSignedCbcPinsWholeSpPolicyDifference'},
               'com.revetsec.differential.SpringSamlComparatorTests': {
                   'signedPlacementsAgreeOnIdentityAndSignedTampering',
                   'wrapperMutationsNeverReleaseAttackerIdentity',
@@ -717,10 +721,15 @@ jobs:
                   'signedPlacementsResolveOnlyTheTrustedIdentity',
                   'forgedKeyInfoCannotMakeAnAttackerSignatureTrusted',
                   'legacySha1NeedsExplicitRevetsecCompatibility',
-                  'wrapperAndNamespaceMutationsNeverReleaseAnIdentity',
+                  'fullSignedXswAndFragileLockMatrixPinsIndependentSpVerdicts',
+                  'signedSemanticCorpusControlsRetainOnlyTheirOriginalIdentityUnderEnvelopeMutations',
+                  'signedSemanticCorpusRejectedFixturesRemainRejectedUnderEnvelopeMutations',
                   'encryptedAssertionsAndEncryptedIdResolveTrustedIdentity',
                   'encryptedNegativesAndUnsignedResponseDoNotAuthenticate',
                   'encryptedWrapperMatrixNeverReleasesAttackerIdentity',
+                  'rejectedEncryptedFixturesCannotGainIdentityUnderWrapperMutations',
+                  'siblingWrappedKeyFixturesCannotPromoteEnvelopeIdentity',
+                  'independentlyMintedFixturesKeepTheirSignedIdentityUnderApplicableMutations',
                   'validlySignedAmbiguousResponsesShowIdentitySelectionDifferences',
                   'assertionSignedAmbiguitiesKeepParserVerdictsPinned',
                   'signedSchemaInstanceHintsKeepParserVerdictsPinned',
@@ -734,6 +743,8 @@ jobs:
               'com.revetsec.differential.LibxmlsecOracleComparatorTests': {
                   'signedFixturesAndTamperingAgreeWithIndependentOracle',
                   'attackerSignaturesRemainValidButCannotBorrowTheTrustedKey',
+                  'fullSignedMutationMatrixSeparatesSignatureValidityFromSpPolicy',
+                  'separatelyMintedMutationsRetainOnlyTheirOriginalLibxmlsecTarget',
                   'encryptedFixturesDecryptInIndependentOracleAndRevetsec',
                   'encryptedWrapperMatrixKeepsOracleSignatureCoverageSeparateFromSpPolicy',
                   'validAssertionSignatureCannotPromoteUnsignedExtensionIdentity',

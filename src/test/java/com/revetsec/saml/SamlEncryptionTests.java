@@ -43,6 +43,7 @@ import java.security.spec.MGF1ParameterSpec;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -351,6 +352,10 @@ final class SamlEncryptionTests {
         assertArrayEquals("<a:Assertion ID='_checked'/>".getBytes(StandardCharsets.UTF_8),
                 XmlEncryptionDecryptor.decrypt(encryptedElement(eightKeys),
                         List.of(credential.privateKey()), false, false, new SecureRandom()));
+        String eightUnreferencedKeys = eightKeys.replace(reference, "");
+        assertArrayEquals("<a:Assertion ID='_checked'/>".getBytes(StandardCharsets.UTF_8),
+                XmlEncryptionDecryptor.decrypt(encryptedElement(eightUnreferencedKeys),
+                        List.of(credential.privateKey()), false, false, new SecureRandom()));
         String eightReferences = referenced.replace(reference, reference.repeat(8));
         assertArrayEquals("<a:Assertion ID='_checked'/>".getBytes(StandardCharsets.UTF_8),
                 XmlEncryptionDecryptor.decrypt(encryptedElement(eightReferences),
@@ -443,16 +448,20 @@ final class SamlEncryptionTests {
         generator.initialize(2048);
         PrivateKey unrelated = generator.generateKeyPair().getPrivate();
         AtomicInteger substitutions = new AtomicInteger();
+        List<byte[]> substituteKeys = new ArrayList<>();
         SecureRandom substituteRandom = new SecureRandom() {
             @Override public void nextBytes(byte @NonNull [] bytes) {
                 assertEquals(16, bytes.length, "AES-128 substitute CEK must retain the selected key length");
                 substitutions.incrementAndGet();
+                substituteKeys.add(bytes);
                 java.util.Arrays.fill(bytes, (byte) 0x5A);
             }
         };
         assertNull(XmlEncryptionDecryptor.decrypt(encryptedElement(gcm), List.of(unrelated),
                 false, false, substituteRandom));
         assertEquals(1, substitutions.get(), "failed unwrap must still do substituted content work");
+        assertArrayEquals(new byte[16], substituteKeys.get(0),
+                "substitute CEK must be wiped after content decryption fails");
     }
 
     private static @NonNull Element encryptedElement(@NonNull String xml) {

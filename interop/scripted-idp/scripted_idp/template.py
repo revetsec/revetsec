@@ -34,8 +34,13 @@ MAX_XML = 256 * 1024
 KEY_NAMES = frozenset(name for name, _, _ in mint.SIGNATURES.values()) | {
     "shibboleth-capture",
     "negative-attacker-rsa-2048",
+    "independent-idp-rsa-2048",
+    "independent-idp-ec-p256",
+    "independent-idp-ec-p384",
+    "independent-idp-ec-p521",
 }
 ORACLE_KEY_ENV = "SCRIPTED_IDP_ORACLE_DECRYPTION_KEY"
+DECRYPTION_KEY_NAMES = frozenset({"independent-sp-rsa-2048"})
 
 
 class OracleUnavailable(RuntimeError):
@@ -187,11 +192,15 @@ def encrypt(spec, key_directory):
             "element": element_name, "target_id": spec["target_id"]}
 
 
-def decrypt(spec):
+def decrypt(spec, key_directory):
     """Check one ciphertext with libxmlsec1 in a separately key-enabled oracle process."""
-    _fields(spec, ("clock", "xml"), ("clock", "xml"))
+    _fields(spec, ("clock", "xml", "credential"), ("clock", "xml"))
     _clock(spec)
-    key_path = os.environ.get(ORACLE_KEY_ENV)
+    name = spec.get("credential")
+    if name is not None and name not in DECRYPTION_KEY_NAMES:
+        raise mint.SpecError("unsupported oracle decryption credential")
+    key_path = (str(pathlib.Path(key_directory) / f"{name}-key.pem") if name is not None
+                else os.environ.get(ORACLE_KEY_ENV))
     if not key_path:
         raise OracleUnavailable("decryption oracle key is not configured")
     root = _tree(spec["xml"])

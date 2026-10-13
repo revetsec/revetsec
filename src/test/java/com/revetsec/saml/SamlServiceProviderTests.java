@@ -40,6 +40,7 @@ import com.revetsec.internal.xml.SecureXmlParser;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 final class SamlServiceProviderTests {
@@ -47,6 +48,15 @@ final class SamlServiceProviderTests {
     private static final @NonNull URI ACS = URI.create("https://sp.example.test/acs");
     private static final @NonNull String IDP = "https://idp.example.test/saml";
     private static final @NonNull Clock CLOCK = Clock.fixed(Instant.parse("2026-10-09T00:01:00Z"), ZoneOffset.UTC);
+
+    @Test void serviceProviderAndIdentityProviderEntityIdsEnforceExactMaximum() {
+        String maximum = "x".repeat(2048);
+        assertInstanceOf(SamlServiceProvider.Builder.class, SamlServiceProvider.withEntityId(maximum));
+        assertInstanceOf(SamlIdentityProvider.Builder.class, SamlIdentityProvider.withEntityId(maximum));
+        String tooLong = maximum + "x";
+        assertThrows(IllegalArgumentException.class, () -> SamlServiceProvider.withEntityId(tooLong));
+        assertThrows(IllegalArgumentException.class, () -> SamlIdentityProvider.withEntityId(tooLong));
+    }
 
     @Test void fractionalClockPendingStateOpensForLoginAndLogout() throws Exception {
         Clock fractional = Clock.fixed(Instant.parse("2026-10-09T00:01:00.123456789Z"), ZoneOffset.UTC);

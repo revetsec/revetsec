@@ -86,14 +86,16 @@ M4 added four OIDC targets, and M5 adds six resource-server targets, so there ar
 | | `signedAccessTokensRespectStrictAndUntypedProfiles` | JSON claim bytes | JDK Ed25519 signs arbitrary input under typed, absent, JWT and unrelated explicit profiles. A separate claim oracle checks issuer, audience, required typed claims, NumericDates and zero-skew edges, confirmation refusal, scope grammar, the extra compatibility claim and untyped identity-claim substitution. Both accepted and rejected verdicts are checked. |
 | | `introspectionResponsesAreTypedAudienceCheckedAndUncached` | JSON response bytes | The public client uses an offline synthetic `HttpClient`, with no socket or executor. A separate oracle distinguishes malformed provider documents from local inactive/profile rejection and verified proof. Each syntactically valid first response is followed by a fresh inactive response to the same credential; two authenticated POSTs and an inactive second verdict prove the client did not reuse the first proof. |
 
-The SAML targets in `SamlFuzzTests` cover raw HTTP-POST form bytes, raw HTTP-Redirect query bytes
-and inflation, bounded IdP metadata XML, and structure-aware changes to signed and encrypted SAML
-responses. The last target starts from scripted-IdP fixtures signed with a pinned test key and requires every successful
-authentication to retain the fixture's exact subject, attributes, signature coverage and encryption
-status. Its input selects the fixture and mutation; verification certificates and the test
-decryption key remain in the fixture tree. The four targets have curated seeds under
-`com/revetsec/saml/SamlFuzzTestsInputs`, including an accepted binding and metadata document and
-all fixture/mutation selections. They use no network service.
+The six SAML targets in `SamlFuzzTests` cover raw HTTP-POST form bytes, raw HTTP-Redirect query bytes
+and inflation, bounded IdP metadata XML, raw XML parser/walker ambiguity, structure-aware changes to
+signed and encrypted SAML responses, and byte changes to encrypted-data and wrapped-key ciphertext.
+The structure-aware target starts from scripted-IdP fixtures signed with a pinned test key and requires
+every successful authentication to retain the fixture's exact subject, attributes, signature coverage
+and encryption status. The ciphertext target starts from a GCM fixture produced by a separate test encryptor and
+requires every changed carrier to reject before identity release. Inputs select fixtures and mutations;
+verification certificates and the test decryption key remain in the fixture tree. All six targets have
+curated seeds under `com/revetsec/saml/SamlFuzzTestsInputs`, including accepted binding and metadata
+documents, XML ambiguity cases and encrypted-carrier boundaries. They use no network service.
 
 The metadata corpus also includes `certificate-size-limit.xml`, a valid IdP
 descriptor with the certificate-only 24,576-byte DER fixture (exactly 32,768

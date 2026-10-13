@@ -28,6 +28,7 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.security.PublicKey;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
 import java.security.Signature;
@@ -36,6 +37,8 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.Base64;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.stream.Stream;
 import java.util.zip.Inflater;
@@ -79,6 +82,35 @@ final class ShibbolethCapturedResponseTests {
         assertTrue(success.getAuthentication().getNameId().isPresent());
         assertInstanceOf(SamlAuthenticationResult.Rejected.class,
                 serviceProvider.completeAuthenticationResult(message, pending, identityProvider));
+    }
+
+    @Test void realShibbolethGcmAcceptsEightConfiguredRolloverKeys() throws Exception {
+        List<String> snapshot = Files.readAllLines(FIXTURES.resolve("gcm-pending.txt"));
+        String xml = Files.readString(FIXTURES.resolve("gcm-response.xml"));
+        var document = assertInstanceOf(SecureXmlParser.Result.Accepted.class,
+                SecureXmlParser.parseMetadata(xml.getBytes(StandardCharsets.UTF_8))).getDocument();
+        Clock clock = Clock.fixed(Instant.parse(document.getDocumentElement()
+                .getAttribute("IssueInstant")).plusSeconds(1), ZoneOffset.UTC);
+        X509Certificate signer;
+        X509Certificate other;
+        try (var input = Files.newInputStream(FIXTURES.resolve("idp-signing.crt"))) {
+            signer = (X509Certificate) CertificateFactory.getInstance("X.509")
+                    .generateCertificate(input);
+        }
+        try (var input = Files.newInputStream(KEYS.resolve("sp-signing-rsa-2048-cert.pem"))) {
+            other = (X509Certificate) CertificateFactory.getInstance("X.509")
+                    .generateCertificate(input);
+        }
+        List<PublicKey> keys = new ArrayList<>(Collections.nCopies(7, other.getPublicKey()));
+        keys.add(signer.getPublicKey());
+        SamlIdentityProvider identityProvider = SamlIdentityProvider.withEntityId(IDP)
+                .connectionId("shibboleth-capture")
+                .redirectSingleSignOnService(URI.create(
+                        "https://idp.example.org/idp/profile/SAML2/Redirect/SSO"))
+                .signingKeys(keys).build();
+        SamlAuthenticationResult result = serviceProvider(clock).completeAuthenticationResult(
+                message(xml, snapshot.get(1)), pending(clock, snapshot), identityProvider);
+        assertInstanceOf(SamlAuthenticationResult.Succeeded.class, result);
     }
 
     @Test void realShibbolethCbcResponseRequiresPerIdpOptIn() throws Exception {

@@ -301,7 +301,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     "/control/encrypt": lambda: template.encrypt(spec, self.server.key_directory),
                     "/control/logout-sign": lambda: slo.sign_fixture(spec, self.server.key_directory),
                     "/control/oracle/verify": lambda: template.verify(spec, self.server.key_directory),
-                    "/control/oracle/decrypt": lambda: template.decrypt(spec),
+                    "/control/oracle/decrypt": lambda: template.decrypt(spec, self.server.key_directory),
                 }[self.path]()
                 self._send_json(200, result)
             except template.OracleUnavailable as exception:

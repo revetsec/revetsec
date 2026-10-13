@@ -42,6 +42,29 @@ jobs:
       - name: Replay new captures through the SP
         run: mvn -B -ntp -Dmaven.javadoc.skip=true -Dtest=ShibbolethCapturedResponseTests "-Drevetsec.shibboleth.fixtures=${RUNNER_TEMP}/shibboleth-capture" test
 
+      - name: Require all hosted replay cases and zero skips
+        run: |
+          python3 - <<'PY'
+          import sys
+          import xml.etree.ElementTree as ET
+
+          report = ET.parse('target/surefire-reports/TEST-com.revetsec.saml.ShibbolethCapturedResponseTests.xml').getroot()
+          expected = {
+              'realShibbolethGcmResponseAuthenticatesOnlyOnce',
+              'realShibbolethGcmAcceptsEightConfiguredRolloverKeys',
+              'realShibbolethCbcResponseRequiresPerIdpOptIn',
+              'capturedEncryptedResponsesRejectEnvelopeAttacksBeforeAcceptingOriginal',
+              'capturedSpMetadataMatchesGeneratedOutputAndDocumentedCbcVariant',
+              'capturedRedirectRequestsCarryValidSpBindingSignatures',
+          }
+          actual = {case.get('name') for case in report.findall('testcase')}
+          failures = sum(int(report.get(key, '0')) for key in ('failures', 'errors', 'skipped'))
+          if actual != expected or failures:
+              sys.exit(f'Shibboleth replay mismatch: missing={sorted(expected - actual)}, '
+                       f'unexpected={sorted(actual - expected)}, failures/errors/skips={failures}')
+          print(f'Shibboleth hosted replay required: {len(expected)} methods; zero skips')
+          PY
+
       - name: Upload captured evidence and test reports
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

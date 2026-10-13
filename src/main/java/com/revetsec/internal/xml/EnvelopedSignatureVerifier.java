@@ -90,8 +90,8 @@ public final class EnvelopedSignatureVerifier {
         requireNonNull(shape);
         requireNonNull(target);
         requireNonNull(trustedKeys);
-        if (trustedKeys.isEmpty() || trustedKeys.size() > 4 || trustedKeys.stream().anyMatch(key -> key == null))
-            throw new IllegalArgumentException("Expected one to four trusted IdP keys");
+        if (trustedKeys.isEmpty() || trustedKeys.size() > 8 || trustedKeys.stream().anyMatch(key -> key == null))
+            throw new IllegalArgumentException("Expected one to eight trusted IdP keys");
 
         Element signed = target == Target.RESPONSE ? shape.getResponse() : shape.getAssertion();
         if (signed == null) return Absent.INSTANCE;

@@ -99,13 +99,18 @@ The SAML service provider's [saml2int SP checklist and deviations](docs/compatib
 
 ## Interop matrix
 
-The SAML SP matrix below records local results on 2026-10-11. These are test-partner observations on the current, uncommitted checkout; hosted CI must run again after the source is pushed. The scripted partner and Keycloak are gating legs. SimpleSAMLphp and the Shibboleth capture are advisory evidence, with checked-in offline replay fixtures.
+The SAML SP matrix below records results through 2026-10-12. These are
+test-partner observations on the current, uncommitted checkout. The hosted
+Shibboleth capture ran on the preceding pushed revision; hosted CI for the
+current checkout remains pending. The scripted partner and Keycloak are gating
+legs. SimpleSAMLphp and Shibboleth are advisory evidence with in-tree offline
+replay fixtures; the imported hosted Shibboleth files are uncommitted.
 
 | SAML partner | Observed behavior | Limits |
 |---|---|---|
 | Scripted IdP (pinned libxmlsec1/signxml image), gating | 17 integration cases passed for signed browser SSO, encryption, metadata and Redirect logout; 7 live libxmlsec differential cases passed. | Our test partner supplies hostile variants; it is not an independent product. |
 | Keycloak 26.7.4, gating | 3 local cases passed: SP Redirect login, explicitly enabled IdP-initiated login, and signed IdP-initiated logout. | These cases do not establish every Keycloak encryption or SLO configuration. |
-| Shibboleth IdP 5.2.3, dispatch capture | Fresh GCM and signed-Response CBC captures replayed through the SP (4 tests). The CBC profile requires a connection-specific opt-in and metadata variant. | Local capture passed; the RC-2 hosted dispatch and manual review remain. |
+| Shibboleth IdP 5.2.3, dispatch capture | GitHub Actions run `38311798191` captured GCM and signed-Response CBC on `e52e162dcdcbc4706321b275f4da12ead9db832d`; hosted replay passed 5/5. The supplied artifact's ZIP and all 11 capture-file hashes matched. Local replay of the imported files passed 6/6 after the signing-key rollover regression. | The CBC profile requires a connection-specific opt-in and metadata variant. Current-source hosted CI and the RC-2 manual review remain. |
 | SimpleSAMLphp 2.5.0, advisory | Fresh signed CBC Response accepted with opt-in; CBC under an unsigned Response rejected; both signed Redirect logout directions accepted (5 replay tests). | The IdP process is restarted between signing modes because it caches SP metadata. |
 | Entra, Okta and Google SAML IdPs | No account-backed capture as of 2026-10-11. | Explicitly unproven; the release plan treats absent accounts as optional rows. |
 

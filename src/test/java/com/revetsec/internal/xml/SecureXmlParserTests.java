@@ -21,6 +21,7 @@ import org.jspecify.annotations.NonNull;
 import org.junit.jupiter.api.Test;
 import org.w3c.dom.Element;
 
+import javax.xml.XMLConstants;
 import java.nio.charset.StandardCharsets;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -37,6 +38,8 @@ final class SecureXmlParserTests {
         Element root = accepted.getDocument().getDocumentElement();
         assertEquals("urn:protocol", root.getNamespaceURI());
         assertEquals("p:Response", root.getTagName());
+        assertEquals("urn:protocol", root.getAttributeNS(
+                XMLConstants.XMLNS_ATTRIBUTE_NS_URI, "p"));
         assertEquals("r1", root.getAttribute("ID"));
         Element assertion = assertInstanceOf(Element.class, root.getFirstChild());
         assertEquals("abc", assertion.getTextContent());

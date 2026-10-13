@@ -88,6 +88,39 @@ final class PendingSamlAuthenticationCodecTests {
                     caseUnderTest.getKey());
     }
 
+    @Test void exactMaximumSealedEntityIdIsDecodedWithoutTruncation() {
+        String[] parts = PendingSamlAuthenticationCodec.encode(pending()).split("\\.", -1);
+        String maximum = "x".repeat(2048);
+        String encoded = with(parts, 1, b64(maximum));
+        PendingSamlAuthentication decoded = requireNonNull(PendingSamlAuthenticationCodec.decode(encoded));
+        assertEquals(maximum, decoded.spEntityId());
+        assertNull(PendingSamlAuthenticationCodec.decode(with(parts, 1, b64(maximum + "x"))));
+    }
+
+    @Test void exactMaximumSealedFrameRemainsReadable() {
+        String[] parts = PendingSamlAuthenticationCodec.encode(pending()).split("\\.", -1);
+        parts[1] = b64("x".repeat(1888));
+        parts[5] = b64("x".repeat(2048));
+        parts[6] = b64("x".repeat(2048));
+        String maximum = String.join(".", parts);
+        assertEquals(8192, maximum.length());
+        PendingSamlAuthentication decoded = requireNonNull(PendingSamlAuthenticationCodec.decode(maximum));
+        assertEquals("x".repeat(1888), decoded.spEntityId());
+        assertNull(PendingSamlAuthenticationCodec.decode(maximum + "x"));
+    }
+
+    @Test void exactMaximumApplicationDataUsesTheFullBase64FieldBudget() {
+        String applicationData = "x".repeat(512);
+        PendingSamlAuthentication original = new PendingSamlAuthentication("https://sp.example.test/saml",
+                "_" + "r".repeat(40), "h".repeat(22), "tenant-one", "https://idp.example.test/saml",
+                "https://sp.example.test/acs", ISSUED, EXPIRES,
+                SamlAuthenticationRequestOptions.builder().applicationData(applicationData).build());
+        String encoded = PendingSamlAuthenticationCodec.encode(original);
+        assertEquals(684, encoded.split("\\.", -1)[12].length());
+        PendingSamlAuthentication decoded = requireNonNull(PendingSamlAuthenticationCodec.decode(encoded));
+        assertEquals(applicationData, decoded.options().getApplicationData().orElseThrow());
+    }
+
     private static @NonNull PendingSamlAuthentication pending() {
         return new PendingSamlAuthentication("https://sp.example.test/saml", "_" + "r".repeat(40),
                 "h".repeat(22), "tenant-one", "https://idp.example.test/saml",

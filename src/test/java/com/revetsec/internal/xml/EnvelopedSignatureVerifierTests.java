@@ -42,16 +42,23 @@ import javax.xml.transform.dom.DOMSource;
 import javax.xml.transform.stream.StreamResult;
 import java.io.ByteArrayOutputStream;
 import java.io.ByteArrayInputStream;
+import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
+import java.security.KeyFactory;
 import java.security.Provider;
 import java.security.PublicKey;
 import java.security.Security;
+import java.security.interfaces.ECPublicKey;
 import java.security.spec.ECGenParameterSpec;
+import java.security.spec.ECParameterSpec;
+import java.security.spec.ECPoint;
+import java.security.spec.RSAPublicKeySpec;
 import java.util.Base64;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -106,7 +113,8 @@ final class EnvelopedSignatureVerifierTests {
         Provider provider = java.util.Objects.requireNonNull(Security.getProvider("XMLDSig"));
         Provider[] providers = Security.getProviders();
         int position = 1;
-        while (position <= providers.length && providers[position - 1] != provider) position++;
+        while (position <= providers.length
+                && !providers[position - 1].getName().equals(provider.getName())) position++;
         int originalPosition = position;
         Security.removeProvider(provider.getName());
         try {
@@ -145,13 +153,15 @@ final class EnvelopedSignatureVerifierTests {
         KeyPair key = rsa(2048);
         Fixture fixture = fixture(signed(key, EnvelopedSignatureVerifier.Target.RESPONSE,
                 SignatureMethod.RSA_SHA256));
-        List<PublicKey> tooMany = List.of(key.getPublic(), key.getPublic(), key.getPublic(),
-                key.getPublic(), key.getPublic());
         List<PublicKey> withNull = java.util.Arrays.asList(key.getPublic(), null);
-        for (List<PublicKey> invalid : List.of(List.<PublicKey>of(), tooMany, withNull)) {
+        for (List<PublicKey> invalid : List.of(List.<PublicKey>of(),
+                Collections.nCopies(9, key.getPublic()), withNull)) {
             assertThrows(IllegalArgumentException.class,
                     () -> EnvelopedSignatureVerifier.verify(fixture.parsed(), fixture.shape(),
                             EnvelopedSignatureVerifier.Target.RESPONSE, invalid));
+        }
+        for (List<PublicKey> invalid : List.of(List.<PublicKey>of(),
+                Collections.nCopies(5, key.getPublic()), withNull)) {
             assertThrows(IllegalArgumentException.class,
                     () -> EnvelopedSignatureVerifier.verifyMetadata(fixture.parsed(),
                             fixture.shape().getResponse(), invalid));
@@ -180,6 +190,28 @@ final class EnvelopedSignatureVerifierTests {
         assertSame(fixture.shape().getAssertion(), verified.getElement());
         assertSame(EnvelopedSignatureVerifier.Absent.INSTANCE,
                 verify(fixture, EnvelopedSignatureVerifier.Target.RESPONSE, key.getPublic()));
+    }
+
+    @Test void ecKeyWithUnapprovedCurveParametersCannotBecomeACompatibleSigner() throws Exception {
+        KeyPair key = ec();
+        Fixture fixture = fixture(signed(key, EnvelopedSignatureVerifier.Target.ASSERTION,
+                SignatureMethod.ECDSA_SHA256));
+        ECPublicKey original = (ECPublicKey) key.getPublic();
+        ECParameterSpec parameters = original.getParams();
+        ECParameterSpec altered = new ECParameterSpec(parameters.getCurve(),
+                parameters.getGenerator(), parameters.getOrder(), parameters.getCofactor() + 1);
+        ECPublicKey wrongParameters = new ECPublicKey() {
+            private static final long serialVersionUID = 1L;
+            @Override public @NonNull ECPoint getW() { return original.getW(); }
+            @Override public @NonNull ECParameterSpec getParams() { return altered; }
+            @Override public @NonNull String getAlgorithm() { return original.getAlgorithm(); }
+            @Override public @NonNull String getFormat() { return original.getFormat(); }
+            @Override public byte @NonNull [] getEncoded() { return original.getEncoded(); }
+        };
+        assertInstanceOf(EnvelopedSignatureVerifier.Verified.class,
+                verify(fixture, EnvelopedSignatureVerifier.Target.ASSERTION, original));
+        assertEquals(EnvelopedSignatureVerifier.Reason.NO_MATCHING_KEY,
+                rejected(verify(fixture, EnvelopedSignatureVerifier.Target.ASSERTION, wrongParameters)));
     }
 
     @Test void acceptsTheRemainingDefaultSignatureAndDigestPairs() throws Exception {
@@ -301,6 +333,17 @@ final class EnvelopedSignatureVerifierTests {
         assertEquals(EnvelopedSignatureVerifier.Reason.DOCUMENT_MISMATCH,
                 rejected(EnvelopedSignatureVerifier.verify(first.parsed(), second.shape(),
                         EnvelopedSignatureVerifier.Target.RESPONSE, List.of(strong.getPublic()))));
+    }
+
+    @Test void exactMaximumRsaModulusIsStillACompatibleButWrongPinnedKey() throws Exception {
+        KeyPair signer = rsa(2048);
+        Fixture fixture = fixture(signed(signer, EnvelopedSignatureVerifier.Target.RESPONSE,
+                SignatureMethod.RSA_SHA256));
+        BigInteger exponent = BigInteger.valueOf(65537);
+        PublicKey maximum = KeyFactory.getInstance("RSA").generatePublic(new RSAPublicKeySpec(
+                BigInteger.ONE.shiftLeft(16383).add(BigInteger.valueOf(3)), exponent));
+        assertEquals(EnvelopedSignatureVerifier.Reason.INVALID_SIGNATURE,
+                rejected(verify(fixture, EnvelopedSignatureVerifier.Target.RESPONSE, maximum)));
     }
 
     @Test void signaturePrecheckRejectsAlteredSignedInfoAndUnexpectedXmlDsigChildren() throws Exception {

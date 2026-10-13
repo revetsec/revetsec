@@ -85,6 +85,10 @@ final class SamlResponseStructureTests {
         rejected(OPEN + SUCCESS + "<a:Assertion ID='_assertion'><a:Advice>"
                 + "<ds:Signature/></a:Advice></a:Assertion>" + CLOSE);
         rejected(OPEN + SUCCESS + "<a:Assertion ID='_assertion' xmlns:evil='relative/path'/>" + CLOSE);
+        rejected(OPEN.replace("<p:Response", "<p:Response xmlns:ns='1'")
+                + SUCCESS + ASSERTION + CLOSE);
+        rejected(OPEN + "<p:Extensions><e:Thing xmlns:e='relative/path'/></p:Extensions>"
+                + SUCCESS + ASSERTION + CLOSE);
         rejected(OPEN + SUCCESS + "<a:Assertion ID='_assertion' a:ID='_spoof'/>" + CLOSE);
         rejected(OPEN + SUCCESS + "<a:Assertion ID='_assertion'>"
                 + "<old:Assertion xmlns:old='urn:oasis:names:tc:SAML:1.0:assertion'/></a:Assertion>" + CLOSE);

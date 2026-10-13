@@ -319,7 +319,8 @@ final class SamlIdentityProviderMetadataTests {
         Provider provider = java.util.Objects.requireNonNull(Security.getProvider("XMLDSig"));
         Provider[] providers = Security.getProviders();
         int originalPosition = 1;
-        while (originalPosition <= providers.length && providers[originalPosition - 1] != provider)
+        while (originalPosition <= providers.length
+                && !providers[originalPosition - 1].getName().equals(provider.getName()))
             originalPosition++;
         Security.removeProvider(provider.getName());
         try {

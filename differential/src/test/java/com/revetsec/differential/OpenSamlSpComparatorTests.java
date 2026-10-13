@@ -26,6 +26,7 @@ import com.revetsec.saml.SamlPostBindingMessage;
 import com.revetsec.saml.SamlPostBindingParseResult;
 import com.revetsec.saml.SamlServiceProvider;
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.opensaml.core.config.InitializationService;
@@ -172,8 +173,9 @@ final class OpenSamlSpComparatorTests {
 
     @Test void fullSignedXswAndFragileLockMatrixPinsIndependentSpVerdicts() throws Exception {
         List<String> fixtures = new ArrayList<>(modernFixtures());
-        fixtures.add("assertion-rsa-sha1");
-        assertEquals(57, fixtures.size(), "signed fixture matrix changed");
+        fixtures.addAll(List.of("assertion-rsa-sha1", "assertion-ec521",
+                "both-rsa384", "response-rsa256", "digest-rsa256-sha1"));
+        assertEquals(61, fixtures.size(), "signed fixture matrix changed");
         Set<String> openSamlUnsignedEnvelopeAcceptances = Set.of(
                 "attacker-extension", "copied-signature-extension");
         Set<String> springUnsignedEnvelopeAcceptances = Set.of(
@@ -181,10 +183,11 @@ final class OpenSamlSpComparatorTests {
         for (String name : fixtures) {
             String original = fixture(name);
             String credential = signingCredential(name);
-            boolean legacySha1 = name.equals("assertion-rsa-sha1");
+            boolean legacySha1 = name.equals("assertion-rsa-sha1")
+                    || name.equals("digest-rsa256-sha1");
             boolean assertionOnly = name.startsWith("matrix-assertion-")
                     || name.equals("assertion-signxml") || name.equals("assertion-ec384")
-                    || legacySha1;
+                    || name.equals("assertion-ec521") || name.equals("assertion-rsa-sha1");
             List<SignedSamlMutationMatrix.Mutation> mutations = SignedSamlMutationMatrix.from(original);
             assertEquals(19, mutations.size(), name + " mutation matrix changed");
             assertEquals("minted-user", authenticate(original, credential), name + " OpenSAML baseline");
@@ -211,6 +214,141 @@ final class OpenSamlSpComparatorTests {
                         springIdentity, label + " Spring");
             }
         }
+    }
+
+    @Test void signedSemanticCorpusControlsRetainOnlyTheirOriginalIdentityUnderEnvelopeMutations()
+            throws Exception {
+        Map<String, Integer> familySizes = Map.of(
+                "signed-structure", 15,
+                "signed-assertion-structure", 29,
+                "signed-attribute-values", 12,
+                "signed-boundary-shape", 19,
+                "signed-identity-shape", 20);
+        int acceptedControls = 0;
+        int applicableMutations = 0;
+        int revetsecAcceptances = 0;
+        int openSamlAcceptances = 0;
+        int springAcceptances = 0;
+        Map<String, Integer> openSamlAcceptedByMutation = new LinkedHashMap<>();
+        Map<String, Integer> springAcceptedByMutation = new LinkedHashMap<>();
+        for (Map.Entry<String, Integer> family : familySizes.entrySet()) {
+            Path directory = FIXTURES.resolve("scripted-idp").resolve(family.getKey());
+            List<Path> files;
+            try (var paths = Files.list(directory)) {
+                files = paths.filter(path -> path.getFileName().toString().endsWith(".xml"))
+                        .sorted().toList();
+            }
+            assertEquals(family.getValue().intValue(), files.size(), family.getKey() + " fixture inventory");
+            for (Path file : files) {
+                String original = Files.readString(file);
+                SamlAuthenticationResult baseline = revetsec(original, "idp-signing-rsa-2048", false, false);
+                if (!(baseline instanceof SamlAuthenticationResult.Succeeded accepted)) continue;
+                acceptedControls++;
+                String originalName = accepted.getAuthentication().getNameId().orElseThrow().getValue();
+                int perControlMutations = 0;
+                for (SignedSamlMutationMatrix.Mutation mutation : SignedSamlMutationMatrix.from(original)) {
+                    if (mutation.xml().equals(original)) continue;
+                    applicableMutations++;
+                    perControlMutations++;
+                    String label = family.getKey() + "/" + file.getFileName() + ":" + mutation.name();
+                    SamlAuthenticationResult changed = revetsec(mutation.xml(),
+                            "idp-signing-rsa-2048", false, false);
+                    if (changed instanceof SamlAuthenticationResult.Succeeded success) {
+                        revetsecAcceptances++;
+                        assertEquals(originalName, success.getAuthentication().getNameId()
+                                .orElseThrow().getValue(), label + " Revetsec identity");
+                    }
+                    try {
+                        String name = authenticate(mutation.xml(), "idp-signing-rsa-2048");
+                        openSamlAcceptances++;
+                        openSamlAcceptedByMutation.merge(mutation.name(), 1, Integer::sum);
+                        assertEquals(originalName, name, label + " OpenSAML identity");
+                    }
+                    catch (Exception ignored) { }
+                    try {
+                        String name = SpringSamlComparatorTests.spring(
+                                mutation.xml(), "idp-signing-rsa-2048").getName();
+                        springAcceptances++;
+                        springAcceptedByMutation.merge(mutation.name(), 1, Integer::sum);
+                        assertEquals(originalName, name, label + " Spring identity");
+                    }
+                    catch (Exception ignored) { }
+                }
+                assertTrue(perControlMutations >= 15, family.getKey() + "/" + file.getFileName());
+            }
+        }
+        assertEquals(30, acceptedControls, "signed semantic corpus control count");
+        assertEquals(568, applicableMutations, "signed semantic corpus mutation coverage");
+        assertEquals(0, revetsecAcceptances, "Revetsec changed-envelope acceptances");
+        assertEquals(48, openSamlAcceptances, "OpenSAML changed-envelope acceptances");
+        assertEquals(Map.of("attacker-extension", 24, "copied-signature-extension", 24),
+                openSamlAcceptedByMutation);
+        assertEquals(78, springAcceptances, "Spring changed-envelope acceptances");
+        assertEquals(Map.of("attacker-extension", 26, "duplicate-status", 26,
+                "copied-signature-extension", 26), springAcceptedByMutation);
+    }
+
+    @Test void signedSemanticCorpusRejectedFixturesRemainRejectedUnderEnvelopeMutations()
+            throws Exception {
+        Map<String, Integer> familySizes = Map.of(
+                "signed-structure", 15,
+                "signed-assertion-structure", 29,
+                "signed-attribute-values", 12,
+                "signed-boundary-shape", 19,
+                "signed-identity-shape", 20);
+        int rejectedFixtures = 0;
+        int applicableMutations = 0;
+        int openSamlAcceptances = 0;
+        int springAcceptances = 0;
+        for (Map.Entry<String, Integer> family : familySizes.entrySet()) {
+            Path directory = FIXTURES.resolve("scripted-idp").resolve(family.getKey());
+            List<Path> files;
+            try (var paths = Files.list(directory)) {
+                files = paths.filter(path -> path.getFileName().toString().endsWith(".xml"))
+                        .sorted().toList();
+            }
+            assertEquals(family.getValue().intValue(), files.size(), family.getKey() + " fixture inventory");
+            for (Path file : files) {
+                String original = Files.readString(file);
+                if (revetsec(original, "idp-signing-rsa-2048", false, false)
+                        instanceof SamlAuthenticationResult.Succeeded) continue;
+                rejectedFixtures++;
+                String originalOpenSaml = null;
+                try { originalOpenSaml = authenticate(original, "idp-signing-rsa-2048"); }
+                catch (Exception ignored) { }
+                String originalSpring = null;
+                try { originalSpring = SpringSamlComparatorTests.spring(
+                        original, "idp-signing-rsa-2048").getName(); }
+                catch (Exception ignored) { }
+                for (SignedSamlMutationMatrix.Mutation mutation : SignedSamlMutationMatrix.from(original)) {
+                    if (mutation.xml().equals(original)) continue;
+                    applicableMutations++;
+                    String label = family.getKey() + "/" + file.getFileName() + ":" + mutation.name();
+                    assertInstanceOf(SamlAuthenticationResult.Rejected.class,
+                            revetsec(mutation.xml(), "idp-signing-rsa-2048", false, false),
+                            label + " Revetsec");
+                    String changedOpenSaml = null;
+                    try { changedOpenSaml = authenticate(mutation.xml(), "idp-signing-rsa-2048"); }
+                    catch (Exception ignored) { }
+                    if (changedOpenSaml != null) {
+                        openSamlAcceptances++;
+                        assertEquals(originalOpenSaml, changedOpenSaml, label + " OpenSAML identity");
+                    }
+                    String changedSpring = null;
+                    try { changedSpring = SpringSamlComparatorTests.spring(
+                            mutation.xml(), "idp-signing-rsa-2048").getName(); }
+                    catch (Exception ignored) { }
+                    if (changedSpring != null) {
+                        springAcceptances++;
+                        assertEquals(originalSpring, changedSpring, label + " Spring identity");
+                    }
+                }
+            }
+        }
+        assertEquals(65, rejectedFixtures, "rejected signed semantic corpus fixture count");
+        assertEquals(1232, applicableMutations, "rejected fixture mutation coverage");
+        assertEquals(60, openSamlAcceptances, "OpenSAML changed-envelope acceptances");
+        assertEquals(96, springAcceptances, "Spring changed-envelope acceptances");
     }
 
     @Test void validlySignedAmbiguousResponsesShowIdentitySelectionDifferences() throws Exception {
@@ -501,6 +639,211 @@ final class OpenSamlSpComparatorTests {
         }
     }
 
+    @Test void rejectedEncryptedFixturesCannotGainIdentityUnderWrapperMutations() throws Exception {
+        List<String> fixtures = List.of("negative-mgf-under-mgf1p",
+                "encrypted-aes128-cbc-assertion", "negative-rsa-1_5",
+                "negative-nonempty-oaep-params", "negative-cipher-bit-flip",
+                "unsigned-encrypted");
+        int applicableMutations = 0;
+        int openSamlAcceptances = 0;
+        int springAcceptances = 0;
+        for (String name : fixtures) {
+            String original = fixture(name);
+            assertInstanceOf(SamlAuthenticationResult.Rejected.class,
+                    revetsec(original, "idp-signing-rsa-2048", false, false), name + " baseline");
+            String originalOpenSaml = null;
+            try { originalOpenSaml = authenticate(original, "idp-signing-rsa-2048"); }
+            catch (Exception ignored) { }
+            String originalSpring = null;
+            try { originalSpring = SpringSamlComparatorTests.spring(
+                    original, "idp-signing-rsa-2048").getName(); }
+            catch (Exception ignored) { }
+            for (Mutation mutation : encryptedMutations(original, name)) {
+                if (mutation.xml().equals(original)) continue;
+                applicableMutations++;
+                String label = name + ":" + mutation.name();
+                assertInstanceOf(SamlAuthenticationResult.Rejected.class,
+                        revetsec(mutation.xml(), "idp-signing-rsa-2048", false, false),
+                        label + " Revetsec");
+                String changedOpenSaml = null;
+                try { changedOpenSaml = authenticate(mutation.xml(), "idp-signing-rsa-2048"); }
+                catch (Exception ignored) { }
+                if (changedOpenSaml != null) {
+                    openSamlAcceptances++;
+                    assertEquals(originalOpenSaml, changedOpenSaml, label + " OpenSAML identity");
+                }
+                String changedSpring = null;
+                try { changedSpring = SpringSamlComparatorTests.spring(
+                        mutation.xml(), "idp-signing-rsa-2048").getName(); }
+                catch (Exception ignored) { }
+                if (changedSpring != null) {
+                    springAcceptances++;
+                    assertEquals(originalSpring, changedSpring, label + " Spring identity");
+                }
+            }
+        }
+        assertEquals(114, applicableMutations, "rejected encrypted fixture mutation coverage");
+        assertEquals(3, openSamlAcceptances, "OpenSAML changed-envelope acceptances");
+        assertEquals(0, springAcceptances, "Spring changed-envelope acceptances");
+    }
+
+    @Test void siblingWrappedKeyFixturesCannotPromoteEnvelopeIdentity() throws Exception {
+        List<String> fixtures = List.of("key-sibling-implicit",
+                "key-sibling-implicit-multi", "key-sibling-retrieval",
+                "encrypted-id-sibling-implicit", "encrypted-id-sibling-retrieval");
+        int applicableMutations = 0;
+        int revetsecAcceptances = 0;
+        int openSamlAcceptances = 0;
+        int springAcceptances = 0;
+        Map<String, Integer> revetsecAcceptedByMutation = new LinkedHashMap<>();
+        Map<String, Integer> springAcceptedByMutation = new LinkedHashMap<>();
+        for (String name : fixtures) {
+            String original = fixture(name);
+            SamlAuthenticationResult.Succeeded baseline = assertInstanceOf(
+                    SamlAuthenticationResult.Succeeded.class,
+                    revetsec(original, "idp-signing-rsa-2048", false, false),
+                    name + " Revetsec baseline");
+            assertEquals("minted-user", baseline.getAuthentication().getNameId()
+                    .orElseThrow().getValue(), name + " Revetsec baseline identity");
+            String originalOpenSaml = null;
+            try { originalOpenSaml = authenticate(original, "idp-signing-rsa-2048"); }
+            catch (Exception ignored) { }
+            String originalSpring = null;
+            try { originalSpring = SpringSamlComparatorTests.spring(
+                    original, "idp-signing-rsa-2048").getName(); }
+            catch (Exception ignored) { }
+            for (Mutation mutation : encryptedMutations(original, name)) {
+                if (mutation.xml().equals(original)) continue;
+                applicableMutations++;
+                String label = name + ":" + mutation.name();
+                SamlAuthenticationResult changed = revetsec(
+                        mutation.xml(), "idp-signing-rsa-2048", false, false);
+                if (changed instanceof SamlAuthenticationResult.Succeeded success) {
+                    revetsecAcceptances++;
+                    revetsecAcceptedByMutation.merge(mutation.name(), 1, Integer::sum);
+                    assertSameAuthentication(baseline.getAuthentication(),
+                            success.getAuthentication(), label + " Revetsec identity");
+                }
+                String changedOpenSaml = null;
+                try { changedOpenSaml = authenticate(mutation.xml(), "idp-signing-rsa-2048"); }
+                catch (Exception ignored) { }
+                if (changedOpenSaml != null) {
+                    openSamlAcceptances++;
+                    assertEquals(originalOpenSaml, changedOpenSaml, label + " OpenSAML identity");
+                }
+                String changedSpring = null;
+                try { changedSpring = SpringSamlComparatorTests.spring(
+                        mutation.xml(), "idp-signing-rsa-2048").getName(); }
+                catch (Exception ignored) { }
+                if (changedSpring != null) {
+                    springAcceptances++;
+                    springAcceptedByMutation.merge(mutation.name(), 1, Integer::sum);
+                    assertEquals(originalSpring, changedSpring, label + " Spring identity");
+                }
+            }
+        }
+        assertEquals(95, applicableMutations, "sibling wrapped-key mutation coverage");
+        assertEquals(2, revetsecAcceptances, "Revetsec changed-envelope acceptances");
+        assertEquals(Map.of("missing-destination", 2), revetsecAcceptedByMutation);
+        assertEquals(0, openSamlAcceptances, "OpenSAML changed-envelope acceptances");
+        assertEquals(12, springAcceptances, "Spring changed-envelope acceptances");
+        assertEquals(Map.of("attacker-extension", 2, "copied-signature-extension", 2,
+                "duplicate-status", 2, "missing-status", 2,
+                "missing-destination", 2, "duplicate-status-code", 2),
+                springAcceptedByMutation);
+    }
+
+    @Test void independentlyMintedFixturesKeepTheirSignedIdentityUnderApplicableMutations()
+            throws Exception {
+        List<String> fixtures = List.of("case1-response-assertion-rsa-sha256",
+                "case2-assertion-rsa-sha1", "case3-assertion-ecdsa-p256",
+                "case3-assertion-ecdsa-p384", "case3-assertion-ecdsa-p521",
+                "case4-encrypted-assertion-gcm-rsa-oaep-sha256-mgf1sha256",
+                "case5-encrypted-assertion-gcm-rsa-1_5",
+                "case6-encrypted-id-gcm-rsa-oaep-sha256-mgf1sha256",
+                "extra-signxml-assertion-rsa-sha256");
+        X509Certificate decryptionCertificate = independentCertificate("sp-rsa-2048.crt");
+        PrivateKey decryptionPrivateKey = independentDecryptionKey();
+        int applicableMutations = 0;
+        int revetsecAcceptances = 0;
+        int openSamlAcceptances = 0;
+        int springAcceptances = 0;
+        Map<String, Integer> revetsecAcceptedByMutation = new LinkedHashMap<>();
+        Map<String, Integer> openSamlAcceptedByMutation = new LinkedHashMap<>();
+        Map<String, Integer> springAcceptedByMutation = new LinkedHashMap<>();
+        for (String name : fixtures) {
+            String xml = Files.readString(FIXTURES.resolve("saml-independent/" + name + ".xml"));
+            String certificateName = name.contains("p256") ? "idp-ec-p256.crt"
+                    : name.contains("p384") ? "idp-ec-p384.crt"
+                    : name.contains("p521") ? "idp-ec-p521.crt" : "idp-rsa-2048.crt";
+            X509Certificate signer = independentCertificate(certificateName);
+            boolean sha1 = name.equals("case2-assertion-rsa-sha1");
+            SamlAuthenticationResult baseline = revetsecIndependent(xml, signer, sha1);
+            if (name.equals("case5-encrypted-assertion-gcm-rsa-1_5"))
+                assertInstanceOf(SamlAuthenticationResult.Rejected.class, baseline, name);
+            else assertInstanceOf(SamlAuthenticationResult.Succeeded.class, baseline, name);
+            String originalOpenSaml = null;
+            try { originalOpenSaml = authenticateCaptured(xml, signer, IDP, SP, ACS,
+                    null, NOW, decryptionCertificate, decryptionPrivateKey); }
+            catch (Exception ignored) { }
+            String originalSpring = null;
+            try { originalSpring = SpringSamlComparatorTests.springWithKeys(
+                    xml, signer, decryptionCertificate, decryptionPrivateKey).getName(); }
+            catch (Exception ignored) { }
+            boolean encrypted = name.startsWith("case4-") || name.startsWith("case5-")
+                    || name.startsWith("case6-");
+            String originalName = baseline instanceof SamlAuthenticationResult.Succeeded success
+                    ? success.getAuthentication().getNameId().orElseThrow().getValue() : "";
+            List<Mutation> mutations = encrypted ? encryptedMutations(xml, name)
+                    : SignedSamlMutationMatrix.from(xml, originalName).stream()
+                            .map(value -> new Mutation(value.name(), value.xml())).toList();
+            for (Mutation mutation : mutations) {
+                String mutationName = mutation.name();
+                String changedXml = mutation.xml();
+                if (changedXml.equals(xml)) continue;
+                applicableMutations++;
+                String label = name + ":" + mutationName;
+                SamlAuthenticationResult changed = revetsecIndependent(changedXml, signer, sha1);
+                if (changed instanceof SamlAuthenticationResult.Succeeded success) {
+                    revetsecAcceptances++;
+                    revetsecAcceptedByMutation.merge(mutationName, 1, Integer::sum);
+                    assertSameAuthentication(assertInstanceOf(SamlAuthenticationResult.Succeeded.class,
+                            baseline, label + " baseline").getAuthentication(),
+                            success.getAuthentication(), label + " Revetsec identity");
+                }
+                String changedOpenSaml = null;
+                try { changedOpenSaml = authenticateCaptured(changedXml, signer, IDP, SP, ACS,
+                        null, NOW, decryptionCertificate, decryptionPrivateKey); }
+                catch (Exception ignored) { }
+                if (changedOpenSaml != null) {
+                    openSamlAcceptances++;
+                    openSamlAcceptedByMutation.merge(mutationName, 1, Integer::sum);
+                    assertEquals(originalOpenSaml, changedOpenSaml, label + " OpenSAML identity");
+                }
+                String changedSpring = null;
+                try { changedSpring = SpringSamlComparatorTests.springWithKeys(
+                        changedXml, signer, decryptionCertificate, decryptionPrivateKey).getName(); }
+                catch (Exception ignored) { }
+                if (changedSpring != null) {
+                    springAcceptances++;
+                    springAcceptedByMutation.merge(mutationName, 1, Integer::sum);
+                    assertEquals(originalSpring, changedSpring, label + " Spring identity");
+                }
+            }
+        }
+        assertEquals(171, applicableMutations, "independent fixture mutation coverage");
+        assertEquals(2, revetsecAcceptances, "Revetsec changed-envelope acceptances");
+        assertEquals(19, openSamlAcceptances, "OpenSAML changed-envelope acceptances");
+        assertEquals(21, springAcceptances, "Spring changed-envelope acceptances");
+        assertEquals(Map.of("missing-destination", 2), revetsecAcceptedByMutation);
+        assertEquals(Map.of("attacker-extension", 8, "copied-signature-extension", 8,
+                "duplicate-status-code", 3), openSamlAcceptedByMutation);
+        assertEquals(Map.of("attacker-extension", 6, "duplicate-status", 6,
+                "copied-signature-extension", 6, "missing-status", 1,
+                "missing-destination", 1, "duplicate-status-code", 1),
+                springAcceptedByMutation);
+    }
+
     static @NonNull List<String> encryptedFixtures() {
         List<String> fixtures = new ArrayList<>();
         for (String data : List.of("aes128-gcm", "aes192-gcm", "aes256-gcm"))
@@ -533,7 +876,8 @@ final class OpenSamlSpComparatorTests {
                 .replace("minted-user", "attacker-user")
                 .replace(id(signedTemplate, "saml:Assertion"), "_attacker_assertion");
         String copiedSignature = section(signedTemplate, "<ds:Signature ", "</ds:Signature>");
-        String carrier = name.equals("assertion-ec256-encrypted-id")
+        String carrier = (name.equals("assertion-ec256-encrypted-id")
+                || name.startsWith("encrypted-id-sibling-") || name.startsWith("case6-"))
                 ? section(xml, "<saml:Assertion ", "</saml:Assertion>")
                 : section(xml, "<saml:EncryptedAssertion>", "</saml:EncryptedAssertion>");
         String extension = "<samlp:Extensions>" + attacker + "</samlp:Extensions>";
@@ -672,8 +1016,52 @@ final class OpenSamlSpComparatorTests {
         return provider.completeUnsolicitedAuthenticationResult(message, identityProvider);
     }
 
+    private static @NonNull SamlAuthenticationResult revetsecIndependent(@NonNull String xml,
+            @NonNull X509Certificate signingCertificate, boolean sha1) throws Exception {
+        SamlCredential decryption = SamlCredential.fromPem(
+                Files.readString(FIXTURES.resolve("saml-independent/keys/sp-rsa-2048.key")),
+                Files.readString(FIXTURES.resolve("saml-independent/keys/sp-rsa-2048.crt")));
+        SamlServiceProvider provider = SamlServiceProvider.withEntityId(SP)
+                .assertionConsumerServiceUrl(URI.create(ACS))
+                .replayCache(InMemorySamlReplayCache.withLimit(Clock.fixed(NOW, ZoneOffset.UTC), 16))
+                .decryptionCredentials(List.of(decryption))
+                .clock(Clock.fixed(NOW, ZoneOffset.UTC)).build();
+        EnumSet<SamlCompatibilityMode> compatibility = EnumSet.of(
+                SamlCompatibilityMode.UNSOLICITED_RESPONSES);
+        if (sha1) compatibility.add(SamlCompatibilityMode.SHA1_SIGNATURES);
+        SamlIdentityProvider identityProvider = SamlIdentityProvider.withEntityId(IDP)
+                .connectionId("independent-differential")
+                .redirectSingleSignOnService(URI.create("https://idp.scripted-idp.test/sso"))
+                .signingKeys(List.of(signingCertificate.getPublicKey()))
+                .compatibility(Set.copyOf(compatibility)).build();
+        String form = "SAMLResponse=" + URLEncoder.encode(Base64.getEncoder().encodeToString(
+                xml.getBytes(StandardCharsets.UTF_8)), StandardCharsets.UTF_8);
+        SamlPostBindingMessage message = assertInstanceOf(SamlPostBindingParseResult.Parsed.class,
+                SamlPostBindingMessage.fromFormBodyResult(form.getBytes(StandardCharsets.US_ASCII),
+                        List.of("application/x-www-form-urlencoded"), null)).getMessage();
+        return provider.completeUnsolicitedAuthenticationResult(message, identityProvider);
+    }
+
     private static @NonNull String authenticate(@NonNull String xml, @NonNull String signingKey)
             throws Exception {
+        return authenticateCaptured(xml, certificate(signingKey), IDP, SP, ACS, null, NOW);
+    }
+
+    static @NonNull String authenticateCaptured(@NonNull String xml,
+            @NonNull X509Certificate signingCertificate, @NonNull String expectedIdp,
+            @NonNull String expectedSp, @NonNull String expectedAcs,
+            @Nullable String expectedRequestId, @NonNull Instant now) throws Exception {
+        return authenticateCaptured(xml, signingCertificate, expectedIdp, expectedSp,
+                expectedAcs, expectedRequestId, now,
+                certificate("sp-encryption-rsa-2048"), decryptionKey());
+    }
+
+    static @NonNull String authenticateCaptured(@NonNull String xml,
+            @NonNull X509Certificate signingCertificate, @NonNull String expectedIdp,
+            @NonNull String expectedSp, @NonNull String expectedAcs,
+            @Nullable String expectedRequestId, @NonNull Instant now,
+            @NonNull X509Certificate decryptionCertificate,
+            @NonNull PrivateKey decryptionPrivateKey) throws Exception {
         byte[] bytes = xml.getBytes(StandardCharsets.UTF_8);
         if (bytes.length > 128_000 || xml.contains("<!DOCTYPE") || xml.contains("<!ENTITY"))
             throw new IllegalArgumentException("Unsafe SAML document");
@@ -684,24 +1072,24 @@ final class OpenSamlSpComparatorTests {
         Response response = (Response) XMLObjectProviderRegistrySupport.getUnmarshallerFactory()
                 .ensureUnmarshaller(root).unmarshall(root);
         if (response.getVersion() != SAMLVersion.VERSION_20
-                || !ACS.equals(response.getDestination())
-                || !IDP.equals(response.getIssuer().getValue())
-                || response.getInResponseTo() != null
+                || !expectedAcs.equals(response.getDestination())
+                || !expectedIdp.equals(response.getIssuer().getValue())
+                || !java.util.Objects.equals(expectedRequestId, response.getInResponseTo())
                 || response.getIssueInstant() == null
-                || response.getIssueInstant().isAfter(NOW.plusSeconds(180))
+                || response.getIssueInstant().isAfter(now.plusSeconds(180))
                 || !StatusCode.SUCCESS.equals(response.getStatus().getStatusCode().getValue())
                 || countChildren(root, PROTOCOL_NS, "Status") != 1
                 || countChildren(root, ASSERTION_NS, "Assertion")
                         + countChildren(root, ASSERTION_NS, "EncryptedAssertion") != 1)
             throw new IllegalArgumentException("Invalid Response envelope");
 
-        BasicX509Credential signing = new BasicX509Credential(certificate(signingKey));
+        BasicX509Credential signing = new BasicX509Credential(signingCertificate);
         boolean responseSigned = response.isSigned();
         if (responseSigned) verify(response, signing);
         Assertion assertion;
         if (!response.getEncryptedAssertions().isEmpty()) {
             BasicX509Credential decryption = new BasicX509Credential(
-                    certificate("sp-encryption-rsa-2048"), decryptionKey());
+                    decryptionCertificate, decryptionPrivateKey);
             Decrypter decrypter = new Decrypter(null,
                     new StaticKeyInfoCredentialResolver(decryption),
                     new InlineEncryptedKeyResolver());
@@ -713,9 +1101,9 @@ final class OpenSamlSpComparatorTests {
             assertion = response.getAssertions().get(0);
         }
         if (assertion.getVersion() != SAMLVersion.VERSION_20
-                || !IDP.equals(assertion.getIssuer().getValue())
+                || !expectedIdp.equals(assertion.getIssuer().getValue())
                 || assertion.getIssueInstant() == null
-                || assertion.getIssueInstant().isAfter(NOW.plusSeconds(180)))
+                || assertion.getIssueInstant().isAfter(now.plusSeconds(180)))
             throw new IllegalArgumentException("Invalid Assertion envelope");
         if (assertion.isSigned()) verify(assertion, signing);
         if (!responseSigned && !assertion.isSigned())
@@ -728,25 +1116,34 @@ final class OpenSamlSpComparatorTests {
                 List.of(new BearerSubjectConfirmationValidator()),
                 List.of(new AuthnStatementValidator()), null, trustEngine,
                 new SAMLSignatureProfileValidator());
-        var context = new ValidationContext(Map.of(
+        Map<String, Object> parameters = new java.util.HashMap<>(Map.of(
                 SAML2AssertionValidationParameters.CLOCK_SKEW,
-                Duration.between(NOW, Instant.now()).abs().plus(Duration.ofDays(1)),
-                SAML2AssertionValidationParameters.VALID_ISSUERS, Set.of(IDP),
-                SAML2AssertionValidationParameters.COND_VALID_AUDIENCES, Set.of(SP),
-                SAML2AssertionValidationParameters.SC_VALID_RECIPIENTS, Set.of(ACS),
+                Duration.between(now, Instant.now()).abs().plus(Duration.ofDays(1)),
+                SAML2AssertionValidationParameters.VALID_ISSUERS, Set.of(expectedIdp),
+                SAML2AssertionValidationParameters.COND_VALID_AUDIENCES, Set.of(expectedSp),
+                SAML2AssertionValidationParameters.SC_VALID_RECIPIENTS, Set.of(expectedAcs),
                 SAML2AssertionValidationParameters.SIGNATURE_REQUIRED, false));
+        if (expectedRequestId != null) {
+            parameters.put(SAML2AssertionValidationParameters.SC_VALID_IN_RESPONSE_TO,
+                    expectedRequestId);
+            // Offline captures do not retain an authenticated client-network address.
+            // Keep issuer, audience, recipient, request ID, time and signature checks active.
+            parameters.put(SAML2AssertionValidationParameters.SC_CHECK_ADDRESS, false);
+            parameters.put(SAML2AssertionValidationParameters.STMT_AUTHN_CHECK_ADDRESS, false);
+        }
+        var context = new ValidationContext(parameters);
         if (validator.validate(assertion, context) != ValidationResult.VALID)
             throw new IllegalArgumentException("OpenSAML assertion validation failed: "
                     + context.getValidationFailureMessages());
         Conditions conditions = assertion.getConditions();
         if (conditions == null || conditions.getNotBefore() == null
-                || conditions.getNotBefore().isAfter(NOW)
+                || conditions.getNotBefore().isAfter(now)
                 || conditions.getNotOnOrAfter() == null
-                || !conditions.getNotOnOrAfter().isAfter(NOW)
+                || !conditions.getNotOnOrAfter().isAfter(now)
                 || conditions.getAudienceRestrictions().isEmpty()
                 || conditions.getAudienceRestrictions().stream().anyMatch(restriction ->
                         restriction.getAudiences().stream().noneMatch(audience ->
-                                SP.equals(audience.getURI()))))
+                                expectedSp.equals(audience.getURI()))))
             throw new IllegalArgumentException("Invalid assertion conditions");
         Subject subject = assertion.getSubject();
         if (subject == null || subject.getSubjectConfirmations().size() != 1)
@@ -754,16 +1151,17 @@ final class OpenSamlSpComparatorTests {
         SubjectConfirmation confirmation = subject.getSubjectConfirmations().get(0);
         if (!SubjectConfirmation.METHOD_BEARER.equals(confirmation.getMethod())
                 || confirmation.getSubjectConfirmationData() == null
-                || !ACS.equals(confirmation.getSubjectConfirmationData().getRecipient())
+                || !expectedAcs.equals(confirmation.getSubjectConfirmationData().getRecipient())
                 || confirmation.getSubjectConfirmationData().getNotOnOrAfter() == null
-                || !confirmation.getSubjectConfirmationData().getNotOnOrAfter().isAfter(NOW)
-                || confirmation.getSubjectConfirmationData().getInResponseTo() != null
+                || !confirmation.getSubjectConfirmationData().getNotOnOrAfter().isAfter(now)
+                || !java.util.Objects.equals(expectedRequestId,
+                        confirmation.getSubjectConfirmationData().getInResponseTo())
                 || assertion.getAuthnStatements().isEmpty())
             throw new IllegalArgumentException("Invalid bearer authentication");
         NameID nameId = subject.getNameID();
         if (nameId == null && subject.getEncryptedID() != null) {
             BasicX509Credential decryption = new BasicX509Credential(
-                    certificate("sp-encryption-rsa-2048"), decryptionKey());
+                    decryptionCertificate, decryptionPrivateKey);
             Decrypter decrypter = new Decrypter(null,
                     new StaticKeyInfoCredentialResolver(decryption),
                     new InlineEncryptedKeyResolver());
@@ -807,8 +1205,10 @@ final class OpenSamlSpComparatorTests {
         if (fixture.contains("ecdsa-sha256")) return "idp-signing-ec-p256";
         if (fixture.contains("ecdsa-sha384") || fixture.equals("assertion-ec384"))
             return "idp-signing-ec-p384";
-        if (fixture.contains("ecdsa-sha512")) return "idp-signing-ec-p521";
-        if (fixture.contains("rsa-sha384") || fixture.contains("rsa-sha512"))
+        if (fixture.contains("ecdsa-sha512") || fixture.equals("assertion-ec521"))
+            return "idp-signing-ec-p521";
+        if (fixture.contains("rsa-sha384") || fixture.contains("rsa-sha512")
+                || fixture.equals("both-rsa384"))
             return "idp-signing-rsa-3072";
         return "idp-signing-rsa-2048";
     }
@@ -833,6 +1233,22 @@ final class OpenSamlSpComparatorTests {
             return (X509Certificate) CertificateFactory.getInstance("X.509")
                     .generateCertificate(input);
         }
+    }
+
+    private static @NonNull X509Certificate independentCertificate(@NonNull String name)
+            throws Exception {
+        try (var input = Files.newInputStream(FIXTURES.resolve("saml-independent/keys/" + name))) {
+            return (X509Certificate) CertificateFactory.getInstance("X.509")
+                    .generateCertificate(input);
+        }
+    }
+
+    private static @NonNull PrivateKey independentDecryptionKey() throws Exception {
+        String pem = Files.readString(FIXTURES.resolve("saml-independent/keys/sp-rsa-2048.key"));
+        String body = pem.replace("-----BEGIN PRIVATE KEY-----", "")
+                .replace("-----END PRIVATE KEY-----", "").replaceAll("\\s", "");
+        return KeyFactory.getInstance("RSA").generatePrivate(new PKCS8EncodedKeySpec(
+                Base64.getDecoder().decode(body)));
     }
 
     private static @NonNull PrivateKey decryptionKey() throws Exception {

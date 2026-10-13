@@ -19,6 +19,8 @@ package com.revetsec.saml;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -39,5 +41,24 @@ final class SamlDateTimeTests {
         assertNull(SamlDateTime.parse("2026-02-30T00:00:00Z"));
         assertNull(SamlDateTime.parse("2026-10-09 00:00:00Z"));
         assertNull(SamlDateTime.parse("2026-10-09T00:00:00. Z"));
+    }
+
+    @Test void offsetMinutesAndMaximumLegalZoneKeepTheExactInstant() {
+        Instant expected = Instant.parse("2026-10-09T00:00:00Z");
+        assertEquals(expected, SamlDateTime.parse("2026-10-09T05:30:00+05:30"));
+        assertEquals(expected, SamlDateTime.parse("2026-10-08T10:00:00-14:00"));
+        assertEquals(expected, SamlDateTime.parse("2026-10-09T13:59:00+13:59"));
+        assertNull(SamlDateTime.parse("2026-10-09T00:00:00+00:60"));
+        assertNull(SamlDateTime.parse("2026-10-09T00:00:00-14:01"));
+    }
+
+    @Test void exactLexicalLengthEndpointsAreAccepted() {
+        assertEquals(Instant.parse("2026-10-09T00:00:00Z"),
+                SamlDateTime.parse("2026-10-09T00:00:00"));
+        String maximum = "100000000-01-01T00:00:00." + "0".repeat(97) + "+00:00";
+        assertEquals(128, maximum.length());
+        assertEquals(LocalDateTime.of(100000000, 1, 1, 0, 0).toInstant(ZoneOffset.UTC),
+                SamlDateTime.parse(maximum));
+        assertNull(SamlDateTime.parse(maximum.replace("+00:00", "0+00:00")));
     }
 }

@@ -117,6 +117,17 @@ final class SamlResponseSemanticsTests {
         assertTrue(accepted.toString().contains("<checked>"));
     }
 
+    @Test void signedAssertionAllowsWhitespaceOnlyDirectText() throws Exception {
+        KeyPair key = rsa();
+        SamlReplayCache cache = (replayKey, expiresAt, remaining) ->
+                SamlReplayCache.MarkResult.MARKED;
+        String spaced = BASE.replace("<a:Issuer>" + IDP + "</a:Issuer><a:Subject>",
+                "<a:Issuer>" + IDP + "</a:Issuer> \t\r\n<a:Subject>")
+                .replace("<a:AudienceRestriction>", " \t\r\n<a:AudienceRestriction>");
+        assertInstanceOf(SamlResponseSemantics.Accepted.class,
+                validate(spaced, true, false, key, expected(cache)));
+    }
+
     @Test void responseSignatureCannotPromoteAnAssertionWithAnInvalidXmlId() throws Exception {
         KeyPair key = rsa();
         AtomicInteger writes = new AtomicInteger();
@@ -904,6 +915,27 @@ final class SamlResponseSemanticsTests {
         assertEquals(SamlResponseSemantics.Reason.CONDITIONS,
                 rejected(validate(secondRestriction, true, false, key, expected(cache))));
         assertEquals(0, writes.get());
+    }
+
+    @Test void assertionOnlySignatureBindsRecipientWithoutResponseDestination() throws Exception {
+        KeyPair key = rsa();
+        AtomicInteger writes = new AtomicInteger();
+        SamlReplayCache cache = (replayKey, expiry, remaining) -> {
+            writes.incrementAndGet();
+            return SamlReplayCache.MarkResult.MARKED;
+        };
+        String envelope = BASE.replace(" Destination='" + ACS + "'", "");
+        String recipient = " Recipient='" + ACS + "'";
+        for (String xml : List.of(
+                envelope.replace(recipient, " Recipient='https://other.example.test/acs'"),
+                envelope.replace(recipient, ""))) {
+            assertEquals(SamlResponseSemantics.Reason.CONFIRMATION,
+                    rejected(validate(xml, false, true, key, expected(cache))));
+        }
+        assertEquals(0, writes.get());
+        assertInstanceOf(SamlResponseSemantics.Accepted.class,
+                validate(envelope, false, true, key, expected(cache)));
+        assertEquals(1, writes.get());
     }
 
     @Test void rejectsNestedNameIdAndExpiredBearer() throws Exception {

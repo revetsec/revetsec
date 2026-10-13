@@ -29,14 +29,20 @@ final class SignedSamlMutationMatrix {
     private SignedSamlMutationMatrix() { }
 
     static @NonNull List<@NonNull Mutation> from(@NonNull String original) {
+        return from(original, "minted-user");
+    }
+
+    static @NonNull List<@NonNull Mutation> from(@NonNull String original,
+            @NonNull String originalIdentity) {
+        if (originalIdentity.isEmpty()) throw new IllegalArgumentException("Missing original identity");
         String assertion = OpenSamlSpComparatorTests.section(original,
                 "<saml:Assertion ", "</saml:Assertion>");
         String assertionId = OpenSamlSpComparatorTests.id(original, "saml:Assertion");
         String attacker = SIGNATURE.matcher(assertion).replaceFirst("")
-                .replace("minted-user", "attacker-user")
+                .replace(originalIdentity, "attacker-user")
                 .replace(assertionId, "_attacker_assertion");
         String duplicateId = SIGNATURE.matcher(assertion).replaceFirst("")
-                .replace("minted-user", "attacker-user");
+                .replace(originalIdentity, "attacker-user");
         Matcher signature = SIGNATURE.matcher(original);
         if (!signature.find()) throw new IllegalArgumentException("fixture signature missing");
         String copiedSignature = signature.group();
@@ -60,7 +66,7 @@ final class SignedSamlMutationMatrix {
                         issuer + "<samlp:Status>")),
                 new Mutation("attacker-sibling-end", original.replace("</samlp:Response>",
                         attacker + "</samlp:Response>")),
-                new Mutation("nameid-tamper", original.replace("minted-user", "attacker-user")),
+                new Mutation("nameid-tamper", original.replace(originalIdentity, "attacker-user")),
                 new Mutation("destination-tamper", original.replace("https://sp.test/acs",
                         "https://attacker.example.test/acs")),
                 new Mutation("duplicate-nameid", original.replace("<saml:Subject>",
@@ -79,8 +85,9 @@ final class SignedSamlMutationMatrix {
                                 + "</Child></Parent></samlp:Extensions><samlp:Status>")),
                 new Mutation("relative-namespace-sibling", original.replace("<samlp:Response ",
                         "<samlp:Response xmlns:ns='1' ").replace(assertion, attacker + assertion)),
-                new Mutation("comment-split-nameid", original.replace("minted-user",
-                        "minted-<!-- -->attacker")));
+                new Mutation("comment-split-nameid", original.replace(originalIdentity,
+                        originalIdentity.substring(0, Math.max(1, originalIdentity.indexOf('-') + 1))
+                                + "<!-- -->attacker")));
     }
 
     record Mutation(@NonNull String name, @NonNull String xml) { }

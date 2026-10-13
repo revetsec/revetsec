@@ -18,9 +18,16 @@ package com.revetsec.saml;
 import com.code_intelligence.jazzer.junit.FuzzTest;
 import com.revetsec.internal.pem.Pem;
 import com.revetsec.internal.xml.SecureXmlParser;
+import com.revetsec.internal.xml.SamlResponseStructure;
 import org.jspecify.annotations.NonNull;
 import org.junit.jupiter.api.Assertions;
+import org.w3c.dom.Attr;
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
+import org.w3c.dom.NamedNodeMap;
+import org.w3c.dom.Node;
 
+import javax.xml.XMLConstants;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
@@ -28,7 +35,10 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.Base64;
+import java.util.ArrayDeque;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.regex.Pattern;
 
 /** SAML ingress and identity-release fuzz checks using independently minted signed fixtures. */
@@ -126,6 +136,69 @@ public final class SamlFuzzTests {
             }
         } else Assertions.assertTrue(result instanceof SamlIdentityProviderMetadataResult.Rejected
                 || result instanceof SamlIdentityProviderMetadataResult.Unavailable);
+    }
+
+    /** Arbitrary SAML XML cannot smuggle duplicate IDs through the single parser and response walker. */
+    @FuzzTest(maxDuration = "5m")
+    public void xmlParserAndWalkerRejectAmbiguousDocuments(byte @NonNull [] input) {
+        SecureXmlParser.Result parsed = SecureXmlParser.parseResponse(input);
+        if (parsed instanceof SecureXmlParser.Result.Rejected rejected) {
+            Assertions.assertNotNull(rejected.getReason());
+            return;
+        }
+        if (parsed == SecureXmlParser.Result.Unavailable.INSTANCE) return;
+        Document document = Assertions.assertInstanceOf(SecureXmlParser.Result.Accepted.class, parsed)
+                .getDocument();
+        Element root = document.getDocumentElement();
+        Assertions.assertNotNull(root);
+        Set<String> identifiers = new HashSet<>();
+        ArrayDeque<Node> pending = new ArrayDeque<>();
+        pending.add(root);
+        while (!pending.isEmpty()) {
+            Node node = pending.removeFirst();
+            if (node instanceof Element element) {
+                NamedNodeMap attributes = element.getAttributes();
+                for (int index = 0; index < attributes.getLength(); index++) {
+                    Attr attribute = (Attr) attributes.item(index);
+                    String local = attribute.getLocalName();
+                    if (!XMLConstants.XMLNS_ATTRIBUTE_NS_URI.equals(attribute.getNamespaceURI())
+                            && ("ID".equals(local) || "Id".equals(local) || "id".equals(local)
+                                    || "AssertionID".equals(local)))
+                        Assertions.assertTrue(identifiers.add(attribute.getValue()),
+                                "one XML document must not contain two ID-like values");
+                }
+            }
+            for (Node child = node.getFirstChild(); child != null; child = child.getNextSibling())
+                pending.addLast(child);
+        }
+        SamlResponseStructure.Result structure = SamlResponseStructure.inspect(document);
+        if (structure instanceof SamlResponseStructure.Accepted accepted)
+            Assertions.assertSame(root, accepted.getShape().getResponse());
+        else Assertions.assertSame(SamlResponseStructure.Rejected.INSTANCE, structure);
+    }
+
+    /** GCM ciphertext or wrapped-key changes cannot release a claimed identity. */
+    @FuzzTest(maxDuration = "5m")
+    public void encryptedCiphertextChangesCannotReleaseIdentity(byte @NonNull [] input) throws Exception {
+        String original = resource(FIXTURES.get(2));
+        SamlAuthenticationResult.Succeeded control = Assertions.assertInstanceOf(
+                SamlAuthenticationResult.Succeeded.class, check(original));
+        Assertions.assertFalse(control.getAuthentication().getNameId()
+                .orElseThrow().getValue().isEmpty());
+        var matcher = Pattern.compile("(?s)<xenc:CipherValue>([^<]+)</xenc:CipherValue>")
+                .matcher(original);
+        int carrier = octet(input, 0) % 2;
+        Assertions.assertTrue(matcher.find());
+        if (carrier == 1) Assertions.assertTrue(matcher.find());
+        byte[] wire = Base64.getMimeDecoder().decode(matcher.group(1));
+        Assertions.assertTrue(wire.length > 0);
+        int position = octet(input, 1) % wire.length;
+        wire[position] ^= (byte) (1 << (octet(input, 2) % 8));
+        String changed = original.substring(0, matcher.start(1))
+                + Base64.getEncoder().encodeToString(wire)
+                + original.substring(matcher.end(1));
+        Assertions.assertNotEquals(original, changed);
+        Assertions.assertInstanceOf(SamlAuthenticationResult.Rejected.class, check(changed));
     }
 
     /** Unsigned wrapping content, signed-field edits and encrypted carriers cannot change released identity. */
