@@ -150,6 +150,22 @@ final class ThreatModelMapTests {
 		}
 	}
 
+	// Plan v4's implemented SAML SP boundary has nineteen numbered invariants. The
+	// cross-document equality check alone would miss a row removed from both files.
+	@Test
+	void everyRequiredSamlInvariantHasARow() throws IOException {
+		List<String> problems = new ArrayList<>();
+		Set<String> ids = new HashSet<>();
+		for (InvariantRow row : invariantRows(read(THREAT_MODEL), problems))
+			ids.add(row.getId());
+		ContractSupport.assertNoViolations("Malformed invariant rows in " + THREAT_MODEL, problems);
+
+		for (int number = 1; number <= 19; number++) {
+			String id = "INV-S" + number;
+			Assertions.assertTrue(ids.contains(id), () -> THREAT_MODEL + " omits required " + id);
+		}
+	}
+
 	// M2-10 item 7 and plan 14.6: every row cites at least one test that exists, every citation in it resolves to a
 	// test class or test method, and the allowlisted row names build checks that exist.
 	@TestFactory

@@ -271,6 +271,33 @@ final class FrozenLimitsTests {
 			amounts("SCIM_FILTER_LENGTH", "SCIM filter length", Unit.CHARACTERS, 4_096, 256, 65_536),
 			amounts("SCIM_FILTER_DEPTH", "SCIM filter depth", Unit.COUNT, 16, 4, 64),
 			amounts("SCIM_FILTER_NODES", "SCIM filter node count", Unit.COUNT, 128, 8, 4_096),
+			amounts("SCIM_FILTER_LITERAL_LENGTH", "SCIM filter literal length", Unit.CHARACTERS, 2_048, 1, 16_384),
+			amounts("SCIM_FILTER_NUMBER_LENGTH", "SCIM filter number length", Unit.CHARACTERS, 64, 1, 256),
+			amounts("SCIM_FILTER_NUMBER_EXPONENT_MAGNITUDE", "SCIM filter number exponent magnitude",
+					Unit.COUNT, 1_000, 0, 10_000, ZERO_ALLOWED),
+			amounts("SCIM_ATTRIBUTE_NAME_LENGTH", "SCIM attribute name length", Unit.CHARACTERS, 128, 1, 128),
+			amounts("SCIM_SCHEMA_ID_LENGTH", "SCIM schema identifier length", Unit.CHARACTERS, 2_048, 1, 2_048),
+			amounts("SCIM_FILTER_COMPARISONS", "SCIM filter comparison count", Unit.COUNT, 32, 1, 128),
+			amounts("SCIM_RAW_QUERY_BYTES", "SCIM raw query bytes", Unit.BYTES, 32768, 1, 131072),
+			amounts("SCIM_QUERY_PARAMETERS", "SCIM query parameter count", Unit.COUNT, 64, 1, 256),
+			amounts("SCIM_PARAMETER_CHARACTERS", "SCIM decoded parameter length", Unit.CHARACTERS, 8192, 256, 65536),
+			amounts("SCIM_PROJECTION_PATHS", "SCIM projection path count", Unit.COUNT, 128, 1, 1024),
+			amounts("SCIM_PAGE_SIZE", "SCIM maximum page size", Unit.COUNT, 1000, 1, 10000),
+			amounts("SCIM_CURSOR_CHARACTERS", "SCIM cursor length", Unit.CHARACTERS, 2048, 1, 8192),
+			amounts("SCIM_CONDITIONAL_HEADER_BYTES", "SCIM conditional header bytes", Unit.BYTES, 8192, 256, 32768),
+			amounts("SCIM_CONDITIONAL_TAGS", "SCIM conditional tag count", Unit.COUNT, 64, 1, 256),
+			amounts("SCIM_RESPONSE_HEADER_BYTES", "SCIM response header bytes", Unit.BYTES, 16384, 512, 65536),
+			amounts("SCIM_RESPONSE_BYTES", "SCIM prepared response bytes", Unit.BYTES, 8388608, 2048, 33554432),
+			amounts("SCIM_WORK_UNITS", "SCIM aggregate work units", Unit.COUNT, 1000000, 10000, 10000000),
+			amounts("SCIM_RESOURCE_TYPES", "SCIM resource type count", Unit.COUNT, 32, 1, 32),
+			amounts("SCIM_SCHEMAS", "SCIM schema count", Unit.COUNT, 64, 1, 64),
+			amounts("SCIM_SCHEMA_EXTENSIONS", "SCIM schema extension count", Unit.COUNT, 16, 1, 16),
+			amounts("SCIM_ATTRIBUTE_DEFINITIONS", "SCIM effective attribute count", Unit.COUNT, 1024, 1, 1024),
+			amounts("SCIM_BASE_URI_LENGTH", "SCIM base URI length", Unit.CHARACTERS, 2048, 1, 2048),
+			amounts("SCIM_IDENTIFIER_LENGTH", "SCIM identifier and version length", Unit.CHARACTERS, 1024, 1, 1024),
+			amounts("SCIM_CONTENT_TYPE_HEADER_BYTES", "SCIM content type header bytes", Unit.BYTES, 8192, 8192, 8192),
+			amounts("SCIM_DEFAULT_PAGE_SIZE", "SCIM default page size", Unit.COUNT, 100, 1, 10000),
+			durations("SCIM_CURSOR_TIMEOUT", "SCIM cursor timeout", null, Duration.ofSeconds(1), Duration.ofHours(24), ZERO_REJECTED),
 			// Pending-state lifetime (G5-6: default 10 -> 15 min).
 			durations("PENDING_STATE_LIFETIME", "Pending-state lifetime", Duration.ofMinutes(15), Duration.ofMinutes(1),
 					Duration.ofMinutes(60), ZERO_REJECTED),
@@ -349,13 +376,14 @@ final class FrozenLimitsTests {
 	 * renewBefore"; G8-10 adds the JOSE clock skew as the third; AS1-C1 adds CIMD maximum freshness as the fourth).
 	 */
 	private static final Set<String> ZERO_ROWS = Set.of("JWKS_MAXIMUM_STALENESS", "CLIENT_CREDENTIALS_RENEW_BEFORE",
-			"JOSE_CLOCK_SKEW", "CIMD_MAXIMUM_FRESHNESS", "AS_CLOCK_SKEW", "AS_PUBLIC_METADATA_FRESHNESS");
+			"JOSE_CLOCK_SKEW", "CIMD_MAXIMUM_FRESHNESS", "AS_CLOCK_SKEW", "AS_PUBLIC_METADATA_FRESHNESS",
+			"SCIM_FILTER_NUMBER_EXPONENT_MAGNITUDE");
 
 	// Gates 5 and 8: the registry holds exactly the approved rows, as public constants, in the transcribed order.
 	@Test
 	void theRegistryHoldsExactlyTheApprovedRowsInOrder() throws IllegalAccessException {
 		List<String> approved = APPROVED_ROWS.stream().map(Row::getConstant).toList();
-		Assertions.assertEquals(79, approved.size(), "AS1-A3 adds the remaining22 approved issuer rows");
+		Assertions.assertEquals(105, approved.size(), "Approved M10 adds twenty bounded SCIM rows");
 
 		Map<String, Limit> constants = constants();
 		IdentityHashMap<Limit, String> names = new IdentityHashMap<>();
@@ -373,11 +401,10 @@ final class FrozenLimitsTests {
 				() -> Limits.all().add(Limits.HTTP_RESPONSE_BODY_SIZE));
 	}
 
-	// The approved zero rows are JWKS maximum staleness, renewBefore, JOSE clock skew and CIMD freshness,
-	// and no other constant permits it.
+	// Every approved zero row is explicitly transcribed, including the M9 exponent magnitude.
 	@Test
 	void zeroIsAllowedForExactlyTheApprovedZeroRows() throws IllegalAccessException {
-		Assertions.assertEquals(6, ZERO_ROWS.size());
+		Assertions.assertEquals(7, ZERO_ROWS.size());
 		Assertions.assertEquals(ZERO_ROWS, APPROVED_ROWS.stream().filter(Row::isZeroAllowed).map(Row::getConstant)
 				.collect(Collectors.toSet()));
 		Assertions.assertEquals(ZERO_ROWS, constants().entrySet().stream()
@@ -415,7 +442,7 @@ final class FrozenLimitsTests {
 		}));
 	}
 
-	// Plan R8 and exit criterion 16: Limit.require rejects zero outside the three zero rows, and every value outside
+	// Plan R8 and exit criterion 16: Limit.require rejects zero outside the approved zero rows, and every value outside
 	// the approved [floor, cap], through each overload; it accepts the approved floor, default and cap.
 	@TestFactory
 	@NonNull Stream<@NonNull DynamicTest> requireRejectsZeroAndEveryValueOutsideTheApprovedRange() {
@@ -453,9 +480,13 @@ final class FrozenLimitsTests {
 				Assertions.assertEquals((int) cap, limit.require((int) cap));
 				Assertions.assertEquals((int) floor, limit.require((int) floor));
 
-				// No amount row permits zero: every floor is positive.
-				assertRejected(() -> limit.require(0));
-				assertRejected(() -> limit.require(0L));
+				if (row.isZeroAllowed()) {
+					Assertions.assertEquals(0, limit.require(0));
+					Assertions.assertEquals(0L, limit.require(0L));
+				} else {
+					assertRejected(() -> limit.require(0));
+					assertRejected(() -> limit.require(0L));
+				}
 
 				for (long outside : new long[]{floor - 1, cap + 1, -1, Long.MIN_VALUE, Long.MAX_VALUE,
 						Integer.MAX_VALUE + 1L})
@@ -1507,8 +1538,13 @@ final class FrozenLimitsTests {
 	}
 
 	private static @NonNull Row amounts(@NonNull String constant, @NonNull String name, @NonNull Unit unit, long defaultValue, long floor, long cap) {
+		return amounts(constant, name, unit, defaultValue, floor, cap, ZERO_REJECTED);
+	}
+
+	private static @NonNull Row amounts(@NonNull String constant, @NonNull String name, @NonNull Unit unit,
+			long defaultValue, long floor, long cap, boolean zeroAllowed) {
 		return new Row(constant, name, unit, defaultValue, floor, cap, null, Duration.ZERO, Duration.ZERO,
-				ZERO_REJECTED);
+				zeroAllowed);
 	}
 
 	private static @NonNull Row durations(@NonNull String constant, @NonNull String name, @Nullable Duration defaultValue, @NonNull Duration floor,

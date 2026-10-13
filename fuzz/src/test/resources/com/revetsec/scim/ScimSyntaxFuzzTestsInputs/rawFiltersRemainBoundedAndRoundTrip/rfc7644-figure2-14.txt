@@ -1,0 +1,1 @@
+userType ne "Employee" and not (emails co "example.com" or emails.value co "example.org")

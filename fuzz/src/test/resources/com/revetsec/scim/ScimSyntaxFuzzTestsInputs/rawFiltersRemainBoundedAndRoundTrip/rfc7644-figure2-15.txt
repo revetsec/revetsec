@@ -1,0 +1,1 @@
+userType eq "Employee" and (emails.type eq "work")

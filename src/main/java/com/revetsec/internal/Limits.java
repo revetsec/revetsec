@@ -285,6 +285,102 @@ public final class Limits {
 	public static final Limit SCIM_FILTER_NODES = Limit.fromAmounts("SCIM filter node count", Unit.COUNT, 128, 8,
 			4_096);
 
+	/**
+	 * Decoded string literal in a SCIM filter: 2,048 UTF-16 code units [1, 16,384].
+	 */
+	public static final Limit SCIM_FILTER_LITERAL_LENGTH = Limit.fromAmounts("SCIM filter literal length",
+			Unit.CHARACTERS, 2_048, 1, 16_384);
+
+	/**
+	 * Number token in a SCIM filter: 64 characters [1, 256].
+	 */
+	public static final Limit SCIM_FILTER_NUMBER_LENGTH = Limit.fromAmounts("SCIM filter number length",
+			Unit.CHARACTERS, 64, 1, 256);
+
+	/**
+	 * Magnitude of a SCIM filter's decimal exponent: 1,000 [0, 10,000].
+	 */
+	public static final Limit SCIM_FILTER_NUMBER_EXPONENT_MAGNITUDE = Limit.fromAmounts(
+			"SCIM filter number exponent magnitude", Unit.COUNT, 1_000, 0, 10_000);
+
+	/**
+	 * SCIM attribute or subattribute name: a fixed 128-character cap.
+	 */
+	public static final Limit SCIM_ATTRIBUTE_NAME_LENGTH = Limit.fromAmounts("SCIM attribute name length",
+			Unit.CHARACTERS, 128, 1, 128);
+
+	/**
+	 * Schema identifier in a SCIM attribute path: a fixed 2,048-character cap.
+	 */
+	public static final Limit SCIM_SCHEMA_ID_LENGTH = Limit.fromAmounts("SCIM schema identifier length",
+			Unit.CHARACTERS, 2_048, 1, 2_048);
+
+	/**
+	 * Comparisons permitted by a SCIM filter policy: 32 [1, 128].
+	 */
+	public static final Limit SCIM_FILTER_COMPARISONS = Limit.fromAmounts("SCIM filter comparison count",
+			Unit.COUNT, 32, 1, 128);
+
+	/** SCIM raw query bytes: 32768 [1, 131072]. Approved M10 SCIM-D02. */
+	public static final Limit SCIM_RAW_QUERY_BYTES = Limit.fromAmounts("SCIM raw query bytes", Unit.BYTES, 32768, 1, 131072);
+
+	/** SCIM query parameter count: 64 [1, 256]. Approved M10 SCIM-D02. */
+	public static final Limit SCIM_QUERY_PARAMETERS = Limit.fromAmounts("SCIM query parameter count", Unit.COUNT, 64, 1, 256);
+
+	/** SCIM decoded parameter length: 8192 [256, 65536]. Approved M10 SCIM-D02. */
+	public static final Limit SCIM_PARAMETER_CHARACTERS = Limit.fromAmounts("SCIM decoded parameter length", Unit.CHARACTERS, 8192, 256, 65536);
+
+	/** SCIM projection path count: 128 [1, 1024]. Approved M10 SCIM-D02. */
+	public static final Limit SCIM_PROJECTION_PATHS = Limit.fromAmounts("SCIM projection path count", Unit.COUNT, 128, 1, 1024);
+
+	/** SCIM maximum page size: 1000 [1, 10000]. Approved M10 SCIM-D02. */
+	public static final Limit SCIM_PAGE_SIZE = Limit.fromAmounts("SCIM maximum page size", Unit.COUNT, 1000, 1, 10000);
+
+	/** SCIM cursor length: 2048 [1, 8192]. Approved M10 SCIM-D02. */
+	public static final Limit SCIM_CURSOR_CHARACTERS = Limit.fromAmounts("SCIM cursor length", Unit.CHARACTERS, 2048, 1, 8192);
+
+	/** SCIM conditional header bytes: 8192 [256, 32768]. Approved M10 SCIM-D02. */
+	public static final Limit SCIM_CONDITIONAL_HEADER_BYTES = Limit.fromAmounts("SCIM conditional header bytes", Unit.BYTES, 8192, 256, 32768);
+
+	/** SCIM conditional tag count: 64 [1, 256]. Approved M10 SCIM-D02. */
+	public static final Limit SCIM_CONDITIONAL_TAGS = Limit.fromAmounts("SCIM conditional tag count", Unit.COUNT, 64, 1, 256);
+
+	/** SCIM response header bytes: 16384 [512, 65536]. Approved M10 SCIM-D02. */
+	public static final Limit SCIM_RESPONSE_HEADER_BYTES = Limit.fromAmounts("SCIM response header bytes", Unit.BYTES, 16384, 512, 65536);
+
+	/** SCIM prepared response bytes: 8388608 [2048, 33554432]. Approved M10 SCIM-D02. */
+	public static final Limit SCIM_RESPONSE_BYTES = Limit.fromAmounts("SCIM prepared response bytes", Unit.BYTES, 8388608, 2048, 33554432);
+
+	/** SCIM aggregate work units: 1000000 [10000, 10000000]. Approved M10 SCIM-D02. */
+	public static final Limit SCIM_WORK_UNITS = Limit.fromAmounts("SCIM aggregate work units", Unit.COUNT, 1000000, 10000, 10000000);
+
+	/** SCIM resource type count: 32 [1, 32]. Approved M10 SCIM-D02. */
+	public static final Limit SCIM_RESOURCE_TYPES = Limit.fromAmounts("SCIM resource type count", Unit.COUNT, 32, 1, 32);
+
+	/** SCIM schema count: 64 [1, 64]. Approved M10 SCIM-D02. */
+	public static final Limit SCIM_SCHEMAS = Limit.fromAmounts("SCIM schema count", Unit.COUNT, 64, 1, 64);
+
+	/** SCIM schema extension count: 16 [1, 16]. Approved M10 SCIM-D02. */
+	public static final Limit SCIM_SCHEMA_EXTENSIONS = Limit.fromAmounts("SCIM schema extension count", Unit.COUNT, 16, 1, 16);
+
+	/** SCIM effective attribute count: 1024 [1, 1024]. Approved M10 SCIM-D02. */
+	public static final Limit SCIM_ATTRIBUTE_DEFINITIONS = Limit.fromAmounts("SCIM effective attribute count", Unit.COUNT, 1024, 1, 1024);
+
+	/** SCIM base URI length: 2048 [1, 2048]. Approved M10 SCIM-D02. */
+	public static final Limit SCIM_BASE_URI_LENGTH = Limit.fromAmounts("SCIM base URI length", Unit.CHARACTERS, 2048, 1, 2048);
+
+	/** SCIM identifier and version length: 1024 [1, 1024]. Approved M10 SCIM-D02. */
+	public static final Limit SCIM_IDENTIFIER_LENGTH = Limit.fromAmounts("SCIM identifier and version length", Unit.CHARACTERS, 1024, 1, 1024);
+
+	/** SCIM content type header bytes: 8192 [8192, 8192]. Approved M10 SCIM-D02. */
+	public static final Limit SCIM_CONTENT_TYPE_HEADER_BYTES = Limit.fromAmounts("SCIM content type header bytes", Unit.BYTES, 8192, 8192, 8192);
+
+	/** SCIM default page size: 100 [1, 10000]. Approved M10 SCIM-D02. */
+	public static final Limit SCIM_DEFAULT_PAGE_SIZE = Limit.fromAmounts("SCIM default page size", Unit.COUNT, 100, 1, 10000);
+
+	/** Explicit cursor validity commitment, no default: 1 second to 24 hours. */
+	public static final Limit SCIM_CURSOR_TIMEOUT = Limit.fromDurations("SCIM cursor timeout", null, Duration.ofSeconds(1), Duration.ofHours(24));
+
 	// Pending state and sealing (D8)
 
 	/**
@@ -495,6 +591,32 @@ public final class Limits {
 			SCIM_FILTER_LENGTH,
 			SCIM_FILTER_DEPTH,
 			SCIM_FILTER_NODES,
+			SCIM_FILTER_LITERAL_LENGTH,
+			SCIM_FILTER_NUMBER_LENGTH,
+			SCIM_FILTER_NUMBER_EXPONENT_MAGNITUDE,
+			SCIM_ATTRIBUTE_NAME_LENGTH,
+			SCIM_SCHEMA_ID_LENGTH,
+			SCIM_FILTER_COMPARISONS,
+			SCIM_RAW_QUERY_BYTES,
+			SCIM_QUERY_PARAMETERS,
+			SCIM_PARAMETER_CHARACTERS,
+			SCIM_PROJECTION_PATHS,
+			SCIM_PAGE_SIZE,
+			SCIM_CURSOR_CHARACTERS,
+			SCIM_CONDITIONAL_HEADER_BYTES,
+			SCIM_CONDITIONAL_TAGS,
+			SCIM_RESPONSE_HEADER_BYTES,
+			SCIM_RESPONSE_BYTES,
+			SCIM_WORK_UNITS,
+			SCIM_RESOURCE_TYPES,
+			SCIM_SCHEMAS,
+			SCIM_SCHEMA_EXTENSIONS,
+			SCIM_ATTRIBUTE_DEFINITIONS,
+			SCIM_BASE_URI_LENGTH,
+			SCIM_IDENTIFIER_LENGTH,
+			SCIM_CONTENT_TYPE_HEADER_BYTES,
+			SCIM_DEFAULT_PAGE_SIZE,
+			SCIM_CURSOR_TIMEOUT,
 			PENDING_STATE_LIFETIME,
 			PENDING_AUTHORIZATION_STORE_ENTRIES,
 			PENDING_AUTHORIZATION_STORE_BYTES,

@@ -39,18 +39,16 @@ name: ClusterFuzzLite batch fuzzing
 # steps: move the digests by hand, in cflite_pr.yml and cflite_cron.yml too, and together with the
 # base-builder-jvm digest in .clusterfuzzlite/Dockerfile.
 #
-# BUDGETS. fuzz/ holds eleven *FuzzTests classes: six from M1 (JSON codec, JSON model, RFC 7638,
-# StateSealer, PEM and encoding) and five from M2 (compact JWS, JSON Web Keys, JwtValidator, ECDSA and
-# cache lifetimes). .clusterfuzzlite/build.sh makes one target of every @FuzzTest method in them, 21
-# targets in all. ClusterFuzzLite runs the targets one at a time and gives each at least FUZZ_SECONDS
+# BUDGETS. At committed core source 33bbac0, fuzz/ holds 27 *FuzzTests classes and 56 @FuzzTest methods, including
+# seven SAML targets. .clusterfuzzlite/build.sh makes one target of every method. ClusterFuzzLite
+# runs the targets one at a time and gives each at least FUZZ_SECONDS
 # divided by the number of targets, plus any time the earlier ones left unused (cifuzz run_fuzzers.py).
 # So each FUZZ_SECONDS below is a total, whatever the number of targets, plus each target's start-up:
 #   cflite_pr.yml     1200 s (20 minutes) per pull-request run, in a 50-minute job;
 #   cflite_batch.yml  3600 s (60 minutes) a night, in a 90-minute job;
 #   cflite_cron.yml   1200 s (20 minutes) of corpus pruning a night, in a 45-minute job.
-# At 21 targets that is about a minute each per pull request and three minutes each a night. M2
-# raised the pull-request and nightly totals from M1's 900 s and 2700 s, in 45- and 75-minute jobs, when
-# it added its five target classes. Each job's timeout leaves room for the image build, the Maven build,
+# At that 56-target source it is about 21 seconds each per pull request and 64 seconds each a night, before
+# unused time from earlier targets is redistributed. Each job's timeout leaves room for the image build, the Maven build,
 # JVM start-up per target and the corpus transfers. The prune cron in cflite_cron.yml starts after this
 # job's timeout; move it if this timeout grows. More targets mean less time for each, so revisit these
 # totals as targets are added.

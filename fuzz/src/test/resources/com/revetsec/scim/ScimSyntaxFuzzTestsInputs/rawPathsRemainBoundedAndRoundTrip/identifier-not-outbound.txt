@@ -1,0 +1,1 @@
+http://user@example.com/schema#part:name

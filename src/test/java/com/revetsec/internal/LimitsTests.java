@@ -80,8 +80,10 @@ final class LimitsTests {
 				Assertions.assertThrows(IllegalArgumentException.class, () -> limit.require(cap + 1));
 				Assertions.assertThrows(IllegalArgumentException.class, () -> limit.require(-1));
 				Assertions.assertThrows(IllegalArgumentException.class, () -> limit.require(Long.MAX_VALUE));
-				Assertions.assertThrows(IllegalArgumentException.class, () -> limit.require(0));
-				Assertions.assertFalse(limit.isZeroAllowed());
+				if (limit.isZeroAllowed())
+					Assertions.assertEquals(0, limit.require(0));
+				else
+					Assertions.assertThrows(IllegalArgumentException.class, () -> limit.require(0));
 				Assertions.assertTrue(limit.hasDefault());
 				Assertions.assertEquals(limit.getDefaultValue(), limit.require(limit.getDefaultIntValue()));
 			}
@@ -98,9 +100,11 @@ final class LimitsTests {
 	void zeroIsAllowedOnlyForTheApprovedZeroRows() {
 		// M1 plan, Limits registry: "Zero is allowed only for maximum staleness and renewBefore." G8-10 adds the JOSE
 		// clock skew (R11: "configurable 0-5 min") as the third zero row. AS1-C1 adds CIMD maximum freshness.
+		// M9 adds an exponent magnitude of zero to allow ordinary numbers while forbidding nonzero exponents.
 		List<Limit> zeroAllowed = Limits.all().stream().filter(Limit::isZeroAllowed).toList();
 
-		Assertions.assertEquals(List.of(Limits.JOSE_CLOCK_SKEW, Limits.JWKS_MAXIMUM_STALENESS,
+		Assertions.assertEquals(List.of(Limits.JOSE_CLOCK_SKEW, Limits.SCIM_FILTER_NUMBER_EXPONENT_MAGNITUDE,
+				Limits.JWKS_MAXIMUM_STALENESS,
 				Limits.CLIENT_CREDENTIALS_RENEW_BEFORE, Limits.CIMD_MAXIMUM_FRESHNESS, Limits.AS_CLOCK_SKEW, Limits.AS_PUBLIC_METADATA_FRESHNESS), zeroAllowed);
 	}
 
@@ -119,7 +123,7 @@ final class LimitsTests {
 		}
 
 		Assertions.assertEquals(constants, Limits.all());
-		Assertions.assertEquals(79, Limits.all().size());
+		Assertions.assertEquals(105, Limits.all().size());
 
 		Set<String> names = new HashSet<>();
 		for (Limit limit : Limits.all())
@@ -143,9 +147,9 @@ final class LimitsTests {
 	}
 
 	@Test
-	void onlyTheSealLifetimeHasNoDefault() {
+	void onlyExplicitSealLifetimeAndCursorTimeoutHaveNoDefault() {
 		// M1 plan, Limits registry: the seal lifetime is a per-call argument (a dash in the default column).
-		Assertions.assertEquals(List.of(Limits.SEAL_LIFETIME),
+		Assertions.assertEquals(List.of(Limits.SCIM_CURSOR_TIMEOUT, Limits.SEAL_LIFETIME),
 				Limits.all().stream().filter(limit -> !limit.hasDefault()).toList());
 	}
 

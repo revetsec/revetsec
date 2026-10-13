@@ -44,7 +44,11 @@ and a run can fail before any input executes.
 M1 deleted the M0 placeholder (`PlaceholderFuzzTests`, which exercised no Revetsec code) and added
 six classes with twelve `@FuzzTest` methods. M2 added five classes with nine methods, for the JOSE
 layer, the fixed-length ECDSA path and the key-set cache lifetime. M3 added four OAuth input targets,
-M4 added four OIDC targets, and M5 adds six resource-server targets, so there are now fourteen classes and thirty-five methods. Each method is one ClusterFuzzLite target, named
+M4 added four OIDC targets, and M5 added six resource-server targets. Later OAuth,
+SAML, WebAuthn and issuer additions bring committed source `33bbac0` to 27
+classes and 56 methods, including seven SAML targets. New worktree targets are
+counted only after they are incorporated into a source revision. Each method
+is one ClusterFuzzLite target, named
 `<SimpleClassName>_<method>`.
 
 | Class (package) | Method | Input | What it checks |
@@ -710,12 +714,79 @@ Actions:
 | `cflite_batch.yml` | nightly, manual | Batch fuzzing within a shared time budget, keeping the corpus in a separate storage repository |
 | `cflite_cron.yml` | nightly, manual | Corpus pruning in that storage repository |
 
-`FUZZ_SECONDS` is one budget shared by every target. M0 set it for a single placeholder target,
-and the workflows (`.github/`) raise it as targets are added: twelve in M1, twenty-one from M2. Each
-target gets at least its share, so the M2 JOSE targets, which sign or verify, execute fewer inputs
-in their share than the codec targets. The batch and pruning
+`FUZZ_SECONDS` is one budget shared by every target. Source `33bbac0` has 56 targets with
+nominal shares of about 21 seconds in a 1,200-second PR run and 64 seconds in a
+3,600-second nightly batch run, with unused time redistributed. Signing and
+verification targets execute fewer inputs than codec targets in the same time.
+The batch and pruning
 workflows skip with a notice until the corpus storage repository described in `cflite_batch.yml`
 is configured, and PR fuzzing then starts from the seeds alone.
+
+### RC-2 SAML local ClusterFuzzLite campaign (2026-10-13)
+
+An isolated archive of core commit `33bbac01a5c29f0f512cdaf4545f18e6295feb0d`
+was compiled by the cached `base-builder-jvm` image (digest
+`sha256:5eaa9b0d62fe132cfd319061dffa85a7bb6a6795ff2cdd52872a4b3a2c816f4a`)
+with offline Maven and no container network. The build produced all 56 target
+wrappers and seed archives. The cached ClusterFuzzLite runner image (digest
+`sha256:4c1febe9ddec42ff005c6115f7769608d1beff57e96ae365d5c4fea1013926dc`)
+then ran each SAML wrapper sequentially with `-runs=4`, its checked-in seed ZIP,
+and no network. LibFuzzer initialized every seed before stopping, so some
+targets report more than four actual runs:
+
+| Target | Seeds in ZIP | Reported runs | Result |
+|---|---:|---:|---|
+| `SamlFuzzTests_postBindingKeepsRawOctetsAndFixedRejections` | 3 | 4 | `DONE` |
+| `SamlFuzzTests_redirectBindingKeepsRawOctetsAndBoundedInflation` | 3 | 4 | `DONE` |
+| `SamlFuzzTests_metadataParsingCannotApproveAnUntrustedDescriptor` | 5 | 6 | `DONE` |
+| `SamlFuzzTests_xmlParserAndWalkerRejectAmbiguousDocuments` | 5 | 6 | `DONE` |
+| `SamlFuzzTests_signedAndEncryptedResponsesNeverReleaseMutatedIdentity` | 31 | 32 | `DONE` |
+| `SamlFuzzTests_encryptedCiphertextChangesCannotReleaseIdentity` | 3 | 4 | `DONE` |
+| `SamlLogoutFuzzTests_signedLogoutCasesNeverReleaseWrongSessionOrSuccess` | 29 | 30 | `DONE` |
+
+All seven startup checks exited zero. The same isolated archive was rebuilt
+with the same images, offline Maven cache and `--network none`, then each SAML
+target ran serially for the committed 56-target nightly share. The command
+inside the runner for each target was:
+
+```sh
+TIMEFORMAT='CPU_USER_SECONDS=%U CPU_SYSTEM_SECONDS=%S ELAPSED_SECONDS=%R'
+FUZZER_ARGS='-rss_limit_mb=2560 -timeout=25'
+time run_fuzzer "$target" -max_total_time=64 "/tmp/corpus-$target"
+```
+
+The builder used `compile` with `MVN` set to an offline wrapper executing:
+
+```sh
+/opt/maven/bin/mvn -o -Dmaven.repo.local=/out/maven-repository -Dmaven.repo.local.tail=/m2 "$@"
+```
+
+`/m2` was a read-only host dependency cache.
+Both cached images ran with `--pull never --platform linux/amd64 --network none`;
+the runner used `RUN_FUZZER_MODE=batch`, `OUT=/out` and the seed ZIPs built in
+that archive. The Bash `time` values below are **user plus system process CPU**
+for each `run_fuzzer` call inside the emulated Linux container. They include
+seed extraction, JVM startup and instrumentation as well as fuzzing; they are
+not host CPU measurements or an inference from the wall-clock budget.
+
+| Target | Executions | Fuzz seconds reported | Process CPU hours | Result |
+|---|---:|---:|---:|---|
+| Raw HTTP-POST binding | 3,394,324 | 65 | 0.02377 | `DONE` |
+| Raw HTTP-Redirect binding and inflate | 14,061,738 | 65 | 0.02449 | `DONE` |
+| Bounded IdP metadata | 124,291 | 65 | 0.02674 | `DONE` |
+| Raw XML parser and walker | 284,947 | 65 | 0.02617 | `DONE` |
+| Signed/encrypted response structure | 4,384 | 65 | 0.02394 | `DONE` |
+| Encrypted data and wrapped-key ciphertext | 3,647 | 65 | 0.02426 | `DONE` |
+| Signed Redirect logout | 295,759 | 65 | 0.02694 | `DONE` |
+| **Total** | **18,169,090** | **455** | **0.17631** | **7/7 passed** |
+
+Every process exited zero without a crash, timeout, assertion failure or other
+finding. This is a local seed-only campaign on the stated commit; it is not an
+all-target `test_all.py` run, hosted nightly batch, persistent corpus run, or
+qualification of later worktree changes. The separate
+[seven-target Jazzer campaign](../docs/saml-mutation-triage-2026-10-11.md)
+records its own measured process CPU hours and source boundary. RC-2 still
+needs final-source and hosted disposition.
 
 The build integration lives in `.clusterfuzzlite/`:
 
@@ -872,3 +943,30 @@ Inputs use four unsigned control bytes. `as1-g3-semantic-seeds.json` inventories
 `IssuerSigningFuzzTests.accessTokensMatchFixedProfileAndIndependentSignature` drives authorization-code and refresh issuance through the public engine. It checks the exact eight-claim access-token profile and JSON types, active key ID, fixed RS256/`at+jwt` header, sorted scope, lifetime arithmetic, strict UTF-8, unique rotation `jti`, online proof admission, and the five-field token response. JCA verifies the exact compact signing input using the original active public key and rejects the retained key. The public JWKS is checked against the original RSA modulus/exponent and exact public-only fields for both active and retained keys.
 
 Inputs use seven unsigned control bytes plus a bounded subject suffix. `as1-g4-semantic-seeds.json` inventories all 256 nonempty authored seeds with controls, meanings and SHA-256. A fixed-profile ordinary test calibrates private wrong-type and wrong-audience production plants. The bounded atomic test store is process-local; this target makes no durability, distributed-store or external-network claim. All six planned semantic target families now have nonempty corpora; PIT disposition and final issuer gates remain pending.
+
+
+## M9 SCIM syntax
+
+`ScimSyntaxFuzzTests` contains two targets: `rawFiltersRemainBoundedAndRoundTrip`
+and `rawPathsRemainBoundedAndRoundTrip`. Both consume a UTF-8 text view and a
+raw UTF-16 view, including unpaired surrogate units. Accepted syntax must keep
+its graph and literal bounds, preserve explicit path parts, serialize without
+length growth, and reparse under the same limits. Rejections carry fixed errors
+and bounded UTF-16 offsets. Core grammar tests supply separately written RFC
+acceptance and AST expectations; these fuzz properties do not establish full
+SCIM conformance or query permission.
+
+The 77 curated seeds, including all 17 RFC 7644 Figure 2 examples, live under
+`src/test/resources/com/revetsec/scim/ScimSyntaxFuzzTestsInputs`. Their complete
+path and byte inventory is `scim-seeds.sha256`; `SCIM-SEEDS.md` records provenance
+and the narrow held-erratum `$ref` syntax choice. The manifest and global layout
+checks run during replay.
+
+On 2026-10-13, each new target ran in a fresh tree and corpus for five minutes on
+Corretto 21 and three minutes on Corretto 17. Actual libFuzzer durations were
+301 seconds and 181 seconds per target, totaling 78,154,861 executions with no
+findings. Frozen Java and seed fingerprints were checked across all four runs.
+This is bounded syntax evidence; schema binding, policy enforcement, provider
+interoperability, persistence and release qualification remain separate.
+
+M10 adds `com.revetsec.scim.ScimM10FuzzTests`: bounded GET query approval, header-aware create/PUT/SearchRequest bodies with integer lexical preservation, and bounded response/projection/conditional invariants. The 32 authored seeds and their checksums are documented in `src/test/resources/com/revetsec/scim/SCIM-M10-SEEDS.md`. Live qualification uses finite runs and records results separately from interoperability evidence.

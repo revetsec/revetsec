@@ -397,7 +397,9 @@ final class WycheproofManifestTests {
 	// the IRTF-stream RFC 8032's vectors are used under, and gives the Revised BSD License only to the IETF-stream
 	// ones. The notices and streams were read from the RFC texts on 2026-09-28 (each RFC's "Copyright Notice" and the
 	// stream line of its header), except for RFC 6749 and RFC 7638, IETF-stream RFCs with an IETF Trust notice whose
-	// texts were not part of that read.
+	// texts were not part of that read. M9 additionally checked RFC 7644's IETF-stream header and
+	// IETF Trust notice in the official text retrieved on 2026-10-13. M10 checked RFC 7643 and RFC 9865
+	// IETF-stream headers and IETF Trust notices in the same dated primary-source record.
 	@Test
 	void noticeGivesEachIetfRfcTheCopyrightNoticeItCarries() throws IOException {
 		String notice = normalizedWhitespace(Files.readString(ContractSupport.repositoryRoot().resolve("NOTICE"),
@@ -405,8 +407,8 @@ final class WycheproofManifestTests {
 		String ietfSection = notice.substring(notice.indexOf(IETF_HEADING));
 		String listedRfcs = ietfSection.substring(0, ietfSection.indexOf("None of them is in the published JAR."));
 
-		Assertions.assertEquals(new TreeSet<>(List.of("4231", "4648", "5869", "6749", "7515", "7517", "7520", "7638",
-						"8032", "8037", "9110")),
+		Assertions.assertEquals(new TreeSet<>(List.of("4231", "4648", "5869", "6749", "7515", "7517", "7520", "7638", "7643", "7644",
+						"8032", "8037", "9110", "9865")),
 				Pattern.compile("RFC (\\d+)").matcher(listedRfcs).results().map(result -> result.group(1))
 						.collect(Collectors.toCollection(TreeSet::new)),
 				"each RFC in NOTICE's list has had its copyright notice and its stream checked: add a new one here, to "

@@ -1,0 +1,1 @@
+{"schemas":["urn:ietf:params:scim:schemas:core:2.0:User","urn:example:scim:fuzz:counter"],"userName":"fixture","urn:example:scim:fuzz:counter":{"counter":1.0}}

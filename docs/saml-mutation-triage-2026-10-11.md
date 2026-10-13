@@ -1,7 +1,9 @@
 # SAML mutation triage — 2026-10-11
 
-This is local RC-2 evidence for the uncommitted checkout. PIT 1.30.0 ran on
-JDK 21 with the SAML test families selected. The earlier full `internal.xml.*`
+This is a chronological local RC-2 evidence ledger. The earlier results below
+describe the source and test snapshots on which they were measured; they are
+not all fresh results for the current checkout. PIT 1.30.0 ran on JDK 21 with
+the SAML test families selected. The earlier full `internal.xml.*`
 run examined 667 mutations: 596 assertion kills, 43 survivors, and 28 with no
 coverage. Later whole-package results are recorded below. This is an
 inventory, not a closure: parser configuration and other defense controls
@@ -191,7 +193,8 @@ archive SHA-256 and all 11 capture-file SHA-256 values matched, and the hosted
 fixtures replaced the earlier local captures. An isolated, unchanged-source
 Corretto 17 offline replay passed 5/5 tests against the imported files. The
 checkout's Corretto 17 hosted-capture replay passed 6/6 after a rollover-key
-regression was added and fixed. The fixture replacement remains uncommitted.
+regression was added and fixed. The fixture replacement was uncommitted at
+that checkpoint; commit `33bbac0` subsequently included the imported captures.
 
 A seven-target, five-minute-per-target Corretto 17 Jazzer campaign finished
 without a finding on the pre-rollover-repair core source. It exercised the
@@ -632,3 +635,196 @@ The local logs are `/private/tmp/revetsec-rc2-final-source-jdk17.log`,
 `/private/tmp/revetsec-rc2-final-source-static.log`, and
 `/private/tmp/revetsec-rc2-final-source-differential.log`. These checks do not
 replace the hosted workflow on the owner's final pushed revision.
+
+## 2026-10-13 replay-lock continuation and current PIT disposition
+
+The current core HEAD is `33bbac0`. Its 56 `saml` and `internal.xml` production
+Java files have SHA-256 `b5fe1132abef182c677fbf57a256b23e7889629b0fe615264d58921eaeedb4a8`
+when sorted paths and their bytes are joined with NUL separators. There is no
+uncommitted production change in either package. The new test-only
+`SamlReplayUnlockMutationTests` checks that a successful replay insertion on a
+worker thread releases the cache lock so a different thread can insert a
+distinct key. Its second call has a two-second budget; on the unmodified cache
+the whole test completes in about 25–35 ms. Corretto 17 and 21 each pass 1/1
+focused test.
+
+An isolated Corretto 21 PIT run selected only this test and
+`InMemorySamlReplayCache`. The exact line-114 `VoidMethodCallMutator` identity,
+including all nine index/block positions, matches the preceding complete
+`saml.*` report and changes from `TIMED_OUT` to `KILLED` by
+`completedAdmissionReleasesLockForAnotherThread`. The isolated report examines
+49 cache mutations: 23 killed, 12 survived and 14 uncovered. Its narrower test
+selection changes other statuses, which **do not** supersede the complete
+package and previous focused reports. Raw evidence:
+`/private/tmp/revetsec-rc2-lock-isolated-mutations-2s.xml`, SHA-256
+`58b5c5240b3b7f0096814a491d84e5298f11b7b14b612f25bcc4ea58f945cf9f`.
+
+The other timeout is the `SamlPostBindingDecoder.validQuery` line-132,
+index-144/block-32 mutation replacing `start = end + 1` with subtraction.
+For a nonempty query, the mutated loop repeatedly visits the same final
+segment or separator and does not terminate. PIT reports `TIMED_OUT`; it is a
+detected availability defect in the mutant, not an assertion kill. The
+production loop advances past the separator and is bounded by the 8,192-character
+query cap. The two timeout identities therefore have separate, explicit
+dispositions: one now has an assertion kill and one remains a detected
+nonterminating mutant.
+
+Combining the unchanged complete-package identities with the exact focused
+continuations gives the following **composite**, not a new full-package run:
+
+| Package | Total | Assertion kills | Survived with source disposition | No coverage | Timeout |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `internal.xml.*` | 667 | 610 | 35 | 22 | 0 |
+| `saml.*` | 2,508 | 2,275 | 78 | 154 | 1 |
+| **Total** | **3,175** | **2,885** | **113** | **176** | **1** |
+
+The SAML assertion-kill score is 2,275/2,508 (90.71% of all generated
+mutants); among covered mutants, 2,275/2,354 (96.64%). PIT's convention also
+counts the one timeout as detected, giving 2,276/2,354 (96.69%). XML has
+610/667 assertion kills (91.45% of all mutants) and 610/645 among covered
+mutants (94.57%). The combined covered score by PIT's convention is
+2,886/2,999 (96.23%). These scores use the explicit composite above, not the
+isolated cache run's whole-class score.
+
+The earlier exact-location tables give source dispositions for all 78 SAML
+and 35 XML survivors. None is silently called an assertion kill. The 176
+uncovered mutations remain coverage limits. In SAML, they comprise 101
+null-return substitutions, 37 empty-object substitutions, seven true-return,
+five negated-conditional and four false-return substitutions. Twenty-six of
+the 37 empty-object actions are diagnostic `toString` methods; others include
+accessors and branches in authentication, signature and logout result paths.
+An unvisited null-return branch could violate a sealed-result contract under
+its fault precondition, so this inventory does **not** assert that uncovered
+branches are equivalent or universally safe. The XML uncovered groups and
+their pinned-provider/fault-model limits are listed above. RC-2's stated PIT
+criterion is no *unjustified survivor* and publication of the score; these
+source dispositions are ready for maintainer review. This local result alone
+does not close the other RC-2 gates or prove untested provider-failure paths.
+
+## 2026-10-13 reachable security-branch continuation
+
+The added `SamlSecurityBranchMutationTests` ran in an isolated `33bbac0`
+snapshot containing only the two new SAML test files. It uses the same 56
+production `saml`/`internal.xml` Java bytes fingerprinted above, without the
+concurrent SCIM implementation. Corretto 17 and 21 each pass its five tests
+with zero failures or skips. The semantics cases use locally signed responses;
+the other cases exercise error-Response and sealed pending-state boundaries:
+
+| Previously uncovered exact identity | Security assertion and scoped PIT result |
+| --- | --- |
+| `SamlResponseSemantics.validAttributeStatement` line 610, `BooleanTrueReturnValsMutator`, index 88/block 29 | A signed scoped subject attribute containing `<a:Other>` instead of `<a:AttributeValue>` is rejected as `ASSERTION_SHAPE`, with zero replay writes. Returning true at that guard would let the downstream attribute reader treat the wrong element's text as a value. `KILLED`. |
+| `SamlResponseSemantics.validate` line 166, `NullReturnValsMutator`, index 30/block 6 | A failing application clock returns sealed `Unavailable`, with zero replay writes. `KILLED`. |
+| `SamlResponseSemantics.validate` line 253, `NullReturnValsMutator`, index 691/block 205 | A replay-store exception returns sealed `Indeterminate`, never an identity. `KILLED`. |
+| `SamlInboundResponse.verifySuccessSignatures` line 91, `NullReturnValsMutator`, index 17/block 5 | An assertion-free error Response yields `SignatureRejected(ASSERTION_NOT_AVAILABLE)` if this internal verifier is called. `KILLED`; the normal SP status-only path remains separately tested. |
+| `SamlServiceProvider.completeAuthenticationInternal` line 246, `NullReturnValsMutator`, index 145/block 43 | A sealed pending request created for one SP entity is rejected as `PENDING` by another SP entity, before malformed response XML is parsed. This checks the boundary and the sealed result contract. `KILLED`. |
+
+Scoped JDK 21 PIT selected `SamlSecurityBranchMutationTests` with each mutated
+class separately. All 476 `SamlResponseSemantics`, 93 `SamlInboundResponse`,
+and 404 `SamlServiceProvider` class/method/descriptor/line/mutator/index/block
+identities match the preceding complete SAML report. Only the five exact
+`NO_COVERAGE` → `KILLED` transitions above are carried into the composite;
+statuses that regress under narrower test selection are ignored. The raw
+scoped reports are `/private/tmp/revetsec-rc2-security-semantics-mutations.xml`
+(SHA-256 `f2bb9db8be5243326706333a4adbaf09cfabd054bdef6a506a3a482ea285dfa8`)
+and `/private/tmp/revetsec-rc2-security-inbound-mutations.xml` (SHA-256
+`64c417a4af3914ccc919ff7f59c6d20bab32e079ff33bb49acf2d6d42e25f85d`).
+The SP report is `/private/tmp/revetsec-rc2-security-sp-mutations.xml`
+(SHA-256 `f0461143264232ba694d13279bf537d2c3cd044927a7b95e989a2d5c7086cd19`).
+
+The updated exact-identity **composite** is 2,280 SAML assertion kills,
+78 source-dispositioned survivors, 149 uncovered and one detected loop timeout
+out of 2,508. XML remains 610 killed, 35 source-dispositioned survivors and
+22 uncovered out of 667. Combined, that is **2,890 assertion kills, 113
+source-dispositioned survivors, 171 uncovered and one timeout out of 3,175**.
+SAML's covered score is 2,280/2,359 (96.65% assertion kills) or 2,281/2,359
+(96.69%) under PIT's timeout-as-detected convention. The combined PIT covered
+score is 2,891/3,004 (96.24%). The remaining SAML uncovered actions include
+98 null-return, 37 empty-object, six true-return, five negated-conditional and
+four false-return substitutions. They are reported as coverage limits, not
+equivalents or kills. This is a bounded continuation targeting reachable
+identity/result branches; it does not claim exhaustive coverage of provider
+faults or every diagnostic accessor.
+
+### Bounded audit of the 171 uncovered identities at this checkpoint
+
+The 149 SAML identities fall into these disjoint, source-reviewed groups. This
+classification describes where PIT did not enter an action; it does not imply
+that an uncovered action is equivalent to production code.
+
+| SAML group | Count | Examples and significance |
+| --- | ---: | --- |
+| Sealed-result and provider-fault branches | 86 | Includes signature/parse outcomes, pending auth and logout resolution, replay and expiry, and SP completion. Some are reachable using injected failing stores or clocks. A null-result substitution could break the sealed-result contract under its fault precondition. |
+| Diagnostic and observer reporting | 28 | Twenty-six `toString` mutations plus two observer outcome mutations. These affect reporting, not the authentication decision. |
+| Accessors and factories | 19 | Identity and pending-state getters, attribute metadata, `isTransient`, and default/construction helpers; these remain API or configuration test gaps. |
+| Semantic and shape helpers | 16 | Assertion ordering, status flattening, structural whitespace, and related guards. These warrant security review even where another guard rejects the same malformed input. |
+
+The 22 XML identities divide into 11 verifier actions (key-type mismatch,
+post-unmarshal checks, and provider/dereferencer failures), two secure-parser
+provider-fault returns, one duplicate-reference decryptor guard, one
+already-rejected Response descendant shape, four SAX character callbacks
+outside the pinned parser's accepted document path, and three diagnostic
+`toString` actions. The verifier's RSA-signature/EC-only-key mismatch can
+change the rejection reason in a mutant; it does not make that signature
+valid. The other cited structural conditions are rejected earlier by the
+normal parser or verifier, or require a provider fault. These are source-backed
+reachability assessments, not assertion kills or claims of equivalence.
+
+The highest-risk reachable actions selected during this bounded audit were
+the five exact identities killed above: signed attribute shape, clock fault,
+replay-store fault, error-Response verifier result, and sealed pending SP
+boundary. Remaining pending-source fault-result paths are reachable with
+pluggable stores, including auth `resolve` lines 93, 98, 100 and 101 and
+logout `resolve` lines 90, 94, 96, 98 and 99. They remain explicit contract
+test gaps at this audit stage, without an observed identity bypass; the
+continuation below tests these exact branches. Review of the remaining
+Assertion ordering guards found that a
+second/out-of-order Issuer is already rejected by `unique`, and an
+out-of-position Signature is rejected by signature position checks. The
+uncovered SLO `ignorableStructuralNode` CDATA branch is normalized to text by
+the pinned SAX builder; nonwhitespace text takes the already-covered reject
+path. No concrete reachable authentication or signature bypass was identified
+in the remaining 171 identities. That finding does not prove the untested
+fault/result branches safe; it leaves them visible for later targeted testing.
+
+## 2026-10-13 pending-source fault-contract continuation
+
+The remaining store-fault cluster was exercised through the public
+`completeAuthenticationResult` and `completeLogoutResult` APIs in the same
+isolated `33bbac0` source snapshot. `SamlPendingSourceFaultMutationTests`
+injects a store that throws, returns `null`, or reports `Missing`,
+`Unavailable`, or `Indeterminate`; it also sends a message without RelayState.
+The login message has deliberately invalid XML, while the logout message has
+a valid IdP Redirect signature. Each case asserts the expected sealed public
+result, the number of store consumes, and zero replay writes. No case returns
+an identity or successful logout. Corretto 17 and 21 each pass 2/2 focused
+tests with no failures or skips.
+
+| Store condition | Public login result | Public logout result | Newly killed exact `NullReturnValsMutator` identities |
+| --- | --- | --- | --- |
+| Missing RelayState; no consume | `Rejected(PENDING)` | `Rejected` | Auth `resolve` 93 index 26/block 4; logout `resolve` 90 index 26/block 4 |
+| Consume throws | `Indeterminate` | `Indeterminate` | Logout `resolve` 94 index 52/block 9; auth throw branch was already covered |
+| Consume returns `null` | `Indeterminate` | `Indeterminate` | Auth `resolve` 98 index 65/block 13; logout `resolve` 96 index 66/block 13 |
+| Consume reports `Missing` | `Rejected(PENDING)` | `Rejected` | Both branches were already covered |
+| Consume reports `Unavailable` | `Unavailable` | `Unavailable` | Auth `resolve` 100 index 81/block 17; logout `resolve` 98 index 82/block 17 |
+| Consume reports `Indeterminate` | `Indeterminate` | `Indeterminate` | Auth `resolve` 101 index 89/block 19; logout `resolve` 99 index 90/block 19 |
+
+Scoped JDK 21 PIT selected only that test class and the two pending-source
+classes. All 42 class/method/descriptor/line/mutator/index/block identities
+match the preceding complete SAML report. The nine identities in the table
+changed from `NO_COVERAGE` to `KILLED`; other statuses from the narrower
+selection are not carried forward. The raw report is
+`/private/tmp/revetsec-rc2-pending-source-mutations.xml`, SHA-256
+`7297a71b3756b3fb691c8770a2866722d29f28575b74365b5fc4192c0324caaa`.
+
+The resulting exact-identity **composite**, not a new full-package run, is
+2,289 SAML assertion kills, 78 source-dispositioned survivors, 140 uncovered,
+and one detected loop timeout out of 2,508. XML remains 610 killed, 35
+source-dispositioned survivors, and 22 uncovered out of 667. Combined, that
+is **2,899 assertion kills, 113 source-dispositioned survivors, 162 uncovered,
+and one timeout out of 3,175**. SAML's covered score is 2,289/2,368 (96.66%
+assertion kills), or 2,290/2,368 (96.71%) counting the detected timeout. The
+combined PIT covered score is 2,900/3,013 (96.25%). The residual SAML
+classification is now 77 sealed-result/provider-fault, 28
+diagnostic/observer, 19 accessor/factory, and 16 semantic/shape identities.
+These 140 SAML and 22 XML actions remain declared coverage limits, not
+assertion kills or proven equivalents.

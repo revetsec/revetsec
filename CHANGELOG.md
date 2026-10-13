@@ -19,6 +19,8 @@ Each release gets a `## X.Y.Z (YYYY-MM-DD)` heading with Added, Changed, Fixed, 
 Nothing has been released. The version is `1.0.0-SNAPSHOT`, and there is no compatibility promise before 1.0.0.
 
 ### Added
+- SCIM registered schemas and immutable resources, create/PUT validation, schema-bound filter policies, GET/SearchRequest queries, projection, index/cursor page framing, conditional headers, discovery and bounded response preparation. Explicit compatibility use is observable and parsed carriers retain private configuration provenance. PATCH and the optional evaluator follow separately. See [SCIM server primitives](docs/scim-server-primitives.md).
+- Bounded SCIM filter and attribute-path syntax parsing with sealed results and fixed errors, an immutable six-kind AST, a Java 17 visitor, explicit serialization and default-deny policy configuration. Syntax success grants no query permission; the provider binds schemas and enforces complete policies. See [SCIM filter syntax](docs/scim-filters.md).
 - Restricted OAuth issuer interaction/result/exception/observer contracts and safe local HTTP failure mapping. Public server builder and endpoint wiring follow separately.
 - Restricted immutable `OAuthServerResponse` with explicit credential-bearing Location/body emission, no Location in ordinary headers, bounded defensive copies and fixed redacted diagnostics. Internal endpoint preparation now retains this response; public server routing remains pending.
 - The remaining22 approved issuer limit rows and pure internal checked settings, including nullable default resets, lifetime/deadline ordering and sealer-cap alignment. Public server-builder setters remain pending.

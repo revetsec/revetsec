@@ -1,6 +1,6 @@
 # RC-2 SAML and XML review, round 1 — 2026-10-12
 
-**Internal, AI-assisted adversarial review; not independent. Gate status: open.**
+**Internal, AI-assisted adversarial review; not independent. Review round complete; RC-2 remains open.**
 The reviewed source was checkout `e52e162dcdcbc4706321b275f4da12ead9db832d`
 plus the uncommitted RC-2 edits described below. Three reviewers used distinct
 SAML protocol/API, XML/cryptography, and cross-boundary attacker prompts. They
@@ -79,12 +79,23 @@ checked audience, recipient, pending request, replay, signed-node selection,
 and Redirect logout paths. No other actual-source finding met the review rule
 of a reproducible failing test.
 
-## Open review actions
+## Post-round disposition
 
-- The maintainer must review the `internal.xml` production diff to the
-  message-signature key limit, as required by plan §14.7. No user review is
-  asserted here.
-- This round does not close RC-2's full differential cross-product, PIT
-  survivor dispositions, the complete Fragile Lock pentest precondition, or
-  final SAML API freeze. The recorded findings and test results apply only to
-  the paths and source described above.
+The maintainer reviewed and confirmed the `internal.xml` message-signature
+key-limit diff and the [SAML public API inventory](rc-2-saml-api-freeze-candidate.md)
+on 2026-10-12. The API freeze is complete. The owner also accepted the
+source-backed non-applicability disposition for the relative-namespace
+void-canonicalization precondition; a full validly signed exploit was not
+reproduced. The [2026-10-13 strict live-browser pass](../pentest/2026-10-13.md)
+records 30 ACS and eight SLO cases through Burp, with the signature
+preconditions and limits of each result. A [selected ZAP-routed pass](../pentest/2026-10-13-zap.md)
+adds a second live proxy observation for clean SSO/SLO, a signed wrong-RelayState
+ACS rejection and a duplicate-SigAlg logout rejection.
+
+A later [hosted Shibboleth capture](../../src/test/resources/fixtures/shibboleth/README.md)
+ran all six required replay methods and imported the GCM and signed-Response
+CBC fixtures. The current checkout includes those fixtures. This hosted receipt
+and the local pentest do not substitute for hosted differential and capture
+checks on the final pushed source. PIT survivor/uncovered/timeout dispositions
+and final-source hosted checks remain RC-2 work. The review findings and
+tests above retain their stated source and tool scope.

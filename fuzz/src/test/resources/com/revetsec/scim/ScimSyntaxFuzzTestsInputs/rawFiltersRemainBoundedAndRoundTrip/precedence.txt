@@ -1,0 +1,1 @@
+a pr or b pr and not(c pr)

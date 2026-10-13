@@ -15,8 +15,12 @@
  */
 
 /**
- * SCIM 2.0 server primitives: schemas, filters, queries, PATCH operations and responses (RFC 7643,
- * RFC 7644).
+ * Bounded SCIM 2.0 server primitives: registered schemas, immutable resources, schema-bound
+ * filters and explicit policies, result-based request parsing, query/page descriptions and prepared responses.
+ * <p>
+ * Syntax success does not authorize a query. Applications authenticate and authorize callers,
+ * execute approved queries and persist candidates atomically. PATCH and the optional evaluator
+ * remain separately sequenced implementation work.
  * <p>
  * It depends only on {@code com.revetsec.json} and the root package.
  *

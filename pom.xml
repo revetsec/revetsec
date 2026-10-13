@@ -140,6 +140,12 @@
 		<revetsec.coverage.bundle.branch>0.92</revetsec.coverage.bundle.branch>
 		<revetsec.coverage.critical.instruction>0.90</revetsec.coverage.critical.instruction>
 		<revetsec.coverage.critical.branch>0.85</revetsec.coverage.critical.branch>
+		<!-- M9 syntax/contract tests, independently compiled on Corretto 17/21/27, 2026-10-13:
+		     com.revetsec.scim covers 4,836/4,930 instructions (0.980933) and 821/885 branches
+		     (0.927684) on each JDK, without exclusions. The dedicated floors leave a margin;
+		     the inherited critical-package floors also apply. -->
+		<revetsec.coverage.scim.instruction>0.97</revetsec.coverage.scim.instruction>
+		<revetsec.coverage.scim.branch>0.91</revetsec.coverage.scim.branch>
 		<revetsec.coverage.internal.json.instruction>0.99</revetsec.coverage.internal.json.instruction>
 		<revetsec.coverage.internal.json.branch>0.99</revetsec.coverage.internal.json.branch>
 		<revetsec.coverage.internal.crypto.instruction>0.97</revetsec.coverage.internal.crypto.instruction>
@@ -717,6 +723,24 @@
 										<rule>
 											<element>PACKAGE</element>
 											<includes>
+												<include>com?revetsec?scim</include>
+											</includes>
+											<limits>
+												<limit>
+													<counter>INSTRUCTION</counter>
+													<value>COVEREDRATIO</value>
+													<minimum>${revetsec.coverage.scim.instruction}</minimum>
+												</limit>
+												<limit>
+													<counter>BRANCH</counter>
+													<value>COVEREDRATIO</value>
+													<minimum>${revetsec.coverage.scim.branch}</minimum>
+												</limit>
+											</limits>
+										</rule>
+										<rule>
+											<element>PACKAGE</element>
+											<includes>
 												<include>com?revetsec?internal?json</include>
 												<include>com?revetsec?internal?crypto</include>
 												<include>com?revetsec?internal?encoding</include>
@@ -727,6 +751,7 @@
 												<include>com?revetsec?oidc</include>
 												<include>com?revetsec?internal?oauth</include>
 												<include>com?revetsec?saml</include>
+												<include>com?revetsec?scim</include>
 												<include>com?revetsec?oauth?server</include>
 											</includes>
 											<limits>

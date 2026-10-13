@@ -114,8 +114,9 @@ Some test sources, test data files and fuzz seeds contain examples, keys and
 test vectors copied or derived from IETF RFCs, each cited where it is used:
 RFC 4231 section 4; RFC 4648 section 10; RFC 5869 appendix A; RFC 6749 section
 4.1.2 and appendix B; RFC 7515 appendix A; RFC 7517 appendix A; RFC 7520
-sections 3 and 4; RFC 7638 section 3.1; RFC 8032 section 7.1; RFC 8037 appendix
-A; and the example dates of RFC 9110 section 5.6.7. None of them is in the
+sections 3 and 4; RFC 7638 section 3.1; RFC 7643 sections 2 through 8; RFC 7644 section 3.4.2.2, Figure 2;
+RFC 8032 section 7.1; RFC 8037 appendix
+A; the example dates of RFC 9110 section 5.6.7; and RFC 9865 section 3. None of them is in the
 published JAR.
 
 RFC 4231 (2005) and RFC 4648 (2006) carry an Internet Society copyright notice,
@@ -169,3 +170,16 @@ IETF Trust's correction of September 21, 2021 call the same license text the
   CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
   ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
   POSSIBILITY OF SUCH DAMAGE.
+
+SCIM schema descriptors (published library)
+
+The built-in SCIM schema descriptors and descriptive text are derived from
+RFC 7643 sections 2 through 8, its selected corrections, and RFC 9865 section 3.
+RFC 7643 is Copyright (c) 2015 IETF Trust and the persons identified as the
+document authors; RFC 9865 is Copyright (c) 2025 IETF Trust and the persons
+identified as the document authors. All rights reserved. Both were published
+in the IETF stream and are subject to BCP 78 and the IETF Trust Legal
+Provisions (https://trustee.ietf.org/license-info) in effect at publication.
+To the extent these descriptors are Code Components, the Revised BSD License
+text reproduced above applies. These descriptors are included in the library;
+the fixture-only statement above applies only to the enumerated test material.

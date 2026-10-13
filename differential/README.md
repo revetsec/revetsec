@@ -294,12 +294,15 @@ boundaries are covered in the core metadata and XML tests. This table records
 which mutation families were applied or excluded; it does not claim that a
 cryptographic oracle enforces Revetsec's application policy.
 
-The local applicability audit and 43-method comparator pass are complete;
-the current uncommitted comparator additions still need hosted CI on the
-owner's pushed revision. The full validly signed
-void-canonicalization variant was not reproduced; its source-backed
-non-applicability disposition was accepted by the owner and is recorded in the
-manual report. The calibrated reviews, hosted Shibboleth replay, owner review
-of the verifier repair, and public SAML API freeze are complete. PIT
-dispositions and the broader live-interception manual gate remain open. The
-latest hosted fixtures are imported locally and still need the owner's commit.
+The local applicability audit and all 43 comparator methods passed again on
+2026-10-13 using Corretto 17, the committed `33bbac01a5c29f0f512cdaf4545f18e6295feb0d`
+source in an isolated checkout, and the live Docker libxmlsec oracle: zero
+failures, errors, or skips. The CI method-inventory check also found all 43
+required methods with zero skips. This verifies the committed SAML source
+locally; hosted CI on the final pushed revision remains a separate gate.
+The full validly signed void-canonicalization variant was not reproduced; its
+source-backed non-applicability disposition was accepted by the owner and is
+recorded in the manual report. The calibrated reviews, hosted Shibboleth
+replay, owner review of the verifier repair, public SAML API freeze, and
+stricter live-interception manual pass are complete locally. PIT dispositions
+remain open.

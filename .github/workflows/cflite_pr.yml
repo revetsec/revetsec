@@ -17,11 +17,8 @@ name: ClusterFuzzLite PR fuzzing
 # cflite_batch.yml and cflite_cron.yml.
 #
 # Targets. .clusterfuzzlite/build.sh makes one target of every Jazzer @FuzzTest method in fuzz/'s
-# *FuzzTests classes, all under com.revetsec. M1 added internal.json.JsonCodecFuzzTests,
-# json.JsonModelFuzzTests, internal.json.Rfc7638FuzzTests, StateSealerFuzzTests, internal.pem.PemFuzzTests
-# and internal.encoding.EncodingFuzzTests; M2 added internal.jose.CompactJwsFuzzTests,
-# internal.jose.JsonWebKeyFuzzTests, jose.JwtValidatorFuzzTests, internal.crypto.EcdsaFuzzTests and
-# internal.http.CacheLifetimeFuzzTests. ClusterFuzzLite runs the targets one at a time and shares
+# *FuzzTests classes, all under com.revetsec. Committed source 33bbac0 has 56 targets, including seven
+# SAML targets. ClusterFuzzLite runs the targets one at a time and shares
 # FUZZ_SECONDS between them, so the budget below is the total for a PR run, whatever the number of
 # targets. Budgets for all three workflows are in the header of cflite_batch.yml.
 

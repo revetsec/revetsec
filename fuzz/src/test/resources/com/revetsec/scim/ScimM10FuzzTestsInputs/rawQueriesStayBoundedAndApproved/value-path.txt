@@ -1,0 +1,1 @@
+filter=emails%5Btype+eq+%22work%22+and+value+eq+%22a%40example.test%22%5D

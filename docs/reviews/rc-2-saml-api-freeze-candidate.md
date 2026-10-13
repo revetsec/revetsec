@@ -1,8 +1,9 @@
 # RC-2 SAML public API freeze — 2026-10-12
 
-**Status: owner reviewed and frozen on 2026-10-12.** This inventory is for
-the current uncommitted checkout after importing the hosted Shibboleth
-captures. It covers `com.revetsec.saml` in the core JAR. The RC-2 production
+**Status: owner reviewed and frozen on 2026-10-12.** This inventory was
+prepared after importing the hosted Shibboleth captures and is included in
+commit `33bbac01a5c29f0f512cdaf4545f18e6295feb0d`. It covers
+`com.revetsec.saml` in the core JAR. The RC-2 production
 fix is in `com.revetsec.internal.xml`; a Redirect signature canonicalizer also
 became package-accessible for same-package boundary tests. The internal
 pending-budget and cache deadline calculations, plus observer result
@@ -40,11 +41,13 @@ rollover. Metadata-signature verification retains its separate one-through-four
 trust-anchor limit. The [integration guide](../saml-sp.md) describes these
 limits, the CBC opt-in, pending-state rules, and login/logout ownership.
 
-The current complete Corretto 17 and 21 core suites each passed 17,701 tests,
-with one intentional locale skip per run.
-RC-2 still needs the manual
-pentest disposition and PIT survivor review. The owner reviewed and confirmed
-the `internal.xml` key-limit diff.
+The source at the freeze review passed 17,701 core tests on each of Corretto
+17 and 21, with one intentional locale skip per run. The later
+[strict Burp/SAML Raider pass](../pentest/2026-10-13.md) and
+[selected ZAP pass](../pentest/2026-10-13-zap.md) record their local outcomes
+and limits. RC-2 still needs PIT disposition and
+final-source hosted checks. The owner reviewed and confirmed the
+`internal.xml` key-limit diff.
 The 43-method differential comparator now
 covers the separately keyed corpus with libxmlsec. The seven-target local
 fuzz campaign and 91-seed replay are recorded in the mutation triage ledger.

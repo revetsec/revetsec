@@ -39,7 +39,7 @@ Revetsec parses and validates protocol messages for the application side of OAut
 - For SCIM, Revetsec enforces schema and mutability rules only. Which privilege-bearing attributes (roles, entitlements, administrator flags) a given SCIM client may write is the application's authorization policy.
 - Fuzzing, conformance-suite runs, interop tests, differential testing and internal reviews are evidence for their stated cases. They are not a third-party penetration test, a certification, or proof that no vulnerabilities exist.
 
-Revetsec has not been independently audited. Its security evidence is meant to be reproducible by anyone and is added to [`docs/`](https://github.com/revetsec/revetsec/tree/main/docs) of the core repository as it is produced. The threat model maps implemented invariants to tests; the interop matrix and fuzz documentation record their bounded local results. Manual SAML pentest, independent review and hosted RC-2 evidence remain open before release.
+Revetsec has not been independently audited. Its security evidence is meant to be reproducible by anyone and is added to [`docs/`](https://github.com/revetsec/revetsec/tree/main/docs) of the core repository as it is produced. The threat model maps implemented invariants to tests; the interop matrix and fuzz documentation record their bounded local results. The SAML review was internal and AI-assisted; the [strict Burp/SAML Raider pass](docs/pentest/2026-10-13.md) and [selected ZAP pass](docs/pentest/2026-10-13-zap.md) record their local outcomes and limits. RC-2 still requires PIT disposition and hosted differential and Shibboleth checks on the final pushed source; the earlier hosted capture is a separate, dated receipt.
 
 ## Sealing Keys
 
