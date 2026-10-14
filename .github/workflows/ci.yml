@@ -471,7 +471,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: revetsec/revetsec-soklet
-          ref: 87bec9f2fb7b39b3e0dd2ff589010d2a0ef739ae
+          ref: d637e1d4a2c64efe09b5c521cee355721332da4f
           path: .example-inputs/adapter
           persist-credentials: false
 
@@ -671,7 +671,7 @@ jobs:
   # comparators plus a live libxmlsec1 cryptographic oracle stay outside the
   # published core graph.
   differential:
-    name: Differential (SAML, JDK 17)
+    name: Differential (SAML and SCIM syntax, JDK 17)
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     env:
@@ -771,6 +771,22 @@ jobs:
                 f'skipped: {skipped}')
           PY
 
+      - name: Require independently pinned SCIM syntax and AST cases
+        run: |
+          python3 - <<'PYCODE'
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+          path = Path('differential/target/surefire-reports/TEST-com.revetsec.differential.ScimFilterComparatorTests.xml')
+          suite = ET.parse(path).getroot()
+          if int(suite.attrib['tests']) != 306 or any(int(suite.attrib.get(key, '0')) for key in ('failures', 'errors', 'skipped')):
+              raise SystemExit('SCIM syntax/AST comparator cases are missing or not green')
+          required = {'documentedGrammarDifferencesRemainExact', 'documentedIndependentNonScalarLiteralFaultsAreExact',
+                      'documentedIndependentDecimalPrecisionLossIsNotSilentlyNormalizedAway', 'typedProjectionDetectsPlantedPrecedenceAndLiteralDefects'}
+          if not required.issubset({case.attrib.get('name') for case in suite.findall('testcase')}):
+              raise SystemExit('SCIM exact oracle dispositions or defect controls are missing')
+          print('SCIM syntax/AST: all 306 pinned cases, zero failures/errors/skips')
+          PYCODE
+
       - name: Upload SAML differential reports
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -841,5 +857,5 @@ jobs:
 
   # scim: from M11. Gating on PR. scim2-tester (hash-pinned) against the examples/ server.
 
-  # differential additions: RC-1 JOSE/JSON and RC-3 SCIM remain open. RC-2 still needs
+  # Differential SCIM syntax/AST is active; remaining RC-3 assurance is open. RC-2 still needs
   # the remaining SLO, XSW, Fragile-Lock and structure-aware comparison matrix.

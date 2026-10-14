@@ -527,6 +527,31 @@ final class SamlServiceProviderTests {
         assertEquals("/local-home", success.getApplicationData().orElseThrow());
     }
 
+    @Test void maximumResponseAgeExactFifteenMinutesCompletesRequestedSso() throws Exception {
+        KeyPair key = rsa();
+        SamlServiceProvider sp = SamlServiceProvider.withEntityId(SP)
+                .assertionConsumerServiceUrl(ACS)
+                .replayCache(InMemorySamlReplayCache.withLimit(CLOCK, 4))
+                .clock(CLOCK).maximumResponseAge(Duration.ofMinutes(15)).build();
+        SamlIdentityProvider idp = SamlIdentityProvider.withEntityId(IDP)
+                .connectionId("tenant-one")
+                .redirectSingleSignOnService(URI.create("https://idp.example.test/sso"))
+                .signingKeys(List.of(key.getPublic())).build();
+        PendingSamlAuthentication pending = assertInstanceOf(
+                SamlAuthenticationRequestResult.Prepared.class,
+                sp.beginAuthenticationResult(idp)).getPendingAuthentication();
+        StateSealer sealer = StateSealer.withActiveKey(TestSealers.fixedKey("saml-age-maximum"))
+                .clock(CLOCK).build();
+        PendingSamlAuthenticationSource source = PendingSamlAuthenticationSource.fromSealedForm(
+                pending.toSealedForm(sealer, "saml-cookie"), sealer, "saml-cookie");
+        String xml = SamlResponseSemanticsTests.BASE.replace("_request", pending.getRequestId())
+                .replace("2026-10-09T00:00:00Z", "2026-10-09T00:01:00Z");
+        String signed = SamlResponseSemanticsTests.signedXml(xml, true, false, key.getPrivate());
+        assertInstanceOf(SamlAuthenticationResult.Succeeded.class,
+                sp.completeAuthenticationResult(message(signed, pending.getRelayStateHandle()),
+                        source, idp));
+    }
+
     @Test void unsolicitedLoginIsOptInAndNeverAcceptsRelayState() throws Exception {
         KeyPair key = rsa();
         SamlServiceProvider sp = SamlServiceProvider.withEntityId(SP)
@@ -668,6 +693,103 @@ final class SamlServiceProviderTests {
         assertEquals(identity.getSessionNotOnOrAfter(),
                 identity.getSessionReference().getSessionNotOnOrAfter());
         assertEquals("urn:example:mfa", identity.getAuthnContextClassRef().orElseThrow());
+    }
+
+    @Test void sameSignedAssertionCannotCrossTwoPendingRequestsAfterFirstBearerWindow() throws Exception {
+        KeyPair key = rsa();
+        AtomicReference<Instant> now = new AtomicReference<>(Instant.parse("2026-10-09T00:01:00Z"));
+        Clock clock = new Clock() {
+            @Override public @NonNull ZoneId getZone() { return ZoneOffset.UTC; }
+            @Override public @NonNull Clock withZone(@NonNull ZoneId zone) {
+                return Clock.fixed(now.get(), zone);
+            }
+            @Override public @NonNull Instant instant() { return java.util.Objects.requireNonNull(now.get()); }
+        };
+        SamlServiceProvider sp = SamlServiceProvider.withEntityId(SP)
+                .assertionConsumerServiceUrl(ACS)
+                .replayCache(InMemorySamlReplayCache.withLimit(clock, 4))
+                .clock(clock).clockSkew(Duration.ZERO).build();
+        SamlIdentityProvider idp = SamlIdentityProvider.withEntityId(IDP).connectionId("tenant-one")
+                .redirectSingleSignOnService(URI.create("https://idp.example.test/sso"))
+                .signingKeys(List.of(key.getPublic())).requireSignedAssertions(true).build();
+        PendingSamlAuthentication first = assertInstanceOf(SamlAuthenticationRequestResult.Prepared.class,
+                sp.beginAuthenticationResult(idp)).getPendingAuthentication();
+        PendingSamlAuthentication second = assertInstanceOf(SamlAuthenticationRequestResult.Prepared.class,
+                sp.beginAuthenticationResult(idp)).getPendingAuthentication();
+        assertTrue(!first.getRequestId().equals(second.getRequestId()));
+        StateSealer sealer = StateSealer.withActiveKey(TestSealers.fixedKey("saml-cross-request"))
+                .clock(clock).build();
+        String original = "<a:SubjectConfirmation Method='urn:oasis:names:tc:SAML:2.0:cm:bearer'>"
+                + "<a:SubjectConfirmationData Recipient='" + ACS + "' InResponseTo='_request' "
+                + "NotOnOrAfter='2026-10-09T00:05:00Z'/></a:SubjectConfirmation>";
+        String firstConfirmation = original.replace("_request", first.getRequestId())
+                .replace("00:05:00Z", "00:01:10Z");
+        String secondConfirmation = original.replace("_request", second.getRequestId())
+                .replace("NotOnOrAfter='2026-10-09T00:05:00Z'",
+                        "NotBefore='2026-10-09T00:01:20Z' "
+                        + "NotOnOrAfter='2026-10-09T00:01:50Z'");
+        String xml = SamlResponseSemanticsTests.BASE
+                .replace(" InResponseTo='_request'>", ">")
+                .replace(original, firstConfirmation + secondConfirmation);
+        String signed = SamlResponseSemanticsTests.signedXml(xml, false, true, key.getPrivate());
+        PendingSamlAuthenticationSource firstSource = PendingSamlAuthenticationSource.fromSealedForm(
+                first.toSealedForm(sealer, "saml-cookie"), sealer, "saml-cookie");
+        PendingSamlAuthenticationSource secondSource = PendingSamlAuthenticationSource.fromSealedForm(
+                second.toSealedForm(sealer, "saml-cookie"), sealer, "saml-cookie");
+        assertInstanceOf(SamlAuthenticationResult.Succeeded.class,
+                sp.completeAuthenticationResult(message(signed, first.getRelayStateHandle()), firstSource, idp));
+        now.set(Instant.parse("2026-10-09T00:01:21Z"));
+        assertEquals(SamlAuthenticationResult.Reason.REPLAYED,
+                assertInstanceOf(SamlAuthenticationResult.Rejected.class,
+                        sp.completeAuthenticationResult(message(signed, second.getRelayStateHandle()),
+                                secondSource, idp)).getReason());
+    }
+
+    @Test void sameSignedAssertionCannotCrossUnsolicitedAndPendingAgePolicies() throws Exception {
+        KeyPair key = rsa();
+        AtomicReference<Instant> now = new AtomicReference<>(Instant.parse("2026-10-09T00:01:00Z"));
+        Clock clock = new Clock() {
+            @Override public @NonNull ZoneId getZone() { return ZoneOffset.UTC; }
+            @Override public @NonNull Clock withZone(@NonNull ZoneId zone) {
+                return Clock.fixed(now.get(), zone);
+            }
+            @Override public @NonNull Instant instant() { return java.util.Objects.requireNonNull(now.get()); }
+        };
+        SamlServiceProvider sp = SamlServiceProvider.withEntityId(SP)
+                .assertionConsumerServiceUrl(ACS)
+                .replayCache(InMemorySamlReplayCache.withLimit(clock, 4))
+                .clock(clock).clockSkew(Duration.ZERO)
+                .maximumResponseAge(Duration.ofMinutes(5)).build();
+        SamlIdentityProvider idp = SamlIdentityProvider.withEntityId(IDP).connectionId("tenant-one")
+                .redirectSingleSignOnService(URI.create("https://idp.example.test/sso"))
+                .signingKeys(List.of(key.getPublic())).requireSignedAssertions(true)
+                .allowUnsolicitedResponses(true).build();
+        PendingSamlAuthentication pending = assertInstanceOf(SamlAuthenticationRequestResult.Prepared.class,
+                sp.beginAuthenticationResult(idp)).getPendingAuthentication();
+        StateSealer sealer = StateSealer.withActiveKey(TestSealers.fixedKey("saml-cross-mode"))
+                .clock(clock).build();
+        String original = "<a:SubjectConfirmation Method='urn:oasis:names:tc:SAML:2.0:cm:bearer'>"
+                + "<a:SubjectConfirmationData Recipient='" + ACS + "' InResponseTo='_request' "
+                + "NotOnOrAfter='2026-10-09T00:05:00Z'/></a:SubjectConfirmation>";
+        String unsolicited = original.replace(" InResponseTo='_request'", "")
+                .replace("00:05:00Z", "00:01:10Z");
+        String requested = original.replace("_request", pending.getRequestId())
+                .replace("NotOnOrAfter='2026-10-09T00:05:00Z'",
+                        "NotBefore='2026-10-09T00:03:00Z' "
+                        + "NotOnOrAfter='2026-10-09T00:04:00Z'");
+        String xml = SamlResponseSemanticsTests.BASE
+                .replace(" InResponseTo='_request'>", ">")
+                .replace(original, unsolicited + requested);
+        String signed = SamlResponseSemanticsTests.signedXml(xml, false, true, key.getPrivate());
+        assertInstanceOf(SamlAuthenticationResult.Succeeded.class,
+                sp.completeUnsolicitedAuthenticationResult(unsolicitedMessage(signed), idp));
+        now.set(Instant.parse("2026-10-09T00:03:01Z"));
+        PendingSamlAuthenticationSource source = PendingSamlAuthenticationSource.fromSealedForm(
+                pending.toSealedForm(sealer, "saml-cookie"), sealer, "saml-cookie");
+        assertEquals(SamlAuthenticationResult.Reason.REPLAYED,
+                assertInstanceOf(SamlAuthenticationResult.Rejected.class,
+                        sp.completeAuthenticationResult(message(signed, pending.getRelayStateHandle()),
+                                source, idp)).getReason());
     }
 
     private static @NonNull SamlPostBindingMessage message(@NonNull String xml, @NonNull String relay) {

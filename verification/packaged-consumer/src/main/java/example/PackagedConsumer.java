@@ -224,6 +224,8 @@ import com.revetsec.scim.ScimContentTypeResult;
 import com.revetsec.scim.ScimError;
 import com.revetsec.scim.ScimErrorType;
 import com.revetsec.scim.ScimFilter;
+import com.revetsec.scim.ScimFilterEvaluationResult;
+import com.revetsec.scim.ScimFilterEvaluator;
 import com.revetsec.scim.ScimFilterLimits;
 import com.revetsec.scim.ScimFilterParseResult;
 import com.revetsec.scim.ScimFilterPolicy;
@@ -234,10 +236,18 @@ import com.revetsec.scim.ScimIfNoneMatchResult;
 import com.revetsec.scim.ScimLimits;
 import com.revetsec.scim.ScimListPage;
 import com.revetsec.scim.ScimLogicalOperator;
+import com.revetsec.scim.ScimMembershipPatch;
+import com.revetsec.scim.ScimMembershipPatchResult;
 import com.revetsec.scim.ScimMutability;
 import com.revetsec.scim.ScimObserver;
 import com.revetsec.scim.ScimPaginationConfig;
 import com.revetsec.scim.ScimPaginationMethod;
+import com.revetsec.scim.ScimPatchApplicationResult;
+import com.revetsec.scim.ScimPatchOperation;
+import com.revetsec.scim.ScimPatchOperationType;
+import com.revetsec.scim.ScimPatchParseResult;
+import com.revetsec.scim.ScimPatchRequest;
+import com.revetsec.scim.ScimPatchResult;
 import com.revetsec.scim.ScimQuery;
 import com.revetsec.scim.ScimQueryParseResult;
 import com.revetsec.scim.ScimResource;
@@ -463,10 +473,13 @@ public final class PackagedConsumer {
 				ScimAttributeDefinition.class, ScimAttributePath.class, ScimAttributePathParseResult.class, ScimAttributeSelection.class,
 				ScimAttributeSelectionResult.class, ScimAttributeType.class, ScimAuthenticationScheme.class, ScimComparisonOperator.class,
 				ScimCompatibility.class, ScimCompatibilityFeature.class, ScimContentTypeResult.class, ScimError.class,
-				ScimErrorType.class, ScimFilter.class, ScimFilterLimits.class, ScimFilterParseResult.class,
+				ScimErrorType.class, ScimFilter.class, ScimFilterEvaluationResult.class, ScimFilterEvaluator.class,
+				ScimFilterLimits.class, ScimFilterParseResult.class,
 				ScimFilterPolicy.class, ScimFilterValue.class, ScimFilterVisitor.class, ScimIfMatchResult.class,
 				ScimIfNoneMatchResult.class, ScimLimits.class, ScimListPage.class, ScimLogicalOperator.class,
-				ScimMutability.class, ScimObserver.class, ScimPaginationConfig.class, ScimPaginationMethod.class,
+				ScimMembershipPatch.class, ScimMembershipPatchResult.class, ScimMutability.class, ScimObserver.class,
+				ScimPaginationConfig.class, ScimPaginationMethod.class, ScimPatchApplicationResult.class, ScimPatchOperation.class,
+				ScimPatchOperationType.class, ScimPatchParseResult.class, ScimPatchRequest.class, ScimPatchResult.class,
 				ScimQuery.class, ScimQueryParseResult.class, ScimResource.class, ScimResourceParseResult.class,
 				ScimResourceType.class, ScimResponse.class, ScimResponseResult.class, ScimReturned.class,
 				ScimSchema.class, ScimSchemaExtension.class, ScimServiceProvider.class, ScimServiceProviderConfig.class,

@@ -38,7 +38,10 @@ public final class Playground {
         PlaygroundSaml saml = PlaygroundSaml.fromEnvironment(System.getenv(), config, sessions, views,
                 Clock.systemUTC());
         PlaygroundResources resources = new PlaygroundResources(config, sessions, views, oidc, http, saml);
-        try (Soklet soklet = Soklet.fromConfig(sokletConfig(config, resources, views))) {
+        String scimToken = System.getenv("SCIM_BEARER_TOKEN");
+        PlaygroundScimResources scim = scimToken == null ? null : new PlaygroundScimResources(PlaygroundScim.create(
+                URI.create(System.getenv().getOrDefault("SCIM_BASE_URI", config.origin + "/scim/v2/")), scimToken));
+        try (Soklet soklet = Soklet.fromConfig(sokletConfig(config, resources, views, scim))) {
             Runtime.getRuntime().addShutdownHook(new Thread(soklet::close, "playground-shutdown"));
             soklet.start();
             System.out.println("Revetsec Playground: local developer demonstration; HTTPS edge required.");
@@ -48,6 +51,12 @@ public final class Playground {
 
     static @NonNull SokletConfig sokletConfig(@NonNull PlaygroundConfig config,
             @NonNull PlaygroundResources resources, @NonNull SafeViews views) {
+        return sokletConfig(config, resources, views, null);
+    }
+
+    static @NonNull SokletConfig sokletConfig(@NonNull PlaygroundConfig config,
+            @NonNull PlaygroundResources resources, @NonNull SafeViews views,
+            @org.jspecify.annotations.Nullable PlaygroundScimResources scim) {
         Set<McpProtocolVersion> versions = Set.of(McpProtocolVersion.V2025_06_18,
                 McpProtocolVersion.V2025_11_25, McpProtocolVersion.V2026_07_28);
         McpToolRegistration<McpJsonObject> whoami = McpToolRegistration.withName("whoami", versions)
@@ -67,10 +76,11 @@ public final class Playground {
                 .maximumRequestBodySizeInBytes(16_384).maximumRequestSizeInBytes(32_768)
                 .requestHandlerTimeout(Duration.ofSeconds(15)).requestHandlerConcurrency(8).requestHandlerQueueCapacity(16).build();
         return SokletConfig.withHttpServer(server).mcpServer(mcp)
-                .resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(PlaygroundResources.class)))
+                .resourceMethodResolver(ResourceMethodResolver.fromClasses(scim == null ? Set.of(PlaygroundResources.class) : Set.of(PlaygroundResources.class, PlaygroundScimResources.class)))
                 .instanceProvider(new InstanceProvider() {
                     @Override public <@NonNull T> @NonNull T provide(@NonNull Class<@NonNull T> type) {
                         if (type.equals(PlaygroundResources.class)) return type.cast(resources);
+                        if (type.equals(PlaygroundScimResources.class) && scim != null) return type.cast(scim);
                         return InstanceProvider.defaultInstance().provide(type);
                     }
                 })

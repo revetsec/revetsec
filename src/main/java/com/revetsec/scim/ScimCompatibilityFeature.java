@@ -46,5 +46,8 @@ public enum ScimCompatibilityFeature {
     /** Drop unknown attributes while preserving known-attribute rules. */
     IGNORE_UNKNOWN_ATTRIBUTES,
     /** Ignore an identical current id in reviewed no-path PATCH objects. */
-    PATCH_READ_ONLY_ID_ECHO
+    PATCH_READ_ONLY_ID_ECHO,
+    /** Accept an exact registered extension schema URI as a whole-extension PATCH object target.
+     * This profile is opt-in and is absent from the strict, Microsoft Entra ID and Okta presets. */
+    PATCH_EXTENSION_SCHEMA_ROOT
 }

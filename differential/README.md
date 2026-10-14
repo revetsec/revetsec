@@ -1,4 +1,4 @@
-# SAML differential tests
+# Protocol differential tests
 
 This is a test-only Maven project. It compares Revetsec with two separate SAML
 service-provider paths: Spring Security 7.0.7's provider and a direct OpenSAML
@@ -318,3 +318,36 @@ meets the no unjustified survivors criterion with 158 uncovered limits. The
 bearer replay repair changed production code after these hosted runs. RC-2
 remains open pending push, green full CI, and another hosted differential and
 capture run on that repaired revision.
+
+
+## SCIM filter syntax and typed AST
+
+`ScimFilterComparatorTests` uses the independent [Ping Identity UnboundID SCIM SDK 6.0.0 release](https://github.com/pingidentity/scim2/releases/tag/scim2-6.0.0), published from tag `scim2-6.0.0`, as a test-only grammar/AST comparator. The selected license is Apache-2.0. [scim-oracle.json](scim-oracle.json) records the SDK/Jackson artifact digests and official release/artifact/advisory sources reviewed on 2026-10-13. Its public repository advisory index returned no published entries at that check; this does not claim that unpublished issues or transitive dependencies are absent.
+
+The test directly traverses both libraries' separately parsed typed trees. It compares operator kinds, ordered operands, NOT grouping, the same-element valuePath boundary, schema/attribute/subattribute components and decoded string/number/boolean/null literals. Only equivalent n-ary AND/OR flattening, ASCII path case and exact numeric scale are normalized. It never uses Revetsec rendering as the expected AST, and it never erases numeric precision loss. Planted precedence, literal-type, literal-value and same-element defects are required to produce different projections.
+
+The lane has 276 shared valid expressions, 26 shared malformed expressions and four focused disposition/negative-control tests: 306 executions with zero skips on the recorded Java 17 and 21 runs. Any unexplained acceptance, structure or typed-value difference fails. This is syntax and AST evidence; schema binding/policy, filter evaluation, authorization, PATCH transformations and database behavior have separate tests.
+
+Each observed difference is asserted as an exact row rather than accepted through a broad exception or grammar allow-list:
+
+| Case | Revetsec | SDK 6.0.0 | Disposition |
+| --- | --- | --- | --- |
+| Lone escaped high surrogate in a string | Rejects | Parses | Revetsec preserves its strict well-formed Unicode literal policy. |
+| `name.givenName.other` | Rejects | Parses | Revetsec's approved attribute path has one optional subattribute; SDK Path supports deeper paths. |
+| No whitespace between a string literal and `or` | Rejects | Parses | Keep the SCIM token-separator requirement. |
+| Missing closing valuePath `]` | Rejects | Parses | Keep complete delimiter validation; SDK acceptance is an observed oracle limitation. |
+| Absolute schema URI containing bracketed IPv6 | Parses | Rejects | Keep the approved absolute-URI schema grammar; SDK token scanning treats brackets differently. |
+| Horizontal tabs around comparison tokens | Parses | Rejects | Distinct input whitespace profiles, recorded explicitly. |
+| Seventeen nested grouping levels | Rejects under shared default limits | Parses | Revetsec applies configured transient nesting/work limits before recursion/allocation. |
+| Array/object comparison literals | Fixed syntax rejection | `ClassCastException` | Non-scalar values remain invalid; the exact SDK faults are tested only for these two rows. Unexpected oracle faults fail. |
+| `0.123456789012345678901234` | Exact decimal | Double-rounded decimal | SDK's default Jackson node loses precision. Preserve the mismatch explicitly; use exactly representable decimals in the common AST corpus. |
+| `1e309` and `1e1000` | Exact bounded decimal | Infinite DoubleNode; decimal extraction throws `JsonNodeException` | Keep exact core values and record the SDK floating representation limit explicitly. |
+
+Run against a locally built exact core artifact:
+
+```shell
+mvn -B -ntp -DskipTests -Dmaven.javadoc.skip=true install
+mvn -B -ntp -f differential/pom.xml -Dtest=ScimFilterComparatorTests test
+```
+
+All SDK dependencies are test scope in this standalone project and remain absent from Revetsec's production POM and runtime classpath. The existing SAML comparator tests keep their dependency pins and test behavior.

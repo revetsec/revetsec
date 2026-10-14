@@ -33,17 +33,33 @@ public final class ScimM11FuzzTests {
     private static final @NonNull String PATCH="urn:ietf:params:scim:api:messages:2.0:PatchOp";
     private static final @NonNull ScimResourceType USER=ScimResourceType.userInstance();
     private static final @NonNull ScimResourceType GROUP=ScimResourceType.groupInstance();
+    private static final @NonNull ScimResourceType REBUILT_GROUP=ScimResourceType.withName("RebuiltGroup").endpoint("/RebuiltGroups")
+            .schema(ScimM12FuzzFixtures.rebuiltGroup()).build();
+    private static final @NonNull ScimResourceType REBUILT_USER=ScimResourceType.withName("RebuiltUser").endpoint("/RebuiltUsers")
+            .schema(ScimM12FuzzFixtures.rebuiltUser()).schemaExtensions(List.of(
+                    ScimSchemaExtension.fromSchema(ScimM12FuzzFixtures.rebuiltEnterpriseUser(),false))).build();
+    private static final @NonNull ScimResourceType PRIMARY_LOWER=primaryType(false);
+    private static final @NonNull ScimResourceType PRIMARY_UPPER=primaryType(true);
     private static final @NonNull ScimResourceType COUNTER=ScimResourceType.withName("Counter").endpoint("/Counters")
             .schema(ScimSchema.withId("urn:example:scim:fuzz:counter").name("Counter")
                     .attributes(List.of(ScimAttributeDefinition.withName("counter").type(ScimAttributeType.INTEGER).build())).build()).build();
     private static final @NonNull ScimLimits LIMITS=ScimLimits.builder().maximumBodyBytes(16384).maximumJsonNodes(1000)
             .maximumPatchOperations(16).maximumWorkUnits(100000).maximumResponseBytes(8192).build();
     private static final @NonNull List<@NonNull ScimServiceProvider> PROVIDERS=List.of(
-            provider(ScimCompatibility.strictInstance()),provider(ScimCompatibility.microsoftEntraIdInstance()),provider(ScimCompatibility.oktaInstance()));
-    private static final @NonNull List<@NonNull ScimResource> RESOURCES=List.of(resource(USER),resource(GROUP),resource(COUNTER));
+            provider(ScimCompatibility.strictInstance()),provider(ScimCompatibility.microsoftEntraIdInstance()),provider(ScimCompatibility.oktaInstance()),
+            provider(ScimCompatibility.builder().features(Set.of(ScimCompatibilityFeature.PATCH_EXTENSION_SCHEMA_ROOT,
+                    ScimCompatibilityFeature.COMPLEX_VALUE_AS_SCALAR)).build()));
+    private static final @NonNull List<@NonNull ScimResource> RESOURCES=List.of(resource(USER),resource(GROUP),resource(COUNTER),resource(REBUILT_GROUP),resource(REBUILT_USER),resource(PRIMARY_LOWER),resource(PRIMARY_UPPER));
+    private static @NonNull ScimResourceType primaryType(boolean upper) {
+        return ScimResourceType.withName(upper ? "UpperPrimary" : "LowerPrimary").endpoint(upper ? "/UpperPrimary" : "/LowerPrimary")
+                .schema(ScimSchema.withId("urn:example:scim:fuzz:primary").name("Primary")
+                        .attributes(List.of(ScimAttributeDefinition.withName(upper ? "ITEMS" : "items").type(ScimAttributeType.COMPLEX).multiValued(true)
+                                .subAttributes(List.of(ScimAttributeDefinition.withName(upper ? "VALUE" : "value").type(ScimAttributeType.STRING).build(),
+                                        ScimAttributeDefinition.withName(upper ? "PRIMARY" : "primary").type(ScimAttributeType.BOOLEAN).build())).build())).build()).build();
+    }
     private static @NonNull ScimServiceProvider provider(@NonNull ScimCompatibility compatibility) {
         return ScimServiceProvider.builder().baseUri(URI.create("https://example.test/scim/"))
-                .resourceTypes(List.of(USER,GROUP,COUNTER)).limits(LIMITS).compatibility(compatibility)
+                .resourceTypes(List.of(USER,GROUP,COUNTER,REBUILT_GROUP,REBUILT_USER,PRIMARY_LOWER,PRIMARY_UPPER)).limits(LIMITS).compatibility(compatibility)
                 .stringMatching((path,definition,operator,value,literal)->ScimStringMatchResult.fromMatched(switch(operator) {
                     case EQ -> value.equals(literal); case NE -> !value.equals(literal);
                     case CO -> value.contains(literal); case SW -> value.startsWith(literal); case EW -> value.endsWith(literal);
@@ -55,10 +71,12 @@ public final class ScimM11FuzzTests {
         JsonObject.Builder object=JsonObject.builder().put("schemas",JsonArray.fromElements(List.of(JsonString.fromValue(type.getSchema().getId()))))
                 .put("id","existing-id").put("meta",JsonObject.builder().put("version","W/\"fuzz\"")
                         .put("lastModified","2026-10-13T00:00:00Z").build());
-        if(type==USER) object.put("userName","existing").put("emails",JsonArray.fromElements(List.of(
+        if(type==USER || type==REBUILT_USER) object.put("userName","existing").put("emails",JsonArray.fromElements(List.of(
                 JsonObject.builder().put("value","one@example.test").put("type","work").put("primary",true).build())));
-        else if(type==GROUP) object.put("displayName","existing").put("members",JsonArray.fromElements(List.of(
+        else if(type==GROUP || type==REBUILT_GROUP) object.put("displayName","existing").put("members",JsonArray.fromElements(List.of(
                 JsonObject.builder().put("value","one").put("display","retained-metadata").build())));
+        else if(type==PRIMARY_LOWER || type==PRIMARY_UPPER) object.put("items",JsonArray.fromElements(List.of(
+                JsonObject.builder().put("value","one").put("primary",true).build(),JsonObject.builder().put("value","two").put("primary",false).build())));
         else object.put("counter",0L);
         return ScimResource.withResourceType(type).document(object.build()).build();
     }
@@ -83,6 +101,14 @@ public final class ScimM11FuzzTests {
                     Assertions.assertEquals(current.getLastModified(),applied.getResource().getLastModified());
                     Assertions.assertEquals(request.getRequestedAttributePaths(),applied.getRequestedAttributePaths());
                     Assertions.assertEquals(request.getSuppliedAttributePaths(),applied.getSuppliedAttributePaths());
+                    if(current.getResourceType()==USER || current.getResourceType()==REBUILT_USER)
+                        Assertions.assertFalse(ScimUser.fromResource(applied.getResource()).getUserName().isEmpty());
+                    if(current.getResourceType()==PRIMARY_LOWER || current.getResourceType()==PRIMARY_UPPER) {
+                        ScimAttributePath primaryPath=((ScimAttributePathParseResult.Succeeded)ScimAttributePath.fromExpressionResult("items.primary")).getAttributePath();
+                        JsonValue primaries=applied.getResource().find(primaryPath).orElse(JsonArray.fromElements(List.of()));
+                        long count=((JsonArray)primaries).getElements().stream().filter(value -> value instanceof JsonBoolean bool && bool.getValue()).count();
+                        Assertions.assertTrue(count<=1);
+                    }
                 }
                 ScimMembershipPatchResult reduced=provider.reduceMembershipPatchResult(request);
                 if(reduced instanceof ScimMembershipPatchResult.Rejected rejected) fixed(rejected.getError());

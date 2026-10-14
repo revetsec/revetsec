@@ -242,7 +242,7 @@ final class ScimResources {
                 }
                 if (definition.getType() == ScimAttributeType.COMPLEX) {
                     if (definition.isMultiValued()) {
-                        if (name.equals("members") && prefix.isEmpty() && type.getSchema().getId().equals(ScimSchema.groupInstance().getId())
+                        if (name.equals("members") && prefix.isEmpty() && type.hasStandardGroupSchema()
                                 && old instanceof JsonArray oldArray && stableMembers(oldArray)) {
                             if (next == null) continue;
                             JsonArray reconciled = members(definition,oldArray,next,prefix+name+".");

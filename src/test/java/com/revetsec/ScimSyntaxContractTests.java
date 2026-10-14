@@ -37,6 +37,7 @@ import com.revetsec.scim.ScimAttributeSelection;
 import com.revetsec.scim.ScimResponse;
 import com.revetsec.scim.ScimFilter;
 import com.revetsec.scim.ScimFilterParseResult;
+import com.revetsec.scim.ScimFilterEvaluationResult;
 import com.revetsec.scim.ScimFilterValue;
 import org.jspecify.annotations.NonNull;
 import org.junit.jupiter.api.Test;
@@ -55,7 +56,7 @@ final class ScimSyntaxContractTests {
     void syntaxOutcomesHaveClosedConstructionAndImmutablePayloads() {
         for (Class<?> base : List.of(ScimFilterParseResult.class, ScimAttributePathParseResult.class,
                 ScimQueryParseResult.class, ScimResourceParseResult.class, ScimAttributeSelectionResult.class,
-                ScimResponseResult.class, ScimContentTypeResult.class, ScimIfMatchResult.class, ScimIfNoneMatchResult.class, ScimPatchParseResult.class, ScimPatchApplicationResult.class, ScimMembershipPatchResult.class)) {
+                ScimResponseResult.class, ScimContentTypeResult.class, ScimIfMatchResult.class, ScimIfNoneMatchResult.class, ScimPatchParseResult.class, ScimPatchApplicationResult.class, ScimMembershipPatchResult.class, ScimFilterEvaluationResult.class)) {
             assertTrue(base.isSealed());
             assertRestrictedConstruction(base);
             for (Class<?> leaf : base.getPermittedSubclasses()) {

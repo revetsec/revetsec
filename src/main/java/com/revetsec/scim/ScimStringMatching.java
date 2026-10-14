@@ -24,6 +24,8 @@ import java.util.*;
 
 /** Application-owned attribute-aware matching; deterministic, bounded and non-I/O.
  * No Unicode or username preparation default is provided.
+ * Unexpected ordinary failures, including a null return, become fixed internalError results.
+ * The facade restores a thrown InterruptedException's thread flag; fatal VM errors escape.
  * @since 1.0.0
  */
 @javax.annotation.concurrent.ThreadSafe

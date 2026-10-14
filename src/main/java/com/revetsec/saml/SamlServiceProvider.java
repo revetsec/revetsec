@@ -1093,9 +1093,11 @@ public final class SamlServiceProvider {
             if (signingKey != null && (!(signingKey instanceof RSAPrivateKey rsa)
                     || rsa.getModulus().bitLength() < 2048))
                 throw new IllegalStateException("Unsupported or weak SAML signing key");
-            if (clockSkew.isNegative() || clockSkew.compareTo(Duration.ofMinutes(5)) > 0
+            if (clockSkew.isNegative()
+                    || clockSkew.compareTo(SamlResponseSemantics.MAXIMUM_CONFIGURED_SKEW) > 0
                     || maximumResponseAge.compareTo(Duration.ofSeconds(1)) < 0
-                    || maximumResponseAge.compareTo(Duration.ofMinutes(15)) > 0
+                    || maximumResponseAge.compareTo(
+                            SamlResponseSemantics.MAXIMUM_CONFIGURED_RESPONSE_AGE) > 0
                     || pendingLifetime.compareTo(Duration.ofSeconds(1)) < 0
                     || pendingLifetime.compareTo(Duration.ofMinutes(15)) > 0
                     || replayBudget.compareTo(Duration.ofMillis(1)) < 0

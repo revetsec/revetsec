@@ -106,12 +106,13 @@ final class SamlResponseSemanticsTests {
         SamlReplayCache cache = (replayKey, expiresAt, remaining) -> {
             writes.incrementAndGet();
             assertEquals(43, replayKey.length());
-            assertEquals(Instant.parse("2026-10-09T00:08:00Z"), expiresAt);
+            assertEquals(Instant.parse("2026-10-09T00:10:00Z"), expiresAt);
             return SamlReplayCache.MarkResult.MARKED;
         };
         SamlResponseSemantics.Accepted accepted = assertInstanceOf(SamlResponseSemantics.Accepted.class,
                 validate(BASE, true, false, key, expected(cache)));
         assertEquals("_assertion", accepted.assertionId());
+        assertEquals(Instant.parse("2026-10-09T00:08:00Z"), accepted.expiresAt());
         assertEquals("alice", accepted.nameId().getValue());
         assertEquals(Instant.parse("2026-10-09T00:00:00Z"), accepted.authnInstant());
         assertTrue(accepted.responseSigned());
@@ -1149,6 +1150,67 @@ final class SamlResponseSemanticsTests {
         assertEquals(Instant.parse("2026-10-09T00:01:50Z"), first.expiresAt());
     }
 
+    @Test void replayFenceSurvivesMorePermissiveClockSkewOnAnotherNode() throws Exception {
+        KeyPair key = rsa();
+        String xml = BASE.replace(" InResponseTo='_request'", "")
+                .replace("NotOnOrAfter='2026-10-09T00:05:00Z'/></a:SubjectConfirmation>",
+                        "NotOnOrAfter='2026-10-09T00:01:10Z'/></a:SubjectConfirmation>");
+        SamlInboundResponse.SignaturesVerified signed = verified(xml, true, false, key, null);
+        AtomicReference<Instant> now = new AtomicReference<>(Instant.parse(NOW));
+        Clock clock = mutableClock(now);
+        SamlReplayCache shared = InMemorySamlReplayCache.withLimit(clock, 4);
+        SamlResponseSemantics.Accepted first = assertInstanceOf(
+                SamlResponseSemantics.Accepted.class,
+                SamlResponseSemantics.validate(signed, unsolicitedExpected(shared, clock)));
+        assertEquals(Instant.parse("2026-10-09T00:01:10Z"), first.expiresAt());
+
+        now.set(Instant.parse("2026-10-09T00:04:00Z"));
+        SamlResponseSemantics.Expectation permissive = new SamlResponseSemantics.Expectation(
+                SP, "tenant-one", IDP, ACS, null, null, null, clock, Duration.ofMinutes(5),
+                Duration.ofMinutes(2), false, List.of(), shared, Duration.ofSeconds(5));
+        assertInstanceOf(SamlResponseSemantics.Accepted.class,
+                SamlResponseSemantics.validate(signed, new SamlResponseSemantics.Expectation(
+                        SP, "tenant-one", IDP, ACS, null, null, null, clock, Duration.ofMinutes(5),
+                        Duration.ofMinutes(2), false, List.of(),
+                        InMemorySamlReplayCache.withLimit(clock, 4), Duration.ofSeconds(5))));
+        assertEquals(SamlResponseSemantics.Reason.REPLAYED,
+                rejected(SamlResponseSemantics.validate(signed, permissive)));
+    }
+
+    @Test void replayFenceKeepsLaterBearerAfterEarlierEndAndMaximumSkew() throws Exception {
+        KeyPair key = rsa();
+        String original = "<a:SubjectConfirmation Method='urn:oasis:names:tc:SAML:2.0:cm:bearer'>"
+                + "<a:SubjectConfirmationData Recipient='" + ACS + "' InResponseTo='_request' "
+                + "NotOnOrAfter='2026-10-09T00:05:00Z'/></a:SubjectConfirmation>";
+        String early = original.replace("00:05:00Z", "00:01:10Z");
+        String later = original.replace("NotOnOrAfter='2026-10-09T00:05:00Z'",
+                "NotBefore='2026-10-09T00:07:00Z' "
+                        + "NotOnOrAfter='2026-10-09T00:08:00Z'");
+        String xml = BASE.replace(original, early + later)
+                .replace("NotOnOrAfter='2026-10-09T00:05:00Z'><a:AudienceRestriction>",
+                        "NotOnOrAfter='2026-10-09T00:09:00Z'><a:AudienceRestriction>");
+        SamlInboundResponse.SignaturesVerified signed = verified(xml, true, false, key);
+        AtomicReference<Instant> now = new AtomicReference<>(Instant.parse(NOW));
+        Clock clock = mutableClock(now);
+        SamlReplayCache shared = InMemorySamlReplayCache.withLimit(clock, 4);
+        SamlResponseSemantics.Expectation expectation = new SamlResponseSemantics.Expectation(
+                SP, "tenant-one", IDP, ACS, "_request", "relay",
+                Instant.parse("2026-10-09T00:10:00Z"), clock, Duration.ZERO,
+                Duration.ofMinutes(15), false, List.of(), shared, Duration.ofSeconds(5));
+        assertInstanceOf(SamlResponseSemantics.Accepted.class,
+                SamlResponseSemantics.validate(signed, expectation));
+
+        now.set(Instant.parse("2026-10-09T00:07:01Z"));
+        assertInstanceOf(SamlResponseSemantics.Accepted.class,
+                SamlResponseSemantics.validate(signed, new SamlResponseSemantics.Expectation(
+                        SP, "tenant-one", IDP, ACS, "_request", "relay",
+                        Instant.parse("2026-10-09T00:10:00Z"), clock, Duration.ZERO,
+                        Duration.ofMinutes(15), false, List.of(),
+                        InMemorySamlReplayCache.withLimit(clock, 4), Duration.ofSeconds(5))));
+        assertEquals(SamlResponseSemantics.Reason.REPLAYED,
+                rejected(SamlResponseSemantics.validate(signed, expectation)));
+    }
+
     @Test void replayKeysSeparateTenantPartnerAssertionAndFieldBoundaries() throws Exception {
         KeyPair key = rsa();
         Set<String> keys = new HashSet<>();
@@ -1301,6 +1363,36 @@ final class SamlResponseSemanticsTests {
         assertInstanceOf(SamlResponseSemantics.Accepted.class,
                 validate(longestAssertionId, true, false, key, expected(cache)));
         assertEquals(3, writes.get());
+    }
+
+    @Test void replayFenceHandlesBothBoundedAndUnboundedConditions() throws Exception {
+        KeyPair key = rsa();
+        String withoutEnd = BASE.replace(
+                " NotOnOrAfter='2026-10-09T00:05:00Z'><a:AudienceRestriction>",
+                "><a:AudienceRestriction>");
+        AtomicReference<Instant> recorded = new AtomicReference<>();
+        SamlReplayCache cache = (replayKey, expiresAt, remaining) -> {
+            recorded.set(expiresAt);
+            return SamlReplayCache.MarkResult.MARKED;
+        };
+        SamlResponseSemantics.Expectation expectation = new SamlResponseSemantics.Expectation(
+                SP, "tenant-one", IDP, ACS, "_request", "relay",
+                Instant.parse("2026-10-09T00:10:00Z"), fixedClock(), Duration.ZERO,
+                Duration.ofMinutes(15), false, List.of(), cache, Duration.ofSeconds(5));
+        SamlResponseSemantics.Accepted noEnd = assertInstanceOf(
+                SamlResponseSemantics.Accepted.class,
+                validate(withoutEnd, true, false, key, expectation));
+        assertEquals(Instant.parse("2026-10-09T00:05:00Z"), noEnd.expiresAt());
+        assertEquals(Instant.parse("2026-10-09T00:10:00Z"), recorded.get());
+
+        String bounded = BASE.replace(
+                "NotOnOrAfter='2026-10-09T00:05:00Z'/></a:SubjectConfirmation>",
+                "NotOnOrAfter='2026-10-09T00:08:00Z'/></a:SubjectConfirmation>");
+        SamlResponseSemantics.Accepted withEnd = assertInstanceOf(
+                SamlResponseSemantics.Accepted.class,
+                validate(bounded, true, false, key, expectation));
+        assertEquals(Instant.parse("2026-10-09T00:05:00Z"), withEnd.expiresAt());
+        assertEquals(Instant.parse("2026-10-09T00:10:00Z"), recorded.get());
     }
 
     private static SamlResponseSemantics.@NonNull Result validate(@NonNull String xml, boolean signResponse,

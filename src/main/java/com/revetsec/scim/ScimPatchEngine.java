@@ -38,6 +38,7 @@ final class ScimPatchEngine {
     private final @NonNull ScimCompatibility compatibility;
     private final @NonNull ScimStringMatching matching;
     private final @NonNull ScimWork work;
+    private final boolean standardGroup;
     private final @NonNull Set<@NonNull ScimCompatibilityFeature> usedFeatures;
     private @Nullable ScimError error;
 
@@ -46,6 +47,7 @@ final class ScimPatchEngine {
             @NonNull Set<@NonNull ScimCompatibilityFeature> usedFeatures) {
         this.type=type; this.compatibility=compatibility; this.matching=matching;
         this.work=work; this.usedFeatures=usedFeatures;
+        standardGroup=type.hasStandardGroupSchema();
     }
 
     static @NonNull ScimPatchApplicationResult apply(@NonNull ScimResource current,
@@ -79,6 +81,11 @@ final class ScimPatchEngine {
         error=ScimError.requestTooLargeInstance(); return false;
     }
     private @Nullable JsonObject operation(@NonNull JsonObject root,@NonNull ScimPatchOperation operation) {
+        String extensionId=operation.getExtensionSchemaId().orElse(null);
+        if (extensionId != null) {
+            usedFeatures.add(ScimCompatibilityFeature.PATCH_EXTENSION_SCHEMA_ROOT);
+            return extensionTarget(root,extensionId,operation.getOperationType(),operation.getValue().orElse(null));
+        }
         ScimAttributePath path=operation.getAttributePath().orElse(null);
         if (path == null) {
             JsonObject object=(JsonObject)operation.getValue().orElseThrow();
@@ -111,6 +118,49 @@ final class ScimPatchEngine {
         }
         return target(root,path,operation.getValueFilter().orElse(null),operation.getSubAttributeName().orElse(null),
                 operation.getOperationType(),operation.getValue().orElse(null));
+    }
+
+    private @Nullable JsonObject extensionTarget(@NonNull JsonObject root,@NonNull String schema,
+            @NonNull ScimPatchOperationType kind,@Nullable JsonValue incoming) {
+        ScimSchemaExtension extension=extension(schema);
+        if (extension == null) {
+            if (error == null) error=ScimError.invalidPathInstance();
+            return null;
+        }
+        if (kind == ScimPatchOperationType.REMOVE) {
+            if (extension.isRequired()) { error=ScimError.mutabilityInstance(); return null; }
+            JsonValue old=root.getMembers().get(schema);
+            if (!(old instanceof JsonObject object)) return root;
+            for (ScimAttributeDefinition definition:extension.getSchema().getAttributes()) {
+                if (!spend(1)) return null;
+                JsonValue value=object.getMembers().get(definition.getName());
+                if (ScimResourceValidation.assigned(value)
+                        && definition.getMutability() != ScimMutability.READ_WRITE
+                        && definition.getMutability() != ScimMutability.WRITE_ONLY
+                        || protectedChildren(definition,value)) {
+                    if (error == null) error=ScimError.mutabilityInstance();
+                    return null;
+                }
+            }
+            if (!spend(root.getMembers().size()+1L)) return null;
+            LinkedHashMap<String,JsonValue> result=new LinkedHashMap<>(root.getMembers());
+            result.remove(schema);
+            return schemas(result);
+        }
+        JsonObject object=(JsonObject)java.util.Objects.requireNonNull(incoming);
+        JsonObject result=root;
+        for (Map.Entry<String,JsonValue> child:object.getMembers().entrySet()) {
+            if (!spend(1)) return null;
+            ScimAttributePath target=path(schema+":"+child.getKey());
+            if (target == null) return null;
+            result=target(result,target,null,null,kind,child.getValue());
+            if (result == null) return null;
+        }
+        // Explicit object targeting retains the extension container, even when it is empty.
+        if (!spend(result.getMembers().size()+1L)) return null;
+        LinkedHashMap<String,JsonValue> envelope=new LinkedHashMap<>(result.getMembers());
+        envelope.putIfAbsent(schema,JsonObject.emptyInstance());
+        return schemas(envelope);
     }
 
     private @Nullable JsonObject target(@NonNull JsonObject root,@NonNull ScimAttributePath target,
@@ -182,7 +232,7 @@ final class ScimPatchEngine {
             }
             // Unfiltered subattributes address all existing elements; an absent array has no target.
             if (result.isEmpty() && kind != ScimPatchOperationType.REMOVE) { error=ScimError.noTargetInstance(); return null; }
-            JsonArray next=primary(parent,result,suppliedPrimary(incoming,name) ? result.size()-1 : -1);
+            JsonArray next=primary(parent,result,suppliedPrimary(parent,incoming,name) ? result.size()-1 : -1);
             return protectParent(parent,old,next);
         }
         JsonObject next=elementChild(parent,old instanceof JsonObject object ? object : JsonObject.emptyInstance(),name,kind,incoming,top);
@@ -229,7 +279,7 @@ final class ScimPatchEngine {
             else next=elementChild(definition,object,suffix,kind,incoming,top);
             if (error != null) return null;
             if (next != null) {
-                if (suppliedPrimary(incoming,suffix)) preferred=output.size();
+                if (suppliedPrimary(definition,incoming,suffix)) preferred=output.size();
                 output.add(next);
             }
         }
@@ -237,7 +287,7 @@ final class ScimPatchEngine {
             JsonObject created=upsert(top,filter,suffix,incoming);
             if (created == null) { if (error == null) error=ScimError.noTargetInstance(); return null; }
             output.add(created);
-            if (suppliedPrimary(incoming,suffix)) preferred=output.size()-1;
+            if (suppliedPrimary(definition,incoming,suffix)) preferred=output.size()-1;
         }
         if (!found && old == null && kind == ScimPatchOperationType.REMOVE) return null;
         return protectParent(definition,old,primary(definition,output,preferred));
@@ -335,7 +385,7 @@ final class ScimPatchEngine {
                 if (next == null) return null;
             }
             if (kind == ScimPatchOperationType.ADD && existing != null) continue;
-            if (suppliedPrimary(supplied,null)) preferred=output.size();
+            if (suppliedPrimary(definition,supplied,null)) preferred=output.size();
             if (!spend(1)) return null;
             output.add(next);
         }
@@ -381,9 +431,12 @@ final class ScimPatchEngine {
         }
         return JsonArray.fromElements(values);
     }
-    private static boolean suppliedPrimary(@Nullable JsonValue incoming,@Nullable String suffix) {
-        return "primary".equals(suffix) && incoming instanceof JsonBoolean value && value.getValue()
-                || suffix == null && incoming instanceof JsonObject object && object.findBoolean("primary").orElse(false);
+    private boolean suppliedPrimary(@NonNull ScimAttributeDefinition definition,@Nullable JsonValue incoming,@Nullable String suffix) {
+        if (!spend(definition.getSubAttributes().size())) return false;
+        ScimAttributeDefinition primary=ScimSchemas.attribute(definition.getSubAttributes(),"primary").orElse(null);
+        if (primary == null || primary.getType() != ScimAttributeType.BOOLEAN) return false;
+        return primary.getName().equals(suffix) && incoming instanceof JsonBoolean value && value.getValue()
+                || suffix == null && incoming instanceof JsonObject object && object.findBoolean(primary.getName()).orElse(false);
     }
     private @Nullable JsonValue removeIds(@Nullable JsonValue old,@NonNull JsonArray ids) {
         List<JsonValue> output=new ArrayList<>();
@@ -521,90 +574,10 @@ final class ScimPatchEngine {
     }
     private boolean dateCompare(@NonNull String left,@NonNull String right,@NonNull ScimComparisonOperator operator) {
         if (!spend(1L+left.length()+right.length())) return false;
-        DateValue a=date(left), b=date(right);
-        if (a.offset != b.offset) { error=ScimError.invalidFilterInstance(); return false; }
-        int comparison=yearCompare(a.year,b.year);
-        if (comparison == 0) comparison=Integer.compare(a.month,b.month);
-        if (comparison == 0) comparison=Integer.compare(a.day,b.day);
-        if (comparison == 0) comparison=Integer.compare(a.seconds,b.seconds);
-        if (comparison == 0) {
-            int maximum=Math.max(a.fraction.length(),b.fraction.length());
-            for (int index=0; index<maximum; index++) {
-                char first=index < a.fraction.length() ? a.fraction.charAt(index) : '0';
-                char second=index < b.fraction.length() ? b.fraction.charAt(index) : '0';
-                comparison=Character.compare(first,second);
-                if (comparison != 0) break;
-            }
-        }
+        Integer comparison=ScimTypedComparison.dateComparison(left,right);
+        if (comparison == null) { error=ScimError.invalidFilterInstance(); return false; }
         return verdict(comparison,operator);
     }
-    /** Linear calendar normalization avoids constructing unbounded numeric year/fraction values. */
-    private static @NonNull DateValue date(@NonNull String value) {
-        int start=value.startsWith("-") ? 1 : 0;
-        int end=value.indexOf('-',start);
-        String year=value.substring(0,end);
-        int month=two(value,end+1), day=two(value,end+4);
-        int seconds=two(value,end+7)*3600+two(value,end+10)*60+two(value,end+13);
-        int fractionStart=end+15, fractionEnd=fractionStart;
-        if (fractionStart < value.length() && value.charAt(fractionStart) == '.') {
-            fractionEnd=++fractionStart;
-            while (fractionEnd < value.length() && value.charAt(fractionEnd) >= '0' && value.charAt(fractionEnd) <= '9') fractionEnd++;
-        }
-        String fraction=value.substring(fractionStart,fractionEnd);
-        boolean offset=fractionEnd < value.length();
-        if (offset && value.charAt(fractionEnd) != 'Z') {
-            int zone=two(value,fractionEnd+1)*3600+two(value,fractionEnd+4)*60;
-            seconds-=value.charAt(fractionEnd) == '-' ? -zone : zone;
-        }
-        if (seconds < 0) {
-            seconds+=86400;
-            day--;
-            if (day == 0) {
-                month--;
-                if (month == 0) { year=shiftYear(year,-1); month=12; }
-                day=monthDays(year,month);
-            }
-        } else if (seconds >= 86400) {
-            seconds-=86400;
-            day++;
-            if (day > monthDays(year,month)) {
-                day=1; month++;
-                if (month == 13) { year=shiftYear(year,1); month=1; }
-            }
-        }
-        return new DateValue(year,month,day,seconds,fraction,offset);
-    }
-    private static int two(@NonNull String value,int start) { return (value.charAt(start)-'0')*10+value.charAt(start+1)-'0'; }
-    private static int monthDays(@NonNull String year,int month) {
-        if (month != 2) return month == 4 || month == 6 || month == 9 || month == 11 ? 30 : 31;
-        int mod=0;
-        for (int index=year.startsWith("-") ? 1 : 0; index<year.length(); index++) mod=(mod*10+year.charAt(index)-'0')%400;
-        if (year.startsWith("-")) mod=(401-mod)%400;
-        return mod%4 == 0 && (mod%100 != 0 || mod == 0) ? 29 : 28;
-    }
-    private static int yearCompare(@NonNull String left,@NonNull String right) {
-        boolean a=left.startsWith("-"), b=right.startsWith("-");
-        if (a != b) return a ? -1 : 1;
-        int comparison=Integer.compare(left.length(),right.length());
-        if (comparison == 0) comparison=left.compareTo(right);
-        return a ? -comparison : comparison;
-    }
-    private static @NonNull String shiftYear(@NonNull String year,int delta) {
-        boolean negative=year.startsWith("-");
-        String magnitude=negative ? year.substring(1) : year;
-        int direction=negative ? -delta : delta;
-        if (direction < 0 && magnitude.equals("0001")) return negative ? "0001" : "-0001";
-        StringBuilder digits=new StringBuilder(magnitude);
-        for (int index=digits.length()-1; index>=0; index--) {
-            int digit=digits.charAt(index)-'0'+direction;
-            digits.setCharAt(index,(char)('0'+(digit+10)%10));
-            if (digit >= 0 && digit <= 9) break;
-            if (index == 0 && direction > 0) digits.insert(0,'1');
-        }
-        if (digits.length() > 4 && digits.charAt(0) == '0') digits.deleteCharAt(0);
-        return negative ? "-"+digits : digits.toString();
-    }
-    private record DateValue(@NonNull String year,int month,int day,int seconds,@NonNull String fraction,boolean offset) { }
 
     private boolean exact(@Nullable JsonValue left,@Nullable JsonValue right) {
         if (!spend(1)) return false;
@@ -663,8 +636,10 @@ final class ScimPatchEngine {
         if (definition.getType() == ScimAttributeType.COMPLEX) {
             for (ScimAttributeDefinition child : definition.getSubAttributes()) {
                 if (!spend(1)) return;
-                if (before instanceof JsonObject a && after instanceof JsonObject b) {
-                    if (exact(a.getMembers().get(child.getName()),b.getMembers().get(child.getName()))) continue;
+                if (!definition.isMultiValued()) {
+                    JsonValue oldChild=before instanceof JsonObject object ? object.getMembers().get(child.getName()) : null;
+                    JsonValue newChild=after instanceof JsonObject object ? object.getMembers().get(child.getName()) : null;
+                    if (exact(oldChild,newChild)) continue;
                 }
                 ScimAttributePath nested=path(expression+"."+child.getName());
                 if (nested == null || !spend(1)) return;
@@ -684,9 +659,8 @@ final class ScimPatchEngine {
         // Registration validates every name/URI, and the parser proves each target association.
         return ((ScimAttributePathParseResult.Succeeded)ScimAttributePath.fromExpressionResult(expression)).getAttributePath();
     }
-    @SuppressWarnings("ReferenceEquality") // The trusted standard schema singleton defines the membership contract.
     private boolean groupMembers(@NonNull ScimAttributePath target) {
-        return type.getSchema() == ScimSchema.groupInstance() && target.getSchemaId().isEmpty()
+        return standardGroup && target.getSchemaId().isEmpty()
                 && target.getSubAttributeName().isEmpty() && target.getAttributeName().equals("members");
     }
 }

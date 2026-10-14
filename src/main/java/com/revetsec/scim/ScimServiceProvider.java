@@ -240,6 +240,31 @@ public final class ScimServiceProvider {
                 () -> new ScimFilterParseResult.Rejected(ScimError.internalErrorInstance()));
     }
 
+    @NonNull ScimFilterEvaluationResult evaluateFilterResult(
+            @NonNull ScimResource resource, @NonNull ScimFilter filter) {
+        ScimWork work = work();
+        Set<ScimCompatibilityFeature> used = EnumSet.noneOf(ScimCompatibilityFeature.class);
+        return process(
+                ScimObserver.Operation.FILTER_EVALUATE,
+                used,
+                () -> {
+                    if (!associated(resource))
+                        return new ScimFilterEvaluationResult.Rejected(ScimError.invalidValueInstance());
+                    String expression = ScimFilterEvaluation.expression(filter, limits.getFilterLimits(), work);
+                    if (expression == null)
+                        return new ScimFilterEvaluationResult.Rejected(work.wasExceeded()
+                                ? ScimError.requestTooLargeInstance() : ScimError.invalidFilterInstance());
+                    ScimFilterParseResult rebound = binding(resource.getResourceType()).bind(expression, used, work);
+                    if (rebound instanceof ScimFilterParseResult.Rejected rejected)
+                        return new ScimFilterEvaluationResult.Rejected(work.wasExceeded()
+                                ? ScimError.requestTooLargeInstance() : rejected.getError());
+                    return ScimFilterEvaluation.evaluate(resource,
+                            ((ScimFilterParseResult.Succeeded) rebound).getFilter(),
+                            requireNonNull(stringMatching), work);
+                },
+                () -> new ScimFilterEvaluationResult.Rejected(ScimError.internalErrorInstance()));
+    }
+
     /** Parses a raw GET collection query with strict bounded decoding.
      * @param resourceType input to this operation
      * @param rawQuery input to this operation
@@ -1256,7 +1281,9 @@ public final class ScimServiceProvider {
         R result;
         try {
             result = requireNonNull(action.get());
-        } catch (RuntimeException unexpected) {
+        } catch (Throwable unexpected) {
+            if (unexpected instanceof VirtualMachineError fatal) throw fatal;
+            if (unexpected instanceof InterruptedException) Thread.currentThread().interrupt();
             for (ScimCompatibilityFeature feature : used)
                 ObserverDispatch.dispatch(
                         observer, value -> value.didUseCompatibilityFeature(feature));
@@ -1286,6 +1313,7 @@ public final class ScimServiceProvider {
                 || result instanceof ScimResourceParseResult.Succeeded
                 || result instanceof ScimPatchParseResult.Succeeded
                 || result instanceof ScimPatchApplicationResult.Succeeded
+                || result instanceof ScimFilterEvaluationResult.Succeeded
                 || result instanceof ScimMembershipPatchResult.Reduced)
             return ScimObserver.Outcome.SUCCEEDED;
         return ScimObserver.Outcome.REJECTED;

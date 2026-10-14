@@ -1,0 +1,1 @@
+{"schemas":["urn:ietf:params:scim:api:messages:2.0:PatchOp"],"Operations":[{"op":"add","value":{"URN:IETF:PARAMS:SCIM:SCHEMAS:EXTENSION:ENTERPRISE:2.0:USER":{"MANAGER":{"VALUE":"manager-1"},"DEPARTMENT":"synthetic"}}}]}

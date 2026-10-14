@@ -190,7 +190,7 @@ public final class SamlAuthentication {
                 sessionIndex, sessionNotOnOrAfter);
     }
     /**
-     * Returns the final possible assertion acceptance instant.
+     * Returns the final possible assertion acceptance instant for this completion context.
      *
      * @return expiry
      * @since 1.0.0

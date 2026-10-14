@@ -51,6 +51,8 @@ final class SamlResponseSemantics {
     private static final String SUCCESS = "urn:oasis:names:tc:SAML:2.0:status:Success";
     private static final String XSI = "http://www.w3.org/2001/XMLSchema-instance";
     private static final String XSD = "http://www.w3.org/2001/XMLSchema";
+    static final Duration MAXIMUM_CONFIGURED_SKEW = Duration.ofMinutes(5);
+    static final Duration MAXIMUM_CONFIGURED_RESPONSE_AGE = Duration.ofMinutes(15);
 
     private SamlResponseSemantics() { }
 
@@ -75,7 +77,9 @@ final class SamlResponseSemantics {
             requireNonNull(replayBudget);
             if (spEntityId.isEmpty() || connectionId.isEmpty() || idpEntityId.isEmpty()
                     || assertionConsumerServiceUrl.isEmpty() || skew.isNegative()
+                    || skew.compareTo(MAXIMUM_CONFIGURED_SKEW) > 0
                     || maximumResponseAge.isZero() || maximumResponseAge.isNegative()
+                    || maximumResponseAge.compareTo(MAXIMUM_CONFIGURED_RESPONSE_AGE) > 0
                     || replayBudget.isZero() || replayBudget.isNegative()
                     || (requestId == null) != (relayState == null)
                     || (requestId == null) != (pendingExpiresAt == null))
@@ -218,8 +222,8 @@ final class SamlResponseSemantics {
             return new Rejected(Reason.ASSERTION_SHAPE);
         SubjectCheck subject = inspectSubject(assertion);
         if (subject == null) return new Rejected(Reason.SUBJECT);
-        Instant bearerEnd = validBearerEnd(subject.confirmations(), subject.nameId(), expected, now);
-        if (bearerEnd == null) return new Rejected(Reason.CONFIRMATION);
+        BearerWindow bearer = validBearerWindow(subject.confirmations(), subject.nameId(), expected, now);
+        if (bearer == null) return new Rejected(Reason.CONFIRMATION);
         ConditionsCheck conditions = inspectConditions(assertion, expected, now);
         if (conditions == null) return new Rejected(Reason.CONDITIONS);
         AuthenticationCheck authentication = inspectAuthentication(assertion, now, expected.skew());
@@ -240,16 +244,25 @@ final class SamlResponseSemantics {
         String pairwiseId = scopedIdentifier(attributes,
                 "urn:oasis:names:tc:SAML:attribute:pairwise-id", expected.authorizedIdentifierScopes());
 
-        Instant cutoff = earlier(assertionAgeEnd, bearerEnd);
+        Instant cutoff = earlier(assertionAgeEnd, bearer.boundEnd());
         Instant conditionEnd = conditions.notOnOrAfter();
         if (conditionEnd != null) cutoff = earlier(cutoff, conditionEnd);
         Instant expiresAt = plus(cutoff, expected.skew());
         if (expiresAt == null || !now.isBefore(expiresAt)) return new Rejected(Reason.CONDITIONS);
+        // The replay key spans request bindings, ACS URLs, and requested/unsolicited time policies.
+        // Retain it until no supported SP configuration can accept this signed assertion again.
+        Instant maximumAgeEnd = plus(assertionIssued, MAXIMUM_CONFIGURED_RESPONSE_AGE);
+        if (maximumAgeEnd == null) return new Rejected(Reason.RESPONSE_AGE);
+        Instant replayCutoff = earlier(maximumAgeEnd, bearer.replayEnd());
+        if (conditionEnd != null) replayCutoff = earlier(replayCutoff, conditionEnd);
+        Instant replayExpiresAt = plus(replayCutoff, MAXIMUM_CONFIGURED_SKEW);
+        if (replayExpiresAt == null) return new Rejected(Reason.CONDITIONS);
         String replayKey;
         try { replayKey = replayKey(expected, assertionId); }
         catch (NoSuchAlgorithmException exception) { return Unavailable.INSTANCE; }
         SamlReplayCache.MarkResult mark;
-        try { mark = expected.replayCache().markIfAbsent(replayKey, expiresAt, expected.replayBudget()); }
+        try { mark = expected.replayCache().markIfAbsent(replayKey, replayExpiresAt,
+                expected.replayBudget()); }
         catch (RuntimeException exception) { return Indeterminate.INSTANCE; }
         if (mark == null || mark == SamlReplayCache.MarkResult.INDETERMINATE) return Indeterminate.INSTANCE;
         if (mark == SamlReplayCache.MarkResult.UNAVAILABLE
@@ -351,35 +364,38 @@ final class SamlResponseSemantics {
 
     private static boolean tooLong(@Nullable String value) { return value != null && value.length() > 2048; }
 
-    private static @Nullable Instant validBearerEnd(@NonNull List<@NonNull Element> confirmations,
+    private static @Nullable BearerWindow validBearerWindow(@NonNull List<@NonNull Element> confirmations,
             @NonNull SamlNameId subjectNameId, @NonNull Expectation expected, @NonNull Instant now) {
-        Instant maximumEnd = null;
+        Instant boundEnd = null;
+        Instant replayEnd = null;
         boolean valid = false;
         for (Element confirmation : confirmations) {
             if (!BEARER.equals(confirmation.getAttributeNS(null, "Method"))) continue;
             Element data = bearerData(confirmation, subjectNameId);
             if (data == null || !scalarDeclarationAllowed(data, ASSERTION, "SubjectConfirmationDataType")
-                    || !children(data).isEmpty() || hasNonWhitespaceDirectText(data)
-                    || !expected.assertionConsumerServiceUrl().equals(data.getAttributeNS(null, "Recipient"))) continue;
-            String boundRequest = data.getAttributeNS(null, "InResponseTo");
-            String requestId = expected.requestId();
-            if (requestId == null ? !boundRequest.isEmpty() : !requestId.equals(boundRequest)) continue;
+                    || !children(data).isEmpty() || hasNonWhitespaceDirectText(data)) continue;
             Instant end = SamlDateTime.parse(data.getAttributeNS(null, "NotOnOrAfter"));
             if (end == null) continue;
-            Instant adjustedEnd = plus(end, expected.skew());
             Instant notBefore = data.hasAttributeNS(null, "NotBefore")
                     ? SamlDateTime.parse(data.getAttributeNS(null, "NotBefore")) : null;
             if (data.hasAttributeNS(null, "NotBefore")
                     && (notBefore == null || !notBefore.isBefore(end))) continue;
+            if (replayEnd == null || end.isAfter(replayEnd)) replayEnd = end;
+            if (!expected.assertionConsumerServiceUrl().equals(data.getAttributeNS(null, "Recipient")))
+                continue;
+            String boundRequest = data.getAttributeNS(null, "InResponseTo");
+            String requestId = expected.requestId();
+            if (requestId == null ? !boundRequest.isEmpty() : !requestId.equals(boundRequest)) continue;
+            Instant adjustedEnd = plus(end, expected.skew());
             Instant adjustedStart = notBefore == null ? null : minus(notBefore, expected.skew());
             if (adjustedEnd == null || (notBefore != null && adjustedStart == null)) continue;
-            // A future bound confirmation can become valid after the first replay mark expires.
-            // Retain the assertion ID through every usable confirmation window.
-            if (maximumEnd == null || end.isAfter(maximumEnd)) maximumEnd = end;
+            // A future bound confirmation can become valid after the current window ends.
+            // Keep the public expiry through every confirmation for this request.
+            if (boundEnd == null || end.isAfter(boundEnd)) boundEnd = end;
             if (now.isBefore(adjustedEnd)
                     && (adjustedStart == null || !now.isBefore(adjustedStart))) valid = true;
         }
-        return valid ? maximumEnd : null;
+        return valid ? new BearerWindow(requireNonNull(boundEnd), requireNonNull(replayEnd)) : null;
     }
 
     private static @Nullable Element bearerData(@NonNull Element confirmation,
@@ -788,6 +804,7 @@ final class SamlResponseSemantics {
     }
 
     private record SubjectCheck(@NonNull SamlNameId nameId, @NonNull List<@NonNull Element> confirmations) { }
+    private record BearerWindow(@NonNull Instant boundEnd, @NonNull Instant replayEnd) { }
     private record ConditionsCheck(@Nullable Instant notOnOrAfter) { }
     private record AuthenticationCheck(@NonNull Instant instant, @Nullable String sessionIndex,
             @Nullable Instant sessionNotOnOrAfter, @Nullable String contextClassRef) { }

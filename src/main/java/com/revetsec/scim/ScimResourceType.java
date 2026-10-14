@@ -22,6 +22,7 @@ import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 import javax.annotation.concurrent.Immutable;
 import javax.annotation.concurrent.NotThreadSafe;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -43,6 +44,10 @@ public final class ScimResourceType {
     private final @NonNull List<@NonNull ScimSchemaExtension> schemaExtensions;
     private final boolean patchResponseNoContent;
     private final int definitionCount;
+    private final boolean standardGroupSchema;
+    private final boolean standardUserSchema;
+    private final @Nullable String standardEnterpriseManagerPath;
+    private final @Nullable String standardEnterpriseManagerValuePath;
 
     private ScimResourceType(@NonNull Builder builder) { this(builder, false); }
 
@@ -53,10 +58,31 @@ public final class ScimResourceType {
         id = builder.id;
         description = builder.description;
         endpoint = builder.endpoint;
-        schema = builder.schema;
+        ScimSchema configured = builder.schema;
+        ScimSchema builtinGroup = ScimSchema.groupInstance();
+        ScimSchema builtinUser = ScimSchema.userInstance();
+        // Prove every trusted builtin facet once. Equivalent rebuilt definitions
+        // use builtin attribute spellings throughout binding, storage and typed views.
+        standardGroupSchema = configured.equals(builtinGroup);
+        standardUserSchema = configured.equals(builtinUser);
+        schema = standardGroupSchema ? canonicalBuiltin(configured, builtinGroup)
+                : standardUserSchema ? canonicalBuiltin(configured, builtinUser) : configured;
         if (schema.isDiscovery() && !allowDiscovery)
             throw new IllegalArgumentException("Discovery schemas cannot define application resource types.");
-        schemaExtensions = builder.schemaExtensions;
+        List<ScimSchemaExtension> extensions = new ArrayList<>();
+        ScimSchema builtinEnterprise = ScimSchema.enterpriseUserInstance();
+        String managerPath = null;
+        for (ScimSchemaExtension extension : builder.schemaExtensions) {
+            ScimSchema extensionSchema = extension.getSchema();
+            if (extensionSchema.equals(builtinEnterprise)) {
+                ScimSchema canonical = canonicalBuiltin(extensionSchema, builtinEnterprise);
+                extensions.add(ScimSchemaExtension.fromSchema(canonical, extension.isRequired()));
+                managerPath = canonical.getId() + ":manager";
+            } else extensions.add(extension);
+        }
+        schemaExtensions = List.copyOf(extensions);
+        standardEnterpriseManagerPath = managerPath;
+        standardEnterpriseManagerValuePath = managerPath == null ? null : managerPath + ".value";
         patchResponseNoContent = Boolean.TRUE.equals(builder.patchResponseNoContent);
         int definitions = ScimSchemas.commonDefinitionCount();
         for (ScimAttributeDefinition attribute : schema.getAttributes()) definitions += attribute.definitionCount();
@@ -73,6 +99,19 @@ public final class ScimResourceType {
     }
 
     int definitionCount() { return definitionCount; }
+    boolean hasStandardGroupSchema() { return standardGroupSchema; }
+    boolean hasStandardUserSchema() { return standardUserSchema; }
+    boolean isStandardEnterpriseManagerPath(@NonNull String path) { return path.equals(standardEnterpriseManagerPath); }
+    boolean isStandardEnterpriseManagerValuePath(@NonNull String path) { return path.equals(standardEnterpriseManagerValuePath); }
+
+    @SuppressWarnings("ReferenceEquality") // Preserve builtin singleton optional fast paths; rebuilt schemas remain distinct.
+    private static @NonNull ScimSchema canonicalBuiltin(@NonNull ScimSchema configured, @NonNull ScimSchema builtin) {
+        // The caller has already proved complete semantic equality, including all facets.
+        return configured == builtin ? configured
+                : ScimSchema.withId(configured.getId()).name(configured.getName())
+                        .description(configured.getDescription().orElse(null))
+                        .attributes(builtin.getAttributes()).build();
+    }
 
     static @NonNull ScimResourceType discovery(@NonNull ScimSchema schema, @NonNull String name,
             @NonNull String endpoint) {
@@ -135,13 +174,17 @@ public final class ScimResourceType {
 
     /**
      * Returns the core schema.
+     * An equal rebuilt standard User or Group retains its configured identifier, name and
+     * description and uses the builtin attribute spellings.
      * @return the core schema
      * @since 1.0.0
      */
     public @NonNull ScimSchema getSchema() { return schema; }
 
     /**
-     * Returns the immutable extension registrations.
+     * Returns the immutable extension registrations. An equal rebuilt Enterprise User
+     * extension retains its configured identifier, name, description and required
+     * characteristic and uses the builtin attribute spellings.
      * @return the immutable extension registrations
      * @since 1.0.0
      */

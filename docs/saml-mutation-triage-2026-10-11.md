@@ -917,3 +917,105 @@ pending the owner push, a green full CI run, and differential and Shibboleth
 hosted reruns on the same repaired revision. The earlier hosted PASS receipts
 remain bound to `eccaa18743bc2efc0287c171a7e027139e0e9eef` and do not
 qualify the changed bearer logic.
+
+## 2026-10-13 hosted post-repair SAML receipts
+
+The owner pushed the bearer replay repair in
+`348da72b82f2709c21e744791e33e2297b5d4b34`. On that exact revision,
+[CI run 38498924770](https://github.com/revetsec/revetsec/actions/runs/38498924770)
+passed all 43 required SAML differential methods with zero skips or failures.
+The overall run was **red only in the packaged-consumer JDK 17 and 27 jobs**:
+their public API inventory omitted eight new SCIM PATCH types. This is not a
+green full-CI receipt.
+
+[Shibboleth capture run 38499662838](https://github.com/revetsec/revetsec/actions/runs/38499662838)
+also succeeded on `348da72b82f2709c21e744791e33e2297b5d4b34`. All six
+required hosted replay methods passed with zero skips, including the GCM and
+signed-Response CBC captures. The downloaded
+`shibboleth-capture-38499662838-1.zip` has SHA-256
+`66465f0f60d9e1adc72e47a8638dc563e9d75593f188481abb7876a71b6821bf`;
+all 11 capture-file hashes match its manifest. These same-revision hosted
+receipts qualify the first bearer replay repair on that SHA for the
+differential and Shibboleth RC-2 checks; they do not change the earlier local
+PIT source and coverage limits above. At that checkpoint RC-2 remained open
+pending green full CI and maintainer review of the post-round finding. The
+earlier Burp and ZAP reports retain their recorded packaged-artifact scope.
+
+## 2026-10-14 stricter bearer replay retention and owner review
+
+Further adversarial review reproduced two more public-API replay acceptances
+on the first repair: across two pending request bindings, and across
+unsolicited and requested completion after the shorter unsolicited age bound.
+The [round-1 review addendum](reviews/rc-2-round-1.md#post-hosted-replay-finding--2026-10-13)
+records the stricter working-tree fix and its tests. The replay key now remains
+marked until no supported completion context can accept the signed assertion;
+the accepted authentication retains its own context-specific expiry. On
+2026-10-14 the maintainer personally reviewed and confirmed this fix,
+including its longer replay-cache retention tradeoff. The 255 SAML-named tests pass
+on each of Corretto 17 and 21, and JDK 21 static analysis passes.
+
+The 3,176-action full PIT receipt above belongs to the intermediate repair,
+and the hosted CI and Shibboleth receipts belong to pushed
+`348da72b82f2709c21e744791e33e2297b5d4b34`. Neither qualifies the
+stricter source. The current-source local receipt follows; hosted checks still
+require a pushed revision.
+
+## 2026-10-14 full stricter-source SAML/XML PIT receipt
+
+The Corretto 21 full-package PIT run used base commit
+`348da72b82f2709c21e744791e33e2297b5d4b34` plus the six current SAML
+source/test changes. All 56 targeted SAML/XML production files and both changed
+test files matched the shared checkout byte for byte; the source-manifest
+SHA-256 is `44ec657340d61b163ace477eea9161a1f2f2b8e789a63dd39ddc5748a6514ccd`.
+The complete run generated **3,187** mutations:
+
+| Package | Generated | `KILLED` | `SURVIVED` | `NO_COVERAGE` | `TIMED_OUT` |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `saml.*` | 2,520 | 2,304 | 77 | 138 | 1 |
+| `internal.xml.*` | 667 | 610 | 35 | 22 | 0 |
+| **Combined** | **3,187** | **2,914** | **112** | **160** | **1** |
+
+All 112 survivors have exact identities and individual source dispositions in
+the earlier full-run ledger; there are **no new survivors** and **no old
+assertion-kill regressions**. Against the previous full run, 3,110 mutation
+identities are shared, 77 are new and 66 were removed by the code rewrite.
+The new identities comprise 73 kills and four uncovered actions. One earlier
+`SamlResponseSemantics.inspectConditions` survivor is now killed by the new
+bounded/unbounded Conditions regression. The sole timeout is the previously
+identified `SamlPostBindingDecoder.validQuery` arithmetic mutation, counted
+as detected by PIT but not as an assertion kill. PIT's aggregate display
+therefore says 2,915 detected, while the XML records 2,914 kills.
+
+The four new uncovered actions are null-return substitutions in
+`SamlResponseSemantics.validate` at current lines 251, 255, 259 and 262 on
+exceptional expiry/crypto-result branches. They remain explicit coverage
+limits, as do the other 156 uncovered actions; none is represented as a kill
+or equivalent. The raw XML report SHA-256 is
+`496a3aae871e51e92824bbf49cdbd5673c12d6f455cec0813e5f3daa3cc36b5c`,
+the run-log SHA-256 is
+`c91016811743798790beb01eb5db7ef17fa60b22f2512a866284084ddc2aa107`,
+and the exact-identity comparison JSON SHA-256 is
+`a58c1d94e7ebd8a7eebb413a330f91a17adb2a6d373f8fe44e1ebf9a48e20265`.
+This full current-source run meets RC-2's local **no unjustified survivors**
+criterion with the 160 uncovered limits visible.
+
+Other local checks on production-byte-identical snapshots passed: 18,110 core
+tests on each of Corretto 17 and 21 (one expected locale skip each), JDK 21
+static analysis and SpotBugs with zero findings, 43/43 required SAML
+differential methods with 13/13 live libxmlsec oracle cases, 91/91 SAML seed
+and layout replays plus nine provenance checks, and a one-minute live Jazzer
+response-semantics target with 15,309 executions and no finding. The live-fuzz
+log SHA-256 is
+`0b812274f72feda4ccc9405e36f8a555a25d66c5dafd6d83cf305dc7641aa3e7`.
+The full core and coverage snapshots preceded the final three test-only regressions;
+the checkout's final 255 SAML-named tests passed on both JDKs. The coverage
+profile completed its tests but missed two inherited branch floors: bundle
+17,533/19,459 (90.10% versus 92%) and SAML 2,197/2,616 (83.98% versus
+85%). This is a separate overall release-coverage gap, not a green coverage
+claim. The earlier seven-target SAML fuzz campaign and manual Burp/ZAP passes
+retain their documented earlier-source and packaged-artifact scope.
+
+RC-2 remains **OPEN** pending the owner's push, green full CI, and differential
+and Shibboleth hosted reruns on the same new revision. The prior hosted receipts
+on `348da72b82f2709c21e744791e33e2297b5d4b34` do not qualify this
+stricter replay logic.

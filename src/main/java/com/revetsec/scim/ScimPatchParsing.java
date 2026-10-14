@@ -124,6 +124,23 @@ final class ScimPatchParsing {
             return normalized == null ? null : new ScimPatchOperation(index,kind,null,null,null,normalized);
         }
         if (!(rawPath instanceof JsonString pathString)) { error=ScimError.invalidPathInstance(); return null; }
+        String expression=pathString.getValue();
+        if (expression.isEmpty() || expression.length()>limits.getFilterLimits().getMaximumExpressionCharacters()) {
+            error=ScimError.invalidPathInstance(); return null;
+        }
+        ScimSchema extension=extension(expression);
+        if (work.wasExceeded()) return null;
+        if (extension != null) {
+            if (!spend(1L+expression.length()+4L*type.definitionCount())) return null;
+            ScimAttributePathParseResult ordinary=ScimAttributePath.fromExpressionResult(expression);
+            boolean attribute=ordinary instanceof ScimAttributePathParseResult.Succeeded accepted
+                    && ScimSchemas.canonicalPath(type,accepted.getAttributePath()).isPresent();
+            // A profile cannot reinterpret an already valid ordinary qualified attribute target.
+            if (!attribute) {
+                if (!enabled(ScimCompatibilityFeature.PATCH_EXTENSION_SCHEMA_ROOT)) { error=ScimError.invalidPathInstance(); return null; }
+                return extensionOperation(index,kind,extension,value);
+            }
+        }
         Target target=target(pathString.getValue());
         if (target == null) return null;
         requested.add(target.path);
@@ -149,6 +166,32 @@ final class ScimPatchParsing {
         JsonValue normalized=validation.patchValue(target.definition,incoming,target.expression,scalarElement);
         if (normalized == null || validation.failed()) return null;
         return new ScimPatchOperation(index,kind,target.path,target.filter,target.suffix,normalized);
+    }
+    private @Nullable ScimPatchOperation extensionOperation(int index,@NonNull ScimPatchOperationType kind,
+            @NonNull ScimSchema schema,@Nullable JsonValue value) {
+        requested.add(ScimFilterBinding.path(null,"schemas",null));
+        if (kind == ScimPatchOperationType.REMOVE) {
+            if (value != null) { error=ScimError.invalidValueInstance(); return null; }
+            for (ScimAttributeDefinition definition:schema.getAttributes()) {
+                if (!extensionPath(schema.getId(),definition,null)) return null;
+                for (ScimAttributeDefinition child:definition.getSubAttributes())
+                    if (!extensionPath(schema.getId(),definition,child.getName())) return null;
+            }
+            used.add(ScimCompatibilityFeature.PATCH_EXTENSION_SCHEMA_ROOT);
+            return new ScimPatchOperation(index,kind,schema.getId(),null);
+        }
+        if (!(value instanceof JsonObject object)) { error=ScimError.invalidValueInstance(); return null; }
+        JsonObject normalized=resourceObject(JsonObject.builder().put(schema.getId(),object).build());
+        if (normalized == null) return null;
+        JsonValue children=normalized.getMembers().get(schema.getId());
+        used.add(ScimCompatibilityFeature.PATCH_EXTENSION_SCHEMA_ROOT);
+        return new ScimPatchOperation(index,kind,schema.getId(),
+                children == null ? JsonObject.emptyInstance() : children);
+    }
+    private boolean extensionPath(@NonNull String schema,@NonNull ScimAttributeDefinition definition,@Nullable String sub) {
+        if (!spend(1L+schema.length()+definition.getName().length()+(sub == null ? 0 : sub.length()))) return false;
+        requested.add(ScimFilterBinding.path(schema,definition.getName(),sub));
+        return true;
     }
     @SuppressWarnings("ReferenceEquality") // The reviewed standard schema singleton defines this vendor membership shape.
     private boolean standardGroup() { return type.getSchema()==ScimSchema.groupInstance(); }

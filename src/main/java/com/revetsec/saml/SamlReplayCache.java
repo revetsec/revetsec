@@ -34,10 +34,12 @@ import java.time.Instant;
 @ThreadSafe
 public interface SamlReplayCache {
     /**
-     * Atomically admit a previously unseen key until its final possible acceptance time.
+     * Atomically admit a previously unseen key until its final possible acceptance time across
+     * supported request bindings and time policies. A backend must retain the key through the
+     * supplied absolute expiry without rounding that expiry down.
      *
      * @param key the Revetsec-generated replay key
-     * @param expiresAt the final possible acceptance time
+     * @param expiresAt the final possible acceptance time across supported completion contexts
      * @param remaining positive time budget for this operation
      * @return an explicit outcome; only MARKED permits identity release
      * @since 1.0.0

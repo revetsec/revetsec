@@ -51,10 +51,14 @@ pushed revision `eccaa18743bc2efc0287c171a7e027139e0e9eef`
 [capture run](https://github.com/revetsec/revetsec/actions/runs/38456503172));
 the overall CI run failed in the examples and packaged-consumer jobs. A later
 [full fixed-source local PIT run](../saml-mutation-triage-2026-10-11.md#2026-10-13-full-fixed-source-samlxml-pit-receipt)
-meets the no unjustified survivors criterion on the bearer replay repair,
-with 158 uncovered limits disclosed. RC-2 remains open pending push, green
+met the no unjustified survivors criterion on the first bearer replay repair,
+with 158 uncovered limits disclosed. It does not cover the stricter
+2026-10-14 replay retention fix, which the owner personally reviewed and
+confirmed. A [new full current-source PIT run](../saml-mutation-triage-2026-10-11.md#2026-10-14-full-stricter-source-samlxml-pit-receipt)
+meets the local survivor criterion with 160 uncovered limits. RC-2 remains open
+pending push, green
 full CI and same-revision hosted differential and Shibboleth reruns. The owner
-reviewed and confirmed the `internal.xml` key-limit diff.
+also reviewed and confirmed the `internal.xml` key-limit diff.
 
 The 43-method differential comparator now
 covers the separately keyed corpus with libxmlsec. The seven-target local

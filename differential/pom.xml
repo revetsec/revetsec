@@ -34,6 +34,13 @@
     </dependencyManagement>
 
     <dependencies>
+        <!-- Independent syntax/AST oracle only; never added to Revetsec's production POM. -->
+        <dependency>
+            <groupId>com.unboundid.product.scim2</groupId>
+            <artifactId>scim2-sdk-common</artifactId>
+            <version>6.0.0</version>
+            <scope>test</scope>
+        </dependency>
         <dependency>
             <groupId>com.revetsec</groupId>
             <artifactId>revetsec</artifactId>

@@ -1,0 +1,107 @@
+name: SCIM independent interoperability
+
+# PR tester qualification plus ongoing nightly outbound-client coverage.
+# Nightly results are advisory; there is no minimum-duration release gate.
+on:
+  pull_request:
+    paths:
+      - 'src/main/java/com/revetsec/scim/**'
+      - 'src/main/java/com/revetsec/internal/json/**'
+      - 'src/main/java/com/revetsec/internal/encoding/**'
+      - 'pom.xml'
+      - 'examples/**'
+      - 'interop/scim/**'
+      - '.github/workflows/scim-interop.yml'
+  schedule:
+    - cron: '19 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  qualify:
+    name: SCIM independent qualification
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Check out current core and examples
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Check out pinned Soklet adapter
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: revetsec/revetsec-soklet
+          ref: d637e1d4a2c64efe09b5c521cee355721332da4f
+          path: .scim-inputs/adapter
+          persist-credentials: false
+
+      - name: Check out pinned Soklet framework
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: soklet/soklet
+          ref: 8e1c689b729eb4cc45ffec1a1aed9668d07ffb10
+          path: .scim-inputs/framework
+          persist-credentials: false
+
+      - name: Verify the qualified Soklet SCIM source
+        run: |
+          if ! sha256sum --check interop/scim/adapter-source.sha256; then
+            echo '::error::The adapter revision predates the locally qualified SCIM empty-body repair. After the owner pushes it, update the exact adapter ref in this workflow.'
+            exit 1
+          fi
+
+      - name: Set up Corretto 17
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: corretto
+          java-version: '17'
+          cache: maven
+
+      - name: Build and verify pinned framework
+        working-directory: .scim-inputs/framework
+        run: |
+          mvn -B -ntp -Dmaven.test.skip=true -Dmaven.javadoc.skip=true -Dgpg.skip=true clean install
+          echo "f7f62f967045a8eb8f943a90d49d499b4c5b755d20ab901e12a34fe1d004319b  target/soklet-4.0.0.jar" | sha256sum --check
+
+      - name: Build current SCIM core and pinned adapter
+        run: |
+          mvn -B -ntp -DskipTests -Dmaven.javadoc.skip=true -Dgpg.skip=true clean install
+          mvn -B -ntp -f .scim-inputs/adapter/pom.xml -DskipTests -Dmaven.javadoc.skip=true -Dgpg.skip=true clean install
+
+      - name: Compile and test actual provisioning routes
+        run: mvn -B -ntp -f examples/playground/pom.xml clean verify
+
+      - name: Install checksum-pinned independent tester
+        run: |
+          python3 -m venv "${RUNNER_TEMP}/scim-tester"
+          "${RUNNER_TEMP}/scim-tester/bin/python" -m pip install --disable-pip-version-check --require-hashes -r interop/scim/requirements.txt
+
+      - name: Verify scheduled evidence accounting
+        run: python3 -m unittest discover -s interop/scim -p test_scripts.py
+
+      - name: Run independent tester and scheduled outbound client qualification
+        run: >-
+          python3 interop/scim/run.py
+          --classes examples/playground/target/classes
+          --class-path-file examples/playground/target/runtime-classpath.txt
+          --python "${RUNNER_TEMP}/scim-tester/bin/python"
+          --mode ${{ github.event_name == 'pull_request' && 'tester' || 'both' }}
+          --output "${RUNNER_TEMP}/scim-qualification"
+
+      - name: Upload exact qualification outcome evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: scim-qualification-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/scim-qualification/
+            examples/playground/target/surefire-reports/
+          if-no-files-found: warn
+          retention-days: 90

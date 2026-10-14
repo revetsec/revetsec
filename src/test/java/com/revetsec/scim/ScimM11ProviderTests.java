@@ -173,6 +173,36 @@ class ScimM11ProviderTests {
         assertEquals(List.of("will:ATTRIBUTE_SELECTION","did:ATTRIBUTE_SELECTION:SUCCEEDED","will:RESPONSE_PREPARE","did:RESPONSE_PREPARE:PREPARED"),observer.events);
     }
 
+    @Test void assertionAndCheckedInterruptionFaultsPublishNoPatchAndVmFailureEscapes() {
+        boolean previouslyInterrupted=Thread.interrupted();
+        ScimResource current=resource(USER);
+        JsonObject before=current.getDocument();
+        try {
+            for(Throwable failure:List.of(new AssertionError("private-matcher-data"),new InterruptedException("private-matcher-data"))) {
+                RecordingObserver observer=new RecordingObserver();
+                ScimServiceProvider p=provider((path,definition,operator,left,right) -> ScimM11ProviderTests.<RuntimeException>throwUnchecked(failure),observer);
+                ScimPatchRequest request=patch(p,USER,"{\"op\":\"replace\",\"path\":\"emails[type eq \\\"work\\\"].value\",\"value\":\"changed\"}");
+                observer.events.clear();
+                assertSame(ScimError.internalErrorInstance(),assertInstanceOf(ScimPatchApplicationResult.Rejected.class,p.applyPatchResult(current,request)).getError());
+                assertEquals(List.of("will:PATCH_APPLY","fail:PATCH_APPLY"),observer.events);
+                assertSame(before,current.getDocument());
+                assertEquals(failure instanceof InterruptedException,Thread.interrupted());
+            }
+            OutOfMemoryError fatal=new OutOfMemoryError("fixture");
+            ScimServiceProvider p=provider((path,definition,operator,left,right) -> { throw fatal; },null);
+            ScimPatchRequest request=patch(p,USER,"{\"op\":\"replace\",\"path\":\"emails[type eq \\\"work\\\"].value\",\"value\":\"changed\"}");
+            assertSame(fatal,assertThrows(OutOfMemoryError.class,() -> p.applyPatchResult(current,request)));
+            assertSame(before,current.getDocument());
+        } finally {
+            Thread.interrupted();
+            if(previouslyInterrupted) Thread.currentThread().interrupt();
+        }
+    }
+    @SuppressWarnings("unchecked")
+    private static <E extends @NonNull Throwable> @NonNull ScimStringMatchResult throwUnchecked(@NonNull Throwable failure) throws E {
+        throw (E)failure;
+    }
+
     @Test void transportErrorsAndQuotaErrorsAreFixedBeforePublishingAnyRequest() {
         ScimServiceProvider p=provider();
         for(byte[] body:List.of(bytes("{broken"),new byte[0],bytes("[]"))) {

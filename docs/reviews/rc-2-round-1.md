@@ -119,14 +119,36 @@ confirmation windows. The same signed unsolicited Response succeeded at
 result should have been `Rejected(REPLAYED)`. The failing-before evidence and
 the exact pre-fix mutation are recorded in the
 [SAML mutation ledger](../saml-mutation-triage-2026-10-11.md#2026-10-13-post-hosted-bearer-replay-finding-and-repair).
-The working-tree fix retains the replay mark through every structurally
-valid bound bearer window while requiring one to be valid at admission.
+The first working-tree fix retained the replay mark through every structurally
+valid bearer window bound to the current request while requiring one to be
+valid at admission.
 Focused Corretto 17 and 21 tests pass 55 each, and a targeted fixed-source
 PIT run kills the moved maximum-end conditional. A subsequent
 [full fixed-source local PIT run](../saml-mutation-triage-2026-10-11.md#2026-10-13-full-fixed-source-samlxml-pit-receipt)
 generated 3,176 actions: 2,904 assertion kills, 113 individually
 source-dispositioned survivors, 158 uncovered limits, and one detected
-timeout. It meets RC-2's no unjustified survivors criterion on the repaired
-source. This later finding does not change what the round-1 reviewers
-observed on their reviewed source. RC-2 remains open pending push, green full
-CI and hosted differential and Shibboleth reruns on the repaired revision.
+timeout. It meets RC-2's no unjustified survivors criterion on that
+intermediate repaired source. This later finding does not change what the
+round-1 reviewers observed on their reviewed source.
+
+Further adversarial review reproduced two more accepted replays on the
+first repaired source: one signed assertion crossed two pending request
+bindings after the first confirmation expired, and one crossed unsolicited
+and requested login after the unsolicited two-minute age bound expired. A
+stricter working-tree repair now keeps the replay key until no supported
+completion context can accept the signed assertion. The replay deadline uses
+the latest structurally usable signed bearer end across bindings, the signed
+Conditions end when present, and the shared maximum configuration limits of
+15 minutes for assertion age and five minutes for skew. The public
+authentication expiry remains specific to the accepted context. A third
+regression checks that a second node with more permissive skew still sees the
+replay. Both reproduced public-API cases and the skew regression pass; the
+255 SAML-named tests pass on Corretto 17 and 21, and JDK 21 static analysis passes.
+
+On 2026-10-14 the maintainer personally reviewed and confirmed this stricter
+bearer replay fix, including the longer replay-cache retention tradeoff. The
+earlier full PIT receipt is bound to the intermediate repair. A
+[new full current-source PIT run](../saml-mutation-triage-2026-10-11.md#2026-10-14-full-stricter-source-samlxml-pit-receipt)
+meets the local survivor criterion with 160 explicit uncovered limits. The
+hosted receipts remain bound to an earlier pushed source. RC-2 remains open
+pending push, green full CI, and hosted differential and Shibboleth reruns.

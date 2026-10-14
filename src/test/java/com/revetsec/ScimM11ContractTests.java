@@ -46,7 +46,7 @@ import static org.junit.jupiter.api.Assertions.*;
 /** Calibrated PATCH guards for direct outcomes, one passed budget, closed proof and pure construction. */
 final class ScimM11ContractTests {
     @Test void patchHelpersNeverThrowCatchExpectedInputsOrRestartWorkBudgets() throws IOException {
-        for(String file:List.of("ScimPatchParsing","ScimPatchEngine","ScimMembershipReduction"))
+        for(String file:List.of("ScimPatchParsing","ScimPatchEngine","ScimMembershipReduction","ScimTypedComparison","ScimFilterEvaluation"))
             assertDirect(parse(Files.readString(Path.of("src/main/java/com/revetsec/scim/"+file+".java"))));
     }
     @Test void parsedAndAppliedCarriersKeepTheirRegistrationProofPrivate() throws ReflectiveOperationException {
@@ -55,7 +55,7 @@ final class ScimM11ContractTests {
     }
     @Test void patchCarrierConstructionCannotCallAnApplicationOrPerformIo() throws IOException {
         for(String file:List.of("ScimPatchOperationType","ScimPatchOperation","ScimPatchRequest","ScimPatchParseResult",
-                "ScimPatchResult","ScimPatchApplicationResult","ScimMembershipPatch","ScimMembershipPatchResult"))
+                "ScimPatchResult","ScimPatchApplicationResult","ScimMembershipPatch","ScimMembershipPatchResult","ScimFilterEvaluationResult"))
             assertPureConstructors(parse(Files.readString(Path.of("src/main/java/com/revetsec/scim/"+file+".java"))));
     }
     @Test void guardsRejectPlantedExceptionBudgetCallbackAndProofDefects() {

@@ -1,0 +1,102 @@
+{
+  "verifiedAt": "2026-10-13",
+  "purpose": "Test-only independent SCIM qualification; no production dependency",
+  "scim2Tester": {
+    "version": "0.5.2",
+    "sourceCommit": "53db52f4addcf1062ca816103054481c7222d9ab",
+    "wheelSha256": "10bc7068620d1c24f4b5cea2216f86bb8d57d0e56e585d622814f7e6b337dce5",
+    "license": "Apache-2.0",
+    "source": "https://pypi.org/project/scim2-tester/0.5.2/",
+    "advisoriesSource": "https://api.github.com/repos/python-scim/scim2-tester/security-advisories",
+    "publishedAdvisories": [],
+    "qualifyingProfile": "discovered-extension-schemas-field-excluded",
+    "defaultProfileDisposition": {
+      "outcome": "unresolved-upstream-extension-fixture-defect",
+      "nestedExtensionSchemasEmitted": true,
+      "configuredModel": "Discovered Enterprise extension subclass; only inherited schemas Field excluded from serialization; all schema facets/check algorithms retained",
+      "registrationApi": "SyncSCIMClient(provider=ScimProvider(...))",
+      "source": "https://github.com/python-scim/scim2-tester/blob/53db52f4addcf1062ca816103054481c7222d9ab/scim2_tester/checkers/patch_add.py"
+    }
+  },
+  "authentik": {
+    "version": "2026.8.3",
+    "image": "ghcr.io/goauthentik/server:2026.8.3@sha256:ab9b4e8cc4ab3f8d1198d2db6aeea66bafea1963b3f2843589e0d163f97d9849",
+    "release": "https://github.com/goauthentik/authentik/releases/tag/version/2026.8.3",
+    "license": "MIT for open-source Python client; enterprise and other portions have separate licenses",
+    "licenseSource": "https://github.com/goauthentik/authentik/blob/version/2026.8.3/LICENSE",
+    "advisoriesSource": "https://api.github.com/repos/goauthentik/authentik/security-advisories",
+    "recentPatchedAdvisories": [
+      {
+        "id": "GHSA-cxwx-9x59-28qm",
+        "url": "https://github.com/goauthentik/authentik/security/advisories/GHSA-cxwx-9x59-28qm",
+        "patchedVersions": [
+          "2026.8.2",
+          "2026.5.7",
+          "2026.2.7"
+        ]
+      },
+      {
+        "id": "GHSA-qgqp-xh8r-v73r",
+        "url": "https://github.com/goauthentik/authentik/security/advisories/GHSA-qgqp-xh8r-v73r",
+        "patchedVersions": [
+          "2026.8.2",
+          "2026.5.7",
+          "2026.2.7"
+        ]
+      },
+      {
+        "id": "GHSA-h6c5-mpvq-j4jc",
+        "url": "https://github.com/goauthentik/authentik/security/advisories/GHSA-h6c5-mpvq-j4jc",
+        "patchedVersions": [
+          "2026.5.7",
+          "2026.2.7",
+          "2026.8.2"
+        ]
+      },
+      {
+        "id": "GHSA-m9h4-7j9c-55x9",
+        "url": "https://github.com/goauthentik/authentik/security/advisories/GHSA-m9h4-7j9c-55x9",
+        "patchedVersions": [
+          "2026.2.7",
+          "2026.5.7",
+          "2026.8.2"
+        ]
+      },
+      {
+        "id": "GHSA-cqj8-fxxf-9pg7",
+        "url": "https://github.com/goauthentik/authentik/security/advisories/GHSA-cqj8-fxxf-9pg7",
+        "patchedVersions": [
+          "2026.2.7",
+          "2026.5.7",
+          "2026.8.2"
+        ]
+      }
+    ],
+    "qualifyingCompatibilityMode": "aws",
+    "sourceCommit": "e5a0d2f7572cb776eee7a3e9355937ce38973761",
+    "defaultModeDisposition": {
+      "outcome": "unresolved-upstream-serialization-defect",
+      "requiredTopLevelPatchOpSchemasOmitted": true,
+      "source": "https://github.com/goauthentik/authentik/blob/e5a0d2f7572cb776eee7a3e9355937ce38973761/authentik/providers/scim/clients/groups.py#L198",
+      "productionGroupClientSha256": "3fc85fb83c42c1b56c4ed9a154b2c972d6641582fa2515887635741c12d58ee0",
+      "negativeControl": "authentik-default-shape.py"
+    }
+  },
+  "postgres": {
+    "observedVersion": "16.15-alpine3.24",
+    "image": "postgres:16-alpine@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea",
+    "license": "PostgreSQL",
+    "source": "https://github.com/docker-library/postgres/tree/9d15534160ade17f2b6c455a39ee967c49b1937d/16/alpine3.24"
+  },
+  "java": {
+    "image": "amazoncorretto:17-al2023@sha256:26c9e7d80db693d546da1d43eca19459f4662af61b4b0ed8d5d8c92e0a73cb28",
+    "license": "GPL-2.0 with Classpath exception plus bundled component notices",
+    "source": "https://github.com/corretto/corretto-docker/tree/883dd4b1df5aa871f1dfcec2244c5959b67e0239/17/jdk/al2023"
+  },
+  "caddy": {
+    "version": "2.11.6",
+    "image": "caddy:2.11.6@sha256:3422ce6de165df66534f9b9ba50efaf457114ec961763cc52f5dbdaac2972d73",
+    "license": "Apache-2.0",
+    "source": "https://github.com/caddyserver/caddy/releases/tag/v2.11.6"
+  }
+}

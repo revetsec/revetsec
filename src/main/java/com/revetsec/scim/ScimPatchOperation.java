@@ -26,7 +26,8 @@ import static java.util.Objects.requireNonNull;
 
 /** A schema-bound operation created only by the PATCH parser. Its value may contain personal data.
  * Filtered paths expose the outer attribute, a same-element predicate, and an optional suffix.
- * An unfiltered subattribute remains part of the attribute path.
+ * An unfiltered subattribute remains part of the attribute path. A whole registered extension
+ * schema URI has a separate extension identifier and no attribute path.
  * @since 1.0.0
  */
 @Immutable
@@ -35,6 +36,7 @@ public final class ScimPatchOperation {
     private final int operationIndex;
     private final @NonNull ScimPatchOperationType operationType;
     private final @Nullable ScimAttributePath attributePath;
+    private final @Nullable String extensionSchemaId;
     private final @Nullable ScimFilter valueFilter;
     private final @Nullable String subAttributeName;
     private final @Nullable JsonValue value;
@@ -42,7 +44,14 @@ public final class ScimPatchOperation {
             @Nullable ScimAttributePath path, @Nullable ScimFilter filter,
             @Nullable String suffix, @Nullable JsonValue value) {
         this.operationIndex=index; this.operationType=requireNonNull(type); this.attributePath=path;
+        this.extensionSchemaId=null;
         this.valueFilter=filter; this.subAttributeName=suffix; this.value=value;
+    }
+    ScimPatchOperation(int index, @NonNull ScimPatchOperationType type,
+            @NonNull String extensionSchemaId, @Nullable JsonValue value) {
+        this.operationIndex=index; this.operationType=requireNonNull(type); this.attributePath=null;
+        this.extensionSchemaId=requireNonNull(extensionSchemaId);
+        this.valueFilter=null; this.subAttributeName=null; this.value=value;
     }
     /** Returns the zero-based original request index, preserved through reduction.
      * @return the original index
@@ -52,10 +61,15 @@ public final class ScimPatchOperation {
      * @return the kind
      * @since 1.0.0 */
     public @NonNull ScimPatchOperationType getOperationType() { return operationType; }
-    /** Returns the canonical path, absent for a resource-object operation.
+    /** Returns the canonical path, absent for a resource-object or whole-extension operation.
      * @return the path
      * @since 1.0.0 */
     public @NonNull Optional<@NonNull ScimAttributePath> getAttributePath() { return Optional.ofNullable(attributePath); }
+    /** Returns the canonical registered extension schema URI for a whole-extension target.
+     * It is absent for ordinary attribute paths and resource-object operations.
+     * @return the extension schema identifier
+     * @since 1.0.0 */
+    public @NonNull Optional<@NonNull String> getExtensionSchemaId() { return Optional.ofNullable(extensionSchemaId); }
     /** Returns the bound same-element selector, when present.
      * @return the predicate
      * @since 1.0.0 */

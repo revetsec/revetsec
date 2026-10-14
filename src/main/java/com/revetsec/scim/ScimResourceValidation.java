@@ -201,13 +201,16 @@ final class ScimResourceValidation {
         if (input instanceof JsonNull) { record(path); return preservePatchNulls ? input : null; }
         if (definition.isMultiValued()) {
             if (!(input instanceof JsonArray array)) { error = ScimError.invalidValueInstance(); return null; }
+            if (!spend(definition.getSubAttributes().size())) return null;
+            ScimAttributeDefinition primary = ScimSchemas.attribute(definition.getSubAttributes(), "primary").orElse(null);
             List<JsonValue> normalized = new ArrayList<>(); int primaries = 0;
             for (JsonValue element : array.getElements()) {
                 if (element instanceof JsonNull) { error = ScimError.invalidValueInstance(); return null; }
                 JsonValue canonical = scalar(definition, element, path, enforceRequired);
                 if (canonical == null) return null;
                 normalized.add(canonical);
-                if (canonical instanceof JsonObject object && object.findBoolean("primary").orElse(false) && ++primaries > 1) {
+                if (primary != null && primary.getType() == ScimAttributeType.BOOLEAN
+                        && canonical instanceof JsonObject object && object.findBoolean(primary.getName()).orElse(false) && ++primaries > 1) {
                     error = ScimError.invalidValueInstance(); return null;
                 }
             }
@@ -222,7 +225,7 @@ final class ScimResourceValidation {
         if (!spend(1)) return null;
         if (definition.getType() == ScimAttributeType.COMPLEX) {
             JsonValue complex = input;
-            if (input instanceof JsonString string && path.equals(ScimSchema.enterpriseUserInstance().getId() + ":manager")
+            if (input instanceof JsonString string && type.isStandardEnterpriseManagerPath(path)
                     && enabled(ScimCompatibilityFeature.COMPLEX_VALUE_AS_SCALAR))
                 {
                 usedFeatures.add(ScimCompatibilityFeature.COMPLEX_VALUE_AS_SCALAR);
@@ -255,9 +258,9 @@ final class ScimResourceValidation {
             BigDecimal numeric = number.getValue();
             normalized = JsonNumber.fromValue(numeric.signum() == 0 ? BigDecimal.ZERO : new BigDecimal(numeric.toBigInteger()));
         }
-        if ((path.equals("id") || path.equals("members.value") && type.getSchema().getId().equals(ScimSchema.groupInstance().getId())
-                || path.equals("groups.value") && type.getSchema().getId().equals(ScimSchema.userInstance().getId())
-                || path.equals(ScimSchema.enterpriseUserInstance().getId()+":manager.value")) && normalized instanceof JsonString string && !id(string.getValue())) {
+        if ((path.equals("id") || path.equals("members.value") && type.hasStandardGroupSchema()
+                || path.equals("groups.value") && type.hasStandardUserSchema()
+                || type.isStandardEnterpriseManagerValuePath(path)) && normalized instanceof JsonString string && !id(string.getValue())) {
             error = ScimError.invalidValueInstance(); return null;
         }
         if (path.equals("meta.resourceType") && normalized instanceof JsonString string && !string.getValue().equals(type.getName())) {

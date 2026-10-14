@@ -65,8 +65,12 @@ identifiers, even when a nested AttributeValue looks valid.
 Configure an SP entity ID, HTTPS ACS URL, replay cache, signing credential and optional
 decryption credentials. A distributed deployment must supply a replay cache whose
 `markIfAbsent` operation is atomic across all nodes. The in-memory implementation is for
-one node. Use a durable atomic pending store across nodes when a single-use browser
-pending record is required; a sealed cookie alone does not provide server-side single use.
+one node. Retain each replay key through the absolute `expiresAt` passed to the cache,
+without rounding the deadline down; it can be later than an individual
+authentication's `getAssertionExpiresAt()` because the same signed assertion may carry
+other valid request bindings or time windows. Use a durable atomic pending store across
+nodes when a single-use browser pending record is required; a sealed cookie alone does
+not provide server-side single use.
 
 ## Browser sign-in
 

@@ -1,0 +1,1 @@
+rows[value ne "a" and type eq "missing"]
