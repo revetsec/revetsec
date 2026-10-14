@@ -27,6 +27,7 @@ import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.time.Duration;
 import java.util.concurrent.atomic.AtomicReference;
@@ -592,6 +593,43 @@ final class SamlServiceProviderTests {
         assertInstanceOf(SamlAuthenticationResult.Succeeded.class,
                 longLimit.completeUnsolicitedAuthenticationResult(unsolicitedMessage(recent), idp));
         assertEquals(1, writes.get());
+    }
+
+    @Test void unsolicitedLoginRetainsReplayAcrossDisjointBearerConfirmationWindows() throws Exception {
+        KeyPair key = rsa();
+        AtomicReference<Instant> now = new AtomicReference<>(Instant.parse("2026-10-09T00:01:00Z"));
+        Clock clock = new Clock() {
+            @Override public @NonNull ZoneId getZone() { return ZoneOffset.UTC; }
+            @Override public @NonNull Clock withZone(@NonNull ZoneId zone) {
+                return Clock.fixed(now.get(), zone);
+            }
+            @Override public @NonNull Instant instant() { return java.util.Objects.requireNonNull(now.get()); }
+        };
+        SamlServiceProvider sp = SamlServiceProvider.withEntityId(SP)
+                .assertionConsumerServiceUrl(ACS)
+                .replayCache(InMemorySamlReplayCache.withLimit(clock, 4))
+                .clock(clock).clockSkew(Duration.ZERO).build();
+        SamlIdentityProvider idp = SamlIdentityProvider.withEntityId(IDP).connectionId("tenant-one")
+                .redirectSingleSignOnService(URI.create("https://idp.example.test/sso"))
+                .signingKeys(List.of(key.getPublic())).allowUnsolicitedResponses(true).build();
+        String original = "<a:SubjectConfirmation Method='urn:oasis:names:tc:SAML:2.0:cm:bearer'>"
+                + "<a:SubjectConfirmationData Recipient='" + ACS + "' "
+                + "NotOnOrAfter='2026-10-09T00:05:00Z'/></a:SubjectConfirmation>";
+        String early = original.replace("00:05:00Z", "00:01:10Z");
+        String future = original.replace("NotOnOrAfter='2026-10-09T00:05:00Z'",
+                "NotBefore='2026-10-09T00:01:20Z' "
+                        + "NotOnOrAfter='2026-10-09T00:01:50Z'");
+        String xml = SamlResponseSemanticsTests.BASE.replace(" InResponseTo='_request'", "")
+                .replace(original, early + future);
+        SamlPostBindingMessage message = unsolicitedMessage(
+                SamlResponseSemanticsTests.signedXml(xml, true, false, key.getPrivate()));
+
+        assertInstanceOf(SamlAuthenticationResult.Succeeded.class,
+                sp.completeUnsolicitedAuthenticationResult(message, idp));
+        now.set(Instant.parse("2026-10-09T00:01:21Z"));
+        assertEquals(SamlAuthenticationResult.Reason.REPLAYED,
+                assertInstanceOf(SamlAuthenticationResult.Rejected.class,
+                        sp.completeUnsolicitedAuthenticationResult(message, idp)).getReason());
     }
 
     @Test void signedAttributesAndSessionFieldsAreReleasedTogether() throws Exception {

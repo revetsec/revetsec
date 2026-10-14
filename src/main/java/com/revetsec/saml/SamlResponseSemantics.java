@@ -372,11 +372,12 @@ final class SamlResponseSemantics {
             if (data.hasAttributeNS(null, "NotBefore")
                     && (notBefore == null || !notBefore.isBefore(end))) continue;
             Instant adjustedStart = notBefore == null ? null : minus(notBefore, expected.skew());
-            if (adjustedEnd != null && now.isBefore(adjustedEnd)
-                    && (notBefore == null || (adjustedStart != null && !now.isBefore(adjustedStart)))) {
-                valid = true;
-                if (maximumEnd == null || end.isAfter(maximumEnd)) maximumEnd = end;
-            }
+            if (adjustedEnd == null || (notBefore != null && adjustedStart == null)) continue;
+            // A future bound confirmation can become valid after the first replay mark expires.
+            // Retain the assertion ID through every usable confirmation window.
+            if (maximumEnd == null || end.isAfter(maximumEnd)) maximumEnd = end;
+            if (now.isBefore(adjustedEnd)
+                    && (adjustedStart == null || !now.isBefore(adjustedStart))) valid = true;
         }
         return valid ? maximumEnd : null;
     }

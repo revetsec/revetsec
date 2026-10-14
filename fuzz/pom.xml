@@ -491,6 +491,7 @@
 						<include>com/revetsec/FuzzSeedLayoutTests.java</include>
 						<include>com/revetsec/FuzzSeedProvenanceTests.java</include>
 						<include>com/revetsec/FuzzNullabilityContractTests.java</include>
+						<include>com/revetsec/scim/*SeedProvenanceTests.java</include>
 					</includes>
 					<failIfNoTests>true</failIfNoTests>
 					<systemPropertyVariables>

@@ -39,7 +39,7 @@ script with the same JAVA_HOME and local repository. It fails unless:
    the installed artifact from the same local repository: its runtimeClasspath and
    compileClasspath are exactly that JAR, and the Revetsec component has no dependency;
 6. each consumer runs on the class path, resolves the automatic module com.revetsec, and
-   calls the public API of com.revetsec, com.revetsec.json, com.revetsec.jose, com.revetsec.oauth and com.revetsec.oidc:
+   calls the public API groups listed in PUBLIC_API_CALLS, including the exported SCIM types:
    PackagedConsumer prints its public-api= line only after every call behaved as
    documented. Both consumers compile it with warnings as errors against nothing but the
    Revetsec JAR, so the build proves the published signatures resolve without the
@@ -84,7 +84,7 @@ PUBLIC_API_LINE_PREFIX = "public-api="
 # The groups of public API checks PackagedConsumer makes, in order; its public-api= line names each.
 PUBLIC_API_CALLS = ("com.revetsec.json", "StateSealer", "OutboundUriPolicy", "com.revetsec.jose",
                     "com.revetsec.oauth", "com.revetsec.oidc", "com.revetsec.oauth.server",
-                    "com.revetsec.saml", "com.revetsec.webauthn")
+                    "com.revetsec.saml", "com.revetsec.webauthn", "com.revetsec.scim")
 MAVEN_CONSUMER_SOURCES = ("pom.xml", "src")
 GRADLE_CONSUMER_SOURCES = ("build.gradle", "settings.gradle", "src")
 

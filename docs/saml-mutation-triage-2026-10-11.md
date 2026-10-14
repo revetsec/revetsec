@@ -828,3 +828,92 @@ classification is now 77 sealed-result/provider-fault, 28
 diagnostic/observer, 19 accessor/factory, and 16 semantic/shape identities.
 These 140 SAML and 22 XML actions remain declared coverage limits, not
 assertion kills or proven equivalents.
+
+## 2026-10-13 post-hosted bearer replay finding and repair
+
+The exact old-source `SamlResponseSemantics.validBearerEnd` mutation at line
+378 (`NegateConditionalsMutator`, index 202/block 63) was previously
+`NO_COVERAGE`. The new
+`SamlResponseSemanticsTests.laterBearerConfirmationKeepsReplayMarkedAfterEarlierConfirmationExpires`
+assertion killed it in an isolated Corretto 21 PIT run. Investigation of that
+boundary then found a separate real defect through the public
+`SamlServiceProvider.completeUnsolicitedAuthenticationResult` API on pushed
+source `eccaa18743bc2efc0287c171a7e027139e0e9eef`.
+
+A single signed Response without `InResponseTo` or RelayState carried two
+bound bearer confirmations with zero clock skew: A ended at 00:01:10; B had
+`NotBefore` 00:01:20 and ended at 00:01:50. The first admission at 00:01:00
+returned `Succeeded`. At 00:01:21, the **same signed Response** returned
+`Succeeded` again instead of `Rejected(REPLAYED)`. The failing-before public
+regression is retained at
+`/private/tmp/revetsec-rc2-bearer-public-failing-before.log`. The old replay
+mark expired at A's end because `validBearerEnd` considered only
+confirmations valid at first admission; B became usable after the mark was
+gone. This is a reproduced replay acceptance, not an inferred mutation risk.
+
+The working-tree repair in `SamlResponseSemantics.validBearerEnd` still
+requires at least one bound bearer confirmation to be valid **now**, but
+retains the replay mark through the latest end of every structurally valid,
+bound bearer window. The final cutoff remains the minimum of assertion-age
+end, maximum bearer end and any Conditions end, plus permitted clock skew.
+The public unsolicited-login regression and a semantics regression now pin
+the disjoint-window case and reject a future-only confirmation at first
+admission. Post-fix focused Corretto 17 and 21 runs passed 55 tests each;
+broader Corretto 17 SAML/XML/threat-model tests passed 323, and policy and
+nullability checks passed 11. A fixed-source targeted Corretto 21 PIT run
+enumerated 337 `NegateConditionalsMutator` actions: 332 killed, four
+uncovered, and one preexisting survivor. The moved maximum-end conditional
+was killed. These are scoped local results, not a full-package PIT rerun.
+
+The 3,175-action composite above remains a dated result on its stated earlier
+production source. The old exact mutation's kill must not be added to those
+counts as if it were a same-source continuation after this production change.
+The hosted [differential CI run](https://github.com/revetsec/revetsec/actions/runs/38456477929)
+and [Shibboleth capture run](https://github.com/revetsec/revetsec/actions/runs/38456503172)
+passed on pushed SHA `eccaa18743bc2efc0287c171a7e027139e0e9eef`, before
+this repair. RC-2 remains **OPEN**; after the owner pushes the repair, the
+hosted checks must be rerun on that new revision. The full fixed-source PIT
+receipt below completes the local survivor-disposition check; full CI and
+same-revision hosted evidence remain open.
+
+## 2026-10-13 full fixed-source SAML/XML PIT receipt
+
+A complete Corretto 21 PIT run covered `saml.*` and `internal.xml.*` on the
+working tree based on pushed commit
+`eccaa18743bc2efc0287c171a7e027139e0e9eef`, with the bearer replay
+production fix and its SAML test/documentation overlay. It generated **3,176**
+mutations. These are fixed-source counts, not arithmetic updates to the
+earlier 3,175-action composite:
+
+| Package | Generated | `KILLED` | `SURVIVED` | `NO_COVERAGE` | `TIMED_OUT` |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `saml.*` | 2,509 | 2,294 | 78 | 136 | 1 |
+| `internal.xml.*` | 667 | 610 | 35 | 22 | 0 |
+| **Combined** | **3,176** | **2,904** | **113** | **158** | **1** |
+
+All 113 survivors are exact identities with prior individual source
+dispositions; no new survivor appeared. The one timeout is the same detected
+`SamlPostBindingDecoder.validQuery` loop action, which PIT counts as detected
+in its aggregate display (2,905 detected versus 2,904 assertion kills).
+All 158 uncovered actions belong to the exact previously reviewed subset;
+they remain declared coverage limits, not kills or proven equivalents. Their
+disjoint breakdown is 74 SAML fault/result, 28 diagnostic/observer, 19
+accessor/factory, 15 semantic/shape and 22 XML actions. The repaired source
+therefore meets RC-2's local **no unjustified survivors** PIT criterion, with
+those coverage limits visible.
+
+The exact-source comparison found six new `validBearerEnd` conditionals
+`KILLED` and three former SP `NO_COVERAGE` identities now `KILLED`. The
+rewrite removed five old identities (four prior kills and one uncovered);
+no old kill regressed. This is a new complete source-bound run, so the
+old-source `validBearerEnd` mutation kill described above is not separately
+added to it. The raw XML report has SHA-256
+`627990e8ba6e9eadf76fc5b5b67faf70d0fab5965a52b9198d0792bb740551ac`;
+the exact-identity comparison JSON has SHA-256
+`8b72d299a687df034e87416f5151a78a089b3c6d0ba5534ad5ffb1663e024d7b`.
+
+This is local evidence on unpushed production bytes. RC-2 remains **OPEN**
+pending the owner push, a green full CI run, and differential and Shibboleth
+hosted reruns on the same repaired revision. The earlier hosted PASS receipts
+remain bound to `eccaa18743bc2efc0287c171a7e027139e0e9eef` and do not
+qualify the changed bearer logic.

@@ -26,7 +26,7 @@ Everything `public` or `protected` in the exported packages of the `revetsec` ar
 
 ### Public types so far
 
-Milestone M1 (foundations) added the first public types, M2 added `com.revetsec.jose`, M3 added `com.revetsec.oauth`, M4 added `com.revetsec.oidc`, and M5 added resource-server protocol helpers. M6 added RSA signing and client authentication. The SAML service-provider API is present and remains pre-release; SCIM schema/resource/query/response primitives are present; PATCH and qualification follow. The table is a package overview, not an exhaustive current member inventory.
+Milestone M1 (foundations) added the first public types, M2 added `com.revetsec.jose`, M3 added `com.revetsec.oauth`, M4 added `com.revetsec.oidc`, and M5 added resource-server protocol helpers. M6 added RSA signing and client authentication. The SAML service-provider API is present and remains pre-release; SCIM schema/resource/query/response primitives, ordered PATCH and membership reduction are present; evaluator and interoperability qualification follow. The table is a package overview, not an exhaustive current member inventory.
 
 | Package | Public types | Count |
 | --- | --- | --- |
@@ -101,20 +101,22 @@ The SAML service provider's [saml2int SP checklist and deviations](docs/compatib
 
 The SAML SP matrix below records results through 2026-10-13. These are dated
 test-partner observations. The imported Shibboleth fixtures are committed in
-`33bbac01a5c29f0f512cdaf4545f18e6295feb0d`; hosted differential and
-Shibboleth checks on the final pushed source remain pending. The scripted
-partner and Keycloak are gating legs. SimpleSAMLphp and Shibboleth are
-advisory evidence with in-tree offline replay fixtures.
+`33bbac01a5c29f0f512cdaf4545f18e6295feb0d`; hosted checks
+subsequently ran on `eccaa18743bc2efc0287c171a7e027139e0e9eef`.
+The scripted partner and Keycloak are gating legs. SimpleSAMLphp and
+Shibboleth are advisory evidence with in-tree offline replay fixtures.
 
 | SAML partner | Observed behavior | Limits |
 |---|---|---|
 | Scripted IdP (pinned libxmlsec1/signxml image), gating | On 2026-10-13, all 17 `ScriptedIdpSsoIT` cases passed on an isolated `33bbac0` source snapshot with zero skips: signed browser SSO, encryption, metadata and Redirect logout. Seven live libxmlsec differential cases passed separately. | Our test partner supplies hostile variants; it is not an independent product. |
-| Keycloak 26.7.4, gating | On 2026-10-13, the digest-pinned local container passed all 3 `KeycloakSamlIT` methods on core commit `33bbac01a5c29f0f512cdaf4545f18e6295feb0d`, with zero skips: SP Redirect login, explicitly enabled IdP-initiated login, and signed IdP-initiated logout. | These cases do not establish every Keycloak encryption or SLO configuration. Final-source hosted integration remains separate. |
-| Shibboleth IdP 5.2.3, dispatch capture | [GitHub Actions run 38337905483](https://github.com/revetsec/revetsec/actions/runs/38337905483) captured GCM and signed-Response CBC; hosted replay passed all six required methods with zero skips. The supplied artifact ZIP SHA-256 `99d922fb2c00124cf9f80f55f9f90dd6560817fad55867f148ebee7eb25d1ddc` and all imported capture-file hashes matched its manifest. The same six methods passed in local offline replay after the eight-key rollover regression. | The CBC profile requires a connection-specific opt-in and metadata variant. A final-source hosted rerun remains; the [strict Burp pass](docs/pentest/2026-10-13.md) and [selected ZAP pass](docs/pentest/2026-10-13-zap.md) are complete locally. |
+| Keycloak 26.7.4, gating | On 2026-10-13, the digest-pinned local container passed all 3 `KeycloakSamlIT` methods on core commit `33bbac01a5c29f0f512cdaf4545f18e6295feb0d`, with zero skips: SP Redirect login, explicitly enabled IdP-initiated login, and signed IdP-initiated logout. All three also passed with zero skips in the later [hosted integration job](https://github.com/revetsec/revetsec/actions/runs/38456477929) on `eccaa18743bc2efc0287c171a7e027139e0e9eef`. | These cases do not establish every Keycloak encryption or SLO configuration. |
+| Shibboleth IdP 5.2.3, dispatch capture | [GitHub Actions run 38337905483](https://github.com/revetsec/revetsec/actions/runs/38337905483) captured GCM and signed-Response CBC; hosted replay passed all six required methods with zero skips. The supplied artifact ZIP SHA-256 `99d922fb2c00124cf9f80f55f9f90dd6560817fad55867f148ebee7eb25d1ddc` and all imported capture-file hashes matched its manifest. The same six methods passed in local offline replay after the eight-key rollover regression. A fresh [capture run 38456503172](https://github.com/revetsec/revetsec/actions/runs/38456503172) succeeded on `eccaa18743bc2efc0287c171a7e027139e0e9eef`: six required replay methods passed with zero skips, and an independent local offline replay of the downloaded artifact also passed six of six. | The CBC profile requires a connection-specific opt-in and metadata variant. The [strict Burp pass](docs/pentest/2026-10-13.md) and [selected ZAP pass](docs/pentest/2026-10-13-zap.md) are complete locally. |
 | SimpleSAMLphp 2.5.0, advisory | Fresh signed CBC Response accepted with opt-in; CBC under an unsigned Response rejected; both signed Redirect logout directions accepted (5 replay tests). | The IdP process is restarted between signing modes because it caches SP metadata. |
 | Entra, Okta and Google SAML IdPs | No account-backed capture as of 2026-10-11. | Explicitly unproven; the release plan treats absent accounts as optional rows. |
 
-The [SAML SP guide](docs/saml-sp.md) describes deployment requirements and the supported binding/encryption profiles. Local fuzz, calibrated review, and the bounded Burp and ZAP passes are recorded; PIT and final-source hosted differential/capture evidence still gate RC-2.
+The [CI run 38456477929](https://github.com/revetsec/revetsec/actions/runs/38456477929) passed all 43 required SAML differential methods with zero skips or failures, 57 integration tests with zero skips or failures, and all 7,330 fuzz replay cases. The overall CI run failed in the examples and packaged-consumer jobs, so this is not a green full-CI claim. The Shibboleth artifact `shibboleth-capture-38456503172-1.zip` has SHA-256 `9480f3eb811aafa9c73aacdc9b547b473ee1abf47e27aadd8eee76acf5407d23`; its manifest hashes match all 11 capture files, including GCM and CBC variants.
+
+The [SAML SP guide](docs/saml-sp.md) describes deployment requirements and the supported binding/encryption profiles. Local fuzz, calibrated review, and the bounded Burp and ZAP passes are recorded. A [full fixed-source local PIT run](docs/saml-mutation-triage-2026-10-11.md#2026-10-13-full-fixed-source-samlxml-pit-receipt) meets RC-2's no unjustified survivors criterion, while retaining 158 explicit uncovered limits. The hosted differential and Shibboleth checks above passed on `eccaa18743bc2efc0287c171a7e027139e0e9eef`, before the bearer replay repair. RC-2 remains open pending the owner's push, green full CI and same-revision hosted reruns on the repaired source.
 
 Evidence for a first row exists: Microsoft Entra ID's public key sets and discovery documents, as read on 2026-09-27, are kept as test fixtures, and every key in them loads with none skipped. Verifying a token Entra itself signed needs an Entra account, so that part of the row is unproven so far. Entra's keys carry no `alg`, so a validator that allows two RSA algorithms cannot use them (see [docs/supported-algorithms.md](docs/supported-algorithms.md)).
 

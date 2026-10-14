@@ -19,8 +19,8 @@
  * filters and explicit policies, result-based request parsing, query/page descriptions and prepared responses.
  * <p>
  * Syntax success does not authorize a query. Applications authenticate and authorize callers,
- * execute approved queries and persist candidates atomically. PATCH and the optional evaluator
- * remain separately sequenced implementation work.
+ * execute approved queries and persist candidates atomically. Ordered atomic PATCH and conservative
+ * membership reduction are supported; the optional collection evaluator follows separately.
  * <p>
  * It depends only on {@code com.revetsec.json} and the root package.
  *

@@ -970,3 +970,6 @@ This is bounded syntax evidence; schema binding, policy enforcement, provider
 interoperability, persistence and release qualification remain separate.
 
 M10 adds `com.revetsec.scim.ScimM10FuzzTests`: bounded GET query approval, header-aware create/PUT/SearchRequest bodies with integer lexical preservation, and bounded response/projection/conditional invariants. The 32 authored seeds and their checksums are documented in `src/test/resources/com/revetsec/scim/SCIM-M10-SEEDS.md`. Live qualification uses finite runs and records results separately from interoperability evidence.
+
+
+M11 adds `com.revetsec.scim.ScimM11FuzzTests` with two targets: arbitrary PatchOp bodies through schema binding, ordered application and membership reduction; and a generated member addition followed by a forbidden final operation. Properties check unchanged authoritative snapshots, metadata retention, fixed rejection outcomes and request/result path provenance across strict, Entra and Okta configurations. Its 29 authored synthetic seeds, including empty and malformed input, are inventoried in `src/test/resources/com/revetsec/scim/scim-m11-seeds.sha256` and documented in `SCIM-M11-SEEDS.md`. All SCIM seed provenance checks run with the normal and main-sources-only fuzz builds. Replay and live qualification remain separate evidence.

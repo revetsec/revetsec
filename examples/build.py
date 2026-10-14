@@ -19,6 +19,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 
@@ -36,6 +37,7 @@ def main():
     parser.add_argument("--maven", required=True, type=Path)
     parser.add_argument("--java-home", required=True, type=Path)
     parser.add_argument("--core-source", required=True, type=Path)
+    parser.add_argument("--core-revision", help="Exact core commit for this build; defaults to the recorded pin")
     parser.add_argument("--adapter-source", required=True, type=Path)
     parser.add_argument("--framework-source", type=Path)
     parser.add_argument("--framework-jar", type=Path)
@@ -46,6 +48,9 @@ def main():
             or not (args.java_home / "bin/java").is_file()
             or bool(args.framework_source) == bool(args.framework_jar)):
         parser.error("Use a new absolute work directory, real tools, and one framework source or pinned JAR")
+    if args.core_revision is not None and re.fullmatch(r"[0-9a-f]{40}", args.core_revision) is None:
+        parser.error("The core revision must be a full lowercase commit SHA")
+    pins = {**PINS, "core": {**PINS["core"], "revision": args.core_revision or PINS["core"]["revision"]}}
     args.work.mkdir(parents=True, mode=0o700)
     env = {**os.environ, "JAVA_HOME": str(args.java_home),
            "PATH": str(args.java_home / "bin") + os.pathsep + os.environ["PATH"]}
@@ -64,10 +69,10 @@ def main():
 
     def copy_source(label, source, require_exact=False):
         source = source.resolve()
-        revision = PINS[label]["revision"]
+        revision = pins[label]["revision"]
         actual = subprocess.check_output(["git", "-C", str(source), "rev-parse", "HEAD"], text=True).strip()
         if require_exact and actual != revision:
-            raise RuntimeError("Framework source must match its exact pin")
+            raise RuntimeError(label.capitalize() + " source must match its exact revision")
         # Docs, examples and CI can evolve without changing the pinned library artifact.
         subprocess.run(["git", "-C", str(source), "diff", "--exit-code", revision,
                         "--", "pom.xml", "src/main"], check=True, stdout=subprocess.DEVNULL)
@@ -86,19 +91,18 @@ def main():
         command.append("-o")
     if args.repository_tail:
         command.append("-Dmaven.repo.local.tail=" + str(args.repository_tail.resolve()))
-    core = copy_source("core", args.core_source)
+    core = copy_source("core", args.core_source, require_exact=args.core_revision is not None)
     adapter = copy_source("adapter", args.adapter_source)
     run("core-install", command + ["-DskipTests", "clean", "install"], core)
-    run("adapter-install", command + ["-DskipTests", "clean", "install"], adapter)
     if args.framework_source:
         framework = copy_source("framework", args.framework_source, require_exact=True)
         run("framework-install", command + ["-Dmaven.test.skip=true", "clean", "install"], framework)
         framework_jar = framework / "target/soklet-4.0.0.jar"
-        if sha(framework_jar) != PINS["framework"]["jar_sha256"]:
+        if sha(framework_jar) != pins["framework"]["jar_sha256"]:
             raise RuntimeError("Framework source build does not match its recorded artifact pin")
     else:
         framework_jar = args.framework_jar.resolve()
-        if sha(framework_jar) != PINS["framework"]["jar_sha256"]:
+        if sha(framework_jar) != pins["framework"]["jar_sha256"]:
             raise RuntimeError("Framework JAR checksum does not match the approved source-built artifact")
         framework_path = repo / "com/soklet/soklet/4.0.0"
         framework_path.mkdir(parents=True, exist_ok=True)
@@ -106,7 +110,10 @@ def main():
         (framework_path / "soklet-4.0.0.pom").write_text(
             '<project xmlns="http://maven.apache.org/POM/4.0.0"><modelVersion>4.0.0</modelVersion>'
             '<groupId>com.soklet</groupId><artifactId>soklet</artifactId><version>4.0.0</version></project>')
-    result = {"pins": PINS, "builtWithJava": str(args.java_home), "examples": {}}
+    # The adapter's Soklet dependency is provided scope, but javac still needs
+    # the pinned framework artifact in this private repository.
+    run("adapter-install", command + ["-DskipTests", "clean", "install"], adapter)
+    result = {"pins": pins, "builtWithJava": str(args.java_home), "examples": {}}
     for name in ("barebones-oidc", "playground"):
         example = args.work / "examples" / name
         shutil.copytree(ROOT / "examples" / name, example,
@@ -130,7 +137,7 @@ def main():
         if len(dependencies) != 3 or {x.name for x in dependencies} != expected:
             raise RuntimeError("Unexpected runtime dependencies for " + name)
         framework_dependency = next(x for x in dependencies if x.name.startswith("soklet-"))
-        if sha(framework_dependency) != PINS["framework"]["jar_sha256"]:
+        if sha(framework_dependency) != pins["framework"]["jar_sha256"]:
             raise RuntimeError("Pinned framework artifact changed")
         artifacts = [*dependencies, *sorted((example / "target").glob("*.jar"))]
         result["examples"][name] = {"directory": str(example), "runtimeDependencies": [str(x) for x in dependencies],

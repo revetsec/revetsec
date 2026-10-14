@@ -50,6 +50,7 @@ final class ScimResourceValidation {
     private final @NonNull Set<@NonNull ScimAttributePath> supplied = new LinkedHashSet<>();
     private final @NonNull Map<@NonNull JsonObject,@NonNull Map<@NonNull String,@NonNull Set<@NonNull String>>> explicitNulls=new IdentityHashMap<>();
     private @Nullable ScimError error;
+    private boolean preservePatchNulls;
     ScimResourceValidation(@NonNull ScimResourceType type, @Nullable JsonDocument parsed,
             @NonNull ScimCompatibility compatibility, @NonNull ScimWork work, boolean create) {
         this(type,parsed,compatibility,work,create,new LinkedHashSet<>());
@@ -186,10 +187,18 @@ final class ScimResourceValidation {
         if (!nullNames.isEmpty()) explicitNulls.computeIfAbsent(result,ignored -> new LinkedHashMap<>()).put(prefix,Set.copyOf(nullNames));
         return !enforceRequired || required(definitions, result) ? result : null;
     }
+    /** Normalizes one partial PATCH attribute, preserving explicit-null instructions and wire-number evidence. */
+    @Nullable JsonValue patchValue(@NonNull ScimAttributeDefinition definition, @NonNull JsonValue input,
+            @NonNull String path, boolean scalarElement) {
+        preservePatchNulls=true;
+        if (!spend(1)) return null;
+        if (input instanceof JsonNull) { record(path); return input; }
+        return scalarElement ? scalar(definition,input,path,false) : value(definition,input,path,false);
+    }
     private @Nullable JsonValue value(@NonNull ScimAttributeDefinition definition, @NonNull JsonValue input,
             @NonNull String path, boolean enforceRequired) {
         if (!spend(1)) return null;
-        if (input instanceof JsonNull) { record(path); return null; }
+        if (input instanceof JsonNull) { record(path); return preservePatchNulls ? input : null; }
         if (definition.isMultiValued()) {
             if (!(input instanceof JsonArray array)) { error = ScimError.invalidValueInstance(); return null; }
             List<JsonValue> normalized = new ArrayList<>(); int primaries = 0;

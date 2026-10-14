@@ -299,10 +299,22 @@ The local applicability audit and all 43 comparator methods passed again on
 source in an isolated checkout, and the live Docker libxmlsec oracle: zero
 failures, errors, or skips. The CI method-inventory check also found all 43
 required methods with zero skips. This verifies the committed SAML source
-locally; hosted CI on the final pushed revision remains a separate gate.
+locally. [Hosted CI run 38456477929](https://github.com/revetsec/revetsec/actions/runs/38456477929)
+later ran all 43 required SAML differential methods on
+`eccaa18743bc2efc0287c171a7e027139e0e9eef` with zero skips or failures.
+The overall CI run failed in its examples and packaged-consumer jobs, so this is a result
+for the differential gate, not a green full-CI claim.
+
 The full validly signed void-canonicalization variant was not reproduced; its
 source-backed non-applicability disposition was accepted by the owner and is
 recorded in the manual report. The calibrated reviews, hosted Shibboleth
 replay, owner review of the verifier repair, public SAML API freeze, and
-stricter live-interception manual pass are complete locally. PIT dispositions
-remain open.
+stricter live-interception manual pass have their separately recorded scopes.
+The [Shibboleth run 38456503172](https://github.com/revetsec/revetsec/actions/runs/38456503172)
+also succeeded on the same SHA with six required replay methods and zero
+skips; the downloaded artifact replayed six of six locally. The
+[full fixed-source local PIT run](../docs/saml-mutation-triage-2026-10-11.md#2026-10-13-full-fixed-source-samlxml-pit-receipt)
+meets the no unjustified survivors criterion with 158 uncovered limits. The
+bearer replay repair changed production code after these hosted runs. RC-2
+remains open pending push, green full CI, and another hosted differential and
+capture run on that repaired revision.

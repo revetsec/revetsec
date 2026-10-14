@@ -18,6 +18,13 @@ package com.revetsec;
 
 import com.revetsec.scim.ScimAttributePathParseResult;
 import com.revetsec.scim.ScimError;
+import com.revetsec.scim.ScimPatchParseResult;
+import com.revetsec.scim.ScimPatchApplicationResult;
+import com.revetsec.scim.ScimMembershipPatchResult;
+import com.revetsec.scim.ScimPatchOperation;
+import com.revetsec.scim.ScimPatchRequest;
+import com.revetsec.scim.ScimPatchResult;
+import com.revetsec.scim.ScimMembershipPatch;
 import com.revetsec.scim.ScimQueryParseResult;
 import com.revetsec.scim.ScimResourceParseResult;
 import com.revetsec.scim.ScimAttributeSelectionResult;
@@ -48,7 +55,7 @@ final class ScimSyntaxContractTests {
     void syntaxOutcomesHaveClosedConstructionAndImmutablePayloads() {
         for (Class<?> base : List.of(ScimFilterParseResult.class, ScimAttributePathParseResult.class,
                 ScimQueryParseResult.class, ScimResourceParseResult.class, ScimAttributeSelectionResult.class,
-                ScimResponseResult.class, ScimContentTypeResult.class, ScimIfMatchResult.class, ScimIfNoneMatchResult.class)) {
+                ScimResponseResult.class, ScimContentTypeResult.class, ScimIfMatchResult.class, ScimIfNoneMatchResult.class, ScimPatchParseResult.class, ScimPatchApplicationResult.class, ScimMembershipPatchResult.class)) {
             assertTrue(base.isSealed());
             assertRestrictedConstruction(base);
             for (Class<?> leaf : base.getPermittedSubclasses()) {
@@ -69,7 +76,7 @@ final class ScimSyntaxContractTests {
 
     @Test
     void boundQuerySelectionAndPreparedResponseCannotBeFabricatedByApplications() {
-        for (Class<?> carrier : List.of(ScimQuery.class, ScimAttributeSelection.class, ScimResponse.class))
+        for (Class<?> carrier : List.of(ScimQuery.class, ScimAttributeSelection.class, ScimResponse.class, ScimPatchOperation.class, ScimPatchRequest.class, ScimPatchResult.class, ScimMembershipPatch.class, ScimMembershipPatch.Step.class))
             assertRestrictedConstruction(carrier);
     }
 

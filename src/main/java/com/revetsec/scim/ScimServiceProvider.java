@@ -562,6 +562,120 @@ public final class ScimServiceProvider {
                 () -> new ScimResourceParseResult.Rejected(ScimError.internalErrorInstance()));
     }
 
+    /** Parses ordered PATCH operations after validating original media-type fields.
+     * @param resourceType a registered type
+     * @param contentTypeHeaderValues original physical media-type occurrences
+     * @param body untrusted UTF-8 PatchOp JSON; empty bytes reject
+     * @return a schema-bound request or fixed error
+     * @since 1.0.0
+     */
+    public @NonNull ScimPatchParseResult parsePatchRequestResult(
+            @NonNull ScimResourceType resourceType,
+            @NonNull List<@NonNull String> contentTypeHeaderValues,
+            byte @NonNull [] body) {
+        registered(resourceType);
+        requireNonNull(contentTypeHeaderValues);
+        requireNonNull(body);
+        ScimWork work = work();
+        Set<ScimCompatibilityFeature> used = EnumSet.noneOf(ScimCompatibilityFeature.class);
+        return process(
+                ScimObserver.Operation.PATCH_PARSE,
+                used,
+                () -> {
+                    if (!serviceProviderConfig.isPatchSupported())
+                        return new ScimPatchParseResult.Rejected(ScimError.forbiddenInstance());
+                    ScimContentTypeResult media = media(contentTypeHeaderValues, work);
+                    if (media instanceof ScimContentTypeResult.Rejected rejected)
+                        return new ScimPatchParseResult.Rejected(rejected.getError());
+                    Body parsed = parse(body, work);
+                    if (parsed.error != null)
+                        return new ScimPatchParseResult.Rejected(parsed.error);
+                    return ScimPatchParsing.parse(resourceType, requireNonNull(parsed.document),
+                            compatibility, limits, work, semanticContext, used);
+                },
+                () -> new ScimPatchParseResult.Rejected(ScimError.internalErrorInstance()));
+    }
+
+    /** Parses PATCH bytes whose transport framing and media type were already validated.
+     * @param resourceType a registered type
+     * @param body untrusted UTF-8 PatchOp JSON; empty bytes reject
+     * @return a schema-bound request or fixed error
+     * @since 1.0.0
+     */
+    public @NonNull ScimPatchParseResult parsePatchRequestResult(
+            @NonNull ScimResourceType resourceType, byte @NonNull [] body) {
+        registered(resourceType);
+        requireNonNull(body);
+        ScimWork work = work();
+        Set<ScimCompatibilityFeature> used = EnumSet.noneOf(ScimCompatibilityFeature.class);
+        return process(
+                ScimObserver.Operation.PATCH_PARSE,
+                used,
+                () -> {
+                    if (!serviceProviderConfig.isPatchSupported())
+                        return new ScimPatchParseResult.Rejected(ScimError.forbiddenInstance());
+                    Body parsed = parse(body, work);
+                    if (parsed.error != null)
+                        return new ScimPatchParseResult.Rejected(parsed.error);
+                    return ScimPatchParsing.parse(resourceType, requireNonNull(parsed.document),
+                            compatibility, limits, work, semanticContext, used);
+                },
+                () -> new ScimPatchParseResult.Rejected(ScimError.internalErrorInstance()));
+    }
+
+    /** Applies every ordered operation to an immutable candidate, publishing only after final validation.
+     * Applications authorize attempted and effective paths and persist the candidate atomically.
+     * @param current authoritative resource from the application's transaction
+     * @param patch schema-bound request from this semantic registration
+     * @return a complete candidate with change/provenance paths or fixed error
+     * @since 1.0.0
+     */
+    public @NonNull ScimPatchApplicationResult applyPatchResult(
+            @NonNull ScimResource current, @NonNull ScimPatchRequest patch) {
+        requireNonNull(current);
+        requireNonNull(patch);
+        registered(current.getResourceType());
+        ScimWork work = work();
+        Set<ScimCompatibilityFeature> used = EnumSet.noneOf(ScimCompatibilityFeature.class);
+        return process(
+                ScimObserver.Operation.PATCH_APPLY,
+                used,
+                () -> {
+                    ScimStringMatching matching = stringMatching;
+                    if (!serviceProviderConfig.isPatchSupported() || matching == null)
+                        return new ScimPatchApplicationResult.Rejected(ScimError.forbiddenInstance());
+                    if (!associated(current) || !associated(patch)
+                            || !same(current.getResourceType(), patch.getResourceType()))
+                        return new ScimPatchApplicationResult.Rejected(ScimError.invalidValueInstance());
+                    return ScimPatchEngine.apply(current, patch, compatibility, matching, work,
+                            semanticContext, used);
+                },
+                () -> new ScimPatchApplicationResult.Rejected(ScimError.internalErrorInstance()));
+    }
+
+    /** Reduces supported standard Group membership operations into ordered ID steps without reading storage.
+     * Metadata-dependent operations require full evaluation. The application executes all steps and the
+     * remainder under one authorization decision and transaction/version predicate.
+     * @param patch schema-bound request from this semantic registration
+     * @return ordered steps, full-evaluation requirement or fixed error
+     * @since 1.0.0
+     */
+    public @NonNull ScimMembershipPatchResult reduceMembershipPatchResult(@NonNull ScimPatchRequest patch) {
+        requireNonNull(patch);
+        ScimWork work = work();
+        return process(
+                ScimObserver.Operation.MEMBERSHIP_REDUCE,
+                Set.of(),
+                () -> {
+                    if (!serviceProviderConfig.isPatchSupported())
+                        return new ScimMembershipPatchResult.Rejected(ScimError.forbiddenInstance());
+                    if (!associated(patch))
+                        return new ScimMembershipPatchResult.Rejected(ScimError.invalidValueInstance());
+                    return ScimMembershipReduction.reduce(patch, work);
+                },
+                () -> new ScimMembershipPatchResult.Rejected(ScimError.internalErrorInstance()));
+    }
+
     /** Encodes an authoritative ID as one path segment beneath the trusted type endpoint.
      * @param resourceType a registered type
      * @param authoritativeId application-assigned identifier
@@ -630,6 +744,26 @@ public final class ScimServiceProvider {
         return response(created, suppliedPaths, selection, true, 201);
     }
 
+    /** Prepares a persisted PATCH candidate using actually supplied canonical write paths.
+     * The resource type's default is used unless either projection parameter was supplied, which
+     * forces status 200. Bodyless responses retain authoritative ETag and bounded headers.
+     * @param persistedCandidate persisted application-assigned resource
+     * @param suppliedPaths actually supplied canonical paths from PATCH application
+     * @param selection bound response projection
+     * @return a bounded prepared response or fixed error
+     * @since 1.0.0
+     */
+    public @NonNull ScimResponseResult patchResponseResult(
+            @NonNull ScimResource persistedCandidate,
+            @NonNull Set<@NonNull ScimAttributePath> suppliedPaths,
+            @NonNull ScimAttributeSelection selection) {
+        requireNonNull(persistedCandidate);
+        requireNonNull(selection);
+        int status = persistedCandidate.getResourceType().isPatchResponseNoContent()
+                && !selection.isExplicit() ? 204 : 200;
+        return response(persistedCandidate, suppliedPaths, selection, true, status);
+    }
+
     private @NonNull ScimResponseResult response(
             @NonNull ScimResource resource,
             @NonNull Set<@NonNull ScimAttributePath> supplied,
@@ -651,6 +785,8 @@ public final class ScimServiceProvider {
                             || !same(resource.getResourceType(), selection.getResourceType())
                             || !supplied(resource.getResourceType(), supplied, work))
                         return responseError(ScimError.invalidValueInstance());
+                    if (status == 204)
+                        return ScimResponses.prepare(limits, 204, null, etag(resource), work);
                     JsonObject body =
                             ScimResources.project(resource, selection, supplied, write, work);
                     if (body == null) return responseError(ScimError.responseTooLargeInstance());
@@ -810,19 +946,37 @@ public final class ScimServiceProvider {
                     ScimAttributeSelection selection =
                             ((ScimAttributeSelectionResult.Succeeded) selected)
                                     .getAttributeSelection();
+                    if (selector != null) {
+                        long cap =
+                                kind.equals("schema")
+                                        ? Limits.SCIM_SCHEMA_ID_LENGTH.getCap()
+                                        : Limits.SCIM_ATTRIBUTE_NAME_LENGTH.getCap();
+                        if (selector.length() > cap)
+                            return responseError(ScimError.requestTooLargeInstance());
+                        if (!work.spend(selector.length()))
+                            return responseError(ScimError.responseTooLargeInstance());
+                    }
                     List<JsonObject> candidates = new ArrayList<>();
-                    if (kind.equals("config"))
+                    if (kind.equals("config")) {
+                        if (!configurationWork(work))
+                            return responseError(ScimError.responseTooLargeInstance());
                         candidates.add(ScimDiscovery.configuration(serviceProviderConfig));
-                    else if (kind.equals("type") || kind.equals("types")) {
+                    } else if (kind.equals("type") || kind.equals("types")) {
                         for (ScimResourceType type : resourceTypes)
-                            if (selector == null || type.getName().equals(selector))
+                            if (selector == null || type.getName().equals(selector)) {
+                                if (!typeWork(type, work))
+                                    return responseError(ScimError.responseTooLargeInstance());
                                 candidates.add(ScimDiscovery.resourceType(type));
+                            }
                     } else
                         for (ScimSchema schema : schemas)
                             if (selector == null
                                     || AsciiCase.fold(schema.getId())
-                                            .equals(AsciiCase.fold(selector)))
+                                            .equals(AsciiCase.fold(selector))) {
+                                if (!schemaWork(schema, work))
+                                    return responseError(ScimError.responseTooLargeInstance());
                                 candidates.add(ScimDiscovery.schema(schema));
+                            }
                     if (candidates.isEmpty() && selector != null)
                         return responseError(ScimError.notFoundInstance());
                     List<JsonValue> values = new ArrayList<>();
@@ -850,12 +1004,75 @@ public final class ScimServiceProvider {
                 () -> responseError(ScimError.internalErrorInstance()));
     }
 
+    // Reserve all descriptor visits and text before allocating their JSON representations.
+    private static boolean schemaWork(@NonNull ScimSchema schema, @NonNull ScimWork work) {
+        if (!work.spend(
+                (long) schema.getId().length()
+                        + schema.getName().length()
+                        + schema.getDescription().orElse("").length())) return false;
+        for (ScimAttributeDefinition definition : schema.getAttributes())
+            if (!definitionWork(definition, work)) return false;
+        return true;
+    }
+
+    private static boolean definitionWork(
+            @NonNull ScimAttributeDefinition definition, @NonNull ScimWork work) {
+        // Covers emitted facet nodes as well as the subsequent immutable-model scans.
+        if (!work.spend(
+                16L
+                        + definition.getName().length()
+                        + definition.getDescription().orElse("").length())) return false;
+        for (String value : definition.getCanonicalValues())
+            if (!work.spend(2L + value.length())) return false;
+        for (String value : definition.getReferenceTypes())
+            if (!work.spend(2L + value.length())) return false;
+        for (ScimAttributeDefinition child : definition.getSubAttributes())
+            if (!definitionWork(child, work)) return false;
+        return true;
+    }
+
+    private static boolean typeWork(@NonNull ScimResourceType type, @NonNull ScimWork work) {
+        if (!work.spend(
+                16L
+                        + type.getName().length()
+                        + type.getEndpoint().length()
+                        + type.getSchema().getId().length()
+                        + type.getId().orElse("").length()
+                        + type.getDescription().orElse("").length())) return false;
+        for (ScimSchemaExtension extension : type.getSchemaExtensions())
+            if (!work.spend(4L + extension.getSchema().getId().length())) return false;
+        return true;
+    }
+
+    private boolean configurationWork(@NonNull ScimWork work) {
+        if (!work.spend(
+                32L
+                        + serviceProviderConfig
+                                .getDocumentationUri()
+                                .map(URI::toString)
+                                .orElse("")
+                                .length())) return false;
+        for (ScimAuthenticationScheme scheme : serviceProviderConfig.getAuthenticationSchemes())
+            if (!work.spend(
+                    8L
+                            + scheme.getType().length()
+                            + scheme.getName().length()
+                            + scheme.getDescription().length()
+                            + scheme.getSpecUri().map(URI::toString).orElse("").length()
+                            + scheme.getDocumentationUri().map(URI::toString).orElse("").length()))
+                return false;
+        return true;
+    }
+
     /** Returns the fixed bounded no-content response.
      * @return a bodyless 204 response
      * @since 1.0.0
      */
     public @NonNull ScimResponse noContentResponse() {
-        return process(ScimObserver.Operation.RESPONSE_PREPARE, Set.of(), ScimResponses::noContent,
+        return process(
+                ScimObserver.Operation.RESPONSE_PREPARE,
+                Set.of(),
+                ScimResponses::noContent,
                 () -> ScimResponses.error(ScimError.internalErrorInstance()));
     }
 
@@ -885,7 +1102,10 @@ public final class ScimServiceProvider {
      */
     public @NonNull ScimResponse errorResponse(@NonNull ScimError error) {
         requireNonNull(error);
-        return process(ScimObserver.Operation.RESPONSE_PREPARE, Set.of(), () -> ScimResponses.error(error),
+        return process(
+                ScimObserver.Operation.RESPONSE_PREPARE,
+                Set.of(),
+                () -> ScimResponses.error(error),
                 () -> ScimResponses.error(ScimError.internalErrorInstance()));
     }
 
@@ -983,6 +1203,11 @@ public final class ScimServiceProvider {
                 && same(selection.getSemanticContext(), semanticContext);
     }
 
+    private boolean associated(@NonNull ScimPatchRequest patch) {
+        return registeredIdentity(patch.getResourceType())
+                && same(patch.getSemanticContext(), semanticContext);
+    }
+
     private boolean supplied(
             @NonNull ScimResourceType type,
             @NonNull Set<@NonNull ScimAttributePath> paths,
@@ -1046,16 +1271,22 @@ public final class ScimServiceProvider {
     }
 
     private static ScimObserver.@NonNull Outcome outcome(@NonNull Object result) {
-        if (result instanceof ScimResponse || result instanceof ScimResponseResult.Prepared) return ScimObserver.Outcome.PREPARED;
-        if (result instanceof ScimIfMatchResult.Satisfied)
-            return ScimObserver.Outcome.SATISFIED;
+        if (result instanceof ScimResponse || result instanceof ScimResponseResult.Prepared)
+            return ScimObserver.Outcome.PREPARED;
+        if (result instanceof ScimIfMatchResult.Satisfied) return ScimObserver.Outcome.SATISFIED;
         if (result instanceof ScimIfNoneMatchResult.Proceed) return ScimObserver.Outcome.PROCEED;
         if (result instanceof ScimIfNoneMatchResult.NotModified)
             return ScimObserver.Outcome.NOT_MODIFIED;
-        if (result instanceof ScimContentTypeResult.Accepted || result instanceof ScimFilterParseResult.Succeeded
+        if (result instanceof ScimMembershipPatchResult.RequiresFullEvaluation)
+            return ScimObserver.Outcome.REQUIRES_FULL_EVALUATION;
+        if (result instanceof ScimContentTypeResult.Accepted
+                || result instanceof ScimFilterParseResult.Succeeded
                 || result instanceof ScimQueryParseResult.Succeeded
                 || result instanceof ScimAttributeSelectionResult.Succeeded
-                || result instanceof ScimResourceParseResult.Succeeded)
+                || result instanceof ScimResourceParseResult.Succeeded
+                || result instanceof ScimPatchParseResult.Succeeded
+                || result instanceof ScimPatchApplicationResult.Succeeded
+                || result instanceof ScimMembershipPatchResult.Reduced)
             return ScimObserver.Outcome.SUCCEEDED;
         return ScimObserver.Outcome.REJECTED;
     }

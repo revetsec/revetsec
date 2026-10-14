@@ -18,6 +18,7 @@ package com.revetsec.saml;
 
 import com.revetsec.internal.xml.SecureXmlParser;
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
@@ -44,6 +45,7 @@ import java.security.PrivateKey;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.Base64;
 import java.util.HashSet;
@@ -51,6 +53,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -1082,6 +1085,70 @@ final class SamlResponseSemanticsTests {
                 validate(BASE, true, false, key, expected(indeterminate)));
     }
 
+    @Test void laterBearerConfirmationKeepsReplayMarkedAfterEarlierConfirmationExpires()
+            throws Exception {
+        KeyPair key = rsa();
+        String later = "<a:SubjectConfirmation Method='urn:oasis:names:tc:SAML:2.0:cm:bearer'>"
+                + "<a:SubjectConfirmationData Recipient='" + ACS + "' InResponseTo='_request' "
+                + "NotOnOrAfter='2026-10-09T00:05:00Z'/></a:SubjectConfirmation>";
+        String earlier = later.replace("00:05:00Z", "00:02:00Z");
+        String xml = BASE.replace(later, earlier + later);
+        SamlInboundResponse.SignaturesVerified signed = verified(xml, true, false, key);
+
+        AtomicReference<Instant> now = new AtomicReference<>(Instant.parse(NOW));
+        Clock clock = mutableClock(now);
+        SamlReplayCache replay = InMemorySamlReplayCache.withLimit(clock, 4);
+        SamlResponseSemantics.Expectation expectation = expected(replay, clock);
+        SamlResponseSemantics.Accepted first = assertInstanceOf(
+                SamlResponseSemantics.Accepted.class,
+                SamlResponseSemantics.validate(signed, expectation));
+        assertEquals(Instant.parse("2026-10-09T00:08:00Z"), first.expiresAt());
+
+        // Both the assertion age and the later bearer confirmation are still valid here.
+        now.set(Instant.parse("2026-10-09T00:05:30Z"));
+        assertInstanceOf(SamlResponseSemantics.Accepted.class,
+                SamlResponseSemantics.validate(signed,
+                        expected(InMemorySamlReplayCache.withLimit(clock, 4), clock)));
+        assertEquals(SamlResponseSemantics.Reason.REPLAYED,
+                rejected(SamlResponseSemantics.validate(signed, expectation)));
+    }
+
+    @Test void futureBearerConfirmationCannotReopenAnUnsolicitedAssertionAfterReplayExpiry()
+            throws Exception {
+        KeyPair key = rsa();
+        String original = "<a:SubjectConfirmation Method='urn:oasis:names:tc:SAML:2.0:cm:bearer'>"
+                + "<a:SubjectConfirmationData Recipient='" + ACS + "' "
+                + "NotOnOrAfter='2026-10-09T00:05:00Z'/></a:SubjectConfirmation>";
+        String early = original.replace("00:05:00Z", "00:01:10Z");
+        String future = original.replace("NotOnOrAfter='2026-10-09T00:05:00Z'",
+                "NotBefore='2026-10-09T00:01:20Z' "
+                        + "NotOnOrAfter='2026-10-09T00:01:50Z'");
+        String xml = BASE.replace(" InResponseTo='_request'", "")
+                .replace(original, early + future);
+        SamlInboundResponse.SignaturesVerified signed = verified(xml, true, false, key, null);
+
+        AtomicReference<Instant> now = new AtomicReference<>(Instant.parse(NOW));
+        Clock clock = mutableClock(now);
+        SamlReplayCache replay = InMemorySamlReplayCache.withLimit(clock, 4);
+        SamlResponseSemantics.Expectation expectation = unsolicitedExpected(replay, clock);
+        assertEquals(SamlResponseSemantics.Reason.CONFIRMATION,
+                rejected(SamlResponseSemantics.validate(
+                        verified(xml.replace(early + future, future), true, false, key, null),
+                        expectation)));
+        SamlResponseSemantics.Accepted first = assertInstanceOf(
+                SamlResponseSemantics.Accepted.class,
+                SamlResponseSemantics.validate(signed, expectation));
+
+        // The later confirmation becomes valid before the two-minute unsolicited age limit closes.
+        now.set(Instant.parse("2026-10-09T00:01:21Z"));
+        assertInstanceOf(SamlResponseSemantics.Accepted.class,
+                SamlResponseSemantics.validate(signed,
+                        unsolicitedExpected(InMemorySamlReplayCache.withLimit(clock, 4), clock)));
+        assertEquals(SamlResponseSemantics.Reason.REPLAYED,
+                rejected(SamlResponseSemantics.validate(signed, expectation)));
+        assertEquals(Instant.parse("2026-10-09T00:01:50Z"), first.expiresAt());
+    }
+
     @Test void replayKeysSeparateTenantPartnerAssertionAndFieldBoundaries() throws Exception {
         KeyPair key = rsa();
         Set<String> keys = new HashSet<>();
@@ -1239,16 +1306,27 @@ final class SamlResponseSemanticsTests {
     private static SamlResponseSemantics.@NonNull Result validate(@NonNull String xml, boolean signResponse,
             boolean signAssertion, @NonNull KeyPair key, SamlResponseSemantics.@NonNull Expectation expectation)
             throws Exception {
+        return SamlResponseSemantics.validate(verified(xml, signResponse, signAssertion, key), expectation);
+    }
+
+    private static SamlInboundResponse.@NonNull SignaturesVerified verified(@NonNull String xml,
+            boolean signResponse, boolean signAssertion, @NonNull KeyPair key) throws Exception {
+        return verified(xml, signResponse, signAssertion, key, "relay");
+    }
+
+    private static SamlInboundResponse.@NonNull SignaturesVerified verified(@NonNull String xml,
+            boolean signResponse, boolean signAssertion, @NonNull KeyPair key,
+            @Nullable String relayState) throws Exception {
         String signed = signedXml(xml, signResponse, signAssertion, key.getPrivate());
         String encoded = Base64.getEncoder().encodeToString(signed.getBytes(StandardCharsets.UTF_8))
                 .replace("+", "%2B").replace("/", "%2F").replace("=", "%3D");
         SamlInboundResponse.Accepted inbound = assertInstanceOf(SamlInboundResponse.Accepted.class,
-                SamlInboundResponse.parse(("SAMLResponse=" + encoded + "&RelayState=relay")
+                SamlInboundResponse.parse(("SAMLResponse=" + encoded
+                        + (relayState == null ? "" : "&RelayState=" + relayState))
                         .getBytes(StandardCharsets.UTF_8), List.of(MIME), null));
-        SamlInboundResponse.SignaturesVerified verified = assertInstanceOf(
+        return assertInstanceOf(
                 SamlInboundResponse.SignaturesVerified.class,
                 SamlInboundResponse.verifySuccessSignatures(inbound, List.of(key.getPublic())));
-        return SamlResponseSemantics.validate(verified, expectation);
     }
 
     private static SamlResponseSemantics.@NonNull Reason rejected(SamlResponseSemantics.@NonNull Result result) {
@@ -1257,9 +1335,31 @@ final class SamlResponseSemanticsTests {
 
     private static SamlResponseSemantics.@NonNull Expectation expected(
             @NonNull SamlReplayCache cache) {
+        return expected(cache, fixedClock());
+    }
+
+    private static SamlResponseSemantics.@NonNull Expectation expected(
+            @NonNull SamlReplayCache cache, @NonNull Clock clock) {
         return new SamlResponseSemantics.Expectation(SP, "tenant-one", IDP, ACS, "_request", "relay",
-                Instant.parse("2026-10-09T00:10:00Z"), fixedClock(), Duration.ofMinutes(3),
+                Instant.parse("2026-10-09T00:10:00Z"), clock, Duration.ofMinutes(3),
                 Duration.ofMinutes(5), false, List.of(), cache, Duration.ofSeconds(5));
+    }
+
+    private static SamlResponseSemantics.@NonNull Expectation unsolicitedExpected(
+            @NonNull SamlReplayCache cache, @NonNull Clock clock) {
+        return new SamlResponseSemantics.Expectation(SP, "tenant-one", IDP, ACS, null, null,
+                null, clock, Duration.ZERO, Duration.ofMinutes(2), false, List.of(), cache,
+                Duration.ofSeconds(5));
+    }
+
+    private static @NonNull Clock mutableClock(@NonNull AtomicReference<@NonNull Instant> now) {
+        return new Clock() {
+            @Override public @NonNull ZoneId getZone() { return ZoneOffset.UTC; }
+            @Override public @NonNull Clock withZone(@NonNull ZoneId zone) {
+                return Clock.fixed(now.get(), zone);
+            }
+            @Override public @NonNull Instant instant() { return java.util.Objects.requireNonNull(now.get()); }
+        };
     }
 
     private static SamlResponseSemantics.@NonNull Expectation replayExpectation(

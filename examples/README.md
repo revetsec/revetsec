@@ -17,7 +17,7 @@ The examples are outside the core reactor. `pins.json` records already-pushed co
 
 ## Build
 
-Check out the revisions in `pins.json` for the adapter and Soklet framework. A core checkout with unchanged `pom.xml` and `src/main` relative to its pin can supply the core artifact. The builder checks these inputs, copies them into a new private directory and uses its own Maven repository. Optional `--repository-tail` is read-only; `--offline` requires cached build dependencies.
+Check out the revisions in `pins.json` for the adapter and Soklet framework. A core checkout with unchanged `pom.xml` and `src/main` relative to its recorded pin can supply the core artifact for a manual build. CI passes its exact run commit with `--core-revision` so the examples exercise the pushed core under test; the builder requires the source checkout to match that SHA and records it in the result. The builder copies these inputs into a new private directory and uses its own Maven repository. Optional `--repository-tail` is read-only; `--offline` requires cached build dependencies.
 
 ```sh
 python3 examples/build.py --work /absolute/new/example-build \

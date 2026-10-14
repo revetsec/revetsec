@@ -210,6 +210,50 @@ import com.revetsec.webauthn.WebAuthnStoreKey;
 import com.revetsec.webauthn.WebAuthnStoreReadResult;
 import com.revetsec.webauthn.WebAuthnStoreSnapshot;
 import com.revetsec.webauthn.WebAuthnStoreWrite;
+import com.revetsec.scim.ScimAttributeDefinition;
+import com.revetsec.scim.ScimAttributePath;
+import com.revetsec.scim.ScimAttributePathParseResult;
+import com.revetsec.scim.ScimAttributeSelection;
+import com.revetsec.scim.ScimAttributeSelectionResult;
+import com.revetsec.scim.ScimAttributeType;
+import com.revetsec.scim.ScimAuthenticationScheme;
+import com.revetsec.scim.ScimComparisonOperator;
+import com.revetsec.scim.ScimCompatibility;
+import com.revetsec.scim.ScimCompatibilityFeature;
+import com.revetsec.scim.ScimContentTypeResult;
+import com.revetsec.scim.ScimError;
+import com.revetsec.scim.ScimErrorType;
+import com.revetsec.scim.ScimFilter;
+import com.revetsec.scim.ScimFilterLimits;
+import com.revetsec.scim.ScimFilterParseResult;
+import com.revetsec.scim.ScimFilterPolicy;
+import com.revetsec.scim.ScimFilterValue;
+import com.revetsec.scim.ScimFilterVisitor;
+import com.revetsec.scim.ScimIfMatchResult;
+import com.revetsec.scim.ScimIfNoneMatchResult;
+import com.revetsec.scim.ScimLimits;
+import com.revetsec.scim.ScimListPage;
+import com.revetsec.scim.ScimLogicalOperator;
+import com.revetsec.scim.ScimMutability;
+import com.revetsec.scim.ScimObserver;
+import com.revetsec.scim.ScimPaginationConfig;
+import com.revetsec.scim.ScimPaginationMethod;
+import com.revetsec.scim.ScimQuery;
+import com.revetsec.scim.ScimQueryParseResult;
+import com.revetsec.scim.ScimResource;
+import com.revetsec.scim.ScimResourceParseResult;
+import com.revetsec.scim.ScimResourceType;
+import com.revetsec.scim.ScimResponse;
+import com.revetsec.scim.ScimResponseResult;
+import com.revetsec.scim.ScimReturned;
+import com.revetsec.scim.ScimSchema;
+import com.revetsec.scim.ScimSchemaExtension;
+import com.revetsec.scim.ScimServiceProvider;
+import com.revetsec.scim.ScimServiceProviderConfig;
+import com.revetsec.scim.ScimSortOrder;
+import com.revetsec.scim.ScimStringMatchResult;
+import com.revetsec.scim.ScimStringMatching;
+import com.revetsec.scim.ScimUniqueness;
 
 import java.lang.module.ModuleDescriptor;
 import java.lang.module.ModuleFinder;
@@ -415,6 +459,20 @@ public final class PackagedConsumer {
 				WebAuthnStoreReadResult.class, WebAuthnStoreSnapshot.class, WebAuthnStoreWrite.class
 		});
 		calledApi.add("com.revetsec.webauthn");
+		exerciseExportedTypes("com.revetsec.scim", new Class<?>[] {
+				ScimAttributeDefinition.class, ScimAttributePath.class, ScimAttributePathParseResult.class, ScimAttributeSelection.class,
+				ScimAttributeSelectionResult.class, ScimAttributeType.class, ScimAuthenticationScheme.class, ScimComparisonOperator.class,
+				ScimCompatibility.class, ScimCompatibilityFeature.class, ScimContentTypeResult.class, ScimError.class,
+				ScimErrorType.class, ScimFilter.class, ScimFilterLimits.class, ScimFilterParseResult.class,
+				ScimFilterPolicy.class, ScimFilterValue.class, ScimFilterVisitor.class, ScimIfMatchResult.class,
+				ScimIfNoneMatchResult.class, ScimLimits.class, ScimListPage.class, ScimLogicalOperator.class,
+				ScimMutability.class, ScimObserver.class, ScimPaginationConfig.class, ScimPaginationMethod.class,
+				ScimQuery.class, ScimQueryParseResult.class, ScimResource.class, ScimResourceParseResult.class,
+				ScimResourceType.class, ScimResponse.class, ScimResponseResult.class, ScimReturned.class,
+				ScimSchema.class, ScimSchemaExtension.class, ScimServiceProvider.class, ScimServiceProviderConfig.class,
+				ScimSortOrder.class, ScimStringMatchResult.class, ScimStringMatching.class, ScimUniqueness.class
+		});
+		calledApi.add("com.revetsec.scim");
 
 		System.out.println("jar=" + jar);
 		System.out.println("automatic-module-name=" + automaticModuleName);

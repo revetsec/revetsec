@@ -64,9 +64,9 @@ libxmlsec full signed-mutation matrix. Its embedded report check passed against
 all 37 local Surefire results with zero skips. The
 Shibboleth capture workflow now requires all six hosted replay methods,
 including the eight-key rollover case; its report check passed against the
-local six-case replay, and the hosted rerun still awaits the user push. The
-final-source full `internal.xml.*` PIT report has 599 assertion kills, 41
-survivors and 27 no-coverage actions out of 667. The final-source full
+local six-case replay. A later hosted rerun is recorded below. The
+then-reviewed `internal.xml.*` PIT report has 599 assertion kills, 41
+survivors and 27 no-coverage actions out of 667. The then-reviewed full
 `saml.*` report has 2,198 assertion kills, 128 survivors, 174 no-coverage
 actions and two timeouts out of 2,502. The corrected seven-target live fuzz
 campaign completed 237,851,042 executions and 0.6380 measured process CPU
@@ -94,8 +94,39 @@ ACS rejection and a duplicate-SigAlg logout rejection.
 
 A later [hosted Shibboleth capture](../../src/test/resources/fixtures/shibboleth/README.md)
 ran all six required replay methods and imported the GCM and signed-Response
-CBC fixtures. The current checkout includes those fixtures. This hosted receipt
-and the local pentest do not substitute for hosted differential and capture
-checks on the final pushed source. PIT survivor/uncovered/timeout dispositions
-and final-source hosted checks remain RC-2 work. The review findings and
-tests above retain their stated source and tool scope.
+CBC fixtures. The current checkout includes those fixtures. After the owner
+pushed `eccaa18743bc2efc0287c171a7e027139e0e9eef`, [CI run 38456477929](https://github.com/revetsec/revetsec/actions/runs/38456477929)
+passed all 43 required SAML differential methods with zero skips or failures,
+all three Keycloak SAML integration methods, and the 7,330-case fuzz replay.
+The overall CI run failed in the examples and packaged-consumer jobs. On the
+same pushed SHA, [Shibboleth run 38456503172](https://github.com/revetsec/revetsec/actions/runs/38456503172)
+completed successfully: six required methods passed with zero skips, both
+GCM and CBC captures were present, all 11 capture-file hashes matched the
+manifest, and independent offline replay of the downloaded artifact passed
+six of six. The artifact ZIP SHA-256 is
+`9480f3eb811aafa9c73aacdc9b547b473ee1abf47e27aadd8eee76acf5407d23`.
+PIT survivor/uncovered/timeout dispositions remained open at this checkpoint.
+The later fixed-source full run and current RC-2 status are recorded below.
+The review findings and tests above retain their stated source and tool scope.
+
+## Post-hosted replay finding — 2026-10-13
+
+After this review and the hosted checks on
+`eccaa18743bc2efc0287c171a7e027139e0e9eef`, a new public-API
+regression reproduced a replay acceptance with two disjoint bearer
+confirmation windows. The same signed unsolicited Response succeeded at
+00:01:00 and again at 00:01:21 after its first replay mark expired; the second
+result should have been `Rejected(REPLAYED)`. The failing-before evidence and
+the exact pre-fix mutation are recorded in the
+[SAML mutation ledger](../saml-mutation-triage-2026-10-11.md#2026-10-13-post-hosted-bearer-replay-finding-and-repair).
+The working-tree fix retains the replay mark through every structurally
+valid bound bearer window while requiring one to be valid at admission.
+Focused Corretto 17 and 21 tests pass 55 each, and a targeted fixed-source
+PIT run kills the moved maximum-end conditional. A subsequent
+[full fixed-source local PIT run](../saml-mutation-triage-2026-10-11.md#2026-10-13-full-fixed-source-samlxml-pit-receipt)
+generated 3,176 actions: 2,904 assertion kills, 113 individually
+source-dispositioned survivors, 158 uncovered limits, and one detected
+timeout. It meets RC-2's no unjustified survivors criterion on the repaired
+source. This later finding does not change what the round-1 reviewers
+observed on their reviewed source. RC-2 remains open pending push, green full
+CI and hosted differential and Shibboleth reruns on the repaired revision.

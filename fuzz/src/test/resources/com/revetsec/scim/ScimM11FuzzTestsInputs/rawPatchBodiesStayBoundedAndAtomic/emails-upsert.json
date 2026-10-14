@@ -1,0 +1,1 @@
+{"schemas":["urn:ietf:params:scim:api:messages:2.0:PatchOp"],"Operations":[{"op":"replace","path":"emails[type eq \"home\"].value","value":"home@example.test"}]}

@@ -751,38 +751,234 @@ class ScimM10ProviderTests {
                         .build();
         assertInstanceOf(ScimQueryParseResult.Succeeded.class, throwing.parseQueryResult(USER, ""));
     }
-    @Test void boundedHeaderAndOperationWorkExhaustionReturnsFixedErrors() {
-        ScimServiceProvider p=ScimServiceProvider.builder().baseUri(URI.create("https://example.invalid/")).resourceTypes(List.of(USER))
-                .limits(ScimLimits.builder().maximumWorkUnits(10000).build()).build();
-        assertSame(ScimError.requestTooLargeInstance(),assertInstanceOf(ScimContentTypeResult.Rejected.class,p.validateContentTypeResult(List.of("x".repeat(6000)))).getError());
-        assertSame(ScimError.requestTooLargeInstance(),assertInstanceOf(ScimIfMatchResult.Rejected.class,p.checkIfMatchResult(java.util.Collections.nCopies(65,""),user("1"))).getError());
-        assertSame(ScimError.requestTooLargeInstance(),assertInstanceOf(ScimIfNoneMatchResult.Rejected.class,p.checkIfNoneMatchResult(List.of("x".repeat(6000)),user("1"))).getError());
-        assertSame(ScimError.requestTooLargeInstance(),assertInstanceOf(ScimResourceParseResult.Rejected.class,p.parseResourceResult(USER,bytes(" ".repeat(10001)))).getError());
-        ScimResource huge=ScimResource.withResourceType(USER).document(object("{\"schemas\":[\""+URN+"\"],\"id\":\"1\",\"userName\":\""+"x".repeat(15000)+"\"}")).build();
-        assertSame(ScimError.responseTooLargeInstance(),assertInstanceOf(ScimResponseResult.Rejected.class,p.resourceResponseResult(huge,selection(p,""))).getError());
-        assertSame(ScimError.responseTooLargeInstance(),assertInstanceOf(ScimResponseResult.Rejected.class,p.listResponseResult(ScimListPage.withQuery(query(p,"count=1")).resources(List.of(huge)).totalResults(1L).build())).getError());
-        Set<ScimAttributePath> paths=new java.util.LinkedHashSet<>();
-        for(int index=0;index<1025;index++)paths.add(assertInstanceOf(ScimAttributePathParseResult.Succeeded.class,ScimAttributePath.fromExpressionResult("x"+index)).getAttributePath());
-        assertInstanceOf(ScimResponseResult.Rejected.class,p.replacementResponseResult(user("1"),paths,selection(p,"")));
+
+    @Test
+    void boundedHeaderAndOperationWorkExhaustionReturnsFixedErrors() {
+        ScimServiceProvider p =
+                ScimServiceProvider.builder()
+                        .baseUri(URI.create("https://example.invalid/"))
+                        .resourceTypes(List.of(USER))
+                        .limits(ScimLimits.builder().maximumWorkUnits(10000).build())
+                        .build();
+        assertSame(
+                ScimError.requestTooLargeInstance(),
+                assertInstanceOf(
+                                ScimContentTypeResult.Rejected.class,
+                                p.validateContentTypeResult(List.of("x".repeat(6000))))
+                        .getError());
+        assertSame(
+                ScimError.requestTooLargeInstance(),
+                assertInstanceOf(
+                                ScimIfMatchResult.Rejected.class,
+                                p.checkIfMatchResult(
+                                        java.util.Collections.nCopies(65, ""), user("1")))
+                        .getError());
+        assertSame(
+                ScimError.requestTooLargeInstance(),
+                assertInstanceOf(
+                                ScimIfNoneMatchResult.Rejected.class,
+                                p.checkIfNoneMatchResult(List.of("x".repeat(6000)), user("1")))
+                        .getError());
+        assertSame(
+                ScimError.requestTooLargeInstance(),
+                assertInstanceOf(
+                                ScimResourceParseResult.Rejected.class,
+                                p.parseResourceResult(USER, bytes(" ".repeat(10001))))
+                        .getError());
+        ScimResource huge =
+                ScimResource.withResourceType(USER)
+                        .document(
+                                object(
+                                        "{\"schemas\":[\""
+                                                + URN
+                                                + "\"],\"id\":\"1\",\"userName\":\""
+                                                + "x".repeat(15000)
+                                                + "\"}"))
+                        .build();
+        assertSame(
+                ScimError.responseTooLargeInstance(),
+                assertInstanceOf(
+                                ScimResponseResult.Rejected.class,
+                                p.resourceResponseResult(huge, selection(p, "")))
+                        .getError());
+        assertSame(
+                ScimError.responseTooLargeInstance(),
+                assertInstanceOf(
+                                ScimResponseResult.Rejected.class,
+                                p.listResponseResult(
+                                        ScimListPage.withQuery(query(p, "count=1"))
+                                                .resources(List.of(huge))
+                                                .totalResults(1L)
+                                                .build()))
+                        .getError());
+        Set<ScimAttributePath> paths = new java.util.LinkedHashSet<>();
+        for (int index = 0; index < 1025; index++)
+            paths.add(
+                    assertInstanceOf(
+                                    ScimAttributePathParseResult.Succeeded.class,
+                                    ScimAttributePath.fromExpressionResult("x" + index))
+                            .getAttributePath());
+        assertInstanceOf(
+                ScimResponseResult.Rejected.class,
+                p.replacementResponseResult(user("1"), paths, selection(p, "")));
     }
-    @Test void boundedConfigurationAndCursorWindowCasesHaveExplicitContracts() {
-        assertThrows(IllegalArgumentException.class,()->ScimServiceProvider.builder().resourceTypes(java.util.Collections.nCopies(33,USER)));
-        Map<ScimResourceType,ScimFilterPolicy> policies=new java.util.LinkedHashMap<>();
-        for(int index=0;index<33;index++)policies.put(ScimResourceType.withName("T"+index).endpoint("/T"+index).schema(USER.getSchema()).build(),ScimFilterPolicy.rejectAllInstance());
-        assertThrows(IllegalArgumentException.class,()->ScimServiceProvider.builder().filterPolicies(policies));
-        String maximumBase="https://x/"+"x".repeat(2038);
-        assertThrows(IllegalArgumentException.class,()->ScimServiceProvider.builder().baseUri(URI.create(maximumBase)).resourceTypes(List.of(USER)).build());
-        ScimServiceProvider p=provider();ScimQuery q=query(p,"count=2");
-        assertThrows(IllegalArgumentException.class,()->ScimListPage.withQuery(q).resources(List.of(user("1"),user("2"))).totalResults(1L).build());
-        assertThrows(IllegalArgumentException.class,()->ScimListPage.withQuery(query(p,"startIndex=10")).resources(List.of(user("1"))).totalResults(1L).build());
-        ScimResource group=ScimResource.withResourceType(ScimResourceType.groupInstance()).document(object("{\"schemas\":[\""+ScimSchema.groupInstance().getId()+"\"],\"displayName\":\"g\"}")).build();
-        assertThrows(IllegalArgumentException.class,()->ScimListPage.withQuery(q).resources(List.of(group)).totalResults(1L).build());
-        ScimServiceProvider cursor=ScimServiceProvider.builder().baseUri(URI.create("http://localhost/scim/")).resourceTypes(List.of(USER)).limits(ScimLimits.builder().maximumCursorCharacters(64).build())
-                .serviceProviderConfig(ScimServiceProviderConfig.builder().pagination(ScimPaginationConfig.builder().cursorSupported(true).cursorTimeout(Duration.ofSeconds(1)).build()).build()).build();
-        ScimQuery first=query(cursor,"cursor=");String token="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~";
-        assertThrows(IllegalArgumentException.class,()->ScimListPage.withQuery(first).nextCursor(token).moreResultsAvailable(true).build());
-        ScimListPage page=ScimListPage.withQuery(first).nextCursor(token.substring(0,64)).moreResultsAvailable(true).build();assertFalse(page.toString().contains(token));
+
+    @Test
+    void boundedConfigurationAndCursorWindowCasesHaveExplicitContracts() {
+        assertThrows(
+                IllegalArgumentException.class,
+                () ->
+                        ScimServiceProvider.builder()
+                                .resourceTypes(java.util.Collections.nCopies(33, USER)));
+        Map<ScimResourceType, ScimFilterPolicy> policies = new java.util.LinkedHashMap<>();
+        for (int index = 0; index < 33; index++)
+            policies.put(
+                    ScimResourceType.withName("T" + index)
+                            .endpoint("/T" + index)
+                            .schema(USER.getSchema())
+                            .build(),
+                    ScimFilterPolicy.rejectAllInstance());
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> ScimServiceProvider.builder().filterPolicies(policies));
+        String maximumBase = "https://x/" + "x".repeat(2038);
+        assertThrows(
+                IllegalArgumentException.class,
+                () ->
+                        ScimServiceProvider.builder()
+                                .baseUri(URI.create(maximumBase))
+                                .resourceTypes(List.of(USER))
+                                .build());
+        ScimServiceProvider p = provider();
+        ScimQuery q = query(p, "count=2");
+        assertThrows(
+                IllegalArgumentException.class,
+                () ->
+                        ScimListPage.withQuery(q)
+                                .resources(List.of(user("1"), user("2")))
+                                .totalResults(1L)
+                                .build());
+        assertThrows(
+                IllegalArgumentException.class,
+                () ->
+                        ScimListPage.withQuery(query(p, "startIndex=10"))
+                                .resources(List.of(user("1")))
+                                .totalResults(1L)
+                                .build());
+        ScimResource group =
+                ScimResource.withResourceType(ScimResourceType.groupInstance())
+                        .document(
+                                object(
+                                        "{\"schemas\":[\""
+                                                + ScimSchema.groupInstance().getId()
+                                                + "\"],\"displayName\":\"g\"}"))
+                        .build();
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> ScimListPage.withQuery(q).resources(List.of(group)).totalResults(1L).build());
+        ScimServiceProvider cursor =
+                ScimServiceProvider.builder()
+                        .baseUri(URI.create("http://localhost/scim/"))
+                        .resourceTypes(List.of(USER))
+                        .limits(ScimLimits.builder().maximumCursorCharacters(64).build())
+                        .serviceProviderConfig(
+                                ScimServiceProviderConfig.builder()
+                                        .pagination(
+                                                ScimPaginationConfig.builder()
+                                                        .cursorSupported(true)
+                                                        .cursorTimeout(Duration.ofSeconds(1))
+                                                        .build())
+                                        .build())
+                        .build();
+        ScimQuery first = query(cursor, "cursor=");
+        String token = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~";
+        assertThrows(
+                IllegalArgumentException.class,
+                () ->
+                        ScimListPage.withQuery(first)
+                                .nextCursor(token)
+                                .moreResultsAvailable(true)
+                                .build());
+        ScimListPage page =
+                ScimListPage.withQuery(first)
+                        .nextCursor(token.substring(0, 64))
+                        .moreResultsAvailable(true)
+                        .build();
+        assertFalse(page.toString().contains(token));
         assertTrue(text(response(cursor.listResponseResult(page))).contains("nextCursor"));
     }
 
+    @Test
+    void largeConfiguredDiscoveryIsRejectedBeforeDescriptorTreeAllocation() {
+        Set<String> suggestions = new java.util.LinkedHashSet<>();
+        for (int index = 0; index < 1024; index++) suggestions.add("value-" + index);
+        List<ScimAttributeDefinition> definitions = new ArrayList<>();
+        for (int index = 0; index < 1000; index++)
+            definitions.add(
+                    ScimAttributeDefinition.withName("a" + index)
+                            .canonicalValues(suggestions)
+                            .build());
+        ScimSchema schema =
+                ScimSchema.withId("https://example.invalid/Large")
+                        .name("Large")
+                        .attributes(definitions)
+                        .build();
+        ScimResourceType type =
+                ScimResourceType.withName("Large").endpoint("/Large").schema(schema).build();
+        ScimServiceProvider p =
+                ScimServiceProvider.builder()
+                        .baseUri(URI.create("https://example.invalid/"))
+                        .resourceTypes(List.of(type))
+                        .build();
+        // Quota rejection must precede wrapping a million configured suggestions in JSON.
+        assertInstanceOf(ScimResponseResult.Prepared.class, p.serviceProviderConfigResponseResult(""));
+        com.sun.management.ThreadMXBean allocations = assertInstanceOf(
+                com.sun.management.ThreadMXBean.class, java.lang.management.ManagementFactory.getThreadMXBean());
+        assertTrue(allocations.isThreadAllocatedMemorySupported());
+        assertTrue(allocations.isThreadAllocatedMemoryEnabled());
+        long thread = Thread.currentThread().getId();
+        long before = allocations.getThreadAllocatedBytes(thread);
+        assertSame(
+                ScimError.responseTooLargeInstance(),
+                assertInstanceOf(ScimResponseResult.Rejected.class, p.schemasResponseResult(""))
+                        .getError());
+        assertSame(
+                ScimError.responseTooLargeInstance(),
+                assertInstanceOf(
+                                ScimResponseResult.Rejected.class,
+                                p.schemaResponseResult(schema.getId(), ""))
+                        .getError());
+        long allocated = allocations.getThreadAllocatedBytes(thread) - before;
+        assertTrue(allocated < 1024 * 1024, "Quota rejection must precede descriptor-tree allocation.");
+
+    }
+
+    @Test
+    void discoveryRouteIdentifiersAreBoundedBeforeCanonicalLookupAllocation() {
+        ScimServiceProvider p = provider();
+        assertSame(
+                ScimError.requestTooLargeInstance(),
+                assertInstanceOf(
+                                ScimResponseResult.Rejected.class,
+                                p.schemaResponseResult("x".repeat(2049), ""))
+                        .getError());
+        assertSame(
+                ScimError.requestTooLargeInstance(),
+                assertInstanceOf(
+                                ScimResponseResult.Rejected.class,
+                                p.resourceTypeResponseResult("x".repeat(129), ""))
+                        .getError());
+        assertSame(
+                ScimError.notFoundInstance(),
+                assertInstanceOf(
+                                ScimResponseResult.Rejected.class,
+                                p.schemaResponseResult("x".repeat(2048), ""))
+                        .getError());
+        assertSame(
+                ScimError.notFoundInstance(),
+                assertInstanceOf(
+                                ScimResponseResult.Rejected.class,
+                                p.resourceTypeResponseResult("x".repeat(128), ""))
+                        .getError());
+    }
 }

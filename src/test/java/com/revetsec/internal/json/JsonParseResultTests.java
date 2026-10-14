@@ -71,6 +71,45 @@ final class JsonParseResultTests {
 	}
 
 	@Test
+	void numberLengthWinsAtMarkersBeforeIncompleteTokenSyntax() {
+		JsonLimits oneCharacter = new JsonLimits(256, 4, 20, 16, 1, 20, false);
+		JsonLimits twoCharacters = new JsonLimits(256, 4, 20, 16, 2, 20, false);
+		JsonLimits threeCharacters = new JsonLimits(256, 4, 20, 16, 3, 20, false);
+		JsonLimits fourCharacters = new JsonLimits(256, 4, 20, 16, 4, 20, false);
+
+		// Each marker is charged before inspecting the following digit or constructing a number.
+		rejected(Kind.NUMBER_LENGTH, 0, utf8("-0"), oneCharacter);
+		rejected(Kind.NUMBER_LENGTH, 0, utf8("1."), oneCharacter);
+		rejected(Kind.NUMBER_LENGTH, 0, utf8("1e"), oneCharacter);
+		rejected(Kind.NUMBER_LENGTH, 0, utf8("1e+"), twoCharacters);
+		rejected(Kind.NUMBER_LENGTH, 0, utf8("1e-"), twoCharacters);
+		rejected(Kind.SYNTAX, 2, utf8("1."), twoCharacters);
+		rejected(Kind.SYNTAX, 2, utf8("1e"), twoCharacters);
+		rejected(Kind.SYNTAX, 3, utf8("1e+"), threeCharacters);
+		rejected(Kind.SYNTAX, 3, utf8("1e-"), threeCharacters);
+
+		assertEquals("0", document("0", oneCharacter).getValue().toJson());
+		assertEquals("0", document("-0", twoCharacters).getValue().toJson());
+		assertEquals("1.0", document("1.0", threeCharacters).getValue().toJson());
+		assertEquals("1", document("1e0", threeCharacters).getValue().toJson());
+		assertEquals("1", document("1e+0", fourCharacters).getValue().toJson());
+		assertEquals("1", document("1e-0", fourCharacters).getValue().toJson());
+	}
+
+	@Test
+	void lexicalDiagnosticsContainOnlyTheTwoBoundedFlags() {
+		JsonDocument parsed = document("[1,1.0,1e0,1.0e0]", LIMITS);
+		List<JsonValue> numbers = ((JsonArray) parsed.getValue()).getElements();
+		List<String> expected = List.of(
+				"JsonNumberSyntax{hadFraction=false, hadExponent=false}",
+				"JsonNumberSyntax{hadFraction=true, hadExponent=false}",
+				"JsonNumberSyntax{hadFraction=false, hadExponent=true}",
+				"JsonNumberSyntax{hadFraction=true, hadExponent=true}");
+		for (int index = 0; index < numbers.size(); ++index)
+			assertEquals(expected.get(index), parsed.numberSyntax((JsonNumber) numbers.get(index)).orElseThrow().toString());
+	}
+
+	@Test
 	void scimProfilePreservesAsciiCaseDuplicateChecksAtEveryLevel() {
 		JsonLimits scim = JsonLimits.scim(256, 1_000);
 		String input = """

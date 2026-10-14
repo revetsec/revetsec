@@ -459,11 +459,11 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Check out pinned core artifact source
+      - name: Check out this run's core artifact source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: revetsec/revetsec
-          ref: ba54bb28abfda5a5c997316bfdd8422742bb98fc
+          ref: ${{ github.sha }}
           path: .example-inputs/core
           persist-credentials: false
 
@@ -506,6 +506,7 @@ jobs:
           python3 examples/build.py --work "$RUNNER_TEMP/revetsec-examples" \
             --maven "$(command -v mvn)" --java-home "$JAVA_HOME" \
             --core-source "$GITHUB_WORKSPACE/.example-inputs/core" \
+            --core-revision "$GITHUB_SHA" \
             --adapter-source "$GITHUB_WORKSPACE/.example-inputs/adapter" \
             --framework-jar "$GITHUB_WORKSPACE/.example-inputs/framework/target/soklet-4.0.0.jar"
 

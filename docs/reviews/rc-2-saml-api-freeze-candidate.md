@@ -45,9 +45,17 @@ The source at the freeze review passed 17,701 core tests on each of Corretto
 17 and 21, with one intentional locale skip per run. The later
 [strict Burp/SAML Raider pass](../pentest/2026-10-13.md) and
 [selected ZAP pass](../pentest/2026-10-13-zap.md) record their local outcomes
-and limits. RC-2 still needs PIT disposition and
-final-source hosted checks. The owner reviewed and confirmed the
-`internal.xml` key-limit diff.
+and limits. The hosted differential and Shibboleth checks later passed on
+pushed revision `eccaa18743bc2efc0287c171a7e027139e0e9eef`
+([CI run](https://github.com/revetsec/revetsec/actions/runs/38456477929),
+[capture run](https://github.com/revetsec/revetsec/actions/runs/38456503172));
+the overall CI run failed in the examples and packaged-consumer jobs. A later
+[full fixed-source local PIT run](../saml-mutation-triage-2026-10-11.md#2026-10-13-full-fixed-source-samlxml-pit-receipt)
+meets the no unjustified survivors criterion on the bearer replay repair,
+with 158 uncovered limits disclosed. RC-2 remains open pending push, green
+full CI and same-revision hosted differential and Shibboleth reruns. The owner
+reviewed and confirmed the `internal.xml` key-limit diff.
+
 The 43-method differential comparator now
 covers the separately keyed corpus with libxmlsec. The seven-target local
 fuzz campaign and 91-seed replay are recorded in the mutation triage ledger.

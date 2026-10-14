@@ -150,6 +150,7 @@ final class PublicApiContractTests {
 			"com.revetsec.oidc.OidcClient",
 			"com.revetsec.saml.SamlServiceProvider",
 			"com.revetsec.saml.SamlAuthenticationResult$Succeeded",
+            "com.revetsec.scim.ScimPatchApplicationResult$Succeeded",
 			"com.revetsec.internal.jose.JwtValidationAccess$Operations",
             "com.revetsec.internal.oauth.OidcTransactionAccess$Operations");
 
