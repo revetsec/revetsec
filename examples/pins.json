@@ -1,11 +1,11 @@
 {
   "core": {
     "repository": "https://github.com/revetsec/revetsec",
-    "revision": "348da72b82f2709c21e744791e33e2297b5d4b34"
+    "revision": "74bcb1438ad5e62ad6fd3b6c0ff9fa60687a5cfe"
   },
   "adapter": {
     "repository": "https://github.com/revetsec/revetsec-soklet",
-    "revision": "d637e1d4a2c64efe09b5c521cee355721332da4f"
+    "revision": "b04188947c048ea9bb4af26fcbe8d572acbfc72d"
   },
   "framework": {
     "repository": "https://github.com/soklet/soklet",

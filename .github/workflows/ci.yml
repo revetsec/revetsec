@@ -471,7 +471,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: revetsec/revetsec-soklet
-          ref: d637e1d4a2c64efe09b5c521cee355721332da4f
+          ref: b04188947c048ea9bb4af26fcbe8d572acbfc72d
           path: .example-inputs/adapter
           persist-credentials: false
 
