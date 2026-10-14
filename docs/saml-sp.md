@@ -7,8 +7,8 @@ is reported to `SamlObserver` at build time. Revetsec sets secure validation on 
 verification context and enforces its signature allowlists even when the JVM policy differs.
 The application owns its users, account links, browser sessions, pending-state transport,
 and the decision to end a session. SAML support is pre-release; the scripted IdP and a
-pinned Keycloak container exercise browser flows, while RC-2 interoperability and
-hostile-input work is still open.
+pinned Keycloak container exercise browser flows. [RC-2 SAML readiness](reviews/rc-2-round-1.md#rc-2-closure--2026-10-14)
+closed on 2026-10-14; other 1.0.0 release checkpoints remain open.
 
 Configure `SamlServiceProvider.Builder.observer(SamlObserver)` to receive one start and
 one terminal event for each service-provider operation. Events contain fixed operation and

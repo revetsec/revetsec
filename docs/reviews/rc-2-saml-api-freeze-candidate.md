@@ -55,14 +55,16 @@ met the no unjustified survivors criterion on the first bearer replay repair,
 with 158 uncovered limits disclosed. It does not cover the stricter
 2026-10-14 replay retention fix, which the owner personally reviewed and
 confirmed. A [new full current-source PIT run](../saml-mutation-triage-2026-10-11.md#2026-10-14-full-stricter-source-samlxml-pit-receipt)
-meets the local survivor criterion with 160 uncovered limits. RC-2 remains open
-pending push, green
-full CI and same-revision hosted differential and Shibboleth reruns. The owner
+meets the local survivor criterion with 160 uncovered limits. The subsequent
+[same-revision push CI](https://github.com/revetsec/revetsec/actions/runs/38581827855)
+and [Shibboleth capture](https://github.com/revetsec/revetsec/actions/runs/38582202155)
+both succeeded on `b91ff91f9ee1daf5c9065257111cb8521ba1f3e4`; the
+[RC-2 closure receipt](rc-2-round-1.md#rc-2-closure--2026-10-14) records the
+checks and limits. The owner
 also reviewed and confirmed the `internal.xml` key-limit diff.
 
 The 43-method differential comparator now
 covers the separately keyed corpus with libxmlsec. The seven-target local
 fuzz campaign and 91-seed replay are recorded in the mutation triage ledger.
 The owner confirmed this public API inventory and the message-signing-key
-limit repair. The API freeze is complete; this note does not claim the
-remaining RC-2 gates are complete.
+limit repair. The API freeze and RC-2 readiness gate are complete.

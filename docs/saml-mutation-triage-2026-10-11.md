@@ -1015,7 +1015,11 @@ profile completed its tests but missed two inherited branch floors: bundle
 claim. The earlier seven-target SAML fuzz campaign and manual Burp/ZAP passes
 retain their documented earlier-source and packaged-artifact scope.
 
-RC-2 remains **OPEN** pending the owner's push, green full CI, and differential
-and Shibboleth hosted reruns on the same new revision. The prior hosted receipts
-on `348da72b82f2709c21e744791e33e2297b5d4b34` do not qualify this
-stricter replay logic.
+The later [same-revision push CI](https://github.com/revetsec/revetsec/actions/runs/38581827855)
+and [Shibboleth capture](https://github.com/revetsec/revetsec/actions/runs/38582202155)
+both passed on `b91ff91f9ee1daf5c9065257111cb8521ba1f3e4`, including the
+gating SAML differential. The [RC-2 closure receipt](reviews/rc-2-round-1.md#rc-2-closure--2026-10-14)
+binds these hosted results to the stricter replay repair. Earlier hosted
+receipts on `348da72b82f2709c21e744791e33e2297b5d4b34` retain only their
+earlier-source scope. The coverage profile gap above remains an overall
+release-coverage item; it is not claimed resolved by RC-2.

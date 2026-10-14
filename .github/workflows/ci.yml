@@ -857,5 +857,6 @@ jobs:
 
   # scim: from M11. Gating on PR. scim2-tester (hash-pinned) against the examples/ server.
 
-  # Differential SCIM syntax/AST is active; remaining RC-3 assurance is open. RC-2 still needs
-  # the remaining SLO, XSW, Fragile-Lock and structure-aware comparison matrix.
+  # Differential SCIM syntax/AST is active; remaining RC-3 assurance is open.
+  # The gating RC-2 SAML comparator requires its signed SLO, XSW, Fragile-Lock,
+  # encryption and structure-aware cases above with zero skips.

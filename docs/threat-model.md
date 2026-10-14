@@ -1,6 +1,6 @@
 # Threat Model
 
-**Status: pre-release.** This map covers the shared foundations, signed-JWT verification, the OAuth client boundary and the implemented SAML service-provider invariants. The SAML RC-2 assurance gates remain open. This page grows as the remaining protocol and release checks land.
+**Status: pre-release.** This map covers the shared foundations, signed-JWT verification, the OAuth client boundary and the implemented SAML service-provider invariants. [SAML RC-2 readiness closed on 2026-10-14](reviews/rc-2-round-1.md#rc-2-closure--2026-10-14); other protocol and release checks remain. This page grows as those checks land.
 
 ## Actors
 

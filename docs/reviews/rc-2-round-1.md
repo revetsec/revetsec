@@ -1,6 +1,6 @@
 # RC-2 SAML and XML review, round 1 — 2026-10-12
 
-**Internal, AI-assisted adversarial review; not independent. Review round complete; RC-2 remains open.**
+**Internal, AI-assisted adversarial review; not independent. Review round complete; RC-2 closed on 2026-10-14.**
 The reviewed source was checkout `e52e162dcdcbc4706321b275f4da12ead9db832d`
 plus the uncommitted RC-2 edits described below. Three reviewers used distinct
 SAML protocol/API, XML/cryptography, and cross-boundary attacker prompts. They
@@ -150,5 +150,40 @@ bearer replay fix, including the longer replay-cache retention tradeoff. The
 earlier full PIT receipt is bound to the intermediate repair. A
 [new full current-source PIT run](../saml-mutation-triage-2026-10-11.md#2026-10-14-full-stricter-source-samlxml-pit-receipt)
 meets the local survivor criterion with 160 explicit uncovered limits. The
-hosted receipts remain bound to an earlier pushed source. RC-2 remains open
-pending push, green full CI, and hosted differential and Shibboleth reruns.
+hosted receipts at that checkpoint remained bound to an earlier pushed source.
+The final same-revision runs are recorded below.
+
+## RC-2 closure — 2026-10-14
+
+The stricter bearer replay repair and its regression tests are in pushed core
+`b91ff91f9ee1daf5c9065257111cb8521ba1f3e4`. Relative to the prior
+`74bcb1438ad5e62ad6fd3b6c0ff9fa60687a5cfe` source, that commit changes
+only example and workflow pins; the reviewed SAML/XML production source and
+local PIT receipt remain applicable. The maintainer confirmed the repair and
+its longer replay-cache retention on 2026-10-14.
+
+[Push CI run 38581827855](https://github.com/revetsec/revetsec/actions/runs/38581827855)
+reports **Success** on `b91ff91f`. Its gating differential job passed the
+workflow's 43 required SAML comparator methods with zero missing, skipped,
+failed or errored cases; the Keycloak SAML integration, core test matrix,
+packaged consumers, examples, static analysis, fuzz corpus replay and other
+applicable push jobs also passed. The advisory alternative-JDK and early-access
+jobs are configured for scheduled or manually dispatched runs and were skipped
+on this push.
+
+On the same commit, [Shibboleth capture run 38582202155](https://github.com/revetsec/revetsec/actions/runs/38582202155)
+reports **Success** and the six required GCM/CBC replay methods passed with
+zero failures, errors or skips. GitHub lists artifact
+`shibboleth-capture-38582202155-1` with SHA-256
+`b4b690be8eab622f30b4c5cf4243ea259656efdde73e76327519e8beee5b4e80`,
+matching the downloaded ZIP. All 11 capture-file hashes match its manifest;
+an independent offline Corretto 17 replay on `b91ff91f` passed 6/6 with zero
+skips. The previously imported Shibboleth fixtures remain committed and are
+replayed by the regular test suite. The new artifact is a same-source hosted
+rerun, not a replacement for those fixtures.
+
+The calibrated review, local fuzz and mutation dispositions, manual pentest,
+published saml2int deviations and owner-reviewed API freeze above satisfy the
+remaining RC-2 exit items. This closes **RC-2 SAML readiness**, not the other
+1.0.0 release checkpoints or an independent external audit. The separate
+overall release-coverage floors disclosed in the mutation ledger remain open.
