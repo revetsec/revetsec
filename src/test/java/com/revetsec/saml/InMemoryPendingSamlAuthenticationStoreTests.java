@@ -27,6 +27,8 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.locks.LockSupport;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -68,6 +70,132 @@ final class InMemoryPendingSamlAuthenticationStoreTests {
                 store.save("fresh", "handle", "new", expiry.plusSeconds(60), BUDGET));
         assertEquals("new", assertInstanceOf(SamlPendingConsumeResult.Consumed.class,
                 store.consume("fresh", "handle", BUDGET)).getSealedRecord());
+    }
+
+    @Test void legacyStoreDoesNotFallBackToUnconditionalConsumption() {
+        AtomicInteger consumes = new AtomicInteger();
+        AtomicInteger validations = new AtomicInteger();
+        PendingSamlAuthenticationStore legacy = new PendingSamlAuthenticationStore() {
+            @Override public @NonNull SamlPendingSaveResult save(@NonNull String browserBinding,
+                    @NonNull String handle, @NonNull String sealedRecord, @NonNull Instant expiresAt,
+                    @NonNull Duration remaining) { return SamlPendingSaveResult.SAVED; }
+            @Override public @NonNull SamlPendingConsumeResult consume(@NonNull String browserBinding,
+                    @NonNull String handle, @NonNull Duration remaining) {
+                consumes.incrementAndGet();
+                return SamlPendingConsumeResult.Consumed.fromSealedRecord("sealed");
+            }
+        };
+        assertInstanceOf(SamlPendingConsumeResult.Unavailable.class,
+                legacy.consumeIfMatches("browser", "handle", record -> {
+                    validations.incrementAndGet();
+                    return true;
+                }, BUDGET));
+        assertEquals(0, validations.get());
+        assertEquals(0, consumes.get());
+    }
+
+    @Test void refusedConditionalConsumeRetainsTheRecordForAnAcceptedCallback() {
+        InMemoryPendingSamlAuthenticationStore store = InMemoryPendingSamlAuthenticationStore.withLimit(
+                Clock.fixed(START, ZoneOffset.UTC), 1);
+        assertEquals(SamlPendingSaveResult.SAVED,
+                store.save("browser", "handle", "sealed", START.plusSeconds(60), BUDGET));
+        assertInstanceOf(SamlPendingConsumeResult.Missing.class,
+                store.consumeIfMatches("browser", "handle", record -> {
+                    assertEquals("sealed", record);
+                    return false;
+                }, BUDGET));
+        assertEquals("sealed", assertInstanceOf(SamlPendingConsumeResult.Consumed.class,
+                store.consumeIfMatches("browser", "handle", "sealed"::equals, BUDGET)).getSealedRecord());
+        assertInstanceOf(SamlPendingConsumeResult.Missing.class,
+                store.consumeIfMatches("browser", "handle", record -> true, BUDGET));
+    }
+
+    @Test void throwingOrTimedOutValidationDoesNotRemoveTheRecord() {
+        InMemoryPendingSamlAuthenticationStore store = InMemoryPendingSamlAuthenticationStore.withLimit(
+                Clock.fixed(START, ZoneOffset.UTC), 1);
+        assertEquals(SamlPendingSaveResult.SAVED,
+                store.save("browser", "handle", "sealed", START.plusSeconds(60), BUDGET));
+        assertInstanceOf(SamlPendingConsumeResult.Unavailable.class,
+                store.consumeIfMatches("browser", "handle", record -> {
+                    throw new IllegalStateException("validation unavailable");
+                }, BUDGET));
+        assertInstanceOf(SamlPendingConsumeResult.Unavailable.class,
+                store.consumeIfMatches("browser", "handle", record -> {
+                    long until = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(20);
+                    while (System.nanoTime() - until < 0)
+                        LockSupport.parkNanos(TimeUnit.MILLISECONDS.toNanos(1));
+                    return true;
+                }, Duration.ofMillis(5)));
+        assertEquals("sealed", assertInstanceOf(SamlPendingConsumeResult.Consumed.class,
+                store.consume("browser", "handle", BUDGET)).getSealedRecord());
+    }
+
+    @Test void recordExpiryIsRecheckedAfterValidation() {
+        MutableClock clock = new MutableClock(START);
+        InMemoryPendingSamlAuthenticationStore store = InMemoryPendingSamlAuthenticationStore.withLimit(clock, 1);
+        Instant expiry = START.plusSeconds(60);
+        assertEquals(SamlPendingSaveResult.SAVED, store.save("browser", "handle", "sealed", expiry, BUDGET));
+        assertInstanceOf(SamlPendingConsumeResult.Missing.class,
+                store.consumeIfMatches("browser", "handle", record -> {
+                    clock.set(expiry);
+                    return true;
+                }, BUDGET));
+    }
+
+    @Test void reentrantValidationCannotConsumeTheSameRecordTwiceOrRemoveAReplacement() {
+        InMemoryPendingSamlAuthenticationStore store = InMemoryPendingSamlAuthenticationStore.withLimit(
+                Clock.fixed(START, ZoneOffset.UTC), 1);
+        Instant expiry = START.plusSeconds(60);
+        for (boolean replace : new boolean[] {false, true}) {
+            assertEquals(SamlPendingSaveResult.SAVED, store.save("browser", "handle", "sealed", expiry, BUDGET));
+            assertInstanceOf(SamlPendingConsumeResult.Missing.class,
+                    store.consumeIfMatches("browser", "handle", record -> {
+                        assertEquals("sealed", assertInstanceOf(SamlPendingConsumeResult.Consumed.class,
+                                store.consume("browser", "handle", BUDGET)).getSealedRecord());
+                        if (replace)
+                            assertEquals(SamlPendingSaveResult.SAVED,
+                                    store.save("browser", "handle", "sealed", expiry, BUDGET));
+                        return true;
+                    }, BUDGET));
+            if (replace)
+                assertEquals("sealed", assertInstanceOf(SamlPendingConsumeResult.Consumed.class,
+                        store.consume("browser", "handle", BUDGET)).getSealedRecord());
+            else assertInstanceOf(SamlPendingConsumeResult.Missing.class, store.consume("browser", "handle", BUDGET));
+        }
+    }
+
+    @Test void concurrentConditionalConsumesAdmitExactlyOneCaller() throws Exception {
+        InMemoryPendingSamlAuthenticationStore store = InMemoryPendingSamlAuthenticationStore.withLimit(
+                Clock.fixed(START, ZoneOffset.UTC), 1);
+        assertEquals(SamlPendingSaveResult.SAVED,
+                store.save("browser", "handle", "sealed", START.plusSeconds(60), BUDGET));
+        CountDownLatch start = new CountDownLatch(1);
+        AtomicInteger accepted = new AtomicInteger();
+        AtomicInteger missing = new AtomicInteger();
+        AtomicReference<Throwable> failure = new AtomicReference<>();
+        Runnable consume = () -> {
+            try {
+                assertTrue(start.await(3, TimeUnit.SECONDS));
+                SamlPendingConsumeResult result = store.consumeIfMatches("browser", "handle", "sealed"::equals, BUDGET);
+                if (result instanceof SamlPendingConsumeResult.Consumed) accepted.incrementAndGet();
+                else {
+                    assertInstanceOf(SamlPendingConsumeResult.Missing.class, result);
+                    missing.incrementAndGet();
+                }
+            } catch (Throwable thrown) { failure.set(thrown); }
+        };
+        Thread first = new Thread(consume);
+        Thread second = new Thread(consume);
+        first.start();
+        second.start();
+        start.countDown();
+        first.join(3_000);
+        second.join(3_000);
+        assertFalse(first.isAlive());
+        assertFalse(second.isAlive());
+        assertNull(failure.get());
+        assertEquals(1, accepted.get());
+        assertEquals(1, missing.get());
     }
 
     @Test void failedBudgetAndClockRollbackLeavePendingRecordUntouched() {

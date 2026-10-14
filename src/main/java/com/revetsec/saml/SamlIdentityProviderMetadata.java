@@ -54,13 +54,14 @@ public final class SamlIdentityProviderMetadata {
     private final @Nullable URI redirectSso;
     private final @Nullable URI postSso;
     private final @Nullable URI redirectSlo;
+    private final @Nullable URI postSlo;
     private final @NonNull List<@NonNull X509Certificate> signingCertificates;
     private final boolean wantAuthnRequestsSigned;
     private final @Nullable Instant validUntil;
     private final @NonNull List<@NonNull String> authorizedScopes;
 
     private SamlIdentityProviderMetadata(@NonNull String entityId, @Nullable URI redirectSso,
-            @Nullable URI postSso, @Nullable URI redirectSlo,
+            @Nullable URI postSso, @Nullable URI redirectSlo, @Nullable URI postSlo,
             @NonNull List<@NonNull X509Certificate> signingCertificates,
             boolean wantAuthnRequestsSigned, @Nullable Instant validUntil,
             @NonNull List<@NonNull String> authorizedScopes) {
@@ -68,6 +69,7 @@ public final class SamlIdentityProviderMetadata {
         this.redirectSso = redirectSso;
         this.postSso = postSso;
         this.redirectSlo = redirectSlo;
+        this.postSlo = postSlo;
         this.signingCertificates = List.copyOf(signingCertificates);
         this.wantAuthnRequestsSigned = wantAuthnRequestsSigned;
         this.validUntil = validUntil;
@@ -216,6 +218,7 @@ public final class SamlIdentityProviderMetadata {
         URI redirect = null;
         URI post = null;
         URI logout = null;
+        URI postLogout = null;
         List<X509Certificate> certificates = new ArrayList<>();
         List<String> scopes = new ArrayList<>();
         for (Node child = descriptor.getFirstChild(); child != null; child = child.getNextSibling()) {
@@ -232,11 +235,18 @@ public final class SamlIdentityProviderMetadata {
                     if (post != null) return SamlIdentityProviderMetadataResult.Rejected.INSTANCE;
                     post = location;
                 }
-            } else if (is(element, MD, "SingleLogoutService")
-                    && REDIRECT.equals(element.getAttributeNS(null, "Binding"))) {
-                if (logout != null) return SamlIdentityProviderMetadataResult.Rejected.INSTANCE;
-                logout = endpoint(element.getAttributeNS(null, "Location"));
-                if (logout == null) return SamlIdentityProviderMetadataResult.Rejected.INSTANCE;
+            } else if (is(element, MD, "SingleLogoutService")) {
+                String binding = element.getAttributeNS(null, "Binding");
+                if (!REDIRECT.equals(binding) && !POST.equals(binding)) continue;
+                URI location = endpoint(element.getAttributeNS(null, "Location"));
+                if (location == null) return SamlIdentityProviderMetadataResult.Rejected.INSTANCE;
+                if (REDIRECT.equals(binding)) {
+                    if (logout != null) return SamlIdentityProviderMetadataResult.Rejected.INSTANCE;
+                    logout = location;
+                } else {
+                    if (postLogout != null) return SamlIdentityProviderMetadataResult.Rejected.INSTANCE;
+                    postLogout = location;
+                }
             } else if (is(element, MD, "KeyDescriptor")) {
                 String use = element.getAttributeNS(null, "use");
                 if (!use.isEmpty() && !"signing".equals(use) && !"encryption".equals(use))
@@ -267,7 +277,7 @@ public final class SamlIdentityProviderMetadata {
                 && !wants.equals("1") && !wants.equals("0"))
             return SamlIdentityProviderMetadataResult.Rejected.INSTANCE;
         return new SamlIdentityProviderMetadataResult.Parsed(new SamlIdentityProviderMetadata(entityId,
-                redirect, post, logout, certificates, wants.equals("true") || wants.equals("1"),
+                redirect, post, logout, postLogout, certificates, wants.equals("true") || wants.equals("1"),
                 validUntil, scopes));
     }
 
@@ -365,6 +375,14 @@ public final class SamlIdentityProviderMetadata {
     public @NonNull Optional<@NonNull URI> getRedirectSingleLogoutService() {
         return Optional.ofNullable(redirectSlo);
     }
+    /** Returns the HTTP-POST logout endpoint, if advertised.
+     * @return POST logout endpoint
+     * @since 1.0.0
+     */
+    public @NonNull Optional<@NonNull URI> getPostSingleLogoutService() {
+        return Optional.ofNullable(postSlo);
+    }
+
     /**
      * Returns signing certificates from this metadata, including rollover certificates.
      *

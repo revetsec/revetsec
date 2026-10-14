@@ -111,6 +111,12 @@ public final class SamlServiceProviderMetadata {
                             "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect");
                     xml.writeAttribute("Location", logoutUrl.toASCIIString());
                 }
+                URI postLogoutUrl = serviceProvider.postSingleLogoutServiceUrl();
+                if (postLogoutUrl != null) {
+                    xml.writeEmptyElement("md", "SingleLogoutService", MD);
+                    xml.writeAttribute("Binding", POST);
+                    xml.writeAttribute("Location", postLogoutUrl.toASCIIString());
+                }
                 xml.writeEmptyElement("md", "AssertionConsumerService", MD);
                 xml.writeAttribute("Binding", POST);
                 xml.writeAttribute("Location", serviceProvider.assertionConsumerServiceUrl().toASCIIString());

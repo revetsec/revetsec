@@ -239,8 +239,9 @@ final class PlaygroundSaml {
             BrowserSessions.Session session = sessions.find(request).orElse(null);
             if (session != null) {
                 synchronized (session) {
-                    if (session.samlLogout != null) {
-                        session.samlLogout = null;
+                    // find() expires pending attempts. A malformed callback cannot cancel a live one.
+                    if (session.samlLogout == null
+                            && BrowserSessions.cookieValue(request, LOGOUT_COOKIE).isPresent()) {
                         return failed(400, "SAML logout binding rejected.", clear(LOGOUT_COOKIE));
                     }
                 }
@@ -263,22 +264,29 @@ final class PlaygroundSaml {
             return PlaygroundResources.fixed(503, "SAML logout response unavailable.");
         }
         BrowserSessions.Session session = sessions.find(request).orElse(null);
-        if (session == null) return failed(400, "Browser binding is required.", clear(LOGOUT_COOKIE));
+        if (session == null) return PlaygroundResources.fixed(400, "Browser binding is required.");
         synchronized (session) {
             LogoutFlow flow = session.samlLogout;
-            session.samlLogout = null;
             if (flow == null) return failed(400, "SAML logout pending state unavailable.", clear(LOGOUT_COOKIE));
-            ResponseCookie clear = clear(LOGOUT_COOKIE);
-            if (!clock.instant().isBefore(flow.expires)
-                    || !sameCookie(request, LOGOUT_COOKIE, flow.sealed))
-                return failed(400, "SAML logout browser binding rejected.", clear);
+            if (!clock.instant().isBefore(flow.expires)) {
+                session.samlLogout = null;
+                return failed(400, "SAML logout pending state expired.", clear(LOGOUT_COOKIE));
+            }
+            if (!sameCookie(request, LOGOUT_COOKIE, flow.sealed))
+                return PlaygroundResources.fixed(400, "SAML logout browser binding rejected.");
             SamlLogoutResult result = sp.completeLogoutResult(message,
                     PendingSamlLogoutSource.fromSealedForm(flow.sealed, sealer, flow.context), idp);
-            if (result instanceof SamlLogoutResult.Succeeded)
-                return SokletOAuth.redirect(origin.resolve("/"), Set.of(clear));
+            if (result instanceof SamlLogoutResult.Succeeded) {
+                session.samlLogout = null;
+                return SokletOAuth.redirect(origin.resolve("/"), Set.of(clear(LOGOUT_COOKIE)));
+            }
+            if (result instanceof SamlLogoutResult.StatusReceived) {
+                session.samlLogout = null;
+                return failed(400, "SAML provider reported an unsuccessful logout.", clear(LOGOUT_COOKIE));
+            }
             if (result instanceof SamlLogoutResult.Unavailable || result instanceof SamlLogoutResult.Indeterminate)
-                return failed(503, "SAML logout unavailable.", clear);
-            return failed(400, "SAML logout rejected.", clear);
+                return PlaygroundResources.fixed(503, "SAML logout unavailable.");
+            return PlaygroundResources.fixed(400, "SAML logout rejected.");
         }
     }
 

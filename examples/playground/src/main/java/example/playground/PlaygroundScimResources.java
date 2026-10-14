@@ -20,6 +20,8 @@ import com.revetsec.soklet.SokletScim;
 import com.soklet.*;
 import com.soklet.annotation.*;
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
+import java.util.List;
 import java.util.function.Supplier;
 
 /** Explicit authenticated routes shared by the Playground and independent-client harness. */
@@ -27,16 +29,27 @@ public final class PlaygroundScimResources {
     private final PlaygroundScim app;
     @NonNull PlaygroundScimResources(@NonNull PlaygroundScim app) { this.app = app; }
     private @NonNull MarshaledResponse response(@NonNull Request request, @NonNull Supplier<@NonNull ScimResponse> operation) {
-        if (!app.authenticated(request)) return SokletScim.responseFor(app.error(ScimError.unauthenticatedInstance()));
+        if (!app.authenticated(request)) return SokletScim.responseFor(app.error(ScimError.unauthenticatedInstance()))
+                .copy().headers(headers -> headers.put("WWW-Authenticate", List.of("Bearer realm=\"scim\""))).finish();
         if (request.isContentTooLarge()) return SokletScim.responseFor(app.error(ScimError.requestTooLargeInstance()));
-        return SokletScim.responseFor(operation.get());
+        MarshaledResponse prepared = SokletScim.responseFor(operation.get());
+        String allowed = allowedMethodsFor(request.getPath());
+        if (prepared.getStatusCode() == 405 && allowed != null)
+            return prepared.copy().headers(headers -> headers.put("Allow", List.of(allowed))).finish();
+        return prepared;
+    }
+    private static @Nullable String allowedMethodsFor(@NonNull String path) {
+        // Soklet supplies HEAD through GET fallback and handles OPTIONS for these known routes.
+        if (java.util.Set.of("/scim/v2/ServiceProviderConfig", "/scim/v2/ResourceTypes", "/scim/v2/Schemas").contains(path)) return "GET, HEAD, OPTIONS";
+        if (java.util.Set.of("/scim/v2/Users", "/scim/v2/Groups").contains(path)) return "GET, HEAD, POST, OPTIONS";
+        return null;
     }
     @POST("/scim/v2/.search") public @NonNull MarshaledResponse aggregateSearch(@NonNull Request request) {
         return response(request, () -> app.error(ScimError.notImplementedInstance()));
     }
     @GET("/scim/v2/{unknown}") @POST("/scim/v2/{unknown}") @PUT("/scim/v2/{unknown}") @PATCH("/scim/v2/{unknown}") @DELETE("/scim/v2/{unknown}")
     public @NonNull MarshaledResponse unknown(@NonNull Request request) {
-        return response(request, () -> app.error(java.util.Set.of("/scim/v2/ServiceProviderConfig", "/scim/v2/ResourceTypes", "/scim/v2/Schemas", "/scim/v2/Users", "/scim/v2/Groups").contains(request.getPath())
+        return response(request, () -> app.error(allowedMethodsFor(request.getPath()) != null
                 ? ScimError.methodNotAllowedInstance() : ScimError.notFoundInstance()));
     }
     @GET("/scim/v2/ServiceProviderConfig") public @NonNull MarshaledResponse config(@NonNull Request request) {

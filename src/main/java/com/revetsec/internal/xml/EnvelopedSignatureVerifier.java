@@ -131,6 +131,29 @@ public final class EnvelopedSignatureVerifier {
         return verifySignedElement(parsed.getDocument(), signed, signature, trustedKeys, false);
     }
 
+    /** Verifies the exact original LogoutRequest or LogoutResponse root using approved IdP keys. */
+    public static @NonNull Result verifyLogout(SecureXmlParser.Result.@NonNull Accepted parsed,
+            @NonNull List<@NonNull PublicKey> trustedKeys, boolean allowSha1) {
+        requireNonNull(parsed);
+        requireNonNull(trustedKeys);
+        if (trustedKeys.isEmpty() || trustedKeys.size() > 8 || trustedKeys.stream().anyMatch(key -> key == null))
+            throw new IllegalArgumentException("Expected one to eight trusted IdP keys");
+        Document document = parsed.getDocument();
+        Element root = document.getDocumentElement();
+        if (root == null || !SamlResponseStructure.PROTOCOL.equals(root.getNamespaceURI())
+                || !("LogoutRequest".equals(root.getLocalName()) || "LogoutResponse".equals(root.getLocalName())))
+            return new Rejected(Reason.SIGNATURE_SHAPE);
+        Element signature = null;
+        for (Node child = root.getFirstChild(); child != null; child = child.getNextSibling()) {
+            if (!(child instanceof Element element) || !is(element, DSIG, "Signature")) continue;
+            if (signature != null) return new Rejected(Reason.SIGNATURE_SHAPE);
+            signature = element;
+        }
+        if (signature == null) return Absent.INSTANCE;
+        if (!signatureAtSchemaPosition(root, signature)) return new Rejected(Reason.SIGNATURE_SHAPE);
+        return verifySignedElement(document, root, signature, trustedKeys, allowSha1);
+    }
+
     private static @NonNull Result verifySignedElement(@NonNull Document document,
             @NonNull Element signed, @NonNull Element signature,
             @NonNull List<@NonNull PublicKey> trustedKeys, boolean allowSha1) {

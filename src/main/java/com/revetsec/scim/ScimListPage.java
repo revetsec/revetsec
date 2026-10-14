@@ -28,7 +28,14 @@ import java.util.*;
 import javax.annotation.concurrent.Immutable;
 import javax.annotation.concurrent.NotThreadSafe;
 
-/** Application-authored page framing for one approved query; storage/count accuracy is app-owned.
+/** Application-authored page framing for one approved query; storage and count accuracy are app-owned.
+ * INDEX pages require a nonnegative accurate totalResults and a consistent result window. CURSOR
+ * pages declare more results exactly when a nextCursor is present; the first page has no
+ * previousCursor. A short page alone does not prove exhaustion. For either method, a zero count
+ * requires accurate totalResults, empty resources and no traversal cursors or more-results flag.
+ * Construction checks framing and resource-type identity, not the truth of storage metadata or
+ * cursor authenticity. The originating provider checks private query/resource associations before
+ * rendering the page.
  * @since 1.0.0
  */
 @Immutable
@@ -84,48 +91,54 @@ public final class ScimListPage {
             throw new IllegalArgumentException("Invalid SCIM cursor.");
     }
 
-    /** Returns the page query.
-     * @return query
+    /** Returns the originating approved query whose bounds and projection frame this page.
+     * @return the original query
      * @since 1.0.0
      */
     public @NonNull ScimQuery getQuery() {
         return query;
     }
 
-    /** Returns the page resources.
-     * @return resources
+    /** Returns the immutable application-supplied resource snapshot in represented page order.
+     * Every resource uses the query's exact resource-type registration and the list is no larger
+     * than the query's effective count.
+     * @return the resources
      * @since 1.0.0
      */
     public @NonNull List<@NonNull ScimResource> getResources() {
         return resources;
     }
 
-    /** Returns the page totalResults.
-     * @return totalResults
+    /** Returns the application's declared accurate nonnegative matching-resource total, when present.
+     * It is required for INDEX and every count-only page; ordinary CURSOR pages may omit it.
+     * @return the declared total, or empty when omitted
      * @since 1.0.0
      */
     public @NonNull Optional<@NonNull Long> getTotalResults() {
         return Optional.ofNullable(totalResults);
     }
 
-    /** Returns the page nextCursor.
-     * @return nextCursor
+    /** Returns the application's next-page token, present exactly when more results are declared.
+     * The token's authenticity, context and validity remain application responsibilities.
+     * @return the next cursor, or empty when no next page is declared
      * @since 1.0.0
      */
     public @NonNull Optional<@NonNull String> getNextCursor() {
         return Optional.ofNullable(nextCursor);
     }
 
-    /** Returns the page previousCursor.
-     * @return previousCursor
+    /** Returns the application's previous-page token, when available.
+     * The first cursor page, INDEX pages and count-only pages cannot have a previous token.
+     * @return the previous cursor, or empty when unavailable
      * @since 1.0.0
      */
     public @NonNull Optional<@NonNull String> getPreviousCursor() {
         return Optional.ofNullable(previousCursor);
     }
 
-    /** Returns the page moreResultsAvailable.
-     * @return moreResultsAvailable
+    /** Reports the application's more-results declaration, true exactly when nextCursor is present.
+     * A short page does not itself imply false; INDEX and count-only pages require false.
+     * @return whether a next cursor page is declared
      * @since 1.0.0
      */
     public @NonNull Boolean isMoreResultsAvailable() {
@@ -147,8 +160,9 @@ public final class ScimListPage {
         return true;
     }
 
-    /** Starts page framing for an approved query.
-     * @param query original query
+    /** Starts page framing for an approved query with empty resources, absent total/cursors and
+     * moreResultsAvailable false. Supply the metadata required by the query's framing before build.
+     * @param query the originating approved query
      * @return builder
      * @since 1.0.0
      */
@@ -165,7 +179,8 @@ public final class ScimListPage {
         return "ScimListPage{<redacted>}";
     }
 
-    /** Mutable complete page configuration.
+    /** Mutable complete page configuration. Defaults are empty resources, absent total/cursors and
+     * moreResultsAvailable false. Setters replace complete values; build checks the combined framing.
      * @since 1.0.0
      */
     @NotThreadSafe
@@ -194,8 +209,9 @@ public final class ScimListPage {
             return this;
         }
 
-        /** Replaces totalResults; null restores absence or false.
-         * @param value complete value or null
+        /** Replaces the application's accurate nonnegative matching-resource total; null restores absence.
+         * INDEX and count-only framing require a total even when no resources are returned.
+         * @param value the declared total, or null to omit it
          * @return this builder
          * @since 1.0.0
          */
@@ -204,8 +220,10 @@ public final class ScimListPage {
             return this;
         }
 
-        /** Replaces nextCursor; null restores absence or false.
-         * @param value complete value or null
+        /** Replaces the next-page token; null restores absence.
+         * A token must be nonempty unreserved ASCII within the query's cursor bound. The application
+         * owns its authenticity, context and validity. Presence must agree with moreResultsAvailable.
+         * @param value the complete next token, or null for absence
          * @return this builder
          * @since 1.0.0
          */
@@ -214,8 +232,10 @@ public final class ScimListPage {
             return this;
         }
 
-        /** Replaces previousCursor; null restores absence or false.
-         * @param value complete value or null
+        /** Replaces the previous-page token; null restores absence.
+         * A token must be nonempty unreserved ASCII within the query's cursor bound. The application
+         * owns its authenticity, context and validity; first, INDEX and count-only pages forbid it.
+         * @param value the complete previous token, or null for absence
          * @return this builder
          * @since 1.0.0
          */
@@ -224,8 +244,10 @@ public final class ScimListPage {
             return this;
         }
 
-        /** Replaces moreResultsAvailable; null restores absence or false.
-         * @param value complete value or null
+        /** Replaces the more-results declaration; null restores false.
+         * CURSOR framing requires true exactly when nextCursor is present. INDEX and count-only
+         * pages require false.
+         * @param value the complete declaration, or null for false
          * @return this builder
          * @since 1.0.0
          */
@@ -234,8 +256,13 @@ public final class ScimListPage {
             return this;
         }
 
-        /** Creates checked page framing.
-         * @return page
+        /** Checks combined counts, cursors, resource-type identity and page framing, then creates the page.
+         * This does not verify storage/count accuracy or token authenticity. INDEX requires totalResults
+         * and a consistent window; CURSOR requires nextCursor iff moreResultsAvailable and no previous
+         * cursor on the first page. Count-only pages require an accurate total, empty resources and no
+         * traversal cursors or more-results declaration.
+         * @return the immutable page
+         * @throws IllegalArgumentException if trusted page values violate the query's bounds or framing
          * @since 1.0.0
          */
         public @NonNull ScimListPage build() {

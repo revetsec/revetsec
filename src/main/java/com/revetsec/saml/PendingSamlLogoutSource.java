@@ -25,10 +25,13 @@ import javax.annotation.concurrent.Immutable;
 import java.time.Clock;
 import java.time.Duration;
 import java.util.Objects;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Predicate;
 
 /**
- * Browser-bound source of one SP-initiated pending logout. The caller clears the cookie on
- * completion; an atomic store supplies single use across callbacks and nodes.
+ * Browser-bound source of one SP-initiated pending logout. The caller clears the cookie after
+ * a verified terminal status; a conditional atomic store supplies single use across callbacks
+ * and nodes without consuming state for an invalid response.
  *
  * @since 1.0.0
  */
@@ -66,7 +69,9 @@ public final class PendingSamlLogoutSource {
     }
 
     /**
-     * Selects an atomic pending store and browser binding.
+     * Selects an atomic pending store and browser binding. Logout completion requires the
+     * store's conditional consume operation so authenticated pending state can be checked
+     * against the response before removal.
      *
      * @param store atomic store
      * @param browserBinding browser-specific secret
@@ -84,28 +89,50 @@ public final class PendingSamlLogoutSource {
     }
 
     @NonNull Resolution resolve(@NonNull Clock clock, @Nullable String relay, @NonNull Duration budget) {
-        String record = sealedForm;
-        String sealContext = context;
-        if (store != null) {
-            if (relay == null || relay.isEmpty()) return Rejected.INSTANCE;
-            SamlPendingConsumeResult consumed;
-            long started = System.nanoTime();
-            try { consumed = store.consume(Objects.requireNonNull(browserBinding), relay, budget); }
-            catch (RuntimeException exception) { return Indeterminate.INSTANCE; }
-            if (consumed == null || SamlPendingBudget.exhausted(started, budget))
-                return Indeterminate.INSTANCE;
-            if (consumed instanceof SamlPendingConsumeResult.Missing) return Rejected.INSTANCE;
-            if (consumed instanceof SamlPendingConsumeResult.Unavailable) return Unavailable.INSTANCE;
-            if (consumed instanceof SamlPendingConsumeResult.Indeterminate) return Indeterminate.INSTANCE;
-            record = ((SamlPendingConsumeResult.Consumed) consumed).getSealedRecord();
-            sealContext = SamlPendingBinding.context(context + "|logout",
-                    Objects.requireNonNull(browserBinding));
-        }
+        return resolve(clock, relay, budget, pending -> true);
+    }
+
+    @NonNull Resolution resolve(@NonNull Clock clock, @Nullable String relay, @NonNull Duration budget,
+            @NonNull Predicate<@NonNull PendingSamlAuthentication> matches) {
+        if (store == null) return open(Objects.requireNonNull(sealedForm), context, clock, matches);
+        if (relay == null || relay.isEmpty()) return Rejected.INSTANCE;
+        String binding = Objects.requireNonNull(browserBinding);
+        String sealContext = SamlPendingBinding.context(context + "|logout", binding);
+        AtomicReference<@Nullable Checked> checked = new AtomicReference<>();
+        SamlPendingConsumeResult consumed;
+        long started = System.nanoTime();
+        try {
+            consumed = store.consumeIfMatches(binding, relay, record -> {
+                Resolution result = open(record, sealContext, clock, matches);
+                checked.set(new Checked(record, result));
+                return result instanceof Resolved;
+            }, budget);
+        } catch (RuntimeException exception) { return Indeterminate.INSTANCE; }
+        if (consumed == null || SamlPendingBudget.exhausted(started, budget))
+            return Indeterminate.INSTANCE;
+        if (consumed instanceof SamlPendingConsumeResult.Unavailable) return Unavailable.INSTANCE;
+        if (consumed instanceof SamlPendingConsumeResult.Indeterminate) return Indeterminate.INSTANCE;
+        Checked approval = checked.get();
+        if (consumed instanceof SamlPendingConsumeResult.Missing)
+            return approval != null && approval.result() instanceof Unavailable
+                    ? Unavailable.INSTANCE : Rejected.INSTANCE;
+        String record = ((SamlPendingConsumeResult.Consumed) consumed).getSealedRecord();
+        // A provider must remove the exact record approved by the predicate, never a replacement.
+        if (approval == null || !(approval.result() instanceof Resolved)
+                || !approval.sealedRecord().equals(record)) return Indeterminate.INSTANCE;
+        Resolution rechecked = open(record, sealContext, clock, matches);
+        // Removal is confirmed. A later expiry or capability failure cannot make state reusable.
+        return rechecked instanceof Resolved resolved
+                ? new Resolved(resolved.pending(), true) : Indeterminate.INSTANCE;
+    }
+
+    private @NonNull Resolution open(@NonNull String record, @NonNull String sealContext,
+            @NonNull Clock clock, @NonNull Predicate<@NonNull PendingSamlAuthentication> matches) {
         try {
             String opened = SealedStateAccess.get().unseal(sealer, SealedStateType.PENDING_SAML_LOGOUT,
-                    Objects.requireNonNull(record), sealContext, clock);
+                    record, sealContext, clock);
             PendingSamlAuthentication pending = PendingSamlAuthenticationCodec.decode(opened);
-            return pending == null ? Rejected.INSTANCE : new Resolved(pending);
+            return pending == null || !matches.test(pending) ? Rejected.INSTANCE : new Resolved(pending, false);
         } catch (UnsealException exception) { return Rejected.INSTANCE; }
         catch (RuntimeException exception) { return Unavailable.INSTANCE; }
     }
@@ -118,8 +145,9 @@ public final class PendingSamlLogoutSource {
      */
     @Override public @NonNull String toString() { return "PendingSamlLogoutSource{<redacted>}"; }
     sealed interface Resolution permits Resolved, Rejected, Unavailable, Indeterminate { }
-    record Resolved(@NonNull PendingSamlAuthentication pending) implements Resolution { }
+    record Resolved(@NonNull PendingSamlAuthentication pending, boolean consumed) implements Resolution { }
     enum Rejected implements Resolution { INSTANCE }
     enum Unavailable implements Resolution { INSTANCE }
     enum Indeterminate implements Resolution { INSTANCE }
+    private record Checked(@NonNull String sealedRecord, @NonNull Resolution result) { }
 }

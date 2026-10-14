@@ -99,11 +99,11 @@ The rows describe the current SP implementation. Partner interoperability and ma
 | INV-S12 | A required replay cache keys assertion acceptance by SP and IdP connection, retains the key across every bound bearer-confirmation window that may become valid within the assertion age, and writes only after all other checks. A completed in-memory admission releases its lock for a subsequent caller. | `saml.InMemorySamlReplayCacheTests`; `saml.SamlReplayUnlockMutationTests.completedAdmissionReleasesLockForAnotherThread`; `saml.SamlServiceProviderTests.unsolicitedLoginRetainsReplayAcrossDisjointBearerConfirmationWindows`; `saml.SamlResponseSemanticsTests.laterBearerConfirmationKeepsReplayMarkedAfterEarlierConfirmationExpires`; `saml.SamlScriptedMintedFixtureTests` |
 | INV-S13 | Unsolicited responses are disabled by default; an enabled path is explicit and never treats RelayState as a redirect destination. | `saml.SamlServiceProviderTests`; `saml.SamlIndependentFixtureTests` |
 | INV-S14 | GCM decryption authenticates its tag. CBC requires an explicitly permitted IdP and a verified Response signature covering the ciphertext. Decryption failures do not expose an oracle reason. | `saml.SamlEncryptionTests`; `saml.SamlScriptedMintedFixtureTests`; `saml.SimpleSamlCapturedResponseTests`; `saml.ShibbolethCapturedResponseTests.realShibbolethGcmResponseAuthenticatesOnlyOnce`, `realShibbolethCbcResponseRequiresPerIdpOptIn` |
-| INV-S15 | SSO responses use bounded POST decoding; logout messages use bounded Redirect decoding. | `saml.SamlPostBindingDecoderTests`; `saml.SamlRedirectBindingMessageTests`; `saml.SamlLogoutRequestTests` |
+| INV-S15 | SSO responses use bounded POST decoding; logout messages use bounded Redirect decoding or dedicated POST logout decoding. | `saml.SamlPostBindingDecoderTests`; `saml.SamlRedirectBindingMessageTests`; `saml.SamlLogoutRequestTests`; `saml.SamlPostLogoutTests` |
 | INV-S16 | Request XML and HTML form output use escaping writers and require an HTTPS form action. | `saml.SamlRedirectAuthnRequestTests`; `saml.SamlPostBindingMessageTests` |
 | INV-S17 | A disabled JVM-global XML-signature secure-validation setting requires explicit builder acknowledgment and is observed; Revetsec still pins the verification context and its own signature allowlists. | `saml.SamlConfigurationBoundaryTests.disabledGlobalSignatureValidationRequiresAnObservedAcknowledgment`; `internal.xml.EnvelopedSignatureVerifierTests.explicitVerificationContextWorksWithGlobalSecureValidationDisabled` |
 | INV-S18 | Message-content traversal avoids XPath and `getElementsByTagName`. | `saml.SamlXswMutationTests`; `SourcePolicyTests` |
-| INV-S19 | Logout accepts only signed HTTP-Redirect messages, verifies the raw query signature, binds issuer, destination, expiry and pending response, and rejects replay. | `saml.SamlRedirectBindingMessageTests`; `saml.SamlLogoutRequestTests`; `saml.SamlServiceProviderTests`; `saml.SimpleSamlCapturedLogoutTests` |
+| INV-S19 | Logout accepts signed Redirect messages or exact-root XML-signed POST messages, validates response semantics and authenticated pending bindings/correlation before conditional atomic consumption, and atomically rejects replay across bindings and time policies by retaining admission through the global supported age/skew limits. | `saml.SamlRedirectBindingMessageTests`; `saml.SamlLogoutRequestTests`; `saml.SamlServiceProviderTests`; `saml.SimpleSamlCapturedLogoutTests`; `saml.SamlPostLogoutTests`; `saml.InMemoryPendingSamlAuthenticationStoreTests`; `saml.SamlPendingSourceFaultMutationTests` |
 
 ### Packaging
 
@@ -243,3 +243,21 @@ A syntax tree grants no query authority. The service provider resolves registere
 Create/PUT validate required/type/extension/primary rules and preserve readOnly/assigned immutable data. Failure exposes no partial candidate and preserves current resources. Group membership replacement reconciles metadata by exact member ID; ambiguous custom protected arrays reject. One work budget spans each operation; response bytes are reserved before buffer growth, with header and framing charges. Core performs no schema/reference retrieval, database work or commits. Preconditions, uniqueness, authorization, password handling and atomic persistence remain host responsibilities.
 
 Independent assertions include `ScimM10BindingTests`, `ScimM10ResourceTests`, `ScimM10ResourceWorkTests`, `ScimM10FacadeResourceTests`, `ScimM10ProviderTests`, `ScimM10WireTests`, `ScimM10ResponseTests`, `ScimM10RegistrationReviewTests` and the calibrated `ScimM10ContractTests` parser guard.
+
+
+### SCIM invariant assertion map (RC-3)
+
+The following public-API assertions are checked by `ScimRc3QualificationContractTests` for complete, unique identifiers and real assertion-bearing test methods. Independent planted-defect recall, PIT identity dispositions, review and application security evidence qualify the assertions separately; this mapping alone is not assurance sign-off. The approved SCIM plan supersedes older INV-M6 wording that ignored unsupported sort requests: they reject explicitly. Bulk is deferred and has no active invariant here.
+
+| Invariant | Enforced contract | Assertion test |
+| --- | --- | --- |
+| INV-M1 | Filter grammar/precedence/bounds and integer lexical distinction | `scim.ScimRc3InvariantTests.invM1GrammarPrecedenceAndWireIntegerLexemesStayDistinct` |
+| INV-M2 | PATCH shape/mutability and atomic failure | `scim.ScimRc3InvariantTests.invM2StrictRemoveValueAndLateFailureCannotPublishMembershipChanges` |
+| INV-M3 | Server-issued ID; opaque externalId; no identity mapping | `scim.ScimRc3InvariantTests.invM3ReadOnlyServerIdDoesNotBecomeAnExternalIdentityMapping` |
+| INV-M4 | Returned-never fields excluded from wire/filter/sort | `scim.ScimRc3InvariantTests.invM4NeverValuesCannotEnterResponsesFiltersOrSorts` |
+| INV-M5 | Core schema declaration, unknown fields, case duplicates | `scim.ScimRc3InvariantTests.invM5UnknownSchemasAttributesAndCaseDuplicatesReject` |
+| INV-M6 | Normalized/capped pagination and explicit unsupported-sort rejection | `scim.ScimRc3InvariantTests.invM6PagingCapsAndUnsupportedSortHaveExplicitOutcomes` |
+| INV-M7 | Fixed error wire string status, no request-value detail | `scim.ScimRc3InvariantTests.invM7ErrorsAreFixedStringStatusWithoutRequestData` |
+| INV-M8 | ASCII protocol names; safe distinct colliding values | `scim.ScimRc3InvariantTests.invM8AsciiNamesAndCollidingValuesRemainUnambiguous` |
+| INV-M9 | One true primary per declared BOOLEAN primary attribute | `scim.ScimRc3InvariantTests.invM9DuplicatePrimaryValuesRejectBeforePublishingACandidate` |
+| INV-M10 | Unsupported/default-denied filters never ignored; same-element ValuePath | `scim.ScimRc3InvariantTests.invM10DefaultDenySameElementAndFormDecodingCannotBroadenAQuery` |

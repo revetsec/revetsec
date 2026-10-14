@@ -21,7 +21,7 @@ import javax.annotation.concurrent.Immutable;
 import java.util.Objects;
 
 /**
- * Storage provider outcomes when consuming a pending login.
+ * Storage provider outcomes when consuming a pending SAML login or logout.
  *
  * @since 1.0.0
  */
@@ -64,12 +64,13 @@ public sealed interface SamlPendingConsumeResult permits SamlPendingConsumeResul
         @Override public @NonNull String toString() { return "SamlPendingConsumeResult.Consumed{<redacted>}"; }
     }
     /**
-     * No live record matches the binding and handle.
+     * No eligible live record matches the binding, handle and any consume condition.
+     * A record refused by a condition remains unconsumed.
      *
      * @since 1.0.0
      */
     @Immutable
-    enum Missing implements SamlPendingConsumeResult { /** Confirmed absence. */ INSTANCE }
+    enum Missing implements SamlPendingConsumeResult { /** No eligible record. */ INSTANCE }
     /**
      * The store failed before a mutation.
      *

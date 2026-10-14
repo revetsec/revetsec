@@ -101,6 +101,7 @@ public final class ScimResourceType {
     int definitionCount() { return definitionCount; }
     boolean hasStandardGroupSchema() { return standardGroupSchema; }
     boolean hasStandardUserSchema() { return standardUserSchema; }
+    boolean hasStandardEnterpriseUserSchema() { return standardEnterpriseManagerPath != null; }
     boolean isStandardEnterpriseManagerPath(@NonNull String path) { return path.equals(standardEnterpriseManagerPath); }
     boolean isStandardEnterpriseManagerValuePath(@NonNull String path) { return path.equals(standardEnterpriseManagerValuePath); }
 

@@ -109,6 +109,7 @@ final class ScriptedIdpSsoIT {
                 Files.readString(Path.of("src/test/resources/fixtures/keys/sp-encryption-rsa-2048-cert.pem")));
         SamlServiceProvider metadataSp = SamlServiceProvider.withEntityId(SP_ENTITY)
                 .assertionConsumerServiceUrl(ACS).singleLogoutServiceUrl(SLO)
+                .postSingleLogoutServiceUrl(SLO)
                 .replayCache(InMemorySamlReplayCache.withLimit(CLOCK, 8))
                 .signingCredential(signing).decryptionCredentials(List.of(decryption))
                 .clock(CLOCK).build();
@@ -276,6 +277,231 @@ final class ScriptedIdpSsoIT {
                         && entry.findBoolean("schema_valid").orElse(false))
                 .count();
         assertTrue(schemaValidLogoutMessages >= 2, "both SP logout directions must pass the OASIS XSD");
+    }
+
+    @Test void postLogoutInBothDirectionsPassesIndependentXmlSignatureAndSchemaChecks() throws Exception {
+        HttpResponse<String> metadataResponse = client.send(HttpRequest.newBuilder(URI.create(base
+                + "/metadata?now=2026-09-01T00%3A00%3A00Z&variant=query-endpoints")).GET().build(),
+                HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, metadataResponse.statusCode(), metadataResponse.body());
+        SamlIdentityProviderMetadata metadata = assertInstanceOf(SamlIdentityProviderMetadataResult.Parsed.class,
+                SamlIdentityProviderMetadata.fromXmlResult(metadataResponse.body().getBytes(StandardCharsets.UTF_8),
+                        "https://idp.scripted-idp.test/", CLOCK)).getMetadata();
+        assertEquals(URI.create(base + "/slo?tenant=one"), metadata.getPostSingleLogoutService().orElseThrow());
+        SamlIdentityProvider identityProvider = SamlIdentityProvider.withMetadata(metadata)
+                .connectionId("scripted-post-slo").build();
+        SamlServiceProvider sp = postLogoutServiceProvider();
+        StateSealer sealer = StateSealer.withActiveKey(TestSealers.fixedKey("post-slo-live"))
+                .clock(CLOCK).build();
+        SamlSessionReference session = new SamlSessionReference(identityProvider.getConnectionId(),
+                identityProvider.getEntityId(), new SamlNameId("post-logout-user", SamlNameId.PERSISTENT,
+                        identityProvider.getEntityId(), SP_ENTITY), "post-session-123", null);
+        assertEquals(200, json("PUT", "/control/armed/slo", JsonObject.builder()
+                .put("entity_id", SP_ENTITY)
+                .put("clock", JsonObject.builder().put("now", "2026-09-01T00:00:00Z").build())
+                .build()).statusCode());
+        SamlLogoutPostResult.Prepared begin = assertInstanceOf(SamlLogoutPostResult.Prepared.class,
+                sp.beginPostLogoutResult(identityProvider, session));
+        assertEquals(URI.create(base + "/slo?tenant=one"), begin.getPostForm().getAction());
+        HttpResponse<String> fromIdp = submitPostForm(begin.getPostForm());
+        assertEquals(200, fromIdp.statusCode(), fromIdp.body());
+        SamlPostBindingMessage response = logoutPostPage(fromIdp.body());
+        assertEquals(SamlPostBindingMessage.Kind.RESPONSE, response.getKind());
+        PendingSamlLogoutSource pending = PendingSamlLogoutSource.fromSealedForm(
+                begin.getPendingLogout().toSealedForm(sealer, "post-slo-cookie"), sealer, "post-slo-cookie");
+        assertInstanceOf(SamlLogoutResult.Succeeded.class, sp.completeLogoutResult(response, pending,
+                identityProvider));
+        assertInstanceOf(SamlLogoutResult.Rejected.class, sp.completeLogoutResult(response, pending,
+                identityProvider));
+
+        String relay = "post logout /+é";
+        HttpResponse<String> issuedResponse = json("POST", "/control/logout-requests", JsonObject.builder()
+                .put("binding", "post")
+                .put("clock", JsonObject.builder().put("now", "2026-09-01T00:00:00Z").build())
+                .put("sp", JsonObject.builder().put("entity_id", SP_ENTITY).put("slo_url", SLO.toString()).build())
+                .put("subject", JsonObject.builder().put("name_id", "post-logout-user")
+                        .put("session_index", "post-session-123").build())
+                .put("relay_state", relay).build());
+        assertEquals(200, issuedResponse.statusCode(), issuedResponse.body());
+        SamlPostBindingMessage request = logoutPostForm(jsonBody(issuedResponse).findString("form_body").orElseThrow());
+        assertEquals(SamlPostBindingMessage.Kind.REQUEST, request.getKind());
+        assertEquals(relay, request.getRelayState().orElseThrow());
+        SamlLogoutRequest accepted = assertInstanceOf(SamlLogoutRequestResult.Accepted.class,
+                sp.acceptLogoutRequestResult(request, identityProvider)).getRequest();
+        assertEquals(session.getNameId().getValue(), accepted.getNameId().getValue());
+        assertEquals(List.of("post-session-123"), accepted.getSessionIndexes());
+        assertInstanceOf(SamlLogoutRequestResult.Rejected.class, sp.acceptLogoutRequestResult(request,
+                identityProvider));
+        SamlLogoutResponsePostResult.Prepared answer = assertInstanceOf(SamlLogoutResponsePostResult.Prepared.class,
+                sp.respondToPostLogoutRequestResult(accepted, identityProvider, SamlLogoutStatus.SUCCESS));
+        assertEquals(relay, answer.getPostForm().getFields().get("RelayState"));
+        HttpResponse<String> verified = submitPostForm(answer.getPostForm());
+        assertEquals(200, verified.statusCode(), verified.body());
+        HttpResponse<String> receipts = client.send(HttpRequest.newBuilder(URI.create(base + "/control/received"))
+                .GET().build(), HttpResponse.BodyHandlers.ofString());
+        JsonArray entries = assertInstanceOf(JsonArray.class, jsonBody(receipts).find("received").orElseThrow());
+        long verifiedMessages = entries.getElements().stream().filter(value -> value instanceof JsonObject entry
+                && "post-slo".equals(entry.findString("binding").orElse(null))
+                && entry.findBoolean("signature_valid").orElse(false)
+                && entry.findBoolean("schema_valid").orElse(false)).count();
+        assertTrue(verifiedMessages >= 2, "POST LogoutRequest and LogoutResponse must pass libxmlsec and OASIS XSD");
+    }
+
+    @Test void independentlySignedPostLogoutRequestsKeepStrictSemanticsAndSharedReplayProtection() throws Exception {
+        SamlIdentityProvider identityProvider = postLogoutIdentityProvider();
+        SamlServiceProvider sp = postLogoutServiceProvider();
+        String relay = "post-hostile-relay";
+        HttpResponse<String> issuedResponse = json("POST", "/control/logout-requests", JsonObject.builder()
+                .put("binding", "post")
+                .put("clock", JsonObject.builder().put("now", "2026-09-01T00:00:00Z").build())
+                .put("sp", JsonObject.builder().put("entity_id", SP_ENTITY).put("slo_url", SLO.toString()).build())
+                .put("subject", JsonObject.builder().put("name_id", "post-hostile-user")
+                        .put("session_index", "post-hostile-session").build())
+                .put("ids", JsonObject.builder().put("request", "_post_slo_hostile_request").build())
+                .put("relay_state", relay).build());
+        assertEquals(200, issuedResponse.statusCode(), issuedResponse.body());
+        JsonObject issued = jsonBody(issuedResponse);
+        String xml = issued.findString("xml").orElseThrow();
+        SamlPostBindingMessage original = logoutPostForm(issued.findString("form_body").orElseThrow());
+        SamlPostBindingMessage tampered = logoutPostXml(xml.replace("post-hostile-user", "attacker"),
+                "SAMLRequest", relay);
+        assertInstanceOf(SamlLogoutRequestResult.Rejected.class,
+                sp.acceptLogoutRequestResult(tampered, identityProvider));
+        for (String altered : List.of(
+                xml.replace(SLO.toASCIIString(), "https://sp.test/wrong-logout"),
+                xml.replace("<a:Issuer>https://idp.scripted-idp.test/</a:Issuer>",
+                        "<a:Issuer>https://attacker.test/</a:Issuer>"),
+                xml.replace("2026-09-01T00:00:00Z", "2026-09-01T00:10:00Z"),
+                xml.replace("NotOnOrAfter=\"2026-09-01T00:05:00Z\"", "NotOnOrAfter=\"2026-09-01T00:00:00Z\""),
+                xml.replace("</p:LogoutRequest>", "<a:NameID>attacker</a:NameID></p:LogoutRequest>"))) {
+            assertNotEquals(xml, altered);
+            SamlPostBindingMessage signed = signPostLogoutFixture(altered, relay);
+            assertTrue(oracleValid(new String(signed.xml(), StandardCharsets.UTF_8),
+                    "_post_slo_hostile_request", "idp-signing-rsa-2048"));
+            assertInstanceOf(SamlLogoutRequestResult.Rejected.class,
+                    sp.acceptLogoutRequestResult(signed, identityProvider));
+        }
+        assertInstanceOf(SamlLogoutRequestResult.Accepted.class,
+                sp.acceptLogoutRequestResult(original, identityProvider));
+        SamlRedirectBindingMessage crossBindingReplay = signLogoutFixture(xml, SLO, relay);
+        assertInstanceOf(SamlLogoutRequestResult.Rejected.class,
+                sp.acceptLogoutRequestResult(crossBindingReplay, identityProvider));
+    }
+
+    @Test void independentlySignedPostLogoutResponsesPreservePendingUntilValidResult() throws Exception {
+        SamlIdentityProvider identityProvider = postLogoutIdentityProvider();
+        SamlServiceProvider sp = postLogoutServiceProvider();
+        StateSealer sealer = StateSealer.withActiveKey(TestSealers.fixedKey("post-slo-hostile"))
+                .clock(CLOCK).build();
+        SamlSessionReference session = new SamlSessionReference(identityProvider.getConnectionId(),
+                identityProvider.getEntityId(), new SamlNameId("post-hostile-user", SamlNameId.PERSISTENT,
+                        identityProvider.getEntityId(), SP_ENTITY), "post-hostile-session", null);
+        assertEquals(200, json("PUT", "/control/armed/slo", JsonObject.builder()
+                .put("entity_id", SP_ENTITY)
+                .put("clock", JsonObject.builder().put("now", "2026-09-01T00:00:00Z").build())
+                .build()).statusCode());
+        SamlLogoutPostResult.Prepared begin = assertInstanceOf(SamlLogoutPostResult.Prepared.class,
+                sp.beginPostLogoutResult(identityProvider, session));
+        HttpResponse<String> fromIdp = submitPostForm(begin.getPostForm());
+        assertEquals(200, fromIdp.statusCode(), fromIdp.body());
+        SamlPostBindingMessage original = logoutPostPage(fromIdp.body());
+        String xml = new String(original.xml(), StandardCharsets.UTF_8);
+        String relay = begin.getPendingLogout().getRelayStateHandle();
+        PendingSamlLogoutSource pending = PendingSamlLogoutSource.fromSealedForm(
+                begin.getPendingLogout().toSealedForm(sealer, "post-slo-hostile-cookie"),
+                sealer, "post-slo-hostile-cookie");
+        assertInstanceOf(SamlLogoutResult.Rejected.class, sp.completeLogoutResult(
+                logoutPostXml(xml, "SAMLResponse", "attacker-relay"), pending, identityProvider));
+        assertInstanceOf(SamlLogoutResult.Rejected.class, sp.completeLogoutResult(logoutPostXml(
+                xml.replace("status:Success", "status:Responder"), "SAMLResponse", relay), pending,
+                identityProvider));
+        for (String altered : List.of(
+                xml.replace(SLO.toASCIIString(), "https://sp.test/wrong-logout"),
+                xml.replace("InResponseTo=\"" + begin.getPendingLogout().getRequestId() + "\"",
+                        "InResponseTo=\"_unrelated_request\""),
+                xml.replace("<a:Issuer>https://idp.scripted-idp.test/</a:Issuer>",
+                        "<a:Issuer>https://attacker.test/</a:Issuer>"),
+                xml.replace("2026-09-01T00:00:00Z", "2026-08-31T00:00:00Z"),
+                xml.replace("</p:LogoutResponse>", "<p:Status><p:StatusCode "
+                        + "Value='urn:oasis:names:tc:SAML:2.0:status:Success'/></p:Status></p:LogoutResponse>"))) {
+            assertNotEquals(xml, altered);
+            SamlPostBindingMessage signed = signPostLogoutFixture(altered, relay);
+            assertInstanceOf(SamlLogoutResult.Rejected.class,
+                    sp.completeLogoutResult(signed, pending, identityProvider));
+        }
+        assertInstanceOf(SamlLogoutResult.Succeeded.class,
+                sp.completeLogoutResult(original, pending, identityProvider));
+        assertInstanceOf(SamlLogoutResult.Rejected.class,
+                sp.completeLogoutResult(original, pending, identityProvider));
+        assertInstanceOf(SamlLogoutResult.Rejected.class,
+                sp.completeLogoutResult(signLogoutFixture(xml, SLO, relay), pending, identityProvider));
+    }
+
+    private static @NonNull SamlServiceProvider postLogoutServiceProvider() throws Exception {
+        SamlCredential signing = SamlCredential.fromPem(
+                Files.readString(Path.of("src/test/resources/fixtures/keys/sp-signing-rsa-2048-key.pem")),
+                Files.readString(Path.of("src/test/resources/fixtures/keys/sp-signing-rsa-2048-cert.pem")));
+        return SamlServiceProvider.withEntityId(SP_ENTITY).assertionConsumerServiceUrl(ACS)
+                .singleLogoutServiceUrl(SLO).postSingleLogoutServiceUrl(SLO).signingCredential(signing)
+                .replayCache(InMemorySamlReplayCache.withLimit(CLOCK, 32)).clock(CLOCK).build();
+    }
+
+    private static @NonNull SamlIdentityProvider postLogoutIdentityProvider() throws Exception {
+        return SamlIdentityProvider.withEntityId("https://idp.scripted-idp.test/")
+                .connectionId("scripted-post-slo-hostile")
+                .redirectSingleSignOnService(URI.create(base + "/sso"))
+                .redirectSingleLogoutService(URI.create(base + "/slo"))
+                .postSingleLogoutService(URI.create(base + "/slo"))
+                .signingKeys(List.of(Pem.parseCertificate(Files.readString(Path.of(
+                        "src/test/resources/fixtures/keys/idp-signing-rsa-2048-cert.pem"))).getPublicKey()))
+                .build();
+    }
+
+    private static @NonNull HttpResponse<@NonNull String> submitPostForm(@NonNull SamlPostForm form) throws Exception {
+        StringBuilder body = new StringBuilder();
+        for (var field : form.getFields().entrySet()) {
+            if (!body.isEmpty()) body.append('&');
+            body.append(URLEncoder.encode(field.getKey(), StandardCharsets.UTF_8)).append('=')
+                    .append(URLEncoder.encode(field.getValue(), StandardCharsets.UTF_8));
+        }
+        return client.send(HttpRequest.newBuilder(form.getAction())
+                .header("Content-Type", "application/x-www-form-urlencoded")
+                .POST(HttpRequest.BodyPublishers.ofString(body.toString())).build(), HttpResponse.BodyHandlers.ofString());
+    }
+
+    private static @NonNull SamlPostBindingMessage signPostLogoutFixture(@NonNull String xml,
+            @NonNull String relay) throws Exception {
+        HttpResponse<String> signed = json("POST", "/control/logout-sign", JsonObject.builder()
+                .put("binding", "post").put("xml", xml).put("destination", SLO.toASCIIString())
+                .put("relay_state", relay).build());
+        assertEquals(200, signed.statusCode(), signed.body());
+        return logoutPostForm(jsonBody(signed).findString("form_body").orElseThrow());
+    }
+
+    private static @NonNull SamlPostBindingMessage logoutPostXml(@NonNull String xml,
+            @NonNull String field, @NonNull String relay) {
+        return logoutPostForm(field + "=" + URLEncoder.encode(Base64.getEncoder().encodeToString(
+                xml.getBytes(StandardCharsets.UTF_8)), StandardCharsets.UTF_8)
+                + "&RelayState=" + URLEncoder.encode(relay, StandardCharsets.UTF_8));
+    }
+
+    private static @NonNull SamlPostBindingMessage logoutPostForm(@NonNull String body) {
+        return assertInstanceOf(SamlPostBindingParseResult.Parsed.class,
+                SamlPostBindingMessage.fromLogoutFormBodyResult(body.getBytes(StandardCharsets.US_ASCII),
+                        List.of("application/x-www-form-urlencoded"), null)).getMessage();
+    }
+
+    private static @NonNull SamlPostBindingMessage logoutPostPage(@NonNull String page) {
+        Matcher matches = FIELD.matcher(page);
+        String response = null;
+        String relay = null;
+        while (matches.find()) {
+            if ("SAMLResponse".equals(matches.group(1))) response = matches.group(2);
+            else relay = matches.group(2);
+        }
+        assertTrue(response != null && relay != null, page);
+        return logoutPostForm("SAMLResponse=" + URLEncoder.encode(response, StandardCharsets.UTF_8)
+                + "&RelayState=" + URLEncoder.encode(relay, StandardCharsets.UTF_8));
     }
 
     @Test void queryfulMetadataEndpointsWorkAcrossRedirectPostAndLogout() throws Exception {

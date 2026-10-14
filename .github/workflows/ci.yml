@@ -628,6 +628,9 @@ jobs:
               missing.update(classname + "#" + name for name in methods - actual)
           saml_class = 'com.revetsec.saml.ScriptedIdpSsoIT'
           saml_expected = {'redirectAndPostAuthenticationRoundTrip',
+                           'postLogoutInBothDirectionsPassesIndependentXmlSignatureAndSchemaChecks',
+                           'independentlySignedPostLogoutRequestsKeepStrictSemanticsAndSharedReplayProtection',
+                           'independentlySignedPostLogoutResponsesPreservePendingUntilValidResult',
                            'queryfulMetadataEndpointsWorkAcrossRedirectPostAndLogout',
                            'libxmlsecVerdictsAndSpPolicyStaySeparateAcrossSignedPlacements',
                            'signedStructureCorpusHasIndependentSignatureProof',
@@ -649,7 +652,9 @@ jobs:
           keycloak_saml_class = 'com.revetsec.saml.KeycloakSamlIT'
           keycloak_saml_expected = {'redirectLoginProducesCheckedPostResponse',
                                    'idpInitiatedLoginRequiresExplicitConnectionMode',
-                                   'idpInitiatedLogoutReturnsSignedRedirectRequest'}
+                                   'idpInitiatedLogoutReturnsSignedRedirectRequest',
+                                   'postLogoutExchangesSignedXmlWithRealKeycloakAndRejectsTamperingAndReplay',
+                                   'idpInitiatedPostLogoutRequestAndReplyUseSignedXmlWithRealKeycloak'}
           keycloak_saml_actual = {case.attrib.get('name') for suite in suites for case in suite.findall('testcase') if case.attrib.get('classname') == keycloak_saml_class}
           missing.update(keycloak_saml_class + '#' + name for name in keycloak_saml_expected - keycloak_saml_actual)
           failed = sum(int(suite.attrib.get('failures', '0')) + int(suite.attrib.get('errors', '0')) for suite in suites)

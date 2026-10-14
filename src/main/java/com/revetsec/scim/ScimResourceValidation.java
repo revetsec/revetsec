@@ -260,7 +260,7 @@ final class ScimResourceValidation {
         }
         if ((path.equals("id") || path.equals("members.value") && type.hasStandardGroupSchema()
                 || path.equals("groups.value") && type.hasStandardUserSchema()
-                || type.isStandardEnterpriseManagerValuePath(path)) && normalized instanceof JsonString string && !id(string.getValue())) {
+                || type.isStandardEnterpriseManagerValuePath(path)) && normalized instanceof JsonString string && !validResourceId(string.getValue())) {
             error = ScimError.invalidValueInstance(); return null;
         }
         if (path.equals("meta.resourceType") && normalized instanceof JsonString string && !string.getValue().equals(type.getName())) {
@@ -321,7 +321,7 @@ final class ScimResourceValidation {
         return value != null && !(value instanceof JsonNull) && !(value instanceof JsonArray array && array.getElements().isEmpty())
                 && !(value instanceof JsonString string && string.getValue().isEmpty());
     }
-    private static boolean id(@NonNull String value) {
+    static boolean validResourceId(@NonNull String value) {
         if (value.isEmpty() || value.length() > Limits.SCIM_IDENTIFIER_LENGTH.getCap() || AsciiCase.fold(value).contains("bulkid")) return false;
         for (int index = 0; index < value.length(); index++) if (value.charAt(index) < 0x20 || value.charAt(index) == 0x7f) return false;
         return true;

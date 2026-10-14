@@ -40,6 +40,8 @@ The app checks `Parsed`/`Rejected`/`Unavailable` metadata results at startup, sc
 
 The [Keycloak browser probe](../../interop/keycloak/README.md) also exercises this app with an independent IdP. Chromium can send `Origin: null` on Keycloak's automatic SAML form POST; the Playground accepts that value only at `/saml/acs`, after which its pending browser binding and SAML checks still decide the result. Other browser forms retain exact Origin and CSRF checks.
 
+Invalid logout callbacks preserve a live pending flow and its browser cookie, so a later valid IdP response can still complete. Verified terminal statuses and attempt expiry clear the flow. Unavailable or indeterminate callbacks release no provider outcome and never restore local access.
+
 This example has one-node replay and account storage. A distributed application supplies shared atomic replay/pending storage and durable account/session storage; see the [SAML integration guide](../../docs/saml-sp.md). The SAML flow does not issue OAuth tokens or change MCP bearer admission.
 
 `PLAYGROUND_VALIDATION=introspection` with the node provider's `TEST_PLAYGROUND_TOKEN_FORMAT=opaque` uses fresh audience-checked JSON introspection on every admission. The JWT preset uses strict RFC 9068 tokens. Provider infrastructure failures map to unavailable rather than invalid credentials. The app authorizes every MCP operation: discovery/catalog operations need `mcp:discover`; only the registered `whoami` tool with permitted local/self arguments needs `mcp:whoami`. Other operations, tenant and object selections are denied. Notifications receive the corresponding transport status without a JSON-RPC response body.

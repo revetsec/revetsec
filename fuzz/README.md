@@ -113,6 +113,18 @@ octet. Only the unchanged valid request may release the fixed NameID/SessionInde
 only the unchanged valid response may complete the sealed pending logout. All other
 cases must reject. The target uses a fresh replay cache for each trial and no network.
 
+Two POST logout targets extend that coverage. `signedPostLogoutCasesNeverReleaseWrongSessionOrSuccess`
+selects the same 23 libxmlsec-signed cases, checks a valid control before each trial,
+then tries the original form, a duplicate message field, or a changed XML signature byte. Successful
+controls retain the fixed NameID/SessionIndex or the correlated status and reject a second admission.
+`rawPostLogoutFormsNeverAdmitUnsignedProtocolMessages` parses arbitrary form bytes, checks replay
+denial for any accepted original, then removes every XML signature and requires rejection. Neither
+target calls a network service. Their authored seeds are inventoried in
+`com/revetsec/saml/saml-post-logout-seeds.sha256`, checked by `FuzzSeedProvenanceTests`.
+Structured seed bytes select case, mutation (0 original, 1 duplicate message, 2 signature edit),
+and signature byte offset; missing control bytes are zero. Raw seeds include signed controls,
+unsigned messages, conflicting form fields, invalid Base64, and malformed encoding.
+
 The M4 semantic seeds under `com/revetsec/oidc/OidcFuzzTestsInputs` use test-only values and a fixed
 2026-09-30 clock. `oidc-seeds.sha256` inventories every authored seed and is checked by
 `FuzzSeedProvenanceTests`. All four targets also receive the two core JSON corpora through Maven

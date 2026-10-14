@@ -17,7 +17,6 @@
 package com.revetsec.scim;
 
 import com.google.errorprone.annotations.CheckReturnValue;
-import com.revetsec.internal.json.AsciiCase;
 import com.revetsec.json.*;
 import org.jspecify.annotations.NonNull;
 import javax.annotation.concurrent.Immutable;
@@ -32,14 +31,15 @@ import static java.util.Objects.requireNonNull;
 @Immutable public final class ScimGroup {
     private final @NonNull ScimResource resource;
     private ScimGroup(@NonNull ScimResource resource) { this.resource = resource; }
-    /** Creates a typed view; a foreign resource schema is a programming error.
+    /** Creates a typed view of a complete standard Group schema.
+     * Equivalent rebuilt schemas are accepted; a foreign or altered schema is a programming error.
      * @param resource the resource
      * @return the view
      * @since 1.0.0
      */
     @CheckReturnValue public static @NonNull ScimGroup fromResource(@NonNull ScimResource resource) {
         requireNonNull(resource);
-        if (!AsciiCase.fold(resource.getResourceType().getSchema().getId()).equals(AsciiCase.fold(ScimSchema.groupInstance().getId())))
+        if (!resource.getResourceType().hasStandardGroupSchema())
             throw new IllegalArgumentException("The resource does not have the required core schema.");
         return new ScimGroup(resource);
     }

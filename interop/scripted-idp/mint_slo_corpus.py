@@ -14,7 +14,7 @@
 # limitations under the License.
 #
 
-"""Mint deterministic Python-signed HTTP-Redirect SLO differential fixtures."""
+"""Mint deterministic independent signatures for Redirect or POST SLO fixtures."""
 
 import argparse
 import pathlib
@@ -22,6 +22,7 @@ import pathlib
 from lxml import etree
 
 from scripted_idp import schema, slo
+from scripted_idp import selftest as x
 
 
 SP = "https://sp.test/Selftest"
@@ -77,6 +78,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--out", required=True, type=pathlib.Path)
     parser.add_argument("--keys", type=pathlib.Path, default=pathlib.Path("/run/keys"))
+    parser.add_argument("--binding", choices=("redirect", "post"), default="redirect")
     args = parser.parse_args()
     if not args.keys.is_dir():
         raise SystemExit("test key directory is missing")
@@ -145,12 +147,18 @@ def main():
     if not official_schema.validate(etree.fromstring(
             candidates["response-nested-failure"].encode("utf-8"))):
         raise ValueError("nested SLO status should be valid XSD but rejected by the SP profile")
-    lines = ["# Python cryptography RSA-SHA256 Redirect signatures from the pinned scripted IdP.",
+    producer = "libxmlsec RSA-SHA256 XML POST" if args.binding == "post" else "Python cryptography RSA-SHA256 Redirect"
+    lines = ["# " + producer + " signatures from the pinned scripted IdP.",
              "# Regenerate inside its image with this script and the fixed test key directory."]
     for name, xml in candidates.items():
-        result = slo.sign_fixture({"xml": xml, "destination": SLO, "relay_state": RELAY},
+        result = slo.sign_fixture({"xml": xml, "destination": SLO, "relay_state": RELAY,
+                                   "binding": args.binding},
                                   args.keys)
-        lines.append(name + "=" + result["raw_query"])
+        if args.binding == "post":
+            x.xmlsec_verify(etree.fromstring(result["xml"].encode("utf-8")),
+                            x.Credential.from_files("idp-signing-rsa-2048", args.keys),
+                            x.C.TransformRsaSha256, x.C.TransformSha256)
+        lines.append(name + "=" + result["form_body" if args.binding == "post" else "raw_query"])
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text("\n".join(lines) + "\n", encoding="ascii")
     print(f"wrote {len(candidates)} signed SLO fixtures to {args.out}")

@@ -1,0 +1,471 @@
+{
+  "kind": "authored synthetic corpus; no captured traffic, credentials or accounts",
+  "target": "com.revetsec.scim.ScimRc3IngressFuzzTests#physicalHeadersQueriesAndBodiesPreserveBoundsPrivacyAndProvenance",
+  "seedCount": 58,
+  "seeds": [
+    {
+      "name": "body-0.bin",
+      "bytes": 3,
+      "sha256": "1b4d1e3084086ec72717ab27e1ff17f55c1bcbe598f1726d63fc92b7088d51b3",
+      "origin": "authored synthetic",
+      "meaning": "Materialized raw Search/create/replacement control: '{}'",
+      "controlMode": 3
+    },
+    {
+      "name": "body-1.bin",
+      "bytes": 78,
+      "sha256": "61b764d4d370f3c813047d84916d038fdb6f7747d4f9454713fce835440d8776",
+      "origin": "authored synthetic",
+      "meaning": "Materialized raw Search/create/replacement control: '{\"schemas\":[\"urn:ietf:params:scim:api:messages:2.0:SearchRequest\"],\"count\":0}'",
+      "controlMode": 3
+    },
+    {
+      "name": "body-2.bin",
+      "bytes": 80,
+      "sha256": "12516aff6bb35f127445f6ad0d3e4ce22b1833bf7e7f7885f6d499e4356f2323",
+      "origin": "authored synthetic",
+      "meaning": "Materialized raw Search/create/replacement control: '{\"schemas\":[\"urn:ietf:params:scim:api:messages:2.0:SearchRequest\"],\"count\":1e0}'",
+      "controlMode": 3
+    },
+    {
+      "name": "body-3.bin",
+      "bytes": 80,
+      "sha256": "32ceef3d5ba9ee154499114a3782fff33e18862908936c44bf796c318d51dd3b",
+      "origin": "authored synthetic",
+      "meaning": "Materialized raw Search/create/replacement control: '{\"schemas\":[\"urn:ietf:params:scim:schemas:core:2.0:User\"],\"userName\":\"fixture\"}'",
+      "controlMode": 3
+    },
+    {
+      "name": "body-4.bin",
+      "bytes": 134,
+      "sha256": "a2ab7343537cec0e70bd8e51fa4056739963b2880e2f3a8a4b599c0a06bf16d1",
+      "origin": "authored synthetic",
+      "meaning": "Materialized raw Search/create/replacement control: '{\"schemas\":[\"urn:ietf:params:scim:schemas:core:2.0:User\"],\"userName\":\"fixture\",\"id\":\"untrusted\",\"meta\":{\"version\":\"W/\\\\\"untrusted'",
+      "controlMode": 3
+    },
+    {
+      "name": "body-5.bin",
+      "bytes": 110,
+      "sha256": "e23f5bafcdd05516466fdcf8a2d1d11b4ba6785680eb485218c1c499a74c05fd",
+      "origin": "authored synthetic",
+      "meaning": "Materialized raw Search/create/replacement control: '{\"schemas\":[\"urn:ietf:params:scim:schemas:core:2.0:User\"],\"userName\":\"fixture\",\"password\":\"synthetic-secret\"}'",
+      "controlMode": 3
+    },
+    {
+      "name": "body-6.bin",
+      "bytes": 100,
+      "sha256": "e2b3fd7738ab52b5d03e53ac5c806c8c3701458cf3268846af6bac714a8b617f",
+      "origin": "authored synthetic",
+      "meaning": "Materialized raw Search/create/replacement control: '{\"schemas\":[\"urn:ietf:params:scim:schemas:core:2.0:User\"],\"userName\":\"fixture\",\"USERNAME\":\"second\"}'",
+      "controlMode": 3
+    },
+    {
+      "name": "body-7.bin",
+      "bytes": 22,
+      "sha256": "e87074b7e7019a63dd0f5f662a7323c93bd5cf6bc55b902096d0cc8e83a17c01",
+      "origin": "authored synthetic",
+      "meaning": "Materialized raw Search/create/replacement control: '{\"count\":1,\"COUNT\":2}'",
+      "controlMode": 3
+    },
+    {
+      "name": "body-8.bin",
+      "bytes": 2059,
+      "sha256": "67b2958d35581cb62763635ec33db06b4b23e73e10b5af5ac52fd4deb6103f03",
+      "origin": "authored synthetic",
+      "meaning": "Materialized raw Search/create/replacement control: '{\"x\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'",
+      "controlMode": 3
+    },
+    {
+      "name": "headers-0.bin",
+      "bytes": 22,
+      "sha256": "e58c99f4c161669c7ad181c22cf43ecca08493af94611cb3661a4638cb0e062c",
+      "origin": "authored synthetic",
+      "meaning": "Original physical fields; NUL only separates occurrences: 'application/scim+json'",
+      "controlMode": 1
+    },
+    {
+      "name": "headers-1.bin",
+      "bytes": 34,
+      "sha256": "76a743196a2781de4b1dbd6a996b769bdc5eb9a7497b61d037252d66653da22c",
+      "origin": "authored synthetic",
+      "meaning": "Original physical fields; NUL only separates occurrences: 'APPLICATION/JSON; charset=\"UTF-8\"'",
+      "controlMode": 1
+    },
+    {
+      "name": "headers-2.bin",
+      "bytes": 44,
+      "sha256": "b56feb87958203ee5071d4531614a613a1cec984b75d378a96d6c44513f19840",
+      "origin": "authored synthetic",
+      "meaning": "Original physical fields; NUL only separates occurrences: 'application/scim+json\\x00application/scim+json'",
+      "controlMode": 1
+    },
+    {
+      "name": "headers-3.bin",
+      "bytes": 40,
+      "sha256": "ba61c352e6c804c4a3ad9cfcaad80e1c06b0030fd586ab3ac19b76c81f9fbdfb",
+      "origin": "authored synthetic",
+      "meaning": "Original physical fields; NUL only separates occurrences: 'application/scim+json, application/json'",
+      "controlMode": 1
+    },
+    {
+      "name": "headers-4.bin",
+      "bytes": 39,
+      "sha256": "2ac18294d1c8b5a7165181e72ffa442a83b3eb976339cc6b128da61aed127033",
+      "origin": "authored synthetic",
+      "meaning": "Original physical fields; NUL only separates occurrences: 'application/scim+json\\r\\nX-Test: fixture'",
+      "controlMode": 1
+    },
+    {
+      "name": "headers-5.bin",
+      "bytes": 8,
+      "sha256": "b70f256aee7585a9fc2da3a9687313b54f2c45c60fd7830cf2a9a0673fad4463",
+      "origin": "authored synthetic",
+      "meaning": "Original physical fields; NUL only separates occurrences: 'W/\"rc3\"'",
+      "controlMode": 1
+    },
+    {
+      "name": "headers-6.bin",
+      "bytes": 16,
+      "sha256": "895bedb23da0ee197e237b48760936abf6e39aea1f44acf02525d60fff40c950",
+      "origin": "authored synthetic",
+      "meaning": "Original physical fields; NUL only separates occurrences: '\"other\"\\x00W/\"rc3\"'",
+      "controlMode": 1
+    },
+    {
+      "name": "headers-7.bin",
+      "bytes": 8,
+      "sha256": "2397ea92c4c4c689a8160726c461d9cfa5173f721a42bdd3fcbe065a0e4827ea",
+      "origin": "authored synthetic",
+      "meaning": "Original physical fields; NUL only separates occurrences: '*\\x00\"rc3\"'",
+      "controlMode": 1
+    },
+    {
+      "name": "headers-8.bin",
+      "bytes": 23,
+      "sha256": "20da77695a74e19ebca0b831adf83b8cea31fbb05dfbd4726a3b2246015058a9",
+      "origin": "authored synthetic",
+      "meaning": "Original physical fields; NUL only separates occurrences: '\"rc3\"\\r\\nX-Test: fixture'",
+      "controlMode": 1
+    },
+    {
+      "name": "headers-9.bin",
+      "bytes": 260,
+      "sha256": "5ede75a7f74f5610a732073cc4e2a753338b60016f70e4e79f61f9210c1a5e3d",
+      "origin": "authored synthetic",
+      "meaning": "Original physical fields; NUL only separates occurrences: '\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'",
+      "controlMode": 1
+    },
+    {
+      "name": "invalid-utf8.bin",
+      "bytes": 4,
+      "sha256": "36388a0ff5644d8153a5986d93d245a4cf2303853309b2bcd21a1b094c6443c5",
+      "origin": "authored synthetic",
+      "meaning": "Invalid UTF-8 raw body",
+      "controlMode": 2
+    },
+    {
+      "name": "model-0.bin",
+      "bytes": 5,
+      "sha256": "6652e2f79177e16e29341f15eaed9be0c10657255025292f2b3e270f8f9a8a66",
+      "origin": "authored synthetic",
+      "meaning": "Binary controls span requested counts, index bounds, media fields and conditional-tag truth table",
+      "controlMode": 0
+    },
+    {
+      "name": "model-1.bin",
+      "bytes": 5,
+      "sha256": "fa330385e3a50cba1d465a160b07bdaf18047967c5ce2a99606a592a0e80564f",
+      "origin": "authored synthetic",
+      "meaning": "Binary controls span requested counts, index bounds, media fields and conditional-tag truth table",
+      "controlMode": 1
+    },
+    {
+      "name": "model-10.bin",
+      "bytes": 5,
+      "sha256": "4b03b54227c036a1596b63ee82664c792d106a90d047990453782b488a77d6dc",
+      "origin": "authored synthetic",
+      "meaning": "Binary controls span requested counts, index bounds, media fields and conditional-tag truth table",
+      "controlMode": 2
+    },
+    {
+      "name": "model-11.bin",
+      "bytes": 5,
+      "sha256": "6fa78971520b7dffc482ac30fae045e6574c19639080c2893f88631254419a9f",
+      "origin": "authored synthetic",
+      "meaning": "Binary controls span requested counts, index bounds, media fields and conditional-tag truth table",
+      "controlMode": 3
+    },
+    {
+      "name": "model-12.bin",
+      "bytes": 5,
+      "sha256": "c4e78da4d37b501334be34d3eeaba779fad37be9e144384c10ff30da7f9168e1",
+      "origin": "authored synthetic",
+      "meaning": "Binary controls span requested counts, index bounds, media fields and conditional-tag truth table",
+      "controlMode": 0
+    },
+    {
+      "name": "model-13.bin",
+      "bytes": 5,
+      "sha256": "29f280ac7f43793d4bbcd0ecd8bb01ed99c12dd7e56720a8f6ec8eeb47498852",
+      "origin": "authored synthetic",
+      "meaning": "Binary controls span requested counts, index bounds, media fields and conditional-tag truth table",
+      "controlMode": 1
+    },
+    {
+      "name": "model-14.bin",
+      "bytes": 5,
+      "sha256": "3585c3c21818abc59b202cc5905e6bd4eb010c997b2bf907c629ff79d2919abc",
+      "origin": "authored synthetic",
+      "meaning": "Binary controls span requested counts, index bounds, media fields and conditional-tag truth table",
+      "controlMode": 2
+    },
+    {
+      "name": "model-15.bin",
+      "bytes": 5,
+      "sha256": "a4e8ec62f35a4d2d080401d3eeea54f8fe5a175a79259d75d031bbe2795c6e14",
+      "origin": "authored synthetic",
+      "meaning": "Binary controls span requested counts, index bounds, media fields and conditional-tag truth table",
+      "controlMode": 3
+    },
+    {
+      "name": "model-2.bin",
+      "bytes": 5,
+      "sha256": "57889670d11aff0d9938ed045c6e73a72d32b4a1245dd901e34568f9ee905024",
+      "origin": "authored synthetic",
+      "meaning": "Binary controls span requested counts, index bounds, media fields and conditional-tag truth table",
+      "controlMode": 2
+    },
+    {
+      "name": "model-3.bin",
+      "bytes": 5,
+      "sha256": "1b961df350773c26047bd6179eecbadc621fce3c9e915c215ffe242e31f460bf",
+      "origin": "authored synthetic",
+      "meaning": "Binary controls span requested counts, index bounds, media fields and conditional-tag truth table",
+      "controlMode": 3
+    },
+    {
+      "name": "model-4.bin",
+      "bytes": 5,
+      "sha256": "36183281678ca0cfea441c483f4b99a6497fb9e93021a33c72f2ee4d61ababca",
+      "origin": "authored synthetic",
+      "meaning": "Binary controls span requested counts, index bounds, media fields and conditional-tag truth table",
+      "controlMode": 0
+    },
+    {
+      "name": "model-5.bin",
+      "bytes": 5,
+      "sha256": "e6d345143a3c1c0ba2b56501f77141255d5b94e9fc998f11340f9858a951f98f",
+      "origin": "authored synthetic",
+      "meaning": "Binary controls span requested counts, index bounds, media fields and conditional-tag truth table",
+      "controlMode": 1
+    },
+    {
+      "name": "model-6.bin",
+      "bytes": 5,
+      "sha256": "c781c6ece115ac44af116ff7f4568b14fae4eba096618f84b4fa2e7c076756fc",
+      "origin": "authored synthetic",
+      "meaning": "Binary controls span requested counts, index bounds, media fields and conditional-tag truth table",
+      "controlMode": 2
+    },
+    {
+      "name": "model-7.bin",
+      "bytes": 5,
+      "sha256": "b2591965d602e5f77e67087b4fe5e273b80ff8fee5eed881678ddbe87d2a31d5",
+      "origin": "authored synthetic",
+      "meaning": "Binary controls span requested counts, index bounds, media fields and conditional-tag truth table",
+      "controlMode": 3
+    },
+    {
+      "name": "model-8.bin",
+      "bytes": 5,
+      "sha256": "aeae0cb8dd1cba094a5e4868a693b3eb6517ee5ad183cfc60199569ced1e82d8",
+      "origin": "authored synthetic",
+      "meaning": "Binary controls span requested counts, index bounds, media fields and conditional-tag truth table",
+      "controlMode": 0
+    },
+    {
+      "name": "model-9.bin",
+      "bytes": 5,
+      "sha256": "1dc8575830844b0c4672721fb2b26c017cae82a6be25fea333e753b2d517732d",
+      "origin": "authored synthetic",
+      "meaning": "Binary controls span requested counts, index bounds, media fields and conditional-tag truth table",
+      "controlMode": 1
+    },
+    {
+      "name": "oversized-body.bin",
+      "bytes": 16386,
+      "sha256": "441d64a83ba00198f78e99c53c92040f64986489ec9ad8cbbb1ecc709ec85ccf",
+      "origin": "authored synthetic",
+      "meaning": "Body cap exceeded before parse",
+      "controlMode": 3
+    },
+    {
+      "name": "query-0.bin",
+      "bytes": 1,
+      "sha256": "6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d",
+      "origin": "authored synthetic",
+      "meaning": "Raw query control: ''",
+      "controlMode": 0
+    },
+    {
+      "name": "query-1.bin",
+      "bytes": 8,
+      "sha256": "dd2f8c4339387086d237310a12d41d07c88d466b95f2e9d4cf9c2c988b585f7f",
+      "origin": "authored synthetic",
+      "meaning": "Raw query control: 'count=0'",
+      "controlMode": 0
+    },
+    {
+      "name": "query-10.bin",
+      "bytes": 37,
+      "sha256": "c624a8b1e1859813083d4ad4f58c99f712d04a814e08ec5556deb97e9f02f9ae",
+      "origin": "authored synthetic",
+      "meaning": "Raw query control: 'filter=password%20eq%20%22fixture%22'",
+      "controlMode": 0
+    },
+    {
+      "name": "query-11.bin",
+      "bytes": 45,
+      "sha256": "2c5047a68695220119d2a128ca05b2d132683139a8f383c37d9f408719c565b3",
+      "origin": "authored synthetic",
+      "meaning": "Raw query control: 'filter=userName%2520eq%2520%2522fixture%2522'",
+      "controlMode": 0
+    },
+    {
+      "name": "query-12.bin",
+      "bytes": 48,
+      "sha256": "8921e4379b96ba33eeccd940e406d2508abbe5280ae91fe686ac7faa370da2bf",
+      "origin": "authored synthetic",
+      "meaning": "Raw query control: 'attributes=userName&excludedAttributes=password'",
+      "controlMode": 0
+    },
+    {
+      "name": "query-13.bin",
+      "bytes": 13,
+      "sha256": "d652c3fbd2cfef80d1bbeb74780baf3848eceff09c3c02e572f785399f598652",
+      "origin": "authored synthetic",
+      "meaning": "Raw query control: 'count=%C0%AF'",
+      "controlMode": 0
+    },
+    {
+      "name": "query-14.bin",
+      "bytes": 10,
+      "sha256": "5fb6de21b7d0e4834d88eca41730ebba437a0148273e6b0df15366983c65d08d",
+      "origin": "authored synthetic",
+      "meaning": "Raw query control: 'count=%FF'",
+      "controlMode": 0
+    },
+    {
+      "name": "query-15.bin",
+      "bytes": 8,
+      "sha256": "c55450fdeffefd62733d4ea445ea3c32164547d1b0bf7d084d145f779406d9d8",
+      "origin": "authored synthetic",
+      "meaning": "Raw query control: 'count=%'",
+      "controlMode": 0
+    },
+    {
+      "name": "query-16.bin",
+      "bytes": 9,
+      "sha256": "e0f8a2da8a2a7ec140624d785ed108194c2adab8cec44d3e526d365d9bf4bd93",
+      "origin": "authored synthetic",
+      "meaning": "Raw query control: 'count=+1'",
+      "controlMode": 0
+    },
+    {
+      "name": "query-17.bin",
+      "bytes": 11,
+      "sha256": "7a0ed0fd938bd341a99ef4b2b44aeaf86bb5b54f1b133d743d153156cf64ebec",
+      "origin": "authored synthetic",
+      "meaning": "Raw query control: 'count=%2B1'",
+      "controlMode": 0
+    },
+    {
+      "name": "query-18.bin",
+      "bytes": 16,
+      "sha256": "67a71800feb3cf7758ceadf54c81b3eb9c23fc482a05de3140098f041042e421",
+      "origin": "authored synthetic",
+      "meaning": "Raw query control: 'unknown=fixture'",
+      "controlMode": 0
+    },
+    {
+      "name": "query-19.bin",
+      "bytes": 33,
+      "sha256": "21d3f4b304931e2d1720f968d94001f74abf97f575bfcc52f0af8f742145a7a3",
+      "origin": "authored synthetic",
+      "meaning": "Raw query control: '&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&'",
+      "controlMode": 0
+    },
+    {
+      "name": "query-2.bin",
+      "bytes": 9,
+      "sha256": "289040746b8519498025f5e866986962f445036169351fab9870b1bf0c35cf25",
+      "origin": "authored synthetic",
+      "meaning": "Raw query control: 'count=10'",
+      "controlMode": 0
+    },
+    {
+      "name": "query-20.bin",
+      "bytes": 1028,
+      "sha256": "101350fee612dc3f2aaf5c53b5c760f91fb84a918fa33577c6e3bb8461bb5cb3",
+      "origin": "authored synthetic",
+      "meaning": "Raw query control: 'x=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'",
+      "controlMode": 0
+    },
+    {
+      "name": "query-3.bin",
+      "bytes": 9,
+      "sha256": "e8b6aa170bc381380613bf6503c9a199485241a75db9fc8785005f1b038a239a",
+      "origin": "authored synthetic",
+      "meaning": "Raw query control: 'count=11'",
+      "controlMode": 0
+    },
+    {
+      "name": "query-4.bin",
+      "bytes": 26,
+      "sha256": "07dce07d878ac0afebe5a63b41a0fa7f5d36b2a9de6cfc3ce9a96b0c90bc8120",
+      "origin": "authored synthetic",
+      "meaning": "Raw query control: 'count=9223372036854775807'",
+      "controlMode": 0
+    },
+    {
+      "name": "query-5.bin",
+      "bytes": 9,
+      "sha256": "59b158a88e1c79d54d6e6ceda7ba5cab753d112f9ec6355023f25edd9d70995d",
+      "origin": "authored synthetic",
+      "meaning": "Raw query control: 'count=-1'",
+      "controlMode": 0
+    },
+    {
+      "name": "query-6.bin",
+      "bytes": 10,
+      "sha256": "5991bb6f228fc00f3e725e6044f468a34eacd278faa5338b9edcadee3f256e6c",
+      "origin": "authored synthetic",
+      "meaning": "Raw query control: 'count=1e0'",
+      "controlMode": 0
+    },
+    {
+      "name": "query-7.bin",
+      "bytes": 16,
+      "sha256": "2b4a9b99ff647e1ff728db0b15784fb4fb20942277a771199f3d44f171783397",
+      "origin": "authored synthetic",
+      "meaning": "Raw query control: 'count=1&COUNT=2'",
+      "controlMode": 0
+    },
+    {
+      "name": "query-8.bin",
+      "bytes": 13,
+      "sha256": "992f8822d498673e9b15fa42e0e396078c0fdb63314fd40d42b17b1515214ba2",
+      "origin": "authored synthetic",
+      "meaning": "Raw query control: 'startIndex=0'",
+      "controlMode": 0
+    },
+    {
+      "name": "query-9.bin",
+      "bytes": 37,
+      "sha256": "ca410ce0d3fe0a441481409337521b061354de961afa91b9d9a61072a21d9cfa",
+      "origin": "authored synthetic",
+      "meaning": "Raw query control: 'filter=userName%20eq%20%22fixture%22'",
+      "controlMode": 0
+    }
+  ]
+}

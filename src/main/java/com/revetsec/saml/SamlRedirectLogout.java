@@ -43,34 +43,41 @@ final class SamlRedirectLogout {
             @NonNull SamlSessionReference session, @NonNull String requestId, @NonNull String relay,
             @NonNull Instant issued, @NonNull PrivateKey key) {
         try {
-            ByteArrayOutputStream bytes = new ByteArrayOutputStream();
-            XMLStreamWriter xml = XMLOutputFactory.newDefaultFactory().createXMLStreamWriter(bytes, "UTF-8");
-            try {
-                xml.writeStartDocument("UTF-8", "1.0");
-                xml.writeStartElement("p", "LogoutRequest", PROTOCOL);
-                xml.writeNamespace("p", PROTOCOL);
-                xml.writeNamespace("a", ASSERTION);
-                xml.writeAttribute("ID", requestId);
-                xml.writeAttribute("Version", "2.0");
-                xml.writeAttribute("IssueInstant", issued.toString());
-                xml.writeAttribute("Destination", destination.toASCIIString());
-                xml.writeStartElement("a", "Issuer", ASSERTION);
-                xml.writeCharacters(spEntityId);
-                xml.writeEndElement();
-                nameId(xml, session.getNameId());
-                if (session.getSessionIndex().isPresent()) {
-                    xml.writeStartElement("p", "SessionIndex", PROTOCOL);
-                    xml.writeCharacters(session.getSessionIndex().orElseThrow());
-                    xml.writeEndElement();
-                }
-                xml.writeEndElement();
-                xml.writeEndDocument();
-                xml.flush();
-            } finally { xml.close(); }
-            return sign(destination, "SAMLRequest", bytes.toByteArray(), relay, key);
+            return sign(destination, "SAMLRequest", requestXml(destination, spEntityId, session, requestId, issued),
+                    relay, key);
         } catch (XMLStreamException | GeneralSecurityException | IllegalArgumentException exception) {
             return null;
         }
+    }
+
+    static byte @NonNull [] requestXml(@NonNull URI destination, @NonNull String spEntityId,
+            @NonNull SamlSessionReference session, @NonNull String requestId, @NonNull Instant issued)
+            throws XMLStreamException {
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+        XMLStreamWriter xml = XMLOutputFactory.newDefaultFactory().createXMLStreamWriter(bytes, "UTF-8");
+        try {
+            xml.writeStartDocument("UTF-8", "1.0");
+            xml.writeStartElement("p", "LogoutRequest", PROTOCOL);
+            xml.writeNamespace("p", PROTOCOL);
+            xml.writeNamespace("a", ASSERTION);
+            xml.writeAttribute("ID", requestId);
+            xml.writeAttribute("Version", "2.0");
+            xml.writeAttribute("IssueInstant", issued.toString());
+            xml.writeAttribute("Destination", destination.toASCIIString());
+            xml.writeStartElement("a", "Issuer", ASSERTION);
+            xml.writeCharacters(spEntityId);
+            xml.writeEndElement();
+            nameId(xml, session.getNameId());
+            if (session.getSessionIndex().isPresent()) {
+                xml.writeStartElement("p", "SessionIndex", PROTOCOL);
+                xml.writeCharacters(session.getSessionIndex().orElseThrow());
+                xml.writeEndElement();
+            }
+            xml.writeEndElement();
+            xml.writeEndDocument();
+            xml.flush();
+        } finally { xml.close(); }
+        return bytes.toByteArray();
     }
 
     static @Nullable URI response(@NonNull URI destination, @NonNull String spEntityId,
@@ -78,33 +85,40 @@ final class SamlRedirectLogout {
             @NonNull Instant issued, @NonNull SamlLogoutStatus status,
             @NonNull PrivateKey key) {
         try {
-            ByteArrayOutputStream bytes = new ByteArrayOutputStream();
-            XMLStreamWriter xml = XMLOutputFactory.newDefaultFactory().createXMLStreamWriter(bytes, "UTF-8");
-            try {
-                xml.writeStartDocument("UTF-8", "1.0");
-                xml.writeStartElement("p", "LogoutResponse", PROTOCOL);
-                xml.writeNamespace("p", PROTOCOL);
-                xml.writeNamespace("a", ASSERTION);
-                xml.writeAttribute("ID", responseId);
-                xml.writeAttribute("Version", "2.0");
-                xml.writeAttribute("IssueInstant", issued.toString());
-                xml.writeAttribute("Destination", destination.toASCIIString());
-                xml.writeAttribute("InResponseTo", inResponseTo);
-                xml.writeStartElement("a", "Issuer", ASSERTION);
-                xml.writeCharacters(spEntityId);
-                xml.writeEndElement();
-                xml.writeStartElement("p", "Status", PROTOCOL);
-                xml.writeEmptyElement("p", "StatusCode", PROTOCOL);
-                xml.writeAttribute("Value", status.uri());
-                xml.writeEndElement();
-                xml.writeEndElement();
-                xml.writeEndDocument();
-                xml.flush();
-            } finally { xml.close(); }
-            return sign(destination, "SAMLResponse", bytes.toByteArray(), relay, key);
+            return sign(destination, "SAMLResponse", responseXml(destination, spEntityId, responseId,
+                    inResponseTo, issued, status), relay, key);
         } catch (XMLStreamException | GeneralSecurityException | IllegalArgumentException exception) {
             return null;
         }
+    }
+
+    static byte @NonNull [] responseXml(@NonNull URI destination, @NonNull String spEntityId,
+            @NonNull String responseId, @NonNull String inResponseTo, @NonNull Instant issued,
+            @NonNull SamlLogoutStatus status) throws XMLStreamException {
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+        XMLStreamWriter xml = XMLOutputFactory.newDefaultFactory().createXMLStreamWriter(bytes, "UTF-8");
+        try {
+            xml.writeStartDocument("UTF-8", "1.0");
+            xml.writeStartElement("p", "LogoutResponse", PROTOCOL);
+            xml.writeNamespace("p", PROTOCOL);
+            xml.writeNamespace("a", ASSERTION);
+            xml.writeAttribute("ID", responseId);
+            xml.writeAttribute("Version", "2.0");
+            xml.writeAttribute("IssueInstant", issued.toString());
+            xml.writeAttribute("Destination", destination.toASCIIString());
+            xml.writeAttribute("InResponseTo", inResponseTo);
+            xml.writeStartElement("a", "Issuer", ASSERTION);
+            xml.writeCharacters(spEntityId);
+            xml.writeEndElement();
+            xml.writeStartElement("p", "Status", PROTOCOL);
+            xml.writeEmptyElement("p", "StatusCode", PROTOCOL);
+            xml.writeAttribute("Value", status.uri());
+            xml.writeEndElement();
+            xml.writeEndElement();
+            xml.writeEndDocument();
+            xml.flush();
+        } finally { xml.close(); }
+        return bytes.toByteArray();
     }
 
     private static void nameId(@NonNull XMLStreamWriter xml, @NonNull SamlNameId nameId)

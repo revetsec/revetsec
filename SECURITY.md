@@ -147,10 +147,20 @@ Revetsec's security invariants are published in this section as the code that up
 - **INV-S12** A required replay cache marks a scoped assertion key only after all other checks.
 - **INV-S13** Unsolicited responses require explicit enablement and never use RelayState as a redirect target.
 - **INV-S14** GCM decryption authenticates its tag; CBC requires a verified covering Response signature and explicit IdP mode.
-- **INV-S15** SSO responses use bounded POST decoding and SLO uses bounded Redirect decoding.
+- **INV-S15** SSO responses use bounded POST decoding and SLO uses bounded Redirect or dedicated POST logout decoding.
 - **INV-S16** Generated SAML XML and HTML are escaped and POST form actions use HTTPS.
 - **INV-S17** Disabled JVM-global XML-signature secure validation requires an observed, explicit SP builder acknowledgment; Revetsec pins its verification context and allowlists.
 - **INV-S18** Message-content traversal avoids XPath and `getElementsByTagName`.
-- **INV-S19** SLO accepts only signed Redirect messages, with raw query verification, binding checks and replay rejection.
+- **INV-S19** SLO accepts only authenticated Redirect or POST messages, with raw query signatures or exact-root XML signatures, validation before conditional atomic pending consumption, and a shared atomic replay domain retained through every supported age/skew policy.
 - **INV-L1** The JAR has zero compile or runtime dependencies, and needs no JDK modules other than `java.base`, `java.net.http`, `java.xml`, `java.xml.crypto` and `java.logging`.
 - **INV-L2** No `ObjectInputStream`, reflective deserialization or scripting.
+- **INV-M1** Filter grammar, precedence and bounds are enforced.
+- **INV-M2** PATCH shape and mutability are enforced; a failed operation publishes no partial candidate.
+- **INV-M3** Resource id is server-issued and externalId remains opaque.
+- **INV-M4** Returned-never fields cannot be rendered, filtered or sorted.
+- **INV-M5** Missing core schemas, unknown attributes and duplicate names reject by default.
+- **INV-M6** Paging is normalized and capped; unsupported sort requests reject explicitly.
+- **INV-M7** Fixed SCIM errors carry a string status and do not echo request data.
+- **INV-M8** Protocol names use ASCII folding; untrusted JSON values are not hash keys for matching.
+- **INV-M9** Multi-valued attributes have at most one true declared BOOLEAN primary.
+- **INV-M10** Unsupported or disallowed filters reject and are never ignored.

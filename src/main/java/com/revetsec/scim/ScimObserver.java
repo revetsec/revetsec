@@ -45,7 +45,9 @@ public interface ScimObserver {
     default void willProcess(@NonNull Operation operation) {}
 
     /**
-     * Called once when a public processing operation returns its direct result.
+     * Called once for checked completion, including an expected rejection, of a public processing operation.
+     * An unexpected processing fault instead calls didFailToProcess, even when a fixed error result
+     * is returned to the caller.
      * @param operation the fixed operation kind
      * @param outcome the fixed result classification
      * @since 1.0.0
@@ -53,7 +55,9 @@ public interface ScimObserver {
     default void didProcess(@NonNull Operation operation, @NonNull Outcome outcome) {}
 
     /**
-     * Called once when an ordinary unexpected processing failure prevents a direct result.
+     * Called once when an unexpected processing fault is contained as a fixed internalError result.
+     * This replaces didProcess for that operation; the caller still receives its fixed error outcome.
+     * Events disclose no fault payload. Interruption is preserved, and fatal VM errors escape.
      * @param operation the fixed operation kind
      * @since 1.0.0
      */

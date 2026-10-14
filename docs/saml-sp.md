@@ -1,6 +1,6 @@
 # SAML service provider integration
 
-Revetsec prepares SAML requests and checks POST responses and Redirect logout messages.
+Revetsec prepares SAML requests and checks POST responses and signed Redirect or POST logout messages.
 If JVM-global XML-signature secure validation is disabled, the SP builder fails unless the
 application explicitly calls `acknowledgeGlobalSecureValidationDisabled(true)`. This choice
 is reported to `SamlObserver` at build time. Revetsec sets secure validation on each
@@ -133,7 +133,9 @@ pending logout state, **end the local application session before sending** the s
 Redirect, and send it. A failed or missing IdP return must not restore that session.
 At the logout endpoint, parse the raw query with
 `SamlRedirectBindingMessage.fromRawQueryResult` and call `completeLogoutResult` to
-report the IdP outcome and clear pending state. The Playground follows this order.
+report a verified IdP terminal status and clear pending state, or clear it when the attempt
+expires. Invalid callbacks preserve a live attempt and its browser cookie. The Playground
+follows this order.
 For stored pending state, an invalid Redirect signature is rejected before the pending
 record is consumed; a valid response still consumes the record once.
 For an IdP-initiated LogoutRequest, call `acceptLogoutRequestResult`, match its NameID
@@ -146,9 +148,62 @@ the IdP accepts Revetsec's signed LogoutResponse. Revetsec also sends a signed
 SP-initiated LogoutRequest that the IdP accepts; Revetsec accepts the IdP's
 signed LogoutResponse. Both captured SSO sessions and logout messages are
 replayed with their identity, request and RelayState bindings in offline tests.
-Both logout entry points verify the Redirect signature and require the supported SAML
+For HTTP-POST logout, configure the SP's `postSingleLogoutServiceUrl` and the IdP's
+`postSingleLogoutService`. IdP metadata parsing exposes `getPostSingleLogoutService`,
+and generated SP metadata advertises POST logout only when its receiver is configured.
+Each binding uses its explicitly configured endpoint; no binding fallback is selected implicitly.
+
+For SP-initiated POST logout, call `beginPostLogoutResult`, save
+`Prepared.getPendingLogout()`, end the local application session, then deliver
+`Prepared.getPostForm()`. At the POST logout receiver, retain the raw form body,
+every Content-Type value and raw query; parse them with
+`SamlPostBindingMessage.fromLogoutFormBodyResult`. A `Kind.RESPONSE` is completed
+with the POST overload of `completeLogoutResult`. Pending browser cookies need
+`SameSite=None; Secure`, with `HttpOnly`. Clear them after a verified `Succeeded` or
+`StatusReceived` outcome, or when the attempt expires; a rejected callback does not
+cancel a valid pending attempt. Reconcile unavailable or indeterminate store outcomes
+before retrying. Once a pending store confirms removal, any later validation or replay-admission
+failure returns `Indeterminate`; do not assume that state remains reusable. A durable pending
+store still supplies atomic single use across nodes. The login
+factory `fromFormBodyResult` remains response-only and does not accept `SAMLRequest`.
+
+For an IdP-initiated POST `Kind.REQUEST`, call the POST overload of
+`acceptLogoutRequestResult`, match the checked NameID qualifiers and SessionIndex
+against the selected connection's stored sessions, end only matching sessions,
+then call `respondToPostLogoutRequestResult`. Both POST preparation methods produce
+an RSA-SHA256 enveloped XML signature over the exact logout root, using the same
+XML-signature profile as POST authentication requests. `SamlPostForm` renders either
+a `SAMLRequest` or `SAMLResponse` and echoes bounded RelayState as an opaque field.
+RelayState is outside the XML signature and must never become an application redirect URL.
+
+POST receivers require a signature covering the original logout root and use the
+same pinned IdP signing keys, rollover and explicit SHA1 compatibility rules as SSO.
+Unsigned roots, nested/duplicate signatures, external references and signature wrapping
+are rejected. Signature and response-semantic rejection occur before pending-state
+consumption or replay writes in both bindings. Pending SP, IdP connection/entity,
+endpoint, expiry, RelayState and request correlation are checked against the
+authenticated sealed record before atomic removal. Custom pending stores must
+implement `consumeIfMatches`: validate the supplied opaque record with the predicate,
+then atomically remove only that same live record if it matched. A distributed store
+can use a read followed by compare-and-delete of the exact approved record; an
+unconditional consume or consume-and-restore is insufficient. The default method
+returns unavailable without consuming, so legacy custom stores fail closed for logout
+until they implement this operation. Login retains its existing consume contract.
+Both bindings share the same strict logout semantic checks and atomic replay keys,
+scoped by SP, IdP connection, message kind and ID; changing the binding cannot admit
+an already accepted message a second time. Successful logout admissions retain their
+replay key until the signed IssueInstant plus the supported maximum response age
+(15 minutes) and maximum clock skew (5 minutes), even when the accepting instance
+uses a narrower time policy. Each instance still rejects messages outside its own
+configured age/skew window. This prevents replay during policy changes or mixed-policy
+deployments sharing the same cache. Replay-cache failures release no accepted request
+or successful status. The new POST paths are covered by
+`SamlPostLogoutTests`, `SamlPostLogoutMetadataTests`, `ScriptedIdpSsoIT` and
+`KeycloakSamlIT`; the Redirect captures remain evidence for their documented binding.
+
+Both Redirect logout entry points verify the query signature and require the supported SAML
 element order and types before accepting identity fields or status. Nilled fields,
-unexpected direct text and nested status codes are rejected. The supported logout
+unexpected direct text and nested status codes are rejected. The supported Redirect logout
 profile uses Issuer, NameID and optional SessionIndex elements in a request, and
 Issuer followed by a single flat StatusCode in a response. A response may also carry
 the standard optional StatusMessage and StatusDetail in order; these fields do not
@@ -162,7 +217,11 @@ empty field names, unencoded spaces, decoded control characters, and malformed p
 in names or values.
 
 The Soklet adapter's `SokletSaml` and both Servlet adapters' `ServletSaml` pass raw
-request fields to core and write prepared Redirect/form responses. The
+request fields to core and write prepared Redirect/form responses. Their dedicated
+`postLogoutBindingResultFor` helper preserves the POST logout boundary, and typed
+POST logout request/response form helpers preserve the core-rendered fields and headers. The
 [local Soklet Playground](../examples/playground/README.md) demonstrates one approved
 IdP, sealed browser pending state, local account mapping and both Redirect logout
-directions. Real servlet container qualification remains open release work.
+directions. The adapter verification tooling includes POST logout transport checks in real Tomcat
+containers; those checks qualify transport preservation, while the core interop tests
+exercise protocol partners.

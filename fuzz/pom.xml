@@ -159,6 +159,7 @@
 					<include>keys/sp-signing-rsa-2048-key.pem</include>
 					<include>keys/sp-signing-rsa-2048-cert.pem</include>
 					<include>scripted-idp/slo-corpus.properties</include>
+					<include>scripted-idp/slo-post-corpus.properties</include>
 					<include>saml-independent/keys/sp-rsa-2048.key</include>
 					<include>saml-independent/keys/sp-rsa-2048.crt</include>
 					<include>saml-independent/keys/idp-rsa-2048.crt</include>

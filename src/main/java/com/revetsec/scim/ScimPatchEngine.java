@@ -499,12 +499,18 @@ final class ScimPatchEngine {
         if (filter instanceof ScimFilter.And and) {
             boolean result=true;
             // Visit all branches: unsupported matching must reject even on a false branch.
-            for (ScimFilter operand : and.getOperands()) result=predicate(operand,element,parent,top) && result;
+            for (ScimFilter operand : and.getOperands()) {
+                result=predicate(operand,element,parent,top) && result;
+                if (error != null) return false;
+            }
             return result;
         }
         if (filter instanceof ScimFilter.Or or) {
             boolean result=false;
-            for (ScimFilter operand : or.getOperands()) result=predicate(operand,element,parent,top) || result;
+            for (ScimFilter operand : or.getOperands()) {
+                result=predicate(operand,element,parent,top) || result;
+                if (error != null) return false;
+            }
             return result;
         }
         if (filter instanceof ScimFilter.Not not) return !predicate(not.getOperand(),element,parent,top);
@@ -515,23 +521,25 @@ final class ScimPatchEngine {
         ScimAttributePath target=path(top.toScimString()+"."+relative.getAttributeName());
         if (target == null) return false;
         JsonValue value=element.getMembers().get(definition.getName());
-        if (filter instanceof ScimFilter.Present) return ScimResourceValidation.assigned(value);
+        if (filter instanceof ScimFilter.Present) return filterPresent(value,definition);
         ScimFilter.Comparison comparison=(ScimFilter.Comparison)filter;
         return scalarCompare(target,definition,value,comparison.getValue(),comparison.getOperator(),groupMembers(top) && definition.getName().equals("value"));
     }
     private boolean scalarCompare(@NonNull ScimAttributePath target,@NonNull ScimAttributeDefinition definition,
             @Nullable JsonValue value,@NonNull ScimFilterValue literal,@NonNull ScimComparisonOperator operator,boolean exactId) {
         if (!spend(1)) return false;
-        if (literal instanceof ScimFilterValue.NullValue) {
-            boolean absent=!ScimResourceValidation.assigned(value);
-            return operator == ScimComparisonOperator.EQ ? absent : !absent;
-        }
-        if (!ScimResourceValidation.assigned(value)) return false;
-        if (value instanceof JsonArray array) {
+        if (value instanceof JsonArray array && !array.getElements().isEmpty()) {
             boolean result=false;
-            for (JsonValue element : array.getElements()) result=scalarCompare(target,definition,element,literal,operator,exactId) || result;
+            for (JsonValue element : array.getElements()) {
+                result=scalarCompare(target,definition,element,literal,operator,exactId) || result;
+                if (error != null) return false;
+            }
             return result;
         }
+        boolean absent=value == null || value instanceof JsonNull
+                || definition.isMultiValued() && value instanceof JsonArray array && array.getElements().isEmpty();
+        if (literal instanceof ScimFilterValue.NullValue) return operator == ScimComparisonOperator.EQ ? absent : !absent;
+        if (absent) return operator == ScimComparisonOperator.NE;
         if (value instanceof JsonString string && literal instanceof ScimFilterValue.StringValue text) {
             if (definition.getType() == ScimAttributeType.DATE_TIME) return dateCompare(string.getValue(),text.getValue(),operator);
             if (definition.getType() == ScimAttributeType.BINARY) return verdict(binaryEqual(string.getValue(),text.getValue()) ? 0 : 1,operator);
@@ -555,6 +563,30 @@ final class ScimPatchEngine {
         if (value instanceof JsonBoolean bool && literal instanceof ScimFilterValue.BooleanValue booleanValue)
             return verdict(Boolean.compare(bool.getValue(),booleanValue.getValue()),operator);
         error=ScimError.invalidFilterInstance(); return false;
+    }
+    private boolean filterPresent(@Nullable JsonValue value,@NonNull ScimAttributeDefinition definition) {
+        if (!spend(1)) return false;
+        if (value == null || value instanceof JsonNull) return false;
+        if (value instanceof JsonString string) return !string.getValue().isEmpty();
+        if (value instanceof JsonArray array) {
+            boolean result=false;
+            for (JsonValue element : array.getElements()) {
+                result=filterPresent(element,definition) || result;
+                if (error != null) return false;
+            }
+            return result;
+        }
+        if (value instanceof JsonObject object) {
+            boolean result=false;
+            for (ScimAttributeDefinition child : definition.getSubAttributes()) {
+                if (!spend(1)) return false;
+                if (child.getReturned() != ScimReturned.NEVER)
+                    result=filterPresent(object.getMembers().get(child.getName()),child) || result;
+                if (error != null) return false;
+            }
+            return result;
+        }
+        return true;
     }
     private boolean strategy(@NonNull ScimAttributePath target,@NonNull ScimAttributeDefinition definition,
             @NonNull ScimComparisonOperator operator,@NonNull String value,@NonNull String literal) {

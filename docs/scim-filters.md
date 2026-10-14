@@ -87,6 +87,11 @@ String; parsing cannot undo an already allocated request body.
 traversal and must return a nonnull result. Immutable getters expose operands,
 paths, comparison operators and literal values without public node factories.
 
+The six `ScimFilter` node kinds and four `ScimFilterValue` literal kinds remain
+stable within a major version and may be matched exhaustively. Adding a node
+kind or an abstract visitor method requires a major release. Operation result
+switches and enum switches retain a rejecting default.
+
 `toScimString()` explicitly emits filter data with lowercase operators, minimal
 grouping, JSON string escapes and compact exponent notation. It preserves
 path spelling and is intended for round trips, not identity matching or
@@ -95,7 +100,7 @@ spellings. Filters, values, paths, parse results and policy diagnostics redact
 their data in `toString()`. Explicit getters and serialization can disclose
 personal data and need application-controlled logging.
 
-## Declare future filter permission
+## Declare filter permission
 
 `ScimFilterPolicy.rejectAllInstance()` and a fresh policy builder deny every
 filter shape. The builder replaces complete snapshots of comparison paths,
@@ -104,8 +109,10 @@ comparison-count default is 32, with an inclusive range of 1–128. Null values
 restore empty collections or the comparison-count default.
 
 Construction validates path syntax, rejects equivalent duplicate paths, and
-bounds the policy graph. This slice stores the declaration; it does not apply
-it to parsed filters. A flat comparison declaration does not imply ValuePath
-permission. Later service-provider registration will bind paths to schemas
-and enforce policy against the complete normalized tree before returning an
-approved query.
+bounds the policy graph. Service-provider registration binds these declarations to registered schemas.
+A flat comparison declaration does not imply ValuePath permission. The provider
+enforces the policy against the complete normalized tree before returning an
+approved filter or query. Syntax-only parsing grants no permission; applications
+still authenticate callers, authorize scope and execute the approved tree.
+See [schema-bound server primitives](scim-server-primitives.md) and
+[the optional evaluator](scim-filter-evaluation.md).

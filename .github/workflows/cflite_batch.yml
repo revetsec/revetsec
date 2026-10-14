@@ -52,6 +52,8 @@ name: ClusterFuzzLite batch fuzzing
 # JVM start-up per target and the corpus transfers. The prune cron in cflite_cron.yml starts after this
 # job's timeout; move it if this timeout grows. More targets mean less time for each, so revisit these
 # totals as targets are added.
+# HTTP-POST logout adds two automatically discovered targets: raw-form ingress and the independent
+# signed POST corpus. They share these total budgets with the existing targets.
 
 on:
   schedule:

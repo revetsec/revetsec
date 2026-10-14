@@ -167,9 +167,11 @@ import com.revetsec.saml.SamlIdentityProvider;
 import com.revetsec.saml.SamlIdentityProviderMetadata;
 import com.revetsec.saml.SamlIdentityProviderMetadataResult;
 import com.revetsec.saml.SamlLogoutRedirectResult;
+import com.revetsec.saml.SamlLogoutPostResult;
 import com.revetsec.saml.SamlLogoutRequest;
 import com.revetsec.saml.SamlLogoutRequestResult;
 import com.revetsec.saml.SamlLogoutResponseRedirectResult;
+import com.revetsec.saml.SamlLogoutResponsePostResult;
 import com.revetsec.saml.SamlLogoutResult;
 import com.revetsec.saml.SamlLogoutStatus;
 import com.revetsec.saml.SamlNameId;
@@ -452,8 +454,8 @@ public final class PackagedConsumer {
 				PendingSamlAuthenticationStore.class, PendingSamlLogout.class, PendingSamlLogoutSource.class, SamlAttribute.class,
 				SamlAttributeValue.class, SamlAuthentication.class, SamlAuthenticationRequestOptions.class, SamlAuthenticationRequestResult.class,
 				SamlAuthenticationResult.class, SamlCompatibilityMode.class, SamlCredential.class, SamlIdentityProvider.class,
-				SamlIdentityProviderMetadata.class, SamlIdentityProviderMetadataResult.class, SamlLogoutRedirectResult.class, SamlLogoutRequest.class,
-				SamlLogoutRequestResult.class, SamlLogoutResponseRedirectResult.class, SamlLogoutResult.class, SamlLogoutStatus.class,
+				SamlIdentityProviderMetadata.class, SamlIdentityProviderMetadataResult.class, SamlLogoutRedirectResult.class, SamlLogoutPostResult.class, SamlLogoutRequest.class,
+				SamlLogoutRequestResult.class, SamlLogoutResponseRedirectResult.class, SamlLogoutResponsePostResult.class, SamlLogoutResult.class, SamlLogoutStatus.class,
 				SamlNameId.class, SamlPendingConsumeResult.class, SamlPendingSaveResult.class, SamlPostBindingMessage.class,
 				SamlPostBindingParseResult.class, SamlPostForm.class, SamlRedirectBindingMessage.class, SamlRedirectBindingParseResult.class,
 				SamlReplayCache.class, SamlObserver.class, SamlServiceProvider.class, SamlServiceProviderMetadata.class, SamlServiceProviderMetadataResult.class,

@@ -85,7 +85,7 @@ public final class ScimAttributeSelection {
 
     /** Checks raw projection membership with parent/child expansion.
      * Returned characteristics and caller authorization are separate checks.
-     * @param path canonical path
+     * @param path canonical path; schema and attribute spelling compare with ASCII folding
      * @return whether the path participates in the selection
      * @since 1.0.0
      */
@@ -100,7 +100,8 @@ public final class ScimAttributeSelection {
     }
 
     static boolean covers(@NonNull ScimAttributePath parent, @NonNull ScimAttributePath child) {
-        return parent.getSchemaId().equals(child.getSchemaId())
+        return parent.getSchemaId().map(com.revetsec.internal.json.AsciiCase::fold)
+                        .equals(child.getSchemaId().map(com.revetsec.internal.json.AsciiCase::fold))
                 && com.revetsec.internal.json.AsciiCase.fold(parent.getAttributeName())
                         .equals(com.revetsec.internal.json.AsciiCase.fold(child.getAttributeName()))
                 && (parent.getSubAttributeName().isEmpty() || parent.equals(child));

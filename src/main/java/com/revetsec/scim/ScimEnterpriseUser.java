@@ -18,7 +18,6 @@ package com.revetsec.scim;
 
 import com.google.errorprone.annotations.CheckReturnValue;
 import com.revetsec.json.*;
-import com.revetsec.internal.json.AsciiCase;
 import org.jspecify.annotations.NonNull;
 import javax.annotation.concurrent.Immutable;
 import java.util.Optional;
@@ -31,15 +30,18 @@ import static java.util.Objects.requireNonNull;
     private final @NonNull ScimResource resource;
     private final @NonNull JsonObject extension;
     private ScimEnterpriseUser(@NonNull ScimResource resource, @NonNull JsonObject extension) { this.resource = resource; this.extension = extension; }
-    /** Creates a view; an absent extension or foreign resource is a programming error.
+    /** Creates a view of a complete standard User schema and standard Enterprise User extension.
+     * Equivalent rebuilt schemas are accepted; an absent extension or altered/foreign schema is a programming error.
      * @param resource the User resource with an Enterprise extension
      * @return the view
      * @since 1.0.0
      */
     @CheckReturnValue public static @NonNull ScimEnterpriseUser fromResource(@NonNull ScimResource resource) {
         requireNonNull(resource);
-        if (!AsciiCase.fold(resource.getResourceType().getSchema().getId()).equals(AsciiCase.fold(ScimSchema.userInstance().getId())))
+        if (!resource.getResourceType().hasStandardUserSchema())
             throw new IllegalArgumentException("The resource does not have the required User schema.");
+        if (!resource.getResourceType().hasStandardEnterpriseUserSchema())
+            throw new IllegalArgumentException("The resource does not have the required Enterprise User schema.");
         JsonObject extension = resource.getExtension(ScimSchema.enterpriseUserInstance().getId()).orElseThrow(() -> new IllegalArgumentException("The resource has no Enterprise User extension."));
         return new ScimEnterpriseUser(resource,extension);
     }

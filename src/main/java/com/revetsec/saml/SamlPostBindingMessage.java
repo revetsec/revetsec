@@ -34,10 +34,23 @@ import static java.util.Objects.requireNonNull;
  */
 @Immutable
 public final class SamlPostBindingMessage {
+    /**
+     * The form field that carries the untrusted message.
+     *
+     * @since 1.0.0
+     */
+    @Immutable
+    public enum Kind {
+        /** A SAMLRequest form field. */ REQUEST,
+        /** A SAMLResponse form field. */ RESPONSE
+    }
+
+    private final @NonNull Kind kind;
     private final byte @NonNull [] xml;
     private final @Nullable String relayState;
 
-    private SamlPostBindingMessage(byte @NonNull [] xml, @Nullable String relayState) {
+    private SamlPostBindingMessage(byte @NonNull [] xml, @Nullable String relayState, @NonNull Kind kind) {
+        this.kind = kind;
         this.xml = xml.clone();
         this.relayState = relayState;
     }
@@ -55,12 +68,32 @@ public final class SamlPostBindingMessage {
             @NonNull List<@NonNull String> contentTypeValues, @Nullable String rawQuery) {
         SamlPostBindingDecoder.Result decoded = SamlPostBindingDecoder.decode(requireNonNull(body),
                 requireNonNull(contentTypeValues), rawQuery);
+        return result(decoded);
+    }
+
+    /**
+     * Decodes exactly one SAMLRequest or SAMLResponse and optional RelayState at a logout endpoint.
+     * XML and signatures remain unverified. The login factory continues to accept only SAMLResponse.
+     *
+     * @param body original HTTP request body
+     * @param contentTypeValues all Content-Type field values
+     * @param rawQuery original query string, or null when absent
+     * @return a parsed untrusted logout message or a fixed rejection
+     * @since 1.0.0
+     */
+    public static @NonNull SamlPostBindingParseResult fromLogoutFormBodyResult(byte @NonNull [] body,
+            @NonNull List<@NonNull String> contentTypeValues, @Nullable String rawQuery) {
+        return result(SamlPostBindingDecoder.decodeLogout(requireNonNull(body),
+                requireNonNull(contentTypeValues), rawQuery));
+    }
+
+    private static @NonNull SamlPostBindingParseResult result(SamlPostBindingDecoder.@NonNull Result decoded) {
         if (decoded instanceof SamlPostBindingDecoder.Rejected rejected)
             return new SamlPostBindingParseResult.Rejected(
                     SamlPostBindingParseResult.Reason.valueOf(rejected.reason().name()));
         SamlPostBindingDecoder.Accepted accepted = (SamlPostBindingDecoder.Accepted) decoded;
         return new SamlPostBindingParseResult.Parsed(new SamlPostBindingMessage(accepted.xml(),
-                accepted.relayState()));
+                accepted.relayState(), accepted.kind()));
     }
 
     /**
@@ -70,6 +103,14 @@ public final class SamlPostBindingMessage {
      * @since 1.0.0
      */
     public @NonNull Optional<@NonNull String> getRelayState() { return Optional.ofNullable(relayState); }
+
+    /**
+     * Returns the untrusted form-field kind.
+     *
+     * @return message kind
+     * @since 1.0.0
+     */
+    public @NonNull Kind getKind() { return kind; }
 
     byte @NonNull [] xml() { return xml.clone(); }
     @Nullable String relayState() { return relayState; }

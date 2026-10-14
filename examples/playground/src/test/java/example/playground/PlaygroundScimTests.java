@@ -49,15 +49,31 @@ class PlaygroundScimTests {
     @Test void actualRoutesAuthenticateThenParseAndProvideCrudSearchProjectionAndConditions() {
         PlaygroundScim app = app();
         SokletSimulator.run(ScimPlayground.config(app, "127.0.0.1", 0), simulator -> {
-            assertEquals(401, simulator.performHttpRequest(user("alice").copy().headers(Map.of()).finish()).getMarshaledResponse().getStatusCode());
+            MarshaledResponse denied = simulator.performHttpRequest(user("alice").copy().headers(Map.of()).finish()).getMarshaledResponse();
+            assertEquals(401, denied.getStatusCode());
+            assertEquals(List.of("Bearer realm=\"scim\""), denied.getHeaders().get("WWW-Authenticate"));
             MarshaledResponse created = simulator.performHttpRequest(user("alice")).getMarshaledResponse();
             assertEquals(201, created.getStatusCode()); assertEquals(List.of(BASE + "Users/u-1"), created.getHeaders().get("Location"));
             assertEquals(200, simulator.performHttpRequest(get("/scim/v2/Users/u-1")).getMarshaledResponse().getStatusCode());
             assertEquals(404, simulator.performHttpRequest(get("/scim/v2/unknown-resource")).getMarshaledResponse().getStatusCode());
             assertEquals(501, simulator.performHttpRequest(body(HttpMethod.POST, "/scim/v2/.search", "{}")).getMarshaledResponse().getStatusCode());
             for (String discovery : List.of("ServiceProviderConfig", "ResourceTypes", "Schemas"))
-                for (HttpMethod method : List.of(HttpMethod.POST, HttpMethod.PUT, HttpMethod.PATCH, HttpMethod.DELETE))
-                    assertEquals(405, simulator.performHttpRequest(body(method, "/scim/v2/" + discovery, "{}")).getMarshaledResponse().getStatusCode());
+                for (HttpMethod method : List.of(HttpMethod.POST, HttpMethod.PUT, HttpMethod.PATCH, HttpMethod.DELETE)) {
+                    MarshaledResponse unsupported = simulator.performHttpRequest(body(method, "/scim/v2/" + discovery, "{}")).getMarshaledResponse();
+                    assertEquals(405, unsupported.getStatusCode());
+                    assertEquals(List.of("GET, HEAD, OPTIONS"), unsupported.getHeaders().get("Allow"));
+                }
+            for (String collection : List.of("Users", "Groups")) {
+                MarshaledResponse unsupported = simulator.performHttpRequest(body(HttpMethod.PATCH, "/scim/v2/" + collection, "{}")).getMarshaledResponse();
+                assertEquals(405, unsupported.getStatusCode());
+                assertEquals(List.of("GET, HEAD, POST, OPTIONS"), unsupported.getHeaders().get("Allow"));
+            }
+            for (String path : List.of("ServiceProviderConfig", "ResourceTypes", "Schemas", "Users", "Groups")) {
+                MarshaledResponse head = simulator.performHttpRequest(get("/scim/v2/" + path).copy().httpMethod(HttpMethod.HEAD).finish()).getMarshaledResponse();
+                assertEquals(200, head.getStatusCode());
+                assertTrue(head.getBody().isEmpty());
+                assertEquals(204, simulator.performHttpRequest(get("/scim/v2/" + path).copy().httpMethod(HttpMethod.OPTIONS).finish()).getMarshaledResponse().getStatusCode());
+            }
             for (String path : List.of("ServiceProviderConfig", "ResourceTypes", "Schemas")) assertEquals(200, simulator.performHttpRequest(get("/scim/v2/" + path)).getMarshaledResponse().getStatusCode());
             Request query = Request.withRawUrl(HttpMethod.GET, "/scim/v2/Users?filter=userName+eq+%22alice%22&attributes=userName&count=0")
                     .headers(Map.of("Authorization", List.of("Bearer " + TOKEN))).build();

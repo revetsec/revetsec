@@ -59,6 +59,12 @@ import javax.annotation.concurrent.NotThreadSafe;
  * Each direct-result operation has one bounded work budget and redacted observer lifecycle.
  * Parsed carriers are tied to this registration and compatibility snapshot. Base-URI-only copies
  * share that semantic registration; changed compatibility requires fresh parsing.
+ * Resource-type arguments must be the exact immutable objects registered with this provider,
+ * rather than separately constructed equal definitions. Passing a foreign trusted type is a
+ * programming error; expected untrusted-input failures return checked fixed rejections.
+ * Original query/header occurrences must reach these operations before framework normalization.
+ * A prepared response proves bounded output only. Applications prepare the final authorized
+ * candidate before commit where preparation can fail, then emit it only after confirmed persistence.
  * @since 1.0.0
  */
 @Immutable
@@ -204,8 +210,11 @@ public final class ScimServiceProvider {
         return filterPolicies;
     }
 
-    /** Validates original physical media-type header values.
-     * @param rawHeaderValues input to this operation
+    /** Validates exactly one original physical media-type header occurrence.
+     * Accepts application/scim+json or application/json with the selected syntactically valid charset
+     * accommodation. Bodies remain strictly UTF-8 regardless of a charset label. Missing, duplicate,
+     * malformed or unsupported values reject; do not join physical occurrences before validation.
+     * @param rawHeaderValues original physical Content-Type values, including an empty list when absent
      * @return the checked direct result
      * @since 1.0.0
      */
@@ -221,9 +230,11 @@ public final class ScimServiceProvider {
                 () -> new ScimContentTypeResult.Rejected(ScimError.internalErrorInstance()));
     }
 
-    /** Parses, binds and approves the complete normalized filter.
-     * @param resourceType input to this operation
-     * @param expression input to this operation
+    /** Parses, binds and approves the complete normalized filter under the configured policy.
+     * Syntax alone grants no query permission. Applications execute the returned tree and separately
+     * authorize the caller and tenant; this operation executes no storage query.
+     * @param resourceType the exact registered resource-type object
+     * @param expression the complete untrusted filter expression
      * @return the checked direct result
      * @since 1.0.0
      */
@@ -265,9 +276,12 @@ public final class ScimServiceProvider {
                 () -> new ScimFilterEvaluationResult.Rejected(ScimError.internalErrorInstance()));
     }
 
-    /** Parses a raw GET collection query with strict bounded decoding.
-     * @param resourceType input to this operation
-     * @param rawQuery input to this operation
+    /** Parses a raw GET collection query with strict bounded decoding and complete filter approval.
+     * Preserve physical repeated fields; do not first pass through a framework parameter map.
+     * Raw plus means space and percent escapes are decoded strictly. Applications own execution,
+     * authorization and cursor authenticity/context binding.
+     * @param resourceType the exact registered resource-type object
+     * @param rawQuery the original undecoded query without a leading question mark, or empty when absent
      * @return the checked direct result
      * @since 1.0.0
      */
@@ -294,9 +308,11 @@ public final class ScimServiceProvider {
                 () -> new ScimQueryParseResult.Rejected(ScimError.internalErrorInstance()));
     }
 
-    /** Parses a bound projection from a raw query.
-     * @param resourceType input to this operation
-     * @param rawQuery input to this operation
+    /** Parses a bound projection from the original raw query, independently of caller authorization.
+     * Preserve physical repeated fields and undecoded text before framework parameter normalization.
+     * The returned selection retains this provider's semantic registration.
+     * @param resourceType the exact registered resource-type object
+     * @param rawQuery the original undecoded query without a leading question mark, or empty when absent
      * @return the checked direct result
      * @since 1.0.0
      */
@@ -313,9 +329,11 @@ public final class ScimServiceProvider {
                 () -> new ScimAttributeSelectionResult.Rejected(ScimError.internalErrorInstance()));
     }
 
-    /** Checks weak opaque-version If-Match against the existing resource; applications enforce atomicity.
-     * @param rawHeaderValues input to this operation
-     * @param current input to this operation
+    /** Checks weak opaque-version If-Match against the existing resource, deliberately differing
+     * from general HTTP strong comparison. Absence succeeds; an isolated wildcard tests existence.
+     * Applications check this exact authoritative resource under the write's lock/version predicate.
+     * @param rawHeaderValues original physical If-Match values, or an empty list when absent
+     * @param current the authoritative existing resource from that transaction
      * @return the checked direct result
      * @since 1.0.0
      */
@@ -339,9 +357,11 @@ public final class ScimServiceProvider {
                 () -> new ScimIfMatchResult.Rejected(ScimError.internalErrorInstance()));
     }
 
-    /** Checks conditional read tags against the existing resource.
-     * @param rawHeaderValues input to this operation
-     * @param current input to this operation
+    /** Checks original conditional-read tags against the authoritative existing resource using weak
+     * opaque-version comparison. Absence proceeds; an isolated wildcard can report NotModified
+     * without a version. Applications own the corresponding GET/HEAD route and read consistency.
+     * @param rawHeaderValues original physical If-None-Match values, or an empty list when absent
+     * @param current the authoritative existing resource
      * @return the checked direct result
      * @since 1.0.0
      */
@@ -366,7 +386,7 @@ public final class ScimServiceProvider {
     }
 
     /** Parses a search body after validating original media-type fields.
-     * @param resourceType a registered type
+     * @param resourceType the exact registered resource-type object
      * @param contentTypeHeaderValues original physical media-type occurrences
      * @param body untrusted UTF-8 JSON; empty bytes reject
      * @return a checked candidate or fixed error
@@ -407,7 +427,7 @@ public final class ScimServiceProvider {
     }
 
     /** Parses a search body whose HTTP framing and media type were already validated.
-     * @param resourceType a registered type
+     * @param resourceType the exact registered resource-type object
      * @param body untrusted UTF-8 JSON; empty bytes reject
      * @return a checked candidate or fixed error
      * @since 1.0.0
@@ -441,7 +461,7 @@ public final class ScimServiceProvider {
     }
 
     /** Parses a create body after validating original media-type fields.
-     * @param resourceType a registered type
+     * @param resourceType the exact registered resource-type object
      * @param contentTypeHeaderValues original physical media-type occurrences
      * @param body untrusted UTF-8 JSON; empty bytes reject
      * @return a checked candidate or fixed error
@@ -474,7 +494,7 @@ public final class ScimServiceProvider {
     }
 
     /** Parses a create body whose HTTP framing and media type were already validated.
-     * @param resourceType a registered type
+     * @param resourceType the exact registered resource-type object
      * @param body untrusted UTF-8 JSON; empty bytes reject
      * @return a checked candidate or fixed error
      * @since 1.0.0
@@ -500,7 +520,7 @@ public final class ScimServiceProvider {
     }
 
     /** Parses a replace body after validating original media-type fields.
-     * @param resourceType a registered type
+     * @param resourceType the exact registered resource-type object
      * @param current the immutable authoritative current resource
      * @param contentTypeHeaderValues original physical media-type occurrences
      * @param body untrusted UTF-8 JSON; empty bytes reject
@@ -547,7 +567,7 @@ public final class ScimServiceProvider {
     }
 
     /** Parses a replace body whose HTTP framing and media type were already validated.
-     * @param resourceType a registered type
+     * @param resourceType the exact registered resource-type object
      * @param current the immutable authoritative current resource
      * @param body untrusted UTF-8 JSON; empty bytes reject
      * @return a checked candidate or fixed error
@@ -588,7 +608,7 @@ public final class ScimServiceProvider {
     }
 
     /** Parses ordered PATCH operations after validating original media-type fields.
-     * @param resourceType a registered type
+     * @param resourceType the exact registered resource-type object
      * @param contentTypeHeaderValues original physical media-type occurrences
      * @param body untrusted UTF-8 PatchOp JSON; empty bytes reject
      * @return a schema-bound request or fixed error
@@ -622,7 +642,7 @@ public final class ScimServiceProvider {
     }
 
     /** Parses PATCH bytes whose transport framing and media type were already validated.
-     * @param resourceType a registered type
+     * @param resourceType the exact registered resource-type object
      * @param body untrusted UTF-8 PatchOp JSON; empty bytes reject
      * @return a schema-bound request or fixed error
      * @since 1.0.0
@@ -702,7 +722,7 @@ public final class ScimServiceProvider {
     }
 
     /** Encodes an authoritative ID as one path segment beneath the trusted type endpoint.
-     * @param resourceType a registered type
+     * @param resourceType the exact registered resource-type object
      * @param authoritativeId application-assigned identifier
      * @return an absolute resource location
      * @since 1.0.0
@@ -710,7 +730,9 @@ public final class ScimServiceProvider {
     public @NonNull URI resourceLocationFor(
             @NonNull ScimResourceType resourceType, @NonNull String authoritativeId) {
         registered(resourceType);
-        ScimSchemas.requireIdentifier(requireNonNull(authoritativeId));
+        ScimSchemas.requireText(requireNonNull(authoritativeId), false);
+        if (!ScimResourceValidation.validResourceId(authoritativeId))
+            throw new IllegalArgumentException("Invalid SCIM resource identifier.");
         StringBuilder segment = new StringBuilder();
         for (byte octet : authoritativeId.getBytes(StandardCharsets.UTF_8)) {
             int value = octet & 255;
@@ -741,10 +763,14 @@ public final class ScimServiceProvider {
         return response(resource, Set.of(), selection, false, 200);
     }
 
-    /** Prepares a replacement response using actually supplied canonical write paths.
-     * @param replaced persisted replacement resource
-     * @param suppliedPaths actually supplied canonical paths
-     * @param selection bound projection
+    /** Prepares a replacement response from the final authorized candidate with authoritative metadata.
+     * Prepare before commit where preparation can fail, and emit only after confirmed persistence.
+     * Supplied paths are trusted application provenance from parsing, separately from attempted or
+     * modified authorization targets. The bare set has no private parser/configuration proof; its
+     * paths are validated against the target schema. Preparation proves neither authorization nor persistence.
+     * @param replaced the final application-assigned replacement candidate
+     * @param suppliedPaths canonical paths actually supplied, from the resource parse result
+     * @param selection the bound projection from this semantic registration
      * @return a bounded prepared response or fixed error
      * @since 1.0.0
      */
@@ -755,10 +781,15 @@ public final class ScimServiceProvider {
         return response(replaced, suppliedPaths, selection, true, 200);
     }
 
-    /** Prepares creation with authoritative ID, Location and consistent meta.location.
-     * @param created persisted application-assigned resource
-     * @param suppliedPaths actually supplied canonical paths
-     * @param selection bound projection
+    /** Prepares creation from the final authorized candidate with authoritative ID and metadata.
+     * Location comes from the trusted base/type endpoint, and any existing meta.location must agree.
+     * Prepare before commit where preparation can fail, and emit only after confirmed persistence.
+     * Supplied paths are trusted application provenance from parsing, not attempted/modified targets.
+     * The bare set has no private parser/configuration proof; its paths are checked against the target
+     * schema. Preparation proves neither authorization nor persistence.
+     * @param created the final application-assigned creation candidate with an assigned ID
+     * @param suppliedPaths canonical paths actually supplied, from the resource parse result
+     * @param selection the bound projection from this semantic registration
      * @return a bounded prepared response or fixed error
      * @since 1.0.0
      */
@@ -769,12 +800,16 @@ public final class ScimServiceProvider {
         return response(created, suppliedPaths, selection, true, 201);
     }
 
-    /** Prepares a persisted PATCH candidate using actually supplied canonical write paths.
+    /** Prepares the final authorized PATCH candidate after application-assigned authoritative metadata.
+     * Prepare before commit where preparation can fail, and emit only after confirmed persistence.
      * The resource type's default is used unless either projection parameter was supplied, which
      * forces status 200. Bodyless responses retain authoritative ETag and bounded headers.
-     * @param persistedCandidate persisted application-assigned resource
-     * @param suppliedPaths actually supplied canonical paths from PATCH application
-     * @param selection bound response projection
+     * Supplied paths are trusted application provenance from PATCH application, not attempted/modified
+     * authorization targets. The bare set has no private parser/configuration proof; its paths are
+     * checked against the target schema. Preparation proves neither authorization nor persistence.
+     * @param persistedCandidate the final application-assigned candidate; persistence need not precede preparation
+     * @param suppliedPaths canonical paths actually supplied, from the PATCH application result
+     * @param selection the bound response projection from this semantic registration
      * @return a bounded prepared response or fixed error
      * @since 1.0.0
      */
@@ -899,7 +934,7 @@ public final class ScimServiceProvider {
     }
 
     /** Prepares bounded discovery with projection; discovery filters reject.
-     * @param rawQuery original query string
+     * @param rawQuery the original undecoded query without a leading question mark, or empty when absent
      * @return discovery or a fixed error
      * @since 1.0.0
      */
@@ -909,7 +944,7 @@ public final class ScimServiceProvider {
     }
 
     /** Prepares bounded discovery with projection; discovery filters reject.
-     * @param rawQuery original query string
+     * @param rawQuery the original undecoded query without a leading question mark, or empty when absent
      * @return discovery or a fixed error
      * @since 1.0.0
      */
@@ -919,7 +954,7 @@ public final class ScimServiceProvider {
 
     /** Prepares bounded discovery with projection; discovery filters reject.
      * @param resourceTypeName registered case-exact type name
-     * @param rawQuery original query string
+     * @param rawQuery the original undecoded query without a leading question mark, or empty when absent
      * @return discovery or a fixed error
      * @since 1.0.0
      */
@@ -930,7 +965,7 @@ public final class ScimServiceProvider {
     }
 
     /** Prepares bounded discovery with projection; discovery filters reject.
-     * @param rawQuery original query string
+     * @param rawQuery the original undecoded query without a leading question mark, or empty when absent
      * @return discovery or a fixed error
      * @since 1.0.0
      */
@@ -940,7 +975,7 @@ public final class ScimServiceProvider {
 
     /** Prepares bounded discovery with projection; discovery filters reject.
      * @param schemaId registered schema identifier
-     * @param rawQuery original query string
+     * @param rawQuery the original undecoded query without a leading question mark, or empty when absent
      * @return discovery or a fixed error
      * @since 1.0.0
      */

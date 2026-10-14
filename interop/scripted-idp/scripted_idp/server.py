@@ -158,18 +158,21 @@ def _verify_redirect(parameters, certificate):
         raise InputError("invalid request signature") from exception
 
 
-def _slo_xml(parameters):
+def _slo_xml(parameters, binding="redirect"):
     if ("SAMLRequest" in parameters) == ("SAMLResponse" in parameters):
         raise InputError("exactly one SAML logout message required")
     field = "SAMLRequest" if "SAMLRequest" in parameters else "SAMLResponse"
     try:
-        compressed = base64.b64decode(parameters[field][1], validate=True)
-        inflater = zlib.decompressobj(-15)
-        payload = inflater.decompress(compressed, MAX_REQUEST + 1)
-        if inflater.unconsumed_tail or not inflater.eof or inflater.unused_data:
-            raise InputError("invalid logout message")
-        payload += inflater.flush()
-        if len(payload) > MAX_REQUEST:
+        decoded = base64.b64decode(parameters[field][1], validate=True)
+        if binding == "redirect":
+            inflater = zlib.decompressobj(-15)
+            payload = inflater.decompress(decoded, MAX_REQUEST + 1)
+            if inflater.unconsumed_tail or not inflater.eof or inflater.unused_data:
+                raise InputError("invalid logout message")
+            payload += inflater.flush()
+        else:
+            payload = decoded
+        if len(payload) > MAX_REQUEST or b"<!DOCTYPE" in payload.upper() or b"<!ENTITY" in payload.upper():
             raise InputError("oversized logout message")
         root = etree.fromstring(payload, x.PARSER)
     except (binascii.Error, zlib.error, etree.XMLSyntaxError) as exception:
@@ -214,7 +217,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self._sso(binding_query, "redirect", endpoint_suffix)
         elif path.path == "/slo":
             binding_query, endpoint_suffix = _endpoint_binding_query(path.query)
-            self._slo(binding_query, endpoint_suffix)
+            self._slo(binding_query, endpoint_suffix, "redirect")
         else:
             self._send_json(404, {"error": "not found"})
 
@@ -340,6 +343,17 @@ class Handler(http.server.BaseHTTPRequestHandler):
             except (InputError, UnicodeError) as exception:
                 self._send_json(400, {"error": str(exception)})
             return
+        if path.path == "/slo":
+            try:
+                if path.query not in ("", "tenant=one"):
+                    raise InputError("invalid POST endpoint query")
+                if self.headers.get_content_type() != "application/x-www-form-urlencoded":
+                    raise InputError("invalid POST binding content type")
+                self._slo(self._body().decode("ascii"),
+                          "?tenant=one" if path.query else "", "post")
+            except (InputError, UnicodeError) as exception:
+                self._send_json(400, {"error": str(exception)})
+            return
         if self.path == "/control/logout-requests":
             try:
                 spec = self._json_body()
@@ -413,6 +427,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if variant != "no-slo":
                 etree.SubElement(role, x._q(md, "SingleLogoutService"),
                                  Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect",
+                                 Location=base_url + "/slo" + endpoint_suffix)
+                etree.SubElement(role, x._q(md, "SingleLogoutService"),
+                                 Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST",
                                  Location=base_url + "/slo" + endpoint_suffix)
             etree.SubElement(role, x._q(md, "SingleSignOnService"),
                              Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect",
@@ -503,12 +520,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
         except (InputError, mint.SpecError, ValueError) as exception:
             self._send_json(400, {"error": str(exception)})
 
-    def _slo(self, raw, endpoint_suffix):
+    def _slo(self, raw, endpoint_suffix, binding):
         try:
-            parameters = _param_pairs(raw)
-            if "SigAlg" not in parameters or "Signature" not in parameters:
+            parameters = _param_pairs(raw.replace("+", "%20") if binding == "post" else raw)
+            if binding == "redirect" and ("SigAlg" not in parameters or "Signature" not in parameters):
                 raise InputError("unsigned logout message")
-            root, payload, field = _slo_xml(parameters)
+            if binding == "post" and set(parameters) - {"SAMLRequest", "SAMLResponse", "RelayState"}:
+                raise InputError("unexpected POST logout field")
+            root, payload, field = _slo_xml(parameters, binding)
             issuer = root.findtext(x._q(x.SAML, "Issuer"))
             with self.server.state_lock:
                 sp = copy.deepcopy(self.server.sps.get(issuer))
@@ -520,11 +539,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
             certificate = sp.get("signing_certificate_pem")
             if certificate is None:
                 raise InputError("SP signing certificate is missing")
-            _verify_redirect(parameters, certificate)
+            if binding == "redirect":
+                _verify_redirect(parameters, certificate)
+            else:
+                _verify_post(root, certificate)
             if not schema.validate(self.server.schemas, "authn_request", root):
                 raise InputError("SAML logout message fails OASIS schema")
             with self.server.state_lock:
-                self.server.received.append({"entity_id": issuer, "binding": "redirect-slo",
+                self.server.received.append({"entity_id": issuer, "binding": binding + "-slo",
                                              "xml": payload.decode("utf-8"),
                                              "signature_valid": True, "schema_valid": True})
                 armed = self.server.armed_slo.pop(issuer, None) if field == "SAMLRequest" else None
@@ -541,7 +563,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
             now = mint._instant(armed["clock"]["now"])
             response = slo.logout_response(now, sp["slo_url"], root.get("ID"),
                     parameters.get("RelayState", (None, None))[1],
-                    armed.get("status", "Success"), self.server.key_directory)
+                    armed.get("status", "Success"), self.server.key_directory, binding)
+            if binding == "post":
+                self._send_form(response["form"], sp["slo_url"])
+                return
             self.send_response(302)
             self.send_header("Location", response["redirect_url"])
             self.send_header("Cache-Control", "no-store")
@@ -549,6 +574,17 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.end_headers()
         except (InputError, mint.SpecError, ValueError, KeyError) as exception:
             self._send_json(400, {"error": str(exception)})
+
+    def _send_form(self, form, action):
+        payload = form.encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Content-Security-Policy", "default-src 'none'; script-src 'unsafe-inline'; form-action "
+                         + action)
+        self.send_header("Content-Length", str(len(payload)))
+        self.end_headers()
+        self.wfile.write(payload)
 
     def _body(self):
         length = self.headers.get("Content-Length")

@@ -15,12 +15,15 @@
  */
 package example.playground;
 
+import com.revetsec.saml.SamlReplayCache;
+import com.revetsec.saml.SamlServiceProvider;
 import com.soklet.HttpMethod;
 import com.soklet.Request;
 import com.soklet.Response;
 import com.soklet.ResponseCookie;
 import com.soklet.SokletSimulator;
 import java.io.IOException;
+import java.lang.reflect.Field;
 import java.net.http.HttpClient;
 import java.net.URI;
 import java.net.URLDecoder;
@@ -36,10 +39,17 @@ import java.security.Signature;
 import java.security.spec.PKCS8EncodedKeySpec;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.zip.Deflater;
@@ -61,6 +71,7 @@ import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.w3c.dom.Node;
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import static java.util.Objects.requireNonNull;
@@ -184,6 +195,167 @@ final class PlaygroundSamlTests {
 
     @Test void verifiedLogoutWithAnotherSessionIndexDoesNotEndTheBrowserSession() throws Exception {
         Fixture fixture = fixture();
+        BrowserSessions.Session loggedIn = authenticatedSession(fixture);
+        Response unmatched = fixture.resources.samlLogoutCallback(signedLogoutRequest(
+                "_unmatched-playground-logout", "session-other", idpPrivateKey()));
+        assertEquals(302, unmatched.getStatusCode());
+        assertNotNull(loggedIn.identity);
+        assertNotNull(loggedIn.samlReference);
+
+        Response matched = fixture.resources.samlLogoutCallback(signedLogoutRequest(
+                "_matched-playground-logout", "session-123", idpPrivateKey()));
+        assertEquals(302, matched.getStatusCode());
+        assertNull(loggedIn.identity);
+        assertNull(loggedIn.samlReference);
+    }
+
+    @Test void rejectedLogoutCallbacksPreserveTheAttemptUntilAGenuineResponseSucceeds() throws Exception {
+        Fixture fixture = fixture();
+        BrowserSessions.Session session = authenticatedSession(fixture);
+        Response started = beginLogout(fixture, session);
+        PlaygroundSaml.LogoutFlow flow = requireNonNull(session.samlLogout);
+        String genuine = logoutResponseQuery(started, "_genuine-completion",
+                "https://localhost:8443/saml/slo", "Success");
+        List<String> rejected = List.of("", genuine.substring(0, genuine.indexOf("&SigAlg=")),
+                genuine.substring(0, genuine.indexOf("&Signature=") + "&Signature=".length())
+                        + URLEncoder.encode(Base64.getEncoder().encodeToString(new byte[256]), StandardCharsets.UTF_8),
+                logoutResponseQuery(started, "_wrong-destination", "https://localhost:8443/other", "Success"));
+        for (String query : rejected) {
+            Response response = fixture.resources.samlLogoutCallback(logoutCallback(session, query, flow.sealed));
+            assertEquals(400, response.getStatusCode());
+            assertPreserved(session, flow, response);
+        }
+        Response completed = fixture.resources.samlLogoutCallback(logoutCallback(session, genuine, flow.sealed));
+        assertEquals(302, completed.getStatusCode());
+        assertNull(session.samlLogout);
+        assertLogoutCookieCleared(completed);
+        assertNull(session.identity);
+        assertNull(session.samlReference);
+    }
+
+    @Test void missingWrongOrDuplicatePendingCookiesDoNotBurnTheLogoutAttempt() throws Exception {
+        Fixture fixture = fixture();
+        BrowserSessions.Session session = authenticatedSession(fixture);
+        Response started = beginLogout(fixture, session);
+        PlaygroundSaml.LogoutFlow flow = requireNonNull(session.samlLogout);
+        String genuine = logoutResponseQuery(started, "_cookie-bound-completion",
+                "https://localhost:8443/saml/slo", "Success");
+        for (String cookie : List.of("", "wrong", flow.sealed + "; " + PlaygroundSaml.LOGOUT_COOKIE + "=duplicate")) {
+            Response rejected = fixture.resources.samlLogoutCallback(logoutCallback(session, genuine,
+                    cookie.isEmpty() ? null : cookie));
+            assertEquals(400, rejected.getStatusCode());
+            assertPreserved(session, flow, rejected);
+        }
+        Response completed = fixture.resources.samlLogoutCallback(logoutCallback(session, genuine, flow.sealed));
+        assertEquals(302, completed.getStatusCode());
+        assertNull(session.samlLogout);
+        assertLogoutCookieCleared(completed);
+    }
+
+    @Test void verifiedNonSuccessStatusEndsTheAttemptAndClearsItsCookie() throws Exception {
+        Fixture fixture = fixture();
+        BrowserSessions.Session session = authenticatedSession(fixture);
+        Response started = beginLogout(fixture, session);
+        PlaygroundSaml.LogoutFlow flow = requireNonNull(session.samlLogout);
+        String query = logoutResponseQuery(started, "_non-success-completion",
+                "https://localhost:8443/saml/slo", "Responder");
+        Response completed = fixture.resources.samlLogoutCallback(logoutCallback(session, query, flow.sealed));
+        assertEquals(400, completed.getStatusCode());
+        assertTrue(completed.getBody().orElseThrow().toString().contains("unsuccessful logout"));
+        assertNull(session.samlLogout);
+        assertLogoutCookieCleared(completed);
+        assertNull(session.identity);
+        assertNull(session.samlReference);
+    }
+
+    @Test void expiredLogoutAttemptClearsStateAndCookieOnEitherCallbackPath() throws Exception {
+        for (boolean malformed : new boolean[] {false, true}) {
+            MutableClock clock = new MutableClock(CLOCK.instant());
+            Fixture fixture = fixture(clock);
+            BrowserSessions.Session session = authenticatedSession(fixture);
+            Response started = beginLogout(fixture, session);
+            PlaygroundSaml.LogoutFlow flow = requireNonNull(session.samlLogout);
+            String query = malformed ? "" : logoutResponseQuery(started, "_expired-completion",
+                    "https://localhost:8443/saml/slo", "Success");
+            clock.now.set(flow.expires);
+            Response rejected = fixture.resources.samlLogoutCallback(logoutCallback(session, query, flow.sealed));
+            assertEquals(400, rejected.getStatusCode());
+            assertNull(session.samlLogout);
+            assertLogoutCookieCleared(rejected);
+            assertNull(session.identity);
+            assertNull(session.samlReference);
+        }
+    }
+
+    @Test void unavailableOrUncertainReplayAdmissionPreservesStateWithoutRestoringLocalAccess() throws Exception {
+        for (SamlReplayCache.MarkResult outcome : List.of(SamlReplayCache.MarkResult.UNAVAILABLE,
+                SamlReplayCache.MarkResult.INDETERMINATE)) {
+            Fixture fixture = fixture();
+            BrowserSessions.Session session = authenticatedSession(fixture);
+            Response started = beginLogout(fixture, session);
+            PlaygroundSaml.LogoutFlow flow = requireNonNull(session.samlLogout);
+            String query = logoutResponseQuery(started, "_store-fault-completion",
+                    "https://localhost:8443/saml/slo", "Success");
+            Field spField = PlaygroundSaml.class.getDeclaredField("sp");
+            spField.setAccessible(true);
+            SamlServiceProvider sp = assertInstanceOf(SamlServiceProvider.class, spField.get(fixture.saml));
+            Field replayField = SamlServiceProvider.class.getDeclaredField("replayCache");
+            replayField.setAccessible(true);
+            SamlReplayCache original = assertInstanceOf(SamlReplayCache.class, replayField.get(sp));
+            try {
+                // Inject a storage fault after genuine login/begin, at the application's completion boundary.
+                replayField.set(sp, (SamlReplayCache) (key, expiry, remaining) -> outcome);
+                Response failed = fixture.resources.samlLogoutCallback(logoutCallback(session, query, flow.sealed));
+                assertEquals(503, failed.getStatusCode());
+                assertPreserved(session, flow, failed);
+            } finally {
+                replayField.set(sp, original);
+            }
+            Response completed = fixture.resources.samlLogoutCallback(logoutCallback(session, query, flow.sealed));
+            assertEquals(302, completed.getStatusCode());
+            assertNull(session.samlLogout);
+            assertLogoutCookieCleared(completed);
+            assertNull(session.identity);
+            assertNull(session.samlReference);
+        }
+    }
+
+    @Test void concurrentGenuineCallbacksReportOnlyOneVerifiedCompletion() throws Exception {
+        Fixture fixture = fixture();
+        BrowserSessions.Session session = authenticatedSession(fixture);
+        Response started = beginLogout(fixture, session);
+        PlaygroundSaml.LogoutFlow flow = requireNonNull(session.samlLogout);
+        String query = logoutResponseQuery(started, "_concurrent-completion",
+                "https://localhost:8443/saml/slo", "Success");
+        Request callback = logoutCallback(session, query, flow.sealed);
+        ExecutorService workers = Executors.newFixedThreadPool(2);
+        CountDownLatch gate = new CountDownLatch(1);
+        try {
+            List<Future<Response>> responses = List.of(workers.submit(() -> {
+                assertTrue(gate.await(5, TimeUnit.SECONDS));
+                return fixture.resources.samlLogoutCallback(callback);
+            }), workers.submit(() -> {
+                assertTrue(gate.await(5, TimeUnit.SECONDS));
+                return fixture.resources.samlLogoutCallback(callback);
+            }));
+            gate.countDown();
+            int successes = 0;
+            for (Future<Response> future : responses) {
+                Response response = future.get(5, TimeUnit.SECONDS);
+                if (response.getStatusCode() == 302) successes++;
+                else assertEquals(400, response.getStatusCode());
+            }
+            assertEquals(1, successes);
+            assertNull(session.samlLogout);
+            assertNull(session.identity);
+            assertNull(session.samlReference);
+        } finally {
+            workers.shutdownNow();
+            assertTrue(workers.awaitTermination(5, TimeUnit.SECONDS));
+        }
+    }
+
+    private static BrowserSessions.@NonNull Session authenticatedSession(@NonNull Fixture fixture) throws Exception {
         BrowserSessions.Session initial = fixture.sessions.begin();
         Response begun = fixture.resources.samlBegin(form("/saml/begin", initial, "csrf=" + initial.csrf));
         assertEquals(302, begun.getStatusCode());
@@ -234,18 +406,52 @@ final class PlaygroundSamlTests {
                         + browserCookie.getValue().orElseThrow()))).build()).orElseThrow();
         assertNotNull(loggedIn.identity);
         assertEquals("session-123", loggedIn.samlReference.getSessionIndex().orElseThrow());
+        return loggedIn;
+    }
 
-        Response unmatched = fixture.resources.samlLogoutCallback(signedLogoutRequest(
-                "_unmatched-playground-logout", "session-other", idpPrivateKey()));
-        assertEquals(302, unmatched.getStatusCode());
-        assertNotNull(loggedIn.identity);
-        assertNotNull(loggedIn.samlReference);
+    private static @NonNull Response beginLogout(@NonNull Fixture fixture,
+            BrowserSessions.@NonNull Session session) {
+        Response started = fixture.resources.samlBeginLogout(form("/saml/logout", session, "csrf=" + session.csrf));
+        assertEquals(302, started.getStatusCode());
+        assertNotNull(session.samlLogout);
+        assertNull(session.identity);
+        assertNull(session.samlReference);
+        return started;
+    }
 
-        Response matched = fixture.resources.samlLogoutCallback(signedLogoutRequest(
-                "_matched-playground-logout", "session-123", idpPrivateKey()));
-        assertEquals(302, matched.getStatusCode());
-        assertNull(loggedIn.identity);
-        assertNull(loggedIn.samlReference);
+    private static void assertPreserved(BrowserSessions.@NonNull Session session,
+            PlaygroundSaml.@NonNull LogoutFlow flow, @NonNull Response response) {
+        assertSame(flow, session.samlLogout);
+        assertTrue(response.getCookies().stream().noneMatch(cookie -> cookie.getName().equals(PlaygroundSaml.LOGOUT_COOKIE)));
+        assertNull(session.identity);
+        assertNull(session.samlReference);
+    }
+
+    private static void assertLogoutCookieCleared(@NonNull Response response) {
+        assertTrue(response.getCookies().stream().anyMatch(cookie -> cookie.getName().equals(PlaygroundSaml.LOGOUT_COOKIE)
+                && cookie.getMaxAge().orElseThrow().isZero()));
+    }
+
+    private static @NonNull Request logoutCallback(BrowserSessions.@NonNull Session session,
+            @NonNull String query, @Nullable String pendingCookie) {
+        String cookies = BrowserSessions.COOKIE + "=" + session.id
+                + (pendingCookie == null ? "" : "; " + PlaygroundSaml.LOGOUT_COOKIE + "=" + pendingCookie);
+        // Browser navigations may omit Origin; a callback still has to prove its SAML and pending bindings.
+        return Request.withRawUrl(HttpMethod.GET, "/saml/slo" + (query.isEmpty() ? "" : "?" + query))
+                .headers(Map.of("Host", List.of("localhost:8443"), "Cookie", List.of(cookies))).build();
+    }
+
+    private static @NonNull String logoutResponseQuery(@NonNull Response started, @NonNull String responseId,
+            @NonNull String destination, @NonNull String status) throws Exception {
+        String redirect = started.getHeaders().get("Location").get(0);
+        String xml = "<p:LogoutResponse xmlns:p='urn:oasis:names:tc:SAML:2.0:protocol' "
+                + "xmlns:a='urn:oasis:names:tc:SAML:2.0:assertion' ID='" + responseId + "' Version='2.0' "
+                + "IssueInstant='2026-10-10T00:00:00Z' Destination='" + destination
+                + "' InResponseTo='" + outboundRequestId(redirect) + "'>"
+                + "<a:Issuer>https://idp.example.test/</a:Issuer>"
+                + "<p:Status><p:StatusCode Value='urn:oasis:names:tc:SAML:2.0:status:" + status
+                + "'/></p:Status></p:LogoutResponse>";
+        return signedRedirectQuery("SAMLResponse", xml, outboundRelayState(redirect), idpPrivateKey());
     }
 
     private static @NonNull String outboundRequestId(@NonNull String redirect) throws Exception {
@@ -320,6 +526,13 @@ final class PlaygroundSamlTests {
                 + "<a:NameID Format='urn:oasis:names:tc:SAML:2.0:nameid-format:persistent' "
                 + "NameQualifier='https://idp.example.test/'>alice</a:NameID>"
                 + "<p:SessionIndex>" + sessionIndex + "</p:SessionIndex></p:LogoutRequest>";
+        return Request.withRawUrl(HttpMethod.GET, "/saml/slo?" + signedRedirectQuery("SAMLRequest", xml, null, key))
+                .headers(Map.of("Host", List.of("localhost:8443"),
+                        "Origin", List.of("https://idp.example.test"))).build();
+    }
+
+    private static @NonNull String signedRedirectQuery(@NonNull String field, @NonNull String xml,
+            @Nullable String relay, @NonNull PrivateKey key) throws Exception {
         Deflater compressor = new Deflater(Deflater.DEFAULT_COMPRESSION, true);
         byte[] compressed = new byte[8192];
         int length;
@@ -329,21 +542,23 @@ final class PlaygroundSamlTests {
             length = compressor.deflate(compressed);
             assertTrue(compressor.finished());
         } finally { compressor.end(); }
-        String signed = "SAMLRequest=" + URLEncoder.encode(Base64.getEncoder().encodeToString(
+        String signed = field + "=" + URLEncoder.encode(Base64.getEncoder().encodeToString(
                 java.util.Arrays.copyOf(compressed, length)), StandardCharsets.UTF_8)
+                + (relay == null ? "" : "&RelayState=" + URLEncoder.encode(relay, StandardCharsets.UTF_8))
                 + "&SigAlg=" + URLEncoder.encode(
                         "http://www.w3.org/2001/04/xmldsig-more#rsa-sha256", StandardCharsets.UTF_8);
         Signature signature = Signature.getInstance("SHA256withRSA");
         signature.initSign(key);
         signature.update(signed.getBytes(StandardCharsets.US_ASCII));
-        String query = signed + "&Signature=" + URLEncoder.encode(
+        return signed + "&Signature=" + URLEncoder.encode(
                 Base64.getEncoder().encodeToString(signature.sign()), StandardCharsets.UTF_8);
-        return Request.withRawUrl(HttpMethod.GET, "/saml/slo?" + query)
-                .headers(Map.of("Host", List.of("localhost:8443"),
-                        "Origin", List.of("https://idp.example.test"))).build();
     }
 
     private @NonNull Fixture fixture() throws IOException {
+        return fixture(CLOCK);
+    }
+
+    private @NonNull Fixture fixture(@NonNull Clock clock) throws IOException {
         String idpCertificate = resource("idp-signing-rsa-2048-cert.pem");
         String encoded = idpCertificate.replace("-----BEGIN CERTIFICATE-----", "")
                 .replace("-----END CERTIFICATE-----", "").replaceAll("\\s", "");
@@ -368,14 +583,14 @@ final class PlaygroundSamlTests {
                 "PLAYGROUND_SAML_SIGNING_KEY_FILE", signingKey.toString(),
                 "PLAYGROUND_SAML_SIGNING_CERT_FILE", signingCertificate.toString());
         PlaygroundConfig config = PlaygroundConfig.fromEnvironment(Map.of());
-        BrowserSessions sessions = new BrowserSessions(CLOCK, 4);
+        BrowserSessions sessions = new BrowserSessions(clock, 4);
         SafeViews views = new SafeViews(LocalSecrets.randomBytes());
         PlaygroundSaml saml = requireNonNull(PlaygroundSaml.fromEnvironment(environment, config,
-                sessions, views, CLOCK));
-        PlaygroundOidc oidc = new PlaygroundOidc(sessions, views, CLOCK);
+                sessions, views, clock));
+        PlaygroundOidc oidc = new PlaygroundOidc(sessions, views, clock);
         PlaygroundResources resources = new PlaygroundResources(config, sessions, views, oidc,
                 HttpClient.newHttpClient(), token -> { throw new AssertionError("Not part of the SAML test"); }, saml);
-        return new Fixture(config, sessions, views, resources, environment);
+        return new Fixture(config, sessions, views, resources, environment, saml);
     }
 
     private static @NonNull Request form(@NonNull String path, BrowserSessions.@NonNull Session session,
@@ -400,11 +615,20 @@ final class PlaygroundSamlTests {
         final SafeViews views;
         final PlaygroundResources resources;
         final Map<String, String> environment;
+        final PlaygroundSaml saml;
         Fixture(@NonNull PlaygroundConfig config, @NonNull BrowserSessions sessions, @NonNull SafeViews views,
                 @NonNull PlaygroundResources resources,
-                @NonNull Map<@NonNull String, @NonNull String> environment) {
+                @NonNull Map<@NonNull String, @NonNull String> environment, @NonNull PlaygroundSaml saml) {
             this.config = config; this.sessions = sessions; this.views = views;
-            this.resources = resources; this.environment = environment;
+            this.resources = resources; this.environment = environment; this.saml = saml;
         }
+    }
+
+    private static final class MutableClock extends Clock {
+        private final @NonNull AtomicReference<@NonNull Instant> now;
+        private MutableClock(@NonNull Instant initial) { this.now = new AtomicReference<>(initial); }
+        @Override public @NonNull ZoneId getZone() { return ZoneOffset.UTC; }
+        @Override public @NonNull Clock withZone(@NonNull ZoneId zone) { return this; }
+        @Override public @NonNull Instant instant() { return now.get(); }
     }
 }

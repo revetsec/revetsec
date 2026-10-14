@@ -194,6 +194,32 @@ final class FuzzSeedProvenanceTests {
 		Assertions.assertEquals(expected, actual); Assertions.assertEquals(126, actual.size());
 	}
 
+	@Test
+	void samlPostLogoutSeedsMatchTheirCompleteNonemptyManifest() throws Exception {
+		Path resources = coreBasedir().resolve(FuzzSeedGenerator.FUZZ_RESOURCES);
+		Set<String> expected = new TreeSet<>();
+		for (String line : Files.readAllLines(resources.resolve("com/revetsec/saml/saml-post-logout-seeds.sha256"))) {
+			Assertions.assertTrue(line.matches("[0-9a-f]{64}  .+"));
+			String relative = line.substring(66);
+			Path file = resources.resolve(relative).normalize();
+			Assertions.assertTrue(file.startsWith(resources));
+			Assertions.assertTrue(expected.add(relative));
+			byte[] bytes = Files.readAllBytes(file);
+			Assertions.assertTrue(bytes.length > 0);
+			Assertions.assertEquals(line.substring(0, 64), HexFormat.of().formatHex(
+					java.security.MessageDigest.getInstance("SHA-256").digest(bytes)));
+		}
+		Set<String> actual = new TreeSet<>();
+		for (String method : List.of("signedPostLogoutCasesNeverReleaseWrongSessionOrSuccess",
+				"rawPostLogoutFormsNeverAdmitUnsignedProtocolMessages")) {
+			try (Stream<Path> files = Files.walk(resources.resolve("com/revetsec/saml/SamlLogoutFuzzTestsInputs/" + method))) {
+				actual.addAll(files.filter(Files::isRegularFile).map(resources::relativize).map(Path::toString)
+						.collect(Collectors.toSet()));
+			}
+		}
+		Assertions.assertEquals(expected, actual);
+	}
+
 	private static final Pattern WYCHEPROOF_SEED = Pattern.compile(
 			"wycheproof-([a-z0-9_]+)-tc([0-9]+)-(jws|sig|public|private)\\.(txt|bin|json)");
 	private static final String GENERATED_PREFIX = "generated-";

@@ -27,10 +27,11 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.Predicate;
 
 /**
- * Bounded, process-local pending-login store with atomic single consumption. Restarting this
- * process loses pending logins. Distributed deployments supply their own shared store.
+ * Bounded, process-local store for pending SAML login and logout with atomic single consumption.
+ * Restarting this process loses pending attempts. Distributed deployments supply their own shared store.
  *
  * @since 1.0.0
  */
@@ -51,7 +52,7 @@ public final class InMemoryPendingSamlAuthenticationStore implements PendingSaml
      * Creates an empty store with an explicit capacity.
      *
      * @param clock validation clock
-     * @param maximumEntries maximum live logins, from 1 to 1000000
+     * @param maximumEntries maximum live attempts, from 1 to 1000000
      * @return local store
      * @since 1.0.0
      */
@@ -104,8 +105,16 @@ public final class InMemoryPendingSamlAuthenticationStore implements PendingSaml
 
     @Override public @NonNull SamlPendingConsumeResult consume(@NonNull String browserBinding,
             @NonNull String relayStateHandle, @NonNull Duration remaining) {
+        return consumeIfMatches(browserBinding, relayStateHandle, record -> true, remaining);
+    }
+
+    @SuppressWarnings("ReferenceEquality") // Removal requires the same live Entry, including identical replacements.
+    @Override public @NonNull SamlPendingConsumeResult consumeIfMatches(@NonNull String browserBinding,
+            @NonNull String relayStateHandle, @NonNull Predicate<@NonNull String> sealedRecordMatches,
+            @NonNull Duration remaining) {
         Objects.requireNonNull(browserBinding);
         Objects.requireNonNull(relayStateHandle);
+        Objects.requireNonNull(sealedRecordMatches);
         Objects.requireNonNull(remaining);
         if (browserBinding.isEmpty() || relayStateHandle.isEmpty())
             throw new IllegalArgumentException("Empty pending key");
@@ -117,6 +126,15 @@ public final class InMemoryPendingSamlAuthenticationStore implements PendingSaml
             String key = key(browserBinding, relayStateHandle);
             Entry existing = entries.get(key);
             if (existing == null || !now.isBefore(existing.expiresAt()))
+                return SamlPendingConsumeResult.Missing.INSTANCE;
+            boolean matches;
+            try { matches = sealedRecordMatches.test(existing.sealedRecord()); }
+            catch (RuntimeException exception) { return SamlPendingConsumeResult.Unavailable.INSTANCE; }
+            now = now();
+            if (now == null || expired(deadline)) return SamlPendingConsumeResult.Unavailable.INSTANCE;
+            // The lock is reentrant: validation must not authorize a record already consumed or
+            // replaced by a recursive call made by the predicate.
+            if (entries.get(key) != existing || !now.isBefore(existing.expiresAt()) || !matches)
                 return SamlPendingConsumeResult.Missing.INSTANCE;
             if (expired(deadline)) return SamlPendingConsumeResult.Unavailable.INSTANCE;
             entries.remove(key);

@@ -191,7 +191,7 @@ final class SamlRedirectAuthnRequest {
         }
     }
 
-    private static byte @Nullable [] signPostXml(byte @NonNull [] unsigned, @NonNull String id,
+    static byte @Nullable [] signPostXml(byte @NonNull [] unsigned, @NonNull String id,
             @NonNull PrivateKey signingKey) throws GeneralSecurityException,
             javax.xml.crypto.MarshalException, javax.xml.crypto.dsig.XMLSignatureException,
             javax.xml.transform.TransformerException {

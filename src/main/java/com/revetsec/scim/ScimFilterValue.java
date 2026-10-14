@@ -28,6 +28,7 @@ import static java.util.Objects.requireNonNull;
  * A SCIM comparison literal: JSON string, number, boolean or null. Construction
  * is restricted to bounded parsing. Strings compare exactly; numbers compare
  * by numeric value. Diagnostic rendering always redacts content.
+ * The four permitted literal kinds are stable within a major version and may be matched exhaustively.
  *
  * @since 1.0.0
  */

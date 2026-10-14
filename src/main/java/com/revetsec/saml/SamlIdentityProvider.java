@@ -45,6 +45,7 @@ public final class SamlIdentityProvider {
     private final @Nullable URI redirectSingleSignOnService;
     private final @Nullable URI postSingleSignOnService;
     private final @Nullable URI redirectSingleLogoutService;
+    private final @Nullable URI postSingleLogoutService;
     private final @NonNull List<@NonNull PublicKey> signingKeys;
     private final boolean wantAuthnRequestsSigned;
     private final boolean requireSignedAssertions;
@@ -59,6 +60,7 @@ public final class SamlIdentityProvider {
         this.redirectSingleSignOnService = builder.redirectSingleSignOnService;
         this.postSingleSignOnService = builder.postSingleSignOnService;
         this.redirectSingleLogoutService = builder.redirectSingleLogoutService;
+        this.postSingleLogoutService = builder.postSingleLogoutService;
         this.signingKeys = List.copyOf(builder.signingKeys);
         this.wantAuthnRequestsSigned = builder.wantAuthnRequestsSigned;
         this.requireSignedAssertions = builder.requireSignedAssertions;
@@ -97,6 +99,7 @@ public final class SamlIdentityProvider {
                 .redirectSingleSignOnService(metadata.getRedirectSingleSignOnService().orElse(null))
                 .postSingleSignOnService(metadata.getPostSingleSignOnService().orElse(null))
                 .redirectSingleLogoutService(metadata.getRedirectSingleLogoutService().orElse(null))
+                .postSingleLogoutService(metadata.getPostSingleLogoutService().orElse(null))
                 .authorizedIdentifierScopes(metadata.getAuthorizedIdentifierScopes())
                 .signingKeys(keys).wantAuthnRequestsSigned(metadata.wantsAuthnRequestsSigned());
     }
@@ -125,6 +128,7 @@ public final class SamlIdentityProvider {
     @Nullable URI redirectSingleSignOnService() { return redirectSingleSignOnService; }
     @Nullable URI postSingleSignOnService() { return postSingleSignOnService; }
     @Nullable URI redirectSingleLogoutService() { return redirectSingleLogoutService; }
+    @Nullable URI postSingleLogoutService() { return postSingleLogoutService; }
     @NonNull List<@NonNull PublicKey> signingKeys() { return signingKeys; }
     boolean wantAuthnRequestsSigned() { return wantAuthnRequestsSigned; }
     boolean requireSignedAssertions() { return requireSignedAssertions; }
@@ -150,6 +154,7 @@ public final class SamlIdentityProvider {
         private @Nullable URI redirectSingleSignOnService;
         private @Nullable URI postSingleSignOnService;
         private @Nullable URI redirectSingleLogoutService;
+        private @Nullable URI postSingleLogoutService;
         private @NonNull List<@NonNull PublicKey> signingKeys = List.of();
         private boolean wantAuthnRequestsSigned;
         private boolean requireSignedAssertions;
@@ -204,6 +209,18 @@ public final class SamlIdentityProvider {
          */
         @CheckReturnValue public @NonNull Builder redirectSingleLogoutService(@Nullable URI value) {
             this.redirectSingleLogoutService = value;
+            return this;
+        }
+
+        /**
+         * Configures the IdP's HTTP-POST Single Logout endpoint.
+         *
+         * @param value HTTPS endpoint, or null to clear
+         * @return this builder
+         * @since 1.0.0
+         */
+        @CheckReturnValue public @NonNull Builder postSingleLogoutService(@Nullable URI value) {
+            this.postSingleLogoutService = value;
             return this;
         }
 
@@ -305,7 +322,7 @@ public final class SamlIdentityProvider {
                 throw new IllegalStateException("IdP connection ID is required");
             if ((redirectSingleSignOnService == null && postSingleSignOnService == null)
                     || !safeEndpoint(redirectSingleSignOnService) || !safeEndpoint(postSingleSignOnService)
-                    || !safeEndpoint(redirectSingleLogoutService))
+                    || !safeEndpoint(redirectSingleLogoutService) || !safeEndpoint(postSingleLogoutService))
                 throw new IllegalStateException("An IdP HTTPS SSO endpoint is required");
             if (signingKeys.isEmpty() || signingKeys.size() > 8)
                 throw new IllegalStateException("IdP signing keys are required");

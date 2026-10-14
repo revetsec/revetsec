@@ -14,10 +14,11 @@
 # limitations under the License.
 #
 
-"""Test IdP HTTP-Redirect Single Logout producer, signed over exact query octets."""
+"""Test IdP Single Logout producer: Redirect octets or POST XML signatures."""
 
 import base64
 import datetime
+import html
 import pathlib
 import urllib.parse
 import zlib
@@ -33,7 +34,24 @@ from . import selftest as x
 SIGALG = "http://www.w3.org/2001/04/xmldsig-more#rsa-sha256"
 
 
-def _signed(root, field, relay, destination, key_directory):
+def _signed(root, field, relay, destination, key_directory, binding="redirect"):
+    credential = x.Credential.from_files("idp-signing-rsa-2048", pathlib.Path(key_directory))
+    if binding == "post":
+        x.xmlsec_sign(root, credential, x.C.TransformRsaSha256, x.C.TransformSha256)
+        serialized = etree.tostring(root, xml_declaration=True, encoding="UTF-8")
+        fields = {field: base64.b64encode(serialized).decode("ascii")}
+        if relay is not None:
+            fields["RelayState"] = relay
+        form = ('<!doctype html><html><head><meta charset="utf-8"></head><body>'
+                '<form method="post" action="' + html.escape(destination, quote=True) + '">'
+                + ''.join('<input type="hidden" name="' + name + '" value="'
+                          + html.escape(value, quote=True) + '">' for name, value in fields.items())
+                + '<noscript><button type="submit">Continue</button></noscript></form>'
+                '<script>document.forms[0].submit()</script></body></html>')
+        return {"action": destination, "fields": fields, "form": form,
+                "form_body": urllib.parse.urlencode(fields), "xml": serialized.decode("utf-8")}
+    if binding != "redirect":
+        raise mint.SpecError("invalid logout binding")
     serialized = etree.tostring(root, xml_declaration=True, encoding="UTF-8")
     compressor = zlib.compressobj(wbits=-15)
     compressed = compressor.compress(serialized) + compressor.flush()
@@ -41,7 +59,6 @@ def _signed(root, field, relay, destination, key_directory):
     if relay is not None:
         query += "&RelayState=" + urllib.parse.quote(relay, safe="")
     query += "&SigAlg=" + urllib.parse.quote(SIGALG, safe="")
-    credential = x.Credential.from_files("idp-signing-rsa-2048", pathlib.Path(key_directory))
     signature = credential.private_key.sign(query.encode("ascii"), padding.PKCS1v15(), hashes.SHA256())
     query += "&Signature=" + urllib.parse.quote(base64.b64encode(signature).decode("ascii"), safe="")
     return {"redirect_url": destination + "?" + query, "raw_query": query,
@@ -49,7 +66,7 @@ def _signed(root, field, relay, destination, key_directory):
 
 
 def logout_request(spec, key_directory):
-    spec = mint._object(spec, ("clock", "sp", "subject", "ids", "relay_state"),
+    spec = mint._object(spec, ("clock", "sp", "subject", "ids", "relay_state", "binding"),
                         ("clock", "sp", "subject"))
     now = mint._instant(mint._object(spec["clock"], ("now",), ("now",))["now"])
     sp = mint._object(spec["sp"], ("entity_id", "slo_url"), ("entity_id", "slo_url"))
@@ -75,13 +92,15 @@ def logout_request(spec, key_directory):
            NameQualifier=x.IDP, SPNameQualifier=entity_id)
     if session_index is not None:
         x._sub(root, x.SAMLP, "SessionIndex", session_index)
-    result = _signed(root, "SAMLRequest", relay, destination, key_directory)
+    result = _signed(root, "SAMLRequest", relay, destination, key_directory,
+                     spec.get("binding", "redirect"))
     result["request_id"] = request_id
     result["relay_state"] = relay
     return result
 
 
-def logout_response(now, destination, in_response_to, relay, status, key_directory):
+def logout_response(now, destination, in_response_to, relay, status, key_directory,
+                    binding="redirect"):
     if status not in ("Success", "Responder"):
         raise mint.SpecError("invalid logout status")
     root = x._root(x.SAMLP, "LogoutResponse", {"p": x.SAMLP, "a": x.SAML},
@@ -91,12 +110,13 @@ def logout_response(now, destination, in_response_to, relay, status, key_directo
     x._sub(root, x.SAML, "Issuer", x.IDP)
     x._sub(x._sub(root, x.SAMLP, "Status"), x.SAMLP, "StatusCode",
            Value="urn:oasis:names:tc:SAML:2.0:status:" + status)
-    return _signed(root, "SAMLResponse", relay, destination, key_directory)
+    return _signed(root, "SAMLResponse", relay, destination, key_directory, binding)
 
 
 def sign_fixture(spec, key_directory):
     """Sign caller-supplied logout XML for hostile SP acceptance tests only."""
-    spec = mint._object(spec, ("xml", "destination", "relay_state"), ("xml", "destination"))
+    spec = mint._object(spec, ("xml", "destination", "relay_state", "binding"),
+                        ("xml", "destination"))
     xml = mint._string(spec["xml"], "xml", 65536).encode("utf-8")
     if b"<!DOCTYPE" in xml.upper() or b"<!ENTITY" in xml.upper():
         raise mint.SpecError("invalid logout XML")
@@ -110,8 +130,14 @@ def sign_fixture(spec, key_directory):
         field = "SAMLResponse"
     else:
         raise mint.SpecError("not a logout message")
+    # The hostile-fixture endpoint signs the caller's current contents anew.
+    # Removing the old signature lets tests distinguish semantic failures from
+    # a broken signature, using the independent libxmlsec implementation.
+    for signature in root.findall(x._q(x.DS, "Signature")):
+        root.remove(signature)
     destination = mint._https(spec["destination"], "destination")
     relay = spec.get("relay_state")
     if relay is not None:
         relay = mint._string(relay, "relay_state", 80)
-    return _signed(root, field, relay, destination, key_directory)
+    return _signed(root, field, relay, destination, key_directory,
+                   spec.get("binding", "redirect"))

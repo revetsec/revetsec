@@ -49,6 +49,18 @@ assertion decryption, and Redirect logout in both directions. It submits Keycloa
 actual login and logout confirmation forms and verifies the returned SAML messages
 through the core service provider. The broader SAML release matrix is still open.
 
+A second SAML client, `https://sp.test/KeycloakSamlPostLogoutIT`, requires signed
+SP requests and exposes only POST Single Logout at
+`https://sp.test/logout/post`. Its encryption and SP signing certificates are the
+same public test certificate; the matching private key remains in the Java test
+process. The two POST cases in `KeycloakSamlIT` establish actual Keycloak sessions,
+exchange signed XML LogoutRequests and LogoutResponses in both directions, check
+NameID and SessionIndex against the login, and reject replay. The SP-initiated
+case first changes the signed NameID and requires Keycloak to reject the request,
+then changes the returned signed status and requires Revetsec to reject the
+response without consuming the valid pending logout. These tests require no
+compatibility relaxation of the SP's logout validation.
+
 `run_playground_browser.sh` starts a disposable browser fixture after the current core
 and Soklet adapter JARs and Playground classes have been built. Set `SOKLET_JAR` to the
 checksum-pinned Soklet 4.0.0 JAR and `BROWSER_SECCOMP` to the private derived profile

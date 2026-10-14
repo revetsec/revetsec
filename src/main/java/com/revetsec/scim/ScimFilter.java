@@ -37,6 +37,9 @@ import static java.util.Objects.requireNonNull;
  * Equality is structural, with the path's ASCII case-insensitive equality and
  * numeric-value literal equality. Explicit serialization contains the complete
  * filter and may expose personal data; every diagnostic toString redacts it.
+ * <p>
+ * The six permitted node kinds are stable within a major version and may be matched exhaustively.
+ * Adding a node kind or an abstract visitor callback requires a major release.
  *
  * @since 1.0.0
  */

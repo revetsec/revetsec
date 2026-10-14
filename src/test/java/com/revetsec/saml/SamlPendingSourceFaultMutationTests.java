@@ -33,6 +33,7 @@ import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Predicate;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -115,6 +116,13 @@ final class SamlPendingSourceFaultMutationTests {
                     case INDETERMINATE -> SamlPendingConsumeResult.Indeterminate.INSTANCE;
                     case MISSING_RELAY -> throw new AssertionError("missing relay must not consume");
                 };
+            }
+
+            @Override public @NonNull SamlPendingConsumeResult consumeIfMatches(@NonNull String browserBinding,
+                    @NonNull String relayStateHandle, @NonNull Predicate<@NonNull String> sealedRecordMatches,
+                    @NonNull Duration remaining) {
+                // This fault provider never claims to have removed a record.
+                return consume(browserBinding, relayStateHandle, remaining);
             }
         };
     }

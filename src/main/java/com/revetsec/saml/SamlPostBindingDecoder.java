@@ -44,6 +44,16 @@ final class SamlPostBindingDecoder {
 
     static @NonNull Result decode(byte @NonNull [] body, @NonNull List<@NonNull String> contentTypes,
             @Nullable String rawQuery) {
+        return decode(body, contentTypes, rawQuery, false);
+    }
+
+    static @NonNull Result decodeLogout(byte @NonNull [] body, @NonNull List<@NonNull String> contentTypes,
+            @Nullable String rawQuery) {
+        return decode(body, contentTypes, rawQuery, true);
+    }
+
+    private static @NonNull Result decode(byte @NonNull [] body, @NonNull List<@NonNull String> contentTypes,
+            @Nullable String rawQuery, boolean logout) {
         requireNonNull(body);
         requireNonNull(contentTypes);
         if (body.length == 0 || body.length > MAXIMUM_BODY_BYTES) return new Rejected(Reason.BODY_SIZE);
@@ -52,6 +62,7 @@ final class SamlPostBindingDecoder {
         if (rawQuery != null && !validQuery(rawQuery)) return new Rejected(Reason.QUERY);
 
         @Nullable String encodedResponse = null;
+        SamlPostBindingMessage.Kind kind = SamlPostBindingMessage.Kind.RESPONSE;
         @Nullable String relayState = null;
         int parameters = 0;
         int start = 0;
@@ -65,9 +76,11 @@ final class SamlPostBindingDecoder {
             @Nullable String name = decodeComponent(body, start, separator);
             @Nullable String value = decodeComponent(body, separator + 1, end);
             if (name == null || value == null) return new Rejected(Reason.FORM_ENCODING);
-            if (name.equals("SAMLResponse")) {
+            if (name.equals("SAMLResponse") || (logout && name.equals("SAMLRequest"))) {
                 if (encodedResponse != null) return new Rejected(Reason.PARAMETERS);
                 encodedResponse = value;
+                kind = name.equals("SAMLRequest") ? SamlPostBindingMessage.Kind.REQUEST
+                        : SamlPostBindingMessage.Kind.RESPONSE;
             } else if (name.equals("RelayState")) {
                 if (relayState != null) return new Rejected(Reason.PARAMETERS);
                 relayState = value;
@@ -90,7 +103,7 @@ final class SamlPostBindingDecoder {
         try { xml = Base64.getDecoder().decode(base64.toString()); }
         catch (IllegalArgumentException exception) { return new Rejected(Reason.BASE64); }
         if (xml.length == 0 || xml.length > MAXIMUM_XML_BYTES) return new Rejected(Reason.XML_SIZE);
-        return new Accepted(xml, relayState);
+        return new Accepted(xml, relayState, kind);
     }
 
     private static boolean validContentType(@Nullable String value) {
@@ -169,11 +182,16 @@ final class SamlPostBindingDecoder {
         private final byte @NonNull [] xml;
         private final @Nullable String relayState;
 
-        private Accepted(byte @NonNull [] xml, @Nullable String relayState) {
+        private final SamlPostBindingMessage.@NonNull Kind kind;
+
+        private Accepted(byte @NonNull [] xml, @Nullable String relayState,
+                SamlPostBindingMessage.@NonNull Kind kind) {
             this.xml = xml.clone();
             this.relayState = relayState;
+            this.kind = kind;
         }
 
+        SamlPostBindingMessage.@NonNull Kind kind() { return kind; }
         byte @NonNull [] xml() { return xml.clone(); }
         @Nullable String relayState() { return relayState; }
         @Override public @NonNull String toString() { return "SamlPostBindingDecoder.Accepted{<unverified>}"; }

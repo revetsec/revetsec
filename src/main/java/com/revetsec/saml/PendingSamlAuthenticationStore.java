@@ -20,9 +20,10 @@ import org.jspecify.annotations.NonNull;
 import javax.annotation.concurrent.ThreadSafe;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.function.Predicate;
 
 /**
- * Atomic storage for browser-bound SAML login attempts. A shared implementation must consume a
+ * Atomic storage for browser-bound SAML login and logout attempts. A shared implementation must consume a
  * record at most once across all nodes. The record is sealed by Revetsec and is opaque to the
  * provider. A process-local provider is suitable only for a single node.
  *
@@ -55,4 +56,31 @@ public interface PendingSamlAuthenticationStore {
      */
     @NonNull SamlPendingConsumeResult consume(@NonNull String browserBinding, @NonNull String relayStateHandle,
             @NonNull Duration remaining);
+
+    /**
+     * Validates one live sealed record before atomically removing that same record. The predicate
+     * must accept the exact record returned by a successful consume; a replacement record must
+     * be validated separately. A false predicate returns {@link SamlPendingConsumeResult.Missing}
+     * without removing the record. A predicate exception or exhausted operation budget returns
+     * {@link SamlPendingConsumeResult.Unavailable} without removal. An uncertain removal is
+     * indeterminate.
+     * <p>
+     * The default implementation returns unavailable without reading, validating or consuming
+     * state. Implementations must supply an atomic conditional consume to support this operation;
+     * falling back to {@link #consume(String, String, Duration)} cannot preserve rejected state.
+     * Logout completion requires this operation and fails closed until the store overrides it.
+     * The predicate should perform only bounded validation and must not mutate store state.
+     *
+     * @param browserBinding browser-specific secret
+     * @param relayStateHandle generated opaque lookup handle
+     * @param sealedRecordMatches validation of the exact live sealed record
+     * @param remaining positive budget including validation and removal
+     * @return conditional consume outcome
+     * @since 1.0.0
+     */
+    default @NonNull SamlPendingConsumeResult consumeIfMatches(@NonNull String browserBinding,
+            @NonNull String relayStateHandle, @NonNull Predicate<@NonNull String> sealedRecordMatches,
+            @NonNull Duration remaining) {
+        return SamlPendingConsumeResult.Unavailable.INSTANCE;
+    }
 }

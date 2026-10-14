@@ -20,7 +20,8 @@
  * <p>
  * Syntax success does not authorize a query. Applications authenticate and authorize callers,
  * execute approved queries and persist candidates atomically. Ordered atomic PATCH and conservative
- * membership reduction are supported; the optional collection evaluator follows separately.
+ * membership reduction are supported. The optional collection evaluator evaluates approved filters
+ * with an explicitly configured application string-matching strategy.
  * <p>
  * It depends only on {@code com.revetsec.json} and the root package.
  *

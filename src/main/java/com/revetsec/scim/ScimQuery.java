@@ -27,7 +27,11 @@ import java.util.*;
 
 import javax.annotation.concurrent.Immutable;
 
-/** Immutable approved query; applications own tenant-scoped execution and stable ordering.
+/** Immutable engine-created query bound to its originating provider's schema and semantic registration.
+ * Filter-policy approval and projection do not authorize a caller. Applications authenticate callers,
+ * select tenants, authorize access and execute the returned normalized filter with stable ordering.
+ * A page built from this query must be rendered by the originating provider or a base-URI-only copy.
+ * Applications own cursor authenticity, context binding and expiry; core checks only bounded framing.
  * @since 1.0.0
  */
 @Immutable
@@ -76,88 +80,108 @@ public final class ScimQuery {
         this.maximumCursorCharacters = maximumCursorCharacters;
     }
 
-    /** Returns the query resourceType.
-     * @return resourceType
+    /** Returns the exact registered resource-type object targeted by this query.
+     * @return the originating registration
      * @since 1.0.0
      */
     public @NonNull ScimResourceType getResourceType() {
         return resourceType;
     }
 
-    /** Returns the query filter.
-     * @return filter
+    /** Returns the complete normalized, schema-bound, policy-approved filter, when supplied.
+     * Applications execute this returned tree rather than the original request text; policy approval
+     * does not establish caller authorization.
+     * @return the approved filter, or empty when no filter was supplied
      * @since 1.0.0
      */
     public @NonNull Optional<@NonNull ScimFilter> getFilter() {
         return Optional.ofNullable(filter);
     }
 
-    /** Returns the query attributeSelection.
-     * @return attributeSelection
+    /** Returns this query's bound projection, separately from attribute authorization.
+     * The selection retains the originating provider's semantic registration.
+     * @return the bound projection
      * @since 1.0.0
      */
     public @NonNull ScimAttributeSelection getAttributeSelection() {
         return attributeSelection;
     }
 
-    /** Returns the query sortBy.
-     * @return sortBy
+    /** Returns the canonical schema-bound sort path, when requested.
+     * Applications own appropriate string collation, primary-or-first multivalue selection,
+     * absent-value ordering and a stable authoritative-ID tie-break.
+     * @return the sort path, or empty when sorting was not requested
      * @since 1.0.0
      */
     public @NonNull Optional<@NonNull ScimAttributePath> getSortBy() {
         return Optional.ofNullable(sortBy);
     }
 
-    /** Returns the query sortOrder.
-     * @return sortOrder
+    /** Returns the selected direction when sortBy is present; otherwise returns empty.
+     * A supplied sortBy with no sortOrder selects {@link ScimSortOrder#ASCENDING}.
+     * @return the bound direction, or empty when sorting was not requested
      * @since 1.0.0
      */
     public @NonNull Optional<@NonNull ScimSortOrder> getSortOrder() {
         return Optional.ofNullable(sortOrder);
     }
 
-    /** Returns the query paginationMethod.
-     * @return paginationMethod
+    /** Returns the selected page-framing method.
+     * An explicit cursor selects CURSOR, an explicit startIndex selects INDEX, and otherwise the
+     * provider's configured default applies. Cursor and startIndex cannot both be supplied.
+     * @return the selected pagination method
      * @since 1.0.0
      */
     public @NonNull ScimPaginationMethod getPaginationMethod() {
         return paginationMethod;
     }
 
-    /** Returns the query startIndex.
-     * @return startIndex
+    /** Returns the normalized one-based start index for INDEX framing, and empty for CURSOR.
+     * The index defaults to one; explicitly supplied values below one become one.
+     * @return the effective index, or empty for cursor pagination
      * @since 1.0.0
      */
     public @NonNull Optional<@NonNull Long> getStartIndex() {
         return Optional.ofNullable(startIndex);
     }
 
-    /** Returns the query count.
-     * @return count
+    /** Returns the effective nonnegative page-size bound after defaults and configured caps.
+     * INDEX requests are clamped to those caps; oversized CURSOR requests reject during parsing.
+     * Zero denotes a count-only operation with no resources or traversal cursors and an accurate
+     * totalResults value in the application-authored page.
+     * @return the effective count
      * @since 1.0.0
      */
     public @NonNull Integer getCount() {
         return count;
     }
 
-    /** Returns the query requestedCount.
-     * @return requestedCount
+    /** Returns the original explicitly supplied signed count, before normalization or clamping.
+     * Negative values remain visible here even though the effective count becomes zero. Empty means
+     * the count field was absent. Applications can retain both this presence/original value and
+     * {@link #getCount()} when checking a cursor's page-size context.
+     * @return the original requested count, or empty when the field was absent
      * @since 1.0.0
      */
     public @NonNull Optional<@NonNull Long> getRequestedCount() {
         return Optional.ofNullable(requestedCount);
     }
 
-    /** Returns the query cursor.
-     * @return cursor
+    /** Returns the original decoded opaque cursor when explicitly supplied.
+     * An explicit empty string remains present and denotes the first cursor page. An absent cursor
+     * also denotes the first page when CURSOR is the configured default. Core validates grammar and
+     * framing; applications authenticate the token and bind tenant, caller, permissions, resource
+     * type, approved query, sort, projection, page size and expiry.
+     * @return the supplied cursor, including an explicit empty string, or empty when absent
      * @since 1.0.0
      */
     public @NonNull Optional<@NonNull String> getCursor() {
         return Optional.ofNullable(cursor);
     }
 
-    /** Reports first cursor-page framing.
-     * @return first-page state
+    /** Reports first-page framing: true exactly for CURSOR with an absent or empty cursor.
+     * This is always false for INDEX and establishes neither cursor authenticity nor storage state.
+     * @return whether this is the first cursor page
      * @since 1.0.0
      */
     public @NonNull Boolean isFirstCursorPage() {

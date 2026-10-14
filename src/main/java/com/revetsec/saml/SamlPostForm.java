@@ -22,8 +22,9 @@ import java.net.URI;
 import java.util.Map;
 
 /**
- * A prepared browser form for a SAML HTTP-POST AuthnRequest. Render only over HTTPS, with a
- * Secure, HttpOnly, SameSite=None pending cookie set before delivery.
+ * A prepared browser form for a SAML HTTP-POST authentication or logout message. Render only over HTTPS.
+ * Retain browser-bound pending state before initiating a flow; a pending cookie needed on a cross-site
+ * POST callback requires Secure, HttpOnly and SameSite=None.
  *
  * @since 1.0.0
  */
@@ -33,8 +34,14 @@ public final class SamlPostForm {
     private final @NonNull Map<@NonNull String, @NonNull String> fields;
 
     SamlPostForm(@NonNull URI action, @NonNull String request, @NonNull String relayState) {
+        this(action, "SAMLRequest", request, relayState);
+    }
+
+    SamlPostForm(@NonNull URI action, @NonNull String field, @NonNull String message,
+            @Nullable String relayState) {
         this.action = action;
-        this.fields = Map.of("SAMLRequest", request, "RelayState", relayState);
+        this.fields = relayState == null ? Map.of(field, message)
+                : Map.of(field, message, "RelayState", relayState);
     }
 
     /**
@@ -75,7 +82,7 @@ public final class SamlPostForm {
             throw new IllegalArgumentException("Invalid CSP nonce");
         StringBuilder html = new StringBuilder(1024);
         html.append("<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">")
-                .append("<title>Continue sign-in</title></head><body>")
+                .append("<title>Continue</title></head><body>")
                 .append("<form id=\"saml-post-form\" method=\"post\" action=\"")
                 .append(escape(action.toASCIIString()))
                 .append("\" autocomplete=\"off\">");

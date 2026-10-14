@@ -20,12 +20,16 @@ import com.revetsec.SealingKey;
 import com.revetsec.StateSealer;
 import com.revetsec.internal.pem.Pem;
 import com.revetsec.internal.pem.PemException;
+import com.revetsec.internal.xml.SamlXmlWriter;
+import com.revetsec.internal.xml.SecureXmlParser;
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Assertions;
 
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
+import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Instant;
@@ -34,8 +38,9 @@ import java.util.Base64;
 import java.util.List;
 import java.util.Objects;
 import java.util.Properties;
+import java.util.regex.Pattern;
 
-/** Signed SLO acceptance and status checks against the independently minted Redirect corpus. */
+/** Signed SLO acceptance and status checks against independently minted Redirect and POST corpora. */
 public final class SamlLogoutFuzzTests {
     private static final @NonNull String SP = "https://sp.test/Selftest";
     private static final @NonNull String IDP = "https://idp.scripted-idp.test/";
@@ -46,6 +51,7 @@ public final class SamlLogoutFuzzTests {
     private static final @NonNull Clock CLOCK = Clock.fixed(
             Instant.parse("2026-09-01T00:01:00Z"), ZoneOffset.UTC);
     private static final @NonNull Properties CORPUS = corpus();
+    private static final @NonNull Properties POST_CORPUS = corpus("slo-post-corpus.properties");
     private static final @NonNull List<@NonNull String> CASES = CORPUS.stringPropertyNames().stream()
             .sorted().toList();
     private static final @NonNull SamlCredential SP_CREDENTIAL = credential();
@@ -94,6 +100,119 @@ public final class SamlLogoutFuzzTests {
         }
     }
 
+    /** Root-signed independent POST cases admit only their checked fixed session or correlated success. */
+    @FuzzTest(maxDuration = "5m")
+    public void signedPostLogoutCasesNeverReleaseWrongSessionOrSuccess(byte @NonNull [] input) {
+        String name = CASES.get(octet(input, 0) % CASES.size());
+        boolean request = name.startsWith("request-");
+        assertPostVerdict(Objects.requireNonNull(POST_CORPUS.getProperty(request ? "request-valid" : "response-valid")),
+                request, true);
+        String original = Objects.requireNonNull(POST_CORPUS.getProperty(name));
+        int mutation = octet(input, 1) % 3;
+        String body = switch (mutation) {
+            case 0 -> original;
+            case 1 -> original + "&" + (request ? "SAMLRequest" : "SAMLResponse") + "=PHgvPg%3D%3D";
+            default -> changedPostSignature(original, octet(input, 2));
+        };
+        if (mutation != 0) Assertions.assertNotEquals(original, body);
+        assertPostVerdict(body, request, mutation == 0 && name.equals(request ? "request-valid" : "response-valid"));
+    }
+
+    /** Raw form bytes remain opaque; removing every signature can never release sessions or logout success. */
+    @FuzzTest(maxDuration = "5m")
+    public void rawPostLogoutFormsNeverAdmitUnsignedProtocolMessages(byte @NonNull [] input) throws Exception {
+        SamlPostBindingParseResult parsed = SamlPostBindingMessage.fromLogoutFormBodyResult(input,
+                List.of("application/x-www-form-urlencoded"), null);
+        if (!(parsed instanceof SamlPostBindingParseResult.Parsed accepted)) return;
+        SamlPostBindingMessage message = accepted.getMessage();
+        SamlServiceProvider sp = serviceProvider();
+        if (message.getKind() == SamlPostBindingMessage.Kind.REQUEST) {
+            SamlLogoutRequestResult result = sp.acceptLogoutRequestResult(message, IDENTITY_PROVIDER);
+            if (result instanceof SamlLogoutRequestResult.Accepted)
+                Assertions.assertInstanceOf(SamlLogoutRequestResult.Rejected.class,
+                        sp.acceptLogoutRequestResult(message, IDENTITY_PROVIDER));
+        } else {
+            SamlLogoutResult result = sp.completeLogoutResult(message, pendingSource(), IDENTITY_PROVIDER);
+            if (result instanceof SamlLogoutResult.Succeeded || result instanceof SamlLogoutResult.StatusReceived)
+                Assertions.assertInstanceOf(SamlLogoutResult.Rejected.class,
+                        sp.completeLogoutResult(message, pendingSource(), IDENTITY_PROVIDER));
+        }
+        SecureXmlParser.Result xml = SecureXmlParser.parseResponse(message.xml());
+        if (!(xml instanceof SecureXmlParser.Result.Accepted document)) return;
+        var signatures = document.getDocument().getElementsByTagNameNS("http://www.w3.org/2000/09/xmldsig#", "Signature");
+        while (signatures.getLength() > 0) {
+            var signature = Objects.requireNonNull(signatures.item(0));
+            Objects.requireNonNull(signature.getParentNode()).removeChild(signature);
+        }
+        String unsigned = new String(SamlXmlWriter.serialize(document.getDocument()), StandardCharsets.UTF_8);
+        String field = message.getKind() == SamlPostBindingMessage.Kind.REQUEST ? "SAMLRequest" : "SAMLResponse";
+        SamlPostBindingParseResult stripped = SamlPostBindingMessage.fromLogoutFormBodyResult(
+                form(field, unsigned, message.relayState()).getBytes(StandardCharsets.US_ASCII),
+                List.of("application/x-www-form-urlencoded"), null);
+        if (!(stripped instanceof SamlPostBindingParseResult.Parsed unsignedParsed)) return;
+        SamlPostBindingMessage unsignedMessage = unsignedParsed.getMessage();
+        if (message.getKind() == SamlPostBindingMessage.Kind.REQUEST)
+            Assertions.assertInstanceOf(SamlLogoutRequestResult.Rejected.class,
+                    serviceProvider().acceptLogoutRequestResult(unsignedMessage, IDENTITY_PROVIDER));
+        else Assertions.assertInstanceOf(SamlLogoutResult.Rejected.class,
+                    serviceProvider().completeLogoutResult(unsignedMessage, pendingSource(), IDENTITY_PROVIDER));
+    }
+
+    private static void assertPostVerdict(@NonNull String body, boolean request, boolean expectedAccepted) {
+        SamlPostBindingParseResult parsed = SamlPostBindingMessage.fromLogoutFormBodyResult(
+                body.getBytes(StandardCharsets.US_ASCII), List.of("application/x-www-form-urlencoded"), null);
+        if (parsed instanceof SamlPostBindingParseResult.Rejected) {
+            Assertions.assertFalse(expectedAccepted);
+            return;
+        }
+        SamlPostBindingMessage message = Assertions.assertInstanceOf(SamlPostBindingParseResult.Parsed.class, parsed).getMessage();
+        SamlServiceProvider sp = serviceProvider();
+        if (request) {
+            SamlLogoutRequestResult result = sp.acceptLogoutRequestResult(message, IDENTITY_PROVIDER);
+            if (expectedAccepted) {
+                SamlLogoutRequest checked = Assertions.assertInstanceOf(SamlLogoutRequestResult.Accepted.class, result).getRequest();
+                Assertions.assertEquals(CONNECTION, checked.getIdentityProviderConnectionId());
+                Assertions.assertEquals("minted-user", checked.getNameId().getValue());
+                Assertions.assertEquals(List.of("session-123"), checked.getSessionIndexes());
+                Assertions.assertInstanceOf(SamlLogoutRequestResult.Rejected.class, sp.acceptLogoutRequestResult(message, IDENTITY_PROVIDER));
+            } else Assertions.assertInstanceOf(SamlLogoutRequestResult.Rejected.class, result);
+        } else {
+            SamlLogoutResult result = sp.completeLogoutResult(message, pendingSource(), IDENTITY_PROVIDER);
+            if (expectedAccepted) {
+                Assertions.assertInstanceOf(SamlLogoutResult.Succeeded.class, result);
+                Assertions.assertInstanceOf(SamlLogoutResult.Rejected.class, sp.completeLogoutResult(message, pendingSource(), IDENTITY_PROVIDER));
+            } else Assertions.assertInstanceOf(SamlLogoutResult.Rejected.class, result);
+        }
+    }
+
+    private static @NonNull PendingSamlLogoutSource pendingSource() {
+        return PendingSamlLogoutSource.fromSealedForm(SEALED_PENDING, SEALER, CONTEXT);
+    }
+
+    private static @NonNull String changedPostSignature(@NonNull String body, int offset) {
+        SamlPostBindingMessage message = postMessage(body);
+        String xml = new String(message.xml(), StandardCharsets.UTF_8);
+        var matcher = Pattern.compile("(?s)<ds:SignatureValue>([^<]+)</ds:SignatureValue>").matcher(xml);
+        Assertions.assertTrue(matcher.find(), "signed POST fixture has a signature");
+        byte[] signature = Base64.getMimeDecoder().decode(matcher.group(1));
+        Assertions.assertTrue(signature.length > 0);
+        signature[offset % signature.length] ^= 1;
+        String changed = xml.substring(0, matcher.start(1)) + Base64.getEncoder().encodeToString(signature)
+                + xml.substring(matcher.end(1));
+        return form(message.getKind() == SamlPostBindingMessage.Kind.REQUEST ? "SAMLRequest" : "SAMLResponse", changed, message.relayState());
+    }
+
+    private static @NonNull SamlPostBindingMessage postMessage(@NonNull String body) {
+        return Assertions.assertInstanceOf(SamlPostBindingParseResult.Parsed.class,
+                SamlPostBindingMessage.fromLogoutFormBodyResult(body.getBytes(StandardCharsets.US_ASCII),
+                        List.of("application/x-www-form-urlencoded"), null)).getMessage();
+    }
+
+    private static @NonNull String form(@NonNull String field, @NonNull String xml, @Nullable String relay) {
+        String body = field + "=" + URLEncoder.encode(Base64.getEncoder().encodeToString(xml.getBytes(StandardCharsets.UTF_8)), StandardCharsets.UTF_8);
+        return relay == null ? body : body + "&RelayState=" + URLEncoder.encode(relay, StandardCharsets.UTF_8);
+    }
+
     private static @NonNull String changedSignedOctet(@NonNull String query, int offset) {
         int firstValue = query.indexOf('=') + 1;
         int signature = query.indexOf("&Signature=");
@@ -107,6 +226,7 @@ public final class SamlLogoutFuzzTests {
         return SamlServiceProvider.withEntityId(SP)
                 .assertionConsumerServiceUrl(URI.create("https://sp.test/acs"))
                 .singleLogoutServiceUrl(URI.create(SLO))
+                .postSingleLogoutServiceUrl(URI.create(SLO))
                 .signingCredential(SP_CREDENTIAL)
                 .replayCache(InMemorySamlReplayCache.withLimit(CLOCK, 8))
                 .clock(CLOCK).build();
@@ -144,9 +264,13 @@ public final class SamlLogoutFuzzTests {
     }
 
     private static @NonNull Properties corpus() {
+        return corpus("slo-corpus.properties");
+    }
+
+    private static @NonNull Properties corpus(@NonNull String name) {
         Properties properties = new Properties();
         try (InputStream input = SamlLogoutFuzzTests.class.getResourceAsStream(
-                "/fixtures/scripted-idp/slo-corpus.properties")) {
+                "/fixtures/scripted-idp/" + name)) {
             if (input == null) throw new IllegalStateException("Missing signed SLO corpus");
             properties.load(input);
         } catch (IOException exception) { throw new IllegalStateException("Unreadable signed SLO corpus", exception); }

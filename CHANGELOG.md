@@ -19,6 +19,7 @@ Each release gets a `## X.Y.Z (YYYY-MM-DD)` heading with Added, Changed, Fixed, 
 Nothing has been released. The version is `1.0.0-SNAPSHOT`, and there is no compatibility promise before 1.0.0.
 
 ### Added
+- HTTP-POST SAML Single Logout in both directions, with exact-root XML signatures, the existing strict logout semantics and a shared atomic replay domain across POST and Redirect. Added explicit POST endpoints and metadata, logout form parsing/results, Soklet and Servlet transport helpers, and scripted-IdP/Keycloak interoperability tests.
 - SCIM registered schemas and immutable resources, create/PUT validation, schema-bound filter policies, GET/SearchRequest queries, projection, index/cursor page framing, conditional headers, discovery and bounded response preparation. Explicit compatibility use is observable and parsed carriers retain private configuration provenance. Ordered atomic PATCH and conservative ordered membership reduction are implemented, with explicit string matching, attempted/effective/supplied paths, narrow compatibility rules and PATCH response policy. The optional collection evaluator follows separately. See [SCIM server primitives](docs/scim-server-primitives.md).
 - Bounded SCIM filter and attribute-path syntax parsing with sealed results and fixed errors, an immutable six-kind AST, a Java 17 visitor, explicit serialization and default-deny policy configuration. Syntax success grants no query permission; the provider binds schemas and enforces complete policies. See [SCIM filter syntax](docs/scim-filters.md).
 - Restricted OAuth issuer interaction/result/exception/observer contracts and safe local HTTP failure mapping. Public server builder and endpoint wiring follow separately.
@@ -83,6 +84,10 @@ Nothing has been released. The version is `1.0.0-SNAPSHOT`, and there is no comp
   - the repository documents: README, COMPATIBILITY, SECURITY, CONTRIBUTING, NAMING_CONVENTIONS, NOTICE, and skeletons under `docs/`.
 
 ### Security
+
+- Playground logout callbacks preserve live pending state and cookies on invalid input, clearing them after verified terminal status or expiry. Logout completion reports `Indeterminate` for failures after confirmed pending-store consumption, including revalidation and replay-admission failures.
+- Signed but semantically invalid POST and Redirect logout responses no longer consume pending state. Logout requires conditional atomic pending-store consumption after document validation and authenticated pending binding/correlation checks; legacy custom stores fail closed until they implement `consumeIfMatches`.
+- Logout replay retention spans all supported age/skew policies for both POST and Redirect requests and responses. Local message-validity checks remain unchanged; a policy increase or mixed-policy deployment cannot re-admit a previously accepted message after a narrower-policy cache entry expires.
 
 Nothing below was ever released; each item rejects input that milestone M1 accepted, so it is listed here, as the security-tightening policy requires.
 

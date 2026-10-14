@@ -26,7 +26,7 @@ Everything `public` or `protected` in the exported packages of the `revetsec` ar
 
 ### Public types so far
 
-Milestone M1 (foundations) added the first public types, M2 added `com.revetsec.jose`, M3 added `com.revetsec.oauth`, M4 added `com.revetsec.oidc`, and M5 added resource-server protocol helpers. M6 added RSA signing and client authentication. The SAML service-provider API is present and remains pre-release; SCIM schema/resource/query/response primitives, ordered PATCH and membership reduction are present; evaluator and interoperability qualification follow. The table is a package overview, not an exhaustive current member inventory.
+Milestone M1 (foundations) added the first public types, M2 added `com.revetsec.jose`, M3 added `com.revetsec.oauth`, M4 added `com.revetsec.oidc`, and M5 added resource-server protocol helpers. M6 added RSA signing and client authentication. The SAML service-provider API is present and remains pre-release; SCIM schema/resource/query/response primitives, ordered PATCH, membership reduction and the optional evaluator are implemented, with local integration and security/mutation qualification recorded. The SCIM API freeze is under review. The table is a package overview, not an exhaustive current member inventory.
 
 | Package | Public types | Count |
 | --- | --- | --- |
@@ -35,9 +35,12 @@ Milestone M1 (foundations) added the first public types, M2 added `com.revetsec.
 | `com.revetsec.jose` | `JwtValidator`, `Jwt`, `JwtClaims`, `JwsAlgorithm`, `JsonWebKey`, `JsonWebKeySet`, `JsonWebKeySkipReason`, `JsonWebKeySource` (sealed), `StaticJsonWebKeySource`, `RemoteJsonWebKeySource`, `JoseObserver`, `JoseException` (abstract, sealed), `MalformedJoseInputException`, `UnsupportedJoseFeatureException`, `JwtValidationException`, `JsonWebKeySetUnavailableException`, `JwtValidationResult`, `JwsSigner`, `JwsSigningException` | 19, plus 6 nested: two builders, `JoseException.Reason`, `JwsSigningException.Reason` and two validation result variants |
 | `com.revetsec.oauth` | `OAuthClient`, `AuthorizationServerMetadata`, `ClientAuthentication`, `ClientAssertionAudience`, `ClientAssertionKeyProvider`, `ClientAssertionSigningKey`, `OAuthConfigurationException`, `ClientSecretBasicEncoding`, `AuthorizationRequestOptions`, `AuthorizationRedirect`, `PendingAuthorization`, `PendingAuthorizationSource`, `PendingAuthorizationStore`, `InMemoryPendingAuthorizationStore`, `AuthorizationResponse`, `TokenResponse`, `AccessToken`, `RefreshToken`, `TokenRequestOptions`, `TokenTypeHint`, `ClientCredentialsTokenSource`, `IssuerParameterPolicy`, `OAuthObserver`, `OAuthEndpoint`, `OAuthException`, six final OAuth exception leaves, `BearerToken`, `BearerError`, `BearerChallenge`, `ProtectedResourceMetadata`, `AccessTokenValidationException`, `BearerTokenResult`, `AuthorizationCompletionResult`, `AccessTokenValidator`, `JwtAccessTokenValidator`, `TokenIntrospectionClient`, `VerifiedAccessToken`, `AccessTokenCompatibilityMode`, `AccessTokenObserver`, `AccessTokenValidationResult` | 45, plus 23 nested: twelve builders, three enums and eight result variants |
 | `com.revetsec.oidc` | `OidcClient`, `OidcProviderMetadata`, `OidcAuthenticationOptions`, `IdToken`, `OidcAuthentication`, `OidcSessionReference`, `OidcRefreshResult`, `OidcUserInfo`, `OidcCompatibilityMode`, `OidcObserver`, `OidcIssuerPolicy`, `OidcException` (abstract, sealed), `OidcValidationException`, `OidcAuthenticationResult` | 14, plus 8 nested: three builders, `OidcValidationException.Reason` and four authentication result variants |
-| `com.revetsec.saml` | `SamlServiceProvider`, `SamlIdentityProvider`, metadata and credential types, signed binding messages, authentication and logout results, subject/session types, replay and pending-state interfaces and defaults | 39 top-level types, plus nested builders and result variants; see [the SAML SP guide](docs/saml-sp.md) |
+| `com.revetsec.saml` | `SamlServiceProvider`, `SamlIdentityProvider`, metadata and credential types, signed binding messages, authentication and logout results, subject/session types, replay and pending-state interfaces and defaults | 41 top-level types, plus nested builders and result variants; see [the SAML SP guide](docs/saml-sp.md) |
+| `com.revetsec.scim` | Schema-bound query/resource/response primitives, filter AST/policy/evaluator, ordered PATCH, membership reduction, configuration and fixed result/error types | 57 top-level types, 116 including nested declarations; see [the SCIM server guide](docs/scim-server-primitives.md) |
 
 `OutboundUriPolicy` has its final shape: two presets, `defaultInstance()` and `publicAddressesOnlyInstance()`, and `permits(URI)`. The addresses and names each preset rejects are dated lists, and adding to them is a security tightening (see below). `JsonValue`'s Javadoc designates its six permitted types for exhaustive matching, so they are frozen within a major version (see below). `JwsAlgorithm`, `JwsSigningException.Reason`, `JoseException.Reason`, `JsonWebKeySkipReason`, `AccessTokenCompatibilityMode`, `BearerError` and `AccessTokenValidationException.Reason` are not switch-stable: a later release may add constants, so a `switch` over one needs a default branch. Nor are the sealed `JsonWebKeySource`, `AccessTokenValidator` and operation result hierarchies: a later release may add permitted implementations or outcomes. Result switches need a rejecting default. Result payload accessors exist only on their appropriate variant; applications cannot construct outcomes. Existing throwing entry points remain available, and infrastructure/configuration failures retain exceptions.
+
+`ScimFilter`'s six node kinds and `ScimFilterValue`'s four literal kinds are designated for exhaustive matching and remain stable within a major version. New abstract `ScimFilterVisitor` callbacks likewise require a major release. SCIM operation result hierarchies and enums may gain variants or constants in a minor release; applications include a rejecting default in those switches. AST inspection alone grants no query authority.
 
 These are not API:
 
@@ -49,6 +52,12 @@ These are not API:
 A sealed type whose Javadoc designates it for exhaustive `switch` keeps its permitted subtypes within a major version. Other sealed types may gain subtypes in a minor release.
 
 The adapters (`revetsec-soklet`, `revetsec-servlet-jakarta` and `revetsec-servlet-javax`) are separate artifacts in their own repositories. Each starts at `1.0.0-SNAPSHOT`, releases 1.0.0 together with core, and then has its own version line. From 1.0.0, each adapter's README states the minimum core version it requires.
+
+Custom `PendingSamlAuthenticationStore` implementations used for logout must implement
+`consumeIfMatches`, validating and atomically removing only the same approved live sealed
+record. Its default returns unavailable without consuming state. Existing store implementations
+remain source-compatible, but logout fails closed until this operation is implemented;
+login's unconditional consume operation remains available. See [the SAML SP guide](docs/saml-sp.md).
 
 ## How the policy is enforced
 

@@ -12,10 +12,10 @@ Build it locally, or in CI with `load: true` and `push: false`.
 ## Current scope
 
 `serve` offers HTTPS endpoints for health, SP registration, metadata, stateless response minting,
-armed Redirect/POST SSO, Redirect SLO in both directions, template signing/encryption, and
+armed Redirect/POST SSO, Redirect/POST SLO in both directions, template signing/encryption, and
 libxmlsec signature/decryption oracles. It checks Revetsec's AuthnRequests and supplied
 SP metadata against pinned, offline OASIS/W3C XSDs. It verifies signed SP Redirect
-queries over the received octets and POST AuthnRequests with libxmlsec1. The Java
+queries over the received octets and POST AuthnRequests and logout messages with libxmlsec1. The Java
 `ScriptedIdpSsoIT` drives Revetsec's public SP API through SSO and SLO, and the fixed-key
 offline corpus covers 120 fixed-key cases: the 54-case signature/digest/placement matrix,
 36 additional GCM/OAEP/coverage combinations, five sibling-key cases, four signed
@@ -73,14 +73,69 @@ LogoutResponses against the same protocol XSD before accepting them. `GET
 /control/received` records `schema_valid:true` for these checks. Vendored source
 URLs and hashes are in `schemas/SOURCES.md`.
 `POST /control/logout-sign` signs supplied LogoutRequest or LogoutResponse XML
-over the exact HTTP-Redirect query octets for hostile SP acceptance tests. It is
+over the exact HTTP-Redirect query octets for hostile SP acceptance tests. Set
+`binding:"post"` to produce a root XML signature with libxmlsec1 instead. The POST
+result includes `action`, `fields`, HTML `form`, and encoded `form_body`. Existing
+XML signatures are removed before the changed message is signed, so hostile
+semantic tests can prove a valid independent signature. It is
 a test control, not an application logout endpoint.
+
+`POST /control/logout-requests` accepts `binding:"post"` for a libxmlsec-signed
+IdP-initiated LogoutRequest. `POST /slo` accepts the SP's signed XML requests
+and responses, checks their OASIS protocol schema, and returns an XML-signed POST
+response when `/control/armed/slo` was armed. `/metadata` advertises both logout
+bindings, including the `query-endpoints` variant. POST RelayState is echoed
+exactly; it is outside the XML signature and the SP still correlates responses
+against its sealed pending state.
+
+The POST cases in `ScriptedIdpSsoIT` exercise both logout directions, independent
+signature and schema verification, queryful form actions, hostile signed
+destination/issuer/time/identity/correlation/status contents, tampering, and the
+shared POST/Redirect replay domain. Run only the live SAML interoperability tests
+after building the image locally:
+
+```sh
+docker build -t revetsec-scripted-idp:local interop/scripted-idp
+mvn -B -ntp -Pintegration -Dmaven.javadoc.skip=true test-compile \
+  failsafe:integration-test failsafe:verify \
+  -Dit.test=ScriptedIdpSsoIT,KeycloakSamlIT
+```
+
+Local verification on 2026-10-14 used Corretto 17.0.20.1 and the locally built
+`revetsec-scripted-idp:post-slo-local` image. The command above, with
+`-Dscripted-idp.image=revetsec-scripted-idp:post-slo-local`, executed all 20
+`ScriptedIdpSsoIT` cases and all five `KeycloakSamlIT` cases: 25 total, zero
+failures, errors or skips. Three scripted cases and two real-Keycloak cases are
+new POST logout coverage; the other 20 cases retain the existing SSO, Redirect
+SLO and independent-oracle checks. The source snapshot used for these tests had
+the exact-root XML signature verifier and authentication's RESPONSE-kind guards.
+
 `mint_slo_corpus.py` uses the same pinned signer and fixed test key to regenerate
 the 23 offline Redirect queries compared with OpenSAML in `differential/`. The nine
 additional signed shape cases pin element order, nilled identity/status fields,
 unexpected text and a nested failure beneath an outer Success. The generator
 checks the malformed shapes against the vendored OASIS protocol XSD; the nested
 status is schema-valid but outside Revetsec's documented SLO profile.
+
+The same generator's `--binding post` option writes the 23 matching XML-signed
+form bodies to `src/test/resources/fixtures/scripted-idp/slo-post-corpus.properties`.
+Every POST fixture's root signature is verified by libxmlsec before the generator
+writes it. The corpus includes the valid request/response pair and the same
+destination, issuer, timing, correlation, identity and structure negatives as
+the Redirect corpus. These POST fixtures supply offline SP regression and fuzz
+coverage; they are separate from the existing OpenSAML Redirect comparison.
+The 2026-10-14 corpus was reproduced byte-for-byte with SHA-256
+`d3ee983d41c67bbfa40aca48e95b1b51a687080eed0dbd0a832990845359b417`.
+
+To regenerate it, mount this directory as `/producer:ro`, the fixed test fixture
+keys as `/run/keys:ro`, and an output directory as `/out` in the locally built
+image, then run Python as the entrypoint:
+
+```sh
+python /producer/mint_slo_corpus.py --binding post \
+  --out /out/slo-post-corpus.properties --keys /run/keys
+```
+
 `mint_signed_structure_corpus.py` signs one clean and 14 deliberately ambiguous
 Response templates, then verifies each with the libxmlsec oracle. The checked-in
 fixtures live in `src/test/resources/fixtures/scripted-idp/signed-structure/`.

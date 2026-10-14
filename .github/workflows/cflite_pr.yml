@@ -21,6 +21,8 @@ name: ClusterFuzzLite PR fuzzing
 # SAML targets. ClusterFuzzLite runs the targets one at a time and shares
 # FUZZ_SECONDS between them, so the budget below is the total for a PR run, whatever the number of
 # targets. Budgets for all three workflows are in the header of cflite_batch.yml.
+# HTTP-POST logout adds raw-form and independently signed corpus targets, discovered automatically
+# by build.sh alongside the existing Redirect logout target.
 
 on:
   pull_request:

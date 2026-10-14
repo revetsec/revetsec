@@ -65,7 +65,8 @@ public sealed interface SamlLogoutResult permits SamlLogoutResult.Succeeded,
         /** No provider outcome was established. */ INSTANCE
     }
     /**
-     * A pending or replay consume may have occurred.
+     * A pending or replay consume may have occurred. This also covers failure after a
+     * pending store has confirmed removal, including expiry or replay-admission failure.
      *
      * @since 1.0.0
      */

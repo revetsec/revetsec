@@ -380,12 +380,12 @@ class ScimM11PatchApplicationTests {
         assertEquals(json("[{\"value\":\"AB\"}]"),exact.getResource().getDocument().find("members").orElseThrow());
     }
 
-    @Test void presenceAndNullSelectorsTreatMissingAndEmptyAssignedValuesAsUnassigned() {
+    @Test void presenceAndNullSelectorsKeepAssignedEmptyStringsDistinctFromMissingValues() {
         ScimResource old=user("\"emails\":[{\"value\":\"a\"},{\"type\":\"work\"},{\"value\":\"\"}]");
         ScimPatchResult present=success(apply(old,request(old.getResourceType(),filtered(0,ScimPatchOperationType.REMOVE,"emails","value pr",null,null))));
         assertEquals(json("[{\"type\":\"work\"},{\"value\":\"\"}]"),present.getResource().getDocument().find("emails").orElseThrow());
         ScimPatchResult missing=success(apply(old,request(old.getResourceType(),filtered(0,ScimPatchOperationType.REMOVE,"emails","value eq null",null,null))));
-        assertEquals(json("[{\"value\":\"a\"}]"),missing.getResource().getDocument().find("emails").orElseThrow());
+        assertEquals(json("[{\"value\":\"a\"},{\"value\":\"\"}]"),missing.getResource().getDocument().find("emails").orElseThrow());
     }
 
     @Test void oneBudgetCoversAllOperationsScansStrategiesAndFinalDiff() {
