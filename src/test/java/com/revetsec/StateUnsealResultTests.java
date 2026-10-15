@@ -21,6 +21,7 @@ import com.revetsec.testing.TestSealers;
 import org.junit.jupiter.api.Test;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Arrays;
 import java.util.List;
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -52,7 +53,8 @@ final class StateUnsealResultTests {
         for (StateUnsealResult result : List.of(wrongKey, malformed, tampered, expired)) {
             assertInstanceOf(StateUnsealResult.Rejected.class, result);
             assertEquals(malformed.toString(), result.toString());
-            assertEquals(0, result.getClass().getDeclaredFields().length);
+            assertEquals(0, Arrays.stream(result.getClass().getDeclaredFields())
+                    .filter(field -> !field.isSynthetic()).count());
         }
         assertThrows(InvalidSealedStateException.class, () -> sealer.unseal(sealed, "context"));
     }

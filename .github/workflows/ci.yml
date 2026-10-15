@@ -675,6 +675,45 @@ jobs:
   # Gating RC-2 slice. Direct OpenSAML 5.2.2 and Spring Security 7 whole-SP
   # comparators plus a live libxmlsec1 cryptographic oracle stay outside the
   # published core graph.
+  rc1-differential:
+    name: Differential (JOSE and JSON, JDK ${{ matrix.java }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        java: ['17', '21']
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Corretto
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: corretto
+          java-version: ${{ matrix.java }}
+          cache: maven
+
+      - name: Install this checkout's core for the test-only comparators
+        run: mvn -B -ntp -DskipTests -Dmaven.javadoc.skip=true install
+
+      - name: Compare all supported JOSE algorithms and the JSON corpus
+        run: mvn -B -ntp -f differential/pom.xml -Prc1 clean verify
+
+      - name: Require the complete comparator case set and zero skips
+        run: python3 differential/verify_rc1_reports.py
+
+      - name: Upload JOSE and JSON differential reports
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: rc1-differential-jdk-${{ matrix.java }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: differential/target/surefire-reports
+          if-no-files-found: error
+          retention-days: 14
+
   differential:
     name: Differential (SAML and SCIM syntax, JDK 17)
     runs-on: ubuntu-24.04

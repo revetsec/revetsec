@@ -1,6 +1,14 @@
 # Released Inspector generic 403 recovery diagnostic
 
-This isolated diagnostic runs unmodified released `@modelcontextprotocol/inspector@2.9.0` against a bounded Node loopback responder. It tests whether a valid static bearer credential plus a generic policy 403 response without `WWW-Authenticate` triggers unintended OAuth recovery. It uses no Revetsec implementation or application tool call and does not qualify a real application host.
+This isolated diagnostic runs unmodified released `@modelcontextprotocol/inspector@2.11.0` against a bounded Node loopback responder. It tests whether a valid static bearer credential plus a generic policy 403 response without `WWW-Authenticate` triggers unintended OAuth recovery. It uses no Revetsec implementation or application tool call and does not qualify a real application host.
+
+Retained 2026-10-14 receipts keep the versions separate. Inspector 2.9.0
+reproduced unintended recovery in the default, explicit-throw and
+no-auto-refresh policy-403 variants after both causal controls passed. The
+same diagnostic against Inspector 2.11.0 did not reproduce that behavior: all
+three variants respected the policy denial and both controls passed. These are
+minimal component observations, not Soklet, Revetsec application or host
+qualification.
 
 ## Locked client
 
@@ -38,4 +46,4 @@ Requests/responses cap at 64 KiB, total requests 64, connections 32, exchange 10
 
 The receipt retains only fixed labels, booleans, bounded counts and static source/dependency/browser/config identities. It excludes live credentials, token hashes, private bodies, request IDs, browser storage and arbitrary host/browser diagnostics. A gap-free combined request sequence requires every OAuth attempt to follow the first denied subscription. Each process must close and each private session must be removed before final identity checks.
 
-The harness is adapted from the focused September 19 Inspector auth-recovery fixture and its shared CDP/process/config helpers. Historical diagnostic outcomes and failed attempts remain private evidence; no unrelated app/source inventory is included. This is implementation verification, with no independent review or audit claim. Normal Playground OAuth/tool-call verification is separate; success there does not close this generic 403 recovery item.
+The harness is adapted from the focused September 19 Inspector auth-recovery fixture and its shared CDP/process/config helpers. Versioned receipts and failed attempts remain private evidence; no unrelated app/source inventory is included. This is implementation verification, with no independent review or audit claim. Normal Playground OAuth/tool-call verification is separate; success there does not close this generic 403 recovery item.

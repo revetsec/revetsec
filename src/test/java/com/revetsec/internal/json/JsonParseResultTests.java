@@ -202,6 +202,7 @@ final class JsonParseResultTests {
 			for (var constructor : outcome.getDeclaredConstructors())
 				assertTrue(Modifier.isPrivate(constructor.getModifiers()));
 			for (var field : outcome.getDeclaredFields()) {
+				if (field.isSynthetic()) continue;
 				assertTrue(Modifier.isFinal(field.getModifiers()));
 				assertTrue(Modifier.isPrivate(field.getModifiers()));
 				assertFalse(Throwable.class.isAssignableFrom(field.getType()));
@@ -209,7 +210,7 @@ final class JsonParseResultTests {
 			}
 		}
 		assertEquals(Map.of("kind", Kind.class, "byteOffset", int.class),
-				java.util.Arrays.stream(JsonParseResult.Rejected.class.getDeclaredFields()).collect(
+				java.util.Arrays.stream(JsonParseResult.Rejected.class.getDeclaredFields()).filter(field -> !field.isSynthetic()).collect(
 						java.util.stream.Collectors.toMap(java.lang.reflect.Field::getName, java.lang.reflect.Field::getType)));
 	}
 

@@ -57,7 +57,7 @@ def main():
         (work / 'client' / name).write_bytes(data)
     lock = json.loads((work / 'client/package-lock.json').read_text())
     inspector = lock['packages']['node_modules/@modelcontextprotocol/inspector']
-    if inspector['version'] != '2.9.0' or inspector['integrity'] != client_pins['integrity']:
+    if inspector['version'] != client_pins['version'] or inspector['integrity'] != client_pins['integrity']:
         raise RuntimeError('RELEASED_CLIENT_DRIFT')
     fetch(pins['nssTool']['url'], pins['nssTool']['sha256'],
           work / 'artifacts/nss-tools.deb', 1_000_000)

@@ -1580,6 +1580,7 @@
 							<!-- Source-inventory contract tests never exercise production code paths. -->
 							<excludedTestClasses>
 								<param>com.revetsec.PublicApiContractTests</param>
+								<param>com.revetsec.ResultApiContractTests</param>
 								<param>com.revetsec.PackageDependencyTests</param>
 								<param>com.revetsec.SourcePolicyTests</param>
 								<param>com.revetsec.ClaimsLintTests</param>

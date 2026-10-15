@@ -155,7 +155,7 @@ public final class IssuerResources {
             OAuthAuthorizationResult result=SokletOAuthAuthorizationServer.beginAuthorizationResultFor(server,request,session.binding);
             if(result instanceof OAuthAuthorizationResult.InteractionRequired required) {
                 sessions.replacePending(session,new BrowserSessions.Pending(required.getInteraction().getInteractionValue()));
-                return view(session).copy().cookies(Set.of(sessions.cookie(session))).finish();
+                return view(session).copy().cookies(List.of(sessions.cookie(session))).finish();
             }
             return authorizationResponse(result);
         } catch(OAuthServerException failure) {return failure(failure);}
@@ -178,7 +178,7 @@ public final class IssuerResources {
             Map<String,String> form=LocalInputs.form(request,Set.of("csrf","flow","key"));
             if(selected==null || !LocalInputs.matches(selected.nonce,form.get("flow")) || !LocalInputs.matches(session.csrf,form.get("csrf")) || !LocalInputs.matches(config.loginKey,form.get("key"))) return fixed(403,"Request denied.");
             BrowserSessions.Session rotated=sessions.login(session,selected);
-            return localRedirect("/consent").copy().cookies(Set.of(sessions.cookie(rotated))).finish();
+            return localRedirect("/consent").copy().cookies(List.of(sessions.cookie(rotated))).finish();
         } catch(IllegalArgumentException bad) {return fixed(403,"Request denied.");}
         catch(BrowserSessionUnavailableException unavailable) {return fixed(503,"Local application unavailable.");}
         catch(IllegalStateException expired) {return fixed(403,"Request denied.");}
@@ -242,7 +242,7 @@ public final class IssuerResources {
         if(!session.authenticated) return page("Demo login",details+"<form method='post' action='/login'>"+csrf
                 +"<label>Local demo access key <input type='password' name='key' autocomplete='off' maxlength='43' required></label><button>Sign in</button></form>");
         return page("Consent",details+"<form method='post' action='/consent'>"+csrf
-                +"<button name='decision' value='approve'>Approve</button><button name='decision' value='deny'>Deny</button></form>").copy().headers(headers -> headers.put("Content-Security-Policy",Set.of(
+                +"<button name='decision' value='approve'>Approve</button><button name='decision' value='deny'>Deny</button></form>").copy().headers(headers -> headers.put("Content-Security-Policy",List.of(
                         "default-src 'none'; form-action 'self'"+("[::1]".equals(interaction.getRedirectUri().getHost())?"":" "+interaction.getRedirectUri().getScheme()+"://"+interaction.getRedirectUri().getRawAuthority())+"; frame-ancestors 'none'; base-uri 'none'"))).finish();
     }
     private @NonNull MarshaledResponse authorizationResponse(@NonNull OAuthAuthorizationResult result) {
@@ -257,26 +257,26 @@ public final class IssuerResources {
         if(destination!=null && destination.getScheme().equals("http") && "[::1]".equals(destination.getHost()))
             return page("Return to application","<p>Return to the checked application to finish authorization.</p><a id='native-return' rel='noreferrer' href='"
                     +LocalInputs.html(destination.toString())+"'>Return to application</a>").copy()
-                    .headers(headers -> headers.put("Referrer-Policy",Set.of("no-referrer"))).finish();
+                    .headers(headers -> headers.put("Referrer-Policy",List.of("no-referrer"))).finish();
         return SokletOAuthAuthorizationServer.responseFor(response);
     }
     private @NonNull MarshaledResponse failure(@NonNull OAuthServerException failure) {return SokletOAuthAuthorizationServer.responseFor(server.responseForFailure(failure));}
     private boolean issuerHost(@NonNull Request request) {return LocalInputs.headers(request,"Host").equals(List.of(config.origin.getRawAuthority()));}
     private boolean sameOrigin(@NonNull Request request) {return issuerHost(request) && LocalInputs.headers(request,"Origin").equals(List.of(config.origin.toString()));}
     private static @NonNull MarshaledResponse localRedirect(@NonNull String path) {
-        return MarshaledResponse.withStatusCode(303).headers(Map.of("Location",Set.of(path),"Cache-Control",Set.of("no-store"),"Referrer-Policy",Set.of("no-referrer"))).build();
+        return MarshaledResponse.withStatusCode(303).headers(Map.of("Location",List.of(path),"Cache-Control",List.of("no-store"),"Referrer-Policy",List.of("no-referrer"))).build();
     }
     static @NonNull MarshaledResponse fixed(int status,@NonNull String text) {return response(status,text,"text/plain; charset=UTF-8");}
     private static @NonNull MarshaledResponse json(@NonNull String text) {return response(200,text,"application/json");}
     private static @NonNull MarshaledResponse page(@NonNull String title,@NonNull String content) {
         return response(200,"<!doctype html><html lang='en'><head><meta charset='utf-8'><title>"+LocalInputs.html(title)
                 +"</title></head><body><h1>"+LocalInputs.html(title)+"</h1>"+content+"</body></html>","text/html; charset=UTF-8")
-                .copy().headers(headers -> headers.put("Referrer-Policy",Set.of("same-origin"))).finish();
+                .copy().headers(headers -> headers.put("Referrer-Policy",List.of("same-origin"))).finish();
     }
     private static @NonNull MarshaledResponse response(int status,@NonNull String text,@NonNull String type) {
-        return MarshaledResponse.withStatusCode(status).headers(Map.of("Content-Type",Set.of(type),"Cache-Control",Set.of("no-store"),
-                "Pragma",Set.of("no-cache"),"Referrer-Policy",Set.of("no-referrer"),"X-Content-Type-Options",Set.of("nosniff"),
-                "Content-Security-Policy",Set.of("default-src 'none'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'")))
+        return MarshaledResponse.withStatusCode(status).headers(Map.of("Content-Type",List.of(type),"Cache-Control",List.of("no-store"),
+                "Pragma",List.of("no-cache"),"Referrer-Policy",List.of("no-referrer"),"X-Content-Type-Options",List.of("nosniff"),
+                "Content-Security-Policy",List.of("default-src 'none'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'")))
                 .body(text.getBytes(StandardCharsets.UTF_8)).build();
     }
 }

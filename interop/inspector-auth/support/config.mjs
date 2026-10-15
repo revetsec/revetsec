@@ -14,7 +14,7 @@
 
 import { dirname, isAbsolute, join, resolve, sep } from 'node:path';
 
-// Source pin: Inspector 2.9.0, commit ae865a19178ddf6f375780a02e9c77c4cf4da184.
+// Source pin: Inspector 2.11.0, commit 074b8108f340590268f2900741403755e923a11c.
 // The CLI reads protocolEra and headers from a read-only --config session, but
 // does not forward that session's advertisedExtensions to InspectorClient.
 // Therefore the OFF config below is a requested mode, never proof of an OFF

@@ -34,6 +34,32 @@
     </dependencyManagement>
 
     <dependencies>
+        <!-- RC-1 independent JOSE/JSON oracles, confined to this unpublished test project. -->
+        <dependency>
+            <groupId>com.nimbusds</groupId>
+            <artifactId>nimbus-jose-jwt</artifactId>
+            <version>10.10</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.bitbucket.b_c</groupId>
+            <artifactId>jose4j</artifactId>
+            <version>0.9.7</version>
+            <scope>test</scope>
+        </dependency>
+        <!-- Nimbus's optional Ed25519 implementation; RSA/EC continue through its ordinary JCA path. -->
+        <dependency>
+            <groupId>com.google.crypto.tink</groupId>
+            <artifactId>tink</artifactId>
+            <version>1.23.0</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-core</artifactId>
+            <version>2.18.8</version>
+            <scope>test</scope>
+        </dependency>
         <!-- Independent syntax/AST oracle only; never added to Revetsec's production POM. -->
         <dependency>
             <groupId>com.unboundid.product.scim2</groupId>
@@ -116,4 +142,24 @@
             </plugin>
         </plugins>
     </build>
+
+    <profiles>
+        <profile>
+            <id>rc1</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-surefire-plugin</artifactId>
+                        <configuration>
+                            <includes>
+                                <include>**/JoseComparatorTests.java</include>
+                                <include>**/JsonComparatorTests.java</include>
+                            </includes>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 </project>

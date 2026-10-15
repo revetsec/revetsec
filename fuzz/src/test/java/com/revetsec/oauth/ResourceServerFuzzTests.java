@@ -287,9 +287,20 @@ public final class ResourceServerFuzzTests {
         String endpoint = text(object.getMembers().get(role == ResourceServerMetadata.Role.JWT ? "jwks_uri" : "introspection_endpoint"));
         if (endpoint == null || endpoint.isEmpty()) return false;
         try { URI.create(endpoint); } catch (IllegalArgumentException malformed) { return false; }
-        JsonValue methods = object.getMembers().get("introspection_endpoint_auth_methods_supported");
-        if (methods == null) return true;
-        if (!(methods instanceof JsonArray array)) return false;
+        if (!optionalNames(object, "introspection_endpoint_auth_methods_supported")) return false;
+        if (role == ResourceServerMetadata.Role.JWT) return true;
+        if (!optionalNames(object, "introspection_endpoint_auth_signing_alg_values_supported")) return false;
+        if (!object.getMembers().containsKey("token_endpoint")) return true;
+        String tokenEndpoint = text(object.getMembers().get("token_endpoint"));
+        if (tokenEndpoint == null || tokenEndpoint.isEmpty()) return false;
+        try { URI.create(tokenEndpoint); return true; }
+        catch (IllegalArgumentException malformed) { return false; }
+    }
+
+    private static boolean optionalNames(@NonNull JsonObject object, @NonNull String member) {
+        JsonValue value = object.getMembers().get(member);
+        if (value == null) return true;
+        if (!(value instanceof JsonArray array)) return false;
         Set<String> names = new HashSet<>();
         for (JsonValue item : array.getElements()) {
             String name = text(item);

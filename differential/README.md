@@ -1,6 +1,7 @@
 # Protocol differential tests
 
-This is a test-only Maven project. It compares Revetsec with two separate SAML
+This is a test-only Maven project. Its RC-1 JOSE/JSON lane and SAML/SCIM lanes
+are described below. It compares Revetsec with two separate SAML
 service-provider paths: Spring Security 7.0.7's provider and a direct OpenSAML
 5.2.2 harness, plus a live libxmlsec1 cryptographic oracle in the scripted IdP
 container. The direct harness uses OpenSAML parsing, signature profile and
@@ -351,3 +352,42 @@ mvn -B -ntp -f differential/pom.xml -Dtest=ScimFilterComparatorTests test
 ```
 
 All SDK dependencies are test scope in this standalone project and remain absent from Revetsec's production POM and runtime classpath. The existing SAML comparator tests keep their dependency pins and test behavior.
+
+
+## RC-1 JOSE and JSON
+
+The `rc1` profile runs the JOSE and JSON comparators without Docker. The dedicated
+CI lane requires both JDK 17 and 21 and verifies the complete executed-case set,
+with zero failures, errors or skips:
+
+```sh
+mvn -B -ntp -DskipTests -Dmaven.javadoc.skip=true install
+mvn -B -ntp -f differential/pom.xml -Prc1 clean verify
+python3 differential/verify_rc1_reports.py
+```
+
+The pins are Nimbus JOSE+JWT 10.10, jose4j 0.9.7, Jackson-core 2.18.8 and Nimbus's
+optional Ed25519 implementation, Tink 1.23.0. They are test dependencies of this
+unpublished project. Core's POM and runtime classpath do not gain these libraries.
+
+JOSE compares all eleven accepted asymmetric algorithm names through 32 token
+fixtures produced by JCA, Nimbus and jose4j. Every fixture receives the full signed
+identity/policy/serialization mutation matrix. The comparators use trusted fixed
+keys, fixed clocks, issuer and audience policy, required expiration and zero skew.
+Success compares the original checked subject, issuer, audiences and expiry; the three JWK thumbprints also agree.
+Nimbus/Tink supplies a separate Ed25519 implementation; RSA and EC use each
+library's JCA integration. These libraries still share parts of the JDK crypto
+stack, so this is implementation comparison rather than an independent audit.
+
+JSON compares typed trees without floating-point conversion. Every one of the 318
+vendored JSONTestSuite inputs has a pinned verdict row and receives three framing
+probes. Additional cases cover escaped duplicate names, exact large integers and
+decimals, Unicode pairs and malformed number grammar. Jackson duplicate detection
+is explicitly enabled; all input tokens must be consumed.
+
+[The difference ledger](RC1-DISPOSITIONS.md) explains every retained acceptance
+or capability difference. The JSON TSV must cover exactly the vendored fixture
+set. New unexplained divergences fail the comparator; missing or skipped cases
+fail the XML gate. The ordinary profile also runs these classes alongside the
+existing SAML and SCIM comparators. There is no network, provider-account or
+whole-OIDC-flow claim from these parser/signature comparisons.

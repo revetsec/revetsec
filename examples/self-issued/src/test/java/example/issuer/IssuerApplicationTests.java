@@ -48,9 +48,9 @@ final class IssuerApplicationTests {
   return form(Map.of("response_type","code","client_id",client,"redirect_uri",app.config.redirect.toString(),"resource",app.config.resource.toString(),"scope",scopes,"state","client-state","code_challenge",CHALLENGE,"code_challenge_method","S256"));
  }
  static @NonNull Request request(@NonNull IssuerResources app,@NonNull HttpMethod method,@NonNull String path,@Nullable String body,@Nullable String cookie) {
-  Map<String,Set<String>> headers=new LinkedHashMap<>(Map.of("Host",Set.of(app.config.origin.getRawAuthority())));
-  if(body!=null) {headers.put("Content-Type",Set.of("application/x-www-form-urlencoded"));headers.put("Origin",Set.of(app.config.origin.toString()));}
-  if(cookie!=null)headers.put("Cookie",Set.of(cookie));
+  Map<String,List<String>> headers=new LinkedHashMap<>(Map.of("Host",List.of(app.config.origin.getRawAuthority())));
+  if(body!=null) {headers.put("Content-Type",List.of("application/x-www-form-urlencoded"));headers.put("Origin",List.of(app.config.origin.toString()));}
+  if(cookie!=null)headers.put("Cookie",List.of(cookie));
   var builder=Request.withRawUrl(method,path).headers(headers);if(body!=null)builder.body(body.getBytes(StandardCharsets.UTF_8));return builder.build();
  }
  static @NonNull String text(@NonNull MarshaledResponse response) {return new String(assertInstanceOf(MarshaledResponseBody.Bytes.class,response.getBody().orElseThrow()).getBytes(),StandardCharsets.UTF_8);}
@@ -66,7 +66,7 @@ final class IssuerApplicationTests {
   Map<String,String> params=new LinkedHashMap<>(Map.of("grant_type","authorization_code","client_id",client,"code",code,"code_verifier",VERIFIER,"redirect_uri",app.config.redirect.toString(),"resource",app.config.resource.toString()));
   if(secret!=null)params.remove("client_id");
   var request=request(app,HttpMethod.POST,"/token",form(params),null);
-  if(secret!=null)request=request.copy().headers(h->h.put("Authorization",Set.of("Basic "+Base64.getEncoder().encodeToString((client+":"+secret).getBytes(StandardCharsets.UTF_8))))).finish();return app.token(request);
+  if(secret!=null)request=request.copy().headers(h->h.put("Authorization",List.of("Basic "+Base64.getEncoder().encodeToString((client+":"+secret).getBytes(StandardCharsets.UTF_8))))).finish();return app.token(request);
  }
  static @NonNull String issued(@NonNull IssuerResources app,@NonNull String scopes) {var response=redeem(app,"demo-public",code(app,"demo-public",scopes),null);assertEquals(200,response.getStatusCode());return text(response);}
  static @NonNull BearerToken bearer(@NonNull String token) {return BearerToken.fromAuthorizationHeaderValues(List.of("Bearer "+token)).orElseThrow();}
@@ -127,7 +127,7 @@ final class IssuerApplicationTests {
  }
  @Test void resourceOnlyIntrospectionAndRevocationUseCurrentIssuerState() throws Exception {
   var app=app();String access=scalar(issued(app,"mcp:discover"),"access_token");
-  var introspect=request(app,HttpMethod.POST,"/introspect",form(Map.of("token",access)),null).copy().headers(h->h.put("Authorization",Set.of("Basic "+Base64.getEncoder().encodeToString(("resource-client:"+app.config.resourceKey).getBytes(StandardCharsets.UTF_8))))).finish();
+  var introspect=request(app,HttpMethod.POST,"/introspect",form(Map.of("token",access)),null).copy().headers(h->h.put("Authorization",List.of("Basic "+Base64.getEncoder().encodeToString(("resource-client:"+app.config.resourceKey).getBytes(StandardCharsets.UTF_8))))).finish();
   assertTrue(text(app.introspect(introspect)).contains("\"active\":true"));
   assertEquals(401,app.introspect(request(app,HttpMethod.POST,"/introspect",form(Map.of("token",access)),null)).getStatusCode());
   assertEquals(400,redeem(app,"resource-client","invalid",app.config.resourceKey).getStatusCode());
@@ -138,22 +138,22 @@ final class IssuerApplicationTests {
   var app=app();SokletSimulator.run(IssuerPlayground.sokletConfig(app),sim->{
    var login=sim.performHttpRequest(request(app,HttpMethod.GET,"/authorize?"+query(app,"demo-public","mcp:discover mcp:whoami"),null,null));
    assertEquals(200,login.getMarshaledResponse().getStatusCode());var response=login.getMarshaledResponse();
-   assertEquals(Set.of("same-origin"),response.getHeaders().get("Referrer-Policy"));
+   assertEquals(List.of("same-origin"),response.getHeaders().get("Referrer-Policy"));
    var cookie=response.getCookies().iterator().next();String old=cookie.getName()+"="+cookie.getValue().orElseThrow();var session=app.sessions.find(request(app,HttpMethod.GET,"/",null,old)).orElseThrow();String binding=session.binding;
    assertTrue(text(response).contains("Demo login"));assertFalse(text(response).contains(app.config.loginKey));assertFalse(text(response).contains(session.pending.get().handle));
    var post=request(app,HttpMethod.POST,"/login",form(Map.of("csrf",session.csrf,"flow",session.pending.get().nonce,"key",app.config.loginKey)),old);
    assertEquals(403,sim.performHttpRequest(post.copy().headers(h->h.remove("Origin")).finish()).getMarshaledResponse().getStatusCode());
-   assertEquals(403,sim.performHttpRequest(post.copy().headers(h->h.put("Origin",Set.of("null"))).finish()).getMarshaledResponse().getStatusCode());
+   assertEquals(403,sim.performHttpRequest(post.copy().headers(h->h.put("Origin",List.of("null"))).finish()).getMarshaledResponse().getStatusCode());
    var rotated=sim.performHttpRequest(post).getMarshaledResponse();assertEquals(303,rotated.getStatusCode());
    var newCookie=rotated.getCookies().iterator().next();String current=newCookie.getName()+"="+newCookie.getValue().orElseThrow();var authenticated=app.sessions.find(request(app,HttpMethod.GET,"/",null,current)).orElseThrow();
    assertEquals(binding,authenticated.binding);assertNotEquals(session.id,authenticated.id);assertNotEquals(session.csrf,authenticated.csrf);assertTrue(app.sessions.find(request(app,HttpMethod.GET,"/",null,old)).isEmpty());
    var consentPage=sim.performHttpRequest(request(app,HttpMethod.GET,"/consent",null,current)).getMarshaledResponse();
-   assertEquals(Set.of("same-origin"),consentPage.getHeaders().get("Referrer-Policy"));
+   assertEquals(List.of("same-origin"),consentPage.getHeaders().get("Referrer-Policy"));
    assertTrue(consentPage.getHeaders().get("Content-Security-Policy").iterator().next().contains("form-action 'self' https://client.example;"));
    var consent=request(app,HttpMethod.POST,"/consent",form(Map.of("csrf",authenticated.csrf,"flow",authenticated.pending.get().nonce,"decision","approve")),current);
    assertEquals(403,sim.performHttpRequest(consent.copy().body(("csrf="+authenticated.csrf+"&decision=approve&subject=attacker").getBytes(StandardCharsets.UTF_8)).finish()).getMarshaledResponse().getStatusCode());
-   assertEquals(403,sim.performHttpRequest(consent.copy().headers(h->h.put("Origin",Set.of("null"))).finish()).getMarshaledResponse().getStatusCode());
-   var complete=sim.performHttpRequest(consent).getMarshaledResponse();assertEquals(303,complete.getStatusCode());assertEquals(Set.of("no-referrer"),complete.getHeaders().get("Referrer-Policy"));String location=complete.getHeaders().get("Location").iterator().next();assertTrue(location.startsWith(app.config.redirect+"&code="));
+   assertEquals(403,sim.performHttpRequest(consent.copy().headers(h->h.put("Origin",List.of("null"))).finish()).getMarshaledResponse().getStatusCode());
+   var complete=sim.performHttpRequest(consent).getMarshaledResponse();assertEquals(303,complete.getStatusCode());assertEquals(List.of("no-referrer"),complete.getHeaders().get("Referrer-Policy"));String location=complete.getHeaders().get("Location").iterator().next();assertTrue(location.startsWith(app.config.redirect+"&code="));
    assertEquals(403,sim.performHttpRequest(consent).getMarshaledResponse().getStatusCode());
    String code=location.substring(location.indexOf("code=")+5,location.indexOf("&state="));assertEquals(200,redeem(app,"demo-public",code,null).getStatusCode());
   });
@@ -171,7 +171,7 @@ final class IssuerApplicationTests {
   assertTrue(text(consent).contains(actual.toString()));String csp=consent.getHeaders().get("Content-Security-Policy").iterator().next();
   assertTrue(csp.contains("form-action 'self' http://127.0.0.1:6274;"));assertFalse(csp.contains(":6273"));
   var completed=app.complete(request(app,HttpMethod.POST,"/consent",form(Map.of("csrf",session.csrf,"flow",session.pending.get().nonce,"decision","approve")),cookie));
-  assertEquals(303,completed.getStatusCode());assertEquals(Set.of("no-referrer"),completed.getHeaders().get("Referrer-Policy"));
+  assertEquals(303,completed.getStatusCode());assertEquals(List.of("no-referrer"),completed.getHeaders().get("Referrer-Policy"));
   String location=completed.getHeaders().get("Location").iterator().next();assertTrue(location.startsWith(actual+"?code="));
   String code=location.substring(location.indexOf("code=")+5,location.indexOf("&state="));assertEquals(400,redeem(app,"demo-public",code,null).getStatusCode());
   var redeemed=app.token(request(app,HttpMethod.POST,"/token",form(Map.of("grant_type","authorization_code","client_id","demo-public","code",code,"code_verifier",VERIFIER,"redirect_uri",actual.toString(),"resource",app.config.resource.toString())),null));
@@ -184,12 +184,12 @@ final class IssuerApplicationTests {
    var app=new IssuerResources(config,Clock.systemUTC());var session=app.sessions.begin();session.authenticated=true;String cookie="RevetsecIssuerDev="+session.id;
    String selected=query(app,"demo-public","mcp:discover").replace(URLEncoder.encode(registered.toString(),StandardCharsets.UTF_8),URLEncoder.encode(actual.toString(),StandardCharsets.UTF_8));
    var consent=app.authorize(request(app,HttpMethod.GET,"/authorize?"+selected,null,cookie));assertEquals(200,consent.getStatusCode());assertTrue(text(consent).contains(actual.toString()));
-   assertEquals(Set.of("default-src 'none'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'"),consent.getHeaders().get("Content-Security-Policy"));
+   assertEquals(List.of("default-src 'none'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'"),consent.getHeaders().get("Content-Security-Policy"));
    var post=request(app,HttpMethod.POST,"/consent",form(Map.of("csrf",session.csrf,"flow",session.pending.get().nonce,"decision",decision)),cookie);
-   assertEquals(403,app.complete(post.copy().headers(h->h.put("Origin",Set.of(actual.getScheme()+"://"+actual.getRawAuthority()))).finish()).getStatusCode());
+   assertEquals(403,app.complete(post.copy().headers(h->h.put("Origin",List.of(actual.getScheme()+"://"+actual.getRawAuthority()))).finish()).getStatusCode());
    var completed=app.complete(post);assertEquals(200,completed.getStatusCode());assertFalse(completed.getHeaders().containsKey("Location"));
-   assertEquals(Set.of("no-referrer"),completed.getHeaders().get("Referrer-Policy"));assertEquals(Set.of("no-store"),completed.getHeaders().get("Cache-Control"));
-   assertEquals(Set.of("default-src 'none'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'"),completed.getHeaders().get("Content-Security-Policy"));
+   assertEquals(List.of("no-referrer"),completed.getHeaders().get("Referrer-Policy"));assertEquals(List.of("no-store"),completed.getHeaders().get("Cache-Control"));
+   assertEquals(List.of("default-src 'none'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'"),completed.getHeaders().get("Content-Security-Policy"));
    String body=text(completed),marker="id='native-return' rel='noreferrer' href='";assertTrue(body.contains(marker));
    String location=body.substring(body.indexOf(marker)+marker.length(),body.indexOf("'",body.indexOf(marker)+marker.length())).replace("&amp;","&");
    URI returned=URI.create(location);assertEquals(actual.getScheme(),returned.getScheme());assertEquals(actual.getRawAuthority(),returned.getRawAuthority());assertEquals(actual.getRawPath(),returned.getRawPath());
@@ -208,11 +208,11 @@ final class IssuerApplicationTests {
   var app=new IssuerResources(new IssuerConfig(base.origin,base.resource,registered,browser,8089,8090,base.loginKey,base.clientKey,base.resourceKey,true),Clock.systemUTC());
   SokletSimulator.run(IssuerPlayground.sokletConfig(app),sim->{
    var metadata=request(app,HttpMethod.GET,"/.well-known/oauth-authorization-server",null,null);
-   var allowed=sim.performHttpRequest(metadata.copy().headers(h->h.put("Origin",Set.of(browser.toString()))).finish()).getMarshaledResponse();
-   assertEquals(200,allowed.getStatusCode());assertEquals(Set.of(browser.toString()),allowed.getHeaders().get("Access-Control-Allow-Origin"));
-   var excluded=sim.performHttpRequest(metadata.copy().headers(h->h.put("Origin",Set.of("http://127.0.0.1:6273"))).finish()).getMarshaledResponse();
+   var allowed=sim.performHttpRequest(metadata.copy().headers(h->h.put("Origin",List.of(browser.toString()))).finish()).getMarshaledResponse();
+   assertEquals(200,allowed.getStatusCode());assertEquals(List.of(browser.toString()),allowed.getHeaders().get("Access-Control-Allow-Origin"));
+   var excluded=sim.performHttpRequest(metadata.copy().headers(h->h.put("Origin",List.of("http://127.0.0.1:6273"))).finish()).getMarshaledResponse();
    assertFalse(excluded.getHeaders().containsKey("Access-Control-Allow-Origin"));
-   assertEquals(403,sim.performHttpRequest(request(app,HttpMethod.POST,"/login","csrf=wrong&flow=wrong&key=wrong",null).copy().headers(h->h.put("Origin",Set.of(browser.toString()))).finish()).getMarshaledResponse().getStatusCode());
+   assertEquals(403,sim.performHttpRequest(request(app,HttpMethod.POST,"/login","csrf=wrong&flow=wrong&key=wrong",null).copy().headers(h->h.put("Origin",List.of(browser.toString()))).finish()).getMarshaledResponse().getStatusCode());
   });
  }
  @TestFactory @NonNull Stream<@NonNull DynamicTest> hostileControlFormsCannotSelectAppIdentityOrBypassCsrf() {
@@ -229,7 +229,7 @@ final class IssuerApplicationTests {
   clock.now=clock.now.plusSeconds(601);assertDoesNotThrow(sessions::begin);assertEquals("IssuerSession{<redacted>}",rotated.toString());
  }
  @Test void fixedHostsOriginsMetadataHeadAndEscapingAreChecked() throws Exception {
-  var app=app();assertEquals(403,app.index(request(app,HttpMethod.GET,"/",null,null).copy().headers(h->h.put("Host",Set.of("evil.example"))).finish()).getStatusCode());
+  var app=app();assertEquals(403,app.index(request(app,HttpMethod.GET,"/",null,null).copy().headers(h->h.put("Host",List.of("evil.example"))).finish()).getStatusCode());
   assertEquals(0,assertInstanceOf(MarshaledResponseBody.Bytes.class,app.metadata(request(app,HttpMethod.HEAD,"/",null,null)).getBody().orElseThrow()).getBytes().length);
   assertTrue(text(app.resourceMetadata(request(app,HttpMethod.GET,"/",null,null))).contains(app.config.resource.toString()));assertEquals("&lt;&amp;&quot;&#39;&gt;",LocalInputs.html("<&\"'>"));
  }
@@ -290,9 +290,9 @@ final class IssuerApplicationTests {
  }
  @Test void materializedHostOriginAndCookieAmbiguityFailClosed() throws Exception {
   var app=app();var session=app.sessions.begin();session.pending.set(new BrowserSessions.Pending("synthetic"));String cookie="RevetsecIssuerDev="+session.id;var valid=request(app,HttpMethod.POST,"/login",form(Map.of("csrf",session.csrf,"flow",session.pending.get().nonce,"key",app.config.loginKey)),cookie);
-  for(String name:List.of("Host","Origin","Cookie","Content-Type"))assertEquals(403,app.login(valid.copy().headers(h->h.put(name,Set.of(h.get(name).iterator().next(),"different"))).finish()).getStatusCode());
-  assertEquals(403,app.login(valid.copy().headers(h->h.put("Cookie",Set.of(cookie+"; "+cookie))).finish()).getStatusCode());
-  assertEquals(403,app.login(valid.copy().headers(h->h.put("Content-Encoding",Set.of("gzip"))).finish()).getStatusCode());
+  for(String name:List.of("Host","Origin","Cookie","Content-Type"))assertEquals(403,app.login(valid.copy().headers(h->h.put(name,List.of(h.get(name).iterator().next(),"different"))).finish()).getStatusCode());
+  assertEquals(403,app.login(valid.copy().headers(h->h.put("Cookie",List.of(cookie+"; "+cookie))).finish()).getStatusCode());
+  assertEquals(403,app.login(valid.copy().headers(h->h.put("Content-Encoding",List.of("gzip"))).finish()).getStatusCode());
   assertEquals(403,app.login(request(app,HttpMethod.POST,"/login?csrf="+session.csrf,form(Map.of("csrf",session.csrf,"flow",session.pending.get().nonce,"key",app.config.loginKey)),cookie)).getStatusCode());
  }
  @Test void metadataIsDefaultOffAndFixedMappingDoesNotResolveDns() throws Exception {
@@ -357,8 +357,8 @@ final class IssuerApplicationTests {
  static @NonNull Request mcpRequest(@NonNull IssuerResources app,@Nullable String token,@NonNull String method,@Nullable String tool,@NonNull String args) {
   String params="{\"_meta\":{\"io.modelcontextprotocol/protocolVersion\":\"2026-07-28\",\"io.modelcontextprotocol/clientCapabilities\":{}}"+(tool==null?"":",\"name\":\""+tool+"\",\"arguments\":"+args)+"}";
   String body="{\"jsonrpc\":\"2.0\",\"id\":\"synthetic\",\"method\":\""+method+"\",\"params\":"+params+"}";
-  Map<String,Set<String>> h=new LinkedHashMap<>(Map.of("Host",Set.of(app.config.resource.getRawAuthority()),"Content-Type",Set.of("application/json"),"Accept",Set.of("application/json, text/event-stream"),"MCP-Protocol-Version",Set.of("2026-07-28"),"Mcp-Method",Set.of(method)));
-  if(token!=null)h.put("Authorization",Set.of("Bearer "+token));if(tool!=null)h.put("Mcp-Name",Set.of(tool));return Request.withRawUrl(HttpMethod.POST,"/mcp").headers(h).body(body.getBytes(StandardCharsets.UTF_8)).build();
+  Map<String,List<String>> h=new LinkedHashMap<>(Map.of("Host",List.of(app.config.resource.getRawAuthority()),"Content-Type",List.of("application/json"),"Accept",List.of("application/json, text/event-stream"),"MCP-Protocol-Version",List.of("2026-07-28"),"Mcp-Method",List.of(method)));
+  if(token!=null)h.put("Authorization",List.of("Bearer "+token));if(tool!=null)h.put("Mcp-Name",List.of(tool));return Request.withRawUrl(HttpMethod.POST,"/mcp").headers(h).body(body.getBytes(StandardCharsets.UTF_8)).build();
  }
  static @NonNull McpSimulationResponse call(@NonNull Simulator sim,@NonNull IssuerResources app,@Nullable String token,@NonNull String method,@Nullable String tool,@NonNull String args) throws InterruptedException {
   try(var simulation=sim.startMcpRequest(mcpRequest(app,token,method,tool,args))) {return simulation.awaitResponse(Duration.ofSeconds(5)).orElseThrow();}

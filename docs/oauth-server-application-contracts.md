@@ -1,8 +1,8 @@
 # OAuth authorization-server application contracts
 
-The `com.revetsec.oauth.server` package starts the app-integrated token-issuance API planned for 1.0.0. Registered-client and application-policy contracts are implemented. Authorization endpoints, issuance, durable store transitions and client-metadata fetching are still under implementation.
+The `com.revetsec.oauth.server` package implements the application-integrated OAuth code issuer planned for 1.0.0, including authorization, token, revocation, introspection, online grant status and optional client-metadata fetching. Local browser/client, mutation, fuzz and PostgreSQL recovery evidence is recorded. RC-AS qualification and API freeze remain open.
 
-The application supplies users, login/session handling, CSRF defenses, permission decisions and storage. Revetsec's issuer will validate the protocol, bind those decisions and manage credentials. An application decision is trusted configuration, not a Revetsec-verified authentication proof.
+The application supplies users, login/session handling, CSRF defenses, permission decisions and storage. Revetsec's issuer validates the protocol, binds those decisions and manages credentials. An application decision is trusted configuration, not a Revetsec-verified authentication proof.
 
 ## Register a browser client
 
@@ -20,7 +20,7 @@ OAuthServerClientRepository clients = (clientId, remainingTime) ->
 
 Public authentication, authorization-code permission, and no refresh permission are the defaults. The configuration version is required; update it when security configuration changes. Registry absence means a genuinely unknown client. A callback that throws, returns null or exceeds its cooperative budget is an infrastructure fault. Revetsec cannot forcibly interrupt an arbitrary synchronous app callback.
 
-Confidential registrations use `OAuthServerClientAuthentication.fromClientSecretVerifier(verifier)` with an application-owned `OAuthClientSecretVerifier`. That selects `client_secret_basic`. The issuer will decode the credentials, reject duplicate/mixed authentication and clear the temporary secret bytes after the callback. The app performs constant-time verification and must not retain those bytes. Construction never calls the verifier.
+Confidential registrations use `OAuthServerClientAuthentication.fromClientSecretVerifier(verifier)` with an application-owned `OAuthClientSecretVerifier`. That selects `client_secret_basic`. The issuer decodes the credentials, rejects duplicate/mixed authentication and clears the temporary secret bytes after the callback. The app performs constant-time verification and must not retain those bytes. Construction never calls the verifier.
 
 ## Supply an application decision
 
@@ -31,7 +31,7 @@ OAuthAuthorizationDecision decision = OAuthAuthorizationDecision
     .build();
 ```
 
-The app authenticates the subject on the server and protects the session and consent submission. The issuer must check that the decision retains the subject and is a subset of the interaction, current client and server configuration. `deniedInstance()` expresses denial with no subject or resource map. An explicit one-resource empty scope set is representable for a policy denial; it never authorizes a zero-scope credential. Refresh defaults false and will also require server/client approval.
+The app authenticates the subject on the server and protects the session and consent submission. The issuer checks that the decision retains the subject and is a subset of the interaction, current client and server configuration. `deniedInstance()` expresses denial with no subject or resource map. An explicit one-resource empty scope set is representable for a policy denial; it never authorizes a zero-scope credential. Refresh defaults false and also requires server/client approval.
 
 `OAuthGrantPolicy` rechecks permissions at approval, code exchange and refresh. Its `OAuthGrantContext` has no public constructor, factory or builder. The issuer supplies checked facts; the application may return denial or a decision that keeps the subject and narrows authority. `getGrantValue()` explicitly releases a sensitive grant-management handle to trusted application code; never log it.
 
@@ -45,7 +45,7 @@ Setting code permission false clears the builder's browser configuration. A code
 
 Collections replace complete values and are copied at setter time; nested scope sets are immutable. Client/resource/scope identifiers retain exact String spelling. Redirects retain each URI's original `toString()` spelling: `URI.equals()` is unsuitable for protocol identity. Resource identifiers are absolute URIs without fragments; they are never URLs to fetch.
 
-HTTPS redirects have no userinfo, fragment or wildcard. Preexisting query parameter names `code`, `state`, `iss`, `error`, `error_description` and `error_uri` are rejected, including percent-encoded names. Only exact HTTP `127.0.0.1`, `[::1]` and `localhost` configurations are representable. Their use will require separate explicit server opt-ins; registration alone enables no loopback feature. The native IP-literal profile's port exception and exact localhost policy will be enforced by endpoint admission.
+HTTPS redirects have no userinfo, fragment or wildcard. Preexisting query parameter names `code`, `state`, `iss`, `error`, `error_description` and `error_uri` are rejected, including percent-encoded names. Only exact HTTP `127.0.0.1`, `[::1]` and `localhost` configurations are representable. Their use requires separate explicit server opt-ins; registration alone enables no loopback feature. Endpoint admission enforces the native IP-literal profile's port exception and exact localhost policy.
 
 Carrier ceilings support the approved configurable server maxima: 4096 UTF-16 code units for client ID/name/version, 1024 for subject, 65536 for URI spelling, 64 redirects, 1024 resources, 128 scopes per resource and 128 ASCII characters per scope. Each collection's resource/scope or redirect spellings also have a 131072-byte UTF-8 aggregate ceiling. These are construction bounds; operations must apply the configured narrower request, response and sealed-record limits. Invalid supplied values throw fixed `IllegalArgumentException`; a missing required builder value throws `IllegalStateException`; null required-primary arguments throw `NullPointerException`. Nullable setters clear required settings or reset the documented defaults.
 
@@ -54,15 +54,15 @@ Value and builder `toString()` methods redact identifiers, display names, config
 
 ## Internal ingress implementation
 
-The registered-client ingress helpers are implemented internally. They have no public endpoint entry point yet. The internal consent ledger described below can create interactions and unused codes; it does not issue access or refresh tokens. The store, CIMD and issuer engine are still under implementation.
+The internal ingress helpers serve the public `OAuthAuthorizationServer` entry points. The consent ledger prepares interactions and unused codes; code redemption and refresh rotation issue credentials only after the authoritative store commits.
 
-Raw query/form parsing retains duplicate occurrences until validation. Recognized security parameters cannot repeat, even with identical values or percent-encoded names. Unknown ordinary extensions are ignored after strict decoding and consume the same field and input limits. Malformed escapes, malformed UTF-8 and unpaired surrogates reject the whole input. Bounds apply before copying/decoding; the fixed structure caps are 128 query/form fields across both channels and 64 header occurrences. Header sizes include serialized names, separators and CRLF bytes. The trusted HTTP edge must preserve every occurrence and enforce allocation, framing, routing and TLS before calling the future engine.
+Raw query/form parsing retains duplicate occurrences until validation. Recognized security parameters cannot repeat, even with identical values or percent-encoded names. Unknown ordinary extensions are ignored after strict decoding and consume the same field and input limits. Malformed escapes, malformed UTF-8 and unpaired surrogates reject the whole input. Bounds apply before copying/decoding; the fixed structure caps are 128 query/form fields across both channels and 64 header occurrences. Header sizes include serialized names, separators and CRLF bytes. The trusted HTTP edge must preserve every occurrence and enforce allocation, framing, routing and TLS before calling the engine.
 
 Authorization admission accepts GET with an empty body. Form endpoints accept POST with one `application/x-www-form-urlencoded` Content-Type and UTF-8 or absent charset; content encoding and query security parameters are rejected. Authorization and Content-Type duplicates include differently cased header names. Basic credentials use percent-decoded exact client IDs and UTF-8 secret bytes. This profile rejects body client IDs combined with Basic, secret-post, assertions and public-client fallback. A false verifier result is a client rejection; a null result, nonfatal callback failure, interruption or exhausted cooperative deadline is an infrastructure fault. Temporary decoded arrays are cleared on every exit, including a fatal VM error; decoded secrets are never materialized as immutable Strings.
 
-Registered redirect matching preserves every component's spelling. HTTPS redirects match exactly. Explicit native IP-loopback policy can vary only the port of literal `127.0.0.1` or `[::1]`; separate localhost policy matches its exact configured port. Both policies default off when the future builder wires these helpers. Resources compare as exact identifiers and are never fetched. Omitted scope selects the client/server intersection; explicit scope must fit that intersection, and empty authority is rejected. S256 challenges require canonical 43-character Base64url; code verifiers require 43–128 ASCII unreserved characters. These checks admit requests, not grants: policy decisions, replay protection, grant/resource binding and credential publication remain engine responsibilities.
+Registered redirect matching preserves every component's spelling. HTTPS redirects match exactly. Explicit native IP-loopback policy can vary only the port of literal `127.0.0.1` or `[::1]`; separate localhost policy matches its exact configured port. Both policies default off in the server builder. Resources compare as exact identifiers and are never fetched. Omitted scope selects the client/server intersection; explicit scope must fit that intersection, and empty authority is rejected. S256 challenges require canonical 43-character Base64url; code verifiers require 43–128 ASCII unreserved characters. These checks admit requests, not grants: policy decisions, replay protection, grant/resource binding and credential publication remain engine responsibilities.
 
-The nine internal ingress settings use the approved ranges, but they do not add public Limits registry rows before the owning server builder exists.
+The server builder applies the approved ingress ranges together with the remaining issuer limits. The limits registry remains internal.
 
 ## Issuer persistence foundation
 
@@ -72,7 +72,7 @@ condition and applies every mutation atomically across participating keys and no
 CONFLICT means zero effects; UNKNOWN requires reconciliation and never implies rollback or safe issuance retry.
 Zero-mutation transactions are required read-set barriers. A cache or example map does not supply these guarantees.
 
-Persist the key, opaque version, whole-second retainUntil and encrypted toSealedForm verbatim. Reconstruction
+Persist the key, opaque version, complete retainUntil instant (seconds and nanoseconds) and encrypted toSealedForm verbatim. Reconstruction
 factories only validate bounded transport syntax; they never confer authorization. The storage grammar is
 `revetsec:as:1:<issuer-digest>:<KIND>:<identifier>`, with canonical 43-character base64url SHA-256/256-bit
 components. The issuer digest hashes the exact UTF-8 issuer spelling. ISSUER_STATE uses that digest as its
@@ -85,8 +85,7 @@ expiry; replay tombstones must survive through their descendant horizon. Retain 
 record, including permanent fences, has migrated. Encryption detects substitution, not authentic backup rollback.
 Restored deployments must fence old grants before serving traffic.
 
-This slice implements bounded carriers, common sealed record bindings and complete read-set construction.
-It has no public transaction factory, endpoint engine, credential issuance, durable backend or replay transition.
+The engine creates bounded transactions from complete observed read sets; applications cannot construct issuer transactions through a public factory. The unpublished PostgreSQL fixture exercises the store contract across independent JVMs on one authoritative primary. It supplies no shipped backend or arbitrary deployment guarantee.
 Application store implementations must honor budgets; no library thread forcibly preempts a blocked callback.
 
 
@@ -98,7 +97,7 @@ Fresh issuer initialization is an explicit trusted deployment action using an AB
 
 Store callbacks receive the remaining original monotonic operation budget, checked before and after each callback. Nonfatal callback faults and null returns are fixed failures. Interruption persists; fatal VM errors propagate. Only a zero-effect CONFLICT permits a bounded reload under that same budget. UNKNOWN ends the operation without automatic retry, rollback or success publication. A completed or uncertain transaction session cannot be reused.
 
-The tests exercise two internal coordinators sharing an atomic single-process test double, with controlled interleavings, complete condition checks, clock rollback and uncertain commits before and after writes. They do not establish persistence, process-crash recovery, multi-node durability or failover. The public issuer engine and full online token status are still being implemented.
+Core tests exercise two coordinators sharing an atomic single-process test double, including controlled interleavings, complete conditions, clock rollback and uncertain commits. The separate [PostgreSQL fixture](../verification/issuer-store/README.md) records independent-JVM races, process/database interruption and authentic logical restore on one primary and host. Replica failover, cross-host control, power loss and arbitrary application stores remain unqualified.
 
 
 ## Internal consent ledger and pending grants
@@ -110,7 +109,7 @@ An immutable consent record binds the exact selected redirect, resource, S256 ch
 optional state, current issuer incarnation/epoch and a digest of the client security configuration. Display text
 is excluded from that digest; the application must change configurationVersion when secret-verifier or key
 semantics change. Resolution of the current client, application login/session fixation/CSRF protection and
-policy callbacks remain requirements of the future engine and application edge.
+policy callbacks remain responsibilities of the engine and application edge.
 
 Resume uses an authoritative condition-only barrier. Completion re-reads consent and current
 fences, checks the browser/client configuration and the application resource/scope subset against the reviewed
@@ -127,7 +126,7 @@ code/grant retention to H, alongside issued-jti and optional refresh facts. The 
 family absolute expiry (or first no-refresh token expiry), the pinned maximum access lifetime, skew, total
 deadline and public metadata freshness. Physical retention rounds up to whole seconds; credential validity
 rounds down. Overflow and an attempted increase of a pinned lifetime reject. The calculator alone confers no issuance authority. The internal redemption transition below consumes
-pending grants; refresh rotation, key lifecycle and full token status remain under implementation.
+pending grants; the integrated refresh, key lifecycle and online-status paths enforce the descendant contracts below.
 
 Operation expiry is checked before and after a cooperative backend callback. A callback returning after code
 or consent expiry cannot publish success, even when the backend committed. Tests use deterministic
@@ -148,8 +147,7 @@ fault is an infrastructure failure. Denial or removed server authority atomicall
 Before consumption, the transition prepares an RS256 at+jwt with fixed issuer, subject, single audience,
 client_id, iat, exp, random jti and sorted scope. It retains the exact bounded JSON response and serialized
 no-store headers. Signing, record preparation or response size failure occurs before commit. No caller claim
-map is accepted. Signing-key publication, persistent provider snapshots and rotation checks are requirements
-of the future engine; the internal encoder alone does not establish key lifecycle authority.
+map is accepted. The public engine applies publication and rotation checks to application-owned key snapshots; the internal encoder alone does not establish durable key lifecycle authority.
 
 One complete transaction consumes code, activates the grant with its maximum access lifetime and H,
 inserts the issued-jti record and optional initial refresh record, and updates the issuer clock. Optional refresh
@@ -162,10 +160,7 @@ also discard late output when writes may already have occurred.
 A fully bound consumed-code replay remains recognizable after ordinary code expiry until retained state
 expires. Its transaction revokes the entire grant, including its initial refresh token and access descendants.
 A racing redemption loser follows that same path; it cannot release its discarded response. Subsequent
-required online status must check the current grant and complete read-set barrier. The internal token-status boundary is implemented; public validation wiring
-and public refresh endpoints are still being implemented. The current internal random credentials are not yet the
-public typed code/refresh wire carriers, and the consent ledger still requires precommit Location/header
-preparation when public authorization endpoints are wired.
+required online status checks the current grant and complete read-set barrier. The public engine composes this status boundary with M5 validation, uses the typed code/refresh wire credentials and prepares complete Location/header bytes before consent commit.
 
 The added tests check signatures using raw JCA, response byte retention, binding failures, policy containment,
 uncertain commits and deterministic two-redemption interleavings over a single-process atomic fixture.
@@ -190,8 +185,7 @@ under the original bounded deadline. No positive token-status cache is used.
 
 The barrier is the admission point: revocation racing before it prevents admission after reload; work
 admitted before revocation may finish, while subsequent validation rejects. The helper releases only immutable
-checked claims internally and retains no received credential. Public issuer result/proof wiring, signing-key
-publication and retirement snapshots and external endpoints remain under implementation.
+checked claims internally and retains no received credential. The public engine releases a restricted `VerifiedAccessToken` only after this admission; key publication and retirement follow the application lifecycle declarations below.
 The tests use deterministic single-process store interleavings; durable multi-node, crash and failover
 contracts require separate evidence.
 
@@ -221,10 +215,7 @@ expiry. It atomically revokes the whole grant and every access/refresh descendan
 reloads USED and revokes the winner. There is no retry grace or re-emission of a prior response. Used rows,
 code and grant retain through H; access rows retain through their own expiry plus the configured margins.
 
-This is an internal registered-client helper. Public refresh/revocation/introspection endpoints, typed wire
-credentials, CIMD and key lifecycle wiring remain under implementation. Tests demonstrate deterministic
-interleavings over a single-process atomic fixture; durable multi-node, crash/failover, actual parallel
-execution and issuer interoperability require separate evidence.
+The public engine integrates this helper with typed credentials, optional CIMD and the configured key lifecycle. Core tests establish deterministic interleavings; the separate PostgreSQL fixture adds process races and crash/restore checks within its single-primary boundary. Arbitrary multi-node deployments, failover and broader issuer interoperability require their own evidence.
 
 
 ## Internal grant revocation and resource introspection
@@ -254,10 +245,7 @@ expired, revoked, wrong-resource or refresh credentials return only {"active":fa
 a service failure, never inactive. Every operation checks current status with no positive cache. Responses
 are immutable copied bytes with no-store/no-cache headers and redacted diagnostics.
 
-These are package-private helpers. Public engine/results, endpoint failure mapping, typed credential prefixes,
-key lifecycle, CIMD and Soklet issuance remain under implementation. Tests establish deterministic
-single-process interleavings; durable multi-node, crash/failover, actual parallel execution and issuer
-interoperability require separate evidence.
+These package-private helpers serve the public engine results and endpoint mapping. Typed credentials, key lifecycle, optional CIMD and Soklet issuance are integrated. Core tests establish deterministic interleavings; browser/client and PostgreSQL fixture receipts retain their own scope and deployment limits.
 
 
 ## Issuer signing keys and public metadata
@@ -292,15 +280,12 @@ Internal metadata preparation preserves the exact configured issuer and inserts 
 path before its tenant path, removing a terminating slash only for discovery location construction. Trusted
 configured endpoints supply authority. Metadata advertises code, S256, none/Basic authentication, configured
 refresh/revocation/introspection and nonempty scope unions. It does not advertise OP/ID tokens, dynamic client
-registration, unimplemented CIMD or custom grants. JWKS contains only checked RSA public n/e, identifiers,
+registration or custom grants. CIMD support is advertised only when enabled. JWKS contains only checked RSA public n/e, identifiers,
 RS256 and verification use. GET/HEAD responses have copied bounded bytes, finite public max-age, must-revalidate
 and a representation ETag. Unsupported methods receive an empty no-store 405 with Allow: GET, HEAD. Conditional
-request handling and HTTP route integration remain application/public-engine work.
+request handling remains application-owned; the engine prepares bounded route responses.
 
-The key contracts are public; lifecycle enforcement and metadata response helpers remain internal. Public
-engine/results, endpoint failure mapping, CIMD and Soklet issuance are still being implemented. Deterministic
-fixtures and an independent JCA signature oracle do not establish durable multi-node key distribution or full
-issuer interoperability.
+The key contracts are public; lifecycle enforcement and metadata response helpers remain internal and are integrated into the public engine. Deterministic fixtures and a separate JCA signature oracle do not establish durable key distribution across arbitrary deployments. Applications retain publication, overlap and restore authority.
 
 
 ## Opt-in client metadata configuration and admission
@@ -327,9 +312,7 @@ mandatory public destination rule. At most 4096 origins and 128 KiB aggregate te
 | maximumResolvedAddresses |16 addresses|1–64|
 
 Null resets each exact default. Invalid supplied values fail immediately. Integer getters are boxed;
-optional absence is explicit. These five approved policy rows extend the limits registry to 57;
-the remaining issuer rows arrive with the public engine. Cache and concurrency limits are currently
-configuration; their operational enforcement arrives with transport and cache integration.
+optional absence is explicit. These five policy rows are part of the complete 27-row issuer limits surface. The integrated transport and cache enforce their operational bounds.
 
 The internal parser uses strict UTF-8 and bounded JSON, including duplicate-member and depth checks.
 It requires exact `client_id`, nonempty `client_name`, nonempty safe `redirect_uris`, and an explicit
@@ -400,11 +383,7 @@ an active AIA positive control. An offline network namespace exercises the full 
 entry point, original DNS SNI/Host and changed numeric answers on a subsequent fetch. These results
 cover transport behavior; no real public service, distributed cache or issuer credential flow is proven.
 
-The application cache-storage interface, bounded in-memory default and builder injection are still
-pending. Revetsec will own document validation, freshness and security fingerprints for every backend.
-Code redemption and refresh will require a new successful200 for that operation before consuming
-state; shared cached data cannot satisfy the fresh-fetch requirement. No CIMD support advertisement
-or registered-client credential path starts fetching metadata yet.
+The application cache-storage interface, bounded in-memory default and builder injection are implemented. Revetsec owns document validation, freshness and security fingerprints for every backend. Code redemption and refresh require a new successful200 for that operation before consuming state; shared cached data cannot satisfy the fresh-fetch requirement. CIMD remains opt-in, and registered clients take precedence without metadata fallback.
 
 ## Client-metadata cache storage
 
@@ -443,7 +422,7 @@ Reuse requires explicit finite freshness. Revetsec subtracts HTTP Age, apparent 
 
 Optional-cache corruption, absence or failure can lead to a new fetch within the original shrinking deadline. Interrupt or exhausted budget aborts. A valid fetch may skip storage if its envelope does not fit the configured sealer cap; the cap is never raised. Observed-version writes are conditional, with no blind retry after conflict or uncertain write. An authenticated newer fetch timestamp also prevents an older-clock replacement. Eviction removes history, so this is not durable ordering or distributed fencing.
 
-Fetches run synchronously on caller threads through the pinned HTTPS driver, outside authoritative transactions. A per-coordinator permit bound rejects excess concurrent work; there is no background executor, unbounded waiter list or single-flight sharing. The bypass path owns its new successful200 and reads no reusable cache record. Registry-first client selection and code/refresh before-consumption fingerprint checks remain the following integration slice; these helpers are not public issuer endpoints or transferable current-fetch capabilities.
+Fetches run synchronously on caller threads through the pinned HTTPS driver, outside authoritative transactions. A per-coordinator permit bound rejects excess concurrent work; there is no background executor, unbounded waiter list or single-flight sharing. The bypass path owns its new successful200 and reads no reusable cache record. Registry-first selection and code/refresh before-consumption fingerprint checks are integrated into the public engine. These internal fetch helpers expose no transferable current-fetch capability.
 
 
 ## Internal registry and credential binding
@@ -454,7 +433,7 @@ CIMD's scope/software/key declarations confer no authority. Configured server re
 
 Every code/refresh attempt, including a retry after a store conflict and a bound used-credential replay, performs its own successful200 via the pinned transport before authoritative state reads/consumption or replay invalidation. It bypasses all cache reads and writes. A prior snapshot, another operation's200 or shared cache cannot replace this fetch. Registry, fetch, store, policy and signing share the original shrinking deadline. Failure, invalid metadata or fingerprint mismatch releases no credentials and leaves an unused code/current refresh unconsumed; valid fully bound reuse retains strict whole-grant invalidation. No callback/network/signing runs inside a backend commit.
 
-These are internal helpers. Public engine routing/results, full endpoint failure mapping, dynamic revocation integration, durable multi-node recovery and final issuer assurance remain pending. Deterministic transport and single-process atomic fixtures do not establish those results.
+The public engine integrates these helpers with restricted results, endpoint failure mapping and dynamic-owner revocation. Local browser/client and PostgreSQL recovery checks supplement deterministic tests within their recorded boundaries. Final RC-AS review, current-source qualification and API freeze remain separate gates.
 
 
 ## Prepared response and credential wire contracts
@@ -481,7 +460,7 @@ ASCII query percent spelling is preserved. Response overflow occurs before atomi
 leaves consent pending. Only an acknowledged COMMITTED result can release the prepared response;
 a conflict prepares again and an unknown outcome releases no response. Subsequent emission never
 recomputes code, timestamps or contents. The legacy internal code-only helper remains a test seam;
-the forthcoming public engine will use the response-producing path.
+the public engine uses the response-producing path.
 
 Authorization codes use `rsc1_` and refresh tokens use `rsr1_`, followed by43 canonical unpadded
 base64url characters encoding32 random bytes. Their complete typed wire spelling is hashed into
@@ -495,22 +474,20 @@ settings enforce each range, exact nullable default resets, request timeout with
 code lifetime within interaction lifetime, refresh-enabled access/idle/absolute lifetime ordering,
 skew within half the access lifetime, and sealed-record capacity within the actual configured
 sealer cap. Checked retention arithmetic keeps fractional-duration precision. Building settings
-performs no application/provider/store callback, network access or signing. Public builder and
-endpoint/result wiring, dynamic revocation, Soklet issuance and distributed backend/recovery/browser
-qualification remain subsequent work.
+performs no application/provider/store callback, network access or signing. Public builder/endpoint/result wiring, dynamic revocation and Soklet issuance are implemented. The separate application qualification records describe browser/client and PostgreSQL recovery behavior within their stated boundaries.
 
 
 ## Restricted outcomes and failure boundary
 
 The public issuer result types are sealed and cannot be constructed by applications. Authorization yields a restricted interaction, completed response, denial response or fixed rejection; token, revocation and introspection yield success or fixed rejection. A restricted interaction exposes its secret continuation handle, checked client ID, optional untrusted display name, exact selected redirect, requested resource/scopes and expiry. Escape display text and keep the handle in the protected app session. It is not user authentication, and a previous UI view is never completion authority.
 
-Issuer access-token success releases the existing VerifiedAccessToken only after the future engine composes M5 validation and an authoritative uncached issuer status barrier. Its rejection carries only fixed issuer/M5/JOSE reasons and a safe BearerError. These contracts do not yet expose a public issuer engine, and no public proof factory has been added.
+Issuer access-token success releases the existing VerifiedAccessToken only after the public engine composes M5 validation and an authoritative uncached issuer status barrier. Its rejection carries only fixed issuer/M5/JOSE reasons and a safe BearerError. No public proof factory is exposed.
 
 OAuthServerException directly extends RevetsecException and is sealed to validation, store, transport, configuration and signing leaves. Construction is restricted. Messages, diagnostics and suppression never retain external callback failures or their data. COMMIT_OUTCOME_UNKNOWN remains a nontransient store infrastructure exception; reconcile it rather than blindly retransmit credential or subject-revocation work. Store corruption and invalid configuration remain configuration failures. Generic SPI unavailability is nontransient because its fixed internal classification cannot prove the cause. A future operation may classify a known timeout, I/O failure or request held back as transient; this never overrides UNKNOWN or interruption. Cooperative interruption preserves the interrupt flag and prevents transient classification.
 
 The local HTTP boundary emits fixed JSON errors with no Location, no reflected error description, no-store/no-cache/no-referrer and bounded bodies/headers. Infrastructure fallback is always503 server_error. Invalid and unknown clients share invalid_client; Basic authentication failure uses401 with a fixed Basic challenge, while public-client rejection uses400. Introspection caller failure uses401. Invalid/replayed grants and PKCE mismatch share invalid_grant. Unsupported methods use405 and endpoint-specific GET/POST Allow. Consent denial redirects still require the existing authenticated, prepared-before-commit path.
 
-OAuthServerObserver has synchronous caller-thread hooks and fixed operation kinds, including trusted grant/subject/issuer invalidation and store resealing. The internal dispatcher emits one will and one terminal hook during ordinary completion, contains hook failures through the existing dispatcher, restores interruption, and propagates VirtualMachineError. Events carry no request, URL, client, subject, grant, credential, key identifier or claims. Future engine callers must dispatch outside locks and store transactions. The issuer builder and endpoint wiring remain the next slice.
+OAuthServerObserver has synchronous caller-thread hooks and fixed operation kinds, including trusted grant/subject/issuer invalidation and store resealing. The internal dispatcher emits one will and one terminal hook during ordinary completion, contains hook failures through the existing dispatcher, restores interruption, and propagates VirtualMachineError. Events carry no request, URL, client, subject, grant, credential, key identifier or claims. The engine dispatches these hooks outside locks and store transactions.
 
 
 ## Public authorization server
@@ -531,4 +508,4 @@ Before traffic, `initializeFreshIssuer()` is an operator assertion that the issu
 
 Expected remote errors are fixed result variants. Infrastructure/corruption/signing/UNKNOWN stays typed and redacted; `responseForFailure` emits fixed503 JSON with no Location. Observer hooks have fixed operation kinds, no credentials or identities, and one terminal event during ordinary completion. InteractionRequired has logical HTTP200; management/validation status is absent. Infrastructure faults never become invalid credentials or implicit retry approval.
 
-This public wiring is checked with deterministic atomic single-process fixtures and the existing regression matrix. Durable/distributed backend, crash/restore recovery, live issuer/browser/Soklet integration and final issuer assurance remain separate work.
+Public wiring has deterministic core tests and local Soklet/browser/released-client qualification. The [unpublished PostgreSQL fixture](../verification/issuer-store/README.md) records durable independent-JVM races, uncertain COMMIT and authentic logical restore with application admission fencing on one primary and host. These checks do not qualify replica failover, cross-host recovery or arbitrary production backends. Final RC-AS qualification, the released-consumer recovery fence and API freeze remain open.

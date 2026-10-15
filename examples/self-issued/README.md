@@ -30,7 +30,7 @@ python3 examples/self-issued/build.py --work /absolute/new/self-issued-build \
   --repository-tail /absolute/read-only/maven-cache --offline
 ```
 
-The framework JAR must have SHA-256 `c454eac7ff5fd58d564a2c1603133ed1c47a01210d2910be4d60f392ebe1184f` (Soklet source `bf9046f5384c367dfa2ddee2105f2f1ed3e4c8d1`). The builder copies both sources privately, installs exact artifacts, runs example tests and attributed nullability checks, then starts a standalone runtime with only core/helper/framework JARs. It records commands, inventories, hashes and boolean evidence without retaining credentials. Socket tests use the JDK HTTP client and raw bounded loopback sockets, including public-host and private-listener-port rejection. They do not qualify a browser or independent MCP client; see `interop/self-issued` for a separately pinned browser fixture.
+The framework JAR must match the framework SHA-256 in [`examples/pins.json`](../pins.json) (currently `f7f62f967045a8eb8f943a90d49d499b4c5b755d20ab901e12a34fe1d004319b`, Soklet source `8e1c689b729eb4cc45ffec1a1aed9668d07ffb10`). The builder copies both sources privately, installs exact artifacts, runs example tests and attributed nullability checks, then starts a standalone runtime with only core/helper/framework JARs. It records commands, inventories, hashes and boolean evidence without retaining credentials. Socket tests use the JDK HTTP client and raw bounded loopback sockets, including public-host and private-listener-port rejection. They do not qualify a browser or independent MCP client; see `interop/self-issued` for a separately pinned browser fixture.
 
 ## Start a disposable run
 
@@ -74,7 +74,7 @@ Admission selects the configured resource from Soklet's checked endpoint context
 
 ## Trusted transport
 
-Soklet's Set-valued headers lose identical physical duplicates, including mixed-case names. A trusted edge must reject forbidden duplicate Authorization/Content-Type/Origin/Host/Cookie fields before materialization, enforce framing/body/header limits, and reject incomplete/oversized requests. Core receives all distinct materialized fields and unchanged raw query/body input. Responses use exact prepared bytes through `MarshaledResponse`, with credential-bearing Location kept separate. Do not log responses, credentials, cookies, keys, subjects or request bodies. The example logger emits event types only.
+Soklet 4 preserves header values in lists. The adapter passes every materialized occurrence, including identical duplicates and differently cased names, to core for ambiguity checks. A trusted edge must still enforce framing/body/header limits and reject incomplete or oversized requests before protocol handling. Core receives unchanged raw query/body input. Responses use exact prepared bytes through `MarshaledResponse`, with credential-bearing Location kept separate. Do not log responses, credentials, cookies, keys, subjects or request bodies. The example logger emits event types only.
 
 ## Optional client metadata documents
 

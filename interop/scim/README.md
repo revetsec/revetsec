@@ -121,13 +121,11 @@ remain supported and are covered by the application tests.
 pull requests (`run.py --mode tester`), and both clients on scheduled/manual
 runs. The outbound nightly result is advisory, not a new PR-required status.
 Nightly CI is ongoing coverage with no minimum-duration or consecutive-run
-release gate. The work is uncommitted until the owner chooses to commit and
-push it, so adding a workflow locally does not start GitHub scheduling.
-The exact adapter source guard includes the M12 empty-body bridge repair, which
-is intentionally uncommitted. The current pushed adapter revision in the new
-workflow predates that repair. After the owner commits and pushes the adapter,
-update the workflow's exact adapter revision to that pushed commit. Until then
-the source guard deliberately fails rather than qualifying the older adapter.
+release gate. The workflow and M12 empty-body bridge repair are pushed. The exact
+adapter source guard and checkout revision are kept together; after a reviewed
+adapter update is pushed, refresh both. The pinned source also includes the
+API-freeze documentation for overflow handling and host-owned response headers.
+A configured schedule is not evidence that a particular run passed.
 Collect the authoritative GitHub REST workflow-run history, including failures
 and skips, and download each matching run's qualification artifact to
 `<evidence-directory>/<run-id>/qualification.json`. Then run:

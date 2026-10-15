@@ -46,7 +46,7 @@ export function directoryIdentity(directory) {
 export function verifyDependencyPins(packageBytes,lockBytes,pins) {
   if(sha(packageBytes)!==pins.packageSha256||sha(lockBytes)!==pins.lockSha256)fail('DEPENDENCY_PIN_DRIFT');
   const lock=JSON.parse(lockBytes);
-  if(lock.lockfileVersion!==3||lock.packages['node_modules/@modelcontextprotocol/inspector']?.version!=='2.9.0'
+  if(lock.lockfileVersion!==3||lock.packages['node_modules/@modelcontextprotocol/inspector']?.version!==pins.version
       ||lock.packages['node_modules/@modelcontextprotocol/inspector']?.integrity!==pins.integrity)
     fail('DEPENDENCY_IDENTITY_INVALID');
   for(const [name,value]of Object.entries(lock.packages))

@@ -54,7 +54,8 @@ def main():
     args = parser.parse_args()
     args.core_source = args.core_source.resolve()
     args.adapter_source = args.adapter_source.resolve()
-    if digest(args.framework_jar) != "c454eac7ff5fd58d564a2c1603133ed1c47a01210d2910be4d60f392ebe1184f":
+    framework = json.loads((args.core_source / "examples/pins.json").read_text())["framework"]
+    if framework["version"] != "4.0.0" or digest(args.framework_jar) != framework["jar_sha256"]:
         parser.error("Use the pinned Soklet framework JAR")
     if (not args.work.is_absolute() or args.work.exists() or not args.maven.is_file()
             or not (args.java_home / "bin/keytool").is_file()

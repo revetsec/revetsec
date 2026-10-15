@@ -53,7 +53,7 @@ final class WebAuthnCborReader {
         int majorType = head >>> 5;
         if (majorType != 0 && majorType != 1) throw new WebAuthnCborException();
         long value = argument(head & 31);
-        if (value > (majorType == 0 ? Integer.MAX_VALUE : 1L + Integer.MAX_VALUE))
+        if (value > Integer.MAX_VALUE)
             throw new WebAuthnCborException();
         return majorType == 0 ? (int) value : (int) (-1L - value);
     }

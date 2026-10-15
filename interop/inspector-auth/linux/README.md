@@ -1,6 +1,6 @@
 # Isolated Linux browser route
 
-The official Playwright 1.63.0-noble image and Linux arm64 manifest are pinned in `pins.json`; the image contains Node 24.20.0 and Chromium 153.0.8010.12. The exact released Inspector 2.9.0 dependency lock is installed without lifecycle scripts. The only added Ubuntu package is checksum-pinned libnss3-tools 2:3.98-1ubuntu0.2. No native browser profile, NSS database, private key or dependency tree belongs in source control.
+The official Playwright 1.63.0-noble image and Linux arm64 manifest are pinned in `pins.json`; the image contains Node 24.20.0 and Chromium 153.0.8010.12. The exact released Inspector 2.11.0 dependency lock is installed without lifecycle scripts. The only added Ubuntu package is checksum-pinned libnss3-tools 2:3.98-1ubuntu0.2. No native browser profile, NSS database, private key or dependency tree belongs in source control.
 
 Prepare a narrow new private build directory:
 

@@ -26,7 +26,7 @@ Everything `public` or `protected` in the exported packages of the `revetsec` ar
 
 ### Public types so far
 
-Milestone M1 (foundations) added the first public types, M2 added `com.revetsec.jose`, M3 added `com.revetsec.oauth`, M4 added `com.revetsec.oidc`, and M5 added resource-server protocol helpers. M6 added RSA signing and client authentication. The SAML service-provider API is present and remains pre-release; SCIM schema/resource/query/response primitives, ordered PATCH, membership reduction and the optional evaluator are implemented, with local integration and security/mutation qualification recorded. The SCIM API freeze is under review. The table is a package overview, not an exhaustive current member inventory.
+Milestone M1 (foundations) added the first public types, M2 added `com.revetsec.jose`, M3 added `com.revetsec.oauth`, M4 added `com.revetsec.oidc`, and M5 added resource-server protocol helpers. M6 added RSA signing and client authentication. The SAML service-provider API is present and remains pre-release; SCIM schema/resource/query/response primitives, ordered PATCH, membership reduction and the optional evaluator are implemented, with local integration and security/mutation qualification recorded. The SCIM API was frozen on 2026-10-14; other 1.0.0 release gates remain open. The table is a package overview, not an exhaustive current member inventory.
 
 | Package | Public types | Count |
 | --- | --- | --- |

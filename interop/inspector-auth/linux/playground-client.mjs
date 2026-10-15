@@ -91,7 +91,7 @@ try {
   const pins=JSON.parse(readFileSync('/source/interop/inspector-auth/client/pins.json'));
   verifyDependencyPins(readFileSync('/private/inspector-client/package.json'),readFileSync('/private/inspector-client/package-lock.json'),pins);
   report.clientTreeBefore=directoryIdentity('/private/inspector-client/node_modules');
-  report.client={version:'2.9.0',commit:pins.commit,lockSha256:pins.lockSha256,runtime:process.version};
+  report.client={version:pins.version,commit:pins.commit,lockSha256:pins.lockSha256,runtime:process.version};
   const nss=env.HOME+'/.pki/nssdb';mkdirSync(nss,{recursive:true,mode:0o700});
   command('/usr/bin/certutil',['-N','--empty-password','-d','sql:'+nss]);
   command('/usr/bin/certutil',['-A','-n','Revetsec disposable test CA','-t','C,,','-i',root+'/ca.pem','-d','sql:'+nss]);

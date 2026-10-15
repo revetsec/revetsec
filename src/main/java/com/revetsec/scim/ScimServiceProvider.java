@@ -308,7 +308,7 @@ public final class ScimServiceProvider {
                 () -> new ScimQueryParseResult.Rejected(ScimError.internalErrorInstance()));
     }
 
-    /** Parses a bound projection from the original raw query, independently of caller authorization.
+    /** Parses a bound projection from the original raw query, separately from caller authorization.
      * Preserve physical repeated fields and undecoded text before framework parameter normalization.
      * The returned selection retains this provider's semantic registration.
      * @param resourceType the exact registered resource-type object

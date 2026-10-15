@@ -1,9 +1,8 @@
 {
-  "name": "revetsec-inspector-auth-verification",
-  "version": "0.0.0",
+  "name": "revetsec-rc1-released-inspector-qualification",
+  "version": "1.0.0",
   "private": true,
-  "type": "module",
   "dependencies": {
-    "@modelcontextprotocol/inspector": "2.9.0"
+    "@modelcontextprotocol/inspector": "2.11.0"
   }
 }

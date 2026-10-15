@@ -374,7 +374,7 @@ export async function run(options) {
   const receipt={formatVersion:1,profile:'revetsec.inspector.policy-denial-auth-recovery.v2',
     status:'FAILED',hostQualification:false,candidateEvidence:false,usesSoklet:false,usesApps:false,
     executedAt:new Date().toISOString(),runtime:{node:process.version,platform:process.platform,architecture:process.arch},
-    target:{name:'@modelcontextprotocol/inspector',version:'2.9.0',commit:pins.commit},
+    target:{name:'@modelcontextprotocol/inspector',version:pins.version,commit:pins.commit},
     installedTreeIdentity:installedPin,browserDistributionIdentity:directoryIdentity(browserRoot),inputs:sourceInputs(),
     bounds:{hostMs:60000,browserMs:45000,startupMs:10000,observationMs:6000,childOutputBytes:1024*1024,
       gracefulExitMs:3000,termGraceMs:2000,killGraceMs:2000},
