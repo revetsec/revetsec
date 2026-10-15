@@ -6,7 +6,7 @@ A zero-dependency Java library for OAuth 2.0 clients and resource servers, OpenI
 
 **Revetsec is pre-release.** It verifies signed JWTs against JSON Web Key Sets, provides bounded RSA signing, and includes OAuth 2.0 client and issuer operations, audience-checked JWT/introspection resource validation, an OpenID Connect relying party, SAML SP, SCIM server primitives and WebAuthn relying-party workflows. See [Status](#status) for current release gates.
 
-Revetsec handles the application side of these protocols. It builds outbound requests, parses and validates what comes back, and hands your code a validated result or an exception. Your application keeps its own users, sessions, routes and storage.
+Revetsec handles the application side of these protocols. It builds outbound requests, parses and validates what comes back, and returns an explicit outcome for expected success or rejection. Infrastructure and configuration failures retain documented exceptions. Your application keeps its own users, sessions, routes and storage.
 
 Framework adapters for [Soklet](https://www.soklet.com) and the Servlet API are separate artifacts in their own repositories (see [Installation](#installation)).
 
@@ -27,43 +27,52 @@ It provides protocol-specific library APIs rather than one abstraction over ever
 - Secure defaults: every relaxation is a named compatibility mode that is off by default and observable
 - Validated identities are produced only by validators, with no public constructors, builders or factories for them
 - Framework-neutral and raw-input-first: the core parses raw query strings, form bodies and header values, and adapters only translate
-- Immutability and thread safety, with injectable `Clock`, `HttpClient` and observers for deterministic tests
+- Immutability and thread safety, with injectable [`Clock`](https://docs.oracle.com/en/java/javase/27/docs/api/java.base/java/time/Clock.html), [`HttpClient`](https://docs.oracle.com/en/java/javase/27/docs/api/java.net.http/java/net/http/HttpClient.html) and observers for deterministic tests
 - The common path for each protocol fits on one page of application code
 - More test code than production code, at least as many negative tests as positive ones, and every security rule tested with a citation of its spec section or CVE
 - Claims only with evidence that anyone can re-run
 
 ### Validation outcomes
 
-Expected input rejections can be handled as immutable sealed results. The existing throwing methods remain available.
+Operations with several expected outcomes expose one immutable sealed result API. Success, absence, malformed input, checked provider denial and local validation rejection remain explicit where applicable. Optional return values mean only a value is present or absent; they never hide a parsing or validation outcome.
 
 | Operation | Result entry point | Outcomes |
 | --- | --- | --- |
-| Access-token validation | `AccessTokenValidator.validateResult` | `Succeeded` with `VerifiedAccessToken`, or `Rejected` with a fixed resource reason and optional JOSE reason |
-| JWT validation | `JwtValidator.validateResult` | `Succeeded` with a checked `Jwt`, or `Rejected` with a fixed JOSE reason |
-| Bearer header parsing | `BearerToken.fromAuthorizationHeaderValuesResult` | `Absent`, `Present` with an unverified credential, or `Malformed` |
-| Sealed application state | `StateSealer.unsealResult` | `Succeeded` with authenticated plaintext, or an opaque `Rejected` |
-| OAuth callback | `OAuthClient.completeAuthorizationResult` | `Succeeded`, checked `access_denied` as `Denied`, or local callback `Rejected` |
-| OIDC callback | `OidcClient.completeAuthenticationResult` | `Succeeded`, `Denied`, `RejectedAuthorization`, or `RejectedIdToken` |
+| Access-token validation | [`AccessTokenValidator`](https://javadoc.revetsec.com/com/revetsec/oauth/AccessTokenValidator.html)`.validateResult` | `Succeeded` with [`VerifiedAccessToken`](https://javadoc.revetsec.com/com/revetsec/oauth/VerifiedAccessToken.html), credential `Rejected` with fixed reasons, or introspection `RejectedEndpoint` |
+| JWT validation | [`JwtValidator`](https://javadoc.revetsec.com/com/revetsec/jose/JwtValidator.html)`.validateResult` | `Succeeded` with a checked [`Jwt`](https://javadoc.revetsec.com/com/revetsec/jose/Jwt.html), or `Rejected` with a fixed JOSE reason |
+| Bearer header parsing | [`BearerToken`](https://javadoc.revetsec.com/com/revetsec/oauth/BearerToken.html)`.fromAuthorizationHeaderValuesResult` | `Absent`, `Present` with an unverified credential, or `Malformed` |
+| Sealed application state | [`StateSealer`](https://javadoc.revetsec.com/com/revetsec/StateSealer.html)`.unsealResult` | `Succeeded` with authenticated plaintext, or an opaque `Rejected` |
+| OAuth callback | [`OAuthClient`](https://javadoc.revetsec.com/com/revetsec/oauth/OAuthClient.html)`.completeAuthorizationResult` | `Succeeded`, `Denied`, `RejectedAuthorizationError`, `RejectedEndpoint`, local `Rejected`, or pending-store `Failed` |
+| OIDC callback | [`OidcClient`](https://javadoc.revetsec.com/com/revetsec/oidc/OidcClient.html)`.completeAuthenticationResult` | `Succeeded`, `Denied`, checked authorization/endpoint rejection, local callback or ID-token rejection, or pending-store `Failed` |
+| Pending transaction persistence | [`PendingAuthorization`](https://javadoc.revetsec.com/com/revetsec/oauth/PendingAuthorization.html)`.saveToResult` | `SAVED`, `ALREADY_PRESENT`, `CAPACITY_REFUSED`, `UNAVAILABLE`, or `INDETERMINATE`; redirect only after confirmed save |
+| Callback parsing | [`AuthorizationResponse`](https://javadoc.revetsec.com/com/revetsec/oauth/AuthorizationResponse.html)`.fromQueryStringResult` / `fromFormBodyResult` | `Succeeded` with an untrusted callback, or fixed `Rejected` |
+| Public-key document parsing | [`Jwks`](https://javadoc.revetsec.com/com/revetsec/jose/Jwks.html)`.fromJsonResult` | `Succeeded` with usable keys, or fixed structural `Rejected` |
+| Metadata parsing | [`AuthorizationServerMetadata`](https://javadoc.revetsec.com/com/revetsec/oauth/AuthorizationServerMetadata.html)`.fromJsonResult` / [`OidcProviderMetadata`](https://javadoc.revetsec.com/com/revetsec/oidc/OidcProviderMetadata.html)`.fromJsonResult` | `Succeeded` with checked metadata, or fixed `Rejected` |
+| Direct service token or OAuth refresh | [`OAuthClient`](https://javadoc.revetsec.com/com/revetsec/oauth/OAuthClient.html)`.requestClientCredentialsResult` / `refreshResult` | [`OAuthTokenRequestResult.Succeeded`](https://javadoc.revetsec.com/com/revetsec/oauth/OAuthTokenRequestResult.Succeeded.html) or fixed endpoint `Rejected` |
+| Cached service token | [`ClientCredentialsTokenSource`](https://javadoc.revetsec.com/com/revetsec/oauth/ClientCredentialsTokenSource.html)`.getAccessTokenResult` | [`AccessTokenAcquisitionResult.Succeeded`](https://javadoc.revetsec.com/com/revetsec/oauth/AccessTokenAcquisitionResult.Succeeded.html) or fixed endpoint `Rejected` |
+| Revocation | [`OAuthClient`](https://javadoc.revetsec.com/com/revetsec/oauth/OAuthClient.html)`.revokeResult` | [`OAuthRevocationResult.Succeeded`](https://javadoc.revetsec.com/com/revetsec/oauth/OAuthRevocationResult.Succeeded.html) or fixed endpoint `Rejected` |
+| OIDC refresh | [`OidcClient`](https://javadoc.revetsec.com/com/revetsec/oidc/OidcClient.html)`.refreshResult` | [`OidcRefreshOutcome.Succeeded`](https://javadoc.revetsec.com/com/revetsec/oidc/OidcRefreshOutcome.Succeeded.html), local `Rejected`, or `RejectedEndpoint` |
+| UserInfo | [`OidcClient`](https://javadoc.revetsec.com/com/revetsec/oidc/OidcClient.html)`.fetchUserInfoResult` | [`OidcUserInfoResult.Succeeded`](https://javadoc.revetsec.com/com/revetsec/oidc/OidcUserInfoResult.Succeeded.html), local `Rejected`, or `RejectedEndpoint` |
+| Restored session reference | [`OidcSessionReference`](https://javadoc.revetsec.com/com/revetsec/oidc/OidcSessionReference.html)`.fromSerializedFormResult` / [`SamlSessionReference`](https://javadoc.revetsec.com/com/revetsec/saml/SamlSessionReference.html)`.fromSerializedFormResult`, or their sealed-form counterparts | A structural/session reference or a fixed rejection; no authenticated identity |
 
-For example, a Java 21+ application can switch over JWT validation results:
+For example, an application can switch over JWT validation results:
 
 ```java
 switch (validator.validateResult(compactJwt)) {
   case JwtValidationResult.Succeeded success ->
-      useValidatedJwt(success.getJwt());
+    useValidatedJwt(success.getJwt());
   case JwtValidationResult.Rejected rejection ->
-      rejectRequest(rejection.getReason());
+    rejectRequest(rejection.getReason());
   default -> rejectRequest();
 }
 ```
 
-The application supplies the handling functions. Java 17 applications can use `instanceof` patterns with the same final getter classes.
+The application supplies the handling functions.
 These hierarchies may gain variants, so keep a rejecting default in switches. Only successful validation releases a checked value;
 expired or rejected tokens expose no identity or claims. Parsing a bearer header grants no permission. Sealed-state rejection exposes
 no distinction between expiry, wrong context, unknown key or authentication failure. Result diagnostics redact their data.
 
-Provider, transport, store and configuration failures retain exceptions. Callback `Denied` specifically means a bound `access_denied`
-response; other authorization errors remain exceptions. Completion result methods execute once and preserve atomic-store consumption,
+Actual endpoint unavailability, malformed provider responses, transport, metadata and configuration failures retain their documented exception boundaries. Pending-store completion failures have fixed result variants. A checked callback `access_denied` yields `Denied`; other checked callback errors, including reported `server_error` and `temporarily_unavailable`, yield `RejectedAuthorizationError` with a fixed [`OAuthEndpointError`](https://javadoc.revetsec.com/com/revetsec/oauth/OAuthEndpointError.html). Endpoint client rejections carry only that fixed error and HTTP status. Completion result methods execute once and preserve atomic-store consumption,
 the sealed-cookie replay boundary and observer behavior. The application clears pending cookies on every outcome and chooses generic
 HTTP errors rather than reflecting detailed validation reasons to a remote caller.
 
@@ -149,35 +158,36 @@ Each area gets its own section here, with application code, when it lands.
 
 ### JOSE
 
-`JwtValidator` validates a JWT signed with a public key, for one issuer, against a JSON Web Key Set. A `RemoteJsonWebKeySource` fetches your identity provider's key set on the first validation that needs it, on the calling thread, and caches it. Building either does no I/O.
+`PublishedJwk` and `JwksPublisher` publish application-owned public verification keys without an OAuth authorization server. RSA (RS*/PS*), EC and Ed25519 keys, certificate chains, HTTP caching and Soklet/Servlet adapters are covered in the [standalone JWKS publication guide](docs/jwks-publication.md).
+
+The [`JwtValidator`](https://javadoc.revetsec.com/com/revetsec/jose/JwtValidator.html) API validates a JWT signed with a public key, for one issuer, against a JSON Web Key Set. A [`RemoteJwksSource`](https://javadoc.revetsec.com/com/revetsec/jose/RemoteJwksSource.html) fetches your identity provider's key set on the first validation that needs it, on the calling thread, and caches it. Building either does no I/O.
 
 ```java
-RemoteJsonWebKeySource keySource = RemoteJsonWebKeySource
+var keySource = RemoteJwksSource
   .withUri(URI.create("https://login.example.com/.well-known/jwks.json"))
   .build();
 
-JwtValidator validator = JwtValidator.withIssuer("https://login.example.com")
-  .jsonWebKeySource(keySource)
+var validator = JwtValidator.withIssuer("https://login.example.com")
+  .jwksSource(keySource)
   .expectedAudiences(Set.of("https://api.example.com"))
+  .requiredClaims(Set.of("sub"))
   .build();
 
-try {
-  Jwt jwt = validator.validate(token);
-  String subject = jwt.getClaims().getSubject().orElseThrow();
-  // The token is valid: signed by a key from the key set, for this issuer and audience, and not expired.
-} catch (JoseException e) {
-  // The token was refused. e.getReason() says why, such as EXPIRED or SIGNATURE_MISMATCH;
-  // the message never contains the token.
-} catch (JsonWebKeySetUnavailableException e) {
-  // The key set could not be fetched. e.isTransient() says whether trying again later may help.
+var result = validator.validateResult(token);
+if (result instanceof JwtValidationResult.Succeeded success) {
+  var jwt = success.getJwt();
+  var subject = jwt.getClaims().getSubject().orElseThrow();
+  // Apply application claim and permission checks to this validated JWT.
+} else {
+  // Reject the token; this outcome releases no checked claims.
 }
 ```
 
-Share one validator, and one key source, across threads. By default a token must be signed with RS256 and carry `iss`, `exp` and an expected audience, and its times are checked with 60 seconds of clock skew. `allowedAlgorithms` widens the algorithms (see [supported algorithms](docs/supported-algorithms.md)), and a `JoseObserver` receives each validation, key-set fetch and skipped key. When key-set URLs come from your tenants, see "JSON Web Key Sets" in [SECURITY.md](SECURITY.md).
+Only the success variant releases the checked JWT. A rejection carries a fixed reason; remote key-source unavailability remains a [`JwksUnavailableException`](https://javadoc.revetsec.com/com/revetsec/jose/JwksUnavailableException.html) for the application error handler. Share one validator, and one key source, across threads. By default a token must be signed with RS256 and carry `iss`, `exp` and an expected audience, and its times are checked with 60 seconds of clock skew. `allowedAlgorithms` widens the algorithms (see [supported algorithms](docs/supported-algorithms.md)), and a [`JoseObserver`](https://javadoc.revetsec.com/com/revetsec/jose/JoseObserver.html) receives each validation, key-set fetch and skipped key. When key-set URLs come from your tenants, see "JSON Web Key Sets" in [SECURITY.md](SECURITY.md).
 
 ### OAuth client
 
-`OAuthClient` supports authorization code with PKCE S256, client credentials, refresh, revocation and generated private-key assertions. It accepts static metadata or discovers an authorization server lazily. Browser completion checks the pending browser binding, state, callback route and issuer before token exchange. The [OAuth client guide](docs/oauth-client.md) covers cookie and store setup, concurrent replay, return destinations and the raw-token boundary.
+The [`OAuthClient`](https://javadoc.revetsec.com/com/revetsec/oauth/OAuthClient.html) API supports authorization code with PKCE S256, client credentials, refresh, revocation and generated private-key assertions. It accepts static metadata or discovers an authorization server lazily. Browser completion checks the pending browser binding, state, callback route and issuer before token exchange. The [OAuth client guide](docs/oauth-client.md) covers cookie and store setup, concurrent replay, return destinations and the raw-token boundary.
 
 For an OIDC sign-in example with an application-owned session and both query and form-post callbacks, start with the [barebones OIDC application](examples/barebones-oidc/README.md). It runs against a local test provider and rotates the browser session after successful authentication.
 
@@ -187,9 +197,30 @@ The `com.revetsec.oauth.server` package implements authorization, token issuance
 
 ### RSA signing
 
-`JwsSigner.fromRsaKeyPair(privateKey, publicKey, JwsAlgorithm.PS256)` creates a reusable signer with a checked public-key snapshot. It retains an application-owned private key without exporting it. Call `warmUp(remainingBudget)` for an explicit noncredential pair probe. `toCompactSerialization(type, keyId, certificateSha256Thumbprint, claimsUtf8, remainingBudget)` signs an exact, bounded JSON object and verifies each output before releasing the compact credential.
+The [`JwsSigner`](https://javadoc.revetsec.com/com/revetsec/jose/JwsSigner.html)`.fromRsaKeyPair(privateKey, publicKey, `[`JwsAlgorithm`](https://javadoc.revetsec.com/com/revetsec/jose/JwsAlgorithm.html)`.PS256)` creates a reusable signer with a checked public-key snapshot. It retains an application-owned private key without exporting it. Call `warmUp(remainingBudget)` for an explicit noncredential pair probe. Supply a typed [`JwtSigningHeader`](https://javadoc.revetsec.com/com/revetsec/jose/JwtSigningHeader.html) and [`JwtClaimsSet`](https://javadoc.revetsec.com/com/revetsec/jose/JwtClaimsSet.html) to sign a compact JWT without manual JSON serialization:
 
-PS256, RS256 and RS384 are supported. The optional 32-byte thumbprint is the SHA-256 digest of a DER certificate. The application supplies claims and remains responsible for their meaning. A checked JCA exception or provider `RuntimeException`, mismatched pair or exhausted budget produces a fixed `JwsSigningException`; it emits no partial credential. Provider `Error` values propagate after buffer cleanup, following the library’s unexpected-error boundary. JCA providers must cooperate with synchronous time budgets. See [algorithms and bounds](docs/supported-algorithms.md#bounded-rsa-signing-jwssigner). OAuth clients support private_key_jwt, and the issuer implements token issuance.
+```java
+var signer = JwsSigner.fromRsaKeyPair(
+  privateKey, publicKey, JwsAlgorithm.PS256);
+var now = Instant.now();
+var claims = JwtClaimsSet.builder()
+  .issuer("https://issuer.example.com")
+  .subject("user-123")
+  .audiences(List.of("https://api.example.com"))
+  .issuedAt(now)
+  .expiresAt(now.plusSeconds(300))
+  .claim("role", "reader")
+  .build();
+var header = JwtSigningHeader.withType(JwtType.JWT)
+  .keyId("key-1")
+  .build();
+
+var jwt = signer.fromHeaderAndClaims(header, claims);
+```
+
+The [`JwtType`](https://javadoc.revetsec.com/com/revetsec/jose/JwtType.html) enum supplies the protected header's `typ`; `alg` comes from the signer. The convenience method signs immediately with a two-second operation budget. Use `signer.withHeaderAndClaims(header, claims).remainingBudget(budget).build()` to override that budget; constructing the builder does not sign. The terminal `build()` signs and verifies the output before releasing the compact credential. The existing `toCompactSerialization(type, keyId, certificateSha256Thumbprint, claimsUtf8, remainingBudget)` remains available to sign an exact, bounded JSON object supplied as bytes.
+
+PS256, RS256 and RS384 are supported. The optional 32-byte thumbprint is the SHA-256 digest of a DER certificate. The application supplies claims and remains responsible for their meaning. A checked JCA exception or provider [`RuntimeException`](https://docs.oracle.com/en/java/javase/27/docs/api/java.base/java/lang/RuntimeException.html), mismatched pair or exhausted budget produces a fixed [`JwsSigningException`](https://javadoc.revetsec.com/com/revetsec/jose/JwsSigningException.html); it emits no partial credential. Provider [`Error`](https://docs.oracle.com/en/java/javase/27/docs/api/java.base/java/lang/Error.html) values propagate after buffer cleanup, following the library’s unexpected-error boundary. JCA providers must cooperate with synchronous time budgets. See [algorithms and bounds](docs/supported-algorithms.md#bounded-rsa-signing-jwssigner). OAuth clients support private_key_jwt, and the issuer implements token issuance.
 
 ### Status
 
@@ -213,23 +244,23 @@ $ mvn -B -ntp -Dmaven.javadoc.skip=true verify
 
 ### Resource-server protocol helpers
 
-`BearerToken.fromAuthorizationHeaderValues(values)` parses one raw Authorization field into an **unverified** credential. Preserve duplicates: an empty list means absent; malformed or multiple values produce `invalid_request`. Other authentication schemes follow the same strict malformed-input policy. The credential has no public value getter. Parsing grants no identity or permission; pass the credential to a configured resource validator.
+The [`BearerToken`](https://javadoc.revetsec.com/com/revetsec/oauth/BearerToken.html)`.fromAuthorizationHeaderValuesResult(values)` operation parses raw Authorization fields into an **unverified** credential. Preserve duplicates: an empty list returns `Absent`; malformed or multiple values return `Malformed`, which the application can map to `invalid_request`. Only `Present` carries a credential. Other authentication schemes follow the same strict malformed-input policy. The credential has no public value getter. Parsing grants no identity or permission; pass the credential to a configured resource validator.
 
-`BearerChallenge.builder().resourceMetadata(metadataUri).build().getHeaderValue()` supplies a bounded initial challenge with no error. Set a trusted realm, fixed error/description or required operation scopes as appropriate; the application chooses the HTTP status. At least one rendered parameter is required. `ProtectedResourceMetadata.withResource(resourceUri)` renders header-only bearer metadata and derives its well-known URI from raw path/query components, preserving the configured identifier. Both are pure helpers with HTTPS defaults and an explicit loopback HTTP option.
+The [`BearerChallenge`](https://javadoc.revetsec.com/com/revetsec/oauth/BearerChallenge.html)`.builder().resourceMetadata(metadataUri).build().getHeaderValue()` supplies a bounded initial challenge with no error. Set a trusted realm, fixed error/description or required operation scopes as appropriate; the application chooses the HTTP status. At least one rendered parameter is required. [`ProtectedResourceMetadata`](https://javadoc.revetsec.com/com/revetsec/oauth/ProtectedResourceMetadata.html)`.withResource(resourceUri)` renders header-only bearer metadata and derives its well-known URI from raw path/query components, preserving the configured identifier. Both are pure helpers with HTTPS defaults and an explicit loopback HTTP option.
 
-`AuthorizationResponse.fromFormBody(body, contentTypeValues, rawQuery)` validates one bounded raw form Content-Type with absent/UTF-8 charset, then applies the existing duplicate and query/body channel checks. The existing Charset overload is retained. Transports that collapse identical physical header values need a trusted edge that rejects duplicate Authorization and Content-Type fields.
+The [`AuthorizationResponse`](https://javadoc.revetsec.com/com/revetsec/oauth/AuthorizationResponse.html)`.fromFormBodyResult(body, contentTypeValues, rawQuery)` operation validates one bounded raw form Content-Type with absent/UTF-8 charset, then applies the existing duplicate and query/body channel checks. The result parser also accepts an explicit-charset overload. Transports that collapse identical physical header values need a trusted edge that rejects duplicate Authorization and Content-Type fields.
 
 ### Resource-server validation
 
-`JwtAccessTokenValidator.withIssuer(issuer).expectedAudiences(Set.of(resource)).build()` validates strict RFC 9068 JWT access tokens. It requires an access-token type, exact issuer, intended audience, valid signature, `exp`, `iat`, and nonempty `sub`, `client_id` and `jti`. Its public-key algorithm default is RS256. A supplied key source bypasses discovery; static keys perform no network I/O. Explicit untyped compatibility requires an additional claim and rejects identity-token claims; it does not grant permissions.
+The [`JwtAccessTokenValidator`](https://javadoc.revetsec.com/com/revetsec/oauth/JwtAccessTokenValidator.html)`.withIssuer(issuer).expectedAudiences(`[`Set`](https://docs.oracle.com/en/java/javase/27/docs/api/java.base/java/util/Set.html)`.of(resource)).build()` validates strict RFC 9068 JWT access tokens. It requires an access-token type, exact issuer, intended audience, valid signature, `exp`, `iat`, and nonempty `sub`, `client_id` and `jti`. Its public-key algorithm default is RS256. A supplied key source bypasses discovery; static keys perform no network I/O. Explicit untyped compatibility requires an additional claim and rejects identity-token claims; it does not grant permissions.
 
-`TokenIntrospectionClient.withOAuthClient(confidentialClient).expectedAudiences(Set.of(resource)).build()` inherits the OAuth client's authentication, issuer, HTTP policy, clock and deadlines. Each validation sends one authenticated JSON introspection request. Active and inactive results are uncached; the response must identify the intended audience. Provider errors and outages remain exceptions, with bounded endpoint-wide backoff and one recovery probe.
+The [`TokenIntrospectionClient`](https://javadoc.revetsec.com/com/revetsec/oauth/TokenIntrospectionClient.html)`.withOAuthClient(confidentialClient).expectedAudiences(`[`Set`](https://docs.oracle.com/en/java/javase/27/docs/api/java.base/java/util/Set.html)`.of(resource)).build()` inherits the OAuth client's authentication, issuer, HTTP policy, clock and deadlines. Each validation sends one authenticated JSON introspection request. Active and inactive results are uncached; the response must identify the intended audience. Non-transient endpoint client errors return [`AccessTokenValidationResult.RejectedEndpoint`](https://javadoc.revetsec.com/com/revetsec/oauth/AccessTokenValidationResult.RejectedEndpoint.html), which carries no Bearer invalid-token error. Outages and malformed provider responses remain exceptions, with bounded endpoint-wide backoff and one recovery probe.
 
-Both implement `AccessTokenValidator`: use `validate` for exception handling or `validateResult` for sealed outcomes. Only `Succeeded.getAccessToken()` releases checked proof. `VerifiedAccessToken` contains checked claims, optional subject/client ID/expiry, audiences and scopes; it has no incoming-credential getter. Claims are sensitive explicit access. Empty scopes grant no permission, and application code still decides operation, tenant and object authorization.
+Both implement [`AccessTokenValidator`](https://javadoc.revetsec.com/com/revetsec/oauth/AccessTokenValidator.html) with one `validateResult` operation for sealed outcomes. Only `Succeeded.getAccessToken()` releases checked proof. [`VerifiedAccessToken`](https://javadoc.revetsec.com/com/revetsec/oauth/VerifiedAccessToken.html) contains checked claims, optional subject/client ID/expiry, audiences and scopes; it has no incoming-credential getter. Claims are sensitive explicit access. Empty scopes grant no permission, and application code still decides operation, tenant and object authorization.
 
 Role-specific discovery needs only issuer/JWKS for JWT or issuer/introspection endpoint for introspection. The existing OAuth metadata parser still requires authorization and token endpoints. `warmUp()` performs discovery/key loading without validating a credential. Builds perform no I/O and start no threads.
 
-Generated OAuth `private_key_jwt` authentication uses `ClientAssertionSigningKey` and a caller-thread `ClientAssertionKeyProvider`. See [the OAuth client guide](docs/oauth-client.md#private-key-client-assertions) for role metadata, audience compatibility and deadline rules. Hosted private-key qualification remains pending.
+Generated OAuth `private_key_jwt` authentication uses [`ClientAssertionSigningKey`](https://javadoc.revetsec.com/com/revetsec/oauth/ClientAssertionSigningKey.html) and a caller-thread [`ClientAssertionKeyProvider`](https://javadoc.revetsec.com/com/revetsec/oauth/ClientAssertionKeyProvider.html). See [the OAuth client guide](docs/oauth-client.md#private-key-client-assertions) for role metadata, audience compatibility and deadline rules. Hosted private-key qualification remains pending.
 
 ### Microsoft Entra issuer policy
 

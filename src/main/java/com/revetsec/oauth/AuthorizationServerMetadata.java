@@ -97,6 +97,27 @@ public final class AuthorizationServerMetadata {
 	}
 
 	/**
+	 * Parses bounded metadata and reports a fixed document or issuer rejection as a value.
+	 * @param expectedIssuer configured trust issuer
+	 * @param json metadata JSON text
+	 * @return the metadata parsing outcome
+	 * @throws NullPointerException if an argument is null
+	 * @since 1.0.0
+	 */
+	@com.google.errorprone.annotations.CheckReturnValue
+	public static @NonNull AuthorizationServerMetadataParseResult fromJsonResult(@NonNull String expectedIssuer,
+			@NonNull String json) {
+		requireNonNull(expectedIssuer); requireNonNull(json);
+		withIssuer(expectedIssuer);
+		try { return AuthorizationServerMetadataParseResult.succeeded(parse(expectedIssuer, json)); }
+		catch (OAuthException rejected) {
+			if (rejected.getReason() != OAuthException.Reason.DOCUMENT_MALFORMED
+					&& rejected.getReason() != OAuthException.Reason.ISSUER_MISMATCH) throw rejected;
+			return AuthorizationServerMetadataParseResult.rejected(rejected.getReason());
+		}
+	}
+
+	/**
 	 * Parses a strict, bounded metadata JSON document and compares its issuer exactly.
 	 *
 	 * @param expectedIssuer the configured issuer
@@ -104,7 +125,7 @@ public final class AuthorizationServerMetadata {
 	 * @return the metadata
 	 * @since 1.0.0
 	 */
-	public static @NonNull AuthorizationServerMetadata fromJson(@NonNull String expectedIssuer,
+	private static @NonNull AuthorizationServerMetadata parse(@NonNull String expectedIssuer,
 			@NonNull String json) {
 		requireNonNull(expectedIssuer);
 		requireNonNull(json);

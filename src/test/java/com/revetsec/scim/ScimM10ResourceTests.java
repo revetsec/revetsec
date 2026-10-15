@@ -15,6 +15,7 @@
  */
 
 package com.revetsec.scim;
+import com.revetsec.json.JsonString;
 
 import com.revetsec.internal.json.JsonCodec;
 import com.revetsec.internal.json.JsonDocument;
@@ -22,6 +23,7 @@ import com.revetsec.internal.json.JsonLimits;
 import com.revetsec.internal.json.JsonParseResult;
 import com.revetsec.json.JsonNumber;
 import com.revetsec.json.JsonObject;
+import com.revetsec.json.JsonArray;
 import org.jspecify.annotations.NonNull;
 import org.junit.jupiter.api.Test;
 import java.math.BigDecimal;
@@ -40,7 +42,7 @@ class ScimM10ResourceTests {
         ScimResourceParseResult.Succeeded result = accepted(create(ScimResourceType.userInstance(),
                 "{\"SCHEMAS\":[\"URN:IETF:PARAMS:SCIM:SCHEMAS:CORE:2.0:USER\"],\"USERNAME\":\"Ada\",\"id\":[],\"meta\":42,\"externalID\":\"client-1\"}"));
         ScimResource resource = result.getResource();
-        assertEquals("Ada",resource.getDocument().findString("userName").orElseThrow());
+        assertEquals("Ada",resource.getDocument().find("userName").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow());
         assertEquals("client-1",resource.getExternalId().orElseThrow());
         assertTrue(resource.getId().isEmpty());
         assertFalse(resource.getDocument().getMembers().containsKey("meta"));
@@ -72,12 +74,12 @@ class ScimM10ResourceTests {
         rejected(create(ScimResourceType.userInstance(),missingDeclaration),ScimErrorType.INVALID_VALUE);
         ScimCompatibility infer = compatibility(ScimCompatibilityFeature.INFER_MISSING_EXTENSION_SCHEMAS);
         ScimResource inferred = accepted(create(ScimResourceType.userInstance(),missingDeclaration,infer)).getResource();
-        assertEquals(Set.of(USER,ENTERPRISE),Set.copyOf(inferred.getDocument().findStringList("schemas").orElseThrow()));
+        assertEquals(Set.of(USER,ENTERPRISE),Set.copyOf(inferred.getDocument().find("schemas").map(JsonArray.class::cast).map(array -> array.getElements().stream().map(JsonString.class::cast).map(JsonString::getValue).toList()).orElseThrow()));
         assertEquals("R&D",ScimEnterpriseUser.fromResource(inferred).getDepartment().orElseThrow());
         String undeclared = "{\"schemas\":[\""+USER+"\",\"urn:unknown\"],\"userName\":\"a\"}";
         rejected(create(ScimResourceType.userInstance(),undeclared),ScimErrorType.INVALID_VALUE);
         assertEquals(java.util.List.of(USER),accepted(create(ScimResourceType.userInstance(),undeclared,
-                compatibility(ScimCompatibilityFeature.IGNORE_UNDECLARED_SCHEMA_URIS))).getResource().getDocument().findStringList("schemas").orElseThrow());
+                compatibility(ScimCompatibilityFeature.IGNORE_UNDECLARED_SCHEMA_URIS))).getResource().getDocument().find("schemas").map(JsonArray.class::cast).map(array -> array.getElements().stream().map(JsonString.class::cast).map(JsonString::getValue).toList()).orElseThrow());
         String bool = "{\"schemas\":[\""+USER+"\"],\"userName\":\"true\",\"active\":\"true\"}";
         ScimUser view = ScimUser.fromResource(accepted(create(ScimResourceType.userInstance(),bool,
                 compatibility(ScimCompatibilityFeature.BOOLEAN_STRINGS))).getResource());
@@ -87,7 +89,7 @@ class ScimM10ResourceTests {
         String scalar = "{\"schemas\":[\""+USER+"\",\""+ENTERPRISE+"\"],\"userName\":\"a\",\""+ENTERPRISE+"\":{\"manager\":\"m-1\"}}";
         rejected(create(ScimResourceType.userInstance(),scalar),ScimErrorType.INVALID_VALUE);
         assertEquals("m-1",ScimEnterpriseUser.fromResource(accepted(create(ScimResourceType.userInstance(),scalar,
-                compatibility(ScimCompatibilityFeature.COMPLEX_VALUE_AS_SCALAR))).getResource()).getManager().orElseThrow().findString("value").orElseThrow());
+                compatibility(ScimCompatibilityFeature.COMPLEX_VALUE_AS_SCALAR))).getResource()).getManager().orElseThrow().find("value").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow());
     }
 
     @Test void integerWireTokensRejectFractionAndExponentAtEveryPosition() {
@@ -111,11 +113,11 @@ class ScimM10ResourceTests {
                 "{\"schemas\":[\""+WIDGET+"\"],\"id\":{},\"title\":\"new\",\"locked\":\"lock\",\"server\":false,\"profile\":{\"note\":\"new\"}}"));
         ScimResource resource = replacement.getResource();
         assertEquals("server-1",resource.getId().orElseThrow()); assertTrue(resource.getExternalId().isEmpty());
-        assertEquals("keep",resource.getDocument().findString("server").orElseThrow());
+        assertEquals("keep",resource.getDocument().find("server").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow());
         JsonObject profile = (JsonObject)resource.getDocument().find("profile").orElseThrow();
-        assertEquals("protected",profile.findString("secret").orElseThrow());
-        assertEquals("immutable",profile.findString("code").orElseThrow());
-        assertEquals("new",profile.findString("note").orElseThrow());
+        assertEquals("protected",profile.find("secret").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow());
+        assertEquals("immutable",profile.find("code").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow());
+        assertEquals("new",profile.find("note").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow());
         assertEquals(Set.of(path("title"),path("locked"),path("profile.note")),replacement.getSuppliedAttributePaths());
         assertEquals(before,current.getDocument().toJson());
         for (String suffix : new String[]{"",",\"profile\":null",",\"profile\":{\"code\":null}"})
@@ -130,11 +132,11 @@ class ScimM10ResourceTests {
         ScimResource current = trusted(type,"{\"schemas\":[\""+GROUP+"\"],\"displayName\":\"team\",\"members\":[{\"value\":\"one\",\"display\":\"One label\"},{\"value\":\"two\",\"display\":\"Two label\"}]}");
         ScimResource replaced = accepted(replace(type,current,"{\"schemas\":[\""+GROUP+"\"],\"displayName\":\"renamed\",\"members\":[{\"value\":\"two\",\"display\":\"stale echo\"},{\"value\":\"new\",\"display\":\"forged\"},{\"value\":\"one\"}]}" )).getResource();
         java.util.List<JsonObject> members=ScimGroup.fromResource(replaced).getMembers();
-        assertEquals("two",members.get(0).findString("value").orElseThrow());
-        assertEquals("Two label",members.get(0).findString("display").orElseThrow());
-        assertEquals("new",members.get(1).findString("value").orElseThrow());
-        assertTrue(members.get(1).findString("display").isEmpty());
-        assertEquals("One label",members.get(2).findString("display").orElseThrow());
+        assertEquals("two",members.get(0).find("value").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow());
+        assertEquals("Two label",members.get(0).find("display").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow());
+        assertEquals("new",members.get(1).find("value").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow());
+        assertTrue(members.get(1).find("display").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).isEmpty());
+        assertEquals("One label",members.get(2).find("display").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow());
         assertTrue(ScimGroup.fromResource(accepted(replace(type,current,"{\"schemas\":[\""+GROUP+"\"],\"displayName\":\"team\",\"members\":[]}")).getResource()).getMembers().isEmpty());
         assertTrue(ScimGroup.fromResource(accepted(replace(type,current,"{\"schemas\":[\""+GROUP+"\"],\"displayName\":\"team\"}")).getResource()).getMembers().isEmpty());
         assertEquals(2,ScimGroup.fromResource(current).getMembers().size());
@@ -253,8 +255,8 @@ class ScimM10ResourceTests {
         ScimResourceType type=ScimResourceType.withName("Extended").endpoint("/Extended").schema(ScimSchema.withId("urn:example:Extended").name("Extended").attributes(java.util.List.of(ScimAttributeDefinition.withName("title").required(true).build())).build()).schemaExtensions(java.util.List.of(ScimSchemaExtension.fromSchema(extension,true))).build();
         ScimResource current=trusted(type,"{\"schemas\":[\"urn:example:Extended\",\""+extensionId+"\"],\"title\":\"old\",\""+extensionId+"\":{\"tag\":\"server\"}}");
         ScimResource result=accepted(replace(type,current,"{\"schemas\":[\"urn:example:Extended\"],\"title\":\"new\"}")).getResource();
-        assertEquals(java.util.List.of("urn:example:Extended",extensionId),result.getDocument().findStringList("schemas").orElseThrow());
-        assertEquals("server",result.getExtension(extensionId).orElseThrow().findString("tag").orElseThrow());
+        assertEquals(java.util.List.of("urn:example:Extended",extensionId),result.getDocument().find("schemas").map(JsonArray.class::cast).map(array -> array.getElements().stream().map(JsonString.class::cast).map(JsonString::getValue).toList()).orElseThrow());
+        assertEquals("server",result.getExtension(extensionId).orElseThrow().find("tag").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow());
     }
 
     private static @NonNull ScimResourceType widget() {

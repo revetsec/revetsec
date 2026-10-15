@@ -30,7 +30,7 @@ import static java.util.Objects.requireNonNull;
  * <p>
  * Usage, with the observer a component was configured with:
  * <pre>{@code
- * ObserverDispatch.dispatch(this.observer, observer -> observer.didFailToRefreshJsonWebKeySet(jwksUri, exception));
+ * ObserverDispatch.dispatch(this.observer, observer -> observer.willFetchJwks(jwksUri));
  * }</pre>
  * The rules:
  * <ul>

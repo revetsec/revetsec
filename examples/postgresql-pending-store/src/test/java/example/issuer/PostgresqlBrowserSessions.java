@@ -169,7 +169,9 @@ public final class PostgresqlBrowserSessions implements BrowserSessionStore {
 
     private BrowserSessions.@NonNull Session open(@NonNull String id,byte @NonNull [] key,
             @NonNull SessionRow row,@NonNull Instant expiry) {
-        String raw=sealer.unseal(row.sealedForm(),context(key));
+        var opened=sealer.unsealResult(row.sealedForm(),context(key));
+        if(!(opened instanceof com.revetsec.StateUnsealResult.Succeeded success)) throw unavailable();
+        String raw=success.getValue();
         String[] parts=raw.split("\\.",-1);
         if(parts.length!=8 || !parts[0].equals("1") || !parts[6].equals(Long.toString(expiry.getEpochSecond()))
                 || !parts[7].equals(Integer.toString(expiry.getNano()))) throw unavailable();

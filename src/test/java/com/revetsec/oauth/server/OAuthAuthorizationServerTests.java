@@ -16,6 +16,10 @@
 
 package com.revetsec.oauth.server;
 
+import com.revetsec.oauth.BearerTokenResult;
+
+import com.revetsec.jose.JwksParseResult;
+
 import com.revetsec.StateSealer;
 import com.revetsec.SealingKey;
 import com.revetsec.OutboundUriPolicy;
@@ -26,12 +30,12 @@ import com.revetsec.internal.json.JsonCodec;
 import com.revetsec.internal.json.JsonLimits;
 import com.revetsec.json.JsonObject;
 import com.revetsec.jose.JwsAlgorithm;
-import com.revetsec.jose.StaticJsonWebKeySource;
-import com.revetsec.jose.JsonWebKeySet;
+import com.revetsec.jose.StaticJwksSource;
+import com.revetsec.jose.Jwks;
 import com.revetsec.oauth.BearerToken;
 import com.revetsec.oauth.JwtAccessTokenValidator;
 import com.revetsec.oauth.OAuthTransportFailureFixture;
-import com.revetsec.testing.TestJsonWebKeys;
+import com.revetsec.testing.TestJwk;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
@@ -68,7 +72,7 @@ final class OAuthAuthorizationServerTests {
  private static final @NonNull String ISSUER="https://issuer.example/tenant",RESOURCE="https://resource.example/mcp",REDIRECT="https://client.example/cb?original=%2f";
  private static final @NonNull String BROWSER="A".repeat(43),VERIFIER="dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk",CHALLENGE="E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM";
  private static final @NonNull Instant NOW=Instant.parse("2026-10-06T12:00:00Z");
- private static final TestJsonWebKeys.@NonNull Fixture KEY=TestJsonWebKeys.Fixture.IDP_SIGNING_RSA_2048;
+ private static final TestJwk.@NonNull Fixture KEY=TestJwk.Fixture.IDP_SIGNING_RSA_2048;
  private final @NonNull OAuthAtomicStoreFixture store=new OAuthAtomicStoreFixture();
  private final @NonNull MutableClock clock=new MutableClock();
  private final @NonNull List<@NonNull OAuthGrantContext> contexts=new ArrayList<>();
@@ -93,7 +97,7 @@ final class OAuthAuthorizationServerTests {
  }
  private OAuthAuthorizationServer.@NonNull Builder builder() {
   return OAuthAuthorizationServer.withIssuer(ISSUER).authorizationEndpoint(URI.create(ISSUER+"/authorize")).tokenEndpoint(URI.create(ISSUER+"/token"))
-   .jsonWebKeySetEndpoint(URI.create(ISSUER+"/jwks")).revocationEndpoint(URI.create(ISSUER+"/revoke")).introspectionEndpoint(URI.create(ISSUER+"/introspect"))
+   .jwksEndpoint(URI.create(ISSUER+"/jwks")).revocationEndpoint(URI.create(ISSUER+"/revoke")).introspectionEndpoint(URI.create(ISSUER+"/introspect"))
    .clientRepository((id,b)->Optional.of(id.equals("resource") ? resourceClient() : this.client)).store(this.store)
    .signingKeys(OAuthIssuerKeyProvider.fromSnapshot(keys())).stateSealer(sealer()).resources(resources()).clock(this.clock)
    .grantPolicy((context,budget)->{this.contexts.add(context);Runnable hook=this.policyHook;this.policyHook=null;if(hook!=null) hook.run();
@@ -126,7 +130,7 @@ final class OAuthAuthorizationServerTests {
  private static byte @NonNull [] bytes(@NonNull String value) {return value.getBytes(StandardCharsets.UTF_8);}
  private static @NonNull Map<@NonNull String,@NonNull List<@NonNull String>> headers() {return Map.of("Content-Type",List.of("application/x-www-form-urlencoded"));}
  private static @NonNull JsonObject json(@NonNull OAuthServerResponse response) {try{return (JsonObject)JsonCodec.parse(response.toHttpBodyWithCredentials(),JsonLimits.protocolDocument(131072));}catch(com.revetsec.internal.json.JsonParseException e){throw new AssertionError(e);}}
- private static @NonNull BearerToken bearer(@NonNull String token) {return BearerToken.fromAuthorizationHeaderValues(List.of("Bearer "+token)).orElseThrow();}
+ private static @NonNull BearerToken bearer(@NonNull String token) {return assertInstanceOf(BearerTokenResult.Present.class, BearerToken.fromAuthorizationHeaderValuesResult(List.of("Bearer "+token))).getToken();}
  private void initialized() {assertEquals(OAuthStoreCommitStatus.COMMITTED,this.server.initializeFreshIssuer());this.server.establishNewSubject("subject");}
  private @NonNull String query() {return form(Map.of("client_id",this.client.getClientId(),"response_type","code","redirect_uri",REDIRECT,"resource",RESOURCE,"code_challenge",CHALLENGE,"code_challenge_method","S256","state","original-state"));}
  private @NonNull OAuthServerInteraction begin() {return assertInstanceOf(OAuthAuthorizationResult.InteractionRequired.class,this.server.beginAuthorizationResult("GET",query(),new byte[0],Map.of(),BROWSER)).getInteraction();}
@@ -152,18 +156,18 @@ final class OAuthAuthorizationServerTests {
    interaction.getInteractionValue(),BROWSER,decision("subject",Set.of("read"),false)));
  }
  @Test void publicFlowRechecksPolicyAndReleasesProofOnlyAfterAtomicStatus() {
-  JsonObject one=issued();String token=one.findString("access_token").orElseThrow();
+  JsonObject one=issued();String token=one.find("access_token").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow();
   OAuthIssuerAccessTokenResult.Succeeded checked=assertInstanceOf(OAuthIssuerAccessTokenResult.Succeeded.class,this.server.validateAccessTokenResult(bearer(token),RESOURCE));
   assertEquals(Optional.of("subject"),checked.getAccessToken().getSubject());assertEquals(Set.of("read","write"),checked.getAccessToken().getScopes());
   assertEquals(4,requireNonNull(this.store.lastTransaction).getConditions().size());assertTrue(requireNonNull(this.store.lastTransaction).getMutations().isEmpty());
   assertEquals(2,this.contexts.size());assertEquals(this.contexts.get(0).getGrantValue(),this.contexts.get(1).getGrantValue());
   assertEquals("authorization_code",this.contexts.get(0).getGrantType());
-  assertTrue(json(assertInstanceOf(OAuthIntrospectionResult.Succeeded.class,introspect(token)).getResponse()).findBoolean("active").orElseThrow());
-  JsonObject two=json(assertInstanceOf(OAuthTokenResult.Succeeded.class,rotate(one.findString("refresh_token").orElseThrow())).getResponse());assertEquals(3,this.contexts.size());
+  assertTrue(json(assertInstanceOf(OAuthIntrospectionResult.Succeeded.class,introspect(token)).getResponse()).find("active").map(value -> ((com.revetsec.json.JsonBoolean) value).getValue()).orElseThrow());
+  JsonObject two=json(assertInstanceOf(OAuthTokenResult.Succeeded.class,rotate(one.find("refresh_token").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow())).getResponse());assertEquals(3,this.contexts.size());
   assertEquals("refresh_token",this.contexts.get(2).getGrantType());assertEquals(this.contexts.get(0).getGrantValue(),this.contexts.get(2).getGrantValue());
-  assertInstanceOf(OAuthRevocationResult.Succeeded.class,revoke(two.findString("access_token").orElseThrow()));
+  assertInstanceOf(OAuthRevocationResult.Succeeded.class,revoke(two.find("access_token").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow()));
   assertInstanceOf(OAuthIssuerAccessTokenResult.Rejected.class,this.server.validateAccessTokenResult(bearer(token),RESOURCE));
-  assertFalse(json(assertInstanceOf(OAuthIntrospectionResult.Succeeded.class,introspect(token)).getResponse()).findBoolean("active").orElseThrow());
+  assertFalse(json(assertInstanceOf(OAuthIntrospectionResult.Succeeded.class,introspect(token)).getResponse()).find("active").map(value -> ((com.revetsec.json.JsonBoolean) value).getValue()).orElseThrow());
  }
  @TestFactory @NonNull Stream<@NonNull DynamicTest> initialPolicyCannotWidenOrChangeSubjectOrRefresh() {
   return Stream.of("subject","scope","resource","extra-resource","refresh","null","fault","denied","empty","narrowed").map(which->test(which,()->{
@@ -218,7 +222,7 @@ final class OAuthAuthorizationServerTests {
    if(!which.equals("initialize")) {f.initialized();key=f.store.rows.keySet().iterator().next();}
    if(which.equals("complete"))handle=f.begin().getInteractionValue();
    if(which.equals("redeem"))code=f.code();
-   if(Set.of("validate","refresh","revoke","grant").contains(which)) {JsonObject one=json(assertInstanceOf(OAuthTokenResult.Succeeded.class,f.redeem(f.code())).getResponse());token=one.findString("access_token").orElseThrow();refresh=one.findString("refresh_token").orElseThrow();grant=f.contexts.get(0).getGrantValue();}
+   if(Set.of("validate","refresh","revoke","grant").contains(which)) {JsonObject one=json(assertInstanceOf(OAuthTokenResult.Succeeded.class,f.redeem(f.code())).getResponse());token=one.find("access_token").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow();refresh=one.find("refresh_token").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow();grant=f.contexts.get(0).getGrantValue();}
    String h=handle,co=code,to=token,re=refresh,gr=grant;OAuthStoreKey k=key;
    f.store.unknownBefore=!after;f.store.unknownAfter=after;int commits=f.store.commits;
    if(which.equals("initialize"))assertEquals(OAuthStoreCommitStatus.UNKNOWN,f.server.initializeFreshIssuer());
@@ -232,14 +236,14 @@ final class OAuthAuthorizationServerTests {
  }
  @TestFactory @NonNull Stream<@NonNull DynamicTest> trustedRevocationsInvalidateSubsequentProofs() {
   return Stream.of("grant","subject","issuer","refresh-replay","code-replay").map(which->test(which,()->{
-   var f=new OAuthAuthorizationServerTests();f.initialized();String code=f.code();JsonObject one=json(assertInstanceOf(OAuthTokenResult.Succeeded.class,f.redeem(code)).getResponse());String token=one.findString("access_token").orElseThrow();
-   switch(which){case "grant"->f.server.revokeGrant(f.contexts.get(0).getGrantValue());case "subject"->f.server.revokeSubject("subject");case "issuer"->f.server.revokeAllGrants();case "code-replay"->assertInstanceOf(OAuthTokenResult.Rejected.class,f.redeem(code));default->{String refresh=one.findString("refresh_token").orElseThrow();assertInstanceOf(OAuthTokenResult.Succeeded.class,f.rotate(refresh));assertInstanceOf(OAuthTokenResult.Rejected.class,f.rotate(refresh));}}
+   var f=new OAuthAuthorizationServerTests();f.initialized();String code=f.code();JsonObject one=json(assertInstanceOf(OAuthTokenResult.Succeeded.class,f.redeem(code)).getResponse());String token=one.find("access_token").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow();
+   switch(which){case "grant"->f.server.revokeGrant(f.contexts.get(0).getGrantValue());case "subject"->f.server.revokeSubject("subject");case "issuer"->f.server.revokeAllGrants();case "code-replay"->assertInstanceOf(OAuthTokenResult.Rejected.class,f.redeem(code));default->{String refresh=one.find("refresh_token").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow();assertInstanceOf(OAuthTokenResult.Succeeded.class,f.rotate(refresh));assertInstanceOf(OAuthTokenResult.Rejected.class,f.rotate(refresh));}}
    assertInstanceOf(OAuthIssuerAccessTokenResult.Rejected.class,f.server.validateAccessTokenResult(bearer(token),RESOURCE));
   }));
  }
  @TestFactory @NonNull Stream<@NonNull DynamicTest> m5RejectionPrecedesBackendAndOnlineAbsenceIsNotCached() {
   return Stream.of("malformed","wrong-issuer","wrong-audience","expired","missing-jti","oversize").map(which->test(which,()->{
-   var f=new OAuthAuthorizationServerTests();JsonObject one=f.issued();String token=one.findString("access_token").orElseThrow();
+   var f=new OAuthAuthorizationServerTests();JsonObject one=f.issued();String token=one.find("access_token").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow();
    if(which.equals("malformed"))token="malformed";
    else if(which.equals("oversize"))token="A".repeat(16385);
    else if(which.equals("expired"))f.clock.time=NOW.plusSeconds(331);
@@ -254,16 +258,16 @@ final class OAuthAuthorizationServerTests {
   }));
  }
  @Test void proofAbsenceRequiresBarrierAndLaterRequestsObserveRevocation() {
-  JsonObject one=issued();String token=one.findString("access_token").orElseThrow();OAuthStoreKey issuance=this.store.rows.keySet().stream().filter(k->k.getKind()==OAuthStoreKey.Kind.ACCESS_TOKEN).findFirst().orElseThrow();this.store.rows.remove(issuance);
+  JsonObject one=issued();String token=one.find("access_token").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow();OAuthStoreKey issuance=this.store.rows.keySet().stream().filter(k->k.getKind()==OAuthStoreKey.Kind.ACCESS_TOKEN).findFirst().orElseThrow();this.store.rows.remove(issuance);
   assertInstanceOf(OAuthIssuerAccessTokenResult.Rejected.class,this.server.validateAccessTokenResult(bearer(token),RESOURCE));assertEquals(2,requireNonNull(this.store.lastTransaction).getConditions().size());
  }
  @Test void originalBudgetIsSharedAcrossM5AndAuthoritativeCallbacks() {
-  this.server=builder().totalDeadline(Duration.ofSeconds(1)).requestTimeout(Duration.ofSeconds(1)).build();JsonObject one=issued();String token=one.findString("access_token").orElseThrow();
+  this.server=builder().totalDeadline(Duration.ofSeconds(1)).requestTimeout(Duration.ofSeconds(1)).build();JsonObject one=issued();String token=one.find("access_token").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow();
   this.clock.hook=()->{long end=System.nanoTime()+1_050_000_000L;while(System.nanoTime()<end)Thread.onSpinWait();};int reads=this.store.reads;
   OAuthServerException failure=assertThrows(OAuthServerException.class,()->this.server.validateAccessTokenResult(bearer(token),RESOURCE));assertEquals(reads,this.store.reads);assertTrue(Set.of(STORE_UNAVAILABLE,CONFIGURATION_INVALID).contains(failure.getReason()));
  }
  @Test void resealPreservesAuthorityRetentionAndUsesCAS() {
-  JsonObject one=issued();String token=one.findString("access_token").orElseThrow();for(OAuthStoreKey key:List.copyOf(this.store.rows.keySet())) {OAuthStoreEntry old=requireNonNull(this.store.rows.get(key));assertEquals(OAuthStoreCommitStatus.COMMITTED,this.server.resealStoreEntry(key));OAuthStoreEntry next=requireNonNull(this.store.rows.get(key));assertNotEquals(old.getVersion(),next.getVersion());assertEquals(old.getRetainUntil(),next.getRetainUntil());}
+  JsonObject one=issued();String token=one.find("access_token").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow();for(OAuthStoreKey key:List.copyOf(this.store.rows.keySet())) {OAuthStoreEntry old=requireNonNull(this.store.rows.get(key));assertEquals(OAuthStoreCommitStatus.COMMITTED,this.server.resealStoreEntry(key));OAuthStoreEntry next=requireNonNull(this.store.rows.get(key));assertNotEquals(old.getVersion(),next.getVersion());assertEquals(old.getRetainUntil(),next.getRetainUntil());}
   assertInstanceOf(OAuthIssuerAccessTokenResult.Succeeded.class,this.server.validateAccessTokenResult(bearer(token),RESOURCE));this.store.conflicts=1;assertEquals(OAuthStoreCommitStatus.CONFLICT,this.server.resealStoreEntry(this.store.rows.keySet().iterator().next()));
   OAuthStoreKey absent=OAuthStoreFormat.key(OAuthStoreFormat.namespace(this.store.rows.keySet().iterator().next()),OAuthStoreKey.Kind.GRANT,"A".repeat(43));assertEquals(OAuthStoreCommitStatus.CONFLICT,this.server.resealStoreEntry(absent));
  }
@@ -329,7 +333,7 @@ final class OAuthAuthorizationServerTests {
  }
  @TestFactory @NonNull Stream<@NonNull DynamicTest> missingOrCorruptPermanentStateNeverInitializesOnTraffic() {
   return Stream.of("issuer","subject","corrupt","warm-up").map(which->test(which,()->{
-   var f=new OAuthAuthorizationServerTests();JsonObject one=f.issued();String token=one.findString("access_token").orElseThrow();int size=f.store.rows.size();
+   var f=new OAuthAuthorizationServerTests();JsonObject one=f.issued();String token=one.find("access_token").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow();int size=f.store.rows.size();
    OAuthStoreKey key=f.store.rows.keySet().stream().filter(k->k.getKind()==(which.equals("subject")?OAuthStoreKey.Kind.SUBJECT_STATE:OAuthStoreKey.Kind.ISSUER_STATE)).findFirst().orElseThrow();
    if(which.equals("corrupt")){OAuthStoreEntry old=requireNonNull(f.store.rows.get(key));f.store.rows.put(key,OAuthStoreEntry.fromStoredForm(key,old.getVersion(),old.getRetainUntil(),"corrupt"));}else f.store.rows.remove(key);
    Executable operation=which.equals("warm-up")?f.server::warmUp:()->f.server.validateAccessTokenResult(bearer(token),RESOURCE);
@@ -337,10 +341,10 @@ final class OAuthAuthorizationServerTests {
   }));
  }
  @Test void metadataJwksAndWarmUpUseConfiguredAuthorityAndDoNotFetchClients() {
-  initialized();this.server.warmUp();JsonObject metadata=json(this.server.metadataResponse("GET"));assertEquals(ISSUER,metadata.findString("issuer").orElseThrow());assertTrue(metadata.getMembers().containsKey("revocation_endpoint"));
+  initialized();this.server.warmUp();JsonObject metadata=json(this.server.metadataResponse("GET"));assertEquals(ISSUER,metadata.find("issuer").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow());assertTrue(metadata.getMembers().containsKey("revocation_endpoint"));
   assertEquals(0,this.server.metadataResponse("HEAD").toHttpBodyWithCredentials().length);assertEquals(405,this.server.metadataResponse("POST").getStatusCode());
-  assertTrue(json(this.server.jsonWebKeySetResponse("GET")).getMembers().containsKey("keys"));assertEquals(0,this.server.jsonWebKeySetResponse("HEAD").toHttpBodyWithCredentials().length);assertEquals(405,this.server.jsonWebKeySetResponse("DELETE").getStatusCode());
-  assertEquals(ISSUER,this.server.getIssuer());assertEquals(URI.create(ISSUER+"/authorize"),this.server.getAuthorizationEndpoint());assertEquals(URI.create(ISSUER+"/token"),this.server.getTokenEndpoint());assertEquals(URI.create(ISSUER+"/jwks"),this.server.getJsonWebKeySetEndpoint());assertEquals(URI.create(ISSUER+"/revoke"),this.server.getRevocationEndpoint().orElseThrow());assertEquals(URI.create(ISSUER+"/introspect"),this.server.getIntrospectionEndpoint().orElseThrow());
+  assertTrue(json(this.server.jwksResponse("GET")).getMembers().containsKey("keys"));assertEquals(0,this.server.jwksResponse("HEAD").toHttpBodyWithCredentials().length);assertEquals(405,this.server.jwksResponse("DELETE").getStatusCode());
+  assertEquals(ISSUER,this.server.getIssuer());assertEquals(URI.create(ISSUER+"/authorize"),this.server.getAuthorizationEndpoint());assertEquals(URI.create(ISSUER+"/token"),this.server.getTokenEndpoint());assertEquals(URI.create(ISSUER+"/jwks"),this.server.getJwksEndpoint());assertEquals(URI.create(ISSUER+"/revoke"),this.server.getRevocationEndpoint().orElseThrow());assertEquals(URI.create(ISSUER+"/introspect"),this.server.getIntrospectionEndpoint().orElseThrow());
   assertEquals("OAuthAuthorizationServer{<redacted>}",this.server.toString());assertEquals("OAuthAuthorizationServer.Builder{<redacted>}",builder().toString());
  }
  @TestFactory @NonNull Stream<@NonNull DynamicTest> publicIngressRejectsBeforeAnyApplicationLookup() {
@@ -369,7 +373,7 @@ final class OAuthAuthorizationServerTests {
    .introspectionEndpoint(URI.create("https://other.example/introspect")).build());
  }
  @TestFactory @NonNull Stream<@NonNull DynamicTest> builderRequiredNullsAreMissingRatherThanFallbacks() {
-  Map<String,Function<OAuthAuthorizationServer.@NonNull Builder,OAuthAuthorizationServer.@NonNull Builder>> clear=Map.of("authorization",b->b.authorizationEndpoint(null),"token",b->b.tokenEndpoint(null),"jwks",b->b.jsonWebKeySetEndpoint(null),"clients",b->b.clientRepository(null),"store",b->b.store(null),"keys",b->b.signingKeys(null),"sealer",b->b.stateSealer(null),"resources",b->b.resources(null),"policy",b->b.grantPolicy(null));
+  Map<String,Function<OAuthAuthorizationServer.@NonNull Builder,OAuthAuthorizationServer.@NonNull Builder>> clear=Map.of("authorization",b->b.authorizationEndpoint(null),"token",b->b.tokenEndpoint(null),"jwks",b->b.jwksEndpoint(null),"clients",b->b.clientRepository(null),"store",b->b.store(null),"keys",b->b.signingKeys(null),"sealer",b->b.stateSealer(null),"resources",b->b.resources(null),"policy",b->b.grantPolicy(null));
   return clear.entrySet().stream().map(e->test(e.getKey(),()->{var f=new OAuthAuthorizationServerTests();var b=f.builder();b=e.getValue().apply(b);assertThrows(IllegalStateException.class,b::build);}));
  }
  @TestFactory @NonNull Stream<@NonNull DynamicTest> builderEndpointAuthorityIsNeverInferredOrRelaxed() {
@@ -411,7 +415,7 @@ final class OAuthAuthorizationServerTests {
  }
  @Test void cimdOptInBuildDoesNotResolveAndPublicMetadataAdvertisesOnlyEnabledSupport() {
   AtomicInteger lookups=new AtomicInteger();OAuthClientMetadataPolicy policy=OAuthClientMetadataPolicy.fromAddressResolver((host,budget)->{lookups.incrementAndGet();return List.of(InetAddress.getLoopbackAddress());});
-  this.server=builder().clientMetadataPolicy(policy).outboundUriPolicy(null).clientRepository((id,b)->Optional.empty()).build();assertEquals(0,lookups.get());assertTrue(json(this.server.metadataResponse("GET")).findBoolean("client_id_metadata_document_supported").orElseThrow());assertEquals(0,lookups.get());
+  this.server=builder().clientMetadataPolicy(policy).outboundUriPolicy(null).clientRepository((id,b)->Optional.empty()).build();assertEquals(0,lookups.get());assertTrue(json(this.server.metadataResponse("GET")).find("client_id_metadata_document_supported").map(value -> ((com.revetsec.json.JsonBoolean) value).getValue()).orElseThrow());assertEquals(0,lookups.get());
   this.client=client("https://client.example.com/metadata");OAuthServerTransportException failure=assertThrows(OAuthServerTransportException.class,()->begin());assertEquals(CLIENT_METADATA_UNAVAILABLE,failure.getReason());assertFalse(failure.isTransient());assertEquals(1,lookups.get());
  }
  @Test void enabledClientMetadataConstructionRequiresAcknowledgmentOnUnpatchedRuntime() {
@@ -436,7 +440,7 @@ final class OAuthAuthorizationServerTests {
    @Override public void didRejectEndpoint(@NonNull Endpoint kind,OAuthServerException.@NonNull Reason reason,@Nullable Integer status,@NonNull Duration elapsed){events.add("rejected:"+kind);}
    @Override public void didFailToHandleEndpoint(@NonNull Endpoint kind,@NonNull OAuthServerException failure,@NonNull Duration elapsed){events.add("failed:"+kind);}
   };
-  this.server=builder().observer(observer).build();JsonObject one=issued();assertInstanceOf(OAuthIssuerAccessTokenResult.Succeeded.class,this.server.validateAccessTokenResult(bearer(one.findString("access_token").orElseThrow()),RESOURCE));assertEquals(405,this.server.metadataResponse("POST").getStatusCode());assertInstanceOf(OAuthTokenResult.Rejected.class,this.server.tokenResult("GET",null,new byte[0],Map.of()));
+  this.server=builder().observer(observer).build();JsonObject one=issued();assertInstanceOf(OAuthIssuerAccessTokenResult.Succeeded.class,this.server.validateAccessTokenResult(bearer(one.find("access_token").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow()),RESOURCE));assertEquals(405,this.server.metadataResponse("POST").getStatusCode());assertInstanceOf(OAuthTokenResult.Rejected.class,this.server.tokenResult("GET",null,new byte[0],Map.of()));
   this.store.unknownAfter=true;assertThrows(OAuthServerStoreException.class,()->this.server.revokeSubject("subject"));
   assertEquals(0,events.size()%2);for(int i=0;i<events.size();i+=2){assertTrue(events.get(i).startsWith("will:"));assertFalse(events.get(i+1).startsWith("will:"));assertEquals(events.get(i).substring(5),events.get(i+1).substring(events.get(i+1).indexOf(':')+1));}
   assertTrue(events.contains("failed:SUBJECT_REVOCATION"));assertTrue(events.contains("rejected:METADATA"));
@@ -540,9 +544,9 @@ final class OAuthAuthorizationServerTests {
   assertEquals(List.of("AUTHORIZATION:CONFIGURATION_INVALID","TOKEN:SIGNING_FAILED"),failures);
  }
  @Test void localM5BridgeNeverResetsAnExpiredParentBudget() {
-  var snapshot=keys();StaticJsonWebKeySource source=StaticJsonWebKeySource.fromJsonWebKeySet(JsonWebKeySet.fromJson(OAuthIssuerPublicKeys.jwks(snapshot.getVerificationKeys()).toJson()));
-  String compact=issued().findString("access_token").orElseThrow();
-  var validator=JwtAccessTokenValidator.withIssuer(ISSUER).jsonWebKeySource(source).expectedAudiences(Set.of(RESOURCE)).clock(this.clock).build();
+  var snapshot=keys();StaticJwksSource source=StaticJwksSource.fromJwks(assertInstanceOf(JwksParseResult.Succeeded.class, Jwks.fromJsonResult(OAuthIssuerPublicKeys.jwks(snapshot.getVerificationKeys()).toJson())).getJwks());
+  String compact=issued().find("access_token").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow();
+  var validator=JwtAccessTokenValidator.withIssuer(ISSUER).jwksSource(source).expectedAudiences(Set.of(RESOURCE)).clock(this.clock).build();
   assertThrows(RuntimeException.class,()->OidcTransactionAccess.get().validateAccessToken(validator,bearer(compact),Deadline.fromNow(Duration.ZERO)));
  }
  @TestFactory @NonNull Stream<@NonNull DynamicTest> eachPublicNumericSetterChecksItsRegistryBounds() {
@@ -554,7 +558,7 @@ final class OAuthAuthorizationServerTests {
  }
  @Test void insecureNumericLoopbackRequiresExplicitBuilderFlagAndOtherFlagsAreResettable() {
   var b=OAuthAuthorizationServer.withIssuer("http://127.0.0.1:1234/tenant").authorizationEndpoint(URI.create("http://127.0.0.1:1234/authorize"))
-   .tokenEndpoint(URI.create("http://127.0.0.1:1234/token")).jsonWebKeySetEndpoint(URI.create("http://127.0.0.1:1234/jwks"))
+   .tokenEndpoint(URI.create("http://127.0.0.1:1234/token")).jwksEndpoint(URI.create("http://127.0.0.1:1234/jwks"))
    .clientRepository((id,budget)->Optional.empty()).store(this.store).signingKeys(OAuthIssuerKeyProvider.fromSnapshot(keys())).stateSealer(sealer()).resources(resources()).grantPolicy((context,budget)->OAuthAuthorizationDecision.deniedInstance());
   assertThrows(IllegalArgumentException.class,b::build);assertNotNull(b.allowInsecureLoopback(true).allowLocalhostRedirects(true).allowNativeLoopbackRedirects(true).acknowledgeUnpatchedRuntime(true).build());
  }
@@ -564,15 +568,15 @@ final class OAuthAuthorizationServerTests {
  @TestFactory @NonNull Stream<@NonNull DynamicTest> signingFailureKeepsCredentialUnusedAndNeverLeaksExternalCause() {
   return Stream.of(false,true).map(refresh->test("signing"+refresh,()->{
    var f=new OAuthAuthorizationServerTests();f.initialized();String code=f.code(),credential=code;
-   if(refresh)credential=json(assertInstanceOf(OAuthTokenResult.Succeeded.class,f.redeem(code)).getResponse()).findString("refresh_token").orElseThrow();
+   if(refresh)credential=json(assertInstanceOf(OAuthTokenResult.Succeeded.class,f.redeem(code)).getResponse()).find("refresh_token").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow();
    f.server=f.builder().signingKeys(OAuthIssuerKeyProvider.fromSnapshot(OAuthIssuerKeySnapshot.withActiveKey(OAuthIssuerSigningKey.fromKeyPair("key",new OpaquePrivate(),KEY.getPublicKey())).generation("g1").publishedAt(NOW.minusSeconds(120)).build())).build();
    String supplied=credential;var before=Map.copyOf(f.store.rows);var failure=assertThrows(OAuthServerSigningException.class,()->{if(refresh)f.rotate(supplied);else f.redeem(supplied);});
    assertEquals(SIGNING_FAILED,failure.getReason());assertNull(failure.getCause());assertEquals(before,f.store.rows);
   }));
  }
  @Test void interruptedM5SharedBudgetRemainsInfrastructureAndPreservesFlag() {
-  String compact=issued().findString("access_token").orElseThrow();var snapshot=keys();StaticJsonWebKeySource source=StaticJsonWebKeySource.fromJsonWebKeySet(JsonWebKeySet.fromJson(OAuthIssuerPublicKeys.jwks(snapshot.getVerificationKeys()).toJson()));
-  var validator=JwtAccessTokenValidator.withIssuer(ISSUER).jsonWebKeySource(source).expectedAudiences(Set.of(RESOURCE)).clock(this.clock).build();
+  String compact=issued().find("access_token").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow();var snapshot=keys();StaticJwksSource source=StaticJwksSource.fromJwks(assertInstanceOf(JwksParseResult.Succeeded.class, Jwks.fromJsonResult(OAuthIssuerPublicKeys.jwks(snapshot.getVerificationKeys()).toJson())).getJwks());
+  var validator=JwtAccessTokenValidator.withIssuer(ISSUER).jwksSource(source).expectedAudiences(Set.of(RESOURCE)).clock(this.clock).build();
   try {Thread.currentThread().interrupt();assertThrows(com.revetsec.oauth.OAuthTransportException.class,()->OidcTransactionAccess.get().validateAccessToken(validator,bearer(compact),Deadline.fromNow(Duration.ofSeconds(1))));assertTrue(Thread.currentThread().isInterrupted());}finally{Thread.interrupted();}
  }
  private static final class OpaquePrivate implements PrivateKey {
@@ -638,11 +642,11 @@ final class OAuthAuthorizationServerTests {
    var redemption=new OAuthCodeRedemption(coordinator,codec,limits,retention,new OAuthTokenResponse.Encoder(ISSUER,"key",signer,32768,16384),Duration.ofMinutes(5),true,Duration.ofDays(1),Duration.ofDays(7),3,255);
    var exchange=OAuthServerRequest.parse(OAuthServerRequest.Endpoint.TOKEN,"POST",null,bytes(form(Map.of("client_id",f.client.getClientId(),"grant_type","authorization_code","code",code,"code_verifier",VERIFIER,"resource",RESOURCE))),headers(),limits);
    JsonObject one=json(redemption.redeem(exchange,selection,resources(),(context,budget)->decision(context.getSubject(),Set.of("read","write"),true),deadline).response());
-   String token=one.findString("access_token").orElseThrow(),credential=one.findString(refresh?"refresh_token":"access_token").orElseThrow();
+   String token=one.find("access_token").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow(),credential=one.find(refresh?"refresh_token":"access_token").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow();
    var revocationRequest=OAuthServerRequest.parse(OAuthServerRequest.Endpoint.REVOCATION,"POST",null,bytes(form(Map.of("client_id",f.client.getClientId(),"token",credential))),headers(),limits);
    var status=new OAuthIssuerTokenStatus(coordinator,codec,limits,f.clock,Duration.ofSeconds(30),3,255,65536);
    var revoker=new OAuthGrantRevocation(coordinator,codec,status,limits,3,255,32768,16384);
-   var snapshot=StaticJsonWebKeySource.fromJsonWebKeySet(JsonWebKeySet.fromJson(OAuthIssuerPublicKeys.jwks(keys().getVerificationKeys()).toJson()));
+   var snapshot=StaticJwksSource.fromJwks(assertInstanceOf(JwksParseResult.Succeeded.class, Jwks.fromJsonResult(OAuthIssuerPublicKeys.jwks(keys().getVerificationKeys()).toJson())).getJwks());
    // A URL registration is another source and cannot borrow the earlier CIMD owner fingerprint.
    assertEquals(200,revoker.revoke(revocationRequest,new OAuthServerClientSelection((id,budget)->Optional.of(f.client),limits,null),resources(),snapshot,deadline).response().getStatusCode());
    assertInstanceOf(OAuthIssuerAccessTokenResult.Succeeded.class,f.server.validateAccessTokenResult(bearer(token),RESOURCE));int before=fetches.get();

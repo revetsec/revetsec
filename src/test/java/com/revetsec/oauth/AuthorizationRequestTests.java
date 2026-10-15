@@ -16,6 +16,8 @@
 
 package com.revetsec.oauth;
 
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+
 import org.jspecify.annotations.NonNull;
 
 import com.revetsec.internal.encoding.QueryParameters;
@@ -62,8 +64,8 @@ final class AuthorizationRequestTests {
 		assertTrue(parameters.getValues("code_challenge").get(0).matches("[A-Za-z0-9_-]{43}"));
 		assertNotEquals(parameters.getValues("state"), QueryParameters.parse(second.getAuthorizationUri().getRawQuery())
 				.getValues("state"));
-		assertEquals(first.getPerFlowCookieName(), AuthorizationResponse.fromQueryString(
-				"state=" + parameters.getValues("state").get(0)).getPerFlowCookieName());
+		assertEquals(first.getPerFlowCookieName(), assertInstanceOf(AuthorizationResponseParseResult.Succeeded.class, AuthorizationResponse.fromQueryStringResult(
+				"state=" + parameters.getValues("state").get(0))).getResponse().getPerFlowCookieName().orElseThrow());
 		assertFalse(first.toString().contains(parameters.getValues("state").get(0)));
 		assertEquals(Map.of("returnTo", "/account"), first.getPendingAuthorization().getApplicationData());
 	}

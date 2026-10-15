@@ -22,7 +22,7 @@ import com.revetsec.internal.http.Deadline;
 import com.revetsec.jose.JwsAlgorithm;
 import com.revetsec.jose.JwsSigner;
 import com.revetsec.json.JsonObject;
-import com.revetsec.testing.TestJsonWebKeys;
+import com.revetsec.testing.TestJwk;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
@@ -69,7 +69,7 @@ final class OAuthIssuerConstructionBoundaryTests {
  }
 
  private static @NonNull JwsSigner signer() {
-  TestJsonWebKeys.Fixture key = TestJsonWebKeys.Fixture.IDP_SIGNING_RSA_2048;
+  TestJwk.Fixture key = TestJwk.Fixture.IDP_SIGNING_RSA_2048;
   return JwsSigner.fromRsaKeyPair(key.getPrivateKey(), key.getPublicKey(), JwsAlgorithm.RS256);
  }
 
@@ -79,7 +79,7 @@ final class OAuthIssuerConstructionBoundaryTests {
  }
 
  private static @NonNull OAuthIssuerKeyLifecycle lifecycle() {
-  TestJsonWebKeys.Fixture key = TestJsonWebKeys.Fixture.IDP_SIGNING_RSA_2048;
+  TestJwk.Fixture key = TestJwk.Fixture.IDP_SIGNING_RSA_2048;
   OAuthIssuerSigningKey active = OAuthIssuerSigningKey.fromKeyPair("key", key.getPrivateKey(), key.getPublicKey());
   OAuthIssuerKeySnapshot snapshot = OAuthIssuerKeySnapshot.withActiveKey(active)
    .generation("generation").publishedAt(NOW.minusSeconds(600)).build();
@@ -275,7 +275,7 @@ final class OAuthIssuerConstructionBoundaryTests {
  }
 
  @Test void keySnapshotBuilderAcceptsExactMapCapacity() {
-  TestJsonWebKeys.Fixture key = TestJsonWebKeys.Fixture.IDP_SIGNING_RSA_2048;
+  TestJwk.Fixture key = TestJwk.Fixture.IDP_SIGNING_RSA_2048;
   OAuthIssuerSigningKey active = OAuthIssuerSigningKey.fromKeyPair("key", key.getPrivateKey(), key.getPublicKey());
   Map<String, java.security.PublicKey> keys = new LinkedHashMap<>();
   Map<String, Instant> retirements = new LinkedHashMap<>();
@@ -288,7 +288,7 @@ final class OAuthIssuerConstructionBoundaryTests {
  }
 
  @Test void publicKeyProjectionAcceptsExactRsaIntegerWidths() throws Exception {
-  RSAPublicKey ordinary = (RSAPublicKey) TestJsonWebKeys.Fixture.IDP_SIGNING_RSA_2048.getPublicKey();
+  RSAPublicKey ordinary = (RSAPublicKey) TestJwk.Fixture.IDP_SIGNING_RSA_2048.getPublicKey();
   BigInteger exponent32 = BigInteger.ONE.shiftLeft(31).add(BigInteger.ONE);
   RSAPublicKey exactExponent = (RSAPublicKey) KeyFactory.getInstance("RSA")
    .generatePublic(new RSAPublicKeySpec(ordinary.getModulus(), exponent32));

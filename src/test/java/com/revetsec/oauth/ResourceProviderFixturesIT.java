@@ -166,15 +166,15 @@ final class ResourceProviderFixturesIT implements AutoCloseable {
 				.httpClient(httpClient()).allowInsecureLoopback(true).build();
 	}
 	static @NonNull BearerToken bearer(@NonNull TokenResponse token) {
-		return BearerToken.fromAuthorizationHeaderValues(List.of("Bearer " + token.getAccessToken().getValue())).orElseThrow();
+		return assertInstanceOf(BearerTokenResult.Present.class, BearerToken.fromAuthorizationHeaderValuesResult(List.of("Bearer " + token.getAccessToken().getValue()))).getToken();
 	}
 	@NonNull TokenResponse nodeCredentials(@NonNull OAuthClient client) {
-		return client.requestClientCredentialsToken(TokenRequestOptions.builder().resources(List.of(URI.create(RESOURCE)))
-				.scopes(Set.of("read")).build());
+		return assertInstanceOf(OAuthTokenRequestResult.Succeeded.class, client.requestClientCredentialsResult(TokenRequestOptions.builder().resources(List.of(URI.create(RESOURCE)))
+				.scopes(Set.of("read")).build())).getTokens();
 	}
 	@NonNull TokenResponse nodeOpaqueCredentials(@NonNull OAuthClient client) {
-		return client.requestClientCredentialsToken(TokenRequestOptions.builder().resources(List.of(URI.create(INTROSPECTION_RESOURCE)))
-				.scopes(Set.of("read")).build());
+		return assertInstanceOf(OAuthTokenRequestResult.Succeeded.class, client.requestClientCredentialsResult(TokenRequestOptions.builder().resources(List.of(URI.create(INTROSPECTION_RESOURCE)))
+				.scopes(Set.of("read")).build())).getTokens();
 	}
 	@NonNull TokenResponse codeFlow(@NonNull OAuthClient client, boolean node) throws Exception {
 		return codeFlow(client, node, Set.of("openid", "read"));
@@ -206,8 +206,8 @@ final class ResourceProviderFixturesIT implements AutoCloseable {
 				assertNull(next.getRawFragment());
 				StateSealer sealer = TestSealers.fromFixedKey();
 				String sealed = begin.getPendingAuthorization().toSealedForm(sealer, "resource-provider-test");
-				return client.completeAuthorization(AuthorizationResponse.fromQueryString(next.getRawQuery()),
-						PendingAuthorizationSource.fromSealedForm(sealed, sealer, "resource-provider-test"), CALLBACK);
+				return assertInstanceOf(AuthorizationCompletionResult.Succeeded.class, client.completeAuthorizationResult(assertInstanceOf(AuthorizationResponseParseResult.Succeeded.class, AuthorizationResponse.fromQueryStringResult(next.getRawQuery())).getResponse(),
+						PendingAuthorizationSource.fromSealedForm(sealed, sealer, "resource-provider-test"), CALLBACK)).getTokens();
 			}
 		}
 		throw new AssertionError("local provider exceeded redirect bound");

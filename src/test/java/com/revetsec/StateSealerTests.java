@@ -74,9 +74,8 @@ import java.util.stream.Stream;
 /**
  * The public sealer (M1 plan, "StateSealer v1"; G6-8 to G6-10; exit criteria 8 and 9).
  * <p>
- * Exit criterion 8: every way a value can fail to open gives the identical {@link InvalidSealedStateException}: the
- * same class, message, category and transience, no cause, nothing suppressed, and the same stack trace down to the
- * test's own call, because it is thrown from one place. Exit criterion 9: rotation, removed keys, label separation
+ * Exit criterion 8: every way a value can fail to open gives the same opaque {@link StateUnsealResult.Rejected}
+ * outcome without exposing input, cryptographic detail or a cause. Exit criterion 9: rotation, removed keys, label separation
  * through {@link SealedStateAccess}, the size limit and the argument and builder checks.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
@@ -103,7 +102,7 @@ final class StateSealerTests {
 			}
 		}
 
-		Assertions.assertEquals(PLAINTEXT, sealer.unseal(sealed, CONTEXT));
+		Assertions.assertEquals(PLAINTEXT, assertOpened(sealer.unsealResult(sealed, CONTEXT)));
 	}
 
 	// Exit criterion 8: truncation at every length, of the text and of the decoded bytes.
@@ -220,7 +219,7 @@ final class StateSealerTests {
 		String justTooLong = roomy.seal("x".repeat(2_793), CONTEXT, HOUR);
 
 		Assertions.assertEquals(3_802, justTooLong.length());
-		Assertions.assertEquals("x".repeat(2_793), roomy.unseal(justTooLong, CONTEXT));
+		Assertions.assertEquals("x".repeat(2_793), assertOpened(roomy.unsealResult(justTooLong, CONTEXT)));
 		assertUniformFailure(sealer, justTooLong, CONTEXT);
 		assertUniformFailure(sealer, "A".repeat(3_801), CONTEXT);
 		assertUniformFailure(sealer, "A".repeat(10_000_000), CONTEXT);
@@ -261,7 +260,7 @@ final class StateSealerTests {
 							Duration.ofSeconds(lifetime.toSeconds() + 1)) < 0);
 
 					clock.set(notAfter.minusNanos(1));
-					Assertions.assertEquals("x", sealer.unseal(sealed, CONTEXT));
+					Assertions.assertEquals("x", assertOpened(sealer.unsealResult(sealed, CONTEXT)));
 					clock.set(notAfter);
 					assertUniformFailure(sealer, sealed, CONTEXT);
 					clock.advance(Duration.ofDays(1_000));
@@ -280,14 +279,14 @@ final class StateSealerTests {
 		String old = before.seal("old", CONTEXT, HOUR);
 		String fresh = promoted.seal("new", CONTEXT, HOUR);
 
-		Assertions.assertEquals("old", added.unseal(old, CONTEXT));
-		Assertions.assertEquals("old", promoted.unseal(old, CONTEXT));
+		Assertions.assertEquals("old", assertOpened(added.unsealResult(old, CONTEXT)));
+		Assertions.assertEquals("old", assertOpened(promoted.unsealResult(old, CONTEXT)));
 		assertUniformFailure(retired, old, CONTEXT);
 
 		// Instances still in phase 1 already open what promoted instances seal.
-		Assertions.assertEquals("new", added.unseal(fresh, CONTEXT));
-		Assertions.assertEquals("new", promoted.unseal(fresh, CONTEXT));
-		Assertions.assertEquals("new", retired.unseal(fresh, CONTEXT));
+		Assertions.assertEquals("new", assertOpened(added.unsealResult(fresh, CONTEXT)));
+		Assertions.assertEquals("new", assertOpened(promoted.unsealResult(fresh, CONTEXT)));
+		Assertions.assertEquals("new", assertOpened(retired.unsealResult(fresh, CONTEXT)));
 		assertUniformFailure(before, fresh, CONTEXT);
 
 		// Verification keys only open: what a sealer seals names its active key.
@@ -329,12 +328,12 @@ final class StateSealerTests {
 		// Key ID "test": ceil(4 * (54 + 4 + p) / 3) <= 1,024 exactly when p <= 710.
 		String largest = sealer.seal("x".repeat(710), CONTEXT, HOUR);
 		Assertions.assertEquals(1_024, largest.length());
-		Assertions.assertEquals("x".repeat(710), sealer.unseal(largest, CONTEXT));
+		Assertions.assertEquals("x".repeat(710), assertOpened(sealer.unsealResult(largest, CONTEXT)));
 		Assertions.assertThrows(IllegalArgumentException.class, () -> sealer.seal("x".repeat(711), CONTEXT, HOUR));
 
 		// 236 euro signs are 708 UTF-8 bytes and fit; 237 are 711 bytes and do not, although they are 237 characters.
-		Assertions.assertEquals("\u20ac".repeat(236), sealer.unseal(sealer.seal("\u20ac".repeat(236), CONTEXT, HOUR),
-				CONTEXT));
+		Assertions.assertEquals("\u20ac".repeat(236), assertOpened(sealer.unsealResult(sealer.seal("\u20ac".repeat(236), CONTEXT, HOUR),
+				CONTEXT)));
 		Assertions.assertThrows(IllegalArgumentException.class, () -> sealer.seal("\u20ac".repeat(237), CONTEXT,
 				HOUR));
 		// 178 supplementary characters are 712 bytes in 356 UTF-16 code units.
@@ -350,7 +349,7 @@ final class StateSealerTests {
 	}
 
 	// Exit criterion 9: null or out-of-range arguments throw NullPointerException or IllegalArgumentException, never
-	// InvalidSealedStateException.
+	// an opaque rejection outcome.
 	// Deliberate null inputs verify runtime rejection.
 	@SuppressWarnings("NullAway")
 	@Test
@@ -361,21 +360,21 @@ final class StateSealerTests {
 		Assertions.assertThrows(NullPointerException.class, () -> sealer.seal(nullValue(), CONTEXT, HOUR));
 		Assertions.assertThrows(NullPointerException.class, () -> sealer.seal("x", nullValue(), HOUR));
 		Assertions.assertThrows(NullPointerException.class, () -> sealer.seal("x", CONTEXT, nullValue()));
-		Assertions.assertThrows(NullPointerException.class, () -> sealer.unseal(nullValue(), CONTEXT));
-		Assertions.assertThrows(NullPointerException.class, () -> sealer.unseal(sealed, nullValue()));
+		Assertions.assertThrows(NullPointerException.class, () -> sealer.unsealResult(nullValue(), CONTEXT));
+		Assertions.assertThrows(NullPointerException.class, () -> sealer.unsealResult(sealed, nullValue()));
 
 		// A context is 1 to 256 characters of well-formed UTF-16.
 		for (String context : List.of("", "x".repeat(257), "\ud800", "\udc00", "a\ud800b", "\udc00\ud800",
 				"\ud834\udd1e".repeat(128) + "x")) {
 			Assertions.assertThrows(IllegalArgumentException.class, () -> sealer.seal("x", context, HOUR),
 					() -> escape(context));
-			Assertions.assertThrows(IllegalArgumentException.class, () -> sealer.unseal(sealed, context),
+			Assertions.assertThrows(IllegalArgumentException.class, () -> sealer.unsealResult(sealed, context),
 					() -> escape(context));
 		}
 
-		Assertions.assertEquals("x", sealer.unseal(sealer.seal("x", "x".repeat(256), HOUR), "x".repeat(256)));
-		Assertions.assertEquals("x", sealer.unseal(sealer.seal("x", "\ud834\udd1e".repeat(128), HOUR),
-				"\ud834\udd1e".repeat(128)));
+		Assertions.assertEquals("x", assertOpened(sealer.unsealResult(sealer.seal("x", "x".repeat(256), HOUR), "x".repeat(256))));
+		Assertions.assertEquals("x", assertOpened(sealer.unsealResult(sealer.seal("x", "\ud834\udd1e".repeat(128), HOUR),
+				"\ud834\udd1e".repeat(128))));
 
 		// A plaintext is well-formed UTF-16.
 		for (String plaintext : List.of("\ud800", "x\udc00", "\udc00\ud800"))
@@ -388,8 +387,8 @@ final class StateSealerTests {
 			Assertions.assertThrows(IllegalArgumentException.class, () -> sealer.seal("x", CONTEXT, lifetime),
 					lifetime::toString);
 
-		Assertions.assertEquals("x", sealer.unseal(sealer.seal("x", CONTEXT, Duration.ofSeconds(1)), CONTEXT));
-		Assertions.assertEquals("x", sealer.unseal(sealer.seal("x", CONTEXT, Duration.ofDays(400)), CONTEXT));
+		Assertions.assertEquals("x", assertOpened(sealer.unsealResult(sealer.seal("x", CONTEXT, Duration.ofSeconds(1)), CONTEXT)));
+		Assertions.assertEquals("x", assertOpened(sealer.unsealResult(sealer.seal("x", CONTEXT, Duration.ofDays(400)), CONTEXT)));
 	}
 
 	// Exit criterion 9 and G6-9: the builder rejects duplicate key IDs or key bytes and more than 16 verification keys.
@@ -456,7 +455,7 @@ final class StateSealerTests {
 		String largest = sealer.seal("x".repeat(2_792), CONTEXT, HOUR);
 
 		Assertions.assertEquals(3_800, largest.length());
-		Assertions.assertEquals("x".repeat(2_792), sealer.unseal(largest, CONTEXT));
+		Assertions.assertEquals("x".repeat(2_792), assertOpened(sealer.unsealResult(largest, CONTEXT)));
 		Assertions.assertThrows(IllegalArgumentException.class, () -> sealer.seal("x".repeat(2_793), CONTEXT, HOUR));
 	}
 
@@ -467,7 +466,7 @@ final class StateSealerTests {
 		for (String plaintext : List.of("", " ", "\u0000", "h\u00e9llo w\u00f6rld \u2713 \ud834\udd1e", PLAINTEXT,
 				"\ufffd\ufeff")) {
 			for (String context : List.of("c", "tenant/\u00e9/\ud834\udd1e", "x".repeat(256), "\u0000"))
-				Assertions.assertEquals(plaintext, sealer.unseal(sealer.seal(plaintext, context, HOUR), context));
+				Assertions.assertEquals(plaintext, assertOpened(sealer.unsealResult(sealer.seal(plaintext, context, HOUR), context)));
 		}
 	}
 
@@ -505,13 +504,13 @@ final class StateSealerTests {
 				.build();
 		String sealed = sealer.seal("x", CONTEXT, Duration.ofDays(1));
 
-		Assertions.assertEquals("x", sealer.unseal(sealed, CONTEXT));
+		Assertions.assertEquals("x", assertOpened(sealer.unsealResult(sealed, CONTEXT)));
 		assertUniformFailure(future, sealed, CONTEXT);
-		Assertions.assertEquals("x", StateSealer.withActiveKey(TestSealers.fixedKey(TestSealers.FIXED_KEY_ID))
+		Assertions.assertEquals("x", assertOpened(StateSealer.withActiveKey(TestSealers.fixedKey(TestSealers.FIXED_KEY_ID))
 				.clock(TestClock.fromInstant(START))
 				.clock(null)
 				.build()
-				.unseal(sealed, CONTEXT));
+				.unsealResult(sealed, CONTEXT)));
 	}
 
 	// R9: no secret or input appears in any rendering or failure.
@@ -528,14 +527,14 @@ final class StateSealerTests {
 		Assertions.assertEquals("StateSealer{activeKeyId=2026-09, verificationKeyIds=[2026-06], "
 				+ "maximumSealedLength=3800}", sealer.toString());
 		Sentinels.assertAbsent(List.of(key, sealer, sealed));
-		Sentinels.assertAbsent(Assertions.assertThrows(InvalidSealedStateException.class,
-				() -> sealer.unseal(sealed, context + "x")));
-		Sentinels.assertAbsent(Assertions.assertThrows(InvalidSealedStateException.class,
-				() -> sealer.unseal(sealed.substring(1), context)));
+		Sentinels.assertAbsent(Assertions.assertInstanceOf(StateUnsealResult.Rejected.class,
+				sealer.unsealResult(sealed, context + "x")));
+		Sentinels.assertAbsent(Assertions.assertInstanceOf(StateUnsealResult.Rejected.class,
+				sealer.unsealResult(sealed.substring(1), context)));
 		Sentinels.assertAbsent(Assertions.assertThrows(IllegalArgumentException.class,
 				() -> StateSealer.withActiveKey(key).verificationKeys(List.of(SealingKey.fromBase64("copy",
 						keyWithMarker))).build()));
-		Assertions.assertEquals(Sentinels.SEALED_PLAINTEXT, sealer.unseal(sealed, context));
+		Assertions.assertEquals(Sentinels.SEALED_PLAINTEXT, assertOpened(sealer.unsealResult(sealed, context)));
 	}
 
 	// G6-9: build() runs a self-test, and throws IllegalStateException if the JCA provider refuses or misbehaves: if it
@@ -581,48 +580,23 @@ final class StateSealerTests {
 	}
 
 	/**
-	 * Asserts that {@code sealed} fails to open with the identical exception every failure gives: the same class,
-	 * message, category and transience, no cause, nothing suppressed, the same stack trace down to this class's own
-	 * call, and no echo of the input.
+	 * Asserts that every rejection has the same opaque variant and diagnostics, with no input or failure detail.
 	 */
 	private static void assertUniformFailure(@NonNull StateSealer sealer,
-																					 @NonNull String sealed,
-																					 @NonNull String context) {
-		InvalidSealedStateException e = failureOf(sealer, sealed, context);
-		InvalidSealedStateException reference = failureOf(sealer, "", CONTEXT);
-
-		Assertions.assertEquals(InvalidSealedStateException.class, e.getClass());
-		Assertions.assertEquals("Sealed state is invalid.", e.getMessage());
-		Assertions.assertEquals(ErrorCategory.VALIDATION_FAILURE, e.getCategory());
-		Assertions.assertFalse(e.isTransient());
-		Assertions.assertNull(e.getCause());
-		Assertions.assertEquals(0, e.getSuppressed().length);
-		Assertions.assertEquals(throwSite(reference), throwSite(e));
-
+			@NonNull String sealed, @NonNull String context) {
+		StateUnsealResult.Rejected rejected = Assertions.assertInstanceOf(StateUnsealResult.Rejected.class,
+				sealer.unsealResult(sealed, context));
+		StateUnsealResult.Rejected reference = Assertions.assertInstanceOf(StateUnsealResult.Rejected.class,
+				sealer.unsealResult("", CONTEXT));
+		Assertions.assertEquals(reference.toString(), rejected.toString());
+		Assertions.assertEquals(0, Arrays.stream(rejected.getClass().getDeclaredFields())
+				.filter(field -> !field.isSynthetic()).count());
 		if (sealed.length() >= 8)
-			Assertions.assertFalse(e.toString().contains(sealed));
+			Assertions.assertFalse(rejected.toString().contains(sealed));
 	}
 
-	/**
-	 * The one call site every failure in this class goes through, so their stack traces can be compared.
-	 */
-	private static @NonNull InvalidSealedStateException failureOf(@NonNull StateSealer sealer,
-																											 @NonNull String sealed,
-																											 @NonNull String context) {
-		return Assertions.assertThrows(InvalidSealedStateException.class, () -> sealer.unseal(sealed, context));
-	}
-
-	/**
-	 * The frames from where the exception was created down to {@link #failureOf}.
-	 */
-	private static @NonNull List<@NonNull StackTraceElement> throwSite(@NonNull Throwable e) {
-		StackTraceElement[] trace = e.getStackTrace();
-
-		for (int index = 0; index < trace.length; ++index)
-			if (trace[index].getMethodName().equals("failureOf"))
-				return List.of(Arrays.copyOf(trace, index + 1));
-
-		throw new AssertionError("No failureOf frame in " + Arrays.toString(trace));
+	private static @NonNull String assertOpened(@NonNull StateUnsealResult result) {
+		return Assertions.assertInstanceOf(StateUnsealResult.Succeeded.class, result).getValue();
 	}
 
 	/**
@@ -706,7 +680,7 @@ final class StateSealerTests {
 			String sealed = earlier.seal("x", CONTEXT, HOUR);
 
 			// A provider that refuses: build() fails, and the earlier sealer throws IllegalStateException from seal and
-			// the uniform exception from unseal, whose GCM step catches the provider's RuntimeException.
+			// the opaque rejection from unsealResult, whose GCM step catches the provider's RuntimeException.
 			Security.insertProviderAt(new TestProvider("RevetsecRefusing", RefusingGcm.class), 1);
 			if (!selects("RevetsecRefusing"))
 				return;
@@ -714,11 +688,9 @@ final class StateSealerTests {
 					TestSealers::fromFixedKey);
 			Assertions.assertInstanceOf(ProviderException.class, refused.getCause());
 			Assertions.assertThrows(IllegalStateException.class, () -> earlier.seal("x", CONTEXT, HOUR));
-			InvalidSealedStateException unsealed = Assertions.assertThrows(InvalidSealedStateException.class,
-					() -> earlier.unseal(sealed, CONTEXT));
-			Assertions.assertNull(unsealed.getCause());
+			Assertions.assertInstanceOf(StateUnsealResult.Rejected.class, earlier.unsealResult(sealed, CONTEXT));
 			Security.removeProvider("RevetsecRefusing");
-			Assertions.assertEquals("x", earlier.unseal(sealed, CONTEXT));
+			Assertions.assertEquals("x", assertOpened(earlier.unsealResult(sealed, CONTEXT)));
 
 			// A provider that never verifies the tag: the self-test's altered value opens, so build() fails.
 			Security.insertProviderAt(new TestProvider("RevetsecNonVerifying", NonVerifyingGcm.class), 1);
@@ -748,7 +720,7 @@ final class StateSealerTests {
 					TestSealers::fromFixedKey);
 			Assertions.assertEquals("The cryptographic provider failed StateSealer's self-test.", ivIgnored.getMessage());
 			Security.removeProvider("RevetsecIvIgnoring");
-			Assertions.assertEquals("x", TestSealers.fromFixedKey().unseal(sealed, CONTEXT));
+			Assertions.assertEquals("x", assertOpened(TestSealers.fromFixedKey().unsealResult(sealed, CONTEXT)));
 
 			System.out.println(SUCCESS);
 			System.out.flush();
@@ -790,7 +762,7 @@ final class StateSealerTests {
 
 			// build() draws the self-test's salt and IV; every draw succeeds until the budget is set.
 			StateSealer sealer = TestSealers.fromFixedKey();
-			Assertions.assertEquals("x", sealer.unseal(sealer.seal("x", CONTEXT, HOUR), CONTEXT));
+			Assertions.assertEquals("x", assertOpened(sealer.unsealResult(sealer.seal("x", CONTEXT, HOUR), CONTEXT)));
 
 			// The salt draw fails, then only the IV draw.
 			for (int successfulDraws = 0; successfulDraws < 2; ++successfulDraws) {
@@ -803,7 +775,7 @@ final class StateSealerTests {
 
 			// With draws working again, the same sealer seals again.
 			FailingRandom.REMAINING_DRAWS.set(Integer.MAX_VALUE);
-			Assertions.assertEquals("x", sealer.unseal(sealer.seal("x", CONTEXT, HOUR), CONTEXT));
+			Assertions.assertEquals("x", assertOpened(sealer.unsealResult(sealer.seal("x", CONTEXT, HOUR), CONTEXT)));
 
 			// A SecureRandom that cannot be constructed fails build(), a JVM-environment failure (section 9.6).
 			FailingRandom.FAIL_CONSTRUCTION.set(true);

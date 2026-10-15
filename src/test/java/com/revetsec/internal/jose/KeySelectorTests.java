@@ -19,8 +19,8 @@ package com.revetsec.internal.jose;
 import org.jspecify.annotations.NonNull;
 
 import com.revetsec.jose.JwsAlgorithm;
-import com.revetsec.testing.TestJsonWebKeys;
-import com.revetsec.testing.TestJsonWebKeys.Fixture;
+import com.revetsec.testing.TestJwk;
+import com.revetsec.testing.TestJwk.Fixture;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.DynamicTest;
@@ -308,7 +308,7 @@ final class KeySelectorTests {
 
 	private static @NonNull VerificationKey key(@NonNull Fixture fixture, @Nullable String kid, @Nullable String alg)
 			throws SkippedKeyException {
-		TestJsonWebKeys.Builder builder = TestJsonWebKeys.withFixture(fixture);
+		TestJwk.Builder builder = TestJwk.withFixture(fixture);
 		if (kid != null)
 			builder.kid(kid);
 		if (alg != null)

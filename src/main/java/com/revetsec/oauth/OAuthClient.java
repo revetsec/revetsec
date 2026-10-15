@@ -77,7 +77,7 @@ public final class OAuthClient {
 		@Override public void checkHmacAuthentication(@NonNull ClientAuthentication authentication, @NonNull Set<com.revetsec.jose.@NonNull JwsAlgorithm> algorithms) { authentication.checkHmac(algorithms); }
 		@Override public @NonNull OAuthException endpointFailure(OAuthException.@NonNull Reason reason) {
 			return switch (reason) {
-				case METADATA_INVALID -> OAuthValidationException.fromReason(reason);
+				case METADATA_INVALID, ISSUER_MISMATCH -> OAuthValidationException.fromReason(reason);
 				case DOCUMENT_MALFORMED -> OAuthResponseException.fromReason(reason);
 				case ISSUER_POLICY_UNAVAILABLE -> OAuthConfigurationException.fromReason(reason);
 				case NETWORK_FAILURE, INTERRUPTED, ATTEMPT_LIMIT -> OAuthTransportException.fromReason(reason, null);
@@ -89,6 +89,12 @@ public final class OAuthClient {
 		}
 		@Override public @NonNull OAuthException endpointStatusFailure(int status, @Nullable Duration retryAfter) {
 			return OAuthErrorResponseException.fromResponse(status, "", Optional.ofNullable(retryAfter));
+		}
+		@Override public @NonNull OAuthException metadataStatusFailure(int status, @Nullable Duration retryAfter) {
+			return OAuthErrorResponseException.fromMetadataResponse(status, Optional.ofNullable(retryAfter));
+		}
+		@Override public boolean isEndpointRejection(@NonNull OAuthErrorResponseException failure) {
+			return failure.isEndpointRejection();
 		}
 		@Override public OidcTransactionAccess.@NonNull RefreshCompletion refresh(@NonNull OAuthClient client, @NonNull RefreshToken token,
 				@NonNull TokenRequestOptions options, @NonNull AuthorizationServerMetadata metadata, @NonNull Deadline deadline, @NonNull Set<com.revetsec.jose.@NonNull JwsAlgorithm> hmacAlgorithms) {
@@ -269,7 +275,7 @@ public final class OAuthClient {
 	 * @return raw token response
 	 * @since 1.0.0
 	 */
-	public @NonNull TokenResponse completeAuthorization(@NonNull AuthorizationResponse response,
+	private @NonNull TokenResponse completeAuthorizationTokens(@NonNull AuthorizationResponse response,
 			@NonNull PendingAuthorizationSource source, @NonNull URI actualCallbackUri) {
 		CodeCompletion completion = complete(response, source, actualCallbackUri, "oauth",
 				this::metadata, Deadline.fromNow(this.totalDeadline));
@@ -278,10 +284,10 @@ public final class OAuthClient {
 
 
 	/**
-	 * Completes the flow once, returning endpoint tokens, a checked access_denied callback, or a local callback
-	 * security rejection, or a fixed pending-store failure. Other authorization errors and metadata, transport and
-	 * endpoint failures remain exceptions. Clear the pending cookie on every outcome. Atomic consumption and replay behavior are
-	 * identical to {@link #completeAuthorization(AuthorizationResponse, PendingAuthorizationSource, URI)}.
+	 * Completes the flow once, returning endpoint tokens, a checked authorization error, a local callback
+	 * security rejection, an endpoint client rejection, or a fixed pending-store failure. Metadata, transport,
+	 * malformed responses and transient endpoint failures remain exceptions. Clear the pending cookie on every outcome. Atomic consumption and replay behavior are
+	 * preserved: local checks precede I/O and an atomic store supplies client-side single use.
 	 * @param response parsed callback
 	 * @param source browser-bound pending source
 	 * @param actualCallbackUri receiving route URI from trusted routing configuration
@@ -292,10 +298,14 @@ public final class OAuthClient {
 	public @NonNull AuthorizationCompletionResult completeAuthorizationResult(@NonNull AuthorizationResponse response,
 			@NonNull PendingAuthorizationSource source, @NonNull URI actualCallbackUri) {
 		try {
-			return AuthorizationCompletionResult.fromTokens(completeAuthorization(response, source, actualCallbackUri));
+			return AuthorizationCompletionResult.fromTokens(completeAuthorizationTokens(response, source, actualCallbackUri));
 		} catch (AuthorizationErrorException failure) {
-			if (!failure.getErrorCode().equals(Optional.of("access_denied"))) throw failure;
-			return AuthorizationCompletionResult.fromDenial();
+			OAuthEndpointError error = OAuthEndpointError.fromWireValue(failure.getErrorCode().orElse(""));
+			return error == OAuthEndpointError.ACCESS_DENIED ? AuthorizationCompletionResult.fromDenial()
+					: AuthorizationCompletionResult.fromAuthorizationError(error);
+		} catch (OAuthErrorResponseException failure) {
+			if (!isEndpointRejection(failure)) throw failure;
+			return AuthorizationCompletionResult.fromEndpoint(failure);
 		} catch (OAuthValidationException rejection) {
 			if (!isLocalCallbackRejection(rejection.getReason())) throw rejection;
 			return AuthorizationCompletionResult.fromReason(rejection.getReason());
@@ -363,13 +373,75 @@ public final class OAuthClient {
 	}
 
 	/**
+	 * Requests one client-credentials token and returns issued tokens or a fixed endpoint client rejection.
+	 * A public client cannot use this grant. Transport, metadata, malformed responses and transient endpoint
+	 * failures remain exceptions. No request is automatically retried.
+	 * @param options scope, resource and safe additional form options
+	 * @return the token-request outcome
+	 * @since 1.0.0
+	 */
+	@CheckReturnValue
+	public @NonNull OAuthTokenRequestResult requestClientCredentialsResult(@NonNull TokenRequestOptions options) {
+		try {
+			return OAuthTokenRequestResult.fromTokens(requestClientCredentialsTokens(options));
+		} catch (OAuthErrorResponseException failure) {
+			if (!isEndpointRejection(failure)) throw failure;
+			return OAuthTokenRequestResult.fromEndpoint(failure);
+		}
+	}
+
+	/**
+	 * Sends one refresh POST and returns issued tokens or a fixed endpoint client rejection. The caller restricts
+	 * scopes to the original grant and retains the old refresh token when no replacement is returned. Transport,
+	 * metadata, malformed responses and transient endpoint failures remain exceptions. No request is retried.
+	 * @param refreshToken current refresh credential
+	 * @param options per-request scope and resources
+	 * @return the token-request outcome
+	 * @since 1.0.0
+	 */
+	@CheckReturnValue
+	public @NonNull OAuthTokenRequestResult refreshResult(@NonNull RefreshToken refreshToken,
+			@NonNull TokenRequestOptions options) {
+		try {
+			return OAuthTokenRequestResult.fromTokens(refreshTokens(refreshToken, options));
+		} catch (OAuthErrorResponseException failure) {
+			if (!isEndpointRejection(failure)) throw failure;
+			return OAuthTokenRequestResult.fromEndpoint(failure);
+		}
+	}
+
+	/**
+	 * Sends one RFC 7009 revocation POST and returns acceptance or a fixed endpoint client rejection.
+	 * A 200 response also accepts unknown tokens, and its body is ignored. Transport, metadata, malformed responses
+	 * and transient endpoint failures remain exceptions. No request is automatically retried.
+	 * @param token token to revoke
+	 * @param hint token type hint
+	 * @return the revocation outcome
+	 * @since 1.0.0
+	 */
+	@CheckReturnValue
+	public @NonNull OAuthRevocationResult revokeResult(@NonNull String token, @NonNull TokenTypeHint hint) {
+		try {
+			revokeToken(token, hint);
+			return OAuthRevocationResult.fromSuccess();
+		} catch (OAuthErrorResponseException failure) {
+			if (!isEndpointRejection(failure)) throw failure;
+			return OAuthRevocationResult.fromEndpoint(failure);
+		}
+	}
+
+	private static boolean isEndpointRejection(@NonNull OAuthErrorResponseException failure) {
+		return failure.isEndpointRejection();
+	}
+
+	/**
 	 * Requests one client-credentials token. A public client cannot use this grant.
 	 *
 	 * @param options scope, resource and safe additional form options
 	 * @return raw token response
 	 * @since 1.0.0
 	 */
-	public @NonNull TokenResponse requestClientCredentialsToken(@NonNull TokenRequestOptions options) {
+	private @NonNull TokenResponse requestClientCredentialsTokens(@NonNull TokenRequestOptions options) {
 		requireNonNull(options);
 		if (this.clientAuthentication.isPublicClient())
 			throw new IllegalStateException("A public client cannot request client credentials.");
@@ -392,7 +464,7 @@ public final class OAuthClient {
 	 * @return raw token response
 	 * @since 1.0.0
 	 */
-	public @NonNull TokenResponse refresh(@NonNull RefreshToken refreshToken, @NonNull TokenRequestOptions options) {
+	private @NonNull TokenResponse refreshTokens(@NonNull RefreshToken refreshToken, @NonNull TokenRequestOptions options) {
 		requireNonNull(refreshToken);
 		requireNonNull(options);
 		Deadline deadline = Deadline.fromNow(this.totalDeadline);
@@ -422,7 +494,7 @@ public final class OAuthClient {
 	 * @param hint its type hint
 	 * @since 1.0.0
 	 */
-	public void revoke(@NonNull String token, @NonNull TokenTypeHint hint) {
+	private void revokeToken(@NonNull String token, @NonNull TokenTypeHint hint) {
 		if (requireNonNull(token).isEmpty()) throw new IllegalArgumentException("A token must not be empty.");
 		requireNonNull(hint);
 		Deadline deadline = Deadline.fromNow(this.totalDeadline);

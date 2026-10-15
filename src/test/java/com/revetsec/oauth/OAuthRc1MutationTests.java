@@ -18,7 +18,7 @@ package com.revetsec.oauth;
 
 import com.revetsec.internal.encoding.QueryParameters;
 import com.revetsec.internal.Limits;
-import com.revetsec.testing.TestJsonWebKeys;
+import com.revetsec.testing.TestJwk;
 import com.revetsec.jose.JwsAlgorithm;
 import com.revetsec.jose.JwsSigner;
 import org.jspecify.annotations.NonNull;
@@ -60,13 +60,12 @@ final class OAuthRc1MutationTests {
         int maximum = Limits.AUTHORIZATION_RESPONSE_QUERY_SIZE.getDefaultIntValue();
         String query = "a=&".repeat(maximum / 3) + "b=";
         assertEquals(maximum, query.length());
-        AuthorizationResponse encoded = AuthorizationResponse.fromQueryString(query);
+        AuthorizationResponse encoded = assertInstanceOf(AuthorizationResponseParseResult.Succeeded.class, AuthorizationResponse.fromQueryStringResult(query)).getResponse();
         assertEquals(maximum / 3, java.util.Objects.requireNonNull(encoded.getParameters().get("a")).size());
-        AuthorizationResponse posted = AuthorizationResponse.fromFormBody(query.getBytes(StandardCharsets.UTF_8),
-                StandardCharsets.UTF_8, null);
+        AuthorizationResponse posted = assertInstanceOf(AuthorizationResponseParseResult.Succeeded.class, AuthorizationResponse.fromFormBodyResult(query.getBytes(StandardCharsets.UTF_8),
+                StandardCharsets.UTF_8, null)).getResponse();
         assertEquals(encoded.getParameters(), posted.getParameters());
-        assertEquals(OAuthException.Reason.CALLBACK_MALFORMED, assertThrows(OAuthResponseException.class,
-                () -> AuthorizationResponse.fromQueryString(query + "c")).getReason());
+        assertEquals(OAuthException.Reason.CALLBACK_MALFORMED, assertInstanceOf(AuthorizationResponseParseResult.Rejected.class, AuthorizationResponse.fromQueryStringResult(query + "c")).getReason());
     }
 
     @Test
@@ -75,40 +74,39 @@ final class OAuthRc1MutationTests {
         int query = Limits.AUTHORIZATION_RESPONSE_QUERY_SIZE.getDefaultIntValue();
         Map<String, List<String>> accepted = new LinkedHashMap<>();
         for (String name : List.of("a", "b", "c", "d")) accepted.put(name, List.of("x".repeat(parameter - 1)));
-        AuthorizationResponse response = AuthorizationResponse.fromParameters(accepted, null, AuthorizationRequestOptions.ResponseMode.QUERY);
+        AuthorizationResponse response = assertInstanceOf(AuthorizationResponseParseResult.Succeeded.class, AuthorizationResponse.fromParametersResult(accepted, null, AuthorizationRequestOptions.ResponseMode.QUERY)).getResponse();
         assertEquals(4, response.getParameters().size());
         assertEquals(query, response.getParameters().entrySet().stream()
                 .mapToInt(entry -> entry.getKey().length() + entry.getValue().get(0).length()).sum());
         accepted.put("e", List.of(""));
-        assertEquals(OAuthException.Reason.CALLBACK_MALFORMED, assertThrows(OAuthResponseException.class,
-                () -> AuthorizationResponse.fromParameters(accepted, null, AuthorizationRequestOptions.ResponseMode.QUERY)).getReason());
-        assertDoesNotThrow(() -> AuthorizationResponse.fromParameters(Map.of("a", List.of("é".repeat((parameter - 2) / 2) + "x")),
-                null, AuthorizationRequestOptions.ResponseMode.QUERY));
-        assertThrows(OAuthResponseException.class, () -> AuthorizationResponse.fromParameters(
+        assertEquals(OAuthException.Reason.CALLBACK_MALFORMED, assertInstanceOf(AuthorizationResponseParseResult.Rejected.class, AuthorizationResponse.fromParametersResult(accepted, null, AuthorizationRequestOptions.ResponseMode.QUERY)).getReason());
+        assertDoesNotThrow(() -> assertInstanceOf(AuthorizationResponseParseResult.Succeeded.class, AuthorizationResponse.fromParametersResult(Map.of("a", List.of("é".repeat((parameter - 2) / 2) + "x")),
+                null, AuthorizationRequestOptions.ResponseMode.QUERY)).getResponse());
+        assertInstanceOf(AuthorizationResponseParseResult.Rejected.class, AuthorizationResponse.fromParametersResult(
                 Map.of("a", List.of("é".repeat(parameter / 2))), null, AuthorizationRequestOptions.ResponseMode.QUERY));
-        assertDoesNotThrow(() -> AuthorizationResponse.fromParameters(Map.of("a".repeat(parameter), List.of("")),
-                null, AuthorizationRequestOptions.ResponseMode.QUERY));
+        assertDoesNotThrow(() -> assertInstanceOf(AuthorizationResponseParseResult.Succeeded.class, AuthorizationResponse.fromParametersResult(Map.of("a".repeat(parameter), List.of("")),
+                null, AuthorizationRequestOptions.ResponseMode.QUERY)).getResponse());
     }
 
     @Test
     void callbackParameterCountsIncludeFormAndQueryValues() {
         int maximum = Limits.AUTHORIZATION_RESPONSE_QUERY_SIZE.getDefaultIntValue();
         List<String> values = new ArrayList<>(java.util.Collections.nCopies(maximum, ""));
-        AuthorizationResponse response = AuthorizationResponse.fromParameters(Map.of("", values), null,
-                AuthorizationRequestOptions.ResponseMode.FORM_POST);
+        AuthorizationResponse response = assertInstanceOf(AuthorizationResponseParseResult.Succeeded.class, AuthorizationResponse.fromParametersResult(Map.of("", values), null,
+                AuthorizationRequestOptions.ResponseMode.FORM_POST)).getResponse();
         assertEquals(maximum, java.util.Objects.requireNonNull(response.getParameters().get("")).size());
         Map<String, List<String>> tooManyAcrossNames = new LinkedHashMap<>();
         tooManyAcrossNames.put("", values);
         tooManyAcrossNames.put("a", List.of(""));
-        assertThrows(OAuthResponseException.class, () -> AuthorizationResponse.fromParameters(tooManyAcrossNames, null,
+        assertInstanceOf(AuthorizationResponseParseResult.Rejected.class, AuthorizationResponse.fromParametersResult(tooManyAcrossNames, null,
                 AuthorizationRequestOptions.ResponseMode.QUERY));
         List<String> nearlyFull = values.subList(0, maximum - 1);
-        assertEquals(maximum - 1, java.util.Objects.requireNonNull(AuthorizationResponse.fromParameters(
-                Map.of("", nearlyFull), "extra=", AuthorizationRequestOptions.ResponseMode.FORM_POST)
+        assertEquals(maximum - 1, java.util.Objects.requireNonNull(assertInstanceOf(AuthorizationResponseParseResult.Succeeded.class, AuthorizationResponse.fromParametersResult(
+                Map.of("", nearlyFull), "extra=", AuthorizationRequestOptions.ResponseMode.FORM_POST)).getResponse()
                 .getParameters().get("")).size());
-        assertThrows(OAuthResponseException.class, () -> AuthorizationResponse.fromParameters(Map.of("", nearlyFull), "extra=&other=",
+        assertInstanceOf(AuthorizationResponseParseResult.Rejected.class, AuthorizationResponse.fromParametersResult(Map.of("", nearlyFull), "extra=&other=",
                 AuthorizationRequestOptions.ResponseMode.FORM_POST));
-        assertThrows(OAuthResponseException.class, () -> AuthorizationResponse.fromParameters(Map.of("", values), "extra=",
+        assertInstanceOf(AuthorizationResponseParseResult.Rejected.class, AuthorizationResponse.fromParametersResult(Map.of("", values), "extra=",
                 AuthorizationRequestOptions.ResponseMode.FORM_POST));
     }
 
@@ -117,17 +115,17 @@ final class OAuthRc1MutationTests {
         int maximum = Limits.AUTHORIZATION_RESPONSE_QUERY_SIZE.getDefaultIntValue();
         Map<String, List<String>> emptyValues = new LinkedHashMap<>();
         for (int index = 0; index < maximum; index++) emptyValues.put("extra" + index, List.of());
-        assertEquals(maximum, AuthorizationResponse.fromParameters(emptyValues, null,
-                AuthorizationRequestOptions.ResponseMode.QUERY).getParameters().size());
+        assertEquals(maximum, assertInstanceOf(AuthorizationResponseParseResult.Succeeded.class, AuthorizationResponse.fromParametersResult(emptyValues, null,
+                AuthorizationRequestOptions.ResponseMode.QUERY)).getResponse().getParameters().size());
         emptyValues.put("one-more", List.of());
-        assertThrows(OAuthResponseException.class, () -> AuthorizationResponse.fromParameters(emptyValues, null,
+        assertInstanceOf(AuthorizationResponseParseResult.Rejected.class, AuthorizationResponse.fromParametersResult(emptyValues, null,
                 AuthorizationRequestOptions.ResponseMode.QUERY));
         Map<String, List<String>> body = Map.of("a", List.of("x".repeat(8191)), "b", List.of("x".repeat(8191)),
                 "c", List.of("x".repeat(8191)));
-        AuthorizationResponse accepted = AuthorizationResponse.fromParameters(body, "d=" + "x".repeat(8191),
-                AuthorizationRequestOptions.ResponseMode.FORM_POST);
+        AuthorizationResponse accepted = assertInstanceOf(AuthorizationResponseParseResult.Succeeded.class, AuthorizationResponse.fromParametersResult(body, "d=" + "x".repeat(8191),
+                AuthorizationRequestOptions.ResponseMode.FORM_POST)).getResponse();
         assertEquals(4, accepted.getParameters().size());
-        assertThrows(OAuthResponseException.class, () -> AuthorizationResponse.fromParameters(body,
+        assertInstanceOf(AuthorizationResponseParseResult.Rejected.class, AuthorizationResponse.fromParametersResult(body,
                 "d=" + "x".repeat(8191) + "&e=", AuthorizationRequestOptions.ResponseMode.FORM_POST));
     }
 
@@ -175,7 +173,7 @@ final class OAuthRc1MutationTests {
         };
         client().build().assertionMetadataFailure(OAuthEndpoint.TOKEN, failure, observer);
         assertEquals(0, failures.get()); assertEquals(0, audiences.get());
-        TestJsonWebKeys.Fixture key = TestJsonWebKeys.Fixture.IDP_SIGNING_RSA_2048;
+        TestJwk.Fixture key = TestJwk.Fixture.IDP_SIGNING_RSA_2048;
         ClientAuthentication authentication = ClientAuthentication.withPrivateKeyJwt(budget -> ClientAssertionSigningKey.withSigner(
                 JwsSigner.fromRsaKeyPair(key.getPrivateKey(), key.getPublicKey(), JwsAlgorithm.RS256)).build())
                 .audience(ClientAssertionAudience.TOKEN_ENDPOINT).build();
@@ -307,10 +305,10 @@ final class OAuthRc1MutationTests {
     void pendingStoreReleasesBothSaveAndConsumeLocksAcrossFreshCallers() {
         InMemoryPendingAuthorizationStore store = InMemoryPendingAuthorizationStore.fromDefaults();
         java.time.Instant expiry = java.time.Instant.now().plusSeconds(60);
-        onBridgeCaller(() -> { store.save("browser", "state-a", "TEST-ONLY-record-a", expiry, Duration.ofSeconds(1)); return true; });
+        onBridgeCaller(() -> { org.junit.jupiter.api.Assertions.assertEquals(com.revetsec.oauth.PendingAuthorizationSaveResult.SAVED, store.save("browser", "state-a", "TEST-ONLY-record-a", expiry, Duration.ofSeconds(1))); return true; });
         assertEquals(java.util.Optional.of("TEST-ONLY-record-a"), onBridgeCaller(() ->
                 store.consume("browser", "state-a", Duration.ofSeconds(1))));
-        onBridgeCaller(() -> { store.save("browser", "state-b", "TEST-ONLY-record-b", expiry, Duration.ofSeconds(1)); return true; });
+        onBridgeCaller(() -> { org.junit.jupiter.api.Assertions.assertEquals(com.revetsec.oauth.PendingAuthorizationSaveResult.SAVED, store.save("browser", "state-b", "TEST-ONLY-record-b", expiry, Duration.ofSeconds(1))); return true; });
         assertEquals(java.util.Optional.of("TEST-ONLY-record-b"), onBridgeCaller(() ->
                 store.consume("browser", "state-b", Duration.ofSeconds(1))));
     }
@@ -321,11 +319,11 @@ final class OAuthRc1MutationTests {
         OAuthClient client = client().redirectUri(callback).build();
         PendingAuthorization pending = client.beginAuthorization().getPendingAuthorization();
         InMemoryPendingAuthorizationStore store = InMemoryPendingAuthorizationStore.fromDefaults();
-        pending.saveTo(store, "browser");
-        AuthorizationResponse response = AuthorizationResponse.fromQueryString("state=" + pending.state());
+        org.junit.jupiter.api.Assertions.assertEquals(PendingAuthorizationSaveResult.SAVED, pending.saveToResult(store, "browser"));
+        AuthorizationResponse response = assertInstanceOf(AuthorizationResponseParseResult.Succeeded.class, AuthorizationResponse.fromQueryStringResult("state=" + pending.state())).getResponse();
         assertEquals(OAuthException.Reason.CALLBACK_MALFORMED, assertThrows(OAuthResponseException.class, () ->
-                client.completeAuthorization(response, PendingAuthorizationSource.fromStore(store, "browser"), callback)).getReason());
-        assertThrowsExactly(IllegalStateException.class, () -> client.revoke("TEST-ONLY-token", TokenTypeHint.ACCESS_TOKEN));
+                client.completeAuthorizationResult(response, PendingAuthorizationSource.fromStore(store, "browser"), callback)).getReason());
+        assertThrowsExactly(IllegalStateException.class, () -> assertInstanceOf(OAuthRevocationResult.Succeeded.class, client.revokeResult("TEST-ONLY-token", TokenTypeHint.ACCESS_TOKEN)));
     }
 
     @Test

@@ -36,7 +36,7 @@
  *   <li>{@link com.revetsec.testing.RecordingObserver}: a proxy that records every observer hook call;</li>
  *   <li>{@link com.revetsec.testing.TestJws}: compact JWS and JWT strings signed with the JDK's own engines, and
  *   their hostile variants;</li>
- *   <li>{@link com.revetsec.testing.TestJsonWebKeys}: the TEST ONLY fixture keys as JWK and JWK Set JSON, and the
+ *   <li>{@link com.revetsec.testing.TestJwk}: the TEST ONLY fixture keys as JWK and JWK Set JSON, and the
  *   malformed, weak and unsupported keys a key-set parser must skip;</li>
  *   <li>{@link com.revetsec.testing.JsonText}: JSON text written without Revetsec's codec, for the raw values those
  *   two helpers take;</li>

@@ -24,7 +24,7 @@ import com.revetsec.internal.oauth.OidcTransactionAccess;
 import com.revetsec.jose.*;
 import com.revetsec.oauth.*;
 import com.revetsec.testing.*;
-import com.revetsec.testing.TestJsonWebKeys.Fixture;
+import com.revetsec.testing.TestJwk.Fixture;
 import com.revetsec.testing.TestJws.Algorithm;
 import com.revetsec.json.*;
 import org.junit.jupiter.api.Test;
@@ -60,7 +60,7 @@ final class OidcAuthenticationResultTests {
             String token = sign(claims(server, nonce(redirect)), false);
             respond(server, "/token", 200, "application/json", response(token, "Bearer"));
             InMemoryPendingAuthorizationStore store = InMemoryPendingAuthorizationStore.builder().clock(CLOCK).build();
-            redirect.getPendingAuthorization().saveTo(store, "browser");
+            org.junit.jupiter.api.Assertions.assertEquals(PendingAuthorizationSaveResult.SAVED, redirect.getPendingAuthorization().saveToResult(store, "browser"));
             PendingAuthorizationSource source = PendingAuthorizationSource.fromStore(store, "browser");
             OidcAuthenticationResult.Succeeded success = assertInstanceOf(OidcAuthenticationResult.Succeeded.class,
                     client.completeAuthenticationResult(callback(redirect), source, CALLBACK));
@@ -80,8 +80,8 @@ final class OidcAuthenticationResultTests {
             OidcClient client = builder(server).build();
             AuthorizationRedirect redirect = client.beginAuthentication();
             PendingAuthorizationStore broken = new PendingAuthorizationStore() {
-                @Override public void save(@NonNull String binding, @NonNull String state, @NonNull String opaque,
-                                           @NonNull Instant expiry, @NonNull Duration remaining) { }
+                @Override public @NonNull PendingAuthorizationSaveResult save(@NonNull String binding, @NonNull String state, @NonNull String opaque,
+                                           @NonNull Instant expiry, @NonNull Duration remaining) { return PendingAuthorizationSaveResult.SAVED; }
                 @Override public @NonNull Optional<@NonNull String> consume(@NonNull String binding, @NonNull String state,
                                                                              @NonNull Duration remaining) {
                     throw new IllegalStateException("TEST-ONLY-secret-provider-detail");
@@ -134,12 +134,12 @@ final class OidcAuthenticationResultTests {
             String state = QueryParameters.parse(redirect.getAuthorizationUri().getRawQuery()).getValues("state").get(0);
             PendingAuthorizationSource source = sealed(redirect);
             assertEquals(OAuthException.Reason.STATE_MISMATCH, assertInstanceOf(OidcAuthenticationResult.RejectedAuthorization.class,
-                    client.completeAuthenticationResult(AuthorizationResponse.fromQueryString("state=wrong&error=access_denied"), source, CALLBACK)).getReason());
+                    client.completeAuthenticationResult(assertInstanceOf(AuthorizationResponseParseResult.Succeeded.class, AuthorizationResponse.fromQueryStringResult("state=wrong&error=access_denied")).getResponse(), source, CALLBACK)).getReason());
             assertInstanceOf(OidcAuthenticationResult.Denied.class,
-                    client.completeAuthenticationResult(AuthorizationResponse.fromQueryString("state=" + state + "&error=access_denied"), source, CALLBACK));
+                    client.completeAuthenticationResult(assertInstanceOf(AuthorizationResponseParseResult.Succeeded.class, AuthorizationResponse.fromQueryStringResult("state=" + state + "&error=access_denied")).getResponse(), source, CALLBACK));
             assertEquals(0, server.getRequests().size());
-            assertThrows(AuthorizationErrorException.class, () -> client.completeAuthenticationResult(
-                    AuthorizationResponse.fromQueryString("state=" + state + "&error=temporarily_unavailable"), source, CALLBACK));
+            assertEquals(com.revetsec.oauth.OAuthEndpointError.TEMPORARILY_UNAVAILABLE, assertInstanceOf(OidcAuthenticationResult.RejectedAuthorizationError.class, client.completeAuthenticationResult(
+                    assertInstanceOf(AuthorizationResponseParseResult.Succeeded.class, AuthorizationResponse.fromQueryStringResult("state=" + state + "&error=temporarily_unavailable")).getResponse(), source, CALLBACK)).getError());
             respond(server, "/token", 503, "application/json", "{\"error\":\"temporarily_unavailable\"}");
             assertThrows(OAuthErrorResponseException.class, () -> client.completeAuthenticationResult(callback(redirect), source, CALLBACK));
             assertEquals(1, server.getRequests().size());
@@ -147,14 +147,14 @@ final class OidcAuthenticationResultTests {
     }
 	private static void respond(@NonNull TestHttpsServer server, @NonNull String path, int status, @NonNull String mediaType, @NonNull String body) { server.script(path, TestHttpsServer.Script.fromResponse(TestHttpsServer.Response.withStatus(status).header("Content-Type", mediaType).body(body.getBytes(StandardCharsets.UTF_8)).build())); }
 	private static OidcClient.@NonNull Builder builder(@NonNull TestHttpsServer server) {
-		return OidcClient.withProviderMetadata(metadata(server)).clientId("client").redirectUri(CALLBACK).clock(CLOCK).httpClient(TestTls.httpClient()).jsonWebKeySource(keys());
+		return OidcClient.withProviderMetadata(metadata(server)).clientId("client").redirectUri(CALLBACK).clock(CLOCK).httpClient(TestTls.httpClient()).jwksSource(keys());
 	}
-	private static @NonNull StaticJsonWebKeySource keys() { return StaticJsonWebKeySource.fromJsonWebKeySet(JsonWebKeySet.fromJson(TestJsonWebKeys.withFixture(Fixture.IDP_SIGNING_RSA_2048).kid("key").alg("RS256").toKeySetJson())); }
+	private static @NonNull StaticJwksSource keys() { return StaticJwksSource.fromJwks(assertInstanceOf(JwksParseResult.Succeeded.class, Jwks.fromJsonResult(TestJwk.withFixture(Fixture.IDP_SIGNING_RSA_2048).kid("key").alg("RS256").toKeySetJson())).getJwks()); }
 	private static @NonNull OidcProviderMetadata metadata(@NonNull TestHttpsServer server) { return OidcProviderMetadata.withIssuer(server.getBaseUri().toString()).authorizationEndpoint(server.uri("/authorize")).tokenEndpoint(server.uri("/token")).jwksUri(server.uri("/jwks")).build(); }
 	private static @NonNull PendingAuthorizationSource sealed(@NonNull AuthorizationRedirect redirect) { StateSealer sealer = TestSealers.fromFixedKey(); return PendingAuthorizationSource.fromSealedForm(redirect.getPendingAuthorization().toSealedForm(sealer, "oidc"), sealer, "oidc"); }
 	private static @NonNull String nonce(@NonNull AuthorizationRedirect redirect) throws Exception { return QueryParameters.parse(redirect.getAuthorizationUri().getRawQuery()).getValues("nonce").get(0); }
 	private static @NonNull String callbackQuery(@NonNull AuthorizationRedirect redirect) throws Exception { return "state=" + QueryParameters.parse(redirect.getAuthorizationUri().getRawQuery()).getValues("state").get(0) + "&code=" + CODE; }
-	private static @NonNull AuthorizationResponse callback(@NonNull AuthorizationRedirect redirect) throws Exception { return AuthorizationResponse.fromQueryString(callbackQuery(redirect)); }
+	private static @NonNull AuthorizationResponse callback(@NonNull AuthorizationRedirect redirect) throws Exception { return assertInstanceOf(AuthorizationResponseParseResult.Succeeded.class, AuthorizationResponse.fromQueryStringResult(callbackQuery(redirect))).getResponse(); }
 	private static @NonNull Map<@NonNull String, @NonNull String> claims(@NonNull TestHttpsServer server, @NonNull String nonce) { Map<String, String> claims = new LinkedHashMap<>(); claims.put("iss", JsonText.string(server.getBaseUri().toString())); claims.put("sub", "\"subject\""); claims.put("aud", "\"client\""); claims.put("exp", Long.toString(NOW.plusSeconds(300).getEpochSecond())); claims.put("iat", Long.toString(NOW.getEpochSecond())); claims.put("nonce", JsonText.string(nonce)); return claims; }
 	private static @NonNull String sign(@NonNull Map<@NonNull String, @NonNull String> claims, boolean forged) { return TestJws.withAlgorithm(Algorithm.RS256).kid("key").payload(JsonText.object(new ArrayList<>(claims.entrySet()))).sign(forged ? Fixture.NEGATIVE_ATTACKER_RSA_2048.getPrivateKey() : Fixture.IDP_SIGNING_RSA_2048.getPrivateKey()); }
 	private static @NonNull String response(@Nullable String token, @NonNull String type) { return "{\"access_token\":" + JsonText.string(ACCESS) + ",\"refresh_token\":" + JsonText.string(REFRESH) + ",\"token_type\":" + JsonText.string(type) + (token == null ? "" : ",\"id_token\":" + JsonText.string(token)) + "}"; }

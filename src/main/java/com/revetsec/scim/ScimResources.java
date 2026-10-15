@@ -295,7 +295,7 @@ final class ScimResources {
         private boolean stableMembers(@NonNull JsonArray array) {
             for (JsonValue value : array.getElements()) {
                 if (!spend(1)) return false;
-                if (!(value instanceof JsonObject object) || object.findString("value").filter(id -> !id.isEmpty()).isEmpty()) return false;
+                if (!(value instanceof JsonObject object) || object.find("value").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).filter(id -> !id.isEmpty()).isEmpty()) return false;
             }
             return true;
         }
@@ -306,11 +306,11 @@ final class ScimResources {
                 if (!spend(1)) return null;
                 if (!(value instanceof JsonObject candidate)) return null;
                 JsonObject prior = null;
-                String id = candidate.findString("value").orElse(null);
+                String id = candidate.find("value").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElse(null);
                 for (JsonValue old : current.getElements()) {
                     if (!spend(1)) return null;
                     if (old instanceof JsonObject existing && id != null) {
-                        String oldId = existing.findString("value").orElseThrow();
+                        String oldId = existing.find("value").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow();
                         if (!spend((long)id.length()+oldId.length())) return null;
                         if (id.equals(oldId)) {
                             if (prior != null) { error=ScimError.mutabilityInstance(); return null; }

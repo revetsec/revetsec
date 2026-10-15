@@ -64,7 +64,7 @@ import static java.util.Objects.requireNonNull;
  *     .kid("rsa-1")
  *     .typ("JWT")
  *     .payload(claims.toJson())
- *     .sign(TestJsonWebKeys.Fixture.IDP_SIGNING_RSA_2048.getPrivateKey());
+ *     .sign(TestJwk.Fixture.IDP_SIGNING_RSA_2048.getPrivateKey());
  * }</pre>
  * RS* use PKCS#1 v1.5, PS* use RSASSA-PSS with the RFC 7518 section 3.5 parameters (MGF1 with the same hash, a salt
  * as long as the hash, trailer field 1), ES* use the JDK's fixed-length {@code R || S} form

@@ -32,7 +32,7 @@ import java.util.Map;
 import static java.util.Objects.requireNonNull;
 
 /**
- * A test-only stand-in for the networked builders M2 to M4 add ({@code RemoteJsonWebKeySet}, {@code OAuthClient},
+ * A test-only stand-in for the networked builders M2 to M4 add ({@code RemoteJwks}, {@code OAuthClient},
  * {@code OidcClient}), shaped the way the plan requires them to be (R5, R6, R8, G6-5, section 9.6): {@link #build()}
  * validates the configuration against {@link Limits}, applies the {@link RuntimeFloor}, checks an injected client with
  * {@link HttpClientChecks}, and creates the component's {@link HttpExchange}, all with no I/O, no default client and

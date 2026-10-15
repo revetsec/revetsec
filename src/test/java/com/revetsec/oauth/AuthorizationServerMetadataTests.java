@@ -16,6 +16,8 @@
 
 package com.revetsec.oauth;
 
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+
 import com.revetsec.OutboundUriPolicy;
 import com.revetsec.testing.TestHttpsServer;
 import org.junit.jupiter.api.Test;
@@ -40,7 +42,7 @@ final class AuthorizationServerMetadataTests {
 
 	@Test
 	void remoteMetadataHasTypedFieldsAndExactIssuer() {
-		AuthorizationServerMetadata metadata = AuthorizationServerMetadata.fromJson(ISSUER, JSON);
+		AuthorizationServerMetadata metadata = assertInstanceOf(AuthorizationServerMetadataParseResult.Succeeded.class, AuthorizationServerMetadata.fromJsonResult(ISSUER, JSON)).getMetadata();
 		assertEquals(ISSUER, metadata.getIssuer());
 		assertEquals(URI.create("https://issuer.example/token"), metadata.getTokenEndpoint());
 		assertEquals(URI.create("https://issuer.example/revoke"), metadata.getRevocationEndpoint().orElseThrow());
@@ -48,8 +50,7 @@ final class AuthorizationServerMetadataTests {
 		assertTrue(metadata.isAuthorizationResponseIssuerSupported());
 		assertTrue(metadata.isRemotelyDiscovered());
 		assertEquals(OAuthException.Reason.ISSUER_MISMATCH,
-				assertThrows(OAuthValidationException.class,
-						() -> AuthorizationServerMetadata.fromJson(ISSUER + "/", JSON)).getReason());
+				assertInstanceOf(AuthorizationServerMetadataParseResult.Rejected.class, AuthorizationServerMetadata.fromJsonResult(ISSUER + "/", JSON)).getReason());
 	}
 
 	@Test
@@ -64,13 +65,13 @@ final class AuthorizationServerMetadataTests {
 								+ "\"token_endpoint\":\"https://issuer.example/other\""),
 				JSON.replace("\"issuer\"", "\"issuer\":\"other\",\"issuer\"")
 		})
-			assertThrows(OAuthResponseException.class, () -> AuthorizationServerMetadata.fromJson(ISSUER, malformed));
+			assertInstanceOf(AuthorizationServerMetadataParseResult.Rejected.class, AuthorizationServerMetadata.fromJsonResult(ISSUER, malformed));
 	}
 
 	@Test
 	void unsafeEndpointInRemoteMetadataCannotBuildAClient() {
-		AuthorizationServerMetadata unsafe = AuthorizationServerMetadata.fromJson(ISSUER,
-				JSON.replace("https://issuer.example/token", "http://issuer.example/token"));
+		AuthorizationServerMetadata unsafe = assertInstanceOf(AuthorizationServerMetadataParseResult.Succeeded.class, AuthorizationServerMetadata.fromJsonResult(ISSUER,
+				JSON.replace("https://issuer.example/token", "http://issuer.example/token"))).getMetadata();
 		assertThrows(IllegalArgumentException.class, () -> OAuthClient.withAuthorizationServerMetadata(unsafe)
 				.clientId("client").clientAuthentication(ClientAuthentication.noneInstance()).build());
 	}
@@ -79,7 +80,7 @@ final class AuthorizationServerMetadataTests {
 	void publicAddressPolicyRejectsMetadataDerivedLoopbackTokenEndpointBeforeRequest() throws Exception {
 		try (TestHttpsServer server = TestHttpsServer.start()) {
 			String document = JSON.replace("https://issuer.example/token", server.uri("/token").toString());
-			AuthorizationServerMetadata remote = AuthorizationServerMetadata.fromJson(ISSUER, document);
+			AuthorizationServerMetadata remote = assertInstanceOf(AuthorizationServerMetadataParseResult.Succeeded.class, AuthorizationServerMetadata.fromJsonResult(ISSUER, document)).getMetadata();
 			assertThrows(IllegalArgumentException.class, () -> OAuthClient.withAuthorizationServerMetadata(remote)
 					.clientId("client").clientAuthentication(ClientAuthentication.noneInstance())
 					.outboundUriPolicy(OutboundUriPolicy.publicAddressesOnlyInstance()).build());
@@ -99,7 +100,7 @@ final class AuthorizationServerMetadataTests {
 	}
     @Test void resourceFieldsHaveTypedGettersCopiesAndNullableResets() {
         String extra=JSON.substring(0,JSON.length()-1)+",\"jwks_uri\":\"https://issuer.example/keys\",\"introspection_endpoint\":\"https://issuer.example/inspect\",\"introspection_endpoint_auth_methods_supported\":[\"client_secret_basic\"]}";
-        AuthorizationServerMetadata m=AuthorizationServerMetadata.fromJson(ISSUER,extra);
+        AuthorizationServerMetadata m=assertInstanceOf(AuthorizationServerMetadataParseResult.Succeeded.class, AuthorizationServerMetadata.fromJsonResult(ISSUER,extra)).getMetadata();
         assertEquals(URI.create("https://issuer.example/keys"),m.getJwksUri().orElseThrow());assertEquals(URI.create("https://issuer.example/inspect"),m.getIntrospectionEndpoint().orElseThrow());assertEquals(Set.of("client_secret_basic"),m.getIntrospectionEndpointAuthMethodsSupported().orElseThrow());
         Set<String> immutableMethods=m.getIntrospectionEndpointAuthMethodsSupported().orElseThrow();assertThrows(UnsupportedOperationException.class,()->immutableMethods.add("other"));
         java.util.HashSet<String> methods=new java.util.HashSet<>(Set.of("client_secret_post"));
@@ -112,17 +113,17 @@ final class AuthorizationServerMetadataTests {
     @Test void malformedPresentResourceFieldsAreNotSilentlyOmitted() {
         for(String field:new String[]{"jwks_uri","introspection_endpoint"}) for(String value:new String[]{"null","42","\"\"","\"%%%\""}) {
             String document=JSON.substring(0,JSON.length()-1)+",\""+field+"\":"+value+"}";
-            assertThrows(OAuthResponseException.class,()->AuthorizationServerMetadata.fromJson(ISSUER,document));
+            assertInstanceOf(AuthorizationServerMetadataParseResult.Rejected.class, AuthorizationServerMetadata.fromJsonResult(ISSUER,document));
         }
         for(String value:new String[]{"null","42","[null]","[\"\"]","[\"a\",\"a\"]"}) {
             String document=JSON.substring(0,JSON.length()-1)+",\"introspection_endpoint_auth_methods_supported\":"+value+"}";
-            assertThrows(OAuthResponseException.class,()->AuthorizationServerMetadata.fromJson(ISSUER,document));
+            assertInstanceOf(AuthorizationServerMetadataParseResult.Rejected.class, AuthorizationServerMetadata.fromJsonResult(ISSUER,document));
         }
     }
     @Test void everyOptionalRequestableResourceEndpointUsesTheClientOutboundPolicy() {
         for(String field:new String[]{"jwks_uri","introspection_endpoint"}) {
             String document=JSON.substring(0,JSON.length()-1)+",\""+field+"\":\"http://10.0.0.1/private\"}";
-            AuthorizationServerMetadata m=AuthorizationServerMetadata.fromJson(ISSUER,document);
+            AuthorizationServerMetadata m=assertInstanceOf(AuthorizationServerMetadataParseResult.Succeeded.class, AuthorizationServerMetadata.fromJsonResult(ISSUER,document)).getMetadata();
             assertThrows(IllegalArgumentException.class,()->OAuthClient.withAuthorizationServerMetadata(m).clientId("client").clientAuthentication(ClientAuthentication.noneInstance()).build());
         }
     }

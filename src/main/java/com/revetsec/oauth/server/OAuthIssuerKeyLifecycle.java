@@ -18,8 +18,9 @@ package com.revetsec.oauth.server;
 
 import com.revetsec.internal.http.Deadline;
 import com.revetsec.json.JsonObject;
-import com.revetsec.jose.JsonWebKeySet;
-import com.revetsec.jose.StaticJsonWebKeySource;
+import com.revetsec.jose.Jwks;
+import com.revetsec.jose.JwksParseResult;
+import com.revetsec.jose.StaticJwksSource;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 import java.time.Clock;
@@ -135,9 +136,11 @@ final class OAuthIssuerKeyLifecycle {
   catch(VirtualMachineError fatal) { throw fatal; }
   catch(Throwable fault) { if(fault instanceof InterruptedException) Thread.currentThread().interrupt();throw signingFailure(); }
  }
- @NonNull StaticJsonWebKeySource verificationKeys(@NonNull Deadline deadline) {
+ @NonNull StaticJwksSource verificationKeys(@NonNull Deadline deadline) {
   OAuthIssuerKeySnapshot keys=snapshot(deadline);
-  StaticJsonWebKeySource result=StaticJsonWebKeySource.fromJsonWebKeySet(JsonWebKeySet.fromJson(OAuthIssuerPublicKeys.jwks(keys.getVerificationKeys()).toJson()));
+  JwksParseResult parsed = Jwks.fromJsonResult(OAuthIssuerPublicKeys.jwks(keys.getVerificationKeys()).toJson());
+  if (!(parsed instanceof JwksParseResult.Succeeded success)) throw new IllegalStateException("Generated issuer keys are invalid.");
+  StaticJwksSource result=StaticJwksSource.fromJwks(success.getJwks());
   OAuthServerClientAdmission.remaining(deadline);return result;
  }
  private @NonNull RuntimeException signingFailure() {

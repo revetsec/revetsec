@@ -48,13 +48,13 @@ final class OAuthStoreFence {
 		boolean issuer = kind == OAuthStoreKey.Kind.ISSUER_STATE;
 		if ((!issuer && kind != OAuthStoreKey.Kind.SUBJECT_STATE)
 			|| !payload.getMembers().keySet().equals(issuer ? ISSUER_FIELDS : SUBJECT_FIELDS)
-			|| payload.findLong("schema").orElse(-1L) != 1L) throw OAuthStoreFormat.invalid();
-		String incarnation = payload.findString("incarnation").orElseThrow(OAuthStoreFormat::invalid);
-		long epoch = payload.findLong("epoch").orElseThrow(OAuthStoreFormat::invalid);
+			|| OAuthStoreFormat.longMember(payload, "schema").orElse(-1L) != 1L) throw OAuthStoreFormat.invalid();
+		String incarnation = OAuthStoreFormat.stringMember(payload, "incarnation").orElseThrow(OAuthStoreFormat::invalid);
+		long epoch = OAuthStoreFormat.longMember(payload, "epoch").orElseThrow(OAuthStoreFormat::invalid);
 		Instant highWater = Instant.EPOCH;
 		if (issuer) {
-			long seconds = payload.findLong("highWaterSeconds").orElseThrow(OAuthStoreFormat::invalid);
-			long nanos = payload.findLong("highWaterNanos").orElseThrow(OAuthStoreFormat::invalid);
+			long seconds = OAuthStoreFormat.longMember(payload, "highWaterSeconds").orElseThrow(OAuthStoreFormat::invalid);
+			long nanos = OAuthStoreFormat.longMember(payload, "highWaterNanos").orElseThrow(OAuthStoreFormat::invalid);
 			if (nanos < 0 || nanos > 999999999) throw OAuthStoreFormat.invalid();
 			try { highWater = Instant.ofEpochSecond(seconds, nanos); }
 			catch (DateTimeException failure) { throw OAuthStoreFormat.invalid(); }

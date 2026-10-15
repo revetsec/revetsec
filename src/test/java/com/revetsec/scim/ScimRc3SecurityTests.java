@@ -15,6 +15,7 @@
  */
 
 package com.revetsec.scim;
+import com.revetsec.json.JsonBoolean;
 
 import com.revetsec.json.JsonArray;
 import com.revetsec.json.JsonObject;
@@ -318,8 +319,8 @@ class ScimRc3SecurityTests {
         Set<String> paths=result.getModifiedAttributePaths().stream().map(ScimAttributePath::toScimString).collect(java.util.stream.Collectors.toSet());
         assertTrue(paths.containsAll(Set.of("emails","emails.primary")));
         JsonArray emails=assertInstanceOf(JsonArray.class,result.getResource().getDocument().find("emails").orElseThrow());
-        assertFalse(assertInstanceOf(JsonObject.class,emails.getElements().get(0)).findBoolean("primary").orElseThrow());
-        assertTrue(assertInstanceOf(JsonObject.class,emails.getElements().get(1)).findBoolean("primary").orElseThrow());
+        assertFalse(assertInstanceOf(JsonObject.class,emails.getElements().get(0)).find("primary").filter(JsonBoolean.class::isInstance).map(JsonBoolean.class::cast).map(JsonBoolean::getValue).orElseThrow());
+        assertTrue(assertInstanceOf(JsonObject.class,emails.getElements().get(1)).find("primary").filter(JsonBoolean.class::isInstance).map(JsonBoolean.class::cast).map(JsonBoolean::getValue).orElseThrow());
     }
 
     @Test void resourceIdentifierLengthBoundaryAgreesWithLocationPreparation() {

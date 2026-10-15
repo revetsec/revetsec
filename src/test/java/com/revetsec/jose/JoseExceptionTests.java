@@ -34,7 +34,7 @@ import java.util.stream.Stream;
 
 /**
  * The JOSE exceptions (plan M2-2, G6-1 to G6-3): the {@link JoseException.Reason} partition over the three leaves and
- * categories, with fixed messages, no cause and no transience; and {@link JsonWebKeySetUnavailableException}'s four
+ * categories, with fixed messages, no cause and no transience; and {@link JwksUnavailableException}'s four
  * categories, one fixed message each, and a cause only for {@link ErrorCategory#TRANSPORT}.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
@@ -116,7 +116,7 @@ final class JoseExceptionTests {
 	// G6-2 and G6-3: a key set failure has TRANSPORT, REMOTE_ERROR, MALFORMED_INPUT or CONFIGURATION, one fixed message
 	// per category, and is transient only where the category allows it.
 	@Test
-	void keySetFailuresHaveFourCategoriesWithFixedMessages() {
+	void jwksFailuresHaveFourCategoriesWithFixedMessages() {
 		Map<ErrorCategory, String> messages = Map.of(
 				ErrorCategory.TRANSPORT, "The JSON Web Key Set could not be fetched.",
 				ErrorCategory.REMOTE_ERROR, "The JSON Web Key Set endpoint answered with an error.",
@@ -126,10 +126,10 @@ final class JoseExceptionTests {
 		for (ErrorCategory category : ErrorCategory.values()) {
 			if (!messages.containsKey(category)) {
 				Assertions.assertThrows(IllegalArgumentException.class,
-						() -> JsonWebKeySetUnavailableException.fromCategory(category, false), category::name);
+						() -> JwksUnavailableException.fromCategory(category, false), category::name);
 				continue;
 			}
-			JsonWebKeySetUnavailableException exception = JsonWebKeySetUnavailableException.fromCategory(category, false);
+			JwksUnavailableException exception = JwksUnavailableException.fromCategory(category, false);
 			Assertions.assertEquals(category, exception.getCategory());
 			Assertions.assertFalse(exception.isTransient());
 			Assertions.assertNull(exception.getCause());
@@ -137,10 +137,10 @@ final class JoseExceptionTests {
 
 			boolean mayBeTransient = category == ErrorCategory.TRANSPORT || category == ErrorCategory.REMOTE_ERROR;
 			if (mayBeTransient)
-				Assertions.assertTrue(JsonWebKeySetUnavailableException.fromCategory(category, true).isTransient());
+				Assertions.assertTrue(JwksUnavailableException.fromCategory(category, true).isTransient());
 			else
 				Assertions.assertThrows(IllegalArgumentException.class,
-						() -> JsonWebKeySetUnavailableException.fromCategory(category, true), category::name);
+						() -> JwksUnavailableException.fromCategory(category, true), category::name);
 		}
 	}
 
@@ -148,16 +148,16 @@ final class JoseExceptionTests {
 	@Test
 	void onlyATransportFailureKeepsItsIoExceptionAsTheCause() {
 		IOException cause = new IOException("connection reset");
-		JsonWebKeySetUnavailableException withCause = JsonWebKeySetUnavailableException.fromCategory(
+		JwksUnavailableException withCause = JwksUnavailableException.fromCategory(
 				ErrorCategory.TRANSPORT, true, cause);
 
 		Assertions.assertSame(cause, withCause.getCause());
 		Assertions.assertEquals("The JSON Web Key Set could not be fetched.", withCause.getMessage());
-		Assertions.assertNull(JsonWebKeySetUnavailableException.fromCategory(ErrorCategory.TRANSPORT, false, null)
+		Assertions.assertNull(JwksUnavailableException.fromCategory(ErrorCategory.TRANSPORT, false, null)
 				.getCause());
 		for (ErrorCategory category : List.of(ErrorCategory.REMOTE_ERROR, ErrorCategory.MALFORMED_INPUT,
 				ErrorCategory.CONFIGURATION))
 			Assertions.assertThrows(IllegalArgumentException.class,
-					() -> JsonWebKeySetUnavailableException.fromCategory(category, false, cause), category::name);
+					() -> JwksUnavailableException.fromCategory(category, false, cause), category::name);
 	}
 }

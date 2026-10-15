@@ -41,12 +41,12 @@ import static com.revetsec.oauth.Phase2Fixtures.*;
 /** Approved G13 nullable/reset/build/proof conventions and M5 no-I/O runtime boundary. */
 final class AccessTokenPhase2ContractTests {
     @Test void proofAndOutcomesCannotBeConstructedOrMintedByPublicFactories() {
-        for(Class<?> type:List.of(VerifiedAccessToken.class,AccessTokenValidationResult.class,AccessTokenValidationResult.Succeeded.class,AccessTokenValidationResult.Rejected.class)) {
+        for(Class<?> type:List.of(VerifiedAccessToken.class,AccessTokenValidationResult.class,AccessTokenValidationResult.Succeeded.class,AccessTokenValidationResult.Rejected.class,AccessTokenValidationResult.RejectedEndpoint.class)) {
             for(var c:type.getDeclaredConstructors()) assertFalse(java.lang.reflect.Modifier.isPublic(c.getModifiers())||java.lang.reflect.Modifier.isProtected(c.getModifiers()));
             for(var m:type.getDeclaredMethods()) assertFalse(java.lang.reflect.Modifier.isStatic(m.getModifiers())&&java.lang.reflect.Modifier.isPublic(m.getModifiers()));
         }
         assertTrue(AccessTokenValidator.class.isSealed());assertEquals(Set.of(JwtAccessTokenValidator.class,TokenIntrospectionClient.class),Set.of(AccessTokenValidator.class.getPermittedSubclasses()));
-        VerifiedAccessToken proof=jwt().build().validate(bearer(token(claims(ISSUER),"at+jwt")));
+        VerifiedAccessToken proof=assertInstanceOf(AccessTokenValidationResult.Succeeded.class, jwt().build().validateResult(bearer(token(claims(ISSUER),"at+jwt")))).getAccessToken();
         assertFalse(Arrays.stream(VerifiedAccessToken.class.getDeclaredFields()).anyMatch(f->f.getType()==Jwt.class||f.getName().equals("token")));
         assertThrows(UnsupportedOperationException.class,()->proof.getScopes().add("write-other"));assertThrows(UnsupportedOperationException.class,()->proof.getAudiences().add("other"));
     }
@@ -57,7 +57,7 @@ final class AccessTokenPhase2ContractTests {
                 .allowInsecureLoopback(true).acknowledgeUnpatchedRuntime(true).observer(new AccessTokenObserver(){});
         assertSame(builder,builder.allowedAlgorithms(null).requiredClaims(null).scopeClaimName(null).compatibility(null).maximumTokenLength(null).clockSkew(null).clock(null).httpClient(null).outboundUriPolicy(null).requestTimeout(null).totalDeadline(null)
                 .minimumTimeToLive(null).defaultTimeToLive(null).maximumTimeToLive(null).discoveryCooldown(null).allowInsecureLoopback(null).acknowledgeUnpatchedRuntime(null).observer(null).clock(CLOCK).clockSkew(Duration.ZERO));
-        JwtAccessTokenValidator before=builder.build();assertSame(builder,builder.expectedAudiences(Set.of("other")));assertNotNull(before.validate(bearer(token(claims(ISSUER),"at+jwt"))));
+        JwtAccessTokenValidator before=builder.build();assertSame(builder,builder.expectedAudiences(Set.of("other")));assertNotNull(assertInstanceOf(AccessTokenValidationResult.Succeeded.class, before.validateResult(bearer(token(claims(ISSUER),"at+jwt")))).getAccessToken());
         assertSame(builder,builder.expectedAudiences(null));assertThrows(IllegalStateException.class,builder::build);
         assertThrows(IllegalArgumentException.class,()->jwt().expectedAudiences(Set.of()));assertThrows(IllegalArgumentException.class,()->jwt().expectedAudiences(Set.of("")));assertThrows(IllegalArgumentException.class,()->jwt().requiredClaims(Set.of("")));
         assertThrows(IllegalArgumentException.class,()->jwt().scopeClaimName("custom"));assertThrows(IllegalArgumentException.class,()->jwt().allowedAlgorithms(Set.of()).build());assertThrows(IllegalArgumentException.class,()->jwt().allowedAlgorithms(Set.of(JwsAlgorithm.HS256)).build());
@@ -65,13 +65,13 @@ final class AccessTokenPhase2ContractTests {
         assertThrows(IllegalArgumentException.class,()->jwt().minimumTimeToLive(Duration.ofHours(1)).defaultTimeToLive(Duration.ofMinutes(1)).build());
     }
     @Test void staticKeysBypassNetworkRuntimeGuardButNetworkedBuildFailsClosed() throws Exception {
-        Runtime.Version old=Runtime.Version.parse("17.0.1");JwtAccessTokenValidator staticKeys=jwt().build(old);staticKeys.warmUp();assertNotNull(staticKeys.validate(bearer(token(claims(ISSUER),"at+jwt"))));
+        Runtime.Version old=Runtime.Version.parse("17.0.1");JwtAccessTokenValidator staticKeys=jwt().build(old);staticKeys.warmUp();assertNotNull(assertInstanceOf(AccessTokenValidationResult.Succeeded.class, staticKeys.validateResult(bearer(token(claims(ISSUER),"at+jwt")))).getAccessToken());
         assertThrows(IllegalStateException.class,()->JwtAccessTokenValidator.withIssuer(ISSUER).expectedAudiences(Set.of(AUD)).build(old));
         AtomicInteger warnings=new AtomicInteger();assertNotNull(JwtAccessTokenValidator.withIssuer(ISSUER).expectedAudiences(Set.of(AUD)).acknowledgeUnpatchedRuntime(true).observer(new AccessTokenObserver(){@Override public void didUseUnpatchedRuntime(@NonNull String v){warnings.incrementAndGet();}}).build(old));assertEquals(1,warnings.get());
         assertThrows(IllegalArgumentException.class,()->JwtAccessTokenValidator.withIssuer("https://issuer.example?bad").expectedAudiences(Set.of(AUD)).build());
         assertThrows(IllegalArgumentException.class,()->JwtAccessTokenValidator.withIssuer("http://10.0.0.1").expectedAudiences(Set.of(AUD)).build());
         try(TestHttpsServer server=TestHttpsServer.start()) {
-            assertNotNull(JwtAccessTokenValidator.withIssuer(server.getBaseUri().toString()).expectedAudiences(Set.of(AUD)).jsonWebKeySource(null).httpClient(TestTls.httpClient()).build());assertEquals(0,server.getRequests().size());
+            assertNotNull(JwtAccessTokenValidator.withIssuer(server.getBaseUri().toString()).expectedAudiences(Set.of(AUD)).jwksSource(null).httpClient(TestTls.httpClient()).build());assertEquals(0,server.getRequests().size());
         }
     }
     @Test void introspectionSettersResetAndBoundsRejectBeforeIo() throws Exception {
@@ -90,9 +90,9 @@ final class AccessTokenPhase2ContractTests {
     }
     @Test void duplicateClaimsAndPreparedOperationCannotWeakenTheConfiguredPolicy() throws Exception {
         String payload=JsonText.object(new ArrayList<>(claims(ISSUER).entrySet()));payload=payload.substring(0,payload.length()-1)+",\"aud\":\"resource\"}";
-        String duplicate=TestJws.withAlgorithm(TestJws.Algorithm.RS256).kid("key").typ("at+jwt").payload(payload).sign(TestJsonWebKeys.Fixture.IDP_SIGNING_RSA_2048.getPrivateKey());assertInstanceOf(AccessTokenValidationResult.Rejected.class,jwt().build().validateResult(bearer(duplicate)));
+        String duplicate=TestJws.withAlgorithm(TestJws.Algorithm.RS256).kid("key").typ("at+jwt").payload(payload).sign(TestJwk.Fixture.IDP_SIGNING_RSA_2048.getPrivateKey());assertInstanceOf(AccessTokenValidationResult.Rejected.class,jwt().build().validateResult(bearer(duplicate)));
         String compact=token(claims(ISSUER),"at+jwt");PreparedJws prepared=JwtProcessor.prepare(compact,JoseHeaderPolicy.fromSettings(65536,Set.of(JwsAlgorithm.RS256),Set.of("at+jwt"),true));
-        JwtValidator mismatch=JwtValidator.withIssuer(ISSUER).jsonWebKeySource(keys()).expectedAudiences(Set.of(AUD)).clock(CLOCK).build();assertEquals(JoseException.Reason.INVALID_TYPE,assertThrows(JoseException.class,()->JwtValidationAccess.get().validatePrepared(mismatch,prepared,()->Duration.ofSeconds(10).toNanos())).getReason());
+        JwtValidator mismatch=JwtValidator.withIssuer(ISSUER).jwksSource(keys()).expectedAudiences(Set.of(AUD)).clock(CLOCK).build();assertEquals(JoseException.Reason.INVALID_TYPE,assertThrows(JoseException.class,()->JwtValidationAccess.get().validatePrepared(mismatch,prepared,()->Duration.ofSeconds(10).toNanos())).getReason());
     }
     @Test void resourceBuildsStartNoThreadsAndNeverLoadTheDefaultHttpClient(@org.junit.jupiter.api.io.TempDir java.nio.file.@NonNull Path directory) throws Exception {
         java.nio.file.Path log=directory.resolve("class-load.log");ChildJvm.Result result=ChildJvm.withMainClass(ResourceBuildChild.class).jvmOptions(List.of("-Xlog:class+load=info:file=\""+log+"\":none:filecount=0")).timeout(Duration.ofSeconds(60)).build().run();
@@ -101,12 +101,12 @@ final class AccessTokenPhase2ContractTests {
     public static final class ResourceBuildChild {
         private ResourceBuildChild() { }
         public static void main(@NonNull String @NonNull [] arguments) {
-            StaticJsonWebKeySource staticKeys=keys();RemoteJsonWebKeySource remote=RemoteJsonWebKeySource.withUri(URI.create(ISSUER+"/keys")).build();
+            StaticJwksSource staticKeys=keys();RemoteJwksSource remote=RemoteJwksSource.withUri(URI.create(ISSUER+"/keys")).build();
             OAuthClient discovered=OAuthClient.withIssuer(ISSUER).clientId("app").clientAuthentication(ClientAuthentication.fromClientSecretBasic(SECRET)).build();
             OAuthClient configured=OAuthClient.withAuthorizationServerMetadata(AuthorizationServerMetadata.withIssuer(ISSUER).authorizationEndpoint(URI.create(ISSUER+"/authorize")).tokenEndpoint(URI.create(ISSUER+"/token")).introspectionEndpoint(URI.create(ISSUER+"/inspect")).build()).clientId("app").clientAuthentication(ClientAuthentication.fromClientSecretBasic(SECRET)).build();
             java.lang.management.ThreadMXBean threads=java.lang.management.ManagementFactory.getThreadMXBean();long before=threads.getTotalStartedThreadCount();
             for(int i=0;i<1000;i++) {
-                assertNotNull(JwtAccessTokenValidator.withIssuer(ISSUER).expectedAudiences(Set.of(AUD)).build());assertNotNull(JwtAccessTokenValidator.withIssuer(ISSUER).expectedAudiences(Set.of(AUD)).jsonWebKeySource(staticKeys).build());assertNotNull(JwtAccessTokenValidator.withIssuer(ISSUER).expectedAudiences(Set.of(AUD)).jsonWebKeySource(remote).build());assertNotNull(TokenIntrospectionClient.withOAuthClient(discovered).expectedAudiences(Set.of(AUD)).build());assertNotNull(TokenIntrospectionClient.withOAuthClient(configured).expectedAudiences(Set.of(AUD)).build());
+                assertNotNull(JwtAccessTokenValidator.withIssuer(ISSUER).expectedAudiences(Set.of(AUD)).build());assertNotNull(JwtAccessTokenValidator.withIssuer(ISSUER).expectedAudiences(Set.of(AUD)).jwksSource(staticKeys).build());assertNotNull(JwtAccessTokenValidator.withIssuer(ISSUER).expectedAudiences(Set.of(AUD)).jwksSource(remote).build());assertNotNull(TokenIntrospectionClient.withOAuthClient(discovered).expectedAudiences(Set.of(AUD)).build());assertNotNull(TokenIntrospectionClient.withOAuthClient(configured).expectedAudiences(Set.of(AUD)).build());
             }
             System.out.println("5000 resource builds; threads started: "+(threads.getTotalStartedThreadCount()-before));
         }

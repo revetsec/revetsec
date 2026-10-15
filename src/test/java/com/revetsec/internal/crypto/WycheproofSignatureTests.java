@@ -15,6 +15,7 @@
  */
 
 package com.revetsec.internal.crypto;
+import com.revetsec.json.JsonString;
 
 import org.jspecify.annotations.NonNull;
 
@@ -143,14 +144,14 @@ public final class WycheproofSignatureTests {
 					&& !(group.getString("mgf").equals("MGF1") && group.getString("mgfSha").equals(group.getString("sha"))
 					&& group.getInteger("sLen") == hash(group).getLength()),
 			// SHA-1 and SHA-224 have no JOSE signature algorithm.
-			"hash-not-jose", group -> group.findString("sha").filter(sha -> !JOSE_HASHES.containsKey(sha)).isPresent(),
+			"hash-not-jose", group -> group.getJson().find("sha").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).filter(sha -> !JOSE_HASHES.containsKey(sha)).isPresent(),
 			// RFC 7518 section 3.2: an HS* secret is at least as long as the hash output.
 			"key-shorter-than-hash", group -> isMac(group) && group.getInteger("keySize") < macHash(group).getLength() * 8,
 			// RFC 7518 section 3.2: an HS* tag is the full hash output (a secret long enough, so only the tag decides).
 			"truncated-tag", group -> isMac(group) && group.getInteger("tagSize") < macHash(group).getLength() * 8
 					&& group.getInteger("keySize") >= macHash(group).getLength() * 8,
 			// M2-7: the public exponent is at least 65537, so e = 3 keys are refused.
-			"small-public-exponent", group -> group.findObject("publicKey").flatMap(key -> key.findString("publicExponent"))
+			"small-public-exponent", group -> group.findObject("publicKey").flatMap(key -> key.find("publicExponent").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue))
 					.filter(exponent -> positive(exponent).compareTo(MINIMUM_PUBLIC_EXPONENT) < 0).isPresent());
 
 	/**
@@ -649,7 +650,7 @@ public final class WycheproofSignatureTests {
 
 	private static byte @NonNull [] base64Url(@NonNull TestGroup group, @NonNull JsonObject jwk, @NonNull String member) {
 		try {
-			return Base64Url.decode(jwk.findString(member).orElseThrow(() -> new AssertionError(group + ": the JWK "
+			return Base64Url.decode(jwk.find(member).filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow(() -> new AssertionError(group + ": the JWK "
 					+ "has no " + member)));
 		} catch (EncodingException exception) {
 			throw new AssertionError(group + ": the JWK's " + member + " is not canonical base64url", exception);
@@ -713,7 +714,7 @@ public final class WycheproofSignatureTests {
 		 */
 		private static @NonNull Setup ecdsa(@NonNull TestGroup group) {
 			JsonObject publicKey = group.getObject("publicKey");
-			String curveName = publicKey.findString("curve").orElse("");
+			String curveName = publicKey.find("curve").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElse("");
 			EcCurve curve = Arrays.stream(EcCurve.values()).filter(value -> value.getStandardName().equals(curveName))
 					.findFirst().orElseThrow(() -> new AssertionError(group + ": no curve " + curveName));
 			HashAlgorithm hash = hash(group);
@@ -726,7 +727,7 @@ public final class WycheproofSignatureTests {
 			};
 			Assertions.assertEquals(joseHash, hash, () -> group + ": the hash JOSE pairs with " + curve.getName());
 
-			byte[] point = HexFormat.of().parseHex(publicKey.findString("uncompressed").orElse(""));
+			byte[] point = HexFormat.of().parseHex(publicKey.find("uncompressed").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElse(""));
 			int length = curve.getCoordinateLength();
 			Assertions.assertEquals(1 + 2 * length, point.length, () -> group + ": an uncompressed point");
 			Assertions.assertEquals(4, point[0], () -> group + ": an uncompressed point");
@@ -734,7 +735,7 @@ public final class WycheproofSignatureTests {
 			byte[] y = Arrays.copyOfRange(point, 1 + length, point.length);
 
 			group.findObject("publicKeyJwk").ifPresent(jwk -> {
-				Assertions.assertEquals(Optional.of(curve.getName()), jwk.findString("crv"), () -> group + ": crv");
+				Assertions.assertEquals(Optional.of(curve.getName()), jwk.find("crv").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue), () -> group + ": crv");
 				Assertions.assertArrayEquals(x, base64Url(group, jwk, "x"), () -> group + ": the JWK's x");
 				Assertions.assertArrayEquals(y, base64Url(group, jwk, "y"), () -> group + ": the JWK's y");
 			});
@@ -753,8 +754,8 @@ public final class WycheproofSignatureTests {
 		private static @NonNull Setup rsa(@NonNull TestGroup group,
 														 @NonNull Family family) {
 			JsonObject publicKey = group.getObject("publicKey");
-			byte[] modulus = unsigned(positive(publicKey.findString("modulus").orElse("")));
-			byte[] exponent = unsigned(positive(publicKey.findString("publicExponent").orElse("")));
+			byte[] modulus = unsigned(positive(publicKey.find("modulus").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElse("")));
+			byte[] exponent = unsigned(positive(publicKey.find("publicExponent").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElse("")));
 			HashAlgorithm hash = hash(group);
 
 			Stream.of("keyJwk", "publicKeyJwk").map(group::findObject).flatMap(Optional::stream).forEach(jwk -> {
@@ -774,11 +775,11 @@ public final class WycheproofSignatureTests {
 		 */
 		private static @NonNull Setup ed25519(@NonNull TestGroup group) {
 			JsonObject publicKey = group.getObject("publicKey");
-			Assertions.assertEquals(Optional.of("edwards25519"), publicKey.findString("curve"), () -> group + ": curve");
-			byte[] encoded = HexFormat.of().parseHex(publicKey.findString("pk").orElse(""));
+			Assertions.assertEquals(Optional.of("edwards25519"), publicKey.find("curve").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue), () -> group + ": curve");
+			byte[] encoded = HexFormat.of().parseHex(publicKey.find("pk").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElse(""));
 
 			group.findObject("publicKeyJwk").ifPresent(jwk -> {
-				Assertions.assertEquals(Optional.of("Ed25519"), jwk.findString("crv"), () -> group + ": crv");
+				Assertions.assertEquals(Optional.of("Ed25519"), jwk.find("crv").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue), () -> group + ": crv");
 				Assertions.assertArrayEquals(encoded, base64Url(group, jwk, "x"), () -> group + ": the JWK's x");
 			});
 

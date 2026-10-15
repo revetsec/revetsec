@@ -69,7 +69,7 @@ final class IssuerApplicationTests {
   if(secret!=null)request=request.copy().headers(h->h.put("Authorization",List.of("Basic "+Base64.getEncoder().encodeToString((client+":"+secret).getBytes(StandardCharsets.UTF_8))))).finish();return app.token(request);
  }
  static @NonNull String issued(@NonNull IssuerResources app,@NonNull String scopes) {var response=redeem(app,"demo-public",code(app,"demo-public",scopes),null);assertEquals(200,response.getStatusCode());return text(response);}
- static @NonNull BearerToken bearer(@NonNull String token) {return BearerToken.fromAuthorizationHeaderValues(List.of("Bearer "+token)).orElseThrow();}
+ static @NonNull BearerToken bearer(@NonNull String token) {return ((com.revetsec.oauth.BearerTokenResult.Present) BearerToken.fromAuthorizationHeaderValuesResult(List.of("Bearer "+token))).getToken();}
  static @NonNull OAuthIssuerKeyProvider signingKeys(@NonNull Clock clock) throws Exception {
   var generator=java.security.KeyPairGenerator.getInstance("RSA");generator.initialize(2048);var pair=generator.generateKeyPair();
   return OAuthIssuerKeyProvider.fromSnapshot(OAuthIssuerKeySnapshot.withActiveKey(OAuthIssuerSigningKey.fromKeyPair(

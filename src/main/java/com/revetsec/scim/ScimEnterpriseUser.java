@@ -54,22 +54,22 @@ import static java.util.Objects.requireNonNull;
      * @return the provisioning value
      * @since 1.0.0
      */
-    public @NonNull Optional<@NonNull String> getEmployeeNumber() { return extension.findString("employeeNumber"); }
+    public @NonNull Optional<@NonNull String> getEmployeeNumber() { return extension.find("employeeNumber").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue); }
     /** Returns department.
      * @return the provisioning value
      * @since 1.0.0
      */
-    public @NonNull Optional<@NonNull String> getDepartment() { return extension.findString("department"); }
+    public @NonNull Optional<@NonNull String> getDepartment() { return extension.find("department").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue); }
     /** Returns organization.
      * @return the provisioning value
      * @since 1.0.0
      */
-    public @NonNull Optional<@NonNull String> getOrganization() { return extension.findString("organization"); }
+    public @NonNull Optional<@NonNull String> getOrganization() { return extension.find("organization").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue); }
     /** Returns division.
      * @return the provisioning value
      * @since 1.0.0
      */
-    public @NonNull Optional<@NonNull String> getDivision() { return extension.findString("division"); }
+    public @NonNull Optional<@NonNull String> getDivision() { return extension.find("division").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue); }
     /** Returns the manager object without fetching its link.
      * @return the manager
      * @since 1.0.0

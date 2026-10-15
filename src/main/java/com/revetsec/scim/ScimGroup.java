@@ -52,7 +52,7 @@ import static java.util.Objects.requireNonNull;
      * @return the provisioning value
      * @since 1.0.0
      */
-    public @NonNull String getDisplayName() { return resource.getDocument().findString("displayName").orElseThrow(); }
+    public @NonNull String getDisplayName() { return resource.getDocument().find("displayName").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow(); }
     /** Returns members.
      * @return the provisioning value
      * @since 1.0.0

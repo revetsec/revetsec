@@ -77,11 +77,10 @@ final class OidcPendingCodecTests {
 					};
 					assertNotEquals(encoded, altered); AtomicReference<String> saved = new AtomicReference<>(altered);
 					PendingAuthorizationStore store = new PendingAuthorizationStore() {
-						@Override public void save(@NonNull String binding, @NonNull String state, @NonNull String record, @NonNull Instant expiry, @NonNull Duration remaining) { saved.set(record); }
+						@Override public @NonNull PendingAuthorizationSaveResult save(@NonNull String binding, @NonNull String state, @NonNull String record, @NonNull Instant expiry, @NonNull Duration remaining) { saved.set(record); return PendingAuthorizationSaveResult.SAVED; }
 						@Override public @NonNull Optional<@NonNull String> consume(@NonNull String binding, @NonNull String state, @NonNull Duration remaining) { return Optional.ofNullable(saved.getAndSet(null)); }
 					};
-					assertEquals(OAuthException.Reason.PENDING_AUTHORIZATION_INVALID, assertThrows(OAuthValidationException.class,
-							() -> client.completeAuthentication(AuthorizationResponse.fromQueryString("state=" + pending.state() + "&code=sentinel-code"), PendingAuthorizationSource.fromStore(store, "browser"), CALLBACK)).getReason());
+					assertEquals(OAuthException.Reason.PENDING_AUTHORIZATION_INVALID, assertInstanceOf(OidcAuthenticationResult.RejectedAuthorization.class, client.completeAuthenticationResult(assertInstanceOf(AuthorizationResponseParseResult.Succeeded.class, AuthorizationResponse.fromQueryStringResult("state=" + pending.state() + "&code=sentinel-code")).getResponse(), PendingAuthorizationSource.fromStore(store, "browser"), CALLBACK)).getReason());
 				}));
 	}
 	@Test
@@ -95,6 +94,8 @@ final class OidcPendingCodecTests {
 			@Override public @NonNull OAuthException endpointFailure(OAuthException.@NonNull Reason reason) { throw new AssertionError(); }
 			@Override public @NonNull OAuthException endpointExchangeFailure(com.revetsec.internal.http.@NonNull HttpExchangeException failure) { throw new AssertionError(); }
 			@Override public @NonNull OAuthException endpointStatusFailure(int status, @Nullable Duration retryAfter) { throw new AssertionError(); }
+			@Override public @NonNull OAuthException metadataStatusFailure(int status, @Nullable Duration retryAfter) { throw new AssertionError(); }
+			@Override public boolean isEndpointRejection(@NonNull OAuthErrorResponseException failure) { throw new AssertionError(); }
 			@Override public OidcTransactionAccess.@NonNull RefreshCompletion refresh(@NonNull OAuthClient client, @NonNull RefreshToken token, @NonNull TokenRequestOptions options, @NonNull AuthorizationServerMetadata metadata, com.revetsec.internal.http.@NonNull Deadline deadline, @NonNull Set<com.revetsec.jose.@NonNull JwsAlgorithm> hmac) { throw new AssertionError(); }
 
 			@Override public @NonNull AuthorizationRedirect begin(@NonNull OAuthClient client, @NonNull AuthorizationRequestOptions options, @NonNull AuthorizationServerMetadata metadata, @Nullable Duration maxAge, @NonNull Set<@NonNull String> acr) { throw new AssertionError(); }
@@ -119,7 +120,7 @@ final class OidcPendingCodecTests {
 			@Override public com.revetsec.jose.@NonNull Jwt validateOidc(com.revetsec.jose.@NonNull JwtValidator v, @NonNull String c, @NonNull Set<com.revetsec.jose.@NonNull JwsAlgorithm> a, byte @NonNull [] s, java.util.function.@NonNull LongSupplier d, @NonNull Runnable u) { throw new AssertionError(); }
 			@Override public com.revetsec.jose.@NonNull Jwt validateMicrosoftEntra(com.revetsec.jose.@NonNull JwtValidator v, @NonNull String c, java.util.function.@NonNull LongSupplier d) { throw new AssertionError(); }
 			@Override public com.revetsec.jose.@NonNull Jwt validateMicrosoftEntraUserInfo(com.revetsec.jose.@NonNull JwtValidator v, @NonNull String c, @NonNull String i, java.util.function.@NonNull LongSupplier d) { throw new AssertionError(); }
-			@Override public void warmUp(com.revetsec.jose.@NonNull RemoteJsonWebKeySource source, java.util.function.@NonNull LongSupplier d) { throw new AssertionError(); }
+			@Override public void warmUp(com.revetsec.jose.@NonNull RemoteJwksSource source, java.util.function.@NonNull LongSupplier d) { throw new AssertionError(); }
 		}));
 	}
 	private static @NonNull OidcClient oidcClient() {

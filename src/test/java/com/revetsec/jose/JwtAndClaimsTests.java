@@ -19,7 +19,7 @@ package com.revetsec.jose;
 import com.revetsec.json.JsonNumber;
 import com.revetsec.json.JsonObject;
 import com.revetsec.json.JsonString;
-import com.revetsec.testing.TestJsonWebKeys.Fixture;
+import com.revetsec.testing.TestJwk.Fixture;
 import com.revetsec.testing.TestJws;
 import com.revetsec.testing.TestJws.Algorithm;
 import org.junit.jupiter.api.Assertions;
@@ -86,7 +86,7 @@ final class JwtAndClaimsTests {
 		Assertions.assertThrows(UnsupportedOperationException.class, () -> full.getAudiences().add("x"));
 		Assertions.assertThrows(UnsupportedOperationException.class, () -> full.getClaimNames().add("x"));
 
-		JwtClaims sparse = JwtFixtures.assertAccepted(JwtValidator.withIssuer(JwtFixtures.ISSUER).jsonWebKeySource(
+		JwtClaims sparse = JwtFixtures.assertAccepted(JwtValidator.withIssuer(JwtFixtures.ISSUER).jwksSource(
 				JwtFixtures.source(Fixture.IDP_SIGNING_RSA_2048)).acceptAnyAudience(true).clock(JwtFixtures.clock()).build(),
 				JwtFixtures.signed(Fixture.IDP_SIGNING_RSA_2048, Algorithm.RS256, JwtFixtures.claims().remove("sub")
 						.remove("aud").remove("iat"))).getClaims();

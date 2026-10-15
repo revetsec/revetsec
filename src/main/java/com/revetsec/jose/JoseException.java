@@ -27,7 +27,7 @@ import static java.util.Objects.requireNonNull;
 
 /**
  * A rejected JOSE input: a token that {@link JwtValidator} refused, or a JSON Web Key Set document that
- * {@link JsonWebKeySet#fromJson(String)} refused.
+ * {@link Jwks#fromJsonResult(String)} rejected.
  * <p>
  * Every instance has a {@link Reason}, which also fixes its class and {@link ErrorCategory}:
  * <ul>

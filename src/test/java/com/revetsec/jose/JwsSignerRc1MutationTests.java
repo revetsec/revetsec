@@ -18,7 +18,7 @@ package com.revetsec.jose;
 
 import com.revetsec.internal.http.Deadline;
 import com.revetsec.json.JsonString;
-import com.revetsec.testing.TestJsonWebKeys;
+import com.revetsec.testing.TestJwk;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
@@ -214,7 +214,7 @@ final class JwsSignerRc1MutationTests {
    AtomicReference<Throwable> failure = new AtomicReference<>();
    Thread worker = new Thread(() -> {
     try {
-     var fixture = TestJsonWebKeys.Fixture.IDP_SIGNING_RSA_2048;
+     var fixture = TestJwk.Fixture.IDP_SIGNING_RSA_2048;
      Signature engine = Signature.getInstance("SHA256withRSA"); engine.initSign(fixture.getPrivateKey()); engine.update((byte)1);
      byte[] signature = engine.sign();
      Signature verifier = Signature.getInstance("SHA256withRSA"); verifier.initVerify(fixture.getPublicKey()); verifier.update((byte)1);
@@ -235,7 +235,7 @@ final class JwsSignerRc1MutationTests {
  }
  private static void assertZero(byte @NonNull [] bytes) { assertArrayEquals(new byte[bytes.length], bytes); }
  private static @NonNull JwsSigner signer() {
-  var fixture = TestJsonWebKeys.Fixture.IDP_SIGNING_RSA_2048;
+  var fixture = TestJwk.Fixture.IDP_SIGNING_RSA_2048;
   return JwsSigner.fromRsaKeyPair(new ProbeKey(fixture.getPrivateKey()), fixture.getPublicKey(), JwsAlgorithm.PS256);
  }
  private static byte @NonNull [] signAndVerify(@NonNull JwsSigner signer, byte @NonNull [] input, @NonNull Deadline deadline) throws Exception {
@@ -257,7 +257,7 @@ final class JwsSignerRc1MutationTests {
  }
  private static void withProvider(@NonNull Scenario scenario) throws Exception {
   // Load fixture key material before installing this operation-only provider.
-  assertNotNull(TestJsonWebKeys.Fixture.IDP_SIGNING_RSA_2048.getPrivateKey());
+  assertNotNull(TestJwk.Fixture.IDP_SIGNING_RSA_2048.getPrivateKey());
   State state = new State(requireNonNull(Security.getProvider("SunRsaSign")));
   assertNull(Security.getProvider(PROVIDER_NAME));
   Provider provider = new FixtureProvider(state);

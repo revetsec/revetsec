@@ -33,16 +33,13 @@ final class BearerTokenResultTests {
     }
 
     @Test
-    void invalidGrammarAndDuplicatesYieldMalformedWithTheSameLegacyVerdict() {
+    void invalidGrammarAndDuplicatesYieldMalformed() {
         for (List<String> fields : List.of(List.of(""), List.of("Bearer"), List.of("Basic secret"),
                 List.of("Bearer\tsecret"), List.of(" Bearer secret"), List.of("Bearer secret "),
                 List.of("Bearer x,y"), List.of("Bearer x\r\n"), List.of("Bearer é"),
                 List.of("Bearer ="), List.of("Bearer x=y"), List.of("Bearer a", "Bearer a"))) {
             BearerTokenResult malformed = BearerToken.fromAuthorizationHeaderValuesResult(fields);
             assertInstanceOf(BearerTokenResult.Malformed.class, malformed);
-            assertEquals(AccessTokenValidationException.Reason.MALFORMED_REQUEST,
-                    assertThrows(AccessTokenValidationException.class,
-                            () -> BearerToken.fromAuthorizationHeaderValues(fields)).getReason());
             assertFalse(malformed.toString().contains("secret"));
         }
     }

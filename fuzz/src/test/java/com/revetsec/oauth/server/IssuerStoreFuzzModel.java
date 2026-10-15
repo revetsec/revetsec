@@ -57,8 +57,8 @@ final class IssuerStoreFuzzModel {
 		try {
 			JsonObject opened = openedCodec.open(candidate, openedClock);
 			assertTrue(expected, "substituted address/version/retention/ciphertext/namespace/key must reject");
-			assertEquals(text, opened.findString("text").orElseThrow());
-			assertEquals(kind.name(), opened.findString("kind").orElseThrow());
+			assertEquals(text, opened.find("text").map(com.revetsec.json.JsonString.class::cast).map(com.revetsec.json.JsonString::getValue).orElseThrow());
+			assertEquals(kind.name(), opened.find("kind").map(com.revetsec.json.JsonString.class::cast).map(com.revetsec.json.JsonString::getValue).orElseThrow());
 		} catch (IllegalArgumentException failure) { assertFalse(expected, "authentic unexpired envelope must open"); }
 	}
 

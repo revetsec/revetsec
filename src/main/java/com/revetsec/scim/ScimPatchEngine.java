@@ -428,7 +428,7 @@ final class ScimPatchEngine {
         for (int index=0; index<values.size(); index++) {
             if (!spend(1)) return null;
             JsonObject object=(JsonObject)values.get(index);
-            if (object.findBoolean(primary.getName()).orElse(false)) {
+            if (object.find(primary.getName()).filter(JsonBoolean.class::isInstance).map(JsonBoolean.class::cast).map(JsonBoolean::getValue).orElse(false)) {
                 if (assigned >= 0 && preferred < 0) { error=ScimError.invalidValueInstance(); return null; }
                 assigned=index;
             }
@@ -437,7 +437,7 @@ final class ScimPatchEngine {
         for (int index=0; index<values.size(); index++) {
             if (!spend(1)) return null;
             JsonObject object=(JsonObject)values.get(index);
-            if (index != preferred && object.findBoolean(primary.getName()).orElse(false)) {
+            if (index != preferred && object.find(primary.getName()).filter(JsonBoolean.class::isInstance).map(JsonBoolean.class::cast).map(JsonBoolean::getValue).orElse(false)) {
                 if (primary.getMutability() != ScimMutability.READ_WRITE) { error=ScimError.mutabilityInstance(); return null; }
                 if (!spend(object.getMembers().size()+1L)) return null;
                 LinkedHashMap<String,JsonValue> children=new LinkedHashMap<>(object.getMembers());
@@ -452,7 +452,7 @@ final class ScimPatchEngine {
         ScimAttributeDefinition primary=ScimSchemas.attribute(definition.getSubAttributes(),"primary").orElse(null);
         if (primary == null || primary.getType() != ScimAttributeType.BOOLEAN) return false;
         return primary.getName().equals(suffix) && incoming instanceof JsonBoolean value && value.getValue()
-                || suffix == null && incoming instanceof JsonObject object && object.findBoolean(primary.getName()).orElse(false);
+                || suffix == null && incoming instanceof JsonObject object && object.find(primary.getName()).filter(JsonBoolean.class::isInstance).map(JsonBoolean.class::cast).map(JsonBoolean::getValue).orElse(false);
     }
     private @Nullable JsonValue removeIds(@Nullable JsonValue old,@NonNull JsonArray ids) {
         List<JsonValue> output=new ArrayList<>();

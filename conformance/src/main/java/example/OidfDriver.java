@@ -23,7 +23,7 @@ import com.revetsec.*;
 import com.revetsec.internal.json.JsonCodec;
 import com.revetsec.internal.json.JsonLimits;
 import com.revetsec.json.*;
-import com.revetsec.jose.RemoteJsonWebKeySource;
+import com.revetsec.jose.RemoteJwksSource;
 import com.revetsec.jose.JwsSigner;
 import com.revetsec.jose.JwsAlgorithm;
 import java.math.BigInteger;
@@ -95,7 +95,7 @@ public final class OidfDriver {
         for (String plan : PLANS) runPlan(plan);
         save(output.resolve("outcomes.json"), JsonArray.fromElements(outcomes));
         check(outcomes.size() == 60, "Unexpected module count");
-        check(outcomes.stream().allMatch(v -> ((JsonObject)v).findBoolean("accepted").orElse(false)), "OIDF gate failed; see module evidence");
+        check(outcomes.stream().allMatch(v -> ((JsonObject)v).find("accepted").map(com.revetsec.json.JsonBoolean.class::cast).map(com.revetsec.json.JsonBoolean::getValue).orElse(false)), "OIDF gate failed; see module evidence");
         System.out.println("Completed 60 module runs; five comprehensive modules are source-selected out of profile.");
     }
     void runPlan(@NonNull String plan) throws Exception {
@@ -154,29 +154,24 @@ public final class OidfDriver {
                 .redirectUri(CALLBACK).scopes(Set.of("profile", "email", "address", "phone")).httpClient(http).allowInsecureLoopback(true);
             if (name.contains("signing-key-rotation")) {
                 JsonObject metadata = object(parse(request("GET", URI.create(text(object(running.getMembers().get("exposed")), "discoveryUrl")),null).body()));
-                builder.jsonWebKeySource(RemoteJsonWebKeySource.withUri(URI.create(text(metadata,"jwks_uri"))).httpClient(http)
+                builder.jwksSource(RemoteJwksSource.withUri(URI.create(text(metadata,"jwks_uri"))).httpClient(http)
                     .unknownKeyRefreshCooldown(Duration.ofSeconds(1)).build());
             }
             if (name.equals("oidcc-client-test-invalid-sig-es256")) builder.idTokenSigningAlgorithms(Set.of(JwsAlgorithm.ES256));
             if (name.equals("oidcc-client-test-userinfo-signed")) builder.userInfoSignedResponseAlgorithm(JwsAlgorithm.RS256);
             OidcClient client = builder.build();
-            boolean form = module.getMembers().get("variant") instanceof JsonObject selected && selected.findString("response_mode").orElse("default").equals("form_post");
+            boolean form = module.getMembers().get("variant") instanceof JsonObject selected && selected.find("response_mode").map(com.revetsec.json.JsonString.class::cast).map(com.revetsec.json.JsonString::getValue).orElse("default").equals("form_post");
             if (name.equals("oidcc-client-test-discovery-openid-config")) { client.beginAuthentication(); rp = "SUCCESS"; }
             else if (name.equals("oidcc-client-test-discovery-jwks-uri-keys")) { client.warmUp(); rp = "SUCCESS"; }
             else {
-            OidcAuthentication auth = login(client, form);
-            if (name.contains("refresh-token")) {
-                OidcRefreshResult refresh = client.refresh(auth.getTokens().getRefreshToken().orElseThrow(),
-                    OidcSessionReference.fromSerializedForm(auth.getSessionReference().toSerializedForm()));
-                check(refresh.getIdToken().isPresent(), "Expected verified refresh ID token");
-                client.fetchUserInfo(auth, refresh);
-            } else {
-                client.fetchUserInfo(auth);
-                if (name.equals("oidcc-client-test-signing-key-rotation")) {
-                    Thread.sleep(1100); client.fetchUserInfo(login(client, form));
-                }
+            LoginResult login = login(client, form);
+            if (login instanceof LoginRejected rejected) { rp = rejected.reason(); detail = rejected.detail(); }
+            else {
+            OidcAuthentication auth = ((LoginSucceeded) login).authentication();
+            LoginResult profile = completeProfile(client, auth, name, form);
+            if (profile instanceof LoginRejected rejected) { rp = rejected.reason(); detail = rejected.detail(); }
+            else rp = "SUCCESS";
             }
-            rp = "SUCCESS";
             }
         } catch (OidcValidationException failure) {
             rp = failure.getReason().name(); detail = failure.getJoseReason().map(Enum::name).orElse("");
@@ -187,7 +182,7 @@ public final class OidfDriver {
         JsonValue logs = api("GET", "/api/log/"+id, null); save(evidence.resolve("log.json"),logs);
         Set<String> expected = REJECTIONS.getOrDefault(name, Set.of("SUCCESS"));
         boolean rejectedCorrectly = expected.contains(rp) || expected.contains(rp+":"+detail);
-        String status = text(end,"status"), result = end.findString("result").orElse("NO_RESULT");
+        String status = text(end,"status"), result = end.find("result").map(com.revetsec.json.JsonString.class::cast).map(com.revetsec.json.JsonString::getValue).orElse("NO_RESULT");
         // Any non-success suite outcome requires an explicit source-based disposition (filled below after inspection).
         boolean accepted = rejectedCorrectly && status.equals("FINISHED") && (result.equals("PASSED") || (result.equals("SKIPPED") && name.equals("oidcc-client-test-idtoken-sig-none")));
         JsonObject outcome = JsonObject.builder().put("plan",dir.getFileName().toString()).put("module",name).put("id",id)
@@ -197,19 +192,19 @@ public final class OidfDriver {
         System.out.println(name+" suite="+status+"/"+result+" RP="+rp+(detail.isEmpty()?"":":"+detail)+" accepted="+accepted);
         if (!status.equals("FINISHED")) api("DELETE", "/api/runner/"+id,null);
     }
-    @NonNull OidcAuthentication login(@NonNull OidcClient client, boolean form) throws Exception {
+    @NonNull LoginResult login(@NonNull OidcClient client, boolean form) throws Exception {
         var options = OidcAuthenticationOptions.builder();
         if (form) options.responseMode(AuthorizationRequestOptions.ResponseMode.FORM_POST);
         AuthorizationRedirect begin = client.beginAuthentication(options.build());
         String sealed = begin.getPendingAuthorization().toSealedForm(sealer,"oidf-callback");
         HttpResponse<byte[]> page = request("GET", begin.getAuthorizationUri(), null);
-        AuthorizationResponse response;
+        AuthorizationResponseParseResult parsed;
         if (!form) {
             check(page.statusCode()==302 || page.statusCode()==303, "Expected query redirect");
             URI location = URI.create(page.headers().firstValue("Location").orElseThrow());
             check(location.getScheme().equals(CALLBACK.getScheme()) && location.getAuthority().equals(CALLBACK.getAuthority())
                 && location.getPath().equals(CALLBACK.getPath()) && location.getFragment()==null,"Wrong callback location");
-            response = AuthorizationResponse.fromQueryString(location.getRawQuery());
+            parsed = AuthorizationResponse.fromQueryStringResult(location.getRawQuery());
         } else {
             check(page.statusCode()==200,"Expected form post HTML");
             String html = new String(page.body(),StandardCharsets.UTF_8);
@@ -218,9 +213,25 @@ public final class OidfDriver {
             check(attribute(formTag.group(1),"action").equals(CALLBACK.toString()) && attribute(formTag.group(1),"method").equalsIgnoreCase("post"),"Wrong form target");
             StringJoiner body = new StringJoiner("&"); Matcher input = Pattern.compile("<input\\b[^>]*>",Pattern.CASE_INSENSITIVE).matcher(formTag.group(2));
             while (input.find()) if(attribute(input.group(),"type").equalsIgnoreCase("hidden")) body.add(encode(attribute(input.group(),"name"))+"="+encode(attribute(input.group(),"value")));
-            response = AuthorizationResponse.fromFormBody(body.toString().getBytes(StandardCharsets.UTF_8),StandardCharsets.UTF_8,null);
+            parsed = AuthorizationResponse.fromFormBodyResult(body.toString().getBytes(StandardCharsets.UTF_8),StandardCharsets.UTF_8,null);
         }
-        return client.completeAuthentication(response,PendingAuthorizationSource.fromSealedForm(sealed,sealer,"oidf-callback"),CALLBACK);
+        if (!(parsed instanceof AuthorizationResponseParseResult.Succeeded response))
+            return new LoginRejected("OAUTH:" + ((AuthorizationResponseParseResult.Rejected) parsed).getReason().name(), "");
+        OidcAuthenticationResult outcome = client.completeAuthenticationResult(response.getResponse(),
+                PendingAuthorizationSource.fromSealedForm(sealed,sealer,"oidf-callback"),CALLBACK);
+        if (outcome instanceof OidcAuthenticationResult.Succeeded success)
+            return new LoginSucceeded(success.getAuthentication());
+        if (outcome instanceof OidcAuthenticationResult.RejectedIdToken rejected)
+            return new LoginRejected(rejected.getReason().name(), rejected.getJoseReason().map(Enum::name).orElse(""));
+        if (outcome instanceof OidcAuthenticationResult.RejectedAuthorization rejected)
+            return new LoginRejected("OAUTH:" + rejected.getReason().name(), "");
+        if (outcome instanceof OidcAuthenticationResult.Failed failed)
+            return new LoginRejected("OAUTH:" + failed.getReason().name(), "");
+        if (outcome instanceof OidcAuthenticationResult.Denied || outcome instanceof OidcAuthenticationResult.RejectedAuthorizationError)
+            return new LoginRejected("OAUTH:AUTHORIZATION_ERROR", "");
+        if (outcome instanceof OidcAuthenticationResult.RejectedEndpoint)
+            return new LoginRejected("OAUTH:ENDPOINT_ERROR", "");
+        throw new IllegalStateException("Unhandled OIDC completion outcome");
     }
     static @NonNull String unsigned(@NonNull BigInteger value) {
         byte[] bytes = value.toByteArray();
@@ -251,9 +262,46 @@ public final class OidfDriver {
     static @NonNull JsonValue parse(byte @NonNull [] body) throws Exception { return JsonCodec.parse(body,JsonLimits.protocolDocument(4*1024*1024)); }
     static @NonNull JsonObject object(@NonNull JsonValue value) { check(value instanceof JsonObject,"Expected object"); return (JsonObject)value; }
     static @Nullable JsonArray array(@NonNull JsonObject value,@NonNull String name) { return (JsonArray)value.getMembers().get(name); }
-    static @NonNull String text(@NonNull JsonObject value,@NonNull String name) { return value.findString(name).orElseThrow(()->new IllegalStateException("Missing field "+name)); }
+    static @NonNull String text(@NonNull JsonObject value,@NonNull String name) { return value.find(name).map(com.revetsec.json.JsonString.class::cast).map(com.revetsec.json.JsonString::getValue).orElseThrow(()->new IllegalStateException("Missing field "+name)); }
     static @NonNull String json(@NonNull JsonValue value) { return new String(JsonCodec.toUtf8Bytes(value),StandardCharsets.UTF_8); }
     static void save(@NonNull Path path,@NonNull JsonValue value) throws Exception { Files.write(path,JsonCodec.toUtf8Bytes(value)); }
     static @NonNull String encode(@NonNull String value) { return URLEncoder.encode(value,StandardCharsets.UTF_8); }
     static void check(boolean value,@NonNull String message) { if(!value) throw new IllegalStateException(message); }
+    private @NonNull LoginResult completeProfile(@NonNull OidcClient client, @NonNull OidcAuthentication auth,
+            @NonNull String name, boolean form) throws Exception {
+        if (name.contains("refresh-token")) {
+            OidcRefreshOutcome outcome = client.refreshResult(auth.getTokens().getRefreshToken().orElseThrow(),
+                    parsedReference(OidcSessionReference.fromSerializedFormResult(auth.getSessionReference().toSerializedForm())));
+            if (outcome instanceof OidcRefreshOutcome.Rejected rejected)
+                return new LoginRejected(rejected.getReason().name(), rejected.getJoseReason().map(Enum::name).orElse(""));
+            if (outcome instanceof OidcRefreshOutcome.RejectedEndpoint)
+                return new LoginRejected("OAUTH:ENDPOINT_ERROR", "");
+            OidcRefreshResult refresh = ((OidcRefreshOutcome.Succeeded) outcome).getRefreshResult();
+            check(refresh.getIdToken().isPresent(), "Expected verified refresh ID token");
+            return checkedUserInfo(auth, client.fetchUserInfoResult(auth, refresh));
+        }
+        LoginResult first = checkedUserInfo(auth, client.fetchUserInfoResult(auth));
+        if (first instanceof LoginRejected || !name.equals("oidcc-client-test-signing-key-rotation")) return first;
+        Thread.sleep(1100);
+        LoginResult rotated = login(client, form);
+        if (rotated instanceof LoginRejected) return rotated;
+        OidcAuthentication next = ((LoginSucceeded) rotated).authentication();
+        return checkedUserInfo(next, client.fetchUserInfoResult(next));
+    }
+    private static @NonNull LoginResult checkedUserInfo(@NonNull OidcAuthentication auth,
+            @NonNull OidcUserInfoResult outcome) {
+        if (outcome instanceof OidcUserInfoResult.Succeeded) return new LoginSucceeded(auth);
+        if (outcome instanceof OidcUserInfoResult.Rejected rejected)
+            return new LoginRejected(rejected.getReason().name(), rejected.getJoseReason().map(Enum::name).orElse(""));
+        return new LoginRejected("OAUTH:ENDPOINT_ERROR", "");
+    }
+
+    private sealed interface LoginResult permits LoginSucceeded, LoginRejected { }
+    private record LoginSucceeded(@NonNull OidcAuthentication authentication) implements LoginResult { }
+    private record LoginRejected(@NonNull String reason, @NonNull String detail) implements LoginResult { }
+    private static @NonNull OidcSessionReference parsedReference(@NonNull OidcSessionReferenceParseResult result) {
+        check(result instanceof OidcSessionReferenceParseResult.Succeeded, "Expected valid saved OIDC reference");
+        return ((OidcSessionReferenceParseResult.Succeeded) result).getReference();
+    }
+
 }

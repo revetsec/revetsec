@@ -197,8 +197,9 @@ public final class PlaygroundResources {
             if (bytes.length == 0 || bytes.length > 8192) return fixed(400, "Inspection input rejected.");
             credential = StandardCharsets.UTF_8.newDecoder().onMalformedInput(CodingErrorAction.REPORT)
                     .onUnmappableCharacter(CodingErrorAction.REPORT).decode(ByteBuffer.wrap(bytes)).toString();
-            BearerToken token = BearerToken.fromAuthorizationHeaderValues(List.of("Bearer " + credential), 8192).orElseThrow();
-            AccessTokenValidationResult result = profile.validator.validate(token);
+            var parsed = BearerToken.fromAuthorizationHeaderValuesResult(List.of("Bearer " + credential), 8192);
+            if (!(parsed instanceof BearerTokenResult.Present present)) return fixed(400, "Inspection input rejected.");
+            AccessTokenValidationResult result = profile.validator.validate(present.getToken());
             event("Transient token inspection completed");
             if (result instanceof AccessTokenValidationResult.Succeeded success)
                 return json(200, views.checked(success.getAccessToken()));
@@ -206,7 +207,7 @@ public final class PlaygroundResources {
                     .put("headerLabels", unverifiedLabels(credential));
             if (result instanceof AccessTokenValidationResult.Rejected rejected) view.put("reason", rejected.getReason().name());
             return json(400, view.build());
-        } catch (AccessTokenValidationException | CharacterCodingException failure) {
+        } catch (CharacterCodingException failure) {
             return fixed(400, "Inspection input rejected.");
         } catch (RevetsecException failure) { return fixed(503, "Validation service unavailable."); }
     }
@@ -217,12 +218,18 @@ public final class PlaygroundResources {
         try {
             ClientCredentialsTokenSource source = ClientCredentialsTokenSource.withClient(config.oauthClient(http, true))
                     .scopes(PlaygroundConfig.SCOPES).resources(List.of(config.resourceUri())).build();
-            AccessToken token = source.getAccessToken();
+            var acquired = source.getAccessTokenResult();
+            if (!(acquired instanceof AccessTokenAcquisitionResult.Succeeded issued))
+                return fixed(400, "Token request rejected.");
+            AccessToken token = issued.getAccessToken();
             int status = probeCall(config, token);
             boolean retried = false;
             if (status == 401) {
                 source.invalidate(token); // app-selected single retry, only after the RS's credential rejection
-                status = probeCall(config, source.getAccessToken());
+                var renewed = source.getAccessTokenResult();
+                if (!(renewed instanceof AccessTokenAcquisitionResult.Succeeded replacement))
+                    return fixed(400, "Token request rejected.");
+                status = probeCall(config, replacement.getAccessToken());
                 retried = true;
             }
             event("Client credentials MCP probe completed");

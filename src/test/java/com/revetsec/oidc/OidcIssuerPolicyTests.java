@@ -23,7 +23,7 @@ import com.revetsec.internal.http.Deadline;
 import com.revetsec.jose.*;
 import com.revetsec.oauth.*;
 import com.revetsec.testing.*;
-import com.revetsec.testing.TestJsonWebKeys.Fixture;
+import com.revetsec.testing.TestJwk.Fixture;
 import com.revetsec.testing.TestJws.Algorithm;
 import org.junit.jupiter.api.*;
 import org.jspecify.annotations.NonNull;
@@ -66,20 +66,20 @@ final class OidcIssuerPolicyTests {
 		OidcIssuerPolicy policy = OidcIssuerPolicy.fromMicrosoftEntraMultiTenant(tenant -> { calls.incrementAndGet(); return true; });
 		for (String configured : List.of(COMMON, ORGANIZATIONS)) {
 			String json = metadataJson(TEMPLATE, "https://issuer.example");
-			OidcProviderMetadata metadata = OidcProviderMetadata.fromJson(configured, json, policy);
+			OidcProviderMetadata metadata = assertInstanceOf(OidcProviderMetadataParseResult.Succeeded.class, OidcProviderMetadata.fromJsonResult(configured, json, policy)).getMetadata();
 			assertEquals(configured, metadata.getIssuer()); assertEquals(TEMPLATE, metadata.getAdvertisedIssuer());
 			assertEquals(configured, metadata.oauthMetadata().getIssuer());
-			assertThrows(OAuthException.class, () -> OidcProviderMetadata.fromJson(configured, json));
-			assertThrows(OAuthException.class, () -> AuthorizationServerMetadata.fromJson(configured, json));
+			assertInstanceOf(OidcProviderMetadataParseResult.Rejected.class, OidcProviderMetadata.fromJsonResult(configured, json));
+			assertInstanceOf(AuthorizationServerMetadataParseResult.Rejected.class, AuthorizationServerMetadata.fromJsonResult(configured, json));
 			assertThrows(IllegalArgumentException.class, () -> configured(metadata, policy).issuerPolicy(null).build());
 			OidcClient built = configured(metadata, policy).build(); assertNotNull(built);
 		}
-		OidcProviderMetadata exact = OidcProviderMetadata.fromJson("https://issuer.example", metadataJson("https://issuer.example", "https://issuer.example"));
+		OidcProviderMetadata exact = assertInstanceOf(OidcProviderMetadataParseResult.Succeeded.class, OidcProviderMetadata.fromJsonResult("https://issuer.example", metadataJson("https://issuer.example", "https://issuer.example"))).getMetadata();
 		assertEquals(exact.getIssuer(), exact.getAdvertisedIssuer()); assertEquals(0, calls.get());
 		assertSame(OidcIssuerPolicy.exactInstance(), OidcIssuerPolicy.exactInstance());
 		assertFalse(policy.toString().contains(TENANT));
 		assertThrows(NullPointerException.class, () -> OidcIssuerPolicy.fromMicrosoftEntraMultiTenant(null));
-		assertThrows(NullPointerException.class, () -> OidcProviderMetadata.fromJson(COMMON, "{}", null));
+		assertThrows(NullPointerException.class, () -> OidcProviderMetadata.fromJsonResult(COMMON, "{}", null));
 	}
 
 	@TestFactory
@@ -91,12 +91,11 @@ final class OidcIssuerPolicyTests {
 				"https://example.ciamlogin.com/common/v2.0", "https://login.microsoftonline.com/v2.0");
 		OidcIssuerPolicy policy = OidcIssuerPolicy.fromMicrosoftEntraMultiTenant(tenant -> { fail("unverified tenant"); return false; });
 		Stream<DynamicTest> configured = unsupported.stream().map(value -> DynamicTest.dynamicTest("configured:" + value, () -> {
-			assertThrows(IllegalArgumentException.class, () -> OidcProviderMetadata.fromJson(value, metadataJson(TEMPLATE, "https://issuer.example"), policy));
+			assertThrows(IllegalArgumentException.class, () -> OidcProviderMetadata.fromJsonResult(value, metadataJson(TEMPLATE, "https://issuer.example"), policy));
 			assertThrows(IllegalArgumentException.class, () -> OidcClient.withIssuer(value).clientId("client").redirectUri(CALLBACK).issuerPolicy(policy).build());
 		}));
 		Stream<DynamicTest> advertised = Stream.of(COMMON, ACTUAL, TEMPLATE + "/", TEMPLATE.replace("{tenantid}", "{tenantId}"), TEMPLATE.replace("login.microsoftonline.com", "evil.test"), TEMPLATE.replace("{tenantid}", "%7Btenantid%7D"))
-				.map(value -> DynamicTest.dynamicTest("advertised:" + value, () -> assertThrows(OAuthException.class,
-						() -> OidcProviderMetadata.fromJson(COMMON, metadataJson(value, "https://issuer.example"), policy))));
+				.map(value -> DynamicTest.dynamicTest("advertised:" + value, () -> assertInstanceOf(OidcProviderMetadataParseResult.Rejected.class, OidcProviderMetadata.fromJsonResult(COMMON, metadataJson(value, "https://issuer.example"), policy))));
 		return Stream.concat(configured, advertised);
 	}
 
@@ -161,11 +160,10 @@ final class OidcIssuerPolicyTests {
 
 	@Test
 	void genericExactTenantValidationStaysExactEvenWithSharedCommonKeys() {
-		StaticJsonWebKeySource shared = keys(TEMPLATE, "RS256");
-		JwtValidator exact = JwtValidator.withIssuer(ACTUAL).jsonWebKeySource(shared).expectedAudiences(Set.of("client")).clock(CLOCK).clockSkew(Duration.ZERO).build();
-		assertEquals(ACTUAL, exact.validate(sign(claims(TENANT, NONCE), Algorithm.RS256, false)).getClaims().getIssuer().orElseThrow());
-		for (String tenant : List.of(OTHER, CONSUMER)) assertEquals(JoseException.Reason.ISSUER_MISMATCH, assertThrows(JoseException.class,
-				() -> exact.validate(sign(claims(tenant, NONCE), Algorithm.RS256, false))).getReason());
+		StaticJwksSource shared = keys(TEMPLATE, "RS256");
+		JwtValidator exact = JwtValidator.withIssuer(ACTUAL).jwksSource(shared).expectedAudiences(Set.of("client")).clock(CLOCK).clockSkew(Duration.ZERO).build();
+		assertEquals(ACTUAL, assertInstanceOf(JwtValidationResult.Succeeded.class, exact.validateResult(sign(claims(TENANT, NONCE), Algorithm.RS256, false))).getJwt().getClaims().getIssuer().orElseThrow());
+		for (String tenant : List.of(OTHER, CONSUMER)) assertEquals(JoseException.Reason.ISSUER_MISMATCH, assertInstanceOf(JwtValidationResult.Rejected.class, exact.validateResult(sign(claims(tenant, NONCE), Algorithm.RS256, false))).getReason());
 		OidcIssuerPolicy first = OidcIssuerPolicy.fromMicrosoftEntraMultiTenant(tenant -> tenant.equals(TENANT));
 		OidcIssuerPolicy second = OidcIssuerPolicy.fromMicrosoftEntraMultiTenant(tenant -> false);
 		assertNotSame(first, second);
@@ -237,11 +235,11 @@ final class OidcIssuerPolicyTests {
 			assertEquals(List.of("enable"), events); assertEquals(0, server.getRequests().size()); assertEquals(0,calls.get());
 			AuthorizationRedirect redirect = client.beginAuthentication(); assertEquals(1,server.getHitCount("/discovery")); assertEquals(0,calls.get());
 			respond(server,"/token","application/json",response(sign(claims(TENANT,nonce(redirect)),Algorithm.RS256,false)));
-			OidcAuthentication auth = client.completeAuthentication(callback(redirect,null),sealed(redirect),CALLBACK);
+			OidcAuthentication auth = assertInstanceOf(OidcAuthenticationResult.Succeeded.class, client.completeAuthenticationResult(callback(redirect,null),sealed(redirect),CALLBACK)).getAuthentication();
 			assertEquals(ACTUAL,auth.getIssuer()); assertEquals(1,calls.get()); assertEquals(List.of("enable","use"),events);
 			assertEquals(1,server.getHitCount("/jwks")); assertEquals(1,server.getHitCount("/token"));
 			AuthorizationRedirect another = client.beginAuthentication();
-			assertThrows(OAuthValidationException.class, () -> client.completeAuthentication(callback(another,ACTUAL),sealed(another),CALLBACK));
+			assertInstanceOf(OidcAuthenticationResult.RejectedAuthorization.class, client.completeAuthenticationResult(callback(another,ACTUAL),sealed(another),CALLBACK));
 			assertEquals(1,server.getHitCount("/token")); assertEquals(1,calls.get());
 		}
 	}
@@ -253,11 +251,11 @@ final class OidcIssuerPolicyTests {
 			OidcIssuerPolicy policy = OidcIssuerPolicy.fromMicrosoftEntraMultiTenant(tenant -> { calls.incrementAndGet(); return allow.get(); });
 			OidcClient first=client(server,policy).build(); OidcClient second=client(server,policy).build(); OidcAuthentication auth=login(server,first,TENANT);
 			respond(server,"/userinfo","application/json","{\"sub\":\"subject\"}");
-			assertEquals(OidcValidationException.Reason.USERINFO_AUTHENTICATION_MISMATCH,assertThrows(OidcValidationException.class,()->second.fetchUserInfo(auth)).getReason());
+			assertEquals(OidcValidationException.Reason.USERINFO_AUTHENTICATION_MISMATCH,assertInstanceOf(OidcUserInfoResult.Rejected.class, second.fetchUserInfoResult(auth)).getReason());
 			assertEquals(1,calls.get()); assertEquals(0,server.getHitCount("/userinfo"));
-			allow.set(false); assertEquals(OidcValidationException.Reason.TENANT_NOT_ALLOWED,assertThrows(OidcValidationException.class,()->first.fetchUserInfo(auth)).getReason());
+			allow.set(false); assertEquals(OidcValidationException.Reason.TENANT_NOT_ALLOWED,assertInstanceOf(OidcUserInfoResult.Rejected.class, first.fetchUserInfoResult(auth)).getReason());
 			assertEquals(2,calls.get()); assertEquals(0,server.getHitCount("/userinfo"));
-			allow.set(true); OidcUserInfo info=first.fetchUserInfo(auth); assertEquals(ACTUAL,info.getIssuer()); assertEquals(3,calls.get());
+			allow.set(true); OidcUserInfo info=assertInstanceOf(OidcUserInfoResult.Succeeded.class, first.fetchUserInfoResult(auth)).getUserInfo(); assertEquals(ACTUAL,info.getIssuer()); assertEquals(3,calls.get());
 			assertEquals(Optional.of("Bearer "+ACCESS),server.getRequests("/userinfo").get(0).getHeader("Authorization"));
 		}
 	}
@@ -274,7 +272,7 @@ final class OidcIssuerPolicyTests {
 			new Case("no expiry",TEMPLATE,c->c.remove("exp"),true),new Case("cnf",TEMPLATE,c->c.put("cnf","{}"),false))
 			.map(row->DynamicTest.dynamicTest(row.name(),()->{
 			Map<String,String> claims=claims(TENANT,NONCE);row.change().accept(claims);String compact=sign(claims,Algorithm.RS256,false);
-			if(row.accepted()) assertEquals("subject",UserInfoValidator.signed(compact,ACTUAL,"client","subject",JwsAlgorithm.RS256,keys(row.keyIssuer(),"RS256"),Duration.ZERO,CLOCK,OidcObserver.disabledInstance(),Set.of(),Deadline.fromNow(Duration.ofSeconds(10)),true).findString("sub").orElseThrow());
+			if(row.accepted()) assertEquals("subject",UserInfoValidator.signed(compact,ACTUAL,"client","subject",JwsAlgorithm.RS256,keys(row.keyIssuer(),"RS256"),Duration.ZERO,CLOCK,OidcObserver.disabledInstance(),Set.of(),Deadline.fromNow(Duration.ofSeconds(10)),true).find("sub").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow());
 			else assertThrows(OidcValidationException.class,()->UserInfoValidator.signed(compact,ACTUAL,"client","subject",JwsAlgorithm.RS256,keys(row.keyIssuer(),"RS256"),Duration.ZERO,CLOCK,OidcObserver.disabledInstance(),Set.of(),Deadline.fromNow(Duration.ofSeconds(10)),true));
 		}));
 	}
@@ -285,7 +283,7 @@ final class OidcIssuerPolicyTests {
 			OidcIssuerPolicy policy=OidcIssuerPolicy.fromMicrosoftEntraMultiTenant(tenant->true);
 			OidcClient client=client(server,policy).userInfoSignedResponseAlgorithm(JwsAlgorithm.RS256).build();OidcAuthentication auth=login(server,client,TENANT);
 			Map<String,String> claims=claims(TENANT,NONCE);claims.remove("tid");respond(server,"/userinfo","application/jwt",sign(claims,Algorithm.RS256,false));
-			assertEquals(ACTUAL,client.fetchUserInfo(auth).getIssuer());
+			assertEquals(ACTUAL,assertInstanceOf(OidcUserInfoResult.Succeeded.class, client.fetchUserInfoResult(auth)).getUserInfo().getIssuer());
 		}
 	}
 
@@ -294,12 +292,12 @@ final class OidcIssuerPolicyTests {
 		try(TestHttpsServer server=TestHttpsServer.start()){
 			AtomicInteger calls=new AtomicInteger();OidcIssuerPolicy policy=OidcIssuerPolicy.fromMicrosoftEntraMultiTenant(tenant->{calls.incrementAndGet();return true;});
 			OidcClient client=client(server,policy).build();OidcAuthentication auth=login(server,client,TENANT);
-			OidcSessionReference restored=OidcSessionReference.fromSerializedForm(auth.getSessionReference().toSerializedForm());
-			respond(server,"/token","application/json",response(null));OidcRefreshResult refreshed=client.refresh(RefreshToken.fromValue("TEST-ONLY-refresh"),restored);
+			OidcSessionReference restored=assertInstanceOf(OidcSessionReferenceParseResult.Succeeded.class, OidcSessionReference.fromSerializedFormResult(auth.getSessionReference().toSerializedForm())).getReference();
+			respond(server,"/token","application/json",response(null));OidcRefreshResult refreshed=assertInstanceOf(OidcRefreshOutcome.Succeeded.class, client.refreshResult(RefreshToken.fromValue("TEST-ONLY-refresh"),restored)).getRefreshResult();
 			assertTrue(refreshed.getIdToken().isEmpty());assertSame(restored,refreshed.getSessionReference());assertEquals(1,calls.get());
-			respond(server,"/userinfo","application/json","{\"sub\":\"subject\"}");assertEquals(ACTUAL,client.fetchUserInfo(auth,refreshed).getIssuer());assertEquals(2,calls.get());
-			OidcSessionReference invalid=OidcSessionReference.fromSerializedForm(auth.getSessionReference().toSerializedForm().replace(ACTUAL,"https://login.microsoftonline.com/v2.0"));
-			int posts=server.getHitCount("/token");assertThrows(OidcValidationException.class,()->client.refresh(RefreshToken.fromValue("TEST-ONLY-refresh"),invalid));assertEquals(posts,server.getHitCount("/token"));assertEquals(2,calls.get());
+			respond(server,"/userinfo","application/json","{\"sub\":\"subject\"}");assertEquals(ACTUAL,assertInstanceOf(OidcUserInfoResult.Succeeded.class, client.fetchUserInfoResult(auth,refreshed)).getUserInfo().getIssuer());assertEquals(2,calls.get());
+			OidcSessionReference invalid=assertInstanceOf(OidcSessionReferenceParseResult.Succeeded.class, OidcSessionReference.fromSerializedFormResult(auth.getSessionReference().toSerializedForm().replace(ACTUAL,"https://login.microsoftonline.com/v2.0"))).getReference();
+			int posts=server.getHitCount("/token");assertInstanceOf(OidcRefreshOutcome.Rejected.class, client.refreshResult(RefreshToken.fromValue("TEST-ONLY-refresh"),invalid));assertEquals(posts,server.getHitCount("/token"));assertEquals(2,calls.get());
 		}
 	}
 
@@ -310,9 +308,9 @@ final class OidcIssuerPolicyTests {
 				AtomicInteger calls=new AtomicInteger();OidcIssuerPolicy policy=OidcIssuerPolicy.fromMicrosoftEntraMultiTenant(tenant->{calls.incrementAndGet();return true;});
 				OidcClient client=client(server,policy).build();OidcAuthentication auth=login(server,client,TENANT);Map<String,String> claims=claims(TENANT,NONCE);claims.remove("nonce");
 				switch(mode){case "aud-array"->claims.put("aud","[\"client\"]");case "other-tenant"->{claims.put("iss",JsonText.string(issuer(OTHER)));claims.put("tid",JsonText.string(OTHER));}case "sub"->claims.put("sub","\"other\"");case "azp"->claims.put("azp","\"client\"");case "older-iat"->claims.put("iat",Long.toString(NOW.minusSeconds(1).getEpochSecond()));case "nonce"->claims.put("nonce","\"other\"");case "auth-time"->claims.put("auth_time",Long.toString(NOW.getEpochSecond()));case "c-hash"->claims.put("c_hash","\"bad\"");default->{} }
-				respond(server,"/token","application/json",response(sign(claims,Algorithm.RS256,false)));OidcSessionReference restored=OidcSessionReference.fromSerializedForm(auth.getSessionReference().toSerializedForm());
-				if(mode.equals("valid")||mode.equals("aud-array")){OidcRefreshResult refreshed=client.refresh(RefreshToken.fromValue("TEST-ONLY-refresh"),restored);assertEquals(ACTUAL,refreshed.getIdToken().orElseThrow().getClaims().getIssuer().orElseThrow());assertSame(restored,refreshed.getSessionReference());assertEquals(2,calls.get());}
-				else {assertThrows(OidcValidationException.class,()->client.refresh(RefreshToken.fromValue("TEST-ONLY-refresh"),restored));assertEquals(1,calls.get());}
+				respond(server,"/token","application/json",response(sign(claims,Algorithm.RS256,false)));OidcSessionReference restored=assertInstanceOf(OidcSessionReferenceParseResult.Succeeded.class, OidcSessionReference.fromSerializedFormResult(auth.getSessionReference().toSerializedForm())).getReference();
+				if(mode.equals("valid")||mode.equals("aud-array")){OidcRefreshResult refreshed=assertInstanceOf(OidcRefreshOutcome.Succeeded.class, client.refreshResult(RefreshToken.fromValue("TEST-ONLY-refresh"),restored)).getRefreshResult();assertEquals(ACTUAL,refreshed.getIdToken().orElseThrow().getClaims().getIssuer().orElseThrow());assertSame(restored,refreshed.getSessionReference());assertEquals(2,calls.get());}
+				else {assertInstanceOf(OidcRefreshOutcome.Rejected.class, client.refreshResult(RefreshToken.fromValue("TEST-ONLY-refresh"),restored));assertEquals(1,calls.get());}
 				assertEquals(2,server.getHitCount("/token"));for(TestHttpsServer.RecordedRequest request:server.getRequests("/token"))assertEquals(server.uri("/token").getRawPath(),request.getUri().getRawPath());
 			}
 		}));
@@ -367,17 +365,17 @@ final class OidcIssuerPolicyTests {
 	private static @NonNull String metadataJson(@NonNull String advertised,@NonNull String endpoints){return "{\"issuer\":"+JsonText.string(advertised)+",\"authorization_endpoint\":"+JsonText.string(endpoints+"/authorize")+",\"token_endpoint\":"+JsonText.string(endpoints+"/token")+",\"jwks_uri\":"+JsonText.string(endpoints+"/jwks")+",\"userinfo_endpoint\":"+JsonText.string(endpoints+"/userinfo")+",\"response_types_supported\":[\"code\"],\"subject_types_supported\":[\"public\"],\"id_token_signing_alg_values_supported\":[\"RS256\"]}";}
 	private static @NonNull Map<@NonNull String,@NonNull String> claims(@NonNull String tenant,@NonNull String nonce){Map<String,String> claims=new LinkedHashMap<>();claims.put("iss",JsonText.string(issuer(tenant)));claims.put("tid",JsonText.string(tenant));claims.put("sub","\"subject\"");claims.put("aud","\"client\"");claims.put("iat",Long.toString(NOW.getEpochSecond()));claims.put("exp",Long.toString(NOW.plusSeconds(300).getEpochSecond()));claims.put("nonce",JsonText.string(nonce));return claims;}
 	private static @NonNull String sign(@NonNull Map<@NonNull String,@NonNull String> claims,@NonNull Algorithm algorithm,boolean forged){return TestJws.withAlgorithm(algorithm).kid("key").payload(JsonText.object(new ArrayList<>(claims.entrySet()))).sign(forged?Fixture.NEGATIVE_ATTACKER_RSA_2048.getPrivateKey():Fixture.IDP_SIGNING_RSA_2048.getPrivateKey());}
-	private static @NonNull String keyJson(@Nullable String issuer,@NonNull String algorithm){return TestJsonWebKeys.withFixture(Fixture.IDP_SIGNING_RSA_2048).kid("key").alg(algorithm).issuer(issuer).toKeySetJson();}
-	private static @NonNull StaticJsonWebKeySource keys(@Nullable String issuer,@NonNull String algorithm){return StaticJsonWebKeySource.fromJsonWebKeySet(JsonWebKeySet.fromJson(keyJson(issuer,algorithm)));}
+	private static @NonNull String keyJson(@Nullable String issuer,@NonNull String algorithm){return TestJwk.withFixture(Fixture.IDP_SIGNING_RSA_2048).kid("key").alg(algorithm).issuer(issuer).toKeySetJson();}
+	private static @NonNull StaticJwksSource keys(@Nullable String issuer,@NonNull String algorithm){return StaticJwksSource.fromJwks(assertInstanceOf(JwksParseResult.Succeeded.class, Jwks.fromJsonResult(keyJson(issuer,algorithm))).getJwks());}
 	private static @NonNull IdTokenValidator validator(@NonNull String trust,@Nullable String keyIssuer,@NonNull Algorithm algorithm,@NonNull OidcIssuerPolicy policy,@NonNull Clock clock,@NonNull OidcObserver observer){return new IdTokenValidator(trust,"client",keys(keyIssuer,algorithm.getWireValue()),Set.of(JwsAlgorithm.findByWireValue(algorithm.getWireValue()).orElseThrow()),Set.of(),Set.of(),Duration.ZERO,Duration.ofMinutes(5),clock,observer,false,policy);}
-	private static OidcClient.@NonNull Builder configured(@NonNull OidcProviderMetadata metadata,@NonNull OidcIssuerPolicy policy){return OidcClient.withProviderMetadata(metadata).issuerPolicy(policy).clientId("client").redirectUri(CALLBACK).clock(CLOCK).jsonWebKeySource(keys(TEMPLATE,"RS256"));}
+	private static OidcClient.@NonNull Builder configured(@NonNull OidcProviderMetadata metadata,@NonNull OidcIssuerPolicy policy){return OidcClient.withProviderMetadata(metadata).issuerPolicy(policy).clientId("client").redirectUri(CALLBACK).clock(CLOCK).jwksSource(keys(TEMPLATE,"RS256"));}
 	private static OidcClient.@NonNull Builder client(@NonNull TestHttpsServer server,@NonNull OidcIssuerPolicy policy){OidcProviderMetadata metadata=OidcProviderMetadata.withIssuer(COMMON).authorizationEndpoint(server.uri("/authorize")).tokenEndpoint(server.uri("/token")).jwksUri(server.uri("/jwks")).userInfoEndpoint(server.uri("/userinfo")).build();return configured(metadata,policy).httpClient(TestTls.httpClient()).clockSkew(Duration.ZERO);}
-	private static @NonNull OidcAuthentication login(@NonNull TestHttpsServer server,@NonNull OidcClient client,@NonNull String tenant)throws Exception{AuthorizationRedirect redirect=client.beginAuthentication();respond(server,"/token","application/json",response(sign(claims(tenant,nonce(redirect)),Algorithm.RS256,false)));return client.completeAuthentication(callback(redirect,null),sealed(redirect),CALLBACK);}
+	private static @NonNull OidcAuthentication login(@NonNull TestHttpsServer server,@NonNull OidcClient client,@NonNull String tenant)throws Exception{AuthorizationRedirect redirect=client.beginAuthentication();respond(server,"/token","application/json",response(sign(claims(tenant,nonce(redirect)),Algorithm.RS256,false)));return assertInstanceOf(OidcAuthenticationResult.Succeeded.class, client.completeAuthenticationResult(callback(redirect,null),sealed(redirect),CALLBACK)).getAuthentication();}
 	private static @NonNull String response(@Nullable String compact){return "{\"access_token\":"+JsonText.string(ACCESS)+",\"refresh_token\":\"TEST-ONLY-refresh\",\"token_type\":\"Bearer\",\"expires_in\":300"+(compact==null?"":",\"id_token\":"+JsonText.string(compact))+"}";}
 	private static void respond(@NonNull TestHttpsServer server,@NonNull String path,@NonNull String type,@NonNull String body){server.script(path,TestHttpsServer.Script.fromResponse(TestHttpsServer.Response.withStatus(200).header("Content-Type",type).body(body).build()));}
 	private static @NonNull String nonce(@NonNull AuthorizationRedirect redirect)throws Exception{return QueryParameters.parse(redirect.getAuthorizationUri().getRawQuery()).getValues("nonce").get(0);}
 	private static @NonNull PendingAuthorizationSource sealed(@NonNull AuthorizationRedirect redirect){StateSealer sealer=TestSealers.fromFixedKey();return PendingAuthorizationSource.fromSealedForm(redirect.getPendingAuthorization().toSealedForm(sealer,"entra"),sealer,"entra");}
-	private static @NonNull AuthorizationResponse callback(@NonNull AuthorizationRedirect redirect,@Nullable String issuer)throws Exception{return AuthorizationResponse.fromQueryString("code="+CODE+"&state="+QueryParameters.parse(redirect.getAuthorizationUri().getRawQuery()).getValues("state").get(0)+(issuer==null?"":"&iss="+issuer));}
+	private static @NonNull AuthorizationResponse callback(@NonNull AuthorizationRedirect redirect,@Nullable String issuer)throws Exception{return assertInstanceOf(AuthorizationResponseParseResult.Succeeded.class, AuthorizationResponse.fromQueryStringResult("code="+CODE+"&state="+QueryParameters.parse(redirect.getAuthorizationUri().getRawQuery()).getValues("state").get(0)+(issuer==null?"":"&iss="+issuer))).getResponse();}
 	private static @NonNull OidcObserver observer(@NonNull List<@NonNull String> events){return new OidcObserver(){@Override public void didEnableMicrosoftEntraMultiTenant(){events.add("enable");}@Override public void didUseMicrosoftEntraMultiTenant(){events.add("use");}};}
 
 	/** Test-only mapping: real TLS/HTTP at a literal local endpoint, with no outbound Microsoft request. */

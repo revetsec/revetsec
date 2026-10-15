@@ -16,6 +16,10 @@
 
 package com.revetsec.oauth.server;
 
+import com.revetsec.jose.JwtValidationResult;
+
+import com.revetsec.jose.JwksParseResult;
+
 import com.revetsec.SealingKey;
 import com.revetsec.StateSealer;
 import com.revetsec.InterruptingSealingProvider;
@@ -26,9 +30,9 @@ import com.revetsec.internal.json.JsonLimits;
 import com.revetsec.json.*;
 import com.revetsec.jose.JwsAlgorithm;
 import com.revetsec.jose.JwsSigner;
-import com.revetsec.jose.JsonWebKeySet;
-import com.revetsec.jose.StaticJsonWebKeySource;
-import com.revetsec.testing.TestJsonWebKeys;
+import com.revetsec.jose.Jwks;
+import com.revetsec.jose.StaticJwksSource;
+import com.revetsec.testing.TestJwk;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
@@ -60,7 +64,7 @@ final class OAuthGrantRevocationTests {
  private static final @NonNull String VERIFIER = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
  private static final @NonNull String CHALLENGE = "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM";
  private static final @NonNull OAuthServerIngressLimits LIMITS = OAuthServerIngressLimits.fromDefaults();
- private static final TestJsonWebKeys.@NonNull Fixture KEY = TestJsonWebKeys.Fixture.IDP_SIGNING_RSA_2048;
+ private static final TestJwk.@NonNull Fixture KEY = TestJwk.Fixture.IDP_SIGNING_RSA_2048;
  private final @NonNull OAuthAtomicStoreFixture store = new OAuthAtomicStoreFixture();
  private final @NonNull MutableClock clock = new MutableClock(NOW);
  private final @NonNull OAuthStoreRecordCodec codec = codec();
@@ -123,7 +127,7 @@ final class OAuthGrantRevocationTests {
   try { return (JsonObject)JsonCodec.parse(bytes,JsonLimits.jose(131072)); } catch(com.revetsec.internal.json.JsonParseException failure) { throw new AssertionError(failure); }
  }
  private static @NonNull JsonObject body(@NonNull OAuthTokenResponse response) { return json(response.body()); }
- private static @NonNull String token(@NonNull OAuthTokenResponse response) { return body(response).findString("access_token").orElseThrow(); }
+ private static @NonNull String token(@NonNull OAuthTokenResponse response) { return body(response).find("access_token").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow(); }
  private static void invalid(@NonNull Executable call) {
   var e=assertThrows(OAuthServerAdmissionFailure.class,call);assertEquals(OAuthServerAdmissionFailure.Reason.INVALID_TOKEN,e.reason());assertNull(e.getCause());assertEquals("OAuth server admission failed.",e.getMessage());
  }
@@ -133,8 +137,8 @@ final class OAuthGrantRevocationTests {
  private @NonNull OAuthIssuerTokenStatus status(int attempts,@NonNull Duration skew,@NonNull Clock clock) {
   return new OAuthIssuerTokenStatus(this.coordinator,this.codec,LIMITS,clock,skew,attempts,255,16384);
  }
- private static @NonNull StaticJsonWebKeySource keys() {
-  return StaticJsonWebKeySource.fromJsonWebKeySet(JsonWebKeySet.fromJson(TestJsonWebKeys.withFixture(KEY).kid("key").alg("RS256").toKeySetJson()));
+ private static @NonNull StaticJwksSource keys() {
+  return StaticJwksSource.fromJwks(assertInstanceOf(JwksParseResult.Succeeded.class, Jwks.fromJsonResult(TestJwk.withFixture(KEY).kid("key").alg("RS256").toKeySetJson())).getJwks());
  }
  private @NonNull JsonObject validate(@NonNull String token) { return status().validate(token,RESOURCE,keys(),deadline()); }
  private @NonNull OAuthTokenResponse issued() { return redeem(code(true,client())); }
@@ -166,7 +170,7 @@ final class OAuthGrantRevocationTests {
   var req=OAuthServerRequest.parse(OAuthServerRequest.Endpoint.TOKEN,"POST",null,("grant_type=refresh_token&client_id=client&resource="+encode(RESOURCE)+"&refresh_token="+encode(refresh)).getBytes(StandardCharsets.UTF_8),Map.of("Content-Type",List.of("application/x-www-form-urlencoded")),LIMITS);
   return r.rotate(req,(id,b)->Optional.of(client()),resources(),allow(),deadline());
  }
- private static @NonNull String refresh(@NonNull OAuthTokenResponse response) {return body(response).findString("refresh_token").orElseThrow();}
+ private static @NonNull String refresh(@NonNull OAuthTokenResponse response) {return body(response).find("refresh_token").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow();}
  private static void ordinary(@NonNull OAuthStatusResponse response) {
   OAuthServerResponse exported=response.response();assertSame(exported,response.response());assertEquals(200,exported.getStatusCode());
   assertArrayEquals(response.body(),exported.toHttpBodyWithCredentials());assertArrayEquals(response.headers(),exported.wireHeaders());
@@ -190,8 +194,8 @@ final class OAuthGrantRevocationTests {
  }
  @Test void expiredIssuedAccessCanRevokeItsStillRetainedRefreshGrant() {
   var one=issued();String jwt=token(one);this.clock.time=NOW.plusSeconds(331);invalid(()->validate(jwt));inactive(introspect(jwt));
-  var ordinaryValidator=com.revetsec.jose.JwtValidator.withIssuer(ISSUER).jsonWebKeySource(keys()).expectedAudiences(Set.of(RESOURCE)).allowedTypes(Set.of("at+jwt")).clock(this.clock).clockSkew(Duration.ofSeconds(30)).build();
-  assertEquals(com.revetsec.jose.JoseException.Reason.EXPIRED,assertThrows(com.revetsec.jose.JoseException.class,()->ordinaryValidator.validate(jwt)).getReason());ordinary(revoke(jwt));
+  var ordinaryValidator=com.revetsec.jose.JwtValidator.withIssuer(ISSUER).jwksSource(keys()).expectedAudiences(Set.of(RESOURCE)).allowedTypes(Set.of("at+jwt")).clock(this.clock).clockSkew(Duration.ofSeconds(30)).build();
+  assertEquals(com.revetsec.jose.JoseException.Reason.EXPIRED,assertInstanceOf(JwtValidationResult.Rejected.class,ordinaryValidator.validateResult(jwt)).getReason());ordinary(revoke(jwt));
   admission(OAuthServerAdmissionFailure.Reason.INVALID_GRANT,()->rotate(refresh(one)));
  }
  @TestFactory @NonNull Stream<@NonNull DynamicTest> expiredRefreshRetainedToHStillRevokes() {
@@ -242,7 +246,7 @@ final class OAuthGrantRevocationTests {
   }));
  }
  @Test void activeIntrospectionReleasesExactlyCheckedClaimsAfterFourRowBarrier() {
-  String jwt=token(issued());var response=introspect(jwt);var json=json(response.body());assertTrue(json.findBoolean("active").orElseThrow());assertEquals("Bearer",json.findString("token_type").orElseThrow());
+  String jwt=token(issued());var response=introspect(jwt);var json=json(response.body());assertTrue(json.find("active").map(value -> ((com.revetsec.json.JsonBoolean) value).getValue()).orElseThrow());assertEquals("Bearer",json.find("token_type").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow());
   assertEquals(Set.of("active","token_type","iss","sub","aud","client_id","iat","exp","jti","scope"),json.getMembers().keySet());for(var member:claims(jwt).getMembers().entrySet())assertEquals(member.getValue(),json.getMembers().get(member.getKey()));
   var t=requireNonNull(this.store.lastTransaction);assertEquals(4,t.getConditions().size());assertTrue(t.getMutations().isEmpty());String headers=new String(response.headers(),StandardCharsets.UTF_8);assertTrue(headers.contains("Content-Length: "+response.body().length+"\r\n"));assertTrue(headers.contains("no-store"));assertTrue(headers.contains("no-cache"));
   var bytes=response.body();bytes[0]=0;assertNotEquals(0,response.body()[0]);var h=response.headers();h[0]=0;assertNotEquals(0,response.headers()[0]);
@@ -261,7 +265,7 @@ final class OAuthGrantRevocationTests {
  }
  @Test void registeredAuthorityIsFreshOnEveryOperation() {
   String jwt=token(issued());int[] calls={0};OAuthServerClientRepository repository=(id,b)->{calls[0]++;return Optional.of(resourceClient(Set.of(calls[0]==1?RESOURCE:RESOURCE+"/wrong"),false));};var request=endpoint(OAuthServerRequest.Endpoint.INTROSPECTION,jwt,Map.of(),"resource:secret");
-  assertTrue(json(introspection().introspect(request,repository,RESOURCE,keys(),deadline()).body()).findBoolean("active").orElseThrow());admission(OAuthServerAdmissionFailure.Reason.UNAUTHORIZED_CLIENT,()->introspection().introspect(request,repository,RESOURCE,keys(),deadline()));assertEquals(2,calls[0]);
+  assertTrue(json(introspection().introspect(request,repository,RESOURCE,keys(),deadline()).body()).find("active").map(value -> ((com.revetsec.json.JsonBoolean) value).getValue()).orElseThrow());admission(OAuthServerAdmissionFailure.Reason.UNAUTHORIZED_CLIENT,()->introspection().introspect(request,repository,RESOURCE,keys(),deadline()));assertEquals(2,calls[0]);
  }
  @TestFactory @NonNull Stream<@NonNull DynamicTest> inactiveResponsesRevealNoOtherFields() {
   return Stream.of("expired","revoked","subject","issuer","missing-jti","missing-grant","wrong-audience","refresh").map(kind->test(kind,()->{
@@ -277,7 +281,7 @@ final class OAuthGrantRevocationTests {
   }));
  }
  @Test void noPositiveIntrospectionCacheAndAlreadyAdmittedWorkHasNoRollbackPromise() {
-  String jwt=token(issued());this.store.afterCommit=()->ordinary(revoke(jwt));assertTrue(json(introspect(jwt).body()).findBoolean("active").orElseThrow());inactive(introspect(jwt));
+  String jwt=token(issued());this.store.afterCommit=()->ordinary(revoke(jwt));assertTrue(json(introspect(jwt).body()).find("active").map(value -> ((com.revetsec.json.JsonBoolean) value).getValue()).orElseThrow());inactive(introspect(jwt));
  }
  @TestFactory @NonNull Stream<@NonNull DynamicTest> everyObservedVersionParticipatesInRevocationCas() {
   return Stream.of(false,true).flatMap(refresh->Stream.of(OAuthStoreKey.Kind.ISSUER_STATE,OAuthStoreKey.Kind.SUBJECT_STATE,OAuthStoreKey.Kind.GRANT,refresh?OAuthStoreKey.Kind.REFRESH_TOKEN:OAuthStoreKey.Kind.ACCESS_TOKEN).map(kind->test(refresh+kind.name(),()->{

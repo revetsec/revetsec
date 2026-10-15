@@ -16,6 +16,7 @@
 package com.revetsec.examples.barebones;
 
 import org.junit.jupiter.api.Test;
+import static com.revetsec.oauth.PendingAuthorizationSaveResult.*;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Optional;
@@ -53,11 +54,11 @@ final class PendingStoreTests {
         var clock = new OidcApplicationTests.MutableClock();
         var store = new PendingStore(clock, 1, 1024);
         store.save("browser", "state", "opaque", clock.instant().plusSeconds(60));
-        assertThrows(IllegalArgumentException.class, () -> store.save("browser", "state", "new", clock.instant().plusSeconds(60)));
-        assertThrows(PendingStore.CapacityException.class, () -> store.save("other", "state", "new", clock.instant().plusSeconds(60)));
+        assertEquals(ALREADY_PRESENT, store.save("browser", "state", "new", clock.instant().plusSeconds(60)));
+        assertEquals(CAPACITY_REFUSED, store.save("other", "state", "new", clock.instant().plusSeconds(60)));
         assertEquals(Optional.of("opaque"), store.consume("browser", "state"));
-        assertThrows(PendingStore.CapacityException.class, () -> store.save("browser", "state", "x".repeat(1024), clock.instant().plusSeconds(60)));
-        assertThrows(IllegalArgumentException.class, () -> store.save("browser", "state", "opaque", clock.instant()));
+        assertEquals(CAPACITY_REFUSED, store.save("browser", "state", "x".repeat(1024), clock.instant().plusSeconds(60)));
+        assertEquals(UNAVAILABLE, store.save("browser", "state", "opaque", clock.instant()));
         assertThrows(IllegalArgumentException.class, () -> store.save("browser", "state", "opaque", clock.instant().plusSeconds(901)));
         store.save("browser", "state", "opaque", clock.instant().plusSeconds(60));
         clock.advance(Duration.ofSeconds(60)); assertTrue(store.consume("browser", "state").isEmpty());

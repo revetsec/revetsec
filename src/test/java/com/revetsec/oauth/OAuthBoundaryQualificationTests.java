@@ -141,28 +141,26 @@ final class OAuthBoundaryQualificationTests {
         malformedCallback(Map.of("x", new ArrayList<>(java.util.Collections.nCopies(query, ""))), "y=");
         malformedCallback(Map.of("x", List.of("a".repeat(parameter - 1))), "y=" + "b".repeat(parameter - 2)
                 + "&z=" + "c".repeat(parameter - 2) + "&q=" + "d".repeat(parameter - 2) + "&r=aaaaa");
-        assertEquals(OAuthException.Reason.CALLBACK_MALFORMED, assertThrows(OAuthResponseException.class,
-                () -> AuthorizationResponse.fromQueryString("a".repeat(query + 1))).getReason());
-        AuthorizationResponse empty = AuthorizationResponse.fromParameters(Map.of("code", List.of()), null,
-                AuthorizationRequestOptions.ResponseMode.QUERY);
+        assertEquals(OAuthException.Reason.CALLBACK_MALFORMED, assertInstanceOf(AuthorizationResponseParseResult.Rejected.class, AuthorizationResponse.fromQueryStringResult("a".repeat(query + 1))).getReason());
+        AuthorizationResponse empty = assertInstanceOf(AuthorizationResponseParseResult.Succeeded.class, AuthorizationResponse.fromParametersResult(Map.of("code", List.of()), null,
+                AuthorizationRequestOptions.ResponseMode.QUERY)).getResponse();
         assertTrue(empty.getCode().isEmpty());
     }
 
     @Test
     void callbackErrorProseIsBoundedAndUrisMustBeAbsolute() {
         String raw = " !\"#[\\]~\u007f\u0080";
-        AuthorizationResponse response = AuthorizationResponse.fromParameters(Map.of("error_description", List.of(raw)), null,
-                AuthorizationRequestOptions.ResponseMode.QUERY);
+        AuthorizationResponse response = assertInstanceOf(AuthorizationResponseParseResult.Succeeded.class, AuthorizationResponse.fromParametersResult(Map.of("error_description", List.of(raw)), null,
+                AuthorizationRequestOptions.ResponseMode.QUERY)).getResponse();
         assertEquals(" !?#[?]~??", response.getErrorDescription().orElseThrow());
         assertEquals(raw, response.getParameters().getOrDefault("error_description", List.of()).get(0));
-        assertEquals(1024, AuthorizationResponse.fromParameters(Map.of("error_description", List.of("a".repeat(1025))), null,
-                AuthorizationRequestOptions.ResponseMode.QUERY).getErrorDescription().orElseThrow().length());
+        assertEquals(1024, assertInstanceOf(AuthorizationResponseParseResult.Succeeded.class, AuthorizationResponse.fromParametersResult(Map.of("error_description", List.of("a".repeat(1025))), null,
+                AuthorizationRequestOptions.ResponseMode.QUERY)).getResponse().getErrorDescription().orElseThrow().length());
         for (String uri : List.of("relative", "https://[invalid"))
-            assertEquals(OAuthException.Reason.CALLBACK_MALFORMED, assertThrows(OAuthResponseException.class,
-                    () -> AuthorizationResponse.fromParameters(Map.of("error_uri", List.of(uri)), null,
-                            AuthorizationRequestOptions.ResponseMode.QUERY).getErrorUri()).getReason());
-        assertEquals(URI.create("https://issuer.example/error"), AuthorizationResponse.fromQueryString(
-                "error_uri=https%3A%2F%2Fissuer.example%2Ferror").getErrorUri().orElseThrow());
+            assertEquals(OAuthException.Reason.CALLBACK_MALFORMED, assertInstanceOf(AuthorizationResponseParseResult.Rejected.class, AuthorizationResponse.fromParametersResult(Map.of("error_uri", List.of(uri)), null,
+                            AuthorizationRequestOptions.ResponseMode.QUERY)).getReason());
+        assertEquals(URI.create("https://issuer.example/error"), assertInstanceOf(AuthorizationResponseParseResult.Succeeded.class, AuthorizationResponse.fromQueryStringResult(
+                "error_uri=https%3A%2F%2Fissuer.example%2Ferror")).getResponse().getErrorUri().orElseThrow());
     }
 
     @Test
@@ -207,7 +205,7 @@ final class OAuthBoundaryQualificationTests {
 
     @Test
     void assertionSerializationPreservesUnicodeAndRejectsInvalidUtf16AndOversizeIds() throws Exception {
-        com.revetsec.testing.TestJsonWebKeys.Fixture key = com.revetsec.testing.TestJsonWebKeys.Fixture.IDP_SIGNING_RSA_2048;
+        com.revetsec.testing.TestJwk.Fixture key = com.revetsec.testing.TestJwk.Fixture.IDP_SIGNING_RSA_2048;
         ClientAuthentication auth = ClientAuthentication.fromPrivateKeyJwt(budget -> ClientAssertionSigningKey.withSigner(
                 com.revetsec.jose.JwsSigner.fromRsaKeyPair(key.getPrivateKey(), key.getPublicKey(), com.revetsec.jose.JwsAlgorithm.RS256)).keyId("qualification-key").build());
         OAuthClient client = OAuthClient.withAuthorizationServerMetadata(AuthorizationServerMetadata.withIssuer("https://issuer.example")
@@ -226,9 +224,9 @@ final class OAuthBoundaryQualificationTests {
             byte[] payload = java.util.Base64.getUrlDecoder().decode(compact.substring(firstDot + 1, secondDot));
             JsonObject claims = assertInstanceOf(JsonObject.class, com.revetsec.internal.json.JsonCodec.parse(payload,
                     com.revetsec.internal.json.JsonLimits.protocolDocument(32768)));
-            assertEquals(clientId, claims.findString("iss").orElseThrow());
-            assertEquals(clientId, claims.findString("sub").orElseThrow());
-            assertEquals("https://issuer.example", claims.findString("aud").orElseThrow());
+            assertEquals(clientId, claims.find("iss").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow());
+            assertEquals(clientId, claims.find("sub").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow());
+            assertEquals("https://issuer.example", claims.find("aud").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow());
             assertEquals(NOW, prepared.issued());
             assertTrue(prepared.expires().isAfter(NOW));
         }
@@ -268,8 +266,7 @@ final class OAuthBoundaryQualificationTests {
 
     private static void malformedCallback(@NonNull Map<@NonNull String, @NonNull List<@NonNull String>> parameters,
             @org.jspecify.annotations.Nullable String query) {
-        assertEquals(OAuthException.Reason.CALLBACK_MALFORMED, assertThrows(OAuthResponseException.class,
-                () -> AuthorizationResponse.fromParameters(parameters, query, AuthorizationRequestOptions.ResponseMode.FORM_POST)).getReason());
+        assertEquals(OAuthException.Reason.CALLBACK_MALFORMED, assertInstanceOf(AuthorizationResponseParseResult.Rejected.class, AuthorizationResponse.fromParametersResult(parameters, query, AuthorizationRequestOptions.ResponseMode.FORM_POST)).getReason());
     }
 
     private static @NonNull RawResponse raw(int status, @NonNull String body) {

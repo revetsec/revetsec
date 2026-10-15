@@ -92,19 +92,19 @@ public class StateSealerFuzzTests {
 	private static final String ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
 
 	/**
-	 * The one public failure: its message, and its stack trace down to {@code StateSealer.unseal}, which every failure
-	 * must share, whichever of the nine unseal steps failed.
+	 * The one public rejected result, whose rendering every rejected input must share, whichever of the nine unseal steps failed.
 	 */
-	private static final InvalidSealedStateException REFERENCE_FAILURE = referenceFailure();
+	private static final StateUnsealResult.Rejected REFERENCE_FAILURE =
+			Assertions.assertInstanceOf(StateUnsealResult.Rejected.class, SEALER.unsealResult("", CONTEXT));
 	private static final String CONTEXT_MESSAGE = sealMessage("x", "", Duration.ofHours(1));
 	private static final String ILL_FORMED_MESSAGE = sealMessage("\uD800", CONTEXT, Duration.ofHours(1));
 	private static final String TOO_LONG_MESSAGE = sealMessage("x".repeat(MAXIMUM_SEALED_LENGTH), CONTEXT,
 			Duration.ofHours(1));
 
 	/**
-	 * Any text given to {@link StateSealer#unseal(String, String)} either opens, or fails with the one
-	 * {@link InvalidSealedStateException}: the fixed message, no cause, nothing suppressed, VALIDATION_FAILURE, not
-	 * transient, and the same stack trace whichever step failed (exit 8). Through {@link SealedStateAccess} the same
+	 * Any text given to {@link StateSealer#unsealResult(String, String)} either opens, or returns the one
+	 * {@link StateUnsealResult.Rejected}, with fixed rendering and no data identifying the opening step (exit 8).
+	 * Through {@link SealedStateAccess} the same
 	 * text fails with {@link UnsealException.Kind#INVALID}, and with {@link UnsealException.Kind#EXPIRED} only for a
 	 * value that opens at an earlier time. Nothing longer than the maximum sealed length opens, not even an authentic
 	 * value sealed under a larger maximum (the {@code over-maximum-length} seed; unseal step 1). A value that opens is
@@ -117,12 +117,9 @@ public class StateSealerFuzzTests {
 	@FuzzTest(maxDuration = "5m")
 	public void unsealRejectsEverythingButAuthenticValuesWithOneFixedException(byte @NonNull [] input) throws UnsealException {
 		String sealed = new String(input, StandardCharsets.ISO_8859_1);
-		String opened;
-
-		try {
-			opened = SEALER.unseal(sealed, CONTEXT);
-		} catch (InvalidSealedStateException e) {
-			requireUniformFailure(e);
+		StateUnsealResult result = SEALER.unsealResult(sealed, CONTEXT);
+		if (result instanceof StateUnsealResult.Rejected rejected) {
+			requireUniformFailure(rejected);
 			requireInternalFailure(sealed, SealedStateType.APP, CONTEXT, CLOCK, false);
 
 			for (SealedStateType type : SealedStateType.values())
@@ -132,6 +129,7 @@ public class StateSealerFuzzTests {
 			return;
 		}
 
+		String opened = Assertions.assertInstanceOf(StateUnsealResult.Succeeded.class, result).getValue();
 		// Unseal step 1 bounds the value before decoding, so nothing longer opens, however authentic.
 		Assertions.assertTrue(sealed.length() <= MAXIMUM_SEALED_LENGTH,
 				"a value longer than the maximum sealed length opened");
@@ -205,7 +203,7 @@ public class StateSealerFuzzTests {
 		requireExpired(sealed, type, context, Clock.fixed(Instant.ofEpochSecond(notAfter), ZoneOffset.UTC));
 
 		if (type == SealedStateType.APP && notAfter > NOW.getEpochSecond())
-			Assertions.assertEquals(plaintext, SEALER.unseal(sealed, context), "the public path did not open the value");
+			Assertions.assertEquals(plaintext, Assertions.assertInstanceOf(StateUnsealResult.Succeeded.class, SEALER.unsealResult(sealed, context)).getValue(), "the public path did not open the value");
 
 		String edited = edited(sealed, data);
 
@@ -385,24 +383,14 @@ public class StateSealerFuzzTests {
 	}
 
 	private static void requirePublicFailure(@NonNull String sealed, @NonNull String context) {
-		try {
-			SEALER.unseal(sealed, context);
-		} catch (InvalidSealedStateException e) {
-			requireUniformFailure(e);
-			return;
-		}
-
-		Assertions.fail("the public path opened a value it must reject");
+		requireUniformFailure(Assertions.assertInstanceOf(StateUnsealResult.Rejected.class,
+				SEALER.unsealResult(sealed, context)));
 	}
 
-	private static void requireUniformFailure(@NonNull InvalidSealedStateException exception) {
-		Assertions.assertEquals(REFERENCE_FAILURE.getMessage(), exception.getMessage(), "not the fixed message");
-		Assertions.assertNull(exception.getCause(), "the failure has a cause");
-		Assertions.assertEquals(0, exception.getSuppressed().length, "the failure has suppressed exceptions");
-		Assertions.assertEquals(ErrorCategory.VALIDATION_FAILURE, exception.getCategory(), "wrong category");
-		Assertions.assertFalse(exception.isTransient(), "the failure is transient");
-		Assertions.assertArrayEquals(sealerFrames(REFERENCE_FAILURE), sealerFrames(exception),
-				"the failure's stack trace depends on which step failed");
+	private static void requireUniformFailure(StateUnsealResult.@NonNull Rejected result) {
+		Assertions.assertEquals(REFERENCE_FAILURE.toString(), result.toString(),
+				"rejection rendering must not identify the input or opening step");
+		Assertions.assertEquals("StateUnsealResult{outcome=Rejected, data=<redacted>}", result.toString());
 	}
 
 	private static void requireFixedShape(@NonNull UnsealException exception) {
@@ -546,30 +534,6 @@ public class StateSealerFuzzTests {
 		}
 
 		return true;
-	}
-
-	/**
-	 * The frames from the top of the stack down to {@code StateSealer.unseal}, which the caller does not affect.
-	 */
-	private static @NonNull StackTraceElement @NonNull [] sealerFrames(@NonNull Throwable throwable) {
-		StackTraceElement[] frames = throwable.getStackTrace();
-
-		for (int index = 0; index < frames.length; ++index)
-			if (frames[index].getClassName().equals(StateSealer.class.getName())
-					&& frames[index].getMethodName().equals("unseal"))
-				return Arrays.copyOf(frames, index + 1);
-
-		return frames;
-	}
-
-	private static @NonNull InvalidSealedStateException referenceFailure() {
-		try {
-			SEALER.unseal("", CONTEXT);
-		} catch (InvalidSealedStateException e) {
-			return e;
-		}
-
-		throw new IllegalStateException("The empty string opened.");
 	}
 
 	private static @NonNull String sealMessage(@NonNull String plaintext, @NonNull String context, @NonNull Duration lifetime) {

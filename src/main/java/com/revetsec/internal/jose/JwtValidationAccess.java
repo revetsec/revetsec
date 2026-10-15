@@ -19,7 +19,7 @@ package com.revetsec.internal.jose;
 import com.revetsec.jose.Jwt;
 import com.revetsec.jose.JwsAlgorithm;
 import java.util.Set;
-import com.revetsec.jose.RemoteJsonWebKeySource;
+import com.revetsec.jose.RemoteJwksSource;
 import com.revetsec.jose.JwtValidator;
 import java.util.function.LongSupplier;
 import org.jspecify.annotations.NonNull;
@@ -46,7 +46,7 @@ public final class JwtValidationAccess {
 		@NonNull Jwt validateMicrosoftEntra(@NonNull JwtValidator validator, @NonNull String compact, @NonNull LongSupplier remainingNanos);
 		@NonNull Jwt validateMicrosoftEntraUserInfo(@NonNull JwtValidator validator, @NonNull String compact,
 				@NonNull String verifiedTenantIssuer, @NonNull LongSupplier remainingNanos);
-		void warmUp(@NonNull RemoteJsonWebKeySource source, @NonNull LongSupplier remainingNanos);
+		void warmUp(@NonNull RemoteJwksSource source, @NonNull LongSupplier remainingNanos);
 	}
 	public static void set(@NonNull Operations value) {
 		requireNonNull(value);

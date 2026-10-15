@@ -46,7 +46,7 @@ import static java.util.Objects.requireNonNull;
  * Validates JWTs in the JWS compact serialization (RFC 7519, RFC 7515) signed with a public key, for one expected
  * issuer.
  * <p>
- * {@link #validate(String)} runs the checks in a fixed order and stops at the first failure:
+ * The {@link #validateResult(String)} operation runs the checks in a fixed order and stops at the first failure:
  * <ol>
  *   <li>the token's length, before it is examined any further;</li>
  *   <li>the compact serialization and the canonical base64url of every segment;</li>
@@ -56,7 +56,7 @@ import static java.util.Objects.requireNonNull;
  *   {@code typ}; then no {@code cty}; then a {@code kid}, when present, that is a string of 1 to 256 characters;</li>
  *   <li>the signature's length and form for the algorithm, before any key is looked up, so a malformed signature never
  *   causes a key set fetch;</li>
- *   <li>the key, selected from the {@link JsonWebKeySource} by the header's {@code kid} and the algorithm; a remote
+ *   <li>the key, selected from the {@link JwksSource} by the header's {@code kid} and the algorithm; a remote
  *   source may fetch or refresh its key set here, on the calling thread;</li>
  *   <li>the signature, over the header and payload exactly as received;</li>
  *   <li>the claims: a strict JSON object whose registered claims have the right types; {@code iss} equal to the
@@ -64,9 +64,9 @@ import static java.util.Objects.requireNonNull;
  *   in {@code aud}; {@code exp}, then {@code iat}, then {@code nbf} against the clock, with the clock skew; the
  *   required claims; and no {@code cnf}, because this validator does not check proof of possession.</li>
  * </ol>
- * A rejected token throws a {@link JoseException} whose {@link JoseException.Reason} names the failed check. A remote
- * source that cannot supply its key set throws a {@link JsonWebKeySetUnavailableException}, unchanged. Neither
- * message contains the token, a claim or a key ID.
+ * A rejected token returns a {@link JwtValidationResult.Rejected} whose {@link JoseException.Reason} names the failed
+ * check. A remote source that cannot supply its key set throws a {@link JwksUnavailableException}, unchanged.
+ * Neither outcome nor exception diagnostics contain the token, a claim or a key ID.
  * <p>
  * Instances are immutable and safe for concurrent use. {@link Builder#build()} does no I/O, even over a remote key
  * source. Validators compare by reference.
@@ -94,7 +94,7 @@ public final class JwtValidator {
                 JoseException mapped = JoseException.fromReason(failure.getReason());
                 ObserverDispatch.dispatch(validator.observer, o -> o.didFailToValidateJwt(mapped, Duration.ofNanos(System.nanoTime() - start)));
                 throw mapped;
-            } catch (JoseException | JsonWebKeySetUnavailableException failure) {
+            } catch (JoseException | JwksUnavailableException failure) {
                 ObserverDispatch.dispatch(validator.observer, o -> o.didFailToValidateJwt(failure, Duration.ofNanos(System.nanoTime() - start)));
                 throw failure;
             }
@@ -119,7 +119,7 @@ public final class JwtValidator {
 				@NonNull String verifiedTenantIssuer, @NonNull LongSupplier remainingNanos) {
 			return validator.validate(compact, requireNonNull(remainingNanos), validator.claimsPolicy.withOptionalExpiration().withMicrosoftEntraIssuer(requireNonNull(verifiedTenantIssuer)));
 		}
-		@Override public void warmUp(@NonNull RemoteJsonWebKeySource source, @NonNull LongSupplier remainingNanos) { source.warmUp(remainingNanos); }
+		@Override public void warmUp(@NonNull RemoteJwksSource source, @NonNull LongSupplier remainingNanos) { source.warmUp(remainingNanos); }
 		@Override public @NonNull Jwt validate(@NonNull JwtValidator validator, @NonNull String compact, @NonNull LongSupplier remainingNanos) {
 			return validator.validate(compact, requireNonNull(remainingNanos));
 		}
@@ -133,7 +133,7 @@ public final class JwtValidator {
 	@NonNull
 	private final String issuer;
 	@NonNull
-	private final JsonWebKeySource jsonWebKeySource;
+	private final JwksSource jwksSource;
 	@NonNull
 	private final JoseHeaderPolicy headerPolicy;
 	@NonNull
@@ -145,14 +145,14 @@ public final class JwtValidator {
 	private final JoseObserver observer;
 
 	private JwtValidator(@NonNull String issuer,
-											 @NonNull JsonWebKeySource jsonWebKeySource,
+											 @NonNull JwksSource jwksSource,
 											 @NonNull JoseHeaderPolicy headerPolicy,
 											 @NonNull JwtClaimsPolicy claimsPolicy,
 											 boolean acceptAnyAudience,
 											 @NonNull Clock clock,
 											 @NonNull JoseObserver observer) {
 		this.issuer = issuer;
-		this.jsonWebKeySource = jsonWebKeySource;
+		this.jwksSource = jwksSource;
 		this.headerPolicy = headerPolicy;
 		this.claimsPolicy = claimsPolicy;
 		this.acceptAnyAudience = acceptAnyAudience;
@@ -176,40 +176,23 @@ public final class JwtValidator {
 	}
 
 	/**
-	 * Validates a token (see the class description for the checks and their order).
+	 * Validates once and returns a success or a fixed local input rejection. Remote key-source failures remain
+	 * exceptions; no rejected JWT, claims or credential are exposed. See the class description for the checks and
+	 * their order.
 	 * <p>
-	 * Over a {@link RemoteJsonWebKeySource}, this may fetch the key set on the calling thread, or wait for another
+	 * Over a {@link RemoteJwksSource}, this may fetch the key set on the calling thread, or wait for another
 	 * caller's fetch, for up to the source's request timeout.
 	 *
-	 * @param compactSerialization the token, untrusted
-	 * @return the validated token
-	 * @throws NullPointerException               if {@code compactSerialization} is {@code null}
-	 * @throws MalformedJoseInputException        if the token cannot be parsed or exceeds a limit
-	 * @throws UnsupportedJoseFeatureException    if the token uses a JOSE feature Revetsec does not support
-	 * @throws JwtValidationException             if the token fails a check
-	 * @throws JsonWebKeySetUnavailableException if a remote key source has no usable key set for this call
-	 * @since 1.0.0
-	 */
-	@NonNull
-	public Jwt validate(@NonNull String compactSerialization) {
-		return validate(compactSerialization, null);
-	}
-
-
-	/**
-	 * Validates once and returns a success or a fixed local input rejection. Remote key-source failures remain
-	 * exceptions; no rejected JWT, claims or credential are exposed. The configured validation and observer behavior
-	 * is identical to {@link #validate(String)}.
 	 * @param compactSerialization untrusted compact token
 	 * @return the validation outcome
 	 * @throws NullPointerException if the token is null
-	 * @throws JsonWebKeySetUnavailableException if remote keys are unavailable
+	 * @throws JwksUnavailableException if remote keys are unavailable
 	 * @since 1.0.0
 	 */
 	@CheckReturnValue
 	public @NonNull JwtValidationResult validateResult(@NonNull String compactSerialization) {
 		try {
-			return JwtValidationResult.fromJwt(validate(compactSerialization));
+			return JwtValidationResult.fromJwt(validate(compactSerialization, null));
 		} catch (JoseException rejection) {
 			return JwtValidationResult.fromReason(rejection.getReason());
 		}
@@ -235,7 +218,7 @@ public final class JwtValidator {
 
 		try {
 			jwt = validateOrThrow(compactSerialization, remainingNanos, policy, header, secret, hmacUsed);
-		} catch (JoseException | JsonWebKeySetUnavailableException exception) {
+		} catch (JoseException | JwksUnavailableException exception) {
 			Duration elapsed = Duration.ofNanos(System.nanoTime() - startNanos);
 			ObserverDispatch.dispatch(this.observer, observer -> observer.didFailToValidateJwt(exception, elapsed));
 			throw exception;
@@ -256,7 +239,7 @@ public final class JwtValidator {
 				return Jwt.fromVerifiedJwt(JwtProcessor.completeWithSecret(prepared, requireNonNull(secret), policy,
 						this.clock.instant()));
 			}
-			// Key resolution throws only JsonWebKeySetUnavailableException, which is never translated.
+			// Key resolution throws only JwksUnavailableException, which is never translated.
 			KeySelection selection = selectKey(prepared.getKeyQuery(), remainingNanos);
 			return Jwt.fromVerifiedJwt(JwtProcessor.complete(prepared, selection, policy,
 					this.clock.instant()));
@@ -267,7 +250,7 @@ public final class JwtValidator {
 
 	@NonNull
 	private KeySelection selectKey(@NonNull KeyQuery query, @Nullable LongSupplier remainingNanos) {
-		if (this.jsonWebKeySource instanceof StaticJsonWebKeySource staticSource) {
+		if (this.jwksSource instanceof StaticJwksSource staticSource) {
 			try {
 				return KeySelector.select(staticSource.verificationKeys(), query);
 			} catch (RuntimeException e) {
@@ -276,8 +259,8 @@ public final class JwtValidator {
 			}
 		}
 
-		// A remote source throws only JsonWebKeySetUnavailableException, which propagates unchanged.
-		RemoteJsonWebKeySource remote = (RemoteJsonWebKeySource) this.jsonWebKeySource;
+		// A remote source throws only JwksUnavailableException, which propagates unchanged.
+		RemoteJwksSource remote = (RemoteJwksSource) this.jwksSource;
 		return remainingNanos == null ? remote.select(query) : remote.select(query,
 				Deadline.fromNow(Duration.ofNanos(Math.max(0, remainingNanos.getAsLong()))));
 	}
@@ -291,7 +274,7 @@ public final class JwtValidator {
 	@Override
 	@NonNull
 	public String toString() {
-		return getClass().getSimpleName() + "{issuer=" + this.issuer + ", jsonWebKeySource=" + this.jsonWebKeySource
+		return getClass().getSimpleName() + "{issuer=" + this.issuer + ", jwksSource=" + this.jwksSource
 				+ ", headerPolicy=" + this.headerPolicy + ", claimsPolicy=" + this.claimsPolicy + "}";
 	}
 
@@ -312,7 +295,7 @@ public final class JwtValidator {
 		@NonNull
 		private final String issuer;
 		@Nullable
-		private JsonWebKeySource jsonWebKeySource;
+		private JwksSource jwksSource;
 		@Nullable
 		private Set<@NonNull String> expectedAudiences;
 		@Nullable
@@ -346,14 +329,14 @@ public final class JwtValidator {
 		/**
 		 * Sets where the verification keys come from. Required.
 		 *
-		 * @param jsonWebKeySource the key source; share one only among validators with the same issuer. {@code null}
+		 * @param jwksSource the key source; share one only among validators with the same issuer. {@code null}
 		 *                         clears it
 		 * @return this builder
 		 * @since 1.0.0
 		 */
 		@NonNull
-		public Builder jsonWebKeySource(@Nullable JsonWebKeySource jsonWebKeySource) {
-			this.jsonWebKeySource = jsonWebKeySource;
+		public Builder jwksSource(@Nullable JwksSource jwksSource) {
+			this.jwksSource = jwksSource;
 			return this;
 		}
 
@@ -555,7 +538,7 @@ public final class JwtValidator {
 					this.allowedTypes == null ? DEFAULT_ALLOWED_TYPES : this.allowedTypes,
 					this.typeRequired != null && this.typeRequired);
 
-			JsonWebKeySource source = this.jsonWebKeySource;
+			JwksSource source = this.jwksSource;
 			if (source == null)
 				throw new IllegalStateException("A JwtValidator needs a JSON Web Key source.");
 			if (!anyAudience && this.expectedAudiences == null)

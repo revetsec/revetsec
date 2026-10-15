@@ -16,6 +16,8 @@
 
 package com.revetsec.oauth;
 
+import com.revetsec.oauth.AuthorizationServerMetadataParseResult;
+import com.revetsec.oauth.AuthorizationResponseParseResult;
 import org.jspecify.annotations.NonNull;
 
 import com.code_intelligence.jazzer.junit.FuzzTest;
@@ -39,22 +41,24 @@ public class OAuthFuzzTests {
 
 	/**
 	 * A parsed callback never selects one of several singleton protocol values, and cannot echo its raw input from
-	 * {@code toString()}. The only rejected-input exception is an OAuth malformed-response exception.
+	 * {@code toString()}. Rejected input has the fixed malformed-callback result.
 	 *
 	 * @param input raw callback query bytes
 	 */
 	@FuzzTest(maxDuration = "5m")
 	public void callbackKeepsSingletonsAndRedactsInput(byte @NonNull [] input) {
 		String query = new String(input, StandardCharsets.ISO_8859_1);
-		try {
-			AuthorizationResponse response = AuthorizationResponse.fromQueryString(query);
+		var parsed = AuthorizationResponse.fromQueryStringResult(query);
+		if (parsed instanceof AuthorizationResponseParseResult.Rejected rejected) {
+			Assertions.assertEquals(OAuthException.Reason.CALLBACK_MALFORMED, rejected.getReason());
+			return;
+		}
+		{
+			AuthorizationResponse response = Assertions.assertInstanceOf(AuthorizationResponseParseResult.Succeeded.class, parsed).getResponse();
 			for (String name : List.of("code", "state", "iss", "error", "error_description", "error_uri"))
 				Assertions.assertTrue(response.getParameters().getOrDefault(name, List.of()).size() <= 1);
 			Assertions.assertFalse(response.getCode().isPresent() && response.getError().isPresent());
 			Assertions.assertEquals("AuthorizationResponse{parameters=<redacted>}", response.toString());
-		} catch (OAuthResponseException rejected) {
-			Assertions.assertEquals(OAuthException.Reason.CALLBACK_MALFORMED, rejected.getReason());
-			Assertions.assertNull(rejected.getCause());
 		}
 	}
 
@@ -83,21 +87,24 @@ public class OAuthFuzzTests {
 
 	/**
 	 * Accepted metadata must retain the exact requested issuer. Endpoint URI safety is checked by the client when it
-	 * loads the document. Malformed or mismatched documents fail with a typed fixed-message exception.
+	 * loads the document. Malformed or mismatched documents return a sealed rejection with a fixed reason.
 	 *
 	 * @param input metadata JSON bytes
 	 */
 	@FuzzTest(maxDuration = "5m")
 	public void metadataRequiresExactIssuer(byte @NonNull [] input) {
 		String json = new String(input, StandardCharsets.ISO_8859_1);
-		try {
-			AuthorizationServerMetadata metadata = AuthorizationServerMetadata.fromJson(ISSUER, json);
+		var parsed = AuthorizationServerMetadata.fromJsonResult(ISSUER, json);
+		if (parsed instanceof AuthorizationServerMetadataParseResult.Rejected rejected) {
+			Assertions.assertNotNull(rejected.getReason());
+			return;
+		}
+		{
+			AuthorizationServerMetadata metadata = Assertions.assertInstanceOf(AuthorizationServerMetadataParseResult.Succeeded.class, parsed).getMetadata();
 			Assertions.assertEquals(ISSUER, metadata.getIssuer());
 			Assertions.assertNotNull(metadata.getAuthorizationEndpoint());
 			Assertions.assertNotNull(metadata.getTokenEndpoint());
 			Assertions.assertTrue(metadata.isRemotelyDiscovered());
-		} catch (OAuthResponseException | OAuthValidationException rejected) {
-			Assertions.assertNull(rejected.getCause());
 		}
 	}
 

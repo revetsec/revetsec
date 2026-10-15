@@ -57,10 +57,10 @@ final class OAuthServerOutcomeTests {
  private static @NonNull OAuthServerInteraction interaction() { return OAuthServerInteraction.fromRecord(HANDLE,pending(),"<TEST-ONLY-untrusted-name>",LIMITS); }
  private static @NonNull VerifiedAccessToken proof() {
   String payload="{\"iss\":\"https://issuer.example\",\"sub\":\"TEST-ONLY-subject\",\"aud\":\""+RESOURCE+"\",\"iat\":"+NOW.getEpochSecond()+",\"exp\":"+NOW.plusSeconds(300).getEpochSecond()+",\"client_id\":\"TEST-ONLY-client\",\"jti\":\"TEST-ONLY-jti\",\"scope\":\"read\"}";
-  String compact=TestJws.withAlgorithm(TestJws.Algorithm.RS256).kid("key").typ("at+jwt").payload(payload).sign(TestJsonWebKeys.Fixture.IDP_SIGNING_RSA_2048.getPrivateKey());
-  StaticJsonWebKeySource keys=StaticJsonWebKeySource.fromJsonWebKeySet(JsonWebKeySet.fromJson(TestJsonWebKeys.withFixture(TestJsonWebKeys.Fixture.IDP_SIGNING_RSA_2048).kid("key").alg("RS256").toKeySetJson()));
-  return JwtAccessTokenValidator.withIssuer("https://issuer.example").jsonWebKeySource(keys).expectedAudiences(Set.of(RESOURCE)).clock(Clock.fixed(NOW,ZoneOffset.UTC)).clockSkew(Duration.ZERO).build()
-   .validate(BearerToken.fromAuthorizationHeaderValues(List.of("Bearer "+compact),65536).orElseThrow());
+  String compact=TestJws.withAlgorithm(TestJws.Algorithm.RS256).kid("key").typ("at+jwt").payload(payload).sign(TestJwk.Fixture.IDP_SIGNING_RSA_2048.getPrivateKey());
+  StaticJwksSource keys=StaticJwksSource.fromJwks(assertInstanceOf(JwksParseResult.Succeeded.class, Jwks.fromJsonResult(TestJwk.withFixture(TestJwk.Fixture.IDP_SIGNING_RSA_2048).kid("key").alg("RS256").toKeySetJson())).getJwks());
+  return assertInstanceOf(AccessTokenValidationResult.Succeeded.class, JwtAccessTokenValidator.withIssuer("https://issuer.example").jwksSource(keys).expectedAudiences(Set.of(RESOURCE)).clock(Clock.fixed(NOW,ZoneOffset.UTC)).clockSkew(Duration.ZERO).build()
+   .validateResult(assertInstanceOf(BearerTokenResult.Present.class, BearerToken.fromAuthorizationHeaderValuesResult(List.of("Bearer "+compact),65536)).getToken())).getAccessToken();
  }
  @Test void checkedPendingViewHasOnlyReviewedFactsAndImmutableScopes() {
   OAuthServerInteraction view=interaction(); assertEquals(HANDLE,view.getInteractionValue());assertEquals("TEST-ONLY-client",view.getClientId());

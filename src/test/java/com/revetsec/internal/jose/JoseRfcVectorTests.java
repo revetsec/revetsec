@@ -22,7 +22,7 @@ import com.revetsec.internal.encoding.Base64Url;
 import com.revetsec.internal.json.JsonCodec;
 import com.revetsec.internal.json.JsonLimits;
 import com.revetsec.jose.JoseException;
-import com.revetsec.jose.JsonWebKeySkipReason;
+import com.revetsec.jose.JwkSkipReason;
 import com.revetsec.jose.JwsAlgorithm;
 import com.revetsec.json.JsonObject;
 import com.revetsec.testing.WycheproofVectors;
@@ -144,26 +144,26 @@ final class JoseRfcVectorTests {
 		// The alg Wycheproof adds follows the test: one RSA key, RS256 for tcId 345 and PS256 for tcId 346.
 		JsonObject rs256Key = rfc7520.group(345).getObject("public");
 		JsonObject ps256Key = rfc7520.group(346).getObject("public");
-		Assertions.assertEquals(rs256Key.findString("kid").orElseThrow(), ps256Key.findString("kid").orElseThrow());
-		Assertions.assertEquals(rs256Key.findString("n").orElseThrow(), ps256Key.findString("n").orElseThrow());
-		Assertions.assertEquals("RS256", rs256Key.findString("alg").orElseThrow());
-		Assertions.assertEquals("PS256", ps256Key.findString("alg").orElseThrow());
+		Assertions.assertEquals(rs256Key.find("kid").map(com.revetsec.json.JsonString.class::cast).map(com.revetsec.json.JsonString::getValue).orElseThrow(), ps256Key.find("kid").map(com.revetsec.json.JsonString.class::cast).map(com.revetsec.json.JsonString::getValue).orElseThrow());
+		Assertions.assertEquals(rs256Key.find("n").map(com.revetsec.json.JsonString.class::cast).map(com.revetsec.json.JsonString::getValue).orElseThrow(), ps256Key.find("n").map(com.revetsec.json.JsonString.class::cast).map(com.revetsec.json.JsonString::getValue).orElseThrow());
+		Assertions.assertEquals("RS256", rs256Key.find("alg").map(com.revetsec.json.JsonString.class::cast).map(com.revetsec.json.JsonString::getValue).orElseThrow());
+		Assertions.assertEquals("PS256", ps256Key.find("alg").map(com.revetsec.json.JsonString.class::cast).map(com.revetsec.json.JsonString::getValue).orElseThrow());
 
 		// Apart from that alg, the vendored keys are RFC 7520's own: section 3.3's RSA key, and section 3.1's EC key.
 		Assertions.assertEquals(Set.of("kty", "kid", "use", "n", "e", "alg"), rs256Key.getMembers().keySet());
-		Assertions.assertEquals("RSA", rs256Key.findString("kty").orElseThrow());
-		Assertions.assertEquals(RFC_7520_FIGURE_3_N_SHA_256, sha256(rs256Key.findString("n").orElseThrow()
+		Assertions.assertEquals("RSA", rs256Key.find("kty").map(com.revetsec.json.JsonString.class::cast).map(com.revetsec.json.JsonString::getValue).orElseThrow());
+		Assertions.assertEquals(RFC_7520_FIGURE_3_N_SHA_256, sha256(rs256Key.find("n").map(com.revetsec.json.JsonString.class::cast).map(com.revetsec.json.JsonString::getValue).orElseThrow()
 				.getBytes(StandardCharsets.US_ASCII)));
-		Assertions.assertEquals("AQAB", rs256Key.findString("e").orElseThrow());
+		Assertions.assertEquals("AQAB", rs256Key.find("e").map(com.revetsec.json.JsonString.class::cast).map(com.revetsec.json.JsonString::getValue).orElseThrow());
 		JsonObject ecKey = rfc7520.group(347).getObject("public");
 		Assertions.assertEquals(Set.of("kty", "kid", "use", "crv", "x", "y", "alg"), ecKey.getMembers().keySet());
-		Assertions.assertEquals("EC", ecKey.findString("kty").orElseThrow());
-		Assertions.assertEquals("P-521", ecKey.findString("crv").orElseThrow());
-		Assertions.assertEquals(RFC_7520_FIGURE_1_COORDINATES_SHA_256, sha256((ecKey.findString("x").orElseThrow() + "."
-				+ ecKey.findString("y").orElseThrow()).getBytes(StandardCharsets.US_ASCII)));
+		Assertions.assertEquals("EC", ecKey.find("kty").map(com.revetsec.json.JsonString.class::cast).map(com.revetsec.json.JsonString::getValue).orElseThrow());
+		Assertions.assertEquals("P-521", ecKey.find("crv").map(com.revetsec.json.JsonString.class::cast).map(com.revetsec.json.JsonString::getValue).orElseThrow());
+		Assertions.assertEquals(RFC_7520_FIGURE_1_COORDINATES_SHA_256, sha256((ecKey.find("x").map(com.revetsec.json.JsonString.class::cast).map(com.revetsec.json.JsonString::getValue).orElseThrow() + "."
+				+ ecKey.find("y").map(com.revetsec.json.JsonString.class::cast).map(com.revetsec.json.JsonString::getValue).orElseThrow()).getBytes(StandardCharsets.US_ASCII)));
 		for (JsonObject key : List.of(rs256Key, ecKey)) {
-			Assertions.assertEquals("bilbo.baggins@hobbiton.example", key.findString("kid").orElseThrow());
-			Assertions.assertEquals("sig", key.findString("use").orElseThrow());
+			Assertions.assertEquals("bilbo.baggins@hobbiton.example", key.find("kid").map(com.revetsec.json.JsonString.class::cast).map(com.revetsec.json.JsonString::getValue).orElseThrow());
+			Assertions.assertEquals("sig", key.find("use").map(com.revetsec.json.JsonString.class::cast).map(com.revetsec.json.JsonString::getValue).orElseThrow());
 		}
 
 		Example example = rfc7520.example(345, JwsAlgorithm.RS256);
@@ -192,7 +192,7 @@ final class JoseRfcVectorTests {
 				Instant.ofEpochSecond(RfcJoseExamples.RFC_7515_JWT_EXPIRES_AT - 1));
 		Assertions.assertEquals("joe", jwt.claims().issuer());
 		Assertions.assertEquals(Instant.ofEpochSecond(RfcJoseExamples.RFC_7515_JWT_EXPIRES_AT), jwt.claims().expiresAt());
-		Assertions.assertTrue(jwt.claims().claims().findBoolean("http://example.com/is_root").orElseThrow());
+		Assertions.assertTrue(jwt.claims().claims().find("http://example.com/is_root").map(com.revetsec.json.JsonBoolean.class::cast).map(com.revetsec.json.JsonBoolean::getValue).orElseThrow());
 		Assertions.assertNull(jwt.key());
 
 		JoseFailure flipped = Assertions.assertThrows(JoseFailure.class, () -> JwtProcessor.verifyWithSecret(
@@ -201,7 +201,7 @@ final class JoseRfcVectorTests {
 
 		JsonWebSignatureFile rfc7520 = JsonWebSignatureFile.load();
 		String rfc7520Jws = rfc7520.jws(348);
-		byte[] rfc7520Secret = Base64Url.decode(rfc7520.group(348).getObject("private").findString("k")
+		byte[] rfc7520Secret = Base64Url.decode(rfc7520.group(348).getObject("private").find("k").map(com.revetsec.json.JsonString.class::cast).map(com.revetsec.json.JsonString::getValue)
 				.orElseThrow());
 		Assertions.assertEquals(RFC_7520_PAYLOAD_SHA_256, sha256(JwtProcessor.verifyWithSecret(prepare(rfc7520Jws,
 				JwsAlgorithm.HS256), rfc7520Secret).getPayload()));
@@ -227,15 +227,15 @@ final class JoseRfcVectorTests {
 		String keySet = "{\"keys\":[" + RfcJoseExamples.RFC_7517_A1_EC_KEY + "," + rsa + ","
 				+ RfcJoseExamples.RFC_7517_A2_EC_KEY + "," + RfcJoseExamples.RFC_7517_A3_HMAC_KEY + "]}";
 
-		ParsedKeySet parsed = JwkSetParser.parse(keySet, 256 * 1024, 100);
+		ParsedJwks parsed = JwksParser.parse(keySet, 256 * 1024, 100);
 		Assertions.assertEquals(1, parsed.keys().size());
 		VerificationKey key = parsed.keys().get(0);
 		Assertions.assertEquals("2011-04-29", key.keyId());
 		Assertions.assertEquals(JwsAlgorithm.RS256, key.algorithm());
 		Assertions.assertEquals("NzbLsXh8uDCcd-6MNwXF4W_7noWXFZAfHkxZsRGC9Xs", key.thumbprintSha256());
-		Assertions.assertEquals(List.of(new ParsedKeySet.Skip(0, JsonWebKeySkipReason.NOT_A_VERIFICATION_KEY),
-				new ParsedKeySet.Skip(2, JsonWebKeySkipReason.PRIVATE_KEY_MEMBERS),
-				new ParsedKeySet.Skip(3, JsonWebKeySkipReason.SYMMETRIC_KEY)), parsed.skips());
+		Assertions.assertEquals(List.of(new ParsedJwks.Skip(0, JwkSkipReason.NOT_A_VERIFICATION_KEY),
+				new ParsedJwks.Skip(2, JwkSkipReason.PRIVATE_KEY_MEMBERS),
+				new ParsedJwks.Skip(3, JwkSkipReason.SYMMETRIC_KEY)), parsed.skips());
 
 		// Without use, the same EC key is a usable ES256 key, so use: enc alone decided the skip.
 		Assertions.assertEquals("1", JwkParser.parse(json(RfcJoseExamples.RFC_7517_A1_EC_KEY.replace(
@@ -303,7 +303,7 @@ final class JoseRfcVectorTests {
 
 		@NonNull Example example(int tcId,
 										@NonNull JwsAlgorithm algorithm) {
-			Assertions.assertEquals("rfc7520", group(tcId).getJson().findString("comment").orElseThrow());
+			Assertions.assertEquals("rfc7520", group(tcId).getJson().find("comment").map(com.revetsec.json.JsonString.class::cast).map(com.revetsec.json.JsonString::getValue).orElseThrow());
 			JsonObject.Builder key = JsonObject.builder();
 			group(tcId).getObject("public").getMembers().forEach((name, value) -> {
 				if (!name.equals("alg"))

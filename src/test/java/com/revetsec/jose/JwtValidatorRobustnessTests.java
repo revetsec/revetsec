@@ -19,7 +19,7 @@ package com.revetsec.jose;
 import org.jspecify.annotations.NonNull;
 
 import com.revetsec.testing.Sentinels;
-import com.revetsec.testing.TestJsonWebKeys.Fixture;
+import com.revetsec.testing.TestJwk.Fixture;
 import com.revetsec.testing.TestJws;
 import com.revetsec.testing.TestJws.Algorithm;
 import com.revetsec.testing.TestJws.Variant;
@@ -35,9 +35,9 @@ import java.util.SplittableRandom;
 import java.util.stream.Stream;
 
 /**
- * {@link JwtValidator#validate(String)} on hostile input (INV-G1, R9): whatever the token, it returns a {@link Jwt} or
- * throws one of the three {@link JoseException} leaves, with a fixed message, no cause and no stack of the input;
- * no mutation of a valid token is accepted; and neither the exception nor the validator shows the token, its
+ * The validation operation {@link JwtValidator#validateResult(String)} on hostile input (INV-G1, R9) returns either
+ * a checked {@link Jwt} or a rejection with a fixed reason and no input data;
+ * no mutation of a valid token is accepted; and neither the rejection nor the validator shows the token, its
  * {@code kid} or its claims. Seeds are fixed, so every run is reproducible.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
@@ -46,7 +46,7 @@ final class JwtValidatorRobustnessTests {
 	private static final int ROUNDS = 3_000;
 
 	// INV-G1: every single-character mutation of a valid token, for each algorithm family, is refused with a
-	// JoseException, unless it left the token unchanged. Nothing else escapes, and no forged variant is accepted.
+	// rejected result, unless it left the token unchanged. Nothing else escapes, and no forged variant is accepted.
 	@TestFactory
 	@NonNull Stream<@NonNull DynamicTest> mutatedTokensAreRefusedAndNothingElseEscapes() {
 		List<Object[]> cases = List.of(new Object[]{Algorithm.RS256, Fixture.IDP_SIGNING_RSA_2048},
@@ -74,21 +74,22 @@ final class JwtValidatorRobustnessTests {
 				}
 				String candidate = mutated.toString();
 
-				try {
-					Jwt jwt = validator.validate(candidate);
+				JwtValidationResult result = validator.validateResult(candidate);
+				if (result instanceof JwtValidationResult.Succeeded success) {
 					Assertions.assertEquals(token, candidate, "a mutated token was accepted");
-					Assertions.assertNotNull(jwt);
-				} catch (JoseException expected) {
-					JwtFixtures.assertReason(expected.getReason(), expected);
+					Assertions.assertNotNull(success.getJwt());
+				} else {
+					JwtValidationResult.Rejected rejected = Assertions.assertInstanceOf(JwtValidationResult.Rejected.class, result);
+					Assertions.assertNotNull(rejected.getReason());
 				}
 			}
 		}));
 	}
 
 	// INV-G1: arbitrary text, from empty to 70 KiB, with dots and JSON-looking fragments, never escapes as anything
-	// but a JoseException from a static source.
+	// but a rejected result from a static source.
 	@Test
-	void arbitraryTextNeverEscapesAsAnythingButJoseException() {
+	void arbitraryTextAlwaysReturnsRejected() {
 		JwtValidator validator = JwtFixtures.validator(Fixture.IDP_SIGNING_RSA_2048, JwsAlgorithm.RS256);
 		SplittableRandom random = new SplittableRandom(42L);
 		List<String> fragments = List.of("eyJhbGciOiJSUzI1NiJ9", "eyJ9", "e30", ".", "..", "{", "=", "AAAA", "-_",
@@ -99,21 +100,16 @@ final class JwtValidatorRobustnessTests {
 			int count = random.nextInt(20);
 			for (int index = 0; index < count; ++index)
 				text.append(fragments.get(random.nextInt(fragments.size())));
-			try {
-				Jwt accepted = validator.validate(text.toString());
-				Assertions.fail("accepted " + accepted);
-			} catch (JoseException expected) {
-				JwtFixtures.assertReason(expected.getReason(), expected);
-			}
+			JwtValidationResult.Rejected rejected = Assertions.assertInstanceOf(JwtValidationResult.Rejected.class,
+					validator.validateResult(text.toString()));
+			Assertions.assertNotNull(rejected.getReason());
 		}
 
 		JwtFixtures.assertRejected(JoseException.Reason.TOKEN_SYNTAX, validator, ".".repeat(65_536));
 		JwtFixtures.assertRejected(JoseException.Reason.TOKEN_TOO_LARGE, validator, ".".repeat(65_537));
 	}
 
-	// R9: a refused token's exception shows only the reason's fixed message: no part of the token, its kid, its
-	// claims or its signature appears in the message, toString or stack trace, and there is no cause or suppressed
-	// exception to carry them.
+	// R9: a refusal contains only the fixed reason and opaque diagnostics, without token, kid, claims or signature.
 	@TestFactory
 	@NonNull Stream<@NonNull DynamicTest> aRefusalRevealsNothingOfTheToken() {
 		JwtValidator validator = JwtFixtures.validator(Fixture.IDP_SIGNING_RSA_2048, JwsAlgorithm.RS256);
@@ -134,12 +130,11 @@ final class JwtValidatorRobustnessTests {
 
 		return tokens.stream().map(token -> DynamicTest.dynamicTest(token.substring(0, 12), () -> {
 			Assertions.assertTrue(Sentinels.containsSentinel(token), "positive control");
-			JoseException exception = Assertions.assertThrows(JoseException.class, () -> validator.validate(token));
-			Assertions.assertNull(exception.getCause());
-			Assertions.assertEquals(0, exception.getSuppressed().length);
-			Sentinels.assertAbsent(exception);
-			Assertions.assertFalse(Sentinels.containsSentinel(exception.getMessage()));
-			Assertions.assertFalse(Sentinels.containsSentinel(exception.toString()));
+			JwtValidationResult.Rejected rejected = Assertions.assertInstanceOf(JwtValidationResult.Rejected.class,
+					validator.validateResult(token));
+			Sentinels.assertAbsent(rejected);
+			Assertions.assertFalse(Sentinels.containsSentinel(rejected.toString()));
+			Assertions.assertFalse(Sentinels.containsSentinel(rejected.getReason().message()));
 		}));
 	}
 
@@ -160,8 +155,7 @@ final class JwtValidatorRobustnessTests {
 		Assertions.assertEquals(Sentinels.JWT_CLAIM, jwt.getClaims().getSubject().orElseThrow());
 	}
 
-	// A static source has its keys in memory, so a token it cannot verify is a JwtValidationException (unknown key,
-	// mismatched signature), never a JsonWebKeySetUnavailableException.
+	// A static source has its keys in memory, so unverifiable tokens return a rejection, never an outage exception.
 	@Test
 	void aStaticSourceNeverMakesTheKeySetUnavailable() {
 		JwtValidator validator = JwtFixtures.validator(JwtFixtures.source(Fixture.IDP_SIGNING_EC_P256)).allowedAlgorithms(
@@ -170,6 +164,6 @@ final class JwtValidatorRobustnessTests {
 				JwtFixtures.token(Algorithm.ES256).kid("unknown").sign(Fixture.IDP_SIGNING_EC_P256.getPrivateKey()),
 				JwtFixtures.token(Algorithm.ES256).signed(Fixture.IDP_SIGNING_EC_P256.getPrivateKey()).withVariant(
 						Variant.FLIPPED_BIT)))
-			Assertions.assertThrows(JwtValidationException.class, () -> validator.validate(token));
+			Assertions.assertInstanceOf(JwtValidationResult.Rejected.class, validator.validateResult(token));
 	}
 }

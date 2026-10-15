@@ -18,7 +18,6 @@ package com.revetsec.oauth;
 
 import org.jspecify.annotations.NonNull;
 
-import com.revetsec.ErrorCategory;
 import org.junit.jupiter.api.Test;
 import java.util.AbstractList;
 import java.util.Arrays;
@@ -27,25 +26,21 @@ import static org.junit.jupiter.api.Assertions.*;
 
 final class BearerTokenTests {
 	@Test void absentIsDifferentFromMalformed() {
-		assertTrue(BearerToken.fromAuthorizationHeaderValues(List.of()).isEmpty());
+		assertTrue((BearerToken.fromAuthorizationHeaderValuesResult(List.of()) instanceof BearerTokenResult.Absent));
 		for (String value : List.of("", " ", "Bearer", "Bearer ", "Bearer  ", "Basic abc", "BEARER\tabc",
 				" Bearer abc", "Bearer abc ", "Bearer abc\t", "Bearer a b", "Bearer =", "Bearer a=b", "Bearer a,b",
 				"Bearer a\r\nInjected: x", "Bearer λ", "Bearer a\u0000", "Bearer a\u007F")) {
-			AccessTokenValidationException error = assertThrows(AccessTokenValidationException.class,
-					() -> BearerToken.fromAuthorizationHeaderValues(List.of(value)), value);
-			assertEquals(AccessTokenValidationException.Reason.MALFORMED_REQUEST, error.getReason());
-			assertEquals(ErrorCategory.MALFORMED_INPUT, error.getCategory());
-			assertEquals(BearerError.INVALID_REQUEST, error.getBearerError());
-			assertEquals(400, error.getBearerError().getStatusCode());
-			assertNull(error.getCause()); assertFalse(error.isTransient());
+			BearerTokenResult.Malformed error = assertInstanceOf(BearerTokenResult.Malformed.class, BearerToken.fromAuthorizationHeaderValuesResult(List.of(value)), value);
+			assertEquals("Malformed", error.getClass().getSimpleName());
+			assertEquals("BearerTokenResult{outcome=Malformed, data=<redacted>}", error.toString());
 		}
 	}
 	@Test void validGrammarPreservesOpaqueTextAndRedactsIt() {
 		String raw = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~+/====";
 		for (String scheme : List.of("Bearer ", "bEaReR ", "BEARER    ")) {
-			BearerToken token = BearerToken.fromAuthorizationHeaderValues(List.of(scheme + raw)).orElseThrow();
+			BearerToken token = assertInstanceOf(BearerTokenResult.Present.class, BearerToken.fromAuthorizationHeaderValuesResult(List.of(scheme + raw))).getToken();
 			assertEquals(raw, token.value()); assertFalse(token.toString().contains(raw));
-			assertNotEquals(token, BearerToken.fromAuthorizationHeaderValues(List.of(scheme + raw)).orElseThrow());
+			assertNotEquals(token, assertInstanceOf(BearerTokenResult.Present.class, BearerToken.fromAuthorizationHeaderValuesResult(List.of(scheme + raw))).getToken());
 		}
 	}
 	@Test void everyAsciiCharacterIsCheckedAgainstTheWireGrammar() {
@@ -53,41 +48,40 @@ final class BearerTokenTests {
 		for (int c = 0; c < 128; c++) {
 			String field = "Bearer a" + (char)c + "b";
 			if (alphabet.indexOf(c) >= 0) assertEquals(field.substring(7),
-					BearerToken.fromAuthorizationHeaderValues(List.of(field)).orElseThrow().value());
-			else assertThrows(AccessTokenValidationException.class, () -> BearerToken.fromAuthorizationHeaderValues(List.of(field)));
+					assertInstanceOf(BearerTokenResult.Present.class, BearerToken.fromAuthorizationHeaderValuesResult(List.of(field))).getToken().value());
+			else assertInstanceOf(BearerTokenResult.Malformed.class, BearerToken.fromAuthorizationHeaderValuesResult(List.of(field)));
 		}
 	}
 	@Test void duplicatesAreRejectedBeforeAccessingOrCopyingValues() {
-		assertThrows(AccessTokenValidationException.class, () -> BearerToken.fromAuthorizationHeaderValues(
+		assertInstanceOf(BearerTokenResult.Malformed.class, BearerToken.fromAuthorizationHeaderValuesResult(
 				List.of("Bearer a", "Bearer a")));
-		assertThrows(AccessTokenValidationException.class, () -> BearerToken.fromAuthorizationHeaderValues(
+		assertInstanceOf(BearerTokenResult.Malformed.class, BearerToken.fromAuthorizationHeaderValuesResult(
 				List.of("Bearer a", "bearer b")));
 		List<String> unreadable = new AbstractList<>() {
 			@Override public int size() { return 2; }
 			@Override public @NonNull String get(int index) { throw new AssertionError("Multiple fields must not be read."); }
 		};
-		assertThrows(AccessTokenValidationException.class, () -> BearerToken.fromAuthorizationHeaderValues(unreadable));
+		assertInstanceOf(BearerTokenResult.Malformed.class, BearerToken.fromAuthorizationHeaderValuesResult(unreadable));
 	}
 	@Test void independentCredentialAndPrefixCapsHoldAtTheirEdges() {
 		for (int size : List.of(8_192, 65_536, 1_048_576)) {
 			String raw = "a".repeat(size);
-			assertEquals(size, BearerToken.fromAuthorizationHeaderValues(List.of("Bearer " + raw), size).orElseThrow().value().length());
-			assertThrows(AccessTokenValidationException.class,
-					() -> BearerToken.fromAuthorizationHeaderValues(List.of("Bearer " + raw + "a"), size));
-			assertEquals(size, BearerToken.fromAuthorizationHeaderValues(List.of("Bearer" + " ".repeat(58) + raw), size).orElseThrow().value().length());
+			assertEquals(size, assertInstanceOf(BearerTokenResult.Present.class, BearerToken.fromAuthorizationHeaderValuesResult(List.of("Bearer " + raw), size)).getToken().value().length());
+			assertInstanceOf(BearerTokenResult.Malformed.class, BearerToken.fromAuthorizationHeaderValuesResult(List.of("Bearer " + raw + "a"), size));
+			assertEquals(size, assertInstanceOf(BearerTokenResult.Present.class, BearerToken.fromAuthorizationHeaderValuesResult(List.of("Bearer" + " ".repeat(58) + raw), size)).getToken().value().length());
 		}
-		assertEquals(65_536, BearerToken.fromAuthorizationHeaderValues(List.of("Bearer " + "a".repeat(65_536))).orElseThrow().value().length());
-		assertThrows(AccessTokenValidationException.class, () -> BearerToken.fromAuthorizationHeaderValues(List.of("Bearer " + "a".repeat(65_537))));
-		assertThrows(AccessTokenValidationException.class, () -> BearerToken.fromAuthorizationHeaderValues(List.of("Bearer" + " ".repeat(59) + "a")));
-		assertThrows(AccessTokenValidationException.class, () -> BearerToken.fromAuthorizationHeaderValues(List.of("Basic " + "a".repeat(70_000))));
+		assertEquals(65_536, assertInstanceOf(BearerTokenResult.Present.class, BearerToken.fromAuthorizationHeaderValuesResult(List.of("Bearer " + "a".repeat(65_536)))).getToken().value().length());
+		assertInstanceOf(BearerTokenResult.Malformed.class, BearerToken.fromAuthorizationHeaderValuesResult(List.of("Bearer " + "a".repeat(65_537))));
+		assertInstanceOf(BearerTokenResult.Malformed.class, BearerToken.fromAuthorizationHeaderValuesResult(List.of("Bearer" + " ".repeat(59) + "a")));
+		assertInstanceOf(BearerTokenResult.Malformed.class, BearerToken.fromAuthorizationHeaderValuesResult(List.of("Basic " + "a".repeat(70_000))));
 		for (int size : List.of(-1, 0, 8_191, 1_048_577, Integer.MAX_VALUE))
-			assertThrows(IllegalArgumentException.class, () -> BearerToken.fromAuthorizationHeaderValues(List.of(), size));
+			assertThrows(IllegalArgumentException.class, () -> BearerToken.fromAuthorizationHeaderValuesResult(List.of(), size));
 	}
 	// Deliberate programmer misuse of required nonnull inputs.
 	@SuppressWarnings("NullAway")
 	@Test void programmerNullsDoNotBecomeCredentialVerdicts() {
-		assertThrows(NullPointerException.class, () -> BearerToken.fromAuthorizationHeaderValues(null));
-		assertThrows(NullPointerException.class, () -> BearerToken.fromAuthorizationHeaderValues(List.of(), null));
-		assertThrows(NullPointerException.class, () -> BearerToken.fromAuthorizationHeaderValues(Arrays.asList((String)null)));
+		assertThrows(NullPointerException.class, () -> BearerToken.fromAuthorizationHeaderValuesResult(null));
+		assertThrows(NullPointerException.class, () -> BearerToken.fromAuthorizationHeaderValuesResult(List.of(), null));
+		assertThrows(NullPointerException.class, () -> BearerToken.fromAuthorizationHeaderValuesResult(Arrays.asList((String)null)));
 	}
 }

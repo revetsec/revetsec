@@ -15,7 +15,7 @@
  */
 
 package com.revetsec.jose;
-import com.revetsec.testing.TestJsonWebKeys;
+import com.revetsec.testing.TestJwk;
 import org.jspecify.annotations.NonNull;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -33,5 +33,5 @@ final class JwsProjectionRc1MutationTests {
   RSAPublicKey key=(RSAPublicKey)projection(signer());String description=key.toString();Assertions.assertFalse(description.isBlank());Assertions.assertFalse(description.contains(key.getModulus().toString()));Assertions.assertFalse(description.contains(key.getPublicExponent().toString()));
  }
  private static @NonNull Object projection(@NonNull JwsSigner signer)throws Exception{var field=JwsSigner.class.getDeclaredField("publicKey");field.setAccessible(true);return java.util.Objects.requireNonNull(field.get(signer));}
- private static @NonNull JwsSigner signer(){return JwsSigner.fromRsaKeyPair(TestJsonWebKeys.Fixture.IDP_SIGNING_RSA_2048.getPrivateKey(),TestJsonWebKeys.Fixture.IDP_SIGNING_RSA_2048.getPublicKey(),JwsAlgorithm.RS256);}
+ private static @NonNull JwsSigner signer(){return JwsSigner.fromRsaKeyPair(TestJwk.Fixture.IDP_SIGNING_RSA_2048.getPrivateKey(),TestJwk.Fixture.IDP_SIGNING_RSA_2048.getPublicKey(),JwsAlgorithm.RS256);}
 }

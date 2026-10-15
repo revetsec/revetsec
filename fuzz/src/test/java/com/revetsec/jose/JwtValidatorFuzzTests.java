@@ -98,7 +98,7 @@ import static com.revetsec.jose.JwtValidatorFuzzSupport.UPPERCASE_ENTRA_ISSUER;
 import static com.revetsec.jose.JwtValidatorFuzzSupport.encodeBase64Url;
 
 /**
- * Coverage-guided checks for {@link JwtValidator} end to end over a {@link StaticJsonWebKeySource} (M2 plan, "JOSE
+ * Coverage-guided checks for {@link JwtValidator} end to end over a {@link StaticJwksSource} (M2 plan, "JOSE
  * semantics" steps 1 to 15, "Key selection" and M2-11; exit criteria 1, 4 to 6, 9 and 10; INV-J1 to INV-J7, INV-G1,
  * INV-G6, INV-C6).
  * <p>
@@ -205,21 +205,21 @@ public class JwtValidatorFuzzTests {
 	private static void requireAgreement(@NonNull ValidatorCase validator, @NonNull String token) {
 		Outcome expected = expected(validator, token);
 		RecordingObserver.reset();
-		Jwt jwt;
-
-		try {
-			jwt = validator.validator.validate(token);
-		} catch (JoseException exception) {
+		var result = validator.validator.validateResult(token);
+		if (result instanceof JwtValidationResult.Rejected rejected) {
+			JoseException exception = Assertions.assertInstanceOf(JoseException.class, RecordingObserver.failure());
+			Assertions.assertEquals(rejected.getReason(), exception.getReason(), "result and observer agree");
 			Assertions.assertEquals(expected.failure, exception.getReason(), () -> validator.name
 					+ " rejected the token with the wrong reason (the oracle expects " + expected.failure + ")");
 			requireFixedShape(exception);
-			Assertions.assertSame(exception, RecordingObserver.failure(), "the observer got another failure instance");
+			Assertions.assertSame(exception, RecordingObserver.failure(), "the recorded diagnostic remains stable");
 			Assertions.assertEquals(0, RecordingObserver.validations(), "a failed validation was reported as valid");
 			Assertions.assertEquals(validator.config.audiences == null ? 1 : 0, RecordingObserver.anyAudience(),
 					"didAcceptAnyAudience did not fire exactly when any audience is accepted");
 			return;
 		}
 
+		Jwt jwt = Assertions.assertInstanceOf(JwtValidationResult.Succeeded.class, result).getJwt();
 		Assertions.assertNull(expected.failure, () -> validator.name + " accepted a token the oracle rejects with "
 				+ expected.failure);
 		Assertions.assertEquals(1, RecordingObserver.validations(), "a validation was not reported exactly once");
@@ -642,26 +642,26 @@ public class JwtValidatorFuzzTests {
 	 * The three validators over a key set, with the oracle's own reading of its keys.
 	 */
 	private static @NonNull List<@NonNull ValidatorCase> validators(@NonNull String keySet) {
-		JsonWebKeySet set = JsonWebKeySet.fromJson(keySet);
+		Jwks set = org.junit.jupiter.api.Assertions.assertInstanceOf(com.revetsec.jose.JwksParseResult.Succeeded.class, Jwks.fromJsonResult(keySet)).getJwks();
 
 		if (set.getKeys().size() != KEY_SLOTS.size())
 			throw new IllegalStateException("The fuzz key set has " + set.getKeys().size() + " usable keys, not "
 					+ KEY_SLOTS.size());
 
-		StaticJsonWebKeySource source = StaticJsonWebKeySource.fromJsonWebKeySet(set);
+		StaticJwksSource source = StaticJwksSource.fromJwks(set);
 		List<OracleKey> keys = OracleKey.readAll(keySet);
 		Set<JwsAlgorithm> asymmetric = EnumSet.complementOf(EnumSet.of(JwsAlgorithm.HS256, JwsAlgorithm.HS384,
 				JwsAlgorithm.HS512));
 		Set<JwsAlgorithm> entraAlgorithms = EnumSet.of(JwsAlgorithm.RS256, JwsAlgorithm.ES256, JwsAlgorithm.EDDSA);
 
-		JwtValidator issuerValidator = JwtValidator.withIssuer(ISSUER).jsonWebKeySource(source)
+		JwtValidator issuerValidator = JwtValidator.withIssuer(ISSUER).jwksSource(source)
 				.expectedAudiences(Set.of(AUDIENCE)).allowedAlgorithms(asymmetric).requiredClaims(REQUIRED_CLAIMS)
 				.clock(Clock.fixed(NOW, ZoneOffset.UTC)).observer(new RecordingObserver()).build();
-		JwtValidator entraValidator = JwtValidator.withIssuer(ENTRA_ISSUER).jsonWebKeySource(source)
+		JwtValidator entraValidator = JwtValidator.withIssuer(ENTRA_ISSUER).jwksSource(source)
 				.acceptAnyAudience(true).allowedAlgorithms(entraAlgorithms).allowedTypes(Set.of("JWT", "at+jwt"))
 				.typeRequired(true).clockSkew(Duration.ZERO).maximumTokenLength(8_192).clock(Clock.fixed(NOW, ZoneOffset.UTC))
 				.observer(new RecordingObserver()).build();
-		JwtValidator uppercaseEntraValidator = JwtValidator.withIssuer(UPPERCASE_ENTRA_ISSUER).jsonWebKeySource(source)
+		JwtValidator uppercaseEntraValidator = JwtValidator.withIssuer(UPPERCASE_ENTRA_ISSUER).jwksSource(source)
 				.acceptAnyAudience(true).clock(Clock.fixed(NOW, ZoneOffset.UTC)).observer(new RecordingObserver()).build();
 
 		return List.of(

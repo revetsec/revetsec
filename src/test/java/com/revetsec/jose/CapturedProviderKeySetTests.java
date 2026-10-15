@@ -22,8 +22,8 @@ import com.revetsec.internal.Limits;
 import com.revetsec.internal.encoding.Base64Url;
 import com.revetsec.internal.json.JsonCodec;
 import com.revetsec.internal.json.JsonLimits;
-import com.revetsec.internal.jose.JwkSetParser;
-import com.revetsec.internal.jose.ParsedKeySet;
+import com.revetsec.internal.jose.JwksParser;
+import com.revetsec.internal.jose.ParsedJwks;
 import com.revetsec.internal.jose.VerificationKey;
 import com.revetsec.json.JsonArray;
 import com.revetsec.json.JsonObject;
@@ -69,9 +69,9 @@ import static java.util.Objects.requireNonNull;
 
 /**
  * Key sets, discovery documents and signed tokens captured on 2026-09-28 from the local Keycloak 26.7.4 and
- * node-oidc-provider 9.12.2 test containers (plan A-5), replayed offline through {@link JsonWebKeySet},
- * {@link StaticJsonWebKeySource} and {@link JwtValidator} with a fixed clock, and through a
- * {@link RemoteJsonWebKeySource} that fetches each key set from a loopback server sending the provider's captured
+ * node-oidc-provider 9.12.2 test containers (plan A-5), replayed offline through {@link Jwks},
+ * {@link StaticJwksSource} and {@link JwtValidator} with a fixed clock, and through a
+ * {@link RemoteJwksSource} that fetches each key set from a loopback server sending the provider's captured
  * {@code Content-Type} and {@code Cache-Control}.
  * <p>
  * Each provider was captured in its committed interop configuration ({@code default-*} files) and with one signing
@@ -133,7 +133,7 @@ final class CapturedProviderKeySetTests {
 	 */
 	private static final List<KeySetCase> KEY_SETS = List.of(
 			new KeySetCase(KEYCLOAK, "default-jwks.json", List.of("RSA 2048 RS256"),
-					List.of(new ParsedKeySet.Skip(0, JsonWebKeySkipReason.NOT_A_VERIFICATION_KEY)), 2),
+					List.of(new ParsedJwks.Skip(0, JwkSkipReason.NOT_A_VERIFICATION_KEY)), 2),
 			new KeySetCase(KEYCLOAK, "algorithms-jwks.json", List.of("OKP Ed25519 EdDSA", "RSA 4096 RS512",
 					"EC P-256 ES256", "RSA 2048 RS256", "RSA 3072 PS384", "RSA 2048 PS256", "EC P-521 ES512", "RSA 4096 PS512",
 					"EC P-384 ES384", "RSA 3072 RS384"), List.of(), 6),
@@ -142,7 +142,7 @@ final class CapturedProviderKeySetTests {
 			new KeySetCase(NODE_OIDC_PROVIDER, "algorithms-jwks.json", List.of("RSA 2048 RS256", "RSA 3072 RS384",
 					"RSA 4096 RS512", "RSA 2048 PS256", "RSA 3072 PS384", "RSA 4096 PS512", "EC P-256 ES256", "EC P-384 ES384",
 					"EC P-521 ES512", "OKP Ed25519 (no alg)"),
-					List.of(new ParsedKeySet.Skip(10, JsonWebKeySkipReason.UNSUPPORTED_KEY_TYPE)), 0));
+					List.of(new ParsedJwks.Skip(10, JwkSkipReason.UNSUPPORTED_KEY_TYPE)), 0));
 
 	/**
 	 * Each captured discovery document: its {@code issuer}, its {@code jwks_uri} and the ID token signing algorithms it
@@ -207,28 +207,28 @@ final class CapturedProviderKeySetTests {
 	}
 
 	// M2-7: each captured key set loads with exactly its pinned usable keys, in document order, and its pinned skips.
-	// The public JsonWebKeySet holds the same keys, each a signing key (use sig) with a kid, and a static source takes
+	// The public Jwks holds the same keys, each a signing key (use sig) with a kid, and a static source takes
 	// the set.
 	@TestFactory
 	@NonNull Stream<@NonNull DynamicTest> everyCapturedKeySetLoadsWithItsPinnedKeysAndSkips() {
 		return KEY_SETS.stream().map(keySet -> DynamicTest.dynamicTest(keySet.toString(), () -> {
-			ParsedKeySet parsed = JwkSetParser.parse(bytes(keySet.capture(), keySet.file()),
+			ParsedJwks parsed = JwksParser.parse(bytes(keySet.capture(), keySet.file()),
 					Limits.JWKS_RESPONSE_BODY_SIZE.getDefaultIntValue(), Limits.JWKS_KEY_COUNT.getDefaultIntValue());
 			Assertions.assertEquals(keySet.skips(), parsed.skips());
 			Assertions.assertEquals(keySet.keys(), parsed.keys().stream().map(CapturedProviderKeySetTests::describe)
 					.toList());
 
-			JsonWebKeySet jsonWebKeySet = JsonWebKeySet.fromJson(text(keySet.capture(), keySet.file()));
+			Jwks jwks = JwtFixtures.assertParsedJwks(text(keySet.capture(), keySet.file()));
 			Assertions.assertEquals(parsed.keys().stream().map(VerificationKey::thumbprintSha256).toList(),
-					jsonWebKeySet.getKeys().stream().map(JsonWebKey::getThumbprintSha256).toList());
-			Assertions.assertEquals(jsonWebKeySet.getKeys().size(), jsonWebKeySet.getKeys().stream()
-					.map(JsonWebKey::getThumbprintSha256).distinct().count(), "distinct keys");
-			for (JsonWebKey key : jsonWebKeySet.getKeys()) {
+					jwks.getKeys().stream().map(Jwk::getThumbprintSha256).toList());
+			Assertions.assertEquals(jwks.getKeys().size(), jwks.getKeys().stream()
+					.map(Jwk::getThumbprintSha256).distinct().count(), "distinct keys");
+			for (Jwk key : jwks.getKeys()) {
 				Assertions.assertEquals(Optional.of("sig"), key.getUse());
 				Assertions.assertTrue(key.getKeyId().isPresent());
 			}
-			Assertions.assertSame(jsonWebKeySet, StaticJsonWebKeySource.fromJsonWebKeySet(jsonWebKeySet)
-					.getJsonWebKeySet());
+			Assertions.assertSame(jwks, StaticJwksSource.fromJwks(jwks)
+					.getJwks());
 		}));
 	}
 
@@ -245,7 +245,7 @@ final class CapturedProviderKeySetTests {
 				for (String member : PRIVATE_MEMBERS)
 					Assertions.assertEquals(Optional.empty(), key.find(member), member);
 
-				String keyType = key.findString("kty").orElseThrow();
+				String keyType = key.find("kty").map(jsonMemberValue -> ((com.revetsec.json.JsonString) jsonMemberValue).getValue()).orElseThrow();
 				switch (keyType) {
 					case "RSA" -> {
 						byte[] modulus = decoded(key, "n");
@@ -255,7 +255,7 @@ final class CapturedProviderKeySetTests {
 						Assertions.assertEquals(BigInteger.valueOf(65_537), new BigInteger(1, exponent));
 					}
 					case "EC" -> {
-						int length = switch (key.findString("crv").orElseThrow()) {
+						int length = switch (key.find("crv").map(jsonMemberValue -> ((com.revetsec.json.JsonString) jsonMemberValue).getValue()).orElseThrow()) {
 							case "P-256" -> 32;
 							case "P-384" -> 48;
 							case "P-521" -> 66;
@@ -265,7 +265,7 @@ final class CapturedProviderKeySetTests {
 						Assertions.assertEquals(length, decoded(key, "y").length);
 					}
 					case "OKP" -> {
-						Assertions.assertEquals(Optional.of("Ed25519"), key.findString("crv"));
+						Assertions.assertEquals(Optional.of("Ed25519"), key.find("crv").map(jsonMemberValue -> ((com.revetsec.json.JsonString) jsonMemberValue).getValue()));
 						Assertions.assertEquals(32, decoded(key, "x").length);
 					}
 					default -> Assertions.assertEquals("AKP", keyType);
@@ -284,15 +284,15 @@ final class CapturedProviderKeySetTests {
 	@Test
 	void keycloaksDefaultKeySetCarriesAnEncryptionKeyThatIsSkipped() throws Exception {
 		List<JsonObject> keycloak = rawKeys(keySet(KEYCLOAK, "default-jwks.json"));
-		Assertions.assertEquals(Optional.of("enc"), keycloak.get(0).findString("use"));
-		Assertions.assertEquals(Optional.of("RSA-OAEP"), keycloak.get(0).findString("alg"));
-		Assertions.assertEquals(List.of(new ParsedKeySet.Skip(0, JsonWebKeySkipReason.NOT_A_VERIFICATION_KEY)),
-				JwkSetParser.parse(bytes(KEYCLOAK, "default-jwks.json"), Limits.JWKS_RESPONSE_BODY_SIZE.getDefaultIntValue(),
+		Assertions.assertEquals(Optional.of("enc"), keycloak.get(0).find("use").map(jsonMemberValue -> ((com.revetsec.json.JsonString) jsonMemberValue).getValue()));
+		Assertions.assertEquals(Optional.of("RSA-OAEP"), keycloak.get(0).find("alg").map(jsonMemberValue -> ((com.revetsec.json.JsonString) jsonMemberValue).getValue()));
+		Assertions.assertEquals(List.of(new ParsedJwks.Skip(0, JwkSkipReason.NOT_A_VERIFICATION_KEY)),
+				JwksParser.parse(bytes(KEYCLOAK, "default-jwks.json"), Limits.JWKS_RESPONSE_BODY_SIZE.getDefaultIntValue(),
 						Limits.JWKS_KEY_COUNT.getDefaultIntValue()).skips());
-		Assertions.assertEquals(1, JsonWebKeySet.fromJson(text(KEYCLOAK, "default-jwks.json")).getKeys().size());
+		Assertions.assertEquals(1, JwtFixtures.assertParsedJwks(text(KEYCLOAK, "default-jwks.json")).getKeys().size());
 
 		for (JsonObject key : rawKeys(keySet(NODE_OIDC_PROVIDER, "default-jwks.json")))
-			Assertions.assertEquals(Optional.of("sig"), key.findString("use"));
+			Assertions.assertEquals(Optional.of("sig"), key.find("use").map(jsonMemberValue -> ((com.revetsec.json.JsonString) jsonMemberValue).getValue()));
 	}
 
 	// Each captured token verifies at its capture time against its own key set with its own algorithm allowed: the
@@ -303,7 +303,7 @@ final class CapturedProviderKeySetTests {
 	@NonNull Stream<@NonNull DynamicTest> everyCapturedTokenVerifiesAtItsCaptureTime() {
 		return TOKENS.stream().map(token -> DynamicTest.dynamicTest(token.toString(), () -> {
 			String compact = text(token.capture(), token.file());
-			StaticJsonWebKeySource source = source(token.capture(), token.keySet());
+			StaticJwksSource source = source(token.capture(), token.keySet());
 			Jwt jwt = JwtFixtures.assertAccepted(validator(token, source, token.capture().finishedAt()).allowedAlgorithms(
 					Set.of(token.algorithm())).build(), compact);
 
@@ -311,7 +311,7 @@ final class CapturedProviderKeySetTests {
 			Assertions.assertEquals(Optional.ofNullable(token.type()), jwt.getType());
 			Assertions.assertEquals(compact, jwt.toCompactSerialization());
 			String kid = jwt.getKeyId().orElseThrow();
-			Assertions.assertEquals(1, source.getJsonWebKeySet().getKeys().stream().filter(key ->
+			Assertions.assertEquals(1, source.getJwks().getKeys().stream().filter(key ->
 					key.getKeyId().equals(Optional.of(kid))).count(), "one key with the token's kid");
 
 			JwtClaims claims = jwt.getClaims();
@@ -333,7 +333,7 @@ final class CapturedProviderKeySetTests {
 	@NonNull Stream<@NonNull DynamicTest> everyCapturedTokenExpiresOnceTheClockReachesExpPlusTheSkew() {
 		return TOKENS.stream().map(token -> DynamicTest.dynamicTest(token.toString(), () -> {
 			String compact = text(token.capture(), token.file());
-			StaticJsonWebKeySource source = source(token.capture(), token.keySet());
+			StaticJwksSource source = source(token.capture(), token.keySet());
 			Instant expiresAt = claimsAtCapture(token, source).getExpiresAt().orElseThrow();
 
 			JwtFixtures.assertAccepted(atTime(token, source, expiresAt.plusSeconds(59), null), compact);
@@ -351,7 +351,7 @@ final class CapturedProviderKeySetTests {
 	@NonNull Stream<@NonNull DynamicTest> everyCapturedTokenIsIssuedInTheFutureForAClockMoreThanTheSkewBehind() {
 		return TOKENS.stream().map(token -> DynamicTest.dynamicTest(token.toString(), () -> {
 			String compact = text(token.capture(), token.file());
-			StaticJsonWebKeySource source = source(token.capture(), token.keySet());
+			StaticJwksSource source = source(token.capture(), token.keySet());
 			Instant issuedAt = claimsAtCapture(token, source).getIssuedAt().orElseThrow();
 
 			JwtFixtures.assertAccepted(atTime(token, source, issuedAt.minusSeconds(60), null), compact);
@@ -368,7 +368,7 @@ final class CapturedProviderKeySetTests {
 	@NonNull Stream<@NonNull DynamicTest> everyCapturedTokenFailsWithAnotherKeySetAChangedByteOrAnotherIssuer() {
 		return TOKENS.stream().map(token -> DynamicTest.dynamicTest(token.toString(), () -> {
 			String compact = text(token.capture(), token.file());
-			StaticJsonWebKeySource source = source(token.capture(), token.keySet());
+			StaticJwksSource source = source(token.capture(), token.keySet());
 			Instant now = token.capture().finishedAt();
 			String[] segments = compact.split("\\.", -1);
 			Assertions.assertEquals(3, segments.length);
@@ -402,7 +402,7 @@ final class CapturedProviderKeySetTests {
 	void theDefaultValidatorAcceptsEachProvidersDefaultIdToken() throws Exception {
 		for (Capture capture : CAPTURES) {
 			String issuer = capture.equals(KEYCLOAK) ? KEYCLOAK_DEFAULT_ISSUER : NODE_OIDC_PROVIDER_ISSUER;
-			Jwt jwt = JwtFixtures.assertAccepted(JwtValidator.withIssuer(issuer).jsonWebKeySource(source(capture,
+			Jwt jwt = JwtFixtures.assertAccepted(JwtValidator.withIssuer(issuer).jwksSource(source(capture,
 					"default-jwks.json")).expectedAudiences(Set.of(TEST_CLIENT)).clock(TestClock.fromInstant(
 					capture.finishedAt())).build(), text(capture, "default-rs256-id-token.jwt"));
 			Assertions.assertEquals(JwsAlgorithm.RS256, jwt.getAlgorithm());
@@ -416,11 +416,11 @@ final class CapturedProviderKeySetTests {
 	@Test
 	void keycloaksAccessTokenHasNoAudienceSoOnlyAcceptingAnyAudienceValidatesIt() throws Exception {
 		String compact = text(KEYCLOAK, "default-rs256-access-token.jwt");
-		StaticJsonWebKeySource source = source(KEYCLOAK, "default-jwks.json");
+		StaticJwksSource source = source(KEYCLOAK, "default-jwks.json");
 
 		for (String audience : List.of(TEST_CLIENT, "account"))
 			JwtFixtures.assertRejected(JoseException.Reason.MISSING_CLAIM, JwtValidator.withIssuer(KEYCLOAK_DEFAULT_ISSUER)
-					.jsonWebKeySource(source).expectedAudiences(Set.of(audience)).clock(TestClock.fromInstant(
+					.jwksSource(source).expectedAudiences(Set.of(audience)).clock(TestClock.fromInstant(
 					KEYCLOAK.finishedAt())).build(), compact);
 
 		List<String> acceptedAnyAudience = new ArrayList<>();
@@ -430,13 +430,13 @@ final class CapturedProviderKeySetTests {
 				acceptedAnyAudience.add(issuer);
 			}
 		};
-		Jwt jwt = JwtFixtures.assertAccepted(JwtValidator.withIssuer(KEYCLOAK_DEFAULT_ISSUER).jsonWebKeySource(source)
+		Jwt jwt = JwtFixtures.assertAccepted(JwtValidator.withIssuer(KEYCLOAK_DEFAULT_ISSUER).jwksSource(source)
 				.acceptAnyAudience(true).observer(observer).clock(TestClock.fromInstant(KEYCLOAK.finishedAt())).build(),
 				compact);
 		Assertions.assertEquals(List.of(KEYCLOAK_DEFAULT_ISSUER, KEYCLOAK_DEFAULT_ISSUER), acceptedAnyAudience);
 		Assertions.assertEquals(List.of(), jwt.getClaims().getAudiences());
-		Assertions.assertEquals(Optional.of(TEST_CLIENT), jwt.getClaims().toJsonObject().findString("azp"));
-		Assertions.assertEquals(Optional.of("Bearer"), jwt.getClaims().toJsonObject().findString("typ"));
+		Assertions.assertEquals(Optional.of(TEST_CLIENT), jwt.getClaims().toJsonObject().find("azp").map(jsonMemberValue -> ((com.revetsec.json.JsonString) jsonMemberValue).getValue()));
+		Assertions.assertEquals(Optional.of("Bearer"), jwt.getClaims().toJsonObject().find("typ").map(jsonMemberValue -> ((com.revetsec.json.JsonString) jsonMemberValue).getValue()));
 	}
 
 	// G8-2 and INV-J3: both providers put alg on every RSA key, so each RSA-signed token still verifies when all six RSA
@@ -445,7 +445,7 @@ final class CapturedProviderKeySetTests {
 	@NonNull Stream<@NonNull DynamicTest> rsaKeysThatCarryAlgStayUsableWhenEveryRsaAlgorithmIsAllowed() {
 		return TOKENS.stream().filter(token -> RSA_ALGORITHMS.contains(token.algorithm())).map(token ->
 				DynamicTest.dynamicTest(token.toString(), () -> {
-					StaticJsonWebKeySource source = source(token.capture(), token.keySet());
+					StaticJwksSource source = source(token.capture(), token.keySet());
 					Jwt jwt = JwtFixtures.assertAccepted(validator(token, source, token.capture().finishedAt())
 							.allowedAlgorithms(RSA_ALGORITHMS).build(), text(token.capture(), token.file()));
 					Assertions.assertEquals(token.algorithm(), jwt.getAlgorithm());
@@ -486,7 +486,7 @@ final class CapturedProviderKeySetTests {
 			if (!both.contains(token.algorithm()))
 				continue;
 			String compact = text(token.capture(), token.file());
-			StaticJsonWebKeySource source = source(token.capture(), token.keySet());
+			StaticJwksSource source = source(token.capture(), token.keySet());
 			Instant now = token.capture().finishedAt();
 
 			Assertions.assertEquals(token.algorithm(), JwtFixtures.assertAccepted(validator(token, source, now)
@@ -507,24 +507,24 @@ final class CapturedProviderKeySetTests {
 		Set<JwsAlgorithm> asymmetric = Stream.of(JwsAlgorithm.values()).filter(algorithm ->
 				!algorithm.getWireValue().startsWith("HS")).collect(Collectors.toUnmodifiableSet());
 		JwtFixtures.assertRejected(JoseException.Reason.ALGORITHM_NOT_ALLOWED, JwtValidator.withIssuer(
-				NODE_OIDC_PROVIDER_ISSUER).jsonWebKeySource(source(NODE_OIDC_PROVIDER, "algorithms-jwks.json"))
+				NODE_OIDC_PROVIDER_ISSUER).jwksSource(source(NODE_OIDC_PROVIDER, "algorithms-jwks.json"))
 				.expectedAudiences(Set.of(TEST_CLIENT + "-ml-dsa-44")).allowedAlgorithms(asymmetric).clock(
 				TestClock.fromInstant(NODE_OIDC_PROVIDER.finishedAt())).build(), text(NODE_OIDC_PROVIDER, ML_DSA_TOKEN));
 
-		Assertions.assertEquals("AKP", rawKeys(keySet(NODE_OIDC_PROVIDER, "algorithms-jwks.json")).get(10).findString(
-				"kty").orElseThrow());
-		Assertions.assertEquals(List.of(new ParsedKeySet.Skip(10, JsonWebKeySkipReason.UNSUPPORTED_KEY_TYPE)),
-				JwkSetParser.parse(bytes(NODE_OIDC_PROVIDER, "algorithms-jwks.json"),
+		Assertions.assertEquals("AKP", rawKeys(keySet(NODE_OIDC_PROVIDER, "algorithms-jwks.json")).get(10).find(
+				"kty").map(jsonMemberValue -> ((com.revetsec.json.JsonString) jsonMemberValue).getValue()).orElseThrow());
+		Assertions.assertEquals(List.of(new ParsedJwks.Skip(10, JwkSkipReason.UNSUPPORTED_KEY_TYPE)),
+				JwksParser.parse(bytes(NODE_OIDC_PROVIDER, "algorithms-jwks.json"),
 						Limits.JWKS_RESPONSE_BODY_SIZE.getDefaultIntValue(), Limits.JWKS_KEY_COUNT.getDefaultIntValue()).skips());
 	}
 
-	// Plan A-5 and M2-8 through RemoteJsonWebKeySource: each captured key set, fetched from a loopback TLS server that
+	// Plan A-5 and M2-8 through RemoteJwksSource: each captured key set, fetched from a loopback TLS server that
 	// sends it byte for byte with its provider's captured Content-Type and Cache-Control, passes the key-set media-type
 	// check (Keycloak's application/json; node-oidc-provider's application/jwk-set+json with charset=utf-8) and loads
 	// with its pinned usable and skipped counts. Its lifetime follows those headers (M2-8's TTL rules): Keycloak's
 	// no-cache gives the 1 min minimum, and node-oidc-provider's missing Cache-Control the 10 min default. Keycloak sent
 	// no Date, and node-oidc-provider's Date changes nothing without Expires, so none is sent. The scenario's first token
-	// validates with no further request until the lifetime ends, and didSkipJsonWebKey reports each skipped key by its
+	// validates with no further request until the lifetime ends, and didSkipJwk reports each skipped key by its
 	// index on every fetch (plan "Exceptions, transience and observers").
 	@TestFactory
 	@NonNull Stream<@NonNull DynamicTest> everyCapturedKeySetFetchedWithItsCapturedHeadersLoadsAndLivesAsTheyDirect() throws IOException {
@@ -540,7 +540,7 @@ final class CapturedProviderKeySetTests {
 
 			TestClock clock = TestClock.fromInstant(capture.finishedAt());
 			RecordingObserver<JoseObserver> observer = RecordingObserver.fromInterface(JoseObserver.class);
-			RemoteJsonWebKeySource source = RemoteJsonWebKeySource.withUri(uri).httpClient(client).clock(clock)
+			RemoteJwksSource source = RemoteJwksSource.withUri(uri).httpClient(client).clock(clock)
 					.observer(observer.getObserver()).build();
 			TokenCase token = TOKENS.stream().filter(candidate -> candidate.capture().equals(capture)
 					&& candidate.keySet().equals(keySet.file())).findFirst().orElseThrow();
@@ -553,8 +553,8 @@ final class CapturedProviderKeySetTests {
 			JwtFixtures.assertAccepted(validator, compact);
 			Assertions.assertEquals(1, server.getHitCount(path));
 			Assertions.assertEquals(List.of(uri, keySet.keys().size(), keySet.skips().size(), capture.keySetTimeToLive()),
-					observer.getCalls("didFetchJsonWebKeySet").get(0).getArguments().subList(0, 4));
-			Assertions.assertEquals(skips, arguments(observer, "didSkipJsonWebKey"));
+					observer.getCalls("didFetchJwks").get(0).getArguments().subList(0, 4));
+			Assertions.assertEquals(skips, arguments(observer, "didSkipJwk"));
 
 			clock.advance(capture.keySetTimeToLive().minusNanos(1));
 			JwtFixtures.assertAccepted(validator, compact);
@@ -563,10 +563,10 @@ final class CapturedProviderKeySetTests {
 			clock.advance(Duration.ofNanos(1));
 			JwtFixtures.assertAccepted(validator, compact);
 			Assertions.assertEquals(2, server.getHitCount(path));
-			Assertions.assertEquals(2, observer.getCalls("didFetchJsonWebKeySet").size());
+			Assertions.assertEquals(2, observer.getCalls("didFetchJwks").size());
 			Assertions.assertEquals(Stream.concat(skips.stream(), skips.stream()).toList(),
-					arguments(observer, "didSkipJsonWebKey"));
-			Assertions.assertEquals(List.of(), observer.getCalls("didFailToFetchJsonWebKeySet"));
+					arguments(observer, "didSkipJwk"));
+			Assertions.assertEquals(List.of(), observer.getCalls("didFailToFetchJwks"));
 		})).onClose(server::close);
 	}
 
@@ -577,9 +577,9 @@ final class CapturedProviderKeySetTests {
 		return DISCOVERY_DOCUMENTS.stream().map(document -> DynamicTest.dynamicTest(document.toString(), () -> {
 			JsonObject json = (JsonObject) JsonCodec.parse(bytes(document.capture(), document.file()),
 					JsonLimits.protocolDocument(Limits.HTTP_RESPONSE_BODY_SIZE.getDefaultIntValue()));
-			Assertions.assertEquals(Optional.of(document.issuer()), json.findString("issuer"));
-			Assertions.assertEquals(Optional.of(document.jwksUri()), json.findString("jwks_uri"));
-			List<String> advertised = json.findStringList("id_token_signing_alg_values_supported").orElseThrow();
+			Assertions.assertEquals(Optional.of(document.issuer()), json.find("issuer").map(jsonMemberValue -> ((com.revetsec.json.JsonString) jsonMemberValue).getValue()));
+			Assertions.assertEquals(Optional.of(document.jwksUri()), json.find("jwks_uri").map(jsonMemberValue -> ((com.revetsec.json.JsonString) jsonMemberValue).getValue()));
+			List<String> advertised = json.find("id_token_signing_alg_values_supported").map(jsonArrayValue -> ((com.revetsec.json.JsonArray) jsonArrayValue).getElements().stream().map(jsonMemberValue -> ((com.revetsec.json.JsonString) jsonMemberValue).getValue()).toList()).orElseThrow();
 			Assertions.assertEquals(document.advertised(), Set.copyOf(advertised));
 			Assertions.assertEquals(advertised.size(), document.advertised().size(), "no duplicates");
 
@@ -596,22 +596,22 @@ final class CapturedProviderKeySetTests {
 	@TestFactory
 	@NonNull Stream<@NonNull DynamicTest> theTokensNameOnlyTheSyntheticTestUser() {
 		return TOKENS.stream().map(token -> DynamicTest.dynamicTest(token.toString(), () -> {
-			StaticJsonWebKeySource source = source(token.capture(), token.keySet());
+			StaticJwksSource source = source(token.capture(), token.keySet());
 			JsonObject claims = JwtFixtures.assertAccepted(validator(token, source, token.capture().finishedAt())
 					.allowedAlgorithms(Set.of(token.algorithm())).build(), text(token.capture(), token.file())).getClaims()
 					.toJsonObject();
 			Assertions.assertEquals(token.claimNames(), claims.getMembers().keySet());
 
 			if (token.capture().equals(NODE_OIDC_PROVIDER)) {
-				Assertions.assertEquals(Optional.of(TEST_USER), claims.findString("sub"));
+				Assertions.assertEquals(Optional.of(TEST_USER), claims.find("sub").map(jsonMemberValue -> ((com.revetsec.json.JsonString) jsonMemberValue).getValue()));
 			} else {
-				Assertions.assertTrue(SUBJECT_UUID.matcher(claims.findString("sub").orElseThrow()).matches());
-				Assertions.assertEquals(Optional.of(TEST_USER), claims.findString("preferred_username"));
-				Assertions.assertEquals(Optional.of("test-user@example.test"), claims.findString("email"));
-				Assertions.assertEquals(Optional.of(true), claims.findBoolean("email_verified"));
-				Assertions.assertEquals(Optional.of("Test User"), claims.findString("name"));
-				Assertions.assertEquals(Optional.of("Test"), claims.findString("given_name"));
-				Assertions.assertEquals(Optional.of("User"), claims.findString("family_name"));
+				Assertions.assertTrue(SUBJECT_UUID.matcher(claims.find("sub").map(jsonMemberValue -> ((com.revetsec.json.JsonString) jsonMemberValue).getValue()).orElseThrow()).matches());
+				Assertions.assertEquals(Optional.of(TEST_USER), claims.find("preferred_username").map(jsonMemberValue -> ((com.revetsec.json.JsonString) jsonMemberValue).getValue()));
+				Assertions.assertEquals(Optional.of("test-user@example.test"), claims.find("email").map(jsonMemberValue -> ((com.revetsec.json.JsonString) jsonMemberValue).getValue()));
+				Assertions.assertEquals(Optional.of(true), claims.find("email_verified").map(jsonMemberValue -> ((com.revetsec.json.JsonBoolean) jsonMemberValue).getValue()));
+				Assertions.assertEquals(Optional.of("Test User"), claims.find("name").map(jsonMemberValue -> ((com.revetsec.json.JsonString) jsonMemberValue).getValue()));
+				Assertions.assertEquals(Optional.of("Test"), claims.find("given_name").map(jsonMemberValue -> ((com.revetsec.json.JsonString) jsonMemberValue).getValue()));
+				Assertions.assertEquals(Optional.of("User"), claims.find("family_name").map(jsonMemberValue -> ((com.revetsec.json.JsonString) jsonMemberValue).getValue()));
 			}
 		}));
 	}
@@ -652,9 +652,9 @@ final class CapturedProviderKeySetTests {
 	 * {@code source}, with a clock stopped at {@code now}.
 	 */
 	private static JwtValidator.@NonNull Builder validator(@NonNull TokenCase token,
-																								@NonNull JsonWebKeySource source,
+																								@NonNull JwksSource source,
 																								@NonNull Instant now) {
-		JwtValidator.Builder builder = JwtValidator.withIssuer(token.issuer()).jsonWebKeySource(source).clock(
+		JwtValidator.Builder builder = JwtValidator.withIssuer(token.issuer()).jwksSource(source).clock(
 				TestClock.fromInstant(now));
 		String audience = token.audience();
 		return audience == null ? builder.acceptAnyAudience(true) : builder.expectedAudiences(Set.of(audience));
@@ -664,7 +664,7 @@ final class CapturedProviderKeySetTests {
 	 * A validator for the token's own algorithm at {@code now}, with {@code clockSkew} ({@code null} for the default).
 	 */
 	private static @NonNull JwtValidator atTime(@NonNull TokenCase token,
-																		 @NonNull StaticJsonWebKeySource source,
+																		 @NonNull StaticJwksSource source,
 																		 @NonNull Instant now,
 																		 @Nullable Duration clockSkew) {
 		return validator(token, source, now).allowedAlgorithms(Set.of(token.algorithm())).clockSkew(clockSkew).build();
@@ -674,7 +674,7 @@ final class CapturedProviderKeySetTests {
 	 * The token's claims, as validated at its capture time.
 	 */
 	private static @NonNull JwtClaims claimsAtCapture(@NonNull TokenCase token,
-																					 @NonNull StaticJsonWebKeySource source) throws IOException {
+																					 @NonNull StaticJwksSource source) throws IOException {
 		return JwtFixtures.assertAccepted(atTime(token, source, token.capture().finishedAt(), null), text(token.capture(),
 				token.file())).getClaims();
 	}
@@ -687,9 +687,9 @@ final class CapturedProviderKeySetTests {
 		return observer.getCalls(hook).stream().map(RecordingObserver.Call::getArguments).toList();
 	}
 
-	private static @NonNull StaticJsonWebKeySource source(@NonNull Capture capture,
+	private static @NonNull StaticJwksSource source(@NonNull Capture capture,
 																							 @NonNull String keySet) throws IOException {
-		return StaticJsonWebKeySource.fromJsonWebKeySet(JsonWebKeySet.fromJson(text(capture, keySet)));
+		return StaticJwksSource.fromJwks(JwtFixtures.assertParsedJwks(text(capture, keySet)));
 	}
 
 	/**
@@ -719,7 +719,7 @@ final class CapturedProviderKeySetTests {
 
 	private static byte @NonNull [] decoded(@NonNull JsonObject key,
 																@NonNull String member) throws Exception {
-		return Base64Url.decode(key.findString(member).orElseThrow());
+		return Base64Url.decode(key.find(member).map(jsonMemberValue -> ((com.revetsec.json.JsonString) jsonMemberValue).getValue()).orElseThrow());
 	}
 
 	private static @NonNull Path directory(@NonNull Capture capture) throws URISyntaxException {
@@ -756,7 +756,7 @@ final class CapturedProviderKeySetTests {
 		}
 	}
 
-	private record KeySetCase(@NonNull Capture capture, @NonNull String file, @NonNull List<@NonNull String> keys, @NonNull List<ParsedKeySet.@NonNull Skip> skips,
+	private record KeySetCase(@NonNull Capture capture, @NonNull String file, @NonNull List<@NonNull String> keys, @NonNull List<ParsedJwks.@NonNull Skip> skips,
 														int certificates) {
 		@Override
 		public @NonNull String toString() {

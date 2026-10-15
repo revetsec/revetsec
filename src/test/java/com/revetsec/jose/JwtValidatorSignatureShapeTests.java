@@ -21,7 +21,7 @@ import org.jspecify.annotations.NonNull;
 import com.revetsec.internal.crypto.VerifyResult;
 import com.revetsec.internal.encoding.Base64Url;
 import com.revetsec.internal.jose.JwsVerifier;
-import com.revetsec.testing.TestJsonWebKeys.Fixture;
+import com.revetsec.testing.TestJwk.Fixture;
 import com.revetsec.testing.TestJws;
 import com.revetsec.testing.TestJws.Algorithm;
 import com.revetsec.testing.TestJws.Variant;

@@ -15,6 +15,8 @@
  */
 
 package com.revetsec.webauthn;
+import com.revetsec.json.JsonNumber;
+import com.revetsec.json.JsonBoolean;
 
 import com.revetsec.SealingKey;
 import com.revetsec.StateSealer;
@@ -82,18 +84,18 @@ final class WebAuthnRelyingPartyTests {
                 rp.beginRegistrationResult(options, BINDING_TEXT));
         var registrationRequest = enrollment.getRequest();
         JsonObject creation = registrationRequest.getPublicKeyOptions();
-        assertEquals(RP, ((JsonObject) creation.find("rp").orElseThrow()).findString("id").orElseThrow());
+        assertEquals(RP, ((JsonObject) creation.find("rp").orElseThrow()).find("id").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow());
         assertEquals("required", ((JsonObject) creation.find("authenticatorSelection").orElseThrow())
-                .findString("residentKey").orElseThrow());
+                .find("residentKey").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow());
         assertEquals(Boolean.TRUE, ((JsonObject) creation.find("extensions").orElseThrow())
-                .findBoolean("credProps").orElseThrow());
+                .find("credProps").filter(JsonBoolean.class::isInstance).map(JsonBoolean.class::cast).map(JsonBoolean::getValue).orElseThrow());
         assertTrue(((JsonArray) creation.find("excludeCredentials").orElseThrow()).getElements().isEmpty());
         JsonArray algorithms = (JsonArray) creation.find("pubKeyCredParams").orElseThrow();
         assertEquals(List.of(-7L, -8L, -257L), algorithms.getElements().stream()
-                .map(value -> ((JsonObject) value).findLong("alg").orElseThrow()).toList());
+                .map(value -> ((JsonObject) value).find("alg").filter(JsonNumber.class::isInstance).map(JsonNumber.class::cast).flatMap(JsonNumber::getLongValueExact).orElseThrow()).toList());
         assertTrue(registrationRequest.getJson().contains("\"publicKey\""));
         assertFalse(registrationRequest.toString().contains("alice"));
-        String challenge = creation.findString("challenge").orElseThrow();
+        String challenge = creation.find("challenge").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow();
         assertEquals(32, Base64Url.decode(challenge).length);
         var registered = assertInstanceOf(WebAuthnRegistrationResult.Succeeded.class,
                 rp.completeRegistrationResult(registrationRequest.getCeremonyId(),
@@ -133,13 +135,13 @@ final class WebAuthnRelyingPartyTests {
                 .find("excludeCredentials").orElseThrow();
         assertEquals(1, exclusions.getElements().size());
         assertEquals(Base64Url.encode(CREDENTIAL_ID), ((JsonObject) exclusions.getElements().get(0))
-                .findString("id").orElseThrow());
+                .find("id").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow());
 
         var signIn = assertInstanceOf(WebAuthnAuthenticationRequestResult.Prepared.class,
                 rp.beginAuthenticationResult(BINDING_TEXT));
         JsonObject request = signIn.getRequest().getPublicKeyOptions();
         assertFalse(request.getMembers().containsKey("allowCredentials"));
-        String assertionChallenge = request.findString("challenge").orElseThrow();
+        String assertionChallenge = request.find("challenge").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow();
         String wrongBinding = Base64Url.encode(filled(99));
         assertInstanceOf(WebAuthnAuthenticationResult.Rejected.class,
                 rp.completeAuthenticationResult(signIn.getRequest().getCeremonyId(),
@@ -161,7 +163,7 @@ final class WebAuthnRelyingPartyTests {
                 rp.completeReauthenticationResult(HANDLE, "transfer",
                         signInAtStepUpRoute.getRequest().getCeremonyId(),
                         assertionJson(pair.getPrivate(), signInAtStepUpRoute.getRequest().getPublicKeyOptions()
-                                .findString("challenge").orElseThrow(), 2), BINDING_TEXT));
+                                .find("challenge").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow(), 2), BINDING_TEXT));
 
         var wrongPurpose = assertInstanceOf(WebAuthnAuthenticationRequestResult.Prepared.class,
                 rp.beginReauthenticationResult(HANDLE, "transfer", BINDING_TEXT));
@@ -169,7 +171,7 @@ final class WebAuthnRelyingPartyTests {
                 rp.completeReauthenticationResult(HANDLE, "withdraw",
                         wrongPurpose.getRequest().getCeremonyId(),
                         assertionJson(pair.getPrivate(), wrongPurpose.getRequest().getPublicKeyOptions()
-                                .findString("challenge").orElseThrow(), 3), BINDING_TEXT));
+                                .find("challenge").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow(), 3), BINDING_TEXT));
 
         var wrongAccount = assertInstanceOf(WebAuthnAuthenticationRequestResult.Prepared.class,
                 rp.beginReauthenticationResult(HANDLE, "transfer", BINDING_TEXT));
@@ -177,14 +179,14 @@ final class WebAuthnRelyingPartyTests {
                 rp.completeReauthenticationResult(new byte[] {9}, "transfer",
                         wrongAccount.getRequest().getCeremonyId(),
                         assertionJson(pair.getPrivate(), wrongAccount.getRequest().getPublicKeyOptions()
-                                .findString("challenge").orElseThrow(), 4), BINDING_TEXT));
+                                .find("challenge").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow(), 4), BINDING_TEXT));
 
         var stepUp = assertInstanceOf(WebAuthnAuthenticationRequestResult.Prepared.class,
                 rp.beginReauthenticationResult(HANDLE, "transfer", BINDING_TEXT));
         var stepUpProof = assertInstanceOf(WebAuthnAuthenticationResult.Succeeded.class,
                 rp.completeReauthenticationResult(HANDLE, "transfer", stepUp.getRequest().getCeremonyId(),
                         assertionJson(pair.getPrivate(), stepUp.getRequest().getPublicKeyOptions()
-                                .findString("challenge").orElseThrow(), 5), BINDING_TEXT));
+                                .find("challenge").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow(), 5), BINDING_TEXT));
         assertEquals(WebAuthnAuthentication.Kind.REAUTHENTICATION,
                 stepUpProof.getAuthentication().getKind());
         assertEquals("transfer", stepUpProof.getAuthentication().getActionPurpose().orElseThrow());
@@ -236,19 +238,19 @@ final class WebAuthnRelyingPartyTests {
         var expiring = assertInstanceOf(WebAuthnRegistrationRequestResult.Prepared.class,
                 rp.beginRegistrationResult(options, BINDING_TEXT));
         assertEquals(30_000L, expiring.getRequest().getPublicKeyOptions()
-                .findLong("timeout").orElseThrow());
+                .find("timeout").filter(JsonNumber.class::isInstance).map(JsonNumber.class::cast).flatMap(JsonNumber::getLongValueExact).orElseThrow());
         clock.advance(Duration.ofSeconds(31));
         assertInstanceOf(WebAuthnRegistrationResult.Rejected.class,
                 rp.completeRegistrationResult(expiring.getRequest().getCeremonyId(),
                         registrationJson(pair, expiring.getRequest().getPublicKeyOptions()
-                                .findString("challenge").orElseThrow()), BINDING_TEXT));
+                                .find("challenge").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow()), BINDING_TEXT));
         enroll(rp, pair, options);
         assertInstanceOf(WebAuthnRegistrationRequestResult.Unavailable.class,
                 rp.beginRegistrationResult(options, BINDING_TEXT));
         var signIn = assertInstanceOf(WebAuthnAuthenticationRequestResult.Prepared.class,
                 rp.beginAuthenticationResult(BINDING_TEXT));
         assertEquals(30_000L, signIn.getRequest().getPublicKeyOptions()
-                .findLong("timeout").orElseThrow());
+                .find("timeout").filter(JsonNumber.class::isInstance).map(JsonNumber.class::cast).flatMap(JsonNumber::getLongValueExact).orElseThrow());
     }
 
     @Test void confirmedCompletionAfterCeremonyExpiryRejectsWithoutProof() throws Exception {
@@ -265,7 +267,7 @@ final class WebAuthnRelyingPartyTests {
         assertInstanceOf(WebAuthnRegistrationResult.Rejected.class,
                 rp.completeRegistrationResult(begin.getRequest().getCeremonyId(),
                         registrationJson(pair, begin.getRequest().getPublicKeyOptions()
-                                .findString("challenge").orElseThrow()), BINDING_TEXT));
+                                .find("challenge").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow()), BINDING_TEXT));
     }
 
     @Test void confirmedConflictsRetryButRejectedResponsesDoNotAdvanceClock() throws Exception {
@@ -293,7 +295,7 @@ final class WebAuthnRelyingPartyTests {
         assertInstanceOf(WebAuthnRegistrationResult.Succeeded.class,
                 rp.completeRegistrationResult(enrollment.getRequest().getCeremonyId(),
                         registrationJson(pair, enrollment.getRequest().getPublicKeyOptions()
-                                .findString("challenge").orElseThrow()), BINDING_TEXT));
+                                .find("challenge").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow()), BINDING_TEXT));
     }
 
     @Test void configuredParserCapsRejectOversizedBrowserComponents() throws Exception {
@@ -317,7 +319,7 @@ final class WebAuthnRelyingPartyTests {
             assertInstanceOf(WebAuthnRegistrationResult.Rejected.class,
                     rp.completeRegistrationResult(started.getRequest().getCeremonyId(),
                             registrationJson(pair, started.getRequest().getPublicKeyOptions()
-                                    .findString("challenge").orElseThrow()), BINDING_TEXT));
+                                    .find("challenge").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow()), BINDING_TEXT));
         }
 
         MemoryStore authenticatedStore = new MemoryStore();
@@ -331,7 +333,7 @@ final class WebAuthnRelyingPartyTests {
         assertInstanceOf(WebAuthnAuthenticationResult.Rejected.class,
                 authentication.completeAuthenticationResult(started.getRequest().getCeremonyId(),
                         assertionJson(pair.getPrivate(), started.getRequest().getPublicKeyOptions()
-                                .findString("challenge").orElseThrow(), 1), BINDING_TEXT));
+                                .find("challenge").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow(), 1), BINDING_TEXT));
     }
 
     @Test void configuredOperationBudgetIsPassedToStore() {
@@ -381,7 +383,7 @@ final class WebAuthnRelyingPartyTests {
         assertInstanceOf(WebAuthnAuthenticationResult.Rejected.class,
                 rp.completeAuthenticationResult(pending.getRequest().getCeremonyId(),
                         assertionJson(pair.getPrivate(), pending.getRequest().getPublicKeyOptions()
-                                .findString("challenge").orElseThrow(), 1), BINDING_TEXT));
+                                .find("challenge").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow(), 1), BINDING_TEXT));
         assertInstanceOf(WebAuthnCredentialRemovalResult.Absent.class,
                 rp.removeCredentialResult(HANDLE, CREDENTIAL_ID));
 
@@ -390,7 +392,7 @@ final class WebAuthnRelyingPartyTests {
         assertInstanceOf(WebAuthnRegistrationResult.Rejected.class,
                 rp.completeRegistrationResult(reenroll.getRequest().getCeremonyId(),
                         registrationJson(pair, reenroll.getRequest().getPublicKeyOptions()
-                                .findString("challenge").orElseThrow()), BINDING_TEXT));
+                                .find("challenge").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow()), BINDING_TEXT));
     }
 
     @Test void disablingAccountFencesPendingCeremoniesButStillAllowsRemoval() throws Exception {
@@ -407,7 +409,7 @@ final class WebAuthnRelyingPartyTests {
         assertInstanceOf(WebAuthnAuthenticationResult.Rejected.class,
                 rp.completeAuthenticationResult(pending.getRequest().getCeremonyId(),
                         assertionJson(pair.getPrivate(), pending.getRequest().getPublicKeyOptions()
-                                .findString("challenge").orElseThrow(), 1), BINDING_TEXT));
+                                .find("challenge").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow(), 1), BINDING_TEXT));
         assertInstanceOf(WebAuthnRegistrationRequestResult.Rejected.class,
                 rp.beginRegistrationResult(options, BINDING_TEXT));
         assertInstanceOf(WebAuthnAuthenticationRequestResult.Rejected.class,
@@ -461,7 +463,7 @@ final class WebAuthnRelyingPartyTests {
         assertInstanceOf(WebAuthnRegistrationResult.Succeeded.class,
                 rp.completeRegistrationResult(started.getRequest().getCeremonyId(),
                         registrationJson(pair, started.getRequest().getPublicKeyOptions()
-                                .findString("challenge").orElseThrow()), BINDING_TEXT));
+                                .find("challenge").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow()), BINDING_TEXT));
     }
 
     private static @NonNull WebAuthnRelyingParty relyingParty(@NonNull WebAuthnStore store,

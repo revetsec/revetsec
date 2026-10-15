@@ -212,13 +212,13 @@ final class ScimResourceValidation {
                 normalized.add(canonical);
                 if (path.equals("members") && type.hasStandardGroupSchema()
                         && canonical instanceof JsonObject member) {
-                    String id = member.findString("value").orElse(null);
+                    String id = member.find("value").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElse(null);
                     if (id != null && !id.isEmpty() && !groupMemberIds.add(id)) {
                         error = ScimError.invalidValueInstance(); return null;
                     }
                 }
                 if (primary != null && primary.getType() == ScimAttributeType.BOOLEAN
-                        && canonical instanceof JsonObject object && object.findBoolean(primary.getName()).orElse(false) && ++primaries > 1) {
+                        && canonical instanceof JsonObject object && object.find(primary.getName()).filter(JsonBoolean.class::isInstance).map(JsonBoolean.class::cast).map(JsonBoolean::getValue).orElse(false) && ++primaries > 1) {
                     error = ScimError.invalidValueInstance(); return null;
                 }
             }

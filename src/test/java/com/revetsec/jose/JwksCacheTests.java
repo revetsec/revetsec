@@ -22,12 +22,12 @@ import com.revetsec.ErrorCategory;
 import com.revetsec.internal.http.Deadline;
 import com.revetsec.internal.jose.KeyQuery;
 import com.revetsec.internal.jose.KeySelection;
-import com.revetsec.jose.RemoteJsonWebKeySourceConcurrencyTests.InjectedError;
+import com.revetsec.jose.RemoteJwksSourceConcurrencyTests.InjectedError;
 import com.revetsec.testing.RecordingObserver;
 import com.revetsec.testing.RewindableClock;
 import com.revetsec.testing.TestClock;
-import com.revetsec.testing.TestJsonWebKeys;
-import com.revetsec.testing.TestJsonWebKeys.Fixture;
+import com.revetsec.testing.TestJwk;
+import com.revetsec.testing.TestJwk.Fixture;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.DynamicTest;
@@ -77,14 +77,14 @@ import java.util.stream.Stream;
 import static java.util.Objects.requireNonNull;
 
 /**
- * The key set cache's rules at the {@code select(KeyQuery, Deadline)} seam (M2 plan, "RemoteJsonWebKeySource
+ * The key set cache's rules at the {@code select(KeyQuery, Deadline)} seam (M2 plan, "RemoteJwksSource
  * algorithm", M2-8, G8-8; INV-J9, INV-G11), driven by an in-memory {@link HttpClient} ({@link MemoryHttpClient}) and a
  * {@link TestClock} or {@link RewindableClock}, so each rule is shown deterministically and without a network: the
  * backoff formula, its schedule and its decay, {@code Retry-After}, the unknown-key cooldown (variant A-prime), the
  * two-attempt ceiling, staleness, a clock set back, empty snapshots, the leader that never reaches the exchange, and
  * how every response and exchange failure maps to a category and transience.
  * <p>
- * The nested helpers are shared with the other {@code RemoteJsonWebKeySource*Tests}.
+ * The nested helpers are shared with the other {@code RemoteJwksSource*Tests}.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
@@ -179,19 +179,19 @@ final class JwksCacheTests {
 	}
 
 	// M2-8 exit criterion 13: the backoff schedule of 30, 60, 120, 240 and 300 s, with zero requests inside each
-	// backoff, warmUp() included, and every held-back call reported to didSuppressJsonWebKeySetFetch.
+	// backoff, warmUp() included, and every held-back call reported to didSuppressJwksFetch.
 	@Test
 	void failedFetchesBackOffOnTheScheduleAndSendNothingInsideIt() {
 		TestClock clock = TestClock.fromInstant(START);
 		MemoryHttpClient client = MemoryHttpClient.answering(Answer.fromStatus(503));
 		RecordingObserver<JoseObserver> observer = RecordingObserver.fromInterface(JoseObserver.class);
-		RemoteJsonWebKeySource source = source(client, clock).observer(observer.getObserver()).build();
+		RemoteJwksSource source = source(client, clock).observer(observer.getObserver()).build();
 
 		List<Long> attempts = new ArrayList<>();
 		for (long second = 0; second <= 1_100; ++second) {
 			clock.set(START.plusSeconds(second));
 			int before = client.getSendCount();
-			JsonWebKeySetUnavailableException exception = second % 2 == 0
+			JwksUnavailableException exception = second % 2 == 0
 					? assertUnavailable(ErrorCategory.REMOTE_ERROR, true, () -> select(source, "a"))
 					: assertUnavailable(ErrorCategory.REMOTE_ERROR, true, source::warmUp);
 			Assertions.assertNull(exception.getCause());
@@ -200,11 +200,11 @@ final class JwksCacheTests {
 		}
 
 		Assertions.assertEquals(List.of(0L, 30L, 90L, 210L, 450L, 750L, 1_050L), attempts);
-		Assertions.assertEquals(attempts.size(), observer.getCalls("willFetchJsonWebKeySet").size());
-		Assertions.assertEquals(attempts.size(), observer.getCalls("didFailToFetchJsonWebKeySet").size());
-		Assertions.assertEquals(1_101 - attempts.size(), observer.getCalls("didSuppressJsonWebKeySetFetch").size());
+		Assertions.assertEquals(attempts.size(), observer.getCalls("willFetchJwks").size());
+		Assertions.assertEquals(attempts.size(), observer.getCalls("didFailToFetchJwks").size());
+		Assertions.assertEquals(1_101 - attempts.size(), observer.getCalls("didSuppressJwksFetch").size());
 		// The first held-back call after the first failure reports the whole step, minus the second that passed.
-		RecordingObserver.Call firstSuppression = observer.getCalls("didSuppressJsonWebKeySetFetch").get(0);
+		RecordingObserver.Call firstSuppression = observer.getCalls("didSuppressJwksFetch").get(0);
 		Assertions.assertEquals(JwksCache.cut(JWKS_URI), firstSuppression.getArgument(0));
 		Assertions.assertEquals(Duration.ofSeconds(29), firstSuppression.getArgument(1));
 	}
@@ -216,10 +216,10 @@ final class JwksCacheTests {
 	void aSuccessBetweenFailuresDoesNotResetTheBackoff() {
 		TestClock clock = TestClock.fromInstant(START);
 		MemoryHttpClient client = MemoryHttpClient.answering(Answer.fromStatus(503));
-		RemoteJsonWebKeySource source = source(client, clock).build();
+		RemoteJwksSource source = source(client, clock).build();
 
 		assertUnavailable(ErrorCategory.REMOTE_ERROR, true, () -> select(source, "a"));   // n = 1, 30 s
-		client.answer(Answer.fromKeySet("no-store", "a"));
+		client.answer(Answer.fromJwks("no-store", "a"));
 		clock.set(START.plusSeconds(30));
 		Assertions.assertEquals(KeySelection.Kind.FOUND, select(source, "a").getKind());   // fresh for 60 s
 		client.answer(Answer.fromStatus(503));
@@ -247,7 +247,7 @@ final class JwksCacheTests {
 	void theFailureCountDecaysWhileNoFetchFails() {
 		TestClock clock = TestClock.fromInstant(START);
 		MemoryHttpClient client = MemoryHttpClient.answering(Answer.fromStatus(500));
-		RemoteJsonWebKeySource source = source(client, clock).build();
+		RemoteJwksSource source = source(client, clock).build();
 
 		// Three failures: n = 3 at t = 90, backoff 120 s.
 		for (long second : List.of(0L, 30L, 90L)) {
@@ -294,7 +294,7 @@ final class JwksCacheTests {
 	void aClockSetBackBeforeThePreviousFailureKeepsTheFailureCount() {
 		RewindableClock clock = RewindableClock.fromInstant(START.plusSeconds(1_000));
 		MemoryHttpClient client = MemoryHttpClient.answering(Answer.fromStatus(503));
-		RemoteJsonWebKeySource source = source(client, clock).build();
+		RemoteJwksSource source = source(client, clock).build();
 
 		assertUnavailable(ErrorCategory.REMOTE_ERROR, true, () -> select(source, "a"));   // n = 1 at 1,000 s: 30 s
 		clock.advance(COOLDOWN);
@@ -325,7 +325,7 @@ final class JwksCacheTests {
 					TestClock clock = TestClock.fromInstant(START);
 					MemoryHttpClient client = MemoryHttpClient.answering(Answer.fromStatus(Integer.parseInt(row.get(0)),
 							Map.of("Retry-After", List.of(row.get(1)))));
-					RemoteJsonWebKeySource source = source(client, clock).build();
+					RemoteJwksSource source = source(client, clock).build();
 					long step = Long.parseLong(row.get(2));
 
 					assertUnavailable(ErrorCategory.REMOTE_ERROR, true, () -> select(source, "a"));
@@ -344,12 +344,12 @@ final class JwksCacheTests {
 	@Test
 	void unknownKeysRefetchAtMostOncePerCooldown() {
 		TestClock clock = TestClock.fromInstant(START);
-		MemoryHttpClient client = MemoryHttpClient.answering(Answer.fromKeySet(null, "a"));
+		MemoryHttpClient client = MemoryHttpClient.answering(Answer.fromJwks(null, "a"));
 		RecordingObserver<JoseObserver> observer = RecordingObserver.fromInterface(JoseObserver.class);
-		RemoteJsonWebKeySource source = source(client, clock).observer(observer.getObserver()).build();
+		RemoteJwksSource source = source(client, clock).observer(observer.getObserver()).build();
 
 		Assertions.assertEquals(KeySelection.Kind.FOUND, select(source, "a").getKind());
-		client.answer(Answer.fromKeySet(null, "a", "b"));
+		client.answer(Answer.fromJwks(null, "a", "b"));
 		clock.advance(Duration.ofSeconds(1));
 		Assertions.assertEquals(KeySelection.Kind.FOUND, select(source, "b").getKind(), "the rotated-in key verifies");
 		Assertions.assertEquals(2, client.getSendCount(), "the first fetch neither consumes nor obeys the cooldown");
@@ -357,7 +357,7 @@ final class JwksCacheTests {
 		clock.advance(Duration.ofSeconds(30).minusNanos(1));
 		Assertions.assertEquals(KeySelection.Kind.UNKNOWN, select(source, "c").getKind());
 		Assertions.assertEquals(2, client.getSendCount());
-		Assertions.assertEquals(List.of(Duration.ofNanos(1)), observer.getCalls("didSuppressJsonWebKeySetFetch").stream()
+		Assertions.assertEquals(List.of(Duration.ofNanos(1)), observer.getCalls("didSuppressJwksFetch").stream()
 				.map(call -> call.getArgument(1)).toList());
 		Assertions.assertEquals(KeySelection.Kind.FOUND, select(source, "a").getKind(), "known keys stay on the fast path");
 
@@ -371,8 +371,8 @@ final class JwksCacheTests {
 	@Test
 	void anExpiryRefreshLeavesTheCooldownAlone() {
 		TestClock clock = TestClock.fromInstant(START);
-		MemoryHttpClient client = MemoryHttpClient.answering(Answer.fromKeySet("max-age=60", "a"));
-		RemoteJsonWebKeySource source = source(client, clock).build();
+		MemoryHttpClient client = MemoryHttpClient.answering(Answer.fromJwks("max-age=60", "a"));
+		RemoteJwksSource source = source(client, clock).build();
 
 		Assertions.assertEquals(KeySelection.Kind.FOUND, select(source, "a").getKind());
 		clock.advance(Duration.ofSeconds(10));
@@ -397,15 +397,15 @@ final class JwksCacheTests {
 	@Test
 	void anExpiryInsideTheUnknownKeyCooldownStillRefreshes() {
 		TestClock clock = TestClock.fromInstant(START);
-		MemoryHttpClient client = MemoryHttpClient.answering(Answer.fromKeySet("max-age=60", "a"));
-		RemoteJsonWebKeySource source = source(client, clock).build();
+		MemoryHttpClient client = MemoryHttpClient.answering(Answer.fromJwks("max-age=60", "a"));
+		RemoteJwksSource source = source(client, clock).build();
 		Assertions.assertEquals(KeySelection.Kind.FOUND, select(source, "a").getKind());
 
 		clock.set(START.plusSeconds(40));
 		client.answer(cutShort());
 		assertCutShort(() -> select(source, "b"));
 		Assertions.assertEquals(2, client.getSendCount());
-		client.answer(Answer.fromKeySet("max-age=60", "a"));
+		client.answer(Answer.fromJwks("max-age=60", "a"));
 
 		clock.set(START.plusSeconds(50));
 		Assertions.assertEquals(KeySelection.Kind.UNKNOWN, select(source, "b").getKind(), "the kept mark");
@@ -420,13 +420,13 @@ final class JwksCacheTests {
 	@Test
 	void onlyAnUnknownKeyEverRefreshes() {
 		TestClock clock = TestClock.fromInstant(START);
-		String keySet = TestJsonWebKeys.keySet(List.of(
-				TestJsonWebKeys.withFixture(Fixture.IDP_SIGNING_RSA_2048).kid("rsa").toJson(),
-				TestJsonWebKeys.withFixture(Fixture.IDP_SIGNING_EC_P256).kid("ec").toJson(),
-				TestJsonWebKeys.withFixture(Fixture.IDP_SIGNING_RSA_3072).kid("twice").toJson(),
-				TestJsonWebKeys.withFixture(Fixture.SP_SIGNING_RSA_2048).kid("twice").toJson()));
+		String keySet = TestJwk.keySet(List.of(
+				TestJwk.withFixture(Fixture.IDP_SIGNING_RSA_2048).kid("rsa").toJson(),
+				TestJwk.withFixture(Fixture.IDP_SIGNING_EC_P256).kid("ec").toJson(),
+				TestJwk.withFixture(Fixture.IDP_SIGNING_RSA_3072).kid("twice").toJson(),
+				TestJwk.withFixture(Fixture.SP_SIGNING_RSA_2048).kid("twice").toJson()));
 		MemoryHttpClient client = MemoryHttpClient.answering(Answer.fromJson(200, null, keySet));
-		RemoteJsonWebKeySource source = source(client, clock).build();
+		RemoteJwksSource source = source(client, clock).build();
 
 		Assertions.assertEquals(KeySelection.Kind.FOUND, select(source, "rsa").getKind());
 		Assertions.assertEquals(KeySelection.Kind.ALGORITHM_MISMATCH, select(source, "ec").getKind());
@@ -434,8 +434,8 @@ final class JwksCacheTests {
 		Assertions.assertEquals(KeySelection.Kind.AMBIGUOUS, select(source, null).getKind());
 		Assertions.assertEquals(1, client.getSendCount());
 
-		MemoryHttpClient single = MemoryHttpClient.answering(Answer.fromKeySet(null, "only"));
-		RemoteJsonWebKeySource singleSource = source(single, clock).build();
+		MemoryHttpClient single = MemoryHttpClient.answering(Answer.fromJwks(null, "only"));
+		RemoteJwksSource singleSource = source(single, clock).build();
 		KeySelection kidless = select(singleSource, null);
 		Assertions.assertEquals(KeySelection.Kind.FOUND, kidless.getKind());
 		Assertions.assertEquals(Optional.of("only"), kidless.findKey().map(key -> requireNonNull(key.keyId())));
@@ -447,62 +447,62 @@ final class JwksCacheTests {
 	@Test
 	void anAllSkippedKeySetIsAValidEmptySnapshot() {
 		TestClock clock = TestClock.fromInstant(START);
-		String allSkipped = TestJsonWebKeys.keySet(List.of(
-				TestJsonWebKeys.octWithK("AAAA").kid("secret").toJson(),
-				TestJsonWebKeys.withFixture(Fixture.NEGATIVE_RSA_1024).kid("small").toJson(),
-				TestJsonWebKeys.withFixture(Fixture.IDP_SIGNING_RSA_2048).kid("enc").use("enc").toJson()));
+		String allSkipped = TestJwk.keySet(List.of(
+				TestJwk.octWithK("AAAA").kid("secret").toJson(),
+				TestJwk.withFixture(Fixture.NEGATIVE_RSA_1024).kid("small").toJson(),
+				TestJwk.withFixture(Fixture.IDP_SIGNING_RSA_2048).kid("enc").use("enc").toJson()));
 		MemoryHttpClient client = MemoryHttpClient.answering(Answer.fromJson(200, null, allSkipped));
 		RecordingObserver<JoseObserver> observer = RecordingObserver.fromInterface(JoseObserver.class);
-		RemoteJsonWebKeySource source = source(client, clock).observer(observer.getObserver()).build();
+		RemoteJwksSource source = source(client, clock).observer(observer.getObserver()).build();
 
 		long before = System.nanoTime();
 		source.warmUp();
 		long after = System.nanoTime();
 		source.warmUp();
 		Assertions.assertEquals(1, client.getSendCount(), "a fresh empty snapshot satisfies warmUp()");
-		Assertions.assertEquals(List.of(List.of(JwksCache.cut(JWKS_URI), 0, JsonWebKeySkipReason.SYMMETRIC_KEY),
-						List.of(JwksCache.cut(JWKS_URI), 1, JsonWebKeySkipReason.RSA_KEY_SIZE),
-						List.of(JwksCache.cut(JWKS_URI), 2, JsonWebKeySkipReason.NOT_A_VERIFICATION_KEY)),
-				observer.getCalls("didSkipJsonWebKey").stream().map(RecordingObserver.Call::getArguments).toList());
-		RecordingObserver.Call fetched = observer.getCalls("didFetchJsonWebKeySet").get(0);
+		Assertions.assertEquals(List.of(List.of(JwksCache.cut(JWKS_URI), 0, JwkSkipReason.SYMMETRIC_KEY),
+						List.of(JwksCache.cut(JWKS_URI), 1, JwkSkipReason.RSA_KEY_SIZE),
+						List.of(JwksCache.cut(JWKS_URI), 2, JwkSkipReason.NOT_A_VERIFICATION_KEY)),
+				observer.getCalls("didSkipJwk").stream().map(RecordingObserver.Call::getArguments).toList());
+		RecordingObserver.Call fetched = observer.getCalls("didFetchJwks").get(0);
 		Assertions.assertEquals(List.of(0, 3, Duration.ofMinutes(10)), fetched.getArguments().subList(1, 4));
 		JwtFixtures.assertElapsedWithin(fetched.getArgument(4), before, after);
 
-		client.answer(Answer.fromKeySet(null, "a"));
+		client.answer(Answer.fromJwks(null, "a"));
 		Assertions.assertEquals(KeySelection.Kind.FOUND, select(source, "a").getKind(), "healed by the refetch");
 		Assertions.assertEquals(2, client.getSendCount());
 	}
 
 	// Exit criterion 7's remote half and M2-3: a key set with one key for every skip reason reports each skip to
-	// didSkipJsonWebKey with its index in keys and its reason, never its kid, on every fetch and not only the first,
+	// didSkipJwk with its index in keys and its reason, never its kid, on every fetch and not only the first,
 	// then the fetch with its usable and skipped counts; the one usable key verifies.
 	@Test
 	void everySkipReasonReachesTheObserverOnEveryFetch() {
 		List<String> keys = List.of(
-				TestJsonWebKeys.withFixture(Fixture.IDP_SIGNING_RSA_2048).kid("no-kty").withoutMember("kty").toJson(),
+				TestJwk.withFixture(Fixture.IDP_SIGNING_RSA_2048).kid("no-kty").withoutMember("kty").toJson(),
 				"{\"kty\":\"RSA2\",\"kid\":\"unknown-type\"}",
-				TestJsonWebKeys.octWithK("GawgguFyGrWKav7AX4VKUg").kid("oct").toJson(),
-				TestJsonWebKeys.withFixture(Fixture.IDP_SIGNING_RSA_2048).kid("private").includePrivateMembers(true)
+				TestJwk.octWithK("GawgguFyGrWKav7AX4VKUg").kid("oct").toJson(),
+				TestJwk.withFixture(Fixture.IDP_SIGNING_RSA_2048).kid("private").includePrivateMembers(true)
 						.toJson(),
-				TestJsonWebKeys.withFixture(Fixture.SP_ENCRYPTION_RSA_2048).kid("enc").use("enc").toJson(),
-				TestJsonWebKeys.withFixture(Fixture.IDP_SIGNING_RSA_2048).kid("oaep").alg("RSA-OAEP").toJson(),
-				TestJsonWebKeys.withFixture(Fixture.IDP_SIGNING_EC_P256).kid("es384").alg("ES384").toJson(),
-				TestJsonWebKeys.withFixture(Fixture.IDP_SIGNING_EC_P256).kid("k1").member("crv", "\"secp256k1\"")
+				TestJwk.withFixture(Fixture.SP_ENCRYPTION_RSA_2048).kid("enc").use("enc").toJson(),
+				TestJwk.withFixture(Fixture.IDP_SIGNING_RSA_2048).kid("oaep").alg("RSA-OAEP").toJson(),
+				TestJwk.withFixture(Fixture.IDP_SIGNING_EC_P256).kid("es384").alg("ES384").toJson(),
+				TestJwk.withFixture(Fixture.IDP_SIGNING_EC_P256).kid("k1").member("crv", "\"secp256k1\"")
 						.toJson(),
-				TestJsonWebKeys.withFixture(Fixture.NEGATIVE_RSA_1024).kid("small").toJson(),
-				TestJsonWebKeys.rsaWithEvenExponent().kid("even").toJson(),
-				TestJsonWebKeys.ecOffCurve().kid("off-curve").toJson(),
-				TestJsonWebKeys.ed25519SmallOrder().kid("small-order").toJson(),
-				TestJsonWebKeys.withFixture(Fixture.IDP_SIGNING_RSA_2048).kid("x5c").x5c(List.of(Fixture.SP_SIGNING_RSA_2048
+				TestJwk.withFixture(Fixture.NEGATIVE_RSA_1024).kid("small").toJson(),
+				TestJwk.rsaWithEvenExponent().kid("even").toJson(),
+				TestJwk.ecOffCurve().kid("off-curve").toJson(),
+				TestJwk.ed25519SmallOrder().kid("small-order").toJson(),
+				TestJwk.withFixture(Fixture.IDP_SIGNING_RSA_2048).kid("x5c").x5c(List.of(Fixture.SP_SIGNING_RSA_2048
 						.getCertificate().orElseThrow())).toJson(),
-				TestJsonWebKeys.withFixture(Fixture.IDP_SIGNING_RSA_2048).kid("a").toJson());
+				TestJwk.withFixture(Fixture.IDP_SIGNING_RSA_2048).kid("a").toJson());
 		TestClock clock = TestClock.fromInstant(START);
 		MemoryHttpClient client = MemoryHttpClient.answering(Answer.fromJson(200, "no-store",
-				TestJsonWebKeys.keySet(keys)));
+				TestJwk.keySet(keys)));
 		RecordingObserver<JoseObserver> observer = RecordingObserver.fromInterface(JoseObserver.class);
-		RemoteJsonWebKeySource source = source(client, clock).observer(observer.getObserver()).build();
+		RemoteJwksSource source = source(client, clock).observer(observer.getObserver()).build();
 		List<List<@Nullable Object>> onePass = new ArrayList<>();
-		for (JsonWebKeySkipReason reason : JsonWebKeySkipReason.values())
+		for (JwkSkipReason reason : JwkSkipReason.values())
 			onePass.add(List.of(JwksCache.cut(JWKS_URI), onePass.size(), reason));
 
 		Assertions.assertEquals(KeySelection.Kind.FOUND, select(source, "a").getKind());
@@ -512,14 +512,14 @@ final class JwksCacheTests {
 
 		List<List<@Nullable Object>> expected = new ArrayList<>(onePass);
 		expected.addAll(onePass);
-		Assertions.assertEquals(expected, observer.getCalls("didSkipJsonWebKey").stream()
+		Assertions.assertEquals(expected, observer.getCalls("didSkipJwk").stream()
 				.map(RecordingObserver.Call::getArguments).toList());
-		for (RecordingObserver.Call fetched : observer.getCalls("didFetchJsonWebKeySet"))
+		for (RecordingObserver.Call fetched : observer.getCalls("didFetchJwks"))
 			Assertions.assertEquals(List.of(1, 13), fetched.getArguments().subList(1, 3));
-		List<String> oneFetch = new ArrayList<>(List.of("willFetchJsonWebKeySet"));
+		List<String> oneFetch = new ArrayList<>(List.of("willFetchJwks"));
 		for (int skip = 0; skip < 13; ++skip)
-			oneFetch.add("didSkipJsonWebKey");
-		oneFetch.add("didFetchJsonWebKeySet");
+			oneFetch.add("didSkipJwk");
+		oneFetch.add("didFetchJwks");
 		List<String> hooks = new ArrayList<>(oneFetch);
 		hooks.addAll(oneFetch);
 		Assertions.assertEquals(hooks, observer.getCalls().stream().map(RecordingObserver.Call::getMethodName).toList());
@@ -531,9 +531,9 @@ final class JwksCacheTests {
 	@Test
 	void staleKeysAnswerForKeysTheyHoldUntilTheStalenessBoundary() {
 		TestClock clock = TestClock.fromInstant(START);
-		MemoryHttpClient client = MemoryHttpClient.answering(Answer.fromKeySet(null, "a"));
+		MemoryHttpClient client = MemoryHttpClient.answering(Answer.fromJwks(null, "a"));
 		RecordingObserver<JoseObserver> observer = RecordingObserver.fromInterface(JoseObserver.class);
-		RemoteJsonWebKeySource source = source(client, clock).observer(observer.getObserver())
+		RemoteJwksSource source = source(client, clock).observer(observer.getObserver())
 				.maximumStaleness(Duration.ofHours(1)).build();
 		Assertions.assertEquals(KeySelection.Kind.FOUND, select(source, "a").getKind());
 		Instant expiresAt = START.plus(Duration.ofMinutes(10));
@@ -541,10 +541,10 @@ final class JwksCacheTests {
 		client.answer(Answer.fromStatus(500));
 		clock.set(expiresAt);
 		Assertions.assertEquals(KeySelection.Kind.FOUND, select(source, "a").getKind(), "served stale by the leader");
-		RecordingObserver.Call failed = observer.getCalls("didFailToFetchJsonWebKeySet").get(0);
+		RecordingObserver.Call failed = observer.getCalls("didFailToFetchJwks").get(0);
 		Assertions.assertEquals(true, failed.getArgument(2));
 		Assertions.assertEquals(ErrorCategory.REMOTE_ERROR,
-				((JsonWebKeySetUnavailableException) requireNonNull(failed.getArgument(1))).getCategory());
+				((JwksUnavailableException) requireNonNull(failed.getArgument(1))).getCategory());
 		Assertions.assertEquals(KeySelection.Kind.FOUND, select(source, "a").getKind(), "served stale in the backoff");
 		assertUnavailable(ErrorCategory.REMOTE_ERROR, true, () -> select(source, "b"));
 		assertUnavailable(ErrorCategory.REMOTE_ERROR, true, source::warmUp);
@@ -555,9 +555,9 @@ final class JwksCacheTests {
 		assertUnavailable(ErrorCategory.REMOTE_ERROR, true, () -> select(source, "a"));
 
 		// A maximum staleness of zero never serves an expired key set.
-		MemoryHttpClient strictClient = MemoryHttpClient.answering(Answer.fromKeySet(null, "a"));
+		MemoryHttpClient strictClient = MemoryHttpClient.answering(Answer.fromJwks(null, "a"));
 		TestClock strictClock = TestClock.fromInstant(START);
-		RemoteJsonWebKeySource strict = source(strictClient, strictClock).maximumStaleness(Duration.ZERO).build();
+		RemoteJwksSource strict = source(strictClient, strictClock).maximumStaleness(Duration.ZERO).build();
 		Assertions.assertEquals(KeySelection.Kind.FOUND, select(strict, "a").getKind());
 		strictClient.answer(Answer.fromStatus(500));
 		strictClock.set(expiresAt);
@@ -566,20 +566,20 @@ final class JwksCacheTests {
 		Assertions.assertEquals(2, strictClient.getSendCount());
 	}
 
-	// M2-8 and the RemoteJsonWebKeySource contract: an expired key set answers stale only with a key it finds. A kid it
+	// M2-8 and the RemoteJwksSource contract: an expired key set answers stale only with a key it finds. A kid it
 	// holds twice, a kid whose key does not fit the algorithm, and a token without kid that three of its keys fit get
 	// the failed refresh's category and transience, the leader included, like a key it lacks; nothing is sent inside
 	// the backoff, and a key it finds is still served stale.
 	@Test
 	void staleKeysAnswerOnlyWithAKeyTheyFind() {
-		String keySet = TestJsonWebKeys.keySet(List.of(
-				TestJsonWebKeys.withFixture(Fixture.IDP_SIGNING_RSA_2048).kid("rsa").toJson(),
-				TestJsonWebKeys.withFixture(Fixture.IDP_SIGNING_EC_P256).kid("ec").toJson(),
-				TestJsonWebKeys.withFixture(Fixture.IDP_SIGNING_RSA_3072).kid("twice").toJson(),
-				TestJsonWebKeys.withFixture(Fixture.SP_SIGNING_RSA_2048).kid("twice").toJson()));
+		String keySet = TestJwk.keySet(List.of(
+				TestJwk.withFixture(Fixture.IDP_SIGNING_RSA_2048).kid("rsa").toJson(),
+				TestJwk.withFixture(Fixture.IDP_SIGNING_EC_P256).kid("ec").toJson(),
+				TestJwk.withFixture(Fixture.IDP_SIGNING_RSA_3072).kid("twice").toJson(),
+				TestJwk.withFixture(Fixture.SP_SIGNING_RSA_2048).kid("twice").toJson()));
 		TestClock clock = TestClock.fromInstant(START);
 		MemoryHttpClient client = MemoryHttpClient.answering(Answer.fromJson(200, null, keySet));
-		RemoteJsonWebKeySource source = source(client, clock).maximumStaleness(Duration.ofHours(1)).build();
+		RemoteJwksSource source = source(client, clock).maximumStaleness(Duration.ofHours(1)).build();
 		Assertions.assertEquals(KeySelection.Kind.FOUND, select(source, "rsa").getKind());
 
 		client.answer(Answer.fromStatus(500));
@@ -598,11 +598,11 @@ final class JwksCacheTests {
 	@Test
 	void aRefreshWithNoKeysReplacesTheKeySet() {
 		TestClock clock = TestClock.fromInstant(START);
-		MemoryHttpClient client = MemoryHttpClient.answering(Answer.fromKeySet("max-age=60", "a"));
-		RemoteJsonWebKeySource source = source(client, clock).build();
+		MemoryHttpClient client = MemoryHttpClient.answering(Answer.fromJwks("max-age=60", "a"));
+		RemoteJwksSource source = source(client, clock).build();
 		Assertions.assertEquals(KeySelection.Kind.FOUND, select(source, "a").getKind());
 
-		client.answer(Answer.fromKeySet("max-age=60"));
+		client.answer(Answer.fromJwks("max-age=60"));
 		clock.set(START.plusSeconds(60));
 		Assertions.assertEquals(KeySelection.Kind.UNKNOWN, select(source, "a").getKind(), "the refresh leader");
 		clock.set(START.plusSeconds(61));
@@ -618,8 +618,8 @@ final class JwksCacheTests {
 	@Test
 	void aClockSetBackRefetches() {
 		RewindableClock clock = RewindableClock.fromInstant(START);
-		MemoryHttpClient client = MemoryHttpClient.answering(Answer.fromKeySet(null, "a"));
-		RemoteJsonWebKeySource source = source(client, clock).build();
+		MemoryHttpClient client = MemoryHttpClient.answering(Answer.fromJwks(null, "a"));
+		RemoteJwksSource source = source(client, clock).build();
 		Assertions.assertEquals(KeySelection.Kind.FOUND, select(source, "a").getKind());
 
 		clock.rewind(Duration.ofHours(1));
@@ -638,13 +638,13 @@ final class JwksCacheTests {
 	@Test
 	void aSmallClockRollbackCannotKeepAnOldKeySetFresh() {
 		RewindableClock clock = RewindableClock.fromInstant(START);
-		MemoryHttpClient client = MemoryHttpClient.answering(Answer.fromKeySet("max-age=60", "a"));
-		RemoteJsonWebKeySource source = source(client, clock).build();
+		MemoryHttpClient client = MemoryHttpClient.answering(Answer.fromJwks("max-age=60", "a"));
+		RemoteJwksSource source = source(client, clock).build();
 		Assertions.assertEquals(KeySelection.Kind.FOUND, select(source, "a").getKind());
 		clock.advance(Duration.ofSeconds(5));
 		Assertions.assertEquals(KeySelection.Kind.FOUND, select(source, "a").getKind());
 		Assertions.assertEquals(1, client.getSendCount());
-		client.answer(Answer.fromKeySet("max-age=60", "b"));
+		client.answer(Answer.fromJwks("max-age=60", "b"));
 		clock.rewind(Duration.ofSeconds(1));
 		Assertions.assertEquals(KeySelection.Kind.UNKNOWN, select(source, "a").getKind());
 		Assertions.assertEquals(2, client.getSendCount(), "an observed rollback invalidates even a fresh window");
@@ -660,8 +660,8 @@ final class JwksCacheTests {
 	@Test
 	void aClockSetBackExtendsNoCooldownOrBackoff() {
 		RewindableClock clock = RewindableClock.fromInstant(START);
-		MemoryHttpClient client = MemoryHttpClient.answering(Answer.fromKeySet(null, "a"));
-		RemoteJsonWebKeySource source = source(client, clock).build();
+		MemoryHttpClient client = MemoryHttpClient.answering(Answer.fromJwks(null, "a"));
+		RemoteJwksSource source = source(client, clock).build();
 		Assertions.assertEquals(KeySelection.Kind.FOUND, select(source, "a").getKind());
 
 		client.answer(Answer.fromStatus(503));
@@ -670,7 +670,7 @@ final class JwksCacheTests {
 		assertUnavailable(ErrorCategory.REMOTE_ERROR, true, () -> select(source, "x"));
 		Assertions.assertEquals(2, client.getSendCount(), "inside the backoff and the cooldown");
 
-		client.answer(Answer.fromKeySet(null, "a", "x"));
+		client.answer(Answer.fromJwks(null, "a", "x"));
 		clock.rewind(Duration.ofSeconds(30));
 		Assertions.assertEquals(KeySelection.Kind.FOUND, select(source, "x").getKind());
 		Assertions.assertEquals(3, client.getSendCount(), "both windows start in the future of now");
@@ -688,10 +688,10 @@ final class JwksCacheTests {
 		TestClock clock = TestClock.fromInstant(START);
 		MemoryHttpClient client = MemoryHttpClient.answering(cutShort());
 		RecordingObserver<JoseObserver> observer = RecordingObserver.fromInterface(JoseObserver.class);
-		RemoteJsonWebKeySource source = source(client, clock).observer(observer.getObserver()).build();
+		RemoteJwksSource source = source(client, clock).observer(observer.getObserver()).build();
 
 		assertCutShort(() -> select(source, "a"));
-		client.answer(Answer.fromKeySet("max-age=60", "a"));
+		client.answer(Answer.fromJwks("max-age=60", "a"));
 		clock.set(START.plusSeconds(1));
 		Assertions.assertEquals(KeySelection.Kind.FOUND, select(source, "a").getKind());
 		Assertions.assertEquals(2, client.getSendCount());
@@ -708,10 +708,10 @@ final class JwksCacheTests {
 		assertCutShort(() -> select(source, "a"));
 		Assertions.assertEquals(4, client.getSendCount(), "the attempt at 0 s has left the window, so 62 s is the second");
 
-		client.answer(Answer.fromKeySet("max-age=60", "a", "b"));
+		client.answer(Answer.fromJwks("max-age=60", "a", "b"));
 		clock.set(START.plusSeconds(63));
 		Assertions.assertEquals(KeySelection.Kind.FOUND, select(source, "a").getKind(), "stale under the ceiling");
-		JsonWebKeySetUnavailableException lacking = assertUnavailable(ErrorCategory.TRANSPORT, true,
+		JwksUnavailableException lacking = assertUnavailable(ErrorCategory.TRANSPORT, true,
 				() -> select(source, "b"));
 		Assertions.assertNull(lacking.getCause());
 		assertUnavailable(ErrorCategory.TRANSPORT, true, source::warmUp);
@@ -720,7 +720,7 @@ final class JwksCacheTests {
 		Assertions.assertEquals(4, client.getSendCount());
 		Assertions.assertEquals(List.of(Duration.ofSeconds(28), Duration.ofSeconds(28), Duration.ofSeconds(28),
 						Duration.ofSeconds(28), Duration.ofNanos(1)),
-				observer.getCalls("didSuppressJsonWebKeySetFetch").stream().map(call -> call.getArgument(1)).toList());
+				observer.getCalls("didSuppressJwksFetch").stream().map(call -> call.getArgument(1)).toList());
 
 		clock.set(START.plusSeconds(91));
 		Assertions.assertEquals(KeySelection.Kind.FOUND, select(source, "b").getKind());
@@ -734,14 +734,14 @@ final class JwksCacheTests {
 		TestClock clock = TestClock.fromInstant(START);
 		MemoryHttpClient client = MemoryHttpClient.answering(Answer.fromStatus(404));
 		RecordingObserver<JoseObserver> observer = RecordingObserver.fromInterface(JoseObserver.class);
-		RemoteJsonWebKeySource source = source(client, clock).observer(observer.getObserver()).build();
+		RemoteJwksSource source = source(client, clock).observer(observer.getObserver()).build();
 
 		assertUnavailable(ErrorCategory.REMOTE_ERROR, false, source::warmUp);
 		assertUnavailable(ErrorCategory.REMOTE_ERROR, false, source::warmUp);
 		Assertions.assertEquals(1, client.getSendCount(), "the backoff holds warmUp() back");
-		Assertions.assertEquals(1, observer.getCalls("didSuppressJsonWebKeySetFetch").size());
+		Assertions.assertEquals(1, observer.getCalls("didSuppressJwksFetch").size());
 
-		client.answer(Answer.fromKeySet(null, "a"));
+		client.answer(Answer.fromJwks(null, "a"));
 		clock.advance(COOLDOWN);
 		source.warmUp();
 		source.warmUp();
@@ -762,8 +762,8 @@ final class JwksCacheTests {
 	@Test
 	void warmUpNeitherObeysNorConsumesTheUnknownKeyCooldown() {
 		TestClock clock = TestClock.fromInstant(START);
-		MemoryHttpClient client = MemoryHttpClient.answering(Answer.fromKeySet("max-age=60", "a"));
-		RemoteJsonWebKeySource source = source(client, clock).build();
+		MemoryHttpClient client = MemoryHttpClient.answering(Answer.fromJwks("max-age=60", "a"));
+		RemoteJwksSource source = source(client, clock).build();
 
 		source.warmUp();
 		clock.set(START.plusSeconds(1));
@@ -774,7 +774,7 @@ final class JwksCacheTests {
 		clock.set(START.plusSeconds(45));
 		assertCutShort(() -> select(source, "c"));
 		Assertions.assertEquals(3, client.getSendCount());
-		client.answer(Answer.fromKeySet("max-age=60", "a"));
+		client.answer(Answer.fromJwks("max-age=60", "a"));
 		clock.set(START.plusSeconds(50));
 		Assertions.assertEquals(KeySelection.Kind.UNKNOWN, select(source, "c").getKind());
 		Assertions.assertEquals(3, client.getSendCount(), "the refetch cut short at 45 s kept its mark");
@@ -795,21 +795,21 @@ final class JwksCacheTests {
 	@Test
 	void aLeaderThatCannotReachTheExchangeSendsNothingAndTakesNoMark() {
 		TestClock clock = TestClock.fromInstant(START);
-		MemoryHttpClient client = MemoryHttpClient.answering(Answer.fromKeySet(null, "a"));
+		MemoryHttpClient client = MemoryHttpClient.answering(Answer.fromJwks(null, "a"));
 		RecordingObserver<JoseObserver> observer = RecordingObserver.fromInterface(JoseObserver.class);
-		RemoteJsonWebKeySource source = source(client, clock).observer(observer.getObserver()).build();
+		RemoteJwksSource source = source(client, clock).observer(observer.getObserver()).build();
 
-		JsonWebKeySetUnavailableException spent = assertUnavailable(ErrorCategory.TRANSPORT, true,
+		JwksUnavailableException spent = assertUnavailable(ErrorCategory.TRANSPORT, true,
 				() -> source.select(rs256("a"), Deadline.fromNow(Duration.ZERO)));
 		Assertions.assertNull(spent.getCause());
 		Assertions.assertEquals(0, client.getSendCount());
 		Assertions.assertEquals(KeySelection.Kind.FOUND, select(source, "a").getKind());
 
-		Assertions.assertThrows(JsonWebKeySetUnavailableException.class,
+		Assertions.assertThrows(JwksUnavailableException.class,
 				() -> source.select(rs256("x"), Deadline.fromNow(Duration.ZERO)));
 		Thread.currentThread().interrupt();
 		try {
-			JsonWebKeySetUnavailableException interrupted = assertUnavailable(ErrorCategory.TRANSPORT, false,
+			JwksUnavailableException interrupted = assertUnavailable(ErrorCategory.TRANSPORT, false,
 					() -> select(source, "x"));
 			Assertions.assertNull(interrupted.getCause());
 			Assertions.assertTrue(Thread.currentThread().isInterrupted(), "the interrupt flag stays set");
@@ -817,7 +817,7 @@ final class JwksCacheTests {
 			Assertions.assertTrue(Thread.interrupted());
 		}
 		Assertions.assertEquals(1, client.getSendCount());
-		Assertions.assertEquals(0, observer.getCalls("didFailToFetchJsonWebKeySet").size());
+		Assertions.assertEquals(0, observer.getCalls("didFailToFetchJwks").size());
 
 		Assertions.assertEquals(KeySelection.Kind.UNKNOWN, select(source, "x").getKind());
 		Assertions.assertEquals(2, client.getSendCount(), "neither refused leader took the cooldown mark");
@@ -860,19 +860,19 @@ final class JwksCacheTests {
 				DynamicTest.dynamicTest(failureCase.name, () -> {
 					MemoryHttpClient client = MemoryHttpClient.answering(failureCase.answer);
 					RecordingObserver<JoseObserver> observer = RecordingObserver.fromInterface(JoseObserver.class);
-					RemoteJsonWebKeySource source = source(client, TestClock.fromInstant(START))
+					RemoteJwksSource source = source(client, TestClock.fromInstant(START))
 							.observer(observer.getObserver()).build();
 
-					JsonWebKeySetUnavailableException exception = assertUnavailable(failureCase.category,
+					JwksUnavailableException exception = assertUnavailable(failureCase.category,
 							failureCase.transientFailure, () -> select(source, "a"));
 					if (failureCase.category == ErrorCategory.TRANSPORT)
 						Assertions.assertInstanceOf(IOException.class, exception.getCause());
 					else
 						Assertions.assertNull(exception.getCause());
-					Assertions.assertSame(exception, observer.getCalls("didFailToFetchJsonWebKeySet").get(0).getArgument(1));
+					Assertions.assertSame(exception, observer.getCalls("didFailToFetchJwks").get(0).getArgument(1));
 
 					// A remembered failure keeps the category and transience, and never the cause.
-					JsonWebKeySetUnavailableException remembered = assertUnavailable(failureCase.category,
+					JwksUnavailableException remembered = assertUnavailable(failureCase.category,
 							failureCase.transientFailure, () -> select(source, "a"));
 					Assertions.assertNull(remembered.getCause());
 					Assertions.assertNotSame(exception, remembered);
@@ -885,8 +885,8 @@ final class JwksCacheTests {
 	@Test
 	void aMalformedRefreshKeepsThePreviousSnapshot() {
 		TestClock clock = TestClock.fromInstant(START);
-		MemoryHttpClient client = MemoryHttpClient.answering(Answer.fromKeySet(null, "a"));
-		RemoteJsonWebKeySource source = source(client, clock).build();
+		MemoryHttpClient client = MemoryHttpClient.answering(Answer.fromJwks(null, "a"));
+		RemoteJwksSource source = source(client, clock).build();
 		Assertions.assertEquals(KeySelection.Kind.FOUND, select(source, "a").getKind());
 
 		client.answer(Answer.fromJson(200, null, keySetJson(keyIds(101))));
@@ -901,19 +901,19 @@ final class JwksCacheTests {
 		Assertions.assertEquals(KeySelection.Kind.FOUND, select(source, "k-100").getKind());
 	}
 
-	// Plan "RemoteJsonWebKeySource.Builder": the configured maximumKeys and maximumResponseBytes bound each fetch in both
+	// Plan "RemoteJwksSource.Builder": the configured maximumKeys and maximumResponseBytes bound each fetch in both
 	// directions. Lowered, a key set one element over (keys counts every element, a skipped key included) or one byte
 	// over is MALFORMED_INPUT, not transient, while one at the limit is accepted. Raised to 1,000 keys and 4 MiB, a key
 	// set of 1,000 keys (over 256 KiB) is accepted, which the defaults refuse.
 	@Test
 	void theConfiguredKeyAndBodyLimitsBoundEachFetch() {
-		String twoKeys = TestJsonWebKeys.keySet(List.of(
-				TestJsonWebKeys.withFixture(Fixture.IDP_SIGNING_RSA_2048).kid("a").toJson(),
-				TestJsonWebKeys.withFixture(Fixture.IDP_SIGNING_RSA_3072).kid("b").toJson()));
-		String threeElements = TestJsonWebKeys.keySet(List.of(
-				TestJsonWebKeys.withFixture(Fixture.IDP_SIGNING_RSA_2048).kid("a").toJson(),
-				TestJsonWebKeys.withFixture(Fixture.IDP_SIGNING_RSA_3072).kid("b").toJson(),
-				TestJsonWebKeys.octWithK("GawgguFyGrWKav7AX4VKUg").kid("oct").toJson()));
+		String twoKeys = TestJwk.keySet(List.of(
+				TestJwk.withFixture(Fixture.IDP_SIGNING_RSA_2048).kid("a").toJson(),
+				TestJwk.withFixture(Fixture.IDP_SIGNING_RSA_3072).kid("b").toJson()));
+		String threeElements = TestJwk.keySet(List.of(
+				TestJwk.withFixture(Fixture.IDP_SIGNING_RSA_2048).kid("a").toJson(),
+				TestJwk.withFixture(Fixture.IDP_SIGNING_RSA_3072).kid("b").toJson(),
+				TestJwk.octWithK("GawgguFyGrWKav7AX4VKUg").kid("oct").toJson()));
 		Assertions.assertEquals(KeySelection.Kind.FOUND, select(limited(twoKeys, 2, null), "b").getKind());
 		assertUnavailable(ErrorCategory.MALFORMED_INPUT, false, () -> select(limited(threeElements, 2, null), "a"));
 
@@ -942,14 +942,14 @@ final class JwksCacheTests {
 	void theRequestTimeoutBoundsTheExchangeUnderALongerEmbeddedDeadline() {
 		MemoryHttpClient client = MemoryHttpClient.answering(Answer.holding());
 		RecordingObserver<JoseObserver> observer = RecordingObserver.fromInterface(JoseObserver.class);
-		RemoteJsonWebKeySource source = source(client, TestClock.fromInstant(START)).requestTimeout(Duration.ofSeconds(1))
+		RemoteJwksSource source = source(client, TestClock.fromInstant(START)).requestTimeout(Duration.ofSeconds(1))
 				.observer(observer.getObserver()).build();
 		Deadline deadline = Deadline.fromNow(WAIT);
 
 		long before = System.nanoTime();
 		assertUnavailable(ErrorCategory.TRANSPORT, true, () -> source.select(rs256("a"), deadline));
 		long after = System.nanoTime();
-		Duration elapsed = JwtFixtures.assertElapsedWithin(observer.getCalls("didFailToFetchJsonWebKeySet").get(0)
+		Duration elapsed = JwtFixtures.assertElapsedWithin(observer.getCalls("didFailToFetchJwks").get(0)
 				.getArgument(3), before, after);
 		Assertions.assertTrue(elapsed.compareTo(Duration.ofMillis(500)) >= 0, elapsed::toString);
 		Duration timeout = client.getRequests().get(0).timeout().orElseThrow();
@@ -964,29 +964,29 @@ final class JwksCacheTests {
 	// client with a permitted URI sends one request.
 	@Test
 	void aUriTheExchangeRefusesIsAConfigurationFailureWithNoRequest() {
-		MemoryHttpClient client = MemoryHttpClient.answering(Answer.fromKeySet(null, "a"));
-		RemoteJsonWebKeySource permitted = source(client, TestClock.fromInstant(START)).build();
-		RemoteJsonWebKeySource unchecked = new RemoteJsonWebKeySource(
+		MemoryHttpClient client = MemoryHttpClient.answering(Answer.fromJwks(null, "a"));
+		RemoteJwksSource permitted = source(client, TestClock.fromInstant(START)).build();
+		RemoteJwksSource unchecked = new RemoteJwksSource(
 				URI.create("https://user@jwks.example.com/keys"), permitted.httpExchangeForTests(),
 				settings(TestClock.fromInstant(START), JoseObserver.disabledInstance()));
 
-		JsonWebKeySetUnavailableException exception = assertUnavailable(ErrorCategory.CONFIGURATION, false,
+		JwksUnavailableException exception = assertUnavailable(ErrorCategory.CONFIGURATION, false,
 				() -> select(unchecked, "a"));
 		Assertions.assertNull(exception.getCause());
 		Assertions.assertEquals(0, client.getSendCount());
-		Assertions.assertEquals("RemoteJsonWebKeySource{uri=https://jwks.example.com/keys, ", unchecked.toString()
-				.substring(0, "RemoteJsonWebKeySource{uri=https://jwks.example.com/keys, ".length()));
+		Assertions.assertEquals("RemoteJwksSource{uri=https://jwks.example.com/keys, ", unchecked.toString()
+				.substring(0, "RemoteJwksSource{uri=https://jwks.example.com/keys, ".length()));
 
 		Assertions.assertEquals(KeySelection.Kind.FOUND, select(permitted, "a").getKind());
 		Assertions.assertEquals(1, client.getSendCount());
 	}
 
-	// Plan "RemoteJsonWebKeySource algorithm", leader step 1: one GET of the configured URI, query included, with the
+	// Plan "RemoteJwksSource algorithm", leader step 1: one GET of the configured URI, query included, with the
 	// JWKS Accept header and identity encoding.
 	@Test
 	void theLeaderSendsOneJwksProfileGetOfTheConfiguredUri() {
-		MemoryHttpClient client = MemoryHttpClient.answering(Answer.fromKeySet(null, "a"));
-		RemoteJsonWebKeySource source = source(client, TestClock.fromInstant(START)).build();
+		MemoryHttpClient client = MemoryHttpClient.answering(Answer.fromJwks(null, "a"));
+		RemoteJwksSource source = source(client, TestClock.fromInstant(START)).build();
 
 		Assertions.assertEquals(KeySelection.Kind.FOUND, select(source, "a").getKind());
 		HttpRequest request = client.getRequests().get(0);
@@ -1006,15 +1006,15 @@ final class JwksCacheTests {
 	void aTimeoutUnderAnEmbeddedDeadlineIsAFailure() {
 		TestClock clock = TestClock.fromInstant(START);
 		MemoryHttpClient client = MemoryHttpClient.answering(Answer.holding());
-		RemoteJsonWebKeySource source = source(client, clock).build();
+		RemoteJwksSource source = source(client, clock).build();
 
-		JsonWebKeySetUnavailableException timedOut = assertUnavailable(ErrorCategory.TRANSPORT, true,
+		JwksUnavailableException timedOut = assertUnavailable(ErrorCategory.TRANSPORT, true,
 				() -> source.select(rs256("a"), Deadline.fromNow(Duration.ofMillis(100))));
 		Assertions.assertNull(timedOut.getCause());
 		assertUnavailable(ErrorCategory.TRANSPORT, true, () -> select(source, "a"));
 		Assertions.assertEquals(1, client.getSendCount());
 		clock.advance(COOLDOWN);
-		client.answer(Answer.fromKeySet(null, "a"));
+		client.answer(Answer.fromJwks(null, "a"));
 		Assertions.assertEquals(KeySelection.Kind.FOUND, select(source, "a").getKind());
 		Assertions.assertEquals(2, client.getSendCount());
 	}
@@ -1022,9 +1022,9 @@ final class JwksCacheTests {
 	// The fast path: a fresh key set answers a known key with no lock-held fetch decision and no hook.
 	@Test
 	void aFreshKeyAnswersWithoutAnyHook() {
-		MemoryHttpClient client = MemoryHttpClient.answering(Answer.fromKeySet(null, "a"));
+		MemoryHttpClient client = MemoryHttpClient.answering(Answer.fromJwks(null, "a"));
 		RecordingObserver<JoseObserver> observer = RecordingObserver.fromInterface(JoseObserver.class);
-		RemoteJsonWebKeySource source = source(client, TestClock.fromInstant(START)).observer(observer.getObserver())
+		RemoteJwksSource source = source(client, TestClock.fromInstant(START)).observer(observer.getObserver())
 				.build();
 		Assertions.assertEquals(KeySelection.Kind.FOUND, select(source, "a").getKind());
 		int hooks = observer.getCalls().size();
@@ -1032,14 +1032,14 @@ final class JwksCacheTests {
 		for (int call = 0; call < 10; ++call)
 			Assertions.assertEquals(KeySelection.Kind.FOUND, select(source, "a").getKind());
 		Assertions.assertEquals(hooks, observer.getCalls().size());
-		Assertions.assertEquals(List.of("willFetchJsonWebKeySet", "didFetchJsonWebKeySet"),
+		Assertions.assertEquals(List.of("willFetchJwks", "didFetchJwks"),
 				observer.getCalls().stream().map(RecordingObserver.Call::getMethodName).toList());
 	}
 
 	@Test
 	void concurrentSystemClockReadsKeepFreshKeysAvailable() throws Exception {
-		MemoryHttpClient client = MemoryHttpClient.answering(Answer.fromKeySet("max-age=60", "a"));
-		RemoteJsonWebKeySource source = source(client, Clock.systemUTC()).build();
+		MemoryHttpClient client = MemoryHttpClient.answering(Answer.fromJwks("max-age=60", "a"));
+		RemoteJwksSource source = source(client, Clock.systemUTC()).build();
 		Assertions.assertEquals(KeySelection.Kind.FOUND, select(source, "a").getKind());
 		int workers = 8;
 		CountDownLatch ready = new CountDownLatch(workers), start = new CountDownLatch(1);
@@ -1066,8 +1066,8 @@ final class JwksCacheTests {
 
 	// ----- Shared helpers -----
 
-	static RemoteJsonWebKeySource.@NonNull Builder source(@NonNull HttpClient client, @NonNull Clock clock) {
-		return RemoteJsonWebKeySource.withUri(JWKS_URI).httpClient(client).clock(clock);
+	static RemoteJwksSource.@NonNull Builder source(@NonNull HttpClient client, @NonNull Clock clock) {
+		return RemoteJwksSource.withUri(JWKS_URI).httpClient(client).clock(clock);
 	}
 
 	static @NonNull JwksSettings settings(@NonNull Clock clock, @NonNull JoseObserver observer) {
@@ -1102,7 +1102,7 @@ final class JwksCacheTests {
 	 * A source over a client that answers {@code json} with no {@code Content-Length}, built with the given key and
 	 * body limits ({@code null} keeps a default).
 	 */
-	private static @NonNull RemoteJsonWebKeySource limited(@NonNull String json, @Nullable Integer maximumKeys,
+	private static @NonNull RemoteJwksSource limited(@NonNull String json, @Nullable Integer maximumKeys,
 			@Nullable Integer maximumResponseBytes) {
 		MemoryHttpClient client = MemoryHttpClient.answering(Answer.fromJson(200, null, json));
 		return source(client, TestClock.fromInstant(START)).maximumKeys(maximumKeys)
@@ -1125,7 +1125,7 @@ final class JwksCacheTests {
 		return new KeyQuery(JwsAlgorithm.RS256, keyId, Set.of(JwsAlgorithm.RS256));
 	}
 
-	static @NonNull KeySelection select(@NonNull RemoteJsonWebKeySource source, @Nullable String keyId) {
+	static @NonNull KeySelection select(@NonNull RemoteJwksSource source, @Nullable String keyId) {
 		return source.select(rs256(keyId));
 	}
 
@@ -1146,13 +1146,13 @@ final class JwksCacheTests {
 	static @NonNull String keySetJson(@NonNull List<@NonNull String> keyIds) {
 		List<String> keys = new ArrayList<>();
 		for (String keyId : keyIds)
-			keys.add(TestJsonWebKeys.withFixture(Fixture.IDP_SIGNING_RSA_2048).kid(keyId).toJson());
-		return TestJsonWebKeys.keySet(keys);
+			keys.add(TestJwk.withFixture(Fixture.IDP_SIGNING_RSA_2048).kid(keyId).toJson());
+		return TestJwk.keySet(keys);
 	}
 
-	static @NonNull JsonWebKeySetUnavailableException assertUnavailable(@NonNull ErrorCategory category, boolean transientFailure,
+	static @NonNull JwksUnavailableException assertUnavailable(@NonNull ErrorCategory category, boolean transientFailure,
 			@NonNull Executable executable) {
-		JsonWebKeySetUnavailableException exception = Assertions.assertThrows(JsonWebKeySetUnavailableException.class,
+		JwksUnavailableException exception = Assertions.assertThrows(JwksUnavailableException.class,
 				executable);
 		Assertions.assertEquals(category, exception.getCategory(), exception::toString);
 		Assertions.assertEquals(transientFailure, exception.isTransient(), exception::toString);
@@ -1225,7 +1225,7 @@ final class JwksCacheTests {
 		/**
 		 * A 200 key set of the RSA fixture key under each kid ({@link #keySetJson(String...)}).
 		 */
-		static @NonNull Answer fromKeySet(@Nullable String cacheControl, @NonNull String @NonNull ... keyIds) {
+		static @NonNull Answer fromJwks(@Nullable String cacheControl, @NonNull String @NonNull ... keyIds) {
 			return fromJson(200, cacheControl, keySetJson(keyIds));
 		}
 

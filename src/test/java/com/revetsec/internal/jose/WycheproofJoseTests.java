@@ -29,9 +29,9 @@ import com.revetsec.internal.json.JsonCodec;
 import com.revetsec.internal.json.JsonLimits;
 import com.revetsec.internal.json.JsonParseException;
 import com.revetsec.jose.JoseException;
-import com.revetsec.jose.JsonWebKey;
-import com.revetsec.jose.JsonWebKeySet;
-import com.revetsec.jose.JsonWebKeySkipReason;
+import com.revetsec.jose.Jwk;
+import com.revetsec.jose.Jwks;
+import com.revetsec.jose.JwkSkipReason;
 import com.revetsec.jose.JwsAlgorithm;
 import com.revetsec.json.JsonArray;
 import com.revetsec.json.JsonObject;
@@ -74,8 +74,8 @@ import java.util.stream.Stream;
  * without {@code alg} to that algorithm (G8-2). The token length and the {@code typ} settings are
  * {@code JwtValidator}'s defaults.
  * <p>
- * <strong>Keys.</strong> Public keys come from the real key set parser, {@link JwkSetParser}, at the default limits of
- * {@link JsonWebKeySet#fromJson(String)}, and {@code JsonWebKeySet.fromJson} must find the same keys: the group's
+ * <strong>Keys.</strong> Public keys come from the real key set parser, {@link JwksParser}, at the default limits of
+ * {@link Jwks#fromJson(String)}, and {@code Jwks.fromJson} must find the same keys: the group's
  * {@code public} JWK or JWK Set, or, for a group without one, its {@code private} keys with their private and
  * symmetric members dropped. An {@code HS*} token goes to the internal HMAC engine
  * ({@link JwtProcessor#verifyWithSecret}), with the {@code k} of the group's one {@code kty: oct} key with the token's
@@ -179,22 +179,22 @@ final class WycheproofJoseTests {
 	 * the group's {@code public} keys, plus its {@code private} keys as Wycheproof writes them, each skipped for its
 	 * private or symmetric member where it has one.
 	 */
-	private static final Map<String, Map<JsonWebKeySkipReason, Integer>> KEY_SET_ONLY_SKIPS = Map.of(
+	private static final Map<String, Map<JwkSkipReason, Integer>> KEY_SET_ONLY_SKIPS = Map.of(
 			"json_web_key_test.json", Map.of(
-					JsonWebKeySkipReason.SYMMETRIC_KEY, 16,
-					JsonWebKeySkipReason.PRIVATE_KEY_MEMBERS, 11,
-					JsonWebKeySkipReason.NOT_A_VERIFICATION_KEY, 2,
-					JsonWebKeySkipReason.UNSUPPORTED_ALGORITHM, 2,
-					JsonWebKeySkipReason.ALGORITHM_MISMATCH, 2,
-					JsonWebKeySkipReason.RSA_KEY_SIZE, 1,
-					JsonWebKeySkipReason.RSA_EXPONENT, 1,
-					JsonWebKeySkipReason.EC_POINT_NOT_ON_CURVE, 1,
-					JsonWebKeySkipReason.WEAK_KEY, 1),
+					JwkSkipReason.SYMMETRIC_KEY, 16,
+					JwkSkipReason.PRIVATE_KEY_MEMBERS, 11,
+					JwkSkipReason.NOT_A_VERIFICATION_KEY, 2,
+					JwkSkipReason.UNSUPPORTED_ALGORITHM, 2,
+					JwkSkipReason.ALGORITHM_MISMATCH, 2,
+					JwkSkipReason.RSA_KEY_SIZE, 1,
+					JwkSkipReason.RSA_EXPONENT, 1,
+					JwkSkipReason.EC_POINT_NOT_ON_CURVE, 1,
+					JwkSkipReason.WEAK_KEY, 1),
 			"json_web_signature_test.json", Map.of(
-					JsonWebKeySkipReason.SYMMETRIC_KEY, 4,
-					JsonWebKeySkipReason.PRIVATE_KEY_MEMBERS, 19,
-					JsonWebKeySkipReason.NOT_A_VERIFICATION_KEY, 4,
-					JsonWebKeySkipReason.UNSUPPORTED_ALGORITHM, 2));
+					JwkSkipReason.SYMMETRIC_KEY, 4,
+					JwkSkipReason.PRIVATE_KEY_MEMBERS, 19,
+					JwkSkipReason.NOT_A_VERIFICATION_KEY, 4,
+					JwkSkipReason.UNSUPPORTED_ALGORITHM, 2));
 
 	/**
 	 * Each file's outcome counts through the key-set-only path, on every JDK.
@@ -310,43 +310,43 @@ final class WycheproofJoseTests {
 
 	// INV-J3, M2-7 and exit criterion 3: each group's verification key set skips exactly its pinned keys, with their
 	// reasons (JWK tcId 7 through WEAK_KEY, 8 RSA_KEY_SIZE, 9 RSA_EXPONENT, 22 EC_POINT_NOT_ON_CURVE), and the public
-	// JsonWebKeySet.fromJson keeps the same keys. The key-set-only path skips every key with a private or symmetric
+	// Jwks.fromJson keeps the same keys. The key-set-only path skips every key with a private or symmetric
 	// member (INV-J2, INV-J3), for that reason, and keeps the same usable keys; its skips per file are pinned too.
 	@Test
 	void eachGroupsKeySetSkipsExactlyItsPinnedKeys() {
 		Map<String, List<String>> skips = new TreeMap<>();
-		Map<String, Map<JsonWebKeySkipReason, Integer>> keySetOnlySkips = new TreeMap<>();
+		Map<String, Map<JwkSkipReason, Integer>> keySetOnlySkips = new TreeMap<>();
 
 		for (VectorFile file : Run.load().files)
 			for (TestGroup group : file.getGroups()) {
 				GroupKeys keys = GroupKeys.of(group);
 				String name = groupName(group);
 
-				for (ParsedKeySet.Skip skip : keys.keySetOnly.skips())
+				for (ParsedJwks.Skip skip : keys.keySetOnly.skips())
 					keySetOnlySkips.computeIfAbsent(file.getName(), fileName -> new TreeMap<>()).merge(skip.reason(), 1,
 							Integer::sum);
 
 				if (!keys.verification.skips().isEmpty())
 					skips.put(name, skips(keys.verification));
 
-				List<JsonWebKey> publicKeys = JsonWebKeySet.fromJson(keys.verificationJson).getKeys();
+				List<Jwk> publicKeys = ((com.revetsec.jose.JwksParseResult.Succeeded) Jwks.fromJsonResult(keys.verificationJson)).getJwks().getKeys();
 				Assertions.assertEquals(thumbprints(keys.verification.keys()), publicKeys.stream()
 						.map(key -> key.getKeyId().orElse("") + " " + key.getThumbprintSha256()).toList(),
-						() -> name + ": JsonWebKeySet.fromJson keeps the same keys");
+						() -> name + ": Jwks.fromJson keeps the same keys");
 
 				Assertions.assertEquals(thumbprints(keys.verification.keys()), thumbprints(keys.keySetOnly.keys()),
 						() -> name + ": the key-set-only path keeps the same usable keys");
 
-				Map<Integer, JsonWebKeySkipReason> skipped = keys.keySetOnly.skips().stream()
-						.collect(Collectors.toMap(ParsedKeySet.Skip::index, ParsedKeySet.Skip::reason));
+				Map<Integer, JwkSkipReason> skipped = keys.keySetOnly.skips().stream()
+						.collect(Collectors.toMap(ParsedJwks.Skip::index, ParsedJwks.Skip::reason));
 
 				for (int index = 0; index < keys.keySetOnlyKeys.size(); ++index) {
 					JsonObject jwk = keys.keySetOnlyKeys.get(index);
 					int keyIndex = index;
 
 					if (PRIVATE_MEMBERS.stream().anyMatch(member -> jwk.find(member).isPresent()))
-						Assertions.assertEquals(isSymmetric(jwk) ? JsonWebKeySkipReason.SYMMETRIC_KEY
-										: JsonWebKeySkipReason.PRIVATE_KEY_MEMBERS, skipped.get(index),
+						Assertions.assertEquals(isSymmetric(jwk) ? JwkSkipReason.SYMMETRIC_KEY
+										: JwkSkipReason.PRIVATE_KEY_MEMBERS, skipped.get(index),
 								() -> name + ": the key-set-only path's key " + keyIndex);
 				}
 			}
@@ -398,7 +398,7 @@ final class WycheproofJoseTests {
 		TestVector vector = Run.load().file("json_web_signature_test.json").getTest(357);
 		PreparedJws prepared = prepare(vector.getString("jws"));
 		JsonObject key = vector.getGroup().getObject("private");
-		String k = key.findString("k").orElseThrow();
+		String k = key.find("k").map(com.revetsec.json.JsonString.class::cast).map(com.revetsec.json.JsonString::getValue).orElseThrow();
 
 		Assertions.assertEquals(Expectations.ACCEPT, verifyWithSecret(prepared, List.of(key)));
 		Assertions.assertEquals(Expectations.ACCEPT, verifyWithSecret(prepared, List.of(without(key, "alg"))));
@@ -511,7 +511,7 @@ final class WycheproofJoseTests {
 	 * Steps 6 and 7 with a key selected from a parsed key set.
 	 */
 	private static @NonNull String verify(@NonNull PreparedJws prepared,
-															 @NonNull ParsedKeySet keySet) {
+															 @NonNull ParsedJwks keySet) {
 		try {
 			JwtProcessor.verify(prepared, KeySelector.select(keySet.keys(), prepared.getKeyQuery()));
 			return Expectations.ACCEPT;
@@ -534,7 +534,7 @@ final class WycheproofJoseTests {
 
 		Optional<String> keyId = prepared.findKeyId();
 		List<JsonObject> candidates = symmetric.stream()
-				.filter(jwk -> keyId.isEmpty() || jwk.findString("kid").equals(keyId)).toList();
+				.filter(jwk -> keyId.isEmpty() || jwk.find("kid").map(com.revetsec.json.JsonString.class::cast).map(com.revetsec.json.JsonString::getValue).equals(keyId)).toList();
 
 		// Two secrets for one token: which one is configured is key-set semantics.
 		if (candidates.size() > 1)
@@ -560,7 +560,7 @@ final class WycheproofJoseTests {
 		byte[] secret;
 
 		try {
-			secret = Base64Url.decode(jwk.findString("k").orElse("?"));
+			secret = Base64Url.decode(jwk.find("k").map(com.revetsec.json.JsonString.class::cast).map(com.revetsec.json.JsonString::getValue).orElse("?"));
 		} catch (EncodingException exception) {
 			return reject(JoseException.Reason.UNKNOWN_KEY);
 		}
@@ -628,10 +628,10 @@ final class WycheproofJoseTests {
 	}
 
 	private static boolean isSymmetric(@NonNull JsonObject jwk) {
-		return jwk.findString("kty").equals(Optional.of(Algorithms.OCT_KEY_TYPE));
+		return jwk.find("kty").map(com.revetsec.json.JsonString.class::cast).map(com.revetsec.json.JsonString::getValue).equals(Optional.of(Algorithms.OCT_KEY_TYPE));
 	}
 
-	private static @NonNull List<@NonNull String> skips(@NonNull ParsedKeySet keySet) {
+	private static @NonNull List<@NonNull String> skips(@NonNull ParsedJwks keySet) {
 		return keySet.skips().stream().map(skip -> skip.index() + " " + skip.reason().name()).toList();
 	}
 
@@ -681,15 +681,15 @@ final class WycheproofJoseTests {
 	private static final class GroupKeys {
 		private final List<JsonObject> privateKeys;
 		private final String verificationJson;
-		private final ParsedKeySet verification;
+		private final ParsedJwks verification;
 		private final List<JsonObject> keySetOnlyKeys;
-		private final ParsedKeySet keySetOnly;
+		private final ParsedJwks keySetOnly;
 
 		private GroupKeys(@NonNull List<@NonNull JsonObject> privateKeys,
 											@NonNull String verificationJson,
-											@NonNull ParsedKeySet verification,
+											@NonNull ParsedJwks verification,
 											@NonNull List<@NonNull JsonObject> keySetOnlyKeys,
-											@NonNull ParsedKeySet keySetOnly) {
+											@NonNull ParsedJwks keySetOnly) {
 			this.privateKeys = privateKeys;
 			this.verificationJson = verificationJson;
 			this.verification = verification;
@@ -733,13 +733,13 @@ final class WycheproofJoseTests {
 		}
 
 		/**
-		 * The real key set parser, at {@code JsonWebKeySet.fromJson}'s limits; no vendored key set is a document
+		 * The real key set parser, at {@code Jwks.fromJson}'s limits; no vendored key set is a document
 		 * failure.
 		 */
-		private static @NonNull ParsedKeySet parse(@NonNull TestGroup group,
+		private static @NonNull ParsedJwks parse(@NonNull TestGroup group,
 																			@NonNull String keySet) {
 			try {
-				return JwkSetParser.parse(keySet, Limits.JWKS_RESPONSE_BODY_SIZE.getDefaultIntValue(),
+				return JwksParser.parse(keySet, Limits.JWKS_RESPONSE_BODY_SIZE.getDefaultIntValue(),
 						Limits.JWKS_KEY_COUNT.getDefaultIntValue());
 			} catch (JoseFailure failure) {
 				throw new AssertionError(group + ": the key set is a document failure, " + failure.getReason(), failure);

@@ -16,6 +16,8 @@
 
 package com.revetsec.oauth;
 
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+
 import org.jspecify.annotations.NonNull;
 
 import com.revetsec.StateSealer;
@@ -191,8 +193,8 @@ final class AuthorizationServerDiscoveryTests {
 			server.script(RFC_PATH, TestHttpsServer.Script.fromResponse(json(200,
 					metadata(server, issuer, server.uri("/token-b")))));
 			assertEquals(OAuthException.Reason.METADATA_ENDPOINT_DRIFT,
-					assertThrows(OAuthValidationException.class, () -> client.completeAuthorization(
-							AuthorizationResponse.fromQueryString("state=" + state + "&code=secret-code"),
+					assertThrows(OAuthValidationException.class, () -> client.completeAuthorizationResult(
+							assertInstanceOf(AuthorizationResponseParseResult.Succeeded.class, AuthorizationResponse.fromQueryStringResult("state=" + state + "&code=secret-code")).getResponse(),
 							PendingAuthorizationSource.fromSealedForm(sealed, sealer, "provider"), CALLBACK))
 							.getReason());
 			assertEquals(0, server.getHitCount("/token-a"));
@@ -207,8 +209,8 @@ final class AuthorizationServerDiscoveryTests {
 			AuthorizationServerMetadata google;
 			try (InputStream input = AuthorizationServerDiscoveryTests.class.getResourceAsStream(
 					"/fixtures/google/2026-09-28/openid-configuration.json")) {
-				google = AuthorizationServerMetadata.fromJson("https://accounts.google.com",
-						new String(java.util.Objects.requireNonNull(input).readAllBytes(), StandardCharsets.UTF_8));
+				google = assertInstanceOf(AuthorizationServerMetadataParseResult.Succeeded.class, AuthorizationServerMetadata.fromJsonResult("https://accounts.google.com",
+						new String(java.util.Objects.requireNonNull(input).readAllBytes(), StandardCharsets.UTF_8))).getMetadata();
 			}
 			assertTrue(google.isAuthorizationResponseIssuerSupported());
 			String issuer = server.uri("/tenant").toString();
@@ -233,8 +235,8 @@ final class AuthorizationServerDiscoveryTests {
 					.httpClient(TestTls.httpClient()).clock(clock).build();
 			int before = server.getRequests().size();
 			assertEquals(OAuthException.Reason.ISSUER_MISSING,
-					assertThrows(OAuthValidationException.class, () -> fresh.completeAuthorization(
-							AuthorizationResponse.fromQueryString("state=" + pending.state() + "&code=code"),
+					assertInstanceOf(AuthorizationCompletionResult.Rejected.class, fresh.completeAuthorizationResult(
+							assertInstanceOf(AuthorizationResponseParseResult.Succeeded.class, AuthorizationResponse.fromQueryStringResult("state=" + pending.state() + "&code=code")).getResponse(),
 							PendingAuthorizationSource.fromSealedForm(sealed, sealer, "provider"), CALLBACK))
 							.getReason());
 			assertEquals(before, server.getRequests().size());

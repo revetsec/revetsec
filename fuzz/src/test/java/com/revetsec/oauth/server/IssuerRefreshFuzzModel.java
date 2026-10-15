@@ -189,7 +189,7 @@ final class IssuerRefreshFuzzModel {
 			OAuthIssuerKeySnapshot keys = OAuthIssuerKeySnapshot.withActiveKey(OAuthIssuerSigningKey.fromKeyPair("key",
 				M6FuzzOracle.KEY.getPrivate(), M6FuzzOracle.KEY.getPublic())).generation("g1").publishedAt(NOW.minusSeconds(120)).build();
 			this.server = OAuthAuthorizationServer.withIssuer(ISSUER).authorizationEndpoint(URI.create(ISSUER + "/authorize"))
-				.tokenEndpoint(URI.create(ISSUER + "/token")).jsonWebKeySetEndpoint(URI.create(ISSUER + "/jwks"))
+				.tokenEndpoint(URI.create(ISSUER + "/token")).jwksEndpoint(URI.create(ISSUER + "/jwks"))
 				.revocationEndpoint(URI.create(ISSUER + "/revoke")).introspectionEndpoint(URI.create(ISSUER + "/introspect"))
 				.clientRepository((id, budget) -> CLIENTS.contains(id) ? Optional.of(client(id)) : Optional.empty())
 				.store(this.store).stateSealer(sealer).signingKeys(OAuthIssuerKeyProvider.fromSnapshot(keys)).resources(resources()).clock(this.clock)
@@ -249,14 +249,14 @@ final class IssuerRefreshFuzzModel {
 		}
 
 		private @NonNull Tokens tokens(@NonNull OAuthServerResponse response) throws Exception {
-			JsonObject body = json(response); String access = body.findString("access_token").orElseThrow();
-			String refresh = body.findString("refresh_token").orElseThrow();
+			JsonObject body = json(response); String access = body.find("access_token").map(com.revetsec.json.JsonString.class::cast).map(com.revetsec.json.JsonString::getValue).orElseThrow();
+			String refresh = body.find("refresh_token").map(com.revetsec.json.JsonString.class::cast).map(com.revetsec.json.JsonString::getValue).orElseThrow();
 			M6FuzzOracle.verify(access, M6FuzzOracle.KEY.getPublic(), com.revetsec.jose.JwsAlgorithm.RS256);
 			return new Tokens(access, refresh);
 		}
 
 		private void assertActive(@NonNull String access, @NonNull Set<@NonNull String> expectedScopes) {
-			BearerToken bearer = BearerToken.fromAuthorizationHeaderValues(List.of("Bearer " + access)).orElseThrow();
+			BearerToken bearer = org.junit.jupiter.api.Assertions.assertInstanceOf(com.revetsec.oauth.BearerTokenResult.Present.class, BearerToken.fromAuthorizationHeaderValuesResult(List.of("Bearer " + access))).getToken();
 			OAuthIssuerAccessTokenResult.Succeeded result = assertInstanceOf(OAuthIssuerAccessTokenResult.Succeeded.class,
 				this.server.validateAccessTokenResult(bearer, this.resource));
 			assertEquals(expectedScopes, result.getAccessToken().getScopes());
@@ -264,7 +264,7 @@ final class IssuerRefreshFuzzModel {
 		}
 
 		private void assertInactive(@NonNull String access) {
-			BearerToken bearer = BearerToken.fromAuthorizationHeaderValues(List.of("Bearer " + access)).orElseThrow();
+			BearerToken bearer = org.junit.jupiter.api.Assertions.assertInstanceOf(com.revetsec.oauth.BearerTokenResult.Present.class, BearerToken.fromAuthorizationHeaderValuesResult(List.of("Bearer " + access))).getToken();
 			assertInstanceOf(OAuthIssuerAccessTokenResult.Rejected.class, this.server.validateAccessTokenResult(bearer, this.resource));
 		}
 

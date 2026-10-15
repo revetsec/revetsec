@@ -27,7 +27,7 @@ import com.revetsec.internal.json.JsonLimits;
 import com.revetsec.json.*;
 import com.revetsec.jose.JwsAlgorithm;
 import com.revetsec.jose.JwsSigner;
-import com.revetsec.testing.TestJsonWebKeys;
+import com.revetsec.testing.TestJwk;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
@@ -98,7 +98,7 @@ final class OAuthClientSelectionTests {
   return StateSealer.withActiveKey(SealingKey.fromBase64("k",Base64.getEncoder().encodeToString(key))).clock(Clock.fixed(NOW,ZoneOffset.UTC)).build();
  }
  private static OAuthTokenResponse.@NonNull Encoder encoder() {
-  var key=TestJsonWebKeys.Fixture.IDP_SIGNING_RSA_2048;
+  var key=TestJwk.Fixture.IDP_SIGNING_RSA_2048;
   return new OAuthTokenResponse.Encoder(ISSUER,"key",JwsSigner.fromRsaKeyPair(key.getPrivateKey(),key.getPublicKey(),JwsAlgorithm.RS256),32768,16384);
  }
  private @NonNull OAuthServerClientSelection selection(@NonNull OAuthServerClientRepository repository) {return new OAuthServerClientSelection(repository,LIMITS,this.fetcher);}
@@ -139,7 +139,7 @@ final class OAuthClientSelectionTests {
  private @NonNull OAuthTokenResponse redeem(@NonNull String credential) {return this.codes.redeem(token(credential,false,Map.of(),null),this.dynamic,resources(),allow(),deadline());}
  private @NonNull OAuthTokenResponse rotate(@NonNull String credential) {return this.refresh.rotate(token(credential,true,Map.of(),null),this.dynamic,resources(),allow(),deadline());}
  private static @NonNull JsonObject body(@NonNull OAuthTokenResponse response) {try{return (JsonObject)JsonCodec.parse(response.body(),JsonLimits.jose(131072));}catch(com.revetsec.internal.json.JsonParseException failure){throw new AssertionError(failure);}}
- private static @NonNull String refreshValue(@NonNull OAuthTokenResponse response) {return body(response).findString("refresh_token").orElseThrow();}
+ private static @NonNull String refreshValue(@NonNull OAuthTokenResponse response) {return body(response).find("refresh_token").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow();}
  private @NonNull JsonObject row(OAuthStoreKey.@NonNull Kind kind) {return this.codec.open(this.store.rows.values().stream().filter(e->e.getKey().getKind()==kind).findFirst().orElseThrow(),Clock.fixed(NOW,ZoneOffset.UTC));}
  private static void failure(OAuthServerAdmissionFailure.@NonNull Reason reason,@NonNull Executable call) {
   var e=assertThrows(OAuthServerAdmissionFailure.class,call);assertEquals(reason,e.reason());assertNull(e.getCause());assertEquals("OAuth server admission failed.",e.getMessage());
@@ -215,12 +215,12 @@ final class OAuthClientSelectionTests {
  }
  @Test void freshFetchFailureLeavesUnusedCodeUnconsumed() {
   String code=code();int commits=this.store.commits,reads=this.store.reads;this.transportFailure=true;
-  failure(OAuthServerAdmissionFailure.Reason.INFRASTRUCTURE,()->redeem(code));assertEquals(commits,this.store.commits);assertTrue(this.store.reads>reads);assertEquals("UNUSED",row(OAuthStoreKey.Kind.CODE).findString("status").orElseThrow());assertEquals(0,this.policies.get());
-  this.transportFailure=false;redeem(code);assertEquals("USED",row(OAuthStoreKey.Kind.CODE).findString("status").orElseThrow());
+  failure(OAuthServerAdmissionFailure.Reason.INFRASTRUCTURE,()->redeem(code));assertEquals(commits,this.store.commits);assertTrue(this.store.reads>reads);assertEquals("UNUSED",row(OAuthStoreKey.Kind.CODE).find("status").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow());assertEquals(0,this.policies.get());
+  this.transportFailure=false;redeem(code);assertEquals("USED",row(OAuthStoreKey.Kind.CODE).find("status").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow());
  }
  @Test void refreshFetchFailureLeavesCurrentFamilyUsable() {
   String credential=refreshValue(redeem(code()));int commits=this.store.commits;this.transportFailure=true;
-  failure(OAuthServerAdmissionFailure.Reason.INFRASTRUCTURE,()->rotate(credential));assertEquals(commits,this.store.commits);assertEquals("ACTIVE",row(OAuthStoreKey.Kind.GRANT).findString("status").orElseThrow());this.transportFailure=false;rotate(credential);
+  failure(OAuthServerAdmissionFailure.Reason.INFRASTRUCTURE,()->rotate(credential));assertEquals(commits,this.store.commits);assertEquals("ACTIVE",row(OAuthStoreKey.Kind.GRANT).find("status").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow());this.transportFailure=false;rotate(credential);
  }
  @TestFactory @NonNull Stream<@NonNull DynamicTest> non200NeverConsumesCodeOrRefresh() {
   return Stream.of(204,301,302,304,400,404,429,500).flatMap(status->Stream.of(false,true).map(refresh->DynamicTest.dynamicTest("non200-"+status+"-"+refresh,()->{
@@ -233,7 +233,7 @@ final class OAuthClientSelectionTests {
   return Stream.of("client_id","token_endpoint_auth_method","redirect_uris","application_type","grant_types").flatMap(field->Stream.of(false,true).map(refresh->DynamicTest.dynamicTest("security-"+field+"-"+refresh,()->{
    var t=new OAuthClientSelectionTests();String code=t.code(),credential=refresh?refreshValue(t.redeem(code)):code;int commits=t.store.commits;
    JsonValue changed=switch(field){case "client_id"->JsonString.fromValue("https://other.example.com/metadata");case "token_endpoint_auth_method"->JsonString.fromValue("client_secret_basic");case "redirect_uris"->JsonArray.fromElements(List.of(JsonString.fromValue("https://client.example.com/other")));case "application_type"->JsonString.fromValue("native");default->JsonArray.fromElements(List.of(JsonString.fromValue("authorization_code")));};
-   t.change(field,changed);assertThrows(OAuthServerAdmissionFailure.class,()->{if(refresh)t.rotate(credential);else t.redeem(credential);});assertEquals(commits,t.store.commits);assertEquals(refresh?"ACTIVE":"PENDING",t.row(OAuthStoreKey.Kind.GRANT).findString("status").orElseThrow());
+   t.change(field,changed);assertThrows(OAuthServerAdmissionFailure.class,()->{if(refresh)t.rotate(credential);else t.redeem(credential);});assertEquals(commits,t.store.commits);assertEquals(refresh?"ACTIVE":"PENDING",t.row(OAuthStoreKey.Kind.GRANT).find("status").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow());
    t.document=document();if(refresh)t.rotate(credential);else t.redeem(credential);
   })));
  }
@@ -244,14 +244,14 @@ final class OAuthClientSelectionTests {
  @Test void sourceChangeDynamicToRegisteredRequiresNewAuthorization() {String code=code();int commits=this.store.commits;invalid(()->this.codes.redeem(token(code,false,Map.of(),null),selection((id,b)->Optional.of(registered(false))),resources(),allow(),deadline()));assertEquals(commits,this.store.commits);}
  @Test void sourceChangeRegisteredToDynamicRequiresNewAuthorization() {String code=code(selection((id,b)->Optional.of(registered(false))));int commits=this.store.commits;invalid(()->redeem(code));assertEquals(commits,this.store.commits);}
  @Test void sourceChangeDuringRefreshDoesNotPoisonWinner() {String credential=refreshValue(redeem(code()));int commits=this.store.commits;invalid(()->this.refresh.rotate(token(credential,true,Map.of(),null),selection((id,b)->Optional.of(registered(false))),resources(),allow(),deadline()));assertEquals(commits,this.store.commits);rotate(credential);}
- @Test void boundUsedCodeRequiresFresh200BeforeReplayInvalidation() {String code=code();redeem(code);int commits=this.store.commits;this.status=304;failure(OAuthServerAdmissionFailure.Reason.INFRASTRUCTURE,()->redeem(code));assertEquals(commits,this.store.commits);this.status=200;invalid(()->redeem(code));assertEquals("REVOKED",row(OAuthStoreKey.Kind.GRANT).findString("status").orElseThrow());}
- @Test void boundUsedRefreshRequiresFresh200BeforeReplayInvalidation() {String credential=refreshValue(redeem(code()));rotate(credential);int commits=this.store.commits;this.status=500;failure(OAuthServerAdmissionFailure.Reason.INFRASTRUCTURE,()->rotate(credential));assertEquals(commits,this.store.commits);this.status=200;invalid(()->rotate(credential));assertEquals("REVOKED",row(OAuthStoreKey.Kind.GRANT).findString("status").orElseThrow());}
- @Test void changedFingerprintOnUsedCodeCannotRevokeActiveGrant() {String code=code();redeem(code);int commits=this.store.commits;change("application_type",JsonString.fromValue("native"));invalid(()->redeem(code));assertEquals(commits,this.store.commits);assertEquals("ACTIVE",row(OAuthStoreKey.Kind.GRANT).findString("status").orElseThrow());}
+ @Test void boundUsedCodeRequiresFresh200BeforeReplayInvalidation() {String code=code();redeem(code);int commits=this.store.commits;this.status=304;failure(OAuthServerAdmissionFailure.Reason.INFRASTRUCTURE,()->redeem(code));assertEquals(commits,this.store.commits);this.status=200;invalid(()->redeem(code));assertEquals("REVOKED",row(OAuthStoreKey.Kind.GRANT).find("status").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow());}
+ @Test void boundUsedRefreshRequiresFresh200BeforeReplayInvalidation() {String credential=refreshValue(redeem(code()));rotate(credential);int commits=this.store.commits;this.status=500;failure(OAuthServerAdmissionFailure.Reason.INFRASTRUCTURE,()->rotate(credential));assertEquals(commits,this.store.commits);this.status=200;invalid(()->rotate(credential));assertEquals("REVOKED",row(OAuthStoreKey.Kind.GRANT).find("status").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow());}
+ @Test void changedFingerprintOnUsedCodeCannotRevokeActiveGrant() {String code=code();redeem(code);int commits=this.store.commits;change("application_type",JsonString.fromValue("native"));invalid(()->redeem(code));assertEquals(commits,this.store.commits);assertEquals("ACTIVE",row(OAuthStoreKey.Kind.GRANT).find("status").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow());}
  @Test void changedFingerprintOnUsedRefreshCannotRevokeRacingWinner() {String credential=refreshValue(redeem(code()));String next=refreshValue(rotate(credential));int commits=this.store.commits;change("application_type",JsonString.fromValue("native"));invalid(()->rotate(credential));assertEquals(commits,this.store.commits);this.document=document();rotate(next);}
  @Test void invalidBindingsCannotPoisonCodeGrant() {String code=code();for(var override:List.of(Map.of("code_verifier","x".repeat(43)),Map.of("resource","https://other.example.com/mcp"),Map.of("redirect_uri","https://client.example.com/other"))){int commits=this.store.commits;invalid(()->this.codes.redeem(token(code,false,override,null),this.dynamic,resources(),allow(),deadline()));assertEquals(commits,this.store.commits);}redeem(code);}
  @Test void conflictFetchesAgainAndDoesNotReuseFirstOperationResponse() {String code=code();this.store.conflicts=1;redeem(code);assertEquals(3,this.fetches.get());assertEquals(2,this.policies.get());}
  @Test void refreshConflictFetchesAgain() {String credential=refreshValue(redeem(code()));int before=this.fetches.get();this.store.conflicts=1;rotate(credential);assertEquals(before+2,this.fetches.get());}
- @Test void metadataChangeAfterConflictPreventsCredentialRelease() {String code=code();int before=this.fetches.get();this.store.conflicts=1;this.fetchHook=()->{if(this.fetches.get()==before+2)change("application_type",JsonString.fromValue("native"));};invalid(()->redeem(code));assertEquals("UNUSED",row(OAuthStoreKey.Kind.CODE).findString("status").orElseThrow());assertEquals("PENDING",row(OAuthStoreKey.Kind.GRANT).findString("status").orElseThrow());}
+ @Test void metadataChangeAfterConflictPreventsCredentialRelease() {String code=code();int before=this.fetches.get();this.store.conflicts=1;this.fetchHook=()->{if(this.fetches.get()==before+2)change("application_type",JsonString.fromValue("native"));};invalid(()->redeem(code));assertEquals("UNUSED",row(OAuthStoreKey.Kind.CODE).find("status").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow());assertEquals("PENDING",row(OAuthStoreKey.Kind.GRANT).find("status").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow());}
  @Test void originalDeadlineIsRetainedFromRegistryThroughFetchAndPolicy() {
   String code=code();Deadline deadline=deadline();AtomicReference<Duration> registryBudget=new AtomicReference<>(),policyBudget=new AtomicReference<>();
   var selection=selection((id,b)->{registryBudget.set(b);return Optional.empty();});this.codes.redeem(token(code,false,Map.of(),null),selection,resources(),(context,b)->{policyBudget.set(b);return decision(context.getSubject());},deadline);
@@ -259,7 +259,7 @@ final class OAuthClientSelectionTests {
  }
  @Test void exhaustedFetchDeadlineDoesNotConsumeStore() {String code=code();int commits=this.store.commits;this.fetchHook=()->{try{Thread.sleep(30);}catch(InterruptedException e){Thread.currentThread().interrupt();}};failure(OAuthServerAdmissionFailure.Reason.INFRASTRUCTURE,()->this.codes.redeem(token(code,false,Map.of(),null),this.dynamic,resources(),allow(),Deadline.fromNow(Duration.ofMillis(10))));assertEquals(commits,this.store.commits);}
  @Test void fetchInterruptionDoesNotConsumeStore() {String code=code();int reads=this.store.reads,commits=this.store.commits;this.fetchHook=()->Thread.currentThread().interrupt();try{failure(OAuthServerAdmissionFailure.Reason.INFRASTRUCTURE,()->redeem(code));assertTrue(Thread.currentThread().isInterrupted());assertTrue(this.store.reads>reads);assertEquals(commits,this.store.commits);}finally{Thread.interrupted();}}
- @Test void applicationDenialStillTerminatesAfterFreshFetch() {String code=code();invalid(()->this.codes.redeem(token(code,false,Map.of(),null),this.dynamic,resources(),(context,b)->OAuthAuthorizationDecision.deniedInstance(),deadline()));assertEquals(2,this.fetches.get());assertEquals("CANCELLED",row(OAuthStoreKey.Kind.CODE).findString("status").orElseThrow());}
+ @Test void applicationDenialStillTerminatesAfterFreshFetch() {String code=code();invalid(()->this.codes.redeem(token(code,false,Map.of(),null),this.dynamic,resources(),(context,b)->OAuthAuthorizationDecision.deniedInstance(),deadline()));assertEquals(2,this.fetches.get());assertEquals("CANCELLED",row(OAuthStoreKey.Kind.CODE).find("status").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow());}
  @Test void callbackFaultAfterFetchLeavesUnusedCode() {String code=code();int commits=this.store.commits;failure(OAuthServerAdmissionFailure.Reason.INFRASTRUCTURE,()->this.codes.redeem(token(code,false,Map.of(),null),this.dynamic,resources(),(context,b)->{throw new IllegalStateException("private");},deadline()));assertEquals(commits,this.store.commits);assertEquals(2,this.fetches.get());redeem(code);}
  @Test void resumeAndCompleteUsePersistedSourceSeparatedFingerprint() {
   this.coordinator.initializeFreshIssuer(deadline());this.coordinator.establishNewSubject("subject",deadline());var a=OAuthServerAuthorizationAdmission.admit(authorize(null,REDIRECT),this.dynamic,deadline(),resources(),LIMITS,true,true);String handle=this.ledger.begin(a,BROWSER,deadline());
@@ -267,7 +267,7 @@ final class OAuthClientSelectionTests {
   assertThrows(OAuthServerAdmissionFailure.class,()->this.ledger.resume(handle,BROWSER,registered(false),deadline()));assertThrows(OAuthServerAdmissionFailure.class,()->this.ledger.complete(handle,BROWSER,registered(false),resources(),decision("subject"),deadline()));
   assertTrue(this.ledger.complete(handle,BROWSER,selected,resources(),decision("subject"),deadline()).isPresent());
  }
- @Test void metadataSnapshotCannotBypassFreshCredentialSelection() {String code=code();var old=this.dynamic.authorization(ID,resources(),deadline());assertNotNull(old.client());this.status=304;failure(OAuthServerAdmissionFailure.Reason.INFRASTRUCTURE,()->redeem(code));assertEquals("UNUSED",row(OAuthStoreKey.Kind.CODE).findString("status").orElseThrow());}
+ @Test void metadataSnapshotCannotBypassFreshCredentialSelection() {String code=code();var old=this.dynamic.authorization(ID,resources(),deadline());assertNotNull(old.client());this.status=304;failure(OAuthServerAdmissionFailure.Reason.INFRASTRUCTURE,()->redeem(code));assertEquals("UNUSED",row(OAuthStoreKey.Kind.CODE).find("status").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow());}
  @Test void internalDiagnosticsRedactClientAndFingerprint() {var selected=this.dynamic.authorization(ID,resources(),deadline());for(String text:List.of(selected.toString(),this.dynamic.toString())){assertFalse(text.contains(ID));assertFalse(text.contains(selected.fingerprint()));assertTrue(text.contains("redacted"));}}
  private static final class Fatal extends VirtualMachineError {private static final long serialVersionUID=1L;Fatal(){super("fixture");}}
 }

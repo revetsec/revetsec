@@ -17,7 +17,7 @@
 package com.revetsec.oauth.server;
 
 import com.revetsec.internal.http.Deadline;
-import com.revetsec.jose.StaticJsonWebKeySource;
+import com.revetsec.jose.StaticJwksSource;
 import com.revetsec.json.JsonObject;
 import org.jspecify.annotations.NonNull;
 import java.util.List;
@@ -42,17 +42,17 @@ final class OAuthGrantRevocation {
   this.attempts = attempts; this.subjectLimit = subjectLimit; this.bodyCap = bodyCap; this.headerCap = headerCap;
  }
  @NonNull OAuthStatusResponse revoke(@NonNull OAuthServerRequest request, @NonNull OAuthServerClientRepository clients,
-   @NonNull StaticJsonWebKeySource keys, @NonNull Deadline deadline) {
+   @NonNull StaticJwksSource keys, @NonNull Deadline deadline) {
   return revokeSelected(request, d -> OAuthServerClientSelection.registered(OAuthServerClientAdmission.authenticate(request, clients, d, this.limits)), keys, deadline);
  }
  @NonNull OAuthStatusResponse revoke(@NonNull OAuthServerRequest request, @NonNull OAuthServerClientSelection clients,
    @NonNull Map<@NonNull String, @NonNull Set<@NonNull String>> resources,
-   @NonNull StaticJsonWebKeySource keys, @NonNull Deadline deadline) {
+   @NonNull StaticJwksSource keys, @NonNull Deadline deadline) {
   return revokeSelected(request, d -> clients.authenticate(request, resources, d), keys, deadline);
  }
  private @NonNull OAuthStatusResponse revokeSelected(@NonNull OAuthServerRequest request,
    @NonNull Function<@NonNull Deadline, OAuthServerClientSelection.@NonNull Selected> clients,
-   @NonNull StaticJsonWebKeySource keys, @NonNull Deadline deadline) {
+   @NonNull StaticJwksSource keys, @NonNull Deadline deadline) {
   if (request.endpoint() != OAuthServerRequest.Endpoint.REVOCATION) throw OAuthServerRequest.invalid();
   requireNonNull(keys);
   String token = request.required("token");
@@ -66,7 +66,7 @@ final class OAuthGrantRevocation {
    String id; JsonObject claims = null;
    try {
     if (refresh) id = OAuthServerCredential.refreshDigest(token);
-    else { claims = this.status.retainedClaims(token, keys, deadline); id = claims.findString("jti").orElseThrow(OAuthServerRequest::invalid); }
+    else { claims = this.status.retainedClaims(token, keys, deadline); id = OAuthStoreFormat.stringMember(claims, "jti").orElseThrow(OAuthServerRequest::invalid); }
    } catch (IllegalArgumentException invalid) { return response; }
    catch (OAuthServerAdmissionFailure invalid) {
     if (invalid.reason() != OAuthServerAdmissionFailure.Reason.INVALID_TOKEN) throw invalid;

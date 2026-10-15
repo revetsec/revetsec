@@ -231,12 +231,18 @@ final class AuthorizationServerCache {
 			if (response.status() == 404 || response.status() == 405 || response.status() == 410)
 				continue;
 			if (response.status() != 200)
-				throw OAuthErrorResponseException.fromResponse(response.status(), "",
+				throw OAuthErrorResponseException.fromMetadataResponse(response.status(),
 						RetryAfter.parse(response.headers(), this.clock.instant()));
 			byte[] bytes = response.body();
 			try {
-				AuthorizationServerMetadata metadata = AuthorizationServerMetadata.fromJson(this.issuer.toString(),
+				AuthorizationServerMetadataParseResult parsed = AuthorizationServerMetadata.fromJsonResult(this.issuer.toString(),
 						StrictUtf8.decode(bytes));
+				if (!(parsed instanceof AuthorizationServerMetadataParseResult.Succeeded success)) {
+					OAuthException.Reason reason = ((AuthorizationServerMetadataParseResult.Rejected) parsed).getReason();
+					if (reason == OAuthException.Reason.DOCUMENT_MALFORMED) throw OAuthResponseException.fromReason(reason);
+					throw OAuthValidationException.fromReason(reason);
+				}
+				AuthorizationServerMetadata metadata = success.getMetadata();
 				for (URI endpoint : allEndpoints(metadata))
 					if (!UriChecks.isPermitted(endpoint, this.outboundPolicy, this.allowLoopback))
 						throw OAuthValidationException.fromReason(OAuthException.Reason.METADATA_INVALID);
@@ -250,7 +256,7 @@ final class AuthorizationServerCache {
 				java.util.Arrays.fill(bytes, (byte) 0);
 			}
 		}
-		throw OAuthErrorResponseException.fromResponse(404, "", java.util.Optional.empty());
+		throw OAuthErrorResponseException.fromMetadataResponse(404, java.util.Optional.empty());
 	}
 
 	static @NonNull List<@NonNull URI> candidates(@NonNull URI issuer) {

@@ -57,8 +57,9 @@ public final class ClientCredentialsTokenSource {
 	private final @NonNull Clock clock;
 	private final ReentrantLock lock = new ReentrantLock();
 	private @Nullable Cached cached;
-	private @Nullable CompletableFuture<@NonNull AccessToken> flight;
+	private @Nullable CompletableFuture<@NonNull AccessTokenAcquisitionResult> flight;
 	private @Nullable OAuthException lastFailure;
+	private AccessTokenAcquisitionResult.@Nullable Rejected lastRejection;
 	private long lastFailureNanos;
 	private int failureCount;
 	private @Nullable Instant lastClock;
@@ -87,41 +88,46 @@ public final class ClientCredentialsTokenSource {
 	}
 
 	/**
-	 * Gets a valid access token, renewing in the calling thread when needed. An early renewal failure may serve the
-	 * still-valid previous token, except after it was invalidated.
+	 * Gets a valid access token or a fixed endpoint client rejection, renewing in the calling thread when needed.
+	 * An early renewal rejection or failure may serve the still-valid previous token, except after invalidation.
+	 * Without a usable token, non-transient endpoint client rejections remain result values through shared renewal
+	 * and backoff. Infrastructure failures remain exceptions.
 	 *
-	 * @return a valid token
+	 * @return the acquisition outcome
 	 * @since 1.0.0
 	 */
-	public @NonNull AccessToken getAccessToken() {
+	@CheckReturnValue
+	public @NonNull AccessTokenAcquisitionResult getAccessTokenResult() {
 		for (;;) {
-			AccessToken token = getAccessTokenOnce();
-			if (token != null) return token;
+			AccessTokenAcquisitionResult result = getAccessTokenOnce();
+			if (result != null) return result;
 		}
 	}
 
 	// Only the caller that installed this exact future may publish or clear its flight.
 	@SuppressWarnings("ReferenceEquality")
-	private @Nullable AccessToken getAccessTokenOnce() {
-		CompletableFuture<AccessToken> mine = null;
-		CompletableFuture<AccessToken> waitFor = null;
+	private @Nullable AccessTokenAcquisitionResult getAccessTokenOnce() {
+		CompletableFuture<AccessTokenAcquisitionResult> mine = null;
+		CompletableFuture<AccessTokenAcquisitionResult> waitFor = null;
 		Cached old;
 		this.lock.lock();
 		try {
 			Instant now = this.clock.instant();
 			old = currentCached(now);
 			if (old != null && now.isBefore(old.renewAt) && now.isBefore(old.expiresAt))
-				return old.token;
+				return AccessTokenAcquisitionResult.fromAccessToken(old.token);
 			if (this.flight != null) {
-				if (old != null && now.isBefore(old.expiresAt)) return old.token;
+				if (old != null && now.isBefore(old.expiresAt)) return AccessTokenAcquisitionResult.fromAccessToken(old.token);
 				waitFor = this.flight;
 			} else {
 				long base = Duration.ofSeconds(30).toNanos();
 				long backoff = Math.min(base << Math.min(4, Math.max(0, this.failureCount - 1)),
 						Duration.ofMinutes(5).toNanos());
-				if (this.lastFailure != null && System.nanoTime() - this.lastFailureNanos < backoff) {
-					if (old != null && now.isBefore(old.expiresAt)) return old.token;
-					throw this.lastFailure;
+				if ((this.lastFailure != null || this.lastRejection != null)
+						&& System.nanoTime() - this.lastFailureNanos < backoff) {
+					if (old != null && now.isBefore(old.expiresAt)) return AccessTokenAcquisitionResult.fromAccessToken(old.token);
+					if (this.lastRejection != null) return this.lastRejection;
+					throw requireNonNull(this.lastFailure);
 				}
 				mine = new CompletableFuture<>();
 				this.flight = mine;
@@ -130,21 +136,26 @@ public final class ClientCredentialsTokenSource {
 			this.lock.unlock();
 		}
 		if (waitFor != null) {
-			AccessToken shared = await(waitFor, this.client.totalDeadline());
+			AccessTokenAcquisitionResult shared = await(waitFor, this.client.totalDeadline());
+			if (shared instanceof AccessTokenAcquisitionResult.Rejected) return shared;
+			AccessToken token = ((AccessTokenAcquisitionResult.Succeeded) shared).getAccessToken();
 			this.lock.lock();
 			try {
 				Instant now = this.clock.instant();
 				Cached current = currentCached(now);
-				if (current != null && current.token == shared
+				if (current != null && current.token == token
 						&& now.isBefore(current.expiresAt)) return shared;
 			} finally {
 				this.lock.unlock();
 			}
 			return null;
 		}
-		CompletableFuture<AccessToken> leader = requireNonNull(mine);
+		CompletableFuture<AccessTokenAcquisitionResult> leader = requireNonNull(mine);
 		try {
-			TokenResponse response = this.client.requestClientCredentialsToken(this.options);
+			OAuthTokenRequestResult requested = this.client.requestClientCredentialsResult(this.options);
+			if (requested instanceof OAuthTokenRequestResult.Rejected rejected)
+				return retainRejection(leader, rejected);
+			TokenResponse response = ((OAuthTokenRequestResult.Succeeded) requested).getTokens();
 			Instant now = this.clock.instant();
 			Instant explicit = response.getExpiresAt().orElse(null);
 			Duration lifetime = explicit == null ? this.fallbackCacheDuration
@@ -161,13 +172,15 @@ public final class ClientCredentialsTokenSource {
 					this.cached = fresh;
 					this.flight = null;
 					this.lastFailure = null;
+					this.lastRejection = null;
 					this.failureCount = 0;
 				}
 			} finally {
 				this.lock.unlock();
 			}
-			leader.complete(token);
-			return token;
+			AccessTokenAcquisitionResult result = AccessTokenAcquisitionResult.fromAccessToken(token);
+			leader.complete(result);
+			return result;
 		} catch (OAuthException failure) {
 			AccessToken fallback = null;
 			this.lock.lock();
@@ -175,6 +188,7 @@ public final class ClientCredentialsTokenSource {
 				if (this.flight == leader) {
 					this.flight = null;
 					this.lastFailure = failure;
+					this.lastRejection = null;
 					this.lastFailureNanos = System.nanoTime();
 					this.failureCount = Math.min(5, this.failureCount + 1);
 					Instant now = this.clock.instant();
@@ -186,8 +200,9 @@ public final class ClientCredentialsTokenSource {
 				this.lock.unlock();
 			}
 			if (fallback != null) {
-				leader.complete(fallback);
-				return fallback;
+				AccessTokenAcquisitionResult result = AccessTokenAcquisitionResult.fromAccessToken(fallback);
+				leader.complete(result);
+				return result;
 			}
 			leader.completeExceptionally(failure);
 			throw failure;
@@ -198,6 +213,7 @@ public final class ClientCredentialsTokenSource {
 				if (this.flight == leader) {
 					this.flight = null;
 					this.lastFailure = safe;
+					this.lastRejection = null;
 					this.lastFailureNanos = System.nanoTime();
 					this.failureCount = Math.min(5, this.failureCount + 1);
 				}
@@ -217,6 +233,34 @@ public final class ClientCredentialsTokenSource {
 			if (!leader.isDone())
 				leader.completeExceptionally(OAuthTransportException.fromReason(OAuthException.Reason.NETWORK_FAILURE, null));
 		}
+	}
+
+	// A checked endpoint rejection follows the same single-flight/backoff and valid-token fallback policy as a
+	// failed renewal, while remaining an explicit value for callers that have no usable cached token.
+	@SuppressWarnings("ReferenceEquality")
+	private @NonNull AccessTokenAcquisitionResult retainRejection(
+			@NonNull CompletableFuture<@NonNull AccessTokenAcquisitionResult> leader,
+			OAuthTokenRequestResult.@NonNull Rejected rejection) {
+		AccessTokenAcquisitionResult.Rejected rejected = AccessTokenAcquisitionResult.fromRejection(rejection);
+		AccessTokenAcquisitionResult result = rejected;
+		this.lock.lock();
+		try {
+			if (this.flight == leader) {
+				Instant now = this.clock.instant();
+				Cached current = currentCached(now);
+				this.flight = null;
+				this.lastFailure = null;
+				this.lastRejection = rejected;
+				this.lastFailureNanos = System.nanoTime();
+				this.failureCount = Math.min(5, this.failureCount + 1);
+				if (current != null && now.isBefore(current.expiresAt))
+					result = AccessTokenAcquisitionResult.fromAccessToken(current.token);
+			}
+		} finally {
+			this.lock.unlock();
+		}
+		leader.complete(result);
+		return result;
 	}
 
 	// Called only under lock. A backward clock step must not make an earlier token usable again.
@@ -244,6 +288,7 @@ public final class ClientCredentialsTokenSource {
 			if (this.cached != null && this.cached.token == rejectedToken) {
 				this.cached = null;
 				this.lastFailure = null;
+				this.lastRejection = null;
 				this.failureCount = 0;
 			}
 	} finally {
@@ -251,7 +296,7 @@ public final class ClientCredentialsTokenSource {
 		}
 	}
 
-	private static @NonNull AccessToken await(@NonNull CompletableFuture<@NonNull AccessToken> future, @NonNull Duration deadline) {
+	private static @NonNull AccessTokenAcquisitionResult await(@NonNull CompletableFuture<@NonNull AccessTokenAcquisitionResult> future, @NonNull Duration deadline) {
 		try {
 			return future.get(deadline.toNanos(), TimeUnit.NANOSECONDS);
 		} catch (InterruptedException interrupted) {

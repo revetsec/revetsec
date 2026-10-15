@@ -51,6 +51,29 @@ node examples/passkeys-soklet/browser_check.mjs \
 
 This check uses `leaf.crt` and `leaf.key` from `prepare_tls.py`; it does not run the generated Caddyfile. It removes its own temporary access key and Chrome profile. Remove the separate TLS and build directories after testing. A virtual authenticator proves browser/API integration, not a physical security key, PIN prompt, trusted browser profile or distributed deployment.
 
+## Check a physical FIDO2 security key
+
+Use `--physical-key` with a connected key that supports discoverable credentials and PIN or biometric user verification. This mode opens visible Chrome and selects the demo's **Use a physical security key** checkbox before each ceremony, without enabling Chrome's virtual WebAuthn environment. The checkbox requests cross-platform enrollment and a security-key browser hint so the test passkey is saved on the key rather than the Mac. At each prompt, select the physical security key, enter its PIN directly in the browser if requested, and touch it. The runner supplies only the disposable application's enrollment approval; it never reads or records the key's PIN. For a manual run, select the checkbox yourself before enrollment; leave it unchecked to use ordinary platform or synced passkeys. These browser choices do not establish hardware trust.
+
+~~~sh
+node examples/passkeys-soklet/browser_check.mjs \
+  --classpath-file /absolute/new/private-passkey-build/CLASSPATH \
+  --tls-dir /absolute/new/private-passkey-tls \
+  --java /absolute/jdk17-or-newer/bin/java \
+  --chrome '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' \
+  --physical-key \
+  --key-model 'Yubico Security Key C NFC' \
+  --key-firmware 'unknown' \
+  --key-transport usb \
+  --report-file /absolute/new/private-physical-key-report.json
+~~~
+
+The runner checks registration, discoverable sign-in, account-pinned reauthentication, a one-use sensitive action and its replay denial, listing/removal, and a signed assertion rejected by the server after removal. Each physical ceremony has a five-minute limit. A cancelled browser prompt cannot satisfy the post-removal check: the removed credential must reach the server's completion endpoint and be rejected there. Bogus-signature injection remains a separate virtual-only check.
+
+The optional report records redacted outcomes and operator-supplied device metadata. Confirm that the same physical key was selected for every ceremony, record its actual firmware and transport, and retain the report with the source/build evidence before treating the run as physical-key qualification. Unknown metadata remains unknown. This isolated test maps the exact DNS name to loopback and accepts only the generated leaf's public-key pin within its disposable Chrome profile; it does not change system trust or qualify a production TLS deployment. Successful server-side removal does not delete the test credential from the security key; remove that test entry separately with the key's credential-management tool if desired. Never reset a key to clean up this test.
+
+## Durable browser check and manual launch
+
 The PostgreSQL fixture can run the same Chrome flow against `DurablePasskeyPlayground`, a test-only launcher with one stable account handle, sealed PostgreSQL credential state and an external local marker. Pass its pinned Soklet JAR and absolute `--browser-node`, `--browser-chrome` and `--browser-openssl` paths to `run_webauthn.py`. It keeps Chrome's virtual authenticator alive while stopping and restarting the Soklet JVM after registration and again after removal. The browser starts with a new anonymous app session after each restart; its persisted credential signs in after the first restart and is rejected after the second. Between those steps, the fixture stops PostgreSQL after reauthentication: the account page and sensitive action return 503, and the unused step-up approval can be consumed exactly once after the same primary returns. The fixture owns and removes its PostgreSQL volume, Chrome profile, local TLS files and keys. See the PostgreSQL example README for the runner arguments and limits.
 
 Create a private POSIX access-key file containing one fresh 43-character base64url value (optionally followed by a newline), mode 0600. This key is an application enrollment approval for the fixed demo account. It is never a WebAuthn credential or a Revetsec secret:

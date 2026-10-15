@@ -24,7 +24,7 @@ import java.net.URI;
 import java.time.Duration;
 
 /**
- * Receives events from {@link JwtValidator} and {@link RemoteJsonWebKeySource}, for metrics, logs and alerts.
+ * Receives events from {@link JwtValidator} and {@link RemoteJwksSource}, for metrics, logs and alerts.
  * <p>
  * Every hook is a {@code default} method that does nothing, so an implementation overrides only the hooks it needs.
  * Hooks run synchronously on the calling thread, never while Revetsec holds a lock. Anything a hook throws is
@@ -56,13 +56,13 @@ public interface JoseObserver {
 	}
 
 	/**
-	 * Called just before a {@link RemoteJsonWebKeySource} sends a request for its key set, by the one caller that
+	 * Called just before a {@link RemoteJwksSource} sends a request for its key set, by the one caller that
 	 * fetches it.
 	 *
 	 * @param jwksUri the key set's URI, cut to its scheme, host, port and path
 	 * @since 1.0.0
 	 */
-	default void willFetchJsonWebKeySet(@NonNull URI jwksUri) {
+	default void willFetchJwks(@NonNull URI jwksUri) {
 		// Does nothing unless overridden.
 	}
 
@@ -73,13 +73,13 @@ public interface JoseObserver {
 	 * @param jwksUri         the key set's URI, cut to its scheme, host, port and path
 	 * @param usableKeyCount  how many keys are usable
 	 * @param skippedKeyCount how many keys were skipped (each also reported to
-	 *                        {@link #didSkipJsonWebKey(URI, Integer, JsonWebKeySkipReason)})
+	 *                        {@link #didSkipJwk(URI, Integer, JwkSkipReason)})
 	 * @param timeToLive      how long the key set stays fresh, from the response's cache headers within the source's
 	 *                        limits
 	 * @param elapsed         how long the fetch took
 	 * @since 1.0.0
 	 */
-	default void didFetchJsonWebKeySet(@NonNull URI jwksUri,
+	default void didFetchJwks(@NonNull URI jwksUri,
 																		 @NonNull Integer usableKeyCount,
 																		 @NonNull Integer skippedKeyCount,
 																		 @NonNull Duration timeToLive,
@@ -96,8 +96,8 @@ public interface JoseObserver {
 	 * @param elapsed          how long the fetch took
 	 * @since 1.0.0
 	 */
-	default void didFailToFetchJsonWebKeySet(@NonNull URI jwksUri,
-																					 @NonNull JsonWebKeySetUnavailableException exception,
+	default void didFailToFetchJwks(@NonNull URI jwksUri,
+																					 @NonNull JwksUnavailableException exception,
 																					 @NonNull Boolean servingStaleKeys,
 																					 @NonNull Duration elapsed) {
 		// Does nothing unless overridden.
@@ -112,7 +112,7 @@ public interface JoseObserver {
 	 * @param untilNextAttempt how long until a fetch may be sent again, on the source's clock
 	 * @since 1.0.0
 	 */
-	default void didSuppressJsonWebKeySetFetch(@NonNull URI jwksUri,
+	default void didSuppressJwksFetch(@NonNull URI jwksUri,
 																						 @NonNull Duration untilNextAttempt) {
 		// Does nothing unless overridden.
 	}
@@ -126,14 +126,14 @@ public interface JoseObserver {
 	 * @param reason   why the key is not used
 	 * @since 1.0.0
 	 */
-	default void didSkipJsonWebKey(@NonNull URI jwksUri,
+	default void didSkipJwk(@NonNull URI jwksUri,
 																 @NonNull Integer keyIndex,
-																 @NonNull JsonWebKeySkipReason reason) {
+																 @NonNull JwkSkipReason reason) {
 		// Does nothing unless overridden.
 	}
 
 	/**
-	 * Called when {@link JwtValidator#validate(String)} accepted a token.
+	 * Called when {@link JwtValidator#validateResult(String)} accepted a token.
 	 *
 	 * @param algorithm the token's algorithm
 	 * @param elapsed   how long validation took, any key set fetch included
@@ -145,11 +145,11 @@ public interface JoseObserver {
 	}
 
 	/**
-	 * Called when {@link JwtValidator#validate(String)} rejected a token or could not get its keys, just before it
-	 * throws.
+	 * Called when {@link JwtValidator#validateResult(String)} rejects a token or cannot get its keys, before returning the rejection or
+	 * propagating the key-source failure.
 	 *
-	 * @param exception the exception about to be thrown: a {@link JoseException} or a
-	 *                  {@link JsonWebKeySetUnavailableException}
+	 * @param exception the fixed rejection diagnostic as a {@link JoseException}, or the
+	 *                  {@link JwksUnavailableException} about to be thrown
 	 * @param elapsed   how long validation took, any key set fetch included
 	 * @since 1.0.0
 	 */

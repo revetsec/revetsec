@@ -146,7 +146,7 @@ class ScimM11ProviderTests {
         observer.events.clear();
         assertInstanceOf(ScimPatchApplicationResult.Rejected.class,unsupported.applyPatchResult(current,request));
         assertEquals(List.of("will:PATCH_APPLY","did:PATCH_APPLY:REJECTED"),observer.events);
-        assertEquals("before",current.getDocument().findString("displayName").orElseThrow());
+        assertEquals("before",current.getDocument().find("displayName").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow());
         ScimServiceProvider broken=provider((path,definition,operator,value,literal)->{throw new IllegalStateException("fixture-sensitive-exception");},observer);
         request=patch(broken,USER,"{\"op\":\"replace\",\"path\":\"emails[type eq \\\"work\\\"].value\",\"value\":\"changed\"}");
         observer.events.clear();
@@ -228,7 +228,7 @@ class ScimM11ProviderTests {
         ScimPatchResult result=assertInstanceOf(ScimPatchApplicationResult.Succeeded.class,outcome).getPatchResult();
         assertFalse(request.toString().contains(secret));assertFalse(request.getOperations().get(0).toString().contains(secret));
         assertFalse(outcome.toString().contains(secret));assertFalse(result.toString().contains(secret));
-        assertEquals(secret,result.getResource().getDocument().findString("password").orElseThrow());
+        assertEquals(secret,result.getResource().getDocument().find("password").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow());
         ScimResponse rendered=prepared(p.patchResponseResult(result.getResource(),result.getSuppliedAttributePaths(),selection(p,USER,"")));
         assertFalse(new String(rendered.toHttpBodyWithPersonalData(),StandardCharsets.UTF_8).contains(secret));
         ScimPatchApplicationResult rejected=p.applyPatchResult(resource(GROUP),request);

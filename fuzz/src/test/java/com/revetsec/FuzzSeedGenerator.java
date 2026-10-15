@@ -118,7 +118,7 @@ public final class FuzzSeedGenerator {
 			"com/revetsec/jose/JwtValidatorFuzzTestsInputs/validateAcceptsOnlyWhatTheJdkVerifiersAccept/";
 	private static final String COMPACT_SEEDS = "com/revetsec/internal/jose/CompactJwsFuzzTestsInputs/"
 			+ "compactSerializationsSplitIntoThreeCanonicalSegmentsOrFailInStepOrder/";
-	private static final String KEY_SET_SEEDS = "com/revetsec/internal/jose/JsonWebKeyFuzzTestsInputs/"
+	private static final String KEY_SET_SEEDS = "com/revetsec/internal/jose/JwkFuzzTestsInputs/"
 			+ "keySetDocumentsSkipExactlyTheKeysAnIndependentOracleRefuses/";
 	private static final String ECDSA_SEEDS = "com/revetsec/internal/crypto/EcdsaFuzzTestsInputs/"
 			+ "shapeCheckAndDerEncodingAgreeWithTheRangeRuleAndAnX690Reader/";

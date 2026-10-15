@@ -28,7 +28,7 @@ import static java.util.Objects.requireNonNull;
 /**
  * JSON text for the JOSE test helpers and the tests that use them, written independently of Revetsec's own JSON codec
  * so a codec bug cannot hide in the fixtures it is tested against. Tests use it for the raw JSON values that
- * {@link TestJws.Builder#headerMember(String, String)} and {@link TestJsonWebKeys.Builder#member(String, String)} take.
+ * {@link TestJws.Builder#headerMember(String, String)} and {@link TestJwk.Builder#member(String, String)} take.
  * <p>
  * Member values are raw JSON text that the caller supplies, so a helper can write anything a hostile producer might:
  * a duplicate member, a number where a string belongs, {@code null}. Only names and {@link #string(String)} values

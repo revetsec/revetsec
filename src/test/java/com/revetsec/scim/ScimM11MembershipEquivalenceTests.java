@@ -74,7 +74,7 @@ class ScimM11MembershipEquivalenceTests {
                 parse(provider, requests.get(0)));
         assertFalse(addExisting.isModified());
         assertEquals(List.of("A", "B"), ids(addExisting.getResource()));
-        assertEquals("Alpha", memberOf(addExisting.getResource(), "A").findString("display").orElseThrow());
+        assertEquals("Alpha", memberOf(addExisting.getResource(), "A").find("display").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow());
         ScimPatchResult removeAdd = applied(provider, original, parse(provider, requests.get(2)));
         assertEquals(List.of("B", "A"), ids(removeAdd.getResource()));
         assertEquals(JsonObject.builder().put("value", "A").build(), memberOf(removeAdd.getResource(), "A"));
@@ -106,7 +106,7 @@ class ScimM11MembershipEquivalenceTests {
                     + "\",\"path\":\"members\",\"value\":[{\"value\":\"A\",\"$ref\":null},{\"value\":\"C\",\"$ref\":null}]}");
             ScimPatchResult full = applied(provider, original, request);
             assertEquals(full.getResource().getDocument(), executeAtomically(original, reduce(provider, request)));
-            assertEquals("https://example.invalid/Users/A", memberOf(full.getResource(), "A").findString("$ref").orElseThrow());
+            assertEquals("https://example.invalid/Users/A", memberOf(full.getResource(), "A").find("$ref").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow());
             assertTrue(memberOf(full.getResource(), "C").find("$ref").isEmpty());
         }
     }
@@ -187,7 +187,7 @@ class ScimM11MembershipEquivalenceTests {
             @NonNull ScimMembershipPatch patch) {
         LinkedHashMap<String, JsonObject> members = new LinkedHashMap<>();
         for (JsonObject member : ScimGroup.fromResource(original).getMembers())
-            members.put(member.findString("value").orElseThrow(), member);
+            members.put(member.find("value").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow(), member);
         LinkedHashMap<String, JsonValue> document = new LinkedHashMap<>(original.getDocument().getMembers());
         Map<Integer, ScimMembershipPatch.Step> steps = new LinkedHashMap<>();
         for (ScimMembershipPatch.Step step : patch.getSteps()) steps.put(step.getOperationIndex(), step);
@@ -285,13 +285,13 @@ class ScimM11MembershipEquivalenceTests {
     private static @NonNull List<@NonNull String> ids(@NonNull ScimResource resource) {
         List<String> ids = new ArrayList<>();
         for (JsonObject member : ScimGroup.fromResource(resource).getMembers())
-            ids.add(member.findString("value").orElseThrow());
+            ids.add(member.find("value").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow());
         return ids;
     }
 
     private static @NonNull JsonObject memberOf(@NonNull ScimResource resource, @NonNull String id) {
         return ScimGroup.fromResource(resource).getMembers().stream()
-                .filter(member -> id.equals(member.findString("value").orElseThrow()))
+                .filter(member -> id.equals(member.find("value").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow()))
                 .findFirst().orElseThrow();
     }
 }

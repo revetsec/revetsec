@@ -173,9 +173,13 @@ public final class OidcApplication {
         try {
             AuthorizationRedirect redirect = this.client.beginAuthentication(OidcAuthenticationOptions.builder()
                     .responseMode(this.responseMode).build());
-            redirect.getPendingAuthorization().saveTo(this.pending, binding);
+            if (redirect.getPendingAuthorization().saveToResult(this.pending, binding)
+                    != com.revetsec.oauth.PendingAuthorizationSaveResult.SAVED) {
+                clearPending(session, binding);
+                return failure(503, "Please try again later");
+            }
             return SokletOAuth.redirect(redirect.getAuthorizationUri(), Set.of(cookie(PENDING_COOKIE, binding, Duration.ofMinutes(5))));
-        } catch (RevetsecException | PendingStore.CapacityException exception) {
+        } catch (RevetsecException exception) {
             clearPending(session, binding);
             return failure(503, "Please try again later");
         }
@@ -214,7 +218,10 @@ public final class OidcApplication {
             session.pendingUntil = null;
         }
         try {
-            AuthorizationResponse response = SokletOAuth.authorizationResponseFor(request);
+            var parsed = SokletOAuth.authorizationResponseResultFor(request);
+            if (!(parsed instanceof com.revetsec.soklet.SokletOAuthCallbackResult.Succeeded read))
+                return failure(400, "Sign in failed", deletion);
+            AuthorizationResponse response = read.getResponse();
             OidcAuthenticationResult result = this.client.completeAuthenticationResult(response,
                     PendingAuthorizationSource.fromStore(this.pending, binding), this.callback);
             if (!(result instanceof OidcAuthenticationResult.Succeeded success))
@@ -230,8 +237,6 @@ public final class OidcApplication {
             if (authenticated == null) return failure(503, "Please try again later", deletion);
             return SokletOAuth.redirect(this.origin.resolve("/"), Set.of(
                     cookie(SESSION_COOKIE, authenticated.id, SESSION_AGE), cookie(PENDING_COOKIE, "", Duration.ZERO)));
-        } catch (OAuthResponseException exception) {
-            return failure(400, "Sign in failed", deletion);
         } catch (RevetsecException exception) {
             return failure(503, "Please try again later", deletion);
         } catch (IllegalArgumentException exception) {

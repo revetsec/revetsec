@@ -19,7 +19,7 @@ package com.revetsec.jose;
 import org.jspecify.annotations.NonNull;
 
 import com.revetsec.internal.jose.TestClaims;
-import com.revetsec.testing.TestJsonWebKeys.Fixture;
+import com.revetsec.testing.TestJwk.Fixture;
 import com.revetsec.testing.TestJws;
 import com.revetsec.testing.TestJws.Algorithm;
 import org.junit.jupiter.api.Assertions;
@@ -35,7 +35,7 @@ import java.util.Set;
 import java.util.stream.Stream;
 
 /**
- * {@link JwtValidator#validate(String)} on the JWT claims (plan "JOSE semantics", steps 8 to 14; plan M2 exit
+ * {@link JwtValidator#validateResult(String)} on the JWT claims (plan "JOSE semantics", steps 8 to 14; plan M2 exit
  * criteria 9 and 10; RFC 7519 sections 2, 4.1 and 7.2): their types, the exact issuer, the key's JWK {@code issuer}
  * member (INV-C6), the audience, the time checks at their boundaries for three skews, the required claims, and
  * {@code cnf} (INV-G6). The claims are read only after the signature verifies.
@@ -124,7 +124,7 @@ final class JwtValidatorClaimsTests {
 		Jwt jwt = accept(validator, JwtFixtures.claims().raw("aud", "[\"x\",\"" + JwtFixtures.AUDIENCE + "\"]"));
 		Assertions.assertEquals(List.of("x", JwtFixtures.AUDIENCE), jwt.getClaims().getAudiences());
 
-		JwtValidator any = JwtValidator.withIssuer(JwtFixtures.ISSUER).jsonWebKeySource(JwtFixtures.source(
+		JwtValidator any = JwtValidator.withIssuer(JwtFixtures.ISSUER).jwksSource(JwtFixtures.source(
 				Fixture.IDP_SIGNING_RSA_2048)).acceptAnyAudience(true).clock(JwtFixtures.clock()).build();
 		accept(any, JwtFixtures.claims().remove("aud"));
 		accept(any, JwtFixtures.claims().put("aud", "https://other.example"));
@@ -181,11 +181,11 @@ final class JwtValidatorClaimsTests {
 	@NonNull Stream<@NonNull DynamicTest> aKeyWithAMalformedIssuerMemberIsNeverUsable() {
 		return Stream.of("null", "123", "[]", "\"\"", "{}", "[\"" + JwtFixtures.ISSUER + "\"]").map(member ->
 				DynamicTest.dynamicTest("issuer " + member, () -> {
-					StaticJsonWebKeySource source = JwtFixtures.source(JwtFixtures.jwk(Fixture.IDP_SIGNING_RSA_2048)
+					StaticJwksSource source = JwtFixtures.source(JwtFixtures.jwk(Fixture.IDP_SIGNING_RSA_2048)
 							.member("issuer", member).toJson(), JwtFixtures.jwk(Fixture.IDP_SIGNING_EC_P384).kid("good")
 							.toJson());
 					for (String issuer : List.of(JwtFixtures.ISSUER, "", "123")) {
-						JwtValidator validator = JwtValidator.withIssuer(issuer.isEmpty() ? "x" : issuer).jsonWebKeySource(
+						JwtValidator validator = JwtValidator.withIssuer(issuer.isEmpty() ? "x" : issuer).jwksSource(
 								source).acceptAnyAudience(true).clock(JwtFixtures.clock()).build();
 						reject(JoseException.Reason.UNKNOWN_KEY, validator, JwtFixtures.claims().put("iss", issuer));
 					}

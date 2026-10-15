@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 package example.pending;
+import com.revetsec.json.JsonString;
 
 import com.revetsec.SealingKey;
 import com.revetsec.StateSealer;
@@ -115,7 +116,7 @@ public final class WebAuthnFlowProbe {
         if (!(result instanceof WebAuthnRegistrationRequestResult.Prepared prepared))
             throw new IllegalStateException("Registration preparation did not commit: " + result);
         var request = prepared.getRequest();
-        String challenge = request.getPublicKeyOptions().findString("challenge").orElseThrow();
+        String challenge = request.getPublicKeyOptions().find("challenge").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow();
         System.out.println("BEGIN " + request.getCeremonyId() + " " + challenge);
     }
 
@@ -145,7 +146,7 @@ public final class WebAuthnFlowProbe {
         if (!(result instanceof WebAuthnAuthenticationRequestResult.Prepared prepared))
             throw new IllegalStateException("Authentication preparation did not commit: " + result);
         var request = prepared.getRequest();
-        String challenge = request.getPublicKeyOptions().findString("challenge").orElseThrow();
+        String challenge = request.getPublicKeyOptions().find("challenge").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow();
         System.out.println("BEGIN " + request.getCeremonyId() + " " + challenge);
     }
 

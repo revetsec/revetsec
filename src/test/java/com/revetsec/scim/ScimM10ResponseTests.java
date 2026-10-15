@@ -159,7 +159,7 @@ final class ScimM10ResponseTests {
             ScimResponse response = ScimResponses.error(error);
             JsonObject body = (JsonObject) JsonCodec.parse(response.toHttpBodyWithPersonalData(), JsonLimits.protocolDocument(2_048));
             assertEquals(JsonString.fromValue(error.getStatusCode().toString()), requireNonNull(body.getMembers().get("status")));
-            assertEquals(error.getDetail(), body.findString("detail").orElseThrow());
+            assertEquals(error.getDetail(), body.find("detail").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow());
             assertFalse(body.getMembers().containsKey("expressionOffset"));
             assertEquals(error.getStatusCode(), response.getStatusCode());
             assertTrue(response.toHttpBodyWithPersonalData().length + encodedHeaders(response) + 128 <= 2_048);
@@ -179,9 +179,9 @@ final class ScimM10ResponseTests {
         JsonObject bulk = (JsonObject) requireNonNull(body.getMembers().get("bulk"));
         assertEquals(JsonObject.builder().put("supported", false).put("maxOperations", 0L).put("maxPayloadSize", 0L).build(), bulk);
         for (String feature : List.of("patch", "filter", "sort", "changePassword"))
-            assertEquals(false, ((JsonObject) requireNonNull(body.getMembers().get(feature))).findBoolean("supported").orElseThrow());
-        assertEquals(true, ((JsonObject) requireNonNull(body.getMembers().get("etag"))).findBoolean("supported").orElseThrow());
-        assertEquals(1_000L, ((JsonObject) requireNonNull(body.getMembers().get("filter"))).findLong("maxResults").orElseThrow());
+            assertEquals(false, ((JsonObject) requireNonNull(body.getMembers().get(feature))).find("supported").filter(JsonBoolean.class::isInstance).map(JsonBoolean.class::cast).map(JsonBoolean::getValue).orElseThrow());
+        assertEquals(true, ((JsonObject) requireNonNull(body.getMembers().get("etag"))).find("supported").filter(JsonBoolean.class::isInstance).map(JsonBoolean.class::cast).map(JsonBoolean::getValue).orElseThrow());
+        assertEquals(1_000L, ((JsonObject) requireNonNull(body.getMembers().get("filter"))).find("maxResults").filter(JsonNumber.class::isInstance).map(JsonNumber.class::cast).flatMap(JsonNumber::getLongValueExact).orElseThrow());
         assertEquals(JsonArray.emptyInstance(), requireNonNull(body.getMembers().get("authenticationSchemes")));
         assertEquals(JsonObject.builder().put("cursor", false).put("index", true).put("defaultPaginationMethod", "index")
                 .put("defaultPageSize", 100L).put("maxPageSize", 1_000L).build(), requireNonNull(body.getMembers().get("pagination")));
@@ -194,9 +194,9 @@ final class ScimM10ResponseTests {
                 .primary(true).specUri(URI.create("https://example.com/spec")).documentationUri(URI.create("https://example.com/help")).build();
         JsonObject body = ScimDiscovery.configuration(ScimServiceProviderConfig.builder().pagination(pagination).authenticationSchemes(List.of(scheme)).build());
         JsonObject paging = (JsonObject) requireNonNull(body.getMembers().get("pagination"));
-        assertEquals("cursor", paging.findString("defaultPaginationMethod").orElseThrow());
-        assertEquals(3_600L, paging.findLong("cursorTimeout").orElseThrow());
-        assertEquals(250L, paging.findLong("maxPageSize").orElseThrow());
+        assertEquals("cursor", paging.find("defaultPaginationMethod").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow());
+        assertEquals(3_600L, paging.find("cursorTimeout").filter(JsonNumber.class::isInstance).map(JsonNumber.class::cast).flatMap(JsonNumber::getLongValueExact).orElseThrow());
+        assertEquals(250L, paging.find("maxPageSize").filter(JsonNumber.class::isInstance).map(JsonNumber.class::cast).flatMap(JsonNumber::getLongValueExact).orElseThrow());
         JsonObject auth = (JsonObject) ((JsonArray) requireNonNull(body.getMembers().get("authenticationSchemes"))).getElements().get(0);
         assertEquals(JsonObject.builder().put("type", "oauthbearertoken").put("name", "Bearer").put("description", "Fixture").put("primary", true)
                 .put("specUri", "https://example.com/spec").put("documentationUri", "https://example.com/help").build(), auth);
@@ -204,19 +204,19 @@ final class ScimM10ResponseTests {
 
     @Test void schemaAndResourceTypeDescriptorsPreserveAttributeFacetsAndExtensionRequiredFlags() {
         JsonObject userType = ScimDiscovery.resourceType(ScimResourceType.userInstance());
-        assertEquals("User", userType.findString("name").orElseThrow());
-        assertEquals("/Users", userType.findString("endpoint").orElseThrow());
-        assertEquals("urn:ietf:params:scim:schemas:core:2.0:User", userType.findString("schema").orElseThrow());
+        assertEquals("User", userType.find("name").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow());
+        assertEquals("/Users", userType.find("endpoint").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow());
+        assertEquals("urn:ietf:params:scim:schemas:core:2.0:User", userType.find("schema").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow());
         JsonObject extension = (JsonObject) ((JsonArray) requireNonNull(userType.getMembers().get("schemaExtensions"))).getElements().get(0);
-        assertEquals("urn:ietf:params:scim:schemas:extension:enterprise:2.0:User", extension.findString("schema").orElseThrow());
-        assertEquals(false, extension.findBoolean("required").orElseThrow());
+        assertEquals("urn:ietf:params:scim:schemas:extension:enterprise:2.0:User", extension.find("schema").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow());
+        assertEquals(false, extension.find("required").filter(JsonBoolean.class::isInstance).map(JsonBoolean.class::cast).map(JsonBoolean::getValue).orElseThrow());
         JsonObject schema = ScimDiscovery.schema(ScimSchema.userInstance());
         JsonArray attrs = (JsonArray) requireNonNull(schema.getMembers().get("attributes"));
-        JsonObject password = attrs.getElements().stream().map(v -> (JsonObject) v).filter(v -> v.findString("name").orElseThrow().equals("password")).findFirst().orElseThrow();
-        assertEquals("writeOnly", password.findString("mutability").orElseThrow());
-        assertEquals("never", password.findString("returned").orElseThrow());
-        assertEquals("string", password.findString("type").orElseThrow());
-        JsonObject name = attrs.getElements().stream().map(v -> (JsonObject) v).filter(v -> v.findString("name").orElseThrow().equals("name")).findFirst().orElseThrow();
+        JsonObject password = attrs.getElements().stream().map(v -> (JsonObject) v).filter(v -> v.find("name").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow().equals("password")).findFirst().orElseThrow();
+        assertEquals("writeOnly", password.find("mutability").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow());
+        assertEquals("never", password.find("returned").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow());
+        assertEquals("string", password.find("type").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow());
+        JsonObject name = attrs.getElements().stream().map(v -> (JsonObject) v).filter(v -> v.find("name").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow().equals("name")).findFirst().orElseThrow();
         assertInstanceOf(JsonArray.class, requireNonNull(name.getMembers().get("subAttributes")));
     }
 
@@ -236,23 +236,23 @@ final class ScimM10ResponseTests {
         JsonArray values = (JsonArray) requireNonNull(ScimDiscovery.schema(definition).getMembers().get("attributes"));
         List<String> types = List.of("string", "boolean", "decimal", "integer", "dateTime", "binary", "reference", "complex", "string");
         for (int index = 0; index < types.size(); ++index)
-            assertEquals(types.get(index), ((JsonObject) values.getElements().get(index)).findString("type").orElseThrow());
+            assertEquals(types.get(index), ((JsonObject) values.getElements().get(index)).find("type").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow());
         JsonObject once = (JsonObject) values.getElements().get(0);
-        assertEquals("immutable", once.findString("mutability").orElseThrow());
-        assertEquals("request", once.findString("returned").orElseThrow());
-        assertEquals("global", once.findString("uniqueness").orElseThrow());
-        assertEquals("Fixture field", once.findString("description").orElseThrow());
+        assertEquals("immutable", once.find("mutability").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow());
+        assertEquals("request", once.find("returned").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow());
+        assertEquals("global", once.find("uniqueness").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow());
+        assertEquals("Fixture field", once.find("description").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow());
         assertEquals(2, ((JsonArray) requireNonNull(once.getMembers().get("canonicalValues"))).getElements().size());
         ScimResourceType type = ScimResourceType.withName("Wire").schema(definition).endpoint("/Wire").description("Fixture type").build();
-        assertEquals("Fixture type", ScimDiscovery.resourceType(type).findString("description").orElseThrow());
+        assertEquals("Fixture type", ScimDiscovery.resourceType(type).find("description").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow());
         assertEquals("https://example.com/help", ScimDiscovery.configuration(ScimServiceProviderConfig.builder()
-                .documentationUri(URI.create("https://example.com/help")).build()).findString("documentationUri").orElseThrow());
+                .documentationUri(URI.create("https://example.com/help")).build()).find("documentationUri").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow());
     }
 
     private static void assertComplexUniquenessAbsent(@NonNull JsonArray attributes) {
         for (JsonValue value : attributes.getElements()) {
             JsonObject attribute = assertInstanceOf(JsonObject.class, value);
-            if (attribute.findString("type").orElseThrow().equals("complex")) {
+            if (attribute.find("type").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow().equals("complex")) {
                 assertFalse(attribute.getMembers().containsKey("uniqueness"), "Verified RFC 7643 erratum 6004");
                 assertComplexUniquenessAbsent(assertInstanceOf(JsonArray.class, attribute.getMembers().get("subAttributes")));
             }

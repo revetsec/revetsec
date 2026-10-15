@@ -22,6 +22,7 @@ import com.pyranid.TransactionIsolation;
 import com.pyranid.TransactionOptions;
 import com.pyranid.TransactionResult;
 import com.revetsec.oauth.PendingAuthorizationStore;
+import com.revetsec.oauth.PendingAuthorizationSaveResult;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
@@ -88,25 +89,36 @@ public final class PostgresqlPendingAuthorizationStore implements PendingAuthori
 	}
 
 	@Override
-	public void save(@NonNull String browserBinding, @NonNull String state, @NonNull String opaqueRecord,
+	public @NonNull PendingAuthorizationSaveResult save(@NonNull String browserBinding, @NonNull String state, @NonNull String opaqueRecord,
 			@NonNull Instant expiresAt, @NonNull Duration remaining) {
+		requireNonNull(remaining);
+		if (remaining.isNegative() || remaining.isZero() || Thread.currentThread().isInterrupted())
+			return PendingAuthorizationSaveResult.UNAVAILABLE;
 		long deadline = deadline(remaining);
 		requireNonNull(expiresAt);
 		byte[] key = key(browserBinding, state);
 		try {
 			byte[] recordBytes = strictUtf8(requireNonNull(opaqueRecord));
 			try {
-				if (recordBytes.length == 0 || recordBytes.length > this.maximumOpaqueRecordBytes)
-					throw new IllegalArgumentException("The pending record exceeds its byte limit.");
+				if (recordBytes.length == 0)
+					throw new IllegalArgumentException("The pending record is empty.");
+				if (recordBytes.length > this.maximumOpaqueRecordBytes)
+					return PendingAuthorizationSaveResult.CAPACITY_REFUSED;
 				int charge = recordBytes.length + key.length;
-				SaveOutcome result = transaction(deadline, database -> save(database, key, opaqueRecord,
-						expiresAt, charge, deadline));
-				if (result == SaveOutcome.DUPLICATE)
-					throw new IllegalArgumentException("A live pending record already exists.");
-				if (result == SaveOutcome.INVALID_EXPIRY)
-					throw new IllegalArgumentException("Pending expiry must be within 60 minutes.");
-				if (result == SaveOutcome.CAPACITY)
-					throw unavailable();
+				SaveOutcome result;
+				try {
+					result = transaction(deadline, database -> save(database, key, opaqueRecord,
+							expiresAt, charge, deadline));
+				} catch (RuntimeException uncertain) {
+					return PendingAuthorizationSaveResult.INDETERMINATE;
+				}
+				return switch (result) {
+					case SAVED -> PendingAuthorizationSaveResult.SAVED;
+					case DUPLICATE -> PendingAuthorizationSaveResult.ALREADY_PRESENT;
+					case CAPACITY -> PendingAuthorizationSaveResult.CAPACITY_REFUSED;
+					case EXPIRED -> PendingAuthorizationSaveResult.UNAVAILABLE;
+					case INVALID_EXPIRY -> throw new IllegalArgumentException("Pending expiry must be within 60 minutes.");
+				};
 			} finally {
 				Arrays.fill(recordBytes, (byte) 0);
 			}
@@ -131,8 +143,8 @@ public final class PostgresqlPendingAuthorizationStore implements PendingAuthori
 			@NonNull String record, @NonNull Instant expiresAt, int charge, long deadline) throws SQLException {
 		Instant now = observe(database, deadline);
 		Duration lifetime = Duration.between(now, expiresAt);
-		if (lifetime.isNegative() || lifetime.isZero() || lifetime.compareTo(MAXIMUM_LIFETIME) > 0)
-			return SaveOutcome.INVALID_EXPIRY;
+		if (lifetime.isNegative() || lifetime.isZero()) return SaveOutcome.EXPIRED;
+		if (lifetime.compareTo(MAXIMUM_LIFETIME) > 0) return SaveOutcome.INVALID_EXPIRY;
 		bound(database, deadline);
 		database.query("DELETE FROM pending_authorization WHERE namespace=:namespace "
 				+ "AND (expires_seconds<:seconds OR (expires_seconds=:seconds AND expires_nanos<=:nanos))")
@@ -281,7 +293,7 @@ public final class PostgresqlPendingAuthorizationStore implements PendingAuthori
 		}
 	}
 
-	private enum SaveOutcome { SAVED, DUPLICATE, CAPACITY, INVALID_EXPIRY }
+	private enum SaveOutcome { SAVED, DUPLICATE, CAPACITY, EXPIRED, INVALID_EXPIRY }
 	@FunctionalInterface
 	private interface Operation<@NonNull T> {
 		@NonNull T apply(@NonNull Database database) throws SQLException;

@@ -113,11 +113,11 @@ final class OAuthStoreRecordCodec {
    bytes = boundedUtf8(plaintext);
    JsonValue value = JsonCodec.parse(bytes, JsonLimits.protocolDocument(this.maximumPlaintextBytes));
    if (!(value instanceof JsonObject object) || !object.getMembers().keySet().equals(FIELDS)
-     || object.findLong("schema").orElse(-1L) != 1L
-     || !object.findString("issuer").orElse("").equals(this.issuer)
-     || !object.findString("key").orElse("").equals(entry.getKey().getStorageKey())
-     || !object.findString("version").orElse("").equals(entry.getVersion())
-     || object.findLong("retainUntil").orElse(Long.MIN_VALUE) != entry.getRetainUntil().getEpochSecond()
+     || OAuthStoreFormat.longMember(object, "schema").orElse(-1L) != 1L
+     || !OAuthStoreFormat.stringMember(object, "issuer").orElse("").equals(this.issuer)
+     || !OAuthStoreFormat.stringMember(object, "key").orElse("").equals(entry.getKey().getStorageKey())
+     || !OAuthStoreFormat.stringMember(object, "version").orElse("").equals(entry.getVersion())
+     || OAuthStoreFormat.longMember(object, "retainUntil").orElse(Long.MIN_VALUE) != entry.getRetainUntil().getEpochSecond()
      || !(object.find("payload").orElseThrow() instanceof JsonObject payload)) throw OAuthStoreFormat.invalid();
    return payload;
   } catch (UnsealException | JsonParseException | IllegalArgumentException failure) {

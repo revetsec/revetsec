@@ -17,7 +17,7 @@
 package com.revetsec.jose;
 import com.revetsec.RevetsecException;
 import com.revetsec.internal.jose.*;
-import com.revetsec.testing.TestJsonWebKeys;
+import com.revetsec.testing.TestJwk;
 import com.revetsec.testing.TestJws;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
@@ -29,30 +29,30 @@ import java.util.Set;
 /** The prepared-validation entry point must publish its success and both failure categories. */
 final class JwtValidatorRc1MutationTests {
  @Test void preparedSuccessPublishesExactlyOneMeasuredSuccess()throws Exception{
-  Recording observer=new Recording();JwtValidator validator=JwtFixtures.validator(JwtFixtures.source(TestJsonWebKeys.Fixture.IDP_SIGNING_RSA_2048)).observer(observer).build();
-  Jwt jwt=JwtValidationAccess.get().validatePrepared(validator,prepared(JwtFixtures.signed(TestJsonWebKeys.Fixture.IDP_SIGNING_RSA_2048,TestJws.Algorithm.RS256)),()->1_000_000_000L);
+  Recording observer=new Recording();JwtValidator validator=JwtFixtures.validator(JwtFixtures.source(TestJwk.Fixture.IDP_SIGNING_RSA_2048)).observer(observer).build();
+  Jwt jwt=JwtValidationAccess.get().validatePrepared(validator,prepared(JwtFixtures.signed(TestJwk.Fixture.IDP_SIGNING_RSA_2048,TestJws.Algorithm.RS256)),()->1_000_000_000L);
   Assertions.assertEquals(JwsAlgorithm.RS256,jwt.getAlgorithm());Assertions.assertEquals(1,observer.success);Assertions.assertEquals(0,observer.failure);measured(observer.elapsed);
  }
  @Test void preparedSignatureFailurePublishesTheExactMappedException(){
-  Recording observer=new Recording();JwtValidator validator=JwtFixtures.validator(JwtFixtures.source(TestJsonWebKeys.Fixture.IDP_SIGNING_RSA_2048)).observer(observer).build();
-  String token=JwtFixtures.signed(TestJsonWebKeys.Fixture.SP_SIGNING_RSA_2048,TestJws.Algorithm.RS256);
+  Recording observer=new Recording();JwtValidator validator=JwtFixtures.validator(JwtFixtures.source(TestJwk.Fixture.IDP_SIGNING_RSA_2048)).observer(observer).build();
+  String token=JwtFixtures.signed(TestJwk.Fixture.SP_SIGNING_RSA_2048,TestJws.Algorithm.RS256);
   JoseException failure=Assertions.assertThrows(JoseException.class,()->JwtValidationAccess.get().validatePrepared(validator,prepared(token),()->1_000_000_000L));
   Assertions.assertEquals(JoseException.Reason.SIGNATURE_MISMATCH,failure.getReason());Assertions.assertSame(failure,observer.exception);Assertions.assertEquals(0,observer.success);Assertions.assertEquals(1,observer.failure);measured(observer.elapsed);
  }
  @Test void preparedPolicyFailurePublishesTheExactPublicException(){
-  Recording observer=new Recording();JwtValidator validator=JwtFixtures.validator(JwtFixtures.source(TestJsonWebKeys.Fixture.IDP_SIGNING_RSA_2048)).allowedAlgorithms(Set.of(JwsAlgorithm.ES256)).observer(observer).build();
-  JoseException failure=Assertions.assertThrows(JoseException.class,()->JwtValidationAccess.get().validatePrepared(validator,prepared(JwtFixtures.signed(TestJsonWebKeys.Fixture.IDP_SIGNING_RSA_2048,TestJws.Algorithm.RS256)),()->1_000_000_000L));
+  Recording observer=new Recording();JwtValidator validator=JwtFixtures.validator(JwtFixtures.source(TestJwk.Fixture.IDP_SIGNING_RSA_2048)).allowedAlgorithms(Set.of(JwsAlgorithm.ES256)).observer(observer).build();
+  JoseException failure=Assertions.assertThrows(JoseException.class,()->JwtValidationAccess.get().validatePrepared(validator,prepared(JwtFixtures.signed(TestJwk.Fixture.IDP_SIGNING_RSA_2048,TestJws.Algorithm.RS256)),()->1_000_000_000L));
   Assertions.assertEquals(JoseException.Reason.ALGORITHM_NOT_ALLOWED,failure.getReason());Assertions.assertSame(failure,observer.exception);Assertions.assertEquals(0,observer.success);Assertions.assertEquals(1,observer.failure);measured(observer.elapsed);
  }
  @Test void unexpectedStaticSelectionFailureMapsToUnknownKey()throws Exception{
-  StaticJsonWebKeySource source=JwtFixtures.source(TestJsonWebKeys.Fixture.IDP_SIGNING_RSA_2048);
-  var field=JsonWebKeySet.class.getDeclaredField("verificationKeys");field.setAccessible(true);
-  field.set(source.getJsonWebKeySet(),new java.util.AbstractList<VerificationKey>(){
+  StaticJwksSource source=JwtFixtures.source(TestJwk.Fixture.IDP_SIGNING_RSA_2048);
+  var field=Jwks.class.getDeclaredField("verificationKeys");field.setAccessible(true);
+  field.set(source.getJwks(),new java.util.AbstractList<VerificationKey>(){
    @Override public @NonNull VerificationKey get(int index){throw new IllegalStateException("controlled selector fault");}
    @Override public int size(){return 1;}
   });
   JwtValidator validator=JwtFixtures.validator(source).build();
-  JoseException failure=Assertions.assertThrows(JoseException.class,()->JwtValidationAccess.get().validatePrepared(validator,prepared(JwtFixtures.signed(TestJsonWebKeys.Fixture.IDP_SIGNING_RSA_2048,TestJws.Algorithm.RS256)),()->1_000_000_000L));
+  JoseException failure=Assertions.assertThrows(JoseException.class,()->JwtValidationAccess.get().validatePrepared(validator,prepared(JwtFixtures.signed(TestJwk.Fixture.IDP_SIGNING_RSA_2048,TestJws.Algorithm.RS256)),()->1_000_000_000L));
   Assertions.assertEquals(JoseException.Reason.UNKNOWN_KEY,failure.getReason());
  }
  @Test void redactedResultDiagnosticRetainsItsOutcomeKind(){

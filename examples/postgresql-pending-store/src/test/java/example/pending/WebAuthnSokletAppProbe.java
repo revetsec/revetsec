@@ -77,7 +77,9 @@ public final class WebAuthnSokletAppProbe {
 
     private static void register(@NonNull PasskeyApp app) throws Exception {
         Session session = approved(app);
-        MarshaledResponse prepared = app.beginRegistration(post("/register/start", session, Map.of(), null));
+        expect(403, app.beginRegistration(post("/register/start", session, Map.of(), null)));
+        MarshaledResponse prepared = app.beginRegistration(post("/register/start", session,
+                Map.of("X-Demo-Access-Key", List.of(ACCESS_KEY)), null));
         expect(200, prepared);
         Ceremony ceremony = ceremony(prepared);
         KeyPair pair = KeyPairGenerator.getInstance("Ed25519").generateKeyPair();
@@ -117,8 +119,12 @@ public final class WebAuthnSokletAppProbe {
     private static void remove(@NonNull PasskeyApp app) {
         Session session = approved(app);
         expectList(app, session, 1);
-        expect(200, app.removeCredential(post("/credentials/remove", session,
+        expect(403, app.removeCredential(post("/credentials/remove", session,
                 Map.of("X-Credential-Id", List.of(url(CREDENTIAL_ID))), null)));
+        expectList(app, session, 1);
+        expect(200, app.removeCredential(post("/credentials/remove", session,
+                Map.of("X-Credential-Id", List.of(url(CREDENTIAL_ID)),
+                        "X-Demo-Access-Key", List.of(ACCESS_KEY)), null)));
         expectList(app, session, 0);
         System.out.println("APP_REMOVED");
     }
@@ -135,8 +141,10 @@ public final class WebAuthnSokletAppProbe {
 
     private static void unknownBegin(@NonNull PasskeyApp app) {
         Session session = approved(app);
-        expect(503, app.beginRegistration(post("/register/start", session, Map.of(), null)));
-        expect(503, app.beginRegistration(post("/register/start", session, Map.of(), null)));
+        expect(503, app.beginRegistration(post("/register/start", session,
+                Map.of("X-Demo-Access-Key", List.of(ACCESS_KEY)), null)));
+        expect(503, app.beginRegistration(post("/register/start", session,
+                Map.of("X-Demo-Access-Key", List.of(ACCESS_KEY)), null)));
         System.out.println("APP_UNKNOWN_CLOSED_LOCAL_ADMISSION");
     }
 

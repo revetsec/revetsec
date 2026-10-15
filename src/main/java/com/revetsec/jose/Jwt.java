@@ -26,7 +26,7 @@ import java.util.Optional;
 import static java.util.Objects.requireNonNull;
 
 /**
- * A JWT that {@link JwtValidator#validate(String)} accepted: its signature verified with a trusted key, and its type,
+ * A JWT that {@link JwtValidator#validateResult(String)} accepted: its signature verified with a trusted key, and its type,
  * issuer, audience, lifetime and required claims passed. Only a validator creates one, so holding a {@code Jwt} means
  * the token was validated.
  * <p>

@@ -18,59 +18,59 @@ Each entry gives the mode's name, protocol area, effect, conditions and safeguar
 
 ### `acceptAnyAudience(true)`
 
-- **Where:** `JwtValidator.Builder` (JOSE).
+- **Where:** [`JwtValidator.Builder`](https://javadoc.revetsec.com/com/revetsec/jose/JwtValidator.Builder.html) (JOSE).
 - **Effect:** the validator does not compare the token's `aud` claim with any expected audience, and `aud` is no longer required. An `aud` that is present must still be a string or a non-empty array of strings. Every other check still applies: the signature, `iss`, `exp`, `nbf` and `iat`, the key rules, the required claims and the refusal of `cnf`.
 - **Risk:** a token the same issuer issued for another application is accepted. Use it only when the issuer serves this application alone.
-- **Safeguards:** it cannot be combined with `expectedAudiences`: setting both makes `build()` throw `IllegalArgumentException`. Without it, `build()` throws `IllegalStateException` unless expected audiences are set. It is reported to `JoseObserver.didAcceptAnyAudience(issuer)` when the validator is built and on every `validate()` call, whatever the outcome.
+- **Safeguards:** it cannot be combined with `expectedAudiences`: setting both makes `build()` throw [`IllegalArgumentException`](https://docs.oracle.com/en/java/javase/27/docs/api/java.base/java/lang/IllegalArgumentException.html). Without it, `build()` throws [`IllegalStateException`](https://docs.oracle.com/en/java/javase/27/docs/api/java.base/java/lang/IllegalStateException.html) unless expected audiences are set. It is reported to [`JoseObserver`](https://javadoc.revetsec.com/com/revetsec/jose/JoseObserver.html)`.didAcceptAnyAudience(issuer)` when the validator is built and on every `validateResult()` call, whatever the outcome.
 - **Tests:** `jose.JwtValidatorBuilderTests` (`missingRequiredSettingsAreIllegalState`, `audienceSettingsThatConflictOrAreEmptyAreIllegalArguments` and `acceptingAnyAudienceIsObservedAtBuild`), `jose.JoseObserverTests.acceptingAnyAudienceIsObservedOnEveryValidation`, and, for the disabled state, `jose.JwtValidatorClaimsTests.theAudienceMustNameAnExpectedAudience`.
 - **Added in:** 1.0.0 (unreleased).
 
 ### `acknowledgeUnpatchedRuntime(true)`
 
-- **Where:** `RemoteJsonWebKeySource.Builder` (JOSE) and `OAuthClient.Builder` (OAuth).
-- **Effect:** the source builds and fetches on a Java runtime below Revetsec's minimum for network I/O, 17.0.3 (18.0.1 on Java 18), whose TLS and certificate checks are exposed to CVE-2022-21449 (ECDSA signature verification). Without it, `build()` throws `IllegalStateException` on such a runtime.
-- **Safeguards:** while the runtime is below the minimum, the choice is reported to `JoseObserver.didUseUnpatchedRuntime(runtimeVersion)` when a key source is built and on every fetch, or when an `OAuthClient` is built. On a runtime at or above the minimum, the setting changes nothing and nothing is reported. Revetsec's own ECDSA range check protects the tokens a validator verifies on every runtime; what the setting accepts is the runtime's own TLS. A `StaticJsonWebKeySource` does no I/O and never needs the setting.
-- **Tests:** `jose.RemoteJsonWebKeySourceBuilderTests.theRuntimeFloorIsEnforcedAndAnAcknowledgmentIsObserved` (17.0.2, 18, 17.0.2.0.1 and 17-ea each refused unless acknowledged, and reported at build and on every fetch), `aRuntimeAtOrAboveTheFloorIsNeverReported`, and `oauth.OAuthClientRuntimeFloorTests` (the Java 18.0.0 release is represented by `Runtime.Version.parse("18")`).
+- **Where:** [`RemoteJwksSource.Builder`](https://javadoc.revetsec.com/com/revetsec/jose/RemoteJwksSource.Builder.html) (JOSE) and [`OAuthClient.Builder`](https://javadoc.revetsec.com/com/revetsec/oauth/OAuthClient.Builder.html) (OAuth).
+- **Effect:** the source builds and fetches on a Java runtime below Revetsec's minimum for network I/O, 17.0.3 (18.0.1 on Java 18), whose TLS and certificate checks are exposed to CVE-2022-21449 (ECDSA signature verification). Without it, `build()` throws [`IllegalStateException`](https://docs.oracle.com/en/java/javase/27/docs/api/java.base/java/lang/IllegalStateException.html) on such a runtime.
+- **Safeguards:** while the runtime is below the minimum, the choice is reported to [`JoseObserver`](https://javadoc.revetsec.com/com/revetsec/jose/JoseObserver.html)`.didUseUnpatchedRuntime(runtimeVersion)` when a key source is built and on every fetch, or when an [`OAuthClient`](https://javadoc.revetsec.com/com/revetsec/oauth/OAuthClient.html) is built. On a runtime at or above the minimum, the setting changes nothing and nothing is reported. Revetsec's own ECDSA range check protects the tokens a validator verifies on every runtime; what the setting accepts is the runtime's own TLS. A [`StaticJwksSource`](https://javadoc.revetsec.com/com/revetsec/jose/StaticJwksSource.html) does no I/O and never needs the setting.
+- **Tests:** `jose.RemoteJwksSourceBuilderTests.theRuntimeFloorIsEnforcedAndAnAcknowledgmentIsObserved` (17.0.2, 18, 17.0.2.0.1 and 17-ea each refused unless acknowledged, and reported at build and on every fetch), `aRuntimeAtOrAboveTheFloorIsNeverReported`, and `oauth.OAuthClientRuntimeFloorTests` (the Java 18.0.0 release is represented by `Runtime.Version.parse("18")`).
 - **Added in:** 1.0.0 (unreleased).
 
-### `ClientSecretBasicEncoding.UNENCODED`
+### [`ClientSecretBasicEncoding`](https://javadoc.revetsec.com/com/revetsec/oauth/ClientSecretBasicEncoding.html)`.UNENCODED`
 
-- **Where:** `ClientAuthentication.fromClientSecretBasic(secret, encoding)` (OAuth).
+- **Where:** [`ClientAuthentication`](https://javadoc.revetsec.com/com/revetsec/oauth/ClientAuthentication.html)`.fromClientSecretBasic(secret, encoding)` (OAuth).
 - **Effect:** the client ID and secret are joined with `:` as supplied before Base64, instead of each being form-encoded as RFC 6749 Appendix B requires. It exists for an explicitly configured provider that expects these bytes. It cannot place a secret in the request URI, and no second client-authentication method is added.
 - **Risk:** some credentials become ambiguous to a provider parser, especially a client ID containing `:`. Use `FORM_URLENCODED`, the default, unless provider evidence requires the alternative.
-- **Safeguards:** the mode is selected per `ClientAuthentication` instance. `OAuthObserver.didUseUnencodedBasic()` is called when its client is built and on every token or revocation request that uses it, with no credential value.
+- **Safeguards:** the mode is selected per [`ClientAuthentication`](https://javadoc.revetsec.com/com/revetsec/oauth/ClientAuthentication.html) instance. [`OAuthObserver`](https://javadoc.revetsec.com/com/revetsec/oauth/OAuthObserver.html)`.didUseUnencodedBasic()` is called when its client is built and on every token or revocation request that uses it, with no credential value.
 - **Tests:** `oauth.ClientAuthenticationTests.explicitUnencodedCompatibilityChangesBytes`, `unencodedBasicIsObservedAtBuildAndUse`, and `basicFormEncodesBothFieldsBeforeJoining` (default mode).
 - **Added in:** 1.0.0 (unreleased).
 
-### `OidcCompatibilityMode.HMAC_ID_TOKENS`
+### [`OidcCompatibilityMode`](https://javadoc.revetsec.com/com/revetsec/oidc/OidcCompatibilityMode.html)`.HMAC_ID_TOKENS`
 
-- **Where:** `OidcClient.Builder.compatibility(Set<OidcCompatibilityMode>)` (OIDC).
-- **Effect:** permits explicitly allowlisted `HS256`, `HS384` or `HS512` ID tokens. The default allowlist remains `{RS256}`, and provider advertisement still restricts the effective set. The mode does not enable HMAC in ordinary `JwtValidator` or signed UserInfo.
+- **Where:** [`OidcClient.Builder`](https://javadoc.revetsec.com/com/revetsec/oidc/OidcClient.Builder.html)`.compatibility(`[`Set`](https://docs.oracle.com/en/java/javase/27/docs/api/java.base/java/util/Set.html)`<`[`OidcCompatibilityMode`](https://javadoc.revetsec.com/com/revetsec/oidc/OidcCompatibilityMode.html)`>)` (OIDC).
+- **Effect:** permits explicitly allowlisted `HS256`, `HS384` or `HS512` ID tokens. The default allowlist remains `{RS256}`, and provider advertisement still restricts the effective set. The mode does not enable HMAC in ordinary [`JwtValidator`](https://javadoc.revetsec.com/com/revetsec/jose/JwtValidator.html) or signed UserInfo.
 - **Conditions:** confidential client-secret Basic or POST authentication; the exact secret's UTF-8 bytes must be at least 32/48/64 bytes for each configured HMAC algorithm, respectively. The secret is not base64-decoded. Length is checked at build, before each token POST and again by the HMAC verifier. Use a high-entropy secret. A supplier is called once at build and once per token POST; keep it fast and thread-safe.
 - **Risk:** the client and provider share the MAC key and can both construct ID tokens. Keep the secret private. An asymmetric public key, including its DER, PEM or JWK representation, is never used as that secret.
 - **Safeguards:** each validation uses the secret actually sent in that request's client authentication, even if the supplier rotates before the response is verified. HMAC verification does no key lookup and HMAC-only warm-up does not fetch JWKS. Tokens with more than one audience entry are rejected, including trusted additional audiences and duplicate entries. Every normal signature, claim, nonce/hash and refresh-continuity check remains required. Raw secrets/ID tokens stay inside the call until validation succeeds, and are absent from result string forms and observer events.
-- **Observation:** `OidcObserver.didEnableCompatibilityMode(mode)` reports enabled modes after successful build. `didUseCompatibilityMode(mode)` reports an actual allowlisted, structurally valid HMAC verification attempt, including a signature or later profile failure. An asymmetric token does not produce a HMAC-use event. Observer failures use the existing containment rules.
+- **Observation:** [`OidcObserver`](https://javadoc.revetsec.com/com/revetsec/oidc/OidcObserver.html)`.didEnableCompatibilityMode(mode)` reports enabled modes after successful build. `didUseCompatibilityMode(mode)` reports an actual allowlisted, structurally valid HMAC verification attempt, including a signature or later profile failure. An asymmetric token does not produce a HMAC-use event. Observer failures use the existing containment rules.
 - **Tests:** `oidc.OidcHmacTests`: `optInRequiresConfidentialAuthenticationAndUtf8HashLength`, `eachHmacAlgorithmUsesExactUtf8SecretWithBasicOrPostAndNoKeys`, `supplierSnapshotSurvivesRotationAndIsReadOnceAtBuildAndOncePerPost`, `hmacStillChecksClaimsHashesSignatureAndExactAudience`, `hmacRefreshRetainsOriginalNonceAndRejectsSubjectDriftBeforeTokenRelease`, `rsaDerPemAndJwkBytesAreNeverHmacKeys`, `mixedAllowlistUsesPublicKeysOnlyForRsaAndModeDoesNotChangeDefaults`, and `lazyDiscoveryIntersectsHmacAndWarmUpFetchesNoJwks`.
 - **Added in:** 1.0.0 (unreleased).
 
 ### `acknowledgeGlobalSecureValidationDisabled(true)`
 
-- **Where:** `SamlServiceProvider.Builder` (SAML).
+- **Where:** [`SamlServiceProvider.Builder`](https://javadoc.revetsec.com/com/revetsec/saml/SamlServiceProvider.Builder.html) (SAML).
 - **Effect:** permits building an SP when `org.jcp.xml.dsig.secureValidation` is globally set to a value other than `true`. Without acknowledgment, `build()` fails. Revetsec still sets secure validation explicitly on each XML-signature verification context, except where the IdP's explicit RSA-SHA1 compatibility mode requires it to be disabled for that signature; its own signature shape and algorithm allowlists apply in either case.
 - **Risk:** other XML-signature consumers in the same JVM may inherit the disabled global setting. Audit them separately.
-- **Safeguards:** false or null clears the acknowledgment. `SamlObserver.didAcknowledgeGlobalSecureValidationDisabled()` reports its use after a successful build without carrying the property value or message data.
+- **Safeguards:** false or null clears the acknowledgment. [`SamlObserver`](https://javadoc.revetsec.com/com/revetsec/saml/SamlObserver.html)`.didAcknowledgeGlobalSecureValidationDisabled()` reports its use after a successful build without carrying the property value or message data.
 - **Tests:** `saml.SamlConfigurationBoundaryTests.disabledGlobalSignatureValidationRequiresAnObservedAcknowledgment` and `internal.xml.EnvelopedSignatureVerifierTests.explicitVerificationContextWorksWithGlobalSecureValidationDisabled`.
 - **Added in:** 1.0.0 (unreleased).
 
-### `SamlCompatibilityMode.SHA1_SIGNATURES`
+### [`SamlCompatibilityMode`](https://javadoc.revetsec.com/com/revetsec/saml/SamlCompatibilityMode.html)`.SHA1_SIGNATURES`
 
-- **Where:** `SamlIdentityProvider.Builder.compatibility(Set<SamlCompatibilityMode>)` for one approved IdP connection.
+- **Where:** [`SamlIdentityProvider.Builder`](https://javadoc.revetsec.com/com/revetsec/saml/SamlIdentityProvider.Builder.html)`.compatibility(`[`Set`](https://docs.oracle.com/en/java/javase/27/docs/api/java.base/java/util/Set.html)`<`[`SamlCompatibilityMode`](https://javadoc.revetsec.com/com/revetsec/saml/SamlCompatibilityMode.html)`>)` for one approved IdP connection.
 - **Effect:** accepts RSA-SHA1 XML and Redirect signatures from that connection. The default rejects them. It does not enable HMAC, unsigned responses or RSA1_5 key transport.
 - **Risk:** SHA-1 collision resistance is broken. Use this mode only for a partner that cannot be upgraded yet, with a dedicated connection and short migration plan.
 - **Tests:** `saml.SamlIndependentFixtureTests`, `saml.SamlScriptedMintedFixtureTests` and `saml.SamlXswMutationTests` exercise the default and selected path.
 - **Added in:** 1.0.0 (unreleased).
 
-### `SamlCompatibilityMode.AES_CBC_ENCRYPTION`
+### [`SamlCompatibilityMode`](https://javadoc.revetsec.com/com/revetsec/saml/SamlCompatibilityMode.html)`.AES_CBC_ENCRYPTION`
 
 - **Where:** the same per-IdP builder.
 - **Effect:** permits AES-CBC assertion decryption only after a trusted IdP signature covers the whole Response. It never accepts CBC solely under an Assertion signature. SP metadata advertises GCM, not CBC.
@@ -78,7 +78,7 @@ Each entry gives the mode's name, protocol area, effect, conditions and safeguar
 - **Tests:** `saml.SamlScriptedMintedFixtureTests` covers AES-128/192/256-CBC, the default rejection, and an unsigned-Response negative. `saml.SimpleSamlCapturedResponseTests` replays real SimpleSAMLphp 2.5.0 signed and assertion-only CBC Responses.
 - **Added in:** 1.0.0 (unreleased).
 
-### `SamlCompatibilityMode.UNSOLICITED_RESPONSES`
+### [`SamlCompatibilityMode`](https://javadoc.revetsec.com/com/revetsec/saml/SamlCompatibilityMode.html)`.UNSOLICITED_RESPONSES`
 
 - **Where:** the same per-IdP builder; `allowUnsolicitedResponses(true)` is the equivalent older spelling during pre-release development.
 - **Effect:** allows IdP-initiated POST SSO without a pending AuthnRequest. RelayState is rejected and the response age is capped at two minutes before clock skew. Signature, issuer, destination, audience, bearer, replay and subject checks still apply.
@@ -86,15 +86,15 @@ Each entry gives the mode's name, protocol area, effect, conditions and safeguar
 - **Tests:** `saml.SamlIndependentFixtureTests` and `saml.SamlScriptedMintedFixtureTests` replay fixed-clock unsolicited assertions; `saml.SamlServiceProviderTests` exercises the disabled path.
 - **Added in:** 1.0.0 (unreleased).
 
-### `AccessTokenCompatibilityMode.UNTYPED_ACCESS_TOKENS`
+### [`AccessTokenCompatibilityMode`](https://javadoc.revetsec.com/com/revetsec/oauth/AccessTokenCompatibilityMode.html)`.UNTYPED_ACCESS_TOKENS`
 
-- **Where:** `JwtAccessTokenValidator` (OAuth resource server).
+- **Where:** [`JwtAccessTokenValidator`](https://javadoc.revetsec.com/com/revetsec/oauth/JwtAccessTokenValidator.html) (OAuth resource server).
 - **Effect:** permits a JWT access token with absent or ordinary `JWT` type only when additional required claims are configured. Strict validation expects an access-token type.
-- **Risk and safeguards:** a provider's identity token must not be admitted as an API access token. Keep exact audience, issuer, signature and application authorization checks; this mode rejects identity-token-only claims and is reported to `AccessTokenObserver`.
+- **Risk and safeguards:** a provider's identity token must not be admitted as an API access token. Keep exact audience, issuer, signature and application authorization checks; this mode rejects identity-token-only claims and is reported to [`AccessTokenObserver`](https://javadoc.revetsec.com/com/revetsec/oauth/AccessTokenObserver.html).
 - **Tests:** `oauth.JwtAccessTokenValidatorTests` and the pinned Keycloak resource-server integration profile.
 - **Added in:** 1.0.0 (unreleased).
 
-### `ClientAssertionAudience.TOKEN_ENDPOINT`
+### [`ClientAssertionAudience`](https://javadoc.revetsec.com/com/revetsec/oauth/ClientAssertionAudience.html)`.TOKEN_ENDPOINT`
 
 - **Where:** OAuth private-key client authentication; the default is `ISSUER`.
 - **Effect:** uses the actual POST endpoint as the assertion audience with `JWT` type instead of the exact issuer with `client-authentication+jwt` type. The client keeps its fixed configured endpoint and does not fall back after a rejection.
@@ -102,7 +102,7 @@ Each entry gives the mode's name, protocol area, effect, conditions and safeguar
 - **Tests:** `oauth.ClientAssertionTests`, `oauth.NodeClientAssertionIT` and `oauth.KeycloakClientAssertionIT`.
 - **Added in:** 1.0.0 (unreleased).
 
-### `OidcIssuerPolicy.fromMicrosoftEntraMultiTenant`
+### [`OidcIssuerPolicy`](https://javadoc.revetsec.com/com/revetsec/oidc/OidcIssuerPolicy.html)`.fromMicrosoftEntraMultiTenant`
 
 - **Where:** an OIDC client configured for Microsoft's fixed public-cloud `common` or `organizations` v2.0 issuer.
 - **Effect:** accepts the advertised `{tenantid}` issuer template only with a signature-verified tenant GUID and a trusted application predicate. The exact issuer policy remains the default.
@@ -110,9 +110,9 @@ Each entry gives the mode's name, protocol area, effect, conditions and safeguar
 - **Tests:** `oidc.OidcIssuerPolicyTests`; hosted Entra acceptance remains unproven.
 - **Added in:** 1.0.0 (unreleased).
 
-### `ScimCompatibilityFeature` and presets
+### [`ScimCompatibilityFeature`](https://javadoc.revetsec.com/com/revetsec/scim/ScimCompatibilityFeature.html) and presets
 
-`ScimCompatibility.strictInstance()` enables no features. `microsoftEntraIdInstance()` enables the eight features through `IGNORE_UNDECLARED_SCHEMA_URIS` in the table; `oktaInstance()` enables `PATCH_OPERATION_NAME_CASE_INSENSITIVE` and `PATCH_READ_ONLY_ID_ECHO`. `ScimCompatibility.builder().features(...)` explicitly selects another reviewed set. No feature is inferred from request content. Each relaxation is confined to SCIM parsing or resource handling; schema binding, authorization policy, work budgets and output rules still apply.
+The [`ScimCompatibility`](https://javadoc.revetsec.com/com/revetsec/scim/ScimCompatibility.html)`.strictInstance()` enables no features. `microsoftEntraIdInstance()` enables the eight features through `IGNORE_UNDECLARED_SCHEMA_URIS` in the table; `oktaInstance()` enables `PATCH_OPERATION_NAME_CASE_INSENSITIVE` and `PATCH_READ_ONLY_ID_ECHO`. [`ScimCompatibility`](https://javadoc.revetsec.com/com/revetsec/scim/ScimCompatibility.html)`.builder().features(...)` explicitly selects another reviewed set. No feature is inferred from request content. Each relaxation is confined to SCIM parsing or resource handling; schema binding, authorization policy, work budgets and output rules still apply.
 
 | Feature | Effect |
 | --- | --- |
@@ -133,9 +133,9 @@ Each entry gives the mode's name, protocol area, effect, conditions and safeguar
 
 ### Settings that are not compatibility modes
 
-- **`JwtValidator.Builder.allowedAlgorithms`** chooses among Revetsec's own algorithms (see [supported algorithms](supported-algorithms.md)); it cannot add `none` or an HMAC algorithm.
-- **`RemoteJsonWebKeySource.Builder.allowInsecureLoopback(true)`** is for tests. It allows plain `http` only to a loopback address or exactly `localhost`, and never changes how a token or a key is validated.
-- **`OAuthAuthorizationServer.Builder.allowInsecureLoopback(true)`** permits a numeric HTTP loopback issuer only for local development. `allowNativeLoopbackRedirects(true)` separately permits the native IP-literal redirect port exception, and `allowLocalhostRedirects(true)` separately admits the configured exact-port localhost redirect profile. All three default off; no one flag implies another. See `oauth.server.OAuthServerApplicationContractsTests` and `oauth.server.OAuthServerWireContractTests`.
+- **[`JwtValidator.Builder`](https://javadoc.revetsec.com/com/revetsec/jose/JwtValidator.Builder.html)`.allowedAlgorithms`** chooses among Revetsec's own algorithms (see [supported algorithms](supported-algorithms.md)); it cannot add `none` or an HMAC algorithm.
+- **[`RemoteJwksSource.Builder`](https://javadoc.revetsec.com/com/revetsec/jose/RemoteJwksSource.Builder.html)`.allowInsecureLoopback(true)`** is for tests. It allows plain `http` only to a loopback address or exactly `localhost`, and never changes how a token or a key is validated.
+- **[`OAuthAuthorizationServer.Builder`](https://javadoc.revetsec.com/com/revetsec/oauth/server/OAuthAuthorizationServer.Builder.html)`.allowInsecureLoopback(true)`** permits a numeric HTTP loopback issuer only for local development. `allowNativeLoopbackRedirects(true)` separately permits the native IP-literal redirect port exception, and `allowLocalhostRedirects(true)` separately admits the configured exact-port localhost redirect profile. All three default off; no one flag implies another. See `oauth.server.OAuthServerApplicationContractsTests` and `oauth.server.OAuthServerWireContractTests`.
 
 ## saml2int deviations
 
@@ -150,7 +150,7 @@ This checklist uses the [Kantara saml2int v2.0 deployment profile](https://kanta
 | SDP-MD01 | Deviation: IdP metadata consumption and refresh are application-owned; Revetsec does not automate periodic federation metadata management. The application must refresh trusted metadata and provision endpoints, keys, and policy from it. |
 | SDP-MD02 | Deployment: obtain metadata over authenticated TLS or use the pinned-signature `fromXmlResult` overload. The unsigned overload assumes application-approved bytes; it does not authenticate their origin. Keep metadata trust keys independent of IdP message-signing keys. |
 | SDP-MD03 | Deviation: approved static IdP metadata without a trusted `validUntil` is accepted. The parser checks expiry on the selected entity and on an aggregate only when its signature is verified or the application supplied approved bytes. An unsigned aggregate around a separately signed entity cannot set that entity's expiry. A strict deployment must reject missing or overlong trusted validity before configuring an IdP. |
-| SDP-MD04 | Deployment: `SamlServiceProviderMetadata` produces a descriptor; publication, stable rollover, and authenticated distribution belong to the application. |
+| SDP-MD04 | Deployment: [`SamlServiceProviderMetadata`](https://javadoc.revetsec.com/com/revetsec/saml/SamlServiceProviderMetadata.html) produces a descriptor; publication, stable rollover, and authenticated distribution belong to the application. |
 | SDP-MD05 | Library: published signing and encryption keys use X.509 certificates in `KeyDescriptor` elements. |
 | SDP-MD06 | Library: configured RSA credentials and IdP signing keys require at least 2048 bits. |
 | SDP-MD07 | Library: accepted EC signing keys require at least 256 bits; SP credentials currently use RSA. |
@@ -175,7 +175,7 @@ This checklist uses the [Kantara saml2int v2.0 deployment profile](https://kanta
 | SDP-SP13 | Deviation: successful assertions currently require a `NameID` in `Subject`. An attribute-only subject is rejected. |
 | SDP-SP14 | Library: checked `subject-id` and `pairwise-id` attributes are exposed and may form stable subject keys when their scopes are approved. Legacy persistent NameID is also supported. |
 | SDP-SP15 | Deviation: generated SP metadata does not signal subject-identifier requirements through `mdattr:EntityAttributes`. Enrich metadata for this profile. |
-| SDP-SP16 | Library and deployment: use `(connectionId, SamlSubjectKey)` as the account key; the connection ID separates IdPs, and scoped subject identifiers are released only after scope approval. |
+| SDP-SP16 | Library and deployment: use `(connectionId, `[`SamlSubjectKey`](https://javadoc.revetsec.com/com/revetsec/saml/SamlSubjectKey.html)`)` as the account key; the connection ID separates IdPs, and scoped subject identifiers are released only after scope approval. |
 | SDP-SP17 | Deployment: configure each IdP's authorized identifier scopes from trusted policy or trusted third-party metadata. Revetsec can read literal `shibmd:Scope`, but the application decides whether that metadata is trusted. |
 | SDP-SP18 | Deployment: use appropriate display attributes for UI; Revetsec does not assume opaque subject IDs are display names. |
 | SDP-SP19 | Library: SAML attributes preserve multiple values. Application code must respect each attribute's external definition. |

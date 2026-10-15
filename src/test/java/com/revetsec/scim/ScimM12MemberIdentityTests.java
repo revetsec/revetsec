@@ -101,7 +101,7 @@ class ScimM12MemberIdentityTests {
             AtomicInteger callbacks=new AtomicInteger();
             ScimServiceProvider provider=provider(type,callbacks);
             ScimResource current=resource(type,List.of(JsonObject.builder().put("value","A").build()));
-            assertEquals("A",ScimGroup.fromResource(current).getMembers().get(0).findString("value").orElseThrow());
+            assertEquals("A",ScimGroup.fromResource(current).getMembers().get(0).find("value").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow());
             for (String expression:List.of("members.value eq \"A\"","members[value eq \"A\"]","members.value ne \"a\""))
                 assertTrue(matched(provider,current,expression),expression);
             for (String expression:List.of("members.value eq \"a\"","members[value eq \"a\"]","members.value ne \"A\""))
@@ -183,14 +183,14 @@ class ScimM12MemberIdentityTests {
         for (ScimMembershipPatch.Step step:instructions.getSteps()) {
             assertEquals(index++,step.getOperationIndex());
             if (step.getKind() == ScimMembershipPatch.Kind.REMOVE_IDS)
-                stored.removeIf(value -> step.getValues().contains(((JsonObject)value).findString("value").orElseThrow()));
+                stored.removeIf(value -> step.getValues().contains(((JsonObject)value).find("value").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow()));
             else if (step.getKind() == ScimMembershipPatch.Kind.CLEAR) stored.clear();
             else {
                 List<JsonValue> next=step.getKind() == ScimMembershipPatch.Kind.REPLACE_IDS ? new ArrayList<>() : stored;
                 for (String id:step.getValues()) {
                     JsonValue existing=null;
-                    for (JsonValue value:stored) if (((JsonObject)value).findString("value").orElseThrow().equals(id)) { existing=value; break; }
-                    if (next.stream().noneMatch(value -> ((JsonObject)value).findString("value").orElseThrow().equals(id)))
+                    for (JsonValue value:stored) if (((JsonObject)value).find("value").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow().equals(id)) { existing=value; break; }
+                    if (next.stream().noneMatch(value -> ((JsonObject)value).find("value").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow().equals(id)))
                         next.add(existing == null ? JsonObject.builder().put("value",id).build() : existing);
                 }
                 stored=next;
@@ -252,6 +252,6 @@ class ScimM12MemberIdentityTests {
                 .put("displayName","Fixture").put("members",JsonArray.fromElements(List.of(JsonObject.builder().put("value","bulkId:temporary").build()))).build();
         ScimResource resource=assertInstanceOf(ScimResourceParseResult.Succeeded.class,provider.parseResourceResult(custom,body.toJson().getBytes(StandardCharsets.UTF_8))).getResource();
         JsonArray members=assertInstanceOf(JsonArray.class,resource.getDocument().find("members").orElseThrow());
-        assertEquals("bulkId:temporary",assertInstanceOf(JsonObject.class,members.getElements().get(0)).findString("value").orElseThrow());
+        assertEquals("bulkId:temporary",assertInstanceOf(JsonObject.class,members.getElements().get(0)).find("value").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow());
     }
 }

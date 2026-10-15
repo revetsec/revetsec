@@ -26,7 +26,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /** Guards the public compatibility registry against omissions as switches are added. */
 final class CompatibilityRegistryTests {
     @Test void releaseRegistryNamesEveryScimFeatureAndOtherExplicitRelaxations() throws IOException {
-        String registry = Files.readString(Path.of("docs/compatibility-modes.md"));
+        String registry = Files.readString(Path.of("docs/compatibility-modes.md"))
+                .replaceAll("\\[([^\\]]+)\\]\\([^\\s)]+\\)", "$1").replace("``", "");
         for (ScimCompatibilityFeature feature : ScimCompatibilityFeature.values())
             assertTrue(registry.contains("`" + feature.name() + "`"), feature.name());
         for (String name : new String[] {

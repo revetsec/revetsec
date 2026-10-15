@@ -106,13 +106,13 @@ final class OAuthClientMetadataCacheCodec {
    plaintext = bounded(text);
    JsonValue value = JsonCodec.parse(plaintext, JsonLimits.protocolDocument(this.plaintextCap));
    if (!(value instanceof JsonObject json) || !json.getMembers().keySet().equals(FIELDS)
-     || json.findLong("schema").orElse(-1L) != 1L || !this.namespace.equals(json.findString("namespace").orElse(""))
-     || !key.getStorageKey().equals(json.findString("key").orElse(""))
-     || !entry.getVersion().equals(json.findString("version").orElse(""))
-     || entry.getExpiresAt().getEpochSecond() != json.findLong("expiresAt").orElse(Long.MIN_VALUE)) return Optional.empty();
-   Instant fetched = Instant.parse(json.findString("fetchedAt").orElse(""));
+     || OAuthStoreFormat.longMember(json, "schema").orElse(-1L) != 1L || !this.namespace.equals(OAuthStoreFormat.stringMember(json, "namespace").orElse(""))
+     || !key.getStorageKey().equals(OAuthStoreFormat.stringMember(json, "key").orElse(""))
+     || !entry.getVersion().equals(OAuthStoreFormat.stringMember(json, "version").orElse(""))
+     || entry.getExpiresAt().getEpochSecond() != OAuthStoreFormat.longMember(json, "expiresAt").orElse(Long.MIN_VALUE)) return Optional.empty();
+   Instant fetched = Instant.parse(OAuthStoreFormat.stringMember(json, "fetchedAt").orElse(""));
    times(fetched, entry.getExpiresAt(), historical ? fetched : now);
-   String encoded = json.findString("body").orElse("");
+   String encoded = OAuthStoreFormat.stringMember(json, "body").orElse("");
    if (encoded.length() > (this.policy.getMaximumDocumentBytes() + 2) / 3 * 4) return Optional.empty();
    body = Base64Url.decode(encoded);
    if (!Base64Url.encode(body).equals(encoded)) return Optional.empty();

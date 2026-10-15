@@ -79,7 +79,7 @@ final class FuzzSeedLayoutTests {
 	 */
 	private static final Set<String> JOSE_JSON_TEXT_TARGETS = Set.of(
 			"com.revetsec.internal.jose.CompactJwsFuzzTests#headerChecksAgreeWithAnIndependentOracleForP3ToP8",
-			"com.revetsec.internal.jose.JsonWebKeyFuzzTests#keySetDocumentsSkipExactlyTheKeysAnIndependentOracleRefuses");
+			"com.revetsec.internal.jose.JwkFuzzTests#keySetDocumentsSkipExactlyTheKeysAnIndependentOracleRefuses");
 
 	/**
 	 * The JOSE {@code byte[]} targets that read something else: compact serializations and signing programs.
@@ -128,7 +128,7 @@ final class FuzzSeedLayoutTests {
 			Map.entry("com.revetsec.internal.json.Rfc7638FuzzTests#canonicalJwkAgreesWithAnIndependentEncoder", JSON_TEXT_CORPORA),
 			Map.entry("com.revetsec.internal.pem.PemFuzzTests#pemParsersRejectOnlyWithPemExceptionAndAcceptAtMostOneLabel", PEM_TEXT_CORPORA),
 			Map.entry("com.revetsec.internal.jose.CompactJwsFuzzTests#headerChecksAgreeWithAnIndependentOracleForP3ToP8", JSON_TEXT_CORPORA),
-			Map.entry("com.revetsec.internal.jose.JsonWebKeyFuzzTests#keySetDocumentsSkipExactlyTheKeysAnIndependentOracleRefuses", KEY_SET_CORPORA),
+			Map.entry("com.revetsec.internal.jose.JwkFuzzTests#keySetDocumentsSkipExactlyTheKeysAnIndependentOracleRefuses", KEY_SET_CORPORA),
 			Map.entry("com.revetsec.oidc.OidcFuzzTests#signedClaimsRespectInitialAndRefreshProfiles", JSON_TEXT_CORPORA),
 			Map.entry("com.revetsec.oidc.OidcFuzzTests#metadataRequiresExactIssuerAndCapabilities", JSON_TEXT_CORPORA),
 			Map.entry("com.revetsec.oidc.OidcFuzzTests#userInfoRequiresTheVerifiedSubject", JSON_TEXT_CORPORA),

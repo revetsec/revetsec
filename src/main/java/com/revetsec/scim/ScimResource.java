@@ -116,11 +116,11 @@ public final class ScimResource {
     /** Returns the server-assigned identifier.
      * @return the identifier
      * @since 1.0.0 */
-    public @NonNull Optional<@NonNull String> getId() { return document.findString("id"); }
+    public @NonNull Optional<@NonNull String> getId() { return document.find("id").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue); }
     /** Returns the client identifier.
      * @return the identifier
      * @since 1.0.0 */
-    public @NonNull Optional<@NonNull String> getExternalId() { return document.findString("externalId"); }
+    public @NonNull Optional<@NonNull String> getExternalId() { return document.find("externalId").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue); }
     /** Returns the version entity tag.
      * @return the version
      * @since 1.0.0 */
@@ -139,7 +139,7 @@ public final class ScimResource {
     public @NonNull Optional<@NonNull Instant> getLastModified() { return metaString("lastModified").map(ScimResourceValidation::instant); }
     private @NonNull Optional<@NonNull String> metaString(@NonNull String name) {
         JsonValue meta = document.getMembers().get("meta");
-        return meta instanceof JsonObject object ? object.findString(name) : Optional.empty();
+        return meta instanceof JsonObject object ? object.find(name).filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue) : Optional.empty();
     }
     /** Returns a fixed redacted description.
      * @return the description

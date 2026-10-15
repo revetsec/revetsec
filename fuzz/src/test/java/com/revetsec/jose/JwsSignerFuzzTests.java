@@ -59,9 +59,9 @@ public class JwsSignerFuzzTests {
 			String[] parts = compact.split("\\.", -1); assertArrayEquals(original, M6FuzzOracle.decode(parts[1]));
 			assertTrue(M6FuzzOracle.decode(parts[0]).length <= 4096); assertTrue(compact.length() <= 65536);
 			JsonObject header = M6FuzzOracle.object(new String(M6FuzzOracle.decode(parts[0]), StandardCharsets.UTF_8));
-			assertEquals(type, header.findString("typ").orElseThrow()); assertEquals(algorithm.getWireValue(), header.findString("alg").orElseThrow());
-			assertEquals(Optional.ofNullable(kid), header.findString("kid"));
-			assertEquals(digest == null ? Optional.empty() : Optional.of(M6FuzzOracle.encode(digest)), header.findString("x5t#S256"));
+			assertEquals(type, header.find("typ").map(com.revetsec.json.JsonString.class::cast).map(com.revetsec.json.JsonString::getValue).orElseThrow()); assertEquals(algorithm.getWireValue(), header.find("alg").map(com.revetsec.json.JsonString.class::cast).map(com.revetsec.json.JsonString::getValue).orElseThrow());
+			assertEquals(Optional.ofNullable(kid), header.find("kid").map(com.revetsec.json.JsonString.class::cast).map(com.revetsec.json.JsonString::getValue));
+			assertEquals(digest == null ? Optional.empty() : Optional.of(M6FuzzOracle.encode(digest)), header.find("x5t#S256").map(com.revetsec.json.JsonString.class::cast).map(com.revetsec.json.JsonString::getValue));
 		} catch (IllegalArgumentException rejected) { assertFalse(grammar); }
 		catch (JwsSigningException rejected) {
 			assertTrue(!grammar || mismatch || exhausted); assertNull(rejected.getCause());

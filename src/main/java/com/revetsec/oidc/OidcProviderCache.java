@@ -256,8 +256,11 @@ final class OidcProviderCache<T> {
 		byte[] bytes = response.body();
 		try {
 			if (response.status() != 200)
-				throw OidcTransactionAccess.get().endpointStatusFailure(response.status(), RetryAfter.parse(response.headers(), this.clock.instant()).orElse(null));
-			OidcProviderMetadata metadata = OidcProviderMetadata.fromJson(this.issuer.toString(), StrictUtf8.decode(bytes), this.issuerPolicy);
+				throw OidcTransactionAccess.get().metadataStatusFailure(response.status(), RetryAfter.parse(response.headers(), this.clock.instant()).orElse(null));
+			OidcProviderMetadataParseResult parsed = OidcProviderMetadata.fromJsonResult(this.issuer.toString(), StrictUtf8.decode(bytes), this.issuerPolicy);
+			if (!(parsed instanceof OidcProviderMetadataParseResult.Succeeded success))
+				throw failure(((OidcProviderMetadataParseResult.Rejected) parsed).getReason());
+			OidcProviderMetadata metadata = success.getMetadata();
 			T checked = this.validate.apply(metadata);
 			Instant now = this.clock.instant();
 			Duration lifetime = CacheLifetime.timeToLive(response.headers(), now, this.minimumTtl, this.defaultTtl, this.maximumTtl);

@@ -16,7 +16,6 @@
 
 package com.revetsec.oauth;
 
-import com.revetsec.ErrorCategory;
 import com.revetsec.testing.RewindableClock;
 import org.junit.jupiter.api.Test;
 import org.jspecify.annotations.NonNull;
@@ -51,14 +50,11 @@ final class PendingAuthorizationStoreTests {
 		InMemoryPendingAuthorizationStore store = InMemoryPendingAuthorizationStore.builder()
 				.maximumLiveEntries(16).clock(clock).build();
 		for (int i = 0; i < 16; i++)
-			store.save("browser", "state-" + i, "record", START.plusSeconds(60));
-		PendingAuthorizationStoreException full = assertThrows(PendingAuthorizationStoreException.class,
-				() -> store.save("browser", "overflow", "record", START.plusSeconds(60)));
-		assertEquals(OAuthException.Reason.CAPACITY_EXCEEDED, full.getReason());
-		assertEquals(ErrorCategory.CONFIGURATION, full.getCategory());
-		assertFalse(full.isTransient());
+			org.junit.jupiter.api.Assertions.assertEquals(com.revetsec.oauth.PendingAuthorizationSaveResult.SAVED, store.save("browser", "state-" + i, "record", START.plusSeconds(60)));
+		assertEquals(PendingAuthorizationSaveResult.CAPACITY_REFUSED,
+				store.save("browser", "overflow", "record", START.plusSeconds(60)));
 		assertEquals("record", store.consume("browser", "state-0").orElseThrow());
-		store.save("browser", "replacement", "record", START.plusSeconds(60));
+		org.junit.jupiter.api.Assertions.assertEquals(com.revetsec.oauth.PendingAuthorizationSaveResult.SAVED, store.save("browser", "replacement", "record", START.plusSeconds(60)));
 	}
 
 	@Test
@@ -67,13 +63,13 @@ final class PendingAuthorizationStoreTests {
 				.maximumChargedBytes(64L * 1_024).maximumOpaqueRecordBytes(64 * 1_024)
 				.clock(RewindableClock.fromInstant(START)).build();
 		String record = "€".repeat(13_000); // 39,000 UTF-8 bytes, 13,000 UTF-16 units.
-		store.save("binding", "a", record, START.plusSeconds(60));
-		assertThrows(IllegalArgumentException.class,
-				() -> store.save("binding", "a", "other", START.plusSeconds(60)));
-		assertThrows(PendingAuthorizationStoreException.class,
-				() -> store.save("binding", "b", record, START.plusSeconds(60)));
-		assertThrows(IllegalArgumentException.class,
-				() -> store.save("binding", "c", "x".repeat(65_537), START.plusSeconds(60)));
+		org.junit.jupiter.api.Assertions.assertEquals(com.revetsec.oauth.PendingAuthorizationSaveResult.SAVED, store.save("binding", "a", record, START.plusSeconds(60)));
+		assertEquals(PendingAuthorizationSaveResult.ALREADY_PRESENT,
+				store.save("binding", "a", "other", START.plusSeconds(60)));
+		assertEquals(PendingAuthorizationSaveResult.CAPACITY_REFUSED,
+				store.save("binding", "b", record, START.plusSeconds(60)));
+		assertEquals(PendingAuthorizationSaveResult.CAPACITY_REFUSED,
+				store.save("binding", "c", "x".repeat(65_537), START.plusSeconds(60)));
 		assertEquals(record, store.consume("binding", "a").orElseThrow());
 	}
 
@@ -81,12 +77,11 @@ final class PendingAuthorizationStoreTests {
 	void expiryIsExactAndNeverExtendedByStore() {
 		RewindableClock clock = RewindableClock.fromInstant(START);
 		InMemoryPendingAuthorizationStore store = InMemoryPendingAuthorizationStore.builder().clock(clock).build();
-		assertThrows(IllegalArgumentException.class,
-				() -> store.save("b", "past", "r", START));
+		assertEquals(PendingAuthorizationSaveResult.UNAVAILABLE, store.save("b", "past", "r", START));
 		assertThrows(IllegalArgumentException.class,
 				() -> store.save("b", "future", "r", START.plus(Duration.ofMinutes(60)).plusNanos(1)));
-		store.save("b", "one", "r", START.plus(Duration.ofMinutes(1)));
-		store.save("b", "sixty", "r", START.plus(Duration.ofMinutes(60)));
+		org.junit.jupiter.api.Assertions.assertEquals(com.revetsec.oauth.PendingAuthorizationSaveResult.SAVED, store.save("b", "one", "r", START.plus(Duration.ofMinutes(1))));
+		org.junit.jupiter.api.Assertions.assertEquals(com.revetsec.oauth.PendingAuthorizationSaveResult.SAVED, store.save("b", "sixty", "r", START.plus(Duration.ofMinutes(60))));
 		clock.advance(Duration.ofMinutes(1));
 		assertTrue(store.consume("b", "one").isEmpty());
 		assertEquals("r", store.consume("b", "sixty").orElseThrow());
@@ -96,16 +91,16 @@ final class PendingAuthorizationStoreTests {
 	void observedExpiryCannotReanimateAfterClockRollback() {
 		RewindableClock clock = RewindableClock.fromInstant(START);
 		InMemoryPendingAuthorizationStore store = InMemoryPendingAuthorizationStore.builder().clock(clock).build();
-		store.save("browser", "state", "record", START.plusSeconds(60));
+		org.junit.jupiter.api.Assertions.assertEquals(com.revetsec.oauth.PendingAuthorizationSaveResult.SAVED, store.save("browser", "state", "record", START.plusSeconds(60)));
 		clock.advance(Duration.ofSeconds(60));
 		assertTrue(store.consume("other-browser", "state").isEmpty());
-		assertThrows(IllegalArgumentException.class,
-				() -> store.save("browser", "expired-save", "record", START.plusSeconds(60)));
+		assertEquals(PendingAuthorizationSaveResult.UNAVAILABLE,
+				store.save("browser", "expired-save", "record", START.plusSeconds(60)));
 		clock.advance(Duration.ofSeconds(-60));
 		assertTrue(store.consume("browser", "state").isEmpty());
-		assertThrows(IllegalArgumentException.class,
-				() -> store.save("browser", "new-state", "record", START.plusSeconds(30)));
-		store.save("browser", "new-state", "record", START.plusSeconds(120));
+		assertEquals(PendingAuthorizationSaveResult.UNAVAILABLE,
+				store.save("browser", "new-state", "record", START.plusSeconds(30)));
+		org.junit.jupiter.api.Assertions.assertEquals(com.revetsec.oauth.PendingAuthorizationSaveResult.SAVED, store.save("browser", "new-state", "record", START.plusSeconds(120)));
 		assertEquals("record", store.consume("browser", "new-state").orElseThrow());
 	}
 
@@ -113,7 +108,7 @@ final class PendingAuthorizationStoreTests {
 	void concurrentConsumeReturnsRecordOnce() throws Exception {
 		InMemoryPendingAuthorizationStore store = InMemoryPendingAuthorizationStore.builder()
 				.clock(RewindableClock.fromInstant(START)).build();
-		store.save("browser", "state", "record", START.plusSeconds(60));
+		org.junit.jupiter.api.Assertions.assertEquals(com.revetsec.oauth.PendingAuthorizationSaveResult.SAVED, store.save("browser", "state", "record", START.plusSeconds(60)));
 		int callers = 32;
 		CountDownLatch start = new CountDownLatch(1);
 		ExecutorService executor = Executors.newFixedThreadPool(callers);
@@ -139,13 +134,12 @@ final class PendingAuthorizationStoreTests {
 	void exhaustedBudgetCannotSaveOrConsumeAnExistingRecord() {
 		InMemoryPendingAuthorizationStore store = InMemoryPendingAuthorizationStore.builder()
 				.clock(RewindableClock.fromInstant(START)).build();
-		store.save("browser", "state", "record", START.plusSeconds(60), Duration.ofSeconds(2));
+		org.junit.jupiter.api.Assertions.assertEquals(com.revetsec.oauth.PendingAuthorizationSaveResult.SAVED, store.save("browser", "state", "record", START.plusSeconds(60), Duration.ofSeconds(2)));
 		assertEquals(OAuthException.Reason.PENDING_AUTHORIZATION_STORE_UNAVAILABLE,
 				assertThrows(PendingAuthorizationStoreException.class, () -> store.consume("browser", "state", Duration.ZERO)).getReason());
 		assertEquals("record", store.consume("browser", "state", Duration.ofSeconds(2)).orElseThrow());
-		assertEquals(OAuthException.Reason.PENDING_AUTHORIZATION_STORE_UNAVAILABLE,
-				assertThrows(PendingAuthorizationStoreException.class, () -> store.save(
-					"browser", "next", "record", START.plusSeconds(60), Duration.ZERO)).getReason());
+		assertEquals(PendingAuthorizationSaveResult.UNAVAILABLE, store.save(
+					"browser", "next", "record", START.plusSeconds(60), Duration.ZERO));
 		assertTrue(store.consume("browser", "next", Duration.ofSeconds(2)).isEmpty());
 	}
 
@@ -155,14 +149,12 @@ final class PendingAuthorizationStoreTests {
 		InMemoryPendingAuthorizationStore store = InMemoryPendingAuthorizationStore.builder()
 				.maximumChargedBytes(65_536L).maximumOpaqueRecordBytes(65_536).clock(clock).build();
 		String record = "x".repeat(65_533); // bb + s + record is exactly 65,536 UTF-8 bytes.
-		store.save("bb", "s", record, START.plusSeconds(60));
-		assertEquals(OAuthException.Reason.CAPACITY_EXCEEDED,
-				assertThrows(PendingAuthorizationStoreException.class,
-						() -> store.save("b", "x", "r", START.plusSeconds(60))).getReason());
+		org.junit.jupiter.api.Assertions.assertEquals(com.revetsec.oauth.PendingAuthorizationSaveResult.SAVED, store.save("bb", "s", record, START.plusSeconds(60)));
+		assertEquals(PendingAuthorizationSaveResult.CAPACITY_REFUSED, store.save("b", "x", "r", START.plusSeconds(60)));
 		assertEquals(record, store.consume("bb", "s").orElseThrow());
-		store.save("bb", "s", record, START.plusSeconds(60));
+		org.junit.jupiter.api.Assertions.assertEquals(com.revetsec.oauth.PendingAuthorizationSaveResult.SAVED, store.save("bb", "s", record, START.plusSeconds(60)));
 		clock.advance(Duration.ofSeconds(60));
-		store.save("bb", "s", record, START.plusSeconds(120));
+		org.junit.jupiter.api.Assertions.assertEquals(com.revetsec.oauth.PendingAuthorizationSaveResult.SAVED, store.save("bb", "s", record, START.plusSeconds(120)));
 		assertEquals(record, store.consume("bb", "s").orElseThrow());
 	}
 
@@ -200,7 +192,7 @@ final class PendingAuthorizationStoreTests {
 		AtomicReference<PendingAuthorizationStoreException> waitingFailure = new AtomicReference<>();
 		AtomicBoolean restored = new AtomicBoolean();
 		Thread holder = new Thread(() -> {
-			try { store.save("browser", "state", "record", START.plusSeconds(60), Duration.ofSeconds(5)); }
+			try { org.junit.jupiter.api.Assertions.assertEquals(com.revetsec.oauth.PendingAuthorizationSaveResult.SAVED, store.save("browser", "state", "record", START.plusSeconds(60), Duration.ofSeconds(5))); }
 			catch (Throwable failure) { holderFailure.set(failure); }
 		});
 		Thread waiting = new Thread(() -> {

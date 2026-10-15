@@ -18,8 +18,8 @@ package com.revetsec.jose;
 
 import org.jspecify.annotations.NonNull;
 
-import com.revetsec.testing.TestJsonWebKeys;
-import com.revetsec.testing.TestJsonWebKeys.Fixture;
+import com.revetsec.testing.TestJwk;
+import com.revetsec.testing.TestJwk.Fixture;
 import com.revetsec.testing.TestJws;
 import com.revetsec.testing.TestJws.Algorithm;
 import com.revetsec.testing.TestJws.Variant;
@@ -36,7 +36,7 @@ import java.util.Set;
 import java.util.stream.Stream;
 
 /**
- * {@link JwtValidator#validate(String)} on the token's form and JOSE header (plan "JOSE semantics", steps 1 to 4,
+ * {@link JwtValidator#validateResult(String)} on the token's form and JOSE header (plan "JOSE semantics", steps 1 to 4,
  * P1 to P8; RFC 7515 sections 2, 4, 5.2 and 7; RFC 8725 sections 3.7, 3.10 and 3.11): each refusal through the leaf
  * exception its reason belongs to, before any key is used.
  *
@@ -165,8 +165,8 @@ final class JwtValidatorHeaderTests {
 		cases.put(JoseException.Reason.COMPRESSED_PAYLOAD, JwtFixtures.token(Algorithm.RS256).headerMember("zip",
 				"\"DEF\""));
 
-		cases.forEach((reason, builder) -> Assertions.assertInstanceOf(UnsupportedJoseFeatureException.class,
-				JwtFixtures.assertRejected(reason, VALIDATOR, builder.sign(Fixture.IDP_SIGNING_RSA_2048.getPrivateKey()))));
+		cases.forEach((reason, builder) -> JwtFixtures.assertRejected(reason, VALIDATOR,
+				builder.sign(Fixture.IDP_SIGNING_RSA_2048.getPrivateKey())));
 		JwtFixtures.assertRejected(JoseException.Reason.CRITICAL_HEADER, VALIDATOR, JwtFixtures.token(Algorithm.RS256)
 				.headerMember("crit", "[\"b64\"]").headerMember("b64", "false").sign(
 						Fixture.IDP_SIGNING_RSA_2048.getPrivateKey()));
@@ -178,7 +178,7 @@ final class JwtValidatorHeaderTests {
 	@Test
 	void keysAndKeyLocationsInTheHeaderAreNeverTrusted() {
 		Fixture attacker = Fixture.NEGATIVE_ATTACKER_RSA_2048;
-		String attackerJwk = TestJsonWebKeys.withFixture(attacker).kid(JwtFixtures.KID).toJson();
+		String attackerJwk = TestJwk.withFixture(attacker).kid(JwtFixtures.KID).toJson();
 
 		for (Map.Entry<String, String> member : List.of(Map.entry("jwk", attackerJwk),
 				Map.entry("jku", "\"https://idp.example.com/.well-known/jwks.json\""),

@@ -260,7 +260,7 @@
 			</testResource>
 			<testResource>
 				<directory>${revetsec.core.basedir}/src/test/resources/com/revetsec/internal/json/corpus</directory>
-				<targetPath>com/revetsec/internal/jose/JsonWebKeyFuzzTestsInputs/keySetDocumentsSkipExactlyTheKeysAnIndependentOracleRefuses</targetPath>
+				<targetPath>com/revetsec/internal/jose/JwkFuzzTestsInputs/keySetDocumentsSkipExactlyTheKeysAnIndependentOracleRefuses</targetPath>
 				<includes>
 					<include>parse/**</include>
 					<include>round-trip/**</include>
@@ -268,14 +268,14 @@
 			</testResource>
 			<testResource>
 				<directory>${revetsec.core.basedir}/src/test/resources/vectors/jsontestsuite/test_parsing</directory>
-				<targetPath>com/revetsec/internal/jose/JsonWebKeyFuzzTestsInputs/keySetDocumentsSkipExactlyTheKeysAnIndependentOracleRefuses/jsontestsuite</targetPath>
+				<targetPath>com/revetsec/internal/jose/JwkFuzzTestsInputs/keySetDocumentsSkipExactlyTheKeysAnIndependentOracleRefuses/jsontestsuite</targetPath>
 				<includes>
 					<include>*.json</include>
 				</includes>
 			</testResource>
 			<testResource>
 				<directory>${revetsec.core.basedir}/src/test/resources/com/revetsec/jose/entra/2026-09-27</directory>
-				<targetPath>com/revetsec/internal/jose/JsonWebKeyFuzzTestsInputs/keySetDocumentsSkipExactlyTheKeysAnIndependentOracleRefuses/entra</targetPath>
+				<targetPath>com/revetsec/internal/jose/JwkFuzzTestsInputs/keySetDocumentsSkipExactlyTheKeysAnIndependentOracleRefuses/entra</targetPath>
 				<includes>
 					<include>*-keys.json</include>
 				</includes>

@@ -171,8 +171,8 @@ public final class PostgresqlIssuerApplicationProbe {
     private static @NonNull String token(@NonNull IssuerResources app,@NonNull Map<@NonNull String,@NonNull String> fields) {
         byte[] body=form(fields).getBytes(StandardCharsets.UTF_8);
         Request request=Request.withRawUrl(HttpMethod.POST,"/token")
-                .headers(Map.of("Host",Set.of(app.config.origin.getRawAuthority()),
-                        "Content-Type",Set.of("application/x-www-form-urlencoded")))
+                .headers(Map.of("Host",List.of(app.config.origin.getRawAuthority()),
+                        "Content-Type",List.of("application/x-www-form-urlencoded")))
                 .body(body).build();
         MarshaledResponse response=app.token(request);
         if(response.getStatusCode()!=200)return "REJECTED";
@@ -203,8 +203,8 @@ public final class PostgresqlIssuerApplicationProbe {
             }
             case "established-active" -> {
                 IssuerResources app=app(IssuerResources.StartupMode.ESTABLISHED,false);
-                var status=app.server.validateAccessTokenResult(BearerToken.fromAuthorizationHeaderValues(
-                        List.of("Bearer "+args[1])).orElseThrow(),app.config.resource.toString());
+                var status=app.server.validateAccessTokenResult(((com.revetsec.oauth.BearerTokenResult.Present) BearerToken.fromAuthorizationHeaderValuesResult(
+                        List.of("Bearer "+args[1]))).getToken(),app.config.resource.toString());
                 System.out.println(status instanceof OAuthIssuerAccessTokenResult.Succeeded?"ACTIVE":"INACTIVE");
             }
             case "established-refresh" -> {
@@ -230,7 +230,7 @@ public final class PostgresqlIssuerApplicationProbe {
             case "browser-claim","browser-pending" -> {
                 IssuerResources app=app(IssuerResources.StartupMode.ESTABLISHED,false);
                 Request request=Request.withRawUrl(HttpMethod.GET,"/")
-                        .headers(Map.of("Cookie",Set.of("RevetsecIssuerDev="+args[1]))).build();
+                        .headers(Map.of("Cookie",List.of("RevetsecIssuerDev="+args[1]))).build();
                 BrowserSessions.Session session=app.sessions.find(request).orElseThrow();
                 BrowserSessions.Pending selected=session.pending.get();
                 if(args[0].equals("browser-pending")) {

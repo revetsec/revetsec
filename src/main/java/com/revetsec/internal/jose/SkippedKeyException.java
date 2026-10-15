@@ -16,7 +16,7 @@
 
 package com.revetsec.internal.jose;
 
-import com.revetsec.jose.JsonWebKeySkipReason;
+import com.revetsec.jose.JwkSkipReason;
 import org.jspecify.annotations.NonNull;
 
 import javax.annotation.concurrent.NotThreadSafe;
@@ -24,7 +24,7 @@ import javax.annotation.concurrent.NotThreadSafe;
 import static java.util.Objects.requireNonNull;
 
 /**
- * Checked refusal of one JWK by {@link JwkParser}: the key is skipped with a {@link JsonWebKeySkipReason}, and the
+ * Checked refusal of one JWK by {@link JwkParser}: the key is skipped with a {@link JwkSkipReason}, and the
  * rest of its key set is still used (RFC 7517 section 5).
  * <p>
  * The message names only the reason, never the key. It has no cause, suppression is disabled, and it records no
@@ -40,14 +40,14 @@ public final class SkippedKeyException extends Exception {
 	 * Why the key is skipped.
 	 */
 	@NonNull
-	private final JsonWebKeySkipReason reason;
+	private final JwkSkipReason reason;
 
 	/**
 	 * Creates a refusal for {@code reason}.
 	 *
 	 * @param reason why the key is skipped
 	 */
-	SkippedKeyException(@NonNull JsonWebKeySkipReason reason) {
+	SkippedKeyException(@NonNull JwkSkipReason reason) {
 		super("A JSON Web Key was skipped: " + requireNonNull(reason).name() + ".", null, false, false);
 		this.reason = reason;
 	}
@@ -58,7 +58,7 @@ public final class SkippedKeyException extends Exception {
 	 * @return the skip reason
 	 */
 	@NonNull
-	public JsonWebKeySkipReason getReason() {
+	public JwkSkipReason getReason() {
 		return this.reason;
 	}
 }

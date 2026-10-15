@@ -47,7 +47,7 @@ class ScimM10ResourceWorkTests {
             if (create instanceof ScimResourceParseResult.Succeeded success) {
                 creationSucceeded=true;
                 assertEquals("new",ScimUser.fromResource(success.getResource()).getUserName());
-                assertEquals("Lovelace",((JsonObject)success.getResource().getDocument().find("name").orElseThrow()).findString("familyName").orElseThrow());
+                assertEquals("Lovelace",((JsonObject)success.getResource().getDocument().find("name").orElseThrow()).find("familyName").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow());
                 assertTrue(success.getResource().getId().isEmpty());
                 assertFalse(success.getResource().getDocument().getMembers().containsKey("meta"));
                 assertEquals(Set.of(path("userName"),path("active"),path("name.givenName"),path("name.familyName"),path("emails.value"),path("emails.primary"),path(ENTERPRISE+":department"),path(ENTERPRISE+":manager.value"),path(ENTERPRISE+":manager.$ref")),success.getSuppliedAttributePaths());
@@ -81,8 +81,8 @@ class ScimM10ResourceWorkTests {
             JsonArray items=(JsonArray)projected.find("items").orElseThrow();
             assertEquals(2,items.getElements().size());
             assertEquals(Set.of("value"),((JsonObject)items.getElements().get(0)).getMembers().keySet());
-            assertEquals("a",((JsonObject)items.getElements().get(0)).findString("value").orElseThrow());
-            assertEquals("b",((JsonObject)items.getElements().get(1)).findString("value").orElseThrow());
+            assertEquals("a",((JsonObject)items.getElements().get(0)).find("value").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow());
+            assertEquals("b",((JsonObject)items.getElements().get(1)).find("value").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow());
         }
         assertTrue(succeeded);
         ScimAttributeSelection includeParent=new ScimAttributeSelection(type,Set.of(path("items")),Set.of(),true,CONTEXT);
@@ -98,8 +98,8 @@ class ScimM10ResourceWorkTests {
         ScimResource current=trusted(type,"{\"schemas\":[\""+GROUP+"\"],\"displayName\":\"group\",\"members\":[{\"value\":\"one\",\"type\":\"User\",\"$ref\":\"Users/one\"},{\"value\":\"two\",\"type\":\"User\",\"$ref\":\"Users/two\"}]}");
         String body="{\"schemas\":[\""+GROUP+"\"],\"displayName\":\"group\",\"members\":[{\"value\":\"one\"},{\"value\":\"two\",\"type\":\"User\"}]}";
         ScimResource result=success(ScimResources.replace(type,current,parsed(body),ScimCompatibility.strictInstance(),ScimLimits.builder().build(),CONTEXT)).getResource();
-        assertEquals("User",ScimGroup.fromResource(result).getMembers().get(0).findString("type").orElseThrow());
-        assertEquals("Users/one",ScimGroup.fromResource(result).getMembers().get(0).findString("$ref").orElseThrow());
+        assertEquals("User",ScimGroup.fromResource(result).getMembers().get(0).find("type").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow());
+        assertEquals("Users/one",ScimGroup.fromResource(result).getMembers().get(0).find("$ref").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow());
         for (String member : new String[]{"{\"value\":\"one\",\"type\":null}","{\"value\":\"one\",\"type\":\"Group\"}","{\"value\":\"one\",\"$ref\":null}"})
             assertEquals(ScimErrorType.MUTABILITY,assertInstanceOf(ScimResourceParseResult.Rejected.class,ScimResources.replace(type,current,parsed("{\"schemas\":[\""+GROUP+"\"],\"displayName\":\"group\",\"members\":["+member+"]}"),ScimCompatibility.strictInstance(),ScimLimits.builder().build(),CONTEXT)).getError().getErrorType().orElseThrow());
         boolean succeeded=false;
@@ -122,7 +122,7 @@ class ScimM10ResourceWorkTests {
         assertEquals(ScimErrorType.MUTABILITY,assertInstanceOf(ScimResourceParseResult.Rejected.class,ScimResources.replace(type,old,clear,ScimCompatibility.strictInstance(),ScimLimits.builder().build(),CONTEXT)).getError().getErrorType().orElseThrow());
         JsonDocument keep=parsed("{\"schemas\":[\"urn:example:Two\"],\"first\":{},\"second\":{\"other\":null}}");
         ScimResource kept=success(ScimResources.replace(type,old,keep,ScimCompatibility.strictInstance(),ScimLimits.builder().build(),CONTEXT)).getResource();
-        assertEquals("immutable",((JsonObject)kept.getDocument().find("first").orElseThrow()).findString("longName").orElseThrow());
+        assertEquals("immutable",((JsonObject)kept.getDocument().find("first").orElseThrow()).find("longName").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow());
     }
 
     @Test void assignedImmutableValuesCompareEveryValueTypeAndPreserveServerChildrenBeforeComparison() {
@@ -137,7 +137,7 @@ class ScimM10ResourceWorkTests {
         ScimResource current=trusted(type,original);
         String same="{\"schemas\":[\"urn:example:Immutable\"],\"text\":\"a\",\"truth\":true,\"number\":1e0,\"tags\":[\"one\",\"two\"],\"object\":{\"one\":\"one\",\"flag\":true,\"server\":false}}";
         ScimResource result=success(ScimResources.replace(type,current,parsed(same),ScimCompatibility.strictInstance(),ScimLimits.builder().build(),CONTEXT)).getResource();
-        assertEquals("protected",((JsonObject)result.getDocument().find("object").orElseThrow()).findString("server").orElseThrow());
+        assertEquals("protected",((JsonObject)result.getDocument().find("object").orElseThrow()).find("server").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow());
         for (String changed : new String[]{same.replace("\"text\":\"a\"","\"text\":null"),same.replace("\"truth\":true","\"truth\":false"),same.replace("\"number\":1e0","\"number\":2"),same.replace("\"one\",\"two\"","\"two\",\"one\""),same.replace("\"one\",\"two\"","\"one\""),same.replace("\"flag\":true","\"flag\":false"),same.replace("\"one\":\"one\",","")})
             assertEquals(ScimErrorType.MUTABILITY,assertInstanceOf(ScimResourceParseResult.Rejected.class,ScimResources.replace(type,current,parsed(changed),ScimCompatibility.strictInstance(),ScimLimits.builder().build(),CONTEXT)).getError().getErrorType().orElseThrow());
         boolean succeeded=false;

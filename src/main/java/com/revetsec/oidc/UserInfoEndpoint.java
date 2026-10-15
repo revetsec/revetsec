@@ -51,11 +51,11 @@ final class UserInfoEndpoint {
 		try { return token.getAuthorizationHeaderValue(); }
 		catch (IllegalStateException invalid) { throw OidcValidationException.fromReason(OidcValidationException.Reason.USERINFO_ACCESS_TOKEN_INVALID); }
 	}
-	@NonNull OidcUserInfo fetch(@NonNull OidcProviderMetadata metadata, @NonNull JsonWebKeySource keys, @NonNull OidcAuthentication authentication,
+	@NonNull OidcUserInfo fetch(@NonNull OidcProviderMetadata metadata, @NonNull JwksSource keys, @NonNull OidcAuthentication authentication,
 			@NonNull String clientId, @Nullable JwsAlgorithm signedAlgorithm, @NonNull Duration skew, @NonNull Set<@NonNull String> trustedAudiences, @NonNull Deadline deadline) {
 		return fetch(metadata, keys, authentication, clientId, signedAlgorithm, skew, trustedAudiences, deadline, OidcIssuerPolicy.exactInstance());
 	}
-	@NonNull OidcUserInfo fetch(@NonNull OidcProviderMetadata metadata, @NonNull JsonWebKeySource keys, @NonNull OidcAuthentication authentication,
+	@NonNull OidcUserInfo fetch(@NonNull OidcProviderMetadata metadata, @NonNull JwksSource keys, @NonNull OidcAuthentication authentication,
 			@NonNull String clientId, @Nullable JwsAlgorithm signedAlgorithm, @NonNull Duration skew, @NonNull Set<@NonNull String> trustedAudiences, @NonNull Deadline deadline, @NonNull OidcIssuerPolicy issuerPolicy) {
 		URI uri = metadata.getUserInfoEndpoint().orElseThrow(() -> OidcValidationException.fromReason(OidcValidationException.Reason.USERINFO_ENDPOINT_UNAVAILABLE));
 		if (issuerPolicy.isMicrosoftEntra()) OidcIssuerPolicy.checkDeadline(deadline);

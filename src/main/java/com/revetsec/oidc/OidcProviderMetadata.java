@@ -26,6 +26,7 @@ import java.net.URI;
 import java.util.*;
 import static java.util.Objects.requireNonNull;
 import com.revetsec.oauth.AuthorizationServerMetadata;
+import com.revetsec.oauth.AuthorizationServerMetadataParseResult;
 import com.revetsec.oauth.OAuthException;
 import com.revetsec.internal.oauth.OidcTransactionAccess;
 import com.revetsec.internal.Limits;
@@ -75,9 +76,37 @@ public final class OidcProviderMetadata {
 	 * @return checked provider metadata, not authenticated identity
 	 * @since 1.0.0
 	 */
-	public static @NonNull OidcProviderMetadata fromJson(@NonNull String expectedIssuer, @NonNull String json) {
-		return fromJson(expectedIssuer, json, OidcIssuerPolicy.exactInstance());
+	public static @NonNull OidcProviderMetadataParseResult fromJsonResult(@NonNull String expectedIssuer, @NonNull String json) {
+		return fromJsonResult(expectedIssuer, json, OidcIssuerPolicy.exactInstance());
 	}
+	/**
+	 * Parses bounded metadata using the configured issuer policy and reports document rejection as a value.
+	 * @param expectedIssuer configured trust issuer
+	 * @param json metadata JSON text
+	 * @param issuerPolicy selected issuer policy
+	 * @return the metadata parsing outcome
+	 * @throws NullPointerException if an argument is null
+	 * @since 1.0.0
+	 */
+	@CheckReturnValue
+	public static @NonNull OidcProviderMetadataParseResult fromJsonResult(@NonNull String expectedIssuer,
+			@NonNull String json, @NonNull OidcIssuerPolicy issuerPolicy) {
+		requireNonNull(expectedIssuer); requireNonNull(json); requireNonNull(issuerPolicy);
+		issuerPolicy.checkConfiguredIssuer(expectedIssuer);
+		try { return OidcProviderMetadataParseResult.succeeded(parse(expectedIssuer, json, issuerPolicy)); }
+		catch (OAuthException rejected) {
+			if (rejected.getReason() != OAuthException.Reason.DOCUMENT_MALFORMED
+					&& rejected.getReason() != OAuthException.Reason.ISSUER_MISMATCH) throw rejected;
+			return OidcProviderMetadataParseResult.rejected(rejected.getReason());
+		}
+	}
+
+	private static @NonNull AuthorizationServerMetadata oauthMetadata(@NonNull String expectedIssuer, @NonNull String json) {
+		AuthorizationServerMetadataParseResult result = AuthorizationServerMetadata.fromJsonResult(expectedIssuer, json);
+		if (result instanceof AuthorizationServerMetadataParseResult.Succeeded success) return success.getMetadata();
+		throw OidcTransactionAccess.get().endpointFailure(((AuthorizationServerMetadataParseResult.Rejected) result).getReason());
+	}
+
 	/**
 	 * Parses bounded metadata using exact issuer validation or the selected fixed Entra template.
 	 * getIssuer retains configured trust; getAdvertisedIssuer retains the received issuer string.
@@ -89,10 +118,10 @@ public final class OidcProviderMetadata {
 	 * @since 1.0.0
 	 */
 	@CheckReturnValue
-	public static @NonNull OidcProviderMetadata fromJson(@NonNull String expectedIssuer, @NonNull String json, @NonNull OidcIssuerPolicy issuerPolicy) {
+	private static @NonNull OidcProviderMetadata parse(@NonNull String expectedIssuer, @NonNull String json, @NonNull OidcIssuerPolicy issuerPolicy) {
 		requireNonNull(expectedIssuer); requireNonNull(json); requireNonNull(issuerPolicy);
 		issuerPolicy.checkConfiguredIssuer(expectedIssuer);
-		@Nullable AuthorizationServerMetadata exact = issuerPolicy.isMicrosoftEntra() ? null : AuthorizationServerMetadata.fromJson(expectedIssuer, json);
+		@Nullable AuthorizationServerMetadata exact = issuerPolicy.isMicrosoftEntra() ? null : oauthMetadata(expectedIssuer, json);
 		byte @Nullable [] bytes = null;
 		try {
 			bytes = StrictUtf8.encode(json);
@@ -106,7 +135,7 @@ public final class OidcProviderMetadata {
 				JsonObject.Builder projection = JsonObject.builder();
 				for (Map.Entry<String, JsonValue> member : members.entrySet())
 					if (!member.getKey().equals("issuer")) projection = projection.put(member.getKey(), member.getValue());
-				oauth = AuthorizationServerMetadata.fromJson(expectedIssuer, projection.put("issuer", expectedIssuer).build().toJson());
+				oauth = oauthMetadata(expectedIssuer, projection.put("issuer", expectedIssuer).build().toJson());
 			} else oauth = requireNonNull(exact);
 			URI jwks = URI.create(requiredString(members, "jwks_uri"));
 			URI userInfo = members.containsKey("userinfo_endpoint") ? URI.create(requiredString(members, "userinfo_endpoint")) : null;

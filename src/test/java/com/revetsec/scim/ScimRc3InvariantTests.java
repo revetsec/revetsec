@@ -81,7 +81,7 @@ class ScimRc3InvariantTests {
                 "{\"op\":\"add\",\"path\":\"members\",\"value\":[{\"value\":\"two\"}]},"
                         +"{\"op\":\"replace\",\"path\":\"id\",\"value\":\"forged\"}")).getPatchRequest();
         assertInstanceOf(ScimPatchApplicationResult.Rejected.class,provider.applyPatchResult(current,patch));
-        assertSame(before,current.getDocument()); assertEquals("one",ScimGroup.fromResource(current).getMembers().get(0).findString("value").orElseThrow());
+        assertSame(before,current.getDocument()); assertEquals("one",ScimGroup.fromResource(current).getMembers().get(0).find("value").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow());
     }
     @Test void invM3ReadOnlyServerIdDoesNotBecomeAnExternalIdentityMapping() {
         ScimServiceProvider provider=provider();

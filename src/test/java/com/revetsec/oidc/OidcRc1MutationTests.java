@@ -16,15 +16,21 @@
 
 package com.revetsec.oidc;
 
+import com.revetsec.oauth.PendingAuthorizationSaveResult;
+
+import com.revetsec.oauth.AuthorizationResponseParseResult;
+
+import com.revetsec.jose.JwksParseResult;
+
 import com.revetsec.OutboundUriPolicy;
 import com.revetsec.internal.http.Deadline;
 import com.revetsec.internal.http.HttpExchange;
 import com.revetsec.internal.oauth.OidcTransactionAccess;
 import com.revetsec.internal.encoding.QueryParameters;
-import com.revetsec.jose.JsonWebKeySet;
+import com.revetsec.jose.Jwks;
 import com.revetsec.jose.JwsAlgorithm;
-import com.revetsec.jose.RemoteJsonWebKeySource;
-import com.revetsec.jose.StaticJsonWebKeySource;
+import com.revetsec.jose.RemoteJwksSource;
+import com.revetsec.jose.StaticJwksSource;
 import com.revetsec.oauth.OAuthEndpoint;
 import com.revetsec.oauth.OAuthException;
 import com.revetsec.oauth.AuthorizationRedirect;
@@ -33,7 +39,7 @@ import com.revetsec.oauth.InMemoryPendingAuthorizationStore;
 import com.revetsec.oauth.PendingAuthorizationSource;
 import com.revetsec.testing.JsonText;
 import com.revetsec.testing.TestHttpsServer;
-import com.revetsec.testing.TestJsonWebKeys;
+import com.revetsec.testing.TestJwk;
 import com.revetsec.testing.TestJws;
 import com.revetsec.testing.TestTls;
 import com.revetsec.testing.TestClock;
@@ -95,7 +101,7 @@ final class OidcRc1MutationTests {
             predicates.incrementAndGet();
             return true;
         });
-        StaticJsonWebKeySource keys = StaticJsonWebKeySource.fromJsonWebKeySet(JsonWebKeySet.fromJson(keySet(false)));
+        StaticJwksSource keys = StaticJwksSource.fromJwks(assertInstanceOf(JwksParseResult.Succeeded.class, Jwks.fromJsonResult(keySet(false))).getJwks());
         assertThrows(IllegalArgumentException.class, () -> new IdTokenValidator(EXACT, "client", keys,
                 Set.of(JwsAlgorithm.RS256), Set.of(), Set.of(), Duration.ZERO, Duration.ofMinutes(5),
                 CLOCK, OidcObserver.disabledInstance(), false, policy));
@@ -112,7 +118,7 @@ final class OidcRc1MutationTests {
             try (TestHttpsServer server = TestHttpsServer.start()) {
                 server.script("/jwks", TestHttpsServer.Script.fromResponse(TestHttpsServer.Response.withStatus(200)
                         .header("Content-Type", "application/json").body(keySet(entra)).build()));
-                RemoteJsonWebKeySource keys = RemoteJsonWebKeySource.withUri(server.uri("/jwks"))
+                RemoteJwksSource keys = RemoteJwksSource.withUri(server.uri("/jwks"))
                         .httpClient(TestTls.httpClient()).build();
                 AtomicInteger predicates = new AtomicInteger();
                 OidcIssuerPolicy policy = entra ? OidcIssuerPolicy.fromMicrosoftEntraMultiTenant(tenant -> {
@@ -437,7 +443,7 @@ final class OidcRc1MutationTests {
                 .jwksUri(URI.create(EXACT + "/jwks")).build();
         OidcClient client = OidcClient.withProviderMetadata(metadata).clientId("client")
                 .redirectUri(URI.create("https://rp.example/callback")).clock(CLOCK)
-                .jsonWebKeySource(StaticJsonWebKeySource.fromJsonWebKeySet(JsonWebKeySet.fromJson(keySet(false)))).build();
+                .jwksSource(StaticJwksSource.fromJwks(assertInstanceOf(JwksParseResult.Succeeded.class, Jwks.fromJsonResult(keySet(false))).getJwks())).build();
         AuthorizationRedirect first = onFreshCaller(client::beginAuthentication);
         AuthorizationRedirect second = onFreshCaller(client::beginAuthentication);
         assertEquals(EXACT, first.getPendingAuthorization().getIssuer());
@@ -482,13 +488,13 @@ final class OidcRc1MutationTests {
                     TestHttpsServer.Response.withStatus(200).header("Content-Type", "application/json")
                             .body(metadata(server, server.uri("/token-two"), server.uri("/jwks"))).build())));
             OidcClient client = lazyClient(server, clock)
-                    .jsonWebKeySource(StaticJsonWebKeySource.fromJsonWebKeySet(JsonWebKeySet.fromJson(keySet(false)))).build();
+                    .jwksSource(StaticJwksSource.fromJwks(assertInstanceOf(JwksParseResult.Succeeded.class, Jwks.fromJsonResult(keySet(false))).getJwks())).build();
             AuthorizationRedirect redirect = client.beginAuthentication();
             InMemoryPendingAuthorizationStore store = InMemoryPendingAuthorizationStore.builder().clock(clock).build();
-            redirect.getPendingAuthorization().saveTo(store, "TEST-ONLY-browser");
+            org.junit.jupiter.api.Assertions.assertEquals(PendingAuthorizationSaveResult.SAVED, redirect.getPendingAuthorization().saveToResult(store, "TEST-ONLY-browser"));
             String state = QueryParameters.parse(redirect.getAuthorizationUri().getRawQuery()).getValues("state").get(0);
-            AuthorizationResponse callback = AuthorizationResponse.fromQueryString("code=TEST-ONLY-code&state=" + state
-                    + "&iss=" + URLEncoder.encode(server.uri("/tenant/").toString(), StandardCharsets.UTF_8));
+            AuthorizationResponse callback = assertInstanceOf(AuthorizationResponseParseResult.Succeeded.class, AuthorizationResponse.fromQueryStringResult("code=TEST-ONLY-code&state=" + state
+                    + "&iss=" + URLEncoder.encode(server.uri("/tenant/").toString(), StandardCharsets.UTF_8))).getResponse();
             clock.advance(Duration.ofSeconds(31));
             assertEquals(OAuthException.Reason.METADATA_ENDPOINT_DRIFT, assertThrows(OAuthException.class,
                     () -> client.completeAuthenticationResult(callback, PendingAuthorizationSource.fromStore(store, "TEST-ONLY-browser"),
@@ -501,14 +507,13 @@ final class OidcRc1MutationTests {
 
     @Test
     void storedReferenceVersionIsCheckedAndItsOriginalClaimsSurviveTheRefreshShortcut() {
-        OidcSessionReference reference = OidcSessionReference.fromSerializedForm(serializedReference("1"));
-        assertEquals(EXACT, reference.continuityClaims().findString("iss").orElseThrow());
-        assertEquals("subject", reference.continuityClaims().findString("sub").orElseThrow());
+        OidcSessionReference reference = assertInstanceOf(OidcSessionReferenceParseResult.Succeeded.class, OidcSessionReference.fromSerializedFormResult(serializedReference("1"))).getReference();
+        assertEquals(EXACT, reference.continuityClaims().find("iss").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow());
+        assertEquals("subject", reference.continuityClaims().find("sub").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow());
         for (String version : List.of("0", "-1", "2"))
-            assertEquals(OidcValidationException.Reason.SESSION_REFERENCE_INVALID, assertThrows(OidcValidationException.class,
-                    () -> OidcSessionReference.fromSerializedForm(serializedReference(version))).getReason());
+            assertEquals(OidcValidationException.Reason.SESSION_REFERENCE_INVALID, assertInstanceOf(OidcSessionReferenceParseResult.Rejected.class, OidcSessionReference.fromSerializedFormResult(serializedReference(version))).getReason());
         IdTokenValidator validator = new IdTokenValidator(EXACT, "client",
-                StaticJsonWebKeySource.fromJsonWebKeySet(JsonWebKeySet.fromJson(keySet(false))), Set.of(JwsAlgorithm.RS256),
+                StaticJwksSource.fromJwks(assertInstanceOf(JwksParseResult.Succeeded.class, Jwks.fromJsonResult(keySet(false))).getJwks()), Set.of(JwsAlgorithm.RS256),
                 Set.of(), Set.of(), Duration.ZERO, Duration.ofMinutes(5), CLOCK);
         String compact = token(false);
         IdToken refreshed = validator.validateRefresh(compact, reference, "TEST-ONLY-access", Set.of(),
@@ -516,8 +521,8 @@ final class OidcRc1MutationTests {
         assertEquals("subject", refreshed.getClaims().getSubject().orElseThrow());
         assertEquals(compact, refreshed.toCompactSerialization());
         assertEquals("subject", UserInfoValidator.signed(compact, EXACT, "client", "subject", JwsAlgorithm.RS256,
-                StaticJsonWebKeySource.fromJsonWebKeySet(JsonWebKeySet.fromJson(keySet(false))), Duration.ZERO, CLOCK,
-                OidcObserver.disabledInstance(), Set.of(), Deadline.fromNow(Duration.ofSeconds(2))).findString("sub").orElseThrow());
+                StaticJwksSource.fromJwks(assertInstanceOf(JwksParseResult.Succeeded.class, Jwks.fromJsonResult(keySet(false))).getJwks()), Duration.ZERO, CLOCK,
+                OidcObserver.disabledInstance(), Set.of(), Deadline.fromNow(Duration.ofSeconds(2))).find("sub").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow());
     }
 
     @Test
@@ -566,8 +571,7 @@ final class OidcRc1MutationTests {
         assertEquals(Set.of("private_key_jwt"), metadata.oauthMetadata().getTokenEndpointAuthMethodsSupported().orElseThrow());
         assertEquals(Set.of("private_key_jwt"), metadata.getIntrospectionEndpointAuthMethodsSupported().orElseThrow());
         OidcIssuerPolicy policy = OidcIssuerPolicy.fromMicrosoftEntraMultiTenant(tenant -> true);
-        assertEquals(OAuthException.Reason.DOCUMENT_MALFORMED, assertThrows(OAuthException.class,
-                () -> OidcProviderMetadata.fromJson(COMMON, "\ud800", policy)).getReason());
+        assertEquals(OAuthException.Reason.DOCUMENT_MALFORMED, assertInstanceOf(OidcProviderMetadataParseResult.Rejected.class, OidcProviderMetadata.fromJsonResult(COMMON, "\ud800", policy)).getReason());
     }
 
     @TestFactory
@@ -600,10 +604,10 @@ final class OidcRc1MutationTests {
                 long started = System.nanoTime();
                 if (fails) {
                     OAuthException failure = assertThrows(OAuthException.class,
-                            () -> authenticated.client().fetchUserInfo(authenticated.authentication()));
+                            () -> authenticated.client().fetchUserInfoResult(authenticated.authentication()));
                     assertSame(failure, observedFailure.get());
                 } else {
-                    assertEquals("subject", authenticated.client().fetchUserInfo(authenticated.authentication()).getSubject());
+                    assertEquals("subject", assertInstanceOf(OidcUserInfoResult.Succeeded.class, authenticated.client().fetchUserInfoResult(authenticated.authentication())).getUserInfo().getSubject());
                     assertNull(observedFailure.get());
                 }
                 long total = System.nanoTime() - started;
@@ -745,7 +749,7 @@ final class OidcRc1MutationTests {
     }
 
     private static @NonNull String keySet(boolean entra) {
-        return TestJsonWebKeys.withFixture(TestJsonWebKeys.Fixture.IDP_SIGNING_RSA_2048)
+        return TestJwk.withFixture(TestJwk.Fixture.IDP_SIGNING_RSA_2048)
                 .kid("rc1").alg("RS256").issuer(entra ? TEMPLATE : null).toKeySetJson();
     }
 
@@ -759,7 +763,7 @@ final class OidcRc1MutationTests {
     }
 
     private static @NonNull IdTokenValidator entraValidator(@NonNull Clock clock, @NonNull OidcIssuerPolicy policy) {
-        return new IdTokenValidator(COMMON, "client", StaticJsonWebKeySource.fromJsonWebKeySet(JsonWebKeySet.fromJson(keySet(true))),
+        return new IdTokenValidator(COMMON, "client", StaticJwksSource.fromJwks(assertInstanceOf(JwksParseResult.Succeeded.class, Jwks.fromJsonResult(keySet(true))).getJwks()),
                 Set.of(JwsAlgorithm.RS256), Set.of(), Set.of(), Duration.ZERO, Duration.ofMinutes(5), clock,
                 OidcObserver.disabledInstance(), false, policy);
     }
@@ -793,17 +797,17 @@ final class OidcRc1MutationTests {
     }
 
     private record Authenticated(@NonNull OidcClient client, @NonNull OidcAuthentication authentication,
-            @NonNull OidcProviderMetadata metadata, @NonNull StaticJsonWebKeySource keys, @NonNull OidcIssuerPolicy policy) { }
+            @NonNull OidcProviderMetadata metadata, @NonNull StaticJwksSource keys, @NonNull OidcIssuerPolicy policy) { }
 
     private static @NonNull Authenticated authenticate(@NonNull TestHttpsServer server, boolean entra,
             @NonNull OidcObserver observer) throws Exception {
         String issuer = entra ? COMMON : EXACT;
         OidcProviderMetadata metadata = OidcProviderMetadata.withIssuer(issuer).authorizationEndpoint(server.uri("/authorize"))
                 .tokenEndpoint(server.uri("/token")).jwksUri(server.uri("/jwks")).userInfoEndpoint(server.uri("/userinfo")).build();
-        StaticJsonWebKeySource keys = StaticJsonWebKeySource.fromJsonWebKeySet(JsonWebKeySet.fromJson(keySet(entra)));
+        StaticJwksSource keys = StaticJwksSource.fromJwks(assertInstanceOf(JwksParseResult.Succeeded.class, Jwks.fromJsonResult(keySet(entra))).getJwks());
         OidcIssuerPolicy policy = entra ? OidcIssuerPolicy.fromMicrosoftEntraMultiTenant(tenant -> true) : OidcIssuerPolicy.exactInstance();
         OidcClient client = OidcClient.withProviderMetadata(metadata).clientId("client").redirectUri(URI.create("https://rp.example/callback"))
-                .clock(CLOCK).clockSkew(Duration.ZERO).httpClient(TestTls.httpClient()).jsonWebKeySource(keys).issuerPolicy(policy)
+                .clock(CLOCK).clockSkew(Duration.ZERO).httpClient(TestTls.httpClient()).jwksSource(keys).issuerPolicy(policy)
                 .observer(observer).build();
         AuthorizationRedirect redirect = client.beginAuthentication();
         QueryParameters query = QueryParameters.parse(redirect.getAuthorizationUri().getRawQuery());
@@ -811,11 +815,11 @@ final class OidcRc1MutationTests {
         server.script("/token", TestHttpsServer.Script.fromResponse(TestHttpsServer.Response.fromJson(200,
                 "{\"access_token\":\"TEST-ONLY-access\",\"token_type\":\"Bearer\",\"expires_in\":300,\"id_token\":" + JsonText.string(compact) + "}")));
         InMemoryPendingAuthorizationStore store = InMemoryPendingAuthorizationStore.builder().clock(CLOCK).build();
-        redirect.getPendingAuthorization().saveTo(store, "TEST-ONLY-browser");
-        AuthorizationResponse response = AuthorizationResponse.fromQueryString("code=TEST-ONLY-code&state=" + query.getValues("state").get(0)
-                + "&iss=" + URLEncoder.encode(issuer, StandardCharsets.UTF_8));
-        OidcAuthentication authentication = client.completeAuthentication(response,
-                PendingAuthorizationSource.fromStore(store, "TEST-ONLY-browser"), URI.create("https://rp.example/callback"));
+        org.junit.jupiter.api.Assertions.assertEquals(PendingAuthorizationSaveResult.SAVED, redirect.getPendingAuthorization().saveToResult(store, "TEST-ONLY-browser"));
+        AuthorizationResponse response = assertInstanceOf(AuthorizationResponseParseResult.Succeeded.class, AuthorizationResponse.fromQueryStringResult("code=TEST-ONLY-code&state=" + query.getValues("state").get(0)
+                + "&iss=" + URLEncoder.encode(issuer, StandardCharsets.UTF_8))).getResponse();
+        OidcAuthentication authentication = assertInstanceOf(OidcAuthenticationResult.Succeeded.class, client.completeAuthenticationResult(response,
+                PendingAuthorizationSource.fromStore(store, "TEST-ONLY-browser"), URI.create("https://rp.example/callback"))).getAuthentication();
         return new Authenticated(client, authentication, metadata, keys, policy);
     }
 
@@ -860,6 +864,6 @@ final class OidcRc1MutationTests {
         if (entra) claims.put("tid", JsonText.string(TENANT));
         return TestJws.withAlgorithm(TestJws.Algorithm.RS256).kid("rc1")
                 .payload(JsonText.object(new ArrayList<>(claims.entrySet())))
-                .sign(TestJsonWebKeys.Fixture.IDP_SIGNING_RSA_2048.getPrivateKey());
+                .sign(TestJwk.Fixture.IDP_SIGNING_RSA_2048.getPrivateKey());
     }
 }

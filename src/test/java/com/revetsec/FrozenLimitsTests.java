@@ -35,21 +35,23 @@ import com.revetsec.internal.jose.TestClaims;
 import com.revetsec.internal.json.JsonLimits;
 import com.revetsec.jose.JoseException;
 import com.revetsec.jose.JoseObserver;
-import com.revetsec.jose.JsonWebKeySet;
-import com.revetsec.jose.JsonWebKeySetUnavailableException;
+import com.revetsec.jose.Jwks;
+import com.revetsec.jose.JwksParseResult;
+import com.revetsec.jose.JwtValidationResult;
+import com.revetsec.jose.JwksUnavailableException;
 import com.revetsec.jose.JwsAlgorithm;
 import com.revetsec.jose.Jwt;
 import com.revetsec.jose.JwtValidator;
-import com.revetsec.jose.RemoteJsonWebKeySource;
-import com.revetsec.jose.StaticJsonWebKeySource;
+import com.revetsec.jose.RemoteJwksSource;
+import com.revetsec.jose.StaticJwksSource;
 import com.revetsec.testing.JsonText;
 import com.revetsec.testing.RecordingObserver;
 import com.revetsec.testing.TestClock;
 import com.revetsec.testing.TestHttpsServer;
 import com.revetsec.testing.TestHttpsServer.Response;
 import com.revetsec.testing.TestHttpsServer.Script;
-import com.revetsec.testing.TestJsonWebKeys;
-import com.revetsec.testing.TestJsonWebKeys.Fixture;
+import com.revetsec.testing.TestJwk;
+import com.revetsec.testing.TestJwk.Fixture;
 import com.revetsec.testing.TestJws;
 import com.revetsec.testing.TestSealers;
 import com.revetsec.testing.TestTls;
@@ -110,25 +112,25 @@ import java.util.stream.Stream;
  * <p>
  * <strong>JOSE (M2 exit criterion 19).</strong> The M2 consumers reject every out-of-range value: the
  * {@link JwtValidator.Builder}'s clock skew and token length, and every limit of the
- * {@link RemoteJsonWebKeySource.Builder}, each with its own row's message, and each accepted value takes effect.
+ * {@link RemoteJwksSource.Builder}, each with its own row's message, and each accepted value takes effect.
  * Beside the rows, the plan fixes policy constants that are not rows ("Limits registry additions"), transcribed here
  * as the secure-defaults block and the JOSE constants:
  * <ul>
  *   <li>the {@link JwtValidator} defaults: RS256 alone, a {@code typ} of JWT or none, {@code iss}, {@code exp} and
  *   {@code aud} always required, and the skew and token length of their rows. They are private, so they are pinned
- *   through {@link JwtValidator#validate(String)};</li>
+ *   through {@link JwtValidator#validateResult(String)};</li>
  *   <li>the key and signature shapes: RSA moduli of 2,048 to 16,384 bits, odd and minimal, with an odd exponent from
  *   65,537 to below 2^32; the ROCA primes 3 to 167; key IDs of 1 to 256 characters; EC coordinates of 32, 48 and 66
  *   octets; Ed25519 keys of 32 octets; ECDSA signatures of 64, 96 and 132 octets, Ed25519 signatures of 64, and RS* and
  *   PS* signatures of 256 to 2,048 octets, all checked before a key is selected; HMAC secrets at least as long as the
  *   hash; and at most one candidate key per token. The public constants of {@code internal.crypto} and
  *   {@code internal.jose} are compared with the transcription, and each shape is also pinned through
- *   {@link JsonWebKeySet#fromJson(String)} or {@link JwtValidator#validate(String)};</li>
+ *   {@link Jwks#fromJsonResult(String)} or {@link JwtValidator#validateResult(String)};</li>
  *   <li>the key set's failure backoff, {@code min(cooldown * 2^(n-1), cap)} with
  *   {@code cap = max(cooldown, min(10 * cooldown, 10 min))}, the decay of the failure count by one per full cap
  *   interval without a failure, and the ceiling of two fetches per cooldown (M2-8). They live in a package-private
- *   class, so they are pinned through {@link RemoteJsonWebKeySource#warmUp()} and
- *   {@link JoseObserver#didSuppressJsonWebKeySetFetch(URI, Duration)}, against a local HTTPS server and a
+ *   class, so they are pinned through {@link RemoteJwksSource#warmUp()} and
+ *   {@link JoseObserver#didSuppressJwksFetch(URI, Duration)}, against a local HTTPS server and a
  *   {@link TestClock}.</li>
  * </ul>
  *
@@ -819,7 +821,8 @@ final class FrozenLimitsTests {
 
 		TestClaims onlyRequired = TestClaims.empty().put("iss", ISSUER).put("aud", AUDIENCE)
 				.put("exp", NOW.plus(Duration.ofMinutes(5)).getEpochSecond());
-		Jwt jwt = validator.validate(signed(onlyRequired));
+		Jwt jwt = Assertions.assertInstanceOf(JwtValidationResult.Succeeded.class,
+				validator.validateResult(signed(onlyRequired))).getJwt();
 		Assertions.assertEquals(Set.copyOf(ALWAYS_REQUIRED_CLAIMS), jwt.getClaims().getClaimNames());
 	}
 
@@ -843,7 +846,7 @@ final class FrozenLimitsTests {
 		}
 		assertRejected(() -> Assertions.assertNotNull(validatorBuilder(rsaKey()).allowedAlgorithms(Set.of()).build()));
 		Assertions.assertThrows(IllegalStateException.class, () -> Assertions.assertNotNull(JwtValidator
-				.withIssuer(ISSUER).jsonWebKeySource(source(rsaKey())).build()));
+				.withIssuer(ISSUER).jwksSource(source(rsaKey())).build()));
 	}
 
 	// Exit criterion 19 (G8-10): the validator's clock skew and maximum token length are checked against their rows
@@ -879,7 +882,7 @@ final class FrozenLimitsTests {
 				}));
 	}
 
-	// Exit criterion 19 (G5-4, G8-4, M2-8): RemoteJsonWebKeySource.Builder checks each limit against its row at build(),
+	// Exit criterion 19 (G5-4, G8-4, M2-8): RemoteJwksSource.Builder checks each limit against its row at build(),
 	// with that row's message and before its other checks, so a builder whose URI it would refuse (plain http to a
 	// name that is not localhost, G8-7) still fails on the limit; it accepts the floor, the default and the cap (zero
 	// staleness included); null restores the row's default; and the built source carries the value it was given. It
@@ -890,26 +893,26 @@ final class FrozenLimitsTests {
 		Duration longest = row("JWKS_MAXIMUM_TIME_TO_LIVE").getCapDuration();
 		Duration longestCooldown = row("JWKS_UNKNOWN_KEY_ID_COOLDOWN").getCapDuration();
 		List<DurationSetting> durationSettings = List.of(
-				new DurationSetting("requestTimeout", "REQUEST_TIMEOUT", RemoteJsonWebKeySource.Builder::requestTimeout,
+				new DurationSetting("requestTimeout", "REQUEST_TIMEOUT", RemoteJwksSource.Builder::requestTimeout,
 						UnaryOperator.identity()),
 				new DurationSetting("minimumTimeToLive", "JWKS_MINIMUM_TIME_TO_LIVE",
-						RemoteJsonWebKeySource.Builder::minimumTimeToLive,
+						RemoteJwksSource.Builder::minimumTimeToLive,
 						builder -> builder.defaultTimeToLive(longest).maximumTimeToLive(longest)),
 				new DurationSetting("defaultTimeToLive", "JWKS_DEFAULT_TIME_TO_LIVE",
-						RemoteJsonWebKeySource.Builder::defaultTimeToLive,
+						RemoteJwksSource.Builder::defaultTimeToLive,
 						builder -> builder.minimumTimeToLive(shortest).maximumTimeToLive(longest)),
 				new DurationSetting("maximumTimeToLive", "JWKS_MAXIMUM_TIME_TO_LIVE",
-						RemoteJsonWebKeySource.Builder::maximumTimeToLive,
+						RemoteJwksSource.Builder::maximumTimeToLive,
 						builder -> builder.minimumTimeToLive(shortest).defaultTimeToLive(shortest)),
 				new DurationSetting("unknownKeyRefreshCooldown", "JWKS_UNKNOWN_KEY_ID_COOLDOWN",
-						RemoteJsonWebKeySource.Builder::unknownKeyRefreshCooldown,
+						RemoteJwksSource.Builder::unknownKeyRefreshCooldown,
 						builder -> builder.minimumTimeToLive(longestCooldown)),
 				new DurationSetting("maximumStaleness", "JWKS_MAXIMUM_STALENESS",
-						RemoteJsonWebKeySource.Builder::maximumStaleness, UnaryOperator.identity()));
+						RemoteJwksSource.Builder::maximumStaleness, UnaryOperator.identity()));
 		List<AmountSetting> amountSettings = List.of(
 				new AmountSetting("maximumResponseBytes", "JWKS_RESPONSE_BODY_SIZE",
-						RemoteJsonWebKeySource.Builder::maximumResponseBytes),
-				new AmountSetting("maximumKeys", "JWKS_KEY_COUNT", RemoteJsonWebKeySource.Builder::maximumKeys));
+						RemoteJwksSource.Builder::maximumResponseBytes),
+				new AmountSetting("maximumKeys", "JWKS_KEY_COUNT", RemoteJwksSource.Builder::maximumKeys));
 
 		Stream<DynamicTest> durations = durationSettings.stream().map(setting -> DynamicTest.dynamicTest(
 				setting.getName(), () -> {
@@ -993,8 +996,8 @@ final class FrozenLimitsTests {
 		assertUsable(false, "one bit long", rsaWithModulus(oddModulus(random, RSA_MAXIMUM_MODULUS_BITS + 1)));
 		assertUsable(false, "an even modulus", rsaWithModulus(oddModulus(random, RSA_MINIMUM_MODULUS_BITS).clearBit(0)));
 		assertUsable(true, "the fixture", rsaKey());
-		assertUsable(false, "a leading zero octet", TestJsonWebKeys.rsaWithLeadingZeroModulus().kid(KEY_ID).toJson());
-		assertUsable(false, "RSA-1024", TestJsonWebKeys.withFixture(Fixture.NEGATIVE_RSA_1024).kid(KEY_ID).toJson());
+		assertUsable(false, "a leading zero octet", TestJwk.rsaWithLeadingZeroModulus().kid(KEY_ID).toJson());
+		assertUsable(false, "RSA-1024", TestJwk.withFixture(Fixture.NEGATIVE_RSA_1024).kid(KEY_ID).toJson());
 	}
 
 	// M2-7: an RSA key's exponent must be odd, at least 65,537 and below 2^32.
@@ -1008,7 +1011,7 @@ final class FrozenLimitsTests {
 				RSA_PUBLIC_EXPONENT_LIMIT, RSA_PUBLIC_EXPONENT_LIMIT.add(BigInteger.ONE))) {
 			boolean usable = exponent.testBit(0) && exponent.compareTo(RSA_MINIMUM_PUBLIC_EXPONENT) >= 0
 					&& exponent.compareTo(RSA_PUBLIC_EXPONENT_LIMIT) < 0;
-			assertUsable(usable, "e = " + exponent, TestJsonWebKeys.rsaWithExponent(exponent).kid(KEY_ID).toJson());
+			assertUsable(usable, "e = " + exponent, TestJwk.rsaWithExponent(exponent).kid(KEY_ID).toJson());
 		}
 	}
 
@@ -1021,22 +1024,22 @@ final class FrozenLimitsTests {
 		for (Map.Entry<Fixture, String> curve : curves.entrySet()) {
 			int octets = Objects.requireNonNull(EC_CURVE_OCTETS.get(curve.getValue())).get(0);
 			ECPoint point = ((ECPublicKey) curve.getKey().getPublicKey()).getW();
-			assertUsable(true, curve.getValue(), TestJsonWebKeys.withFixture(curve.getKey()).kid(KEY_ID).toJson());
-			assertUsable(false, curve.getValue() + " x one octet long", TestJsonWebKeys.withFixture(curve.getKey())
-					.kid(KEY_ID).member("x", JsonText.string(TestJsonWebKeys.base64UrlFixedLength(point.getAffineX(),
+			assertUsable(true, curve.getValue(), TestJwk.withFixture(curve.getKey()).kid(KEY_ID).toJson());
+			assertUsable(false, curve.getValue() + " x one octet long", TestJwk.withFixture(curve.getKey())
+					.kid(KEY_ID).member("x", JsonText.string(TestJwk.base64UrlFixedLength(point.getAffineX(),
 							octets + 1))).toJson());
-			assertUsable(false, curve.getValue() + " y one octet long", TestJsonWebKeys.withFixture(curve.getKey())
-					.kid(KEY_ID).member("y", JsonText.string(TestJsonWebKeys.base64UrlFixedLength(point.getAffineY(),
+			assertUsable(false, curve.getValue() + " y one octet long", TestJwk.withFixture(curve.getKey())
+					.kid(KEY_ID).member("y", JsonText.string(TestJwk.base64UrlFixedLength(point.getAffineY(),
 							octets + 1))).toJson());
 		}
-		assertUsable(false, "P-256 x one octet short", TestJsonWebKeys.ecWithShortX().kid(KEY_ID).toJson());
+		assertUsable(false, "P-256 x one octet short", TestJwk.ecWithShortX().kid(KEY_ID).toJson());
 
 		byte[] encoded = Fixture.ED25519.getPublicKey().getEncoded();
 		byte[] x = Arrays.copyOfRange(encoded, encoded.length - ED25519_KEY_OCTETS, encoded.length);
-		assertUsable(true, "Ed25519", TestJsonWebKeys.ed25519WithX(TestJws.base64Url(x)).kid(KEY_ID).toJson());
-		assertUsable(false, "Ed25519 x one octet short", TestJsonWebKeys.ed25519WithX(TestJws.base64Url(
+		assertUsable(true, "Ed25519", TestJwk.ed25519WithX(TestJws.base64Url(x)).kid(KEY_ID).toJson());
+		assertUsable(false, "Ed25519 x one octet short", TestJwk.ed25519WithX(TestJws.base64Url(
 				Arrays.copyOf(x, ED25519_KEY_OCTETS - 1))).kid(KEY_ID).toJson());
-		assertUsable(false, "Ed25519 x one octet long", TestJsonWebKeys.ed25519WithX(TestJws.base64Url(
+		assertUsable(false, "Ed25519 x one octet long", TestJwk.ed25519WithX(TestJws.base64Url(
 				Arrays.copyOf(x, ED25519_KEY_OCTETS + 1))).kid(KEY_ID).toJson());
 	}
 
@@ -1045,13 +1048,13 @@ final class FrozenLimitsTests {
 	@Test
 	void keyIdsAreOneTo256Characters() {
 		String longest = "k".repeat(MAXIMUM_KEY_ID_LENGTH);
-		assertUsable(true, "the longest kid", TestJsonWebKeys.withFixture(Fixture.IDP_SIGNING_RSA_2048).kid(longest)
+		assertUsable(true, "the longest kid", TestJwk.withFixture(Fixture.IDP_SIGNING_RSA_2048).kid(longest)
 				.toJson());
-		assertUsable(false, "a kid one character long", TestJsonWebKeys.withFixture(Fixture.IDP_SIGNING_RSA_2048)
+		assertUsable(false, "a kid one character long", TestJwk.withFixture(Fixture.IDP_SIGNING_RSA_2048)
 				.kid(longest + "k").toJson());
-		assertUsable(false, "an empty kid", TestJsonWebKeys.withFixture(Fixture.IDP_SIGNING_RSA_2048).kid("").toJson());
+		assertUsable(false, "an empty kid", TestJwk.withFixture(Fixture.IDP_SIGNING_RSA_2048).kid("").toJson());
 
-		JwtValidator validator = validatorBuilder(TestJsonWebKeys.withFixture(Fixture.IDP_SIGNING_RSA_2048).kid(longest)
+		JwtValidator validator = validatorBuilder(TestJwk.withFixture(Fixture.IDP_SIGNING_RSA_2048).kid(longest)
 				.toJson()).build();
 		assertAccepted(validator, rs256(claims()).kid(longest).sign(Fixture.IDP_SIGNING_RSA_2048.getPrivateKey()));
 		assertRejected(JoseException.Reason.HEADER, validator, rs256(claims()).kid(longest + "k")
@@ -1116,8 +1119,8 @@ final class FrozenLimitsTests {
 			List<String> keysWithKid = new ArrayList<>();
 			List<String> keysWithoutKid = new ArrayList<>();
 			for (Fixture fixture : rsaKeys.subList(0, candidates)) {
-				keysWithKid.add(TestJsonWebKeys.withFixture(fixture).kid(KEY_ID).toJson());
-				keysWithoutKid.add(TestJsonWebKeys.withFixture(fixture).toJson());
+				keysWithKid.add(TestJwk.withFixture(fixture).kid(KEY_ID).toJson());
+				keysWithoutKid.add(TestJwk.withFixture(fixture).toJson());
 			}
 			JwtValidator byKid = validatorBuilder(keysWithKid.toArray(String[]::new)).build();
 			JwtValidator byFit = validatorBuilder(keysWithoutKid.toArray(String[]::new)).build();
@@ -1158,10 +1161,10 @@ final class FrozenLimitsTests {
 		Response failure = Response.fromStatus(500);
 		String path = path();
 		server().script(path, Script.fromSequence(List.of(failure, failure, failure, failure, failure, failure,
-				Response.fromJsonWebKeySet(TestJsonWebKeys.keySet(List.of(rsaKey())), "no-store"), failure)));
+				Response.fromJwks(TestJwk.keySet(List.of(rsaKey())), "no-store"), failure)));
 		TestClock clock = TestClock.fromInstant(NOW);
 		RecordingObserver<JoseObserver> observer = RecordingObserver.fromInterface(JoseObserver.class);
-		RemoteJsonWebKeySource source = remoteSource(path, clock, observer).build();
+		RemoteJwksSource source = remoteSource(path, clock, observer).build();
 
 		assertFailureHeldBackFor(source, observer, backoffStep(cooldown, 1));
 		clock.advance(backoffStep(cooldown, 1));
@@ -1185,7 +1188,7 @@ final class FrozenLimitsTests {
 		clock.advance(Duration.ofSeconds(60));
 		source.warmUp();
 		Assertions.assertEquals(7, server().getHitCount(path));
-		Assertions.assertEquals(1, observer.getCalls("didFetchJsonWebKeySet").size());
+		Assertions.assertEquals(1, observer.getCalls("didFetchJwks").size());
 		// ...so when the key set expires (no-store: the minimum time to live) and the next fetch fails, n is 3, where a
 		// reset would have made it 1 (30 s).
 		clock.advance(Objects.requireNonNull(row("JWKS_MINIMUM_TIME_TO_LIVE").getDefaultDuration()));
@@ -1211,7 +1214,7 @@ final class FrozenLimitsTests {
 		});
 		TestClock clock = TestClock.fromInstant(NOW);
 		RecordingObserver<JoseObserver> observer = RecordingObserver.fromInterface(JoseObserver.class);
-		RemoteJsonWebKeySource source = remoteSource(path, clock, observer).unknownKeyRefreshCooldown(cooldown)
+		RemoteJwksSource source = remoteSource(path, clock, observer).unknownKeyRefreshCooldown(cooldown)
 				.minimumTimeToLive(cooldown).build();
 
 		for (int attempt = 1; attempt <= ATTEMPTS_PER_COOLDOWN; ++attempt) {
@@ -1226,8 +1229,8 @@ final class FrozenLimitsTests {
 			clock.advance(spacing);
 		}
 
-		server().script(path, Script.fromResponse(Response.fromJsonWebKeySet(TestJsonWebKeys.keySet(List.of(rsaKey())))));
-		JsonWebKeySetUnavailableException heldBack = assertUnavailable(ErrorCategory.TRANSPORT, true, source::warmUp);
+		server().script(path, Script.fromResponse(Response.fromJwks(TestJwk.keySet(List.of(rsaKey())))));
+		JwksUnavailableException heldBack = assertUnavailable(ErrorCategory.TRANSPORT, true, source::warmUp);
 		Assertions.assertNull(heldBack.getCause());
 		Assertions.assertEquals(cooldown.minus(spacing.multipliedBy(ATTEMPTS_PER_COOLDOWN)), lastSuppression(observer));
 		clock.set(NOW.plus(cooldown).minusNanos(1));
@@ -1253,7 +1256,7 @@ final class FrozenLimitsTests {
 			RecordingObserver<JoseObserver> observer = RecordingObserver.fromInterface(JoseObserver.class);
 			// build() requires a minimum time to live at least as long as the cooldown, so a longer cooldown raises it.
 			Duration minimumTimeToLive = Objects.requireNonNull(row("JWKS_MINIMUM_TIME_TO_LIVE").getDefaultDuration());
-			RemoteJsonWebKeySource source = remoteSource(path, clock, observer).unknownKeyRefreshCooldown(cooldown)
+			RemoteJwksSource source = remoteSource(path, clock, observer).unknownKeyRefreshCooldown(cooldown)
 					.minimumTimeToLive(cooldown.compareTo(minimumTimeToLive) > 0 ? cooldown : minimumTimeToLive).build();
 
 			for (int index = 0; index < expected.size(); ++index) {
@@ -1262,7 +1265,7 @@ final class FrozenLimitsTests {
 				Assertions.assertEquals(index + 1, server().getHitCount(path));
 
 				clock.advance(step.minusNanos(1));
-				JsonWebKeySetUnavailableException heldBack = assertUnavailable(ErrorCategory.REMOTE_ERROR, true,
+				JwksUnavailableException heldBack = assertUnavailable(ErrorCategory.REMOTE_ERROR, true,
 						source::warmUp);
 				Assertions.assertNull(heldBack.getCause());
 				Assertions.assertEquals(Duration.ofNanos(1), lastSuppression(observer));
@@ -1279,15 +1282,15 @@ final class FrozenLimitsTests {
 	 * {@code warmUp()} fetches and fails with the server's 500, and the next call, at the same instant, is held back
 	 * without a request for exactly {@code step}.
 	 */
-	private static void assertFailureHeldBackFor(@NonNull RemoteJsonWebKeySource source, @NonNull RecordingObserver<@NonNull JoseObserver> observer,
+	private static void assertFailureHeldBackFor(@NonNull RemoteJwksSource source, @NonNull RecordingObserver<@NonNull JoseObserver> observer,
 			@NonNull Duration step) {
-		int suppressedBefore = observer.getCalls("didSuppressJsonWebKeySetFetch").size();
+		int suppressedBefore = observer.getCalls("didSuppressJwksFetch").size();
 		assertUnavailable(ErrorCategory.REMOTE_ERROR, true, source::warmUp);
-		Assertions.assertEquals(suppressedBefore, observer.getCalls("didSuppressJsonWebKeySetFetch").size(),
+		Assertions.assertEquals(suppressedBefore, observer.getCalls("didSuppressJwksFetch").size(),
 				"the first call fetched");
-		JsonWebKeySetUnavailableException heldBack = assertUnavailable(ErrorCategory.REMOTE_ERROR, true, source::warmUp);
+		JwksUnavailableException heldBack = assertUnavailable(ErrorCategory.REMOTE_ERROR, true, source::warmUp);
 		Assertions.assertNull(heldBack.getCause(), "a held-back call gets the remembered failure without its cause");
-		Assertions.assertEquals(suppressedBefore + 1, observer.getCalls("didSuppressJsonWebKeySetFetch").size());
+		Assertions.assertEquals(suppressedBefore + 1, observer.getCalls("didSuppressJwksFetch").size());
 		Assertions.assertEquals(step, lastSuppression(observer));
 	}
 
@@ -1313,14 +1316,14 @@ final class FrozenLimitsTests {
 	}
 
 	private static @NonNull Duration lastSuppression(@NonNull RecordingObserver<@NonNull JoseObserver> observer) {
-		List<RecordingObserver.Call> calls = observer.getCalls("didSuppressJsonWebKeySetFetch");
+		List<RecordingObserver.Call> calls = observer.getCalls("didSuppressJwksFetch");
 		Assertions.assertFalse(calls.isEmpty(), "a call was held back");
 		return (Duration) Objects.requireNonNull(calls.get(calls.size() - 1).getArgument(1));
 	}
 
-	private static @NonNull JsonWebKeySetUnavailableException assertUnavailable(@NonNull ErrorCategory category, boolean transientFailure,
+	private static @NonNull JwksUnavailableException assertUnavailable(@NonNull ErrorCategory category, boolean transientFailure,
 			@NonNull Executable call) {
-		JsonWebKeySetUnavailableException exception = Assertions.assertThrows(JsonWebKeySetUnavailableException.class,
+		JwksUnavailableException exception = Assertions.assertThrows(JwksUnavailableException.class,
 				call);
 		Assertions.assertEquals(category, exception.getCategory());
 		Assertions.assertEquals(transientFailure, exception.isTransient());
@@ -1348,28 +1351,25 @@ final class FrozenLimitsTests {
 				() -> row.getConstant() + " did not reject the value: " + exception.getMessage());
 	}
 
-	private static void assertCarries(@NonNull RemoteJsonWebKeySource source, @NonNull String setting, @NonNull Object value) {
+	private static void assertCarries(@NonNull RemoteJwksSource source, @NonNull String setting, @NonNull Object value) {
 		Assertions.assertTrue(source.toString().contains(setting + "=" + value + ", "),
 				() -> setting + "=" + value + " in " + source);
 	}
 
 	private static void assertUsable(boolean usable, @NonNull String name, @NonNull String jwk) {
-		JsonWebKeySet keySet = JsonWebKeySet.fromJson(TestJsonWebKeys.keySet(List.of(jwk)));
+		Jwks keySet = parsedJwks(Jwks.fromJsonResult(TestJwk.keySet(List.of(jwk))));
 		Assertions.assertEquals(usable ? 1 : 0, keySet.getKeys().size(), () -> name + (usable ? " is usable"
 				: " is skipped"));
 	}
 
 	private static void assertAccepted(@NonNull JwtValidator validator, @NonNull String token) {
-		try {
-			Assertions.assertNotNull(validator.validate(token));
-		} catch (JoseException exception) {
-			throw new AssertionError("expected acceptance, got " + exception.getReason(), exception);
-		}
+		Assertions.assertInstanceOf(JwtValidationResult.Succeeded.class, validator.validateResult(token));
 	}
 
 	private static void assertRejected(JoseException.@NonNull Reason reason, @NonNull JwtValidator validator, @NonNull String token) {
-		JoseException exception = Assertions.assertThrows(JoseException.class, () -> validator.validate(token));
-		Assertions.assertEquals(reason, exception.getReason());
+		JwtValidationResult.Rejected result = Assertions.assertInstanceOf(JwtValidationResult.Rejected.class,
+				validator.validateResult(token));
+		Assertions.assertEquals(reason, result.getReason());
 	}
 
 	/**
@@ -1385,23 +1385,23 @@ final class FrozenLimitsTests {
 	 * The RSA fixture's JWK with another modulus; the key is parsed, never used.
 	 */
 	private static @NonNull String rsaWithModulus(@NonNull BigInteger modulus) {
-		return TestJsonWebKeys.withFixture(Fixture.IDP_SIGNING_RSA_2048).kid(KEY_ID)
-				.member("n", JsonText.string(TestJsonWebKeys.base64UrlUInt(modulus))).toJson();
+		return TestJwk.withFixture(Fixture.IDP_SIGNING_RSA_2048).kid(KEY_ID)
+				.member("n", JsonText.string(TestJwk.base64UrlUInt(modulus))).toJson();
 	}
 
 	private static @NonNull String rsaKey() {
-		return TestJsonWebKeys.withFixture(Fixture.IDP_SIGNING_RSA_2048).kid(KEY_ID).toJson();
+		return TestJwk.withFixture(Fixture.IDP_SIGNING_RSA_2048).kid(KEY_ID).toJson();
 	}
 
-	private static @NonNull StaticJsonWebKeySource source(@NonNull String @NonNull ... jwks) {
-		return StaticJsonWebKeySource.fromJsonWebKeySet(JsonWebKeySet.fromJson(TestJsonWebKeys.keySet(List.of(jwks))));
+	private static @NonNull StaticJwksSource source(@NonNull String @NonNull ... jwks) {
+		return StaticJwksSource.fromJwks(parsedJwks(Jwks.fromJsonResult(TestJwk.keySet(List.of(jwks)))));
 	}
 
 	/**
 	 * A validator builder with only its required settings, over a static source of {@code jwks}, at {@link #NOW}.
 	 */
 	private static JwtValidator.@NonNull Builder validatorBuilder(@NonNull String @NonNull ... jwks) {
-		return JwtValidator.withIssuer(ISSUER).jsonWebKeySource(source(jwks)).expectedAudiences(Set.of(AUDIENCE))
+		return JwtValidator.withIssuer(ISSUER).jwksSource(source(jwks)).expectedAudiences(Set.of(AUDIENCE))
 				.clock(TestClock.fromInstant(NOW));
 	}
 
@@ -1425,21 +1425,21 @@ final class FrozenLimitsTests {
 		return rs256(claims).sign(Fixture.IDP_SIGNING_RSA_2048.getPrivateKey());
 	}
 
-	private static RemoteJsonWebKeySource.@NonNull Builder remoteBuilder() {
-		return RemoteJsonWebKeySource.withUri(JWKS_URI);
+	private static RemoteJwksSource.@NonNull Builder remoteBuilder() {
+		return RemoteJwksSource.withUri(JWKS_URI);
 	}
 
 	/**
 	 * A builder whose URI {@code build()} refuses once every limit has passed: plain http to a name that is not
 	 * {@code localhost} (G8-7).
 	 */
-	private static RemoteJsonWebKeySource.@NonNull Builder refusedUriBuilder() {
-		return RemoteJsonWebKeySource.withUri(URI.create("http://issuer.example.com/jwks"));
+	private static RemoteJwksSource.@NonNull Builder refusedUriBuilder() {
+		return RemoteJwksSource.withUri(URI.create("http://issuer.example.com/jwks"));
 	}
 
-	private static RemoteJsonWebKeySource.@NonNull Builder remoteSource(@NonNull String path, @NonNull TestClock clock,
+	private static RemoteJwksSource.@NonNull Builder remoteSource(@NonNull String path, @NonNull TestClock clock,
 			@NonNull RecordingObserver<@NonNull JoseObserver> observer) {
-		return RemoteJsonWebKeySource.withUri(server().uri(path)).httpClient(client()).clock(clock)
+		return RemoteJwksSource.withUri(server().uri(path)).httpClient(client()).clock(clock)
 				.observer(observer.getObserver());
 	}
 
@@ -1553,19 +1553,19 @@ final class FrozenLimitsTests {
 	}
 
 	/**
-	 * A duration setting of {@link RemoteJsonWebKeySource.Builder}: its name, as the source's {@code toString()}
+	 * A duration setting of {@link RemoteJwksSource.Builder}: its name, as the source's {@code toString()}
 	 * shows it, its row, its setter, and the other settings that keep the time-to-live order for any value of it in
 	 * range.
 	 */
 	private static final class DurationSetting {
 		private final String name;
 		private final String row;
-		private final BiFunction<RemoteJsonWebKeySource.Builder, @Nullable Duration, RemoteJsonWebKeySource.Builder> setter;
-		private final UnaryOperator<RemoteJsonWebKeySource.Builder> neighbors;
+		private final BiFunction<RemoteJwksSource.Builder, @Nullable Duration, RemoteJwksSource.Builder> setter;
+		private final UnaryOperator<RemoteJwksSource.Builder> neighbors;
 
 		private DurationSetting(@NonNull String name, @NonNull String row,
-				@NonNull BiFunction<RemoteJsonWebKeySource.@NonNull Builder, @Nullable Duration, RemoteJsonWebKeySource.@NonNull Builder> setter,
-				@NonNull UnaryOperator<RemoteJsonWebKeySource.@NonNull Builder> neighbors) {
+				@NonNull BiFunction<RemoteJwksSource.@NonNull Builder, @Nullable Duration, RemoteJwksSource.@NonNull Builder> setter,
+				@NonNull UnaryOperator<RemoteJwksSource.@NonNull Builder> neighbors) {
 			this.name = name;
 			this.row = row;
 			this.setter = setter;
@@ -1580,25 +1580,25 @@ final class FrozenLimitsTests {
 			return this.row;
 		}
 
-		RemoteJsonWebKeySource.@NonNull Builder apply(RemoteJsonWebKeySource.@NonNull Builder builder, @Nullable Duration value) {
+		RemoteJwksSource.@NonNull Builder apply(RemoteJwksSource.@NonNull Builder builder, @Nullable Duration value) {
 			return this.setter.apply(builder, value);
 		}
 
-		RemoteJsonWebKeySource.@NonNull Builder configure(RemoteJsonWebKeySource.@NonNull Builder builder, @NonNull Duration value) {
+		RemoteJwksSource.@NonNull Builder configure(RemoteJwksSource.@NonNull Builder builder, @NonNull Duration value) {
 			return apply(this.neighbors.apply(builder), value);
 		}
 	}
 
 	/**
-	 * A count or size setting of {@link RemoteJsonWebKeySource.Builder}: its name, its row and its setter.
+	 * A count or size setting of {@link RemoteJwksSource.Builder}: its name, its row and its setter.
 	 */
 	private static final class AmountSetting {
 		private final String name;
 		private final String row;
-		private final BiFunction<RemoteJsonWebKeySource.Builder, @Nullable Integer, RemoteJsonWebKeySource.Builder> setter;
+		private final BiFunction<RemoteJwksSource.Builder, @Nullable Integer, RemoteJwksSource.Builder> setter;
 
 		private AmountSetting(@NonNull String name, @NonNull String row,
-				@NonNull BiFunction<RemoteJsonWebKeySource.@NonNull Builder, @Nullable Integer, RemoteJsonWebKeySource.@NonNull Builder> setter) {
+				@NonNull BiFunction<RemoteJwksSource.@NonNull Builder, @Nullable Integer, RemoteJwksSource.@NonNull Builder> setter) {
 			this.name = name;
 			this.row = row;
 			this.setter = setter;
@@ -1612,7 +1612,7 @@ final class FrozenLimitsTests {
 			return this.row;
 		}
 
-		RemoteJsonWebKeySource.@NonNull Builder apply(RemoteJsonWebKeySource.@NonNull Builder builder, @Nullable Integer value) {
+		RemoteJwksSource.@NonNull Builder apply(RemoteJwksSource.@NonNull Builder builder, @Nullable Integer value) {
 			return this.setter.apply(builder, value);
 		}
 	}
@@ -1686,4 +1686,8 @@ final class FrozenLimitsTests {
 			return this.zeroAllowed;
 		}
 	}
+	private static @NonNull Jwks parsedJwks(@NonNull JwksParseResult result) {
+		return Assertions.assertInstanceOf(JwksParseResult.Succeeded.class, result).getJwks();
+	}
+
 }

@@ -157,7 +157,7 @@ public final class PendingStoreProbe {
 
 	private static @NonNull String callback(@NonNull String state, @NonNull String binding,
 			@NonNull Duration deadline) {
-		AuthorizationResponse response = AuthorizationResponse.fromQueryString("state=" + state + "&error=access_denied");
+		AuthorizationResponse response = ((com.revetsec.oauth.AuthorizationResponseParseResult.Succeeded) AuthorizationResponse.fromQueryStringResult("state=" + state + "&error=access_denied")).getResponse();
 		AuthorizationCompletionResult result = client(deadline).completeAuthorizationResult(response,
 				PendingAuthorizationSource.fromStore(store(), binding), CALLBACK);
 		if (result instanceof AuthorizationCompletionResult.Denied) return "DENIED";
@@ -178,7 +178,7 @@ public final class PendingStoreProbe {
 
 	private static @NonNull String oidcCallback(@NonNull String state, @NonNull String binding,
 			@NonNull String issuer, boolean rsa) {
-		AuthorizationResponse response = AuthorizationResponse.fromQueryString("state=" + state + "&code=test-only-code");
+		AuthorizationResponse response = ((com.revetsec.oauth.AuthorizationResponseParseResult.Succeeded) AuthorizationResponse.fromQueryStringResult("state=" + state + "&code=test-only-code")).getResponse();
 		OidcAuthenticationResult result = (rsa ? rsaOidcClient(issuer) : oidcClient(issuer)).completeAuthenticationResult(response,
 				PendingAuthorizationSource.fromStore(store(), binding), CALLBACK);
 		if (result instanceof OidcAuthenticationResult.Succeeded succeeded) {
@@ -197,7 +197,7 @@ public final class PendingStoreProbe {
 
 	private static @NonNull String codeCallback(@NonNull String state, @NonNull String binding,
 			@NonNull String issuer, @NonNull PendingAuthorizationStore pendingStore) {
-		AuthorizationResponse response = AuthorizationResponse.fromQueryString("state=" + state + "&code=test-only-code");
+		AuthorizationResponse response = ((com.revetsec.oauth.AuthorizationResponseParseResult.Succeeded) AuthorizationResponse.fromQueryStringResult("state=" + state + "&code=test-only-code")).getResponse();
 		AuthorizationCompletionResult result = codeClient(issuer).completeAuthorizationResult(response,
 				PendingAuthorizationSource.fromStore(pendingStore, binding), CALLBACK);
 		if (result instanceof AuthorizationCompletionResult.Succeeded succeeded) {
@@ -232,7 +232,9 @@ public final class PendingStoreProbe {
 		switch (args[0]) {
 			case "issue" -> {
 				AuthorizationRedirect redirect = client(Duration.ofSeconds(3)).beginAuthorization();
-				redirect.getPendingAuthorization().saveTo(store, args[1], Duration.ofSeconds(3));
+				if (redirect.getPendingAuthorization().saveToResult(store, args[1], Duration.ofSeconds(3))
+						!= com.revetsec.oauth.PendingAuthorizationSaveResult.SAVED)
+					throw new IllegalStateException("Pending save did not succeed.");
 				System.out.println(state(redirect));
 			}
 			case "callback" -> System.out.println(callback(args[1], args[2], Duration.ofSeconds(3)));
@@ -245,17 +247,18 @@ public final class PendingStoreProbe {
 			}
 			case "issue-code" -> {
 				AuthorizationRedirect redirect = codeClient(args[2]).beginAuthorization();
-				redirect.getPendingAuthorization().saveTo(store, args[1], Duration.ofSeconds(3));
+				if (redirect.getPendingAuthorization().saveToResult(store, args[1], Duration.ofSeconds(3))
+						!= com.revetsec.oauth.PendingAuthorizationSaveResult.SAVED)
+					throw new IllegalStateException("Pending save did not succeed.");
 				if (!queryValue(redirect, "code_challenge_method").equals("S256"))
 					throw new IllegalStateException("Unexpected PKCE method.");
 				System.out.println(state(redirect) + "\t" + queryValue(redirect, "code_challenge"));
 			}
 			case "issue-code-unknown" -> {
 				AuthorizationRedirect redirect = codeClient(args[2]).beginAuthorization();
-				boolean failedClosed = false;
-				try { redirect.getPendingAuthorization().saveTo(uncertainStore(), args[1], Duration.ofSeconds(3)); }
-				catch (PendingAuthorizationStoreException expected) { failedClosed = true; }
-				if (!failedClosed) throw new IllegalStateException("Unknown save commit released a redirect.");
+				if (redirect.getPendingAuthorization().saveToResult(uncertainStore(), args[1], Duration.ofSeconds(3))
+						!= com.revetsec.oauth.PendingAuthorizationSaveResult.INDETERMINATE)
+					throw new IllegalStateException("Unknown save commit released a redirect.");
 				if (store.consume(args[1], state(redirect), Duration.ofSeconds(3)).isEmpty())
 					throw new IllegalStateException("Injected save COMMIT did not happen.");
 				System.out.println("UNCERTAIN_SAVE_NO_REDIRECT");
@@ -270,7 +273,9 @@ public final class PendingStoreProbe {
 			}
 			case "issue-oidc" -> {
 				AuthorizationRedirect redirect = oidcClient(args[2]).beginAuthentication();
-				redirect.getPendingAuthorization().saveTo(store, args[1], Duration.ofSeconds(3));
+				if (redirect.getPendingAuthorization().saveToResult(store, args[1], Duration.ofSeconds(3))
+						!= com.revetsec.oauth.PendingAuthorizationSaveResult.SAVED)
+					throw new IllegalStateException("Pending save did not succeed.");
 				if (!queryValue(redirect, "code_challenge_method").equals("S256"))
 					throw new IllegalStateException("Unexpected OIDC PKCE method.");
 				System.out.println(state(redirect) + "\t" + queryValue(redirect, "code_challenge")
@@ -285,7 +290,9 @@ public final class PendingStoreProbe {
 			}
 			case "issue-oidc-rsa" -> {
 				AuthorizationRedirect redirect = rsaOidcClient(args[2]).beginAuthentication();
-				redirect.getPendingAuthorization().saveTo(store, args[1], Duration.ofSeconds(3));
+				if (redirect.getPendingAuthorization().saveToResult(store, args[1], Duration.ofSeconds(3))
+						!= com.revetsec.oauth.PendingAuthorizationSaveResult.SAVED)
+					throw new IllegalStateException("Pending save did not succeed.");
 				if (!queryValue(redirect, "code_challenge_method").equals("S256"))
 					throw new IllegalStateException("Unexpected RSA OIDC PKCE method.");
 				System.out.println(state(redirect) + "\t" + queryValue(redirect, "code_challenge")
@@ -302,17 +309,18 @@ public final class PendingStoreProbe {
 			case "duplicate" -> {
 				String key = "duplicate-" + System.nanoTime();
 				Instant expiry = Instant.now().plusSeconds(60);
-				store.save("browser", key, "first", expiry, Duration.ofSeconds(3));
-				boolean rejected = false;
-				try { store.save("browser", key, "second", expiry, Duration.ofSeconds(3)); }
-				catch (IllegalArgumentException expected) { rejected = true; }
+				if (store.save("browser", key, "first", expiry, Duration.ofSeconds(3)) != com.revetsec.oauth.PendingAuthorizationSaveResult.SAVED)
+					throw new IllegalStateException("Pending save did not succeed.");
+				boolean rejected = store.save("browser", key, "second", expiry, Duration.ofSeconds(3))
+						== com.revetsec.oauth.PendingAuthorizationSaveResult.ALREADY_PRESENT;
 				if (!rejected || !store.consume("browser", key, Duration.ofSeconds(3)).orElseThrow().equals("first"))
 					throw new IllegalStateException("Duplicate was accepted or replaced the first record.");
 				System.out.println("DUPLICATE_REJECTED");
 			}
 			case "expiry" -> {
 				String key = "expiry-" + System.nanoTime();
-				store.save("browser", key, "record", Instant.now().plusSeconds(2), Duration.ofSeconds(3));
+				if (store.save("browser", key, "record", Instant.now().plusSeconds(2), Duration.ofSeconds(3)) != com.revetsec.oauth.PendingAuthorizationSaveResult.SAVED)
+					throw new IllegalStateException("Pending save did not succeed.");
 				Thread.sleep(2_200);
 				if (store.consume("browser", key, Duration.ofSeconds(3)).isPresent())
 					throw new IllegalStateException("Expired record returned.");
@@ -320,7 +328,8 @@ public final class PendingStoreProbe {
 			}
 			case "zero-budget" -> {
 				String key = "budget-" + System.nanoTime();
-				store.save("browser", key, "record", Instant.now().plusSeconds(60), Duration.ofSeconds(3));
+				if (store.save("browser", key, "record", Instant.now().plusSeconds(60), Duration.ofSeconds(3)) != com.revetsec.oauth.PendingAuthorizationSaveResult.SAVED)
+					throw new IllegalStateException("Pending save did not succeed.");
 				try {
 					store.consume("browser", key, Duration.ZERO);
 					throw new IllegalStateException("Zero-budget consume succeeded.");
@@ -332,14 +341,16 @@ public final class PendingStoreProbe {
 			}
 			case "long-budget" -> {
 				String key = "long-budget-" + System.nanoTime();
-				store.save("browser", key, "record", Instant.now().plusSeconds(60), Duration.ofMinutes(2));
+				if (store.save("browser", key, "record", Instant.now().plusSeconds(60), Duration.ofMinutes(2)) != com.revetsec.oauth.PendingAuthorizationSaveResult.SAVED)
+					throw new IllegalStateException("Pending save did not succeed.");
 				if (!store.consume("browser", key, Duration.ofMinutes(2)).orElseThrow().equals("record"))
 					throw new IllegalStateException("Long-budget call failed.");
 				System.out.println("LONG_BUDGET_BOUNDED");
 			}
 			case "unknown-consume" -> {
 				String key = "unknown-" + System.nanoTime();
-				store.save("browser", key, "record", Instant.now().plusSeconds(60), Duration.ofSeconds(3));
+				if (store.save("browser", key, "record", Instant.now().plusSeconds(60), Duration.ofSeconds(3)) != com.revetsec.oauth.PendingAuthorizationSaveResult.SAVED)
+					throw new IllegalStateException("Pending save did not succeed.");
 				boolean failedClosed = false;
 				try { uncertainStore().consume("browser", key, Duration.ofSeconds(3)); }
 				catch (IllegalStateException expected) { failedClosed = true; }
@@ -352,11 +363,11 @@ public final class PendingStoreProbe {
 				PostgresqlPendingAuthorizationStore tiny = new PostgresqlPendingAuthorizationStore(NAMESPACE,
 						PendingStoreProbe::connection, 1, 8 * 1_024, 64 * 1_024);
 				String first = "capacity-a-" + System.nanoTime();
-				store.save("browser", first, "record", Instant.now().plusSeconds(60), Duration.ofSeconds(3));
+				if (store.save("browser", first, "record", Instant.now().plusSeconds(60), Duration.ofSeconds(3)) != com.revetsec.oauth.PendingAuthorizationSaveResult.SAVED)
+					throw new IllegalStateException("Pending save did not succeed.");
 				String second = "capacity-b-" + System.nanoTime();
-				boolean refused = false;
-				try { tiny.save("browser", second, "record", Instant.now().plusSeconds(60), Duration.ofSeconds(3)); }
-				catch (IllegalStateException expected) { refused = true; }
+				boolean refused = tiny.save("browser", second, "record", Instant.now().plusSeconds(60), Duration.ofSeconds(3))
+						== com.revetsec.oauth.PendingAuthorizationSaveResult.CAPACITY_REFUSED;
 				if (!refused || !store.consume("browser", first, Duration.ofSeconds(3)).orElseThrow().equals("record")
 						|| store.consume("browser", second, Duration.ofSeconds(3)).isPresent())
 					throw new IllegalStateException("Capacity refusal was not atomic.");
@@ -366,7 +377,8 @@ public final class PendingStoreProbe {
 				PostgresqlPendingAuthorizationStore clockStore = new PostgresqlPendingAuthorizationStore(
 						"fixture_clock", PendingStoreProbe::connection, 1_024, 8 * 1_024, 4L * 1_024 * 1_024);
 				String key = "clock-" + System.nanoTime();
-				clockStore.save("browser", key, "record", Instant.now().plusSeconds(60), Duration.ofSeconds(3));
+				if (clockStore.save("browser", key, "record", Instant.now().plusSeconds(60), Duration.ofSeconds(3)) != com.revetsec.oauth.PendingAuthorizationSaveResult.SAVED)
+					throw new IllegalStateException("Pending save did not succeed.");
 				try (Connection connection = connection(Duration.ofSeconds(3));
 						PreparedStatement statement = connection.prepareStatement("UPDATE pending_authorization_clock "
 								+ "SET observed_seconds=?,observed_nanos=0 WHERE namespace=?")) {

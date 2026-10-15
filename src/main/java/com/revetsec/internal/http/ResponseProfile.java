@@ -70,7 +70,7 @@ public enum ResponseProfile {
 	REVOCATION("application/json");
 
 	private static final List<String> JSON = List.of("application/json");
-	private static final List<String> JSON_OR_JWK_SET = List.of("application/json", "application/jwk-set+json");
+	private static final List<String> JSON_OR_JWKS = List.of("application/json", "application/jwk-set+json");
 	private static final List<String> JSON_OR_JWT = List.of("application/json", "application/jwt");
 
 	@NonNull
@@ -109,7 +109,7 @@ public enum ResponseProfile {
 	public List<@NonNull String> getAcceptedMediaTypes() {
 		return switch (this) {
 			case METADATA, TOKEN, INTROSPECTION -> JSON;
-			case JWKS -> JSON_OR_JWK_SET;
+			case JWKS -> JSON_OR_JWKS;
 			case USERINFO -> JSON_OR_JWT;
 			case REVOCATION -> List.of();
 		};

@@ -59,7 +59,7 @@ class ScimApiFreezeViewTests {
         ScimResource resource = resource(type, userEnvelope(type)
                 .put(contradictory.getId(), JsonObject.builder().put("Department", "Engineering").build()));
         assertEquals("Engineering", resource.getExtension(contradictory.getId()).orElseThrow()
-                .findString("Department").orElseThrow());
+                .find("Department").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow());
         assertThrows(IllegalArgumentException.class, () -> ScimEnterpriseUser.fromResource(resource));
         assertEquals("Ada", ScimUser.fromResource(resource).getUserName());
     }
@@ -81,15 +81,15 @@ class ScimApiFreezeViewTests {
                 assertEquals("Ada", view.getUserName());
                 assertEquals("Ada Lovelace", view.getDisplayName().orElseThrow());
                 assertTrue(view.isActive().orElseThrow());
-                assertEquals("ada@example.invalid", view.getEmails().get(0).findString("value").orElseThrow());
+                assertEquals("ada@example.invalid", view.getEmails().get(0).find("value").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow());
                 ScimEnterpriseUser extension = ScimEnterpriseUser.fromResource(resource);
                 assertSame(resource, extension.getResource());
                 assertEquals("employee-1", extension.getEmployeeNumber().orElseThrow());
                 assertEquals("Engineering", extension.getDepartment().orElseThrow());
                 assertEquals("Analytical", extension.getOrganization().orElseThrow());
                 assertEquals("Machines", extension.getDivision().orElseThrow());
-                assertEquals("manager-1", extension.getManager().orElseThrow().findString("value").orElseThrow());
-                assertEquals("../Users/manager-1", extension.getManager().orElseThrow().findString("$ref").orElseThrow());
+                assertEquals("manager-1", extension.getManager().orElseThrow().find("value").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow());
+                assertEquals("../Users/manager-1", extension.getManager().orElseThrow().find("$ref").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow());
                 assertEquals(user.getId(), type.getSchema().getId());
                 assertEquals(user.getName(), type.getSchema().getName());
                 assertEquals(user.getDescription(), type.getSchema().getDescription());
@@ -108,7 +108,7 @@ class ScimApiFreezeViewTests {
             ScimGroup view = ScimGroup.fromResource(resource);
             assertSame(resource, view.getResource());
             assertEquals("Engineering", view.getDisplayName());
-            assertEquals("user-1", view.getMembers().get(0).findString("value").orElseThrow());
+            assertEquals("user-1", view.getMembers().get(0).find("value").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow());
             assertEquals(schema.getId(), type.getSchema().getId());
             assertEquals(schema.getName(), type.getSchema().getName());
             assertEquals(schema.getDescription(), type.getSchema().getDescription());

@@ -56,7 +56,6 @@ final class StateUnsealResultTests {
             assertEquals(0, Arrays.stream(result.getClass().getDeclaredFields())
                     .filter(field -> !field.isSynthetic()).count());
         }
-        assertThrows(InvalidSealedStateException.class, () -> sealer.unseal(sealed, "context"));
     }
 
     @SuppressWarnings("NullAway") // Deliberate required-argument misuse.

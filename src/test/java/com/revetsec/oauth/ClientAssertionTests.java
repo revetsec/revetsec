@@ -16,6 +16,8 @@
 
 package com.revetsec.oauth;
 
+import com.revetsec.oidc.OidcProviderMetadataParseResult;
+
 import com.revetsec.ErrorCategory;
 import com.revetsec.internal.Limits;
 import com.revetsec.internal.http.Deadline;
@@ -28,7 +30,7 @@ import com.revetsec.oidc.OidcClient;
 import com.revetsec.oidc.OidcProviderMetadata;
 import com.revetsec.testing.TestClock;
 import com.revetsec.testing.TestHttpsServer;
-import com.revetsec.testing.TestJsonWebKeys;
+import com.revetsec.testing.TestJwk;
 import com.revetsec.testing.TestTls;
 import java.net.URI;
 import java.net.URLDecoder;
@@ -53,7 +55,7 @@ import static com.revetsec.oauth.Phase2Fixtures.*;
 
 /** Approved M6-B: real emitted requests, independent signatures, role policy and caller-thread failure boundaries. */
 final class ClientAssertionTests {
-	private static final TestJsonWebKeys.@NonNull Fixture KEY = TestJsonWebKeys.Fixture.IDP_SIGNING_RSA_2048;
+	private static final TestJwk.@NonNull Fixture KEY = TestJwk.Fixture.IDP_SIGNING_RSA_2048;
 	private static final @NonNull String CLIENT = "TEST-ONLY-client-é";
 
 	@SuppressWarnings("NullAway") // Deliberately violates required-null contracts to verify public boundary rejection.
@@ -103,15 +105,15 @@ final class ClientAssertionTests {
 				OAuthClient client = client( metadata(server), auth).observer(events).redirectUri(server.uri("/callback")).build();
 				assertEquals(0, keys.get()); assertEquals(audience == ClientAssertionAudience.TOKEN_ENDPOINT ? 1 : 0, events.enabled.get());
 				response(server, "/token", 200, "application/json", tokens());
-				client.requestClientCredentialsToken(TokenRequestOptions.builder().build());
-				client.refresh(RefreshToken.fromValue("TEST-ONLY-refresh"), TokenRequestOptions.builder().build());
+				assertInstanceOf(OAuthTokenRequestResult.Succeeded.class, client.requestClientCredentialsResult(TokenRequestOptions.builder().build())).getTokens();
+				assertInstanceOf(OAuthTokenRequestResult.Succeeded.class, client.refreshResult(RefreshToken.fromValue("TEST-ONLY-refresh"), TokenRequestOptions.builder().build())).getTokens();
 				AuthorizationRedirect redirect = client.beginAuthorization();
-				AuthorizationResponse callback = AuthorizationResponse.fromQueryString("code=TEST-ONLY-code&state="+
-						java.net.URLEncoder.encode(redirect.getPendingAuthorization().state(), StandardCharsets.UTF_8));
-				client.completeAuthorization(callback, source(redirect.getPendingAuthorization()), server.uri("/callback"));
-				response(server, "/revoke", 200, "application/json", "{}"); client.revoke("TEST-ONLY-access", TokenTypeHint.ACCESS_TOKEN);
+				AuthorizationResponse callback = assertInstanceOf(AuthorizationResponseParseResult.Succeeded.class, AuthorizationResponse.fromQueryStringResult("code=TEST-ONLY-code&state="+
+						java.net.URLEncoder.encode(redirect.getPendingAuthorization().state(), StandardCharsets.UTF_8))).getResponse();
+				assertInstanceOf(AuthorizationCompletionResult.Succeeded.class, client.completeAuthorizationResult(callback, source(redirect.getPendingAuthorization()), server.uri("/callback"))).getTokens();
+				response(server, "/revoke", 200, "application/json", "{}"); assertInstanceOf(OAuthRevocationResult.Succeeded.class, client.revokeResult("TEST-ONLY-access", TokenTypeHint.ACCESS_TOKEN));
 				response(server, "/inspect", 200, "application/json", active());
-				assertNotNull(TokenIntrospectionClient.withOAuthClient(client).expectedAudiences(Set.of(AUD)).observer(events).build().validate(bearer("TEST-ONLY-opaque")));
+				assertNotNull(assertInstanceOf(AccessTokenValidationResult.Succeeded.class, TokenIntrospectionClient.withOAuthClient(client).expectedAudiences(Set.of(AUD)).observer(events).build().validateResult(bearer("TEST-ONLY-opaque"))).getAccessToken());
 				assertEquals(5, keys.get()); assertEquals(5, events.will.get()); assertEquals(5, events.did.get()); assertEquals(0, events.failed.get());
 				assertEquals(audience == ClientAssertionAudience.TOKEN_ENDPOINT ? 5 : 0, events.used.get());
 				Set<String> identifiers = new HashSet<>();
@@ -123,15 +125,15 @@ final class ClientAssertionTests {
 					String compact = form.get("client_assertion"); assertNotNull(compact); verify(compact, algorithm);
 					JsonObject header = segment(compact, 0); JsonObject claims = segment(compact, 1);
 					assertEquals(Set.of("alg", "typ", "kid", "x5t#S256"), header.getMembers().keySet());
-					assertEquals(audience == ClientAssertionAudience.ISSUER ? "client-authentication+jwt" : "JWT", header.findString("typ").orElseThrow());
-					assertEquals("key-é", header.findString("kid").orElseThrow());
-					assertEquals(Base64.getUrlEncoder().withoutPadding().encodeToString(new byte[32]), header.findString("x5t#S256").orElseThrow());
+					assertEquals(audience == ClientAssertionAudience.ISSUER ? "client-authentication+jwt" : "JWT", header.find("typ").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow());
+					assertEquals("key-é", header.find("kid").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow());
+					assertEquals(Base64.getUrlEncoder().withoutPadding().encodeToString(new byte[32]), header.find("x5t#S256").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow());
 					assertEquals(Set.of("iss","sub","aud","iat","nbf","exp","jti"), claims.getMembers().keySet());
-					assertEquals(CLIENT, claims.findString("iss").orElseThrow()); assertEquals(CLIENT, claims.findString("sub").orElseThrow());
-					assertEquals(audience == ClientAssertionAudience.ISSUER ? server.getBaseUri().toString() : server.uri(path).toString(), claims.findString("aud").orElseThrow());
-					assertEquals(NOW.getEpochSecond(), claims.findLong("iat").orElseThrow()); assertEquals(claims.findLong("iat"), claims.findLong("nbf"));
-					assertEquals(NOW.getEpochSecond()+60, claims.findLong("exp").orElseThrow());
-					String jti = claims.findString("jti").orElseThrow(); assertEquals(32, Base64.getUrlDecoder().decode(jti).length); assertTrue(identifiers.add(jti));
+					assertEquals(CLIENT, claims.find("iss").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow()); assertEquals(CLIENT, claims.find("sub").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow());
+					assertEquals(audience == ClientAssertionAudience.ISSUER ? server.getBaseUri().toString() : server.uri(path).toString(), claims.find("aud").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow());
+					assertEquals(NOW.getEpochSecond(), claims.find("iat").flatMap(value -> ((com.revetsec.json.JsonNumber) value).getLongValueExact()).orElseThrow()); assertEquals(claims.find("iat").flatMap(value -> ((com.revetsec.json.JsonNumber) value).getLongValueExact()), claims.find("nbf").flatMap(value -> ((com.revetsec.json.JsonNumber) value).getLongValueExact()));
+					assertEquals(NOW.getEpochSecond()+60, claims.find("exp").flatMap(value -> ((com.revetsec.json.JsonNumber) value).getLongValueExact()).orElseThrow());
+					String jti = claims.find("jti").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow(); assertEquals(32, Base64.getUrlDecoder().decode(jti).length); assertTrue(identifiers.add(jti));
 				}
 			}
 		}))); 
@@ -149,9 +151,9 @@ final class ClientAssertionTests {
 				if (mode.startsWith("alg")) metadata = metadata.tokenEndpointAuthSigningAlgValuesSupported(mode.endsWith("empty") ? Set.of() : Set.of(mode.endsWith("unknown") ? "future" : "RS384"));
 				OAuthClient client = client( metadata.build(), authentication(reads)).observer(events).build();
 				OAuthConfigurationException failure = assertThrows(OAuthConfigurationException.class, () -> {
-					if (mode.startsWith("revoke")) client.revoke("token", TokenTypeHint.ACCESS_TOKEN);
+					if (mode.startsWith("revoke")) assertInstanceOf(OAuthRevocationResult.Succeeded.class, client.revokeResult("token", TokenTypeHint.ACCESS_TOKEN));
 					else if (mode.startsWith("intro")) assertNotNull(TokenIntrospectionClient.withOAuthClient(client).expectedAudiences(Set.of(AUD)).build().validateResult(bearer("token")));
-					else client.requestClientCredentialsToken(TokenRequestOptions.builder().build());
+					else assertInstanceOf(OAuthTokenRequestResult.Succeeded.class, client.requestClientCredentialsResult(TokenRequestOptions.builder().build()));
 				});
 				assertEquals(OAuthException.Reason.CLIENT_ASSERTION_ENDPOINT_MISMATCH, failure.getReason());
 				assertEquals(mode.equals("alg-exclude") || mode.equals("alg-unknown") ? 1 : 0, reads.get());
@@ -164,11 +166,11 @@ final class ClientAssertionTests {
 		try (TestHttpsServer server = TestHttpsServer.start()) {
 			AuthorizationServerMetadata metadata = metadataBuilder(server).tokenEndpointAuthSigningAlgValuesSupported(null)
 					.revocationEndpointAuthSigningAlgValuesSupported(null).introspectionEndpointAuthSigningAlgValuesSupported(null).build();
-			response(server, "/token",200,"application/json",tokens()); client(metadata,authentication(new AtomicInteger())).build().requestClientCredentialsToken(TokenRequestOptions.builder().build());
+			response(server, "/token",200,"application/json",tokens()); assertInstanceOf(OAuthTokenRequestResult.Succeeded.class, client(metadata,authentication(new AtomicInteger())).build().requestClientCredentialsResult(TokenRequestOptions.builder().build())).getTokens();
 			String json = "{\"issuer\":\"https://issuer.example\",\"authorization_endpoint\":\"https://issuer.example/a\",\"token_endpoint\":\"https://issuer.example/t\","
 					+"\"jwks_uri\":\"https://issuer.example/j\",\"subject_types_supported\":[\"public\"],\"id_token_signing_alg_values_supported\":[\"RS256\"],\"response_types_supported\":[\"code\"],"
 					+"\"token_endpoint_auth_signing_alg_values_supported\":[\"future\"],\"revocation_endpoint_auth_methods_supported\":[],\"revocation_endpoint_auth_signing_alg_values_supported\":[\"RS384\"],\"introspection_endpoint_auth_signing_alg_values_supported\":[\"PS256\"]}";
-			AuthorizationServerMetadata parsed = AuthorizationServerMetadata.fromJson(ISSUER,json); OidcProviderMetadata oidc = OidcProviderMetadata.fromJson(ISSUER,json);
+			AuthorizationServerMetadata parsed = assertInstanceOf(AuthorizationServerMetadataParseResult.Succeeded.class, AuthorizationServerMetadata.fromJsonResult(ISSUER,json)).getMetadata(); OidcProviderMetadata oidc = assertInstanceOf(OidcProviderMetadataParseResult.Succeeded.class, OidcProviderMetadata.fromJsonResult(ISSUER,json)).getMetadata();
 			assertEquals(Set.of("future"), parsed.getTokenEndpointAuthSigningAlgValuesSupported().orElseThrow()); assertEquals(parsed.getTokenEndpointAuthSigningAlgValuesSupported(),oidc.getTokenEndpointAuthSigningAlgValuesSupported());
 			assertEquals(Optional.of(Set.of()), oidc.getRevocationEndpointAuthMethodsSupported());
 			assertEquals(parsed.getRevocationEndpointAuthSigningAlgValuesSupported(),oidc.getRevocationEndpointAuthSigningAlgValuesSupported());
@@ -181,8 +183,7 @@ final class ClientAssertionTests {
 					.introspectionEndpointAuthSigningAlgValuesSupported(Set.of()).introspectionEndpointAuthSigningAlgValuesSupported(null).build();
 			assertTrue(reset.getTokenEndpointAuthSigningAlgValuesSupported().isEmpty()); assertTrue(reset.getRevocationEndpointAuthMethodsSupported().isEmpty());
 			assertTrue(reset.getRevocationEndpointAuthSigningAlgValuesSupported().isEmpty()); assertTrue(reset.getIntrospectionEndpointAuthSigningAlgValuesSupported().isEmpty()); assertTrue(reset.getIntrospectionEndpointAuthMethodsSupported().isEmpty());
-			for (String invalid : List.of("null", "true", "[\"PS256\",\"PS256\"]", "[\"\"]")) assertThrows(OAuthResponseException.class,
-					() -> AuthorizationServerMetadata.fromJson(ISSUER,json.replace("[\"future\"]",invalid)));
+			for (String invalid : List.of("null", "true", "[\"PS256\",\"PS256\"]", "[\"\"]")) assertInstanceOf(AuthorizationServerMetadataParseResult.Rejected.class, AuthorizationServerMetadata.fromJsonResult(ISSUER,json.replace("[\"future\"]",invalid)));
 		}
 	}
 
@@ -203,9 +204,9 @@ final class ClientAssertionTests {
 				};
 				OAuthClient client = client(metadata(server),ClientAuthentication.fromPrivateKeyJwt(provider)).observer(events).build();
 				try {
-					if (mode.equals("fatal")) { assertThrows(OutOfMemoryError.class, () -> client.requestClientCredentialsToken(TokenRequestOptions.builder().build())); assertEquals(0,events.preparedFailed.get()); }
+					if (mode.equals("fatal")) { assertThrows(OutOfMemoryError.class, () -> client.requestClientCredentialsResult(TokenRequestOptions.builder().build())); assertEquals(0,events.preparedFailed.get()); }
 					else {
-						OAuthException failure = assertThrows(OAuthException.class, () -> client.requestClientCredentialsToken(TokenRequestOptions.builder().build()));
+						OAuthException failure = assertThrows(OAuthException.class, () -> client.requestClientCredentialsResult(TokenRequestOptions.builder().build()));
 						assertEquals(mode.equals("interrupt") ? OAuthException.Reason.INTERRUPTED : OAuthException.Reason.CLIENT_ASSERTION_KEY_UNAVAILABLE, failure.getReason());
 						assertNull(failure.getCause()); assertSame(failure,events.failure.get()); assertEquals(1,events.preparedFailed.get()); assertFalse(failure.toString().contains("TEST-ONLY"));
 						if (mode.equals("interrupt")) assertTrue(Thread.currentThread().isInterrupted());
@@ -246,7 +247,7 @@ final class ClientAssertionTests {
 				OAuthClient client = client(metadata(server),ClientAuthentication.withPrivateKeyJwt(provider).assertionLifetime(Duration.ofSeconds(1)).build())
 						.clock(selected).observer(observer).clientId(mode.equals("claims-cap") ? "x".repeat(40_000) : mode.equals("invalid-text") ? "\ud800" : CLIENT)
 						.requestTimeout(Duration.ofSeconds(1)).totalDeadline(Duration.ofSeconds(1)).build();
-				OAuthException failure = assertThrows(OAuthException.class, () -> client.requestClientCredentialsToken(TokenRequestOptions.builder().build()));
+				OAuthException failure = assertThrows(OAuthException.class, () -> client.requestClientCredentialsResult(TokenRequestOptions.builder().build()));
 				assertSame(failure,events.failure.get()); assertEquals(1,reads.get()); assertEquals(0,server.getRequests().size());
 				boolean afterWill = mode.startsWith("will"); assertEquals(afterWill ? 1 : 0,events.will.get()); assertEquals(afterWill ? 1 : 0,events.failed.get()); assertEquals(afterWill ? 0 : 1,events.preparedFailed.get());
 				assertEquals(mode.endsWith("budget") ? OAuthException.Reason.NETWORK_FAILURE : OAuthException.Reason.CLIENT_ASSERTION_SIGNING_FAILED,failure.getReason());
@@ -260,16 +261,16 @@ final class ClientAssertionTests {
 			OAuthClient client = OAuthClient.withIssuer(server.getBaseUri().toString()).clientId(CLIENT).clientAuthentication(authentication(reads)).httpClient(TestTls.httpClient()).clock(CLOCK).build();
 			response(server,"/inspect",200,"application/json",active());
 			TokenIntrospectionClient explicit = TokenIntrospectionClient.withOAuthClient(client).introspectionEndpoint(server.uri("/inspect")).expectedAudiences(Set.of(AUD)).build();
-			explicit.warmUp(); assertEquals(0,reads.get()); assertEquals(0,server.getRequests().size()); assertNotNull(explicit.validate(bearer("opaque"))); assertEquals(1,reads.get());
+			explicit.warmUp(); assertEquals(0,reads.get()); assertEquals(0,server.getRequests().size()); assertNotNull(assertInstanceOf(AccessTokenValidationResult.Succeeded.class, explicit.validateResult(bearer("opaque"))).getAccessToken()); assertEquals(1,reads.get());
 			String json = "{\"issuer\":\""+server.getBaseUri()+"\",\"introspection_endpoint\":\""+server.uri("/inspect")+"\",\"introspection_endpoint_auth_signing_alg_values_supported\":[\"PS256\"],\"id_token_signing_alg_values_supported\":[\"HS256\"]}";
 			response(server,"/.well-known/oauth-authorization-server",200,"application/json",json);
 			TokenIntrospectionClient discovered = TokenIntrospectionClient.withOAuthClient(client).expectedAudiences(Set.of(AUD)).build();
-			discovered.warmUp(); assertEquals(1,reads.get()); assertNotNull(discovered.validate(bearer("opaque"))); assertEquals(2,reads.get());
+			discovered.warmUp(); assertEquals(1,reads.get()); assertNotNull(assertInstanceOf(AccessTokenValidationResult.Succeeded.class, discovered.validateResult(bearer("opaque"))).getAccessToken()); assertEquals(2,reads.get());
 			assertEquals(1,server.getHitCount("/.well-known/oauth-authorization-server"));
 			AuthorizationServerMetadata other = metadataBuilder(server).introspectionEndpoint(server.uri("/other"))
 					.introspectionEndpointAuthMethodsSupported(Set.of()).introspectionEndpointAuthSigningAlgValuesSupported(Set.of("RS384")).build();
 			OAuthClient configured = client(other,authentication(reads)).build();
-			assertNotNull(TokenIntrospectionClient.withOAuthClient(configured).introspectionEndpoint(server.uri("/inspect")).expectedAudiences(Set.of(AUD)).build().validate(bearer("opaque"))); assertEquals(3,reads.get());
+			assertNotNull(assertInstanceOf(AccessTokenValidationResult.Succeeded.class, TokenIntrospectionClient.withOAuthClient(configured).introspectionEndpoint(server.uri("/inspect")).expectedAudiences(Set.of(AUD)).build().validateResult(bearer("opaque"))).getAccessToken()); assertEquals(3,reads.get());
 			assertThrows(OAuthConfigurationException.class, () -> TokenIntrospectionClient.withOAuthClient(configured).expectedAudiences(Set.of(AUD)).build().validateResult(bearer("opaque"))); assertEquals(3,reads.get());
 		}
 	}
@@ -285,7 +286,7 @@ final class ClientAssertionTests {
 				OAuthClient client = client(b.build(),authentication(reads)).allowInsecureLoopback(true).observer(events).build();
 				OAuthConfigurationException failure = assertThrows(OAuthConfigurationException.class, () -> {
 					if (role.startsWith("inspect")) assertNotNull(TokenIntrospectionClient.withOAuthClient(client).expectedAudiences(Set.of(AUD)).build().validateResult(bearer("opaque")));
-					else if (role.equals("revoke")) client.revoke("opaque",TokenTypeHint.ACCESS_TOKEN); else client.requestClientCredentialsToken(TokenRequestOptions.builder().build());
+					else if (role.equals("revoke")) assertInstanceOf(OAuthRevocationResult.Succeeded.class, client.revokeResult("opaque",TokenTypeHint.ACCESS_TOKEN)); else assertInstanceOf(OAuthTokenRequestResult.Succeeded.class, client.requestClientCredentialsResult(TokenRequestOptions.builder().build()));
 				});
 				assertEquals(OAuthException.Reason.CLIENT_ASSERTION_ENDPOINT_MISMATCH,failure.getReason()); assertEquals(0,reads.get()); assertEquals(0,events.will.get()); assertSame(failure,events.failure.get()); assertEquals(0,server.getRequests().size());
 			}
@@ -300,8 +301,8 @@ final class ClientAssertionTests {
 			URI endpoint = URI.create(server.uri("/inspect")+"?q=%2F&x=a%20b");
 			response(server,"/inspect",200,"application/json",active());
 			OAuthClient client = client(metadata(server),ClientAuthentication.withPrivateKeyJwt(budget -> key(JwsAlgorithm.PS256)).audience(ClientAssertionAudience.TOKEN_ENDPOINT).build()).build();
-			assertNotNull(TokenIntrospectionClient.withOAuthClient(client).introspectionEndpoint(endpoint).expectedAudiences(Set.of(AUD)).build().validate(bearer("opaque")));
-			assertEquals(endpoint.toString(),segment(java.util.Objects.requireNonNull(form(server.getRequests("/inspect").get(0).getBodyAsString()).get("client_assertion")),1).findString("aud").orElseThrow());
+			assertNotNull(assertInstanceOf(AccessTokenValidationResult.Succeeded.class, TokenIntrospectionClient.withOAuthClient(client).introspectionEndpoint(endpoint).expectedAudiences(Set.of(AUD)).build().validateResult(bearer("opaque"))).getAccessToken());
+			assertEquals(endpoint.toString(),segment(java.util.Objects.requireNonNull(form(server.getRequests("/inspect").get(0).getBodyAsString()).get("client_assertion")),1).find("aud").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow());
 		}
 	}
 
@@ -314,7 +315,7 @@ final class ClientAssertionTests {
 					@Override public @Nullable String getFormat() { return null; }
 					@Override public byte @Nullable [] getEncoded() { return null; }
 				};
-				JwsSigner signer = JwsSigner.fromRsaKeyPair(privateKey,mismatch ? TestJsonWebKeys.Fixture.NEGATIVE_ATTACKER_RSA_2048.getPublicKey() : KEY.getPublicKey(),JwsAlgorithm.RS256);
+				JwsSigner signer = JwsSigner.fromRsaKeyPair(privateKey,mismatch ? TestJwk.Fixture.NEGATIVE_ATTACKER_RSA_2048.getPublicKey() : KEY.getPublicKey(),JwsAlgorithm.RS256);
 				Events events = new Events();
 				OAuthClient client = client(metadata(server),ClientAuthentication.fromPrivateKeyJwt(ClientAssertionKeyProvider.fromKey(ClientAssertionSigningKey.withSigner(signer).keyId("TEST-ONLY-key").build()))).observer(events).build();
 				OAuthConfigurationException failure = assertThrows(OAuthConfigurationException.class, () -> TokenIntrospectionClient.withOAuthClient(client).expectedAudiences(Set.of(AUD)).build().validateResult(bearer("opaque")));
@@ -332,16 +333,16 @@ final class ClientAssertionTests {
 			TestHttpsServer.HeldScript held = TestHttpsServer.HeldScript.fromResponse(TestHttpsServer.Response.fromJson(200,tokens())); server.script("/token",held);
 			ClientCredentialsTokenSource source = ClientCredentialsTokenSource.withClient(client).build(); ExecutorService pool = Executors.newFixedThreadPool(3);
 			try {
-				Future<AccessToken> leader = pool.submit(source::getAccessToken); assertTrue(held.awaitHeldCount(1,Duration.ofSeconds(5)));
+				Future<AccessToken> leader = pool.submit(() -> assertInstanceOf(AccessTokenAcquisitionResult.Succeeded.class, source.getAccessTokenResult()).getAccessToken()); assertTrue(held.awaitHeldCount(1,Duration.ofSeconds(5)));
 				AtomicReference<Thread> waiterThread = new AtomicReference<>(); CountDownLatch entered = new CountDownLatch(1);
-				Future<AccessToken> waiter = pool.submit(() -> { waiterThread.set(Thread.currentThread()); entered.countDown(); return source.getAccessToken(); });
+				Future<AccessToken> waiter = pool.submit(() -> { waiterThread.set(Thread.currentThread()); entered.countDown(); return assertInstanceOf(AccessTokenAcquisitionResult.Succeeded.class, source.getAccessTokenResult()).getAccessToken(); });
 				assertTrue(entered.await(5,TimeUnit.SECONDS)); awaitWaitingForToken(java.util.Objects.requireNonNull(waiterThread.get()));
 				assertFalse(waiter.isDone()); assertEquals(1,reads.get()); held.release();
-				assertSame(leader.get(5,TimeUnit.SECONDS),waiter.get(5,TimeUnit.SECONDS)); source.getAccessToken(); assertEquals(1,reads.get()); assertEquals(1,server.getHitCount("/token"));
-				response(server,"/token",200,"application/json",tokens()); client.requestClientCredentialsToken(TokenRequestOptions.builder().build()); assertEquals(2,reads.get());
+				assertSame(leader.get(5,TimeUnit.SECONDS),waiter.get(5,TimeUnit.SECONDS)); assertInstanceOf(AccessTokenAcquisitionResult.Succeeded.class, source.getAccessTokenResult()).getAccessToken(); assertEquals(1,reads.get()); assertEquals(1,server.getHitCount("/token"));
+				response(server,"/token",200,"application/json",tokens()); assertInstanceOf(OAuthTokenRequestResult.Succeeded.class, client.requestClientCredentialsResult(TokenRequestOptions.builder().build())).getTokens(); assertEquals(2,reads.get());
 				String first = java.util.Objects.requireNonNull(form(server.getRequests("/token").get(0).getBodyAsString()).get("client_assertion")); String second = java.util.Objects.requireNonNull(form(server.getRequests("/token").get(1).getBodyAsString()).get("client_assertion"));
-				assertEquals("key-1",segment(first,0).findString("kid").orElseThrow()); assertEquals("key-2",segment(second,0).findString("kid").orElseThrow());
-				assertEquals("RS384",segment(second,0).findString("alg").orElseThrow()); assertNotEquals(segment(first,1).findString("jti"),segment(second,1).findString("jti"));
+				assertEquals("key-1",segment(first,0).find("kid").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow()); assertEquals("key-2",segment(second,0).find("kid").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow());
+				assertEquals("RS384",segment(second,0).find("alg").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow()); assertNotEquals(segment(first,1).find("jti").map(value -> ((com.revetsec.json.JsonString) value).getValue()),segment(second,1).find("jti").map(value -> ((com.revetsec.json.JsonString) value).getValue()));
 			} finally { held.release(); pool.shutdownNow(); assertTrue(pool.awaitTermination(5,TimeUnit.SECONDS)); }
 		}
 	}
@@ -356,7 +357,7 @@ final class ClientAssertionTests {
 		try (TestHttpsServer server = TestHttpsServer.start()) {
 			Events events = new Events(); OAuthClient client = client(metadata(server),auth).observer(events).redirectUri(server.uri("/callback")).build();
 			AuthorizationRedirect redirect = client.beginAuthorization();
-			assertInstanceOf(AuthorizationCompletionResult.Rejected.class,client.completeAuthorizationResult(AuthorizationResponse.fromQueryString("code=bad&state=bad"),source(redirect.getPendingAuthorization()),server.uri("/callback")));
+			assertInstanceOf(AuthorizationCompletionResult.Rejected.class,client.completeAuthorizationResult(assertInstanceOf(AuthorizationResponseParseResult.Succeeded.class, AuthorizationResponse.fromQueryStringResult("code=bad&state=bad")).getResponse(),source(redirect.getPendingAuthorization()),server.uri("/callback")));
 			assertEquals(0,reads.get()); assertEquals(0,events.preparedFailed.get()); assertEquals(0,events.will.get());
 		}
 	}
@@ -378,7 +379,7 @@ final class ClientAssertionTests {
 				if (role.equals("revoke")) metadata = metadata.revocationEndpointAuthSigningAlgValuesSupported(algorithms); else metadata = metadata.introspectionEndpointAuthSigningAlgValuesSupported(algorithms);
 				OAuthClient client = client(metadata.build(),authentication(reads)).observer(events).build();
 				assertThrows(OAuthConfigurationException.class, () -> {
-					if (role.equals("revoke")) client.revoke("token",TokenTypeHint.ACCESS_TOKEN); else assertNotNull(TokenIntrospectionClient.withOAuthClient(client).expectedAudiences(Set.of(AUD)).build().validateResult(bearer("token")));
+					if (role.equals("revoke")) assertInstanceOf(OAuthRevocationResult.Succeeded.class, client.revokeResult("token",TokenTypeHint.ACCESS_TOKEN)); else assertNotNull(TokenIntrospectionClient.withOAuthClient(client).expectedAudiences(Set.of(AUD)).build().validateResult(bearer("token")));
 				});
 				assertEquals(policy.equals("empty") ? 0 : 1,reads.get()); assertEquals(1,events.preparedFailed.get()); assertEquals(0,events.will.get()); assertEquals(0,server.getRequests().size());
 			}
@@ -389,9 +390,9 @@ final class ClientAssertionTests {
 			TestClock clock = TestClock.fromInstant(NOW.plusNanos(500_000_000));
 			ClientAuthentication auth = ClientAuthentication.withPrivateKeyJwt(budget -> { clock.advance(Duration.ofSeconds(10)); return key(JwsAlgorithm.PS256); }).assertionLifetime(Duration.ofSeconds(1)).build();
 			response(server,"/token",200,"application/json",tokens());
-			TokenResponse token = client(metadata(server),auth).clock(clock).build().requestClientCredentialsToken(TokenRequestOptions.builder().build());
+			TokenResponse token = assertInstanceOf(OAuthTokenRequestResult.Succeeded.class, client(metadata(server),auth).clock(clock).build().requestClientCredentialsResult(TokenRequestOptions.builder().build())).getTokens();
 			JsonObject claims = segment(java.util.Objects.requireNonNull(form(server.getRequests("/token").get(0).getBodyAsString()).get("client_assertion")),1);
-			assertEquals(NOW.getEpochSecond()+10,claims.findLong("iat").orElseThrow()); assertEquals(NOW.getEpochSecond()+11,claims.findLong("exp").orElseThrow());
+			assertEquals(NOW.getEpochSecond()+10,claims.find("iat").flatMap(value -> ((com.revetsec.json.JsonNumber) value).getLongValueExact()).orElseThrow()); assertEquals(NOW.getEpochSecond()+11,claims.find("exp").flatMap(value -> ((com.revetsec.json.JsonNumber) value).getLongValueExact()).orElseThrow());
 			assertEquals(Optional.of(NOW.plusSeconds(310).plusNanos(500_000_000)),token.getExpiresAt());
 		}
 	}
@@ -458,7 +459,7 @@ final class ClientAssertionTests {
 
 	private static @NonNull PendingAuthorizationSource source(@NonNull PendingAuthorization pending) {
 		InMemoryPendingAuthorizationStore store = InMemoryPendingAuthorizationStore.builder().clock(CLOCK).build();
-		pending.saveTo(store,"browser"); return PendingAuthorizationSource.fromStore(store,"browser");
+		org.junit.jupiter.api.Assertions.assertEquals(PendingAuthorizationSaveResult.SAVED, pending.saveToResult(store,"browser")); return PendingAuthorizationSource.fromStore(store,"browser");
 	}
 	private static @NonNull JwsSigner signer(@NonNull JwsAlgorithm algorithm) { return JwsSigner.fromRsaKeyPair(KEY.getPrivateKey(),KEY.getPublicKey(),algorithm); }
 	private static @NonNull ClientAssertionSigningKey key(@NonNull JwsAlgorithm algorithm) { return ClientAssertionSigningKey.withSigner(signer(algorithm)).keyId("key").build(); }

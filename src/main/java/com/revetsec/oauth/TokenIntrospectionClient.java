@@ -130,10 +130,8 @@ public final class TokenIntrospectionClient implements AccessTokenValidator {
 	 * @return fully checked proof with no received credential
 	 * @since 1.0.0
 	 */
-	@Override
-	@CheckReturnValue
 	@NonNull
-	public VerifiedAccessToken validate(@NonNull BearerToken token) {
+	private VerifiedAccessToken validateCredential(@NonNull BearerToken token) {
 		requireNonNull(token);
 		Deadline deadline = Deadline.fromNow(this.settings.totalDeadline());
 		try {
@@ -177,7 +175,8 @@ public final class TokenIntrospectionClient implements AccessTokenValidator {
 	}
 
 	/**
-	 * Returns only local credential verdicts; provider errors remain exceptions.
+	 * Returns a credential verdict or a distinct checked endpoint rejection. Transient provider failures,
+	 * malformed responses, metadata failures and transport failures remain exceptions.
 	 * @param token unverified bearer credential
 	 * @return outcome
 	 * @since 1.0.0
@@ -187,9 +186,12 @@ public final class TokenIntrospectionClient implements AccessTokenValidator {
 	@NonNull
 	public AccessTokenValidationResult validateResult(@NonNull BearerToken token) {
 		try {
-			return AccessTokenValidationResult.fromToken(validate(token));
+			return AccessTokenValidationResult.fromToken(validateCredential(token));
 		} catch (AccessTokenValidationException rejection) {
 			return AccessTokenValidationResult.fromRejection(rejection);
+		} catch (OAuthErrorResponseException failure) {
+			if (!failure.isEndpointRejection()) throw failure;
+			return AccessTokenValidationResult.fromEndpoint(failure);
 		}
 	}
 

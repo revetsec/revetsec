@@ -180,6 +180,25 @@ class OAuthClientMetadataFetchTests {
    assertTrue(c.open(ID,copy(entry,sealed),NOW).isEmpty());
   }));
  }
+ @Test void authenticatedUnsupportedNumericSchemaAndWrongTypesRemainCacheMisses() throws Exception {
+  StateSealer sealer=sealer();var c=codec(sealer,policy(null));
+  var original=c.seal(ID,body("display"),NOW,NOW.plusSeconds(120));
+  assertEquals("display",c.open(ID,original,NOW).orElseThrow().document().clientName());
+  String text=SealedStateAccess.get().unseal(sealer,SealedStateType.AS_CLIENT_METADATA_CACHE,
+   original.toSealedForm(),context(original),Clock.fixed(NOW,ZoneOffset.UTC));
+  JsonObject payload=(JsonObject)com.revetsec.internal.json.JsonCodec.parse(StrictUtf8.encode(text),
+   com.revetsec.internal.json.JsonLimits.protocolDocument(16000));
+  List<JsonValue> versions=List.of(com.revetsec.json.JsonNumber.fromValue(2L),
+   JsonString.fromValue("1"),com.revetsec.json.JsonBoolean.fromValue(true),com.revetsec.json.JsonNull.defaultInstance());
+  for(JsonValue version:versions) {
+   var members=new java.util.LinkedHashMap<>(payload.getMembers());members.put("schema",version);
+   String changed=SealedStateAccess.get().seal(sealer,SealedStateType.AS_CLIENT_METADATA_CACHE,
+    JsonObject.fromMembers(members).toJson(),context(original),original.getExpiresAt());
+   OAuthClientMetadataCacheEntry candidate=copy(original,changed);
+   assertTrue(c.open(ID,candidate,NOW).isEmpty());
+   assertTrue(c.authenticatedFetchedAt(ID,candidate).isEmpty());
+  }
+ }
  @Test void twoIndependentCoordinatorsReuseOnlyAuthenticatedSharedRecords() {
   OAuthClientMetadataCache cache=InMemoryOAuthClientMetadataCache.fromDefaults();var p=policy(cache);StateSealer s=sealer();AtomicInteger calls=new AtomicInteger();
   OAuthClientMetadataFetcher.Transport transport=(uri,d)->{calls.incrementAndGet();return response("display");};
@@ -257,6 +276,25 @@ class OAuthClientMetadataFetchTests {
    @Override public @NonNull Boolean compareAndSet(@NonNull OAuthClientMetadataCacheKey k,@Nullable String v,@Nullable OAuthClientMetadataCacheEntry e,@NonNull Duration b){throw new IllegalStateException("backend diagnostic");}
   };
   assertEquals("fresh",fetcher(sealer(),policy(bad),Clock.fixed(NOW,ZoneOffset.UTC),(u,d)->response("fresh")).reusable(ID,deadline()).clientName());
+ }
+ @Test void failedOptionalWriteMayHaveAppliedAndIsNeverRetried() {
+  for(var reason:List.of(OAuthClientMetadataCacheException.Reason.UNAVAILABLE,OAuthClientMetadataCacheException.Reason.TIMEOUT)) {
+   AtomicInteger fetches=new AtomicInteger(),writes=new AtomicInteger();
+   AtomicReference<OAuthClientMetadataCacheEntry> saved=new AtomicReference<>();
+   OAuthClientMetadataCache cache=new OAuthClientMetadataCache(){
+    @Override public @NonNull Optional<@NonNull OAuthClientMetadataCacheEntry> read(@NonNull OAuthClientMetadataCacheKey key,@NonNull Duration budget){return Optional.ofNullable(saved.get());}
+    @Override public @NonNull Boolean compareAndSet(@NonNull OAuthClientMetadataCacheKey key,@Nullable String version,
+      @Nullable OAuthClientMetadataCacheEntry replacement,@NonNull Duration budget) {
+     writes.incrementAndGet();assertNull(version);assertNotNull(replacement);saved.set(replacement);
+     throw OAuthClientMetadataCacheException.fromReason(reason);
+    }
+   };
+   var f=fetcher(sealer(),policy(cache),Clock.fixed(NOW,ZoneOffset.UTC),(u,d)->{fetches.incrementAndGet();return response("fresh");});
+   assertEquals("fresh",f.reusable(ID,deadline()).clientName());
+   assertNotNull(saved.get());assertEquals(1,fetches.get());assertEquals(1,writes.get());
+   assertEquals("fresh",f.reusable(ID,deadline()).clientName());
+   assertEquals(1,fetches.get());assertEquals(1,writes.get());
+  }
  }
  @Test void interruptedOptionalWriteAbortsReleaseAndRestoresTheFlag() {
   OAuthClientMetadataCache interrupted=new OAuthClientMetadataCache(){

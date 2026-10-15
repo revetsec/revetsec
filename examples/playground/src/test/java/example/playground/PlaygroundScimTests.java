@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 package example.playground;
+import com.revetsec.json.JsonString;
 
 import org.jspecify.annotations.NonNull;
 import com.revetsec.json.JsonObject;
@@ -161,7 +162,7 @@ class PlaygroundScimTests {
         Request add = patch("{\"op\":\"add\",\"path\":\"members\",\"value\":[{\"value\":\"u-2\"}]}");
         assertEquals(204, app.write(GROUP, "g-3", add, true).getStatusCode());
         ScimResource changed = Objects.requireNonNull(app.snapshot(GROUP, "g-3"));
-        assertEquals(List.of("u-1", "u-2"), ((com.revetsec.json.JsonArray) changed.getDocument().find("members").orElseThrow()).getElements().stream().map(value -> ((JsonObject) value).findString("value").orElseThrow()).toList());
+        assertEquals(List.of("u-1", "u-2"), ((com.revetsec.json.JsonArray) changed.getDocument().find("members").orElseThrow()).getElements().stream().map(value -> ((JsonObject) value).find("value").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow()).toList());
         assertEquals(400, app.write(GROUP, "g-3", patch("{\"op\":\"add\",\"path\":\"members\",\"value\":[{\"value\":\"missing-user\"}]}"), true).getStatusCode());
         assertSame(changed, app.snapshot(GROUP, "g-3"));
     }
@@ -169,7 +170,7 @@ class PlaygroundScimTests {
         PlaygroundScim app = app(); app.create(USER, user("alice"));
         String enterprise = "urn:ietf:params:scim:schemas:extension:enterprise:2.0:User";
         assertEquals(200, app.write(USER, "u-1", patch("{\"op\":\"add\",\"path\":\"" + enterprise + "\",\"value\":{\"department\":\"Engineering\"}}"), true).getStatusCode());
-        assertEquals("Engineering", app.snapshot(USER, "u-1").getExtension(enterprise).orElseThrow().findString("department").orElseThrow());
+        assertEquals("Engineering", app.snapshot(USER, "u-1").getExtension(enterprise).orElseThrow().find("department").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow());
         String group = "{\"schemas\":[\"urn:ietf:params:scim:schemas:core:2.0:Group\"],\"displayName\":\"nested\"}";
         assertEquals(201, app.create(GROUP, body(HttpMethod.POST, "/scim/v2/Groups", group)).getStatusCode());
         Request outer = body(HttpMethod.POST, "/scim/v2/Groups", "{\"schemas\":[\"urn:ietf:params:scim:schemas:core:2.0:Group\"],\"displayName\":\"outer\",\"members\":[{\"value\":\"g-2\",\"type\":\"Group\",\"$ref\":\"Groups/g-2\"}]}");
@@ -196,7 +197,7 @@ class PlaygroundScimTests {
         app.failNext(PlaygroundScim.Fault.BEFORE_COMMIT_CONFLICT); assertEquals(412, app.write(USER, "u-1", change, true).getStatusCode()); assertSame(original, app.snapshot(USER, "u-1"));
         assertEquals(PlaygroundScim.CommitOutcome.CONFLICT, app.lastOutcome());
         app.failNext(PlaygroundScim.Fault.ACKNOWLEDGEMENT_LOST); assertEquals(503, app.write(USER, "u-1", change, true).getStatusCode());
-        assertEquals(PlaygroundScim.CommitOutcome.UNKNOWN, app.lastOutcome()); assertEquals("Changed", app.snapshot(USER, "u-1").getDocument().findString("displayName").orElseThrow());
+        assertEquals(PlaygroundScim.CommitOutcome.UNKNOWN, app.lastOutcome()); assertEquals("Changed", app.snapshot(USER, "u-1").getDocument().find("displayName").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow());
     }
     @Test void raceRechecksIfMatchOnTheCommittedRowAndUniqueNamesUnderLock() throws Exception {
         PlaygroundScim app = app(); app.create(USER, user("alice"));

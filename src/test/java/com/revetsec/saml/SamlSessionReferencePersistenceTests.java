@@ -18,6 +18,7 @@ package com.revetsec.saml;
 import com.revetsec.StateSealer;
 import com.revetsec.testing.TestSealers;
 import org.junit.jupiter.api.Test;
+import org.jspecify.annotations.NonNull;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -25,6 +26,8 @@ import java.time.ZoneOffset;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 final class SamlSessionReferencePersistenceTests {
@@ -37,7 +40,7 @@ final class SamlSessionReferencePersistenceTests {
                         "https://sp.example.test", "alias"), "session-123", NOW.plusSeconds(300));
         String serialized = source.toSerializedForm();
         assertTrue(serialized.startsWith("1."));
-        SamlSessionReference restored = SamlSessionReference.fromSerializedForm(serialized);
+        SamlSessionReference restored = parsed(SamlSessionReference.fromSerializedFormResult(serialized));
         assertEquals(source.getIdentityProviderConnectionId(), restored.getIdentityProviderConnectionId());
         assertEquals(source.getIdentityProviderEntityId(), restored.getIdentityProviderEntityId());
         assertEquals(source.getNameId().getValue(), restored.getNameId().getValue());
@@ -55,13 +58,13 @@ final class SamlSessionReferencePersistenceTests {
         SamlSessionReference source = new SamlSessionReference("tenant-one", "https://idp.example.test",
                 new SamlNameId("alice", SamlNameId.PERSISTENT, null, null), null, null);
         String sealed = source.toSealedForm(sealer, "browser-session-1", NOW.plusSeconds(60));
-        assertEquals("alice", SamlSessionReference.fromSealedForm(sealed, sealer,
-                "browser-session-1", CLOCK).getNameId().getValue());
-        assertThrows(IllegalArgumentException.class, () -> SamlSessionReference.fromSealedForm(
+        assertEquals("alice", parsed(SamlSessionReference.fromSealedFormResult(sealed, sealer,
+                "browser-session-1", CLOCK)).getNameId().getValue());
+        assertInstanceOf(SamlSessionReferenceParseResult.RejectedSealedState.class, SamlSessionReference.fromSealedFormResult(
                 sealed, sealer, "browser-session-2", CLOCK));
-        assertThrows(IllegalArgumentException.class, () -> SamlSessionReference.fromSealedForm(
+        assertInstanceOf(SamlSessionReferenceParseResult.RejectedSealedState.class, SamlSessionReference.fromSealedFormResult(
                 sealed.substring(0, sealed.length() - 1) + "!", sealer, "browser-session-1", CLOCK));
-        assertThrows(IllegalArgumentException.class, () -> SamlSessionReference.fromSealedForm(
+        assertInstanceOf(SamlSessionReferenceParseResult.RejectedSealedState.class, SamlSessionReference.fromSealedFormResult(
                 sealed, sealer, "browser-session-1", Clock.fixed(NOW.plusSeconds(60), ZoneOffset.UTC)));
         assertTrue(source.toString().contains("<redacted>"));
     }
@@ -74,6 +77,40 @@ final class SamlSessionReferencePersistenceTests {
                 valid.replaceFirst("dGVuYW50", "?"),
                 valid.substring(0, valid.lastIndexOf('.') + 1) + "eGJhZA",
                 "x".repeat(32769)
-        }) assertThrows(IllegalArgumentException.class, () -> SamlSessionReference.fromSerializedForm(invalid));
+        }) assertInstanceOf(SamlSessionReferenceParseResult.Rejected.class, SamlSessionReference.fromSerializedFormResult(invalid));
     }
+    @Test void resultReasonsAndDiagnosticsAreFixedWithoutStoredPersonalData() {
+        SamlSessionReferenceParseResult.Rejected rejected = assertInstanceOf(
+                SamlSessionReferenceParseResult.Rejected.class,
+                SamlSessionReference.fromSerializedFormResult("synthetic-private-reference"));
+        assertEquals(SamlSessionReferenceParseResult.Reason.INVALID_REFERENCE, rejected.getReason());
+        assertFalse(rejected.toString().contains("synthetic-private-reference"));
+        StateSealer sealer = StateSealer.withActiveKey(TestSealers.fixedKey("saml-session-reference"))
+                .clock(CLOCK).build();
+        SamlSessionReferenceParseResult.RejectedSealedState sealedRejected = assertInstanceOf(
+                SamlSessionReferenceParseResult.RejectedSealedState.class,
+                SamlSessionReference.fromSealedFormResult("synthetic-private-reference", sealer, "context", CLOCK));
+        assertEquals(SamlSessionReferenceParseResult.Reason.INVALID_SEALED_STATE, sealedRejected.getReason());
+        assertFalse(sealedRejected.toString().contains("synthetic-private-reference"));
+    }
+
+    @SuppressWarnings("NullAway") // Deliberately violates required argument contracts.
+    @Test void nullRequiredInputsRemainProgrammerErrors() {
+        StateSealer sealer = StateSealer.withActiveKey(TestSealers.fixedKey("saml-session-reference"))
+                .clock(CLOCK).build();
+        assertThrows(NullPointerException.class, () -> SamlSessionReference.fromSerializedFormResult(null));
+        assertThrows(NullPointerException.class,
+                () -> SamlSessionReference.fromSealedFormResult(null, sealer, "context", CLOCK));
+        assertThrows(NullPointerException.class,
+                () -> SamlSessionReference.fromSealedFormResult("opaque", null, "context", CLOCK));
+        assertThrows(NullPointerException.class,
+                () -> SamlSessionReference.fromSealedFormResult("opaque", sealer, null, CLOCK));
+        assertThrows(NullPointerException.class,
+                () -> SamlSessionReference.fromSealedFormResult("opaque", sealer, "context", null));
+    }
+
+    private static @NonNull SamlSessionReference parsed(@NonNull SamlSessionReferenceParseResult result) {
+        return assertInstanceOf(SamlSessionReferenceParseResult.Succeeded.class, result).getReference();
+    }
+
 }

@@ -44,7 +44,7 @@ final class ResourceServerMetadataTests {
         String json="{\"issuer\":\"https://issuer.example\",\"jwks_uri\":\"https://issuer.example/keys\",\"id_token_signing_alg_values_supported\":[\"HS256\"]}";
         ResourceServerMetadata m=ResourceServerMetadata.parse(ISSUER,json.getBytes(StandardCharsets.UTF_8),ResourceServerMetadata.Role.JWT);assertEquals(URI.create(ISSUER+"/keys"),m.endpoint());assertNull(m.authenticationMethods());redacted(m,ISSUER);
         assertThrows(OAuthResponseException.class,()->ResourceServerMetadata.parse(ISSUER,json.getBytes(StandardCharsets.UTF_8),ResourceServerMetadata.Role.INTROSPECTION));
-        assertThrows(OAuthResponseException.class,()->AuthorizationServerMetadata.fromJson(ISSUER,json));
+        assertInstanceOf(AuthorizationServerMetadataParseResult.Rejected.class, AuthorizationServerMetadata.fromJsonResult(ISSUER,json));
         ResourceServerMetadata parsed=ResourceServerMetadata.parse(ISSUER,"{\"issuer\":\"https://issuer.example\",\"introspection_endpoint\":\"https://issuer.example/inspect\",\"introspection_endpoint_auth_methods_supported\":[\"client_secret_post\"]}".getBytes(StandardCharsets.UTF_8),ResourceServerMetadata.Role.INTROSPECTION);
         assertEquals(Set.of("client_secret_post"),parsed.authenticationMethods());assertEquals(ISSUER,parsed.issuer());
     }
@@ -56,7 +56,7 @@ final class ResourceServerMetadataTests {
             String issuer=server.uri("/tenant/").toString();String doc="{\"issuer\":"+JsonText.string(issuer)+",\"jwks_uri\":"+JsonText.string(server.uri("/jwks").toString())+"}";
             response(server,"/.well-known/oauth-authorization-server/tenant",404,"application/json","{}");response(server,"/.well-known/openid-configuration/tenant",404,"application/json","{}");response(server,"/tenant/.well-known/openid-configuration",200,"application/json",doc);response(server,"/jwks",200,"application/json",keyJson());
             JwtAccessTokenValidator validator=JwtAccessTokenValidator.withIssuer(issuer).expectedAudiences(Set.of(AUD)).clock(CLOCK).httpClient(TestTls.httpClient()).build();
-            assertEquals(0,server.getRequests().size());validator.warmUp();assertEquals(4,server.getRequests().size());assertNotNull(validator.validate(bearer(token(claims(issuer),"at+jwt"))));assertEquals(4,server.getRequests().size());
+            assertEquals(0,server.getRequests().size());validator.warmUp();assertEquals(4,server.getRequests().size());assertNotNull(assertInstanceOf(AccessTokenValidationResult.Succeeded.class, validator.validateResult(bearer(token(claims(issuer),"at+jwt")))).getAccessToken());assertEquals(4,server.getRequests().size());
         }
         try(TestHttpsServer server=TestHttpsServer.start()) {
             response(server,"/.well-known/oauth-authorization-server",200,"application/json","{}");JwtAccessTokenValidator validator=JwtAccessTokenValidator.withIssuer(server.getBaseUri().toString()).expectedAudiences(Set.of(AUD)).httpClient(TestTls.httpClient()).build();
@@ -83,12 +83,12 @@ final class ResourceServerMetadataTests {
             String issuer=server.getBaseUri().toString();RewindableClock clock=RewindableClock.fromInstant(NOW);
             java.util.function.Function<String,String> doc=path->"{\"issuer\":"+JsonText.string(issuer)+",\"jwks_uri\":"+JsonText.string(server.uri(path).toString())+"}";
             response(server,"/.well-known/oauth-authorization-server",200,"application/json",doc.apply("/keys-a"));response(server,"/keys-a",200,"application/json",keyJson());
-            String rotated=TestJsonWebKeys.withFixture(TestJsonWebKeys.Fixture.IDP_SIGNING_RSA_3072).kid("new-key").alg("RS256").toKeySetJson();response(server,"/keys-b",200,"application/json",rotated);
+            String rotated=TestJwk.withFixture(TestJwk.Fixture.IDP_SIGNING_RSA_3072).kid("new-key").alg("RS256").toKeySetJson();response(server,"/keys-b",200,"application/json",rotated);
             JwtAccessTokenValidator v=JwtAccessTokenValidator.withIssuer(issuer).expectedAudiences(Set.of(AUD)).clock(clock).httpClient(TestTls.httpClient()).minimumTimeToLive(Duration.ofSeconds(30)).defaultTimeToLive(Duration.ofSeconds(30)).maximumTimeToLive(Duration.ofSeconds(60)).discoveryCooldown(Duration.ofSeconds(1)).build();
-            assertNotNull(v.validate(bearer(token(claims(issuer),"at+jwt"))));assertEquals(1,server.getHitCount("/keys-a"));
-            clock.advance(Duration.ofSeconds(31));assertNotNull(v.validate(bearer(token(claims(issuer),"at+jwt"))));assertEquals(1,server.getHitCount("/keys-a"));
+            assertNotNull(assertInstanceOf(AccessTokenValidationResult.Succeeded.class, v.validateResult(bearer(token(claims(issuer),"at+jwt")))).getAccessToken());assertEquals(1,server.getHitCount("/keys-a"));
+            clock.advance(Duration.ofSeconds(31));assertNotNull(assertInstanceOf(AccessTokenValidationResult.Succeeded.class, v.validateResult(bearer(token(claims(issuer),"at+jwt")))).getAccessToken());assertEquals(1,server.getHitCount("/keys-a"));
             Thread.sleep(1050);clock.advance(Duration.ofSeconds(31));response(server,"/.well-known/oauth-authorization-server",200,"application/json",doc.apply("/keys-b"));
-            String compact=TestJws.withAlgorithm(TestJws.Algorithm.RS256).kid("new-key").typ("at+jwt").payload(JsonText.object(new ArrayList<>(claims(issuer).entrySet()))).sign(TestJsonWebKeys.Fixture.IDP_SIGNING_RSA_3072.getPrivateKey());assertNotNull(v.validate(bearer(compact)));assertEquals(1,server.getHitCount("/keys-b"));assertEquals(3,server.getHitCount("/.well-known/oauth-authorization-server"));
+            String compact=TestJws.withAlgorithm(TestJws.Algorithm.RS256).kid("new-key").typ("at+jwt").payload(JsonText.object(new ArrayList<>(claims(issuer).entrySet()))).sign(TestJwk.Fixture.IDP_SIGNING_RSA_3072.getPrivateKey());assertNotNull(assertInstanceOf(AccessTokenValidationResult.Succeeded.class, v.validateResult(bearer(compact))).getAccessToken());assertEquals(1,server.getHitCount("/keys-b"));assertEquals(3,server.getHitCount("/.well-known/oauth-authorization-server"));
             assertInstanceOf(AccessTokenValidationResult.Rejected.class,v.validateResult(bearer(token(claims(issuer),"at+jwt"))));assertEquals(1,server.getHitCount("/keys-a"));
         }
     }

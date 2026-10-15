@@ -64,8 +64,8 @@ final class OAuthRc1JwtMutationTests {
     void staticValidatorOwnershipIsReleasedBetweenCallerThreads() {
         JwtAccessTokenValidator validator=Phase2Fixtures.jwt().build();
         BearerToken token=Phase2Fixtures.bearer(Phase2Fixtures.token(Phase2Fixtures.claims(Phase2Fixtures.ISSUER),"at+jwt"));
-        assertEquals("TEST-ONLY-subject",onCaller(()->validator.validate(token)).getSubject().orElseThrow());
-        assertEquals("TEST-ONLY-subject",onCaller(()->validator.validate(token)).getSubject().orElseThrow());
+        assertEquals("TEST-ONLY-subject",onCaller(()->assertInstanceOf(AccessTokenValidationResult.Succeeded.class, validator.validateResult(token)).getAccessToken()).getSubject().orElseThrow());
+        assertEquals("TEST-ONLY-subject",onCaller(()->assertInstanceOf(AccessTokenValidationResult.Succeeded.class, validator.validateResult(token)).getAccessToken()).getSubject().orElseThrow());
     }
 
     @Test

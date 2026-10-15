@@ -66,23 +66,6 @@ public final class OidcUserInfo {
 	 */
 	public @NonNull Boolean isSigned() { return this.signed; }
 	/**
-	 * Returns a string email claim, never an account key.
-	 * @return optional email
-	 * @since 1.0.0
-	 */
-	public @NonNull Optional<@NonNull String> getEmail() {
-		return this.claims.getMembers().get("email") instanceof JsonString text ? Optional.of(text.getValue()) : Optional.empty();
-	}
-	/**
-	 * Returns a JSON-boolean email-verification claim; strings are never coerced. This does not establish the
-	 * provider's authority over an email domain.
-	 * @return optional boolean
-	 * @since 1.0.0
-	 */
-	public @NonNull Optional<@NonNull Boolean> getEmailVerified() {
-		return this.claims.getMembers().get("email_verified") instanceof JsonBoolean value ? Optional.of(value.getValue()) : Optional.empty();
-	}
-	/**
 	 * Redacts claims and identity.
 	 * @return redacted description
 	 * @since 1.0.0

@@ -24,12 +24,12 @@ import com.nimbusds.jwt.JWTClaimsSet;
 import com.nimbusds.jwt.SignedJWT;
 import com.nimbusds.jwt.proc.DefaultJWTClaimsVerifier;
 import com.nimbusds.jose.proc.SecurityContext;
-import com.revetsec.jose.JsonWebKeySet;
+import com.revetsec.jose.Jwks;
 import com.revetsec.jose.JoseException;
 import com.revetsec.jose.JwsAlgorithm;
 import com.revetsec.jose.Jwt;
 import com.revetsec.jose.JwtValidator;
-import com.revetsec.jose.StaticJsonWebKeySource;
+import com.revetsec.jose.StaticJwksSource;
 import org.jose4j.jwa.AlgorithmConstraints;
 import org.jose4j.jws.JsonWebSignature;
 import org.jose4j.jwt.NumericDate;
@@ -84,13 +84,13 @@ final class JoseComparatorTests {
         return FIXTURES.stream().map(f -> DynamicTest.dynamicTest(f.id(), () -> {
             Verdict verdict = compare(f, f.compact());
             assertEquals(new Verdict(true, true, !f.algorithm().equals("Ed25519")), verdict, f.id());
-            Jwt checked = validator(f).validate(f.compact());
+            Jwt checked = org.junit.jupiter.api.Assertions.assertInstanceOf(com.revetsec.jose.JwtValidationResult.Succeeded.class, validator(f).validateResult(f.compact())).getJwt();
             assertEquals("original-subject", checked.getClaims().getSubject().orElseThrow());
             assertEquals(ISSUER, checked.getClaims().getIssuer().orElseThrow());
             assertEquals(List.of(AUDIENCE), checked.getClaims().getAudiences());
             assertEquals(NOW.plusSeconds(300), checked.getClaims().getExpiresAt().orElseThrow());
             assertEquals("original-subject", SignedJWT.parse(f.compact()).getJWTClaimsSet().getSubject());
-            String thumbprint = JsonWebKeySet.fromJson("{\"keys\":[" + f.publicJwk() + "]}")
+            String thumbprint = org.junit.jupiter.api.Assertions.assertInstanceOf(com.revetsec.jose.JwksParseResult.Succeeded.class, Jwks.fromJsonResult("{\"keys\":[" + f.publicJwk() + "]}")).getJwks()
                     .getKeys().get(0).getThumbprintSha256();
             assertEquals(thumbprint, JWK.parse(f.publicJwk()).computeThumbprint().toString());
             assertEquals(thumbprint, org.jose4j.jwk.JsonWebKey.Factory.newJwk(f.publicJwk())
@@ -206,14 +206,12 @@ final class JoseComparatorTests {
         String changed = jcaSign(f.algorithm(), f.privateKey(), header(f.algorithm()),
                 CLAIMS.replace("original-subject", "attacker-subject"));
         assertTrue(nimbus(f, changed));
-        assertNotEquals(validator(f).validate(f.compact()).getClaims().getSubject(),
-                validator(f).validate(changed).getClaims().getSubject());
+        assertNotEquals(org.junit.jupiter.api.Assertions.assertInstanceOf(com.revetsec.jose.JwtValidationResult.Succeeded.class, validator(f).validateResult(f.compact())).getJwt().getClaims().getSubject(),
+                org.junit.jupiter.api.Assertions.assertInstanceOf(com.revetsec.jose.JwtValidationResult.Succeeded.class, validator(f).validateResult(changed)).getJwt().getClaims().getSubject());
     }
 
     private static Verdict compare(Fixture f, String compact) throws Exception {
-        boolean ours;
-        try { validator(f).validate(compact); ours = true; }
-        catch (JoseException failure) { ours = false; }
+        boolean ours = validator(f).validateResult(compact) instanceof com.revetsec.jose.JwtValidationResult.Succeeded;
         boolean independent;
         try { consumer(f).processToClaims(compact); independent = true; }
         catch (InvalidJwtException failure) { independent = false; }
@@ -246,8 +244,8 @@ final class JoseComparatorTests {
 
     private static JwtValidator validator(Fixture f) {
         return JwtValidator.withIssuer(ISSUER).expectedAudiences(Set.of(AUDIENCE))
-                .jsonWebKeySource(StaticJsonWebKeySource.fromJsonWebKeySet(JsonWebKeySet.fromJson(
-                        "{\"keys\":[" + f.publicJwk() + "]}")))
+                .jwksSource(StaticJwksSource.fromJwks(org.junit.jupiter.api.Assertions.assertInstanceOf(com.revetsec.jose.JwksParseResult.Succeeded.class, Jwks.fromJsonResult(
+                        "{\"keys\":[" + f.publicJwk() + "]}")).getJwks()))
                 .allowedAlgorithms(Set.of(JwsAlgorithm.valueOf(f.algorithm().equals("EdDSA") ? "EDDSA" : f.algorithm().equals("Ed25519") ? "ED25519" : f.algorithm()))).clockSkew(Duration.ZERO)
                 .clock(Clock.fixed(NOW, ZoneOffset.UTC)).build();
     }

@@ -25,13 +25,14 @@ import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 /**
- * The access-token verdict. Only success releases proof; rejection contains fixed reasons only.
+ * The access-token verdict. Only success releases proof. Credential rejection contains fixed reasons only;
+ * a checked introspection endpoint rejection is distinct from an invalid credential.
  * Applications cannot construct outcomes. Future variants require a rejecting switch default.
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  * @since 1.0.0
  */
 @Immutable
-public abstract sealed class AccessTokenValidationResult permits AccessTokenValidationResult.Succeeded, AccessTokenValidationResult.Rejected {
+public abstract sealed class AccessTokenValidationResult permits AccessTokenValidationResult.Succeeded, AccessTokenValidationResult.Rejected, AccessTokenValidationResult.RejectedEndpoint {
 
 	AccessTokenValidationResult() {
 	}
@@ -42,6 +43,10 @@ public abstract sealed class AccessTokenValidationResult permits AccessTokenVali
 
 	static @NonNull AccessTokenValidationResult fromRejection(@NonNull AccessTokenValidationException rejection) {
 		return new Rejected(rejection.getReason(), rejection.getJoseReason().orElse(null));
+	}
+
+	static @NonNull AccessTokenValidationResult fromEndpoint(@NonNull OAuthErrorResponseException failure) {
+		return new RejectedEndpoint(OAuthEndpointError.fromWireValue(failure.getErrorCode().orElse("")), failure.getStatus());
 	}
 
 	/**
@@ -127,4 +132,31 @@ public abstract sealed class AccessTokenValidationResult permits AccessTokenVali
 			return this.reason == AccessTokenValidationException.Reason.MALFORMED_REQUEST ? BearerError.INVALID_REQUEST : BearerError.INVALID_TOKEN;
 		}
 	}
+	/**
+	 * The introspection endpoint rejected the request with a checked, nontransient client error. This establishes
+	 * no credential verdict and supplies no bearer challenge error. No identity, credential or endpoint prose is retained.
+	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
+	 * @since 1.0.0
+	 */
+	@Immutable
+	public static final class RejectedEndpoint extends AccessTokenValidationResult {
+		private final @NonNull OAuthEndpointError error;
+		private final int status;
+		private RejectedEndpoint(@NonNull OAuthEndpointError error, int status) {
+			this.error = error; this.status = status;
+		}
+		/**
+		 * Returns the fixed endpoint error. Extension codes have the unrecognized value.
+		 * @return fixed error
+		 * @since 1.0.0
+		 */
+		public @NonNull OAuthEndpointError getError() { return this.error; }
+		/**
+		 * Returns the endpoint's HTTP status.
+		 * @return HTTP status
+		 * @since 1.0.0
+		 */
+		public @NonNull Integer getStatus() { return this.status; }
+	}
+
 }

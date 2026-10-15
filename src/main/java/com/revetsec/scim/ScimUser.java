@@ -52,17 +52,17 @@ import static java.util.Objects.requireNonNull;
      * @return the provisioning value
      * @since 1.0.0
      */
-    public @NonNull String getUserName() { return resource.getDocument().findString("userName").orElseThrow(); }
+    public @NonNull String getUserName() { return resource.getDocument().find("userName").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow(); }
     /** Returns displayName.
      * @return the provisioning value
      * @since 1.0.0
      */
-    public @NonNull Optional<@NonNull String> getDisplayName() { return resource.getDocument().findString("displayName"); }
+    public @NonNull Optional<@NonNull String> getDisplayName() { return resource.getDocument().find("displayName").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue); }
     /** Returns active.
      * @return the provisioning value
      * @since 1.0.0
      */
-    public @NonNull Optional<@NonNull Boolean> isActive() { return resource.getDocument().findBoolean("active"); }
+    public @NonNull Optional<@NonNull Boolean> isActive() { return resource.getDocument().find("active").filter(JsonBoolean.class::isInstance).map(JsonBoolean.class::cast).map(JsonBoolean::getValue); }
     /** Returns emails.
      * @return the provisioning value
      * @since 1.0.0

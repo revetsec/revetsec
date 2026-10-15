@@ -20,7 +20,7 @@ import com.revetsec.internal.http.Deadline;
 import com.revetsec.jose.JwsAlgorithm;
 import com.revetsec.jose.JwsSigner;
 import com.revetsec.json.JsonString;
-import com.revetsec.testing.TestJsonWebKeys;
+import com.revetsec.testing.TestJwk;
 import com.revetsec.testing.TestHttpsServer;
 import com.revetsec.testing.TestTls;
 import org.jspecify.annotations.NonNull;
@@ -204,20 +204,20 @@ final class OAuthRc1AssertionMutationTests {
  }
 
  @Test void bearerDiagnosticKeepsItsRedactedDescription() {
-  BearerToken token = BearerToken.fromAuthorizationHeaderValues(List.of("Bearer fixture-secret")).orElseThrow();
+  BearerToken token = assertInstanceOf(BearerTokenResult.Present.class, BearerToken.fromAuthorizationHeaderValuesResult(List.of("Bearer fixture-secret"))).getToken();
   assertEquals("BearerToken{value=<redacted>}", token.toString());
  }
 
  @Test void assertionKeyIdentifierAllowsItsExactCharacterCap() {
-  JwsSigner signer = JwsSigner.fromRsaKeyPair(TestJsonWebKeys.Fixture.IDP_SIGNING_RSA_2048.getPrivateKey(),
-    TestJsonWebKeys.Fixture.IDP_SIGNING_RSA_2048.getPublicKey(), JwsAlgorithm.PS256);
+  JwsSigner signer = JwsSigner.fromRsaKeyPair(TestJwk.Fixture.IDP_SIGNING_RSA_2048.getPrivateKey(),
+    TestJwk.Fixture.IDP_SIGNING_RSA_2048.getPublicKey(), JwsAlgorithm.PS256);
   String identifier = "é".repeat(256);
   assertEquals(identifier, ClientAssertionSigningKey.withSigner(signer).keyId(identifier).build().getKeyId().orElseThrow());
  }
 
  @Test void assertionKeyBuilderKeepsItsRedactedDescription() {
-  JwsSigner signer = JwsSigner.fromRsaKeyPair(TestJsonWebKeys.Fixture.IDP_SIGNING_RSA_2048.getPrivateKey(),
-    TestJsonWebKeys.Fixture.IDP_SIGNING_RSA_2048.getPublicKey(), JwsAlgorithm.PS256);
+  JwsSigner signer = JwsSigner.fromRsaKeyPair(TestJwk.Fixture.IDP_SIGNING_RSA_2048.getPrivateKey(),
+    TestJwk.Fixture.IDP_SIGNING_RSA_2048.getPublicKey(), JwsAlgorithm.PS256);
   assertEquals("ClientAssertionSigningKey.Builder{key=<redacted>}", ClientAssertionSigningKey.withSigner(signer).keyId("private-marker").toString());
  }
 
@@ -226,7 +226,7 @@ final class OAuthRc1AssertionMutationTests {
    AssertionFailureObserver observer = new AssertionFailureObserver(); AtomicInteger providers = new AtomicInteger();
    OAuthClient client = failingDiscoveryClient(server, observer, providers);
    OAuthException failure = assertThrows(OAuthException.class,
-     () -> client.requestClientCredentialsToken(TokenRequestOptions.builder().build()));
+     () -> client.requestClientCredentialsResult(TokenRequestOptions.builder().build()));
    observer.check(OAuthEndpoint.TOKEN, failure); assertEquals(0, providers.get()); assertDiscoveryRequested(server);
   }
  }
@@ -240,9 +240,9 @@ final class OAuthRc1AssertionMutationTests {
      "state", "verifier", null, Set.of(), List.of(), AuthorizationRequestOptions.ResponseMode.QUERY,
      NOW, NOW.plusSeconds(60), Map.of(), false, server.uri("/authorize"), server.uri("/token"));
    InMemoryPendingAuthorizationStore store = InMemoryPendingAuthorizationStore.builder().clock(Clock.fixed(NOW, ZoneOffset.UTC)).build();
-   pending.saveTo(store, "browser");
-   OAuthException failure = assertThrows(OAuthException.class, () -> client.completeAuthorization(
-     AuthorizationResponse.fromQueryString("code=fixture-code&state=state"), PendingAuthorizationSource.fromStore(store, "browser"), callback));
+   org.junit.jupiter.api.Assertions.assertEquals(PendingAuthorizationSaveResult.SAVED, pending.saveToResult(store, "browser"));
+   OAuthException failure = assertThrows(OAuthException.class, () -> client.completeAuthorizationResult(
+     assertInstanceOf(AuthorizationResponseParseResult.Succeeded.class, AuthorizationResponse.fromQueryStringResult("code=fixture-code&state=state")).getResponse(), PendingAuthorizationSource.fromStore(store, "browser"), callback));
    observer.check(OAuthEndpoint.TOKEN, failure); assertEquals(0, providers.get()); assertDiscoveryRequested(server);
   }
  }
@@ -252,8 +252,8 @@ final class OAuthRc1AssertionMutationTests {
    AssertionFailureObserver observer = new AssertionFailureObserver(); AtomicInteger providers = new AtomicInteger();
    OAuthClient client = failingDiscoveryClient(server, observer, providers);
    TokenIntrospectionClient introspection = TokenIntrospectionClient.withOAuthClient(client).expectedAudiences(Set.of("api")).observer(observer).build();
-   BearerToken token = BearerToken.fromAuthorizationHeaderValues(List.of("Bearer fixture-token")).orElseThrow();
-   OAuthException failure = assertThrows(OAuthException.class, () -> introspection.validate(token));
+   BearerToken token = assertInstanceOf(BearerTokenResult.Present.class, BearerToken.fromAuthorizationHeaderValuesResult(List.of("Bearer fixture-token"))).getToken();
+   OAuthException failure = assertThrows(OAuthException.class, () -> introspection.validateResult(token));
    observer.check(OAuthEndpoint.INTROSPECTION, failure); assertEquals(0, providers.get()); assertDiscoveryRequested(server);
   }
  }
@@ -262,10 +262,10 @@ final class OAuthRc1AssertionMutationTests {
   try (TestHttpsServer server = TestHttpsServer.start()) {
    TokenIntrospectionClient client = probingIntrospection(server, ClientAuthentication.fromClientSecretPost("fixture-secret"));
    server.script("/introspect", TestHttpsServer.Script.fromResponse(TestHttpsServer.Response.fromStatus(503)));
-   assertThrows(OAuthException.class, () -> client.validate(probeToken())); assertEquals(1, server.getHitCount("/introspect"));
+   assertThrows(OAuthException.class, () -> client.validateResult(probeToken())); assertEquals(1, server.getHitCount("/introspect"));
    ageIntrospectionFailure(client);
    server.script("/introspect", TestHttpsServer.Script.fromResponse(TestHttpsServer.Response.fromJson(200, "{\"active\":true,\"aud\":\"api\"}")));
-   assertNotNull(client.validate(probeToken()));
+   assertNotNull(assertInstanceOf(AccessTokenValidationResult.Succeeded.class, client.validateResult(probeToken())).getAccessToken());
    assertNotNull(validateOnIndependentCaller(client)); assertEquals(3, server.getHitCount("/introspect"));
   }
  }
@@ -277,9 +277,9 @@ final class OAuthRc1AssertionMutationTests {
     if (secrets.incrementAndGet() == 2) throw new IllegalStateException("fixture supplier interruption"); return "fixture-secret";
    }));
    server.script("/introspect", TestHttpsServer.Script.fromResponse(TestHttpsServer.Response.fromStatus(503)));
-   assertThrows(OAuthException.class, () -> client.validate(probeToken())); assertEquals(1, server.getHitCount("/introspect"));
+   assertThrows(OAuthException.class, () -> client.validateResult(probeToken())); assertEquals(1, server.getHitCount("/introspect"));
    ageIntrospectionFailure(client);
-   assertThrows(IllegalArgumentException.class, () -> client.validate(probeToken()));
+   assertThrows(IllegalArgumentException.class, () -> client.validateResult(probeToken()));
    assertEquals(2, secrets.get()); assertEquals(1, server.getHitCount("/introspect"));
    server.script("/introspect", TestHttpsServer.Script.fromResponse(TestHttpsServer.Response.fromJson(200, "{\"active\":true,\"aud\":\"api\"}")));
    assertNotNull(validateOnIndependentCaller(client)); assertEquals(3, secrets.get()); assertEquals(2, server.getHitCount("/introspect"));
@@ -302,9 +302,9 @@ final class OAuthRc1AssertionMutationTests {
   var timestamp = guard.getClass().getDeclaredField("failedAtNanos"); timestamp.setAccessible(true);
   timestamp.setLong(guard, System.nanoTime() - Duration.ofSeconds(31).toNanos());
  }
- private static @NonNull BearerToken probeToken() { return BearerToken.fromAuthorizationHeaderValues(List.of("Bearer fixture-token")).orElseThrow(); }
+ private static @NonNull BearerToken probeToken() { return assertInstanceOf(BearerTokenResult.Present.class, BearerToken.fromAuthorizationHeaderValuesResult(List.of("Bearer fixture-token"))).getToken(); }
  private static @NonNull VerifiedAccessToken validateOnIndependentCaller(@NonNull TokenIntrospectionClient client) {
-  FutureTask<VerifiedAccessToken> future = new FutureTask<>(() -> client.validate(probeToken()));
+  FutureTask<VerifiedAccessToken> future = new FutureTask<>(() -> assertInstanceOf(AccessTokenValidationResult.Succeeded.class, client.validateResult(probeToken())).getAccessToken());
   Thread thread = new Thread(future, "rc1-introspection-independent-caller"); thread.setDaemon(true); thread.start();
   try { return assertDoesNotThrow(() -> future.get(2, TimeUnit.SECONDS)); }
   finally { future.cancel(true); }
@@ -346,10 +346,10 @@ final class OAuthRc1AssertionMutationTests {
  private static @NonNull ClientAuthentication authentication(@NonNull KeySource source) {
   return ClientAuthentication.fromPrivateKeyJwt(budget -> source.get());
  }
- private static @NonNull ClientAssertionSigningKey key() { return key(TestJsonWebKeys.Fixture.IDP_SIGNING_RSA_2048.getPrivateKey()); }
+ private static @NonNull ClientAssertionSigningKey key() { return key(TestJwk.Fixture.IDP_SIGNING_RSA_2048.getPrivateKey()); }
  private static @NonNull ClientAssertionSigningKey key(@NonNull PrivateKey privateKey) {
   return ClientAssertionSigningKey.withSigner(JwsSigner.fromRsaKeyPair(privateKey,
-    TestJsonWebKeys.Fixture.IDP_SIGNING_RSA_2048.getPublicKey(), JwsAlgorithm.PS256)).keyId("fixture").build();
+    TestJwk.Fixture.IDP_SIGNING_RSA_2048.getPublicKey(), JwsAlgorithm.PS256)).keyId("fixture").build();
  }
  private static long stringLength(@NonNull String value) throws Exception {
   var method = ClientAssertionPreparation.class.getDeclaredMethod("jsonStringLength", String.class); method.setAccessible(true);
@@ -390,7 +390,7 @@ final class OAuthRc1AssertionMutationTests {
  }
  private static final class CountingPrivateKey implements RSAPrivateCrtKey {
   private static final long serialVersionUID = 1L;
-  private final @NonNull RSAPrivateCrtKey delegate = (RSAPrivateCrtKey) TestJsonWebKeys.Fixture.IDP_SIGNING_RSA_2048.getPrivateKey();
+  private final @NonNull RSAPrivateCrtKey delegate = (RSAPrivateCrtKey) TestJwk.Fixture.IDP_SIGNING_RSA_2048.getPrivateKey();
   private int reads;
   private transient @NonNull Runnable onModulus = () -> {};
   @Override public @NonNull BigInteger getModulus() { this.reads++; this.onModulus.run(); return this.delegate.getModulus(); }

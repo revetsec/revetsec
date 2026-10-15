@@ -16,6 +16,8 @@
 
 package com.revetsec.oauth;
 
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+
 import org.junit.jupiter.api.Test;
 import com.revetsec.testing.TestHttpsServer;
 import com.revetsec.testing.TestTls;
@@ -106,7 +108,7 @@ final class ClientAuthenticationTests {
 							ClientSecretBasicEncoding.UNENCODED))
 					.observer(observer).httpClient(TestTls.httpClient()).build();
 			assertEquals(1, notices.get());
-			client.requestClientCredentialsToken(TokenRequestOptions.builder().build());
+			assertInstanceOf(OAuthTokenRequestResult.Succeeded.class, client.requestClientCredentialsResult(TokenRequestOptions.builder().build())).getTokens();
 			assertEquals(2, notices.get());
 		}
 	}

@@ -61,7 +61,9 @@ final class PlaygroundOidc {
             String context = "playground-oidc:" + session.binding;
             String sealedForm = sealed ? redirect.getPendingAuthorization().toSealedForm(sealer, context) : "store";
             if (sealedForm.length() > 3800) throw new IllegalStateException("Pending cookie exceeds local cap.");
-            if (!sealed) redirect.getPendingAuthorization().saveTo(pending, session.binding);
+            if (!sealed && redirect.getPendingAuthorization().saveToResult(pending, session.binding)
+                    != PendingAuthorizationSaveResult.SAVED)
+                return PlaygroundResources.fixed(503, "Pending authorization could not be saved.");
             session.flow = new Flow(client, config.callbackUri(), redirect.getPerFlowCookieName(),
                     context, redirect.getPendingAuthorization().getExpiresAt(), sealed,
                     capture && config.replayEnabled, sealedForm);
@@ -85,10 +87,13 @@ final class PlaygroundOidc {
             try {
                 if (!clock.instant().isBefore(flow.expires))
                     return PlaygroundResources.fixed(400, "Pending authorization expired.").copy().cookies(List.of(clear)).finish();
-                AuthorizationResponse response = SokletOAuth.authorizationResponseFor(request);
+                var parsed = SokletOAuth.authorizationResponseResultFor(request);
+                if (!(parsed instanceof com.revetsec.soklet.SokletOAuthCallbackResult.Succeeded read))
+                    return PlaygroundResources.fixed(400, "Callback rejected.").copy().cookies(List.of(clear)).finish();
+                AuthorizationResponse response = read.getResponse();
                 // The selected cookie is still required even in store mode; no state-only source is accepted.
                 String browserCookie = BrowserSessions.cookieValue(request, flow.cookieName).orElse("");
-                if (!response.getPerFlowCookieName().equals(flow.cookieName) || !browserCookie.equals(flow.cookieValue))
+                if (response.getPerFlowCookieName().filter(flow.cookieName::equals).isEmpty() || !browserCookie.equals(flow.cookieValue))
                     return PlaygroundResources.fixed(400, "Browser binding is required.").copy().cookies(List.of(clear)).finish();
                 PendingAuthorizationSource source = flow.sealed
                         ? PendingAuthorizationSource.fromSealedForm(browserCookie, sealer, flow.context)
@@ -133,14 +138,14 @@ final class PlaygroundOidc {
             try {
                 OidcAuthenticationResult result = journal.client.completeAuthenticationResult(journal.response,
                         journal.source, journal.callback);
+                if (result instanceof OidcAuthenticationResult.RejectedEndpoint rejected)
+                    return JsonObject.builder().put("boundary", boundary)
+                            .put("outcome", rejected.getError() == OAuthEndpointError.INVALID_GRANT
+                                    ? "AS rejected single-use authorization code" : "AS rejected replay").build();
                 return JsonObject.builder().put("boundary", boundary).put("outcome",
                         result instanceof OidcAuthenticationResult.Succeeded
                                 ? "Completed by provider; this mode has no local at-most-once guarantee"
                                 : "Rejected by normal callback validation").build();
-            } catch (OAuthErrorResponseException failure) {
-                return JsonObject.builder().put("boundary", boundary)
-                        .put("outcome", failure.getErrorCode().filter("invalid_grant"::equals).isPresent()
-                                ? "AS rejected single-use authorization code" : "AS rejected replay").build();
             } catch (com.revetsec.RevetsecException failure) {
                 return JsonObject.builder().put("boundary", boundary).put("outcome", "Provider unavailable").build();
             }

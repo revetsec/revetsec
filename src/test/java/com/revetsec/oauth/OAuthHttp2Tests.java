@@ -16,6 +16,8 @@
 
 package com.revetsec.oauth;
 
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+
 import com.revetsec.testing.OAuthHttp2Server;
 import com.revetsec.testing.TestTls;
 import org.junit.jupiter.api.Test;
@@ -44,7 +46,7 @@ final class OAuthHttp2Tests {
 			OAuthClient client = OAuthClient.withAuthorizationServerMetadata(metadata).clientId("service")
 					.clientAuthentication(ClientAuthentication.fromClientSecretBasic("secret"))
 					.httpClient(http2).allowInsecureLoopback(true).build();
-			assertEquals("ok", client.requestClientCredentialsToken(TokenRequestOptions.builder().build())
+			assertEquals("ok", assertInstanceOf(OAuthTokenRequestResult.Succeeded.class, client.requestClientCredentialsResult(TokenRequestOptions.builder().build())).getTokens()
 					.getAccessToken().getValue());
 			assertEquals(2, server.getRequestCount());
 		}
@@ -98,10 +100,10 @@ final class OAuthHttp2Tests {
 					.httpClient(http2).allowInsecureLoopback(true)
 					.requestTimeout(Duration.ofSeconds(10)).totalDeadline(Duration.ofSeconds(15)).build();
 			assertEquals(OAuthException.Reason.TOO_LARGE,
-					assertThrows(OAuthResponseException.class, () -> client.requestClientCredentialsToken(
+					assertThrows(OAuthResponseException.class, () -> client.requestClientCredentialsResult(
 							TokenRequestOptions.builder().build())).getReason());
 			assertEquals(OAuthException.Reason.TOO_LARGE,
-					assertThrows(OAuthResponseException.class, () -> client.requestClientCredentialsToken(
+					assertThrows(OAuthResponseException.class, () -> client.requestClientCredentialsResult(
 							TokenRequestOptions.builder().build())).getReason());
 			assertTrue(server.awaitNoOpenStreams(Duration.ofSeconds(5)));
 			assertEquals(0, server.getOpenStreamCount());
@@ -123,10 +125,10 @@ final class OAuthHttp2Tests {
 					.requestTimeout(Duration.ofSeconds(1)).totalDeadline(Duration.ofSeconds(2)).build();
 			long started = System.nanoTime();
 			assertEquals(OAuthException.Reason.NETWORK_FAILURE,
-					assertThrows(OAuthTransportException.class, () -> client.requestClientCredentialsToken(
+					assertThrows(OAuthTransportException.class, () -> client.requestClientCredentialsResult(
 							TokenRequestOptions.builder().build())).getReason());
 			assertTrue(System.nanoTime() - started < Duration.ofSeconds(5).toNanos());
-			assertEquals("ok", client.requestClientCredentialsToken(TokenRequestOptions.builder().build())
+			assertEquals("ok", assertInstanceOf(OAuthTokenRequestResult.Succeeded.class, client.requestClientCredentialsResult(TokenRequestOptions.builder().build())).getTokens()
 					.getAccessToken().getValue());
 			assertTrue(server.awaitNoOpenStreams(Duration.ofSeconds(5)));
 			assertEquals(0, server.getOpenStreamCount());

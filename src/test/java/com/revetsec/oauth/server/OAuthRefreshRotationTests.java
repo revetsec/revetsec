@@ -16,6 +16,8 @@
 
 package com.revetsec.oauth.server;
 
+import com.revetsec.jose.JwksParseResult;
+
 import com.revetsec.SealingKey;
 import com.revetsec.StateSealer;
 import com.revetsec.internal.encoding.FormUrlEncoding;
@@ -25,9 +27,9 @@ import com.revetsec.internal.json.JsonLimits;
 import com.revetsec.json.*;
 import com.revetsec.jose.JwsAlgorithm;
 import com.revetsec.jose.JwsSigner;
-import com.revetsec.jose.StaticJsonWebKeySource;
-import com.revetsec.jose.JsonWebKeySet;
-import com.revetsec.testing.TestJsonWebKeys;
+import com.revetsec.jose.StaticJwksSource;
+import com.revetsec.jose.Jwks;
+import com.revetsec.testing.TestJwk;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
@@ -60,7 +62,7 @@ final class OAuthRefreshRotationTests {
  private static final @NonNull String VERIFIER = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
  private static final @NonNull String CHALLENGE = "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM";
  private static final @NonNull OAuthServerIngressLimits LIMITS = OAuthServerIngressLimits.fromDefaults();
- private static final TestJsonWebKeys.@NonNull Fixture KEY = TestJsonWebKeys.Fixture.IDP_SIGNING_RSA_2048;
+ private static final TestJwk.@NonNull Fixture KEY = TestJwk.Fixture.IDP_SIGNING_RSA_2048;
  private final @NonNull OAuthAtomicStoreFixture store = new OAuthAtomicStoreFixture();
  private final @NonNull MutableClock clock = new MutableClock(NOW);
  private final @NonNull OAuthStoreRecordCodec codec = codec();
@@ -124,7 +126,7 @@ final class OAuthRefreshRotationTests {
   try { return (JsonObject)JsonCodec.parse(bytes,JsonLimits.jose(131072)); } catch(com.revetsec.internal.json.JsonParseException failure) { throw new AssertionError(failure); }
  }
  private static @NonNull JsonObject body(@NonNull OAuthTokenResponse response) { return json(response.body()); }
- private static @NonNull String token(@NonNull OAuthTokenResponse response) { return body(response).findString("access_token").orElseThrow(); }
+ private static @NonNull String token(@NonNull OAuthTokenResponse response) { return body(response).find("access_token").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow(); }
  private static void invalid(@NonNull Executable call) {
   var e=assertThrows(OAuthServerAdmissionFailure.class,call);assertEquals(OAuthServerAdmissionFailure.Reason.INVALID_GRANT,e.reason());assertNull(e.getCause());assertEquals("OAuth server admission failed.",e.getMessage());
  }
@@ -144,7 +146,7 @@ final class OAuthRefreshRotationTests {
  private @NonNull OAuthTokenResponse rotate(@NonNull String token,@NonNull Map<@NonNull String,@NonNull String> fields,@NonNull OAuthGrantPolicy policy) {
   return rotation().rotate(refreshRequest(token,fields),(id,b)->Optional.of(client()),resources(),policy,deadline());
  }
- private static @NonNull String refresh(@NonNull OAuthTokenResponse response) { return body(response).findString("refresh_token").orElseThrow(); }
+ private static @NonNull String refresh(@NonNull OAuthTokenResponse response) { return body(response).find("refresh_token").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow(); }
  private @NonNull OAuthTokenResponse issued() { return redeem(code(true)); }
  private @NonNull OAuthStoreKey refreshKey(@NonNull String credential) { return this.codec.key(OAuthStoreKey.Kind.REFRESH_TOKEN,OAuthServerCredential.refreshDigest(credential)); }
  private @NonNull OAuthAuthorizationRecord refreshRecord(@NonNull String credential) {
@@ -152,7 +154,7 @@ final class OAuthRefreshRotationTests {
   return OAuthAuthorizationRecord.decode(key.getKind(),id,this.codec.open(entry,Clock.fixed(this.clock.time,ZoneOffset.UTC)),LIMITS,255);
  }
  private @NonNull JsonObject validate(@NonNull String jwt) {
-  var keys=StaticJsonWebKeySource.fromJsonWebKeySet(JsonWebKeySet.fromJson(TestJsonWebKeys.withFixture(KEY).kid("key").alg("RS256").toKeySetJson()));
+  var keys=StaticJwksSource.fromJwks(assertInstanceOf(JwksParseResult.Succeeded.class, Jwks.fromJsonResult(TestJwk.withFixture(KEY).kid("key").alg("RS256").toKeySetJson())).getJwks());
   return new OAuthIssuerTokenStatus(this.coordinator,this.codec,LIMITS,this.clock,Duration.ofSeconds(30),3,255,16384).validate(jwt,RESOURCE,keys,deadline());
  }
  private static void inactive(@NonNull Executable action) { var e=assertThrows(OAuthServerAdmissionFailure.class,action);assertEquals(OAuthServerAdmissionFailure.Reason.INVALID_TOKEN,e.reason()); }
@@ -165,14 +167,14 @@ final class OAuthRefreshRotationTests {
   var after=record(OAuthStoreKey.Kind.GRANT);assertEquals(before.horizon(),after.horizon());assertEquals(before.expires(),after.expires());assertEquals(before.maximumAccessLifetime(),after.maximumAccessLifetime());assertEquals(before.scopes(LIMITS),after.scopes(LIMITS));
   assertEquals("USED",refreshRecord(old).text("status"));assertEquals(oldExpiry,refreshRecord(old).expires());assertEquals(before.horizon(),refreshRecord(old).retention());
   assertNotEquals(old,refresh(response));assertEquals(OAuthServerCredential.refreshDigest(refresh(response)),after.text("refreshId"));assertEquals("ACTIVE",refreshRecord(refresh(response)).text("status"));
-  assertEquals("read write",validate(token(response)).findString("scope").orElseThrow());assertNotNull(validate(token(initial)));
+  assertEquals("read write",validate(token(response)).find("scope").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow());assertNotNull(validate(token(initial)));
   assertTrue(new String(response.headers(),StandardCharsets.US_ASCII).contains("Cache-Control: no-store"));
  }
  @Test void narrowedAccessDoesNotNarrowRefreshAndFutureAccessCanRegainOriginalScopes() {
-  var initial=issued();var narrow=rotate(refresh(initial),Map.of("scope","read"),allow());assertEquals("read",validate(token(narrow)).findString("scope").orElseThrow());
+  var initial=issued();var narrow=rotate(refresh(initial),Map.of("scope","read"),allow());assertEquals("read",validate(token(narrow)).find("scope").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow());
   assertEquals(Set.of("read","write"),record(OAuthStoreKey.Kind.GRANT).scopes(LIMITS));
-  var wide=rotate(refresh(narrow));assertEquals("read write",validate(token(wide)).findString("scope").orElseThrow());
-  assertEquals("read",body(narrow).findString("scope").orElseThrow());assertNotNull(validate(token(initial)));
+  var wide=rotate(refresh(narrow));assertEquals("read write",validate(token(wide)).find("scope").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow());
+  assertEquals("read",body(narrow).find("scope").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow());assertNotNull(validate(token(initial)));
  }
  @Test void usedRefreshRevokesEveryAccessAndRefreshDescendantWithoutReemission() {
   var a=issued();var b=rotate(refresh(a));var c=rotate(refresh(b));invalid(()->rotate(refresh(a)));
@@ -392,7 +394,7 @@ final class OAuthRefreshRotationTests {
  @Test void largerConfiguredMaximumCannotEnlargePersistedPinButShorterAccessCanIssue() {
   String old=refresh(issued());var before=record(OAuthStoreKey.Kind.GRANT);var config=new OAuthGrantRetention(Duration.ofMinutes(15),Duration.ofSeconds(30),Duration.ofSeconds(10),Duration.ofSeconds(60));
   var response=rotation(true,Duration.ofSeconds(30),config,signer(),3).rotate(refreshRequest(old,Map.of()),(id,b)->Optional.of(client()),resources(),allow(),deadline());
-  var after=record(OAuthStoreKey.Kind.GRANT);assertEquals(before.maximumAccessLifetime(),after.maximumAccessLifetime());assertEquals(before.horizon(),after.horizon());assertEquals(29L,body(response).findLong("expires_in").orElseThrow());assertNotNull(validate(token(response)));
+  var after=record(OAuthStoreKey.Kind.GRANT);assertEquals(before.maximumAccessLifetime(),after.maximumAccessLifetime());assertEquals(before.horizon(),after.horizon());assertEquals(29L,body(response).find("expires_in").flatMap(value -> ((com.revetsec.json.JsonNumber) value).getLongValueExact()).orElseThrow());assertNotNull(validate(token(response)));
  }
  @Test void usedReplayRevokesEvenAfterCurrentServerDisablesRefreshAndScopes() {
   String old=refresh(issued());rotate(old);var engine=rotation(false,Duration.ofMinutes(5),this.retention,signer(),3);

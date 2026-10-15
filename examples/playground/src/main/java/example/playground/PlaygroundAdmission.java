@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 package example.playground;
+import com.revetsec.json.JsonString;
 
 import com.revetsec.RevetsecException;
 import com.revetsec.oauth.*;
@@ -21,7 +22,6 @@ import com.revetsec.soklet.SokletBearer;
 import com.soklet.*;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
@@ -47,16 +47,16 @@ final class PlaygroundAdmission implements McpAdmissionController {
         if (!trusted(context.getRequest(), profile.config, false)) return fixed(403, "Operation not permitted");
         String scope = requiredScope(context);
         if (scope == null) return fixed(403, "Operation not permitted");
-        Optional<BearerToken> token;
-        try { token = SokletBearer.bearerTokenFor(context.getRequest()); }
-        catch (AccessTokenValidationException malformed) { return challenge(profile.config, 400, BearerError.INVALID_REQUEST, scope); }
-        if (token.isEmpty()) return challenge(profile.config, 401, null, scope);
+        BearerTokenResult token = SokletBearer.bearerTokenResultFor(context.getRequest());
+        if (token instanceof BearerTokenResult.Absent) return challenge(profile.config, 401, null, scope);
+        if (!(token instanceof BearerTokenResult.Present present))
+            return challenge(profile.config, 400, BearerError.INVALID_REQUEST, scope);
         if (inFlight.incrementAndGet() > 8) {
             inFlight.decrementAndGet();
             return fixed(503, "Validation service unavailable");
         }
         try {
-            AccessTokenValidationResult result = profile.validator.validate(token.orElseThrow());
+            AccessTokenValidationResult result = profile.validator.validate(present.getToken());
             if (!(result instanceof AccessTokenValidationResult.Succeeded success)) {
                 if (result instanceof AccessTokenValidationResult.Rejected rejected)
                     return challenge(profile.config, rejected.getBearerError() == BearerError.INVALID_REQUEST ? 400 : 401,
@@ -70,7 +70,7 @@ final class PlaygroundAdmission implements McpAdmissionController {
                 return challenge(profile.config, 401, BearerError.INVALID_TOKEN, scope);
             if (!proof.getScopes().contains(scope))
                 return challenge(profile.config, 403, BearerError.INSUFFICIENT_SCOPE, scope);
-            String tenant = proof.getClaims().findString("tenant").orElse("local");
+            String tenant = proof.getClaims().find("tenant").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElse("local");
             if (!tenant.equals("local")) return fixed(403, "Operation not permitted");
             String subject = proof.getSubject().orElseGet(() -> proof.getClientId().orElse("anonymous-client"));
             String partition = views.partition(proof.getIssuer(), subject, tenant);

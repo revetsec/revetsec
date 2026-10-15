@@ -23,7 +23,7 @@ import com.revetsec.internal.json.JsonLimits;
 import com.revetsec.json.JsonObject;
 import com.revetsec.testing.ChildJvm;
 import com.revetsec.testing.Sentinels;
-import com.revetsec.testing.TestJsonWebKeys;
+import com.revetsec.testing.TestJwk;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.DynamicTest;
@@ -61,7 +61,7 @@ import static java.util.Objects.requireNonNull;
 final class JwsSignerTests {
 	private static final @NonNull Duration BUDGET = Duration.ofSeconds(5);
 	private static final @NonNull String SECRET = Sentinels.secret("signer");
-	private static final TestJsonWebKeys.@NonNull Fixture KEY = TestJsonWebKeys.Fixture.IDP_SIGNING_RSA_2048;
+	private static final TestJwk.@NonNull Fixture KEY = TestJwk.Fixture.IDP_SIGNING_RSA_2048;
 	private static final @NonNull String EXACT_CLAIMS = " \n{\"z\":1e+0,\"label\":\"é😀\",\"a\": [true,null]}\t ";
 
 	@TestFactory
@@ -79,7 +79,7 @@ final class JwsSignerTests {
 					assertEquals(((RSAPublicKey) KEY.getPublicKey()).getModulus(), ((RSAPublicKey) signer.getPublicKey()).getModulus());
 					assertFalse(compact.contains("="));
 					assertEquals(Set.of("alg", "typ", "kid"), header(compact).getMembers().keySet());
-					assertEquals(algorithm.getWireValue(), header(compact).findString("alg").orElseThrow());
+					assertEquals(algorithm.getWireValue(), header(compact).find("alg").map(jsonMemberValue -> ((com.revetsec.json.JsonString) jsonMemberValue).getValue()).orElseThrow());
 				}));
 	}
 
@@ -101,10 +101,10 @@ final class JwsSignerTests {
 
 	@Test
 	void structuralFactoryRejectsNonRsaPrivateAndPublicKeys() {
-		assertInvalidKey(() -> JwsSigner.fromRsaKeyPair(TestJsonWebKeys.Fixture.IDP_SIGNING_EC_P256.getPrivateKey(),
+		assertInvalidKey(() -> JwsSigner.fromRsaKeyPair(TestJwk.Fixture.IDP_SIGNING_EC_P256.getPrivateKey(),
 				KEY.getPublicKey(), JwsAlgorithm.RS256));
 		assertInvalidKey(() -> JwsSigner.fromRsaKeyPair(KEY.getPrivateKey(),
-				TestJsonWebKeys.Fixture.IDP_SIGNING_EC_P256.getPublicKey(), JwsAlgorithm.RS256));
+				TestJwk.Fixture.IDP_SIGNING_EC_P256.getPublicKey(), JwsAlgorithm.RS256));
 		assertInvalidKey(() -> JwsSigner.fromRsaKeyPair(new RefusingPrivateKey("unknown"), KEY.getPublicKey(), JwsAlgorithm.PS256));
 	}
 
@@ -119,10 +119,10 @@ final class JwsSignerTests {
 		for (BigInteger badE : List.of(BigInteger.ZERO, BigInteger.valueOf(3), BigInteger.valueOf(65536),
 				BigInteger.ONE.shiftLeft(32).add(BigInteger.ONE), e.negate()))
 			assertInvalidKey(() -> JwsSigner.fromRsaKeyPair(KEY.getPrivateKey(), new SuppliedPublicKey(n, badE, null), JwsAlgorithm.RS256));
-		assertInvalidKey(() -> JwsSigner.fromRsaKeyPair(TestJsonWebKeys.rocaFingerprintedRsaKeyPair().getPrivate(),
-				TestJsonWebKeys.rocaFingerprintedRsaKeyPair().getPublic(), JwsAlgorithm.RS256));
-		assertInvalidKey(() -> JwsSigner.fromRsaKeyPair(TestJsonWebKeys.Fixture.NEGATIVE_RSA_1024.getPrivateKey(),
-				TestJsonWebKeys.Fixture.NEGATIVE_RSA_1024.getPublicKey(), JwsAlgorithm.RS256));
+		assertInvalidKey(() -> JwsSigner.fromRsaKeyPair(TestJwk.rocaFingerprintedRsaKeyPair().getPrivate(),
+				TestJwk.rocaFingerprintedRsaKeyPair().getPublic(), JwsAlgorithm.RS256));
+		assertInvalidKey(() -> JwsSigner.fromRsaKeyPair(TestJwk.Fixture.NEGATIVE_RSA_1024.getPrivateKey(),
+				TestJwk.Fixture.NEGATIVE_RSA_1024.getPublicKey(), JwsAlgorithm.RS256));
 		BigInteger large = BigInteger.ONE.shiftLeft(16383).add(BigInteger.valueOf(173));
 		while (com.revetsec.internal.crypto.RsaPublicKeys.isRocaFingerprinted(large)) large = large.add(BigInteger.TWO);
 		JwsSigner maximum = JwsSigner.fromRsaKeyPair(KEY.getPrivateKey(), new SuppliedPublicKey(large,
@@ -182,7 +182,7 @@ final class JwsSignerTests {
 	@Test
 	void pairMismatchIsAConfigurationFailureOnEveryOperation() {
 		JwsSigner signer = JwsSigner.fromRsaKeyPair(KEY.getPrivateKey(),
-				TestJsonWebKeys.Fixture.NEGATIVE_ATTACKER_RSA_2048.getPublicKey(), JwsAlgorithm.RS256);
+				TestJwk.Fixture.NEGATIVE_ATTACKER_RSA_2048.getPublicKey(), JwsAlgorithm.RS256);
 		for (int index = 0; index < 2; ++index) {
 			assertReason(JwsSigningException.Reason.KEY_PAIR_MISMATCH,
 					() -> emit(signer, "JWT", "{}", BUDGET));
@@ -192,7 +192,7 @@ final class JwsSignerTests {
 
 	@Test
 	void differentModulusLengthsFailAsSigningUnavailableWithoutOutput() {
-		PrivateKey largerPrivate = TestJsonWebKeys.Fixture.IDP_SIGNING_RSA_3072.getPrivateKey();
+		PrivateKey largerPrivate = TestJwk.Fixture.IDP_SIGNING_RSA_3072.getPrivateKey();
 		for (JwsAlgorithm algorithm : List.of(JwsAlgorithm.PS256, JwsAlgorithm.RS256, JwsAlgorithm.RS384)) {
 			JwsSigner signer = JwsSigner.fromRsaKeyPair(largerPrivate, KEY.getPublicKey(), algorithm);
 			assertReason(JwsSigningException.Reason.SIGNING_UNAVAILABLE, () -> emit(signer, "JWT", "{}", BUDGET));
@@ -291,9 +291,9 @@ final class JwsSignerTests {
 			String compact = signer.toCompactSerialization(type, kid, digest, utf8("{}"), BUDGET);
 			JsonObject header = header(compact);
 			assertEquals(Set.of("alg", "typ", "kid", "x5t#S256"), header.getMembers().keySet());
-			assertEquals(kid, header.findString("kid").orElseThrow());
-			assertEquals(type, header.findString("typ").orElseThrow());
-			assertEquals(Base64.getUrlEncoder().withoutPadding().encodeToString(digest), header.findString("x5t#S256").orElseThrow());
+			assertEquals(kid, header.find("kid").map(jsonMemberValue -> ((com.revetsec.json.JsonString) jsonMemberValue).getValue()).orElseThrow());
+			assertEquals(type, header.find("typ").map(jsonMemberValue -> ((com.revetsec.json.JsonString) jsonMemberValue).getValue()).orElseThrow());
+			assertEquals(Base64.getUrlEncoder().withoutPadding().encodeToString(digest), header.find("x5t#S256").map(jsonMemberValue -> ((com.revetsec.json.JsonString) jsonMemberValue).getValue()).orElseThrow());
 			assertTrue(verify(JwsAlgorithm.RS384, compact, KEY.getPublicKey(), null));
 		}
 		String none = signer.toCompactSerialization("JWT", null, null, utf8("{}"), BUDGET);
@@ -304,7 +304,7 @@ final class JwsSignerTests {
 	void everyJsonEscapeAndThreeByteUnicodePreservesTheExactKeyId() throws Exception {
 		String kid = "\b\f\n\r\t\u007F\u0080\u07FF\u0800\uD7FF\uE000\uFFFF";
 		String compact = signer(JwsAlgorithm.RS256).toCompactSerialization("JWT", kid, null, utf8("{}"), BUDGET);
-		assertEquals(kid, header(compact).findString("kid").orElseThrow());
+		assertEquals(kid, header(compact).find("kid").map(jsonMemberValue -> ((com.revetsec.json.JsonString) jsonMemberValue).getValue()).orElseThrow());
 		assertEquals(Set.of("alg", "typ", "kid"), header(compact).getMembers().keySet());
 		assertTrue(verify(JwsAlgorithm.RS256, compact, KEY.getPublicKey(), null));
 	}

@@ -46,25 +46,25 @@ final class KeycloakAccessTokenIT {
 		assertTrue(proof.getSubject().isPresent()); assertTrue(proof.getAudiences().contains(ResourceProviderFixturesIT.RESOURCE));
 	}
 	@Test void enabledAccessTokenHeaderPassesStrictClientCredentials() {
-		TokenResponse tokens = client("resource-strict", null).requestClientCredentialsToken(TokenRequestOptions.builder().scopes(Set.of("read")).build());
+		TokenResponse tokens = assertInstanceOf(OAuthTokenRequestResult.Succeeded.class, client("resource-strict", null).requestClientCredentialsResult(TokenRequestOptions.builder().scopes(Set.of("read")).build())).getTokens();
 		VerifiedAccessToken proof = assertInstanceOf(AccessTokenValidationResult.Succeeded.class,
 				provider().validator().validateResult(ResourceProviderFixturesIT.bearer(tokens))).getAccessToken();
 		assertEquals("resource-strict", proof.getClientId().orElseThrow()); assertTrue(proof.getExpiresAt().isPresent());
 		assertTrue(proof.getScopes().contains("read")); assertFalse(proof.getScopes().contains("write"));
 	}
 	@Test void disabledAccessTokenHeaderNeedsNamedCompatibilityAndExtraClaim() {
-		TokenResponse tokens = client("resource-untyped", null).requestClientCredentialsToken(TokenRequestOptions.builder().scopes(Set.of("read")).build());
+		TokenResponse tokens = assertInstanceOf(OAuthTokenRequestResult.Succeeded.class, client("resource-untyped", null).requestClientCredentialsResult(TokenRequestOptions.builder().scopes(Set.of("read")).build())).getTokens();
 		BearerToken bearer = ResourceProviderFixturesIT.bearer(tokens);
 		assertInstanceOf(AccessTokenValidationResult.Rejected.class, provider().validator().validateResult(bearer));
 		JwtAccessTokenValidator compatible = JwtAccessTokenValidator.withIssuer(provider().issuer()).expectedAudiences(Set.of(ResourceProviderFixturesIT.RESOURCE))
 				.compatibility(AccessTokenCompatibilityMode.UNTYPED_ACCESS_TOKENS).requiredClaims(Set.of("azp"))
 				.httpClient(provider().httpClient()).allowInsecureLoopback(true).build();
-		VerifiedAccessToken proof = compatible.validate(bearer); assertEquals("resource-untyped", assertInstanceOf(com.revetsec.json.JsonString.class, proof.getClaims().getMembers().get("azp")).getValue());
+		VerifiedAccessToken proof = assertInstanceOf(AccessTokenValidationResult.Succeeded.class, compatible.validateResult(bearer)).getAccessToken(); assertEquals("resource-untyped", assertInstanceOf(com.revetsec.json.JsonString.class, proof.getClaims().getMembers().get("azp")).getValue());
 		assertTrue(proof.getScopes().contains("read")); assertFalse(proof.getScopes().contains("write"));
 	}
 	@Test void introspectionAudienceCheckSendsFreshPostEachTime() {
 		AtomicInteger posts = new AtomicInteger(); OAuthClient oauth = client("resource-strict", counter(posts));
-		BearerToken bearer = ResourceProviderFixturesIT.bearer(oauth.requestClientCredentialsToken(TokenRequestOptions.builder().scopes(Set.of("read")).build()));
+		BearerToken bearer = ResourceProviderFixturesIT.bearer(assertInstanceOf(OAuthTokenRequestResult.Succeeded.class, oauth.requestClientCredentialsResult(TokenRequestOptions.builder().scopes(Set.of("read")).build())).getTokens());
 		TokenIntrospectionClient introspection = TokenIntrospectionClient.withOAuthClient(oauth).expectedAudiences(Set.of(ResourceProviderFixturesIT.RESOURCE)).build();
 		assertInstanceOf(AccessTokenValidationResult.Succeeded.class, introspection.validateResult(bearer));
 		assertInstanceOf(AccessTokenValidationResult.Succeeded.class, introspection.validateResult(bearer)); assertEquals(2, posts.get());
@@ -76,7 +76,7 @@ final class KeycloakAccessTokenIT {
 		AtomicInteger posts = new AtomicInteger(); OAuthClient oauth = client("resource-strict", counter(posts));
 		TokenResponse tokens = provider().codeFlow(oauth, false); BearerToken bearer = ResourceProviderFixturesIT.bearer(tokens);
 		TokenIntrospectionClient introspection = TokenIntrospectionClient.withOAuthClient(oauth).expectedAudiences(Set.of(ResourceProviderFixturesIT.RESOURCE)).build();
-		assertTrue(introspection.validate(bearer).getAudiences().contains(ResourceProviderFixturesIT.RESOURCE)); oauth.revoke(tokens.getRefreshToken().orElseThrow().getValue(), TokenTypeHint.REFRESH_TOKEN);
+		assertTrue(assertInstanceOf(AccessTokenValidationResult.Succeeded.class, introspection.validateResult(bearer)).getAccessToken().getAudiences().contains(ResourceProviderFixturesIT.RESOURCE)); assertInstanceOf(OAuthRevocationResult.Succeeded.class, oauth.revokeResult(tokens.getRefreshToken().orElseThrow().getValue(), TokenTypeHint.REFRESH_TOKEN));
 		for (int i = 0; i < 2; i++) assertEquals(AccessTokenValidationException.Reason.INACTIVE,
 				assertInstanceOf(AccessTokenValidationResult.Rejected.class, introspection.validateResult(bearer)).getReason());
 		assertEquals(3, posts.get());
@@ -88,7 +88,7 @@ final class KeycloakAccessTokenIT {
 		assertWrongAudience("resource-untyped", true);
 	}
 	private static void assertWrongAudience(@NonNull String clientId, boolean untyped) {
-		TokenResponse tokens = client(clientId, null).requestClientCredentialsToken(TokenRequestOptions.builder().scopes(Set.of("read")).build());
+		TokenResponse tokens = assertInstanceOf(OAuthTokenRequestResult.Succeeded.class, client(clientId, null).requestClientCredentialsResult(TokenRequestOptions.builder().scopes(Set.of("read")).build())).getTokens();
 		JwtAccessTokenValidator.Builder builder = JwtAccessTokenValidator.withIssuer(provider().issuer())
 				.expectedAudiences(Set.of("https://other.example.test/mcp")).httpClient(provider().httpClient()).allowInsecureLoopback(true);
 		if (untyped) assertSame(builder, builder.compatibility(AccessTokenCompatibilityMode.UNTYPED_ACCESS_TOKENS).requiredClaims(Set.of("azp")));

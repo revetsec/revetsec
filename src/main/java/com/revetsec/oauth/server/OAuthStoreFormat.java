@@ -17,6 +17,7 @@
 package com.revetsec.oauth.server;
 
 import com.google.errorprone.annotations.CheckReturnValue;
+import com.revetsec.json.*;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 import javax.annotation.concurrent.Immutable;
@@ -71,6 +72,24 @@ final class OAuthStoreFormat {
   requireNonNull(value);
   if (value.isEmpty() || value.length() > cap) throw invalid();
   for (int i = 0; i < value.length(); ++i) if (value.charAt(i) > 127) throw invalid();
+ }
+ static @NonNull Optional<@NonNull String> stringMember(@NonNull JsonObject object, @NonNull String name) {
+  return object.find(name).map(value -> {
+   if (!(value instanceof JsonString text)) throw invalid();
+   return text.getValue();
+  });
+ }
+ static @NonNull Optional<@NonNull Long> longMember(@NonNull JsonObject object, @NonNull String name) {
+  return object.find(name).flatMap(value -> {
+   if (!(value instanceof JsonNumber number)) throw invalid();
+   return number.getLongValueExact();
+  });
+ }
+ static @NonNull Optional<@NonNull Boolean> booleanMember(@NonNull JsonObject object, @NonNull String name) {
+  return object.find(name).map(value -> {
+   if (!(value instanceof JsonBoolean flag)) throw invalid();
+   return flag.getValue();
+  });
  }
  static @NonNull IllegalArgumentException invalid() { return new IllegalArgumentException("Invalid OAuth store value."); }
 }

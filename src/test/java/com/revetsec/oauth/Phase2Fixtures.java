@@ -49,12 +49,12 @@ final class Phase2Fixtures {
         c.put("exp",Long.toString(NOW.plusSeconds(300).getEpochSecond()));c.put("iat",Long.toString(NOW.getEpochSecond()));c.put("client_id","\"TEST-ONLY-client\"");c.put("jti","\"TEST-ONLY-jti\"");c.put("scope","\"read write\"");return c;
     }
     static @NonNull String token(@NonNull Map<@NonNull String,@NonNull String> claims,@Nullable String typ) {
-        return TestJws.withAlgorithm(TestJws.Algorithm.RS256).kid("key").typ(typ).payload(JsonText.object(new ArrayList<>(claims.entrySet()))).sign(TestJsonWebKeys.Fixture.IDP_SIGNING_RSA_2048.getPrivateKey());
+        return TestJws.withAlgorithm(TestJws.Algorithm.RS256).kid("key").typ(typ).payload(JsonText.object(new ArrayList<>(claims.entrySet()))).sign(TestJwk.Fixture.IDP_SIGNING_RSA_2048.getPrivateKey());
     }
-    static @NonNull String keyJson() { return TestJsonWebKeys.withFixture(TestJsonWebKeys.Fixture.IDP_SIGNING_RSA_2048).kid("key").alg("RS256").toKeySetJson(); }
-    static @NonNull StaticJsonWebKeySource keys() { return StaticJsonWebKeySource.fromJsonWebKeySet(JsonWebKeySet.fromJson(keyJson())); }
-    static @NonNull BearerToken bearer(@NonNull String token) { return BearerToken.fromAuthorizationHeaderValues(List.of("Bearer "+token),1_048_576).orElseThrow(); }
-    static JwtAccessTokenValidator.@NonNull Builder jwt() { return JwtAccessTokenValidator.withIssuer(ISSUER).expectedAudiences(Set.of(AUD)).jsonWebKeySource(keys()).clock(CLOCK).clockSkew(Duration.ZERO); }
+    static @NonNull String keyJson() { return TestJwk.withFixture(TestJwk.Fixture.IDP_SIGNING_RSA_2048).kid("key").alg("RS256").toKeySetJson(); }
+    static @NonNull StaticJwksSource keys() { return StaticJwksSource.fromJwks(assertInstanceOf(JwksParseResult.Succeeded.class, Jwks.fromJsonResult(keyJson())).getJwks()); }
+    static @NonNull BearerToken bearer(@NonNull String token) { return assertInstanceOf(BearerTokenResult.Present.class, BearerToken.fromAuthorizationHeaderValuesResult(List.of("Bearer "+token),1_048_576)).getToken(); }
+    static JwtAccessTokenValidator.@NonNull Builder jwt() { return JwtAccessTokenValidator.withIssuer(ISSUER).expectedAudiences(Set.of(AUD)).jwksSource(keys()).clock(CLOCK).clockSkew(Duration.ZERO); }
     static @NonNull RawResponse raw(int status,@NonNull String json) { return new RawResponse(status,HttpHeaders.of(Map.of(),(a,b)->true),json.getBytes(StandardCharsets.UTF_8),null,false,Duration.ZERO); }
     static void response(@NonNull TestHttpsServer server,@NonNull String path,int status,@NonNull String type,@NonNull String json) {
         server.script(path,TestHttpsServer.Script.fromResponse(TestHttpsServer.Response.withStatus(status).header("Content-Type",type).body(json).build()));

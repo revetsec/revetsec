@@ -15,6 +15,7 @@
  */
 
 package com.revetsec.internal.json;
+import com.revetsec.json.JsonString;
 
 import org.jspecify.annotations.NonNull;
 
@@ -155,7 +156,7 @@ final class JsonCorpusManifestTests {
 
 		for (JsonValue key : ((JsonArray) jwks.find("keys").orElseThrow()).getElements()) {
 			JsonObject jwk = (JsonObject) key;
-			keyTypes.add(jwk.findString("kty").orElseThrow());
+			keyTypes.add(jwk.find("kty").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow());
 
 			for (String privateMember : List.of("d", "p", "q", "dp", "dq", "qi", "k"))
 				Assertions.assertFalse(jwk.getMembers().containsKey(privateMember), privateMember);

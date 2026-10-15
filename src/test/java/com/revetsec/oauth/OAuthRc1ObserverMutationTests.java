@@ -21,7 +21,7 @@ import com.revetsec.jose.JwsAlgorithm;
 import com.revetsec.jose.JwsSigner;
 import com.revetsec.testing.TestClock;
 import com.revetsec.testing.TestHttpsServer;
-import com.revetsec.testing.TestJsonWebKeys;
+import com.revetsec.testing.TestJwk;
 import com.revetsec.testing.TestTls;
 import org.jspecify.annotations.NonNull;
 import org.junit.jupiter.api.DynamicTest;
@@ -109,7 +109,7 @@ final class OAuthRc1ObserverMutationTests {
                 OAuthClient client=client(server,TestClock.fromInstant(NOW),observer,
                         ClientAuthentication.fromClientSecretBasic("TEST-ONLY-secret",encoding));
                 events.set(0);
-                client.revoke("TEST-ONLY-token",TokenTypeHint.ACCESS_TOKEN);
+                assertInstanceOf(OAuthRevocationResult.Succeeded.class, client.revokeResult("TEST-ONLY-token",TokenTypeHint.ACCESS_TOKEN));
                 assertEquals(encoding==ClientSecretBasicEncoding.UNENCODED?1:0,events.get());
                 assertEquals(1,server.getHitCount("/revoke"));
             }
@@ -130,7 +130,7 @@ final class OAuthRc1ObserverMutationTests {
             TokenIntrospectionClient introspection=TokenIntrospectionClient.withOAuthClient(client).expectedAudiences(Set.of("api"))
                     .observer(observer).build();
             long started=System.nanoTime();
-            OAuthException failure=assertThrows(OAuthException.class,()->introspection.validate(bearer()));
+            OAuthException failure=assertThrows(OAuthException.class,()->introspection.validateResult(bearer()));
             long total=System.nanoTime()-started;
             assertSame(failure,observed.get());assertNotNull(elapsed.get());assertFalse(elapsed.get().isNegative());
             assertTrue(elapsed.get().toNanos()<=total);
@@ -140,19 +140,19 @@ final class OAuthRc1ObserverMutationTests {
     private static void invoke(@NonNull OAuthClient client,@NonNull TestHttpsServer server,@NonNull OAuthEndpoint role,
             @NonNull AccessTokenObserver observer){
         switch(role){
-            case TOKEN -> client.requestClientCredentialsToken(TokenRequestOptions.builder().build());
-            case REVOCATION -> client.revoke("TEST-ONLY-token",TokenTypeHint.ACCESS_TOKEN);
+            case TOKEN -> assertInstanceOf(OAuthTokenRequestResult.Succeeded.class, client.requestClientCredentialsResult(TokenRequestOptions.builder().build())).getTokens();
+            case REVOCATION -> assertInstanceOf(OAuthRevocationResult.Succeeded.class, client.revokeResult("TEST-ONLY-token",TokenTypeHint.ACCESS_TOKEN));
             case INTROSPECTION -> client.introspectionRequest(bearer(),new ResourceServerMetadata(server.uri("/tenant").toString(),
                     server.uri("/introspect"),Set.of("client_secret_basic","private_key_jwt"),Set.of("RS256"),server.uri("/token")),
                     Deadline.fromNow(Duration.ofSeconds(5)),observer);
             default -> throw new AssertionError(role);
         }
     }
-    private static @NonNull BearerToken bearer(){return BearerToken.fromAuthorizationHeaderValues(java.util.List.of("Bearer TEST-ONLY-token")).orElseThrow();}
+    private static @NonNull BearerToken bearer(){return assertInstanceOf(BearerTokenResult.Present.class, BearerToken.fromAuthorizationHeaderValuesResult(java.util.List.of("Bearer TEST-ONLY-token"))).getToken();}
     private static @NonNull String path(@NonNull OAuthEndpoint role){return switch(role){
         case TOKEN -> "/token";case REVOCATION -> "/revoke";case INTROSPECTION -> "/introspect";default -> throw new AssertionError(role);};}
     private static @NonNull ClientAuthentication assertion(){
-        TestJsonWebKeys.Fixture key=TestJsonWebKeys.Fixture.IDP_SIGNING_RSA_2048;
+        TestJwk.Fixture key=TestJwk.Fixture.IDP_SIGNING_RSA_2048;
         return ClientAuthentication.fromPrivateKeyJwt(budget->ClientAssertionSigningKey.withSigner(
                 JwsSigner.fromRsaKeyPair(key.getPrivateKey(),key.getPublicKey(),JwsAlgorithm.RS256)).keyId("rc1-observer-key").build());
     }

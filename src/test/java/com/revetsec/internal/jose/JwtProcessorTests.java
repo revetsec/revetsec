@@ -26,8 +26,8 @@ import com.revetsec.internal.json.JsonLimits;
 import com.revetsec.jose.JoseException;
 import com.revetsec.jose.JwsAlgorithm;
 import com.revetsec.json.JsonObject;
-import com.revetsec.testing.TestJsonWebKeys;
-import com.revetsec.testing.TestJsonWebKeys.Fixture;
+import com.revetsec.testing.TestJwk;
+import com.revetsec.testing.TestJwk.Fixture;
 import com.revetsec.testing.TestJws;
 import com.revetsec.testing.TestJws.Algorithm;
 import org.jspecify.annotations.Nullable;
@@ -82,7 +82,7 @@ final class JwtProcessorTests {
 					JwsAlgorithm algorithm = JwsAlgorithm.findByWireValue(entry.getKey().getWireValue()).orElseThrow();
 					String token = TestJws.withAlgorithm(entry.getKey()).kid("k").typ("JWT").payload(claims().toJson())
 							.sign(entry.getValue().getPrivateKey());
-					VerificationKey key = key(TestJsonWebKeys.withFixture(entry.getValue()).kid("k").alg(
+					VerificationKey key = key(TestJwk.withFixture(entry.getValue()).kid("k").alg(
 							entry.getKey().getWireValue()));
 
 					PreparedJws prepared = JwtProcessor.prepare(token, policy(PUBLIC_KEY_ALGORITHMS));
@@ -119,16 +119,16 @@ final class JwtProcessorTests {
 		PreparedJws prepared = prepared(Fixture.IDP_SIGNING_RSA_2048, Algorithm.RS256, "k");
 
 		assertVerifyFails(JoseException.Reason.KEY_ALGORITHM_MISMATCH, prepared, KeySelection.fromKey(key(
-				TestJsonWebKeys.withFixture(Fixture.IDP_SIGNING_EC_P256).kid("k"))));
+				TestJwk.withFixture(Fixture.IDP_SIGNING_EC_P256).kid("k"))));
 		assertVerifyFails(JoseException.Reason.KEY_ALGORITHM_MISMATCH, prepared, KeySelection.fromKey(key(
-				TestJsonWebKeys.withFixture(Fixture.IDP_SIGNING_RSA_2048).kid("k").alg("PS256"))));
+				TestJwk.withFixture(Fixture.IDP_SIGNING_RSA_2048).kid("k").alg("PS256"))));
 		assertVerifyFails(JoseException.Reason.UNKNOWN_KEY, prepared, KeySelection.fromKey(key(
-				TestJsonWebKeys.withFixture(Fixture.IDP_SIGNING_RSA_2048).kid("other"))));
+				TestJwk.withFixture(Fixture.IDP_SIGNING_RSA_2048).kid("other"))));
 		assertVerifyFails(JoseException.Reason.UNKNOWN_KEY, prepared, KeySelection.fromKey(key(
-				TestJsonWebKeys.withFixture(Fixture.IDP_SIGNING_RSA_2048))));
+				TestJwk.withFixture(Fixture.IDP_SIGNING_RSA_2048))));
 
 		PreparedJws kidless = prepared(Fixture.IDP_SIGNING_RSA_2048, Algorithm.RS256, null);
-		Assertions.assertNotNull(JwtProcessor.verify(kidless, KeySelection.fromKey(key(TestJsonWebKeys.withFixture(
+		Assertions.assertNotNull(JwtProcessor.verify(kidless, KeySelection.fromKey(key(TestJwk.withFixture(
 				Fixture.IDP_SIGNING_RSA_2048).kid("any")))));
 	}
 
@@ -138,16 +138,16 @@ final class JwtProcessorTests {
 	void theSignatureIsCheckedAgainstTheSelectedKey() throws Exception {
 		PreparedJws prepared = prepared(Fixture.IDP_SIGNING_RSA_2048, Algorithm.RS256, "k");
 		assertVerifyFails(JoseException.Reason.SIGNATURE_MISMATCH, prepared, KeySelection.fromKey(key(
-				TestJsonWebKeys.withFixture(Fixture.NEGATIVE_ATTACKER_RSA_2048).kid("k"))));
+				TestJwk.withFixture(Fixture.NEGATIVE_ATTACKER_RSA_2048).kid("k"))));
 		assertVerifyFails(JoseException.Reason.SIGNATURE_MALFORMED, prepared, KeySelection.fromKey(key(
-				TestJsonWebKeys.withFixture(Fixture.IDP_SIGNING_RSA_3072).kid("k"))));
+				TestJwk.withFixture(Fixture.IDP_SIGNING_RSA_3072).kid("k"))));
 	}
 
 	// Defense in depth: a token that skipped step 5 (a PreparedJws built directly) still cannot verify with r = 0 or
 	// a short signature; the engine's OUT_OF_RANGE and WRONG_LENGTH at step 7 are SIGNATURE_MALFORMED.
 	@Test
 	void stepSevenStillRefusesMalformedSignaturesThatSkippedTheShapeCheck() throws Exception {
-		VerificationKey key = key(TestJsonWebKeys.withFixture(Fixture.IDP_SIGNING_EC_P256).kid("k"));
+		VerificationKey key = key(TestJwk.withFixture(Fixture.IDP_SIGNING_EC_P256).kid("k"));
 		byte[] signingInput = "e30.e30".getBytes(StandardCharsets.US_ASCII);
 		byte[] rZero = new byte[64];
 		Arrays.fill(rZero, 32, 64, (byte) 1);
@@ -167,7 +167,7 @@ final class JwtProcessorTests {
 	@Test
 	void thePayloadIsReadOnlyAfterTheSignatureVerifies() throws Exception {
 		TestJws.Builder builder = TestJws.withAlgorithm(Algorithm.RS256).kid("k").payload("not json");
-		VerificationKey key = key(TestJsonWebKeys.withFixture(Fixture.IDP_SIGNING_RSA_2048).kid("k"));
+		VerificationKey key = key(TestJwk.withFixture(Fixture.IDP_SIGNING_RSA_2048).kid("k"));
 
 		PreparedJws forged = JwtProcessor.prepare(builder.sign(Fixture.NEGATIVE_ATTACKER_RSA_2048.getPrivateKey()),
 				policy(Set.of(JwsAlgorithm.RS256)));
@@ -297,10 +297,10 @@ final class JwtProcessorTests {
 		prepared.signature()[0] ^= 1;
 		prepared.payload()[0] ^= 1;
 		prepared.signingInput()[0] ^= 1;
-		Assertions.assertNotNull(JwtProcessor.verify(prepared, KeySelection.fromKey(key(TestJsonWebKeys.withFixture(
+		Assertions.assertNotNull(JwtProcessor.verify(prepared, KeySelection.fromKey(key(TestJwk.withFixture(
 				Fixture.IDP_SIGNING_RSA_2048).kid("secret-kid")))));
 		Assertions.assertEquals("PreparedJws{algorithm=RS256}", prepared.toString());
-		VerifiedJws verified = JwtProcessor.verify(prepared, KeySelection.fromKey(key(TestJsonWebKeys.withFixture(
+		VerifiedJws verified = JwtProcessor.verify(prepared, KeySelection.fromKey(key(TestJwk.withFixture(
 				Fixture.IDP_SIGNING_RSA_2048).kid("secret-kid"))));
 		verified.getPayload()[0] ^= 1;
 		Assertions.assertEquals('{', verified.getPayload()[0]);
@@ -324,7 +324,7 @@ final class JwtProcessorTests {
 				.orElseThrow())));
 	}
 
-	static @NonNull VerificationKey key(TestJsonWebKeys.@NonNull Builder jwk) throws Exception {
+	static @NonNull VerificationKey key(TestJwk.@NonNull Builder jwk) throws Exception {
 		return JwkParser.parse((JsonObject) JsonCodec.parse(jwk.toJson().getBytes(StandardCharsets.UTF_8),
 				JsonLimits.jose(65_536)));
 	}

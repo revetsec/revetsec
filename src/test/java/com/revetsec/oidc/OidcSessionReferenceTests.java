@@ -37,14 +37,14 @@ final class OidcSessionReferenceTests {
 	void referenceFromValidatedAuthenticationRoundTripsWithoutCredentialsOrPersonalAttributes() throws Exception {
 		try(TestHttpsServer server=TestHttpsServer.start()) {
 			OidcRefreshTests.Login login=OidcRefreshTests.login(server,OidcRefreshTests.builder(server).build(),CLOCK);
-			String storage=login.reference().toSerializedForm(); OidcSessionReference decoded=OidcSessionReference.fromSerializedForm(storage);
+			String storage=login.reference().toSerializedForm(); OidcSessionReference decoded=assertInstanceOf(OidcSessionReferenceParseResult.Succeeded.class, OidcSessionReference.fromSerializedFormResult(storage)).getReference();
 			assertEquals(storage,decoded.toSerializedForm()); assertEquals(login.reference().getSessionId(),decoded.getSessionId()); assertTrue(decoded.matchesNonce(login.nonce()));
 			for(String secret:List.of(login.nonce(),login.refresh().getValue(),"TEST-ONLY-new-access","TEST-ONLY-identity-secret","\"exp\"","\"email\""))assertFalse(storage.contains(secret),"Reference retained non-continuity data");
 			assertFalse(decoded.toString().contains("TEST-ONLY")); assertEquals(1,server.getRequests().size());
 			for(var method:OidcSessionReference.class.getMethods()) assertFalse(Set.of(IdToken.class,OidcAuthentication.class,OidcUserInfo.class,com.revetsec.oauth.AccessToken.class,com.revetsec.oauth.RefreshToken.class).contains(method.getReturnType()),"Reference cannot return identity or credentials");
 			JsonObject envelope=parse(storage);Map<String,JsonValue> fields=new LinkedHashMap<>(envelope.getMembers());Map<String,JsonValue> claims=new LinkedHashMap<>(((JsonObject)Objects.requireNonNull(fields.get("claims"))).getMembers());claims.put("sub",JsonString.fromValue("unverified-claimed-subject"));fields.put("claims",JsonObject.fromMembers(claims));
 			// Parsing checks structure and never converts this changed comparison value into authenticated identity.
-			OidcSessionReference changed=OidcSessionReference.fromSerializedForm(JsonObject.fromMembers(fields).toJson());assertTrue(changed.toSerializedForm().contains("unverified-claimed-subject"));assertFalse(changed.toString().contains("unverified-claimed-subject"));
+			OidcSessionReference changed=assertInstanceOf(OidcSessionReferenceParseResult.Succeeded.class, OidcSessionReference.fromSerializedFormResult(JsonObject.fromMembers(fields).toJson())).getReference();assertTrue(changed.toSerializedForm().contains("unverified-claimed-subject"));assertFalse(changed.toString().contains("unverified-claimed-subject"));
 		}
 	}
 	@Test
@@ -52,12 +52,17 @@ final class OidcSessionReferenceTests {
 		try(TestHttpsServer server=TestHttpsServer.start()) {
 			OidcSessionReference reference=OidcRefreshTests.login(server,OidcRefreshTests.builder(server).build(),CLOCK).reference();TestClock clock=TestClock.fromInstant(NOW);
 			StateSealer sealer=StateSealer.withActiveKey(TestSealers.fixedKey("session-a")).clock(clock).build();String sealed=reference.toSealedForm(sealer,"oidc-session",Duration.ofSeconds(2));
-			assertEquals(reference.toSerializedForm(),OidcSessionReference.fromSealedForm(sealed,sealer,"oidc-session").toSerializedForm());
-			List<Runnable> failures=new ArrayList<>();failures.add(()->OidcSessionReference.fromSealedForm(sealed,sealer,"other-context"));failures.add(()->OidcSessionReference.fromSealedForm(sealed.substring(1),sealer,"oidc-session"));
-			StateSealer other=StateSealer.withActiveKey(TestSealers.fixedKey("session-b")).clock(clock).build();failures.add(()->OidcSessionReference.fromSealedForm(sealed,other,"oidc-session"));
-			for(Runnable action:failures){InvalidSealedStateException failure=assertThrows(InvalidSealedStateException.class,action::run);assertEquals("Sealed state is invalid.",failure.getMessage());assertNull(failure.getCause());assertEquals(0,failure.getSuppressed().length);assertFalse(failure.toString().contains(sealed));}
-			clock.advance(Duration.ofSeconds(2));assertThrows(InvalidSealedStateException.class,()->OidcSessionReference.fromSealedForm(sealed,sealer,"oidc-session"));
-			String wrongSchema=sealer.seal("{\"access_token\":\"TEST-ONLY-secret\"}","oidc-session",Duration.ofSeconds(2));assertEquals(OidcValidationException.Reason.SESSION_REFERENCE_INVALID,assertThrows(OidcValidationException.class,()->OidcSessionReference.fromSealedForm(wrongSchema,sealer,"oidc-session")).getReason());
+			assertEquals(reference.toSerializedForm(),assertInstanceOf(OidcSessionReferenceParseResult.Succeeded.class, OidcSessionReference.fromSealedFormResult(sealed,sealer,"oidc-session")).getReference().toSerializedForm());
+			for (OidcSessionReferenceParseResult rejected : List.of(
+					OidcSessionReference.fromSealedFormResult(sealed,sealer,"other-context"),
+					OidcSessionReference.fromSealedFormResult(sealed.substring(1),sealer,"oidc-session"),
+					OidcSessionReference.fromSealedFormResult(sealed,StateSealer.withActiveKey(TestSealers.fixedKey("session-b")).clock(clock).build(),"oidc-session"))) {
+				assertInstanceOf(OidcSessionReferenceParseResult.Rejected.class,rejected);
+				assertFalse(rejected.toString().contains(sealed));
+			}
+			clock.advance(Duration.ofSeconds(2));assertInstanceOf(OidcSessionReferenceParseResult.Rejected.class,
+					OidcSessionReference.fromSealedFormResult(sealed,sealer,"oidc-session"));
+			String wrongSchema=sealer.seal("{\"access_token\":\"TEST-ONLY-secret\"}","oidc-session",Duration.ofSeconds(2));assertEquals(OidcValidationException.Reason.SESSION_REFERENCE_INVALID,assertInstanceOf(OidcSessionReferenceParseResult.Rejected.class, OidcSessionReference.fromSealedFormResult(wrongSchema,sealer,"oidc-session")).getReason());
 			assertThrows(IllegalArgumentException.class,()->reference.toSealedForm(sealer,"oidc-session",Duration.ZERO));assertThrows(IllegalArgumentException.class,()->reference.toSealedForm(sealer,"oidc-session",Duration.ofDays(401)));
 		}
 	}
@@ -93,7 +98,7 @@ final class OidcSessionReferenceTests {
 						Map<String, JsonValue> fields = new LinkedHashMap<>(parse(storage).getMembers());
 						editClaims(fields, c -> c.put("sub", JsonString.fromValue(subject)));
 						String changed = JsonObject.fromMembers(fields).toJson();
-						assertEquals(changed, OidcSessionReference.fromSerializedForm(changed).toSerializedForm());
+						assertEquals(changed, assertInstanceOf(OidcSessionReferenceParseResult.Succeeded.class, OidcSessionReference.fromSerializedFormResult(changed)).getReference().toSerializedForm());
 					}
 				}));
 	}
@@ -111,7 +116,7 @@ final class OidcSessionReferenceTests {
 				editClaims(fields, c -> c.put("sid", JsonString.fromValue(padding)));
 				String exact = JsonObject.fromMembers(fields).toJson();
 				assertEquals(64 * 1_024, exact.getBytes(StandardCharsets.UTF_8).length);
-				assertEquals(exact, OidcSessionReference.fromSerializedForm(exact).toSerializedForm());
+				assertEquals(exact, assertInstanceOf(OidcSessionReferenceParseResult.Succeeded.class, OidcSessionReference.fromSerializedFormResult(exact)).getReference().toSerializedForm());
 				editClaims(fields, c -> c.put("sid", JsonString.fromValue(padding + "s")));
 				assertInvalid(JsonObject.fromMembers(fields).toJson());
 			}
@@ -124,5 +129,5 @@ final class OidcSessionReferenceTests {
 	}
 	private static @NonNull JsonObject parse(@NonNull String value)throws Exception{return (JsonObject)JsonCodec.parse(value.getBytes(StandardCharsets.UTF_8),JsonLimits.protocolDocument(64*1024));}
 	private static void editClaims(@NonNull Map<@NonNull String,@NonNull JsonValue> envelope,@NonNull Consumer<@NonNull Map<@NonNull String,@NonNull JsonValue>> edit){Map<String,JsonValue> claims=new LinkedHashMap<>(((JsonObject)Objects.requireNonNull(envelope.get("claims"))).getMembers());edit.accept(claims);envelope.put("claims",JsonObject.fromMembers(claims));}
-	private static void assertInvalid(@NonNull String value){OidcValidationException failure=assertThrows(OidcValidationException.class,()->OidcSessionReference.fromSerializedForm(value));assertEquals(OidcValidationException.Reason.SESSION_REFERENCE_INVALID,failure.getReason());assertNull(failure.getCause());failure.addSuppressed(new IllegalArgumentException(value));assertEquals(0,failure.getSuppressed().length);assertFalse(failure.toString().contains("TEST-ONLY"));assertEquals("The OIDC session reference is invalid.",failure.getMessage());}
+	private static void assertInvalid(@NonNull String value){OidcSessionReferenceParseResult.Rejected failure=assertInstanceOf(OidcSessionReferenceParseResult.Rejected.class, OidcSessionReference.fromSerializedFormResult(value));assertEquals(OidcValidationException.Reason.SESSION_REFERENCE_INVALID,failure.getReason());assertFalse(failure.toString().contains("TEST-ONLY"));assertEquals("OidcSessionReferenceParseResult{outcome=Rejected, data=<redacted>}",failure.toString());}
 }

@@ -15,6 +15,7 @@
  */
 package com.revetsec.saml;
 
+import com.google.errorprone.annotations.CheckReturnValue;
 import com.revetsec.StateSealer;
 import com.revetsec.internal.crypto.SealedStateAccess;
 import com.revetsec.internal.crypto.SealedStateType;
@@ -121,13 +122,22 @@ public final class SamlSessionReference {
     /**
      * Restores a bounded reference from trusted application storage. It validates
      * structure, but cannot authenticate the original SAML assertion. Browser-side
-     * storage must use {@link #fromSealedForm(String, StateSealer, String, Clock)}.
+     * storage must use {@link #fromSealedFormResult(String, StateSealer, String, Clock)}.
      *
      * @param serializedForm versioned storage form
-     * @return logout continuity reference, not an authenticated identity
+     * @return parsed logout continuity reference or a fixed structural rejection, never authenticated identity
      * @since 1.0.0
      */
-    public static @NonNull SamlSessionReference fromSerializedForm(@NonNull String serializedForm) {
+    @CheckReturnValue
+    public static @NonNull SamlSessionReferenceParseResult fromSerializedFormResult(@NonNull String serializedForm) {
+        try {
+            return SamlSessionReferenceParseResult.fromReference(parseSerializedForm(serializedForm));
+        } catch (IllegalArgumentException rejected) {
+            return SamlSessionReferenceParseResult.fromRejection();
+        }
+    }
+
+    private static @NonNull SamlSessionReference parseSerializedForm(@NonNull String serializedForm) {
         requireNonNull(serializedForm);
         try {
             if (serializedForm.length() > MAXIMUM_BYTES) throw invalid();
@@ -206,17 +216,18 @@ public final class SamlSessionReference {
      * @param sealer active and verification keys
      * @param context original application context
      * @param clock time source for expiry
-     * @return logout continuity reference
+     * @return parsed logout continuity reference or a fixed sealed-state/structural rejection
      * @since 1.0.0
      */
-    public static @NonNull SamlSessionReference fromSealedForm(@NonNull String sealedForm,
+    @CheckReturnValue
+    public static @NonNull SamlSessionReferenceParseResult fromSealedFormResult(@NonNull String sealedForm,
             @NonNull StateSealer sealer, @NonNull String context, @NonNull Clock clock) {
         try {
-            return fromSerializedForm(SealedStateAccess.get().unseal(requireNonNull(sealer),
+            return fromSerializedFormResult(SealedStateAccess.get().unseal(requireNonNull(sealer),
                     SealedStateType.SAML_SESSION, requireNonNull(sealedForm), requireNonNull(context),
                     requireNonNull(clock)));
         } catch (UnsealException exception) {
-            throw invalid();
+            return SamlSessionReferenceParseResult.fromSealedStateRejection();
         }
     }
 

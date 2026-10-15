@@ -15,9 +15,9 @@
  */
 package example.playground;
 
-import com.revetsec.jose.JsonWebKeySet;
+import com.revetsec.jose.Jwks;
 import com.revetsec.jose.JwsAlgorithm;
-import com.revetsec.jose.StaticJsonWebKeySource;
+import com.revetsec.jose.StaticJwksSource;
 import com.revetsec.json.JsonObject;
 import com.revetsec.oauth.*;
 import com.soklet.*;
@@ -151,7 +151,7 @@ final class PlaygroundAdmissionTests {
     @Test void setsCannotRecoverIdenticalPhysicalHeadersAndBodyTokensAreNotMcpTransport() throws Exception {
         Fixtures fixture = new Fixtures();
         Request collapsed = Request.withPath(HttpMethod.POST, "/mcp").headers(Map.of("Authorization", List.of("Bearer opaque"))).build();
-        assertTrue(com.revetsec.soklet.SokletBearer.bearerTokenFor(collapsed).isPresent());
+        assertInstanceOf(com.revetsec.oauth.BearerTokenResult.Present.class, com.revetsec.soklet.SokletBearer.bearerTokenResultFor(collapsed));
         SokletSimulator.run(fixture.application(fixture.validator(new AtomicInteger())), simulator -> {
             McpSimulationResponse response = fixture.call(simulator, null, "tools/call", "whoami", "{\"token\":\"opaque\"}", false);
             assertEquals(401, response.getStatusCode());
@@ -248,7 +248,7 @@ final class PlaygroundAdmissionTests {
         PlaygroundAdmission.@NonNull TokenValidator validator(@NonNull AtomicInteger calls) {
             JwtAccessTokenValidator validator = JwtAccessTokenValidator.withIssuer(issuer)
                     .expectedAudiences(Set.of(resource)).allowedAlgorithms(Set.of(JwsAlgorithm.RS256))
-                    .jsonWebKeySource(StaticJsonWebKeySource.fromJsonWebKeySet(JsonWebKeySet.fromJson(jwks()))).build();
+                    .jwksSource(StaticJwksSource.fromJwks(((com.revetsec.jose.JwksParseResult.Succeeded) Jwks.fromJsonResult(jwks())).getJwks())).build();
             return token -> { calls.incrementAndGet(); return validator.validateResult(token); };
         }
         @NonNull SokletConfig application(PlaygroundAdmission.@NonNull TokenValidator validator) {

@@ -295,7 +295,7 @@ final class ResourceServerMetadataCache<T> {
 				if (response.status() == 404 || response.status() == 405 || response.status() == 410)
 					continue;
 				if (response.status() != 200)
-					throw OAuthErrorResponseException.fromResponse(response.status(), "", RetryAfter.parse(response.headers(), this.clock.instant()));
+					throw OAuthErrorResponseException.fromMetadataResponse(response.status(), RetryAfter.parse(response.headers(), this.clock.instant()));
 				ResourceServerMetadata metadata = ResourceServerMetadata.parse(this.issuer.toString(), bytes, this.role);
 				T checked = this.validate.apply(metadata);
 				Instant now = this.clock.instant();
@@ -305,7 +305,7 @@ final class ResourceServerMetadataCache<T> {
 				java.util.Arrays.fill(bytes, (byte) 0);
 			}
 		}
-		throw OAuthErrorResponseException.fromResponse(404, "", java.util.Optional.empty());
+		throw OAuthErrorResponseException.fromMetadataResponse(404, java.util.Optional.empty());
 	}
 
 	private static @NonNull OAuthException failure(OAuthException.@NonNull Reason reason) {

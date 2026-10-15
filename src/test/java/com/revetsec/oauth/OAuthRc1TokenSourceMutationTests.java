@@ -66,7 +66,7 @@ final class OAuthRc1TokenSourceMutationTests {
                                 ClientCredentialsTokenSource source=java.util.Objects.requireNonNull(sourceRef.get());
                                 if(variant==2)clockNow.set(NOW.plusSeconds(61));
                                 else source.invalidate(java.util.Objects.requireNonNull(sharedRef.get()));
-                                if(variant==1)assertEquals("TEST-ONLY-second",source.getAccessToken().getValue());
+                                if(variant==1)assertEquals("TEST-ONLY-second",assertInstanceOf(AccessTokenAcquisitionResult.Succeeded.class, source.getAccessTokenResult()).getAccessToken().getValue());
                             }
                         }
                         return java.util.Objects.requireNonNull(clockNow.get());
@@ -76,11 +76,11 @@ final class OAuthRc1TokenSourceMutationTests {
                 sourceRef.set(source);
                 TestHttpsServer.HeldScript held=TestHttpsServer.HeldScript.fromResponse(token("TEST-ONLY-first"));
                 server.script("/token",held);
-                FutureTask<AccessToken> leader=task("rc1-token-leader",source::getAccessToken);
+                FutureTask<AccessToken> leader=task("rc1-token-leader",() -> assertInstanceOf(AccessTokenAcquisitionResult.Succeeded.class, source.getAccessTokenResult()).getAccessToken());
                 FutureTask<AccessToken> follower=null;
                 try {
                     assertTrue(held.awaitHeldCount(1,Duration.ofSeconds(2)));
-                    follower=task("rc1-token-follower",source::getAccessToken);
+                    follower=task("rc1-token-follower",() -> assertInstanceOf(AccessTokenAcquisitionResult.Succeeded.class, source.getAccessTokenResult()).getAccessToken());
                     assertTrue(followerEntered.await(2,TimeUnit.SECONDS));
                     server.script("/token",TestHttpsServer.Script.fromResponse(token("TEST-ONLY-second")));
                     held.release();
@@ -90,7 +90,7 @@ final class OAuthRc1TokenSourceMutationTests {
                     assertEquals("TEST-ONLY-second",second.getValue());
                     assertNotSame(first,second);
                     onCaller(()->{source.invalidate(first);return true;});
-                    assertSame(second,onCaller(source::getAccessToken));
+                    assertSame(second,onCaller(() -> assertInstanceOf(AccessTokenAcquisitionResult.Succeeded.class, source.getAccessTokenResult()).getAccessToken()));
                     assertEquals(2,server.getHitCount("/token"));
                 } finally {releaseClock.countDown();held.release();leader.cancel(true);if(follower!=null)follower.cancel(true);}
             }
@@ -104,14 +104,14 @@ final class OAuthRc1TokenSourceMutationTests {
             ClientCredentialsTokenSource source=ClientCredentialsTokenSource.withClient(client(server,clock))
                     .renewBefore(Duration.ofSeconds(10)).build();
             server.script("/token",TestHttpsServer.Script.fromResponse(token("TEST-ONLY-first")));
-            AccessToken first=onCaller(source::getAccessToken);
-            assertSame(first,onCaller(source::getAccessToken));
+            AccessToken first=onCaller(() -> assertInstanceOf(AccessTokenAcquisitionResult.Succeeded.class, source.getAccessTokenResult()).getAccessToken());
+            assertSame(first,onCaller(() -> assertInstanceOf(AccessTokenAcquisitionResult.Succeeded.class, source.getAccessTokenResult()).getAccessToken()));
             clock.advance(Duration.ofSeconds(51));
             server.script("/token",TestHttpsServer.Script.fromResponse(TestHttpsServer.Response.fromStatus(503)));
-            assertSame(first,onCaller(source::getAccessToken));
-            assertSame(first,onCaller(source::getAccessToken));
+            assertSame(first,onCaller(() -> assertInstanceOf(AccessTokenAcquisitionResult.Succeeded.class, source.getAccessTokenResult()).getAccessToken()));
+            assertSame(first,onCaller(() -> assertInstanceOf(AccessTokenAcquisitionResult.Succeeded.class, source.getAccessTokenResult()).getAccessToken()));
             clock.advance(Duration.ofSeconds(9));
-            OAuthException failure=onCaller(()->assertThrows(OAuthException.class,source::getAccessToken));
+            OAuthException failure=onCaller(()->assertThrows(OAuthException.class,source::getAccessTokenResult));
             assertEquals(OAuthException.Reason.ENDPOINT_ERROR,failure.getReason());
             assertEquals(2,server.getHitCount("/token"));
         }
@@ -131,14 +131,14 @@ final class OAuthRc1TokenSourceMutationTests {
             };
             ClientCredentialsTokenSource source=ClientCredentialsTokenSource.withClient(client(server,clock)).build();
             server.script("/token",TestHttpsServer.Script.fromResponse(token("TEST-ONLY-first")));
-            OAuthException first=onCaller(()->assertThrows(OAuthException.class,source::getAccessToken));
+            OAuthException first=onCaller(()->assertThrows(OAuthException.class,source::getAccessTokenResult));
             assertEquals(OAuthException.Reason.NETWORK_FAILURE,first.getReason());assertNull(first.getCause());
             java.lang.reflect.Field flight=ClientCredentialsTokenSource.class.getDeclaredField("flight");
             flight.setAccessible(true);assertNull(flight.get(source),"An unexpected leader failure must release its installed flight.");
             java.lang.reflect.Field count=ClientCredentialsTokenSource.class.getDeclaredField("failureCount");
             count.setAccessible(true);assertEquals(1,count.getInt(source),"The first infrastructure failure starts the bounded backoff sequence.");
             assertFalse(first.toString().contains("TEST-ONLY-private-clock"));
-            assertSame(first,onCaller(()->assertThrows(OAuthException.class,source::getAccessToken)));
+            assertSame(first,onCaller(()->assertThrows(OAuthException.class,source::getAccessTokenResult)));
             assertEquals(1,server.getHitCount("/token"));
         }
     }
@@ -157,11 +157,11 @@ final class OAuthRc1TokenSourceMutationTests {
             };
             ClientCredentialsTokenSource source=ClientCredentialsTokenSource.withClient(client(server,clock)).build();
             server.script("/token",TestHttpsServer.Script.fromResponse(token("TEST-ONLY-recovered")));
-            AssertionError first=onCaller(()->assertThrows(AssertionError.class,source::getAccessToken));
+            AssertionError first=onCaller(()->assertThrows(AssertionError.class,source::getAccessTokenResult));
             assertEquals("TEST-ONLY-clock-error",first.getMessage());
             java.lang.reflect.Field flight=ClientCredentialsTokenSource.class.getDeclaredField("flight");
             flight.setAccessible(true);assertNull(flight.get(source));
-            assertEquals("TEST-ONLY-recovered",onCaller(source::getAccessToken).getValue());
+            assertEquals("TEST-ONLY-recovered",onCaller(() -> assertInstanceOf(AccessTokenAcquisitionResult.Succeeded.class, source.getAccessTokenResult()).getAccessToken()).getValue());
             assertEquals(2,server.getHitCount("/token"));
         }
     }
@@ -182,9 +182,9 @@ final class OAuthRc1TokenSourceMutationTests {
                 ClientCredentialsTokenSource source=ClientCredentialsTokenSource.withClient(client(server,clock)).build();
                 TestHttpsServer.HeldScript held=TestHttpsServer.HeldScript.fromResponse(TestHttpsServer.Response.fromStatus(503));
                 server.script("/token",held);
-                FutureTask<OAuthException> leader=task("rc1-failed-token-leader",()->assertThrows(OAuthException.class,source::getAccessToken));
+                FutureTask<OAuthException> leader=task("rc1-failed-token-leader",()->assertThrows(OAuthException.class,source::getAccessTokenResult));
                 FutureTask<OAuthException> follower=new FutureTask<>(()->{
-                    OAuthException failure=assertThrows(OAuthException.class,source::getAccessToken);
+                    OAuthException failure=assertThrows(OAuthException.class,source::getAccessTokenResult);
                     if(interrupt)assertTrue(Thread.currentThread().isInterrupted());
                     return failure;
                 });
@@ -195,7 +195,7 @@ final class OAuthRc1TokenSourceMutationTests {
                     if(interrupt){thread.interrupt();assertEquals(OAuthException.Reason.INTERRUPTED,result(follower).getReason());}
                     held.release();OAuthException first=result(leader);
                     if(!interrupt)assertSame(first,result(follower));
-                    assertSame(first,onCaller(()->assertThrows(OAuthException.class,source::getAccessToken)));
+                    assertSame(first,onCaller(()->assertThrows(OAuthException.class,source::getAccessTokenResult)));
                     assertEquals(1,server.getHitCount("/token"));
                 } finally {held.release();leader.cancel(true);follower.cancel(true);}
             }
@@ -213,7 +213,7 @@ final class OAuthRc1TokenSourceMutationTests {
             });
             ClientCredentialsTokenSource source=ClientCredentialsTokenSource.withClient(client(server,clock,authentication)).build();
             server.script("/token",TestHttpsServer.Script.fromResponse(token("TEST-ONLY-first")));
-            assertEquals("TEST-ONLY-first",onCaller(source::getAccessToken).getValue());
+            assertEquals("TEST-ONLY-first",onCaller(() -> assertInstanceOf(AccessTokenAcquisitionResult.Succeeded.class, source.getAccessTokenResult()).getAccessToken()).getValue());
             assertEquals(1,secretReads.get());assertEquals(1,server.getHitCount("/token"));
         }
     }
@@ -225,9 +225,9 @@ final class OAuthRc1TokenSourceMutationTests {
             ClientCredentialsTokenSource source=ClientCredentialsTokenSource.withClient(client(server,clock))
                     .renewBefore(Duration.ofSeconds(10)).build();
             server.script("/token",TestHttpsServer.Script.fromResponse(token("TEST-ONLY-first")));
-            AccessToken first=onCaller(source::getAccessToken);
+            AccessToken first=onCaller(() -> assertInstanceOf(AccessTokenAcquisitionResult.Succeeded.class, source.getAccessTokenResult()).getAccessToken());
             server.script("/token",TestHttpsServer.Script.fromResponse(TestHttpsServer.Response.fromStatus(503)));
-            assertSame(first,onCaller(source::getAccessToken));
+            assertSame(first,onCaller(() -> assertInstanceOf(AccessTokenAcquisitionResult.Succeeded.class, source.getAccessTokenResult()).getAccessToken()));
             assertEquals(2,server.getHitCount("/token"));
         }
     }
@@ -251,11 +251,11 @@ final class OAuthRc1TokenSourceMutationTests {
             ClientCredentialsTokenSource source=ClientCredentialsTokenSource.withClient(client(server,clock,authentication)).build();
             TestHttpsServer.HeldScript held=TestHttpsServer.HeldScript.fromResponse(token("TEST-ONLY-shared"));
             server.script("/token",held);
-            FutureTask<AccessToken> leader=task("rc1-returning-token-leader",source::getAccessToken);
+            FutureTask<AccessToken> leader=task("rc1-returning-token-leader",() -> assertInstanceOf(AccessTokenAcquisitionResult.Succeeded.class, source.getAccessTokenResult()).getAccessToken());
             FutureTask<AccessToken> follower=null;
             try{
                 assertTrue(held.awaitHeldCount(1,Duration.ofSeconds(2)));
-                follower=task("rc1-returning-token-follower",source::getAccessToken);
+                follower=task("rc1-returning-token-follower",() -> assertInstanceOf(AccessTokenAcquisitionResult.Succeeded.class, source.getAccessTokenResult()).getAccessToken());
                 assertTrue(followerEntered.await(2,TimeUnit.SECONDS));held.release();
                 AccessToken token=result(leader);assertSame(token,result(follower));
                 assertEquals("TEST-ONLY-shared",token.getValue());assertEquals(2,followerReads.get());

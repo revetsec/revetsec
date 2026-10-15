@@ -33,17 +33,7 @@ import org.jspecify.annotations.NonNull;
 public sealed interface AccessTokenValidator permits JwtAccessTokenValidator, TokenIntrospectionClient {
 
 	/**
-	 * Validates the credential, throwing only for rejection or infrastructure failure.
-	 * @param token unverified header credential
-	 * @return fully checked access token
-	 * @since 1.0.0
-	 */
-	@CheckReturnValue
-	@NonNull
-	VerifiedAccessToken validate(@NonNull BearerToken token);
-
-	/**
-	 * Returns a local credential verdict; infrastructure failures remain exceptions.
+	 * Returns a credential verdict or checked endpoint rejection; infrastructure failures remain exceptions.
 	 * @param token unverified header credential
 	 * @return validation outcome
 	 * @since 1.0.0

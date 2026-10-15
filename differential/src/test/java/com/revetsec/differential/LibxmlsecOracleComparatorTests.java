@@ -130,14 +130,14 @@ final class LibxmlsecOracleComparatorTests {
             String targetId = OpenSamlSpComparatorTests.id(xml, element);
             String credential = OpenSamlSpComparatorTests.signingCredential(fixture);
             JsonObject verified = verify(xml, targetId, credential);
-            assertTrue(verified.findBoolean("valid").orElseThrow(), fixture + " oracle");
-            assertTrue(verified.findBoolean("covers_target").orElseThrow(), fixture + " target");
+            assertTrue(verified.find("valid").map(com.revetsec.json.JsonBoolean.class::cast).map(com.revetsec.json.JsonBoolean::getValue).orElseThrow(), fixture + " oracle");
+            assertTrue(verified.find("covers_target").map(com.revetsec.json.JsonBoolean.class::cast).map(com.revetsec.json.JsonBoolean::getValue).orElseThrow(), fixture + " target");
             assertInstanceOf(SamlAuthenticationResult.Succeeded.class,
                     OpenSamlSpComparatorTests.revetsec(xml, credential, false, false), fixture);
 
             String tampered = xml.replace("minted-user", "attacker-user");
             assertNotEquals(xml, tampered, fixture + " must contain the signed identity");
-            assertFalse(verify(tampered, targetId, credential).findBoolean("valid").orElseThrow(),
+            assertFalse(verify(tampered, targetId, credential).find("valid").map(com.revetsec.json.JsonBoolean.class::cast).map(com.revetsec.json.JsonBoolean::getValue).orElseThrow(),
                     fixture + " tampered oracle");
             assertInstanceOf(SamlAuthenticationResult.Rejected.class,
                     OpenSamlSpComparatorTests.revetsec(tampered, credential, false, false),
@@ -163,10 +163,10 @@ final class LibxmlsecOracleComparatorTests {
             @NonNull String label) throws Exception {
         String targetId = OpenSamlSpComparatorTests.id(xml, element);
         JsonObject attacker = verify(xml, targetId, ForgedKeyInfoCorpus.ATTACKER);
-        assertTrue(attacker.findBoolean("valid").orElseThrow(), label + " attacker key");
-        assertTrue(attacker.findBoolean("covers_target").orElseThrow(), label + " target");
+        assertTrue(attacker.find("valid").map(com.revetsec.json.JsonBoolean.class::cast).map(com.revetsec.json.JsonBoolean::getValue).orElseThrow(), label + " attacker key");
+        assertTrue(attacker.find("covers_target").map(com.revetsec.json.JsonBoolean.class::cast).map(com.revetsec.json.JsonBoolean::getValue).orElseThrow(), label + " target");
         assertFalse(verify(xml, targetId, ForgedKeyInfoCorpus.TRUSTED)
-                .findBoolean("valid").orElseThrow(), label + " configured IdP key");
+                .find("valid").map(com.revetsec.json.JsonBoolean.class::cast).map(com.revetsec.json.JsonBoolean::getValue).orElseThrow(), label + " configured IdP key");
     }
 
     @Test void fullSignedMutationMatrixSeparatesSignatureValidityFromSpPolicy() throws Exception {
@@ -210,9 +210,9 @@ final class LibxmlsecOracleComparatorTests {
                     JsonObject proof = assertInstanceOf(JsonObject.class, JsonCodec.parse(
                             response.body().getBytes(StandardCharsets.UTF_8),
                             JsonLimits.protocolDocument(128_000)));
-                    boolean valid = proof.findBoolean("valid").orElseThrow();
+                    boolean valid = proof.find("valid").map(com.revetsec.json.JsonBoolean.class::cast).map(com.revetsec.json.JsonBoolean::getValue).orElseThrow();
                     verdict = valid ? "valid" : "invalid-signature";
-                    if (valid) assertTrue(proof.findBoolean("covers_target").orElseThrow(), label);
+                    if (valid) assertTrue(proof.find("covers_target").map(com.revetsec.json.JsonBoolean.class::cast).map(com.revetsec.json.JsonBoolean::getValue).orElseThrow(), label);
                 }
                 // An assertion-only signature can remain cryptographically valid after an
                 // unsigned envelope edit. The SP still rejects every changed envelope.
@@ -259,8 +259,8 @@ final class LibxmlsecOracleComparatorTests {
             String targetId = OpenSamlSpComparatorTests.id(target,
                     responseSigned ? "samlp:Response" : "saml:Assertion");
             JsonObject baseline = verify(target, targetId, credential);
-            assertTrue(baseline.findBoolean("valid").orElseThrow(), name + " baseline");
-            assertTrue(baseline.findBoolean("covers_target").orElseThrow(), name + " target");
+            assertTrue(baseline.find("valid").map(com.revetsec.json.JsonBoolean.class::cast).map(com.revetsec.json.JsonBoolean::getValue).orElseThrow(), name + " baseline");
+            assertTrue(baseline.find("covers_target").map(com.revetsec.json.JsonBoolean.class::cast).map(com.revetsec.json.JsonBoolean::getValue).orElseThrow(), name + " target");
             String originalIdentity = name.startsWith("case2-") ? "user-2"
                     : name.startsWith("case3-") ? "user-3"
                     : name.startsWith("extra-") ? "user-7" : "user-1";
@@ -303,8 +303,8 @@ final class LibxmlsecOracleComparatorTests {
                     JsonObject proof = assertInstanceOf(JsonObject.class, JsonCodec.parse(
                             decrypted.body().getBytes(StandardCharsets.UTF_8),
                             JsonLimits.protocolDocument(128_000)));
-                    assertTrue(proof.findBoolean("valid").orElseThrow(), label + " ciphertext");
-                    candidate = proof.findString("xml").orElseThrow();
+                    assertTrue(proof.find("valid").map(com.revetsec.json.JsonBoolean.class::cast).map(com.revetsec.json.JsonBoolean::getValue).orElseThrow(), label + " ciphertext");
+                    candidate = proof.find("xml").map(com.revetsec.json.JsonString.class::cast).map(com.revetsec.json.JsonString::getValue).orElseThrow();
                 }
                 HttpResponse<String> response = request("/control/oracle/verify",
                         JsonObject.builder().put("clock", JsonObject.builder().put("now", NOW).build())
@@ -319,10 +319,10 @@ final class LibxmlsecOracleComparatorTests {
                 JsonObject proof = assertInstanceOf(JsonObject.class, JsonCodec.parse(
                         response.body().getBytes(StandardCharsets.UTF_8),
                         JsonLimits.protocolDocument(128_000)));
-                if (proof.findBoolean("valid").orElseThrow()) {
+                if (proof.find("valid").map(com.revetsec.json.JsonBoolean.class::cast).map(com.revetsec.json.JsonBoolean::getValue).orElseThrow()) {
                     valid++;
                     assertEquals("valid", expected, label + " signature");
-                    assertTrue(proof.findBoolean("covers_target").orElseThrow(), label);
+                    assertTrue(proof.find("covers_target").map(com.revetsec.json.JsonBoolean.class::cast).map(com.revetsec.json.JsonBoolean::getValue).orElseThrow(), label);
                 } else {
                     invalid++;
                     assertEquals("invalid-signature", expected, label + " signature");
@@ -341,8 +341,8 @@ final class LibxmlsecOracleComparatorTests {
         JsonObject result = post("/control/oracle/decrypt", JsonObject.builder()
                 .put("clock", JsonObject.builder().put("now", NOW).build())
                 .put("xml", xml).put("credential", "independent-sp-rsa-2048").build());
-        assertTrue(result.findBoolean("valid").orElseThrow(), "independent baseline decrypt");
-        return result.findString("xml").orElseThrow();
+        assertTrue(result.find("valid").map(com.revetsec.json.JsonBoolean.class::cast).map(com.revetsec.json.JsonBoolean::getValue).orElseThrow(), "independent baseline decrypt");
+        return result.find("xml").map(com.revetsec.json.JsonString.class::cast).map(com.revetsec.json.JsonString::getValue).orElseThrow();
     }
 
     @Test void encryptedFixturesDecryptInIndependentOracleAndRevetsec() throws Exception {
@@ -353,8 +353,8 @@ final class LibxmlsecOracleComparatorTests {
             JsonObject response = post("/control/oracle/decrypt", JsonObject.builder()
                     .put("clock", JsonObject.builder().put("now", NOW).build())
                     .put("xml", xml).build());
-            assertTrue(response.findBoolean("valid").orElseThrow(), fixture + " oracle");
-            assertTrue(response.findString("xml").orElseThrow().contains("minted-user"),
+            assertTrue(response.find("valid").map(com.revetsec.json.JsonBoolean.class::cast).map(com.revetsec.json.JsonBoolean::getValue).orElseThrow(), fixture + " oracle");
+            assertTrue(response.find("xml").map(com.revetsec.json.JsonString.class::cast).map(com.revetsec.json.JsonString::getValue).orElseThrow().contains("minted-user"),
                     fixture + " decrypted identity");
             boolean cbc = fixture.contains("cbc");
             assertInstanceOf(SamlAuthenticationResult.Succeeded.class,
@@ -366,7 +366,7 @@ final class LibxmlsecOracleComparatorTests {
         JsonObject decrypted = post("/control/oracle/decrypt", JsonObject.builder()
                 .put("clock", JsonObject.builder().put("now", NOW).build())
                 .put("xml", unsignedCbc).build());
-        assertTrue(decrypted.findBoolean("valid").orElseThrow(), "CBC ciphertext is decryptable");
+        assertTrue(decrypted.find("valid").map(com.revetsec.json.JsonBoolean.class::cast).map(com.revetsec.json.JsonBoolean::getValue).orElseThrow(), "CBC ciphertext is decryptable");
         assertInstanceOf(SamlAuthenticationResult.Rejected.class,
                 OpenSamlSpComparatorTests.revetsec(unsignedCbc,
                         "idp-signing-rsa-2048", false, true),
@@ -392,11 +392,11 @@ final class LibxmlsecOracleComparatorTests {
                     original, encryptedId ? "saml:Assertion" : "samlp:Response");
             if (!assertionOnly) {
                 JsonObject baseline = verify(original, targetId, credential);
-                assertTrue(baseline.findBoolean("valid").orElseThrow(), fixture + " outer baseline");
-                assertTrue(baseline.findBoolean("covers_target").orElseThrow(), fixture + " outer target");
+                assertTrue(baseline.find("valid").map(com.revetsec.json.JsonBoolean.class::cast).map(com.revetsec.json.JsonBoolean::getValue).orElseThrow(), fixture + " outer baseline");
+                assertTrue(baseline.find("covers_target").map(com.revetsec.json.JsonBoolean.class::cast).map(com.revetsec.json.JsonBoolean::getValue).orElseThrow(), fixture + " outer target");
             } else if (encryptedId) {
                 JsonObject baseline = verify(original, targetId, credential);
-                assertTrue(baseline.findBoolean("valid").orElseThrow(), fixture + " assertion baseline");
+                assertTrue(baseline.find("valid").map(com.revetsec.json.JsonBoolean.class::cast).map(com.revetsec.json.JsonBoolean::getValue).orElseThrow(), fixture + " assertion baseline");
             }
             List<OpenSamlSpComparatorTests.Mutation> mutations =
                     OpenSamlSpComparatorTests.encryptedMutations(original, fixture);
@@ -417,7 +417,7 @@ final class LibxmlsecOracleComparatorTests {
                     JsonObject proof = assertInstanceOf(JsonObject.class, JsonCodec.parse(
                             response.body().getBytes(StandardCharsets.UTF_8),
                             JsonLimits.protocolDocument(128_000)));
-                    assertFalse(proof.findBoolean("valid").orElseThrow(), label + " outer signature");
+                    assertFalse(proof.find("valid").map(com.revetsec.json.JsonBoolean.class::cast).map(com.revetsec.json.JsonBoolean::getValue).orElseThrow(), label + " outer signature");
                     outerInvalid++;
                 } else if (encryptedId) {
                     HttpResponse<String> response = request("/control/oracle/verify",
@@ -436,10 +436,10 @@ final class LibxmlsecOracleComparatorTests {
                     boolean expectedValid = !mutation.name().equals("relative-namespace-sibling")
                             && !mutation.name().equals("destination")
                             && !mutation.name().equals("issuer-tamper");
-                    assertEquals(expectedValid, proof.findBoolean("valid").orElseThrow(),
+                    assertEquals(expectedValid, proof.find("valid").map(com.revetsec.json.JsonBoolean.class::cast).map(com.revetsec.json.JsonBoolean::getValue).orElseThrow(),
                             label + " inner signature");
                     if (expectedValid)
-                        assertTrue(proof.findBoolean("covers_target").orElseThrow(), label + " target");
+                        assertTrue(proof.find("covers_target").map(com.revetsec.json.JsonBoolean.class::cast).map(com.revetsec.json.JsonBoolean::getValue).orElseThrow(), label + " target");
                     if (expectedValid) innerValid++;
                     else innerInvalid++;
                 } else {
@@ -455,16 +455,16 @@ final class LibxmlsecOracleComparatorTests {
                     JsonObject decrypted = assertInstanceOf(JsonObject.class, JsonCodec.parse(
                             response.body().getBytes(StandardCharsets.UTF_8),
                             JsonLimits.protocolDocument(128_000)));
-                    assertTrue(decrypted.findBoolean("valid").orElseThrow(), label + " ciphertext");
-                    String assertion = decrypted.findString("xml").orElseThrow();
+                    assertTrue(decrypted.find("valid").map(com.revetsec.json.JsonBoolean.class::cast).map(com.revetsec.json.JsonBoolean::getValue).orElseThrow(), label + " ciphertext");
+                    String assertion = decrypted.find("xml").map(com.revetsec.json.JsonString.class::cast).map(com.revetsec.json.JsonString::getValue).orElseThrow();
                     String assertionId = Pattern.compile("\\bID=\"([^\"]+)\"").matcher(assertion)
                             .results().findFirst().orElseThrow().group(1);
                     JsonObject proof = verify(assertion, assertionId, credential);
                     boolean expectedValid = !mutation.name().equals("relative-namespace-sibling");
-                    assertEquals(expectedValid, proof.findBoolean("valid").orElseThrow(),
+                    assertEquals(expectedValid, proof.find("valid").map(com.revetsec.json.JsonBoolean.class::cast).map(com.revetsec.json.JsonBoolean::getValue).orElseThrow(),
                             label + " inner signature");
                     if (expectedValid)
-                        assertTrue(proof.findBoolean("covers_target").orElseThrow(), label + " target");
+                        assertTrue(proof.find("covers_target").map(com.revetsec.json.JsonBoolean.class::cast).map(com.revetsec.json.JsonBoolean::getValue).orElseThrow(), label + " target");
                     if (expectedValid) innerValid++;
                     else innerInvalid++;
                 }
@@ -493,8 +493,8 @@ final class LibxmlsecOracleComparatorTests {
                     "<samlp:Extensions>" + attacker + "</samlp:Extensions><samlp:Status>");
             assertNotEquals(xml, wrapped, fixture + " extension was not inserted");
             JsonObject verdict = verify(wrapped, targetId, credential);
-            assertTrue(verdict.findBoolean("valid").orElseThrow(), fixture + " signed target");
-            assertTrue(verdict.findBoolean("covers_target").orElseThrow(), fixture + " reference");
+            assertTrue(verdict.find("valid").map(com.revetsec.json.JsonBoolean.class::cast).map(com.revetsec.json.JsonBoolean::getValue).orElseThrow(), fixture + " signed target");
+            assertTrue(verdict.find("covers_target").map(com.revetsec.json.JsonBoolean.class::cast).map(com.revetsec.json.JsonBoolean::getValue).orElseThrow(), fixture + " reference");
             assertInstanceOf(SamlAuthenticationResult.Rejected.class,
                     OpenSamlSpComparatorTests.revetsec(wrapped, credential, false, false), fixture);
         }
@@ -530,9 +530,9 @@ final class LibxmlsecOracleComparatorTests {
                 String label = fixture + " structural mutation " + index;
                 assertNotEquals(xml, changed, label + " is inert");
                 JsonObject proof = verify(changed, targetId, credential);
-                assertEquals(!responseSigned, proof.findBoolean("valid").orElseThrow(), label);
+                assertEquals(!responseSigned, proof.find("valid").map(com.revetsec.json.JsonBoolean.class::cast).map(com.revetsec.json.JsonBoolean::getValue).orElseThrow(), label);
                 if (!responseSigned)
-                    assertTrue(proof.findBoolean("covers_target").orElseThrow(), label);
+                    assertTrue(proof.find("covers_target").map(com.revetsec.json.JsonBoolean.class::cast).map(com.revetsec.json.JsonBoolean::getValue).orElseThrow(), label);
                 assertInstanceOf(SamlAuthenticationResult.Rejected.class,
                         OpenSamlSpComparatorTests.revetsec(changed, credential, false, false), label);
             }
@@ -545,21 +545,21 @@ final class LibxmlsecOracleComparatorTests {
             String responseId = Pattern.compile("<saml2p:Response\\b[^>]*\\bID=\"([^\"]+)\"")
                     .matcher(xml).results().findFirst().orElseThrow().group(1);
             JsonObject verified = verify(xml, responseId, "shibboleth-capture");
-            assertTrue(verified.findBoolean("valid").orElseThrow(), mode + " real IdP signature");
-            assertTrue(verified.findBoolean("covers_target").orElseThrow(),
+            assertTrue(verified.find("valid").map(com.revetsec.json.JsonBoolean.class::cast).map(com.revetsec.json.JsonBoolean::getValue).orElseThrow(), mode + " real IdP signature");
+            assertTrue(verified.find("covers_target").map(com.revetsec.json.JsonBoolean.class::cast).map(com.revetsec.json.JsonBoolean::getValue).orElseThrow(),
                     mode + " Response must be covered");
             JsonObject decrypted = post("/control/oracle/decrypt", JsonObject.builder()
                     .put("clock", JsonObject.builder().put("now", NOW).build())
                     .put("xml", xml).build());
-            assertTrue(decrypted.findBoolean("valid").orElseThrow(), mode + " real IdP encryption");
-            String assertion = decrypted.findString("xml").orElseThrow();
+            assertTrue(decrypted.find("valid").map(com.revetsec.json.JsonBoolean.class::cast).map(com.revetsec.json.JsonBoolean::getValue).orElseThrow(), mode + " real IdP encryption");
+            String assertion = decrypted.find("xml").map(com.revetsec.json.JsonString.class::cast).map(com.revetsec.json.JsonString::getValue).orElseThrow();
             assertTrue(assertion.contains("AuthnStatement") && assertion.contains("Subject"),
                     mode + " decrypted assertion shape");
             String tampered = xml.replace("https://sp.example.test/acs",
                     "https://attacker.example.test/acs");
             assertNotEquals(xml, tampered, mode + " signed destination was not changed");
             assertFalse(verify(tampered, responseId, "shibboleth-capture")
-                    .findBoolean("valid").orElseThrow(), mode + " tampered signature");
+                    .find("valid").map(com.revetsec.json.JsonBoolean.class::cast).map(com.revetsec.json.JsonBoolean::getValue).orElseThrow(), mode + " tampered signature");
         }
     }
 
@@ -568,29 +568,29 @@ final class LibxmlsecOracleComparatorTests {
                 "simplesamlphp/cbc-response-signed-response.xml"));
         String responseId = OpenSamlSpComparatorTests.id(signed, "samlp:Response");
         JsonObject responseProof = verify(signed, responseId, "idp-signing-rsa-2048");
-        assertTrue(responseProof.findBoolean("valid").orElseThrow());
-        assertTrue(responseProof.findBoolean("covers_target").orElseThrow());
+        assertTrue(responseProof.find("valid").map(com.revetsec.json.JsonBoolean.class::cast).map(com.revetsec.json.JsonBoolean::getValue).orElseThrow());
+        assertTrue(responseProof.find("covers_target").map(com.revetsec.json.JsonBoolean.class::cast).map(com.revetsec.json.JsonBoolean::getValue).orElseThrow());
         String decryptedSigned = post("/control/oracle/decrypt", JsonObject.builder()
                 .put("clock", JsonObject.builder().put("now", NOW).build())
-                .put("xml", signed).build()).findString("xml").orElseThrow();
+                .put("xml", signed).build()).find("xml").map(com.revetsec.json.JsonString.class::cast).map(com.revetsec.json.JsonString::getValue).orElseThrow();
         assertTrue(decryptedSigned.contains("AuthnStatement"));
         String tampered = signed.replace("https://sp.example.test/acs",
                 "https://attacker.example.test/acs");
         assertNotEquals(signed, tampered);
         assertFalse(verify(tampered, responseId, "idp-signing-rsa-2048")
-                .findBoolean("valid").orElseThrow());
+                .find("valid").map(com.revetsec.json.JsonBoolean.class::cast).map(com.revetsec.json.JsonBoolean::getValue).orElseThrow());
 
         String assertionSigned = Files.readString(FIXTURES.resolve(
                 "simplesamlphp/cbc-assertion-signed-response.xml"));
         String decryptedAssertion = post("/control/oracle/decrypt", JsonObject.builder()
                 .put("clock", JsonObject.builder().put("now", NOW).build())
-                .put("xml", assertionSigned).build()).findString("xml").orElseThrow();
+                .put("xml", assertionSigned).build()).find("xml").map(com.revetsec.json.JsonString.class::cast).map(com.revetsec.json.JsonString::getValue).orElseThrow();
         var matcher = Pattern.compile("\\bID=\"([^\"]+)\"").matcher(decryptedAssertion);
         assertTrue(matcher.find());
         JsonObject assertionProof = verify(decryptedAssertion, matcher.group(1),
                 "idp-signing-rsa-2048");
-        assertTrue(assertionProof.findBoolean("valid").orElseThrow());
-        assertTrue(assertionProof.findBoolean("covers_target").orElseThrow());
+        assertTrue(assertionProof.find("valid").map(com.revetsec.json.JsonBoolean.class::cast).map(com.revetsec.json.JsonBoolean::getValue).orElseThrow());
+        assertTrue(assertionProof.find("covers_target").map(com.revetsec.json.JsonBoolean.class::cast).map(com.revetsec.json.JsonBoolean::getValue).orElseThrow());
     }
 
     @Test void realProviderEncryptedEnvelopeAttacksInvalidateSignedResponses() throws Exception {
@@ -603,7 +603,7 @@ final class LibxmlsecOracleComparatorTests {
             String assertion = shibboleth ? "saml2" : "saml";
             String credential = shibboleth ? "shibboleth-capture" : "idp-signing-rsa-2048";
             String responseId = OpenSamlSpComparatorTests.id(xml, protocol + ":Response");
-            assertTrue(verify(xml, responseId, credential).findBoolean("valid").orElseThrow(),
+            assertTrue(verify(xml, responseId, credential).find("valid").map(com.revetsec.json.JsonBoolean.class::cast).map(com.revetsec.json.JsonBoolean::getValue).orElseThrow(),
                     fixture + " baseline signature");
             List<String> mutations = capturedEncryptedEnvelopeMutations(xml, protocol, assertion);
             assertEquals(19, mutations.size(), fixture + " mutation count");
@@ -619,7 +619,7 @@ final class LibxmlsecOracleComparatorTests {
                 JsonObject proof = assertInstanceOf(JsonObject.class, JsonCodec.parse(
                         response.body().getBytes(StandardCharsets.UTF_8),
                         JsonLimits.protocolDocument(128_000)));
-                assertFalse(proof.findBoolean("valid").orElseThrow(), label + " signature");
+                assertFalse(proof.find("valid").map(com.revetsec.json.JsonBoolean.class::cast).map(com.revetsec.json.JsonBoolean::getValue).orElseThrow(), label + " signature");
             }
         }
     }
@@ -635,23 +635,23 @@ final class LibxmlsecOracleComparatorTests {
             String protocol = shibboleth ? "saml2p" : "samlp";
             String credential = shibboleth ? "shibboleth-capture" : "idp-signing-rsa-2048";
             String responseId = OpenSamlSpComparatorTests.id(xml, protocol + ":Response");
-            assertTrue(verify(xml, responseId, credential).findBoolean("valid").orElseThrow(),
+            assertTrue(verify(xml, responseId, credential).find("valid").map(com.revetsec.json.JsonBoolean.class::cast).map(com.revetsec.json.JsonBoolean::getValue).orElseThrow(),
                     fixture + " baseline signature");
             String plaintext = post("/control/oracle/decrypt", JsonObject.builder()
                     .put("clock", JsonObject.builder().put("now", NOW).build())
-                    .put("xml", xml).build()).findString("xml").orElseThrow();
+                    .put("xml", xml).build()).find("xml").map(com.revetsec.json.JsonString.class::cast).map(com.revetsec.json.JsonString::getValue).orElseThrow();
             for (int index = 0; index < 2; index++) {
                 String changed = flipCapturedCipherValue(xml, index);
                 String label = fixture + (index == 0 ? ":wrapped-key" : ":encrypted-data");
                 assertNotEquals(xml, changed, label + " mutation is inert");
                 assertFalse(verify(changed, responseId, credential)
-                        .findBoolean("valid").orElseThrow(), label + " outer signature");
+                        .find("valid").map(com.revetsec.json.JsonBoolean.class::cast).map(com.revetsec.json.JsonBoolean::getValue).orElseThrow(), label + " outer signature");
                 JsonObject decrypted = post("/control/oracle/decrypt", JsonObject.builder()
                         .put("clock", JsonObject.builder().put("now", NOW).build())
                         .put("xml", changed).build());
-                boolean valid = decrypted.findBoolean("valid").orElseThrow();
+                boolean valid = decrypted.find("valid").map(com.revetsec.json.JsonBoolean.class::cast).map(com.revetsec.json.JsonBoolean::getValue).orElseThrow();
                 if (gcm) assertFalse(valid, label + " GCM authentication");
-                else if (valid) assertNotEquals(plaintext, decrypted.findString("xml").orElseThrow(),
+                else if (valid) assertNotEquals(plaintext, decrypted.find("xml").map(com.revetsec.json.JsonString.class::cast).map(com.revetsec.json.JsonString::getValue).orElseThrow(),
                         label + " CBC plaintext changed without intrinsic authentication");
             }
         }
@@ -676,15 +676,15 @@ final class LibxmlsecOracleComparatorTests {
             JsonObject decrypted = assertInstanceOf(JsonObject.class, JsonCodec.parse(
                     response.body().getBytes(StandardCharsets.UTF_8),
                     JsonLimits.protocolDocument(128_000)));
-            assertTrue(decrypted.findBoolean("valid").orElseThrow(), "mutation " + index + " decrypts");
-            String assertion = decrypted.findString("xml").orElseThrow();
+            assertTrue(decrypted.find("valid").map(com.revetsec.json.JsonBoolean.class::cast).map(com.revetsec.json.JsonBoolean::getValue).orElseThrow(), "mutation " + index + " decrypts");
+            String assertion = decrypted.find("xml").map(com.revetsec.json.JsonString.class::cast).map(com.revetsec.json.JsonString::getValue).orElseThrow();
             String assertionId = Pattern.compile("\\bID=\"([^\"]+)\"").matcher(assertion)
                     .results().findFirst().orElseThrow().group(1);
             JsonObject proof = verify(assertion, assertionId, "idp-signing-rsa-2048");
-            assertEquals(index != 14, proof.findBoolean("valid").orElseThrow(),
+            assertEquals(index != 14, proof.find("valid").map(com.revetsec.json.JsonBoolean.class::cast).map(com.revetsec.json.JsonBoolean::getValue).orElseThrow(),
                     "mutation " + index + " inner signature");
             if (index != 14)
-                assertTrue(proof.findBoolean("covers_target").orElseThrow(), "mutation " + index + " target");
+                assertTrue(proof.find("covers_target").map(com.revetsec.json.JsonBoolean.class::cast).map(com.revetsec.json.JsonBoolean::getValue).orElseThrow(), "mutation " + index + " target");
         }
     }
 

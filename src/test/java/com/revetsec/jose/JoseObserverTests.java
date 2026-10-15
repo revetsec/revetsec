@@ -21,7 +21,7 @@ import com.revetsec.RevetsecException;
 import com.revetsec.testing.RecordingObserver;
 import com.revetsec.testing.Sentinels;
 import com.revetsec.testing.TestClock;
-import com.revetsec.testing.TestJsonWebKeys.Fixture;
+import com.revetsec.testing.TestJwk.Fixture;
 import com.revetsec.testing.TestJws;
 import com.revetsec.testing.TestJws.Algorithm;
 import org.junit.jupiter.api.Assertions;
@@ -66,12 +66,12 @@ final class JoseObserverTests {
 		};
 		for (JoseObserver observer : List.of(disabled, bare)) {
 			URI uri = URI.create("https://idp.example.com/jwks");
-			observer.willFetchJsonWebKeySet(uri);
-			observer.didFetchJsonWebKeySet(uri, 1, 0, Duration.ofMinutes(1), Duration.ZERO);
-			observer.didFailToFetchJsonWebKeySet(uri, JsonWebKeySetUnavailableException.fromCategory(
+			observer.willFetchJwks(uri);
+			observer.didFetchJwks(uri, 1, 0, Duration.ofMinutes(1), Duration.ZERO);
+			observer.didFailToFetchJwks(uri, JwksUnavailableException.fromCategory(
 					ErrorCategory.TRANSPORT, true), false, Duration.ZERO);
-			observer.didSuppressJsonWebKeySetFetch(uri, Duration.ofSeconds(30));
-			observer.didSkipJsonWebKey(uri, 0, JsonWebKeySkipReason.MALFORMED_KEY);
+			observer.didSuppressJwksFetch(uri, Duration.ofSeconds(30));
+			observer.didSkipJwk(uri, 0, JwkSkipReason.MALFORMED_KEY);
 			observer.didValidateJwt(JwsAlgorithm.RS256, Duration.ZERO);
 			observer.didFailToValidateJwt(JwtValidationException.fromReason(JoseException.Reason.EXPIRED), Duration.ZERO);
 			observer.didAcceptAnyAudience("issuer");
@@ -80,7 +80,7 @@ final class JoseObserverTests {
 	}
 
 	// M2-3: a successful validation fires didValidateJwt once, with the algorithm and the call's elapsed time, measured
-	// with System.nanoTime(): between zero and the time measured around validate().
+	// with System.nanoTime(): between zero and the time measured around validateResult().
 	@Test
 	void aValidationFiresDidValidateJwt() {
 		RecordingObserver<JoseObserver> recorder = RecordingObserver.fromInterface(JoseObserver.class);
@@ -101,21 +101,23 @@ final class JoseObserverTests {
 		Assertions.assertSame(Thread.currentThread(), call.getThread());
 	}
 
-	// G6-4: a failed validation fires didFailToValidateJwt once, with the very exception the caller receives, from
+	// G6-4: a failed validation fires didFailToValidateJwt once, with a fixed diagnostic for the returned rejection, from
 	// every leaf, and the call's elapsed time.
 	@Test
-	void aFailureFiresDidFailToValidateJwtWithTheThrownInstance() {
+	void aFailureFiresDidFailToValidateJwtWithTheReturnedRejectionReason() {
 		RecordingObserver<JoseObserver> recorder = RecordingObserver.fromInterface(JoseObserver.class);
 		JwtValidator validator = JwtFixtures.validator(JwtFixtures.source(Fixture.IDP_SIGNING_RSA_2048))
 				.observer(recorder.getObserver()).build();
 
 		for (String token : List.of("x", "{}", JwtFixtures.signed(Fixture.NEGATIVE_ATTACKER_RSA_2048, Algorithm.RS256))) {
 			long before = System.nanoTime();
-			JoseException thrown = Assertions.assertThrows(JoseException.class, () -> validator.validate(token));
+			JwtValidationResult.Rejected rejected = Assertions.assertInstanceOf(JwtValidationResult.Rejected.class,
+					validator.validateResult(token));
 			long after = System.nanoTime();
 			RecordingObserver.Call call = recorder.getCalls().get(recorder.getCalls().size() - 1);
 			Assertions.assertEquals("didFailToValidateJwt", call.getMethodName());
-			Assertions.assertSame(thrown, call.getArgument(0));
+			JoseException diagnostic = Assertions.assertInstanceOf(JoseException.class, call.getArgument(0));
+			JwtFixtures.assertReason(rejected.getReason(), diagnostic);
 			JwtFixtures.assertElapsedWithin(call.getArgument(1), before, after);
 		}
 		Assertions.assertEquals(3, recorder.getCalls().size());
@@ -127,14 +129,14 @@ final class JoseObserverTests {
 
 	// M2-3: the validation hooks' elapsed time covers the whole call, any key set fetch included. Over a remote source,
 	// a validation that leads the first fetch, and a refusal that leads an unknown-key refetch, each report a time
-	// within the one measured around validate() and at least the fetch's own, which the source reports to its observer.
+	// within the one measured around validateResult() and at least the fetch's own, which the source reports to its observer.
 	@Test
 	void theValidationHooksIncludeTheKeySetFetch() {
 		RecordingObserver<JoseObserver> sourceRecorder = RecordingObserver.fromInterface(JoseObserver.class);
 		RecordingObserver<JoseObserver> validatorRecorder = RecordingObserver.fromInterface(JoseObserver.class);
 		JwksCacheTests.MemoryHttpClient client = JwksCacheTests.MemoryHttpClient.answering(
-				JwksCacheTests.Answer.fromKeySet(null, JwtFixtures.KID));
-		RemoteJsonWebKeySource source = JwksCacheTests.source(client, TestClock.fromInstant(JwksCacheTests.START))
+				JwksCacheTests.Answer.fromJwks(null, JwtFixtures.KID));
+		RemoteJwksSource source = JwksCacheTests.source(client, TestClock.fromInstant(JwksCacheTests.START))
 				.observer(sourceRecorder.getObserver()).build();
 		JwtValidator validator = JwtFixtures.validator(source).observer(validatorRecorder.getObserver()).build();
 		String accepted = JwtFixtures.signed(Fixture.IDP_SIGNING_RSA_2048, Algorithm.RS256);
@@ -146,7 +148,7 @@ final class JoseObserverTests {
 		long after = System.nanoTime();
 		Duration validation = JwtFixtures.assertElapsedWithin(validatorRecorder.getCalls("didValidateJwt").get(0)
 				.getArgument(1), before, after);
-		Duration fetch = JwtFixtures.assertElapsedWithin(sourceRecorder.getCalls("didFetchJsonWebKeySet").get(0)
+		Duration fetch = JwtFixtures.assertElapsedWithin(sourceRecorder.getCalls("didFetchJwks").get(0)
 				.getArgument(4), before, after);
 		Assertions.assertTrue(validation.compareTo(fetch) >= 0, () -> validation + " is shorter than its fetch, " + fetch);
 
@@ -155,7 +157,7 @@ final class JoseObserverTests {
 		after = System.nanoTime();
 		Duration refusal = JwtFixtures.assertElapsedWithin(validatorRecorder.getCalls("didFailToValidateJwt").get(0)
 				.getArgument(1), before, after);
-		Duration refetch = JwtFixtures.assertElapsedWithin(sourceRecorder.getCalls("didFetchJsonWebKeySet").get(1)
+		Duration refetch = JwtFixtures.assertElapsedWithin(sourceRecorder.getCalls("didFetchJwks").get(1)
 				.getArgument(4), before, after);
 		Assertions.assertTrue(refusal.compareTo(refetch) >= 0, () -> refusal + " is shorter than its fetch, " + refetch);
 		Assertions.assertEquals(2, client.getSendCount());
@@ -166,12 +168,12 @@ final class JoseObserverTests {
 	@Test
 	void acceptingAnyAudienceIsObservedOnEveryValidation() {
 		RecordingObserver<JoseObserver> recorder = RecordingObserver.fromInterface(JoseObserver.class);
-		JwtValidator validator = JwtValidator.withIssuer(JwtFixtures.ISSUER).jsonWebKeySource(JwtFixtures.source(
+		JwtValidator validator = JwtValidator.withIssuer(JwtFixtures.ISSUER).jwksSource(JwtFixtures.source(
 				Fixture.IDP_SIGNING_RSA_2048)).acceptAnyAudience(true).clock(JwtFixtures.clock())
 				.observer(recorder.getObserver()).build();
 
 		JwtFixtures.assertAccepted(validator, JwtFixtures.signed(Fixture.IDP_SIGNING_RSA_2048, Algorithm.RS256));
-		Assertions.assertThrows(JoseException.class, () -> validator.validate("x"));
+		JwtFixtures.assertRejected(JoseException.Reason.TOKEN_SYNTAX, validator, "x");
 		JwtFixtures.assertAccepted(validator, JwtFixtures.signed(Fixture.IDP_SIGNING_RSA_2048, Algorithm.RS256));
 
 		Assertions.assertEquals(List.of("didAcceptAnyAudience", "didAcceptAnyAudience", "didValidateJwt",
@@ -187,7 +189,7 @@ final class JoseObserverTests {
 	void aThrowingObserverChangesNoOutcome() {
 		RecordingObserver<JoseObserver> throwing = RecordingObserver.fromInterface(JoseObserver.class,
 				() -> new IllegalStateException("observer failure"));
-		JwtValidator validator = JwtValidator.withIssuer(JwtFixtures.ISSUER).jsonWebKeySource(JwtFixtures.source(
+		JwtValidator validator = JwtValidator.withIssuer(JwtFixtures.ISSUER).jwksSource(JwtFixtures.source(
 				Fixture.IDP_SIGNING_RSA_2048)).acceptAnyAudience(true).clock(JwtFixtures.clock())
 				.observer(throwing.getObserver()).build();
 
@@ -201,14 +203,14 @@ final class JoseObserverTests {
 	@Test
 	void noHookArgumentCarriesTokenContent() {
 		RecordingObserver<JoseObserver> recorder = RecordingObserver.fromInterface(JoseObserver.class);
-		JwtValidator validator = JwtValidator.withIssuer(JwtFixtures.ISSUER).jsonWebKeySource(JwtFixtures.source(
+		JwtValidator validator = JwtValidator.withIssuer(JwtFixtures.ISSUER).jwksSource(JwtFixtures.source(
 				Fixture.IDP_SIGNING_RSA_2048)).acceptAnyAudience(true).clock(JwtFixtures.clock())
 				.observer(recorder.getObserver()).build();
 
 		for (String token : List.of(Sentinels.compactJwt("RS256", 256), Sentinels.compactJwt("ES256", 64),
 				Sentinels.compactJwtWithSentinelClaim(0), JwtFixtures.token(Algorithm.RS256).kid(Sentinels.JWT_KEY_ID)
 						.sign(Fixture.IDP_SIGNING_RSA_2048.getPrivateKey())))
-			Assertions.assertThrows(RevetsecException.class, () -> validator.validate(token));
+			Assertions.assertInstanceOf(JwtValidationResult.Rejected.class, validator.validateResult(token));
 
 		Assertions.assertFalse(recorder.getCalls().isEmpty());
 		for (RecordingObserver.Call call : recorder.getCalls())

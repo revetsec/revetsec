@@ -57,7 +57,7 @@ final class IssuerFixture {
             .introspectionResources(Set.of(RESOURCE)).authentication(OAuthServerClientAuthentication.fromClientSecretVerifier(
                 (id,secret,budget)->Arrays.equals(secret,"fixture-secret".getBytes(StandardCharsets.UTF_8)))).build();
         this.server=OAuthAuthorizationServer.withIssuer(issuer).authorizationEndpoint(URI.create(issuer+"/authorize"))
-            .tokenEndpoint(URI.create(issuer+"/token")).jsonWebKeySetEndpoint(URI.create(issuer+"/jwks"))
+            .tokenEndpoint(URI.create(issuer+"/token")).jwksEndpoint(URI.create(issuer+"/jwks"))
             .revocationEndpoint(URI.create(issuer+"/revoke")).introspectionEndpoint(URI.create(issuer+"/introspect")).clientRepository((id,budget)->Optional.ofNullable(
                 id.equals("client")?client:id.equals("resource")?resource:null)).store(store)
             .signingKeys(OAuthIssuerKeyProvider.fromSnapshot(keys)).resources(resources)
@@ -120,7 +120,13 @@ final class IssuerFixture {
         if(matcher.find())throw new IllegalStateException("Duplicate credential field");return value;
     }
     boolean active(@NonNull String token) {
-        var bearer=BearerToken.fromAuthorizationHeaderValues(List.of("Bearer "+token)).orElseThrow();
+        var bearer=parsedBearer(BearerToken.fromAuthorizationHeaderValuesResult(List.of("Bearer "+token)));
         return this.server.validateAccessTokenResult(bearer,RESOURCE) instanceof OAuthIssuerAccessTokenResult.Succeeded;
     }
+    private static com.revetsec.oauth.@NonNull BearerToken parsedBearer(com.revetsec.oauth.@NonNull BearerTokenResult result) {
+        if (!(result instanceof com.revetsec.oauth.BearerTokenResult.Present success))
+            throw new AssertionError("Expected successful fixture outcome: " + result);
+        return success.getToken();
+    }
+
 }

@@ -257,11 +257,11 @@ final class TestHttpsServerTests {
 	}
 
 	@Test
-	void servesAJsonWebKeySetWithItsMediaTypeAndAnyCacheControl() throws Exception {
+	void servesAJwksWithItsMediaTypeAndAnyCacheControl() throws Exception {
 		String keySet = "{\"keys\":[]}";
 		try (TestHttpsServer server = TestHttpsServer.start()) {
-			server.script("/plain", Script.fromResponse(Response.fromJsonWebKeySet(keySet)));
-			server.script("/cached", Script.fromResponse(Response.fromJsonWebKeySet(keySet, "max-age=300, public")));
+			server.script("/plain", Script.fromResponse(Response.fromJwks(keySet)));
+			server.script("/cached", Script.fromResponse(Response.fromJwks(keySet, "max-age=300, public")));
 			HttpClient client = TestTls.httpClient();
 
 			HttpResponse<String> plain = get(client, server.uri("/plain"));
@@ -322,8 +322,8 @@ final class TestHttpsServerTests {
 		// A key rotation scripted in advance: a failure, the old key set, then the new one for good.
 		try (TestHttpsServer server = TestHttpsServer.start()) {
 			server.script("/jwks", Script.fromSequence(List.of(Response.fromRetryAfter(503, "1"),
-					Response.fromJsonWebKeySet("{\"keys\":[\"old\"]}"),
-					Response.fromJsonWebKeySet("{\"keys\":[\"new\"]}"))));
+					Response.fromJwks("{\"keys\":[\"old\"]}"),
+					Response.fromJwks("{\"keys\":[\"new\"]}"))));
 			HttpClient client = TestTls.httpClient();
 
 			List<String> answers = new ArrayList<>();
@@ -343,7 +343,7 @@ final class TestHttpsServerTests {
 		// Plan M2-8 and G8-8: a server that answers a valid key set after each failure.
 		try (TestHttpsServer server = TestHttpsServer.start()) {
 			server.script("/jwks", Script.fromCycle(List.of(Response.fromStatus(500),
-					Response.fromJsonWebKeySet("{\"keys\":[]}", "no-store"))));
+					Response.fromJwks("{\"keys\":[]}", "no-store"))));
 			HttpClient client = TestTls.httpClient();
 
 			List<Integer> statuses = new ArrayList<>();
@@ -364,7 +364,7 @@ final class TestHttpsServerTests {
 	void aHeldScriptHoldsEveryRequestUntilReleasedThenLetsLaterOnesThrough() throws Exception {
 		// Plan M2 A-2 and exit criterion 11: hold the fetch until every caller has joined, with no sleeps.
 		try (TestHttpsServer server = TestHttpsServer.start()) {
-			HeldScript held = HeldScript.fromResponse(Response.fromJsonWebKeySet("{\"keys\":[]}"));
+			HeldScript held = HeldScript.fromResponse(Response.fromJwks("{\"keys\":[]}"));
 			server.script("/jwks", held);
 			HttpClient client = TestTls.httpClient();
 			HttpRequest request = HttpRequest.newBuilder(server.uri("/jwks")).build();

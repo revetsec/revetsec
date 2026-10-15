@@ -125,6 +125,8 @@ final class PublicApiContractTests {
 			"com.revetsec.oidc.OidcAuthenticationResult$Succeeded",
 			"com.revetsec.oidc.OidcUserInfo",
 			"com.revetsec.oidc.OidcRefreshResult",
+			"com.revetsec.oidc.OidcRefreshOutcome$Succeeded",
+			"com.revetsec.oidc.OidcUserInfoResult$Succeeded",
 			"com.revetsec.saml.SamlAuthentication",
 			"com.revetsec.scim.ScimPatchResult");
 
@@ -147,6 +149,8 @@ final class PublicApiContractTests {
 			"com.revetsec.oidc.OidcAuthentication",
 			"com.revetsec.oidc.OidcAuthenticationResult$Succeeded",
 			"com.revetsec.oidc.OidcRefreshResult",
+			"com.revetsec.oidc.OidcRefreshOutcome$Succeeded",
+			"com.revetsec.oidc.OidcUserInfoResult$Succeeded",
 			"com.revetsec.oidc.OidcClient",
 			"com.revetsec.saml.SamlServiceProvider",
 			"com.revetsec.saml.SamlAuthenticationResult$Succeeded",

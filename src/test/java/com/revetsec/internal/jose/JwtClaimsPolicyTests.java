@@ -23,8 +23,8 @@ import com.revetsec.internal.json.JsonLimits;
 import com.revetsec.jose.JoseException;
 import com.revetsec.jose.JwsAlgorithm;
 import com.revetsec.json.JsonObject;
-import com.revetsec.testing.TestJsonWebKeys;
-import com.revetsec.testing.TestJsonWebKeys.Fixture;
+import com.revetsec.testing.TestJwk;
+import com.revetsec.testing.TestJwk.Fixture;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.DynamicTest;
@@ -435,7 +435,7 @@ final class JwtClaimsPolicyTests {
 	}
 
 	private static @NonNull VerificationKey key(@Nullable String issuer) throws Exception {
-		VerificationKey key = JwkParser.parse((JsonObject) JsonCodec.parse(TestJsonWebKeys.withFixture(
+		VerificationKey key = JwkParser.parse((JsonObject) JsonCodec.parse(TestJwk.withFixture(
 				Fixture.IDP_SIGNING_RSA_2048).kid("k").toJson().getBytes(StandardCharsets.UTF_8), JsonLimits.jose(65_536)));
 		return new VerificationKey(key.keyId(), key.keyType(), key.curve(), JwsAlgorithm.RS256, key.use(), issuer,
 				key.thumbprintSha256(), key.publicKey());

@@ -20,6 +20,7 @@ import com.revetsec.StateSealer;
 import com.revetsec.oauth.server.*;
 import com.revetsec.oauth.ProtectedResourceMetadata;
 import com.revetsec.soklet.SokletOAuthAuthorizationServer;
+import com.revetsec.soklet.SokletRequestResult;
 import com.soklet.*;
 import com.soklet.annotation.GET;
 import com.soklet.annotation.HEAD;
@@ -89,7 +90,7 @@ public final class IssuerResources {
         Map<String,OAuthServerClientRegistration> clients=Map.of("demo-public",publicClient,"demo-confidential",privateClient,"resource-client",resourceClient);
         this.server=OAuthAuthorizationServer.withIssuer(config.origin.toString())
                 .authorizationEndpoint(config.origin.resolve("/authorize")).tokenEndpoint(config.origin.resolve("/token"))
-                .jsonWebKeySetEndpoint(config.origin.resolve("/jwks")).revocationEndpoint(config.origin.resolve("/revoke"))
+                .jwksEndpoint(config.origin.resolve("/jwks")).revocationEndpoint(config.origin.resolve("/revoke"))
                 .introspectionEndpoint(config.origin.resolve("/introspect"))
                 .clientRepository((id,budget) -> Optional.ofNullable(clients.get(id)))
                 .store(store).stateSealer(sealer).signingKeys(keys).resources(resources)
@@ -131,7 +132,7 @@ public final class IssuerResources {
     }
     @GET("/jwks") @HEAD("/jwks") public @NonNull MarshaledResponse jwks(@NonNull Request request) {
         if(!issuerHost(request)) return fixed(403,"Request denied.");
-        try {return SokletOAuthAuthorizationServer.responseFor(server.jsonWebKeySetResponse(request.getHttpMethod().name()));}
+        try {return SokletOAuthAuthorizationServer.responseFor(server.jwksResponse(request.getHttpMethod().name()));}
         catch(OAuthServerException failure) {return failure(failure);}
     }
     @GET("/.well-known/oauth-protected-resource/mcp")
@@ -152,7 +153,10 @@ public final class IssuerResources {
         if(!issuerHost(request)) return fixed(403,"Request denied.");
         try {
             BrowserSessions.Session session=sessions.find(request).orElseGet(sessions::begin);
-            OAuthAuthorizationResult result=SokletOAuthAuthorizationServer.beginAuthorizationResultFor(server,request,session.binding);
+            var read=SokletOAuthAuthorizationServer.beginAuthorizationResultFor(server,request,session.binding);
+            if(!(read instanceof SokletRequestResult.Completed<OAuthAuthorizationResult> completed))
+                return fixed(413,"Request body exceeds the limit.");
+            OAuthAuthorizationResult result=completed.getResult();
             if(result instanceof OAuthAuthorizationResult.InteractionRequired required) {
                 sessions.replacePending(session,new BrowserSessions.Pending(required.getInteraction().getInteractionValue()));
                 return view(session).copy().cookies(List.of(sessions.cookie(session))).finish();
@@ -214,19 +218,28 @@ public final class IssuerResources {
     }
     @POST("/token") public @NonNull MarshaledResponse token(@NonNull Request request) {
         if(!issuerHost(request)) return fixed(403,"Request denied.");
-        try {OAuthTokenResult result=SokletOAuthAuthorizationServer.tokenResultFor(server,request);
+        try {var read=SokletOAuthAuthorizationServer.tokenResultFor(server,request);
+            if(!(read instanceof SokletRequestResult.Completed<OAuthTokenResult> completed))
+                return fixed(413,"Request body exceeds the limit.");
+            OAuthTokenResult result=completed.getResult();
             return SokletOAuthAuthorizationServer.responseFor(result instanceof OAuthTokenResult.Succeeded s?s.getResponse():((OAuthTokenResult.Rejected)result).getResponse());}
         catch(OAuthServerException failure) {return failure(failure);}
     }
     @POST("/revoke") public @NonNull MarshaledResponse revoke(@NonNull Request request) {
         if(!issuerHost(request)) return fixed(403,"Request denied.");
-        try {OAuthRevocationResult result=SokletOAuthAuthorizationServer.revocationResultFor(server,request);
+        try {var read=SokletOAuthAuthorizationServer.revocationResultFor(server,request);
+            if(!(read instanceof SokletRequestResult.Completed<OAuthRevocationResult> completed))
+                return fixed(413,"Request body exceeds the limit.");
+            OAuthRevocationResult result=completed.getResult();
             return SokletOAuthAuthorizationServer.responseFor(result instanceof OAuthRevocationResult.Succeeded s?s.getResponse():((OAuthRevocationResult.Rejected)result).getResponse());}
         catch(OAuthServerException failure) {return failure(failure);}
     }
     @POST("/introspect") public @NonNull MarshaledResponse introspect(@NonNull Request request) {
         if(!issuerHost(request)) return fixed(403,"Request denied.");
-        try {OAuthIntrospectionResult result=SokletOAuthAuthorizationServer.introspectionResultFor(server,request);
+        try {var read=SokletOAuthAuthorizationServer.introspectionResultFor(server,request);
+            if(!(read instanceof SokletRequestResult.Completed<OAuthIntrospectionResult> completed))
+                return fixed(413,"Request body exceeds the limit.");
+            OAuthIntrospectionResult result=completed.getResult();
             return SokletOAuthAuthorizationServer.responseFor(result instanceof OAuthIntrospectionResult.Succeeded s?s.getResponse():((OAuthIntrospectionResult.Rejected)result).getResponse());}
         catch(OAuthServerException failure) {return failure(failure);}
     }

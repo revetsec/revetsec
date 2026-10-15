@@ -17,6 +17,7 @@
 package com.revetsec.oauth;
 
 import org.jspecify.annotations.NonNull;
+import com.google.errorprone.annotations.CheckReturnValue;
 
 import javax.annotation.concurrent.ThreadSafe;
 import java.time.Instant;
@@ -42,24 +43,31 @@ public interface PendingAuthorizationStore {
 	 * @param state authorization state
 	 * @param opaqueRecord opaque Revetsec record
 	 * @param expiresAt exact expiry
+	 * @return the fixed storage outcome
 	 * @since 1.0.0
 	 */
-	default void save(@NonNull String browserBinding, @NonNull String state, @NonNull String opaqueRecord,
+	@CheckReturnValue
+	default @NonNull PendingAuthorizationSaveResult save(@NonNull String browserBinding, @NonNull String state, @NonNull String opaqueRecord,
 			@NonNull Instant expiresAt) {
-		save(browserBinding, state, opaqueRecord, expiresAt, Duration.ofSeconds(5));
+		return save(browserBinding, state, opaqueRecord, expiresAt, Duration.ofSeconds(5));
 	}
 
 	/**
-	 * Saves one opaque record until its authenticated expiry. A duplicate live binding and state must be rejected.
+	 * Saves one opaque record until its authenticated expiry without replacing a live binding and state.
+	 * Return ALREADY_PRESENT for a live duplicate and CAPACITY_REFUSED without evicting live records.
+	 * UNAVAILABLE promises that no record was saved. A possibly completed write must return INDETERMINATE;
+	 * callers must not infer that a retry is safe.
 	 *
 	 * @param browserBinding an application-generated, browser-specific secret
 	 * @param state          the authorization state
 	 * @param opaqueRecord   a record produced by Revetsec, never interpreted by the store
 	 * @param expiresAt      the exact expiry supplied by Revetsec
 	 * @param remaining      positive time left for this call; the store must not wait beyond it
+	 * @return the fixed storage outcome
 	 * @since 1.0.0
 	 */
-	void save(@NonNull String browserBinding, @NonNull String state, @NonNull String opaqueRecord,
+	@CheckReturnValue
+	@NonNull PendingAuthorizationSaveResult save(@NonNull String browserBinding, @NonNull String state, @NonNull String opaqueRecord,
 			@NonNull Instant expiresAt, @NonNull Duration remaining);
 
 	/**

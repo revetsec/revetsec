@@ -129,7 +129,7 @@ final class OAuthAuthorizationLedgerTests {
   initialized();String a=begin(),b=begin();assertNotEquals(a,b);assertNotEquals(BROWSER,a);OAuthStoreFormat.nonce(a);
   String key=this.codec.key(OAuthStoreKey.Kind.INTERACTION,OAuthAuthorizationRecord.credentialDigest(a)).getStorageKey();
   assertTrue(this.store.rows.keySet().stream().anyMatch(k->k.getStorageKey().equals(key)));assertFalse(key.contains(a));
-  assertNotEquals(a,payload(OAuthStoreKey.Kind.INTERACTION).findString("id").orElseThrow());
+  assertNotEquals(a,payload(OAuthStoreKey.Kind.INTERACTION).find("id").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow());
   assertEquals(NOW.plusSeconds(900).minusNanos(123456789),decoded(OAuthStoreKey.Kind.INTERACTION).expires());
  }
  @Test void resumeReconstructsExactReviewAndRequiresCompleteBarrier() {
@@ -251,7 +251,7 @@ final class OAuthAuthorizationLedgerTests {
  @Test void expiryDuringCommitPreventsCredentialReleaseEvenWhenRowsCommitted() {
   initialized();String handle=begin();this.store.afterCommit=()->this.clock.time=NOW.plusSeconds(120);
   // Code validity was rounded down, so this callback crossed the exact issuance boundary.
-  failed(OAuthStoreFailure.Reason.UNAVAILABLE,()->approved(handle));assertEquals("COMPLETED",payload(OAuthStoreKey.Kind.INTERACTION).findString("status").orElseThrow());
+  failed(OAuthStoreFailure.Reason.UNAVAILABLE,()->approved(handle));assertEquals("COMPLETED",payload(OAuthStoreKey.Kind.INTERACTION).find("status").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow());
  }
  @Test void expiryBeforeBackendCommitPreventsAnyWrites() {
   initialized();String handle=begin();this.store.beforeRead=()->this.clock.time=NOW.plusSeconds(900);invalid(()->approved(handle));
@@ -273,7 +273,7 @@ final class OAuthAuthorizationLedgerTests {
  @TestFactory @NonNull Stream<@NonNull DynamicTest> exactSchemasRejectMissingWrongTypeAndExtraFields() {
   initialized();String handle=begin();approved(handle);
   return Stream.of(OAuthStoreKey.Kind.INTERACTION,OAuthStoreKey.Kind.CODE,OAuthStoreKey.Kind.GRANT).flatMap(kind->{
-   JsonObject p=payload(kind);String id=p.findString("id").orElseThrow();
+   JsonObject p=payload(kind);String id=p.find("id").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow();
    return Stream.concat(p.getMembers().keySet().stream().flatMap(name->Stream.of(
     DynamicTest.dynamicTest(kind+" missing "+name,()->assertThrows(IllegalArgumentException.class,()->OAuthAuthorizationRecord.decode(kind,id,changed(p,name,null),LIMITS,255))),
     DynamicTest.dynamicTest(kind+" null "+name,()->{if(!name.equals("state"))assertThrows(IllegalArgumentException.class,()->OAuthAuthorizationRecord.decode(kind,id,changed(p,name,JsonNull.defaultInstance()),LIMITS,255));else assertNull(OAuthAuthorizationRecord.decode(kind,id,changed(p,name,JsonNull.defaultInstance()),LIMITS,255).state(1024));})
@@ -281,7 +281,7 @@ final class OAuthAuthorizationLedgerTests {
   });
  }
  @TestFactory @NonNull Stream<@NonNull DynamicTest> malformedTypedValuesNeverAcquireAuthority() {
-  initialized();assertNotNull(begin());JsonObject p=payload(OAuthStoreKey.Kind.INTERACTION);String id=p.findString("id").orElseThrow();
+  initialized();assertNotNull(begin());JsonObject p=payload(OAuthStoreKey.Kind.INTERACTION);String id=p.find("id").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow();
   Map<String,JsonValue> values=Map.of("issuerEpoch",com.revetsec.json.JsonNumber.fromValue(-1L),"issuerIncarnation",JsonString.fromValue("x"),
    "status",JsonString.fromValue("ACTIVE"),"expires",com.revetsec.json.JsonNumber.fromValue(Long.MAX_VALUE),"challenge",JsonString.fromValue("x"),
    "scopes",JsonArray.fromElements(List.of(JsonString.fromValue("read"),JsonString.fromValue("read"))),"resource",JsonString.fromValue("relative"),"redirect",JsonString.fromValue("https://evil.example/#fragment"));
@@ -289,10 +289,10 @@ final class OAuthAuthorizationLedgerTests {
  }
  @Test void narrowScopeSubjectAndStateBoundsAreAppliedOnDecode() {
   initialized();String h=begin();approved(h);JsonObject g=payload(OAuthStoreKey.Kind.GRANT),i=payload(OAuthStoreKey.Kind.INTERACTION);
-  assertThrows(IllegalArgumentException.class,()->OAuthAuthorizationRecord.decode(OAuthStoreKey.Kind.GRANT,g.findString("id").orElseThrow(),changed(g,"subject",JsonString.fromValue("x".repeat(256))),LIMITS,255));
-  assertThrows(IllegalArgumentException.class,()->OAuthAuthorizationRecord.decode(OAuthStoreKey.Kind.INTERACTION,i.findString("id").orElseThrow(),changed(i,"state",JsonString.fromValue("x".repeat(1025))),LIMITS,255));
+  assertThrows(IllegalArgumentException.class,()->OAuthAuthorizationRecord.decode(OAuthStoreKey.Kind.GRANT,g.find("id").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow(),changed(g,"subject",JsonString.fromValue("x".repeat(256))),LIMITS,255));
+  assertThrows(IllegalArgumentException.class,()->OAuthAuthorizationRecord.decode(OAuthStoreKey.Kind.INTERACTION,i.find("id").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow(),changed(i,"state",JsonString.fromValue("x".repeat(1025))),LIMITS,255));
   OAuthServerIngressLimits narrow=new OAuthServerIngressLimits(1024,1024,1024,128,256,1,1,1,1);
-  assertThrows(IllegalArgumentException.class,()->OAuthAuthorizationRecord.decode(OAuthStoreKey.Kind.INTERACTION,i.findString("id").orElseThrow(),i,narrow,255));
+  assertThrows(IllegalArgumentException.class,()->OAuthAuthorizationRecord.decode(OAuthStoreKey.Kind.INTERACTION,i.find("id").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow(),i,narrow,255));
  }
  @Test void unsupportedKindAndIllegalCompletionAreRejected() {
   initialized();String h=begin();approved(h);assertThrows(IllegalArgumentException.class,()->decoded(OAuthStoreKey.Kind.CODE).completed());
@@ -348,7 +348,7 @@ final class OAuthAuthorizationLedgerTests {
   assertThrows(IllegalStateException.class,()->s.requireBefore(NOW.plusSeconds(3)));
  }
  @Test void malformedScopeStateAndNonceBoundsAreRejected() {
-  initialized();String h=begin();JsonObject p=payload(OAuthStoreKey.Kind.INTERACTION);String id=p.findString("id").orElseThrow();
+  initialized();String h=begin();JsonObject p=payload(OAuthStoreKey.Kind.INTERACTION);String id=p.find("id").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow();
   for (JsonValue value:List.of(JsonArray.emptyInstance(),JsonArray.fromElements(List.of(JsonNull.defaultInstance())),JsonArray.fromElements(List.of(JsonString.fromValue("bad scope")))))
    assertThrows(IllegalArgumentException.class,()->OAuthAuthorizationRecord.decode(OAuthStoreKey.Kind.INTERACTION,id,changed(p,"scopes",value),LIMITS,255));
   OAuthServerIngressLimits narrow=new OAuthServerIngressLimits(1024,1024,1024,128,256,1,1,4,1);

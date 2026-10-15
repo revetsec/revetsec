@@ -21,8 +21,8 @@ import org.jspecify.annotations.NonNull;
 import com.revetsec.ErrorCategory;
 import com.revetsec.internal.jose.TestClaims;
 import com.revetsec.testing.TestClock;
-import com.revetsec.testing.TestJsonWebKeys;
-import com.revetsec.testing.TestJsonWebKeys.Fixture;
+import com.revetsec.testing.TestJwk;
+import com.revetsec.testing.TestJwk.Fixture;
 import com.revetsec.testing.TestJws;
 import com.revetsec.testing.TestJws.Algorithm;
 import org.jspecify.annotations.Nullable;
@@ -72,29 +72,29 @@ final class JwtFixtures {
 	/**
 	 * A JWK for a fixture key with {@code kid} {@code KID}.
 	 */
-	static TestJsonWebKeys.@NonNull Builder jwk(@NonNull Fixture fixture) {
-		return TestJsonWebKeys.withFixture(fixture).kid(KID);
+	static TestJwk.@NonNull Builder jwk(@NonNull Fixture fixture) {
+		return TestJwk.withFixture(fixture).kid(KID);
 	}
 
 	/**
 	 * A static source over one or more JWKs.
 	 */
-	static @NonNull StaticJsonWebKeySource source(@NonNull String @NonNull ... jwks) {
-		return StaticJsonWebKeySource.fromJsonWebKeySet(JsonWebKeySet.fromJson(TestJsonWebKeys.keySet(List.of(jwks))));
+	static @NonNull StaticJwksSource source(@NonNull String @NonNull ... jwks) {
+		return StaticJwksSource.fromJwks(JwtFixtures.assertParsedJwks(TestJwk.keySet(List.of(jwks))));
 	}
 
 	/**
 	 * A static source over a fixture key with {@code kid} {@code KID}.
 	 */
-	static @NonNull StaticJsonWebKeySource source(@NonNull Fixture fixture) {
+	static @NonNull StaticJwksSource source(@NonNull Fixture fixture) {
 		return source(jwk(fixture).toJson());
 	}
 
 	/**
 	 * A validator builder for {@link #ISSUER} and {@link #AUDIENCE} at {@link #NOW} over {@code source}.
 	 */
-	static JwtValidator.@NonNull Builder validator(@NonNull JsonWebKeySource source) {
-		return JwtValidator.withIssuer(ISSUER).jsonWebKeySource(source).expectedAudiences(Set.of(AUDIENCE))
+	static JwtValidator.@NonNull Builder validator(@NonNull JwksSource source) {
+		return JwtValidator.withIssuer(ISSUER).jwksSource(source).expectedAudiences(Set.of(AUDIENCE))
 				.clock(clock());
 	}
 
@@ -131,15 +131,16 @@ final class JwtFixtures {
 	}
 
 	/**
-	 * Asserts that {@code validator} refuses {@code token} with {@code reason}, through the leaf exception its category
-	 * names, with the reason's fixed message, no cause and no transience (M2-2), and returns the exception.
+	 * Asserts that validation returns the rejected variant with the exact fixed reason and no input data.
 	 */
-	static @NonNull JoseException assertRejected(JoseException.@NonNull Reason reason,
-																			@NonNull JwtValidator validator,
-																			@NonNull String token) {
-		JoseException exception = Assertions.assertThrows(JoseException.class, () -> validator.validate(token));
-		assertReason(reason, exception);
-		return exception;
+	static JwtValidationResult.@NonNull Rejected assertRejected(JoseException.@NonNull Reason reason,
+			@NonNull JwtValidator validator, @NonNull String token) {
+		JwtValidationResult.Rejected rejected = Assertions.assertInstanceOf(JwtValidationResult.Rejected.class,
+				validator.validateResult(token));
+		Assertions.assertEquals(reason, rejected.getReason());
+		if (token.length() >= 8)
+			Assertions.assertFalse(rejected.toString().contains(token));
+		return rejected;
 	}
 
 	/**
@@ -171,23 +172,24 @@ final class JwtFixtures {
 	/**
 	 * Validates and returns the token, failing the test with the reason if it is refused.
 	 */
-	static @NonNull Jwt assertAccepted(@NonNull JwtValidator validator,
-														@NonNull String token) {
-		try {
-			return validator.validate(token);
-		} catch (JoseException exception) {
-			throw new AssertionError("expected acceptance, got " + exception.getReason(), exception);
-		}
+	static @NonNull Jwt assertAccepted(@NonNull JwtValidator validator, @NonNull String token) {
+		return Assertions.assertInstanceOf(JwtValidationResult.Succeeded.class,
+				validator.validateResult(token)).getJwt();
+	}
+
+	static @NonNull Jwks assertParsedJwks(@NonNull String json) {
+		return Assertions.assertInstanceOf(JwksParseResult.Succeeded.class,
+				Jwks.fromJsonResult(json)).getJwks();
 	}
 
 	/**
 	 * A key set JSON text from several JWK builders.
 	 */
-	static @NonNull String keySet(TestJsonWebKeys.@NonNull Builder @NonNull ... keys) {
+	static @NonNull String keySet(TestJwk.@NonNull Builder @NonNull ... keys) {
 		List<String> jwks = new ArrayList<>();
-		for (TestJsonWebKeys.Builder key : keys)
+		for (TestJwk.Builder key : keys)
 			jwks.add(key.toJson());
-		return TestJsonWebKeys.keySet(jwks);
+		return TestJwk.keySet(jwks);
 	}
 
 	/**

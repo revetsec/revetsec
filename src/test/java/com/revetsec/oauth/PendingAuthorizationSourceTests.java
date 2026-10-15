@@ -120,16 +120,16 @@ final class PendingAuthorizationSourceTests {
 		PendingAuthorization pending = pending("state-A");
 		PendingAuthorizationStore defective = new PendingAuthorizationStore() {
 			private @Nullable String record;
-			@Override public void save(@NonNull String binding, @NonNull String state, @NonNull String opaque, @NonNull Instant expiry, @NonNull Duration remaining) {
+			@Override public @NonNull PendingAuthorizationSaveResult save(@NonNull String binding, @NonNull String state, @NonNull String opaque, @NonNull Instant expiry, @NonNull Duration remaining) {
 				this.record = opaque;
-			}
+			return PendingAuthorizationSaveResult.SAVED; }
 			@Override public @NonNull Optional<@NonNull String> consume(@NonNull String binding, @NonNull String state, @NonNull Duration remaining) {
 				String value = this.record;
 				this.record = null;
 				return Optional.ofNullable(value);
 			}
 		};
-		pending.saveTo(defective, "browser-A");
+		org.junit.jupiter.api.Assertions.assertEquals(PendingAuthorizationSaveResult.SAVED, pending.saveToResult(defective, "browser-A"));
 		assertEquals(OAuthException.Reason.BROWSER_BINDING_MISMATCH,
 				assertThrows(OAuthValidationException.class, () -> PendingAuthorizationResolver.resolve(
 						PendingAuthorizationSource.fromStore(defective, "browser-B"), "state-A",
@@ -140,13 +140,13 @@ final class PendingAuthorizationSourceTests {
 	void atomicStoreConsumesOnceAndExpiryIsChecked() {
 		RewindableClock clock = RewindableClock.fromInstant(START);
 		InMemoryPendingAuthorizationStore store = InMemoryPendingAuthorizationStore.builder().clock(clock).build();
-		pending("state-A").saveTo(store, "browser-A");
+		org.junit.jupiter.api.Assertions.assertEquals(PendingAuthorizationSaveResult.SAVED, pending("state-A").saveToResult(store, "browser-A"));
 		PendingAuthorizationSource source = PendingAuthorizationSource.fromStore(store, "browser-A");
 		assertEquals("state-A", PendingAuthorizationResolver.resolve(source, "state-A", clock).state());
 		assertEquals(OAuthException.Reason.PENDING_AUTHORIZATION_NOT_FOUND,
 				assertThrows(OAuthValidationException.class,
 						() -> PendingAuthorizationResolver.resolve(source, "state-A", clock)).getReason());
-		pending("state-B").saveTo(store, "browser-A");
+		org.junit.jupiter.api.Assertions.assertEquals(PendingAuthorizationSaveResult.SAVED, pending("state-B").saveToResult(store, "browser-A"));
 		clock.advance(Duration.ofMinutes(15));
 		assertThrows(OAuthValidationException.class, () -> PendingAuthorizationResolver.resolve(
 				PendingAuthorizationSource.fromStore(store, "browser-A"), "state-B", clock));
@@ -159,16 +159,16 @@ final class PendingAuthorizationSourceTests {
 		AtomicReference<String> saved = new AtomicReference<>();
 		AtomicInteger consumes = new AtomicInteger();
 		PendingAuthorizationStore store = new PendingAuthorizationStore() {
-			@Override public void save(@NonNull String binding, @NonNull String state, @NonNull String opaque,
+			@Override public @NonNull PendingAuthorizationSaveResult save(@NonNull String binding, @NonNull String state, @NonNull String opaque,
 					@NonNull Instant expiry, @NonNull Duration remaining) {
 				savedBudget.set(remaining); saved.set(opaque);
-			}
+			return PendingAuthorizationSaveResult.SAVED; }
 			@Override public @NonNull Optional<@NonNull String> consume(@NonNull String binding, @NonNull String state,
 					@NonNull Duration remaining) {
 				consumedBudget.set(remaining); consumes.incrementAndGet(); return Optional.ofNullable(saved.getAndSet(null));
 			}
 		};
-		pending("state-A").saveTo(store, "browser-A", Duration.ofSeconds(2));
+		org.junit.jupiter.api.Assertions.assertEquals(PendingAuthorizationSaveResult.SAVED, pending("state-A").saveToResult(store, "browser-A", Duration.ofSeconds(2)));
 		Duration saveRemaining = requireNonNull(savedBudget.get());
 		assertTrue(saveRemaining.compareTo(Duration.ZERO) > 0);
 		assertTrue(saveRemaining.compareTo(Duration.ofSeconds(2)) <= 0);
@@ -188,7 +188,7 @@ final class PendingAuthorizationSourceTests {
 	@Test
 	void customStoreFaultsUseFixedReasonWithoutProviderText() {
 		PendingAuthorizationStore broken = new PendingAuthorizationStore() {
-			@Override public void save(@NonNull String binding, @NonNull String state, @NonNull String opaque,
+			@Override public @NonNull PendingAuthorizationSaveResult save(@NonNull String binding, @NonNull String state, @NonNull String opaque,
 					@NonNull Instant expiry, @NonNull Duration remaining) {
 				throw new IllegalStateException("TEST-ONLY-secret-store-detail");
 			}
@@ -197,9 +197,8 @@ final class PendingAuthorizationSourceTests {
 				throw new IllegalStateException("TEST-ONLY-secret-store-detail");
 			}
 		};
-		PendingAuthorizationStoreException save = assertThrows(PendingAuthorizationStoreException.class,
-				() -> pending("state-A").saveTo(broken, "browser-A", Duration.ofSeconds(2)));
-		assertEquals(OAuthException.Reason.PENDING_AUTHORIZATION_STORE_UNAVAILABLE, save.getReason());
+		PendingAuthorizationSaveResult save = pending("state-A").saveToResult(broken, "browser-A", Duration.ofSeconds(2));
+		assertEquals(PendingAuthorizationSaveResult.INDETERMINATE, save);
 		assertFalse(save.toString().contains("TEST-ONLY-secret-store-detail"));
 		assertFalse(Thread.currentThread().isInterrupted());
 		PendingAuthorizationStoreException consume = assertThrows(PendingAuthorizationStoreException.class,
@@ -213,10 +212,10 @@ final class PendingAuthorizationSourceTests {
 	@Test
 	void interruptedStoreFaultsRestoreCallerInterruptWithoutReleasingPendingData() {
 		PendingAuthorizationStore interrupted = new PendingAuthorizationStore() {
-			@Override public void save(@NonNull String binding, @NonNull String state, @NonNull String opaque,
+			@Override public @NonNull PendingAuthorizationSaveResult save(@NonNull String binding, @NonNull String state, @NonNull String opaque,
 					@NonNull Instant expiry, @NonNull Duration remaining) {
 				throwUnchecked(new InterruptedException("TEST-ONLY-store-interrupted"));
-			}
+			return PendingAuthorizationSaveResult.INDETERMINATE; }
 			@Override public @NonNull Optional<@NonNull String> consume(@NonNull String binding, @NonNull String state,
 					@NonNull Duration remaining) {
 				throwUnchecked(new InterruptedException("TEST-ONLY-store-interrupted"));
@@ -225,9 +224,8 @@ final class PendingAuthorizationSourceTests {
 		};
 		assertFalse(Thread.currentThread().isInterrupted());
 		try {
-			PendingAuthorizationStoreException save = assertThrows(PendingAuthorizationStoreException.class,
-					() -> pending("state-A").saveTo(interrupted, "browser-A", Duration.ofSeconds(2)));
-			assertEquals(OAuthException.Reason.PENDING_AUTHORIZATION_STORE_UNAVAILABLE, save.getReason());
+			assertEquals(PendingAuthorizationSaveResult.INDETERMINATE,
+					pending("state-A").saveToResult(interrupted, "browser-A", Duration.ofSeconds(2)));
 			assertTrue(Thread.currentThread().isInterrupted());
 			Thread.interrupted();
 			PendingAuthorizationStoreException consume = assertThrows(PendingAuthorizationStoreException.class,

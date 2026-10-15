@@ -25,7 +25,6 @@ import org.jspecify.annotations.Nullable;
 import javax.annotation.concurrent.Immutable;
 import javax.annotation.concurrent.NotThreadSafe;
 import java.math.BigDecimal;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -44,11 +43,9 @@ import static java.util.Objects.requireNonNull;
  * present throws {@link IllegalArgumentException} instead of replacing the earlier value. {@link #fromMembers(Map)}
  * takes a complete map.
  * <p>
- * <strong>Convenience lookups.</strong> {@link #findString(String)}, {@link #findLong(String)},
- * {@link #findBoolean(String)} and {@link #findStringList(String)} return an empty {@link Optional} both when a
- * member is absent and when it holds a value of another type. They suit display and application code. Revetsec's own
- * protocol validation never uses them, because it must tell an absent member from a malformed one and reject the
- * malformed one.
+ * <strong>Member lookups.</strong> {@link #find(String)} returns an empty {@link Optional} only when a member is
+ * absent. A present member retains its {@link JsonValue} type, including {@link JsonNull}; callers can inspect that
+ * type to distinguish an absent member from a malformed one.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  * @since 1.0.0
@@ -173,81 +170,9 @@ public final class JsonObject implements JsonValue {
 		return Optional.ofNullable(this.members.get(name));
 	}
 
-	/**
-	 * Returns the value of the member named {@code name} if it is a JSON string. Never used by Revetsec for protocol
-	 * validation: an absent member and a member of another type both give an empty result.
-	 *
-	 * @param name the member name, compared exactly
-	 * @return the string, or empty if the member is absent or not a string
-	 * @throws NullPointerException if {@code name} is {@code null}
-	 * @since 1.0.0
-	 */
-	@NonNull
-	public Optional<@NonNull String> findString(@NonNull String name) {
-		@Nullable JsonValue value = this.members.get(requireNonNull(name));
-		return value instanceof JsonString string ? Optional.of(string.getValue()) : Optional.empty();
-	}
 
-	/**
-	 * Returns the value of the member named {@code name} if it is a JSON number that is a whole number in the range
-	 * of {@code long} (see {@link JsonNumber#getLongValueExact()}). Never used by Revetsec for protocol validation: an
-	 * absent member and a member of another type or range both give an empty result.
-	 *
-	 * @param name the member name, compared exactly
-	 * @return the number, or empty if the member is absent, not a number, not whole or out of range
-	 * @throws NullPointerException if {@code name} is {@code null}
-	 * @since 1.0.0
-	 */
-	@NonNull
-	public Optional<@NonNull Long> findLong(@NonNull String name) {
-		@Nullable JsonValue value = this.members.get(requireNonNull(name));
-		return value instanceof JsonNumber number ? number.getLongValueExact() : Optional.empty();
-	}
 
-	/**
-	 * Returns the value of the member named {@code name} if it is a JSON boolean. Never used by Revetsec for protocol
-	 * validation: an absent member and a member of another type both give an empty result.
-	 *
-	 * @param name the member name, compared exactly
-	 * @return the boolean, or empty if the member is absent or not a boolean
-	 * @throws NullPointerException if {@code name} is {@code null}
-	 * @since 1.0.0
-	 */
-	@NonNull
-	public Optional<@NonNull Boolean> findBoolean(@NonNull String name) {
-		@Nullable JsonValue value = this.members.get(requireNonNull(name));
-		return value instanceof JsonBoolean bool ? Optional.of(bool.getValue()) : Optional.empty();
-	}
 
-	/**
-	 * Returns the value of the member named {@code name} if it is a JSON array whose elements are all strings. A
-	 * single string is not a list. Never used by Revetsec for protocol validation: an absent member and a member of
-	 * another type both give an empty result.
-	 *
-	 * @param name the member name, compared exactly
-	 * @return the strings in order (an empty array gives an empty list), or empty if the member is absent, not an
-	 * array, or holds a value that is not a string
-	 * @throws NullPointerException if {@code name} is {@code null}
-	 * @since 1.0.0
-	 */
-	@NonNull
-	public Optional<@NonNull List<@NonNull String>> findStringList(@NonNull String name) {
-		@Nullable JsonValue value = this.members.get(requireNonNull(name));
-
-		if (!(value instanceof JsonArray array))
-			return Optional.empty();
-
-		List<@NonNull String> strings = new ArrayList<>(array.getElements().size());
-
-		for (JsonValue element : array.getElements()) {
-			if (!(element instanceof JsonString string))
-				return Optional.empty();
-
-			strings.add(string.getValue());
-		}
-
-		return Optional.of(Collections.unmodifiableList(strings));
-	}
 
 	/**
 	 * The G7-6 depth: 1 if empty, otherwise 1 more than the deepest member value.

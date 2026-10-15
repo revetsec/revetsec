@@ -100,7 +100,7 @@ public final class ScimM10FuzzTests {
             ScimResourceParseResult replacement = provider.parseReplacementResult(USER, CURRENT, input);
             resourceOutcome(provider, replacement);
             Assertions.assertSame(before, CURRENT.getDocument());
-            Assertions.assertEquals("before", CURRENT.getDocument().findString("userName").orElseThrow());
+            Assertions.assertEquals("before", CURRENT.getDocument().find("userName").map(com.revetsec.json.JsonString.class::cast).map(com.revetsec.json.JsonString::getValue).orElseThrow());
             if (replacement instanceof ScimResourceParseResult.Succeeded succeeded)
                 Assertions.assertEquals("existing", succeeded.getResource().getId().orElseThrow());
         }
@@ -124,7 +124,7 @@ public final class ScimM10FuzzTests {
         JsonObject body = (JsonObject) JsonCodec.parse(prepared.toHttpBodyWithPersonalData(), JsonLimits.protocolDocument(2_048));
         Assertions.assertFalse(body.getMembers().containsKey("password"));
         Assertions.assertFalse(new String(prepared.toHttpBodyWithPersonalData(), StandardCharsets.UTF_8).contains(PRIVATE_PREFIX));
-        Assertions.assertEquals(password, resource.getDocument().findString("password").orElseThrow());
+        Assertions.assertEquals(password, resource.getDocument().find("password").map(com.revetsec.json.JsonString.class::cast).map(com.revetsec.json.JsonString::getValue).orElseThrow());
         Assertions.assertFalse(resource.toString().contains(PRIVATE_PREFIX));
     }
 

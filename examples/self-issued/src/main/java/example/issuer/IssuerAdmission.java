@@ -24,7 +24,6 @@ import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
@@ -53,9 +52,10 @@ final class IssuerAdmission implements McpAdmissionController {
         };
         if(scope==null) return fixed(403,"Operation not permitted");
         try {
-            Optional<BearerToken> token=SokletBearer.bearerTokenFor(request);
-            if(token.isEmpty()) return challenge(401,null,scope,resource);
-            OAuthIssuerAccessTokenResult result=app.server.validateAccessTokenResult(token.orElseThrow(),resource.toString());
+            BearerTokenResult token=SokletBearer.bearerTokenResultFor(request);
+            if(token instanceof BearerTokenResult.Absent) return challenge(401,null,scope,resource);
+            if(!(token instanceof BearerTokenResult.Present present)) return challenge(400,BearerError.INVALID_REQUEST,scope,resource);
+            OAuthIssuerAccessTokenResult result=app.server.validateAccessTokenResult(present.getToken(),resource.toString());
             if(!(result instanceof OAuthIssuerAccessTokenResult.Succeeded success)) return challenge(401,((OAuthIssuerAccessTokenResult.Rejected)result).getBearerError(),scope,resource);
             VerifiedAccessToken proof=success.getAccessToken();
             if(!proof.getIssuer().equals(app.config.origin.toString()) || !proof.getAudiences().contains(resource.toString())) return challenge(401,BearerError.INVALID_TOKEN,scope,resource);
@@ -63,8 +63,7 @@ final class IssuerAdmission implements McpAdmissionController {
             String partition=partition(proof.getSubject().orElseThrow());
             return McpAdmissionDecision.accepted(McpAdmissionIdentity.withRateLimitPartitionKey(partition).authorizationPartitionKey(partition)
                     .principal(new Principal(proof,partition)).build());
-        } catch(AccessTokenValidationException malformed) {return challenge(400,BearerError.INVALID_REQUEST,scope,resource);}
-        catch(OAuthServerException unavailable) {return fixed(503,"Validation service unavailable");}
+        } catch(OAuthServerException unavailable) {return fixed(503,"Validation service unavailable");}
     }
     private @NonNull String partition(@NonNull String subject) {
         try {

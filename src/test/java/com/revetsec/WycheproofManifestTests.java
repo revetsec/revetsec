@@ -15,6 +15,8 @@
  */
 
 package com.revetsec;
+import com.revetsec.json.JsonNumber;
+import com.revetsec.json.JsonString;
 
 import org.jspecify.annotations.NonNull;
 
@@ -245,7 +247,7 @@ final class WycheproofManifestTests {
 		Assertions.assertTrue(largest <= WycheproofVectors.MAXIMUM_FILE_BYTES, "the loader's limit fits every file");
 
 		for (VectorFile file : vectors.getFiles())
-			Assertions.assertEquals(file.getNumberOfTests(), file.getJson().findLong("numberOfTests").orElseThrow()
+			Assertions.assertEquals(file.getNumberOfTests(), file.getJson().find("numberOfTests").filter(JsonNumber.class::isInstance).map(JsonNumber.class::cast).flatMap(JsonNumber::getLongValueExact).orElseThrow()
 					.intValue(), file.getName());
 	}
 
@@ -484,10 +486,10 @@ final class WycheproofManifestTests {
 		Assertions.assertEquals(0, group.getIndex());
 		Assertions.assertEquals("SampleVerify", group.getType());
 		Assertions.assertEquals("SHA-256", group.getString("sha"));
-		Assertions.assertEquals(Optional.empty(), group.findString("keySize"), "a number is not a string");
+		Assertions.assertEquals(Optional.empty(), group.getJson().find("keySize").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue), "a number is not a string");
 		Assertions.assertEquals(256, group.getInteger("keySize"));
 		Assertions.assertEquals(Optional.empty(), group.findInteger("sha"), "a string is not a number");
-		Assertions.assertEquals(Optional.of("04ab"), group.getObject("publicKey").findString("uncompressed"));
+		Assertions.assertEquals(Optional.of("04ab"), group.getObject("publicKey").find("uncompressed").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue));
 		Assertions.assertEquals(Optional.empty(), group.findObject("sha"), "a string is not an object");
 		Assertions.assertEquals(List.of(1, 2), group.getTests().stream().map(TestVector::getTcId).toList());
 		Assertions.assertTrue(group.getJson().find("tests").isPresent(), "the whole group object");
@@ -516,8 +518,8 @@ final class WycheproofManifestTests {
 		Assertions.assertArrayEquals(new byte[0], valid.getHexBytes("msg"));
 		Assertions.assertArrayEquals(new byte[]{'h', 'i'}, invalid.getHexBytes("msg"));
 		Assertions.assertEquals("6869", invalid.getString("msg"));
-		Assertions.assertEquals(Optional.empty(), invalid.findString("jws"));
-		Assertions.assertEquals(3L, acceptable.getJson().findLong("tcId").orElseThrow());
+		Assertions.assertEquals(Optional.empty(), invalid.getJson().find("jws").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue));
+		Assertions.assertEquals(3L, acceptable.getJson().find("tcId").filter(JsonNumber.class::isInstance).map(JsonNumber.class::cast).flatMap(JsonNumber::getLongValueExact).orElseThrow());
 		Assertions.assertEquals("sample_test.json tcId 3 (acceptable) [Legacy, Edge]: an acceptable case",
 				acceptable.toString());
 		assertAbsentMember("sample_test.json tcId 2 has no string member jws", () -> invalid.getString("jws"));

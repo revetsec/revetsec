@@ -15,6 +15,7 @@
  */
 
 package com.revetsec.testing;
+import com.revetsec.json.JsonString;
 
 import org.jspecify.annotations.NonNull;
 
@@ -429,7 +430,7 @@ public final class WycheproofVectors {
 		 * @return the algorithm, such as {@code ECDSA}, or empty
 		 */
 		public @NonNull Optional<@NonNull String> findAlgorithm() {
-			return this.json.findString("algorithm");
+			return this.json.find("algorithm").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue);
 		}
 
 		/**
@@ -447,7 +448,7 @@ public final class WycheproofVectors {
 		 * @return an unmodifiable list of lines
 		 */
 		public @NonNull List<@NonNull String> getHeader() {
-			return this.json.findStringList("header").orElseThrow();
+			return this.json.find("header").filter(com.revetsec.json.JsonArray.class::isInstance).map(com.revetsec.json.JsonArray.class::cast).filter(array -> array.getElements().stream().allMatch(com.revetsec.json.JsonString.class::isInstance)).map(array -> array.getElements().stream().map(com.revetsec.json.JsonString.class::cast).map(com.revetsec.json.JsonString::getValue).toList()).orElseThrow();
 		}
 
 		/**
@@ -590,7 +591,7 @@ public final class WycheproofVectors {
 		 * @return the value, or empty if the member is absent or not a string
 		 */
 		public @NonNull Optional<@NonNull String> findString(@NonNull String name) {
-			return this.json.findString(requireNonNull(name));
+			return this.json.find(requireNonNull(name)).filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue);
 		}
 
 		/**
@@ -726,7 +727,7 @@ public final class WycheproofVectors {
 		 * @return an unmodifiable list, in file order
 		 */
 		public @NonNull List<@NonNull String> getFlags() {
-			return this.json.findStringList("flags").orElseThrow();
+			return this.json.find("flags").filter(com.revetsec.json.JsonArray.class::isInstance).map(com.revetsec.json.JsonArray.class::cast).filter(array -> array.getElements().stream().allMatch(com.revetsec.json.JsonString.class::isInstance)).map(array -> array.getElements().stream().map(com.revetsec.json.JsonString.class::cast).map(com.revetsec.json.JsonString::getValue).toList()).orElseThrow();
 		}
 
 		/**
@@ -754,7 +755,7 @@ public final class WycheproofVectors {
 		 * @return the value, or empty if the member is absent or not a string
 		 */
 		public @NonNull Optional<@NonNull String> findString(@NonNull String name) {
-			return this.json.findString(requireNonNull(name));
+			return this.json.find(requireNonNull(name)).filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue);
 		}
 
 		/**
@@ -883,16 +884,16 @@ public final class WycheproofVectors {
 
 			List<String> found = new ArrayList<>();
 
-			if (root.findString("schema").isEmpty())
+			if (root.find("schema").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).isEmpty())
 				found.add(path + " has no string member schema");
-			if (root.find("algorithm").isPresent() && root.findString("algorithm").isEmpty())
+			if (root.find("algorithm").isPresent() && root.find("algorithm").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).isEmpty())
 				found.add(path + " has a member algorithm that is not a string");
 
 			Optional<Integer> numberOfTests = integer(root, "numberOfTests");
 
 			if (numberOfTests.isEmpty())
 				found.add(path + " has no whole-number member numberOfTests");
-			if (root.findStringList("header").isEmpty())
+			if (root.find("header").filter(com.revetsec.json.JsonArray.class::isInstance).map(com.revetsec.json.JsonArray.class::cast).filter(array -> array.getElements().stream().allMatch(com.revetsec.json.JsonString.class::isInstance)).map(array -> array.getElements().stream().map(com.revetsec.json.JsonString.class::cast).map(com.revetsec.json.JsonString::getValue).toList()).isEmpty())
 				found.add(path + " has no member header that is an array of strings");
 
 			Optional<JsonObject> notes = optionalObject(root, "notes");
@@ -921,7 +922,7 @@ public final class WycheproofVectors {
 					continue;
 				}
 
-				if (group.findString("type").isEmpty())
+				if (group.find("type").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).isEmpty())
 					found.add(where + " has no string member type");
 
 				Optional<JsonArray> tests = optionalArray(group, "tests");
@@ -948,10 +949,10 @@ public final class WycheproofVectors {
 					else
 						tcIds.add(tcId.get());
 
-					if (test.findString("comment").isEmpty())
+					if (test.find("comment").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).isEmpty())
 						found.add(at + " has no string member comment");
 
-					Optional<List<String>> flags = test.findStringList("flags");
+					Optional<List<String>> flags = test.find("flags").filter(com.revetsec.json.JsonArray.class::isInstance).map(com.revetsec.json.JsonArray.class::cast).filter(array -> array.getElements().stream().allMatch(com.revetsec.json.JsonString.class::isInstance)).map(array -> array.getElements().stream().map(com.revetsec.json.JsonString.class::cast).map(com.revetsec.json.JsonString::getValue).toList());
 
 					if (flags.isEmpty())
 						found.add(at + " has no member flags that is an array of strings");
@@ -960,7 +961,7 @@ public final class WycheproofVectors {
 							if (!flagsDefined.contains(flag))
 								found.add(at + " has a flag that notes does not define: " + flag);
 
-					Optional<Result> result = test.findString("result").flatMap(Result::findByWireValue);
+					Optional<Result> result = test.find("result").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).flatMap(Result::findByWireValue);
 
 					if (result.isEmpty())
 						found.add(at + " has no member result that is valid, invalid or acceptable");
@@ -1255,7 +1256,7 @@ public final class WycheproofVectors {
 	// ---------------------------------------------------------------------------------------------------------------
 
 	private static @NonNull String string(@NonNull JsonObject object, @NonNull String name) {
-		return object.findString(name).orElseThrow();
+		return object.find(name).filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow();
 	}
 
 	private static @NonNull JsonObject object(@NonNull JsonObject object, @NonNull String name) {

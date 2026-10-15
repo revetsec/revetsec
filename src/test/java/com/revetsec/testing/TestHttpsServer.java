@@ -78,7 +78,7 @@ import static java.util.Objects.requireNonNull;
  * server speaks only HTTP/1.1 and frames bodies itself; responses whose framing must be wrong on purpose belong on
  * {@link RawTlsServer}.
  * <p>
- * <strong>Key-set scripts</strong> (plan M2, "Test helpers"): {@link Response#fromJsonWebKeySet(String, String)} serves
+ * <strong>Key-set scripts</strong> (plan M2, "Test helpers"): {@link Response#fromJwks(String, String)} serves
  * a JWK Set with a {@code Cache-Control} value, {@link Response#fromRetryAfter(Integer, String)} a 429 or 5xx with
  * {@code Retry-After}; {@link Script#fromSequence(List)} and {@link Script#fromCycle(List)} answer successive requests
  * differently (a key rotation, a server that alternates failures and successes); {@link HeldScript} holds each
@@ -728,22 +728,22 @@ public final class TestHttpsServer implements AutoCloseable {
 		 * A {@code 200} with {@code Content-Type: application/jwk-set+json} (RFC 7517 section 8.5.1) and {@code json}
 		 * as its UTF-8 body, and no {@code Cache-Control}, so a cache applies its default lifetime.
 		 *
-		 * @param json the key set, such as from {@link TestJsonWebKeys#keySet(List)}
+		 * @param json the key set, such as from {@link TestJwk#keySet(List)}
 		 * @return the response
 		 */
-		public static @NonNull Response fromJsonWebKeySet(@NonNull String json) {
+		public static @NonNull Response fromJwks(@NonNull String json) {
 			return withStatus(200).header("Content-Type", JWK_SET_MEDIA_TYPE).body(requireNonNull(json)).build();
 		}
 
 		/**
-		 * {@link #fromJsonWebKeySet(String)} with a {@code Cache-Control} value, such as {@code max-age=300} or
+		 * {@link #fromJwks(String)} with a {@code Cache-Control} value, such as {@code max-age=300} or
 		 * {@code no-store}.
 		 *
 		 * @param json the key set
 		 * @param cacheControl the {@code Cache-Control} field value
 		 * @return the response
 		 */
-		public static @NonNull Response fromJsonWebKeySet(@NonNull String json, @NonNull String cacheControl) {
+		public static @NonNull Response fromJwks(@NonNull String json, @NonNull String cacheControl) {
 			return withStatus(200).header("Content-Type", JWK_SET_MEDIA_TYPE).header("Cache-Control", cacheControl)
 					.body(requireNonNull(json)).build();
 		}

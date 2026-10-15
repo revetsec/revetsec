@@ -16,7 +16,7 @@
 
 package com.revetsec.jose;
 
-import com.revetsec.testing.TestJsonWebKeys;
+import com.revetsec.testing.TestJwk;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 import java.security.InvalidAlgorithmParameterException;
@@ -70,8 +70,8 @@ public final class JwsSignerTestProvider extends Provider {
 	}
 
 	private static void exercise() throws Exception {
-		PrivateKey real = TestJsonWebKeys.Fixture.IDP_SIGNING_RSA_2048.getPrivateKey();
-		PublicKey publicKey = TestJsonWebKeys.Fixture.IDP_SIGNING_RSA_2048.getPublicKey();
+		PrivateKey real = TestJwk.Fixture.IDP_SIGNING_RSA_2048.getPrivateKey();
+		PublicKey publicKey = TestJwk.Fixture.IDP_SIGNING_RSA_2048.getPublicKey();
 		OpaqueKey opaque = new OpaqueKey(real, mode.equals("restricted") ? "RSASSA-PSS" : "RSA");
 		int beforeThreads = Thread.getAllStackTraces().size();
 		JwsSigner signer = JwsSigner.fromRsaKeyPair(opaque, publicKey, JwsAlgorithm.PS256);

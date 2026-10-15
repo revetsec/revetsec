@@ -54,7 +54,7 @@ final class IssuerCodeFuzzModel {
 		OAuthStoreEntry entry = fixture.store.rows.values().stream()
 			.filter(value -> value.getKey().getKind() == OAuthStoreKey.Kind.CODE).findFirst().orElseThrow();
 		JsonObject payload = fixture.codec.open(entry, fixture.clock);
-		String id = payload.findString("id").orElseThrow();
+		String id = payload.find("id").map(com.revetsec.json.JsonString.class::cast).map(com.revetsec.json.JsonString::getValue).orElseThrow();
 		OAuthAuthorizationRecord unused = OAuthAuthorizationRecord.decode(OAuthStoreKey.Kind.CODE, id, payload,
 			OAuthServerIngressLimits.fromDefaults(), 255);
 		OAuthAuthorizationRecord used = unused.consumed(NOW.plusSeconds(3600), OAuthServerIngressLimits.fromDefaults(), 255);
@@ -89,17 +89,17 @@ final class IssuerCodeFuzzModel {
 		assertEquals(200, response.getStatusCode());
 		assertEquals(accesses + 1, fixture.store.accesses(), "one credential response requires one new access row");
 		JsonObject json = (JsonObject) JsonCodec.parse(response.toHttpBodyWithCredentials(), JsonLimits.protocolDocument(65536));
-		String compact = json.findString("access_token").orElseThrow();
+		String compact = json.find("access_token").map(com.revetsec.json.JsonString.class::cast).map(com.revetsec.json.JsonString::getValue).orElseThrow();
 		M6FuzzOracle.verify(compact, M6FuzzOracle.KEY.getPublic(), com.revetsec.jose.JwsAlgorithm.RS256);
 		JsonObject claims = M6FuzzOracle.object(new String(M6FuzzOracle.decode(compact.split("\\.")[1]), StandardCharsets.UTF_8));
-		assertEquals(ISSUER, claims.findString("iss").orElseThrow());
-		assertEquals(fixture.resource, claims.findString("aud").orElseThrow());
-		assertEquals(fixture.clientId, claims.findString("client_id").orElseThrow());
-		assertEquals("subject", claims.findString("sub").orElseThrow());
-		Set<String> scopes = Set.copyOf(Arrays.asList(claims.findString("scope").orElseThrow().split(" ")));
+		assertEquals(ISSUER, claims.find("iss").map(com.revetsec.json.JsonString.class::cast).map(com.revetsec.json.JsonString::getValue).orElseThrow());
+		assertEquals(fixture.resource, claims.find("aud").map(com.revetsec.json.JsonString.class::cast).map(com.revetsec.json.JsonString::getValue).orElseThrow());
+		assertEquals(fixture.clientId, claims.find("client_id").map(com.revetsec.json.JsonString.class::cast).map(com.revetsec.json.JsonString::getValue).orElseThrow());
+		assertEquals("subject", claims.find("sub").map(com.revetsec.json.JsonString.class::cast).map(com.revetsec.json.JsonString::getValue).orElseThrow());
+		Set<String> scopes = Set.copyOf(Arrays.asList(claims.find("scope").map(com.revetsec.json.JsonString.class::cast).map(com.revetsec.json.JsonString::getValue).orElseThrow().split(" ")));
 		assertEquals(fixture.narrow ? Set.of("read") : fixture.scopes, scopes, "policy may narrow but never widen scopes");
 		assertFalse(json.getMembers().containsKey("refresh_token"), "refresh is outside this code-only model");
-		BearerToken bearer = BearerToken.fromAuthorizationHeaderValues(List.of("Bearer " + compact)).orElseThrow();
+		BearerToken bearer = org.junit.jupiter.api.Assertions.assertInstanceOf(com.revetsec.oauth.BearerTokenResult.Present.class, BearerToken.fromAuthorizationHeaderValuesResult(List.of("Bearer " + compact))).getToken();
 		assertInstanceOf(OAuthIssuerAccessTokenResult.Succeeded.class, fixture.server.validateAccessTokenResult(bearer, fixture.resource));
 		assertInstanceOf(OAuthIssuerAccessTokenResult.Rejected.class, fixture.server.validateAccessTokenResult(bearer, fixture.otherResource));
 		before = Map.copyOf(fixture.store.rows);
@@ -138,7 +138,7 @@ final class IssuerCodeFuzzModel {
 			this.codec = new OAuthStoreRecordCodec(ISSUER, sealer, 3800);
 			OAuthIssuerKeySnapshot keys = OAuthIssuerKeySnapshot.withActiveKey(OAuthIssuerSigningKey.fromKeyPair("key", M6FuzzOracle.KEY.getPrivate(), M6FuzzOracle.KEY.getPublic())).generation("g1").publishedAt(NOW.minusSeconds(120)).build();
 			this.server = OAuthAuthorizationServer.withIssuer(ISSUER).authorizationEndpoint(URI.create(ISSUER + "/authorize"))
-				.tokenEndpoint(URI.create(ISSUER + "/token")).jsonWebKeySetEndpoint(URI.create(ISSUER + "/jwks"))
+				.tokenEndpoint(URI.create(ISSUER + "/token")).jwksEndpoint(URI.create(ISSUER + "/jwks"))
 				.clientRepository((id, budget) -> id.equals(this.clientId) || id.equals("other") ? Optional.of(client(id)) : Optional.empty())
 				.store(this.store).stateSealer(sealer).signingKeys(OAuthIssuerKeyProvider.fromSnapshot(keys)).resources(resources()).clock(this.clock)
 				.grantPolicy((context, budget) -> this.deny ? OAuthAuthorizationDecision.deniedInstance() : decision(this.narrow ? Set.of("read") : context.getAuthorizedScopesByResource().get(this.resource))).build();

@@ -42,7 +42,7 @@ final class ResourceServerAssuranceTests {
         RecordingObserver<@NonNull AccessTokenObserver> events = RecordingObserver.fromInterface(AccessTokenObserver.class);
         JwtAccessTokenValidator validator = jwt().observer(events.getObserver()).build();
         Map<@NonNull String, @NonNull String> claims = claims(ISSUER);
-        assertEquals(List.of(AUD), validator.validate(bearer(token(claims, "at+jwt"))).getAudiences());
+        assertEquals(List.of(AUD), assertInstanceOf(AccessTokenValidationResult.Succeeded.class, validator.validateResult(bearer(token(claims, "at+jwt")))).getAccessToken().getAudiences());
         claims.put("aud", "\"other-resource\"");
         AccessTokenValidationResult.Rejected rejection = assertInstanceOf(AccessTokenValidationResult.Rejected.class,
                 validator.validateResult(bearer(token(claims, "at+jwt"))));
@@ -60,7 +60,7 @@ final class ResourceServerAssuranceTests {
                     claims.put("app", "true");
                     JwtAccessTokenValidator validator = jwt().compatibility(AccessTokenCompatibilityMode.UNTYPED_ACCESS_TOKENS)
                             .requiredClaims(Set.of("app")).build();
-                    assertNotNull(validator.validate(bearer(token(claims, "JWT"))));
+                    assertNotNull(assertInstanceOf(AccessTokenValidationResult.Succeeded.class, validator.validateResult(bearer(token(claims, "JWT")))).getAccessToken());
                     claims.put(name, value);
                     AccessTokenValidationResult.Rejected rejection = assertInstanceOf(AccessTokenValidationResult.Rejected.class,
                             validator.validateResult(bearer(token(claims, "JWT"))));
@@ -107,11 +107,11 @@ final class ResourceServerAssuranceTests {
             TokenIntrospectionClient validator = inspect(server).build();
             BearerToken credential = bearer("TEST-ONLY-repeated-credential");
             response(server, "/inspect", 200, "application/json", "{\"active\":true,\"aud\":\"resource\",\"scope\":\"read\",\"sub\":\"first\"}");
-            VerifiedAccessToken first = validator.validate(credential);
+            VerifiedAccessToken first = assertInstanceOf(AccessTokenValidationResult.Succeeded.class, validator.validateResult(credential)).getAccessToken();
             assertEquals(Set.of("read"), first.getScopes());
             assertEquals(Optional.of("first"), first.getSubject());
             response(server, "/inspect", 200, "application/json", "{\"active\":true,\"aud\":\"resource\",\"scope\":\"write\",\"sub\":\"second\"}");
-            VerifiedAccessToken second = validator.validate(credential);
+            VerifiedAccessToken second = assertInstanceOf(AccessTokenValidationResult.Succeeded.class, validator.validateResult(credential)).getAccessToken();
             assertNotSame(first, second);
             assertEquals(Set.of("write"), second.getScopes());
             assertEquals(Optional.of("second"), second.getSubject());
@@ -120,7 +120,7 @@ final class ResourceServerAssuranceTests {
             assertEquals(AccessTokenValidationException.Reason.INACTIVE,
                     assertInstanceOf(AccessTokenValidationResult.Rejected.class, validator.validateResult(credential)).getReason());
             response(server, "/inspect", 200, "application/json", active());
-            assertEquals(Set.of("read", "write"), validator.validate(credential).getScopes());
+            assertEquals(Set.of("read", "write"), assertInstanceOf(AccessTokenValidationResult.Succeeded.class, validator.validateResult(credential)).getAccessToken().getScopes());
             assertEquals(4, server.getHitCount("/inspect"));
             assertTrue(server.getRequests("/inspect").stream().allMatch(request ->
                     request.getBodyAsString().equals("token=TEST-ONLY-repeated-credential&token_type_hint=access_token")));
@@ -200,7 +200,7 @@ final class ResourceServerAssuranceTests {
         claims.put("padding", "\"" + "a".repeat(6_500) + "\"");
         String credential = token(claims, "at+jwt");
         JwtAccessTokenValidator validator = jwt().maximumTokenLength(credential.length()).build();
-        assertEquals(List.of(AUD), validator.validate(bearer(credential)).getAudiences());
+        assertEquals(List.of(AUD), assertInstanceOf(AccessTokenValidationResult.Succeeded.class, validator.validateResult(bearer(credential))).getAccessToken().getAudiences());
         AccessTokenValidationResult.Rejected rejected = assertInstanceOf(AccessTokenValidationResult.Rejected.class,
                 validator.validateResult(bearer(credential + "a")));
         assertEquals(AccessTokenValidationException.Reason.MALFORMED_REQUEST, rejected.getReason());
@@ -212,7 +212,7 @@ final class ResourceServerAssuranceTests {
         try (TestHttpsServer server = TestHttpsServer.start()) {
             TokenIntrospectionClient validator = inspect(server).maximumTokenLength(8_192).build();
             response(server, "/inspect", 200, "application/json", active());
-            assertEquals(List.of(AUD), validator.validate(bearer("a".repeat(8_192))).getAudiences());
+            assertEquals(List.of(AUD), assertInstanceOf(AccessTokenValidationResult.Succeeded.class, validator.validateResult(bearer("a".repeat(8_192)))).getAccessToken().getAudiences());
             AccessTokenValidationResult.Rejected rejected = assertInstanceOf(AccessTokenValidationResult.Rejected.class,
                     validator.validateResult(bearer("a".repeat(8_193))));
             assertEquals(AccessTokenValidationException.Reason.MALFORMED_REQUEST, rejected.getReason());
@@ -233,7 +233,7 @@ final class ResourceServerAssuranceTests {
                                 assertInstanceOf(AccessTokenValidationResult.Rejected.class,
                                         jwt().build().validateResult(bearer(token(claims, "at+jwt")))).getReason());
                     } else {
-                        assertEquals(Set.of(scope), jwt().build().validate(bearer(token(claims, "at+jwt"))).getScopes());
+                        assertEquals(Set.of(scope), assertInstanceOf(AccessTokenValidationResult.Succeeded.class, jwt().build().validateResult(bearer(token(claims, "at+jwt")))).getAccessToken().getScopes());
                     }
                 }));
     }
@@ -245,7 +245,7 @@ final class ResourceServerAssuranceTests {
         claims.put("app", "true");
         JwtAccessTokenValidator validator = jwt().compatibility(AccessTokenCompatibilityMode.UNTYPED_ACCESS_TOKENS)
                 .requiredClaims(Set.of("app")).observer(events.getObserver()).build();
-        assertNotNull(validator.validate(bearer(token(claims, "at+jwt"))));
+        assertNotNull(assertInstanceOf(AccessTokenValidationResult.Succeeded.class, validator.validateResult(bearer(token(claims, "at+jwt")))).getAccessToken());
         assertEquals(1, eventCount(events, "didEnableCompatibilityMode"));
         assertEquals(0, eventCount(events, "didUseCompatibilityMode"));
         assertEquals(1, eventCount(events, "didValidateAccessToken"));

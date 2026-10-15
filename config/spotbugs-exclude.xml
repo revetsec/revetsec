@@ -7,6 +7,15 @@
 	accepted risk.
 -->
 <FindBugsFilter>
+	<!-- RFC 7517 section 4.8 defines x5t specifically as a SHA-1 certificate identifier. This publisher
+	     emits it for compatibility alongside the SHA-256 x5t#S256 identifier. It never uses SHA-1 for
+	     signing, certificate trust or signature verification; publication tests check both exact digests.
+	     Keep the exception limited to certificate metadata serialization in this one method. -->
+	<Match>
+		<Bug pattern="WEAK_MESSAGE_DIGEST_SHA1"/>
+		<Class name="com.revetsec.jose.PublishedJwk"/>
+		<Method name="snapshotCertificates" signature="(Lcom/revetsec/json/JsonObject;Ljava/util/List;)Lcom/revetsec/json/JsonObject;"/>
+	</Match>
 	<!-- Cleanup deliberately preserves the checked operation failure and fixed diagnostics.
 	     The socket/selector closure is always attempted; a late IOException cannot expose remote text
 	     or turn cleanup into a new operation outcome. Local closure tests check resource release. -->

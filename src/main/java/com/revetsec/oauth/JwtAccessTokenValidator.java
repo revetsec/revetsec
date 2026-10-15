@@ -58,7 +58,7 @@ public final class JwtAccessTokenValidator implements AccessTokenValidator {
 	private JwtAccessTokenValidator(@NonNull Builder settings) {
 		this.settings = settings;
 		this.header = JoseHeaderPolicy.fromSettings(settings.maximumTokenLength, settings.allowedAlgorithms, settings.compatibility == null ? Set.of("at+jwt") : Set.of("at+jwt", "JWT"), settings.compatibility == null);
-		if (settings.jsonWebKeySource != null) {
+		if (settings.jwksSource != null) {
 			this.state = stateFor(null);
 			this.cache = null;
 		} else {
@@ -67,21 +67,21 @@ public final class JwtAccessTokenValidator implements AccessTokenValidator {
 	}
 
 	private @NonNull State stateFor(@Nullable ResourceServerMetadata metadata) {
-		if (this.settings.jsonWebKeySource == null && !UriChecks.isPermitted(requireNonNull(metadata).endpoint(), this.settings.outboundUriPolicy, this.settings.allowInsecureLoopback))
+		if (this.settings.jwksSource == null && !UriChecks.isPermitted(requireNonNull(metadata).endpoint(), this.settings.outboundUriPolicy, this.settings.allowInsecureLoopback))
 			throw OAuthValidationException.fromReason(OAuthException.Reason.METADATA_INVALID);
 		this.stateLock.lock();
 		try {
 			State previous = this.state;
-			JsonWebKeySource source = this.settings.jsonWebKeySource;
+			JwksSource source = this.settings.jwksSource;
 			if (source == null && previous != null && previous.endpoint != null && previous.endpoint.toString().equals(requireNonNull(metadata).endpoint().toString()))
 				source = previous.source;
 			if (source == null)
-				source = RemoteJsonWebKeySource.withUri(requireNonNull(metadata).endpoint()).httpClient(this.settings.httpClient).outboundUriPolicy(this.settings.outboundUriPolicy).clock(this.settings.clock).observer(this.settings.observer).allowInsecureLoopback(this.settings.allowInsecureLoopback).acknowledgeUnpatchedRuntime(this.settings.acknowledgeUnpatchedRuntime).requestTimeout(this.settings.requestTimeout).build();
+				source = RemoteJwksSource.withUri(requireNonNull(metadata).endpoint()).httpClient(this.settings.httpClient).outboundUriPolicy(this.settings.outboundUriPolicy).clock(this.settings.clock).observer(this.settings.observer).allowInsecureLoopback(this.settings.allowInsecureLoopback).acknowledgeUnpatchedRuntime(this.settings.acknowledgeUnpatchedRuntime).requestTimeout(this.settings.requestTimeout).build();
 			Set<String> required = new HashSet<>(this.settings.requiredClaims);
 			required.addAll(Set.of("exp", "iat", "sub"));
 			if (this.settings.compatibility == null)
 				required.addAll(Set.of("client_id", "jti"));
-			JwtValidator validator = JwtValidator.withIssuer(this.settings.issuer).jsonWebKeySource(source).expectedAudiences(this.settings.expectedAudiences).allowedAlgorithms(this.settings.allowedAlgorithms).allowedTypes(this.header.getAllowedTypes()).typeRequired(this.header.isTypeRequired()).requiredClaims(required).clockSkew(this.settings.clockSkew).clock(this.settings.clock).maximumTokenLength(this.settings.maximumTokenLength).observer(this.settings.observer).build();
+			JwtValidator validator = JwtValidator.withIssuer(this.settings.issuer).jwksSource(source).expectedAudiences(this.settings.expectedAudiences).allowedAlgorithms(this.settings.allowedAlgorithms).allowedTypes(this.header.getAllowedTypes()).typeRequired(this.header.isTypeRequired()).requiredClaims(required).clockSkew(this.settings.clockSkew).clock(this.settings.clock).maximumTokenLength(this.settings.maximumTokenLength).observer(this.settings.observer).build();
 			return new State(metadata == null ? null : metadata.endpoint(), source, validator);
 		} finally {
 			this.stateLock.unlock();
@@ -108,7 +108,7 @@ public final class JwtAccessTokenValidator implements AccessTokenValidator {
 		}
 	}
 
-	private record State(@Nullable URI endpoint, @NonNull JsonWebKeySource source, @NonNull JwtValidator validator) {
+	private record State(@Nullable URI endpoint, @NonNull JwksSource source, @NonNull JwtValidator validator) {
 
 		@Override
 		public @NonNull String toString() {
@@ -134,22 +134,10 @@ public final class JwtAccessTokenValidator implements AccessTokenValidator {
 	public void warmUp() {
 		Deadline deadline = Deadline.fromNow(this.settings.totalDeadline);
 		State ready = state(deadline);
-		if (ready.source instanceof RemoteJsonWebKeySource remote)
+		if (ready.source instanceof RemoteJwksSource remote)
 			JwtValidationAccess.get().warmUp(remote, deadline::remainingNanos);
 	}
 
-	/**
-	 * Validates the token exactly once; infrastructure failures remain distinct exceptions.
-	 * @param token unverified bearer credential
-	 * @return verified access token with no credential retained
-	 * @since 1.0.0
-	 */
-	@Override
-	@CheckReturnValue
-	@NonNull
-	public VerifiedAccessToken validate(@NonNull BearerToken token) {
-  return validate(token,Deadline.fromNow(this.settings.totalDeadline));
- }
  /** Shared issuer transaction path; no new deadline or public proof factory. */
  @NonNull VerifiedAccessToken validate(@NonNull BearerToken token,@NonNull Deadline deadline) {
   requireNonNull(token);requireNonNull(deadline);
@@ -209,7 +197,7 @@ public final class JwtAccessTokenValidator implements AccessTokenValidator {
 	@NonNull
 	public AccessTokenValidationResult validateResult(@NonNull BearerToken token) {
 		try {
-			return AccessTokenValidationResult.fromToken(validate(token));
+			return AccessTokenValidationResult.fromToken(validate(token, Deadline.fromNow(this.settings.totalDeadline)));
 		} catch (AccessTokenValidationException rejection) {
 			return AccessTokenValidationResult.fromRejection(rejection);
 		}
@@ -256,7 +244,7 @@ public final class JwtAccessTokenValidator implements AccessTokenValidator {
 		private Clock clock = Clock.systemUTC();
 
 		@Nullable
-		private JsonWebKeySource jsonWebKeySource;
+		private JwksSource jwksSource;
 
 		@Nullable
 		private HttpClient httpClient;
@@ -297,7 +285,7 @@ public final class JwtAccessTokenValidator implements AccessTokenValidator {
 			this.maximumTokenLength = original.maximumTokenLength;
 			this.clockSkew = original.clockSkew;
 			this.clock = original.clock;
-			this.jsonWebKeySource = original.jsonWebKeySource;
+			this.jwksSource = original.jwksSource;
 			this.httpClient = original.httpClient;
 			this.outboundUriPolicy = original.outboundUriPolicy;
 			this.requestTimeout = original.requestTimeout;
@@ -416,8 +404,8 @@ public final class JwtAccessTokenValidator implements AccessTokenValidator {
 		 * @since 1.0.0
 		 */
 		@NonNull
-		public Builder jsonWebKeySource(@Nullable JsonWebKeySource value) {
-			this.jsonWebKeySource = value;
+		public Builder jwksSource(@Nullable JwksSource value) {
+			this.jwksSource = value;
 			return this;
 		}
 
@@ -572,9 +560,9 @@ public final class JwtAccessTokenValidator implements AccessTokenValidator {
 				throw new IllegalArgumentException("Untyped access tokens require an additional required claim.");
 			Limits.requireRequestTimeoutWithinTotalDeadline(this.requestTimeout, this.totalDeadline);
 			Limits.requireDiscoveryTimeToLiveOrder(this.minimumTimeToLive, this.defaultTimeToLive, this.maximumTimeToLive, this.discoveryCooldown);
-			if (!(this.jsonWebKeySource instanceof StaticJsonWebKeySource)) {
+			if (!(this.jwksSource instanceof StaticJwksSource)) {
 				RuntimeFloor.require(runtime, this.acknowledgeUnpatchedRuntime);
-				if (this.jsonWebKeySource == null) {
+				if (this.jwksSource == null) {
 					URI issuerUri = URI.create(this.issuer);
 					if (issuerUri.getRawQuery() != null || issuerUri.getRawFragment() != null)
 						throw new IllegalArgumentException("Issuer query/fragment is invalid.");
@@ -585,7 +573,7 @@ public final class JwtAccessTokenValidator implements AccessTokenValidator {
 			AccessTokenCompatibilityMode mode = this.compatibility;
 			if (mode != null)
 				ObserverDispatch.dispatch(this.observer, o -> o.didEnableCompatibilityMode(mode));
-			if (!(this.jsonWebKeySource instanceof StaticJsonWebKeySource) && RuntimeFloor.isBelowFloor(runtime) && this.acknowledgeUnpatchedRuntime)
+			if (!(this.jwksSource instanceof StaticJwksSource) && RuntimeFloor.isBelowFloor(runtime) && this.acknowledgeUnpatchedRuntime)
 				ObserverDispatch.dispatch(this.observer, o -> o.didUseUnpatchedRuntime(runtime.toString()));
 			return validator;
 		}

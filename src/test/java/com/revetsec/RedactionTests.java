@@ -51,16 +51,24 @@ import com.revetsec.internal.pem.Pem;
 import com.revetsec.internal.pem.PemException;
 import com.revetsec.jose.JoseException;
 import com.revetsec.jose.JoseObserver;
-import com.revetsec.jose.JsonWebKeySet;
-import com.revetsec.jose.JsonWebKeySetUnavailableException;
-import com.revetsec.jose.JsonWebKeySkipReason;
+import com.revetsec.jose.Jwks;
+import com.revetsec.jose.JwksParseResult;
+import com.revetsec.jose.JwksPublisher;
+import com.revetsec.jose.JwksResponse;
+import com.revetsec.jose.PublishedJwk;
+import com.revetsec.jose.JwtValidationResult;
+import com.revetsec.jose.JwksUnavailableException;
+import com.revetsec.jose.JwkSkipReason;
 import com.revetsec.jose.JwsAlgorithm;
 import com.revetsec.jose.JwsSigner;
 import com.revetsec.jose.JwsSigningException;
 import com.revetsec.jose.Jwt;
+import com.revetsec.jose.JwtClaimsSet;
+import com.revetsec.jose.JwtSigningHeader;
+import com.revetsec.jose.JwtType;
 import com.revetsec.jose.JwtValidator;
-import com.revetsec.jose.RemoteJsonWebKeySource;
-import com.revetsec.jose.StaticJsonWebKeySource;
+import com.revetsec.jose.RemoteJwksSource;
+import com.revetsec.jose.StaticJwksSource;
 import com.revetsec.json.JsonArray;
 import com.revetsec.json.JsonBoolean;
 import com.revetsec.json.JsonNull;
@@ -74,8 +82,8 @@ import com.revetsec.testing.RecordingObserver;
 import com.revetsec.testing.Sentinels;
 import com.revetsec.testing.TestClock;
 import com.revetsec.testing.TestHttpsServer;
-import com.revetsec.testing.TestJsonWebKeys;
-import com.revetsec.testing.TestJsonWebKeys.Fixture;
+import com.revetsec.testing.TestJwk;
+import com.revetsec.testing.TestJwk.Fixture;
 import com.revetsec.testing.TestJws;
 import com.revetsec.testing.TestSealers;
 import com.revetsec.testing.TestTls;
@@ -153,7 +161,7 @@ import java.util.stream.Stream;
  * <p>
  * <strong>Observers.</strong> Every public failure (a {@link RevetsecException}) is also handed to the real
  * {@link JoseObserver} through {@link ObserverDispatch}: to {@code didFailToValidateJwt}, and a key-set failure to
- * {@code didFailToFetchJsonWebKeySet} too. It goes once to a recorded observer, which must record the same instance
+ * {@code didFailToFetchJwks} too. It goes once to a recorded observer, which must record the same instance
  * (G6-4), and once to an observer that throws, whose contained failure's {@code com.revetsec} log record is walked
  * as well. An internal failure never reaches a hook, because Revetsec translates it first, so it is walked but not
  * dispatched. The JOSE components are run with recorded and throwing observers of their own, so every argument they
@@ -166,18 +174,18 @@ import java.util.stream.Stream;
  * <p>
  * <strong>The JOSE surfaces</strong>, each group built once and walked by its own test:
  * <ul>
- *   <li>{@link JwtValidator#validate(String)} refusing tokens that carry sentinels in the header ({@code kid},
+ *   <li>{@link JwtValidator#validateResult(String)} refusing tokens that carry sentinels in the header ({@code kid},
  *   {@code alg}, {@code typ}, {@code crit}, {@code zip}, {@code cty}, {@code jku}, {@code jwk} and duplicate members),
  *   in the claims (ones that fail each claim check included), in the signature segment and in the text around them,
  *   so that every {@link JoseException.Reason} is reached with a sentinel in its input: the exceptions, every hook
  *   argument, and the log records of a throwing observer;</li>
- *   <li>{@link JsonWebKeySet#fromJson(String)} over a key set with sentinels in private and symmetric members, in the
+ *   <li>{@link Jwks#fromJsonResult(String)} over a key set with sentinels in private and symmetric members, in the
  *   {@code kid}, {@code use}, {@code alg}, {@code kty}, {@code issuer} and {@code x5c} of skipped keys, and in the
  *   {@code issuer} and an unknown member of a usable key; its refusals of documents that carry sentinels; and the key
- *   set, its keys, a {@link StaticJsonWebKeySource} and a {@link JwtValidator} over it;</li>
- *   <li>{@link RemoteJsonWebKeySource}, whose URI has a sentinel in its query, fetching that key set and failing on
+ *   set, its keys, a {@link StaticJwksSource} and a {@link JwtValidator} over it;</li>
+ *   <li>{@link RemoteJwksSource}, whose URI has a sentinel in its query, fetching that key set and failing on
  *   error, redirect, media-type, framing, malformed and oversized responses with sentinels in their bodies and
- *   headers, through {@link RemoteJsonWebKeySource#warmUp()} and through a validator; holding back a fetch, inside the
+ *   headers, through {@link RemoteJwksSource#warmUp()} and through a validator; holding back a fetch, inside the
  *   backoff after each of those failures and inside the unknown-key cooldown; and a fetch whose leader is interrupted
  *   after its request was sent: the sources, the validators, the failures, every hook argument and every log
  *   record;</li>
@@ -198,7 +206,7 @@ import java.util.stream.Stream;
  * <p>
  * <strong>One documented exception.</strong> An I/O failure keeps the JDK's {@link IOException} as its cause
  * ({@link HttpExchangeException.Kind#IO} internally, and a transient {@link ErrorCategory#TRANSPORT}
- * {@link JsonWebKeySetUnavailableException} for the caller whose fetch failed; G6-2), and the JDK may copy
+ * {@link JwksUnavailableException} for the caller whose fetch failed; G6-2), and the JDK may copy
  * server-controlled text into that cause's message, for example a status line it rejects. That is the server's own
  * text echoed by the JDK, not something Revetsec rendered, so for I/O failures the server's sentinel may appear
  * inside the cause (and in the "Caused by" part of the printed stack trace), and nowhere else. The request's own
@@ -344,7 +352,6 @@ final class RedactionTests {
 	// rendering that would echo the token; the validator that refuses it echoes nothing.
 	@TestFactory
 	@NonNull Stream<@NonNull DynamicTest> theWalkerFindsABase64UrlSentinelClaimAtEachAlignment() {
-		JwtValidator validator = validator(rsaJwk(KEY_ID)).build();
 		return IntStream.range(0, 3).mapToObj(alignment -> DynamicTest.dynamicTest("alignment " + alignment, () -> {
 			String token = Sentinels.compactJwtWithSentinelClaim(alignment);
 			String payload = new String(Base64Url.decode(token.substring(token.indexOf('.') + 1, token.lastIndexOf('.'))),
@@ -362,9 +369,12 @@ final class RedactionTests {
 					new EchoingFailure(new IOException(token)), ELAPSED));
 			Assertions.assertFalse(Sentinels.findIn(recorder).isEmpty());
 
-			JoseException refused = Assertions.assertThrows(JoseException.class, () -> validator.validate(token));
+			JwtValidator validator = validator(rsaJwk(KEY_ID)).observer(recorder.getObserver()).build();
+			JwtValidationResult.Rejected refused = Assertions.assertInstanceOf(JwtValidationResult.Rejected.class,
+					validator.validateResult(token));
 			Assertions.assertEquals(JoseException.Reason.SIGNATURE_MISMATCH, refused.getReason());
-			assertRedacted(refused);
+			assertRedacted(recordedValidationFailure(recorder));
+			Sentinels.assertAbsent(refused);
 		}));
 	}
 
@@ -489,11 +499,12 @@ final class RedactionTests {
 		Assertions.assertEquals("SealingKey{keyId=2026-09, key=<redacted>}", key.toString());
 		Sentinels.assertAbsent(List.of(key, StateSealer.withActiveKey(key), sealer, sealed, pending,
 				SealerV1.Key.fromMasterKey("k", masterKey)));
-		Assertions.assertEquals(Sentinels.SEALED_PLAINTEXT, sealer.unseal(sealed, CONTEXT));
+		Assertions.assertEquals(Sentinels.SEALED_PLAINTEXT,
+				Assertions.assertInstanceOf(StateUnsealResult.Succeeded.class, sealer.unsealResult(sealed, CONTEXT)).getValue());
 	}
 
 	// G6-8, G6-9 and exit criteria 8 and 9: every sealing, opening and key failure is fixed text, whatever the input
-	// carried, and every failure to open is the one InvalidSealedStateException.
+	// carried, and every public failure to open is one value-free rejected outcome.
 	@TestFactory
 	@NonNull Stream<@NonNull DynamicTest> sealerFailuresDoNotEchoTheirInput() {
 		TestClock clock = TestClock.fromInstant(START);
@@ -509,17 +520,14 @@ final class RedactionTests {
 		String keyWithMarker = Sentinels.MARKER + "A".repeat(29) + "=";
 
 		return Stream.of(
-				failure("unseal garbage", InvalidSealedStateException.class, () -> sealer.unseal(SECRET, CONTEXT)),
-				failure("unseal an over-length value", InvalidSealedStateException.class,
-						() -> sealer.unseal(SECRET.repeat(200), CONTEXT)),
-				failure("unseal a tampered value", InvalidSealedStateException.class, () -> sealer.unseal(tampered, CONTEXT)),
-				failure("unseal under another context", InvalidSealedStateException.class,
-						() -> sealer.unseal(sealed, SECRET)),
-				failure("unseal under an unknown key ID", InvalidSealedStateException.class,
-						() -> sealer.unseal(sealedByOther, CONTEXT)),
-				failure("unseal an expired value", InvalidSealedStateException.class, () -> {
+				sealedRejectionTest("unseal garbage", () -> sealer.unsealResult(SECRET, CONTEXT)),
+				sealedRejectionTest("unseal an over-length value", 						() -> sealer.unsealResult(SECRET.repeat(200), CONTEXT)),
+				sealedRejectionTest("unseal a tampered value", () -> sealer.unsealResult(tampered, CONTEXT)),
+				sealedRejectionTest("unseal under another context", 						() -> sealer.unsealResult(sealed, SECRET)),
+				sealedRejectionTest("unseal under an unknown key ID", 						() -> sealer.unsealResult(sealedByOther, CONTEXT)),
+				sealedRejectionTest("unseal an expired value", () -> {
 					clock.set(START.plusSeconds(2));
-					sealer.unseal(sealed, CONTEXT);
+					return sealer.unsealResult(sealed, CONTEXT);
 				}),
 				failure("unseal pending state under another type", UnsealException.class,
 						() -> SealedStateAccess.get().unseal(sealer, SealedStateType.PENDING_SAML, pending, CONTEXT, clock)),
@@ -777,8 +785,12 @@ final class RedactionTests {
 	@Test
 	void aPublicFailureReachesTheRealObserverAsTheSameInstanceWithoutASentinel() {
 		StateSealer sealer = TestSealers.fromFixedKey();
-		InvalidSealedStateException failure = Assertions.assertThrows(InvalidSealedStateException.class,
-				() -> sealer.unseal(SECRET, CONTEXT));
+		Assertions.assertInstanceOf(StateUnsealResult.Rejected.class, sealer.unsealResult(SECRET, CONTEXT));
+		RecordingObserver<JoseObserver> original = RecordingObserver.fromInterface(JoseObserver.class);
+		JwtValidationResult.Rejected result = Assertions.assertInstanceOf(JwtValidationResult.Rejected.class,
+				validator(rsaJwk(KEY_ID)).observer(original.getObserver()).build().validateResult(SECRET));
+		JoseException failure = recordedValidationFailure(original);
+		Assertions.assertEquals(result.getReason(), failure.getReason());
 
 		RecordingObserver<JoseObserver> recorder = RecordingObserver.fromInterface(JoseObserver.class);
 		ObserverDispatch.dispatch(recorder.getObserver(), observer -> observer.didFailToValidateJwt(failure, ELAPSED));
@@ -839,10 +851,10 @@ final class RedactionTests {
 	void everyExportedConcreteJoseClassIsWalked() throws IOException, ClassNotFoundException {
 		List<Class<?>> exported = exportedConcreteJoseClasses();
 		for (Class<?> expected : List.of(Jwt.class, com.revetsec.jose.JwtClaims.class, JwtValidator.Builder.class,
-				RemoteJsonWebKeySource.Builder.class, JoseException.Reason.class, JsonWebKeySkipReason.class))
+				RemoteJwksSource.Builder.class, JoseException.Reason.class, JwkSkipReason.class))
 			Assertions.assertTrue(exported.contains(expected), () -> "the source scan finds " + expected.getName());
 		for (Class<?> notConcrete : List.of(JoseException.class, JoseObserver.class,
-				com.revetsec.jose.JsonWebKeySource.class))
+				com.revetsec.jose.JwksSource.class))
 			Assertions.assertFalse(exported.contains(notConcrete), notConcrete::getName);
 
 		List<Object> walked = new ArrayList<>();
@@ -887,7 +899,7 @@ final class RedactionTests {
 		Set<JoseException.Reason> reached = EnumSet.noneOf(JoseException.Reason.class);
 		for (List<Surface> surfaces : joseSurfaces().values())
 			for (Surface surface : surfaces)
-				if (surface.getCheck() == Check.FAILURE && surface.getExpected() instanceof JoseException.Reason reason)
+				if ((surface.getCheck() == Check.FAILURE || surface.getCheck() == Check.RESULT_REJECTION) && surface.getExpected() instanceof JoseException.Reason reason)
 					reached.add(reason);
 		Assertions.assertEquals(EnumSet.allOf(JoseException.Reason.class), reached);
 	}
@@ -937,6 +949,12 @@ final class RedactionTests {
 				Sentinels.assertPresent(text);
 			}
 			case RENDERING -> Sentinels.assertAbsent(value);
+			case RESULT_REJECTION -> {
+				JwksParseResult.Rejected rejected = Assertions.assertInstanceOf(
+						JwksParseResult.Rejected.class, value);
+				Assertions.assertEquals(surface.getExpected(), rejected.getReason());
+				Sentinels.assertAbsent(rejected);
+			}
 			case FAILURE -> {
 				Throwable failure = (Throwable) value;
 				assertExpected(surface.getExpected(), failure);
@@ -968,8 +986,8 @@ final class RedactionTests {
 			JwsSigningException exception = Assertions.assertInstanceOf(JwsSigningException.class, failure);
 			Assertions.assertEquals(reason, exception.getReason());
 		} else if (expected instanceof ErrorCategory category) {
-			JsonWebKeySetUnavailableException exception = Assertions.assertInstanceOf(
-					JsonWebKeySetUnavailableException.class, failure);
+			JwksUnavailableException exception = Assertions.assertInstanceOf(
+					JwksUnavailableException.class, failure);
 			Assertions.assertEquals(category, exception.getCategory());
 		} else if (expected instanceof Class<?> type) {
 			Assertions.assertInstanceOf(type, failure);
@@ -1073,7 +1091,7 @@ final class RedactionTests {
 			Assertions.assertTrue(call.getArguments().contains(failure), "hooks receive the caller's exception instance "
 					+ "(G6-4)");
 		int hooks = recorder.getCalls().size();
-		Assertions.assertEquals(failure instanceof JsonWebKeySetUnavailableException ? 2 : 1, hooks);
+		Assertions.assertEquals(failure instanceof JwksUnavailableException ? 2 : 1, hooks);
 
 		RecordingObserver<JoseObserver> throwing = RecordingObserver.fromInterface(JoseObserver.class,
 				() -> new IllegalStateException(HOOK_SECRET));
@@ -1087,8 +1105,8 @@ final class RedactionTests {
 
 	private static void dispatchFailureHooks(@NonNull JoseObserver observer, @NonNull RevetsecException failure) {
 		ObserverDispatch.dispatch(observer, hook -> hook.didFailToValidateJwt(failure, ELAPSED));
-		if (failure instanceof JsonWebKeySetUnavailableException unavailable)
-			ObserverDispatch.dispatch(observer, hook -> hook.didFailToFetchJsonWebKeySet(REPORTED_URI, unavailable,
+		if (failure instanceof JwksUnavailableException unavailable)
+			ObserverDispatch.dispatch(observer, hook -> hook.didFailToFetchJwks(REPORTED_URI, unavailable,
 					false, ELAPSED));
 	}
 
@@ -1298,7 +1316,7 @@ final class RedactionTests {
 	 * A JWK for the RSA 2048 fixture key with {@code kid}.
 	 */
 	private static @NonNull String rsaJwk(@NonNull String kid) {
-		return TestJsonWebKeys.withFixture(Fixture.IDP_SIGNING_RSA_2048).kid(kid).toJson();
+		return TestJwk.withFixture(Fixture.IDP_SIGNING_RSA_2048).kid(kid).toJson();
 	}
 
 	/**
@@ -1307,8 +1325,8 @@ final class RedactionTests {
 	 */
 	private static JwtValidator.@NonNull Builder validator(@NonNull String @NonNull ... jwks) {
 		return JwtValidator.withIssuer(ISSUER)
-				.jsonWebKeySource(StaticJsonWebKeySource.fromJsonWebKeySet(JsonWebKeySet.fromJson(
-						TestJsonWebKeys.keySet(List.of(jwks)))))
+				.jwksSource(StaticJwksSource.fromJwks(parsedJwks(Jwks.fromJsonResult(
+						TestJwk.keySet(List.of(jwks))))))
 				.expectedAudiences(Set.of(AUDIENCE))
 				.clock(TestClock.fromInstant(NOW));
 	}
@@ -1351,6 +1369,8 @@ final class RedactionTests {
 		 * No rendering carries a sentinel.
 		 */
 		RENDERING,
+		/** A rejected public result with a fixed JOSE reason and no submitted data. */
+		RESULT_REJECTION,
 		/**
 		 * A failure with the expected reason, category or class, redacted ({@link #assertRedacted(Throwable)}).
 		 */
@@ -1490,11 +1510,11 @@ final class RedactionTests {
 			String rsa = rsaJwk(KEY_ID);
 			Function<JoseObserver, JwtValidator> standard = observer -> validator(rsa).observer(observer).build();
 			Function<JoseObserver, JwtValidator> ambiguous = observer -> validator(rsa,
-					TestJsonWebKeys.withFixture(Fixture.NEGATIVE_ATTACKER_RSA_2048).kid(KEY_ID).toJson())
+					TestJwk.withFixture(Fixture.NEGATIVE_ATTACKER_RSA_2048).kid(KEY_ID).toJson())
 					.observer(observer).build();
 			Function<JoseObserver, JwtValidator> withEcdsa = observer -> validator(rsa)
 					.allowedAlgorithms(Set.of(JwsAlgorithm.RS256, JwsAlgorithm.ES256)).observer(observer).build();
-			Function<JoseObserver, JwtValidator> issuerBound = observer -> validator(TestJsonWebKeys.withFixture(
+			Function<JoseObserver, JwtValidator> issuerBound = observer -> validator(TestJwk.withFixture(
 					Fixture.IDP_SIGNING_RSA_2048).kid(KEY_ID).issuer(Sentinels.secret("jwk-issuer")).toJson())
 					.observer(observer).build();
 			byte[] rsaSignature = new byte[256];
@@ -1526,7 +1546,7 @@ final class RedactionTests {
 			rejected("a jku with a sentinel", JoseException.Reason.UNTRUSTED_KEY_REFERENCE, standard, rs256(claims())
 					.headerMember("jku", JsonText.string("https://keys.example.com/" + SECRET)).withSignature(rsaSignature));
 			rejected("an embedded jwk with sentinel members", JoseException.Reason.UNTRUSTED_KEY_REFERENCE, standard,
-					rs256(claims()).headerMember("jwk", TestJsonWebKeys.withFixture(Fixture.NEGATIVE_ATTACKER_RSA_2048)
+					rs256(claims()).headerMember("jwk", TestJwk.withFixture(Fixture.NEGATIVE_ATTACKER_RSA_2048)
 							.kid(SECRET).member("d", JsonText.string(Sentinels.PRIVATE_KEY_MEMBER)).toJson())
 							.withSignature(rsaSignature));
 			rejected("a sentinel typ", JoseException.Reason.INVALID_TYPE, standard, rs256(claims()).typ(SECRET)
@@ -1579,7 +1599,10 @@ final class RedactionTests {
 
 			RecordingObserver<JoseObserver> recorder = RecordingObserver.fromInterface(JoseObserver.class);
 			JwtValidator recorded = validator.apply(recorder.getObserver());
-			add(Group.REJECTED_TOKENS, surface + ": the exception", thrownBy(surface, () -> recorded.validate(token)),
+			JwtValidationResult.Rejected recordedResult = Assertions.assertInstanceOf(JwtValidationResult.Rejected.class,
+					recorded.validateResult(token));
+			Assertions.assertEquals(reason, recordedResult.getReason());
+			add(Group.REJECTED_TOKENS, surface + ": the observer diagnostic", recordedValidationFailure(recorder),
 					Check.FAILURE, reason);
 			add(Group.REJECTED_TOKENS, surface + ": the hook arguments", recorder, Check.HOOK_ARGUMENTS);
 			com.revetsec.jose.JwtValidationResult result = validator.apply(JoseObserver.disabledInstance()).validateResult(token);
@@ -1590,8 +1613,11 @@ final class RedactionTests {
 					() -> new IllegalStateException(HOOK_SECRET));
 			JwtValidator throwingValidator = validator.apply(throwing.getObserver());
 			this.records.clear();
-			add(Group.REJECTED_TOKENS, surface + ": the exception, with a throwing observer",
-					thrownBy(surface, () -> throwingValidator.validate(token)), Check.FAILURE, reason);
+			JwtValidationResult.Rejected throwingResult = Assertions.assertInstanceOf(JwtValidationResult.Rejected.class,
+					throwingValidator.validateResult(token));
+			Assertions.assertEquals(reason, throwingResult.getReason());
+			add(Group.REJECTED_TOKENS, surface + ": the diagnostic, with a throwing observer",
+					recordedValidationFailure(throwing), Check.FAILURE, reason);
 			add(Group.REJECTED_TOKENS, surface + ": the throwing observer's log records", this.records.getRecords(),
 					Check.LOG_RECORDS);
 		}
@@ -1601,23 +1627,25 @@ final class RedactionTests {
 		private void keySets() {
 			String document = sentinelKeySet();
 			add(Group.KEY_SETS, "the key set document carries sentinels", document, Check.PRESENT);
-			JsonWebKeySet keySet = JsonWebKeySet.fromJson(document);
+			JwksParseResult parsed = Jwks.fromJsonResult(document);
+			Jwks keySet = parsedJwks(parsed);
+			add(Group.KEY_SETS, "the parse result", parsed, Check.RENDERING);
 			add(Group.KEY_SETS, "the key set", keySet, Check.RENDERING);
 			add(Group.KEY_SETS, "its one usable key", keySet.getKeys(), Check.RENDERING);
-			StaticJsonWebKeySource source = StaticJsonWebKeySource.fromJsonWebKeySet(keySet);
+			StaticJwksSource source = StaticJwksSource.fromJwks(keySet);
 			add(Group.KEY_SETS, "a static source over it", source, Check.RENDERING);
-			JwtValidator.Builder builder = JwtValidator.withIssuer(ISSUER).jsonWebKeySource(source)
+			JwtValidator.Builder builder = JwtValidator.withIssuer(ISSUER).jwksSource(source)
 					.expectedAudiences(Set.of(AUDIENCE)).clock(TestClock.fromInstant(NOW));
 			add(Group.KEY_SETS, "a validator builder over it", builder, Check.RENDERING);
 			add(Group.KEY_SETS, "a validator over it", builder.build(), Check.RENDERING);
 
-			String onlySkipped = TestJsonWebKeys.keySet(List.of(
-					TestJsonWebKeys.octWithK(Sentinels.SYMMETRIC_KEY).kid(SECRET).toJson(),
-					TestJsonWebKeys.withFixture(Fixture.IDP_SIGNING_RSA_2048).kid(SECRET)
+			String onlySkipped = TestJwk.keySet(List.of(
+					TestJwk.octWithK(Sentinels.SYMMETRIC_KEY).kid(SECRET).toJson(),
+					TestJwk.withFixture(Fixture.IDP_SIGNING_RSA_2048).kid(SECRET)
 							.member("d", JsonText.string(Sentinels.PRIVATE_KEY_MEMBER)).toJson()));
 			add(Group.KEY_SETS, "a static source refused over sentinel keys that are all skipped",
-					thrownBy("a static source", () -> StaticJsonWebKeySource.fromJsonWebKeySet(JsonWebKeySet.fromJson(
-							onlySkipped))), Check.FAILURE, IllegalArgumentException.class);
+					thrownBy("a static source", () -> StaticJwksSource.fromJwks(parsedJwks(Jwks.fromJsonResult(
+							onlySkipped)))), Check.FAILURE, IllegalArgumentException.class);
 
 			Map<String, String> malformed = new LinkedHashMap<>();
 			malformed.put("keys is a sentinel string", "{\"keys\":" + JsonText.string(SECRET) + "}");
@@ -1627,14 +1655,14 @@ final class RedactionTests {
 					+ JsonText.string(SECRET) + ":2}");
 			malformed.put("text that is not JSON", "{" + JsonText.string(SECRET) + ":");
 			malformed.put("a sentinel with an unpaired surrogate", "{\"keys\":[],\"note\":\"" + SECRET + "\uD800\"}");
-			malformed.put("more keys than the limit", TestJsonWebKeys.keySet(Collections.nCopies(101,
-					TestJsonWebKeys.octWithK(Sentinels.SYMMETRIC_KEY).kid(SECRET).toJson())));
+			malformed.put("more keys than the limit", TestJwk.keySet(Collections.nCopies(101,
+					TestJwk.octWithK(Sentinels.SYMMETRIC_KEY).kid(SECRET).toJson())));
 			malformed.put("a document over the size limit", "{\"keys\":[],\"note\":"
 					+ JsonText.string(SECRET.repeat(256 * 1_024 / SECRET.length() + 1)) + "}");
 			malformed.forEach((name, text) -> {
 				add(Group.KEY_SETS, "KEY_SET, " + name + ": the document carries a sentinel", text, Check.PRESENT);
-				add(Group.KEY_SETS, "KEY_SET, " + name + ": the exception", thrownBy(name,
-						() -> JsonWebKeySet.fromJson(text)), Check.FAILURE, JoseException.Reason.KEY_SET);
+				add(Group.KEY_SETS, "KEY_SET, " + name + ": the rejected result",
+						Jwks.fromJsonResult(text), Check.RESULT_REJECTION, JoseException.Reason.KEY_SET);
 			});
 		}
 
@@ -1650,29 +1678,31 @@ final class RedactionTests {
 					.build();
 
 			RecordingObserver<JoseObserver> recorder = RecordingObserver.fromInterface(JoseObserver.class);
-			RemoteJsonWebKeySource.Builder builder = RemoteJsonWebKeySource.withUri(jdkTarget(keySet))
+			RemoteJwksSource.Builder builder = RemoteJwksSource.withUri(jdkTarget(keySet))
 					.httpClient(this.client).clock(TestClock.fromInstant(NOW)).observer(recorder.getObserver());
 			add(Group.KEY_SET_FETCHES, "a source builder whose URI has a sentinel query", builder, Check.RENDERING);
-			RemoteJsonWebKeySource source = builder.build();
+			RemoteJwksSource source = builder.build();
 			add(Group.KEY_SET_FETCHES, "the source before its first fetch", source, Check.RENDERING);
 			source.warmUp();
 			add(Group.KEY_SET_FETCHES, "the source after fetching the sentinel key set", source, Check.RENDERING);
 			JwtValidator validator = remoteValidator(source, recorder.getObserver());
 			add(Group.KEY_SET_FETCHES, "a validator over it", validator, Check.RENDERING);
+			Assertions.assertInstanceOf(JwtValidationResult.Rejected.class,
+					validator.validateResult(Sentinels.compactJwt("RS256", 256)));
 			add(Group.KEY_SET_FETCHES, "UNKNOWN_KEY after a refetch, for a sentinel kid",
-					thrownBy("an unknown kid", () -> validator.validate(Sentinels.compactJwt("RS256", 256))),
-					Check.FAILURE, JoseException.Reason.UNKNOWN_KEY);
+					recordedValidationFailure(recorder), Check.FAILURE, JoseException.Reason.UNKNOWN_KEY);
+			Assertions.assertInstanceOf(JwtValidationResult.Rejected.class,
+					validator.validateResult(Sentinels.compactJwt("RS256", 256)));
 			add(Group.KEY_SET_FETCHES, "UNKNOWN_KEY inside the unknown-key cooldown, for a sentinel kid",
-					thrownBy("an unknown kid inside the cooldown", () -> validator.validate(Sentinels.compactJwt("RS256",
-							256))), Check.FAILURE, JoseException.Reason.UNKNOWN_KEY);
-			Assertions.assertEquals(1, recorder.getCalls("didSuppressJsonWebKeySetFetch").size(),
+					recordedValidationFailure(recorder), Check.FAILURE, JoseException.Reason.UNKNOWN_KEY);
+			Assertions.assertEquals(1, recorder.getCalls("didSuppressJwksFetch").size(),
 					"the cooldown held back the second unknown kid's refetch");
 			add(Group.KEY_SET_FETCHES, "the fetch, skip, suppression and validation hook arguments", recorder,
 					Check.HOOK_ARGUMENTS);
 
 			RecordingObserver<JoseObserver> throwing = RecordingObserver.fromInterface(JoseObserver.class,
 					() -> new IllegalStateException(HOOK_SECRET));
-			RemoteJsonWebKeySource throwingSource = remoteSource(jdkTarget(keySet), throwing.getObserver());
+			RemoteJwksSource throwingSource = remoteSource(jdkTarget(keySet), throwing.getObserver());
 			this.records.clear();
 			throwingSource.warmUp();
 			add(Group.KEY_SET_FETCHES, "a successful fetch's throwing observer: its log records",
@@ -1700,10 +1730,10 @@ final class RedactionTests {
 							.body("{\"keys\":" + JsonText.string(SECRET) + "}")
 							.build()));
 			fetchFailure("more keys than the limit", ErrorCategory.MALFORMED_INPUT,
-					() -> jdkTarget(TestHttpsServer.Response.fromJsonWebKeySet(TestJsonWebKeys.keySet(Collections.nCopies(
-							101, TestJsonWebKeys.octWithK(Sentinels.SYMMETRIC_KEY).kid(SECRET).toJson())))));
+					() -> jdkTarget(TestHttpsServer.Response.fromJwks(TestJwk.keySet(Collections.nCopies(
+							101, TestJwk.octWithK(Sentinels.SYMMETRIC_KEY).kid(SECRET).toJson())))));
 			fetchFailure("a body over the limit", ErrorCategory.MALFORMED_INPUT,
-					() -> jdkTarget(TestHttpsServer.Response.fromJsonWebKeySet("{\"keys\":[],\"note\":"
+					() -> jdkTarget(TestHttpsServer.Response.fromJwks("{\"keys\":[],\"note\":"
 							+ JsonText.string(SECRET.repeat(300 * 1_024 / SECRET.length())) + "}")));
 			fetchFailure("a sentinel media type", ErrorCategory.MALFORMED_INPUT,
 					() -> jdkTarget(TestHttpsServer.Response.withStatus(200)
@@ -1746,7 +1776,7 @@ final class RedactionTests {
 			String surface = category + ", " + name;
 
 			RecordingObserver<JoseObserver> leader = RecordingObserver.fromInterface(JoseObserver.class);
-			RemoteJsonWebKeySource warmed = remoteSource(target.get(), leader.getObserver());
+			RemoteJwksSource warmed = remoteSource(target.get(), leader.getObserver());
 			add(Group.KEY_SET_FETCHES, surface + ": warmUp()'s exception", thrownBy(surface, () -> {
 				warmed.warmUp();
 				return warmed;
@@ -1755,7 +1785,7 @@ final class RedactionTests {
 				warmed.warmUp();
 				return warmed;
 			}), Check.FAILURE, category);
-			Assertions.assertEquals(1, leader.getCalls("didSuppressJsonWebKeySetFetch").size(),
+			Assertions.assertEquals(1, leader.getCalls("didSuppressJwksFetch").size(),
 					() -> surface + ": the backoff held back the second warmUp()");
 			add(Group.KEY_SET_FETCHES, surface + ": the fetch and suppression hook arguments", leader,
 					Check.HOOK_ARGUMENTS);
@@ -1764,8 +1794,8 @@ final class RedactionTests {
 			RecordingObserver<JoseObserver> validation = RecordingObserver.fromInterface(JoseObserver.class);
 			JwtValidator validator = remoteValidator(remoteSource(target.get(), validation.getObserver()),
 					validation.getObserver());
-			add(Group.KEY_SET_FETCHES, surface + ": validate()'s exception", thrownBy(surface,
-					() -> validator.validate(Sentinels.compactJwt("RS256", 256))), failureCheck, category);
+			add(Group.KEY_SET_FETCHES, surface + ": validateResult()'s infrastructure exception", thrownBy(surface,
+					() -> validator.validateResult(Sentinels.compactJwt("RS256", 256))), failureCheck, category);
 			add(Group.KEY_SET_FETCHES, surface + ": the fetch and validation hook arguments", validation,
 					Check.HOOK_ARGUMENTS);
 
@@ -1774,8 +1804,8 @@ final class RedactionTests {
 			JwtValidator throwingValidator = remoteValidator(remoteSource(target.get(), throwing.getObserver()),
 					throwing.getObserver());
 			this.records.clear();
-			add(Group.KEY_SET_FETCHES, surface + ": validate()'s exception, with a throwing observer", thrownBy(surface,
-					() -> throwingValidator.validate(Sentinels.compactJwt("RS256", 256))), failureCheck, category);
+			add(Group.KEY_SET_FETCHES, surface + ": validateResult()'s infrastructure exception, with a throwing observer", thrownBy(surface,
+					() -> throwingValidator.validateResult(Sentinels.compactJwt("RS256", 256))), failureCheck, category);
 			add(Group.KEY_SET_FETCHES, surface + ": the throwing observer's log records", this.records.getRecords(),
 					Check.LOG_RECORDS);
 		}
@@ -1787,11 +1817,11 @@ final class RedactionTests {
 		 */
 		private void interruptedLeader() {
 			TestHttpsServer.HeldScript held = TestHttpsServer.HeldScript.fromResponse(
-					TestHttpsServer.Response.fromJsonWebKeySet(sentinelKeySet()));
+					TestHttpsServer.Response.fromJwks(sentinelKeySet()));
 			String path = "/redaction-jwks-" + NEXT_PATH.incrementAndGet();
 			this.jdkServer.script(path, held);
 			RecordingObserver<JoseObserver> recorder = RecordingObserver.fromInterface(JoseObserver.class);
-			RemoteJsonWebKeySource source = remoteSource(withSecretQuery(this.jdkServer.uri(path)), recorder.getObserver());
+			RemoteJwksSource source = remoteSource(withSecretQuery(this.jdkServer.uri(path)), recorder.getObserver());
 			CompletableFuture<Throwable> failure = new CompletableFuture<>();
 			Thread leader = new Thread(() -> {
 				try {
@@ -1810,8 +1840,8 @@ final class RedactionTests {
 				leader.start();
 				Assertions.assertTrue(held.awaitHeldCount(1, WAIT), "the leader's request reached the server");
 				leader.interrupt();
-				JsonWebKeySetUnavailableException exception = Assertions.assertInstanceOf(
-						JsonWebKeySetUnavailableException.class, failure.get(WAIT.toNanos(), TimeUnit.NANOSECONDS));
+				JwksUnavailableException exception = Assertions.assertInstanceOf(
+						JwksUnavailableException.class, failure.get(WAIT.toNanos(), TimeUnit.NANOSECONDS));
 				Assertions.assertFalse(exception.isTransient(), () -> surface + ": not transient");
 				Assertions.assertNull(exception.getCause(), () -> surface + ": no cause");
 				add(Group.KEY_SET_FETCHES, surface + ": the exception", exception, Check.FAILURE, ErrorCategory.TRANSPORT);
@@ -1824,7 +1854,7 @@ final class RedactionTests {
 				held.release();
 			}
 
-			Assertions.assertEquals(1, recorder.getCalls("didFailToFetchJsonWebKeySet").size(),
+			Assertions.assertEquals(1, recorder.getCalls("didFailToFetchJwks").size(),
 					() -> surface + ": the leader reported its interrupted fetch");
 			add(Group.KEY_SET_FETCHES, surface + ": the fetch hook arguments", recorder, Check.HOOK_ARGUMENTS);
 		}
@@ -1845,13 +1875,13 @@ final class RedactionTests {
 			return URI.create(uri + "?appid=" + URI_SECRET);
 		}
 
-		private @NonNull RemoteJsonWebKeySource remoteSource(@NonNull URI uri, @NonNull JoseObserver observer) {
-			return RemoteJsonWebKeySource.withUri(uri).httpClient(this.client).clock(TestClock.fromInstant(NOW))
+		private @NonNull RemoteJwksSource remoteSource(@NonNull URI uri, @NonNull JoseObserver observer) {
+			return RemoteJwksSource.withUri(uri).httpClient(this.client).clock(TestClock.fromInstant(NOW))
 					.observer(observer).build();
 		}
 
-		private static @NonNull JwtValidator remoteValidator(@NonNull RemoteJsonWebKeySource source, @NonNull JoseObserver observer) {
-			return JwtValidator.withIssuer(ISSUER).jsonWebKeySource(source).expectedAudiences(Set.of(AUDIENCE))
+		private static @NonNull JwtValidator remoteValidator(@NonNull RemoteJwksSource source, @NonNull JoseObserver observer) {
+			return JwtValidator.withIssuer(ISSUER).jwksSource(source).expectedAudiences(Set.of(AUDIENCE))
 					.clock(TestClock.fromInstant(NOW)).observer(observer).build();
 		}
 
@@ -1874,8 +1904,8 @@ final class RedactionTests {
 
 			String anyAudience = signed(claims().put("aud", SECRET).put("sub", SECRET));
 			accepted("any audience, and a sentinel aud and sub", JwtValidator.withIssuer(ISSUER)
-					.jsonWebKeySource(StaticJsonWebKeySource.fromJsonWebKeySet(JsonWebKeySet.fromJson(
-							TestJsonWebKeys.keySet(List.of(rsaJwk(KEY_ID))))))
+					.jwksSource(StaticJwksSource.fromJwks(parsedJwks(Jwks.fromJsonResult(
+							TestJwk.keySet(List.of(rsaJwk(KEY_ID)))))))
 					.acceptAnyAudience(true).clock(TestClock.fromInstant(NOW)), anyAudience, false);
 		}
 
@@ -1887,7 +1917,8 @@ final class RedactionTests {
 			add(Group.ACCEPTED_TOKENS, name + ": the token carries a sentinel", token,
 					encodedOnly ? Check.ENCODED_ONLY : Check.PRESENT);
 			RecordingObserver<JoseObserver> recorder = RecordingObserver.fromInterface(JoseObserver.class);
-			Jwt jwt = builder.observer(recorder.getObserver()).build().validate(token);
+			Jwt jwt = Assertions.assertInstanceOf(JwtValidationResult.Succeeded.class,
+					builder.observer(recorder.getObserver()).build().validateResult(token)).getJwt();
 			add(Group.ACCEPTED_TOKENS, name + ": the Jwt", jwt, Check.RENDERING);
 			com.revetsec.jose.JwtValidationResult result = builder.observer(JoseObserver.disabledInstance()).build().validateResult(token);
 			Assertions.assertEquals(token, Assertions.assertInstanceOf(com.revetsec.jose.JwtValidationResult.Succeeded.class, result).getJwt().toCompactSerialization());
@@ -1923,6 +1954,37 @@ final class RedactionTests {
 			String compact = signer.toCompactSerialization("at+jwt", KEY_ID, digest, payload, Duration.ofSeconds(10));
 			add(Group.CONFIGURATION, "signer is redacted after credential emission", signer, Check.RENDERING);
 			add(Group.CONFIGURATION, "signer compact serialization is an explicit emission", compact, Check.PRESENT);
+			JwtClaimsSet.Builder claimsBuilder = JwtClaimsSet.builder().issuer(SECRET).subject(SECRET)
+					.audiences(List.of(SECRET)).issuedAt(NOW).expiresAt(NOW.plusSeconds(60)).jwtId(SECRET)
+					.claim(SECRET, SECRET);
+			JwtClaimsSet claims = claimsBuilder.build();
+			JwtSigningHeader.Builder headerBuilder = JwtSigningHeader.withType(JwtType.ACCESS_TOKEN)
+					.keyId(Sentinels.JWT_KEY_ID).certificateSha256Thumbprint(digest);
+			JwtSigningHeader header = headerBuilder.build();
+			JwsSigner.Builder signingBuilder = signer.withHeaderAndClaims(header, claims)
+					.remainingBudget(Duration.ofSeconds(10));
+			String typedCompact = signingBuilder.build();
+			add(Group.CONFIGURATION, "outbound claims builder with sentinel registered and custom claims",
+					claimsBuilder, Check.RENDERING);
+			add(Group.CONFIGURATION, "outbound claims snapshot with sentinel registered and custom claims",
+					claims, Check.RENDERING);
+			add(Group.CONFIGURATION, "signing header builder with sentinel key identifier and certificate digest",
+					headerBuilder, Check.RENDERING);
+			add(Group.CONFIGURATION, "signing header snapshot with sentinel key identifier and certificate digest",
+					header, Check.RENDERING);
+			add(Group.CONFIGURATION, "signing builder is redacted after credential emission", signingBuilder,
+					Check.RENDERING);
+			add(Group.CONFIGURATION, "every JwtType", List.of(JwtType.values()), Check.RENDERING);
+			add(Group.CONFIGURATION, "outbound claims JSON is an explicit emission", claims.toJsonObject(), Check.PRESENT);
+			add(Group.CONFIGURATION, "signing header key identifier accessor is an explicit emission", header.getKeyId(),
+					Check.PRESENT);
+			add(Group.CONFIGURATION, "signing header certificate digest accessor is an explicit emission",
+					header.getCertificateSha256Thumbprint(), Check.PRESENT);
+			add(Group.CONFIGURATION, "signing builder compact JWT is an explicit emission", typedCompact, Check.PRESENT);
+			add(Group.CONFIGURATION, "signing builder budget exception with sentinel header and claims",
+					thrownBy("signing builder exhausted budget", () -> signer.withHeaderAndClaims(header, claims)
+							.remainingBudget(Duration.ZERO).build()), Check.FAILURE,
+					JwsSigningException.Reason.BUDGET_EXHAUSTED);
 			add(Group.CONFIGURATION, "every JwsSigningException.Reason", List.of(JwsSigningException.Reason.values()), Check.RENDERING);
 			add(Group.CONFIGURATION, "signer budget exception with sentinel claims and identifiers",
 					thrownBy("signer exhausted budget", () -> signer.toCompactSerialization("JWT", KEY_ID, digest, payload, Duration.ZERO)),
@@ -1947,10 +2009,38 @@ final class RedactionTests {
 
 		// -- Configuration --
 
+		/** Walks publication diagnostics separately from intentional public-key document emission. */
+		private void publication() {
+			PublishedJwk.Builder keyBuilder = PublishedJwk
+					.withPublicKey(Fixture.IDP_SIGNING_RSA_2048.getPublicKey()).keyId(SECRET)
+					.algorithm(JwsAlgorithm.RS384)
+					.certificateChain(List.of(Fixture.IDP_SIGNING_RSA_2048.getCertificate().orElseThrow()));
+			PublishedJwk key = keyBuilder.build();
+			JwksPublisher.Builder publisherBuilder = JwksPublisher.withKeys(List.of(key));
+			JwksPublisher publisher = publisherBuilder.build();
+			JwksResponse response = publisher.responseFor("GET", SECRET);
+			add(Group.CONFIGURATION, "published key builder with sentinel identifier", keyBuilder, Check.RENDERING);
+			add(Group.CONFIGURATION, "published key with sentinel identifier", key, Check.RENDERING);
+			add(Group.CONFIGURATION, "publisher builder with sentinel identifier", publisherBuilder, Check.RENDERING);
+			add(Group.CONFIGURATION, "publisher with sentinel identifier", publisher, Check.RENDERING);
+			add(Group.CONFIGURATION, "public JWKS response diagnostic", response, Check.RENDERING);
+			add(Group.CONFIGURATION, "published JWK JSON is an explicit emission", key.toJson(), Check.PRESENT);
+			add(Group.CONFIGURATION, "published JWKS JSON is an explicit emission", publisher.toJson(), Check.PRESENT);
+			add(Group.CONFIGURATION, "published JWK JSON object is an explicit emission", key.toJsonObject(), Check.PRESENT);
+			add(Group.CONFIGURATION, "published JWKS JSON object is an explicit emission", publisher.toJsonObject(), Check.PRESENT);
+			add(Group.CONFIGURATION, "published JWKS HTTP body is an explicit emission", response.toHttpBody(), Check.PRESENT);
+			add(Group.CONFIGURATION, "published JWKS response document is an explicit emission",
+					response.getDocument().orElseThrow(), Check.PRESENT);
+			add(Group.CONFIGURATION, "duplicate published key identifiers are redacted",
+					thrownBy("duplicate published identifiers", () -> JwksPublisher.fromKeys(List.of(key, key))),
+					Check.FAILURE, IllegalArgumentException.class);
+		}
+
 		private void configuration() {
+			publication();
 			signing();
 			add(Group.CONFIGURATION, "every JwsAlgorithm", List.of(JwsAlgorithm.values()), Check.RENDERING);
-			add(Group.CONFIGURATION, "every JsonWebKeySkipReason", List.of(JsonWebKeySkipReason.values()),
+			add(Group.CONFIGURATION, "every JwkSkipReason", List.of(JwkSkipReason.values()),
 					Check.RENDERING);
 			add(Group.CONFIGURATION, "every JoseException.Reason", List.of(JoseException.Reason.values()),
 					Check.RENDERING);
@@ -1967,22 +2057,22 @@ final class RedactionTests {
 					.allowedTypes(Set.of("application/jwt; profile=" + SECRET)).build());
 			refusals.put("an HMAC algorithm", () -> validator(rsaJwk(KEY_ID))
 					.allowedAlgorithms(Set.of(JwsAlgorithm.HS256)).build());
-			refusals.put("a key set URI with sentinel user information", () -> RemoteJsonWebKeySource
+			refusals.put("a key set URI with sentinel user information", () -> RemoteJwksSource
 					.withUri(URI.create("https://user:" + SECRET + "@issuer.example.com/jwks")).build());
-			refusals.put("a key set URI with a sentinel fragment", () -> RemoteJsonWebKeySource
+			refusals.put("a key set URI with a sentinel fragment", () -> RemoteJwksSource
 					.withUri(URI.create("https://issuer.example.com/jwks#" + SECRET)).build());
-			refusals.put("a plain-http key set URI with a sentinel path", () -> RemoteJsonWebKeySource
+			refusals.put("a plain-http key set URI with a sentinel path", () -> RemoteJwksSource
 					.withUri(URI.create("http://issuer.example.com/" + SECRET + "?appid=" + URI_SECRET)).build());
-			refusals.put("a metadata-address key set URI with a sentinel path", () -> RemoteJsonWebKeySource
+			refusals.put("a metadata-address key set URI with a sentinel path", () -> RemoteJwksSource
 					.withUri(URI.create("https://169.254.169.254/" + SECRET + "?appid=" + URI_SECRET)).build());
 			refusals.forEach((name, refusal) -> add(Group.CONFIGURATION, name + ": the refusal", thrownBy(name, refusal),
 					Check.FAILURE, IllegalArgumentException.class));
 
 			add(Group.CONFIGURATION, "a validator builder", validator(rsaJwk(KEY_ID)).requiredClaims(Set.of(SECRET)),
 					Check.RENDERING);
-			add(Group.CONFIGURATION, "a source builder whose URI has a sentinel query", RemoteJsonWebKeySource.withUri(
+			add(Group.CONFIGURATION, "a source builder whose URI has a sentinel query", RemoteJwksSource.withUri(
 					withSecretQuery(REPORTED_URI)), Check.RENDERING);
-			add(Group.CONFIGURATION, "a source whose URI has a sentinel query", RemoteJsonWebKeySource.withUri(
+			add(Group.CONFIGURATION, "a source whose URI has a sentinel query", RemoteJwksSource.withUri(
 					withSecretQuery(REPORTED_URI)).build(), Check.RENDERING);
 		}
 
@@ -1992,29 +2082,29 @@ final class RedactionTests {
 		 * members that get them skipped.
 		 */
 		private static @NonNull String sentinelKeySet() {
-			return TestJsonWebKeys.keySet(List.of(
-					TestJsonWebKeys.withFixture(Fixture.IDP_SIGNING_RSA_2048).kid(KEY_ID)
+			return TestJwk.keySet(List.of(
+					TestJwk.withFixture(Fixture.IDP_SIGNING_RSA_2048).kid(KEY_ID)
 							.issuer(Sentinels.secret("jwk-issuer")).member("x-note", JsonText.string(SECRET)).toJson(),
-					TestJsonWebKeys.withFixture(Fixture.IDP_SIGNING_RSA_3072).kid(Sentinels.secret("private-rsa"))
+					TestJwk.withFixture(Fixture.IDP_SIGNING_RSA_3072).kid(Sentinels.secret("private-rsa"))
 							.member("d", JsonText.string(Sentinels.PRIVATE_KEY_MEMBER))
 							.member("p", JsonText.string(Sentinels.PRIVATE_KEY_MEMBER)).toJson(),
-					TestJsonWebKeys.withFixture(Fixture.IDP_SIGNING_EC_P256).kid(Sentinels.secret("private-ec"))
+					TestJwk.withFixture(Fixture.IDP_SIGNING_EC_P256).kid(Sentinels.secret("private-ec"))
 							.member("d", JsonText.string(Sentinels.PRIVATE_KEY_MEMBER)).toJson(),
-					TestJsonWebKeys.withFixture(Fixture.ED25519).kid(Sentinels.secret("private-okp"))
+					TestJwk.withFixture(Fixture.ED25519).kid(Sentinels.secret("private-okp"))
 							.member("d", JsonText.string(Sentinels.PRIVATE_KEY_MEMBER)).toJson(),
-					TestJsonWebKeys.octWithK(Sentinels.SYMMETRIC_KEY).kid(Sentinels.secret("oct")).toJson(),
-					TestJsonWebKeys.octWithK(Sentinels.HMAC_SECRET).alg("HS256").toJson(),
-					TestJsonWebKeys.withFixture(Fixture.SP_ENCRYPTION_RSA_2048).kid(Sentinels.secret("encryption"))
+					TestJwk.octWithK(Sentinels.SYMMETRIC_KEY).kid(Sentinels.secret("oct")).toJson(),
+					TestJwk.octWithK(Sentinels.HMAC_SECRET).alg("HS256").toJson(),
+					TestJwk.withFixture(Fixture.SP_ENCRYPTION_RSA_2048).kid(Sentinels.secret("encryption"))
 							.use("enc").toJson(),
-					TestJsonWebKeys.withFixture(Fixture.NEGATIVE_ATTACKER_RSA_2048).alg(SECRET).toJson(),
+					TestJwk.withFixture(Fixture.NEGATIVE_ATTACKER_RSA_2048).alg(SECRET).toJson(),
 					JsonText.object(List.of(Map.entry("kty", JsonText.string(SECRET)),
 							Map.entry("kid", JsonText.string(SECRET)))),
-					TestJsonWebKeys.withFixture(Fixture.SP_SIGNING_RSA_2048).member("x5c",
+					TestJwk.withFixture(Fixture.SP_SIGNING_RSA_2048).member("x5c",
 							JsonText.stringArray(List.of(SECRET))).toJson(),
-					TestJsonWebKeys.withFixture(Fixture.IDP_SIGNING_EC_P384).member("issuer",
+					TestJwk.withFixture(Fixture.IDP_SIGNING_EC_P384).member("issuer",
 							JsonText.stringArray(List.of(SECRET))).toJson(),
-					TestJsonWebKeys.withFixture(Fixture.IDP_SIGNING_EC_P521).kid(SECRET.repeat(10)).toJson(),
-					TestJsonWebKeys.ecOffCurve().kid(Sentinels.secret("off-curve")).toJson()));
+					TestJwk.withFixture(Fixture.IDP_SIGNING_EC_P521).kid(SECRET.repeat(10)).toJson(),
+					TestJwk.ecOffCurve().kid(Sentinels.secret("off-curve")).toJson()));
 		}
 
 		/**
@@ -2065,21 +2155,41 @@ final class RedactionTests {
         Clock clock=Clock.fixed(NOW,java.time.ZoneOffset.UTC);
         RecordingObserver<com.revetsec.oauth.AccessTokenObserver> observer=RecordingObserver.fromInterface(com.revetsec.oauth.AccessTokenObserver.class,()->new IllegalStateException(HOOK_SECRET));
         JsonObject claims=JsonObject.builder().put("iss",ISSUER).put("aud",AUDIENCE).put("sub",SECRET).put("client_id",SECRET).put("jti",SECRET).put("scope","read").put("iat",NOW.getEpochSecond()).put("exp",NOW.plusSeconds(60).getEpochSecond()).put("custom",SECRET).build();
-        String compact=TestJws.withAlgorithm(TestJws.Algorithm.RS256).kid(KEY_ID).typ("at+jwt").payload(claims.toJson()).sign(TestJsonWebKeys.Fixture.IDP_SIGNING_RSA_2048.getPrivateKey());Sentinels.assertPresent(compact);
-        com.revetsec.oauth.JwtAccessTokenValidator.Builder builder=com.revetsec.oauth.JwtAccessTokenValidator.withIssuer(ISSUER).expectedAudiences(Set.of(AUDIENCE)).jsonWebKeySource(StaticJsonWebKeySource.fromJsonWebKeySet(JsonWebKeySet.fromJson(TestJsonWebKeys.keySet(List.of(rsaJwk(KEY_ID)))))).clock(clock).observer(observer.getObserver());
-        com.revetsec.oauth.JwtAccessTokenValidator validator=builder.build();com.revetsec.oauth.BearerToken bearer=com.revetsec.oauth.BearerToken.fromAuthorizationHeaderValues(List.of("Bearer "+compact)).orElseThrow();
+        String compact=TestJws.withAlgorithm(TestJws.Algorithm.RS256).kid(KEY_ID).typ("at+jwt").payload(claims.toJson()).sign(TestJwk.Fixture.IDP_SIGNING_RSA_2048.getPrivateKey());Sentinels.assertPresent(compact);
+        com.revetsec.oauth.JwtAccessTokenValidator.Builder builder=com.revetsec.oauth.JwtAccessTokenValidator.withIssuer(ISSUER).expectedAudiences(Set.of(AUDIENCE)).jwksSource(StaticJwksSource.fromJwks(parsedJwks(Jwks.fromJsonResult(TestJwk.keySet(List.of(rsaJwk(KEY_ID))))))).clock(clock).observer(observer.getObserver());
+        com.revetsec.oauth.JwtAccessTokenValidator validator=builder.build();com.revetsec.oauth.BearerToken bearer=Assertions.assertInstanceOf(com.revetsec.oauth.BearerTokenResult.Present.class, com.revetsec.oauth.BearerToken.fromAuthorizationHeaderValuesResult(List.of("Bearer "+compact))).getToken();
         com.revetsec.oauth.AccessTokenValidationResult result=validator.validateResult(bearer);com.revetsec.oauth.VerifiedAccessToken proof=Assertions.assertInstanceOf(com.revetsec.oauth.AccessTokenValidationResult.Succeeded.class,result).getAccessToken();
         Sentinels.assertPresent(proof.getClaims());Sentinels.assertAbsent(List.of(builder,validator,bearer,result,proof,observer));
-        com.revetsec.oauth.BearerToken invalid=com.revetsec.oauth.BearerToken.fromAuthorizationHeaderValues(List.of("Bearer "+SECRET)).orElseThrow();Sentinels.assertAbsent(validator.validateResult(invalid));assertRedacted(Assertions.assertThrows(com.revetsec.oauth.AccessTokenValidationException.class,()->validator.validate(invalid)));
+        com.revetsec.oauth.BearerToken invalid=Assertions.assertInstanceOf(com.revetsec.oauth.BearerTokenResult.Present.class, com.revetsec.oauth.BearerToken.fromAuthorizationHeaderValuesResult(List.of("Bearer "+SECRET))).getToken();var rejected = Assertions.assertInstanceOf(com.revetsec.oauth.AccessTokenValidationResult.Rejected.class, validator.validateResult(invalid));
+        var diagnostic = Assertions.assertInstanceOf(com.revetsec.oauth.AccessTokenValidationException.class,
+                observer.getCalls("didRejectAccessToken").get(observer.getCalls("didRejectAccessToken").size()-1).getArgument(0));
+        Assertions.assertEquals(rejected.getReason(), diagnostic.getReason());Sentinels.assertAbsent(rejected);assertRedacted(diagnostic);
         try(TestHttpsServer server=TestHttpsServer.start()) {
             String path="/inspect";server.script(path,TestHttpsServer.Script.fromResponse(TestHttpsServer.Response.fromJson(200,"{\"active\":true,\"aud\":"+JsonText.string(AUDIENCE)+",\"sub\":"+JsonText.string(SECRET)+",\"scope\":\"read\",\"custom\":"+JsonText.string(SECRET)+"}")));
             com.revetsec.oauth.OAuthClient oauth=com.revetsec.oauth.OAuthClient.withAuthorizationServerMetadata(com.revetsec.oauth.AuthorizationServerMetadata.withIssuer(server.getBaseUri().toString()).authorizationEndpoint(server.uri("/authorize")).tokenEndpoint(server.uri("/token")).introspectionEndpoint(server.uri(path+"?secret="+URI_SECRET)).build()).clientId("client").clientAuthentication(com.revetsec.oauth.ClientAuthentication.fromClientSecretBasic(SECRET)).httpClient(TestTls.httpClient()).clock(clock).observer(observer.getObserver()).build();
             com.revetsec.oauth.TokenIntrospectionClient.Builder ib=com.revetsec.oauth.TokenIntrospectionClient.withOAuthClient(oauth).expectedAudiences(Set.of(AUDIENCE)).observer(observer.getObserver());com.revetsec.oauth.TokenIntrospectionClient client=ib.build();
             com.revetsec.oauth.AccessTokenValidationResult ir=client.validateResult(invalid);com.revetsec.oauth.VerifiedAccessToken ip=Assertions.assertInstanceOf(com.revetsec.oauth.AccessTokenValidationResult.Succeeded.class,ir).getAccessToken();Sentinels.assertPresent(ip.getClaims());Sentinels.assertAbsent(List.of(ib,client,ir,ip,observer));
             server.script(path,TestHttpsServer.Script.fromResponse(TestHttpsServer.Response.fromJson(200,"{\"active\":false,\"sub\":"+JsonText.string(SECRET)+"}")));Sentinels.assertAbsent(client.validateResult(invalid));
-            server.script(path,TestHttpsServer.Script.fromResponse(TestHttpsServer.Response.fromJson(401,"{\"error\":\"invalid_client\",\"error_description\":"+JsonText.string(SECRET)+"}")));assertRedacted(Assertions.assertThrows(com.revetsec.oauth.OAuthException.class,()->client.validateResult(invalid)));Sentinels.assertAbsent(observer);
+            server.script(path,TestHttpsServer.Script.fromResponse(TestHttpsServer.Response.fromJson(401,"{\"error\":\"invalid_client\",\"error_description\":"+JsonText.string(SECRET)+"}")));var endpoint = Assertions.assertInstanceOf(com.revetsec.oauth.AccessTokenValidationResult.RejectedEndpoint.class, client.validateResult(invalid)); Assertions.assertEquals(com.revetsec.oauth.OAuthEndpointError.INVALID_CLIENT, endpoint.getError()); Assertions.assertEquals(401, endpoint.getStatus()); Sentinels.assertAbsent(endpoint); Sentinels.assertAbsent(observer);
         }
         Assertions.assertFalse(this.logRecords.getRecords().isEmpty());Sentinels.assertAbsent(this.logRecords.getRecords());
     }
+
+	private static @NonNull Jwks parsedJwks(@NonNull JwksParseResult result) {
+		return Assertions.assertInstanceOf(JwksParseResult.Succeeded.class, result).getJwks();
+	}
+
+	private static @NonNull JoseException recordedValidationFailure(
+			@NonNull RecordingObserver<@NonNull JoseObserver> recorder) {
+		List<RecordingObserver.Call> calls = recorder.getCalls("didFailToValidateJwt");
+		Assertions.assertFalse(calls.isEmpty(), "the actual validator reports its fixed diagnostic");
+		return Assertions.assertInstanceOf(JoseException.class, calls.get(calls.size() - 1).getArgument(0));
+	}
+
+	private static @NonNull DynamicTest sealedRejectionTest(@NonNull String name,
+			@NonNull Supplier<@NonNull StateUnsealResult> operation) {
+		return DynamicTest.dynamicTest(name, () -> Sentinels.assertAbsent(
+				Assertions.assertInstanceOf(StateUnsealResult.Rejected.class, operation.get())));
+	}
 
 }

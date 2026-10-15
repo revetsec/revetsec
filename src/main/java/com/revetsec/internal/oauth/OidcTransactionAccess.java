@@ -53,6 +53,8 @@ public final class OidcTransactionAccess {
 		@NonNull OAuthException endpointFailure(OAuthException.@NonNull Reason reason);
 		@NonNull OAuthException endpointExchangeFailure(@NonNull HttpExchangeException failure);
 		@NonNull OAuthException endpointStatusFailure(int status, @Nullable Duration retryAfter);
+		@NonNull OAuthException metadataStatusFailure(int status, @Nullable Duration retryAfter);
+		boolean isEndpointRejection(@NonNull OAuthErrorResponseException failure);
 		@NonNull AuthorizationRedirect begin(@NonNull OAuthClient client, @NonNull AuthorizationRequestOptions options,
 				@NonNull AuthorizationServerMetadata metadata, @Nullable Duration maxAge, @NonNull Set<@NonNull String> acrValues);
 		@NonNull RefreshCompletion refresh(@NonNull OAuthClient client, @NonNull RefreshToken token, @NonNull TokenRequestOptions options,

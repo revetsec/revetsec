@@ -16,12 +16,14 @@
 
 package com.revetsec.oauth.server;
 
+import com.revetsec.jose.JwksParseResult;
+
 import com.revetsec.internal.http.Deadline;
 import com.revetsec.internal.json.JsonCodec;
 import com.revetsec.internal.json.JsonLimits;
-import com.revetsec.jose.JsonWebKeySet;
+import com.revetsec.jose.Jwks;
 import com.revetsec.json.JsonObject;
-import com.revetsec.testing.TestJsonWebKeys;
+import com.revetsec.testing.TestJwk;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
@@ -62,11 +64,11 @@ import static org.junit.jupiter.api.Assertions.*;
 /** Deterministic lifecycle and independent JCA signature checks; no distributed publication or persistence proof. */
 final class OAuthIssuerKeysTests {
  private static final @NonNull Instant NOW=Instant.parse("2026-10-05T12:00:00Z");
- private static final TestJsonWebKeys.@NonNull Fixture A=TestJsonWebKeys.Fixture.IDP_SIGNING_RSA_2048;
- private static final TestJsonWebKeys.@NonNull Fixture B=TestJsonWebKeys.Fixture.IDP_SIGNING_RSA_3072;
+ private static final TestJwk.@NonNull Fixture A=TestJwk.Fixture.IDP_SIGNING_RSA_2048;
+ private static final TestJwk.@NonNull Fixture B=TestJwk.Fixture.IDP_SIGNING_RSA_3072;
  private static final @NonNull String ISSUER="https://issuer.example/tenant";
  private static final @NonNull Duration FRESHNESS=Duration.ofSeconds(60);
- private static @NonNull OAuthIssuerSigningKey key(@NonNull String id,TestJsonWebKeys.@NonNull Fixture fixture) {
+ private static @NonNull OAuthIssuerSigningKey key(@NonNull String id,TestJwk.@NonNull Fixture fixture) {
   return OAuthIssuerSigningKey.fromKeyPair(id,fixture.getPrivateKey(),fixture.getPublicKey());
  }
  private static @NonNull OAuthIssuerKeySnapshot snapshot(@NonNull OAuthIssuerSigningKey key,@NonNull String generation,
@@ -167,8 +169,8 @@ final class OAuthIssuerKeysTests {
  }
  @TestFactory @NonNull Stream<@NonNull DynamicTest> malformedPublicKeys() {
   RSAPublicKey good=(RSAPublicKey)A.getPublicKey();List<PublicKey> bad=new ArrayList<>();
-  bad.add(TestJsonWebKeys.rocaFingerprintedRsaKeyPair().getPublic());
-  bad.add(TestJsonWebKeys.Fixture.NEGATIVE_RSA_1024.getPublicKey());bad.add(TestJsonWebKeys.Fixture.IDP_SIGNING_EC_P256.getPublicKey());
+  bad.add(TestJwk.rocaFingerprintedRsaKeyPair().getPublic());
+  bad.add(TestJwk.Fixture.NEGATIVE_RSA_1024.getPublicKey());bad.add(TestJwk.Fixture.IDP_SIGNING_EC_P256.getPublicKey());
   bad.add(new SuppliedKey(good.getModulus(),good.getPublicExponent(),"unknown",null));
   bad.add(new SuppliedKey(good.getModulus(),good.getPublicExponent(),"RSASSA-PSS",null));
   bad.add(new SuppliedKey(good.getModulus(),good.getPublicExponent(),"RSA",PSSParameterSpec.DEFAULT));
@@ -193,10 +195,10 @@ final class OAuthIssuerKeysTests {
   var lifecycle=lifecycle(initial());String jwt=lifecycle.sign(claims(),NOW.plusSeconds(300),deadline());String[] parts=jwt.split("\\.",-1);
   Signature oracle=Signature.getInstance("SHA256withRSA");oracle.initVerify(A.getPublicKey());oracle.update((parts[0]+"."+parts[1]).getBytes(StandardCharsets.US_ASCII));
   assertTrue(oracle.verify(Base64.getUrlDecoder().decode(parts[2])));assertArrayEquals(claims(),Base64.getUrlDecoder().decode(parts[1]));
-  JsonObject header=json(Base64.getUrlDecoder().decode(parts[0]));assertEquals("a",header.findString("kid").orElseThrow());assertEquals("at+jwt",header.findString("typ").orElseThrow());
-  String jwks=OAuthIssuerPublicKeys.jwks(initial().getVerificationKeys()).toJson();assertEquals(1,JsonWebKeySet.fromJson(jwks).getKeys().size());
+  JsonObject header=json(Base64.getUrlDecoder().decode(parts[0]));assertEquals("a",header.find("kid").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow());assertEquals("at+jwt",header.find("typ").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow());
+  String jwks=OAuthIssuerPublicKeys.jwks(initial().getVerificationKeys()).toJson();assertEquals(1,assertInstanceOf(JwksParseResult.Succeeded.class, Jwks.fromJsonResult(jwks)).getJwks().getKeys().size());
   for(String field:List.of("d","p","q","dp","dq","qi","oth","k","x5u","jku")) assertFalse(jwks.contains("\""+field+"\""));
-  var parsed=JsonWebKeySet.fromJson(jwks).getKeys().get(0);assertEquals("a",parsed.getKeyId().orElseThrow());
+  var parsed=assertInstanceOf(JwksParseResult.Succeeded.class, Jwks.fromJsonResult(jwks)).getJwks().getKeys().get(0);assertEquals("a",parsed.getKeyId().orElseThrow());
   assertNotNull(lifecycle.verificationKeys(deadline()));lifecycle.warmUp(deadline());
  }
  @TestFactory @NonNull Stream<@NonNull DynamicTest> publicationAndRetirementBounds() {
@@ -327,7 +329,7 @@ final class OAuthIssuerKeysTests {
    .map(issuer->test(issuer,()->{
     var metadata=metadata(issuer,false,false,Set.of(),FRESHNESS,32768,16384,false);URI uri=URI.create(issuer);String path=uri.getRawPath();if(path.endsWith("/"))path=path.substring(0,path.length()-1);
     assertEquals(uri.getScheme()+"://"+uri.getRawAuthority()+"/.well-known/oauth-authorization-server"+path,metadata.wellKnownUri().toString());
-    JsonObject body=json(metadata.metadata("GET",deadline()).body());assertEquals(issuer,body.findString("issuer").orElseThrow());assertFalse(body.getMembers().containsKey("scopes_supported"));
+    JsonObject body=json(metadata.metadata("GET",deadline()).body());assertEquals(issuer,body.find("issuer").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow());assertFalse(body.getMembers().containsKey("scopes_supported"));
    }));
  }
  @Test void metadataAdvertisesOnlyImplementedConfiguredCapabilities() {

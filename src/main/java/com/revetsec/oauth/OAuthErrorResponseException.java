@@ -34,16 +34,19 @@ public final class OAuthErrorResponseException extends OAuthException {
 	private static final long serialVersionUID = 1L;
 	/** Endpoint HTTP status retained without the response body. */
 	private final int status;
+	/** Distinguishes a grant/resource endpoint response from discovery infrastructure. */
+	private final boolean operationEndpoint;
 	/** Safe bounded OAuth error code; null when absent or unsafe. */
 	private final @Nullable String errorCode;
 	/** Parsed retry delay; null when the header is absent or invalid. */
 	private final @Nullable Duration retryAfter;
 
 	private OAuthErrorResponseException(int status, @Nullable String errorCode,
-			@Nullable Duration retryAfter) {
+			@Nullable Duration retryAfter, boolean operationEndpoint) {
 		super(Reason.ENDPOINT_ERROR, status == 429 || status >= 500
 				|| "temporarily_unavailable".equals(errorCode), null);
 		this.status = status;
+		this.operationEndpoint = operationEndpoint;
 		this.errorCode = errorCode;
 		this.retryAfter = retryAfter;
 	}
@@ -51,7 +54,17 @@ public final class OAuthErrorResponseException extends OAuthException {
 	@NonNull
 	static OAuthErrorResponseException fromResponse(int status, @NonNull String code,
 			@NonNull Optional<@NonNull Duration> retryAfter) {
-		return new OAuthErrorResponseException(status, OAuthSafeErrorCode.fromValue(code), retryAfter.orElse(null));
+		return new OAuthErrorResponseException(status, OAuthSafeErrorCode.fromValue(code), retryAfter.orElse(null), true);
+	}
+
+	@NonNull
+	static OAuthErrorResponseException fromMetadataResponse(int status,
+			@NonNull Optional<@NonNull Duration> retryAfter) {
+		return new OAuthErrorResponseException(status, null, retryAfter.orElse(null), false);
+	}
+
+	boolean isEndpointRejection() {
+		return this.operationEndpoint && this.status >= 400 && this.status < 500 && !isTransient();
 	}
 
 	/**

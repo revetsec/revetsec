@@ -87,7 +87,7 @@ final class ClientAssertionProviderChecksIT implements AutoCloseable {
 			var response = this.fixture.httpClient().send(HttpRequest.newBuilder(URI.create(this.fixture.issuer()
 					+ "/.well-known/openid-configuration")).timeout(Duration.ofSeconds(10)).GET().build(), HttpResponse.BodyHandlers.ofString());
 			assertEquals(200, response.statusCode());
-			AuthorizationServerMetadata discovered = AuthorizationServerMetadata.fromJson(this.fixture.issuer(), response.body());
+			AuthorizationServerMetadata discovered = assertInstanceOf(AuthorizationServerMetadataParseResult.Succeeded.class, AuthorizationServerMetadata.fromJsonResult(this.fixture.issuer(), response.body())).getMetadata();
 			assertTrue(discovered.getTokenEndpointAuthMethodsSupported().orElseThrow().contains("private_key_jwt"));
 			assertTrue(discovered.getTokenEndpointAuthSigningAlgValuesSupported().orElseThrow().containsAll(Set.of("RS256", "RS384", "PS256")));
 			// Only absent role fields receive trusted fixture registration settings; discovery's present values are retained.
@@ -121,28 +121,28 @@ final class ClientAssertionProviderChecksIT implements AutoCloseable {
 		});
 		TokenRequestOptions credentials = TokenRequestOptions.builder().scopes(Set.of("read"))
 				.resources(this.node ? List.of(URI.create(ResourceProviderFixturesIT.INTROSPECTION_RESOURCE)) : List.of()).build();
-		TokenResponse service = client.requestClientCredentialsToken(credentials);
+		TokenResponse service = assertInstanceOf(OAuthTokenRequestResult.Succeeded.class, client.requestClientCredentialsResult(credentials)).getTokens();
 		assertFalse(service.getAccessToken().getValue().isEmpty()); assertEquals(1, lookups.get()); assertEquals(1, posts.get());
 		TokenResponse code = this.fixture.codeFlow(client, this.node, this.node ? Set.of("openid", "read", "offline_access") : Set.of("openid", "read"));
 		assertTrue(code.getRefreshToken().isPresent()); assertEquals(2, lookups.get()); assertEquals(2, posts.get());
-		TokenResponse refreshed = client.refresh(code.getRefreshToken().orElseThrow(), TokenRequestOptions.builder()
-				.resources(this.node ? List.of(URI.create(ResourceProviderFixturesIT.RESOURCE)) : List.of()).build());
+		TokenResponse refreshed = assertInstanceOf(OAuthTokenRequestResult.Succeeded.class, client.refreshResult(code.getRefreshToken().orElseThrow(), TokenRequestOptions.builder()
+				.resources(this.node ? List.of(URI.create(ResourceProviderFixturesIT.RESOURCE)) : List.of()).build())).getTokens();
 		assertFalse(refreshed.getAccessToken().getValue().isEmpty()); assertEquals(3, lookups.get()); assertEquals(3, posts.get());
 		String resource = this.node ? ResourceProviderFixturesIT.INTROSPECTION_RESOURCE : ResourceProviderFixturesIT.RESOURCE;
 		TokenIntrospectionClient introspection = TokenIntrospectionClient.withOAuthClient(client).expectedAudiences(Set.of(resource)).build();
 		BearerToken bearer = ResourceProviderFixturesIT.bearer(service);
-		assertEquals(id, introspection.validate(bearer).getClientId().orElseThrow());
-		assertEquals(id, introspection.validate(bearer).getClientId().orElseThrow());
+		assertEquals(id, assertInstanceOf(AccessTokenValidationResult.Succeeded.class, introspection.validateResult(bearer)).getAccessToken().getClientId().orElseThrow());
+		assertEquals(id, assertInstanceOf(AccessTokenValidationResult.Succeeded.class, introspection.validateResult(bearer)).getAccessToken().getClientId().orElseThrow());
 		assertEquals(5, lookups.get()); assertEquals(5, posts.get());
 		if (!this.node && audience == ClientAssertionAudience.TOKEN_ENDPOINT) {
 			// Keycloak's pinned validator omits the revocation URL; never substitute the token URL or fall back.
-			assertInvalidClient(() -> client.revoke(code.getRefreshToken().orElseThrow().getValue(), TokenTypeHint.REFRESH_TOKEN));
+			assertInvalidClient(() -> assertInstanceOf(OAuthRevocationResult.Succeeded.class, client.revokeResult(code.getRefreshToken().orElseThrow().getValue(), TokenTypeHint.REFRESH_TOKEN)));
 			assertEquals(6, lookups.get()); assertEquals(6, posts.get());
-			assertEquals(id, introspection.validate(bearer).getClientId().orElseThrow());
+			assertEquals(id, assertInstanceOf(AccessTokenValidationResult.Succeeded.class, introspection.validateResult(bearer)).getAccessToken().getClientId().orElseThrow());
 			assertEquals(7, lookups.get()); assertEquals(7, posts.get());
 		} else {
-			client.revoke(this.node ? service.getAccessToken().getValue() : code.getRefreshToken().orElseThrow().getValue(),
-					this.node ? TokenTypeHint.ACCESS_TOKEN : TokenTypeHint.REFRESH_TOKEN);
+			assertInstanceOf(OAuthRevocationResult.Succeeded.class, client.revokeResult(this.node ? service.getAccessToken().getValue() : code.getRefreshToken().orElseThrow().getValue(),
+					this.node ? TokenTypeHint.ACCESS_TOKEN : TokenTypeHint.REFRESH_TOKEN));
 			assertEquals(6, lookups.get()); assertEquals(6, posts.get());
 			BearerToken revoked = this.node ? bearer : ResourceProviderFixturesIT.bearer(refreshed);
 			for (int attempt = 0; attempt < 2; attempt++) assertEquals(AccessTokenValidationException.Reason.INACTIVE,
@@ -156,17 +156,17 @@ final class ClientAssertionProviderChecksIT implements AutoCloseable {
 			@Override public void willRequestEndpoint(@NonNull OAuthEndpoint endpoint, @NonNull URI uri) { wrongPosts.incrementAndGet(); }
 		};
 		OAuthClient wrongClient = client(id, audience, ClientAssertionKeyProvider.fromKey(key(wrong, algorithm, id)), counter);
-		assertInvalidClient(() -> wrongClient.requestClientCredentialsToken(credentials)); assertEquals(1, wrongPosts.get());
+		assertInvalidClient(() -> assertInstanceOf(OAuthTokenRequestResult.Succeeded.class, wrongClient.requestClientCredentialsResult(credentials)).getTokens()); assertEquals(1, wrongPosts.get());
 		OAuthClient wrongRevocation = !this.node && audience == ClientAssertionAudience.TOKEN_ENDPOINT
 				? client(id, ClientAssertionAudience.ISSUER, ClientAssertionKeyProvider.fromKey(key(wrong, algorithm, id)), counter) : wrongClient;
 		// Use an accepted audience in the Keycloak negative so its known audience deviation cannot mask the wrong key.
-		assertInvalidClient(() -> wrongRevocation.revoke(service.getAccessToken().getValue(), TokenTypeHint.ACCESS_TOKEN)); assertEquals(2, wrongPosts.get());
+		assertInvalidClient(() -> assertInstanceOf(OAuthRevocationResult.Succeeded.class, wrongRevocation.revokeResult(service.getAccessToken().getValue(), TokenTypeHint.ACCESS_TOKEN))); assertEquals(2, wrongPosts.get());
 		TokenIntrospectionClient wrongIntrospection = TokenIntrospectionClient.withOAuthClient(wrongClient).expectedAudiences(Set.of(resource)).build();
 		assertInvalidClient(() -> wrongIntrospection.validateResult(bearer)); assertEquals(3, wrongPosts.get());
 		// Correct pair with a different algorithm is also rejected by independent registration policy.
 		JwsAlgorithm other = algorithm == JwsAlgorithm.RS256 ? JwsAlgorithm.PS256 : JwsAlgorithm.RS256;
 		OAuthClient wrongAlgorithm = client(id, audience, ClientAssertionKeyProvider.fromKey(key(pair, other, id)), counter);
-		assertInvalidClient(() -> wrongAlgorithm.requestClientCredentialsToken(credentials)); assertEquals(4, wrongPosts.get());
+		assertInvalidClient(() -> assertInstanceOf(OAuthTokenRequestResult.Succeeded.class, wrongAlgorithm.requestClientCredentialsResult(credentials)).getTokens()); assertEquals(4, wrongPosts.get());
 		System.out.println("M6 provider=" + (this.node ? "node" : "keycloak") + " alg=" + algorithm.getWireValue()
 				+ " audience=" + audience + " roles=token,code,refresh,introspection,revocation negative-key=3 negative-alg=1"
 				+ " revocation=" + (!this.node && audience == ClientAssertionAudience.TOKEN_ENDPOINT ? "invalid_client-qualified-deviation" : "accepted"));

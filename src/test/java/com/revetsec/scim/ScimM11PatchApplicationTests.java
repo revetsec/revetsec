@@ -58,7 +58,7 @@ class ScimM11PatchApplicationTests {
                 op(0,ScimPatchOperationType.REPLACE,"displayName","\"new\""),
                 op(1,ScimPatchOperationType.REMOVE,"displayName",null),
                 op(2,ScimPatchOperationType.ADD,"displayName","\"final\""))));
-        assertEquals("final",result.getResource().getDocument().findString("displayName").orElseThrow());
+        assertEquals("final",result.getResource().getDocument().find("displayName").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow());
         assertTrue(result.isModified()); assertEquals(Set.of(path("displayName")),result.getModifiedAttributePaths());
         assertEquals(original,old.getDocument().toJson());
     }
@@ -99,7 +99,7 @@ class ScimM11PatchApplicationTests {
     @Test void missingSimpleReplaceCreatesAndMissingRemoveIsNoOp() {
         ScimResource old=user("");
         assertEquals("created",success(apply(old,request(old.getResourceType(),op(0,ScimPatchOperationType.REPLACE,"displayName","\"created\""))))
-                .getResource().getDocument().findString("displayName").orElseThrow());
+                .getResource().getDocument().find("displayName").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow());
         for (String target : List.of("displayName","name.givenName","emails.value")) {
             ScimPatchResult result=success(apply(old,request(old.getResourceType(),op(0,ScimPatchOperationType.REMOVE,target,null))));
             assertSame(old,result.getResource()); assertFalse(result.isModified());
@@ -114,7 +114,7 @@ class ScimM11PatchApplicationTests {
         rejected(publicApply(provider,old,op(0,ScimPatchOperationType.ADD,"displayName","\"candidate\""),remove,
                 op(2,ScimPatchOperationType.ADD,"userName","\"new\"")),ScimErrorType.MUTABILITY);
         assertEquals("Ada",ScimUser.fromResource(old).getUserName());
-        assertTrue(old.getDocument().findString("displayName").isEmpty());
+        assertTrue(old.getDocument().find("displayName").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).isEmpty());
         for (ScimPatchOperationType kind : List.of(ScimPatchOperationType.ADD,ScimPatchOperationType.REPLACE)) {
             rejected(publicApply(provider,old,op(0,kind,"userName","null")),ScimErrorType.MUTABILITY);
             rejected(publicApply(provider,old,op(0,kind,"userName","\"\"")),ScimErrorType.MUTABILITY);
@@ -193,7 +193,7 @@ class ScimM11PatchApplicationTests {
         rejected(apply(old,request(old.getResourceType(),op(0,ScimPatchOperationType.REPLACE,"displayName","\"new\""),
                 filtered(1,ScimPatchOperationType.REMOVE,"emails","type eq \"x\" and value eq \"a\"",null,null)),
                 ScimCompatibility.strictInstance(),strategy,new ScimWork(1_000_000)),ScimErrorType.INVALID_FILTER);
-        assertTrue(old.getDocument().findString("displayName").isEmpty());
+        assertTrue(old.getDocument().find("displayName").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).isEmpty());
         ScimPatchRequest duplicate=request(old.getResourceType(),op(0,ScimPatchOperationType.ADD,"emails","[{\"value\":\"a\",\"type\":\"work\"}]"));
         rejected(apply(old,duplicate,ScimCompatibility.strictInstance(),strategy,new ScimWork(1_000_000)),ScimErrorType.INVALID_FILTER);
     }
@@ -272,17 +272,17 @@ class ScimM11PatchApplicationTests {
         assertTrue(result.getModifiedAttributePaths().containsAll(Set.of(path("emails"),path("emails.primary"))));
         ScimPatchResult added=success(apply(old,request(old.getResourceType(),op(0,ScimPatchOperationType.ADD,"emails","[{\"value\":\"c\",\"primary\":true}]"))));
         JsonArray array=(JsonArray)added.getResource().getDocument().find("emails").orElseThrow();
-        assertFalse(((JsonObject)array.getElements().get(0)).findBoolean("primary").orElseThrow());
-        assertTrue(((JsonObject)array.getElements().get(2)).findBoolean("primary").orElseThrow());
+        assertFalse(((JsonObject)array.getElements().get(0)).find("primary").filter(JsonBoolean.class::isInstance).map(JsonBoolean.class::cast).map(JsonBoolean::getValue).orElseThrow());
+        assertTrue(((JsonObject)array.getElements().get(2)).find("primary").filter(JsonBoolean.class::isInstance).map(JsonBoolean.class::cast).map(JsonBoolean::getValue).orElseThrow());
     }
 
     @Test void extensionIntroductionAndFinalRemovalUpdateSchemasAndEffectivePaths() {
         ScimResource old=user("");
         ScimPatchResult introduced=success(apply(old,request(old.getResourceType(),op(0,ScimPatchOperationType.ADD,ENTERPRISE+":department","\"Research\""))));
-        assertEquals(List.of(USER,ENTERPRISE),introduced.getResource().getDocument().findStringList("schemas").orElseThrow());
+        assertEquals(List.of(USER,ENTERPRISE),introduced.getResource().getDocument().find("schemas").map(JsonArray.class::cast).map(array -> array.getElements().stream().map(JsonString.class::cast).map(JsonString::getValue).toList()).orElseThrow());
         assertTrue(introduced.getModifiedAttributePaths().containsAll(Set.of(path("schemas"),path(ENTERPRISE+":department"))));
         ScimPatchResult cleared=success(apply(introduced.getResource(),request(old.getResourceType(),op(0,ScimPatchOperationType.REMOVE,ENTERPRISE+":department",null))));
-        assertEquals(List.of(USER),cleared.getResource().getDocument().findStringList("schemas").orElseThrow());
+        assertEquals(List.of(USER),cleared.getResource().getDocument().find("schemas").map(JsonArray.class::cast).map(array -> array.getElements().stream().map(JsonString.class::cast).map(JsonString::getValue).toList()).orElseThrow());
         assertFalse(cleared.getResource().getDocument().getMembers().containsKey(ENTERPRISE));
     }
 
@@ -327,7 +327,7 @@ class ScimM11PatchApplicationTests {
         ScimCompatibility compatibility=ScimCompatibility.builder().features(Set.of(ScimCompatibilityFeature.PATCH_READ_ONLY_ID_ECHO)).build();
         ScimPatchRequest echo=request(old.getResourceType(),op(0,ScimPatchOperationType.REPLACE,null,"{\"id\":\"one\",\"displayName\":\"new\"}"));
         rejected(apply(old,echo),ScimErrorType.MUTABILITY);
-        assertEquals("new",success(apply(old,echo,compatibility,EXACT,new ScimWork(1_000_000))).getResource().getDocument().findString("displayName").orElseThrow());
+        assertEquals("new",success(apply(old,echo,compatibility,EXACT,new ScimWork(1_000_000))).getResource().getDocument().find("displayName").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow());
         for (ScimPatchOperation operation : List.of(op(0,ScimPatchOperationType.REPLACE,null,"{\"id\":\"two\"}"),op(0,ScimPatchOperationType.REPLACE,null,"{\"id\":null}"),
                 op(0,ScimPatchOperationType.REPLACE,"id","\"one\""),op(0,ScimPatchOperationType.REPLACE,null,"{\"meta\":{}}"),
                 op(0,ScimPatchOperationType.REPLACE,"schemas","[\""+USER+"\"]")))

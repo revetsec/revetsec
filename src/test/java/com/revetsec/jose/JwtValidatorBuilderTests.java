@@ -19,7 +19,7 @@ package com.revetsec.jose;
 import org.jspecify.annotations.NonNull;
 
 import com.revetsec.testing.RecordingObserver;
-import com.revetsec.testing.TestJsonWebKeys.Fixture;
+import com.revetsec.testing.TestJwk.Fixture;
 import com.revetsec.testing.TestJws.Algorithm;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.DynamicTest;
@@ -55,20 +55,20 @@ final class JwtValidatorBuilderTests {
 	// accepted; each missing one is IllegalStateException at build().
 	@Test
 	void missingRequiredSettingsAreIllegalState() {
-		StaticJsonWebKeySource source = JwtFixtures.source(Fixture.IDP_SIGNING_RSA_2048);
+		StaticJwksSource source = JwtFixtures.source(Fixture.IDP_SIGNING_RSA_2048);
 
 		Assertions.assertThrows(IllegalStateException.class, () -> JwtValidator.withIssuer(JwtFixtures.ISSUER)
 				.expectedAudiences(Set.of(JwtFixtures.AUDIENCE)).build());
 		Assertions.assertThrows(IllegalStateException.class, () -> JwtValidator.withIssuer(JwtFixtures.ISSUER)
-				.jsonWebKeySource(source).build());
+				.jwksSource(source).build());
 		Assertions.assertThrows(IllegalStateException.class, () -> JwtValidator.withIssuer(JwtFixtures.ISSUER)
-				.jsonWebKeySource(source).acceptAnyAudience(false).build());
+				.jwksSource(source).acceptAnyAudience(false).build());
 		Assertions.assertThrows(IllegalStateException.class, () -> JwtValidator.withIssuer(JwtFixtures.ISSUER)
-				.jsonWebKeySource(source).expectedAudiences(Set.of(JwtFixtures.AUDIENCE)).expectedAudiences(null).build());
-		Assertions.assertThrows(IllegalStateException.class, () -> JwtFixtures.validator(source).jsonWebKeySource(null)
+				.jwksSource(source).expectedAudiences(Set.of(JwtFixtures.AUDIENCE)).expectedAudiences(null).build());
+		Assertions.assertThrows(IllegalStateException.class, () -> JwtFixtures.validator(source).jwksSource(null)
 				.build());
 
-		Assertions.assertNotNull(JwtValidator.withIssuer(JwtFixtures.ISSUER).jsonWebKeySource(source)
+		Assertions.assertNotNull(JwtValidator.withIssuer(JwtFixtures.ISSUER).jwksSource(source)
 				.acceptAnyAudience(true).build());
 		Assertions.assertNotNull(JwtFixtures.validator(source).build());
 	}
@@ -77,7 +77,7 @@ final class JwtValidatorBuilderTests {
 	// are an empty audience set and an empty audience.
 	@Test
 	void audienceSettingsThatConflictOrAreEmptyAreIllegalArguments() {
-		StaticJsonWebKeySource source = JwtFixtures.source(Fixture.IDP_SIGNING_RSA_2048);
+		StaticJwksSource source = JwtFixtures.source(Fixture.IDP_SIGNING_RSA_2048);
 
 		Assertions.assertThrows(IllegalArgumentException.class, () -> JwtFixtures.validator(source).acceptAnyAudience(true)
 				.build());
@@ -94,7 +94,7 @@ final class JwtValidatorBuilderTests {
 	// IllegalArgumentException, because this validator verifies only with public keys.
 	@Test
 	void theAlgorithmsDefaultToRs256AndNeverIncludeHmac() {
-		StaticJsonWebKeySource source = JwtFixtures.source(Fixture.IDP_SIGNING_RSA_2048);
+		StaticJwksSource source = JwtFixtures.source(Fixture.IDP_SIGNING_RSA_2048);
 
 		Assertions.assertThrows(IllegalArgumentException.class, () -> JwtFixtures.validator(source)
 				.allowedAlgorithms(Set.of()).build());
@@ -124,7 +124,7 @@ final class JwtValidatorBuilderTests {
 	// required type needs an allowed one.
 	@Test
 	void typeSettingsMustBeMediaTypesWithoutParameters() {
-		StaticJsonWebKeySource source = JwtFixtures.source(Fixture.IDP_SIGNING_RSA_2048);
+		StaticJwksSource source = JwtFixtures.source(Fixture.IDP_SIGNING_RSA_2048);
 
 		for (String type : List.of("", "application/jwt; charset=utf-8", "a/b/c", "jwt ", "\u00e9"))
 			Assertions.assertThrows(IllegalArgumentException.class, () -> JwtFixtures.validator(source)
@@ -159,7 +159,7 @@ final class JwtValidatorBuilderTests {
 	// M2-4: a required claim name must not be empty.
 	@Test
 	void anEmptyRequiredClaimNameIsIllegal() {
-		StaticJsonWebKeySource source = JwtFixtures.source(Fixture.IDP_SIGNING_RSA_2048);
+		StaticJwksSource source = JwtFixtures.source(Fixture.IDP_SIGNING_RSA_2048);
 		Assertions.assertThrows(IllegalArgumentException.class, () -> JwtFixtures.validator(source)
 				.requiredClaims(Set.of("sub", "")).build());
 		Assertions.assertNotNull(JwtFixtures.validator(source).requiredClaims(Set.of("sub", "jti")).build());
@@ -169,7 +169,7 @@ final class JwtValidatorBuilderTests {
 	// [8 KiB, 1 MiB] (COMPACT_JWT_SIZE); the edges are accepted and one step past each is refused.
 	@TestFactory
 	@NonNull Stream<@NonNull DynamicTest> rangedSettingsAreCheckedAgainstTheirLimitRows() {
-		StaticJsonWebKeySource source = JwtFixtures.source(Fixture.IDP_SIGNING_RSA_2048);
+		StaticJwksSource source = JwtFixtures.source(Fixture.IDP_SIGNING_RSA_2048);
 
 		return Stream.of(
 				DynamicTest.dynamicTest("clockSkew accepts 0 and 5 minutes", () -> {
@@ -200,7 +200,7 @@ final class JwtValidatorBuilderTests {
 	// boundaries through validate.
 	@Test
 	void theDefaultsAreSixtySecondsOfSkewAndSixtyFourKibibytes() {
-		StaticJsonWebKeySource source = JwtFixtures.source(Fixture.IDP_SIGNING_RSA_2048);
+		StaticJwksSource source = JwtFixtures.source(Fixture.IDP_SIGNING_RSA_2048);
 		JwtValidator validator = JwtFixtures.validator(source).build();
 
 		JwtFixtures.assertAccepted(validator, JwtFixtures.signed(Fixture.IDP_SIGNING_RSA_2048, Algorithm.RS256,
@@ -224,9 +224,9 @@ final class JwtValidatorBuilderTests {
 	@Test
 	void acceptingAnyAudienceIsObservedAtBuild() {
 		RecordingObserver<JoseObserver> recorder = RecordingObserver.fromInterface(JoseObserver.class);
-		StaticJsonWebKeySource source = JwtFixtures.source(Fixture.IDP_SIGNING_RSA_2048);
+		StaticJwksSource source = JwtFixtures.source(Fixture.IDP_SIGNING_RSA_2048);
 
-		Assertions.assertNotNull(JwtValidator.withIssuer(JwtFixtures.ISSUER).jsonWebKeySource(source)
+		Assertions.assertNotNull(JwtValidator.withIssuer(JwtFixtures.ISSUER).jwksSource(source)
 				.acceptAnyAudience(true).observer(recorder.getObserver()).build());
 		Assertions.assertEquals(1, recorder.getCalls().size());
 		Assertions.assertEquals("didAcceptAnyAudience", recorder.getCalls().get(0).getMethodName());
@@ -238,7 +238,7 @@ final class JwtValidatorBuilderTests {
 		// A throwing observer is contained: build still succeeds.
 		RecordingObserver<JoseObserver> throwing = RecordingObserver.fromInterface(JoseObserver.class,
 				() -> new IllegalStateException("observer failure"));
-		Assertions.assertNotNull(JwtValidator.withIssuer(JwtFixtures.ISSUER).jsonWebKeySource(source)
+		Assertions.assertNotNull(JwtValidator.withIssuer(JwtFixtures.ISSUER).jwksSource(source)
 				.acceptAnyAudience(true).observer(throwing.getObserver()).build());
 		Assertions.assertEquals(1, throwing.getCalls().size());
 	}
@@ -259,7 +259,7 @@ final class JwtValidatorBuilderTests {
 	// built, and validators compare by reference (M2-5).
 	@Test
 	void aBuiltValidatorIsIndependentOfItsBuilderAndComparesByReference() {
-		StaticJsonWebKeySource source = JwtFixtures.source(Fixture.IDP_SIGNING_RSA_2048);
+		StaticJwksSource source = JwtFixtures.source(Fixture.IDP_SIGNING_RSA_2048);
 		Set<String> audiences = new HashSet<>(Set.of(JwtFixtures.AUDIENCE));
 		JwtValidator.Builder builder = JwtFixtures.validator(source).expectedAudiences(audiences);
 		JwtValidator first = builder.build();

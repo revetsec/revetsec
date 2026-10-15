@@ -17,7 +17,7 @@
 package com.revetsec.oauth.server;
 
 import com.revetsec.internal.http.Deadline;
-import com.revetsec.jose.StaticJsonWebKeySource;
+import com.revetsec.jose.StaticJwksSource;
 import com.revetsec.json.JsonObject;
 import org.jspecify.annotations.NonNull;
 import java.util.Map;
@@ -36,7 +36,7 @@ final class OAuthResourceIntrospection {
  }
  /** Resource is trusted endpoint configuration, never token-controlled or inferred from Host. */
  @NonNull OAuthStatusResponse introspect(@NonNull OAuthServerRequest request, @NonNull OAuthServerClientRepository clients,
-   @NonNull String resource, @NonNull StaticJsonWebKeySource keys, @NonNull Deadline deadline) {
+   @NonNull String resource, @NonNull StaticJwksSource keys, @NonNull Deadline deadline) {
   if (request.endpoint() != OAuthServerRequest.Endpoint.INTROSPECTION) throw OAuthServerRequest.invalid();
   OAuthServerConfiguration.resources(Map.of(resource, Set.of()), 1);
   OAuthServerClientRegistration client = OAuthServerClientAdmission.authenticate(request, clients, deadline, this.limits);

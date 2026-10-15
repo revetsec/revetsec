@@ -48,7 +48,7 @@ import static java.util.Objects.requireNonNull;
  * only for the same context before they expire.
  * <p>
  * Revetsec uses sealed values to carry pending sign-in state through the browser, and applications can seal their
- * own data with {@link #seal(String, String, Duration)} and {@link #unseal(String, String)}. A sealed value is
+ * own data with {@link #seal(String, String, Duration)} and {@link #unsealResult(String, String)}. A sealed value is
  * encrypted and authenticated with AES-256-GCM under a key derived with HKDF-SHA256 from the sealing key and a fresh
  * random salt, so every value gets its own encryption key, and it is written in unpadded base64url. It carries, in
  * the clear, the ID of the key that sealed it; everything else is encrypted, authenticated or both. Values sealed
@@ -66,10 +66,9 @@ import static java.util.Objects.requireNonNull;
  * <p>
  * <strong>Failures.</strong> Arguments are checked first: a {@code null} throws {@link NullPointerException}, and an
  * invalid context, plaintext or lifetime, or a plaintext too long to seal, throws {@link IllegalArgumentException}.
- * Every failure to open a value throws the one {@link InvalidSealedStateException}, with the same message, no cause
- * and nothing suppressed, whether the value was tampered with, truncated, malformed, too long, sealed for another
- * context, sealed under a key this sealer does not hold, or expired. Opening never tries more than one key: the key
- * ID in the value selects exactly one.
+ * Every failure to open a value returns the same opaque {@link StateUnsealResult.Rejected} outcome, whether the
+ * value was tampered with, truncated, malformed, too long, sealed for another context, sealed under a key this sealer
+ * does not hold, or expired. Opening never tries more than one key: the key ID in the value selects exactly one.
  * <p>
  * <strong>Keys and rotation.</strong> The {@linkplain Builder#build() built} sealer seals with its active key and
  * opens values sealed under its active key or any of its verification keys (at most 16). To rotate:
@@ -83,8 +82,8 @@ import static java.util.Objects.requireNonNull;
  * <p>
  * <strong>Size.</strong> A sealed value is {@code ceil(4 * (54 + k + p) / 3)} characters long for a key ID of
  * {@code k} characters and a plaintext of {@code p} UTF-8 bytes; a 700-byte plaintext under key ID {@code 2026-09}
- * seals to 1,015 characters. {@code seal} refuses, and {@code unseal} rejects before decoding, any value longer than
- * {@link Builder#maximumSealedLength(Integer)}: 3,800 characters by default, which leaves room for a cookie's name
+ * seals to 1,015 characters. The {@code seal} operation refuses, and {@code unsealResult} rejects before decoding, any
+ * value longer than {@link Builder#maximumSealedLength(Integer)}: 3,800 characters by default, which leaves room for a cookie's name
  * and attributes within the 4,096 bytes per cookie that RFC 6265 section 6.1 asks browsers to support.
  * <p>
  * Instances are immutable and safe for concurrent use.
@@ -180,40 +179,9 @@ public final class StateSealer {
 	}
 
 	/**
-	 * Opens a value that {@link #seal(String, String, Duration)} sealed for {@code context} under one of this
-	 * sealer's keys, if it has not expired.
-	 *
-	 * @param sealed  the sealed value, untrusted
-	 * @param context the context it was sealed for: 1 to 256 characters of well-formed UTF-16
-	 * @return the plaintext
-	 * @throws NullPointerException         if an argument is {@code null}
-	 * @throws IllegalArgumentException     if the context is out of range or contains an unpaired surrogate
-	 * @throws InvalidSealedStateException  if the value does not open, for whatever reason
-	 * @since 1.0.0
-	 */
-	@NonNull
-	public String unseal(@NonNull String sealed,
-											 @NonNull String context) {
-		requireNonNull(sealed);
-		requireNonNull(context);
-		SealerV1.requireContext(context);
-
-		Instant now = this.clock.instant();
-
-		try {
-			return SealerV1.open(sealed, this.maximumSealedLength, this.keysByKeyId, SealedStateType.APP, context, now);
-		} catch (UnsealException e) {
-			// Every failure, expiry included, is this one exception, thrown from this one place, so neither the type,
-			// the message nor the stack trace says which step failed.
-			throw InvalidSealedStateException.fromAnyFailure();
-		}
-	}
-
-
-	/**
 	 * Opens application state once and returns its authenticated plaintext or one undifferentiated rejection.
 	 * Expiry, wrong context, unknown keys, malformed input and authentication failure expose no differing detail.
-	 * This operation uses the same checks as {@link #unseal(String, String)}.
+	 *
 	 * @param sealed untrusted sealed state
 	 * @param context trusted application context
 	 * @return the opening outcome
@@ -223,9 +191,15 @@ public final class StateSealer {
 	 */
 	@CheckReturnValue
 	public @NonNull StateUnsealResult unsealResult(@NonNull String sealed, @NonNull String context) {
+		requireNonNull(sealed);
+		requireNonNull(context);
+		SealerV1.requireContext(context);
+
+		Instant now = this.clock.instant();
 		try {
-			return StateUnsealResult.fromValue(unseal(sealed, context));
-		} catch (InvalidSealedStateException rejection) {
+			return StateUnsealResult.fromValue(SealerV1.open(sealed, this.maximumSealedLength, this.keysByKeyId,
+					SealedStateType.APP, context, now));
+		} catch (UnsealException rejection) {
 			return StateUnsealResult.fromRejection();
 		}
 	}
@@ -365,7 +339,7 @@ public final class StateSealer {
 		}
 
 		/**
-		 * Sets the longest sealed value, in characters, that {@code seal} returns and {@code unseal} decodes.
+		 * Sets the longest sealed value, in characters, that {@code seal} returns and {@code unsealResult} decodes.
 		 *
 		 * @param maximumSealedLength from 1,024 to 16,384; {@code null} restores the default, 3,800. {@link #build()}
 		 *                            checks the range

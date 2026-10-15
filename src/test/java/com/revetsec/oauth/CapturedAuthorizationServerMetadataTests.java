@@ -16,6 +16,8 @@
 
 package com.revetsec.oauth;
 
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+
 import org.jspecify.annotations.NonNull;
 
 import org.junit.jupiter.api.Test;
@@ -34,27 +36,27 @@ final class CapturedAuthorizationServerMetadataTests {
 
 	@Test
 	void googleCaptureAdvertisesIssuerParameterAndS256() throws Exception {
-		AuthorizationServerMetadata google = AuthorizationServerMetadata.fromJson("https://accounts.google.com",
-				fixture("google/2026-09-28/openid-configuration.json"));
+		AuthorizationServerMetadata google = assertInstanceOf(AuthorizationServerMetadataParseResult.Succeeded.class, AuthorizationServerMetadata.fromJsonResult("https://accounts.google.com",
+				fixture("google/2026-09-28/openid-configuration.json"))).getMetadata();
 		assertTrue(google.isAuthorizationResponseIssuerSupported());
 		assertTrue(google.getCodeChallengeMethodsSupported().orElseThrow().contains("S256"));
 	}
 
 	@Test
 	void appleCaptureLoadsWithoutPkceAdvertisement() throws Exception {
-		AuthorizationServerMetadata apple = AuthorizationServerMetadata.fromJson("https://appleid.apple.com",
-				fixture("apple/2026-09-28/openid-configuration.json"));
+		AuthorizationServerMetadata apple = assertInstanceOf(AuthorizationServerMetadataParseResult.Succeeded.class, AuthorizationServerMetadata.fromJsonResult("https://appleid.apple.com",
+				fixture("apple/2026-09-28/openid-configuration.json"))).getMetadata();
 		assertFalse(apple.isAuthorizationResponseIssuerSupported());
 		assertTrue(apple.getCodeChallengeMethodsSupported().isEmpty());
 	}
 
 	@Test
 	void tenantSpecificEntraLoadsButCommonTemplateCannotPassExactIssuerCheck() throws Exception {
-		AuthorizationServerMetadata tenant = AuthorizationServerMetadata.fromJson(ENTRA_TENANT,
-				fixture("entra/2026-09-27/tenant-v2-openid.json"));
+		AuthorizationServerMetadata tenant = assertInstanceOf(AuthorizationServerMetadataParseResult.Succeeded.class, AuthorizationServerMetadata.fromJsonResult(ENTRA_TENANT,
+				fixture("entra/2026-09-27/tenant-v2-openid.json"))).getMetadata();
 		assertEquals(ENTRA_TENANT, tenant.getIssuer());
 		assertEquals(OAuthException.Reason.ISSUER_MISMATCH,
-				assertThrows(OAuthValidationException.class, () -> AuthorizationServerMetadata.fromJson(
+				assertInstanceOf(AuthorizationServerMetadataParseResult.Rejected.class, AuthorizationServerMetadata.fromJsonResult(
 						"https://login.microsoftonline.com/common/v2.0",
 						fixture("entra/2026-09-27/common-v2-openid.json"))).getReason());
 	}

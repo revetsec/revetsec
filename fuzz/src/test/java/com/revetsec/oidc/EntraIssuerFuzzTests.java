@@ -16,6 +16,7 @@
 
 package com.revetsec.oidc;
 
+import com.revetsec.oidc.OidcProviderMetadataParseResult;
 import com.code_intelligence.jazzer.junit.FuzzTest;
 import com.revetsec.M6FuzzOracle;
 import com.revetsec.oauth.OAuthException;
@@ -47,8 +48,8 @@ public class EntraIssuerFuzzTests {
 		OidcIssuerPolicy policy = OidcIssuerPolicy.fromMicrosoftEntraMultiTenant(tenant -> { calls.incrementAndGet(); assertTrue(tenant.equals(TENANT) || tenant.equals(OTHER)); return allowed; });
 		String advertised = metadataCase == 0 ? TEMPLATE : metadataCase == 1 ? issuer(TENANT) : TEMPLATE + "/";
 		String metadata = JsonObject.builder().put("issuer", advertised).put("authorization_endpoint", trust + "/authorize").put("token_endpoint", trust + "/token").put("jwks_uri", trust + "/jwks").put("subject_types_supported", JsonArray.fromElements(List.of(com.revetsec.json.JsonString.fromValue("public")))).put("response_types_supported", JsonArray.fromElements(List.of(com.revetsec.json.JsonString.fromValue("code")))).put("id_token_signing_alg_values_supported", JsonArray.fromElements(List.of(com.revetsec.json.JsonString.fromValue("RS256")))).build().toJson();
-		if (metadataCase != 0) { assertThrows(OAuthException.class, () -> OidcProviderMetadata.fromJson(trust, metadata, policy)); assertEquals(0, calls.get()); return; }
-		OidcProviderMetadata parsed = OidcProviderMetadata.fromJson(trust, metadata, policy); assertEquals(trust, parsed.getIssuer()); assertEquals(0, calls.get());
+		if (metadataCase != 0) { assertInstanceOf(OidcProviderMetadataParseResult.Rejected.class, OidcProviderMetadata.fromJsonResult(trust, metadata, policy)); assertEquals(0, calls.get()); return; }
+		OidcProviderMetadata parsed = org.junit.jupiter.api.Assertions.assertInstanceOf(com.revetsec.oidc.OidcProviderMetadataParseResult.Succeeded.class, OidcProviderMetadata.fromJsonResult(trust, metadata, policy)).getMetadata(); assertEquals(trust, parsed.getIssuer()); assertEquals(0, calls.get());
 		@Nullable String keyIssuer = switch (keyCase) { case 0 -> TEMPLATE; case 1 -> issuer(TENANT); case 2 -> null; case 3 -> issuer(OTHER); default -> TEMPLATE + "/"; };
 		IdTokenValidator validator = validator(trust, keyIssuer, algorithm, policy);
 		String compact = M6FuzzOracle.sign(claims(TENANT, claimCase, false), algorithm, forged);
@@ -57,7 +58,7 @@ public class EntraIssuerFuzzTests {
 			IdToken initial = validator.validate(compact, "nonce", "TEST-ONLY-access", "TEST-ONLY-code", null, Set.of());
 			assertTrue(profile && allowed); assertEquals(1, calls.get()); assertEquals(issuer(TENANT), initial.getClaims().getIssuer().orElseThrow());
 			OidcSessionReference reference = new OidcSessionReference(initial, "client");
-			OidcSessionReference restored = OidcSessionReference.fromSerializedForm(reference.toSerializedForm()); assertTrue(reference.matchesOriginalReference(restored));
+			OidcSessionReference restored = org.junit.jupiter.api.Assertions.assertInstanceOf(com.revetsec.oidc.OidcSessionReferenceParseResult.Succeeded.class, OidcSessionReference.fromSerializedFormResult(reference.toSerializedForm())).getReference(); assertTrue(reference.matchesOriginalReference(restored));
 			// A template key can validate both tenants, so original-issuer continuity has a separate oracle.
 			IdTokenValidator refreshValidator = validator(trust, TEMPLATE, algorithm, policy);
 			String refreshed = M6FuzzOracle.sign(claims(refreshCase == 1 ? OTHER : TENANT, refreshCase == 2 ? 1 : 0, refreshCase == 3), algorithm, refreshCase == 4);
@@ -74,6 +75,6 @@ public class EntraIssuerFuzzTests {
 		return claims.build();
 	}
 	private static @NonNull IdTokenValidator validator(@NonNull String trust, @Nullable String keyIssuer, @NonNull JwsAlgorithm algorithm, @NonNull OidcIssuerPolicy policy) {
-		return new IdTokenValidator(trust, "client", StaticJsonWebKeySource.fromJsonWebKeySet(JsonWebKeySet.fromJson(M6FuzzOracle.jwks(keyIssuer, algorithm))), Set.of(algorithm), Set.of(), Set.of(), Duration.ZERO, Duration.ofMinutes(5), Clock.fixed(NOW, ZoneOffset.UTC), OidcObserver.disabledInstance(), false, policy);
+		return new IdTokenValidator(trust, "client", StaticJwksSource.fromJwks(org.junit.jupiter.api.Assertions.assertInstanceOf(com.revetsec.jose.JwksParseResult.Succeeded.class, Jwks.fromJsonResult(M6FuzzOracle.jwks(keyIssuer, algorithm))).getJwks()), Set.of(algorithm), Set.of(), Set.of(), Duration.ZERO, Duration.ofMinutes(5), Clock.fixed(NOW, ZoneOffset.UTC), OidcObserver.disabledInstance(), false, policy);
 	}
 }

@@ -67,8 +67,8 @@ is one ClusterFuzzLite target, named
 | | `urlAndUtf8CodecsMatchTheirOraclesExactly` | octets, also read as text | `StrictUtf8`, `PercentDecoding`, `FormUrlEncoding` and `QueryParameters` agree with oracles written from RFC 3629, RFC 3986 and RFC 6749 Appendix B. `FormUrlEncoding` also agrees with `URLDecoder` where it accepts and with `URLEncoder` for well-formed input. Query parameters survive re-encoding. |
 | `CompactJwsFuzzTests` (`internal.jose`) | `compactSerializationsSplitIntoThreeCanonicalSegmentsOrFailInStepOrder` | token text | `CompactJwsParser.parse` under two maximum lengths, then `JwtProcessor.prepare` under three header policies (M2 plan, "JOSE semantics" steps 1 to 5): the oracle's decoded segments and the received signing input, or the reason of the first failed step, from `TOKEN_TOO_LARGE` through `JSON_SERIALIZATION`, `TOKEN_SYNTAX`, `ENCRYPTED_TOKEN` and the header reasons to `SIGNATURE_MALFORMED`. An empty payload or signature passes the split (M2-6). Every `JoseFailure` names only its reason, with no cause and no stack trace. |
 | | `headerChecksAgreeWithAnIndependentOracleForP3ToP8` | JSON bytes | `JoseHeaderPolicy.check` under three policies against a P3 to P8 oracle with its own table of `alg` wire values and its own `typ` normalization: `HEADER`, `ALGORITHM_NOT_ALLOWED` (every spelling of `none`), `CRITICAL_HEADER`, `UNENCODED_PAYLOAD`, `COMPRESSED_PAYLOAD`, `UNTRUSTED_KEY_REFERENCE`, `INVALID_TYPE` and `NESTED_TOKEN`, in that order, or the header's algorithm, `kid` and raw `typ`. For every string in the header, `normalizeType`, `allowsType` and `JwsAlgorithm.findByWireValue` agree with the oracle. |
-| `JsonWebKeyFuzzTests` (`internal.jose`) | `keySetDocumentsSkipExactlyTheKeysAnIndependentOracleRefuses` | JSON bytes | `JwkSetParser` under the default and tight limits: `KEY_SET` exactly for the oracle's document failures, and otherwise every key kept or skipped with the reason of the first of the plan's twelve key rules it breaks, at its index (M2-7). Every object in the document also goes through `JwkParser` alone. A kept key has the oracle's `kid`, `kty`, `crv`, `alg`, `use`, JWK `issuer`, RFC 7638 thumbprint and JCA key values. `JsonWebKeySet.fromJson` agrees on the same text, escapes the `kid` in `toString`, and a `StaticJsonWebKeySource` needs one usable key. |
-| | `keysBuiltFromFuzzedIntegersAgreeWithTheCurveAndThumbprintOracle` | `FuzzedDataProvider` | Builds the JWKs that byte mutation seldom reaches: RSA moduli of chosen sizes and parity, some built to carry the ROCA fingerprint for every prime or for all but one; exponents at their bounds; EC points computed on the curve, moved off it, or past the field prime; Ed25519 small-order points, `y` at or past the field prime, and `x = 0` with the sign bit; encodings that are not minimal or not the curve's length; every optional member, valid and invalid. `JwkParser`, and a one-key document through `JwkSetParser`, give the oracle's verdict. |
+| `JwkFuzzTests` (`internal.jose`) | `keySetDocumentsSkipExactlyTheKeysAnIndependentOracleRefuses` | JSON bytes | `JwksParser` under the default and tight limits: `KEY_SET` exactly for the oracle's document failures, and otherwise every key kept or skipped with the reason of the first of the plan's twelve key rules it breaks, at its index (M2-7). Every object in the document also goes through `JwkParser` alone. A kept key has the oracle's `kid`, `kty`, `crv`, `alg`, `use`, JWK `issuer`, RFC 7638 thumbprint and JCA key values. `Jwks.fromJson` agrees on the same text, escapes the `kid` in `toString`, and a `StaticJwksSource` needs one usable key. |
+| | `keysBuiltFromFuzzedIntegersAgreeWithTheCurveAndThumbprintOracle` | `FuzzedDataProvider` | Builds the JWKs that byte mutation seldom reaches: RSA moduli of chosen sizes and parity, some built to carry the ROCA fingerprint for every prime or for all but one; exponents at their bounds; EC points computed on the curve, moved off it, or past the field prime; Ed25519 small-order points, `y` at or past the field prime, and `x = 0` with the sign bit; encodings that are not minimal or not the curve's length; every optional member, valid and invalid. `JwkParser`, and a one-key document through `JwksParser`, give the oracle's verdict. |
 | `JwtValidatorFuzzTests` (`jose`) | `validateAcceptsOnlyWhatTheJdkVerifiersAccept` | token text | Three validators over the TEST ONLY fixture keys' public halves (see below). A token is accepted only if the JDK's own verifier for its algorithm accepts its signature with the one key the selection rules pick, and every header and claim rule passes; then it carries exactly the oracle's claims. A rejection has the reason of the oracle's first failed step, in that reason's exception class, with its fixed message, no cause, never transient, and `didFailToValidateJwt` gets the same instance. |
 | | `signedTokensAreJudgedLikeTheOracleWhateverTheirHeaderAndClaims` | signing program | The same validators and oracle over fuzz-only keys. The input spells a header and a payload, which the target signs and may then damage (a flipped bit, a byte cut or added, a zeroed or emptied signature, the high-S twin, `r` of 0 or `n`, another key's signature, a changed payload, padding), so fuzzed headers and claims reach the checks after the signature. |
 | `EcdsaFuzzTests` (`internal.crypto`) | `shapeCheckAndDerEncodingAgreeWithTheRangeRuleAndAnX690Reader` | signature octets | For each curve, `EcdsaSignatures.findShapeFailure` gives RFC 7518 section 3.4's verdict (the exact length, then `1 <= r, s <= n - 1` over the curve orders the JDK names). `toDer` refuses a signature of the wrong length and otherwise gives a minimal DER `SEQUENCE` that an X.690 reader written here reads back to `r` and `s`. `SignatureVerifier.verifyEcdsa` decides the shape before it looks at the key (G8-3, CVE-2022-21449). |
@@ -158,8 +158,8 @@ backoff/races and opaque-token revocation remain core regression/integration che
     allows it.
 - **Only the documented exception, in JOSE.** Inside, `JoseFailure` and `SkippedKeyException`;
   at the public API, the `JoseException` subclass of the reason, and `IllegalArgumentException`
-  only from `StaticJsonWebKeySource.fromJsonWebKeySet` for a set with no usable key. A static key
-  source never throws `JsonWebKeySetUnavailableException`, so one would be a finding too.
+  only from `StaticJwksSource.fromJwks` for a set with no usable key. A static key
+  source never throws `JwksUnavailableException`, so one would be a finding too.
 - **Fixed messages, no input echo.** A checked failure's message must equal its Kind's own fixed
   message; a `JoseFailure` or `SkippedKeyException` message names only its reason, and a
   `JoseException` carries its reason's fixed message. The model's and the sealer's
@@ -270,8 +270,8 @@ sources fill it.
 |---|---|---|
 | `com/revetsec/internal/json/corpus/parse/` and `round-trip/`: the 25 files ported from Soklet plus the protocol-shaped seeds, `.bin` files included | 30 | the five JSON-text methods (`parse/`, `round-trip/`) |
 | `vectors/jsontestsuite/test_parsing/`: JSONTestSuite at `1ef36fa0`, one file name containing `#` | 318 | the same five methods (`jsontestsuite/`) |
-| `com/revetsec/internal/json/corpus/`, `vectors/jsontestsuite/test_parsing/` (the same files) | 30 and 318 | the two JOSE JSON-text methods, `CompactJwsFuzzTests#headerChecksAgreeWithAnIndependentOracleForP3ToP8` and `JsonWebKeyFuzzTests#keySetDocumentsSkipExactlyTheKeysAnIndependentOracleRefuses` |
-| `com/revetsec/jose/entra/2026-09-27/*-keys.json`: the captured Entra key sets, with `x5c` chains and templated `issuer` members | 5 | `JsonWebKeyFuzzTests#keySetDocumentsSkipExactlyTheKeysAnIndependentOracleRefuses` (`entra/`) |
+| `com/revetsec/internal/json/corpus/`, `vectors/jsontestsuite/test_parsing/` (the same files) | 30 and 318 | the two JOSE JSON-text methods, `CompactJwsFuzzTests#headerChecksAgreeWithAnIndependentOracleForP3ToP8` and `JwkFuzzTests#keySetDocumentsSkipExactlyTheKeysAnIndependentOracleRefuses` |
+| `com/revetsec/jose/entra/2026-09-27/*-keys.json`: the captured Entra key sets, with `x5c` chains and templated `issuer` members | 5 | `JwkFuzzTests#keySetDocumentsSkipExactlyTheKeysAnIndependentOracleRefuses` (`entra/`) |
 | `com/revetsec/internal/json/corpus/`, `vectors/jsontestsuite/test_parsing/` | 30 and 318 | all four OIDC JSON methods and the three M5 role-metadata, signed-profile and introspection JSON methods |
 | `fixtures/pem/` and `fixtures/keys/`: the TEST ONLY PEM fixtures | 33 | `PemFuzzTests#pemParsersRejectOnlyWithPemExceptionAndAcceptAtMostOneLabel` (`fixtures-pem/`, `fixtures-keys/`) |
 
@@ -398,7 +398,7 @@ Surefire names:
 - **JWK Sets:** each document failure (`keys` missing, null, not an array, an element that is not
   an object, a duplicate `keys` member, more elements than the tight limit, and 101 keys against
   the default limit of 100, next to 100 keys), each skip reason in a small document, `kid` values
-  that `JsonWebKey.toString` must escape, and the RFC 7515 appendix A, RFC 7517 appendix A.1 and
+  that `Jwk.toString` must escape, and the RFC 7515 appendix A, RFC 7517 appendix A.1 and
   RFC 8037 appendix A.2 public keys.
 - **ECDSA:** empty, all-zero, all-ones and single-bit signatures of each curve's length, and two
   P-521 signatures whose DER form has 127 and 128 content octets, on each side of the long form.
@@ -420,7 +420,7 @@ subclass, `lying-bigdecimal-subclass.bin`, and an unpaired surrogate in a `fromM
 `unpaired-surrogate-member-name-in-a-map.bin`), so that the replay reaches those oracles too. A
 change to how a target consumes its `FuzzedDataProvider` turns these seeds into other programs;
 regenerate them by fuzzing the planted defect again. The two M2 `FuzzedDataProvider` targets
-(`JsonWebKeyFuzzTests#keysBuiltFromFuzzedIntegersAgreeWithTheCurveAndThumbprintOracle` and
+(`JwkFuzzTests#keysBuiltFromFuzzedIntegersAgreeWithTheCurveAndThumbprintOracle` and
 `EcdsaFuzzTests#verdictsAgreeWithTheJdksFixedLengthEngine`) start from programs kept from their
 2026-09-28 fuzzing sessions' corpora: for each key kind and each skip reason or usable outcome (46),
 and for each curve, signature form (raw, signed, signed and damaged), verifying key and verdict
@@ -481,7 +481,7 @@ generation and signing remain synthetic JDK fixtures, not independent authentica
   generator does not make fails the replay.
 - Keep choice 0 of a `FuzzedDataProvider` target on the ordinary path. An exhausted input gives
   the minimum of every range, so a rare branch at 0 would absorb most short inputs.
-- Never name a main-code record (such as `VerificationKey` or `ParsedKeySet`) in the signature of
+- Never name a main-code record (such as `VerificationKey` or `ParsedJwks`) in the signature of
   a method of a target class; take `Object` and cast inside. Jazzer finds a target by reflecting
   over its class's declared methods, which loads every type their signatures name before fuzzing
   starts, and in ClusterFuzzLite's base image (its own Jazzer on Temurin 17.0.16) a record loaded
@@ -613,7 +613,7 @@ Every M2 method was fuzzed the same way on 2026-09-28, each in its own copy of t
 per method on Corretto 21.0.11, all nine at once, then 210 seconds per method on Corretto 17.0.20.1.
 Three targets were fuzzed again, and their rows give the last session: the two
 `FuzzedDataProvider` targets after their choice order changed (choice 0, which an exhausted input
-gives, now takes the ordinary path, where it had taken a rare one), and the two `JsonWebKeyFuzzTests`
+gives, now takes the ordinary path, where it had taken a rare one), and the two `JwkFuzzTests`
 targets after their helpers stopped naming records in their signatures (see "Writing a target").
 In review, the two `JwtValidatorFuzzTests` targets were fuzzed once more the same way (all four
 sessions at once), after their key set gained five slots, and their rows give that session. The
@@ -625,8 +625,8 @@ length limit from 4,096 bytes, so it runs fewer, longer inputs than before.
 |---|---:|---:|
 | `CompactJwsFuzzTests_compactSerializationsSplitIntoThreeCanonicalSegmentsOrFailInStepOrder` | 11,403,269 | 8,932,078 |
 | `CompactJwsFuzzTests_headerChecksAgreeWithAnIndependentOracleForP3ToP8` | 4,345,714 | 2,913,392 |
-| `JsonWebKeyFuzzTests_keySetDocumentsSkipExactlyTheKeysAnIndependentOracleRefuses` | 621,287 | 374,124 |
-| `JsonWebKeyFuzzTests_keysBuiltFromFuzzedIntegersAgreeWithTheCurveAndThumbprintOracle` | 2,889,353 | 1,929,494 |
+| `JwkFuzzTests_keySetDocumentsSkipExactlyTheKeysAnIndependentOracleRefuses` | 621,287 | 374,124 |
+| `JwkFuzzTests_keysBuiltFromFuzzedIntegersAgreeWithTheCurveAndThumbprintOracle` | 2,889,353 | 1,929,494 |
 | `JwtValidatorFuzzTests_validateAcceptsOnlyWhatTheJdkVerifiersAccept` | 4,124,988 | 2,767,915 |
 | `JwtValidatorFuzzTests_signedTokensAreJudgedLikeTheOracleWhateverTheirHeaderAndClaims` | 411,064 | 236,196 |
 | `EcdsaFuzzTests_shapeCheckAndDerEncodingAgreeWithTheRangeRuleAndAnX690Reader` | 29,372,437 | 19,157,972 |
@@ -676,7 +676,7 @@ or its last prime; moduli of 2,047 or 16,385 bits accepted; a JWK `kid` of 256 c
 the small-order check blind to Ed25519's points of order 8; an EC coordinate equal to the field
 prime accepted; `zip` checked before `b64`; `Cache-Control` directive names compared
 case-sensitively; the DER `SEQUENCE` given the short form at 128 content octets; and
-`JsonWebKeySet.fromJson` accepting 101 keys. The key slots and the seeds described above were
+`Jwks.fromJson` accepting 101 keys. The key slots and the seeds described above were
 added for them, and the replay now fails on all 36, and still on the first 47.
 
 The key-set cache's own behavior (cooldowns, backoff, a removed key, stale keys) is outside these
@@ -903,7 +903,7 @@ The same offline build was run on 2026-09-28 with the twenty-one M2 targets:
   targets timed out when all were checked in parallel, and passed when test_all retried them one
   at a time.
 - A 20-second `run_fuzzer` of
-  `JsonWebKeyFuzzTests_keysBuiltFromFuzzedIntegersAgreeWithTheCurveAndThumbprintOracle` loaded its
+  `JwkFuzzTests_keysBuiltFromFuzzedIntegersAgreeWithTheCurveAndThumbprintOracle` loaded its
   seeds from its zip and executed 76,847 inputs, and one of
   `JwtValidatorFuzzTests_validateAcceptsOnlyWhatTheJdkVerifiersAccept` executed 109,373. Neither
   found anything.

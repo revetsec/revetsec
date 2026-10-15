@@ -16,20 +16,24 @@
 
 package com.revetsec.oidc;
 
+import com.revetsec.jose.JwksParseResult;
+
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+
 import org.jspecify.annotations.NonNull;
 
 import com.revetsec.ErrorCategory;
-import com.revetsec.jose.JsonWebKeySet;
+import com.revetsec.jose.Jwks;
 import com.revetsec.jose.JoseException;
 import com.revetsec.jose.JwsAlgorithm;
-import com.revetsec.jose.StaticJsonWebKeySource;
-import com.revetsec.jose.RemoteJsonWebKeySource;
+import com.revetsec.jose.StaticJwksSource;
+import com.revetsec.jose.RemoteJwksSource;
 import com.revetsec.testing.TestClock;
 import com.revetsec.testing.TestHttpsServer;
 import com.revetsec.testing.TestTls;
 import com.revetsec.testing.JsonText;
-import com.revetsec.testing.TestJsonWebKeys;
-import com.revetsec.testing.TestJsonWebKeys.Fixture;
+import com.revetsec.testing.TestJwk;
+import com.revetsec.testing.TestJwk.Fixture;
 import com.revetsec.testing.TestJws;
 import com.revetsec.testing.TestJws.Algorithm;
 import org.junit.jupiter.api.Assertions;
@@ -67,7 +71,7 @@ final class IdTokenValidatorTests {
 
 	@Test
 	void validatesCoreAppendixA3AndA4WithTheirPublishedPublicKeyAndHashValues() throws IOException {
-		StaticJsonWebKeySource source = StaticJsonWebKeySource.fromJsonWebKeySet(JsonWebKeySet.fromJson(resource("jwks.json")));
+		StaticJwksSource source = StaticJwksSource.fromJwks(assertInstanceOf(JwksParseResult.Succeeded.class, Jwks.fromJsonResult(resource("jwks.json"))).getJwks());
 		IdTokenValidator validator = new IdTokenValidator("https://server.example.com", "s6BhdRkqt3", source,
 				Set.of(JwsAlgorithm.RS256), Set.of(), Set.of(), Duration.ofSeconds(60), Duration.ofMinutes(5),
 				Clock.fixed(Instant.ofEpochSecond(1311281000L), ZoneOffset.UTC));
@@ -220,14 +224,14 @@ final class IdTokenValidatorTests {
 	@Test
 	void expiryIsCheckedAfterARemoteKeyLookupRatherThanBeforeIt() throws IOException {
 		TestClock clock = TestClock.fromInstant(NOW);
-		String keys = TestJsonWebKeys.withFixture(Fixture.IDP_SIGNING_RSA_2048).kid("key")
+		String keys = TestJwk.withFixture(Fixture.IDP_SIGNING_RSA_2048).kid("key")
 				.alg("RS256").toKeySetJson();
 		try (TestHttpsServer server = TestHttpsServer.start()) {
 			server.script("/jwks", exchange -> {
 				clock.advance(Duration.ofSeconds(361));
-				exchange.send(TestHttpsServer.Response.fromJsonWebKeySet(keys));
+				exchange.send(TestHttpsServer.Response.fromJwks(keys));
 			});
-			RemoteJsonWebKeySource source = RemoteJsonWebKeySource.withUri(server.uri("/jwks"))
+			RemoteJwksSource source = RemoteJwksSource.withUri(server.uri("/jwks"))
 					.httpClient(TestTls.httpClient()).clock(clock).build();
 			IdTokenValidator validator = new IdTokenValidator(ISSUER, CLIENT, source, Set.of(JwsAlgorithm.RS256),
 					Set.of(), Set.of(), Duration.ofSeconds(60), Duration.ofMinutes(5), clock);
@@ -283,22 +287,25 @@ final class IdTokenValidatorTests {
 	}
 
 	@Test
-	void onlyJsonBooleansMakeEmailVerificationAvailableAndStringFormsAreRedacted() {
+	void emailClaimsPreservePresentJsonTypesAndDiagnosticsAreRedacted() {
 		Map<String, String> claims = claims();
 		claims.put("email", "\"TEST-ONLY-email-sentinel@example.com\"");
 		claims.put("email_verified", "true");
 		IdToken verified = accept(claims);
-		Assertions.assertEquals(Optional.of(true), verified.getEmailVerified());
-		Assertions.assertEquals(Optional.of("TEST-ONLY-email-sentinel@example.com"), verified.getEmail());
+		Assertions.assertTrue(Assertions.assertInstanceOf(com.revetsec.json.JsonBoolean.class, verified.getClaims().getClaim("email_verified").orElseThrow()).getValue());
+		Assertions.assertEquals("TEST-ONLY-email-sentinel@example.com", Assertions.assertInstanceOf(com.revetsec.json.JsonString.class, verified.getClaims().getClaim("email").orElseThrow()).getValue());
 		Assertions.assertFalse(verified.toString().contains("sentinel"));
 		for (String value : List.of("\"true\"", "123", "null", "[]")) {
 			claims.put("email_verified", value);
-			Assertions.assertTrue(accept(claims).getEmailVerified().isEmpty());
+			Assertions.assertEquals(value, accept(claims).getClaims().getClaim("email_verified").orElseThrow().toJson());
 		}
 		claims.put("email_verified", "false");
-		Assertions.assertEquals(Optional.of(false), accept(claims).getEmailVerified());
+		Assertions.assertFalse(Assertions.assertInstanceOf(com.revetsec.json.JsonBoolean.class, accept(claims).getClaims().getClaim("email_verified").orElseThrow()).getValue());
 		claims.put("email", "123");
-		Assertions.assertTrue(accept(claims).getEmail().isEmpty());
+		Assertions.assertEquals(123L, Assertions.assertInstanceOf(com.revetsec.json.JsonNumber.class, accept(claims).getClaims().getClaim("email").orElseThrow()).getLongValueExact().orElseThrow());
+		claims.remove("email"); claims.remove("email_verified");
+		Assertions.assertTrue(accept(claims).getClaims().getClaim("email").isEmpty());
+		Assertions.assertTrue(accept(claims).getClaims().getClaim("email_verified").isEmpty());
 	}
 
 	@Test
@@ -355,10 +362,10 @@ final class IdTokenValidatorTests {
 
 	@Test
 	void signingKeyIssuerBindingCannotBeSkippedByTheProfile() {
-		String key = TestJsonWebKeys.withFixture(Fixture.IDP_SIGNING_RSA_2048).kid("key")
+		String key = TestJwk.withFixture(Fixture.IDP_SIGNING_RSA_2048).kid("key")
 				.alg("RS256").issuer("https://other-issuer.example.com").toKeySetJson();
 		IdTokenValidator validator = new IdTokenValidator(ISSUER, CLIENT,
-				StaticJsonWebKeySource.fromJsonWebKeySet(JsonWebKeySet.fromJson(key)), Set.of(JwsAlgorithm.RS256),
+				StaticJwksSource.fromJwks(assertInstanceOf(JwksParseResult.Succeeded.class, Jwks.fromJsonResult(key)).getJwks()), Set.of(JwsAlgorithm.RS256),
 				Set.of(), Set.of(), Duration.ofSeconds(60), Duration.ofMinutes(5), Clock.fixed(NOW, ZoneOffset.UTC));
 		OidcValidationException failure = assertFailure(OidcValidationException.Reason.ISSUER_MISMATCH, () ->
 				validator.validate(signed(claims()), NONCE, ACCESS, CODE, null, Set.of()));
@@ -410,9 +417,9 @@ final class IdTokenValidatorTests {
 
 	private static @NonNull IdTokenValidator validator(@NonNull Fixture fixture, @NonNull Set<@NonNull JwsAlgorithm> algorithms, @NonNull Set<@NonNull String> audiences,
 			@NonNull Set<@NonNull String> authorizedParties, @NonNull Instant now) {
-		String key = TestJsonWebKeys.withFixture(fixture).kid("key")
+		String key = TestJwk.withFixture(fixture).kid("key")
 				.alg(algorithms.iterator().next().getWireValue()).toKeySetJson();
-		return new IdTokenValidator(ISSUER, CLIENT, StaticJsonWebKeySource.fromJsonWebKeySet(JsonWebKeySet.fromJson(key)),
+		return new IdTokenValidator(ISSUER, CLIENT, StaticJwksSource.fromJwks(assertInstanceOf(JwksParseResult.Succeeded.class, Jwks.fromJsonResult(key)).getJwks()),
 				algorithms, audiences, authorizedParties, Duration.ofSeconds(60), Duration.ofMinutes(5),
 				Clock.fixed(now, ZoneOffset.UTC));
 	}

@@ -37,7 +37,7 @@ final class NodeAccessTokenIT {
 	}
 	@Test void authorizationCodeResourceIndicatorReturnsStrictProof() throws Exception {
 		TokenResponse tokens = provider().codeFlow(client(null), true);
-		VerifiedAccessToken checked = provider().validator().validate(ResourceProviderFixturesIT.bearer(tokens));
+		VerifiedAccessToken checked = assertInstanceOf(AccessTokenValidationResult.Succeeded.class, provider().validator().validateResult(ResourceProviderFixturesIT.bearer(tokens))).getAccessToken();
 		assertEquals(provider().issuer(), checked.getIssuer()); assertEquals("test-user", checked.getSubject().orElseThrow());
 		assertEquals(ResourceProviderFixturesIT.NODE_CLIENT, checked.getClientId().orElseThrow());
 		assertTrue(checked.getAudiences().contains(ResourceProviderFixturesIT.RESOURCE)); assertEquals(Set.of("read"), checked.getScopes());
@@ -66,7 +66,7 @@ final class NodeAccessTokenIT {
 		TokenResponse tokens = provider().nodeOpaqueCredentials(oauth);
 		TokenIntrospectionClient introspection = TokenIntrospectionClient.withOAuthClient(oauth).expectedAudiences(Set.of(ResourceProviderFixturesIT.INTROSPECTION_RESOURCE)).build();
 		BearerToken bearer = ResourceProviderFixturesIT.bearer(tokens);
-		VerifiedAccessToken first = introspection.validate(bearer); VerifiedAccessToken second = introspection.validate(bearer);
+		VerifiedAccessToken first = assertInstanceOf(AccessTokenValidationResult.Succeeded.class, introspection.validateResult(bearer)).getAccessToken(); VerifiedAccessToken second = assertInstanceOf(AccessTokenValidationResult.Succeeded.class, introspection.validateResult(bearer)).getAccessToken();
 		assertEquals(2, posts.get()); assertNotSame(first, second); assertEquals(Set.of("read"), first.getScopes());
 		assertEquals(provider().issuer(), first.getIssuer()); assertTrue(first.getAudiences().contains(ResourceProviderFixturesIT.INTROSPECTION_RESOURCE));
 		TokenIntrospectionClient wrong = TokenIntrospectionClient.withOAuthClient(oauth).expectedAudiences(Set.of("https://other.example.test/mcp")).build();
@@ -78,7 +78,7 @@ final class NodeAccessTokenIT {
 		TokenResponse tokens = provider().nodeOpaqueCredentials(oauth); BearerToken bearer = ResourceProviderFixturesIT.bearer(tokens);
 		TokenIntrospectionClient introspection = TokenIntrospectionClient.withOAuthClient(oauth).expectedAudiences(Set.of(ResourceProviderFixturesIT.INTROSPECTION_RESOURCE)).build();
 		assertInstanceOf(AccessTokenValidationResult.Succeeded.class, introspection.validateResult(bearer));
-		oauth.revoke(tokens.getAccessToken().getValue(), TokenTypeHint.ACCESS_TOKEN);
+		assertInstanceOf(OAuthRevocationResult.Succeeded.class, oauth.revokeResult(tokens.getAccessToken().getValue(), TokenTypeHint.ACCESS_TOKEN));
 		for (int i = 0; i < 2; i++) assertEquals(AccessTokenValidationException.Reason.INACTIVE,
 				assertInstanceOf(AccessTokenValidationResult.Rejected.class, introspection.validateResult(bearer)).getReason());
 		assertEquals(3, posts.get());
@@ -97,14 +97,14 @@ final class NodeAccessTokenIT {
 		JwtAccessTokenValidator validator = JwtAccessTokenValidator.withIssuer(provider().issuer())
 				.expectedAudiences(Set.of(ResourceProviderFixturesIT.RESOURCE)).httpClient(provider().httpClient())
 				.allowInsecureLoopback(true).observer(new AccessTokenObserver() {
-					@Override public void willFetchJsonWebKeySet(@NonNull URI uri) { fetches.incrementAndGet(); }
+					@Override public void willFetchJwks(@NonNull URI uri) { fetches.incrementAndGet(); }
 				}).build();
 		OAuthClient oauth = client(null); TokenResponse first = provider().nodeCredentials(oauth);
 		BearerToken oldBearer = ResourceProviderFixturesIT.bearer(first);
-		VerifiedAccessToken before = validator.validate(oldBearer); assertEquals(1, fetches.get());
+		VerifiedAccessToken before = assertInstanceOf(AccessTokenValidationResult.Succeeded.class, validator.validateResult(oldBearer)).getAccessToken(); assertEquals(1, fetches.get());
 		provider().restartNode();
 		TokenResponse second = provider().nodeCredentials(oauth);
-		VerifiedAccessToken after = validator.validate(ResourceProviderFixturesIT.bearer(second));
+		VerifiedAccessToken after = assertInstanceOf(AccessTokenValidationResult.Succeeded.class, validator.validateResult(ResourceProviderFixturesIT.bearer(second))).getAccessToken();
 		assertEquals(2, fetches.get(), "same cached JWKS source refreshes for the actual new provider key");
 		assertEquals(before.getIssuer(), after.getIssuer()); assertEquals(before.getAudiences(), after.getAudiences());
 		assertNotEquals(before.getClaims().getMembers().get("jti"), after.getClaims().getMembers().get("jti"));
@@ -113,7 +113,7 @@ final class NodeAccessTokenIT {
 	}
 	@Test void unconfiguredResourceIndicatorFailsAtActualProvider() {
 		OAuthErrorResponseException failure = assertThrows(OAuthErrorResponseException.class, () -> client(null)
-				.requestClientCredentialsToken(TokenRequestOptions.builder().resources(java.util.List.of(URI.create("https://other.example.test/mcp")))
+				.requestClientCredentialsResult(TokenRequestOptions.builder().resources(java.util.List.of(URI.create("https://other.example.test/mcp")))
 						.scopes(Set.of("read")).build()));
 		assertEquals(java.util.Optional.of("invalid_target"), failure.getErrorCode());
 	}

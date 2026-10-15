@@ -63,7 +63,7 @@ public final class ClientAssertionFuzzModel {
 			assertThrows(OAuthTransportException.class, () -> ClientAssertionPreparation.checkReady(first, clock, Deadline.fromNow(Duration.ZERO)));
 			ClientAssertionPreparation.Prepared second = ClientAssertionPreparation.prepare(authentication, "client", target, role, client.resourceSettings(), new SecureRandom(), deadline);
 			assertEquals(2, reads.get()); verify(second, selected.get(1), audienceCase == 0 ? issuer : endpoint.toString(), audienceCase, algorithm);
-			assertNotEquals(claims(first.value()).findString("jti"), claims(second.value()).findString("jti"));
+			assertNotEquals(claims(first.value()).find("jti").map(com.revetsec.json.JsonString.class::cast).map(com.revetsec.json.JsonString::getValue), claims(second.value()).find("jti").map(com.revetsec.json.JsonString.class::cast).map(com.revetsec.json.JsonString::getValue));
 		} catch (OAuthException rejected) {
 			assertFalse(permitted); assertNull(rejected.getCause());
 			assertEquals(expired ? OAuthException.Reason.NETWORK_FAILURE : metadataCase != 0 ? OAuthException.Reason.CLIENT_ASSERTION_ENDPOINT_MISMATCH : keyCase == 1 ? OAuthException.Reason.CLIENT_ASSERTION_KEY_UNAVAILABLE : OAuthException.Reason.CLIENT_ASSERTION_KEY_PAIR_MISMATCH, rejected.getReason());
@@ -74,9 +74,9 @@ public final class ClientAssertionFuzzModel {
 	private static void verify(ClientAssertionPreparation.@NonNull Prepared prepared, @NonNull String kid, @NonNull String audience, int mode, @NonNull JwsAlgorithm algorithm) throws Exception {
 		M6FuzzOracle.verify(prepared.value(), M6FuzzOracle.KEY.getPublic(), algorithm);
 		JsonObject claims = claims(prepared.value()), header = M6FuzzOracle.object(new String(M6FuzzOracle.decode(prepared.value().split("\\.")[0]), StandardCharsets.UTF_8));
-		assertEquals("client", claims.findString("iss").orElseThrow()); assertEquals("client", claims.findString("sub").orElseThrow()); assertEquals(audience, claims.findString("aud").orElseThrow());
-		assertEquals(NOW.getEpochSecond(), claims.findLong("iat").orElseThrow()); assertEquals(NOW.getEpochSecond(), claims.findLong("nbf").orElseThrow()); assertEquals(NOW.plusSeconds(60).getEpochSecond(), claims.findLong("exp").orElseThrow());
-		assertEquals(32, M6FuzzOracle.decode(claims.findString("jti").orElseThrow()).length); assertEquals(kid, header.findString("kid").orElseThrow()); assertEquals(mode == 0 ? "client-authentication+jwt" : "JWT", header.findString("typ").orElseThrow());
+		assertEquals("client", claims.find("iss").map(com.revetsec.json.JsonString.class::cast).map(com.revetsec.json.JsonString::getValue).orElseThrow()); assertEquals("client", claims.find("sub").map(com.revetsec.json.JsonString.class::cast).map(com.revetsec.json.JsonString::getValue).orElseThrow()); assertEquals(audience, claims.find("aud").map(com.revetsec.json.JsonString.class::cast).map(com.revetsec.json.JsonString::getValue).orElseThrow());
+		assertEquals(NOW.getEpochSecond(), claims.find("iat").map(com.revetsec.json.JsonNumber.class::cast).flatMap(com.revetsec.json.JsonNumber::getLongValueExact).orElseThrow()); assertEquals(NOW.getEpochSecond(), claims.find("nbf").map(com.revetsec.json.JsonNumber.class::cast).flatMap(com.revetsec.json.JsonNumber::getLongValueExact).orElseThrow()); assertEquals(NOW.plusSeconds(60).getEpochSecond(), claims.find("exp").map(com.revetsec.json.JsonNumber.class::cast).flatMap(com.revetsec.json.JsonNumber::getLongValueExact).orElseThrow());
+		assertEquals(32, M6FuzzOracle.decode(claims.find("jti").map(com.revetsec.json.JsonString.class::cast).map(com.revetsec.json.JsonString::getValue).orElseThrow()).length); assertEquals(kid, header.find("kid").map(com.revetsec.json.JsonString.class::cast).map(com.revetsec.json.JsonString::getValue).orElseThrow()); assertEquals(mode == 0 ? "client-authentication+jwt" : "JWT", header.find("typ").map(com.revetsec.json.JsonString.class::cast).map(com.revetsec.json.JsonString::getValue).orElseThrow());
 		assertEquals(NOW, prepared.issued()); assertEquals(NOW.plusSeconds(60), prepared.expires());
 	}
 }

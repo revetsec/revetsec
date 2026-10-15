@@ -158,6 +158,8 @@ public final class PasskeyApp {
                     + "<title>Revetsec passkey demo</title></head><body data-authenticated='"
                     + session.authenticated + "' data-csrf='" + session.csrf + "'>"
                     + "<h1>Revetsec passkey demo</h1><p>" + this.storageNotice + "</p>"
+                    + "<p><label><input id='security-key' type='checkbox'> Use a physical security key</label>"
+                    + " (choose this before registering to save the passkey on your key).</p>"
                     + "<section id='login'><label>Demo access key <input id='access' type='password' autocomplete='off' maxlength='43'></label>"
                     + "<button id='access-login'>Approve enrollment</button> <button id='sign-in'>Sign in with passkey</button></section>"
                     + "<section id='account' hidden><p>Signed in to the fixed demo account.</p>"

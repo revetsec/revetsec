@@ -23,7 +23,7 @@ import com.revetsec.internal.http.Deadline;
 import com.revetsec.internal.http.RuntimeFloor;
 import com.revetsec.internal.oauth.OidcTransactionAccess;
 import com.revetsec.jose.JwsAlgorithm;
-import com.revetsec.jose.StaticJsonWebKeySource;
+import com.revetsec.jose.StaticJwksSource;
 import com.revetsec.oauth.BearerToken;
 import com.revetsec.oauth.JwtAccessTokenValidator;
 import com.revetsec.oauth.VerifiedAccessToken;
@@ -61,7 +61,7 @@ import static com.revetsec.oauth.server.OAuthServerObserver.Endpoint.*;
 @ThreadSafe
 public final class OAuthAuthorizationServer {
  private final @NonNull String issuer;
- private final @NonNull URI authorizationEndpoint, tokenEndpoint, jsonWebKeySetEndpoint;
+ private final @NonNull URI authorizationEndpoint, tokenEndpoint, jwksEndpoint;
  private final @Nullable URI revocationEndpoint, introspectionEndpoint;
  private final @NonNull OAuthServerSettings settings;
  private final @NonNull OAuthServerIngressLimits limits;
@@ -85,7 +85,7 @@ public final class OAuthAuthorizationServer {
  private OAuthAuthorizationServer(@NonNull Builder b) { this(b, Runtime.version()); }
  private OAuthAuthorizationServer(@NonNull Builder b, Runtime.@NonNull Version runtimeVersion) {
   this.issuer=b.issuer; this.authorizationEndpoint=required(b.authorizationEndpoint); this.tokenEndpoint=required(b.tokenEndpoint);
-  this.jsonWebKeySetEndpoint=required(b.jsonWebKeySetEndpoint); this.revocationEndpoint=b.revocationEndpoint; this.introspectionEndpoint=b.introspectionEndpoint;
+  this.jwksEndpoint=required(b.jwksEndpoint); this.revocationEndpoint=b.revocationEndpoint; this.introspectionEndpoint=b.introspectionEndpoint;
   this.repository=required(b.clientRepository); this.policy=required(b.grantPolicy); OAuthAuthorizationServerStore store=required(b.store);
   OAuthIssuerKeyProvider provider=required(b.signingKeys); StateSealer sealer=required(b.stateSealer);
   this.refresh=b.refreshTokensEnabled;
@@ -95,7 +95,7 @@ public final class OAuthAuthorizationServer {
   this.clock=b.clock; this.observer=b.observer; this.nativeLoopback=b.allowNativeLoopbackRedirects; this.localhost=b.allowLocalhostRedirects;
   URI issuerUri=endpoint(URI.create(this.issuer),b.allowInsecureLoopback);
   Set<String> routes=new HashSet<>();
-  for (URI route:List.of(this.authorizationEndpoint,this.tokenEndpoint,this.jsonWebKeySetEndpoint)) checkRoute(issuerUri,route,b.allowInsecureLoopback,routes);
+  for (URI route:List.of(this.authorizationEndpoint,this.tokenEndpoint,this.jwksEndpoint)) checkRoute(issuerUri,route,b.allowInsecureLoopback,routes);
   if(this.revocationEndpoint!=null) checkRoute(issuerUri,this.revocationEndpoint,b.allowInsecureLoopback,routes);
   if(this.introspectionEndpoint!=null) checkRoute(issuerUri,this.introspectionEndpoint,b.allowInsecureLoopback,routes);
   OAuthClientMetadataPolicy metadataPolicy=b.clientMetadataPolicy;
@@ -119,7 +119,7 @@ public final class OAuthAuthorizationServer {
   this.revocation=new OAuthGrantRevocation(this.coordinator,codec,this.status,this.limits,this.settings.maximumStoreCommitAttempts,this.settings.maximumSubjectLength,this.settings.maximumResponseBodyBytes,this.settings.maximumHeaderBytes);
   this.introspection=new OAuthResourceIntrospection(this.status,this.limits,this.settings.maximumResponseBodyBytes,this.settings.maximumHeaderBytes);
   Set<String> scopes=new HashSet<>(); for(Set<String> values:this.resources.values()) scopes.addAll(values);
-  this.metadata=new OAuthIssuerMetadata(issuerUri,this.authorizationEndpoint,this.tokenEndpoint,this.jsonWebKeySetEndpoint,this.revocationEndpoint,this.introspectionEndpoint,
+  this.metadata=new OAuthIssuerMetadata(issuerUri,this.authorizationEndpoint,this.tokenEndpoint,this.jwksEndpoint,this.revocationEndpoint,this.introspectionEndpoint,
    this.refresh,b.allowInsecureLoopback,scopes,this.settings.publicMetadataFreshness,this.settings.maximumResponseBodyBytes,this.settings.maximumHeaderBytes,metadataPolicy.getEnabled());
  }
  /** Starts configuration with the exact issuer identity.
@@ -246,11 +246,11 @@ public final class OAuthAuthorizationServer {
   if(!this.resources.containsKey(resource)) throw OAuthServerConfiguration.invalid();
   return execute(ACCESS_TOKEN_VALIDATION,d->{
    if(OidcTransactionAccess.get().bearerValue(token).length()>this.settings.maximumRequestBodyBytes) return OAuthIssuerAccessTokenResult.fromRejection(MALFORMED_REQUEST,null,null);
-   StaticJsonWebKeySource snapshot=this.keys.verificationKeys(d);
+   StaticJwksSource snapshot=this.keys.verificationKeys(d);
    VerifiedAccessToken proof;
    try {
     OAuthServerClientAdmission.remaining(d);
-    JwtAccessTokenValidator validator=JwtAccessTokenValidator.withIssuer(this.issuer).jsonWebKeySource(snapshot).expectedAudiences(Set.of(resource))
+    JwtAccessTokenValidator validator=JwtAccessTokenValidator.withIssuer(this.issuer).jwksSource(snapshot).expectedAudiences(Set.of(resource))
      .allowedAlgorithms(Set.of(JwsAlgorithm.RS256)).clock(this.clock).clockSkew(this.settings.clockSkew)
      .maximumTokenLength(Math.max(8192,this.settings.maximumRequestBodyBytes)).requestTimeout(Duration.ofSeconds(1)).totalDeadline(this.settings.totalDeadline).build();
     proof=OidcTransactionAccess.get().validateAccessToken(validator,token,d);
@@ -320,9 +320,9 @@ public final class OAuthAuthorizationServer {
   * @return safe public response, including method rejection
   * @since 1.0.0
   */
- @CheckReturnValue public @NonNull OAuthServerResponse jsonWebKeySetResponse(@NonNull String httpMethod) {
+ @CheckReturnValue public @NonNull OAuthServerResponse jwksResponse(@NonNull String httpMethod) {
   requireNonNull(httpMethod);
-  return execute(JSON_WEB_KEY_SET,d->this.metadata.jwks(httpMethod,this.keys,d).response(),r->{throw OAuthServerValidationException.fromReason(r);});
+  return execute(JWKS,d->this.metadata.jwks(httpMethod,this.keys,d).response(),r->{throw OAuthServerValidationException.fromReason(r);});
  }
  /** Translates a caught infrastructure exception to a fixed, bounded local503 response.
   * @param failure restricted issuer failure
@@ -358,11 +358,11 @@ public final class OAuthAuthorizationServer {
   * @since 1.0.0
   */
  @CheckReturnValue public @NonNull URI getTokenEndpoint() {return this.tokenEndpoint;}
- /** Returns configured JsonWebKeySetEndpoint.
+ /** Returns configured JwksEndpoint.
   * @return exact setting or optional absence
   * @since 1.0.0
   */
- @CheckReturnValue public @NonNull URI getJsonWebKeySetEndpoint() {return this.jsonWebKeySetEndpoint;}
+ @CheckReturnValue public @NonNull URI getJwksEndpoint() {return this.jwksEndpoint;}
  /** Returns configured RevocationEndpoint.
   * @return exact setting or optional absence
   * @since 1.0.0
@@ -463,7 +463,7 @@ public final class OAuthAuthorizationServer {
  @NotThreadSafe @CheckReturnValue
  public static final class Builder {
   private final @NonNull String issuer;
-  private @Nullable URI authorizationEndpoint,tokenEndpoint,jsonWebKeySetEndpoint,revocationEndpoint,introspectionEndpoint;
+  private @Nullable URI authorizationEndpoint,tokenEndpoint,jwksEndpoint,revocationEndpoint,introspectionEndpoint;
   private @Nullable OAuthServerClientRepository clientRepository;
   private @Nullable OAuthAuthorizationServerStore store;
   private @Nullable OAuthIssuerKeyProvider signingKeys;
@@ -489,12 +489,12 @@ public final class OAuthAuthorizationServer {
    * @since 1.0.0
    */
   @CheckReturnValue public @NonNull Builder tokenEndpoint(@Nullable URI value) {this.tokenEndpoint=value;return this;}
-  /** Sets jsonWebKeySetEndpoint; null restores its default or clears a required setting.
+  /** Sets jwksEndpoint; null restores its default or clears a required setting.
    * @param value complete replacement or null
    * @return this builder
    * @since 1.0.0
    */
-  @CheckReturnValue public @NonNull Builder jsonWebKeySetEndpoint(@Nullable URI value) {this.jsonWebKeySetEndpoint=value;return this;}
+  @CheckReturnValue public @NonNull Builder jwksEndpoint(@Nullable URI value) {this.jwksEndpoint=value;return this;}
   /** Sets revocationEndpoint; null restores its default or clears a required setting.
    * @param value complete replacement or null
    * @return this builder

@@ -78,7 +78,7 @@ public interface OAuthServerObserver {
 		/** Credential revocation. */ REVOCATION,
 		/** Registered-resource introspection. */ INTROSPECTION,
 		/** Public issuer metadata. */ METADATA,
-		/** Public verification keys. */ JSON_WEB_KEY_SET,
+		/** Public verification keys. */ JWKS,
 		/** Online issuer access-token validation. */ ACCESS_TOKEN_VALIDATION,
 		/** Trusted grant invalidation. */ GRANT_REVOCATION,
 		/** Trusted subject invalidation. */ SUBJECT_REVOCATION,

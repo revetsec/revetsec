@@ -18,7 +18,7 @@ package com.revetsec.jose;
 
 import org.jspecify.annotations.NonNull;
 
-import com.revetsec.testing.TestJsonWebKeys.Fixture;
+import com.revetsec.testing.TestJwk.Fixture;
 import com.revetsec.testing.TestJws.Algorithm;
 import com.revetsec.testing.TestHttpsServer;
 import com.revetsec.testing.TestTls;
@@ -64,8 +64,6 @@ final class JwtValidationResultTests {
         JwtValidationResult.Rejected failure = assertInstanceOf(JwtValidationResult.Rejected.class,
                 validator.validateResult(expired));
         assertEquals(JoseException.Reason.EXPIRED, failure.getReason());
-        assertEquals(JoseException.Reason.EXPIRED, assertThrows(JoseException.class,
-                () -> validator.validate(expired)).getReason());
         String wrongAudience = JwtFixtures.signed(Fixture.IDP_SIGNING_RSA_2048, Algorithm.RS256,
                 JwtFixtures.claims().put("aud", "TEST-ONLY-wrong-audience"));
         assertEquals(JoseException.Reason.AUDIENCE_MISMATCH,
@@ -82,13 +80,13 @@ final class JwtValidationResultTests {
         try (TestHttpsServer server = TestHttpsServer.start()) {
             server.script("/jwks", TestHttpsServer.Script.fromResponse(TestHttpsServer.Response.withStatus(503)
                     .header("Content-Type", "application/json").body("{}".getBytes(java.nio.charset.StandardCharsets.UTF_8)).build()));
-            RemoteJsonWebKeySource source = RemoteJsonWebKeySource.withUri(server.uri("/jwks"))
+            RemoteJwksSource source = RemoteJwksSource.withUri(server.uri("/jwks"))
                     .httpClient(TestTls.httpClient()).build();
             JwtValidator validator = JwtFixtures.validator(source).build();
             assertInstanceOf(JwtValidationResult.Rejected.class, validator.validateResult("bad.jwt"));
             assertEquals(0, server.getRequests().size());
             String token = JwtFixtures.signed(Fixture.IDP_SIGNING_RSA_2048, Algorithm.RS256);
-            assertThrows(JsonWebKeySetUnavailableException.class, () -> validator.validateResult(token));
+            assertThrows(JwksUnavailableException.class, () -> validator.validateResult(token));
             assertEquals(1, server.getRequests().size());
         }
     }

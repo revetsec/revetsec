@@ -16,17 +16,19 @@
 
 package com.revetsec.oidc;
 
+import com.revetsec.jose.JwksParseResult;
+
 import com.revetsec.OutboundUriPolicy;
 import com.revetsec.internal.encoding.QueryParameters;
 import com.revetsec.jose.JoseObserver;
-import com.revetsec.jose.JsonWebKeySet;
+import com.revetsec.jose.Jwks;
 import com.revetsec.jose.JwsAlgorithm;
-import com.revetsec.jose.StaticJsonWebKeySource;
+import com.revetsec.jose.StaticJwksSource;
 import com.revetsec.oauth.AuthorizationRedirect;
 import com.revetsec.oauth.AuthorizationRequestOptions;
 import com.revetsec.oauth.ClientAuthentication;
 import com.revetsec.oauth.IssuerParameterPolicy;
-import com.revetsec.testing.TestJsonWebKeys;
+import com.revetsec.testing.TestJwk;
 import org.jspecify.annotations.NonNull;
 import org.junit.jupiter.api.DynamicTest;
 import org.junit.jupiter.api.Test;
@@ -219,12 +221,12 @@ final class OidcCloseoutConfigurationTests {
     }
     private static OidcClient.@NonNull Builder client() {
         return OidcClient.withProviderMetadata(metadata()).clientId("client").redirectUri(CALLBACK)
-                .jsonWebKeySource(keys());
+                .jwksSource(keys());
     }
-    private static @NonNull StaticJsonWebKeySource keys() {
-        String json = TestJsonWebKeys.withFixture(TestJsonWebKeys.Fixture.IDP_SIGNING_RSA_2048)
+    private static @NonNull StaticJwksSource keys() {
+        String json = TestJwk.withFixture(TestJwk.Fixture.IDP_SIGNING_RSA_2048)
                 .kid("TEST-ONLY-closeout").alg("RS256").toKeySetJson();
-        return StaticJsonWebKeySource.fromJsonWebKeySet(JsonWebKeySet.fromJson(json));
+        return StaticJwksSource.fromJwks(assertInstanceOf(JwksParseResult.Succeeded.class, Jwks.fromJsonResult(json)).getJwks());
     }
     private static @NonNull IdTokenValidator validator(@NonNull String issuer, @NonNull String client,
             @NonNull Set<@NonNull JwsAlgorithm> algorithms, @NonNull Set<@NonNull String> audiences,

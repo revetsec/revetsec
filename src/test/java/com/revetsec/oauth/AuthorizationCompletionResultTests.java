@@ -41,9 +41,9 @@ final class AuthorizationCompletionResultTests {
             OAuthClient client = client(server);
             PendingAuthorization pending = client.beginAuthorization().getPendingAuthorization();
             InMemoryPendingAuthorizationStore store = InMemoryPendingAuthorizationStore.builder().build();
-            pending.saveTo(store, "browser");
+            org.junit.jupiter.api.Assertions.assertEquals(PendingAuthorizationSaveResult.SAVED, pending.saveToResult(store, "browser"));
             PendingAuthorizationSource source = PendingAuthorizationSource.fromStore(store, "browser");
-            AuthorizationResponse response = AuthorizationResponse.fromQueryString("state=" + pending.state() + "&code=TEST-ONLY-code");
+            AuthorizationResponse response = assertInstanceOf(AuthorizationResponseParseResult.Succeeded.class, AuthorizationResponse.fromQueryStringResult("state=" + pending.state() + "&code=TEST-ONLY-code")).getResponse();
             AuthorizationCompletionResult.Succeeded success = assertInstanceOf(AuthorizationCompletionResult.Succeeded.class,
                     client.completeAuthorizationResult(response, source, CALLBACK));
             assertEquals("TEST-ONLY-access", success.getTokens().getAccessToken().getValue());
@@ -67,14 +67,14 @@ final class AuthorizationCompletionResultTests {
             PendingAuthorization pending = client.beginAuthorization().getPendingAuthorization();
             PendingAuthorizationSource source = sealed(pending);
             AuthorizationCompletionResult.Rejected wrongState = assertInstanceOf(AuthorizationCompletionResult.Rejected.class,
-                    client.completeAuthorizationResult(AuthorizationResponse.fromQueryString("state=wrong&error=access_denied"), source, CALLBACK));
+                    client.completeAuthorizationResult(assertInstanceOf(AuthorizationResponseParseResult.Succeeded.class, AuthorizationResponse.fromQueryStringResult("state=wrong&error=access_denied")).getResponse(), source, CALLBACK));
             assertEquals(OAuthException.Reason.STATE_MISMATCH, wrongState.getReason());
             assertEquals(1, rejected.get());
-            AuthorizationResponse wrongIssuer = AuthorizationResponse.fromQueryString("state=" + pending.state()
-                    + "&iss=https%3A%2F%2Fwrong.example&error=access_denied");
+            AuthorizationResponse wrongIssuer = assertInstanceOf(AuthorizationResponseParseResult.Succeeded.class, AuthorizationResponse.fromQueryStringResult("state=" + pending.state()
+                    + "&iss=https%3A%2F%2Fwrong.example&error=access_denied")).getResponse();
             assertEquals(OAuthException.Reason.ISSUER_MISMATCH, assertInstanceOf(AuthorizationCompletionResult.Rejected.class,
                     client.completeAuthorizationResult(wrongIssuer, source, CALLBACK)).getReason());
-            AuthorizationResponse denied = AuthorizationResponse.fromQueryString("state=" + pending.state() + "&error=access_denied&error_description=TEST-ONLY-prose");
+            AuthorizationResponse denied = assertInstanceOf(AuthorizationResponseParseResult.Succeeded.class, AuthorizationResponse.fromQueryStringResult("state=" + pending.state() + "&error=access_denied&error_description=TEST-ONLY-prose")).getResponse();
             assertEquals(OAuthException.Reason.CALLBACK_URI_MISMATCH, assertInstanceOf(AuthorizationCompletionResult.Rejected.class,
                     client.completeAuthorizationResult(denied, source, URI.create("https://app.example/other"))).getReason());
             AuthorizationCompletionResult result = client.completeAuthorizationResult(denied, source, CALLBACK);
@@ -85,20 +85,20 @@ final class AuthorizationCompletionResultTests {
     }
 
     @Test
-    void providerFailuresAndMetadataDriftRemainExceptions() throws Exception {
+    void checkedCallbackErrorsAreValuesAndInfrastructureFailuresRemainExceptions() throws Exception {
         try (TestHttpsServer server = TestHttpsServer.start()) {
             OAuthClient client = client(server);
             PendingAuthorization pending = client.beginAuthorization().getPendingAuthorization();
             PendingAuthorizationSource source = sealed(pending);
             for (String code : java.util.List.of("temporarily_unavailable", "server_error", "invalid_request")) {
-                AuthorizationResponse response = AuthorizationResponse.fromQueryString("state=" + pending.state() + "&error=" + code);
-                assertEquals(Optional.of(code), assertThrows(AuthorizationErrorException.class,
-                        () -> client.completeAuthorizationResult(response, source, CALLBACK)).getErrorCode());
+                AuthorizationResponse response = assertInstanceOf(AuthorizationResponseParseResult.Succeeded.class, AuthorizationResponse.fromQueryStringResult("state=" + pending.state() + "&error=" + code)).getResponse();
+                assertEquals(OAuthEndpointError.fromWireValue(code), assertInstanceOf(AuthorizationCompletionResult.RejectedAuthorizationError.class,
+                        client.completeAuthorizationResult(response, source, CALLBACK)).getError());
             }
             OAuthClient changed = OAuthClient.withAuthorizationServerMetadata(AuthorizationServerMetadata.withIssuer(server.getBaseUri().toString())
                     .authorizationEndpoint(server.uri("/authorize")).tokenEndpoint(server.uri("/changed")).build())
                     .clientId("client").clientAuthentication(ClientAuthentication.noneInstance()).redirectUri(CALLBACK).httpClient(TestTls.httpClient()).build();
-            AuthorizationResponse response = AuthorizationResponse.fromQueryString("state=" + pending.state() + "&code=TEST-ONLY-code");
+            AuthorizationResponse response = assertInstanceOf(AuthorizationResponseParseResult.Succeeded.class, AuthorizationResponse.fromQueryStringResult("state=" + pending.state() + "&code=TEST-ONLY-code")).getResponse();
             assertEquals(OAuthException.Reason.METADATA_ENDPOINT_DRIFT, assertThrows(OAuthValidationException.class,
                     () -> changed.completeAuthorizationResult(response, source, CALLBACK)).getReason());
             assertEquals(0, server.getRequests().size());
@@ -115,23 +115,22 @@ final class AuthorizationCompletionResultTests {
             OAuthClient client = client(server);
             PendingAuthorization pending = client.beginAuthorization().getPendingAuthorization();
             PendingAuthorizationStore broken = new PendingAuthorizationStore() {
-                @Override public void save(@NonNull String binding, @NonNull String state, @NonNull String opaque,
-                                           @NonNull Instant expiry, @NonNull Duration remaining) { }
+                @Override public @NonNull PendingAuthorizationSaveResult save(@NonNull String binding, @NonNull String state, @NonNull String opaque,
+                                           @NonNull Instant expiry, @NonNull Duration remaining) { return PendingAuthorizationSaveResult.SAVED; }
                 @Override public @NonNull Optional<@NonNull String> consume(@NonNull String binding, @NonNull String state,
                                                                              @NonNull Duration remaining) {
                     throw new IllegalStateException("TEST-ONLY-secret-provider-detail");
                 }
             };
             PendingAuthorizationSource source = PendingAuthorizationSource.fromStore(broken, "browser");
-            AuthorizationResponse response = AuthorizationResponse.fromQueryString("state=" + pending.state() + "&code=TEST-ONLY-code");
+            AuthorizationResponse response = assertInstanceOf(AuthorizationResponseParseResult.Succeeded.class, AuthorizationResponse.fromQueryStringResult("state=" + pending.state() + "&code=TEST-ONLY-code")).getResponse();
             AuthorizationCompletionResult.Failed result = assertInstanceOf(AuthorizationCompletionResult.Failed.class,
                     client.completeAuthorizationResult(response, source, CALLBACK));
             assertEquals(OAuthException.Reason.PENDING_AUTHORIZATION_STORE_UNAVAILABLE, result.getReason());
             assertFalse(result.toString().contains("TEST-ONLY-secret-provider-detail"));
             assertEquals(0, server.getRequests().size());
             assertEquals(OAuthException.Reason.PENDING_AUTHORIZATION_STORE_UNAVAILABLE,
-                    assertThrows(PendingAuthorizationStoreException.class,
-                            () -> client.completeAuthorization(response, source, CALLBACK)).getReason());
+                    assertInstanceOf(AuthorizationCompletionResult.Failed.class, client.completeAuthorizationResult(response, source, CALLBACK)).getReason());
             assertEquals(0, server.getRequests().size());
         }
     }

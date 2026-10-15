@@ -85,16 +85,16 @@ class ScimM11ReviewTests {
         ScimPatchResult result = applied(provider, current, request);
         JsonObject changed = assertInstanceOf(JsonObject.class, assertInstanceOf(JsonArray.class,
                 result.getResource().getExtension(schemaId).orElseThrow().find("entries").orElseThrow()).getElements().get(0));
-        assertEquals("Private]Key", changed.findString("key").orElseThrow());
-        assertEquals("New", changed.findString("note").orElseThrow());
-        assertEquals("Private Secret", changed.findString("secret").orElseThrow());
+        assertEquals("Private]Key", changed.find("key").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow());
+        assertEquals("New", changed.find("note").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow());
+        assertEquals("Private Secret", changed.find("secret").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow());
 
         String hidden = schemaId + ":entries[key eq \"Private]Key\" or secret pr].note";
         ScimPatchParseResult.Rejected rejected = assertInstanceOf(ScimPatchParseResult.Rejected.class,
                 provider.parsePatchRequestResult(type, body(JsonObject.builder().put("op", "replace")
                         .put("path", hidden).put("value", "Leaked").build().toJson())));
         assertEquals(ScimErrorType.INVALID_PATH, rejected.getError().getErrorType().orElseThrow());
-        assertEquals("Old", originalEntry.findString("note").orElseThrow());
+        assertEquals("Old", originalEntry.find("note").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow());
         assertFalse(rejected.toString().contains("Private"));
     }
 
@@ -153,9 +153,9 @@ class ScimM11ReviewTests {
             ScimPatchResult result = applied(provider, current, request);
             JsonObject row = assertInstanceOf(JsonObject.class, assertInstanceOf(JsonArray.class,
                     result.getResource().getDocument().find("rows").orElseThrow()).getElements().get(0));
-            assertEquals("Visible", row.findString("note").orElseThrow());
+            assertEquals("Visible", row.find("note").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow());
             if (operation.equals("remove")) assertTrue(row.find("secret").isEmpty());
-            else assertEquals("Updated Private Secret", row.findString("secret").orElseThrow());
+            else assertEquals("Updated Private Secret", row.find("secret").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow());
             ScimResponse response = assertInstanceOf(ScimResponseResult.Prepared.class, provider.patchResponseResult(
                     result.getResource(), result.getSuppliedAttributePaths(), selection)).getResponse();
             String output = new String(response.toHttpBodyWithPersonalData(), StandardCharsets.UTF_8);

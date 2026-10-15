@@ -19,7 +19,7 @@ package com.revetsec.jose;
 import javax.annotation.concurrent.ThreadSafe;
 
 /**
- * An exported sealed interface, shaped like JsonWebKeySource. Controls: a final exported implementation
+ * An exported sealed interface, shaped like JwksSource. Controls: a final exported implementation
  * ({@link StaticKeySourceFixture}), and a package-private record and enum, which are implicitly final. Seeded
  * violations: a package-private non-sealed implementation, and a non-sealed interface behind a sealed one, either of
  * which lets classes outside the permits list implement it (M2-10 item 6).

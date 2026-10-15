@@ -143,7 +143,7 @@ final class IssuerSigningFuzzModel {
 			byte[] material = new byte[32]; for (int index = 0; index < material.length; index++) material[index] = (byte) (index + 1);
 			StateSealer sealer = StateSealer.withActiveKey(SealingKey.fromBase64("test", Base64.getEncoder().encodeToString(material))).build();
 			this.server = OAuthAuthorizationServer.withIssuer(ISSUER).authorizationEndpoint(URI.create(ISSUER + "/authorize"))
-				.tokenEndpoint(URI.create(ISSUER + "/token")).jsonWebKeySetEndpoint(URI.create(ISSUER + "/jwks"))
+				.tokenEndpoint(URI.create(ISSUER + "/token")).jwksEndpoint(URI.create(ISSUER + "/jwks"))
 				.revocationEndpoint(URI.create(ISSUER + "/revoke")).introspectionEndpoint(URI.create(ISSUER + "/introspect"))
 				.clientRepository((id, budget) -> id.equals(this.clientId) ? Optional.of(client()) : Optional.empty())
 				.store(this.store).stateSealer(sealer).signingKeys(OAuthIssuerKeyProvider.fromSnapshot(snapshot))
@@ -185,24 +185,35 @@ final class IssuerSigningFuzzModel {
 			String code = location.substring(location.indexOf("code=") + 5, location.indexOf("&state="));
 			Map<String, String> fields = Map.of("grant_type", "authorization_code", "client_id", this.clientId,
 				"resource", this.resource, "code", code, "code_verifier", VERIFIER, "redirect_uri", REDIRECT);
+			long operationStarted = System.nanoTime();
 			OAuthTokenResult result = this.server.tokenResult("POST", null, form(fields).getBytes(StandardCharsets.UTF_8), headers());
-			return issued(assertInstanceOf(OAuthTokenResult.Succeeded.class, result).getResponse());
+			return issued(assertInstanceOf(OAuthTokenResult.Succeeded.class, result).getResponse(),
+					Math.max(0L, System.nanoTime() - operationStarted));
 		}
 
 		private @NonNull Issued rotate(@NonNull String refresh) throws Exception {
 			Map<String, String> fields = Map.of("grant_type", "refresh_token", "client_id", this.clientId,
 				"resource", this.resource, "refresh_token", refresh);
+			long operationStarted = System.nanoTime();
 			OAuthTokenResult result = this.server.tokenResult("POST", null, form(fields).getBytes(StandardCharsets.UTF_8), headers());
-			return issued(assertInstanceOf(OAuthTokenResult.Succeeded.class, result).getResponse());
+			return issued(assertInstanceOf(OAuthTokenResult.Succeeded.class, result).getResponse(),
+					Math.max(0L, System.nanoTime() - operationStarted));
 		}
 
-		private @NonNull Issued issued(@NonNull OAuthServerResponse response) throws Exception {
+		private @NonNull Issued issued(@NonNull OAuthServerResponse response, long elapsedNanos) throws Exception {
 			assertEquals(200, response.getStatusCode()); JsonObject body = parseObject(response.toHttpBodyWithCredentials());
 			assertEquals(Set.of("access_token", "token_type", "expires_in", "scope", "refresh_token"), body.getMembers().keySet());
-			assertEquals("Bearer", body.findString("token_type").orElseThrow());
-			assertEquals(this.lifetime.getSeconds(), body.findLong("expires_in").orElseThrow());
-			assertEquals(String.join(" ", this.scopes.stream().sorted().toList()), body.findString("scope").orElseThrow());
-			return new Issued(body.findString("access_token").orElseThrow(), body.findString("refresh_token").orElseThrow());
+			assertEquals("Bearer", body.find("token_type").map(com.revetsec.json.JsonString.class::cast).map(com.revetsec.json.JsonString::getValue).orElseThrow());
+			long advertisedSeconds = body.find("expires_in").map(com.revetsec.json.JsonNumber.class::cast)
+				.flatMap(com.revetsec.json.JsonNumber::getLongValueExact).orElseThrow();
+			// The wire value floors continuously remaining time; startup is outside this measured operation.
+			long elapsedCeilingSeconds = elapsedNanos / 1_000_000_000L
+				+ (elapsedNanos % 1_000_000_000L == 0 ? 0 : 1);
+			long minimumSeconds = Math.max(0L, this.lifetime.getSeconds() - elapsedCeilingSeconds);
+			assertTrue(advertisedSeconds >= minimumSeconds && advertisedSeconds <= this.lifetime.getSeconds(),
+				"expires_in must remain within the configured lifetime and measured operation duration");
+			assertEquals(String.join(" ", this.scopes.stream().sorted().toList()), body.find("scope").map(com.revetsec.json.JsonString.class::cast).map(com.revetsec.json.JsonString::getValue).orElseThrow());
+			return new Issued(body.find("access_token").map(com.revetsec.json.JsonString.class::cast).map(com.revetsec.json.JsonString::getValue).orElseThrow(), body.find("refresh_token").map(com.revetsec.json.JsonString.class::cast).map(com.revetsec.json.JsonString::getValue).orElseThrow());
 		}
 
 		private void assertToken(@NonNull String compact, @org.jspecify.annotations.Nullable String different) throws Exception {
@@ -211,38 +222,38 @@ final class IssuerSigningFuzzModel {
 			strictUtf8(headerBytes); strictUtf8(payloadBytes);
 			JsonObject header = parseObject(headerBytes), claims = parseObject(payloadBytes);
 			assertEquals(Set.of("alg", "kid", "typ"), header.getMembers().keySet());
-			assertEquals("RS256", header.findString("alg").orElseThrow()); assertEquals("at+jwt", header.findString("typ").orElseThrow());
-			assertEquals(this.activeKeyId, header.findString("kid").orElseThrow());
+			assertEquals("RS256", header.find("alg").map(com.revetsec.json.JsonString.class::cast).map(com.revetsec.json.JsonString::getValue).orElseThrow()); assertEquals("at+jwt", header.find("typ").map(com.revetsec.json.JsonString.class::cast).map(com.revetsec.json.JsonString::getValue).orElseThrow());
+			assertEquals(this.activeKeyId, header.find("kid").map(com.revetsec.json.JsonString.class::cast).map(com.revetsec.json.JsonString::getValue).orElseThrow());
 			assertEquals(Set.of("iss", "sub", "aud", "client_id", "iat", "exp", "jti", "scope"), claims.getMembers().keySet());
-			assertEquals(ISSUER, claims.findString("iss").orElseThrow()); assertEquals(this.subject, claims.findString("sub").orElseThrow());
-			assertEquals(this.resource, claims.findString("aud").orElseThrow()); assertEquals(this.clientId, claims.findString("client_id").orElseThrow());
-			assertEquals(NOW.getEpochSecond(), claims.findLong("iat").orElseThrow());
-			assertEquals(NOW.plus(this.lifetime).getEpochSecond(), claims.findLong("exp").orElseThrow());
-			String jti = claims.findString("jti").orElseThrow(); OAuthStoreFormat.nonce(jti);
-			assertEquals(String.join(" ", this.scopes.stream().sorted().toList()), claims.findString("scope").orElseThrow());
+			assertEquals(ISSUER, claims.find("iss").map(com.revetsec.json.JsonString.class::cast).map(com.revetsec.json.JsonString::getValue).orElseThrow()); assertEquals(this.subject, claims.find("sub").map(com.revetsec.json.JsonString.class::cast).map(com.revetsec.json.JsonString::getValue).orElseThrow());
+			assertEquals(this.resource, claims.find("aud").map(com.revetsec.json.JsonString.class::cast).map(com.revetsec.json.JsonString::getValue).orElseThrow()); assertEquals(this.clientId, claims.find("client_id").map(com.revetsec.json.JsonString.class::cast).map(com.revetsec.json.JsonString::getValue).orElseThrow());
+			assertEquals(NOW.getEpochSecond(), claims.find("iat").map(com.revetsec.json.JsonNumber.class::cast).flatMap(com.revetsec.json.JsonNumber::getLongValueExact).orElseThrow());
+			assertEquals(NOW.plus(this.lifetime).getEpochSecond(), claims.find("exp").map(com.revetsec.json.JsonNumber.class::cast).flatMap(com.revetsec.json.JsonNumber::getLongValueExact).orElseThrow());
+			String jti = claims.find("jti").map(com.revetsec.json.JsonString.class::cast).map(com.revetsec.json.JsonString::getValue).orElseThrow(); OAuthStoreFormat.nonce(jti);
+			assertEquals(String.join(" ", this.scopes.stream().sorted().toList()), claims.find("scope").map(com.revetsec.json.JsonString.class::cast).map(com.revetsec.json.JsonString::getValue).orElseThrow());
 			assertTrue(verifies(compact, this.activePublicKey)); assertFalse(verifies(compact, this.retainedPublicKey));
 			if (different != null) {
 				JsonObject other = parseObject(Base64.getUrlDecoder().decode(different.split("\\.", -1)[1]));
-				assertNotEquals(other.findString("jti").orElseThrow(), jti);
+				assertNotEquals(other.find("jti").map(com.revetsec.json.JsonString.class::cast).map(com.revetsec.json.JsonString::getValue).orElseThrow(), jti);
 			}
-			BearerToken bearer = BearerToken.fromAuthorizationHeaderValues(List.of("Bearer " + compact)).orElseThrow();
+			BearerToken bearer = org.junit.jupiter.api.Assertions.assertInstanceOf(com.revetsec.oauth.BearerTokenResult.Present.class, BearerToken.fromAuthorizationHeaderValuesResult(List.of("Bearer " + compact))).getToken();
 			OAuthIssuerAccessTokenResult.Succeeded checked = assertInstanceOf(OAuthIssuerAccessTokenResult.Succeeded.class,
 				this.server.validateAccessTokenResult(bearer, this.resource));
 			assertEquals(this.scopes, checked.getAccessToken().getScopes()); assertEquals(Optional.of(this.subject), checked.getAccessToken().getSubject());
 		}
 
 		private void assertPublishedKeys() throws Exception {
-			JsonObject jwks = parseObject(this.server.jsonWebKeySetResponse("GET").toHttpBodyWithCredentials());
+			JsonObject jwks = parseObject(this.server.jwksResponse("GET").toHttpBodyWithCredentials());
 			assertEquals(Set.of("keys"), jwks.getMembers().keySet()); JsonArray keys = assertInstanceOf(JsonArray.class, jwks.find("keys").orElseThrow());
 			assertEquals(2, keys.getElements().size()); Map<String, JsonObject> byId = new LinkedHashMap<>();
 			for (JsonValue value : keys.getElements()) {
 				JsonObject key = assertInstanceOf(JsonObject.class, value);
 				assertEquals(Set.of("kty", "alg", "use", "key_ops", "kid", "n", "e"), key.getMembers().keySet());
-				assertEquals("RSA", key.findString("kty").orElseThrow()); assertEquals("RS256", key.findString("alg").orElseThrow());
-				assertEquals("sig", key.findString("use").orElseThrow());
+				assertEquals("RSA", key.find("kty").map(com.revetsec.json.JsonString.class::cast).map(com.revetsec.json.JsonString::getValue).orElseThrow()); assertEquals("RS256", key.find("alg").map(com.revetsec.json.JsonString.class::cast).map(com.revetsec.json.JsonString::getValue).orElseThrow());
+				assertEquals("sig", key.find("use").map(com.revetsec.json.JsonString.class::cast).map(com.revetsec.json.JsonString::getValue).orElseThrow());
 				JsonArray operations = assertInstanceOf(JsonArray.class, key.find("key_ops").orElseThrow());
 				assertEquals(List.of(JsonString.fromValue("verify")), operations.getElements());
-				assertNull(byId.put(key.findString("kid").orElseThrow(), key));
+				assertNull(byId.put(key.find("kid").map(com.revetsec.json.JsonString.class::cast).map(com.revetsec.json.JsonString::getValue).orElseThrow(), key));
 			}
 			assertEquals(Set.of(this.activeKeyId, this.retainedKeyId), byId.keySet());
 			assertKey(requireNonNull(byId.get(this.activeKeyId)), this.activePublicKey);
@@ -251,8 +262,8 @@ final class IssuerSigningFuzzModel {
 
 		private static void assertKey(@NonNull JsonObject key, @NonNull PublicKey expected) {
 			RSAPublicKey rsa = assertInstanceOf(RSAPublicKey.class, expected);
-			assertEquals(unsigned(rsa.getModulus()), key.findString("n").orElseThrow());
-			assertEquals(unsigned(rsa.getPublicExponent()), key.findString("e").orElseThrow());
+			assertEquals(unsigned(rsa.getModulus()), key.find("n").map(com.revetsec.json.JsonString.class::cast).map(com.revetsec.json.JsonString::getValue).orElseThrow());
+			assertEquals(unsigned(rsa.getPublicExponent()), key.find("e").map(com.revetsec.json.JsonString.class::cast).map(com.revetsec.json.JsonString::getValue).orElseThrow());
 		}
 
 		private static @NonNull Map<@NonNull String, @NonNull List<@NonNull String>> headers() {

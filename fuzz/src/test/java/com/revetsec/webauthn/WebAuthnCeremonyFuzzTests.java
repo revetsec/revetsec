@@ -72,7 +72,7 @@ public final class WebAuthnCeremonyFuzzTests {
                 .userName("alice").userDisplayName("Alice Example").build();
         var prepared = Assertions.assertInstanceOf(WebAuthnRegistrationRequestResult.Prepared.class,
                 rp.beginRegistrationResult(options, BINDING)).getRequest();
-        String challenge = prepared.getPublicKeyOptions().findString("challenge").orElseThrow();
+        String challenge = prepared.getPublicKeyOptions().find("challenge").map(com.revetsec.json.JsonString.class::cast).map(com.revetsec.json.JsonString::getValue).orElseThrow();
         byte[] valid = registration(id, challenge, ORIGIN, 0x45, true, -8, false, false);
         int change = unsigned(input, 0) % 9;
         byte[] altered = switch (change) {
@@ -107,7 +107,7 @@ public final class WebAuthnCeremonyFuzzTests {
         enroll(rp, id);
         var prepared = Assertions.assertInstanceOf(WebAuthnAuthenticationRequestResult.Prepared.class,
                 rp.beginAuthenticationResult(BINDING)).getRequest();
-        String challenge = prepared.getPublicKeyOptions().findString("challenge").orElseThrow();
+        String challenge = prepared.getPublicKeyOptions().find("challenge").map(com.revetsec.json.JsonString.class::cast).map(com.revetsec.json.JsonString::getValue).orElseThrow();
         byte[] valid = assertion(id, KEY.getPrivate(), challenge, ORIGIN, 0x05, 1,
                 HANDLE, false, false);
         int change = unsigned(input, 0) % 12;
@@ -151,7 +151,7 @@ public final class WebAuthnCeremonyFuzzTests {
 
         var stale = Assertions.assertInstanceOf(WebAuthnAuthenticationRequestResult.Prepared.class,
                 rp.beginAuthenticationResult(BINDING)).getRequest();
-        String next = stale.getPublicKeyOptions().findString("challenge").orElseThrow();
+        String next = stale.getPublicKeyOptions().find("challenge").map(com.revetsec.json.JsonString.class::cast).map(com.revetsec.json.JsonString::getValue).orElseThrow();
         Assertions.assertInstanceOf(WebAuthnAuthenticationResult.Rejected.class,
                 rp.completeAuthenticationResult(stale.getCeremonyId(),
                         assertion(id, KEY.getPrivate(), next, ORIGIN, 0x05, 1,
@@ -166,7 +166,7 @@ public final class WebAuthnCeremonyFuzzTests {
         var stepUp = Assertions.assertInstanceOf(WebAuthnAuthenticationResult.Succeeded.class,
                 rp.completeAuthenticationResult(pinned.getCeremonyId(),
                         assertion(id, KEY.getPrivate(), pinned.getPublicKeyOptions()
-                                .findString("challenge").orElseThrow(), ORIGIN, 0x05, 3,
+                                .find("challenge").map(com.revetsec.json.JsonString.class::cast).map(com.revetsec.json.JsonString::getValue).orElseThrow(), ORIGIN, 0x05, 3,
                                 HANDLE, false, false), BINDING));
         Assertions.assertEquals(WebAuthnAuthentication.Kind.REAUTHENTICATION,
                 stepUp.getAuthentication().getKind());
@@ -181,7 +181,7 @@ public final class WebAuthnCeremonyFuzzTests {
         Assertions.assertInstanceOf(WebAuthnAuthenticationResult.Rejected.class,
                 rp.completeAuthenticationResult(pending.getCeremonyId(),
                         assertion(id, KEY.getPrivate(), pending.getPublicKeyOptions()
-                                .findString("challenge").orElseThrow(), ORIGIN, 0x05, 4,
+                                .find("challenge").map(com.revetsec.json.JsonString.class::cast).map(com.revetsec.json.JsonString::getValue).orElseThrow(), ORIGIN, 0x05, 4,
                                 HANDLE, false, false), BINDING));
 
         WebAuthnRegistrationOptions options = WebAuthnRegistrationOptions.withUserHandle(HANDLE)
@@ -190,7 +190,7 @@ public final class WebAuthnCeremonyFuzzTests {
                 rp.beginRegistrationResult(options, BINDING)).getRequest();
         Assertions.assertInstanceOf(WebAuthnRegistrationResult.Rejected.class,
                 rp.completeRegistrationResult(retry.getCeremonyId(),
-                        registration(id, retry.getPublicKeyOptions().findString("challenge").orElseThrow(),
+                        registration(id, retry.getPublicKeyOptions().find("challenge").map(com.revetsec.json.JsonString.class::cast).map(com.revetsec.json.JsonString::getValue).orElseThrow(),
                                 ORIGIN, 0x45, true, -8, false, false), BINDING));
     }
 
@@ -225,7 +225,7 @@ public final class WebAuthnCeremonyFuzzTests {
                 .userName("alice").userDisplayName("Alice Example").build();
         var enrollment = Assertions.assertInstanceOf(WebAuthnRegistrationRequestResult.Prepared.class,
                 rp.beginRegistrationResult(options, BINDING)).getRequest();
-        String challenge = enrollment.getPublicKeyOptions().findString("challenge").orElseThrow();
+        String challenge = enrollment.getPublicKeyOptions().find("challenge").map(com.revetsec.json.JsonString.class::cast).map(com.revetsec.json.JsonString::getValue).orElseThrow();
         Assertions.assertInstanceOf(WebAuthnRegistrationResult.Rejected.class,
                 rp.completeRegistrationResult(enrollment.getCeremonyId(),
                         registration(id, challenge, ORIGIN, 0x45, true,
@@ -237,7 +237,7 @@ public final class WebAuthnCeremonyFuzzTests {
 
         var request = Assertions.assertInstanceOf(WebAuthnAuthenticationRequestResult.Prepared.class,
                 rp.beginAuthenticationResult(BINDING)).getRequest();
-        String assertionChallenge = request.getPublicKeyOptions().findString("challenge").orElseThrow();
+        String assertionChallenge = request.getPublicKeyOptions().find("challenge").map(com.revetsec.json.JsonString.class::cast).map(com.revetsec.json.JsonString::getValue).orElseThrow();
         byte[] auth = assertionAuth(0x05, 1);
         byte[] client = client("webauthn.get", assertionChallenge, ORIGIN, false, false);
         byte[] wrongClient = client("webauthn.get", changed(assertionChallenge), ORIGIN, false, false);
@@ -260,7 +260,7 @@ public final class WebAuthnCeremonyFuzzTests {
                 Base64.getEncoder().encodeToString(material))).clock(CLOCK).build();
         return WebAuthnRelyingParty.withRelyingPartyId(RP).relyingPartyName("Example")
                 .allowedOrigins(Set.of(ORIGIN)).credentialNamespace("fuzz")
-                .store(InMemoryWebAuthnStore.withLimits(128, 2_000_000))
+                .store(InMemoryWebAuthnStore.withLimits(128, 2_000_000, CLOCK))
                 .stateSealer(sealer).recoveryGate(GATE).clockForTesting(CLOCK).build();
     }
 
@@ -271,7 +271,7 @@ public final class WebAuthnCeremonyFuzzTests {
                 rp.beginRegistrationResult(options, BINDING)).getRequest();
         Assertions.assertInstanceOf(WebAuthnRegistrationResult.Succeeded.class,
                 rp.completeRegistrationResult(prepared.getCeremonyId(),
-                        registration(id, prepared.getPublicKeyOptions().findString("challenge").orElseThrow(),
+                        registration(id, prepared.getPublicKeyOptions().find("challenge").map(com.revetsec.json.JsonString.class::cast).map(com.revetsec.json.JsonString::getValue).orElseThrow(),
                                 ORIGIN, 0x45, true, -8, false, false), BINDING));
     }
 

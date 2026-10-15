@@ -3,14 +3,14 @@
 Revetsec prepares SAML requests and checks POST responses and signed Redirect or POST logout messages.
 If JVM-global XML-signature secure validation is disabled, the SP builder fails unless the
 application explicitly calls `acknowledgeGlobalSecureValidationDisabled(true)`. This choice
-is reported to `SamlObserver` at build time. Revetsec sets secure validation on each
+is reported to [`SamlObserver`](https://javadoc.revetsec.com/com/revetsec/saml/SamlObserver.html) at build time. Revetsec sets secure validation on each
 verification context and enforces its signature allowlists even when the JVM policy differs.
 The application owns its users, account links, browser sessions, pending-state transport,
 and the decision to end a session. SAML support is pre-release; the scripted IdP and a
 pinned Keycloak container exercise browser flows. [RC-2 SAML readiness](reviews/rc-2-round-1.md#rc-2-closure--2026-10-14)
 closed on 2026-10-14; other 1.0.0 release checkpoints remain open.
 
-Configure `SamlServiceProvider.Builder.observer(SamlObserver)` to receive one start and
+Configure [`SamlServiceProvider.Builder`](https://javadoc.revetsec.com/com/revetsec/saml/SamlServiceProvider.Builder.html)`.observer(`[`SamlObserver`](https://javadoc.revetsec.com/com/revetsec/saml/SamlObserver.html)`)` to receive one start and
 one terminal event for each service-provider operation. Events contain fixed operation and
 outcome kinds plus monotonic elapsed time; they never include XML, identities, connection
 IDs, request IDs or browser state. Hooks run on the caller's thread, outside replay-store
@@ -19,8 +19,8 @@ calls, and a hook failure cannot change a SAML result. The default observer does
 ## Trust and account identity
 
 Approve an IdP connection in application configuration. Parse its metadata locally with
-`SamlIdentityProviderMetadata.fromXmlResult`, select the expected entity ID, check the
-source or a pinned metadata signature, then build `SamlIdentityProvider` with an
+[`SamlIdentityProviderMetadata`](https://javadoc.revetsec.com/com/revetsec/saml/SamlIdentityProviderMetadata.html)`.fromXmlResult`, select the expected entity ID, check the
+source or a pinned metadata signature, then build [`SamlIdentityProvider`](https://javadoc.revetsec.com/com/revetsec/saml/SamlIdentityProvider.html) with an
 application-assigned `connectionId`. The metadata's entity ID is supplied by the IdP and
 must not be the tenant or account namespace.
 An IdP connection accepts one through eight trusted message-signing keys for
@@ -33,7 +33,7 @@ When a pinned signature covers only the selected entity inside an aggregate, Rev
 ignores expiry on the unsigned aggregate; only a verified aggregate signature can
 authenticate that parent's `validUntil`.
 
-Use `(connectionId, SamlSubjectKey)` as the application account key. A persistent NameID
+Use `(connectionId, `[`SamlSubjectKey`](https://javadoc.revetsec.com/com/revetsec/saml/SamlSubjectKey.html)`)` as the application account key. A persistent NameID
 produces a subject key. Scope-authorized `subject-id` or `pairwise-id` can also produce one;
 the application decides whether to link it to an existing user. Transient identifiers
 do not become stable account keys. Treat attributes as IdP assertions, subject to the
@@ -43,7 +43,7 @@ received on the wire. If an IdP changes an omitted qualifier to its explicit def
 or changes `SPProvidedID`, the same person can receive a different key. Plan account
 linking and migration with the IdP; do not silently merge keys using untrusted attributes.
 
-`SamlAttribute.getTypedValues()` preserves the order and shape of each value. Text
+The [`SamlAttribute`](https://javadoc.revetsec.com/com/revetsec/saml/SamlAttribute.html)`.getTypedValues()` preserves the order and shape of each value. Text
 values appear in `getValues()`; a sole nested `saml:NameID` is exposed with its
 qualifiers and `SPProvidedID`, while other element content remains opaque `COMPLEX`. Neither complex
 content nor a mixed text/complex identifier is promoted to a stable subject ID.
@@ -91,26 +91,26 @@ capacity, and its expiry cleanup scans live entries under one lock.
 
 1. Call `beginAuthenticationResult(idp)` for HTTP-Redirect, or
    `beginPostAuthenticationResult(idp)` for HTTP-POST. The prepared result contains a
-   redirect URI or form and a `PendingSamlAuthentication`.
+   redirect URI or form and a [`PendingSamlAuthentication`](https://javadoc.revetsec.com/com/revetsec/saml/PendingSamlAuthentication.html).
 2. Before sending the browser to the IdP, save pending state through a browser-bound,
-   Secure, HttpOnly cookie or through `PendingSamlAuthenticationStore`. Prefer a
+   Secure, HttpOnly cookie or through [`PendingSamlAuthenticationStore`](https://javadoc.revetsec.com/com/revetsec/saml/PendingSamlAuthenticationStore.html). Prefer a
    `__Host-` cookie with `Path=/` and no `Domain` attribute. For a cross-site
    IdP POST to the ACS, use `SameSite=None; Secure`. Use the same application context and
-   browser binding when constructing `PendingSamlAuthenticationSource` later.
+   browser binding when constructing [`PendingSamlAuthenticationSource`](https://javadoc.revetsec.com/com/revetsec/saml/PendingSamlAuthenticationSource.html) later.
 3. At the ACS, retain the original POST body, every Content-Type value and the raw query.
-   Decode with `SamlPostBindingMessage.fromFormBodyResult`, then call
+   Decode with [`SamlPostBindingMessage`](https://javadoc.revetsec.com/com/revetsec/saml/SamlPostBindingMessage.html)`.fromFormBodyResult`, then call
    `completeAuthenticationResult`. Clear the pending browser cookie on every terminal
    outcome. Only `Succeeded` contains a checked identity.
 4. Rotate the application's browser session ID after local account mapping, then
    create or update that session. Persist
-   `SamlAuthentication.getSessionReference()` if front-channel logout is enabled.
-   Use `toSerializedForm()` and `fromSerializedForm()` only in trusted server-side
+   [`SamlAuthentication`](https://javadoc.revetsec.com/com/revetsec/saml/SamlAuthentication.html)`.getSessionReference()` if front-channel logout is enabled.
+   Use `toSerializedForm()` and `fromSerializedFormResult()` only in trusted server-side
    storage. For browser-side storage, use `toSealedForm(sealer, sessionContext,
-   expiresAt)` and `fromSealedForm(...)`; bind the context to the application's
+   expiresAt)` and `fromSealedFormResult(...)`; bind the context to the application's
    own browser session and choose an expiry no later than that session's lifetime.
-   Opening either form supplies logout continuity fields, not a fresh identity.
+   Only [`SamlSessionReferenceParseResult.Succeeded`](https://javadoc.revetsec.com/com/revetsec/saml/SamlSessionReferenceParseResult.Succeeded.html) supplies restored logout continuity fields. Structural rejection and opaque sealed-state rejection have separate variants. Neither form creates a fresh identity.
 
-`SamlAuthenticationRequestOptions` can request fresh authentication, passive behavior,
+The [`SamlAuthenticationRequestOptions`](https://javadoc.revetsec.com/com/revetsec/saml/SamlAuthenticationRequestOptions.html) can request fresh authentication, passive behavior,
 an exact authentication context, and bounded local application data. Revetsec seals the
 options in pending state and checks the returned assertion against them. RelayState is
 an opaque correlation handle, never a return URL. Validate application data as a local
@@ -122,13 +122,13 @@ true only when the IdP signature covers that Response. Malformed status structur
 are rejected and never promoted to a provider status result.
 
 IdP-initiated SSO is disabled by default. A selected IdP connection can enable
-`SamlCompatibilityMode.UNSOLICITED_RESPONSES`; Revetsec then rejects RelayState and
+[`SamlCompatibilityMode`](https://javadoc.revetsec.com/com/revetsec/saml/SamlCompatibilityMode.html)`.UNSOLICITED_RESPONSES`; Revetsec then rejects RelayState and
 applies a shorter response-age bound. Apply explicit application session and account
 linking policy to this flow.
 
 ## Metadata, encryption and logout
 
-`SamlServiceProviderMetadata.fromServiceProviderResult(sp)` publishes SP metadata with
+The [`SamlServiceProviderMetadata`](https://javadoc.revetsec.com/com/revetsec/saml/SamlServiceProviderMetadata.html)`.fromServiceProviderResult(sp)` publishes SP metadata with
 an explicit signing `KeyDescriptor`. When decryption credentials are configured, it
 advertises GCM and RSA-OAEP, not CBC. Publish metadata only after choosing stable
 entity, ACS and logout URLs and the active certificate. Keep old decryption credentials
@@ -158,14 +158,14 @@ For SP-initiated logout, call `beginLogoutResult(idp, sessionReference)`, retain
 pending logout state, **end the local application session before sending** the signed
 Redirect, and send it. A failed or missing IdP return must not restore that session.
 At the logout endpoint, parse the raw query with
-`SamlRedirectBindingMessage.fromRawQueryResult` and call `completeLogoutResult` to
+[`SamlRedirectBindingMessage`](https://javadoc.revetsec.com/com/revetsec/saml/SamlRedirectBindingMessage.html)`.fromRawQueryResult` and call `completeLogoutResult` to
 report a verified IdP terminal status and clear pending state, or clear it when the attempt
 expires. Invalid callbacks preserve a live attempt and its browser cookie. The Playground
 follows this order.
 For stored pending state, an invalid Redirect signature is rejected before the pending
 record is consumed; a valid response still consumes the record once.
 For an IdP-initiated LogoutRequest, call `acceptLogoutRequestResult`, match its NameID
-qualifiers and SessionIndex against stored `SamlSessionReference`s within the same
+qualifiers and SessionIndex against stored [`SamlSessionReference`](https://javadoc.revetsec.com/com/revetsec/saml/SamlSessionReference.html)s within the same
 connection ID, end only matching sessions, then call `respondToLogoutRequestResult`.
 An unmatched SessionIndex ends no application session.
 The pinned SimpleSAMLphp 2.5.0 interoperability capture exercises both directions
@@ -186,7 +186,7 @@ For SP-initiated POST logout, call `beginPostLogoutResult`, save
 `Prepared.getPendingLogout()`, end the local application session, then deliver
 `Prepared.getPostForm()`. At the POST logout receiver, retain the raw form body,
 every Content-Type value and raw query; parse them with
-`SamlPostBindingMessage.fromLogoutFormBodyResult`. A `Kind.RESPONSE` is completed
+[`SamlPostBindingMessage`](https://javadoc.revetsec.com/com/revetsec/saml/SamlPostBindingMessage.html)`.fromLogoutFormBodyResult`. A `Kind.RESPONSE` is completed
 with the POST overload of `completeLogoutResult`. Pending browser cookies need
 `SameSite=None; Secure`, with `HttpOnly`; use the same `__Host-` scope as sign-in.
 Clear them after a verified `Succeeded` or
@@ -202,7 +202,7 @@ For an IdP-initiated POST `Kind.REQUEST`, call the POST overload of
 against the selected connection's stored sessions, end only matching sessions,
 then call `respondToPostLogoutRequestResult`. Both POST preparation methods produce
 an RSA-SHA256 enveloped XML signature over the exact logout root, using the same
-XML-signature profile as POST authentication requests. `SamlPostForm` renders either
+XML-signature profile as POST authentication requests. [`SamlPostForm`](https://javadoc.revetsec.com/com/revetsec/saml/SamlPostForm.html) renders either
 a `SAMLRequest` or `SAMLResponse` and echoes bounded RelayState as an opaque field.
 RelayState is outside the XML signature and must never become an application redirect URL.
 
@@ -246,7 +246,7 @@ also carry ordinary query fields. All three paths reject binding-field name coll
 empty field names, unencoded spaces, decoded control characters, and malformed percent-encoding or UTF-8
 in names or values.
 
-The Soklet adapter's `SokletSaml` and both Servlet adapters' `ServletSaml` pass raw
+The Soklet adapter's [`SokletSaml`](https://javadoc.revetsec.com/com/revetsec/soklet/SokletSaml.html) and both Servlet adapters' [`ServletSaml`](https://javadoc.revetsec.com/com/revetsec/servlet/jakarta/ServletSaml.html) pass raw
 request fields to core and write prepared Redirect/form responses. Their dedicated
 `postLogoutBindingResultFor` helper preserves the POST logout boundary, and typed
 POST logout request/response form helpers preserve the core-rendered fields and headers. The

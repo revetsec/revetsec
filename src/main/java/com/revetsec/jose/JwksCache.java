@@ -28,11 +28,11 @@ import com.revetsec.internal.http.RawResponse;
 import com.revetsec.internal.http.ResponseProfile;
 import com.revetsec.internal.http.RetryAfter;
 import com.revetsec.internal.jose.JoseFailure;
-import com.revetsec.internal.jose.JwkSetParser;
+import com.revetsec.internal.jose.JwksParser;
 import com.revetsec.internal.jose.KeyQuery;
 import com.revetsec.internal.jose.KeySelection;
 import com.revetsec.internal.jose.KeySelector;
-import com.revetsec.internal.jose.ParsedKeySet;
+import com.revetsec.internal.jose.ParsedJwks;
 import com.revetsec.internal.jose.VerificationKey;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
@@ -57,8 +57,8 @@ import java.util.concurrent.locks.ReentrantLock;
 import static java.util.Objects.requireNonNull;
 
 /**
- * The key set cache behind a {@link RemoteJsonWebKeySource}: it fetches the key set on callers' threads, one fetch at
- * a time, and decides when a fetch may start (M2 plan, "RemoteJsonWebKeySource algorithm"; G8-4, G8-8, M2-8).
+ * The key set cache behind a {@link RemoteJwksSource}: it fetches the key set on callers' threads, one fetch at
+ * a time, and decides when a fetch may start (M2 plan, "RemoteJwksSource algorithm"; G8-4, G8-8, M2-8).
  * <p>
  * <strong>State.</strong> The snapshot (the parsed keys, when they were fetched, when they expire and until when they
  * may still answer while refreshes fail) is immutable and published through a volatile field. A short lock protects
@@ -92,7 +92,7 @@ import static java.util.Objects.requireNonNull;
  *   <li>an {@code UNKNOWN_KID} caller inside the unknown-key cooldown: no request, and no key;</li>
  *   <li>two attempts started within the last cooldown (the ceiling): no request; an {@code EXPIRED} caller is served
  *   stale if it can be, an {@code UNKNOWN_KID} caller gets no key, and every other caller a transient
- *   {@link ErrorCategory#TRANSPORT} failure with no cause. {@link RemoteJsonWebKeySource.Builder#build()} keeps the
+ *   {@link ErrorCategory#TRANSPORT} failure with no cause. {@link RemoteJwksSource.Builder#build()} keeps the
  *   cooldown within the minimum time to live, so a success leaves a snapshot fresh, and a failure starts a backoff,
  *   for at least one cooldown: unless a flight was cut short, a fresh snapshot or rules 1 to 4 answer every call that
  *   the ceiling would hold back, and it never binds;</li>
@@ -100,10 +100,10 @@ import static java.util.Objects.requireNonNull;
  *   with {@link ErrorCategory#TRANSPORT}, and nothing is sent or counted), it starts a flight, records the attempt
  *   and, for {@code UNKNOWN_KID}, the cooldown mark, and fetches on its own thread.</li>
  * </ol>
- * Rules 3 to 5 report {@link JoseObserver#didSuppressJsonWebKeySetFetch(URI, Duration)} on every such call.
+ * Rules 3 to 5 report {@link JoseObserver#didSuppressJwksFetch(URI, Duration)} on every such call.
  * <p>
  * <strong>Flights.</strong> The leader runs one exchange (profile {@code JWKS}, the caller's deadline), parses the
- * body through {@link JwkSetParser} and computes the time to live through {@link CacheLifetime}. In a {@code finally},
+ * body through {@link JwksParser} and computes the time to live through {@link CacheLifetime}. In a {@code finally},
  * it publishes the outcome under the lock and clears the flight; then it completes the flight's future, which has no
  * dependent stages, and only then fires the fetch hooks. A {@link VirtualMachineError}, such as a
  * {@link StackOverflowError}, can stop a leader before that {@code finally} runs; its flight then stays until it is
@@ -115,7 +115,7 @@ import static java.util.Objects.requireNonNull;
  *   empty snapshot), and the leader and waiters select from it. The failure count is left as it is;</li>
  *   <li>failure (any response or exchange failure except the leader's interrupt, a timeout included, whoever's
  *   deadline ended it): the backoff advances; an {@code EXPIRED} caller whose usable snapshot holds its key is served
- *   stale, and everyone else gets a {@link JsonWebKeySetUnavailableException}, the leader with the JDK's
+ *   stale, and everyone else gets a {@link JwksUnavailableException}, the leader with the JDK's
  *   {@link IOException} as its cause for an I/O failure, waiters their own instance with no cause;</li>
  *   <li>cut short (the leader's thread interrupted during the exchange, an {@link Error} after the exchange began, or
  *   the flight overdue): no backoff step, but the attempt counts and an unknown-key refetch keeps its cooldown mark.
@@ -232,7 +232,7 @@ final class JwksCache {
 	 * @param query    the token's algorithm, key ID and effective algorithm set
 	 * @param deadline this call's deadline, which bounds its exchange or its wait for another caller's
 	 * @return the selection; {@link KeySelection.Kind#UNKNOWN} is final for this call
-	 * @throws JsonWebKeySetUnavailableException if no usable key set is available for this call
+	 * @throws JwksUnavailableException if no usable key set is available for this call
 	 */
 	@NonNull
 	KeySelection select(@NonNull KeyQuery query,
@@ -264,7 +264,7 @@ final class JwksCache {
 	 * ignores the unknown-key cooldown, and throws on failure even when an expired key set could still answer.
 	 *
 	 * @param deadline this call's deadline
-	 * @throws JsonWebKeySetUnavailableException if the fetch failed or was suppressed
+	 * @throws JwksUnavailableException if the fetch failed or was suppressed
 	 */
 	void warmUp(@NonNull Deadline deadline) {
 		requireNonNull(deadline);
@@ -372,7 +372,7 @@ final class JwksCache {
 				case SUPPRESS -> {
 					Duration untilNextAttempt = requireNonNull(decision.untilNextAttempt);
 					ObserverDispatch.dispatch(this.settings.observer(),
-							hook -> hook.didSuppressJsonWebKeySetFetch(this.reportedUri, untilNextAttempt));
+							hook -> hook.didSuppressJwksFetch(this.reportedUri, untilNextAttempt));
 
 					if (decision.failure != null)
 						throw decision.failure.toException();
@@ -541,7 +541,7 @@ final class JwksCache {
 	/**
 	 * Waits for another caller's flight within this caller's deadline.
 	 *
-	 * @throws JsonWebKeySetUnavailableException {@link ErrorCategory#TRANSPORT}: transient when the deadline ended,
+	 * @throws JwksUnavailableException {@link ErrorCategory#TRANSPORT}: transient when the deadline ended,
 	 *                                           and not transient, with the interrupt flag set again, when
 	 *                                           interrupted
 	 */
@@ -552,9 +552,9 @@ final class JwksCache {
 			return joined.result.get(Math.max(0L, deadline.remainingNanos()), TimeUnit.NANOSECONDS);
 		} catch (InterruptedException e) {
 			Thread.currentThread().interrupt();
-			throw JsonWebKeySetUnavailableException.fromCategory(ErrorCategory.TRANSPORT, false);
+			throw JwksUnavailableException.fromCategory(ErrorCategory.TRANSPORT, false);
 		} catch (TimeoutException e) {
-			throw JsonWebKeySetUnavailableException.fromCategory(ErrorCategory.TRANSPORT, true);
+			throw JwksUnavailableException.fromCategory(ErrorCategory.TRANSPORT, true);
 		} catch (ExecutionException e) {
 			// A flight's future is only ever completed normally; were it not, deciding again is the safe answer.
 			return FlightResult.CUT_SHORT;
@@ -590,7 +590,7 @@ final class JwksCache {
 			if (unpatchedRuntimeVersion != null)
 				ObserverDispatch.dispatch(observer, hook -> hook.didUseUnpatchedRuntime(unpatchedRuntimeVersion));
 
-			ObserverDispatch.dispatch(observer, hook -> hook.willFetchJsonWebKeySet(this.reportedUri));
+			ObserverDispatch.dispatch(observer, hook -> hook.willFetchJwks(this.reportedUri));
 
 			// From here on the flight is an attempt: the exchange may send its request.
 			executed = true;
@@ -606,23 +606,23 @@ final class JwksCache {
 			case SUCCEEDED -> {
 				Snapshot fetched = requireNonNull(outcome.snapshot);
 
-				for (ParsedKeySet.Skip skip : outcome.skips)
-					ObserverDispatch.dispatch(observer, hook -> hook.didSkipJsonWebKey(this.reportedUri, skip.index(),
+				for (ParsedJwks.Skip skip : outcome.skips)
+					ObserverDispatch.dispatch(observer, hook -> hook.didSkipJwk(this.reportedUri, skip.index(),
 							skip.reason()));
 
 				Duration timeToLive = requireNonNull(outcome.timeToLive);
-				ObserverDispatch.dispatch(observer, hook -> hook.didFetchJsonWebKeySet(this.reportedUri,
+				ObserverDispatch.dispatch(observer, hook -> hook.didFetchJwks(this.reportedUri,
 						fetched.keys().size(), outcome.skips.size(), timeToLive, elapsed));
 
 				return query == null ? null : KeySelector.select(fetched.keys(), query);
 			}
 			case FAILED -> {
 				Failure failure = requireNonNull(outcome.failure);
-				JsonWebKeySetUnavailableException exception = JsonWebKeySetUnavailableException.fromCategory(
+				JwksUnavailableException exception = JwksUnavailableException.fromCategory(
 						failure.category, failure.transientFailure, outcome.cause);
 				@Nullable KeySelection stale = trigger == Trigger.EXPIRED
 						? currentStaleSelection(query) : null;
-				ObserverDispatch.dispatch(observer, hook -> hook.didFailToFetchJsonWebKeySet(this.reportedUri, exception,
+				ObserverDispatch.dispatch(observer, hook -> hook.didFailToFetchJwks(this.reportedUri, exception,
 						stale != null, elapsed));
 
 				if (stale != null)
@@ -632,9 +632,9 @@ final class JwksCache {
 			}
 			case INTERRUPTED -> {
 				// HttpExchange has already set the thread's interrupt flag again.
-				JsonWebKeySetUnavailableException exception = JsonWebKeySetUnavailableException.fromCategory(
+				JwksUnavailableException exception = JwksUnavailableException.fromCategory(
 						ErrorCategory.TRANSPORT, false);
-				ObserverDispatch.dispatch(observer, hook -> hook.didFailToFetchJsonWebKeySet(this.reportedUri, exception,
+				ObserverDispatch.dispatch(observer, hook -> hook.didFailToFetchJwks(this.reportedUri, exception,
 						false, elapsed));
 				throw exception;
 			}
@@ -668,10 +668,10 @@ final class JwksCache {
 			return Fetch.failed(new Failure(ErrorCategory.REMOTE_ERROR, transientFailure), null, retryAfter);
 		}
 
-		ParsedKeySet parsedKeySet;
+		ParsedJwks parsedJwks;
 
 		try {
-			parsedKeySet = JwkSetParser.parse(response.body(), this.settings.maximumResponseBytes(),
+			parsedJwks = JwksParser.parse(response.body(), this.settings.maximumResponseBytes(),
 					this.settings.maximumKeys());
 		} catch (JoseFailure | RuntimeException e) {
 			// A document failure, or anything unexpected in parsing (INV-G1): the response is malformed.
@@ -681,10 +681,10 @@ final class JwksCache {
 		Duration timeToLive = CacheLifetime.timeToLive(response.headers(), receivedAt,
 				this.settings.minimumTimeToLive(), this.settings.defaultTimeToLive(), this.settings.maximumTimeToLive());
 		Instant expiresAt = plus(receivedAt, timeToLive);
-		Snapshot fetched = new Snapshot(parsedKeySet.keys(), receivedAt, expiresAt,
+		Snapshot fetched = new Snapshot(parsedJwks.keys(), receivedAt, expiresAt,
 				plus(expiresAt, this.settings.maximumStaleness()));
 
-		return Fetch.succeeded(fetched, parsedKeySet.skips(), timeToLive);
+		return Fetch.succeeded(fetched, parsedJwks.skips(), timeToLive);
 	}
 
 	/**
@@ -931,8 +931,8 @@ final class JwksCache {
 		}
 
 		@NonNull
-		JsonWebKeySetUnavailableException toException() {
-			return JsonWebKeySetUnavailableException.fromCategory(this.category, this.transientFailure);
+		JwksUnavailableException toException() {
+			return JwksUnavailableException.fromCategory(this.category, this.transientFailure);
 		}
 	}
 
@@ -1076,7 +1076,7 @@ final class JwksCache {
 		@Nullable
 		private final Snapshot snapshot;
 		@NonNull
-		private final List<ParsedKeySet.@NonNull Skip> skips;
+		private final List<ParsedJwks.@NonNull Skip> skips;
 		@Nullable
 		private final Duration timeToLive;
 		@Nullable
@@ -1088,7 +1088,7 @@ final class JwksCache {
 
 		private Fetch(@NonNull Result result,
 									@Nullable Snapshot snapshot,
-									@NonNull List<ParsedKeySet.@NonNull Skip> skips,
+									@NonNull List<ParsedJwks.@NonNull Skip> skips,
 									@Nullable Duration timeToLive,
 									@Nullable Failure failure,
 									@Nullable IOException cause,
@@ -1104,7 +1104,7 @@ final class JwksCache {
 
 		@NonNull
 		static Fetch succeeded(@NonNull Snapshot snapshot,
-													 @NonNull List<ParsedKeySet.@NonNull Skip> skips,
+													 @NonNull List<ParsedJwks.@NonNull Skip> skips,
 													 @NonNull Duration timeToLive) {
 			return new Fetch(Result.SUCCEEDED, snapshot, skips, timeToLive, null, null, null);
 		}

@@ -127,8 +127,8 @@ final class JwtValidatorRfcVectorTests {
 	private static @NonNull JwtValidator joe(@NonNull String jwk,
 																	@NonNull Set<@NonNull JwsAlgorithm> algorithms,
 																	@NonNull Instant now) {
-		return JwtValidator.withIssuer("joe").jsonWebKeySource(StaticJsonWebKeySource.fromJsonWebKeySet(
-				JsonWebKeySet.fromJson("{\"keys\":[" + jwk + "]}"))).acceptAnyAudience(true).allowedAlgorithms(algorithms)
+		return JwtValidator.withIssuer("joe").jwksSource(StaticJwksSource.fromJwks(
+				JwtFixtures.assertParsedJwks("{\"keys\":[" + jwk + "]}"))).acceptAnyAudience(true).allowedAlgorithms(algorithms)
 				.clock(TestClock.fromInstant(now)).build();
 	}
 

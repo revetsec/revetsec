@@ -16,6 +16,8 @@
 
 package com.revetsec.oauth;
 
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+
 import org.jspecify.annotations.NonNull;
 
 import com.revetsec.StateSealer;
@@ -52,13 +54,13 @@ final class AuthorizationCompletionTests {
 		String stateA = QueryParameters.parse(a.getAuthorizationUri().getRawQuery()).getValues("state").get(0);
 		String sealedB = b.getPendingAuthorization().toSealedForm(sealer, "provider");
 		assertEquals(OAuthException.Reason.STATE_MISMATCH,
-				assertThrows(OAuthValidationException.class, () -> client.completeAuthorization(
-						AuthorizationResponse.fromQueryString("state=" + stateA + "&code=correct"),
+				assertInstanceOf(AuthorizationCompletionResult.Rejected.class, client.completeAuthorizationResult(
+						assertInstanceOf(AuthorizationResponseParseResult.Succeeded.class, AuthorizationResponse.fromQueryStringResult("state=" + stateA + "&code=correct")).getResponse(),
 						PendingAuthorizationSource.fromSealedForm(sealedB, sealer, "provider"), CALLBACK)).getReason());
 		String sealedA = a.getPendingAuthorization().toSealedForm(sealer, "provider");
 		assertEquals(OAuthException.Reason.CALLBACK_URI_MISMATCH,
-				assertThrows(OAuthValidationException.class, () -> client.completeAuthorization(
-						AuthorizationResponse.fromQueryString("state=" + stateA + "&code=correct"),
+				assertInstanceOf(AuthorizationCompletionResult.Rejected.class, client.completeAuthorizationResult(
+						assertInstanceOf(AuthorizationResponseParseResult.Succeeded.class, AuthorizationResponse.fromQueryStringResult("state=" + stateA + "&code=correct")).getResponse(),
 						PendingAuthorizationSource.fromSealedForm(sealedA, sealer, "provider"),
 						URI.create("https://app.example/other"))).getReason());
 	}
@@ -71,8 +73,8 @@ final class AuthorizationCompletionTests {
 		String state = QueryParameters.parse(redirect.getAuthorizationUri().getRawQuery()).getValues("state").get(0);
 		String sealed = redirect.getPendingAuthorization().toSealedForm(sealer, "provider");
 		assertEquals(OAuthException.Reason.ISSUER_MISSING,
-				assertThrows(OAuthValidationException.class, () -> client.completeAuthorization(
-						AuthorizationResponse.fromQueryString("state=" + state + "&error=access_denied"),
+				assertInstanceOf(AuthorizationCompletionResult.Rejected.class, client.completeAuthorizationResult(
+						assertInstanceOf(AuthorizationResponseParseResult.Succeeded.class, AuthorizationResponse.fromQueryStringResult("state=" + state + "&error=access_denied")).getResponse(),
 						PendingAuthorizationSource.fromSealedForm(sealed, sealer, "provider"), CALLBACK)).getReason());
 	}
 
@@ -86,8 +88,8 @@ final class AuthorizationCompletionTests {
 			String stateA = QueryParameters.parse(a.getAuthorizationUri().getRawQuery()).getValues("state").get(0);
 			String sealedB = b.getPendingAuthorization().toSealedForm(sealer, "provider");
 			assertEquals(OAuthException.Reason.STATE_MISMATCH,
-					assertThrows(OAuthValidationException.class, () -> client.completeAuthorization(
-							AuthorizationResponse.fromQueryString("state=" + stateA + "&error=access_denied"),
+					assertInstanceOf(AuthorizationCompletionResult.Rejected.class, client.completeAuthorizationResult(
+							assertInstanceOf(AuthorizationResponseParseResult.Succeeded.class, AuthorizationResponse.fromQueryStringResult("state=" + stateA + "&error=access_denied")).getResponse(),
 							PendingAuthorizationSource.fromSealedForm(sealedB, sealer, "provider"), CALLBACK))
 							.getReason());
 			assertEquals(0, server.getRequests().size());
@@ -102,19 +104,19 @@ final class AuthorizationCompletionTests {
 			String state = QueryParameters.parse(redirect.getAuthorizationUri().getRawQuery()).getValues("state").get(0);
 			PendingAuthorizationStore defective = new PendingAuthorizationStore() {
 				private @Nullable String record;
-				@Override public void save(@NonNull String binding, @NonNull String key, @NonNull String opaque, @NonNull Instant expiry, @NonNull Duration remaining) {
+				@Override public @NonNull PendingAuthorizationSaveResult save(@NonNull String binding, @NonNull String key, @NonNull String opaque, @NonNull Instant expiry, @NonNull Duration remaining) {
 					this.record = opaque;
-				}
+				return PendingAuthorizationSaveResult.SAVED; }
 				@Override public @NonNull Optional<@NonNull String> consume(@NonNull String binding, @NonNull String key, @NonNull Duration remaining) {
 					String found = this.record;
 					this.record = null;
 					return Optional.ofNullable(found);
 				}
 			};
-			redirect.getPendingAuthorization().saveTo(defective, "browser-A");
+			org.junit.jupiter.api.Assertions.assertEquals(PendingAuthorizationSaveResult.SAVED, redirect.getPendingAuthorization().saveToResult(defective, "browser-A"));
 			assertEquals(OAuthException.Reason.BROWSER_BINDING_MISMATCH,
-					assertThrows(OAuthValidationException.class, () -> client.completeAuthorization(
-							AuthorizationResponse.fromQueryString("state=" + state + "&code=valid-code"),
+					assertInstanceOf(AuthorizationCompletionResult.Rejected.class, client.completeAuthorizationResult(
+							assertInstanceOf(AuthorizationResponseParseResult.Succeeded.class, AuthorizationResponse.fromQueryStringResult("state=" + state + "&code=valid-code")).getResponse(),
 							PendingAuthorizationSource.fromStore(defective, "browser-B"), CALLBACK))
 							.getReason());
 			assertEquals(0, server.getRequests().size());
@@ -130,24 +132,21 @@ final class AuthorizationCompletionTests {
 			String state = redirect.getPendingAuthorization().state();
 			String sealed = redirect.getPendingAuthorization().toSealedForm(sealer, "provider");
 			PendingAuthorizationSource source = PendingAuthorizationSource.fromSealedForm(sealed, sealer, "provider");
-			AuthorizationResponse wrongState = AuthorizationResponse.fromQueryString(
-					"state=attacker&error=access_denied&error_description=secret");
+			AuthorizationResponse wrongState = assertInstanceOf(AuthorizationResponseParseResult.Succeeded.class, AuthorizationResponse.fromQueryStringResult(
+					"state=attacker&error=access_denied&error_description=secret")).getResponse();
 			assertEquals(OAuthException.Reason.STATE_MISMATCH,
-					assertThrows(OAuthValidationException.class, () -> client.completeAuthorization(
+					assertInstanceOf(AuthorizationCompletionResult.Rejected.class, client.completeAuthorizationResult(
 							wrongState, source, CALLBACK)).getReason());
-			AuthorizationResponse wrongIssuer = AuthorizationResponse.fromQueryString("state=" + state
-					+ "&iss=https%3A%2F%2Fattacker.example&error=access_denied&error_description=secret");
-			OAuthValidationException issuerFailure = assertThrows(OAuthValidationException.class,
-					() -> client.completeAuthorization(wrongIssuer, source, CALLBACK));
+			AuthorizationResponse wrongIssuer = assertInstanceOf(AuthorizationResponseParseResult.Succeeded.class, AuthorizationResponse.fromQueryStringResult("state=" + state
+					+ "&iss=https%3A%2F%2Fattacker.example&error=access_denied&error_description=secret")).getResponse();
+			AuthorizationCompletionResult.Rejected issuerFailure = assertInstanceOf(AuthorizationCompletionResult.Rejected.class, client.completeAuthorizationResult(wrongIssuer, source, CALLBACK));
 			assertEquals(OAuthException.Reason.ISSUER_MISMATCH, issuerFailure.getReason());
-			org.junit.jupiter.api.Assertions.assertFalse(java.util.Objects.requireNonNull(issuerFailure.getMessage())
+			org.junit.jupiter.api.Assertions.assertFalse(issuerFailure.toString()
 					.contains("secret"));
-			AuthorizationResponse valid = AuthorizationResponse.fromQueryString("state=" + state
-					+ "&error=access_denied&error_description=secret");
-			AuthorizationErrorException denied = assertThrows(AuthorizationErrorException.class,
-					() -> client.completeAuthorization(valid, source, CALLBACK));
-			assertEquals("access_denied", denied.getErrorCode().orElseThrow());
-			org.junit.jupiter.api.Assertions.assertFalse(java.util.Objects.requireNonNull(denied.getMessage())
+			AuthorizationResponse valid = assertInstanceOf(AuthorizationResponseParseResult.Succeeded.class, AuthorizationResponse.fromQueryStringResult("state=" + state
+					+ "&error=access_denied&error_description=secret")).getResponse();
+			AuthorizationCompletionResult.Denied denied = assertInstanceOf(AuthorizationCompletionResult.Denied.class, client.completeAuthorizationResult(valid, source, CALLBACK));
+			org.junit.jupiter.api.Assertions.assertFalse(denied.toString()
 					.contains("secret"));
 			assertEquals(0, server.getRequests().size());
 		}
@@ -166,13 +165,11 @@ final class AuthorizationCompletionTests {
 			String callback = "state=" + state + "&iss="
 					+ URLEncoder.encode(wrong, StandardCharsets.UTF_8) + "&error=access_denied";
 			assertEquals(OAuthException.Reason.ISSUER_MISMATCH,
-					assertThrows(OAuthValidationException.class, () -> client.completeAuthorization(
-							AuthorizationResponse.fromQueryString(callback), source, CALLBACK)).getReason());
+					assertInstanceOf(AuthorizationCompletionResult.Rejected.class, client.completeAuthorizationResult(
+							assertInstanceOf(AuthorizationResponseParseResult.Succeeded.class, AuthorizationResponse.fromQueryStringResult(callback)).getResponse(), source, CALLBACK)).getReason());
 		}
 		String matching = "state=" + state + "&iss=https%3A%2F%2Fissuer.example&error=access_denied";
-		assertEquals("access_denied", assertThrows(AuthorizationErrorException.class,
-				() -> client.completeAuthorization(AuthorizationResponse.fromQueryString(matching), source, CALLBACK))
-				.getErrorCode().orElseThrow());
+		assertInstanceOf(AuthorizationCompletionResult.Denied.class, client.completeAuthorizationResult(assertInstanceOf(AuthorizationResponseParseResult.Succeeded.class, AuthorizationResponse.fromQueryStringResult(matching)).getResponse(), source, CALLBACK));
 	}
 
 	@Test
@@ -185,8 +182,8 @@ final class AuthorizationCompletionTests {
 					pending.toSealedForm(sealer, "provider"), sealer, "provider");
 			for (String query : List.of("code=one-time-code", "state=&code=one-time-code"))
 				assertEquals(OAuthException.Reason.STATE_MISMATCH,
-						assertThrows(OAuthValidationException.class, () -> client.completeAuthorization(
-								AuthorizationResponse.fromQueryString(query), source, CALLBACK)).getReason());
+						assertInstanceOf(AuthorizationCompletionResult.Rejected.class, client.completeAuthorizationResult(
+								assertInstanceOf(AuthorizationResponseParseResult.Succeeded.class, AuthorizationResponse.fromQueryStringResult(query)).getResponse(), source, CALLBACK)).getReason());
 			assertEquals(0, server.getRequests().size());
 		}
 	}
@@ -203,8 +200,8 @@ final class AuthorizationCompletionTests {
 				pending.toSealedForm(sealer, "provider"), sealer, "provider");
 		clock.advance(Duration.ofMinutes(1));
 		assertEquals(OAuthException.Reason.PENDING_AUTHORIZATION_EXPIRED,
-				assertThrows(OAuthValidationException.class, () -> client.completeAuthorization(
-						AuthorizationResponse.fromQueryString("state=" + pending.state() + "&code=code"),
+				assertInstanceOf(AuthorizationCompletionResult.Rejected.class, client.completeAuthorizationResult(
+						assertInstanceOf(AuthorizationResponseParseResult.Succeeded.class, AuthorizationResponse.fromQueryStringResult("state=" + pending.state() + "&code=code")).getResponse(),
 						source, CALLBACK)).getReason());
 	}
 
@@ -213,19 +210,19 @@ final class AuthorizationCompletionTests {
 		OAuthClient first = client(false);
 		StateSealer sealer = TestSealers.fromFixedKey();
 		PendingAuthorization pending = first.beginAuthorization().getPendingAuthorization();
-		AuthorizationResponse response = AuthorizationResponse.fromQueryString(
-				"state=" + pending.state() + "&code=one-time-code");
+		AuthorizationResponse response = assertInstanceOf(AuthorizationResponseParseResult.Succeeded.class, AuthorizationResponse.fromQueryStringResult(
+				"state=" + pending.state() + "&code=one-time-code")).getResponse();
 		PendingAuthorizationSource source = PendingAuthorizationSource.fromSealedForm(
 				pending.toSealedForm(sealer, "provider"), sealer, "provider");
 		OAuthClient otherClientId = OAuthClient.withAuthorizationServerMetadata(metadata("https://issuer.example"))
 				.clientId("another-client").clientAuthentication(ClientAuthentication.noneInstance())
 				.redirectUri(CALLBACK).build();
 		assertEquals(OAuthException.Reason.CLIENT_MISMATCH,
-				assertThrows(OAuthValidationException.class, () -> otherClientId.completeAuthorization(
+				assertInstanceOf(AuthorizationCompletionResult.Rejected.class, otherClientId.completeAuthorizationResult(
 						response, source, CALLBACK)).getReason());
 		OAuthClient otherIssuer = clientWithIssuer("https://another.example");
 		assertEquals(OAuthException.Reason.ISSUER_MISMATCH,
-				assertThrows(OAuthValidationException.class, () -> otherIssuer.completeAuthorization(
+				assertInstanceOf(AuthorizationCompletionResult.Rejected.class, otherIssuer.completeAuthorizationResult(
 						response, source, CALLBACK)).getReason());
 		PendingAuthorization oidc = new PendingAuthorization("oidc", pending.getIssuer(), pending.getClientId(),
 				pending.getRedirectUri(), pending.state(), pending.verifier(), pending.nonce(),
@@ -234,7 +231,7 @@ final class AuthorizationCompletionTests {
 		PendingAuthorizationSource oidcSource = PendingAuthorizationSource.fromSealedForm(
 				oidc.toSealedForm(sealer, "provider"), sealer, "provider");
 		assertEquals(OAuthException.Reason.PENDING_AUTHORIZATION_INVALID,
-				assertThrows(OAuthValidationException.class, () -> first.completeAuthorization(
+				assertInstanceOf(AuthorizationCompletionResult.Rejected.class, first.completeAuthorizationResult(
 						response, oidcSource, CALLBACK)).getReason());
 	}
 
@@ -260,13 +257,13 @@ final class AuthorizationCompletionTests {
 			StateSealer sealer = TestSealers.fromFixedKey();
 			PendingAuthorizationSource source = PendingAuthorizationSource.fromSealedForm(
 					pending.toSealedForm(sealer, "provider"), sealer, "provider");
-			AuthorizationResponse response = AuthorizationResponse.fromQueryString(
-					"state=" + pending.state() + "&code=attacker-code");
+			AuthorizationResponse response = assertInstanceOf(AuthorizationResponseParseResult.Succeeded.class, AuthorizationResponse.fromQueryStringResult(
+					"state=" + pending.state() + "&code=attacker-code")).getResponse();
 			assertEquals(OAuthException.Reason.ISSUER_MISMATCH,
-					assertThrows(OAuthValidationException.class, () -> secondClient.completeAuthorization(
+					assertInstanceOf(AuthorizationCompletionResult.Rejected.class, secondClient.completeAuthorizationResult(
 							response, source, secondCallback)).getReason());
 			assertEquals(OAuthException.Reason.CALLBACK_URI_MISMATCH,
-					assertThrows(OAuthValidationException.class, () -> firstClient.completeAuthorization(
+					assertInstanceOf(AuthorizationCompletionResult.Rejected.class, firstClient.completeAuthorizationResult(
 							response, source, secondCallback)).getReason());
 			assertEquals(0, firstServer.getRequests().size());
 			assertEquals(0, secondServer.getRequests().size());

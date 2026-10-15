@@ -104,7 +104,7 @@ public final class PostgresqlScimPatch {
                 if (type == ScimResourceType.userInstance()) {
                     bound(database, deadline);
                     if (database.query("SELECT 1 FROM scim_fixture_resource WHERE tenant=:tenant AND kind='User' AND name_key=:name AND id<>:id")
-                            .bind("tenant", tenant).bind("name", asciiFold(candidate.getDocument().findString("userName").orElseThrow())).bind("id", id).fetchObject(Integer.class).isPresent())
+                            .bind("tenant", tenant).bind("name", asciiFold(candidate.getDocument().find("userName").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow())).bind("id", id).fetchObject(Integer.class).isPresent())
                         return Optional.of(new Rejected(ScimError.uniquenessInstance()));
                 }
                 long version = row.orElseThrow().version();
@@ -115,8 +115,8 @@ public final class PostgresqlScimPatch {
                     bound(database, deadline); completion.attemptedWrite = true;
                     JsonObject document = candidate.getDocument();
                     long count = database.query("UPDATE scim_fixture_resource SET user_name=:name,name_key=:key,display_name=:display,active=:active,version=:next,modified=:modified WHERE tenant=:tenant AND id=:id AND version=:previous")
-                            .bind("name", document.findString("userName").orElse(null)).bind("key", document.findString("userName").map(PostgresqlScimPatch::asciiFold).orElse(null))
-                            .bind("display", document.findString("displayName").orElse(null)).bind("active", document.findBoolean("active").orElse(null))
+                            .bind("name", document.find("userName").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElse(null)).bind("key", document.find("userName").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).map(PostgresqlScimPatch::asciiFold).orElse(null))
+                            .bind("display", document.find("displayName").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElse(null)).bind("active", document.find("active").filter(JsonBoolean.class::isInstance).map(JsonBoolean.class::cast).map(JsonBoolean::getValue).orElse(null))
                             .bind("next", version + 1).bind("modified", candidate.getLastModified().orElseThrow().toString())
                             .bind("tenant", tenant).bind("id", id).bind("previous", version).execute();
                     if (count != 1) throw new SQLException("The locked version changed unexpectedly.");
@@ -167,21 +167,21 @@ public final class PostgresqlScimPatch {
     private static @Nullable ScimError profile(@NonNull ScimResource resource) {
         Set<String> allowed = resource.getResourceType() == ScimResourceType.userInstance() ? Set.of("schemas", "id", "meta", "userName", "displayName", "active") : Set.of("schemas", "id", "meta", "displayName", "members");
         if (!allowed.containsAll(resource.getDocument().getMembers().keySet())) return ScimError.invalidValueInstance();
-        for (String name : List.of("userName", "displayName")) if (resource.getDocument().findString(name).isPresent()) {
-            String value = resource.getDocument().findString(name).orElseThrow();
+        for (String name : List.of("userName", "displayName")) if (resource.getDocument().find(name).filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).isPresent()) {
+            String value = resource.getDocument().find(name).filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow();
             if (value.length() > 256 || !printableAscii(value)) return ScimError.invalidValueInstance();
         }
         List<String> ids = memberIds(resource); if (ids.size() > 128 || new HashSet<>(ids).size() != ids.size()) return ScimError.invalidValueInstance();
         JsonValue raw = resource.getDocument().getMembers().get("members");
         if (raw instanceof JsonArray array) for (JsonValue element : array.getElements()) {
             JsonObject member = (JsonObject) element;
-            if (!member.getMembers().keySet().equals(Set.of("value")) || member.findString("value").orElse("").isEmpty()) return ScimError.invalidValueInstance();
+            if (!member.getMembers().keySet().equals(Set.of("value")) || member.find("value").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElse("").isEmpty()) return ScimError.invalidValueInstance();
         }
         return null;
     }
     private static @NonNull List<@NonNull String> memberIds(@NonNull ScimResource resource) {
         List<String> ids = new ArrayList<>(); JsonValue value = resource.getDocument().getMembers().get("members");
-        if (value instanceof JsonArray array) for (JsonValue member : array.getElements()) ((JsonObject) member).findString("value").ifPresent(ids::add);
+        if (value instanceof JsonArray array) for (JsonValue member : array.getElements()) ((JsonObject) member).find("value").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).ifPresent(ids::add);
         return List.copyOf(ids);
     }
     private static boolean printableAscii(@NonNull String value) { for (int index = 0; index < value.length(); ++index) if (value.charAt(index) < 32 || value.charAt(index) > 126) return false; return true; }

@@ -72,7 +72,9 @@ final class BuilderConventionsContractTests {
 						&& analysis.getTypes().isSameType(analysis.getTypes().erasure(method.getReturnType()),
 								analysis.getTypes().erasure(type.asType()))
 						&& !(name.equals("com.revetsec.json.JsonObject$Builder")
-								&& method.getSimpleName().contentEquals("putNull"))) {
+								&& method.getSimpleName().contentEquals("putNull"))
+						&& !(name.equals("com.revetsec.jose.JwtClaimsSet$Builder")
+								&& method.getSimpleName().contentEquals("claimNull"))) {
 					var parameter = method.getParameters().get(0).asType();
 					boolean nullable = parameter.getAnnotationMirrors().stream().anyMatch(annotation ->
 							annotation.getAnnotationType().toString().equals("org.jspecify.annotations.Nullable"));

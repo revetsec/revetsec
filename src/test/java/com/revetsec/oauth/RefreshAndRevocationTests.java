@@ -16,6 +16,8 @@
 
 package com.revetsec.oauth;
 
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+
 import org.jspecify.annotations.NonNull;
 
 import com.revetsec.internal.encoding.QueryParameters;
@@ -41,8 +43,8 @@ final class RefreshAndRevocationTests {
 							+ "\"refresh_token\":\"replacement\",\"expires_in\":60}"),
 					json(200, "{\"access_token\":\"access-two\",\"token_type\":\"Bearer\"}"))));
 			OAuthClient client = client(server);
-			TokenResponse replacement = client.refresh(RefreshToken.fromValue("old-refresh"),
-					TokenRequestOptions.builder().scopes(Set.of("narrow")).build());
+			TokenResponse replacement = assertInstanceOf(OAuthTokenRequestResult.Succeeded.class, client.refreshResult(RefreshToken.fromValue("old-refresh"),
+					TokenRequestOptions.builder().scopes(Set.of("narrow")).build())).getTokens();
 			assertTrue(replacement.getApplicationData().isEmpty());
 			assertEquals("replacement", replacement.getRefreshToken().orElseThrow().getValue());
 			assertEquals(Set.of("narrow"), replacement.getGrantedScopes().orElseThrow());
@@ -50,8 +52,8 @@ final class RefreshAndRevocationTests {
 			assertEquals(List.of("refresh_token"), first.getValues("grant_type"));
 			assertEquals(List.of("old-refresh"), first.getValues("refresh_token"));
 			assertEquals(List.of("narrow"), first.getValues("scope"));
-			TokenResponse noReplacement = client.refresh(replacement.getRefreshToken().orElseThrow(),
-					TokenRequestOptions.builder().build());
+			TokenResponse noReplacement = assertInstanceOf(OAuthTokenRequestResult.Succeeded.class, client.refreshResult(replacement.getRefreshToken().orElseThrow(),
+					TokenRequestOptions.builder().build())).getTokens();
 			assertTrue(noReplacement.getRefreshToken().isEmpty());
 			assertTrue(noReplacement.getGrantedScopes().isEmpty());
 			QueryParameters second = QueryParameters.parse(server.getRequests("/token").get(1).getBodyAsString());
@@ -71,21 +73,21 @@ final class RefreshAndRevocationTests {
 					json(400, "{\"error\":\"unsupported_token_type\"}"),
 					json(503, "{\"error\":\"server_error\"}"))));
 			OAuthClient client = client(server);
-			assertThrows(OAuthErrorResponseException.class, () -> client.refresh(
+			assertThrows(OAuthErrorResponseException.class, () -> client.refreshResult(
 					RefreshToken.fromValue("old-refresh"), TokenRequestOptions.builder().build()));
 			assertEquals(1, server.getHitCount("/token"));
-			client.revoke("old-refresh", TokenTypeHint.REFRESH_TOKEN);
+			assertInstanceOf(OAuthRevocationResult.Succeeded.class, client.revokeResult("old-refresh", TokenTypeHint.REFRESH_TOKEN));
 			QueryParameters form = QueryParameters.parse(server.getRequests("/revoke").get(0).getBodyAsString());
 			assertEquals(List.of("old-refresh"), form.getValues("token"));
 			assertEquals(List.of("refresh_token"), form.getValues("token_type_hint"));
 			assertEquals("Basic Y2xpZW50OnNlY3JldA==",
 					server.getRequests("/revoke").get(0).getHeader("Authorization").orElseThrow());
-			OAuthErrorResponseException unsupported = assertThrows(OAuthErrorResponseException.class,
-					() -> client.revoke("another-refresh", TokenTypeHint.REFRESH_TOKEN));
+			OAuthRevocationResult.Rejected unsupported = assertInstanceOf(OAuthRevocationResult.Rejected.class,
+					client.revokeResult("another-refresh", TokenTypeHint.REFRESH_TOKEN));
 			assertEquals(400, unsupported.getStatus());
-			assertEquals("unsupported_token_type", unsupported.getErrorCode().orElseThrow());
+			assertEquals(OAuthEndpointError.UNSUPPORTED_TOKEN_TYPE, unsupported.getError());
 			OAuthErrorResponseException unavailable = assertThrows(OAuthErrorResponseException.class,
-					() -> client.revoke("third-refresh", TokenTypeHint.REFRESH_TOKEN));
+					() -> client.revokeResult("third-refresh", TokenTypeHint.REFRESH_TOKEN));
 			assertEquals(503, unavailable.getStatus());
 			assertTrue(unavailable.isTransient());
 			assertEquals(3, server.getHitCount("/revoke"));

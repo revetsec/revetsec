@@ -17,6 +17,7 @@
 package com.revetsec.oauth;
 
 import com.revetsec.StateSealer;
+import com.google.errorprone.annotations.CheckReturnValue;
 import com.revetsec.internal.crypto.SealedStateAccess;
 import com.revetsec.internal.crypto.SealedStateType;
 import com.revetsec.internal.http.Deadline;
@@ -175,38 +176,47 @@ public final class PendingAuthorization {
 	 *
 	 * @param store the store
 	 * @param browserBinding a browser-specific secret
+	 * @return the fixed storage outcome
 	 * @since 1.0.0
 	 */
-	public void saveTo(@NonNull PendingAuthorizationStore store, @NonNull String browserBinding) {
-		saveTo(store, browserBinding, Duration.ofSeconds(5));
+	@CheckReturnValue
+	public @NonNull PendingAuthorizationSaveResult saveToResult(@NonNull PendingAuthorizationStore store, @NonNull String browserBinding) {
+		return saveToResult(store, browserBinding, Duration.ofSeconds(5));
 	}
 
 	/**
-	 * Saves the complete browser-bound record within the supplied operation budget.
+	 * Saves the complete browser-bound record within the supplied operation budget. Continue the browser
+	 * authorization flow only after SAVED. A late, failed or possibly completed provider call returns
+	 * INDETERMINATE; it must not be treated as an absent record or an instruction to retry.
 	 * @param store the store
 	 * @param browserBinding browser-specific secret
 	 * @param remaining positive time left for this operation
+	 * @return the fixed storage outcome
 	 * @since 1.0.0
 	 */
-	public void saveTo(@NonNull PendingAuthorizationStore store, @NonNull String browserBinding,
+	@CheckReturnValue
+	public @NonNull PendingAuthorizationSaveResult saveToResult(@NonNull PendingAuthorizationStore store, @NonNull String browserBinding,
 			@NonNull Duration remaining) {
 		requireNonNull(store);
 		requireNonNull(browserBinding);
 		if (browserBinding.isEmpty()) throw new IllegalArgumentException("A browser binding must not be empty.");
-		Deadline deadline = Deadline.fromNow(requireNonNull(remaining));
-		if (deadline.isExpired()) throw PendingAuthorizationStoreException.fromReason(OAuthException.Reason.PENDING_AUTHORIZATION_STORE_UNAVAILABLE);
+		requireNonNull(remaining);
+		if (remaining.isNegative() || remaining.isZero() || Thread.currentThread().isInterrupted())
+			return PendingAuthorizationSaveResult.UNAVAILABLE;
+		Deadline deadline = Deadline.fromNow(remaining);
 		String encoded = PendingAuthorizationCodec.encode(this, PendingAuthorizationCodec.bindingDigest(browserBinding));
+		if (deadline.isExpired() || Thread.currentThread().isInterrupted())
+			return PendingAuthorizationSaveResult.UNAVAILABLE;
 		try {
-			if (deadline.isExpired()) throw PendingAuthorizationStoreException.fromReason(OAuthException.Reason.PENDING_AUTHORIZATION_STORE_UNAVAILABLE);
-			store.save(browserBinding, this.state, encoded, this.expiresAt, deadline.remaining());
-			if (deadline.isExpired()) throw PendingAuthorizationStoreException.fromReason(OAuthException.Reason.PENDING_AUTHORIZATION_STORE_UNAVAILABLE);
+			PendingAuthorizationSaveResult result = store.save(browserBinding, this.state, encoded, this.expiresAt, deadline.remaining());
+			if (result == null || deadline.isExpired() || Thread.currentThread().isInterrupted())
+				return PendingAuthorizationSaveResult.INDETERMINATE;
+			return result;
 		} catch (VirtualMachineError fatal) {
 			throw fatal;
-		} catch (PendingAuthorizationStoreException failure) {
-			throw failure;
 		} catch (Throwable failure) {
 			if (failure instanceof InterruptedException) Thread.currentThread().interrupt();
-			throw PendingAuthorizationStoreException.fromReason(OAuthException.Reason.PENDING_AUTHORIZATION_STORE_UNAVAILABLE);
+			return PendingAuthorizationSaveResult.INDETERMINATE;
 		}
 	}
 

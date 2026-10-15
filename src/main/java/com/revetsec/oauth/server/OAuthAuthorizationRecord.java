@@ -92,14 +92,14 @@ final class OAuthAuthorizationRecord {
  }
  static @NonNull OAuthAuthorizationRecord decode(OAuthStoreKey.@NonNull Kind kind, @NonNull String identifier,
    @NonNull JsonObject payload, @NonNull OAuthServerIngressLimits limits, int subjectLimit) {
-  String status = payload.findString("status").orElseThrow(OAuthStoreFormat::invalid);
+  String status = OAuthStoreFormat.stringMember(payload, "status").orElseThrow(OAuthStoreFormat::invalid);
   Set<String> fields = switch (kind) {
    case INTERACTION -> INTERACTION;
    case CODE -> status.equals("USED") ? USED_CODE : CODE;
    case GRANT -> status.equals("ACTIVE") || status.equals("REVOKED") ? ISSUED_GRANT : GRANT;
    case ACCESS_TOKEN -> ACCESS; case REFRESH_TOKEN -> REFRESH;
    default -> throw OAuthStoreFormat.invalid(); };
-  if (!payload.getMembers().keySet().equals(fields) || payload.findLong("schema").orElse(-1L) != 1L)
+  if (!payload.getMembers().keySet().equals(fields) || OAuthStoreFormat.longMember(payload, "schema").orElse(-1L) != 1L)
    throw OAuthStoreFormat.invalid();
   OAuthAuthorizationRecord r = new OAuthAuthorizationRecord(kind, payload);
   OAuthStoreFormat.nonce(identifier); nonce(r.text("id"));
@@ -252,8 +252,8 @@ final class OAuthAuthorizationRecord {
   changed.put("status", JsonString.fromValue("COMPLETED"));
   return new OAuthAuthorizationRecord(this.kind, JsonObject.fromMembers(changed));
  }
- @NonNull String text(@NonNull String name) { return this.payload.findString(name).orElseThrow(OAuthStoreFormat::invalid); }
- long number(@NonNull String name) { return this.payload.findLong(name).orElseThrow(OAuthStoreFormat::invalid); }
+ @NonNull String text(@NonNull String name) { return OAuthStoreFormat.stringMember(this.payload, name).orElseThrow(OAuthStoreFormat::invalid); }
+ long number(@NonNull String name) { return OAuthStoreFormat.longMember(this.payload, name).orElseThrow(OAuthStoreFormat::invalid); }
  @NonNull Instant expires() {
   try { return Instant.ofEpochSecond(number("expires")); }
   catch (DateTimeException failure) { throw OAuthStoreFormat.invalid(); }
@@ -276,7 +276,7 @@ final class OAuthAuthorizationRecord {
   if (!(value instanceof JsonString string) || string.getValue().length() > maximum) throw OAuthStoreFormat.invalid();
   String state = string.getValue(); if (!state.isEmpty()) OAuthServerConfiguration.text(state, maximum); return state;
  }
- boolean refresh() { return this.payload.findBoolean("refresh").orElseThrow(OAuthStoreFormat::invalid); }
+ boolean refresh() { return OAuthStoreFormat.booleanMember(this.payload, "refresh").orElseThrow(OAuthStoreFormat::invalid); }
  boolean matchesIssuer(@NonNull OAuthStoreFence fence) { return matches("issuer", fence); }
  boolean matchesSubject(@NonNull OAuthStoreFence fence) { return matches("subject", fence); }
  private boolean matches(@NonNull String prefix, @NonNull OAuthStoreFence fence) {

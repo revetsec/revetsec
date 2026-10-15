@@ -200,7 +200,7 @@ final class ScimM11PatchParsingTests {
         assertEquals(Set.of("name.givenName",id+":department"),paths(enabled.getSuppliedAttributePaths()));
         assertEquals(Set.of(ScimCompatibilityFeature.PATCH_VALUE_OBJECT_ATTRIBUTE_PATHS),used);
         JsonObject normalized=assertInstanceOf(JsonObject.class,enabled.getOperations().get(0).getValue().orElseThrow());
-        assertEquals("one",assertInstanceOf(JsonObject.class,normalized.getMembers().get("name")).findString("givenName").orElseThrow());
+        assertEquals("one",assertInstanceOf(JsonObject.class,normalized.getMembers().get("name")).find("givenName").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow());
         for(String value:List.of("{\"name\":{\"givenName\":\"a\"},\"name.familyName\":\"b\"}","{\"emails.value\":\"x\"}","{\""+id+":manager.value\":\"a\",\""+id+":manager\":{\"value\":\"b\"}}"))
             assertInstanceOf(ScimPatchParseResult.Rejected.class,parse(USER,"{\"op\":\"replace\",\"value\":"+value+"}",ScimCompatibility.microsoftEntraIdInstance(),ScimLimits.fromDefaults(),new LinkedHashSet<>()));
     }

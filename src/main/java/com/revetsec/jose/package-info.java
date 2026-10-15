@@ -19,11 +19,20 @@
  * validation (RFC 7515, RFC 7517, RFC 7519).
  * <p>
  * {@link com.revetsec.jose.JwtValidator} validates tokens with keys from a
- * {@link com.revetsec.jose.StaticJsonWebKeySource} or a {@link com.revetsec.jose.RemoteJsonWebKeySource}.
+ * {@link com.revetsec.jose.StaticJwksSource} or a {@link com.revetsec.jose.RemoteJwksSource}.
  * <p>
- * {@link com.revetsec.jose.JwsSigner} signs exact bounded JSON claims with an application-owned RSA private key
- * and verifies every output against its checked public projection before releasing a credential. Signing does
- * not validate claim meaning or grant permission.
+ * {@link com.revetsec.jose.JwsSigner} signs a typed {@link com.revetsec.jose.JwtSigningHeader} and
+ * {@link com.revetsec.jose.JwtClaimsSet} with an application-owned RSA private key. Its
+ * {@code fromHeaderAndClaims} method immediately releases a signed compact JWT with the default two-second
+ * operation budget; {@code withHeaderAndClaims} provides optional configuration and signs only when its
+ * builder's {@code build()} is called. The signer selects the algorithm and verifies every output against its
+ * checked public projection before releasing a credential. The exact-byte signing API remains available.
+ * Issuance claims are separate from validated {@link com.revetsec.jose.JwtClaims}; signing does not validate
+ * claim meaning or grant permission.
+ * <p>
+ * Standalone public-key publication uses {@link com.revetsec.jose.PublishedJwk} and
+ * {@link com.revetsec.jose.JwksPublisher}. It supports RSA, EC and Ed25519 verification keys, optional
+ * certificate chains, and prepared GET/HEAD responses without configuring an OAuth authorization server.
  * <p>
  * It depends only on {@code com.revetsec.json} and the root package, apart from Revetsec's internal packages.
  *

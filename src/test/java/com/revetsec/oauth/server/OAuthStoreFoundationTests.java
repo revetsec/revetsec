@@ -178,7 +178,7 @@ class OAuthStoreFoundationTests {
   OAuthStoreEntry first = codec.seal(code, NOW.plusSeconds(60), "{\"scope\":\"read\"}");
   OAuthStoreEntry next = codec.seal(code, NOW.plusSeconds(60), "{\"scope\":\"read\"}");
   assertNotEquals(first.getVersion(), next.getVersion()); assertNotEquals(first.toSealedForm(), next.toSealedForm());
-  assertEquals("read", codec.open(first, clock(NOW)).findString("scope").orElseThrow());
+  assertEquals("read", codec.open(first, clock(NOW)).find("scope").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow());
   assertEquals(codec.issuerKey(), new OAuthStoreRecordCodec(ISSUER, sealer("k", (byte) 1,3800),3800).issuerKey());
   assertNotEquals(codec.issuerKey(), new OAuthStoreRecordCodec(ISSUER+"/",sealer("k",(byte)1,3800),3800).issuerKey());
   assertNotEquals(codec.subjectKey("Alice"),codec.subjectKey("alice"));
@@ -210,11 +210,11 @@ class OAuthStoreFoundationTests {
   assertEquals("{}",codec.open(finite,clock(NOW.plusSeconds(59).plusNanos(999999999))).toJson());
   rejected(()->codec.open(finite,clock(NOW.plusSeconds(60))));
   OAuthStoreEntry permanent=codec.seal(codec.issuerKey(),OAuthStoreFormat.PERMANENT,"{\"epoch\":1}");
-  assertEquals(1L,codec.open(permanent,clock(NOW.plusSeconds(86400*401L))).findLong("epoch").orElseThrow());
+  assertEquals(1L,codec.open(permanent,clock(NOW.plusSeconds(86400*401L))).find("epoch").flatMap(value -> ((com.revetsec.json.JsonNumber) value).getLongValueExact()).orElseThrow());
   byte[] oldKey=new byte[32],newKey=new byte[32];for(int i=0;i<32;i++){oldKey[i]=(byte)(1+i);newKey[i]=(byte)(2+i);}
   StateSealer rotated=StateSealer.withActiveKey(SealingKey.fromBase64("new",Base64.getEncoder().encodeToString(newKey)))
     .verificationKeys(List.of(SealingKey.fromBase64("k",Base64.getEncoder().encodeToString(oldKey)))).build();
-  assertEquals(1L,new OAuthStoreRecordCodec(ISSUER,rotated,3800).open(permanent,clock(NOW)).findLong("epoch").orElseThrow());
+  assertEquals(1L,new OAuthStoreRecordCodec(ISSUER,rotated,3800).open(permanent,clock(NOW)).find("epoch").flatMap(value -> ((com.revetsec.json.JsonNumber) value).getLongValueExact()).orElseThrow());
   rejected(()->new OAuthStoreRecordCodec(ISSUER,sealer("new",(byte)2,3800),3800).open(permanent,clock(NOW)));
  }
  @TestFactory @NonNull Stream<@NonNull DynamicTest> strictBoundedPayloadsReject() {

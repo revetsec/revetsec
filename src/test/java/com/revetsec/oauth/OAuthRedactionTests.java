@@ -16,6 +16,8 @@
 
 package com.revetsec.oauth;
 
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+
 import org.jspecify.annotations.NonNull;
 
 import com.revetsec.SealingKey;
@@ -56,10 +58,12 @@ final class OAuthRedactionTests {
 					.body("{\"error\":\"invalid_grant\",\"error_description\":\"" + RAW_PROSE + "\"}")
 					.build()));
 			List<String> observed = new ArrayList<>();
+			java.util.concurrent.atomic.AtomicReference<OAuthException> observedFailure = new java.util.concurrent.atomic.AtomicReference<>();
 			OAuthObserver observer = new OAuthObserver() {
 				@Override public void didFailEndpoint(@NonNull OAuthEndpoint endpoint, @NonNull URI uri,
 						@NonNull OAuthException failure, @NonNull Duration elapsed) {
 					observed.add(endpoint + " " + uri + " " + failure);
+					observedFailure.set(failure);
 				}
 			};
 			AuthorizationServerMetadata metadata = AuthorizationServerMetadata.withIssuer(server.getBaseUri().toString())
@@ -73,9 +77,10 @@ final class OAuthRedactionTests {
 			String state = pending.state();
 			String verifier = pending.verifier();
 			String nonce = java.util.Objects.requireNonNull(pending.nonce());
-			OAuthErrorResponseException failure = assertThrows(OAuthErrorResponseException.class,
-					() -> client.requestClientCredentialsToken(TokenRequestOptions.builder().build()));
-			assertEquals("invalid_grant", failure.getErrorCode().orElseThrow());
+			OAuthTokenRequestResult.Rejected rejection = assertInstanceOf(OAuthTokenRequestResult.Rejected.class,
+					client.requestClientCredentialsResult(TokenRequestOptions.builder().build()));
+			assertEquals(OAuthEndpointError.INVALID_GRANT, rejection.getError());
+			OAuthErrorResponseException failure = assertInstanceOf(OAuthErrorResponseException.class, observedFailure.get());
 			assertTrue(server.getRequests("/token").get(0).getBodyAsString().contains(CLIENT_SECRET));
 			assertEquals(1, observed.size());
 			StringWriter stack = new StringWriter();
@@ -87,7 +92,7 @@ final class OAuthRedactionTests {
 			TokenResponse tokens = TokenResponseParser.parse(raw, Instant.parse("2026-09-28T12:00:00Z"), null);
 			SealingKey key = TestSealers.fixedKey("redaction");
 			String keyValue = Base64.getEncoder().encodeToString(TestSealers.fixedKeyBytes("redaction"));
-			AuthorizationResponse callback = AuthorizationResponse.fromQueryString("state=" + state + "&code=code-secret");
+			AuthorizationResponse callback = assertInstanceOf(AuthorizationResponseParseResult.Succeeded.class, AuthorizationResponse.fromQueryStringResult("state=" + state + "&code=code-secret")).getResponse();
 			String rendered = String.join(" ", authentication.toString(), client.toString(), pending.toString(),
 					callback.toString(), tokens.toString(), tokens.getAccessToken().toString(),
 					tokens.getRefreshToken().orElseThrow().toString(), key.toString(), failure.toString(),
@@ -99,8 +104,8 @@ final class OAuthRedactionTests {
 	}
 	@Test void assertionSnapshotsAndConfigurationFailureStacksRedactAppIdentifiersAndCauses() {
 		String marker = "TEST-ONLY-private-identifier";
-		com.revetsec.jose.JwsSigner signer = com.revetsec.jose.JwsSigner.fromRsaKeyPair(com.revetsec.testing.TestJsonWebKeys.Fixture.IDP_SIGNING_RSA_2048.getPrivateKey(),
-				com.revetsec.testing.TestJsonWebKeys.Fixture.IDP_SIGNING_RSA_2048.getPublicKey(),com.revetsec.jose.JwsAlgorithm.PS256);
+		com.revetsec.jose.JwsSigner signer = com.revetsec.jose.JwsSigner.fromRsaKeyPair(com.revetsec.testing.TestJwk.Fixture.IDP_SIGNING_RSA_2048.getPrivateKey(),
+				com.revetsec.testing.TestJwk.Fixture.IDP_SIGNING_RSA_2048.getPublicKey(),com.revetsec.jose.JwsAlgorithm.PS256);
 		ClientAssertionSigningKey.Builder builder = ClientAssertionSigningKey.withSigner(signer).keyId(marker).certificateSha256Thumbprint(new byte[32]);
 		ClientAssertionSigningKey key = builder.build(); assertEquals(marker,key.getKeyId().orElseThrow());
 		ClientAuthentication.PrivateKeyJwtBuilder authenticationBuilder = ClientAuthentication.withPrivateKeyJwt(budget -> { throw new IllegalStateException(marker); });

@@ -63,29 +63,6 @@ public final class IdToken {
 		return this.jwt.toCompactSerialization();
 	}
 
-	/**
-	 * Returns the email claim only when it is a JSON string. It is never a stable account key.
-	 *
-	 * @return the email, if supplied as a string
-	 * @since 1.0.0
-	 */
-	public @NonNull Optional<@NonNull String> getEmail() {
-		JsonValue value = getClaims().getClaim("email").orElse(null);
-		return value instanceof JsonString string ? Optional.of(string.getValue()) : Optional.empty();
-	}
-
-	/**
-	 * Returns the issuer's email-verification claim only when it is a JSON boolean. A string such as
-	 * {@code "true"} gives an empty result; this claim does not establish issuer authority over an email domain.
-	 *
-	 * @return the boolean claim, if supplied as a boolean
-	 * @since 1.0.0
-	 */
-	public @NonNull Optional<@NonNull Boolean> getEmailVerified() {
-		JsonValue value = getClaims().getClaim("email_verified").orElse(null);
-		return value instanceof JsonBoolean bool ? Optional.of(bool.getValue()) : Optional.empty();
-	}
-
 	@Override
 	public @NonNull String toString() {
 		return "IdToken{claims=<redacted>, token=<redacted>}";

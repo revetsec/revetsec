@@ -16,6 +16,8 @@
 
 package com.revetsec.oauth;
 
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+
 import org.jspecify.annotations.NonNull;
 
 import com.revetsec.StateSealer;
@@ -44,7 +46,7 @@ final class AuthorizationReplayTests {
 			OAuthClient client = client(server);
 			AuthorizationRedirect begin = client.beginAuthorization();
 			InMemoryPendingAuthorizationStore store = InMemoryPendingAuthorizationStore.fromDefaults();
-			begin.getPendingAuthorization().saveTo(store, "browser");
+			org.junit.jupiter.api.Assertions.assertEquals(PendingAuthorizationSaveResult.SAVED, begin.getPendingAuthorization().saveToResult(store, "browser"));
 			String state = state(begin);
 			int accepted = concurrentCompletions(client, state,
 					() -> PendingAuthorizationSource.fromStore(store, "browser"));
@@ -75,14 +77,13 @@ final class AuthorizationReplayTests {
 		try {
 			java.util.concurrent.Callable<Boolean> call = () -> {
 				start.await();
-				try {
-					client.completeAuthorization(AuthorizationResponse.fromQueryString(
-							"state=" + state + "&code=single-code"), source.get(), CALLBACK);
-					return true;
-				} catch (OAuthValidationException rejected) {
-					assertEquals(OAuthException.Reason.PENDING_AUTHORIZATION_NOT_FOUND, rejected.getReason());
-					return false;
-				}
+				AuthorizationCompletionResult outcome = client.completeAuthorizationResult(
+						assertInstanceOf(AuthorizationResponseParseResult.Succeeded.class, AuthorizationResponse.fromQueryStringResult(
+								"state=" + state + "&code=single-code")).getResponse(), source.get(), CALLBACK);
+				if (outcome instanceof AuthorizationCompletionResult.Succeeded) return true;
+				AuthorizationCompletionResult.Rejected rejected = assertInstanceOf(AuthorizationCompletionResult.Rejected.class, outcome);
+				assertEquals(OAuthException.Reason.PENDING_AUTHORIZATION_NOT_FOUND, rejected.getReason());
+				return false;
 			};
 			Future<Boolean> first = executor.submit(call);
 			Future<Boolean> second = executor.submit(call);

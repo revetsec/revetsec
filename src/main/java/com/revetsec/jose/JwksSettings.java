@@ -26,8 +26,8 @@ import java.time.Duration;
 import static java.util.Objects.requireNonNull;
 
 /**
- * The settings of one {@link RemoteJsonWebKeySource} and its {@link JwksCache}, already checked against their
- * {@code Limits} rows and the cross-field rules by {@link RemoteJsonWebKeySource.Builder#build()}, which is the only
+ * The settings of one {@link RemoteJwksSource} and its {@link JwksCache}, already checked against their
+ * {@code Limits} rows and the cross-field rules by {@link RemoteJwksSource.Builder#build()}, which is the only
  * place that makes them for applications. A later milestone's component that embeds a key source (M4, M5) builds them
  * the same way, from settings it has checked itself, the cross-field rules included. The constructor keeps only the
  * cache's own preconditions: it does not require the unknown-key cooldown to be within the minimum time to live, which
@@ -166,7 +166,7 @@ final class JwksSettings {
 	}
 
 	/**
-	 * Describes the settings, for {@link RemoteJsonWebKeySource#toString()}.
+	 * Describes the settings, for {@link RemoteJwksSource#toString()}.
 	 *
 	 * @return the settings, without the observer
 	 */

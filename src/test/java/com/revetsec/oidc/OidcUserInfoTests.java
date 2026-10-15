@@ -25,7 +25,7 @@ import com.revetsec.internal.json.JsonLimits;
 import com.revetsec.jose.*;
 import com.revetsec.oauth.*;
 import com.revetsec.testing.*;
-import com.revetsec.testing.TestJsonWebKeys.Fixture;
+import com.revetsec.testing.TestJwk.Fixture;
 import com.revetsec.testing.TestJws.Algorithm;
 import com.revetsec.json.*;
 import org.junit.jupiter.api.*;
@@ -60,9 +60,9 @@ final class OidcUserInfoTests {
 			}).build();
 			OidcAuthentication authentication = authenticate(server, client, ACCESS, 300);
 			respond(server, 200, "application/json; charset=UTF-8", "{\"sub\":" + JsonText.string(SUBJECT) + ",\"email\":" + JsonText.string(EMAIL) + ",\"email_verified\":true,\"_claim_names\":{\"phone_number\":\"src\"},\"_claim_sources\":{\"src\":{\"endpoint\":" + JsonText.string(server.uri("/private").toString()) + "}}}");
-			OidcUserInfo result = client.fetchUserInfo(authentication); client.fetchUserInfo(authentication);
+			OidcUserInfo result = assertInstanceOf(OidcUserInfoResult.Succeeded.class, client.fetchUserInfoResult(authentication)).getUserInfo(); assertInstanceOf(OidcUserInfoResult.Succeeded.class, client.fetchUserInfoResult(authentication)).getUserInfo();
 			assertEquals(server.getBaseUri().toString(), result.getIssuer()); assertEquals(SUBJECT, result.getSubject());
-			assertEquals(Optional.of(EMAIL), result.getEmail()); assertEquals(Optional.of(true), result.getEmailVerified()); assertFalse(result.isSigned());
+			assertEquals(EMAIL, assertInstanceOf(JsonString.class, result.getClaims().find("email").orElseThrow()).getValue()); assertTrue(assertInstanceOf(JsonBoolean.class, result.getClaims().find("email_verified").orElseThrow()).getValue()); assertFalse(result.isSigned());
 			assertTrue(result.getClaims().toJson().contains(EMAIL)); assertRedacted(result.toString() + events);
 			assertEquals(List.of(server.uri("/userinfo").toString(), "success:false", server.uri("/userinfo").toString(), "success:false"), events);
 			assertEquals(2, server.getHitCount("/userinfo")); assertEquals(0, server.getHitCount("/private")); assertEquals(0, server.getHitCount("/jwks"));
@@ -78,7 +78,7 @@ final class OidcUserInfoTests {
 		return Stream.of("s".repeat(255), "\u007f", "s".repeat(254) + "\u007f")
 				.map(subject -> DynamicTest.dynamicTest("ASCII subject length " + subject.length(), () -> {
 					byte[] body = ("{\"sub\":" + JsonText.string(subject) + "}").getBytes(StandardCharsets.UTF_8);
-					assertEquals(subject, UserInfoValidator.json(body, subject).findString("sub").orElseThrow());
+					assertEquals(subject, UserInfoValidator.json(body, subject).find("sub").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow());
 				}));
 	}
 
@@ -97,25 +97,25 @@ final class OidcUserInfoTests {
 					@Override public void didFetchUserInfo(@NonNull Boolean signed) { success.incrementAndGet(); }
 				}).build(); OidcAuthentication authentication = authenticate(server, client, ACCESS, 300);
 				Case test = cases.get(i); respond(server, 200, "application/json", test.body());
-				OidcValidationException failure = assertThrows(OidcValidationException.class, () -> client.fetchUserInfo(authentication));
-				assertEquals(test.reason(), failure.getReason()); assertSame(failure, observed.get()); assertEquals(0, success.get());
+				OidcUserInfoResult.Rejected failure = assertInstanceOf(OidcUserInfoResult.Rejected.class, client.fetchUserInfoResult(authentication));
+				assertEquals(test.reason(), failure.getReason()); assertEquals(failure.getReason(),java.util.Objects.requireNonNull(observed.get()).getReason()); assertEquals(0, success.get());
 				assertSafeFailure(failure);
-				respond(server, 200, "application/json", json()); assertEquals(SUBJECT, client.fetchUserInfo(authentication).getSubject());
+				respond(server, 200, "application/json", json()); assertEquals(SUBJECT, assertInstanceOf(OidcUserInfoResult.Succeeded.class, client.fetchUserInfoResult(authentication)).getUserInfo().getSubject());
 				assertEquals(2, server.getHitCount("/userinfo"));
 			}
 		}));
 	}
 
 	@Test
-	void optionalProfileGettersDoNotCoerceStringsNumbersOrNullAndUtf8IsStrict() throws Exception {
+	void optionalClaimsPreservePresentJsonTypesAndUtf8IsStrict() throws Exception {
 		try (TestHttpsServer server = TestHttpsServer.start()) {
 			OidcClient client = builder(server).build(); OidcAuthentication auth = authenticate(server, client, ACCESS, 300);
 			for (String value : List.of("\"true\"", "1", "null", "{}", "[]")) {
 				respond(server, 200, "application/json", "{\"sub\":" + JsonText.string(SUBJECT) + ",\"email\":1,\"email_verified\":" + value + "}");
-				OidcUserInfo result = client.fetchUserInfo(auth); assertTrue(result.getEmail().isEmpty()); assertTrue(result.getEmailVerified().isEmpty());
+				OidcUserInfo result = assertInstanceOf(OidcUserInfoResult.Succeeded.class, client.fetchUserInfoResult(auth)).getUserInfo(); assertEquals(1L, assertInstanceOf(JsonNumber.class, result.getClaims().find("email").orElseThrow()).getLongValueExact().orElseThrow()); assertEquals(value, result.getClaims().find("email_verified").orElseThrow().toJson());
 			}
 			server.script("/userinfo", TestHttpsServer.Script.fromResponse(TestHttpsServer.Response.withStatus(200).header("Content-Type", "application/json").body(new byte[]{(byte) 0xc0, (byte) 0xaf}).build()));
-			assertEquals(OidcValidationException.Reason.USERINFO_MALFORMED, assertThrows(OidcValidationException.class, () -> client.fetchUserInfo(auth)).getReason());
+			assertEquals(OidcValidationException.Reason.USERINFO_MALFORMED, assertInstanceOf(OidcUserInfoResult.Rejected.class, client.fetchUserInfoResult(auth)).getReason());
 		}
 	}
 
@@ -126,11 +126,11 @@ final class OidcUserInfoTests {
 			OidcAuthentication auth = authenticate(server, client, ACCESS, 300);
 			Map<String,String> claims = claims(server); String compact = sign(claims, false);
 			respond(server, 200, "application/jwt", compact);
-			OidcUserInfo result = client.fetchUserInfo(auth); assertTrue(result.isSigned()); assertEquals(SUBJECT, result.getSubject()); assertRedacted(result.toString());
-			JwtValidator ordinary = JwtValidator.withIssuer(server.getBaseUri().toString()).expectedAudiences(Set.of("client")).jsonWebKeySource(keys()).clock(CLOCK).build();
-			assertEquals(JoseException.Reason.MISSING_CLAIM, assertThrows(JoseException.class, () -> ordinary.validate(compact)).getReason());
+			OidcUserInfo result = assertInstanceOf(OidcUserInfoResult.Succeeded.class, client.fetchUserInfoResult(auth)).getUserInfo(); assertTrue(result.isSigned()); assertEquals(SUBJECT, result.getSubject()); assertRedacted(result.toString());
+			JwtValidator ordinary = JwtValidator.withIssuer(server.getBaseUri().toString()).expectedAudiences(Set.of("client")).jwksSource(keys()).clock(CLOCK).build();
+			assertEquals(JoseException.Reason.MISSING_CLAIM, assertInstanceOf(JwtValidationResult.Rejected.class, ordinary.validateResult(compact)).getReason());
 			claims.put("aud", "[\"client\",\"trusted\"]"); claims.put("exp", Long.toString(NOW.plusSeconds(60).getEpochSecond())); claims.put("iat", Long.toString(NOW.getEpochSecond()));
-			respond(server, 200, "application/jwt; charset=utf-8", sign(claims, false)); assertEquals(SUBJECT, client.fetchUserInfo(auth).getSubject());
+			respond(server, 200, "application/jwt; charset=utf-8", sign(claims, false)); assertEquals(SUBJECT, assertInstanceOf(OidcUserInfoResult.Succeeded.class, client.fetchUserInfoResult(auth)).getUserInfo().getSubject());
 		}
 	}
 
@@ -157,7 +157,7 @@ final class OidcUserInfoTests {
 			try (TestHttpsServer server = TestHttpsServer.start()) {
 				OidcClient client = builder(server).clockSkew(Duration.ZERO).userInfoSignedResponseAlgorithm(JwsAlgorithm.RS256).build(); OidcAuthentication auth = authenticate(server, client, ACCESS, 300);
 				Map<String,String> claims = claims(server); test.change().accept(claims); String compact = sign(claims, test.name().equals("signature")); respond(server, 200, "application/jwt", compact);
-				OidcValidationException failure = assertThrows(OidcValidationException.class, () -> client.fetchUserInfo(auth)); assertEquals(test.reason(), failure.getReason());
+				OidcUserInfoResult.Rejected failure = assertInstanceOf(OidcUserInfoResult.Rejected.class, client.fetchUserInfoResult(auth)); assertEquals(test.reason(), failure.getReason());
 				if (!Set.of("subject changed", "untrusted extra").contains(test.name())) assertTrue(failure.getJoseReason().isPresent());
 				assertSafeFailure(failure); assertRedacted(failure.toString() + failure.getJoseReason()); assertFalse(failure.toString().contains(compact)); assertEquals(0, server.getHitCount("/jwks"));
 			}
@@ -169,7 +169,7 @@ final class OidcUserInfoTests {
 		return Stream.of("at+jwt", "jku", "crit", "none", "wrong alg", "JWE").map(name -> DynamicTest.dynamicTest(name, () -> {
 			try (TestHttpsServer server = TestHttpsServer.start()) {
 				OidcAuthentication auth = authenticate(server, builder(server).build(), ACCESS, 300);
-				OidcClient client = builder(server).jsonWebKeySource(null).userInfoSignedResponseAlgorithm(JwsAlgorithm.RS256).build();
+				OidcClient client = builder(server).jwksSource(null).userInfoSignedResponseAlgorithm(JwsAlgorithm.RS256).build();
 				TestJws.Builder token = TestJws.withAlgorithm(Algorithm.RS256).kid("key").payload(JsonText.object(new ArrayList<>(claims(server).entrySet())));
 				switch (name) {
 					case "at+jwt" -> token.typ("at+jwt"); case "jku" -> token.headerMember("jku", JsonText.string(server.uri("/attack").toString()));
@@ -177,7 +177,7 @@ final class OidcUserInfoTests {
 					case "none" -> token.alg("none"); case "wrong alg" -> token.alg("ES256"); default -> { }
 				}
 				String compact = token.sign(Fixture.IDP_SIGNING_RSA_2048.getPrivateKey()); if (name.equals("JWE")) compact += ".e30.e30";
-				respond(server, 200, "application/jwt", compact); OidcValidationException failure = assertThrows(OidcValidationException.class, () -> client.fetchUserInfo(auth));
+				respond(server, 200, "application/jwt", compact); OidcUserInfoResult.Rejected failure = assertInstanceOf(OidcUserInfoResult.Rejected.class, client.fetchUserInfoResult(auth));
 				assertTrue(failure.getJoseReason().isPresent()); assertEquals(0, server.getHitCount("/jwks")); assertEquals(0, server.getHitCount("/attack")); assertRedacted(failure.toString());
 			}
 		}));
@@ -188,14 +188,14 @@ final class OidcUserInfoTests {
 		try (TestHttpsServer server = TestHttpsServer.start()) {
 			OidcClient jsonClient = builder(server).build(); OidcClient signedClient = builder(server).userInfoSignedResponseAlgorithm(JwsAlgorithm.RS256).build();
 			OidcAuthentication auth = authenticate(server, jsonClient, ACCESS, 300);
-			respond(server, 200, "application/jwt", sign(claims(server), false)); assertEquals(OidcValidationException.Reason.USERINFO_FORMAT_MISMATCH, assertThrows(OidcValidationException.class, () -> jsonClient.fetchUserInfo(auth)).getReason());
-			respond(server, 200, "application/json", json()); assertEquals(OidcValidationException.Reason.USERINFO_FORMAT_MISMATCH, assertThrows(OidcValidationException.class, () -> signedClient.fetchUserInfo(auth)).getReason());
+			respond(server, 200, "application/jwt", sign(claims(server), false)); assertEquals(OidcValidationException.Reason.USERINFO_FORMAT_MISMATCH, assertInstanceOf(OidcUserInfoResult.Rejected.class, jsonClient.fetchUserInfoResult(auth)).getReason());
+			respond(server, 200, "application/json", json()); assertEquals(OidcValidationException.Reason.USERINFO_FORMAT_MISMATCH, assertInstanceOf(OidcUserInfoResult.Rejected.class, signedClient.fetchUserInfoResult(auth)).getReason());
 			for (String media : List.of("text/plain", "application/json; charset=iso-8859-1")) {
-				respond(server, 200, media, json()); assertEquals(OAuthException.Reason.UNEXPECTED_CONTENT_TYPE, assertThrows(OAuthException.class, () -> jsonClient.fetchUserInfo(auth)).getReason());
+				respond(server, 200, media, json()); assertEquals(OAuthException.Reason.UNEXPECTED_CONTENT_TYPE, assertThrows(OAuthException.class, () -> jsonClient.fetchUserInfoResult(auth)).getReason());
 			}
 			server.script("/userinfo", TestHttpsServer.Script.fromRedirect(302, server.uri("/attack").toString()));
-			assertEquals(OAuthException.Reason.REDIRECT_NOT_FOLLOWED, assertThrows(OAuthException.class, () -> jsonClient.fetchUserInfo(auth)).getReason()); assertEquals(0, server.getHitCount("/attack"));
-			respond(server, 200, "application/json", " ".repeat(256 * 1024 + 1)); assertEquals(OAuthException.Reason.TOO_LARGE, assertThrows(OAuthException.class, () -> jsonClient.fetchUserInfo(auth)).getReason());
+			assertEquals(OAuthException.Reason.REDIRECT_NOT_FOLLOWED, assertThrows(OAuthException.class, () -> jsonClient.fetchUserInfoResult(auth)).getReason()); assertEquals(0, server.getHitCount("/attack"));
+			respond(server, 200, "application/json", " ".repeat(256 * 1024 + 1)); assertEquals(OAuthException.Reason.TOO_LARGE, assertThrows(OAuthException.class, () -> jsonClient.fetchUserInfoResult(auth)).getReason());
 		}
 	}
 
@@ -204,7 +204,7 @@ final class OidcUserInfoTests {
 		try (TestHttpsServer server = TestHttpsServer.start()) {
 			OidcAuthentication auth = authenticate(server, builder(server).build(), ACCESS, 300);
 			for (OidcClient client : List.of(lazy(server).clientId("other").trustedAudiences(Set.of("client")).build(), OidcClient.withIssuer(server.uri("/other-issuer").toString()).clientId("client").redirectUri(CALLBACK).httpClient(TestTls.httpClient()).clock(CLOCK).build())) {
-				assertEquals(OidcValidationException.Reason.USERINFO_AUTHENTICATION_MISMATCH, assertThrows(OidcValidationException.class, () -> client.fetchUserInfo(auth)).getReason());
+				assertEquals(OidcValidationException.Reason.USERINFO_AUTHENTICATION_MISMATCH, assertInstanceOf(OidcUserInfoResult.Rejected.class, client.fetchUserInfoResult(auth)).getReason());
 			}
 			assertEquals(1, server.getRequests().size());
 		}
@@ -214,14 +214,14 @@ final class OidcUserInfoTests {
 	void unsafeAndExpiredAccessTokenRejectBeforeDiscoveryAndExpiryIsRecheckedAfterDiscovery() throws Exception {
 		try (TestHttpsServer server = TestHttpsServer.start()) {
 			OidcAuthentication unsafe = authenticate(server, builder(server).build(), "TEST-ONLY access invalid", 300);
-			assertEquals(OidcValidationException.Reason.USERINFO_ACCESS_TOKEN_INVALID, assertThrows(OidcValidationException.class, () -> lazy(server).build().fetchUserInfo(unsafe)).getReason());
+			assertEquals(OidcValidationException.Reason.USERINFO_ACCESS_TOKEN_INVALID, assertInstanceOf(OidcUserInfoResult.Rejected.class, lazy(server).build().fetchUserInfoResult(unsafe)).getReason());
 			TestClock clock = TestClock.fromInstant(NOW); OidcAuthentication expired = authenticate(server, builder(server).clock(clock).build(), ACCESS, 1); clock.advance(Duration.ofSeconds(1));
-			assertEquals(OidcValidationException.Reason.USERINFO_ACCESS_TOKEN_EXPIRED, assertThrows(OidcValidationException.class, () -> lazy(server).clock(clock).build().fetchUserInfo(expired)).getReason()); assertEquals(0, server.getHitCount(DISCOVERY));
+			assertEquals(OidcValidationException.Reason.USERINFO_ACCESS_TOKEN_EXPIRED, assertInstanceOf(OidcUserInfoResult.Rejected.class, lazy(server).clock(clock).build().fetchUserInfoResult(expired)).getReason()); assertEquals(0, server.getHitCount(DISCOVERY));
 			TestClock advancing = TestClock.fromInstant(NOW); OidcAuthentication fresh = authenticate(server, builder(server).clock(advancing).build(), ACCESS, 1); discovery(server, null);
 			OidcClient client = lazy(server).clock(advancing).observer(new OidcObserver() {
 				@Override public void didRequestEndpoint(@NonNull OAuthEndpoint endpoint, @NonNull URI uri, @NonNull Integer status, @NonNull Duration elapsed) { if (endpoint == OAuthEndpoint.METADATA) advancing.advance(Duration.ofSeconds(1)); }
 			}).build();
-			assertEquals(OidcValidationException.Reason.USERINFO_ACCESS_TOKEN_EXPIRED, assertThrows(OidcValidationException.class, () -> client.fetchUserInfo(fresh)).getReason()); assertEquals(1, server.getHitCount(DISCOVERY)); assertEquals(0, server.getHitCount("/userinfo"));
+			assertEquals(OidcValidationException.Reason.USERINFO_ACCESS_TOKEN_EXPIRED, assertInstanceOf(OidcUserInfoResult.Rejected.class, client.fetchUserInfoResult(fresh)).getReason()); assertEquals(1, server.getHitCount(DISCOVERY)); assertEquals(0, server.getHitCount("/userinfo"));
 		}
 	}
 
@@ -230,14 +230,14 @@ final class OidcUserInfoTests {
 		try (TestHttpsServer server = TestHttpsServer.start()) {
 			OidcAuthentication auth = authenticate(server, builder(server).build(), ACCESS, 300);
 			OidcProviderMetadata without = metadata(server).userInfoEndpoint(null).build();
-			OidcClient missing = OidcClient.withProviderMetadata(without).clientId("client").redirectUri(CALLBACK).jsonWebKeySource(keys()).httpClient(TestTls.httpClient()).clock(CLOCK).build();
-			assertEquals(OidcValidationException.Reason.USERINFO_ENDPOINT_UNAVAILABLE, assertThrows(OidcValidationException.class, () -> missing.fetchUserInfo(auth)).getReason());
+			OidcClient missing = OidcClient.withProviderMetadata(without).clientId("client").redirectUri(CALLBACK).jwksSource(keys()).httpClient(TestTls.httpClient()).clock(CLOCK).build();
+			assertEquals(OidcValidationException.Reason.USERINFO_ENDPOINT_UNAVAILABLE, assertInstanceOf(OidcUserInfoResult.Rejected.class, missing.fetchUserInfoResult(auth)).getReason());
 			for (JwsAlgorithm algorithm : List.of(JwsAlgorithm.HS256, JwsAlgorithm.HS384, JwsAlgorithm.HS512)) assertThrows(IllegalArgumentException.class, () -> builder(server).userInfoSignedResponseAlgorithm(algorithm).build());
 			OidcProviderMetadata restricted = metadata(server).userInfoSigningAlgValuesSupported(Set.of("ES256")).build();
-			assertThrows(IllegalArgumentException.class, () -> OidcClient.withProviderMetadata(restricted).clientId("client").redirectUri(CALLBACK).userInfoSignedResponseAlgorithm(JwsAlgorithm.RS256).jsonWebKeySource(keys()).build());
-			discovery(server, "[\"ES256\"]"); assertEquals(OAuthException.Reason.METADATA_INVALID, assertThrows(OAuthException.class, () -> lazy(server).userInfoSignedResponseAlgorithm(JwsAlgorithm.RS256).build().fetchUserInfo(auth)).getReason());
+			assertThrows(IllegalArgumentException.class, () -> OidcClient.withProviderMetadata(restricted).clientId("client").redirectUri(CALLBACK).userInfoSignedResponseAlgorithm(JwsAlgorithm.RS256).jwksSource(keys()).build());
+			discovery(server, "[\"ES256\"]"); assertEquals(OAuthException.Reason.METADATA_INVALID, assertThrows(OAuthException.class, () -> lazy(server).userInfoSignedResponseAlgorithm(JwsAlgorithm.RS256).build().fetchUserInfoResult(auth)).getReason());
 			assertEquals(0, server.getHitCount("/userinfo"));
-			OidcClient restored = builder(server).userInfoSignedResponseAlgorithm(JwsAlgorithm.RS256).userInfoSignedResponseAlgorithm(null).build(); respond(server, 200, "application/json", json()); assertFalse(restored.fetchUserInfo(auth).isSigned());
+			OidcClient restored = builder(server).userInfoSignedResponseAlgorithm(JwsAlgorithm.RS256).userInfoSignedResponseAlgorithm(null).build(); respond(server, 200, "application/json", json()); assertFalse(assertInstanceOf(OidcUserInfoResult.Succeeded.class, restored.fetchUserInfoResult(auth)).getUserInfo().isSigned());
 		}
 	}
 
@@ -246,7 +246,7 @@ final class OidcUserInfoTests {
 		return Stream.of("null", "[]", "[1]", "[\"RS256\",\"RS256\"]", "[\"\"]", "\"RS256\"").map(value -> DynamicTest.dynamicTest(value, () -> {
 			try (TestHttpsServer server = TestHttpsServer.start()) {
 				OidcAuthentication auth = authenticate(server, builder(server).build(), ACCESS, 300); discovery(server, value);
-				assertEquals(OAuthException.Reason.DOCUMENT_MALFORMED, assertThrows(OAuthException.class, () -> lazy(server).build().fetchUserInfo(auth)).getReason()); assertEquals(0, server.getHitCount("/userinfo"));
+				assertEquals(OAuthException.Reason.DOCUMENT_MALFORMED, assertThrows(OAuthException.class, () -> lazy(server).build().fetchUserInfoResult(auth)).getReason()); assertEquals(0, server.getHitCount("/userinfo"));
 			}
 		}));
 	}
@@ -255,12 +255,12 @@ final class OidcUserInfoTests {
 	void signedUserInfoResolvesRemoteKeysAfterGetAndUsesPostLookupClock() throws Exception {
 		try (TestHttpsServer server = TestHttpsServer.start()) {
 			OidcAuthentication auth = authenticate(server, builder(server).build(), ACCESS, 300); TestClock clock = TestClock.fromInstant(NOW);
-			server.script("/jwks", TestHttpsServer.Script.fromResponse(TestHttpsServer.Response.fromJsonWebKeySet(keyJson())));
-			OidcClient client = builder(server).jsonWebKeySource(null).clock(clock).clockSkew(Duration.ZERO).userInfoSignedResponseAlgorithm(JwsAlgorithm.RS256).observer(new OidcObserver() {
-				@Override public void didFetchJsonWebKeySet(@NonNull URI uri, @NonNull Integer usable, @NonNull Integer skipped, @NonNull Duration ttl, @NonNull Duration elapsed) { clock.advance(Duration.ofSeconds(2)); }
+			server.script("/jwks", TestHttpsServer.Script.fromResponse(TestHttpsServer.Response.fromJwks(keyJson())));
+			OidcClient client = builder(server).jwksSource(null).clock(clock).clockSkew(Duration.ZERO).userInfoSignedResponseAlgorithm(JwsAlgorithm.RS256).observer(new OidcObserver() {
+				@Override public void didFetchJwks(@NonNull URI uri, @NonNull Integer usable, @NonNull Integer skipped, @NonNull Duration ttl, @NonNull Duration elapsed) { clock.advance(Duration.ofSeconds(2)); }
 			}).build();
 			Map<String,String> claims = claims(server); claims.put("exp", Long.toString(NOW.plusSeconds(1).getEpochSecond())); respond(server, 200, "application/jwt", sign(claims, false));
-			assertEquals(OidcValidationException.Reason.EXPIRED, assertThrows(OidcValidationException.class, () -> client.fetchUserInfo(auth)).getReason());
+			assertEquals(OidcValidationException.Reason.EXPIRED, assertInstanceOf(OidcUserInfoResult.Rejected.class, client.fetchUserInfoResult(auth)).getReason());
 			assertEquals(List.of("/token", "/userinfo", "/jwks"), server.getRequests().stream().map(TestHttpsServer.RecordedRequest::getPath).toList());
 		}
 	}
@@ -269,10 +269,10 @@ final class OidcUserInfoTests {
 	void deadlineSpentOnUserInfoCannotStartNewSigningKeyBudget() throws Exception {
 		try (TestHttpsServer server = TestHttpsServer.start()) {
 			OidcAuthentication auth = authenticate(server, builder(server).build(), ACCESS, 300); respond(server, 200, "application/jwt", sign(claims(server), false));
-			OidcClient client = builder(server).jsonWebKeySource(null).userInfoSignedResponseAlgorithm(JwsAlgorithm.RS256).requestTimeout(Duration.ofSeconds(1)).totalDeadline(Duration.ofSeconds(1)).observer(new OidcObserver() {
+			OidcClient client = builder(server).jwksSource(null).userInfoSignedResponseAlgorithm(JwsAlgorithm.RS256).requestTimeout(Duration.ofSeconds(1)).totalDeadline(Duration.ofSeconds(1)).observer(new OidcObserver() {
 				@Override public void didRequestEndpoint(@NonNull OAuthEndpoint endpoint, @NonNull URI uri, @NonNull Integer status, @NonNull Duration elapsed) { if (endpoint == OAuthEndpoint.USERINFO) pause(); }
 			}).build();
-			assertThrows(JsonWebKeySetUnavailableException.class, () -> client.fetchUserInfo(auth)); assertEquals(0, server.getHitCount("/jwks")); assertEquals(1, server.getHitCount("/userinfo"));
+			assertThrows(JwksUnavailableException.class, () -> client.fetchUserInfoResult(auth)); assertEquals(0, server.getHitCount("/jwks")); assertEquals(1, server.getHitCount("/userinfo"));
 		}
 	}
 
@@ -283,7 +283,7 @@ final class OidcUserInfoTests {
 			OidcClient client = lazy(server).requestTimeout(Duration.ofSeconds(1)).totalDeadline(Duration.ofSeconds(1)).observer(new OidcObserver() {
 				@Override public void didRequestEndpoint(@NonNull OAuthEndpoint endpoint, @NonNull URI uri, @NonNull Integer status, @NonNull Duration elapsed) { if (endpoint == OAuthEndpoint.METADATA) pause(); }
 			}).build();
-			assertEquals(OAuthException.Reason.NETWORK_FAILURE, assertThrows(OAuthException.class, () -> client.fetchUserInfo(auth)).getReason()); assertEquals(0, server.getHitCount("/userinfo"));
+			assertEquals(OAuthException.Reason.NETWORK_FAILURE, assertThrows(OAuthException.class, () -> client.fetchUserInfoResult(auth)).getReason()); assertEquals(0, server.getHitCount("/userinfo"));
 		}
 	}
 
@@ -293,10 +293,20 @@ final class OidcUserInfoTests {
 			try (TestHttpsServer server = TestHttpsServer.start()) {
 				OidcClient client = builder(server).build(); OidcAuthentication auth = authenticate(server, client, ACCESS, 300);
 				server.script("/userinfo", TestHttpsServer.Script.fromResponse(TestHttpsServer.Response.withStatus(status).header("Content-Type", "application/json").header("Retry-After", "10").header("WWW-Authenticate", "Bearer error_description=\"" + ACCESS + "\"").body("{\"secret\":" + JsonText.string(REFRESH) + "}").build()));
-				OAuthErrorResponseException failure = assertThrows(OAuthErrorResponseException.class, () -> client.fetchUserInfo(auth)); assertEquals(status, failure.getStatus()); assertEquals(Optional.of(Duration.ofSeconds(10)), failure.getRetryAfter()); assertNull(failure.getCause()); assertRedacted(failure.toString());
-				respond(server, 200, "application/json", json());
-				if (status == 429 || status == 503) { assertSame(failure, assertThrows(OAuthErrorResponseException.class, () -> client.fetchUserInfo(auth))); assertEquals(1, server.getHitCount("/userinfo")); }
-				else { assertEquals(SUBJECT, client.fetchUserInfo(auth).getSubject()); assertEquals(2, server.getHitCount("/userinfo")); }
+				if (status == 429 || status == 503) {
+					OAuthErrorResponseException failure = assertThrows(OAuthErrorResponseException.class, () -> client.fetchUserInfoResult(auth));
+					assertEquals(status, failure.getStatus()); assertEquals(Optional.of(Duration.ofSeconds(10)), failure.getRetryAfter());
+					assertNull(failure.getCause()); assertRedacted(failure.toString());
+					respond(server, 200, "application/json", json());
+					assertSame(failure, assertThrows(OAuthErrorResponseException.class, () -> client.fetchUserInfoResult(auth)));
+					assertEquals(1, server.getHitCount("/userinfo"));
+				} else {
+					OidcUserInfoResult.RejectedEndpoint rejected = assertInstanceOf(OidcUserInfoResult.RejectedEndpoint.class, client.fetchUserInfoResult(auth));
+					assertEquals(status, rejected.getStatus()); assertEquals(OAuthEndpointError.UNRECOGNIZED, rejected.getError());
+					assertRedacted(rejected.toString()); respond(server, 200, "application/json", json());
+					assertEquals(SUBJECT, assertInstanceOf(OidcUserInfoResult.Succeeded.class, client.fetchUserInfoResult(auth)).getUserInfo().getSubject());
+					assertEquals(2, server.getHitCount("/userinfo"));
+				}
 			}
 		}));
 	}
@@ -330,11 +340,11 @@ final class OidcUserInfoTests {
 		try (TestHttpsServer server = TestHttpsServer.start()) {
 			Set<String> algorithms = new HashSet<>(Set.of("ES256")); OidcProviderMetadata metadata = metadata(server).userInfoSigningAlgValuesSupported(algorithms).build(); algorithms.clear();
 			assertEquals(Set.of("ES256"), metadata.getUserInfoSigningAlgValuesSupported().orElseThrow()); assertThrows(UnsupportedOperationException.class, () -> metadata.getUserInfoSigningAlgValuesSupported().orElseThrow().clear());
-			String combinedKeys = TestJsonWebKeys.keySet(List.of(TestJsonWebKeys.withFixture(Fixture.IDP_SIGNING_RSA_2048).kid("key").alg("RS256").toJson(), TestJsonWebKeys.withFixture(Fixture.IDP_SIGNING_EC_P256).kid("ec").alg("ES256").toJson()));
-			OidcClient client = OidcClient.withProviderMetadata(metadata).clientId("client").redirectUri(CALLBACK).jsonWebKeySource(StaticJsonWebKeySource.fromJsonWebKeySet(JsonWebKeySet.fromJson(combinedKeys))).clock(CLOCK).httpClient(TestTls.httpClient()).userInfoSignedResponseAlgorithm(JwsAlgorithm.ES256).build();
+			String combinedKeys = TestJwk.keySet(List.of(TestJwk.withFixture(Fixture.IDP_SIGNING_RSA_2048).kid("key").alg("RS256").toJson(), TestJwk.withFixture(Fixture.IDP_SIGNING_EC_P256).kid("ec").alg("ES256").toJson()));
+			OidcClient client = OidcClient.withProviderMetadata(metadata).clientId("client").redirectUri(CALLBACK).jwksSource(StaticJwksSource.fromJwks(assertInstanceOf(JwksParseResult.Succeeded.class, Jwks.fromJsonResult(combinedKeys)).getJwks())).clock(CLOCK).httpClient(TestTls.httpClient()).userInfoSignedResponseAlgorithm(JwsAlgorithm.ES256).build();
 			assertTrue(server.getRequests().isEmpty()); OidcAuthentication auth = authenticate(server, client, ACCESS, 300);
 			String compact = TestJws.withAlgorithm(Algorithm.ES256).kid("ec").payload(JsonText.object(new ArrayList<>(claims(server).entrySet()))).sign(Fixture.IDP_SIGNING_EC_P256.getPrivateKey());
-			respond(server, 200, "application/jwt", compact); assertTrue(client.fetchUserInfo(auth).isSigned());
+			respond(server, 200, "application/jwt", compact); assertTrue(assertInstanceOf(OidcUserInfoResult.Succeeded.class, client.fetchUserInfoResult(auth)).getUserInfo().isSigned());
 			assertEquals(SUBJECT, auth.getSubject());
 		}
 	}
@@ -344,9 +354,9 @@ final class OidcUserInfoTests {
 		try (TestHttpsServer server = TestHttpsServer.start()) {
 			OidcClient client = builder(server).requestTimeout(Duration.ofSeconds(1)).totalDeadline(Duration.ofSeconds(1)).build();
 			OidcAuthentication auth = authenticate(server, client, ACCESS, 300); server.script("/userinfo", TestHttpsServer.Script.fromTarpit());
-			OAuthException failure = assertThrows(OAuthException.class, () -> client.fetchUserInfo(auth)); assertEquals(OAuthException.Reason.NETWORK_FAILURE, failure.getReason());
+			OAuthException failure = assertThrows(OAuthException.class, () -> client.fetchUserInfoResult(auth)); assertEquals(OAuthException.Reason.NETWORK_FAILURE, failure.getReason());
 			assertEquals(1, server.getHitCount("/userinfo")); respond(server, 200, "application/json", json());
-			assertSame(failure, assertThrows(OAuthException.class, () -> client.fetchUserInfo(auth))); assertEquals(1, server.getHitCount("/userinfo")); assertRedacted(failure.toString());
+			assertSame(failure, assertThrows(OAuthException.class, () -> client.fetchUserInfoResult(auth))); assertEquals(1, server.getHitCount("/userinfo")); assertRedacted(failure.toString());
 		}
 	}
 	@Test
@@ -354,15 +364,15 @@ final class OidcUserInfoTests {
 		try (TestHttpsServer server = TestHttpsServer.start()) {
 			OidcClient client = builder(server).build(); OidcAuthentication auth = authenticate(server, client, ACCESS, 300); respond(server, 200, "application/json", json());
 			try {
-				Thread.currentThread().interrupt(); assertEquals(OAuthException.Reason.INTERRUPTED, assertThrows(OAuthException.class, () -> client.fetchUserInfo(auth)).getReason()); assertTrue(Thread.currentThread().isInterrupted());
+				Thread.currentThread().interrupt(); assertEquals(OAuthException.Reason.INTERRUPTED, assertThrows(OAuthException.class, () -> client.fetchUserInfoResult(auth)).getReason()); assertTrue(Thread.currentThread().isInterrupted());
 			} finally { Thread.interrupted(); }
-			assertEquals(SUBJECT, client.fetchUserInfo(auth).getSubject());
+			assertEquals(SUBJECT, assertInstanceOf(OidcUserInfoResult.Succeeded.class, client.fetchUserInfoResult(auth)).getUserInfo().getSubject());
 		}
 	}
 
-	private static void assertSafeFailure(@NonNull OidcValidationException failure) throws IllegalAccessException {
-		assertNull(failure.getCause()); failure.addSuppressed(new IllegalStateException(ACCESS)); assertEquals(0, failure.getSuppressed().length); assertRedacted(failure.toString());
-		for (Class<?> type = failure.getClass(); type != RuntimeException.class; type = type.getSuperclass()) {
+	private static void assertSafeFailure(@NonNull Object failure) throws IllegalAccessException {
+		if (failure instanceof Throwable throwable) { assertNull(throwable.getCause()); throwable.addSuppressed(new IllegalStateException(ACCESS)); assertEquals(0, throwable.getSuppressed().length); } assertRedacted(failure.toString());
+		for (Class<?> type = failure.getClass(); type != RuntimeException.class && type != Object.class; type = type.getSuperclass()) {
 			for (var field : type.getDeclaredFields()) {
 				if (java.lang.reflect.Modifier.isStatic(field.getModifiers())) continue;
 				field.setAccessible(true); Object value = field.get(failure);
@@ -379,14 +389,14 @@ final class OidcUserInfoTests {
 	void userInfoAfterRefreshUsesNewCredentialAndOriginalIdentityWithStoredReference() throws Exception {
 		try (TestHttpsServer server = TestHttpsServer.start()) {
 			OidcClient client = builder(server).build(); OidcAuthentication auth = authenticate(server, client, ACCESS, 0);
-			OidcSessionReference stored = OidcSessionReference.fromSerializedForm(auth.getSessionReference().toSerializedForm());
+			OidcSessionReference stored = assertInstanceOf(OidcSessionReferenceParseResult.Succeeded.class, OidcSessionReference.fromSerializedFormResult(auth.getSessionReference().toSerializedForm())).getReference();
 			server.script("/token", TestHttpsServer.Script.fromResponse(TestHttpsServer.Response.fromJson(200,
 					"{\"access_token\":\"TEST-ONLY-refreshed-userinfo\",\"token_type\":\"Bearer\",\"expires_in\":300}")));
-			OidcRefreshResult refreshed = client.refresh(auth.getTokens().getRefreshToken().orElseThrow(), stored);
-			respond(server, 200, "application/json", json()); assertEquals(SUBJECT, client.fetchUserInfo(auth, refreshed).getSubject());
+			OidcRefreshResult refreshed = assertInstanceOf(OidcRefreshOutcome.Succeeded.class, client.refreshResult(auth.getTokens().getRefreshToken().orElseThrow(), stored)).getRefreshResult();
+			respond(server, 200, "application/json", json()); assertEquals(SUBJECT, assertInstanceOf(OidcUserInfoResult.Succeeded.class, client.fetchUserInfoResult(auth, refreshed)).getUserInfo().getSubject());
 			assertTrue(refreshed.getIdToken().isEmpty()); assertSame(stored, refreshed.getSessionReference());
 			assertEquals(Optional.of("Bearer TEST-ONLY-refreshed-userinfo"), server.getRequests("/userinfo").get(0).getHeader("Authorization"));
-			assertEquals(OidcValidationException.Reason.USERINFO_ACCESS_TOKEN_EXPIRED, assertThrows(OidcValidationException.class, () -> client.fetchUserInfo(auth)).getReason());
+			assertEquals(OidcValidationException.Reason.USERINFO_ACCESS_TOKEN_EXPIRED, assertInstanceOf(OidcUserInfoResult.Rejected.class, client.fetchUserInfoResult(auth)).getReason());
 		}
 	}
 
@@ -400,12 +410,12 @@ final class OidcUserInfoTests {
 			OidcAuthentication first = authenticate(server, client, ACCESS, 300), second = authenticate(server, client, ACCESS, 300);
 			server.script("/token", TestHttpsServer.Script.fromResponse(TestHttpsServer.Response.fromJson(200,
 					"{\"access_token\":\"TEST-ONLY-refreshed-userinfo\",\"token_type\":\"Bearer\"}")));
-			OidcRefreshResult refreshed = client.refresh(second.getTokens().getRefreshToken().orElseThrow(), second.getSessionReference());
+			OidcRefreshResult refreshed = assertInstanceOf(OidcRefreshOutcome.Succeeded.class, client.refreshResult(second.getTokens().getRefreshToken().orElseThrow(), second.getSessionReference())).getRefreshResult();
 			int before = server.getRequests().size();
-			OidcValidationException failure = assertThrows(OidcValidationException.class, () -> lazy(server).build().fetchUserInfo(first, refreshed));
+			OidcUserInfoResult.Rejected failure = assertInstanceOf(OidcUserInfoResult.Rejected.class, lazy(server).build().fetchUserInfoResult(first, refreshed));
 			assertEquals(OidcValidationException.Reason.USERINFO_AUTHENTICATION_MISMATCH, failure.getReason());
-			OidcValidationException observed = assertThrows(OidcValidationException.class, () -> client.fetchUserInfo(first, refreshed)); assertSame(observed, rejected.get());
-			assertEquals(before, server.getRequests().size()); assertNull(failure.getCause()); assertSafeFailure(failure);
+			OidcUserInfoResult.Rejected observed = assertInstanceOf(OidcUserInfoResult.Rejected.class, client.fetchUserInfoResult(first, refreshed)); assertEquals(observed.getReason(),java.util.Objects.requireNonNull(rejected.get()).getReason());
+			assertEquals(before, server.getRequests().size()); assertSafeFailure(failure);
 		}
 	}
 
@@ -437,9 +447,9 @@ final class OidcUserInfoTests {
 				assertNotEquals(auth.getSessionReference().toSerializedForm(), stored.toSerializedForm());
 				server.script("/token", TestHttpsServer.Script.fromResponse(TestHttpsServer.Response.fromJson(200,
 						"{\"access_token\":\"TEST-ONLY-refreshed-userinfo\",\"token_type\":\"Bearer\",\"expires_in\":300}")));
-				OidcRefreshResult refreshed = client.refresh(auth.getTokens().getRefreshToken().orElseThrow(), stored);
+				OidcRefreshResult refreshed = assertInstanceOf(OidcRefreshOutcome.Succeeded.class, client.refreshResult(auth.getTokens().getRefreshToken().orElseThrow(), stored)).getRefreshResult();
 				respond(server, 200, "application/json", json());
-				assertEquals(SUBJECT, client.fetchUserInfo(auth, refreshed).getSubject());
+				assertEquals(SUBJECT, assertInstanceOf(OidcUserInfoResult.Succeeded.class, client.fetchUserInfoResult(auth, refreshed)).getUserInfo().getSubject());
 				assertEquals(Optional.of("Bearer TEST-ONLY-refreshed-userinfo"), server.getRequests("/userinfo").get(0).getHeader("Authorization"));
 				assertEquals(1, server.getHitCount("/userinfo"));
 			}
@@ -469,9 +479,9 @@ final class OidcUserInfoTests {
 						});
 						OidcRefreshResult refreshed = new OidcRefreshResult(auth.getTokens(), null, auth.getTokens().getRefreshToken().orElseThrow(), changed);
 						int before = server.getRequests().size();
-						OidcValidationException failure = assertThrows(OidcValidationException.class, () -> client.fetchUserInfo(auth, refreshed));
+						OidcUserInfoResult.Rejected failure = assertInstanceOf(OidcUserInfoResult.Rejected.class, client.fetchUserInfoResult(auth, refreshed));
 						assertEquals(OidcValidationException.Reason.USERINFO_AUTHENTICATION_MISMATCH, failure.getReason());
-						assertSame(failure, observed.get()); assertEquals(before, server.getRequests().size()); assertSafeFailure(failure);
+						assertEquals(failure.getReason(),java.util.Objects.requireNonNull(observed.get()).getReason()); assertEquals(before, server.getRequests().size()); assertSafeFailure(failure);
 					}
 					}));
 	}
@@ -482,7 +492,7 @@ final class OidcUserInfoTests {
 		Map<String, JsonValue> envelope = new LinkedHashMap<>(parsed.getMembers());
 		Map<String, JsonValue> claims = new LinkedHashMap<>(((JsonObject) java.util.Objects.requireNonNull(envelope.get("claims"))).getMembers());
 		changeEnvelope.accept(envelope); changeClaims.accept(claims); envelope.put("claims", JsonObject.fromMembers(claims));
-		return OidcSessionReference.fromSerializedForm(JsonObject.fromMembers(envelope).toJson());
+		return assertInstanceOf(OidcSessionReferenceParseResult.Succeeded.class, OidcSessionReference.fromSerializedFormResult(JsonObject.fromMembers(envelope).toJson())).getReference();
 	}
 
 	@Test
@@ -492,20 +502,20 @@ final class OidcUserInfoTests {
 			OidcAuthentication auth = authenticate(server, client, ACCESS, 300);
 			server.script("/token", TestHttpsServer.Script.fromResponse(TestHttpsServer.Response.fromJson(200,
 					"{\"access_token\":\"TEST-ONLY-refreshed-userinfo\",\"token_type\":\"Bearer\"}")));
-			OidcRefreshResult refreshed = client.refresh(auth.getTokens().getRefreshToken().orElseThrow(), auth.getSessionReference());
-			respond(server, 200, "application/jwt", sign(claims(server), false)); assertTrue(client.fetchUserInfo(auth, refreshed).isSigned());
+			OidcRefreshResult refreshed = assertInstanceOf(OidcRefreshOutcome.Succeeded.class, client.refreshResult(auth.getTokens().getRefreshToken().orElseThrow(), auth.getSessionReference())).getRefreshResult();
+			respond(server, 200, "application/jwt", sign(claims(server), false)); assertTrue(assertInstanceOf(OidcUserInfoResult.Succeeded.class, client.fetchUserInfoResult(auth, refreshed)).getUserInfo().isSigned());
 			respond(server, 200, "application/json", json());
-			assertEquals(OidcValidationException.Reason.USERINFO_FORMAT_MISMATCH, assertThrows(OidcValidationException.class, () -> client.fetchUserInfo(auth, refreshed)).getReason());
+			assertEquals(OidcValidationException.Reason.USERINFO_FORMAT_MISMATCH, assertInstanceOf(OidcUserInfoResult.Rejected.class, client.fetchUserInfoResult(auth, refreshed)).getReason());
 			Map<String,String> changed = claims(server); changed.put("sub", "\"other\""); respond(server, 200, "application/jwt", sign(changed, false));
-			assertEquals(OidcValidationException.Reason.USERINFO_SUBJECT_MISMATCH, assertThrows(OidcValidationException.class, () -> client.fetchUserInfo(auth, refreshed)).getReason());
+			assertEquals(OidcValidationException.Reason.USERINFO_SUBJECT_MISMATCH, assertInstanceOf(OidcUserInfoResult.Rejected.class, client.fetchUserInfoResult(auth, refreshed)).getReason());
 		}
 	}
 
-	private static @NonNull String keyJson() { return TestJsonWebKeys.withFixture(Fixture.IDP_SIGNING_RSA_2048).kid("key").alg("RS256").toKeySetJson(); }
-	private static @NonNull StaticJsonWebKeySource keys() { return StaticJsonWebKeySource.fromJsonWebKeySet(JsonWebKeySet.fromJson(keyJson())); }
+	private static @NonNull String keyJson() { return TestJwk.withFixture(Fixture.IDP_SIGNING_RSA_2048).kid("key").alg("RS256").toKeySetJson(); }
+	private static @NonNull StaticJwksSource keys() { return StaticJwksSource.fromJwks(assertInstanceOf(JwksParseResult.Succeeded.class, Jwks.fromJsonResult(keyJson())).getJwks()); }
 	private static OidcProviderMetadata.@NonNull Builder metadata(@NonNull TestHttpsServer server) { return OidcProviderMetadata.withIssuer(server.getBaseUri().toString()).authorizationEndpoint(server.uri("/authorize")).tokenEndpoint(server.uri("/token")).jwksUri(server.uri("/jwks")).userInfoEndpoint(server.uri("/userinfo")); }
-	private static OidcClient.@NonNull Builder builder(@NonNull TestHttpsServer server) { return OidcClient.withProviderMetadata(metadata(server).build()).clientId("client").redirectUri(CALLBACK).clock(CLOCK).httpClient(TestTls.httpClient()).jsonWebKeySource(keys()); }
-	private static OidcClient.@NonNull Builder lazy(@NonNull TestHttpsServer server) { return OidcClient.withIssuer(server.getBaseUri().toString()).clientId("client").redirectUri(CALLBACK).clock(CLOCK).httpClient(TestTls.httpClient()).jsonWebKeySource(keys()); }
+	private static OidcClient.@NonNull Builder builder(@NonNull TestHttpsServer server) { return OidcClient.withProviderMetadata(metadata(server).build()).clientId("client").redirectUri(CALLBACK).clock(CLOCK).httpClient(TestTls.httpClient()).jwksSource(keys()); }
+	private static OidcClient.@NonNull Builder lazy(@NonNull TestHttpsServer server) { return OidcClient.withIssuer(server.getBaseUri().toString()).clientId("client").redirectUri(CALLBACK).clock(CLOCK).httpClient(TestTls.httpClient()).jwksSource(keys()); }
 	private static @NonNull Map<@NonNull String,@NonNull String> claims(@NonNull TestHttpsServer server) { Map<String,String> claims = new LinkedHashMap<>(); claims.put("iss", JsonText.string(server.getBaseUri().toString())); claims.put("sub", JsonText.string(SUBJECT)); claims.put("aud", "\"client\""); return claims; }
 	private static @NonNull String sign(@NonNull Map<@NonNull String,@NonNull String> claims, boolean forged) { return TestJws.withAlgorithm(Algorithm.RS256).kid("key").payload(JsonText.object(new ArrayList<>(claims.entrySet()))).sign(forged ? Fixture.NEGATIVE_ATTACKER_RSA_2048.getPrivateKey() : Fixture.IDP_SIGNING_RSA_2048.getPrivateKey()); }
 	private static @NonNull OidcAuthentication authenticate(@NonNull TestHttpsServer server, @NonNull OidcClient client, @NonNull String access, long lifetime) throws Exception {
@@ -517,7 +527,7 @@ final class OidcUserInfoTests {
 		claims.putAll(additionalClaims);
 		server.script("/token", TestHttpsServer.Script.fromResponse(TestHttpsServer.Response.fromJson(200, "{\"access_token\":" + JsonText.string(access) + ",\"token_type\":\"Bearer\",\"expires_in\":" + lifetime + ",\"refresh_token\":" + JsonText.string(REFRESH) + ",\"id_token\":" + JsonText.string(sign(claims, false)) + "}")));
 		StateSealer sealer = TestSealers.fromFixedKey(); PendingAuthorizationSource source = PendingAuthorizationSource.fromSealedForm(redirect.getPendingAuthorization().toSealedForm(sealer, "userinfo"), sealer, "userinfo");
-		return client.completeAuthentication(AuthorizationResponse.fromQueryString("state=" + query.getValues("state").get(0) + "&code=TEST-ONLY-code"), source, CALLBACK);
+		return assertInstanceOf(OidcAuthenticationResult.Succeeded.class, client.completeAuthenticationResult(assertInstanceOf(AuthorizationResponseParseResult.Succeeded.class, AuthorizationResponse.fromQueryStringResult("state=" + query.getValues("state").get(0) + "&code=TEST-ONLY-code")).getResponse(), source, CALLBACK)).getAuthentication();
 	}
 	private static void respond(@NonNull TestHttpsServer server, int status, @NonNull String media, @NonNull String body) { server.script("/userinfo", TestHttpsServer.Script.fromResponse(TestHttpsServer.Response.withStatus(status).header("Content-Type", media).body(body).build())); }
 	private static void discovery(@NonNull TestHttpsServer server, @Nullable String algorithms) { server.script(DISCOVERY, TestHttpsServer.Script.fromResponse(TestHttpsServer.Response.fromJson(200, "{\"issuer\":" + JsonText.string(server.getBaseUri().toString()) + ",\"authorization_endpoint\":" + JsonText.string(server.uri("/authorize").toString()) + ",\"token_endpoint\":" + JsonText.string(server.uri("/token").toString()) + ",\"jwks_uri\":" + JsonText.string(server.uri("/jwks").toString()) + ",\"userinfo_endpoint\":" + JsonText.string(server.uri("/userinfo").toString()) + ",\"subject_types_supported\":[\"public\"],\"id_token_signing_alg_values_supported\":[\"RS256\"],\"response_types_supported\":[\"code\"]" + (algorithms == null ? "" : ",\"userinfo_signing_alg_values_supported\":" + algorithms) + "}"))); }

@@ -64,7 +64,7 @@ public final class OidcClient {
 	private final Set<String> acrValues;
 	private final Duration totalDeadline;
 	private final OidcObserver observer;
-	private final @Nullable JsonWebKeySource configuredKeySource;
+	private final @Nullable JwksSource configuredKeySource;
 	private final String clientId;
 	private final Set<JwsAlgorithm> algorithms;
 	private final Set<JwsAlgorithm> hmacAlgorithms;
@@ -115,9 +115,9 @@ public final class OidcClient {
 			ProviderState current = this.state;
 			if (current != null && current.metadata == metadata) return current;
 			// Keep one current source, sharing its cache only while the exact JWKS URI is unchanged.
-			JsonWebKeySource source = this.configuredKeySource;
+			JwksSource source = this.configuredKeySource;
 			if (source == null && current != null && current.metadata.getJwksUri().toString().equals(metadata.getJwksUri().toString())) source = current.source;
-			if (source == null) source = RemoteJsonWebKeySource.withUri(metadata.getJwksUri())
+			if (source == null) source = RemoteJwksSource.withUri(metadata.getJwksUri())
 					.httpClient(this.httpClient).outboundUriPolicy(this.policy).clock(this.clock).observer(this.observer)
 					.allowInsecureLoopback(this.allowInsecureLoopback).acknowledgeUnpatchedRuntime(this.acknowledgeUnpatchedRuntime)
 					.requestTimeout(this.requestTimeout).build();
@@ -153,7 +153,7 @@ public final class OidcClient {
 		metadata.oauthMetadata().getRevocationEndpoint().ifPresent(uri -> UriChecks.requirePermitted(uri, policy, loopback));
 	}
 	@ThreadSafe
-	private record ProviderState(@NonNull OidcProviderMetadata metadata, @NonNull JsonWebKeySource source, @NonNull IdTokenValidator validator) { }
+	private record ProviderState(@NonNull OidcProviderMetadata metadata, @NonNull JwksSource source, @NonNull IdTokenValidator validator) { }
 	/**
 	 * Starts an OIDC client with lazy issuer-path discovery. Build performs no discovery or key lookup.
 	 * @param issuer exact issuer identifier, without query or fragment
@@ -177,7 +177,7 @@ public final class OidcClient {
 	public void warmUp() {
 		Deadline deadline = Deadline.fromNow(this.totalDeadline);
 		ProviderState provider = provider(deadline);
-		if ((provider.validator.needsPublicKeys() || this.userInfoAlgorithm != null) && provider.source instanceof RemoteJsonWebKeySource remote) com.revetsec.internal.jose.JwtValidationAccess.get().warmUp(remote, deadline::remainingNanos);
+		if ((provider.validator.needsPublicKeys() || this.userInfoAlgorithm != null) && provider.source instanceof RemoteJwksSource remote) com.revetsec.internal.jose.JwtValidationAccess.get().warmUp(remote, deadline::remainingNanos);
 	}
 	/**
 	 * Starts authentication with the client defaults. This prepares the authorization URL.
@@ -207,7 +207,7 @@ public final class OidcClient {
 	 * @return validated authentication and released tokens
 	 * @since 1.0.0
 	 */
-	public @NonNull OidcAuthentication completeAuthentication(@NonNull AuthorizationResponse response,
+	private @NonNull OidcAuthentication completeAuthenticationChecked(@NonNull AuthorizationResponse response,
 			@NonNull PendingAuthorizationSource source, @NonNull URI actualCallbackUri) {
 		Deadline deadline = Deadline.fromNow(this.totalDeadline);
 		AtomicReference<ProviderState> selected = new AtomicReference<>();
@@ -234,10 +234,10 @@ public final class OidcClient {
 	}
 
 	/**
-	 * Completes authentication once, returning authenticated identity, checked access_denied, rejected callback
-	 * binding, or a rejected ID token. Rejected outcomes release no identity, claims or endpoint credentials.
-	 * Pending-store failures return a fixed failure result. Metadata, transport, endpoint and invalid HMAC-secret
-	 * failures remain exceptions. Clear the pending
+	 * Completes authentication once, returning authenticated identity, checked authorization errors, rejected callback
+	 * binding, rejected endpoint credentials, or a rejected ID token. Rejected outcomes release no identity, claims or endpoint credentials.
+	 * Pending-store failures return a fixed failure result. Metadata, transport, malformed responses, transient
+	 * endpoint failures and invalid HMAC-secret failures remain exceptions. Clear the pending
 	 * cookie on every outcome; the original completion's atomic-consumption and observer behavior is preserved.
 	 * @param response parsed callback
 	 * @param source browser-bound pending source
@@ -249,10 +249,14 @@ public final class OidcClient {
 	public @NonNull OidcAuthenticationResult completeAuthenticationResult(@NonNull AuthorizationResponse response,
 			@NonNull PendingAuthorizationSource source, @NonNull URI actualCallbackUri) {
 		try {
-			return OidcAuthenticationResult.fromAuthentication(completeAuthentication(response, source, actualCallbackUri));
+			return OidcAuthenticationResult.fromAuthentication(completeAuthenticationChecked(response, source, actualCallbackUri));
 		} catch (AuthorizationErrorException failure) {
-			if (!failure.getErrorCode().equals(Optional.of("access_denied"))) throw failure;
-			return OidcAuthenticationResult.fromDenial();
+			OAuthEndpointError error = OAuthEndpointError.fromWireValue(failure.getErrorCode().orElse(""));
+			return error == OAuthEndpointError.ACCESS_DENIED ? OidcAuthenticationResult.fromDenial()
+					: OidcAuthenticationResult.fromAuthorizationError(error);
+		} catch (OAuthErrorResponseException failure) {
+			if (!isEndpointRejection(failure)) throw failure;
+			return OidcAuthenticationResult.fromEndpoint(failure);
 		} catch (OAuthValidationException rejection) {
 			if (!isLocalCallbackRejection(rejection.getReason())) throw rejection;
 			return OidcAuthenticationResult.fromAuthorizationReason(rejection.getReason());
@@ -274,6 +278,93 @@ public final class OidcClient {
 	}
 
 	/**
+	 * Fetches UserInfo and returns checked data or a fixed local or endpoint rejection. Issuer/client binding,
+	 * subject, format and token lifetime checks precede release of any UserInfo. Transport, metadata, transient
+	 * endpoint failures and invalid HMAC configuration remain exceptions. No request is automatically retried.
+	 * @param authentication previously validated authentication for this issuer and client
+	 * @return the UserInfo outcome
+	 * @since 1.0.0
+	 */
+	@CheckReturnValue
+	public @NonNull OidcUserInfoResult fetchUserInfoResult(@NonNull OidcAuthentication authentication) {
+		try {
+			return OidcUserInfoResult.fromUserInfo(fetchUserInfoChecked(authentication));
+		} catch (OidcValidationException failure) {
+			if (failure.getReason() == OidcValidationException.Reason.HMAC_SECRET_INVALID) throw failure;
+			return OidcUserInfoResult.fromRejection(failure);
+		} catch (OAuthErrorResponseException failure) {
+			if (!isEndpointRejection(failure)) throw failure;
+			return OidcUserInfoResult.fromEndpoint(failure);
+		}
+	}
+
+	/**
+	 * Fetches UserInfo using a checked refresh result and the original authenticated identity. The original
+	 * session must match before I/O. Rejection releases no UserInfo; infrastructure failures remain exceptions.
+	 * @param authentication original validated authentication
+	 * @param refreshed checked refresh result for that original session
+	 * @return the UserInfo outcome
+	 * @since 1.0.0
+	 */
+	@CheckReturnValue
+	public @NonNull OidcUserInfoResult fetchUserInfoResult(@NonNull OidcAuthentication authentication,
+			@NonNull OidcRefreshResult refreshed) {
+		try {
+			return OidcUserInfoResult.fromUserInfo(fetchUserInfoChecked(authentication, refreshed));
+		} catch (OidcValidationException failure) {
+			if (failure.getReason() == OidcValidationException.Reason.HMAC_SECRET_INVALID) throw failure;
+			return OidcUserInfoResult.fromRejection(failure);
+		} catch (OAuthErrorResponseException failure) {
+			if (!isEndpointRejection(failure)) throw failure;
+			return OidcUserInfoResult.fromEndpoint(failure);
+		}
+	}
+
+	/**
+	 * Sends one refresh POST with default options and returns checked tokens or a fixed rejection. Persist the
+	 * original session reference in trusted storage and serialize refreshes to avoid token-rotation races.
+	 * Infrastructure failures and invalid HMAC configuration remain exceptions; no request is retried.
+	 * @param refreshToken current refresh credential
+	 * @param original original session comparison reference, not proof of identity
+	 * @return the refresh outcome
+	 * @since 1.0.0
+	 */
+	@CheckReturnValue
+	public @NonNull OidcRefreshOutcome refreshResult(@NonNull RefreshToken refreshToken,
+			@NonNull OidcSessionReference original) {
+		return refreshResult(refreshToken, original, TokenRequestOptions.builder().build());
+	}
+
+	/**
+	 * Sends one refresh POST with scope/resource options and returns checked tokens or a fixed rejection.
+	 * The caller restricts scopes to the original grant. Any returned ID token must pass original-session
+	 * continuity checks before tokens are released. Infrastructure failures and invalid HMAC configuration
+	 * remain exceptions; no request is automatically retried.
+	 * @param refreshToken current refresh credential
+	 * @param original original session comparison reference
+	 * @param options per-request scope and resources
+	 * @return the refresh outcome
+	 * @since 1.0.0
+	 */
+	@CheckReturnValue
+	public @NonNull OidcRefreshOutcome refreshResult(@NonNull RefreshToken refreshToken,
+			@NonNull OidcSessionReference original, @NonNull TokenRequestOptions options) {
+		try {
+			return OidcRefreshOutcome.fromRefreshResult(refreshChecked(refreshToken, original, options));
+		} catch (OidcValidationException failure) {
+			if (failure.getReason() == OidcValidationException.Reason.HMAC_SECRET_INVALID) throw failure;
+			return OidcRefreshOutcome.fromRejection(failure);
+		} catch (OAuthErrorResponseException failure) {
+			if (!isEndpointRejection(failure)) throw failure;
+			return OidcRefreshOutcome.fromEndpoint(failure);
+		}
+	}
+
+	private static boolean isEndpointRejection(@NonNull OAuthErrorResponseException failure) {
+		return OidcTransactionAccess.get().isEndpointRejection(failure);
+	}
+
+	/**
 	 * Fetches UserInfo for this client's validated authentication. The access token is sent only in a Bearer header
 	 * to a permitted endpoint; issuer/client binding and safe token form are checked before discovery or UserInfo I/O.
 	 * The returned subject must exactly match the ID token. JSON is the default; a configured signed response cannot
@@ -283,7 +374,7 @@ public final class OidcClient {
 	 * @return checked UserInfo
 	 * @since 1.0.0
 	 */
-	public @NonNull OidcUserInfo fetchUserInfo(@NonNull OidcAuthentication authentication) {
+	private @NonNull OidcUserInfo fetchUserInfoChecked(@NonNull OidcAuthentication authentication) {
 		requireNonNull(authentication); Deadline deadline = Deadline.fromNow(this.totalDeadline);
 		OidcUserInfo result;
 		try {
@@ -316,24 +407,13 @@ public final class OidcClient {
 	 * @return checked UserInfo
 	 * @since 1.0.0
 	 */
-	public @NonNull OidcUserInfo fetchUserInfo(@NonNull OidcAuthentication authentication, @NonNull OidcRefreshResult refreshed) {
+	private @NonNull OidcUserInfo fetchUserInfoChecked(@NonNull OidcAuthentication authentication, @NonNull OidcRefreshResult refreshed) {
 		requireNonNull(authentication); requireNonNull(refreshed);
 		if (!authentication.getSessionReference().matchesOriginalReference(refreshed.getSessionReference())) {
 			OidcValidationException failure = OidcValidationException.fromReason(OidcValidationException.Reason.USERINFO_AUTHENTICATION_MISMATCH);
 			ObserverDispatch.dispatch(this.observer, observer -> observer.didRejectUserInfo(failure)); throw failure;
 		}
-		return fetchUserInfo(authentication.withTokens(refreshed.getTokens()));
-	}
-	/**
-	 * Sends one refresh POST with default request options. There is no automatic retry. Persist the original session
-	 * reference in trusted storage and serialize refreshes in the application to avoid token-rotation races.
-	 * @param refreshToken current refresh credential
-	 * @param original original session comparison reference, not proof of identity
-	 * @return tokens and optional verified ID token
-	 * @since 1.0.0
-	 */
-	public @NonNull OidcRefreshResult refresh(@NonNull RefreshToken refreshToken, @NonNull OidcSessionReference original) {
-		return refresh(refreshToken, original, TokenRequestOptions.builder().build());
+		return fetchUserInfoChecked(authentication.withTokens(refreshed.getTokens()));
 	}
 	/**
 	 * Sends one refresh POST with scope/resource options. No scope option means no scope field is sent; the caller
@@ -347,7 +427,7 @@ public final class OidcClient {
 	 * @return tokens, retained/replacement refresh credential and optional verified ID token
 	 * @since 1.0.0
 	 */
-	public @NonNull OidcRefreshResult refresh(@NonNull RefreshToken refreshToken, @NonNull OidcSessionReference original,
+	private @NonNull OidcRefreshResult refreshChecked(@NonNull RefreshToken refreshToken, @NonNull OidcSessionReference original,
 			@NonNull TokenRequestOptions options) {
 		requireNonNull(refreshToken); requireNonNull(original); requireNonNull(options);
 		Deadline deadline = Deadline.fromNow(this.totalDeadline);
@@ -398,7 +478,7 @@ public final class OidcClient {
 		private Set<String> trustedAuthorizedParties = Set.of();
 		private Set<JwsAlgorithm> algorithms = Set.of(JwsAlgorithm.RS256);
 		private Set<OidcCompatibilityMode> compatibility = Set.of();
-		private @Nullable JsonWebKeySource keySource;
+		private @Nullable JwksSource keySource;
 		private @Nullable JwsAlgorithm userInfoAlgorithm;
 		private Duration clockSkew = Duration.ofSeconds(60);
 		private Duration maximumIdTokenAge = Duration.ofMinutes(5);
@@ -520,7 +600,7 @@ public final class OidcClient {
 		 * @return this builder
 		 * @since 1.0.0
 		 */
-		public @NonNull Builder jsonWebKeySource(@Nullable JsonWebKeySource value) { this.keySource = value; return this; }
+		public @NonNull Builder jwksSource(@Nullable JwksSource value) { this.keySource = value; return this; }
 		/**
 		 * Sets the time skew, zero to five minutes.
 		 *

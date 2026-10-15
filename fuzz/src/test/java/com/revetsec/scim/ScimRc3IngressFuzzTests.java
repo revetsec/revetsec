@@ -112,8 +112,8 @@ public final class ScimRc3IngressFuzzTests {
         }
         model(input);
         Assertions.assertSame(before, CURRENT.getDocument());
-        Assertions.assertEquals("fixture-before", CURRENT.getDocument().findString("userName").orElseThrow());
-        Assertions.assertEquals(PRIVATE + "retained", CURRENT.getDocument().findString("password").orElseThrow());
+        Assertions.assertEquals("fixture-before", CURRENT.getDocument().find("userName").map(com.revetsec.json.JsonString.class::cast).map(com.revetsec.json.JsonString::getValue).orElseThrow());
+        Assertions.assertEquals(PRIVATE + "retained", CURRENT.getDocument().find("password").map(com.revetsec.json.JsonString.class::cast).map(com.revetsec.json.JsonString::getValue).orElseThrow());
     }
 
     private static void model(byte @NonNull [] input) {
@@ -156,7 +156,7 @@ public final class ScimRc3IngressFuzzTests {
         bounded(Assertions.assertInstanceOf(ScimResponseResult.Prepared.class,
                 OWN.resourceResponseResult(persisted, own)).getResponse());
         Assertions.assertSame(document, persisted.getDocument());
-        Assertions.assertEquals(PRIVATE + suffix, persisted.getDocument().findString("password").orElseThrow());
+        Assertions.assertEquals(PRIVATE + suffix, persisted.getDocument().find("password").map(com.revetsec.json.JsonString.class::cast).map(com.revetsec.json.JsonString::getValue).orElseThrow());
         Assertions.assertFalse(persisted.toString().contains(PRIVATE));
 
         int mediaChoice = octet(input, 3) % MEDIA.size();

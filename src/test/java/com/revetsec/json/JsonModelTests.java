@@ -374,11 +374,7 @@ final class JsonModelTests {
 				() -> JsonObject.builder().put("a", noDecimal),
 				() -> JsonObject.builder().put("a", noBoolean),
 				() -> JsonObject.builder().putNull(noString),
-				() -> object.find(noString),
-				() -> object.findString(noString),
-				() -> object.findLong(noString),
-				() -> object.findBoolean(noString),
-				() -> object.findStringList(noString)))
+				() -> object.find(noString)))
 			Assertions.assertThrows(NullPointerException.class, call);
 	}
 
@@ -478,10 +474,9 @@ final class JsonModelTests {
 	// Lookups
 	// ---------------------------------------------------------------------------------------------------------------
 
-	// The findX conveniences return empty for an absent member and for a member of another type alike, which is why
-	// protocol validation never uses them.
+	// Absence is distinct from every present JSON subtype, including null and values of an unexpected type.
 	@Test
-	void findHelpersReturnEmptyForAbsentAndMistypedMembers() {
+	void memberLookupPreservesEveryPresentType() {
 		JsonObject object = JsonObject.builder()
 				.put("s", "text")
 				.put("n", 42L)
@@ -497,24 +492,15 @@ final class JsonModelTests {
 
 		Assertions.assertEquals(Optional.of(JsonNull.defaultInstance()), object.find("z"));
 		Assertions.assertEquals(Optional.empty(), object.find("absent"));
-		Assertions.assertEquals(Optional.of("text"), object.findString("s"));
-		Assertions.assertEquals(Optional.of(42L), object.findLong("n"));
-		Assertions.assertEquals(Optional.of(42L), object.findLong("w"));
-		Assertions.assertEquals(Optional.of(true), object.findBoolean("t"));
-		Assertions.assertEquals(Optional.of(List.of("a", "b")), object.findStringList("list"));
-		Assertions.assertEquals(Optional.of(List.of()), object.findStringList("empty"));
-
-		for (String name : List.of("n", "t", "z", "list", "absent"))
-			Assertions.assertEquals(Optional.empty(), object.findString(name), name);
-		for (String name : List.of("s", "f", "big", "t", "z", "absent"))
-			Assertions.assertEquals(Optional.empty(), object.findLong(name), name);
-		for (String name : List.of("s", "n", "z", "absent"))
-			Assertions.assertEquals(Optional.empty(), object.findBoolean(name), name);
-		for (String name : List.of("s", "mixed", "z", "absent"))
-			Assertions.assertEquals(Optional.empty(), object.findStringList(name), name);
-
-		Assertions.assertThrows(UnsupportedOperationException.class, () -> object.findStringList("list").orElseThrow()
-				.add("c"));
+		Assertions.assertEquals("text", Assertions.assertInstanceOf(JsonString.class, object.find("s").orElseThrow()).getValue());
+		Assertions.assertEquals(42L, Assertions.assertInstanceOf(JsonNumber.class, object.find("n").orElseThrow()).getLongValueExact().orElseThrow());
+		Assertions.assertTrue(Assertions.assertInstanceOf(JsonBoolean.class, object.find("t").orElseThrow()).getValue());
+		for (String name : List.of("s", "n", "f", "w", "big", "t", "z", "list", "mixed", "empty"))
+			Assertions.assertTrue(object.find(name).isPresent(), name);
+		JsonArray mixed = Assertions.assertInstanceOf(JsonArray.class, object.find("mixed").orElseThrow());
+		Assertions.assertInstanceOf(JsonString.class, mixed.getElements().get(0));
+		Assertions.assertInstanceOf(JsonNumber.class, mixed.getElements().get(1));
+		Assertions.assertThrows(UnsupportedOperationException.class, () -> mixed.getElements().add(JsonNull.defaultInstance()));
 	}
 
 	// getLongValueExact: whole numbers in the range of long, whatever their scale; nothing else.

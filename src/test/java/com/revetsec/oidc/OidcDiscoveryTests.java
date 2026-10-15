@@ -88,15 +88,14 @@ final class OidcDiscoveryTests {
 	void parserKeepsDiscoveryProvenanceAndUnknownFieldsWithoutBroadeningPolicy() {
 		Map<String,String> fields = publicFields(); fields.put("future_extension", "{\"future\":true}");
 		fields.put("id_token_signing_alg_values_supported", "[\"RS256\",\"FUTURE-ALG\",\"none\",\"HS256\"]");
-		OidcProviderMetadata metadata = OidcProviderMetadata.fromJson("https://issuer.example", json(fields));
+		OidcProviderMetadata metadata = assertInstanceOf(OidcProviderMetadataParseResult.Succeeded.class, OidcProviderMetadata.fromJsonResult("https://issuer.example", json(fields))).getMetadata();
 		assertEquals(Set.of("RS256", "FUTURE-ALG", "none", "HS256"), metadata.getIdTokenSigningAlgValuesSupported());
 		assertTrue(metadata.oauthMetadata().isRemotelyDiscovered());
 		assertEquals(Set.of("public"), metadata.getSubjectTypesSupported());
 		for (Set<String> values : List.of(metadata.getSubjectTypesSupported(), metadata.getIdTokenSigningAlgValuesSupported(), metadata.getResponseTypesSupported()))
 			assertThrows(UnsupportedOperationException.class, () -> values.add("unexpected"));
-		assertThrows(OAuthResponseException.class, () -> OidcProviderMetadata.fromJson("https://issuer.example", "{\"issuer\":\"https://issuer.example\",\"issuer\":\"https://issuer.example\"}"));
-		assertEquals(OAuthException.Reason.ISSUER_MISMATCH, assertThrows(OAuthValidationException.class,
-				() -> OidcProviderMetadata.fromJson("https://issuer.example/", json(fields))).getReason());
+		assertInstanceOf(OidcProviderMetadataParseResult.Rejected.class, OidcProviderMetadata.fromJsonResult("https://issuer.example", "{\"issuer\":\"https://issuer.example\",\"issuer\":\"https://issuer.example\"}"));
+		assertEquals(OAuthException.Reason.ISSUER_MISMATCH, assertInstanceOf(OidcProviderMetadataParseResult.Rejected.class, OidcProviderMetadata.fromJsonResult("https://issuer.example/", json(fields))).getReason());
 	}
 	@TestFactory
 	@NonNull Stream<@NonNull DynamicTest> metadataEndpointsResetToUnsetDefaults() {
@@ -153,7 +152,7 @@ final class OidcDiscoveryTests {
 				.map(name -> DynamicTest.dynamicTest(name, () -> {
 					try (TestHttpsServer server = TestHttpsServer.start()) {
 						Map<String,String> map = fields(server); map.put(name, JsonText.string("http://169.254.169.254/private?credential=SENTINEL")); script(server, map, "max-age=60");
-						OAuthValidationException failure = assertThrows(OAuthValidationException.class, () -> builder(server, Clock.systemUTC()).jsonWebKeySource(keys()).build().beginAuthentication());
+						OAuthValidationException failure = assertThrows(OAuthValidationException.class, () -> builder(server, Clock.systemUTC()).jwksSource(keys()).build().beginAuthentication());
 						assertEquals(OAuthException.Reason.METADATA_INVALID, failure.getReason()); assertFalse(failure.toString().contains("SENTINEL"));
 						assertNull(failure.getCause()); assertEquals(1, server.getRequests().size());
 					}
@@ -184,20 +183,16 @@ final class OidcDiscoveryTests {
 	void badLocalCallbacksAndWrongFlowRejectBeforeAnyDiscovery() throws Exception {
 		try (TestHttpsServer server = TestHttpsServer.start()) {
 			RewindableClock clock = RewindableClock.fromInstant(NOW);
-			OidcClient explicit = OidcClient.withProviderMetadata(OidcProviderMetadata.fromJson(issuer(server), json(fields(server))))
+			OidcClient explicit = OidcClient.withProviderMetadata(assertInstanceOf(OidcProviderMetadataParseResult.Succeeded.class, OidcProviderMetadata.fromJsonResult(issuer(server), json(fields(server)))).getMetadata())
 					.clientId(CLIENT).redirectUri(CALLBACK).clock(clock).httpClient(TestTls.httpClient()).build();
 			AuthorizationRedirect redirect = explicit.beginAuthentication(); OidcClient lazy = builder(server, clock).build();
 			PendingAuthorizationSource source = source(redirect, clock);
-			assertEquals(OAuthException.Reason.CALLBACK_URI_MISMATCH, assertThrows(OAuthValidationException.class,
-					() -> lazy.completeAuthentication(callback(redirect), source, URI.create("https://rp.example/other"))).getReason());
-			assertEquals(OAuthException.Reason.STATE_MISMATCH, assertThrows(OAuthValidationException.class,
-					() -> lazy.completeAuthentication(AuthorizationResponse.fromQueryString("code=test&state=wrong"), source, CALLBACK)).getReason());
-			assertEquals(OAuthException.Reason.ISSUER_MISMATCH, assertThrows(OAuthValidationException.class,
-					() -> lazy.completeAuthentication(AuthorizationResponse.fromQueryString(query(redirect) + "&iss=https%3A%2F%2Fother.example"), source, CALLBACK)).getReason());
-			AuthorizationRedirect oauth = OAuthClient.withAuthorizationServerMetadata(OidcProviderMetadata.fromJson(issuer(server), json(fields(server))).oauthMetadata())
+			assertEquals(OAuthException.Reason.CALLBACK_URI_MISMATCH, assertInstanceOf(OidcAuthenticationResult.RejectedAuthorization.class, lazy.completeAuthenticationResult(callback(redirect), source, URI.create("https://rp.example/other"))).getReason());
+			assertEquals(OAuthException.Reason.STATE_MISMATCH, assertInstanceOf(OidcAuthenticationResult.RejectedAuthorization.class, lazy.completeAuthenticationResult(assertInstanceOf(AuthorizationResponseParseResult.Succeeded.class, AuthorizationResponse.fromQueryStringResult("code=test&state=wrong")).getResponse(), source, CALLBACK)).getReason());
+			assertEquals(OAuthException.Reason.ISSUER_MISMATCH, assertInstanceOf(OidcAuthenticationResult.RejectedAuthorization.class, lazy.completeAuthenticationResult(assertInstanceOf(AuthorizationResponseParseResult.Succeeded.class, AuthorizationResponse.fromQueryStringResult(query(redirect) + "&iss=https%3A%2F%2Fother.example")).getResponse(), source, CALLBACK)).getReason());
+			AuthorizationRedirect oauth = OAuthClient.withAuthorizationServerMetadata(assertInstanceOf(OidcProviderMetadataParseResult.Succeeded.class, OidcProviderMetadata.fromJsonResult(issuer(server), json(fields(server)))).getMetadata().oauthMetadata())
 					.clientId(CLIENT).clientAuthentication(ClientAuthentication.noneInstance()).redirectUri(CALLBACK).clock(clock).httpClient(TestTls.httpClient()).build().beginAuthorization();
-			assertEquals(OAuthException.Reason.PENDING_AUTHORIZATION_INVALID, assertThrows(OAuthValidationException.class,
-					() -> lazy.completeAuthentication(callback(oauth), source(oauth,clock), CALLBACK)).getReason());
+			assertEquals(OAuthException.Reason.PENDING_AUTHORIZATION_INVALID, assertInstanceOf(OidcAuthenticationResult.RejectedAuthorization.class, lazy.completeAuthenticationResult(callback(oauth), source(oauth,clock), CALLBACK)).getReason());
 			assertTrue(server.getRequests().isEmpty());
 		}
 	}
@@ -208,7 +203,7 @@ final class OidcDiscoveryTests {
 			OidcClient client = shortTtl(builder(server, clock)).build(); AuthorizationRedirect redirect = client.beginAuthentication();
 			clock.advance(Duration.ofSeconds(31)); Map<String,String> changed = fields(server); changed.put("token_endpoint", JsonText.string(server.uri("/new-token").toString())); script(server, changed, "max-age=30");
 			assertEquals(OAuthException.Reason.METADATA_ENDPOINT_DRIFT, assertThrows(OAuthValidationException.class,
-					() -> client.completeAuthentication(callback(redirect), source(redirect,clock), CALLBACK)).getReason());
+					() -> client.completeAuthenticationResult(callback(redirect), source(redirect,clock), CALLBACK)).getReason());
 			assertEquals(2, server.getRequests().size()); assertEquals(0, server.getHitCount("/token")); assertEquals(0, server.getHitCount("/new-token"));
 		}
 	}
@@ -216,15 +211,15 @@ final class OidcDiscoveryTests {
 	void lazyAuthenticationWarmupAndJwksUriRotationUseCurrentProvider() throws Exception {
 		try (TestHttpsServer server = TestHttpsServer.start()) {
 			RewindableClock clock = RewindableClock.fromInstant(NOW); script(server, fields(server), "max-age=30");
-			server.script("/jwks", TestHttpsServer.Script.fromResponse(TestHttpsServer.Response.fromJsonWebKeySet(keyJson())));
-			OidcClient client = shortTtl(builder(server,clock)).jsonWebKeySource(null).build(); client.warmUp(); client.warmUp();
+			server.script("/jwks", TestHttpsServer.Script.fromResponse(TestHttpsServer.Response.fromJwks(keyJson())));
+			OidcClient client = shortTtl(builder(server,clock)).jwksSource(null).build(); client.warmUp(); client.warmUp();
 			assertEquals(1,server.getHitCount(PATH)); assertEquals(1, server.getHitCount("/jwks"));
 			AuthorizationRedirect redirect = client.beginAuthentication(); String token = token(issuer(server), nonce(redirect), clock.instant());
 			server.script("/token", TestHttpsServer.Script.fromResponse(TestHttpsServer.Response.fromJson(200,
 					"{\"access_token\":\"test-only-access\",\"token_type\":\"Bearer\",\"id_token\":" + JsonText.string(token) + "}")));
-			assertEquals("subject", client.completeAuthentication(callback(redirect), source(redirect,clock), CALLBACK).getSubject());
+			assertEquals("subject", assertInstanceOf(OidcAuthenticationResult.Succeeded.class, client.completeAuthenticationResult(callback(redirect), source(redirect,clock), CALLBACK)).getAuthentication().getSubject());
 			clock.advance(Duration.ofSeconds(31)); Map<String,String> changed = fields(server); changed.put("jwks_uri", JsonText.string(server.uri("/new-jwks").toString())); script(server,changed,"max-age=30");
-			server.script("/new-jwks", TestHttpsServer.Script.fromResponse(TestHttpsServer.Response.fromJsonWebKeySet(keyJson())));
+			server.script("/new-jwks", TestHttpsServer.Script.fromResponse(TestHttpsServer.Response.fromJwks(keyJson())));
 			client.warmUp(); assertEquals(2,server.getHitCount(PATH)); assertEquals(1, server.getHitCount("/new-jwks")); assertEquals(1,server.getHitCount("/jwks"));
 		}
 	}
@@ -316,15 +311,15 @@ final class OidcDiscoveryTests {
 	void concurrentMetadataRefreshCannotChangeAnInFlightCallbacksKeyPolicy() throws Exception {
 		try (TestHttpsServer server=TestHttpsServer.start()) {
 			RewindableClock clock=RewindableClock.fromInstant(NOW);script(server,fields(server),"max-age=30");
-			OidcClient client=shortTtl(builder(server,clock)).jsonWebKeySource(null).build();AuthorizationRedirect redirect=client.beginAuthentication();
+			OidcClient client=shortTtl(builder(server,clock)).jwksSource(null).build();AuthorizationRedirect redirect=client.beginAuthentication();
 			String compact=token(issuer(server),nonce(redirect),clock.instant());
 			TestHttpsServer.HeldScript held=TestHttpsServer.HeldScript.fromResponse(TestHttpsServer.Response.fromJson(200,"{\"access_token\":\"test-only-access\",\"token_type\":\"Bearer\",\"id_token\":"+JsonText.string(compact)+"}"));server.script("/token",held);
-			server.script("/jwks",TestHttpsServer.Script.fromResponse(TestHttpsServer.Response.fromJsonWebKeySet(keyJson())));
+			server.script("/jwks",TestHttpsServer.Script.fromResponse(TestHttpsServer.Response.fromJwks(keyJson())));
 			PendingAuthorizationSource pending=source(redirect,clock);ExecutorService pool=Executors.newSingleThreadExecutor();
 			try {
-				Future<OidcAuthentication> result=pool.submit(()->client.completeAuthentication(callback(redirect),pending,CALLBACK));assertTrue(held.awaitHeldCount(1,Duration.ofSeconds(5)));
+				Future<OidcAuthentication> result=pool.submit(()->assertInstanceOf(OidcAuthenticationResult.Succeeded.class, client.completeAuthenticationResult(callback(redirect),pending,CALLBACK)).getAuthentication());assertTrue(held.awaitHeldCount(1,Duration.ofSeconds(5)));
 				clock.advance(Duration.ofSeconds(31));Map<String,String> changed=fields(server);changed.put("jwks_uri",JsonText.string(server.uri("/new-jwks").toString()));script(server,changed,"max-age=30");
-				server.script("/new-jwks",TestHttpsServer.Script.fromResponse(TestHttpsServer.Response.fromJsonWebKeySet("{\"keys\":[]}")));client.warmUp();held.release();
+				server.script("/new-jwks",TestHttpsServer.Script.fromResponse(TestHttpsServer.Response.fromJwks("{\"keys\":[]}")));client.warmUp();held.release();
 				assertEquals("subject",result.get(5,TimeUnit.SECONDS).getSubject());assertEquals(1,server.getHitCount("/jwks"));assertEquals(1,server.getHitCount("/new-jwks"));
 			} finally { held.release();pool.shutdownNow();assertTrue(pool.awaitTermination(5,TimeUnit.SECONDS)); }
 		}
@@ -338,13 +333,13 @@ final class OidcDiscoveryTests {
 					if(kind==OAuthEndpoint.METADATA)try {new CountDownLatch(1).await(2,TimeUnit.SECONDS);}catch(InterruptedException failure){Thread.currentThread().interrupt();}
 				}
 			};
-			OidcClient explicit=OidcClient.withProviderMetadata(OidcProviderMetadata.fromJson(issuer(server),json(fields(server))))
+			OidcClient explicit=OidcClient.withProviderMetadata(assertInstanceOf(OidcProviderMetadataParseResult.Succeeded.class, OidcProviderMetadata.fromJsonResult(issuer(server),json(fields(server)))).getMetadata())
 					.clientId(CLIENT).redirectUri(CALLBACK).clock(clock).httpClient(TestTls.httpClient()).build();AuthorizationRedirect redirect=explicit.beginAuthentication();
 			OidcClient lazy=builder(server,clock).requestTimeout(Duration.ofSeconds(1)).totalDeadline(Duration.ofSeconds(1)).observer(slow).build();
-			assertEquals(OAuthException.Reason.NETWORK_FAILURE,assertThrows(OAuthTransportException.class,()->lazy.completeAuthentication(callback(redirect),source(redirect,clock),CALLBACK)).getReason());
+			assertEquals(OAuthException.Reason.NETWORK_FAILURE,assertThrows(OAuthTransportException.class,()->lazy.completeAuthenticationResult(callback(redirect),source(redirect,clock),CALLBACK)).getReason());
 			assertEquals(0,server.getHitCount("/token"));
-			OidcClient warm=builder(server,clock).jsonWebKeySource(null).requestTimeout(Duration.ofSeconds(1)).totalDeadline(Duration.ofSeconds(1)).observer(slow).build();
-			assertThrows(JsonWebKeySetUnavailableException.class,warm::warmUp);assertEquals(0,server.getHitCount("/jwks"));assertEquals(2,server.getHitCount(PATH));
+			OidcClient warm=builder(server,clock).jwksSource(null).requestTimeout(Duration.ofSeconds(1)).totalDeadline(Duration.ofSeconds(1)).observer(slow).build();
+			assertThrows(JwksUnavailableException.class,warm::warmUp);assertEquals(0,server.getHitCount("/jwks"));assertEquals(2,server.getHitCount(PATH));
 		}
 	}
 	@TestFactory
@@ -353,7 +348,7 @@ final class OidcDiscoveryTests {
 				.map(path->DynamicTest.dynamicTest(path,()->{
 					String document;try(var input=Objects.requireNonNull(OidcDiscoveryTests.class.getResourceAsStream("/fixtures/"+path))){document=new String(input.readAllBytes(),StandardCharsets.UTF_8);}
 					JsonObject parsed=(JsonObject)com.revetsec.internal.json.JsonCodec.parse(document.getBytes(StandardCharsets.UTF_8),com.revetsec.internal.json.JsonLimits.protocolDocument(256*1024));
-					String issuer=((JsonString)Objects.requireNonNull(parsed.getMembers().get("issuer"))).getValue();OidcProviderMetadata provider=OidcProviderMetadata.fromJson(issuer,document);
+					String issuer=((JsonString)Objects.requireNonNull(parsed.getMembers().get("issuer"))).getValue();OidcProviderMetadata provider=assertInstanceOf(OidcProviderMetadataParseResult.Succeeded.class, OidcProviderMetadata.fromJsonResult(issuer,document)).getMetadata();
 					assertEquals(issuer,provider.getIssuer());assertTrue(provider.getIdTokenSigningAlgValuesSupported().contains("RS256"));assertTrue(provider.getResponseTypesSupported().contains("code"));
 				}));
 	}
@@ -363,10 +358,10 @@ final class OidcDiscoveryTests {
 	}
 	private static @NonNull Deadline deadline() { return Deadline.fromNow(Duration.ofSeconds(15)); }
 	private static @NonNull String issuer(@NonNull TestHttpsServer server) { return server.uri("/tenant/").toString(); }
-	private static OidcClient.@NonNull Builder builder(@NonNull TestHttpsServer server,@NonNull Clock clock) { return OidcClient.withIssuer(issuer(server)).clientId(CLIENT).redirectUri(CALLBACK).clock(clock).httpClient(TestTls.httpClient()).jsonWebKeySource(keys()); }
+	private static OidcClient.@NonNull Builder builder(@NonNull TestHttpsServer server,@NonNull Clock clock) { return OidcClient.withIssuer(issuer(server)).clientId(CLIENT).redirectUri(CALLBACK).clock(clock).httpClient(TestTls.httpClient()).jwksSource(keys()); }
 	private static OidcClient.@NonNull Builder shortTtl(OidcClient.@NonNull Builder builder) { return builder.minimumTimeToLive(Duration.ofSeconds(30)).defaultTimeToLive(Duration.ofSeconds(30)).maximumTimeToLive(Duration.ofMinutes(1)).discoveryCooldown(Duration.ofSeconds(1)); }
-	private static @NonNull JsonWebKeySource keys() { return StaticJsonWebKeySource.fromJsonWebKeySet(JsonWebKeySet.fromJson(keyJson())); }
-	private static @NonNull String keyJson() { return TestJsonWebKeys.withFixture(TestJsonWebKeys.Fixture.IDP_SIGNING_RSA_2048).kid("key").alg("RS256").toKeySetJson(); }
+	private static @NonNull JwksSource keys() { return StaticJwksSource.fromJwks(assertInstanceOf(JwksParseResult.Succeeded.class, Jwks.fromJsonResult(keyJson())).getJwks()); }
+	private static @NonNull String keyJson() { return TestJwk.withFixture(TestJwk.Fixture.IDP_SIGNING_RSA_2048).kid("key").alg("RS256").toKeySetJson(); }
 	private static @NonNull Map<@NonNull String,@NonNull String> publicFields() {
 		Map<String,String> map=new LinkedHashMap<>(); map.put("issuer",JsonText.string("https://issuer.example"));
 		map.put("authorization_endpoint",JsonText.string("https://issuer.example/auth"));map.put("token_endpoint",JsonText.string("https://issuer.example/token"));map.put("jwks_uri",JsonText.string("https://issuer.example/jwks"));
@@ -380,7 +375,7 @@ final class OidcDiscoveryTests {
 	private static void script(@NonNull TestHttpsServer server,@NonNull Map<@NonNull String,@NonNull String> fields,@NonNull String cache) { server.script(PATH,TestHttpsServer.Script.fromResponse(TestHttpsServer.Response.withStatus(200).header("Content-Type","application/json").header("Cache-Control",cache).body(json(fields)).build())); }
 	private static @NonNull String nonce(@NonNull AuthorizationRedirect redirect) throws Exception { return QueryParameters.parse(redirect.getAuthorizationUri().getRawQuery()).getValues("nonce").get(0); }
 	private static @NonNull String query(@NonNull AuthorizationRedirect redirect) throws Exception { return "code=TEST-ONLY-CODE&state="+URLEncoder.encode(QueryParameters.parse(redirect.getAuthorizationUri().getRawQuery()).getValues("state").get(0),StandardCharsets.UTF_8); }
-	private static @NonNull AuthorizationResponse callback(@NonNull AuthorizationRedirect redirect) throws Exception { return AuthorizationResponse.fromQueryString(query(redirect)); }
+	private static @NonNull AuthorizationResponse callback(@NonNull AuthorizationRedirect redirect) throws Exception { return assertInstanceOf(AuthorizationResponseParseResult.Succeeded.class, AuthorizationResponse.fromQueryStringResult(query(redirect))).getResponse(); }
 	private static @NonNull PendingAuthorizationSource source(@NonNull AuthorizationRedirect redirect,@NonNull Clock clock) { StateSealer sealer=StateSealer.withActiveKey(TestSealers.fixedKey("oidc-discovery")).clock(clock).build();String sealed=redirect.getPendingAuthorization().toSealedForm(sealer,"oidc-discovery");return PendingAuthorizationSource.fromSealedForm(sealed,sealer,"oidc-discovery"); }
-	private static @NonNull String token(@NonNull String issuer,@NonNull String nonce,@NonNull Instant now) { return TestJws.withAlgorithm(TestJws.Algorithm.RS256).kid("key").payload(JsonText.object(List.of(Map.entry("iss",JsonText.string(issuer)),Map.entry("sub","\"subject\""),Map.entry("aud",JsonText.string(CLIENT)),Map.entry("iat",Long.toString(now.getEpochSecond())),Map.entry("exp",Long.toString(now.plusSeconds(300).getEpochSecond())),Map.entry("nonce",JsonText.string(nonce))))).sign(TestJsonWebKeys.Fixture.IDP_SIGNING_RSA_2048.getPrivateKey()); }
+	private static @NonNull String token(@NonNull String issuer,@NonNull String nonce,@NonNull Instant now) { return TestJws.withAlgorithm(TestJws.Algorithm.RS256).kid("key").payload(JsonText.object(List.of(Map.entry("iss",JsonText.string(issuer)),Map.entry("sub","\"subject\""),Map.entry("aud",JsonText.string(CLIENT)),Map.entry("iat",Long.toString(now.getEpochSecond())),Map.entry("exp",Long.toString(now.plusSeconds(300).getEpochSecond())),Map.entry("nonce",JsonText.string(nonce))))).sign(TestJwk.Fixture.IDP_SIGNING_RSA_2048.getPrivateKey()); }
 }

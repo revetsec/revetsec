@@ -21,8 +21,9 @@ import javax.annotation.concurrent.Immutable;
 import static java.util.Objects.requireNonNull;
 
 /**
- * The outcome of OAuth callback completion. A pending-store failure has a fixed, value-free result;
- * other transport, metadata and endpoint failures remain exceptions.
+ * The outcome of OAuth callback completion. Bound authorization errors, checked endpoint rejections and
+ * pending-store failures have distinct, fixed results. Transport, metadata, malformed endpoint responses and
+ * transient endpoint failures remain exceptions.
  * <p>
  * Applications receive these outcomes from the corresponding operation; they cannot construct them.
  * Value accessors exist only on the variant that owns a value. Diagnostic text contains no input or result data.
@@ -32,7 +33,7 @@ import static java.util.Objects.requireNonNull;
  * @since 1.0.0
  */
 @Immutable
-public abstract sealed class AuthorizationCompletionResult permits AuthorizationCompletionResult.Succeeded, AuthorizationCompletionResult.Denied, AuthorizationCompletionResult.Rejected, AuthorizationCompletionResult.Failed {
+public abstract sealed class AuthorizationCompletionResult permits AuthorizationCompletionResult.Succeeded, AuthorizationCompletionResult.Denied, AuthorizationCompletionResult.Rejected, AuthorizationCompletionResult.Failed, AuthorizationCompletionResult.RejectedAuthorizationError, AuthorizationCompletionResult.RejectedEndpoint {
 	AuthorizationCompletionResult() { }
 
 	static @NonNull AuthorizationCompletionResult fromTokens(@NonNull TokenResponse tokens) {
@@ -49,6 +50,13 @@ public abstract sealed class AuthorizationCompletionResult permits Authorization
 
 	static @NonNull AuthorizationCompletionResult fromStoreFailure(OAuthException.@NonNull Reason reason) {
 		return new Failed(requireNonNull(reason));
+	}
+
+	static @NonNull AuthorizationCompletionResult fromAuthorizationError(@NonNull OAuthEndpointError error) {
+		return new RejectedAuthorizationError(requireNonNull(error));
+	}
+	static @NonNull AuthorizationCompletionResult fromEndpoint(@NonNull OAuthErrorResponseException failure) {
+		return new RejectedEndpoint(OAuthEndpointError.fromWireValue(failure.getErrorCode().orElse("")), failure.getStatus());
 	}
 
 	/**
@@ -123,5 +131,47 @@ public abstract sealed class AuthorizationCompletionResult permits Authorization
 		 * @since 1.0.0
 		 */
 		public OAuthException.@NonNull Reason getReason() { return this.reason; }
+	}
+
+	/**
+	 * A bound callback reported an authorization error after all pending-state and issuer checks passed.
+	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
+	 * @since 1.0.0
+	 */
+	@Immutable
+	public static final class RejectedAuthorizationError extends AuthorizationCompletionResult {
+		private final @NonNull OAuthEndpointError error;
+		private RejectedAuthorizationError(@NonNull OAuthEndpointError error) { this.error = requireNonNull(error); }
+		/**
+		 * Returns the fixed authorization error; unknown extension codes share one fallback.
+		 * @return authorization error
+		 * @since 1.0.0
+		 */
+		public @NonNull OAuthEndpointError getError() { return this.error; }
+	}
+	/**
+	 * The endpoint returned a non-transient client error. No response body or credential is retained.
+	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
+	 * @since 1.0.0
+	 */
+	@Immutable
+	public static final class RejectedEndpoint extends AuthorizationCompletionResult {
+		private final @NonNull OAuthEndpointError error;
+		private final int status;
+		private RejectedEndpoint(@NonNull OAuthEndpointError error, int status) {
+			this.error = requireNonNull(error); this.status = status;
+		}
+		/**
+		 * Returns the fixed endpoint error; unrecognized or absent codes use the same fallback.
+		 * @return fixed endpoint error
+		 * @since 1.0.0
+		 */
+		public @NonNull OAuthEndpointError getError() { return this.error; }
+		/**
+		 * Returns the endpoint's HTTP status.
+		 * @return endpoint status
+		 * @since 1.0.0
+		 */
+		public @NonNull Integer getStatus() { return this.status; }
 	}
 }

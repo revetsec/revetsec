@@ -18,12 +18,12 @@ package com.revetsec.jose;
 
 import org.jspecify.annotations.NonNull;
 
-import com.revetsec.internal.jose.JwkSetParser;
-import com.revetsec.internal.jose.ParsedKeySet;
+import com.revetsec.internal.jose.JwksParser;
+import com.revetsec.internal.jose.ParsedJwks;
 import com.revetsec.json.JsonArray;
 import com.revetsec.json.JsonValue;
-import com.revetsec.testing.TestJsonWebKeys;
-import com.revetsec.testing.TestJsonWebKeys.Fixture;
+import com.revetsec.testing.TestJwk;
+import com.revetsec.testing.TestJwk.Fixture;
 import com.revetsec.testing.TestJws;
 import com.revetsec.testing.TestJws.Algorithm;
 import com.revetsec.testing.WycheproofVectors;
@@ -45,7 +45,7 @@ import java.util.Set;
 import java.util.stream.Stream;
 
 /**
- * {@link JwtValidator} over a {@link StaticJsonWebKeySource}: which key verifies a token (INV-J3, INV-J9; plan "Key
+ * {@link JwtValidator} over a {@link StaticJwksSource}: which key verifies a token (INV-J3, INV-J9; plan "Key
  * selection" and "Keys"; plan M2 exit criteria 7 and 10). A key the key-set rules skip never verifies, not even a token
  * signed with its own private key; a {@code kid} selects at most one key; a duplicate {@code kid} or a {@code kid}-less
  * token with two candidates is ambiguous (OpenID Connect Core section 10.1); an RSA key without {@code alg} serves only
@@ -56,7 +56,7 @@ import java.util.stream.Stream;
  */
 final class JwtValidatorKeySelectionTests {
 	private static final String BAD_KID = "bad";
-	private static final BigInteger ED25519_P = TestJsonWebKeys.ED25519_FIELD_PRIME;
+	private static final BigInteger ED25519_P = TestJwk.ED25519_FIELD_PRIME;
 
 	// Exit criterion 7: every key the rules skip is skipped with its reason, and a token naming its kid is
 	// UNKNOWN_KEY, even when signed by that key's own private key (or, for a key that is only a variant of a good key,
@@ -65,65 +65,65 @@ final class JwtValidatorKeySelectionTests {
 	@NonNull Stream<@NonNull DynamicTest> aSkippedKeyNeverVerifiesATokenNamingIt() throws Exception {
 		Map<String, SkippedCase> cases = new LinkedHashMap<>();
 		PrivateKey rsa = Fixture.IDP_SIGNING_RSA_2048.getPrivateKey();
-		cases.put("a ROCA-fingerprinted modulus", new SkippedCase(TestJsonWebKeys.withKeyPair(
-				TestJsonWebKeys.rocaFingerprintedRsaKeyPair()), JsonWebKeySkipReason.WEAK_KEY, Algorithm.RS256,
-				TestJsonWebKeys.rocaFingerprintedRsaKeyPair().getPrivate()));
+		cases.put("a ROCA-fingerprinted modulus", new SkippedCase(TestJwk.withKeyPair(
+				TestJwk.rocaFingerprintedRsaKeyPair()), JwkSkipReason.WEAK_KEY, Algorithm.RS256,
+				TestJwk.rocaFingerprintedRsaKeyPair().getPrivate()));
 		for (long exponent : List.of(1L, 3L, 65_535L, 65_536L, 65_538L, 4_294_967_297L))
-			cases.put("e = " + exponent, new SkippedCase(TestJsonWebKeys.rsaWithExponent(BigInteger.valueOf(exponent)),
-					JsonWebKeySkipReason.RSA_EXPONENT, Algorithm.RS256, rsa));
-		cases.put("a non-minimal n", new SkippedCase(TestJsonWebKeys.rsaWithLeadingZeroModulus(),
-				JsonWebKeySkipReason.MALFORMED_KEY, Algorithm.RS256, rsa));
-		cases.put("a 31-octet EC x", new SkippedCase(TestJsonWebKeys.ecWithShortX(), JsonWebKeySkipReason.MALFORMED_KEY,
-				Algorithm.ES256, TestJsonWebKeys.ecKeyPairWithLeadingZeroX().getPrivate()));
-		cases.put("an EC point off the curve", new SkippedCase(TestJsonWebKeys.ecOffCurve(),
-				JsonWebKeySkipReason.EC_POINT_NOT_ON_CURVE, Algorithm.ES256, Fixture.IDP_SIGNING_EC_P256.getPrivateKey()));
-		cases.put("a non-canonical Ed25519 y (p + 1)", new SkippedCase(TestJsonWebKeys.ed25519WithX(
-				TestJsonWebKeys.ed25519PublicKeyEncoding(ED25519_P.add(BigInteger.ONE), false)),
-				JsonWebKeySkipReason.MALFORMED_KEY, Algorithm.EDDSA, Fixture.ED25519.getPrivateKey()));
-		cases.put("an Ed25519 x that does not decode (y = 2)", new SkippedCase(TestJsonWebKeys.ed25519WithX(
-				TestJsonWebKeys.ed25519PublicKeyEncoding(BigInteger.TWO, false)), JsonWebKeySkipReason.MALFORMED_KEY,
+			cases.put("e = " + exponent, new SkippedCase(TestJwk.rsaWithExponent(BigInteger.valueOf(exponent)),
+					JwkSkipReason.RSA_EXPONENT, Algorithm.RS256, rsa));
+		cases.put("a non-minimal n", new SkippedCase(TestJwk.rsaWithLeadingZeroModulus(),
+				JwkSkipReason.MALFORMED_KEY, Algorithm.RS256, rsa));
+		cases.put("a 31-octet EC x", new SkippedCase(TestJwk.ecWithShortX(), JwkSkipReason.MALFORMED_KEY,
+				Algorithm.ES256, TestJwk.ecKeyPairWithLeadingZeroX().getPrivate()));
+		cases.put("an EC point off the curve", new SkippedCase(TestJwk.ecOffCurve(),
+				JwkSkipReason.EC_POINT_NOT_ON_CURVE, Algorithm.ES256, Fixture.IDP_SIGNING_EC_P256.getPrivateKey()));
+		cases.put("a non-canonical Ed25519 y (p + 1)", new SkippedCase(TestJwk.ed25519WithX(
+				TestJwk.ed25519PublicKeyEncoding(ED25519_P.add(BigInteger.ONE), false)),
+				JwkSkipReason.MALFORMED_KEY, Algorithm.EDDSA, Fixture.ED25519.getPrivateKey()));
+		cases.put("an Ed25519 x that does not decode (y = 2)", new SkippedCase(TestJwk.ed25519WithX(
+				TestJwk.ed25519PublicKeyEncoding(BigInteger.TWO, false)), JwkSkipReason.MALFORMED_KEY,
 				Algorithm.EDDSA, Fixture.ED25519.getPrivateKey()));
-		cases.put("x = 0 with the sign bit set (y = 1)", new SkippedCase(TestJsonWebKeys.ed25519WithX(
-				TestJsonWebKeys.ed25519PublicKeyEncoding(BigInteger.ONE, true)), JsonWebKeySkipReason.MALFORMED_KEY,
+		cases.put("x = 0 with the sign bit set (y = 1)", new SkippedCase(TestJwk.ed25519WithX(
+				TestJwk.ed25519PublicKeyEncoding(BigInteger.ONE, true)), JwkSkipReason.MALFORMED_KEY,
 				Algorithm.EDDSA, Fixture.ED25519.getPrivateKey()));
-		cases.put("x = 0 with the sign bit set (y = p - 1)", new SkippedCase(TestJsonWebKeys.ed25519WithX(
-				TestJsonWebKeys.ed25519PublicKeyEncoding(ED25519_P.subtract(BigInteger.ONE), true)),
-				JsonWebKeySkipReason.MALFORMED_KEY, Algorithm.EDDSA, Fixture.ED25519.getPrivateKey()));
-		cases.put("an Ed448 key", new SkippedCase(TestJsonWebKeys.withKeyPair(KeyPairGenerator.getInstance("Ed448")
-				.generateKeyPair()), JsonWebKeySkipReason.UNSUPPORTED_CURVE, Algorithm.EDDSA, Fixture.ED25519.getPrivateKey()));
-		cases.put("an X25519 key", new SkippedCase(TestJsonWebKeys.withKeyPair(KeyPairGenerator.getInstance("X25519")
-				.generateKeyPair()), JsonWebKeySkipReason.UNSUPPORTED_CURVE, Algorithm.EDDSA, Fixture.ED25519.getPrivateKey()));
+		cases.put("x = 0 with the sign bit set (y = p - 1)", new SkippedCase(TestJwk.ed25519WithX(
+				TestJwk.ed25519PublicKeyEncoding(ED25519_P.subtract(BigInteger.ONE), true)),
+				JwkSkipReason.MALFORMED_KEY, Algorithm.EDDSA, Fixture.ED25519.getPrivateKey()));
+		cases.put("an Ed448 key", new SkippedCase(TestJwk.withKeyPair(KeyPairGenerator.getInstance("Ed448")
+				.generateKeyPair()), JwkSkipReason.UNSUPPORTED_CURVE, Algorithm.EDDSA, Fixture.ED25519.getPrivateKey()));
+		cases.put("an X25519 key", new SkippedCase(TestJwk.withKeyPair(KeyPairGenerator.getInstance("X25519")
+				.generateKeyPair()), JwkSkipReason.UNSUPPORTED_CURVE, Algorithm.EDDSA, Fixture.ED25519.getPrivateKey()));
 		for (String issuer : List.of("null", "123", "[]", "\"\""))
-			cases.put("an issuer member of " + issuer, new SkippedCase(TestJsonWebKeys.withFixture(
-					Fixture.IDP_SIGNING_RSA_2048).member("issuer", issuer), JsonWebKeySkipReason.MALFORMED_KEY, Algorithm.RS256,
+			cases.put("an issuer member of " + issuer, new SkippedCase(TestJwk.withFixture(
+					Fixture.IDP_SIGNING_RSA_2048).member("issuer", issuer), JwkSkipReason.MALFORMED_KEY, Algorithm.RS256,
 					rsa));
-		cases.put("private members", new SkippedCase(TestJsonWebKeys.withFixture(Fixture.IDP_SIGNING_RSA_2048)
-				.includePrivateMembers(true), JsonWebKeySkipReason.PRIVATE_KEY_MEMBERS, Algorithm.RS256, rsa));
-		cases.put("a symmetric key", new SkippedCase(TestJsonWebKeys.octWithK(TestJws.base64Url(new byte[32])),
-				JsonWebKeySkipReason.SYMMETRIC_KEY, Algorithm.RS256, rsa));
-		cases.put("use enc", new SkippedCase(TestJsonWebKeys.withFixture(Fixture.IDP_SIGNING_RSA_2048).use("enc"),
-				JsonWebKeySkipReason.NOT_A_VERIFICATION_KEY, Algorithm.RS256, rsa));
-		cases.put("key_ops [encrypt]", new SkippedCase(TestJsonWebKeys.withFixture(Fixture.IDP_SIGNING_RSA_2048)
-				.keyOps(List.of("encrypt")), JsonWebKeySkipReason.NOT_A_VERIFICATION_KEY, Algorithm.RS256, rsa));
-		cases.put("use sig with key_ops [encrypt]", new SkippedCase(TestJsonWebKeys.withFixture(
+		cases.put("private members", new SkippedCase(TestJwk.withFixture(Fixture.IDP_SIGNING_RSA_2048)
+				.includePrivateMembers(true), JwkSkipReason.PRIVATE_KEY_MEMBERS, Algorithm.RS256, rsa));
+		cases.put("a symmetric key", new SkippedCase(TestJwk.octWithK(TestJws.base64Url(new byte[32])),
+				JwkSkipReason.SYMMETRIC_KEY, Algorithm.RS256, rsa));
+		cases.put("use enc", new SkippedCase(TestJwk.withFixture(Fixture.IDP_SIGNING_RSA_2048).use("enc"),
+				JwkSkipReason.NOT_A_VERIFICATION_KEY, Algorithm.RS256, rsa));
+		cases.put("key_ops [encrypt]", new SkippedCase(TestJwk.withFixture(Fixture.IDP_SIGNING_RSA_2048)
+				.keyOps(List.of("encrypt")), JwkSkipReason.NOT_A_VERIFICATION_KEY, Algorithm.RS256, rsa));
+		cases.put("use sig with key_ops [encrypt]", new SkippedCase(TestJwk.withFixture(
 				Fixture.IDP_SIGNING_RSA_2048).use("sig").keyOps(List.of("encrypt")),
-				JsonWebKeySkipReason.NOT_A_VERIFICATION_KEY, Algorithm.RS256, rsa));
-		cases.put("an x5c for another key", new SkippedCase(TestJsonWebKeys.withFixture(Fixture.IDP_SIGNING_RSA_2048)
+				JwkSkipReason.NOT_A_VERIFICATION_KEY, Algorithm.RS256, rsa));
+		cases.put("an x5c for another key", new SkippedCase(TestJwk.withFixture(Fixture.IDP_SIGNING_RSA_2048)
 				.x5c(List.of(Fixture.SP_SIGNING_RSA_2048.getCertificate().orElseThrow())),
-				JsonWebKeySkipReason.CERTIFICATE_MISMATCH, Algorithm.RS256, rsa));
+				JwkSkipReason.CERTIFICATE_MISMATCH, Algorithm.RS256, rsa));
 
 		return cases.entrySet().stream().map(entry -> DynamicTest.dynamicTest(entry.getKey(), () -> {
 			SkippedCase example = entry.getValue();
-			String keySet = TestJsonWebKeys.keySet(List.of(example.jwk().kid(BAD_KID).toJson(),
-					TestJsonWebKeys.withFixture(Fixture.IDP_SIGNING_EC_P384).kid("good").toJson()));
+			String keySet = TestJwk.keySet(List.of(example.jwk().kid(BAD_KID).toJson(),
+					TestJwk.withFixture(Fixture.IDP_SIGNING_EC_P384).kid("good").toJson()));
 
-			ParsedKeySet parsed = JwkSetParser.parse(keySet, 256 * 1_024, 100);
-			Assertions.assertEquals(List.of(new ParsedKeySet.Skip(0, example.reason())), parsed.skips());
-			Assertions.assertEquals(List.of("good"), JsonWebKeySet.fromJson(keySet).getKeys().stream().map(key ->
+			ParsedJwks parsed = JwksParser.parse(keySet, 256 * 1_024, 100);
+			Assertions.assertEquals(List.of(new ParsedJwks.Skip(0, example.reason())), parsed.skips());
+			Assertions.assertEquals(List.of("good"), JwtFixtures.assertParsedJwks(keySet).getKeys().stream().map(key ->
 					key.getKeyId().orElseThrow()).toList());
 
-			JwtValidator validator = JwtFixtures.validator(StaticJsonWebKeySource.fromJsonWebKeySet(
-					JsonWebKeySet.fromJson(keySet))).allowedAlgorithms(Set.of(jwsAlgorithm(example.algorithm()))).build();
+			JwtValidator validator = JwtFixtures.validator(StaticJwksSource.fromJwks(
+					JwtFixtures.assertParsedJwks(keySet))).allowedAlgorithms(Set.of(jwsAlgorithm(example.algorithm()))).build();
 			JwtFixtures.assertRejected(JoseException.Reason.UNKNOWN_KEY, validator, TestJws.withAlgorithm(
 					example.algorithm()).kid(BAD_KID).payload(JwtFixtures.claims().toJson()).sign(example.signer()));
 		}));
@@ -133,12 +133,12 @@ final class JwtValidatorKeySelectionTests {
 	// WEAK_KEY and the forgery naming it is UNKNOWN_KEY; kid-less, it finds no candidate either.
 	@Test
 	void theSmallOrderForgeryNeverVerifies() {
-		String keySet = TestJsonWebKeys.keySet(List.of(TestJsonWebKeys.ed25519SmallOrder().kid(BAD_KID).toJson(),
-				TestJsonWebKeys.withFixture(Fixture.IDP_SIGNING_EC_P384).kid("good").toJson()));
+		String keySet = TestJwk.keySet(List.of(TestJwk.ed25519SmallOrder().kid(BAD_KID).toJson(),
+				TestJwk.withFixture(Fixture.IDP_SIGNING_EC_P384).kid("good").toJson()));
 		byte[] forgery = new byte[64];
 		forgery[0] = 1;
 
-		JwtValidator validator = JwtFixtures.validator(StaticJsonWebKeySource.fromJsonWebKeySet(JsonWebKeySet.fromJson(
+		JwtValidator validator = JwtFixtures.validator(StaticJwksSource.fromJwks(JwtFixtures.assertParsedJwks(
 				keySet))).allowedAlgorithms(Set.of(JwsAlgorithm.EDDSA, JwsAlgorithm.ED25519)).build();
 		JwtFixtures.assertRejected(JoseException.Reason.UNKNOWN_KEY, validator, JwtFixtures.token(Algorithm.EDDSA)
 				.kid(BAD_KID).withSignature(forgery));
@@ -150,11 +150,11 @@ final class JwtValidatorKeySelectionTests {
 	// before key resolution (M2-6's 256 to 2,048-octet bound), and a well-formed token naming its kid is UNKNOWN_KEY.
 	@Test
 	void anRsa1024KeyIsSkippedAndItsTokensNeverReachIt() throws Exception {
-		String keySet = TestJsonWebKeys.keySet(List.of(TestJsonWebKeys.withFixture(Fixture.NEGATIVE_RSA_1024).kid(BAD_KID)
+		String keySet = TestJwk.keySet(List.of(TestJwk.withFixture(Fixture.NEGATIVE_RSA_1024).kid(BAD_KID)
 				.toJson(), JwtFixtures.jwk(Fixture.IDP_SIGNING_RSA_2048).toJson()));
-		Assertions.assertEquals(List.of(new ParsedKeySet.Skip(0, JsonWebKeySkipReason.RSA_KEY_SIZE)), parse(keySet)
+		Assertions.assertEquals(List.of(new ParsedJwks.Skip(0, JwkSkipReason.RSA_KEY_SIZE)), parse(keySet)
 				.skips());
-		JwtValidator validator = JwtFixtures.validator(StaticJsonWebKeySource.fromJsonWebKeySet(JsonWebKeySet.fromJson(
+		JwtValidator validator = JwtFixtures.validator(StaticJwksSource.fromJwks(JwtFixtures.assertParsedJwks(
 				keySet))).build();
 
 		JwtFixtures.assertRejected(JoseException.Reason.SIGNATURE_MALFORMED, validator, TestJws.withAlgorithm(
@@ -171,18 +171,18 @@ final class JwtValidatorKeySelectionTests {
 	@NonNull Stream<@NonNull DynamicTest> wycheproofsInvalidKeysAreSkippedAndTheirTokensRefused() {
 		VectorFile file = WycheproofVectors.fromVendoredFiles().getFile("json_web_key_test.json");
 		Map<Integer, List<Object>> expected = new LinkedHashMap<>();
-		expected.put(7, List.of(JsonWebKeySkipReason.WEAK_KEY, JoseException.Reason.UNKNOWN_KEY));
-		expected.put(8, List.of(JsonWebKeySkipReason.RSA_KEY_SIZE, JoseException.Reason.SIGNATURE_MALFORMED));
-		expected.put(9, List.of(JsonWebKeySkipReason.RSA_EXPONENT, JoseException.Reason.UNKNOWN_KEY));
-		expected.put(22, List.of(JsonWebKeySkipReason.EC_POINT_NOT_ON_CURVE, JoseException.Reason.UNKNOWN_KEY));
+		expected.put(7, List.of(JwkSkipReason.WEAK_KEY, JoseException.Reason.UNKNOWN_KEY));
+		expected.put(8, List.of(JwkSkipReason.RSA_KEY_SIZE, JoseException.Reason.SIGNATURE_MALFORMED));
+		expected.put(9, List.of(JwkSkipReason.RSA_EXPONENT, JoseException.Reason.UNKNOWN_KEY));
+		expected.put(22, List.of(JwkSkipReason.EC_POINT_NOT_ON_CURVE, JoseException.Reason.UNKNOWN_KEY));
 
 		return expected.entrySet().stream().map(entry -> DynamicTest.dynamicTest("tcId " + entry.getKey(), () -> {
 			WycheproofVectors.TestVector vector = file.getTest(entry.getKey());
 			Assertions.assertEquals(WycheproofVectors.Result.INVALID, vector.getResult());
 			String publicKeys = vector.getGroup().getObject("public").toJson();
-			List<ParsedKeySet.Skip> skips = parse(publicKeys).skips();
+			List<ParsedJwks.Skip> skips = parse(publicKeys).skips();
 			Assertions.assertFalse(skips.isEmpty());
-			for (ParsedKeySet.Skip skip : skips)
+			for (ParsedJwks.Skip skip : skips)
 				Assertions.assertEquals(entry.getValue().get(0), skip.reason());
 
 			List<String> keys = new ArrayList<>();
@@ -190,8 +190,8 @@ final class JwtValidatorKeySelectionTests {
 					.find("keys").orElseThrow()).getElements())
 				keys.add(key.toJson());
 			keys.add(JwtFixtures.jwk(Fixture.IDP_SIGNING_EC_P384).kid("good").toJson());
-			JwtValidator validator = JwtFixtures.validator(StaticJsonWebKeySource.fromJsonWebKeySet(JsonWebKeySet.fromJson(
-					TestJsonWebKeys.keySet(keys)))).allowedAlgorithms(Set.of(JwsAlgorithm.RS256, JwsAlgorithm.ES256)).build();
+			JwtValidator validator = JwtFixtures.validator(StaticJwksSource.fromJwks(JwtFixtures.assertParsedJwks(
+					TestJwk.keySet(keys)))).allowedAlgorithms(Set.of(JwsAlgorithm.RS256, JwsAlgorithm.ES256)).build();
 			JwtFixtures.assertRejected((JoseException.Reason) entry.getValue().get(1), validator, vector.getString("jws"));
 		}));
 	}
@@ -239,7 +239,7 @@ final class JwtValidatorKeySelectionTests {
 	// key verifies the token without a kid.
 	@Test
 	void aTokenWithAKidIsNeverVerifiedByAKeyWithoutOne() {
-		JwtValidator validator = JwtFixtures.validator(JwtFixtures.source(TestJsonWebKeys.withFixture(
+		JwtValidator validator = JwtFixtures.validator(JwtFixtures.source(TestJwk.withFixture(
 				Fixture.IDP_SIGNING_RSA_2048).toJson())).build();
 
 		JwtFixtures.assertRejected(JoseException.Reason.UNKNOWN_KEY, validator, JwtFixtures.signed(
@@ -253,7 +253,7 @@ final class JwtValidatorKeySelectionTests {
 	// kid-less token finds no candidate. A key that names its alg keeps working.
 	@Test
 	void anRsaKeyWithoutAlgServesOnlyALoneRsaAlgorithm() {
-		StaticJsonWebKeySource bare = JwtFixtures.source(Fixture.IDP_SIGNING_RSA_2048);
+		StaticJwksSource bare = JwtFixtures.source(Fixture.IDP_SIGNING_RSA_2048);
 		JwtFixtures.assertAccepted(JwtFixtures.validator(bare).build(), JwtFixtures.signed(Fixture.IDP_SIGNING_RSA_2048,
 				Algorithm.RS256));
 		JwtFixtures.assertAccepted(JwtFixtures.validator(bare).allowedAlgorithms(Set.of(JwsAlgorithm.PS256,
@@ -294,15 +294,15 @@ final class JwtValidatorKeySelectionTests {
 				.kid("another-issuers-key").sign(Fixture.NEGATIVE_ATTACKER_RSA_2048.getPrivateKey()));
 	}
 
-	private static @NonNull ParsedKeySet parse(@NonNull String keySet) throws Exception {
-		return JwkSetParser.parse(keySet, 256 * 1_024, 100);
+	private static @NonNull ParsedJwks parse(@NonNull String keySet) throws Exception {
+		return JwksParser.parse(keySet, 256 * 1_024, 100);
 	}
 
 	private static @NonNull JwsAlgorithm jwsAlgorithm(@NonNull Algorithm algorithm) {
 		return JwsAlgorithm.findByWireValue(algorithm.getWireValue()).orElseThrow();
 	}
 
-	private record SkippedCase(TestJsonWebKeys.@NonNull Builder jwk, @NonNull JsonWebKeySkipReason reason, @NonNull Algorithm algorithm,
+	private record SkippedCase(TestJwk.@NonNull Builder jwk, @NonNull JwkSkipReason reason, @NonNull Algorithm algorithm,
 														 @NonNull PrivateKey signer) {
 	}
 }

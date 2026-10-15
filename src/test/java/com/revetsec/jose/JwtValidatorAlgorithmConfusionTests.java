@@ -23,8 +23,8 @@ import com.revetsec.internal.jose.JoseHeaderPolicy;
 import com.revetsec.internal.jose.JwtProcessor;
 import com.revetsec.internal.jose.KeySelector;
 import com.revetsec.internal.jose.PreparedJws;
-import com.revetsec.testing.TestJsonWebKeys;
-import com.revetsec.testing.TestJsonWebKeys.Fixture;
+import com.revetsec.testing.TestJwk;
+import com.revetsec.testing.TestJwk.Fixture;
 import com.revetsec.testing.TestJws;
 import com.revetsec.testing.TestJws.Algorithm;
 import org.junit.jupiter.api.Assertions;
@@ -92,7 +92,7 @@ final class JwtValidatorAlgorithmConfusionTests {
 		byte[] clientSecret = "a client secret of at least thirty-two octets".getBytes(StandardCharsets.US_ASCII);
 		JoseHeaderPolicy hmacPolicy = JoseHeaderPolicy.fromSettings(65_536, Set.of(JwsAlgorithm.HS256), Set.of("JWT"),
 				false);
-		StaticJsonWebKeySource source = JwtFixtures.source(Fixture.IDP_SIGNING_RSA_2048);
+		StaticJwksSource source = JwtFixtures.source(Fixture.IDP_SIGNING_RSA_2048);
 
 		for (Map.Entry<String, byte[]> encoding : publicKeyEncodings().entrySet()) {
 			PreparedJws prepared = JwtProcessor.prepare(TestJws.withAlgorithm(Algorithm.HS256).kid(JwtFixtures.KID)
@@ -198,11 +198,11 @@ final class JwtValidatorAlgorithmConfusionTests {
 		PublicKey key = Fixture.IDP_SIGNING_RSA_2048.getPublicKey();
 		Map<String, byte[]> encodings = new LinkedHashMap<>();
 		encodings.put("DER", key.getEncoded());
-		encodings.put("PEM", TestJsonWebKeys.publicKeyPem(key).getBytes(StandardCharsets.US_ASCII));
+		encodings.put("PEM", TestJwk.publicKeyPem(key).getBytes(StandardCharsets.US_ASCII));
 		encodings.put("JWK", JwtFixtures.jwk(Fixture.IDP_SIGNING_RSA_2048).toJson().getBytes(StandardCharsets.UTF_8));
 		return encodings;
 	}
 
-	private record Case(TestJsonWebKeys.@NonNull Builder key, @NonNull Algorithm algorithm, @NonNull Fixture signer, @NonNull Set<@NonNull JwsAlgorithm> allowed) {
+	private record Case(TestJwk.@NonNull Builder key, @NonNull Algorithm algorithm, @NonNull Fixture signer, @NonNull Set<@NonNull JwsAlgorithm> allowed) {
 	}
 }

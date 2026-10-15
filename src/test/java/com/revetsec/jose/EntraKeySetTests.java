@@ -21,16 +21,16 @@ import org.jspecify.annotations.NonNull;
 import com.revetsec.internal.Limits;
 import com.revetsec.internal.json.JsonCodec;
 import com.revetsec.internal.json.JsonLimits;
-import com.revetsec.internal.jose.JwkSetParser;
+import com.revetsec.internal.jose.JwksParser;
 import com.revetsec.internal.jose.KeyQuery;
 import com.revetsec.internal.jose.KeySelection;
 import com.revetsec.internal.jose.KeySelector;
-import com.revetsec.internal.jose.ParsedKeySet;
+import com.revetsec.internal.jose.ParsedJwks;
 import com.revetsec.internal.jose.TestClaims;
 import com.revetsec.internal.jose.VerificationKey;
 import com.revetsec.json.JsonObject;
-import com.revetsec.testing.TestJsonWebKeys;
-import com.revetsec.testing.TestJsonWebKeys.Fixture;
+import com.revetsec.testing.TestJwk;
+import com.revetsec.testing.TestJwk.Fixture;
 import com.revetsec.testing.TestJws;
 import com.revetsec.testing.TestJws.Algorithm;
 import org.jspecify.annotations.Nullable;
@@ -132,14 +132,14 @@ final class EntraKeySetTests {
 	@TestFactory
 	@NonNull Stream<@NonNull DynamicTest> everyCapturedKeySetLoadsWithNoKeySkipped() {
 		return KEY_SETS.stream().map(capture -> DynamicTest.dynamicTest(capture.file(), () -> {
-			ParsedKeySet parsed = JwkSetParser.parse(bytes(capture.file()),
+			ParsedJwks parsed = JwksParser.parse(bytes(capture.file()),
 					Limits.JWKS_RESPONSE_BODY_SIZE.getDefaultIntValue(), Limits.JWKS_KEY_COUNT.getDefaultIntValue());
-			JsonWebKeySet keySet = JsonWebKeySet.fromJson(resource(capture.file()));
+			Jwks keySet = JwtFixtures.assertParsedJwks(resource(capture.file()));
 
 			Assertions.assertEquals(List.of(), parsed.skips());
 			Assertions.assertEquals(capture.keyCount(), parsed.keys().size());
 			Assertions.assertEquals(capture.keyCount(), keySet.getKeys().size());
-			Assertions.assertEquals(capture.keyCount(), keySet.getKeys().stream().map(JsonWebKey::getThumbprintSha256)
+			Assertions.assertEquals(capture.keyCount(), keySet.getKeys().stream().map(Jwk::getThumbprintSha256)
 					.distinct().count(), "distinct keys");
 
 			Map<String, Integer> issuers = new TreeMap<>();
@@ -165,13 +165,13 @@ final class EntraKeySetTests {
 		JsonObject common = json("common-v2-openid.json");
 		JsonObject tenant = json("tenant-v2-openid.json");
 
-		Assertions.assertEquals(TEMPLATE, common.findString("issuer").orElseThrow());
+		Assertions.assertEquals(TEMPLATE, common.find("issuer").map(jsonMemberValue -> ((com.revetsec.json.JsonString) jsonMemberValue).getValue()).orElseThrow());
 		Assertions.assertEquals("https://login.microsoftonline.com/common/discovery/v2.0/keys",
-				common.findString("jwks_uri").orElseThrow());
-		Assertions.assertEquals(TENANT_ISSUER, tenant.findString("issuer").orElseThrow());
+				common.find("jwks_uri").map(jsonMemberValue -> ((com.revetsec.json.JsonString) jsonMemberValue).getValue()).orElseThrow());
+		Assertions.assertEquals(TENANT_ISSUER, tenant.find("issuer").map(jsonMemberValue -> ((com.revetsec.json.JsonString) jsonMemberValue).getValue()).orElseThrow());
 		Assertions.assertEquals("https://login.microsoftonline.com/72f988bf-86f1-41af-91ab-2d7cd011db47/discovery/v2.0"
 				+ "/keys",
-				tenant.findString("jwks_uri").orElseThrow());
+				tenant.find("jwks_uri").map(jsonMemberValue -> ((com.revetsec.json.JsonString) jsonMemberValue).getValue()).orElseThrow());
 	}
 
 	// G8-2 and M2-11: Entra's keys carry no alg, so each fits RS256 under the default {RS256}, and none fits once a
@@ -179,7 +179,7 @@ final class EntraKeySetTests {
 	@TestFactory
 	@NonNull Stream<@NonNull DynamicTest> entraKeysFitOnlyWhileOneRsaAlgorithmIsAllowed() {
 		return KEY_SETS.stream().map(capture -> DynamicTest.dynamicTest(capture.file(), () -> {
-			List<VerificationKey> keys = JsonWebKeySet.fromJson(resource(capture.file())).verificationKeys();
+			List<VerificationKey> keys = JwtFixtures.assertParsedJwks(resource(capture.file())).verificationKeys();
 
 			for (VerificationKey key : keys) {
 				String kid = key.keyId();
@@ -268,8 +268,8 @@ final class EntraKeySetTests {
 				"https://login.microsoftonline.com/{tenantid}{tenantid}/v2.0",
 				"https://login.microsoftonline.com/{tenantid}/v2.0/").map(template -> DynamicTest.dynamicTest(template, () -> {
 			String keySet = JwtFixtures.keySet(entraKey(Fixture.IDP_SIGNING_RSA_2048, "templated", template));
-			JwtValidator validator = JwtValidator.withIssuer(TENANT_ISSUER).jsonWebKeySource(
-					StaticJsonWebKeySource.fromJsonWebKeySet(JsonWebKeySet.fromJson(keySet))).expectedAudiences(
+			JwtValidator validator = JwtValidator.withIssuer(TENANT_ISSUER).jwksSource(
+					StaticJwksSource.fromJwks(JwtFixtures.assertParsedJwks(keySet))).expectedAudiences(
 					Set.of(APPLICATION)).clock(JwtFixtures.clock()).build();
 			JwtFixtures.assertRejected(JoseException.Reason.KEY_ISSUER_MISMATCH, validator, token("templated",
 					Fixture.IDP_SIGNING_RSA_2048, TENANT_ISSUER, "\"" + TENANT_ID + "\""));
@@ -307,11 +307,11 @@ final class EntraKeySetTests {
 		keyIssuers.put("a common or organizations v2.0 key", TEMPLATE);
 
 		return keyIssuers.entrySet().stream().map(entry -> DynamicTest.dynamicTest(entry.getKey(), () -> {
-			String keySet = JwtFixtures.keySet(TestJsonWebKeys.withFixture(Fixture.IDP_SIGNING_RSA_2048).kid("k")
+			String keySet = JwtFixtures.keySet(TestJwk.withFixture(Fixture.IDP_SIGNING_RSA_2048).kid("k")
 					.use("sig").x5c(List.of(Fixture.IDP_SIGNING_RSA_2048.getCertificate().orElseThrow()))
 					.issuer(entry.getValue()));
-			JwtValidator validator = JwtValidator.withIssuer(VERSION_ONE_TENANT_ISSUER).jsonWebKeySource(
-					StaticJsonWebKeySource.fromJsonWebKeySet(JsonWebKeySet.fromJson(keySet))).expectedAudiences(
+			JwtValidator validator = JwtValidator.withIssuer(VERSION_ONE_TENANT_ISSUER).jwksSource(
+					StaticJwksSource.fromJwks(JwtFixtures.assertParsedJwks(keySet))).expectedAudiences(
 					Set.of(APPLICATION)).clock(JwtFixtures.clock()).build();
 			String token = TestJws.withAlgorithm(Algorithm.RS256).kid("k").typ("JWT").payload(TestClaims.empty()
 					.put("aud", APPLICATION).put("iss", VERSION_ONE_TENANT_ISSUER).put("iat", JwtFixtures.NOW.getEpochSecond())
@@ -348,16 +348,16 @@ final class EntraKeySetTests {
 		String keySet = JwtFixtures.keySet(entraKey(Fixture.IDP_SIGNING_RSA_2048, "templated", TEMPLATE),
 				entraKey(Fixture.IDP_SIGNING_RSA_3072, "tenant", TENANT_ISSUER),
 				entraKey(Fixture.SP_SIGNING_RSA_2048, "consumer", CONSUMER_ISSUER));
-		Assertions.assertEquals(3, JsonWebKeySet.fromJson(keySet).getKeys().size());
-		return JwtValidator.withIssuer(issuer).jsonWebKeySource(StaticJsonWebKeySource.fromJsonWebKeySet(
-				JsonWebKeySet.fromJson(keySet))).expectedAudiences(Set.of(APPLICATION)).allowedAlgorithms(algorithms)
+		Assertions.assertEquals(3, JwtFixtures.assertParsedJwks(keySet).getKeys().size());
+		return JwtValidator.withIssuer(issuer).jwksSource(StaticJwksSource.fromJwks(
+				JwtFixtures.assertParsedJwks(keySet))).expectedAudiences(Set.of(APPLICATION)).allowedAlgorithms(algorithms)
 				.clock(JwtFixtures.clock()).build();
 	}
 
-	private static TestJsonWebKeys.@NonNull Builder entraKey(@NonNull Fixture fixture,
+	private static TestJwk.@NonNull Builder entraKey(@NonNull Fixture fixture,
 																									@NonNull String kid,
 																									@NonNull String issuer) {
-		return TestJsonWebKeys.withFixture(fixture).kid(kid).use("sig").x5c(List.of(fixture.getCertificate()
+		return TestJwk.withFixture(fixture).kid(kid).use("sig").x5c(List.of(fixture.getCertificate()
 				.orElseThrow())).issuer(issuer);
 	}
 
@@ -379,7 +379,7 @@ final class EntraKeySetTests {
 	}
 
 	private static @NonNull Set<@NonNull String> keyIds(@NonNull String capture) throws IOException {
-		return JsonWebKeySet.fromJson(resource(capture)).getKeys().stream().map(key -> key.getKeyId().orElseThrow())
+		return JwtFixtures.assertParsedJwks(resource(capture)).getKeys().stream().map(key -> key.getKeyId().orElseThrow())
 				.collect(Collectors.toCollection(TreeSet::new));
 	}
 

@@ -66,12 +66,12 @@ public final class ExampleChecksTests {
 			if (endpoint) builder.clientAuthentication(ClientAuthentication.withPrivateKeyJwt(rotating).audience(ClientAssertionAudience.TOKEN_ENDPOINT).build());
 			OAuthClient client = builder.build(); assertEquals(0, snapshots.get());
 			ClientCredentialsTokenSource cache = ClientCredentialsTokenSource.withClient(client).build();
-			AccessToken first = cache.getAccessToken(); assertSame(first, cache.getAccessToken()); assertEquals(1, snapshots.get());
-			client.refresh(RefreshToken.fromValue(LocalProvider.REFRESH), TokenRequestOptions.builder().build());
+			AccessToken first = assertInstanceOf(AccessTokenAcquisitionResult.Succeeded.class, cache.getAccessTokenResult()).getAccessToken(); assertSame(first, assertInstanceOf(AccessTokenAcquisitionResult.Succeeded.class, cache.getAccessTokenResult()).getAccessToken()); assertEquals(1, snapshots.get());
+			assertInstanceOf(OAuthTokenRequestResult.Succeeded.class, client.refreshResult(RefreshToken.fromValue(LocalProvider.REFRESH), TokenRequestOptions.builder().build()));
 			TokenIntrospectionClient introspection = TokenIntrospectionClient.withOAuthClient(client)
 					.expectedAudiences(Set.of("https://resource.example")).build();
-			assertNotNull(introspection.validate(BearerToken.fromAuthorizationHeaderValues(List.of("Bearer " + LocalProvider.ACCESS)).orElseThrow()));
-			client.revoke(LocalProvider.ACCESS, TokenTypeHint.ACCESS_TOKEN);
+			assertInstanceOf(AccessTokenValidationResult.Succeeded.class, introspection.validateResult(((com.revetsec.oauth.BearerTokenResult.Present) BearerToken.fromAuthorizationHeaderValuesResult(List.of("Bearer " + LocalProvider.ACCESS))).getToken()));
+			assertInstanceOf(OAuthRevocationResult.Succeeded.class, client.revokeResult(LocalProvider.ACCESS, TokenTypeHint.ACCESS_TOKEN));
 			assertNull(fixture.failure, "Independent provider rejected a request (details redacted)");
 			assertEquals(4, fixture.posts.get()); assertEquals(4, fixture.assertions.get()); assertEquals(4, snapshots.get());
 			assertEquals(4, fixture.identifiers.size());
@@ -95,20 +95,21 @@ public final class ExampleChecksTests {
 			AuthorizationRedirect redirect = client.beginAuthentication();
 			Map<String,String> query = LocalProvider.form(redirect.getAuthorizationUri().getRawQuery());
 			InMemoryPendingAuthorizationStore pending = InMemoryPendingAuthorizationStore.builder().clock(LocalProvider.CLOCK).build();
-			redirect.getPendingAuthorization().saveTo(pending, BINDING);
+			assertEquals(com.revetsec.oauth.PendingAuthorizationSaveResult.SAVED,
+                    redirect.getPendingAuthorization().saveToResult(pending, BINDING));
 			// The synthetic code is the nonce so the test-only fixture can bind its independently signed token.
-			AuthorizationResponse callback = AuthorizationResponse.fromQueryString("code=" + query.get("nonce") + "&state=" + query.get("state"));
+			AuthorizationResponse callback = ((com.revetsec.oauth.AuthorizationResponseParseResult.Succeeded) AuthorizationResponse.fromQueryStringResult("code=" + query.get("nonce") + "&state=" + query.get("state"))).getResponse();
 			OidcAuthenticationResult result = client.completeAuthenticationResult(callback, PendingAuthorizationSource.fromStore(pending, BINDING), CALLBACK);
 			if (mode.equals("valid") || mode.equals("refresh-switch")) {
 				OidcAuthentication auth = assertInstanceOf(OidcAuthenticationResult.Succeeded.class, result).getAuthentication();
 				assertEquals(LocalProvider.actualIssuer(LocalProvider.TENANT), auth.getIssuer());
 				assertEquals("TEST-ONLY-example-user", auth.getSubject()); assertEquals(1, tenantCalls.get());
 				if (mode.equals("valid")) {
-					assertEquals(auth.getSubject(), client.fetchUserInfo(auth).getSubject()); assertEquals(2, tenantCalls.get());
+					assertEquals(auth.getSubject(), assertInstanceOf(OidcUserInfoResult.Succeeded.class, client.fetchUserInfoResult(auth)).getUserInfo().getSubject()); assertEquals(2, tenantCalls.get());
 				} else {
 					fixture.tenant = LocalProvider.OTHER;
-					OidcSessionReference stored = OidcSessionReference.fromSerializedForm(auth.getSessionReference().toSerializedForm());
-					OidcValidationException failure = assertThrows(OidcValidationException.class, () -> client.refresh(auth.getTokens().getRefreshToken().orElseThrow(), stored));
+					OidcSessionReference stored = ((com.revetsec.oidc.OidcSessionReferenceParseResult.Succeeded) OidcSessionReference.fromSerializedFormResult(auth.getSessionReference().toSerializedForm())).getReference();
+					OidcRefreshOutcome.Rejected failure = assertInstanceOf(OidcRefreshOutcome.Rejected.class, client.refreshResult(auth.getTokens().getRefreshToken().orElseThrow(), stored));
 					assertEquals(OidcValidationException.Reason.REFRESHED_ID_TOKEN_MISMATCH, failure.getReason());
 					assertEquals(1, tenantCalls.get());
 				}

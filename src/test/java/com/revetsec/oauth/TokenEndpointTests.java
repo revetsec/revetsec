@@ -16,6 +16,8 @@
 
 package com.revetsec.oauth;
 
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+
 import org.jspecify.annotations.NonNull;
 
 import com.revetsec.internal.encoding.QueryParameters;
@@ -55,10 +57,10 @@ final class TokenEndpointTests {
 			String state = begin.getValues("state").get(0);
 			String sealed = redirect.getPendingAuthorization().toSealedForm(
 					com.revetsec.testing.TestSealers.fromFixedKey(), "provider");
-			TokenResponse tokens = client.completeAuthorization(
-					AuthorizationResponse.fromQueryString("state=" + state + "&code=one-time-code"),
+			TokenResponse tokens = assertInstanceOf(AuthorizationCompletionResult.Succeeded.class, client.completeAuthorizationResult(
+					assertInstanceOf(AuthorizationResponseParseResult.Succeeded.class, AuthorizationResponse.fromQueryStringResult("state=" + state + "&code=one-time-code")).getResponse(),
 					PendingAuthorizationSource.fromSealedForm(sealed,
-							com.revetsec.testing.TestSealers.fromFixedKey(), "provider"), CALLBACK);
+							com.revetsec.testing.TestSealers.fromFixedKey(), "provider"), CALLBACK)).getTokens();
 			assertEquals("token-value", tokens.getAccessToken().getValue());
 			assertEquals(Set.of("one"), tokens.getGrantedScopes().orElseThrow());
 			assertEquals(Map.of("returnTo", "/account"), tokens.getApplicationData());
@@ -89,13 +91,13 @@ final class TokenEndpointTests {
 					"{\"error\":\"invalid_grant\"}")));
 			OAuthClient client = client(server);
 			assertEquals("invalid_grant", assertThrows(OAuthErrorResponseException.class, () ->
-					client.requestClientCredentialsToken(TokenRequestOptions.builder().build()))
+					client.requestClientCredentialsResult(TokenRequestOptions.builder().build()))
 					.getErrorCode().orElseThrow());
 			assertEquals(1, server.getHitCount("/token"));
 			server.script("/token", TestHttpsServer.Script.fromResponse(json(503,
 					"{\"error\":\"server_error\"}")));
 			assertThrows(OAuthErrorResponseException.class, () ->
-					client.requestClientCredentialsToken(TokenRequestOptions.builder().build()));
+					client.requestClientCredentialsResult(TokenRequestOptions.builder().build()));
 			assertEquals(2, server.getHitCount("/token"));
 		}
 	}
@@ -115,14 +117,18 @@ final class TokenEndpointTests {
 							.body("{\"error\":\"invalid_client\"}").build(),
 					json(200, githubBody))));
 			OAuthClient client = client(server);
-			List<String> errors = List.of("invalid_grant", "invalid_client", "bad_verification_code");
-			List<Integer> statuses = List.of(400, 401, 200);
+			List<OAuthEndpointError> errors = List.of(OAuthEndpointError.INVALID_GRANT, OAuthEndpointError.INVALID_CLIENT);
+			List<Integer> statuses = List.of(400, 401);
 			for (int index = 0; index < errors.size(); index++) {
-				OAuthErrorResponseException error = assertThrows(OAuthErrorResponseException.class,
-						() -> client.requestClientCredentialsToken(TokenRequestOptions.builder().build()));
-				assertEquals(errors.get(index), error.getErrorCode().orElseThrow());
+				OAuthTokenRequestResult.Rejected error = assertInstanceOf(OAuthTokenRequestResult.Rejected.class,
+						client.requestClientCredentialsResult(TokenRequestOptions.builder().build()));
+				assertEquals(errors.get(index), error.getError());
 				assertEquals(statuses.get(index), error.getStatus());
 			}
+			OAuthErrorResponseException malformed = assertThrows(OAuthErrorResponseException.class,
+					() -> client.requestClientCredentialsResult(TokenRequestOptions.builder().build()));
+			assertEquals("bad_verification_code", malformed.getErrorCode().orElseThrow());
+			assertEquals(200, malformed.getStatus());
 			assertEquals(3, server.getHitCount("/token"));
 		}
 	}
@@ -135,7 +141,7 @@ final class TokenEndpointTests {
 		OAuthClient publicClient = OAuthClient.withAuthorizationServerMetadata(metadata).clientId("public")
 				.clientAuthentication(ClientAuthentication.noneInstance()).build();
 		assertThrows(IllegalStateException.class,
-				() -> publicClient.requestClientCredentialsToken(TokenRequestOptions.builder().build()));
+				() -> publicClient.requestClientCredentialsResult(TokenRequestOptions.builder().build()));
 	}
 
 	@Test
@@ -144,13 +150,13 @@ final class TokenEndpointTests {
 			server.script("/token", TestHttpsServer.Script.fromResponse(json(200,
 					"{\"access_token\":\"token-value\",\"token_type\":\"Bearer\"}")));
 			OAuthClient client = client(server);
-			TokenResponse scoped = client.requestClientCredentialsToken(
-					TokenRequestOptions.builder().scopes(Set.of("requested")).build());
+			TokenResponse scoped = assertInstanceOf(OAuthTokenRequestResult.Succeeded.class, client.requestClientCredentialsResult(
+					TokenRequestOptions.builder().scopes(Set.of("requested")).build())).getTokens();
 			assertEquals(Set.of("requested"), scoped.getGrantedScopes().orElseThrow());
 			QueryParameters first = QueryParameters.parse(server.getRequests("/token").get(0).getBodyAsString());
 			assertEquals(List.of("requested"), first.getValues("scope"));
-			TokenResponse empty = client.requestClientCredentialsToken(
-					TokenRequestOptions.builder().scopes(Set.of()).build());
+			TokenResponse empty = assertInstanceOf(OAuthTokenRequestResult.Succeeded.class, client.requestClientCredentialsResult(
+					TokenRequestOptions.builder().scopes(Set.of()).build())).getTokens();
 			assertEquals(Set.of(), empty.getGrantedScopes().orElseThrow());
 			QueryParameters second = QueryParameters.parse(server.getRequests("/token").get(1).getBodyAsString());
 			assertTrue(!second.getValuesByName().containsKey("scope"));
@@ -165,7 +171,7 @@ final class TokenEndpointTests {
 					.header("Retry-After", "120")
 					.body("<html>private echoed credential</html>").build()));
 			OAuthErrorResponseException error = assertThrows(OAuthErrorResponseException.class,
-					() -> client(server).requestClientCredentialsToken(TokenRequestOptions.builder().build()));
+					() -> client(server).requestClientCredentialsResult(TokenRequestOptions.builder().build()));
 			assertEquals(502, error.getStatus());
 			assertTrue(error.isTransient());
 			assertEquals(java.time.Duration.ofSeconds(120), error.getRetryAfter().orElseThrow());
@@ -176,7 +182,7 @@ final class TokenEndpointTests {
 					.header("Content-Type", "text/html").body("<html>not JSON</html>").build()));
 			assertEquals(OAuthException.Reason.UNEXPECTED_CONTENT_TYPE,
 					assertThrows(OAuthResponseException.class, () -> client(server)
-							.requestClientCredentialsToken(TokenRequestOptions.builder().build())).getReason());
+							.requestClientCredentialsResult(TokenRequestOptions.builder().build())).getReason());
 		}
 	}
 
@@ -189,7 +195,7 @@ final class TokenEndpointTests {
 					"{\"access_token\":\"wrong\",\"token_type\":\"Bearer\"}")));
 			assertEquals(OAuthException.Reason.REDIRECT_NOT_FOLLOWED,
 					assertThrows(OAuthResponseException.class, () -> client(server)
-							.requestClientCredentialsToken(TokenRequestOptions.builder().build())).getReason());
+							.requestClientCredentialsResult(TokenRequestOptions.builder().build())).getReason());
 			assertEquals(1, server.getHitCount("/token"));
 			assertEquals(0, server.getHitCount("/redirect-target"));
 			AuthorizationServerMetadata metadata = AuthorizationServerMetadata
@@ -212,7 +218,7 @@ final class TokenEndpointTests {
 				server.script("/token", TestHttpsServer.Script.fromResponse(TestHttpsServer.Response.withStatus(200)
 						.header("Content-Type", "application/json").body(body).framing(framing).build()));
 				assertEquals(OAuthException.Reason.TOO_LARGE,
-						assertThrows(OAuthResponseException.class, () -> client.requestClientCredentialsToken(
+						assertThrows(OAuthResponseException.class, () -> client.requestClientCredentialsResult(
 								TokenRequestOptions.builder().build())).getReason());
 			}
 			assertEquals(2, server.getHitCount("/token"));
@@ -238,7 +244,7 @@ final class TokenEndpointTests {
 					.httpClient(TestTls.httpClient()).requestTimeout(Duration.ofSeconds(1))
 					.totalDeadline(Duration.ofSeconds(1)).build();
 			assertEquals(OAuthException.Reason.NETWORK_FAILURE,
-					assertThrows(OAuthTransportException.class, () -> client.requestClientCredentialsToken(
+					assertThrows(OAuthTransportException.class, () -> client.requestClientCredentialsResult(
 							TokenRequestOptions.builder().build())).getReason());
 			assertEquals(1, server.getHitCount("/token"));
 		}

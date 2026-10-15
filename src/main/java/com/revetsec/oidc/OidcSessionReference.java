@@ -17,6 +17,8 @@
 package com.revetsec.oidc;
 
 import com.revetsec.StateSealer;
+import com.revetsec.StateUnsealResult;
+import com.google.errorprone.annotations.CheckReturnValue;
 import com.revetsec.internal.crypto.ConstantTime;
 import com.revetsec.internal.encoding.StrictUtf8;
 import com.revetsec.internal.encoding.Base64Url;
@@ -59,7 +61,7 @@ public final class OidcSessionReference {
 	}
 	private OidcSessionReference(@NonNull JsonObject claims, @NonNull String clientId, @NonNull String nonceDigest) {
 		this.continuityClaims = claims; this.clientId = clientId; this.nonceDigest = nonceDigest;
-		this.sessionId = claims.findString("sid").orElse(null);
+		this.sessionId = claims.find("sid").map(value -> ((JsonString) value).getValue()).orElse(null);
 	}
 	static @NonNull String digest(@NonNull String nonce) {
 		byte[] input = nonce.getBytes(StandardCharsets.UTF_8);
@@ -81,10 +83,10 @@ public final class OidcSessionReference {
 		return original.equals(restored);
 	}
 	void checkMicrosoftEntraClient(@NonNull String clientId) {
-		if (!this.clientId.equals(clientId) || OidcIssuerPolicy.tenantFromIssuer(this.continuityClaims.findString("iss").orElseThrow()) == null) throw mismatch();
+		if (!this.clientId.equals(clientId) || OidcIssuerPolicy.tenantFromIssuer(this.continuityClaims.find("iss").map(value -> ((JsonString) value).getValue()).orElseThrow()) == null) throw mismatch();
 	}
 	void checkClient(@NonNull String issuer, @NonNull String clientId) {
-		if (!this.continuityClaims.findString("iss").orElseThrow().equals(issuer) || !this.clientId.equals(clientId)) throw mismatch();
+		if (!this.continuityClaims.find("iss").map(value -> ((JsonString) value).getValue()).orElseThrow().equals(issuer) || !this.clientId.equals(clientId)) throw mismatch();
 	}
 	void checkContinuity(@NonNull JwtClaims claims) {
 		try {
@@ -126,28 +128,42 @@ public final class OidcSessionReference {
 		try { if (bytes.length > MAXIMUM_BYTES) throw invalid(); return value; } finally { Arrays.fill(bytes, (byte) 0); }
 	}
 	/**
+	 * Parses a bounded reference from trusted application storage, returning a fixed rejection for invalid structure.
+	 * This supplies no identity. Untrusted browser storage must use
+	 * {@link #fromSealedFormResult(String, StateSealer, String)}.
+	 * @param serializedForm versioned storage form
+	 * @return parsed reference or fixed rejection
+	 * @since 1.0.0
+	 */
+	@CheckReturnValue
+	public static @NonNull OidcSessionReferenceParseResult fromSerializedFormResult(@NonNull String serializedForm) {
+		try { return OidcSessionReferenceParseResult.fromReference(parseSerializedForm(serializedForm)); }
+		catch (OidcValidationException rejected) { return OidcSessionReferenceParseResult.fromRejection(); }
+	}
+
+	/**
 	 * Parses a bounded reference from trusted application storage. This factory checks structure only, supplies no
-	 * identity and accepts no credentials. Untrusted browser storage must use {@link #fromSealedForm(String, StateSealer, String)}.
+	 * identity and accepts no credentials. Untrusted browser storage must use {@link #fromSealedFormResult(String, StateSealer, String)}.
 	 * @param serializedForm versioned storage form
 	 * @return continuity reference, not authenticated identity
 	 * @throws OidcValidationException if the structure is invalid
 	 * @since 1.0.0
 	 */
-	public static @NonNull OidcSessionReference fromSerializedForm(@NonNull String serializedForm) {
+	private static @NonNull OidcSessionReference parseSerializedForm(@NonNull String serializedForm) {
 		requireNonNull(serializedForm); byte @Nullable [] bytes = null;
 		try {
 			if (serializedForm.length() > MAXIMUM_BYTES) throw new IllegalArgumentException();
 			bytes = StrictUtf8.encode(serializedForm); JsonValue value = JsonCodec.parse(bytes, JsonLimits.protocolDocument(MAXIMUM_BYTES));
 			if (!(value instanceof JsonObject envelope) || !envelope.getMembers().keySet().equals(Set.of("v", "client_id", "claims", "nonce_digest"))
-					|| !envelope.findLong("v").filter(v -> v == 1).isPresent() || !(envelope.getMembers().get("claims") instanceof JsonObject claims)) throw new IllegalArgumentException();
-			String client = envelope.findString("client_id").filter(v -> !v.isEmpty()).orElseThrow(IllegalArgumentException::new);
-			String digest = envelope.findString("nonce_digest").orElseThrow(IllegalArgumentException::new);
+					|| !referenceLong(envelope, "v").filter(v -> v == 1).isPresent() || !(envelope.getMembers().get("claims") instanceof JsonObject claims)) throw new IllegalArgumentException();
+			String client = JsonFields.string(envelope, "client_id").filter(v -> !v.isEmpty()).orElseThrow(IllegalArgumentException::new);
+			String digest = JsonFields.string(envelope, "nonce_digest").orElseThrow(IllegalArgumentException::new);
 			if (digest.length() != 43) throw new IllegalArgumentException();
 			byte[] decoded = Base64Url.decode(digest);
 			try { if (decoded.length != 32) throw new IllegalArgumentException(); }
 			finally { Arrays.fill(decoded, (byte) 0); }
-			if (!CLAIM_NAMES.containsAll(claims.getMembers().keySet()) || !claims.findString("iss").filter(v -> !v.isEmpty()).isPresent()) throw new IllegalArgumentException();
-			String subject = claims.findString("sub").orElseThrow(IllegalArgumentException::new);
+			if (!CLAIM_NAMES.containsAll(claims.getMembers().keySet()) || !JsonFields.string(claims, "iss").filter(v -> !v.isEmpty()).isPresent()) throw new IllegalArgumentException();
+			String subject = JsonFields.string(claims, "sub").orElseThrow(IllegalArgumentException::new);
 			if (subject.isEmpty() || subject.length() > 255 || subject.chars().anyMatch(c -> c > 0x7f)) throw new IllegalArgumentException();
 			if (!audiences(claims).contains(client) || JsonFields.numericDate(claims, "iat").isEmpty()) throw new IllegalArgumentException();
 			JsonFields.numericDate(claims, "auth_time");
@@ -169,16 +185,28 @@ public final class OidcSessionReference {
 		return requireNonNull(sealer).seal(toSerializedForm(), requireNonNull(context), requireNonNull(lifetime));
 	}
 	/**
-	 * Opens a sealed reference under the same application-specific context. Sealer failures retain its fixed
-	 * exception; invalid reference structure uses a fixed OIDC reason. No identity is created by opening it.
+	 * Opens a sealed reference under its original context. Invalid sealed state and invalid reference structure
+	 * return the same fixed, value-free rejection. No identity is created by opening a reference.
 	 * @param sealedForm sealed storage form
 	 * @param sealer application sealer
 	 * @param context original OIDC session context
-	 * @return continuity reference
+	 * @return parsed reference or fixed rejection
 	 * @since 1.0.0
 	 */
-	public static @NonNull OidcSessionReference fromSealedForm(@NonNull String sealedForm, @NonNull StateSealer sealer, @NonNull String context) {
-		return fromSerializedForm(requireNonNull(sealer).unseal(requireNonNull(sealedForm), requireNonNull(context)));
+	@CheckReturnValue
+	public static @NonNull OidcSessionReferenceParseResult fromSealedFormResult(@NonNull String sealedForm,
+			@NonNull StateSealer sealer, @NonNull String context) {
+		StateUnsealResult opened = requireNonNull(sealer).unsealResult(requireNonNull(sealedForm), requireNonNull(context));
+		if (!(opened instanceof StateUnsealResult.Succeeded success))
+			return OidcSessionReferenceParseResult.fromRejection();
+		return fromSerializedFormResult(success.getValue());
+	}
+
+	private static @NonNull Optional<@NonNull Long> referenceLong(@NonNull JsonObject object, @NonNull String name) {
+		return object.find(name).flatMap(value -> {
+			if (!(value instanceof JsonNumber number)) throw new IllegalArgumentException();
+			return number.getLongValueExact();
+		});
 	}
 	private static @NonNull OidcValidationException invalid() { return OidcValidationException.fromReason(OidcValidationException.Reason.SESSION_REFERENCE_INVALID); }
 	/**

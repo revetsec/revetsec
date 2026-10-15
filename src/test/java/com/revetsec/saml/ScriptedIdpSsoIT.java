@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 package com.revetsec.saml;
+import com.revetsec.json.JsonBoolean;
+import com.revetsec.json.JsonString;
 
 import com.revetsec.StateSealer;
 import com.revetsec.internal.json.JsonCodec;
@@ -250,7 +252,7 @@ final class ScriptedIdpSsoIT {
         assertEquals(200, initiated.statusCode(), initiated.body());
         JsonObject issued = assertInstanceOf(JsonObject.class, JsonCodec.parse(
                 initiated.body().getBytes(StandardCharsets.UTF_8), JsonLimits.protocolDocument(64_000)));
-        URI requestUri = URI.create(issued.findString("redirect_url").orElseThrow());
+        URI requestUri = URI.create(issued.find("redirect_url").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow());
         SamlRedirectBindingMessage logoutRequest = assertInstanceOf(
                 SamlRedirectBindingParseResult.Parsed.class,
                 SamlRedirectBindingMessage.fromRawQueryResult(requestUri.getRawQuery())).getMessage();
@@ -273,8 +275,8 @@ final class ScriptedIdpSsoIT {
         JsonArray entries = assertInstanceOf(JsonArray.class, receiptBody.find("received").orElseThrow());
         long schemaValidLogoutMessages = entries.getElements().stream()
                 .filter(value -> value instanceof JsonObject entry
-                        && "redirect-slo".equals(entry.findString("binding").orElse(null))
-                        && entry.findBoolean("schema_valid").orElse(false))
+                        && "redirect-slo".equals(entry.find("binding").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElse(null))
+                        && entry.find("schema_valid").filter(JsonBoolean.class::isInstance).map(JsonBoolean.class::cast).map(JsonBoolean::getValue).orElse(false))
                 .count();
         assertTrue(schemaValidLogoutMessages >= 2, "both SP logout directions must pass the OASIS XSD");
     }
@@ -323,7 +325,7 @@ final class ScriptedIdpSsoIT {
                         .put("session_index", "post-session-123").build())
                 .put("relay_state", relay).build());
         assertEquals(200, issuedResponse.statusCode(), issuedResponse.body());
-        SamlPostBindingMessage request = logoutPostForm(jsonBody(issuedResponse).findString("form_body").orElseThrow());
+        SamlPostBindingMessage request = logoutPostForm(jsonBody(issuedResponse).find("form_body").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow());
         assertEquals(SamlPostBindingMessage.Kind.REQUEST, request.getKind());
         assertEquals(relay, request.getRelayState().orElseThrow());
         SamlLogoutRequest accepted = assertInstanceOf(SamlLogoutRequestResult.Accepted.class,
@@ -341,9 +343,9 @@ final class ScriptedIdpSsoIT {
                 .GET().build(), HttpResponse.BodyHandlers.ofString());
         JsonArray entries = assertInstanceOf(JsonArray.class, jsonBody(receipts).find("received").orElseThrow());
         long verifiedMessages = entries.getElements().stream().filter(value -> value instanceof JsonObject entry
-                && "post-slo".equals(entry.findString("binding").orElse(null))
-                && entry.findBoolean("signature_valid").orElse(false)
-                && entry.findBoolean("schema_valid").orElse(false)).count();
+                && "post-slo".equals(entry.find("binding").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElse(null))
+                && entry.find("signature_valid").filter(JsonBoolean.class::isInstance).map(JsonBoolean.class::cast).map(JsonBoolean::getValue).orElse(false)
+                && entry.find("schema_valid").filter(JsonBoolean.class::isInstance).map(JsonBoolean.class::cast).map(JsonBoolean::getValue).orElse(false)).count();
         assertTrue(verifiedMessages >= 2, "POST LogoutRequest and LogoutResponse must pass libxmlsec and OASIS XSD");
     }
 
@@ -361,8 +363,8 @@ final class ScriptedIdpSsoIT {
                 .put("relay_state", relay).build());
         assertEquals(200, issuedResponse.statusCode(), issuedResponse.body());
         JsonObject issued = jsonBody(issuedResponse);
-        String xml = issued.findString("xml").orElseThrow();
-        SamlPostBindingMessage original = logoutPostForm(issued.findString("form_body").orElseThrow());
+        String xml = issued.find("xml").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow();
+        SamlPostBindingMessage original = logoutPostForm(issued.find("form_body").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow());
         SamlPostBindingMessage tampered = logoutPostXml(xml.replace("post-hostile-user", "attacker"),
                 "SAMLRequest", relay);
         assertInstanceOf(SamlLogoutRequestResult.Rejected.class,
@@ -475,7 +477,7 @@ final class ScriptedIdpSsoIT {
                 .put("binding", "post").put("xml", xml).put("destination", SLO.toASCIIString())
                 .put("relay_state", relay).build());
         assertEquals(200, signed.statusCode(), signed.body());
-        return logoutPostForm(jsonBody(signed).findString("form_body").orElseThrow());
+        return logoutPostForm(jsonBody(signed).find("form_body").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow());
     }
 
     private static @NonNull SamlPostBindingMessage logoutPostXml(@NonNull String xml,
@@ -612,8 +614,8 @@ final class ScriptedIdpSsoIT {
                         .put("relay_state", relay).build());
         assertEquals(200, issuedResponse.statusCode(), issuedResponse.body());
         JsonObject issued = jsonBody(issuedResponse);
-        String originalXml = issued.findString("xml").orElseThrow();
-        String originalQuery = issued.findString("raw_query").orElseThrow();
+        String originalXml = issued.find("xml").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow();
+        String originalQuery = issued.find("raw_query").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow();
         SamlRedirectBindingMessage original = redirectMessage(originalQuery);
         assertTrue(original.verify(identityProvider.signingKeys()));
         String equivalentRelayQuery = originalQuery.replace("&RelayState=" + relay,
@@ -856,7 +858,7 @@ final class ScriptedIdpSsoIT {
             assertEquals(200, signed.statusCode(), signed.body());
             String signedXml = assertInstanceOf(JsonObject.class, JsonCodec.parse(
                     signed.body().getBytes(StandardCharsets.UTF_8), JsonLimits.protocolDocument(128_000)))
-                    .findString("xml").orElseThrow();
+                    .find("xml").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow();
             assertTrue(oracleValid(signedXml, "_independent_sso_status", "idp-signing-rsa-2048"));
             String form = "SAMLResponse=" + URLEncoder.encode(Base64.getEncoder().encodeToString(
                     signedXml.getBytes(StandardCharsets.UTF_8)), StandardCharsets.UTF_8)
@@ -895,7 +897,7 @@ final class ScriptedIdpSsoIT {
                 .put("xml", xml).put("destination", destination.toASCIIString())
                 .put("relay_state", relay).build());
         assertEquals(200, signed.statusCode(), signed.body());
-        return redirectMessage(jsonBody(signed).findString("raw_query").orElseThrow());
+        return redirectMessage(jsonBody(signed).find("raw_query").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow());
     }
 
     private static @NonNull JsonObject jsonBody(@NonNull HttpResponse<@NonNull String> response) throws Exception {
@@ -927,7 +929,7 @@ final class ScriptedIdpSsoIT {
         assertEquals(200, minted.statusCode(), minted.body());
         String xml = assertInstanceOf(JsonObject.class, JsonCodec.parse(
                 minted.body().getBytes(StandardCharsets.UTF_8), JsonLimits.protocolDocument(64_000)))
-                .findString("xml").orElseThrow();
+                .find("xml").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow();
         int start = xml.indexOf("<saml:Assertion");
         int end = xml.indexOf("</saml:Assertion>", start);
         assertTrue(start >= 0 && end > start, xml);
@@ -943,7 +945,7 @@ final class ScriptedIdpSsoIT {
         assertEquals(200, signed.statusCode(), signed.body());
         String signedXml = assertInstanceOf(JsonObject.class, JsonCodec.parse(
                 signed.body().getBytes(StandardCharsets.UTF_8), JsonLimits.protocolDocument(128_000)))
-                .findString("xml").orElseThrow();
+                .find("xml").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow();
         HttpResponse<String> oracle = json("POST", "/control/oracle/verify", JsonObject.builder()
                 .put("clock", fixedClock).put("xml", signedXml)
                 .put("target_id", "_template_response")
@@ -1166,8 +1168,8 @@ final class ScriptedIdpSsoIT {
         String xml = Files.readString(Path.of("src/test/resources/fixtures/scripted-idp/"
                 + name + ".xml"));
         JsonObject oracle = oracleDecrypt(xml);
-        assertTrue(oracle.findBoolean("valid").orElseThrow(), name + " libxmlsec decryption");
-        assertTrue(oracle.findString("xml").orElseThrow().contains("minted-user"),
+        assertTrue(oracle.find("valid").filter(JsonBoolean.class::isInstance).map(JsonBoolean.class::cast).map(JsonBoolean::getValue).orElseThrow(), name + " libxmlsec decryption");
+        assertTrue(oracle.find("xml").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow().contains("minted-user"),
                 name + " libxmlsec plaintext identity");
         SamlAuthenticationResult.Succeeded success = assertInstanceOf(
                 SamlAuthenticationResult.Succeeded.class,
@@ -1193,7 +1195,7 @@ final class ScriptedIdpSsoIT {
             String carrier = name.equals("assertion-ec256-encrypted-id")
                     ? section(xml, "<saml:EncryptedID>", "</saml:EncryptedID>")
                     : section(xml, "<saml:EncryptedAssertion>", "</saml:EncryptedAssertion>");
-            String plaintext = oracleDecrypt(xml).findString("xml").orElseThrow();
+            String plaintext = oracleDecrypt(xml).find("xml").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow();
             assertTrue(plaintext.contains("minted-user"), name + " baseline libxmlsec identity");
             boolean responseSigned = xml.indexOf("<ds:Signature") < xml.indexOf("<samlp:Status>")
                     && xml.contains("<ds:Signature");
@@ -1212,9 +1214,9 @@ final class ScriptedIdpSsoIT {
                 String label = name + (candidate.equals(extension) ? ":extension" : ":destination");
                 assertNotEquals(xml, candidate, label + " is inert");
                 JsonObject decrypted = oracleDecrypt(candidate);
-                assertTrue(decrypted.findBoolean("valid").orElseThrow(),
+                assertTrue(decrypted.find("valid").filter(JsonBoolean.class::isInstance).map(JsonBoolean.class::cast).map(JsonBoolean::getValue).orElseThrow(),
                         label + " unchanged ciphertext decrypts");
-                assertEquals(plaintext, decrypted.findString("xml").orElseThrow(),
+                assertEquals(plaintext, decrypted.find("xml").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow(),
                         label + " libxmlsec plaintext remains identical");
                 assertFalse(oracleValid(candidate, responseId, fixture.credential()),
                         label + " outer Response signature is absent or invalid");
@@ -1256,10 +1258,10 @@ final class ScriptedIdpSsoIT {
                     + name + ".xml"));
             JsonObject oracle = oracleDecrypt(xml);
             boolean rsa15 = name.equals("negative-rsa-1_5");
-            assertEquals(rsa15, oracle.findBoolean("valid").orElseThrow(),
+            assertEquals(rsa15, oracle.find("valid").filter(JsonBoolean.class::isInstance).map(JsonBoolean.class::cast).map(JsonBoolean::getValue).orElseThrow(),
                     name + " libxmlsec cryptographic verdict");
             if (rsa15)
-                assertTrue(oracle.findString("xml").orElseThrow().contains("minted-user"),
+                assertTrue(oracle.find("xml").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow().contains("minted-user"),
                         name + " libxmlsec plaintext identity");
             SamlAuthenticationResult.Rejected rejected = assertInstanceOf(
                     SamlAuthenticationResult.Rejected.class,
@@ -1311,10 +1313,10 @@ final class ScriptedIdpSsoIT {
                 + ": " + response.statusCode());
         JsonObject verdict = assertInstanceOf(JsonObject.class, JsonCodec.parse(
                 response.body().getBytes(StandardCharsets.UTF_8), JsonLimits.protocolDocument(64_000)));
-        boolean valid = verdict.findBoolean("valid").orElseThrow();
+        boolean valid = verdict.find("valid").filter(JsonBoolean.class::isInstance).map(JsonBoolean.class::cast).map(JsonBoolean::getValue).orElseThrow();
         if (valid) {
-            assertEquals("#" + targetId, verdict.findString("reference_uri").orElseThrow());
-            assertTrue(verdict.findBoolean("covers_target").orElseThrow());
+            assertEquals("#" + targetId, verdict.find("reference_uri").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow());
+            assertTrue(verdict.find("covers_target").filter(JsonBoolean.class::isInstance).map(JsonBoolean.class::cast).map(JsonBoolean::getValue).orElseThrow());
         }
         return valid;
     }

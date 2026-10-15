@@ -16,6 +16,8 @@
 
 package com.revetsec.oauth.server;
 
+import com.revetsec.jose.JwksParseResult;
+
 import com.revetsec.SealingKey;
 import com.revetsec.StateSealer;
 import com.revetsec.internal.encoding.FormUrlEncoding;
@@ -25,9 +27,9 @@ import com.revetsec.internal.json.JsonLimits;
 import com.revetsec.json.*;
 import com.revetsec.jose.JwsAlgorithm;
 import com.revetsec.jose.JwsSigner;
-import com.revetsec.jose.JsonWebKeySet;
-import com.revetsec.jose.StaticJsonWebKeySource;
-import com.revetsec.testing.TestJsonWebKeys;
+import com.revetsec.jose.Jwks;
+import com.revetsec.jose.StaticJwksSource;
+import com.revetsec.testing.TestJwk;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
@@ -59,7 +61,7 @@ final class OAuthIssuerTokenStatusTests {
  private static final @NonNull String VERIFIER = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
  private static final @NonNull String CHALLENGE = "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM";
  private static final @NonNull OAuthServerIngressLimits LIMITS = OAuthServerIngressLimits.fromDefaults();
- private static final TestJsonWebKeys.@NonNull Fixture KEY = TestJsonWebKeys.Fixture.IDP_SIGNING_RSA_2048;
+ private static final TestJwk.@NonNull Fixture KEY = TestJwk.Fixture.IDP_SIGNING_RSA_2048;
  private final @NonNull OAuthAtomicStoreFixture store = new OAuthAtomicStoreFixture();
  private final @NonNull MutableClock clock = new MutableClock(NOW);
  private final @NonNull OAuthStoreRecordCodec codec = codec();
@@ -123,7 +125,7 @@ final class OAuthIssuerTokenStatusTests {
   try { return (JsonObject)JsonCodec.parse(bytes,JsonLimits.jose(131072)); } catch(com.revetsec.internal.json.JsonParseException failure) { throw new AssertionError(failure); }
  }
  private static @NonNull JsonObject body(@NonNull OAuthTokenResponse response) { return json(response.body()); }
- private static @NonNull String token(@NonNull OAuthTokenResponse response) { return body(response).findString("access_token").orElseThrow(); }
+ private static @NonNull String token(@NonNull OAuthTokenResponse response) { return body(response).find("access_token").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow(); }
  private static void invalid(@NonNull Executable call) {
   var e=assertThrows(OAuthServerAdmissionFailure.class,call);assertEquals(OAuthServerAdmissionFailure.Reason.INVALID_TOKEN,e.reason());assertNull(e.getCause());assertEquals("OAuth server admission failed.",e.getMessage());
  }
@@ -133,8 +135,8 @@ final class OAuthIssuerTokenStatusTests {
  private @NonNull OAuthIssuerTokenStatus status(int attempts,@NonNull Duration skew,@NonNull Clock clock) {
   return new OAuthIssuerTokenStatus(this.coordinator,this.codec,LIMITS,clock,skew,attempts,255,16384);
  }
- private static @NonNull StaticJsonWebKeySource keys() {
-  return StaticJsonWebKeySource.fromJsonWebKeySet(JsonWebKeySet.fromJson(TestJsonWebKeys.withFixture(KEY).kid("key").alg("RS256").toKeySetJson()));
+ private static @NonNull StaticJwksSource keys() {
+  return StaticJwksSource.fromJwks(assertInstanceOf(JwksParseResult.Succeeded.class, Jwks.fromJsonResult(TestJwk.withFixture(KEY).kid("key").alg("RS256").toKeySetJson())).getJwks());
  }
  private @NonNull JsonObject validate(@NonNull String token) { return status().validate(token,RESOURCE,keys(),deadline()); }
  private @NonNull String issued() { return token(redeem(code(true))); }
@@ -355,14 +357,14 @@ final class OAuthIssuerTokenStatusTests {
    Duration.ofMinutes(5),true,Duration.ofDays(1),Duration.ofDays(7),3,255);
   String code=code(true);String compact=token(managed.redeem(request(code,Map.of()),(id,budget)->Optional.of(client()),resources(),allow(),deadline()));
   assertEquals(claims(compact),status().validate(compact,RESOURCE,keys,deadline()));int commits=this.store.commits;
-  var b=TestJsonWebKeys.Fixture.IDP_SIGNING_RSA_3072;
+  var b=TestJwk.Fixture.IDP_SIGNING_RSA_3072;
   current.set(OAuthIssuerKeySnapshot.withActiveKey(OAuthIssuerSigningKey.fromKeyPair("b",b.getPrivateKey(),b.getPublicKey())).generation("g2")
    .publishedAt(NOW.minusSeconds(60)).verificationKeys(Map.of("a",a.getPublicKey())).retirementNotBefore(Map.of("a",NOW.plusSeconds(500))).build());
   assertEquals(claims(compact),status().validate(compact,RESOURCE,keys,deadline()));assertEquals(commits+1,this.store.commits);
   revokeGrant();invalid(()->status().validate(compact,RESOURCE,keys,deadline()));
  }
  @Test void managedMismatchedPairLeavesUnusedCodeAndLedgerUnchanged() {
-  var b=TestJsonWebKeys.Fixture.IDP_SIGNING_RSA_3072;
+  var b=TestJwk.Fixture.IDP_SIGNING_RSA_3072;
   var snapshot=OAuthIssuerKeySnapshot.withActiveKey(OAuthIssuerSigningKey.fromKeyPair("a",KEY.getPrivateKey(),b.getPublicKey()))
    .generation("g1").publishedAt(NOW.minusSeconds(120)).build();
   var keys=new OAuthIssuerKeyLifecycle(OAuthIssuerKeyProvider.fromSnapshot(snapshot),this.clock,Duration.ofSeconds(60),this.retention);
@@ -374,7 +376,7 @@ final class OAuthIssuerTokenStatusTests {
   assertNotNull(redeem(code));
  }
  @Test void managedRotationWithoutPublicOverlapCannotCommitPreparedIssuance() {
-  var b=TestJsonWebKeys.Fixture.IDP_SIGNING_RSA_3072;var first=OAuthIssuerKeySnapshot.withActiveKey(OAuthIssuerSigningKey.fromKeyPair("a",KEY.getPrivateKey(),KEY.getPublicKey()))
+  var b=TestJwk.Fixture.IDP_SIGNING_RSA_3072;var first=OAuthIssuerKeySnapshot.withActiveKey(OAuthIssuerSigningKey.fromKeyPair("a",KEY.getPrivateKey(),KEY.getPublicKey()))
    .generation("g1").publishedAt(NOW.minusSeconds(120)).build();
   var missing=OAuthIssuerKeySnapshot.withActiveKey(OAuthIssuerSigningKey.fromKeyPair("b",b.getPrivateKey(),b.getPublicKey()))
    .generation("g2").publishedAt(NOW.minusSeconds(60)).build();var calls=new java.util.concurrent.atomic.AtomicInteger();

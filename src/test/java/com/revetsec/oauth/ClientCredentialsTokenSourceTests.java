@@ -16,6 +16,8 @@
 
 package com.revetsec.oauth;
 
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+
 import org.jspecify.annotations.NonNull;
 
 import com.revetsec.internal.encoding.QueryParameters;
@@ -53,15 +55,15 @@ final class ClientCredentialsTokenSourceTests {
 					.clientId("client").clientAuthentication(ClientAuthentication.fromClientSecretBasic("secret"))
 					.httpClient(TestTls.httpClient()).clock(clock).build();
 			ClientCredentialsTokenSource source = ClientCredentialsTokenSource.withClient(client).build();
-			AccessToken first = source.getAccessToken();
+			AccessToken first = assertInstanceOf(AccessTokenAcquisitionResult.Succeeded.class, source.getAccessTokenResult()).getAccessToken();
 			clock.advance(Duration.ofSeconds(5));
-			assertSame(first, source.getAccessToken());
+			assertSame(first, assertInstanceOf(AccessTokenAcquisitionResult.Succeeded.class, source.getAccessTokenResult()).getAccessToken());
 			clock.rewind(Duration.ofSeconds(1));
-			AccessToken replacement = source.getAccessToken();
+			AccessToken replacement = assertInstanceOf(AccessTokenAcquisitionResult.Succeeded.class, source.getAccessTokenResult()).getAccessToken();
 			assertEquals("replacement", replacement.getValue());
 			assertEquals(2, server.getHitCount("/token"));
 			clock.advance(Duration.ofSeconds(1));
-			assertSame(replacement, source.getAccessToken());
+			assertSame(replacement, assertInstanceOf(AccessTokenAcquisitionResult.Succeeded.class, source.getAccessTokenResult()).getAccessToken());
 			assertEquals(2, server.getHitCount("/token"));
 		}
 	}
@@ -77,9 +79,9 @@ final class ClientCredentialsTokenSourceTests {
 					.clientId("client").clientAuthentication(ClientAuthentication.fromClientSecretBasic("secret"))
 					.resources(List.of(URI.create("https://api.example/default")))
 					.httpClient(TestTls.httpClient()).build();
-			ClientCredentialsTokenSource.withClient(client).build().getAccessToken();
-			ClientCredentialsTokenSource.withClient(client).resources(List.of()).build().getAccessToken();
-			client.requestClientCredentialsToken(TokenRequestOptions.builder().resources(List.of()).build());
+			assertInstanceOf(AccessTokenAcquisitionResult.Succeeded.class, ClientCredentialsTokenSource.withClient(client).build().getAccessTokenResult()).getAccessToken();
+			assertInstanceOf(AccessTokenAcquisitionResult.Succeeded.class, ClientCredentialsTokenSource.withClient(client).resources(List.of()).build().getAccessTokenResult()).getAccessToken();
+			assertInstanceOf(OAuthTokenRequestResult.Succeeded.class, client.requestClientCredentialsResult(TokenRequestOptions.builder().resources(List.of()).build())).getTokens();
 			assertEquals(List.of("https://api.example/default"), QueryParameters.parse(
 					server.getRequests("/token").get(0).getBodyAsString()).getValues("resource"));
 			for (int index : List.of(1, 2))
@@ -98,7 +100,7 @@ final class ClientCredentialsTokenSourceTests {
 					.httpClient(TestTls.httpClient()).build();
 			ClientCredentialsTokenSource source = ClientCredentialsTokenSource.withClient(client)
 					.additionalParameters(java.util.Map.of("audience", "https://api.example/resource")).build();
-			assertEquals("token", source.getAccessToken().getValue());
+			assertEquals("token", assertInstanceOf(AccessTokenAcquisitionResult.Succeeded.class, source.getAccessTokenResult()).getAccessToken().getValue());
 			assertEquals(List.of("https://api.example/resource"), QueryParameters.parse(
 					server.getRequests("/token").get(0).getBodyAsString()).getValues("audience"));
 			assertThrows(IllegalArgumentException.class, () -> ClientCredentialsTokenSource.withClient(client)
@@ -121,15 +123,15 @@ final class ClientCredentialsTokenSourceTests {
 					.clientId("client").clientAuthentication(ClientAuthentication.fromClientSecretBasic("secret"))
 					.httpClient(TestTls.httpClient()).clock(clock).build();
 			ClientCredentialsTokenSource source = ClientCredentialsTokenSource.withClient(client).build();
-			AccessToken first = source.getAccessToken();
+			AccessToken first = assertInstanceOf(AccessTokenAcquisitionResult.Succeeded.class, source.getAccessTokenResult()).getAccessToken();
 			clock.advance(Duration.ofSeconds(40));
-			assertSame(first, source.getAccessToken());
+			assertSame(first, assertInstanceOf(AccessTokenAcquisitionResult.Succeeded.class, source.getAccessTokenResult()).getAccessToken());
 			assertEquals(2, server.getHitCount("/token"));
 			clock.advance(Duration.ofSeconds(20));
-			assertThrows(OAuthException.class, source::getAccessToken);
+			assertThrows(OAuthException.class, source::getAccessTokenResult);
 			assertEquals(2, server.getHitCount("/token"));
 			source.invalidate(first);
-			assertEquals("replacement", source.getAccessToken().getValue());
+			assertEquals("replacement", assertInstanceOf(AccessTokenAcquisitionResult.Succeeded.class, source.getAccessTokenResult()).getAccessToken().getValue());
 			assertEquals(3, server.getHitCount("/token"));
 		}
 	}
@@ -148,11 +150,11 @@ final class ClientCredentialsTokenSourceTests {
 					.clientId("client").clientAuthentication(ClientAuthentication.fromClientSecretBasic("secret"))
 					.httpClient(TestTls.httpClient()).clock(clock).build();
 			ClientCredentialsTokenSource source = ClientCredentialsTokenSource.withClient(client).build();
-			AccessToken first = source.getAccessToken();
+			AccessToken first = assertInstanceOf(AccessTokenAcquisitionResult.Succeeded.class, source.getAccessTokenResult()).getAccessToken();
 			clock.advance(Duration.ofSeconds(40));
-			assertSame(first, source.getAccessToken());
+			assertSame(first, assertInstanceOf(AccessTokenAcquisitionResult.Succeeded.class, source.getAccessTokenResult()).getAccessToken());
 			clock.rewind(Duration.ofSeconds(1));
-			assertThrows(OAuthException.class, source::getAccessToken);
+			assertThrows(OAuthException.class, source::getAccessTokenResult);
 			assertEquals(2, server.getHitCount("/token"));
 		}
 	}
@@ -167,15 +169,15 @@ final class ClientCredentialsTokenSourceTests {
 					.clientId("client").clientAuthentication(ClientAuthentication.fromClientSecretBasic("secret"))
 					.httpClient(TestTls.httpClient()).clock(clock).build();
 			ClientCredentialsTokenSource source = ClientCredentialsTokenSource.withClient(client).build();
-			AccessToken first = source.getAccessToken();
+			AccessToken first = assertInstanceOf(AccessTokenAcquisitionResult.Succeeded.class, source.getAccessTokenResult()).getAccessToken();
 			TestHttpsServer.HeldScript held = TestHttpsServer.HeldScript.fromResponse(jsonWithExpiry("second", 60));
 			server.script("/token", held);
 			clock.advance(Duration.ofSeconds(40));
 			ExecutorService executor = Executors.newFixedThreadPool(2);
 			try {
-				Future<AccessToken> renewal = executor.submit(source::getAccessToken);
+				Future<AccessToken> renewal = executor.submit(() -> assertInstanceOf(AccessTokenAcquisitionResult.Succeeded.class, source.getAccessTokenResult()).getAccessToken());
 				assertTrue(held.awaitHeldCount(1, Duration.ofSeconds(2)));
-				Future<AccessToken> concurrent = executor.submit(source::getAccessToken);
+				Future<AccessToken> concurrent = executor.submit(() -> assertInstanceOf(AccessTokenAcquisitionResult.Succeeded.class, source.getAccessTokenResult()).getAccessToken());
 				assertSame(first, concurrent.get(1, TimeUnit.SECONDS));
 				held.release();
 				assertEquals("second", renewal.get(3, TimeUnit.SECONDS).getValue());
@@ -194,7 +196,7 @@ final class ClientCredentialsTokenSourceTests {
 					.clientId("client").clientAuthentication(ClientAuthentication.fromClientSecretBasic("secret"))
 					.httpClient(TestTls.httpClient()).build();
 			ClientCredentialsTokenSource source = ClientCredentialsTokenSource.withClient(client).build();
-			AccessToken first = source.getAccessToken();
+			AccessToken first = assertInstanceOf(AccessTokenAcquisitionResult.Succeeded.class, source.getAccessTokenResult()).getAccessToken();
 			assertEquals("first", first.getValue());
 			source.invalidate(first);
 			int callers = 100;
@@ -203,14 +205,14 @@ final class ClientCredentialsTokenSourceTests {
 			try {
 				List<Future<AccessToken>> results = new ArrayList<>();
 				for (int i = 0; i < callers; i++)
-					results.add(executor.submit(() -> { start.await(); return source.getAccessToken(); }));
+					results.add(executor.submit(() -> { start.await(); return assertInstanceOf(AccessTokenAcquisitionResult.Succeeded.class, source.getAccessTokenResult()).getAccessToken(); }));
 				start.countDown();
 				AccessToken second = results.get(0).get();
 				assertEquals("second", second.getValue());
 				for (Future<AccessToken> result : results) assertSame(second, result.get());
 				assertEquals(2, server.getHitCount("/token"));
 				source.invalidate(first);
-				assertSame(second, source.getAccessToken());
+				assertSame(second, assertInstanceOf(AccessTokenAcquisitionResult.Succeeded.class, source.getAccessTokenResult()).getAccessToken());
 			} finally {
 				executor.shutdownNow();
 			}

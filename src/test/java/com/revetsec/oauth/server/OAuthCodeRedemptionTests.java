@@ -25,7 +25,7 @@ import com.revetsec.internal.json.JsonLimits;
 import com.revetsec.json.*;
 import com.revetsec.jose.JwsAlgorithm;
 import com.revetsec.jose.JwsSigner;
-import com.revetsec.testing.TestJsonWebKeys;
+import com.revetsec.testing.TestJwk;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
@@ -60,7 +60,7 @@ final class OAuthCodeRedemptionTests {
  private static final @NonNull String VERIFIER = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
  private static final @NonNull String CHALLENGE = "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM";
  private static final @NonNull OAuthServerIngressLimits LIMITS = OAuthServerIngressLimits.fromDefaults();
- private static final TestJsonWebKeys.@NonNull Fixture KEY = TestJsonWebKeys.Fixture.IDP_SIGNING_RSA_2048;
+ private static final TestJwk.@NonNull Fixture KEY = TestJwk.Fixture.IDP_SIGNING_RSA_2048;
  private final @NonNull OAuthAtomicStoreFixture store = new OAuthAtomicStoreFixture();
  private final @NonNull MutableClock clock = new MutableClock(NOW);
  private final @NonNull OAuthStoreRecordCodec codec = codec();
@@ -125,7 +125,7 @@ final class OAuthCodeRedemptionTests {
   try { return (JsonObject)JsonCodec.parse(bytes,JsonLimits.jose(131072)); } catch(com.revetsec.internal.json.JsonParseException failure) { throw new AssertionError(failure); }
  }
  private static @NonNull JsonObject body(@NonNull OAuthTokenResponse response) { return json(response.body()); }
- private static @NonNull String token(@NonNull OAuthTokenResponse response) { return body(response).findString("access_token").orElseThrow(); }
+ private static @NonNull String token(@NonNull OAuthTokenResponse response) { return body(response).find("access_token").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow(); }
  private static @NonNull JsonObject part(@NonNull String token,int part) { return json(Base64.getUrlDecoder().decode(token.split("\\.",-1)[part])); }
  private static void invalid(@NonNull Executable call) {
   var e=assertThrows(OAuthServerAdmissionFailure.class,call);assertEquals(OAuthServerAdmissionFailure.Reason.INVALID_GRANT,e.reason());assertNull(e.getCause());assertEquals("OAuth server admission failed.",e.getMessage());
@@ -138,12 +138,12 @@ final class OAuthCodeRedemptionTests {
  }
  @Test void signedJwtHasEngineOwnedClaimsAndRawJcaSignature() throws Exception {
   String code=code(true);OAuthTokenResponse response=redeem(code);String jwt=token(response);
-  assertEquals(Set.of("alg","typ","kid"),part(jwt,0).getMembers().keySet());assertEquals("RS256",part(jwt,0).findString("alg").orElseThrow());assertEquals("at+jwt",part(jwt,0).findString("typ").orElseThrow());
+  assertEquals(Set.of("alg","typ","kid"),part(jwt,0).getMembers().keySet());assertEquals("RS256",part(jwt,0).find("alg").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow());assertEquals("at+jwt",part(jwt,0).find("typ").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow());
   JsonObject claims=part(jwt,1);assertEquals(Set.of("iss","sub","aud","client_id","iat","exp","jti","scope"),claims.getMembers().keySet());
-  assertEquals(ISSUER,claims.findString("iss").orElseThrow());assertEquals("subject",claims.findString("sub").orElseThrow());assertEquals(RESOURCE,claims.findString("aud").orElseThrow());assertEquals("client",claims.findString("client_id").orElseThrow());assertEquals("read write",claims.findString("scope").orElseThrow());
-  assertEquals(NOW.getEpochSecond(),claims.findLong("iat").orElseThrow());assertEquals(NOW.getEpochSecond()+300,claims.findLong("exp").orElseThrow());
+  assertEquals(ISSUER,claims.find("iss").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow());assertEquals("subject",claims.find("sub").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow());assertEquals(RESOURCE,claims.find("aud").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow());assertEquals("client",claims.find("client_id").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow());assertEquals("read write",claims.find("scope").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow());
+  assertEquals(NOW.getEpochSecond(),claims.find("iat").flatMap(value -> ((com.revetsec.json.JsonNumber) value).getLongValueExact()).orElseThrow());assertEquals(NOW.getEpochSecond()+300,claims.find("exp").flatMap(value -> ((com.revetsec.json.JsonNumber) value).getLongValueExact()).orElseThrow());
   String[] parts=jwt.split("\\.",-1);Signature oracle=Signature.getInstance("SHA256withRSA");oracle.initVerify(KEY.getPublicKey());oracle.update((parts[0]+"."+parts[1]).getBytes(StandardCharsets.US_ASCII));assertTrue(oracle.verify(Base64.getUrlDecoder().decode(parts[2])));
-  assertEquals(record(OAuthStoreKey.Kind.ACCESS_TOKEN).text("id"),claims.findString("jti").orElseThrow());assertEquals("Bearer",body(response).findString("token_type").orElseThrow());assertEquals(299L,body(response).findLong("expires_in").orElseThrow());
+  assertEquals(record(OAuthStoreKey.Kind.ACCESS_TOKEN).text("id"),claims.find("jti").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow());assertEquals("Bearer",body(response).find("token_type").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow());assertEquals(299L,body(response).find("expires_in").flatMap(value -> ((com.revetsec.json.JsonNumber) value).getLongValueExact()).orElseThrow());
  }
  @Test void commitAtomicallyConsumesCodePinsHAndWritesExactAccessAndRefreshBindings() {
   String code=code(true);int commits=this.store.commits;OAuthTokenResponse result=redeem(code);
@@ -151,7 +151,7 @@ final class OAuthCodeRedemptionTests {
   assertEquals("USED",c.text("status"));assertEquals("ACTIVE",g.text("status"));assertEquals(NOW.plusSeconds(120).minusNanos(NOW.getNano()),c.expires());
   assertEquals(Duration.ofMinutes(5),g.maximumAccessLifetime());assertEquals(this.retention.horizon(g.expires()),g.horizon());assertEquals(g.horizon(),c.retention());assertEquals(g.horizon(),r.retention());
   assertEquals(this.retention.accessRetention(a.expires()),a.retention());assertEquals(g.text("id"),a.text("grantId"));assertEquals(g.text("id"),r.text("grantId"));assertTrue(a.sameLineage(g));assertTrue(c.sameLineage(g));assertTrue(r.sameLineage(g));
-  String refresh=body(result).findString("refresh_token").orElseThrow();assertEquals(OAuthServerCredential.refreshDigest(refresh),g.text("refreshId"));assertEquals(g.text("refreshId"),r.text("id"));assertEquals(NOW.plusSeconds(86400).minusNanos(NOW.getNano()),r.expires());
+  String refresh=body(result).find("refresh_token").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow();assertEquals(OAuthServerCredential.refreshDigest(refresh),g.text("refreshId"));assertEquals(g.text("refreshId"),r.text("id"));assertEquals(NOW.plusSeconds(86400).minusNanos(NOW.getNano()),r.expires());
   assertEquals(6,requireNonNull(this.store.lastTransaction).getConditions().size());assertEquals(5,requireNonNull(this.store.lastTransaction).getMutations().size());
  }
  @Test void exactWireBodyAndHeaderBytesAreRetainedAndDefensivelyCopied() {
@@ -168,7 +168,7 @@ final class OAuthCodeRedemptionTests {
  }
  @Test void serverRefreshDisabledAndPolicyNarrowingAreAppliedBeforeSignature() {
   String code=code(true);var result=engine(false,signer(),3).redeem(request(code,Map.of()),(id,b)->Optional.of(client()),resources(),(c,b)->decision("subject",Set.of("read"),false),deadline());
-  assertEquals("read",part(token(result),1).findString("scope").orElseThrow());assertEquals(Set.of("read"),record(OAuthStoreKey.Kind.GRANT).scopes(LIMITS));assertFalse(record(OAuthStoreKey.Kind.GRANT).refresh());
+  assertEquals("read",part(token(result),1).find("scope").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow());assertEquals(Set.of("read"),record(OAuthStoreKey.Kind.GRANT).scopes(LIMITS));assertFalse(record(OAuthStoreKey.Kind.GRANT).refresh());
  }
  @Test void policyReceivesCheckedGrantNotRawCodeAndOriginalBudget() {
   String code=code(true);this.first.redeem(request(code,Map.of()),(id,b)->Optional.of(client()),resources(),(c,b)->{assertEquals("authorization_code",c.getGrantType());assertEquals("subject",c.getSubject());assertEquals(record(OAuthStoreKey.Kind.GRANT).text("id"),c.getGrantValue());assertNotEquals(code,c.getGrantValue());assertTrue(b.compareTo(Duration.ofSeconds(10))<0);return decision("subject",Set.of("read"),false);},deadline());
@@ -321,7 +321,7 @@ final class OAuthCodeRedemptionTests {
  }
  @TestFactory @NonNull Stream<@NonNull DynamicTest> exactIssuedSchemasRejectMissingNullAndExtraFields() {
   OAuthCodeRedemptionTests fixture=new OAuthCodeRedemptionTests();fixture.redeem(fixture.code(true));
-  return Stream.of(OAuthStoreKey.Kind.CODE,OAuthStoreKey.Kind.GRANT,OAuthStoreKey.Kind.ACCESS_TOKEN,OAuthStoreKey.Kind.REFRESH_TOKEN).flatMap(kind->{JsonObject original=fixture.payload(kind);String id=original.findString("id").orElseThrow();return Stream.concat(original.getMembers().keySet().stream().flatMap(key->Stream.of("missing","null").map(mode->DynamicTest.dynamicTest(kind+" "+key+" "+mode,()->{
+  return Stream.of(OAuthStoreKey.Kind.CODE,OAuthStoreKey.Kind.GRANT,OAuthStoreKey.Kind.ACCESS_TOKEN,OAuthStoreKey.Kind.REFRESH_TOKEN).flatMap(kind->{JsonObject original=fixture.payload(kind);String id=original.find("id").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow();return Stream.concat(original.getMembers().keySet().stream().flatMap(key->Stream.of("missing","null").map(mode->DynamicTest.dynamicTest(kind+" "+key+" "+mode,()->{
    JsonObject malformed=changed(original,key,mode.equals("null")?JsonNull.defaultInstance():null);
    if(kind==OAuthStoreKey.Kind.GRANT&&key.equals("refreshId")&&mode.equals("null"))assertThrows(IllegalArgumentException.class,()->OAuthAuthorizationRecord.decode(kind,id,malformed,LIMITS,255));else assertThrows(RuntimeException.class,()->OAuthAuthorizationRecord.decode(kind,id,malformed,LIMITS,255));
   }))),Stream.of(DynamicTest.dynamicTest(kind+" extra",()->assertThrows(IllegalArgumentException.class,()->OAuthAuthorizationRecord.decode(kind,id,changed(original,"extra",JsonBoolean.fromValue(true)),LIMITS,255)))));});
@@ -424,7 +424,7 @@ final class OAuthCodeRedemptionTests {
   String handle=ledger.begin(admission,BROWSER,deadline());String code=ledger.complete(handle,BROWSER,client,resources,OAuthAuthorizationDecision.withSubject(subject).authorizedScopesByResource(resources).build(),deadline()).orElseThrow();
   var engine=new OAuthCodeRedemption(coordinator,codec,LIMITS,this.retention,new OAuthTokenResponse.Encoder(ISSUER,"key",signer(),4096,1024),Duration.ofMinutes(5),false,Duration.ofDays(1),Duration.ofDays(7),3,1024);int commits=this.store.commits;
   unavailable(()->engine.redeem(request(code,Map.of("client_id",clientId)),(id,b)->Optional.of(client),resources,(c,b)->OAuthAuthorizationDecision.withSubject(subject).authorizedScopesByResource(resources).build(),deadline()));assertEquals(commits,this.store.commits);assertFalse(this.store.rows.keySet().stream().anyMatch(k->k.getKind()==OAuthStoreKey.Kind.ACCESS_TOKEN));
-  var entry=entry(OAuthStoreKey.Kind.CODE);assertEquals("UNUSED",codec.open(entry,Clock.fixed(NOW,ZoneOffset.UTC)).findString("status").orElseThrow());
+  var entry=entry(OAuthStoreKey.Kind.CODE);assertEquals("UNUSED",codec.open(entry,Clock.fixed(NOW,ZoneOffset.UTC)).find("status").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow());
  }
  @Test void decodedIssuedFactsRejectOutOfRangeInstantsAndRetiredTransitions() {
   redeem(code(false));var g=record(OAuthStoreKey.Kind.GRANT);assertEquals("REVOKED",g.terminated(LIMITS,255).terminated(LIMITS,255).text("status"));

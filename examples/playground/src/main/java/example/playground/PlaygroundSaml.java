@@ -21,6 +21,7 @@ import com.revetsec.json.JsonObject;
 import com.revetsec.saml.*;
 import com.revetsec.soklet.SokletOAuth;
 import com.revetsec.soklet.SokletSaml;
+import com.revetsec.soklet.SokletRequestResult;
 import com.soklet.Request;
 import com.soklet.Response;
 import com.soklet.ResponseCookie;
@@ -180,7 +181,10 @@ final class PlaygroundSaml {
             if (!clock.instant().isBefore(flow.expires)
                     || !sameCookie(request, LOGIN_COOKIE, flow.sealed))
                 return failed(400, "SAML browser binding rejected.", clear);
-            SamlPostBindingParseResult parsed = SokletSaml.postBindingResultFor(request);
+            var read = SokletSaml.postBindingResultFor(request);
+            if (!(read instanceof SokletRequestResult.Completed<SamlPostBindingParseResult> completed))
+                return failed(413, "SAML request body exceeds the limit.", clear);
+            SamlPostBindingParseResult parsed = completed.getResult();
             if (!(parsed instanceof SamlPostBindingParseResult.Parsed post))
                 return failed(400, "SAML POST rejected.", clear);
             SamlAuthenticationResult result = sp.completeAuthenticationResult(post.getMessage(),

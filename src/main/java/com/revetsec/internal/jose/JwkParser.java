@@ -29,7 +29,7 @@ import com.revetsec.internal.json.JsonFieldException;
 import com.revetsec.internal.json.Rfc7638;
 import com.revetsec.internal.pem.Pem;
 import com.revetsec.internal.pem.PemException;
-import com.revetsec.jose.JsonWebKeySkipReason;
+import com.revetsec.jose.JwkSkipReason;
 import com.revetsec.jose.JwsAlgorithm;
 import com.revetsec.json.JsonArray;
 import com.revetsec.json.JsonObject;
@@ -55,7 +55,7 @@ import static java.util.Objects.requireNonNull;
 
 /**
  * Turns one JSON Web Key (RFC 7517 section 4) into a {@link VerificationKey}, or refuses it with the
- * {@link JsonWebKeySkipReason} of the first rule it breaks (plan M2-7, "Keys"). A refused key is skipped, never used
+ * {@link JwkSkipReason} of the first rule it breaks (plan M2-7, "Keys"). A refused key is skipped, never used
  * for its public half, and never fails its key set.
  * <p>
  * <strong>The rules, in order:</strong>
@@ -136,7 +136,7 @@ public final class JwkParser {
 		try {
 			return parseMembers(jwk);
 		} catch (RuntimeException e) {
-			throw skip(JsonWebKeySkipReason.MALFORMED_KEY);
+			throw skip(JwkSkipReason.MALFORMED_KEY);
 		}
 	}
 
@@ -150,14 +150,14 @@ public final class JwkParser {
 			case Algorithms.RSA_KEY_TYPE, Algorithms.EC_KEY_TYPE, Algorithms.OKP_KEY_TYPE -> {
 				// Supported.
 			}
-			case Algorithms.OCT_KEY_TYPE -> throw skip(JsonWebKeySkipReason.SYMMETRIC_KEY);
-			default -> throw skip(JsonWebKeySkipReason.UNSUPPORTED_KEY_TYPE);
+			case Algorithms.OCT_KEY_TYPE -> throw skip(JwkSkipReason.SYMMETRIC_KEY);
+			default -> throw skip(JwkSkipReason.UNSUPPORTED_KEY_TYPE);
 		}
 
 		// Rule 3.
 		for (String name : PRIVATE_MEMBERS)
 			if (members.containsKey(name))
-				throw skip(JsonWebKeySkipReason.PRIVATE_KEY_MEMBERS);
+				throw skip(JwkSkipReason.PRIVATE_KEY_MEMBERS);
 
 		// Rules 4 to 6.
 		String use = checkUse(members);
@@ -178,14 +178,14 @@ public final class JwkParser {
 				String curveName = requiredString(members, "crv");
 				// Rule 6 has already refused a string crv that names no supported curve.
 				EcCurve ecCurve = EcCurve.findByName(curveName)
-						.orElseThrow(() -> skip(JsonWebKeySkipReason.UNSUPPORTED_CURVE));
+						.orElseThrow(() -> skip(JwkSkipReason.UNSUPPORTED_CURVE));
 				curve = curveName;
 				publicKey = EcPublicKeys.fromCoordinates(ecCurve, requiredBase64Url(members, "x"),
 						requiredBase64Url(members, "y"));
 			} else {
 				String curveName = requiredString(members, "crv");
 				if (!isSupportedCurve(Algorithms.OKP_KEY_TYPE, curveName))
-					throw skip(JsonWebKeySkipReason.UNSUPPORTED_CURVE);
+					throw skip(JwkSkipReason.UNSUPPORTED_CURVE);
 				curve = curveName;
 				publicKey = Ed25519PublicKeys.fromEncoded(requiredBase64Url(members, "x"));
 			}
@@ -207,25 +207,25 @@ public final class JwkParser {
 			throws SkippedKeyException {
 		JsonValue use = members.get("use");
 		if (use != null && !(use instanceof JsonString string && string.getValue().equals(SIGNATURE_USE)))
-			throw skip(JsonWebKeySkipReason.NOT_A_VERIFICATION_KEY);
+			throw skip(JwkSkipReason.NOT_A_VERIFICATION_KEY);
 
 		JsonValue keyOperations = members.get("key_ops");
 		if (keyOperations != null) {
 			if (!(keyOperations instanceof JsonArray operations))
-				throw skip(JsonWebKeySkipReason.NOT_A_VERIFICATION_KEY);
+				throw skip(JwkSkipReason.NOT_A_VERIFICATION_KEY);
 
 			boolean verify = false;
 			for (JsonValue element : operations.getElements()) {
 				if (!(element instanceof JsonString operation))
-					throw skip(JsonWebKeySkipReason.NOT_A_VERIFICATION_KEY);
+					throw skip(JwkSkipReason.NOT_A_VERIFICATION_KEY);
 				if (operation.getValue().equals(VERIFY_OPERATION))
 					verify = true;
 				else if (use != null && !operation.getValue().equals(SIGN_OPERATION))
-					throw skip(JsonWebKeySkipReason.NOT_A_VERIFICATION_KEY);
+					throw skip(JwkSkipReason.NOT_A_VERIFICATION_KEY);
 			}
 
 			if (!verify)
-				throw skip(JsonWebKeySkipReason.NOT_A_VERIFICATION_KEY);
+				throw skip(JwkSkipReason.NOT_A_VERIFICATION_KEY);
 		}
 
 		return use == null ? null : SIGNATURE_USE;
@@ -241,19 +241,19 @@ public final class JwkParser {
 		if (value == null)
 			return null;
 		if (!(value instanceof JsonString string))
-			throw skip(JsonWebKeySkipReason.UNSUPPORTED_ALGORITHM);
+			throw skip(JwkSkipReason.UNSUPPORTED_ALGORITHM);
 
 		JwsAlgorithm algorithm = JwsAlgorithm.findByWireValue(string.getValue())
-				.orElseThrow(() -> skip(JsonWebKeySkipReason.UNSUPPORTED_ALGORITHM));
+				.orElseThrow(() -> skip(JwkSkipReason.UNSUPPORTED_ALGORITHM));
 
 		// A key set never supplies an HMAC key, so an HS* alg is for another key type whatever kty says.
 		if (Algorithms.familyOf(algorithm) == Algorithms.Family.HMAC || !Algorithms.keyTypeOf(algorithm).equals(keyType))
-			throw skip(JsonWebKeySkipReason.ALGORITHM_MISMATCH);
+			throw skip(JwkSkipReason.ALGORITHM_MISMATCH);
 
 		// Another supported curve than the algorithm's is a mismatch; a curve Revetsec does not support is rule 6's.
 		if (members.get("crv") instanceof JsonString curve && isSupportedCurve(keyType, curve.getValue())
 				&& !Algorithms.findCurveName(algorithm).orElse("").equals(curve.getValue()))
-			throw skip(JsonWebKeySkipReason.ALGORITHM_MISMATCH);
+			throw skip(JwkSkipReason.ALGORITHM_MISMATCH);
 
 		return algorithm;
 	}
@@ -265,7 +265,7 @@ public final class JwkParser {
 																 @NonNull String keyType) throws SkippedKeyException {
 		if (!keyType.equals(Algorithms.RSA_KEY_TYPE) && members.get("crv") instanceof JsonString curve
 				&& !isSupportedCurve(keyType, curve.getValue()))
-			throw skip(JsonWebKeySkipReason.UNSUPPORTED_CURVE);
+			throw skip(JwkSkipReason.UNSUPPORTED_CURVE);
 	}
 
 	/**
@@ -292,7 +292,7 @@ public final class JwkParser {
 			return null;
 		if (!(value instanceof JsonString string) || string.getValue().isEmpty()
 				|| string.getValue().length() > MAXIMUM_KEY_ID_LENGTH)
-			throw skip(JsonWebKeySkipReason.MALFORMED_KEY);
+			throw skip(JwkSkipReason.MALFORMED_KEY);
 		return string.getValue();
 	}
 
@@ -307,7 +307,7 @@ public final class JwkParser {
 		if (value == null)
 			return null;
 		if (!(value instanceof JsonString string) || string.getValue().isEmpty())
-			throw skip(JsonWebKeySkipReason.MALFORMED_KEY);
+			throw skip(JwkSkipReason.MALFORMED_KEY);
 		return string.getValue();
 	}
 
@@ -315,7 +315,7 @@ public final class JwkParser {
 	private static String requiredString(@NonNull Map<@NonNull String, @NonNull JsonValue> members,
 																			 @NonNull String name) throws SkippedKeyException {
 		if (!(members.get(name) instanceof JsonString string))
-			throw skip(JsonWebKeySkipReason.MALFORMED_KEY);
+			throw skip(JwkSkipReason.MALFORMED_KEY);
 		return string.getValue();
 	}
 
@@ -324,7 +324,7 @@ public final class JwkParser {
 		try {
 			return Base64Url.decode(requiredString(members, name));
 		} catch (EncodingException e) {
-			throw skip(JsonWebKeySkipReason.MALFORMED_KEY);
+			throw skip(JwkSkipReason.MALFORMED_KEY);
 		}
 	}
 
@@ -338,7 +338,7 @@ public final class JwkParser {
 			return;
 		if (!(value instanceof JsonArray chain) || chain.getElements().isEmpty()
 				|| !(chain.getElements().get(0) instanceof JsonString first))
-			throw skip(JsonWebKeySkipReason.CERTIFICATE_MISMATCH);
+			throw skip(JwkSkipReason.CERTIFICATE_MISMATCH);
 
 		PublicKey certificateKey;
 
@@ -346,11 +346,11 @@ public final class JwkParser {
 			// RFC 7517 section 4.7: standard base64 of the DER, not base64url.
 			certificateKey = Pem.parseCertificateDer(StandardBase64.decode(first.getValue())).getPublicKey();
 		} catch (EncodingException | PemException | RuntimeException e) {
-			throw skip(JsonWebKeySkipReason.CERTIFICATE_MISMATCH);
+			throw skip(JwkSkipReason.CERTIFICATE_MISMATCH);
 		}
 
 		if (!isSameKey(publicKey, certificateKey))
-			throw skip(JsonWebKeySkipReason.CERTIFICATE_MISMATCH);
+			throw skip(JwkSkipReason.CERTIFICATE_MISMATCH);
 	}
 
 	/**
@@ -394,23 +394,23 @@ public final class JwkParser {
 			return Base64Url.encode(MessageDigest.getInstance(HashAlgorithm.SHA_256.getDigestName()).digest(canonical));
 		} catch (JsonFieldException | GeneralSecurityException e) {
 			// Unreachable once every member is canonical base64url; SHA-256 is in every JDK.
-			throw skip(JsonWebKeySkipReason.MALFORMED_KEY);
+			throw skip(JwkSkipReason.MALFORMED_KEY);
 		}
 	}
 
 	@NonNull
-	private static JsonWebKeySkipReason reasonFor(KeyRejectedException.@NonNull Kind kind) {
+	private static JwkSkipReason reasonFor(KeyRejectedException.@NonNull Kind kind) {
 		return switch (kind) {
-			case MALFORMED, SECRET_TOO_SHORT -> JsonWebKeySkipReason.MALFORMED_KEY;
-			case RSA_KEY_SIZE -> JsonWebKeySkipReason.RSA_KEY_SIZE;
-			case RSA_EXPONENT -> JsonWebKeySkipReason.RSA_EXPONENT;
-			case NOT_ON_CURVE -> JsonWebKeySkipReason.EC_POINT_NOT_ON_CURVE;
-			case WEAK -> JsonWebKeySkipReason.WEAK_KEY;
+			case MALFORMED, SECRET_TOO_SHORT -> JwkSkipReason.MALFORMED_KEY;
+			case RSA_KEY_SIZE -> JwkSkipReason.RSA_KEY_SIZE;
+			case RSA_EXPONENT -> JwkSkipReason.RSA_EXPONENT;
+			case NOT_ON_CURVE -> JwkSkipReason.EC_POINT_NOT_ON_CURVE;
+			case WEAK -> JwkSkipReason.WEAK_KEY;
 		};
 	}
 
 	@NonNull
-	private static SkippedKeyException skip(@NonNull JsonWebKeySkipReason reason) {
+	private static SkippedKeyException skip(@NonNull JwkSkipReason reason) {
 		return new SkippedKeyException(reason);
 	}
 }

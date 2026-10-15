@@ -22,7 +22,7 @@ import com.revetsec.internal.json.JsonCodec;
 import com.revetsec.internal.json.JsonLimits;
 import com.revetsec.json.JsonObject;
 import com.revetsec.json.JsonString;
-import com.revetsec.testing.TestJsonWebKeys.Fixture;
+import com.revetsec.testing.TestJwk.Fixture;
 import com.revetsec.testing.TestJws.Algorithm;
 import com.revetsec.testing.TestJws.Signed;
 import com.revetsec.testing.TestJws.Variant;

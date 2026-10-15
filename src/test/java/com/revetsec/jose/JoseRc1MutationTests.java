@@ -18,10 +18,10 @@ package com.revetsec.jose;
 
 import com.revetsec.ErrorCategory;
 import com.revetsec.internal.http.Deadline;
-import com.revetsec.internal.jose.JwkSetParser;
+import com.revetsec.internal.jose.JwksParser;
 import com.revetsec.internal.jose.KeySelection;
 import com.revetsec.testing.TestClock;
-import com.revetsec.testing.TestJsonWebKeys;
+import com.revetsec.testing.TestJwk;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Assertions;
@@ -140,7 +140,7 @@ final class JoseRc1MutationTests {
     if (outcome.equals("timeout") || outcome.equals("interrupt")) {
      InvocationTargetException thrown = Assertions.assertThrows(InvocationTargetException.class,
        () -> call(cache, "await", flight, Deadline.fromNow(outcome.equals("timeout") ? Duration.ZERO : Duration.ofSeconds(2))));
-     Assertions.assertInstanceOf(JsonWebKeySetUnavailableException.class, thrown.getCause());
+     Assertions.assertInstanceOf(JwksUnavailableException.class, thrown.getCause());
      if (outcome.equals("interrupt")) Assertions.assertTrue(Thread.currentThread().isInterrupted());
     } else Assertions.assertSame(cutShort, call(cache, "await", flight, Deadline.fromNow(Duration.ofSeconds(2))));
     Assertions.assertEquals(0, field(cache, "waiterCount"));
@@ -161,7 +161,7 @@ final class JoseRc1MutationTests {
  }
 
  @Test void publicSelectionReleasesFastAndSlowPathLocks() throws Exception {
-  JwksCache cache = JwksCacheTests.source(JwksCacheTests.MemoryHttpClient.answering(JwksCacheTests.Answer.fromKeySet(null, "a")),
+  JwksCache cache = JwksCacheTests.source(JwksCacheTests.MemoryHttpClient.answering(JwksCacheTests.Answer.fromJwks(null, "a")),
     TestClock.fromInstant(JwksCacheTests.START)).build().cacheForTests();
   for (int attempt = 0; attempt < 2; ++attempt) {
    Assertions.assertEquals(KeySelection.Kind.FOUND, cache.select(JwksCacheTests.rs256("a"), Deadline.fromNow(Duration.ofSeconds(2))).getKind());
@@ -212,12 +212,12 @@ final class JoseRc1MutationTests {
  }
 
  private static @NonNull JwksCache cache() {
-  return JwksCacheTests.source(JwksCacheTests.MemoryHttpClient.answering(JwksCacheTests.Answer.fromKeySet(null)),
+  return JwksCacheTests.source(JwksCacheTests.MemoryHttpClient.answering(JwksCacheTests.Answer.fromJwks(null)),
     TestClock.fromInstant(JwksCacheTests.START)).build().cacheForTests();
  }
  private static JwksCache.@NonNull Snapshot snapshot(boolean fresh, boolean withKey) throws Exception {
-  String json = withKey ? TestJsonWebKeys.keySet(List.of(TestJsonWebKeys.withFixture(TestJsonWebKeys.Fixture.IDP_SIGNING_RSA_2048).kid("a").toJson())) : "{\"keys\":[]}";
-  return new JwksCache.Snapshot(JwkSetParser.parse(json, 256 * 1024, 100).keys(), JwksCacheTests.START.minusSeconds(60),
+  String json = withKey ? TestJwk.keySet(List.of(TestJwk.withFixture(TestJwk.Fixture.IDP_SIGNING_RSA_2048).kid("a").toJson())) : "{\"keys\":[]}";
+  return new JwksCache.Snapshot(JwksParser.parse(json, 256 * 1024, 100).keys(), JwksCacheTests.START.minusSeconds(60),
     fresh ? JwksCacheTests.START.plusSeconds(60) : JwksCacheTests.START.minusSeconds(1), JwksCacheTests.START.plusSeconds(3600));
  }
  private static @NonNull Class<?> nested(@NonNull String name) throws ClassNotFoundException { return Class.forName(JwksCache.class.getName() + "$" + name); }

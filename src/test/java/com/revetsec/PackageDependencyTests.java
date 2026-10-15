@@ -132,7 +132,7 @@ final class PackageDependencyTests {
 	 * fetching code may live (M1 plan, "Contract-list changes" item 3). Its layer is the root package, which every
 	 * package may use, so without this row {@code saml}, {@code scim} and {@code json} could reach it too.
 	 * {@code internal.jose} is not listed: it holds only pure, I/O-free JOSE code, and the JWKS fetch and its cache
-	 * live in {@code jose}, next to {@code RemoteJsonWebKeySource} (G8-11). The row bans only this package; other I/O is
+	 * live in {@code jose}, next to {@code RemoteJwksSource} (G8-11). The row bans only this package; other I/O is
 	 * left to review.
 	 */
 	static final Map<String, Set<String>> RESTRICTED_INTERNAL_PACKAGES = Map.of(

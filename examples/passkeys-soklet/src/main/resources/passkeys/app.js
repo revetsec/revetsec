@@ -41,6 +41,12 @@ async function ceremony(startPath, finishPath, creation, startHeaders = {}) {
     const options = creation
       ? PublicKeyCredential.parseCreationOptionsFromJSON(started.publicKey)
       : PublicKeyCredential.parseRequestOptionsFromJSON(started.publicKey);
+    if (document.getElementById("security-key").checked) {
+      options.hints = ["security-key"];
+      if (creation) options.authenticatorSelection = {
+        ...options.authenticatorSelection, authenticatorAttachment: "cross-platform"
+      };
+    }
     const credential = creation
       ? await navigator.credentials.create({ publicKey: options })
       : await navigator.credentials.get({ publicKey: options });

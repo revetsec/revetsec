@@ -122,13 +122,13 @@ class ScimBuiltinUserEquivalenceTests {
             for (ScimResource resource:List.of(created(provider,type,body),ScimResource.withResourceType(type).document(body).build())) {
                 ScimUser view=ScimUser.fromResource(resource); assertEquals("Ada",view.getUserName());
                 assertEquals("Ada Lovelace",view.getDisplayName().orElseThrow()); assertTrue(view.isActive().orElseThrow());
-                assertEquals("ada@example.invalid",view.getEmails().get(0).findString("value").orElseThrow());
+                assertEquals("ada@example.invalid",view.getEmails().get(0).find("value").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow());
                 ScimEnterpriseUser enterpriseView=ScimEnterpriseUser.fromResource(resource);
                 assertEquals("employee-1",enterpriseView.getEmployeeNumber().orElseThrow());
                 assertEquals("Research",enterpriseView.getDepartment().orElseThrow());
                 assertEquals("Analytical",enterpriseView.getOrganization().orElseThrow()); assertEquals("Machines",enterpriseView.getDivision().orElseThrow());
-                assertEquals("manager-A",enterpriseView.getManager().orElseThrow().findString("value").orElseThrow());
-                assertEquals("../Users/manager-A",enterpriseView.getManager().orElseThrow().findString("$ref").orElseThrow());
+                assertEquals("manager-A",enterpriseView.getManager().orElseThrow().find("value").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow());
+                assertEquals("../Users/manager-A",enterpriseView.getManager().orElseThrow().find("$ref").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow());
                 ScimAttributePath managerPath=assertInstanceOf(ScimAttributePathParseResult.Succeeded.class,
                         ScimAttributePath.fromExpressionResult(extensionId(type)+":MANAGER.VALUE")).getAttributePath();
                 assertTrue(resource.find(managerPath).isPresent());
@@ -165,7 +165,7 @@ class ScimBuiltinUserEquivalenceTests {
                 assertSame(ScimError.invalidValueInstance(),assertInstanceOf(ScimResourceParseResult.Rejected.class,provider.parseReplacementResult(type,current,bytes(body))).getError());
                 assertSame(ScimError.invalidValueInstance(),assertInstanceOf(ScimPatchParseResult.Rejected.class,parsePatch(provider,type,
                         JsonObject.builder().put("op","replace").put("path",extensionId(type)+":MANAGER.VALUE").put("value",invalid).build())).getError());
-                assertEquals("manager-A",ScimEnterpriseUser.fromResource(current).getManager().orElseThrow().findString("value").orElseThrow());
+                assertEquals("manager-A",ScimEnterpriseUser.fromResource(current).getManager().orElseThrow().find("value").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow());
             }
         }
     }
@@ -175,19 +175,19 @@ class ScimBuiltinUserEquivalenceTests {
             for (String id:List.of("x".repeat(1024),"Manager-A","manager-a")) {
                 JsonObject body=document(type,JsonObject.builder().put("manager",JsonObject.builder().put("value",id).build()).build());
                 ScimResource resource=created(provider,type,body);
-                assertEquals(id,ScimEnterpriseUser.fromResource(resource).getManager().orElseThrow().findString("value").orElseThrow());
+                assertEquals(id,ScimEnterpriseUser.fromResource(resource).getManager().orElseThrow().find("value").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow());
                 java.util.Map<String,JsonValue> fields=new java.util.LinkedHashMap<>(body.getMembers());
                 fields.put("groups",JsonArray.fromElements(List.of(JsonObject.builder().put("value",id).build())));
                 ScimResource trusted=ScimResource.withResourceType(type).document(JsonObject.fromMembers(fields)).build();
                 assertEquals(id,assertInstanceOf(JsonObject.class,assertInstanceOf(JsonArray.class,
-                        trusted.getDocument().find("groups").orElseThrow()).getElements().get(0)).findString("value").orElseThrow());
+                        trusted.getDocument().find("groups").orElseThrow()).getElements().get(0)).find("value").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow());
             }
             ScimResource current=created(provider,type,document(type,JsonObject.builder().put("manager",JsonObject.builder().put("value","Manager-A").build()).build()));
             ScimPatchResult changed=assertInstanceOf(ScimPatchApplicationResult.Succeeded.class,
                     provider.applyPatchResult(current,patch(provider,type,extensionId(type)+":manager.value",JsonString.fromValue("manager-a")))).getPatchResult();
             assertTrue(changed.isModified());
-            assertEquals("manager-a",ScimEnterpriseUser.fromResource(changed.getResource()).getManager().orElseThrow().findString("value").orElseThrow());
-            assertEquals("Manager-A",ScimEnterpriseUser.fromResource(current).getManager().orElseThrow().findString("value").orElseThrow());
+            assertEquals("manager-a",ScimEnterpriseUser.fromResource(changed.getResource()).getManager().orElseThrow().find("value").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow());
+            assertEquals("Manager-A",ScimEnterpriseUser.fromResource(current).getManager().orElseThrow().find("value").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow());
         }
     }
     @Test void canonicalizedEnterpriseExtensionsRetainTheirRequiredRegistration() {
@@ -209,7 +209,7 @@ class ScimBuiltinUserEquivalenceTests {
                     JsonObject.builder().put("op","remove").put("path",enterprise.getId()).build())).getPatchRequest();
             assertSame(ScimError.mutabilityInstance(),assertInstanceOf(ScimPatchApplicationResult.Rejected.class,
                     root.applyPatchResult(current,removal)).getError());
-            assertEquals("manager-A",ScimEnterpriseUser.fromResource(current).getManager().orElseThrow().findString("value").orElseThrow());
+            assertEquals("manager-A",ScimEnterpriseUser.fromResource(current).getManager().orElseThrow().find("value").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow());
         }
     }
     @Test void putAndPatchClearReadOnlyManagerDisplayNameWhenIdentityChanges() {
@@ -221,14 +221,14 @@ class ScimBuiltinUserEquivalenceTests {
             JsonObject replacement=document(type,JsonObject.builder().put("manager",JsonObject.builder().put("value","manager-B").put("displayName","Forged").build()).put("department","After").build());
             ScimResourceParseResult.Succeeded replaced=assertInstanceOf(ScimResourceParseResult.Succeeded.class,provider.parseReplacementResult(type,current,bytes(replacement)));
             JsonObject putManager=ScimEnterpriseUser.fromResource(replaced.getResource()).getManager().orElseThrow();
-            assertEquals("manager-B",putManager.findString("value").orElseThrow()); assertTrue(putManager.findString("displayName").isEmpty());
+            assertEquals("manager-B",putManager.find("value").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow()); assertTrue(putManager.find("displayName").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).isEmpty());
             assertTrue(paths(replaced.getSuppliedAttributePaths()).contains(extensionId(type)+":manager.value"));
             assertFalse(paths(replaced.getSuppliedAttributePaths()).contains(extensionId(type)+":manager.displayName"));
             ScimPatchRequest request=patch(provider,type,extensionId(type)+":MANAGER.VALUE",JsonString.fromValue("manager-C"));
             assertEquals(Set.of(extensionId(type)+":manager.value"),paths(request.getRequestedAttributePaths()));
             ScimPatchResult changed=assertInstanceOf(ScimPatchApplicationResult.Succeeded.class,provider.applyPatchResult(current,request)).getPatchResult();
-            assertEquals("manager-C",ScimEnterpriseUser.fromResource(changed.getResource()).getManager().orElseThrow().findString("value").orElseThrow());
-            assertTrue(ScimEnterpriseUser.fromResource(changed.getResource()).getManager().orElseThrow().findString("displayName").isEmpty());
+            assertEquals("manager-C",ScimEnterpriseUser.fromResource(changed.getResource()).getManager().orElseThrow().find("value").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow());
+            assertTrue(ScimEnterpriseUser.fromResource(changed.getResource()).getManager().orElseThrow().find("displayName").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).isEmpty());
             assertEquals(Set.of(extensionId(type)+":manager",extensionId(type)+":manager.value",
                     extensionId(type)+":manager.displayName"),paths(changed.getModifiedAttributePaths()));
             ScimResource sameManager=assertInstanceOf(ScimResourceParseResult.Succeeded.class,
@@ -236,7 +236,7 @@ class ScimBuiltinUserEquivalenceTests {
                             .put("manager",JsonObject.builder().put("value","manager-A").build()).build()))))
                     .getResource();
             assertEquals("Stored Manager",ScimEnterpriseUser.fromResource(sameManager).getManager()
-                    .orElseThrow().findString("displayName").orElseThrow());
+                    .orElseThrow().find("displayName").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow());
             assertSame(before,current.getDocument());
         }
     }
@@ -275,15 +275,15 @@ class ScimBuiltinUserEquivalenceTests {
             };
             ScimServiceProvider provider=provider(type,scalar,observer);
             ScimResource created=created(provider,type,body);
-            assertEquals("manager-A",ScimEnterpriseUser.fromResource(created).getManager().orElseThrow().findString("value").orElseThrow());
+            assertEquals("manager-A",ScimEnterpriseUser.fromResource(created).getManager().orElseThrow().find("value").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow());
             assertEquals(List.of(ScimCompatibilityFeature.COMPLEX_VALUE_AS_SCALAR),features); features.clear();
             ScimPatchRequest request=patch(provider,type,extensionId(type)+":MANAGER",JsonString.fromValue("manager-B"));
             ScimResource changed=assertInstanceOf(ScimPatchApplicationResult.Succeeded.class,provider.applyPatchResult(created,request)).getPatchResult().getResource();
-            assertEquals("manager-B",ScimEnterpriseUser.fromResource(changed).getManager().orElseThrow().findString("value").orElseThrow());
+            assertEquals("manager-B",ScimEnterpriseUser.fromResource(changed).getManager().orElseThrow().find("value").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow());
             assertEquals(List.of(ScimCompatibilityFeature.COMPLEX_VALUE_AS_SCALAR),features);
             features.clear();
             ScimResource replaced=assertInstanceOf(ScimResourceParseResult.Succeeded.class,provider.parseReplacementResult(type,created,bytes(body))).getResource();
-            assertEquals("manager-A",ScimEnterpriseUser.fromResource(replaced).getManager().orElseThrow().findString("value").orElseThrow());
+            assertEquals("manager-A",ScimEnterpriseUser.fromResource(replaced).getManager().orElseThrow().find("value").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow());
             assertEquals(List.of(ScimCompatibilityFeature.COMPLEX_VALUE_AS_SCALAR),features);
             assertSame(ScimError.invalidValueInstance(),assertInstanceOf(ScimResourceParseResult.Rejected.class,
                     provider.parseResourceResult(type,bytes(document(type,JsonObject.builder().put("manager","bulkId:temporary").build())))).getError());
@@ -298,7 +298,7 @@ class ScimBuiltinUserEquivalenceTests {
             ScimPatchApplicationResult result=provider.applyPatchResult(current,request);
             if (user == ScimSchema.userInstance()) {
                 ScimResource changed=assertInstanceOf(ScimPatchApplicationResult.Succeeded.class,result).getPatchResult().getResource();
-                assertEquals("ada@example.invalid",ScimUser.fromResource(changed).getEmails().get(0).findString("value").orElseThrow());
+                assertEquals("ada@example.invalid",ScimUser.fromResource(changed).getEmails().get(0).find("value").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow());
             } else assertSame(ScimError.noTargetInstance(),assertInstanceOf(ScimPatchApplicationResult.Rejected.class,result).getError());
         }
     }
@@ -324,9 +324,9 @@ class ScimBuiltinUserEquivalenceTests {
             ScimPatchRequest request=patch(provider,type,"EMAILS[TYPE eq \"home\"].PRIMARY",JsonBoolean.fromValue(true));
             ScimResource changed=assertInstanceOf(ScimPatchApplicationResult.Succeeded.class,provider.applyPatchResult(current,request)).getPatchResult().getResource();
             List<JsonObject> emails=ScimUser.fromResource(changed).getEmails();
-            assertEquals(2,emails.size()); assertFalse(emails.get(0).findBoolean("primary").orElse(false));
-            assertTrue(emails.get(1).findBoolean("primary").orElseThrow());
-            assertTrue(ScimUser.fromResource(current).getEmails().get(0).findBoolean("primary").orElseThrow());
+            assertEquals(2,emails.size()); assertFalse(emails.get(0).find("primary").filter(JsonBoolean.class::isInstance).map(JsonBoolean.class::cast).map(JsonBoolean::getValue).orElse(false));
+            assertTrue(emails.get(1).find("primary").filter(JsonBoolean.class::isInstance).map(JsonBoolean.class::cast).map(JsonBoolean::getValue).orElseThrow());
+            assertTrue(ScimUser.fromResource(current).getEmails().get(0).find("primary").filter(JsonBoolean.class::isInstance).map(JsonBoolean.class::cast).map(JsonBoolean::getValue).orElseThrow());
             assertEquals(Set.of("emails","emails.type","emails.primary"),paths(request.getRequestedAttributePaths()));
         }
     }
@@ -360,12 +360,12 @@ class ScimBuiltinUserEquivalenceTests {
                 ScimPatchRequest request=assertInstanceOf(ScimPatchParseResult.Succeeded.class,parsePatch(provider,type,operation)).getPatchRequest();
                 ScimResource changed=assertInstanceOf(ScimPatchApplicationResult.Succeeded.class,provider.applyPatchResult(current,request)).getPatchResult().getResource();
                 JsonArray emails=assertInstanceOf(JsonArray.class,changed.getDocument().find(emailsName).orElseThrow());
-                assertFalse(assertInstanceOf(JsonObject.class,emails.getElements().get(0)).findBoolean(primaryName).orElse(false));
+                assertFalse(assertInstanceOf(JsonObject.class,emails.getElements().get(0)).find(primaryName).filter(JsonBoolean.class::isInstance).map(JsonBoolean.class::cast).map(JsonBoolean::getValue).orElse(false));
                 int primaryCount=0;
-                for (JsonValue email:emails.getElements()) if (assertInstanceOf(JsonObject.class,email).findBoolean(primaryName).orElse(false)) primaryCount++;
-                assertEquals(1,primaryCount); assertTrue(assertInstanceOf(JsonObject.class,emails.getElements().get(emails.getElements().size()-1)).findBoolean(primaryName).orElseThrow());
+                for (JsonValue email:emails.getElements()) if (assertInstanceOf(JsonObject.class,email).find(primaryName).filter(JsonBoolean.class::isInstance).map(JsonBoolean.class::cast).map(JsonBoolean::getValue).orElse(false)) primaryCount++;
+                assertEquals(1,primaryCount); assertTrue(assertInstanceOf(JsonObject.class,emails.getElements().get(emails.getElements().size()-1)).find(primaryName).filter(JsonBoolean.class::isInstance).map(JsonBoolean.class::cast).map(JsonBoolean::getValue).orElseThrow());
                 assertTrue(assertInstanceOf(JsonObject.class,assertInstanceOf(JsonArray.class,current.getDocument().find(emailsName).orElseThrow())
-                        .getElements().get(0)).findBoolean(primaryName).orElseThrow());
+                        .getElements().get(0)).find(primaryName).filter(JsonBoolean.class::isInstance).map(JsonBoolean.class::cast).map(JsonBoolean::getValue).orElseThrow());
             }
         }
         for (boolean primaryString:List.of(false,true)) {
@@ -401,7 +401,7 @@ class ScimBuiltinUserEquivalenceTests {
                     .put(enterprise.getId(),JsonObject.builder().put("MANAGER","manager-A").build()).build();
             ScimResource current=created(provider,type,body);
             assertEquals("manager-A",assertInstanceOf(JsonObject.class,current.getExtension(enterprise.getId()).orElseThrow()
-                    .find("manager").orElseThrow()).findString("value").orElseThrow());
+                    .find("manager").orElseThrow()).find("value").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow());
             assertSame(ScimError.invalidValueInstance(),assertInstanceOf(ScimPatchParseResult.Rejected.class,parsePatch(provider,type,
                     JsonObject.builder().put("op","replace").put("path",enterprise.getId()+":manager.value").put("value","bulkId:temporary").build())).getError());
             assertThrows(IllegalArgumentException.class,() -> ScimEnterpriseUser.fromResource(current));
@@ -414,7 +414,7 @@ class ScimBuiltinUserEquivalenceTests {
                 .put(ScimSchema.userInstance().getId(),JsonObject.builder().put("userName","Ada")
                         .put("groups",JsonArray.fromElements(List.of(JsonObject.builder().put("value","bulkId:temporary").build()))).build()).build();
         ScimResource trusted=ScimResource.withResourceType(misplaced).document(body).build();
-        assertEquals("bulkId:temporary",assertInstanceOf(JsonObject.class,trusted.getDocument().find("manager").orElseThrow()).findString("value").orElseThrow());
+        assertEquals("bulkId:temporary",assertInstanceOf(JsonObject.class,trusted.getDocument().find("manager").orElseThrow()).find("value").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow());
         assertThrows(IllegalArgumentException.class,() -> ScimUser.fromResource(trusted));
         assertSame(ScimError.invalidValueInstance(),assertInstanceOf(ScimPatchParseResult.Rejected.class,
                 parsePatch(provider,misplaced,JsonObject.builder().put("op","replace").put("path","manager").put("value","manager-A").build())).getError());
@@ -442,7 +442,7 @@ class ScimBuiltinUserEquivalenceTests {
             JsonObject body=document(type,JsonObject.builder().put("manager",JsonObject.builder().put("value","bulkId:temporary").build()).build());
             ScimResource resource=created(provider,type,body);
             assertEquals("bulkId:temporary",assertInstanceOf(JsonObject.class,resource.getExtension(enterprise.getId()).orElseThrow()
-                    .find(upperNames ? "MANAGER" : "manager").orElseThrow()).findString(upperNames ? "VALUE" : "value").orElseThrow());
+                    .find(upperNames ? "MANAGER" : "manager").orElseThrow()).find(upperNames ? "VALUE" : "value").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow());
             java.util.Map<String,JsonValue> fields=new java.util.LinkedHashMap<>(body.getMembers());
             fields.put("groups",JsonArray.fromElements(List.of(JsonObject.builder().put("value","bulkId:temporary").build())));
             assertDoesNotThrow(() -> ScimResource.withResourceType(type).document(JsonObject.fromMembers(fields)).build());

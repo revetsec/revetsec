@@ -297,14 +297,6 @@ public class JsonModelFuzzTests {
 			JsonValue memberValue = member.getValue();
 
 			Assertions.assertEquals(Optional.of(memberValue), object.find(name), "find() disagrees with getMembers()");
-			Assertions.assertEquals(memberValue instanceof JsonString string ? Optional.of(string.getValue())
-					: Optional.empty(), object.findString(name), "findString() disagrees with getMembers()");
-			Assertions.assertEquals(memberValue instanceof JsonBoolean bool ? Optional.of(bool.getValue())
-					: Optional.empty(), object.findBoolean(name), "findBoolean() disagrees with getMembers()");
-			Assertions.assertEquals(memberValue instanceof JsonNumber number ? exactLong(number.getValue())
-					: Optional.empty(), object.findLong(name), "findLong() disagrees with getMembers()");
-			Assertions.assertEquals(stringList(memberValue), object.findStringList(name),
-					"findStringList() disagrees with getMembers()");
 			requireLookupsAgree(memberValue);
 		}
 
@@ -336,22 +328,6 @@ public class JsonModelFuzzTests {
 		}
 
 		return integer.bitLength() <= 63 ? Optional.of(integer.longValue()) : Optional.empty();
-	}
-
-	private static @NonNull Optional<@NonNull List<@NonNull String>> stringList(@NonNull JsonValue value) {
-		if (!(value instanceof JsonArray array))
-			return Optional.empty();
-
-		List<String> strings = new ArrayList<>();
-
-		for (JsonValue element : array.getElements()) {
-			if (!(element instanceof JsonString string))
-				return Optional.empty();
-
-			strings.add(string.getValue());
-		}
-
-		return Optional.of(strings);
 	}
 
 	/**

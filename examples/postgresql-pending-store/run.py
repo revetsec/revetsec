@@ -63,7 +63,7 @@ def main() -> None:
     if not all(path.is_file() for path in paths) or not (args.java_home / "bin/java").is_file():
         parser.error("All input JARs and the Java home must exist")
     if app_lane and hashlib.sha256(args.framework_jar.read_bytes()).hexdigest() != (
-            "c454eac7ff5fd58d564a2c1603133ed1c47a01210d2910be4d60f392ebe1184f"):
+            "f7f62f967045a8eb8f943a90d49d499b4c5b755d20ab901e12a34fe1d004319b"):
         parser.error("Use the pinned Soklet 4.0.0 framework JAR for the application lane")
     check(docker("image", "inspect", "--format", "{{.Id}}", IMAGE) == IMAGE, "cached-image")
 

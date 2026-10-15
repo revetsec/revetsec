@@ -16,6 +16,8 @@
 
 package com.revetsec.oauth;
 
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+
 import org.jspecify.annotations.NonNull;
 
 import com.revetsec.OutboundUriPolicy;
@@ -84,14 +86,14 @@ final class OAuthBuilderConventionTests {
 			TokenRequestOptions reset = TokenRequestOptions.builder().scopes(Set.of("other")).scopes(null)
 					.resources(List.of(URI.create("https://api.example/other"))).resources(null)
 					.additionalParameters(Map.of("extension", "old")).additionalParameters(null).build();
-			assertEquals("received", client.requestClientCredentialsToken(reset).getAccessToken().getValue());
-			assertEquals("received", client.requestClientCredentialsToken(TokenRequestOptions.builder()
-					.scopes(Set.of()).resources(List.of()).build()).getAccessToken().getValue());
-			assertEquals("received", ClientCredentialsTokenSource.withClient(client).scopes(Set.of("other"))
-					.scopes(null).resources(List.of()).resources(null).build().getAccessToken().getValue());
-			assertEquals("received", ClientCredentialsTokenSource.withClient(client).scopes(Set.of())
-					.resources(List.of()).build().getAccessToken().getValue());
-			assertEquals("received", client.refresh(RefreshToken.fromValue("refresh"), reset)
+			assertEquals("received", assertInstanceOf(OAuthTokenRequestResult.Succeeded.class, client.requestClientCredentialsResult(reset)).getTokens().getAccessToken().getValue());
+			assertEquals("received", assertInstanceOf(OAuthTokenRequestResult.Succeeded.class, client.requestClientCredentialsResult(TokenRequestOptions.builder()
+					.scopes(Set.of()).resources(List.of()).build())).getTokens().getAccessToken().getValue());
+			assertEquals("received", assertInstanceOf(AccessTokenAcquisitionResult.Succeeded.class, ClientCredentialsTokenSource.withClient(client).scopes(Set.of("other"))
+					.scopes(null).resources(List.of()).resources(null).build().getAccessTokenResult()).getAccessToken().getValue());
+			assertEquals("received", assertInstanceOf(AccessTokenAcquisitionResult.Succeeded.class, ClientCredentialsTokenSource.withClient(client).scopes(Set.of())
+					.resources(List.of()).build().getAccessTokenResult()).getAccessToken().getValue());
+			assertEquals("received", assertInstanceOf(OAuthTokenRequestResult.Succeeded.class, client.refreshResult(RefreshToken.fromValue("refresh"), reset)).getTokens()
 					.getAccessToken().getValue());
 			for (int index : List.of(0, 2)) {
 				QueryParameters form = QueryParameters.parse(server.getRequests("/token").get(index).getBodyAsString());
@@ -121,16 +123,16 @@ final class OAuthBuilderConventionTests {
 					.fallbackCacheDuration(Duration.ofSeconds(10)).fallbackCacheDuration(null)
 					.maximumCacheDuration(Duration.ofMinutes(1)).maximumCacheDuration(null)
 					.renewBefore(Duration.ZERO).renewBefore(null).build();
-			AccessToken first = source.getAccessToken();
+			AccessToken first = assertInstanceOf(AccessTokenAcquisitionResult.Succeeded.class, source.getAccessTokenResult()).getAccessToken();
 			clock.advance(Duration.ofSeconds(239));
-			assertSame(first, source.getAccessToken());
+			assertSame(first, assertInstanceOf(AccessTokenAcquisitionResult.Succeeded.class, source.getAccessTokenResult()).getAccessToken());
 			clock.advance(Duration.ofSeconds(1));
-			assertEquals("renewed", source.getAccessToken().getValue());
+			assertEquals("renewed", assertInstanceOf(AccessTokenAcquisitionResult.Succeeded.class, source.getAccessTokenResult()).getAccessToken().getValue());
 			ClientCredentialsTokenSource capped = ClientCredentialsTokenSource.withClient(client)
 					.maximumCacheDuration(Duration.ofMinutes(1)).maximumCacheDuration(null).build();
-			AccessToken longToken = capped.getAccessToken();
+			AccessToken longToken = assertInstanceOf(AccessTokenAcquisitionResult.Succeeded.class, capped.getAccessTokenResult()).getAccessToken();
 			clock.advance(Duration.ofMinutes(2));
-			assertSame(longToken, capped.getAccessToken());
+			assertSame(longToken, assertInstanceOf(AccessTokenAcquisitionResult.Succeeded.class, capped.getAccessTokenResult()).getAccessToken());
 			assertEquals(3, server.getHitCount("/token"));
 			assertThrows(IllegalArgumentException.class, () -> ClientCredentialsTokenSource.withClient(client)
 					.maximumCacheDuration(Duration.ofMinutes(1)).fallbackCacheDuration(null).build());
@@ -144,20 +146,20 @@ final class OAuthBuilderConventionTests {
 		InMemoryPendingAuthorizationStore store = InMemoryPendingAuthorizationStore.builder()
 				.maximumLiveEntries(16).maximumLiveEntries(null).maximumChargedBytes(65536L).maximumChargedBytes(null)
 				.maximumOpaqueRecordBytes(1024).maximumOpaqueRecordBytes(null).clock(clock).build();
-		for (int index = 0; index < 1024; index++) store.save("binding", "state-" + index, "x".repeat(2000), now.plusSeconds(60));
-		assertThrows(PendingAuthorizationStoreException.class, () -> store.save("binding", "overflow", "x", now.plusSeconds(60)));
-		assertThrows(IllegalArgumentException.class, () -> store.save("binding", "too-large", "x".repeat(8193), now.plusSeconds(60)));
+		for (int index = 0; index < 1024; index++) org.junit.jupiter.api.Assertions.assertEquals(com.revetsec.oauth.PendingAuthorizationSaveResult.SAVED, store.save("binding", "state-" + index, "x".repeat(2000), now.plusSeconds(60)));
+		assertEquals(PendingAuthorizationSaveResult.CAPACITY_REFUSED, store.save("binding", "overflow", "x", now.plusSeconds(60)));
+		assertEquals(PendingAuthorizationSaveResult.CAPACITY_REFUSED, store.save("binding", "too-large", "x".repeat(8193), now.plusSeconds(60)));
 		clock.advance(Duration.ofSeconds(60));
 		assertTrue(store.consume("binding", "state-0").isEmpty());
-		store.save("binding", "fresh", "x", now.plusSeconds(120));
+		org.junit.jupiter.api.Assertions.assertEquals(com.revetsec.oauth.PendingAuthorizationSaveResult.SAVED, store.save("binding", "fresh", "x", now.plusSeconds(120)));
 		assertEquals("x", store.consume("binding", "fresh").orElseThrow());
 		InMemoryPendingAuthorizationStore byteBound = InMemoryPendingAuthorizationStore.builder()
 				.maximumChargedBytes(65536L).maximumChargedBytes(null).clock(clock).build();
-		for (int index = 0; index < 511; index++) byteBound.save("binding", "bytes-" + index, "x".repeat(8192), now.plusSeconds(120));
-		assertThrows(PendingAuthorizationStoreException.class, () -> byteBound.save("binding", "bytes-511", "x".repeat(8192), now.plusSeconds(120)));
+		for (int index = 0; index < 511; index++) org.junit.jupiter.api.Assertions.assertEquals(com.revetsec.oauth.PendingAuthorizationSaveResult.SAVED, byteBound.save("binding", "bytes-" + index, "x".repeat(8192), now.plusSeconds(120)));
+		assertEquals(PendingAuthorizationSaveResult.CAPACITY_REFUSED, byteBound.save("binding", "bytes-511", "x".repeat(8192), now.plusSeconds(120)));
 		InMemoryPendingAuthorizationStore system = InMemoryPendingAuthorizationStore.builder()
 				.clock(Clock.fixed(Instant.EPOCH, ZoneOffset.UTC)).clock(null).build();
-		assertThrows(IllegalArgumentException.class, () -> system.save("binding", "expired", "x", Instant.now().minusSeconds(1)));
+		assertEquals(PendingAuthorizationSaveResult.UNAVAILABLE, system.save("binding", "expired", "x", Instant.now().minusSeconds(1)));
 	}
 
 	@Test
@@ -206,8 +208,7 @@ final class OAuthBuilderConventionTests {
 				.authorizationResponseIssuerSupported(true).authorizationResponseIssuerSupported(null).build();
 		assertEquals(Boolean.FALSE, reset.isAuthorizationResponseIssuerSupported());
 		assertEquals(Boolean.FALSE, reset.isRemotelyDiscovered());
-		assertEquals(OAuthException.Reason.DOCUMENT_MALFORMED, assertThrows(OAuthResponseException.class,
-				() -> AuthorizationServerMetadata.fromJson("https://issuer.example", "{\"issuer\":\"https://issuer.example\"}")).getReason());
+		assertEquals(OAuthException.Reason.DOCUMENT_MALFORMED, assertInstanceOf(AuthorizationServerMetadataParseResult.Rejected.class, AuthorizationServerMetadata.fromJsonResult("https://issuer.example", "{\"issuer\":\"https://issuer.example\"}")).getReason());
 	}
 
 	private static @NonNull AuthorizationServerMetadata metadata(@NonNull String issuer) {

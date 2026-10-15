@@ -81,13 +81,13 @@ class ScimM12ExtensionPatchTests {
         ScimPatchResult added=apply(p,current,patch);
         assertTrue(added.isModified());
         assertEquals(Set.of("schemas",ENTERPRISE+":department"),paths(added.getModifiedAttributePaths()));
-        assertEquals("research",added.getResource().getExtension(ENTERPRISE).orElseThrow().findString("department").orElseThrow());
+        assertEquals("research",added.getResource().getExtension(ENTERPRISE).orElseThrow().find("department").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow());
         ScimResource withSibling=user(JsonObject.builder().put("department","research").put("employeeNumber","employee-1").build());
         ScimPatchResult replaced=apply(p,withSibling,parse(p,USER,operation("replace",ENTERPRISE.toUpperCase(java.util.Locale.ROOT),
                 JsonObject.builder().put("department","engineering").build())));
         JsonObject extension=replaced.getResource().getExtension(ENTERPRISE).orElseThrow();
-        assertEquals("engineering",extension.findString("department").orElseThrow());
-        assertEquals("employee-1",extension.findString("employeeNumber").orElseThrow());
+        assertEquals("engineering",extension.find("department").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow());
+        assertEquals("employee-1",extension.find("employeeNumber").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow());
         assertEquals(Set.of(ENTERPRISE+":department"),paths(replaced.getModifiedAttributePaths()));
         assertEquals("W/\"v1\"",replaced.getResource().getVersion().orElseThrow());
         assertFalse(replaced.toString().contains("engineering"));
@@ -173,7 +173,7 @@ class ScimM12ExtensionPatchTests {
             ScimPatchRequest clearThenRestore=parse(p,type,operation("replace",schema,JsonObject.builder().put("field",JsonNull.defaultInstance()).build()),
                     operation("replace",schema,JsonObject.builder().put("field","restored").build()));
             assertSame(ScimError.mutabilityInstance(),assertInstanceOf(ScimPatchApplicationResult.Rejected.class,p.applyPatchResult(current,clearThenRestore)).getError());
-            assertEquals("assigned",current.getExtension(schema).orElseThrow().findString("field").orElseThrow());
+            assertEquals("assigned",current.getExtension(schema).orElseThrow().find("field").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow());
         }
     }
     @Test void wholeExtensionRemovalAndWritesProtectImmutableAndReadOnlyDataIncludingDescendants() {
@@ -185,7 +185,7 @@ class ScimM12ExtensionPatchTests {
             for (JsonObject op:List.of(operation("remove",schema,null),operation("replace",schema,JsonObject.builder().put("field","changed").build()),
                     operation("add",schema,JsonObject.builder().put("field",JsonNull.defaultInstance()).build())))
                 assertSame(ScimError.mutabilityInstance(),assertInstanceOf(ScimPatchApplicationResult.Rejected.class,p.applyPatchResult(current,parse(p,type,op))).getError());
-            assertEquals("locked",current.getExtension(schema).orElseThrow().findString("field").orElseThrow());
+            assertEquals("locked",current.getExtension(schema).orElseThrow().find("field").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow());
             ScimResource child=fixture(type,JsonObject.builder().put("complex",JsonObject.builder().put("locked","child").build()).build());
             assertSame(ScimError.mutabilityInstance(),assertInstanceOf(ScimPatchApplicationResult.Rejected.class,
                     p.applyPatchResult(child,parse(p,type,operation("remove",schema,null)))).getError());
@@ -256,7 +256,7 @@ class ScimM12ExtensionPatchTests {
             assertTrue(operation.getExtensionSchemaId().isEmpty());
             assertEquals("field",operation.getAttributePath().orElseThrow().toScimString());
             ScimPatchResult result=apply(p,current,request);
-            assertEquals("after",result.getResource().getDocument().findString("field").orElseThrow());
+            assertEquals("after",result.getResource().getDocument().find("field").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow());
             assertTrue(result.getResource().getExtension(extension.getId()).isEmpty());
             assertEquals(Set.of("field"),paths(result.getModifiedAttributePaths()));
         }

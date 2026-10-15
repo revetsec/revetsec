@@ -24,7 +24,7 @@ import com.revetsec.internal.http.Deadline;
 import com.revetsec.internal.jose.JwtValidationAccess;
 import com.revetsec.internal.json.JsonFieldException;
 import com.revetsec.internal.json.JsonFields;
-import com.revetsec.jose.JsonWebKeySource;
+import com.revetsec.jose.JwksSource;
 import com.revetsec.jose.JoseException;
 import com.revetsec.jose.JoseObserver;
 import com.revetsec.jose.JwsAlgorithm;
@@ -59,7 +59,7 @@ import static java.util.Objects.requireNonNull;
 final class IdTokenValidator {
 	private final String issuer;
 	private final String clientId;
-	private final JsonWebKeySource jsonWebKeySource;
+	private final JwksSource jwksSource;
 	private final Set<JwsAlgorithm> algorithms;
 	private final Set<String> trustedAudiences;
 	private final Set<String> trustedAuthorizedParties;
@@ -70,25 +70,25 @@ final class IdTokenValidator {
 	private final boolean hmacEnabled;
 	private final OidcIssuerPolicy issuerPolicy;
 
-	IdTokenValidator(@NonNull String issuer, @NonNull String clientId, @NonNull JsonWebKeySource jsonWebKeySource,
+	IdTokenValidator(@NonNull String issuer, @NonNull String clientId, @NonNull JwksSource jwksSource,
 			@NonNull Set<@NonNull JwsAlgorithm> algorithms, @NonNull Set<@NonNull String> trustedAudiences, @NonNull Set<@NonNull String> trustedAuthorizedParties,
 			@NonNull Duration clockSkew, @NonNull Duration maximumIdTokenAge, @NonNull Clock clock) {
-		this(issuer, clientId, jsonWebKeySource, algorithms, trustedAudiences, trustedAuthorizedParties, clockSkew,
+		this(issuer, clientId, jwksSource, algorithms, trustedAudiences, trustedAuthorizedParties, clockSkew,
 				maximumIdTokenAge, clock, JoseObserver.disabledInstance());
 	}
 
-	IdTokenValidator(@NonNull String issuer, @NonNull String clientId, @NonNull JsonWebKeySource jsonWebKeySource,
+	IdTokenValidator(@NonNull String issuer, @NonNull String clientId, @NonNull JwksSource jwksSource,
 			@NonNull Set<@NonNull JwsAlgorithm> algorithms, @NonNull Set<@NonNull String> trustedAudiences, @NonNull Set<@NonNull String> trustedAuthorizedParties,
 			@NonNull Duration clockSkew, @NonNull Duration maximumIdTokenAge, @NonNull Clock clock, @NonNull JoseObserver observer) {
-		this(issuer, clientId, jsonWebKeySource, algorithms, trustedAudiences, trustedAuthorizedParties, clockSkew,
+		this(issuer, clientId, jwksSource, algorithms, trustedAudiences, trustedAuthorizedParties, clockSkew,
 				maximumIdTokenAge, clock, observer, false);
 	}
-	IdTokenValidator(@NonNull String issuer, @NonNull String clientId, @NonNull JsonWebKeySource jsonWebKeySource,
+	IdTokenValidator(@NonNull String issuer, @NonNull String clientId, @NonNull JwksSource jwksSource,
 			@NonNull Set<@NonNull JwsAlgorithm> algorithms, @NonNull Set<@NonNull String> trustedAudiences, @NonNull Set<@NonNull String> trustedAuthorizedParties,
 			@NonNull Duration clockSkew, @NonNull Duration maximumIdTokenAge, @NonNull Clock clock, @NonNull JoseObserver observer, boolean hmacEnabled) {
-		this(issuer, clientId, jsonWebKeySource, algorithms, trustedAudiences, trustedAuthorizedParties, clockSkew, maximumIdTokenAge, clock, observer, hmacEnabled, OidcIssuerPolicy.exactInstance());
+		this(issuer, clientId, jwksSource, algorithms, trustedAudiences, trustedAuthorizedParties, clockSkew, maximumIdTokenAge, clock, observer, hmacEnabled, OidcIssuerPolicy.exactInstance());
 	}
-	IdTokenValidator(@NonNull String issuer, @NonNull String clientId, @NonNull JsonWebKeySource jsonWebKeySource,
+	IdTokenValidator(@NonNull String issuer, @NonNull String clientId, @NonNull JwksSource jwksSource,
 			@NonNull Set<@NonNull JwsAlgorithm> algorithms, @NonNull Set<@NonNull String> trustedAudiences, @NonNull Set<@NonNull String> trustedAuthorizedParties,
 			@NonNull Duration clockSkew, @NonNull Duration maximumIdTokenAge, @NonNull Clock clock, @NonNull JoseObserver observer, boolean hmacEnabled, @NonNull OidcIssuerPolicy issuerPolicy) {
 		this.issuerPolicy = requireNonNull(issuerPolicy); this.issuerPolicy.checkConfiguredIssuer(issuer);
@@ -96,7 +96,7 @@ final class IdTokenValidator {
 		this.hmacEnabled = hmacEnabled;
 		this.issuer = requireNonNull(issuer);
 		this.clientId = requireNonNull(clientId);
-		this.jsonWebKeySource = requireNonNull(jsonWebKeySource);
+		this.jwksSource = requireNonNull(jwksSource);
 		this.algorithms = Set.copyOf(algorithms);
 		this.trustedAudiences = Set.copyOf(trustedAudiences);
 		this.trustedAuthorizedParties = Set.copyOf(trustedAuthorizedParties);
@@ -166,7 +166,7 @@ final class IdTokenValidator {
 			Set<JwsAlgorithm> asymmetric = new java.util.HashSet<>(this.algorithms);
 			asymmetric.removeIf(IdTokenValidator::isHmac);
 			if (asymmetric.isEmpty()) asymmetric.add(JwsAlgorithm.RS256); // Template only; private profile replaces it.
-			JwtValidator validator = JwtValidator.withIssuer(this.issuer).jsonWebKeySource(this.jsonWebKeySource)
+			JwtValidator validator = JwtValidator.withIssuer(this.issuer).jwksSource(this.jwksSource)
 					.expectedAudiences(Set.of(this.clientId)).allowedAlgorithms(asymmetric)
 					.requiredClaims(Set.of("iat")).clockSkew(this.clockSkew)
 					.clock(validationClock).observer(this.observer).build();
@@ -177,8 +177,8 @@ final class IdTokenValidator {
 						deadline == null ? () -> Long.MAX_VALUE : deadline::remainingNanos, this::reportHmacUse);
 			} else if (this.issuerPolicy.isMicrosoftEntra()) jwt = JwtValidationAccess.get().validateMicrosoftEntra(validator, compactSerialization,
 					deadline == null ? () -> Long.MAX_VALUE : deadline::remainingNanos);
-			else jwt = deadline == null ? validator.validate(compactSerialization)
-					: JwtValidationAccess.get().validate(validator, compactSerialization, deadline::remainingNanos);
+			else jwt = JwtValidationAccess.get().validate(validator, compactSerialization,
+					deadline == null ? () -> Long.MAX_VALUE : deadline::remainingNanos);
 		} catch (JoseException exception) {
 			throw OidcValidationException.fromJoseReason(exception.getReason());
 		} catch (EncodingException | IllegalArgumentException invalidSecret) {

@@ -16,6 +16,7 @@
 
 package com.revetsec.oauth;
 
+import com.google.errorprone.annotations.CheckReturnValue;
 import com.revetsec.internal.Limits;
 import com.revetsec.internal.http.MediaType;
 import com.revetsec.internal.encoding.EncodingException;
@@ -53,35 +54,104 @@ public final class AuthorizationResponse {
 			"error_description", "error_uri");
 	private final @NonNull Map<@NonNull String, @NonNull List<@NonNull String>> parameters;
 	private final AuthorizationRequestOptions.@NonNull ResponseMode responseMode;
+	private final @Nullable URI errorUri;
 
 	private AuthorizationResponse(@NonNull Map<@NonNull String, @NonNull List<@NonNull String>> values,
-			AuthorizationRequestOptions.@NonNull ResponseMode responseMode) {
+			AuthorizationRequestOptions.@NonNull ResponseMode responseMode, @Nullable URI errorUri) {
 		this.parameters = values;
 		this.responseMode = responseMode;
+		this.errorUri = errorUri;
 	}
 
 	/**
-	 * Parses a raw URL query, without the question mark.
+	 * Parses a raw URL query, without the question mark, keeping malformed input as a rejected result.
+	 * A successful parse grants no identity and does not validate the pending authorization transaction.
 	 *
 	 * @param rawQuery the raw query
-	 * @return the parsed callback
+	 * @return the unverified callback or a fixed rejection reason
+	 * @throws NullPointerException if rawQuery is null
 	 * @since 1.0.0
 	 */
-	public static @NonNull AuthorizationResponse fromQueryString(@NonNull String rawQuery) {
-		return fromEncoded(rawQuery, AuthorizationRequestOptions.ResponseMode.QUERY);
+	@CheckReturnValue
+	public static @NonNull AuthorizationResponseParseResult fromQueryStringResult(@NonNull String rawQuery) {
+		try {
+			return AuthorizationResponseParseResult.fromResponse(fromQueryString(rawQuery));
+		} catch (OAuthResponseException exception) {
+			return AuthorizationResponseParseResult.fromRejected();
+		}
 	}
 
 	/**
-	 * Parses a UTF-8 form-post body. OAuth protocol members in the URL query are rejected to prevent a response from
-	 * being split across channels; safe nonprotocol query parameters are retained as untrusted extras.
+	 * Parses a UTF-8 form-post body. Protocol members in the query reject split-channel responses; safe nonprotocol
+	 * query parameters remain untrusted extras. Invalid charset, encoding, size or parameters produce rejection.
 	 *
 	 * @param body the form bytes
 	 * @param charset the application's parsed Content-Type charset, which must be UTF-8
 	 * @param rawQueryOrNull the URL's raw query, if any
-	 * @return the parsed callback
+	 * @return the unverified callback or a fixed rejection reason
+	 * @throws NullPointerException if body or charset is null
 	 * @since 1.0.0
 	 */
-	public static @NonNull AuthorizationResponse fromFormBody(byte @NonNull [] body, @NonNull Charset charset,
+	@CheckReturnValue
+	public static @NonNull AuthorizationResponseParseResult fromFormBodyResult(byte @NonNull [] body,
+			@NonNull Charset charset, @Nullable String rawQueryOrNull) {
+		try {
+			return AuthorizationResponseParseResult.fromResponse(fromFormBody(body, charset, rawQueryOrNull));
+		} catch (OAuthResponseException exception) {
+			return AuthorizationResponseParseResult.fromRejected();
+		}
+	}
+
+	/**
+	 * Parses a form-post callback after validating every raw Content-Type occurrence. Requires exactly one form
+	 * field with an absent or UTF-8 charset and no duplicate MIME parameters. The field is capped at 8,192
+	 * characters before MIME parsing. Preserve materialized duplicates; a trusted edge rejects physical fields
+	 * discarded by a transport. Invalid MIME, body, duplicate parameters and split channels produce rejection.
+	 *
+	 * @param body the raw form bytes
+	 * @param contentTypeHeaderValues all materialized Content-Type values
+	 * @param rawQueryOrNull the raw URL query, if any
+	 * @return the unverified callback or a fixed rejection reason
+	 * @throws NullPointerException if body, header list or its sole field is null
+	 * @since 1.0.0
+	 */
+	@CheckReturnValue
+	public static @NonNull AuthorizationResponseParseResult fromFormBodyResult(byte @NonNull [] body,
+			@NonNull List<@NonNull String> contentTypeHeaderValues, @Nullable String rawQueryOrNull) {
+		try {
+			return AuthorizationResponseParseResult.fromResponse(fromFormBody(body, contentTypeHeaderValues, rawQueryOrNull));
+		} catch (OAuthResponseException exception) {
+			return AuthorizationResponseParseResult.fromRejected();
+		}
+	}
+
+	/**
+	 * Accepts parameters from an application parser, retaining multiplicity and the explicit route mode.
+	 * Malformed, duplicate, oversized or split-channel parameters produce rejection. Success remains unverified.
+	 *
+	 * @param values decoded parameters, with all values for each name
+	 * @param rawQueryOrNull the URL query when the mode is form-post, if any
+	 * @param responseMode mode established by trusted application routing
+	 * @return the unverified callback or a fixed rejection reason
+	 * @throws NullPointerException if values, a parameter name/list/value or responseMode is null
+	 * @since 1.0.0
+	 */
+	@CheckReturnValue
+	public static @NonNull AuthorizationResponseParseResult fromParametersResult(
+			@NonNull Map<@NonNull String, @NonNull List<@NonNull String>> values,
+			@Nullable String rawQueryOrNull, AuthorizationRequestOptions.@NonNull ResponseMode responseMode) {
+		try {
+			return AuthorizationResponseParseResult.fromResponse(fromParameters(values, rawQueryOrNull, responseMode));
+		} catch (OAuthResponseException exception) {
+			return AuthorizationResponseParseResult.fromRejected();
+		}
+	}
+
+	private static @NonNull AuthorizationResponse fromQueryString(@NonNull String rawQuery) {
+		return fromEncoded(rawQuery, AuthorizationRequestOptions.ResponseMode.QUERY);
+	}
+
+	private static @NonNull AuthorizationResponse fromFormBody(byte @NonNull [] body, @NonNull Charset charset,
 			@Nullable String rawQueryOrNull) {
 		requireNonNull(body);
 		if (!StandardCharsets.UTF_8.equals(requireNonNull(charset)))
@@ -96,22 +166,7 @@ public final class AuthorizationResponse {
 		}
 	}
 
-	/**
-	 * Parses a form-post callback after validating its raw Content-Type values. Requires exactly one form field,
-	 * with absent or UTF-8 charset and no duplicate MIME parameters. Caps the field at 8,192 characters before
-	 * MIME parsing using the authorization-response parameter default; accepted field characters each occupy one
-	 * ISO-8859-1 octet. Preserve materialized duplicates; identical physical fields lost by a transport must be
-	 * rejected at a trusted edge. Body/query multiplicity and split-channel checks are the same as the Charset overload.
-	 *
-	 * @param body the raw form bytes
-	 * @param contentTypeHeaderValues all materialized Content-Type values
-	 * @param rawQueryOrNull the raw URL query, if any
-	 * @return the untrusted parsed callback
-	 * @throws OAuthResponseException if MIME, size, charset or callback checks fail
-	 * @throws NullPointerException if body, header list or its sole field is null
-	 * @since 1.0.0
-	 */
-	public static @NonNull AuthorizationResponse fromFormBody(byte @NonNull [] body,
+	private static @NonNull AuthorizationResponse fromFormBody(byte @NonNull [] body,
 			@NonNull List<@NonNull String> contentTypeHeaderValues, @Nullable String rawQueryOrNull) {
 		requireNonNull(body);
 		requireNonNull(contentTypeHeaderValues);
@@ -127,16 +182,7 @@ public final class AuthorizationResponse {
 		return fromFormBody(body, StandardCharsets.UTF_8, rawQueryOrNull);
 	}
 
-	/**
-	 * Accepts parameters from a trusted application parser, keeping their multiplicity and explicit route mode.
-	 *
-	 * @param values decoded parameters, with all values for each name
-	 * @param rawQueryOrNull the URL query when the mode is form-post, if any
-	 * @param responseMode mode established by trusted application routing
-	 * @return the parsed callback
-	 * @since 1.0.0
-	 */
-	public static @NonNull AuthorizationResponse fromParameters(
+	private static @NonNull AuthorizationResponse fromParameters(
 			@NonNull Map<@NonNull String, @NonNull List<@NonNull String>> values,
 			@Nullable String rawQueryOrNull, AuthorizationRequestOptions.@NonNull ResponseMode responseMode) {
 		requireNonNull(values);
@@ -187,7 +233,7 @@ public final class AuthorizationResponse {
 		if (aggregate > Limits.AUTHORIZATION_RESPONSE_QUERY_SIZE.getDefaultIntValue()
 				|| (copy.containsKey("code") && copy.containsKey("error")))
 			throw OAuthResponseException.fromReason(OAuthException.Reason.CALLBACK_MALFORMED);
-		return new AuthorizationResponse(Collections.unmodifiableMap(copy), responseMode);
+		return new AuthorizationResponse(Collections.unmodifiableMap(copy), responseMode, parseErrorUri(copy));
 	}
 
 	private static @NonNull AuthorizationResponse fromEncoded(@NonNull String encoded,
@@ -217,6 +263,20 @@ public final class AuthorizationResponse {
 				Arrays.fill(encoded, (byte) 0);
 			}
 		} catch (EncodingException exception) {
+			throw OAuthResponseException.fromReason(OAuthException.Reason.CALLBACK_MALFORMED);
+		}
+	}
+
+	private static @Nullable URI parseErrorUri(@NonNull Map<@NonNull String, @NonNull List<@NonNull String>> values) {
+		List<String> list = values.get("error_uri");
+		if (list == null || list.isEmpty() || list.get(0).isEmpty())
+			return null;
+		try {
+			URI uri = URI.create(list.get(0));
+			if (!uri.isAbsolute())
+				throw new IllegalArgumentException();
+			return uri;
+		} catch (IllegalArgumentException exception) {
 			throw OAuthResponseException.fromReason(OAuthException.Reason.CALLBACK_MALFORMED);
 		}
 	}
@@ -280,22 +340,13 @@ public final class AuthorizationResponse {
 	}
 
 	/**
-	 * Returns an absolute error URI, if present and parseable.
+	 * Returns the absolute error URI, if present and nonempty. Parsing rejects a malformed supplied URI.
 	 *
 	 * @return the URI
 	 * @since 1.0.0
 	 */
 	public @NonNull Optional<@NonNull URI> getErrorUri() {
-		return first("error_uri").map(value -> {
-			try {
-				URI uri = URI.create(value);
-				if (!uri.isAbsolute())
-					throw new IllegalArgumentException();
-				return uri;
-			} catch (IllegalArgumentException exception) {
-				throw OAuthResponseException.fromReason(OAuthException.Reason.CALLBACK_MALFORMED);
-			}
-		});
+		return Optional.ofNullable(this.errorUri);
 	}
 
 	/**
@@ -319,12 +370,11 @@ public final class AuthorizationResponse {
 	/**
 	 * Returns the optional per-flow cookie name derived from state. The suffix is a selector, not an authenticator.
 	 *
-	 * @return the cookie name
+	 * @return the cookie name when nonempty state is present
 	 * @since 1.0.0
 	 */
-	public @NonNull String getPerFlowCookieName() {
-		return OAuthCookieNames.fromState(getState().orElseThrow(() ->
-				new IllegalArgumentException("A callback state is required for a per-flow cookie name.")));
+	public @NonNull Optional<@NonNull String> getPerFlowCookieName() {
+		return getState().map(OAuthCookieNames::fromState);
 	}
 
 	/**

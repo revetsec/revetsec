@@ -95,43 +95,57 @@ public final class InMemoryPendingAuthorizationStore implements PendingAuthoriza
 	 * @param opaqueRecord the opaque record
 	 * @param expiresAt its exact expiry
 	 * @param remaining positive time left for this operation
+	 * @return the fixed storage outcome
 	 * @since 1.0.0
 	 */
 	@Override
-	public void save(@NonNull String browserBinding, @NonNull String state, @NonNull String opaqueRecord,
+	@CheckReturnValue
+	public @NonNull PendingAuthorizationSaveResult save(@NonNull String browserBinding, @NonNull String state, @NonNull String opaqueRecord,
 			@NonNull Instant expiresAt, @NonNull Duration remaining) {
-		Deadline deadline = deadline(remaining);
+		requireNonNull(remaining);
 		checkLookupInputs(browserBinding, state);
 		requireNonNull(opaqueRecord);
 		requireNonNull(expiresAt);
 		if (opaqueRecord.isEmpty())
 			throw new IllegalArgumentException("A pending record must not be empty.");
+		if (remaining.isZero() || remaining.isNegative() || Thread.currentThread().isInterrupted())
+			return PendingAuthorizationSaveResult.UNAVAILABLE;
+		Deadline deadline = Deadline.fromNow(remaining);
+		if (deadline.isExpired()) return PendingAuthorizationSaveResult.UNAVAILABLE;
 		long recordBytes = utf8Length(opaqueRecord, this.maximumOpaqueRecordBytes);
+		if (deadline.isExpired() || Thread.currentThread().isInterrupted()) return PendingAuthorizationSaveResult.UNAVAILABLE;
 		if (recordBytes > this.maximumOpaqueRecordBytes)
-			throw new IllegalArgumentException("A pending record exceeds the configured byte limit.");
+			return PendingAuthorizationSaveResult.CAPACITY_REFUSED;
 		long charged = recordBytes + utf8Length(browserBinding, this.maximumChargedBytes)
 				+ utf8Length(state, this.maximumChargedBytes);
+		if (deadline.isExpired() || Thread.currentThread().isInterrupted()) return PendingAuthorizationSaveResult.UNAVAILABLE;
 		if (charged > this.maximumChargedBytes)
-			throw new IllegalArgumentException("A pending record exceeds the store byte limit.");
-
-		acquire(deadline);
+			return PendingAuthorizationSaveResult.CAPACITY_REFUSED;
+		try { acquire(deadline); }
+		catch (PendingAuthorizationStoreException unavailable) { return PendingAuthorizationSaveResult.UNAVAILABLE; }
 		try {
-			if (deadline.isExpired()) throw unavailable();
-			Instant clockNow = this.clock.instant();
-			if (deadline.isExpired()) throw unavailable();
+			if (deadline.isExpired() || Thread.currentThread().isInterrupted()) return PendingAuthorizationSaveResult.UNAVAILABLE;
+			Instant clockNow;
+			try { clockNow = this.clock.instant(); }
+			catch (RuntimeException unavailable) { return PendingAuthorizationSaveResult.UNAVAILABLE; }
+			if (clockNow == null || deadline.isExpired() || Thread.currentThread().isInterrupted())
+				return PendingAuthorizationSaveResult.UNAVAILABLE;
 			Instant now = observedTime(clockNow);
-			if (!expiresAt.isAfter(now) || expiresAt.isAfter(now.plus(Duration.ofMinutes(60))))
+			if (!expiresAt.isAfter(now)) return PendingAuthorizationSaveResult.UNAVAILABLE;
+			if (expiresAt.isAfter(now.plus(Duration.ofMinutes(60))))
 				throw new IllegalArgumentException("A pending record expiry must be within 60 minutes.");
 			pruneExpired(now);
-			if (deadline.isExpired()) throw unavailable();
+			if (deadline.isExpired() || Thread.currentThread().isInterrupted()) return PendingAuthorizationSaveResult.UNAVAILABLE;
 			Key key = new Key(browserBinding, state);
-			if (this.entries.containsKey(key))
-				throw new IllegalArgumentException("A live pending record already exists.");
+			if (this.entries.containsKey(key)) return PendingAuthorizationSaveResult.ALREADY_PRESENT;
 			if (this.entries.size() >= this.maximumLiveEntries
 					|| charged > this.maximumChargedBytes - this.chargedBytes.get())
-				throw PendingAuthorizationStoreException.fromReason(OAuthException.Reason.CAPACITY_EXCEEDED);
+				return PendingAuthorizationSaveResult.CAPACITY_REFUSED;
+			if (deadline.isExpired() || Thread.currentThread().isInterrupted()) return PendingAuthorizationSaveResult.UNAVAILABLE;
 			this.entries.put(key, new Entry(opaqueRecord, expiresAt, charged));
 			this.chargedBytes.addAndGet(charged);
+			return deadline.isExpired() || Thread.currentThread().isInterrupted()
+					? PendingAuthorizationSaveResult.INDETERMINATE : PendingAuthorizationSaveResult.SAVED;
 		} finally {
 			this.lock.unlock();
 		}

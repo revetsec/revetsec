@@ -132,21 +132,24 @@ import com.revetsec.json.JsonString;
 import com.revetsec.json.JsonValue;
 import com.revetsec.jose.JoseException;
 import com.revetsec.jose.JoseObserver;
-import com.revetsec.jose.JsonWebKey;
-import com.revetsec.jose.JsonWebKeySet;
-import com.revetsec.jose.JsonWebKeySetUnavailableException;
-import com.revetsec.jose.JsonWebKeySkipReason;
-import com.revetsec.jose.JsonWebKeySource;
+import com.revetsec.jose.Jwk;
+import com.revetsec.jose.Jwks;
+import com.revetsec.jose.JwksUnavailableException;
+import com.revetsec.jose.JwkSkipReason;
+import com.revetsec.jose.JwksSource;
 import com.revetsec.jose.JwsAlgorithm;
 import com.revetsec.jose.JwsSigner;
 import com.revetsec.jose.JwsSigningException;
 import com.revetsec.jose.Jwt;
 import com.revetsec.jose.JwtClaims;
+import com.revetsec.jose.JwtClaimsSet;
+import com.revetsec.jose.JwtSigningHeader;
+import com.revetsec.jose.JwtType;
 import com.revetsec.jose.JwtValidationException;
 import com.revetsec.jose.JwtValidator;
 import com.revetsec.jose.MalformedJoseInputException;
-import com.revetsec.jose.RemoteJsonWebKeySource;
-import com.revetsec.jose.StaticJsonWebKeySource;
+import com.revetsec.jose.RemoteJwksSource;
+import com.revetsec.jose.StaticJwksSource;
 import com.revetsec.jose.UnsupportedJoseFeatureException;
 import com.revetsec.saml.InMemoryPendingSamlAuthenticationStore;
 import com.revetsec.saml.InMemorySamlReplayCache;
@@ -525,15 +528,15 @@ public final class PackagedConsumer {
 		require(!key.toString().contains(KEY_ID) && !snapshot.toString().contains(KEY_ID), "issuer key redaction");
   byte[] sealBytes=new byte[32];for(int i=0;i<sealBytes.length;i++)sealBytes[i]=(byte)(i+1);
   OAuthAuthorizationServer server=OAuthAuthorizationServer.withIssuer(ISSUER)
-   .authorizationEndpoint(URI.create(ISSUER+"/authorize")).tokenEndpoint(URI.create(ISSUER+"/token")).jsonWebKeySetEndpoint(URI.create(ISSUER+"/jwks"))
+   .authorizationEndpoint(URI.create(ISSUER+"/authorize")).tokenEndpoint(URI.create(ISSUER+"/token")).jwksEndpoint(URI.create(ISSUER+"/jwks"))
    .clientRepository((id,budget)->Optional.empty()).store(new OAuthAuthorizationServerStore(){
     @Override public @NonNull Optional<@NonNull OAuthStoreEntry> read(@NonNull OAuthStoreKey address,@NonNull Duration budget){throw new AssertionError("build touched store");}
     @Override public @NonNull OAuthStoreCommitStatus commit(@NonNull OAuthStoreTransaction transaction,@NonNull Duration budget){throw new AssertionError("build touched store");}
    }).signingKeys(provider).stateSealer(StateSealer.withActiveKey(SealingKey.fromBase64("consumer-issuer",Base64.getEncoder().encodeToString(sealBytes))).build())
    .resources(Map.of("https://resource.example/mcp",Set.of("read"))).grantPolicy((context,budget)->OAuthAuthorizationDecision.deniedInstance()).clock(Clock.fixed(NOW,ZoneOffset.UTC)).build();
   require(server.getIssuer().equals(ISSUER) && server.getTokenEndpoint().toString().equals(ISSUER+"/token") && server.getAuthorizationEndpoint()!=null
-   && server.getJsonWebKeySetEndpoint()!=null && server.getRevocationEndpoint().isEmpty() && server.getIntrospectionEndpoint().isEmpty(),"public issuer builder/getters without I/O");
-  require(server.metadataResponse("GET").getStatusCode()==200 && server.jsonWebKeySetResponse("HEAD").getStatusCode()==200,"public metadata/JWKS endpoints");
+   && server.getJwksEndpoint()!=null && server.getRevocationEndpoint().isEmpty() && server.getIntrospectionEndpoint().isEmpty(),"public issuer builder/getters without I/O");
+  require(server.metadataResponse("GET").getStatusCode()==200 && server.jwksResponse("HEAD").getStatusCode()==200,"public metadata/JWKS endpoints");
   require(server.tokenResult("GET",null,new byte[0],Map.of()) instanceof OAuthTokenResult.Rejected,"public bounded method result");
 
 	}
@@ -602,10 +605,10 @@ public final class PackagedConsumer {
 				+ "\"aud\":[\"a\",\"b\"],\"scale\":1,\"nonce\":null}";
 
 		require(expected.equals(json), "JsonObject.toJson() wrote " + json);
-		require(object.findString("iss").equals(Optional.of("https://issuer.example")), "findString(iss)");
-		require(object.findLong("exp").equals(Optional.of(1_800_000_000L)), "findLong(exp)");
-		require(object.findBoolean("active").equals(Optional.of(Boolean.TRUE)), "findBoolean(active)");
-		require(object.findStringList("aud").equals(Optional.of(List.of("a", "b"))), "findStringList(aud)");
+		require(object.find("iss").map(com.revetsec.json.JsonString.class::cast).map(com.revetsec.json.JsonString::getValue).equals(Optional.of("https://issuer.example")), "findString(iss)");
+		require(object.find("exp").map(com.revetsec.json.JsonNumber.class::cast).flatMap(com.revetsec.json.JsonNumber::getLongValueExact).equals(Optional.of(1_800_000_000L)), "findLong(exp)");
+		require(object.find("active").map(com.revetsec.json.JsonBoolean.class::cast).map(com.revetsec.json.JsonBoolean::getValue).equals(Optional.of(Boolean.TRUE)), "findBoolean(active)");
+		require(object.find("aud").map(com.revetsec.json.JsonArray.class::cast).map(array -> array.getElements().stream().map(com.revetsec.json.JsonString.class::cast).map(com.revetsec.json.JsonString::getValue).toList()).equals(Optional.of(List.of("a", "b"))), "findStringList(aud)");
 		require(object.find("missing").isEmpty(), "find(missing)");
 		require(JsonNull.defaultInstance().equals(object.getMembers().get("nonce")), "JsonNull.defaultInstance()");
 		require(JsonNumber.fromValue(new BigDecimal("1.0")).equals(JsonNumber.fromValue(1L)), "JsonNumber equality");
@@ -640,10 +643,11 @@ public final class PackagedConsumer {
 	private static @NonNull PendingAuthorizationStore unavailablePendingStore() {
 		return new PendingAuthorizationStore() {
 			@Override
-			public void save(@NonNull String browserBinding, @NonNull String state, @NonNull String opaqueRecord,
-					@NonNull Instant expiresAt, @NonNull Duration remaining) {
-				throw new IllegalStateException("test store unavailable");
-			}
+			public com.revetsec.oauth.@NonNull PendingAuthorizationSaveResult save(@NonNull String browserBinding,
+                    @NonNull String state, @NonNull String opaqueRecord, @NonNull Instant expiresAt,
+                    @NonNull Duration remaining) {
+                return com.revetsec.oauth.PendingAuthorizationSaveResult.UNAVAILABLE;
+            }
 
 			@Override
 			public @NonNull Optional<@NonNull String> consume(@NonNull String browserBinding, @NonNull String state,
@@ -661,7 +665,6 @@ public final class PackagedConsumer {
 		StateSealer sealer = builder.clock(Clock.systemUTC()).maximumSealedLength(4_096).build();
 		String sealed = sealer.seal(plaintext, SEALING_CONTEXT, Duration.ofMinutes(5));
 
-		require(sealer.unseal(sealed, SEALING_CONTEXT).equals(plaintext), "StateSealer round trip");
 		StateUnsealResult opened = sealer.unsealResult(sealed, SEALING_CONTEXT);
 		require(opened instanceof StateUnsealResult.Succeeded && ((StateUnsealResult.Succeeded) opened).getValue().equals(plaintext),
 				"result opening authenticates plaintext");
@@ -670,18 +673,6 @@ public final class PackagedConsumer {
 		require(key.getKeyId().equals("consumer-1")
 				&& !key.toString().contains(Base64.getEncoder().encodeToString(keyBytes)),
 				"SealingKey must render its key ID but never its key");
-
-		RevetsecException failure = null;
-
-		try {
-			sealer.unseal(sealed, "another-context");
-		} catch (InvalidSealedStateException e) {
-			failure = e;
-		}
-
-		require(failure != null, "a value sealed for one context must not open for another");
-		require(failure.getCategory() == ErrorCategory.VALIDATION_FAILURE && !failure.isTransient(),
-				"InvalidSealedStateException is a non-transient VALIDATION_FAILURE");
 
 		calledApi.add("StateSealer");
 	}
@@ -732,12 +723,12 @@ public final class PackagedConsumer {
 		// The same key published for encryption: a key set skips it, and never uses its public half to verify.
 		String encryptionKey = "{\"kty\":\"RSA\",\"kid\":\"consumer-key-2\",\"use\":\"enc\",\"n\":\"" + modulus
 				+ "\",\"e\":\"" + exponent + "\"}";
-		JsonWebKeySet keySet = JsonWebKeySet.fromJson("{\"keys\":[" + signingKey + "," + encryptionKey + "]}");
+		Jwks keySet = parsedJwks(Jwks.fromJsonResult("{\"keys\":[" + signingKey + "," + encryptionKey + "]}"));
 
 		require(keySet.getKeys().size() == 1, "the encryption key is skipped");
-		require(keySet.equals(JsonWebKeySet.fromJson("{\"keys\":[" + signingKey + "]}")), "key sets compare by value");
+		require(keySet.equals(parsedJwks(Jwks.fromJsonResult("{\"keys\":[" + signingKey + "]}"))), "key sets compare by value");
 
-		JsonWebKey key = keySet.getKeys().get(0);
+		Jwk key = keySet.getKeys().get(0);
 		String thumbprintInput = "{\"e\":\"" + exponent + "\",\"kty\":\"RSA\",\"n\":\"" + modulus + "\"}";
 		String thumbprint = BASE64URL.encodeToString(MessageDigest.getInstance("SHA-256")
 				.digest(thumbprintInput.getBytes(StandardCharsets.UTF_8)));
@@ -745,18 +736,18 @@ public final class PackagedConsumer {
 		require(key.getKeyType().equals("RSA") && key.getKeyId().equals(Optional.of(KEY_ID))
 						&& key.getAlgorithm().equals(Optional.of(JwsAlgorithm.RS256)) && key.getUse().equals(Optional.of("sig"))
 						&& key.getCurve().isEmpty() && key.getThumbprintSha256().equals(thumbprint),
-				"JsonWebKey exposes its public facts and its RFC 7638 thumbprint");
-		require(!key.toString().contains(modulus), "JsonWebKey.toString() must not show the modulus");
+				"Jwk exposes its public facts and its RFC 7638 thumbprint");
+		require(!key.toString().contains(modulus), "Jwk.toString() must not show the modulus");
 
-		JsonWebKeySource source = StaticJsonWebKeySource.fromJsonWebKeySet(keySet);
-		require(source instanceof StaticJsonWebKeySource
-						&& ((StaticJsonWebKeySource) source).getJsonWebKeySet().equals(keySet),
-				"StaticJsonWebKeySource holds the key set");
+		JwksSource source = StaticJwksSource.fromJwks(keySet);
+		require(source instanceof StaticJwksSource
+						&& ((StaticJwksSource) source).getJwks().equals(keySet),
+				"StaticJwksSource holds the key set");
 
 		boolean refusedEmptySource = false;
 
 		try {
-			StaticJsonWebKeySource.fromJsonWebKeySet(JsonWebKeySet.fromJson("{\"keys\":[" + encryptionKey + "]}"));
+			StaticJwksSource.fromJwks(parsedJwks(Jwks.fromJsonResult("{\"keys\":[" + encryptionKey + "]}")));
 		} catch (IllegalArgumentException e) {
 			refusedEmptySource = true;
 		}
@@ -766,7 +757,7 @@ public final class PackagedConsumer {
 		RecordingJoseObserver observer = new RecordingJoseObserver();
 		JwtValidator.Builder builder = JwtValidator.withIssuer(ISSUER);
 		JwtValidator validator = builder
-				.jsonWebKeySource(source)
+				.jwksSource(source)
 				.expectedAudiences(Set.of(AUDIENCE))
 				.clock(Clock.fixed(NOW, ZoneOffset.UTC))
 				.observer(observer)
@@ -777,19 +768,22 @@ public final class PackagedConsumer {
 				+ NOW.getEpochSecond() + ",\"exp\":" + (NOW.getEpochSecond() + 300) + ",\"scope\":\"openid\"}";
 		String token = signRs256(header, claims, keyPair);
 		exerciseSigner(keyPair, claims);
+		exerciseTypedSigner(keyPair, source);
 
         String accessClaims=claims.substring(0,claims.length()-1)+",\"client_id\":\"app\",\"jti\":\"id\"}";
         String accessCompact=signRs256(header.replace("JWT","at+jwt"),accessClaims,keyPair);
-        JwtAccessTokenValidator.Builder accessBuilder=JwtAccessTokenValidator.withIssuer(ISSUER).expectedAudiences(Set.of(AUDIENCE)).jsonWebKeySource(source).clock(Clock.fixed(NOW,ZoneOffset.UTC)).observer(AccessTokenObserver.disabledInstance());
+        JwtAccessTokenValidator.Builder accessBuilder=JwtAccessTokenValidator.withIssuer(ISSUER).expectedAudiences(Set.of(AUDIENCE)).jwksSource(source).clock(Clock.fixed(NOW,ZoneOffset.UTC)).observer(AccessTokenObserver.disabledInstance());
         AccessTokenValidator access=accessBuilder.build();((JwtAccessTokenValidator)access).warmUp();
-        AccessTokenValidationResult accessResult=access.validateResult(BearerToken.fromAuthorizationHeaderValues(List.of("Bearer "+accessCompact)).orElseThrow());
+        AccessTokenValidationResult accessResult=access.validateResult(parsedBearer(BearerToken.fromAuthorizationHeaderValuesResult(List.of("Bearer "+accessCompact))));
         require(accessResult instanceof AccessTokenValidationResult.Succeeded,"packaged access-token validation");VerifiedAccessToken proof=((AccessTokenValidationResult.Succeeded)accessResult).getAccessToken();
-        require(proof.getIssuer().equals(ISSUER)&&proof.getSubject().equals(Optional.of("user-1"))&&proof.getClientId().equals(Optional.of("app"))&&proof.getScopes().equals(Set.of("openid"))&&proof.getAudiences().equals(List.of(AUDIENCE))&&proof.getExpiresAt().isPresent()&&proof.getClaims().findString("jti").equals(Optional.of("id")),"checked access-token getters");
-        AccessTokenValidationResult bad=access.validateResult(BearerToken.fromAuthorizationHeaderValues(List.of("Bearer malformed")).orElseThrow());require(bad instanceof AccessTokenValidationResult.Rejected&&((AccessTokenValidationResult.Rejected)bad).getReason()==AccessTokenValidationException.Reason.JWT_REJECTED&&((AccessTokenValidationResult.Rejected)bad).getJoseReason().isPresent()&&((AccessTokenValidationResult.Rejected)bad).getBearerError()==BearerError.INVALID_TOKEN,"packaged access-token rejection");
+        require(proof.getIssuer().equals(ISSUER)&&proof.getSubject().equals(Optional.of("user-1"))&&proof.getClientId().equals(Optional.of("app"))&&proof.getScopes().equals(Set.of("openid"))&&proof.getAudiences().equals(List.of(AUDIENCE))&&proof.getExpiresAt().isPresent()&&proof.getClaims().find("jti").map(com.revetsec.json.JsonString.class::cast).map(com.revetsec.json.JsonString::getValue).equals(Optional.of("id")),"checked access-token getters");
+        AccessTokenValidationResult bad=access.validateResult(parsedBearer(BearerToken.fromAuthorizationHeaderValuesResult(List.of("Bearer malformed"))));require(bad instanceof AccessTokenValidationResult.Rejected&&((AccessTokenValidationResult.Rejected)bad).getReason()==AccessTokenValidationException.Reason.JWT_REJECTED&&((AccessTokenValidationResult.Rejected)bad).getJoseReason().isPresent()&&((AccessTokenValidationResult.Rejected)bad).getBearerError()==BearerError.INVALID_TOKEN,"packaged access-token rejection");
         OAuthClient confidential=OAuthClient.withAuthorizationServerMetadata(AuthorizationServerMetadata.withIssuer(ISSUER).authorizationEndpoint(URI.create(ISSUER+"/authorize")).tokenEndpoint(URI.create(ISSUER+"/token")).introspectionEndpoint(URI.create(ISSUER+"/inspect")).jwksUri(URI.create(ISSUER+"/keys")).introspectionEndpointAuthMethodsSupported(Set.of("client_secret_basic")).build()).clientId("app").clientAuthentication(ClientAuthentication.fromClientSecretBasic("TEST-ONLY-secret")).build();
         TokenIntrospectionClient.Builder introspectionBuilder=TokenIntrospectionClient.withOAuthClient(confidential).expectedAudiences(Set.of(AUDIENCE));TokenIntrospectionClient introspection=introspectionBuilder.build();introspection.warmUp();
         for(Class<?> type:List.of(AccessTokenValidator.class,JwtAccessTokenValidator.class,JwtAccessTokenValidator.Builder.class,TokenIntrospectionClient.class,TokenIntrospectionClient.Builder.class,VerifiedAccessToken.class,AccessTokenObserver.class,AccessTokenCompatibilityMode.class,AccessTokenValidationResult.class,AccessTokenValidationResult.Succeeded.class,AccessTokenValidationResult.Rejected.class))require(type.getName().startsWith("com.revetsec.oauth."),"packaged resource type "+type.getName());
-		Jwt jwt = validator.validate(token);
+		JwtValidationResult validated = validator.validateResult(token);
+		require(validated instanceof JwtValidationResult.Succeeded, "the signed fixture validates");
+		Jwt jwt = ((JwtValidationResult.Succeeded) validated).getJwt();
 		JwtClaims jwtClaims = jwt.getClaims();
 
 		require(jwt.getAlgorithm() == JwsAlgorithm.RS256 && jwt.getKeyId().equals(Optional.of(KEY_ID))
@@ -809,31 +803,24 @@ public final class PackagedConsumer {
 		String forgedClaims = claims.replace("\"sub\":\"user-1\"", "\"sub\":\"admin\"");
 		String[] segments = token.split("\\.");
 		String forged = segments[0] + "." + base64Url(forgedClaims) + "." + segments[2];
-		JoseException forgery = refusal(validator, forged);
-		require(forgery instanceof JwtValidationException
-						&& forgery.getReason() == JoseException.Reason.SIGNATURE_MISMATCH
-						&& forgery.getCategory() == ErrorCategory.VALIDATION_FAILURE,
+		JwtValidationResult.Rejected forgery = refusal(validator, forged);
+		require(forgery.getReason() == JoseException.Reason.SIGNATURE_MISMATCH,
 				"a forged token fails with SIGNATURE_MISMATCH");
 
-		JoseException unsigned = refusal(validator, base64Url("{\"alg\":\"none\"}") + "." + base64Url(claims) + ".");
-		require(unsigned instanceof JwtValidationException
-						&& unsigned.getReason() == JoseException.Reason.ALGORITHM_NOT_ALLOWED,
+		JwtValidationResult.Rejected unsigned = refusal(validator, base64Url("{\"alg\":\"none\"}") + "." + base64Url(claims) + ".");
+		require(unsigned.getReason() == JoseException.Reason.ALGORITHM_NOT_ALLOWED,
 				"an unsigned token fails with ALGORITHM_NOT_ALLOWED");
 
-		JoseException malformed = refusal(validator, "not-a-token");
-		require(malformed instanceof MalformedJoseInputException
-						&& malformed.getReason() == JoseException.Reason.TOKEN_SYNTAX
-						&& malformed.getCategory() == ErrorCategory.MALFORMED_INPUT,
+		JwtValidationResult.Rejected malformed = refusal(validator, "not-a-token");
+		require(malformed.getReason() == JoseException.Reason.TOKEN_SYNTAX,
 				"a malformed token fails with TOKEN_SYNTAX");
 
-		JoseException encrypted = refusal(validator, "a.b.c.d.e");
-		require(encrypted instanceof UnsupportedJoseFeatureException
-						&& encrypted.getReason() == JoseException.Reason.ENCRYPTED_TOKEN
-						&& encrypted.getCategory() == ErrorCategory.UNSUPPORTED,
+		JwtValidationResult.Rejected encrypted = refusal(validator, "a.b.c.d.e");
+		require(encrypted.getReason() == JoseException.Reason.ENCRYPTED_TOKEN,
 				"an encrypted token fails with ENCRYPTED_TOKEN");
 
 		JwtValidator otherIssuer = JwtValidator.withIssuer("https://login.example.com/tenant-2")
-				.jsonWebKeySource(source)
+				.jwksSource(source)
 				.acceptAnyAudience(Boolean.TRUE)
 				.clock(Clock.fixed(NOW, ZoneOffset.UTC))
 				.observer(JoseObserver.disabledInstance())
@@ -841,8 +828,9 @@ public final class PackagedConsumer {
 		require(refusal(otherIssuer, token).getReason() == JoseException.Reason.ISSUER_MISMATCH,
 				"a token from another issuer fails with ISSUER_MISMATCH");
 
-		require(observer.failures.equals(List.of(forgery, unsigned, malformed, encrypted)),
-				"the observer saw each refusal, as the very instance thrown");
+		require(observer.failures.stream().map(failure -> ((JoseException) failure).getReason()).toList()
+				.equals(List.of(forgery.getReason(), unsigned.getReason(), malformed.getReason(), encrypted.getReason())),
+				"the observer diagnostics match every sealed rejection reason");
 
 		JwtValidationResult checked = validator.validateResult(token);
 		require(checked instanceof JwtValidationResult.Succeeded && ((JwtValidationResult.Succeeded) checked).getJwt().toCompactSerialization().equals(token),
@@ -851,20 +839,15 @@ public final class PackagedConsumer {
 		require(rejected instanceof JwtValidationResult.Rejected && ((JwtValidationResult.Rejected) rejected).getReason() == JoseException.Reason.TOKEN_SYNTAX,
 				"result validation rejects malformed input");
 
-		boolean refusedKeySet = false;
-
-		try {
-			JsonWebKeySet.fromJson("{\"keys\":{}}");
-		} catch (MalformedJoseInputException e) {
-			refusedKeySet = e.getReason() == JoseException.Reason.KEY_SET;
-		}
-
-		require(refusedKeySet, "a key set document without a keys array fails with KEY_SET");
+		var refusedKeySet = Jwks.fromJsonResult("{\"keys\":{}}");
+		require(refusedKeySet instanceof com.revetsec.jose.JwksParseResult.Rejected
+				&& ((com.revetsec.jose.JwksParseResult.Rejected) refusedKeySet).getReason() == JoseException.Reason.KEY_SET,
+				"a key set document without a keys array has a fixed KEY_SET rejection");
 
 		// A remote source and a validator over it do no I/O until a key is needed, so nothing here touches the network.
 		URI jwksUri = URI.create("https://login.example.com/tenant-1/discovery/v2.0/keys?appid=packaged-consumer");
-		RemoteJsonWebKeySource.Builder remoteBuilder = RemoteJsonWebKeySource.withUri(jwksUri);
-		RemoteJsonWebKeySource remoteSource = remoteBuilder
+		RemoteJwksSource.Builder remoteBuilder = RemoteJwksSource.withUri(jwksUri);
+		RemoteJwksSource remoteSource = remoteBuilder
 				.outboundUriPolicy(OutboundUriPolicy.publicAddressesOnlyInstance())
 				.requestTimeout(Duration.ofSeconds(5))
 				.unknownKeyRefreshCooldown(Duration.ofSeconds(30))
@@ -872,17 +855,17 @@ public final class PackagedConsumer {
 				.observer(observer)
 				.build();
 		JwtValidator remoteValidator = JwtValidator.withIssuer(ISSUER)
-				.jsonWebKeySource(remoteSource)
+				.jwksSource(remoteSource)
 				.expectedAudiences(Set.of(AUDIENCE))
 				.build();
 
 		require(remoteSource.getUri().equals(jwksUri) && !remoteSource.toString().contains("appid")
 						&& !remoteValidator.toString().contains("appid"),
-				"RemoteJsonWebKeySource keeps its URI and renders it without the query");
+				"RemoteJwksSource keeps its URI and renders it without the query");
 		require(refusesToBuild(URI.create("https://169.254.169.254/keys"))
 						&& refusesToBuild(URI.create("http://login.example.com/keys"))
 						&& refusesToBuild(URI.create("https://login.example.com/keys#fragment")),
-				"RemoteJsonWebKeySource refuses a metadata address, plain http and a fragment at build()");
+				"RemoteJwksSource refuses a metadata address, plain http and a fragment at build()");
 		require(observer.unexpected.isEmpty(), "no key set was fetched or skipped: " + observer.unexpected);
 
 		calledApi.add("com.revetsec.jose");
@@ -910,7 +893,7 @@ public final class PackagedConsumer {
 		require(redirect.getAuthorizationUri().getRawQuery().contains("code_challenge_method=S256")
 				&& pending.getIssuer().equals(ISSUER) && pending.getRequestedScopes().equals(Set.of("read"))
 				&& !redirect.toString().contains("code_challenge"), "OAuth begin uses PKCE and redacts pending state");
-		AuthorizationResponse response = AuthorizationResponse.fromQueryString("code=example&state=opaque");
+		AuthorizationResponse response = parsedCallback(AuthorizationResponse.fromQueryStringResult("code=example&state=opaque"));
 		require(response.getCode().equals(Optional.of("example")), "OAuth callback parser exposes the code");
 		TokenRequestOptions.Builder tokenBuilder = TokenRequestOptions.builder();
 		TokenRequestOptions tokenOptions = tokenBuilder.scopes(Set.of("read")).build();
@@ -967,18 +950,12 @@ public final class PackagedConsumer {
 				"result parsing returns an unverified bearer");
 		require(BearerToken.fromAuthorizationHeaderValuesResult(List.of("Bearer a", "Bearer a")) instanceof BearerTokenResult.Malformed,
 				"result parsing rejects duplicate headers");
-		BearerToken credential = BearerToken.fromAuthorizationHeaderValues(List.of("bEaReR a._~+/=="), 8192).orElseThrow();
+		BearerToken credential = parsedBearer(BearerToken.fromAuthorizationHeaderValuesResult(List.of("bEaReR a._~+/=="), 8192));
 		require(!credential.toString().contains("a._~+/=="), "parsed bearer diagnostic is redacted");
-		require(BearerToken.fromAuthorizationHeaderValues(List.of()).isEmpty(), "missing bearer remains absent");
-		try {
-			BearerToken.fromAuthorizationHeaderValues(List.of("Bearer a", "Bearer a"));
-			throw new IllegalStateException("Repeated credential was accepted.");
-		} catch (AccessTokenValidationException error) {
-			require(error.getReason() == AccessTokenValidationException.Reason.MALFORMED_REQUEST
-					&& error.getBearerError() == BearerError.INVALID_REQUEST
-					&& error.getBearerError().getStatusCode() == 400 && error.getJoseReason().isEmpty()
-					&& error.getCause() == null && !error.isTransient(), "fixed malformed bearer verdict");
-		}
+		require(BearerToken.fromAuthorizationHeaderValuesResult(List.of()) instanceof BearerTokenResult.Absent, "missing bearer remains absent");
+		require(BearerToken.fromAuthorizationHeaderValuesResult(List.of("Bearer a", "Bearer a"))
+				instanceof BearerTokenResult.Malformed, "duplicate bearer headers are a malformed result");
+
 		URI resource = URI.create("https://rs.example/mcp/?q=%2F");
 		ProtectedResourceMetadata.Builder metadataBuilder = ProtectedResourceMetadata.withResource(resource);
 		ProtectedResourceMetadata metadata = metadataBuilder.authorizationServers(List.of("https://as.example"))
@@ -996,8 +973,8 @@ public final class PackagedConsumer {
 				&& !challenge.getHeaderValue().contains("error="), "initial bearer challenge omits error");
 		require(BearerError.INVALID_TOKEN.getStatusCode() == 401 && BearerError.INVALID_TOKEN.getWireValue().equals("invalid_token")
 				&& BearerError.INSUFFICIENT_SCOPE.getStatusCode() == 403, "bearer error mappings");
-		AuthorizationResponse response = AuthorizationResponse.fromFormBody("state=abc&code=a%2Bb".getBytes(StandardCharsets.UTF_8),
-				List.of("application/x-www-form-urlencoded; charset=utf-8"), "tracking=1");
+		AuthorizationResponse response = parsedCallback(AuthorizationResponse.fromFormBodyResult("state=abc&code=a%2Bb".getBytes(StandardCharsets.UTF_8),
+				List.of("application/x-www-form-urlencoded; charset=utf-8"), "tracking=1"));
 		require(response.getCode().equals(Optional.of("a+b")), "raw callback Content-Type envelope");
 	}
 
@@ -1021,7 +998,7 @@ public final class PackagedConsumer {
 				.put("jwks_uri", common + "/keys").put("response_types_supported", JsonArray.fromElements(List.of(JsonString.fromValue("code"))))
 				.put("subject_types_supported", JsonArray.fromElements(List.of(JsonString.fromValue("public"))))
 				.put("id_token_signing_alg_values_supported", JsonArray.fromElements(List.of(JsonString.fromValue("RS256")))).build().toJson();
-		OidcProviderMetadata selected = OidcProviderMetadata.fromJson(common, discovery, entra);
+		OidcProviderMetadata selected = parsedOidcMetadata(OidcProviderMetadata.fromJsonResult(common, discovery, entra));
 		require(selected.getIssuer().equals(common) && selected.getAdvertisedIssuer().equals(template), "Entra configured and advertised issuers remain distinct");
 		OidcClient selectedClient = OidcClient.withProviderMetadata(selected).issuerPolicy(entra).clientId(AUDIENCE)
 				.redirectUri(URI.create("https://consumer.example/callback")).build();
@@ -1041,29 +1018,28 @@ public final class PackagedConsumer {
 		String nonceDigest = BASE64URL.encodeToString(MessageDigest.getInstance("SHA-256").digest("TEST-ONLY-nonce".getBytes(StandardCharsets.UTF_8)));
 		String storage = JsonObject.builder().put("v", 1L).put("client_id", AUDIENCE).put("claims", original)
 				.put("nonce_digest", nonceDigest).build().toJson();
-		OidcSessionReference reference = OidcSessionReference.fromSerializedForm(storage);
+		OidcSessionReference reference = parsedOidcReference(OidcSessionReference.fromSerializedFormResult(storage));
 		byte[] keyBytes = new byte[32]; new SecureRandom().nextBytes(keyBytes);
 		StateSealer sealer = StateSealer.withActiveKey(SealingKey.fromBase64("oidc-consumer", Base64.getEncoder().encodeToString(keyBytes)))
 				.clock(Clock.fixed(NOW, ZoneOffset.UTC)).build(); Arrays.fill(keyBytes, (byte) 0);
 		String sealed = reference.toSealedForm(sealer, "consumer-oidc-session", Duration.ofHours(1));
-		OidcSessionReference opened = OidcSessionReference.fromSealedForm(sealed, sealer, "consumer-oidc-session");
+		OidcSessionReference opened = parsedOidcReference(OidcSessionReference.fromSealedFormResult(sealed, sealer, "consumer-oidc-session"));
 		require(opened.getSessionId().equals(Optional.of("consumer-sid")) && opened.toSerializedForm().equals(storage)
 				&& !opened.toString().contains("consumer-session"), "OIDC reference storage round trip and redaction");
-		boolean rejected = false;
-		try { OidcSessionReference.fromSerializedForm("{}"); }
-		catch (OidcValidationException exception) {
-			OidcException root = exception; OidcValidationException.Reason reason = exception.getReason();
-			rejected = reason == OidcValidationException.Reason.SESSION_REFERENCE_INVALID && root.getCategory() == ErrorCategory.VALIDATION_FAILURE;
-		}
-		require(rejected, "OIDC reference parser rejects invalid storage with a fixed reason");
-		OidcAuthenticationResult outcome = client.completeAuthenticationResult(AuthorizationResponse.fromQueryString("state=missing&code=example"),
+		var rejectedReference = OidcSessionReference.fromSerializedFormResult("{}");
+		require(rejectedReference instanceof com.revetsec.oidc.OidcSessionReferenceParseResult.Rejected
+				&& ((com.revetsec.oidc.OidcSessionReferenceParseResult.Rejected) rejectedReference).getReason()
+				== OidcValidationException.Reason.SESSION_REFERENCE_INVALID,
+				"OIDC reference parser rejects invalid storage with a fixed reason");
+
+		OidcAuthenticationResult outcome = client.completeAuthenticationResult(parsedCallback(AuthorizationResponse.fromQueryStringResult("state=missing&code=example")),
 				PendingAuthorizationSource.fromStore(InMemoryPendingAuthorizationStore.builder().clock(Clock.fixed(NOW, ZoneOffset.UTC)).build(), "consumer-browser"),
 				URI.create("https://consumer.example/callback"));
 		require(outcome instanceof OidcAuthenticationResult.RejectedAuthorization
 				&& ((OidcAuthenticationResult.RejectedAuthorization) outcome).getReason() == OAuthException.Reason.PENDING_AUTHORIZATION_NOT_FOUND,
 				"OIDC result rejects missing state before any token or identity release");
 		OidcAuthenticationResult unavailable = client.completeAuthenticationResult(
-				AuthorizationResponse.fromQueryString("state=missing&code=example"),
+				parsedCallback(AuthorizationResponse.fromQueryStringResult("state=missing&code=example")),
 				PendingAuthorizationSource.fromStore(unavailablePendingStore(), "consumer-browser"),
 				URI.create("https://consumer.example/callback"));
 		require(unavailable instanceof OidcAuthenticationResult.Failed
@@ -1081,26 +1057,93 @@ public final class PackagedConsumer {
 		calledApi.add("com.revetsec.oidc");
 	}
 
-	private static @NonNull JoseException refusal(@NonNull JwtValidator validator, @NonNull String token) {
-		try {
-			validator.validate(token);
-		} catch (JoseException e) {
-			require(e.getCause() == null && !e.isTransient() && !e.getMessage().contains(token),
-					"a JOSE refusal has no cause, is not transient and does not show the token");
-			return e;
-		}
-
-		throw new IllegalStateException("Public API check failed: a token that must be refused was accepted");
+	private static JwtValidationResult.@NonNull Rejected refusal(@NonNull JwtValidator validator, @NonNull String token) {
+		JwtValidationResult result = validator.validateResult(token);
+		require(result instanceof JwtValidationResult.Rejected, "a token that must be refused was rejected");
+		require(!result.toString().contains(token), "a rejection does not show the token");
+		return (JwtValidationResult.Rejected) result;
 	}
 
 	private static boolean refusesToBuild(@NonNull URI jwksUri) {
 		try {
-			RemoteJsonWebKeySource.withUri(jwksUri).build();
+			RemoteJwksSource.withUri(jwksUri).build();
 		} catch (IllegalArgumentException e) {
 			return true;
 		}
 
 		return false;
+	}
+
+	/** Exercises typed JWT issuance through the public JAR, then validates every emitted credential. */
+	private static void exerciseTypedSigner(@NonNull KeyPair keyPair, @NonNull JwksSource source) {
+		List<@NonNull String> audiences = new ArrayList<>(List.of(AUDIENCE));
+		JwtClaimsSet.Builder claimsBuilder = JwtClaimsSet.builder()
+				.issuer(ISSUER).subject("typed-user").audiences(audiences)
+				.issuedAt(NOW).notBefore(NOW.minusSeconds(1)).expiresAt(NOW.plusSeconds(300))
+				.jwtId("typed-jwt-id")
+				.claim("role", "reader").claim("count", 3L).claim("ratio", new BigDecimal("1.25"))
+				.claim("enabled", true).claim("context", JsonObject.builder().put("tenant", "example").build())
+				.claimNull("nullable");
+		audiences.clear();
+		JwtClaimsSet claims = claimsBuilder.build();
+		require(claims.getIssuer().equals(Optional.of(ISSUER))
+				&& claims.getSubject().equals(Optional.of("typed-user"))
+				&& claims.getAudiences().equals(List.of(AUDIENCE))
+				&& claims.getIssuedAt().equals(Optional.of(NOW))
+				&& claims.getNotBefore().equals(Optional.of(NOW.minusSeconds(1)))
+				&& claims.getExpiresAt().equals(Optional.of(NOW.plusSeconds(300)))
+				&& claims.getJwtId().equals(Optional.of("typed-jwt-id"))
+				&& claims.getClaim("role").equals(Optional.of(JsonString.fromValue("reader")))
+				&& claims.getClaim("nullable").equals(Optional.of(JsonNull.defaultInstance()))
+				&& claims.getClaimNames().containsAll(Set.of("iss", "role", "nullable")),
+				"outbound claims expose typed immutable values and preserve explicit JSON null");
+		require(!claims.toString().contains("typed-user") && !claimsBuilder.toString().contains("reader"),
+				"outbound claim renderings are redacted");
+		JwsSigner signer = JwsSigner.fromRsaKeyPair(keyPair.getPrivate(), keyPair.getPublic(), JwsAlgorithm.RS256);
+		require(JwtType.JWT.getWireValue().equals("JWT")
+				&& JwtType.ACCESS_TOKEN.getWireValue().equals("at+jwt")
+				&& JwtType.CLIENT_AUTHENTICATION.getWireValue().equals("client-authentication+jwt"),
+				"typed JWT header wire values");
+		for (JwtType type : JwtType.values()) {
+			JwtSigningHeader defaultHeader = JwtSigningHeader.fromType(type);
+			require(defaultHeader.getType() == type && defaultHeader.getKeyId().isEmpty()
+					&& defaultHeader.getCertificateSha256Thumbprint().isEmpty(), "typed header convenience defaults");
+			byte[] digest = new byte[32];
+			digest[0] = 7;
+			JwtSigningHeader.Builder headerBuilder = JwtSigningHeader.withType(type)
+					.keyId(KEY_ID).certificateSha256Thumbprint(digest);
+			JwtSigningHeader header = headerBuilder.build();
+			digest[0] = 8;
+			require(header.getType() == type && header.getKeyId().equals(Optional.of(KEY_ID))
+					&& header.getCertificateSha256Thumbprint().orElseThrow()[0] == 7,
+					"typed signing header snapshots its certificate digest");
+			header.getCertificateSha256Thumbprint().orElseThrow()[0] = 9;
+			require(header.getCertificateSha256Thumbprint().orElseThrow()[0] == 7
+					&& !header.toString().contains(KEY_ID) && !headerBuilder.toString().contains(KEY_ID),
+					"typed header getters copy mutable values and renderings are redacted");
+			JwsSigner.Builder signingBuilder = signer.withHeaderAndClaims(header, claims)
+					.remainingBudget(Duration.ZERO);
+			require(!signingBuilder.toString().contains("typed-user") && !signingBuilder.toString().contains(KEY_ID),
+					"creating a signing builder does no signing and its rendering is redacted");
+			String defaultCredential = signer.fromHeaderAndClaims(defaultHeader, claims);
+			String configuredCredential = signingBuilder.remainingBudget(null)
+					.remainingBudget(Duration.ofSeconds(10)).build();
+			JwtValidator validator = JwtValidator.withIssuer(ISSUER).jwksSource(source)
+					.expectedAudiences(Set.of(AUDIENCE)).allowedTypes(Set.of(type.getWireValue())).typeRequired(true)
+					.clock(Clock.fixed(NOW, ZoneOffset.UTC)).build();
+			for (String credential : List.of(defaultCredential, configuredCredential)) {
+				JwtValidationResult result = validator.validateResult(credential);
+				require(result instanceof JwtValidationResult.Succeeded, "typed signer output validates");
+				Jwt jwt = ((JwtValidationResult.Succeeded) result).getJwt();
+				require(jwt.getAlgorithm() == JwsAlgorithm.RS256 && jwt.getType().equals(Optional.of(type.getWireValue()))
+						&& jwt.getClaims().getSubject().equals(claims.getSubject())
+						&& jwt.getClaims().getClaim("context").equals(claims.getClaim("context"))
+						&& jwt.getClaims().getClaim("nullable").equals(claims.getClaim("nullable")),
+						"typed claims and token type survive signing and validation");
+				String payload = new String(Base64.getUrlDecoder().decode(credential.split("\\.")[1]), StandardCharsets.UTF_8);
+				require(payload.equals(claims.toJsonObject().toJson()), "typed signer serializes the outbound JSON object");
+			}
+		}
 	}
 
 	/** Exercises all signer algorithms through the public JAR with an independent JCA verifier. */
@@ -1199,24 +1242,24 @@ public final class PackagedConsumer {
 		public void didFailToValidateJwt(@NonNull RevetsecException exception, @NonNull Duration elapsed) {
 			this.failures.add(exception);
 
-			if (exception instanceof JsonWebKeySetUnavailableException)
+			if (exception instanceof JwksUnavailableException)
 				this.unexpected.add("a static source made the key set unavailable");
 		}
 
 		@Override
-		public void willFetchJsonWebKeySet(@NonNull URI jwksUri) {
-			this.unexpected.add("willFetchJsonWebKeySet");
+		public void willFetchJwks(@NonNull URI jwksUri) {
+			this.unexpected.add("willFetchJwks");
 		}
 
 		@Override
-		public void didFailToFetchJsonWebKeySet(@NonNull URI jwksUri, @NonNull JsonWebKeySetUnavailableException exception,
+		public void didFailToFetchJwks(@NonNull URI jwksUri, @NonNull JwksUnavailableException exception,
 																						@NonNull Boolean servingStaleKeys, @NonNull Duration elapsed) {
-			this.unexpected.add("didFailToFetchJsonWebKeySet");
+			this.unexpected.add("didFailToFetchJwks");
 		}
 
 		@Override
-		public void didSkipJsonWebKey(@NonNull URI jwksUri, @NonNull Integer keyIndex, @NonNull JsonWebKeySkipReason reason) {
-			this.unexpected.add("didSkipJsonWebKey " + reason);
+		public void didSkipJwk(@NonNull URI jwksUri, @NonNull Integer keyIndex, @NonNull JwkSkipReason reason) {
+			this.unexpected.add("didSkipJwk " + reason);
 		}
 	}
 
@@ -1253,4 +1296,34 @@ public final class PackagedConsumer {
   else if(validation instanceof OAuthIssuerAccessTokenResult.Rejected bad) require(bad.getReason()!=null&&bad.getAccessTokenReason()!=null
     && bad.getJoseReason()!=null&&bad.getBearerError()!=null,"issuer rejection without proof");
  }
+    private static com.revetsec.jose.@NonNull Jwks parsedJwks(com.revetsec.jose.@NonNull JwksParseResult result) {
+        if (!(result instanceof com.revetsec.jose.JwksParseResult.Succeeded success))
+            throw new AssertionError("Expected successful fixture outcome: " + result);
+        return success.getJwks();
+    }
+
+    private static com.revetsec.oauth.@NonNull AuthorizationResponse parsedCallback(com.revetsec.oauth.@NonNull AuthorizationResponseParseResult result) {
+        if (!(result instanceof com.revetsec.oauth.AuthorizationResponseParseResult.Succeeded success))
+            throw new AssertionError("Expected successful fixture outcome: " + result);
+        return success.getResponse();
+    }
+
+    private static com.revetsec.oidc.@NonNull OidcProviderMetadata parsedOidcMetadata(com.revetsec.oidc.@NonNull OidcProviderMetadataParseResult result) {
+        if (!(result instanceof com.revetsec.oidc.OidcProviderMetadataParseResult.Succeeded success))
+            throw new AssertionError("Expected successful fixture outcome: " + result);
+        return success.getMetadata();
+    }
+
+    private static com.revetsec.oidc.@NonNull OidcSessionReference parsedOidcReference(com.revetsec.oidc.@NonNull OidcSessionReferenceParseResult result) {
+        if (!(result instanceof com.revetsec.oidc.OidcSessionReferenceParseResult.Succeeded success))
+            throw new AssertionError("Expected successful fixture outcome: " + result);
+        return success.getReference();
+    }
+
+    private static com.revetsec.oauth.@NonNull BearerToken parsedBearer(com.revetsec.oauth.@NonNull BearerTokenResult result) {
+        if (!(result instanceof com.revetsec.oauth.BearerTokenResult.Present success))
+            throw new AssertionError("Expected successful fixture outcome: " + result);
+        return success.getToken();
+    }
+
 }

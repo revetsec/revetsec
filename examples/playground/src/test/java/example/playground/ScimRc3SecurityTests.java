@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 package example.playground;
+import com.revetsec.json.JsonString;
 
 import com.revetsec.json.JsonArray;
 import com.revetsec.json.JsonObject;
@@ -108,7 +109,7 @@ class ScimRc3SecurityTests {
             assertEquals(404, invoke(simulator, get("/scim/v2/Users/other-tenant-id")).getStatusCode());
         });
         assertNull(other.snapshot(USER, "u-1"));
-        assertEquals("alice", first.snapshot(USER, "u-1").getDocument().findString("userName").orElseThrow());
+        assertEquals("alice", first.snapshot(USER, "u-1").getDocument().find("userName").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow());
     }
 
     @Test void malformedMediaJsonUtf8DuplicatesAndUnknownFieldsNeverReachCommit() {
@@ -233,7 +234,7 @@ class ScimRc3SecurityTests {
             assertEquals(PlaygroundScim.CommitOutcome.UNKNOWN, app.lastOutcome());
             assertEquals(Optional.of("W/\"2\""), app.snapshot(USER, "u-1").getVersion());
             assertEquals(412, invoke(simulator, condition(change, "W/\"1\"")).getStatusCode());
-            assertEquals("Changed", app.snapshot(USER, "u-1").getDocument().findString("displayName").orElseThrow());
+            assertEquals("Changed", app.snapshot(USER, "u-1").getDocument().find("displayName").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow());
         });
     }
 
@@ -247,8 +248,8 @@ class ScimRc3SecurityTests {
                     .copy().path("/scim/v2/Groups/g-5").finish();
             assertEquals(204, invoke(simulator, edit).getStatusCode());
             JsonArray result = (JsonArray) app.snapshot(GROUP, "g-5").getDocument().find("members").orElseThrow();
-            assertEquals(List.of("u-1", "u-3", "u-4"), result.getElements().stream().map(value -> ((JsonObject) value).findString("value").orElseThrow()).toList());
-            assertEquals(List.of("Users/u-1", "Users/u-3", "Users/u-4"), result.getElements().stream().map(value -> ((JsonObject) value).findString("$ref").orElseThrow()).toList());
+            assertEquals(List.of("u-1", "u-3", "u-4"), result.getElements().stream().map(value -> ((JsonObject) value).find("value").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow()).toList());
+            assertEquals(List.of("Users/u-1", "Users/u-3", "Users/u-4"), result.getElements().stream().map(value -> ((JsonObject) value).find("$ref").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow()).toList());
         });
     }
 

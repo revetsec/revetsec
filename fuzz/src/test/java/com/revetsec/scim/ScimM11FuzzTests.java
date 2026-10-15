@@ -132,7 +132,7 @@ public final class ScimM11FuzzTests {
             Assertions.assertSame(ScimError.mutabilityInstance(),error);
             Assertions.assertSame(before,current.getDocument());
             Assertions.assertEquals("retained-metadata",((JsonArray)current.getDocument().getMembers().get("members")).getElements().stream()
-                    .map(value->(JsonObject)value).findFirst().orElseThrow().findString("display").orElseThrow());
+                    .map(value->(JsonObject)value).findFirst().orElseThrow().find("display").map(com.revetsec.json.JsonString.class::cast).map(com.revetsec.json.JsonString::getValue).orElseThrow());
         }
     }
     private static void fixed(@NonNull ScimError error) {

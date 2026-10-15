@@ -30,10 +30,16 @@ import com.revetsec.internal.jose.JwkParser;
 import com.revetsec.internal.json.JsonCodec;
 import com.revetsec.internal.json.JsonLimits;
 import com.revetsec.internal.json.JsonParseException;
+import com.revetsec.json.JsonArray;
+import com.revetsec.json.JsonBoolean;
+import com.revetsec.json.JsonNumber;
 import com.revetsec.json.JsonObject;
+import com.revetsec.json.JsonString;
+import com.revetsec.json.JsonValue;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 import javax.annotation.concurrent.Immutable;
+import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
 import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
@@ -69,6 +75,7 @@ import static java.util.Objects.requireNonNull;
  */
 @ThreadSafe
 public final class JwsSigner {
+	private static final @NonNull Duration DEFAULT_REMAINING_BUDGET = Duration.ofSeconds(2);
 	private static final int MAXIMUM_COMPACT_LENGTH = Limits.COMPACT_JWT_SIZE.getDefaultIntValue();
 	private static final int MAXIMUM_CLAIMS_LENGTH = MAXIMUM_COMPACT_LENGTH / 2;
 	private static final int MAXIMUM_HEADER_LENGTH = MAXIMUM_COMPACT_LENGTH / 16;
@@ -143,6 +150,40 @@ public final class JwsSigner {
 	public @NonNull PublicKey getPublicKey() { return this.publicKey; }
 
 	/**
+	 * Starts a signing builder with the required protected-header metadata and outbound claims. Construction does
+	 * not serialize claims or invoke a provider. The builder's {@link Builder#build()} signs and returns a compact
+	 * JWT, using a two-second operation budget unless overridden. The algorithm always comes from this signer.
+	 *
+	 * @param header the required header metadata
+	 * @param claims the required outbound claims; construction does not establish that they are trusted or valid
+	 * @return a new signing builder
+	 * @throws NullPointerException if a required argument is null
+	 * @since 1.0.0
+	 */
+	@CheckReturnValue
+	public @NonNull Builder withHeaderAndClaims(@NonNull JwtSigningHeader header, @NonNull JwtClaimsSet claims) {
+		return new Builder(this, header, claims);
+	}
+
+	/**
+	 * Signs the header metadata and outbound claims with the default two-second operation budget, returning a
+	 * compact JWT credential. Equivalent to {@code withHeaderAndClaims(header, claims).build()}. The algorithm
+	 * comes from this signer, and the claims' application meaning remains the caller's responsibility.
+	 *
+	 * @param header the required header metadata
+	 * @param claims the required outbound claims
+	 * @return the verified compact JWT credential; keep it out of logs
+	 * @throws NullPointerException if a required argument is null
+	 * @throws IllegalArgumentException if the serialized claims exceed the signing JSON profile or size limits
+	 * @throws JwsSigningException if signing, pair verification or the operation budget fails
+	 * @since 1.0.0
+	 */
+	@CheckReturnValue
+	public @NonNull String fromHeaderAndClaims(@NonNull JwtSigningHeader header, @NonNull JwtClaimsSet claims) {
+		return withHeaderAndClaims(header, claims).build();
+	}
+
+	/**
 	 * Signs the exact accepted UTF-8 claims bytes and returns a compact JWS credential, an explicit secret emission.
 	 * Claims are one strict JSON object under the existing JOSE defaults, limited to 32 KiB; their semantics belong
 	 * to the caller. Arrays are snapshotted after length checks. The fixed protected header holds only alg, typ and
@@ -166,7 +207,11 @@ public final class JwsSigner {
 		requireNonNull(type);
 		requireNonNull(claimsUtf8);
 		requireNonNull(remainingBudget);
-		Deadline deadline = deadline(remainingBudget);
+		return toCompactSerialization(type, keyId, certificateSha256Thumbprint, claimsUtf8, deadline(remainingBudget));
+	}
+
+	private @NonNull String toCompactSerialization(@NonNull String type, @Nullable String keyId,
+			byte @Nullable [] certificateSha256Thumbprint, byte @NonNull [] claimsUtf8, @NonNull Deadline deadline) {
 		if (!(type.equals("client-authentication+jwt") || type.equals("JWT") || type.equals("at+jwt")))
 			throw invalidInput();
 		if (keyId != null && (keyId.isEmpty() || keyId.length() > JwkParser.MAXIMUM_KEY_ID_LENGTH))
@@ -236,6 +281,110 @@ public final class JwsSigner {
 	 */
 	@Override
 	public @NonNull String toString() { return "JwsSigner{key=<redacted>}"; }
+
+	/**
+	 * Configures one signing operation. Header and claims are immutable snapshots; the builder owns no credential.
+	 * Each {@link #build()} starts a fresh budget, serializes the claims and signs on the caller thread. A trusted
+	 * JCA provider must cooperate with the budget; it cannot be forcibly interrupted. Callers enforcing an original
+	 * deadline must also recheck it after the operation.
+	 *
+	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
+	 * @since 1.0.0
+	 */
+	@NotThreadSafe
+	@CheckReturnValue
+	public static final class Builder {
+		private final @NonNull JwsSigner signer;
+		private final @NonNull JwtSigningHeader header;
+		private final @NonNull JwtClaimsSet claims;
+		private @NonNull Duration remainingBudget = DEFAULT_REMAINING_BUDGET;
+
+		private Builder(@NonNull JwsSigner signer, @NonNull JwtSigningHeader header, @NonNull JwtClaimsSet claims) {
+			this.signer = requireNonNull(signer);
+			this.header = requireNonNull(header);
+			this.claims = requireNonNull(claims);
+		}
+
+		/**
+		 * Sets the budget measured from entry to {@link #build()}, including claims serialization and signing.
+		 * Nonpositive values are exhausted and cause {@code build()} to fail without signing.
+		 *
+		 * @param remainingBudget the remaining operation allowance, or null to restore the two-second default
+		 * @return this builder
+		 * @since 1.0.0
+		 */
+		public @NonNull Builder remainingBudget(@Nullable Duration remainingBudget) {
+			this.remainingBudget = remainingBudget == null ? DEFAULT_REMAINING_BUDGET : remainingBudget;
+			return this;
+		}
+
+		/**
+		 * Serializes the outbound claims, signs them and verifies the signature before returning the compact JWT.
+		 * This is an explicit credential emission; it does not validate the application meaning of the claims.
+		 *
+		 * @return the verified compact JWT credential; keep it out of logs
+		 * @throws IllegalArgumentException if the claims exceed the signing JSON profile or size limits
+		 * @throws JwsSigningException if signing, pair verification or the operation budget fails
+		 * @since 1.0.0
+		 */
+		public @NonNull String build() {
+			Deadline deadline = deadline(this.remainingBudget);
+			JsonObject json = this.claims.toJsonObject();
+			// Bound the expanded tree before the general JSON writer allocates its output. Shared subtrees can
+			// otherwise expand exponentially despite the immutable JSON model's depth limit.
+			claimsLength(json, deadline);
+			byte[] claimsUtf8 = JsonCodec.toUtf8Bytes(json);
+			byte @Nullable [] digest = this.header.getCertificateSha256Thumbprint().orElse(null);
+			try {
+				checkBudget(deadline);
+				return this.signer.toCompactSerialization(this.header.getType().getWireValue(),
+						this.header.getKeyId().orElse(null), digest, claimsUtf8, deadline);
+			} finally { clear(claimsUtf8); clear(digest); }
+		}
+
+		/**
+		 * Returns a description without the header, claims, key or credential.
+		 * @return the redacted description
+		 * @since 1.0.0
+		 */
+		@Override
+		public @NonNull String toString() { return "JwsSigner.Builder{input=<redacted>}"; }
+	}
+
+	private static int claimsLength(@NonNull JsonValue value, @NonNull Deadline deadline) {
+		checkBudget(deadline);
+		int length;
+		if (value instanceof JsonObject object) {
+			length = 2;
+			boolean first = true;
+			for (var member : object.getMembers().entrySet()) {
+				length = addClaimsLength(length, claimsStringLength(member.getKey()) + (first ? 1 : 2));
+				length = addClaimsLength(length, claimsLength(member.getValue(), deadline));
+				first = false;
+			}
+		} else if (value instanceof JsonArray array) {
+			length = 2;
+			boolean first = true;
+			for (JsonValue element : array.getElements()) {
+				length = addClaimsLength(length, (first ? 0 : 1) + claimsLength(element, deadline));
+				first = false;
+			}
+		} else if (value instanceof JsonString string) length = claimsStringLength(string.getValue());
+		else if (value instanceof JsonNumber number) length = number.getValue().toString().length();
+		else if (value instanceof JsonBoolean bool) length = bool.getValue() ? 4 : 5;
+		else length = 4;
+		return addClaimsLength(0, length);
+	}
+
+	private static int claimsStringLength(@NonNull String value) {
+		if (value.length() > MAXIMUM_CLAIMS_LENGTH) throw invalidInput();
+		return jsonStringBytes(value);
+	}
+
+	private static int addClaimsLength(int length, int additional) {
+		if (additional > MAXIMUM_CLAIMS_LENGTH - length) throw invalidInput();
+		return length + additional;
+	}
 
 	private byte @NonNull [] signAndVerify(byte @NonNull [] input, @NonNull Deadline deadline) {
 		checkBudget(deadline);

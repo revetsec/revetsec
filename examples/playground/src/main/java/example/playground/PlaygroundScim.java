@@ -18,6 +18,7 @@ package example.playground;
 import com.revetsec.json.*;
 import com.revetsec.scim.*;
 import com.revetsec.soklet.SokletScim;
+import com.revetsec.soklet.SokletRequestResult;
 import com.soklet.Request;
 import java.net.URI;
 import java.time.Clock;
@@ -106,7 +107,13 @@ public final class PlaygroundScim {
         return difference == 0;
     }
     synchronized @NonNull ScimResponse list(@NonNull ScimResourceType type, @NonNull Request request, boolean search) {
-        ScimQueryParseResult parsed = search ? SokletScim.searchRequestResultFor(provider, type, request) : SokletScim.queryResultFor(provider, type, request);
+        ScimQueryParseResult parsed;
+        if (search) {
+            var read = SokletScim.searchRequestResultFor(provider, type, request);
+            if (!(read instanceof SokletRequestResult.Completed<ScimQueryParseResult> completed))
+                return error(ScimError.requestTooLargeInstance());
+            parsed = completed.getResult();
+        } else parsed = SokletScim.queryResultFor(provider, type, request);
         if (parsed instanceof ScimQueryParseResult.Rejected rejected) return error(rejected.getError());
         ScimQuery query = ((ScimQueryParseResult.Succeeded) parsed).getQuery();
         List<ScimResource> matched = new ArrayList<>();
@@ -133,7 +140,10 @@ public final class PlaygroundScim {
     }
     synchronized @NonNull ScimResponse create(@NonNull ScimResourceType type, @NonNull Request request) {
         lastOutcome = CommitOutcome.NONE;
-        ScimResourceParseResult parsed = SokletScim.resourceResultFor(provider, type, request);
+        var read = SokletScim.resourceResultFor(provider, type, request);
+        if (!(read instanceof SokletRequestResult.Completed<ScimResourceParseResult> completed))
+            return error(ScimError.requestTooLargeInstance());
+        ScimResourceParseResult parsed = completed.getResult();
         if (parsed instanceof ScimResourceParseResult.Rejected rejected) return error(rejected.getError());
         ScimResourceParseResult.Succeeded accepted = (ScimResourceParseResult.Succeeded) parsed;
         ScimResource candidate = accepted.getResource(); Set<ScimAttributePath> attempted = accepted.getSuppliedAttributePaths();
@@ -159,7 +169,10 @@ public final class PlaygroundScim {
         if (conditional instanceof ScimIfMatchResult.Rejected rejected) return error(rejected.getError());
         ScimResource candidate; Set<ScimAttributePath> attempted, effective, supplied; boolean changed;
         if (patch) {
-            ScimPatchParseResult parsed = SokletScim.patchRequestResultFor(provider, type, request);
+            var read = SokletScim.patchRequestResultFor(provider, type, request);
+            if (!(read instanceof SokletRequestResult.Completed<ScimPatchParseResult> completed))
+                return error(ScimError.requestTooLargeInstance());
+            ScimPatchParseResult parsed = completed.getResult();
             if (parsed instanceof ScimPatchParseResult.Rejected rejected) return error(rejected.getError());
             ScimPatchApplicationResult applied = provider.applyPatchResult(current, ((ScimPatchParseResult.Succeeded) parsed).getPatchRequest());
             if (applied instanceof ScimPatchApplicationResult.Rejected rejected) return error(rejected.getError());
@@ -167,7 +180,10 @@ public final class PlaygroundScim {
             candidate = result.getResource(); attempted = result.getRequestedAttributePaths(); effective = result.getModifiedAttributePaths();
             supplied = result.getSuppliedAttributePaths(); changed = result.isModified();
         } else {
-            ScimResourceParseResult parsed = SokletScim.replacementResultFor(provider, type, current, request);
+            var read = SokletScim.replacementResultFor(provider, type, current, request);
+            if (!(read instanceof SokletRequestResult.Completed<ScimResourceParseResult> completed))
+                return error(ScimError.requestTooLargeInstance());
+            ScimResourceParseResult parsed = completed.getResult();
             if (parsed instanceof ScimResourceParseResult.Rejected rejected) return error(rejected.getError());
             ScimResourceParseResult.Succeeded result = (ScimResourceParseResult.Succeeded) parsed;
             candidate = result.getResource(); supplied = result.getSuppliedAttributePaths();
@@ -206,8 +222,8 @@ public final class PlaygroundScim {
         if (type == ScimResourceType.userInstance()) for (ScimResource user : users.values()) {
             JsonObject extension = user.getExtension("urn:ietf:params:scim:schemas:extension:enterprise:2.0:User").orElse(JsonObject.emptyInstance());
             JsonValue rawManager = extension.getMembers().get("manager");
-            if (rawManager instanceof JsonObject manager && (manager.findString("value").orElse("").equals(id)
-                    || manager.findString("$ref").map(value -> provider.getBaseUri().resolve(URI.create(value)).equals(provider.resourceLocationFor(type, id))).orElse(false)))
+            if (rawManager instanceof JsonObject manager && (manager.find("value").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElse("").equals(id)
+                    || manager.find("$ref").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).map(value -> provider.getBaseUri().resolve(URI.create(value)).equals(provider.resourceLocationFor(type, id))).orElse(false)))
                 return error(ScimError.invalidValueInstance());
         }
         Map<String, ScimResource> replacement = new LinkedHashMap<>(map(type)); replacement.remove(id);
@@ -225,12 +241,12 @@ public final class PlaygroundScim {
     private @Nullable ScimError integrity(@NonNull ScimResource candidate, @Nullable String currentId) {
         
         if (candidate.getResourceType() == ScimResourceType.userInstance()) {
-            String name = candidate.getDocument().findString("userName").orElseThrow();
+            String name = candidate.getDocument().find("userName").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow();
             if (name.length() > 128 || !ascii(name, false)) return ScimError.invalidValueInstance();
             JsonObject extension = candidate.getExtension("urn:ietf:params:scim:schemas:extension:enterprise:2.0:User").orElse(JsonObject.emptyInstance());
             JsonValue rawManager = extension.getMembers().get("manager");
             if (rawManager instanceof JsonObject manager) {
-                String managerId = manager.findString("value").orElse(null), reference = manager.findString("$ref").orElse(null);
+                String managerId = manager.find("value").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElse(null), reference = manager.find("$ref").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElse(null);
                 if (managerId != null && !users.containsKey(managerId)) return ScimError.invalidValueInstance();
                 if (reference != null) {
                     URI location = provider.getBaseUri().resolve(URI.create(reference));
@@ -240,15 +256,15 @@ public final class PlaygroundScim {
                     if (target == null || !provider.resourceLocationFor(ScimResourceType.userInstance(), target).equals(location)) return ScimError.invalidValueInstance();
                 }
             }
-            for (ScimResource other : users.values()) if (!other.getId().orElseThrow().equals(currentId) && fold(other.getDocument().findString("userName").orElseThrow()).equals(fold(name))) return ScimError.uniquenessInstance();
+            for (ScimResource other : users.values()) if (!other.getId().orElseThrow().equals(currentId) && fold(other.getDocument().find("userName").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow()).equals(fold(name))) return ScimError.uniquenessInstance();
         } else {
             Set<String> ids = new HashSet<>(); JsonValue raw = candidate.getDocument().getMembers().get("members");
             if (raw instanceof JsonArray array) for (JsonValue element : array.getElements()) {
-                JsonObject member = (JsonObject) element; String id = member.findString("value").orElse("");
+                JsonObject member = (JsonObject) element; String id = member.find("value").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElse("");
                 ScimResourceType referenced = users.containsKey(id) ? ScimResourceType.userInstance()
                         : groups.containsKey(id) ? ScimResourceType.groupInstance() : null;
-                if (id.isEmpty() || !ids.add(id) || referenced == null || !member.findString("type").orElse(referenced.getName()).equals(referenced.getName())) return ScimError.invalidValueInstance();
-                if (member.findString("$ref").isPresent() && !provider.getBaseUri().resolve(URI.create(member.findString("$ref").orElseThrow()))
+                if (id.isEmpty() || !ids.add(id) || referenced == null || !member.find("type").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElse(referenced.getName()).equals(referenced.getName())) return ScimError.invalidValueInstance();
+                if (member.find("$ref").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).isPresent() && !provider.getBaseUri().resolve(URI.create(member.find("$ref").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow()))
                         .equals(provider.resourceLocationFor(referenced, id))) return ScimError.invalidValueInstance();
             }
         }
@@ -266,7 +282,7 @@ public final class PlaygroundScim {
     private @NonNull PasswordChange password(@NonNull ScimResource candidate, @Nullable String id, @NonNull Set<@NonNull ScimAttributePath> supplied) {
         if (candidate.getResourceType() != ScimResourceType.userInstance() || supplied.stream().noneMatch(path -> path.getAttributeName().equals("password")))
             return new PasswordChange(false, false, null);
-        String value = candidate.getDocument().findString("password").orElse(null);
+        String value = candidate.getDocument().find("password").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElse(null);
         Password previous = id == null ? null : credentials.get(id);
         if (value == null) return new PasswordChange(previous != null, false, null);
         if (value.length() > 512) return new PasswordChange(false, true, null);
@@ -289,7 +305,7 @@ public final class PlaygroundScim {
     private @NonNull Map<@NonNull String, @NonNull ScimResource> map(@NonNull ScimResourceType type) { return type == ScimResourceType.userInstance() ? users : groups; }
     private static @NonNull Set<@NonNull String> memberIds(@NonNull ScimResource group) {
         Set<String> ids = new HashSet<>(); JsonValue raw = group.getDocument().getMembers().get("members");
-        if (raw instanceof JsonArray array) for (JsonValue value : array.getElements()) ((JsonObject) value).findString("value").ifPresent(ids::add); return ids;
+        if (raw instanceof JsonArray array) for (JsonValue value : array.getElements()) ((JsonObject) value).find("value").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).ifPresent(ids::add); return ids;
     }
     private static @NonNull Set<@NonNull ScimAttributePath> allDataPaths(@NonNull ScimResource @NonNull ... resources) {
         Set<ScimAttributePath> paths = new LinkedHashSet<>();

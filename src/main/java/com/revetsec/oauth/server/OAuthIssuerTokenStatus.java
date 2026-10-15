@@ -22,7 +22,7 @@ import com.revetsec.jose.JoseException;
 import com.revetsec.jose.JwsAlgorithm;
 import com.revetsec.jose.Jwt;
 import com.revetsec.jose.JwtValidator;
-import com.revetsec.jose.StaticJsonWebKeySource;
+import com.revetsec.jose.StaticJwksSource;
 import com.revetsec.json.JsonObject;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
@@ -57,7 +57,7 @@ final class OAuthIssuerTokenStatus {
  }
  /** Returns immutable checked claims only after COMMITTED; never returns/retains the received credential. */
  @NonNull JsonObject validate(@NonNull String compact, @NonNull String resource,
-   @NonNull StaticJsonWebKeySource keys, @NonNull Deadline deadline) {
+   @NonNull StaticJwksSource keys, @NonNull Deadline deadline) {
   return validate(compact, resource, keys, deadline, Function.identity());
  }
  /** Fresh checked public snapshot before the existing uncached atomic issuer-status admission. */
@@ -67,10 +67,10 @@ final class OAuthIssuerTokenStatus {
  }
  /** Prepare the complete internal response before the authoritative status admission. */
  <T> @NonNull T validate(@NonNull String compact, @NonNull String resource,
-   @NonNull StaticJsonWebKeySource keys, @NonNull Deadline deadline, @NonNull Function<@NonNull JsonObject, @NonNull T> prepare) {
+   @NonNull StaticJwksSource keys, @NonNull Deadline deadline, @NonNull Function<@NonNull JsonObject, @NonNull T> prepare) {
   requireNonNull(prepare); requireNonNull(resource);
   JsonObject claims = verify(compact, resource, keys, deadline, false);
-  String jti = claims.findString("jti").orElseThrow(OAuthIssuerTokenStatus::invalid);
+  String jti = claimString(claims, "jti").orElseThrow(OAuthIssuerTokenStatus::invalid);
   // Every conflict starts a new authoritative read set while preserving the original operation budget.
   for (int attempt = 0; attempt < this.attempts; attempt++) {
    OAuthStoreCoordinator.Session session = this.coordinator.begin(deadline);
@@ -93,16 +93,16 @@ final class OAuthIssuerTokenStatus {
   throw new OAuthStoreFailure(UNAVAILABLE);
  }
  /** Signature and exact profile recognition only; never an admission proof. */
- @NonNull JsonObject retainedClaims(@NonNull String compact, @NonNull StaticJsonWebKeySource keys, @NonNull Deadline deadline) {
+ @NonNull JsonObject retainedClaims(@NonNull String compact, @NonNull StaticJwksSource keys, @NonNull Deadline deadline) {
   return verify(compact, null, keys, deadline, true);
  }
  private @NonNull JsonObject verify(@NonNull String compact, @Nullable String resource,
-   @NonNull StaticJsonWebKeySource keys, @NonNull Deadline deadline, boolean retained) {
+   @NonNull StaticJwksSource keys, @NonNull Deadline deadline, boolean retained) {
   requireNonNull(compact); requireNonNull(keys);
   if (resource != null) OAuthServerConfiguration.resources(java.util.Map.of(resource, Set.of()), 1);
   OAuthServerClientAdmission.remaining(deadline);
   // Fixed local key snapshot: no discovery, remote key source, positive token-status cache or caller claim override.
-  JwtValidator.Builder builder = JwtValidator.withIssuer(this.codec.issuer()).jsonWebKeySource(keys);
+  JwtValidator.Builder builder = JwtValidator.withIssuer(this.codec.issuer()).jwksSource(keys);
   builder = resource == null ? builder.acceptAnyAudience(true) : builder.expectedAudiences(Set.of(resource));
   JwtValidator validator = builder
    .allowedAlgorithms(Set.of(JwsAlgorithm.RS256)).allowedTypes(Set.of("at+jwt")).typeRequired(true).requiredClaims(CLAIMS)
@@ -116,8 +116,8 @@ final class OAuthIssuerTokenStatus {
   OAuthServerClientAdmission.remaining(deadline);
   JsonObject claims = jwt.getClaims().toJsonObject();
   if (!claims.getMembers().keySet().equals(CLAIMS) || jwt.getKeyId().isEmpty()
-    || claims.findString("aud").isEmpty() || resource != null && !resource.equals(claims.findString("aud").orElse(null))) throw invalid();
-  String jti = claims.findString("jti").orElseThrow(OAuthIssuerTokenStatus::invalid);
+    || claimString(claims, "aud").isEmpty() || resource != null && !resource.equals(claimString(claims, "aud").orElse(null))) throw invalid();
+  String jti = claimString(claims, "jti").orElseThrow(OAuthIssuerTokenStatus::invalid);
   try { OAuthStoreFormat.nonce(jti); } catch (IllegalArgumentException rejection) { throw invalid(); }
   return claims;
  }
@@ -135,12 +135,12 @@ final class OAuthIssuerTokenStatus {
     || access.retention().isBefore(prepared(() -> access.expires().plus(this.skew)))) throw new OAuthStoreFailure(CORRUPT_STATE);
  }
  boolean matches(@NonNull JsonObject claims, @NonNull OAuthAuthorizationRecord access, @NonNull String resource) {
-  return resource.equals(access.text("resource")) && resource.equals(claims.findString("aud").orElse(null)) && this.codec.issuer().equals(claims.findString("iss").orElse(null))
-   && access.text("subject").equals(claims.findString("sub").orElse(null))
-   && access.text("clientId").equals(claims.findString("client_id").orElse(null))
-   && claims.findLong("iat").orElse(Long.MIN_VALUE) == access.number("issued")
-   && claims.findLong("exp").orElse(Long.MIN_VALUE) == access.expires().getEpochSecond()
-   && String.join(" ", access.scopes(this.limits).stream().sorted().toList()).equals(claims.findString("scope").orElse(null));
+  return resource.equals(access.text("resource")) && resource.equals(claimString(claims, "aud").orElse(null)) && this.codec.issuer().equals(claimString(claims, "iss").orElse(null))
+   && access.text("subject").equals(claimString(claims, "sub").orElse(null))
+   && access.text("clientId").equals(claimString(claims, "client_id").orElse(null))
+   && claimLong(claims, "iat").orElse(Long.MIN_VALUE) == access.number("issued")
+   && claimLong(claims, "exp").orElse(Long.MIN_VALUE) == access.expires().getEpochSecond()
+   && String.join(" ", access.scopes(this.limits).stream().sorted().toList()).equals(claimString(claims, "scope").orElse(null));
  }
  @Nullable OAuthAuthorizationRecord read(OAuthStoreCoordinator.@NonNull Session session, @NonNull OAuthStoreKey key) {
   Optional<OAuthStoreEntry> observed = session.read(key);
@@ -155,6 +155,18 @@ final class OAuthIssuerTokenStatus {
  }
  private static <T> @NonNull T prepared(@NonNull Supplier<@NonNull T> work) {
   try { return work.get(); } catch (VirtualMachineError fatal) { throw fatal; } catch (Throwable fault) { throw new OAuthStoreFailure(CORRUPT_STATE); }
+ }
+ private static @NonNull Optional<@NonNull String> claimString(@NonNull JsonObject claims, @NonNull String name) {
+  return claims.find(name).map(value -> {
+   if (!(value instanceof com.revetsec.json.JsonString text)) throw invalid();
+   return text.getValue();
+  });
+ }
+ private static @NonNull Optional<@NonNull Long> claimLong(@NonNull JsonObject claims, @NonNull String name) {
+  return claims.find(name).flatMap(value -> {
+   if (!(value instanceof com.revetsec.json.JsonNumber number)) throw invalid();
+   return number.getLongValueExact();
+  });
  }
  private static @NonNull OAuthServerAdmissionFailure invalid() {
   return OAuthServerClientAdmission.failure(OAuthServerAdmissionFailure.Reason.INVALID_TOKEN);

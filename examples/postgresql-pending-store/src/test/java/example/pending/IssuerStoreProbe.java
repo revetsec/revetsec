@@ -122,7 +122,7 @@ public final class IssuerStoreProbe {
 								"fixture-secret".getBytes(StandardCharsets.UTF_8)))).build();
 		SealingKey sealingKey = SealingKey.fromBase64("fixture", Files.readString(directory.resolve("sealer.txt")));
 		return OAuthAuthorizationServer.withIssuer(ISSUER).authorizationEndpoint(URI.create(ISSUER + "/authorize"))
-				.tokenEndpoint(URI.create(ISSUER + "/token")).jsonWebKeySetEndpoint(URI.create(ISSUER + "/jwks"))
+				.tokenEndpoint(URI.create(ISSUER + "/token")).jwksEndpoint(URI.create(ISSUER + "/jwks"))
 				.revocationEndpoint(URI.create(ISSUER + "/revoke"))
 				.introspectionEndpoint(URI.create(ISSUER + "/introspect"))
 				.clientRepository((id, budget) -> Optional.ofNullable(
@@ -230,7 +230,7 @@ public final class IssuerStoreProbe {
 			try {
 				if (args[0].equals("active-short-budget")) {
 					var status = bounded.validateAccessTokenResult(
-							BearerToken.fromAuthorizationHeaderValues(List.of("Bearer " + args[1])).orElseThrow(), RESOURCE);
+							((com.revetsec.oauth.BearerTokenResult.Present) BearerToken.fromAuthorizationHeaderValuesResult(List.of("Bearer " + args[1]))).getToken(), RESOURCE);
 					System.out.println(status instanceof OAuthIssuerAccessTokenResult.Succeeded ? "ACTIVE" : "INACTIVE");
 				} else {
 					bounded.revokeAllGrants();
@@ -317,7 +317,7 @@ public final class IssuerStoreProbe {
 			}
 			case "active", "active-small-cap", "fence-active" -> {
 				var status = server.validateAccessTokenResult(
-						BearerToken.fromAuthorizationHeaderValues(List.of("Bearer " + args[1])).orElseThrow(), RESOURCE);
+						((com.revetsec.oauth.BearerTokenResult.Present) BearerToken.fromAuthorizationHeaderValuesResult(List.of("Bearer " + args[1]))).getToken(), RESOURCE);
 				System.out.println(status instanceof OAuthIssuerAccessTokenResult.Succeeded ? "ACTIVE"
 						: "INACTIVE:" + ((OAuthIssuerAccessTokenResult.Rejected) status).getReason());
 			}

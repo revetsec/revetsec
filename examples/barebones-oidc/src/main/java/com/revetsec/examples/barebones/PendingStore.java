@@ -16,6 +16,7 @@
 package com.revetsec.examples.barebones;
 
 import com.revetsec.oauth.PendingAuthorizationStore;
+import com.revetsec.oauth.PendingAuthorizationSaveResult;
 import org.jspecify.annotations.NonNull;
 import javax.annotation.concurrent.ThreadSafe;
 import java.nio.charset.StandardCharsets;
@@ -49,29 +50,35 @@ final class PendingStore implements PendingAuthorizationStore {
     }
 
     @Override
-    public void save(@NonNull String binding, @NonNull String state, @NonNull String record,
+    public @NonNull PendingAuthorizationSaveResult save(@NonNull String binding, @NonNull String state, @NonNull String record,
                                   @NonNull Instant expiresAt, @NonNull Duration remaining) {
+        requireNonNull(remaining);
+        if (remaining.isNegative() || remaining.isZero()) return PendingAuthorizationSaveResult.UNAVAILABLE;
         long cutoff = cutoff(remaining);
         requireNonNull(binding); requireNonNull(state); requireNonNull(record); requireNonNull(expiresAt);
         if (binding.isEmpty() || binding.length() > 128 || state.isEmpty() || state.length() > 128
                 || record.isEmpty() || record.length() > 65_536)
             throw new IllegalArgumentException("Invalid pending record");
-        acquire(cutoff);
+        try { acquire(cutoff); }
+        catch (IllegalStateException unavailable) { return PendingAuthorizationSaveResult.UNAVAILABLE; }
         try {
-            if (System.nanoTime() - cutoff >= 0) throw unavailable();
+            if (System.nanoTime() - cutoff >= 0) return PendingAuthorizationSaveResult.UNAVAILABLE;
             Instant now = this.clock.instant();
-            if (!expiresAt.isAfter(now) || expiresAt.isAfter(now.plus(Duration.ofMinutes(15))))
+            if (expiresAt.isAfter(now.plus(Duration.ofMinutes(15))))
                 throw new IllegalArgumentException("Invalid pending expiry");
+            if (!expiresAt.isAfter(now)) return PendingAuthorizationSaveResult.UNAVAILABLE;
             pruneLocked();
-            if (System.nanoTime() - cutoff >= 0) throw unavailable();
+            if (System.nanoTime() - cutoff >= 0) return PendingAuthorizationSaveResult.UNAVAILABLE;
             Key key = new Key(binding, state);
-            if (this.entries.containsKey(key)) throw new IllegalArgumentException("Duplicate pending record");
+            if (this.entries.containsKey(key)) return PendingAuthorizationSaveResult.ALREADY_PRESENT;
             long charged = record.getBytes(StandardCharsets.UTF_8).length + binding.length() + state.length();
             if (charged > 65_792 || this.entries.size() >= this.maximumEntries
                     || charged > this.maximumBytes - this.bytes)
-                throw new CapacityException();
+                return PendingAuthorizationSaveResult.CAPACITY_REFUSED;
             this.entries.put(key, new Entry(record, expiresAt, now, charged));
             this.bytes += charged;
+            return System.nanoTime() - cutoff >= 0 || Thread.currentThread().isInterrupted()
+                    ? PendingAuthorizationSaveResult.INDETERMINATE : PendingAuthorizationSaveResult.SAVED;
         } finally { this.lock.unlock(); }
     }
 
@@ -145,11 +152,6 @@ final class PendingStore implements PendingAuthorizationStore {
     }
 
     private static @NonNull IllegalStateException unavailable() { return new IllegalStateException("Pending store unavailable"); }
-
-    static final class CapacityException extends RuntimeException {
-        private static final long serialVersionUID = 1L;
-        CapacityException() { super("Pending store full"); }
-    }
 
     // Explicit accessors preserve nullness on compiler-visible reference signatures too.
     private record Key(@NonNull String binding, @NonNull String state) {

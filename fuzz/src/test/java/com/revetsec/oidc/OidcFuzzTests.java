@@ -16,6 +16,8 @@
 
 package com.revetsec.oidc;
 
+import com.revetsec.oidc.OidcSessionReferenceParseResult;
+import com.revetsec.oidc.OidcProviderMetadataParseResult;
 import org.jspecify.annotations.Nullable;
 
 import org.jspecify.annotations.NonNull;
@@ -25,9 +27,9 @@ import com.revetsec.internal.json.JsonCodec;
 import com.revetsec.internal.json.JsonLimits;
 import com.revetsec.internal.json.JsonParseException;
 import com.revetsec.jose.JoseObserver;
-import com.revetsec.jose.JsonWebKeySet;
+import com.revetsec.jose.Jwks;
 import com.revetsec.jose.JwsAlgorithm;
-import com.revetsec.jose.StaticJsonWebKeySource;
+import com.revetsec.jose.StaticJwksSource;
 import com.revetsec.json.JsonArray;
 import com.revetsec.json.JsonNumber;
 import com.revetsec.json.JsonObject;
@@ -94,8 +96,13 @@ public class OidcFuzzTests {
 	@FuzzTest(maxDuration = "5m")
 	public void metadataRequiresExactIssuerAndCapabilities(byte @NonNull [] input) {
 		String text = new String(input, StandardCharsets.ISO_8859_1);
-		try {
-			OidcProviderMetadata accepted = OidcProviderMetadata.fromJson(ISSUER, text);
+		var parsed = OidcProviderMetadata.fromJsonResult(ISSUER, text);
+		if (parsed instanceof OidcProviderMetadataParseResult.Rejected rejected) {
+			Assertions.assertNotNull(rejected.getReason());
+			return;
+		}
+		{
+			OidcProviderMetadata accepted = Assertions.assertInstanceOf(OidcProviderMetadataParseResult.Succeeded.class, parsed).getMetadata();
 			Assertions.assertEquals(ISSUER, accepted.getIssuer());
 			Assertions.assertTrue(accepted.getResponseTypesSupported().contains("code"));
 			Assertions.assertTrue(accepted.getIdTokenSigningAlgValuesSupported().contains("RS256"));
@@ -103,9 +110,6 @@ public class OidcFuzzTests {
 			Assertions.assertTrue(Set.of("public", "pairwise").containsAll(accepted.getSubjectTypesSupported()));
 			Assertions.assertNotNull(accepted.getJwksUri());
 			Assertions.assertEquals("OidcProviderMetadata{configuration=<redacted>}", accepted.toString());
-		} catch (OAuthException rejected) {
-			Assertions.assertNull(rejected.getCause());
-			Assertions.assertEquals(0, rejected.getSuppressed().length);
 		}
 	}
 
@@ -128,12 +132,16 @@ public class OidcFuzzTests {
 	/** A trusted-storage reference stays bounded, canonical and redacted, and retains no credentials. */
 	@FuzzTest(maxDuration = "5m")
 	public void sessionReferencesRoundTripWithoutCredentials(byte @NonNull [] input) {
-		try {
-			OidcSessionReference reference = OidcSessionReference.fromSerializedForm(
-					new String(input, StandardCharsets.ISO_8859_1));
+		var result = OidcSessionReference.fromSerializedFormResult(new String(input, StandardCharsets.ISO_8859_1));
+		if (result instanceof OidcSessionReferenceParseResult.Rejected rejected) {
+			Assertions.assertEquals(OidcValidationException.Reason.SESSION_REFERENCE_INVALID, rejected.getReason());
+			return;
+		}
+		{
+			OidcSessionReference reference = Assertions.assertInstanceOf(OidcSessionReferenceParseResult.Succeeded.class, result).getReference();
 			String serialized = reference.toSerializedForm();
 			Assertions.assertTrue(serialized.getBytes(StandardCharsets.UTF_8).length <= 65_536);
-			OidcSessionReference restored = OidcSessionReference.fromSerializedForm(serialized);
+			OidcSessionReference restored = org.junit.jupiter.api.Assertions.assertInstanceOf(com.revetsec.oidc.OidcSessionReferenceParseResult.Succeeded.class, OidcSessionReference.fromSerializedFormResult(serialized)).getReference();
 			Assertions.assertEquals(serialized, restored.toSerializedForm());
 			Assertions.assertEquals(reference.getSessionId(), restored.getSessionId());
 			Assertions.assertEquals("OidcSessionReference{session=<redacted>}", reference.toString());
@@ -142,9 +150,6 @@ public class OidcFuzzTests {
 			Assertions.assertEquals(Set.of("v", "client_id", "claims", "nonce_digest"), envelope.getMembers().keySet());
 			Assertions.assertTrue(Set.of("iss", "sub", "aud", "iat", "azp", "auth_time", "sid")
 					.containsAll(reference.continuityClaims().getMembers().keySet()));
-		} catch (OidcValidationException rejected) {
-			Assertions.assertEquals(OidcValidationException.Reason.SESSION_REFERENCE_INVALID, rejected.getReason());
-			fixedFailure(rejected);
 		}
 	}
 
@@ -239,8 +244,8 @@ public class OidcFuzzTests {
 			byte[] modulus = key.getModulus().toByteArray();
 			if (modulus[0] == 0) modulus = Arrays.copyOfRange(modulus, 1, modulus.length);
 			String n = Base64.getUrlEncoder().withoutPadding().encodeToString(modulus);
-			StaticJsonWebKeySource source = StaticJsonWebKeySource.fromJsonWebKeySet(JsonWebKeySet.fromJson(
-					"{\"keys\":[{\"kty\":\"RSA\",\"n\":\"" + n + "\",\"e\":\"AQAB\"}]}"));
+			StaticJwksSource source = StaticJwksSource.fromJwks(org.junit.jupiter.api.Assertions.assertInstanceOf(com.revetsec.jose.JwksParseResult.Succeeded.class, Jwks.fromJsonResult(
+					"{\"keys\":[{\"kty\":\"RSA\",\"n\":\"" + n + "\",\"e\":\"AQAB\"}]}")).getJwks());
 			return new IdTokenValidator(ISSUER, CLIENT, source, Set.of(JwsAlgorithm.HS256), Set.of(), Set.of(),
 					Duration.ofSeconds(60), Duration.ofSeconds(300), Clock.fixed(NOW, ZoneOffset.UTC), JoseObserver.disabledInstance(), true);
 		} catch (GeneralSecurityException impossible) { throw new AssertionError(impossible); }

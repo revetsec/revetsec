@@ -53,7 +53,7 @@ final class StateSealerRc1MutationTests {
         StateSealer sealer = StateSealer.withActiveKey(TestSealers.fixedKey("rc1-context-order"))
                 .clock(clock).build();
         for (String context : new String[]{"", "x".repeat(257), "\ud800"}) {
-            assertThrows(IllegalArgumentException.class, () -> sealer.unseal("untrusted-not-a-seal", context));
+            assertThrows(IllegalArgumentException.class, () -> sealer.unsealResult("untrusted-not-a-seal", context));
             assertEquals(0, clockCalls.get());
             assertThrows(IllegalArgumentException.class, () -> SealedStateAccess.get().unseal(sealer,
                     SealedStateType.APP, "untrusted-not-a-seal", context, clock));

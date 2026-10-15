@@ -16,13 +16,14 @@
 
 package com.revetsec.oauth;
 
+import com.revetsec.oauth.AuthorizationResponseParseResult;
 import com.code_intelligence.jazzer.junit.FuzzTest;
 import com.revetsec.internal.json.JsonCodec;
 import com.revetsec.internal.json.JsonLimits;
 import com.revetsec.internal.json.JsonParseException;
-import com.revetsec.jose.JsonWebKeySet;
+import com.revetsec.jose.Jwks;
 import com.revetsec.jose.JwsAlgorithm;
-import com.revetsec.jose.StaticJsonWebKeySource;
+import com.revetsec.jose.StaticJwksSource;
 import com.revetsec.json.*;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
@@ -49,7 +50,7 @@ public final class ResourceServerFuzzTests {
     private static final String AUDIENCE = "https://resource.example/mcp";
     private static final Instant NOW = Instant.parse("2026-10-01T12:00:00Z");
     private static final KeyPair KEY = key();
-    private static final StaticJsonWebKeySource KEYS = keys();
+    private static final StaticJwksSource KEYS = keys();
     private static final JwtAccessTokenValidator STRICT = validator(false);
     private static final JwtAccessTokenValidator COMPATIBILITY = validator(true);
     private static final Pattern BEARER = Pattern.compile("[Bb][Ee][Aa][Rr][Ee][Rr] {1,58}[A-Za-z0-9._~+/-]+=*");
@@ -57,7 +58,7 @@ public final class ResourceServerFuzzTests {
     private static final byte[] CALLBACK = "code=TEST-ONLY-code&state=TEST-ONLY-state".getBytes(StandardCharsets.UTF_8);
     private static final byte[] INACTIVE = "{\"active\":false}".getBytes(StandardCharsets.UTF_8);
 
-    /** RFC6750 header grammar, duplicate rejection and result/throwing API equivalence. */
+    /** RFC6750 header grammar, duplicate rejection and sealed outcome agreement. */
     @FuzzTest(maxDuration = "5m")
     public void bearerPresentationMatchesTheHeaderGrammar(byte @NonNull [] input) {
         String field = new String(input, StandardCharsets.ISO_8859_1);
@@ -68,18 +69,13 @@ public final class ResourceServerFuzzTests {
             BearerTokenResult result = BearerToken.fromAuthorizationHeaderValuesResult(fields, 8_192);
             if (fields.isEmpty()) {
                 Assertions.assertInstanceOf(BearerTokenResult.Absent.class, result);
-                Assertions.assertTrue(BearerToken.fromAuthorizationHeaderValues(fields, 8_192).isEmpty());
             } else if (fields.size() == 1 && valid) {
                 BearerToken token = Assertions.assertInstanceOf(BearerTokenResult.Present.class, result).getToken();
                 Assertions.assertEquals("BearerToken{value=<redacted>}", token.toString());
                 Assertions.assertEquals(field.substring(6).stripLeading(), token.value());
-                Assertions.assertTrue(BearerToken.fromAuthorizationHeaderValues(fields, 8_192).isPresent());
             } else {
                 Assertions.assertInstanceOf(BearerTokenResult.Malformed.class, result);
-                AccessTokenValidationException failure = Assertions.assertThrows(AccessTokenValidationException.class,
-                        () -> BearerToken.fromAuthorizationHeaderValues(fields, 8_192));
-                Assertions.assertEquals(AccessTokenValidationException.Reason.MALFORMED_REQUEST, failure.getReason());
-                fixed(failure);
+                Assertions.assertEquals("BearerTokenResult{outcome=Malformed, data=<redacted>}", result.toString());
             }
         }
     }
@@ -115,16 +111,16 @@ public final class ResourceServerFuzzTests {
         String field = new String(input, StandardCharsets.ISO_8859_1);
         boolean valid = field.length() <= 8_192 && formMime(field);
         for (List<String> fields : List.of(List.<String>of(), List.of(field), List.of(field, field))) {
-            try {
-                AuthorizationResponse accepted = AuthorizationResponse.fromFormBody(CALLBACK, fields, null);
+            var result = AuthorizationResponse.fromFormBodyResult(CALLBACK, fields, null);
+            if (result instanceof AuthorizationResponseParseResult.Rejected rejected) {
+                Assertions.assertFalse(valid && fields.size() == 1);
+                Assertions.assertEquals(OAuthException.Reason.CALLBACK_MALFORMED, rejected.getReason());
+            } else {
+                AuthorizationResponse accepted = Assertions.assertInstanceOf(AuthorizationResponseParseResult.Succeeded.class, result).getResponse();
                 Assertions.assertTrue(valid && fields.size() == 1);
                 Assertions.assertEquals(Optional.of("TEST-ONLY-code"), accepted.getCode());
                 Assertions.assertEquals(Optional.of("TEST-ONLY-state"), accepted.getState());
                 Assertions.assertEquals("AuthorizationResponse{parameters=<redacted>}", accepted.toString());
-            } catch (OAuthResponseException rejected) {
-                Assertions.assertFalse(valid && fields.size() == 1);
-                Assertions.assertEquals(OAuthException.Reason.CALLBACK_MALFORMED, rejected.getReason());
-                fixed(rejected);
             }
         }
     }
@@ -167,7 +163,7 @@ public final class ResourceServerFuzzTests {
                     + (uri.getRawQuery() == null ? "" : "?" + uri.getRawQuery()), parsed.getWellKnownUri().toString());
             Assertions.assertTrue(parsed.toJson().getBytes(StandardCharsets.UTF_8).length <= 262_144);
             Assertions.assertEquals(resource, object(parsed.toJson().getBytes(StandardCharsets.UTF_8), 262_144, false)
-                    .findString("resource").orElseThrow());
+                    .find("resource").map(com.revetsec.json.JsonString.class::cast).map(com.revetsec.json.JsonString::getValue).orElseThrow());
         } catch (IllegalArgumentException rejected) {
             // Extremely long syntactically safe URIs can hit the JSON size bound.
             Assertions.assertFalse(valid && resource.length() < 32_768);
@@ -181,7 +177,7 @@ public final class ResourceServerFuzzTests {
         JsonObject claims = object(input, 65_536, true);
         for (String type : List.of("at+jwt", "MISSING", "JWT", "logout+jwt")) {
             String token = signed(input, type);
-            BearerToken credential = BearerToken.fromAuthorizationHeaderValues(List.of("Bearer " + token), 1_048_576).orElseThrow();
+            BearerToken credential = org.junit.jupiter.api.Assertions.assertInstanceOf(com.revetsec.oauth.BearerTokenResult.Present.class, BearerToken.fromAuthorizationHeaderValuesResult(List.of("Bearer " + token), 1_048_576)).getToken();
             for (boolean compatibility : List.of(false, true)) {
                 boolean valid = token.length() <= 65_536 && jwt(claims, compatibility,
                         type.equals("MISSING") || type.equals("JWT"))
@@ -211,7 +207,7 @@ public final class ResourceServerFuzzTests {
         TokenIntrospectionClient validator = TokenIntrospectionClient.withOAuthClient(oauth)
                 .expectedAudiences(Set.of(AUDIENCE)).introspectionEndpoint(URI.create(ISSUER + "/introspection"))
                 .clockSkew(Duration.ZERO).build();
-        BearerToken token = BearerToken.fromAuthorizationHeaderValues(List.of("Bearer TEST-ONLY-opaque")).orElseThrow();
+        BearerToken token = org.junit.jupiter.api.Assertions.assertInstanceOf(com.revetsec.oauth.BearerTokenResult.Present.class, BearerToken.fromAuthorizationHeaderValuesResult(List.of("Bearer TEST-ONLY-opaque"))).getToken();
         try {
             AccessTokenValidationResult result = validator.validateResult(token);
             Assertions.assertTrue(expected != 0);
@@ -393,14 +389,14 @@ public final class ResourceServerFuzzTests {
         try { return KeyPairGenerator.getInstance("Ed25519").generateKeyPair(); }
         catch (GeneralSecurityException failure) { throw new IllegalStateException(failure); }
     }
-    private static @NonNull StaticJsonWebKeySource keys() {
+    private static @NonNull StaticJwksSource keys() {
         byte[] encoded = KEY.getPublic().getEncoded();
         String x = Base64.getUrlEncoder().withoutPadding().encodeToString(Arrays.copyOfRange(encoded, encoded.length - 32, encoded.length));
-        return StaticJsonWebKeySource.fromJsonWebKeySet(JsonWebKeySet.fromJson("{\"keys\":[{\"kty\":\"OKP\",\"crv\":\"Ed25519\",\"alg\":\"Ed25519\",\"kid\":\"TEST-ONLY-fuzz-key\",\"x\":\"" + x + "\"}]}"));
+        return StaticJwksSource.fromJwks(org.junit.jupiter.api.Assertions.assertInstanceOf(com.revetsec.jose.JwksParseResult.Succeeded.class, Jwks.fromJsonResult("{\"keys\":[{\"kty\":\"OKP\",\"crv\":\"Ed25519\",\"alg\":\"Ed25519\",\"kid\":\"TEST-ONLY-fuzz-key\",\"x\":\"" + x + "\"}]}")).getJwks());
     }
     private static @NonNull JwtAccessTokenValidator validator(boolean compatibility) {
         JwtAccessTokenValidator.Builder builder = JwtAccessTokenValidator.withIssuer(ISSUER).expectedAudiences(Set.of(AUDIENCE))
-                .jsonWebKeySource(KEYS).allowedAlgorithms(Set.of(JwsAlgorithm.ED25519)).clock(Clock.fixed(NOW, ZoneOffset.UTC))
+                .jwksSource(KEYS).allowedAlgorithms(Set.of(JwsAlgorithm.ED25519)).clock(Clock.fixed(NOW, ZoneOffset.UTC))
                 .clockSkew(Duration.ZERO);
         return (compatibility ? builder.compatibility(AccessTokenCompatibilityMode.UNTYPED_ACCESS_TOKENS).requiredClaims(Set.of("app")) : builder).build();
     }

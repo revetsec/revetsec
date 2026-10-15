@@ -49,7 +49,7 @@ final class AccessTokenObserverTests {
             @Override public void didRejectAccessToken(@NonNull AccessTokenValidationException e){bad.incrementAndGet();redacted(e,"TEST-ONLY-subject");throw new IllegalStateException("TEST-ONLY-hook");}
         };
         JwtAccessTokenValidator validator=jwt().compatibility(AccessTokenCompatibilityMode.UNTYPED_ACCESS_TOKENS).requiredClaims(Set.of("app")).observer(observer).build();assertEquals(1,enabled.get());assertEquals(0,used.get());
-        Map<String,String> c=claims(ISSUER);c.put("app","true");assertNotNull(validator.validate(bearer(token(c,"JWT"))));assertEquals(1,used.get());assertEquals(1,good.get());
+        Map<String,String> c=claims(ISSUER);c.put("app","true");assertNotNull(assertInstanceOf(AccessTokenValidationResult.Succeeded.class, validator.validateResult(bearer(token(c,"JWT")))).getAccessToken());assertEquals(1,used.get());assertEquals(1,good.get());
         c.put("nonce","null");assertInstanceOf(AccessTokenValidationResult.Rejected.class,validator.validateResult(bearer(token(c,null))));assertEquals(2,used.get());assertEquals(1,bad.get());
         assertInstanceOf(AccessTokenValidationResult.Rejected.class,validator.validateResult(bearer("broken")));assertEquals(2,used.get());assertEquals(2,bad.get());
     }
@@ -64,7 +64,7 @@ final class AccessTokenObserverTests {
                 @Override public void didRejectAccessToken(@NonNull AccessTokenValidationException e){bad.incrementAndGet();}
             };
             OAuthClient oauth=oauth(server).observer(observer).build();TokenIntrospectionClient client=TokenIntrospectionClient.withOAuthClient(oauth).expectedAudiences(Set.of(AUD)).observer(observer).build();
-            response(server,"/inspect",200,"application/json",active());assertNotNull(client.validate(bearer("opaque")));assertEquals(1,before.get());assertEquals(1,after.get());assertEquals(1,good.get());
+            response(server,"/inspect",200,"application/json",active());assertNotNull(assertInstanceOf(AccessTokenValidationResult.Succeeded.class, client.validateResult(bearer("opaque"))).getAccessToken());assertEquals(1,before.get());assertEquals(1,after.get());assertEquals(1,good.get());
             response(server,"/inspect",200,"application/json","{\"active\":false}");assertInstanceOf(AccessTokenValidationResult.Rejected.class,client.validateResult(bearer("opaque")));assertEquals(1,bad.get());assertEquals(2,before.get());
             response(server,"/inspect",503,"application/json","{}");assertThrows(OAuthErrorResponseException.class,()->client.validateResult(bearer("opaque")));assertEquals(1,failure.get());assertEquals(1,bad.get());assertEquals(3,before.get());
         }
@@ -73,7 +73,7 @@ final class AccessTokenObserverTests {
         try(TestHttpsServer server=TestHttpsServer.start()) {
             AtomicInteger app=new AtomicInteger(),resource=new AtomicInteger();OAuthObserver one=new OAuthObserver(){@Override public void didRequestEndpoint(@NonNull OAuthEndpoint k,@NonNull URI uri,@NonNull Integer status,@NonNull Duration elapsed){app.incrementAndGet();}};
             AccessTokenObserver two=new AccessTokenObserver(){@Override public void didRequestEndpoint(@NonNull OAuthEndpoint k,@NonNull URI uri,@NonNull Integer status,@NonNull Duration elapsed){resource.incrementAndGet();}};
-            response(server,"/inspect",200,"application/json",active());TokenIntrospectionClient client=TokenIntrospectionClient.withOAuthClient(oauth(server).observer(one).build()).expectedAudiences(Set.of(AUD)).observer(two).build();assertNotNull(client.validate(bearer("opaque")));assertEquals(1,app.get());assertEquals(1,resource.get());
+            response(server,"/inspect",200,"application/json",active());TokenIntrospectionClient client=TokenIntrospectionClient.withOAuthClient(oauth(server).observer(one).build()).expectedAudiences(Set.of(AUD)).observer(two).build();assertNotNull(assertInstanceOf(AccessTokenValidationResult.Succeeded.class, client.validateResult(bearer("opaque"))).getAccessToken());assertEquals(1,app.get());assertEquals(1,resource.get());
         }
     }
     @Test void transportResponseFailuresAndUnencodedBasicAreReportedExactlyOnce() throws Exception {
