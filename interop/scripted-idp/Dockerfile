@@ -27,7 +27,7 @@
 
 # python:3.13-alpine3.24 (Python 3.13.15, Alpine 3.24.2), multi-arch index digest resolved
 # 2026-09-23 with `docker buildx imagetools inspect python:3.13-alpine3.24`.
-FROM python:3.13-alpine3.24@sha256:79e7a9b9ff1cbceff819f856fb374477792a5967759d94df266de7b7b4120e6f
+FROM python:3.13-alpine3.24@sha256:2d9aefe2fef018a7eb2c13064c89c71929800fd2e5dccdbf52ea5da5bb8d929a
 
 LABEL org.opencontainers.image.title="revetsec-scripted-idp" \
       org.opencontainers.image.description="Revetsec SAML test IdP (libxmlsec1 + signxml). Test tooling; never pushed." \
