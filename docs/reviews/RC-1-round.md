@@ -1,8 +1,9 @@
 # RC-1 OAuth, OIDC, JOSE and JSON review — 2026-10-14
 
 **Internal, AI-assisted adversarial review; not independent. All automated local
-RC-1 closeout lanes are complete within the recorded Burp boundary. Release
-acceptance remains open for the gates listed below.**
+RC-1 closeout lanes are complete, including the authorized Burp lane. The owner
+accepted the RC-1 and OAuth issuer API freezes on 2026-10-15. Applicable hosted
+CI remains the release gate listed below.**
 The entry snapshot is commit `dd5c10b984ca48ff38e728c5cd70d8fded92173f`
 plus the uncommitted closeout changes recorded in the source-bound evidence.
 This ledger covers shared foundations, JOSE, the OAuth client and resource
@@ -99,9 +100,23 @@ with 18,763 tests per leg under a two-CPU quota, Keycloak TLS smoke, actionlint,
 and two 60-execution OIDF runs. Each OIDF run reports 56 passes and the same four
 documented unsigned-token skips; five comprehensive-profile exclusions remain
 not run. Final cleanup found no lingering task-owned or newly introduced
-container. Only the README and the two RC-1 public ledger documents changed
-after the qualified snapshot, so no code, test, build or workflow result was
-invalidated. This is local qualification and does not claim hosted CI, OIDF
+container. At matrix sealing, its live drift contained only the README and two
+RC-1 public ledger documents.
+
+A later hosted Examples run exposed checkout-pin drift: the workflow selected
+adapter commit `b04188947c048ea9bb4af26fcbe8d572acbfc72d`, while
+`examples/pins.json` requires
+`595cc578a9c03572bd3fad9cb3c54e17f375142a`. The uncommitted repair updates that
+workflow pin and hardens one Playground loopback test against the reproduced
+post-response reset race. Its source-bound receipt, SHA-256
+`03f8ffcb4eacc9654ad022aefec3ea0cecb1a6f1ae3bdf086bd9a6c0a83fca25`,
+passes all eight Examples phases on Java 17 and 27: 31 Barebones OIDC tests and
+66 Playground tests per JDK, explicit nullability checks over 202 and 674
+reference positions, 20/20 focused loopback repetitions on Java 17, actionlint
+and all nine workflow YAML parses. It changes no production source or public
+API. The final matrix remains evidence for its sealed snapshot; the Examples
+receipt qualifies these two later changes, and hosted CI must run after they are
+pushed. This is local qualification and does not claim hosted CI, OIDF
 certification or external review.
 
 ## Released-client and application boundary
@@ -123,11 +138,12 @@ step-up runs include 401 discovery, `insufficient_scope`, a second
 authorization-code grant, successful retry and application denial after
 admission. The generic-403 component diagnostic remains separate, and its
 application-host recovery fence now passes in the
-[bounded local RC-1 qualification](../pentest/2026-10-15-rc1.md). That run also
-passes 33 named OIDC and resource-server cases through ZAP and the released
-Inspector JWT and opaque paths. Burp did not reach application traffic because
-its fresh private state presented first-run terms requiring explicit human
-acceptance; the report records no result or product inference from that lane.
+[bounded local RC-1 qualification](../pentest/2026-10-15-rc1.md). The
+[authorized Burp closeout](../pentest/2026-10-15-rc1-burp.md) runs the same 33
+named OIDC and resource-server cases through Burp Community 2026.9.2 and passes
+all of them. ZAP also passes those 33 cases, and the released Inspector JWT and
+opaque paths pass. The owner explicitly authorized acceptance of the displayed
+Burp first-run terms before that lane ran.
 Historical documents that describe the original Inspector 2.9.0 observation
 retain that version and scope.
 
@@ -143,8 +159,9 @@ The generated RC-1 declaration inventory measures 92 top-level public types,
 170 enum constants across the shared root, JSON, JOSE, OAuth/resource-server and
 OIDC areas. It finds no public/protected data fields or copiers and one
 application-accessible protected constructor, the documented
-`RevetsecException` extension contract. The internal freeze proposal recommends
-accepting that measured surface. Owner acceptance remains a separate gate.
+`RevetsecException` extension contract. The owner accepted that RC-1 freeze and
+the separate OAuth issuer freeze on 2026-10-15. Immutable additive internal
+receipts record both decisions without altering the proposals or inventories.
 
 The [threat model](../threat-model.md) now states the scope of its original
 invariant table explicitly. It is not a complete OIDC, resource-server or OAuth
@@ -162,21 +179,19 @@ must be rerun if their source or public text changes before release.
 
 ## Open items
 
-The source-bound local closeout is complete. RC-1 release acceptance still has
-three explicit gates:
+The source-bound local closeout is complete. The owner accepted the RC-1 and
+OAuth issuer API freezes on 2026-10-15. The authorized Burp lane passes all 33
+named cases, joining the completed ZAP, released Inspector and generic-403
+application-host paths. RC-1 release acceptance retains one explicit gate:
 
-1. applicable hosted CI must run after this uncommitted source is pushed;
-2. the owner must accept the RC-1 and OAuth issuer API freeze proposals;
-3. the Burp second-proxy lane requires explicit human acceptance of Burp's
-   first-run terms before it can execute, or an explicit owner decision to
-   accept the documented coverage boundary. ZAP's 33 cases, the released
-   Inspector JWT and opaque paths, and the generic-403 application recovery
-   fence are complete. Burp contributed no application result or product
-   inference.
+1. applicable hosted CI must run after the remaining uncommitted changes are
+   pushed.
 
 The parallel internal RC-AS source and qualification review is complete. Its
 final receipt has SHA-256
 `428fd219252856da475dbccf415ce2849cf57202bb9c9c020a4613daff337572`.
 That sealed receipt predates the released-consumer and final local matrix
-evidence, which are now complete. It does not close hosted CI, accept either API
-proposal, authorize publication or characterize an application deployment.
+evidence, which are now complete. The sealed receipt itself did not close hosted
+CI, accept either API proposal, authorize publication or characterize an
+application deployment. The separate dated owner-acceptance receipts now accept
+both API proposals without altering that historical receipt.

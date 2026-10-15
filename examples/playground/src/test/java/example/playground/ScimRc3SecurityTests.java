@@ -20,10 +20,13 @@ import com.revetsec.json.JsonObject;
 import com.revetsec.scim.*;
 import com.soklet.*;
 import org.junit.jupiter.api.Test;
+import org.jspecify.annotations.NonNull;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.net.SocketException;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
@@ -48,27 +51,27 @@ class ScimRc3SecurityTests {
     private static final URI BASE = URI.create("https://scim.example/scim/v2/");
     private static final Clock CLOCK = Clock.fixed(Instant.parse("2026-10-14T12:00:00Z"), ZoneOffset.UTC);
 
-    private static PlaygroundScim app() { return app((operation, current, candidate, attempted, effective) -> true); }
-    private static PlaygroundScim app(PlaygroundScim.Authorizer authorizer) {
+    private static @NonNull PlaygroundScim app() { return app((operation, current, candidate, attempted, effective) -> true); }
+    private static @NonNull PlaygroundScim app(PlaygroundScim.@NonNull Authorizer authorizer) {
         return new PlaygroundScim(PlaygroundScim.provider(BASE, ScimLimits.builder().maximumBodyBytes(16_384).build()), TOKEN, CLOCK, authorizer);
     }
-    private static Request request(HttpMethod method, String path, String body) {
+    private static @NonNull Request request(@NonNull HttpMethod method, @NonNull String path, @NonNull String body) {
         return Request.withRawUrl(method, path).headers(Map.of("Authorization", List.of("Bearer " + TOKEN),
                 "Content-Type", List.of("application/scim+json"))).body(body.getBytes(StandardCharsets.UTF_8)).build();
     }
-    private static Request user(String name) { return request(HttpMethod.POST, "/scim/v2/Users", userDocument(name)); }
-    private static String userDocument(String name) { return "{\"schemas\":[\"" + USER_SCHEMA + "\"],\"userName\":\"" + name + "\",\"displayName\":\"Original\",\"active\":true}"; }
-    private static Request patch(String id, String operations) {
+    private static @NonNull Request user(@NonNull String name) { return request(HttpMethod.POST, "/scim/v2/Users", userDocument(name)); }
+    private static @NonNull String userDocument(@NonNull String name) { return "{\"schemas\":[\"" + USER_SCHEMA + "\"],\"userName\":\"" + name + "\",\"displayName\":\"Original\",\"active\":true}"; }
+    private static @NonNull Request patch(@NonNull String id, @NonNull String operations) {
         return request(HttpMethod.PATCH, "/scim/v2/Users/" + id, "{\"schemas\":[\"" + PATCH_SCHEMA + "\"],\"Operations\":[" + operations + "]}");
     }
-    private static Request get(String path) { return request(HttpMethod.GET, path, ""); }
-    private static MarshaledResponse invoke(Simulator simulator, Request request) { return simulator.performHttpRequest(request).getMarshaledResponse(); }
-    private static String text(MarshaledResponse response) {
+    private static @NonNull Request get(@NonNull String path) { return request(HttpMethod.GET, path, ""); }
+    private static @NonNull MarshaledResponse invoke(@NonNull Simulator simulator, @NonNull Request request) { return simulator.performHttpRequest(request).getMarshaledResponse(); }
+    private static @NonNull String text(@NonNull MarshaledResponse response) {
         return response.getBody().map(body -> new String(((MarshaledResponseBody.Bytes) body).getBytes(), StandardCharsets.UTF_8)).orElse("");
     }
-    private static void unchanged(PlaygroundScim app, ScimResource original) { assertSame(original, app.snapshot(original.getResourceType(), original.getId().orElseThrow())); }
-    private static Request condition(Request request, String value) { return request.copy().headers(headers -> headers.put("If-Match", List.of(value))).finish(); }
-    private static Set<String> paths(Set<ScimAttributePath> paths) { Set<String> result = new HashSet<>(); paths.forEach(path -> result.add(path.toScimString())); return result; }
+    private static void unchanged(@NonNull PlaygroundScim app, @NonNull ScimResource original) { assertSame(original, app.snapshot(original.getResourceType(), original.getId().orElseThrow())); }
+    private static @NonNull Request condition(@NonNull Request request, @NonNull String value) { return request.copy().headers(headers -> headers.put("If-Match", List.of(value))).finish(); }
+    private static @NonNull Set<@NonNull String> paths(@NonNull Set<@NonNull ScimAttributePath> paths) { Set<@NonNull String> result = new HashSet<>(); paths.forEach(path -> result.add(path.toScimString())); return result; }
 
     @Test void everyRegisteredOperationAuthenticatesBeforeMalformedInputAndTenantHints() {
         AtomicInteger authorization = new AtomicInteger();
@@ -281,7 +284,7 @@ class ScimRc3SecurityTests {
             assertEquals(401, wire(port, "GET", "/scim/v2/Users", List.of("Authorization: Bearer " + TOKEN, "Authorization: Bearer " + TOKEN), "").status);
             assertEquals(415, wire(port, "POST", "/scim/v2/Users", List.of("Authorization: Bearer " + TOKEN, "Content-Type: application/scim+json", "Content-Type: application/scim+json"), userDocument("alice")).status);
             List<String> headers = List.of("Authorization: Bearer " + TOKEN, "Content-Type: application/scim+json");
-            assertEquals(413, wire(port, "POST", "/scim/v2/Users", headers, "x".repeat(16_385)).status);
+            assertEquals(413, wire(port, "POST", "/scim/v2/Users", headers, "x".repeat(16_385), true).status);
             assertEquals(201, wire(port, "POST", "/scim/v2/Users", headers, userDocument("alice")).status);
             assertEquals(400, wire(port, "GET", "/scim/v2/Users?count=1&COUNT=2", headers, "").status);
             assertEquals(400, wire(port, "GET", "/scim/v2/Users?filter=password+pr", headers, "").status);
@@ -305,15 +308,31 @@ class ScimRc3SecurityTests {
         }
     }
 
-    private record WireResponse(int status, String message) { }
-    private static WireResponse wire(int port, String method, String path, List<String> headers, String body) throws IOException {
+    private record WireResponse(int status, @NonNull String message) { }
+    private static @NonNull WireResponse wire(int port, @NonNull String method, @NonNull String path,
+            @NonNull List<@NonNull String> headers, @NonNull String body) throws IOException {
+        return wire(port, method, path, headers, body, false);
+    }
+    private static @NonNull WireResponse wire(int port, @NonNull String method, @NonNull String path,
+            @NonNull List<@NonNull String> headers, @NonNull String body, boolean acceptResetAfterResponse) throws IOException {
         byte[] payload = body.getBytes(StandardCharsets.UTF_8);
         try (Socket socket = new Socket(InetAddress.getLoopbackAddress(), port)) {
             socket.setSoTimeout(5000);
             String message = method + " " + path + " HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n" + String.join("\r\n", headers)
                     + "\r\nContent-Length: " + payload.length + "\r\n\r\n";
             socket.getOutputStream().write(message.getBytes(StandardCharsets.US_ASCII)); socket.getOutputStream().write(payload); socket.getOutputStream().flush();
-            byte[] response = socket.getInputStream().readNBytes(65_537); assertTrue(response.length <= 65_536, "bounded loopback response");
+            ByteArrayOutputStream captured = new ByteArrayOutputStream(); byte[] block = new byte[8_192];
+            while (captured.size() <= 65_536) {
+                try {
+                    int read = socket.getInputStream().read(block, 0, Math.min(block.length, 65_537 - captured.size()));
+                    if (read < 0) break;
+                    captured.write(block, 0, read);
+                } catch (SocketException reset) {
+                    if (!acceptResetAfterResponse || captured.size() < 12) throw reset;
+                    break;
+                }
+            }
+            byte[] response = captured.toByteArray(); assertTrue(response.length <= 65_536, "bounded loopback response");
             String text = new String(response, StandardCharsets.UTF_8); assertTrue(text.startsWith("HTTP/1.1 "), text);
             return new WireResponse(Integer.parseInt(text.substring(9, 12)), text);
         }

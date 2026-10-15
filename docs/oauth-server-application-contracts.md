@@ -1,6 +1,6 @@
 # OAuth authorization-server application contracts
 
-The `com.revetsec.oauth.server` package implements the application-integrated OAuth code issuer planned for 1.0.0, including authorization, token, revocation, introspection, online grant status and optional client-metadata fetching. Local browser/client, mutation, fuzz and PostgreSQL recovery evidence is recorded. RC-AS qualification and API freeze remain open.
+The `com.revetsec.oauth.server` package implements the application-integrated OAuth code issuer planned for 1.0.0, including authorization, token, revocation, introspection, online grant status and optional client-metadata fetching. Local browser/client, mutation, fuzz and PostgreSQL recovery evidence is recorded. RC-AS qualification is complete, and the release owner accepted the measured API freeze on 2026-10-15.
 
 The application supplies users, login/session handling, CSRF defenses, permission decisions and storage. Revetsec's issuer validates the protocol, binds those decisions and manages credentials. An application decision is trusted configuration, not a Revetsec-verified authentication proof.
 
@@ -433,7 +433,7 @@ CIMD's scope/software/key declarations confer no authority. Configured server re
 
 Every code/refresh attempt, including a retry after a store conflict and a bound used-credential replay, performs its own successful200 via the pinned transport before authoritative state reads/consumption or replay invalidation. It bypasses all cache reads and writes. A prior snapshot, another operation's200 or shared cache cannot replace this fetch. Registry, fetch, store, policy and signing share the original shrinking deadline. Failure, invalid metadata or fingerprint mismatch releases no credentials and leaves an unused code/current refresh unconsumed; valid fully bound reuse retains strict whole-grant invalidation. No callback/network/signing runs inside a backend commit.
 
-The public engine integrates these helpers with restricted results, endpoint failure mapping and dynamic-owner revocation. Local browser/client and PostgreSQL recovery checks supplement deterministic tests within their recorded boundaries. Final RC-AS review, current-source qualification and API freeze remain separate gates.
+The public engine integrates these helpers with restricted results, endpoint failure mapping and dynamic-owner revocation. Local browser/client and PostgreSQL recovery checks supplement deterministic tests within their recorded boundaries. The final RC-AS review and current-source qualification are complete, and the release owner accepted the measured API freeze on 2026-10-15.
 
 
 ## Prepared response and credential wire contracts
@@ -508,4 +508,4 @@ Before traffic, `initializeFreshIssuer()` is an operator assertion that the issu
 
 Expected remote errors are fixed result variants. Infrastructure/corruption/signing/UNKNOWN stays typed and redacted; `responseForFailure` emits fixed503 JSON with no Location. Observer hooks have fixed operation kinds, no credentials or identities, and one terminal event during ordinary completion. InteractionRequired has logical HTTP200; management/validation status is absent. Infrastructure faults never become invalid credentials or implicit retry approval.
 
-Public wiring has deterministic core tests and local Soklet/browser/released-client qualification. The [unpublished PostgreSQL fixture](../verification/issuer-store/README.md) records durable independent-JVM races, uncertain COMMIT and authentic logical restore with application admission fencing on one primary and host. These checks do not qualify replica failover, cross-host recovery or arbitrary production backends. Final RC-AS qualification, the released-consumer recovery fence and API freeze remain open.
+Public wiring has deterministic core tests and local Soklet/browser/released-client qualification. The [unpublished PostgreSQL fixture](../verification/issuer-store/README.md) records durable independent-JVM races, uncertain COMMIT and authentic logical restore with application admission fencing on one primary and host. These checks do not qualify replica failover, cross-host recovery or arbitrary production backends. Final RC-AS qualification and the released-consumer recovery fence are complete, and the release owner accepted the measured API freeze on 2026-10-15.
