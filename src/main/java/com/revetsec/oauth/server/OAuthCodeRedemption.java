@@ -69,16 +69,21 @@ final class OAuthCodeRedemption {
   catch (IllegalArgumentException failure) { throw invalid(); }
   Map<String, Set<String>> server = OAuthServerConfiguration.resources(resources, this.limits.resources);
   for (int attempt = 0; attempt < this.attempts; attempt++) {
+   // Public CIMD requests must identify an existing, matching credential before taking a fresh-fetch permit.
+   String claimedClient = request.authorization() == null ? request.value("client_id") : null;
+   if (claimedClient != null && clients.metadataEnabled()) readCredential(codeId, claimedClient, deadline);
    // Resolve/authenticate again after every conflict; neither app decisions nor metadata are positive caches.
    OAuthServerClientSelection.Selected selectedClient = clients.authenticate(request, server, deadline);
    OAuthServerClientRegistration client = selectedClient.client();
    if (!client.isAuthorizationCodePermitted()) throw OAuthServerClientAdmission.failure(UNAUTHORIZED_CLIENT);
    String fingerprint = selectedClient.fingerprint();
-   OAuthStoreCoordinator.Session session = this.coordinator.begin(deadline);
+   // Re-read after the external fetch so the commit uses a current atomic-store observation.
+   CredentialRead credential = readCredential(codeId, null, deadline);
+   OAuthStoreCoordinator.Session session = credential.session();
    OAuthStoreKey codeKey = this.codec.key(OAuthStoreKey.Kind.CODE, codeId);
-   OAuthAuthorizationRecord code = read(session, codeKey, false);
+   OAuthAuthorizationRecord code = credential.credential();
    OAuthStoreKey grantKey = this.codec.key(OAuthStoreKey.Kind.GRANT, code.text("grantId"));
-   OAuthAuthorizationRecord grant = read(session, grantKey, true);
+   OAuthAuthorizationRecord grant = credential.grant();
    if (!grant.text("codeId").equals(codeId) || !code.sameLineage(grant)) throw new OAuthStoreFailure(CORRUPT_STATE);
    if (!grant.text("clientId").equals(client.getClientId()) || !OAuthAuthorizationRecord.equalDigest(grant.text("clientHash"), fingerprint)
      || !grant.text("resource").equals(request.required("resource")) || !OAuthAuthorizationRecord.equalDigest(code.text("challenge"), verifier)
@@ -137,6 +142,18 @@ final class OAuthCodeRedemption {
    if (session.commit(mutations) == OAuthStoreCommitStatus.COMMITTED) return response;
   }
   throw new OAuthStoreFailure(UNAVAILABLE);
+ }
+ private record CredentialRead(OAuthStoreCoordinator.@NonNull Session session, @NonNull OAuthAuthorizationRecord credential,
+   @NonNull OAuthAuthorizationRecord grant) {}
+ private @NonNull CredentialRead readCredential(@NonNull String codeId, @Nullable String claimedClient,
+   @NonNull Deadline deadline) {
+  OAuthStoreCoordinator.Session session = this.coordinator.begin(deadline);
+  OAuthStoreKey codeKey = this.codec.key(OAuthStoreKey.Kind.CODE, codeId);
+  OAuthAuthorizationRecord code = read(session, codeKey, false);
+  OAuthStoreKey grantKey = this.codec.key(OAuthStoreKey.Kind.GRANT, code.text("grantId"));
+  OAuthAuthorizationRecord grant = read(session, grantKey, true);
+  if (claimedClient != null && !grant.text("clientId").equals(claimedClient)) throw invalid();
+  return new CredentialRead(session, code, grant);
  }
  private @NonNull OAuthAuthorizationDecision authorize(@NonNull OAuthGrantPolicy policy, @NonNull OAuthAuthorizationRecord grant, @NonNull Deadline deadline) {
   OAuthGrantContext context = prepared(() -> OAuthGrantContext.fromCheckedGrant(grant.text("subject"), grant.text("clientId"),

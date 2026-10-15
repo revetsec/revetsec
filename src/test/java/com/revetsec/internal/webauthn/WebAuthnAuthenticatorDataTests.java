@@ -77,6 +77,28 @@ final class WebAuthnAuthenticatorDataTests {
         assertEquals(7, rsa.counter());
     }
 
+    @Test void acceptsOnlyCanonicalCredProtectRegistrationOutput() throws WebAuthnCborException {
+        byte[] key = esKey(ES_X, ES_Y);
+        for (int level = 1; level <= 3; level++) {
+            byte[] data = registration(key, new byte[] {1}, 0xc5, 0);
+            byte[] extension = credProtect(level);
+            byte[] withExtension = Arrays.copyOf(data, data.length + extension.length);
+            System.arraycopy(extension, 0, withExtension, data.length, extension.length);
+            assertEquals(-7, WebAuthnAuthenticatorData.parseRegistration(withExtension, RP_HASH).algorithm());
+        }
+        byte[] good = registration(key, new byte[] {1}, 0xc5, 0);
+        byte[] extension = credProtect(3);
+        byte[] withExtension = Arrays.copyOf(good, good.length + extension.length);
+        System.arraycopy(extension, 0, withExtension, good.length, extension.length);
+        rejectRegistration(Arrays.copyOf(withExtension, withExtension.length - 1));
+        rejectRegistration(Arrays.copyOf(withExtension, withExtension.length + 1));
+        withExtension[good.length] = (byte) 0xa2; // Extra map member is not in the selected profile.
+        rejectRegistration(withExtension);
+        withExtension[good.length] = (byte) 0xa1;
+        withExtension[withExtension.length - 1] = 4;
+        rejectRegistration(withExtension);
+    }
+
     @Test void parsesOnlyExactAssertionShape() throws WebAuthnCborException {
         var parsed = WebAuthnAuthenticatorData.parseAssertion(assertion(0x1d, 0xffff_ffffL), RP_HASH);
         assertEquals(0xffff_ffffL, parsed.counter());
@@ -179,6 +201,13 @@ final class WebAuthnAuthenticatorDataTests {
         out.writeBytes(RP_HASH); out.write(flags);
         out.write((int) (counter >>> 24)); out.write((int) (counter >>> 16));
         out.write((int) (counter >>> 8)); out.write((int) counter);
+        return out.toByteArray();
+    }
+
+    private static byte @NonNull [] credProtect(int protection) {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        out.write(0xa1); out.write(0x6b); out.writeBytes("credProtect".getBytes(StandardCharsets.US_ASCII));
+        out.write(protection);
         return out.toByteArray();
     }
 

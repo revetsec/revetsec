@@ -71,19 +71,45 @@ final class SamlPostLogoutMetadataTests {
     }
 
     @Test void parsedPostLogoutEndpointSurvivesMetadataConnectionConstruction() throws Exception {
-        String post = "<md:SingleLogoutService Binding='" + POST + "' Location='https://idp.example.test/post-logout'/>";
-        String redirect = "<md:SingleLogoutService Binding='" + REDIRECT + "' Location='https://idp.example.test/redirect-logout'/>";
+        String post = "<md:SingleLogoutService Binding='" + POST + "' Location='https://idp.example.test/post-logout'"
+                + " ResponseLocation='https://idp.example.test/post-response'/>";
+        String redirect = "<md:SingleLogoutService Binding='" + REDIRECT + "' Location='https://idp.example.test/redirect-logout'"
+                + " ResponseLocation='https://idp.example.test/redirect-response'/>";
         SamlIdentityProviderMetadata metadata = assertInstanceOf(SamlIdentityProviderMetadataResult.Parsed.class,
                 SamlIdentityProviderMetadata.fromXmlResult(metadata(post + redirect).getBytes(StandardCharsets.UTF_8),
                         null, CLOCK)).getMetadata();
         assertEquals(URI.create("https://idp.example.test/post-logout"), metadata.getPostSingleLogoutService().orElseThrow());
         assertEquals(URI.create("https://idp.example.test/redirect-logout"), metadata.getRedirectSingleLogoutService().orElseThrow());
+        assertEquals(URI.create("https://idp.example.test/post-response"), metadata.getPostSingleLogoutResponseService().orElseThrow());
+        assertEquals(URI.create("https://idp.example.test/redirect-response"), metadata.getRedirectSingleLogoutResponseService().orElseThrow());
         SamlIdentityProvider idp = SamlIdentityProvider.withMetadata(metadata).connectionId("tenant-one").build();
         assertEquals(URI.create("https://idp.example.test/post-logout"), idp.postSingleLogoutService());
         assertEquals(URI.create("https://idp.example.test/redirect-logout"), idp.redirectSingleLogoutService());
+        assertEquals(URI.create("https://idp.example.test/post-response"), idp.postSingleLogoutResponseService());
+        assertEquals(URI.create("https://idp.example.test/redirect-response"), idp.redirectSingleLogoutResponseService());
+        SamlCredential credential = SamlCredential.fromPem(resource("sp-signing-rsa-2048-key.pem"),
+                resource("sp-signing-rsa-2048-cert.pem"));
+        SamlServiceProvider sp = SamlServiceProvider.withEntityId("https://sp.example.test/saml")
+                .assertionConsumerServiceUrl(URI.create("https://sp.example.test/acs"))
+                .singleLogoutServiceUrl(URI.create("https://sp.example.test/redirect-logout"))
+                .postSingleLogoutServiceUrl(URI.create("https://sp.example.test/post-logout"))
+                .signingCredential(credential)
+                .replayCache(InMemorySamlReplayCache.withLimit(CLOCK, 8)).clock(CLOCK).build();
+        SamlLogoutRequest accepted = new SamlLogoutRequest("tenant-one", "https://sp.example.test/saml",
+                "https://idp.example.test/saml", "_idp-request", "relay",
+                new SamlNameId("alice", null, null, null), List.of());
+        URI response = assertInstanceOf(SamlLogoutResponseRedirectResult.Prepared.class,
+                sp.respondToLogoutRequestResult(accepted, idp, SamlLogoutStatus.SUCCESS)).getRedirectUri();
+        assertEquals("https://idp.example.test/redirect-response", response.getScheme() + "://"
+                + response.getAuthority() + response.getPath());
+        assertEquals(URI.create("https://idp.example.test/post-response"),
+                assertInstanceOf(SamlLogoutResponsePostResult.Prepared.class,
+                        sp.respondToPostLogoutRequestResult(accepted, idp, SamlLogoutStatus.SUCCESS))
+                        .getPostForm().getAction());
         for (String invalid : List.of(post + post,
                 post.replace("https://", "http://"),
-                post.replace("https://idp.example.test/post-logout", "https://idp.example.test/post-logout#fragment")))
+                post.replace("https://idp.example.test/post-logout", "https://idp.example.test/post-logout#fragment"),
+                post.replace("https://idp.example.test/post-response", "http://idp.example.test/post-response")))
             assertInstanceOf(SamlIdentityProviderMetadataResult.Rejected.class,
                     SamlIdentityProviderMetadata.fromXmlResult(metadata(invalid).getBytes(StandardCharsets.UTF_8),
                             null, CLOCK));

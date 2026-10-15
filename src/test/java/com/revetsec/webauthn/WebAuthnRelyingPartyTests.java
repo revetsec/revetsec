@@ -70,7 +70,7 @@ final class WebAuthnRelyingPartyTests {
     };
 
     @Test void publicEnrollmentSignInAndPinnedReauthenticationUseCommittedState() throws Exception {
-        WebAuthnStore store = InMemoryWebAuthnStore.withLimits(128, 2_000_000);
+        WebAuthnStore store = InMemoryWebAuthnStore.withLimits(128, 2_000_000, CLOCK);
         WebAuthnRelyingParty rp = relyingParty(store, ADMIT);
         KeyPair pair = KeyPairGenerator.getInstance("Ed25519").generateKeyPair();
         var options = WebAuthnRegistrationOptions.withUserHandle(HANDLE)
@@ -102,6 +102,28 @@ final class WebAuthnRelyingPartyTests {
         assertArrayEquals(CREDENTIAL_ID, registered.getRegistration().getCredentialId());
         assertEquals(NAMESPACE, registered.getRegistration().getCredentialNamespace());
         assertFalse(registered.getRegistration().toString().contains(Base64Url.encode(CREDENTIAL_ID)));
+        for (WebAuthnStoreKey key : List.of(
+                WebAuthnStoreKey.forCredential(NAMESPACE, RP, CREDENTIAL_ID),
+                WebAuthnStoreKey.forAccountCredentialIndex(NAMESPACE, RP, HANDLE),
+                WebAuthnStoreKey.forAccountFence(NAMESPACE, RP, HANDLE),
+                WebAuthnStoreKey.forNamespaceClock(NAMESPACE, RP))) {
+            byte[] before = assertInstanceOf(WebAuthnStoreEntry.Present.class,
+                    assertInstanceOf(WebAuthnStoreReadResult.Available.class,
+                            store.read(Set.of(key), Duration.ofSeconds(1)))
+                            .getSnapshot().getEntry(key)).getVersion();
+            assertEquals(WebAuthnStoreCommitResult.COMMITTED, rp.resealStoreEntry(key));
+            byte[] after = assertInstanceOf(WebAuthnStoreEntry.Present.class,
+                    assertInstanceOf(WebAuthnStoreReadResult.Available.class,
+                            store.read(Set.of(key), Duration.ofSeconds(1)))
+                            .getSnapshot().getEntry(key)).getVersion();
+            assertFalse(Arrays.equals(before, after));
+        }
+        assertEquals(WebAuthnStoreCommitResult.CONFLICT, rp.resealStoreEntry(
+                WebAuthnStoreKey.forCredential(NAMESPACE, RP, new byte[] {99})));
+        assertThrows(IllegalArgumentException.class, () -> rp.resealStoreEntry(
+                WebAuthnStoreKey.forCeremony(NAMESPACE, RP, new byte[32])));
+        assertThrows(IllegalArgumentException.class, () -> rp.resealStoreEntry(
+                WebAuthnStoreKey.forAccountFence("other", RP, HANDLE)));
         assertInstanceOf(WebAuthnRegistrationResult.Rejected.class,
                 rp.completeRegistrationResult(registrationRequest.getCeremonyId(),
                         registrationJson(pair, challenge), BINDING_TEXT));
@@ -133,12 +155,36 @@ final class WebAuthnRelyingPartyTests {
         assertEquals(WebAuthnAuthentication.Kind.SIGN_IN, authenticated.getAuthentication().getKind());
         assertTrue(authenticated.getAuthentication().getActionPurpose().isEmpty());
 
+        var signInAtStepUpRoute = assertInstanceOf(WebAuthnAuthenticationRequestResult.Prepared.class,
+                rp.beginAuthenticationResult(BINDING_TEXT));
+        assertInstanceOf(WebAuthnAuthenticationResult.Rejected.class,
+                rp.completeReauthenticationResult(HANDLE, "transfer",
+                        signInAtStepUpRoute.getRequest().getCeremonyId(),
+                        assertionJson(pair.getPrivate(), signInAtStepUpRoute.getRequest().getPublicKeyOptions()
+                                .findString("challenge").orElseThrow(), 2), BINDING_TEXT));
+
+        var wrongPurpose = assertInstanceOf(WebAuthnAuthenticationRequestResult.Prepared.class,
+                rp.beginReauthenticationResult(HANDLE, "transfer", BINDING_TEXT));
+        assertInstanceOf(WebAuthnAuthenticationResult.Rejected.class,
+                rp.completeReauthenticationResult(HANDLE, "withdraw",
+                        wrongPurpose.getRequest().getCeremonyId(),
+                        assertionJson(pair.getPrivate(), wrongPurpose.getRequest().getPublicKeyOptions()
+                                .findString("challenge").orElseThrow(), 3), BINDING_TEXT));
+
+        var wrongAccount = assertInstanceOf(WebAuthnAuthenticationRequestResult.Prepared.class,
+                rp.beginReauthenticationResult(HANDLE, "transfer", BINDING_TEXT));
+        assertInstanceOf(WebAuthnAuthenticationResult.Rejected.class,
+                rp.completeReauthenticationResult(new byte[] {9}, "transfer",
+                        wrongAccount.getRequest().getCeremonyId(),
+                        assertionJson(pair.getPrivate(), wrongAccount.getRequest().getPublicKeyOptions()
+                                .findString("challenge").orElseThrow(), 4), BINDING_TEXT));
+
         var stepUp = assertInstanceOf(WebAuthnAuthenticationRequestResult.Prepared.class,
                 rp.beginReauthenticationResult(HANDLE, "transfer", BINDING_TEXT));
         var stepUpProof = assertInstanceOf(WebAuthnAuthenticationResult.Succeeded.class,
-                rp.completeAuthenticationResult(stepUp.getRequest().getCeremonyId(),
+                rp.completeReauthenticationResult(HANDLE, "transfer", stepUp.getRequest().getCeremonyId(),
                         assertionJson(pair.getPrivate(), stepUp.getRequest().getPublicKeyOptions()
-                                .findString("challenge").orElseThrow(), 2), BINDING_TEXT));
+                                .findString("challenge").orElseThrow(), 5), BINDING_TEXT));
         assertEquals(WebAuthnAuthentication.Kind.REAUTHENTICATION,
                 stepUpProof.getAuthentication().getKind());
         assertEquals("transfer", stepUpProof.getAuthentication().getActionPurpose().orElseThrow());
@@ -157,6 +203,9 @@ final class WebAuthnRelyingPartyTests {
         assertThrows(IllegalArgumentException.class,
                 () -> WebAuthnRelyingParty.withRelyingPartyId(RP)
                         .allowedOrigins(Set.of("http://" + RP)));
+        assertThrows(IllegalArgumentException.class,
+                () -> WebAuthnRelyingParty.withRelyingPartyId(RP)
+                        .allowedOrigins(Set.of(ORIGIN + ":443")));
         assertThrows(NullPointerException.class,
                 () -> WebAuthnRelyingParty.withRelyingPartyId(RP)
                         .relyingPartyName("Name").allowedOrigins(Set.of(ORIGIN))
@@ -189,7 +238,7 @@ final class WebAuthnRelyingPartyTests {
         assertEquals(30_000L, expiring.getRequest().getPublicKeyOptions()
                 .findLong("timeout").orElseThrow());
         clock.advance(Duration.ofSeconds(31));
-        assertInstanceOf(WebAuthnRegistrationResult.Unavailable.class,
+        assertInstanceOf(WebAuthnRegistrationResult.Rejected.class,
                 rp.completeRegistrationResult(expiring.getRequest().getCeremonyId(),
                         registrationJson(pair, expiring.getRequest().getPublicKeyOptions()
                                 .findString("challenge").orElseThrow()), BINDING_TEXT));
@@ -200,6 +249,51 @@ final class WebAuthnRelyingPartyTests {
                 rp.beginAuthenticationResult(BINDING_TEXT));
         assertEquals(30_000L, signIn.getRequest().getPublicKeyOptions()
                 .findLong("timeout").orElseThrow());
+    }
+
+    @Test void confirmedCompletionAfterCeremonyExpiryRejectsWithoutProof() throws Exception {
+        MemoryStore store = new MemoryStore();
+        TestClock clock = TestClock.fromInstant(CLOCK.instant());
+        WebAuthnRelyingParty rp = relyingParty(store, ADMIT,
+                WebAuthnSettings.builder().ceremonyLifetime(Duration.ofSeconds(30)).build(), clock);
+        KeyPair pair = KeyPairGenerator.getInstance("Ed25519").generateKeyPair();
+        var options = WebAuthnRegistrationOptions.withUserHandle(HANDLE)
+                .userName("alice").userDisplayName("Alice Example").build();
+        var begin = assertInstanceOf(WebAuthnRegistrationRequestResult.Prepared.class,
+                rp.beginRegistrationResult(options, BINDING_TEXT));
+        store.afterCommit = () -> clock.advance(Duration.ofSeconds(31));
+        assertInstanceOf(WebAuthnRegistrationResult.Rejected.class,
+                rp.completeRegistrationResult(begin.getRequest().getCeremonyId(),
+                        registrationJson(pair, begin.getRequest().getPublicKeyOptions()
+                                .findString("challenge").orElseThrow()), BINDING_TEXT));
+    }
+
+    @Test void confirmedConflictsRetryButRejectedResponsesDoNotAdvanceClock() throws Exception {
+        MemoryStore store = new MemoryStore();
+        TestClock clock = TestClock.fromInstant(CLOCK.instant());
+        WebAuthnRelyingParty rp = relyingParty(store, ADMIT,
+                WebAuthnSettings.builder().build(), clock);
+        store.nextCommit = WebAuthnStoreCommitResult.CONFLICT;
+        var begun = assertInstanceOf(WebAuthnAuthenticationRequestResult.Prepared.class,
+                rp.beginAuthenticationResult(BINDING_TEXT));
+        assertTrue(store.reads >= 2);
+        int version = store.version;
+        clock.advance(Duration.ofSeconds(2));
+        assertInstanceOf(WebAuthnAuthenticationResult.Rejected.class,
+                rp.completeAuthenticationResult(begun.getRequest().getCeremonyId(),
+                        new byte[] {1}, BINDING_TEXT));
+        assertEquals(version, store.version);
+
+        KeyPair pair = KeyPairGenerator.getInstance("Ed25519").generateKeyPair();
+        var options = WebAuthnRegistrationOptions.withUserHandle(HANDLE)
+                .userName("alice").userDisplayName("Alice Example").build();
+        var enrollment = assertInstanceOf(WebAuthnRegistrationRequestResult.Prepared.class,
+                rp.beginRegistrationResult(options, BINDING_TEXT));
+        store.nextCommit = WebAuthnStoreCommitResult.CONFLICT;
+        assertInstanceOf(WebAuthnRegistrationResult.Succeeded.class,
+                rp.completeRegistrationResult(enrollment.getRequest().getCeremonyId(),
+                        registrationJson(pair, enrollment.getRequest().getPublicKeyOptions()
+                                .findString("challenge").orElseThrow()), BINDING_TEXT));
     }
 
     @Test void configuredParserCapsRejectOversizedBrowserComponents() throws Exception {
@@ -347,7 +441,7 @@ final class WebAuthnRelyingPartyTests {
         assertEquals(1, assertInstanceOf(WebAuthnCredentialListResult.Listed.class,
                 rp.listCredentialsResult(HANDLE)).getCredentialIds().size());
         store.nextCommit = WebAuthnStoreCommitResult.CONFLICT;
-        assertInstanceOf(WebAuthnAccountDisableResult.Unavailable.class,
+        assertInstanceOf(WebAuthnAccountDisableResult.Disabled.class,
                 rp.disableAccountResult(HANDLE));
         WebAuthnRelyingParty denied = relyingParty(store, remaining -> null);
         int before = store.reads;
@@ -486,6 +580,7 @@ final class WebAuthnRelyingPartyTests {
         private int version;
         private int reads;
         private @Nullable WebAuthnStoreCommitResult nextCommit;
+        private @Nullable Runnable afterCommit;
 
         @Override public synchronized @NonNull WebAuthnStoreReadResult read(
                 @NonNull Set<@NonNull WebAuthnStoreKey> keys, @NonNull Duration remainingBudget) {
@@ -522,6 +617,11 @@ final class WebAuthnRelyingPartyTests {
                 else this.records.put(mutation.getKey(), new Stored(
                         ByteBuffer.allocate(4).putInt(++this.version).array(),
                         mutation.getSealedBytes().orElseThrow()));
+            }
+            if (this.afterCommit != null) {
+                Runnable action = this.afterCommit;
+                this.afterCommit = null;
+                action.run();
             }
             return WebAuthnStoreCommitResult.COMMITTED;
         }

@@ -22,9 +22,11 @@ import javax.annotation.concurrent.ThreadSafe;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.util.PriorityQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -42,18 +44,30 @@ public final class InMemorySamlReplayCache implements SamlReplayCache {
     private static final @NonNull Duration MAXIMUM_BUDGET = Duration.ofSeconds(30);
 
     private final @NonNull ReentrantLock lock = new ReentrantLock();
-    private final @NonNull Map<@NonNull String, @NonNull Instant> entries = new HashMap<>();
+    private final @NonNull Map<@NonNull String, @NonNull ReplayEntry> entries = new HashMap<>();
+    private final @NonNull Map<@NonNull String, @NonNull Integer> connectionCounts = new HashMap<>();
+    private final @NonNull PriorityQueue<@NonNull ExpiryEntry> expiryIndex =
+            new PriorityQueue<>(Comparator.comparing(ExpiryEntry::expiresAt));
     private final @NonNull Clock clock;
     private final int maximumEntries;
+    private final int maximumPerConnection;
     private @NonNull Instant lastObserved = Instant.MIN;
+
+    private record ReplayEntry(@NonNull String connectionId, @NonNull Instant expiresAt) { }
+    private record ExpiryEntry(@NonNull String key, @NonNull Instant expiresAt) { }
 
     private InMemorySamlReplayCache(@NonNull Clock clock, int maximumEntries) {
         this.clock = clock;
         this.maximumEntries = maximumEntries;
+        this.maximumPerConnection = Math.max(1, maximumEntries / 4);
     }
 
     /**
      * Creates a volatile cache with an explicit entry limit.
+     *
+     * New namespaced admissions are limited to one quarter of the total
+     * capacity (at least one). Legacy three-argument admissions retain the
+     * full configured capacity.
      *
      * @param clock the time source used for admission and expiry
      * @param maximumEntries maximum number of live replay records, from 1 to 1000000
@@ -79,6 +93,18 @@ public final class InMemorySamlReplayCache implements SamlReplayCache {
 
     @Override public @NonNull MarkResult markIfAbsent(@NonNull String key, @NonNull Instant expiresAt,
             @NonNull Duration remaining) {
+        return mark("", key, expiresAt, remaining);
+    }
+
+    @Override public @NonNull MarkResult markIfAbsent(@NonNull String connectionId,
+            @NonNull String key, @NonNull Instant expiresAt, @NonNull Duration remaining) {
+        Objects.requireNonNull(connectionId);
+        if (connectionId.isEmpty()) throw new IllegalArgumentException("Empty SAML connection namespace");
+        return mark(connectionId, key, expiresAt, remaining);
+    }
+
+    private @NonNull MarkResult mark(@NonNull String connectionId, @NonNull String key,
+            @NonNull Instant expiresAt, @NonNull Duration remaining) {
         Objects.requireNonNull(key);
         Objects.requireNonNull(expiresAt);
         Objects.requireNonNull(remaining);
@@ -103,15 +129,36 @@ public final class InMemorySamlReplayCache implements SamlReplayCache {
             lastObserved = now;
             // A stale key cannot become fresh before the accepting caller's own expiry fence.
             if (!now.isBefore(expiresAt)) return MarkResult.UNAVAILABLE;
-            Instant existing = entries.get(key);
-            if (existing != null && now.isBefore(existing)) return MarkResult.ALREADY_PRESENT;
-            entries.entrySet().removeIf(entry -> !now.isBefore(entry.getValue()));
+            ReplayEntry existing = entries.get(key);
+            if (existing != null && now.isBefore(existing.expiresAt())) return MarkResult.ALREADY_PRESENT;
+            reclaimExpired(now);
             if (entries.size() >= maximumEntries) return MarkResult.CAPACITY_REFUSED;
+            if (!connectionId.isEmpty()
+                    && connectionCounts.getOrDefault(connectionId, 0) >= maximumPerConnection)
+                return MarkResult.CAPACITY_REFUSED;
             if (expired(deadline)) return MarkResult.UNAVAILABLE;
-            entries.put(key, expiresAt);
+            entries.put(key, new ReplayEntry(connectionId, expiresAt));
+            expiryIndex.add(new ExpiryEntry(key, expiresAt));
+            if (!connectionId.isEmpty()) connectionCounts.merge(connectionId, 1, Integer::sum);
             return expired(deadline) ? MarkResult.INDETERMINATE : MarkResult.MARKED;
         } finally {
             lock.unlock();
+        }
+    }
+
+    private void reclaimExpired(@NonNull Instant now) {
+        while (true) {
+            ExpiryEntry earliest = expiryIndex.peek();
+            if (earliest == null || now.isBefore(earliest.expiresAt())) return;
+            expiryIndex.remove();
+            ReplayEntry entry = entries.get(earliest.key());
+            if (entry == null || !entry.expiresAt().equals(earliest.expiresAt())) continue;
+            entries.remove(earliest.key());
+            if (!entry.connectionId().isEmpty()) {
+                int count = connectionCounts.getOrDefault(entry.connectionId(), 0) - 1;
+                if (count == 0) connectionCounts.remove(entry.connectionId());
+                else connectionCounts.put(entry.connectionId(), count);
+            }
         }
     }
 

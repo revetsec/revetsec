@@ -234,7 +234,8 @@ final class SamlResponseSemantics {
                 return new Rejected(Reason.AUTHN_STATEMENT);
         }
         if (!options.getRequestedAuthnContextClassRefs().isEmpty()
-                && !options.getRequestedAuthnContextClassRefs().contains(authentication.contextClassRef()))
+                && (authentication.contextClassRef() == null
+                    || !options.getRequestedAuthnContextClassRefs().contains(authentication.contextClassRef())))
             return new Rejected(Reason.AUTHN_STATEMENT);
         if (!safeRemainingAssertionContent(assertion)) return new Rejected(Reason.ASSERTION_SHAPE);
         List<SamlAttribute> attributes = inspectAttributes(assertion);
@@ -261,7 +262,7 @@ final class SamlResponseSemantics {
         try { replayKey = replayKey(expected, assertionId); }
         catch (NoSuchAlgorithmException exception) { return Unavailable.INSTANCE; }
         SamlReplayCache.MarkResult mark;
-        try { mark = expected.replayCache().markIfAbsent(replayKey, replayExpiresAt,
+        try { mark = expected.replayCache().markIfAbsent(expected.connectionId(), replayKey, replayExpiresAt,
                 expected.replayBudget()); }
         catch (RuntimeException exception) { return Indeterminate.INSTANCE; }
         if (mark == null || mark == SamlReplayCache.MarkResult.INDETERMINATE) return Indeterminate.INSTANCE;
@@ -298,10 +299,8 @@ final class SamlResponseSemantics {
         String value = null;
         for (Element child : children(status)) {
             if (phase == 0 && is(child, PROTOCOL, "StatusCode")) {
-                if (!scalarDeclarationAllowed(child, PROTOCOL, "StatusCodeType")
-                        || !children(child).isEmpty() || hasNonWhitespaceDirectText(child)) return null;
-                value = child.getAttributeNS(null, "Value");
-                if (value.isEmpty()) return null;
+                value = statusCode(child);
+                if (value == null) return null;
                 phase = 1;
             } else if (phase == 1 && is(child, PROTOCOL, "StatusMessage")) {
                 if (!scalarDeclarationAllowed(child, XSD, "string")
@@ -314,6 +313,27 @@ final class SamlResponseSemantics {
             } else return null;
         }
         return value;
+    }
+
+    private static @Nullable String statusCode(@NonNull Element outer) {
+        Element current = outer;
+        String primary = null;
+        for (int depth = 0; depth < 32; depth++) {
+            if (!scalarDeclarationAllowed(current, PROTOCOL, "StatusCodeType")
+                    || hasNonWhitespaceDirectText(current)) return null;
+            String value = current.getAttributeNS(null, "Value");
+            if (value.isEmpty()) return null;
+            if (primary == null) primary = value;
+            List<Element> children = children(current);
+            if (children.isEmpty()) return primary;
+            // Success has no meaningful subordinate refusal; the second-level
+            // Success code likewise cannot explain a top-level refusal.
+            if (SUCCESS.equals(primary) || children.size() != 1
+                    || !is(children.get(0), PROTOCOL, "StatusCode")
+                    || SUCCESS.equals(children.get(0).getAttributeNS(null, "Value"))) return null;
+            current = children.get(0);
+        }
+        return null;
     }
 
     private static boolean validIssueInstant(@NonNull Instant issued, @NonNull Instant ageEnd,
@@ -666,7 +686,14 @@ final class SamlResponseSemantics {
     }
 
     private static boolean scalarValueAllowed(@NonNull Element value) {
-        return scalarDeclarationAllowed(value, XSD, "string");
+        // A QName in xsi:type is an attribute value. Exclusive canonicalization does not
+        // necessarily sign the namespace declaration that gives its prefix meaning.
+        // Classifying a leaf through that mutable binding lets a response holder hide
+        // a signed policy attribute without invalidating the signature. Only the
+        // signed element shape and the literal xsi:nil value determine text exposure.
+        if (!value.hasAttributeNS(XSI, "nil")) return true;
+        String nil = value.getAttributeNS(XSI, "nil");
+        return "false".equals(nil) || "0".equals(nil);
     }
 
     static boolean scalarDeclarationAllowed(@NonNull Element element,

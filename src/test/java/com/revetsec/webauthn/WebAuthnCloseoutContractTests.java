@@ -93,17 +93,15 @@ final class WebAuthnCloseoutContractTests {
             if (outcome == WebAuthnStoreCommitResult.COMMITTED) {
                 assertInstanceOf(WebAuthnRegistrationRequestResult.Prepared.class, registration);
                 assertInstanceOf(WebAuthnAuthenticationRequestResult.Prepared.class, authentication);
-                assertInstanceOf(WebAuthnAuthenticationRequestResult.Rejected.class, reauth);
             } else if (outcome == WebAuthnStoreCommitResult.UNKNOWN) {
                 assertInstanceOf(WebAuthnRegistrationRequestResult.Indeterminate.class, registration);
                 assertInstanceOf(WebAuthnAuthenticationRequestResult.Indeterminate.class, authentication);
-                assertInstanceOf(WebAuthnAuthenticationRequestResult.Indeterminate.class, reauth);
             } else {
                 assertInstanceOf(WebAuthnRegistrationRequestResult.Unavailable.class, registration);
                 assertInstanceOf(WebAuthnAuthenticationRequestResult.Unavailable.class, authentication);
-                assertInstanceOf(WebAuthnAuthenticationRequestResult.Unavailable.class, reauth);
             }
-            assertEquals(3, store.writes);
+            assertInstanceOf(WebAuthnAuthenticationRequestResult.Rejected.class, reauth);
+            assertEquals(outcome == WebAuthnStoreCommitResult.CONFLICT ? 18 : 2, store.writes);
         }
     }
 

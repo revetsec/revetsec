@@ -34,10 +34,12 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 final class ClientCredentialsTokenSourceTests {
 	@Test
@@ -83,6 +85,24 @@ final class ClientCredentialsTokenSourceTests {
 			for (int index : List.of(1, 2))
 				assertEquals(List.of(), QueryParameters.parse(server.getRequests("/token").get(index)
 						.getBodyAsString()).getValues("resource"));
+		}
+	}
+	@Test
+	void sourceCanSendBoundedProviderSpecificTokenParameters() throws Exception {
+		try (TestHttpsServer server = TestHttpsServer.start()) {
+			server.script("/token", TestHttpsServer.Script.fromResponse(json("token")));
+			OAuthClient client = OAuthClient.withAuthorizationServerMetadata(
+					AuthorizationServerMetadata.withIssuer(server.getBaseUri().toString())
+							.authorizationEndpoint(server.uri("/auth")).tokenEndpoint(server.uri("/token")).build())
+					.clientId("client").clientAuthentication(ClientAuthentication.fromClientSecretBasic("secret"))
+					.httpClient(TestTls.httpClient()).build();
+			ClientCredentialsTokenSource source = ClientCredentialsTokenSource.withClient(client)
+					.additionalParameters(java.util.Map.of("audience", "https://api.example/resource")).build();
+			assertEquals("token", source.getAccessToken().getValue());
+			assertEquals(List.of("https://api.example/resource"), QueryParameters.parse(
+					server.getRequests("/token").get(0).getBodyAsString()).getValues("audience"));
+			assertThrows(IllegalArgumentException.class, () -> ClientCredentialsTokenSource.withClient(client)
+					.additionalParameters(java.util.Map.of("grant_type", "password")));
 		}
 	}
 
@@ -134,6 +154,32 @@ final class ClientCredentialsTokenSourceTests {
 			clock.rewind(Duration.ofSeconds(1));
 			assertThrows(OAuthException.class, source::getAccessToken);
 			assertEquals(2, server.getHitCount("/token"));
+		}
+	}
+	@Test
+	void validCachedTokenIsAvailableWhileEarlyRenewalIsInFlight() throws Exception {
+		try (TestHttpsServer server = TestHttpsServer.start()) {
+			server.script("/token", TestHttpsServer.Script.fromResponse(jsonWithExpiry("first", 60)));
+			TestClock clock = TestClock.fromInstant(Instant.parse("2026-09-28T12:00:00Z"));
+			OAuthClient client = OAuthClient.withAuthorizationServerMetadata(
+					AuthorizationServerMetadata.withIssuer(server.getBaseUri().toString())
+							.authorizationEndpoint(server.uri("/auth")).tokenEndpoint(server.uri("/token")).build())
+					.clientId("client").clientAuthentication(ClientAuthentication.fromClientSecretBasic("secret"))
+					.httpClient(TestTls.httpClient()).clock(clock).build();
+			ClientCredentialsTokenSource source = ClientCredentialsTokenSource.withClient(client).build();
+			AccessToken first = source.getAccessToken();
+			TestHttpsServer.HeldScript held = TestHttpsServer.HeldScript.fromResponse(jsonWithExpiry("second", 60));
+			server.script("/token", held);
+			clock.advance(Duration.ofSeconds(40));
+			ExecutorService executor = Executors.newFixedThreadPool(2);
+			try {
+				Future<AccessToken> renewal = executor.submit(source::getAccessToken);
+				assertTrue(held.awaitHeldCount(1, Duration.ofSeconds(2)));
+				Future<AccessToken> concurrent = executor.submit(source::getAccessToken);
+				assertSame(first, concurrent.get(1, TimeUnit.SECONDS));
+				held.release();
+				assertEquals("second", renewal.get(3, TimeUnit.SECONDS).getValue());
+			} finally { held.release(); executor.shutdownNow(); }
 		}
 	}
 

@@ -32,7 +32,7 @@ import java.util.function.Supplier;
 import static java.util.Objects.requireNonNull;
 
 /**
- * One bounded two-read completion attempt and at most one authoritative write. COMMITTED means
+ * A bounded two-read completion attempt, retried only after a confirmed store conflict. COMMITTED means
  * only that the store transition was timely confirmed; this runner creates and exposes no
  * verification proof. Public success still requires the external recovery admission gate.
  */
@@ -77,11 +77,11 @@ final class WebAuthnCompletionRunner {
             inspected = this.planner.inspectRegistration(firstSnapshot, ceremonyId,
                     browserBinding, responseBody, this.clock);
         } catch (WebAuthnResponseException failure) {
-            return Completion.failure(rejectWithClock(attempt, firstSnapshot, Outcome.REJECTED));
+            return Completion.failure(Outcome.REJECTED);
         } catch (WebAuthnRecordException failure) {
             return Completion.failure(Outcome.UNAVAILABLE);
         }
-        if (inspected.isEmpty()) return Completion.failure(rejectWithClock(attempt, firstSnapshot, Outcome.REJECTED));
+        if (inspected.isEmpty()) return Completion.failure(Outcome.REJECTED);
         var expanded = attempt.readExpanded(inspected.orElseThrow().expandedKeys());
         if (!expanded.isAvailable()) return Completion.failure(Outcome.UNAVAILABLE);
         WebAuthnStoreSnapshot snapshot = expanded.getSnapshot();
@@ -89,11 +89,11 @@ final class WebAuthnCompletionRunner {
         try {
             preparation = this.planner.prepareRegistration(inspected.orElseThrow(), snapshot, this.clock);
         } catch (WebAuthnResponseException failure) {
-            return Completion.failure(rejectWithClock(attempt, snapshot, Outcome.REJECTED));
+            return Completion.failure(Outcome.REJECTED);
         } catch (WebAuthnRecordException failure) {
             return Completion.failure(Outcome.UNAVAILABLE);
         }
-        Outcome outcome = finish(attempt, snapshot, preparation, inspected.orElseThrow().expiresAt());
+        Outcome outcome = finish(attempt, preparation, inspected.orElseThrow().expiresAt());
         return outcome == Outcome.COMMITTED_NO_PROOF
                 ? Completion.verified(new VerifiedFact(WebAuthnCeremonyState.Kind.REGISTRATION,
                 inspected.orElseThrow().approvedHandle(), inspected.orElseThrow().credentialId(), null))
@@ -126,11 +126,11 @@ final class WebAuthnCompletionRunner {
             inspected = this.planner.inspectAuthentication(firstSnapshot, ceremonyId,
                     browserBinding, responseBody, this.clock);
         } catch (WebAuthnResponseException failure) {
-            return Completion.failure(rejectWithClock(attempt, firstSnapshot, Outcome.REJECTED));
+            return Completion.failure(Outcome.REJECTED);
         } catch (WebAuthnRecordException failure) {
             return Completion.failure(Outcome.UNAVAILABLE);
         }
-        if (inspected.isEmpty()) return Completion.failure(rejectWithClock(attempt, firstSnapshot, Outcome.REJECTED));
+        if (inspected.isEmpty()) return Completion.failure(Outcome.REJECTED);
         var expanded = attempt.readExpanded(inspected.orElseThrow().expandedKeys());
         if (!expanded.isAvailable()) return Completion.failure(Outcome.UNAVAILABLE);
         WebAuthnStoreSnapshot snapshot = expanded.getSnapshot();
@@ -140,7 +140,7 @@ final class WebAuthnCompletionRunner {
         } catch (WebAuthnRecordException failure) {
             return Completion.failure(Outcome.UNAVAILABLE);
         }
-        Outcome outcome = finish(attempt, snapshot, preparation, inspected.orElseThrow().expiresAt());
+        Outcome outcome = finish(attempt, preparation, inspected.orElseThrow().expiresAt());
         return outcome == Outcome.COMMITTED_NO_PROOF
                 ? Completion.verified(new VerifiedFact(inspected.orElseThrow().kind(),
                 inspected.orElseThrow().userHandle(), inspected.orElseThrow().credentialId(),
@@ -168,7 +168,8 @@ final class WebAuthnCompletionRunner {
             if (attempt.remainingBudget() == null || !isCurrent(permit)) {
                 completion = Completion.failure(Outcome.UNAVAILABLE);
             } else {
-                completion = operation.get();
+                do { completion = operation.get(); }
+                while (attempt.retryAfterConflict());
                 // A write may already have occurred. A changed marker or expired budget cannot
                 // be reported as success, even if the store acknowledged the write.
                 if (attempt.remainingBudget() == null || !isCurrent(permit))
@@ -205,37 +206,20 @@ final class WebAuthnCompletionRunner {
     }
 
     private @NonNull Outcome finish(WebAuthnStoreCoordinator.@NonNull Attempt attempt,
-            @NonNull WebAuthnStoreSnapshot snapshot,
             WebAuthnCompletionPlanner.@NonNull Preparation preparation,
             @NonNull Instant expiresAt) {
         return switch (preparation.status()) {
             case CANDIDATE -> {
                 if (!this.clock.instant().isBefore(expiresAt))
-                    yield rejectWithClock(attempt, snapshot, Outcome.REJECTED);
+                    yield Outcome.REJECTED;
                 Outcome committed = commit(attempt, preparation.write().orElseThrow());
                 yield committed == Outcome.COMMITTED_NO_PROOF && !this.clock.instant().isBefore(expiresAt)
-                        ? Outcome.INDETERMINATE : committed;
+                        ? Outcome.REJECTED : committed;
             }
-            case REJECTED -> rejectWithClock(attempt, snapshot, Outcome.REJECTED);
-            case COUNTER_RISK -> rejectWithClock(attempt, snapshot, Outcome.COUNTER_RISK);
-            case CAPACITY -> rejectWithClock(attempt, snapshot, Outcome.CAPACITY);
+            case REJECTED -> Outcome.REJECTED;
+            case COUNTER_RISK -> Outcome.COUNTER_RISK;
+            case CAPACITY -> Outcome.CAPACITY;
             case UNAVAILABLE -> Outcome.UNAVAILABLE;
-        };
-    }
-
-    private @NonNull Outcome rejectWithClock(WebAuthnStoreCoordinator.@NonNull Attempt attempt,
-            @NonNull WebAuthnStoreSnapshot snapshot, @NonNull Outcome rejection) {
-        Optional<WebAuthnStoreWrite> clockWrite;
-        try {
-            clockWrite = this.planner.clockOnlyAdvance(snapshot, this.clock);
-        } catch (WebAuthnRecordException failure) {
-            return Outcome.UNAVAILABLE;
-        }
-        if (clockWrite.isEmpty()) return rejection;
-        return switch (attempt.commit(clockWrite.orElseThrow().getMutations())) {
-            case COMMITTED -> rejection;
-            case CONFLICT, CAPACITY, UNAVAILABLE -> Outcome.UNAVAILABLE;
-            case INDETERMINATE -> Outcome.INDETERMINATE;
         };
     }
 

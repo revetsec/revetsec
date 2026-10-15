@@ -63,6 +63,7 @@ final class OAuthClientMetadataFetcher {
  private final @NonNull Transport transport;
  private final boolean nativeLoopback, localhost;
  private final @NonNull Semaphore fetches;
+ private final @NonNull Semaphore authorizationFetches;
  private final @NonNull AtomicReference<@Nullable Instant> observedTime = new AtomicReference<>();
  OAuthClientMetadataFetcher(@NonNull String issuer, @NonNull StateSealer sealer, @NonNull OAuthClientMetadataPolicy policy,
    @NonNull OAuthServerIngressLimits limits, boolean nativeLoopback, boolean localhost,
@@ -77,7 +78,10 @@ final class OAuthClientMetadataFetcher {
   this.codec = new OAuthClientMetadataCacheCodec(issuer, sealer, policy, limits, nativeLoopback, localhost);
   this.cache = policy.cacheForEngine(); this.nativeLoopback = nativeLoopback; this.localhost = localhost;
   this.outbound = requireNonNull(outbound); this.clock = requireNonNull(clock); this.transport = requireNonNull(transport);
-  this.fetches = new Semaphore(policy.getMaximumConcurrentFetches());
+  int maximum = policy.getMaximumConcurrentFetches();
+  this.fetches = new Semaphore(maximum);
+  // Keep one engine-wide fetch slot available to credential transitions when the configured bound permits it.
+  this.authorizationFetches = new Semaphore(Math.max(1, maximum - 1));
  }
  @NonNull OAuthClientMetadataDocument reusable(@NonNull String clientId, @NonNull Deadline deadline) { return retrieve(clientId, deadline, false); }
  // A bypass returns admitted metadata, not a transferable credential-transition capability.
@@ -103,12 +107,18 @@ final class OAuthClientMetadataFetcher {
    }
   }
   remaining(deadline);
-  if (!this.fetches.tryAcquire()) throw fail(INFRASTRUCTURE);
+  boolean authorizationPermit = !bypass;
+  if (authorizationPermit && !this.authorizationFetches.tryAcquire()) throw fail(INFRASTRUCTURE);
+  if (!this.fetches.tryAcquire()) {
+   if (authorizationPermit) this.authorizationFetches.release();
+   throw fail(INFRASTRUCTURE);
+  }
   try {
    remaining(deadline); RawResponse response;
    try { response = requireNonNull(this.transport.fetch(uri, deadline)); }
    catch (HttpExchangeException | RuntimeException failure) { throw fail(INFRASTRUCTURE); }
    remaining(deadline); Instant fetchedAt = now(deadline); rollback |= rollback(fetchedAt) || fetchedAt.isBefore(before);
+   if (response.status() == 404) throw fail(INVALID_CLIENT);
    if (response.status() != 200) throw fail(INFRASTRUCTURE);
    byte[] body = response.body();
    try {
@@ -134,7 +144,10 @@ final class OAuthClientMetadataFetcher {
     }
     remaining(deadline); now(deadline); return document;
    } finally { Arrays.fill(body, (byte)0); }
-  } finally { this.fetches.release(); }
+  } finally {
+   this.fetches.release();
+   if (authorizationPermit) this.authorizationFetches.release();
+  }
  }
  private @NonNull Instant now(@NonNull Deadline deadline) {
   remaining(deadline);

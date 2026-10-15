@@ -195,13 +195,27 @@ final class OAuthClientSelectionTests {
   var response=redeem(code);assertEquals(2,this.fetches.get());assertEquals(reads,this.cacheReads.get());assertEquals(writes,this.cacheWrites.get());
   String first=refreshValue(response),second=refreshValue(rotate(first));assertNotEquals(first,second);assertEquals(3,this.fetches.get());rotate(second);assertEquals(4,this.fetches.get());assertEquals(3,this.policies.get());assertEquals(reads,this.cacheReads.get());assertEquals(writes,this.cacheWrites.get());
  }
+ @Test void inventedOrWrongOwnerCodeDoesNotConsumeFreshFetchCapacity() {
+  String valid=code();int before=this.fetches.get();
+  String invented=valid.substring(0,5)+(valid.charAt(5)=='A'?'B':'A')+valid.substring(6);
+  invalid(()->redeem(invented));
+  invalid(()->this.codes.redeem(token(valid,false,Map.of("client_id","https://other.example.com/client"),null),this.dynamic,resources(),allow(),deadline()));
+  assertEquals(before,this.fetches.get());redeem(valid);
+ }
+ @Test void inventedOrWrongOwnerRefreshDoesNotConsumeFreshFetchCapacity() {
+  String valid=refreshValue(redeem(code()));int before=this.fetches.get();
+  String invented=valid.substring(0,5)+(valid.charAt(5)=='A'?'B':'A')+valid.substring(6);
+  invalid(()->rotate(invented));
+  invalid(()->this.refresh.rotate(token(valid,true,Map.of("client_id","https://other.example.com/client"),null),this.dynamic,resources(),allow(),deadline()));
+  assertEquals(before,this.fetches.get());rotate(valid);
+ }
  @Test void separateSelectorsSharingCacheStillFetchForEachCredentialOperation() {
   String code=code();var another=selection((id,b)->Optional.empty());another.authorization(ID,resources(),deadline());assertEquals(1,this.fetches.get());
   var first=this.codes.redeem(token(code,false,Map.of(),null),another,resources(),allow(),deadline());this.refresh.rotate(token(refreshValue(first),true,Map.of(),null),this.dynamic,resources(),allow(),deadline());assertEquals(3,this.fetches.get());
  }
  @Test void freshFetchFailureLeavesUnusedCodeUnconsumed() {
   String code=code();int commits=this.store.commits,reads=this.store.reads;this.transportFailure=true;
-  failure(OAuthServerAdmissionFailure.Reason.INFRASTRUCTURE,()->redeem(code));assertEquals(commits,this.store.commits);assertEquals(reads,this.store.reads);assertEquals("UNUSED",row(OAuthStoreKey.Kind.CODE).findString("status").orElseThrow());assertEquals(0,this.policies.get());
+  failure(OAuthServerAdmissionFailure.Reason.INFRASTRUCTURE,()->redeem(code));assertEquals(commits,this.store.commits);assertTrue(this.store.reads>reads);assertEquals("UNUSED",row(OAuthStoreKey.Kind.CODE).findString("status").orElseThrow());assertEquals(0,this.policies.get());
   this.transportFailure=false;redeem(code);assertEquals("USED",row(OAuthStoreKey.Kind.CODE).findString("status").orElseThrow());
  }
  @Test void refreshFetchFailureLeavesCurrentFamilyUsable() {
@@ -211,7 +225,8 @@ final class OAuthClientSelectionTests {
  @TestFactory @NonNull Stream<@NonNull DynamicTest> non200NeverConsumesCodeOrRefresh() {
   return Stream.of(204,301,302,304,400,404,429,500).flatMap(status->Stream.of(false,true).map(refresh->DynamicTest.dynamicTest("non200-"+status+"-"+refresh,()->{
    var t=new OAuthClientSelectionTests();String code=t.code(),credential=refresh?refreshValue(t.redeem(code)):code;int commits=t.store.commits;t.status=status;
-   failure(OAuthServerAdmissionFailure.Reason.INFRASTRUCTURE,()->{if(refresh)t.rotate(credential);else t.redeem(credential);});assertEquals(commits,t.store.commits);
+   failure(status==404?OAuthServerAdmissionFailure.Reason.INVALID_CLIENT:OAuthServerAdmissionFailure.Reason.INFRASTRUCTURE,
+    ()->{if(refresh)t.rotate(credential);else t.redeem(credential);});assertEquals(commits,t.store.commits);
   })));
  }
  @TestFactory @NonNull Stream<@NonNull DynamicTest> invalidOrChangedSecurityNeverConsumesOrPoisons() {
@@ -242,8 +257,8 @@ final class OAuthClientSelectionTests {
   var selection=selection((id,b)->{registryBudget.set(b);return Optional.empty();});this.codes.redeem(token(code,false,Map.of(),null),selection,resources(),(context,b)->{policyBudget.set(b);return decision(context.getSubject());},deadline);
   assertSame(deadline,this.observed.get());assertTrue(requireNonNull(policyBudget.get()).compareTo(requireNonNull(registryBudget.get()))<=0);for(Duration budget:this.store.budgets)assertTrue(!budget.isNegative() && !budget.isZero());
  }
- @Test void exhaustedFetchDeadlineDoesNotReadOrConsumeStore() {String code=code();int reads=this.store.reads,commits=this.store.commits;this.fetchHook=()->{try{Thread.sleep(30);}catch(InterruptedException e){Thread.currentThread().interrupt();}};failure(OAuthServerAdmissionFailure.Reason.INFRASTRUCTURE,()->this.codes.redeem(token(code,false,Map.of(),null),this.dynamic,resources(),allow(),Deadline.fromNow(Duration.ofMillis(10))));assertEquals(reads,this.store.reads);assertEquals(commits,this.store.commits);}
- @Test void fetchInterruptionDoesNotReadOrConsumeStore() {String code=code();int reads=this.store.reads,commits=this.store.commits;this.fetchHook=()->Thread.currentThread().interrupt();try{failure(OAuthServerAdmissionFailure.Reason.INFRASTRUCTURE,()->redeem(code));assertTrue(Thread.currentThread().isInterrupted());assertEquals(reads,this.store.reads);assertEquals(commits,this.store.commits);}finally{Thread.interrupted();}}
+ @Test void exhaustedFetchDeadlineDoesNotConsumeStore() {String code=code();int commits=this.store.commits;this.fetchHook=()->{try{Thread.sleep(30);}catch(InterruptedException e){Thread.currentThread().interrupt();}};failure(OAuthServerAdmissionFailure.Reason.INFRASTRUCTURE,()->this.codes.redeem(token(code,false,Map.of(),null),this.dynamic,resources(),allow(),Deadline.fromNow(Duration.ofMillis(10))));assertEquals(commits,this.store.commits);}
+ @Test void fetchInterruptionDoesNotConsumeStore() {String code=code();int reads=this.store.reads,commits=this.store.commits;this.fetchHook=()->Thread.currentThread().interrupt();try{failure(OAuthServerAdmissionFailure.Reason.INFRASTRUCTURE,()->redeem(code));assertTrue(Thread.currentThread().isInterrupted());assertTrue(this.store.reads>reads);assertEquals(commits,this.store.commits);}finally{Thread.interrupted();}}
  @Test void applicationDenialStillTerminatesAfterFreshFetch() {String code=code();invalid(()->this.codes.redeem(token(code,false,Map.of(),null),this.dynamic,resources(),(context,b)->OAuthAuthorizationDecision.deniedInstance(),deadline()));assertEquals(2,this.fetches.get());assertEquals("CANCELLED",row(OAuthStoreKey.Kind.CODE).findString("status").orElseThrow());}
  @Test void callbackFaultAfterFetchLeavesUnusedCode() {String code=code();int commits=this.store.commits;failure(OAuthServerAdmissionFailure.Reason.INFRASTRUCTURE,()->this.codes.redeem(token(code,false,Map.of(),null),this.dynamic,resources(),(context,b)->{throw new IllegalStateException("private");},deadline()));assertEquals(commits,this.store.commits);assertEquals(2,this.fetches.get());redeem(code);}
  @Test void resumeAndCompleteUsePersistedSourceSeparatedFingerprint() {

@@ -313,7 +313,11 @@ final class ScimM11PatchParsingTests {
         for(String value:List.of("null","1","\"text\"","[]"))
             assertSame(ScimError.invalidValueInstance(),rejected(parse(USER,"{\"op\":\"replace\",\"value\":{\""+id+"\":"+value+"}}")));
         assertSame(ScimError.invalidValueInstance(),rejected(parse(USER,"{\"op\":\"replace\",\"value\":{\""+id+"\":{\"department\":1}}}")));
+        String dottedExtension = "{\"op\":\"replace\",\"value\":{\"" + id
+                + "\":{\"manager.value\":\"alice\"}}}";
+        assertSame(ScimError.invalidPathInstance(), rejected(parse(USER, dottedExtension)));
         ScimCompatibility compatible=ScimCompatibility.microsoftEntraIdInstance();
+        request(parse(USER, dottedExtension, compatible, ScimLimits.fromDefaults(), new LinkedHashSet<>()));
         ScimPatchRequest dotted=request(parse(USER,"{\"op\":\"replace\",\"value\":{\"name.givenName\":\"one\",\"name.familyName\":\"two\"}}",compatible,ScimLimits.fromDefaults(),new LinkedHashSet<>()));
         JsonObject object=assertInstanceOf(JsonObject.class,dotted.getOperations().get(0).getValue().orElseThrow());
         assertEquals(Set.of("givenName","familyName"),assertInstanceOf(JsonObject.class,object.getMembers().get("name")).getMembers().keySet());

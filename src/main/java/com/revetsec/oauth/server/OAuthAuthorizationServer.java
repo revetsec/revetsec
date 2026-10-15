@@ -104,7 +104,7 @@ public final class OAuthAuthorizationServer {
    this.nativeLoopback,this.localhost,b.outboundUriPolicy,this.clock,this.settings.requestTimeout) : null;
   this.clients=new OAuthServerClientSelection(this.repository,this.limits,fetcher,true);
   OAuthStoreRecordCodec codec=new OAuthStoreRecordCodec(this.issuer,sealer,this.settings.maximumStoreRecordBytes);
-  this.coordinator=new OAuthStoreCoordinator(store,codec,this.clock,this.settings.maximumStoreCommitAttempts,this.settings.maximumSubjectLength);
+  this.coordinator=new OAuthStoreCoordinator(store,codec,this.clock,this.settings.clockSkew,this.settings.maximumStoreCommitAttempts,this.settings.maximumSubjectLength);
   this.ledger=new OAuthAuthorizationLedger(this.coordinator,codec,this.limits,this.settings.authorizationInteractionLifetime,
    this.settings.authorizationCodeLifetime,this.settings.maximumStoreCommitAttempts,this.settings.maximumSubjectLength,this.refresh);
   OAuthGrantRetention retention=new OAuthGrantRetention(this.settings.accessTokenLifetime,this.settings.clockSkew,this.settings.totalDeadline,this.settings.publicMetadataFreshness);
@@ -628,6 +628,8 @@ public final class OAuthAuthorizationServer {
    */
   @CheckReturnValue public @NonNull Builder refreshTokenAbsoluteLifetime(@Nullable Duration value) {this.settings.refreshTokenAbsoluteLifetime(value);return this;}
   /** Sets clockSkew; null restores the issuer registry default. Bounds are checked at build.
+   * The issuer may reserve up to the lesser of this setting and 100 milliseconds in its durable
+   * clock fence, so effective admission time can lead the sampled clock by that amount.
    * @param value setting or null
    * @return this builder
    * @since 1.0.0

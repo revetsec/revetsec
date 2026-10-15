@@ -118,6 +118,20 @@ final class SamlRedirectLogoutSerializationTests {
         }
     }
 
+    @Test void responsePreservesUtf8RelayStateOctets() throws Exception {
+        SamlCredential credential = credential();
+        String relay = "é-東京";
+        URI redirect = Objects.requireNonNull(SamlRedirectLogout.response(
+                URI.create("https://idp.example.test/slo"), "https://sp.example.test",
+                "_response-unicode", "_request-unicode", relay,
+                Instant.parse("2026-10-11T00:00:00Z"), SamlLogoutStatus.SUCCESS,
+                credential.privateKey()));
+        assertTrue(redirect.getRawQuery().contains("RelayState=%C3%A9-%E6%9D%B1%E4%BA%AC"));
+        SamlRedirectBindingMessage parsed = parse(redirect);
+        assertEquals(Optional.of(relay), parsed.getRelayState());
+        assertTrue(parsed.verify(List.of(credential.getCertificate().getPublicKey())));
+    }
+
     @Test void outboundIdentifiersConsumeTheInjectedRandomBytes() {
         SecureRandom random = new SecureRandom() {
             @Override public void nextBytes(byte @NonNull [] bytes) {

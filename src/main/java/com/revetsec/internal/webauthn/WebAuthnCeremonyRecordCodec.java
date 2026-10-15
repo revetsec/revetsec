@@ -86,7 +86,7 @@ final class WebAuthnCeremonyRecordCodec {
                 writer.putShort((short) ascii.length).put(ascii);
             }
             WebAuthnStoreKey key = WebAuthnStoreKey.forCeremony(this.namespace, this.relyingPartyId, id);
-            return new Encoded(key, this.records.seal(key, payload, state.expiresAt()));
+            return new Encoded(key, this.records.seal(key, payload, state.expiresAt()), state.expiresAt());
         } finally {
             Arrays.fill(id, (byte) 0);
             Arrays.fill(challenge, (byte) 0);
@@ -124,7 +124,7 @@ final class WebAuthnCeremonyRecordCodec {
                 Instant expiresAt = readInstant(reader);
                 // StateSealer transports expiry at second precision; the ceremony keeps the
                 // exact instant so a subsecond deadline cannot be rounded into acceptance.
-                if (!clock.instant().isBefore(expiresAt)) throw new WebAuthnRecordException();
+                if (!clock.instant().isBefore(expiresAt)) throw WebAuthnRecordException.expired();
                 int handleLength = reader.get() & 0xff;
                 int purposeLength = reader.get() & 0xff;
                 int originCount = reader.get() & 0xff;
@@ -195,14 +195,18 @@ final class WebAuthnCeremonyRecordCodec {
     static final class Encoded {
         private final @NonNull WebAuthnStoreKey key;
         private final byte @NonNull [] sealedBytes;
+        private final @NonNull Instant expiresAt;
 
-        private Encoded(@NonNull WebAuthnStoreKey key, byte @NonNull [] sealedBytes) {
+        private Encoded(@NonNull WebAuthnStoreKey key, byte @NonNull [] sealedBytes,
+                @NonNull Instant expiresAt) {
             this.key = key;
             this.sealedBytes = sealedBytes.clone();
+            this.expiresAt = expiresAt;
         }
 
         @NonNull WebAuthnStoreKey key() { return this.key; }
         byte @NonNull [] sealedBytes() { return this.sealedBytes.clone(); }
+        @NonNull Instant expiresAt() { return this.expiresAt; }
         @Override public @NonNull String toString() { return "Encoded{ceremony=<redacted>, no proof}"; }
     }
 }

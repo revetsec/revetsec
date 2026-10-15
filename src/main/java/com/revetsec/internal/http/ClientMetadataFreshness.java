@@ -71,7 +71,7 @@ public final class ClientMetadataFreshness {
     int end = MediaType.tokenEnd(value, i, value.length());
     if (end == i) return true;
     String name = MediaType.asciiLowerCase(value.substring(i, end));
-    if (name.equals("private") || name.equals("s-maxage")) return true;
+    if (name.equals("private")) return true;
     i = end;
     if (i < value.length() && value.charAt(i) == '=') {
      i++;

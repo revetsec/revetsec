@@ -50,7 +50,7 @@ public final class OAuthServerInteraction {
 		@Nullable String clientName, @NonNull OAuthServerIngressLimits limits) {
 		OAuthStoreFormat.nonce(value); requireNonNull(record); requireNonNull(limits);
 		if (!record.text("status").equals("PENDING") || !OAuthAuthorizationRecord.equalDigest(OAuthAuthorizationRecord.credentialDigest(value),record.text("id"))) throw OAuthStoreFormat.invalid();
-		if (clientName!=null) OAuthServerConfiguration.text(clientName,255);
+		if (clientName!=null) OAuthServerConfiguration.text(clientName,OAuthServerConfiguration.MAXIMUM_TEXT_LENGTH);
 		return new OAuthServerInteraction(value,record.text("clientId"),clientName,URI.create(record.text("redirect")),
 			Map.of(record.text("resource"),Set.copyOf(record.scopes(limits))),record.expires());
 	}

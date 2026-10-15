@@ -228,7 +228,7 @@ final class SamlLogoutRequestTests {
                 .assertionConsumerServiceUrl(URI.create("https://sp.example.test/acs"))
                 .singleLogoutServiceUrl(URI.create("https://sp.example.test/logout"))
                 .signingPrivateKey(idpKey.getPrivate())
-                .replayCache(InMemorySamlReplayCache.withLimit(clock, 8)).clock(clock).build();
+                .replayCache(InMemorySamlReplayCache.withLimit(clock, 16)).clock(clock).build();
         String firstEntity = "https://idp.example.test/saml_";
         String secondEntity = "https://idp.example.test/saml";
         SamlIdentityProvider firstIdp = SamlIdentityProvider.withEntityId(firstEntity)

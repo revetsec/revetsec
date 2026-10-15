@@ -175,6 +175,7 @@ final class ScimFilterEvaluation {
                     default -> verdict(left.compareTo(right),operator);
                 };
             }
+            if (operator == ScimComparisonOperator.CO && !spend((long)left.length()*right.length())) return false;
             ScimStringMatchResult result=requireNonNull(matching.match(path,definition,operator,left,right));
             if (result instanceof ScimStringMatchResult.Matched matched) return matched.isMatched();
             error=ScimError.invalidFilterInstance(); return false;

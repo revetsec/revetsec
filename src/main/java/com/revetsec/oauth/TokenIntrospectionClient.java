@@ -151,7 +151,9 @@ public final class TokenIntrospectionClient implements AccessTokenValidator {
 				parsed = IntrospectionResponse.parse(response, requestStart);
 				this.guard.healthy(attempt);
 			} catch (OAuthException failure) {
-				this.guard.failed(attempt, failure);
+				// A token-specific 4xx proves the endpoint answered; it must not throttle unrelated tokens.
+				if (credentialSpecificResponse(failure)) this.guard.healthy(attempt);
+				else this.guard.failed(attempt, failure);
 				if (receivedResponse)
 					this.client.introspectionResponseFailure(target.endpoint(), failure, Duration.ofNanos(System.nanoTime() - started), this.observer);
 				throw failure;
@@ -166,6 +168,12 @@ public final class TokenIntrospectionClient implements AccessTokenValidator {
 			ObserverDispatch.dispatch(this.observer, o -> o.didRejectAccessToken(rejection));
 			throw rejection;
 		}
+	}
+
+	private static boolean credentialSpecificResponse(@NonNull OAuthException failure) {
+		if (!(failure instanceof OAuthErrorResponseException response) || failure.isTransient()) return false;
+		int status = response.getStatus();
+		return status == 400 || status == 413 || status == 422;
 	}
 
 	/**

@@ -357,7 +357,7 @@ final class SamlResponseSemanticsTests {
                 accepted.attributes().get(0).getTypedValues().get(0).getKind());
     }
 
-    @Test void schemaInstanceHintsCannotPromoteAnOpaqueScopedIdentifier() throws Exception {
+    @Test void schemaInstancePrefixBindingsCannotHideSignedLeafIdentifiers() throws Exception {
         KeyPair key = rsa();
         SamlReplayCache cache = (replayKey, expiry, remaining) -> SamlReplayCache.MarkResult.MARKED;
         SamlResponseSemantics.Expectation approved = new SamlResponseSemantics.Expectation(
@@ -370,8 +370,7 @@ final class SamlResponseSemanticsTests {
                 + "xmlns:xs='http://www.w3.org/2001/XMLSchema' %s>alice@example.test"
                 + "</a:AttributeValue></a:Attribute></a:AttributeStatement>";
         for (String hint : List.of("xsi:nil='true'", "xsi:nil='1'",
-                "xsi:type='xs:boolean'", "xsi:type='xs:string' xsi:nil='true'",
-                "xsi:type='shadow:string' xmlns:shadow='urn:attacker:shadow'")) {
+                "xsi:type='xs:string' xsi:nil='true'")) {
             String xml = BASE.replace("</a:Assertion>", attribute.formatted(hint) + "</a:Assertion>");
             SamlResponseSemantics.Accepted accepted = assertInstanceOf(
                     SamlResponseSemantics.Accepted.class,
@@ -379,13 +378,49 @@ final class SamlResponseSemanticsTests {
             assertEquals(null, accepted.subjectId(), hint);
             assertEquals(List.of(), accepted.attributes(), hint);
         }
-        for (String hint : List.of("xsi:type='xs:string'", "xsi:nil='false'")) {
+        for (String hint : List.of("xsi:type='xs:string'", "xsi:nil='false'",
+                "xsi:type='xs:boolean'",
+                "xsi:type='shadow:string' xmlns:shadow='urn:attacker:shadow'")) {
             String xml = BASE.replace("</a:Assertion>", attribute.formatted(hint) + "</a:Assertion>");
             SamlResponseSemantics.Accepted accepted = assertInstanceOf(
                     SamlResponseSemantics.Accepted.class,
                     validate(xml, true, false, key, approved), hint);
             assertEquals("alice@example.test", accepted.subjectId(), hint);
             assertEquals(List.of("alice@example.test"), accepted.attributes().get(0).getValues(), hint);
+        }
+        String rebound = attribute.replace("xmlns:xs='http://www.w3.org/2001/XMLSchema'",
+                "xmlns:xs='urn:attacker:shadow'").formatted("xsi:type='xs:string'");
+        SamlResponseSemantics.Accepted accepted = assertInstanceOf(
+                SamlResponseSemantics.Accepted.class,
+                validate(BASE.replace("</a:Assertion>", rebound + "</a:Assertion>"),
+                        true, false, key, approved));
+        assertEquals("alice@example.test", accepted.subjectId());
+    }
+
+    @Test void unsignedNamespaceRebindingCannotHideAnAlreadySignedAttribute() throws Exception {
+        KeyPair key = rsa();
+        String attribute = "<a:AttributeStatement><a:Attribute Name='account-locked'>"
+                + "<a:AttributeValue xmlns:xsi='http://www.w3.org/2001/XMLSchema-instance' "
+                + "xmlns:xs='http://www.w3.org/2001/XMLSchema' xsi:type='xs:string'>true"
+                + "</a:AttributeValue></a:Attribute></a:AttributeStatement>";
+        String xml = BASE.replace("</a:Assertion>", attribute + "</a:Assertion>");
+        for (boolean responseSignature : List.of(true, false)) {
+            String signed = signedXml(xml, responseSignature, !responseSignature, key.getPrivate());
+            String rebound = signed.replace("xmlns:xs=\"http://www.w3.org/2001/XMLSchema\"",
+                    "xmlns:xs=\"urn:attacker:shadow\"");
+            assertTrue(!signed.equals(rebound), "fixture namespace binding must be changed");
+            String encoded = Base64.getEncoder().encodeToString(rebound.getBytes(StandardCharsets.UTF_8))
+                    .replace("+", "%2B").replace("/", "%2F").replace("=", "%3D");
+            SamlInboundResponse.Accepted inbound = assertInstanceOf(SamlInboundResponse.Accepted.class,
+                    SamlInboundResponse.parse(("SAMLResponse=" + encoded + "&RelayState=relay")
+                            .getBytes(StandardCharsets.UTF_8), List.of(MIME), null));
+            SamlInboundResponse.SignaturesVerified verified = assertInstanceOf(
+                    SamlInboundResponse.SignaturesVerified.class,
+                    SamlInboundResponse.verifySuccessSignatures(inbound, List.of(key.getPublic())));
+            SamlResponseSemantics.Accepted accepted = assertInstanceOf(SamlResponseSemantics.Accepted.class,
+                    SamlResponseSemantics.validate(verified, expected((replayKey, expiry, remaining) ->
+                            SamlReplayCache.MarkResult.MARKED)));
+            assertEquals(List.of("true"), accepted.attributes().get(0).getValues());
         }
     }
 
@@ -975,6 +1010,12 @@ final class SamlResponseSemanticsTests {
                 SamlResponseSemantics.Accepted.class,
                 validate(BASE.replace(original, withDeclRef), true, false, key, expected(cache)));
         assertEquals(null, declRef.authnContextClassRef());
+        SamlAuthenticationRequestOptions requestedClass = SamlAuthenticationRequestOptions.builder()
+                .requestedAuthnContextClassRefs(List.of("urn:example:loa2")).build();
+        assertEquals(SamlResponseSemantics.Reason.AUTHN_STATEMENT,
+                rejected(SamlResponseSemantics.validate(
+                        verified(BASE.replace(original, withDeclRef), true, false, key),
+                        expected(cache), null, requestedClass)));
         String withBoth = withClassRef.replace("</a:AuthnContextClassRef>",
                 "</a:AuthnContextClassRef><a:AuthnContextDeclRef>urn:example:decl"
                         + "</a:AuthnContextDeclRef>");

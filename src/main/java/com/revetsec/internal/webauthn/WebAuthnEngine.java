@@ -21,6 +21,7 @@ import com.revetsec.internal.crypto.EntropySource;
 import com.revetsec.webauthn.WebAuthnRecoveryGate;
 import com.revetsec.webauthn.WebAuthnSettings;
 import com.revetsec.webauthn.WebAuthnStore;
+import com.revetsec.webauthn.WebAuthnStoreCommitResult;
 import com.revetsec.webauthn.WebAuthnStoreEntry;
 import com.revetsec.webauthn.WebAuthnStoreKey;
 import com.revetsec.webauthn.WebAuthnStoreSnapshot;
@@ -35,6 +36,7 @@ import java.time.DateTimeException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -44,6 +46,7 @@ import static java.util.Objects.requireNonNull;
 /** Internal bridge: only confirmed, recovery-admitted transitions carry a browser request or fact. */
 @ThreadSafe
 public final class WebAuthnEngine {
+    private static final @NonNull Instant PERMANENT = Instant.ofEpochSecond(Instant.MAX.getEpochSecond());
     private final @NonNull String namespace;
     private final @NonNull String relyingPartyId;
     private final @NonNull Set<@NonNull String> origins;
@@ -53,6 +56,7 @@ public final class WebAuthnEngine {
     private final @NonNull EntropySource entropy;
     private final @NonNull WebAuthnRecoveryGate recoveryGate;
     private final @NonNull WebAuthnStoreCoordinator coordinator;
+    private final @NonNull WebAuthnRecordCodec records;
     private final @NonNull WebAuthnCompletionRunner completion;
     private final @NonNull WebAuthnCeremonyRecordCodec ceremonies;
     private final @NonNull WebAuthnNamespaceClock namespaceClock;
@@ -76,6 +80,7 @@ public final class WebAuthnEngine {
         this.coordinator = new WebAuthnStoreCoordinator(requireNonNull(store),
                 settings.getOperationTimeout());
         WebAuthnRecordCodec records = new WebAuthnRecordCodec(requireNonNull(sealer));
+        this.records = records;
         this.ceremonies = new WebAuthnCeremonyRecordCodec(namespace, relyingPartyId, records);
         this.namespaceClock = new WebAuthnNamespaceClock(namespace, relyingPartyId, records);
         this.fences = new WebAuthnAccountFence(namespace, relyingPartyId, records);
@@ -135,6 +140,68 @@ public final class WebAuthnEngine {
         return manage(ManagementOperation.DISABLE, approvedHandle, null);
     }
 
+    /** Privileged CAS reseal of one permanent row under the sealer's active key. */
+    public @NonNull WebAuthnStoreCommitResult resealStoreEntry(
+            @NonNull WebAuthnStoreKey key) {
+        requireNonNull(key);
+        String clockAddress = this.namespaceClock.key().getStorageKey();
+        String scope = clockAddress.substring(0, clockAddress.indexOf(":NAMESPACE_CLOCK:") + 1);
+        if (key.getKind() == WebAuthnStoreKey.Kind.CEREMONY
+                || !key.getStorageKey().startsWith(scope))
+            throw new IllegalArgumentException("Invalid WebAuthn maintenance key");
+        var attempt = this.coordinator.begin();
+        Duration budget = attempt.remainingBudget();
+        if (budget == null) return WebAuthnStoreCommitResult.UNAVAILABLE;
+        WebAuthnRecoveryGate.Permit permit;
+        try { permit = this.recoveryGate.acquire(budget); }
+        catch (VirtualMachineError fatal) { throw fatal; }
+        catch (Throwable failure) {
+            WebAuthnStoreCoordinator.preserveInterrupt(failure);
+            return WebAuthnStoreCommitResult.UNAVAILABLE;
+        }
+        if (permit == null) return WebAuthnStoreCommitResult.UNAVAILABLE;
+        WebAuthnStoreCommitResult result;
+        try {
+            if (attempt.remainingBudget() == null || !current(permit))
+                result = WebAuthnStoreCommitResult.UNAVAILABLE;
+            else {
+                do { result = resealAdmitted(attempt, key); }
+                while (attempt.retryAfterConflict());
+                if (attempt.remainingBudget() == null || !current(permit))
+                    result = WebAuthnStoreCommitResult.UNKNOWN;
+            }
+        } catch (RuntimeException | Error failure) {
+            close(permit);
+            throw failure;
+        }
+        return close(permit) ? result : WebAuthnStoreCommitResult.UNKNOWN;
+    }
+
+    private @NonNull WebAuthnStoreCommitResult resealAdmitted(
+            WebAuthnStoreCoordinator.@NonNull Attempt attempt, @NonNull WebAuthnStoreKey key) {
+        var read = attempt.read(Set.of(key));
+        if (!read.isAvailable()) return WebAuthnStoreCommitResult.UNAVAILABLE;
+        if (!(read.getSnapshot().getEntry(key) instanceof WebAuthnStoreEntry.Present present))
+            return WebAuthnStoreCommitResult.CONFLICT;
+        byte[] plaintext;
+        try { plaintext = this.records.open(key, present.getSealedBytes(), this.wallClock); }
+        catch (WebAuthnRecordException failure) {
+            return WebAuthnStoreCommitResult.UNAVAILABLE;
+        }
+        byte[] resealed;
+        try { resealed = this.records.seal(key, plaintext, PERMANENT); }
+        finally { Arrays.fill(plaintext, (byte) 0); }
+        try {
+            return switch (attempt.commit(List.of(WebAuthnStoreWrite.Mutation.replace(key, resealed)))) {
+                case COMMITTED -> WebAuthnStoreCommitResult.COMMITTED;
+                case CONFLICT -> WebAuthnStoreCommitResult.CONFLICT;
+                case CAPACITY -> WebAuthnStoreCommitResult.CAPACITY;
+                case UNAVAILABLE -> WebAuthnStoreCommitResult.UNAVAILABLE;
+                case INDETERMINATE -> WebAuthnStoreCommitResult.UNKNOWN;
+            };
+        } finally { Arrays.fill(resealed, (byte) 0); }
+    }
+
     private @NonNull Management manage(@NonNull ManagementOperation operation,
             byte @NonNull [] approvedHandle, byte @Nullable [] credentialId) {
         var attempt = this.coordinator.begin();
@@ -153,7 +220,8 @@ public final class WebAuthnEngine {
             if (attempt.remainingBudget() == null || !current(permit))
                 result = Management.failure(ManagementStatus.UNAVAILABLE);
             else {
-                result = manageAdmitted(attempt, operation, approvedHandle, credentialId);
+                do { result = manageAdmitted(attempt, operation, approvedHandle, credentialId); }
+                while (attempt.retryAfterConflict());
                 if (attempt.remainingBudget() == null || !current(permit))
                     result = Management.failure(operation == ManagementOperation.LIST
                             ? ManagementStatus.UNAVAILABLE : ManagementStatus.INDETERMINATE);
@@ -202,12 +270,12 @@ public final class WebAuthnEngine {
                 if (prepared.isPresent())
                     return mutationResult(attempt, prepared.orElseThrow().write().getMutations(),
                             ManagementStatus.REMOVED);
-                return absentWithClock(attempt, snapshot);
+                return Management.failure(ManagementStatus.ABSENT);
             }
             WebAuthnStoreEntry fence = snapshot.getEntry(fenceKey);
             if (fence instanceof WebAuthnStoreEntry.Present present) {
                 if (!this.fences.decode(fenceKey, present.getSealedBytes(), this.wallClock).isActive())
-                    return disabledWithClock(attempt, snapshot);
+                    return Management.failure(ManagementStatus.DISABLED);
                 var encoded = this.fences.encode(approvedHandle, false);
                 List<WebAuthnStoreWrite.Mutation> mutations = new ArrayList<>(2);
                 mutations.add(WebAuthnStoreWrite.Mutation.replace(encoded.key(), encoded.sealedBytes()));
@@ -228,25 +296,6 @@ public final class WebAuthnEngine {
         } catch (WebAuthnRecordException | DateTimeException failure) {
             return Management.failure(ManagementStatus.UNAVAILABLE);
         }
-    }
-
-    private @NonNull Management absentWithClock(WebAuthnStoreCoordinator.@NonNull Attempt attempt,
-            @NonNull WebAuthnStoreSnapshot snapshot) throws WebAuthnRecordException {
-        return clockOnly(attempt, snapshot, ManagementStatus.ABSENT);
-    }
-
-    private @NonNull Management disabledWithClock(WebAuthnStoreCoordinator.@NonNull Attempt attempt,
-            @NonNull WebAuthnStoreSnapshot snapshot) throws WebAuthnRecordException {
-        return clockOnly(attempt, snapshot, ManagementStatus.DISABLED);
-    }
-
-    private @NonNull Management clockOnly(WebAuthnStoreCoordinator.@NonNull Attempt attempt,
-            @NonNull WebAuthnStoreSnapshot snapshot, @NonNull ManagementStatus status)
-            throws WebAuthnRecordException {
-        WebAuthnNamespaceClock.Advance time = this.namespaceClock.prepare(snapshot,
-                this.wallClock.instant(), this.wallClock);
-        return time.mutation() == null ? Management.failure(status)
-                : mutationResult(attempt, List.of(time.mutation()), status);
     }
 
     private static @NonNull Management mutationResult(WebAuthnStoreCoordinator.@NonNull Attempt attempt,
@@ -282,7 +331,8 @@ public final class WebAuthnEngine {
             if (attempt.remainingBudget() == null || !current(permit)) {
                 result = Start.failure(Status.UNAVAILABLE);
             } else {
-                result = beginAdmitted(attempt, kind, approvedHandle, browserBinding, purpose);
+                do { result = beginAdmitted(attempt, kind, approvedHandle, browserBinding, purpose); }
+                while (attempt.retryAfterConflict());
                 if (attempt.remainingBudget() == null || !current(permit))
                     result = Start.failure(Status.INDETERMINATE);
             }
@@ -323,21 +373,21 @@ public final class WebAuthnEngine {
             WebAuthnNamespaceClock.Advance time = this.namespaceClock.prepare(snapshot,
                     this.wallClock.instant(), this.wallClock);
             if (!(snapshot.getEntry(ceremonyKey) instanceof WebAuthnStoreEntry.Absent))
-                return rejectWithClock(attempt, time, Status.UNAVAILABLE);
+                return Start.failure(Status.UNAVAILABLE);
             List<byte[]> excluded = List.of();
             WebAuthnStoreWrite.Mutation activeFence = null;
             if (fenceKey != null) {
                 WebAuthnStoreEntry fenceEntry = snapshot.getEntry(fenceKey);
                 if (fenceEntry instanceof WebAuthnStoreEntry.Absent) {
                     if (kind != WebAuthnCeremonyState.Kind.REGISTRATION)
-                        return rejectWithClock(attempt, time, Status.REJECTED);
+                        return Start.failure(Status.REJECTED);
                     var encodedFence = this.fences.encode(requireNonNull(approvedHandle), true);
                     activeFence = WebAuthnStoreWrite.Mutation.insert(encodedFence.key(),
                             encodedFence.sealedBytes());
                 } else if (!(fenceEntry instanceof WebAuthnStoreEntry.Present presentFence)
                         || !this.fences.decode(fenceKey, presentFence.getSealedBytes(),
                         this.wallClock).isActive()) {
-                    return rejectWithClock(attempt, time, Status.REJECTED);
+                    return Start.failure(Status.REJECTED);
                 }
             }
             if (indexKey != null) {
@@ -345,7 +395,7 @@ public final class WebAuthnEngine {
                 if (indexEntry instanceof WebAuthnStoreEntry.Present presentIndex) {
                     var index = this.indexes.decode(indexKey, presentIndex.getSealedBytes(), this.wallClock);
                     if (index.size() >= this.maximumExcludedCredentials)
-                        return rejectWithClock(attempt, time, Status.UNAVAILABLE);
+                        return Start.failure(Status.UNAVAILABLE);
                     excluded = index.credentialIds();
                 }
             }
@@ -362,7 +412,8 @@ public final class WebAuthnEngine {
             };
             var encoded = this.ceremonies.encode(state);
             List<WebAuthnStoreWrite.Mutation> changes = new ArrayList<>(2);
-            changes.add(WebAuthnStoreWrite.Mutation.insert(encoded.key(), encoded.sealedBytes()));
+            changes.add(WebAuthnStoreWrite.Mutation.insertExpiring(encoded.key(), encoded.sealedBytes(),
+                    encoded.expiresAt()));
             if (activeFence != null) changes.add(activeFence);
             if (time.mutation() != null) changes.add(time.mutation());
             var committed = attempt.commit(changes);
@@ -376,16 +427,6 @@ public final class WebAuthnEngine {
         } catch (WebAuthnRecordException | DateTimeException failure) {
             return Start.failure(Status.UNAVAILABLE);
         }
-    }
-
-    private static @NonNull Start rejectWithClock(WebAuthnStoreCoordinator.@NonNull Attempt attempt,
-            WebAuthnNamespaceClock.@NonNull Advance time, @NonNull Status rejection) {
-        if (time.mutation() == null) return Start.failure(rejection);
-        return switch (attempt.commit(List.of(time.mutation()))) {
-            case COMMITTED -> Start.failure(rejection);
-            case INDETERMINATE -> Start.failure(Status.INDETERMINATE);
-            case CONFLICT, CAPACITY, UNAVAILABLE -> Start.failure(Status.UNAVAILABLE);
-        };
     }
 
     private static @NonNull Finish convert(WebAuthnCompletionRunner.@NonNull Completion completed) {

@@ -34,7 +34,10 @@ import javax.annotation.concurrent.ThreadSafe;
 import java.nio.ByteBuffer;
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.sql.Timestamp;
 import java.time.Duration;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.Arrays;
 import java.util.Base64;
 import java.util.HashMap;
@@ -47,8 +50,9 @@ import static java.util.Objects.requireNonNull;
 /**
  * Application-owned WebAuthn store for one durable PostgreSQL primary. A provisioned namespace
  * mutex serializes every read and conditional commit across participating JVMs. Pyranid manages
- * transactions; the database sequence supplies non-reused live versions. No row is evicted for
- * capacity. The application must separately close admission and fence authentic restore, key
+ * transactions; the database sequence supplies non-reused live versions. Expired ceremonies are
+ * reclaimed under the namespace lock before reads and capacity checks; permanent records are
+ * retained. The application must separately close admission and fence authentic restore, key
  * rotation and old writers; this example is not a distributed recovery gate.
  */
 @ThreadSafe
@@ -98,6 +102,7 @@ public final class PostgresqlWebAuthnStore implements WebAuthnStore {
                         .addPostTransactionOperation(value -> completion.result = value);
                 configure(database, deadline);
                 lock(database, deadline);
+                reclaimExpiredCeremonies(database, deadline);
                 Map<WebAuthnStoreKey, WebAuthnStoreEntry> entries = new HashMap<>();
                 for (WebAuthnStoreKey key : keys) entries.put(key, entry(database, key, deadline)
                         .<WebAuthnStoreEntry>map(row -> WebAuthnStoreEntry.Present.fromVersionAndSealedBytes(
@@ -130,6 +135,7 @@ public final class PostgresqlWebAuthnStore implements WebAuthnStore {
                         .addPostTransactionOperation(value -> completion.result = value);
                 configure(database, deadline);
                 lock(database, deadline);
+                reclaimExpiredCeremonies(database, deadline);
                 for (var observed : write.getSnapshot().getEntries().entrySet()) {
                     Optional<StoredRow> actual = entry(database, observed.getKey(), deadline);
                     WebAuthnStoreEntry expected = observed.getValue();
@@ -220,6 +226,13 @@ public final class PostgresqlWebAuthnStore implements WebAuthnStore {
                 .bind("namespace", this.namespace).fetchObject(Long.class).orElseThrow();
     }
 
+    private void reclaimExpiredCeremonies(@NonNull Database database, long deadline) throws SQLException {
+        PostgresqlPyranidDataSource.bound(database, deadline);
+        database.query("DELETE FROM webauthn_store_entry WHERE namespace=:namespace "
+                + "AND kind='CEREMONY' AND expires_at <= clock_timestamp()")
+                .bind("namespace", this.namespace).execute();
+    }
+
     private void apply(@NonNull Database database, WebAuthnStoreWrite.@NonNull Mutation mutation,
             long deadline) throws SQLException {
         PostgresqlPyranidDataSource.bound(database, deadline);
@@ -230,19 +243,30 @@ public final class PostgresqlWebAuthnStore implements WebAuthnStore {
                     .bind("namespace", this.namespace).bind("key", key).execute();
         } else if (mutation.getKind() == WebAuthnStoreWrite.Mutation.Kind.INSERT) {
             changed = database.query("INSERT INTO webauthn_store_entry"
-                    + "(namespace,storage_key,kind,version,sealed_form) VALUES"
-                    + "(:namespace,:key,:kind,nextval('webauthn_store_version_seq'),:sealed)")
+                    + "(namespace,storage_key,kind,version,sealed_form,expires_at) VALUES"
+                    + "(:namespace,:key,:kind,nextval('webauthn_store_version_seq'),:sealed,:expires)")
                     .bind("namespace", this.namespace).bind("key", key)
                     .bind("kind", mutation.getKey().getKind().name())
-                    .bind("sealed", sealedForm(mutation.getSealedBytes().orElseThrow())).execute();
+                    .bind("sealed", sealedForm(mutation.getSealedBytes().orElseThrow()))
+                    .bind("expires", mutation.getExpiresAt().map(PostgresqlWebAuthnStore::retainUntil).orElse(null))
+                    .execute();
         } else {
             changed = database.query("UPDATE webauthn_store_entry SET "
-                    + "version=nextval('webauthn_store_version_seq'),sealed_form=:sealed "
+                    + "version=nextval('webauthn_store_version_seq'),sealed_form=:sealed,expires_at=:expires "
                     + "WHERE namespace=:namespace AND storage_key=:key")
                     .bind("namespace", this.namespace).bind("key", key)
-                    .bind("sealed", sealedForm(mutation.getSealedBytes().orElseThrow())).execute();
+                    .bind("sealed", sealedForm(mutation.getSealedBytes().orElseThrow()))
+                    .bind("expires", mutation.getExpiresAt().map(PostgresqlWebAuthnStore::retainUntil).orElse(null))
+                    .execute();
         }
         if (changed != 1) throw new SQLException("WebAuthn mutation lost its row");
+    }
+
+    private static @NonNull Timestamp retainUntil(@NonNull Instant expiresAt) {
+        // PostgreSQL stores microseconds; round up so reclamation never precedes core expiry.
+        Instant rounded = expiresAt.truncatedTo(ChronoUnit.MICROS);
+        if (!rounded.equals(expiresAt)) rounded = rounded.plus(1, ChronoUnit.MICROS);
+        return Timestamp.from(rounded);
     }
 
     private static byte @NonNull [] versionBytes(long version) {

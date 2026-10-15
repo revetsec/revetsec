@@ -93,10 +93,12 @@ public final class XmlEncryptionDecryptor {
             if (ciphertext == null) continue;
             for (PrivateKey privateKey : privateKeys) {
                 byte[] cek = null;
+                boolean unwrapped = false;
                 try {
                     Cipher rsa = Cipher.getInstance("RSA/ECB/OAEPPadding");
                     rsa.init(Cipher.DECRYPT_MODE, privateKey, keyMethod.parameters());
                     cek = rsa.doFinal(ciphertext);
+                    unwrapped = true;
                 } catch (GeneralSecurityException | RuntimeException exception) {
                     // Follow the content-decryption path with an unpredictable substitute CEK.
                     cek = new byte[bits / 8];
@@ -125,7 +127,9 @@ public final class XmlEncryptionDecryptor {
                         Arrays.fill(plaintext, (byte) 0);
                         plaintext = unpadded;
                     }
-                    if (accepted == null) accepted = plaintext;
+                    // CBC can accept random padding. Substitute CEKs preserve content-decryption
+                    // work after a failed unwrap, but must never select the returned plaintext.
+                    if (accepted == null && unwrapped) accepted = plaintext;
                     else Arrays.fill(plaintext, (byte) 0);
                 } catch (GeneralSecurityException | RuntimeException exception) {
                     // The public outcome is identical for unwrap and content failures.

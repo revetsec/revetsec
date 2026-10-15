@@ -30,6 +30,7 @@ import javax.crypto.spec.GCMParameterSpec;
 import javax.crypto.spec.IvParameterSpec;
 import javax.crypto.spec.OAEPParameterSpec;
 import javax.crypto.spec.PSource;
+import javax.crypto.spec.SecretKeySpec;
 import java.io.ByteArrayInputStream;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
@@ -131,7 +132,7 @@ final class SamlEncryptionTests {
         SamlCredential decryption = credential();
         SamlServiceProvider sp = SamlServiceProvider.withEntityId("https://sp.example.test/saml")
                 .assertionConsumerServiceUrl(URI.create("https://sp.example.test/acs"))
-                .replayCache(InMemorySamlReplayCache.withLimit(CLOCK, 4))
+                .replayCache(InMemorySamlReplayCache.withLimit(CLOCK, 64))
                 .decryptionCredentials(List.of(decryption)).clock(CLOCK).build();
         SamlIdentityProvider idp = SamlIdentityProvider.withEntityId("https://idp.example.test/saml")
                 .connectionId("tenant-one").redirectSingleSignOnService(URI.create("https://idp.example.test/sso"))
@@ -462,6 +463,45 @@ final class SamlEncryptionTests {
         assertEquals(1, substitutions.get(), "failed unwrap must still do substituted content work");
         assertArrayEquals(new byte[16], substituteKeys.get(0),
                 "substitute CEK must be wiped after content decryption fails");
+    }
+
+    @Test void cbcRolloverNeverAcceptsPaddingFromAFailedUnwrap() throws Exception {
+        SamlCredential credential = credential();
+        byte[] plaintext = "<a:Assertion ID='_rollover'/>".getBytes(StandardCharsets.UTF_8);
+        String cbc = encryptedAssertion(new String(plaintext, StandardCharsets.UTF_8), credential, true);
+        int start = cbc.lastIndexOf("<xenc:CipherValue>") + "<xenc:CipherValue>".length();
+        int end = cbc.indexOf("</xenc:CipherValue>", start);
+        byte[] wire = Base64.getDecoder().decode(cbc.substring(start, end));
+        byte[] substitute = new byte[16];
+        boolean paddingAccepted = false;
+        for (int attempt = 0; attempt < 4096; attempt++) {
+            substitute[0] = (byte) attempt;
+            substitute[1] = (byte) (attempt >>> 8);
+            Cipher aes = Cipher.getInstance("AES/CBC/NoPadding");
+            aes.init(Cipher.DECRYPT_MODE, new SecretKeySpec(substitute, "AES"),
+                    new IvParameterSpec(wire, 0, 16));
+            byte[] candidate = aes.doFinal(wire, 16, wire.length - 16);
+            int paddingLength = candidate[candidate.length - 1] & 255;
+            if (paddingLength >= 1 && paddingLength <= 16) {
+                paddingAccepted = true;
+                break;
+            }
+        }
+        assertTrue(paddingAccepted, "test must exercise CBC's unauthenticated padding path");
+        byte[] chosen = substitute.clone();
+        SecureRandom substituteRandom = new SecureRandom() {
+            @Override public void nextBytes(byte @NonNull [] bytes) {
+                assertEquals(chosen.length, bytes.length);
+                System.arraycopy(chosen, 0, bytes, 0, bytes.length);
+            }
+        };
+        KeyPairGenerator generator = KeyPairGenerator.getInstance("RSA");
+        generator.initialize(2048);
+        PrivateKey oldKey = generator.generateKeyPair().getPrivate();
+        assertNull(XmlEncryptionDecryptor.decrypt(encryptedElement(cbc), List.of(oldKey),
+                true, true, substituteRandom));
+        assertArrayEquals(plaintext, XmlEncryptionDecryptor.decrypt(encryptedElement(cbc),
+                List.of(oldKey, credential.privateKey()), true, true, substituteRandom));
     }
 
     private static @NonNull Element encryptedElement(@NonNull String xml) {

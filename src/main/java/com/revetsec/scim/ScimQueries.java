@@ -190,7 +190,7 @@ final class ScimQueries {
         int maximum = Math.min(limits.getMaximumPageSize(), paging.getMaximumPageSize());
         if (filter != null) maximum = Math.min(maximum, config.getFilterMaximumResults());
         long normalizedCount = requestedCount == null ? paging.getDefaultPageSize() : Math.max(0, requestedCount);
-        if (method == ScimPaginationMethod.CURSOR && normalizedCount > maximum)
+        if (method == ScimPaginationMethod.CURSOR && requestedCount != null && normalizedCount > maximum)
             return rejected(ScimError.invalidCountInstance());
         int count = (int) Math.min(maximum, normalizedCount);
         return new ScimQueryParseResult.Succeeded(new ScimQuery(type, filter, selection, sortBy, sortOrder,

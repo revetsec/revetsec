@@ -137,8 +137,9 @@ public final class ScimServiceProvider {
         semanticContext = context == null ? new Object() : context;
     }
 
-    /** Starts configuration with no resource registrations; PATCH, filter, sort and password changes
-     * are disabled, and ETags are enabled.
+    /** Starts configuration with no resource registrations; PATCH, filter, sort and password-change
+     * advertisement are disabled, and ETags are enabled. The application still owns password
+     * authorization and handling for a supplied write-only {@code password} value.
      * @return a new builder
      * @since 1.0.0
      */

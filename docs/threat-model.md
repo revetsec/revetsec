@@ -1,6 +1,6 @@
 # Threat Model
 
-**Status: pre-release.** This map covers the shared foundations, signed-JWT verification, the original OAuth client boundary, the SAML service provider and SCIM. It is not yet a complete invariant map for the implemented OIDC, resource-server or OAuth issuer surfaces. The [OAuth and token responsibility map](asvs-5.0-oauth-self-assessment.md) separately maps all OWASP ASVS 5.0 V9 and V10 requirements to Revetsec, application-owned or unsupported responsibilities. [SAML RC-2 readiness closed on 2026-10-14](reviews/rc-2-round-1.md#rc-2-closure--2026-10-14); RC-1 documentation reconciliation and other release checks remain open.
+**Status: pre-release.** This map covers shared foundations, JOSE, OAuth client, OIDC, resource-server, issuer, WebAuthn, SAML and SCIM invariants. The OIDC, resource-server, issuer and WebAuthn rows are focused security boundaries; the consolidated release review must still check their completeness against the final API and claims. The [OAuth and token responsibility map](asvs-5.0-oauth-self-assessment.md) separately maps all OWASP ASVS 5.0 V9 and V10 requirements to Revetsec, application-owned or unsupported responsibilities. [SAML RC-2 readiness closed on 2026-10-14](reviews/rc-2-round-1.md#rc-2-closure--2026-10-14), before this patch changed the replay-cache SPI and session-reference API; that public-contract review must be revisited. RC-1 documentation reconciliation and other release checks remain open.
 
 ## Actors
 
@@ -78,6 +78,37 @@ The INV-O rows below preserve the original M3 OAuth client-boundary mapping. The
 | INV-O7 | Basic encodes client ID and secret separately before Base64; secrets stay out of observer URI and exception messages. | `oauth.ClientAuthenticationTests.basicFormEncodesBothFieldsBeforeJoining`, `supplierFailureDoesNotExposeItsMessageOrCause` |
 | INV-O8 | `OAuthClient` returns raw token wrappers and no identity result. `TokenResponse` excludes `id_token` and other credential members from its generic JSON accessors. | `oauth.TokenResponseTests.successUsesRequestScopesAndHidesAllTokenMembers`; `PublicApiContractTests` |
 | INV-O9 | Metadata issuer equals the configured issuer and discovered endpoints pass the outbound URI policy. Tenant-specific Entra metadata loads; common template issuer fails exact comparison. | `oauth.AuthorizationServerMetadataTests`, `oauth.AuthorizationServerDiscoveryTests`, `oauth.CapturedAuthorizationServerMetadataTests` |
+
+### OpenID Connect relying party
+
+| ID | Invariant and boundary | Checked by |
+|---|---|---|
+| INV-I1 | ID-token signature, issuer, audience, nonce and time checks precede authentication proof for the initiating browser. A raw OAuth token response does not establish identity. | `oidc.IdTokenValidatorTests`; `oidc.OidcAuthenticationFlowTests`; `oidc.OidcAuthenticationResultTests` |
+| INV-I2 | UserInfo subject matches the authenticated ID token. The explicit Entra policy admits only a signature-verified tenant approved by the application predicate, including on UserInfo and refresh. | `oidc.OidcUserInfoTests`; `oidc.OidcIssuerPolicyTests`; `oidc.OidcRefreshTests` |
+| INV-I3 | Refresh and restored session references retain issuer, client and subject binding; a changed provider result cannot silently change the signed-in account. | `oidc.OidcRefreshTests`; `oidc.OidcSessionReferenceTests` |
+
+### OAuth resource server
+
+| ID | Invariant and boundary | Checked by |
+|---|---|---|
+| INV-R1 | Parsing a bearer field yields an unverified credential. A validated JWT or active introspection result still needs exact resource audience and application scope/permission decisions. | `oauth.BearerTokenResultTests`; `oauth.JwtAccessTokenValidatorTests`; `oauth.ResourceServerAssuranceTests` |
+| INV-R2 | Introspection rejects inactive and malformed responses and reports transport unavailability separately. A token-specific 4xx does not poison the shared endpoint failure guard. | `oauth.TokenIntrospectionClientTests`; `oauth.IntrospectionFailureGuardTests` |
+
+### OAuth authorization server
+
+| ID | Invariant and boundary | Checked by |
+|---|---|---|
+| INV-A1 | Admission uses current registered-client policy, exact redirect and resource matching, S256 PKCE and an application-bound browser consent decision. | `oauth.server.OAuthAuthorizationServerTests`; `oauth.server.OAuthServerIngressTests`; `oauth.server.OAuthServerApplicationContractsTests` |
+| INV-A2 | Authorization-code redemption, refresh rotation and revocation compare authoritative state and commit atomically. Unknown or failed commits withhold new credentials and online status proof. | `oauth.server.OAuthCodeRedemptionTests`; `oauth.server.OAuthRefreshRotationTests`; `oauth.server.OAuthGrantRevocationTests`; `oauth.server.OAuthStoreCoordinationTests` |
+| INV-A3 | Signing-key lifecycle validates public/private pairs and publication windows; JWKS emits only public material and a retired key cannot sign a new token. | `oauth.server.OAuthIssuerKeysTests`; `oauth.server.OAuthServerWireContractTests` |
+
+### WebAuthn relying party
+
+| ID | Invariant and boundary | Checked by |
+|---|---|---|
+| INV-W1 | Registration and assertion verification bind RP ID, origin, challenge, browser ceremony, UP/UV flags and the credential signature before result release. | `webauthn.WebAuthnRelyingPartyTests`; `webauthn.WebAuthnCloseoutContractTests` |
+| INV-W2 | Ceremonies are single use. Reauthentication proof is bound to the expected kind, account handle and action purpose; a discoverable sign-in cannot satisfy it. | `webauthn.WebAuthnRelyingPartyTests`; `webauthn.WebAuthnStoreContractTests` |
+| INV-W3 | Versioned conditional store writes, expiry and the recovery gate prevent uncertain state from becoming authentication proof. | `webauthn.WebAuthnStoreContractTests`; `webauthn.InMemoryWebAuthnStoreTests` |
 
 ### SAML service provider
 

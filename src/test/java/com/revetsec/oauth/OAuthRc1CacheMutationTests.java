@@ -293,6 +293,51 @@ final class OAuthRc1CacheMutationTests {
         }
     }
 
+    @Test
+    void interruptedResourceDiscoveryLeaderDoesNotBackOffOtherCallers() throws Exception {
+        try (TestHttpsServer server = TestHttpsServer.start()) {
+            ResourceServerMetadataCache<ResourceServerMetadata> cache = resource(server, CLOCK,
+                    new AtomicLong(), value -> value);
+            TestHttpsServer.HeldScript held = TestHttpsServer.HeldScript.fromResponse(
+                    TestHttpsServer.Response.fromJson(200, document(server)));
+            server.script(PATH, held);
+            FutureTask<OAuthException.Reason> first = new FutureTask<>(() -> {
+                OAuthException failure = assertThrows(OAuthException.class, () -> cache.get(deadline()));
+                return failure.getReason();
+            });
+            Thread leader = new Thread(first, "rc1-interrupted-resource-leader"); leader.setDaemon(true);
+            try {
+                leader.start(); assertTrue(held.awaitHeldCount(1, Duration.ofSeconds(2)));
+                leader.interrupt(); assertEquals(OAuthException.Reason.INTERRUPTED, first.get(5, TimeUnit.SECONDS));
+                server.script(PATH, TestHttpsServer.Script.fromResponse(TestHttpsServer.Response.fromJson(200, document(server))));
+                assertEquals(server.uri("/tenant").toString(), onCaller(() -> cache.get(deadline())).issuer());
+                assertEquals(2, server.getHitCount(PATH));
+            } finally { held.release(); first.cancel(true); }
+        }
+    }
+
+    @Test
+    void interruptedAuthorizationDiscoveryLeaderDoesNotBackOffOtherCallers() throws Exception {
+        try (TestHttpsServer server = TestHttpsServer.start()) {
+            AuthorizationServerCache cache = authorization(server, CLOCK, OAuthObserver.disabledInstance());
+            TestHttpsServer.HeldScript held = TestHttpsServer.HeldScript.fromResponse(
+                    TestHttpsServer.Response.fromJson(200, document(server)));
+            server.script(PATH, held);
+            FutureTask<OAuthException.Reason> first = new FutureTask<>(() -> {
+                OAuthException failure = assertThrows(OAuthException.class, () -> cache.get(deadline()));
+                return failure.getReason();
+            });
+            Thread leader = new Thread(first, "rc1-interrupted-authorization-leader"); leader.setDaemon(true);
+            try {
+                leader.start(); assertTrue(held.awaitHeldCount(1, Duration.ofSeconds(2)));
+                leader.interrupt(); assertEquals(OAuthException.Reason.INTERRUPTED, first.get(5, TimeUnit.SECONDS));
+                server.script(PATH, TestHttpsServer.Script.fromResponse(TestHttpsServer.Response.fromJson(200, document(server))));
+                assertEquals(server.uri("/tenant").toString(), onCaller(() -> cache.get(deadline())).getIssuer());
+                assertEquals(2, server.getHitCount(PATH));
+            } finally { held.release(); first.cancel(true); }
+        }
+    }
+
     private static @NonNull ResourceServerMetadataCache<@NonNull ResourceServerMetadata> resource(
             @NonNull TestHttpsServer server, @NonNull Clock clock, @NonNull AtomicLong nanos,
             @NonNull Function<@NonNull ResourceServerMetadata, @NonNull ResourceServerMetadata> validate) {

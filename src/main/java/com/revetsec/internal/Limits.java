@@ -351,8 +351,8 @@ public final class Limits {
 	/** SCIM prepared response bytes: 8388608 [2048, 33554432]. Approved M10 SCIM-D02. */
 	public static final Limit SCIM_RESPONSE_BYTES = Limit.fromAmounts("SCIM prepared response bytes", Unit.BYTES, 8388608, 2048, 33554432);
 
-	/** SCIM aggregate work units: 1000000 [10000, 10000000]. Approved M10 SCIM-D02. */
-	public static final Limit SCIM_WORK_UNITS = Limit.fromAmounts("SCIM aggregate work units", Unit.COUNT, 1000000, 10000, 10000000);
+	/** SCIM aggregate work units: 4000000 [10000, 10000000]. The default covers a default-sized body plus normalization. */
+	public static final Limit SCIM_WORK_UNITS = Limit.fromAmounts("SCIM aggregate work units", Unit.COUNT, 4000000, 10000, 10000000);
 
 	/** SCIM resource type count: 32 [1, 32]. Approved M10 SCIM-D02. */
 	public static final Limit SCIM_RESOURCE_TYPES = Limit.fromAmounts("SCIM resource type count", Unit.COUNT, 32, 1, 32);

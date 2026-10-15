@@ -45,7 +45,8 @@ final class ScimResources {
         ScimResourceValidation validation = new ScimResourceValidation(type,document,compatibility,work,true,usedFeatures);
         JsonObject normalized = validation.normalize(object);
         if (normalized == null) return new ScimResourceParseResult.Rejected(validation.error());
-        return new ScimResourceParseResult.Succeeded(ScimResource.parsed(type,normalized,context),validation.supplied(),context);
+        return new ScimResourceParseResult.Succeeded(ScimResource.parsed(type,normalized,context,
+                work.maximum()),validation.supplied(),context);
     }
     static @NonNull ScimResourceParseResult replace(@NonNull ScimResourceType type, @NonNull ScimResource current,
             @NonNull JsonDocument document, @NonNull ScimCompatibility compatibility, @NonNull ScimLimits limits, @NonNull Object context) {
@@ -98,7 +99,8 @@ final class ScimResources {
         ScimResourceValidation finalValidation = new ScimResourceValidation(type,null,ScimCompatibility.strictInstance(),work,false);
         JsonObject checked = finalValidation.normalize(JsonObject.fromMembers(finalMembers));
         if (checked == null) return new ScimResourceParseResult.Rejected(finalValidation.error());
-        return new ScimResourceParseResult.Succeeded(ScimResource.parsed(type,checked,context),validation.supplied(),context);
+        return new ScimResourceParseResult.Succeeded(ScimResource.parsed(type,checked,context,
+                work.maximum()),validation.supplied(),context);
     }
     static @Nullable JsonObject project(@NonNull ScimResource resource, @NonNull ScimAttributeSelection selection,
             @NonNull Set<@NonNull ScimAttributePath> suppliedPaths, boolean writeContext, @NonNull ScimWork work) {
@@ -254,8 +256,18 @@ final class ScimResources {
                             merged.put(name,old); continue;
                         }
                     } else if (old instanceof JsonObject || next instanceof JsonObject) {
-                        JsonObject object = object(definition.getSubAttributes(),old instanceof JsonObject value ? value : JsonObject.emptyInstance(),
-                                next instanceof JsonObject value ? value : JsonObject.emptyInstance(),next instanceof JsonObject,prefix+name+".");
+                        boolean manager = type.isStandardEnterpriseManagerPath(prefix+name);
+                        if (manager && next == null) continue;
+                        JsonObject previous = old instanceof JsonObject value ? value : JsonObject.emptyInstance();
+                        JsonObject supplied = next instanceof JsonObject value ? value : JsonObject.emptyInstance();
+                        if (manager && !java.util.Objects.equals(previous.getMembers().get("value"),
+                                supplied.getMembers().get("value"))) {
+                            LinkedHashMap<String,JsonValue> retained = new LinkedHashMap<>(previous.getMembers());
+                            retained.remove("displayName");
+                            previous = JsonObject.fromMembers(retained);
+                        }
+                        JsonObject object = object(definition.getSubAttributes(),previous,
+                                supplied,next instanceof JsonObject,prefix+name+".");
                         if (object == null) return null;
                         if (next != null || !object.getMembers().isEmpty()) merged.put(name,object);
                         continue;

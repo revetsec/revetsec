@@ -45,6 +45,8 @@ final class OidcApplicationTests {
                         SokletSimulator.run(app.configuration(18080), simulator -> {
                             Browser browser = new Browser(simulator);
                             Flow flow = begin(provider, browser);
+                            assertEquals(405, status(browser.send(HttpMethod.HEAD, "/callback?" + flow.query, null, Map.of())));
+                            assertEquals(0, provider.tokenPosts.get());
                             String oldSession = browser.cookies.get(OidcApplication.SESSION_COOKIE);
                             HttpRequestResult completed = browser.callback(flow.query, mode, null);
                             assertEquals(302, status(completed));

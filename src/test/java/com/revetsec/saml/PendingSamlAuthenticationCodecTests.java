@@ -97,7 +97,7 @@ final class PendingSamlAuthenticationCodecTests {
         assertNull(PendingSamlAuthenticationCodec.decode(with(parts, 1, b64(maximum + "x"))));
     }
 
-    @Test void exactMaximumSealedFrameRemainsReadable() {
+    @Test void previouslyMaximumSealedFrameRemainsReadable() {
         String[] parts = PendingSamlAuthenticationCodec.encode(pending()).split("\\.", -1);
         parts[1] = b64("x".repeat(1888));
         parts[5] = b64("x".repeat(2048));
@@ -106,7 +106,19 @@ final class PendingSamlAuthenticationCodecTests {
         assertEquals(8192, maximum.length());
         PendingSamlAuthentication decoded = requireNonNull(PendingSamlAuthenticationCodec.decode(maximum));
         assertEquals("x".repeat(1888), decoded.spEntityId());
-        assertNull(PendingSamlAuthenticationCodec.decode(maximum + "x"));
+        assertNull(PendingSamlAuthenticationCodec.decode(maximum + "x".repeat(8193)));
+    }
+
+    @Test void allBuilderAllowedContextClassesRemainReadable() {
+        String context = "urn:example:" + "a".repeat(500);
+        PendingSamlAuthentication original = new PendingSamlAuthentication("https://sp.example.test/saml",
+                "_" + "r".repeat(40), "h".repeat(22), "tenant-one",
+                "https://idp.example.test/saml", "https://sp.example.test/acs", ISSUED, EXPIRES,
+                SamlAuthenticationRequestOptions.builder()
+                        .requestedAuthnContextClassRefs(java.util.Collections.nCopies(8, context)).build());
+        String encoded = PendingSamlAuthenticationCodec.encode(original);
+        assertEquals(8, requireNonNull(PendingSamlAuthenticationCodec.decode(encoded))
+                .options().getRequestedAuthnContextClassRefs().size());
     }
 
     @Test void exactMaximumApplicationDataUsesTheFullBase64FieldBudget() {

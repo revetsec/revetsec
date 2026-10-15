@@ -166,6 +166,20 @@ final class ThreatModelMapTests {
 		}
 	}
 
+	@Test
+	void newerProtocolInvariantGroupsCannotDisappearFromBothDocuments() throws IOException {
+		List<String> problems = new ArrayList<>();
+		Set<String> ids = new HashSet<>();
+		for (InvariantRow row : invariantRows(read(THREAT_MODEL), problems))
+			ids.add(row.getId());
+		ContractSupport.assertNoViolations("Malformed invariant rows in " + THREAT_MODEL, problems);
+		for (Map.Entry<String, Integer> group : Map.of("I", 3, "R", 2, "A", 3, "W", 3).entrySet())
+			for (int number = 1; number <= group.getValue(); number++) {
+				String id = "INV-" + group.getKey() + number;
+				Assertions.assertTrue(ids.contains(id), () -> THREAT_MODEL + " omits required " + id);
+			}
+	}
+
 	// M2-10 item 7 and plan 14.6: every row cites at least one test that exists, every citation in it resolves to a
 	// test class or test method, and the allowlisted row names build checks that exist.
 	@TestFactory

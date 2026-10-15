@@ -43,8 +43,9 @@ import static java.util.Objects.requireNonNull;
  * key, and an RSA key of 2,040 bits or fewer never verifies, even one that bypassed the key policy.
  * <p>
  * The verification is tri-state safe: the JCA's {@code false} is {@link VerifyResult#MISMATCH}, and any
- * {@code GeneralSecurityException} or {@code RuntimeException} from the key, the provider or the signature bytes is
- * {@link VerifyResult#PROVIDER_FAILURE}. Neither is ever {@link VerifyResult#VALID}, and no unchecked exception
+ * {@code GeneralSecurityException} or {@code RuntimeException} from the key or provider is
+ * {@link VerifyResult#PROVIDER_FAILURE}. Ed25519 signature point and scalar encodings are checked before JCA and
+ * reported as {@link VerifyResult#OUT_OF_RANGE}. Neither is ever {@link VerifyResult#VALID}, and no unchecked exception
  * leaves these methods (INV-G1). Every call creates its own {@link Signature}, because JCA objects are never shared
  * between operations or threads. Algorithm names are pinned and providers are not, so hardware-backed and
  * approved-mode providers work.
@@ -161,6 +162,7 @@ public final class SignatureVerifier {
 	 * @param message   the signed bytes; not modified
 	 * @param signature the signature; not modified
 	 * @return {@link VerifyResult#VALID}; {@link VerifyResult#WRONG_LENGTH} before any JCA call;
+	 * {@link VerifyResult#OUT_OF_RANGE} for a noncanonical signature point or scalar;
 	 * {@link VerifyResult#MISMATCH} for a key that is not an Ed25519 key or a signature that does not verify; or
 	 * {@link VerifyResult#PROVIDER_FAILURE}
 	 */
@@ -174,6 +176,8 @@ public final class SignatureVerifier {
 
 		if (signature.length != Ed25519PublicKeys.SIGNATURE_LENGTH)
 			return VerifyResult.WRONG_LENGTH;
+		if (!Ed25519PublicKeys.isCanonicalSignature(signature))
+			return VerifyResult.OUT_OF_RANGE;
 
 		try {
 			if (!(key instanceof EdECPublicKey edKey) || !Ed25519PublicKeys.isEd25519(edKey.getParams()))

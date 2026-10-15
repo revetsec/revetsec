@@ -40,6 +40,7 @@ final class OAuthServerClientSelection {
   this.publicBoundary=publicBoundary;
   this.repository = requireNonNull(repository); this.limits = requireNonNull(limits); this.metadata = metadata;
  }
+ boolean metadataEnabled() { return this.metadata != null; }
  @NonNull Selected authorization(@NonNull String id,
    @NonNull Map<@NonNull String, @NonNull Set<@NonNull String>> resources, @NonNull Deadline deadline) {
   return select(id, resources, deadline, false);

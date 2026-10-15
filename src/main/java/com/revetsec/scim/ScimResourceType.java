@@ -190,6 +190,17 @@ public final class ScimResourceType {
      * @since 1.0.0
      */
     public @NonNull List<@NonNull ScimSchemaExtension> getSchemaExtensions() { return schemaExtensions; }
+    /** Canonicalizes a registered path for authorization rules and supplied-path comparisons.
+     * Core schema paths become unqualified; extension paths retain the registered schema URI.
+     * This only resolves schema spelling and does not authorize an operation or a caller.
+     * @param path a parsed attribute path
+     * @return its canonical registered form, or empty for an unknown path
+     * @since 1.0.0
+     */
+    public @NonNull Optional<@NonNull ScimAttributePath> canonicalAttributePath(
+            @NonNull ScimAttributePath path) {
+        return ScimSchemas.canonicalPath(this, Objects.requireNonNull(path));
+    }
 
     /**
      * Returns whether an unprojected PATCH response uses 204.

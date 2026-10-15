@@ -143,6 +143,29 @@ final class OAuthRc1TokenSourceMutationTests {
         }
     }
 
+    @Test
+    void injectedErrorCannotLeaveTheRenewalFlightInstalled() throws Exception {
+        try(TestHttpsServer server=TestHttpsServer.start()) {
+            AtomicInteger reads=new AtomicInteger();
+            Clock clock=new Clock(){
+                @Override public @NonNull ZoneId getZone(){return ZoneOffset.UTC;}
+                @Override public @NonNull Clock withZone(@NonNull ZoneId zone){return this;}
+                @Override public @NonNull Instant instant(){
+                    if(reads.incrementAndGet()==3)throw new AssertionError("TEST-ONLY-clock-error");
+                    return NOW;
+                }
+            };
+            ClientCredentialsTokenSource source=ClientCredentialsTokenSource.withClient(client(server,clock)).build();
+            server.script("/token",TestHttpsServer.Script.fromResponse(token("TEST-ONLY-recovered")));
+            AssertionError first=onCaller(()->assertThrows(AssertionError.class,source::getAccessToken));
+            assertEquals("TEST-ONLY-clock-error",first.getMessage());
+            java.lang.reflect.Field flight=ClientCredentialsTokenSource.class.getDeclaredField("flight");
+            flight.setAccessible(true);assertNull(flight.get(source));
+            assertEquals("TEST-ONLY-recovered",onCaller(source::getAccessToken).getValue());
+            assertEquals(2,server.getHitCount("/token"));
+        }
+    }
+
     @TestFactory
     @NonNull Stream<@NonNull DynamicTest> coalescedFailureAndInterruptionKeepTheirOriginalMeaning() {
         return Stream.of(false,true).map(interrupt -> DynamicTest.dynamicTest(interrupt?"interrupted waiter":"failed leader",()->{

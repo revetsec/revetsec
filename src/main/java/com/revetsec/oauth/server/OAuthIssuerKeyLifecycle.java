@@ -40,6 +40,7 @@ final class OAuthIssuerKeyLifecycle {
  private final @NonNull OAuthGrantRetention retention;
  private final @NonNull ReentrantLock lock=new ReentrantLock();
  private final @NonNull Map<@NonNull String,@NonNull Instant> reserved=new HashMap<>();
+ private final @NonNull Map<@NonNull String,@NonNull Instant> firstPublished=new HashMap<>();
  private @Nullable OAuthIssuerKeySnapshot previous;
  private @Nullable Instant lastNow;
  OAuthIssuerKeyLifecycle(@NonNull OAuthIssuerKeyProvider provider,@NonNull Clock clock,@NonNull Duration freshness,
@@ -54,13 +55,14 @@ final class OAuthIssuerKeyLifecycle {
  }
  @NonNull OAuthIssuerKeySnapshot snapshot(@NonNull Deadline deadline) { return checked(deadline,null); }
  private @NonNull OAuthIssuerKeySnapshot checked(@NonNull Deadline deadline,@Nullable Instant expiry) {
-  // Trusted callback and clock execute outside the consistency lock, never inside a backend transaction.
+  // The provider callback runs outside the consistency lock; sample the clock after acquiring it.
   try {
    OAuthIssuerKeySnapshot next=requireNonNull(this.provider.getSnapshot(OAuthServerClientAdmission.remaining(deadline)));
-   OAuthServerClientAdmission.remaining(deadline);Instant now=requireNonNull(this.clock.instant());
+   OAuthServerClientAdmission.remaining(deadline);
    if(!this.lock.tryLock(OAuthServerClientAdmission.remaining(deadline).toNanos(),TimeUnit.NANOSECONDS)) throw unavailable();
    try {
     OAuthServerClientAdmission.remaining(deadline);
+    Instant now=requireNonNull(this.clock.instant());
     if(next.getPublishedAt().isAfter(now) || (this.lastNow!=null && now.isBefore(this.lastNow))) throw unavailable();
     OAuthIssuerKeySnapshot old=this.previous;
     if(old!=null) {
@@ -85,13 +87,20 @@ final class OAuthIssuerKeyLifecycle {
     String active=next.getActiveKey().getKeyId();
     Instant retirement=next.getRetirementNotBefore().get(active);
     if(retirement!=null && !now.isBefore(retirement)) throw unavailable();
+    Map<String,Instant> publication=new HashMap<>();
+    for(String id:next.getVerificationKeys().keySet()) {
+     Instant first=old!=null && old.getVerificationKeys().containsKey(id)
+      ? this.firstPublished.getOrDefault(id,old.getPublishedAt()) : next.getPublishedAt();
+     publication.put(id,first);
+    }
     if(expiry!=null) {
-     if(now.isBefore(next.getPublishedAt().plus(this.freshness)) || !expiry.isAfter(now)) throw unavailable();
+     if(now.isBefore(requireNonNull(publication.get(active)).plus(this.freshness)) || !expiry.isAfter(now)) throw unavailable();
      Instant required=this.retention.accessRetention(expiry);
      if(retirement!=null && retirement.isBefore(required)) throw unavailable();
      this.reserved.merge(active,required,(a,b)->a.isAfter(b)?a:b);
     }
     this.reserved.keySet().retainAll(next.getVerificationKeys().keySet());
+    this.firstPublished.clear();this.firstPublished.putAll(publication);
     this.previous=next;this.lastNow=now;return next;
    } finally { this.lock.unlock(); }
   } catch(VirtualMachineError fatal) { throw fatal; }

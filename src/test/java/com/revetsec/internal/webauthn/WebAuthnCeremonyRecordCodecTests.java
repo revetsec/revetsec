@@ -200,10 +200,8 @@ final class WebAuthnCeremonyRecordCodecTests {
                         new byte[] {4}, encoded.sealedBytes()),
                 namespaceClock.key(), WebAuthnStoreEntry.Present.fromVersionAndSealedBytes(
                         new byte[] {5}, namespaceClock.encode(EXPIRY))));
-        var rolledBackTime = namespaceClock.prepare(rolledBackSnapshot, NOW, CLOCK);
-        assertEquals(EXPIRY, rolledBackTime.effectiveAt());
-        assertTrue(WebAuthnCeremonyConsumption.prepare(rolledBackSnapshot, codec, encoded.key(), ID,
-                BINDING, WebAuthnCeremonyState.Kind.REGISTRATION, rolledBackTime, CLOCK).isEmpty());
+        assertThrows(WebAuthnRecordException.class,
+                () -> namespaceClock.prepare(rolledBackSnapshot, NOW, CLOCK));
     }
 
     private static @NonNull WebAuthnCeremonyRecordCodec ceremonyCodec() {

@@ -241,10 +241,11 @@ final class JwksCache {
 		requireNonNull(deadline);
 
 		@Nullable Snapshot observed = this.snapshot;
-		Instant now = this.settings.clock().instant();
+		Instant sampled = this.settings.clock().instant();
 		@Nullable Snapshot current;
 		this.lock.lock();
 		try {
+			Instant now = orderedClockSample(sampled);
 			current = observeClock(now);
 			if (current != null && current.isFresh(now)) {
 				KeySelection selection = KeySelector.select(current.keys(), query);
@@ -268,10 +269,11 @@ final class JwksCache {
 	void warmUp(@NonNull Deadline deadline) {
 		requireNonNull(deadline);
 		@Nullable Snapshot observed = this.snapshot;
-		Instant now = this.settings.clock().instant();
+		Instant sampled = this.settings.clock().instant();
 		@Nullable Snapshot current;
 		this.lock.lock();
 		try {
+			Instant now = orderedClockSample(sampled);
 			current = observeClock(now);
 			if (current != null && current.isFresh(now))
 				return;
@@ -280,6 +282,13 @@ final class JwksCache {
 		}
 
 		resolve(null, deadline, observed);
+	}
+
+	// Called under lock. An earlier caller can sample before another caller advances lastClock, then acquire
+	// the lock second. Re-sample under the lock before treating that stale sample as an actual rollback.
+	private @NonNull Instant orderedClockSample(@NonNull Instant sampled) {
+		return this.lastClock != null && sampled.isBefore(this.lastClock)
+				? this.settings.clock().instant() : sampled;
 	}
 
 	// Called under lock. An observed rollback invalidates cached keys even inside their original TTL.

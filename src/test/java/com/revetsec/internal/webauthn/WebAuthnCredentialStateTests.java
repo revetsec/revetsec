@@ -90,8 +90,7 @@ final class WebAuthnCredentialStateTests {
         assertFalse(zero.backedUp());
 
         var signedZero = five.assess(parsed(pair.getPrivate(), CREDENTIAL_ID, USER_HANDLE, 0x0d, 0), null);
-        assertEquals(CANDIDATE, signedZero.status());
-        assertEquals(5, signedZero.candidate().orElseThrow().counter());
+        assertEquals(COUNTER_RISK, signedZero.status());
         assertEquals(COUNTER_RISK, five.assess(parsed(pair.getPrivate(), CREDENTIAL_ID, USER_HANDLE, 0x0d, 5),
                 null).status());
         assertEquals(COUNTER_RISK, five.assess(parsed(pair.getPrivate(), CREDENTIAL_ID, USER_HANDLE, 0x0d, 4),

@@ -206,21 +206,24 @@ final class ResourceServerMetadataCache<T> {
 			this.lock.lock();
 			try {
 				if (this.flight == leader) {
-					this.lastFailure = failure;
-					this.lastFailureNanos = this.nanoTime.getAsLong();
-					this.consecutiveFailures = Math.min(5, this.consecutiveFailures + 1);
-					this.failureBackoffNanos = Math.min(this.cooldown.toNanos() << (this.consecutiveFailures - 1), Math.min(this.cooldown.toNanos() * 10, Duration.ofMinutes(10).toNanos()));
-					if (failure instanceof OAuthErrorResponseException error) {
-						Duration delay = error.getRetryAfter().orElse(Duration.ZERO);
-						long retryNanos = delay.compareTo(Duration.ofMinutes(10)) >= 0 ? Duration.ofMinutes(10).toNanos() : delay.toNanos();
-						this.failureBackoffNanos = Math.max(this.failureBackoffNanos, retryNanos);
+					if (failure.getReason() != OAuthException.Reason.INTERRUPTED) {
+						this.lastFailure = failure;
+						this.lastFailureNanos = this.nanoTime.getAsLong();
+						this.consecutiveFailures = Math.min(5, this.consecutiveFailures + 1);
+						this.failureBackoffNanos = Math.min(this.cooldown.toNanos() << (this.consecutiveFailures - 1), Math.min(this.cooldown.toNanos() * 10, Duration.ofMinutes(10).toNanos()));
+						if (failure instanceof OAuthErrorResponseException error) {
+							Duration delay = error.getRetryAfter().orElse(Duration.ZERO);
+							long retryNanos = delay.compareTo(Duration.ofMinutes(10)) >= 0 ? Duration.ofMinutes(10).toNanos() : delay.toNanos();
+							this.failureBackoffNanos = Math.max(this.failureBackoffNanos, retryNanos);
+						}
 					}
 					this.flight = null;
 				}
 			} finally {
 				this.lock.unlock();
 			}
-			leader.future.completeExceptionally(failure);
+			leader.future.completeExceptionally(failure.getReason() == OAuthException.Reason.INTERRUPTED
+					? failure(OAuthException.Reason.NETWORK_FAILURE) : failure);
 			throw failure;
 		} catch (RuntimeException failure) {
 			OAuthException safe = failure(OAuthException.Reason.NETWORK_FAILURE);

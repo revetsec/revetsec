@@ -66,14 +66,19 @@ final class OAuthRefreshRotation {
   catch (IllegalArgumentException failure) { throw invalid(); }
   Map<String, Set<String>> server = OAuthServerConfiguration.resources(resources, this.limits.resources);
   for (int attempt = 0; attempt < this.attempts; attempt++) {
+   // Public CIMD requests must identify an existing, matching credential before taking a fresh-fetch permit.
+   String claimedClient = request.authorization() == null ? request.value("client_id") : null;
+   if (claimedClient != null && clients.metadataEnabled()) readCredential(refreshId, claimedClient, deadline);
    OAuthServerClientSelection.Selected selectedClient = clients.authenticate(request, server, deadline);
    OAuthServerClientRegistration client = selectedClient.client();
    String fingerprint = selectedClient.fingerprint();
-   OAuthStoreCoordinator.Session session = this.coordinator.begin(deadline);
+   // Re-read after the external fetch so the commit uses a current atomic-store observation.
+   CredentialRead credentialRead = readCredential(refreshId, null, deadline);
+   OAuthStoreCoordinator.Session session = credentialRead.session();
    OAuthStoreKey refreshKey = this.codec.key(OAuthStoreKey.Kind.REFRESH_TOKEN, refreshId);
-   OAuthAuthorizationRecord refresh = read(session, refreshKey, false);
+   OAuthAuthorizationRecord refresh = credentialRead.credential();
    OAuthStoreKey grantKey = this.codec.key(OAuthStoreKey.Kind.GRANT, refresh.text("grantId"));
-   OAuthAuthorizationRecord grant = read(session, grantKey, true);
+   OAuthAuthorizationRecord grant = credentialRead.grant();
    if (!refresh.sameLineage(grant) || !grant.refresh()
      || !grant.text("status").equals("ACTIVE") && !grant.text("status").equals("REVOKED")
      || !refresh.horizon().equals(grant.horizon()) || refresh.expires().isAfter(grant.expires())) throw new OAuthStoreFailure(CORRUPT_STATE);
@@ -129,6 +134,18 @@ final class OAuthRefreshRotation {
    if (session.commit(mutations) == OAuthStoreCommitStatus.COMMITTED) return response;
   }
   throw new OAuthStoreFailure(UNAVAILABLE);
+ }
+ private record CredentialRead(OAuthStoreCoordinator.@NonNull Session session, @NonNull OAuthAuthorizationRecord credential,
+   @NonNull OAuthAuthorizationRecord grant) {}
+ private @NonNull CredentialRead readCredential(@NonNull String refreshId, @Nullable String claimedClient,
+   @NonNull Deadline deadline) {
+  OAuthStoreCoordinator.Session session = this.coordinator.begin(deadline);
+  OAuthStoreKey refreshKey = this.codec.key(OAuthStoreKey.Kind.REFRESH_TOKEN, refreshId);
+  OAuthAuthorizationRecord refresh = read(session, refreshKey, false);
+  OAuthStoreKey grantKey = this.codec.key(OAuthStoreKey.Kind.GRANT, refresh.text("grantId"));
+  OAuthAuthorizationRecord grant = read(session, grantKey, true);
+  if (claimedClient != null && !grant.text("clientId").equals(claimedClient)) throw invalid();
+  return new CredentialRead(session, refresh, grant);
  }
  private @NonNull OAuthAuthorizationDecision authorize(@NonNull OAuthGrantPolicy policy, @NonNull OAuthAuthorizationRecord grant, @NonNull Deadline deadline) {
   OAuthGrantContext context = prepared(() -> OAuthGrantContext.fromCheckedGrant(grant.text("subject"), grant.text("clientId"),

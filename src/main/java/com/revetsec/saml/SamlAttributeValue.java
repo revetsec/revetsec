@@ -22,9 +22,11 @@ import javax.annotation.concurrent.Immutable;
 import java.util.Optional;
 
 /**
- * One checked SAML AttributeValue. XML with unrecognized element content, nilled values,
- * and values declared with a non-string schema type are retained as {@link Kind#COMPLEX}
- * without exposing a flattened string or an untrusted DOM node.
+ * One checked SAML AttributeValue. Nilled values and XML with unrecognized element
+ * content are retained as {@link Kind#COMPLEX} without exposing a flattened
+ * string or an untrusted DOM node. A leaf's signed text is exposed independent
+ * of its {@code xsi:type} prefix binding, which exclusive XML canonicalization
+ * need not sign. Applications interpret any domain-specific type themselves.
  *
  * @since 1.0.0
  */
@@ -78,7 +80,7 @@ public final class SamlAttributeValue {
     /**
      * Reads a scalar value without flattening nested XML.
      *
-     * @return text only for an element-free, non-nilled string value
+     * @return text only for an element-free, non-nilled value
      * @since 1.0.0
      */
     public @NonNull Optional<@NonNull String> getText() { return Optional.ofNullable(text); }

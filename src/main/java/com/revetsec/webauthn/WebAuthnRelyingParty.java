@@ -30,6 +30,7 @@ import org.jspecify.annotations.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
 import java.net.URI;
+import java.security.MessageDigest;
 import java.time.Clock;
 import java.util.ArrayList;
 import java.util.List;
@@ -120,12 +121,7 @@ public final class WebAuthnRelyingParty {
             @NonNull String browserBinding) {
         WebAuthnStoreKey.forAccountFence(this.credentialNamespace, this.relyingPartyId,
                 requireNonNull(expectedUserHandle));
-        requireNonNull(actionPurpose);
-        if (actionPurpose.isEmpty() || actionPurpose.length() > 128)
-            throw new IllegalArgumentException("Invalid WebAuthn action purpose");
-        for (int i = 0; i < actionPurpose.length(); i++)
-            if (actionPurpose.charAt(i) < 0x20 || actionPurpose.charAt(i) > 0x7e)
-                throw new IllegalArgumentException("Invalid WebAuthn action purpose");
+        validateActionPurpose(actionPurpose);
         byte[] binding = parseBinding(browserBinding);
         return authenticationRequestResult(this.engine.beginReauthentication(
                 expectedUserHandle.clone(), actionPurpose, binding));
@@ -164,7 +160,10 @@ public final class WebAuthnRelyingParty {
         };
     }
 
-    /** Consumes a raw browser sign-in or account-pinned reauthentication response.
+    /** Consumes a raw browser sign-in or account-pinned reauthentication response. Applications
+     * using this general result for a sensitive action must check the proof's kind, account
+     * handle and action purpose. {@link #completeReauthenticationResult(byte[], String, String, byte[], String)}
+     * enforces those checks before returning a successful result.
      * @param ceremonyId opaque request handle
      * @param responseBody browser {@code PublicKeyCredential.toJSON()} bytes
      * @param browserBinding application-held browser-session binding
@@ -199,6 +198,35 @@ public final class WebAuthnRelyingParty {
             case INDETERMINATE -> WebAuthnAuthenticationResult.indeterminate();
             case PREPARED -> throw new IllegalStateException("Invalid completion outcome");
         };
+    }
+
+    /** Completes a sensitive action only for the expected account and action purpose. A
+     * discoverable sign-in ceremony, or a reauthentication for another account or purpose,
+     * cannot return a successful result here. The application still authorizes the current
+     * browser session and consumes its own one-use action before applying the operation.
+     * @param expectedUserHandle app-approved current account handle
+     * @param actionPurpose app-approved action label used when beginning reauthentication
+     * @param ceremonyId opaque request handle
+     * @param responseBody browser {@code PublicKeyCredential.toJSON()} bytes
+     * @param browserBinding application-held browser-session binding
+     * @return a matching reauthentication proof or fixed failure
+     * @since 1.0.0 */
+    @CheckReturnValue public @NonNull WebAuthnAuthenticationResult completeReauthenticationResult(
+            byte @NonNull [] expectedUserHandle, @NonNull String actionPurpose,
+            @NonNull String ceremonyId, byte @NonNull [] responseBody,
+            @NonNull String browserBinding) {
+        WebAuthnStoreKey.forAccountFence(this.credentialNamespace, this.relyingPartyId,
+                requireNonNull(expectedUserHandle));
+        validateActionPurpose(actionPurpose);
+        WebAuthnAuthenticationResult result = completeAuthenticationResult(ceremonyId, responseBody, browserBinding);
+        if (result instanceof WebAuthnAuthenticationResult.Succeeded succeeded) {
+            WebAuthnAuthentication proof = succeeded.getAuthentication();
+            if (proof.getKind() != WebAuthnAuthentication.Kind.REAUTHENTICATION
+                    || !MessageDigest.isEqual(proof.getUserHandle(), expectedUserHandle)
+                    || !proof.getActionPurpose().filter(actionPurpose::equals).isPresent())
+                return WebAuthnAuthenticationResult.rejected(WebAuthnRejectionReason.REJECTED);
+        }
+        return result;
     }
 
     /** Lists active credential IDs for an app-approved account. The application must authorize
@@ -240,7 +268,7 @@ public final class WebAuthnRelyingParty {
 
     /** Disables an app-approved account's passkey fence, including pending ceremonies. The app
      * must authorize this action, coordinate its own account state, and reconcile uncertain
-     * transitions before any future reopening. This method does not terminate app sessions.
+     * transitions. This API does not reenable a disabled account or terminate app sessions.
      * @param approvedUserHandle app-approved account handle
      * @return confirmed disabled state or fixed failure
      * @since 1.0.0 */
@@ -253,6 +281,19 @@ public final class WebAuthnRelyingParty {
             case INDETERMINATE -> WebAuthnAccountDisableResult.indeterminate();
             case LISTED, REMOVED, ABSENT -> throw new IllegalStateException("Invalid disable outcome");
         };
+    }
+
+    /** Reseals one permanent, namespace-bound record with the current active sealing key.
+     * The application must coordinate key rotation, retain the old key until every permanent
+     * row has been resealed, and close admission during restore or uncertain outcomes. Ceremony
+     * rows are short lived and are not eligible. Absence returns CONFLICT; an uncertain commit
+     * returns UNKNOWN and requires authoritative reconciliation before proceeding.
+     * @param key privileged credential, index, account-fence or namespace-clock address
+     * @return the authoritative compare-and-commit status
+     * @since 1.0.0 */
+    @CheckReturnValue public @NonNull WebAuthnStoreCommitResult resealStoreEntry(
+            @NonNull WebAuthnStoreKey key) {
+        return this.engine.resealStoreEntry(requireNonNull(key));
     }
 
     private @NonNull WebAuthnAuthenticationRequestResult authenticationRequestResult(
@@ -326,6 +367,15 @@ public final class WebAuthnRelyingParty {
         } catch (EncodingException failure) {
             return null;
         }
+    }
+
+    private static void validateActionPurpose(@NonNull String actionPurpose) {
+        requireNonNull(actionPurpose);
+        if (actionPurpose.isEmpty() || actionPurpose.length() > 128)
+            throw new IllegalArgumentException("Invalid WebAuthn action purpose");
+        for (int i = 0; i < actionPurpose.length(); i++)
+            if (actionPurpose.charAt(i) < 0x20 || actionPurpose.charAt(i) > 0x7e)
+                throw new IllegalArgumentException("Invalid WebAuthn action purpose");
     }
 
     /** Redacts configuration and protocol state.
@@ -440,7 +490,7 @@ public final class WebAuthnRelyingParty {
         String expected = "https://" + relyingPartyId + (port == -1 ? "" : ":" + port);
         if (!"https".equals(uri.getScheme()) || !relyingPartyId.equals(uri.getHost())
                 || uri.getRawUserInfo() != null || uri.getRawQuery() != null
-                || uri.getRawFragment() != null || port == 0 || port > 65_535
+                || uri.getRawFragment() != null || port == 0 || port == 443 || port > 65_535
                 || uri.getRawPath() != null && !uri.getRawPath().isEmpty()
                 || !value.equals(expected))
             throw new IllegalArgumentException("Invalid WebAuthn origin");

@@ -162,7 +162,9 @@ final class OAuthServerWireContractTests {
    var headers=OAuthServerResponse.privateHeaders(0);headers.put(name,List.of("x"));assertThrows(IllegalArgumentException.class,()->OAuthServerResponse.prepare(200,headers,null,new byte[0],4096,1024));
   }));
   for(int status:List.of(100,201,302,307,308,500)) cases.add(DynamicTest.dynamicTest("invalid status "+status,()->assertThrows(IllegalArgumentException.class,()->OAuthServerResponse.prepare(status,OAuthServerResponse.privateHeaders(0),null,new byte[0],4096,1024))));
-  for(String uri:List.of("/relative","https://client.example/#fragment","https://u@client.example/")) cases.add(DynamicTest.dynamicTest("unsafe Location "+uri,()->assertThrows(IllegalArgumentException.class,()->OAuthServerResponse.prepare(303,OAuthServerResponse.privateHeaders(0),URI.create(uri),new byte[0],4096,1024))));
+  for(String uri:List.of("/relative","https://client.example/#fragment","https://u@client.example/",
+   "https://client.example/%0a?code=secret","https://client.example/cb?x=%0D&code=secret","https://client.example/%7f"))
+   cases.add(DynamicTest.dynamicTest("unsafe Location "+uri,()->assertThrows(IllegalArgumentException.class,()->OAuthServerResponse.prepare(303,OAuthServerResponse.privateHeaders(0),URI.create(uri),new byte[0],4096,1024))));
   return cases.stream();
  }
  @Test void responseAsciiBoundariesRemainPrintableAndLocationSafe() {

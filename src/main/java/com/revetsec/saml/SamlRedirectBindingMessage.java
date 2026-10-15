@@ -15,6 +15,9 @@
  */
 package com.revetsec.saml;
 
+import com.revetsec.internal.encoding.EncodingException;
+import com.revetsec.internal.encoding.StrictUtf8;
+
 import com.revetsec.internal.crypto.EcCurve;
 import com.revetsec.internal.crypto.EcdsaSignatures;
 import org.jspecify.annotations.NonNull;
@@ -95,7 +98,7 @@ public final class SamlRedirectBindingMessage {
         String algorithm = ascii(alg);
         String encoded = ascii(message);
         String signatureEncoded = ascii(signed);
-        String relay = relayBytes == null ? null : ascii(relayBytes);
+        String relay = relayBytes == null ? null : relay(relayBytes);
         if (algorithm == null || encoded == null || signatureEncoded == null
                 || (relayBytes != null && relay == null))
             return SamlRedirectBindingParseResult.Rejected.INSTANCE;
@@ -252,6 +255,17 @@ public final class SamlRedirectBindingMessage {
     private static @Nullable String ascii(byte @NonNull [] value) {
         for (byte octet : value) if (octet < 33 || octet > 126) return null;
         return new String(value, StandardCharsets.US_ASCII);
+    }
+
+    private static @Nullable String relay(byte @NonNull [] value) {
+        try {
+            String decoded = StrictUtf8.decode(value);
+            for (int index = 0; index < decoded.length(); index++) {
+                char character = decoded.charAt(index);
+                if (Character.isISOControl(character) || Character.isWhitespace(character)) return null;
+            }
+            return decoded;
+        } catch (EncodingException exception) { return null; }
     }
 
     /**

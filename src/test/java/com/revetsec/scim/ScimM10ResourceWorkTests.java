@@ -109,8 +109,8 @@ class ScimM10ResourceWorkTests {
             else { assertFalse(succeeded); assertEquals(413,((ScimResourceParseResult.Rejected)replaced).getError().getStatusCode()); }
         }
         assertTrue(succeeded);
-        ScimResource duplicate=trusted(type,"{\"schemas\":[\""+GROUP+"\"],\"displayName\":\"group\",\"members\":[{\"value\":\"one\"},{\"value\":\"one\"}]}");
-        assertInstanceOf(ScimResourceParseResult.Rejected.class,ScimResources.replace(type,duplicate,parsed(body),ScimCompatibility.strictInstance(),ScimLimits.builder().build(),CONTEXT));
+        assertThrows(IllegalArgumentException.class, () -> trusted(type,
+                "{\"schemas\":[\""+GROUP+"\"],\"displayName\":\"group\",\"members\":[{\"value\":\"one\"},{\"value\":\"one\"}]}"));
     }
 
     @Test void normalizedEmptyObjectsDoNotMixExplicitClearProofAcrossComplexAttributes() {

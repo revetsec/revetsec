@@ -221,6 +221,9 @@ class OAuthClientMetadataFetchTests {
   var invalid=fetcher(s,p,Clock.fixed(NOW,ZoneOffset.UTC),(u,d)->new RawResponse(200,HttpHeaders.of(Map.of(),(a,b)->true),new byte[]{1},null,false,Duration.ZERO));
   assertEquals(OAuthServerAdmissionFailure.Reason.INVALID_CLIENT,assertThrows(OAuthServerAdmissionFailure.class,()->invalid.reusable(ID,deadline())).reason());
   var error=fetcher(s,p,Clock.fixed(NOW,ZoneOffset.UTC),(u,d)->new RawResponse(503,HttpHeaders.of(Map.of(),(a,b)->true),new byte[0],null,false,Duration.ZERO));infrastructure(()->error.reusable(ID,deadline()));
+  var missing=fetcher(s,p,Clock.fixed(NOW,ZoneOffset.UTC),(u,d)->new RawResponse(404,HttpHeaders.of(Map.of(),(a,b)->true),new byte[0],null,false,Duration.ZERO));
+  assertEquals(OAuthServerAdmissionFailure.Reason.INVALID_CLIENT,
+   assertThrows(OAuthServerAdmissionFailure.class,()->missing.reusable(ID,deadline())).reason());
  }
  @Test void slowOldFetchCannotOverwriteConcurrentNewerWriteOrRemoveIt() {
   var cache=InMemoryOAuthClientMetadataCache.fromDefaults();var p=policy(cache);StateSealer s=sealer();var c=codec(s,p);
@@ -282,6 +285,26 @@ class OAuthClientMetadataFetchTests {
   Thread worker=new Thread(()->{try{f.fresh(ID,deadline());}catch(Throwable failure){error.set(failure);}},"cimd-owned-test");worker.start();
   try{assertTrue(entered.await(2,TimeUnit.SECONDS));infrastructure(()->f.fresh(ID,deadline()));assertEquals(1,calls.get());}finally{release.countDown();worker.join(3000);if(worker.isAlive()){worker.interrupt();worker.join(3000);}}
   assertFalse(worker.isAlive());assertNull(error.get());f.fresh(ID,deadline());assertEquals(2,calls.get());
+ }
+ @Test void anonymousFetchesCannotExhaustTheCredentialTransitionReserve() throws Exception {
+  var p=OAuthClientMetadataPolicy.withAddressResolver((h,b)->List.of()).maximumConcurrentFetches(2).build();
+  CountDownLatch entered=new CountDownLatch(1),release=new CountDownLatch(1);
+  AtomicInteger calls=new AtomicInteger();AtomicReference<Throwable> error=new AtomicReference<>();
+  var f=fetcher(sealer(),p,Clock.fixed(NOW,ZoneOffset.UTC),(u,d)->{
+   if(calls.incrementAndGet()==1) {
+    entered.countDown();
+    try {if(!release.await(2,TimeUnit.SECONDS))throw new AssertionError("release");}
+    catch(InterruptedException failure){Thread.currentThread().interrupt();throw new IllegalStateException("interrupted");}
+   }
+   return response("fresh");
+  });
+  Thread worker=new Thread(()->{try{f.reusable(ID,deadline());}catch(Throwable failure){error.set(failure);}},"cimd-anonymous-reserve");worker.start();
+  try {
+   assertTrue(entered.await(2,TimeUnit.SECONDS));
+   infrastructure(()->f.reusable(ID,deadline()));assertEquals(1,calls.get());
+   assertEquals("fresh",f.fresh(ID,deadline()).clientName());assertEquals(2,calls.get());
+  } finally {release.countDown();worker.join(3000);if(worker.isAlive()){worker.interrupt();worker.join(3000);}}
+  assertFalse(worker.isAlive());assertNull(error.get());
  }
  @Test void productionSelectionUsesPinnedDriverAndOriginalResolverBudget() {
   AtomicInteger calls=new AtomicInteger();AtomicReference<Duration> budget=new AtomicReference<>();

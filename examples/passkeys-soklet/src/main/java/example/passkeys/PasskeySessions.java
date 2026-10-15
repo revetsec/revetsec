@@ -49,7 +49,12 @@ final class PasskeySessions {
 
     synchronized @NonNull Session begin() {
         cleanup();
-        if (this.entries.size() >= this.maximumSessions) throw new IllegalStateException("Session capacity reached");
+        if (this.entries.size() >= this.maximumSessions) {
+            String oldestAnonymous = this.entries.values().stream()
+                    .filter(session -> !session.authenticated).map(session -> session.id).findFirst().orElse(null);
+            if (oldestAnonymous == null) throw new IllegalStateException("Session capacity reached");
+            this.entries.remove(oldestAnonymous);
+        }
         Session session = fresh(false);
         this.entries.put(session.id, session);
         return session;

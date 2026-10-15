@@ -75,6 +75,11 @@ final class PlaygroundOidcTests {
             Request request = Request.withRawUrl(formPost ? HttpMethod.POST : HttpMethod.GET,
                     formPost ? "/oidc/callback" : "/oidc/callback?" + callback).headers(headers)
                     .body(formPost ? callback.getBytes(StandardCharsets.UTF_8) : null).build();
+            Response head = oidc.callback(config, Request.withRawUrl(HttpMethod.HEAD,
+                    "/oidc/callback?" + callback).headers(headers).build());
+            assertEquals(405, head.getStatusCode());
+            assertNotNull(original.flow);
+            assertEquals(0, provider.posts.get());
             Response completed = oidc.callback(config, request);
             assertEquals(302, completed.getStatusCode());
             assertEquals(List.of("no-referrer"), completed.getHeaders().get("Referrer-Policy"));

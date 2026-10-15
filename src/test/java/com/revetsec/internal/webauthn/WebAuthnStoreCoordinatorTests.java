@@ -44,6 +44,34 @@ final class WebAuthnStoreCoordinatorTests {
     private static final WebAuthnStoreKey CREDENTIAL = WebAuthnStoreKey.forCredential("tenant", "login.example.com", new byte[] {1});
     private static final Set<WebAuthnStoreKey> KEYS = Set.of(CEREMONY, CREDENTIAL);
 
+    @Test void retriesOnlyConfirmedConflictsWithinTheOriginalAttempt() {
+        AtomicInteger reads = new AtomicInteger();
+        AtomicInteger writes = new AtomicInteger();
+        WebAuthnStoreSnapshot snapshot = snapshot(KEYS);
+        var attempt = new WebAuthnStoreCoordinator(store((keys, budget) -> {
+            reads.incrementAndGet();
+            return WebAuthnStoreReadResult.Available.fromSnapshot(snapshot);
+        }, (write, budget) -> writes.incrementAndGet() == 1
+                ? WebAuthnStoreCommitResult.CONFLICT : WebAuthnStoreCommitResult.COMMITTED),
+                Duration.ofSeconds(1), () -> 0).begin();
+        assertTrue(attempt.read(KEYS).isAvailable());
+        assertEquals(WebAuthnStoreCoordinator.Commit.CONFLICT, attempt.commit(List.of()));
+        assertTrue(attempt.retryAfterConflict());
+        assertTrue(attempt.read(KEYS).isAvailable());
+        assertEquals(WebAuthnStoreCoordinator.Commit.COMMITTED, attempt.commit(List.of()));
+        assertFalse(attempt.retryAfterConflict());
+        assertEquals(2, reads.get());
+        assertEquals(2, writes.get());
+
+        var uncertain = new WebAuthnStoreCoordinator(store((keys, budget) ->
+                WebAuthnStoreReadResult.Available.fromSnapshot(snapshot),
+                (write, budget) -> WebAuthnStoreCommitResult.UNKNOWN),
+                Duration.ofSeconds(1), () -> 0).begin();
+        assertTrue(uncertain.read(KEYS).isAvailable());
+        assertEquals(WebAuthnStoreCoordinator.Commit.INDETERMINATE, uncertain.commit(List.of()));
+        assertFalse(uncertain.retryAfterConflict());
+    }
+
     @Test void passesOneShrinkingBudgetAndCompleteSnapshotToCommit() {
         AtomicLong clock = new AtomicLong();
         WebAuthnStoreSnapshot snapshot = snapshot(KEYS);

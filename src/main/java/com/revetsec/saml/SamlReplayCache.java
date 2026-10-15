@@ -22,6 +22,7 @@ import javax.annotation.concurrent.ThreadSafe;
 import javax.annotation.concurrent.Immutable;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Objects;
 
 /**
  * Atomic SAML assertion replay admission. A shared implementation must make one key visible to all nodes before
@@ -46,6 +47,27 @@ public interface SamlReplayCache {
      */
     @NonNull MarkResult markIfAbsent(@NonNull String key, @NonNull Instant expiresAt,
             @NonNull Duration remaining);
+
+    /**
+     * Atomically admit a replay key within a connection's capacity namespace. The key
+     * itself already binds the connection, SP and IdP identifiers. Implementations
+     * shared by mutually untrusted IdP connections should override this method and
+     * reserve capacity per connection. The default preserves source compatibility
+     * for existing stores but supplies no such capacity isolation.
+     *
+     * @param connectionId application-approved IdP connection namespace
+     * @param key the Revetsec-generated replay key
+     * @param expiresAt the final possible acceptance time
+     * @param remaining positive time budget
+     * @return an explicit atomic outcome
+     * @since 1.0.0
+     */
+    default @NonNull MarkResult markIfAbsent(@NonNull String connectionId, @NonNull String key,
+            @NonNull Instant expiresAt, @NonNull Duration remaining) {
+        if (Objects.requireNonNull(connectionId).isEmpty())
+            throw new IllegalArgumentException("Empty SAML connection namespace");
+        return markIfAbsent(key, expiresAt, remaining);
+    }
 
     /**
      * Outcomes of an atomic replay admission. A retry after INDETERMINATE cannot be interpreted as fresh.

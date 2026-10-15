@@ -179,7 +179,10 @@ final class WebAuthnRecordCodec {
             } finally {
                 Arrays.fill(plaintext, (byte) 0);
             }
-        } catch (UnsealException | EncodingException | IllegalArgumentException failure) {
+        } catch (UnsealException failure) {
+            throw failure.getKind() == UnsealException.Kind.EXPIRED
+                    ? WebAuthnRecordException.expired() : new WebAuthnRecordException();
+        } catch (EncodingException | IllegalArgumentException failure) {
             throw new WebAuthnRecordException();
         } finally {
             Arrays.fill(frame, (byte) 0);

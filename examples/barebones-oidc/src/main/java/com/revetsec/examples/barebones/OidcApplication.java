@@ -187,7 +187,10 @@ public final class OidcApplication {
      * @since 1.0.0
      */
     @GET("/callback")
-    public @NonNull Response queryCallback(@NonNull Request request) { return complete(request); }
+    public @NonNull Response queryCallback(@NonNull Request request) {
+        if (request.getHttpMethod() != HttpMethod.GET) return failure(405, "Method not allowed");
+        return complete(request);
+    }
 
     /** Completes form-post callbacks through the raw adapter and normal OIDC validator.
      * @param request untrusted request

@@ -17,12 +17,18 @@
 package com.revetsec.webauthn;
 
 import java.time.Duration;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicReference;
 import org.jspecify.annotations.NonNull;
 import org.junit.jupiter.api.Test;
 
@@ -40,6 +46,56 @@ final class InMemoryWebAuthnStoreTests {
    "tenant", "login.example.com", new byte[] {1});
  private static final WebAuthnStoreKey SECOND = WebAuthnStoreKey.forCredential(
    "tenant", "login.example.com", new byte[] {2});
+ private static final WebAuthnStoreKey CEREMONY = WebAuthnStoreKey.forCeremony(
+   "tenant", "login.example.com", new byte[32]);
+
+ @Test void reclaimsExpiredCeremoniesBeforeReadsAndCapacityChecks() {
+  AtomicReference<Instant> now = new AtomicReference<>(Instant.parse("2026-10-15T12:00:00Z"));
+  Clock clock = new Clock() {
+   @Override public @NonNull ZoneId getZone() { return ZoneOffset.UTC; }
+   @Override public @NonNull Clock withZone(@NonNull ZoneId zone) { return this; }
+   @Override public @NonNull Instant instant() { return Objects.requireNonNull(now.get()); }
+  };
+  InMemoryWebAuthnStore store = InMemoryWebAuthnStore.withLimits(1, 100, clock);
+  Instant expiresAt = Objects.requireNonNull(now.get()).plusSeconds(1);
+  WebAuthnStoreSnapshot empty = snapshot(store, Set.of(CEREMONY));
+  assertEquals(WebAuthnStoreCommitResult.COMMITTED, store.compareAndCommit(
+    WebAuthnStoreWrite.fromSnapshotAndMutations(empty, List.of(
+      WebAuthnStoreWrite.Mutation.insertExpiring(CEREMONY, new byte[] {1}, expiresAt))), BUDGET));
+  WebAuthnStoreSnapshot live = snapshot(store, Set.of(CEREMONY, FIRST));
+  assertInstanceOf(WebAuthnStoreEntry.Present.class, live.getEntry(CEREMONY));
+  assertEquals(WebAuthnStoreCommitResult.COMMITTED, store.compareAndCommit(
+    WebAuthnStoreWrite.fromSnapshotAndMutations(live, List.of(
+      WebAuthnStoreWrite.Mutation.replaceExpiring(CEREMONY, new byte[] {3}, expiresAt))), BUDGET));
+  live = snapshot(store, Set.of(CEREMONY, FIRST));
+  now.set(expiresAt);
+  assertInstanceOf(WebAuthnStoreEntry.Absent.class, snapshot(store, Set.of(CEREMONY)).getEntry(CEREMONY));
+  assertEquals(WebAuthnStoreCommitResult.CONFLICT, store.compareAndCommit(
+    WebAuthnStoreWrite.fromSnapshotAndMutations(live, List.of()), BUDGET));
+  assertEquals(WebAuthnStoreCommitResult.COMMITTED, store.compareAndCommit(
+    WebAuthnStoreWrite.fromSnapshotAndMutations(snapshot(store, Set.of(FIRST)), List.of(
+      WebAuthnStoreWrite.Mutation.insert(FIRST, new byte[] {2}))), BUDGET));
+  now.set(Objects.requireNonNull(now.get()).plusSeconds(86_400));
+  assertInstanceOf(WebAuthnStoreEntry.Present.class, snapshot(store, Set.of(FIRST)).getEntry(FIRST));
+ }
+
+ @Test void repeatedCeremonyReplacementKeepsExpiryQueueWithinConfiguredCapacity() {
+  Instant now = Instant.parse("2026-10-15T12:00:00Z");
+  Instant expiresAt = now.plusSeconds(3600);
+  InMemoryWebAuthnStore store = InMemoryWebAuthnStore.withLimits(1, 1,
+    Clock.fixed(now, ZoneOffset.UTC));
+  assertEquals(WebAuthnStoreCommitResult.COMMITTED, store.compareAndCommit(
+    WebAuthnStoreWrite.fromSnapshotAndMutations(snapshot(store, Set.of(CEREMONY)), List.of(
+      WebAuthnStoreWrite.Mutation.insertExpiring(CEREMONY, new byte[] {1}, expiresAt))), BUDGET));
+  for (int index = 0; index < 1_000; index++) {
+   assertEquals(WebAuthnStoreCommitResult.COMMITTED, store.compareAndCommit(
+     WebAuthnStoreWrite.fromSnapshotAndMutations(snapshot(store, Set.of(CEREMONY)), List.of(
+       WebAuthnStoreWrite.Mutation.replaceExpiring(CEREMONY, new byte[] {(byte) index}, expiresAt))),
+     BUDGET));
+  }
+  assertTrue(store.expiryQueueSize() <= 8);
+  assertInstanceOf(WebAuthnStoreEntry.Present.class, snapshot(store, Set.of(CEREMONY)).getEntry(CEREMONY));
+ }
 
  @Test void capacityRejectsWholeWriteAndNeverEvictsRecords() {
   assertThrows(IllegalArgumentException.class, () -> InMemoryWebAuthnStore.withLimits(0, 10));

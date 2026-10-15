@@ -57,7 +57,7 @@ public final class PasskeySocketChecks {
                 throw new AssertionError("Soklet account session was not accepted");
             String accountCsrf = capture(account, "data-csrf='([A-Za-z0-9_-]{43})'");
             String registration = request(port, post("/register/start", authenticatedCookie,
-                    accountCsrf, ""));
+                    accountCsrf, "X-Demo-Access-Key: " + "A".repeat(43) + "\r\n"));
             if (!registration.startsWith("HTTP/1.1 200 ") || !registration.contains("\"publicKey\""))
                 throw new AssertionError("Soklet registration preparation did not reach Revetsec");
             String wrongHost = request(port, "GET / HTTP/1.1\r\nHost: other.example.test\r\nConnection: close\r\n\r\n");

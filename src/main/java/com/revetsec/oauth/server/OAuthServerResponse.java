@@ -107,7 +107,8 @@ public final class OAuthServerResponse {
   }
   if (!List.of("no-referrer").equals(copy.get("Referrer-Policy"))) throw OAuthStoreFormat.invalid();
   if (location != null) {
-   if (!location.isAbsolute() || location.getRawFragment() != null || location.getRawUserInfo() != null) throw OAuthStoreFormat.invalid();
+   if (!location.isAbsolute() || location.getRawFragment() != null || location.getRawUserInfo() != null
+    || OAuthServerConfiguration.hasEncodedAsciiControl(location.toString())) throw OAuthStoreFormat.invalid();
    String ascii = location.toASCIIString();
    if (ascii.length() > headerCap) throw OAuthStoreFormat.invalid();
    for (int i = 0; i < ascii.length(); i++) if (ascii.charAt(i) < 0x21 || ascii.charAt(i) > 0x7e) throw OAuthStoreFormat.invalid();

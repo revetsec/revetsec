@@ -140,7 +140,9 @@ final class OAuthServerApplicationContractsTests {
 			"https://client.example/*", "https://client.example/callback?code=x", "https://client.example/callback?%63ode=x",
 			"https://client.example/callback?state", "https://client.example/callback?iss=x", "https://client.example/callback?error=x",
 			"https://client.example/callback?error_description=x", "https://client.example/callback?error_uri=x",
-			"https://client.example/callback?ok=1&st%61te=x&ok=2", "https://client.example/callback?%FF=x").stream().map(uri -> DynamicTest.dynamicTest("uri: " + uri, () -> {
+			"https://client.example/callback?ok=1&st%61te=x&ok=2", "https://client.example/callback?%FF=x",
+			"https://client.example/callback?x=%0d", "https://client.example/%0A/callback",
+			"https://client.example/callback?x=%09", "https://client.example/%7f").stream().map(uri -> DynamicTest.dynamicTest("uri: " + uri, () -> {
 		var failure = assertThrows(IllegalArgumentException.class, () -> registration().redirectUris(List.of(URI.create(uri))));
 		assertEquals("Invalid authorization-server configuration value.", failure.getMessage()); assertNull(failure.getCause());
 		}));

@@ -21,6 +21,7 @@ import com.revetsec.json.JsonObject;
 import com.revetsec.oauth.*;
 import com.revetsec.oidc.*;
 import com.revetsec.soklet.SokletOAuth;
+import com.soklet.HttpMethod;
 import com.soklet.Request;
 import com.soklet.Response;
 import com.soklet.ResponseCookie;
@@ -72,6 +73,8 @@ final class PlaygroundOidc {
     }
 
     @NonNull Response callback(@NonNull PlaygroundConfig config, @NonNull Request request) {
+        if (request.getHttpMethod() != HttpMethod.GET && request.getHttpMethod() != HttpMethod.POST)
+            return PlaygroundResources.fixed(405, "Method not allowed.");
         BrowserSessions.Session session = sessions.find(request).orElse(null);
         if (session == null) return PlaygroundResources.fixed(400, "Browser binding is required.");
         synchronized (session) {

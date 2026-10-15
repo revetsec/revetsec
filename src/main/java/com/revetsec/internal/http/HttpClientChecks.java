@@ -28,9 +28,10 @@ import static java.util.Objects.requireNonNull;
  * <p>
  * Every networked builder takes {@code httpClient(@Nullable HttpClient)} and calls
  * {@link #requireNeverRedirects(HttpClient)} on a non-null client in {@code build()}. The application owns the
- * injected client's TLS, proxy, authenticator and cookies; Revetsec only refuses one that follows redirects, because a
- * followed cross-origin 307 re-sends a POST body, and with it {@code client_secret}, to another origin (verified
- * against the JDK client with {@code Redirect.NORMAL}).
+ * injected client's TLS and proxy selection. Revetsec refuses redirect following, authenticators and cookie
+ * handlers. A followed cross-origin 307 can re-send a POST credential to another origin. A JDK authenticator can
+ * replace an explicit Authorization field or answer a remote Basic challenge with application credentials. A cookie
+ * handler can attach unrelated application cookies to an outbound request.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
@@ -41,13 +42,12 @@ public final class HttpClientChecks {
 	}
 
 	/**
-	 * Requires that {@code httpClient} never follows redirects.
+	 * Requires that {@code httpClient} never follows redirects and has no authenticator or cookie handler.
 	 *
 	 * @param httpClient the injected client
 	 * @return {@code httpClient}
 	 * @throws NullPointerException     if {@code httpClient} is {@code null}
-	 * @throws IllegalArgumentException if {@code httpClient.followRedirects()} is not
-	 *                                  {@link HttpClient.Redirect#NEVER}
+	 * @throws IllegalArgumentException if the client follows redirects or has an authenticator or cookie handler
 	 */
 	@NonNull
 	public static HttpClient requireNeverRedirects(@NonNull HttpClient httpClient) {
@@ -56,6 +56,12 @@ public final class HttpClientChecks {
 		if (httpClient.followRedirects() != HttpClient.Redirect.NEVER)
 			throw new IllegalArgumentException("An injected HttpClient must use followRedirects(HttpClient.Redirect.NEVER): "
 					+ "a followed redirect can re-send credentials to another origin.");
+		if (requireNonNull(httpClient.authenticator()).isPresent())
+			throw new IllegalArgumentException("An injected HttpClient must not have an Authenticator: "
+					+ "remote challenges can receive application credentials.");
+		if (requireNonNull(httpClient.cookieHandler()).isPresent())
+			throw new IllegalArgumentException("An injected HttpClient must not have a CookieHandler: "
+					+ "cookies can be attached to outbound requests.");
 
 		return httpClient;
 	}

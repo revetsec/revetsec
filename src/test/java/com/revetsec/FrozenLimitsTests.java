@@ -288,7 +288,7 @@ final class FrozenLimitsTests {
 			amounts("SCIM_CONDITIONAL_TAGS", "SCIM conditional tag count", Unit.COUNT, 64, 1, 256),
 			amounts("SCIM_RESPONSE_HEADER_BYTES", "SCIM response header bytes", Unit.BYTES, 16384, 512, 65536),
 			amounts("SCIM_RESPONSE_BYTES", "SCIM prepared response bytes", Unit.BYTES, 8388608, 2048, 33554432),
-			amounts("SCIM_WORK_UNITS", "SCIM aggregate work units", Unit.COUNT, 1000000, 10000, 10000000),
+			amounts("SCIM_WORK_UNITS", "SCIM aggregate work units", Unit.COUNT, 4000000, 10000, 10000000),
 			amounts("SCIM_RESOURCE_TYPES", "SCIM resource type count", Unit.COUNT, 32, 1, 32),
 			amounts("SCIM_SCHEMAS", "SCIM schema count", Unit.COUNT, 64, 1, 64),
 			amounts("SCIM_SCHEMA_EXTENSIONS", "SCIM schema extension count", Unit.COUNT, 16, 1, 16),

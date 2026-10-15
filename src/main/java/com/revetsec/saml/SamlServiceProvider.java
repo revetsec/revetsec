@@ -494,7 +494,8 @@ public final class SamlServiceProvider {
         try { replayKey = logoutReplayKey(identityProvider, SamlRedirectBindingMessage.Kind.REQUEST, id); }
         catch (NoSuchAlgorithmException exception) { return SamlLogoutRequestResult.Unavailable.INSTANCE; }
         SamlReplayCache.MarkResult mark;
-        try { mark = replayCache.markIfAbsent(replayKey, replayExpiry, replayBudget); }
+        try { mark = replayCache.markIfAbsent(identityProvider.getConnectionId(), replayKey,
+                replayExpiry, replayBudget); }
         catch (RuntimeException exception) { return SamlLogoutRequestResult.Indeterminate.INSTANCE; }
         if (mark == null || mark == SamlReplayCache.MarkResult.INDETERMINATE)
             return SamlLogoutRequestResult.Indeterminate.INSTANCE;
@@ -698,7 +699,8 @@ public final class SamlServiceProvider {
             return SamlLogoutResult.Indeterminate.INSTANCE;
         boolean pendingConsumed = ((PendingSamlLogoutSource.Resolved) resolved).consumed();
         SamlReplayCache.MarkResult mark;
-        try { mark = replayCache.markIfAbsent(replayKey, replayExpiry, replayBudget); }
+        try { mark = replayCache.markIfAbsent(identityProvider.getConnectionId(), replayKey,
+                replayExpiry, replayBudget); }
         catch (RuntimeException exception) { return SamlLogoutResult.Indeterminate.INSTANCE; }
         if (mark == null || mark == SamlReplayCache.MarkResult.INDETERMINATE)
             return SamlLogoutResult.Indeterminate.INSTANCE;
@@ -734,7 +736,7 @@ public final class SamlServiceProvider {
         Objects.requireNonNull(request);
         Objects.requireNonNull(identityProvider);
         Objects.requireNonNull(status);
-        URI destination = identityProvider.redirectSingleLogoutService();
+        URI destination = identityProvider.redirectSingleLogoutResponseService();
         if (singleLogoutServiceUrl == null || signingKey == null || destination == null
                 || !safeLogoutEndpointQuery(destination)
                 || !entityId.equals(request.spEntityId())
@@ -801,7 +803,7 @@ public final class SamlServiceProvider {
             Objects.requireNonNull(request);
             Objects.requireNonNull(identityProvider);
             Objects.requireNonNull(status);
-            URI destination = identityProvider.postSingleLogoutService();
+            URI destination = identityProvider.postSingleLogoutResponseService();
             if (postSingleLogoutServiceUrl == null || signingKey == null || destination == null
                     || !safeLogoutEndpointQuery(destination) || !entityId.equals(request.spEntityId())
                     || !identityProvider.getConnectionId().equals(request.getIdentityProviderConnectionId())
@@ -1287,7 +1289,8 @@ public final class SamlServiceProvider {
                     && (!"https".equalsIgnoreCase(singleLogoutServiceUrl.getScheme())
                         || singleLogoutServiceUrl.getHost() == null
                         || singleLogoutServiceUrl.getRawUserInfo() != null
-                        || singleLogoutServiceUrl.getRawFragment() != null))
+                        || singleLogoutServiceUrl.getRawFragment() != null
+                        || singleLogoutServiceUrl.getRawQuery() != null))
                 throw new IllegalStateException("Invalid HTTPS SAML logout URL");
             if (postSingleLogoutServiceUrl != null
                     && (!"https".equalsIgnoreCase(postSingleLogoutServiceUrl.getScheme())

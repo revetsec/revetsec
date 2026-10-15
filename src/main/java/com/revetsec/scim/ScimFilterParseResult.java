@@ -23,9 +23,10 @@ import javax.annotation.concurrent.Immutable;
 import static java.util.Objects.requireNonNull;
 
 /**
- * The result of bounded SCIM filter syntax parsing. Syntax success does not bind
- * attributes to a schema, approve a filter policy, or authorize query execution.
- * Results have identity equality and redacted diagnostics.
+ * The result of bounded SCIM filter parsing. Direct syntax parsing does not bind
+ * attributes or approve a policy; a provider's result includes those checks.
+ * Neither entry point authorizes the caller or executes a query. Results have
+ * identity equality and redacted diagnostics.
  *
  * @since 1.0.0
  */
@@ -33,7 +34,8 @@ import static java.util.Objects.requireNonNull;
 public sealed interface ScimFilterParseResult permits ScimFilterParseResult.Succeeded,
         ScimFilterParseResult.Rejected {
     /**
-     * A syntactically valid immutable filter awaiting schema binding and policy approval.
+     * An immutable filter. Direct parser results await schema and policy checks;
+     * provider results have passed the provider's configured checks.
      *
      * @since 1.0.0
      */
@@ -44,7 +46,8 @@ public sealed interface ScimFilterParseResult permits ScimFilterParseResult.Succ
         Succeeded(@NonNull ScimFilter filter) { this.filter = requireNonNull(filter); }
 
         /**
-         * Returns the parsed syntax tree, without query permission.
+         * Returns the parsed tree. A provider result has passed schema and filter-policy
+         * checks, but caller and tenant authorization remain application-owned.
          *
          * @return the filter
          * @since 1.0.0

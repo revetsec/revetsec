@@ -46,6 +46,8 @@ public enum SealedStateType {
 	 * Pending SAML front-channel logout state, separate from pending login.
 	 */
 	PENDING_SAML_LOGOUT("revetsec/pending-saml-logout/v1"),
+	/** A SAML logout session reference, separate from pending SAML state. */
+	SAML_SESSION("revetsec/saml-session/v1"),
 	/**
 	 * An OpenID Connect session reference: {@code revetsec/oidc-session/v1}.
 	 */

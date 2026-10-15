@@ -16,11 +16,23 @@
 
 package com.revetsec.internal.webauthn;
 
+import org.jspecify.annotations.NonNull;
+
 /** One redacted failure to open an authoritative WebAuthn record. */
 final class WebAuthnRecordException extends Exception {
     private static final long serialVersionUID = 1L;
+    private final boolean expired;
 
     WebAuthnRecordException() {
-        super("Invalid WebAuthn store record.");
+        this(false);
     }
+
+    private WebAuthnRecordException(boolean expired) {
+        super("Invalid WebAuthn store record.", null, false, false);
+        this.expired = expired;
+    }
+
+    static @NonNull WebAuthnRecordException expired() { return new WebAuthnRecordException(true); }
+
+    boolean isExpired() { return this.expired; }
 }

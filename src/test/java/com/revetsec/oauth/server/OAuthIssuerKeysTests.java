@@ -48,6 +48,11 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Stream;
@@ -101,6 +106,23 @@ final class OAuthIssuerKeysTests {
   assertEquals("OAuthIssuerKeyLifecycle{<redacted>}",lifecycle.toString());
   for(Object value:List.of(key,snapshot,key.getPublicKey(),lifecycle)) assertFalse(value.toString().contains("private-"));
   unavailable(()->lifecycle.warmUp(deadline()));assertEquals(0,privateKey.encodings);
+ }
+ @Test void concurrentSystemClockReadsDoNotRejectUnchangedKeys() throws Exception {
+  Clock clock=Clock.systemUTC();
+  OAuthIssuerKeySnapshot keys=snapshot(key("a",A),"g",clock.instant().minusSeconds(120),Map.of(),Map.of());
+  OAuthIssuerKeyLifecycle lifecycle=lifecycle(OAuthIssuerKeyProvider.fromSnapshot(keys),clock);
+  int workers=8;CountDownLatch ready=new CountDownLatch(workers),start=new CountDownLatch(1);
+  ExecutorService pool=Executors.newFixedThreadPool(workers);
+  try {
+   List<Future<?>> calls=new ArrayList<>();
+   for(int worker=0;worker<workers;worker++) calls.add(pool.submit(()->{
+    ready.countDown();if(!start.await(10,TimeUnit.SECONDS))throw new AssertionError("workers did not start");
+    for(int call=0;call<400;call++)assertSame(keys,lifecycle.snapshot(deadline()));
+    return null;
+   }));
+   assertTrue(ready.await(10,TimeUnit.SECONDS));start.countDown();
+   for(Future<?> call:calls)call.get(20,TimeUnit.SECONDS);
+  } finally {start.countDown();pool.shutdownNow();}
  }
  @Test void resetAndMutationIsolationApplyToEveryBuilderProperty() {
   Map<String,PublicKey> keys=new LinkedHashMap<>(Map.of("b",B.getPublicKey()));Map<String,Instant> retirement=new LinkedHashMap<>(Map.of("b",NOW.plusSeconds(1000)));
@@ -201,6 +223,16 @@ final class OAuthIssuerKeysTests {
   String next=life.sign(claims(),NOW.plusSeconds(300),deadline());assertNotEquals(old,next);assertEquals(2,life.snapshot(deadline()).getVerificationKeys().size());
   current.set(snapshot(key("b",B),"g3",NOW,Map.of(),Map.of()));unavailable(()->life.snapshot(deadline()));
   clock.now=NOW.plusSeconds(400);assertEquals(Set.of("b"),life.snapshot(deadline()).getVerificationKeys().keySet());
+ }
+ @Test void stagedVerificationKeyCanBecomeActiveWithoutAnotherFreshnessOutage() {
+  AtomicReference<OAuthIssuerKeySnapshot> current=new AtomicReference<>(snapshot(key("a",A),"g1",
+   NOW.minusSeconds(120),Map.of("b",B.getPublicKey()),Map.of()));
+  var life=lifecycle(budget->requireNonNull(current.get()),Clock.fixed(NOW,ZoneOffset.UTC));
+  assertNotNull(life.sign(claims(),NOW.plusSeconds(300),deadline()));
+  current.set(snapshot(key("b",B),"g2",NOW,Map.of("a",A.getPublicKey()),Map.of()));
+  assertNotNull(life.sign(claims(),NOW.plusSeconds(300),deadline()));
+  var fresh=lifecycle(requireNonNull(current.get()));
+  unavailable(()->fresh.sign(claims(),NOW.plusSeconds(300),deadline()));
  }
  @Test void laterShorterIssuanceCannotReduceAnEarlierKeyReservation() {
   AtomicReference<OAuthIssuerKeySnapshot> current=new AtomicReference<>(

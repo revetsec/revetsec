@@ -42,7 +42,7 @@ class ScimM10LimitsTests {
         assertEquals(32768,reset.getMaximumRawQueryBytes());assertEquals(64,reset.getMaximumQueryParameters());assertEquals(8192,reset.getMaximumParameterCharacters());
         assertEquals(128,reset.getMaximumProjectionPaths());assertEquals(1000,reset.getMaximumPageSize());assertEquals(2048,reset.getMaximumCursorCharacters());
         assertEquals(8192,reset.getMaximumConditionalHeaderBytes());assertEquals(64,reset.getMaximumConditionalTags());assertEquals(16384,reset.getMaximumResponseHeaderBytes());
-        assertEquals(8388608,reset.getMaximumResponseBytes());assertEquals(1000000,reset.getMaximumWorkUnits());assertEquals(128,reset.getFilterLimits().getMaximumNodes());
+        assertEquals(8388608,reset.getMaximumResponseBytes());assertEquals(4000000,reset.getMaximumWorkUnits());assertEquals(128,reset.getFilterLimits().getMaximumNodes());
         for(ScimLimits.Builder invalid:List.of(ScimLimits.builder().maximumBodyBytes(16383),ScimLimits.builder().maximumPatchOperations(0),ScimLimits.builder().maximumJsonNodes(999),
                 ScimLimits.builder().maximumRawQueryBytes(0),ScimLimits.builder().maximumQueryParameters(0),ScimLimits.builder().maximumParameterCharacters(255),ScimLimits.builder().maximumProjectionPaths(0),
                 ScimLimits.builder().maximumPageSize(0),ScimLimits.builder().maximumCursorCharacters(0),ScimLimits.builder().maximumConditionalHeaderBytes(255),ScimLimits.builder().maximumConditionalTags(0),

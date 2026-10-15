@@ -25,20 +25,24 @@ import com.revetsec.webauthn.WebAuthnStoreWrite;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
+import java.security.SecureRandom;
 import java.time.Duration;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.locks.LockSupport;
 import java.util.function.LongSupplier;
 
 import static java.util.Objects.requireNonNull;
 
 /**
- * One caller-thread, bounded authoritative read, optional expanded read, and at most one compare-and-commit. This
+ * One caller-thread, bounded authoritative read, optional expanded read, and compare-and-commit. Confirmed conflicts
+ * may restart the whole read/plan/write under the original deadline. This
  * coordinator validates callback shapes and withholds success after a late or uncertain write;
  * the provider remains responsible for linearizability, durable commits and capacity fences.
  * No result here is a WebAuthn authentication or registration proof.
  */
 final class WebAuthnStoreCoordinator {
+    private static final @NonNull SecureRandom RETRY_RANDOM = new SecureRandom();
     private final @NonNull WebAuthnStore store;
     private final long timeoutNanos;
     private final @NonNull LongSupplier nanoTime;
@@ -68,7 +72,9 @@ final class WebAuthnStoreCoordinator {
         private final long startNanos;
         private long lastRemainingNanos;
         private int readCount;
+        private int conflictRetries;
         private boolean finished;
+        private boolean lastCommitConflicted;
         private @Nullable WebAuthnStoreSnapshot snapshot;
         private @Nullable Set<@NonNull WebAuthnStoreKey> firstKeys;
 
@@ -134,6 +140,7 @@ final class WebAuthnStoreCoordinator {
             WebAuthnStoreWrite write = WebAuthnStoreWrite.fromSnapshotAndMutations(this.snapshot, mutations);
             Duration budget = remaining();
             this.finished = true;
+            this.lastCommitConflicted = false;
             if (budget == null) return Commit.UNAVAILABLE;
 
             WebAuthnStoreCommitResult result;
@@ -153,11 +160,34 @@ final class WebAuthnStoreCoordinator {
                 return remaining() == null ? Commit.INDETERMINATE : Commit.COMMITTED;
             if (remaining() == null) return Commit.UNAVAILABLE;
             return switch (result) {
-                case CONFLICT -> Commit.CONFLICT;
+                case CONFLICT -> {
+                    this.lastCommitConflicted = true;
+                    yield Commit.CONFLICT;
+                }
                 case CAPACITY -> Commit.CAPACITY;
                 case UNAVAILABLE -> Commit.UNAVAILABLE;
                 case COMMITTED, UNKNOWN -> throw new IllegalStateException("Handled commit result");
             };
+        }
+
+        /** Restarts only a timely, confirmed conflict; uncertainty never retries a write. */
+        boolean retryAfterConflict() {
+            checkOwner();
+            if (!this.finished || !this.lastCommitConflicted || this.conflictRetries >= 8)
+                return false;
+            Duration budget = remaining();
+            if (budget == null) return false;
+            this.conflictRetries++;
+            long ceiling = Math.min(2_000_000L, 100_000L << Math.min(this.conflictRetries, 4));
+            long jitter = 50_000L + RETRY_RANDOM.nextInt((int) (ceiling - 50_000L + 1));
+            LockSupport.parkNanos(Math.min(jitter, budget.toNanos()));
+            if (remaining() == null) return false;
+            this.readCount = 0;
+            this.snapshot = null;
+            this.firstKeys = null;
+            this.finished = false;
+            this.lastCommitConflicted = false;
+            return true;
         }
 
         /** Shares the same shrinking monotonic deadline with an external admission callback. */

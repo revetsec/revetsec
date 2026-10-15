@@ -209,15 +209,6 @@ final class WebAuthnCompletionPlanner {
         return Preparation.candidate(WebAuthnStoreWrite.fromSnapshotAndMutations(expanded, changes));
     }
 
-    @NonNull Optional<@NonNull WebAuthnStoreWrite> clockOnlyAdvance(
-            @NonNull WebAuthnStoreSnapshot snapshot, @NonNull Clock clock)
-            throws WebAuthnRecordException {
-        WebAuthnStoreWrite.Mutation mutation = this.namespaceClock.prepare(
-                requireNonNull(snapshot), requireNonNull(clock).instant(), clock).mutation();
-        return mutation == null ? Optional.empty() : Optional.of(
-                WebAuthnStoreWrite.fromSnapshotAndMutations(snapshot, List.of(mutation)));
-    }
-
     private @Nullable WebAuthnCeremonyState firstPending(@NonNull WebAuthnStoreSnapshot first,
             byte @NonNull [] ceremonyId, byte @NonNull [] browserBinding,
             WebAuthnCeremonyState.@Nullable Kind requiredKind, @NonNull Clock clock)
@@ -230,10 +221,16 @@ final class WebAuthnCompletionPlanner {
             throw new IllegalArgumentException("Invalid first WebAuthn read");
         var time = this.namespaceClock.prepare(first, clock.instant(), clock);
         if (!(first.getEntry(key) instanceof WebAuthnStoreEntry.Present)) return null;
-        WebAuthnCeremonyState.Kind kind = requiredKind == null
-                ? this.ceremonies.decode(key,
-                ((WebAuthnStoreEntry.Present) first.getEntry(key)).getSealedBytes(), clock).kind()
-                : requiredKind;
+        WebAuthnCeremonyState.Kind kind;
+        if (requiredKind == null) {
+            try {
+                kind = this.ceremonies.decode(key,
+                        ((WebAuthnStoreEntry.Present) first.getEntry(key)).getSealedBytes(), clock).kind();
+            } catch (WebAuthnRecordException failure) {
+                if (failure.isExpired()) return null;
+                throw failure;
+            }
+        } else kind = requiredKind;
         return WebAuthnCeremonyConsumption.prepare(first, this.ceremonies, key, ceremonyId,
                 requireNonNull(browserBinding), kind, time, clock)
                 .map(WebAuthnCeremonyConsumption.Prepared::pending).orElse(null);

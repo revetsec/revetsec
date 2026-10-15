@@ -22,7 +22,14 @@ async function call(path, extraHeaders = {}, body = null) {
   return response;
 }
 
-async function ceremony(startPath, finishPath, creation) {
+function managementHeaders() {
+  const input = document.getElementById("management-access");
+  const key = input.value;
+  input.value = "";
+  return { "X-Demo-Access-Key": key };
+}
+
+async function ceremony(startPath, finishPath, creation, startHeaders = {}) {
   if (!window.PublicKeyCredential ||
       !PublicKeyCredential.parseCreationOptionsFromJSON ||
       !PublicKeyCredential.parseRequestOptionsFromJSON) {
@@ -30,7 +37,7 @@ async function ceremony(startPath, finishPath, creation) {
     return;
   }
   try {
-    const started = await (await call(startPath)).json();
+    const started = await (await call(startPath, startHeaders)).json();
     const options = creation
       ? PublicKeyCredential.parseCreationOptionsFromJSON(started.publicKey)
       : PublicKeyCredential.parseRequestOptionsFromJSON(started.publicKey);
@@ -61,7 +68,7 @@ document.getElementById("access-login").addEventListener("click", () => action(a
 document.getElementById("sign-in").addEventListener("click", () =>
   ceremony("/sign-in/start", "/sign-in/finish", false));
 document.getElementById("register").addEventListener("click", () =>
-  ceremony("/register/start", "/register/finish", true));
+  ceremony("/register/start", "/register/finish", true, managementHeaders()));
 document.getElementById("reauth").addEventListener("click", () =>
   ceremony("/reauth/start", "/reauth/finish", false));
 document.getElementById("sensitive").addEventListener("click", () => action(async () =>
@@ -81,7 +88,8 @@ document.getElementById("list").addEventListener("click", () => action(async () 
     const remove = document.createElement("button");
     remove.textContent = "Remove";
     remove.addEventListener("click", () => action(async () => {
-      report(await (await call("/credentials/remove", { "X-Credential-Id": id })).text());
+      report(await (await call("/credentials/remove",
+        { "X-Credential-Id": id, ...managementHeaders() })).text());
       item.remove();
     }));
     item.append(label, remove);

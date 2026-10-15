@@ -60,6 +60,16 @@ final class SamlServiceProviderTests {
         assertThrows(IllegalArgumentException.class, () -> SamlIdentityProvider.withEntityId(tooLong));
     }
 
+    @Test void redirectLogoutEndpointRejectsItsOwnQueryAtConfiguration() throws Exception {
+        KeyPair signing = rsa();
+        assertThrows(IllegalStateException.class, () -> SamlServiceProvider.withEntityId(SP)
+                .assertionConsumerServiceUrl(ACS)
+                .singleLogoutServiceUrl(URI.create("https://sp.example.test/logout?tenant=one"))
+                .signingPrivateKey(signing.getPrivate())
+                .replayCache(InMemorySamlReplayCache.withLimit(CLOCK, 4))
+                .clock(CLOCK).build());
+    }
+
     @Test void fractionalClockPendingStateOpensForLoginAndLogout() throws Exception {
         Clock fractional = Clock.fixed(Instant.parse("2026-10-09T00:01:00.123456789Z"), ZoneOffset.UTC);
         KeyPair signing = rsa();
@@ -358,6 +368,14 @@ final class SamlServiceProviderTests {
                 sp.completeAuthenticationResult(message(xml, pending.getRelayStateHandle()), source, idp));
         assertEquals(SamlAuthenticationResult.StatusCode.AUTHN_FAILED, unsigned.getStatusCode());
         assertEquals(false, unsigned.isAuthenticated());
+        String nestedRefusal = xml.replace(status, "<p:Status><p:StatusCode "
+                + "Value='urn:oasis:names:tc:SAML:2.0:status:Responder'>"
+                + "<p:StatusCode Value='urn:oasis:names:tc:SAML:2.0:status:AuthnFailed'/>"
+                + "</p:StatusCode></p:Status>");
+        assertEquals(SamlAuthenticationResult.StatusCode.RESPONDER,
+                assertInstanceOf(SamlAuthenticationResult.StatusReceived.class,
+                        sp.completeAuthenticationResult(message(nestedRefusal,
+                                pending.getRelayStateHandle()), source, idp)).getStatusCode());
         SamlAuthenticationResult.StatusReceived signed = assertInstanceOf(
                 SamlAuthenticationResult.StatusReceived.class,
                 sp.completeAuthenticationResult(message(SamlResponseSemanticsTests.signedXml(xml, true,

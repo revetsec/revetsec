@@ -28,6 +28,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
@@ -38,8 +39,9 @@ import java.util.concurrent.locks.ReentrantLock;
 import static java.util.Objects.requireNonNull;
 
 /**
- * A bounded caller-thread cache for client-credentials access tokens. One caller renews while waiters share its
- * result. A rejected cached token is cleared only when {@link #invalidate(AccessToken)} receives that exact instance.
+ * A bounded caller-thread cache for client-credentials access tokens. One caller renews; callers may continue
+ * using a valid cached token during early renewal, while callers without one share the renewal result.
+ * A rejected cached token is cleared only when {@link #invalidate(AccessToken)} receives that exact instance.
  * No expired or rejected token is returned.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
@@ -65,6 +67,7 @@ public final class ClientCredentialsTokenSource {
 		this.client = builder.client;
 		TokenRequestOptions.Builder optionsBuilder = TokenRequestOptions.builder().scopes(builder.scopes);
 		if (builder.resourcesOverridden) optionsBuilder = optionsBuilder.resources(builder.resources);
+		optionsBuilder = optionsBuilder.additionalParameters(builder.additionalParameters);
 		this.options = optionsBuilder.build();
 		this.fallbackCacheDuration = builder.fallbackCacheDuration;
 		this.maximumCacheDuration = builder.maximumCacheDuration;
@@ -110,6 +113,7 @@ public final class ClientCredentialsTokenSource {
 			if (old != null && now.isBefore(old.renewAt) && now.isBefore(old.expiresAt))
 				return old.token;
 			if (this.flight != null) {
+				if (old != null && now.isBefore(old.expiresAt)) return old.token;
 				waitFor = this.flight;
 			} else {
 				long base = Duration.ofSeconds(30).toNanos();
@@ -202,6 +206,16 @@ public final class ClientCredentialsTokenSource {
 			}
 			leader.completeExceptionally(safe);
 			throw safe;
+		} finally {
+			// An Error from an injected clock, credential supplier or transport must not strand every later caller.
+			this.lock.lock();
+			try {
+				if (this.flight == leader) this.flight = null;
+			} finally {
+				this.lock.unlock();
+			}
+			if (!leader.isDone())
+				leader.completeExceptionally(OAuthTransportException.fromReason(OAuthException.Reason.NETWORK_FAILURE, null));
 		}
 	}
 
@@ -266,6 +280,7 @@ public final class ClientCredentialsTokenSource {
 		private final @NonNull OAuthClient client;
 		private @Nullable Set<@NonNull String> scopes;
 		private @NonNull List<@NonNull URI> resources = List.of();
+		private @NonNull Map<@NonNull String, @NonNull String> additionalParameters = Map.of();
 		private boolean resourcesOverridden;
 		private @NonNull Duration fallbackCacheDuration = Limits.CLIENT_CREDENTIALS_FALLBACK_CACHE_DURATION.getDefaultDuration();
 		private @NonNull Duration maximumCacheDuration = Limits.CLIENT_CREDENTIALS_MAXIMUM_CACHE_DURATION.getDefaultDuration();
@@ -295,6 +310,18 @@ public final class ClientCredentialsTokenSource {
 		public @NonNull Builder resources(@Nullable List<@NonNull URI> value) {
 			this.resources = TokenRequestOptions.builder().resources(value).build().getResources();
 			this.resourcesOverridden = value != null;
+			return this;
+		}
+
+		/**
+		 * Replaces provider-specific nonreserved token form parameters.
+		 *
+		 * @param value parameters, or null to clear them
+		 * @return this builder
+		 * @since 1.0.0
+		 */
+		public @NonNull Builder additionalParameters(@Nullable Map<@NonNull String, @NonNull String> value) {
+			this.additionalParameters = TokenRequestOptions.builder().additionalParameters(value).build().getAdditionalParameters();
 			return this;
 		}
 

@@ -343,6 +343,12 @@ final class ScimPatchParsing {
             if (extension != null) {
                 if (!(entry.getValue() instanceof JsonObject object)) { error=ScimError.invalidValueInstance(); return null; }
                 for (Map.Entry<String,JsonValue> child:object.getMembers().entrySet()) {
+                    if (child.getKey().indexOf('.') >= 0) {
+                        if (!enabled(ScimCompatibilityFeature.PATCH_VALUE_OBJECT_ATTRIBUTE_PATHS)) {
+                            error = ScimError.invalidPathInstance(); return null;
+                        }
+                        used.add(ScimCompatibilityFeature.PATCH_VALUE_OBJECT_ATTRIBUTE_PATHS);
+                    }
                     if (!noPathField(normalized,suppliedTargets,extension.getId()+":"+child.getKey(),child.getValue(),false)) return null;
                 }
                 if (object.getMembers().isEmpty()) {

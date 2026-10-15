@@ -161,6 +161,7 @@ public final class PasskeyApp {
                     + "<section id='login'><label>Demo access key <input id='access' type='password' autocomplete='off' maxlength='43'></label>"
                     + "<button id='access-login'>Approve enrollment</button> <button id='sign-in'>Sign in with passkey</button></section>"
                     + "<section id='account' hidden><p>Signed in to the fixed demo account.</p>"
+                    + "<label>Management approval key <input id='management-access' type='password' autocomplete='off' maxlength='43'></label>"
                     + "<button id='register'>Register passkey</button> <button id='list'>List passkeys</button>"
                     + "<ul id='credentials'></ul><button id='reauth'>Reauthenticate for sensitive action</button> "
                     + "<button id='sensitive'>Perform sensitive action</button> <button id='logout'>Sign out</button></section>"
@@ -201,7 +202,8 @@ public final class PasskeyApp {
 
     private @NonNull MarshaledResponse beginRegistrationRoute(@NonNull Request request) {
         PasskeySessions.Session session = admitted(request, true);
-        if (session == null || !emptyBody(request)) return text(403, "Request denied.");
+        if (session == null || !emptyBody(request) || !managementApproved(request))
+            return text(403, "Request denied.");
         WebAuthnRegistrationOptions options = WebAuthnRegistrationOptions
                 .withUserHandle(this.accountHandle).userName("demo-account")
                 .userDisplayName("Demo Account").build();
@@ -281,13 +283,10 @@ public final class PasskeyApp {
         byte[] body = credentialBody(request);
         String ceremony = ceremonyId(request);
         if (session == null || body == null || ceremony == null) return text(403, "Request denied.");
-        WebAuthnAuthenticationResult result = this.relyingParty.completeAuthenticationResult(ceremony, body, session.binding);
-        if (result instanceof WebAuthnAuthenticationResult.Succeeded success) {
-            WebAuthnAuthentication proof = success.getAuthentication();
-            if (proof.getKind() != WebAuthnAuthentication.Kind.REAUTHENTICATION
-                    || !MessageDigest.isEqual(this.accountHandle, proof.getUserHandle())
-                    || !proof.getActionPurpose().equals(java.util.Optional.of(PURPOSE))
-                    || !this.sessions.grantStepUp(session)) return text(403, "Request denied.");
+        WebAuthnAuthenticationResult result = this.relyingParty.completeReauthenticationResult(
+                this.accountHandle, PURPOSE, ceremony, body, session.binding);
+        if (result instanceof WebAuthnAuthenticationResult.Succeeded) {
+            if (!this.sessions.grantStepUp(session)) return text(403, "Request denied.");
             return text(200, "Sensitive action approved for one use.");
         }
         return authenticationFailure(result);
@@ -326,7 +325,8 @@ public final class PasskeyApp {
 
     private @NonNull MarshaledResponse removeCredentialRoute(@NonNull Request request) {
         PasskeySessions.Session session = admitted(request, true);
-        if (session == null || !emptyBody(request)) return text(403, "Request denied.");
+        if (session == null || !emptyBody(request) || !managementApproved(request))
+            return text(403, "Request denied.");
         List<String> values = headers(request, "X-Credential-Id");
         if (values.size() != 1) return text(403, "Request denied.");
         byte[] id = decodeId(values.get(0));
@@ -410,6 +410,11 @@ public final class PasskeyApp {
         if (session == null || session.authenticated != authenticated || !this.sessions.current(session)) return null;
         List<String> tokens = headers(request, "X-CSRF-Token");
         return tokens.size() == 1 && matches(session.csrf, tokens.get(0)) ? session : null;
+    }
+
+    private boolean managementApproved(@NonNull Request request) {
+        List<String> supplied = headers(request, "X-Demo-Access-Key");
+        return supplied.size() == 1 && matches(this.accessKey, supplied.get(0));
     }
 
     private boolean host(@NonNull Request request) {

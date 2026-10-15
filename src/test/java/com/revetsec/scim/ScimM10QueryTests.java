@@ -155,6 +155,19 @@ class ScimM10QueryTests {
             assertInstanceOf(ScimQueryParseResult.Rejected.class, query(raw, config, LIMITS));
         assertEquals(ScimErrorType.INVALID_CURSOR, error(query("cursor=", CONFIG, LIMITS)).getErrorType().orElseThrow());
     }
+    @Test void implicitCursorCountClampsToFilterMaximum() {
+        ScimServiceProviderConfig config = ScimServiceProviderConfig.builder()
+                .filterSupported(true).filterMaximumResults(50)
+                .pagination(ScimPaginationConfig.builder().cursorSupported(true)
+                        .defaultMethod(ScimPaginationMethod.CURSOR)
+                        .cursorTimeout(Duration.ofMinutes(5)).build()).build();
+        ScimQuery implicit = success(query("filter=userName+pr", config, LIMITS));
+        assertEquals(50, implicit.getCount());
+        assertTrue(implicit.getRequestedCount().isEmpty());
+        assertEquals(ScimErrorType.INVALID_COUNT,
+                error(query("filter=userName+pr&count=100", config, LIMITS))
+                        .getErrorType().orElseThrow());
+    }
 
     @Test void getAndSearchProduceEquivalentApprovedQueryData() {
         ScimQuery get = success(query("filter=userName+eq+%22alice%22&attributes=userName,name.givenName&sortBy=userName&sortOrder=descending&startIndex=5&count=2", CONFIG, LIMITS));

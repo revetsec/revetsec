@@ -223,6 +223,9 @@ final class IssuerApplicationTests {
  }
  @Test void sessionCapAndExpiryNeverEvictAuthenticatedStateToAdmitNewSession() {
   var clock=new MutableClock();var sessions=new BrowserSessions(clock,1,true);var first=sessions.begin();
+  var replacement=sessions.begin();
+  assertFalse(sessions.find(Request.withPath(HttpMethod.GET,"/").headers(Map.of("Cookie",List.of("__Host-RevetsecIssuer="+first.id))).build()).isPresent());
+  first=replacement;
   var pending=new BrowserSessions.Pending("synthetic");sessions.replacePending(first,pending);
   var rotated=sessions.login(first,pending);
   assertThrows(IllegalStateException.class,sessions::begin);var cookie=sessions.cookie(rotated);assertEquals("__Host-RevetsecIssuer",cookie.getName());assertTrue(cookie.getSecure());assertTrue(cookie.getHttpOnly());

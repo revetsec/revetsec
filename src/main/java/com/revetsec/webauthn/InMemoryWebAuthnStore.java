@@ -18,11 +18,15 @@ package com.revetsec.webauthn;
 
 import java.nio.ByteBuffer;
 import java.security.SecureRandom;
+import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.util.PriorityQueue;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
@@ -32,8 +36,8 @@ import org.jspecify.annotations.NonNull;
  * Explicit, bounded single-process WebAuthn store. It is volatile: a restart loses ceremonies,
  * credentials, revocation records, account fences and the observed-time fence. Use a durable,
  * shared {@link WebAuthnStore} for established accounts or deployments with more than one node.
- * Records are never evicted, including expired ceremonies and revoked credential IDs; when either
- * configured limit is reached a write returns {@link WebAuthnStoreCommitResult#CAPACITY}.
+ * Expired ceremonies are reclaimed before reads and capacity checks. Credentials, revocation
+ * records, account fences and namespace clocks are never evicted.
  *
  * @since 1.0.0
  */
@@ -47,20 +51,24 @@ public final class InMemoryWebAuthnStore implements WebAuthnStore {
  private final @NonNull ReentrantLock lock = new ReentrantLock();
  private final int maximumEntries;
  private final long maximumSealedBytes;
+ private final @NonNull Clock clock;
+ private final @NonNull PriorityQueue<@NonNull Expiry> expirations = new PriorityQueue<>(
+   Comparator.comparing(expiry -> expiry.expiresAt));
  private final byte @NonNull [] versionPrefix = new byte[16];
  private @NonNull Map<@NonNull WebAuthnStoreKey, @NonNull Stored> entries = Map.of();
- private long sealedBytes;
+ private volatile long sealedBytes;
  private long sequence;
 
- private InMemoryWebAuthnStore(int maximumEntries, long maximumSealedBytes) {
+ private InMemoryWebAuthnStore(int maximumEntries, long maximumSealedBytes, @NonNull Clock clock) {
   this.maximumEntries = maximumEntries;
   this.maximumSealedBytes = maximumSealedBytes;
+  this.clock = Objects.requireNonNull(clock);
   VERSION_RANDOM.nextBytes(this.versionPrefix);
  }
 
  /**
   * Creates a volatile store with explicit record-count and aggregate sealed-byte limits.
-  * Neither limit causes eviction. A single sealed record may be up to 262144 bytes.
+  * Only expired ceremonies are reclaimed. A single sealed record may be up to 262144 bytes.
   * @param maximumEntries capacity from 1 to 65536
   * @param maximumSealedBytes aggregate capacity from 1 to 268435456 bytes
   * @return a new empty, process-local store
@@ -71,7 +79,15 @@ public final class InMemoryWebAuthnStore implements WebAuthnStore {
   if (maximumEntries < 1 || maximumEntries > MAXIMUM_ENTRIES
     || maximumSealedBytes < 1 || maximumSealedBytes > MAXIMUM_BYTES)
    throw new IllegalArgumentException("Invalid WebAuthn store limits");
-  return new InMemoryWebAuthnStore(maximumEntries, maximumSealedBytes);
+  return withLimits(maximumEntries, maximumSealedBytes, Clock.systemUTC());
+ }
+
+ static @NonNull InMemoryWebAuthnStore withLimits(int maximumEntries,
+   long maximumSealedBytes, @NonNull Clock clock) {
+  if (maximumEntries < 1 || maximumEntries > MAXIMUM_ENTRIES
+    || maximumSealedBytes < 1 || maximumSealedBytes > MAXIMUM_BYTES)
+   throw new IllegalArgumentException("Invalid WebAuthn store limits");
+  return new InMemoryWebAuthnStore(maximumEntries, maximumSealedBytes, clock);
  }
 
  @Override public @NonNull WebAuthnStoreReadResult read(
@@ -84,6 +100,7 @@ public final class InMemoryWebAuthnStore implements WebAuthnStore {
   if (!acquire(deadline)) return WebAuthnStoreReadResult.Unavailable.get();
   try {
    if (expired(deadline)) return WebAuthnStoreReadResult.Unavailable.get();
+   pruneExpired(this.clock.instant());
    Map<WebAuthnStoreKey, WebAuthnStoreEntry> observed = new HashMap<>();
    for (WebAuthnStoreKey key : keys) {
     Stored stored = this.entries.get(key);
@@ -108,6 +125,7 @@ public final class InMemoryWebAuthnStore implements WebAuthnStore {
   if (!acquire(deadline)) return WebAuthnStoreCommitResult.UNAVAILABLE;
   try {
    if (expired(deadline)) return WebAuthnStoreCommitResult.UNAVAILABLE;
+   pruneExpired(this.clock.instant());
    for (Map.Entry<WebAuthnStoreKey, WebAuthnStoreEntry> predicate
        : write.getSnapshot().getEntries().entrySet()) {
     Stored actual = this.entries.get(predicate.getKey());
@@ -121,6 +139,7 @@ public final class InMemoryWebAuthnStore implements WebAuthnStore {
    Map<WebAuthnStoreKey, Stored> next = new HashMap<>(this.entries);
    long nextBytes = this.sealedBytes;
    long nextSequence = this.sequence;
+   PriorityQueue<Expiry> addedExpirations = new PriorityQueue<>(Comparator.comparing(expiry -> expiry.expiresAt));
    for (WebAuthnStoreWrite.Mutation mutation : write.getMutations()) {
     WebAuthnStoreKey key = mutation.getKey();
     Stored prior = next.get(key);
@@ -132,7 +151,9 @@ public final class InMemoryWebAuthnStore implements WebAuthnStore {
      if (nextSequence == Long.MAX_VALUE) return WebAuthnStoreCommitResult.CAPACITY;
      nextSequence++;
      byte[] version = ByteBuffer.allocate(24).put(this.versionPrefix).putLong(nextSequence).array();
+     Instant expiresAt = mutation.getExpiresAt().orElse(null);
      next.put(key, new Stored(version, bytes));
+     if (expiresAt != null) addedExpirations.add(new Expiry(key, version, expiresAt));
      nextBytes += bytes.length;
     }
    }
@@ -142,10 +163,40 @@ public final class InMemoryWebAuthnStore implements WebAuthnStore {
    this.entries = next;
    this.sealedBytes = nextBytes;
    this.sequence = nextSequence;
+   this.expirations.addAll(addedExpirations);
+   long queueLimit = Math.max(8L, 2L * Math.min((long) this.maximumEntries, this.maximumSealedBytes));
+   if (this.expirations.size() > queueLimit) compactStaleExpirations();
    return expired(deadline) ? WebAuthnStoreCommitResult.UNKNOWN : WebAuthnStoreCommitResult.COMMITTED;
   } finally {
    this.lock.unlock();
   }
+ }
+
+ private void pruneExpired(@NonNull Instant now) {
+  Map<WebAuthnStoreKey, Stored> next = null;
+  while (!this.expirations.isEmpty() && !now.isBefore(this.expirations.peek().expiresAt)) {
+   Expiry candidate = this.expirations.remove();
+   Stored current = this.entries.get(candidate.key);
+   if (current == null || !Arrays.equals(current.version, candidate.version)) continue;
+   if (next == null) next = new HashMap<>(this.entries);
+   next.remove(candidate.key);
+   this.sealedBytes -= current.sealedBytes.length;
+  }
+  if (next != null) this.entries = next;
+ }
+
+ private void compactStaleExpirations() {
+  this.expirations.removeIf(expiry -> {
+   Stored current = this.entries.get(expiry.key);
+   return current == null || !Arrays.equals(current.version, expiry.version);
+  });
+ }
+
+ /** Package-local observation for the expiry-queue capacity regression. */
+ int expiryQueueSize() {
+  this.lock.lock();
+  try { return this.expirations.size(); }
+  finally { this.lock.unlock(); }
  }
 
  private static long budgetNanos(@NonNull Duration budget) {
@@ -179,6 +230,17 @@ public final class InMemoryWebAuthnStore implements WebAuthnStore {
   private Stored(byte @NonNull [] version, byte @NonNull [] sealedBytes) {
    this.version = version;
    this.sealedBytes = sealedBytes;
+  }
+ }
+
+ private static final class Expiry {
+  private final @NonNull WebAuthnStoreKey key;
+  private final byte @NonNull [] version;
+  private final @NonNull Instant expiresAt;
+  private Expiry(@NonNull WebAuthnStoreKey key, byte @NonNull [] version, @NonNull Instant expiresAt) {
+   this.key = key;
+   this.version = version;
+   this.expiresAt = expiresAt;
   }
  }
 }

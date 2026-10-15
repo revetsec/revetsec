@@ -71,10 +71,10 @@ final class SamlSignedStructureCorpusTests {
             "comment-split-nameid", "cdata-nameid", "advice-before-authn",
             "typed-attribute-statement", "attribute-before-authn");
     private static final @NonNull List<@NonNull String> TEXT_ATTRIBUTES = List.of(
-            "clean", "type-xs-string", "type-alias-string", "nil-false", "nil-zero");
+            "clean", "type-xs-string", "type-alias-string", "type-boolean",
+            "spoof-string-type", "nil-false", "nil-zero");
     private static final @NonNull List<@NonNull String> OPAQUE_ATTRIBUTES = List.of(
-            "nil-true", "nil-one", "nil-invalid", "type-boolean", "type-and-nil",
-            "spoof-string-type", "mixed-element");
+            "nil-true", "nil-one", "nil-invalid", "type-and-nil", "mixed-element");
     private static final @NonNull List<@NonNull String> IDENTITY_POSITIVES = List.of(
             "clean", "subject-nameid-type", "assertion-issuer-type", "audience-type",
             "authn-class-ref-type", "subject-nameid-nil-false",
@@ -134,7 +134,7 @@ final class SamlSignedStructureCorpusTests {
         }
     }
 
-    @Test void signedSchemaHintsCannotTurnOpaqueAttributesIntoAccountKeys() throws Exception {
+    @Test void signedLeafValuesRemainVisibleIndependentOfUnsignedTypeBindings() throws Exception {
         Map<String, String> manifest = manifest(ATTRIBUTE_PREFIX);
         assertEquals(TEXT_ATTRIBUTES.size() + OPAQUE_ATTRIBUTES.size(), manifest.size());
         for (String name : TEXT_ATTRIBUTES) {

@@ -38,7 +38,7 @@ class ClientMetadataFreshnessTests {
  }
  @TestFactory @NonNull Stream<@NonNull DynamicTest> blockedOrAmbiguousControlIsNeverReusable() {
   return Stream.of("no-store, max-age=120", "no-cache, max-age=120", "no-cache=\"field\", max-age=120",
-   "private, max-age=120", "PrIvAtE=\"field\", max-age=120", "s-maxage=120, max-age=120", "max-age=1, max-age=2",
+   "private, max-age=120", "PrIvAtE=\"field\", max-age=120", "max-age=1, max-age=2",
    "max-age", "max-age=-1", "max-age=1.5", "max-age=\"\"", "max-age=\"12", "{bad}", "max-age =12",
    "public", "max-age=120, other=", "max-age=120, other=\"x\" garbage").map(value->DynamicTest.dynamicTest(value,()->
      assertEquals(Duration.ZERO,ttl(Map.of("Cache-Control",List.of(value))))));
@@ -49,6 +49,8 @@ class ClientMetadataFreshnessTests {
  }
  @Test void explicitGrammarAndCapAreReused() {
   assertEquals(Duration.ofSeconds(300),ttl(Map.of("Cache-Control",List.of("max-age=1000"))));
+  assertEquals(Duration.ofSeconds(120),ttl(Map.of("Cache-Control",List.of("s-maxage=5, max-age=120"))));
+  assertEquals(Duration.ZERO,ttl(Map.of("Cache-Control",List.of("s-maxage=120"))));
   assertEquals(Duration.ofSeconds(120),ttl(Map.of("Cache-Control",List.of(",, max-age=\"120\", unknown=\"private,x\",", "MAX-AGE=120"))));
   assertEquals(Duration.ZERO,ttl(Map.of()));
   assertEquals(Duration.ZERO,ttl(Map.of("Cache-Control",List.of("max-age=0"))));

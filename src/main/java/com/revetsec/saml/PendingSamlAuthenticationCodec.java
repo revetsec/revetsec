@@ -31,7 +31,9 @@ import java.util.List;
 
 /** A bounded, versioned format inside a separately authenticated SAML seal. */
 final class PendingSamlAuthenticationCodec {
-    private static final int MAXIMUM_LENGTH = 8192;
+    // The StateSealer's maximum sealed length is 16384; its plaintext is shorter.
+    // Keep the decoder above every plaintext that a configured sealer can issue.
+    private static final int MAXIMUM_LENGTH = 16384;
     private PendingSamlAuthenticationCodec() { }
 
     static @NonNull String encode(@NonNull PendingSamlAuthentication pending) {
@@ -74,7 +76,7 @@ final class PendingSamlAuthenticationCodec {
             if (!old) {
                 if (!(fields[9].equals("0") || fields[9].equals("1"))
                         || !(fields[10].equals("0") || fields[10].equals("1"))) return null;
-                String contexts = fields[11].equals("-") ? null : fromPart(fields[11], 4096);
+                String contexts = fields[11].equals("-") ? null : fromPart(fields[11], 12 * 1024);
                 String encodedData = fields[12].equals("-") ? null : fromPart(fields[12], 513);
                 String applicationData = encodedData == null || !encodedData.startsWith("x")
                         ? null : encodedData.substring(1);

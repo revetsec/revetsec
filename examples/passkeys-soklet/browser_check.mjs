@@ -285,6 +285,8 @@ async function main() {
     await click(cdp, "#access-login");
     await waitPage(cdp, (state) => state.ready === "complete" && state.auth === "true",
       "access approval");
+    await cdp.evaluate("document.querySelector('#management-access').value="
+      + JSON.stringify((await readFile(accessFile, "utf8")).trim()));
     await click(cdp, "#register");
     await waitPage(cdp, (state) => state.status === "Passkey registered.", "browser registration");
     if (args.has("--restart-app")) {
@@ -341,6 +343,8 @@ async function main() {
     await waitPage(cdp, (state) => state.status === "Request denied.", "step-up replay rejection");
     await click(cdp, "#list");
     await waitPage(cdp, (state) => state.count === 1, "credential list");
+    await cdp.evaluate("document.querySelector('#management-access').value="
+      + JSON.stringify((await readFile(accessFile, "utf8")).trim()));
     await click(cdp, "#credentials li button");
     await waitPage(cdp, (state) => state.status === "Passkey removed." && state.count === 0,
       "server-side removal");

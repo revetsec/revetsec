@@ -21,6 +21,7 @@ import org.junit.jupiter.api.Test;
 import org.jspecify.annotations.NonNull;
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -79,5 +80,39 @@ class ScimM12WorkBudgetTests {
         ScimFilterEvaluationResult result=ScimFilterEvaluation.evaluate(current,filter("rows[longchildname eq \"a\"]"),
                 (path,definition,operator,left,right) -> {assertEquals("rows.longchildname",path.toScimString());return ScimStringMatchResult.fromMatched(left.equals(right));},new ScimWork(1000000));
         assertTrue(assertInstanceOf(ScimFilterEvaluationResult.Succeeded.class,result).isMatched());
+    }
+    @Test void delegatedContainsChargesQuadraticWorkBeforeCallingApplicationCode() {
+        String longValue = "a".repeat(40);
+        ScimResource current = resource("text", JsonString.fromValue(longValue));
+        ScimFilter contains = filter("text co \"" + longValue + "\"");
+        AtomicInteger calls = new AtomicInteger();
+        ScimStringMatching matching = (path, definition, operator, left, right) -> {
+            calls.incrementAndGet();
+            return ScimStringMatchResult.fromMatched(left.contains(right));
+        };
+        tooLarge(ScimFilterEvaluation.evaluate(current, contains, matching, new ScimWork(1000)));
+        assertEquals(0, calls.get());
+        assertTrue(assertInstanceOf(ScimFilterEvaluationResult.Succeeded.class,
+                ScimFilterEvaluation.evaluate(current, contains, matching, new ScimWork(10000))).isMatched());
+        assertEquals(1, calls.get());
+
+        ScimResource rows = resource("rows", JsonArray.fromElements(List.of(
+                JsonObject.builder().put("longchildname", longValue).build())));
+        ScimAttributePath path = assertInstanceOf(ScimAttributePathParseResult.Succeeded.class,
+                ScimAttributePath.fromExpressionResult("rows")).getAttributePath();
+        ScimPatchOperation remove = new ScimPatchOperation(0, ScimPatchOperationType.REMOVE,
+                path, filter("longchildname co \"" + longValue + "\""), null, null);
+        ScimPatchRequest request = new ScimPatchRequest(TYPE, List.of(remove), Set.of(path),
+                Set.of(), new Object());
+        ScimPatchApplicationResult rejected = ScimPatchEngine.apply(rows, request,
+                ScimCompatibility.strictInstance(), matching, new ScimWork(1000),
+                new Object(), new java.util.LinkedHashSet<>());
+        assertSame(ScimError.requestTooLargeInstance(),
+                assertInstanceOf(ScimPatchApplicationResult.Rejected.class, rejected).getError());
+        assertEquals(1, calls.get());
+        assertInstanceOf(ScimPatchApplicationResult.Succeeded.class, ScimPatchEngine.apply(rows,
+                request, ScimCompatibility.strictInstance(), matching, new ScimWork(10000),
+                new Object(), new java.util.LinkedHashSet<>()));
+        assertEquals(2, calls.get());
     }
 }

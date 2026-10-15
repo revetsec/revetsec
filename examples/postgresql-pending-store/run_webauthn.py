@@ -117,7 +117,7 @@ def main() -> None:
             docker("exec", "-i", name, "psql", "-X", "-q", "-v", "ON_ERROR_STOP=1",
                    "-U", "postgres", "-d", "webauthn_fixture",
                    input_text=(ROOT / "schema.sql").read_text() + "\nINSERT INTO webauthn_store_namespace(namespace) "
-                   "VALUES ('fixture_wa_basic'),('fixture_wa_unknown'),('fixture_wa_race'),"
+                   "VALUES ('fixture_wa_basic'),('fixture_wa_expiry'),('fixture_wa_unknown'),('fixture_wa_race'),"
                    "('fixture_wa_flow'),('fixture_wa_app'),('fixture_wa_browser');\n")
             seal_key = base64.b64encode(secrets.token_bytes(32)).decode("ascii")
             sealer_digest = base64.urlsafe_b64encode(hashlib.sha256(
@@ -222,6 +222,7 @@ def main() -> None:
                     raise RuntimeError("WebAuthn barrier failed before ready")
 
             probe("basic", "BASIC_OK")
+            probe("expiry", "EXPIRY_RECLAIMED")
             probe("unknown", "UNKNOWN_REPORTED")
             probe("reconcile", "RECONCILED")
 

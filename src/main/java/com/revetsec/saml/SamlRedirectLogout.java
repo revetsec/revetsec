@@ -15,6 +15,9 @@
  */
 package com.revetsec.saml;
 
+import com.revetsec.internal.encoding.EncodingException;
+import com.revetsec.internal.encoding.StrictUtf8;
+
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 import javax.xml.stream.XMLOutputFactory;
@@ -178,7 +181,10 @@ final class SamlRedirectLogout {
 
     private static @NonNull String percent(@NonNull String text) {
         StringBuilder result = new StringBuilder();
-        for (byte octet : text.getBytes(StandardCharsets.US_ASCII)) {
+        byte[] bytes;
+        try { bytes = StrictUtf8.encode(text); }
+        catch (EncodingException exception) { throw new IllegalArgumentException("Invalid SAML Redirect text"); }
+        for (byte octet : bytes) {
             int value = octet & 255;
             if ((value >= 'A' && value <= 'Z') || (value >= 'a' && value <= 'z')
                     || (value >= '0' && value <= '9') || value == '-' || value == '.'

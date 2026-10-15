@@ -31,9 +31,15 @@ import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.Base64;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.LockSupport;
 import java.util.stream.Stream;
 import static org.junit.jupiter.api.Assertions.*;
@@ -121,6 +127,80 @@ class OAuthStoreCoordinationTests {
 		initialized(); String incarnation = issuer().incarnation(); this.clock.time = NOW.plusNanos(1);
 		assertEquals(1, this.first.revokeAll(deadline()).epoch()); assertEquals(2, this.second.revokeAll(deadline()).epoch());
 		assertEquals(incarnation, issuer().incarnation()); assertEquals(this.clock.time, issuer().highWater());
+	}
+	@Test void boundedClockSkewUsesTheDurableHighWaterForAdmissionsAndCommits() {
+		initialized(); this.clock.time = NOW.plusMillis(5);
+		assertEquals(OAuthStoreCommitStatus.COMMITTED, this.first.begin(deadline()).commit(List.of()));
+		Clock lagging = Clock.fixed(NOW, ZoneOffset.UTC);
+		OAuthStoreCoordinator within = new OAuthStoreCoordinator(this.store, this.codec, lagging,
+			Duration.ofMillis(5), 3, 255);
+		assertEquals(NOW.plusMillis(5), within.begin(deadline()).effectiveNow());
+		assertEquals(OAuthStoreCommitStatus.COMMITTED, within.begin(deadline()).barrier());
+		assertEquals(NOW.plusMillis(5), issuer().highWater());
+		OAuthStoreCoordinator beyond = new OAuthStoreCoordinator(this.store, this.codec, lagging,
+			Duration.ofMillis(4), 3, 255);
+		failed(UNAVAILABLE, () -> beyond.begin(deadline()));
+	}
+	@Test void reservedIssuerClockAllowsIndependentCodeCommitsAcrossCoordinators() throws Exception {
+		OAuthAuthorizationServerStore synchronizedStore = new OAuthAuthorizationServerStore() {
+			@Override public synchronized @NonNull Optional<@NonNull OAuthStoreEntry> read(
+					@NonNull OAuthStoreKey key, @NonNull Duration budget) { return store.read(key, budget); }
+			@Override public synchronized @NonNull OAuthStoreCommitStatus commit(
+					@NonNull OAuthStoreTransaction transaction, @NonNull Duration budget) {
+				return store.commit(transaction, budget);
+			}
+		};
+		OAuthStoreCoordinator first = new OAuthStoreCoordinator(synchronizedStore, this.codec, this.clock,
+			Duration.ofMillis(200), 3, 255);
+		OAuthStoreCoordinator second = new OAuthStoreCoordinator(synchronizedStore, this.codec, this.clock,
+			Duration.ofMillis(200), 3, 255);
+		assertEquals(OAuthStoreCommitStatus.COMMITTED, first.initializeFreshIssuer(deadline()));
+		OAuthStoreEntry original = requireNonNull(this.store.rows.get(this.codec.issuerKey()));
+		assertEquals(NOW.plusMillis(100), first.begin(deadline()).effectiveNow());
+		int workers = 32;
+		List<OAuthStoreCoordinator.Session> sessions = new ArrayList<>();
+		List<OAuthStoreKey> codes = new ArrayList<>();
+		for (int i = 0; i < workers; i++) {
+			OAuthStoreCoordinator coordinator = i % 2 == 0 ? first : second;
+			OAuthStoreKey code = this.codec.key(OAuthStoreKey.Kind.CODE,
+				"A".repeat(40) + (char) ('A' + i / 26) + (char) ('A' + i % 26) + "A");
+			OAuthStoreCoordinator.Session session = coordinator.begin(Deadline.fromNow(Duration.ofSeconds(30)));
+			session.read(code); sessions.add(session); codes.add(code);
+		}
+		CountDownLatch release = new CountDownLatch(1);
+		ExecutorService executor = Executors.newFixedThreadPool(8);
+		try {
+			List<Future<OAuthStoreCommitStatus>> results = new ArrayList<>();
+			for (int i = 0; i < workers; i++) {
+				OAuthStoreCoordinator.Session session = sessions.get(i);
+				OAuthStoreKey code = codes.get(i);
+				results.add(executor.submit(() -> {
+					release.await();
+					return session.commit(List.of(OAuthStoreTransaction.Mutation.fromPut(finite(code))));
+				}));
+			}
+			release.countDown();
+			for (Future<OAuthStoreCommitStatus> result : results)
+				assertEquals(OAuthStoreCommitStatus.COMMITTED, result.get(15, TimeUnit.SECONDS));
+			assertSame(original, this.store.rows.get(this.codec.issuerKey()));
+			assertEquals(workers + 1, this.store.rows.size());
+		} finally { release.countDown(); executor.shutdownNow(); }
+	}
+	@Test void reservedClockRollsOverAndIssuerRevocationStillFencesAdmission() {
+		OAuthStoreCoordinator reserving = new OAuthStoreCoordinator(this.store, this.codec, this.clock,
+			Duration.ofMillis(200), 3, 255);
+		assertEquals(OAuthStoreCommitStatus.COMMITTED, reserving.initializeFreshIssuer(deadline()));
+		OAuthStoreKey code = key(0);
+		OAuthStoreCoordinator.Session pending = reserving.begin(deadline()); pending.read(code);
+		assertEquals(1, reserving.revokeAll(deadline()).epoch());
+		assertEquals(OAuthStoreCommitStatus.CONFLICT, pending.commit(List.of(
+			OAuthStoreTransaction.Mutation.fromPut(finite(code)))));
+		assertEquals(NOW.plusMillis(100), reserving.begin(deadline()).issuer().highWater());
+		this.clock.time = NOW.plusMillis(101);
+		assertEquals(OAuthStoreCommitStatus.COMMITTED, reserving.begin(deadline()).commit(List.of()));
+		assertEquals(NOW.plusMillis(201), reserving.begin(deadline()).issuer().highWater());
+		this.clock.time = NOW.minusNanos(1);
+		failed(UNAVAILABLE, () -> reserving.begin(deadline()));
 	}
 	@Test void racingIssuerRevocationsReloadAndBothAdvanceExactlyOnce() {
 		initialized(); this.store.beforeCommit = () -> assertEquals(1, this.second.revokeAll(deadline()).epoch());

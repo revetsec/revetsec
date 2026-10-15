@@ -27,6 +27,7 @@ import javax.annotation.concurrent.Immutable;
 import java.nio.ByteBuffer;
 import java.time.Clock;
 import java.time.DateTimeException;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Arrays;
 
@@ -37,6 +38,8 @@ import static java.util.Objects.requireNonNull;
 final class WebAuthnNamespaceClock {
     private static final int VERSION = 1;
     private static final int PAYLOAD_BYTES = 13;
+    private static final @NonNull Duration ADVANCE_STEP = Duration.ofSeconds(1);
+    private static final @NonNull Duration MAXIMUM_BACKWARD_SKEW = Duration.ofSeconds(30);
     private static final @NonNull Instant PERMANENT = Instant.ofEpochSecond(Instant.MAX.getEpochSecond());
 
     private final @NonNull WebAuthnStoreKey key;
@@ -83,8 +86,9 @@ final class WebAuthnNamespaceClock {
 
     /**
      * The returned mutation must share the accepting transaction's complete snapshot. If the
-     * wall clock moved backward, the stored observation remains the effective time. This does
-     * not replace the separate external durable recovery marker after a database restore.
+     * wall clock moved backward by at most the allowed skew, the stored observation remains the
+     * effective time. Larger skew fails closed. The row is only rewritten after a one-second
+     * advance; this does not replace an external durable recovery marker after a database restore.
      */
     @NonNull Advance prepare(@NonNull WebAuthnStoreSnapshot snapshot, @NonNull Instant wallTime,
             @NonNull Clock clock) throws WebAuthnRecordException {
@@ -97,8 +101,12 @@ final class WebAuthnNamespaceClock {
                     WebAuthnStoreWrite.Mutation.insert(this.key, encode(wallTime)));
         WebAuthnStoreEntry.Present present = (WebAuthnStoreEntry.Present) entry;
         Instant stored = decode(this.key, present.getSealedBytes(), clock);
-        if (!wallTime.isAfter(stored)) return new Advance(snapshot, stored, null);
-        return new Advance(snapshot, wallTime,
+        if (Duration.between(wallTime, stored).compareTo(MAXIMUM_BACKWARD_SKEW) > 0)
+            throw new WebAuthnRecordException();
+        Instant effective = wallTime.isAfter(stored) ? wallTime : stored;
+        if (Duration.between(stored, wallTime).compareTo(ADVANCE_STEP) < 0)
+            return new Advance(snapshot, effective, null);
+        return new Advance(snapshot, effective,
                 WebAuthnStoreWrite.Mutation.replace(this.key, encode(wallTime)));
     }
 

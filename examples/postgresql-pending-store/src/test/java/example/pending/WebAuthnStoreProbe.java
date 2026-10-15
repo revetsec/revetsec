@@ -33,6 +33,7 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -186,6 +187,28 @@ public final class WebAuthnStoreProbe {
         System.out.println("UNKNOWN_REPORTED");
     }
 
+    private static void expiredCeremonyReclamation() {
+        String namespace = "fixture_wa_expiry";
+        PostgresqlWebAuthnStore store = store(namespace, 1);
+        WebAuthnStoreKey ceremony = WebAuthnStoreKey.forCeremony(namespace, RP, new byte[32]);
+        WebAuthnStoreKey credential = key(namespace, 1);
+        WebAuthnStoreSnapshot empty = read(store, Set.of(ceremony, credential));
+        expect(store.compareAndCommit(write(empty, List.of(
+                WebAuthnStoreWrite.Mutation.insertExpiring(ceremony, new byte[] { 1 },
+                        Instant.now().minusSeconds(1)))), BUDGET), WebAuthnStoreCommitResult.COMMITTED);
+        // The next commit reclaims the expired ceremony before applying its capacity fence.
+        WebAuthnStoreSnapshot credentialAbsent = WebAuthnStoreSnapshot.fromEntries(Set.of(credential),
+                Map.of(credential, WebAuthnStoreEntry.Absent.confirmed()));
+        expect(store.compareAndCommit(write(credentialAbsent, List.of(
+                WebAuthnStoreWrite.Mutation.insert(credential, new byte[] { 2 }))), BUDGET),
+                WebAuthnStoreCommitResult.COMMITTED);
+        WebAuthnStoreSnapshot after = read(store, Set.of(ceremony, credential));
+        if (!(after.getEntry(ceremony) instanceof WebAuthnStoreEntry.Absent)
+                || !(after.getEntry(credential) instanceof WebAuthnStoreEntry.Present))
+            throw new IllegalStateException("Expired ceremony reclamation failed");
+        System.out.println("EXPIRY_RECLAIMED");
+    }
+
     private static void reconcile() {
         String namespace = "fixture_wa_unknown";
         WebAuthnStoreEntry entry = read(store(namespace, 2), Set.of(key(namespace, 1)))
@@ -258,6 +281,7 @@ public final class WebAuthnStoreProbe {
         if (args.length != 1) throw new IllegalArgumentException("Expected one probe command");
         switch (args[0]) {
             case "basic" -> basic();
+            case "expiry" -> expiredCeremonyReclamation();
             case "unknown" -> unknown();
             case "reconcile" -> reconcile();
             case "race" -> race();

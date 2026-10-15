@@ -52,6 +52,16 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 final class SamlIdentityProviderMetadataTests {
     private static final @NonNull Clock CLOCK = Clock.fixed(Instant.parse("2026-10-09T00:00:00Z"), ZoneOffset.UTC);
 
+    @Test void roleExpiryIsTheEarliestMetadataExpiry() throws Exception {
+        String role = entity("https://idp.example.test/", certificate())
+                .replace("WantAuthnRequestsSigned='true'",
+                        "WantAuthnRequestsSigned='true' validUntil='2026-10-09T06:00:00Z'");
+        assertEquals(Instant.parse("2026-10-09T06:00:00Z"),
+                parsed(role, null).getValidUntil().orElseThrow());
+        assertRejected("expired role", role.replace("2026-10-09T06:00:00Z",
+                "2026-10-08T23:59:59Z"), null);
+    }
+
     @Test void selectsOneEntityAndPrefillsExplicitConnectionBuilder() throws Exception {
         String certificate = certificate();
         String entity = entity("https://idp.example.test/", certificate);

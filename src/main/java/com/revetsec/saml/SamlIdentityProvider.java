@@ -46,6 +46,8 @@ public final class SamlIdentityProvider {
     private final @Nullable URI postSingleSignOnService;
     private final @Nullable URI redirectSingleLogoutService;
     private final @Nullable URI postSingleLogoutService;
+    private final @Nullable URI redirectSingleLogoutResponseService;
+    private final @Nullable URI postSingleLogoutResponseService;
     private final @NonNull List<@NonNull PublicKey> signingKeys;
     private final boolean wantAuthnRequestsSigned;
     private final boolean requireSignedAssertions;
@@ -61,6 +63,8 @@ public final class SamlIdentityProvider {
         this.postSingleSignOnService = builder.postSingleSignOnService;
         this.redirectSingleLogoutService = builder.redirectSingleLogoutService;
         this.postSingleLogoutService = builder.postSingleLogoutService;
+        this.redirectSingleLogoutResponseService = builder.redirectSingleLogoutResponseService;
+        this.postSingleLogoutResponseService = builder.postSingleLogoutResponseService;
         this.signingKeys = List.copyOf(builder.signingKeys);
         this.wantAuthnRequestsSigned = builder.wantAuthnRequestsSigned;
         this.requireSignedAssertions = builder.requireSignedAssertions;
@@ -100,6 +104,8 @@ public final class SamlIdentityProvider {
                 .postSingleSignOnService(metadata.getPostSingleSignOnService().orElse(null))
                 .redirectSingleLogoutService(metadata.getRedirectSingleLogoutService().orElse(null))
                 .postSingleLogoutService(metadata.getPostSingleLogoutService().orElse(null))
+                .redirectSingleLogoutResponseService(metadata.getRedirectSingleLogoutResponseService().orElse(null))
+                .postSingleLogoutResponseService(metadata.getPostSingleLogoutResponseService().orElse(null))
                 .authorizedIdentifierScopes(metadata.getAuthorizedIdentifierScopes())
                 .signingKeys(keys).wantAuthnRequestsSigned(metadata.wantsAuthnRequestsSigned());
     }
@@ -129,6 +135,14 @@ public final class SamlIdentityProvider {
     @Nullable URI postSingleSignOnService() { return postSingleSignOnService; }
     @Nullable URI redirectSingleLogoutService() { return redirectSingleLogoutService; }
     @Nullable URI postSingleLogoutService() { return postSingleLogoutService; }
+    @Nullable URI redirectSingleLogoutResponseService() {
+        return redirectSingleLogoutResponseService == null
+                ? redirectSingleLogoutService : redirectSingleLogoutResponseService;
+    }
+    @Nullable URI postSingleLogoutResponseService() {
+        return postSingleLogoutResponseService == null
+                ? postSingleLogoutService : postSingleLogoutResponseService;
+    }
     @NonNull List<@NonNull PublicKey> signingKeys() { return signingKeys; }
     boolean wantAuthnRequestsSigned() { return wantAuthnRequestsSigned; }
     boolean requireSignedAssertions() { return requireSignedAssertions; }
@@ -155,6 +169,8 @@ public final class SamlIdentityProvider {
         private @Nullable URI postSingleSignOnService;
         private @Nullable URI redirectSingleLogoutService;
         private @Nullable URI postSingleLogoutService;
+        private @Nullable URI redirectSingleLogoutResponseService;
+        private @Nullable URI postSingleLogoutResponseService;
         private @NonNull List<@NonNull PublicKey> signingKeys = List.of();
         private boolean wantAuthnRequestsSigned;
         private boolean requireSignedAssertions;
@@ -221,6 +237,24 @@ public final class SamlIdentityProvider {
          */
         @CheckReturnValue public @NonNull Builder postSingleLogoutService(@Nullable URI value) {
             this.postSingleLogoutService = value;
+            return this;
+        }
+        /** Configures a distinct HTTP-Redirect endpoint for LogoutResponse messages.
+         * @param value HTTPS ResponseLocation, or null to use the request endpoint
+         * @return this builder
+         * @since 1.0.0
+         */
+        @CheckReturnValue public @NonNull Builder redirectSingleLogoutResponseService(@Nullable URI value) {
+            this.redirectSingleLogoutResponseService = value;
+            return this;
+        }
+        /** Configures a distinct HTTP-POST endpoint for LogoutResponse messages.
+         * @param value HTTPS ResponseLocation, or null to use the request endpoint
+         * @return this builder
+         * @since 1.0.0
+         */
+        @CheckReturnValue public @NonNull Builder postSingleLogoutResponseService(@Nullable URI value) {
+            this.postSingleLogoutResponseService = value;
             return this;
         }
 
@@ -322,7 +356,9 @@ public final class SamlIdentityProvider {
                 throw new IllegalStateException("IdP connection ID is required");
             if ((redirectSingleSignOnService == null && postSingleSignOnService == null)
                     || !safeEndpoint(redirectSingleSignOnService) || !safeEndpoint(postSingleSignOnService)
-                    || !safeEndpoint(redirectSingleLogoutService) || !safeEndpoint(postSingleLogoutService))
+                    || !safeEndpoint(redirectSingleLogoutService) || !safeEndpoint(postSingleLogoutService)
+                    || !safeEndpoint(redirectSingleLogoutResponseService)
+                    || !safeEndpoint(postSingleLogoutResponseService))
                 throw new IllegalStateException("An IdP HTTPS SSO endpoint is required");
             if (signingKeys.isEmpty() || signingKeys.size() > 8)
                 throw new IllegalStateException("IdP signing keys are required");

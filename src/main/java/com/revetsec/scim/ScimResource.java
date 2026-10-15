@@ -41,11 +41,18 @@ public final class ScimResource {
     private final @NonNull ScimResourceType resourceType;
     private final @NonNull JsonObject document;
     private final @Nullable Object semanticContext;
-    private ScimResource(@NonNull ScimResourceType type, @NonNull JsonObject document, @Nullable Object context) {
+    private final long constructionWorkUnits;
+    private ScimResource(@NonNull ScimResourceType type, @NonNull JsonObject document,
+            @Nullable Object context, long constructionWorkUnits) {
         this.resourceType = type; this.document = document; this.semanticContext = context;
+        this.constructionWorkUnits = constructionWorkUnits;
     }
     static @NonNull ScimResource parsed(@NonNull ScimResourceType type, @NonNull JsonObject document, @NonNull Object context) {
-        return new ScimResource(type, document, context);
+        return parsed(type, document, context, ScimLimits.fromDefaults().getMaximumWorkUnits());
+    }
+    static @NonNull ScimResource parsed(@NonNull ScimResourceType type, @NonNull JsonObject document,
+            @NonNull Object context, long workUnits) {
+        return new ScimResource(type, document, context, workUnits);
     }
     @Nullable Object getSemanticContext() { return semanticContext; }
     /** Starts trusted data construction.
@@ -143,18 +150,24 @@ public final class ScimResource {
     @NotThreadSafe @CheckReturnValue public static final class Builder {
         private final @NonNull ScimResourceType type;
         private @Nullable JsonObject document;
+        private @Nullable ScimLimits limits;
         private Builder(@NonNull ScimResourceType type) { this.type = type; }
         /** Replaces the entire document; null restores unset.
      * @param value the document
      * @return this builder
      * @since 1.0.0 */
         @CanIgnoreReturnValue public @NonNull Builder document(@Nullable JsonObject value) { document = value; return this; }
+        /** Uses the provider's configured processing limits for trusted construction.
+         * @param value processing limits; null restores defaults
+         * @return this builder
+         * @since 1.0.0 */
+        @CanIgnoreReturnValue public @NonNull Builder limits(@Nullable ScimLimits value) { limits = value; return this; }
         /** Validates and normalizes trusted data.
      * @return the immutable resource
      * @since 1.0.0 */
         public @NonNull ScimResource build() {
             if (document == null) throw new IllegalStateException("A resource document is required.");
-            return trusted(type, document);
+            return trusted(type, document, null, budget(limits));
         }
         /** Returns a fixed redacted description.
      * @return the description
@@ -166,26 +179,42 @@ public final class ScimResource {
     @NotThreadSafe @CheckReturnValue public static final class Copier {
         private final @NonNull ScimResource source;
         private @Nullable JsonObject document;
+        private @Nullable ScimLimits limits;
         private Copier(@NonNull ScimResource source) { this.source = source; }
         /** Replaces the entire document; null restores the source.
      * @param value the document
      * @return this copier
      * @since 1.0.0 */
         @CanIgnoreReturnValue public @NonNull Copier document(@Nullable JsonObject value) { document = value; return this; }
+        /** Overrides the source resource's processing limit for this copy.
+         * @param value processing limits; null uses the source limit
+         * @return this copier
+         * @since 1.0.0 */
+        @CanIgnoreReturnValue public @NonNull Copier limits(@Nullable ScimLimits value) { limits = value; return this; }
         /** Validates the replacement trusted data.
      * @return the immutable resource
      * @since 1.0.0 */
-        public @NonNull ScimResource finish() { return trusted(source.resourceType, document == null ? source.document : document,source.semanticContext); }
+        public @NonNull ScimResource finish() { return trusted(source.resourceType,
+                document == null ? source.document : document, source.semanticContext,
+                limits == null ? source.constructionWorkUnits : budget(limits)); }
         /** Returns a fixed redacted description.
      * @return the description
      * @since 1.0.0 */
         @Override public @NonNull String toString() { return "ScimResource.Copier{document=<redacted>}"; }
     }
-    private static @NonNull ScimResource trusted(@NonNull ScimResourceType type, @NonNull JsonObject document) { return trusted(type,document,null); }
-    private static @NonNull ScimResource trusted(@NonNull ScimResourceType type, @NonNull JsonObject document,@Nullable Object context) {
-        ScimResourceValidation validation = new ScimResourceValidation(type, null, ScimCompatibility.strictInstance(), new ScimWork(ScimLimits.builder().build().getMaximumWorkUnits()), false);
+    private static long budget(@Nullable ScimLimits limits) {
+        return (limits == null ? ScimLimits.fromDefaults() : limits).getMaximumWorkUnits();
+    }
+    private static @NonNull ScimResource trusted(@NonNull ScimResourceType type,
+            @NonNull JsonObject document, @Nullable Object context, long workUnits) {
+        ScimResourceValidation validation = new ScimResourceValidation(type, null,
+                ScimCompatibility.strictInstance(), new ScimWork(workUnits), false);
         JsonObject normalized = validation.normalize(document);
-        if (normalized == null) throw new IllegalArgumentException("The resource document violates its registered schema.");
-        return new ScimResource(type, normalized, context);
+        if (normalized == null) {
+            if (validation.error() == ScimError.requestTooLargeInstance())
+                throw new ScimResourceWorkLimitException();
+            throw new IllegalArgumentException("The resource document violates its registered schema.");
+        }
+        return new ScimResource(type, normalized, context, workUnits);
     }
 }

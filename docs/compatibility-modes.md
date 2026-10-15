@@ -1,6 +1,6 @@
 # Compatibility Modes
 
-**Status: pre-release.** The registry below describes implemented JOSE, OAuth, OIDC and SAML switches. SAML interoperability and release qualification are still in progress.
+**Status: pre-release.** The registry below describes implemented JOSE, OAuth, OIDC, SAML and SCIM switches. Release qualification remains open.
 
 A compatibility mode is a named, explicit relaxation that lets Revetsec work with a provider or a deployment that departs from a specification or from Revetsec's defaults. The rules for every mode:
 
@@ -14,7 +14,7 @@ Some relaxations are never available as a mode: accepting an unsigned message wh
 
 ## Registry
 
-Each entry gives the mode's name, protocol area, effect, conditions and safeguards, the tests that cover it (named relative to [`src/test/java/com/revetsec/`](../src/test/java/com/revetsec/)), and the release that added it. There are no presets yet.
+Each entry gives the mode's name, protocol area, effect, conditions and safeguards, the tests that cover it (named relative to [`src/test/java/com/revetsec/`](../src/test/java/com/revetsec/)), and the release that added it. SCIM has explicit provider presets.
 
 ### `acceptAnyAudience(true)`
 
@@ -86,10 +86,56 @@ Each entry gives the mode's name, protocol area, effect, conditions and safeguar
 - **Tests:** `saml.SamlIndependentFixtureTests` and `saml.SamlScriptedMintedFixtureTests` replay fixed-clock unsolicited assertions; `saml.SamlServiceProviderTests` exercises the disabled path.
 - **Added in:** 1.0.0 (unreleased).
 
+### `AccessTokenCompatibilityMode.UNTYPED_ACCESS_TOKENS`
+
+- **Where:** `JwtAccessTokenValidator` (OAuth resource server).
+- **Effect:** permits a JWT access token with absent or ordinary `JWT` type only when additional required claims are configured. Strict validation expects an access-token type.
+- **Risk and safeguards:** a provider's identity token must not be admitted as an API access token. Keep exact audience, issuer, signature and application authorization checks; this mode rejects identity-token-only claims and is reported to `AccessTokenObserver`.
+- **Tests:** `oauth.JwtAccessTokenValidatorTests` and the pinned Keycloak resource-server integration profile.
+- **Added in:** 1.0.0 (unreleased).
+
+### `ClientAssertionAudience.TOKEN_ENDPOINT`
+
+- **Where:** OAuth private-key client authentication; the default is `ISSUER`.
+- **Effect:** uses the actual POST endpoint as the assertion audience with `JWT` type instead of the exact issuer with `client-authentication+jwt` type. The client keeps its fixed configured endpoint and does not fall back after a rejection.
+- **Risk and safeguards:** select this only for an approved provider registration that requires endpoint audience. It changes which signed assertion a provider accepts; it does not change destination admission.
+- **Tests:** `oauth.ClientAssertionTests`, `oauth.NodeClientAssertionIT` and `oauth.KeycloakClientAssertionIT`.
+- **Added in:** 1.0.0 (unreleased).
+
+### `OidcIssuerPolicy.fromMicrosoftEntraMultiTenant`
+
+- **Where:** an OIDC client configured for Microsoft's fixed public-cloud `common` or `organizations` v2.0 issuer.
+- **Effect:** accepts the advertised `{tenantid}` issuer template only with a signature-verified tenant GUID and a trusted application predicate. The exact issuer policy remains the default.
+- **Risk and safeguards:** an overly broad tenant predicate admits identities from unwanted tenants. The same policy instance must be shared with a shared key source; ID-token, UserInfo and refresh tenant checks remain bound.
+- **Tests:** `oidc.OidcIssuerPolicyTests`; hosted Entra acceptance remains unproven.
+- **Added in:** 1.0.0 (unreleased).
+
+### `ScimCompatibilityFeature` and presets
+
+`ScimCompatibility.strictInstance()` enables no features. `microsoftEntraIdInstance()` enables the eight features through `IGNORE_UNDECLARED_SCHEMA_URIS` in the table; `oktaInstance()` enables `PATCH_OPERATION_NAME_CASE_INSENSITIVE` and `PATCH_READ_ONLY_ID_ECHO`. `ScimCompatibility.builder().features(...)` explicitly selects another reviewed set. No feature is inferred from request content. Each relaxation is confined to SCIM parsing or resource handling; schema binding, authorization policy, work budgets and output rules still apply.
+
+| Feature | Effect |
+| --- | --- |
+| `PATCH_OPERATION_NAME_CASE_INSENSITIVE` | Accept ASCII case variants of PATCH operation names. |
+| `BOOLEAN_STRINGS` | Accept true/false strings in Boolean-bound positions. |
+| `PATCH_REMOVE_WITH_VALUE` | Accept reviewed member-removal value shapes. |
+| `PATCH_VALUE_PATH_UPSERT` | Accept reviewed email type-selector upsert shapes. |
+| `PATCH_VALUE_OBJECT_ATTRIBUTE_PATHS` | Accept dotted or qualified keys in reviewed PATCH objects. |
+| `FILTER_VALUE_PATH_SUB_ATTRIBUTE_COMPARISON` | Rewrite a filtered suffix to a same-element predicate. |
+| `INFER_MISSING_EXTENSION_SCHEMAS` | Infer registered extension declarations from present values. |
+| `IGNORE_UNDECLARED_SCHEMA_URIS` | Ignore unknown schema declarations without admitting unknown attributes. |
+| `COMPLEX_VALUE_AS_SCALAR` | Accept an Enterprise manager string as its value object. |
+| `IGNORE_UNKNOWN_ATTRIBUTES` | Drop unknown attributes while preserving known-attribute rules. |
+| `PATCH_READ_ONLY_ID_ECHO` | Ignore an identical current id in reviewed no-path PATCH objects. |
+| `PATCH_EXTENSION_SCHEMA_ROOT` | Accept an exact registered extension URI as a whole-extension PATCH target; absent from both provider presets. |
+
+**Tests:** `scim.ScimM10ConfigurationTests`, `scim.ScimM11PatchParsingTests`, `scim.ScimM11PatchApplicationTests`, `scim.ScimM12ExtensionPatchTests`, `scim.ScimApiFreezeSelectionTests` and `scim.ScimRc3SecurityTests` cover selection and affected paths. **Added in:** 1.0.0 (unreleased).
+
 ### Settings that are not compatibility modes
 
 - **`JwtValidator.Builder.allowedAlgorithms`** chooses among Revetsec's own algorithms (see [supported algorithms](supported-algorithms.md)); it cannot add `none` or an HMAC algorithm.
 - **`RemoteJsonWebKeySource.Builder.allowInsecureLoopback(true)`** is for tests. It allows plain `http` only to a loopback address or exactly `localhost`, and never changes how a token or a key is validated.
+- **`OAuthAuthorizationServer.Builder.allowInsecureLoopback(true)`** permits a numeric HTTP loopback issuer only for local development. `allowNativeLoopbackRedirects(true)` separately permits the native IP-literal redirect port exception, and `allowLocalhostRedirects(true)` separately admits the configured exact-port localhost redirect profile. All three default off; no one flag implies another. See `oauth.server.OAuthServerApplicationContractsTests` and `oauth.server.OAuthServerWireContractTests`.
 
 ## saml2int deviations
 

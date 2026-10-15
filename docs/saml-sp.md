@@ -38,14 +38,20 @@ produces a subject key. Scope-authorized `subject-id` or `pairwise-id` can also 
 the application decides whether to link it to an existing user. Transient identifiers
 do not become stable account keys. Treat attributes as IdP assertions, subject to the
 application's authorization policy.
+The persistent-NameID key preserves the exact qualifier presence and `SPProvidedID`
+received on the wire. If an IdP changes an omitted qualifier to its explicit default,
+or changes `SPProvidedID`, the same person can receive a different key. Plan account
+linking and migration with the IdP; do not silently merge keys using untrusted attributes.
 
 `SamlAttribute.getTypedValues()` preserves the order and shape of each value. Text
 values appear in `getValues()`; a sole nested `saml:NameID` is exposed with its
 qualifiers and `SPProvidedID`, while other element content remains opaque `COMPLEX`. Neither complex
 content nor a mixed text/complex identifier is promoted to a stable subject ID.
-An `AttributeValue` declared nil or with a non-string `xsi:type` also stays opaque;
-an explicit XML Schema string type remains text. Applications never receive the
-raw XML for an opaque value.
+An `AttributeValue` declared nil stays opaque. An element-free non-nilled value
+remains text regardless of `xsi:type`: exclusive XML canonicalization may leave
+the type prefix's namespace binding unsigned, so applications must interpret
+domain-specific text types themselves. Applications never receive the raw XML
+for an opaque value.
 Revetsec also requires the checked Assertion to declare SAML version 2.0 and
 rejects nilled or misdeclared NameID, Issuer, Audience and authentication-context
 scalars. Subject and authentication-statement children must follow the supported
@@ -65,12 +71,21 @@ identifiers, even when a nested AttributeValue looks valid.
 Configure an SP entity ID, HTTPS ACS URL, replay cache, signing credential and optional
 decryption credentials. A distributed deployment must supply a replay cache whose
 `markIfAbsent` operation is atomic across all nodes. The in-memory implementation is for
-one node. Retain each replay key through the absolute `expiresAt` passed to the cache,
-without rounding the deadline down; it can be later than an individual
+one node and reserves at most one quarter of its configured live entries per IdP
+connection (at least one). Size the cache for each connection's peak login and logout
+volume over the replay lifetime. A shared custom cache must override the
+connection-aware `markIfAbsent(connectionId, key, expiresAt, remaining)` operation
+to isolate capacity per approved IdP connection; its compatibility default does
+not provide isolation. Limit the number of connections an untrusted tenant can
+register, and rate-limit verified login and logout requests per connection before
+they can fill that connection's quota. Retain each replay key through the absolute
+`expiresAt` passed to the cache, without rounding the deadline down; it can be later than an individual
 authentication's `getAssertionExpiresAt()` because the same signed assertion may carry
 other valid request bindings or time windows. Use a durable atomic pending store across
 nodes when a single-use browser pending record is required; a sealed cookie alone does
-not provide server-side single use.
+not provide server-side single use. Rate-limit unauthenticated begin requests before
+saving to the in-memory pending store: arbitrary browser bindings can fill its shared
+capacity, and its expiry cleanup scans live entries under one lock.
 
 ## Browser sign-in
 
@@ -78,15 +93,22 @@ not provide server-side single use.
    `beginPostAuthenticationResult(idp)` for HTTP-POST. The prepared result contains a
    redirect URI or form and a `PendingSamlAuthentication`.
 2. Before sending the browser to the IdP, save pending state through a browser-bound,
-   Secure, HttpOnly cookie or through `PendingSamlAuthenticationStore`. For a cross-site
+   Secure, HttpOnly cookie or through `PendingSamlAuthenticationStore`. Prefer a
+   `__Host-` cookie with `Path=/` and no `Domain` attribute. For a cross-site
    IdP POST to the ACS, use `SameSite=None; Secure`. Use the same application context and
    browser binding when constructing `PendingSamlAuthenticationSource` later.
 3. At the ACS, retain the original POST body, every Content-Type value and the raw query.
    Decode with `SamlPostBindingMessage.fromFormBodyResult`, then call
    `completeAuthenticationResult`. Clear the pending browser cookie on every terminal
    outcome. Only `Succeeded` contains a checked identity.
-4. Create or update the application's own session after local account mapping. Persist
+4. Rotate the application's browser session ID after local account mapping, then
+   create or update that session. Persist
    `SamlAuthentication.getSessionReference()` if front-channel logout is enabled.
+   Use `toSerializedForm()` and `fromSerializedForm()` only in trusted server-side
+   storage. For browser-side storage, use `toSealedForm(sealer, sessionContext,
+   expiresAt)` and `fromSealedForm(...)`; bind the context to the application's
+   own browser session and choose an expiry no later than that session's lifetime.
+   Opening either form supplies logout continuity fields, not a fresh identity.
 
 `SamlAuthenticationRequestOptions` can request fresh authentication, passive behavior,
 an exact authentication context, and bounded local application data. Revetsec seals the
@@ -116,6 +138,10 @@ Encrypted assertions and encrypted NameID use the configured SP private keys. AE
 with RSA-OAEP is the preferred profile. `AES_CBC_ENCRYPTION` is a per-IdP compatibility
 mode and requires a verified signature over the whole Response before CBC decryption.
 RSA1_5 key transport is rejected.
+An encrypted assertion with no outer Response signature can require several private-key
+operations before its inner signature can be checked. Limit each connection to the
+current and necessary rollover decryption keys, and rate-limit inbound ACS requests
+before XML decryption.
 
 Some IdPs prioritize the SP metadata's advertised GCM algorithms over their own
 CBC setting. In the Shibboleth 5.2.3 capture, the generated metadata selected
@@ -150,7 +176,10 @@ signed LogoutResponse. Both captured SSO sessions and logout messages are
 replayed with their identity, request and RelayState bindings in offline tests.
 For HTTP-POST logout, configure the SP's `postSingleLogoutServiceUrl` and the IdP's
 `postSingleLogoutService`. IdP metadata parsing exposes `getPostSingleLogoutService`,
-and generated SP metadata advertises POST logout only when its receiver is configured.
+plus a distinct `getPostSingleLogoutResponseService` when `ResponseLocation` is present;
+the Redirect binding has the corresponding response getter. Responses use that distinct
+endpoint while outbound LogoutRequests use `Location`. Generated SP metadata advertises
+POST logout only when its receiver is configured.
 Each binding uses its explicitly configured endpoint; no binding fallback is selected implicitly.
 
 For SP-initiated POST logout, call `beginPostLogoutResult`, save
@@ -159,7 +188,8 @@ For SP-initiated POST logout, call `beginPostLogoutResult`, save
 every Content-Type value and raw query; parse them with
 `SamlPostBindingMessage.fromLogoutFormBodyResult`. A `Kind.RESPONSE` is completed
 with the POST overload of `completeLogoutResult`. Pending browser cookies need
-`SameSite=None; Secure`, with `HttpOnly`. Clear them after a verified `Succeeded` or
+`SameSite=None; Secure`, with `HttpOnly`; use the same `__Host-` scope as sign-in.
+Clear them after a verified `Succeeded` or
 `StatusReceived` outcome, or when the attempt expires; a rejected callback does not
 cancel a valid pending attempt. Reconcile unavailable or indeterminate store outcomes
 before retrying. Once a pending store confirms removal, any later validation or replay-admission

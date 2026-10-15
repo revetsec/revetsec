@@ -204,11 +204,19 @@ final class ScimResourceValidation {
             if (!spend(definition.getSubAttributes().size())) return null;
             ScimAttributeDefinition primary = ScimSchemas.attribute(definition.getSubAttributes(), "primary").orElse(null);
             List<JsonValue> normalized = new ArrayList<>(); int primaries = 0;
+            Set<String> groupMemberIds = new HashSet<>();
             for (JsonValue element : array.getElements()) {
                 if (element instanceof JsonNull) { error = ScimError.invalidValueInstance(); return null; }
                 JsonValue canonical = scalar(definition, element, path, enforceRequired);
                 if (canonical == null) return null;
                 normalized.add(canonical);
+                if (path.equals("members") && type.hasStandardGroupSchema()
+                        && canonical instanceof JsonObject member) {
+                    String id = member.findString("value").orElse(null);
+                    if (id != null && !id.isEmpty() && !groupMemberIds.add(id)) {
+                        error = ScimError.invalidValueInstance(); return null;
+                    }
+                }
                 if (primary != null && primary.getType() == ScimAttributeType.BOOLEAN
                         && canonical instanceof JsonObject object && object.findBoolean(primary.getName()).orElse(false) && ++primaries > 1) {
                     error = ScimError.invalidValueInstance(); return null;
@@ -322,7 +330,9 @@ final class ScimResourceValidation {
                 && !(value instanceof JsonString string && string.getValue().isEmpty());
     }
     static boolean validResourceId(@NonNull String value) {
-        if (value.isEmpty() || value.length() > Limits.SCIM_IDENTIFIER_LENGTH.getCap() || AsciiCase.fold(value).contains("bulkid")) return false;
+        if (value.isEmpty() || value.equals(".") || value.equals("..")
+                || value.length() > Limits.SCIM_IDENTIFIER_LENGTH.getCap()
+                || AsciiCase.fold(value).contains("bulkid")) return false;
         for (int index = 0; index < value.length(); index++) if (value.charAt(index) < 0x20 || value.charAt(index) == 0x7f) return false;
         return true;
     }

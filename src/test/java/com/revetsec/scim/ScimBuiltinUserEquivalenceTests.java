@@ -212,7 +212,7 @@ class ScimBuiltinUserEquivalenceTests {
             assertEquals("manager-A",ScimEnterpriseUser.fromResource(current).getManager().orElseThrow().findString("value").orElseThrow());
         }
     }
-    @Test void putAndPatchPreserveReadOnlyManagerChildrenAndCanonicalProvenance() {
+    @Test void putAndPatchClearReadOnlyManagerDisplayNameWhenIdentityChanges() {
         for (ScimSchema user:variants(ScimSchema.userInstance())) for (ScimSchema enterprise:variants(ScimSchema.enterpriseUserInstance())) {
             ScimResourceType type=type(user,enterprise); ScimServiceProvider provider=provider(type);
             JsonObject manager=JsonObject.builder().put("VALUE","manager-A").put("DISPLAYNAME","Stored Manager").build();
@@ -221,16 +221,41 @@ class ScimBuiltinUserEquivalenceTests {
             JsonObject replacement=document(type,JsonObject.builder().put("manager",JsonObject.builder().put("value","manager-B").put("displayName","Forged").build()).put("department","After").build());
             ScimResourceParseResult.Succeeded replaced=assertInstanceOf(ScimResourceParseResult.Succeeded.class,provider.parseReplacementResult(type,current,bytes(replacement)));
             JsonObject putManager=ScimEnterpriseUser.fromResource(replaced.getResource()).getManager().orElseThrow();
-            assertEquals("manager-B",putManager.findString("value").orElseThrow()); assertEquals("Stored Manager",putManager.findString("displayName").orElseThrow());
+            assertEquals("manager-B",putManager.findString("value").orElseThrow()); assertTrue(putManager.findString("displayName").isEmpty());
             assertTrue(paths(replaced.getSuppliedAttributePaths()).contains(extensionId(type)+":manager.value"));
             assertFalse(paths(replaced.getSuppliedAttributePaths()).contains(extensionId(type)+":manager.displayName"));
             ScimPatchRequest request=patch(provider,type,extensionId(type)+":MANAGER.VALUE",JsonString.fromValue("manager-C"));
             assertEquals(Set.of(extensionId(type)+":manager.value"),paths(request.getRequestedAttributePaths()));
             ScimPatchResult changed=assertInstanceOf(ScimPatchApplicationResult.Succeeded.class,provider.applyPatchResult(current,request)).getPatchResult();
             assertEquals("manager-C",ScimEnterpriseUser.fromResource(changed.getResource()).getManager().orElseThrow().findString("value").orElseThrow());
-            assertEquals("Stored Manager",ScimEnterpriseUser.fromResource(changed.getResource()).getManager().orElseThrow().findString("displayName").orElseThrow());
-            assertEquals(Set.of(extensionId(type)+":manager",extensionId(type)+":manager.value"),paths(changed.getModifiedAttributePaths()));
+            assertTrue(ScimEnterpriseUser.fromResource(changed.getResource()).getManager().orElseThrow().findString("displayName").isEmpty());
+            assertEquals(Set.of(extensionId(type)+":manager",extensionId(type)+":manager.value",
+                    extensionId(type)+":manager.displayName"),paths(changed.getModifiedAttributePaths()));
+            ScimResource sameManager=assertInstanceOf(ScimResourceParseResult.Succeeded.class,
+                    provider.parseReplacementResult(type,current,bytes(document(type,JsonObject.builder()
+                            .put("manager",JsonObject.builder().put("value","manager-A").build()).build()))))
+                    .getResource();
+            assertEquals("Stored Manager",ScimEnterpriseUser.fromResource(sameManager).getManager()
+                    .orElseThrow().findString("displayName").orElseThrow());
             assertSame(before,current.getDocument());
+        }
+    }
+
+    @Test void patchCanRemoveManagerAndOptionalExtensionDespiteReadOnlyDisplayName() {
+        ScimResourceType type=type(ScimSchema.userInstance(),ScimSchema.enterpriseUserInstance());
+        ScimServiceProvider provider=provider(type,ScimCompatibility.builder()
+                .features(Set.of(ScimCompatibilityFeature.PATCH_EXTENSION_SCHEMA_ROOT)).build(),null);
+        ScimResource current=ScimResource.withResourceType(type).document(document(type,
+                JsonObject.builder().put("manager",JsonObject.builder().put("value","manager-A")
+                        .put("displayName","Stored Manager").build()).build())).build();
+        for (String path:List.of(extensionId(type)+":manager",extensionId(type))) {
+            ScimPatchRequest removal=assertInstanceOf(ScimPatchParseResult.Succeeded.class,
+                    parsePatch(provider,type,JsonObject.builder().put("op","remove").put("path",path).build()))
+                    .getPatchRequest();
+            ScimResource changed=assertInstanceOf(ScimPatchApplicationResult.Succeeded.class,
+                    provider.applyPatchResult(current,removal)).getPatchResult().getResource();
+            assertTrue(changed.getExtension(extensionId(type))
+                    .flatMap(extension -> extension.find("manager")).isEmpty());
         }
     }
     @Test void explicitScalarManagerCompatibilityIsEquivalentAndEveryPresetStillRejectsIt() {

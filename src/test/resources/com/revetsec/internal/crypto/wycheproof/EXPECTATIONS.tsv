@@ -19,7 +19,7 @@
 #count	ecdsa_secp384r1_sha384_p1363_test.json	18+	accept=193	reject:MISMATCH=18	reject:OUT_OF_RANGE=50	reject:WRONG_LENGTH=19
 #count	ecdsa_secp521r1_sha512_p1363_test.json	17	accept=229	reject:MISMATCH=20	reject:OUT_OF_RANGE=55	reject:WRONG_LENGTH=14
 #count	ecdsa_secp521r1_sha512_p1363_test.json	18+	accept=231	reject:MISMATCH=18	reject:OUT_OF_RANGE=55	reject:WRONG_LENGTH=14
-#count	ed25519_test.json	all	accept=88	reject:MISMATCH=19	reject:PROVIDER_FAILURE=32	reject:WRONG_LENGTH=12
+#count	ed25519_test.json	all	accept=88	reject:MISMATCH=19	reject:OUT_OF_RANGE=32	reject:WRONG_LENGTH=12
 #count	hmac_sha256_test.json	all	accept=30	reject:MISMATCH=54	reject:SECRET_TOO_SHORT=6	reject:WRONG_LENGTH=84
 #count	hmac_sha384_test.json	all	accept=30	reject:MISMATCH=54	reject:SECRET_TOO_SHORT=6	reject:WRONG_LENGTH=84
 #count	hmac_sha512_test.json	all	accept=30	reject:MISMATCH=54	reject:SECRET_TOO_SHORT=6	reject:WRONG_LENGTH=84

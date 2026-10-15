@@ -75,6 +75,20 @@ final class TokenIntrospectionClientTests {
             }
         }));
     }
+    @TestFactory @NonNull Stream<@NonNull DynamicTest> tokenSpecificClientErrorsDoNotThrottleOtherCredentials() {
+        return Stream.of(400,413,422).map(status->DynamicTest.dynamicTest("status"+status,()->{
+            try(TestHttpsServer server=TestHttpsServer.start()) {
+                response(server,"/inspect",status,"application/json","{\"error\":\"invalid_request\"}");
+                TokenIntrospectionClient client=inspect(server).build();
+                OAuthErrorResponseException first=assertThrows(OAuthErrorResponseException.class,
+                        ()->client.validateResult(bearer("attacker-controlled")));
+                assertEquals(status,first.getStatus());
+                response(server,"/inspect",200,"application/json",active());
+                assertNotNull(client.validate(bearer("legitimate")));
+                assertEquals(2,server.getHitCount("/inspect"));
+            }
+        }));
+    }
     @TestFactory @NonNull Stream<@NonNull DynamicTest> jsonTransportAndMalformedProviderResponsesRemainExceptions() {
         return Stream.of(Map.entry("application/token-introspection+jwt","signed.jwt.bytes"),Map.entry("application/json","{\"active\":\"true\"}"),Map.entry("application/json","{\"active\":true,\"active\":false}"),Map.entry("application/json","{\"active\":true,\"aud\":42}"),Map.entry("application/json","{\"active\":true,\"aud\":\"resource\",\"exp\":1.5}")).map(e->DynamicTest.dynamicTest(e.toString(),()-> {
             try(TestHttpsServer server=TestHttpsServer.start()) {

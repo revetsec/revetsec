@@ -58,14 +58,20 @@ final class WebAuthnCeremonyConsumption {
         WebAuthnStoreEntry entry = snapshot.getEntry(ceremonyKey);
         if (!(entry instanceof WebAuthnStoreEntry.Present present)) return Optional.empty();
         Instant observedAt = namespaceTime.effectiveAt();
-        WebAuthnCeremonyState pending = codec.decode(ceremonyKey, present.getSealedBytes(), clock);
+        WebAuthnCeremonyState pending;
+        try { pending = codec.decode(ceremonyKey, present.getSealedBytes(), clock); }
+        catch (WebAuthnRecordException failure) {
+            if (failure.isExpired()) return Optional.empty();
+            throw failure;
+        }
         if (pending.kind() != expectedKind || !pending.isPendingAt(observedAt)
                 || !pending.matchesBrowserBinding(browserBinding)
                 || !java.security.MessageDigest.isEqual(pending.ceremonyId(), expectedCeremonyId))
             return Optional.empty();
         var consumed = codec.encode(pending.consume());
         return Optional.of(new Prepared(pending,
-                WebAuthnStoreWrite.Mutation.replace(consumed.key(), consumed.sealedBytes())));
+                WebAuthnStoreWrite.Mutation.replaceExpiring(consumed.key(), consumed.sealedBytes(),
+                        consumed.expiresAt())));
     }
 
     /** Candidate input and the required ceremony mutation, never a verified result. */

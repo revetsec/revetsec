@@ -25,8 +25,10 @@ import org.jspecify.annotations.NonNull;
  * return a complete versioned snapshot, and atomically compare every predicate before applying
  * all mutations. A confirmed commit must be durable for restart and cross-node continuity;
  * {@link InMemoryWebAuthnStore} is an explicitly selected, volatile single-process option only.
- * No live ceremony or credential may be
- * evicted to make room; capacity pressure is reported explicitly. A lost acknowledgement after
+ * Stores must treat a ceremony carrying {@link WebAuthnStoreWrite.Mutation#getExpiresAt()}
+ * as absent once that deadline passes and reclaim it before enforcing capacity. No live ceremony
+ * or permanent credential, tombstone, index, fence or namespace clock may be evicted to make room;
+ * capacity pressure is reported explicitly. A lost acknowledgement after
  * a possible write is UNKNOWN, never CONFLICT or UNAVAILABLE. Implementations honor the remaining
  * positive caller-thread budget and preserve interrupt status. Revetsec cannot preempt blocked
  * application code or provide durability through this interface alone.

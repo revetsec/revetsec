@@ -56,7 +56,8 @@ import java.util.stream.Stream;
 /**
  * {@link SignatureVerifier}: RSASSA-PKCS1-v1_5 and RSASSA-PSS (RFC 8017; PSS with the fixed parameters of RFC 7518
  * section 3.5), ECDSA in curve and hash terms (gate 8's G8-3), and Ed25519 (RFC 8032). Shape checks run before the
- * key and the JCA; a JCA {@code false} is a mismatch, and every exception is a provider failure, never valid and
+ * key and the JCA; a JCA {@code false} is a mismatch, malformed Ed25519 signatures are out of range, and
+ * provider exceptions are failures, never valid and
  * never thrown (INV-G1: verification is tri-state safe). The INV-G1 inventory of the unchecked exceptions observed in
  * the JDK's providers is here too, each with a control that shows the JDK still throws it.
  *
@@ -331,7 +332,8 @@ final class SignatureVerifierTests {
 
 		Assertions.assertEquals(VerifyResult.VALID, SignatureVerifier.verifyEd25519(key, MESSAGE, signature));
 		Assertions.assertEquals(VerifyResult.MISMATCH, SignatureVerifier.verifyEd25519(key, changed(MESSAGE), signature));
-		Assertions.assertEquals(VerifyResult.MISMATCH, SignatureVerifier.verifyEd25519(key, MESSAGE, changed(signature)));
+		Assertions.assertNotEquals(VerifyResult.VALID,
+				SignatureVerifier.verifyEd25519(key, MESSAGE, changed(signature)));
 
 		for (int length : new int[]{0, 32, 63, 65, 128})
 			Assertions.assertEquals(VerifyResult.WRONG_LENGTH, SignatureVerifier.verifyEd25519(key, MESSAGE,
@@ -340,7 +342,19 @@ final class SignatureVerifierTests {
 		// S >= L: the JDK refuses it one way or another, never as valid.
 		byte[] largeS = signature.clone();
 		largeS[63] = (byte) 0xff;
-		Assertions.assertNotEquals(VerifyResult.VALID, SignatureVerifier.verifyEd25519(key, MESSAGE, largeS));
+		Assertions.assertEquals(VerifyResult.OUT_OF_RANGE,
+				SignatureVerifier.verifyEd25519(key, MESSAGE, largeS));
+		byte[] invalidR = signature.clone();
+		Arrays.fill(invalidR, 0, 32, (byte) 0xff);
+		Assertions.assertEquals(VerifyResult.OUT_OF_RANGE,
+				SignatureVerifier.verifyEd25519(key, MESSAGE, invalidR));
+		Random random = new Random(52);
+		for (int index = 0; index < 256; index++) {
+			byte[] randomSignature = new byte[64];
+			random.nextBytes(randomSignature);
+			VerifyResult result = SignatureVerifier.verifyEd25519(key, MESSAGE, randomSignature);
+			Assertions.assertTrue(result == VerifyResult.OUT_OF_RANGE || result == VerifyResult.MISMATCH);
+		}
 
 		Assertions.assertEquals(VerifyResult.MISMATCH, SignatureVerifier.verifyEd25519(
 				KeyPairGenerator.getInstance("Ed448").generateKeyPair().getPublic(), MESSAGE, signature));
@@ -406,8 +420,9 @@ final class SignatureVerifierTests {
 		}
 
 		PublicKey undecodable = Ed25519PublicKeysTests.rawJdkKey(Ed25519PublicKeysTests.encode(BigInteger.TWO, false));
+		byte[] canonicalEdSignature = sign("Ed25519", null, generate("Ed25519").getPrivate());
 		Assertions.assertEquals(VerifyResult.PROVIDER_FAILURE, SignatureVerifier.verifyEd25519(undecodable, MESSAGE,
-				new byte[64]), "control: the JDK decodes the point only when it verifies");
+				canonicalEdSignature), "control: the JDK decodes the key point when it verifies");
 		Assertions.assertEquals(VerifyResult.WRONG_LENGTH, SignatureVerifier.verifyEd25519(undecodable, MESSAGE,
 				new byte[65]));
 	}

@@ -153,17 +153,20 @@ final class AuthorizationServerCache {
 			this.lock.lock();
 			try {
 				if (this.flight == leader) {
-					this.lastFailure = failure;
-					this.lastFailureNanos = System.nanoTime();
-					this.consecutiveFailures = Math.min(5, this.consecutiveFailures + 1);
-					this.failureBackoffNanos = Math.min(this.cooldown.toNanos() << (this.consecutiveFailures - 1),
-							Math.min(this.cooldown.toNanos() * 10, Duration.ofMinutes(10).toNanos()));
+					if (failure.getReason() != OAuthException.Reason.INTERRUPTED) {
+						this.lastFailure = failure;
+						this.lastFailureNanos = System.nanoTime();
+						this.consecutiveFailures = Math.min(5, this.consecutiveFailures + 1);
+						this.failureBackoffNanos = Math.min(this.cooldown.toNanos() << (this.consecutiveFailures - 1),
+								Math.min(this.cooldown.toNanos() * 10, Duration.ofMinutes(10).toNanos()));
+					}
 					this.flight = null;
 				}
 			} finally {
 				this.lock.unlock();
 			}
-			leader.future.completeExceptionally(failure);
+			leader.future.completeExceptionally(failure.getReason() == OAuthException.Reason.INTERRUPTED
+					? OAuthTransportException.fromReason(OAuthException.Reason.NETWORK_FAILURE, null) : failure);
 			throw failure;
 		} catch (RuntimeException failure) {
 			OAuthException safe = OAuthTransportException.fromReason(OAuthException.Reason.NETWORK_FAILURE, null);

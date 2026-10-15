@@ -119,7 +119,7 @@ public final class PinnedHttpsTransport {
   URI ascii = URI.create(uri.toASCIIString());
   String target = requireNonNull(ascii.getRawPath()) + (ascii.getRawQuery() == null ? "" : "?" + ascii.getRawQuery());
   byte[] bytes = ("GET " + target + " HTTP/1.1\r\nHost: " + uri.getRawAuthority()
-    + "\r\nAccept: application/json\r\nAccept-Encoding: identity\r\nConnection: close\r\n\r\n").getBytes(StandardCharsets.US_ASCII);
+    + "\r\nAccept: application/json\r\nAccept-Encoding: identity\r\nUser-Agent: Revetsec\r\nConnection: close\r\n\r\n").getBytes(StandardCharsets.US_ASCII);
   if (bytes.length > 65536) throw new HttpExchangeException(HttpExchangeException.Kind.URI_REJECTED);
   return bytes;
  }

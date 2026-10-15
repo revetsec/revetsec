@@ -94,7 +94,7 @@ final class PinnedHttpsTransportTests {
  @Test void requestHasOnlyAnonymousHeadersAndExactEncodedTarget() throws Exception {
   URI uri=URI.create("https://metadata.revetsec.com:9443/cliënt.json?a=%2B&b=+");
   String request=new String(PinnedHttpsTransport.request(uri,true),StandardCharsets.US_ASCII);
-  assertEquals("GET /cli%C3%ABnt.json?a=%2B&b=+ HTTP/1.1\r\nHost: metadata.revetsec.com:9443\r\nAccept: application/json\r\nAccept-Encoding: identity\r\nConnection: close\r\n\r\n",request);
+  assertEquals("GET /cli%C3%ABnt.json?a=%2B&b=+ HTTP/1.1\r\nHost: metadata.revetsec.com:9443\r\nAccept: application/json\r\nAccept-Encoding: identity\r\nUser-Agent: Revetsec\r\nConnection: close\r\n\r\n",request);
   assertFalse(request.contains("Cookie"));assertFalse(request.contains("Authorization"));
  }
  @TestFactory @NonNull Stream<@NonNull DynamicTest> liveTlsReadsFramedResponsesAndClosesCases() {

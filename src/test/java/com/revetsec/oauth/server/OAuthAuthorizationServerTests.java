@@ -142,6 +142,15 @@ final class OAuthAuthorizationServerTests {
  private @NonNull OAuthRevocationResult revoke(@NonNull String token) {return this.server.revokeResult("POST",null,bytes(form(Map.of("client_id",this.client.getClientId(),"token",token))),headers());}
  private @NonNull OAuthIntrospectionResult introspect(@NonNull String token) {Map<String,List<String>> h=new LinkedHashMap<>(headers());h.put("Authorization",List.of("Basic "+Base64.getEncoder().encodeToString(bytes("resource:secret"))));return this.server.introspectionResult("POST",null,bytes(form(Map.of("token",token))),h);}
  private static @NonNull DynamicTest test(@NonNull String name,@NonNull Executable call) {return DynamicTest.dynamicTest(name,call);}
+ @Test void maximumRegisteredClientNameCanCompleteTheInteraction() {
+  String display="n".repeat(4096);
+  this.client=OAuthServerClientRegistration.withClientId("client").configurationVersion("v1")
+   .redirectUris(List.of(URI.create(REDIRECT))).allowedScopesByResource(resources()).clientName(display).build();
+  initialized();OAuthServerInteraction interaction=begin();
+  assertEquals(display,interaction.getClientName().orElseThrow());
+  assertInstanceOf(OAuthAuthorizationResult.Completed.class,this.server.completeAuthorizationResult(
+   interaction.getInteractionValue(),BROWSER,decision("subject",Set.of("read"),false)));
+ }
  @Test void publicFlowRechecksPolicyAndReleasesProofOnlyAfterAtomicStatus() {
   JsonObject one=issued();String token=one.findString("access_token").orElseThrow();
   OAuthIssuerAccessTokenResult.Succeeded checked=assertInstanceOf(OAuthIssuerAccessTokenResult.Succeeded.class,this.server.validateAccessTokenResult(bearer(token),RESOURCE));
@@ -578,7 +587,7 @@ final class OAuthAuthorizationServerTests {
    OAuthStoreRecordCodec codec=new OAuthStoreRecordCodec(ISSUER,sealer(),3800);OAuthStoreCoordinator coordinator=new OAuthStoreCoordinator(f.store,codec,f.clock,3,255);
    if(which.equals("namespace")){OAuthStoreKey foreign=OAuthStoreFormat.key("A".repeat(43),OAuthStoreKey.Kind.GRANT,BROWSER);assertThrows(IllegalArgumentException.class,()->coordinator.reseal(foreign,Deadline.fromNow(Duration.ofSeconds(1))));return;}
    if(which.equals("missing-issuer"))f.store.rows.remove(codec.issuerKey());
-   if(which.equals("clock-backward"))f.clock.time=NOW.minusSeconds(1);
+   if(which.equals("clock-backward"))f.clock.time=NOW.minusSeconds(31);
    if(which.equals("expired")){f.clock.time=requireNonNull(f.store.rows.get(key)).getRetainUntil();assertEquals(OAuthStoreCommitStatus.CONFLICT,f.server.resealStoreEntry(key));return;}
    if(which.equals("retention")){OAuthStoreEntry old=requireNonNull(f.store.rows.get(key));JsonObject payload=codec.open(old,f.clock);f.store.rows.put(key,codec.seal(key,old.getRetainUntil().plusSeconds(1),payload.toJson()));}
    if(which.equals("fault")||which.equals("initialization-fault"))f.store.fault=new IllegalStateException("backend-sensitive");
@@ -611,7 +620,7 @@ final class OAuthAuthorizationServerTests {
   return Stream.of(false,true).map(refresh->test("dynamic-owner"+refresh,()->{
    var f=new OAuthAuthorizationServerTests();f.initialized();f.client=client("https://client.example.com/metadata");
    OAuthServerIngressLimits limits=OAuthServerIngressLimits.fromDefaults();OAuthStoreRecordCodec codec=new OAuthStoreRecordCodec(ISSUER,sealer(),3800);
-   OAuthStoreCoordinator coordinator=new OAuthStoreCoordinator(f.store,codec,f.clock,3,255);AtomicInteger fetches=new AtomicInteger();
+   OAuthStoreCoordinator coordinator=new OAuthStoreCoordinator(f.store,codec,f.clock,Duration.ofSeconds(30),3,255);AtomicInteger fetches=new AtomicInteger();
    JsonObject document=JsonObject.builder().put("client_id",f.client.getClientId()).put("client_name","reviewed client").put("redirect_uris",com.revetsec.json.JsonArray.fromElements(List.of(com.revetsec.json.JsonString.fromValue(REDIRECT))))
     .put("token_endpoint_auth_method","none").put("grant_types",com.revetsec.json.JsonArray.fromElements(List.of(com.revetsec.json.JsonString.fromValue("authorization_code"),com.revetsec.json.JsonString.fromValue("refresh_token"))))
     .put("response_types",com.revetsec.json.JsonArray.fromElements(List.of(com.revetsec.json.JsonString.fromValue("code")))).build();

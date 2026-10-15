@@ -140,6 +140,17 @@ class ScimM10ResourceTests {
         assertEquals(2,ScimGroup.fromResource(current).getMembers().size());
     }
 
+    @Test void duplicateGroupMemberIdsAreRejectedBeforeTheyCanPoisonLaterPut() {
+        ScimResourceType type = ScimResourceType.groupInstance();
+        String duplicate = "{\"schemas\":[\""+GROUP+"\"],\"displayName\":\"team\",\"members\":[{\"value\":\"one\"},{\"value\":\"one\"}]}";
+        rejected(create(type,duplicate),ScimErrorType.INVALID_VALUE);
+        ScimResource current = trusted(type,"{\"schemas\":[\""+GROUP+"\"],\"displayName\":\"team\",\"members\":[{\"value\":\"one\"}]}");
+        rejected(replace(type,current,duplicate),ScimErrorType.INVALID_VALUE);
+        assertEquals(2,ScimGroup.fromResource(accepted(create(type,
+                duplicate.replace("{\"value\":\"one\"}]}", "{\"value\":\"One\"}]}")))
+                .getResource()).getMembers().size(), "SCIM resource IDs remain case exact");
+    }
+
     @Test void trustedViewsAndCopierHaveIntentionalDataAccessAndFixedDiagnostics() {
         ScimResource user = trusted(ScimResourceType.userInstance(),"{\"schemas\":[\""+USER+"\"],\"userName\":\"Ada-secret\",\"password\":\"temporary-secret\",\"meta\":{\"created\":\"2000-02-29T24:00:00Z\",\"location\":\"https://example.invalid/Users/1\",\"version\":\"W/\\\"1\\\"\"}}");
         assertEquals(java.time.Instant.parse("2000-03-01T00:00:00Z"),user.getCreated().orElseThrow());

@@ -72,6 +72,10 @@ public final class Ed25519PublicKeys {
 	 */
 	private static final BigInteger FIELD_PRIME = BigInteger.TWO.pow(255).subtract(BigInteger.valueOf(19));
 
+	/** Ed25519 scalar order. An S outside this range is a malformed signature, not a provider outage. */
+	private static final BigInteger GROUP_ORDER = BigInteger.TWO.pow(252)
+			.add(new BigInteger("27742317777372353535851937790883648493"));
+
 	/**
 	 * The curve constant {@code d = -121665 / 121666 (mod p)}.
 	 */
@@ -175,6 +179,23 @@ public final class Ed25519PublicKeys {
 			case ALGORITHM -> true;
 			default -> false;
 		};
+	}
+
+	/** Checks public signature encoding before invoking providers that throw for malformed R or S. */
+	static boolean isCanonicalSignature(byte @NonNull [] signature) {
+		if (signature.length != SIGNATURE_LENGTH) return false;
+		byte[] reversed = new byte[KEY_LENGTH];
+		for (int index = 0; index < KEY_LENGTH; index++)
+			reversed[index] = signature[KEY_LENGTH - 1 - index];
+		boolean xOdd = (reversed[0] & SIGN_BIT) != 0;
+		reversed[0] = (byte) (reversed[0] & ~SIGN_BIT);
+		BigInteger y = new BigInteger(1, reversed);
+		if (y.compareTo(FIELD_PRIME) >= 0) return false;
+		try { recoverX(y, xOdd); }
+		catch (KeyRejectedException invalidPoint) { return false; }
+		for (int index = 0; index < KEY_LENGTH; index++)
+			reversed[index] = signature[SIGNATURE_LENGTH - 1 - index];
+		return new BigInteger(1, reversed).compareTo(GROUP_ORDER) < 0;
 	}
 
 	/**

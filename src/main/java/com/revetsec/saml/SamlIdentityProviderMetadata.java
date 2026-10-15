@@ -55,6 +55,8 @@ public final class SamlIdentityProviderMetadata {
     private final @Nullable URI postSso;
     private final @Nullable URI redirectSlo;
     private final @Nullable URI postSlo;
+    private final @Nullable URI redirectSloResponse;
+    private final @Nullable URI postSloResponse;
     private final @NonNull List<@NonNull X509Certificate> signingCertificates;
     private final boolean wantAuthnRequestsSigned;
     private final @Nullable Instant validUntil;
@@ -62,6 +64,7 @@ public final class SamlIdentityProviderMetadata {
 
     private SamlIdentityProviderMetadata(@NonNull String entityId, @Nullable URI redirectSso,
             @Nullable URI postSso, @Nullable URI redirectSlo, @Nullable URI postSlo,
+            @Nullable URI redirectSloResponse, @Nullable URI postSloResponse,
             @NonNull List<@NonNull X509Certificate> signingCertificates,
             boolean wantAuthnRequestsSigned, @Nullable Instant validUntil,
             @NonNull List<@NonNull String> authorizedScopes) {
@@ -70,6 +73,8 @@ public final class SamlIdentityProviderMetadata {
         this.postSso = postSso;
         this.redirectSlo = redirectSlo;
         this.postSlo = postSlo;
+        this.redirectSloResponse = redirectSloResponse;
+        this.postSloResponse = postSloResponse;
         this.signingCertificates = List.copyOf(signingCertificates);
         this.wantAuthnRequestsSigned = wantAuthnRequestsSigned;
         this.validUntil = validUntil;
@@ -215,10 +220,17 @@ public final class SamlIdentityProviderMetadata {
         if (descriptor == null || !descriptor.getAttributeNS(null, "protocolSupportEnumeration")
                 .matches("(?:^|.*\\s)urn:oasis:names:tc:SAML:2\\.0:protocol(?:\\s.*|$)"))
             return SamlIdentityProviderMetadataResult.Rejected.INSTANCE;
+        Instant roleLimit = validity(descriptor, now);
+        if (descriptor.hasAttributeNS(null, "validUntil") && roleLimit == null)
+            return SamlIdentityProviderMetadataResult.Rejected.INSTANCE;
+        if (roleLimit != null && (validUntil == null || roleLimit.isBefore(validUntil)))
+            validUntil = roleLimit;
         URI redirect = null;
         URI post = null;
         URI logout = null;
         URI postLogout = null;
+        URI logoutResponse = null;
+        URI postLogoutResponse = null;
         List<X509Certificate> certificates = new ArrayList<>();
         List<String> scopes = new ArrayList<>();
         for (Node child = descriptor.getFirstChild(); child != null; child = child.getNextSibling()) {
@@ -240,12 +252,18 @@ public final class SamlIdentityProviderMetadata {
                 if (!REDIRECT.equals(binding) && !POST.equals(binding)) continue;
                 URI location = endpoint(element.getAttributeNS(null, "Location"));
                 if (location == null) return SamlIdentityProviderMetadataResult.Rejected.INSTANCE;
+                URI responseLocation = element.hasAttributeNS(null, "ResponseLocation")
+                        ? endpoint(element.getAttributeNS(null, "ResponseLocation")) : null;
+                if (element.hasAttributeNS(null, "ResponseLocation") && responseLocation == null)
+                    return SamlIdentityProviderMetadataResult.Rejected.INSTANCE;
                 if (REDIRECT.equals(binding)) {
                     if (logout != null) return SamlIdentityProviderMetadataResult.Rejected.INSTANCE;
                     logout = location;
+                    logoutResponse = responseLocation;
                 } else {
                     if (postLogout != null) return SamlIdentityProviderMetadataResult.Rejected.INSTANCE;
                     postLogout = location;
+                    postLogoutResponse = responseLocation;
                 }
             } else if (is(element, MD, "KeyDescriptor")) {
                 String use = element.getAttributeNS(null, "use");
@@ -277,7 +295,8 @@ public final class SamlIdentityProviderMetadata {
                 && !wants.equals("1") && !wants.equals("0"))
             return SamlIdentityProviderMetadataResult.Rejected.INSTANCE;
         return new SamlIdentityProviderMetadataResult.Parsed(new SamlIdentityProviderMetadata(entityId,
-                redirect, post, logout, postLogout, certificates, wants.equals("true") || wants.equals("1"),
+                redirect, post, logout, postLogout, logoutResponse, postLogoutResponse,
+                certificates, wants.equals("true") || wants.equals("1"),
                 validUntil, scopes));
     }
 
@@ -381,6 +400,20 @@ public final class SamlIdentityProviderMetadata {
      */
     public @NonNull Optional<@NonNull URI> getPostSingleLogoutService() {
         return Optional.ofNullable(postSlo);
+    }
+    /** Returns a distinct HTTP-Redirect SLO ResponseLocation, if advertised.
+     * @return response endpoint, or empty to use the request endpoint
+     * @since 1.0.0
+     */
+    public @NonNull Optional<@NonNull URI> getRedirectSingleLogoutResponseService() {
+        return Optional.ofNullable(redirectSloResponse);
+    }
+    /** Returns a distinct HTTP-POST SLO ResponseLocation, if advertised.
+     * @return response endpoint, or empty to use the request endpoint
+     * @since 1.0.0
+     */
+    public @NonNull Optional<@NonNull URI> getPostSingleLogoutResponseService() {
+        return Optional.ofNullable(postSloResponse);
     }
 
     /**

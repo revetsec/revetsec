@@ -73,11 +73,13 @@ final class OAuthServerOutcomeTests {
   Set<String> getters=new HashSet<>();for(var method:OAuthServerInteraction.class.getDeclaredMethods()) if(Modifier.isPublic(method.getModifiers())) getters.add(method.getName());
   assertEquals(Set.of("getInteractionValue","getClientId","getClientName","getRedirectUri","getRequestedScopesByResource","getExpiresAt","toString"),getters);
  }
- @Test void completedRecordWrongHandleAndUnboundedNameCannotMintPendingView() {
+ @Test void completedRecordWrongHandleAndOversizedNameCannotMintPendingView() {
   assertThrows(IllegalArgumentException.class,()->OAuthServerInteraction.fromRecord(HANDLE,pending().completed(),null,LIMITS));
   assertThrows(IllegalArgumentException.class,()->OAuthServerInteraction.fromRecord("B".repeat(42)+"A",pending(),null,LIMITS));
   assertThrows(IllegalArgumentException.class,()->OAuthServerInteraction.fromRecord("bad",pending(),null,LIMITS));
-  assertThrows(IllegalArgumentException.class,()->OAuthServerInteraction.fromRecord(HANDLE,pending(),"x".repeat(256),LIMITS));
+  assertEquals("x".repeat(256),OAuthServerInteraction.fromRecord(HANDLE,pending(),"x".repeat(256),LIMITS).getClientName().orElseThrow());
+  assertThrows(IllegalArgumentException.class,()->OAuthServerInteraction.fromRecord(HANDLE,pending(),
+   "x".repeat(OAuthServerConfiguration.MAXIMUM_TEXT_LENGTH+1),LIMITS));
  }
  @Test void outcomesAreIdentityEqualRestrictedAndRetainOnlyReviewedHolders() {
   OAuthServerInteraction view=interaction();OAuthServerResponse wire=response();

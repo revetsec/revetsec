@@ -132,7 +132,8 @@ final class OAuthServerConfiguration {
 			String scheme = uri.getScheme(); String host = uri.getHost();
 			int port = uri.getPort();
 			if (scheme == null || host == null || uri.isOpaque() || uri.getRawUserInfo() != null
-					|| uri.getRawFragment() != null || port == 0 || port > 65_535 || spelling.indexOf('*') >= 0)
+					|| uri.getRawFragment() != null || port == 0 || port > 65_535 || spelling.indexOf('*') >= 0
+					|| hasEncodedAsciiControl(spelling))
 				throw invalid();
 			boolean https = scheme.equalsIgnoreCase("https");
 			boolean loopback = scheme.equalsIgnoreCase("http") &&
@@ -143,6 +144,18 @@ final class OAuthServerConfiguration {
 			copy.add(uri);
 		}
 		return List.copyOf(copy);
+	}
+	static boolean hasEncodedAsciiControl(@NonNull String value) {
+		for (int i = 0; i + 2 < value.length(); i++) {
+			if (value.charAt(i) != '%') continue;
+			int upper = Character.digit(value.charAt(i + 1), 16);
+			int lower = Character.digit(value.charAt(i + 2), 16);
+			if (upper < 0 || lower < 0) continue;
+			int octet = upper * 16 + lower;
+			if (octet < 0x20 || octet == 0x7f) return true;
+			i += 2;
+		}
+		return false;
 	}
 	private static void rejectResponseParameters(@NonNull URI uri) {
 		String query = uri.getRawQuery();

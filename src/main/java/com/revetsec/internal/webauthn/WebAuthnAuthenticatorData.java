@@ -50,6 +50,7 @@ final class WebAuthnAuthenticatorData {
         if (credentialIdLength < 1 || credentialIdLength > 1_023) throw new WebAuthnCborException();
         byte[] credentialId = reader.rawBytes(credentialIdLength);
         WebAuthnCoseKey.Parsed key = WebAuthnCoseKey.parse(reader, input);
+        if (header.extensionData) parseRegistrationExtensions(reader);
         if (!reader.finished()) throw new WebAuthnCborException();
         return new Registration(aaguid, credentialId, key.encoding(), key.algorithm(), header.counter,
             header.backupEligible, header.backedUp);
@@ -68,6 +69,15 @@ final class WebAuthnAuthenticatorData {
         return new Assertion(header.counter, header.backupEligible, header.backedUp);
     }
 
+    /** A bounded, exact extension profile. credProtect is an authenticator output, not a proof of user verification. */
+    private static void parseRegistrationExtensions(@NonNull WebAuthnCborReader reader)
+            throws WebAuthnCborException {
+        if (reader.length(5, 1) != 1 || !"credProtect".equals(reader.ascii(32)))
+            throw new WebAuthnCborException();
+        int protection = reader.integer();
+        if (protection < 1 || protection > 3) throw new WebAuthnCborException();
+    }
+
     private static @NonNull Header header(byte @NonNull [] input, byte @NonNull [] expectedRpIdHash,
                                           boolean registration, int maximumBytes) throws WebAuthnCborException {
         requireNonNull(input);
@@ -81,11 +91,13 @@ final class WebAuthnAuthenticatorData {
         if (!MessageDigest.isEqual(reader.rawBytes(32), expectedRpIdHash)) throw new WebAuthnCborException();
         int flags = reader.unsignedByte();
         if ((flags & (USER_PRESENT | USER_VERIFIED)) != (USER_PRESENT | USER_VERIFIED)
-            || (flags & (RESERVED | EXTENSION_DATA)) != 0
+            || (flags & RESERVED) != 0
+            || !registration && (flags & EXTENSION_DATA) != 0
             || (flags & BACKUP_STATE) != 0 && (flags & BACKUP_ELIGIBLE) == 0
             || ((flags & ATTESTED_CREDENTIAL_DATA) != 0) != registration) throw new WebAuthnCborException();
         long counter = reader.unsignedInt();
-        return new Header(reader, counter, (flags & BACKUP_ELIGIBLE) != 0, (flags & BACKUP_STATE) != 0);
+        return new Header(reader, counter, (flags & BACKUP_ELIGIBLE) != 0, (flags & BACKUP_STATE) != 0,
+                (flags & EXTENSION_DATA) != 0);
     }
 
     private static final class Header {
@@ -93,12 +105,15 @@ final class WebAuthnAuthenticatorData {
         private final long counter;
         private final boolean backupEligible;
         private final boolean backedUp;
+        private final boolean extensionData;
 
-        private Header(@NonNull WebAuthnCborReader reader, long counter, boolean backupEligible, boolean backedUp) {
+        private Header(@NonNull WebAuthnCborReader reader, long counter, boolean backupEligible, boolean backedUp,
+                boolean extensionData) {
             this.reader = reader;
             this.counter = counter;
             this.backupEligible = backupEligible;
             this.backedUp = backedUp;
+            this.extensionData = extensionData;
         }
     }
 

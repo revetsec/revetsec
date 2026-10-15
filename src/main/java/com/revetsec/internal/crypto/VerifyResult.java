@@ -40,8 +40,9 @@ public enum VerifyResult {
 	 */
 	WRONG_LENGTH,
 	/**
-	 * An ECDSA {@code r} or {@code s} is outside {@code [1, n - 1]}, where {@code n} is the order of the curve's base
-	 * point. Decided before any JCA call, so a provider without its own range check (CVE-2022-21449) never sees it.
+	 * An ECDSA {@code r} or {@code s} is outside {@code [1, n - 1]}, or an Ed25519 signature has a noncanonical
+	 * point or scalar. Decided before any JCA call, so a provider without its own ECDSA range check
+	 * (CVE-2022-21449) never sees it.
 	 */
 	OUT_OF_RANGE,
 	/**

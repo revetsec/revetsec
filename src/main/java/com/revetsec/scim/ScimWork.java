@@ -22,9 +22,11 @@ import javax.annotation.concurrent.NotThreadSafe;
 /** One operation's monotonically consumed work budget. */
 @NotThreadSafe
 final class ScimWork {
+    private final long maximum;
     private long remaining;
     private boolean exceeded;
-    ScimWork(long maximum) { remaining = maximum; }
+    ScimWork(long maximum) { this.maximum = maximum; remaining = maximum; }
+    long maximum() { return maximum; }
     boolean wasExceeded() { return exceeded; }
     boolean take(int amount) { return spend(amount); }
     boolean spend(long amount) {

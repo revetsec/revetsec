@@ -63,6 +63,10 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Flow;
 import java.util.concurrent.locks.Condition;
@@ -1030,6 +1034,34 @@ final class JwksCacheTests {
 		Assertions.assertEquals(hooks, observer.getCalls().size());
 		Assertions.assertEquals(List.of("willFetchJsonWebKeySet", "didFetchJsonWebKeySet"),
 				observer.getCalls().stream().map(RecordingObserver.Call::getMethodName).toList());
+	}
+
+	@Test
+	void concurrentSystemClockReadsKeepFreshKeysAvailable() throws Exception {
+		MemoryHttpClient client = MemoryHttpClient.answering(Answer.fromKeySet("max-age=60", "a"));
+		RemoteJsonWebKeySource source = source(client, Clock.systemUTC()).build();
+		Assertions.assertEquals(KeySelection.Kind.FOUND, select(source, "a").getKind());
+		int workers = 8;
+		CountDownLatch ready = new CountDownLatch(workers), start = new CountDownLatch(1);
+		ExecutorService pool = Executors.newFixedThreadPool(workers);
+		try {
+			List<Future<?>> calls = new ArrayList<>();
+			for (int worker = 0; worker < workers; worker++)
+				calls.add(pool.submit(() -> {
+					ready.countDown();
+					if (!start.await(10, TimeUnit.SECONDS)) throw new AssertionError("workers did not start");
+					for (int call = 0; call < 400; call++)
+						Assertions.assertEquals(KeySelection.Kind.FOUND, select(source, "a").getKind());
+					return null;
+				}));
+			Assertions.assertTrue(ready.await(10, TimeUnit.SECONDS));
+			start.countDown();
+			for (Future<?> call : calls) call.get(20, TimeUnit.SECONDS);
+			Assertions.assertEquals(1, client.getSendCount(), "no false rollback or retry fetch");
+		} finally {
+			start.countDown();
+			pool.shutdownNow();
+		}
 	}
 
 	// ----- Shared helpers -----

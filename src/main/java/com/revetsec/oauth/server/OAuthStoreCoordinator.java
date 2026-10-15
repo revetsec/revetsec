@@ -37,14 +37,24 @@ import static com.revetsec.oauth.server.OAuthStoreFailure.Reason.*;
  * The backend owns atomicity/durability; a return enum cannot establish those properties by itself.
  */
 final class OAuthStoreCoordinator {
+	private static final @NonNull Duration MAXIMUM_CLOCK_RESERVATION = Duration.ofMillis(100);
 	private final @NonNull OAuthAuthorizationServerStore store;
 	private final @NonNull OAuthStoreRecordCodec codec;
 	private final @NonNull Clock clock;
+	private final @NonNull Duration clockSkew;
+	private final @NonNull Duration clockReservation;
 	private final int maximumAttempts;
 	private final int maximumSubjectLength;
 	OAuthStoreCoordinator(@NonNull OAuthAuthorizationServerStore store, @NonNull OAuthStoreRecordCodec codec,
 			@NonNull Clock clock, int maximumAttempts, int maximumSubjectLength) {
+		this(store, codec, clock, Duration.ZERO, maximumAttempts, maximumSubjectLength);
+	}
+	OAuthStoreCoordinator(@NonNull OAuthAuthorizationServerStore store, @NonNull OAuthStoreRecordCodec codec,
+			@NonNull Clock clock, @NonNull Duration clockSkew, int maximumAttempts, int maximumSubjectLength) {
 		this.store = requireNonNull(store); this.codec = requireNonNull(codec); this.clock = requireNonNull(clock);
+		this.clockSkew = com.revetsec.internal.Limits.AS_CLOCK_SKEW.require(requireNonNull(clockSkew));
+		this.clockReservation = this.clockSkew.compareTo(MAXIMUM_CLOCK_RESERVATION) < 0
+			? this.clockSkew : MAXIMUM_CLOCK_RESERVATION;
 		if (maximumAttempts < 1 || maximumAttempts > 8 || maximumSubjectLength < 16 || maximumSubjectLength > 1024)
 			throw OAuthStoreFormat.invalid();
 		this.maximumAttempts = maximumAttempts; this.maximumSubjectLength = maximumSubjectLength;
@@ -55,7 +65,7 @@ final class OAuthStoreCoordinator {
 		Optional<OAuthStoreEntry> old = read(key, deadline);
 		if (old.isPresent()) { decode(old.orElseThrow(), now()); return OAuthStoreCommitStatus.CONFLICT; }
 		OAuthStoreReadSet reads = new OAuthStoreReadSet(); reads.observe(key, old);
-		OAuthStoreEntry entry = seal(key, initialIssuer(now()));
+		OAuthStoreEntry entry = seal(key, initialIssuer(reservedUntil(now())));
 		return submit(reads.transaction(List.of(OAuthStoreTransaction.Mutation.fromPut(entry))), deadline);
 	}
 	/** Explicit initialization outcome for management only, never credential admission. */
@@ -100,10 +110,11 @@ final class OAuthStoreCoordinator {
 	@NonNull OAuthStoreCommitStatus reseal(@NonNull OAuthStoreKey key, @NonNull Deadline deadline) {
 		requireNonNull(key);
 		if (!OAuthStoreFormat.namespace(key).equals(OAuthStoreFormat.namespace(this.codec.issuerKey()))) throw OAuthStoreFormat.invalid();
-		Instant time = now(); OAuthStoreReadSet reads = new OAuthStoreReadSet();
+		OAuthStoreReadSet reads = new OAuthStoreReadSet();
 		Optional<OAuthStoreEntry> issuerEntry = read(this.codec.issuerKey(), deadline);
-		OAuthStoreFence issuer = decode(issuerEntry.orElseThrow(() -> failure(CORRUPT_STATE)), time);
-		if (time.isBefore(issuer.highWater())) throw failure(UNAVAILABLE);
+		Instant sampled = now();
+		OAuthStoreFence issuer = decode(issuerEntry.orElseThrow(() -> failure(CORRUPT_STATE)), sampled);
+		Instant time = effectiveTime(sampled, issuer.highWater());
 		reads.observe(this.codec.issuerKey(), issuerEntry);
 		Optional<OAuthStoreEntry> entry = key.equals(this.codec.issuerKey()) ? issuerEntry : read(key, deadline);
 		if (entry.isEmpty() || !time.isBefore(entry.orElseThrow().getRetainUntil())) return OAuthStoreCommitStatus.CONFLICT;
@@ -150,6 +161,17 @@ final class OAuthStoreCoordinator {
 			return time;
 		} catch (VirtualMachineError fatal) { throw fatal; }
 		catch (Throwable exception) { throw callbackFailure(exception); }
+	}
+	private @NonNull Instant effectiveTime(@NonNull Instant sampled, @NonNull Instant highWater) {
+		if (!sampled.isBefore(highWater)) return sampled;
+		if (Duration.between(sampled, highWater).compareTo(this.clockSkew) > 0) throw failure(UNAVAILABLE);
+		return highWater;
+	}
+	/** A persisted upper bound; reservations never accumulate when a node's wall clock lags. */
+	private @NonNull Instant reservedUntil(@NonNull Instant sampled) {
+		if (this.clockReservation.isZero()) return sampled;
+		Instant latest = OAuthStoreFormat.PERMANENT.minus(this.clockReservation);
+		return sampled.isBefore(latest) ? sampled.plus(this.clockReservation) : sampled;
 	}
 	private @NonNull Optional<@NonNull OAuthStoreEntry> read(@NonNull OAuthStoreKey key, @NonNull Deadline deadline) {
 		Optional<OAuthStoreEntry> entry;
@@ -202,8 +224,8 @@ final class OAuthStoreCoordinator {
 		private Session(@NonNull Deadline deadline) {
 			this.deadline = requireNonNull(deadline); remaining(deadline);
 			OAuthStoreEntry entry = read(codec.issuerKey()).orElseThrow(() -> failure(CORRUPT_STATE));
-			this.observedNow = now(); this.issuer = decode(entry, this.observedNow);
-			if (this.observedNow.isBefore(this.issuer.highWater())) throw failure(UNAVAILABLE);
+			Instant sampled = now(); this.issuer = decode(entry, sampled);
+			this.observedNow = effectiveTime(sampled, this.issuer.highWater());
 		}
 		/** Cooperative operation validity boundary, checked immediately before/after the backend returns. */
 		void requireBefore(@NonNull Instant expires) {
@@ -240,15 +262,22 @@ final class OAuthStoreCoordinator {
 			if (mutations.size() > 7) throw OAuthStoreFormat.invalid();
 			for (OAuthStoreTransaction.Mutation mutation : mutations)
 				if (requireNonNull(mutation).getKey().equals(codec.issuerKey())) throw OAuthStoreFormat.invalid();
-			Instant time = checkedNow(); List<OAuthStoreTransaction.Mutation> prepared = new ArrayList<>(mutations);
-			prepared.add(OAuthStoreTransaction.Mutation.fromPut(seal(codec.issuerKey(), issuerState.atTime(time))));
+			Instant sampled = now(); Instant time = checkedTime(sampled);
+			List<OAuthStoreTransaction.Mutation> prepared = new ArrayList<>(mutations);
+			// The issuer version remains an exact condition on every transaction. Only a clock
+			// reservation rollover or an epoch change needs to mutate that shared row.
+			if (this.issuer != issuerState || clockReservation.isZero() || sampled.isAfter(this.issuer.highWater())) {
+				Instant reserved = reservedUntil(sampled);
+				Instant highWater = reserved.isAfter(time) ? reserved : time;
+				prepared.add(OAuthStoreTransaction.Mutation.fromPut(seal(codec.issuerKey(), issuerState.atTime(highWater))));
+			}
 			return finish(prepared);
 		}
-		private @NonNull Instant checkedNow() {
-			Instant time = now();
+		private @NonNull Instant checkedNow() { return checkedTime(now()); }
+		private @NonNull Instant checkedTime(@NonNull Instant sampled) {
+			Instant time = effectiveTime(sampled, this.observedNow);
 			Instant boundary = this.validBefore;
-			if (time.isBefore(this.observedNow) || time.isBefore(this.issuer.highWater())
-				|| boundary != null && !time.isBefore(boundary)) throw failure(UNAVAILABLE);
+			if (boundary != null && !time.isBefore(boundary)) throw failure(UNAVAILABLE);
 			return time;
 		}
 		private @NonNull OAuthStoreCommitStatus finish(@NonNull List<OAuthStoreTransaction.@NonNull Mutation> mutations) {

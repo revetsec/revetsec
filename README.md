@@ -4,7 +4,7 @@
 
 A zero-dependency Java library for OAuth 2.0 clients and resource servers, OpenID Connect relying parties, JOSE, SAML 2.0 service providers and SCIM 2.0 servers.
 
-**Revetsec is pre-release.** It verifies signed JWTs against JSON Web Key Sets, provides bounded RSA signing, and includes OAuth 2.0 client and issuer primitives, audience-checked JWT/introspection resource validation, an OpenID Connect relying party, SAML SP primitives and SCIM schema, resource, query and response primitives. SAML and SCIM interoperability qualification are still in progress; see [Status](#status) for what exists.
+**Revetsec is pre-release.** It verifies signed JWTs against JSON Web Key Sets, provides bounded RSA signing, and includes OAuth 2.0 client and issuer operations, audience-checked JWT/introspection resource validation, an OpenID Connect relying party, SAML SP, SCIM server primitives and WebAuthn relying-party workflows. See [Status](#status) for current release gates.
 
 Revetsec handles the application side of these protocols. It builds outbound requests, parses and validates what comes back, and hands your code a validated result or an exception. Your application keeps its own users, sessions, routes and storage.
 
@@ -143,6 +143,7 @@ Every area below ships together in a single 1.0.0 release:
 - JOSE: JWS verification, bounded RSA signing, JWK and JWK Sets, and JWT validation
 - SAML 2.0 service provider for Web Browser SSO, including encrypted assertions and front-channel Single Logout
 - SCIM 2.0 server primitives
+- WebAuthn relying-party registration, sign-in and account management
 
 Each area gets its own section here, with application code, when it lands.
 
@@ -178,21 +179,23 @@ Share one validator, and one key source, across threads. By default a token must
 
 `OAuthClient` supports authorization code with PKCE S256, client credentials, refresh, revocation and generated private-key assertions. It accepts static metadata or discovers an authorization server lazily. Browser completion checks the pending browser binding, state, callback route and issuer before token exchange. The [OAuth client guide](docs/oauth-client.md) covers cookie and store setup, concurrent replay, return destinations and the raw-token boundary.
 
-### OAuth authorization-server application contracts
+For an OIDC sign-in example with an application-owned session and both query and form-post callbacks, start with the [barebones OIDC application](examples/barebones-oidc/README.md). It runs against a local test provider and rotates the browser session after successful authentication.
 
-Registered-client lookup, secret verification, immutable registrations, app authorization decisions and continuing grant-policy contracts are implemented in `com.revetsec.oauth.server`. See the [application-contract guide](docs/oauth-server-application-contracts.md). Endpoint operations, token issuance, durable transactions and client-metadata transport remain under implementation.
+### OAuth authorization server
+
+The `com.revetsec.oauth.server` package implements authorization, token issuance, refresh, revocation, introspection, metadata and JWKS operations. The application supplies registered clients, subject authentication, consent, grant policy, a durable atomic store, signing keys and the browser session. See the [application-contract guide](docs/oauth-server-application-contracts.md) and the [self-issued runnable example](examples/self-issued/README.md).
 
 ### RSA signing
 
 `JwsSigner.fromRsaKeyPair(privateKey, publicKey, JwsAlgorithm.PS256)` creates a reusable signer with a checked public-key snapshot. It retains an application-owned private key without exporting it. Call `warmUp(remainingBudget)` for an explicit noncredential pair probe. `toCompactSerialization(type, keyId, certificateSha256Thumbprint, claimsUtf8, remainingBudget)` signs an exact, bounded JSON object and verifies each output before releasing the compact credential.
 
-PS256, RS256 and RS384 are supported. The optional 32-byte thumbprint is the SHA-256 digest of a DER certificate. The application supplies claims and remains responsible for their meaning. A checked JCA exception or provider `RuntimeException`, mismatched pair or exhausted budget produces a fixed `JwsSigningException`; it emits no partial credential. Provider `Error` values propagate after buffer cleanup, following the library’s unexpected-error boundary. JCA providers must cooperate with synchronous time budgets. See [algorithms and bounds](docs/supported-algorithms.md#bounded-rsa-signing-jwssigner). OAuth clients support private_key_jwt; token issuance is planned for 1.0.0.
+PS256, RS256 and RS384 are supported. The optional 32-byte thumbprint is the SHA-256 digest of a DER certificate. The application supplies claims and remains responsible for their meaning. A checked JCA exception or provider `RuntimeException`, mismatched pair or exhausted budget produces a fixed `JwsSigningException`; it emits no partial credential. Provider `Error` values propagate after buffer cleanup, following the library’s unexpected-error boundary. JCA providers must cooperate with synchronous time budgets. See [algorithms and bounds](docs/supported-algorithms.md#bounded-rsa-signing-jwssigner). OAuth clients support private_key_jwt, and the issuer implements token issuance.
 
 ### Status
 
 Revetsec is **pre-release**. The version is `1.0.0-SNAPSHOT`, and there is no compatibility promise before 1.0.0; see [COMPATIBILITY.md](COMPATIBILITY.md).
 
-The repository includes shared foundations, JOSE, an OAuth client, an OAuth issuer engine, an OpenID Connect relying party, strict JWT access-token validation, audience-checked JSON introspection and a SAML SP whose [RC-2 readiness gate](docs/reviews/rc-2-round-1.md#rc-2-closure--2026-10-14) closed on 2026-10-14. The SAML SP covers Redirect and POST sign-in requests, POST responses, encrypted assertions, encrypted NameIDs, metadata, pending and replay state, and front-channel Redirect and POST logout. Its [integration guide](docs/saml-sp.md) describes application ownership and deployment contracts. The scripted IdP, pinned Keycloak container, independent SAML differential comparators and Shibboleth capture exercise SSO, SLO, encryption and hostile structure cases within their documented limits. Other 1.0.0 release checkpoints remain open. SCIM includes schema-bound filters and explicit policies, resource create/replacement validation, ordered atomic PATCH, ordered membership reduction, GET/SearchRequest queries, projection, index/cursor framing, conditional headers, discovery and bounded responses; see the [server guide](docs/scim-server-primitives.md). The optional collection evaluator is implemented. Local SCIM integration and security/mutation qualification are recorded; its API was frozen on 2026-10-14 and other release gates remain open. The application supplies users, permissions, sessions, routes and durable storage. The Soklet adapter provides raw OAuth, SAML and SCIM transport helpers; the Jakarta and javax Servlet adapters provide SAML and SCIM transport helpers. Applications choose validators and make permission decisions.
+The repository includes shared foundations, JOSE, an OAuth client and issuer, an OpenID Connect relying party, resource-server validation, a SAML SP, SCIM server primitives and a WebAuthn relying party. The SAML SP's [RC-2 readiness gate](docs/reviews/rc-2-round-1.md#rc-2-closure--2026-10-14) closed on 2026-10-14; its [integration guide](docs/saml-sp.md) describes deployment contracts. SCIM's API was frozen on 2026-10-14; see its [server guide](docs/scim-server-primitives.md). WebAuthn's dedicated review and physical-key qualification remain open. The application supplies users, permissions, sessions, routes and durable storage. The Soklet, Jakarta Servlet and javax Servlet adapters provide transport helpers across OAuth, bearer admission, issuer endpoints, SAML, SCIM and WebAuthn as documented in each adapter. Applications choose validators and make permission decisions.
 
 Revetsec has not been independently audited. Its bounded security evidence is in [`docs/`](docs/): the [threat model](docs/threat-model.md), [interop matrix](COMPATIBILITY.md), [RC-1 local OAuth/OIDC qualification and Burp closeout](docs/pentest/2026-10-15-rc1-burp.md), [RC-2 review and closure](docs/reviews/rc-2-round-1.md), [SAML pentest notes](docs/pentest/2026-10-13.md), and [mutation ledger](docs/saml-mutation-triage-2026-10-11.md). [Fuzz evidence](fuzz/README.md) includes local runs and planted-defect checks. Other 1.0.0 release evidence is still being assembled.
 

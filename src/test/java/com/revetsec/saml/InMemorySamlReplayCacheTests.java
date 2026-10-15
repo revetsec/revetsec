@@ -36,6 +36,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static java.util.Objects.requireNonNull;
 
@@ -67,6 +68,61 @@ final class InMemorySamlReplayCacheTests {
         assertEquals(SamlReplayCache.MarkResult.CAPACITY_REFUSED,
                 cache.markIfAbsent("one", expiry.plusSeconds(2), BUDGET));
         assertTrue(cache.toString().contains("<redacted>"));
+    }
+
+    @Test void oneConnectionCannotConsumeOtherConnectionsReplayCapacity() {
+        MutableClock clock = new MutableClock(START);
+        SamlReplayCache cache = InMemorySamlReplayCache.withLimit(clock, 8);
+        Instant early = START.plusSeconds(10);
+        Instant late = START.plusSeconds(20);
+        assertEquals(SamlReplayCache.MarkResult.MARKED,
+                cache.markIfAbsent("tenant-a", "a1", early, BUDGET));
+        assertEquals(SamlReplayCache.MarkResult.MARKED,
+                cache.markIfAbsent("tenant-a", "a2", late, BUDGET));
+        assertEquals(SamlReplayCache.MarkResult.CAPACITY_REFUSED,
+                cache.markIfAbsent("tenant-a", "a3", late, BUDGET));
+        assertEquals(SamlReplayCache.MarkResult.ALREADY_PRESENT,
+                cache.markIfAbsent("tenant-a", "a1", early, BUDGET));
+        assertEquals(SamlReplayCache.MarkResult.MARKED,
+                cache.markIfAbsent("tenant-b", "b1", late, BUDGET));
+        assertEquals(SamlReplayCache.MarkResult.MARKED,
+                cache.markIfAbsent("tenant-c", "c1", late, BUDGET));
+        assertThrows(IllegalArgumentException.class,
+                () -> cache.markIfAbsent("", "invalid", late, BUDGET));
+        clock.set(early);
+        assertEquals(SamlReplayCache.MarkResult.MARKED,
+                cache.markIfAbsent("tenant-a", "a3", late, BUDGET));
+    }
+
+    @Test void connectionQuotaScalesBeyondOneThousandEntries() {
+        SamlReplayCache cache = InMemorySamlReplayCache.withLimit(
+                Clock.fixed(START, ZoneOffset.UTC), 4_100);
+        Instant expiry = START.plusSeconds(60);
+        for (int index = 0; index < 1_025; index++) {
+            assertEquals(SamlReplayCache.MarkResult.MARKED,
+                    cache.markIfAbsent("tenant-a", "a-" + index, expiry, BUDGET));
+        }
+        assertEquals(SamlReplayCache.MarkResult.CAPACITY_REFUSED,
+                cache.markIfAbsent("tenant-a", "a-over-quota", expiry, BUDGET));
+        assertEquals(SamlReplayCache.MarkResult.MARKED,
+                cache.markIfAbsent("tenant-b", "b-1", expiry, BUDGET));
+    }
+
+    @Test void expiredKeyCanBeReadmittedWithoutDiscardingItsNewExpiry() {
+        MutableClock clock = new MutableClock(START);
+        SamlReplayCache cache = InMemorySamlReplayCache.withLimit(clock, 4);
+        Instant firstExpiry = START.plusSeconds(10);
+        Instant secondExpiry = START.plusSeconds(20);
+        assertEquals(SamlReplayCache.MarkResult.MARKED,
+                cache.markIfAbsent("tenant-a", "same", firstExpiry, BUDGET));
+        clock.set(firstExpiry);
+        assertEquals(SamlReplayCache.MarkResult.MARKED,
+                cache.markIfAbsent("tenant-a", "same", secondExpiry, BUDGET));
+        assertEquals(SamlReplayCache.MarkResult.ALREADY_PRESENT,
+                cache.markIfAbsent("tenant-a", "same", secondExpiry, BUDGET));
+        clock.set(secondExpiry);
+        assertEquals(SamlReplayCache.MarkResult.MARKED,
+                cache.markIfAbsent("tenant-a", "new", secondExpiry.plusSeconds(10), BUDGET));
     }
 
     @Test void clockRollbackCannotReviveAnExpiredOrLiveKey() {

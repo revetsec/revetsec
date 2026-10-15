@@ -1,14 +1,18 @@
 # SCIM filter syntax
 
-The first SCIM slice provides bounded filter and attribute-path parsing,
-immutable syntax trees, a Java 17 visitor, explicit serialization, and filter
-policy configuration. Schema binding, policy enforcement, resource models,
-query execution and provisioning endpoints follow in later slices.
+SCIM support includes bounded filter and attribute-path parsing, immutable
+syntax trees, a Java 17 visitor, explicit serialization, schema binding,
+policy enforcement, resource models, query framing, an optional evaluator,
+and provisioning primitives.
 
 **A successful syntax parse grants no query permission.** Before executing a
 filter, an application needs registered-schema binding, type validation,
 approval of the complete normalized tree, and tenant and caller authorization.
-The current parser performs syntax validation only.
+`ScimFilter.fromExpressionResult` performs syntax validation only.
+`ScimServiceProvider.parseFilterResult` also binds the tree to registered
+schemas and checks the configured filter policy. The application still
+authenticates the caller, authorizes its tenant and scope, and executes the
+approved tree against its own data.
 
 ## Parse a filter
 

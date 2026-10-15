@@ -108,9 +108,9 @@ final class WebAuthnCredentialState {
         if (flags.backupEligible() != this.backupEligible)
             return Assessment.rejected();
         long newCounter = flags.counter();
-        if (this.counter != 0 && newCounter != 0 && newCounter <= this.counter)
+        if (this.counter != 0 && newCounter <= this.counter)
             return Assessment.counterRisk();
-        // A signed zero is allowed for a credential without a counter, but cannot lower the stored high-water value.
+        // An authenticator that has established a counter cannot return to zero or repeat a value.
         long highWaterCounter = Math.max(this.counter, newCounter);
         return Assessment.candidate(new WebAuthnCredentialState(this.credentialId, this.userHandle,
                 this.keyCbor, this.algorithm, highWaterCounter, this.backupEligible, flags.backedUp()));

@@ -64,7 +64,7 @@ CREATE TABLE issuer_store_entry (
 
 -- Optional authoritative WebAuthn store. Every participating node, including account
 -- management, must lock the provisioned namespace row before reading or writing. Retain
--- credential tombstones and account fences; do not TTL-delete live protocol state.
+-- credential tombstones and account fences; only expired ceremonies are reclaimed.
 CREATE SEQUENCE webauthn_store_version_seq AS bigint NO CYCLE;
 
 CREATE TABLE webauthn_store_namespace (
@@ -77,8 +77,12 @@ CREATE TABLE webauthn_store_entry (
     kind text COLLATE "C" NOT NULL,
     version bigint NOT NULL CHECK (version > 0),
     sealed_form text COLLATE "C" NOT NULL CHECK (octet_length(sealed_form) BETWEEN 1 AND 350000),
+    expires_at timestamptz,
     PRIMARY KEY (namespace, storage_key)
 );
+
+CREATE INDEX webauthn_store_ceremony_expiry ON webauthn_store_entry(namespace, expires_at)
+    WHERE kind = 'CEREMONY' AND expires_at IS NOT NULL;
 
 -- Optional application recovery marker used by the local WebAuthn fixture. Its matching
 -- epoch and sealing-key fingerprint must also be retained in an independent durable control

@@ -350,9 +350,8 @@ class ScimM10ProviderTests {
                 List.of("https://example.invalid/scim/v2/Users/1%2F2"),
                 created.getHeaders().get("Location"));
         assertTrue(text(created).contains("https://example.invalid/scim/v2/Users/1%2F2"));
-        assertEquals(
-                URI.create("https://example.invalid/scim/v2/Users/%2E%2E"),
-                p.resourceLocationFor(USER, ".."));
+        assertThrows(IllegalArgumentException.class, () -> p.resourceLocationFor(USER, ".."));
+        assertThrows(IllegalArgumentException.class, () -> p.resourceLocationFor(USER, "."));
         assertEquals(200, response(p.replacementResponseResult(r, Set.of(), s)).getStatusCode());
         ScimResponse no = p.noContentResponse();
         assertEquals(204, no.getStatusCode());

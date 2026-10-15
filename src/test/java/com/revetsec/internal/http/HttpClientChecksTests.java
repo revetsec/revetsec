@@ -26,6 +26,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestFactory;
 
 import java.net.http.HttpClient;
+import java.net.Authenticator;
+import java.net.CookieManager;
 import java.util.stream.Stream;
 
 /**
@@ -56,6 +58,18 @@ final class HttpClientChecksTests {
 		// The default JDK setting is NEVER, so a client built without a redirect setting passes too.
 		HttpClient defaults = HttpClient.newBuilder().build();
 		Assertions.assertSame(defaults, HttpClientChecks.requireNeverRedirects(defaults));
+	}
+
+	@Test
+	void rejectsJdkAuthenticatorAndCookieHandlerAtBuildBoundary() {
+		HttpClient authenticated = TestTls.httpClientBuilder().authenticator(new Authenticator() { }).build();
+		IllegalArgumentException authenticator = Assertions.assertThrows(IllegalArgumentException.class,
+				() -> HttpClientChecks.requireNeverRedirects(authenticated));
+		Assertions.assertTrue(String.valueOf(authenticator.getMessage()).contains("Authenticator"));
+		HttpClient cookies = TestTls.httpClientBuilder().cookieHandler(new CookieManager()).build();
+		IllegalArgumentException cookieHandler = Assertions.assertThrows(IllegalArgumentException.class,
+				() -> HttpClientChecks.requireNeverRedirects(cookies));
+		Assertions.assertTrue(String.valueOf(cookieHandler.getMessage()).contains("CookieHandler"));
 	}
 
 	// The check reads only followRedirects(), so an application's own HttpClient subclass is judged the same way.

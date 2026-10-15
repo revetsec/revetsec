@@ -145,6 +145,8 @@ public final class PlaygroundResources {
 
     @GET("/oidc/callback") @POST("/oidc/callback")
     public @NonNull Response callback(@NonNull Request request) {
+        if (request.getHttpMethod() != HttpMethod.GET && request.getHttpMethod() != HttpMethod.POST)
+            return fixed(405, "Method not allowed.");
         if (!PlaygroundAdmission.trusted(request, profile.config, true)) return fixed(403, "Request denied.");
         event("OIDC callback received");
         return oidc.callback(profile.config, request);

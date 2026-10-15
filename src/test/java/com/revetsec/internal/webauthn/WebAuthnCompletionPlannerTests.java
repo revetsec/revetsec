@@ -196,8 +196,7 @@ final class WebAuthnCompletionPlannerTests {
                 indexKey(), WebAuthnStoreEntry.Absent.confirmed(),
                 fenceKey(), present(new byte[] {2}, fence(true))));
         for (WebAuthnStoreCommitResult status : new WebAuthnStoreCommitResult[] {
-                WebAuthnStoreCommitResult.COMMITTED, WebAuthnStoreCommitResult.UNKNOWN,
-                WebAuthnStoreCommitResult.CONFLICT}) {
+                WebAuthnStoreCommitResult.COMMITTED, WebAuthnStoreCommitResult.UNKNOWN}) {
             AtomicInteger reads = new AtomicInteger();
             AtomicInteger writes = new AtomicInteger();
             var runner = runner(first, expanded, status, reads, writes, new AtomicLong());
@@ -205,7 +204,6 @@ final class WebAuthnCompletionPlannerTests {
             assertEquals(switch (status) {
                 case COMMITTED -> WebAuthnCompletionRunner.Outcome.COMMITTED_NO_PROOF;
                 case UNKNOWN -> WebAuthnCompletionRunner.Outcome.INDETERMINATE;
-                case CONFLICT -> WebAuthnCompletionRunner.Outcome.UNAVAILABLE;
                 default -> throw new AssertionError(status);
             }, completion.outcome());
             assertEquals(status == WebAuthnStoreCommitResult.COMMITTED, completion.fact().isPresent());
@@ -223,9 +221,8 @@ final class WebAuthnCompletionPlannerTests {
         }
     }
 
-    @Test void runnerPersistsObservedTimeForRejectedInputAndWithholdsLateCommit() throws Exception {
+    @Test void runnerRejectsMalformedInputWithoutAClockWrite() throws Exception {
         KeyPair pair = KeyPairGenerator.getInstance("Ed25519").generateKeyPair();
-        var planner = planner();
         var first = first(registration());
         AtomicInteger reads = new AtomicInteger();
         AtomicInteger writes = new AtomicInteger();
@@ -236,29 +233,7 @@ final class WebAuthnCompletionPlannerTests {
         assertEquals(WebAuthnCompletionRunner.Outcome.REJECTED,
                 rejected.completeRegistration(CEREMONY_ID, BINDING, malformed));
         assertEquals(1, reads.get());
-        assertEquals(1, writes.get());
-
-        reads.set(0); writes.set(0);
-        AtomicLong nanos = new AtomicLong();
-        WebAuthnStore store = new WebAuthnStore() {
-            @Override public @NonNull WebAuthnStoreReadResult read(
-                    @NonNull Set<@NonNull WebAuthnStoreKey> keys, @NonNull Duration remaining) {
-                reads.incrementAndGet();
-                return WebAuthnStoreReadResult.Available.fromSnapshot(first);
-            }
-            @Override public @NonNull WebAuthnStoreCommitResult compareAndCommit(
-                    @NonNull WebAuthnStoreWrite write, @NonNull Duration remaining) {
-                writes.incrementAndGet();
-                nanos.addAndGet(Duration.ofSeconds(1).toNanos());
-                return WebAuthnStoreCommitResult.COMMITTED;
-            }
-        };
-        var late = new WebAuthnCompletionRunner(new WebAuthnStoreCoordinator(
-                store, Duration.ofSeconds(1), nanos::get), planner, CLOCK, ALLOW);
-        assertEquals(WebAuthnCompletionRunner.Outcome.INDETERMINATE,
-                late.completeRegistration(CEREMONY_ID, BINDING, malformed));
-        assertEquals(1, reads.get());
-        assertEquals(1, writes.get());
+        assertEquals(0, writes.get());
     }
 
     @Test void runnerChecksRealSignedAssertionBeforeConfirmedCredentialUpdate() throws Exception {
@@ -345,7 +320,7 @@ final class WebAuthnCompletionPlannerTests {
         };
         var runner = new WebAuthnCompletionRunner(new WebAuthnStoreCoordinator(store,
                 Duration.ofSeconds(1), () -> 0), planner(), changingClock, ALLOW);
-        assertEquals(WebAuthnCompletionRunner.Outcome.INDETERMINATE,
+        assertEquals(WebAuthnCompletionRunner.Outcome.REJECTED,
                 runner.completeRegistration(CEREMONY_ID, BINDING, registrationJson(pair)));
         assertEquals(2, reads.get());
     }
@@ -416,14 +391,14 @@ final class WebAuthnCompletionPlannerTests {
             @Override public boolean isCurrent() { return true; }
             @Override public void close() { throw new IllegalStateException("private marker"); }
         };
-        var afterClockOnlyWrite = runner(first, first, WebAuthnStoreCommitResult.COMMITTED,
+        var afterRejectedRead = runner(first, first, WebAuthnStoreCommitResult.COMMITTED,
                 reads, writes, new AtomicLong(), brokenRelease);
         byte[] malformed = registrationJson(pair);
         malformed[0] = '<';
         assertEquals(WebAuthnCompletionRunner.Outcome.INDETERMINATE,
-                afterClockOnlyWrite.completeRegistration(CEREMONY_ID, BINDING, malformed));
+                afterRejectedRead.completeRegistration(CEREMONY_ID, BINDING, malformed));
         assertEquals(1, reads.get());
-        assertEquals(1, writes.get());
+        assertEquals(0, writes.get());
     }
 
     private static @NonNull WebAuthnCompletionRunner runner(@NonNull WebAuthnStoreSnapshot first,

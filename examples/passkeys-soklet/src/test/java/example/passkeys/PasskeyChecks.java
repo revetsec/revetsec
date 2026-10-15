@@ -42,6 +42,7 @@ public final class PasskeyChecks {
 
     public static void main(java.lang.@NonNull String @NonNull [] args) throws Exception {
         rejectsUnsafeConfiguration();
+        checksAnonymousSessionCapacity();
         checksSessionAndProtocolBoundary();
         checksSuccessfulPasskeyLifecycle();
         System.out.println("Passkey example route checks passed.");
@@ -52,6 +53,21 @@ public final class PasskeyChecks {
                 "passkeys.example.test", ACCESS_KEY, Clock.systemUTC()));
         rejected(() -> new PasskeyApp(ORIGIN, "other.example.test", ACCESS_KEY, Clock.systemUTC()));
         rejected(() -> new PasskeyApp(ORIGIN, "Passkeys.example.test", ACCESS_KEY, Clock.systemUTC()));
+    }
+
+    private static void checksAnonymousSessionCapacity() throws Exception {
+        PasskeySessions sessions = new PasskeySessions(Clock.systemUTC(), 1);
+        PasskeySessions.Session first = sessions.begin();
+        PasskeySessions.Session second = sessions.begin();
+        check(!sessions.current(first) && sessions.current(second));
+        PasskeySessions.Session authenticated = sessions.rotate(second, true);
+        try {
+            sessions.begin();
+            throw new AssertionError("Authenticated session displaced at capacity");
+        } catch (IllegalStateException expected) {
+            // Only anonymous sessions may be displaced.
+        }
+        check(sessions.current(authenticated));
     }
 
     private static void checksSessionAndProtocolBoundary() throws Exception {
@@ -84,8 +100,10 @@ public final class PasskeyChecks {
         check(body(account).contains("data-authenticated='true'"));
         String nextCsrf = capture(body(account), "data-csrf='([A-Za-z0-9_-]{43})'");
         check(!csrf.equals(nextCsrf));
+        equal(403, app.beginRegistration(post("/register/start", nextCookie,
+                nextCsrf, ORIGIN, Map.of(), null)).getStatusCode());
         MarshaledResponse prepared = app.beginRegistration(post("/register/start", nextCookie,
-                nextCsrf, ORIGIN, Map.of(), null));
+                nextCsrf, ORIGIN, Map.of("X-Demo-Access-Key", List.of(ACCESS_KEY)), null));
         equal(200, prepared.getStatusCode());
         String ceremony = capture(body(prepared), "\\\"ceremonyId\\\":\\\"([A-Za-z0-9_-]{43})\\\"");
         check(body(prepared).contains("\"publicKey\""));
@@ -125,7 +143,7 @@ public final class PasskeyChecks {
         String accountCsrf = csrf(app.index(get("/", accountCookie)));
 
         MarshaledResponse prepared = app.beginRegistration(post("/register/start", accountCookie,
-                accountCsrf, ORIGIN, Map.of(), null));
+                accountCsrf, ORIGIN, Map.of("X-Demo-Access-Key", List.of(ACCESS_KEY)), null));
         equal(200, prepared.getStatusCode());
         String registration = body(prepared);
         String registrationId = capture(registration, "\\\"ceremonyId\\\":\\\"([A-Za-z0-9_-]{43})\\\"");
@@ -181,13 +199,16 @@ public final class PasskeyChecks {
         equal(403, app.sensitiveAction(post("/sensitive", signedInCookie,
                 signedInCsrf, ORIGIN, Map.of(), null)).getStatusCode());
 
-        equal(200, app.removeCredential(post("/credentials/remove", signedInCookie,
+        equal(403, app.removeCredential(post("/credentials/remove", signedInCookie,
                 signedInCsrf, ORIGIN, Map.of("X-Credential-Id", List.of(authenticator.credentialId())),
                 null)).getStatusCode());
+        equal(200, app.removeCredential(post("/credentials/remove", signedInCookie,
+                signedInCsrf, ORIGIN, Map.of("X-Credential-Id", List.of(authenticator.credentialId()),
+                        "X-Demo-Access-Key", List.of(ACCESS_KEY)), null)).getStatusCode());
         check(body(app.listCredentials(post("/credentials/list", signedInCookie,
                 signedInCsrf, ORIGIN, Map.of(), null))).contains("\"credentialIds\":[]"));
         MarshaledResponse reuseStart = app.beginRegistration(post("/register/start", signedInCookie,
-                signedInCsrf, ORIGIN, Map.of(), null));
+                signedInCsrf, ORIGIN, Map.of("X-Demo-Access-Key", List.of(ACCESS_KEY)), null));
         equal(200, reuseStart.getStatusCode());
         String reuse = body(reuseStart);
         equal(400, app.finishRegistration(finish("/register/finish", signedInCookie, signedInCsrf,

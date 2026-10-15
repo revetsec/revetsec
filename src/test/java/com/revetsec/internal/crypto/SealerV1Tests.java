@@ -187,7 +187,7 @@ final class SealerV1Tests {
 		}
 
         Assertions.assertEquals(Set.of("revetsec/pending-authorization/v1", "revetsec/pending-saml/v1",
-                "revetsec/pending-saml-logout/v1",
+                "revetsec/pending-saml-logout/v1", "revetsec/saml-session/v1",
                 "revetsec/oidc-session/v1", "revetsec/app/v1", "revetsec/as-record/v1",
                 "revetsec/as-client-metadata-cache/v1", "revetsec/webauthn-record/v1"), labels);
 	}

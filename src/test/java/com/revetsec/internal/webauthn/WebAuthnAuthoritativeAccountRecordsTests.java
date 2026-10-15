@@ -74,10 +74,16 @@ final class WebAuthnAuthoritativeAccountRecordsTests {
         Instant later = NOW.plusNanos(1);
         var advanced = codec.prepare(present, later, CLOCK);
         assertEquals(later, advanced.effectiveAt());
+        assertNull(advanced.mutation());
+        later = NOW.plusSeconds(1);
+        advanced = codec.prepare(present, later, CLOCK);
+        assertEquals(later, advanced.effectiveAt());
         var advancedMutation = requireNonNull(advanced.mutation());
         assertEquals(WebAuthnStoreWrite.Mutation.Kind.REPLACE, advancedMutation.getKind());
         assertEquals(later, codec.decode(key, advancedMutation.getSealedBytes().orElseThrow(), CLOCK));
         assertFalse(advanced.toString().contains(key.getStorageKey()));
+        assertThrows(WebAuthnRecordException.class,
+                () -> codec.prepare(present, NOW.minusSeconds(31), CLOCK));
 
         var ceremony = WebAuthnCeremonyState.discoverableAuthentication(new byte[32],
                 new byte[32], new byte[32], Set.of("https://login.example.com"),
@@ -98,6 +104,25 @@ final class WebAuthnAuthoritativeAccountRecordsTests {
         }
         assertRedacted(() -> codec.decode(WebAuthnStoreKey.forNamespaceClock("other", RP),
                 codec.encode(NOW), CLOCK));
+    }
+
+    @Test void namespaceClockNearInstantMaximumKeepsSkewAndStepChecksBounded() throws Exception {
+        var codec = new WebAuthnNamespaceClock(NAMESPACE, RP, records());
+        WebAuthnStoreKey key = codec.key();
+        var maximum = WebAuthnStoreSnapshot.fromEntries(Set.of(key), Map.of(key,
+                WebAuthnStoreEntry.Present.fromVersionAndSealedBytes(new byte[] {1}, codec.encode(Instant.MAX))));
+        var tolerated = codec.prepare(maximum, Instant.MAX.minusSeconds(30), CLOCK);
+        assertEquals(Instant.MAX, tolerated.effectiveAt());
+        assertNull(tolerated.mutation());
+        assertThrows(WebAuthnRecordException.class,
+                () -> codec.prepare(maximum, Instant.MAX.minusSeconds(31), CLOCK));
+
+        var nearMaximum = WebAuthnStoreSnapshot.fromEntries(Set.of(key), Map.of(key,
+                WebAuthnStoreEntry.Present.fromVersionAndSealedBytes(new byte[] {2},
+                        codec.encode(Instant.MAX.minusNanos(1)))));
+        var shortStep = codec.prepare(nearMaximum, Instant.MAX, CLOCK);
+        assertEquals(Instant.MAX, shortStep.effectiveAt());
+        assertNull(shortStep.mutation());
     }
 
     @Test void accountFenceActiveAndDisabledAreKeyBoundAndDoNotInferActiveFromAbsence() throws Exception {

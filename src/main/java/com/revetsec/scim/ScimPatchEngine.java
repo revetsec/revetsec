@@ -71,7 +71,7 @@ final class ScimPatchEngine {
         if (engine.error != null) return new ScimPatchApplicationResult.Rejected(engine.error);
         boolean changed=!modified.isEmpty();
         return new ScimPatchApplicationResult.Succeeded(new ScimPatchResult(changed
-                ? ScimResource.parsed(engine.type,checked,context) : current,changed,
+                ? ScimResource.parsed(engine.type,checked,context,work.maximum()) : current,changed,
                 request.getRequestedAttributePaths(),modified,request.getSuppliedAttributePaths(),context));
     }
 
@@ -137,7 +137,8 @@ final class ScimPatchEngine {
                 if (ScimResourceValidation.assigned(value)
                         && definition.getMutability() != ScimMutability.READ_WRITE
                         && definition.getMutability() != ScimMutability.WRITE_ONLY
-                        || protectedChildren(definition,value)) {
+                        || !type.isStandardEnterpriseManagerPath(schema+":"+definition.getName())
+                        && protectedChildren(definition,value)) {
                     if (error == null) error=ScimError.mutabilityInstance();
                     return null;
                 }
@@ -248,6 +249,12 @@ final class ScimPatchEngine {
         JsonValue value=update(definition,old.getMembers().get(definition.getName()),incoming,kind,childPath);
         if (error != null) return null;
         LinkedHashMap<String,JsonValue> result=new LinkedHashMap<>(old.getMembers());
+        if (type.isStandardEnterpriseManagerPath(top.toScimString()) && name.equals("value")
+                && !exact(old.getMembers().get("value"),value)) {
+            if (error != null) return null;
+            result.remove("displayName");
+            result.remove("$ref");
+        }
         if (value == null) result.remove(definition.getName()); else result.put(definition.getName(),value);
         return JsonObject.fromMembers(result);
     }
@@ -319,7 +326,9 @@ final class ScimPatchEngine {
         if (definition.getMutability() == ScimMutability.READ_ONLY) { error=ScimError.mutabilityInstance(); return null; }
         JsonValue result;
         if (kind == ScimPatchOperationType.REMOVE || incoming instanceof JsonNull) {
-            if (old != null && !groupMembers(target) && protectedChildren(definition,old)) { if (error == null) error=ScimError.mutabilityInstance(); return null; }
+            if (old != null && !groupMembers(target)
+                    && !type.isStandardEnterpriseManagerPath(target.toScimString())
+                    && protectedChildren(definition,old)) { if (error == null) error=ScimError.mutabilityInstance(); return null; }
             result=null;
         } else if (definition.isMultiValued()) result=array(definition,old,(JsonArray)java.util.Objects.requireNonNull(incoming),kind,target);
         else if (definition.getType() == ScimAttributeType.COMPLEX) result=merge(definition,
@@ -338,6 +347,13 @@ final class ScimPatchEngine {
             @NonNull JsonObject object,@NonNull ScimAttributePath target) {
         if (!spend(old.getMembers().size()+object.getMembers().size()+1L)) return null;
         LinkedHashMap<String,JsonValue> output=new LinkedHashMap<>(old.getMembers());
+        if (type.isStandardEnterpriseManagerPath(target.toScimString())
+                && object.getMembers().containsKey("value")
+                && !exact(old.getMembers().get("value"),object.getMembers().get("value"))) {
+            if (error != null) return null;
+            output.remove("displayName");
+            if (!object.getMembers().containsKey("$ref")) output.remove("$ref");
+        }
         for (Map.Entry<String,JsonValue> supplied : object.getMembers().entrySet()) {
             if (!spend(definition.getSubAttributes().size()+1L)) return null;
             ScimAttributeDefinition child=ScimSchemas.attribute(definition.getSubAttributes(),supplied.getKey()).orElseThrow();
@@ -591,6 +607,7 @@ final class ScimPatchEngine {
     private boolean strategy(@NonNull ScimAttributePath target,@NonNull ScimAttributeDefinition definition,
             @NonNull ScimComparisonOperator operator,@NonNull String value,@NonNull String literal) {
         if (!spend(1L+value.length()+literal.length())) return false;
+        if (operator == ScimComparisonOperator.CO && !spend((long)value.length()*literal.length())) return false;
         ScimStringMatchResult result=java.util.Objects.requireNonNull(matching.match(target,definition,operator,value,literal));
         if (result instanceof ScimStringMatchResult.Matched matched) return matched.isMatched();
         error=ScimError.invalidFilterInstance(); return false;
