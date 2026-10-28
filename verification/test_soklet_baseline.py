@@ -19,8 +19,10 @@ import hashlib
 import importlib.util
 import io
 import json
+import os
 from pathlib import Path
 import re
+import subprocess
 import sys
 import tempfile
 from types import SimpleNamespace
@@ -34,6 +36,7 @@ ROOT = Path(__file__).resolve().parents[1]
 PINS = json.loads((ROOT / "examples/pins.json").read_text())
 CONFIG_PATHS = (
     ".github/workflows/ci.yml", ".github/workflows/scim-interop.yml", "pom.xml",
+    ".github/scripts/download-pinned-corretto21-linux-x64.sh",
     "examples/barebones-oidc/pom.xml", "examples/playground/pom.xml",
     "examples/self-issued/pom.xml", "examples/rsa-oidc/pom.xml",
     "verification/examples/NullabilityAudit.java",
@@ -77,6 +80,16 @@ def check_configuration(files, pins):
     compiler = pins["framework"]["build_java_version"]
     if minimum <= core_release or int(compiler.split(".")[0]) != minimum:
         raise AssertionError("Framework compiler and minimum Java must agree above core Java 17")
+    archive = "amazon-corretto-21.0.11.10.1-linux-x64.tar.gz"
+    downloader = ".github/scripts/download-pinned-corretto21-linux-x64.sh"
+    source = files[downloader]
+    for required in (
+            "archive=" + archive,
+            "sha256=5b4dc8817df13f88f9bfc434e5d018adb535889ff2fe0ccf758bcebcc216f394",
+            "url=https://corretto.aws/downloads/resources/21.0.11.10.1/$archive",
+            "sha256sum --check --strict"):
+        if required not in source:
+            raise AssertionError("Pinned Corretto download guard drift: " + required)
     for path, expected in (("pom.xml", core_release), ("examples/rsa-oidc/pom.xml", core_release),
                            *(("examples/" + name + "/pom.xml", minimum)
                              for name in ("barebones-oidc", "playground", "self-issued"))):
@@ -115,6 +128,14 @@ def check_configuration(files, pins):
         if not setups or not re.search(r"java-version: ['\"]" + re.escape(compiler) + r"['\"]",
                                        setups[-1].group()):
             raise AssertionError(label + " framework must build under its exact pinned compiler")
+        setup = setups[-1].group()
+        if ("distribution: jdkfile" not in setup or
+                "jdk-file: ${{ runner.temp }}/" + archive not in setup):
+            raise AssertionError(label + " framework compiler must use the verified local archive")
+        setup_index = builds.index(setups[-1])
+        if setup_index == 0 or ("bash " + downloader not in builds[setup_index - 1].group() or
+                                '"$RUNNER_TEMP/' + archive + '"' not in builds[setup_index - 1].group()):
+            raise AssertionError(label + " framework compiler archive must be downloaded immediately before setup")
         if "working-directory:" not in framework_build.group() or "framework" not in framework_build.group():
             raise AssertionError(label + " framework checksum must accompany the framework build")
         if label == "examples":
@@ -136,6 +157,23 @@ class SokletBaselineConfigurationTests(unittest.TestCase):
     def test_current_workflows_and_poms_form_one_coherent_baseline(self):
         check_configuration(self.files, PINS)
 
+    def test_corrupt_pinned_jdk_download_is_rejected_and_removed(self):
+        downloader = ROOT / ".github/scripts/download-pinned-corretto21-linux-x64.sh"
+        self.assertEqual(0, subprocess.run(["bash", "-n", str(downloader)], check=False).returncode)
+        with tempfile.TemporaryDirectory(prefix="revetsec-corretto-pin-test-") as temporary:
+            root = Path(temporary)
+            archive = root / "amazon-corretto-21.0.11.10.1-linux-x64.tar.gz"
+            fake_bin = root / "bin"
+            fake_bin.mkdir()
+            curl = fake_bin / "curl"
+            curl.write_text("#!/usr/bin/env bash\nprintf 'corrupt archive' > \"${@: -1}\"\n")
+            curl.chmod(0o755)
+            environment = dict(os.environ, PATH=str(fake_bin) + os.pathsep + os.environ["PATH"])
+            result = subprocess.run(["bash", str(downloader), str(archive)], check=False,
+                                    capture_output=True, text=True, env=environment)
+            self.assertNotEqual(0, result.returncode)
+            self.assertFalse(archive.exists(), "A failed checksum must not leave an installable archive")
+
     def test_guard_detects_independent_pin_checksum_and_compiler_drift(self):
         replacements = (
             (".github/workflows/ci.yml", PINS["adapter"]["revision"], "a" * 40, "checkout pin"),
@@ -144,6 +182,13 @@ class SokletBaselineConfigurationTests(unittest.TestCase):
             (".github/workflows/scim-interop.yml", PINS["framework"]["jar_sha256"], "d" * 64, "checksum"),
             (".github/workflows/ci.yml", "java-version: '" + PINS["framework"]["build_java_version"] + "'",
              "java-version: '27'", "pinned compiler"),
+            (".github/workflows/ci.yml", "distribution: jdkfile", "distribution: corretto",
+             "verified local archive"),
+            (".github/workflows/scim-interop.yml", "jdk-file: ${{ runner.temp }}/amazon-corretto-21.0.11.10.1-linux-x64.tar.gz",
+             "jdk-file: ${{ runner.temp }}/different.tar.gz", "verified local archive"),
+            (".github/scripts/download-pinned-corretto21-linux-x64.sh",
+             "5b4dc8817df13f88f9bfc434e5d018adb535889ff2fe0ccf758bcebcc216f394",
+             "0" * 64, "download guard"),
         )
         for path, before, after, reason in replacements:
             with self.subTest(path=path, reason=reason):

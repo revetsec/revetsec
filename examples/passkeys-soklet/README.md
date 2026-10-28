@@ -100,4 +100,8 @@ Every POST route checks the configured Host and exact Origin, a server-held sess
 
 Anonymous page floods can still churn in-progress anonymous sessions. A deployed application needs admission and rate limits at the trusted edge, plus a session store sized for its traffic.
 
-The route, loopback listener and virtual Chrome browser checks are separate. Trusted-edge deployment and the required physical discoverable UV-capable FIDO2 key remain separate release evidence.
+The route, loopback listener and virtual Chrome browser checks are separate. A
+[dated local physical-key flow](../../docs/reviews/security-review-2026-10-15-followup.md)
+passed with a discoverable UV-capable FIDO2 key. Trusted-edge deployment,
+distributed recovery and the remaining WebAuthn release review require separate
+evidence.

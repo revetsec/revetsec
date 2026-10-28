@@ -96,9 +96,11 @@ public final class PasswordSizingProbe {
                 System.getProperty("os.arch"), Runtime.getRuntime().availableProcessors(),
                 Runtime.getRuntime().maxMemory() / (1024 * 1024), memoryKiB, passes, lanes, bcryptLogRounds,
                 gateCalls, workers, rounds);
-        System.out.println("round,worker,elapsed_ms,outcome");
+        List<MeasuredCall> measuredCalls = new ArrayList<>();
         List<Long> completedNanos = new ArrayList<>();
         int unavailable = 0;
+        long measuredStartNanos = 0;
+        long measuredElapsedNanos;
         ExecutorService executor = Executors.newFixedThreadPool(workers);
         try {
             for (int round = 0; round <= rounds; round++) {
@@ -110,23 +112,33 @@ public final class PasswordSizingProbe {
                         return sample(mode, hasher, stored, bcryptStored);
                     }));
                 }
+                if (round == 1) measuredStartNanos = System.nanoTime();
                 start.countDown();
                 for (int worker = 0; worker < workers; worker++) {
                     Sample sample = get(futures.get(worker));
                     if (round == 0) continue; // Warm-up is deliberately excluded from results.
-                    System.out.printf(Locale.ROOT, "%d,%d,%.3f,%s%n", round, worker,
-                            sample.elapsedNanos() / 1_000_000.0, sample.outcome());
+                    measuredCalls.add(new MeasuredCall(round, worker, sample));
                     if (sample.outcome().equals("WORK_CAPACITY")) unavailable++;
                     else completedNanos.add(sample.elapsedNanos());
                 }
             }
+            measuredElapsedNanos = System.nanoTime() - measuredStartNanos;
         } finally {
             executor.shutdownNow();
         }
+        System.out.println("round,worker,elapsed_ms,outcome");
+        for (MeasuredCall call : measuredCalls)
+            System.out.printf(Locale.ROOT, "%d,%d,%.3f,%s%n", call.round(), call.worker(),
+                    call.sample().elapsedNanos() / 1_000_000.0, call.sample().outcome());
         completedNanos.sort(Long::compareTo);
-        System.err.printf(Locale.ROOT, "completed=%d work_capacity=%d p50_ms=%.3f p95_ms=%.3f%n",
-                completedNanos.size(), unavailable, percentile(completedNanos, 0.50),
-                percentile(completedNanos, 0.95));
+        double measuredSeconds = Math.max(1L, measuredElapsedNanos) / 1_000_000_000.0;
+        System.err.printf(Locale.ROOT,
+                "completed=%d work_capacity=%d measured_wall_ms=%.3f completed_per_s=%.3f "
+                        + "attempted_per_s=%.3f p50_ms=%.3f p95_ms=%.3f p99_ms=%.3f%n",
+                completedNanos.size(), unavailable, measuredElapsedNanos / 1_000_000.0,
+                completedNanos.size() / measuredSeconds, measuredCalls.size() / measuredSeconds,
+                percentile(completedNanos, 0.50), percentile(completedNanos, 0.95),
+                percentile(completedNanos, 0.99));
     }
 
     private static @NonNull Sample sample(@NonNull String mode, @NonNull PasswordHasher hasher,
@@ -201,4 +213,7 @@ public final class PasswordSizingProbe {
 
     @Immutable
     private record Sample(long elapsedNanos, @NonNull String outcome) { }
+
+    @Immutable
+    private record MeasuredCall(int round, int worker, @NonNull Sample sample) { }
 }

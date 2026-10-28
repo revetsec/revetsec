@@ -683,7 +683,46 @@ def main() -> None:
             expect(application, "pending", "PENDING", pause_binding,
                    now=pause_time, rotation="new")
 
-            expiry_time = safe_step(manual_secret, pause_time + 30)
+            tx_time = safe_step(manual_secret, pause_time + 30)
+            tx_binding = "fixture-sql-transaction-before-admission-close"
+            tx_seed = probe(application, "seed", tx_binding,
+                            now=tx_time, rotation="new").split()
+            check(len(tx_seed) == 3 and tx_seed[0] == "SEEDED",
+                  "application-sql-drain-pending-login-seeded")
+            in_transaction = spawn(application, "complete-totp-tx-paused", tx_binding,
+                                   totp_code(manual_secret, tx_time), tx_seed[1], tx_seed[2],
+                                   now=tx_time, rotation="new")
+            check(read_line(in_transaction, 15) == "APP_TX_OPEN",
+                  "application-sql-transaction-open-after-session-insert")
+            row_lock = docker("exec", name, "psql", "-X", "-q", "-v", "ON_ERROR_STOP=1",
+                              "-v", "VERBOSITY=verbose", "-U", "postgres", "-d", "totp_fixture",
+                              "-c", "SELECT active_epoch FROM totp_store_namespace "
+                              "WHERE namespace='fixture_totp_flow' FOR UPDATE NOWAIT",
+                              required=False, timeout=5)
+            check(row_lock.returncode != 0 and b"55P03" in row_lock.stderr,
+                  "application-sql-transaction-holds-namespace-row-lock")
+            draining_sql = spawn(controller, "retire", rotation="new")
+            sql_close_deadline = time.monotonic() + 5
+            while time.monotonic() < sql_close_deadline:
+                if marker.is_file() and marker.read_text(encoding="ascii").splitlines()[1] == "CLOSED":
+                    break
+                time.sleep(0.05)
+            else:
+                raise RuntimeError("application-sql-drain-marker-did-not-close")
+            readable, _, _ = select.select([draining_sql.stdout], [], [], 0.5)
+            check(not readable, "application-sql-permit-blocks-controller-drain")
+            write_line(in_transaction, "go")
+            check(finish(in_transaction, 10) == "COMPLETION_UNAVAILABLE",
+                  "closed-marker-withholds-inflight-sql-completion-cookie")
+            check(finish(draining_sql, 10) == "KEYS_CHANGED",
+                  "controller-drains-inflight-application-sql-transaction")
+            expect(application, "pending", "CONSUMED", tx_binding,
+                   now=tx_time, rotation="new")
+            expect(application, "session", "SESSION_REJECTED", tx_seed[1],
+                   now=tx_time, rotation="new")
+            check(True, "inflight-sql-commit-reconciled-without-cookie-release")
+
+            expiry_time = safe_step(manual_secret, tx_time + 30)
             expiry_binding = "fixture-expiring-pending-login"
             expiry_seed = probe(application, "seed", expiry_binding,
                                 now=expiry_time, rotation="new").split()

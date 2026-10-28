@@ -141,14 +141,15 @@ final class TotpApplicationSessionStore {
         });
     }
 
+    /** Test-only barrier runs after the final session write, before this transaction commits. */
     @NonNull WriteResult completeTotp(@NonNull TotpVerification proof,
             @NonNull String oldCookie, @NonNull String oldCsrf,
-            long nowMs, @NonNull Duration budget) {
+            long nowMs, @NonNull Duration budget, @Nullable Runnable beforeCommit) {
         if (proof.getMethod() != TotpAuthenticationMethod.TOTP) return WriteResult.rejected();
         return complete(proof.getCredentialNamespace(), proof.getRecoveryEpoch(),
                 proof.getAccountId(), proof.getOperationBinding(), proof.getFactorId(),
                 "TOTP", oldCookie, oldCsrf,
-                nowMs, budget);
+                nowMs, budget, beforeCommit);
     }
 
     @NonNull WriteResult completeRecovery(@NonNull RecoveryCodeUse proof,
@@ -158,14 +159,14 @@ final class TotpApplicationSessionStore {
         return complete(proof.getCredentialNamespace(), proof.getRecoveryEpoch(),
                 proof.getAccountId(), proof.getOperationBinding(), proof.getFactorId(),
                 "RECOVERY_CODE", oldCookie,
-                oldCsrf, nowMs, budget);
+                oldCsrf, nowMs, budget, null);
     }
 
     private @NonNull WriteResult complete(@NonNull String proofNamespace,
             @NonNull String epoch, @NonNull String account, @NonNull String binding,
             @NonNull String factorId, @NonNull String method, @NonNull String oldCookie,
             @NonNull String oldCsrf,
-            long nowMs, @NonNull Duration budget) {
+            long nowMs, @NonNull Duration budget, @Nullable Runnable beforeCommit) {
         if (!this.namespace.equals(proofNamespace)) return WriteResult.rejected();
         String oldSessionHash = hash(oldCookie);
         String oldCsrfHash = hash(oldCsrf);
@@ -203,6 +204,7 @@ final class TotpApplicationSessionStore {
                     "namespace", this.namespace, "session", newSessionHash, "epoch", epoch,
                     "account", account, "kind", method, "csrf", newCsrfHash,
                     "expires", nowMs + SESSION_LIFETIME.toMillis());
+            if (beforeCommit != null) beforeCommit.run();
             return WriteResult.committed(new Receipt(newCookie, newCsrf, null));
         });
     }

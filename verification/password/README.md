@@ -17,23 +17,48 @@ javac --release 17 -Xlint:all -Werror \
   -cp "target/classes:$HOME/.m2/repository/org/jspecify/jspecify/1.0.1/jspecify-1.0.1.jar:$HOME/.m2/repository/com/google/code/findbugs/jsr305/3.0.2/jsr305-3.0.2.jar" \
   -d target/password-sizing verification/password/PasswordSizingProbe.java
 java -cp target/classes:target/password-sizing PasswordSizingProbe \
-  argon2-verify 65536 3 4 4 4 20 > /tmp/argon2-verify.csv
+  argon2-verify 65536 3 4 4 4 20 \
+  > /tmp/argon2-verify.csv 2> /tmp/argon2-verify.summary
 java -cp target/classes:target/password-sizing PasswordSizingProbe \
-  argon2-hash 65536 3 4 4 8 20 > /tmp/argon2-overload.csv
+  argon2-hash 65536 3 4 4 8 20 \
+  > /tmp/argon2-overload.csv 2> /tmp/argon2-overload.summary
 java -cp target/classes:target/password-sizing PasswordSizingProbe \
-  bcrypt-verify 14 4 4 20 > /tmp/bcrypt-migration.csv
+  bcrypt-verify 14 4 4 20 \
+  > /tmp/bcrypt-migration.csv 2> /tmp/bcrypt-migration.summary
 ```
+
+After building core, run the bounded output regression on the same JDK:
+
+```sh
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover \
+  -s verification/password -p 'test_*.py'
+```
+
+The regression compiles the probe with `--release 17 -Xlint:all -Werror`, then
+runs a small real Argon2id profile, an overload wave and an invalid profile.
 
 The Argon2 modes take `memoryKiB passes lanes gateCalls workers rounds`; the
 bcrypt mode takes `logRounds gateCalls workers rounds`. Each run has one excluded
 warm-up wave. `gateCalls` is the shared work-gate concurrency ceiling, and
 `workers` is the number of calls released together. Argon2's gate memory budget
 is `memoryKiB * gateCalls`. A row marked `WORK_CAPACITY` is an immediate local
-admission failure, not a slow success. Summary p50/p95 values on stderr include
-only completed calls. The CSV retains all rows so the operator can calculate
-tail latency and throughput for each load level. The bcrypt probe uses a valid
+admission failure, not a slow success. Summary p50/p95/p99 values on stderr include
+only completed calls. The CSV retains all rows for latency and admission counts;
+retain stderr as well for the run-level `measured_wall_ms`,
+`completed_per_s`, `attempted_per_s` and p99 summary. The bcrypt probe uses a valid
 synthetic Openwall vector with the selected cost; at a cost other than 5 it
 expects a full-work non-match. No password or stored form is printed.
+
+One warm-up wave and any synthetic verifier preparation precede the measurement.
+The measured wall interval begins when the first measured wave is released and
+ends after the last measured result is collected. CSV rows and summary formatting
+are emitted afterward, outside that interval. `completed_per_s` is the count of
+`DONE` rows divided by measured wall seconds; `attempted_per_s` uses all CSV
+rows, including immediate `WORK_CAPACITY` refusals. Both are process-local
+synthetic rates, not end-to-end login throughput. p50/p95/p99 use nearest-rank
+latencies from `DONE` rows only; if no work completes, those percentiles are
+`NaN`. The CSV alone does not contain the run wall duration, so keep its paired
+summary file when comparing load levels.
 
 Run both a steady-state level (`workers` no greater than `gateCalls`) and an
 overload level (`workers` greater than `gateCalls`). Measure new-hash creation,

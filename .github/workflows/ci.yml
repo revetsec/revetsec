@@ -66,6 +66,10 @@ jobs:
             -d target/password-example examples/password-hashing/PasswordHashingExample.java
           java -cp target/classes:target/password-example PasswordHashingExample
 
+      - name: Verify password sizing probe output (JDK 17)
+        if: matrix.jdk == '17'
+        run: PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s verification/password -p 'test_*.py'
+
       - name: Upload test reports
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -478,7 +482,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: revetsec/revetsec-soklet
-          ref: b8b2f27c5d3dbc19204b8c0aabe80a78fbb189f5
+          ref: 7f99a80a7971e47fb763d69cca36c74f4bc5e9b1
           path: .example-inputs/adapter
           persist-credentials: false
 
@@ -490,11 +494,17 @@ jobs:
           path: .example-inputs/framework
           persist-credentials: false
 
+      - name: Download checksum-pinned Corretto 21.0.11 for Soklet
+        run: >-
+          bash .github/scripts/download-pinned-corretto21-linux-x64.sh
+          "$RUNNER_TEMP/amazon-corretto-21.0.11.10.1-linux-x64.tar.gz"
+
       - name: Set up Corretto 21.0.11 for pinned Soklet artifact
         uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
         with:
-          distribution: corretto
+          distribution: jdkfile
           java-version: '21.0.11'
+          jdk-file: ${{ runner.temp }}/amazon-corretto-21.0.11.10.1-linux-x64.tar.gz
 
       - name: Build exact Soklet 4.0.0 artifact
         working-directory: .example-inputs/framework

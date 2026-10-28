@@ -21,6 +21,7 @@ import javax.annotation.concurrent.NotThreadSafe;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.sql.Connection;
@@ -83,7 +84,8 @@ public final class TotpApplicationSessionProbe {
                             argument(args, 1), appClock.now(), remaining(deadline)));
                     case "pending" -> readAnswer("PENDING", sessions.pending(epoch,
                             argument(args, 1), appClock.now(), remaining(deadline)));
-                    case "complete-totp", "complete-totp-unknown", "complete-totp-paused" ->
+                    case "complete-totp", "complete-totp-unknown", "complete-totp-paused",
+                            "complete-totp-tx-paused" ->
                             completeTotp(args, command, epoch, key, activeKeyId, oldKey,
                                     gate, sessions, permit, appClock, deadline);
                     case "complete-recovery", "complete-recovery-paused" ->
@@ -152,8 +154,20 @@ public final class TotpApplicationSessionProbe {
         }
         if (!permit.isCurrent()) return "COMPLETION_UNAVAILABLE";
         if (command.equals("complete-totp-unknown")) sessions.failNextCommitAcknowledgement();
+        @Nullable Runnable beforeCommit = null;
+        if (command.equals("complete-totp-tx-paused")) {
+            beforeCommit = () -> {
+                System.out.println("APP_TX_OPEN");
+                System.out.flush();
+                try {
+                    awaitRelease(appClock);
+                } catch (IOException failure) {
+                    throw new UncheckedIOException(failure);
+                }
+            };
+        }
         return writeAnswer("COMPLETED", sessions.completeTotp(success.getVerification(),
-                oldCookie, oldCsrf, appClock.now(), remaining(deadline)));
+                oldCookie, oldCsrf, appClock.now(), remaining(deadline), beforeCommit));
     }
 
     private static @NonNull String completeRecovery(java.lang.@NonNull String @NonNull [] args,

@@ -8,6 +8,8 @@ command used one excluded warm-up wave and a fixed synthetic password. The
 operating environment did not provide a reliable peak-RSS measurement, so
 these runs establish latency and gate outcomes only. The Argon2 translation
 uses additional heap beyond its requested KiB.
+These CSVs predate the probe's measured-wall and throughput summary fields;
+they do not establish a throughput figure or p99 for this local run.
 
 | Mode | Parameters | Measured calls | Completed | Gate refusals | p50 completed | p95 completed |
 | --- | --- | ---: | ---: | ---: | ---: | ---: |
