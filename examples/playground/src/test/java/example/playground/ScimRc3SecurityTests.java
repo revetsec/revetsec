@@ -88,7 +88,7 @@ class ScimRc3SecurityTests {
         routes.add(request(HttpMethod.POST, "/scim/v2/.search", "{")); routes.add(get("/scim/v2/not-a-resource"));
         SokletSimulator.run(ScimPlayground.config(app, "127.0.0.1", 0), simulator -> {
             for (Request route : routes) for (List<String> credentials : List.of(List.<String>of(), List.of("Bearer " + OTHER_TOKEN),
-                    List.of("Bearer " + TOKEN, "Bearer " + TOKEN), List.of("bearer " + TOKEN), List.of("Bearer " + TOKEN + " "))) {
+                    List.of("Bearer " + TOKEN, "Bearer " + TOKEN), List.of("bearer " + TOKEN), List.of("Bearer " + TOKEN + " extra"))) {
                 Request denied = route.copy().headers(Map.of("Authorization", credentials, "X-Tenant-ID", List.of("other"), "Content-Type", List.of("text/plain")))
                         .finish();
                 MarshaledResponse response = invoke(simulator, denied); assertEquals(401, response.getStatusCode(), route.getPath());
@@ -96,6 +96,21 @@ class ScimRc3SecurityTests {
             }
         });
         assertEquals(0, authorization.get()); assertNull(app.snapshot(USER, "u-1"));
+    }
+
+    @Test void sokletNormalizesOuterHeaderWhitespaceBeforeApplicationAuthentication() {
+        PlaygroundScim app = app();
+        SokletSimulator.run(ScimPlayground.config(app, "127.0.0.1", 0), simulator -> {
+            for (String credential : List.of("Bearer " + TOKEN + " ", "\tBearer " + TOKEN + "\t")) {
+                Request normalized = get("/scim/v2/Users").copy().headers(headers ->
+                        headers.put("Authorization", List.of(credential))).finish();
+                assertEquals(List.of("Bearer " + TOKEN), normalized.getHeaders().get("Authorization"));
+                assertEquals(200, invoke(simulator, normalized).getStatusCode());
+            }
+            Request invalid = get("/scim/v2/Users").copy().headers(headers ->
+                    headers.put("Authorization", List.of(" Bearer " + OTHER_TOKEN + " "))).finish();
+            assertEquals(401, invoke(simulator, invalid).getStatusCode());
+        });
     }
 
     @Test void independentConfiguredTenantsDoNotAcceptEachOthersCredentialsOrRequestHints() {

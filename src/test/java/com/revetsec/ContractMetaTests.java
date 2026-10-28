@@ -59,6 +59,14 @@ final class ContractMetaTests {
 	 * types, a missing type and (for {@code OPEN_ABSTRACT_TYPES}) a sealed class, which exempt nothing and must be
 	 * reported as stale or misspelled.
 	 */
+	private static final Set<String> FIXTURE_VERIFIED_TYPES = Set.of(
+			"com.revetsec.jose.Jwt",
+			"com.revetsec.jose.JwtClaims",
+			"com.revetsec.oidc.IdToken",
+			"com.revetsec.saml.SamlAuthentication",
+			"com.revetsec.scim.ScimPatchResult",
+			"com.revetsec.oidc.IdTokenValidatorFixture.Completion",
+			"com.revetsec.oidc.RenamedVerifiedFixture");
 	private static final Set<String> FIXTURE_VERIFIED_TYPE_SOURCES = Set.of(
 			"com.revetsec.oidc.IdTokenValidatorFixture",
 			"com.revetsec.oidc.IdTokenValidatorFixture$Completion",
@@ -115,12 +123,19 @@ final class ContractMetaTests {
 	void publicApiContractReportsExactlyTheSeededViolations() throws IOException {
 		// The rendering of an annotated type in a nullness message differs across JDKs, so it is left out.
 		List<String> violations = PublicApiContractTests.findViolations(fixture("public-api"),
-						FIXTURE_VERIFIED_TYPE_SOURCES, FIXTURE_R1_EXCEPTIONS, FIXTURE_OPEN_ABSTRACT_TYPES,
+						FIXTURE_VERIFIED_TYPES, FIXTURE_VERIFIED_TYPE_SOURCES, FIXTURE_R1_EXCEPTIONS, FIXTURE_OPEN_ABSTRACT_TYPES,
 						FIXTURE_APP_CONSTRUCTIBLE_EXCEPTION_FACTORIES).stream()
 				.map(violation -> violation.replaceFirst(" at .* \\(R2\\)$", " (R2)"))
 				.toList();
 
 		List<String> expected = new ArrayList<>(List.of(
+				"PublicApiContractTests.VERIFIED_TYPES entry "
+						+ "\"com.revetsec.oidc.IdTokenValidatorFixture.Completion\": stale or misspelled entry; "
+						+ "use the binary name (Outer$Nested, as violation messages print it) of an accessible type in "
+						+ "the analyzed sources",
+				"PublicApiContractTests.VERIFIED_TYPES entry \"com.revetsec.oidc.RenamedVerifiedFixture\": "
+						+ "stale or misspelled entry; use the binary name (Outer$Nested, as violation messages print "
+						+ "it) of an accessible type in the analyzed sources",
 				"PublicApiContractTests.R1_EXCEPTIONS entry \"com.revetsec.scim.ScimErrorsFixture.RetiredError\": "
 						+ "stale or misspelled entry; use the binary name (Outer$Nested, as violation messages print it) "
 						+ "of an exported type in the analyzed sources",
@@ -192,6 +207,8 @@ final class ContractMetaTests {
 						+ "validators may create one (R17)",
 				"com.revetsec.jose.JwtBuilderFixture#build(): public or protected method returns a verified type; "
 						+ "only validators may create one (R17)",
+				"com.revetsec.jose.JwtBuilderFixture#nestedHolder(): public or protected method returns a verified "
+						+ "type; only validators may create one (R17)",
 				"com.revetsec.jose.PublicConstructorFixture#PublicConstructorFixture(): public concrete types have "
 						+ "private constructors (R1)",
 				"com.revetsec.jose.PublicConstructorFixture#PublicConstructorFixture(java.lang.String): public "

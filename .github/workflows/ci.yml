@@ -59,6 +59,13 @@ jobs:
       - name: Verify
         run: mvn -B -ntp -Dmaven.javadoc.skip=true verify
 
+      - name: Compile and run the standalone password example as Java 17 source
+        run: |
+          mkdir -p target/password-example
+          javac --release 17 -Xlint:all -Werror -cp target/classes \
+            -d target/password-example examples/password-hashing/PasswordHashingExample.java
+          java -cp target/classes:target/password-example PasswordHashingExample
+
       - name: Upload test reports
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -452,7 +459,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        java: ['17', '27']
+        java: ['21', '27']
     steps:
       - name: Check out current examples
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -471,7 +478,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: revetsec/revetsec-soklet
-          ref: 595cc578a9c03572bd3fad9cb3c54e17f375142a
+          ref: b8b2f27c5d3dbc19204b8c0aabe80a78fbb189f5
           path: .example-inputs/adapter
           persist-credentials: false
 
@@ -479,21 +486,21 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: soklet/soklet
-          ref: 8e1c689b729eb4cc45ffec1a1aed9668d07ffb10
+          ref: 61d02245c745cedf8452a1fc0a13be96f9414a9b
           path: .example-inputs/framework
           persist-credentials: false
 
-      - name: Set up Corretto 17 for pinned Soklet artifact
+      - name: Set up Corretto 21.0.11 for pinned Soklet artifact
         uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
         with:
           distribution: corretto
-          java-version: '17'
+          java-version: '21.0.11'
 
       - name: Build exact Soklet 4.0.0 artifact
         working-directory: .example-inputs/framework
         run: |
           mvn -B -ntp -Dmaven.test.skip=true -Dmaven.javadoc.skip=true -Dgpg.skip=true clean package
-          echo "f7f62f967045a8eb8f943a90d49d499b4c5b755d20ab901e12a34fe1d004319b  target/soklet-4.0.0.jar" | sha256sum --check
+          echo "56e37d0e8ef781822de1618595f43366df00bb29e7b486cdc5901623b83845a9  target/soklet-4.0.0.jar" | sha256sum --check
 
       - name: Set up Corretto
         uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
@@ -510,6 +517,16 @@ jobs:
             --adapter-source "$GITHUB_WORKSPACE/.example-inputs/adapter" \
             --framework-jar "$GITHUB_WORKSPACE/.example-inputs/framework/target/soklet-4.0.0.jar"
 
+      - name: Compile and exercise the Soklet TOTP example
+        run: |
+          python3 examples/totp-soklet/build.py --work "$RUNNER_TEMP/revetsec-totp-soklet" \
+            --java-home "$JAVA_HOME" \
+            --core-jar "$RUNNER_TEMP/revetsec-examples/core/target/revetsec-1.0.0-SNAPSHOT.jar" \
+            --soklet-jar "$GITHUB_WORKSPACE/.example-inputs/framework/target/soklet-4.0.0.jar" \
+            --jspecify-jar "$RUNNER_TEMP/revetsec-examples/repository/org/jspecify/jspecify/1.0.1/jspecify-1.0.1.jar" \
+            --jsr305-jar "$RUNNER_TEMP/revetsec-examples/repository/com/google/code/findbugs/jsr305/3.0.2/jsr305-3.0.2.jar" \
+            --socket-check
+
       - name: Upload example evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -520,6 +537,8 @@ jobs:
             ${{ runner.temp }}/revetsec-examples/*.log
             ${{ runner.temp }}/revetsec-examples/examples/*/target/surefire-reports/
             ${{ runner.temp }}/revetsec-examples/examples/*/target/nullability-audit.json
+            ${{ runner.temp }}/revetsec-totp-soklet/BUILD.txt
+            ${{ runner.temp }}/revetsec-totp-soklet/nullability-audit.json
           if-no-files-found: warn
 
   rsa-oidc-examples:
@@ -559,6 +578,64 @@ jobs:
             ${{ runner.temp }}/revetsec-rsa-examples/example/target/surefire-reports/
             ${{ runner.temp }}/revetsec-rsa-examples/example/target/nullability-audit.json
           if-no-files-found: warn
+
+  # Gating. Qualifies the unpublished Java 17 TOTP store and recovery-controller recipe against
+  # one owned PostgreSQL primary, including cross-JVM races, outage, and an authentic logical restore.
+  totp-postgresql:
+    name: TOTP PostgreSQL fixture (JDK 17)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Corretto 17
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: corretto
+          java-version: '17'
+          cache: maven
+
+      - name: Build the current core artifact
+        run: mvn -B -ntp -Dmaven.test.skip=true -Dmaven.javadoc.skip=true package
+
+      # Core supplies the provided annotation JARs, but it intentionally has no Pyranid or JDBC
+      # dependency. Resolve the example-only versions explicitly on a fresh runner.
+      - name: Resolve pinned PostgreSQL fixture dependencies
+        run: |
+          mvn -B -ntp org.apache.maven.plugins:maven-dependency-plugin:3.11.0:get \
+            -Dartifact=com.pyranid:pyranid:4.7.0 -Dtransitive=false
+          mvn -B -ntp org.apache.maven.plugins:maven-dependency-plugin:3.11.0:get \
+            -Dartifact=org.postgresql:postgresql:42.7.13 -Dtransitive=false
+          test -f "$HOME/.m2/repository/com/pyranid/pyranid/4.7.0/pyranid-4.7.0.jar"
+          test -f "$HOME/.m2/repository/org/postgresql/postgresql/42.7.13/postgresql-42.7.13.jar"
+          test -f "$HOME/.m2/repository/org/jspecify/jspecify/1.0.1/jspecify-1.0.1.jar"
+          test -f "$HOME/.m2/repository/com/google/code/findbugs/jsr305/3.0.2/jsr305-3.0.2.jar"
+
+      - name: Cache the exact PostgreSQL fixture image
+        run: docker pull postgres:18.4@sha256:a02db8cac496f15b094798a38254f14d6e00741f709360e5e00bb6668ea31636
+
+      - name: Qualify the TOTP store and recovery fence
+        run: |
+          python3 examples/postgresql-pending-store/run_totp.py \
+            --java-home "$JAVA_HOME" \
+            --core-jar target/revetsec-1.0.0-SNAPSHOT.jar \
+            --pyranid-jar "$HOME/.m2/repository/com/pyranid/pyranid/4.7.0/pyranid-4.7.0.jar" \
+            --driver-jar "$HOME/.m2/repository/org/postgresql/postgresql/42.7.13/postgresql-42.7.13.jar" \
+            --jspecify-jar "$HOME/.m2/repository/org/jspecify/jspecify/1.0.1/jspecify-1.0.1.jar" \
+            --jsr305-jar "$HOME/.m2/repository/com/google/code/findbugs/jsr305/3.0.2/jsr305-3.0.2.jar" \
+            --output "$RUNNER_TEMP/revetsec-totp-postgresql"
+
+      - name: Upload fixture evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: totp-postgresql-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/revetsec-totp-postgresql
+          if-no-files-found: warn
+          retention-days: 30
 
   # Gating from M3. KeycloakOAuthIT starts the digest-pinned Keycloak image, imports the test-only realm and
   # exercises OAuth confidential/public code flows, client credentials, refresh and revocation, plus OIDC

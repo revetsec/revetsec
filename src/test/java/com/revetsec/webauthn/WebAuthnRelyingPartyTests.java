@@ -67,9 +67,26 @@ final class WebAuthnRelyingPartyTests {
     private static final String BINDING_TEXT = Base64Url.encode(BINDING);
     private static final Clock CLOCK = Clock.fixed(Instant.parse("2026-10-09T12:00:00Z"), ZoneOffset.UTC);
     private static final WebAuthnRecoveryGate ADMIT = remaining -> new WebAuthnRecoveryGate.Permit() {
-        @Override public boolean isCurrent() { return true; }
+        @Override public @NonNull Boolean isCurrent() { return true; }
         @Override public void close() { }
     };
+
+    @Test void nullClearsRequiredBuilderValuesAndBuildFailsClosed() {
+        var options = WebAuthnRegistrationOptions.withUserHandle(HANDLE)
+                .userName("alice").userDisplayName("Alice");
+        assertThrows(NullPointerException.class, () -> options.userName(null).build());
+        assertEquals("Alice", options.userName("alice").build().getUserDisplayName());
+        assertThrows(NullPointerException.class, () -> options.userDisplayName(null).build());
+        assertEquals("alice", options.userDisplayName("Alice").build().getUserName());
+
+        assertThrows(NullPointerException.class, () -> configuredBuilder().relyingPartyName(null).build());
+        assertThrows(NullPointerException.class, () -> configuredBuilder().allowedOrigins(null).build());
+        assertThrows(NullPointerException.class, () -> configuredBuilder().credentialNamespace(null).build());
+        assertThrows(NullPointerException.class, () -> configuredBuilder().store(null).build());
+        assertThrows(NullPointerException.class, () -> configuredBuilder().stateSealer(null).build());
+        assertThrows(NullPointerException.class, () -> configuredBuilder().recoveryGate(null).build());
+        assertInstanceOf(WebAuthnRelyingParty.class, configuredBuilder().settings(null).build());
+    }
 
     @Test void publicEnrollmentSignInAndPinnedReauthenticationUseCommittedState() throws Exception {
         WebAuthnStore store = InMemoryWebAuthnStore.withLimits(128, 2_000_000, CLOCK);
@@ -478,6 +495,13 @@ final class WebAuthnRelyingPartyTests {
                 .allowedOrigins(Set.of(ORIGIN)).credentialNamespace(NAMESPACE)
                 .store(store).stateSealer(sealer()).recoveryGate(gate).settings(settings)
                 .clockForTesting(clock).build();
+    }
+
+    private static WebAuthnRelyingParty.@NonNull Builder configuredBuilder() {
+        return WebAuthnRelyingParty.withRelyingPartyId(RP).relyingPartyName("Example")
+                .allowedOrigins(Set.of(ORIGIN)).credentialNamespace(NAMESPACE)
+                .store(InMemoryWebAuthnStore.withLimits(128, 2_000_000, CLOCK))
+                .stateSealer(sealer()).recoveryGate(ADMIT);
     }
 
     private static @NonNull StateSealer sealer() {

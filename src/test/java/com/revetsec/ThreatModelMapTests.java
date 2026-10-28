@@ -64,7 +64,7 @@ import java.util.stream.Stream;
  * same invariants in the same order.
  * <p>
  * <strong>The rows.</strong> An invariant row is a Markdown table line whose first cell starts with {@code INV-},
- * however the line is spaced. It has exactly three cells: the ID ({@code INV-} followed by an upper-case letter and a
+ * however the line is spaced. It has exactly three cells: the ID ({@code INV-} followed by upper-case letters and a
  * number), the invariant, and the "Checked by" cell, which must not be empty. IDs are unique, and every invariant ID
  * either document mentions, in a row, a list or prose, is the ID of a row. In {@value #SECURITY}'s section, an entry
  * reads {@code - **INV-…**}, and a list item that starts with an ID in any other form is reported, not skipped.
@@ -123,9 +123,9 @@ final class ThreatModelMapTests {
 	private static final Pattern CITATION = Pattern.compile("((?:[a-z]+\\.)*[A-Z]\\w*Tests)(?:\\.(\\w+))?");
 	private static final Pattern METHOD = Pattern.compile("[a-z]\\w*");
 	private static final Pattern BACKTICKED = Pattern.compile("`([^`]+)`");
-	private static final Pattern INVARIANT_ID = Pattern.compile("INV-[A-Z]\\d+");
-	private static final Pattern MENTIONED_ID = Pattern.compile("\\bINV-[A-Z]\\d+\\b");
-	private static final Pattern SECURITY_ENTRY = Pattern.compile("^- \\*\\*(INV-[A-Z]\\d+)\\*\\*");
+	private static final Pattern INVARIANT_ID = Pattern.compile("INV-[A-Z]+\\d+");
+	private static final Pattern MENTIONED_ID = Pattern.compile("\\bINV-[A-Z]+\\d+\\b");
+	private static final Pattern SECURITY_ENTRY = Pattern.compile("^- \\*\\*(INV-[A-Z]+\\d+)\\*\\*");
 	/**
 	 * A top-level list item whose text starts with an invariant ID, in any emphasis: in the "Security Invariants"
 	 * section it must be an entry ({@link #SECURITY_ENTRY}).
@@ -178,6 +178,8 @@ final class ThreatModelMapTests {
 				String id = "INV-" + group.getKey() + number;
 				Assertions.assertTrue(ids.contains(id), () -> THREAT_MODEL + " omits required " + id);
 			}
+		for (String id : List.of("INV-SEC1", "INV-SEC5"))
+			Assertions.assertTrue(ids.contains(id), () -> THREAT_MODEL + " omits selected application-security " + id);
 	}
 
 	// M2-10 item 7 and plan 14.6: every row cites at least one test that exists, every citation in it resolves to a
@@ -323,7 +325,7 @@ final class ThreatModelMapTests {
 		Assertions.assertTrue(problems.get(1).contains("line 9"), problems::toString);
 
 		List<String> securityProblems = new ArrayList<>();
-		Assertions.assertEquals(List.of("INV-G1", "INV-J1"), securityInvariantIds("""
+		Assertions.assertEquals(List.of("INV-G1", "INV-J1", "INV-SEC1"), securityInvariantIds("""
 				# Policy
 				- **INV-X1** Before the section.
 				## Security Invariants
@@ -332,6 +334,7 @@ final class ThreatModelMapTests {
 				- **INV-G1** One.
 				  - **INV-G9** An indented line is not an entry.
 				- **INV-J1** Two.
+				- **INV-SEC1** Three.
 				- INV-J2 An entry without emphasis.
 				* **INV-J3** An entry with another marker.
 				- A list item that mentions INV-J4 later.
@@ -342,8 +345,8 @@ final class ThreatModelMapTests {
 		Assertions.assertTrue(securityProblems.get(0).contains("INV-J2"), securityProblems::toString);
 		Assertions.assertTrue(securityProblems.get(1).contains("INV-J3"), securityProblems::toString);
 
-		Assertions.assertEquals(List.of("INV-G1", "INV-J9", "INV-C6", "INV-L1"), mentionedIds(
-				"INV-G1, (INV-J9), `INV-C6`, **INV-L1**; not INV-G1a, INV-g2, INV-G or XINV-G3."));
+		Assertions.assertEquals(List.of("INV-G1", "INV-J9", "INV-C6", "INV-L1", "INV-SEC5"), mentionedIds(
+				"INV-G1, (INV-J9), `INV-C6`, **INV-L1**, INV-SEC5; not INV-G1a, INV-SEC5a, INV-g2, INV-G or XINV-G3."));
 	}
 
 	/**

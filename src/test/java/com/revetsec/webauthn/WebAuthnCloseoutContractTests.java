@@ -166,7 +166,7 @@ final class WebAuthnCloseoutContractTests {
     }
     private static WebAuthnRecoveryGate.@NonNull Permit permit(boolean current,boolean closeFails) {
         return new WebAuthnRecoveryGate.Permit() {
-            @Override public boolean isCurrent(){return current;}
+            @Override public @NonNull Boolean isCurrent(){return current;}
             @Override public void close(){if(closeFails)throw new IllegalStateException("synthetic close failure");}
         };
     }

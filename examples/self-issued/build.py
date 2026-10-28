@@ -19,6 +19,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 
@@ -32,8 +33,12 @@ def digest(path):
 def inventory(source):
     names = sorted(set(subprocess.check_output(["git", "ls-files", "--cached", "--others",
                     "--exclude-standard", "-z"], cwd=source).decode().split("\0")) - {""})
+    deleted = set(subprocess.check_output(["git", "ls-files", "--deleted", "-z"],
+                  cwd=source).decode().split("\0")) - {""}
     rows = []
     for name in names:
+        if name in deleted:
+            continue
         path = source / name
         if not path.is_file() or path.is_symlink() or ".." in Path(name).parts:
             raise RuntimeError("Unexpected authored source entry")
@@ -58,10 +63,14 @@ def main():
     if framework["version"] != "4.0.0" or digest(args.framework_jar) != framework["jar_sha256"]:
         parser.error("Use the pinned Soklet framework JAR")
     if (not args.work.is_absolute() or args.work.exists() or not args.maven.is_file()
-            or not (args.java_home / "bin/keytool").is_file()
+            or not (args.java_home / "bin/keytool").is_file() or not (args.java_home / "bin/javac").is_file()
             or args.work.resolve().is_relative_to(args.core_source)
             or args.work.resolve().is_relative_to(args.adapter_source)):
         parser.error("Use new absolute private work outside core and existing toolchain paths")
+    compiler = subprocess.check_output([str(args.java_home / "bin/javac"), "-version"], text=True).strip()
+    compiler_version = re.fullmatch(r"javac (\d+)(?:\..*)?", compiler)
+    if compiler_version is None or int(compiler_version.group(1)) < framework["minimum_java"]:
+        parser.error("The Soklet application requires JDK 21 or newer")
     args.work.mkdir(mode=0o700, parents=True)
     rows = inventory(args.core_source)
     (args.work / "SOURCE-INVENTORY.json").write_text(json.dumps(rows, indent=2) + "\n")
@@ -112,7 +121,8 @@ def main():
     checker = core / "verification/examples/NullabilityAudit.java"
     source_list = example / "target/audit-sources.txt"
     source_list.write_text("\n".join(str(p) for p in [*sorted((example / "src").rglob("*.java")), checker]) + "\n")
-    run("explicit-nullability", [args.java_home / "bin/java", "-cp", audit_cp.read_text(), checker, source_list, audit_cp, example / "target/nullability-audit.json"], example)
+    run("explicit-nullability", [args.java_home / "bin/java", "-cp", audit_cp.read_text(), checker, source_list,
+        audit_cp, example / "target/nullability-audit.json", "21"], example)
     runtime = [Path(x) for x in (example / "target/runtime-classpath.txt").read_text().strip().split(os.pathsep)]
     if sorted(p.name for p in runtime) != ["revetsec-1.0.0-SNAPSHOT.jar", "revetsec-soklet-1.0.0-SNAPSHOT.jar", "soklet-4.0.0.jar"]:
         raise RuntimeError("Example runtime must contain exactly core, helper and framework JARs")

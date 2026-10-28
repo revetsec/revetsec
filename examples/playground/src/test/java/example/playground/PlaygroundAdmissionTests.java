@@ -84,7 +84,8 @@ final class PlaygroundAdmissionTests {
             assertEquals(403, fixture.call(simulator, discover, "tools/call", "whoami", "{}", false).getStatusCode());
             String whoami = "Bearer " + fixture.jwt(fixture.issuer, fixture.resource, "mcp:whoami", 60, false);
             assertEquals(403, fixture.call(simulator, whoami, "tools/list", null, "{}", false).getStatusCode());
-            assertEquals(400, fixture.call(simulator, whoami, "tools/call", "unmapped", "{}", false).getStatusCode());
+            // Soklet 4 applies admission before resolving a tool; unknown tools inherit no permission.
+            assertEquals(403, fixture.call(simulator, whoami, "tools/call", "unmapped", "{}", false).getStatusCode());
             for (String args : List.of("{\"tenant\":\"other\"}", "{\"object\":\"other\"}", "{\"object\":42}", "{\"unexpected\":\"secret\"}")) {
                 McpSimulationResponse denied = fixture.call(simulator, whoami, "tools/call", "whoami", args, false);
                 assertEquals(200, denied.getStatusCode());

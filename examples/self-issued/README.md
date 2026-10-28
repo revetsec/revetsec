@@ -1,5 +1,7 @@
 # Self-issued MCP Playground (unpublished)
 
+Use JDK 21 or newer for this Soklet application. Revetsec core retains Java 17 compatibility.
+
 A Soklet app using Revetsec as its OAuth issuer and online resource validator. The app owns a fixed demo account, browser sessions, CSRF, consent, client registrations, signing/sealing keys and persistence. Core owns OAuth admission, PKCE, issuance, refresh rotation, replay detection, revocation and checked token results. No external identity provider is required for this demonstration. Revetsec has not been independently audited.
 
 ## Storage and startup qualification
@@ -20,7 +22,7 @@ The fresh local issuer sets metadata freshness to zero; this does not demonstrat
 
 ## Build exact local sources
 
-The module is outside the reactor and cannot install/deploy itself. It records current core/helper source inventories, including uncommitted files. Matching CI pins await the owner's pushed revisions; existing example pins are unchanged.
+The module is outside the reactor and cannot install/deploy itself. It records current core/helper source inventories, including uncommitted files. The packaged OIDC/Playground examples use the pushed revisions in [`examples/pins.json`](../pins.json); this builder separately checks the supplied authored source inventories and does not claim hosted CI qualification.
 
 ```sh
 python3 examples/self-issued/build.py --work /absolute/new/self-issued-build \
@@ -30,7 +32,7 @@ python3 examples/self-issued/build.py --work /absolute/new/self-issued-build \
   --repository-tail /absolute/read-only/maven-cache --offline
 ```
 
-The framework JAR must match the framework SHA-256 in [`examples/pins.json`](../pins.json) (currently `f7f62f967045a8eb8f943a90d49d499b4c5b755d20ab901e12a34fe1d004319b`, Soklet source `8e1c689b729eb4cc45ffec1a1aed9668d07ffb10`). The builder copies both sources privately, installs exact artifacts, runs example tests and attributed nullability checks, then starts a standalone runtime with only core/helper/framework JARs. It records commands, inventories, hashes and boolean evidence without retaining credentials. Socket tests use the JDK HTTP client and raw bounded loopback sockets, including public-host and private-listener-port rejection. They do not qualify a browser or independent MCP client; see `interop/self-issued` for a separately pinned browser fixture.
+The framework JAR must match the framework SHA-256 in [`examples/pins.json`](../pins.json) (which records the exact pushed source and framework build toolchain). The builder copies both sources privately, installs exact artifacts, runs example tests and attributed nullability checks, then starts a standalone runtime with only core/helper/framework JARs. It records commands, inventories, hashes and boolean evidence without retaining credentials. Socket tests use the JDK HTTP client and raw bounded loopback sockets, including public-host and private-listener-port rejection. They do not qualify a browser or independent MCP client; see `interop/self-issued` for a separately pinned browser fixture.
 
 ## Start a disposable run
 

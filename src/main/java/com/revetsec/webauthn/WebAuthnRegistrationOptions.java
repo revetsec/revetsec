@@ -16,6 +16,7 @@
 
 package com.revetsec.webauthn;
 
+import com.google.errorprone.annotations.CheckReturnValue;
 import com.revetsec.json.JsonString;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
@@ -68,7 +69,7 @@ public final class WebAuthnRegistrationOptions {
 
     /** One caller-thread builder.
      * @since 1.0.0 */
-    @NotThreadSafe
+    @NotThreadSafe @CheckReturnValue
     public static final class Builder {
         private final byte @NonNull [] userHandle;
         private @Nullable String userName;
@@ -80,18 +81,18 @@ public final class WebAuthnRegistrationOptions {
             this.userHandle = Arrays.copyOf(userHandle, userHandle.length);
         }
         /** Sets a browser display name, which does not establish identity.
-         * @param name bounded account name
+         * @param name bounded account name, or null to clear the required name
          * @return this builder
          * @since 1.0.0 */
-        public @NonNull Builder userName(@NonNull String name) {
-            this.userName = boundedName(name); return this;
+        public @NonNull Builder userName(@Nullable String name) {
+            this.userName = name == null ? null : boundedName(name); return this;
         }
         /** Sets a browser display label.
-         * @param name bounded display label
+         * @param name bounded display label, or null to clear the required label
          * @return this builder
          * @since 1.0.0 */
-        public @NonNull Builder userDisplayName(@NonNull String name) {
-            this.userDisplayName = boundedName(name); return this;
+        public @NonNull Builder userDisplayName(@Nullable String name) {
+            this.userDisplayName = name == null ? null : boundedName(name); return this;
         }
         /** Builds immutable enrollment options.
          * @return the options

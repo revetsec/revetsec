@@ -68,7 +68,7 @@ final class WebAuthnCompletionPlannerTests {
     private static final Instant NOW = Instant.parse("2026-10-09T12:00:00Z");
     private static final Clock CLOCK = Clock.fixed(NOW, ZoneOffset.UTC);
     private static final WebAuthnRecoveryGate ALLOW = remaining -> new WebAuthnRecoveryGate.Permit() {
-        @Override public boolean isCurrent() { return true; }
+        @Override public @NonNull Boolean isCurrent() { return true; }
         @Override public void close() { }
     };
 
@@ -349,7 +349,7 @@ final class WebAuthnCompletionPlannerTests {
         AtomicInteger checks = new AtomicInteger();
         AtomicInteger closes = new AtomicInteger();
         WebAuthnRecoveryGate revoked = remaining -> new WebAuthnRecoveryGate.Permit() {
-            @Override public boolean isCurrent() { return checks.incrementAndGet() == 1; }
+            @Override public @NonNull Boolean isCurrent() { return checks.incrementAndGet() == 1; }
             @Override public void close() { closes.incrementAndGet(); }
         };
         var runner = runner(first, expanded, WebAuthnStoreCommitResult.COMMITTED,
@@ -375,7 +375,7 @@ final class WebAuthnCompletionPlannerTests {
             assertEquals(Duration.ofSeconds(1), remaining);
             nanos.addAndGet(Duration.ofSeconds(1).toNanos());
             return new WebAuthnRecoveryGate.Permit() {
-                @Override public boolean isCurrent() { return true; }
+                @Override public @NonNull Boolean isCurrent() { return true; }
                 @Override public void close() { closes.incrementAndGet(); }
             };
         };
@@ -388,7 +388,7 @@ final class WebAuthnCompletionPlannerTests {
         assertEquals(1, closes.get());
 
         WebAuthnRecoveryGate brokenRelease = remaining -> new WebAuthnRecoveryGate.Permit() {
-            @Override public boolean isCurrent() { return true; }
+            @Override public @NonNull Boolean isCurrent() { return true; }
             @Override public void close() { throw new IllegalStateException("private marker"); }
         };
         var afterRejectedRead = runner(first, first, WebAuthnStoreCommitResult.COMMITTED,

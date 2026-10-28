@@ -105,7 +105,7 @@ ServletJwks.writeResponse(publisher, request, response);
 
 The Soklet `Response` variant carries an immutable `com.revetsec.soklet.JwksResponse.Body` for successful GETs. It provides `getKeys()`, `toJsonObject()` and `toJson()` for inspection and application-owned serialization. It uses a weak ETag and leaves `Content-Length` to the application marshaler and transport. HEAD, 304 and error responses have no body object. The `MarshaledResponse` variant and both Servlet adapters preserve the strong ETag, prepared length and exact bytes.
 
-See the adapter-specific examples in [Soklet](../../revetsec-soklet/docs/jwks.md), [Jakarta Servlet](../../revetsec-servlet-jakarta/docs/jwks.md), and [javax Servlet](../../revetsec-servlet-javax/docs/jwks.md). Soklet's default response marshaler supports these prepared HEAD responses without custom configuration; use a build containing the default HEAD handling fix described in the Soklet guide. The application owns TLS, endpoint routing, ingress limits, and any discovery or partner registration that advertises the URL.
+See the adapter-specific examples in [Soklet](https://github.com/revetsec/revetsec-soklet/blob/main/docs/jwks.md), [Jakarta Servlet](https://github.com/revetsec/revetsec-servlet-jakarta/blob/main/docs/jwks.md), and [javax Servlet](https://github.com/revetsec/revetsec-servlet-javax/blob/main/docs/jwks.md). Soklet's default response marshaler supports these prepared HEAD responses without custom configuration; use a build containing the default HEAD handling fix described in the Soklet guide. The application owns TLS, endpoint routing, ingress limits, and any discovery or partner registration that advertises the URL.
 
 ## Rotation
 

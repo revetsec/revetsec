@@ -18,10 +18,12 @@ package com.revetsec.webauthn;
 
 import org.jspecify.annotations.NonNull;
 
-/** An explicit authoritative observation: a versioned sealed record or confirmed absence. @since 1.0.0 */
+/** An explicit authoritative observation: a versioned sealed record or confirmed absence.
+ * @since 1.0.0 */
 @javax.annotation.concurrent.Immutable
 public sealed interface WebAuthnStoreEntry permits WebAuthnStoreEntry.Present, WebAuthnStoreEntry.Absent {
- /** A record and its opaque, non-reused compare-and-commit version. @since 1.0.0 */
+ /** A record and its opaque, non-reused compare-and-commit version.
+  * @since 1.0.0 */
  @javax.annotation.concurrent.Immutable
  final class Present implements WebAuthnStoreEntry {
   private final byte @NonNull [] version;
@@ -57,7 +59,8 @@ public sealed interface WebAuthnStoreEntry permits WebAuthnStoreEntry.Present, W
   @Override public @NonNull String toString() { return "Present{record=<redacted>}"; }
  }
 
- /** Confirmed absence, never an omitted read result. @since 1.0.0 */
+ /** Confirmed absence, never an omitted read result.
+  * @since 1.0.0 */
  @javax.annotation.concurrent.Immutable
  final class Absent implements WebAuthnStoreEntry {
   private static final WebAuthnStoreEntry.@NonNull Absent INSTANCE = new Absent();

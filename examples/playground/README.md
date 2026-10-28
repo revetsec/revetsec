@@ -1,5 +1,7 @@
 # Revetsec Playground — local protocol scenarios
 
+Use JDK 21 or newer for this Soklet application. Revetsec core retains Java 17 compatibility.
+
 Build with [the example builder](../README.md), start the local provider and [HTTPS edge](../../interop/local-https/README.md), and configure:
 
 ```sh

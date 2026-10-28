@@ -61,7 +61,7 @@ public interface WebAuthnRecoveryGate {
          * @return true only while this permit still admits traffic
          * @since 1.0.0
          */
-        boolean isCurrent();
+        @NonNull Boolean isCurrent();
 
         /** Releases this operation's restore barrier. @since 1.0.0 */
         @Override void close();

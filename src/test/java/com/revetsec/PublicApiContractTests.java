@@ -25,6 +25,7 @@ import com.sun.source.tree.CompilationUnitTree;
 import com.sun.source.tree.Tree;
 import com.sun.source.util.TreePath;
 import org.jspecify.annotations.Nullable;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import javax.lang.model.element.Element;
@@ -49,7 +50,6 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Objects;
 import java.util.Set;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -57,7 +57,7 @@ import java.util.stream.Collectors;
 /**
  * Source-inventory contracts for Revetsec's exported API (plan R1, R2, R17, R20, 14.6), adapted from Soklet.
  * <p>
- * For every exported type (public top-level types in the eight exported packages, and their public or protected
+ * For every exported type (public top-level types in the exported packages, and their public or protected
  * nested types):
  * <ul>
  *   <li>it is not a record;</li>
@@ -97,7 +97,8 @@ import java.util.stream.Collectors;
  * Verified identity types (R17) and their subtypes have no public or protected constructor and no public or
  * protected nested {@code Builder} or {@code Copier}; each is final, or sealed with only non-public permitted
  * subclasses. No public or protected method or field of an accessible type, in any package, declared or inherited,
- * returns or holds a type that mentions one (a subtype, a type argument or a type-variable bound included). A class
+ * returns or holds a type that mentions one (a subtype, a type argument or a type-variable bound included). A nested
+ * enum is metadata, not an instance of its enclosing proof type. A class
  * in {@link #VERIFIED_TYPE_SOURCES} is exempt for its instance members only; its static methods and fields are
  * checked like any other.
  * <p>
@@ -128,7 +129,18 @@ final class PublicApiContractTests {
 			"com.revetsec.oidc.OidcRefreshOutcome$Succeeded",
 			"com.revetsec.oidc.OidcUserInfoResult$Succeeded",
 			"com.revetsec.saml.SamlAuthentication",
-			"com.revetsec.scim.ScimPatchResult");
+			"com.revetsec.scim.ScimPatchResult",
+			"com.revetsec.totp.TotpVerification",
+			"com.revetsec.totp.RecoveryCodeUse",
+			"com.revetsec.totp.TotpVerificationResult$Succeeded",
+			"com.revetsec.totp.RecoveryCodeUseResult$Succeeded",
+			"com.revetsec.totp.TotpEnrollmentRequestResult$Prepared",
+			"com.revetsec.totp.TotpEnrollmentResult$Succeeded",
+			"com.revetsec.totp.RecoveryCodeRotationResult$Succeeded",
+			"com.revetsec.webauthn.WebAuthnAuthentication",
+			"com.revetsec.webauthn.WebAuthnRegistration",
+			"com.revetsec.webauthn.WebAuthnAuthenticationResult$Succeeded",
+			"com.revetsec.webauthn.WebAuthnRegistrationResult$Succeeded");
 
 	/**
 	 * Binary names of the accessible classes whose public or protected instance methods and fields may return or hold
@@ -154,9 +166,15 @@ final class PublicApiContractTests {
 			"com.revetsec.oidc.OidcClient",
 			"com.revetsec.saml.SamlServiceProvider",
 			"com.revetsec.saml.SamlAuthenticationResult$Succeeded",
-            "com.revetsec.scim.ScimPatchApplicationResult$Succeeded",
+			"com.revetsec.scim.ScimPatchApplicationResult$Succeeded",
+			"com.revetsec.totp.TotpAuthenticator",
+			"com.revetsec.totp.TotpVerificationResult$Succeeded",
+			"com.revetsec.totp.RecoveryCodeUseResult$Succeeded",
+			"com.revetsec.webauthn.WebAuthnRelyingParty",
+			"com.revetsec.webauthn.WebAuthnAuthenticationResult$Succeeded",
+			"com.revetsec.webauthn.WebAuthnRegistrationResult$Succeeded",
 			"com.revetsec.internal.jose.JwtValidationAccess$Operations",
-            "com.revetsec.internal.oauth.OidcTransactionAccess$Operations");
+			"com.revetsec.internal.oauth.OidcTransactionAccess$Operations");
 
 	/**
 	 * Binary names of the exported concrete classes approved to be neither final nor sealed (R1). The exemption covers
@@ -222,28 +240,44 @@ final class PublicApiContractTests {
 				findViolations(ContractSupport.repositoryRoot().resolve("src/main/java")));
 	}
 
+	@Test
+	void selectedApplicationSecurityAndWebAuthnPackagesStayInExportedApiAudit() {
+		Assertions.assertTrue(ContractSupport.EXPORTED_PACKAGES.containsAll(Set.of(
+				"com.revetsec.password", "com.revetsec.totp", "com.revetsec.webauthn")),
+				"Selected password, TOTP and WebAuthn APIs must remain in the source contract audit");
+		Assertions.assertTrue(VERIFIED_TYPES.containsAll(Set.of(
+				"com.revetsec.webauthn.WebAuthnAuthentication",
+				"com.revetsec.webauthn.WebAuthnRegistration",
+				"com.revetsec.webauthn.WebAuthnAuthenticationResult$Succeeded",
+				"com.revetsec.webauthn.WebAuthnRegistrationResult$Succeeded")),
+				"Committed WebAuthn proofs must remain in the R17 verified-type audit");
+	}
+
 	/**
 	 * Checks the Java sources under {@code sourceRoot} and returns one message per violation (empty if none).
 	 */
 	static @NonNull List<@NonNull String> findViolations(@NonNull Path sourceRoot) throws IOException {
-		return findViolations(sourceRoot, VERIFIED_TYPE_SOURCES, R1_EXCEPTIONS, OPEN_ABSTRACT_TYPES,
+		return findViolations(sourceRoot, VERIFIED_TYPES, VERIFIED_TYPE_SOURCES, R1_EXCEPTIONS, OPEN_ABSTRACT_TYPES,
 				APP_CONSTRUCTIBLE_EXCEPTION_FACTORIES);
 	}
 
 	/**
-	 * {@link #findViolations(Path)} with the given lists in place of {@link #VERIFIED_TYPE_SOURCES},
+	 * {@link #findViolations(Path)} with the given lists in place of {@link #VERIFIED_TYPES},
+	 * {@link #VERIFIED_TYPE_SOURCES},
 	 * {@link #R1_EXCEPTIONS}, {@link #OPEN_ABSTRACT_TYPES} and {@link #APP_CONSTRUCTIBLE_EXCEPTION_FACTORIES}, so
 	 * {@link ContractMetaTests} can exercise entries against the fixtures.
 	 */
-	static @NonNull List<@NonNull String> findViolations(@NonNull Path sourceRoot, @NonNull Set<@NonNull String> verifiedTypeSources, @NonNull Set<@NonNull String> r1Exceptions,
+	static @NonNull List<@NonNull String> findViolations(@NonNull Path sourceRoot, @NonNull Set<@NonNull String> verifiedTypes,
+			@NonNull Set<@NonNull String> verifiedTypeSources, @NonNull Set<@NonNull String> r1Exceptions,
 			@NonNull Set<@NonNull String> openAbstractTypes, @NonNull Set<@NonNull String> appConstructibleExceptionFactories) throws IOException {
 		if (ContractSupport.javaSources(sourceRoot).isEmpty())
 			return List.of();
-		return ContractSupport.analyze(sourceRoot, analysis -> findViolations(analysis, verifiedTypeSources,
+		return ContractSupport.analyze(sourceRoot, analysis -> findViolations(analysis, verifiedTypes, verifiedTypeSources,
 				r1Exceptions, openAbstractTypes, appConstructibleExceptionFactories));
 	}
 
-	private static @NonNull List<@NonNull String> findViolations(@NonNull SourceAnalysis analysis, @NonNull Set<@NonNull String> verifiedTypeSources,
+	private static @NonNull List<@NonNull String> findViolations(@NonNull SourceAnalysis analysis, @NonNull Set<@NonNull String> verifiedTypeNames,
+			@NonNull Set<@NonNull String> verifiedTypeSources,
 			@NonNull Set<@NonNull String> r1Exceptions, @NonNull Set<@NonNull String> openAbstractTypes, @NonNull Set<@NonNull String> appConstructibleExceptionFactories) {
 		List<String> violations = new ArrayList<>();
 		List<TypeElement> exportedTypes = ContractSupport.exportedTypes(analysis);
@@ -251,11 +285,13 @@ final class PublicApiContractTests {
 		for (TypeElement type : exportedTypes)
 			checkExportedType(type, exported, r1Exceptions, analysis, violations);
 		Set<TypeElement> accessibleTypes = accessibleTypes(analysis);
-		checkVerifiedTypes(accessibleTypes, verifiedTypeSources, analysis, violations);
+		checkVerifiedTypes(verifiedTypeNames, accessibleTypes, verifiedTypeSources, analysis, violations);
 		checkOpenAbstractTypes(exportedTypes, openAbstractTypes, analysis, violations);
 		checkExceptions(exportedTypes, exported, appConstructibleExceptionFactories, analysis, violations);
 		checkObservers(exportedTypes, exported, analysis, violations);
 		checkReviewedEntries("R1_EXCEPTIONS", r1Exceptions, exported, "exported type", analysis, violations);
+		checkReviewedEntries("VERIFIED_TYPES", verifiedTypeNames, accessibleTypes, "accessible type", analysis,
+				violations);
 		checkReviewedEntries("VERIFIED_TYPE_SOURCES", verifiedTypeSources, accessibleTypes, "accessible type",
 				analysis, violations);
 		violations.sort(null);
@@ -676,11 +712,11 @@ final class PublicApiContractTests {
 	/**
 	 * R17: verified identity types come only from validators.
 	 */
-	private static void checkVerifiedTypes(@NonNull Set<@NonNull TypeElement> accessibleTypes, @NonNull Set<@NonNull String> verifiedTypeSources,
+	private static void checkVerifiedTypes(@NonNull Set<@NonNull String> verifiedTypeNames, @NonNull Set<@NonNull TypeElement> accessibleTypes,
+			@NonNull Set<@NonNull String> verifiedTypeSources,
 			@NonNull SourceAnalysis analysis, @NonNull List<@NonNull String> violations) {
-		List<TypeElement> verifiedTypes = VERIFIED_TYPES.stream()
-				.map(name -> analysis.getElements().getTypeElement(name))
-				.filter(Objects::nonNull)
+		List<TypeElement> verifiedTypes = accessibleTypes.stream()
+				.filter(type -> verifiedTypeNames.contains(analysis.getElements().getBinaryName(type).toString()))
 				.toList();
 		for (TypeElement type : topLevelTypes(analysis))
 			checkVerifiedTypes(type, verifiedTypes, accessibleTypes, verifiedTypeSources, analysis, violations);
@@ -775,9 +811,14 @@ final class PublicApiContractTests {
 			@NonNull SourceAnalysis analysis, @NonNull Set<@NonNull TypeParameterElement> visitedTypeVariables) {
 		if (type instanceof DeclaredType declaredType) {
 			for (@Nullable Element element = declaredType.asElement(); element instanceof TypeElement typeElement;
-					element = typeElement.getEnclosingElement())
+					element = typeElement.getEnclosingElement()) {
 				if (isVerifiedType(typeElement, verifiedTypes, analysis))
 					return true;
+				// A static enum does not carry an instance of its enclosing verified type. Keep traversing
+				// other nested classes, whose public type can otherwise be used as a proof carrier.
+				if (typeElement.getKind() == ElementKind.ENUM)
+					break;
+			}
 			return declaredType.getTypeArguments().stream().anyMatch(argument ->
 					mentionsVerifiedType(argument, verifiedTypes, analysis, visitedTypeVariables));
 		}

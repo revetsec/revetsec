@@ -3,6 +3,30 @@ Copyright 2026 Revetware LLC
 
 Licensed under the Apache License, Version 2.0. See LICENSE.
 
+Third-party material included in the published library
+
+Spring Security BCrypt (internal password migration verifier)
+
+The internal BCrypt source is copied from Spring Security 6.5.11, tag commit
+73b077790fcb04ac3712033d3e939daf42264545, with only its package declaration
+changed. The original file is
+https://github.com/spring-projects/spring-security/blob/6.5.11/crypto/src/main/java/org/springframework/security/crypto/bcrypt/BCrypt.java
+and has SHA-256 c05d267ceef5faa04380006075b9067939e03d526a2d9f4987bbf22a7a6ff7be.
+The source carries Copyright (c) 2006 Damien Miller <djm@mindrot.org> and
+its permissive license notice is reproduced in LICENSE and in the source file.
+Revetsec uses it only behind a bounded verify-only wrapper; no Spring runtime
+dependency is included.
+
+Argon2 reference implementation (internal password hashing engine)
+
+The Java Argon2id engine is a source translation of selected files from the
+Password Hashing Competition Argon2 reference implementation, tag 20190702,
+commit 62358ba2123abd17fccf2a108a301d4b52c01a7c. The upstream authors are
+Daniel Dinu, Dmitry Khovratovich, Jean-Philippe Aumasson, and Samuel Neves
+(Copyright 2015). The reference source is dual-licensed under CC0 1.0 or
+Apache License 2.0; Revetsec uses the Apache License 2.0 option. Exact file
+hashes, method mappings, and translation notes are in docs/password-vendored-source.md.
+
 Third-party material in the source repository
 
 The files below are in the source repository only, as test tooling. None of

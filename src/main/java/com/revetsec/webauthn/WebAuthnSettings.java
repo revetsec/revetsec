@@ -62,23 +62,23 @@ public final class WebAuthnSettings {
     /** Returns the raw completion body limit.
      * @return maximum raw completion body bytes
      * @since 1.0.0 */
-    public int getMaximumResponseBodyBytes() { return this.maximumResponseBodyBytes; }
+    public @NonNull Integer getMaximumResponseBodyBytes() { return this.maximumResponseBodyBytes; }
     /** Returns the decoded client data limit.
      * @return maximum decoded clientDataJSON bytes
      * @since 1.0.0 */
-    public int getMaximumClientDataJsonBytes() { return this.maximumClientDataJsonBytes; }
+    public @NonNull Integer getMaximumClientDataJsonBytes() { return this.maximumClientDataJsonBytes; }
     /** Returns the decoded attestation object limit.
      * @return maximum decoded attestationObject bytes
      * @since 1.0.0 */
-    public int getMaximumAttestationObjectBytes() { return this.maximumAttestationObjectBytes; }
+    public @NonNull Integer getMaximumAttestationObjectBytes() { return this.maximumAttestationObjectBytes; }
     /** Returns the decoded authenticator data limit.
      * @return maximum decoded authenticatorData bytes
      * @since 1.0.0 */
-    public int getMaximumAuthenticatorDataBytes() { return this.maximumAuthenticatorDataBytes; }
+    public @NonNull Integer getMaximumAuthenticatorDataBytes() { return this.maximumAuthenticatorDataBytes; }
     /** Returns the active credential exclusion limit.
      * @return maximum active credential IDs admitted before enrollment is refused
      * @since 1.0.0 */
-    public int getMaximumExcludedCredentials() { return this.maximumExcludedCredentials; }
+    public @NonNull Integer getMaximumExcludedCredentials() { return this.maximumExcludedCredentials; }
     /** Returns the validity duration of a ceremony.
      * @return ceremony validity duration
      * @since 1.0.0 */
@@ -94,7 +94,7 @@ public final class WebAuthnSettings {
 
     /** One caller-thread settings builder. Passing null to a setter restores its default.
      * @since 1.0.0 */
-    @NotThreadSafe public static final class Builder {
+    @NotThreadSafe @CheckReturnValue public static final class Builder {
         private int maximumResponseBodyBytes = DEFAULT_BODY;
         private int maximumClientDataJsonBytes = DEFAULT_CLIENT_DATA;
         private int maximumAttestationObjectBytes = DEFAULT_ATTESTATION;

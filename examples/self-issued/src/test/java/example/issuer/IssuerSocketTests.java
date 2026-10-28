@@ -81,7 +81,9 @@ final class IssuerSocketTests {
    assertTrue(rawMcp(mp,authority,access).startsWith("HTTP/1.1 200 "));
    assertTrue(rawMcp(mp,"localhost:"+mp,access).startsWith("HTTP/1.1 403 "));
    assertTrue(rawMcp(mp,"127.0.0.1:"+mp,access).startsWith("HTTP/1.1 403 "));
-   assertTrue(rawMcp(mp,"issuer.example:"+hp,access).startsWith("HTTP/1.1 421 "));
+   // Explicit public hosts may use a proxy port; app admission still requires the exact resource authority.
+   String wrongPort=rawMcp(mp,"issuer.example:"+hp,access);
+   assertTrue(wrongPort.startsWith("HTTP/1.1 403 "),wrongPort.split("\r\n",2)[0]);
    assertTrue(rawMcp(mp,"unregistered.example:"+mp,access).startsWith("HTTP/1.1 421 "));
   }
  }

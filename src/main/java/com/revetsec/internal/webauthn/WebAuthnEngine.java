@@ -446,7 +446,7 @@ public final class WebAuthnEngine {
     }
 
     private static boolean current(WebAuthnRecoveryGate.@NonNull Permit permit) {
-        try { return permit.isCurrent(); }
+        try { return Boolean.TRUE.equals(permit.isCurrent()); }
         catch (VirtualMachineError fatal) { throw fatal; }
         catch (Throwable failure) { WebAuthnStoreCoordinator.preserveInterrupt(failure); return false; }
     }

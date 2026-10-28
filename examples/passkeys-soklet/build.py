@@ -17,14 +17,16 @@
 
 import argparse
 import hashlib
+import json
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import zipfile
 
 
 ROOT = Path(__file__).resolve().parent
-SOKLET_4_SHA256 = "f7f62f967045a8eb8f943a90d49d499b4c5b755d20ab901e12a34fe1d004319b"
+FRAMEWORK_PIN = json.loads((ROOT.parent / "pins.json").read_text())["framework"]
 
 
 def digest(path):
@@ -50,7 +52,7 @@ def main():
     for jar in jars:
         if not jar.is_file():
             parser.error("a required JAR is missing")
-    if digest(args.soklet_jar) != SOKLET_4_SHA256:
+    if digest(args.soklet_jar) != FRAMEWORK_PIN["jar_sha256"]:
         parser.error("Soklet JAR does not match the pinned 4.0.0 artifact")
     with zipfile.ZipFile(args.core_jar) as jar:
         if "com/revetsec/webauthn/InMemoryWebAuthnStore.class" not in jar.namelist():
@@ -60,6 +62,10 @@ def main():
     java = args.java_home / "bin" / "java"
     if not javac.is_file() or not java.is_file():
         parser.error("--java-home must contain javac and java")
+    compiler = subprocess.check_output([str(javac), "-version"], text=True).strip()
+    compiler_version = re.fullmatch(r"javac (\d+)(?:\..*)?", compiler)
+    if compiler_version is None or int(compiler_version.group(1)) < FRAMEWORK_PIN["minimum_java"]:
+        parser.error("The Soklet passkey application requires JDK 21 or newer")
     work.mkdir(mode=0o700, parents=True)
     classes = work / "classes"
     classes.mkdir()
@@ -77,7 +83,7 @@ def main():
     java_files.extend(sorted((ROOT / "src" / "test" / "java").rglob("*.java")))
     if not java_files:
         parser.error("passkey Java sources missing")
-    subprocess.run([str(javac), "--release", "17", "-proc:none", "-Xlint:all,-serial", "-Werror",
+    subprocess.run([str(javac), "--release", "21", "-proc:none", "-Xlint:all,-serial", "-Werror",
                     "-cp", ":".join(map(str, compile_jars)), "-d", str(classes),
                     *map(str, java_files)], check=True)
     shutil.copytree(ROOT / "src" / "main" / "resources", classes, dirs_exist_ok=True)

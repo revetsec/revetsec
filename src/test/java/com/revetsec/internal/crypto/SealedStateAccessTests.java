@@ -239,6 +239,14 @@ final class SealedStateAccessTests {
 	 */
 	static final class ForeignOperations implements SealedStateAccess.Operations {
   @Override public @NonNull Integer getMaximumSealedLength(@NonNull StateSealer sealer) { return 3800; }
+        @Override public @NonNull String getActiveKeyId(@NonNull StateSealer sealer) { return "foreign"; }
+        @Override public java.util.@NonNull Set<@NonNull String> getOpeningKeyIds(@NonNull StateSealer sealer) {
+            return java.util.Set.of("foreign");
+        }
+        @Override public @NonNull String sealDurable(@NonNull StateSealer sealer,
+                @NonNull String plaintext, @NonNull String context) { return plaintext; }
+        @Override public @NonNull String unsealDurable(@NonNull StateSealer sealer,
+                @NonNull String sealed, @NonNull String context) { return sealed; }
 
 		@Override
 		public @NonNull String seal(@NonNull StateSealer sealer,

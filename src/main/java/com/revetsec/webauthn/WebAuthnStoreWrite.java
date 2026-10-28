@@ -77,7 +77,8 @@ public final class WebAuthnStoreWrite {
  /** Redacts predicates and mutations. @since 1.0.0 */
  @Override public @NonNull String toString() { return "WebAuthnStoreWrite{write=<redacted>}"; }
 
- /** A typed insertion, replacement or deletion of a key from the read set. @since 1.0.0 */
+ /** A typed insertion, replacement or deletion of a key from the read set.
+  * @since 1.0.0 */
  @javax.annotation.concurrent.Immutable
  public static final class Mutation {
   private final @NonNull WebAuthnStoreKey key;
@@ -188,7 +189,8 @@ public final class WebAuthnStoreWrite {
     throw new IllegalArgumentException("Only ceremonies may carry a reclamation deadline");
   }
 
-  /** The three atomic write operations. @since 1.0.0 */
+  /** The three atomic write operations.
+   * @since 1.0.0 */
   @javax.annotation.concurrent.Immutable
   public enum Kind {
    /** Insert after confirmed absence. @since 1.0.0 */ INSERT,

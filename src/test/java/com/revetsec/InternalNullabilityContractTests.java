@@ -49,9 +49,14 @@ import java.util.stream.Collectors;
 /**
  * Every source-declared production signature states its reference nullability, including internal declarations.
  * This supplements the public API contract; implicit generic bounds and compiler-generated methods are not source
- * signatures. There is no production vendor exclusion: the current production inventory is Revetsec-authored.
+ * signatures. The one pinned, near-verbatim BCrypt vendor file is excluded under D52; its wrapper and package-info
+ * remain subject to this contract, and {@link com.revetsec.internal.password.BcryptVendoredSourceTests} checks its
+ * exact upstream source hash after reversing the package rewrite.
  */
 final class InternalNullabilityContractTests {
+
+	private static final @NonNull String VENDORED_BCRYPT =
+			"com/revetsec/internal/password/vendor/spring/BCrypt.java";
 
 	private static final @NonNull String NON_NULL = "org.jspecify.annotations.NonNull";
 	private static final @NonNull String NULLABLE = "org.jspecify.annotations.Nullable";
@@ -156,6 +161,8 @@ final class InternalNullabilityContractTests {
 		return ContractSupport.analyze(sourceRoot, analysis -> {
 			List<String> violations = new ArrayList<>();
 			for (CompilationUnitTree unit : analysis.getCompilationUnits()) {
+				if (analysis.relativePath(unit).equals(VENDORED_BCRYPT))
+					continue;
 				new TreePathScanner<Void, Void>() {
 					private @NonNull String owner(@NonNull Tree tree, @NonNull String member) {
 						long position = analysis.getTrees().getSourcePositions().getStartPosition(unit, tree);

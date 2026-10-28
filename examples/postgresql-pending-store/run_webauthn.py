@@ -16,9 +16,7 @@ import subprocess
 import tempfile
 import time
 
-from run import IMAGE, ROOT, check, docker
-
-SOKLET_4_SHA256 = "f7f62f967045a8eb8f943a90d49d499b4c5b755d20ab901e12a34fe1d004319b"
+from run import FRAMEWORK_PIN, IMAGE, ROOT, check, docker, java_release_for
 
 
 def main() -> None:
@@ -41,11 +39,12 @@ def main() -> None:
     jars = [args.core_jar, args.pyranid_jar, args.driver_jar, args.jspecify_jar, args.jsr305_jar]
     if args.soklet_jar is not None:
         if not args.soklet_jar.is_file() or hashlib.sha256(args.soklet_jar.read_bytes()).hexdigest() \
-                != SOKLET_4_SHA256:
+                != FRAMEWORK_PIN["jar_sha256"]:
             parser.error("--soklet-jar must be the pinned Soklet 4.0.0 artifact")
         jars.append(args.soklet_jar)
     if not all(path.is_file() for path in jars) or not (args.java_home / "bin/javac").is_file():
         parser.error("All input JARs and the Java home must exist")
+    java_release = java_release_for(args.java_home, args.soklet_jar is not None)
 
     with tempfile.TemporaryDirectory(prefix="revetsec-webauthn-store-") as temp:
         work = Path(temp)
@@ -71,7 +70,7 @@ def main() -> None:
                     app_root / "src/main/java/example/passkeys/PasskeyPlayground.java",
                     ROOT / "src/test/java/example/pending/DurablePasskeyPlayground.java",
                 ])
-        compiled = subprocess.run([str(args.java_home / "bin/javac"), "--release", "17", "-proc:none",
+        compiled = subprocess.run([str(args.java_home / "bin/javac"), "--release", java_release, "-proc:none",
                                    "-Xlint:all", "-Werror", "-cp", classpath, "-d", str(classes),
                                    *(str(source) for source in sources)], capture_output=True, text=True,
                                   timeout=60)

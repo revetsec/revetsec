@@ -1,2 +1,13 @@
 Revetsec
 Copyright 2026 Revetware LLC
+
+Includes a BCrypt source file from Spring Security 6.5.11, based on the
+Copyright (c) 2006 Damien Miller <djm@mindrot.org> implementation. Its
+permission notice is reproduced in LICENSE. The only source change is the
+package declaration; SHA-256 of the original is
+c05d267ceef5faa04380006075b9067939e03d526a2d9f4987bbf22a7a6ff7be.
+
+Includes a Java Argon2id translation from the Password Hashing Competition
+Argon2 reference implementation, tag 20190702. Copyright 2015 Daniel Dinu,
+Dmitry Khovratovich, Jean-Philippe Aumasson, and Samuel Neves. Used under
+the Apache License 2.0 option of its dual CC0 1.0 / Apache 2.0 license.

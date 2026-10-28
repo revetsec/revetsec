@@ -4,9 +4,9 @@
 
 A zero-dependency Java library for OAuth 2.0 clients and resource servers, OpenID Connect relying parties, JOSE, SAML 2.0 service providers and SCIM 2.0 servers.
 
-**Revetsec is pre-release.** It verifies signed JWTs against JSON Web Key Sets, provides bounded RSA signing, and includes OAuth 2.0 client and issuer operations, audience-checked JWT/introspection resource validation, an OpenID Connect relying party, SAML SP, SCIM server primitives and WebAuthn relying-party workflows. See [Status](#status) for current release gates.
+**Revetsec is pre-release.** It verifies signed JWTs against JSON Web Key Sets, provides bounded RSA signing, and includes OAuth 2.0 client and issuer operations, audience-checked JWT/introspection resource validation, an OpenID Connect relying party, SAML SP, SCIM server primitives, WebAuthn relying-party workflows, TOTP enrollment with one-use recovery codes, and password hashing. See [Status](#status) for current release gates.
 
-Revetsec handles the application side of these protocols. It builds outbound requests, parses and validates what comes back, and returns an explicit outcome for expected success or rejection. Infrastructure and configuration failures retain documented exceptions. Your application keeps its own users, sessions, routes and storage.
+Revetsec handles the application side of these protocols. It builds outbound requests, parses and validates what comes back, and returns an explicit outcome for expected success or rejection. TOTP storage and recovery-admission failures also have explicit outcomes; other infrastructure and configuration failures retain their documented exception boundaries. Your application keeps its own users, sessions, routes and storage.
 
 Framework adapters for [Soklet](https://www.soklet.com) and the Servlet API are separate artifacts in their own repositories (see [Installation](#installation)).
 
@@ -42,6 +42,8 @@ Operations with several expected outcomes expose one immutable sealed result API
 | JWT validation | [`JwtValidator`](https://javadoc.revetsec.com/com/revetsec/jose/JwtValidator.html)`.validateResult` | `Succeeded` with a checked [`Jwt`](https://javadoc.revetsec.com/com/revetsec/jose/Jwt.html), or `Rejected` with a fixed JOSE reason |
 | Bearer header parsing | [`BearerToken`](https://javadoc.revetsec.com/com/revetsec/oauth/BearerToken.html)`.fromAuthorizationHeaderValuesResult` | `Absent`, `Present` with an unverified credential, or `Malformed` |
 | Sealed application state | [`StateSealer`](https://javadoc.revetsec.com/com/revetsec/StateSealer.html)`.unsealResult` | `Succeeded` with authenticated plaintext, or an opaque `Rejected` |
+| New password hash | [`PasswordHasher`](https://javadoc.revetsec.com/com/revetsec/password/PasswordHasher.html)`.hashResult` | `Succeeded` with a stored verifier, `Rejected`, or `Unavailable` |
+| Password verification | [`PasswordHasher`](https://javadoc.revetsec.com/com/revetsec/password/PasswordHasher.html)`.verifyResult` | `Matched` with rehash advice, `NotMatched`, `Rejected`, or `Unavailable` |
 | OAuth callback | [`OAuthClient`](https://javadoc.revetsec.com/com/revetsec/oauth/OAuthClient.html)`.completeAuthorizationResult` | `Succeeded`, `Denied`, `RejectedAuthorizationError`, `RejectedEndpoint`, local `Rejected`, or pending-store `Failed` |
 | OIDC callback | [`OidcClient`](https://javadoc.revetsec.com/com/revetsec/oidc/OidcClient.html)`.completeAuthenticationResult` | `Succeeded`, `Denied`, checked authorization/endpoint rejection, local callback or ID-token rejection, or pending-store `Failed` |
 | Pending transaction persistence | [`PendingAuthorization`](https://javadoc.revetsec.com/com/revetsec/oauth/PendingAuthorization.html)`.saveToResult` | `SAVED`, `ALREADY_PRESENT`, `CAPACITY_REFUSED`, `UNAVAILABLE`, or `INDETERMINATE`; redirect only after confirmed save |
@@ -137,7 +139,7 @@ dependencies {
 
 Each adapter lives in its own repository, and its README lists its coordinates. An adapter declares Revetsec core and its framework API as `provided` dependencies, so your application declares both.
 
-- [revetsec-soklet](https://github.com/revetsec/revetsec-soklet) for [Soklet](https://www.soklet.com)
+- [revetsec-soklet](https://github.com/revetsec/revetsec-soklet) for [Soklet](https://www.soklet.com) 4, requiring Java 21 or newer
 - [revetsec-servlet-jakarta](https://github.com/revetsec/revetsec-servlet-jakarta) for the `jakarta.servlet` API
 - [revetsec-servlet-javax](https://github.com/revetsec/revetsec-servlet-javax) for the legacy `javax.servlet` API
 
@@ -153,8 +155,18 @@ Every area below ships together in a single 1.0.0 release:
 - SAML 2.0 service provider for Web Browser SSO, including encrypted assertions and front-channel Single Logout
 - SCIM 2.0 server primitives
 - WebAuthn relying-party registration, sign-in and account management
+- TOTP authenticator enrollment, replay-protected verification and one-use recovery codes
+- Argon2id password hashing with bounded work and explicit legacy verification
 
 Each area gets its own section here, with application code, when it lands.
+
+### TOTP and recovery codes
+
+`TotpAuthenticator` provides confirmed enrollment, factor replacement/removal, replay-protected TOTP verification and one-use recovery-code batches. The application supplies durable opaque-record storage and an independent deployment recovery gate; accounts, authorization, primary authentication and sessions remain application-owned. Core stays at Java 17. See the [TOTP and recovery guide](docs/totp-recovery.md), [complete Soklet 4 integration](examples/totp-soklet/README.md), and unpublished [PostgreSQL durable-store fixture](examples/postgresql-pending-store/README.md#durable-totp-fixture).
+
+### Password hashing
+
+`PasswordHasher` creates Argon2id password verifiers, checks native stored forms, and optionally verifies selected bcrypt or PBKDF2 legacy records for migration. The application supplies a shared process-local work gate and owns account admission, password policy, credential-version compare-and-set, MFA and sessions. Optional pepper keys are separate from the credential database. See the [password hashing guide](docs/password-hashing.md).
 
 ### JOSE
 
@@ -226,7 +238,11 @@ PS256, RS256 and RS384 are supported. The optional 32-byte thumbprint is the SHA
 
 Revetsec is **pre-release**. The version is `1.0.0-SNAPSHOT`, and there is no compatibility promise before 1.0.0; see [COMPATIBILITY.md](COMPATIBILITY.md).
 
-The repository includes shared foundations, JOSE, an OAuth client and issuer, an OpenID Connect relying party, resource-server validation, a SAML SP, SCIM server primitives and a WebAuthn relying party. The SAML SP's [RC-2 readiness gate](docs/reviews/rc-2-round-1.md#rc-2-closure--2026-10-14) closed on 2026-10-14; its [integration guide](docs/saml-sp.md) describes deployment contracts. SCIM's API was frozen on 2026-10-14; see its [server guide](docs/scim-server-primitives.md). WebAuthn's dedicated review and physical-key qualification remain open. The application supplies users, permissions, sessions, routes and durable storage. The Soklet, Jakarta Servlet and javax Servlet adapters provide transport helpers across OAuth, bearer admission, issuer endpoints, SAML, SCIM and WebAuthn as documented in each adapter. Applications choose validators and make permission decisions.
+The repository includes shared foundations, JOSE, an OAuth client and issuer, an OpenID Connect relying party, resource-server validation, a SAML SP, SCIM server primitives and a WebAuthn relying party. The SAML SP's [RC-2 readiness gate](docs/reviews/rc-2-round-1.md#rc-2-closure--2026-10-14) closed on 2026-10-14; its [integration guide](docs/saml-sp.md) describes deployment contracts. SCIM's API was frozen on 2026-10-14; see its [server guide](docs/scim-server-primitives.md). Subsequent API changes still require consolidated review against the final release source.
+
+On 2026-10-15, the local [WebAuthn browser example](examples/passkeys-soklet/README.md) passed registration, discoverable sign-in, account-pinned reauthentication and rejection after server-side credential removal with a Yubico Security Key C NFC over USB. WebAuthn's dedicated review and final release qualification remain open. The [PostgreSQL example](examples/postgresql-pending-store/README.md) also passed its full storage/Soklet application lanes on Java 17 and 27, including synthetic WebAuthn recovery checks, on one host and one authoritative primary. These observations retain their tested source and environment scope.
+
+The application supplies users, permissions, sessions, routes and durable storage. The Soklet, Jakarta Servlet and javax Servlet adapters provide transport helpers across OAuth, bearer admission, issuer endpoints, SAML, SCIM and WebAuthn as documented in each adapter. Applications choose validators and make permission decisions.
 
 Revetsec has not been independently audited. Its bounded security evidence is in [`docs/`](docs/): the [threat model](docs/threat-model.md), [interop matrix](COMPATIBILITY.md), [RC-1 local OAuth/OIDC qualification and Burp closeout](docs/pentest/2026-10-15-rc1-burp.md), [RC-2 review and closure](docs/reviews/rc-2-round-1.md), [SAML pentest notes](docs/pentest/2026-10-13.md), and [mutation ledger](docs/saml-mutation-triage-2026-10-11.md). [Fuzz evidence](fuzz/README.md) includes local runs and planted-defect checks. Other 1.0.0 release evidence is still being assembled.
 

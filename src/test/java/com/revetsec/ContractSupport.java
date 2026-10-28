@@ -104,7 +104,7 @@ final class ContractSupport {
 			""";
 
 	/**
-	 * The eight exported (API) packages. Every other package is under {@code com.revetsec.internal} and is not API.
+	 * The exported (API) packages. Every other package is under {@code com.revetsec.internal} and is not API.
 	 */
 	static final Set<String> EXPORTED_PACKAGES = Set.of(
 			"com.revetsec",
@@ -114,7 +114,10 @@ final class ContractSupport {
 			"com.revetsec.oauth.server",
 			"com.revetsec.oidc",
 			"com.revetsec.saml",
-			"com.revetsec.scim");
+			"com.revetsec.scim",
+			"com.revetsec.password",
+			"com.revetsec.totp",
+			"com.revetsec.webauthn");
 
 	/**
 	 * Directory names skipped when the repository file list comes from a directory walk (no git listing): VCS

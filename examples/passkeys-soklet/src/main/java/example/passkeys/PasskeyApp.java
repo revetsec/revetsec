@@ -125,7 +125,7 @@ public final class PasskeyApp {
             if (!admissionOpen.get() || remaining.isNegative() || remaining.isZero()
                     || Thread.currentThread().isInterrupted()) return null;
             return new WebAuthnRecoveryGate.Permit() {
-                @Override public boolean isCurrent() { return admissionOpen.get(); }
+                @Override public @NonNull Boolean isCurrent() { return admissionOpen.get(); }
                 @Override public void close() { }
             };
         };

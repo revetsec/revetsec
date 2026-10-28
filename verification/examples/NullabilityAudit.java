@@ -46,7 +46,8 @@ import java.util.List;
 import java.util.Set;
 
 /** Readonly attributed signature audit for unpublished examples; writes only its requested JSON evidence.
- * <p>Arguments: newline-delimited Java source-list file, resolved classpath file, output JSON file.
+ * <p>Arguments: newline-delimited Java source-list file, resolved classpath file, output JSON file,
+ * optional source release (17 by default, 21 for Soklet applications).
  * Caller includes every main/test source and the compiled example classes plus its resolved test dependencies.
  * @since 1.0.0
  */
@@ -61,7 +62,11 @@ public final class NullabilityAudit {
      * @since 1.0.0
      */
     public static void main(@NonNull String @NonNull [] arguments) throws IOException {
-        if (arguments.length != 3) throw new IllegalArgumentException("Expected source-list,class-path,output");
+        if (arguments.length != 3 && arguments.length != 4)
+            throw new IllegalArgumentException("Expected source-list,class-path,output[,release]");
+        String release = arguments.length == 4 ? arguments[3] : "17";
+        if (!release.equals("17") && !release.equals("21"))
+            throw new IllegalArgumentException("Expected source release 17 or 21");
         List<Path> sources = new ArrayList<>();
         for (String line : Files.readAllLines(Path.of(arguments[0]), StandardCharsets.UTF_8)) {
             if (!line.isBlank()) sources.add(Path.of(line).toAbsolutePath().normalize());
@@ -78,7 +83,7 @@ public final class NullabilityAudit {
         Audit audit = new Audit();
         try (var manager = compiler.getStandardFileManager(diagnostics, null, StandardCharsets.UTF_8)) {
             JavacTask task = (JavacTask) compiler.getTask(null, manager, diagnostics,
-                    List.of("-proc:none", "--release", "17", "-classpath", classpath), null,
+                    List.of("-proc:none", "--release", release, "-classpath", classpath), null,
                     manager.getJavaFileObjectsFromPaths(sources));
             List<CompilationUnitTree> units = new ArrayList<>();
             task.parse().forEach(units::add);

@@ -1,6 +1,6 @@
 # Threat Model
 
-**Status: pre-release.** This map covers shared foundations, JOSE, OAuth client, OIDC, resource-server, issuer, WebAuthn, SAML and SCIM invariants. The OIDC, resource-server, issuer and WebAuthn rows are focused security boundaries; the consolidated release review must still check their completeness against the final API and claims. The [OAuth and token responsibility map](asvs-5.0-oauth-self-assessment.md) separately maps all OWASP ASVS 5.0 V9 and V10 requirements to Revetsec, application-owned or unsupported responsibilities. [SAML RC-2 readiness closed on 2026-10-14](reviews/rc-2-round-1.md#rc-2-closure--2026-10-14), before this patch changed the replay-cache SPI and session-reference API; that public-contract review must be revisited. RC-1 documentation reconciliation and other release checks remain open.
+**Status: pre-release.** This map covers shared foundations, JOSE, OAuth client, OIDC, resource-server, issuer, WebAuthn, password hashing, TOTP/recovery, SAML and SCIM invariants. The newer protocol and application-security rows are focused security boundaries; the consolidated release review must still check their completeness against the final API and claims. The [OAuth and token responsibility map](asvs-5.0-oauth-self-assessment.md) separately maps all OWASP ASVS 5.0 V9 and V10 requirements to Revetsec, application-owned or unsupported responsibilities. [SAML RC-2 readiness closed on 2026-10-14](reviews/rc-2-round-1.md#rc-2-closure--2026-10-14), before subsequent replay-cache SPI and session-reference API changes; that public-contract review must be revisited. [RC-1 local closeout](reviews/RC-1-round.md) is complete; applicable hosted CI and other release checks remain open.
 
 ## Actors
 
@@ -12,15 +12,17 @@ The design considers these attackers:
 - an authenticated but hostile SCIM client;
 - an attacker sending oversized, deeply nested or otherwise pathological input to exhaust resources;
 - server-side request forgery through tenant-supplied issuer or metadata URLs;
-- an operator who has changed JVM-wide security settings.
+- an operator who has changed JVM-wide security settings;
+- a reader of stolen password verifiers attempting offline guesses, or an attacker presenting malformed stored forms and legacy parameters to a login path;
+- a stale application node or restored backup attempting to reuse TOTP steps, recovery codes or an older factor epoch.
 
 ## Assets
 
-Account identity (who is logged in, and as which tenant), session establishment, tokens and authorization codes, service-provider private keys and sealing keys, and provisioning integrity (which users exist and which groups they belong to).
+Account identity (who is logged in, and as which tenant), session establishment, tokens and authorization codes, service-provider private keys and sealing keys, password verifiers and pepper keys, TOTP factors and recovery codes, and provisioning integrity (which users exist and which groups they belong to).
 
 ## Trust boundaries
 
-Browser to application; application to authorization server, OpenID Provider or identity provider (outbound HTTPS); identity provider to application (front-channel POST); SCIM client to application.
+Browser to application; application to authorization server, OpenID Provider or identity provider (outbound HTTPS); identity provider to application (front-channel POST); SCIM client to application; application to authoritative account and factor stores, pepper/key custody and the deployment recovery controller.
 
 ## Invariants and tests
 
@@ -109,6 +111,15 @@ The INV-O rows below preserve the original M3 OAuth client-boundary mapping. The
 | INV-W1 | Registration and assertion verification bind RP ID, origin, challenge, browser ceremony, UP/UV flags and the credential signature before result release. | `webauthn.WebAuthnRelyingPartyTests`; `webauthn.WebAuthnCloseoutContractTests` |
 | INV-W2 | Ceremonies are single use. Reauthentication proof is bound to the expected kind, account handle and action purpose; a discoverable sign-in cannot satisfy it. | `webauthn.WebAuthnRelyingPartyTests`; `webauthn.WebAuthnStoreContractTests` |
 | INV-W3 | Versioned conditional store writes, expiry and the recovery gate prevent uncertain state from becoming authentication proof. | `webauthn.WebAuthnStoreContractTests`; `webauthn.InMemoryWebAuthnStoreTests` |
+
+### Application passwords and TOTP/recovery
+
+These rows cover the library's selected hashing and factor transitions. Account admission, password policy, protected key custody, durable store and recovery-controller implementations, authorization, MFA requirements and sessions are application responsibilities. The Argon2 translation still requires external review. The in-memory TOTP tests and unpublished one-primary PostgreSQL fixture do not qualify a distributed deployment.
+
+| ID | Invariant and boundary | Checked by |
+|---|---|---|
+| INV-SEC1 | New password hashes use bounded Argon2id parameters and complete NFC/UTF-8 input; stored cost and encoding are checked before KDF work. A shared gate bounds local concurrent work. A pepper-enabled hasher refuses raw unpeppered forms and cannot verify without the named key; bcrypt and PBKDF2 are explicit verify-only migration paths. Invalid, unavailable and mismatched outcomes release no password match. | `password.PasswordHasherTests`; `password.PasswordStoredFormTests`; `internal.password.Argon2idVectorsTests`; `internal.password.LegacyPasswordVerifierTests` |
+| INV-SEC5 | TOTP enrollment is inactive until confirmed; accepted TOTP steps and recovery-code uses commit atomically and cannot be reused. A durable record is bound to its account and recovery epoch. Failed, uncertain, stale-epoch or lost-gate transitions release no factor proof or recovery plaintext. | `totp.TotpAuthenticatorTests`; `totp.TotpStoreConformanceTests`; `internal.crypto.TotpDurableSealingTests`; unpublished PostgreSQL [durable TOTP fixture](../examples/postgresql-pending-store/README.md#durable-totp-fixture) |
 
 ### SAML service provider
 

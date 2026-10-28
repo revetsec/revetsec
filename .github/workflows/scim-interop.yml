@@ -38,7 +38,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: revetsec/revetsec-soklet
-          ref: 595cc578a9c03572bd3fad9cb3c54e17f375142a
+          ref: b8b2f27c5d3dbc19204b8c0aabe80a78fbb189f5
           path: .scim-inputs/adapter
           persist-credentials: false
 
@@ -46,7 +46,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: soklet/soklet
-          ref: 8e1c689b729eb4cc45ffec1a1aed9668d07ffb10
+          ref: 61d02245c745cedf8452a1fc0a13be96f9414a9b
           path: .scim-inputs/framework
           persist-credentials: false
 
@@ -57,18 +57,18 @@ jobs:
             exit 1
           fi
 
-      - name: Set up Corretto 17
+      - name: Set up Corretto 21.0.11
         uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
         with:
           distribution: corretto
-          java-version: '17'
+          java-version: '21.0.11'
           cache: maven
 
       - name: Build and verify pinned framework
         working-directory: .scim-inputs/framework
         run: |
           mvn -B -ntp -Dmaven.test.skip=true -Dmaven.javadoc.skip=true -Dgpg.skip=true clean install
-          echo "f7f62f967045a8eb8f943a90d49d499b4c5b755d20ab901e12a34fe1d004319b  target/soklet-4.0.0.jar" | sha256sum --check
+          echo "56e37d0e8ef781822de1618595f43366df00bb29e7b486cdc5901623b83845a9  target/soklet-4.0.0.jar" | sha256sum --check
 
       - name: Build current SCIM core and pinned adapter
         run: |

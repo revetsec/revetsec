@@ -165,7 +165,8 @@ public final class WebAuthnStoreKey {
   catch (NoSuchAlgorithmException exception) { throw new IllegalStateException("SHA-256 unavailable", exception); }
  }
 
- /** The five authoritative record kinds. @since 1.0.0 */
+ /** The five authoritative record kinds.
+  * @since 1.0.0 */
  @javax.annotation.concurrent.Immutable
  public enum Kind {
   /** Single-use ceremony or retained consumption proof. @since 1.0.0 */

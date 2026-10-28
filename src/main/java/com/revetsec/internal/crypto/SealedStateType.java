@@ -61,7 +61,9 @@ public enum SealedStateType {
  /** Optional authenticated client metadata cache, distinct from application/issuer persistence. */
  AS_CLIENT_METADATA_CACHE("revetsec/as-client-metadata-cache/v1"),
  /** Authenticated WebAuthn authoritative-store records, separate from application and issuer state. */
- WEBAUTHN_RECORD("revetsec/webauthn-record/v1");
+ WEBAUTHN_RECORD("revetsec/webauthn-record/v1"),
+ /** Permanent TOTP authoritative records, never interchangeable with expiring application state. */
+ TOTP_RECORD("revetsec/totp-record/v1");
 
 	@NonNull
 	private final String label;

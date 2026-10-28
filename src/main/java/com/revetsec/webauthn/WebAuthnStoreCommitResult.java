@@ -16,7 +16,8 @@
 
 package com.revetsec.webauthn;
 
-/** Outcome of one atomic WebAuthn store write. Only COMMITTED permits a protocol proof. @since 1.0.0 */
+/** Outcome of one atomic WebAuthn store write. Only COMMITTED permits a protocol proof.
+ * @since 1.0.0 */
 @javax.annotation.concurrent.Immutable
 public enum WebAuthnStoreCommitResult {
  /** All predicates matched and all changes committed to the selected store. Durability across

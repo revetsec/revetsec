@@ -74,4 +74,29 @@
 		<Class name="com.revetsec.saml.SamlPostForm"/>
 		<Method name="toHtml"/>
 	</Match>
+	<!-- This exact OR intentionally computes the historical bcrypt sign-extended word alongside
+	     words[0]'s corrected word. Spring uses their difference for accepted $2a$ collision-safety
+	     logic; Revetsec rejects $2x$ hashes. Changing words[1] would alter verification behavior.
+	     BCrypt.java is pinned to Spring Security 6.5.11 by BcryptVendoredSourceTests. -->
+	<Match>
+		<Bug pattern="BIT_IOR_OF_SIGNED_BYTE"/>
+		<Class name="com.revetsec.internal.password.vendor.spring.BCrypt"/>
+		<Method name="streamtowords" signature="([B[I[I)[I"/>
+	</Match>
+	<!-- A Java char is unsigned, so the x < 0 half of this upstream bounds check is unreachable.
+	     The x >= index_64.length half remains effective; retain the pinned source unchanged. -->
+	<Match>
+		<Bug pattern="INT_BAD_COMPARISON_WITH_NONNEGATIVE_VALUE"/>
+		<Class name="com.revetsec.internal.password.vendor.spring.BCrypt"/>
+		<Method name="char64" signature="(C)B"/>
+	</Match>
+	<!-- SpotBugs describes one-shot java.util.Random as yielding mediocre numbers. This site uses
+	     a fresh platform SecureRandom for each 16-byte Argon2id salt, after work admission, so the
+	     algorithm is cryptographic and no SecureRandom instance is shared among calls. Reusing
+	     a provider instance here would introduce shared state solely for this generic diagnostic. -->
+	<Match>
+		<Bug pattern="DMI_RANDOM_USED_ONLY_ONCE"/>
+		<Class name="com.revetsec.password.PasswordHasher"/>
+		<Method name="hashResult" signature="([C)Lcom/revetsec/password/PasswordHashResult;"/>
+	</Match>
 </FindBugsFilter>

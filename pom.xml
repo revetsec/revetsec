@@ -82,6 +82,7 @@
 		<junit.jupiter.version>6.1.3</junit.jupiter.version>
 		<testcontainers.version>2.0.5</testcontainers.version>
 		<netty.test.version>4.1.138.Final</netty.test.version>
+		<bouncycastle.test.version>1.84</bouncycastle.test.version>
 
 		<!-- The javadoc JAR is built by a separately pinned JDK (REVETSEC_JAVADOC_HOME, Corretto 26), as in Soklet.
 		     CI builds it only in the javadoc job; every other job passes -Dmaven.javadoc.skip=true. -->
@@ -517,6 +518,13 @@
 			<version>${junit.jupiter.version}</version>
 			<scope>test</scope>
 		</dependency>
+		<!-- Independent Argon2id differential oracle; never enters the published artifact. -->
+		<dependency>
+			<groupId>org.bouncycastle</groupId>
+			<artifactId>bcprov-jdk18on</artifactId>
+			<version>${bouncycastle.test.version}</version>
+			<scope>test</scope>
+		</dependency>
 		<!-- Patched, test-only ALPN HTTP/2 frame server; never enters the main artifact. -->
 		<dependency>
 			<groupId>io.netty</groupId>
@@ -596,6 +604,7 @@
 								</path>
 							</annotationProcessorPaths>
 							<compilerArgs combine.children="append">
+								<!-- D52 keeps the pinned Spring BCrypt source near-verbatim; Error Prone checks its bounded wrapper. -->
 								<arg>-Xmaxwarns</arg>
 								<arg>100000</arg>
 								<arg>-Xmaxerrs</arg>
@@ -603,7 +612,7 @@
 								<arg>-XDcompilePolicy=simple</arg>
 								<arg>--should-stop=ifError=FLOW</arg>
 								<arg>-XDaddTypeAnnotationsToSymbol=true</arg>
-								<arg>-Xplugin:ErrorProne -Xep:NullAway:ERROR -XepOpt:NullAway:AnnotatedPackages=com.revetsec -Xep:DefaultCharset:ERROR -Xep:StringSplitter:ERROR -Xep:StringCaseLocaleUsage:ERROR -Xep:ReferenceEquality:ERROR -Xep:EmptyCatch:ERROR -Xep:NullableVoid:ERROR -Xep:AnnotateFormatMethod:ERROR -Xep:UnusedMethod:ERROR -Xep:UnusedVariable:ERROR -Xep:Finally:ERROR -Xep:NarrowingCompoundAssignment:ERROR -Xep:MissingSummary:OFF</arg>
+								<arg>-Xplugin:ErrorProne -Xep:NullAway:ERROR -XepOpt:NullAway:AnnotatedPackages=com.revetsec -XepExcludedPaths:.*/com/revetsec/internal/password/vendor/spring/BCrypt[.]java$ -Xep:DefaultCharset:ERROR -Xep:StringSplitter:ERROR -Xep:StringCaseLocaleUsage:ERROR -Xep:ReferenceEquality:ERROR -Xep:EmptyCatch:ERROR -Xep:NullableVoid:ERROR -Xep:AnnotateFormatMethod:ERROR -Xep:UnusedMethod:ERROR -Xep:UnusedVariable:ERROR -Xep:Finally:ERROR -Xep:NarrowingCompoundAssignment:ERROR -Xep:MissingSummary:OFF</arg>
 								<arg>-J--add-exports=jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED</arg>
 								<arg>-J--add-exports=jdk.compiler/com.sun.tools.javac.file=ALL-UNNAMED</arg>
 								<arg>-J--add-exports=jdk.compiler/com.sun.tools.javac.main=ALL-UNNAMED</arg>

@@ -7,15 +7,25 @@ Two unpublished Soklet projects use packaged core, adapter and framework artifac
 | [barebones-oidc](barebones-oidc/README.md) | OIDC login and an application-owned session | Pinned 4.0.0 |
 | [playground](playground/README.md) | OIDC and SAML browser sessions, JWT/introspection MCP `whoami`, resource metadata, scope and application permissions, client credentials and transient inspection | Pinned 4.0.0 |
 
-A separate [self-issued MCP Playground](self-issued/README.md) uses current core/helper sources for app-owned OAuth issuance and online MCP validation with bounded volatile sessions/storage. Its matching CI pins await pushed revisions.
+A separate [self-issued MCP Playground](self-issued/README.md) uses current core/helper sources for app-owned OAuth issuance and online MCP validation with bounded volatile sessions/storage. Its builder records the authored core/helper inputs separately from the packaged-example pins below.
 
 The [Soklet passkey browser demo](passkeys-soklet/README.md) exercises registration, discoverable sign-in, account-pinned reauthentication and credential management with an explicitly selected volatile WebAuthn store and exact HTTPS DNS origin.
+
+The [complete Soklet 4 TOTP integration](totp-soklet/README.md) shows enrollment, confirmation, replacement, TOTP login, recovery login, rotation, removal, cancellation and status with application-owned authorization, sessions, durable storage and recovery admission. Its isolated builder compiles against the current core and pinned Soklet JAR on Java 21 or newer. The examples CI job runs its boundary, lifecycle and loopback socket checks.
+
+The paired [Jakarta Servlet](https://github.com/revetsec/revetsec-servlet-jakarta/blob/main/docs/totp.md) and [Javax Servlet](https://github.com/revetsec/revetsec-servlet-javax/blob/main/docs/totp.md) cookbooks live in their adapter repositories. Their Java 17 sources call core directly from application-owned routes, with disposable Tomcat 11 and 9 fixtures. They do not supply production primary authentication, durable sessions or a cross-host recovery gate.
+
+The [Java 17 password hashing example](password-hashing/README.md) runs directly
+against current core. It demonstrates bounded Argon2id work, an ephemeral pepper
+key and exact-version compare-and-set rehashing without an HTTP adapter.
 
 The standalone [PostgreSQL storage examples](postgresql-pending-store/README.md) show application-owned shared pending-authorization storage, an optional CIMD cache, an authoritative issuer store and a WebAuthn store, all using Pyranid. They are outside the core reactor and are not a managed database service.
 
 The examples are outside the core reactor. `pins.json` records already-pushed core/helper revisions and the exact framework source. They do not publish artifacts. Revetsec has not been independently audited.
 
 ## Build
+
+Use JDK 21 or newer for Soklet examples. The framework source build uses Corretto 21.0.11 so its JAR matches the recorded checksum.
 
 Check out the revisions in `pins.json` for the adapter and Soklet framework. A core checkout with unchanged `pom.xml` and `src/main` relative to its recorded pin can supply the core artifact for a manual build. CI passes its exact run commit with `--core-revision` so the examples exercise the pushed core under test; the builder requires the source checkout to match that SHA and records it in the result. The builder copies these inputs into a new private directory and uses its own Maven repository. Optional `--repository-tail` is read-only; `--offline` requires cached build dependencies.
 
@@ -26,7 +36,7 @@ python3 examples/build.py --work /absolute/new/example-build \
   --framework-source /absolute/pinned-soklet-checkout
 ```
 
-The builder runs both example test suites and checks their runtime classpaths contain exactly the three declared dependency JARs. Provided annotation JARs are absent at runtime. It records commands, artifact checksums and exact source pins in the private result. The alternative `--framework-jar` accepts only the recorded source-built JAR checksum. Java 17 source compatibility is retained when tests run on later JDKs.
+The builder runs both example test suites and checks their runtime classpaths contain exactly the three declared dependency JARs. Provided annotation JARs are absent at runtime. It records commands, artifact checksums and exact source pins in the private result. The alternative `--framework-jar` accepts only the recorded source-built JAR checksum. Soklet applications require Java 21 or newer; CI checks them on JDK 21 and 27. The framework JAR is built with the exact Corretto version recorded in `pins.json` before those application lanes run. Core and the core-only RSA/OIDC recipes retain Java 17 compatibility.
 
 ## Local provider and HTTPS
 

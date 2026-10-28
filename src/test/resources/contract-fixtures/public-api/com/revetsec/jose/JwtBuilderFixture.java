@@ -58,4 +58,18 @@ public final class JwtBuilderFixture {
 	public @NonNull Jwt build() {
 		throw new UnsupportedOperationException();
 	}
+
+	/** A nested enum is metadata, so exposing it does not mint a verified token.
+	 * @return never
+	 * @since 1.0.0 */
+	public Jwt.@NonNull Kind kind() {
+		throw new UnsupportedOperationException();
+	}
+
+	/** A nested holder still crosses the verified-type boundary.
+	 * @return never
+	 * @since 1.0.0 */
+	public Jwt.@NonNull Builder nestedHolder() {
+		throw new UnsupportedOperationException();
+	}
 }

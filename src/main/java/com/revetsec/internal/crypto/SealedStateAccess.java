@@ -24,6 +24,7 @@ import javax.annotation.concurrent.ThreadSafe;
 import java.lang.invoke.MethodHandles;
 import java.time.Clock;
 import java.time.Instant;
+import java.util.Set;
 import java.util.concurrent.locks.ReentrantLock;
 
 import static java.util.Objects.requireNonNull;
@@ -78,6 +79,20 @@ public final class SealedStateAccess {
    * @return its validated maximum sealed length
    */
   @NonNull Integer getMaximumSealedLength(@NonNull StateSealer sealer);
+
+        /** Returns the immutable active sealing-key identifier, without key material. */
+        @NonNull String getActiveKeyId(@NonNull StateSealer sealer);
+
+        /** Returns a snapshot of all opening-key identifiers, including the active key. */
+        @NonNull Set<@NonNull String> getOpeningKeyIds(@NonNull StateSealer sealer);
+
+        /** Seals bounded durable protocol state with no expiry and a separate typed domain. */
+        @NonNull String sealDurable(@NonNull StateSealer sealer, @NonNull String plaintext,
+                @NonNull String context);
+
+        /** Opens only a durable TOTP record; the permanent wire lifetime is authenticated. */
+        @NonNull String unsealDurable(@NonNull StateSealer sealer, @NonNull String sealed,
+                @NonNull String context) throws UnsealException;
 
 		/**
 		 * Seals {@code plaintext} under {@code type} with the sealer's active key.

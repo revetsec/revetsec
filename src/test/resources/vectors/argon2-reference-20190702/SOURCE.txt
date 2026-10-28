@@ -1,0 +1,21 @@
+Argon2 reference source code package
+Repository: https://github.com/P-H-C/phc-winner-argon2
+Tag: 20190702
+Commit: 62358ba2123abd17fccf2a108a301d4b52c01a7c
+Archive: https://github.com/P-H-C/phc-winner-argon2/archive/refs/tags/20190702.tar.gz
+Archive SHA-256: daf972a89577f8772602bf2eb38b6a3dd3d922bf5724d45e7f9589b5e830442c
+License: CC0-1.0 OR Apache-2.0; Revetsec selects Apache-2.0
+
+Files below are exact bytes from the archive. They are retained in test resources for source-identity
+verification and are not packaged into the Revetsec runtime JAR.
+
+SHA-256  PATH
+72a93deebc5fd76bec0c6d300a2d92b500fb354b26babbddbc6d8b88681e663d  src/argon2.c
+4ec47b080c22f4ee416b9dbcfae70ee6007fcfba427f870d7b84395846fa1bc7  src/ref.c
+0f53eb2370f8971f04fcf043b8083bf81d1530c48b2ead71c0b6c4e22a01aeec  src/core.c
+c9665623cb3d306f63b6a3effd87bcfab971c28253c77e111445e42c1523235e  src/core.h
+52519ccbc1e48f489ff444091f630d05dadcc8f1ee61c5b7361e3a9618299c9a  src/blake2/blake2b.c
+8ac91f1f57d94235f8de0069b7809be1deb365c3b37adb8e30423cd364aff09a  src/blake2/blake2-impl.h
+bcfdcf785218cf897f05b144e80b659e611188fee3887d533bdcb7a6aa4c336b  src/blake2/blamka-round-ref.h
+df20cb726a2fe6bccc736b81ea0d86219766a0d17f1794c19e048a34830ca1cc  include/argon2.h
+220f8736a89ff51c92ef3d497f413b48e6cf1df3d6278bc909c6308c78e1718e  LICENSE

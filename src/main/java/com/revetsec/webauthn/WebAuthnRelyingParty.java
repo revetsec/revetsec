@@ -385,7 +385,7 @@ public final class WebAuthnRelyingParty {
 
     /** One caller-thread trusted configuration builder.
      * @since 1.0.0 */
-    @NotThreadSafe
+    @NotThreadSafe @CheckReturnValue
     public static final class Builder {
         private final @NonNull String relyingPartyId;
         private @Nullable String relyingPartyName;
@@ -399,18 +399,21 @@ public final class WebAuthnRelyingParty {
         private Builder(@NonNull String relyingPartyId) { this.relyingPartyId = relyingPartyId; }
 
         /** Sets a bounded RP display name.
-         * @param name RP name
+         * @param name RP name, or null to clear the required name
          * @return this builder
          * @since 1.0.0 */
-        public @NonNull Builder relyingPartyName(@NonNull String name) {
-            this.relyingPartyName = displayName(name); return this;
+        public @NonNull Builder relyingPartyName(@Nullable String name) {
+            this.relyingPartyName = name == null ? null : displayName(name); return this;
         }
         /** Sets exact trusted HTTPS origins whose host is the configured RP ID.
-         * @param origins one to eight canonical origins
+         * @param origins one to eight canonical origins, or null to clear the required set
          * @return this builder
          * @since 1.0.0 */
-        public @NonNull Builder allowedOrigins(@NonNull Set<@NonNull String> origins) {
-            requireNonNull(origins);
+        public @NonNull Builder allowedOrigins(@Nullable Set<@NonNull String> origins) {
+            if (origins == null) {
+                this.allowedOrigins = null;
+                return this;
+            }
             if (origins.isEmpty() || origins.size() > 8)
                 throw new IllegalArgumentException("Invalid WebAuthn origin count");
             Set<String> copy = Set.copyOf(origins);
@@ -418,33 +421,34 @@ public final class WebAuthnRelyingParty {
             this.allowedOrigins = copy; return this;
         }
         /** Sets the app-controlled credential namespace.
-         * @param namespace namespace
+         * @param namespace namespace, or null to clear the required namespace
          * @return this builder
          * @since 1.0.0 */
-        public @NonNull Builder credentialNamespace(@NonNull String namespace) {
-            WebAuthnStoreKey.forNamespaceClock(requireNonNull(namespace), this.relyingPartyId);
+        public @NonNull Builder credentialNamespace(@Nullable String namespace) {
+            if (namespace != null)
+                WebAuthnStoreKey.forNamespaceClock(namespace, this.relyingPartyId);
             this.credentialNamespace = namespace; return this;
         }
         /** Selects the app-owned authoritative store.
-         * @param store store
+         * @param store store, or null to clear the required store
          * @return this builder
          * @since 1.0.0 */
-        public @NonNull Builder store(@NonNull WebAuthnStore store) {
-            this.store = requireNonNull(store); return this;
+        public @NonNull Builder store(@Nullable WebAuthnStore store) {
+            this.store = store; return this;
         }
         /** Selects the app-provisioned record sealer.
-         * @param sealer sealer
+         * @param sealer sealer, or null to clear the required sealer
          * @return this builder
          * @since 1.0.0 */
-        public @NonNull Builder stateSealer(@NonNull StateSealer sealer) {
-            this.stateSealer = requireNonNull(sealer); return this;
+        public @NonNull Builder stateSealer(@Nullable StateSealer sealer) {
+            this.stateSealer = sealer; return this;
         }
         /** Selects the app-owned durable restore admission barrier.
-         * @param gate gate
+         * @param gate gate, or null to clear the required gate
          * @return this builder
          * @since 1.0.0 */
-        public @NonNull Builder recoveryGate(@NonNull WebAuthnRecoveryGate gate) {
-            this.recoveryGate = requireNonNull(gate); return this;
+        public @NonNull Builder recoveryGate(@Nullable WebAuthnRecoveryGate gate) {
+            this.recoveryGate = gate; return this;
         }
         /** Selects bounded WebAuthn settings. Null restores the selected defaults.
          * @param settings settings or null for defaults

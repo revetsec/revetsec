@@ -181,6 +181,8 @@ import java.util.stream.Collectors;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 final class SourcePolicyTests {
+	/** D52's single near-verbatim vendor source; its wrapper and package-info keep all source checks. */
+	static final String VENDORED_BCRYPT = "com/revetsec/internal/password/vendor/spring/BCrypt.java";
 	/**
 	 * The one class allowed to create the process-wide default JDK {@code HttpClient} (D36). It is exempt from
 	 * {@code default-http-client} only; it may not create threads or executors of its own.
@@ -215,6 +217,10 @@ final class SourcePolicyTests {
 			{"com.revetsec.internal.crypto.SealedStateAccess", "operations", "set-once accessor (G6-10, the JDK "
 					+ "SharedSecrets pattern): volatile, written at most once, under a lock, by StateSealer's static "
 					+ "initializer; a second set throws IllegalStateException"},
+			{"com.revetsec.internal.password.Blake2b", "blake2b_IV", "D52 pinned C reference constants: "
+					+ "private lookup array, never returned or written after class initialization"},
+			{"com.revetsec.internal.password.Blake2b", "blake2b_sigma", "D52 pinned C reference constants: "
+					+ "private round-schedule array, never returned or written after class initialization"},
 	});
 
 	private static final String INTERNAL_XML = "com/revetsec/internal/xml/";
@@ -269,7 +275,7 @@ final class SourcePolicyTests {
 			"-----BEGIN [A-Z0-9 ]+-----([A-Za-z0-9+/=\\s]+)-----END "
 					+ "|<(?:[\\w.-]+:)?X509Certificate>([A-Za-z0-9+/=\\s]+)<");
 
-	private static final Pattern JAR_NOTICE = Pattern.compile("Revetsec\nCopyright 2026 Revetware LLC\\.?\n");
+	private static final String JAR_NOTICE_HEADER = "Revetsec\nCopyright 2026 Revetware LLC\n";
 
 	static final String SYNCHRONIZED = "synchronized";
 	static final String BACKGROUND_WORK = "background-work";
@@ -703,14 +709,20 @@ final class SourcePolicyTests {
 				"src/main/resources/META-INF/LICENSE must be a byte-for-byte copy of LICENSE");
 
 		String jarNotice = Files.readString(metaInf.resolve("NOTICE"), StandardCharsets.UTF_8);
-		Assertions.assertTrue(JAR_NOTICE.matcher(jarNotice).matches(), () -> "src/main/resources/META-INF/NOTICE must "
-				+ "be exactly two lines, \"Revetsec\" and the Revetware copyright line, but was:\n" + jarNotice);
+		Assertions.assertTrue(jarNotice.startsWith(JAR_NOTICE_HEADER),
+				"src/main/resources/META-INF/NOTICE must start with the Revetsec copyright header");
+		Assertions.assertTrue(jarNotice.contains("Spring Security 6.5.11"), "JAR NOTICE must attribute vendored BCrypt");
+		Assertions.assertTrue(jarNotice.contains("Argon2 reference implementation"),
+				"JAR NOTICE must attribute the Argon2 translation");
 
 		Path repositoryNotice = root.resolve("NOTICE");
 		Assertions.assertTrue(Files.isRegularFile(repositoryNotice), "The repository has no NOTICE file");
 		String notice = Files.readString(repositoryNotice, StandardCharsets.UTF_8).replace("\r\n", "\n");
-		Assertions.assertTrue(notice.startsWith(jarNotice),
-				"NOTICE must begin with the same two lines as src/main/resources/META-INF/NOTICE");
+		Assertions.assertTrue(notice.startsWith(JAR_NOTICE_HEADER),
+				"NOTICE must begin with the same Revetsec copyright header as the JAR NOTICE");
+		Assertions.assertTrue(notice.contains("Spring Security 6.5.11"), "Repository NOTICE must attribute vendored BCrypt");
+		Assertions.assertTrue(notice.contains("Argon2 reference implementation"),
+				"Repository NOTICE must attribute the Argon2 translation");
 	}
 
 	/**
@@ -847,6 +859,8 @@ final class SourcePolicyTests {
 		List<Detection> detections = new ArrayList<>();
 		for (Path file : sources) {
 			String relativePath = ContractSupport.relativePath(sourceRoot, file);
+			if (relativePath.equals(VENDORED_BCRYPT))
+				continue;
 			ContractSupport.TranslatedSource translated = ContractSupport.translateUnicodeEscapes(
 					Files.readString(file, StandardCharsets.UTF_8));
 			List<Integer> lineCommentStarts = new ArrayList<>();
@@ -897,6 +911,8 @@ final class SourcePolicyTests {
 
 		for (CompilationUnitTree compilationUnit : analysis.getCompilationUnits()) {
 			String relativePath = analysis.relativePath(compilationUnit);
+			if (relativePath.equals(VENDORED_BCRYPT))
+				continue;
 			boolean exportedPackage = ContractSupport.EXPORTED_PACKAGES.contains(
 					ContractSupport.packageName(compilationUnit));
 			boolean providerScope = rule(JCA_PROVIDER_ARGUMENT).appliesTo.test(relativePath);
@@ -1470,6 +1486,8 @@ final class SourcePolicyTests {
 		List<String> violations = new ArrayList<>();
 		for (Path file : ContractSupport.javaSources(sourceRoot)) {
 			String content = Files.readString(file, StandardCharsets.UTF_8).replace("\r\n", "\n");
+			if (ContractSupport.relativePath(sourceRoot, file).equals(VENDORED_BCRYPT))
+				continue;
 			// The copied Soklet implementation retains its upstream copyright years.
 			boolean sokletHeader = ContractSupport.relativePath(sourceRoot, file)
 					.equals("com/revetsec/internal/ConcurrentLruMap.java")

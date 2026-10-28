@@ -45,11 +45,17 @@ def main():
     parser.add_argument("--offline", action="store_true")
     args = parser.parse_args()
     if (not args.work.is_absolute() or args.work.exists() or not args.maven.is_file()
-            or not (args.java_home / "bin/java").is_file()
+            or not (args.java_home / "bin/java").is_file() or not (args.java_home / "bin/javac").is_file()
             or bool(args.framework_source) == bool(args.framework_jar)):
         parser.error("Use a new absolute work directory, real tools, and one framework source or pinned JAR")
     if args.core_revision is not None and re.fullmatch(r"[0-9a-f]{40}", args.core_revision) is None:
         parser.error("The core revision must be a full lowercase commit SHA")
+    compiler = subprocess.check_output([str(args.java_home / "bin/javac"), "-version"], text=True).strip()
+    compiler_version = re.fullmatch(r"javac (\d+)(?:\..*)?", compiler)
+    if compiler_version is None or int(compiler_version.group(1)) < PINS["framework"]["minimum_java"]:
+        parser.error("Soklet applications require JDK 21 or newer; core remains compatible with Java 17")
+    if args.framework_source and compiler != "javac " + PINS["framework"]["build_java_version"]:
+        parser.error("Build framework source with its pinned compiler, or supply the checksum-pinned JAR")
     pins = {**PINS, "core": {**PINS["core"], "revision": args.core_revision or PINS["core"]["revision"]}}
     args.work.mkdir(parents=True, mode=0o700)
     env = {**os.environ, "JAVA_HOME": str(args.java_home),
@@ -131,7 +137,7 @@ def main():
             *sorted((example / "src/test/java").rglob("*.java")), checker]) + "\n")
         run(name + "-explicit-nullability", [str(args.java_home / "bin/java"), "-cp",
             audit_classpath.read_text(), str(checker), str(source_list), str(audit_classpath),
-            str(example / "target/nullability-audit.json")], example)
+            str(example / "target/nullability-audit.json"), "21"], example)
         dependencies = [Path(x) for x in (example / "target/runtime-classpath.txt").read_text().strip().split(os.pathsep)]
         expected = {"revetsec-1.0.0-SNAPSHOT.jar", "revetsec-soklet-1.0.0-SNAPSHOT.jar", "soklet-4.0.0.jar"}
         if len(dependencies) != 3 or {x.name for x in dependencies} != expected:

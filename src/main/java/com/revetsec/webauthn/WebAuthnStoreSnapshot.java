@@ -20,7 +20,8 @@ import java.util.Map;
 import java.util.Set;
 import org.jspecify.annotations.NonNull;
 
-/** Complete immutable authoritative read set, including explicit absences. @since 1.0.0 */
+/** Complete immutable authoritative read set, including explicit absences.
+ * @since 1.0.0 */
 @javax.annotation.concurrent.Immutable
 public final class WebAuthnStoreSnapshot {
  private final @NonNull Map<@NonNull WebAuthnStoreKey, @NonNull WebAuthnStoreEntry> entries;

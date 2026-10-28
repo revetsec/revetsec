@@ -458,6 +458,14 @@ different client-data bytes before accepting the exact signed assertion. It then
 This covers the public registration-to-stored-key-to-assertion path for all three algorithms; key
 generation and signing remain synthetic JDK fixtures, not independent authenticator evidence.
 
+`TotpFuzzTests` drives two stateful public-flow targets through an explicitly initialized,
+volatile in-memory store. Each input selects a change to a newly issued recovery code or a
+six-digit TOTP code. The altered carrier must be rejected, the unchanged control must still
+succeed, and replay must fail. Fourteen authored seeds cover the selected changes, including
+invalid ASCII, Unicode lookalikes, missing or extra symbols and overlong inputs. The target's
+fixed test gate and in-memory store do not qualify durable recovery admission or database
+transactions; the PostgreSQL fixture covers those separately.
+
 ## Writing a target
 
 - Put the class in `fuzz/src/test/java`, in the package of the code it exercises.

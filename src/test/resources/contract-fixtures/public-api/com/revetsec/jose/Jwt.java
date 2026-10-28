@@ -17,6 +17,7 @@
 package com.revetsec.jose;
 
 import javax.annotation.concurrent.NotThreadSafe;
+import javax.annotation.concurrent.Immutable;
 import javax.annotation.concurrent.ThreadSafe;
 
 /**
@@ -43,5 +44,13 @@ public final class Jwt {
 	public static final class Builder {
 		private Builder() {
 		}
+	}
+
+	/** Metadata describing a verified token, without carrying that token.
+	 * @since 1.0.0 */
+	@Immutable
+	public enum Kind {
+		/** A fixture token kind. */
+		FIXTURE
 	}
 }

@@ -1,5 +1,7 @@
 # Barebones OIDC
 
+Use JDK 21 or newer for this Soklet application. Revetsec core retains Java 17 compatibility.
+
 Build with [the example builder](../README.md), then configure trusted process values:
 
 ```sh

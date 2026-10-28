@@ -40,6 +40,7 @@ import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static java.util.Objects.requireNonNull;
 
@@ -75,8 +76,11 @@ import static java.util.Objects.requireNonNull;
  * <ol>
  *   <li>add the new key as a verification key on every instance, so each can open values the new key seals;</li>
  *   <li>promote it: make it the active key and the old key a verification key;</li>
- *   <li>once every value sealed under the old key has expired, retire the old key.</li>
+ *   <li>once every expiring value sealed under the old key has expired and every permanent protocol record has
+ *   been migrated, retire the old key.</li>
  * </ol>
+ * Permanent protocol records, including TOTP credentials, do not age out with cookies. Their authenticated
+ * resealing, outstanding writers and retained backups need an explicit key-retirement inventory.
  * Rotate at once if a key may have been disclosed: whoever holds a key can seal values that every sealer holding it
  * accepts. Use one key per application.
  * <p>
@@ -441,6 +445,35 @@ public final class StateSealer {
   @Override public @NonNull Integer getMaximumSealedLength(@NonNull StateSealer sealer) {
    return requireNonNull(sealer).maximumSealedLength;
   }
+
+        @Override public @NonNull String getActiveKeyId(@NonNull StateSealer sealer) {
+            return requireNonNull(sealer).activeKey.getKeyId();
+        }
+
+        @Override public @NonNull Set<@NonNull String> getOpeningKeyIds(@NonNull StateSealer sealer) {
+            return Set.copyOf(requireNonNull(sealer).keysByKeyId.keySet());
+        }
+
+        @Override public @NonNull String sealDurable(@NonNull StateSealer sealer,
+                @NonNull String plaintext, @NonNull String context) {
+            requireNonNull(sealer);
+            requireNonNull(plaintext);
+            SealerV1.requireContext(context);
+            if (plaintext.length() > 48_000) throw new IllegalArgumentException("Durable record too large");
+            byte[] bytes;
+            try { bytes = StrictUtf8.encode(plaintext); }
+            catch (EncodingException failure) { throw new IllegalArgumentException("Invalid durable text"); }
+            try {
+                if (SealerV1.sealedLength(sealer.activeKey.getKeyId().length(), bytes.length) > 65_536)
+                    throw new IllegalArgumentException("Durable record too large");
+                return sealer.sealWithProvider(SealedStateType.TOTP_RECORD, context, Long.MAX_VALUE, bytes);
+            } finally { Arrays.fill(bytes, (byte) 0); }
+        }
+
+        @Override public @NonNull String unsealDurable(@NonNull StateSealer sealer,
+                @NonNull String sealed, @NonNull String context) throws UnsealException {
+            return SealerV1.openDurable(sealed, requireNonNull(sealer).keysByKeyId, context);
+        }
 
 		@Override
 		@NonNull

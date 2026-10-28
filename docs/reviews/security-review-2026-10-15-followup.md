@@ -1,8 +1,18 @@
 # Security review follow-up (2026-10-15)
 
-**Status:** pre-release working tree. This records the disposition of the 2026-10-15 security review supplied with the workspace. It is not a release sign-off. The changes described here are uncommitted.
+**Status:** historical pre-release review checkpoint, not a release sign-off. The original findings and verification below describe their source at that checkpoint. The dated update records subsequent work.
 
-## Addressed in this working tree
+## Current status update — 2026-10-15
+
+The sections below retain the original review checkpoint, including its test counts and then-open items. Subsequent work has changed three of those statuses:
+
+- The local [passkey browser example](../../examples/passkeys-soklet/README.md) passed registration, discoverable sign-in, account-pinned reauthentication and rejection after server-side removal with a Yubico Security Key C NFC over USB. The recorded environment was Chrome 155 on macOS 27; firmware 5.7.4 came from the USB descriptor rather than a separate CTAP query. This closes that recorded hardware-flow check, while the remaining WebAuthn review and release qualification stay separate.
+- The [PostgreSQL example](../../examples/postgresql-pending-store/README.md) passed its full storage/Soklet application lanes on Java 17 and 27, supplemental SCIM PATCH checks and synthetic WebAuthn storage/relying-party/application/recovery lanes. The evidence covers one host and one authoritative primary. It does not qualify cross-host recovery or failover.
+- All three adapters' CI core pins now select pushed core revision `30cf5833c4b784d205bbfc189815172da79de264`: [Soklet](https://github.com/revetsec/revetsec-soklet/blob/main/.github/workflows/ci.yml), [Jakarta Servlet](https://github.com/revetsec/revetsec-servlet-jakarta/blob/main/.github/workflows/ci.yml) and [javax Servlet](https://github.com/revetsec/revetsec-servlet-javax/blob/main/.github/workflows/ci.yml). Updating those inputs is separate from a successful hosted CI run.
+
+The result-only API migration, typed JWT signing and standalone JWKS publication also postdate this checkpoint. Current callers use the [single result contracts](../../README.md#validation-outcomes) for operations with several expected outcomes. Earlier API freezes and source-bound qualification receipts do not automatically qualify those later declarations. Consolidated API, claims and release review remain open.
+
+## Original checkpoint: addressed changes
 
 | Review finding | Change |
 | --- | --- |
@@ -16,7 +26,7 @@
 | §2 assurance documents | Added focused OIDC, resource-server, issuer and WebAuthn invariant rows and registered explicit compatibility switches. The consolidated release review still needs to check completeness. |
 | §3 bounded fixes | Corrected the confirmed SAML, SCIM, WebAuthn, adapter and example issues that could be changed without a persisted-identity migration or a wider API design. The remaining items are below. |
 
-## Remaining decisions and qualification
+## Original checkpoint: remaining decisions and qualification
 
 - **Issuer throughput and retries (§1.5).** The core reservation passed a 32-code, two-coordinator contention regression on the CAS test store. Its configured attempt count is still fixed, so repeated epoch changes or reservation rollovers may exhaust retries. The runnable PostgreSQL issuer store still locks a namespace row for every read and commit, serializing its traffic. Qualify that backend under target load and decide its atomic capacity/locking design before freezing the store SPI.
 - **SAML persistent identity and admission (§3).** Normalizing persistent NameID default qualifiers or `SPProvidedID` changes account keys and needs an account-linking migration. An unsigned encrypted response may require private-key work before its inner signature is visible. Anonymous begins can fill a bounded pending store. The SAML guide calls for minimal rollover keys, edge admission/rate limits, and durable pending storage where needed.
@@ -25,7 +35,7 @@
 - **Public-contract review.** The 2026-10-14 SAML RC-2 review and SCIM API freeze predate the connection-aware replay-cache SPI, persistable SAML session reference, SCIM canonical path API and new work-limit exception. Recheck those public contracts before treating either freeze as current.
 - **Cross-repository CI pins.** The Servlet recipe and fixture now call the new core reauthentication API. Their GitHub Actions core SHA pins must move to a pushed core commit containing this patch before those remote jobs can pass. No commit or pin update was made in this working tree.
 
-## Verification completed
+## Original checkpoint: verification completed
 
 - Core JDK 21 Maven `verify`: 18,827 tests, zero failures, zero errors, one skipped. JDK 21 static analysis and SpotBugs passed.
 - Java 17 Maven `verify`: Soklet 155 tests, Jakarta Servlet 42 tests, javax Servlet 42 tests; zero failures and errors. Their JDK 21 static-analysis and SpotBugs profiles passed.

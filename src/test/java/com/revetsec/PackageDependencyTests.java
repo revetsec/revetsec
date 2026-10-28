@@ -90,6 +90,8 @@ final class PackageDependencyTests {
 	private static final String OIDC = "com.revetsec.oidc";
 	private static final String SAML = "com.revetsec.saml";
 	private static final String SCIM = "com.revetsec.scim";
+	private static final String TOTP = "com.revetsec.totp";
+	private static final String PASSWORD = "com.revetsec.password";
 	private static final String WEBAUTHN = "com.revetsec.webauthn";
 	private static final String INTERNAL = "com.revetsec.internal";
 	private static final String NULL_MARKED = "org.jspecify.annotations.NullMarked";
@@ -97,31 +99,35 @@ final class PackageDependencyTests {
 	/**
 	 * The allowed dependency DAG among exported packages (plan 6). A package may always use itself.
 	 */
-	static final Map<String, Set<String>> ALLOWED_DEPENDENCIES = Map.of(
-			ROOT, Set.of(),
-			JSON, Set.of(ROOT),
-			JOSE, Set.of(JSON, ROOT),
-			OAUTH, Set.of(JOSE, JSON, ROOT),
-			SERVER, Set.of(OAUTH, JOSE, JSON, ROOT),
-			OIDC, Set.of(OAUTH, JOSE, JSON, ROOT),
-			SAML, Set.of(ROOT),
-			SCIM, Set.of(JSON, ROOT),
-			WEBAUTHN, Set.of(JSON, ROOT));
+	static final Map<String, Set<String>> ALLOWED_DEPENDENCIES = Map.ofEntries(
+			Map.entry(ROOT, Set.of()),
+			Map.entry(JSON, Set.of(ROOT)),
+			Map.entry(JOSE, Set.of(JSON, ROOT)),
+			Map.entry(OAUTH, Set.of(JOSE, JSON, ROOT)),
+			Map.entry(SERVER, Set.of(OAUTH, JOSE, JSON, ROOT)),
+			Map.entry(OIDC, Set.of(OAUTH, JOSE, JSON, ROOT)),
+			Map.entry(SAML, Set.of(ROOT)),
+			Map.entry(SCIM, Set.of(JSON, ROOT)),
+			Map.entry(WEBAUTHN, Set.of(JSON, ROOT)),
+			Map.entry(TOTP, Set.of(JSON, ROOT)),
+			Map.entry(PASSWORD, Set.of(ROOT)));
 
 	/**
 	 * The exported package each internal package serves. An internal package follows its owner's rules.
 	 */
-	static final Map<String, String> INTERNAL_PACKAGE_LAYERS = Map.of(
-			INTERNAL, ROOT,
-			INTERNAL + ".encoding", ROOT,
-			INTERNAL + ".crypto", ROOT,
-			INTERNAL + ".pem", ROOT,
-			INTERNAL + ".http", ROOT,
-			INTERNAL + ".json", JSON,
-			INTERNAL + ".jose", JOSE,
-			INTERNAL + ".oauth", OAUTH,
-			INTERNAL + ".xml", SAML,
-			INTERNAL + ".webauthn", WEBAUTHN);
+	static final Map<String, String> INTERNAL_PACKAGE_LAYERS = Map.ofEntries(
+			Map.entry(INTERNAL, ROOT),
+			Map.entry(INTERNAL + ".encoding", ROOT),
+			Map.entry(INTERNAL + ".crypto", ROOT),
+			Map.entry(INTERNAL + ".pem", ROOT),
+			Map.entry(INTERNAL + ".http", ROOT),
+			Map.entry(INTERNAL + ".json", JSON),
+			Map.entry(INTERNAL + ".jose", JOSE),
+			Map.entry(INTERNAL + ".oauth", OAUTH),
+			Map.entry(INTERNAL + ".xml", SAML),
+			Map.entry(INTERNAL + ".webauthn", WEBAUTHN),
+			Map.entry(INTERNAL + ".password", PASSWORD),
+			Map.entry(INTERNAL + ".password.vendor.spring", PASSWORD));
 
 	/**
 	 * Internal packages that only the listed packages may use (besides themselves). The check matches the importing
@@ -139,7 +145,9 @@ final class PackageDependencyTests {
 			INTERNAL + ".xml", Set.of(SAML),
 			INTERNAL + ".oauth", Set.of(OAUTH, OIDC, SERVER),
 			INTERNAL + ".http", Set.of(JOSE, OAUTH, OIDC, SERVER, INTERNAL + ".oauth"),
-			INTERNAL + ".webauthn", Set.of(WEBAUTHN));
+			INTERNAL + ".webauthn", Set.of(WEBAUTHN),
+			INTERNAL + ".password", Set.of(PASSWORD),
+			INTERNAL + ".password.vendor.spring", Set.of(INTERNAL + ".password"));
 
 	@Test
 	void mainSourcesRespectPackageDependencyRules() throws IOException {

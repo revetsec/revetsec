@@ -54,7 +54,7 @@ public final class WebAuthnCeremonyFuzzTests {
     private static final String WRONG_BINDING = Base64Url.encode(filled(99));
     private static final Clock CLOCK = Clock.fixed(Instant.parse("2026-10-09T12:00:00Z"), ZoneOffset.UTC);
     private static final WebAuthnRecoveryGate GATE = remaining -> new WebAuthnRecoveryGate.Permit() {
-        @Override public boolean isCurrent() { return true; }
+        @Override public @NonNull Boolean isCurrent() { return true; }
         @Override public void close() { }
     };
     private static final KeyPair KEY = edKeyPair();

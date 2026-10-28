@@ -19,11 +19,13 @@ package com.revetsec.webauthn;
 import java.util.Objects;
 import org.jspecify.annotations.NonNull;
 
-/** One authoritative read result. No result grants a verified WebAuthn proof. @since 1.0.0 */
+/** One authoritative read result. No result grants a verified WebAuthn proof.
+ * @since 1.0.0 */
 @javax.annotation.concurrent.Immutable
 public sealed interface WebAuthnStoreReadResult
   permits WebAuthnStoreReadResult.Available, WebAuthnStoreReadResult.Unavailable {
- /** A complete versioned snapshot. @since 1.0.0 */
+ /** A complete versioned snapshot.
+  * @since 1.0.0 */
  @javax.annotation.concurrent.Immutable
  final class Available implements WebAuthnStoreReadResult {
   private final @NonNull WebAuthnStoreSnapshot snapshot;
@@ -43,7 +45,8 @@ public sealed interface WebAuthnStoreReadResult
   @Override public @NonNull String toString() { return "Available{snapshot=<redacted>}"; }
  }
 
- /** No authoritative read was available. @since 1.0.0 */
+ /** No authoritative read was available.
+  * @since 1.0.0 */
  @javax.annotation.concurrent.Immutable
  final class Unavailable implements WebAuthnStoreReadResult {
   private static final WebAuthnStoreReadResult.@NonNull Unavailable INSTANCE = new Unavailable();

@@ -8,12 +8,12 @@ The default state is **single-process and volatile**. Each launch creates a fres
 
 ## Build against the pinned 4.0.0 artifact
 
-Build the current Revetsec core JAR first. The build.py script compiles the example into a new private directory with warning-fatal Java 17 settings. It verifies the Soklet 4.0.0 artifact SHA-256 f7f62f967045a8eb8f943a90d49d499b4c5b755d20ab901e12a34fe1d004319b, runs route checks, and copies only core and Soklet JARs onto the runtime classpath. Annotation JARs are compile-time only.
+Build the current Revetsec core JAR first. The build.py script compiles the example into a new private directory with warning-fatal Java 21 settings. It verifies the Soklet 4.0.0 artifact SHA-256 recorded in [`examples/pins.json`](../pins.json), runs route checks, and copies only core and Soklet JARs onto the runtime classpath. Annotation JARs are compile-time only.
 
 ~~~sh
 python3 examples/passkeys-soklet/build.py \
   --work /absolute/new/private-passkey-build \
-  --java-home /absolute/jdk17-or-newer \
+  --java-home /absolute/jdk21-or-newer \
   --core-jar /absolute/revetsec/target/revetsec-1.0.0-SNAPSHOT.jar \
   --soklet-jar /absolute/soklet-4.0.0.jar \
   --jspecify-jar /absolute/jspecify-1.0.1.jar \
@@ -45,7 +45,7 @@ The script requires an OpenSSL binary with `verify -verify_hostname` support (th
 node examples/passkeys-soklet/browser_check.mjs \
   --classpath-file /absolute/new/private-passkey-build/CLASSPATH \
   --tls-dir /absolute/new/private-passkey-tls \
-  --java /absolute/jdk17-or-newer/bin/java \
+  --java /absolute/jdk21-or-newer/bin/java \
   --chrome '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
 ~~~
 
@@ -59,7 +59,7 @@ Use `--physical-key` with a connected key that supports discoverable credentials
 node examples/passkeys-soklet/browser_check.mjs \
   --classpath-file /absolute/new/private-passkey-build/CLASSPATH \
   --tls-dir /absolute/new/private-passkey-tls \
-  --java /absolute/jdk17-or-newer/bin/java \
+  --java /absolute/jdk21-or-newer/bin/java \
   --chrome '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' \
   --physical-key \
   --key-model 'Yubico Security Key C NFC' \
@@ -89,7 +89,7 @@ REVETSEC_PASSKEY_RP_ID=passkeys.example.test \
 REVETSEC_PASSKEY_ORIGIN=https://passkeys.example.test:9443 \
 REVETSEC_PASSKEY_HTTP_PORT=8093 \
 REVETSEC_PASSKEY_ACCESS_KEY_FILE=/absolute/private/access-key \
-  /absolute/jdk17-or-newer/bin/java \
+  /absolute/jdk21-or-newer/bin/java \
   -cp "$(cat /absolute/new/private-passkey-build/CLASSPATH)" \
   example.passkeys.PasskeyPlayground
 ~~~

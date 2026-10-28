@@ -32,6 +32,17 @@ from urllib.request import ProxyHandler, Request, build_opener
 ROOT = Path(__file__).resolve().parent
 APP_ROOT = ROOT.parent / "self-issued"
 IMAGE = "sha256:3a82e1f56c8f0f5616a11103ac3d47e632c3938698946a7ad26da0df1334744a"
+FRAMEWORK_PIN = json.loads((ROOT.parent / "pins.json").read_text())["framework"]
+
+
+def java_release_for(java_home: Path, soklet_enabled: bool) -> str:
+    """Keep core-only storage probes on 17 and require 21 for optional Soklet applications."""
+    release = FRAMEWORK_PIN["minimum_java"] if soklet_enabled else 17
+    compiler = subprocess.check_output([str(java_home / "bin/javac"), "-version"], text=True).strip()
+    compiler_version = re.fullmatch(r"javac (\d+)(?:\..*)?", compiler)
+    if compiler_version is None or int(compiler_version.group(1)) < release:
+        raise RuntimeError("This lane requires JDK " + str(release) + " or newer")
+    return str(release)
 
 
 def docker(*args: str, input_text: str | None = None) -> str:
@@ -62,9 +73,9 @@ def main() -> None:
         paths.extend((args.adapter_jar, args.framework_jar))
     if not all(path.is_file() for path in paths) or not (args.java_home / "bin/java").is_file():
         parser.error("All input JARs and the Java home must exist")
-    if app_lane and hashlib.sha256(args.framework_jar.read_bytes()).hexdigest() != (
-            "f7f62f967045a8eb8f943a90d49d499b4c5b755d20ab901e12a34fe1d004319b"):
+    if app_lane and hashlib.sha256(args.framework_jar.read_bytes()).hexdigest() != FRAMEWORK_PIN["jar_sha256"]:
         parser.error("Use the pinned Soklet 4.0.0 framework JAR for the application lane")
+    java_release = java_release_for(args.java_home, app_lane)
     check(docker("image", "inspect", "--format", "{{.Id}}", IMAGE) == IMAGE, "cached-image")
 
     with tempfile.TemporaryDirectory(prefix="revetsec-pending-") as work_name:
@@ -84,7 +95,7 @@ def main() -> None:
             sources.extend(sorted((APP_ROOT / "src/main/java/example/issuer").glob("*.java")))
             sources.append(ROOT / "src/test/java/example/issuer/PostgresqlBrowserSessions.java")
             sources.append(ROOT / "src/test/java/example/issuer/PostgresqlIssuerApplicationProbe.java")
-        compiled = subprocess.run([str(args.java_home / "bin/javac"), "--release", "17", "-proc:none", "-Xlint:all",
+        compiled = subprocess.run([str(args.java_home / "bin/javac"), "--release", java_release, "-proc:none", "-Xlint:all",
                                    "-Werror", "-cp", os.pathsep.join(map(str, paths)), "-d", str(classes),
                                    *map(str, sources)], capture_output=True, text=True, timeout=60)
         if compiled.returncode:

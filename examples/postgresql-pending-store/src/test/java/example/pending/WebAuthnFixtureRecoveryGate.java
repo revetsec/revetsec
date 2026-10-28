@@ -139,7 +139,7 @@ final class WebAuthnFixtureRecoveryGate implements WebAuthnRecoveryGate {
             this.deadline = deadline;
         }
 
-        @Override public boolean isCurrent() {
+        @Override public @NonNull Boolean isCurrent() {
             return !this.closed && this.lock.isValid() && current(this.deadline);
         }
 

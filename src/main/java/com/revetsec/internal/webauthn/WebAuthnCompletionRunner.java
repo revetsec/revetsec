@@ -184,7 +184,7 @@ final class WebAuthnCompletionRunner {
 
     private static boolean isCurrent(WebAuthnRecoveryGate.@NonNull Permit permit) {
         try {
-            return permit.isCurrent();
+            return Boolean.TRUE.equals(permit.isCurrent());
         } catch (VirtualMachineError fatal) {
             throw fatal;
         } catch (Throwable failure) {

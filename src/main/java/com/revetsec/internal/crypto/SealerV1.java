@@ -341,7 +341,7 @@ public final class SealerV1 {
 			throw new IllegalArgumentException("A maximum sealed length must be positive.");
 
 		try {
-			return openChecked(sealed, maximumSealedLength, keys, type, contextBytes, now);
+			return openChecked(sealed, maximumSealedLength, keys, type, contextBytes, now, false);
 		} catch (RuntimeException e) {
 			// INV-G1: whatever else goes wrong on untrusted input is one more failure of the same kind.
 			throw invalid();
@@ -474,13 +474,25 @@ public final class SealerV1 {
 		}
 	}
 
-	@NonNull
-	private static String openChecked(@NonNull String sealed,
+    /** Opens only the permanent lifetime representation, under the dedicated durable record type. */
+    public static @NonNull String openDurable(@NonNull String sealed,
+            @NonNull Map<@NonNull String, @NonNull Key> keys, @NonNull String context)
+            throws UnsealException {
+        requireNonNull(sealed);
+        requireNonNull(keys);
+        byte[] contextBytes = contextBytes(context);
+        try {
+            return openChecked(sealed, 65_536, keys, SealedStateType.TOTP_RECORD,
+                    contextBytes, Instant.EPOCH, true);
+        } catch (RuntimeException failure) { throw invalid(); }
+    }
+
+	private static @NonNull String openChecked(@NonNull String sealed,
 																		int maximumSealedLength,
 																		@NonNull Map<@NonNull String, @NonNull Key> keys,
 																		@NonNull SealedStateType type,
 																		byte @NonNull [] contextBytes,
-																		@NonNull Instant now) throws UnsealException {
+																		@NonNull Instant now, boolean durable) throws UnsealException {
 		// 1. The length, before any decoding.
 		if (sealed.length() > maximumSealedLength)
 			throw invalid();
@@ -540,6 +552,8 @@ public final class SealerV1 {
 			// 8. notAfter, only now that the value is known to be authentic. Step 4's minimum length guarantees the
 			// body holds one.
 			long notAfter = ByteBuffer.wrap(body, 0, NOT_AFTER_LENGTH).getLong();
+
+            if (durable && notAfter != Long.MAX_VALUE) throw invalid();
 
 			if (now.getEpochSecond() >= notAfter)
 				throw new UnsealException(UnsealException.Kind.EXPIRED);
