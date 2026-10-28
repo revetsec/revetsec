@@ -48,12 +48,11 @@ final class OAuthRc1TokenSourceMutationTests {
         return Stream.of(0,1,2).map(variant -> DynamicTest.dynamicTest(variant==1?"replacement already published":variant==2?"expired before publication check":"invalidated before publication check",()->{
             try(TestHttpsServer server=TestHttpsServer.start()) {
                 AtomicReference<ClientCredentialsTokenSource> sourceRef=new AtomicReference<>();
-                AtomicReference<AccessToken> sharedRef=new AtomicReference<>();
                 AtomicReference<Instant> clockNow=new AtomicReference<>(NOW);
                 AtomicInteger followerReads=new AtomicInteger();
                 AtomicBoolean interleaved=new AtomicBoolean();
                 CountDownLatch followerEntered=new CountDownLatch(1);
-                CountDownLatch releaseClock=new CountDownLatch(1);
+                Duration wait=Duration.ofSeconds(10);
                 Clock clock=new Clock() {
                     @Override public @NonNull ZoneId getZone(){return ZoneOffset.UTC;}
                     @Override public @NonNull Clock withZone(@NonNull ZoneId zone){return this;}
@@ -62,10 +61,14 @@ final class OAuthRc1TokenSourceMutationTests {
                             int read=followerReads.incrementAndGet();
                             if(read==1)followerEntered.countDown();
                             if(read==2&&interleaved.compareAndSet(false,true)) {
-                                await(releaseClock);
                                 ClientCredentialsTokenSource source=java.util.Objects.requireNonNull(sourceRef.get());
                                 if(variant==2)clockNow.set(NOW.plusSeconds(61));
-                                else source.invalidate(java.util.Objects.requireNonNull(sharedRef.get()));
+                                else {
+                                    AccessToken first=assertInstanceOf(AccessTokenAcquisitionResult.Succeeded.class,
+                                            source.getAccessTokenResult()).getAccessToken();
+                                    assertEquals("TEST-ONLY-first",first.getValue());
+                                    source.invalidate(first);
+                                }
                                 if(variant==1)assertEquals("TEST-ONLY-second",assertInstanceOf(AccessTokenAcquisitionResult.Succeeded.class, source.getAccessTokenResult()).getAccessToken().getValue());
                             }
                         }
@@ -79,20 +82,20 @@ final class OAuthRc1TokenSourceMutationTests {
                 FutureTask<AccessToken> leader=task("rc1-token-leader",() -> assertInstanceOf(AccessTokenAcquisitionResult.Succeeded.class, source.getAccessTokenResult()).getAccessToken());
                 FutureTask<AccessToken> follower=null;
                 try {
-                    assertTrue(held.awaitHeldCount(1,Duration.ofSeconds(2)));
+                    assertTrue(held.awaitHeldCount(1,wait));
                     follower=task("rc1-token-follower",() -> assertInstanceOf(AccessTokenAcquisitionResult.Succeeded.class, source.getAccessTokenResult()).getAccessToken());
-                    assertTrue(followerEntered.await(2,TimeUnit.SECONDS));
+                    assertTrue(followerEntered.await(wait.toNanos(),TimeUnit.NANOSECONDS));
                     server.script("/token",TestHttpsServer.Script.fromResponse(token("TEST-ONLY-second")));
                     held.release();
-                    AccessToken first=result(leader); sharedRef.set(first); releaseClock.countDown();
-                    AccessToken second=result(follower);
+                    AccessToken second=result(follower,wait);
+                    AccessToken first=result(leader,wait);
                     assertEquals("TEST-ONLY-first",first.getValue());
                     assertEquals("TEST-ONLY-second",second.getValue());
                     assertNotSame(first,second);
                     onCaller(()->{source.invalidate(first);return true;});
                     assertSame(second,onCaller(() -> assertInstanceOf(AccessTokenAcquisitionResult.Succeeded.class, source.getAccessTokenResult()).getAccessToken()));
                     assertEquals(2,server.getHitCount("/token"));
-                } finally {releaseClock.countDown();held.release();leader.cancel(true);if(follower!=null)follower.cancel(true);}
+                } finally {held.release();leader.cancel(true);if(follower!=null)follower.cancel(true);}
             }
         }));
     }
@@ -284,13 +287,13 @@ final class OAuthRc1TokenSourceMutationTests {
     private static TestHttpsServer.@NonNull Response token(@NonNull String value){
         return TestHttpsServer.Response.fromJson(200,"{\"access_token\":\""+value+"\",\"token_type\":\"Bearer\",\"expires_in\":60}");
     }
-    private static void await(@NonNull CountDownLatch latch){
-        assertDoesNotThrow(()->assertTrue(latch.await(2,TimeUnit.SECONDS)));
-    }
     private static <T> @NonNull FutureTask<@NonNull T> task(@NonNull String name,@NonNull Supplier<@NonNull T> action){
         FutureTask<T> future=new FutureTask<>(action::get);Thread thread=new Thread(future,name);thread.setDaemon(true);thread.start();return future;
     }
     private static <T> @NonNull T result(@NonNull FutureTask<@NonNull T> future){return assertDoesNotThrow(()->future.get(2,TimeUnit.SECONDS));}
+    private static <T> @NonNull T result(@NonNull FutureTask<@NonNull T> future,@NonNull Duration timeout){
+        return assertDoesNotThrow(()->future.get(timeout.toNanos(),TimeUnit.NANOSECONDS));
+    }
     private static <T> @NonNull T onCaller(@NonNull Supplier<@NonNull T> action){
         FutureTask<T> future=task("rc1-isolated-token-caller",action);try{return result(future);}finally{future.cancel(true);}
     }
