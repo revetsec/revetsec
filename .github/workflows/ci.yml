@@ -72,7 +72,7 @@ jobs:
 
       - name: Upload test reports
         if: failure()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: test-reports-jdk-${{ matrix.jdk }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: target/surefire-reports
@@ -226,7 +226,7 @@ jobs:
 
       - name: Upload packaged-consumer evidence
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: packaged-consumer-jdk-${{ matrix.jdk }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/packaged-consumer-result
@@ -358,7 +358,7 @@ jobs:
 
       - name: Upload selftest evidence
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: scripted-idp-selftest-${{ matrix.runner }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
@@ -539,7 +539,7 @@ jobs:
 
       - name: Upload example evidence
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: examples-${{ matrix.java }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
@@ -579,7 +579,7 @@ jobs:
 
       - name: Upload example evidence
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: rsa-oidc-examples-${{ matrix.java }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
@@ -640,7 +640,7 @@ jobs:
 
       - name: Upload fixture evidence
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: totp-postgresql-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/revetsec-totp-postgresql
@@ -752,7 +752,7 @@ jobs:
 
       - name: Upload integration reports
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: integration-reports-${{ github.run_id }}-${{ github.run_attempt }}
           path: target/failsafe-reports
@@ -794,7 +794,7 @@ jobs:
 
       - name: Upload JOSE and JSON differential reports
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: rc1-differential-jdk-${{ matrix.java }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: differential/target/surefire-reports
@@ -920,7 +920,7 @@ jobs:
 
       - name: Upload SAML differential reports
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: saml-differential-reports-${{ github.run_id }}-${{ github.run_attempt }}
           path: differential/target/surefire-reports
@@ -949,7 +949,7 @@ jobs:
         run: python3 conformance/run.py --pull-images --repository-tail "$HOME/.m2/repository" --output "$RUNNER_TEMP/oidf-evidence"
       - name: Upload OIDF evidence
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: oidf-rp-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/oidf-evidence
