@@ -17,11 +17,11 @@
 package com.revetsec.internal.http;
 
 import com.revetsec.OutboundUriPolicy;
+import com.revetsec.internal.GuardedBy;
 import com.revetsec.internal.http.HttpExchangeException.Kind;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
-import javax.annotation.concurrent.GuardedBy;
 import javax.annotation.concurrent.Immutable;
 import javax.annotation.concurrent.ThreadSafe;
 import java.io.IOException;

@@ -19,7 +19,6 @@ package com.revetsec.internal;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
-import javax.annotation.concurrent.GuardedBy;
 import javax.annotation.concurrent.ThreadSafe;
 import java.util.AbstractCollection;
 import java.util.AbstractSet;

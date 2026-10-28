@@ -21,8 +21,10 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import java.net.URI;
+import java.time.Duration;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import static java.util.Objects.requireNonNull;
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -87,9 +89,9 @@ final class NodeAccessTokenIT {
 		OAuthClient oauth = client(null); TokenResponse tokens = provider().nodeCredentials(oauth);
 		TokenIntrospectionClient introspection = TokenIntrospectionClient.withOAuthClient(oauth)
 				.expectedAudiences(Set.of(ResourceProviderFixturesIT.RESOURCE)).build();
-		OAuthErrorResponseException failure = assertThrows(OAuthErrorResponseException.class,
-				() -> introspection.validateResult(ResourceProviderFixturesIT.bearer(tokens)));
-		assertEquals(java.util.Optional.of("unsupported_token_type"), failure.getErrorCode());
+		AccessTokenValidationResult.RejectedEndpoint failure = assertInstanceOf(AccessTokenValidationResult.RejectedEndpoint.class,
+				introspection.validateResult(ResourceProviderFixturesIT.bearer(tokens)));
+		assertEquals(OAuthEndpointError.UNSUPPORTED_TOKEN_TYPE, failure.getError());
 	}
 
 	@Test void actualProviderKeyRotationRefreshesSameValidatorAndCache() throws Exception {
@@ -112,10 +114,20 @@ final class NodeAccessTokenIT {
 		assertEquals(2, fetches.get(), "the unknown-key cooldown does not refetch removed old signing keys");
 	}
 	@Test void unconfiguredResourceIndicatorFailsAtActualProvider() {
-		OAuthErrorResponseException failure = assertThrows(OAuthErrorResponseException.class, () -> client(null)
+		AtomicReference<OAuthErrorResponseException> endpointFailure = new AtomicReference<>();
+		OAuthClient oauth = client(new OAuthObserver() {
+			@Override public void didFailEndpoint(@NonNull OAuthEndpoint endpoint, @NonNull URI uri,
+					@NonNull OAuthException failure, @NonNull Duration elapsed) {
+				if (endpoint == OAuthEndpoint.TOKEN && failure instanceof OAuthErrorResponseException error)
+					endpointFailure.set(error);
+			}
+		});
+		OAuthTokenRequestResult.Rejected failure = assertInstanceOf(OAuthTokenRequestResult.Rejected.class, oauth
 				.requestClientCredentialsResult(TokenRequestOptions.builder().resources(java.util.List.of(URI.create("https://other.example.test/mcp")))
 						.scopes(Set.of("read")).build()));
-		assertEquals(java.util.Optional.of("invalid_target"), failure.getErrorCode());
+		// The result remains fixed and redacted; the observer confirms the actual provider's RFC 8707 code.
+		assertEquals(OAuthEndpointError.UNRECOGNIZED, failure.getError());
+		assertEquals(java.util.Optional.of("invalid_target"), requireNonNull(endpointFailure.get()).getErrorCode());
 	}
 
 	private static @NonNull OAuthObserver counter(@NonNull AtomicInteger posts) {

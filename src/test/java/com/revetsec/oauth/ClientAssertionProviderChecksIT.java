@@ -32,7 +32,6 @@ import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.jspecify.annotations.NonNull;
-import org.junit.jupiter.api.function.Executable;
 import static org.junit.jupiter.api.Assertions.*;
 
 /** Profile-only actual providers; public registrations are built from original JCA keys, independently of Revetsec. */
@@ -136,7 +135,7 @@ final class ClientAssertionProviderChecksIT implements AutoCloseable {
 		assertEquals(5, lookups.get()); assertEquals(5, posts.get());
 		if (!this.node && audience == ClientAssertionAudience.TOKEN_ENDPOINT) {
 			// Keycloak's pinned validator omits the revocation URL; never substitute the token URL or fall back.
-			assertInvalidClient(() -> assertInstanceOf(OAuthRevocationResult.Succeeded.class, client.revokeResult(code.getRefreshToken().orElseThrow().getValue(), TokenTypeHint.REFRESH_TOKEN)));
+			assertInvalidClient(client.revokeResult(code.getRefreshToken().orElseThrow().getValue(), TokenTypeHint.REFRESH_TOKEN));
 			assertEquals(6, lookups.get()); assertEquals(6, posts.get());
 			assertEquals(id, assertInstanceOf(AccessTokenValidationResult.Succeeded.class, introspection.validateResult(bearer)).getAccessToken().getClientId().orElseThrow());
 			assertEquals(7, lookups.get()); assertEquals(7, posts.get());
@@ -156,17 +155,17 @@ final class ClientAssertionProviderChecksIT implements AutoCloseable {
 			@Override public void willRequestEndpoint(@NonNull OAuthEndpoint endpoint, @NonNull URI uri) { wrongPosts.incrementAndGet(); }
 		};
 		OAuthClient wrongClient = client(id, audience, ClientAssertionKeyProvider.fromKey(key(wrong, algorithm, id)), counter);
-		assertInvalidClient(() -> assertInstanceOf(OAuthTokenRequestResult.Succeeded.class, wrongClient.requestClientCredentialsResult(credentials)).getTokens()); assertEquals(1, wrongPosts.get());
+		assertInvalidClient(wrongClient.requestClientCredentialsResult(credentials)); assertEquals(1, wrongPosts.get());
 		OAuthClient wrongRevocation = !this.node && audience == ClientAssertionAudience.TOKEN_ENDPOINT
 				? client(id, ClientAssertionAudience.ISSUER, ClientAssertionKeyProvider.fromKey(key(wrong, algorithm, id)), counter) : wrongClient;
 		// Use an accepted audience in the Keycloak negative so its known audience deviation cannot mask the wrong key.
-		assertInvalidClient(() -> assertInstanceOf(OAuthRevocationResult.Succeeded.class, wrongRevocation.revokeResult(service.getAccessToken().getValue(), TokenTypeHint.ACCESS_TOKEN))); assertEquals(2, wrongPosts.get());
+		assertInvalidClient(wrongRevocation.revokeResult(service.getAccessToken().getValue(), TokenTypeHint.ACCESS_TOKEN)); assertEquals(2, wrongPosts.get());
 		TokenIntrospectionClient wrongIntrospection = TokenIntrospectionClient.withOAuthClient(wrongClient).expectedAudiences(Set.of(resource)).build();
-		assertInvalidClient(() -> wrongIntrospection.validateResult(bearer)); assertEquals(3, wrongPosts.get());
+		assertInvalidClient(wrongIntrospection.validateResult(bearer)); assertEquals(3, wrongPosts.get());
 		// Correct pair with a different algorithm is also rejected by independent registration policy.
 		JwsAlgorithm other = algorithm == JwsAlgorithm.RS256 ? JwsAlgorithm.PS256 : JwsAlgorithm.RS256;
 		OAuthClient wrongAlgorithm = client(id, audience, ClientAssertionKeyProvider.fromKey(key(pair, other, id)), counter);
-		assertInvalidClient(() -> assertInstanceOf(OAuthTokenRequestResult.Succeeded.class, wrongAlgorithm.requestClientCredentialsResult(credentials)).getTokens()); assertEquals(4, wrongPosts.get());
+		assertInvalidClient(wrongAlgorithm.requestClientCredentialsResult(credentials)); assertEquals(4, wrongPosts.get());
 		System.out.println("M6 provider=" + (this.node ? "node" : "keycloak") + " alg=" + algorithm.getWireValue()
 				+ " audience=" + audience + " roles=token,code,refresh,introspection,revocation negative-key=3 negative-alg=1"
 				+ " revocation=" + (!this.node && audience == ClientAssertionAudience.TOKEN_ENDPOINT ? "invalid_client-qualified-deviation" : "accepted"));
@@ -180,8 +179,14 @@ final class ClientAssertionProviderChecksIT implements AutoCloseable {
 	private static @NonNull ClientAssertionSigningKey key(@NonNull KeyPair pair, @NonNull JwsAlgorithm algorithm, @NonNull String id) {
 		return ClientAssertionSigningKey.withSigner(JwsSigner.fromRsaKeyPair(pair.getPrivate(), pair.getPublic(), algorithm)).keyId(id).build();
 	}
-	private static void assertInvalidClient(@NonNull Executable operation) {
-		assertEquals(Optional.of("invalid_client"), assertThrows(OAuthErrorResponseException.class, operation).getErrorCode());
+	private static void assertInvalidClient(@NonNull OAuthTokenRequestResult result) {
+		assertEquals(OAuthEndpointError.INVALID_CLIENT, assertInstanceOf(OAuthTokenRequestResult.Rejected.class, result).getError());
+	}
+	private static void assertInvalidClient(@NonNull OAuthRevocationResult result) {
+		assertEquals(OAuthEndpointError.INVALID_CLIENT, assertInstanceOf(OAuthRevocationResult.Rejected.class, result).getError());
+	}
+	private static void assertInvalidClient(@NonNull AccessTokenValidationResult result) {
+		assertEquals(OAuthEndpointError.INVALID_CLIENT, assertInstanceOf(AccessTokenValidationResult.RejectedEndpoint.class, result).getError());
 	}
 	private static @NonNull KeyPair generateKey() throws Exception { KeyPairGenerator generator = KeyPairGenerator.getInstance("RSA"); generator.initialize(2048); return generator.generateKeyPair(); }
 	private static @NonNull String clientId(@NonNull JwsAlgorithm algorithm, @NonNull ClientAssertionAudience audience) { return "m6-" + algorithm.getWireValue().toLowerCase(Locale.ROOT) + "-" + audience.name().toLowerCase(Locale.ROOT); }

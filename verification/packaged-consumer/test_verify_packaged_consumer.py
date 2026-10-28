@@ -93,6 +93,13 @@ class JarContentTests(unittest.TestCase):
         violations, _ = VERIFIER.jar_violations(self.jar)
         self.assertTrue(any("org/json/JSONObject.class: outside com/revetsec/" in item for item in violations))
 
+    def test_source_only_guard_annotation_must_not_appear_in_class_files(self):
+        self.write_jar(self.good_entries(**{
+            "com/revetsec/internal/Probe.class": b"\xca\xfe\xba\xbe" + VERIFIER.SOURCE_ONLY_GUARD_DESCRIPTOR,
+        }))
+        violations, _ = VERIFIER.jar_violations(self.jar)
+        self.assertTrue(any("source-only GuardedBy annotation appears" in item for item in violations))
+
     def test_root_resource_rejected(self):
         self.write_jar(self.good_entries(**{"logging.properties": b"x"}))
         violations, _ = VERIFIER.jar_violations(self.jar)
@@ -365,12 +372,25 @@ class ConsumerOutputTests(unittest.TestCase):
         types = self.exported_public_types()
         self.assertIn(("com.revetsec", "StateSealer", "Builder"), types)
         self.assertIn(("com.revetsec.json", "JsonObject", "Builder"), types)
+        imports_by_name = {imported.rsplit(".", 1)[-1]: imported
+                           for imported in re.findall(r"^import ([A-Za-z_][A-Za-z0-9_.]*);$", source, re.MULTILINE)}
         for package, name, nested in types:
             with self.subTest(type=f"{package}.{name}" + (f".{nested}" if nested else "")):
-                self.assertIn(f"import {package}.{name};", source)
-                self.assertRegex(code, rf"(?<![A-Za-z0-9_$.]){name}(?![A-Za-z0-9_$])")
+                qualified = f"{package}.{name}"
+                imported = f"import {qualified};" in source
+                # Only a simple-name collision permits a qualified reference instead of an import.
+                if not imported:
+                    self.assertIn(name, imports_by_name)
+                    self.assertNotEqual(qualified, imports_by_name[name])
+                reference = name if imported else qualified
+                self.assertRegex(code, rf"(?<![A-Za-z0-9_$.]){re.escape(reference)}(?![A-Za-z0-9_$])")
                 if nested:
-                    self.assertRegex(code, rf"(?<![A-Za-z0-9_$.]){name}\.{nested}(?![A-Za-z0-9_$])")
+                    self.assertRegex(code, rf"(?<![A-Za-z0-9_$.]){re.escape(reference)}\.{nested}(?![A-Za-z0-9_$])")
+
+    def test_internal_guard_annotation_is_source_retained(self):
+        guard = (REPOSITORY_ROOT / "src" / "main" / "java" / "com" / "revetsec" / "internal" / "GuardedBy.java")
+        source = guard.read_text(encoding="utf-8")
+        self.assertIn("@Retention(RetentionPolicy.SOURCE)", source)
 
     def test_packaged_consumer_prints_the_line_and_every_call_group(self):
         source = (VERIFIER.SCRIPT_DIRECTORY / "src" / "main" / "java" / "example" / "PackagedConsumer.java").read_text(

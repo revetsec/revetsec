@@ -75,7 +75,6 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /** Offline Keycloak 26.7.4 integration against the pinned local image and test-only realm. */
 final class KeycloakOAuthIT {
@@ -212,10 +211,11 @@ final class KeycloakOAuthIT {
 					@Override public void didCompleteAuthentication() { completed.incrementAndGet(); }
 					@Override public void didRejectIdToken(@NonNull OidcValidationException failure) { rejected.set(failure); }
 				}).build();
-		OidcValidationException failure = assertThrows(OidcValidationException.class,
-				() -> authenticate(client, OidcAuthenticationOptions.builder().build(), "hmac-realm-key"));
+		OidcAuthenticationResult.RejectedIdToken failure = assertInstanceOf(OidcAuthenticationResult.RejectedIdToken.class,
+				authenticateResult(client, OidcAuthenticationOptions.builder().build(), "hmac-realm-key"));
 		assertEquals(OidcValidationException.Reason.ID_TOKEN_SIGNATURE_INVALID, failure.getReason());
-		assertSame(failure, rejected.get()); assertEquals(1, used.get()); assertEquals(0, completed.get()); assertNull(failure.getCause());
+		assertEquals(failure.getReason(), requireNonNull(rejected.get()).getReason());
+		assertEquals(1, used.get()); assertEquals(0, completed.get()); assertNull(requireNonNull(rejected.get()).getCause());
 	}
 
 	@Test
@@ -231,8 +231,9 @@ final class KeycloakOAuthIT {
 		AuthorizationResponse response = queryResponse(login(begin.getAuthorizationUri()));
 		StateSealer sealer = TestSealers.fromFixedKey();
 		String sealed = begin.getPendingAuthorization().toSealedForm(sealer, "wrong-route");
-		OAuthException failure = assertThrows(OAuthException.class, () -> client.completeAuthenticationResult(response,
-				PendingAuthorizationSource.fromSealedForm(sealed, sealer, "wrong-route"), URI.create("http://localhost:8080/wrong")));
+		OidcAuthenticationResult.RejectedAuthorization failure = assertInstanceOf(OidcAuthenticationResult.RejectedAuthorization.class,
+				client.completeAuthenticationResult(response,
+						PendingAuthorizationSource.fromSealedForm(sealed, sealer, "wrong-route"), URI.create("http://localhost:8080/wrong")));
 		assertEquals(OAuthException.Reason.CALLBACK_URI_MISMATCH, failure.getReason());
 		assertEquals(0, tokenPosts.get());
 	}
@@ -265,6 +266,15 @@ final class KeycloakOAuthIT {
 	}
 
 	private static @NonNull OidcAuthentication authenticate(@NonNull OidcClient client, @NonNull OidcAuthenticationOptions options, @NonNull String context) throws Exception {
+		OidcAuthentication auth = assertInstanceOf(OidcAuthenticationResult.Succeeded.class,
+				authenticateResult(client, options, context)).getAuthentication();
+		assertEquals(issuer, auth.getIssuer()); assertFalse(auth.getSubject().isEmpty());
+		assertTrue(auth.getTokens().getParameter("id_token").isEmpty());
+		assertFalse(auth.toString().contains(auth.getIdToken().toCompactSerialization()));
+		return auth;
+	}
+
+	private static @NonNull OidcAuthenticationResult authenticateResult(@NonNull OidcClient client, @NonNull OidcAuthenticationOptions options, @NonNull String context) throws Exception {
 		AuthorizationRedirect begin = client.beginAuthentication(options);
 		QueryParameters parameters = QueryParameters.parse(begin.getAuthorizationUri().getRawQuery());
 		assertEquals(1, parameters.getValues("nonce").size());
@@ -275,11 +285,7 @@ final class KeycloakOAuthIT {
 		HttpResponse<String> login = login(begin.getAuthorizationUri());
 		AuthorizationResponse response = parameters.getValues("response_mode").equals(java.util.List.of("form_post"))
 				? formPostResponse(login) : queryResponse(login);
-		OidcAuthentication auth = assertInstanceOf(OidcAuthenticationResult.Succeeded.class, client.completeAuthenticationResult(response, PendingAuthorizationSource.fromSealedForm(sealed, sealer, context), CALLBACK)).getAuthentication();
-		assertEquals(issuer, auth.getIssuer()); assertFalse(auth.getSubject().isEmpty());
-		assertTrue(auth.getTokens().getParameter("id_token").isEmpty());
-		assertFalse(auth.toString().contains(auth.getIdToken().toCompactSerialization()));
-		return auth;
+		return client.completeAuthenticationResult(response, PendingAuthorizationSource.fromSealedForm(sealed, sealer, context), CALLBACK);
 	}
 
 	private static void checkUserInfo(@NonNull OidcClient client, @NonNull OidcAuthentication auth, boolean signed) {

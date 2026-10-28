@@ -270,6 +270,72 @@ import com.revetsec.scim.ScimStringMatchResult;
 import com.revetsec.scim.ScimStringMatching;
 import com.revetsec.scim.ScimUniqueness;
 
+// Type inventory for exerciseAdditionalExportedTypes.
+import com.revetsec.jose.JwksParseResult;
+import com.revetsec.jose.JwksPublisher;
+import com.revetsec.jose.JwksResponse;
+import com.revetsec.jose.PublishedJwk;
+import com.revetsec.oauth.AccessTokenAcquisitionResult;
+import com.revetsec.oauth.AuthorizationResponseParseResult;
+import com.revetsec.oauth.AuthorizationServerMetadataParseResult;
+import com.revetsec.oauth.OAuthEndpointError;
+import com.revetsec.oauth.OAuthTokenRequestResult;
+import com.revetsec.oauth.PendingAuthorizationSaveResult;
+import com.revetsec.oidc.OidcProviderMetadataParseResult;
+import com.revetsec.oidc.OidcRefreshOutcome;
+import com.revetsec.oidc.OidcSessionReferenceParseResult;
+import com.revetsec.oidc.OidcUserInfoResult;
+import com.revetsec.password.Argon2idParameters;
+import com.revetsec.password.LegacyPasswordPreparation;
+import com.revetsec.password.PasswordHash;
+import com.revetsec.password.PasswordHashResult;
+import com.revetsec.password.PasswordHasher;
+import com.revetsec.password.PasswordPepperKey;
+import com.revetsec.password.PasswordPepperSnapshot;
+import com.revetsec.password.PasswordPepperSnapshotResult;
+import com.revetsec.password.PasswordPepperSource;
+import com.revetsec.password.PasswordRejectionReason;
+import com.revetsec.password.PasswordUnavailableReason;
+import com.revetsec.password.PasswordVerificationLimits;
+import com.revetsec.password.PasswordVerificationResult;
+import com.revetsec.password.PasswordWorkGate;
+import com.revetsec.password.Pbkdf2Hmac;
+import com.revetsec.saml.SamlSessionReferenceParseResult;
+import com.revetsec.scim.ScimResourceWorkLimitException;
+import com.revetsec.totp.InMemoryTotpStore;
+import com.revetsec.totp.RecoveryCodeRotationResult;
+import com.revetsec.totp.RecoveryCodeUse;
+import com.revetsec.totp.RecoveryCodeUseResult;
+import com.revetsec.totp.RecoveryCodes;
+import com.revetsec.totp.TotpAuthenticationMethod;
+import com.revetsec.totp.TotpAuthenticator;
+import com.revetsec.totp.TotpEnrollment;
+import com.revetsec.totp.TotpEnrollmentCancellationResult;
+import com.revetsec.totp.TotpEnrollmentOptions;
+import com.revetsec.totp.TotpEnrollmentRequestResult;
+import com.revetsec.totp.TotpEnrollmentResult;
+import com.revetsec.totp.TotpFactor;
+import com.revetsec.totp.TotpFactorRemovalResult;
+import com.revetsec.totp.TotpNamespaceInitializationResult;
+import com.revetsec.totp.TotpPendingEnrollment;
+import com.revetsec.totp.TotpRecoveryContext;
+import com.revetsec.totp.TotpRecoveryGate;
+import com.revetsec.totp.TotpRejectionReason;
+import com.revetsec.totp.TotpStatus;
+import com.revetsec.totp.TotpStatusResult;
+import com.revetsec.totp.TotpStore;
+import com.revetsec.totp.TotpStoreCommitResult;
+import com.revetsec.totp.TotpStoreEntry;
+import com.revetsec.totp.TotpStoreKey;
+import com.revetsec.totp.TotpStoreReadResult;
+import com.revetsec.totp.TotpStoreRecord;
+import com.revetsec.totp.TotpStoreResealResult;
+import com.revetsec.totp.TotpStoreSnapshot;
+import com.revetsec.totp.TotpStoreWrite;
+import com.revetsec.totp.TotpUnavailableReason;
+import com.revetsec.totp.TotpVerification;
+import com.revetsec.totp.TotpVerificationResult;
+
 import java.lang.module.ModuleDescriptor;
 import java.lang.module.ModuleFinder;
 import java.lang.module.ModuleReference;
@@ -443,6 +509,7 @@ public final class PackagedConsumer {
 		List<String> calledApi = new ArrayList<>();
 		String json = exerciseJsonModel(calledApi);
 		exerciseResultTypes();
+		exerciseAdditionalExportedTypes();
 		exerciseStateSealer(json, calledApi);
 		exerciseOutboundUriPolicy(calledApi);
 		exerciseJose(calledApi);
@@ -499,6 +566,61 @@ public final class PackagedConsumer {
 		System.out.println("runtime=" + Runtime.version());
 		System.out.println("error-categories=" + Arrays.toString(ErrorCategory.values()));
 		System.out.println("public-api=" + String.join(",", calledApi));
+	}
+
+	/** Compile against every exported type that the behavioral consumer calls do not otherwise touch. */
+	private static void exerciseAdditionalExportedTypes() {
+		exerciseExportedTypes("com.revetsec", new Class<?>[] {
+			InvalidSealedStateException.class
+		});
+		exerciseExportedTypes("com.revetsec.jose", new Class<?>[] {
+			JwksParseResult.class, JwksParseResult.Succeeded.class, JwksParseResult.Rejected.class, JwksPublisher.class,
+			JwksPublisher.Builder.class, JwksResponse.class, JwtValidationException.class, MalformedJoseInputException.class,
+			PublishedJwk.class, PublishedJwk.Builder.class, UnsupportedJoseFeatureException.class
+		});
+		exerciseExportedTypes("com.revetsec.oauth", new Class<?>[] {
+			AccessTokenAcquisitionResult.class, AccessTokenAcquisitionResult.Succeeded.class,
+			AccessTokenAcquisitionResult.Rejected.class, AccessTokenValidationResult.RejectedEndpoint.class,
+			AuthorizationCompletionResult.RejectedAuthorizationError.class,
+			AuthorizationCompletionResult.RejectedEndpoint.class, AuthorizationResponseParseResult.class,
+			AuthorizationResponseParseResult.Succeeded.class, AuthorizationResponseParseResult.Rejected.class,
+			AuthorizationServerMetadataParseResult.class, OAuthEndpointError.class,
+			com.revetsec.oauth.OAuthRevocationResult.class, com.revetsec.oauth.OAuthRevocationResult.Succeeded.class,
+			com.revetsec.oauth.OAuthRevocationResult.Rejected.class, OAuthTokenRequestResult.class,
+			OAuthTokenRequestResult.Succeeded.class, OAuthTokenRequestResult.Rejected.class,
+			PendingAuthorizationSaveResult.class
+		});
+		exerciseExportedTypes("com.revetsec.oidc", new Class<?>[] {
+			OidcAuthenticationResult.RejectedAuthorizationError.class, OidcAuthenticationResult.RejectedEndpoint.class,
+			OidcProviderMetadataParseResult.class, OidcRefreshOutcome.class, OidcRefreshOutcome.Succeeded.class,
+			OidcRefreshOutcome.Rejected.class, OidcRefreshOutcome.RejectedEndpoint.class,
+			OidcSessionReferenceParseResult.class, OidcSessionReferenceParseResult.Succeeded.class,
+			OidcSessionReferenceParseResult.Rejected.class, OidcUserInfoResult.class, OidcUserInfoResult.Succeeded.class,
+			OidcUserInfoResult.Rejected.class, OidcUserInfoResult.RejectedEndpoint.class
+		});
+		exerciseExportedTypes("com.revetsec.password", new Class<?>[] {
+			Argon2idParameters.class, LegacyPasswordPreparation.class, PasswordHash.class, PasswordHashResult.class,
+			PasswordHasher.class, PasswordPepperKey.class, PasswordPepperSnapshot.class, PasswordPepperSnapshotResult.class,
+			PasswordPepperSource.class, PasswordRejectionReason.class, PasswordUnavailableReason.class,
+			PasswordVerificationLimits.class, PasswordVerificationResult.class, PasswordWorkGate.class, Pbkdf2Hmac.class
+		});
+		exerciseExportedTypes("com.revetsec.saml", new Class<?>[] {
+			SamlSessionReferenceParseResult.class
+		});
+		exerciseExportedTypes("com.revetsec.scim", new Class<?>[] {
+			ScimResourceWorkLimitException.class
+		});
+		exerciseExportedTypes("com.revetsec.totp", new Class<?>[] {
+			InMemoryTotpStore.class, RecoveryCodeRotationResult.class, RecoveryCodeUse.class, RecoveryCodeUseResult.class,
+			RecoveryCodes.class, TotpAuthenticationMethod.class, TotpAuthenticator.class, TotpEnrollment.class,
+			TotpEnrollmentCancellationResult.class, TotpEnrollmentOptions.class, TotpEnrollmentRequestResult.class,
+			TotpEnrollmentResult.class, TotpFactor.class, TotpFactorRemovalResult.class,
+			TotpNamespaceInitializationResult.class, TotpPendingEnrollment.class, TotpRecoveryContext.class,
+			TotpRecoveryGate.class, TotpRejectionReason.class, TotpStatus.class, TotpStatusResult.class, TotpStore.class,
+			TotpStoreCommitResult.class, TotpStoreEntry.class, TotpStoreKey.class, TotpStoreReadResult.class,
+			TotpStoreRecord.class, TotpStoreResealResult.class, TotpStoreSnapshot.class, TotpStoreWrite.class,
+			TotpUnavailableReason.class, TotpVerification.class, TotpVerificationResult.class
+		});
 	}
 
 	private static void exerciseExportedTypes(@NonNull String packageName, @NonNull Class<?> @NonNull [] types) {

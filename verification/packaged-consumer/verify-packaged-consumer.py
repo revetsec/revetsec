@@ -114,6 +114,7 @@ PROVIDED_ANNOTATION_PACKAGES = frozenset({
     "javax.annotation.concurrent",
     "com.google.errorprone.annotations",
 })
+SOURCE_ONLY_GUARD_DESCRIPTOR = b"Lcom/revetsec/internal/GuardedBy;"
 
 JDEPS_DEPENDENCY_LINE = re.compile(r"^\s+(?P<origin>\S+)\s+->\s+(?P<target>\S+)\s+(?P<location>\S.*?)\s*$")
 MODULE_NAME = re.compile(r"^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z][A-Za-z0-9_]*)*$")
@@ -205,6 +206,8 @@ def jar_violations(jar):
                 violations.append(f"{name}: outside {CLASS_PREFIX}; the JAR must not bundle other code or resources")
             elif path.endswith(".class"):
                 packages.add(path.rsplit("/", 1)[0].replace("/", "."))
+                if SOURCE_ONLY_GUARD_DESCRIPTOR in archive.read(name):
+                    violations.append(f"{name}: source-only GuardedBy annotation appears in a class file")
         for required in REQUIRED_ENTRIES:
             if required not in names:
                 violations.append(f"{required} is missing")

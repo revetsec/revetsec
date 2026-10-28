@@ -57,6 +57,7 @@ final class ConcurrentLruMapTests {
 
     private static @NonNull String normalize(@NonNull String source) {
         return source.replace("package com.soklet.internal.util;", "package com.revetsec.internal;")
+                .replace("import javax.annotation.concurrent.GuardedBy;", "")
                 .replaceAll("@(NonNull|Nullable)\\b\\s*", "")
                 .replaceAll("\\s+", "");
     }

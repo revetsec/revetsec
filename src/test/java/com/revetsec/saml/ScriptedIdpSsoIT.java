@@ -1009,7 +1009,7 @@ final class ScriptedIdpSsoIT {
                 .map(line -> line.substring(0, line.indexOf(' '))).toList();
         assertEquals(12, names.size(), "signed attribute corpus changed");
         List<String> text = List.of("clean", "type-xs-string", "type-alias-string",
-                "nil-false", "nil-zero");
+                "type-boolean", "spoof-string-type", "nil-false", "nil-zero");
         for (String name : names) {
             String xml = Files.readString(directory.resolve(name + ".xml"));
             assertTrue(oracleValid(xml, "_mint_assertion_9", "idp-signing-rsa-2048"),
