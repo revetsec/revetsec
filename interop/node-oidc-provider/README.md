@@ -4,7 +4,7 @@ A strict, spec-exact OpenID Provider for Revetsec's Tier-1 interop legs, gating 
 
 - [`oidc-provider`](https://github.com/panva/node-oidc-provider) **9.12.2** (MIT, Copyright Filip Skokan), installed unmodified from registry.npmjs.org. `package-lock.json` pins it and its 39 transitive packages with integrity hashes;
 - `server.js`, our own code (Apache-2.0): one test client, one test account, and an auto-login interaction handler;
-- `Dockerfile`: `node:24.21.0-alpine3.24`, pinned by multi-arch index digest, `npm ci --omit=dev --ignore-scripts`, run as the `node` user.
+- `Dockerfile`: `node:24.22.0-alpine3.24`, pinned by multi-arch index digest, `npm ci --omit=dev --ignore-scripts`, run as the `node` user.
 
 The image is built locally or in CI with `--load` and is never pushed to a registry.
 
@@ -38,6 +38,13 @@ Without `TLS_CERT_FILE` and `TLS_KEY_FILE` it serves plain HTTP. `ISSUER` must b
 - **oidc-provider:** change the exact version in `package.json`, run `npm install --package-lock-only --ignore-scripts`, and review the lockfile diff.
 - **Base image:** change the tag and index digest on the `FROM` line.
 - Either way, re-run `interop/spike/tier1-spike.sh --only node`, which builds the image and runs the headless code-flow smoke check.
+
+The 2026-10-28 refresh moved the base to Node 24.22.0 and the compatible locked
+`jose` dependency to 6.2.13. The lockfile was resolved with
+`npm update --package-lock-only --ignore-scripts --before=2026-10-21T17:00:00Z`
+to retain the seven-day release cooldown. The exact `oidc-provider` pin remains
+9.12.2 because the 9.13 releases were newer than that cutoff. Historical provider
+captures retain their original version evidence.
 
 M5 enables a separate test mode through `TEST_RESOURCE_MODE=m5`: resource indicators issue strict RFC 9068 JWT access tokens for the configured MCP resource and opaque tokens for a separate introspection resource. Code and client-credentials grants use the provider's real issuance paths. Signing keys rotate when the same local provider restarts; storage resets with that restart.
 

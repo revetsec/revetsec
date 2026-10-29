@@ -11,6 +11,16 @@ Build it locally, or in CI with `load: true` and `push: false`.
 
 ## Current scope
 
+The 2026-10-28 dependency refresh uses Python 3.13.16 / Alpine 3.24.2,
+cryptography 50.0.2, signxml 5.2.0, cffi 2.1.1, pycparser 3.11 and certifi
+2026.10.19. The wheel hashes were checked against PyPI and the image build,
+`pip check`, libxml2 pairing check and all producer selftests passed on both
+linux/amd64 and linux/arm64. lxml 6.0.2 and xmlsec 1.3.17 remain paired on
+libxml2 2.14.6; upgrading lxml alone would violate that requirement. The newer
+Python 3.13.18 image, certifi 2026.10.23 and pycparser 3.12 were still inside
+the seven-day release cooldown. `SPIKE-RESULTS.md` records the original producer
+versions and remains historical evidence for those captures.
+
 `serve` offers HTTPS endpoints for health, SP registration, metadata, stateless response minting,
 armed Redirect/POST SSO, Redirect/POST SLO in both directions, template signing/encryption, and
 libxmlsec signature/decryption oracles. It checks Revetsec's AuthnRequests and supplied

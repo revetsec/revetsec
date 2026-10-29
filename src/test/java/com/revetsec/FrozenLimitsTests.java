@@ -357,7 +357,7 @@ final class FrozenLimitsTests {
 			durations("AS_CLOCK_SKEW", "Issuer clockSkew", Duration.ofSeconds(30), Duration.ZERO, Duration.ofSeconds(60), ZERO_ALLOWED),
 			durations("AS_TOTAL_DEADLINE", "Issuer totalDeadline", Duration.ofSeconds(10), Duration.ofSeconds(1), Duration.ofSeconds(60), ZERO_REJECTED),
 			durations("AS_REQUEST_TIMEOUT", "Issuer requestTimeout", Duration.ofSeconds(5), Duration.ofSeconds(1), Duration.ofSeconds(30), ZERO_REJECTED),
-			durations("AS_PUBLIC_METADATA_FRESHNESS", "Issuer publicMetadataFreshness", Duration.ofSeconds(60), Duration.ZERO, Duration.ofMinutes(5), ZERO_ALLOWED),
+			durations("AS_PUBLIC_METADATA_HTTP_CACHE_MAX_AGE", "Issuer publicMetadataHttpCacheMaxAge", Duration.ofSeconds(60), Duration.ZERO, Duration.ofMinutes(5), ZERO_ALLOWED),
 			amounts("AS_MAXIMUM_REQUEST_BODY_BYTES", "Issuer maximumRequestBodyBytes", Unit.BYTES, 16384, 1024, 65536),
 			amounts("AS_MAXIMUM_RAW_QUERY_LENGTH", "Issuer maximumRawQueryLength", Unit.CHARACTERS, 16384, 1024, 65536),
 			amounts("AS_MAXIMUM_HEADER_BYTES", "Issuer maximumHeaderBytes", Unit.BYTES, 16384, 1024, 65536),
@@ -378,7 +378,7 @@ final class FrozenLimitsTests {
 	 * renewBefore"; G8-10 adds the JOSE clock skew as the third; AS1-C1 adds CIMD maximum freshness as the fourth).
 	 */
 	private static final Set<String> ZERO_ROWS = Set.of("JWKS_MAXIMUM_STALENESS", "CLIENT_CREDENTIALS_RENEW_BEFORE",
-			"JOSE_CLOCK_SKEW", "CIMD_MAXIMUM_FRESHNESS", "AS_CLOCK_SKEW", "AS_PUBLIC_METADATA_FRESHNESS",
+			"JOSE_CLOCK_SKEW", "CIMD_MAXIMUM_FRESHNESS", "AS_CLOCK_SKEW", "AS_PUBLIC_METADATA_HTTP_CACHE_MAX_AGE",
 			"SCIM_FILTER_NUMBER_EXPONENT_MAGNITUDE");
 
 	// Gates 5 and 8: the registry holds exactly the approved rows, as public constants, in the transcribed order.

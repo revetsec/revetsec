@@ -73,7 +73,7 @@ TLS=$ROOT/src/test/resources/tls
 docker run --pull never --rm -d --name "$NS" --network none alpine:latest sleep 900 >/dev/null
 docker run --pull never --rm -d --name "$KC" --network "container:$NS" \
   -v "$TLS:/tls:ro" -v "$WORK/realm.json:/opt/keycloak/data/import/realm.json:ro" \
-  quay.io/keycloak/keycloak@sha256:82a77884f3af238beab1e7afd63b5f530e1b5c0590bd7aa60b40a40463e29b2c \
+  quay.io/keycloak/keycloak@sha256:a78d6b79572168cb25886b80a8b5b8d4ed4390743e3eecb810538683e209dd6b \
   start --db=dev-file --hostname-strict=false --http-enabled=false --https-port=8444 \
   --https-certificate-file=/tls/server.pem --https-certificate-key-file=/tls/server-key.pem \
   --import-realm >/dev/null

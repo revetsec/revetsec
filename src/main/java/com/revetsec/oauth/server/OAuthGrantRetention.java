@@ -23,18 +23,21 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import static java.util.Objects.requireNonNull;
 
-/** Checked retention arithmetic. Retention never grants credential validity or extends a pinned lifetime. */
+/**
+ * Checked retention arithmetic. The public metadata HTTP cache max-age contributes to the physical-retention
+ * margin; retention never grants credential validity or extends a pinned lifetime.
+ */
 final class OAuthGrantRetention {
 	private final @NonNull Duration maximumAccessLifetime;
 	private final @NonNull Duration margin;
 	OAuthGrantRetention(@NonNull Duration maximumAccessLifetime, @NonNull Duration skew,
-			@NonNull Duration totalDeadline, @NonNull Duration metadataFreshness) {
+			@NonNull Duration totalDeadline, @NonNull Duration publicMetadataHttpCacheMaxAge) {
 		this.maximumAccessLifetime = duration(maximumAccessLifetime, Duration.ofSeconds(30), Duration.ofMinutes(15));
 		duration(skew, Duration.ZERO, Duration.ofSeconds(60));
 		duration(totalDeadline, Duration.ofSeconds(1), Duration.ofSeconds(60));
-		duration(metadataFreshness, Duration.ZERO, Duration.ofMinutes(5));
+		duration(publicMetadataHttpCacheMaxAge, Duration.ZERO, Duration.ofMinutes(5));
 		if (skew.compareTo(maximumAccessLifetime.dividedBy(2)) > 0) throw OAuthStoreFormat.invalid();
-		this.margin = skew.plus(totalDeadline).plus(metadataFreshness);
+		this.margin = skew.plus(totalDeadline).plus(publicMetadataHttpCacheMaxAge);
 	}
 	/** Called at first redemption: the caller persists this H and the maximum lifetime in the same issuance commit. */
 	@NonNull Instant horizon(@NonNull Instant lastFamilyOrFirstTokenExpiry) {

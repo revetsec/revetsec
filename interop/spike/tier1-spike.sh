@@ -82,8 +82,8 @@ test_pki="$interop_dir/../src/test/resources/tls"
 # Pins. Move them only in a deliberate change that re-runs this spike.
 # ---------------------------------------------------------------------------
 
-# Keycloak 26.7.4 (quay.io, 2026-09-16), multi-arch index digest.
-KEYCLOAK_IMAGE="quay.io/keycloak/keycloak:26.7.4@sha256:82a77884f3af238beab1e7afd63b5f530e1b5c0590bd7aa60b40a40463e29b2c"
+# Keycloak 26.8.1 (quay.io, 2026-10-28), multi-arch index digest.
+KEYCLOAK_IMAGE="quay.io/keycloak/keycloak:26.8.1@sha256:a78d6b79572168cb25886b80a8b5b8d4ed4390743e3eecb810538683e209dd6b"
 # The suite's images and mongo are pinned in the compose file.
 OIDF_TAG="release-v5.3.1"
 OIDF_COMPOSE="$script_dir/oidf-compose.yml"

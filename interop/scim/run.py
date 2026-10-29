@@ -111,10 +111,35 @@ def prepare_tls(directory, openssl):
     return tls
 
 
-def wait_ready(url, ca_file, token):
+def container_states(docker, containers):
+    # Inspect only lifecycle state; the full container configuration includes secrets.
+    states = checked(docker, "inspect", "--format", "{{json .State}}", *containers, timeout=10).stdout.splitlines()
+    if len(states) != len(containers):
+        raise RuntimeError("SCIM container lifecycle state is incomplete")
+    return [(name, json.loads(state)) for name, state in zip(containers, states)]
+
+
+def startup_diagnostics(docker, containers, sensitive_values):
+    diagnostics = []
+    for name, state in container_states(docker, containers):
+        logs = checked(docker, "logs", "--tail", "40", name, timeout=10)
+        excerpt = logs.stdout + logs.stderr
+        for value in sensitive_values:
+            if value:
+                excerpt = excerpt.replace(value, "[redacted]")
+        diagnostics.append({"container": name, "status": state.get("Status"),
+                            "exitCode": state.get("ExitCode"), "oomKilled": state.get("OOMKilled"),
+                            "logExcerpt": excerpt[-12000:]})
+    return diagnostics
+
+
+def wait_ready(url, ca_file, token, *, docker, containers):
     context = ssl.create_default_context(cafile=str(ca_file))
     deadline = time.monotonic() + 60
     while True:
+        for _, state in container_states(docker, containers):
+            if state.get("Status") in {"exited", "dead"}:
+                raise RuntimeError("SCIM application or TLS edge exited before readiness")
         try:
             request = urllib.request.Request(url + "/ServiceProviderConfig", headers={"Authorization": "Bearer " + token})
             with urllib.request.urlopen(request, context=context, timeout=5) as response:
@@ -127,6 +152,7 @@ def wait_ready(url, ca_file, token):
                             return
                         raise RuntimeError("default-trust control failed for a reason other than certificate validation") from rejected
                     raise RuntimeError("private CA unexpectedly trusted by the default store")
+                raise urllib.error.URLError("SCIM readiness returned a non-200 response")
         except (urllib.error.URLError, TimeoutError, ConnectionError):
             remaining = deadline - time.monotonic()
             if remaining <= 0:
@@ -248,7 +274,8 @@ def main():
             binding = edge_binding(args.docker, edge)
             base_url = "https://localhost:" + binding["HostPort"] + "/scim/v2"
             stage = "wait-verified-tls-application"
-            wait_ready(base_url, tls / "ca.crt", token)
+            wait_ready(base_url, tls / "ca.crt", token, docker=args.docker, containers=(app, edge))
+            stage = "default-tester"
             environment = os.environ.copy()
             environment["SCIM_BEARER_TOKEN"] = token
             tester_command = [args.python, str(HERE / "tester.py"), "--base-url", base_url,
@@ -265,8 +292,10 @@ def main():
             default_wire = json.loads(default_wire_file.read_text()) if default_wire_file.is_file() else []
             default_identified = identified_default_fixture_errors(default_report, default_wire)
             report["testerDefaultOutcome"] = "failed-with-identified-fixture-defect" if default_identified else "unexplained"
+            stage = "reset-application-for-configured-tester"
             checked(args.docker, "restart", app)
-            wait_ready(base_url, tls / "ca.crt", token)
+            wait_ready(base_url, tls / "ca.crt", token, docker=args.docker, containers=(app, edge))
+            stage = "configured-tester"
             completed = subprocess.run(tester_command + ["--profile", "configured", "--output", str(args.output / "tester.json")],
                                        env=environment, text=True, capture_output=True, timeout=600)
             (args.output / "tester-console.txt").write_text(completed.stdout)
@@ -292,7 +321,7 @@ def main():
             # failures must not contaminate the outbound client's outcome checks.
             stage = "reset-application-for-outbound-client"
             checked(args.docker, "restart", app)
-            wait_ready(base_url, tls / "ca.crt", token)
+            wait_ready(base_url, tls / "ca.crt", token, docker=args.docker, containers=(app, edge))
             password = secrets.token_urlsafe(36)
             stage = "start-authentik-database"
             database = start("database", "--tmpfs", "/var/lib/postgresql/data", "-e", "POSTGRES_USER=authentik",
@@ -358,6 +387,14 @@ def main():
             # A bounded console excerpt aids repair. The fixture has synthetic identities;
             # commands and their secret-bearing environment arguments are never rendered.
             print(diagnostic[-12000:], file=sys.stderr)
+        if stage in {"wait-verified-tls-application", "reset-application-for-configured-tester",
+                     "reset-application-for-outbound-client"}:
+            try:
+                diagnostics = startup_diagnostics(args.docker, (app, edge), (token, locals().get("password")))
+                (args.output / "startup-diagnostics.json").write_text(json.dumps(diagnostics, indent=2) + "\n")
+                print(json.dumps({"startupDiagnostics": diagnostics}), file=sys.stderr)
+            except (subprocess.SubprocessError, OSError, RuntimeError, ValueError):
+                print("SCIM startup diagnostics unavailable", file=sys.stderr)
         print("SCIM qualification failed at " + stage + ": " + type(failure).__name__, file=sys.stderr)
     finally:
         for container in reversed(containers):

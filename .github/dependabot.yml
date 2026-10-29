@@ -3,31 +3,39 @@ updates:
   # Revetsec core has zero runtime dependencies; these entries watch build/test tooling only.
   # Every entry waits 7 days after a release before proposing it (cooldown), so a compromised or
   # yanked release is less likely to reach a PR.
+  # Include the standalone tooling and examples so shared versions move in one PR.
+  # Java contract-fixture POMs under src/test/resources are intentional test inputs.
   - package-ecosystem: maven
-    directory: "/"
+    directories:
+      - "/"
+      - "/fuzz"
+      - "/differential"
+      - "/conformance"
+      - "/verification/packaged-consumer"
+      - "/verification/issuer-store"
+      - "/examples/barebones-oidc"
+      - "/examples/playground"
+      - "/examples/postgresql-pending-store"
+      - "/examples/rsa-oidc"
+      - "/examples/self-issued"
     schedule:
       interval: weekly
     cooldown:
       default-days: 7
 
-  # Jazzer fuzz tooling (own pom, never published).
-  - package-ecosystem: maven
-    directory: "/fuzz"
-    schedule:
-      interval: weekly
-    cooldown:
-      default-days: 7
-
-  # The packaged-consumer fixture pins its build plugins. Its Revetsec dependency tracks the core
-  # version under test (passed by verify-packaged-consumer.py), never a released version.
-  - package-ecosystem: maven
-    directory: "/verification/packaged-consumer"
-    schedule:
-      interval: weekly
-    cooldown:
-      default-days: 7
+    groups:
+      build-and-test-tooling:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
     ignore:
-      - dependency-name: "com.revetsec:revetsec"
+      # Revetsec artifacts are built from the source/pushed commits under test, not Central.
+      - dependency-name: "com.revetsec:*"
+      # The examples deliberately use the Soklet 4.0 baseline. Move its API floor by hand.
+      - dependency-name: "com.soklet:soklet"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      # The comparator and adapter fixtures deliberately compile against Servlet 6.1.
+      - dependency-name: "jakarta.servlet:jakarta.servlet-api"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
 
   - package-ecosystem: github-actions
     directory: "/"
@@ -35,6 +43,10 @@ updates:
       interval: weekly
     cooldown:
       default-days: 7
+    groups:
+      github-actions:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
 
   # The scripted IdP's hash-pinned Python wheels (plan §14.10).
   - package-ecosystem: pip
@@ -43,6 +55,10 @@ updates:
       interval: weekly
     cooldown:
       default-days: 7
+    groups:
+      scripted-idp-python:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
     ignore:
       # lxml and xmlsec move only together, in a manual PR: lxml must match the libxml2 bundled in the
       # xmlsec wheel (plan §14.10, §16).
@@ -78,6 +94,10 @@ updates:
       interval: weekly
     cooldown:
       default-days: 7
+    groups:
+      node-provider:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
   - package-ecosystem: docker
     directory: "/interop/node-oidc-provider"
     schedule:

@@ -73,9 +73,9 @@ final class JwksPublisherTests {
 				parsed.getKeys().stream().map(Jwk::getKeyId).toList());
 		assertEquals(publisher.toJson(), text(publisher.responseFor("GET")));
 
-		builder.cacheLifetime(Duration.ofHours(1));
-		assertEquals(Duration.ofSeconds(60), publisher.getCacheLifetime());
-		assertEquals(Duration.ofHours(1), builder.build().getCacheLifetime());
+		builder.httpCacheMaxAge(Duration.ofHours(1));
+		assertEquals(Duration.ofSeconds(60), publisher.getHttpCacheMaxAge());
+		assertEquals(Duration.ofHours(1), builder.build().getHttpCacheMaxAge());
 	}
 
 	@Test
@@ -152,20 +152,20 @@ final class JwksPublisherTests {
 	}
 
 	@Test
-	void freshnessDefaultsTo60SecondsAndSupportsZeroThrough24Hours() {
+	void httpCacheMaxAgeDefaultsTo60SecondsAndSupportsZeroThrough24Hours() {
 		JwksPublisher.Builder builder = JwksPublisher.withKeys(List.of());
-		assertEquals(Duration.ofSeconds(60), builder.build().getCacheLifetime());
-		for (Duration freshness : List.of(Duration.ZERO, Duration.ofSeconds(1), Duration.ofHours(1), Duration.ofDays(1))) {
-			JwksPublisher publisher = builder.cacheLifetime(freshness).build();
-			assertEquals(freshness, publisher.getCacheLifetime());
-			assertEquals("public, max-age=" + freshness.toSeconds() + ", must-revalidate",
+		assertEquals(Duration.ofSeconds(60), builder.build().getHttpCacheMaxAge());
+		for (Duration maxAge : List.of(Duration.ZERO, Duration.ofSeconds(1), Duration.ofHours(1), Duration.ofDays(1))) {
+			JwksPublisher publisher = builder.httpCacheMaxAge(maxAge).build();
+			assertEquals(maxAge, publisher.getHttpCacheMaxAge());
+			assertEquals("public, max-age=" + maxAge.toSeconds() + ", must-revalidate",
 					header(publisher.responseFor("GET"), "Cache-Control"));
 		}
-		assertEquals(Duration.ofSeconds(60), builder.cacheLifetime(null).build().getCacheLifetime());
+		assertEquals(Duration.ofSeconds(60), builder.httpCacheMaxAge(null).build().getHttpCacheMaxAge());
 		for (Duration invalid : List.of(Duration.ofSeconds(-1), Duration.ofNanos(1), Duration.ofSeconds(1, 1),
 				Duration.ofDays(1).plusSeconds(1), Duration.ofSeconds(Long.MAX_VALUE)))
 			assertThrows(IllegalArgumentException.class,
-					() -> JwksPublisher.withKeys(List.of()).cacheLifetime(invalid).build());
+					() -> JwksPublisher.withKeys(List.of()).httpCacheMaxAge(invalid).build());
 	}
 
 	@Test
@@ -206,12 +206,12 @@ final class JwksPublisherTests {
 	}
 
 	@Test
-	void entityTagTracksTheExactOrderedRepresentationAndIgnoresFreshness() {
+	void entityTagTracksTheExactOrderedRepresentationAndIgnoresHttpCacheMaxAge() {
 		PublishedJwk first = key(Fixture.IDP_SIGNING_RSA_2048, "first", JwsAlgorithm.RS384);
 		PublishedJwk second = key(Fixture.SP_SIGNING_RSA_2048, "second", JwsAlgorithm.RS384);
 		String original = header(JwksPublisher.fromKeys(List.of(first, second)).responseFor("GET"), "ETag");
 		assertEquals(original, header(JwksPublisher.withKeys(List.of(first, second))
-				.cacheLifetime(Duration.ofDays(1)).build().responseFor("GET"), "ETag"));
+				.httpCacheMaxAge(Duration.ofDays(1)).build().responseFor("GET"), "ETag"));
 		assertNotEquals(original,
 				header(JwksPublisher.fromKeys(List.of(second, first)).responseFor("GET"), "ETag"));
 		assertNotEquals(original, header(JwksPublisher.fromKeys(List.of(first)).responseFor("GET"), "ETag"));

@@ -2,8 +2,8 @@
 
 This is a test-only Maven project. Its RC-1 JOSE/JSON lane and SAML/SCIM lanes
 are described below. It compares Revetsec with two separate SAML
-service-provider paths: Spring Security 7.0.7's provider and a direct OpenSAML
-5.2.2 harness, plus a live libxmlsec1 cryptographic oracle in the scripted IdP
+service-provider paths: Spring Security 7.1.1's provider and a direct OpenSAML
+5.2.3 harness, plus a live libxmlsec1 cryptographic oracle in the scripted IdP
 container. The direct harness uses OpenSAML parsing, signature profile and
 cryptographic validation, decryption, and native assertion validation, then checks
 the fixture's Response binding and subject identity. Those libraries are absent
@@ -219,9 +219,9 @@ release. Valid attribute statements may appear before or after AuthnStatement.
 
 A separate 12-document assertion-signed AttributeValue corpus uses a transient
 NameID so an approved `subject-id` is the only stable key source. Libxmlsec
-verifies every signature. Revetsec exposes five plain or explicit XML Schema
-string values as text and keeps seven nilled, non-string, spoofed-type or mixed
-values opaque; the latter cannot become a scoped account key. The pinned direct
+verifies every signature. Revetsec exposes seven signed leaf-text values as text, independent of
+unsigned type bindings, and keeps five nilled or mixed-element values opaque;
+the latter cannot become a scoped account key. The pinned direct
 OpenSAML and Spring SP paths authenticate the original NameID in all 12 cases.
 That comparison pins parser acceptance and NameID selection, not the other
 libraries' attribute-value interpretation.
@@ -262,7 +262,7 @@ Revetsec's SP behavior against a wire fixture signed by the scripted IdP; it is 
 a second SP implementation.
 
 The offline differential leg replays 14 fixed-key, Python-signed Redirect
-fixtures through OpenSAML 5.2.2's HTTP-Redirect decoder, simple-signature
+fixtures through OpenSAML 5.2.3's HTTP-Redirect decoder, simple-signature
 security handler, and LogoutRequest/LogoutResponse models, alongside Revetsec.
 Both accept the two valid messages and reject six signed semantic mutations in
 each direction under the checked SP policy. An equivalent percent encoding of
@@ -323,7 +323,7 @@ capture run on that repaired revision.
 
 ## SCIM filter syntax and typed AST
 
-`ScimFilterComparatorTests` uses the independent [Ping Identity UnboundID SCIM SDK 6.0.0 release](https://github.com/pingidentity/scim2/releases/tag/scim2-6.0.0), published from tag `scim2-6.0.0`, as a test-only grammar/AST comparator. The selected license is Apache-2.0. [scim-oracle.json](scim-oracle.json) records the SDK/Jackson artifact digests and official release/artifact/advisory sources reviewed on 2026-10-13. Its public repository advisory index returned no published entries at that check; this does not claim that unpublished issues or transitive dependencies are absent.
+`ScimFilterComparatorTests` uses the independent [Ping Identity UnboundID SCIM SDK 6.1.0 release](https://github.com/pingidentity/scim2/releases/tag/scim2-6.1.0), published from tag `scim2-6.1.0`, as a test-only grammar/AST comparator. The selected license is Apache-2.0. [scim-oracle.json](scim-oracle.json) records the SDK/Jackson artifact digests and official release/artifact/advisory sources reviewed on 2026-10-28. Its public repository advisory index returned no published entries at that check; this does not claim that unpublished issues or transitive dependencies are absent.
 
 The test directly traverses both libraries' separately parsed typed trees. It compares operator kinds, ordered operands, NOT grouping, the same-element valuePath boundary, schema/attribute/subattribute components and decoded string/number/boolean/null literals. Only equivalent n-ary AND/OR flattening, ASCII path case and exact numeric scale are normalized. It never uses Revetsec rendering as the expected AST, and it never erases numeric precision loss. Planted precedence, literal-type, literal-value and same-element defects are required to produce different projections.
 
@@ -331,7 +331,7 @@ The lane has 276 shared valid expressions, 26 shared malformed expressions and f
 
 Each observed difference is asserted as an exact row rather than accepted through a broad exception or grammar allow-list:
 
-| Case | Revetsec | SDK 6.0.0 | Disposition |
+| Case | Revetsec | SDK 6.1.0 | Disposition |
 | --- | --- | --- | --- |
 | Lone escaped high surrogate in a string | Rejects | Parses | Revetsec preserves its strict well-formed Unicode literal policy. |
 | `name.givenName.other` | Rejects | Parses | Revetsec's approved attribute path has one optional subattribute; SDK Path supports deeper paths. |
@@ -351,7 +351,7 @@ mvn -B -ntp -DskipTests -Dmaven.javadoc.skip=true install
 mvn -B -ntp -f differential/pom.xml -Dtest=ScimFilterComparatorTests test
 ```
 
-All SDK dependencies are test scope in this standalone project and remain absent from Revetsec's production POM and runtime classpath. The existing SAML comparator tests keep their dependency pins and test behavior.
+All SDK dependencies are test scope in this standalone project and remain absent from Revetsec's production POM and runtime classpath. The SAML comparators use the current Spring Security/OpenSAML pins listed above.
 
 
 ## RC-1 JOSE and JSON
@@ -366,9 +366,17 @@ mvn -B -ntp -f differential/pom.xml -Prc1 clean verify
 python3 differential/verify_rc1_reports.py
 ```
 
-The pins are Nimbus JOSE+JWT 10.10, jose4j 0.9.7, Jackson-core 2.18.8 and Nimbus's
-optional Ed25519 implementation, Tink 1.23.0. They are test dependencies of this
+The pins are Nimbus JOSE+JWT 10.10, jose4j 0.9.7, Jackson-core 2.22.4 and Nimbus's
+optional Ed25519 implementation, Tink 1.24.0. They are test dependencies of this
 unpublished project. Core's POM and runtime classpath do not gain these libraries.
+
+The 2026-10-28 refresh replayed all 930 JOSE and 1,310 JSON cases on JDK 17 and
+21, plus all 306 SCIM cases on both JDKs. The full JDK 17 run also passed all 43
+SAML comparator methods, including the refreshed Docker oracle, for 2,589 cases
+with zero failures, errors or skips. Jackson 2.22.4 now rejects two previously
+accepted malformed Unicode corpus inputs; the exact rows and member-name
+controls were updated. [The refresh note](RC1-DISPOSITIONS.md#2026-10-28-dependency-refresh)
+records those changes separately from the original RC-1 observations.
 
 JOSE compares all eleven accepted asymmetric algorithm names through 32 token
 fixtures produced by JCA, Nimbus and jose4j. Every fixture receives the full signed

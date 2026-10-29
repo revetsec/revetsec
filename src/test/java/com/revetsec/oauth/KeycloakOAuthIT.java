@@ -76,9 +76,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 
-/** Offline Keycloak 26.7.4 integration against the pinned local image and test-only realm. */
+/** Offline Keycloak 26.8.1 integration against the pinned local image and test-only realm. */
 final class KeycloakOAuthIT {
-	private static final String IMAGE = "quay.io/keycloak/keycloak:26.7.4@sha256:82a77884f3af238beab1e7afd63b5f530e1b5c0590bd7aa60b40a40463e29b2c";
+	private static final String IMAGE = "quay.io/keycloak/keycloak:26.8.1@sha256:a78d6b79572168cb25886b80a8b5b8d4ed4390743e3eecb810538683e209dd6b";
 	private static final URI CALLBACK = URI.create("http://localhost:8080/callback");
 	private static final String CLIENT_SECRET = "test-only-client-secret-not-a-real-secret";
 	private static final String SIGNED_SECRET = "test-only-signed-userinfo-secret-not-a-real-secret";

@@ -131,12 +131,15 @@ final class JsonComparatorTests {
     }
 
     @Test void escapedUnpairedSurrogatesAreAnExplicitJacksonModelDifference() throws IOException {
-        for (String text : List.of("\"\\uD800\"", "\"\\uDC00\"", "{\"\\uD800\":1}", "[\"\\uD800x\"]")) {
+        for (String text : List.of("\"\\uD800\"", "\"\\uDC00\"", "[\"\\uD800x\"]")) {
             byte[] input = text.getBytes(StandardCharsets.UTF_8);
             assertNull(core(input));
             assertNotNull(jackson(input));
         }
-        // Revetsec's public JSON model deliberately requires scalar Unicode. Jackson exposes UTF-16 units.
+        // Jackson 2.22.4 rejects unpaired surrogates in member names while still exposing them in values.
+        for (String text : List.of("{\"\\uD800\":1}", "{\"\\uDC00\":1}"))
+            assertRejected(text.getBytes(StandardCharsets.UTF_8));
+        // Revetsec's public JSON model deliberately requires scalar Unicode in both positions.
         assertEquals(new Text("\uD800"), jackson("\"\\uD800\"".getBytes(StandardCharsets.UTF_8)));
     }
 

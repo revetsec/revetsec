@@ -102,7 +102,7 @@ final class ClientAssertionProviderChecksIT implements AutoCloseable {
 					.revocationEndpointAuthSigningAlgValuesSupported(discovered.getRevocationEndpointAuthSigningAlgValuesSupported().orElse(Set.of("RS256", "RS384", "PS256")))
 					.introspectionEndpointAuthMethodsSupported(discovered.getIntrospectionEndpointAuthMethodsSupported().orElse(Set.of("private_key_jwt")))
 					.introspectionEndpointAuthSigningAlgValuesSupported(discovered.getIntrospectionEndpointAuthSigningAlgValuesSupported().orElse(Set.of("RS256", "RS384", "PS256"))).build();
-			System.out.println("M6 assertion provider=" + (node ? "node9.12.2" : "keycloak26.7.4")
+			System.out.println("M6 assertion provider=" + (node ? "node9.12.2" : "keycloak26.8.1")
 					+ " revocation-methods-discovered=" + discovered.getRevocationEndpointAuthMethodsSupported().isPresent()
 					+ " revocation-algs-discovered=" + discovered.getRevocationEndpointAuthSigningAlgValuesSupported().isPresent()
 					+ " introspection-methods-discovered=" + discovered.getIntrospectionEndpointAuthMethodsSupported().isPresent()

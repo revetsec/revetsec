@@ -83,7 +83,7 @@ jobs:
 
       - name: Build fuzzers (${{ matrix.sanitizer }})
         id: build
-        uses: docker://gcr.io/oss-fuzz-base/clusterfuzzlite-build-fuzzers:v1@sha256:fde96247c3488104b96822156a6e107d58487140115247a34e1f967c23df5604
+        uses: docker://gcr.io/oss-fuzz-base/clusterfuzzlite-build-fuzzers:v1@sha256:06bc64e8f7e98d7f974d5650486331a55667152ccb67b887632abc7cf9c91889
         env:
           LANGUAGE: jvm
           SANITIZER: ${{ matrix.sanitizer }}
@@ -97,7 +97,7 @@ jobs:
 
       - name: Run fuzzers (${{ matrix.sanitizer }})
         id: run
-        uses: docker://gcr.io/oss-fuzz-base/clusterfuzzlite-run-fuzzers:v1@sha256:4c1febe9ddec42ff005c6115f7769608d1beff57e96ae365d5c4fea1013926dc
+        uses: docker://gcr.io/oss-fuzz-base/clusterfuzzlite-run-fuzzers:v1@sha256:a0dd50326eb0dc912362a441304799d2fe3afff5442a718b9371715adef6d25d
         env:
           LANGUAGE: jvm
           SANITIZER: ${{ matrix.sanitizer }}
@@ -124,7 +124,7 @@ jobs:
       # uploads what it saved under $GITHUB_WORKSPACE/out/artifacts.
       - name: Upload crashes (seed-corpus-only run)
         if: failure() && steps.storage.outputs.seeds-only == 'true'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: cflite-pr-crashes-${{ matrix.sanitizer }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ github.workspace }}/out/artifacts

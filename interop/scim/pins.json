@@ -89,9 +89,10 @@
     "source": "https://github.com/docker-library/postgres/tree/9d15534160ade17f2b6c455a39ee967c49b1937d/16/alpine3.24"
   },
   "java": {
-    "image": "amazoncorretto:17-al2023@sha256:26c9e7d80db693d546da1d43eca19459f4662af61b4b0ed8d5d8c92e0a73cb28",
+    "requiredMajor": 21,
+    "image": "amazoncorretto:21-al2023@sha256:1a307926702559b0086a5c4d339eaafa9c992b3e8ba54201ac8ebbde31d22f0b",
     "license": "GPL-2.0 with Classpath exception plus bundled component notices",
-    "source": "https://github.com/corretto/corretto-docker/tree/883dd4b1df5aa871f1dfcec2244c5959b67e0239/17/jdk/al2023"
+    "source": "https://github.com/corretto/corretto-docker/tree/6937b7b0baee86178e3b2d8ccb18bb9eb26cbbad/21/jdk/al2023"
   },
   "caddy": {
     "version": "2.11.6",

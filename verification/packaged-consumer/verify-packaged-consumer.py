@@ -88,14 +88,13 @@ PUBLIC_API_CALLS = ("com.revetsec.json", "StateSealer", "OutboundUriPolicy", "co
 MAVEN_CONSUMER_SOURCES = ("pom.xml", "src")
 GRADLE_CONSUMER_SOURCES = ("build.gradle", "settings.gradle", "src")
 
-# The Gradle distribution the Gradle consumer builds with, pinned by SHA-256. 9.8.0 was the current release on
-# 2026-09-24, and its release highlights list Java 27 support. That day it built and ran this consumer on Corretto
-# 17, 21, 25, 26 and 27, so one distribution serves the whole JDK matrix. The digest is the one Gradle
+# The Gradle distribution the Gradle consumer builds with, pinned by SHA-256 and refreshed on 2026-10-28.
+# The 9.8 line supports the Java 17 through 27 consumer matrix. The digest is the one Gradle
 # publishes at GRADLE_DISTRIBUTION_URL + ".sha256", and it matched the downloaded archive. Dependabot does not
 # update this pin. Move it together with the download URL in .github/workflows/ci.yml, CONTRIBUTING.md and
 # verification/README.md; test_verify_packaged_consumer.py fails while they disagree.
-GRADLE_VERSION = "9.8.0"
-GRADLE_DISTRIBUTION_SHA256 = "bafd5ce9cfaea0fbccfdc8439a1ac42fbd4cd9c89dc9a988228d8a2639a58e6c"
+GRADLE_VERSION = "9.8.2"
+GRADLE_DISTRIBUTION_SHA256 = "21bd5da2de49b642904077f38c0efdc7778e92b3ed0889392dca61b97e389607"
 GRADLE_DISTRIBUTION_URL = f"https://services.gradle.org/distributions/gradle-{GRADLE_VERSION}-bin.zip"
 # Written by build.gradle's resolutionReport task.
 GRADLE_REPORT = Path("build", "revetsec-consumer", "resolution.json")

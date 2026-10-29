@@ -32,27 +32,30 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
 import static java.util.Objects.requireNonNull;
 
-/** Observed consistency guard, not a durable key history or proof of external publication. No positive token cache. */
+/**
+ * Observed consistency guard, not a durable key history or proof of external publication. New active keys must
+ * already have been published for the public metadata HTTP cache max-age. No positive token cache.
+ */
 final class OAuthIssuerKeyLifecycle {
  private final @NonNull OAuthIssuerKeyProvider provider;
  private final boolean publicBoundary;
  private final @NonNull Clock clock;
- private final @NonNull Duration freshness;
+ private final @NonNull Duration publicMetadataHttpCacheMaxAge;
  private final @NonNull OAuthGrantRetention retention;
  private final @NonNull ReentrantLock lock=new ReentrantLock();
  private final @NonNull Map<@NonNull String,@NonNull Instant> reserved=new HashMap<>();
  private final @NonNull Map<@NonNull String,@NonNull Instant> firstPublished=new HashMap<>();
  private @Nullable OAuthIssuerKeySnapshot previous;
  private @Nullable Instant lastNow;
- OAuthIssuerKeyLifecycle(@NonNull OAuthIssuerKeyProvider provider,@NonNull Clock clock,@NonNull Duration freshness,
+ OAuthIssuerKeyLifecycle(@NonNull OAuthIssuerKeyProvider provider,@NonNull Clock clock,@NonNull Duration publicMetadataHttpCacheMaxAge,
    @NonNull OAuthGrantRetention retention) {
-  this(provider,clock,freshness,retention,false);
+  this(provider,clock,publicMetadataHttpCacheMaxAge,retention,false);
  }
- OAuthIssuerKeyLifecycle(@NonNull OAuthIssuerKeyProvider provider,@NonNull Clock clock,@NonNull Duration freshness,
+ OAuthIssuerKeyLifecycle(@NonNull OAuthIssuerKeyProvider provider,@NonNull Clock clock,@NonNull Duration publicMetadataHttpCacheMaxAge,
    @NonNull OAuthGrantRetention retention,boolean publicBoundary) {
   this.publicBoundary=publicBoundary;
   this.provider=requireNonNull(provider);this.clock=requireNonNull(clock);
-  this.freshness=OAuthGrantRetention.duration(freshness,Duration.ZERO,Duration.ofMinutes(5));this.retention=requireNonNull(retention);
+  this.publicMetadataHttpCacheMaxAge=OAuthGrantRetention.duration(publicMetadataHttpCacheMaxAge,Duration.ZERO,Duration.ofMinutes(5));this.retention=requireNonNull(retention);
  }
  @NonNull OAuthIssuerKeySnapshot snapshot(@NonNull Deadline deadline) { return checked(deadline,null); }
  private @NonNull OAuthIssuerKeySnapshot checked(@NonNull Deadline deadline,@Nullable Instant expiry) {
@@ -95,7 +98,7 @@ final class OAuthIssuerKeyLifecycle {
      publication.put(id,first);
     }
     if(expiry!=null) {
-     if(now.isBefore(requireNonNull(publication.get(active)).plus(this.freshness)) || !expiry.isAfter(now)) throw unavailable();
+     if(now.isBefore(requireNonNull(publication.get(active)).plus(this.publicMetadataHttpCacheMaxAge)) || !expiry.isAfter(now)) throw unavailable();
      Instant required=this.retention.accessRetention(expiry);
      if(retirement!=null && retirement.isBefore(required)) throw unavailable();
      this.reserved.merge(active,required,(a,b)->a.isAfter(b)?a:b);

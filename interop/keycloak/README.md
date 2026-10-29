@@ -21,7 +21,7 @@ Moving the Keycloak pin (`../spike/tier1-spike.sh`, `KEYCLOAK_IMAGE`) is a delib
 
 ## OAuth and OIDC integration
 
-`src/test/java/com/revetsec/oauth/KeycloakOAuthIT.java` starts Keycloak 26.7.4 at the pinned image digest, binds its published port to 127.0.0.1 only, and uses the checked-in test CA and imports this realm. Run it with `mvn -B -ntp -Pintegration -Dmaven.javadoc.skip=true verify`. Testcontainers and the provider are test-only; the artifact gains no runtime dependency. CI requires all ten named cases to execute with zero skips, failures or errors.
+`src/test/java/com/revetsec/oauth/KeycloakOAuthIT.java` starts Keycloak 26.8.1 at the pinned image digest, binds its published port to 127.0.0.1 only, and uses the checked-in test CA and imports this realm. Run it with `mvn -B -ntp -Pintegration -Dmaven.javadoc.skip=true verify`. Testcontainers and the provider are test-only; the artifact gains no runtime dependency. CI requires all ten named cases to execute with zero skips, failures or errors.
 
 | Client | Tested behavior |
 |---|---|
@@ -33,7 +33,7 @@ Moving the Keycloak pin (`../spike/tier1-spike.sh`, `KEYCLOAK_IMAGE`) is a delib
 
 The signed-UserInfo client's fixed test-only secret is `test-only-signed-userinfo-secret-not-a-real-secret`. Its Keycloak attribute is `user.info.response.signature.alg=RS256`. The HMAC client's test-only secret is `test-only-hmac-client-secret-not-a-real-secret-` followed by 19 `s` characters; its attribute is `id.token.signed.response.alg=HS256`. None of these values may be reused outside the disposable test realm.
 
-**Pinned-provider HMAC limit:** Keycloak 26.7.4's `DefaultTokenManager.encode` selects the algorithm's `SignatureProvider.signer()`. Its MAC signer selects the realm's active signing key, rather than this client's secret. Revetsec's OIDC HMAC mode verifies with the exact request-authentication `client_secret` and rejects this token with `ID_TOKEN_SIGNATURE_INVALID`, without releasing identity or endpoint credentials. Use asymmetric ID tokens with this provider. This negative integration case supplements the positive client-secret HMAC cases in `OidcHmacTests`; it does not establish HMAC compatibility with Keycloak.
+**Pinned-provider HMAC limit:** Keycloak 26.8.1's `DefaultTokenManager.encode` selects the algorithm's `SignatureProvider.signer()`. Its MAC signer selects the realm's active signing key, rather than this client's secret. Revetsec's OIDC HMAC mode verifies with the exact request-authentication `client_secret` and rejects this token with `ID_TOKEN_SIGNATURE_INVALID`, without releasing identity or endpoint credentials. Use asymmetric ID tokens with this provider. This negative integration case supplements the positive client-secret HMAC cases in `OidcHmacTests`; it does not establish HMAC compatibility with Keycloak.
 
 The headless test browser submits the real login form, handles secure session cookies over TLS and stops at the fixed registered callback. Query responses are parsed from Keycloak's redirect. Form-post responses are taken from Keycloak's actual HTML form, encoded into a UTF-8 POST body and passed to the core form-body parser; the harness checks the exact action and POST mode and never contacts the callback URL. The HTML parser is test-only and deliberately tied to the pinned theme. Separate negatives prove that a changed callback route sends no token POST, a changed authorization nonce rejects the provider-signed token, and configured signed UserInfo cannot downgrade to the provider's JSON response.
 

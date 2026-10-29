@@ -6,7 +6,7 @@
  <dependencies>
   <dependency><groupId>com.pyranid</groupId><artifactId>pyranid</artifactId><version>4.7.0</version></dependency>
   <dependency><groupId>com.revetsec</groupId><artifactId>revetsec</artifactId><version>1.0.0-SNAPSHOT</version></dependency>
-  <dependency><groupId>org.postgresql</groupId><artifactId>postgresql</artifactId><version>42.7.13</version><scope>runtime</scope></dependency>
+  <dependency><groupId>org.postgresql</groupId><artifactId>postgresql</artifactId><version>42.7.14</version><scope>runtime</scope></dependency>
   <dependency><groupId>org.jspecify</groupId><artifactId>jspecify</artifactId><version>1.0.1</version><scope>provided</scope></dependency>
  </dependencies>
  <build><plugins>

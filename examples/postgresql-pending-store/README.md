@@ -71,7 +71,7 @@ python3 examples/postgresql-pending-store/run_totp.py \
   --java-home "$JAVA_HOME" \
   --core-jar target/revetsec-1.0.0-SNAPSHOT.jar \
   --pyranid-jar "$HOME/.m2/repository/com/pyranid/pyranid/4.7.0/pyranid-4.7.0.jar" \
-  --driver-jar "$HOME/.m2/repository/org/postgresql/postgresql/42.7.13/postgresql-42.7.13.jar" \
+  --driver-jar "$HOME/.m2/repository/org/postgresql/postgresql/42.7.14/postgresql-42.7.14.jar" \
   --jspecify-jar "$HOME/.m2/repository/org/jspecify/jspecify/1.0.1/jspecify-1.0.1.jar" \
   --jsr305-jar "$HOME/.m2/repository/com/google/code/findbugs/jsr305/3.0.2/jsr305-3.0.2.jar"
 ```
@@ -128,7 +128,7 @@ python3 examples/postgresql-pending-store/run_scim.py \
   --java-home "$JAVA_HOME" \
   --core-jar target/revetsec-1.0.0-SNAPSHOT.jar \
   --pyranid-jar "$HOME/.m2/repository/com/pyranid/pyranid/4.7.0/pyranid-4.7.0.jar" \
-  --driver-jar "$HOME/.m2/repository/org/postgresql/postgresql/42.7.13/postgresql-42.7.13.jar" \
+  --driver-jar "$HOME/.m2/repository/org/postgresql/postgresql/42.7.14/postgresql-42.7.14.jar" \
   --jspecify-jar "$HOME/.m2/repository/org/jspecify/jspecify/1.0.1/jspecify-1.0.1.jar" \
   --jsr305-jar "$HOME/.m2/repository/com/google/code/findbugs/jsr305/3.0.2/jsr305-3.0.2.jar" \
   --output /private/tmp/revetsec-scim-durable-evidence

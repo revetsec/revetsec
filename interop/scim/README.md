@@ -55,6 +55,9 @@ advisory checks are in `pins.json` and `python-pins.json`. The tester's full
 transitive Python closure is exact-version and artifact-checksum locked in
 `requirements.txt`. Container pulls always include the digest, including Java,
 Caddy and PostgreSQL. Pin metadata alone is not interoperability evidence.
+The SCIM application container uses Java 21 to match the Soklet 4 example's
+compiler baseline; core retains Java 17 compatibility. The runtime pin is
+checked against the Playground compiler release before qualification.
 The source for the [tester](https://github.com/python-scim/scim2-tester) and
 [authentik outbound provider](https://docs.goauthentik.io/add-secure-apps/providers/scim/)
 is independent of Revetsec. Authentik's September 2026 published advisories are
@@ -96,6 +99,10 @@ controls are mandatory. There are no hostname bypass flags. Outcome reads have
 a 20-second deadline and 100-ms bounded polling; each authentik HTTP request
 has a five-second connection and twenty-second response timeout. This fixture
 does not assume propagation from a fixed sleep.
+If the application or TLS edge exits before readiness, the runner fails promptly
+and retains their lifecycle status and bounded, secret-redacted log excerpts in
+`startup-diagnostics.json` and the CI console. The same diagnostics are captured
+for readiness timeouts; container environment variables are never retained.
 
 Both complete tester profiles run against discovered User and Group schemas.
 ERROR, CRITICAL, DEVIATION or a missing required test category in the configured
@@ -142,7 +149,8 @@ successful run can pass; pin changes, successful reruns and calendar gaps do
 not impose a release waiting period. Age is reported for visibility. Failures
 and missing or mismatched receipts remain explicit. Manual runs remain separate
 from scheduled history. Use authoritative history rather than a success-only
-list. `test_scripts.py` checks provenance and exact upstream-defect dispositions.
+list. The `test_*.py` harness tests check provenance, exact upstream-defect
+dispositions, runtime compatibility and startup diagnostics.
 This ongoing coverage does not replace owner API freeze, external review,
 penetration testing or the complete release assurance matrix.
 

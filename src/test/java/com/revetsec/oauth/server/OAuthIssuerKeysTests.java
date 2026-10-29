@@ -67,7 +67,7 @@ final class OAuthIssuerKeysTests {
  private static final TestJwk.@NonNull Fixture A=TestJwk.Fixture.IDP_SIGNING_RSA_2048;
  private static final TestJwk.@NonNull Fixture B=TestJwk.Fixture.IDP_SIGNING_RSA_3072;
  private static final @NonNull String ISSUER="https://issuer.example/tenant";
- private static final @NonNull Duration FRESHNESS=Duration.ofSeconds(60);
+ private static final @NonNull Duration PUBLIC_METADATA_HTTP_CACHE_MAX_AGE=Duration.ofSeconds(60);
  private static @NonNull OAuthIssuerSigningKey key(@NonNull String id,TestJwk.@NonNull Fixture fixture) {
   return OAuthIssuerSigningKey.fromKeyPair(id,fixture.getPrivateKey(),fixture.getPublicKey());
  }
@@ -76,9 +76,9 @@ final class OAuthIssuerKeysTests {
   return OAuthIssuerKeySnapshot.withActiveKey(key).generation(generation).publishedAt(publication).verificationKeys(keys).retirementNotBefore(retirement).build();
  }
  private static @NonNull OAuthIssuerKeySnapshot initial() { return snapshot(key("a",A),"g1",NOW.minusSeconds(120),Map.of(),Map.of()); }
- private static @NonNull OAuthGrantRetention retention() { return new OAuthGrantRetention(Duration.ofMinutes(5),Duration.ofSeconds(30),Duration.ofSeconds(10),FRESHNESS); }
+ private static @NonNull OAuthGrantRetention retention() { return new OAuthGrantRetention(Duration.ofMinutes(5),Duration.ofSeconds(30),Duration.ofSeconds(10),PUBLIC_METADATA_HTTP_CACHE_MAX_AGE); }
  private static @NonNull OAuthIssuerKeyLifecycle lifecycle(@NonNull OAuthIssuerKeyProvider provider,@NonNull Clock clock) {
-  return new OAuthIssuerKeyLifecycle(provider,clock,FRESHNESS,retention());
+  return new OAuthIssuerKeyLifecycle(provider,clock,PUBLIC_METADATA_HTTP_CACHE_MAX_AGE,retention());
  }
  private static @NonNull OAuthIssuerKeyLifecycle lifecycle(@NonNull OAuthIssuerKeySnapshot snapshot) {
   return lifecycle(OAuthIssuerKeyProvider.fromSnapshot(snapshot),Clock.fixed(NOW,ZoneOffset.UTC));
@@ -226,7 +226,7 @@ final class OAuthIssuerKeysTests {
   current.set(snapshot(key("b",B),"g3",NOW,Map.of(),Map.of()));unavailable(()->life.snapshot(deadline()));
   clock.now=NOW.plusSeconds(400);assertEquals(Set.of("b"),life.snapshot(deadline()).getVerificationKeys().keySet());
  }
- @Test void stagedVerificationKeyCanBecomeActiveWithoutAnotherFreshnessOutage() {
+ @Test void stagedVerificationKeyCanBecomeActiveWithoutAnotherPublicationWait() {
   AtomicReference<OAuthIssuerKeySnapshot> current=new AtomicReference<>(snapshot(key("a",A),"g1",
    NOW.minusSeconds(120),Map.of("b",B.getPublicKey()),Map.of()));
   var life=lifecycle(budget->requireNonNull(current.get()),Clock.fixed(NOW,ZoneOffset.UTC));
@@ -320,28 +320,28 @@ final class OAuthIssuerKeysTests {
  }
  @SuppressWarnings("unchecked") private static <E extends Throwable> void raise(@NonNull Throwable fault) throws E { throw (E)fault; }
  private static @NonNull OAuthIssuerMetadata metadata(@NonNull String issuer,boolean refresh,boolean extra,@NonNull Set<@NonNull String> scopes,
-   @NonNull Duration freshness,int bodyCap,int headerCap,boolean loopback) {
+   @NonNull Duration publicMetadataHttpCacheMaxAge,int bodyCap,int headerCap,boolean loopback) {
   return new OAuthIssuerMetadata(URI.create(issuer),URI.create(issuer+"/authorize"),URI.create(issuer+"/token"),URI.create(issuer+"/jwks"),
-   extra ? URI.create(issuer+"/revoke") : null,extra ? URI.create(issuer+"/introspect") : null,refresh,loopback,scopes,freshness,bodyCap,headerCap);
+   extra ? URI.create(issuer+"/revoke") : null,extra ? URI.create(issuer+"/introspect") : null,refresh,loopback,scopes,publicMetadataHttpCacheMaxAge,bodyCap,headerCap);
  }
  @TestFactory @NonNull Stream<@NonNull DynamicTest> correctWellKnownPathsAndExactIssuer() {
   return Stream.of("https://issuer.example","https://issuer.example/","https://issuer.example/tenant/","https://issuer.example/a%2Fb","https://issuer.example:443/A")
    .map(issuer->test(issuer,()->{
-    var metadata=metadata(issuer,false,false,Set.of(),FRESHNESS,32768,16384,false);URI uri=URI.create(issuer);String path=uri.getRawPath();if(path.endsWith("/"))path=path.substring(0,path.length()-1);
+    var metadata=metadata(issuer,false,false,Set.of(),PUBLIC_METADATA_HTTP_CACHE_MAX_AGE,32768,16384,false);URI uri=URI.create(issuer);String path=uri.getRawPath();if(path.endsWith("/"))path=path.substring(0,path.length()-1);
     assertEquals(uri.getScheme()+"://"+uri.getRawAuthority()+"/.well-known/oauth-authorization-server"+path,metadata.wellKnownUri().toString());
     JsonObject body=json(metadata.metadata("GET",deadline()).body());assertEquals(issuer,body.find("issuer").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow());assertFalse(body.getMembers().containsKey("scopes_supported"));
    }));
  }
  @Test void metadataAdvertisesOnlyImplementedConfiguredCapabilities() {
-  var metadata=metadata(ISSUER,true,true,Set.of("write","read"),FRESHNESS,32768,16384,false);JsonObject body=json(metadata.metadata("GET",deadline()).body());String text=body.toJson();
+  var metadata=metadata(ISSUER,true,true,Set.of("write","read"),PUBLIC_METADATA_HTTP_CACHE_MAX_AGE,32768,16384,false);JsonObject body=json(metadata.metadata("GET",deadline()).body());String text=body.toJson();
   assertTrue(text.contains("refresh_token"));assertTrue(text.contains("revocation_endpoint"));assertTrue(text.contains("introspection_endpoint"));assertTrue(text.contains("S256"));
   for(String unsupported:List.of("openid","id_token","registration_endpoint","client_id_metadata_document_supported","private_key_jwt","implicit","password")) assertFalse(text.contains(unsupported));
-  String disabled=json(metadata(ISSUER,false,false,Set.of(),FRESHNESS,32768,16384,false).metadata("GET",deadline()).body()).toJson();
+  String disabled=json(metadata(ISSUER,false,false,Set.of(),PUBLIC_METADATA_HTTP_CACHE_MAX_AGE,32768,16384,false).metadata("GET",deadline()).body()).toJson();
   assertFalse(disabled.contains("refresh_token"));assertFalse(disabled.contains("revocation_endpoint"));assertFalse(disabled.contains("introspection_endpoint"));
   assertEquals("OAuthIssuerMetadata{<redacted>}",metadata.toString());
  }
  @Test void metadataAndJwksHeadHeadersFiniteCacheAndCopiedBytes() {
-  var metadata=metadata(ISSUER,true,true,Set.of("read"),FRESHNESS,32768,16384,false);var life=lifecycle(initial());
+  var metadata=metadata(ISSUER,true,true,Set.of("read"),PUBLIC_METADATA_HTTP_CACHE_MAX_AGE,32768,16384,false);var life=lifecycle(initial());
   for(boolean jwks:List.of(false,true)) {
    var get=jwks ? metadata.jwks("GET",life,deadline()) : metadata.metadata("GET",deadline());
    var head=jwks ? metadata.jwks("HEAD",life,deadline()) : metadata.metadata("HEAD",deadline());
@@ -354,23 +354,23 @@ final class OAuthIssuerKeysTests {
  @TestFactory @NonNull Stream<@NonNull DynamicTest> metadataFailuresAndMethods() {
   List<DynamicTest> tests=new ArrayList<>();
   for(String issuer:List.of("http://issuer.example","https://user@issuer.example","https://issuer.example/#bad","https://issuer.example/?bad", "urn:issuer", "https://issuer.example:65536"))
-   tests.add(test("bad issuer "+issuer,()->assertThrows(IllegalArgumentException.class,()->metadata(issuer,false,false,Set.of(),FRESHNESS,32768,16384,false))));
+   tests.add(test("bad issuer "+issuer,()->assertThrows(IllegalArgumentException.class,()->metadata(issuer,false,false,Set.of(),PUBLIC_METADATA_HTTP_CACHE_MAX_AGE,32768,16384,false))));
   for(String issuer:List.of("http://127.0.0.1:8080/tenant","http://[::1]:8080/tenant")) tests.add(test("explicit loopback "+issuer,()->{
-   assertThrows(IllegalArgumentException.class,()->metadata(issuer,false,false,Set.of(),FRESHNESS,32768,16384,false));assertNotNull(metadata(issuer,false,false,Set.of(),FRESHNESS,32768,16384,true));}));
-  tests.add(test("localhost is not literal development permission",()->assertThrows(IllegalArgumentException.class,()->metadata("http://localhost",false,false,Set.of(),FRESHNESS,32768,16384,true))));
-  for(Duration duration:List.of(Duration.ofNanos(-1),Duration.ofMinutes(5).plusNanos(1))) tests.add(test("bad freshness "+duration,()->assertThrows(IllegalArgumentException.class,()->metadata(ISSUER,false,false,Set.of(),duration,32768,16384,false))));
-  for(int cap:List.of(4095,131073)) tests.add(test("bad body cap "+cap,()->assertThrows(IllegalArgumentException.class,()->metadata(ISSUER,false,false,Set.of(),FRESHNESS,cap,16384,false))));
-  for(int cap:List.of(1023,65537)) tests.add(test("bad header cap "+cap,()->assertThrows(IllegalArgumentException.class,()->metadata(ISSUER,false,false,Set.of(),FRESHNESS,32768,cap,false))));
+   assertThrows(IllegalArgumentException.class,()->metadata(issuer,false,false,Set.of(),PUBLIC_METADATA_HTTP_CACHE_MAX_AGE,32768,16384,false));assertNotNull(metadata(issuer,false,false,Set.of(),PUBLIC_METADATA_HTTP_CACHE_MAX_AGE,32768,16384,true));}));
+  tests.add(test("localhost is not literal development permission",()->assertThrows(IllegalArgumentException.class,()->metadata("http://localhost",false,false,Set.of(),PUBLIC_METADATA_HTTP_CACHE_MAX_AGE,32768,16384,true))));
+  for(Duration duration:List.of(Duration.ofNanos(-1),Duration.ofMinutes(5).plusNanos(1))) tests.add(test("bad public metadata HTTP cache max-age "+duration,()->assertThrows(IllegalArgumentException.class,()->metadata(ISSUER,false,false,Set.of(),duration,32768,16384,false))));
+  for(int cap:List.of(4095,131073)) tests.add(test("bad body cap "+cap,()->assertThrows(IllegalArgumentException.class,()->metadata(ISSUER,false,false,Set.of(),PUBLIC_METADATA_HTTP_CACHE_MAX_AGE,cap,16384,false))));
+  for(int cap:List.of(1023,65537)) tests.add(test("bad header cap "+cap,()->assertThrows(IllegalArgumentException.class,()->metadata(ISSUER,false,false,Set.of(),PUBLIC_METADATA_HTTP_CACHE_MAX_AGE,32768,cap,false))));
   for(String method:List.of("POST","OPTIONS","get","GET\r\nprivate")) tests.add(test("unsupported method "+tests.size(),()->{
-   var metadata=metadata(ISSUER,false,false,Set.of(),FRESHNESS,32768,16384,false);var bad=lifecycle(budget->{throw new AssertionError("must not call provider");},Clock.fixed(NOW,ZoneOffset.UTC));
+   var metadata=metadata(ISSUER,false,false,Set.of(),PUBLIC_METADATA_HTTP_CACHE_MAX_AGE,32768,16384,false);var bad=lifecycle(budget->{throw new AssertionError("must not call provider");},Clock.fixed(NOW,ZoneOffset.UTC));
    for(var response:List.of(metadata.metadata(method,deadline()),metadata.jwks(method,bad,deadline()))) {
     assertEquals(0,response.body().length);String h=new String(response.headers(),StandardCharsets.US_ASCII);assertTrue(h.contains("405 Method Not Allowed"));assertTrue(h.contains("Allow: GET, HEAD"));assertTrue(h.contains("Cache-Control: no-store"));assertFalse(h.contains("private"));
    }
   }));
-  tests.add(test("zero freshness revalidates",()->assertTrue(new String(metadata(ISSUER,false,false,Set.of(),Duration.ZERO,32768,16384,false).metadata("GET",deadline()).headers(),StandardCharsets.US_ASCII).contains("max-age=0, must-revalidate"))));
+  tests.add(test("zero HTTP cache max-age revalidates",()->assertTrue(new String(metadata(ISSUER,false,false,Set.of(),Duration.ZERO,32768,16384,false).metadata("GET",deadline()).headers(),StandardCharsets.US_ASCII).contains("max-age=0, must-revalidate"))));
   tests.add(test("metadata body overflow",()->{Set<String> scopes=new java.util.HashSet<>();for(int i=0;i<64;i++)scopes.add("a".repeat(100)+i);
-   var metadata=metadata(ISSUER,false,false,scopes,FRESHNESS,4096,16384,false);assertThrows(IllegalArgumentException.class,()->metadata.metadata("GET",deadline()));}));
-  tests.add(test("metadata expired budget",()->unavailable(()->metadata(ISSUER,false,false,Set.of(),FRESHNESS,32768,16384,false).metadata("GET",Deadline.fromNow(Duration.ZERO)))));
+   var metadata=metadata(ISSUER,false,false,scopes,PUBLIC_METADATA_HTTP_CACHE_MAX_AGE,4096,16384,false);assertThrows(IllegalArgumentException.class,()->metadata.metadata("GET",deadline()));}));
+  tests.add(test("metadata expired budget",()->unavailable(()->metadata(ISSUER,false,false,Set.of(),PUBLIC_METADATA_HTTP_CACHE_MAX_AGE,32768,16384,false).metadata("GET",Deadline.fromNow(Duration.ZERO)))));
   return tests.stream();
  }
 
@@ -391,21 +391,21 @@ final class OAuthIssuerKeysTests {
  @Test void jwksOverflowUsesActualBoundedResponseWithoutPrivateMaterial() {
   Map<String,PublicKey> keys=new LinkedHashMap<>();for(int i=0;i<20;i++)keys.put("old"+i,A.getPublicKey());
   var life=lifecycle(snapshot(key("a",A),"g",NOW.minusSeconds(120),keys,Map.of()));
-  var metadata=metadata(ISSUER,false,false,Set.of(),FRESHNESS,4096,16384,false);
+  var metadata=metadata(ISSUER,false,false,Set.of(),PUBLIC_METADATA_HTTP_CACHE_MAX_AGE,4096,16384,false);
   assertThrows(IllegalArgumentException.class,()->metadata.jwks("GET",life,deadline()));
  }
  @Test void scopeAdvertisementIncludesUnionAcrossResources() {
   Set<String> scopes=new java.util.HashSet<>();for(int i=0;i<128;i++)scopes.add("scope"+i);
-  assertTrue(new String(metadata(ISSUER,false,false,scopes,FRESHNESS,32768,16384,false).metadata("GET",deadline()).body(),StandardCharsets.UTF_8).contains("scope127"));
+  assertTrue(new String(metadata(ISSUER,false,false,scopes,PUBLIC_METADATA_HTTP_CACHE_MAX_AGE,32768,16384,false).metadata("GET",deadline()).body(),StandardCharsets.UTF_8).contains("scope127"));
  }
  @TestFactory @NonNull Stream<@NonNull DynamicTest> responseAndEncoderBounds() {
   List<DynamicTest> tests=new ArrayList<>();var life=lifecycle(initial());
   for(int body:List.of(4095,131073)) {
-   tests.add(test("direct response body cap "+body,()->assertThrows(IllegalArgumentException.class,()->OAuthPublicMetadataResponse.prepare(JsonObject.builder().build(),"GET",FRESHNESS,body,16384))));
+   tests.add(test("direct response body cap "+body,()->assertThrows(IllegalArgumentException.class,()->OAuthPublicMetadataResponse.prepare(JsonObject.builder().build(),"GET",PUBLIC_METADATA_HTTP_CACHE_MAX_AGE,body,16384))));
    tests.add(test("managed encoder body cap "+body,()->assertThrows(IllegalArgumentException.class,()->new OAuthTokenResponse.Encoder(ISSUER,life,body,16384))));
   }
   for(int header:List.of(1023,65537)) {
-   tests.add(test("direct response header cap "+header,()->assertThrows(IllegalArgumentException.class,()->OAuthPublicMetadataResponse.prepare(JsonObject.builder().build(),"GET",FRESHNESS,32768,header))));
+   tests.add(test("direct response header cap "+header,()->assertThrows(IllegalArgumentException.class,()->OAuthPublicMetadataResponse.prepare(JsonObject.builder().build(),"GET",PUBLIC_METADATA_HTTP_CACHE_MAX_AGE,32768,header))));
    tests.add(test("managed encoder header cap "+header,()->assertThrows(IllegalArgumentException.class,()->new OAuthTokenResponse.Encoder(ISSUER,life,32768,header))));
   }
   return tests.stream();

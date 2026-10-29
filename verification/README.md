@@ -18,9 +18,9 @@ Download the pinned Gradle distribution, install core, then run the check with t
 ```sh
 export JAVA_HOME=/path/to/jdk-17-or-later
 work=$(mktemp -d)
-curl --proto '=https' --tlsv1.2 --fail --location --silent --show-error --output "$work/gradle-9.8.0-bin.zip" https://services.gradle.org/distributions/gradle-9.8.0-bin.zip
+curl --proto '=https' --tlsv1.2 --fail --location --silent --show-error --output "$work/gradle-9.8.2-bin.zip" https://services.gradle.org/distributions/gradle-9.8.2-bin.zip
 mvn -B -ntp -Dmaven.javadoc.skip=true -DskipTests install
-python3 verification/packaged-consumer/verify-packaged-consumer.py --gradle-distribution "$work/gradle-9.8.0-bin.zip"
+python3 verification/packaged-consumer/verify-packaged-consumer.py --gradle-distribution "$work/gradle-9.8.2-bin.zip"
 ```
 
 [CONTRIBUTING.md](../CONTRIBUTING.md#packaged-consumer) has the CI variant, which installs into an empty repository.
@@ -49,7 +49,7 @@ PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s verification/packaged-
 
 ## The Gradle pin
 
-`verify-packaged-consumer.py` pins Gradle 9.8.0 by the SHA-256 Gradle publishes next to the archive (`GRADLE_VERSION`, `GRADLE_DISTRIBUTION_SHA256`). It runs on every JDK from 17 to 27, so the same distribution serves the whole matrix; it was checked on Corretto 17, 21, 25, 26 and 27. There is no Gradle wrapper, so no wrapper JAR is committed. Dependabot does not update the pin. To move it, change the two constants, the download URL in `.github/workflows/ci.yml`, and the commands and every "Gradle <version>" in this file and in CONTRIBUTING.md together; `test_verify_packaged_consumer.py` fails while they disagree.
+`verify-packaged-consumer.py` pins Gradle 9.8.2 by the SHA-256 Gradle publishes next to the archive (`GRADLE_VERSION`, `GRADLE_DISTRIBUTION_SHA256`). The 9.8 line supports JDK 17 through 27; the packaged-consumer matrix verifies this pinned distribution on Corretto 17 and 27. There is no Gradle wrapper, so no wrapper JAR is committed. Dependabot does not update the pin. To move it, change the two constants, the download URL in `.github/workflows/ci.yml`, and the commands and every "Gradle <version>" in this file and in CONTRIBUTING.md together; `test_verify_packaged_consumer.py` fails while they disagree.
 
 ## In CI
 

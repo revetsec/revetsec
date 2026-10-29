@@ -67,7 +67,7 @@
 			 test classpath and the run can fail before any corpus input executes. -->
 		<junit.version>6.1.3</junit.version>
 		<!-- Match the independent Argon2id test oracle compiled from the core test tree. -->
-		<bouncycastle.test.version>1.84</bouncycastle.test.version>
+		<bouncycastle.test.version>1.86</bouncycastle.test.version>
 		<!-- The Revetsec core checkout whose sources this module compiles. The core test tree is
 			 compiled in by default; the "main-sources-only" profile unbinds the add-core-test-*
 			 executions. -->
@@ -532,7 +532,7 @@
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-install-plugin</artifactId>
-				<version>3.1.4</version>
+				<version>3.2.0</version>
 				<configuration>
 					<skip>true</skip>
 				</configuration>
@@ -540,7 +540,7 @@
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-deploy-plugin</artifactId>
-				<version>3.1.4</version>
+				<version>3.2.0</version>
 				<configuration>
 					<skip>true</skip>
 				</configuration>

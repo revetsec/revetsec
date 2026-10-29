@@ -107,8 +107,8 @@ public final class OAuthAuthorizationServer {
   this.coordinator=new OAuthStoreCoordinator(store,codec,this.clock,this.settings.clockSkew,this.settings.maximumStoreCommitAttempts,this.settings.maximumSubjectLength);
   this.ledger=new OAuthAuthorizationLedger(this.coordinator,codec,this.limits,this.settings.authorizationInteractionLifetime,
    this.settings.authorizationCodeLifetime,this.settings.maximumStoreCommitAttempts,this.settings.maximumSubjectLength,this.refresh);
-  OAuthGrantRetention retention=new OAuthGrantRetention(this.settings.accessTokenLifetime,this.settings.clockSkew,this.settings.totalDeadline,this.settings.publicMetadataFreshness);
-  this.keys=new OAuthIssuerKeyLifecycle(provider,this.clock,this.settings.publicMetadataFreshness,retention,true);
+  OAuthGrantRetention retention=new OAuthGrantRetention(this.settings.accessTokenLifetime,this.settings.clockSkew,this.settings.totalDeadline,this.settings.publicMetadataHttpCacheMaxAge);
+  this.keys=new OAuthIssuerKeyLifecycle(provider,this.clock,this.settings.publicMetadataHttpCacheMaxAge,retention,true);
   OAuthTokenResponse.Encoder encoder=new OAuthTokenResponse.Encoder(this.issuer,this.keys,this.settings.maximumResponseBodyBytes,this.settings.maximumHeaderBytes);
   this.codes=new OAuthCodeRedemption(this.coordinator,codec,this.limits,retention,encoder,this.settings.accessTokenLifetime,this.refresh,
    this.settings.refreshTokenIdleLifetime,this.settings.refreshTokenAbsoluteLifetime,this.settings.maximumStoreCommitAttempts,this.settings.maximumSubjectLength);
@@ -120,7 +120,7 @@ public final class OAuthAuthorizationServer {
   this.introspection=new OAuthResourceIntrospection(this.status,this.limits,this.settings.maximumResponseBodyBytes,this.settings.maximumHeaderBytes);
   Set<String> scopes=new HashSet<>(); for(Set<String> values:this.resources.values()) scopes.addAll(values);
   this.metadata=new OAuthIssuerMetadata(issuerUri,this.authorizationEndpoint,this.tokenEndpoint,this.jwksEndpoint,this.revocationEndpoint,this.introspectionEndpoint,
-   this.refresh,b.allowInsecureLoopback,scopes,this.settings.publicMetadataFreshness,this.settings.maximumResponseBodyBytes,this.settings.maximumHeaderBytes,metadataPolicy.getEnabled());
+   this.refresh,b.allowInsecureLoopback,scopes,this.settings.publicMetadataHttpCacheMaxAge,this.settings.maximumResponseBodyBytes,this.settings.maximumHeaderBytes,metadataPolicy.getEnabled());
  }
  /** Starts configuration with the exact issuer identity.
   * @param issuer absolute HTTPS issuer, or an explicitly enabled numeric HTTP loopback issuer
@@ -647,12 +647,17 @@ public final class OAuthAuthorizationServer {
    * @since 1.0.0
    */
   @CheckReturnValue public @NonNull Builder requestTimeout(@Nullable Duration value) {this.settings.requestTimeout(value);return this;}
-  /** Sets publicMetadataFreshness; null restores the issuer registry default. Bounds are checked at build.
-   * @param value setting or null
+  /**
+   * Sets the HTTP Cache-Control max-age for public authorization-server metadata and JWKS responses.
+   * The default is 60 seconds; zero through five minutes inclusive are accepted. Null restores the default,
+   * and bounds are checked at build. The header uses whole seconds from {@link Duration#toSeconds()}.
+   * The full configured duration also determines the publication wait before signing with a new key and
+   * contributes to grant and verification-key retention margins.
+   * @param value HTTP cache max-age, or null to restore the default
    * @return this builder
    * @since 1.0.0
    */
-  @CheckReturnValue public @NonNull Builder publicMetadataFreshness(@Nullable Duration value) {this.settings.publicMetadataFreshness(value);return this;}
+  @CheckReturnValue public @NonNull Builder publicMetadataHttpCacheMaxAge(@Nullable Duration value) {this.settings.publicMetadataHttpCacheMaxAge(value);return this;}
   /** Sets maximumRequestBodyBytes; null restores the issuer registry default. Bounds are checked at build.
    * @param value setting or null
    * @return this builder

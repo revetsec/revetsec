@@ -25,6 +25,8 @@ This deliberately simple global lock serializes all namespaces. It is a correctn
 
 The tested boundary is **one authoritative PostgreSQL primary, a persisted Docker volume, and independent JVM callers on one host**. `fsync`, `full_page_writes`, and synchronous COMMIT are required and checked. With `--recovery`, the fixture also exercises authentic logical backup restoration and an application-owned recovery gate; see [RECOVERY.md](RECOVERY.md). There is no replica, failover, cross-host, physical/PITR or storage-device power-loss qualification. Operator SQL, migrations and maintenance must participate in the same locking/fencing contract. Never reopen an authentic restored snapshot merely because sealed records validate; restore needs a separate administrative fence and key lifecycle procedure.
 
+The fixture explicitly configures zero issuer clock skew so every observed backward step, including a nanosecond step, must fail unavailable. Deployments that configure a nonzero skew use core's bounded high-water clamping policy instead; this strict rollback lane does not test that configuration.
+
 ## Run
 
 Build the core into a private Maven repository, then build this standalone module with `mvn -f verification/issuer-store/pom.xml package`. Use Java17 or newer. For an offline run, pre-cache the pinned image and artifact versions; the runner always uses `--pull=never`.
@@ -35,7 +37,7 @@ python3 verification/issuer-store/run.py \
   --core-jar /absolute/path/to/revetsec-1.0.0-SNAPSHOT.jar \
   --fixture-jar /absolute/path/to/issuer-store-1.0.0-SNAPSHOT.jar \
   --pyranid-jar /absolute/path/to/pyranid-4.7.0.jar \
-  --driver-jar /absolute/path/to/postgresql-42.7.13.jar \
+  --driver-jar /absolute/path/to/postgresql-42.7.14.jar \
   --output /absolute/path/to/new/evidence-directory
 ```
 

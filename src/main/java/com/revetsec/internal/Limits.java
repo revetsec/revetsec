@@ -41,7 +41,7 @@ import static java.util.Objects.requireNonNull;
  * <p>
  * <strong>Zero</strong> is permitted by the following rows: {@link #JWKS_MAXIMUM_STALENESS} (never serve a stale key
  * set), {@link #CLIENT_CREDENTIALS_RENEW_BEFORE} (renew only at expiry) and {@link #JOSE_CLOCK_SKEW} (compare times
- * exactly), and {@link #CIMD_MAXIMUM_FRESHNESS} (never reuse metadata). {@link #AS_CLOCK_SKEW} and {@link #AS_PUBLIC_METADATA_FRESHNESS} also permit zero. Every other row rejects zero and negative values.
+ * exactly), and {@link #CIMD_MAXIMUM_FRESHNESS} (never reuse metadata). {@link #AS_CLOCK_SKEW} and {@link #AS_PUBLIC_METADATA_HTTP_CACHE_MAX_AGE} also permit zero. Every other row rejects zero and negative values.
  * <p>
  * <strong>Internal rows.</strong> The JSON structural rows other than {@link #SCIM_JSON_NODES} are fixed in 1.0.0:
  * the codec's profiles use their defaults, and their floors bind only if a row is ever made configurable.
@@ -528,8 +528,8 @@ public final class Limits {
 	public static final Limit AS_TOTAL_DEADLINE = Limit.fromDurations("Issuer totalDeadline", Duration.ofSeconds(10), Duration.ofSeconds(1), Duration.ofSeconds(60));
 	/** Issuer requestTimeout: default Duration.ofSeconds(5), inclusive interval [Duration.ofSeconds(1), Duration.ofSeconds(30)]. */
 	public static final Limit AS_REQUEST_TIMEOUT = Limit.fromDurations("Issuer requestTimeout", Duration.ofSeconds(5), Duration.ofSeconds(1), Duration.ofSeconds(30));
-	/** Issuer publicMetadataFreshness: default Duration.ofSeconds(60), inclusive interval [Duration.ZERO, Duration.ofMinutes(5)]. */
-	public static final Limit AS_PUBLIC_METADATA_FRESHNESS = Limit.fromDurations("Issuer publicMetadataFreshness", Duration.ofSeconds(60), Duration.ZERO, Duration.ofMinutes(5));
+	/** Issuer publicMetadataHttpCacheMaxAge: default Duration.ofSeconds(60), inclusive interval [Duration.ZERO, Duration.ofMinutes(5)]. */
+	public static final Limit AS_PUBLIC_METADATA_HTTP_CACHE_MAX_AGE = Limit.fromDurations("Issuer publicMetadataHttpCacheMaxAge", Duration.ofSeconds(60), Duration.ZERO, Duration.ofMinutes(5));
 	/** Issuer maximumRequestBodyBytes: default 16384, inclusive interval [1024, 65536]. */
 	public static final Limit AS_MAXIMUM_REQUEST_BODY_BYTES = Limit.fromAmounts("Issuer maximumRequestBodyBytes", Unit.BYTES, 16384, 1024, 65536);
 	/** Issuer maximumRawQueryLength: default 16384, inclusive interval [1024, 65536]. */
@@ -644,7 +644,7 @@ public final class Limits {
 			AS_CLOCK_SKEW,
 			AS_TOTAL_DEADLINE,
 			AS_REQUEST_TIMEOUT,
-			AS_PUBLIC_METADATA_FRESHNESS,
+			AS_PUBLIC_METADATA_HTTP_CACHE_MAX_AGE,
 			AS_MAXIMUM_REQUEST_BODY_BYTES,
 			AS_MAXIMUM_RAW_QUERY_LENGTH,
 			AS_MAXIMUM_HEADER_BYTES,

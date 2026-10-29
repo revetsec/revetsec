@@ -28,14 +28,14 @@ import java.util.List;
 import java.util.LinkedHashMap;
 import static java.util.Objects.requireNonNull;
 
-/** Exact bounded public metadata bytes. Finite freshness and explicit revalidation; no credential emission. */
+/** Exact bounded public metadata bytes. Finite HTTP cache max-age and explicit revalidation; no credential emission. */
 final class OAuthPublicMetadataResponse {
  private final @NonNull OAuthServerResponse response;
  private OAuthPublicMetadataResponse(@NonNull OAuthServerResponse response) { this.response = response; }
  @NonNull OAuthServerResponse response() { return this.response; }
  static @NonNull OAuthPublicMetadataResponse prepare(@NonNull JsonObject json,@NonNull String method,
-   @NonNull Duration freshness,int bodyCap,int headerCap) {
-  requireNonNull(json);requireNonNull(method);OAuthGrantRetention.duration(freshness,Duration.ZERO,Duration.ofMinutes(5));
+   @NonNull Duration publicMetadataHttpCacheMaxAge,int bodyCap,int headerCap) {
+  requireNonNull(json);requireNonNull(method);OAuthGrantRetention.duration(publicMetadataHttpCacheMaxAge,Duration.ZERO,Duration.ofMinutes(5));
   if(bodyCap<4096 || bodyCap>131072 || headerCap<1024 || headerCap>65536) throw OAuthStoreFormat.invalid();
   boolean allowed=method.equals("GET") || method.equals("HEAD");
   byte[] representation=allowed ? JsonCodec.toUtf8Bytes(json) : new byte[0];
@@ -44,7 +44,7 @@ final class OAuthPublicMetadataResponse {
    String tag=HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(representation));
    Map<String, List<String>> headers = new LinkedHashMap<>();
    headers.put("Content-Type", List.of("application/json"));
-   headers.put("Cache-Control", List.of(allowed ? "public, max-age="+freshness.toSeconds()+", must-revalidate" : "no-store"));
+   headers.put("Cache-Control", List.of(allowed ? "public, max-age="+publicMetadataHttpCacheMaxAge.toSeconds()+", must-revalidate" : "no-store"));
    headers.put("Referrer-Policy", List.of("no-referrer"));
    if (allowed) headers.put("ETag", List.of("\""+tag+"\"")); else headers.put("Allow", List.of("GET, HEAD"));
    headers.put("Content-Length", List.of(Integer.toString(representation.length)));

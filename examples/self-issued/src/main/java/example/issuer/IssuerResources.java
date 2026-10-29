@@ -98,7 +98,7 @@ public final class IssuerResources {
                         ? OAuthAuthorizationDecision.withSubject(context.getSubject()).authorizedScopesByResource(context.getAuthorizedScopesByResource())
                                 .refreshTokenPermitted(context.isRefreshTokenPermitted()).build()
                         : OAuthAuthorizationDecision.deniedInstance())
-                .clientMetadataPolicy(config.metadataPolicy).clock(clock).clockSkew(Duration.ZERO).publicMetadataFreshness(Duration.ZERO).accessTokenLifetime(Duration.ofMinutes(2)).refreshTokensEnabled(true)
+                .clientMetadataPolicy(config.metadataPolicy).clock(clock).clockSkew(Duration.ZERO).publicMetadataHttpCacheMaxAge(Duration.ZERO).accessTokenLifetime(Duration.ofMinutes(2)).refreshTokensEnabled(true)
                 .allowInsecureLoopback(config.loopback).allowNativeLoopbackRedirects(true).build();
         if(startupMode==StartupMode.FRESH) {
             if(server.initializeFreshIssuer()!=OAuthStoreCommitStatus.COMMITTED) throw new IllegalStateException("Fresh demo store initialization failed.");

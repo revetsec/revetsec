@@ -48,8 +48,9 @@ import static java.util.Objects.requireNonNull;
  * key sets have expired. Publication does not advertise the endpoint through discovery automatically.
  * <p>
  * A set has at most 100 keys and 256 KiB of UTF-8 JSON. Nonempty key IDs must be unique; keys without IDs are allowed.
- * GET and HEAD support entity tags and bounded If-None-Match input. Freshness defaults to 60 seconds and can be
- * configured from zero through 24 hours, in whole seconds. This cache policy is independent of OAuth issuer policy.
+ * GET and HEAD support entity tags and bounded If-None-Match input. Outgoing HTTP Cache-Control max-age defaults to
+ * 60 seconds and can be configured from zero through 24 hours, in whole seconds. This policy controls downstream
+ * response caching; it does not expire or reload the key snapshot and is independent of OAuth issuer policy.
  *
  * @since 1.0.0
  */
@@ -59,17 +60,17 @@ public final class JwksPublisher {
 	private static final int MAXIMUM_KEYS = 100;
 	private static final int MAXIMUM_BODY_BYTES = 262_144;
 	private static final int MAXIMUM_CONDITIONAL_HEADER_LENGTH = 8192;
-	private static final @NonNull Duration DEFAULT_CACHE_LIFETIME = Duration.ofSeconds(60);
-	private static final @NonNull Duration MAXIMUM_CACHE_LIFETIME = Duration.ofHours(24);
+	private static final @NonNull Duration DEFAULT_HTTP_CACHE_MAX_AGE = Duration.ofSeconds(60);
+	private static final @NonNull Duration MAXIMUM_HTTP_CACHE_MAX_AGE = Duration.ofHours(24);
 	private final @NonNull List<@NonNull PublishedJwk> keys;
-	private final @NonNull Duration cacheLifetime;
+	private final @NonNull Duration httpCacheMaxAge;
 	private final @NonNull JsonObject json;
 	private final byte @NonNull [] body;
 	private final @NonNull String entityTag;
 
 	private JwksPublisher(@NonNull Builder builder) {
 		this.keys = builder.keys;
-		this.cacheLifetime = builder.cacheLifetime;
+		this.httpCacheMaxAge = builder.httpCacheMaxAge;
 		List<JsonValue> values = new ArrayList<>();
 		Set<String> identifiers = new HashSet<>();
 		int size = 0;
@@ -108,7 +109,7 @@ public final class JwksPublisher {
 	}
 
 	/**
-	 * Returns a publisher with the default cache lifetime. Equivalent to {@code withKeys(keys).build()}.
+	 * Returns a publisher with the default HTTP cache max-age. Equivalent to {@code withKeys(keys).build()}.
 	 * @param keys at most 100 public keys, in publication order
 	 * @return the immutable publisher
 	 * @throws NullPointerException if the list or an element is null
@@ -130,16 +131,17 @@ public final class JwksPublisher {
 	}
 
 	/**
-	 * Returns the configured HTTP freshness lifetime.
-	 * @return the lifetime in whole seconds
+	 * Returns the max-age advertised in outgoing HTTP Cache-Control headers. It does not control key loading.
+	 * @return the HTTP cache max-age in whole seconds
 	 * @since 1.0.0
 	 */
-	public @NonNull Duration getCacheLifetime() {
-		return this.cacheLifetime;
+	public @NonNull Duration getHttpCacheMaxAge() {
+		return this.httpCacheMaxAge;
 	}
 
 	/**
-	 * Serializes the public JWKS document to JSON text, in the supplied key order.
+	 * Serializes the public JWKS document to JSON text, in the supplied key order. The HTTP cache max-age does not
+	 * affect the document.
 	 * @return the JSON text, matching the UTF-8 document served by GET
 	 * @since 1.0.0
 	 */
@@ -188,7 +190,7 @@ public final class JwksPublisher {
 		boolean unchanged = ifNoneMatch != null && matches(ifNoneMatch);
 		Map<String, List<String>> headers = new LinkedHashMap<>();
 		headers.put("Content-Type", List.of("application/jwk-set+json"));
-		headers.put("Cache-Control", List.of("public, max-age=" + this.cacheLifetime.toSeconds() + ", must-revalidate"));
+		headers.put("Cache-Control", List.of("public, max-age=" + this.httpCacheMaxAge.toSeconds() + ", must-revalidate"));
 		headers.put("ETag", List.of(this.entityTag));
 		headers.put("Referrer-Policy", List.of("no-referrer"));
 		if (!unchanged)
@@ -267,7 +269,7 @@ public final class JwksPublisher {
 	@CheckReturnValue
 	public static final class Builder {
 		private final @NonNull List<@NonNull PublishedJwk> keys;
-		private @NonNull Duration cacheLifetime = DEFAULT_CACHE_LIFETIME;
+		private @NonNull Duration httpCacheMaxAge = DEFAULT_HTTP_CACHE_MAX_AGE;
 
 		private Builder(@NonNull List<@NonNull PublishedJwk> keys) {
 			requireNonNull(keys);
@@ -277,19 +279,21 @@ public final class JwksPublisher {
 		}
 
 		/**
-		 * Replaces the freshness lifetime. It must be zero through 24 hours inclusive, expressed in whole seconds.
-		 * @param cacheLifetime the lifetime, or null to restore 60 seconds
+		 * Replaces the max-age advertised in outgoing HTTP Cache-Control headers. It must be zero through 24 hours
+		 * inclusive, expressed in whole seconds. This setting does not expire or reload the immutable key snapshot,
+		 * and does not affect {@link JwksPublisher#toJson()} or {@link JwksPublisher#toJsonObject()}.
+		 * @param httpCacheMaxAge the HTTP cache max-age, or null to restore 60 seconds
 		 * @return this builder
-		 * @throws IllegalArgumentException if the lifetime is negative, fractional or over 24 hours
+		 * @throws IllegalArgumentException if the max-age is negative, fractional or over 24 hours
 		 * @since 1.0.0
 		 */
 		@CanIgnoreReturnValue
-		public @NonNull Builder cacheLifetime(@Nullable Duration cacheLifetime) {
-			Duration value = cacheLifetime == null ? DEFAULT_CACHE_LIFETIME : cacheLifetime;
+		public @NonNull Builder httpCacheMaxAge(@Nullable Duration httpCacheMaxAge) {
+			Duration value = httpCacheMaxAge == null ? DEFAULT_HTTP_CACHE_MAX_AGE : httpCacheMaxAge;
 			if (value.isNegative() || !value.equals(value.truncatedTo(ChronoUnit.SECONDS))
-					|| value.compareTo(MAXIMUM_CACHE_LIFETIME) > 0)
-				throw new IllegalArgumentException("The JWKS cache lifetime must be whole seconds from zero through 24 hours.");
-			this.cacheLifetime = value;
+					|| value.compareTo(MAXIMUM_HTTP_CACHE_MAX_AGE) > 0)
+				throw new IllegalArgumentException("The JWKS HTTP cache max-age must be whole seconds from zero through 24 hours.");
+			this.httpCacheMaxAge = value;
 			return this;
 		}
 

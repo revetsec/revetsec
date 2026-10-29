@@ -59,7 +59,7 @@ import static org.junit.jupiter.api.Assertions.*;
 /** Profile-only providers with fresh SAN-correct TLS and no global trust changes. */
 final class ResourceProviderFixturesIT implements AutoCloseable {
 	static final String NODE_IMAGE = System.getProperty("revetsec.nodeProviderImage", "revetsec-interop/node-oidc-provider:local");
-	static final String KEYCLOAK_IMAGE = "quay.io/keycloak/keycloak:26.7.4@sha256:82a77884f3af238beab1e7afd63b5f530e1b5c0590bd7aa60b40a40463e29b2c";
+	static final String KEYCLOAK_IMAGE = "quay.io/keycloak/keycloak:26.8.1@sha256:a78d6b79572168cb25886b80a8b5b8d4ed4390743e3eecb810538683e209dd6b";
 	static final String RESOURCE = "https://resource.example.test/mcp";
 	static final String INTROSPECTION_RESOURCE = "https://resource.example.test/introspection";
 	static final URI CALLBACK = URI.create("http://localhost:8080/callback");

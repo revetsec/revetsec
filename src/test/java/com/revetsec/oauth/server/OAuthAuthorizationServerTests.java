@@ -397,7 +397,7 @@ final class OAuthAuthorizationServerTests {
   assertSame(b,b.clockSkew(null));
   assertSame(b,b.totalDeadline(null));
   assertSame(b,b.requestTimeout(null));
-  assertSame(b,b.publicMetadataFreshness(null));
+  assertSame(b,b.publicMetadataHttpCacheMaxAge(null));
   assertSame(b,b.maximumRequestBodyBytes(null));
   assertSame(b,b.maximumRawQueryLength(null));
   assertSame(b,b.maximumHeaderBytes(null));
@@ -550,7 +550,7 @@ final class OAuthAuthorizationServerTests {
   assertThrows(RuntimeException.class,()->OidcTransactionAccess.get().validateAccessToken(validator,bearer(compact),Deadline.fromNow(Duration.ZERO)));
  }
  @TestFactory @NonNull Stream<@NonNull DynamicTest> eachPublicNumericSetterChecksItsRegistryBounds() {
-  return Stream.of("authorizationInteractionLifetime","authorizationCodeLifetime","accessTokenLifetime","refreshTokenIdleLifetime","refreshTokenAbsoluteLifetime","clockSkew","totalDeadline","requestTimeout","publicMetadataFreshness","maximumRequestBodyBytes","maximumRawQueryLength","maximumHeaderBytes","maximumResponseBodyBytes","maximumStoreRecordBytes","maximumStoreCommitAttempts","maximumResources","maximumRedirectUris","maximumScopesPerResource","maximumScopeLength","maximumStateLength","maximumClientIdLength","maximumSubjectLength").map(name->test(name,()->{
+  return Stream.of("authorizationInteractionLifetime","authorizationCodeLifetime","accessTokenLifetime","refreshTokenIdleLifetime","refreshTokenAbsoluteLifetime","clockSkew","totalDeadline","requestTimeout","publicMetadataHttpCacheMaxAge","maximumRequestBodyBytes","maximumRawQueryLength","maximumHeaderBytes","maximumResponseBodyBytes","maximumStoreRecordBytes","maximumStoreCommitAttempts","maximumResources","maximumRedirectUris","maximumScopesPerResource","maximumScopeLength","maximumStateLength","maximumClientIdLength","maximumSubjectLength").map(name->test(name,()->{
    var f=new OAuthAuthorizationServerTests();var b=f.builder();boolean duration=!name.startsWith("maximum");Object value=duration?Duration.ofDays(366):Integer.MAX_VALUE;
    var method=OAuthAuthorizationServer.Builder.class.getMethod(name,duration?Duration.class:Integer.class);assertSame(b,method.invoke(b,value));assertThrows(IllegalArgumentException.class,b::build);
    assertSame(b,method.invoke(b,new Object[]{null}));assertNotNull(b.build());

@@ -35,7 +35,7 @@ name: ClusterFuzzLite batch fuzzing
 # the same for each of them. KEEP_UNAFFECTED_FUZZ_TARGETS is 'true' where the action defaults to
 # 'false': no workflow here produces the coverage report that target selection needs, so every target
 # was kept anyway, and the build step no longer reads a coverage artifact. The digests were resolved
-# on 2026-09-23 with `docker buildx imagetools inspect`. Do not rely on Dependabot for docker://
+# on 2026-10-28 with `docker buildx imagetools inspect` (eligible images created by 2026-10-21). Do not rely on Dependabot for docker://
 # steps: move the digests by hand, in cflite_pr.yml and cflite_cron.yml too, and together with the
 # base-builder-jvm digest in .clusterfuzzlite/Dockerfile.
 #
@@ -137,7 +137,7 @@ jobs:
       - name: Build fuzzers (${{ matrix.sanitizer }})
         id: build
         if: steps.storage.outputs.configured == 'true'
-        uses: docker://gcr.io/oss-fuzz-base/clusterfuzzlite-build-fuzzers:v1@sha256:fde96247c3488104b96822156a6e107d58487140115247a34e1f967c23df5604
+        uses: docker://gcr.io/oss-fuzz-base/clusterfuzzlite-build-fuzzers:v1@sha256:06bc64e8f7e98d7f974d5650486331a55667152ccb67b887632abc7cf9c91889
         env:
           LANGUAGE: jvm
           SANITIZER: ${{ matrix.sanitizer }}
@@ -152,7 +152,7 @@ jobs:
       - name: Run fuzzers (${{ matrix.sanitizer }})
         id: run
         if: steps.storage.outputs.configured == 'true'
-        uses: docker://gcr.io/oss-fuzz-base/clusterfuzzlite-run-fuzzers:v1@sha256:4c1febe9ddec42ff005c6115f7769608d1beff57e96ae365d5c4fea1013926dc
+        uses: docker://gcr.io/oss-fuzz-base/clusterfuzzlite-run-fuzzers:v1@sha256:a0dd50326eb0dc912362a441304799d2fe3afff5442a718b9371715adef6d25d
         env:
           LANGUAGE: jvm
           SANITIZER: ${{ matrix.sanitizer }}

@@ -50,7 +50,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up Corretto ${{ matrix.jdk }}
-        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with:
           distribution: corretto
           java-version: ${{ matrix.jdk }}
@@ -72,7 +72,7 @@ jobs:
 
       - name: Upload test reports
         if: failure()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: test-reports-jdk-${{ matrix.jdk }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: target/surefire-reports
@@ -102,7 +102,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up Corretto 21
-        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with:
           distribution: corretto
           java-version: '21'
@@ -135,7 +135,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up Corretto 21
-        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with:
           distribution: corretto
           java-version: '21'
@@ -156,7 +156,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up Corretto 21
-        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with:
           distribution: corretto
           java-version: '21'
@@ -187,7 +187,7 @@ jobs:
 
       # No Maven cache: the isolated repository must hold only what this job resolves and installs.
       - name: Set up Corretto ${{ matrix.jdk }}
-        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with:
           distribution: corretto
           java-version: ${{ matrix.jdk }}
@@ -206,8 +206,8 @@ jobs:
       - name: Download the pinned Gradle distribution
         run: >-
           curl --proto '=https' --tlsv1.2 --fail --location --silent --show-error --retry 3
-          --output "${RUNNER_TEMP}/gradle-9.8.0-bin.zip"
-          https://services.gradle.org/distributions/gradle-9.8.0-bin.zip
+          --output "${RUNNER_TEMP}/gradle-9.8.2-bin.zip"
+          https://services.gradle.org/distributions/gradle-9.8.2-bin.zip
 
       - name: Install core into an isolated local repository
         run: >-
@@ -221,12 +221,12 @@ jobs:
           python3 verification/packaged-consumer/verify-packaged-consumer.py
           --repository "${RUNNER_TEMP}/consumer-repository"
           --java-home "${JAVA_HOME}"
-          --gradle-distribution "${RUNNER_TEMP}/gradle-9.8.0-bin.zip"
+          --gradle-distribution "${RUNNER_TEMP}/gradle-9.8.2-bin.zip"
           --output "${RUNNER_TEMP}/packaged-consumer-result"
 
       - name: Upload packaged-consumer evidence
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: packaged-consumer-jdk-${{ matrix.jdk }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/packaged-consumer-result
@@ -247,7 +247,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up Corretto 21
-        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with:
           distribution: corretto
           java-version: '21'
@@ -325,7 +325,7 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
         with:
-          driver-opts: image=moby/buildkit:v0.32.2@sha256:28a898719c18a33f4e8000685287fa36fd0dd9560c6440227d3a732d79bb41d8
+          driver-opts: image=moby/buildkit:v0.34.1@sha256:99368f3e46177c6405b9740e4461d91cee004128daeecca78d4ceac50ec1da5c
 
       - name: Build image (load only, never pushed)
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
@@ -358,7 +358,7 @@ jobs:
 
       - name: Upload selftest evidence
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: scripted-idp-selftest-${{ matrix.runner }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
@@ -387,7 +387,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up ${{ matrix.name }}
-        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with:
           distribution: ${{ matrix.distribution }}
           java-version: ${{ matrix.jdk }}
@@ -415,7 +415,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up OpenJDK ${{ matrix.jdk }}
-        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with:
           distribution: oracle-openjdk
           java-version: ${{ matrix.jdk }}
@@ -447,7 +447,7 @@ jobs:
           "${RUNNER_TEMP}/javadoc-java-distribution.txt"
 
       - name: Set up Corretto 17
-        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with:
           distribution: corretto
           java-version: '17'
@@ -500,7 +500,7 @@ jobs:
           "$RUNNER_TEMP/amazon-corretto-21.0.11.10.1-linux-x64.tar.gz"
 
       - name: Set up Corretto 21.0.11 for pinned Soklet artifact
-        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with:
           distribution: jdkfile
           java-version: '21.0.11'
@@ -513,7 +513,7 @@ jobs:
           echo "56e37d0e8ef781822de1618595f43366df00bb29e7b486cdc5901623b83845a9  target/soklet-4.0.0.jar" | sha256sum --check
 
       - name: Set up Corretto
-        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with:
           distribution: corretto
           java-version: ${{ matrix.java }}
@@ -539,7 +539,7 @@ jobs:
 
       - name: Upload example evidence
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: examples-${{ matrix.java }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
@@ -566,7 +566,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up Corretto
-        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with:
           distribution: corretto
           java-version: ${{ matrix.java }}
@@ -579,7 +579,7 @@ jobs:
 
       - name: Upload example evidence
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: rsa-oidc-examples-${{ matrix.java }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
@@ -602,7 +602,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up Corretto 17
-        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with:
           distribution: corretto
           java-version: '17'
@@ -618,9 +618,9 @@ jobs:
           mvn -B -ntp org.apache.maven.plugins:maven-dependency-plugin:3.11.0:get \
             -Dartifact=com.pyranid:pyranid:4.7.0 -Dtransitive=false
           mvn -B -ntp org.apache.maven.plugins:maven-dependency-plugin:3.11.0:get \
-            -Dartifact=org.postgresql:postgresql:42.7.13 -Dtransitive=false
+            -Dartifact=org.postgresql:postgresql:42.7.14 -Dtransitive=false
           test -f "$HOME/.m2/repository/com/pyranid/pyranid/4.7.0/pyranid-4.7.0.jar"
-          test -f "$HOME/.m2/repository/org/postgresql/postgresql/42.7.13/postgresql-42.7.13.jar"
+          test -f "$HOME/.m2/repository/org/postgresql/postgresql/42.7.14/postgresql-42.7.14.jar"
           test -f "$HOME/.m2/repository/org/jspecify/jspecify/1.0.1/jspecify-1.0.1.jar"
           test -f "$HOME/.m2/repository/com/google/code/findbugs/jsr305/3.0.2/jsr305-3.0.2.jar"
 
@@ -633,14 +633,14 @@ jobs:
             --java-home "$JAVA_HOME" \
             --core-jar target/revetsec-1.0.0-SNAPSHOT.jar \
             --pyranid-jar "$HOME/.m2/repository/com/pyranid/pyranid/4.7.0/pyranid-4.7.0.jar" \
-            --driver-jar "$HOME/.m2/repository/org/postgresql/postgresql/42.7.13/postgresql-42.7.13.jar" \
+            --driver-jar "$HOME/.m2/repository/org/postgresql/postgresql/42.7.14/postgresql-42.7.14.jar" \
             --jspecify-jar "$HOME/.m2/repository/org/jspecify/jspecify/1.0.1/jspecify-1.0.1.jar" \
             --jsr305-jar "$HOME/.m2/repository/com/google/code/findbugs/jsr305/3.0.2/jsr305-3.0.2.jar" \
             --output "$RUNNER_TEMP/revetsec-totp-postgresql"
 
       - name: Upload fixture evidence
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: totp-postgresql-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/revetsec-totp-postgresql
@@ -664,7 +664,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up Corretto 17
-        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with:
           distribution: corretto
           java-version: '17'
@@ -673,7 +673,7 @@ jobs:
       # ResourceProviderFixturesIT deliberately refuses test-time pulls. Prepare the
       # same digest used by both Keycloak fixtures before Failsafe can select either.
       - name: Pull the pinned Keycloak integration fixture
-        run: docker pull quay.io/keycloak/keycloak:26.7.4@sha256:82a77884f3af238beab1e7afd63b5f530e1b5c0590bd7aa60b40a40463e29b2c
+        run: docker pull quay.io/keycloak/keycloak:26.8.1@sha256:a78d6b79572168cb25886b80a8b5b8d4ed4390743e3eecb810538683e209dd6b
 
       - name: Build the locked local node-oidc-provider fixture
         run: docker build --pull=false -t revetsec-interop/node-oidc-provider:local interop/node-oidc-provider
@@ -752,7 +752,7 @@ jobs:
 
       - name: Upload integration reports
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: integration-reports-${{ github.run_id }}-${{ github.run_attempt }}
           path: target/failsafe-reports
@@ -777,7 +777,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up Corretto
-        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with:
           distribution: corretto
           java-version: ${{ matrix.java }}
@@ -794,7 +794,7 @@ jobs:
 
       - name: Upload JOSE and JSON differential reports
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: rc1-differential-jdk-${{ matrix.java }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: differential/target/surefire-reports
@@ -814,7 +814,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up Corretto 17
-        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with:
           distribution: corretto
           java-version: '17'
@@ -920,7 +920,7 @@ jobs:
 
       - name: Upload SAML differential reports
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: saml-differential-reports-${{ github.run_id }}-${{ github.run_attempt }}
           path: differential/target/surefire-reports
@@ -938,7 +938,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Set up Corretto 17
-        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with:
           distribution: corretto
           java-version: '17'
@@ -949,7 +949,7 @@ jobs:
         run: python3 conformance/run.py --pull-images --repository-tail "$HOME/.m2/repository" --output "$RUNNER_TEMP/oidf-evidence"
       - name: Upload OIDF evidence
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: oidf-rp-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/oidf-evidence

@@ -30,8 +30,8 @@ import static java.util.Objects.requireNonNull;
 /**
  * Immutable application declaration of active, published and retained public keys. The active projection is
  * always included. Identifiers must never be reused for different material. A new generation has a strictly
- * later publication instant; keep its published keys available for the configured metadata freshness before
- * signing. Retirement boundaries cannot precede outstanding token expiries plus skew, deadline and cache margins.
+ * later publication instant; keep its published keys available for the configured public metadata HTTP cache max-age
+ * before signing. Retirement boundaries cannot precede outstanding token expiries plus skew, deadline and cache margins.
  * Applications persist these obligations across nodes, restarts and restores; an initial snapshot is a trusted
  * declaration, not evidence of external distribution. At most 100 keys and 128 KiB of aggregate configuration
  * are accepted; response limits apply separately. No provider lookup or signing occurs during construction.

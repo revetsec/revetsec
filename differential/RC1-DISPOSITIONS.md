@@ -6,6 +6,10 @@ The Maven pins are test-only. RSA/EC verification shares JCA providers; Nimbus's
 Ed25519 path uses Tink. The original protected header and signed input are never
 rewritten to make an oracle accept a different algorithm.
 
+These original observations are retained below. The
+[2026-10-28 dependency refresh](#2026-10-28-dependency-refresh) records the current
+pins and the two changed JSON corpus verdicts separately.
+
 | Input or capability | Revetsec | Nimbus 10.10 | jose4j 0.9.7 | Disposition |
 |---|---|---|---|---|
 | RS256/384/512, PS256/384/512, ES256/384/512, EdDSA positive fixture | Accept | Accept | Accept | Same checked subject, issuer, audiences and expiry. |
@@ -53,3 +57,24 @@ Primary pin sources checked on 2026-10-14: [Nimbus release metadata](https://rep
 [Tink 1.23.0 release](https://github.com/tink-crypto/tink-java/releases/tag/v1.23.0).
 Nimbus's published POM selects optional Tink 1.23.0; the dedicated dependency
 makes that verifier available without adding it to core.
+
+## 2026-10-28 dependency refresh
+
+The current standalone comparator pins Jackson-core 2.22.4 and Tink 1.24.0;
+Nimbus 10.10 and jose4j 0.9.7 are unchanged. All 930 JOSE and 1,310 JSON cases
+passed on JDK 17 and 21 with zero failures, errors or skips. The complete-case
+report verifier passed on both JDKs.
+
+Jackson 2.22.4 rejects two corpus inputs that Jackson 2.18.8 accepted:
+
+| Input | Current Revetsec | Current Jackson | Disposition |
+|---|---|---|---|
+| `i_object_key_lone_2nd_surrogate.json` | Reject | Reject | An escaped unpaired surrogate in a member name is now rejected by both parsers. |
+| `i_string_UTF8_surrogate_U+D800.json` | Reject | Reject | The UTF-8 byte sequence encoding a surrogate is now rejected by both parsers. |
+
+The current TSV therefore has 300 shared verdicts and 18 differences: three
+bounded-exponent inputs, nine Unicode-scalar model inputs, five strict-UTF-8
+inputs and the BOM input. Explicit high- and low-surrogate member-name controls
+also reject in both parsers. Jackson still exposes escaped unpaired UTF-16 units
+in string values; that model difference remains asserted. No core parser policy
+or accepted typed tree changed to obtain agreement.

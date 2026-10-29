@@ -70,8 +70,8 @@ than `src/opt.c`. The checked-in `src/test/resources/vectors/argon2-container-co
 the original corpus exactly. The input source's `ref.c` and `core.c` hashes matched the manifest inside
 the container. The container was pinned by digest and invoked with `--network none`.
 
-An independent Java differential test uses test-scope Bouncy Castle `bcprov-jdk18on:1.84` (JAR SHA-256
-`64d6c5a6121fcd927152dd182cbed39afe0fda641a970d9bcc0c9cb1858b2731`) across parameter combinations
+An independent Java differential test uses test-scope Bouncy Castle `bcprov-jdk18on:1.86` (JAR SHA-256
+`2af190b300cbb0b35e248ccf5f4a06b6072030aeb3da7a98ec73abe5b4cb371f`) across parameter combinations
 including secret and associated data. It is not a runtime dependency. BLAKE2b is separately checked against
 RFC 7693/Python `hashlib.blake2b` digests at empty, short, exact-block and multi-block boundaries.
 `Argon2idVectorsTests.matchesPinnedReferenceCVectorWithActualThirtyTwoBytePepper` also checks a known-answer

@@ -22,5 +22,5 @@
 # image build if the two libxml2 copies differ, down to the patch level.
 xmlsec==1.3.17
 lxml==6.0.2
-signxml==5.1.0
-cryptography==50.0.1
+signxml==5.2.0
+cryptography==50.0.2

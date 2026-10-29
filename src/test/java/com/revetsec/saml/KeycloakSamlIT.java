@@ -56,7 +56,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /** Real-product SAML POST response from the pinned, local Keycloak test realm. */
 final class KeycloakSamlIT {
     private static final @NonNull String IMAGE =
-            "quay.io/keycloak/keycloak:26.7.4@sha256:82a77884f3af238beab1e7afd63b5f530e1b5c0590bd7aa60b40a40463e29b2c";
+            "quay.io/keycloak/keycloak:26.8.1@sha256:a78d6b79572168cb25886b80a8b5b8d4ed4390743e3eecb810538683e209dd6b";
     private static final @NonNull String ENTITY = "https://sp.test/KeycloakSamlIT";
     private static final @NonNull String POST_ENTITY = "https://sp.test/KeycloakSamlPostLogoutIT";
     private static final @NonNull URI ACS = URI.create("https://sp.test/acs");

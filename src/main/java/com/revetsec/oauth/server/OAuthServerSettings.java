@@ -32,7 +32,7 @@ final class OAuthServerSettings {
  final @NonNull Duration clockSkew;
  final @NonNull Duration totalDeadline;
  final @NonNull Duration requestTimeout;
- final @NonNull Duration publicMetadataFreshness;
+ final @NonNull Duration publicMetadataHttpCacheMaxAge;
  final int maximumRequestBodyBytes;
  final int maximumRawQueryLength;
  final int maximumHeaderBytes;
@@ -55,7 +55,7 @@ final class OAuthServerSettings {
   this.clockSkew = Limits.AS_CLOCK_SKEW.require(builder.clockSkew == null ? Limits.AS_CLOCK_SKEW.getDefaultDuration() : builder.clockSkew);
   this.totalDeadline = Limits.AS_TOTAL_DEADLINE.require(builder.totalDeadline == null ? Limits.AS_TOTAL_DEADLINE.getDefaultDuration() : builder.totalDeadline);
   this.requestTimeout = Limits.AS_REQUEST_TIMEOUT.require(builder.requestTimeout == null ? Limits.AS_REQUEST_TIMEOUT.getDefaultDuration() : builder.requestTimeout);
-  this.publicMetadataFreshness = Limits.AS_PUBLIC_METADATA_FRESHNESS.require(builder.publicMetadataFreshness == null ? Limits.AS_PUBLIC_METADATA_FRESHNESS.getDefaultDuration() : builder.publicMetadataFreshness);
+  this.publicMetadataHttpCacheMaxAge = Limits.AS_PUBLIC_METADATA_HTTP_CACHE_MAX_AGE.require(builder.publicMetadataHttpCacheMaxAge == null ? Limits.AS_PUBLIC_METADATA_HTTP_CACHE_MAX_AGE.getDefaultDuration() : builder.publicMetadataHttpCacheMaxAge);
   this.maximumRequestBodyBytes = Limits.AS_MAXIMUM_REQUEST_BODY_BYTES.require(builder.maximumRequestBodyBytes == null ? Limits.AS_MAXIMUM_REQUEST_BODY_BYTES.getDefaultIntValue() : builder.maximumRequestBodyBytes);
   this.maximumRawQueryLength = Limits.AS_MAXIMUM_RAW_QUERY_LENGTH.require(builder.maximumRawQueryLength == null ? Limits.AS_MAXIMUM_RAW_QUERY_LENGTH.getDefaultIntValue() : builder.maximumRawQueryLength);
   this.maximumHeaderBytes = Limits.AS_MAXIMUM_HEADER_BYTES.require(builder.maximumHeaderBytes == null ? Limits.AS_MAXIMUM_HEADER_BYTES.getDefaultIntValue() : builder.maximumHeaderBytes);
@@ -77,7 +77,7 @@ final class OAuthServerSettings {
     || this.maximumStoreRecordBytes > Limits.STATE_SEALER_MAXIMUM_SEALED_LENGTH.require(sealerMaximumLength))
    throw OAuthStoreFormat.invalid();
   // All rows are bounded; explicit exact addition keeps retention overflow a build failure.
-  this.retentionExtension = Duration.ofNanos(this.accessTokenLifetime.plus(this.clockSkew).plus(this.totalDeadline).plus(this.publicMetadataFreshness).toNanos());
+  this.retentionExtension = Duration.ofNanos(this.accessTokenLifetime.plus(this.clockSkew).plus(this.totalDeadline).plus(this.publicMetadataHttpCacheMaxAge).toNanos());
  }
  static @NonNull Builder builder() { return new Builder(); }
  @NonNull OAuthServerIngressLimits ingress() {
@@ -95,7 +95,7 @@ final class OAuthServerSettings {
   private @Nullable Duration clockSkew;
   private @Nullable Duration totalDeadline;
   private @Nullable Duration requestTimeout;
-  private @Nullable Duration publicMetadataFreshness;
+  private @Nullable Duration publicMetadataHttpCacheMaxAge;
   private @Nullable Integer maximumRequestBodyBytes;
   private @Nullable Integer maximumRawQueryLength;
   private @Nullable Integer maximumHeaderBytes;
@@ -118,7 +118,7 @@ final class OAuthServerSettings {
   @NonNull Builder clockSkew(@Nullable Duration value) { this.clockSkew = value; return this; }
   @NonNull Builder totalDeadline(@Nullable Duration value) { this.totalDeadline = value; return this; }
   @NonNull Builder requestTimeout(@Nullable Duration value) { this.requestTimeout = value; return this; }
-  @NonNull Builder publicMetadataFreshness(@Nullable Duration value) { this.publicMetadataFreshness = value; return this; }
+  @NonNull Builder publicMetadataHttpCacheMaxAge(@Nullable Duration value) { this.publicMetadataHttpCacheMaxAge = value; return this; }
   @NonNull Builder maximumRequestBodyBytes(@Nullable Integer value) { this.maximumRequestBodyBytes = value; return this; }
   @NonNull Builder maximumRawQueryLength(@Nullable Integer value) { this.maximumRawQueryLength = value; return this; }
   @NonNull Builder maximumHeaderBytes(@Nullable Integer value) { this.maximumHeaderBytes = value; return this; }

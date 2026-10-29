@@ -28,7 +28,7 @@ PublishedJwk key = PublishedJwk.withPublicKey(chain.get(0).getPublicKey())
     .build();
 
 JwksPublisher publisher = JwksPublisher.withKeys(List.of(key))
-    .cacheLifetime(Duration.ofHours(1))
+    .httpCacheMaxAge(Duration.ofHours(1))
     .build();
 
 String publicJson = publisher.toJson();
@@ -84,7 +84,9 @@ Emit the prepared status, headers and bytes together, without JSON serialization
 - A matching `If-None-Match` returns 304 without a body. Weak tags, lists, and the wildcard are supported. Malformed conditional syntax is ignored; a combined conditional value over 8192 characters receives a non-cacheable 400.
 - Other methods receive 405 with `Allow: GET, HEAD` and `Cache-Control: no-store`.
 
-Freshness defaults to 60 seconds. `cacheLifetime` accepts whole seconds from zero to 24 hours; `null` restores the default. A set contains at most 100 keys and at most 256 KiB of UTF-8 JSON. Duplicate configured key IDs are rejected. An empty set and keys without IDs are allowed.
+The outgoing HTTP cache max-age defaults to 60 seconds. `httpCacheMaxAge(...)` accepts whole seconds from zero to 24 hours; `null` restores the default, and `getHttpCacheMaxAge()` returns the configured value. This controls the `max-age` directive sent by `responseFor(...)` and the adapters. It does not expire or reload keys and has no effect on `toJson()` or `toJsonObject()`. Applications replace the immutable publisher when their published keys change.
+
+A set contains at most 100 keys and at most 256 KiB of UTF-8 JSON. Duplicate configured key IDs are rejected. An empty set and keys without IDs are allowed.
 
 ## Soklet and Servlet routes
 
@@ -109,4 +111,4 @@ See the adapter-specific examples in [Soklet](https://github.com/revetsec/revets
 
 ## Rotation
 
-Construct a replacement publisher containing the new and retained public verification keys, then replace the application's publisher reference atomically. Use unique key IDs and retain old keys for all outstanding signatures plus the applicable cache lifetime. Replacing a snapshot changes the ETag when the published JSON changes; the publisher does not generate or rotate private keys.
+Construct a replacement publisher containing the new and retained public verification keys, then replace the application's publisher reference atomically. Use unique key IDs and retain old keys for all outstanding signatures plus the applicable downstream HTTP caching period. Replacing a snapshot changes the ETag when the published JSON changes; the publisher does not generate or rotate private keys.

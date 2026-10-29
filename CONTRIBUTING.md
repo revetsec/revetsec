@@ -49,7 +49,7 @@ CI runs these gating checks on every pull request (the scripted-IdP image only w
 | Fuzz corpus replay: every fuzz target's seeds, in Jazzer's regression mode | 21 | `mvn -B -ntp -f fuzz/pom.xml clean verify` |
 | Javadoc | 17 for Maven, 26 for `javadoc` | `REVETSEC_JAVADOC_HOME=/absolute/path/to/jdk-26 mvn -B -ntp -Dmaven.javadoc.failOnWarnings=true -DskipTests clean verify` |
 | Packaged consumer: Maven | 17, 27 | the commands under [Packaged consumer](#packaged-consumer) |
-| Packaged consumer: Gradle 9.8.0 | 17, 27 | the same commands; one run of the script checks both consumers |
+| Packaged consumer: Gradle 9.8.2 | 17, 27 | the same commands; one run of the script checks both consumers |
 | Scripted IdP image, only when `interop/scripted-idp/` or `ci.yml` changes | none (Docker, x86-64 and arm64) | the commands under [Scripted IdP image](#scripted-idp-image) |
 
 Milestone exits also run the Python guards under `verification`, `verification/packaged-consumer` and `conformance`, all required replay modes, and their prescribed platform/repeat legs. OIDF requires the exact documented pass/skip dispositions and rejects unexpected REVIEW/warning statuses. Its fresh loopback-only provider runs need ports 8443/8444 available and pinned local images; omit `--pull-images`.
@@ -78,16 +78,16 @@ The build's contract tests enforce the conventions in [NAMING_CONVENTIONS.md](NA
 
 This installs core into an empty local repository, then checks the installed POM and JAR, builds two separate consumer projects against them, one with Maven and one with Gradle, and runs `jdeps`. Each consumer must resolve exactly the Revetsec JAR from that repository, with no dependency of its own, and must compile and run a program that calls the public API. [verification/README.md](verification/README.md) describes each check and the script's options.
 
-The Gradle consumer builds with Gradle 9.8.0, which runs on every JDK from 17 to 27. The script checks the distribution's pinned SHA-256 before it extracts anything, so download the archive from the pinned URL:
+The Gradle consumer builds with Gradle 9.8.2, which runs on every JDK from 17 to 27. The script checks the distribution's pinned SHA-256 before it extracts anything, so download the archive from the pinned URL:
 
 ```shell
 $ export PYTHONDONTWRITEBYTECODE=1
 $ python3 -m unittest discover -s verification -p 'test_*.py'
 $ python3 -m unittest discover -s verification/packaged-consumer -p 'test_*.py'
 $ work=$(mktemp -d)
-$ curl --proto '=https' --tlsv1.2 --fail --location --silent --show-error --output "$work/gradle-9.8.0-bin.zip" https://services.gradle.org/distributions/gradle-9.8.0-bin.zip
+$ curl --proto '=https' --tlsv1.2 --fail --location --silent --show-error --output "$work/gradle-9.8.2-bin.zip" https://services.gradle.org/distributions/gradle-9.8.2-bin.zip
 $ mvn -B -ntp -Dmaven.repo.local="$work/consumer-repository" -Dmaven.javadoc.skip=true -DskipTests clean install
-$ python3 verification/packaged-consumer/verify-packaged-consumer.py --repository "$work/consumer-repository" --java-home "$JAVA_HOME" --gradle-distribution "$work/gradle-9.8.0-bin.zip" --output "$work/packaged-consumer-result"
+$ python3 verification/packaged-consumer/verify-packaged-consumer.py --repository "$work/consumer-repository" --java-home "$JAVA_HOME" --gradle-distribution "$work/gradle-9.8.2-bin.zip" --output "$work/packaged-consumer-result"
 ```
 
 ##### Scripted IdP Image

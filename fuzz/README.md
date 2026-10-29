@@ -812,7 +812,7 @@ The build integration lives in `.clusterfuzzlite/`:
 
 - `project.yaml`: `language: jvm`. JVM projects support only the `address` and `undefined`
   sanitizers, and the workflows use `address` alone, because Revetsec has no native code.
-- `Dockerfile`: `gcr.io/oss-fuzz-base/base-builder-jvm:v1`, pinned by digest, plus Maven 3.9.16
+- `Dockerfile`: `gcr.io/oss-fuzz-base/base-builder-jvm:v1`, pinned by digest, plus Maven 3.10.0
   from Maven Central with its SHA-512 checked. `Dockerfile.dockerignore` keeps build output out of
   the context.
 - `build.sh`: compiles this module with Maven (`test-compile`), then asks Jazzer to list the
@@ -836,8 +836,8 @@ The build integration lives in `.clusterfuzzlite/`:
   supplies them through the zip, and its build check needs a `-runs=4` start-up run to execute
   exactly four inputs.
 
-**JDK.** On 2026-09-23 both `base-builder-jvm` (digest `sha256:5eaa9b0d…`) and the runner image
-`clusterfuzzlite-run-fuzzers:v1` (digest `sha256:4c1febe9…`) shipped Temurin 17.0.16+8 as
+**JDK.** On 2026-10-28 both the refreshed `base-builder-jvm` (digest `sha256:bd13a763…`) and the runner image
+`clusterfuzzlite-run-fuzzers:v1` (digest `sha256:a0dd5032…`) shipped Temurin 17.0.16+8 as
 `$JAVA_HOME`. The ClusterFuzzLite docs still say OpenJDK 15, which is stale. No extra JDK is
 installed; `build.sh` fails if the image's JDK is older than 17.
 
@@ -848,6 +848,16 @@ environment that the v1 actions' `action.yml` passes (see the header of `cflite_
 Dependabot watches the `base-builder-jvm` digest in `.clusterfuzzlite/Dockerfile`, but not the
 `docker://` step digests: move those by hand, in all three workflows, in the same PR as the
 `base-builder-jvm` bump.
+
+The 2026-10-28 refresh selects the newest eligible builder and action images
+outside the seven-day cooldown: builder `bd13a763…` was created on October 12,
+and build/run action images `06bc64e8…` / `a0dd5032…` on October 21. The current
+floating action tags had been rebuilt on October 28 and were not selected.
+Maven 3.10.0 is pinned with the SHA-512 verified against Maven Central; Maven 4
+release candidates are not used. The refreshed source image built successfully,
+`compile` produced all 69 wrapper/seed-ZIP pairs, and a generated StateSealer
+wrapper completed a four-input smoke run in the matching runner image. Earlier
+campaign sections below retain their original image and Maven versions.
 
 ### Reproducing the ClusterFuzzLite build locally
 

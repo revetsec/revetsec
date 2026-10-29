@@ -28,23 +28,26 @@ import java.util.List;
 import java.util.Set;
 import static java.util.Objects.requireNonNull;
 
-/** RFC 8414 trusted configuration. No Host/Forwarded inference, OP, DCR, ID token or unimplemented CIMD advertisement. */
+/**
+ * RFC 8414 trusted configuration with one outgoing HTTP cache max-age for metadata and JWKS responses.
+ * No Host/Forwarded inference, OP, DCR, ID token or unimplemented CIMD advertisement.
+ */
 final class OAuthIssuerMetadata {
  private final @NonNull URI wellKnown;
  private final @NonNull JsonObject metadata;
- private final @NonNull Duration freshness;
+ private final @NonNull Duration publicMetadataHttpCacheMaxAge;
  private final int bodyCap,headerCap;
  OAuthIssuerMetadata(@NonNull URI issuer,@NonNull URI authorization,@NonNull URI token,@NonNull URI jwks,
    @Nullable URI revocation,@Nullable URI introspection,boolean refresh,boolean insecureLoopback,
-   @NonNull Set<@NonNull String> scopes,@NonNull Duration freshness,int bodyCap,int headerCap) {
-  this(issuer,authorization,token,jwks,revocation,introspection,refresh,insecureLoopback,scopes,freshness,bodyCap,headerCap,false);
+   @NonNull Set<@NonNull String> scopes,@NonNull Duration publicMetadataHttpCacheMaxAge,int bodyCap,int headerCap) {
+  this(issuer,authorization,token,jwks,revocation,introspection,refresh,insecureLoopback,scopes,publicMetadataHttpCacheMaxAge,bodyCap,headerCap,false);
  }
  OAuthIssuerMetadata(@NonNull URI issuer,@NonNull URI authorization,@NonNull URI token,@NonNull URI jwks,
    @Nullable URI revocation,@Nullable URI introspection,boolean refresh,boolean insecureLoopback,
-   @NonNull Set<@NonNull String> scopes,@NonNull Duration freshness,int bodyCap,int headerCap,boolean cimd) {
+   @NonNull Set<@NonNull String> scopes,@NonNull Duration publicMetadataHttpCacheMaxAge,int bodyCap,int headerCap,boolean cimd) {
   endpoint(issuer,insecureLoopback);endpoint(authorization,insecureLoopback);endpoint(token,insecureLoopback);endpoint(jwks,insecureLoopback);
   if(issuer.getRawQuery()!=null || bodyCap<4096 || bodyCap>131072 || headerCap<1024 || headerCap>65536) throw OAuthStoreFormat.invalid();
-  this.freshness=OAuthGrantRetention.duration(freshness,Duration.ZERO,Duration.ofMinutes(5));this.bodyCap=bodyCap;this.headerCap=headerCap;
+  this.publicMetadataHttpCacheMaxAge=OAuthGrantRetention.duration(publicMetadataHttpCacheMaxAge,Duration.ZERO,Duration.ofMinutes(5));this.bodyCap=bodyCap;this.headerCap=headerCap;
   String path=issuer.getRawPath();if(path.endsWith("/")) path=path.substring(0,path.length()-1);
   this.wellKnown=URI.create(issuer.getScheme()+"://"+issuer.getRawAuthority()+"/.well-known/oauth-authorization-server"+path);
   JsonObject.Builder builder=JsonObject.builder().put("issuer",issuer.toString()).put("authorization_endpoint",authorization.toString())
@@ -77,14 +80,14 @@ final class OAuthIssuerMetadata {
  @NonNull URI wellKnownUri() { return this.wellKnown; }
  @NonNull OAuthPublicMetadataResponse metadata(@NonNull String method,@NonNull Deadline deadline) {
   OAuthServerClientAdmission.remaining(deadline);
-  OAuthPublicMetadataResponse response=OAuthPublicMetadataResponse.prepare(this.metadata,method,this.freshness,this.bodyCap,this.headerCap);
+  OAuthPublicMetadataResponse response=OAuthPublicMetadataResponse.prepare(this.metadata,method,this.publicMetadataHttpCacheMaxAge,this.bodyCap,this.headerCap);
   OAuthServerClientAdmission.remaining(deadline);return response;
  }
  @NonNull OAuthPublicMetadataResponse jwks(@NonNull String method,@NonNull OAuthIssuerKeyLifecycle keys,@NonNull Deadline deadline) {
   OAuthServerClientAdmission.remaining(deadline);
-  if(!method.equals("GET") && !method.equals("HEAD")) return OAuthPublicMetadataResponse.prepare(JsonObject.builder().build(),method,this.freshness,this.bodyCap,this.headerCap);
+  if(!method.equals("GET") && !method.equals("HEAD")) return OAuthPublicMetadataResponse.prepare(JsonObject.builder().build(),method,this.publicMetadataHttpCacheMaxAge,this.bodyCap,this.headerCap);
   OAuthIssuerKeySnapshot snapshot=keys.snapshot(deadline);
-  OAuthPublicMetadataResponse response=OAuthPublicMetadataResponse.prepare(OAuthIssuerPublicKeys.jwks(snapshot.getVerificationKeys()),method,this.freshness,this.bodyCap,this.headerCap);
+  OAuthPublicMetadataResponse response=OAuthPublicMetadataResponse.prepare(OAuthIssuerPublicKeys.jwks(snapshot.getVerificationKeys()),method,this.publicMetadataHttpCacheMaxAge,this.bodyCap,this.headerCap);
   OAuthServerClientAdmission.remaining(deadline);return response;
  }
  @Override public @NonNull String toString() { return "OAuthIssuerMetadata{<redacted>}"; }

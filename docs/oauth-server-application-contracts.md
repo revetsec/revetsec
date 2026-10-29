@@ -126,7 +126,7 @@ authentication of the common envelope alone cannot authorize a transition. Pendi
 ends at unused code expiry. The internal first-redemption transition atomically pins the maximum access lifetime and extend
 code/grant retention to H, alongside issued-jti and optional refresh facts. The checked calculator includes
 family absolute expiry (or first no-refresh token expiry), the pinned maximum access lifetime, skew, total
-deadline and public metadata freshness. Physical retention rounds up to whole seconds; credential validity
+deadline and public metadata HTTP cache max-age. Physical retention rounds up to whole seconds; credential validity
 rounds down. Overflow and an attempted increase of a pinned lifetime reject. The calculator alone confers no issuance authority. The internal redemption transition below consumes
 pending grants; the integrated refresh, key lifecycle and online-status paths enforce the descendant contracts below.
 
@@ -265,7 +265,7 @@ never reusing an identifier for different material, and overlap across nodes, re
 Construction performs no provider lookup or signing. Operations fetch a fresh snapshot on the caller thread
 under the original shrinking deadline. Provider faults, null, interruption and exhausted budgets fail closed;
 fatal VM errors propagate. A generation's facts remain immutable. Every new generation has a strictly later
-publication instant, and signing waits the configured public metadata freshness after publication. Delaying
+publication instant, and signing waits the configured public metadata HTTP cache max-age after publication. Delaying
 or cancelling a retirement is allowed; moving it earlier is rejected. A key without a retirement declaration
 cannot disappear from the next observed snapshot. Declared removal also waits through all locally reserved
 access expiries plus skew, deadline and metadata cache margins. Failed signing may conservatively reserve an
@@ -286,6 +286,13 @@ registration or custom grants. CIMD support is advertised only when enabled. JWK
 RS256 and verification use. GET/HEAD responses have copied bounded bytes, finite public max-age, must-revalidate
 and a representation ETag. Unsupported methods receive an empty no-store 405 with Allow: GET, HEAD. Conditional
 request handling remains application-owned; the engine prepares bounded route responses.
+
+The `OAuthAuthorizationServer.Builder.publicMetadataHttpCacheMaxAge(...)` setting supplies the HTTP
+`Cache-Control: max-age` value for both public metadata and JWKS responses. It defaults to 60 seconds,
+accepts durations from zero through five minutes inclusive, and resets to the default when passed null.
+Headers use whole seconds through `Duration.toSeconds()`; publication waits and retention calculations
+use the exact configured duration. This setting does not load or refresh keys. The application remains
+responsible for publishing the provider's declared key snapshot before its publication wait begins.
 
 The key contracts are public; lifecycle enforcement and metadata response helpers remain internal and are integrated into the public engine. Deterministic fixtures and a separate JCA signature oracle do not establish durable key distribution across arbitrary deployments. Applications retain publication, overlap and restore authority.
 

@@ -10,12 +10,12 @@ i_number_real_underflow.json	false	true	BOUNDED_EXPONENT
 i_number_too_big_neg_int.json	true	true	AGREE
 i_number_too_big_pos_int.json	true	true	AGREE
 i_number_very_big_negative_int.json	true	true	AGREE
-i_object_key_lone_2nd_surrogate.json	false	true	UNICODE_SCALAR_MODEL
+i_object_key_lone_2nd_surrogate.json	false	false	AGREE
 i_string_1st_surrogate_but_2nd_missing.json	false	true	UNICODE_SCALAR_MODEL
 i_string_1st_valid_surrogate_2nd_invalid.json	false	true	UNICODE_SCALAR_MODEL
 i_string_UTF-16LE_with_BOM.json	false	true	STRICT_UTF8_PROFILE
 i_string_UTF-8_invalid_sequence.json	false	false	AGREE
-i_string_UTF8_surrogate_U+D800.json	false	true	STRICT_UTF8_PROFILE
+i_string_UTF8_surrogate_U+D800.json	false	false	AGREE
 i_string_incomplete_surrogate_and_escape_valid.json	false	true	UNICODE_SCALAR_MODEL
 i_string_incomplete_surrogate_pair.json	false	true	UNICODE_SCALAR_MODEL
 i_string_incomplete_surrogates_escape_valid.json	false	true	UNICODE_SCALAR_MODEL
