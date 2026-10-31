@@ -19,6 +19,7 @@ import re
 import select
 import secrets
 import socket
+import struct
 import subprocess
 import tempfile
 import threading
@@ -58,6 +59,14 @@ def check(condition: bool, label: str) -> None:
     print(label + ": PASS", flush=True)
 
 
+def issuer_admission_lock(namespace: str) -> str:
+    identity = lambda value: base64.urlsafe_b64encode(hashlib.sha256(value.encode()).digest()).decode().rstrip("=")
+    physical=identity("issuer-physical/"+namespace).encode()
+    digest=hashlib.sha256(b"revetsec/pg-admission/v1\0"+struct.pack("!I",6)+b"ISSUER"+struct.pack("!I",len(physical))+physical).digest()
+    first,second=struct.unpack("!ii",digest[:8])
+    return "DO $$ BEGIN PERFORM pg_advisory_xact_lock("+str(first)+","+str(second)+"); END $$;\n"
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     for name in ("java-home", "core-jar", "pyranid-jar", "driver-jar", "jspecify-jar", "jsr305-jar"):
@@ -87,6 +96,8 @@ def main() -> None:
                    ROOT / "src/main/java/example/pending/PostgresqlPendingAuthorizationStore.java",
                    ROOT / "src/main/java/example/pending/PostgresqlClientMetadataCache.java",
                    ROOT / "src/main/java/example/pending/PostgresqlIssuerStore.java",
+                   *(ROOT / ("src/main/java/example/pending/IssuerPg"+n+".java") for n in ["Scope","Locks","Capacity","Transactions"]),
+                   ROOT / "src/test/java/example/pending/IssuerFixtureAuthority.java",
                    ROOT / "src/test/java/example/pending/PendingStoreProbe.java",
                    ROOT / "src/test/java/example/pending/ClientMetadataCacheProbe.java",
                    ROOT / "src/test/java/example/pending/IssuerStoreProbe.java",
@@ -154,9 +165,7 @@ def main() -> None:
                    "(namespace,observed_seconds,observed_nanos) VALUES ('fixture',0,0),('fixture_clock',0,0);\n"
                    "INSERT INTO cimd_cache_namespace(namespace,next_order) VALUES ('fixture_cache',0);\n")
             docker("exec", "-i", name, "psql", "-X", "-q", "-v", "ON_ERROR_STOP=1", "-U", "postgres",
-                   "-d", "pending_fixture", input_text="INSERT INTO issuer_store_namespace(namespace) "
-                   "VALUES ('fixture_issuer'),('fixture_issuer_unknown'),('fixture_issuer_fence'),"
-                   "('fixture_issuer_app');\n")
+                   "-d", "pending_fixture", input_text=__import__("run_issuer").provision(["fixture_issuer","fixture_issuer_unknown","fixture_issuer_fence","fixture_issuer_app"],4096))
             docker("exec", "-i", name, "psql", "-X", "-q", "-v", "ON_ERROR_STOP=1", "-U", "postgres",
                    "-d", "pending_fixture", input_text="INSERT INTO issuer_browser_namespace"
                    "(namespace,observed_seconds,observed_nanos) VALUES ('fixture_issuer_browser',0,0);\n")
@@ -170,6 +179,7 @@ def main() -> None:
                             REVETSEC_TEST_DB_USER="postgres", REVETSEC_TEST_DB_PASSWORD=password,
                             REVETSEC_TEST_OIDC_SECRET=oidc_secret,
                             REVETSEC_TEST_ISSUER_TIME=issuer_time,
+                            REVETSEC_TEST_ISSUER_AUTHORITY_NOW="2026-10-06T12:00:00Z",
                             REVETSEC_TEST_ISSUER_SECRET_DIR=str(issuer_secrets),
                             REVETSEC_TEST_ISSUER_HTTP_PORT=str(app_http_port),
                             REVETSEC_TEST_ISSUER_MCP_PORT=str(app_mcp_port))
@@ -789,12 +799,11 @@ def main() -> None:
                                       stderr=subprocess.PIPE, text=True, bufsize=1)
             try:
                 assert holder.stdin is not None
-                holder.stdin.write("BEGIN;\nSELECT 'READY' FROM issuer_store_namespace "
-                                   "WHERE namespace='fixture_issuer' FOR UPDATE;\n")
+                holder.stdin.write("BEGIN;\n"+issuer_admission_lock("fixture_issuer")+"SELECT 'READY';\n")
                 holder.stdin.flush()
                 check(holder.stdout is not None
                       and bool(select.select([holder.stdout], [], [], 5)[0])
-                      and holder.stdout.readline().strip() == "READY", "issuer-namespace-lock-held")
+                      and holder.stdout.readline().strip() == "READY", "issuer-exclusive-admission-held")
                 began = time.monotonic()
                 check(run_issuer("active-short-budget", first_token) == "STORE_UNAVAILABLE"
                       and time.monotonic() - began < 3,
@@ -824,13 +833,13 @@ def main() -> None:
                     holder.stdout.close()
                 if holder.stderr is not None:
                     holder.stderr.close()
-            check(holder.returncode == 0, "issuer-namespace-lock-released")
+            check(holder.returncode == 0, "issuer-exclusive-admission-released")
             check(run_issuer("active", first_token) == "ACTIVE",
                   "issuer-blocked-revocation-keeps-grant")
-            check(run_issuer("active-small-cap", first_token) == "ACTIVE",
-                  "issuer-capacity-reduction-keeps-read-barrier")
-            check(run_issuer("issue-small-cap") == "CAPACITY_REFUSED",
-                  "issuer-capacity-refusal-releases-no-code")
+            check(run_issuer("active-small-cap", first_token) == "PROFILE_REFUSED",
+                  "issuer-incompatible-capacity-profile-refuses-read")
+            check(run_issuer("issue-small-cap") == "PROFILE_REFUSED",
+                  "issuer-incompatible-capacity-profile-releases-no-code")
             check(run_issuer("active", first_token) == "ACTIVE",
                   "issuer-capacity-refusal-keeps-existing-grant")
             check(run_issuer("fence-init") == "INITIALIZED", "issuer-separate-fence-initialized")
@@ -844,13 +853,13 @@ def main() -> None:
                   "issuer-separate-fence-token-active")
             damaged_rows = docker("exec", "-i", name, "psql", "-X", "-q", "-t", "-A",
                                   "-v", "ON_ERROR_STOP=1", "-U", "postgres", "-d", "pending_fixture",
-                                  input_text="BEGIN;\nSELECT 1 FROM issuer_store_namespace "
-                                  "WHERE namespace='fixture_issuer_fence' FOR UPDATE;\n"
+                                  input_text="BEGIN;\n"+issuer_admission_lock("fixture_issuer_fence")+
+
                                   "SELECT count(*) FROM issuer_store_entry WHERE "
                                   "namespace='fixture_issuer_fence' AND kind='SUBJECT_STATE';\n"
                                   "DELETE FROM issuer_store_entry WHERE namespace='fixture_issuer_fence' "
                                   "AND kind='SUBJECT_STATE';\nCOMMIT;\n")
-            check(damaged_rows.splitlines() == ["1", "1"],
+            check(damaged_rows.splitlines() == ["1"],
                   "issuer-test-damage-removed-one-subject-fence")
             try:
                 run_issuer("fence-active", fence_token)

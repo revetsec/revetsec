@@ -58,7 +58,7 @@ final class WebAuthnCredentialIndex {
         return new State(userHandle, List.of());
     }
 
-    @NonNull Encoded encode(@NonNull State state) {
+    @NonNull Encoded encode(@NonNull State state, @NonNull Instant floor) {
         requireNonNull(state);
         byte[] handle = state.userHandle();
         WebAuthnStoreKey key = WebAuthnStoreKey.forAccountCredentialIndex(
@@ -71,7 +71,7 @@ final class WebAuthnCredentialIndex {
             ByteBuffer writer = ByteBuffer.wrap(payload);
             writer.put((byte) VERSION).put((byte) handle.length).put((byte) ids.size()).put(handle);
             for (byte[] id : ids) writer.putShort((short) id.length).put(id);
-            return new Encoded(key, this.records.seal(key, payload, PERMANENT));
+            return new Encoded(key, this.records.sealEntity(key, payload, PERMANENT, floor));
         } finally {
             Arrays.fill(handle, (byte) 0);
             for (byte[] id : ids) Arrays.fill(id, (byte) 0);
@@ -86,7 +86,7 @@ final class WebAuthnCredentialIndex {
         requireNonNull(clock);
         if (key.getKind() != WebAuthnStoreKey.Kind.ACCOUNT_CREDENTIAL_INDEX)
             throw new WebAuthnRecordException();
-        byte[] payload = this.records.open(key, sealedBytes, clock);
+        byte[] payload = this.records.openAdmitted(key, sealedBytes, clock);
         try {
             if (payload.length < 4 || payload.length > MAXIMUM_PAYLOAD_BYTES || payload[0] != VERSION)
                 throw new WebAuthnRecordException();

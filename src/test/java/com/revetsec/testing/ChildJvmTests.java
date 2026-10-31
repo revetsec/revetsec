@@ -109,6 +109,8 @@ final class ChildJvmTests {
 		// Exit criterion 14 asserts this for Revetsec builders; a trivial main never loads the JDK HTTP client.
 		Assertions.assertFalse(loadedClasses.contains("jdk.internal.net.http.HttpClientImpl"));
 		Assertions.assertFalse(result.getStandardOutput().contains("source:"), "the log goes to its own file");
+		Assertions.assertEquals("stderr:absent\n", normalizeLineEnds(result.getStandardErrorWithoutJvmNotices()),
+				"class-load logging must preserve application standard error");
 	}
 
 	@Test

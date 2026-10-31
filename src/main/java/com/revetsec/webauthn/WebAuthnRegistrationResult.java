@@ -27,9 +27,10 @@ import static java.util.Objects.requireNonNull;
 @Immutable
 public abstract sealed class WebAuthnRegistrationResult permits WebAuthnRegistrationResult.Succeeded,
         WebAuthnRegistrationResult.Rejected, WebAuthnRegistrationResult.Unavailable,
-        WebAuthnRegistrationResult.Indeterminate {
+        WebAuthnRegistrationResult.Indeterminate, WebAuthnRegistrationResult.ReconciliationRequired {
     private static final @NonNull Unavailable UNAVAILABLE = new Unavailable();
     private static final @NonNull Indeterminate INDETERMINATE = new Indeterminate();
+    private static final @NonNull ReconciliationRequired RECONCILIATION_REQUIRED = new ReconciliationRequired();
     WebAuthnRegistrationResult() { }
     static @NonNull WebAuthnRegistrationResult succeeded(@NonNull WebAuthnRegistration registration) {
         return new Succeeded(registration);
@@ -39,6 +40,7 @@ public abstract sealed class WebAuthnRegistrationResult permits WebAuthnRegistra
     }
     static @NonNull WebAuthnRegistrationResult unavailable() { return UNAVAILABLE; }
     static @NonNull WebAuthnRegistrationResult indeterminate() { return INDETERMINATE; }
+    static @NonNull WebAuthnRegistrationResult reconciliationRequired() { return RECONCILIATION_REQUIRED; }
     /** Redacts all identity and browser data.
      * @return a fixed description
      * @since 1.0.0 */
@@ -76,4 +78,11 @@ public abstract sealed class WebAuthnRegistrationResult permits WebAuthnRegistra
     @Immutable public static final class Indeterminate extends WebAuthnRegistrationResult {
         private Indeterminate() { }
     }
+    /** The requested transition committed, but normal output could not be admitted.
+     * Reconcile through an authorized fresh operation before deciding what to do next.
+     * @since 1.0.0 */
+    @Immutable public static final class ReconciliationRequired extends WebAuthnRegistrationResult {
+        private ReconciliationRequired() { }
+    }
+
 }

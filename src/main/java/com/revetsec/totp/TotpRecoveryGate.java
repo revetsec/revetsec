@@ -40,8 +40,9 @@ public interface TotpRecoveryGate {
   * Acquires admission within the positive remaining caller-thread budget. The budget establishes
   * a deadline for the complete permit lifetime, including later currentness checks. Return null
   * when admission is closed or cannot be confirmed. Core holds admission through storage and its
-  * final result decision. After a possible write, loss of admission requires an indeterminate
-  * outcome without releasing proofs or plaintext. If acquisition returns null or throws, the
+  * final result decision. After a genuinely unknown mutation, loss of admission preserves Indeterminate; a known requested
+  * commitment without releasable output requires ReconciliationRequired. A retained charge whose
+  * settlement is incomplete remains ATTEMPT_INCOMPLETE. None releases proofs or plaintext. If acquisition returns null or throws, the
   * implementation must first release every partially acquired lock, lease, reference count or
   * other admission claim. Such an outcome must leave no admission held by the calling thread;
   * core cannot release a permit it never received. This also applies when acquisition is

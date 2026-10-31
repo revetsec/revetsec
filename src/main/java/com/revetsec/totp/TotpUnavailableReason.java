@@ -28,7 +28,7 @@ public enum TotpUnavailableReason {
     /** Recovery admission was closed or could not be confirmed.
      * @since 1.0.0 */
     ADMISSION_CLOSED,
-    /** The configured recovery epoch was no longer authoritative.
+    /** The authority, admission, clock generation or recovery epoch was no longer authoritative.
      * @since 1.0.0 */
     FENCED,
     /** The backend refused capacity without changing state.
@@ -51,5 +51,16 @@ public enum TotpUnavailableReason {
     DEADLINE_EXCEEDED,
     /** Repeated confirmed conflicts exhausted the bounded retry policy.
      * @since 1.0.0 */
-    CONFLICT_LIMIT_REACHED
+    CONFLICT_LIMIT_REACHED,
+    /** A charge reservation is confirmed, but verification or settlement is definitely incomplete.
+     * No proof is released and the charge is not refunded or reserved again automatically.
+     * @since 1.0.0 */
+    ATTEMPT_INCOMPLETE,
+    /** Healthy admitted authority time is unavailable or precedes a required minimum or entity floor.
+     * No worker-time fallback is permitted.
+     * @since 1.0.0 */
+    TIME_AUTHORITY_UNAVAILABLE,
+    /** The complete worker offset interval, elapsed continuity or release-rate bound could not establish health.
+     * @since 1.0.0 */
+    CLOCK_HEALTH_UNCONFIRMED
 }

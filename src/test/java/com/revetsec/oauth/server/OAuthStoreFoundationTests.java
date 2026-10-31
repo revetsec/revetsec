@@ -47,6 +47,18 @@ class OAuthStoreFoundationTests {
   return StateSealer.withActiveKey(SealingKey.fromBase64(id, Base64.getEncoder().encodeToString(bytes)))
     .maximumSealedLength(cap).clock(clock(NOW)).build();
  }
+ private static @NonNull OAuthStoreTransaction transaction(@NonNull List<OAuthStoreTransaction.@NonNull Condition> conditions,
+   @NonNull List<OAuthStoreTransaction.@NonNull Mutation> mutations) {
+  var observation=com.revetsec.testing.ScriptedOAuthStore.observation(NOW);
+  var temporal=com.revetsec.internal.StoreTimeAccess.get().fromObservation(observation,NOW,null);
+  return OAuthStoreTransaction.fromConditions(OAuthStoreTransaction.Purpose.TIMED,observation.getAdmission(),temporal,conditions,mutations);
+ }
+ private static @NonNull OAuthStoreTransaction transaction(@NonNull OAuthStoreReadSet reads,
+   @NonNull List<OAuthStoreTransaction.@NonNull Mutation> mutations) {
+  var observation=com.revetsec.testing.ScriptedOAuthStore.observation(NOW);
+  return reads.transaction(OAuthStoreTransaction.Purpose.TIMED,observation.getAdmission(),
+    com.revetsec.internal.StoreTimeAccess.get().fromObservation(observation,NOW,null),mutations);
+ }
  private static @NonNull Clock clock(@NonNull Instant time) { return Clock.fixed(time, ZoneOffset.UTC); }
  private static @NonNull OAuthStoreRecordCodec codec() { return new OAuthStoreRecordCodec(ISSUER, sealer("k", (byte) 1, 3800), 3800); }
  private static @NonNull OAuthStoreKey key(OAuthStoreKey.@NonNull Kind kind) {
@@ -123,7 +135,7 @@ class OAuthStoreFoundationTests {
   OAuthStoreReadSet reads = new OAuthStoreReadSet(); OAuthStoreKey code = key(OAuthStoreKey.Kind.CODE), grant = key(OAuthStoreKey.Kind.GRANT);
   reads.observe(code, Optional.of(entry(code))); reads.observe(grant, Optional.empty());
   reads.observe(OAuthStoreKey.fromStoredForm(code.getStorageKey()), Optional.of(entry(code)));
-  OAuthStoreTransaction barrier = reads.transaction(List.of()); assertEquals(2, barrier.getConditions().size());
+  OAuthStoreTransaction barrier = transaction(reads,List.of()); assertEquals(2, barrier.getConditions().size());
   assertEquals(Optional.of(VERSION), barrier.getConditions().get(0).getExpectedVersion());
   assertEquals(Optional.empty(), barrier.getConditions().get(1).getExpectedVersion()); assertTrue(barrier.getMutations().isEmpty());
   reads.observe(key(OAuthStoreKey.Kind.ACCESS_TOKEN), Optional.empty()); assertEquals(2, barrier.getConditions().size());
@@ -134,7 +146,7 @@ class OAuthStoreFoundationTests {
  }
  @SuppressWarnings("NullAway") // Deliberate null boundary probes.
  @Test void readSetRejectsMissingChangedAndMismatchedObservations() {
-  OAuthStoreReadSet reads = new OAuthStoreReadSet(); rejected(() -> reads.transaction(List.of()));
+  OAuthStoreReadSet reads = new OAuthStoreReadSet(); rejected(() -> transaction(reads,List.of()));
   OAuthStoreKey code = key(OAuthStoreKey.Kind.CODE); reads.observe(code, Optional.empty());
   rejected(() -> reads.observe(code, Optional.of(entry(code))));
   rejected(() -> reads.observe(code, Optional.of(entry(key(OAuthStoreKey.Kind.GRANT)))));
@@ -146,15 +158,15 @@ class OAuthStoreFoundationTests {
   List<OAuthStoreTransaction.Condition> conditions = new ArrayList<>(List.of(
    OAuthStoreTransaction.Condition.fromAbsent(code), OAuthStoreTransaction.Condition.fromVersion(grant, VERSION)));
   List<OAuthStoreTransaction.Mutation> mutations = new ArrayList<>(List.of(put, remove));
-  OAuthStoreTransaction transaction = OAuthStoreTransaction.fromConditions(conditions, mutations); conditions.clear(); mutations.clear();
+  OAuthStoreTransaction transaction = transaction(conditions, mutations); conditions.clear(); mutations.clear();
   assertEquals(2, transaction.getConditions().size()); assertEquals(2, transaction.getMutations().size());
   assertEquals(code, put.getKey()); assertEquals(Optional.of(row), put.getEntry()); assertEquals(OAuthStoreTransaction.Mutation.Kind.PUT, put.getKind());
   assertEquals(grant, remove.getKey()); assertEquals(Optional.empty(), remove.getEntry()); assertEquals(OAuthStoreTransaction.Mutation.Kind.REMOVE, remove.getKind());
   assertEquals("Mutation{change=<redacted>}", put.toString());
-  rejected(() -> OAuthStoreTransaction.fromConditions(List.of(OAuthStoreTransaction.Condition.fromAbsent(code)), List.of(remove)));
-  rejected(() -> OAuthStoreTransaction.fromConditions(List.of(OAuthStoreTransaction.Condition.fromAbsent(grant)), List.of(remove)));
-  rejected(() -> OAuthStoreTransaction.fromConditions(List.of(OAuthStoreTransaction.Condition.fromAbsent(code)), List.of(put, put)));
-  rejected(() -> OAuthStoreTransaction.fromConditions(List.of(OAuthStoreTransaction.Condition.fromAbsent(code), OAuthStoreTransaction.Condition.fromAbsent(code)), List.of()));
+  rejected(() -> transaction(List.of(OAuthStoreTransaction.Condition.fromAbsent(code)), List.of(remove)));
+  rejected(() -> transaction(List.of(OAuthStoreTransaction.Condition.fromAbsent(grant)), List.of(remove)));
+  rejected(() -> transaction(List.of(OAuthStoreTransaction.Condition.fromAbsent(code)), List.of(put, put)));
+  rejected(() -> transaction(List.of(OAuthStoreTransaction.Condition.fromAbsent(code), OAuthStoreTransaction.Condition.fromAbsent(code)), List.of()));
  }
  @Test void inclusiveConditionAndMutationCapsBoundBeforeCopy() {
   List<OAuthStoreTransaction.Condition> conditions = new ArrayList<>(); List<OAuthStoreTransaction.Mutation> mutations = new ArrayList<>();
@@ -165,12 +177,12 @@ class OAuthStoreFoundationTests {
    conditions.add(OAuthStoreTransaction.Condition.fromAbsent(k));
    if(i<8) mutations.add(OAuthStoreTransaction.Mutation.fromPut(entry(k)));
   }
-  assertEquals(16, reads.transaction(mutations).getConditions().size());
-  assertEquals(8, OAuthStoreTransaction.fromConditions(conditions, mutations).getMutations().size());
+  assertEquals(16, transaction(reads,mutations).getConditions().size());
+  assertEquals(8, transaction(conditions, mutations).getMutations().size());
   mutations.add(OAuthStoreTransaction.Mutation.fromPut(entry(conditions.get(8).getKey())));
-  rejected(() -> OAuthStoreTransaction.fromConditions(conditions, mutations));
+  rejected(() -> transaction(conditions, mutations));
   conditions.add(OAuthStoreTransaction.Condition.fromAbsent(key(OAuthStoreKey.Kind.GRANT)));
-  rejected(() -> OAuthStoreTransaction.fromConditions(conditions, List.of()));
+  rejected(() -> transaction(conditions, List.of()));
   rejected(() -> reads.observe(key(OAuthStoreKey.Kind.GRANT), Optional.empty()));
  }
  @Test void codecBindsIssuerExactSpellingSubjectKindAndRandomVersions() {
@@ -238,7 +250,7 @@ class OAuthStoreFoundationTests {
   for(Class<?> type:List.of(OAuthStoreTransaction.class,OAuthStoreTransaction.Condition.class,OAuthStoreTransaction.Mutation.class))
    for(var method:type.getDeclaredMethods()) if(java.lang.reflect.Modifier.isStatic(method.getModifiers()))
     assertFalse(java.lang.reflect.Modifier.isPublic(method.getModifiers()));
-  assertEquals(List.of(OAuthStoreCommitStatus.COMMITTED,OAuthStoreCommitStatus.CONFLICT,OAuthStoreCommitStatus.UNKNOWN),List.of(OAuthStoreCommitStatus.values()));
+  assertEquals(9,OAuthStoreCommitStatus.values().length);
  }
  @TestFactory @NonNull Stream<@NonNull DynamicTest> authenticatedMalformedCommonBindingsStillReject() {
   OAuthStoreRecordCodec codec=codec(); OAuthStoreKey key=codec.key(OAuthStoreKey.Kind.CODE,NONCE);

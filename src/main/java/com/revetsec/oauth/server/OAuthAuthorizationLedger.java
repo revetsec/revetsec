@@ -58,20 +58,34 @@ final class OAuthAuthorizationLedger {
  }
  @NonNull String begin(@NonNull OAuthServerAuthorizationAdmission admission, @NonNull String browserBinding,
    @NonNull Deadline deadline) {
-  String browserHash = OAuthAuthorizationRecord.credentialDigest(browserBinding);
-  String clientHash = admission.fingerprint();
-  for (int attempt = 0; attempt < this.maximumAttempts; attempt++) {
-   OAuthStoreCoordinator.Session session = this.coordinator.begin(deadline);
-   String credential = prepared(this.codec::freshVersion), id = OAuthAuthorizationRecord.credentialDigest(credential);
-   OAuthStoreKey key = this.codec.key(OAuthStoreKey.Kind.INTERACTION, id);
-   if (session.read(key).isPresent()) continue;
-   Instant expires = prepared(() -> OAuthGrantRetention.expiry(session.effectiveNow(), this.interactionLifetime));
-   OAuthAuthorizationRecord record = prepared(() -> OAuthAuthorizationRecord.interaction(id, browserHash, clientHash,
-    admission, session.issuer(), expires, this.limits));
+  return beginPrepared(()->admission,browserBinding,deadline).credential;
+ }
+ @NonNull OAuthAuthorizationResult beginResult(@NonNull Supplier<@NonNull OAuthServerAuthorizationAdmission> prepare,
+   @NonNull String browserBinding,@NonNull Deadline deadline){
+  Begun begun=beginPrepared(prepare,browserBinding,deadline);
+  return OAuthAuthorizationResult.fromInteractionRequired(OAuthServerInteraction.fromRecord(begun.credential,begun.record,
+    begun.admission.client().getClientName().orElse(null),this.limits));
+ }
+ private @NonNull Begun beginPrepared(@NonNull Supplier<@NonNull OAuthServerAuthorizationAdmission> prepare,
+   @NonNull String browserBinding,@NonNull Deadline deadline){
+  String browserHash=OAuthAuthorizationRecord.credentialDigest(browserBinding);
+  for(int attempt=0;attempt<this.maximumAttempts;attempt++){
+   OAuthServerAuthorizationAdmission admission=requireNonNull(prepare.get());String clientHash=admission.fingerprint();
+   OAuthStoreCoordinator.Session session=this.coordinator.begin(deadline);session.expiresAs(OAuthServerException.Reason.INTERACTION_EXPIRED);
+   String credential=prepared(this.codec::freshVersion),id=OAuthAuthorizationRecord.credentialDigest(credential);
+   OAuthStoreKey key=this.codec.key(OAuthStoreKey.Kind.INTERACTION,id);if(session.read(key).isPresent())continue;
+   Instant expires=prepared(()->OAuthGrantRetention.expiry(session.effectiveNow(),this.interactionLifetime));
+   OAuthAuthorizationRecord record=prepared(()->OAuthAuthorizationRecord.interaction(id,browserHash,clientHash,admission,session.issuer(),expires,this.limits));
    session.requireBefore(expires);
-   if (session.commit(List.of(put(key, expires, record))) == OAuthStoreCommitStatus.COMMITTED) return credential;
+   if(session.commit(List.of(put(session,key,expires,record)))==OAuthStoreCommitStatus.COMMITTED)return new Begun(credential,record,admission);
   }
   throw new OAuthStoreFailure(UNAVAILABLE);
+ }
+ private static final class Begun {
+  private final @NonNull String credential;
+  private final @NonNull OAuthAuthorizationRecord record;
+  private final @NonNull OAuthServerAuthorizationAdmission admission;
+  private Begun(@NonNull String credential,@NonNull OAuthAuthorizationRecord record,@NonNull OAuthServerAuthorizationAdmission admission){this.credential=credential;this.record=record;this.admission=admission;}
  }
  /** Each resume is admitted by a complete condition-only barrier; completion re-reads instead of trusting this view. */
  @NonNull OAuthAuthorizationRecord resume(@NonNull String interaction, @NonNull String browserBinding,
@@ -84,6 +98,7 @@ final class OAuthAuthorizationLedger {
   String fingerprint = selectedClient.fingerprint();
   for (int attempt = 0; attempt < this.maximumAttempts; attempt++) {
    OAuthStoreCoordinator.Session session = this.coordinator.begin(deadline);
+   session.expiresAs(OAuthServerException.Reason.INTERACTION_EXPIRED);
    OAuthAuthorizationRecord record = checkedInteraction(session, key, browserHash, fingerprint);
    session.requireBefore(record.expires());
    if (session.barrier() == OAuthStoreCommitStatus.COMMITTED) return record;
@@ -114,6 +129,7 @@ final class OAuthAuthorizationLedger {
   OAuthStoreKey key = interactionKey(interaction); String browserHash = OAuthAuthorizationRecord.credentialDigest(browserBinding);
   for (int attempt = 0; attempt < this.maximumAttempts; attempt++) {
    OAuthStoreCoordinator.Session session = this.coordinator.begin(deadline);
+   session.expiresAs(OAuthServerException.Reason.INTERACTION_EXPIRED);
    OAuthAuthorizationRecord record = checkedInteraction(session, key, browserHash, null);
    session.requireBefore(record.expires());
    if (session.barrier() == OAuthStoreCommitStatus.COMMITTED) return record.text("clientId");
@@ -140,9 +156,10 @@ final class OAuthAuthorizationLedger {
    OAuthServerClientSelection.Selected selectedClient = selectClient.get();
    OAuthServerClientRegistration currentClient = selectedClient.client(); String fingerprint = selectedClient.fingerprint();
    OAuthStoreCoordinator.Session session = this.coordinator.begin(deadline);
+   session.expiresAs(OAuthServerException.Reason.INTERACTION_EXPIRED);
    OAuthAuthorizationRecord record = checkedInteraction(session, key, browserHash, fingerprint);
    List<OAuthStoreTransaction.Mutation> changes = new ArrayList<>();
-   changes.add(put(key, record.expires(), record.completed()));
+   changes.add(put(session, key, record.expires(), record.completed()));
    session.requireBefore(record.expires());
    Optional<String> code = Optional.empty();
    if (!decision.isDenied()) {
@@ -189,7 +206,7 @@ final class OAuthAuthorizationLedger {
        session.issuer(), subjectFence, expires, this.limits, this.subjectLimit));
      OAuthAuthorizationRecord grant = prepared(() -> OAuthAuthorizationRecord.grant(grantId, codeId, record, subject,
        finalApproved, finalRefresh, session.issuer(), subjectFence, expires, this.limits, this.subjectLimit));
-     changes.add(put(codeKey, expires, codeRecord)); changes.add(put(grantKey, expires, grant)); code = Optional.of(credential);
+     changes.add(put(session, codeKey, expires, codeRecord)); changes.add(put(session, grantKey, expires, grant)); code = Optional.of(credential);
     }
    }
    OAuthServerResponse response = encoder == null ? null : encoder.prepare(record, code.orElse(null));
@@ -207,7 +224,7 @@ final class OAuthAuthorizationLedger {
   OAuthStoreEntry entry = session.read(key).orElseThrow(OAuthAuthorizationLedger::invalid);
   if (!session.effectiveNow().isBefore(entry.getRetainUntil())) throw invalid();
   OAuthAuthorizationRecord record = prepared(() -> OAuthAuthorizationRecord.decode(key.getKind(), identifier(key),
-   this.codec.open(entry, Clock.fixed(session.effectiveNow(), ZoneOffset.UTC)), this.limits, this.subjectLimit));
+   session.open(entry), this.limits, this.subjectLimit));
   if (!record.expires().equals(entry.getRetainUntil())) throw new OAuthStoreFailure(CORRUPT_STATE);
   if (!record.text("status").equals("PENDING") || !record.matchesIssuer(session.issuer())
     || !session.effectiveNow().isBefore(record.expires())
@@ -221,14 +238,14 @@ final class OAuthAuthorizationLedger {
  private static @NonNull String identifier(@NonNull OAuthStoreKey key) {
   String storage = key.getStorageKey(); return storage.substring(storage.lastIndexOf(':') + 1);
  }
- private OAuthStoreTransaction.@NonNull Mutation put(@NonNull OAuthStoreKey key, @NonNull Instant retention,
+ private OAuthStoreTransaction.@NonNull Mutation put(OAuthStoreCoordinator.@NonNull Session session, @NonNull OAuthStoreKey key, @NonNull Instant retention,
    @NonNull OAuthAuthorizationRecord record) {
-  return prepared(() -> OAuthStoreTransaction.Mutation.fromPut(this.codec.seal(key, retention, record.toPayload())));
+  return prepared(() -> OAuthStoreTransaction.Mutation.fromPut(session.seal(key, retention, record.toPayload())));
  }
  private static <T> @NonNull T prepared(@NonNull Supplier<@NonNull T> operation) {
   try { return operation.get(); }
   catch (VirtualMachineError fatal) { throw fatal; }
-  catch (Throwable failure) { throw new OAuthStoreFailure(CORRUPT_STATE); }
+  catch (Throwable failure) { OAuthStoreCoordinator.preserveInterrupt(failure);throw new OAuthStoreFailure(CORRUPT_STATE); }
  }
  private static @NonNull OAuthServerAdmissionFailure invalid() {
   return new OAuthServerAdmissionFailure(OAuthServerAdmissionFailure.Reason.INVALID_REQUEST);

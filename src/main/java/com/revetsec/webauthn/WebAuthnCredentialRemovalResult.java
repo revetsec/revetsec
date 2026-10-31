@@ -25,16 +25,18 @@ import javax.annotation.concurrent.Immutable;
 @Immutable
 public abstract sealed class WebAuthnCredentialRemovalResult permits
         WebAuthnCredentialRemovalResult.Removed, WebAuthnCredentialRemovalResult.Absent,
-        WebAuthnCredentialRemovalResult.Unavailable, WebAuthnCredentialRemovalResult.Indeterminate {
+        WebAuthnCredentialRemovalResult.Unavailable, WebAuthnCredentialRemovalResult.Indeterminate, WebAuthnCredentialRemovalResult.ReconciliationRequired {
     private static final @NonNull Removed REMOVED = new Removed();
     private static final @NonNull Absent ABSENT = new Absent();
     private static final @NonNull Unavailable UNAVAILABLE = new Unavailable();
     private static final @NonNull Indeterminate INDETERMINATE = new Indeterminate();
+    private static final @NonNull ReconciliationRequired RECONCILIATION_REQUIRED = new ReconciliationRequired();
     WebAuthnCredentialRemovalResult() { }
     static @NonNull WebAuthnCredentialRemovalResult removed() { return REMOVED; }
     static @NonNull WebAuthnCredentialRemovalResult absent() { return ABSENT; }
     static @NonNull WebAuthnCredentialRemovalResult unavailable() { return UNAVAILABLE; }
     static @NonNull WebAuthnCredentialRemovalResult indeterminate() { return INDETERMINATE; }
+    static @NonNull WebAuthnCredentialRemovalResult reconciliationRequired() { return RECONCILIATION_REQUIRED; }
     /** Redacts account and credential identifiers.
      * @return fixed description
      * @since 1.0.0 */
@@ -59,4 +61,11 @@ public abstract sealed class WebAuthnCredentialRemovalResult permits
     @Immutable public static final class Indeterminate extends WebAuthnCredentialRemovalResult {
         private Indeterminate() { }
     }
+    /** The requested transition committed, but normal output could not be admitted.
+     * Reconcile through an authorized fresh operation before deciding what to do next.
+     * @since 1.0.0 */
+    @Immutable public static final class ReconciliationRequired extends WebAuthnCredentialRemovalResult {
+        private ReconciliationRequired() { }
+    }
+
 }

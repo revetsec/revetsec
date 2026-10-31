@@ -143,10 +143,7 @@ public final class OAuthAuthorizationServer {
   return execute(AUTHORIZATION,d->{
    OAuthServerRequest request=parse(OAuthServerRequest.Endpoint.AUTHORIZATION,httpMethod,rawQuery,rawBody,rawHeaderValues);
    binding(browserBinding);
-   OAuthServerAuthorizationAdmission admission=OAuthServerAuthorizationAdmission.admit(request,this.clients,d,this.resources,this.limits,this.nativeLoopback,this.localhost);
-   String interaction=this.ledger.begin(admission,browserBinding,d);
-   OAuthServerClientSelection.Selected selected=this.clients.authorization(admission.client().getClientId(),this.resources,d);
-   return interaction(interaction,browserBinding,selected,d);
+   return this.ledger.beginResult(()->OAuthServerAuthorizationAdmission.admit(request,this.clients,d,this.resources,this.limits,this.nativeLoopback,this.localhost),browserBinding,d);
   },r->OAuthAuthorizationResult.fromRejection(r,rejection(OAuthServerRequest.Endpoint.AUTHORIZATION,r,false)));
  }
  /** Rechecks a continuation before rendering consent; this does not authenticate a user.
@@ -211,7 +208,7 @@ public final class OAuthAuthorizationServer {
   boolean[] basic={false};
   return execute(REVOCATION,d->{
    OAuthServerRequest request=parse(OAuthServerRequest.Endpoint.REVOCATION,httpMethod,rawQuery,rawBody,rawHeaderValues);basic[0]=request.authorization()!=null;
-   return OAuthRevocationResult.fromSucceeded(this.revocation.revoke(request,this.clients,this.resources,this.keys.verificationKeys(d),d).response());
+   return OAuthRevocationResult.fromSucceeded(this.revocation.revoke(request,this.clients,this.resources,this.keys,d).response());
   },r->OAuthRevocationResult.fromRejection(r,rejection(OAuthServerRequest.Endpoint.REVOCATION,r,basic[0])));
  }
  /** Handles one bounded introspection form request on its configured route.
@@ -232,7 +229,7 @@ public final class OAuthAuthorizationServer {
    String resource=request.value("resource");
    if(resource==null) { if(this.resources.size()!=1) throw OAuthServerValidationException.fromReason(INVALID_RESOURCE); resource=this.resources.keySet().iterator().next(); }
    if(!this.resources.containsKey(resource)) throw OAuthServerValidationException.fromReason(INVALID_RESOURCE);
-   return OAuthIntrospectionResult.fromSucceeded(this.introspection.introspect(request,this.repository,resource,this.keys.verificationKeys(d),d).response());
+   return OAuthIntrospectionResult.fromSucceeded(this.introspection.introspect(request,this.repository,resource,this.keys,d).response());
   },r->OAuthIntrospectionResult.fromRejection(r,rejection(OAuthServerRequest.Endpoint.INTROSPECTION,r,basic[0])));
  }
  /** Validates local M5 signature/profile facts and uncached authoritative issuer status before proof release.
@@ -246,20 +243,25 @@ public final class OAuthAuthorizationServer {
   if(!this.resources.containsKey(resource)) throw OAuthServerConfiguration.invalid();
   return execute(ACCESS_TOKEN_VALIDATION,d->{
    if(OidcTransactionAccess.get().bearerValue(token).length()>this.settings.maximumRequestBodyBytes) return OAuthIssuerAccessTokenResult.fromRejection(MALFORMED_REQUEST,null,null);
-   StaticJwksSource snapshot=this.keys.verificationKeys(d);
-   VerifiedAccessToken proof;
-   try {
-    OAuthServerClientAdmission.remaining(d);
-    JwtAccessTokenValidator validator=JwtAccessTokenValidator.withIssuer(this.issuer).jwksSource(snapshot).expectedAudiences(Set.of(resource))
-     .allowedAlgorithms(Set.of(JwsAlgorithm.RS256)).clock(this.clock).clockSkew(this.settings.clockSkew)
-     .maximumTokenLength(Math.max(8192,this.settings.maximumRequestBodyBytes)).requestTimeout(Duration.ofSeconds(1)).totalDeadline(this.settings.totalDeadline).build();
-    proof=OidcTransactionAccess.get().validateAccessToken(validator,token,d);
-   } catch(AccessTokenValidationException rejected) {
-    OAuthServerClientAdmission.remaining(d);
-    return OAuthIssuerAccessTokenResult.fromRejection(TOKEN_REVOKED,rejected.getReason(),rejected.getJoseReason().orElse(null));
-   }
-   OAuthServerClientAdmission.remaining(d);
-   return this.status.validate(OidcTransactionAccess.get().bearerValue(token),resource,snapshot,d,c->OAuthIssuerAccessTokenResult.fromSucceeded(proof));
+   StaticJwksSource snapshot=this.keys.recognitionKeys(d);
+   com.revetsec.json.JsonObject claims;
+   try{claims=this.status.recognizeForProof(OidcTransactionAccess.get().bearerValue(token),resource,snapshot,d);}
+   catch(OAuthIssuerTokenStatus.RecognitionFailure rejected){return rejected.result();}
+   return this.status.validateProof(claims,resource,d,session->{
+    StaticJwksSource admittedKeys=this.keys.verificationKeys(d,session::authorityNow);
+    Clock authorityClock=Clock.fixed(session.effectiveNow(),java.time.ZoneOffset.UTC);
+    try {
+     OAuthServerClientAdmission.remaining(d);
+     JwtAccessTokenValidator validator=JwtAccessTokenValidator.withIssuer(this.issuer).jwksSource(admittedKeys).expectedAudiences(Set.of(resource))
+      .allowedAlgorithms(Set.of(JwsAlgorithm.RS256)).clock(authorityClock).clockSkew(this.settings.clockSkew)
+      .maximumTokenLength(Math.max(8192,this.settings.maximumRequestBodyBytes)).requestTimeout(Duration.ofSeconds(1)).totalDeadline(this.settings.totalDeadline).build();
+     VerifiedAccessToken proof=OidcTransactionAccess.get().validateAccessToken(validator,token,d);
+     return OAuthIssuerAccessTokenResult.fromSucceeded(proof);
+    }catch(AccessTokenValidationException rejected){
+     OAuthServerClientAdmission.remaining(d);
+     return OAuthIssuerAccessTokenResult.fromRejection(TOKEN_REVOKED,rejected.getReason(),rejected.getJoseReason().orElse(null));
+    }
+   });
   },r->OAuthIssuerAccessTokenResult.fromRejection(r,null,null));
  }
  /** Revokes a trusted grant reference monotonically.
@@ -294,7 +296,7 @@ public final class OAuthAuthorizationServer {
   * @return one authoritative initialization outcome
   * @since 1.0.0
   */
- @CheckReturnValue public @NonNull OAuthStoreCommitStatus initializeFreshIssuer() {
+ @CheckReturnValue public @NonNull OAuthStoreCommitReceipt initializeFreshIssuer() {
   return execute(ISSUER_INITIALIZATION,this.coordinator::initializeFreshIssuerResult,r->{throw OAuthServerValidationException.fromReason(r);});
  }
  /** Attempts one authenticated reseal CAS without changing grant authority or retention.
@@ -302,7 +304,7 @@ public final class OAuthAuthorizationServer {
   * @return COMMITTED, CONFLICT for absence/race/expired row, or UNKNOWN requiring reconciliation
   * @since 1.0.0
   */
- @CheckReturnValue public @NonNull OAuthStoreCommitStatus resealStoreEntry(@NonNull OAuthStoreKey key) {
+ @CheckReturnValue public @NonNull OAuthStoreCommitReceipt resealStoreEntry(@NonNull OAuthStoreKey key) {
   requireNonNull(key);
   return execute(STORE_RESEAL,d->this.coordinator.reseal(key,d),r->{throw OAuthServerValidationException.fromReason(r);});
  }
@@ -337,8 +339,11 @@ public final class OAuthAuthorizationServer {
   * @since 1.0.0
   */
  public void warmUp() {
-  try { Deadline d=Deadline.fromNow(this.settings.totalDeadline); this.keys.warmUp(d);
-   for(int n=0;n<this.settings.maximumStoreCommitAttempts;n++) if(this.coordinator.begin(d).barrier()==OAuthStoreCommitStatus.COMMITTED) return;
+  try { Deadline d=Deadline.fromNow(this.settings.totalDeadline);
+   for(int n=0;n<this.settings.maximumStoreCommitAttempts;n++){
+    OAuthStoreCoordinator.Session session=this.coordinator.begin(d);this.keys.warmUp(d,session::authorityNow);
+    if(session.barrier()==OAuthStoreCommitStatus.COMMITTED)return;
+   }
    throw OAuthServerStoreException.fromReason(STORE_UNAVAILABLE,false);
   } catch(OAuthStoreFailure f) {throw OAuthServerFailureBoundary.store(f);}
   catch(OAuthServerAdmissionFailure f) {throw OAuthServerFailureBoundary.admission(f);}
@@ -402,20 +407,28 @@ public final class OAuthAuthorizationServer {
    @NonNull Function<OAuthServerException.@NonNull Reason,@NonNull T> reject) {
   Deadline d=Deadline.fromNow(this.settings.totalDeadline);OAuthServerObservation observation=new OAuthServerObservation(this.observer,endpoint);
   T result;
+  try (OAuthStoreCoordinator.Operation scope=this.coordinator.operation(d)) {
   try {result=work.apply(d);}
-  catch(OAuthTransportException f) {OAuthServerException translated=OAuthServerStoreException.fromReason(STORE_UNAVAILABLE,true);observation.failed(translated);throw translated;}
-  catch(OAuthStoreFailure f) {OAuthServerException translated=OAuthServerFailureBoundary.store(f);observation.failed(translated);throw translated;}
-  catch(OAuthServerAdmissionFailure f) {
+  catch(OAuthTransportException f) {rethrowEffect(scope,observation,false);OAuthServerException translated=OAuthServerStoreException.fromReason(STORE_UNAVAILABLE,true);observation.failed(translated);throw translated;}
+  catch(OAuthStoreFailure f) {rethrowEffect(scope,observation,false);OAuthServerException translated=OAuthServerFailureBoundary.store(f);observation.failed(translated);throw translated;}
+  catch(OAuthServerAdmissionFailure f) {rethrowEffect(scope,observation,f.reason()!=OAuthServerAdmissionFailure.Reason.INFRASTRUCTURE);
    OAuthServerException translated=OAuthServerFailureBoundary.admission(f);
    if(translated instanceof OAuthServerValidationException) result=reject.apply(translated.getReason());
    else {observation.failed(translated);throw translated;}
   }
-  catch(OAuthServerValidationException rejected) {result=reject.apply(rejected.getReason());}
-  catch(OAuthServerException f) {observation.failed(f);throw f;}
-  catch(IllegalArgumentException f) {result=reject.apply(MALFORMED_REQUEST);}
+  catch(OAuthServerValidationException rejected) {rethrowEffect(scope,observation,true);result=reject.apply(rejected.getReason());}
+  catch(OAuthServerException f) {rethrowEffect(scope,observation,false);observation.failed(f);throw f;}
+  catch(IllegalArgumentException f) {rethrowEffect(scope,observation,true);result=reject.apply(MALFORMED_REQUEST);}
+  try{scope.release();}catch(OAuthStoreFailure failure){OAuthServerException translated=OAuthServerFailureBoundary.store(failure);observation.failed(translated);throw translated;}
   OAuthServerException.Reason rejected=reason(result);Integer statusCode=statusCode(result);
   if(rejected==null) observation.succeeded(statusCode);else observation.rejected(rejected,statusCode);
+  try{scope.release();}catch(OAuthStoreFailure failure){throw OAuthServerFailureBoundary.store(failure);}
   return result;
+  }
+ }
+ private static void rethrowEffect(OAuthStoreCoordinator.@NonNull Operation scope,@NonNull OAuthServerObservation observation,boolean rejection){
+  try{if(rejection)scope.rethrowRejectionEffect();else scope.rethrowEffect();}
+  catch(OAuthStoreFailure failure){OAuthServerException translated=OAuthServerFailureBoundary.store(failure);observation.failed(translated);throw translated;}
  }
  private static OAuthServerException.@Nullable Reason reason(@NonNull Object result) {
   if(result instanceof OAuthAuthorizationResult.Rejected r) return r.getReason();

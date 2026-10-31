@@ -16,7 +16,7 @@
 
 package com.revetsec.webauthn;
 
-/** Outcome of one atomic WebAuthn store write. Only COMMITTED permits a protocol proof.
+/** Outcome of one atomic WebAuthn store write. Values describe facts inside a contextual receipt, not proof release eligibility.
  * @since 1.0.0 */
 @javax.annotation.concurrent.Immutable
 public enum WebAuthnStoreCommitResult {
@@ -27,7 +27,15 @@ public enum WebAuthnStoreCommitResult {
  CONFLICT,
  /** Capacity was insufficient; no mutation took effect. @since 1.0.0 */
  CAPACITY,
- /** The store failed before attempting a write; no mutation took effect. @since 1.0.0 */
+ /** The active authority, recovery or clock generation differs; no mutation took effect. @since 1.0.0 */
+ FENCED,
+ /** No healthy admitted time was available; no mutation took effect. @since 1.0.0 */
+ TIME_UNAVAILABLE,
+ /** Fresh validation time precedes the inclusive floor; no mutation took effect. @since 1.0.0 */
+ TIME_BEFORE_FLOOR,
+ /** Fresh validation time reached the exclusive expiry; no mutation took effect. @since 1.0.0 */
+ TIME_EXPIRED,
+ /** The store refused with known no effect, including a confirmed abort. @since 1.0.0 */
  UNAVAILABLE,
  /** The write may have taken effect; reconciliation is required. @since 1.0.0 */
  UNKNOWN

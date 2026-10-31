@@ -15,6 +15,8 @@
  */
 package com.revetsec.webauthn;
 
+import com.revetsec.testing.ScriptedWebAuthnStore;
+
 import com.revetsec.SealingKey;
 import com.revetsec.StateSealer;
 import com.revetsec.internal.encoding.Base64Url;
@@ -86,13 +88,18 @@ final class WebAuthnCloseoutContractTests {
     @Test void allWriteFailureKindsWithholdEnrollmentAndAccountPinnedRequests() {
         var options = WebAuthnRegistrationOptions.withUserHandle(HANDLE).userName("a").userDisplayName("A").build();
         for (WebAuthnStoreCommitResult outcome : WebAuthnStoreCommitResult.values()) {
-            var store = new OutcomeStore(outcome); var rp = relyingParty(store, budget -> permit(true, false));
+            var store = new OutcomeStore(WebAuthnStoreCommitResult.COMMITTED); var rp = relyingParty(store, budget -> permit(true, false));
+            assertInstanceOf(WebAuthnAuthenticationRequestResult.Prepared.class,rp.beginAuthenticationResult(BINDING));
+            store.outcome=outcome;store.reads=0;store.writes=0;
             var registration = rp.beginRegistrationResult(options, BINDING);
             var authentication = rp.beginAuthenticationResult(BINDING);
             var reauth = rp.beginReauthenticationResult(HANDLE, "transfer", BINDING);
             if (outcome == WebAuthnStoreCommitResult.COMMITTED) {
                 assertInstanceOf(WebAuthnRegistrationRequestResult.Prepared.class, registration);
                 assertInstanceOf(WebAuthnAuthenticationRequestResult.Prepared.class, authentication);
+            } else if (outcome == WebAuthnStoreCommitResult.TIME_EXPIRED) {
+                assertInstanceOf(WebAuthnRegistrationRequestResult.Rejected.class, registration);
+                assertInstanceOf(WebAuthnAuthenticationRequestResult.Rejected.class, authentication);
             } else if (outcome == WebAuthnStoreCommitResult.UNKNOWN) {
                 assertInstanceOf(WebAuthnRegistrationRequestResult.Indeterminate.class, registration);
                 assertInstanceOf(WebAuthnAuthenticationRequestResult.Indeterminate.class, authentication);
@@ -100,8 +107,9 @@ final class WebAuthnCloseoutContractTests {
                 assertInstanceOf(WebAuthnRegistrationRequestResult.Unavailable.class, registration);
                 assertInstanceOf(WebAuthnAuthenticationRequestResult.Unavailable.class, authentication);
             }
-            assertInstanceOf(WebAuthnAuthenticationRequestResult.Rejected.class, reauth);
-            assertEquals(outcome == WebAuthnStoreCommitResult.CONFLICT ? 18 : 2, store.writes);
+            if(outcome==WebAuthnStoreCommitResult.COMMITTED)assertInstanceOf(WebAuthnAuthenticationRequestResult.Prepared.class,reauth);
+            else assertInstanceOf(WebAuthnAuthenticationRequestResult.Rejected.class,reauth);
+            assertEquals(outcome==WebAuthnStoreCommitResult.CONFLICT?18:outcome==WebAuthnStoreCommitResult.COMMITTED?3:2,store.writes);
         }
     }
 
@@ -114,23 +122,23 @@ final class WebAuthnCloseoutContractTests {
         assertInstanceOf(WebAuthnAccountDisableResult.Unavailable.class, revoked.disableAccountResult(HANDLE));
         assertEquals(0, store.reads);
         var unclosable = relyingParty(store, budget -> permit(true, true));
-        assertInstanceOf(WebAuthnAuthenticationRequestResult.Indeterminate.class, unclosable.beginAuthenticationResult(BINDING));
+        assertInstanceOf(WebAuthnAuthenticationRequestResult.ReconciliationRequired.class, unclosable.beginAuthenticationResult(BINDING));
         assertInstanceOf(WebAuthnCredentialListResult.Unavailable.class, unclosable.listCredentialsResult(HANDLE));
-        assertInstanceOf(WebAuthnAccountDisableResult.Indeterminate.class, unclosable.disableAccountResult(HANDLE));
-        assertInstanceOf(WebAuthnCredentialRemovalResult.Indeterminate.class, unclosable.removeCredentialResult(HANDLE, new byte[] {1}));
+        assertInstanceOf(WebAuthnAccountDisableResult.ReconciliationRequired.class, unclosable.disableAccountResult(HANDLE));
+        assertInstanceOf(WebAuthnCredentialRemovalResult.Unavailable.class, unclosable.removeCredentialResult(HANDLE, new byte[] {1}));
     }
 
     @Test void boundedStoreRequestsRejectEmptyAndOverLimitPredicatesAndMutations() {
-        assertThrows(IllegalArgumentException.class, () -> WebAuthnStoreSnapshot.fromEntries(Set.of(),Map.of()));
+        assertThrows(IllegalArgumentException.class, () -> WebAuthnStoreSnapshot.fromEntries(Set.of(),Map.of(), ScriptedWebAuthnStore.observation(java.time.Instant.now())));
         Map<WebAuthnStoreKey, WebAuthnStoreEntry> entries = new HashMap<>();
         for (int i=0;i<17;i++) entries.put(WebAuthnStoreKey.forCredential("tenant",RP,new byte[] {(byte)i}),WebAuthnStoreEntry.Absent.confirmed());
-        assertThrows(IllegalArgumentException.class, () -> WebAuthnStoreSnapshot.fromEntries(entries.keySet(),entries));
+        assertThrows(IllegalArgumentException.class, () -> WebAuthnStoreSnapshot.fromEntries(entries.keySet(),entries, ScriptedWebAuthnStore.observation(java.time.Instant.now())));
         var keys = new ArrayList<>(entries.keySet()).subList(0,9);
         Map<WebAuthnStoreKey,WebAuthnStoreEntry> nine = new HashMap<>();
         List<WebAuthnStoreWrite.Mutation> mutations = new ArrayList<>();
         for (WebAuthnStoreKey key : keys) { nine.put(key,WebAuthnStoreEntry.Absent.confirmed()); mutations.add(WebAuthnStoreWrite.Mutation.insert(key,new byte[] {1})); }
-        var snapshot = WebAuthnStoreSnapshot.fromEntries(nine.keySet(),nine);
-        assertThrows(IllegalArgumentException.class, () -> WebAuthnStoreWrite.fromSnapshotAndMutations(snapshot,mutations));
+        var snapshot = WebAuthnStoreSnapshot.fromEntries(nine.keySet(),nine, ScriptedWebAuthnStore.observation(java.time.Instant.now()));
+        assertThrows(IllegalArgumentException.class, () -> ScriptedWebAuthnStore.write(snapshot,mutations));
         for (byte[] invalid : new byte[][] {new byte[0],new byte[262145]}) {
             assertThrows(IllegalArgumentException.class, () -> WebAuthnStoreWrite.Mutation.insert(keys.get(0),invalid));
             assertThrows(IllegalArgumentException.class, () -> WebAuthnStoreWrite.Mutation.replace(keys.get(0),invalid));
@@ -144,18 +152,18 @@ final class WebAuthnCloseoutContractTests {
         for (int[] limits : new int[][] {{0,1},{65537,1},{1,0},{1,268435457}})
             assertThrows(IllegalArgumentException.class, () -> InMemoryWebAuthnStore.withLimits(limits[0],limits[1]));
         var store = InMemoryWebAuthnStore.withLimits(1,1); var key = WebAuthnStoreKey.forCredential("tenant",RP,new byte[] {1});
-        var absent = WebAuthnStoreSnapshot.fromEntries(Set.of(key),Map.of(key,WebAuthnStoreEntry.Absent.confirmed()));
-        var insertion=WebAuthnStoreWrite.fromSnapshotAndMutations(absent,List.of(WebAuthnStoreWrite.Mutation.insert(key,new byte[] {1})));
-        assertEquals(WebAuthnStoreCommitResult.UNAVAILABLE,store.compareAndCommit(insertion,Duration.ofNanos(-1)));
+        var absent=assertInstanceOf(WebAuthnStoreReadResult.Available.class,store.read(Set.of(key),Duration.ofSeconds(1))).getSnapshot();
+        var insertion=ScriptedWebAuthnStore.write(absent,List.of(WebAuthnStoreWrite.Mutation.insert(key,new byte[] {1})));
+        assertEquals(WebAuthnStoreCommitResult.UNAVAILABLE,store.compareAndCommit(insertion,Duration.ofNanos(-1)).getStatus());
         assertInstanceOf(WebAuthnStoreReadResult.Unavailable.class,store.read(Set.of(key),Duration.ZERO));
         Thread.currentThread().interrupt();
         try {
-            assertEquals(WebAuthnStoreCommitResult.UNAVAILABLE,store.compareAndCommit(insertion,Duration.ofSeconds(30)));
+            assertEquals(WebAuthnStoreCommitResult.UNAVAILABLE,store.compareAndCommit(insertion,Duration.ofSeconds(30)).getStatus());
             assertInstanceOf(WebAuthnStoreReadResult.Unavailable.class,store.read(Set.of(key),Duration.ofSeconds(31)));
             assertTrue(Thread.currentThread().isInterrupted());
         } finally { Thread.interrupted(); }
-        assertEquals(WebAuthnStoreCommitResult.COMMITTED,store.compareAndCommit(insertion,Duration.ofSeconds(30)));
-        assertEquals(WebAuthnStoreCommitResult.CONFLICT,store.compareAndCommit(insertion,Duration.ofSeconds(1)));
+        assertEquals(WebAuthnStoreCommitResult.COMMITTED,store.compareAndCommit(insertion,Duration.ofSeconds(30)).getStatus());
+        assertEquals(WebAuthnStoreCommitResult.CONFLICT,store.compareAndCommit(insertion,Duration.ofSeconds(1)).getStatus());
     }
 
     private static @NonNull WebAuthnRelyingParty relyingParty(@NonNull WebAuthnStore store,@NonNull WebAuthnRecoveryGate gate) {
@@ -171,14 +179,15 @@ final class WebAuthnCloseoutContractTests {
         };
     }
     private static final class OutcomeStore implements WebAuthnStore {
-        private final @NonNull WebAuthnStoreCommitResult outcome;
+        private @NonNull WebAuthnStoreCommitResult outcome;
+        private final @NonNull ScriptedWebAuthnStore source=new ScriptedWebAuthnStore(java.time.Instant.now());
         private int reads,writes;
         private OutcomeStore(@NonNull WebAuthnStoreCommitResult outcome){this.outcome=outcome;}
-        @Override public @NonNull WebAuthnStoreReadResult read(@NonNull Set<@NonNull WebAuthnStoreKey> keys,@NonNull Duration budget) {
-            reads++; Map<WebAuthnStoreKey,WebAuthnStoreEntry> absent=new HashMap<>();
-            for(WebAuthnStoreKey key:keys)absent.put(key,WebAuthnStoreEntry.Absent.confirmed());
-            return WebAuthnStoreReadResult.Available.fromSnapshot(WebAuthnStoreSnapshot.fromEntries(keys,absent));
+        @Override public @NonNull WebAuthnStoreReadResult read(@NonNull Set<@NonNull WebAuthnStoreKey> keys,@NonNull Duration budget){reads++;return this.source.read(keys,budget);}
+        @Override public @NonNull WebAuthnStoreCommitReceipt compareAndCommit(@NonNull WebAuthnStoreWrite write,@NonNull Duration budget){
+            writes++;
+            if(this.outcome==WebAuthnStoreCommitResult.COMMITTED)return this.source.compareAndCommit(write,budget);
+            return this.outcome==WebAuthnStoreCommitResult.UNKNOWN?WebAuthnStoreCommitReceipt.unknownInstance():WebAuthnStoreCommitReceipt.fromRefusal(this.outcome);
         }
-        @Override public @NonNull WebAuthnStoreCommitResult compareAndCommit(@NonNull WebAuthnStoreWrite write,@NonNull Duration budget){writes++;return outcome;}
     }
 }

@@ -27,9 +27,10 @@ import static java.util.Objects.requireNonNull;
 @Immutable
 public abstract sealed class WebAuthnRegistrationRequestResult permits
         WebAuthnRegistrationRequestResult.Prepared, WebAuthnRegistrationRequestResult.Rejected,
-        WebAuthnRegistrationRequestResult.Unavailable, WebAuthnRegistrationRequestResult.Indeterminate {
+        WebAuthnRegistrationRequestResult.Unavailable, WebAuthnRegistrationRequestResult.Indeterminate, WebAuthnRegistrationRequestResult.ReconciliationRequired {
     private static final @NonNull Unavailable UNAVAILABLE = new Unavailable();
     private static final @NonNull Indeterminate INDETERMINATE = new Indeterminate();
+    private static final @NonNull ReconciliationRequired RECONCILIATION_REQUIRED = new ReconciliationRequired();
     WebAuthnRegistrationRequestResult() { }
     static @NonNull WebAuthnRegistrationRequestResult prepared(@NonNull WebAuthnBrowserRequest request) {
         return new Prepared(request);
@@ -37,6 +38,7 @@ public abstract sealed class WebAuthnRegistrationRequestResult permits
     static @NonNull WebAuthnRegistrationRequestResult rejected() { return new Rejected(); }
     static @NonNull WebAuthnRegistrationRequestResult unavailable() { return UNAVAILABLE; }
     static @NonNull WebAuthnRegistrationRequestResult indeterminate() { return INDETERMINATE; }
+    static @NonNull WebAuthnRegistrationRequestResult reconciliationRequired() { return RECONCILIATION_REQUIRED; }
     /** Redacts browser and account fields.
      * @return a fixed description
      * @since 1.0.0 */
@@ -71,4 +73,11 @@ public abstract sealed class WebAuthnRegistrationRequestResult permits
     @Immutable public static final class Indeterminate extends WebAuthnRegistrationRequestResult {
         private Indeterminate() { }
     }
+    /** The requested transition committed, but normal output could not be admitted.
+     * Reconcile through an authorized fresh operation before deciding what to do next.
+     * @since 1.0.0 */
+    @Immutable public static final class ReconciliationRequired extends WebAuthnRegistrationRequestResult {
+        private ReconciliationRequired() { }
+    }
+
 }

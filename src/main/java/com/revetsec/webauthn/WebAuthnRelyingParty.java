@@ -96,6 +96,7 @@ public final class WebAuthnRelyingParty {
             case REJECTED -> WebAuthnRegistrationRequestResult.rejected();
             case UNAVAILABLE -> WebAuthnRegistrationRequestResult.unavailable();
             case INDETERMINATE -> WebAuthnRegistrationRequestResult.indeterminate();
+            case RECONCILIATION_REQUIRED -> WebAuthnRegistrationRequestResult.reconciliationRequired();
             case SUCCEEDED, COUNTER_RISK -> throw new IllegalStateException("Invalid begin outcome");
         };
     }
@@ -156,6 +157,7 @@ public final class WebAuthnRelyingParty {
             case REJECTED, COUNTER_RISK -> WebAuthnRegistrationResult.rejected(WebAuthnRejectionReason.REJECTED);
             case UNAVAILABLE -> WebAuthnRegistrationResult.unavailable();
             case INDETERMINATE -> WebAuthnRegistrationResult.indeterminate();
+            case RECONCILIATION_REQUIRED -> WebAuthnRegistrationResult.reconciliationRequired();
             case PREPARED -> throw new IllegalStateException("Invalid completion outcome");
         };
     }
@@ -196,6 +198,7 @@ public final class WebAuthnRelyingParty {
             case COUNTER_RISK -> WebAuthnAuthenticationResult.rejected(WebAuthnRejectionReason.COUNTER_RISK);
             case UNAVAILABLE -> WebAuthnAuthenticationResult.unavailable();
             case INDETERMINATE -> WebAuthnAuthenticationResult.indeterminate();
+            case RECONCILIATION_REQUIRED -> WebAuthnAuthenticationResult.reconciliationRequired();
             case PREPARED -> throw new IllegalStateException("Invalid completion outcome");
         };
     }
@@ -241,7 +244,7 @@ public final class WebAuthnRelyingParty {
         return switch (result.status()) {
             case LISTED -> WebAuthnCredentialListResult.listed(result.credentialIds());
             case UNAVAILABLE -> WebAuthnCredentialListResult.unavailable();
-            case REMOVED, ABSENT, DISABLED, INDETERMINATE ->
+            case REMOVED, ABSENT, DISABLED, INDETERMINATE, RECONCILIATION_REQUIRED ->
                     throw new IllegalStateException("Invalid listing outcome");
         };
     }
@@ -262,6 +265,7 @@ public final class WebAuthnRelyingParty {
             case ABSENT -> WebAuthnCredentialRemovalResult.absent();
             case UNAVAILABLE -> WebAuthnCredentialRemovalResult.unavailable();
             case INDETERMINATE -> WebAuthnCredentialRemovalResult.indeterminate();
+            case RECONCILIATION_REQUIRED -> WebAuthnCredentialRemovalResult.reconciliationRequired();
             case LISTED, DISABLED -> throw new IllegalStateException("Invalid removal outcome");
         };
     }
@@ -279,6 +283,7 @@ public final class WebAuthnRelyingParty {
             case DISABLED -> WebAuthnAccountDisableResult.disabled();
             case UNAVAILABLE -> WebAuthnAccountDisableResult.unavailable();
             case INDETERMINATE -> WebAuthnAccountDisableResult.indeterminate();
+            case RECONCILIATION_REQUIRED -> WebAuthnAccountDisableResult.reconciliationRequired();
             case LISTED, REMOVED, ABSENT -> throw new IllegalStateException("Invalid disable outcome");
         };
     }
@@ -287,11 +292,14 @@ public final class WebAuthnRelyingParty {
      * The application must coordinate key rotation, retain the old key until every permanent
      * row has been resealed, and close admission during restore or uncertain outcomes. Ceremony
      * rows are short lived and are not eligible. Absence returns CONFLICT; an uncertain commit
-     * returns UNKNOWN and requires authoritative reconciliation before proceeding.
+     * returns UNKNOWN and requires authoritative reconciliation before proceeding. Healthy admitted
+     * time is required before the timed attempt. This effect-only acknowledgement preserves a known
+     * COMMITTED receipt after deadline, optional-completion or permit-close failure; it releases no
+     * verification proof and performs no post-commit service-admission read.
      * @param key privileged credential, index, account-fence or namespace-clock address
-     * @return the authoritative compare-and-commit status
+     * @return the factual contextual compare-and-commit receipt
      * @since 1.0.0 */
-    @CheckReturnValue public @NonNull WebAuthnStoreCommitResult resealStoreEntry(
+    @CheckReturnValue public @NonNull WebAuthnStoreCommitReceipt resealStoreEntry(
             @NonNull WebAuthnStoreKey key) {
         return this.engine.resealStoreEntry(requireNonNull(key));
     }
@@ -304,6 +312,7 @@ public final class WebAuthnRelyingParty {
             case REJECTED -> WebAuthnAuthenticationRequestResult.rejected();
             case UNAVAILABLE -> WebAuthnAuthenticationRequestResult.unavailable();
             case INDETERMINATE -> WebAuthnAuthenticationRequestResult.indeterminate();
+            case RECONCILIATION_REQUIRED -> WebAuthnAuthenticationRequestResult.reconciliationRequired();
             case SUCCEEDED, COUNTER_RISK -> throw new IllegalStateException("Invalid begin outcome");
         };
     }

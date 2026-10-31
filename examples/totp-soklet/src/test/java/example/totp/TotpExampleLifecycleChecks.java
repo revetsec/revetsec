@@ -17,7 +17,6 @@ package example.totp;
 
 import com.revetsec.SealingKey;
 import com.revetsec.StateSealer;
-import com.revetsec.totp.InMemoryTotpStore;
 import com.revetsec.totp.RecoveryCodeUse;
 import com.revetsec.totp.TotpAuthenticator;
 import com.revetsec.totp.TotpFactor;
@@ -57,7 +56,7 @@ import javax.crypto.spec.SecretKeySpec;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
-/** End-to-end route transitions with real core storage; all authentication grants are test-only. */
+/** End-to-end route transitions with an independent scripted store authority; all authentication grants are test-only. */
 @NotThreadSafe
 public final class TotpExampleLifecycleChecks {
     private static final @NonNull String NAMESPACE = "example-lifecycle";
@@ -81,7 +80,7 @@ public final class TotpExampleLifecycleChecks {
         check(prepared.contains("otpauth://totp/Example:test-account"));
         equal(fixture.security.enrollmentId, field(prepared, "enrollmentId"));
         String confirmed = checked(fixture.app.confirmEnrollment(post("/account/totp/confirm",
-                code(manual, fixture.clock))), 200);
+                code(manual, fixture))), 200);
         List<String> recovery = codes(confirmed);
         equal(10, recovery.size());
         String firstFactor = fixture.security.factorId;
@@ -91,8 +90,8 @@ public final class TotpExampleLifecycleChecks {
                 && status.contains("\"remainingRecoveryCodes\":10"));
         check(!status.contains(manual) && !status.contains(recovery.get(0)));
 
-        fixture.clock.advance();
-        String nextCode = code(manual, fixture.clock);
+        fixture.advance();
+        String nextCode = code(manual, fixture);
         MarshaledResponse login = fixture.app.verifyTotp(post("/login/totp", nextCode));
         check(checked(login, 200).contains("\"authenticated\":true"));
         checkCookie(login);
@@ -124,11 +123,11 @@ public final class TotpExampleLifecycleChecks {
         String replacement = checked(fixture.app.beginReplacement(post("/account/totp/replacement", "")), 200);
         String replacementManual = field(replacement, "manualEntryKey");
         String replaced = checked(fixture.app.confirmEnrollment(post("/account/totp/confirm",
-                code(replacementManual, fixture.clock))), 200);
+                code(replacementManual, fixture))), 200);
         equal(10, codes(replaced).size());
         check(!firstFactor.equals(fixture.security.factorId));
-        fixture.clock.advance();
-        checked(fixture.app.verifyTotp(post("/login/totp", code(replacementManual, fixture.clock))), 200);
+        fixture.advance();
+        checked(fixture.app.verifyTotp(post("/login/totp", code(replacementManual, fixture))), 200);
         equal(2, fixture.security.totpLogins);
         checked(fixture.app.useRecoveryCode(post("/login/recovery", newRecovery.get(0))), 403);
 
@@ -149,15 +148,15 @@ public final class TotpExampleLifecycleChecks {
         String manual = field(prepared, "manualEntryKey");
         fixture.security.confirmCompletion = false;
         String refused = checked(fixture.app.confirmEnrollment(post("/account/totp/confirm",
-                code(manual, fixture.clock))), 503);
+                code(manual, fixture))), 503);
         check(!refused.contains("codes") && !refused.contains("batchId") && !refused.contains(manual));
         equal(1, fixture.security.reconciliations);
         String reconciled = checked(fixture.app.status(get()), 200);
         check(reconciled.contains("\"active\":true"));
         fixture.security.factorId = field(reconciled, "factorId");
         fixture.security.loginCompletion = false;
-        fixture.clock.advance();
-        MarshaledResponse login = fixture.app.verifyTotp(post("/login/totp", code(manual, fixture.clock)));
+        fixture.advance();
+        MarshaledResponse login = fixture.app.verifyTotp(post("/login/totp", code(manual, fixture)));
         checked(login, 503);
         check(login.getCookies().isEmpty());
         equal(0, fixture.security.totpLogins);
@@ -183,11 +182,11 @@ public final class TotpExampleLifecycleChecks {
         Fixture login = new Fixture(loginNanos::get);
         String prepared = checked(login.app.beginEnrollment(post("/account/totp/enrollment", "")), 200);
         String manual = field(prepared, "manualEntryKey");
-        checked(login.app.confirmEnrollment(post("/account/totp/confirm", code(manual, login.clock))), 200);
-        login.clock.advance();
+        checked(login.app.confirmEnrollment(post("/account/totp/confirm", code(manual, login))), 200);
+        login.advance();
         login.security.afterOuterClose = () -> loginNanos.addAndGet(Duration.ofSeconds(10).toNanos());
         MarshaledResponse withheldLogin = login.app.verifyTotp(
-                post("/login/totp", code(manual, login.clock)));
+                post("/login/totp", code(manual, login)));
         String refusedLogin = checked(withheldLogin, 503);
         check(!refusedLogin.contains("authenticated") && withheldLogin.getCookies().isEmpty());
         equal(1, login.security.totpLogins);
@@ -234,13 +233,13 @@ public final class TotpExampleLifecycleChecks {
     }
 
     /** Avoids the intentionally rejected rare case where adjacent steps generate the same digits. */
-    private static @NonNull String code(@NonNull String manual, @NonNull TestClock clock) throws Exception {
+    private static @NonNull String code(@NonNull String manual, @NonNull Fixture fixture) throws Exception {
         for (int attempt = 0; attempt < 8; attempt++) {
-            Instant now = clock.instant();
+            Instant now = fixture.clock.instant();
             String candidate = otp(manual, now);
             if (!candidate.equals(otp(manual, now.minusSeconds(30)))
                     && !candidate.equals(otp(manual, now.plusSeconds(30)))) return candidate;
-            clock.advance();
+            fixture.advance();
         }
         throw new AssertionError("No unambiguous TOTP fixture step");
     }
@@ -278,16 +277,21 @@ public final class TotpExampleLifecycleChecks {
     @NotThreadSafe
     private static final class Fixture {
         private final @NonNull TestClock clock = new TestClock();
+        private final @NonNull ScriptedTotpStore store = new ScriptedTotpStore(NAMESPACE, EPOCH, this.clock.instant());
         private final @NonNull Gate gate = new Gate();
         private final @NonNull Security security = new Security(this.gate);
         private final @NonNull TotpApplication app;
         private Fixture() { this(System::nanoTime); }
+        private void advance() {
+            this.store.advance(Duration.ofSeconds(30));
+            this.clock.advance();
+        }
         private Fixture(@NonNull LongSupplier monotonicNanos) {
             byte[] key = new byte[32];
             for (int index = 0; index < key.length; index++) key[index] = (byte) (index + 1);
             TotpAuthenticator totp = TotpAuthenticator.withIssuer("Example")
                     .credentialNamespace(NAMESPACE).recoveryEpoch(EPOCH)
-                    .store(InMemoryTotpStore.withNamespace(NAMESPACE, EPOCH).build())
+                    .store(this.store)
                     .stateSealer(StateSealer.withActiveKey(SealingKey.fromBase64("test-only",
                             Base64.getEncoder().encodeToString(key))).build())
                     .clock(this.clock).recoveryGate(this.gate).build();

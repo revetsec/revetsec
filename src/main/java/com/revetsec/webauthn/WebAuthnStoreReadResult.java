@@ -16,14 +16,16 @@
 
 package com.revetsec.webauthn;
 
+import com.google.errorprone.annotations.CheckReturnValue;
 import java.util.Objects;
 import org.jspecify.annotations.NonNull;
 
 /** One authoritative read result. No result grants a verified WebAuthn proof.
  * @since 1.0.0 */
 @javax.annotation.concurrent.Immutable
+@CheckReturnValue
 public sealed interface WebAuthnStoreReadResult
-  permits WebAuthnStoreReadResult.Available, WebAuthnStoreReadResult.Unavailable {
+  permits WebAuthnStoreReadResult.Available, WebAuthnStoreReadResult.Fenced, WebAuthnStoreReadResult.Unavailable {
  /** A complete versioned snapshot.
   * @since 1.0.0 */
  @javax.annotation.concurrent.Immutable
@@ -43,6 +45,21 @@ public sealed interface WebAuthnStoreReadResult
   public @NonNull WebAuthnStoreSnapshot getSnapshot() { return this.snapshot; }
   /** Redacts all observations. @since 1.0.0 */
   @Override public @NonNull String toString() { return "Available{snapshot=<redacted>}"; }
+ }
+
+ /** The requested state incarnation is incompatible with current admission.
+  * @since 1.0.0 */
+ @javax.annotation.concurrent.Immutable
+ @CheckReturnValue
+ final class Fenced implements WebAuthnStoreReadResult {
+  private static final WebAuthnStoreReadResult.@NonNull Fenced INSTANCE = new Fenced();
+  private Fenced() { }
+  /** Returns the fixed fenced outcome.
+   * @return the fenced result
+   * @since 1.0.0 */
+  public static WebAuthnStoreReadResult.@NonNull Fenced get() { return INSTANCE; }
+  /** Returns a fixed description. @since 1.0.0 */
+  @Override public @NonNull String toString() { return "Fenced{}"; }
  }
 
  /** No authoritative read was available.

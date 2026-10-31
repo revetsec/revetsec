@@ -17,6 +17,7 @@
 package com.revetsec.totp;
 
 import org.jspecify.annotations.NonNull;
+import com.google.errorprone.annotations.CheckReturnValue;
 import javax.annotation.concurrent.Immutable;
 import java.time.Duration;
 
@@ -26,8 +27,9 @@ import static java.util.Objects.requireNonNull;
  * @since 1.0.0 */
 @Immutable
 public abstract sealed class TotpVerificationResult permits
-        TotpVerificationResult.Succeeded, TotpVerificationResult.Rejected, TotpVerificationResult.Throttled, TotpVerificationResult.Unavailable, TotpVerificationResult.Indeterminate {
+        TotpVerificationResult.Succeeded, TotpVerificationResult.Rejected, TotpVerificationResult.Throttled, TotpVerificationResult.Unavailable, TotpVerificationResult.Indeterminate, TotpVerificationResult.ReconciliationRequired {
     private static final @NonNull Indeterminate INDETERMINATE = new Indeterminate();
+    private static final @NonNull ReconciliationRequired RECONCILIATION_REQUIRED = new ReconciliationRequired();
 
     TotpVerificationResult() { }
     static @NonNull TotpVerificationResult succeeded(@NonNull TotpVerification verification) {
@@ -44,6 +46,10 @@ public abstract sealed class TotpVerificationResult permits
     }
     static @NonNull TotpVerificationResult indeterminate() {
         return INDETERMINATE;
+    }
+    @CheckReturnValue
+    static @NonNull TotpVerificationResult reconciliationRequired() {
+        return RECONCILIATION_REQUIRED;
     }
     static @NonNull TotpVerificationResult unavailable() {
         return unavailable(TotpUnavailableReason.DEPENDENCY_UNAVAILABLE);
@@ -116,5 +122,13 @@ public abstract sealed class TotpVerificationResult permits
     @Immutable
     public static final class Indeterminate extends TotpVerificationResult {
         private Indeterminate() { }
+    }
+
+    /** The requested transition is known committed, but normal output could not be admitted.
+     * No proof, secret or operation detail is released.
+     * @since 1.0.0 */
+    @Immutable
+    public static final class ReconciliationRequired extends TotpVerificationResult {
+        private ReconciliationRequired() { }
     }
 }

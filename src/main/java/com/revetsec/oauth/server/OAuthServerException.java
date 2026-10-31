@@ -100,6 +100,9 @@ public abstract sealed class OAuthServerException extends RevetsecException perm
 		STORE_CORRUPT(Kind.STORE,ErrorCategory.CONFIGURATION,"The OAuth server store state is invalid."),
 		/** The OAuth server commit outcome is unknown. */
 		COMMIT_OUTCOME_UNKNOWN(Kind.STORE,ErrorCategory.TRANSPORT,"The OAuth server commit outcome is unknown."),
+        /** The OAuth server transition committed but its result was not admitted.
+         * @since 1.0.0 */
+        COMMIT_CONFIRMED_NOT_ADMITTED(Kind.STORE,ErrorCategory.TRANSPORT,"The OAuth server transition committed but its result was not admitted."),
 		/** The OAuth server client metadata is unavailable. */
 		CLIENT_METADATA_UNAVAILABLE(Kind.TRANSPORT,ErrorCategory.TRANSPORT,"The OAuth server client metadata is unavailable."),
 		/** The OAuth server configuration is invalid. */

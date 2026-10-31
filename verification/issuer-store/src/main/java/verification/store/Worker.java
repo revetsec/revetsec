@@ -45,10 +45,10 @@ public final class Worker {
             Files.writeString(dir.resolve("sealer-next.txt"),Base64.getEncoder().encodeToString(key));System.out.println("KEYS");return;
         }
         String mode=p.getProperty("mode","normal");int[] calls={0};
-        PostgresStore store=new PostgresStore(value(p,"url"),p,Integer.parseInt(p.getProperty("capacity","1000")));
+        PostgresStore store=new PostgresStore(value(p,"url"),p,Integer.parseInt(p.getProperty("capacity","4096")));
         OAuthAuthorizationServerStore wrapper=new OAuthAuthorizationServerStore() {
-            @Override public @NonNull Optional<@NonNull OAuthStoreEntry> read(@NonNull OAuthStoreKey key,@NonNull Duration budget){return store.read(key,budget);}
-            @Override public @NonNull OAuthStoreCommitStatus commit(@NonNull OAuthStoreTransaction txn,@NonNull Duration budget){
+            @Override public @NonNull OAuthStoreReadResult read(@NonNull OAuthStoreKey key,@NonNull Duration budget){return store.read(key,budget);}
+            @Override public @NonNull OAuthStoreCommitReceipt commit(@NonNull OAuthStoreTransaction txn,@NonNull Duration budget){
                 calls[0]++;
                 if(calls[0]==1 && mode.equals("race")){try{gate(dir);}catch(Exception e){throw new IllegalStateException("Gate failed");}}
                 return store.commit(txn,budget);
@@ -68,10 +68,10 @@ public final class Worker {
                 ()->store.probe=(stage,txn)->{if(stage.equals("mutation"))throw new java.sql.SQLException("Injected SQL failure");},
                 ()->store.probe=null);return;
         }
-        if(command.equals("init")){System.out.println(f.server.initializeFreshIssuer().name());f.server.establishNewSubject("subject");return;}
+        if(command.equals("init")){System.out.println(f.server.initializeFreshIssuer().getStatus().name());f.server.establishNewSubject("subject");return;}
         if(command.equals("budget")) {
             long start=System.nanoTime();boolean failed=false;
-            try{store.read(OAuthStoreKey.fromStoredForm(value(p,"key")),Duration.ofMillis(300));}catch(IllegalStateException e){failed=true;}
+            failed=store.read(OAuthStoreKey.fromStoredForm(value(p,"key")),Duration.ofMillis(300)) instanceof OAuthStoreReadResult.Unavailable;
             System.out.println(failed && System.nanoTime()-start<Duration.ofSeconds(2).toNanos()?"BOUNDED":"BAD-BUDGET");return;
         }
         if(mode.equals("wait"))gate(dir); // engine already built, before route admission
@@ -81,7 +81,7 @@ public final class Worker {
                 case "warm"-> {f.server.warmUp();System.out.println("READY");return;}
                 case "fence"-> {f.server.revokeAllGrants();System.out.println("FENCED");return;}
                 case "subject-fence"-> {f.server.revokeSubject("subject");System.out.println("FENCED");return;}
-                case "reseal"-> {System.out.println(f.server.resealStoreEntry(OAuthStoreKey.fromStoredForm(value(p,"key"))).name());return;}
+                case "reseal"-> {System.out.println(f.server.resealStoreEntry(OAuthStoreKey.fromStoredForm(value(p,"key"))).getStatus().name());return;}
                 case "prepare"-> {String code=f.code();if(!admitted(deployment)){System.out.println("GATED");return;}Files.writeString(dir.resolve("code"),code);System.out.println("PREPARED");return;}
                 case "begin"-> {String handle=f.begin();if(!admitted(deployment)){System.out.println("GATED");return;}Files.writeString(dir.resolve("interaction"),handle);System.out.println("PREPARED");return;}
                 case "complete"-> {var result=f.complete(Files.readString(dir.resolve("interaction")));System.out.println(!admitted(deployment)?"GATED":result instanceof OAuthAuthorizationResult.Completed?"COMPLETED":"REJECTED");return;}

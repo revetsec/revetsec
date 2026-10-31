@@ -88,6 +88,7 @@ public final class TotpAuthenticator {
             case THROTTLED -> TotpEnrollmentRequestResult.throttled(result.retryAfter);
             case UNAVAILABLE -> TotpEnrollmentRequestResult.unavailable(result.unavailable);
             case INDETERMINATE -> TotpEnrollmentRequestResult.indeterminate();
+			case RECONCILIATION_REQUIRED -> TotpEnrollmentRequestResult.reconciliationRequired();
             default -> throw new IllegalStateException("Unexpected TOTP operation outcome");
         };
     }
@@ -109,6 +110,7 @@ public final class TotpAuthenticator {
             case THROTTLED -> TotpEnrollmentResult.throttled(result.retryAfter);
             case UNAVAILABLE -> TotpEnrollmentResult.unavailable(result.unavailable);
             case INDETERMINATE -> TotpEnrollmentResult.indeterminate();
+			case RECONCILIATION_REQUIRED -> TotpEnrollmentResult.reconciliationRequired();
             default -> throw new IllegalStateException("Unexpected TOTP operation outcome");
         };
     }
@@ -129,6 +131,7 @@ public final class TotpAuthenticator {
             case THROTTLED -> TotpVerificationResult.throttled(result.retryAfter);
             case UNAVAILABLE -> TotpVerificationResult.unavailable(result.unavailable);
             case INDETERMINATE -> TotpVerificationResult.indeterminate();
+			case RECONCILIATION_REQUIRED -> TotpVerificationResult.reconciliationRequired();
             default -> throw new IllegalStateException("Unexpected TOTP operation outcome");
         };
     }
@@ -149,6 +152,7 @@ public final class TotpAuthenticator {
             case THROTTLED -> RecoveryCodeUseResult.throttled(result.retryAfter);
             case UNAVAILABLE -> RecoveryCodeUseResult.unavailable(result.unavailable);
             case INDETERMINATE -> RecoveryCodeUseResult.indeterminate();
+			case RECONCILIATION_REQUIRED -> RecoveryCodeUseResult.reconciliationRequired();
             default -> throw new IllegalStateException("Unexpected TOTP operation outcome");
         };
     }
@@ -167,6 +171,7 @@ public final class TotpAuthenticator {
             case REJECTED -> RecoveryCodeRotationResult.rejected(result.rejection);
             case UNAVAILABLE -> RecoveryCodeRotationResult.unavailable(result.unavailable);
             case INDETERMINATE -> RecoveryCodeRotationResult.indeterminate();
+			case RECONCILIATION_REQUIRED -> RecoveryCodeRotationResult.reconciliationRequired();
             default -> throw new IllegalStateException("Unexpected TOTP operation outcome");
         };
     }
@@ -184,6 +189,7 @@ public final class TotpAuthenticator {
             case REJECTED -> TotpFactorRemovalResult.rejected(result.rejection);
             case UNAVAILABLE -> TotpFactorRemovalResult.unavailable(result.unavailable);
             case INDETERMINATE -> TotpFactorRemovalResult.indeterminate();
+			case RECONCILIATION_REQUIRED -> TotpFactorRemovalResult.reconciliationRequired();
             default -> throw new IllegalStateException("Unexpected TOTP operation outcome");
         };
     }
@@ -202,6 +208,7 @@ public final class TotpAuthenticator {
             case REJECTED -> TotpEnrollmentCancellationResult.rejected(result.rejection);
             case UNAVAILABLE -> TotpEnrollmentCancellationResult.unavailable(result.unavailable);
             case INDETERMINATE -> TotpEnrollmentCancellationResult.indeterminate();
+			case RECONCILIATION_REQUIRED -> TotpEnrollmentCancellationResult.reconciliationRequired();
             default -> throw new IllegalStateException("Unexpected TOTP operation outcome");
         };
     }
@@ -231,6 +238,7 @@ public final class TotpAuthenticator {
             case ALREADY_CURRENT -> TotpNamespaceInitializationResult.alreadyInitialized();
             case UNAVAILABLE -> TotpNamespaceInitializationResult.unavailable(result.unavailable);
             case INDETERMINATE -> TotpNamespaceInitializationResult.indeterminate();
+			case RECONCILIATION_REQUIRED -> TotpNamespaceInitializationResult.reconciliationRequired();
             default -> throw new IllegalStateException("Unexpected TOTP operation outcome");
         };
     }
@@ -251,6 +259,7 @@ public final class TotpAuthenticator {
             case ABSENT -> TotpStoreResealResult.absent();
             case UNAVAILABLE -> TotpStoreResealResult.unavailable(result.unavailable);
             case INDETERMINATE -> TotpStoreResealResult.indeterminate();
+			case RECONCILIATION_REQUIRED -> TotpStoreResealResult.reconciliationRequired();
             default -> throw new IllegalStateException("Unexpected TOTP operation outcome");
         };
     }

@@ -36,6 +36,7 @@ import java.security.CodeSource;
 import java.time.Duration;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Deque;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -70,9 +71,10 @@ import static java.util.Objects.requireNonNull;
  * present ({@link ClassPathSource#CODE_SOURCES}).
  * {@link Result#getClassPathSource()} says which was used; a test may also force either one.
  * <p>
- * <strong>Class loading.</strong> With {@link Builder#classLoadLogging(Boolean)}, the child runs with
- * {@code -Xlog:class+load=info} written to a temporary file, and {@link Result#getLoadedClasses()} returns the binary
- * name of every class it loaded, so a test can assert that a class was never loaded.
+ * <strong>Class loading.</strong> With {@link Builder#classLoadLogging(Boolean)}, HotSpot writes
+ * {@code -Xlog:class+load=info} to a temporary file; OpenJ9 uses {@code -verbose:class} on standard
+ * error. The log is removed from captured standard error, and {@link Result#getLoadedClasses()} returns the binary
+ * names in load order, so a test can assert that a class was never loaded or loaded only after a marker.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
@@ -108,6 +110,7 @@ public final class ChildJvm {
 
 	private static final Pattern PATH_SEPARATOR = Pattern.compile(Pattern.quote(File.pathSeparator));
 	private static final Pattern WHITESPACE = Pattern.compile("\\s+");
+	private static final Pattern OPENJ9_CLASS_LOAD = Pattern.compile("class load: (\\S+)(?: from:.*)?\\s*");
 	private static final String JVM_NOTICE_PREFIX_PICKED_UP = "Picked up ";
 	private static final String JVM_NOTICE_PREFIX_NOTE = "NOTE: Picked up ";
 
@@ -170,12 +173,14 @@ public final class ChildJvm {
 			Path standardOutput = directory.resolve("stdout.txt");
 			Path standardError = directory.resolve("stderr.txt");
 			Path classLoadLog = directory.resolve("class-load.log");
+			boolean openJ9 = System.getProperty("java.vm.name", "").contains("OpenJ9");
 
 			List<String> command = new ArrayList<>();
 			command.add(javaExecutable().toString());
 			command.addAll(this.jvmOptions);
 			if (this.classLoadLogging)
-				command.add("-Xlog:class+load=info:file=\"" + classLoadLog + "\":none:filecount=0");
+				command.add(openJ9 ? "-verbose:class"
+						: "-Xlog:class+load=info:file=\"" + classLoadLog + "\":none:filecount=0");
 			command.add("-cp");
 			command.add(classPath.getValue());
 			command.add(this.mainClass.getName());
@@ -201,10 +206,14 @@ public final class ChildJvm {
 			}
 			Duration elapsed = Duration.ofNanos(System.nanoTime() - started);
 
-			Set<String> loadedClasses = this.classLoadLogging && Files.isRegularFile(classLoadLog)
-					? loadedClasses(classLoadLog) : Set.of();
+			Set<String> loadedClasses = this.classLoadLogging
+					? loadedClasses(openJ9 ? standardError : classLoadLog, openJ9) : Set.of();
+			String error = readCapped(standardError);
+			if (this.classLoadLogging && openJ9)
+				error = error.lines().filter(line -> !OPENJ9_CLASS_LOAD.matcher(line).matches())
+						.map(line -> line + "\n").collect(Collectors.joining());
 			return new Result(List.copyOf(command), classPath.getSource(), exited ? process.exitValue() : null,
-					readCapped(standardOutput), readCapped(standardError), loadedClasses, elapsed);
+					readCapped(standardOutput), error, loadedClasses, elapsed);
 		} finally {
 			deleteRecursively(directory);
 		}
@@ -392,16 +401,22 @@ public final class ChildJvm {
 		return Path.of(javaHome, "bin", windows ? "java.exe" : "java");
 	}
 
-	private static @NonNull Set<@NonNull String> loadedClasses(@NonNull Path classLoadLog) throws IOException {
-		// With the "none" decorator each line is "<binary name> source: <where>".
+	private static @NonNull Set<@NonNull String> loadedClasses(@NonNull Path classLoadLog, boolean openJ9) throws IOException {
 		Set<String> loadedClasses = new LinkedHashSet<>();
 		for (String line : Files.readAllLines(classLoadLog, StandardCharsets.UTF_8)) {
+			if (openJ9) {
+				var match = OPENJ9_CLASS_LOAD.matcher(line);
+				if (match.matches())
+					loadedClasses.add(match.group(1).replace('/', '.'));
+				continue;
+			}
+			// With HotSpot's "none" decorator each line is "<binary name> source: <where>".
 			int space = line.indexOf(' ');
 			String name = space < 0 ? line.strip() : line.substring(0, space);
 			if (!name.isEmpty())
 				loadedClasses.add(name);
 		}
-		return Set.copyOf(loadedClasses);
+		return Collections.unmodifiableSet(loadedClasses);
 	}
 
 	private static @NonNull String readCapped(@NonNull Path file) throws IOException {
@@ -637,7 +652,7 @@ public final class ChildJvm {
 		}
 
 		/**
-		 * The binary name of every class the child loaded, if class-load logging was on.
+		 * The binary name of every class the child loaded, in load order, if class-load logging was on.
 		 *
 		 * @return the class names; empty if logging was off
 		 */

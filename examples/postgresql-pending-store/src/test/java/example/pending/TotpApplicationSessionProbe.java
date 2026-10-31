@@ -143,6 +143,7 @@ public final class TotpApplicationSessionProbe {
         if (!permit.isCurrent()) return "COMPLETION_UNAVAILABLE";
         TotpAuthenticator totp = authenticator(epoch, key, activeKeyId, oldKey, gate);
         TotpVerificationResult proofResult = totp.verifyResult(ACCOUNT, code, binding);
+        if (proofResult instanceof TotpVerificationResult.ReconciliationRequired)return "PROOF_RECONCILIATION_REQUIRED";
         if (!(proofResult instanceof TotpVerificationResult.Succeeded success))
             return proofResult instanceof TotpVerificationResult.Rejected
                     || proofResult instanceof TotpVerificationResult.Throttled
@@ -189,6 +190,7 @@ public final class TotpApplicationSessionProbe {
         TotpAuthenticator totp = authenticator(epoch, key, activeKeyId, oldKey, gate);
         RecoveryCodeUseResult proofResult = totp.consumeRecoveryCodeResult(ACCOUNT,
                 argument(args, 2), binding);
+        if (proofResult instanceof RecoveryCodeUseResult.ReconciliationRequired)return "PROOF_RECONCILIATION_REQUIRED";
         if (!(proofResult instanceof RecoveryCodeUseResult.Succeeded success))
             return proofResult instanceof RecoveryCodeUseResult.Rejected
                     || proofResult instanceof RecoveryCodeUseResult.Throttled
@@ -230,8 +232,8 @@ public final class TotpApplicationSessionProbe {
     private static @NonNull TotpAuthenticator authenticator(@NonNull String epoch,
             @NonNull String key, @NonNull String activeKeyId, @Nullable String oldKey,
             @NonNull TotpFixtureRecoveryGate gate) {
-        PostgresqlTotpStore store = new PostgresqlTotpStore(NAMESPACE,
-                TotpApplicationSessionProbe::connection, 4_096, 64L * 1024 * 1024);
+        PostgresqlTotpStore store = new PostgresqlTotpStore(NAMESPACE, TotpFixtureAuthority.physical(NAMESPACE),
+                TotpApplicationSessionProbe::connection, 4_096, 64L * 1024 * 1024, TotpFixtureAuthority.fromEnvironment(NAMESPACE));
         StateSealer.Builder sealer = StateSealer.withActiveKey(SealingKey.fromBase64(activeKeyId, key));
         if (oldKey != null) sealer.verificationKeys(List.of(SealingKey.fromBase64(FIRST_KEY_ID, oldKey)));
         return TotpAuthenticator.withIssuer("Fixture").credentialNamespace(NAMESPACE)
@@ -286,6 +288,8 @@ public final class TotpApplicationSessionProbe {
         properties.setProperty("connectTimeout", Integer.toString(seconds));
         properties.setProperty("socketTimeout", Integer.toString(seconds));
         properties.setProperty("gssEncMode", "disable");
+        properties.setProperty("sslmode", "disable");
+        properties.setProperty("preferQueryMode", "simple");
         return DriverManager.getConnection(env("REVETSEC_TEST_DB_URL"), properties);
     }
 

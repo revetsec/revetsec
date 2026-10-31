@@ -16,6 +16,7 @@
 
 package com.revetsec.webauthn;
 
+import com.google.errorprone.annotations.CheckReturnValue;
 import java.time.Duration;
 import java.util.Set;
 import org.jspecify.annotations.NonNull;
@@ -25,10 +26,12 @@ import org.jspecify.annotations.NonNull;
  * return a complete versioned snapshot, and atomically compare every predicate before applying
  * all mutations. A confirmed commit must be durable for restart and cross-node continuity;
  * {@link InMemoryWebAuthnStore} is an explicitly selected, volatile single-process option only.
- * Stores must treat a ceremony carrying {@link WebAuthnStoreWrite.Mutation#getExpiresAt()}
- * as absent once that deadline passes and reclaim it before enforcing capacity. No live ceremony
- * or permanent credential, tombstone, index, fence or namespace clock may be evicted to make room;
- * capacity pressure is reported explicitly. A lost acknowledgement after
+ * Data and admitted time must be one coherent observation. Timed writes compare the current
+ * authority, recovery and clock tuple, every predicate, and fresh time after all waits. Ordinary
+ * reads, barriers and no-effect refusals perform no hidden reclamation or quota update. Expired
+ * ceremonies may remain retained until explicit admitted maintenance; capacity can refuse safely.
+ * Permanent credentials, ownership tombstones, indexes, fences and stable namespace roots are
+ * never evicted to make room. A lost acknowledgement after
  * a possible write is UNKNOWN, never CONFLICT or UNAVAILABLE. Implementations honor the remaining
  * positive caller-thread budget and preserve interrupt status. Revetsec cannot preempt blocked
  * application code or provide durability through this interface alone.
@@ -36,13 +39,15 @@ import org.jspecify.annotations.NonNull;
  * @since 1.0.0
  */
 @javax.annotation.concurrent.ThreadSafe
+@CheckReturnValue
 public interface WebAuthnStore {
  /**
   * Reads every requested key at one authoritative snapshot point. A missing key is represented
-  * by an explicit {@link WebAuthnStoreEntry.Absent} entry. A provider failure is UNAVAILABLE.
+  * by an explicit {@link WebAuthnStoreEntry.Absent} entry. Admission retirement is Fenced; a
+  * provider failure is Unavailable, never fabricated absence.
   * @param keys the complete bounded read set
   * @param remainingBudget the remaining positive operation budget
-  * @return a complete snapshot or unavailable result
+  * @return a coherent complete snapshot, fenced result or unavailable result
   * @since 1.0.0
   */
  @NonNull WebAuthnStoreReadResult read(@NonNull Set<@NonNull WebAuthnStoreKey> keys,
@@ -50,12 +55,14 @@ public interface WebAuthnStore {
 
  /**
   * Compares all snapshot versions and absences at one linearization point and applies all changes
-  * or none. An empty mutation set is still a full predicate barrier. Never retry an uncertain write.
+  * or none. Fresh healthy authority time must satisfy the original inclusive floor and exclusive
+  * expiry after all waits and before mutations. An empty mutation set is a timed predicate barrier.
+  * A known late commit stays COMMITTED with timing; an uncertain mutation is never safe to retry.
   * @param write the complete predicate and mutation set
   * @param remainingBudget the remaining positive operation budget
   * @return the actual commit outcome
   * @since 1.0.0
   */
- @NonNull WebAuthnStoreCommitResult compareAndCommit(@NonNull WebAuthnStoreWrite write,
+ @NonNull WebAuthnStoreCommitReceipt compareAndCommit(@NonNull WebAuthnStoreWrite write,
    @NonNull Duration remainingBudget);
 }

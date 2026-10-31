@@ -22,7 +22,7 @@ import static java.util.Objects.requireNonNull;
 /** Fixed internal classification; the future public exception boundary translates these reasons. */
 final class OAuthStoreFailure extends RuntimeException {
 	private static final long serialVersionUID = 1L;
-	enum Reason { UNAVAILABLE, CORRUPT_STATE, COMMIT_OUTCOME_UNKNOWN }
+	enum Reason { UNAVAILABLE, CORRUPT_STATE, COMMIT_OUTCOME_UNKNOWN, COMMIT_CONFIRMED_NOT_ADMITTED }
 	private final @NonNull Reason reason;
 	OAuthStoreFailure(@NonNull Reason reason) {
 		super("OAuth server store operation failed.", null, false, false);

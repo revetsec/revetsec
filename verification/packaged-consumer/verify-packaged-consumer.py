@@ -84,7 +84,7 @@ PUBLIC_API_LINE_PREFIX = "public-api="
 # The groups of public API checks PackagedConsumer makes, in order; its public-api= line names each.
 PUBLIC_API_CALLS = ("com.revetsec.json", "StateSealer", "OutboundUriPolicy", "com.revetsec.jose",
                     "com.revetsec.oauth", "com.revetsec.oidc", "com.revetsec.oauth.server",
-                    "com.revetsec.saml", "com.revetsec.webauthn", "com.revetsec.scim")
+                    "com.revetsec.saml", "com.revetsec.webauthn", "com.revetsec.scim", "shared-clock")
 MAVEN_CONSUMER_SOURCES = ("pom.xml", "src")
 GRADLE_CONSUMER_SOURCES = ("build.gradle", "settings.gradle", "src")
 

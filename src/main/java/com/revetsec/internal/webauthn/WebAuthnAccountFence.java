@@ -50,7 +50,7 @@ final class WebAuthnAccountFence {
         this.records = requireNonNull(records);
     }
 
-    @NonNull Encoded encode(byte @NonNull [] userHandle, boolean active) {
+    @NonNull Encoded encode(byte @NonNull [] userHandle, boolean active, @NonNull Instant floor) {
         requireNonNull(userHandle);
         byte[] handle = userHandle.clone();
         try {
@@ -59,7 +59,7 @@ final class WebAuthnAccountFence {
             byte[] payload = ByteBuffer.allocate(3 + handle.length)
                     .put((byte) VERSION).put((byte) (active ? 1 : 0))
                     .put((byte) handle.length).put(handle).array();
-            try { return new Encoded(key, this.records.seal(key, payload, PERMANENT)); }
+            try { return new Encoded(key, this.records.sealEntity(key, payload, PERMANENT, floor)); }
             finally { Arrays.fill(payload, (byte) 0); }
         } finally { Arrays.fill(handle, (byte) 0); }
     }
@@ -71,7 +71,7 @@ final class WebAuthnAccountFence {
         requireNonNull(clock);
         if (key.getKind() != WebAuthnStoreKey.Kind.ACCOUNT_FENCE)
             throw new WebAuthnRecordException();
-        byte[] payload = this.records.open(key, sealedBytes, clock);
+        byte[] payload = this.records.openAdmitted(key, sealedBytes, clock);
         try {
             if (payload.length < 4 || payload.length > 67 || payload[0] != VERSION
                     || payload[1] < 0 || payload[1] > 1 || (payload[2] & 0xff) != payload.length - 3)

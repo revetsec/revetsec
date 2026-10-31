@@ -56,6 +56,27 @@ final class OAuthResourceIntrospection {
    OAuthServerClientAdmission.remaining(deadline); return inactive();
   }
  }
+ /** Managed issuer lane: recheck provider history using this attempt's admitted authority. */
+ @NonNull OAuthStatusResponse introspect(@NonNull OAuthServerRequest request,@NonNull OAuthServerClientRepository clients,
+   @NonNull String resource,@NonNull OAuthIssuerKeyLifecycle keys,@NonNull Deadline deadline){
+  if(request.endpoint()!=OAuthServerRequest.Endpoint.INTROSPECTION)throw OAuthServerRequest.invalid();
+  OAuthServerConfiguration.resources(Map.of(resource,Set.of()),1);
+  Runnable admission=()->{
+   OAuthServerClientRegistration client=OAuthServerClientAdmission.authenticate(request,clients,deadline,this.limits);
+   if(client.isAuthorizationCodePermitted() || !client.getIntrospectionResources().contains(resource))
+    throw OAuthServerClientAdmission.failure(OAuthServerAdmissionFailure.Reason.UNAUTHORIZED_CLIENT);
+  };
+  String token=request.required("token"),selected=request.value("resource");
+  if(selected!=null && !resource.equals(selected)){admission.run();return inactive();}
+  try{return this.status.validate(token,resource,keys,deadline,claims->{
+   var response=JsonObject.builder().put("active",true).put("token_type","Bearer");
+   for(var member:claims.getMembers().entrySet())response.put(member.getKey(),member.getValue());
+   return OAuthStatusResponse.prepare(response.build(),this.bodyCap,this.headerCap);
+  },admission);}catch(OAuthServerAdmissionFailure rejection){
+   if(rejection.reason()!=OAuthServerAdmissionFailure.Reason.INVALID_TOKEN)throw rejection;
+   OAuthServerClientAdmission.remaining(deadline);return inactive();
+  }
+ }
  private @NonNull OAuthStatusResponse inactive() { return OAuthStatusResponse.prepare(JsonObject.builder().put("active", false).build(), this.bodyCap, this.headerCap); }
  @Override public @NonNull String toString() { return "OAuthResourceIntrospection{<redacted>}"; }
 }

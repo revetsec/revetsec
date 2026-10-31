@@ -16,6 +16,10 @@
 package example.pending;
 
 import com.revetsec.totp.TotpStoreCommitResult;
+import com.revetsec.totp.TotpStoreCommitReceipt;
+import com.revetsec.StoreTimeObservation;
+import com.revetsec.StoreTemporalCondition;
+import com.revetsec.internal.StoreTimeAccess;
 import com.revetsec.totp.TotpStoreEntry;
 import com.revetsec.totp.TotpStoreKey;
 import com.revetsec.totp.TotpStoreReadResult;
@@ -57,11 +61,13 @@ public final class TotpStoreProbe {
         properties.setProperty("connectTimeout", Integer.toString(seconds));
         properties.setProperty("socketTimeout", Integer.toString(seconds));
         properties.setProperty("gssEncMode", "disable");
+        properties.setProperty("sslmode", "disable");
+        properties.setProperty("preferQueryMode", "simple");
         return DriverManager.getConnection(Objects.requireNonNull(System.getenv("REVETSEC_TEST_DB_URL")), properties);
     }
 
     private static @NonNull PostgresqlTotpStore store(@NonNull String namespace, int entries) {
-        return new PostgresqlTotpStore(namespace, TotpStoreProbe::connection, entries, 2_000_000L);
+        return new PostgresqlTotpStore(namespace, TotpFixtureAuthority.physical(namespace), TotpStoreProbe::connection, entries, 2_000_000L, TotpFixtureAuthority.fromEnvironment(namespace));
     }
 
     private static @NonNull TotpStoreKey root(@NonNull String namespace, @NonNull String epoch) {
@@ -77,7 +83,8 @@ public final class TotpStoreProbe {
         byte[] nonce = new byte[32];
         Arrays.fill(nonce, (byte) value);
         String version = Base64.getUrlEncoder().withoutPadding().encodeToString(nonce);
-        return TotpStoreRecord.fromStoredForm(key, version, new byte[] {(byte) value});
+        byte[] raw=new byte[55];Arrays.fill(raw,(byte)value);raw[0]=1;raw[1]=1;raw[2]='k';
+        return TotpStoreRecord.fromStoredForm(key, version, Base64.getUrlEncoder().withoutPadding().encodeToString(raw).getBytes(StandardCharsets.US_ASCII));
     }
 
     private static @NonNull TotpStoreSnapshot read(@NonNull PostgresqlTotpStore store,
@@ -91,21 +98,30 @@ public final class TotpStoreProbe {
     private static @NonNull TotpStoreWrite initialize(@NonNull TotpStoreSnapshot snapshot,
             @NonNull TotpStoreKey root) {
         return TotpStoreWrite.fromSnapshotAndMutations(TotpStoreWrite.Purpose.INITIALIZE_NAMESPACE,
-                snapshot, List.of(TotpStoreWrite.Mutation.insert(record(root, 1))));
+                snapshot, List.of(TotpStoreWrite.Mutation.insert(record(root, 1))), condition(snapshot));
     }
 
     private static @NonNull TotpStoreWrite update(@NonNull TotpStoreSnapshot snapshot,
             @NonNull List<TotpStoreWrite.@NonNull Mutation> mutations) {
-        return TotpStoreWrite.fromSnapshotAndMutations(TotpStoreWrite.Purpose.UPDATE, snapshot, mutations);
+        return TotpStoreWrite.fromSnapshotAndMutations(TotpStoreWrite.Purpose.UPDATE, snapshot, mutations, condition(snapshot));
+    }
+
+    private static @NonNull StoreTemporalCondition condition(@NonNull TotpStoreSnapshot snapshot) {
+        StoreTimeObservation.Healthy time=(StoreTimeObservation.Healthy)snapshot.getTimeObservation();
+        return StoreTimeAccess.get().fromObservation(time,time.getObservedAt(),null);
     }
 
     private static void expect(@NonNull Object actual, @NonNull Object expected) {
+        if(actual instanceof TotpStoreCommitReceipt receipt){
+            if(receipt.getStatus()==TotpStoreCommitResult.COMMITTED && receipt.getTiming().isEmpty())throw new IllegalStateException("Committed timing missing");
+            actual=receipt.getStatus();
+        }
         if (!actual.equals(expected)) throw new IllegalStateException("Unexpected TOTP store outcome: " + actual);
     }
 
     private static void basic() {
         String namespace = "fixture-totp-basic";
-        PostgresqlTotpStore store = store(namespace, 100);
+        PostgresqlTotpStore store = store(namespace, 1024);
         TotpStoreKey root = root(namespace, FIRST);
         TotpStoreKey first = account(namespace, FIRST, "account-a");
         TotpStoreKey second = account(namespace, FIRST, "account-b");
@@ -128,7 +144,7 @@ public final class TotpStoreProbe {
         expect(store.compareAndCommit(update(current, List.of()), BUDGET), TotpStoreCommitResult.COMMITTED);
         expect(store(namespace, 3).compareAndCommit(update(read(store, Set.of(root, third)),
                 List.of(TotpStoreWrite.Mutation.insert(record(third, 4)))), BUDGET),
-                TotpStoreCommitResult.CAPACITY_REFUSED);
+                TotpStoreCommitResult.UNAVAILABLE);
         if (!(read(store, Set.of(root, third)).getEntry(third) instanceof TotpStoreEntry.Absent))
             throw new IllegalStateException("Capacity refusal wrote a record");
         expect(store.compareAndCommit(update(current, List.of(
@@ -140,7 +156,7 @@ public final class TotpStoreProbe {
 
     private static void initializeRace() {
         String namespace = "fixture-totp-race";
-        PostgresqlTotpStore store = store(namespace, 100);
+        PostgresqlTotpStore store = store(namespace, 1024);
         TotpStoreKey root = root(namespace, FIRST);
         expect(store.compareAndCommit(initialize(read(store, Set.of(root)), root), BUDGET),
                 TotpStoreCommitResult.COMMITTED);
@@ -149,7 +165,7 @@ public final class TotpStoreProbe {
 
     private static void race() throws Exception {
         String namespace = "fixture-totp-race";
-        PostgresqlTotpStore store = store(namespace, 100);
+        PostgresqlTotpStore store = store(namespace, 1024);
         TotpStoreKey root = root(namespace, FIRST);
         TotpStoreKey account = account(namespace, FIRST, "contended");
         TotpStoreSnapshot observed = read(store, Set.of(root, account));
@@ -161,7 +177,7 @@ public final class TotpStoreProbe {
                 StandardCharsets.US_ASCII)).readLine()))
             throw new IllegalStateException("Race barrier missing");
         TotpStoreCommitResult result = store.compareAndCommit(update(observed,
-                List.of(TotpStoreWrite.Mutation.insert(record(account, 2)))), BUDGET);
+                List.of(TotpStoreWrite.Mutation.insert(record(account, 2)))), BUDGET).getStatus();
         if (result != TotpStoreCommitResult.COMMITTED && result != TotpStoreCommitResult.CONFLICT)
             throw new IllegalStateException("Unexpected race outcome: " + result);
         System.out.println(result);
@@ -171,14 +187,14 @@ public final class TotpStoreProbe {
         String namespace = "fixture-totp-race";
         TotpStoreKey root = root(namespace, FIRST);
         TotpStoreKey account = account(namespace, FIRST, "contended");
-        if (!(read(store(namespace, 100), Set.of(root, account)).getEntry(account)
+        if (!(read(store(namespace, 1024), Set.of(root, account)).getEntry(account)
                 instanceof TotpStoreEntry.Present)) throw new IllegalStateException("Race winner was not retained");
         System.out.println("RACE_RETAINED");
     }
 
     private static void unknown() {
         String namespace = "fixture-totp-unknown";
-        PostgresqlTotpStore store = store(namespace, 100);
+        PostgresqlTotpStore store = store(namespace, 1024);
         TotpStoreKey root = root(namespace, FIRST);
         TotpStoreKey account = account(namespace, FIRST, "account-a");
         expect(store.compareAndCommit(initialize(read(store, Set.of(root)), root), BUDGET),
@@ -195,32 +211,30 @@ public final class TotpStoreProbe {
         String namespace = "fixture-totp-unknown";
         TotpStoreKey root = root(namespace, FIRST);
         TotpStoreKey account = account(namespace, FIRST, "account-a");
-        if (!(read(store(namespace, 100), Set.of(root, account)).getEntry(account)
+        if (!(read(store(namespace, 1024), Set.of(root, account)).getEntry(account)
                 instanceof TotpStoreEntry.Present)) throw new IllegalStateException("Unknown commit not retained");
         System.out.println("UNKNOWN_RETAINED");
     }
 
     private static void byteCap() {
         String namespace = "fixture-totp-byte-cap";
-        PostgresqlTotpStore store = store(namespace, 100);
+        PostgresqlTotpStore store = store(namespace, 1024);
         TotpStoreKey root = root(namespace, FIRST);
         TotpStoreKey account = account(namespace, FIRST, "byte-limited");
         expect(store.compareAndCommit(initialize(read(store, Set.of(root)), root), BUDGET),
                 TotpStoreCommitResult.COMMITTED);
-        PostgresqlTotpStore capped = new PostgresqlTotpStore(namespace,
-                TotpStoreProbe::connection, 100, 1);
-        TotpStoreSnapshot observed = read(capped, Set.of(root, account));
-        expect(capped.compareAndCommit(update(observed,
-                List.of(TotpStoreWrite.Mutation.insert(record(account, 11)))), BUDGET),
-                TotpStoreCommitResult.CAPACITY_REFUSED);
+        PostgresqlTotpStore capped = new PostgresqlTotpStore(namespace, TotpFixtureAuthority.physical(namespace),
+                TotpStoreProbe::connection, 1024, 1, TotpFixtureAuthority.fromEnvironment(namespace));
+        if(!(capped.read(Set.of(root,account),BUDGET) instanceof TotpStoreReadResult.Unavailable))
+            throw new IllegalStateException("Changed byte profile was admitted");
         if (!(read(store, Set.of(root, account)).getEntry(account) instanceof TotpStoreEntry.Absent))
-            throw new IllegalStateException("Byte capacity refusal wrote a record");
-        System.out.println("BYTE_CAP_REFUSED");
+            throw new IllegalStateException("Profile mismatch wrote a record");
+        System.out.println("BYTE_PROFILE_MISMATCH_CLOSED");
     }
 
     private static void fence() {
         String namespace = "fixture-totp-basic";
-        PostgresqlTotpStore store = store(namespace, 100);
+        PostgresqlTotpStore store = store(namespace, 1024);
         TotpStoreKey oldRoot = root(namespace, FIRST);
         TotpStoreKey oldAccount = account(namespace, FIRST, "stale-account");
         TotpStoreSnapshot stale = read(store, Set.of(oldRoot, oldAccount));
@@ -241,7 +255,7 @@ public final class TotpStoreProbe {
 
     private static void staleWriter() throws Exception {
         String namespace = "fixture-totp-basic";
-        PostgresqlTotpStore store = store(namespace, 100);
+        PostgresqlTotpStore store = store(namespace, 1024);
         TotpStoreKey root = root(namespace, FIRST);
         TotpStoreKey account = account(namespace, FIRST, "late-account");
         TotpStoreSnapshot stale = read(store, Set.of(root, account));
@@ -257,13 +271,13 @@ public final class TotpStoreProbe {
     }
 
     private static void provisionFlow() {
-        PostgresqlTotpStore store = store("fixture_totp_flow", 100);
+        PostgresqlTotpStore store = new PostgresqlTotpStore("fixture_totp_flow", TotpFixtureAuthority.physical("fixture_totp_flow"), TotpStoreProbe::connection, 4096,64L*1024*1024,TotpFixtureAuthority.fromEnvironment("fixture_totp_flow"));
         expect(store.provisionRecoveryEpoch(SECOND, BUDGET), TotpStoreCommitResult.COMMITTED);
         System.out.println("FLOW_EPOCH_PROVISIONED");
     }
 
     private static void flowOldFenced() {
-        PostgresqlTotpStore store = store("fixture_totp_flow", 100);
+        PostgresqlTotpStore store = new PostgresqlTotpStore("fixture_totp_flow", TotpFixtureAuthority.physical("fixture_totp_flow"), TotpStoreProbe::connection, 4096,64L*1024*1024,TotpFixtureAuthority.fromEnvironment("fixture_totp_flow"));
         TotpStoreKey oldRoot = root("fixture_totp_flow", FIRST);
         if (!(store.read(Set.of(oldRoot), BUDGET) instanceof TotpStoreReadResult.Fenced))
             throw new IllegalStateException("Restored old epoch remained authoritative");
@@ -272,7 +286,7 @@ public final class TotpStoreProbe {
 
     private static void outage() {
         String namespace = "fixture-totp-race";
-        TotpStoreReadResult result = store(namespace, 100).read(Set.of(root(namespace, FIRST)),
+        TotpStoreReadResult result = store(namespace, 1024).read(Set.of(root(namespace, FIRST)),
                 Duration.ofMillis(300));
         if (!(result instanceof TotpStoreReadResult.Unavailable))
             throw new IllegalStateException("Stopped primary yielded a trusted read");
@@ -281,7 +295,7 @@ public final class TotpStoreProbe {
 
     private static void deadline() {
         String namespace = "fixture-totp-race";
-        TotpStoreReadResult result = store(namespace, 100).read(Set.of(root(namespace, FIRST)),
+        TotpStoreReadResult result = store(namespace, 1024).read(Set.of(root(namespace, FIRST)),
                 Duration.ofMillis(75));
         if (!(result instanceof TotpStoreReadResult.Unavailable))
             throw new IllegalStateException("Locked namespace exceeded a short deadline");

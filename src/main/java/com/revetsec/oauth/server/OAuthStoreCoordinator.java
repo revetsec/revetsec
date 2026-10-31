@@ -16,7 +16,14 @@
 
 package com.revetsec.oauth.server;
 
+import com.revetsec.StoreAdmission;
+import com.revetsec.StoreCommitTiming;
+import com.revetsec.StoreTemporalCondition;
+import com.revetsec.StoreTimeObservation;
+import com.revetsec.internal.StoreTimeAccess;
+import com.revetsec.internal.StoreTimeRules;
 import com.revetsec.internal.http.Deadline;
+import com.revetsec.json.JsonObject;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 import java.time.Clock;
@@ -32,261 +39,319 @@ import java.util.function.Supplier;
 import static java.util.Objects.requireNonNull;
 import static com.revetsec.oauth.server.OAuthStoreFailure.Reason.*;
 
-/**
- * Authoritative caller-thread coordination. No cache, owned threads or backend callback transaction.
- * The backend owns atomicity/durability; a return enum cannot establish those properties by itself.
- */
+/** Caller-thread coordination of admitted issuer observations, exact joins and factual commit effects. */
 final class OAuthStoreCoordinator {
-	private static final @NonNull Duration MAXIMUM_CLOCK_RESERVATION = Duration.ofMillis(100);
-	private final @NonNull OAuthAuthorizationServerStore store;
-	private final @NonNull OAuthStoreRecordCodec codec;
-	private final @NonNull Clock clock;
-	private final @NonNull Duration clockSkew;
-	private final @NonNull Duration clockReservation;
-	private final int maximumAttempts;
-	private final int maximumSubjectLength;
-	OAuthStoreCoordinator(@NonNull OAuthAuthorizationServerStore store, @NonNull OAuthStoreRecordCodec codec,
-			@NonNull Clock clock, int maximumAttempts, int maximumSubjectLength) {
-		this(store, codec, clock, Duration.ZERO, maximumAttempts, maximumSubjectLength);
-	}
-	OAuthStoreCoordinator(@NonNull OAuthAuthorizationServerStore store, @NonNull OAuthStoreRecordCodec codec,
-			@NonNull Clock clock, @NonNull Duration clockSkew, int maximumAttempts, int maximumSubjectLength) {
-		this.store = requireNonNull(store); this.codec = requireNonNull(codec); this.clock = requireNonNull(clock);
-		this.clockSkew = com.revetsec.internal.Limits.AS_CLOCK_SKEW.require(requireNonNull(clockSkew));
-		this.clockReservation = this.clockSkew.compareTo(MAXIMUM_CLOCK_RESERVATION) < 0
-			? this.clockSkew : MAXIMUM_CLOCK_RESERVATION;
-		if (maximumAttempts < 1 || maximumAttempts > 8 || maximumSubjectLength < 16 || maximumSubjectLength > 1024)
-			throw OAuthStoreFormat.invalid();
-		this.maximumAttempts = maximumAttempts; this.maximumSubjectLength = maximumSubjectLength;
-	}
-	/** Operator assertion: this namespace has never been used/restored. Absence alone cannot prove that. */
-	@NonNull OAuthStoreCommitStatus initializeFreshIssuer(@NonNull Deadline deadline) {
-		OAuthStoreKey key = this.codec.issuerKey();
-		Optional<OAuthStoreEntry> old = read(key, deadline);
-		if (old.isPresent()) { decode(old.orElseThrow(), now()); return OAuthStoreCommitStatus.CONFLICT; }
-		OAuthStoreReadSet reads = new OAuthStoreReadSet(); reads.observe(key, old);
-		OAuthStoreEntry entry = seal(key, initialIssuer(reservedUntil(now())));
-		return submit(reads.transaction(List.of(OAuthStoreTransaction.Mutation.fromPut(entry))), deadline);
-	}
-	/** Explicit initialization outcome for management only, never credential admission. */
-	@NonNull OAuthStoreCommitStatus initializeFreshIssuerResult(@NonNull Deadline deadline) {
-		try {return initializeFreshIssuer(deadline);}
-		catch(OAuthStoreFailure failure) {if(failure.reason()==COMMIT_OUTCOME_UNKNOWN) return OAuthStoreCommitStatus.UNKNOWN;throw failure;}
-	}
-	/** Established operation: a missing permanent issuer fence is a configuration fault, never initialization. */
-	@NonNull Session begin(@NonNull Deadline deadline) { return new Session(deadline); }
-	/** Explicit first registration only; established status/revocation must use Session.subject instead. */
-	@NonNull OAuthStoreFence establishNewSubject(@NonNull String subject, @NonNull Deadline deadline) {
-		OAuthStoreKey key = subjectKey(subject);
-		for (int attempt = 0; attempt < this.maximumAttempts; attempt++) {
-			Session session = begin(deadline); Optional<OAuthStoreEntry> old = session.read(key);
-			OAuthStoreFence fence = old.isPresent() ? decode(old.orElseThrow(), session.observedNow)
-				: initialSubject();
-			List<OAuthStoreTransaction.Mutation> mutations = old.isPresent() ? List.of()
-				: List.of(OAuthStoreTransaction.Mutation.fromPut(seal(key, fence)));
-			OAuthStoreCommitStatus status = old.isPresent() ? session.barrier() : session.commit(mutations);
-			if (status == OAuthStoreCommitStatus.COMMITTED) return fence;
-		}
-		throw failure(UNAVAILABLE);
-	}
-	@NonNull OAuthStoreFence revokeSubject(@NonNull String subject, @NonNull Deadline deadline) {
-		OAuthStoreKey key = subjectKey(subject);
-		for (int attempt = 0; attempt < this.maximumAttempts; attempt++) {
-			Session session = begin(deadline); OAuthStoreFence current = session.subject(subject);
-			OAuthStoreFence next = advance(current, session.observedNow);
-			if (session.commit(List.of(OAuthStoreTransaction.Mutation.fromPut(seal(key, next))))
-				== OAuthStoreCommitStatus.COMMITTED) return next;
-		}
-		throw failure(UNAVAILABLE);
-	}
-	@NonNull OAuthStoreFence revokeAll(@NonNull Deadline deadline) {
-		for (int attempt = 0; attempt < this.maximumAttempts; attempt++) {
-			Session session = begin(deadline); OAuthStoreFence next = advance(session.issuer, session.observedNow);
-			if (session.commit(List.of(), next) == OAuthStoreCommitStatus.COMMITTED) return next;
-		}
-		throw failure(UNAVAILABLE);
-	}
-	/** One CAS maintenance attempt; caller reconciles UNKNOWN rather than retrying it automatically. */
-	@NonNull OAuthStoreCommitStatus reseal(@NonNull OAuthStoreKey key, @NonNull Deadline deadline) {
-		requireNonNull(key);
-		if (!OAuthStoreFormat.namespace(key).equals(OAuthStoreFormat.namespace(this.codec.issuerKey()))) throw OAuthStoreFormat.invalid();
-		OAuthStoreReadSet reads = new OAuthStoreReadSet();
-		Optional<OAuthStoreEntry> issuerEntry = read(this.codec.issuerKey(), deadline);
-		Instant sampled = now();
-		OAuthStoreFence issuer = decode(issuerEntry.orElseThrow(() -> failure(CORRUPT_STATE)), sampled);
-		Instant time = effectiveTime(sampled, issuer.highWater());
-		reads.observe(this.codec.issuerKey(), issuerEntry);
-		Optional<OAuthStoreEntry> entry = key.equals(this.codec.issuerKey()) ? issuerEntry : read(key, deadline);
-		if (entry.isEmpty() || !time.isBefore(entry.orElseThrow().getRetainUntil())) return OAuthStoreCommitStatus.CONFLICT;
-		reads.observe(key, entry); OAuthStoreEntry old = entry.orElseThrow();
-		com.revetsec.json.JsonObject payload = crypto(() -> this.codec.open(old, Clock.fixed(time, java.time.ZoneOffset.UTC)));
-		if (key.getKind() == OAuthStoreKey.Kind.ISSUER_STATE || key.getKind() == OAuthStoreKey.Kind.SUBJECT_STATE)
-			crypto(() -> OAuthStoreFence.decode(payload, key.getKind()));
-  else {
-   OAuthServerIngressLimits limits=new OAuthServerIngressLimits(65536,65536,65536,4096,4096,1024,64,128,128);
-   String name=key.getStorageKey();String id=name.substring(name.lastIndexOf(':')+1);
-   OAuthAuthorizationRecord record=crypto(() -> OAuthAuthorizationRecord.decode(key.getKind(),id,payload,limits,this.maximumSubjectLength));
-   if(!record.retention().equals(old.getRetainUntil())) throw failure(CORRUPT_STATE);
-  }
-		OAuthStoreEntry replacement = crypto(() -> this.codec.seal(key, old.getRetainUntil(), payload.toJson()));
-		return submit(reads.transaction(List.of(OAuthStoreTransaction.Mutation.fromPut(replacement))), deadline, true);
-	}
-	private @NonNull OAuthStoreKey subjectKey(@NonNull String subject) {
-		OAuthServerConfiguration.text(subject, this.maximumSubjectLength);
-		return this.codec.subjectKey(subject);
-	}
-	private @NonNull OAuthStoreFence initialIssuer(@NonNull Instant now) {
-		return crypto(() -> OAuthStoreFence.initialIssuer(this.codec.freshVersion(), now));
-	}
-	private @NonNull OAuthStoreFence initialSubject() {
-		return crypto(() -> OAuthStoreFence.initialSubject(this.codec.freshVersion()));
-	}
-	private @NonNull OAuthStoreFence advance(@NonNull OAuthStoreFence fence, @NonNull Instant time) {
-		return crypto(() -> fence.advance(time));
-	}
-	private @NonNull OAuthStoreEntry seal(@NonNull OAuthStoreKey key, @NonNull OAuthStoreFence fence) {
-		return crypto(() -> this.codec.seal(key, OAuthStoreFormat.PERMANENT, fence.toPayload()));
-	}
-	private @NonNull OAuthStoreFence decode(@NonNull OAuthStoreEntry entry, @NonNull Instant time) {
-		return crypto(() -> OAuthStoreFence.decode(this.codec.open(entry, Clock.fixed(time, ZoneOffset.UTC)), entry.getKey().getKind()));
-	}
-	private static <T> @NonNull T crypto(@NonNull Supplier<@NonNull T> operation) {
-		try { return operation.get(); }
-		catch (VirtualMachineError fatal) { throw fatal; }
-		catch (Throwable exception) { throw failure(CORRUPT_STATE); }
-	}
-	private @NonNull Instant now() {
-		try { Instant time = this.clock.instant();
-			if (time == null || !time.isBefore(OAuthStoreFormat.PERMANENT)) throw failure(UNAVAILABLE);
-			return time;
-		} catch (VirtualMachineError fatal) { throw fatal; }
-		catch (Throwable exception) { throw callbackFailure(exception); }
-	}
-	private @NonNull Instant effectiveTime(@NonNull Instant sampled, @NonNull Instant highWater) {
-		if (!sampled.isBefore(highWater)) return sampled;
-		if (Duration.between(sampled, highWater).compareTo(this.clockSkew) > 0) throw failure(UNAVAILABLE);
-		return highWater;
-	}
-	/** A persisted upper bound; reservations never accumulate when a node's wall clock lags. */
-	private @NonNull Instant reservedUntil(@NonNull Instant sampled) {
-		if (this.clockReservation.isZero()) return sampled;
-		Instant latest = OAuthStoreFormat.PERMANENT.minus(this.clockReservation);
-		return sampled.isBefore(latest) ? sampled.plus(this.clockReservation) : sampled;
-	}
-	private @NonNull Optional<@NonNull OAuthStoreEntry> read(@NonNull OAuthStoreKey key, @NonNull Deadline deadline) {
-		Optional<OAuthStoreEntry> entry;
-		try { entry = this.store.read(key, remaining(deadline)); }
-		catch (VirtualMachineError fatal) { throw fatal; }
-		catch (Throwable exception) { throw callbackFailure(exception); }
-		remaining(deadline);
-		if (entry == null) throw failure(UNAVAILABLE);
-		if (entry.isPresent() && !key.equals(entry.orElseThrow().getKey())) throw failure(CORRUPT_STATE);
-		return entry;
-	}
-	private @NonNull OAuthStoreCommitStatus submit(@NonNull OAuthStoreTransaction transaction, @NonNull Deadline deadline) {
-  return submit(transaction, deadline, false);
+ private final @NonNull OAuthAuthorizationServerStore store;
+ private final @NonNull OAuthStoreRecordCodec codec;
+ private final @NonNull Clock workerClock;
+ private final int maximumAttempts, maximumSubjectLength;
+ private final @NonNull ThreadLocal<@Nullable Operation> operation = new ThreadLocal<>();
+ OAuthStoreCoordinator(@NonNull OAuthAuthorizationServerStore store, @NonNull OAuthStoreRecordCodec codec,
+   @NonNull Clock clock, int maximumAttempts, int maximumSubjectLength) {
+  this(store,codec,clock,Duration.ZERO,maximumAttempts,maximumSubjectLength);
  }
- private @NonNull OAuthStoreCommitStatus submit(@NonNull OAuthStoreTransaction transaction, @NonNull Deadline deadline, boolean allowUnknown) {
-		OAuthStoreCommitStatus status;
-		try { status = this.store.commit(transaction, remaining(deadline)); }
-		catch (VirtualMachineError fatal) { throw fatal; }
-		catch (Throwable exception) { throw callbackFailure(exception); }
-		// Uncertainty remains uncertainty even if the callback also exhausted its cooperative budget.
-		if (status == OAuthStoreCommitStatus.UNKNOWN) { if (allowUnknown) return status; throw failure(COMMIT_OUTCOME_UNKNOWN); }
-		remaining(deadline);
-		if (status == null) throw failure(UNAVAILABLE);
-		return status;
-	}
-	private static @NonNull Duration remaining(@NonNull Deadline deadline) {
-		requireNonNull(deadline);
-		if (Thread.currentThread().isInterrupted()) throw failure(UNAVAILABLE);
-		Duration budget = deadline.remaining();
-		if (budget.isZero() || budget.isNegative()) throw failure(UNAVAILABLE);
-		return budget;
-	}
-	private static @NonNull OAuthStoreFailure callbackFailure(@NonNull Throwable exception) {
-		if (exception instanceof InterruptedException) Thread.currentThread().interrupt();
-		return failure(UNAVAILABLE);
-	}
-	private static @NonNull OAuthStoreFailure failure(OAuthStoreFailure.@NonNull Reason reason) {
-		return new OAuthStoreFailure(reason);
-	}
+ OAuthStoreCoordinator(@NonNull OAuthAuthorizationServerStore store, @NonNull OAuthStoreRecordCodec codec,
+   @NonNull Clock clock, @NonNull Duration clockSkew, int maximumAttempts, int maximumSubjectLength) {
+  this.store=requireNonNull(store);this.codec=requireNonNull(codec);this.workerClock=requireNonNull(clock);
+  com.revetsec.internal.Limits.AS_CLOCK_SKEW.require(requireNonNull(clockSkew));
+  if(maximumAttempts<1 || maximumAttempts>8 || maximumSubjectLength<16 || maximumSubjectLength>1024)
+   throw OAuthStoreFormat.invalid();
+  this.maximumAttempts=maximumAttempts;this.maximumSubjectLength=maximumSubjectLength;
+ }
+ /** One public operation may contain several sessions; earlier requested effects must survive later failure. */
+ @NonNull Operation operation(@NonNull Deadline deadline) {
+  Operation next=new Operation(deadline,this.operation.get());this.operation.set(next);return next;
+ }
+ final class Operation implements AutoCloseable {
+  private final @NonNull Deadline deadline;
+  private final @Nullable Operation previous;
+  private boolean committed,unknown,raw,allowedRejection;
+  private @Nullable Session release;
+  private Operation(@NonNull Deadline deadline,@Nullable Operation previous){this.deadline=deadline;this.previous=previous;}
+  void rethrowEffect(){if(this.unknown)throw failure(COMMIT_OUTCOME_UNKNOWN);if(this.committed)throw failure(COMMIT_CONFIRMED_NOT_ADMITTED);}
+  void rethrowRejectionEffect(){if(this.allowedRejection && this.release!=null && this.release.releaseAllowed())return;rethrowEffect();}
+  void release(){Session admitted=this.release;if(!this.raw && admitted!=null && !admitted.releaseAllowed()){
+   rethrowEffect();throw failure(UNAVAILABLE);
+  }}
+  @Override public void close(){if(this.previous==null)operation.remove();else operation.set(this.previous);}
+ }
+ private @Nullable Operation current(@NonNull Deadline deadline){
+  Operation current=this.operation.get();return current!=null && current.deadline.equals(deadline)?current:null;
+ }
+ /** Raw initialization reports factual effects; it is not a readiness or credential-release operation. */
+ @NonNull OAuthStoreCommitReceipt initializeFreshIssuerResult(@NonNull Deadline deadline){
+  Operation scope=current(deadline);if(scope!=null)scope.raw=true;
+  Session session=new Session(deadline,false,false);
+  Optional<OAuthStoreEntry> old=session.read(this.codec.issuerKey());
+  if(old.isPresent()){
+   session.root(old.orElseThrow());return OAuthStoreCommitReceipt.fromRefusal(OAuthStoreCommitStatus.CONFLICT);
+  }
+  Instant minimum=session.effectiveNow();StoreAdmission admission=session.admission();
+  OAuthIssuerRootV2 root=crypto(()->OAuthIssuerRootV2.initial(this.codec.freshVersion(),admission.getAuthorityId(),minimum));
+  OAuthStoreEntry entry=crypto(()->this.codec.sealAdmitted(this.codec.issuerKey(),OAuthStoreFormat.PERMANENT,minimum,root.toPayload()));
+  return session.finishRaw(List.of(OAuthStoreTransaction.Mutation.fromPut(entry)),false);
+ }
+ @NonNull OAuthStoreCommitReceipt initializeFreshIssuer(@NonNull Deadline deadline){return initializeFreshIssuerResult(deadline);}
+ @NonNull Session begin(@NonNull Deadline deadline){return new Session(deadline,false,true);}
+ @NonNull OAuthStoreFence establishNewSubject(@NonNull String subject,@NonNull Deadline deadline){
+  OAuthStoreKey key=subjectKey(subject);
+  for(int attempt=0;attempt<this.maximumAttempts;attempt++){
+   Session session=begin(deadline);Optional<OAuthStoreEntry> old=session.read(key);
+   OAuthStoreFence fence=old.isPresent()?session.decodeSubject(old.orElseThrow()):crypto(()->OAuthStoreFence.initialSubject(this.codec.freshVersion()));
+   List<OAuthStoreTransaction.Mutation> changes=old.isPresent()?List.of():List.of(OAuthStoreTransaction.Mutation.fromPut(session.seal(key,OAuthStoreFormat.PERMANENT,fence.toPayload())));
+   if(session.commit(changes)==OAuthStoreCommitStatus.COMMITTED)return fence;
+  }
+  throw failure(UNAVAILABLE);
+ }
+ /** Only these two methods enter FENCE_ONLY. They cannot create a root or subject or refresh a floor. */
+ @NonNull OAuthStoreFence revokeSubject(@NonNull String subject,@NonNull Deadline deadline){
+  OAuthStoreKey key=subjectKey(subject);
+  for(int attempt=0;attempt<this.maximumAttempts;attempt++){
+   Session session=new Session(deadline,true,true);OAuthStoreFence old=session.subject(subject);
+   OAuthStoreFence next=crypto(()->old.advance(old.highWater()));
+   Instant floor=requireNonNull(session.floors.get(key));
+   OAuthStoreEntry entry=crypto(()->this.codec.sealAdmitted(key,OAuthStoreFormat.PERMANENT,floor,next.toPayload()));
+   if(session.finishFence(List.of(OAuthStoreTransaction.Mutation.fromPut(entry)))==OAuthStoreCommitStatus.COMMITTED)return next;
+  }
+  throw failure(UNAVAILABLE);
+ }
+ @NonNull OAuthStoreFence revokeAll(@NonNull Deadline deadline){
+  for(int attempt=0;attempt<this.maximumAttempts;attempt++){
+   Session session=new Session(deadline,true,true);OAuthIssuerRootV2 next=crypto(()->requireNonNull(session.root).advance());
+   OAuthStoreEntry entry=crypto(()->this.codec.sealAdmitted(this.codec.issuerKey(),OAuthStoreFormat.PERMANENT,next.minimum(),next.toPayload()));
+   if(session.finishFence(List.of(OAuthStoreTransaction.Mutation.fromPut(entry)))==OAuthStoreCommitStatus.COMMITTED)return OAuthStoreFence.fromRoot(next);
+  }
+  throw failure(UNAVAILABLE);
+ }
+ /** Raw retained-state maintenance preserves the original payload, floor and full retention horizon. */
+ @NonNull OAuthStoreCommitReceipt reseal(@NonNull OAuthStoreKey key,@NonNull Deadline deadline){
+  namespace(key);Operation scope=current(deadline);if(scope!=null)scope.raw=true;
+  Session session=begin(deadline);Optional<OAuthStoreEntry> found=session.read(key);
+  if(found.isEmpty() || !session.effectiveNow().isBefore(found.orElseThrow().getRetainUntil()))
+   return OAuthStoreCommitReceipt.fromRefusal(OAuthStoreCommitStatus.CONFLICT);
+  OAuthStoreEntry old=found.orElseThrow();OAuthStoreRecordCodecV2.Opened opened=session.opened(old);
+  if(!old.getRetainUntil().equals(OAuthStoreFormat.PERMANENT))session.requireBefore(old.getRetainUntil());
+  OAuthStoreEntry replacement=crypto(()->this.codec.sealAdmitted(key,old.getRetainUntil(),opened.floor(),opened.payload().toJson()));
+  return session.finishRaw(List.of(OAuthStoreTransaction.Mutation.fromPut(replacement)),true);
+ }
+ private @NonNull OAuthStoreKey subjectKey(@NonNull String subject){OAuthServerConfiguration.text(subject,this.maximumSubjectLength);return this.codec.subjectKey(subject);}
+ private void namespace(@NonNull OAuthStoreKey key){requireNonNull(key);if(!OAuthStoreFormat.namespace(key).equals(OAuthStoreFormat.namespace(this.codec.issuerKey())))throw OAuthStoreFormat.invalid();}
+ private static boolean ordinary(@NonNull Instant time){return time.getEpochSecond()>=0 && time.getEpochSecond()<=253402300799L;}
+ private static <T> @NonNull T crypto(@NonNull Supplier<@NonNull T> work){
+  try{return work.get();}catch(VirtualMachineError fatal){throw fatal;}catch(OAuthStoreFailure failure){throw failure;}
+  catch(Throwable failure){preserveInterrupt(failure);throw failure(CORRUPT_STATE);}
+ }
+ private static @NonNull Duration remaining(@NonNull Deadline deadline){
+  if(Thread.currentThread().isInterrupted())throw failure(UNAVAILABLE);Duration left=requireNonNull(deadline).remaining();
+  if(left.isZero() || left.isNegative())throw failure(UNAVAILABLE);return left;
+ }
+ static void preserveInterrupt(@NonNull Throwable fault){
+  if(fault instanceof InterruptedException || fault instanceof java.io.InterruptedIOException)Thread.currentThread().interrupt();
+ }
+ private static @NonNull OAuthStoreFailure failure(OAuthStoreFailure.@NonNull Reason reason){return new OAuthStoreFailure(reason);}
 
-	/** One operation attempt, thread-confined; every observation is included and no uncertain attempt is reusable. */
-	final class Session {
-		private final @NonNull Deadline deadline;
-		private final @NonNull OAuthStoreReadSet reads = new OAuthStoreReadSet();
-		private final @NonNull Map<@NonNull OAuthStoreKey, @NonNull Optional<@NonNull OAuthStoreEntry>> loaded = new LinkedHashMap<>();
-		private final @NonNull OAuthStoreFence issuer;
-		private final @NonNull Instant observedNow;
-		private boolean finished;
-		private @Nullable Instant validBefore;
-		private Session(@NonNull Deadline deadline) {
-			this.deadline = requireNonNull(deadline); remaining(deadline);
-			OAuthStoreEntry entry = read(codec.issuerKey()).orElseThrow(() -> failure(CORRUPT_STATE));
-			Instant sampled = now(); this.issuer = decode(entry, sampled);
-			this.observedNow = effectiveTime(sampled, this.issuer.highWater());
-		}
-		/** Cooperative operation validity boundary, checked immediately before/after the backend returns. */
-		void requireBefore(@NonNull Instant expires) {
-			checkOpen(); requireNonNull(expires);
-			Instant previous = this.validBefore;
-			if (previous == null || expires.isBefore(previous)) this.validBefore = expires;
-			checkedNow();
-		}
-		@NonNull OAuthStoreFence issuer() { checkOpen(); return this.issuer; }
-		@NonNull Instant effectiveNow() { checkOpen(); return this.observedNow; }
-		@NonNull Optional<@NonNull OAuthStoreEntry> read(@NonNull OAuthStoreKey key) {
-			checkOpen(); requireNonNull(key); remaining(this.deadline);
-			// Reject a foreign namespace before contacting the trusted backend.
-			if (!OAuthStoreFormat.namespace(key).equals(OAuthStoreFormat.namespace(codec.issuerKey()))) throw OAuthStoreFormat.invalid();
-			Optional<OAuthStoreEntry> previous = this.loaded.get(key);
-			if (previous != null) return previous;
-			if (this.loaded.size() == 16) throw OAuthStoreFormat.invalid();
-			Optional<OAuthStoreEntry> entry = OAuthStoreCoordinator.this.read(key, this.deadline);
-			this.reads.observe(key, entry); this.loaded.put(key, entry); return entry;
-		}
-		@NonNull OAuthStoreFence subject(@NonNull String subject) {
-			OAuthStoreEntry entry = read(subjectKey(subject)).orElseThrow(() -> failure(CORRUPT_STATE));
-			return decode(entry, this.observedNow);
-		}
-		/** COMMITTED is the admission point; the caller must bind every relevant ledger row before this call. */
-		@NonNull OAuthStoreCommitStatus barrier() { return finish(List.of()); }
-		@NonNull OAuthStoreCommitStatus commit(@NonNull List<OAuthStoreTransaction.@NonNull Mutation> mutations) {
-			return commit(mutations, this.issuer);
-		}
-		private @NonNull OAuthStoreCommitStatus commit(@NonNull List<OAuthStoreTransaction.@NonNull Mutation> mutations,
-				@NonNull OAuthStoreFence issuerState) {
-			checkOpen(); requireNonNull(mutations); requireNonNull(issuerState);
-			// One of eight mutation slots belongs to the durable clock/epoch fence.
-			if (mutations.size() > 7) throw OAuthStoreFormat.invalid();
-			for (OAuthStoreTransaction.Mutation mutation : mutations)
-				if (requireNonNull(mutation).getKey().equals(codec.issuerKey())) throw OAuthStoreFormat.invalid();
-			Instant sampled = now(); Instant time = checkedTime(sampled);
-			List<OAuthStoreTransaction.Mutation> prepared = new ArrayList<>(mutations);
-			// The issuer version remains an exact condition on every transaction. Only a clock
-			// reservation rollover or an epoch change needs to mutate that shared row.
-			if (this.issuer != issuerState || clockReservation.isZero() || sampled.isAfter(this.issuer.highWater())) {
-				Instant reserved = reservedUntil(sampled);
-				Instant highWater = reserved.isAfter(time) ? reserved : time;
-				prepared.add(OAuthStoreTransaction.Mutation.fromPut(seal(codec.issuerKey(), issuerState.atTime(highWater))));
-			}
-			return finish(prepared);
-		}
-		private @NonNull Instant checkedNow() { return checkedTime(now()); }
-		private @NonNull Instant checkedTime(@NonNull Instant sampled) {
-			Instant time = effectiveTime(sampled, this.observedNow);
-			Instant boundary = this.validBefore;
-			if (boundary != null && !time.isBefore(boundary)) throw failure(UNAVAILABLE);
-			return time;
-		}
-		private @NonNull OAuthStoreCommitStatus finish(@NonNull List<OAuthStoreTransaction.@NonNull Mutation> mutations) {
-			checkOpen(); this.finished = true; checkedNow();
-			OAuthStoreTransaction transaction = this.reads.transaction(mutations);
-			OAuthStoreCommitStatus status = submit(transaction, this.deadline); checkedNow(); return status;
-		}
-		private void checkOpen() {
-			if (this.finished) throw new IllegalStateException("OAuth store attempt is closed.");
-		}
-	}
+ /** One full preparation attempt. Every external callback precedes the final exact fact join. */
+ final class Session {
+  private final @NonNull Deadline deadline;
+  private final boolean fenceOnly;
+  private final @NonNull OAuthStoreReadSet reads=new OAuthStoreReadSet();
+  private final @NonNull Map<@NonNull OAuthStoreKey,@NonNull Optional<@NonNull OAuthStoreEntry>> loaded=new LinkedHashMap<>();
+  private final @NonNull Map<@NonNull OAuthStoreKey,@NonNull Instant> floors=new LinkedHashMap<>();
+  private @Nullable StoreAdmission expectedAdmission;
+  private StoreTimeObservation.@Nullable Healthy profile,lastObservation;
+  private @Nullable Instant latestTime,validBefore;
+  private @Nullable OAuthIssuerRootV2 root;
+  private @Nullable OAuthStoreEntry rootEntry;
+  private boolean finished,requestedCommitted,mutationUnknown,expiryNoop;
+  void allowExpiryNoop(){this.expiryNoop=true;}
+  private OAuthServerException.@NonNull Reason expiryReason=OAuthServerException.Reason.INVALID_GRANT;
+  void expiresAs(OAuthServerException.@NonNull Reason reason){this.expiryReason=requireNonNull(reason);}
+  private StoreTimeObservation.@Nullable Healthy finalObservation;
+  private long finalCallStart;
+  private Session(@NonNull Deadline deadline,boolean fenceOnly,boolean established){
+   this.deadline=requireNonNull(deadline);this.fenceOnly=fenceOnly;remaining(deadline);
+   Operation scope=current(deadline);if(scope!=null){scope.release=null;scope.allowedRejection=false;}
+   if(established){OAuthStoreEntry entry=read(codec.issuerKey()).orElseThrow(()->failure(CORRUPT_STATE));root(entry);}
+  }
+  private @NonNull StoreAdmission admission(){return requireNonNull(this.expectedAdmission);}
+  private StoreTimeObservation.@NonNull Healthy profile(){return requireNonNull(this.profile);}
+  private @NonNull OAuthIssuerRootV2 root(@NonNull OAuthStoreEntry entry){
+   OAuthStoreRecordCodecV2.Opened opened=this.fenceOnly?crypto(()->codec.openPermanentFence(entry,admission(),entry)):opened(entry);
+   OAuthIssuerRootV2 decoded=crypto(()->OAuthIssuerRootV2.decode(opened.payload()));
+   if(!decoded.authorityId().equals(admission().getAuthorityId()) || !opened.floor().equals(decoded.minimum()))throw failure(CORRUPT_STATE);
+   if(!this.fenceOnly)floor(decoded.minimum());
+   this.root=decoded;this.rootEntry=entry;return decoded;
+  }
+  @NonNull OAuthStoreFence issuer(){checkOpen();return OAuthStoreFence.fromRoot(requireNonNull(this.root));}
+  @NonNull Instant effectiveNow(){checkOpen();return requireNonNull(this.latestTime);}
+  void requireBefore(@NonNull Instant expiry){
+   checkOpen();requireNonNull(expiry);if(!ordinary(expiry))throw failure(UNAVAILABLE);
+   if(this.validBefore==null || expiry.isBefore(this.validBefore))this.validBefore=expiry;
+  }
+  @NonNull Optional<@NonNull OAuthStoreEntry> read(@NonNull OAuthStoreKey key){
+   checkOpen();namespace(key);Optional<OAuthStoreEntry> old=this.loaded.get(key);if(old!=null)return old;
+   if(this.loaded.size()==16)throw OAuthStoreFormat.invalid();Optional<OAuthStoreEntry> entry=observe(key);
+   this.loaded.put(key,entry);this.reads.observe(key,entry);return entry;
+  }
+  private @NonNull Optional<@NonNull OAuthStoreEntry> observe(@NonNull OAuthStoreKey key){
+   Duration budget=remaining(this.deadline);long started=System.nanoTime();OAuthStoreReadResult reply;
+   try{reply=store.read(key,budget);}catch(VirtualMachineError fatal){throw fatal;}
+   catch(Throwable fault){preserveInterrupt(fault);throw failure(UNAVAILABLE);}
+   if(!(reply instanceof OAuthStoreReadResult.Available available) || !available.getKey().equals(key))throw failure(UNAVAILABLE);
+   StoreTimeObservation observation=available.getTimeObservation();StoreAdmission admission=observation.getAdmission();
+   if(this.expectedAdmission!=null && !StoreTimeRules.sameAdmission(this.expectedAdmission,admission))throw failure(UNAVAILABLE);
+   if(this.expectedAdmission==null)this.expectedAdmission=admission;
+   if(!this.fenceOnly){
+    if(!(observation instanceof StoreTimeObservation.Healthy healthy))throw failure(UNAVAILABLE);
+    accept(healthy,started);
+   }
+   remaining(this.deadline);return available.getEntry();
+  }
+  private void accept(StoreTimeObservation.@NonNull Healthy observation,long started){
+   if(this.profile!=null && !StoreTimeRules.sameProfile(this.profile,observation))throw failure(UNAVAILABLE);
+   if(this.latestTime!=null && observation.getObservedAt().isBefore(this.latestTime))throw failure(UNAVAILABLE);
+   Instant wall;try{wall=requireNonNull(workerClock.instant());}catch(VirtualMachineError fatal){throw fatal;}
+   catch(Throwable fault){preserveInterrupt(fault);throw failure(UNAVAILABLE);}
+   Duration elapsed=StoreTimeRules.elapsed(started,System.nanoTime()).orElseThrow(()->failure(UNAVAILABLE));
+   if(!StoreTimeRules.isWorkerClockHealthy(observation,wall,elapsed))throw failure(UNAVAILABLE);
+   if(this.profile==null)this.profile=observation;this.lastObservation=observation;this.latestTime=observation.getObservedAt();remaining(this.deadline);
+  }
+  private void floor(@NonNull Instant value){
+   if(!ordinary(value) || value.isAfter(requireNonNull(this.latestTime)))throw failure(UNAVAILABLE);
+  }
+  private OAuthStoreRecordCodecV2.@NonNull Opened opened(@NonNull OAuthStoreEntry entry){
+   OAuthStoreRecordCodecV2.Opened opened=crypto(()->codec.openAdmitted(entry,Clock.fixed(requireNonNull(this.latestTime),ZoneOffset.UTC)));
+   floor(opened.floor());this.floors.put(entry.getKey(),opened.floor());return opened;
+  }
+  @NonNull JsonObject open(@NonNull OAuthStoreEntry entry){checkOpen();return opened(entry).payload();}
+  @NonNull OAuthStoreEntry seal(@NonNull OAuthStoreKey key,@NonNull Instant retainUntil,@NonNull String payload){
+   checkOpen();return crypto(()->codec.sealAdmitted(key,retainUntil,effectiveNow(),payload));
+  }
+  private @NonNull OAuthStoreFence decodeSubject(@NonNull OAuthStoreEntry entry){
+   OAuthStoreRecordCodecV2.Opened opened=this.fenceOnly?crypto(()->codec.openPermanentFence(entry,admission(),requireNonNull(this.rootEntry))):opened(entry);
+   this.floors.put(entry.getKey(),opened.floor());return crypto(()->OAuthStoreFence.decode(opened.payload(),OAuthStoreKey.Kind.SUBJECT_STATE));
+  }
+  @NonNull OAuthStoreFence subject(@NonNull String subject){return decodeSubject(read(subjectKey(subject)).orElseThrow(()->failure(CORRUPT_STATE)));}
+  /** Fresh authority time for key checks after provider/signing work; expected epoch predicates remain pinned. */
+  @NonNull Instant authorityNow(){
+   checkOpen();OAuthStoreEntry entry=observe(codec.issuerKey()).orElseThrow(()->failure(CORRUPT_STATE));
+   OAuthStoreRecordCodecV2.Opened opened=opened(entry);OAuthIssuerRootV2 observed=crypto(()->OAuthIssuerRootV2.decode(opened.payload()));
+   sameRoot(observed);return effectiveNow();
+  }
+  private void sameRoot(@NonNull OAuthIssuerRootV2 observed){
+   OAuthIssuerRootV2 expected=requireNonNull(this.root);
+   if(!expected.authorityId().equals(observed.authorityId()) || !expected.minimum().equals(observed.minimum())
+     || !expected.incarnation().equals(observed.incarnation()))throw failure(UNAVAILABLE);
+  }
+  private boolean join(){
+   for(var item:this.loaded.entrySet()){
+    Optional<OAuthStoreEntry> actual=observe(item.getKey());if(!sameEntry(item.getValue(),actual))return false;
+   }
+   return true;
+  }
+  private boolean sameEntry(@NonNull Optional<@NonNull OAuthStoreEntry> a,@NonNull Optional<@NonNull OAuthStoreEntry> b){
+   if(a.isEmpty() || b.isEmpty())return a.isEmpty() && b.isEmpty();OAuthStoreEntry x=a.orElseThrow(),y=b.orElseThrow();
+   return x.getKey().equals(y.getKey()) && x.getVersion().equals(y.getVersion()) && x.getRetainUntil().equals(y.getRetainUntil()) && x.toSealedForm().equals(y.toSealedForm());
+  }
+  @NonNull OAuthStoreCommitStatus barrier(){return commit(List.of());}
+  @NonNull OAuthStoreCommitStatus commit(@NonNull List<OAuthStoreTransaction.@NonNull Mutation> mutations){
+   for(OAuthStoreTransaction.Mutation mutation:mutations)if(mutation.getKey().equals(codec.issuerKey())){this.finished=true;throw OAuthStoreFormat.invalid();}
+   OAuthStoreCommitReceipt receipt=finishRaw(mutations,false);OAuthStoreCommitStatus status=receipt.getStatus();
+   if(status==OAuthStoreCommitStatus.UNKNOWN){if(mutations.isEmpty())throw failure(UNAVAILABLE);throw failure(COMMIT_OUTCOME_UNKNOWN);}
+   if(status!=OAuthStoreCommitStatus.COMMITTED){
+    if(status==OAuthStoreCommitStatus.CONFLICT)return status;
+    if(status==OAuthStoreCommitStatus.TIME_EXPIRED){
+     if(this.expiryNoop){this.validBefore=null;finalTimed();return status;}
+     if(this.expiryReason==OAuthServerException.Reason.TOKEN_REVOKED)throw OAuthServerClientAdmission.failure(OAuthServerAdmissionFailure.Reason.INVALID_TOKEN);
+     if(this.expiryReason==OAuthServerException.Reason.INVALID_GRANT)throw OAuthServerClientAdmission.failure(OAuthServerAdmissionFailure.Reason.INVALID_GRANT);
+     throw OAuthServerValidationException.fromReason(this.expiryReason);
+    }
+    throw failure(UNAVAILABLE);
+   }
+   if(!validTimedReceipt(receipt))throw effectFailure();
+   finalTimed();return status;
+  }
+  @NonNull OAuthStoreCommitStatus commitRejection(@NonNull List<OAuthStoreTransaction.@NonNull Mutation> changes){
+   OAuthStoreCommitStatus result=commit(changes);Operation scope=current(this.deadline);
+   if(result==OAuthStoreCommitStatus.COMMITTED && scope!=null)scope.allowedRejection=true;return result;
+  }
+  private @NonNull OAuthStoreCommitReceipt finishRaw(@NonNull List<OAuthStoreTransaction.@NonNull Mutation> mutations,boolean preserveFloor){
+   checkOpen();requireNonNull(mutations);
+   if(!join()){this.finished=true;return OAuthStoreCommitReceipt.fromRefusal(OAuthStoreCommitStatus.CONFLICT);}
+   this.finished=true;Instant lower=requireNonNull(this.latestTime),upper=this.validBefore;
+   if(upper!=null && !lower.isBefore(upper)){this.finished=true;return OAuthStoreCommitReceipt.fromRefusal(OAuthStoreCommitStatus.TIME_EXPIRED);}
+   List<OAuthStoreTransaction.Mutation> changes=new ArrayList<>();
+   for(OAuthStoreTransaction.Mutation mutation:mutations){
+    if(mutation.getKind()==OAuthStoreTransaction.Mutation.Kind.REMOVE || preserveFloor){changes.add(mutation);continue;}
+    OAuthStoreEntry old=mutation.getEntry().orElseThrow();OAuthStoreRecordCodecV2.Opened opened=crypto(()->codec.openAdmitted(old,Clock.fixed(lower,ZoneOffset.UTC)));
+    Instant nextFloor=old.getKey().equals(codec.issuerKey())?opened.floor():lower;
+    changes.add(OAuthStoreTransaction.Mutation.fromPut(crypto(()->codec.sealAdmitted(old.getKey(),old.getRetainUntil(),nextFloor,opened.payload().toJson()))));
+   }
+   StoreTemporalCondition condition=StoreTimeAccess.get().fromObservation(profile(),lower,upper);
+   OAuthStoreTransaction transaction=this.reads.transaction(OAuthStoreTransaction.Purpose.TIMED,admission(),condition,changes);
+   return invoke(transaction);
+  }
+  private long commitCallStart;
+  private @Nullable StoreTemporalCondition submittedCondition;
+  private @NonNull OAuthStoreCommitReceipt invoke(@NonNull OAuthStoreTransaction transaction){
+   Duration budget=remaining(this.deadline);this.finished=true;this.submittedCondition=transaction.getTemporalCondition().orElse(null);
+   this.commitCallStart=System.nanoTime();OAuthStoreCommitReceipt receipt;
+   try{receipt=store.commit(transaction,budget);}catch(VirtualMachineError fatal){rememberUnknown(transaction);throw fatal;}
+   catch(Throwable fault){preserveInterrupt(fault);receipt=null;}
+   if(receipt==null || receipt.getStatus()==OAuthStoreCommitStatus.UNKNOWN){rememberUnknown(transaction);return OAuthStoreCommitReceipt.unknownInstance();}
+   // Record durable facts before checking timing, elapsed budget, worker health or final admission.
+   if(receipt.getStatus()==OAuthStoreCommitStatus.COMMITTED && !transaction.getMutations().isEmpty()){
+    this.requestedCommitted=true;Operation scope=current(this.deadline);if(scope!=null)scope.committed=true;
+   }
+   return receipt;
+  }
+  private void rememberUnknown(@NonNull OAuthStoreTransaction transaction){
+   if(!transaction.getMutations().isEmpty()){this.mutationUnknown=true;Operation scope=current(this.deadline);if(scope!=null)scope.unknown=true;}
+  }
+  private @NonNull OAuthStoreFailure effectFailure(){return failure(this.mutationUnknown?COMMIT_OUTCOME_UNKNOWN:this.requestedCommitted?COMMIT_CONFIRMED_NOT_ADMITTED:UNAVAILABLE);}
+  private boolean validTimedReceipt(@NonNull OAuthStoreCommitReceipt receipt){
+   try{
+    StoreTemporalCondition condition=requireNonNull(this.submittedCondition);StoreCommitTiming timing=receipt.getTiming().orElseThrow();
+    StoreTimeObservation.Healthy validated=timing.getValidatedTime();Instant at=validated.getObservedAt();
+    if(!StoreTimeRules.sameProfile(profile(),validated) || at.isBefore(condition.getNotBeforeInclusive())
+      || condition.getValidBeforeExclusive().filter(bound->!at.isBefore(bound)).isPresent())return false;
+    accept(validated,this.commitCallStart);
+    if(timing.getCompletedTime().isPresent()){
+     StoreTimeObservation.Healthy completed=timing.getCompletedTime().orElseThrow();
+     if(!StoreTimeRules.sameProfile(profile(),completed) || completed.getObservedAt().isBefore(at))return false;
+     this.latestTime=completed.getObservedAt();
+    }
+    return true;
+   }catch(VirtualMachineError fatal){throw fatal;}catch(Throwable fault){preserveInterrupt(fault);return false;}
+  }
+  private void finalTimed(){
+   try{
+    this.finalCallStart=System.nanoTime();OAuthStoreEntry entry=observe(codec.issuerKey()).orElseThrow(()->failure(CORRUPT_STATE));
+    OAuthStoreRecordCodecV2.Opened opened=opened(entry);OAuthIssuerRootV2 current=crypto(()->OAuthIssuerRootV2.decode(opened.payload()));sameRoot(current);
+    this.finalObservation=requireNonNull(this.lastObservation);
+    if(!releaseAllowed())throw effectFailure();Operation scope=current(this.deadline);if(scope!=null)scope.release=this;
+   }catch(VirtualMachineError fatal){throw fatal;}catch(Throwable fault){preserveInterrupt(fault);throw effectFailure();}
+  }
+  private boolean releaseAllowed(){
+   try{remaining(this.deadline);if(this.fenceOnly)return true;StoreTimeObservation.Healthy observation=this.finalObservation;if(observation==null)return false;
+    Duration elapsed=StoreTimeRules.elapsed(this.finalCallStart,System.nanoTime()).orElseThrow();
+    return StoreTimeRules.isWorkerClockHealthy(observation,workerClock.instant(),elapsed)
+      && (this.validBefore==null || StoreTimeRules.isReleaseBefore(observation,elapsed,this.validBefore));
+   }catch(VirtualMachineError fatal){throw fatal;}catch(Throwable fault){preserveInterrupt(fault);return false;}
+  }
+  private @NonNull OAuthStoreCommitStatus finishFence(@NonNull List<OAuthStoreTransaction.@NonNull Mutation> changes){
+   checkOpen();OAuthStoreTransaction transaction=this.reads.transaction(OAuthStoreTransaction.Purpose.FENCE_ONLY,admission(),null,changes);
+   OAuthStoreCommitReceipt receipt=invoke(transaction);OAuthStoreCommitStatus status=receipt.getStatus();
+   if(status==OAuthStoreCommitStatus.UNKNOWN)throw failure(COMMIT_OUTCOME_UNKNOWN);
+   if(status==OAuthStoreCommitStatus.CONFLICT)return status;if(status!=OAuthStoreCommitStatus.COMMITTED)throw failure(UNAVAILABLE);
+   try{
+    if(receipt.getTiming().isPresent() || receipt.getAdmission().isEmpty() || !StoreTimeRules.sameAdmission(admission(),receipt.getAdmission().orElseThrow()))throw effectFailure();
+    OAuthStoreEntry rootAfter=observe(codec.issuerKey()).orElseThrow(()->failure(CORRUPT_STATE));
+    OAuthStoreRecordCodecV2.Opened opened=crypto(()->codec.openPermanentFence(rootAfter,admission(),rootAfter));
+    sameRoot(crypto(()->OAuthIssuerRootV2.decode(opened.payload())));remaining(this.deadline);
+    Operation scope=current(this.deadline);if(scope!=null)scope.release=this;return status;
+   }catch(VirtualMachineError fatal){throw fatal;}catch(Throwable fault){preserveInterrupt(fault);throw effectFailure();}
+  }
+  private void checkOpen(){if(this.finished)throw new IllegalStateException("OAuth store attempt is closed.");}
+ }
 }

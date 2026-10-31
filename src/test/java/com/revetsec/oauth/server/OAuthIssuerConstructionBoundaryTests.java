@@ -371,7 +371,7 @@ final class OAuthIssuerConstructionBoundaryTests {
   OAuthAtomicStoreFixture store = new OAuthAtomicStoreFixture();
   OAuthStoreCoordinator coordinator = new OAuthStoreCoordinator(store, codec, CLOCK, 1, 255);
   assertEquals(OAuthStoreCommitStatus.COMMITTED,
-   coordinator.initializeFreshIssuer(Deadline.fromNow(Duration.ofSeconds(1))));
+   coordinator.initializeFreshIssuer(Deadline.fromNow(Duration.ofSeconds(1))).getStatus());
   store.conflicts = 1;
   OAuthStoreFailure registration = assertThrows(OAuthStoreFailure.class,
    () -> coordinator.establishNewSubject("subject", Deadline.fromNow(Duration.ofSeconds(1))));
@@ -391,7 +391,7 @@ final class OAuthIssuerConstructionBoundaryTests {
   OAuthStoreRecordCodec codec = codec();
   OAuthStoreCoordinator coordinator = coordinator(codec);
   assertEquals(OAuthStoreCommitStatus.COMMITTED,
-   coordinator.initializeFreshIssuer(Deadline.fromNow(Duration.ofSeconds(1))));
+   coordinator.initializeFreshIssuer(Deadline.fromNow(Duration.ofSeconds(1))).getStatus());
   OAuthStoreCoordinator.Session session = coordinator.begin(Deadline.fromNow(Duration.ofSeconds(1)));
   assertEquals(OAuthStoreCommitStatus.COMMITTED, session.barrier());
   OAuthStoreTransaction.Mutation mutation = OAuthStoreTransaction.Mutation.fromRemove(
@@ -405,7 +405,7 @@ final class OAuthIssuerConstructionBoundaryTests {
   OAuthAtomicStoreFixture store = new OAuthAtomicStoreFixture();
   OAuthStoreCoordinator coordinator = new OAuthStoreCoordinator(store, codec, CLOCK, 1, 255);
   assertEquals(OAuthStoreCommitStatus.COMMITTED,
-   coordinator.initializeFreshIssuer(Deadline.fromNow(Duration.ofSeconds(1))));
+   coordinator.initializeFreshIssuer(Deadline.fromNow(Duration.ofSeconds(1))).getStatus());
   OAuthIssuerTokenStatus status = new OAuthIssuerTokenStatus(coordinator, codec, LIMITS, CLOCK,
    Duration.ZERO, 1, 255, 16384);
   OAuthGrantRevocation revocation = new OAuthGrantRevocation(coordinator, codec, status, LIMITS,

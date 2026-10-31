@@ -29,6 +29,6 @@ final class RecordingStore implements OAuthAuthorizationServerStore {
     @Nullable OAuthStoreTransaction last;
     @NonNull List<@NonNull String> before=java.util.List.of();
     RecordingStore(@NonNull OAuthAuthorizationServerStore backend) {this.backend=backend;}
-    @Override public @NonNull Optional<@NonNull OAuthStoreEntry> read(@NonNull OAuthStoreKey key,@NonNull Duration budget) {return this.backend.read(key,budget);}
-    @Override public @NonNull OAuthStoreCommitStatus commit(@NonNull OAuthStoreTransaction txn,@NonNull Duration budget) {this.last=txn;this.before=StoreContract.snapshot(this.backend,txn);return this.backend.commit(txn,budget);}
+    @Override public @NonNull OAuthStoreReadResult read(@NonNull OAuthStoreKey key,@NonNull Duration budget) {return this.backend.read(key,budget);}
+    @Override public @NonNull OAuthStoreCommitReceipt commit(@NonNull OAuthStoreTransaction txn,@NonNull Duration budget) {this.last=txn;this.before=StoreContract.snapshot(this.backend,txn);return this.backend.commit(txn,budget);}
 }

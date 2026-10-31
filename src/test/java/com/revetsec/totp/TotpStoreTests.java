@@ -17,7 +17,13 @@
 package com.revetsec.totp;
 
 import java.lang.reflect.Field;
+import com.revetsec.StoreAdmission;
+import com.revetsec.StoreCommitTiming;
+import com.revetsec.StoreTemporalCondition;
+import com.revetsec.StoreTimeObservation;
+import com.revetsec.internal.StoreTimeAccess;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Base64;
@@ -40,6 +46,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -108,39 +116,39 @@ final class TotpStoreTests {
   entries.put(ROOT, TotpStoreEntry.Present.fromRecord(record(ROOT, 1, 1)));
   entries.put(ACCOUNT, TotpStoreEntry.Absent.confirmed());
   Set<TotpStoreKey> keys = new HashSet<>(entries.keySet());
-  TotpStoreSnapshot snapshot = TotpStoreSnapshot.fromEntries(keys, entries);
+  TotpStoreSnapshot snapshot = TotpStoreSnapshot.fromEntries(keys, entries, healthy());
   keys.clear(); entries.clear();
   assertEquals(2, snapshot.getEntries().size());
   assertInstanceOf(TotpStoreEntry.Absent.class, snapshot.getEntry(ACCOUNT));
   assertThrows(UnsupportedOperationException.class, () -> snapshot.getEntries().clear());
   assertThrows(IllegalArgumentException.class, () -> snapshot.getEntry(OTHER));
-  assertThrows(IllegalArgumentException.class, () -> TotpStoreSnapshot.fromEntries(Set.of(ROOT), Map.of()));
-  assertThrows(IllegalArgumentException.class, () -> TotpStoreSnapshot.fromEntries(Set.of(), Map.of()));
+  assertThrows(IllegalArgumentException.class, () -> TotpStoreSnapshot.fromEntries(Set.of(ROOT), Map.of(), healthy()));
+  assertThrows(IllegalArgumentException.class, () -> TotpStoreSnapshot.fromEntries(Set.of(), Map.of(), healthy()));
   assertThrows(IllegalArgumentException.class, () -> TotpStoreSnapshot.fromEntries(Set.of(ROOT),
-    Map.of(ROOT, TotpStoreEntry.Present.fromRecord(record(ACCOUNT, 2, 2)))));
+    Map.of(ROOT, TotpStoreEntry.Present.fromRecord(record(ACCOUNT, 2, 2))), healthy()));
   TotpStoreKey nextEpoch = TotpStoreKey.forNamespace("accounts", "epoch-two");
   assertThrows(IllegalArgumentException.class, () -> TotpStoreSnapshot.fromEntries(Set.of(ROOT, nextEpoch),
-    Map.of(ROOT, TotpStoreEntry.Absent.confirmed(), nextEpoch, TotpStoreEntry.Absent.confirmed())));
+    Map.of(ROOT, TotpStoreEntry.Absent.confirmed(), nextEpoch, TotpStoreEntry.Absent.confirmed()), healthy()));
   Set<TotpStoreKey> tooMany = new HashSet<>(); Map<TotpStoreKey, TotpStoreEntry> tooManyEntries = new HashMap<>();
   for (int i = 0; i < 17; i++) {
    TotpStoreKey key = TotpStoreKey.forAccount("accounts", "epoch-one", "account-" + i);
    tooMany.add(key); tooManyEntries.put(key, TotpStoreEntry.Absent.confirmed());
   }
-  assertThrows(IllegalArgumentException.class, () -> TotpStoreSnapshot.fromEntries(tooMany, tooManyEntries));
+  assertThrows(IllegalArgumentException.class, () -> TotpStoreSnapshot.fromEntries(tooMany, tooManyEntries, healthy()));
  }
 
  @Test void writeGrammarRequiresInitializedRootAndFreshVersionWithExactMutationPredicates() {
-  TotpStoreSnapshot absent = TotpStoreSnapshot.fromEntries(Set.of(ROOT), Map.of(ROOT, TotpStoreEntry.Absent.confirmed()));
+  TotpStoreSnapshot absent = TotpStoreSnapshot.fromEntries(Set.of(ROOT), Map.of(ROOT, TotpStoreEntry.Absent.confirmed()), healthy());
   assertThrows(IllegalArgumentException.class, () -> write(absent, List.of()));
   assertThrows(IllegalArgumentException.class, () -> TotpStoreWrite.fromSnapshotAndMutations(
-    TotpStoreWrite.Purpose.INITIALIZE_NAMESPACE, absent, List.of()));
+    TotpStoreWrite.Purpose.INITIALIZE_NAMESPACE, absent, List.of(), condition(absent)));
   TotpStoreWrite initialize = TotpStoreWrite.fromSnapshotAndMutations(TotpStoreWrite.Purpose.INITIALIZE_NAMESPACE,
-    absent, List.of(TotpStoreWrite.Mutation.insert(record(ROOT, 1, 1))));
+    absent, List.of(TotpStoreWrite.Mutation.insert(record(ROOT, 1, 1))), condition(absent));
   assertEquals("accounts", initialize.getCredentialNamespace());
   assertEquals("epoch-one", initialize.getRecoveryEpoch());
   assertEquals(TotpStoreWrite.Purpose.INITIALIZE_NAMESPACE, initialize.getPurpose());
   TotpStoreSnapshot rootAndAbsent = TotpStoreSnapshot.fromEntries(Set.of(ROOT, ACCOUNT), Map.of(
-    ROOT, TotpStoreEntry.Present.fromRecord(record(ROOT, 1, 1)), ACCOUNT, TotpStoreEntry.Absent.confirmed()));
+    ROOT, TotpStoreEntry.Present.fromRecord(record(ROOT, 1, 1)), ACCOUNT, TotpStoreEntry.Absent.confirmed()), healthy());
   assertThrows(IllegalArgumentException.class, () -> write(rootAndAbsent,
     List.of(TotpStoreWrite.Mutation.insert(record(ROOT, 2, 2)))));
   assertThrows(IllegalArgumentException.class, () -> write(rootAndAbsent,
@@ -164,35 +172,35 @@ final class TotpStoreTests {
   assertInstanceOf(TotpStoreEntry.Absent.class, absent.getEntry(ROOT));
   assertInstanceOf(TotpStoreReadResult.Unavailable.class, store.read(Set.of(ROOT, ACCOUNT), BUDGET));
   TotpStoreWrite initialize = initialization(absent, ROOT, 1);
-  assertEquals(TotpStoreCommitResult.COMMITTED, store.compareAndCommit(initialize, BUDGET));
-  assertEquals(TotpStoreCommitResult.CONFLICT, store.compareAndCommit(initialize, BUDGET));
+  assertEquals(TotpStoreCommitResult.COMMITTED, commit(store, initialize, BUDGET));
+  assertEquals(TotpStoreCommitResult.CONFLICT, commit(store, initialize, BUDGET));
   assertInstanceOf(TotpStoreEntry.Present.class, snapshot(store, Set.of(ROOT)).getEntry(ROOT));
   Field records = InMemoryTotpStore.class.getDeclaredField("records"); records.setAccessible(true);
   records.set(store, Map.of());
   assertInstanceOf(TotpStoreReadResult.Unavailable.class, store.read(Set.of(ROOT), BUDGET));
-  assertEquals(TotpStoreCommitResult.UNAVAILABLE, store.compareAndCommit(initialize, BUDGET));
+  assertEquals(TotpStoreCommitResult.UNAVAILABLE, commit(store, initialize, BUDGET));
  }
 
  @Test void comparesEveryAbsenceAndVersionIncludingConditionOnlyWrites() {
   InMemoryTotpStore store = initializedStore(5, 100);
   TotpStoreSnapshot initial = snapshot(store, Set.of(ROOT, ACCOUNT, OTHER));
   TotpStoreWrite insert = write(initial, List.of(TotpStoreWrite.Mutation.insert(record(ACCOUNT, 2, 7))));
-  assertEquals(TotpStoreCommitResult.COMMITTED, store.compareAndCommit(insert, BUDGET));
-  assertEquals(TotpStoreCommitResult.CONFLICT, store.compareAndCommit(insert, BUDGET));
-  assertEquals(TotpStoreCommitResult.CONFLICT, store.compareAndCommit(write(initial, List.of()), BUDGET));
+  assertEquals(TotpStoreCommitResult.COMMITTED, commit(store, insert, BUDGET));
+  assertEquals(TotpStoreCommitResult.CONFLICT, commit(store, insert, BUDGET));
+  assertEquals(TotpStoreCommitResult.CONFLICT, commit(store, write(initial, List.of()), BUDGET));
   TotpStoreSnapshot first = snapshot(store, Set.of(ROOT, ACCOUNT, OTHER));
-  assertEquals(TotpStoreCommitResult.COMMITTED, store.compareAndCommit(write(first,
+  assertEquals(TotpStoreCommitResult.COMMITTED, commit(store, write(first,
     List.of(TotpStoreWrite.Mutation.replace(record(ACCOUNT, 3, 8)))), BUDGET));
-  assertEquals(TotpStoreCommitResult.CONFLICT, store.compareAndCommit(write(first,
+  assertEquals(TotpStoreCommitResult.CONFLICT, commit(store, write(first,
     List.of(TotpStoreWrite.Mutation.insert(record(OTHER, 4, 9)))), BUDGET));
   assertInstanceOf(TotpStoreEntry.Absent.class, snapshot(store, Set.of(ROOT, OTHER)).getEntry(OTHER));
   TotpStoreSnapshot second = snapshot(store, Set.of(ROOT, ACCOUNT));
   assertArrayEquals(new byte[] {8}, present(second, ACCOUNT).getSealedBytes());
   assertNotEquals(present(first, ACCOUNT).getVersion(), present(second, ACCOUNT).getVersion());
-  assertEquals(TotpStoreCommitResult.COMMITTED, store.compareAndCommit(write(second, List.of()), BUDGET));
-  assertEquals(TotpStoreCommitResult.COMMITTED, store.compareAndCommit(write(second,
+  assertEquals(TotpStoreCommitResult.COMMITTED, commit(store, write(second, List.of()), BUDGET));
+  assertEquals(TotpStoreCommitResult.COMMITTED, commit(store, write(second,
     List.of(TotpStoreWrite.Mutation.replace(record(ROOT, 5, 6)))), BUDGET));
-  assertEquals(TotpStoreCommitResult.CONFLICT, store.compareAndCommit(write(second, List.of()), BUDGET));
+  assertEquals(TotpStoreCommitResult.CONFLICT, commit(store, write(second, List.of()), BUDGET));
  }
 
  @Test void concurrentWritersHaveExactlyOneWinner() throws Exception {
@@ -202,11 +210,11 @@ final class TotpStoreTests {
   ExecutorService executor = Executors.newFixedThreadPool(2);
   try {
    Future<TotpStoreCommitResult> first = executor.submit(() -> {
-    start.await(); return store.compareAndCommit(write(shared,
+    start.await(); return commit(store, write(shared,
       List.of(TotpStoreWrite.Mutation.insert(record(ACCOUNT, 2, 2)))), BUDGET);
    });
    Future<TotpStoreCommitResult> second = executor.submit(() -> {
-    start.await(); return store.compareAndCommit(write(shared,
+    start.await(); return commit(store, write(shared,
       List.of(TotpStoreWrite.Mutation.insert(record(ACCOUNT, 3, 3)))), BUDGET);
    });
    start.countDown();
@@ -221,19 +229,19 @@ final class TotpStoreTests {
   assertThrows(IllegalArgumentException.class, () -> InMemoryTotpStore.withNamespace("accounts", "epoch-one").maximumSealedBytes(0L));
   InMemoryTotpStore store = initializedStore(2, 4);
   TotpStoreSnapshot absent = snapshot(store, Set.of(ROOT, ACCOUNT, OTHER));
-  assertEquals(TotpStoreCommitResult.CAPACITY_REFUSED, store.compareAndCommit(write(absent, List.of(
+  assertEquals(TotpStoreCommitResult.CAPACITY_REFUSED, commit(store, write(absent, List.of(
     TotpStoreWrite.Mutation.insert(record(ACCOUNT, 2, 2)), TotpStoreWrite.Mutation.insert(record(OTHER, 3, 3)))), BUDGET));
   assertInstanceOf(TotpStoreEntry.Absent.class, snapshot(store, Set.of(ROOT, ACCOUNT)).getEntry(ACCOUNT));
-  assertEquals(TotpStoreCommitResult.COMMITTED, store.compareAndCommit(write(absent,
+  assertEquals(TotpStoreCommitResult.COMMITTED, commit(store, write(absent,
     List.of(TotpStoreWrite.Mutation.insert(record(ACCOUNT, 2, 2)))), BUDGET));
   TotpStoreSnapshot full = snapshot(store, Set.of(ROOT, ACCOUNT));
   TotpStoreRecord oversized = TotpStoreRecord.fromStoredForm(ACCOUNT, version(3), new byte[] {3, 4, 5, 6});
-  assertEquals(TotpStoreCommitResult.CAPACITY_REFUSED, store.compareAndCommit(write(full,
+  assertEquals(TotpStoreCommitResult.CAPACITY_REFUSED, commit(store, write(full,
     List.of(TotpStoreWrite.Mutation.replace(oversized))), BUDGET));
   assertArrayEquals(new byte[] {2}, present(snapshot(store, Set.of(ROOT, ACCOUNT)), ACCOUNT).getSealedBytes());
   assertEquals(TotpStoreCommitResult.COMMITTED, store.provisionRecoveryEpoch("epoch-two", BUDGET));
   TotpStoreKey nextRoot = TotpStoreKey.forNamespace("accounts", "epoch-two");
-  assertEquals(TotpStoreCommitResult.CAPACITY_REFUSED, store.compareAndCommit(
+  assertEquals(TotpStoreCommitResult.CAPACITY_REFUSED, commit(store,
     initialization(snapshot(store, Set.of(nextRoot)), nextRoot, 4), BUDGET));
  }
 
@@ -243,11 +251,11 @@ final class TotpStoreTests {
   TotpStoreWrite oldWrite = write(before, List.of(TotpStoreWrite.Mutation.insert(record(ACCOUNT, 2, 2))));
   assertEquals(TotpStoreCommitResult.COMMITTED, store.provisionRecoveryEpoch("epoch-two", BUDGET));
   assertInstanceOf(TotpStoreReadResult.Fenced.class, store.read(Set.of(ROOT), BUDGET));
-  assertEquals(TotpStoreCommitResult.FENCED, store.compareAndCommit(oldWrite, BUDGET));
+  assertEquals(TotpStoreCommitResult.FENCED, commit(store, oldWrite, BUDGET));
   assertThrows(IllegalArgumentException.class, () -> store.provisionRecoveryEpoch("epoch-one", BUDGET));
   assertThrows(IllegalArgumentException.class, () -> store.provisionRecoveryEpoch("epoch-two", BUDGET));
   TotpStoreKey rootTwo = TotpStoreKey.forNamespace("accounts", "epoch-two");
-  assertEquals(TotpStoreCommitResult.COMMITTED, store.compareAndCommit(
+  assertEquals(TotpStoreCommitResult.COMMITTED, commit(store,
     initialization(snapshot(store, Set.of(rootTwo)), rootTwo, 3), BUDGET));
   TotpStoreKey accountTwo = TotpStoreKey.forAccount("accounts", "epoch-two", "person@example.com");
   assertInstanceOf(TotpStoreEntry.Absent.class, snapshot(store, Set.of(rootTwo, accountTwo)).getEntry(accountTwo));
@@ -258,12 +266,12 @@ final class TotpStoreTests {
   InMemoryTotpStore store = initializedStore(5, 100);
   TotpStoreWrite insert = write(snapshot(store, Set.of(ROOT, ACCOUNT)),
     List.of(TotpStoreWrite.Mutation.insert(record(ACCOUNT, 2, 2))));
-  assertEquals(TotpStoreCommitResult.UNAVAILABLE, store.compareAndCommit(insert, Duration.ZERO));
+  assertEquals(TotpStoreCommitResult.UNAVAILABLE, commit(store, insert, Duration.ZERO));
   assertInstanceOf(TotpStoreReadResult.Unavailable.class, store.read(Set.of(ROOT), Duration.ofSeconds(-1)));
   assertEquals(TotpStoreCommitResult.UNAVAILABLE, store.provisionRecoveryEpoch("epoch-two", Duration.ZERO));
   Thread.currentThread().interrupt();
   try {
-   assertEquals(TotpStoreCommitResult.UNAVAILABLE, store.compareAndCommit(insert, BUDGET));
+   assertEquals(TotpStoreCommitResult.UNAVAILABLE, commit(store, insert, BUDGET));
    assertInstanceOf(TotpStoreReadResult.Unavailable.class, store.read(Set.of(ROOT), BUDGET));
    assertTrue(Thread.currentThread().isInterrupted());
   } finally { Thread.interrupted(); }
@@ -273,12 +281,12 @@ final class TotpStoreTests {
   ExecutorService executor = Executors.newSingleThreadExecutor();
   lock.lock();
   try {
-   Future<TotpStoreCommitResult> blocked = executor.submit(() -> store.compareAndCommit(insert, Duration.ofMillis(20)));
+   Future<TotpStoreCommitResult> blocked = executor.submit(() -> commit(store, insert, Duration.ofMillis(20)));
    assertEquals(TotpStoreCommitResult.UNAVAILABLE, blocked.get(2, TimeUnit.SECONDS));
    Future<TotpStoreReadResult> blockedRead = executor.submit(() -> store.read(Set.of(ROOT), Duration.ofMillis(20)));
    assertInstanceOf(TotpStoreReadResult.Unavailable.class, blockedRead.get(2, TimeUnit.SECONDS));
   } finally { lock.unlock(); executor.shutdownNow(); }
-  assertEquals(TotpStoreCommitResult.COMMITTED, store.compareAndCommit(insert, BUDGET));
+  assertEquals(TotpStoreCommitResult.COMMITTED, commit(store, insert, BUDGET));
  }
 
  @Test void recoveryContextDefensivelyCapturesExactConfigurationAndPurpose() {
@@ -298,12 +306,184 @@ final class TotpStoreTests {
   assertFalse(context.toString().contains("current"));
  }
 
+ @SuppressWarnings("NullAway") // Deliberate null arguments verify the runtime contract.
+ @Test void snapshotsRequireTimeAndWritesRejectUnavailableOrForeignTemporalMetadata() {
+  Map<TotpStoreKey, TotpStoreEntry> entries = Map.of(ROOT, TotpStoreEntry.Absent.confirmed());
+  assertThrows(NullPointerException.class, () -> TotpStoreSnapshot.fromEntries(Set.of(ROOT), entries, null));
+  StoreTimeObservation.Healthy expected = healthy();
+  TotpStoreSnapshot snapshot = TotpStoreSnapshot.fromEntries(Set.of(ROOT), entries, expected);
+  assertSame(expected, snapshot.getTimeObservation());
+  StoreTemporalCondition condition = StoreTimeAccess.get().fromObservation(expected, expected.getObservedAt(), null);
+  TotpStoreSnapshot unavailable = TotpStoreSnapshot.fromEntries(Set.of(ROOT), entries,
+    StoreTimeObservation.Unavailable.fromAdmission(expected.getAdmission()));
+  assertThrows(IllegalArgumentException.class, () -> TotpStoreWrite.fromSnapshotAndMutations(
+    TotpStoreWrite.Purpose.INITIALIZE_NAMESPACE, unavailable,
+    List.of(TotpStoreWrite.Mutation.insert(record(ROOT, 1, 1))), condition));
+  StoreTimeObservation.Healthy foreign = StoreTimeObservation.Healthy.fromObservation(
+    StoreAdmission.fromIdentifiers(version(104), version(105)), version(106), expected.getObservedAt(), Duration.ZERO);
+  StoreTemporalCondition foreignCondition = StoreTimeAccess.get().fromObservation(foreign, foreign.getObservedAt(), null);
+  assertThrows(IllegalArgumentException.class, () -> TotpStoreWrite.fromSnapshotAndMutations(
+    TotpStoreWrite.Purpose.INITIALIZE_NAMESPACE, snapshot,
+    List.of(TotpStoreWrite.Mutation.insert(record(ROOT, 1, 1))), foreignCondition));
+  StoreTimeObservation.Healthy old = StoreTimeObservation.Healthy.fromObservation(expected.getAdmission(),
+    expected.getClockGeneration(), expected.getObservedAt().minusNanos(1), Duration.ZERO);
+  StoreTemporalCondition oldCondition = StoreTimeAccess.get().fromObservation(old, old.getObservedAt(), null);
+  assertThrows(IllegalArgumentException.class, () -> TotpStoreWrite.fromSnapshotAndMutations(
+    TotpStoreWrite.Purpose.INITIALIZE_NAMESPACE, snapshot,
+    List.of(TotpStoreWrite.Mutation.insert(record(ROOT, 1, 1))), oldCondition));
+ }
+
+ @SuppressWarnings("NullAway") // Deliberate null arguments verify the runtime contract.
+ @Test void contextualReceiptsHaveAnExactStatusTimingMatrixAndRedaction() {
+  StoreCommitTiming timing = StoreCommitTiming.fromTimes(healthy(), null);
+  TotpStoreCommitReceipt committed = TotpStoreCommitReceipt.fromCommittedTiming(timing);
+  assertEquals(TotpStoreCommitResult.COMMITTED, committed.getStatus());
+  assertSame(timing, committed.getTiming().orElseThrow());
+  assertTrue(committed.getTiming().orElseThrow().getCompletedTime().isEmpty());
+  assertThrows(NullPointerException.class, () -> TotpStoreCommitReceipt.fromCommittedTiming(null));
+  assertThrows(NullPointerException.class, () -> TotpStoreCommitReceipt.fromRefusal(null));
+  for (TotpStoreCommitResult status : TotpStoreCommitResult.values()) {
+   if (status == TotpStoreCommitResult.COMMITTED || status == TotpStoreCommitResult.UNKNOWN)
+    assertThrows(IllegalArgumentException.class, () -> TotpStoreCommitReceipt.fromRefusal(status));
+   else {
+    TotpStoreCommitReceipt receipt = TotpStoreCommitReceipt.fromRefusal(status);
+    assertEquals(status, receipt.getStatus()); assertTrue(receipt.getTiming().isEmpty());
+   }
+  }
+  assertEquals(TotpStoreCommitResult.UNKNOWN, TotpStoreCommitReceipt.unknownInstance().getStatus());
+  assertTrue(TotpStoreCommitReceipt.unknownInstance().getTiming().isEmpty());
+  assertFalse(committed.toString().contains(healthy().getObservedAt().toString()));
+  assertFalse(committed.toString().contains(healthy().getAdmission().getAuthorityId()));
+ }
+
+ @SuppressWarnings("NullAway") // Deliberate null budget verifies the runtime contract.
+ @Test void constructionAndNonpositiveBudgetsNeverEstablishOperationalAuthority() throws Exception {
+  InMemoryTotpStore store = store(5, 100);
+  Field entropy = InMemoryTotpStore.class.getDeclaredField("entropy"); entropy.setAccessible(true);
+  Field admission = InMemoryTotpStore.class.getDeclaredField("admission"); admission.setAccessible(true);
+  Field anchor = InMemoryTotpStore.class.getDeclaredField("authorityAnchor"); anchor.setAccessible(true);
+  Field clock = InMemoryTotpStore.class.getDeclaredField("clockGeneration"); clock.setAccessible(true);
+  assertNull(entropy.get(store)); assertNull(admission.get(store)); assertNull(anchor.get(store)); assertNull(clock.get(store));
+  assertInstanceOf(TotpStoreReadResult.Unavailable.class, store.read(Set.of(ROOT), Duration.ZERO));
+  assertInstanceOf(TotpStoreReadResult.Unavailable.class, store.read(Set.of(ROOT), Duration.ofSeconds(Long.MIN_VALUE)));
+  assertThrows(NullPointerException.class, () -> store.read(Set.of(ROOT), null));
+  assertNull(entropy.get(store)); assertNull(admission.get(store)); assertNull(anchor.get(store)); assertNull(clock.get(store));
+  TotpStoreSnapshot first = snapshot(store, Set.of(ROOT));
+  assertInstanceOf(StoreTimeObservation.Healthy.class, first.getTimeObservation());
+  assertSame(admission.get(store), first.getTimeObservation().getAdmission());
+ }
+
+ @Test void localQueriesSampleFreshMetadataWithoutChangingAnyStoredRootOrEntity() throws Exception {
+  InMemoryTotpStore store = initializedStore(5, 100);
+  Field records = InMemoryTotpStore.class.getDeclaredField("records"); records.setAccessible(true);
+  Object before = records.get(store);
+  TotpStoreSnapshot first = snapshot(store, Set.of(ROOT));
+  TotpStoreSnapshot second = snapshot(store, Set.of(ROOT));
+  assertSame(before, records.get(store));
+  assertEquals(present(first, ROOT).getVersion(), present(second, ROOT).getVersion());
+  StoreTimeObservation.Healthy one = assertInstanceOf(StoreTimeObservation.Healthy.class, first.getTimeObservation());
+  StoreTimeObservation.Healthy two = assertInstanceOf(StoreTimeObservation.Healthy.class, second.getTimeObservation());
+  assertFalse(two.getObservedAt().isBefore(one.getObservedAt()));
+  assertEquals(one.getAdmission(), two.getAdmission());
+  assertEquals(one.getClockGeneration(), two.getClockGeneration());
+  Field bytes = InMemoryTotpStore.class.getDeclaredField("sealedBytes"); bytes.setAccessible(true);
+  long capacityBefore = bytes.getLong(store);
+  TotpStoreCommitReceipt barrier = store.compareAndCommit(write(second, List.of()), BUDGET);
+  assertEquals(TotpStoreCommitResult.COMMITTED, barrier.getStatus());
+  assertSame(before, records.get(store));
+  assertEquals(capacityBefore, bytes.getLong(store));
+  assertEquals(present(first, ROOT).getVersion(), present(snapshot(store, Set.of(ROOT)), ROOT).getVersion());
+ }
+
+ @Test void localFinalValidationRefusesFutureFloorForeignProfileAndForeignGeneration() {
+  InMemoryTotpStore store = initializedStore(5, 100);
+  TotpStoreSnapshot snapshot = snapshot(store, Set.of(ROOT, ACCOUNT));
+  StoreTimeObservation.Healthy time = assertInstanceOf(StoreTimeObservation.Healthy.class, snapshot.getTimeObservation());
+  List<TotpStoreWrite.Mutation> mutation = List.of(TotpStoreWrite.Mutation.insert(record(ACCOUNT, 2, 2)));
+  StoreTemporalCondition future = StoreTimeAccess.get().fromObservation(time, time.getObservedAt().plusSeconds(3600), null);
+  assertEquals(TotpStoreCommitResult.TIME_BEFORE_FLOOR, store.compareAndCommit(
+    TotpStoreWrite.fromSnapshotAndMutations(TotpStoreWrite.Purpose.UPDATE, snapshot, mutation, future), BUDGET).getStatus());
+  StoreTimeObservation.Healthy profile = StoreTimeObservation.Healthy.fromObservation(time.getAdmission(),
+    time.getClockGeneration(), time.getObservedAt(), Duration.ZERO);
+  TotpStoreSnapshot changed = TotpStoreSnapshot.fromEntries(snapshot.getEntries().keySet(), snapshot.getEntries(), profile);
+  assertEquals(TotpStoreCommitResult.FENCED, store.compareAndCommit(
+    TotpStoreWrite.fromSnapshotAndMutations(TotpStoreWrite.Purpose.UPDATE, changed, mutation, condition(changed)), BUDGET).getStatus());
+  StoreTimeObservation.Healthy generation = StoreTimeObservation.Healthy.fromObservation(time.getAdmission(),
+    version(115), time.getObservedAt(), time.getMaximumUtcError());
+  TotpStoreSnapshot retired = TotpStoreSnapshot.fromEntries(snapshot.getEntries().keySet(), snapshot.getEntries(), generation);
+  assertEquals(TotpStoreCommitResult.FENCED, store.compareAndCommit(
+    TotpStoreWrite.fromSnapshotAndMutations(TotpStoreWrite.Purpose.UPDATE, retired, mutation, condition(retired)), BUDGET).getStatus());
+  assertInstanceOf(TotpStoreEntry.Absent.class, snapshot(store, Set.of(ROOT, ACCOUNT)).getEntry(ACCOUNT));
+ }
+
+ @Test void lockWaitCrossingExclusiveExpiryRefusesBeforeAnyMutation() throws Exception {
+  InMemoryTotpStore store = initializedStore(5, 100);
+  TotpStoreSnapshot snapshot = snapshot(store, Set.of(ROOT, ACCOUNT));
+  StoreTimeObservation.Healthy time = assertInstanceOf(StoreTimeObservation.Healthy.class, snapshot.getTimeObservation());
+  StoreTemporalCondition expires = StoreTimeAccess.get().fromObservation(time, time.getObservedAt(), time.getObservedAt().plusMillis(20));
+  TotpStoreWrite write = TotpStoreWrite.fromSnapshotAndMutations(TotpStoreWrite.Purpose.UPDATE, snapshot,
+    List.of(TotpStoreWrite.Mutation.insert(record(ACCOUNT, 2, 2))), expires);
+  Field lockField = InMemoryTotpStore.class.getDeclaredField("lock"); lockField.setAccessible(true);
+  ReentrantLock lock = (ReentrantLock) lockField.get(store);
+  ExecutorService executor = Executors.newSingleThreadExecutor();
+  CountDownLatch entered = new CountDownLatch(1);
+  lock.lock();
+  Future<TotpStoreCommitReceipt> waiting;
+  try {
+   waiting = executor.submit(() -> { entered.countDown(); return store.compareAndCommit(write, BUDGET); });
+   assertTrue(entered.await(2, TimeUnit.SECONDS));
+   assertFalse(new CountDownLatch(1).await(40, TimeUnit.MILLISECONDS));
+  } finally { lock.unlock(); }
+  try { assertEquals(TotpStoreCommitResult.TIME_EXPIRED, waiting.get(2, TimeUnit.SECONDS).getStatus()); }
+  finally { executor.shutdownNow(); }
+  assertInstanceOf(TotpStoreEntry.Absent.class, snapshot(store, Set.of(ROOT, ACCOUNT)).getEntry(ACCOUNT));
+ }
+
+ @Test void lossOfElapsedContinuityCannotBeRepairedByRecoveryEpochProvisioning() throws Exception {
+  InMemoryTotpStore store = initializedStore(5, 100);
+  TotpStoreSnapshot snapshot = snapshot(store, Set.of(ROOT, ACCOUNT));
+  TotpStoreWrite write = write(snapshot, List.of(TotpStoreWrite.Mutation.insert(record(ACCOUNT, 2, 2))));
+  Field lost = InMemoryTotpStore.class.getDeclaredField("authorityContinuityLost"); lost.setAccessible(true); lost.setBoolean(store, true);
+  TotpStoreSnapshot closed = snapshot(store, Set.of(ROOT, ACCOUNT));
+  assertInstanceOf(StoreTimeObservation.Unavailable.class, closed.getTimeObservation());
+  assertEquals(TotpStoreCommitResult.TIME_UNAVAILABLE, store.compareAndCommit(write, BUDGET).getStatus());
+  assertEquals(TotpStoreCommitResult.COMMITTED, store.provisionRecoveryEpoch("epoch-two", BUDGET));
+  TotpStoreKey nextRoot = TotpStoreKey.forNamespace("accounts", "epoch-two");
+  assertInstanceOf(StoreTimeObservation.Unavailable.class, snapshot(store, Set.of(nextRoot)).getTimeObservation());
+ }
+
+ @Test void recoveryAdmissionChangesWithoutResettingAuthorityProjectionOrClockGeneration() {
+  InMemoryTotpStore store = initializedStore(10, 100);
+  StoreTimeObservation.Healthy before = assertInstanceOf(StoreTimeObservation.Healthy.class, snapshot(store, Set.of(ROOT)).getTimeObservation());
+  assertEquals(TotpStoreCommitResult.COMMITTED, store.provisionRecoveryEpoch("epoch-two", BUDGET));
+  TotpStoreKey nextRoot = TotpStoreKey.forNamespace("accounts", "epoch-two");
+  StoreTimeObservation.Healthy after = assertInstanceOf(StoreTimeObservation.Healthy.class, snapshot(store, Set.of(nextRoot)).getTimeObservation());
+  assertEquals(before.getAdmission().getAuthorityId(), after.getAdmission().getAuthorityId());
+  assertNotEquals(before.getAdmission().getRecoveryGeneration(), after.getAdmission().getRecoveryGeneration());
+  assertEquals(before.getClockGeneration(), after.getClockGeneration());
+  assertFalse(after.getObservedAt().isBefore(before.getObservedAt()));
+ }
+
+ @Test void committedReceiptCarriesValidationRatherThanInventedCompletionAndHugeBudgetsDoNotOverflow() {
+  InMemoryTotpStore store = store(5, 100);
+  TotpStoreSnapshot before = assertInstanceOf(TotpStoreReadResult.Available.class,
+    store.read(Set.of(ROOT), Duration.ofSeconds(Long.MAX_VALUE))).getSnapshot();
+  StoreTimeObservation.Healthy observed = assertInstanceOf(StoreTimeObservation.Healthy.class, before.getTimeObservation());
+  TotpStoreCommitReceipt receipt = store.compareAndCommit(initialization(before, ROOT, 1), Duration.ofSeconds(Long.MAX_VALUE));
+  assertEquals(TotpStoreCommitResult.COMMITTED, receipt.getStatus());
+  StoreCommitTiming timing = receipt.getTiming().orElseThrow();
+  assertEquals(observed.getAdmission(), timing.getValidatedTime().getAdmission());
+  assertEquals(observed.getClockGeneration(), timing.getValidatedTime().getClockGeneration());
+  assertFalse(timing.getValidatedTime().getObservedAt().isBefore(observed.getObservedAt()));
+  assertTrue(timing.getCompletedTime().isEmpty());
+ }
+
  private static @NonNull InMemoryTotpStore store(int entries, long bytes) {
   return InMemoryTotpStore.withNamespace("accounts", "epoch-one").maximumEntries(entries).maximumSealedBytes(bytes).build();
  }
  private static @NonNull InMemoryTotpStore initializedStore(int entries, long bytes) {
   InMemoryTotpStore store = store(entries, bytes);
-  assertEquals(TotpStoreCommitResult.COMMITTED, store.compareAndCommit(initialization(snapshot(store, Set.of(ROOT)), ROOT, 1), BUDGET));
+  assertEquals(TotpStoreCommitResult.COMMITTED, commit(store, initialization(snapshot(store, Set.of(ROOT)), ROOT, 1), BUDGET));
   return store;
  }
  private static @NonNull TotpStoreSnapshot snapshot(@NonNull TotpStore store, @NonNull Set<@NonNull TotpStoreKey> keys) {
@@ -311,11 +491,11 @@ final class TotpStoreTests {
  }
  private static @NonNull TotpStoreWrite initialization(@NonNull TotpStoreSnapshot snapshot, @NonNull TotpStoreKey key, int version) {
   return TotpStoreWrite.fromSnapshotAndMutations(TotpStoreWrite.Purpose.INITIALIZE_NAMESPACE, snapshot,
-    List.of(TotpStoreWrite.Mutation.insert(record(key, version, 1))));
+    List.of(TotpStoreWrite.Mutation.insert(record(key, version, 1))), condition(snapshot));
  }
  private static @NonNull TotpStoreWrite write(@NonNull TotpStoreSnapshot snapshot,
    @NonNull List<TotpStoreWrite.@NonNull Mutation> changes) {
-  return TotpStoreWrite.fromSnapshotAndMutations(TotpStoreWrite.Purpose.UPDATE, snapshot, changes);
+  return TotpStoreWrite.fromSnapshotAndMutations(TotpStoreWrite.Purpose.UPDATE, snapshot, changes, condition(snapshot));
  }
  private static @NonNull TotpStoreRecord present(@NonNull TotpStoreSnapshot snapshot, @NonNull TotpStoreKey key) {
   return assertInstanceOf(TotpStoreEntry.Present.class, snapshot.getEntry(key)).getRecord();
@@ -326,5 +506,18 @@ final class TotpStoreTests {
  private static @NonNull String version(int value) {
   byte[] version = new byte[32]; Arrays.fill(version, (byte) value);
   return Base64.getUrlEncoder().withoutPadding().encodeToString(version);
+ }
+
+ private static @NonNull TotpStoreCommitResult commit(@NonNull TotpStore store, @NonNull TotpStoreWrite write,
+   @NonNull Duration remainingBudget) {
+  return store.compareAndCommit(write, remainingBudget).getStatus();
+ }
+ private static @NonNull StoreTemporalCondition condition(@NonNull TotpStoreSnapshot snapshot) {
+  StoreTimeObservation.Healthy time = assertInstanceOf(StoreTimeObservation.Healthy.class, snapshot.getTimeObservation());
+  return StoreTimeAccess.get().fromObservation(time, time.getObservedAt(), null);
+ }
+ private static StoreTimeObservation.@NonNull Healthy healthy() {
+  return StoreTimeObservation.Healthy.fromObservation(StoreAdmission.fromIdentifiers(version(101), version(102)),
+    version(103), Instant.ofEpochSecond(1800000000), Duration.ZERO);
  }
 }

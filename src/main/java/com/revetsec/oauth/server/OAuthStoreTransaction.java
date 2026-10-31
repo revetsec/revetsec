@@ -17,6 +17,9 @@
 package com.revetsec.oauth.server;
 
 import com.google.errorprone.annotations.CheckReturnValue;
+import com.revetsec.StoreAdmission;
+import com.revetsec.StoreTemporalCondition;
+import com.revetsec.internal.StoreTimeRules;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 import javax.annotation.concurrent.Immutable;
@@ -36,29 +39,83 @@ import static java.util.Objects.requireNonNull;
 @Immutable
 @CheckReturnValue
 public final class OAuthStoreTransaction {
+ private final OAuthStoreTransaction.@NonNull Purpose purpose;
+ private final @NonNull StoreAdmission expectedAdmission;
+ private final @Nullable StoreTemporalCondition temporalCondition;
  private final @NonNull List<OAuthStoreTransaction.@NonNull Condition> conditions;
  private final @NonNull List<OAuthStoreTransaction.@NonNull Mutation> mutations;
- private OAuthStoreTransaction(@NonNull List<OAuthStoreTransaction.@NonNull Condition> conditions,
+ private OAuthStoreTransaction(OAuthStoreTransaction.@NonNull Purpose purpose,
+   @NonNull StoreAdmission expectedAdmission, @Nullable StoreTemporalCondition temporalCondition,
+   @NonNull List<OAuthStoreTransaction.@NonNull Condition> conditions,
    @NonNull List<OAuthStoreTransaction.@NonNull Mutation> mutations) {
+  this.purpose=purpose; this.expectedAdmission=expectedAdmission; this.temporalCondition=temporalCondition;
   this.conditions = List.copyOf(conditions); this.mutations = List.copyOf(mutations);
  }
  static @NonNull OAuthStoreTransaction fromConditions(
+   OAuthStoreTransaction.@NonNull Purpose purpose, @NonNull StoreAdmission expectedAdmission,
+   @Nullable StoreTemporalCondition temporalCondition,
    @NonNull List<OAuthStoreTransaction.@NonNull Condition> conditions,
    @NonNull List<OAuthStoreTransaction.@NonNull Mutation> mutations) {
-  requireNonNull(conditions); requireNonNull(mutations);
+  requireNonNull(purpose); requireNonNull(expectedAdmission); requireNonNull(conditions); requireNonNull(mutations);
+  if(purpose==Purpose.TIMED) {
+   if(temporalCondition==null || !StoreTimeRules.sameAdmission(expectedAdmission,temporalCondition.getAdmission())) throw OAuthStoreFormat.invalid();
+  } else if(temporalCondition!=null) throw OAuthStoreFormat.invalid();
   if (conditions.isEmpty() || conditions.size() > 16 || mutations.size() > 8) throw OAuthStoreFormat.invalid();
   var expected = new java.util.HashMap<OAuthStoreKey, Condition>();
+  String namespace=null;
   for (Condition condition : conditions) {
    requireNonNull(condition);
+   String scope=OAuthStoreFormat.namespace(condition.key);
+   if(namespace==null) namespace=scope; else if(!namespace.equals(scope)) throw OAuthStoreFormat.invalid();
    if (expected.put(condition.key, condition) != null) throw OAuthStoreFormat.invalid();
   }
   var changed = new java.util.HashSet<OAuthStoreKey>();
   for (Mutation mutation : mutations) {
    requireNonNull(mutation); Condition condition = expected.get(mutation.key);
    if (condition == null || !changed.add(mutation.key)
-     || (mutation.kind == Mutation.Kind.REMOVE && condition.version == null)) throw OAuthStoreFormat.invalid();
+     || (mutation.kind == Mutation.Kind.REMOVE && condition.version == null)
+     || (mutation.kind == Mutation.Kind.PUT && mutation.entry!=null && mutation.entry.getVersion().equals(condition.version))) throw OAuthStoreFormat.invalid();
   }
-  return new OAuthStoreTransaction(conditions, mutations);
+  if(purpose==Purpose.FENCE_ONLY) validateFence(conditions,mutations);
+  return new OAuthStoreTransaction(purpose,expectedAdmission,temporalCondition,conditions, mutations);
+ }
+ private static void validateFence(@NonNull List<OAuthStoreTransaction.@NonNull Condition> conditions,
+   @NonNull List<OAuthStoreTransaction.@NonNull Mutation> mutations) {
+  if(mutations.size()!=1) throw OAuthStoreFormat.invalid();
+  Mutation mutation=mutations.get(0);
+  if(mutation.kind!=Mutation.Kind.PUT || mutation.entry==null || !mutation.entry.getRetainUntil().equals(OAuthStoreFormat.PERMANENT)) throw OAuthStoreFormat.invalid();
+  boolean issuer=false,subject=false;
+  for(Condition condition:conditions) {
+   if(condition.version==null) throw OAuthStoreFormat.invalid();
+   if(condition.key.getKind()==OAuthStoreKey.Kind.ISSUER_STATE) issuer=true;
+   else if(condition.key.getKind()==OAuthStoreKey.Kind.SUBJECT_STATE && condition.key.equals(mutation.key)) subject=true;
+   else throw OAuthStoreFormat.invalid();
+  }
+  if(!issuer || (mutation.key.getKind()==OAuthStoreKey.Kind.ISSUER_STATE ? conditions.size()!=1
+    : mutation.key.getKind()!=OAuthStoreKey.Kind.SUBJECT_STATE || conditions.size()!=2 || !subject)) throw OAuthStoreFormat.invalid();
+ }
+ /** Returns TIMED or the narrow existing permanent-fence transition purpose.
+  * @return the purpose
+  * @since 1.0.0 */
+ public OAuthStoreTransaction.@NonNull Purpose getPurpose(){return this.purpose;}
+ /** Returns the admitted authority/recovery identities required by every condition.
+  * @return expected admission
+  * @since 1.0.0 */
+ public @NonNull StoreAdmission getExpectedAdmission(){return this.expectedAdmission;}
+ /** Returns the required TIMED condition, or empty only for FENCE_ONLY.
+  * @return the temporal condition
+  * @since 1.0.0 */
+ public @NonNull Optional<@NonNull StoreTemporalCondition> getTemporalCondition(){return Optional.ofNullable(this.temporalCondition);}
+ /** The two explicit transaction modes. FENCE_ONLY grants no generic clock-off write authority.
+  * @since 1.0.0 */
+ @Immutable
+ public enum Purpose {
+  /** Normal timed validation including initialization, issuance and maintenance.
+   * @since 1.0.0 */
+  TIMED,
+  /** Exactly one existing permanent issuer/subject epoch advance; no temporal condition.
+   * @since 1.0.0 */
+  FENCE_ONLY
  }
  /** Returns the complete immutable predicate set.
  * @return all conditions

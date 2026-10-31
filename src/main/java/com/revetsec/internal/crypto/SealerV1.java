@@ -569,6 +569,168 @@ public final class SealerV1 {
 		}
 	}
 
+	/** Opens only authoritative record domains, preserving metadata and enforcing ordinary expiry. */
+	public static @NonNull AuthenticatedRecord openRecord(@NonNull String sealed, int maximumSealedLength,
+			@NonNull Map<@NonNull String, @NonNull Key> keys, @NonNull SealedStateType type,
+			@NonNull String context, @NonNull Instant now) throws UnsealException {
+		requireNonNull(now);
+		AuthenticatedRecord record = authenticateRecord(sealed, maximumSealedLength, keys, type, context);
+		if (now.getEpochSecond() >= record.getNotAfterEpochSecond()) {
+			record.close();
+			throw new UnsealException(UnsealException.Kind.EXPIRED);
+		}
+		return record;
+	}
+
+	/** Authenticates retained records solely for an externally verified closed administrative transform. */
+	public static @NonNull AuthenticatedRecord openForMigration(@NonNull String sealed, int maximumSealedLength,
+			@NonNull Map<@NonNull String, @NonNull Key> keys, @NonNull SealedStateType type,
+			@NonNull String context, @NonNull ClosedMigrationIntent intent) throws UnsealException {
+		requireNonNull(intent);
+		requireRecordTypeAndContext(type, context);
+		intent.requireFormat(type == SealedStateType.AS_RECORD
+				? ClosedMigrationIntent.Format.ISSUER_SCHEMA2 : ClosedMigrationIntent.Format.WEBAUTHN_WAR2);
+		return authenticateRecord(sealed, maximumSealedLength, keys, type, context);
+	}
+
+	/** Opens only new-format permanent issuer/subject fence addresses, without consulting UTC. */
+	public static @NonNull AuthenticatedRecord openPermanentFence(@NonNull String sealed, int maximumSealedLength,
+			@NonNull Map<@NonNull String, @NonNull Key> keys, @NonNull String context) throws UnsealException {
+		requireNonNull(context);
+		String prefix = "revetsec/as-record/v2:";
+		if (!context.startsWith(prefix))
+			throw new IllegalArgumentException("Unsupported permanent fence context.");
+		String[] parts = context.substring(prefix.length()).split(":", -1);
+		if (parts.length != 6 || !ConstantTime.isEqual(parts[0], "revetsec") || !ConstantTime.isEqual(parts[1], "as")
+				|| !ConstantTime.isEqual(parts[2], "1") || (!ConstantTime.isEqual(parts[4], "ISSUER_STATE") && !ConstantTime.isEqual(parts[4], "SUBJECT_STATE")))
+			throw new IllegalArgumentException("Unsupported permanent fence address.");
+		try {
+			if (parts[3].length() != 43 || parts[5].length() != 43
+					|| Base64Url.decode(parts[3]).length != 32 || Base64Url.decode(parts[5]).length != 32
+					|| (ConstantTime.isEqual(parts[4], "ISSUER_STATE") && !ConstantTime.isEqual(parts[3], parts[5])))
+				throw new IllegalArgumentException("Unsupported permanent fence address.");
+		} catch (EncodingException failure) {
+			throw new IllegalArgumentException("Unsupported permanent fence address.");
+		}
+		AuthenticatedRecord record = authenticateRecord(sealed, maximumSealedLength, keys,
+				SealedStateType.AS_RECORD, context);
+		if (record.getNotAfterEpochSecond() != Instant.MAX.getEpochSecond()) {
+			record.close();
+			throw invalid();
+		}
+		return record;
+	}
+
+	private static void requireRecordTypeAndContext(@NonNull SealedStateType type, @NonNull String context) {
+		requireNonNull(type);
+		requireNonNull(context);
+		boolean allowed = switch (type) {
+			case AS_RECORD -> context.startsWith("revetsec/as-record/v1:") || context.startsWith("revetsec/as-record/v2:");
+			case WEBAUTHN_RECORD -> context.startsWith("revetsec/wa-record/v1:") || context.startsWith("revetsec/wa-record/v2:");
+			default -> false;
+		};
+		if (!allowed)
+			throw new IllegalArgumentException("Unsupported authoritative record context.");
+	}
+
+	private static @NonNull AuthenticatedRecord authenticateRecord(@NonNull String sealed, int maximumSealedLength,
+			@NonNull Map<@NonNull String, @NonNull Key> keys, @NonNull SealedStateType type,
+			@NonNull String context) throws UnsealException {
+		requireNonNull(sealed);
+		requireNonNull(keys);
+		requireRecordTypeAndContext(type, context);
+		byte[] contextBytes = contextBytes(context);
+		if (maximumSealedLength < 1)
+			throw new IllegalArgumentException("A maximum sealed length must be positive.");
+		try {
+			return authenticateRecordChecked(sealed, maximumSealedLength, keys, type, contextBytes);
+		} catch (RuntimeException failure) {
+			throw invalid();
+		}
+	}
+
+	// Additive metadata path; old open/openDurable/openChecked implementations intentionally remain unchanged.
+	private static @NonNull AuthenticatedRecord authenticateRecordChecked(@NonNull String sealed,
+			int maximumSealedLength, @NonNull Map<@NonNull String, @NonNull Key> keys,
+			@NonNull SealedStateType type, byte @NonNull [] contextBytes) throws UnsealException {
+		// 1. The length, before any decoding.
+		if (sealed.length() > maximumSealedLength)
+			throw invalid();
+
+		// 2 and 3. The alphabet, then decode and confirm the canonical form.
+		byte[] bytes;
+
+		try {
+			bytes = Base64Url.decode(sealed);
+		} catch (EncodingException e) {
+			throw invalid();
+		}
+
+		// 4. The minimum length, the version, the key ID's length and characters. The length comes first, so a
+		// ciphertext shorter than the tag never reaches the provider (JDK 17 note).
+		if (bytes.length < FIXED_OVERHEAD + 1 || (bytes[0] & 0xFF) != VERSION)
+			throw invalid();
+
+		int keyIdLength = bytes[1] & 0xFF;
+
+		if (keyIdLength < 1 || keyIdLength > MAXIMUM_KEY_ID_LENGTH || bytes.length < FIXED_OVERHEAD + keyIdLength)
+			throw invalid();
+
+		for (int index = 2; index < 2 + keyIdLength; ++index)
+			if (!isKeyIdCharacter((char) (bytes[index] & 0xFF)))
+				throw invalid();
+
+		// 5. An exact lookup of the key ID, with no fallback to any other key.
+		@Nullable Key key = keys.get(new String(bytes, 2, keyIdLength, StandardCharsets.US_ASCII));
+
+		if (key == null)
+			throw invalid();
+
+		// 6. The context, bound into the additional authenticated data with the header and the type label.
+		int saltOffset = 2 + keyIdLength;
+		int ivOffset = saltOffset + SALT_LENGTH;
+		int headerLength = ivOffset + IV_LENGTH;
+		byte[] additionalData = additionalData(Arrays.copyOfRange(bytes, 0, headerLength), type, contextBytes);
+
+		// 7. Derive the message key and run GCM, which authenticates everything above.
+		byte[] salt = Arrays.copyOfRange(bytes, saltOffset, ivOffset);
+		byte[] iv = Arrays.copyOfRange(bytes, ivOffset, headerLength);
+		byte[] ciphertextAndTag = Arrays.copyOfRange(bytes, headerLength, bytes.length);
+		byte[] messageKey = new byte[0];
+		byte[] body;
+
+		try {
+			messageKey = messageKey(key, type, salt);
+			body = AesGcm.decrypt(messageKey, iv, additionalData, ciphertextAndTag);
+		} catch (GeneralSecurityException | RuntimeException e) {
+			throw invalid();
+		} finally {
+			Arrays.fill(messageKey, (byte) 0);
+		}
+
+		try {
+			// 8. notAfter, only now that the value is known to be authentic. Step 4's minimum length guarantees the
+			// body holds one.
+			long notAfter = ByteBuffer.wrap(body, 0, NOT_AFTER_LENGTH).getLong();
+
+			// 9. A strict UTF-8 decode.
+			byte[] plaintext = Arrays.copyOfRange(body, NOT_AFTER_LENGTH, body.length);
+			try {
+				// Old WA can seal ceil(Instant.MAX fractional), a valid long outside Instant by one second.
+				long maximum = Instant.MAX.getEpochSecond() + (type == SealedStateType.WEBAUTHN_RECORD ? 1 : 0);
+				if (notAfter < Instant.MIN.getEpochSecond() || notAfter > maximum)
+					throw invalid();
+				return new AuthenticatedRecord(plaintext, notAfter);
+			} catch (EncodingException e) {
+				throw invalid();
+			} finally {
+				Arrays.fill(plaintext, (byte) 0);
+			}
+		} finally {
+			Arrays.fill(body, (byte) 0);
+		}
+	}
+
 	/**
 	 * The message key {@code K} for one value.
 	 */

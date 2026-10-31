@@ -73,7 +73,7 @@ final class OAuthAuthorizationServerTests {
  private static final @NonNull String BROWSER="A".repeat(43),VERIFIER="dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk",CHALLENGE="E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM";
  private static final @NonNull Instant NOW=Instant.parse("2026-10-06T12:00:00Z");
  private static final TestJwk.@NonNull Fixture KEY=TestJwk.Fixture.IDP_SIGNING_RSA_2048;
- private final @NonNull OAuthAtomicStoreFixture store=new OAuthAtomicStoreFixture();
+ private final @NonNull OAuthAtomicStoreFixture store=new OAuthAtomicStoreFixture(NOW);
  private final @NonNull MutableClock clock=new MutableClock();
  private final @NonNull List<@NonNull OAuthGrantContext> contexts=new ArrayList<>();
  private @NonNull OAuthServerClientRegistration client=client("client");
@@ -131,7 +131,7 @@ final class OAuthAuthorizationServerTests {
  private static @NonNull Map<@NonNull String,@NonNull List<@NonNull String>> headers() {return Map.of("Content-Type",List.of("application/x-www-form-urlencoded"));}
  private static @NonNull JsonObject json(@NonNull OAuthServerResponse response) {try{return (JsonObject)JsonCodec.parse(response.toHttpBodyWithCredentials(),JsonLimits.protocolDocument(131072));}catch(com.revetsec.internal.json.JsonParseException e){throw new AssertionError(e);}}
  private static @NonNull BearerToken bearer(@NonNull String token) {return assertInstanceOf(BearerTokenResult.Present.class, BearerToken.fromAuthorizationHeaderValuesResult(List.of("Bearer "+token))).getToken();}
- private void initialized() {assertEquals(OAuthStoreCommitStatus.COMMITTED,this.server.initializeFreshIssuer());this.server.establishNewSubject("subject");}
+ private void initialized() {assertEquals(OAuthStoreCommitStatus.COMMITTED,this.server.initializeFreshIssuer().getStatus());this.server.establishNewSubject("subject");}
  private @NonNull String query() {return form(Map.of("client_id",this.client.getClientId(),"response_type","code","redirect_uri",REDIRECT,"resource",RESOURCE,"code_challenge",CHALLENGE,"code_challenge_method","S256","state","original-state"));}
  private @NonNull OAuthServerInteraction begin() {return assertInstanceOf(OAuthAuthorizationResult.InteractionRequired.class,this.server.beginAuthorizationResult("GET",query(),new byte[0],Map.of(),BROWSER)).getInteraction();}
  private @NonNull String code() {
@@ -204,7 +204,7 @@ final class OAuthAuthorizationServerTests {
    var f=new OAuthAuthorizationServerTests();f.initialized();var interaction=f.begin();String handle=interaction.getInteractionValue(),browser=BROWSER;
    if(which.equals("handle"))handle="B".repeat(42)+"A";
    if(which.equals("browser"))browser="B".repeat(42)+"A";
-   if(which.equals("expired"))f.clock.time=NOW.plusSeconds(900);
+   if(which.equals("expired")){f.clock.time=NOW.plusSeconds(900); f.store.authorityNow=f.clock.time;}
    if(which.equals("completed"))assertInstanceOf(OAuthAuthorizationResult.Denied.class,f.server.completeAuthorizationResult(handle,browser,OAuthAuthorizationDecision.deniedInstance()));
    if(which.equals("client-change"))f.client=OAuthServerClientRegistration.withClientId("client").configurationVersion("v2").redirectUris(List.of(URI.create(REDIRECT))).allowedScopesByResource(resources()).build();
    if(which.equals("issuer-fence"))f.server.revokeAllGrants();
@@ -225,11 +225,11 @@ final class OAuthAuthorizationServerTests {
    if(Set.of("validate","refresh","revoke","grant").contains(which)) {JsonObject one=json(assertInstanceOf(OAuthTokenResult.Succeeded.class,f.redeem(f.code())).getResponse());token=one.find("access_token").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow();refresh=one.find("refresh_token").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow();grant=f.contexts.get(0).getGrantValue();}
    String h=handle,co=code,to=token,re=refresh,gr=grant;OAuthStoreKey k=key;
    f.store.unknownBefore=!after;f.store.unknownAfter=after;int commits=f.store.commits;
-   if(which.equals("initialize"))assertEquals(OAuthStoreCommitStatus.UNKNOWN,f.server.initializeFreshIssuer());
-   else if(which.equals("reseal"))assertEquals(OAuthStoreCommitStatus.UNKNOWN,f.server.resealStoreEntry(requireNonNull(k)));
+   if(which.equals("initialize"))assertEquals(OAuthStoreCommitStatus.UNKNOWN,f.server.initializeFreshIssuer().getStatus());
+   else if(which.equals("reseal"))assertEquals(OAuthStoreCommitStatus.UNKNOWN,f.server.resealStoreEntry(requireNonNull(k)).getStatus());
    else {
     Executable operation=switch(which) {case "begin"->f::begin;case "complete"->()->f.server.completeAuthorizationResult(requireNonNull(h),BROWSER,decision("subject",Set.of("read"),true));case "redeem"->()->f.redeem(requireNonNull(co));case "validate"->()->f.server.validateAccessTokenResult(bearer(requireNonNull(to)),RESOURCE);case "refresh"->()->f.rotate(requireNonNull(re));case "revoke"->()->f.revoke(requireNonNull(to));case "subject"->()->f.server.revokeSubject("subject");case "issuer"->f.server::revokeAllGrants;default->()->f.server.revokeGrant(requireNonNull(gr));};
-    OAuthServerStoreException failure=assertThrows(OAuthServerStoreException.class,operation);assertEquals(COMMIT_OUTCOME_UNKNOWN,failure.getReason());assertFalse(failure.isTransient());assertEquals(503,f.server.responseForFailure(failure).getStatusCode());
+    OAuthServerStoreException failure=assertThrows(OAuthServerStoreException.class,operation);assertEquals(Set.of("complete","validate").contains(which)?STORE_UNAVAILABLE:COMMIT_OUTCOME_UNKNOWN,failure.getReason());assertFalse(failure.isTransient());assertEquals(503,f.server.responseForFailure(failure).getStatusCode());
    }
    assertEquals(commits+1,f.store.commits);
   })));
@@ -246,14 +246,14 @@ final class OAuthAuthorizationServerTests {
    var f=new OAuthAuthorizationServerTests();JsonObject one=f.issued();String token=one.find("access_token").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow();
    if(which.equals("malformed"))token="malformed";
    else if(which.equals("oversize"))token="A".repeat(16385);
-   else if(which.equals("expired"))f.clock.time=NOW.plusSeconds(331);
+   else if(which.equals("expired")){f.clock.time=NOW.plusSeconds(331); f.store.authorityNow=f.clock.time;}
    else {String[] parts=token.split("\\.",-1);JsonObject original;
     try{original=(JsonObject)JsonCodec.parse(Base64.getUrlDecoder().decode(parts[1]),JsonLimits.jose(65536));}catch(com.revetsec.internal.json.JsonParseException e){throw new AssertionError(e);}
     JsonObject.Builder claims=JsonObject.builder();for(var member:original.getMembers().entrySet())if(!(member.getKey().equals("jti")&&which.equals("missing-jti")) && !(member.getKey().equals("iss")&&which.equals("wrong-issuer")) && !(member.getKey().equals("aud")&&which.equals("wrong-audience")))claims.put(member.getKey(),member.getValue());
     if(which.equals("wrong-issuer"))claims.put("iss","https://wrong.example");if(which.equals("wrong-audience"))claims.put("aud","urn:wrong");
     token=com.revetsec.jose.JwsSigner.fromRsaKeyPair(KEY.getPrivateKey(),KEY.getPublicKey(),JwsAlgorithm.RS256).toCompactSerialization("at+jwt","key",null,JsonCodec.toUtf8Bytes(claims.build()),Duration.ofSeconds(1));
    }
-   int reads=f.store.reads;var result=assertInstanceOf(OAuthIssuerAccessTokenResult.Rejected.class,f.server.validateAccessTokenResult(bearer(token),RESOURCE));assertEquals(reads,f.store.reads);
+   int reads=f.store.reads;var result=assertInstanceOf(OAuthIssuerAccessTokenResult.Rejected.class,f.server.validateAccessTokenResult(bearer(token),RESOURCE));if(which.equals("expired"))assertTrue(f.store.reads>reads);else assertEquals(reads,f.store.reads);
    if(!which.equals("oversize"))assertTrue(result.getAccessTokenReason().isPresent());else assertEquals(MALFORMED_REQUEST,result.getReason());
   }));
  }
@@ -267,16 +267,16 @@ final class OAuthAuthorizationServerTests {
   OAuthServerException failure=assertThrows(OAuthServerException.class,()->this.server.validateAccessTokenResult(bearer(token),RESOURCE));assertEquals(reads,this.store.reads);assertTrue(Set.of(STORE_UNAVAILABLE,CONFIGURATION_INVALID).contains(failure.getReason()));
  }
  @Test void resealPreservesAuthorityRetentionAndUsesCAS() {
-  JsonObject one=issued();String token=one.find("access_token").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow();for(OAuthStoreKey key:List.copyOf(this.store.rows.keySet())) {OAuthStoreEntry old=requireNonNull(this.store.rows.get(key));assertEquals(OAuthStoreCommitStatus.COMMITTED,this.server.resealStoreEntry(key));OAuthStoreEntry next=requireNonNull(this.store.rows.get(key));assertNotEquals(old.getVersion(),next.getVersion());assertEquals(old.getRetainUntil(),next.getRetainUntil());}
-  assertInstanceOf(OAuthIssuerAccessTokenResult.Succeeded.class,this.server.validateAccessTokenResult(bearer(token),RESOURCE));this.store.conflicts=1;assertEquals(OAuthStoreCommitStatus.CONFLICT,this.server.resealStoreEntry(this.store.rows.keySet().iterator().next()));
-  OAuthStoreKey absent=OAuthStoreFormat.key(OAuthStoreFormat.namespace(this.store.rows.keySet().iterator().next()),OAuthStoreKey.Kind.GRANT,"A".repeat(43));assertEquals(OAuthStoreCommitStatus.CONFLICT,this.server.resealStoreEntry(absent));
+  JsonObject one=issued();String token=one.find("access_token").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow();for(OAuthStoreKey key:List.copyOf(this.store.rows.keySet())) {OAuthStoreEntry old=requireNonNull(this.store.rows.get(key));assertEquals(OAuthStoreCommitStatus.COMMITTED,this.server.resealStoreEntry(key).getStatus());OAuthStoreEntry next=requireNonNull(this.store.rows.get(key));assertNotEquals(old.getVersion(),next.getVersion());assertEquals(old.getRetainUntil(),next.getRetainUntil());}
+  assertInstanceOf(OAuthIssuerAccessTokenResult.Succeeded.class,this.server.validateAccessTokenResult(bearer(token),RESOURCE));this.store.conflicts=1;assertEquals(OAuthStoreCommitStatus.CONFLICT,this.server.resealStoreEntry(this.store.rows.keySet().iterator().next()).getStatus());
+  OAuthStoreKey absent=OAuthStoreFormat.key(OAuthStoreFormat.namespace(this.store.rows.keySet().iterator().next()),OAuthStoreKey.Kind.GRANT,"A".repeat(43));assertEquals(OAuthStoreCommitStatus.CONFLICT,this.server.resealStoreEntry(absent).getStatus());
  }
  @Test void resealCannotCommitAcrossAnIssuerFenceAdvance() {
   issued();OAuthStoreKey access=this.store.rows.keySet().stream()
    .filter(key->key.getKind()==OAuthStoreKey.Kind.ACCESS_TOKEN).findFirst().orElseThrow();
   OAuthStoreEntry original=requireNonNull(this.store.rows.get(access));
   this.store.beforeCommit=this.server::revokeAllGrants;
-  assertEquals(OAuthStoreCommitStatus.CONFLICT,this.server.resealStoreEntry(access));
+  assertEquals(OAuthStoreCommitStatus.CONFLICT,this.server.resealStoreEntry(access).getStatus());
   assertSame(original,this.store.rows.get(access));
  }
  @Test void resealRejectsAuthenticatedButMalformedPermanentFencePayload() {
@@ -284,15 +284,15 @@ final class OAuthAuthorizationServerTests {
    .filter(key->key.getKind()==OAuthStoreKey.Kind.SUBJECT_STATE).findFirst().orElseThrow();
   OAuthStoreEntry old=requireNonNull(this.store.rows.get(subject));
   OAuthStoreRecordCodec codec=new OAuthStoreRecordCodec(ISSUER,sealer(),3800);
-  this.store.rows.put(subject,codec.seal(subject,old.getRetainUntil(),"{}"));
+  this.store.rows.put(subject,IssuerTestRecords.seal(codec,subject,old.getRetainUntil(),"{}"));
   OAuthServerStoreException failure=assertThrows(OAuthServerStoreException.class,
-   ()->this.server.resealStoreEntry(subject));
+   ()->this.server.resealStoreEntry(subject).getStatus());
   assertEquals(STORE_CORRUPT,failure.getReason());
  }
  @Test void authorizationBeginCannotReleaseAnInteractionAfterItsCommitExpiry() {
-  initialized();this.store.beforeCommit=()->this.clock.time=NOW.plusSeconds(900);
-  OAuthServerStoreException failure=assertThrows(OAuthServerStoreException.class,this::begin);
-  assertEquals(STORE_UNAVAILABLE,failure.getReason());
+  initialized();int size=this.store.rows.size();this.store.beforeCommit=()->{this.clock.time=NOW.plusSeconds(900);this.store.authorityNow=this.clock.time;};
+  var rejected=assertInstanceOf(OAuthAuthorizationResult.Rejected.class,this.server.beginAuthorizationResult("GET",query(),new byte[0],Map.of(),BROWSER));
+  assertEquals(INTERACTION_EXPIRED,rejected.getReason());assertEquals(size,this.store.rows.size());
  }
  @Test void malformedBrowserBindingDoesNotCallTheApplicationClientRepository() {
   AtomicInteger lookups=new AtomicInteger();
@@ -305,31 +305,31 @@ final class OAuthAuthorizationServerTests {
  }
  @Test void authorizationClientLookupBarrierRetainsTheInteractionExpiry() {
   initialized();OAuthServerInteraction interaction=begin();
-  this.store.beforeCommit=()->this.clock.time=NOW.plusSeconds(900);
-  OAuthServerStoreException failure=assertThrows(OAuthServerStoreException.class,
-   ()->this.server.resumeAuthorizationResult(interaction.getInteractionValue(),BROWSER));
-  assertEquals(STORE_UNAVAILABLE,failure.getReason());
+  this.store.beforeCommit=()->{this.clock.time=NOW.plusSeconds(900); this.store.authorityNow=this.clock.time;};
+  OAuthAuthorizationResult.Rejected rejected=assertInstanceOf(OAuthAuthorizationResult.Rejected.class,
+   this.server.resumeAuthorizationResult(interaction.getInteractionValue(),BROWSER));
+  assertEquals(INTERACTION_EXPIRED,rejected.getReason());
  }
  @Test void authorizationResumeBarrierRetainsTheInteractionExpiry() {
   initialized();OAuthServerInteraction interaction=begin();
   this.server=builder().clientRepository((id,budget)->{
-   this.store.beforeCommit=()->this.clock.time=NOW.plusSeconds(900);
+   this.store.beforeCommit=()->{this.clock.time=NOW.plusSeconds(900); this.store.authorityNow=this.clock.time;};
    return Optional.of(this.client);
   }).build();
-  OAuthServerStoreException failure=assertThrows(OAuthServerStoreException.class,
-   ()->this.server.resumeAuthorizationResult(interaction.getInteractionValue(),BROWSER));
-  assertEquals(STORE_UNAVAILABLE,failure.getReason());
+  OAuthAuthorizationResult.Rejected rejected=assertInstanceOf(OAuthAuthorizationResult.Rejected.class,
+   this.server.resumeAuthorizationResult(interaction.getInteractionValue(),BROWSER));
+  assertEquals(INTERACTION_EXPIRED,rejected.getReason());
  }
  @Test void authorizationDenialCannotCommitAfterItsInteractionExpiry() {
   initialized();OAuthServerInteraction interaction=begin();
   this.server=builder().clientRepository((id,budget)->{
-   this.store.beforeCommit=()->this.clock.time=NOW.plusSeconds(900);
+   this.store.beforeCommit=()->{this.clock.time=NOW.plusSeconds(900); this.store.authorityNow=this.clock.time;};
    return Optional.of(this.client);
   }).build();
-  OAuthServerStoreException failure=assertThrows(OAuthServerStoreException.class,
-   ()->this.server.completeAuthorizationResult(interaction.getInteractionValue(),BROWSER,
+  OAuthAuthorizationResult.Rejected rejected=assertInstanceOf(OAuthAuthorizationResult.Rejected.class,
+   this.server.completeAuthorizationResult(interaction.getInteractionValue(),BROWSER,
     OAuthAuthorizationDecision.deniedInstance()));
-  assertEquals(STORE_UNAVAILABLE,failure.getReason());
+  assertEquals(INTERACTION_EXPIRED,rejected.getReason());
  }
  @TestFactory @NonNull Stream<@NonNull DynamicTest> missingOrCorruptPermanentStateNeverInitializesOnTraffic() {
   return Stream.of("issuer","subject","corrupt","warm-up").map(which->test(which,()->{
@@ -337,7 +337,7 @@ final class OAuthAuthorizationServerTests {
    OAuthStoreKey key=f.store.rows.keySet().stream().filter(k->k.getKind()==(which.equals("subject")?OAuthStoreKey.Kind.SUBJECT_STATE:OAuthStoreKey.Kind.ISSUER_STATE)).findFirst().orElseThrow();
    if(which.equals("corrupt")){OAuthStoreEntry old=requireNonNull(f.store.rows.get(key));f.store.rows.put(key,OAuthStoreEntry.fromStoredForm(key,old.getVersion(),old.getRetainUntil(),"corrupt"));}else f.store.rows.remove(key);
    Executable operation=which.equals("warm-up")?f.server::warmUp:()->f.server.validateAccessTokenResult(bearer(token),RESOURCE);
-   OAuthServerStoreException failure=assertThrows(OAuthServerStoreException.class,operation);assertEquals(STORE_CORRUPT,failure.getReason());assertEquals(size-(which.equals("corrupt")?0:1),f.store.rows.size());
+   OAuthServerStoreException failure=assertThrows(OAuthServerStoreException.class,operation);assertEquals(which.equals("subject")||which.equals("corrupt")?STORE_CORRUPT:STORE_UNAVAILABLE,failure.getReason());assertEquals(size-(which.equals("corrupt")?0:1),f.store.rows.size());
   }));
  }
  @Test void metadataJwksAndWarmUpUseConfiguredAuthorityAndDoNotFetchClients() {
@@ -589,15 +589,15 @@ final class OAuthAuthorizationServerTests {
   return Stream.of("namespace","missing-issuer","clock-backward","expired","retention","fault","null-read","null-commit","initialization-fault").map(which->test(which,()->{
    var f=new OAuthAuthorizationServerTests();assertNotNull(f.issued());OAuthStoreKey key=f.store.rows.keySet().stream().filter(k->k.getKind()==OAuthStoreKey.Kind.ACCESS_TOKEN).findFirst().orElseThrow();
    OAuthStoreRecordCodec codec=new OAuthStoreRecordCodec(ISSUER,sealer(),3800);OAuthStoreCoordinator coordinator=new OAuthStoreCoordinator(f.store,codec,f.clock,3,255);
-   if(which.equals("namespace")){OAuthStoreKey foreign=OAuthStoreFormat.key("A".repeat(43),OAuthStoreKey.Kind.GRANT,BROWSER);assertThrows(IllegalArgumentException.class,()->coordinator.reseal(foreign,Deadline.fromNow(Duration.ofSeconds(1))));return;}
+   if(which.equals("namespace")){OAuthStoreKey foreign=OAuthStoreFormat.key("A".repeat(43),OAuthStoreKey.Kind.GRANT,BROWSER);assertThrows(IllegalArgumentException.class,()->coordinator.reseal(foreign,Deadline.fromNow(Duration.ofSeconds(1))).getStatus());return;}
    if(which.equals("missing-issuer"))f.store.rows.remove(codec.issuerKey());
-   if(which.equals("clock-backward"))f.clock.time=NOW.minusSeconds(31);
-   if(which.equals("expired")){f.clock.time=requireNonNull(f.store.rows.get(key)).getRetainUntil();assertEquals(OAuthStoreCommitStatus.CONFLICT,f.server.resealStoreEntry(key));return;}
-   if(which.equals("retention")){OAuthStoreEntry old=requireNonNull(f.store.rows.get(key));JsonObject payload=codec.open(old,f.clock);f.store.rows.put(key,codec.seal(key,old.getRetainUntil().plusSeconds(1),payload.toJson()));}
+   if(which.equals("clock-backward")){f.clock.time=NOW.minusSeconds(31); f.store.authorityNow=f.clock.time;}
+   if(which.equals("expired")){f.clock.time=requireNonNull(f.store.rows.get(key)).getRetainUntil(); f.store.authorityNow=f.clock.time;assertEquals(OAuthStoreCommitStatus.CONFLICT,f.server.resealStoreEntry(key).getStatus());return;}
+   if(which.equals("retention")){OAuthStoreEntry old=requireNonNull(f.store.rows.get(key));JsonObject payload=IssuerTestRecords.open(codec,old,f.clock);f.store.rows.put(key,IssuerTestRecords.seal(codec,key,old.getRetainUntil().plusSeconds(1),payload.toJson()));}
    if(which.equals("fault")||which.equals("initialization-fault"))f.store.fault=new IllegalStateException("backend-sensitive");
-   if(which.equals("null-read"))f.store.nullRead=true;if(which.equals("null-commit"))f.store.nullCommit=true;
-   Executable operation=which.equals("initialization-fault")?f.server::initializeFreshIssuer:()->f.server.resealStoreEntry(key);
-   var failure=assertThrows(OAuthServerStoreException.class,operation);assertEquals(Set.of("missing-issuer","retention").contains(which)?STORE_CORRUPT:STORE_UNAVAILABLE,failure.getReason());
+   if(which.equals("null-read"))f.store.nullRead=true;if(which.equals("null-commit")){f.store.nullCommit=true;assertEquals(OAuthStoreCommitStatus.UNKNOWN,f.server.resealStoreEntry(key).getStatus());return;}
+   Executable operation=which.equals("initialization-fault")?f.server::initializeFreshIssuer:()->f.server.resealStoreEntry(key).getStatus();
+   var failure=assertThrows(OAuthServerStoreException.class,operation);assertEquals(which.equals("retention")?STORE_CORRUPT:STORE_UNAVAILABLE,failure.getReason());
   }));
  }
  @Test void clientLookupBarrierConflictExhaustionAndPolicyDenialConflictsAreBounded() {

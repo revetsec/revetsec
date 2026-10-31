@@ -25,14 +25,16 @@ import javax.annotation.concurrent.Immutable;
 @Immutable
 public abstract sealed class WebAuthnAccountDisableResult permits
         WebAuthnAccountDisableResult.Disabled,
-        WebAuthnAccountDisableResult.Unavailable, WebAuthnAccountDisableResult.Indeterminate {
+        WebAuthnAccountDisableResult.Unavailable, WebAuthnAccountDisableResult.Indeterminate, WebAuthnAccountDisableResult.ReconciliationRequired {
     private static final @NonNull Disabled DISABLED = new Disabled();
     private static final @NonNull Unavailable UNAVAILABLE = new Unavailable();
     private static final @NonNull Indeterminate INDETERMINATE = new Indeterminate();
+    private static final @NonNull ReconciliationRequired RECONCILIATION_REQUIRED = new ReconciliationRequired();
     WebAuthnAccountDisableResult() { }
     static @NonNull WebAuthnAccountDisableResult disabled() { return DISABLED; }
     static @NonNull WebAuthnAccountDisableResult unavailable() { return UNAVAILABLE; }
     static @NonNull WebAuthnAccountDisableResult indeterminate() { return INDETERMINATE; }
+    static @NonNull WebAuthnAccountDisableResult reconciliationRequired() { return RECONCILIATION_REQUIRED; }
     /** Redacts account identity.
      * @return fixed description
      * @since 1.0.0 */
@@ -52,4 +54,11 @@ public abstract sealed class WebAuthnAccountDisableResult permits
     @Immutable public static final class Indeterminate extends WebAuthnAccountDisableResult {
         private Indeterminate() { }
     }
+    /** The requested transition committed, but normal output could not be admitted.
+     * Reconcile through an authorized fresh operation before deciding what to do next.
+     * @since 1.0.0 */
+    @Immutable public static final class ReconciliationRequired extends WebAuthnAccountDisableResult {
+        private ReconciliationRequired() { }
+    }
+
 }

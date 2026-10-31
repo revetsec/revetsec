@@ -50,7 +50,7 @@ final class WebAuthnCredentialRecordCodecTests {
         byte[] key = edKey(KeyPairGenerator.getInstance("Ed25519").generateKeyPair());
         var state = WebAuthnCredentialState.checked(ID, HANDLE, key, -8, 0xffff_ffffL, true, true);
         WebAuthnCredentialRecordCodec codec = credentialCodec();
-        var encoded = codec.encode(state);
+        var encoded = codec.encode(state, NOW);
         assertEquals(WebAuthnStoreKey.forCredential(NAMESPACE, RP, ID), encoded.key());
         byte[] frame = encoded.sealedBytes();
         frame[0] = 0;
@@ -70,7 +70,7 @@ final class WebAuthnCredentialRecordCodecTests {
     @Test void rejectsReboundCredentialKeysAndWrongKinds() throws Exception {
         byte[] key = edKey(KeyPairGenerator.getInstance("Ed25519").generateKeyPair());
         var codec = credentialCodec();
-        var encoded = codec.encode(WebAuthnCredentialState.checked(ID, HANDLE, key, -8, 1, false, false));
+        var encoded = codec.encode(WebAuthnCredentialState.checked(ID, HANDLE, key, -8, 1, false, false), NOW);
         assertThrows(WebAuthnRecordException.class, () -> codec.decode(
                 WebAuthnStoreKey.forCredential(NAMESPACE, RP, new byte[] {1, 2, 4}),
                 encoded.sealedBytes(), CLOCK));
@@ -78,7 +78,7 @@ final class WebAuthnCredentialRecordCodecTests {
                 WebAuthnStoreKey.forAccountFence(NAMESPACE, RP, HANDLE), encoded.sealedBytes(), CLOCK));
 
         WebAuthnStoreKey wrongAddress = WebAuthnStoreKey.forCredential(NAMESPACE, RP, new byte[] {1, 2, 4});
-        byte[] rebound = recordCodec().seal(wrongAddress, rawPayload(ID, HANDLE, key, -8, 1, 0),
+        byte[] rebound = malformed(wrongAddress, rawPayload(ID, HANDLE, key, -8, 1, 0),
                 NOW.plusSeconds(300));
         assertThrows(WebAuthnRecordException.class, () -> codec.decode(wrongAddress, rebound, CLOCK));
     }
@@ -106,7 +106,7 @@ final class WebAuthnCredentialRecordCodecTests {
 
     @Test void revokedCredentialRetainsIdOwnershipWithoutAnActiveVerificationKey() throws Exception {
         var codec = credentialCodec();
-        var tombstone = codec.encodeRevoked(ID, HANDLE);
+        var tombstone = codec.encodeRevoked(ID, HANDLE, NOW);
         var decoded = codec.decodeRecord(tombstone.key(), tombstone.sealedBytes(), CLOCK);
         assertTrue(decoded.isRevoked());
         assertArrayEquals(ID, decoded.credentialId());
@@ -115,7 +115,7 @@ final class WebAuthnCredentialRecordCodecTests {
                 () -> codec.decode(tombstone.key(), tombstone.sealedBytes(), CLOCK));
         assertTrue(tombstone.sealedBytes().length < codec.encode(WebAuthnCredentialState.checked(
                 ID, HANDLE, edKey(KeyPairGenerator.getInstance("Ed25519").generateKeyPair()),
-                -8, 0, false, false)).sealedBytes().length);
+                -8, 0, false, false), NOW).sealedBytes().length);
 
         WebAuthnStoreKey address = tombstone.key();
         byte[] valid = {2, 0, 3, 3, 1, 2, 3, 4, 5, 6};
@@ -123,7 +123,7 @@ final class WebAuthnCredentialRecordCodecTests {
                 Arrays.copyOf(valid, valid.length - 1), Arrays.copyOf(valid, valid.length + 1),
                 {2, 0, 3, 3, 1, 2, 4, 4, 5, 6}, {2, 0, 3, 3, 1, 2, 3, 4, 5, 6, 7}
         }) {
-            byte[] sealed = recordCodec().seal(address, invalid, NOW.plusSeconds(300));
+            byte[] sealed = malformed(address, invalid, NOW.plusSeconds(300));
             assertThrows(WebAuthnRecordException.class, () -> codec.decodeRecord(address, sealed, CLOCK));
         }
         assertThrows(WebAuthnRecordException.class, () -> codec.decodeRecord(
@@ -161,4 +161,8 @@ final class WebAuthnCredentialRecordCodecTests {
         out.writeBytes(Arrays.copyOfRange(spki, spki.length - 32, spki.length));
         return out.toByteArray();
     }
+    private static byte @NonNull [] malformed(@NonNull WebAuthnStoreKey key,byte @NonNull [] inner,@NonNull Instant expires){
+        return WebAuthnTestPayloads.seal(key,inner,expires,NOW);
+    }
+
 }

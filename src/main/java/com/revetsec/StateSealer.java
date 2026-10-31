@@ -24,6 +24,8 @@ import com.revetsec.internal.crypto.SealedStateAccess;
 import com.revetsec.internal.crypto.SealedStateType;
 import com.revetsec.internal.crypto.SealerV1;
 import com.revetsec.internal.crypto.UnsealException;
+import com.revetsec.internal.crypto.AuthenticatedRecord;
+import com.revetsec.internal.crypto.ClosedMigrationIntent;
 import com.revetsec.internal.encoding.EncodingException;
 import com.revetsec.internal.encoding.StrictUtf8;
 import org.jspecify.annotations.NonNull;
@@ -442,6 +444,32 @@ public final class StateSealer {
 	 */
 	@ThreadSafe
 	private static final class SealedStateOperations implements SealedStateAccess.Operations {
+		@Override
+		public @NonNull AuthenticatedRecord openRecord(@NonNull StateSealer sealer, @NonNull SealedStateType type,
+				@NonNull String sealed, @NonNull String context, @NonNull Clock clock) throws UnsealException {
+			requireNonNull(sealer);
+			requireNonNull(type);
+			requireNonNull(sealed);
+			requireNonNull(context);
+			requireNonNull(clock);
+			SealerV1.requireContext(context);
+			return SealerV1.openRecord(sealed, sealer.maximumSealedLength, sealer.keysByKeyId, type, context, clock.instant());
+		}
+
+		@Override
+		public @NonNull AuthenticatedRecord openForMigration(@NonNull StateSealer sealer, @NonNull SealedStateType type,
+				@NonNull String sealed, @NonNull String context, @NonNull ClosedMigrationIntent intent) throws UnsealException {
+			requireNonNull(sealer);
+			return SealerV1.openForMigration(sealed, sealer.maximumSealedLength, sealer.keysByKeyId, type, context, intent);
+		}
+
+		@Override
+		public @NonNull AuthenticatedRecord openPermanentFence(@NonNull StateSealer sealer, @NonNull String sealed,
+				@NonNull String context) throws UnsealException {
+			requireNonNull(sealer);
+			return SealerV1.openPermanentFence(sealed, sealer.maximumSealedLength, sealer.keysByKeyId, context);
+		}
+
   @Override public @NonNull Integer getMaximumSealedLength(@NonNull StateSealer sealer) {
    return requireNonNull(sealer).maximumSealedLength;
   }

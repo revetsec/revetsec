@@ -144,7 +144,7 @@ final class WebAuthnCloseoutBoundaryTests {
         var records = records(); var codec = new WebAuthnCredentialIndex("tenant", RP, records);
         var state = codec.empty(HANDLE).withAdded(ID).withAdded(new byte[] {9});
         assertTrue(state.contains(ID)); assertFalse(state.contains(new byte[] {8}));
-        assertEquals(2, codec.decode(codec.encode(state).key(), codec.encode(state).sealedBytes(), CLOCK).size());
+        assertEquals(2, codec.decode(codec.encode(state, NOW).key(), codec.encode(state, NOW).sealedBytes(), CLOCK).size());
         assertThrows(IllegalArgumentException.class, () -> codec.empty(new byte[0]));
         assertThrows(IllegalArgumentException.class, () -> codec.empty(new byte[65]));
         assertThrows(IllegalArgumentException.class, () -> state.withAdded(ID));
@@ -162,7 +162,7 @@ final class WebAuthnCloseoutBoundaryTests {
                 change(valid, 6, 4), change(valid, 7, 0),
                 indexPayload(HANDLE, ID, ID), indexPayload(HANDLE, new byte[] {9}, ID),
                 indexPayload(new byte[] {9}, ID), concat(valid, new byte[] {0}), Arrays.copyOf(valid, valid.length - 1)}) {
-            byte[] sealed = records.seal(key, bad, EXPIRY);
+            byte[] sealed = malformed(key, bad, EXPIRY);
             assertEquals("Invalid WebAuthn store record.", assertThrows(WebAuthnRecordException.class,
                     () -> codec.decode(key, sealed, CLOCK)).getMessage());
         }
@@ -174,13 +174,13 @@ final class WebAuthnCloseoutBoundaryTests {
         var key = WebAuthnStoreKey.forAccountFence("tenant", RP, HANDLE);
         for (byte[] bad : new byte[][] {new byte[3], new byte[68], {2, 1, 3, 4, 5, 6}, {1, -1, 3, 4, 5, 6},
                 {1, 2, 3, 4, 5, 6}, {1, 1, 2, 4, 5, 6}, {1, 1, 3, 4, 5, 7}}) {
-            byte[] sealed = records.seal(key, bad, EXPIRY);
+            byte[] sealed = malformed(key, bad, EXPIRY);
             assertThrows(WebAuthnRecordException.class, () -> codec.decode(key, sealed, CLOCK));
         }
         assertThrows(WebAuthnRecordException.class, () -> codec.decode(WebAuthnStoreKey.forCredential("tenant", RP, ID), new byte[] {1}, CLOCK));
         var time = new WebAuthnNamespaceClock("tenant", RP, records);
         byte[] negativeNanos = ByteBuffer.allocate(13).put((byte) 1).putLong(NOW.getEpochSecond()).putInt(-1).array();
-        assertThrows(WebAuthnRecordException.class, () -> time.decode(time.key(), records.seal(time.key(), negativeNanos, EXPIRY), CLOCK));
+        assertThrows(WebAuthnRecordException.class, () -> time.decode(time.key(), malformed(time.key(), negativeNanos, EXPIRY), CLOCK));
     }
 
     @Test void credentialPayloadCapsAndRevokedOwnershipAreIndependentlyChecked() {
@@ -192,18 +192,18 @@ final class WebAuthnCloseoutBoundaryTests {
                 change(header, 10, 0), change(header, 10, 65), change(header, 11, 4), change(header, 12, 1),
                 {2}, {2, 0, 0, 3, 4, 5, 6}, {2, 4, 0, 3, 1, 2, 3, 4, 5, 6},
                 {2, 0, 3, 0, 1, 2, 3}, {2, 0, 3, 65, 1, 2, 3, 4, 5, 6}}) {
-            byte[] sealed = records.seal(key, bad, EXPIRY);
+            byte[] sealed = malformed(key, bad, EXPIRY);
             assertThrows(WebAuthnRecordException.class, () -> codec.decodeRecord(key, sealed, CLOCK));
         }
         for (byte[] handle : new byte[][] {new byte[0], new byte[65]})
-            assertThrows(IllegalArgumentException.class, () -> codec.encodeRevoked(ID, handle));
+            assertThrows(IllegalArgumentException.class, () -> codec.encodeRevoked(ID, handle, NOW));
     }
 
     @Test void ceremonyPayloadRejectsEveryCountLengthAndCanonicalOrderViolation() throws Exception {
         var records = records(); var codec = new WebAuthnCeremonyRecordCodec("tenant", RP, records);
         var key = WebAuthnStoreKey.forCeremony("tenant", RP, RANDOM);
         byte[] valid = ceremonyPayload(ORIGIN, ORIGIN + ":443");
-        assertEquals(Set.of(ORIGIN, ORIGIN + ":443"), codec.decode(key, records.seal(key, valid, EXPIRY), CLOCK).allowedOrigins());
+        assertEquals(Set.of(ORIGIN, ORIGIN + ":443"), codec.decode(key, malformed(key, valid, EXPIRY), CLOCK).allowedOrigins());
         byte[] originControl = valid.clone(); originControl[131] = 0x20;
         byte[] originHigh = valid.clone(); originHigh[131] = 0x7f;
         byte[] nanosNegative = valid.clone(); ByteBuffer.wrap(nanosNegative).putInt(107, -1);
@@ -215,16 +215,16 @@ final class WebAuthnCloseoutBoundaryTests {
                 change(valid, 129, 1), change(valid, 130, 0), change(valid, 130, 255),
                 ceremonyPayload(ORIGIN, ORIGIN), ceremonyPayload(ORIGIN + ":443", ORIGIN), originControl, originHigh,
                 nanosNegative, expired, hugeSeconds, shortSecond}) {
-            byte[] sealed = records.seal(key, bad, EXPIRY);
+            byte[] sealed = malformed(key, bad, EXPIRY);
             assertThrows(WebAuthnRecordException.class, () -> codec.decode(key, sealed, CLOCK));
         }
         byte[] purposeControl = ceremonyPayload(ORIGIN);
         purposeControl = concat(Arrays.copyOf(purposeControl, 129), concat(new byte[] {0x1f}, Arrays.copyOfRange(purposeControl, 129, purposeControl.length)));
         purposeControl[2] = 3; purposeControl[124] = 1;
-        byte[] controlSealed = records.seal(key, purposeControl, EXPIRY);
+        byte[] controlSealed = malformed(key, purposeControl, EXPIRY);
         assertThrows(WebAuthnRecordException.class, () -> codec.decode(key, controlSealed, CLOCK));
         purposeControl[129] = 0x7f;
-        byte[] highSealed = records.seal(key, purposeControl, EXPIRY);
+        byte[] highSealed = malformed(key, purposeControl, EXPIRY);
         assertThrows(WebAuthnRecordException.class, () -> codec.decode(key, highSealed, CLOCK));
         assertThrows(WebAuthnRecordException.class, () -> codec.decode(WebAuthnStoreKey.forCredential("tenant", RP, ID), new byte[] {1}, CLOCK));
     }
@@ -306,4 +306,11 @@ final class WebAuthnCloseoutBoundaryTests {
         if (value.length < 24) out.write(0x40 | value.length); else if (value.length < 256) { out.write(0x58); out.write(value.length); }
         else { out.write(0x59); out.write(value.length >>> 8); out.write(value.length); } out.writeBytes(value);
     }
+
+
+
+    private static byte @NonNull [] malformed(@NonNull WebAuthnStoreKey key,byte @NonNull [] inner,@NonNull Instant expires){
+        return WebAuthnTestPayloads.seal(key,inner,expires,NOW);
+    }
+
 }

@@ -16,6 +16,8 @@
 
 package com.revetsec.internal.webauthn;
 
+import com.revetsec.testing.ScriptedWebAuthnStore;
+
 import com.revetsec.SealingKey;
 import com.revetsec.StateSealer;
 import com.revetsec.webauthn.WebAuthnStoreEntry;
@@ -66,7 +68,7 @@ final class WebAuthnCeremonyRecordCodecTests {
                         HANDLE, "transfer 123", NOW, EXPIRY)
         };
         for (WebAuthnCeremonyState original : states) {
-            var encoded = codec.encode(original);
+            var encoded = codec.encode(original, NOW);
             assertEquals(WebAuthnStoreKey.forCeremony(NAMESPACE, RP, ID), encoded.key());
             var restored = codec.decode(encoded.key(), encoded.sealedBytes(), CLOCK);
             assertEquals(original.kind(), restored.kind());
@@ -91,7 +93,7 @@ final class WebAuthnCeremonyRecordCodecTests {
             assertFalse(Arrays.equals(sealed, encoded.sealedBytes()));
             assertFalse(encoded.toString().contains(encoded.key().getStorageKey()));
 
-            var consumed = codec.decode(encoded.key(), codec.encode(restored.consume()).sealedBytes(), CLOCK);
+            var consumed = codec.decode(encoded.key(), codec.encode(restored.consume(), NOW).sealedBytes(), CLOCK);
             assertTrue(consumed.isConsumed());
             assertFalse(consumed.isPendingAt(NOW));
             assertThrows(IllegalStateException.class, consumed::consume);
@@ -101,7 +103,7 @@ final class WebAuthnCeremonyRecordCodecTests {
     @Test void rejectsWrongAddressNamespaceOriginAndExpiry() throws Exception {
         var codec = ceremonyCodec();
         var pending = WebAuthnCeremonyState.registration(ID, CHALLENGE, BINDING, ORIGINS, HANDLE, NOW, EXPIRY);
-        var encoded = codec.encode(pending);
+        var encoded = codec.encode(pending, NOW);
         assertThrows(WebAuthnRecordException.class, () -> codec.decode(
                 WebAuthnStoreKey.forCeremony(NAMESPACE, RP, bytes(2)), encoded.sealedBytes(), CLOCK));
         assertThrows(WebAuthnRecordException.class, () -> new WebAuthnCeremonyRecordCodec(
@@ -109,7 +111,7 @@ final class WebAuthnCeremonyRecordCodecTests {
         assertThrows(WebAuthnRecordException.class, () -> codec.decode(encoded.key(), encoded.sealedBytes(),
                 Clock.fixed(EXPIRY.plusNanos(1), ZoneOffset.UTC)));
         assertThrows(IllegalArgumentException.class, () -> codec.encode(WebAuthnCeremonyState.registration(
-                ID, CHALLENGE, BINDING, Set.of("https://attacker.example.com"), HANDLE, NOW, EXPIRY)));
+                ID, CHALLENGE, BINDING, Set.of("https://attacker.example.com"), HANDLE, NOW, EXPIRY), NOW));
     }
 
     @Test void rejectsAuthenticatedPayloadWithInvalidKindStatusTimeOriginOrAccountBinding() throws Exception {
@@ -139,7 +141,7 @@ final class WebAuthnCeremonyRecordCodecTests {
                         HANDLE, new byte[] {(byte) 0xff}, "https://login.example.com")
         };
         for (byte[] payload : invalid) {
-            byte[] sealed = envelopes.seal(address, payload, EXPIRY);
+            byte[] sealed = malformed(address, payload, EXPIRY);
             WebAuthnRecordException failure = assertThrows(WebAuthnRecordException.class,
                     () -> codec.decode(address, sealed, CLOCK));
             assertEquals("Invalid WebAuthn store record.", failure.getMessage());
@@ -150,7 +152,7 @@ final class WebAuthnCeremonyRecordCodecTests {
             throws Exception {
         var codec = ceremonyCodec();
         var encoded = codec.encode(WebAuthnCeremonyState.registration(
-                ID, CHALLENGE, BINDING, ORIGINS, HANDLE, NOW, EXPIRY));
+                ID, CHALLENGE, BINDING, ORIGINS, HANDLE, NOW, EXPIRY), NOW);
         WebAuthnStoreKey credential = WebAuthnStoreKey.forCredential(NAMESPACE, RP, new byte[] {9});
         WebAuthnStoreKey fence = WebAuthnStoreKey.forAccountFence(NAMESPACE, RP, HANDLE);
         var namespaceClock = new WebAuthnNamespaceClock(NAMESPACE, RP, recordCodec());
@@ -161,11 +163,11 @@ final class WebAuthnCeremonyRecordCodecTests {
                 credential, WebAuthnStoreEntry.Absent.confirmed(),
                 fence, WebAuthnStoreEntry.Present.fromVersionAndSealedBytes(
                         new byte[] {2}, new byte[] {1}),
-                namespaceClock.key(), WebAuthnStoreEntry.Absent.confirmed()));
+                namespaceClock.key(), WebAuthnStoreEntry.Absent.confirmed()), ScriptedWebAuthnStore.observation(NOW));
         var namespaceTime = namespaceClock.prepare(snapshot, NOW, CLOCK);
         var prepared = WebAuthnCeremonyConsumption.prepare(snapshot, codec, encoded.key(), ID,
                 BINDING, WebAuthnCeremonyState.Kind.REGISTRATION, namespaceTime, CLOCK).orElseThrow();
-        var write = WebAuthnStoreWrite.fromSnapshotAndMutations(snapshot, List.of(prepared.mutation(),
+        var write = ScriptedWebAuthnStore.write(snapshot, List.of(prepared.mutation(),
                 WebAuthnStoreWrite.Mutation.insert(credential, new byte[] {7}),
                 requireNonNull(namespaceTime.mutation())));
         assertEquals(Set.of(encoded.key(), credential, fence, namespaceClock.key()),
@@ -186,7 +188,7 @@ final class WebAuthnCeremonyRecordCodecTests {
                 Set.of(encoded.key(), namespaceClock.key()), Map.of(
                 encoded.key(), WebAuthnStoreEntry.Present.fromVersionAndSealedBytes(
                         new byte[] {3}, prepared.mutation().getSealedBytes().orElseThrow()),
-                namespaceClock.key(), WebAuthnStoreEntry.Absent.confirmed()));
+                namespaceClock.key(), WebAuthnStoreEntry.Absent.confirmed()), ScriptedWebAuthnStore.observation(NOW));
         var consumedTime = namespaceClock.prepare(consumedSnapshot, NOW, CLOCK);
         assertTrue(WebAuthnCeremonyConsumption.prepare(consumedSnapshot, codec, encoded.key(), ID,
                 BINDING, WebAuthnCeremonyState.Kind.REGISTRATION, consumedTime, CLOCK).isEmpty());
@@ -199,7 +201,7 @@ final class WebAuthnCeremonyRecordCodecTests {
                 encoded.key(), WebAuthnStoreEntry.Present.fromVersionAndSealedBytes(
                         new byte[] {4}, encoded.sealedBytes()),
                 namespaceClock.key(), WebAuthnStoreEntry.Present.fromVersionAndSealedBytes(
-                        new byte[] {5}, namespaceClock.encode(EXPIRY))));
+                        new byte[] {5}, namespaceClock.encode(ScriptedWebAuthnStore.observation(NOW).getAdmission().getAuthorityId(), EXPIRY))), ScriptedWebAuthnStore.observation(NOW));
         assertThrows(WebAuthnRecordException.class,
                 () -> namespaceClock.prepare(rolledBackSnapshot, NOW, CLOCK));
     }
@@ -243,4 +245,8 @@ final class WebAuthnCeremonyRecordCodecTests {
         writer.put(handle).put(purpose).putShort((short) ascii.length).put(ascii);
         return writer.array();
     }
+    private static byte @NonNull [] malformed(@NonNull WebAuthnStoreKey key,byte @NonNull [] inner,@NonNull Instant expires){
+        return WebAuthnTestPayloads.seal(key,inner,expires,NOW);
+    }
+
 }

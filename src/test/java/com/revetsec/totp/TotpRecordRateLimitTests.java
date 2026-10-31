@@ -17,6 +17,7 @@
 package com.revetsec.totp;
 
 import com.revetsec.SealingKey;
+import com.revetsec.internal.crypto.ClosedMigrationIntent;
 import com.revetsec.StateSealer;
 import com.revetsec.internal.crypto.SealedStateAccess;
 import com.revetsec.internal.crypto.TotpPrimitives;
@@ -48,40 +49,46 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 /** Durable format migration and bounds for the six-digit attempt ledger. */
 @NotThreadSafe
 final class TotpRecordRateLimitTests {
-    @Test void oldNamespaceRecordRemainsReadableAfterFormatUpgrade() throws IOException {
+    @Test void legacyNamespaceRequiresClosedMigrationBeforeNormalTtr3Read() throws IOException {
         StateSealer sealer = sealer();
-        TotpRecords records = new TotpRecords(sealer);
+        TotpRecords legacy = new TotpRecords(sealer);
+        TotpRecordsV3 records = new TotpRecordsV3(sealer);
         TotpStoreKey key = TotpStoreKey.forNamespace("example", "epoch-one");
-        Instant now = Instant.ofEpochSecond(1_700_000_010L);
-        String version = records.freshId();
+        Instant now = Instant.ofEpochSecond(1_700_000_010L, 123);
+        ScriptedTotpStore store = new ScriptedTotpStore("example", "epoch-one", now);
+        String version = legacy.freshId();
         TotpStoreRecord oldRecord = sealLegacy(sealer, key, version, legacyNamespace(key, version, now));
-        try (TotpRecords.Decoded legacy = records.open(oldRecord)) {
-            assertNull(legacy.account);
-            assertEquals(now, legacy.namespace.observedAt);
-            TotpStoreRecord upgraded = records.seal(key, legacy.namespace, null);
-            try (TotpRecords.Decoded reopened = records.open(upgraded)) {
-                assertNull(reopened.account);
-                assertEquals(now, reopened.namespace.observedAt);
-            }
+        assertThrows(IOException.class, () -> records.open(oldRecord));
+        TotpStoreRecord migrated = new TotpMigrationV3(sealer).migrateNamespace(oldRecord, intent(legacy, store));
+        try (TotpRecordsV3.Decoded reopened = records.open(migrated)) {
+            assertNull(reopened.account);
+            TotpRecordsV3.Namespace root = java.util.Objects.requireNonNull(reopened.namespace);
+            assertEquals(now, root.getMinimum());
+            assertEquals(store.admission().getAuthorityId(), root.getAuthorityId());
         }
     }
 
-    @Test void oldSharedChargesConservativelyBecomeDailyChargesAndSurviveResealing() throws IOException {
+    @Test void closedMigrationPromotesLegacyChargesAndPreservesThemOnTtr3Reseal() throws IOException {
         StateSealer sealer = sealer();
-        TotpRecords records = new TotpRecords(sealer);
+        TotpRecords legacy = new TotpRecords(sealer);
+        TotpRecordsV3 records = new TotpRecordsV3(sealer);
         TotpStoreKey key = TotpStoreKey.forAccount("example", "epoch-one", "account-1");
+        TotpStoreKey rootKey = TotpStoreKey.forNamespace("example", "epoch-one");
         Instant now = Instant.ofEpochSecond(1_700_000_010L);
-        String version = records.freshId();
-        String chargeId = records.freshId();
+        ScriptedTotpStore store = new ScriptedTotpStore("example", "epoch-one", now);
+        String version = legacy.freshId(), rootVersion = legacy.freshId(), chargeId = legacy.freshId();
+        TotpStoreRecord oldRoot = sealLegacy(sealer, rootKey, rootVersion, legacyNamespace(rootKey, rootVersion, now));
         TotpStoreRecord oldRecord = sealLegacy(sealer, key, version,
-                legacyAccount(key, version, records.freshId(), List.of(chargeId), now));
-        try (TotpRecords.Decoded migrated = records.open(oldRecord)) {
-            TotpRecords.Account account = java.util.Objects.requireNonNull(migrated.account);
+                legacyAccount(key, version, legacy.freshId(), List.of(chargeId), now));
+        TotpStoreRecord migrated = new TotpMigrationV3(sealer).migrateAccount(oldRecord, oldRoot, intent(legacy, store));
+        assertThrows(IOException.class, () -> records.open(oldRecord));
+        try (TotpRecordsV3.Decoded decoded = records.open(migrated)) {
+            TotpRecords.Account account = java.util.Objects.requireNonNull(decoded.account);
             assertEquals(1, account.charges.size());
             assertEquals(1, account.totpCharges.size());
             assertEquals(chargeId, account.totpCharges.get(0).id);
-            TotpStoreRecord newRecord = records.seal(key, migrated.namespace, account);
-            try (TotpRecords.Decoded reopened = records.open(newRecord)) {
+            TotpStoreRecord resealed = records.sealAccount(key, account);
+            try (TotpRecordsV3.Decoded reopened = records.open(resealed)) {
                 assertEquals(1, java.util.Objects.requireNonNull(reopened.account).totpCharges.size());
             }
         }
@@ -89,35 +96,34 @@ final class TotpRecordRateLimitTests {
 
     @Test void migratedFiveChargesAndFiveLaterFailuresReachTheDailyLimit() throws IOException {
         StateSealer sealer = sealer();
-        TotpRecords records = new TotpRecords(sealer);
-        InMemoryTotpStore store = InMemoryTotpStore.withNamespace("example", "epoch-one").build();
-        MigrationGate gate = new MigrationGate();
+        TotpRecords legacy = new TotpRecords(sealer);
         Instant now = Instant.ofEpochSecond(1_700_000_010L);
-        TotpAuthenticator initial = authenticator(store, sealer, gate, now);
-        assertInstanceOf(TotpNamespaceInitializationResult.Initialized.class,
-                initial.initializeNamespaceResult());
-
+        ScriptedTotpStore store = new ScriptedTotpStore("example", "epoch-one", now);
+        MigrationGate gate = new MigrationGate();
         TotpStoreKey namespaceKey = TotpStoreKey.forNamespace("example", "epoch-one");
         TotpStoreKey accountKey = TotpStoreKey.forAccount("example", "epoch-one", "account-1");
-        List<String> legacyCharges = List.of(records.freshId(), records.freshId(), records.freshId(),
-                records.freshId(), records.freshId());
-        String version = records.freshId();
-        TotpStoreRecord account = sealLegacy(sealer, accountKey, version,
-                legacyAccount(accountKey, version, records.freshId(), legacyCharges, now));
-        TotpStoreSnapshot snapshot = ((TotpStoreReadResult.Available) store.read(Set.of(namespaceKey, accountKey),
-                Duration.ofSeconds(1))).getSnapshot();
-        TotpStoreWrite insertion = TotpStoreWrite.fromSnapshotAndMutations(TotpStoreWrite.Purpose.UPDATE,
-                snapshot, List.of(TotpStoreWrite.Mutation.insert(account)));
-        assertEquals(TotpStoreCommitResult.COMMITTED, store.compareAndCommit(insertion, Duration.ofSeconds(1)));
-
+        List<String> charges = List.of(legacy.freshId(), legacy.freshId(), legacy.freshId(), legacy.freshId(), legacy.freshId());
+        String rootVersion = legacy.freshId(), version = legacy.freshId();
+        TotpStoreRecord oldRoot = sealLegacy(sealer, namespaceKey, rootVersion, legacyNamespace(namespaceKey, rootVersion, now));
+        TotpStoreRecord oldAccount = sealLegacy(sealer, accountKey, version,
+                legacyAccount(accountKey, version, legacy.freshId(), charges, now));
+        TotpMigrationV3 migration = new TotpMigrationV3(sealer);
+        ClosedMigrationIntent intent = intent(legacy, store);
+        store.seedClosedMigration(List.of(migration.migrateNamespace(oldRoot, intent), migration.migrateAccount(oldAccount, oldRoot, intent)));
+        store.setTime(now.plusSeconds(301));
         TotpAuthenticator later = authenticator(store, sealer, gate, now.plusSeconds(301));
         for (int attempt = 0; attempt < 5; attempt++)
             assertInstanceOf(TotpVerificationResult.Rejected.class,
                     later.verifyResult("account-1", "bad", "login-binding"));
+        store.setTime(now.plusSeconds(602));
         TotpAuthenticator afterCooldown = authenticator(store, sealer, gate, now.plusSeconds(602));
         TotpVerificationResult.Throttled blocked = assertInstanceOf(TotpVerificationResult.Throttled.class,
                 afterCooldown.verifyResult("account-1", "bad", "login-binding"));
         assertEquals(Duration.ofDays(1).minusSeconds(602), blocked.getRetryAfter());
+    }
+
+    private static @NonNull ClosedMigrationIntent intent(@NonNull TotpRecords legacy, @NonNull ScriptedTotpStore store) {
+        return ClosedMigrationIntent.fromExternalIntent(legacy.freshId(), store.admission(), Set.of(ClosedMigrationIntent.Format.TOTP_TTR3));
     }
 
     @Test void dailyLedgerDecoderRejectsMoreThanTenCharges() throws IOException {

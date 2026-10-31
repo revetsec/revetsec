@@ -117,7 +117,7 @@ final class OAuthServerOutcomeTests {
   assertThrows(IllegalStateException.class,()->failure.initCause(new RuntimeException("TEST-ONLY-sensitive-cause")));
   assertFalse(requireNonNull(failure.getMessage()).contains("TEST-ONLY"));
   assertEquals("OAuthServerException{"+reason+"}",failure.toString());assertFalse(failure.toString().contains("TEST-ONLY"));
-  if(reason==COMMIT_OUTCOME_UNKNOWN) {assertEquals(ErrorCategory.TRANSPORT,failure.getCategory());assertFalse(failure.isTransient());}
+  if(reason==COMMIT_OUTCOME_UNKNOWN||reason==COMMIT_CONFIRMED_NOT_ADMITTED) {assertEquals(ErrorCategory.TRANSPORT,failure.getCategory());assertFalse(failure.isTransient());}
   if(reason==STORE_CORRUPT||reason==CONFIGURATION_INVALID||reason==SIGNING_FAILED) assertEquals(ErrorCategory.CONFIGURATION,failure.getCategory());
   if(validation(reason)) {
    assertInstanceOf(OAuthServerValidationException.class,failure);OAuthServerResponse response=response();
@@ -134,11 +134,11 @@ final class OAuthServerOutcomeTests {
   }
  }
  private static boolean validation(OAuthServerException.@NonNull Reason reason) { return switch(reason) {
-  case STORE_UNAVAILABLE,STORE_CORRUPT,COMMIT_OUTCOME_UNKNOWN,CLIENT_METADATA_UNAVAILABLE,CONFIGURATION_INVALID,SIGNING_FAILED -> false;
+  case STORE_UNAVAILABLE,STORE_CORRUPT,COMMIT_OUTCOME_UNKNOWN,COMMIT_CONFIRMED_NOT_ADMITTED,CLIENT_METADATA_UNAVAILABLE,CONFIGURATION_INVALID,SIGNING_FAILED -> false;
   default -> true;
  }; }
  private static @NonNull OAuthServerException failure(OAuthServerException.@NonNull Reason reason,boolean interrupted) { return switch(reason) {
-  case STORE_UNAVAILABLE,STORE_CORRUPT,COMMIT_OUTCOME_UNKNOWN -> OAuthServerStoreException.fromReason(reason,interrupted);
+  case STORE_UNAVAILABLE,STORE_CORRUPT,COMMIT_OUTCOME_UNKNOWN,COMMIT_CONFIRMED_NOT_ADMITTED -> OAuthServerStoreException.fromReason(reason,interrupted);
   case CLIENT_METADATA_UNAVAILABLE -> OAuthServerTransportException.fromReason(reason,interrupted);
   case CONFIGURATION_INVALID -> OAuthServerConfigurationException.fromReason(reason);
   case SIGNING_FAILED -> OAuthServerSigningException.fromReason(reason);
@@ -146,7 +146,7 @@ final class OAuthServerOutcomeTests {
  }; }
  @TestFactory @NonNull Stream<@NonNull DynamicTest> wrongLeafFactoriesRejectMisclassification() { return Stream.of(OAuthServerException.Reason.values()).map(value->DynamicTest.dynamicTest("wrongLeafFactoriesRejectMisclassification["+value.name()+"]",()->wrongLeafFactoriesRejectMisclassificationCase(value))); }
  private void wrongLeafFactoriesRejectMisclassificationCase(OAuthServerException.@NonNull Reason reason) {
-  if(reason!=STORE_UNAVAILABLE&&reason!=STORE_CORRUPT&&reason!=COMMIT_OUTCOME_UNKNOWN) assertThrows(IllegalArgumentException.class,()->OAuthServerStoreException.fromReason(reason,false));
+  if(reason!=STORE_UNAVAILABLE&&reason!=STORE_CORRUPT&&reason!=COMMIT_OUTCOME_UNKNOWN&&reason!=COMMIT_CONFIRMED_NOT_ADMITTED) assertThrows(IllegalArgumentException.class,()->OAuthServerStoreException.fromReason(reason,false));
   if(reason!=CLIENT_METADATA_UNAVAILABLE) assertThrows(IllegalArgumentException.class,()->OAuthServerTransportException.fromReason(reason,false));
   if(reason!=CONFIGURATION_INVALID) assertThrows(IllegalArgumentException.class,()->OAuthServerConfigurationException.fromReason(reason));
   if(reason!=SIGNING_FAILED) assertThrows(IllegalArgumentException.class,()->OAuthServerSigningException.fromReason(reason));

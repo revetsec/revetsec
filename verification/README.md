@@ -2,6 +2,8 @@
 
 Tooling that checks Revetsec's packaged artifact the way a consumer receives it. It checks invariant INV-L1 from [docs/threat-model.md](../docs/threat-model.md): the JAR has zero compile or runtime dependencies and needs no JDK modules other than `java.base`, `java.net.http`, `java.xml`, `java.xml.crypto` and `java.logging`. CI runs it in the `packaged-consumer` job. Nothing here is published, and the root pom never builds it.
 
+The unpublished [focused shared-clock qualification fixture](shared-clock-qualification/README.md) contributes current-source joins, calibrated guard checks and disposable PostgreSQL contention measurements. Its evidence is limited to the declared source/backend profile; real UTC, custody, durability and worker continuity remain separate qualification requirements.
+
 | Path | Checks |
 |---|---|
 | `verify-published-pom.py` | A POM exactly as installed or downloaded: zero compile, runtime or system dependencies, including inside profiles; literal coordinates; jar packaging; no `<parent>`; no `<repositories>`; no DOCTYPE. A scope written as a property fails, because it cannot be checked statically. |

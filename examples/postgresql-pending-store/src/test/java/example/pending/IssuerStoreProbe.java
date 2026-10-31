@@ -31,6 +31,8 @@ import com.revetsec.oauth.server.OAuthServerClientRegistration;
 import com.revetsec.oauth.server.OAuthServerException;
 import com.revetsec.oauth.server.OAuthServerStoreException;
 import com.revetsec.oauth.server.OAuthStoreCommitStatus;
+import com.revetsec.oauth.server.OAuthStoreCommitReceipt;
+import com.revetsec.oauth.server.OAuthStoreReadResult;
 import com.revetsec.oauth.server.OAuthStoreEntry;
 import com.revetsec.oauth.server.OAuthStoreKey;
 import com.revetsec.oauth.server.OAuthStoreTransaction;
@@ -97,12 +99,12 @@ public final class IssuerStoreProbe {
 		System.out.println("KEYS_READY");
 	}
 
-	private static @NonNull OAuthAuthorizationServer server(@NonNull OAuthAuthorizationServerStore store)
+	static @NonNull OAuthAuthorizationServer server(@NonNull OAuthAuthorizationServerStore store)
 			throws Exception {
 		return server(store, Duration.ofSeconds(10));
 	}
 
-	private static @NonNull OAuthAuthorizationServer server(@NonNull OAuthAuthorizationServerStore store,
+	static @NonNull OAuthAuthorizationServer server(@NonNull OAuthAuthorizationServerStore store,
 			@NonNull Duration totalDeadline) throws Exception {
 		Path directory = secretDirectory();
 		KeyFactory factory = KeyFactory.getInstance("RSA");
@@ -205,17 +207,18 @@ public final class IssuerStoreProbe {
 		return "PAIR:" + tokenField(json, "access_token") + "\t" + tokenField(json, "refresh_token");
 	}
 
-	private static @NonNull OAuthAuthorizationServerStore uncertainCommitStore() {
-		PostgresqlIssuerStore reads = new PostgresqlIssuerStore(
-				"fixture_issuer", PendingStoreProbe::connection, 256);
-		PostgresqlIssuerStore commits = new PostgresqlIssuerStore(
-				"fixture_issuer", PendingStoreProbe::commitAcknowledgementLost, 256);
+	private static @NonNull OAuthAuthorizationServerStore uncertainCommitStore() { return uncertainCommitStore("fixture_issuer"); }
+	private static @NonNull OAuthAuthorizationServerStore uncertainCommitStore(@NonNull String namespace) {
+		PostgresqlIssuerStore reads = IssuerFixtureAuthority.store(
+				namespace, PendingStoreProbe::connection, 4096);
+		PostgresqlIssuerStore commits = IssuerFixtureAuthority.store(
+				namespace, PendingStoreProbe::commitAcknowledgementLost, 4096);
 		return new OAuthAuthorizationServerStore() {
-			@Override public @NonNull Optional<@NonNull OAuthStoreEntry> read(@NonNull OAuthStoreKey key,
+			@Override public @NonNull OAuthStoreReadResult read(@NonNull OAuthStoreKey key,
 					@NonNull Duration remainingBudget) {
 				return reads.read(key, remainingBudget);
 			}
-			@Override public @NonNull OAuthStoreCommitStatus commit(@NonNull OAuthStoreTransaction transaction,
+			@Override public @NonNull OAuthStoreCommitReceipt commit(@NonNull OAuthStoreTransaction transaction,
 					@NonNull Duration remainingBudget) {
 				return commits.commit(transaction, remainingBudget);
 			}
@@ -224,9 +227,62 @@ public final class IssuerStoreProbe {
 
 	public static void main(@NonNull String @NonNull [] args) throws Exception {
 		if (args[0].equals("keygen")) { keygen(); return; }
+        if(args[0].equals("active-small-cap")) {
+            try{server(IssuerFixtureAuthority.store("fixture_issuer",PendingStoreProbe::connection,1)).validateAccessTokenResult(((com.revetsec.oauth.BearerTokenResult.Present)BearerToken.fromAuthorizationHeaderValuesResult(List.of("Bearer "+args[1]))).getToken(),RESOURCE);throw new AssertionError("Incompatible capacity profile served a read");}
+            catch(OAuthServerStoreException failure){if(failure.getReason()!=OAuthServerException.Reason.STORE_UNAVAILABLE)throw failure;System.out.println("PROFILE_REFUSED");return;}
+        }
+
+        if(args[0].equals("reseal-entry")) {
+            var key=OAuthStoreKey.fromStoredForm(args[1]);
+            var receipt=server(IssuerFixtureAuthority.store("fixture_issuer",PendingStoreProbe::connection,4096)).resealStoreEntry(key);
+            if(receipt.getStatus()==OAuthStoreCommitStatus.COMMITTED && receipt.getTiming().isEmpty())throw new AssertionError("Missing raw finite reseal timing");
+            System.out.println(receipt.getStatus());return;
+        }
+
+        if(args[0].equals("known-final-refusal")) {
+            var delegate=IssuerFixtureAuthority.store("fixture_issuer_final",PendingStoreProbe::connection,4096);
+            if(server(delegate).initializeFreshIssuer().getStatus()!=OAuthStoreCommitStatus.COMMITTED)throw new AssertionError("Final-read fixture not new");
+            AtomicInteger writes=new AtomicInteger();
+            OAuthAuthorizationServerStore interrupted=new OAuthAuthorizationServerStore(){
+                @Override public @NonNull OAuthStoreReadResult read(@NonNull OAuthStoreKey key,@NonNull Duration budget){return writes.get()>0?OAuthStoreReadResult.Unavailable.get():delegate.read(key,budget);}
+                @Override public @NonNull OAuthStoreCommitReceipt commit(@NonNull OAuthStoreTransaction txn,@NonNull Duration budget){var receipt=delegate.commit(txn,budget);if(receipt.getStatus()==OAuthStoreCommitStatus.COMMITTED && !txn.getMutations().isEmpty())writes.incrementAndGet();return receipt;}
+            };
+            try{issue(server(interrupted));throw new AssertionError("Known commit must withhold response");}
+            catch(OAuthServerStoreException failure){if(failure.getReason()!=OAuthServerException.Reason.COMMIT_CONFIRMED_NOT_ADMITTED || writes.get()!=1)throw failure;System.out.println("KNOWN_COMMITTED_NO_OUTPUT");return;}
+        }
+
+        if(args[0].equals("active-refused")) {
+            try {
+                var store=IssuerFixtureAuthority.store("fixture_issuer",PendingStoreProbe::connection,4096);
+                var result=server(store).validateAccessTokenResult(((com.revetsec.oauth.BearerTokenResult.Present)BearerToken.fromAuthorizationHeaderValuesResult(List.of("Bearer "+args[1]))).getToken(),RESOURCE);
+                throw new AssertionError("Expected closed admitted authority/worker health: "+result.getClass().getSimpleName());
+            }catch(OAuthServerStoreException failure){if(failure.getReason()!=OAuthServerException.Reason.STORE_UNAVAILABLE)throw failure;System.out.println("STORE_UNAVAILABLE");return;}
+        }
+        if(args[0].equals("capacity-root")) {
+            var capServer=server(IssuerFixtureAuthority.store("fixture_issuer_capacity",PendingStoreProbe::connection,4096));
+            if(capServer.initializeFreshIssuer().getStatus()!=OAuthStoreCommitStatus.COMMITTED)throw new AssertionError("Capacity root not committed");
+            try{capServer.establishNewSubject("subject");throw new AssertionError("Capacity must refuse subject insertion");}
+            catch(OAuthServerStoreException failure){if(failure.getReason()!=OAuthServerException.Reason.STORE_UNAVAILABLE)throw failure;System.out.println("CAPACITY_REFUSED");return;}
+        }
+
+        if(args[0].equals("reseal-root")) {
+            String digest=IssuerFixtureAuthority.identity(ISSUER);
+            var key=OAuthStoreKey.fromStoredForm("revetsec:as:1:"+digest+":ISSUER_STATE:"+digest);
+            var receipt=server(IssuerFixtureAuthority.store("fixture_issuer",PendingStoreProbe::connection,4096)).resealStoreEntry(key);
+            if(receipt.getStatus()!=OAuthStoreCommitStatus.COMMITTED || receipt.getTiming().isEmpty())throw new AssertionError("Missing raw reseal timing");
+            System.out.println("RAW_RESEALED");return;
+        }
+        if(args[0].equals("unknown-reseal-root")) {
+            String digest=IssuerFixtureAuthority.identity(ISSUER);
+            var key=OAuthStoreKey.fromStoredForm("revetsec:as:1:"+digest+":ISSUER_STATE:"+digest);
+            var receipt=server(uncertainCommitStore()).resealStoreEntry(key);
+            if(receipt.getStatus()!=OAuthStoreCommitStatus.UNKNOWN)throw new AssertionError("Raw reseal lost uncertainty");
+            System.out.println("RAW_UNKNOWN");return;
+        }
+
 		if (args[0].equals("active-short-budget") || args[0].equals("revoke-short-budget")) {
-			OAuthAuthorizationServer bounded = server(new PostgresqlIssuerStore("fixture_issuer",
-					PendingStoreProbe::connection, 256), Duration.ofSeconds(1));
+			OAuthAuthorizationServer bounded = server(IssuerFixtureAuthority.store("fixture_issuer",
+					PendingStoreProbe::connection, 4096), Duration.ofSeconds(1));
 			try {
 				if (args[0].equals("active-short-budget")) {
 					var status = bounded.validateAccessTokenResult(
@@ -243,17 +299,12 @@ public final class IssuerStoreProbe {
 			return;
 		}
 		if (args[0].equals("unknown-init")) {
-			AtomicInteger opened = new AtomicInteger();
-			PostgresqlIssuerStore uncertain = new PostgresqlIssuerStore("fixture_issuer_unknown",
-					remaining -> opened.incrementAndGet() == 2
-							? PendingStoreProbe.commitAcknowledgementLost(remaining)
-							: PendingStoreProbe.connection(remaining), 256);
-			System.out.println(server(uncertain).initializeFreshIssuer());
+			System.out.println(server(uncertainCommitStore("fixture_issuer_unknown")).initializeFreshIssuer().getStatus());
 			return;
 		}
 		if (args[0].equals("reconcile-unknown")) {
-			System.out.println(server(new PostgresqlIssuerStore("fixture_issuer_unknown",
-					PendingStoreProbe::connection, 256)).initializeFreshIssuer());
+			System.out.println(server(IssuerFixtureAuthority.store("fixture_issuer_unknown",
+					PendingStoreProbe::connection, 4096)).initializeFreshIssuer().getStatus());
 			return;
 		}
 		if (args[0].equals("unknown-subject-revoke")) {
@@ -279,13 +330,13 @@ public final class IssuerStoreProbe {
 			}
 			return;
 		}
-		OAuthAuthorizationServer server = server(new PostgresqlIssuerStore(
+		OAuthAuthorizationServer server = server(IssuerFixtureAuthority.store(
 				args[0].startsWith("fence-") ? "fixture_issuer_fence" : "fixture_issuer",
 				PendingStoreProbe::connection,
-				args[0].equals("active-small-cap") || args[0].equals("issue-small-cap") ? 1 : 256));
+				args[0].equals("active-small-cap") || args[0].equals("issue-small-cap") ? 1 : 4096));
 		switch (args[0]) {
 			case "init", "fence-init" -> {
-				if (server.initializeFreshIssuer() != OAuthStoreCommitStatus.COMMITTED)
+				if (server.initializeFreshIssuer().getStatus() != OAuthStoreCommitStatus.COMMITTED)
 					throw new IllegalStateException("Issuer initialization was not confirmed.");
 				server.establishNewSubject("subject");
 				System.out.println("INITIALIZED");
@@ -297,7 +348,7 @@ public final class IssuerStoreProbe {
 					throw new IllegalStateException("Issuer capacity refusal released a code.");
 				} catch (OAuthServerStoreException failure) {
 					if (failure.getReason() != OAuthServerException.Reason.STORE_UNAVAILABLE) throw failure;
-					System.out.println("CAPACITY_REFUSED");
+					System.out.println("PROFILE_REFUSED");
 				}
 			}
 			case "redeem", "fence-redeem" -> System.out.println(redeem(server, args[1]));

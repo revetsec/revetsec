@@ -127,7 +127,7 @@ final class TotpAuthenticatorTests {
         assertTrue(enrolled.pending.getProvisioningUri().contains("period=30"));
         assertInstanceOf(TotpVerificationResult.Rejected.class,
                 fixture.totp.verifyResult(ACCOUNT, fixture.code(enrolled.pending), LOGIN));
-        fixture.clock.advance(Duration.ofSeconds(30));
+        fixture.advance(Duration.ofSeconds(30));
         TotpVerification proof = assertInstanceOf(TotpVerificationResult.Succeeded.class,
                 fixture.totp.verifyResult(ACCOUNT, fixture.code(enrolled.pending), LOGIN)).getVerification();
         assertEquals(TotpAuthenticationMethod.TOTP, proof.getMethod());
@@ -144,17 +144,19 @@ final class TotpAuthenticatorTests {
         assertEquals(10, status.getRemainingRecoveryCodeCount());
     }
 
-    @Test void anExpiredReservationPersistsObservedExpiryBeforeRejecting() throws GeneralSecurityException {
+    @Test void expiredReservationNeverReleasesProofAndAuthorityCatchupPreservesExpiry() throws GeneralSecurityException {
         Fixture fixture = new Fixture();
         TotpEnrollment pending = fixture.begin(null);
         String code = fixture.code(pending);
-        fixture.store.afterNextCommit.set(() -> fixture.clock.advance(Duration.ofMinutes(6)));
-        assertInstanceOf(TotpEnrollmentResult.Rejected.class,
+        fixture.store.afterNextCommit.set(() -> fixture.advance(Duration.ofMinutes(6)));
+        TotpEnrollmentResult.Unavailable incomplete = assertInstanceOf(TotpEnrollmentResult.Unavailable.class,
                 fixture.totp.confirmEnrollmentResult(ACCOUNT, pending.getEnrollmentId(), code, BROWSER));
-        fixture.clock.advance(Duration.ofMinutes(-6));
+        assertEquals(TotpUnavailableReason.ATTEMPT_INCOMPLETE, incomplete.getReason());
+        assertTrue(fixture.status().getPendingEnrollment().isEmpty());
+        fixture.advance(Duration.ofMinutes(-6));
         assertInstanceOf(TotpEnrollmentResult.Unavailable.class,
                 fixture.totp.confirmEnrollmentResult(ACCOUNT, pending.getEnrollmentId(), code, BROWSER));
-        fixture.clock.advance(Duration.ofMinutes(6));
+        fixture.advance(Duration.ofMinutes(6));
         assertTrue(fixture.status().getPendingEnrollment().isEmpty());
         assertTrue(fixture.status().getActiveFactor().isEmpty());
     }
@@ -162,13 +164,13 @@ final class TotpAuthenticatorTests {
     @Test void previousCurrentAndNextStepsShareAnIncreasingHighWaterMark() throws GeneralSecurityException {
         Fixture fixture = new Fixture();
         Enrollment enrolled = fixture.enroll();
-        fixture.clock.advance(Duration.ofSeconds(60));
+        fixture.advance(Duration.ofSeconds(60));
         String future = fixture.code(enrolled.pending, 1);
         assertInstanceOf(TotpVerificationResult.Succeeded.class,
                 fixture.totp.verifyResult(ACCOUNT, future, LOGIN));
         assertInstanceOf(TotpVerificationResult.Rejected.class,
                 fixture.totp.verifyResult(ACCOUNT, fixture.code(enrolled.pending), LOGIN));
-        fixture.clock.advance(Duration.ofSeconds(30));
+        fixture.advance(Duration.ofSeconds(30));
         assertInstanceOf(TotpVerificationResult.Rejected.class,
                 fixture.totp.verifyResult(ACCOUNT, future, LOGIN));
     }
@@ -193,7 +195,7 @@ final class TotpAuthenticatorTests {
                 fixture.totp.consumeRecoveryCodeResult(ACCOUNT, enrolled.codes.getCodes().get(0), LOGIN));
         assertInstanceOf(TotpEnrollmentResult.Throttled.class, fixture.totp.confirmEnrollmentResult(
                 ACCOUNT, replacement.getEnrollmentId(), fixture.code(replacement), BROWSER));
-        fixture.clock.advance(Duration.ofMinutes(5).plusSeconds(1));
+        fixture.advance(Duration.ofMinutes(5).plusSeconds(1));
         assertInstanceOf(TotpVerificationResult.Succeeded.class,
                 fixture.totp.verifyResult(ACCOUNT, fixture.code(enrolled.pending), LOGIN));
     }
@@ -211,7 +213,7 @@ final class TotpAuthenticatorTests {
                         fixture.totp.verifyResult(ACCOUNT, fixture.code(enrolled.pending), LOGIN));
                 assertEquals(Duration.ofDays(1).minusSeconds(301), bothLimits.getRetryAfter());
             }
-            fixture.clock.advance(Duration.ofMinutes(5).plusSeconds(1));
+            fixture.advance(Duration.ofMinutes(5).plusSeconds(1));
         }
         TotpAuthenticator restarted = authenticator(fixture.store, fixture.clock, fixture.gate,
                 fixture.sealer, EPOCH);
@@ -222,7 +224,7 @@ final class TotpAuthenticatorTests {
                 restarted.consumeRecoveryCodeResult(ACCOUNT, enrolled.codes.getCodes().get(0), LOGIN));
         assertInstanceOf(TotpVerificationResult.Throttled.class,
                 restarted.verifyResult(ACCOUNT, fixture.code(enrolled.pending), LOGIN));
-        fixture.clock.advance(Duration.ofDays(1).minusSeconds(602));
+        fixture.advance(Duration.ofDays(1).minusSeconds(602));
         assertInstanceOf(TotpVerificationResult.Succeeded.class,
                 restarted.verifyResult(ACCOUNT, fixture.code(enrolled.pending), LOGIN));
     }
@@ -239,7 +241,7 @@ final class TotpAuthenticatorTests {
                 else assertInstanceOf(TotpVerificationResult.Rejected.class,
                         fixture.totp.verifyResult(ACCOUNT, "bad", LOGIN));
             }
-            fixture.clock.advance(Duration.ofMinutes(5).plusSeconds(1));
+            fixture.advance(Duration.ofMinutes(5).plusSeconds(1));
         }
         assertInstanceOf(TotpVerificationResult.Throttled.class,
                 fixture.totp.verifyResult(ACCOUNT, fixture.code(enrolled.pending), LOGIN));
@@ -250,12 +252,12 @@ final class TotpAuthenticatorTests {
         Enrollment enrolled = fixture.enroll();
         assertInstanceOf(TotpVerificationResult.Rejected.class,
                 fixture.totp.verifyResult(ACCOUNT, "bad", LOGIN));
-        fixture.clock.advance(Duration.ofSeconds(30));
+        fixture.advance(Duration.ofSeconds(30));
         assertInstanceOf(TotpVerificationResult.Succeeded.class,
                 fixture.totp.verifyResult(ACCOUNT, fixture.code(enrolled.pending), LOGIN));
         TotpStoreRecord record = assertInstanceOf(TotpStoreEntry.Present.class,
                 fixture.accountRecordEntry()).getRecord();
-        try (TotpRecords.Decoded decoded = new TotpRecords(fixture.sealer).open(record)) {
+        try (TotpRecordsV3.Decoded decoded = new TotpRecordsV3(fixture.sealer).open(record)) {
             TotpRecords.Account account = java.util.Objects.requireNonNull(decoded.account);
             assertEquals(1, account.charges.size());
             assertEquals(1, account.totpCharges.size());
@@ -272,11 +274,11 @@ final class TotpAuthenticatorTests {
         for (int attempt = 0; attempt < 4; attempt++)
             assertInstanceOf(TotpVerificationResult.Rejected.class,
                     fixture.totp.verifyResult(ACCOUNT, "bad", LOGIN));
-        fixture.clock.advance(Duration.ofMinutes(5).plusSeconds(1));
+        fixture.advance(Duration.ofMinutes(5).plusSeconds(1));
         for (int attempt = 0; attempt < 5; attempt++)
             assertInstanceOf(TotpVerificationResult.Rejected.class,
                     fixture.totp.verifyResult(ACCOUNT, "bad", LOGIN));
-        fixture.clock.advance(Duration.ofMinutes(5).plusSeconds(1));
+        fixture.advance(Duration.ofMinutes(5).plusSeconds(1));
         assertInstanceOf(TotpVerificationResult.Throttled.class,
                 fixture.totp.verifyResult(ACCOUNT, fixture.code(enrolled.pending), LOGIN));
     }
@@ -285,11 +287,11 @@ final class TotpAuthenticatorTests {
         Fixture fixture = new Fixture();
         fixture.enroll();
         for (int attempt = 0; attempt < 9; attempt++) {
-            if (attempt == 5) fixture.clock.advance(Duration.ofMinutes(5).plusSeconds(1));
+            if (attempt == 5) fixture.advance(Duration.ofMinutes(5).plusSeconds(1));
             assertInstanceOf(TotpVerificationResult.Rejected.class,
                     fixture.totp.verifyResult(ACCOUNT, "bad", LOGIN));
         }
-        fixture.clock.advance(Duration.ofMinutes(5).plusSeconds(1));
+        fixture.advance(Duration.ofMinutes(5).plusSeconds(1));
         List<TotpVerificationResult> results = race(
                 () -> fixture.totp.verifyResult(ACCOUNT, "bad", LOGIN),
                 () -> fixture.totp.verifyResult(ACCOUNT, "bad", LOGIN));
@@ -304,13 +306,13 @@ final class TotpAuthenticatorTests {
             for (int attempt = 0; attempt < 5; attempt++)
                 assertInstanceOf(TotpVerificationResult.Rejected.class,
                         fixture.totp.verifyResult(ACCOUNT, "bad", LOGIN));
-            fixture.clock.advance(Duration.ofMinutes(5).plusSeconds(1));
+            fixture.advance(Duration.ofMinutes(5).plusSeconds(1));
         }
         assertInstanceOf(TotpVerificationResult.Throttled.class,
                 fixture.totp.verifyResult(ACCOUNT, fixture.code(enrolled.pending), LOGIN));
         fixture.clock.advance(Duration.ofSeconds(-20));
-        assertInstanceOf(TotpVerificationResult.Throttled.class,
-                fixture.totp.verifyResult(ACCOUNT, fixture.code(enrolled.pending), LOGIN));
+        assertEquals(TotpUnavailableReason.CLOCK_HEALTH_UNCONFIRMED, assertInstanceOf(TotpVerificationResult.Unavailable.class,
+                fixture.totp.verifyResult(ACCOUNT, fixture.code(enrolled.pending), LOGIN)).getReason());
         fixture.clock.advance(Duration.ofMinutes(-1));
         assertInstanceOf(TotpVerificationResult.Unavailable.class,
                 fixture.totp.verifyResult(ACCOUNT, fixture.code(enrolled.pending), LOGIN));
@@ -345,7 +347,7 @@ final class TotpAuthenticatorTests {
     @Test void concurrentIdenticalTotpAttemptsCannotBothSucceed() throws Exception {
         Fixture fixture = new Fixture();
         Enrollment enrolled = fixture.enroll();
-        fixture.clock.advance(Duration.ofSeconds(30));
+        fixture.advance(Duration.ofSeconds(30));
         String code = fixture.code(enrolled.pending);
         List<TotpVerificationResult> results = race(
                 () -> fixture.totp.verifyResult(ACCOUNT, code, LOGIN),
@@ -378,7 +380,7 @@ final class TotpAuthenticatorTests {
         assertEquals(enrolled.factor.getFactorId(), fixture.status().getActiveFactor().orElseThrow().getFactorId());
         assertInstanceOf(RecoveryCodeUseResult.Succeeded.class,
                 fixture.totp.consumeRecoveryCodeResult(ACCOUNT, enrolled.codes.getCodes().get(0), LOGIN));
-        fixture.clock.advance(Duration.ofSeconds(30));
+        fixture.advance(Duration.ofSeconds(30));
         assertInstanceOf(TotpVerificationResult.Succeeded.class,
                 fixture.totp.verifyResult(ACCOUNT, fixture.code(enrolled.pending), LOGIN));
         TotpEnrollmentResult.Succeeded confirmed = assertInstanceOf(TotpEnrollmentResult.Succeeded.class,
@@ -401,7 +403,7 @@ final class TotpAuthenticatorTests {
                 "different-account", pending.getEnrollmentId(), fixture.code(pending), BROWSER));
         assertInstanceOf(TotpEnrollmentResult.Rejected.class, fixture.totp.confirmEnrollmentResult(
                 ACCOUNT, "stale-enrollment", fixture.code(pending), BROWSER));
-        fixture.clock.advance(Duration.ofMinutes(5));
+        fixture.advance(Duration.ofMinutes(5));
         assertInstanceOf(TotpEnrollmentResult.Rejected.class, fixture.totp.confirmEnrollmentResult(
                 ACCOUNT, pending.getEnrollmentId(), fixture.code(pending), BROWSER));
         assertTrue(fixture.status().getActiveFactor().isEmpty());
@@ -424,7 +426,7 @@ final class TotpAuthenticatorTests {
             throws GeneralSecurityException {
         Fixture fixture = new Fixture();
         TotpEnrollment pending = fixture.begin(null);
-        fixture.clock.advance(Duration.ofSeconds(301));
+        fixture.advance(Duration.ofSeconds(301));
         assertTrue(fixture.status().getPendingEnrollment().isEmpty());
         fixture.clock.advance(Duration.ofSeconds(-2));
         assertInstanceOf(TotpEnrollmentResult.Rejected.class, fixture.totp.confirmEnrollmentResult(
@@ -435,7 +437,7 @@ final class TotpAuthenticatorTests {
             throws GeneralSecurityException {
         Fixture fixture = new Fixture();
         TotpEnrollment pending = fixture.begin(null);
-        fixture.clock.advance(Duration.ofSeconds(301));
+        fixture.advance(Duration.ofSeconds(301));
         assertInstanceOf(TotpEnrollmentCancellationResult.Rejected.class,
                 fixture.totp.cancelEnrollmentResult(ACCOUNT, pending.getEnrollmentId(), BROWSER));
         fixture.clock.advance(Duration.ofSeconds(-2));
@@ -475,7 +477,7 @@ final class TotpAuthenticatorTests {
                 fixture.totp.removeFactorResult(ACCOUNT, enrolled.factor.getFactorId()));
         assertInstanceOf(TotpEnrollmentRequestResult.Throttled.class,
                 fixture.totp.beginEnrollmentResult(options(null), BROWSER));
-        fixture.clock.advance(Duration.ofMinutes(5).plusSeconds(1));
+        fixture.advance(Duration.ofMinutes(5).plusSeconds(1));
         assertInstanceOf(TotpEnrollmentRequestResult.Prepared.class,
                 fixture.totp.beginEnrollmentResult(options(null), BROWSER));
     }
@@ -488,14 +490,14 @@ final class TotpAuthenticatorTests {
                     fixture.totp.verifyResult(ACCOUNT, "bad", LOGIN));
         assertInstanceOf(TotpFactorRemovalResult.Succeeded.class,
                 fixture.totp.removeFactorResult(ACCOUNT, enrolled.factor.getFactorId()));
-        fixture.clock.advance(Duration.ofMinutes(5).plusSeconds(1));
+        fixture.advance(Duration.ofMinutes(5).plusSeconds(1));
         TotpEnrollment fresh = fixture.begin(null);
         assertInstanceOf(TotpEnrollmentResult.Succeeded.class,
                 fixture.totp.confirmEnrollmentResult(ACCOUNT, fresh.getEnrollmentId(), fixture.code(fresh), BROWSER));
         for (int attempt = 0; attempt < 5; attempt++)
             assertInstanceOf(TotpVerificationResult.Rejected.class,
                     fixture.totp.verifyResult(ACCOUNT, "bad", LOGIN));
-        fixture.clock.advance(Duration.ofMinutes(5).plusSeconds(1));
+        fixture.advance(Duration.ofMinutes(5).plusSeconds(1));
         assertInstanceOf(TotpVerificationResult.Throttled.class,
                 fixture.totp.verifyResult(ACCOUNT, fixture.code(fresh), LOGIN));
     }
@@ -503,7 +505,7 @@ final class TotpAuthenticatorTests {
     @Test void racingRemovalCannotBeIgnoredByVerification() throws GeneralSecurityException {
         Fixture fixture = new Fixture();
         Enrollment enrolled = fixture.enroll();
-        fixture.clock.advance(Duration.ofSeconds(30));
+        fixture.advance(Duration.ofSeconds(30));
         fixture.store.beforeNextCommit.set(() -> assertInstanceOf(TotpFactorRemovalResult.Succeeded.class,
                 fixture.totp.removeFactorResult(ACCOUNT, enrolled.factor.getFactorId())));
         TotpVerificationResult result = fixture.totp.verifyResult(ACCOUNT, fixture.code(enrolled.pending), LOGIN);
@@ -590,7 +592,7 @@ final class TotpAuthenticatorTests {
     @Test void unknownTotpSettlementConsumesTheStepWithoutReleasingProof() throws GeneralSecurityException {
         Fixture fixture = new Fixture();
         Enrollment enrolled = fixture.enroll();
-        fixture.clock.advance(Duration.ofSeconds(30));
+        fixture.advance(Duration.ofSeconds(30));
         fixture.store.unknownCommitCountdown.set(2);
         String code = fixture.code(enrolled.pending);
         int before = fixture.store.commits.get();
@@ -616,7 +618,7 @@ final class TotpAuthenticatorTests {
     @Test void lossOfRecoveryAdmissionAfterAWritePreventsProvisioningRelease() {
         Fixture fixture = new Fixture();
         fixture.store.afterNextCommit.set(() -> fixture.gate.open.set(false));
-        assertInstanceOf(TotpEnrollmentRequestResult.Indeterminate.class,
+        assertInstanceOf(TotpEnrollmentRequestResult.ReconciliationRequired.class,
                 fixture.totp.beginEnrollmentResult(options(null), BROWSER));
         assertInstanceOf(TotpStatusResult.Unavailable.class, fixture.totp.getStatusResult(ACCOUNT));
         fixture.gate.open.set(true);
@@ -639,7 +641,7 @@ final class TotpAuthenticatorTests {
         Fixture fixture = new Fixture();
         fixture.gate.onNextClose.set(() -> { throw new IllegalStateException("Close failed"); });
         int before = fixture.store.commits.get();
-        assertInstanceOf(TotpEnrollmentRequestResult.Indeterminate.class,
+        assertInstanceOf(TotpEnrollmentRequestResult.ReconciliationRequired.class,
                 fixture.totp.beginEnrollmentResult(options(null), BROWSER));
         assertEquals(before + 1, fixture.store.commits.get());
         assertTrue(fixture.status().getPendingEnrollment().isPresent());
@@ -653,7 +655,7 @@ final class TotpAuthenticatorTests {
                 .operationTimeout(Duration.ofMillis(100)).build();
         fixture.gate.onNextClose.set(TotpAuthenticatorTests::delayPastShortDeadline);
         int before = fixture.store.commits.get();
-        assertInstanceOf(TotpEnrollmentRequestResult.Indeterminate.class,
+        assertInstanceOf(TotpEnrollmentRequestResult.ReconciliationRequired.class,
                 shortBudget.beginEnrollmentResult(options(null), BROWSER));
         assertEquals(before + 1, fixture.store.commits.get());
         assertTrue(fixture.status().getPendingEnrollment().isPresent());
@@ -666,7 +668,7 @@ final class TotpAuthenticatorTests {
                 .clock(fixture.clock).stateSealer(fixture.sealer).recoveryGate(fixture.gate)
                 .operationTimeout(Duration.ofMillis(100)).build();
         fixture.store.afterNextCommit.set(TotpAuthenticatorTests::delayPastShortDeadline);
-        assertInstanceOf(TotpEnrollmentRequestResult.Indeterminate.class,
+        assertInstanceOf(TotpEnrollmentRequestResult.ReconciliationRequired.class,
                 shortBudget.beginEnrollmentResult(options(null), BROWSER));
         assertTrue(fixture.status().getPendingEnrollment().isPresent());
     }
@@ -743,7 +745,7 @@ final class TotpAuthenticatorTests {
         });
         int before = fixture.store.commits.get();
         try {
-            assertInstanceOf(TotpEnrollmentRequestResult.Indeterminate.class,
+            assertInstanceOf(TotpEnrollmentRequestResult.ReconciliationRequired.class,
                     fixture.totp.beginEnrollmentResult(options(null), BROWSER));
             assertTrue(Thread.currentThread().isInterrupted());
             assertEquals(before + 1, fixture.store.commits.get());
@@ -802,7 +804,7 @@ final class TotpAuthenticatorTests {
     @Test void clockRollbackDoesNotReviveEnrollmentOrPermitAuthentication() throws GeneralSecurityException {
         Fixture fixture = new Fixture();
         Enrollment enrolled = fixture.enroll();
-        fixture.clock.advance(Duration.ofSeconds(60));
+        fixture.advance(Duration.ofSeconds(60));
         assertInstanceOf(TotpVerificationResult.Succeeded.class,
                 fixture.totp.verifyResult(ACCOUNT, fixture.code(enrolled.pending), LOGIN));
         fixture.clock.advance(Duration.ofMinutes(-1));
@@ -841,7 +843,7 @@ final class TotpAuthenticatorTests {
                 newKeyOnly.verifyResult(ACCOUNT, fixture.code(enrolled.pending), LOGIN));
         assertInstanceOf(RecoveryCodeUseResult.Rejected.class,
                 newKeyOnly.consumeRecoveryCodeResult(ACCOUNT, enrolled.codes.getCodes().get(0), LOGIN));
-        fixture.clock.advance(Duration.ofDays(3650));
+        fixture.advance(Duration.ofDays(3650));
         assertInstanceOf(TotpVerificationResult.Succeeded.class,
                 newKeyOnly.verifyResult(ACCOUNT, fixture.code(enrolled.pending), LOGIN));
         assertInstanceOf(RecoveryCodeUseResult.Succeeded.class,
@@ -849,7 +851,7 @@ final class TotpAuthenticatorTests {
     }
 
     @Test void capacityRefusalDoesNotEvictPermanentStateOrFallBack() {
-        InMemoryTotpStore store = InMemoryTotpStore.withNamespace(NAMESPACE, EPOCH).maximumEntries(1).build();
+        ScriptedTotpStore store = new ScriptedTotpStore(NAMESPACE, EPOCH, Instant.ofEpochSecond(1700000010), 1, 268435456L);
         MutableClock clock = new MutableClock(Instant.ofEpochSecond(1700000010));
         TotpAuthenticator totp = authenticator(store, clock, new Gate(EPOCH),
                 StateSealer.withActiveKey(key("old", 11)).build(), EPOCH);
@@ -911,11 +913,15 @@ final class TotpAuthenticatorTests {
     @NotThreadSafe
     private static final class Fixture {
         final @NonNull MutableClock clock = new MutableClock(Instant.ofEpochSecond(1700000010));
-        final @NonNull InMemoryTotpStore delegate = InMemoryTotpStore.withNamespace(NAMESPACE, EPOCH).build();
+        final @NonNull ScriptedTotpStore delegate = new ScriptedTotpStore(NAMESPACE, EPOCH, this.clock.instant());
         final @NonNull FaultStore store = new FaultStore(this.delegate);
         final @NonNull Gate gate = new Gate(EPOCH);
         final @NonNull StateSealer sealer = StateSealer.withActiveKey(key("old", 11)).build();
         final @NonNull TotpAuthenticator totp = authenticator(this.store, this.clock, this.gate, this.sealer, EPOCH);
+        void advance(@NonNull Duration duration) {
+            this.delegate.advance(duration);
+            this.clock.advance(duration);
+        }
         Fixture() { this(true); }
         Fixture(boolean initialize) {
             if (initialize) assertInstanceOf(TotpNamespaceInitializationResult.Initialized.class,
@@ -1045,23 +1051,23 @@ final class TotpAuthenticatorTests {
                     && result instanceof TotpStoreReadResult.Available available) {
                 Map<TotpStoreKey, TotpStoreEntry> entries = new HashMap<>(available.getSnapshot().getEntries());
                 entries.put(replacement.getKey(), TotpStoreEntry.Present.fromRecord(replacement));
-                return TotpStoreReadResult.Available.fromSnapshot(TotpStoreSnapshot.fromEntries(keys, entries));
+                return TotpStoreReadResult.Available.fromSnapshot(TotpStoreSnapshot.fromEntries(keys, entries, available.getSnapshot().getTimeObservation()));
             }
             return result;
         }
-        @Override public @NonNull TotpStoreCommitResult compareAndCommit(@NonNull TotpStoreWrite write,
+        @Override public @NonNull TotpStoreCommitReceipt compareAndCommit(@NonNull TotpStoreWrite write,
                 @NonNull Duration remainingBudget) {
             this.commits.incrementAndGet();
-            if (this.unknownWithoutMutation.getAndSet(false)) return TotpStoreCommitResult.UNKNOWN;
+            if (this.unknownWithoutMutation.getAndSet(false)) return TotpStoreCommitReceipt.unknownInstance();
             Runnable before = this.beforeNextCommit.getAndSet(null);
             if (before != null) before.run();
-            TotpStoreCommitResult result = this.delegate.compareAndCommit(write, remainingBudget);
+            TotpStoreCommitReceipt result = this.delegate.compareAndCommit(write, remainingBudget);
             Runnable after = this.afterNextCommit.getAndSet(null);
             if (after != null) after.run();
             boolean unknown = this.unknownAfterCommit.getAndSet(false);
             boolean countedUnknown = this.unknownCommitCountdown.getAndUpdate(value -> value > 0 ? value - 1 : 0) == 1;
-            return (unknown || countedUnknown) && result == TotpStoreCommitResult.COMMITTED
-                    ? TotpStoreCommitResult.UNKNOWN : result;
+            return (unknown || countedUnknown) && result.getStatus() == TotpStoreCommitResult.COMMITTED
+                    ? TotpStoreCommitReceipt.unknownInstance() : result;
         }
     }
 }

@@ -1,6 +1,10 @@
 # OAuth authorization-server application contracts
 
-The `com.revetsec.oauth.server` package implements the application-integrated OAuth code issuer planned for 1.0.0, including authorization, token, revocation, introspection, online grant status and optional client-metadata fetching. Local browser/client, mutation, fuzz and PostgreSQL recovery evidence is recorded. RC-AS qualification is complete, and the release owner accepted the measured API freeze on 2026-10-15.
+**All-family source join — 2026-10-30:** use the [shared-clock store and consumer contract](shared-clock-stores.md) with the matching core and adapter artifacts. Its explicit reconciliation, factual raw-receipt and final-admission rules apply alongside this guide. Historical review and release approvals remain bound to their original artifacts; live profile, migration and release-owner acceptance remain separate.
+
+**2026-10-30 shared-clock source checkpoint:** SCP-08 switches the issuer source/API, normal outer envelope and direct callers together. The current uncommitted candidate uses admitted store time, immutable issuer minimum/entity floors, contextual receipts and final release admission. The clock-reservation and bare-enum contracts from the earlier candidate are superseded below. SCP-09 accepts the selected all-family API/consumer candidate through compiled inventory and exact-artifact checks. Bounded fixture evidence does not qualify live UTC, the witness owner, platform durability, deployment recovery or the complete shared profile. The October 15 API/RC acceptance applies to its historical artifact; current profile, migration, qualification and release-owner approval remain separate.
+
+The `com.revetsec.oauth.server` package implements the application-integrated OAuth code issuer planned for 1.0.0, including authorization, token, revocation, introspection, online grant status and optional client-metadata fetching. Local browser/client, mutation, fuzz and PostgreSQL recovery evidence is recorded. The historical RC-AS qualification and release-owner API-freeze acceptance were completed on 2026-10-15 for their recorded artifact.
 
 The application supplies users, login/session handling, CSRF defenses, permission decisions and storage. Revetsec's issuer validates the protocol, binds those decisions and manages credentials. An application decision is trusted configuration, not a Revetsec-verified authentication proof.
 
@@ -67,10 +71,7 @@ The server builder applies the approved ingress ranges together with the remaini
 ## Issuer persistence foundation
 
 The `com.revetsec.oauth.server` store SPI and carriers describe an application-owned durable backend.
-`read` returns authoritative linearizable data or confirmed absence. `commit` checks every ABSENT/version
-condition and applies every mutation atomically across participating keys and nodes. COMMITTED means durable;
-CONFLICT means zero effects; UNKNOWN requires reconciliation and never implies rollback or safe issuance retry.
-Zero-mutation transactions are required read-set barriers. A cache or example map does not supply these guarantees.
+`read` returns a coherent `OAuthStoreReadResult.Available` containing the exact key, entry or confirmed absence, and `StoreTimeObservation`; `Fenced` and `Unavailable` never mean absence. A time-unavailable observation can support only the narrow emergency fence path. `commit` checks all exact predicates and admission plus the required temporal condition for `TIMED`, then returns `OAuthStoreCommitReceipt`. COMMITTED means the requested mutation or barrier committed with its contextual validation timing; CONFLICT and the explicit capacity/admission/time refusals have zero effects. UNKNOWN requires reconciliation and never implies rollback or safe retry. A known requested commitment whose service output cannot be admitted becomes `COMMIT_CONFIRMED_NOT_ADMITTED`, not UNKNOWN. Zero-mutation barriers remain atomic and create no uncertain business mutation if their acknowledgement is unknown. A cache or example map does not supply durability or recovery protection.
 
 Persist the key, opaque version, complete retainUntil instant (seconds and nanoseconds) and encrypted toSealedForm verbatim. Reconstruction
 factories only validate bounded transport syntax; they never confer authorization. The storage grammar is
@@ -91,15 +92,17 @@ Application store implementations must honor budgets; no library thread forcibly
 
 ## Internal permanent fences and store coordination
 
-The internal coordinator implements sealed issuer and subject revocation fences. Each fence has a random incarnation and a checked monotonic epoch; later grant and status records must bind both. These records retain permanently. Issuer state also persists a complete clock upper bound, reserved at most 100 ms ahead of sampled wall time and no farther than the configured clock skew. Every transaction conditions on the exact issuer version. Ordinary transactions within that window leave the shared row unchanged; reservation rollover and epoch changes write it. A node farther behind the bound than the configured skew fails unavailable, while admitted operations use the later of wall time and the bound. With zero skew, every mutating transaction updates the exact clock. A condition-only admission barrier checks the complete observed versions and absences without writing the global clock on every resource request.
+The internal coordinator authenticates permanent issuer and subject revocation fences with random incarnation and checked monotonic epoch; grants and status records bind both. The schema-2 issuer root binds its admitted authority and immutable exact minimum `L`. Its outer floor equals `L`; subject and authorization records carry their own authenticated entity floors. Ordinary time passage never rewrites the issuer root. Healthy coherent store observations supply time; worker clocks are checked only for health and never advance `L` or entity floors. Every transaction retains exact issuer/entity versions and absences. A timed lower bound includes the selected authority observation and all relevant floors; the exclusive upper bound remains no later than the original applicable credential/policy expiry. Unsupported or future legacy floors close timed admission without clamping. Normal decoders reject outer schema 1; its authentication and conversion remain restricted to closed migration.
 
 Fresh issuer initialization is an explicit trusted deployment action using an ABSENT condition. A missing established issuer fence fails closed. Subject creation is likewise separate from established subject reads and revocation. An authoritative missing row cannot establish that a namespace is unused: the operator must know that it has never held grants or been restored. Restore recovery must advance the issuer fence before traffic resumes. Encryption detects substitution and corruption; it cannot detect rollback of an authentic database backup.
 
-Store callbacks receive the remaining original monotonic operation budget, checked before and after each callback. Nonfatal callback faults and null returns are fixed failures. Interruption persists; fatal VM errors propagate. Only a zero-effect CONFLICT permits a bounded reload under that same budget. UNKNOWN ends the operation without automatic retry, rollback or success publication. A completed or uncertain transaction session cannot be reused.
+Store callbacks receive the remaining original monotonic budget. Client/CIMD/policy and signing are provisional preparation; the session freshly joins every complete entry fingerprint before the exact timed transaction. A full conflict retry repeats the relevant client and policy preparation under that original budget. Callback facts are recorded before post-callback health/deadline checks: a throw or null after entering a mutating write is uncertain, while a known durable commitment stays known even if acknowledged late. Interruption persists; fatal VM errors propagate. Only a zero-effect conflict permits bounded reload; UNKNOWN and confirmed requested commitment stop automatic retry. Normal output requires the minimum fresh issuer-root checkpoint and final budget/health/finite-bound check. Raw effect-only maintenance has the separate factual receipt contract below. A completed, uncertain or invalid submitted session cannot be reused.
+
+`revokeAllGrants()` and `revokeSubject(subject)` alone use `FENCE_ONLY`: exactly one existing permanent root epoch advances, with current authority/recovery admission, exact issuer/subject predicates, preserved incarnation, authority binding, `L`, entity floor and permanent retention. They cannot initialize roots or subjects, issue credentials, reseal, or serve as a fallback for timed work. Their postcommit minimum issuer-root acknowledgement accepts time unavailable and ignores clock generation/worker health; loss of current recovery admission or the original budget withholds acknowledgement while preserving known commitment.
 
 Core tests exercise two coordinators sharing an atomic single-process test double, including controlled interleavings, complete conditions, clock rollback and uncertain commits. The separate [PostgreSQL fixture](../verification/issuer-store/README.md) records independent-JVM races, process/database interruption and authentic logical restore on one primary and host. Replica failover, cross-host control, power loss and arbitrary application stores remain unqualified.
 
-The runnable `examples/postgresql-pending-store` issuer store still takes a namespace-row `FOR UPDATE` lock for every read and commit. It serializes traffic even when core does not rewrite `ISSUER_STATE` for an independent mutation. Throughput qualification for that backend remains open.
+The runnable issuer PostgreSQL source uses shared admission for ordinary operations, exclusive first-root activation, sorted strongest logical-key locks and changed entry-escrow buckets. It samples the supplied authority after lock waits, evaluates lower then upper bound before capacity and atomic mutation, and performs no read/failure cleanup or normal namespace-wide count/mutex. A current data-admission observation with an unadmitted clock profile exposes unavailable time so emergency fences remain possible while timed work closes. These owned one-primary fixtures do not qualify live witness integration or deployment throughput.
 
 
 ## Internal consent ledger and pending grants
@@ -116,8 +119,7 @@ policy callbacks remain responsibilities of the engine and application edge.
 Resume uses an authoritative condition-only barrier. Completion re-reads consent and current
 fences, checks the browser/client configuration and the application resource/scope subset against the reviewed
 request and current server authority. An allowed nonempty decision requires an established subject fence.
-It atomically completes the interaction and inserts an unused code and pending grant, together with the issuer
-clock update. The internal code return occurs only after COMMITTED. A denial, including an explicit empty
+It atomically completes the interaction and inserts an unused code and pending grant with their authority-derived floors. The internal code return requires a known COMMITTED receipt and final release admission. A denial, including an explicit empty
 scope decision, completes consent without creating a code or grant. Duplicate or racing completion cannot
 re-emit a code. UNKNOWN yields no handle, review or code and is never automatically retried.
 
@@ -152,10 +154,10 @@ no-store headers. Signing, record preparation or response size failure occurs be
 map is accepted. The public engine applies publication and rotation checks to application-owned key snapshots; the internal encoder alone does not establish durable key lifecycle authority.
 
 One complete transaction consumes code, activates the grant with its maximum access lifetime and H,
-inserts the issued-jti record and optional initial refresh record, and updates the issuer clock. Optional refresh
+inserts the issued-jti record and optional initial refresh record with entity floors while preserving the issuer minimum. Optional refresh
 requires server, client, original approval and continuing policy permission. Used code and grant retain together
 through at least H and the original code expiry; access rows retain through their own expiry plus margins.
-Only COMMITTED returns the prepared bytes. CONFLICT discards them and reloads under the original deadline;
+Only a known committed receipt followed by final release admission returns the prepared bytes. CONFLICT discards them and reloads under the original deadline;
 UNKNOWN releases nothing and never triggers hidden retransmission. Cooperative expiry/deadline checks
 also discard late output when writes may already have occurred.
 
@@ -172,8 +174,7 @@ They do not establish durable storage, process recovery, multi-node failover or 
 ## Internal online token-status admission
 
 The internal validator checks a bounded RS256 at+jwt against an explicit local public-key snapshot, exact
-issuer and single resource audience, required fixed claims and token times before accessing storage. It
-then binds the issued-jti record to the exact subject, client, resource, canonical scopes, issuance time and
+issuer and single resource audience and required fixed claims before accessing storage. Token-time admission and restricted M5 proof creation use the healthy authority observed by the actual session; signature/profile recognition creates no proof or temporal-history writes. It then binds the issued-jti record to the exact subject, client, resource, canonical scopes, issuance time and
 expiry. The active grant must share the same issuer/subject incarnations and epochs, contain the issued
 scopes and cover the access token's pinned lifetime and retention horizon. Grant family expiry does not
 prematurely invalidate an access token issued near that expiry. Token expiry plus configured skew remains
@@ -182,7 +183,7 @@ the admission boundary and is checked around the backend commit.
 A successful admission requires one COMMITTED condition-only transaction containing every observed
 issuer fence, issued-jti, grant and subject-fence version. Missing issuance/grant returns an inactive verdict
 only after an authoritative absence barrier. Missing permanent fences, contradictory authenticated records,
-backend faults and UNKNOWN outcomes remain infrastructure failures. CONFLICT reloads the entire read set
+backend faults and unknown barrier acknowledgements remain infrastructure failures. A read barrier creates no uncertain mutation. CONFLICT reloads the entire read set
 under the original bounded deadline. No positive token-status cache is used.
 
 The barrier is the admission point: revocation racing before it prevents admission after reload; work
@@ -208,8 +209,7 @@ The final access token may outlive family expiry, and required online status che
 
 Before commit, the helper prepares independent random replacement refresh and access-jti identifiers,
 signed fixed RS256 at+jwt, sealed records and bounded immutable response bytes. One complete CAS marks
-the old refresh USED, replaces the grant head, creates the new refresh and issuance rows and advances
-the issuer clock. Only COMMITTED releases those bytes. CONFLICT discards output and reloads under the
+the old refresh USED, replaces the grant head and creates new refresh and issuance rows with authority-derived floors. Known commitment plus final release admission releases those bytes. CONFLICT discards output and reloads under the
 same deadline; UNKNOWN releases nothing and permits no guessed rollback or automatic credential retry.
 
 Fully bound used-refresh replay remains recognizable through H, including after its original idle or family
@@ -228,8 +228,8 @@ Exact owner, client security fingerprint, resource, persisted issuance and curre
 must match before mutation. An optional revocation resource selector must match the grant; token hints
 never select authority. Unknown, malformed, wrong-owner and already-revoked credentials receive identical
 empty 200 response bytes after applicable authentication. Authoritative absence and unchanged state
-require a complete condition-only barrier. Known grant invalidation and issuer clock update share one CAS.
-Backend faults, corruption, exhausted budgets and UNKNOWN cannot produce success.
+require a complete condition-only barrier. Known grant invalidation uses one exact timed CAS without changing the issuer minimum.
+Backend faults, corruption, exhausted budgets and uncertain requested mutations cannot produce success; pure barrier uncertainty is unavailable unless an earlier requested commitment requires reconciliation.
 
 Retained expired access credentials can revoke a still-live refresh grant. This uses an internal signature
 recognition profile without time admission, then exact persisted issuance and ownership checks. It never
@@ -273,7 +273,7 @@ unused horizon. This observed guard is bounded by the retained public set; it is
 of actual external publication. Initial snapshots and safely retired identifiers remain application obligations.
 
 Managed internal issuance checks publication, reserves retention, signs and verifies the pair, then reloads
-and checks public overlap before preparing a response or committing issuance. A failed check leaves the unused
+and checks public overlap before preparing a response or committing issuance. Signing, post-sign retirement and managed proof/status/revocation phases use their actual session authority. Worker/provisional metadata history and admitted lifecycle history are separate; a fast metadata call cannot move a later admitted signing or proof floor. A failed check leaves the unused
 code and ledger unchanged. Online status loads checked public keys for the existing uncached atomic status
 barrier. Ordinary rotation does not advance the issuer epoch; compromise/restore handling still requires
 explicit issuer revocation and reconciliation of uncertain outcomes.
@@ -442,7 +442,7 @@ CIMD's scope/software/key declarations confer no authority. Configured server re
 
 Every code/refresh attempt, including a retry after a store conflict and a bound used-credential replay, performs its own successful200 via the pinned transport before authoritative state reads/consumption or replay invalidation. It bypasses all cache reads and writes. A prior snapshot, another operation's200 or shared cache cannot replace this fetch. Registry, fetch, store, policy and signing share the original shrinking deadline. Failure, invalid metadata or fingerprint mismatch releases no credentials and leaves an unused code/current refresh unconsumed; valid fully bound reuse retains strict whole-grant invalidation. No callback/network/signing runs inside a backend commit.
 
-The public engine integrates these helpers with restricted results, endpoint failure mapping and dynamic-owner revocation. Local browser/client and PostgreSQL recovery checks supplement deterministic tests within their recorded boundaries. The final RC-AS review and current-source qualification are complete, and the release owner accepted the measured API freeze on 2026-10-15.
+The public engine integrates these helpers with restricted results, endpoint failure mapping and dynamic-owner revocation. Local browser/client and PostgreSQL recovery checks supplement deterministic tests within their recorded boundaries. The final RC-AS review, qualification and release-owner API-freeze acceptance were completed on 2026-10-15 for the artifact recorded by that review.
 
 
 ## Prepared response and credential wire contracts
@@ -492,11 +492,11 @@ The public issuer result types are sealed and cannot be constructed by applicati
 
 Issuer access-token success releases the existing VerifiedAccessToken only after the public engine composes M5 validation and an authoritative uncached issuer status barrier. Its rejection carries only fixed issuer/M5/JOSE reasons and a safe BearerError. No public proof factory is exposed.
 
-OAuthServerException directly extends RevetsecException and is sealed to validation, store, transport, configuration and signing leaves. Construction is restricted. Messages, diagnostics and suppression never retain external callback failures or their data. COMMIT_OUTCOME_UNKNOWN remains a nontransient store infrastructure exception; reconcile it rather than blindly retransmit credential or subject-revocation work. Store corruption and invalid configuration remain configuration failures. Generic SPI unavailability is nontransient because its fixed internal classification cannot prove the cause. A future operation may classify a known timeout, I/O failure or request held back as transient; this never overrides UNKNOWN or interruption. Cooperative interruption preserves the interrupt flag and prevents transient classification.
+OAuthServerException directly extends RevetsecException and is sealed to validation, store, transport, configuration and signing leaves. Construction is restricted. Messages, diagnostics and suppression never retain external callback failures or their data. COMMIT_OUTCOME_UNKNOWN and COMMIT_CONFIRMED_NOT_ADMITTED are distinct nontransient store infrastructure exceptions; reconcile either rather than blindly retransmit credential or subject-revocation work. Store corruption and invalid configuration remain configuration failures. Generic SPI unavailability is nontransient because its fixed internal classification cannot prove the cause. A future operation may classify a known timeout, I/O failure or request held back as transient; this never overrides UNKNOWN or interruption. Cooperative interruption preserves the interrupt flag and prevents transient classification.
 
 The local HTTP boundary emits fixed JSON errors with no Location, no reflected error description, no-store/no-cache/no-referrer and bounded bodies/headers. Infrastructure fallback is always503 server_error. Invalid and unknown clients share invalid_client; Basic authentication failure uses401 with a fixed Basic challenge, while public-client rejection uses400. Introspection caller failure uses401. Invalid/replayed grants and PKCE mismatch share invalid_grant. Unsupported methods use405 and endpoint-specific GET/POST Allow. Consent denial redirects still require the existing authenticated, prepared-before-commit path.
 
-OAuthServerObserver has synchronous caller-thread hooks and fixed operation kinds, including trusted grant/subject/issuer invalidation and store resealing. The internal dispatcher emits one will and one terminal hook during ordinary completion, contains hook failures through the existing dispatcher, restores interruption, and propagates VirtualMachineError. Events carry no request, URL, client, subject, grant, credential, key identifier or claims. The engine dispatches these hooks outside locks and store transactions.
+OAuthServerObserver has synchronous caller-thread hooks and fixed operation kinds, including trusted grant/subject/issuer invalidation and store resealing. The internal dispatcher emits one will and one terminal hook during ordinary completion, contains hook failures through the existing dispatcher, restores interruption, and propagates VirtualMachineError. Events carry no request, URL, client, subject, grant, credential, key identifier or claims. The engine dispatches these hooks outside locks and store transactions. Terminal hooks describe the processing checkpoint before their callback runs. A final pure release guard runs after the terminal callback; callback delay can still withhold a service return, without a second terminal event. Raw receipts preserve effect truth despite such delay.
 
 
 ## Public authorization server
@@ -511,10 +511,10 @@ Register the exact configured routes and preserve materialized body, raw query a
 
 ### Explicit deployment and maintenance
 
-Before traffic, `initializeFreshIssuer()` is an operator assertion that the issuer namespace has never held grants or been restored. It returns COMMITTED, CONFLICT when an authenticated issuer fence already exists, or UNKNOWN requiring authoritative reconciliation. Absence cannot prove freshness. Do not call it to repair a lost fence. `establishNewSubject(subject)` similarly asserts first registration of a never-used subject; normal approval/status/revocation requires an established permanent subject fence. UNKNOWN is a typed uncertainty and never permission to retry blindly. Restored databases and lost permanent fences require the deployment recovery procedure before traffic.
+Before traffic, `initializeFreshIssuer()` is an operator assertion that the issuer namespace has never held grants or been restored. It returns a contextual `OAuthStoreCommitReceipt`: COMMITTED records factual initialization, CONFLICT reports an authenticated existing fence, and UNKNOWN requires authoritative reconciliation. The receipt does not establish current readiness or replace a fresh admitted operation. Absence cannot prove freshness. Do not call it to repair a lost fence. `establishNewSubject(subject)` similarly asserts first registration of a never-used subject; normal approval/status/revocation requires an established permanent subject fence. UNKNOWN is a typed uncertainty and never permission to retry blindly. Restored databases and lost permanent fences require the deployment recovery procedure before traffic.
 
-`warmUp()` checks configured signing capability and an existing issuer fence; it never initializes state or fetches arbitrary metadata URLs. Trusted grant, subject and issuer revocation use authoritative state; epoch advances are non-idempotent under UNKNOWN. `resealStoreEntry(key)` authenticates retained typed payloads and performs one namespace-bound version CAS without changing authority/retention. It returns CONFLICT for absence/expired rows/races and UNKNOWN for uncertain outcomes. Keep old decrypt keys until all retained rows, including permanent fences, are migrated.
+`warmUp()` checks configured signing capability and an existing issuer fence; it never initializes state or fetches arbitrary metadata URLs. Trusted grant, subject and issuer revocation use authoritative state; epoch advances are non-idempotent under UNKNOWN. `resealStoreEntry(key)` authenticates retained typed payloads and performs one namespace-bound version CAS without changing authority/retention. It returns a contextual factual receipt, including CONFLICT for absence/retention-expired rows/races and UNKNOWN for uncertain outcomes. Finite reseal can authenticate used or credential-expired state strictly before its original full retention; it preserves the floor, authorization payload and retention, releases no credential and never becomes FENCE_ONLY. Raw initialization/reseal do not require the service final-read checkpoint and preserve COMMITTED/UNKNOWN after late acknowledgement. Keep old decrypt keys until all retained rows, including permanent fences, are migrated.
 
 Expected remote errors are fixed result variants. Infrastructure/corruption/signing/UNKNOWN stays typed and redacted; `responseForFailure` emits fixed503 JSON with no Location. Observer hooks have fixed operation kinds, no credentials or identities, and one terminal event during ordinary completion. InteractionRequired has logical HTTP200; management/validation status is absent. Infrastructure faults never become invalid credentials or implicit retry approval.
 
-Public wiring has deterministic core tests and local Soklet/browser/released-client qualification. The [unpublished PostgreSQL fixture](../verification/issuer-store/README.md) records durable independent-JVM races, uncertain COMMIT and authentic logical restore with application admission fencing on one primary and host. These checks do not qualify replica failover, cross-host recovery or arbitrary production backends. Final RC-AS qualification and the released-consumer recovery fence are complete, and the release owner accepted the measured API freeze on 2026-10-15.
+Public wiring has deterministic core tests and local Soklet/browser/released-client qualification. The [unpublished PostgreSQL fixture](../verification/issuer-store/README.md) records durable independent-JVM races, uncertain COMMIT and authentic logical restore with application admission fencing on one primary and host. These checks do not qualify replica failover, cross-host recovery or arbitrary production backends. Those historical RC-AS/released-consumer checks and the owner's October 15 API-freeze acceptance remain bound to their original artifact. SCP-09 separately accepts the selected shared-clock API/consumer candidate; current witness/profile, retained-migration, qualification and release-owner approval remain open.

@@ -27,9 +27,10 @@ import static java.util.Objects.requireNonNull;
 @Immutable
 public abstract sealed class WebAuthnAuthenticationResult permits WebAuthnAuthenticationResult.Succeeded,
         WebAuthnAuthenticationResult.Rejected, WebAuthnAuthenticationResult.Unavailable,
-        WebAuthnAuthenticationResult.Indeterminate {
+        WebAuthnAuthenticationResult.Indeterminate, WebAuthnAuthenticationResult.ReconciliationRequired {
     private static final @NonNull Unavailable UNAVAILABLE = new Unavailable();
     private static final @NonNull Indeterminate INDETERMINATE = new Indeterminate();
+    private static final @NonNull ReconciliationRequired RECONCILIATION_REQUIRED = new ReconciliationRequired();
     WebAuthnAuthenticationResult() { }
     static @NonNull WebAuthnAuthenticationResult succeeded(@NonNull WebAuthnAuthentication authentication) {
         return new Succeeded(authentication);
@@ -39,6 +40,7 @@ public abstract sealed class WebAuthnAuthenticationResult permits WebAuthnAuthen
     }
     static @NonNull WebAuthnAuthenticationResult unavailable() { return UNAVAILABLE; }
     static @NonNull WebAuthnAuthenticationResult indeterminate() { return INDETERMINATE; }
+    static @NonNull WebAuthnAuthenticationResult reconciliationRequired() { return RECONCILIATION_REQUIRED; }
     /** Redacts all identity and browser data.
      * @return a fixed description
      * @since 1.0.0 */
@@ -76,4 +78,11 @@ public abstract sealed class WebAuthnAuthenticationResult permits WebAuthnAuthen
     @Immutable public static final class Indeterminate extends WebAuthnAuthenticationResult {
         private Indeterminate() { }
     }
+    /** The requested transition committed, but normal output could not be admitted.
+     * Reconcile through an authorized fresh operation before deciding what to do next.
+     * @since 1.0.0 */
+    @Immutable public static final class ReconciliationRequired extends WebAuthnAuthenticationResult {
+        private ReconciliationRequired() { }
+    }
+
 }

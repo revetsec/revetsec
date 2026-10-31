@@ -1,5 +1,7 @@
 # Revetsec
 
+The current pre-1.0 source includes the coordinated TOTP/WebAuthn/issuer [shared-clock store and consumer contracts](docs/shared-clock-stores.md). Update stores and result handling together; a successful raw maintenance receipt is not traffic/readiness admission. Shared-profile qualification and retained-data migration remain separate requirements.
+
 ### What Is It?
 
 A zero-dependency Java library for OAuth 2.0 clients and resource servers, OpenID Connect relying parties, JOSE, SAML 2.0 service providers and SCIM 2.0 servers.

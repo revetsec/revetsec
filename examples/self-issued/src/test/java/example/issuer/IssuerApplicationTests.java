@@ -19,6 +19,7 @@ import com.revetsec.SealingKey;
 import com.revetsec.StateSealer;
 import com.revetsec.oauth.BearerToken;
 import com.revetsec.oauth.server.*;
+import com.revetsec.testing.ScriptedOAuthStore;
 import com.soklet.*;
 import java.net.URI;
 import java.net.URLEncoder;
@@ -79,7 +80,7 @@ final class IssuerApplicationTests {
   return StateSealer.withActiveKey(SealingKey.fromBase64("test-seal",Base64.getEncoder().encodeToString(LocalInputs.randomBytes()))).build();
  }
  @Test void establishedStartupRetainsGrantAndRefreshAcrossApplicationInstances() throws Exception {
-  var clock=Clock.systemUTC();var config=config(8089,8090);var store=new VolatileStore(clock,2048,4_194_304);
+  var clock=Clock.systemUTC();var config=config(8089,8090);var store=new VolatileStore(2048,4_194_304);
   var keys=signingKeys(clock);var sealing=sealer();byte[] partitionKey=LocalInputs.randomBytes();
   var first=new IssuerResources(config,clock,store,keys,sealing,IssuerResources.StartupMode.FRESH,partitionKey);
   String firstPair=issued(first,"mcp:discover mcp:whoami");String access=scalar(firstPair,"access_token");
@@ -100,7 +101,7 @@ final class IssuerApplicationTests {
     ()->new IssuerResources(config,clock,store,keys,sealing,IssuerResources.StartupMode.ESTABLISHED));
  }
  @Test void establishedStartupRejectsMissingFenceAndWrongSealingKey() throws Exception {
-  var clock=Clock.systemUTC();var config=config(8089,8090);var store=new VolatileStore(clock,2048,4_194_304);
+  var clock=Clock.systemUTC();var config=config(8089,8090);var store=new VolatileStore(2048,4_194_304);
   var keys=signingKeys(clock);var sealing=sealer();byte[] partitionKey=LocalInputs.randomBytes();
   assertThrows(OAuthServerStoreException.class,
     ()->new IssuerResources(config,clock,store,keys,sealing,IssuerResources.StartupMode.ESTABLISHED,partitionKey));
@@ -237,15 +238,15 @@ final class IssuerApplicationTests {
   assertTrue(text(app.resourceMetadata(request(app,HttpMethod.GET,"/",null,null))).contains(app.config.resource.toString()));assertEquals("&lt;&amp;&quot;&#39;&gt;",LocalInputs.html("<&\"'>"));
  }
  @Test void failedStoreCapacityDoesNotDeletePermanentFencesAndCasIsAtomic() throws Exception {
-  var clock=new MutableClock();var real=new VolatileStore(clock,2,4_194_304);var captured=new CapturingStore(real);var app=new IssuerResources(config(8089,8090),clock,captured);
-  assertEquals(3,captured.commits.size());var issuer=captured.commits.get(0);assertEquals(OAuthStoreCommitStatus.CONFLICT,real.commit(issuer,Duration.ofSeconds(1)));
+  var clock=new MutableClock();var real=new ScriptedOAuthStore(clock.instant(),2,4_194_304);var captured=new CapturingStore(real);var app=new IssuerResources(config(8089,8090),clock,captured);
+  assertEquals(3,captured.commits.size());var issuer=captured.commits.get(0);assertEquals(OAuthStoreCommitStatus.CONFLICT,real.commit(issuer,Duration.ofSeconds(1)).getStatus());
   assertThrows(OAuthServerException.class,()->code(app,"demo-public","mcp:discover"));
   clock.now=clock.now.plusSeconds(1000000);
-  for(var tx:captured.commits.subList(0,2))for(var mutation:tx.getMutations())assertTrue(real.read(mutation.getKey(),Duration.ofSeconds(1)).isPresent());
-  assertThrows(IllegalStateException.class,()->real.read(issuer.getConditions().get(0).getKey(),Duration.ZERO));
+  for(var tx:captured.commits.subList(0,2))for(var mutation:tx.getMutations())assertTrue(((OAuthStoreReadResult.Available)real.read(mutation.getKey(),Duration.ofSeconds(1))).getEntry().isPresent());
+  assertInstanceOf(OAuthStoreReadResult.Unavailable.class,real.read(issuer.getConditions().get(0).getKey(),Duration.ZERO));
  }
  @Test void unavailableStoreRemains503AtMcpAdmission() throws Exception {
-  var clock=new MutableClock();var captured=new CapturingStore(new VolatileStore(clock,2048,4_194_304));var app=new IssuerResources(config(8089,8090),clock,captured);String access=scalar(issued(app,"mcp:discover mcp:whoami"),"access_token");captured.fail=true;
+  var clock=new MutableClock();var captured=new CapturingStore(new ScriptedOAuthStore(clock.instant(),2048,4_194_304));var app=new IssuerResources(config(8089,8090),clock,captured);String access=scalar(issued(app,"mcp:discover mcp:whoami"),"access_token");captured.fail=true;
   SokletSimulator.run(IssuerPlayground.sokletConfig(app),sim->assertEquals(503,call(sim,app,access,"tools/call","whoami","{}").getStatusCode()));
  }
  @Test void everyMcpMessageUsesOnlineStatusScopeAndObjectAuthorization() throws Exception {
@@ -285,10 +286,10 @@ final class IssuerApplicationTests {
   assertEquals(List.of(second.toString()),assertInstanceOf(OAuthIssuerAccessTokenResult.Succeeded.class,app.server.validateAccessTokenResult(bearer(secondToken),second.toString())).getAccessToken().getAudiences());
  }
  @Test void expiresAndWrongResourceAreRejectedWithoutAnOfflineShortcut() throws Exception {
-  var clock=new MutableClock();var app=new IssuerResources(config(8089,8090),clock);String token=scalar(issued(app,"mcp:discover mcp:whoami"),"access_token");
+  var clock=new MutableClock();var authority=new ScriptedOAuthStore(clock.instant());var app=new IssuerResources(config(8089,8090),clock,authority);String token=scalar(issued(app,"mcp:discover mcp:whoami"),"access_token");
   assertThrows(IllegalArgumentException.class,()->app.server.validateAccessTokenResult(bearer(token),"https://wrong.example/mcp"));
   assertEquals(400,app.token(request(app,HttpMethod.POST,"/token",form(Map.of("grant_type","refresh_token","client_id","demo-public","resource","https://wrong.example/mcp","refresh_token","invalid")),null)).getStatusCode());
-  clock.now=clock.now.plusSeconds(121);assertInstanceOf(OAuthIssuerAccessTokenResult.Rejected.class,app.server.validateAccessTokenResult(bearer(token),app.config.resource.toString()));
+  clock.now=clock.now.plusSeconds(121);authority.advance(Duration.ofSeconds(121));assertInstanceOf(OAuthIssuerAccessTokenResult.Rejected.class,app.server.validateAccessTokenResult(bearer(token),app.config.resource.toString()));
   SokletSimulator.run(IssuerPlayground.sokletConfig(app),sim->assertEquals(401,call(sim,app,token,"tools/list",null,"{}").getStatusCode()));
  }
  @Test void materializedHostOriginAndCookieAmbiguityFailClosed() throws Exception {
@@ -344,7 +345,7 @@ final class IssuerApplicationTests {
   var completed=app.complete(request(app,HttpMethod.POST,"/consent",form(Map.of("csrf",session.csrf,"flow",replacement.nonce,"decision","approve")),cookie));assertEquals(303,completed.getStatusCode());assertNull(session.pending.get());
  }
  @Test void replacementDuringResumeCannotChangeTheApprovedClientOrLoseTheNewInteraction() throws Exception {
-  var clock=new MutableClock();var captured=new CapturingStore(new VolatileStore(clock,2048,4_194_304));var app=new IssuerResources(config(8089,8090),clock,captured);
+  var clock=new MutableClock();var captured=new CapturingStore(new ScriptedOAuthStore(clock.instant(),2048,4_194_304));var app=new IssuerResources(config(8089,8090),clock,captured);
   var session=app.sessions.begin();session.authenticated=true;String cookie="RevetsecIssuerDev="+session.id;
   app.authorize(request(app,HttpMethod.GET,"/authorize?"+query(app,"demo-public","mcp:discover"),null,cookie));var first=session.pending.get();assertNotNull(first);
   String binding=LocalInputs.randomId();var next=assertInstanceOf(OAuthAuthorizationResult.InteractionRequired.class,app.server.beginAuthorizationResult("GET",query(app,"demo-confidential","mcp:whoami"),new byte[0],Map.of(),binding));
@@ -373,10 +374,10 @@ final class IssuerApplicationTests {
   @Override public @NonNull Instant instant() {return now;}
  }
  static final class CapturingStore implements OAuthAuthorizationServerStore {
-  final VolatileStore store;final List<OAuthStoreTransaction> commits=new ArrayList<>();boolean fail;
+  final OAuthAuthorizationServerStore store;final List<OAuthStoreTransaction> commits=new ArrayList<>();boolean fail;
   @Nullable Runnable beforeNextRead;
-  CapturingStore(@NonNull VolatileStore store) {this.store=store;}
-  @Override public @NonNull Optional<@NonNull OAuthStoreEntry> read(@NonNull OAuthStoreKey key,@NonNull Duration budget) {if(fail)throw new IllegalStateException("private-diagnostic");Runnable action=beforeNextRead;beforeNextRead=null;if(action!=null)action.run();return store.read(key,budget);}
-  @Override public @NonNull OAuthStoreCommitStatus commit(@NonNull OAuthStoreTransaction tx,@NonNull Duration budget) {commits.add(tx);return store.commit(tx,budget);}
+  CapturingStore(@NonNull OAuthAuthorizationServerStore store) {this.store=store;}
+  @Override public @NonNull OAuthStoreReadResult read(@NonNull OAuthStoreKey key,@NonNull Duration budget) {if(fail)throw new IllegalStateException("private-diagnostic");Runnable action=beforeNextRead;beforeNextRead=null;if(action!=null)action.run();return store.read(key,budget);}
+  @Override public @NonNull OAuthStoreCommitReceipt commit(@NonNull OAuthStoreTransaction tx,@NonNull Duration budget) {commits.add(tx);return store.commit(tx,budget);}
  }
 }

@@ -17,6 +17,15 @@
 package com.revetsec.oauth.server;
 
 import org.jspecify.annotations.NonNull;
+import com.revetsec.StoreAdmission;
+import com.revetsec.StoreCommitTiming;
+import com.revetsec.StoreTimeObservation;
+import com.revetsec.StoreTemporalCondition;
+import com.revetsec.internal.StoreTimeRules;
+import com.revetsec.testing.ScriptedOAuthStore;
+import java.time.Instant;
+import java.util.HashSet;
+import java.util.Set;
 import org.jspecify.annotations.Nullable;
 import java.time.Duration;
 import java.util.LinkedHashMap;
@@ -42,36 +51,77 @@ final class OAuthAtomicStoreFixture implements OAuthAuthorizationServerStore {
 	int commits;
 	@Nullable OAuthStoreEntry substitute;
 	@Nullable OAuthStoreTransaction lastTransaction;
-	OAuthAtomicStoreFixture() { }
+    @NonNull Instant authorityNow;
+    boolean healthy=true;
+    @NonNull StoreAdmission admission=ScriptedOAuthStore.observation(Instant.EPOCH).getAdmission();
+    @NonNull String clockGeneration=ScriptedOAuthStore.observation(Instant.EPOCH).getClockGeneration();
+    private @NonNull Instant lastPublished=Instant.EPOCH;
+    private final @NonNull Set<@NonNull String> activatedScopes=new HashSet<>();
+    OAuthAtomicStoreFixture(){this(Instant.parse("2026-10-04T00:00:00.123456789Z"));}
+    OAuthAtomicStoreFixture(@NonNull Instant authorityNow){this.authorityNow=java.util.Objects.requireNonNull(authorityNow);}
+    /** Explicit new isolated fixture universe between test cases, never an operational reset. */
+    void resetClosedFixture(){synchronized(this.rows){this.rows.clear();this.activatedScopes.clear();this.lastPublished=Instant.EPOCH;this.healthy=true;}}
+    @NonNull StoreTimeObservation observation(){
+        if(!this.healthy || this.authorityNow.isBefore(this.lastPublished))return StoreTimeObservation.Unavailable.fromAdmission(this.admission);
+        this.lastPublished=this.authorityNow;
+        return ScriptedOAuthStore.observation(this.admission,this.clockGeneration,this.authorityNow);
+    }
+    private boolean missingRoot(@NonNull OAuthStoreKey key){
+        String scope=OAuthStoreFormat.namespace(key);boolean data=false;
+        for(OAuthStoreKey present:this.rows.keySet())if(scope.equals(OAuthStoreFormat.namespace(present))){
+            if(present.getKind()==OAuthStoreKey.Kind.ISSUER_STATE)return false;data=true;
+        }
+        return data || this.activatedScopes.contains(scope);
+    }
+    private static @NonNull OAuthStoreCommitReceipt refusal(@NonNull OAuthStoreCommitStatus status){return OAuthStoreCommitReceipt.fromRefusal(status);}
 	@Override @NonNull @SuppressWarnings("NullAway") // Deliberate invalid SPI return exercises caller checks.
-	public Optional<@NonNull OAuthStoreEntry> read(@NonNull OAuthStoreKey key, @NonNull Duration budget) {
+	public OAuthStoreReadResult read(@NonNull OAuthStoreKey key, @NonNull Duration budget) {
 		this.reads++; this.budgets.add(budget);
 		Runnable hook = this.beforeRead; this.beforeRead = null; if (hook != null) hook.run();
 		if (this.fault != null) raise(this.fault);
 		if (this.nullRead) return null;
-		synchronized (this.rows) { return Optional.ofNullable(this.substitute == null ? this.rows.get(key) : this.substitute); }
+		synchronized (this.rows) {
+            if(missingRoot(key))return OAuthStoreReadResult.Unavailable.get();
+            return OAuthStoreReadResult.Available.fromObservation(key,this.substitute == null ? this.rows.get(key) : this.substitute,observation());
+        }
 	}
 	@Override @NonNull @SuppressWarnings("NullAway") // Deliberate invalid SPI return exercises caller checks.
-	public OAuthStoreCommitStatus commit(@NonNull OAuthStoreTransaction transaction, @NonNull Duration budget) {
+	public OAuthStoreCommitReceipt commit(@NonNull OAuthStoreTransaction transaction, @NonNull Duration budget) {
 		this.commits++; this.budgets.add(budget); this.lastTransaction = transaction;
 		Runnable hook = this.beforeCommit; this.beforeCommit = null; if (hook != null) hook.run();
 		if (this.fault != null) raise(this.fault);
 		if (this.nullCommit) return null;
-		if (this.unknownBefore) return OAuthStoreCommitStatus.UNKNOWN;
-		if (this.conflicts > 0) { this.conflicts--; return OAuthStoreCommitStatus.CONFLICT; }
-		synchronized (this.rows) {
-			for (OAuthStoreTransaction.Condition condition : transaction.getConditions()) {
+		if (this.unknownBefore) return OAuthStoreCommitReceipt.unknownInstance();
+		if (this.conflicts > 0) { this.conflicts--; return refusal(OAuthStoreCommitStatus.CONFLICT); }
+        OAuthStoreCommitReceipt committed;
+        synchronized (this.rows) {
+            if(!StoreTimeRules.sameAdmission(this.admission,transaction.getExpectedAdmission()))return refusal(OAuthStoreCommitStatus.FENCED);
+            if(missingRoot(transaction.getConditions().get(0).getKey()))return refusal(OAuthStoreCommitStatus.UNAVAILABLE);
+            for (OAuthStoreTransaction.Condition condition : transaction.getConditions()) {
 				OAuthStoreEntry current = this.rows.get(condition.getKey());
 				if (!condition.getExpectedVersion().equals(current == null ? Optional.empty() : Optional.of(current.getVersion())))
-					return OAuthStoreCommitStatus.CONFLICT;
+					return refusal(OAuthStoreCommitStatus.CONFLICT);
 			}
-			for (OAuthStoreTransaction.Mutation mutation : transaction.getMutations()) {
+            if(transaction.getPurpose()==OAuthStoreTransaction.Purpose.FENCE_ONLY)committed=OAuthStoreCommitReceipt.fromFenceAdmission(this.admission);
+            else {
+                StoreTemporalCondition condition=transaction.getTemporalCondition().orElseThrow();
+                if(!this.clockGeneration.equals(condition.getClockGeneration()))return refusal(OAuthStoreCommitStatus.FENCED);
+                StoreTimeObservation sampled=observation();
+                if(!(sampled instanceof StoreTimeObservation.Healthy validated))return refusal(OAuthStoreCommitStatus.TIME_UNAVAILABLE);
+                if(validated.getObservedAt().isBefore(condition.getNotBeforeInclusive()))return refusal(OAuthStoreCommitStatus.TIME_BEFORE_FLOOR);
+                if(condition.getValidBeforeExclusive().isPresent() && !validated.getObservedAt().isBefore(condition.getValidBeforeExclusive().orElseThrow()))return refusal(OAuthStoreCommitStatus.TIME_EXPIRED);
+                committed=OAuthStoreCommitReceipt.fromCommittedTiming(StoreCommitTiming.fromTimes(validated,null));
+            }
+            for (OAuthStoreTransaction.Mutation mutation : transaction.getMutations()) {
 				if (mutation.getKind() == OAuthStoreTransaction.Mutation.Kind.REMOVE) this.rows.remove(mutation.getKey());
-				else this.rows.put(mutation.getKey(), mutation.getEntry().orElseThrow());
+				else {
+                    this.rows.put(mutation.getKey(), mutation.getEntry().orElseThrow());
+                    if(mutation.getKey().getKind()==OAuthStoreKey.Kind.ISSUER_STATE)this.activatedScopes.add(OAuthStoreFormat.namespace(mutation.getKey()));
+                }
 			}
 		}
 		hook = this.afterCommit; this.afterCommit = null; if (hook != null) hook.run();
-		return this.unknownAfter ? OAuthStoreCommitStatus.UNKNOWN : OAuthStoreCommitStatus.COMMITTED;
+		return this.unknownAfter ? OAuthStoreCommitReceipt.unknownInstance() : committed;
 	}
 	@SuppressWarnings("unchecked")
 	private static <T extends Throwable> void raise(@NonNull Throwable failure) throws T { throw (T) failure; }

@@ -52,7 +52,7 @@ public final class WebAuthnCeremonyFuzzTests {
     private static final byte[] HANDLE = {4, 5, 6};
     private static final String BINDING = Base64Url.encode(filled(65));
     private static final String WRONG_BINDING = Base64Url.encode(filled(99));
-    private static final Clock CLOCK = Clock.fixed(Instant.parse("2026-10-09T12:00:00Z"), ZoneOffset.UTC);
+    private static final Clock CLOCK = Clock.systemUTC();
     private static final WebAuthnRecoveryGate GATE = remaining -> new WebAuthnRecoveryGate.Permit() {
         @Override public @NonNull Boolean isCurrent() { return true; }
         @Override public void close() { }
@@ -260,7 +260,7 @@ public final class WebAuthnCeremonyFuzzTests {
                 Base64.getEncoder().encodeToString(material))).clock(CLOCK).build();
         return WebAuthnRelyingParty.withRelyingPartyId(RP).relyingPartyName("Example")
                 .allowedOrigins(Set.of(ORIGIN)).credentialNamespace("fuzz")
-                .store(InMemoryWebAuthnStore.withLimits(128, 2_000_000, CLOCK))
+                .store(InMemoryWebAuthnStore.withLimits(128, 2_000_000))
                 .stateSealer(sealer).recoveryGate(GATE).clockForTesting(CLOCK).build();
     }
 

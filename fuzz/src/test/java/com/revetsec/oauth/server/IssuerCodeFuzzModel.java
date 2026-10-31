@@ -16,6 +16,10 @@
 
 package com.revetsec.oauth.server;
 
+import com.revetsec.StoreAdmission;
+import com.revetsec.StoreTimeObservation;
+import com.revetsec.StoreCommitTiming;
+
 import com.revetsec.M6FuzzOracle;
 import com.revetsec.oauth.BearerToken;
 import com.revetsec.internal.json.JsonCodec;
@@ -53,7 +57,7 @@ final class IssuerCodeFuzzModel {
 		fixture.issue();
 		OAuthStoreEntry entry = fixture.store.rows.values().stream()
 			.filter(value -> value.getKey().getKind() == OAuthStoreKey.Kind.CODE).findFirst().orElseThrow();
-		JsonObject payload = fixture.codec.open(entry, fixture.clock);
+		JsonObject payload = fixture.codec.openAdmitted(entry, Clock.fixed(fixture.store.authorityTime,ZoneOffset.UTC)).payload();
 		String id = payload.find("id").map(com.revetsec.json.JsonString.class::cast).map(com.revetsec.json.JsonString::getValue).orElseThrow();
 		OAuthAuthorizationRecord unused = OAuthAuthorizationRecord.decode(OAuthStoreKey.Kind.CODE, id, payload,
 			OAuthServerIngressLimits.fromDefaults(), 255);
@@ -67,7 +71,7 @@ final class IssuerCodeFuzzModel {
 		String code = fixture.issue();
 		int mode = M6FuzzOracle.choice(input, 3, 11);
 		if (mode == 5) fixture.version = "v2";
-		if (mode == 6) fixture.clock.now = NOW.plusSeconds(121);
+		if (mode == 6) { fixture.clock.now = NOW.plusSeconds(121); fixture.store.authorityTime=NOW.plusSeconds(121); }
 		if (mode == 7) fixture.deny = true;
 		if (mode == 8) fixture.narrow = true;
 		if (mode == 10) fixture.store.conflicts = 1;
@@ -142,7 +146,7 @@ final class IssuerCodeFuzzModel {
 				.clientRepository((id, budget) -> id.equals(this.clientId) || id.equals("other") ? Optional.of(client(id)) : Optional.empty())
 				.store(this.store).stateSealer(sealer).signingKeys(OAuthIssuerKeyProvider.fromSnapshot(keys)).resources(resources()).clock(this.clock)
 				.grantPolicy((context, budget) -> this.deny ? OAuthAuthorizationDecision.deniedInstance() : decision(this.narrow ? Set.of("read") : context.getAuthorizedScopesByResource().get(this.resource))).build();
-			assertEquals(OAuthStoreCommitStatus.COMMITTED, this.server.initializeFreshIssuer());
+			assertEquals(OAuthStoreCommitStatus.COMMITTED, this.server.initializeFreshIssuer().getStatus());
 			this.server.establishNewSubject("subject");
 		}
 		private @NonNull OAuthServerClientRegistration client(@NonNull String id) {
@@ -183,22 +187,36 @@ final class IssuerCodeFuzzModel {
 		private final @NonNull Map<@NonNull OAuthStoreKey, @NonNull OAuthStoreEntry> rows = new LinkedHashMap<>();
 		private int conflicts;
 		private Store() { }
-		@Override public synchronized @NonNull Optional<@NonNull OAuthStoreEntry> read(@NonNull OAuthStoreKey key, @NonNull Duration budget) {
-			assertFalse(budget.isNegative() || budget.isZero()); return Optional.ofNullable(this.rows.get(key));
+        private @NonNull Instant authorityTime=NOW;
+        private StoreTimeObservation.@NonNull Healthy observation() {
+            byte[] a=new byte[32],r=new byte[32],g=new byte[32];java.util.Arrays.fill(a,(byte)1);java.util.Arrays.fill(r,(byte)2);java.util.Arrays.fill(g,(byte)3);
+            var b=Base64.getUrlEncoder().withoutPadding();return StoreTimeObservation.Healthy.fromObservation(StoreAdmission.fromIdentifiers(b.encodeToString(a),b.encodeToString(r)),b.encodeToString(g),this.authorityTime,Duration.ZERO);
+        }
+
+		@Override public synchronized @NonNull OAuthStoreReadResult read(@NonNull OAuthStoreKey key, @NonNull Duration budget) {
+			assertFalse(budget.isNegative() || budget.isZero()); OAuthStoreEntry entry=this.rows.get(key);
+			// Preserve retained rows; the engine evaluates credential/retention expiry at this observation.
+			return OAuthStoreReadResult.Available.fromObservation(key,entry,observation());
 		}
-		@Override public synchronized @NonNull OAuthStoreCommitStatus commit(@NonNull OAuthStoreTransaction transaction, @NonNull Duration budget) {
+		@Override public synchronized @NonNull OAuthStoreCommitReceipt commit(@NonNull OAuthStoreTransaction transaction, @NonNull Duration budget) {
 			assertFalse(budget.isNegative() || budget.isZero());
-			if (this.conflicts > 0) { this.conflicts--; return OAuthStoreCommitStatus.CONFLICT; }
+			if (this.conflicts > 0) { this.conflicts--; return OAuthStoreCommitReceipt.fromRefusal(OAuthStoreCommitStatus.CONFLICT); }
 			for (var condition : transaction.getConditions()) {
 				OAuthStoreEntry row = this.rows.get(condition.getKey());
-				if (!condition.getExpectedVersion().equals(row == null ? Optional.empty() : Optional.of(row.getVersion()))) return OAuthStoreCommitStatus.CONFLICT;
+				if (!condition.getExpectedVersion().equals(row == null ? Optional.empty() : Optional.of(row.getVersion()))) return OAuthStoreCommitReceipt.fromRefusal(OAuthStoreCommitStatus.CONFLICT);
 			}
+
+            if(transaction.getPurpose()==OAuthStoreTransaction.Purpose.TIMED) {
+                var condition=transaction.getTemporalCondition().orElseThrow();
+                if(this.authorityTime.isBefore(condition.getNotBeforeInclusive()))return OAuthStoreCommitReceipt.fromRefusal(OAuthStoreCommitStatus.TIME_BEFORE_FLOOR);
+                if(condition.getValidBeforeExclusive().isPresent()&&!this.authorityTime.isBefore(condition.getValidBeforeExclusive().orElseThrow()))return OAuthStoreCommitReceipt.fromRefusal(OAuthStoreCommitStatus.TIME_EXPIRED);
+            }
 			assertTrue(this.rows.size() + transaction.getMutations().size() < 64, "bounded fixture capacity");
 			for (var mutation : transaction.getMutations()) {
 				if (mutation.getKind() == OAuthStoreTransaction.Mutation.Kind.REMOVE) this.rows.remove(mutation.getKey());
 				else this.rows.put(mutation.getKey(), mutation.getEntry().orElseThrow());
 			}
-			return OAuthStoreCommitStatus.COMMITTED;
+			return transaction.getPurpose()==OAuthStoreTransaction.Purpose.FENCE_ONLY?OAuthStoreCommitReceipt.fromFenceAdmission(observation().getAdmission()):OAuthStoreCommitReceipt.fromCommittedTiming(StoreCommitTiming.fromTimes(observation(),null));
 		}
 		private int accesses() { return (int) this.rows.keySet().stream().filter(k -> k.getKind() == OAuthStoreKey.Kind.ACCESS_TOKEN).count(); }
 	}

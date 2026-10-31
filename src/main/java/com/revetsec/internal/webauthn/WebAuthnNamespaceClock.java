@@ -16,6 +16,7 @@
 
 package com.revetsec.internal.webauthn;
 
+import com.revetsec.StoreTimeObservation;
 import com.revetsec.webauthn.WebAuthnStoreEntry;
 import com.revetsec.webauthn.WebAuthnStoreKey;
 import com.revetsec.webauthn.WebAuthnStoreSnapshot;
@@ -24,24 +25,15 @@ import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.Immutable;
-import java.nio.ByteBuffer;
 import java.time.Clock;
-import java.time.DateTimeException;
-import java.time.Duration;
 import java.time.Instant;
-import java.util.Arrays;
+import java.time.ZoneOffset;
 
 import static java.util.Objects.requireNonNull;
 
-/** Authenticated namespace-wide observed time, advanced with the accepting store transaction. */
+/** Authenticated immutable authority binding and minimum; ordinary work never advances the root. */
 @Immutable
 final class WebAuthnNamespaceClock {
-    private static final int VERSION = 1;
-    private static final int PAYLOAD_BYTES = 13;
-    private static final @NonNull Duration ADVANCE_STEP = Duration.ofSeconds(1);
-    private static final @NonNull Duration MAXIMUM_BACKWARD_SKEW = Duration.ofSeconds(30);
-    private static final @NonNull Instant PERMANENT = Instant.ofEpochSecond(Instant.MAX.getEpochSecond());
-
     private final @NonNull WebAuthnStoreKey key;
     private final @NonNull WebAuthnRecordCodec records;
 
@@ -53,79 +45,53 @@ final class WebAuthnNamespaceClock {
 
     @NonNull WebAuthnStoreKey key() { return this.key; }
 
-    byte @NonNull [] encode(@NonNull Instant observedAt) {
-        requireNonNull(observedAt);
-        byte[] payload = ByteBuffer.allocate(PAYLOAD_BYTES).put((byte) VERSION)
-                .putLong(observedAt.getEpochSecond()).putInt(observedAt.getNano()).array();
-        try { return this.records.seal(this.key, payload, PERMANENT); }
-        finally { Arrays.fill(payload, (byte) 0); }
+    byte @NonNull [] encode(@NonNull String authorityId, @NonNull Instant minimum) {
+        return this.records.sealNamespace(this.key, authorityId, minimum);
     }
 
     @NonNull Instant decode(@NonNull WebAuthnStoreKey addressedKey, byte @NonNull [] sealedBytes,
-            @NonNull Clock clock) throws WebAuthnRecordException {
-        requireNonNull(addressedKey);
-        requireNonNull(sealedBytes);
-        requireNonNull(clock);
-        if (!this.key.equals(addressedKey)) throw new WebAuthnRecordException();
-        byte[] payload = this.records.open(addressedKey, sealedBytes, clock);
-        try {
-            if (payload.length != PAYLOAD_BYTES || payload[0] != VERSION)
-                throw new WebAuthnRecordException();
-            ByteBuffer reader = ByteBuffer.wrap(payload);
-            reader.get();
-            long seconds = reader.getLong();
-            int nanos = reader.getInt();
-            if (nanos < 0 || nanos > 999_999_999) throw new WebAuthnRecordException();
-            return Instant.ofEpochSecond(seconds, nanos);
-        } catch (DateTimeException failure) {
-            throw new WebAuthnRecordException();
-        } finally {
-            Arrays.fill(payload, (byte) 0);
+            @NonNull Clock authorityClock) throws WebAuthnRecordException {
+        if (!this.key.equals(requireNonNull(addressedKey))) throw new WebAuthnRecordException();
+        try (var decoded = this.records.openAdmittedRecord(addressedKey, sealedBytes, authorityClock)) {
+            return decoded.floor();
         }
     }
 
-    /**
-     * The returned mutation must share the accepting transaction's complete snapshot. If the
-     * wall clock moved backward by at most the allowed skew, the stored observation remains the
-     * effective time. Larger skew fails closed. The row is only rewritten after a one-second
-     * advance; this does not replace an external durable recovery marker after a database restore.
-     */
-    @NonNull Advance prepare(@NonNull WebAuthnStoreSnapshot snapshot, @NonNull Instant wallTime,
-            @NonNull Clock clock) throws WebAuthnRecordException {
-        requireNonNull(snapshot);
-        requireNonNull(wallTime);
-        requireNonNull(clock);
+    /** The retained arguments are internal fixture inputs; healthy snapshot time is authoritative. */
+    @NonNull Advance prepare(@NonNull WebAuthnStoreSnapshot snapshot, @NonNull Instant ignoredWorkerTime,
+            @NonNull Clock ignoredWorkerClock) throws WebAuthnRecordException {
+        requireNonNull(snapshot); requireNonNull(ignoredWorkerTime); requireNonNull(ignoredWorkerClock);
+        if (!(snapshot.getTimeObservation() instanceof StoreTimeObservation.Healthy observation))
+            throw new WebAuthnRecordException();
+        Instant now = observation.getObservedAt();
+        String authority = observation.getAdmission().getAuthorityId();
         WebAuthnStoreEntry entry = snapshot.getEntry(this.key);
         if (entry instanceof WebAuthnStoreEntry.Absent)
-            return new Advance(snapshot, wallTime,
-                    WebAuthnStoreWrite.Mutation.insert(this.key, encode(wallTime)));
-        WebAuthnStoreEntry.Present present = (WebAuthnStoreEntry.Present) entry;
-        Instant stored = decode(this.key, present.getSealedBytes(), clock);
-        if (Duration.between(wallTime, stored).compareTo(MAXIMUM_BACKWARD_SKEW) > 0)
-            throw new WebAuthnRecordException();
-        Instant effective = wallTime.isAfter(stored) ? wallTime : stored;
-        if (Duration.between(stored, wallTime).compareTo(ADVANCE_STEP) < 0)
-            return new Advance(snapshot, effective, null);
-        return new Advance(snapshot, effective,
-                WebAuthnStoreWrite.Mutation.replace(this.key, encode(wallTime)));
+            return new Advance(snapshot, now, now, false,
+                    WebAuthnStoreWrite.Mutation.insert(this.key, encode(authority, now)));
+        if (!(entry instanceof WebAuthnStoreEntry.Present present)) throw new WebAuthnRecordException();
+        try (var decoded = this.records.openAdmittedRecord(this.key, present.getSealedBytes(),
+                Clock.fixed(now, ZoneOffset.UTC))) {
+            if (!decoded.authorityId().orElseThrow().equals(authority)) throw new WebAuthnRecordException();
+            return new Advance(snapshot, now, decoded.floor(), true, null);
+        }
     }
 
-    /** Effective monotonic time and an optional version-conditioned advance; no proof. */
     @Immutable
     static final class Advance {
         private final @NonNull WebAuthnStoreSnapshot snapshot;
         private final @NonNull Instant effectiveAt;
+        private final @NonNull Instant minimum;
+        private final boolean present;
         private final WebAuthnStoreWrite.@Nullable Mutation mutation;
-
         private Advance(@NonNull WebAuthnStoreSnapshot snapshot, @NonNull Instant effectiveAt,
-                WebAuthnStoreWrite.@Nullable Mutation mutation) {
-            this.snapshot = snapshot;
-            this.effectiveAt = effectiveAt;
-            this.mutation = mutation;
+                @NonNull Instant minimum, boolean present, WebAuthnStoreWrite.@Nullable Mutation mutation) {
+            this.snapshot=snapshot;this.effectiveAt=effectiveAt;this.minimum=minimum;this.present=present;this.mutation=mutation;
         }
-
         boolean belongsTo(@NonNull WebAuthnStoreSnapshot candidate) { return this.snapshot.equals(candidate); }
         @NonNull Instant effectiveAt() { return this.effectiveAt; }
+        @NonNull Instant minimum() { return this.minimum; }
+        boolean present() { return this.present; }
         WebAuthnStoreWrite.@Nullable Mutation mutation() { return this.mutation; }
         @Override public @NonNull String toString() { return "Advance{clock=<redacted>, no proof}"; }
     }

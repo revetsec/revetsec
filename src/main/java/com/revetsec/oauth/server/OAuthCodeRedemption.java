@@ -95,7 +95,7 @@ final class OAuthCodeRedemption {
       || code.horizon().isBefore(grant.horizon())) throw new OAuthStoreFailure(CORRUPT_STATE);
     session.requireBefore(code.retention()); session.requireBefore(grant.retention());
     if (grant.text("status").equals("REVOKED")) { if (session.barrier() == OAuthStoreCommitStatus.COMMITTED) throw invalid(); }
-    else if (session.commit(List.of(put(grantKey, prepared(() -> grant.terminated(this.limits, this.subjectLimit))))) == OAuthStoreCommitStatus.COMMITTED) throw invalid();
+    else if (session.commitRejection(List.of(put(session, grantKey, prepared(() -> grant.terminated(this.limits, this.subjectLimit))))) == OAuthStoreCommitStatus.COMMITTED) throw invalid();
     continue;
    }
    if (!status.equals("UNUSED") || !grant.text("status").equals("PENDING")) throw invalid();
@@ -128,17 +128,17 @@ final class OAuthCodeRedemption {
    String jti = prepared(this.codec::freshVersion); OAuthStoreKey accessKey = this.codec.key(OAuthStoreKey.Kind.ACCESS_TOKEN, jti);
    if (session.read(accessKey).isPresent()) continue;
    List<OAuthStoreTransaction.Mutation> mutations = new ArrayList<>();
-   mutations.add(put(codeKey, prepared(() -> code.consumed(codeHorizon, this.limits, this.subjectLimit)))); mutations.add(put(grantKey, active));
+   mutations.add(put(session, codeKey, prepared(() -> code.consumed(codeHorizon, this.limits, this.subjectLimit)))); mutations.add(put(session, grantKey, active));
    OAuthAuthorizationRecord access = prepared(() -> OAuthAuthorizationRecord.access(jti, active, issued, expires,
-    this.retention.accessRetention(expires), this.limits, this.subjectLimit)); mutations.add(put(accessKey, access));
+    this.retention.accessRetention(expires), this.limits, this.subjectLimit)); mutations.add(put(session, accessKey, access));
    if (refreshId != null) {
     OAuthStoreKey refreshKey = this.codec.key(OAuthStoreKey.Kind.REFRESH_TOKEN, refreshId);
     if (session.read(refreshKey).isPresent()) continue;
     Instant idle = prepared(() -> OAuthGrantRetention.expiry(session.effectiveNow(), this.refreshIdle));
     Instant refreshExpiry = idle.isAfter(grantExpiry) ? grantExpiry : idle;
-    mutations.add(put(refreshKey, prepared(() -> OAuthAuthorizationRecord.refresh(refreshId, active, refreshExpiry, this.limits, this.subjectLimit))));
+    mutations.add(put(session, refreshKey, prepared(() -> OAuthAuthorizationRecord.refresh(refreshId, active, refreshExpiry, this.limits, this.subjectLimit))));
    }
-   OAuthTokenResponse response = prepareResponse(active, jti, issued, expires, selected, refreshCredential, deadline);
+   OAuthTokenResponse response = prepareResponse(active, jti, issued, expires, selected, refreshCredential, deadline, session);
    if (session.commit(mutations) == OAuthStoreCommitStatus.COMMITTED) return response;
   }
   throw new OAuthStoreFailure(UNAVAILABLE);
@@ -165,30 +165,30 @@ final class OAuthCodeRedemption {
   OAuthServerClientAdmission.remaining(deadline); if (decision == null) throw OAuthServerClientAdmission.failure(INFRASTRUCTURE); return decision;
  }
  private @NonNull OAuthTokenResponse prepareResponse(@NonNull OAuthAuthorizationRecord grant, @NonNull String jti,
-   @NonNull Instant issued, @NonNull Instant expires, @NonNull Set<@NonNull String> scopes, @Nullable String refresh, @NonNull Deadline deadline) {
-  try { return this.encoder.prepare(grant, jti, issued, expires, scopes, refresh, deadline); }
+   @NonNull Instant issued, @NonNull Instant expires, @NonNull Set<@NonNull String> scopes, @Nullable String refresh, @NonNull Deadline deadline, OAuthStoreCoordinator.@NonNull Session session) {
+  try { return this.encoder.prepare(grant, jti, issued, expires, scopes, refresh, deadline, session); }
   catch (VirtualMachineError fatal) { throw fatal; }
   catch (OAuthServerException failure) {throw failure;}
   catch (Throwable failure) { if (failure instanceof InterruptedException) Thread.currentThread().interrupt(); throw OAuthServerClientAdmission.failure(INFRASTRUCTURE); }
  }
  private boolean terminate(OAuthStoreCoordinator.@NonNull Session session, @NonNull OAuthStoreKey codeKey,
    @NonNull OAuthAuthorizationRecord code, @NonNull OAuthStoreKey grantKey, @NonNull OAuthAuthorizationRecord grant) {
-  return session.commit(List.of(put(codeKey, prepared(() -> code.terminated(this.limits, this.subjectLimit))),
-   put(grantKey, prepared(() -> grant.terminated(this.limits, this.subjectLimit))))) == OAuthStoreCommitStatus.COMMITTED;
+  return session.commitRejection(List.of(put(session, codeKey, prepared(() -> code.terminated(this.limits, this.subjectLimit))),
+   put(session, grantKey, prepared(() -> grant.terminated(this.limits, this.subjectLimit))))) == OAuthStoreCommitStatus.COMMITTED;
  }
  private @NonNull OAuthAuthorizationRecord read(OAuthStoreCoordinator.@NonNull Session session, @NonNull OAuthStoreKey key, boolean required) {
   OAuthStoreEntry entry = session.read(key).orElseThrow(() -> required ? new OAuthStoreFailure(CORRUPT_STATE) : invalid());
   if (!session.effectiveNow().isBefore(entry.getRetainUntil())) { if (required) throw new OAuthStoreFailure(CORRUPT_STATE); else throw invalid(); }
   String raw = key.getStorageKey(), id = raw.substring(raw.lastIndexOf(':') + 1);
   OAuthAuthorizationRecord record = prepared(() -> OAuthAuthorizationRecord.decode(key.getKind(), id,
-   this.codec.open(entry, Clock.fixed(session.effectiveNow(), ZoneOffset.UTC)), this.limits, this.subjectLimit));
+   session.open(entry), this.limits, this.subjectLimit));
   if (!record.retention().equals(entry.getRetainUntil())) throw new OAuthStoreFailure(CORRUPT_STATE); return record;
  }
- private OAuthStoreTransaction.@NonNull Mutation put(@NonNull OAuthStoreKey key, @NonNull OAuthAuthorizationRecord record) {
-  return prepared(() -> OAuthStoreTransaction.Mutation.fromPut(this.codec.seal(key, record.retention(), record.toPayload())));
+ private OAuthStoreTransaction.@NonNull Mutation put(OAuthStoreCoordinator.@NonNull Session session, @NonNull OAuthStoreKey key, @NonNull OAuthAuthorizationRecord record) {
+  return prepared(() -> OAuthStoreTransaction.Mutation.fromPut(session.seal(key, record.retention(), record.toPayload())));
  }
  private static <T> @NonNull T prepared(@NonNull Supplier<@NonNull T> work) {
-  try { return work.get(); } catch (VirtualMachineError fatal) { throw fatal; } catch (Throwable failure) { throw new OAuthStoreFailure(CORRUPT_STATE); }
+  try { return work.get(); } catch (VirtualMachineError fatal) { throw fatal; } catch (Throwable failure) { OAuthStoreCoordinator.preserveInterrupt(failure);throw new OAuthStoreFailure(CORRUPT_STATE); }
  }
  private static @NonNull OAuthServerAdmissionFailure invalid() { return OAuthServerClientAdmission.failure(INVALID_GRANT); }
  @Override public @NonNull String toString() { return "OAuthCodeRedemption{<redacted>}"; }

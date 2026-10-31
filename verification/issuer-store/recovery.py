@@ -55,7 +55,7 @@ def exercise(state, container, port, record, sql, docker, digest, call, launch, 
 
     def issuer_version(name):
         prefix = 'revetsec:as:1:' + namespace(name) + ':'
-        value = sql("SELECT version FROM issuer_entries WHERE kind='ISSUER_STATE' AND storage_key LIKE '" + prefix + "%';")
+        value = sql("SELECT version FROM issuer_store_entry WHERE kind='ISSUER_STATE' AND storage_key LIKE '" + prefix + "%';")
         if len(value) != 43:
             raise RuntimeError('Expected one authoritative recovery fence')
         return value
@@ -191,14 +191,15 @@ def exercise(state, container, port, record, sql, docker, digest, call, launch, 
 
     name = 'restore-clock'
     now = '2026-10-06T12:00:00.000000500Z'
-    directory = fresh(name, now=now)
+    directory = fresh(name, now=now, authorityNow=now)
     old = digest()
-    record('restore-nanosecond-highwater-rejects-behind-node', call('warm', directory, name, now='2026-10-06T12:00:00.000000499Z') == 'STORE_UNAVAILABLE' and digest() == old)
-    record('restore-forward-node-advances-fence', call('fence', directory, name, now='2026-10-06T12:00:00.000000501Z') == 'FENCED')
+    behind='2026-10-06T12:00:00.000000499Z'
+    record('restore-exact-authority-floor-rejects-one-nanosecond-behind', call('warm', directory, name, now=behind, authorityNow=behind) == 'STORE_UNAVAILABLE' and digest() == old)
+    record('restore-explicit-fence-preserves-admitted-minimum', call('fence', directory, name, now='2026-10-06T12:00:00.000000501Z', authorityNow=now) == 'FENCED')
     old = digest()
-    record('restore-highwater-persists-across-fresh-jvm', call('warm', directory, name, now=now) == 'STORE_UNAVAILABLE' and digest() == old)
-    record('restore-current-clock-ready', call('warm', directory, name, now='2026-10-06T12:00:00.000000501Z') == 'READY')
-    record('restore-extreme-clock-rejects-without-commit', call('fence', directory, name, now='+1000000000-12-31T23:59:59.999999999Z') == 'STORE_UNAVAILABLE 0' and digest() == old)
+    record('restore-immutable-minimum-persists-across-fresh-jvm', call('warm', directory, name, now=now, authorityNow=now) == 'READY' and digest() == old)
+    record('restore-current-authority-ready', call('warm', directory, name, now=now, authorityNow=now) == 'READY')
+    record('restore-fence-ignores-worker-utc-time', call('fence', directory, name, now='+1000000000-12-31T23:59:59.999999999Z', authorityNow=now) == 'FENCED' and digest() != old)
 
     name = 'restore-sealing'
     directory = fresh(name)
@@ -208,7 +209,7 @@ def exercise(state, container, port, record, sql, docker, digest, call, launch, 
     record('restore-overlap-key-ring-reads-old-state', call('warm', directory, name, sealing='next-with-old') == 'READY')
     prefix = 'revetsec:as:1:' + namespace(name) + ':'
     def metadata():
-        return sql("SELECT storage_key||'|'||kind||'|'||retain_seconds||'|'||retain_nanos FROM issuer_entries WHERE storage_key LIKE '" + prefix + "%' ORDER BY storage_key;")
+        return sql("SELECT storage_key||'|'||kind||'|'||retain_seconds||'|'||retain_nanos FROM issuer_store_entry WHERE storage_key LIKE '" + prefix + "%' ORDER BY storage_key;")
     rows = metadata()
     keys = [row.split('|')[0] for row in rows.splitlines()]
     kinds = [row.split('|')[1] for row in rows.splitlines()]

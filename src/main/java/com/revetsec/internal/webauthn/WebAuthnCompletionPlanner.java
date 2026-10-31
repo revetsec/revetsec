@@ -23,6 +23,9 @@ import com.revetsec.webauthn.WebAuthnStoreWrite;
 import com.revetsec.webauthn.WebAuthnSettings;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
+import com.revetsec.StoreTimeObservation;
+import com.revetsec.internal.StoreTimeAccess;
+import java.time.ZoneOffset;
 
 import javax.annotation.concurrent.Immutable;
 import java.security.MessageDigest;
@@ -79,6 +82,7 @@ final class WebAuthnCompletionPlanner {
             @NonNull WebAuthnStoreSnapshot first, byte @NonNull [] ceremonyId,
             byte @NonNull [] browserBinding, byte @NonNull [] responseBody,
             @NonNull Clock clock) throws WebAuthnRecordException, WebAuthnResponseException {
+        clock = admittedClock(first);
         WebAuthnCeremonyState pending = firstPending(first, ceremonyId, browserBinding,
                 WebAuthnCeremonyState.Kind.REGISTRATION, clock);
         if (pending == null) return Optional.empty();
@@ -94,6 +98,7 @@ final class WebAuthnCompletionPlanner {
             @NonNull WebAuthnStoreSnapshot first, byte @NonNull [] ceremonyId,
             byte @NonNull [] browserBinding, byte @NonNull [] responseBody,
             @NonNull Clock clock) throws WebAuthnRecordException, WebAuthnResponseException {
+        clock = admittedClock(first);
         WebAuthnCeremonyState pending = firstPending(first, ceremonyId, browserBinding, null, clock);
         if (pending == null) return Optional.empty();
         if (pending.kind() == WebAuthnCeremonyState.Kind.REGISTRATION)
@@ -116,6 +121,7 @@ final class WebAuthnCompletionPlanner {
         requireNonNull(clock);
         if (!expanded.getEntries().keySet().equals(inspected.keys))
             throw new IllegalArgumentException("Incomplete WebAuthn registration read");
+        clock = admittedClock(expanded);
         Instant observedAt = clock.instant();
         WebAuthnCeremonyConsumption.Prepared consumed = recheck(inspected.pending, expanded,
                 observedAt, clock);
@@ -146,8 +152,8 @@ final class WebAuthnCompletionPlanner {
         } catch (WebAuthnCborException failure) {
             throw new WebAuthnResponseException();
         }
-        var encodedCredential = this.credentials.encode(credential);
-        var encodedIndex = this.indexes.encode(index.withAdded(id));
+        var encodedCredential = this.credentials.encode(credential, observedAt);
+        var encodedIndex = this.indexes.encode(index.withAdded(id), observedAt);
         List<WebAuthnStoreWrite.Mutation> changes = new ArrayList<>(4);
         changes.add(consumed.mutation());
         changes.add(WebAuthnStoreWrite.Mutation.insert(encodedCredential.key(),
@@ -155,8 +161,8 @@ final class WebAuthnCompletionPlanner {
         changes.add(indexEntry instanceof WebAuthnStoreEntry.Present
                 ? WebAuthnStoreWrite.Mutation.replace(encodedIndex.key(), encodedIndex.sealedBytes())
                 : WebAuthnStoreWrite.Mutation.insert(encodedIndex.key(), encodedIndex.sealedBytes()));
-        addClockChange(changes, expanded, observedAt, clock);
-        return Preparation.candidate(WebAuthnStoreWrite.fromSnapshotAndMutations(expanded, changes));
+        requireEstablishedRoot(expanded, observedAt, clock);
+        return Preparation.candidate(WebAuthnStoreWrite.fromSnapshotAndMutations(expanded, changes, StoreTimeAccess.get().fromObservation((StoreTimeObservation.Healthy) expanded.getTimeObservation(), observedAt, inspected.expiresAt())));
     }
 
     @NonNull Preparation prepareAuthentication(@NonNull AuthenticationInspection inspected,
@@ -167,6 +173,7 @@ final class WebAuthnCompletionPlanner {
         requireNonNull(clock);
         if (!expanded.getEntries().keySet().equals(inspected.keys))
             throw new IllegalArgumentException("Incomplete WebAuthn authentication read");
+        clock = admittedClock(expanded);
         Instant observedAt = clock.instant();
         WebAuthnCeremonyConsumption.Prepared consumed = recheck(inspected.pending, expanded,
                 observedAt, clock);
@@ -201,12 +208,12 @@ final class WebAuthnCompletionPlanner {
         if (assessment.status() == WebAuthnCredentialState.Assessment.Status.UNAVAILABLE)
             return Preparation.unavailable();
         WebAuthnCredentialState updated = assessment.candidate().orElseThrow();
-        var encoded = this.credentials.encode(updated);
+        var encoded = this.credentials.encode(updated, observedAt);
         List<WebAuthnStoreWrite.Mutation> changes = new ArrayList<>(3);
         changes.add(consumed.mutation());
         changes.add(WebAuthnStoreWrite.Mutation.replace(encoded.key(), encoded.sealedBytes()));
-        addClockChange(changes, expanded, observedAt, clock);
-        return Preparation.candidate(WebAuthnStoreWrite.fromSnapshotAndMutations(expanded, changes));
+        requireEstablishedRoot(expanded, observedAt, clock);
+        return Preparation.candidate(WebAuthnStoreWrite.fromSnapshotAndMutations(expanded, changes, StoreTimeAccess.get().fromObservation((StoreTimeObservation.Healthy) expanded.getTimeObservation(), observedAt, inspected.expiresAt())));
     }
 
     private @Nullable WebAuthnCeremonyState firstPending(@NonNull WebAuthnStoreSnapshot first,
@@ -273,13 +280,17 @@ final class WebAuthnCompletionPlanner {
                 WebAuthnStoreKey.forAccountFence(this.namespace, this.relyingPartyId, handle));
     }
 
-    private void addClockChange(@NonNull List<WebAuthnStoreWrite.@NonNull Mutation> changes,
-            @NonNull WebAuthnStoreSnapshot snapshot, @NonNull Instant observedAt,
+    private void requireEstablishedRoot(@NonNull WebAuthnStoreSnapshot snapshot, @NonNull Instant observedAt,
             @NonNull Clock clock)
             throws WebAuthnRecordException {
         WebAuthnStoreWrite.Mutation mutation = this.namespaceClock.prepare(
                 snapshot, observedAt, clock).mutation();
-        if (mutation != null) changes.add(mutation);
+        if (mutation != null) throw new WebAuthnRecordException();
+    }
+
+    private static @NonNull Clock admittedClock(@NonNull WebAuthnStoreSnapshot snapshot) throws WebAuthnRecordException {
+        if (!(snapshot.getTimeObservation() instanceof StoreTimeObservation.Healthy healthy)) throw new WebAuthnRecordException();
+        return Clock.fixed(healthy.getObservedAt(), ZoneOffset.UTC);
     }
 
     @Immutable
@@ -294,6 +305,7 @@ final class WebAuthnCompletionPlanner {
             this.registration = registration;
             this.keys = keys;
         }
+        @NonNull WebAuthnCeremonyState pending() { return this.pending; }
         @NonNull Set<@NonNull WebAuthnStoreKey> expandedKeys() { return this.keys; }
         @NonNull Instant expiresAt() { return this.pending.expiresAt(); }
         byte @NonNull [] approvedHandle() { return requireNonNull(this.pending.expectedHandle()); }
@@ -313,6 +325,7 @@ final class WebAuthnCompletionPlanner {
             this.assertion = assertion;
             this.keys = keys;
         }
+        @NonNull WebAuthnCeremonyState pending() { return this.pending; }
         @NonNull Set<@NonNull WebAuthnStoreKey> expandedKeys() { return this.keys; }
         @NonNull Instant expiresAt() { return this.pending.expiresAt(); }
         byte @NonNull [] userHandle() { return this.assertion.userHandle(); }

@@ -166,6 +166,10 @@ public final class TotpApplication {
         }
         if (result instanceof TotpEnrollmentRequestResult.Throttled throttled)
             return throttled(throttled.getRetryAfter());
+        if (result instanceof TotpEnrollmentRequestResult.ReconciliationRequired) {
+            this.security.requireReconciliation(context);
+            return unavailable();
+        }
         if (result instanceof TotpEnrollmentRequestResult.Indeterminate) {
             this.security.requireReconciliation(context);
             return unavailable();
@@ -192,6 +196,10 @@ public final class TotpApplication {
             }
             if (result instanceof TotpEnrollmentResult.Throttled throttled)
                 return throttled(throttled.getRetryAfter());
+            if (result instanceof TotpEnrollmentResult.ReconciliationRequired) {
+                this.security.requireReconciliation(input);
+                return unavailable();
+            }
             if (result instanceof TotpEnrollmentResult.Indeterminate) {
                 this.security.requireReconciliation(input);
                 return unavailable();
@@ -219,8 +227,15 @@ public final class TotpApplication {
                 return throttled(throttled.getRetryAfter());
             // Indeterminate code use never creates a session. Leave primary authentication pending;
             // demand a fresh code in a later step or take the application's approved recovery path.
-            return result instanceof TotpVerificationResult.Unavailable
-                    || result instanceof TotpVerificationResult.Indeterminate ? unavailable() : denied();
+            if (result instanceof TotpVerificationResult.ReconciliationRequired) {
+                this.security.requireReconciliation(input);
+                return unavailable();
+            }
+            if (result instanceof TotpVerificationResult.Indeterminate) {
+                this.security.requireReconciliation(input);
+                return unavailable();
+            }
+            return result instanceof TotpVerificationResult.Unavailable ? unavailable() : denied();
         });
     }
 
@@ -242,8 +257,15 @@ public final class TotpApplication {
             }
             if (result instanceof RecoveryCodeUseResult.Throttled throttled)
                 return throttled(throttled.getRetryAfter());
-            return result instanceof RecoveryCodeUseResult.Unavailable
-                    || result instanceof RecoveryCodeUseResult.Indeterminate ? unavailable() : denied();
+            if (result instanceof RecoveryCodeUseResult.ReconciliationRequired) {
+                this.security.requireReconciliation(input);
+                return unavailable();
+            }
+            if (result instanceof RecoveryCodeUseResult.Indeterminate) {
+                this.security.requireReconciliation(input);
+                return unavailable();
+            }
+            return result instanceof RecoveryCodeUseResult.Unavailable ? unavailable() : denied();
         });
     }
 
@@ -261,6 +283,10 @@ public final class TotpApplication {
                     return unavailable();
                 }
                 return json(200, recoveryCodes(codes));
+            }
+            if (result instanceof RecoveryCodeRotationResult.ReconciliationRequired) {
+                this.security.requireReconciliation(context);
+                return unavailable();
             }
             if (result instanceof RecoveryCodeRotationResult.Indeterminate) {
                 this.security.requireReconciliation(context);
@@ -284,6 +310,10 @@ public final class TotpApplication {
                 }
                 return json(200, JsonObject.builder().put("removed", true).build());
             }
+            if (result instanceof TotpFactorRemovalResult.ReconciliationRequired) {
+                this.security.requireReconciliation(context);
+                return unavailable();
+            }
             if (result instanceof TotpFactorRemovalResult.Indeterminate) {
                 this.security.requireReconciliation(context);
                 return unavailable();
@@ -305,6 +335,10 @@ public final class TotpApplication {
                     return unavailable();
                 }
                 return json(200, JsonObject.builder().put("cancelled", true).build());
+            }
+            if (result instanceof TotpEnrollmentCancellationResult.ReconciliationRequired) {
+                this.security.requireReconciliation(context);
+                return unavailable();
             }
             if (result instanceof TotpEnrollmentCancellationResult.Indeterminate) {
                 this.security.requireReconciliation(context);

@@ -46,7 +46,7 @@ final class OAuthServerFailureBoundary {
 	}
 	static @NonNull OAuthServerStoreException store(@NonNull OAuthStoreFailure failure) {
 		return OAuthServerStoreException.fromReason(switch(requireNonNull(failure).reason()) {
-			case UNAVAILABLE -> STORE_UNAVAILABLE; case CORRUPT_STATE -> STORE_CORRUPT; case COMMIT_OUTCOME_UNKNOWN -> COMMIT_OUTCOME_UNKNOWN;
+			case UNAVAILABLE -> STORE_UNAVAILABLE; case CORRUPT_STATE -> STORE_CORRUPT; case COMMIT_OUTCOME_UNKNOWN -> COMMIT_OUTCOME_UNKNOWN; case COMMIT_CONFIRMED_NOT_ADMITTED -> COMMIT_CONFIRMED_NOT_ADMITTED;
 		},false);
 	}
 	static @NonNull OAuthServerResponse failure(@NonNull OAuthServerException failure, int bodyCap, int headerCap) {

@@ -16,6 +16,9 @@
 package example.pending;
 
 import com.revetsec.webauthn.WebAuthnStoreCommitResult;
+import com.revetsec.webauthn.WebAuthnStoreCommitReceipt;
+import com.revetsec.StoreTimeObservation;
+import com.revetsec.internal.StoreTimeAccess;
 import com.revetsec.webauthn.WebAuthnStoreEntry;
 import com.revetsec.webauthn.WebAuthnStoreKey;
 import com.revetsec.webauthn.WebAuthnStoreReadResult;
@@ -75,7 +78,7 @@ public final class WebAuthnStoreProbe {
     }
 
     private static @NonNull PostgresqlWebAuthnStore store(@NonNull String namespace, int cap) {
-        return new PostgresqlWebAuthnStore(namespace, WebAuthnStoreProbe::connection, cap);
+        return new PostgresqlWebAuthnStore(namespace, WebAuthnFixtureAuthority.physical(namespace), WebAuthnStoreProbe::connection, cap, WebAuthnFixtureAuthority.fromEnvironment(namespace));
     }
 
     private static @NonNull WebAuthnStoreKey key(@NonNull String namespace, int identifier) {
@@ -92,18 +95,20 @@ public final class WebAuthnStoreProbe {
 
     private static @NonNull WebAuthnStoreWrite write(@NonNull WebAuthnStoreSnapshot snapshot,
             @NonNull List<WebAuthnStoreWrite.@NonNull Mutation> mutations) {
-        return WebAuthnStoreWrite.fromSnapshotAndMutations(snapshot, mutations);
+        StoreTimeObservation.Healthy time=(StoreTimeObservation.Healthy)snapshot.getTimeObservation();
+        return WebAuthnStoreWrite.fromSnapshotAndMutations(snapshot, mutations, StoreTimeAccess.get().fromObservation(time,time.getObservedAt(),null));
     }
 
-    private static void expect(@NonNull Object actual, @NonNull Object expected) {
+    private static void expect(@NonNull WebAuthnStoreCommitReceipt receipt, @NonNull WebAuthnStoreCommitResult expected) {
+        WebAuthnStoreCommitResult actual=receipt.getStatus();
         if (!actual.equals(expected)) throw new IllegalStateException("Unexpected WebAuthn store outcome: " + actual);
     }
 
     private static void basic() {
         String namespace = "fixture_wa_basic";
-        PostgresqlWebAuthnStore store = store(namespace, 2);
+        PostgresqlWebAuthnStore store = store(namespace, 4096);
         WebAuthnStoreKey first = key(namespace, 1);
-        WebAuthnStoreKey second = key(namespace, 2);
+        WebAuthnStoreKey second = WebAuthnStoreKey.forCeremony(namespace, RP, new byte[32]);
         WebAuthnStoreKey third = key(namespace, 3);
         try {
             store.read(Set.of(key("another_namespace", 1)), BUDGET);
@@ -113,7 +118,7 @@ public final class WebAuthnStoreProbe {
         }
         WebAuthnStoreKey foreign = key("another_namespace", 1);
         WebAuthnStoreSnapshot foreignSnapshot = WebAuthnStoreSnapshot.fromEntries(Set.of(foreign),
-                Map.of(foreign, WebAuthnStoreEntry.Absent.confirmed()));
+                Map.of(foreign, WebAuthnStoreEntry.Absent.confirmed()), read(store,Set.of(first)).getTimeObservation());
         try {
             store.compareAndCommit(write(foreignSnapshot, List.of()), BUDGET);
             throw new IllegalStateException("Cross-namespace predicate was accepted");
@@ -126,11 +131,11 @@ public final class WebAuthnStoreProbe {
             throw new IllegalStateException("Expected two confirmed absences");
         expect(store.compareAndCommit(write(absent, List.of(
                 WebAuthnStoreWrite.Mutation.insert(first, new byte[] { 11 }),
-                WebAuthnStoreWrite.Mutation.insert(second, new byte[] { 22 }))), BUDGET),
+                WebAuthnStoreWrite.Mutation.insertExpiring(second, new byte[] { 22 }, Instant.ofEpochSecond(1700000310)))), BUDGET),
                 WebAuthnStoreCommitResult.COMMITTED);
         WebAuthnStoreSnapshot present = read(store, Set.of(first, second));
         WebAuthnStoreSnapshot oldSecond = WebAuthnStoreSnapshot.fromEntries(Set.of(second),
-                Map.of(second, present.getEntry(second)));
+                Map.of(second, present.getEntry(second)), present.getTimeObservation());
         WebAuthnStoreEntry.Present firstPresent = (WebAuthnStoreEntry.Present) present.getEntry(first);
         if (!Arrays.equals(firstPresent.getSealedBytes(), new byte[] { 11 })
                 || !(present.getEntry(second) instanceof WebAuthnStoreEntry.Present))
@@ -148,7 +153,7 @@ public final class WebAuthnStoreProbe {
             throw new IllegalStateException("Replacement or deletion was incomplete");
         expect(store.compareAndCommit(write(present, List.of()), BUDGET), WebAuthnStoreCommitResult.CONFLICT);
         expect(store.compareAndCommit(write(changed, List.of(
-                WebAuthnStoreWrite.Mutation.insert(second, new byte[] { 22 }))), BUDGET),
+                WebAuthnStoreWrite.Mutation.insertExpiring(second, new byte[] { 22 }, Instant.ofEpochSecond(1700000310)))), BUDGET),
                 WebAuthnStoreCommitResult.COMMITTED);
         expect(store.compareAndCommit(write(oldSecond, List.of()), BUDGET), WebAuthnStoreCommitResult.CONFLICT);
         WebAuthnStoreSnapshot secondAgain = read(store, Set.of(second));
@@ -159,59 +164,47 @@ public final class WebAuthnStoreProbe {
                 WebAuthnStoreWrite.Mutation.replace(first, new byte[] { 34 }))), BUDGET),
                 WebAuthnStoreCommitResult.COMMITTED);
         expect(store.compareAndCommit(write(stalePredicate, List.of(
-                WebAuthnStoreWrite.Mutation.insert(second, new byte[] { 22 }))), BUDGET),
+                WebAuthnStoreWrite.Mutation.insertExpiring(second, new byte[] { 22 }, Instant.ofEpochSecond(1700000310)))), BUDGET),
                 WebAuthnStoreCommitResult.CONFLICT);
         if (!(read(store, Set.of(second)).getEntry(second) instanceof WebAuthnStoreEntry.Absent))
             throw new IllegalStateException("Stale multi-key predicate had an effect");
-        WebAuthnStoreSnapshot capacityRead = read(store(namespace, 1), Set.of(first, third));
-        expect(store(namespace, 1).compareAndCommit(write(capacityRead, List.of(
-                WebAuthnStoreWrite.Mutation.insert(third, new byte[] { 44 }))), BUDGET),
-                WebAuthnStoreCommitResult.CAPACITY);
-        WebAuthnStoreSnapshot afterCapacity = read(store, Set.of(first, third));
-        if (!(afterCapacity.getEntry(third) instanceof WebAuthnStoreEntry.Absent)
-                || !Arrays.equals(((WebAuthnStoreEntry.Present) afterCapacity.getEntry(first))
-                        .getSealedBytes(), new byte[] { 34 }))
-            throw new IllegalStateException("Capacity refusal changed stored state");
+        if (!(read(store,Set.of(third)).getEntry(third) instanceof WebAuthnStoreEntry.Absent))
+            throw new IllegalStateException("Absent fixture was changed");
         System.out.println("BASIC_OK");
     }
 
     private static void unknown() {
         String namespace = "fixture_wa_unknown";
         WebAuthnStoreKey key = key(namespace, 1);
-        WebAuthnStoreSnapshot absent = read(store(namespace, 2), Set.of(key));
-        PostgresqlWebAuthnStore uncertain = new PostgresqlWebAuthnStore(namespace,
-                WebAuthnStoreProbe::lostCommitAcknowledgement, 2);
+        WebAuthnStoreSnapshot absent = read(store(namespace, 4096), Set.of(key));
+        PostgresqlWebAuthnStore uncertain = new PostgresqlWebAuthnStore(namespace, WebAuthnFixtureAuthority.physical(namespace),
+                WebAuthnStoreProbe::lostCommitAcknowledgement, 4096, WebAuthnFixtureAuthority.fromEnvironment(namespace));
         expect(uncertain.compareAndCommit(write(absent, List.of(
                 WebAuthnStoreWrite.Mutation.insert(key, new byte[] { 55 }))), BUDGET),
                 WebAuthnStoreCommitResult.UNKNOWN);
         System.out.println("UNKNOWN_REPORTED");
     }
 
-    private static void expiredCeremonyReclamation() {
-        String namespace = "fixture_wa_expiry";
-        PostgresqlWebAuthnStore store = store(namespace, 1);
-        WebAuthnStoreKey ceremony = WebAuthnStoreKey.forCeremony(namespace, RP, new byte[32]);
-        WebAuthnStoreKey credential = key(namespace, 1);
-        WebAuthnStoreSnapshot empty = read(store, Set.of(ceremony, credential));
-        expect(store.compareAndCommit(write(empty, List.of(
-                WebAuthnStoreWrite.Mutation.insertExpiring(ceremony, new byte[] { 1 },
-                        Instant.now().minusSeconds(1)))), BUDGET), WebAuthnStoreCommitResult.COMMITTED);
-        // The next commit reclaims the expired ceremony before applying its capacity fence.
-        WebAuthnStoreSnapshot credentialAbsent = WebAuthnStoreSnapshot.fromEntries(Set.of(credential),
-                Map.of(credential, WebAuthnStoreEntry.Absent.confirmed()));
-        expect(store.compareAndCommit(write(credentialAbsent, List.of(
-                WebAuthnStoreWrite.Mutation.insert(credential, new byte[] { 2 }))), BUDGET),
-                WebAuthnStoreCommitResult.COMMITTED);
-        WebAuthnStoreSnapshot after = read(store, Set.of(ceremony, credential));
-        if (!(after.getEntry(ceremony) instanceof WebAuthnStoreEntry.Absent)
-                || !(after.getEntry(credential) instanceof WebAuthnStoreEntry.Present))
-            throw new IllegalStateException("Expired ceremony reclamation failed");
-        System.out.println("EXPIRY_RECLAIMED");
+    private static void expiredCeremonyReclamation() throws Exception {
+        String namespace="fixture_wa_expiry";PostgresqlWebAuthnStore store=store(namespace,4096);
+        WebAuthnStoreKey ceremony=WebAuthnStoreKey.forCeremony(namespace,RP,new byte[32]);
+        WebAuthnStoreSnapshot empty=read(store,Set.of(ceremony));
+        Instant exact=Instant.ofEpochSecond(1699999999,999999999);
+        expect(store.compareAndCommit(write(empty,List.of(WebAuthnStoreWrite.Mutation.insertExpiring(ceremony,new byte[]{1},exact))),BUDGET),WebAuthnStoreCommitResult.COMMITTED);
+        WebAuthnStoreSnapshot before=read(store,Set.of(ceremony));
+        expect(store.compareAndCommit(write(before,List.of()),BUDGET),WebAuthnStoreCommitResult.COMMITTED);
+        WebAuthnStoreSnapshot after=read(store,Set.of(ceremony));
+        if(!(after.getEntry(ceremony) instanceof WebAuthnStoreEntry.Present present)
+                || !Arrays.equals(present.getVersion(),((WebAuthnStoreEntry.Present)before.getEntry(ceremony)).getVersion()))throw new IllegalStateException("Ordinary read/barrier pruned expired ceremony");
+        try(Connection c=connection(BUDGET);var st=c.prepareStatement("SELECT expires_seconds,expires_nanos FROM webauthn_store_entry WHERE namespace=? AND storage_key=?")){
+            st.setString(1,namespace);st.setString(2,ceremony.getStorageKey());try(var rows=st.executeQuery()){if(!rows.next() || rows.getLong(1)!=exact.getEpochSecond() || rows.getInt(2)!=exact.getNano())throw new IllegalStateException("Expiry projection rounded");}
+        }
+        System.out.println("EXPIRY_RETAINED_EXACT");
     }
 
     private static void reconcile() {
         String namespace = "fixture_wa_unknown";
-        WebAuthnStoreEntry entry = read(store(namespace, 2), Set.of(key(namespace, 1)))
+        WebAuthnStoreEntry entry = read(store(namespace, 4096), Set.of(key(namespace, 1)))
                 .getEntry(key(namespace, 1));
         if (!(entry instanceof WebAuthnStoreEntry.Present present)
                 || !Arrays.equals(present.getSealedBytes(), new byte[] { 55 }))
@@ -222,7 +215,7 @@ public final class WebAuthnStoreProbe {
     private static void race() throws Exception {
         String namespace = "fixture_wa_race";
         WebAuthnStoreKey key = key(namespace, 1);
-        PostgresqlWebAuthnStore store = store(namespace, 2);
+        PostgresqlWebAuthnStore store = store(namespace, 4096);
         WebAuthnStoreSnapshot absent = read(store, Set.of(key));
         if (!(absent.getEntry(key) instanceof WebAuthnStoreEntry.Absent))
             throw new IllegalStateException("Race fixture already used");
@@ -231,12 +224,12 @@ public final class WebAuthnStoreProbe {
         if (new BufferedReader(new InputStreamReader(System.in, StandardCharsets.US_ASCII)).readLine() == null)
             throw new IllegalStateException("Race barrier closed");
         System.out.println(store.compareAndCommit(write(absent, List.of(
-                WebAuthnStoreWrite.Mutation.insert(key, new byte[] { 66 }))), BUDGET));
+                WebAuthnStoreWrite.Mutation.insert(key, new byte[] { 66 }))), BUDGET).getStatus());
     }
 
     private static void raceCheck() {
         String namespace = "fixture_wa_race";
-        WebAuthnStoreEntry entry = read(store(namespace, 2), Set.of(key(namespace, 1)))
+        WebAuthnStoreEntry entry = read(store(namespace, 4096), Set.of(key(namespace, 1)))
                 .getEntry(key(namespace, 1));
         if (!(entry instanceof WebAuthnStoreEntry.Present present)
                 || !Arrays.equals(present.getSealedBytes(), new byte[] { 66 }))
@@ -247,10 +240,7 @@ public final class WebAuthnStoreProbe {
     private static void holdLock() throws Exception {
         try (Connection connection = connection(BUDGET)) {
             connection.setAutoCommit(false);
-            try (var statement = connection.prepareStatement(
-                    "SELECT 1 FROM webauthn_store_namespace WHERE namespace='fixture_wa_basic' FOR UPDATE")) {
-                statement.executeQuery().close();
-            }
+            WebAuthnPgLocks.exclusiveAdmission(connection,List.of(WebAuthnPgScope.from("WEBAUTHN",WebAuthnFixtureAuthority.physical("fixture_wa_basic"))),System.nanoTime()+BUDGET.toNanos());
             System.out.println("LOCKED");
             System.out.flush();
             if (new BufferedReader(new InputStreamReader(System.in, StandardCharsets.US_ASCII)).readLine() == null)
@@ -261,7 +251,7 @@ public final class WebAuthnStoreProbe {
 
     private static void shortBudget() {
         String namespace = "fixture_wa_basic";
-        WebAuthnStoreReadResult result = store(namespace, 2)
+        WebAuthnStoreReadResult result = store(namespace, 4096)
                 .read(Set.of(key(namespace, 1)), Duration.ofMillis(150));
         if (!(result instanceof WebAuthnStoreReadResult.Unavailable))
             throw new IllegalStateException("Locked read escaped its deadline");
@@ -270,14 +260,14 @@ public final class WebAuthnStoreProbe {
 
     private static void outage() {
         String namespace = "fixture_wa_basic";
-        WebAuthnStoreReadResult result = store(namespace, 2)
+        WebAuthnStoreReadResult result = store(namespace, 4096)
                 .read(Set.of(key(namespace, 1)), Duration.ofMillis(500));
         if (!(result instanceof WebAuthnStoreReadResult.Unavailable))
             throw new IllegalStateException("Primary outage released a snapshot");
         System.out.println("OUTAGE_CLOSED");
     }
 
-    public static void main(String @NonNull [] args) throws Exception {
+    public static void main(@NonNull String @NonNull [] args) throws Exception {
         if (args.length != 1) throw new IllegalArgumentException("Expected one probe command");
         switch (args[0]) {
             case "basic" -> basic();

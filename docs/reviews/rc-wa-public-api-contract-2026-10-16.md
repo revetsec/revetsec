@@ -1,6 +1,10 @@
 # WebAuthn public API contract audit — 2026-10-16
 
+**All-family source join — 2026-10-30:** use the [shared-clock store and consumer contract](../shared-clock-stores.md) with the matching core and adapter artifacts. Its explicit reconciliation, factual raw-receipt and final-admission rules apply alongside this guide. Historical review and release approvals remain bound to their original artifacts; live profile, migration and release-owner acceptance remain separate.
+
 **Status:** source-bound pre-release audit of the current uncommitted WebAuthn API. This is not the RC-WA API freeze, an independent security review, a production recovery qualification, or 1.0.0 release sign-off.
+
+**2026-10-30 SCP-07 source candidate:** the coordinated WebAuthn transition adds one immutable contextual `WebAuthnStoreCommitReceipt`, a `WebAuthnStoreReadResult.Fenced` singleton, six payload-free restricted `ReconciliationRequired` variants, three temporal commit refusals and the required observation/condition factory arguments. `WebAuthnRelyingParty.resealStoreEntry` now returns its factual receipt. Normal storage uses WAR2 with admitted authority time, stable roots and entity floors; listing performs no hidden cleanup or write. All current source callers move with this break. Origin and algorithm policy retain their existing behavior. Exact compiled shape, regression and caller evidence are recorded in the [SCP-07 handoff](../../../planning/records/security/shared-clock-scp07-2026-10-30/HANDOFF.md). Real witness/platform qualification and the owner's broad API-freeze acceptance remain open; the dated audit below keeps its original scope.
 
 ## Boundary and findings
 

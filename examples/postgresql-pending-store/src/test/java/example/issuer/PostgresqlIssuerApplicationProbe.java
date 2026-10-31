@@ -31,6 +31,7 @@ import com.soklet.MarshaledResponseBody;
 import com.soklet.Request;
 import com.soklet.Soklet;
 import example.pending.PostgresqlIssuerStore;
+import example.pending.IssuerFixtureAuthority;
 import org.jspecify.annotations.NonNull;
 
 import java.net.URI;
@@ -124,8 +125,8 @@ public final class PostgresqlIssuerApplicationProbe {
         IssuerConfig config=new IssuerConfig(URI.create("http://127.0.0.1:"+httpPort),
                 URI.create("http://127.0.0.1:"+mcpPort+"/mcp"),URI.create("https://client.example/cb"),
                 httpPort,mcpPort,"A".repeat(43),"B".repeat(42)+"A","C".repeat(42)+"A",true);
-        PostgresqlIssuerStore store=new PostgresqlIssuerStore("fixture_issuer_app",
-                PostgresqlIssuerApplicationProbe::connection,256);
+        PostgresqlIssuerStore store=IssuerFixtureAuthority.store("fixture_issuer_app",
+                PostgresqlIssuerApplicationProbe::connection,4096);
         byte[] partitionKey=Files.readAllBytes(directory.resolve("partition.key"));
         StateSealer browserSealer=StateSealer.withActiveKey(SealingKey.fromBase64("fixture",encoded))
                 .clock(clock).build();

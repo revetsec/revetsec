@@ -12,6 +12,8 @@
 # fails the build.
 #
 # Outcome counts, measured on Corretto 17.0.20.1, 21, 25, 26 and 27 (21 and later agree).
+# On Semeru OpenJ9 21, the runner pins five ECDSA rejections per curve as PROVIDER_FAILURE instead of MISMATCH.
+# All individual vector expectations below apply unchanged on both VMs.
 
 #count	ecdsa_secp256r1_sha256_p1363_test.json	17	accept=171	reject:MISMATCH=20	reject:OUT_OF_RANGE=50	reject:WRONG_LENGTH=21
 #count	ecdsa_secp256r1_sha256_p1363_test.json	18+	accept=173	reject:MISMATCH=18	reject:OUT_OF_RANGE=50	reject:WRONG_LENGTH=21

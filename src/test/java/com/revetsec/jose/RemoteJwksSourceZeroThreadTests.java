@@ -26,7 +26,6 @@ import com.revetsec.testing.ChildJvm;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
 
 import javax.annotation.concurrent.ThreadSafe;
 import javax.net.ssl.SSLContext;
@@ -44,11 +43,7 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.time.Duration;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -80,11 +75,10 @@ final class RemoteJwksSourceZeroThreadTests {
 	private static final int BUILDS = 1_000;
 
 	@Test
-	void buildsStartNoThreadAndLoadNoClientAndFirstFetchesShareOneDefaultClient(@TempDir @NonNull Path directory)
+	void buildsStartNoThreadAndLoadNoClientAndFirstFetchesShareOneDefaultClient()
 			throws Exception {
-		Path classLoadLog = directory.resolve("class-load.log");
 		ChildJvm.Result result = ChildJvm.withMainClass(BuildChild.class)
-				.jvmOptions(List.of("-Xlog:class+load=info:file=\"" + classLoadLog + "\":none:filecount=0"))
+				.classLoadLogging(true)
 				.arguments(List.of(refusedUri().toString()))
 				.timeout(Duration.ofSeconds(60))
 				.build()
@@ -101,7 +95,7 @@ final class RemoteJwksSourceZeroThreadTests {
 				"both sources use the held client: true"), result.getStandardOutput().lines().toList(),
 				result::toString);
 
-		List<String> loaded = loadedInOrder(classLoadLog);
+		List<String> loaded = List.copyOf(result.getLoadedClasses());
 		int marker = loaded.indexOf(MARKER);
 		Assertions.assertTrue(marker > 0, "the marker class was loaded");
 		List<String> duringBuilds = loaded.subList(0, marker);
@@ -127,20 +121,6 @@ final class RemoteJwksSourceZeroThreadTests {
 			port = serverSocket.getLocalPort();
 		}
 		return URI.create("http://127.0.0.1:" + port + "/keys");
-	}
-
-	/**
-	 * The binary names in a {@code -Xlog:class+load} log written with the {@code none} decorator, in load order.
-	 */
-	private static @NonNull List<@NonNull String> loadedInOrder(@NonNull Path classLoadLog) throws IOException {
-		List<String> names = new ArrayList<>();
-		for (String line : Files.readAllLines(classLoadLog, StandardCharsets.UTF_8)) {
-			int space = line.indexOf(' ');
-			String name = space < 0 ? line.strip() : line.substring(0, space);
-			if (!name.isEmpty())
-				names.add(name);
-		}
-		return names;
 	}
 
 	/**

@@ -29,7 +29,9 @@ final class StoreContract {
     static @NonNull List<@NonNull String> snapshot(@NonNull OAuthAuthorizationServerStore store,@NonNull OAuthStoreTransaction txn) {
         List<String> values=new ArrayList<>();
         for(var condition:txn.getConditions()) {
-            var entry=store.read(condition.getKey(),Duration.ofSeconds(5));
+            var observed=store.read(condition.getKey(),Duration.ofSeconds(5));
+            if(!(observed instanceof OAuthStoreReadResult.Available available))throw new IllegalStateException("Unavailable contract read");
+            var entry=available.getEntry();
             values.add(entry.map(e->e.getVersion()+":"+e.getRetainUntil()+":"+e.toSealedForm()).orElse("ABSENT"));
         }
         return values;
@@ -37,12 +39,12 @@ final class StoreContract {
     static void run(@NonNull RecordingStore backend,@NonNull IssuerFixture initial,
                     @NonNull Runnable injectPartialWriteFailure,@NonNull Runnable clearFailure) {
         // Genuine initialization transaction: exact ABSENT comparison, stable retained permanent transport.
-        check(initial.server.initializeFreshIssuer()==OAuthStoreCommitStatus.COMMITTED,"fresh-absence-commit");
+        check(initial.server.initializeFreshIssuer().getStatus()==OAuthStoreCommitStatus.COMMITTED,"fresh-absence-commit");
         OAuthStoreTransaction init=Objects.requireNonNull(backend.last);
         List<String> before=snapshot(backend,init);
-        check(backend.commit(init,Duration.ofSeconds(5))==OAuthStoreCommitStatus.CONFLICT,"absence-is-not-any-version");
+        check(backend.commit(init,Duration.ofSeconds(5)).getStatus()==OAuthStoreCommitStatus.CONFLICT,"absence-is-not-any-version");
         check(before.equals(snapshot(backend,init)),"conflict-zero-effects");
-        var entry=backend.read(init.getConditions().get(0).getKey(),Duration.ofSeconds(5)).orElseThrow();
+        var entry=((OAuthStoreReadResult.Available)backend.read(init.getConditions().get(0).getKey(),Duration.ofSeconds(5))).getEntry().orElseThrow();
         check(entry.getRetainUntil().getEpochSecond()==java.time.Instant.MAX.getEpochSecond(),"permanent-retention-exact");
         initial.server.establishNewSubject("subject");
         String code=initial.code();
@@ -57,14 +59,14 @@ final class StoreContract {
         check(initial.active(token),"authoritative-status-active");
         OAuthStoreTransaction barrier=Objects.requireNonNull(backend.last);
         check(barrier.getMutations().isEmpty() && barrier.getConditions().size()>=4,"condition-only-complete-read-set");
-        check(backend.commit(barrier,Duration.ofSeconds(5))==OAuthStoreCommitStatus.COMMITTED,"condition-only-commit");
+        check(backend.commit(barrier,Duration.ofSeconds(5)).getStatus()==OAuthStoreCommitStatus.COMMITTED,"condition-only-commit");
         initial.server.revokeAllGrants();
         var revoked=snapshot(backend,barrier);
-        check(backend.commit(barrier,Duration.ofSeconds(5))==OAuthStoreCommitStatus.CONFLICT,"stale-condition-only-conflict");
+        check(backend.commit(barrier,Duration.ofSeconds(5)).getStatus()==OAuthStoreCommitStatus.CONFLICT,"stale-condition-only-conflict");
         check(revoked.equals(snapshot(backend,barrier)),"stale-barrier-zero-effects");
         check(!initial.active(token),"epoch-fence-invalidates-status");
-        check(initial.server.initializeFreshIssuer()==OAuthStoreCommitStatus.CONFLICT,"never-reinitialize-established-issuer");
-        try{backend.read(entry.getKey(),Duration.ZERO);throw new AssertionError("Expected budget failure");}catch(IllegalStateException e){check(true,"zero-budget-fails");}
-        try{Thread.currentThread().interrupt();backend.read(entry.getKey(),Duration.ofSeconds(1));throw new AssertionError("Expected interrupt failure");}catch(IllegalStateException e){check(Thread.currentThread().isInterrupted(),"interrupt-preserved");}finally{Thread.interrupted();}
+        check(initial.server.initializeFreshIssuer().getStatus()==OAuthStoreCommitStatus.CONFLICT,"never-reinitialize-established-issuer");
+        check(backend.read(entry.getKey(),Duration.ZERO) instanceof OAuthStoreReadResult.Unavailable,"zero-budget-fails");
+        try{Thread.currentThread().interrupt();check(backend.read(entry.getKey(),Duration.ofSeconds(1)) instanceof OAuthStoreReadResult.Unavailable && Thread.currentThread().isInterrupted(),"interrupt-preserved");}finally{Thread.interrupted();}
     }
 }

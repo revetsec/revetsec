@@ -17,6 +17,7 @@
 package com.revetsec.totp;
 
 import org.jspecify.annotations.NonNull;
+import com.google.errorprone.annotations.CheckReturnValue;
 import javax.annotation.concurrent.Immutable;
 import java.time.Duration;
 
@@ -26,8 +27,9 @@ import static java.util.Objects.requireNonNull;
  * @since 1.0.0 */
 @Immutable
 public abstract sealed class TotpEnrollmentRequestResult permits
-        TotpEnrollmentRequestResult.Prepared, TotpEnrollmentRequestResult.Rejected, TotpEnrollmentRequestResult.Throttled, TotpEnrollmentRequestResult.Unavailable, TotpEnrollmentRequestResult.Indeterminate {
+        TotpEnrollmentRequestResult.Prepared, TotpEnrollmentRequestResult.Rejected, TotpEnrollmentRequestResult.Throttled, TotpEnrollmentRequestResult.Unavailable, TotpEnrollmentRequestResult.Indeterminate, TotpEnrollmentRequestResult.ReconciliationRequired {
     private static final @NonNull Indeterminate INDETERMINATE = new Indeterminate();
+    private static final @NonNull ReconciliationRequired RECONCILIATION_REQUIRED = new ReconciliationRequired();
 
     TotpEnrollmentRequestResult() { }
     static @NonNull TotpEnrollmentRequestResult prepared(@NonNull TotpEnrollment enrollment) {
@@ -44,6 +46,10 @@ public abstract sealed class TotpEnrollmentRequestResult permits
     }
     static @NonNull TotpEnrollmentRequestResult indeterminate() {
         return INDETERMINATE;
+    }
+    @CheckReturnValue
+    static @NonNull TotpEnrollmentRequestResult reconciliationRequired() {
+        return RECONCILIATION_REQUIRED;
     }
     static @NonNull TotpEnrollmentRequestResult unavailable() {
         return unavailable(TotpUnavailableReason.DEPENDENCY_UNAVAILABLE);
@@ -116,5 +122,13 @@ public abstract sealed class TotpEnrollmentRequestResult permits
     @Immutable
     public static final class Indeterminate extends TotpEnrollmentRequestResult {
         private Indeterminate() { }
+    }
+
+    /** The requested transition is known committed, but normal output could not be admitted.
+     * No proof, secret or operation detail is released.
+     * @since 1.0.0 */
+    @Immutable
+    public static final class ReconciliationRequired extends TotpEnrollmentRequestResult {
+        private ReconciliationRequired() { }
     }
 }

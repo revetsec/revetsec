@@ -17,6 +17,7 @@
 package com.revetsec.oauth.server;
 
 import com.revetsec.StateSealer;
+import com.revetsec.StoreAdmission;
 import com.revetsec.internal.crypto.EntropySource;
 import com.revetsec.internal.crypto.SealedStateAccess;
 import com.revetsec.internal.crypto.SealedStateType;
@@ -43,7 +44,8 @@ import static java.util.Objects.requireNonNull;
 /**
  * Bounded issuer envelope codec. Authenticates only common storage bindings; kind-specific credential
  * validity, epochs, replay and transition checks remain the consuming engine's responsibility.
- * Format generation is fixed at one; the durable issuer epoch is distinct and lives in the payload.
+ * Raw schema-one methods are retained for restricted migration fixtures. Normal issuer operations
+ * explicitly use the schema-two admitted methods and never fall back to the legacy decoder.
  */
 final class OAuthStoreRecordCodec {
  private static final @NonNull Set<@NonNull String> FIELDS =
@@ -77,6 +79,25 @@ final class OAuthStoreRecordCodec {
  @NonNull String freshVersion() {
   byte[] bytes = EntropySource.fromDefaults().nextBytes(32);
   try { return Base64Url.encode(bytes); } finally { Arrays.fill(bytes, (byte) 0); }
+ }
+ /** Active schema-two output with an explicit authority-derived entity floor. */
+ @NonNull OAuthStoreEntry sealAdmitted(@NonNull OAuthStoreKey key, @NonNull Instant retainUntil,
+   @NonNull Instant floor, @NonNull String payloadJson) {
+  return admittedCodec().seal(key, retainUntil, floor, payloadJson);
+ }
+ /** Normal admission opens only schema two; it supplies no worker-selected time fallback. */
+ OAuthStoreRecordCodecV2.@NonNull Opened openAdmitted(@NonNull OAuthStoreEntry entry, @NonNull Clock authorityClock) {
+  return admittedCodec().open(entry, authorityClock);
+ }
+ /** Narrow permanent authentication used only by the two issuer emergency-fence operations. */
+ OAuthStoreRecordCodecV2.@NonNull Opened openPermanentFence(@NonNull OAuthStoreEntry entry,
+   @NonNull StoreAdmission admission, @NonNull OAuthStoreEntry issuerRootEntry) {
+  return admittedCodec().openPermanentFence(entry, admission, issuerRootEntry);
+ }
+ private @NonNull OAuthStoreRecordCodecV2 admittedCodec() {
+  // Consuming workflows still enforce their configured, usually narrower authorization limits.
+  OAuthServerIngressLimits bounds = new OAuthServerIngressLimits(65536,65536,65536,4096,4096,1024,64,128,128);
+  return new OAuthStoreRecordCodecV2(this.issuer,this.sealer,this.maximumRecordBytes,bounds,1024);
  }
  @NonNull OAuthStoreEntry seal(@NonNull OAuthStoreKey key, @NonNull Instant retainUntil,
    @NonNull String payloadJson) {

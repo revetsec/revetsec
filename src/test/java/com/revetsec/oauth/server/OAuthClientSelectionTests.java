@@ -60,7 +60,7 @@ final class OAuthClientSelectionTests {
   VERIFIER="dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk", CHALLENGE="E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM";
  private static final @NonNull Instant NOW=Instant.parse("2026-10-06T12:00:00Z");
  private static final @NonNull OAuthServerIngressLimits LIMITS=OAuthServerIngressLimits.fromDefaults();
- private final @NonNull OAuthAtomicStoreFixture store=new OAuthAtomicStoreFixture();
+ private final @NonNull OAuthAtomicStoreFixture store=new OAuthAtomicStoreFixture(NOW);
  private final @NonNull StateSealer sealer=sealer();
  private final @NonNull OAuthStoreRecordCodec codec=new OAuthStoreRecordCodec(ISSUER,this.sealer,3800);
  private final @NonNull OAuthStoreCoordinator coordinator=new OAuthStoreCoordinator(this.store,this.codec,Clock.fixed(NOW,ZoneOffset.UTC),3,255);
@@ -131,7 +131,7 @@ final class OAuthClientSelectionTests {
  private @NonNull OAuthGrantPolicy allow() {return (context,budget)->{this.policies.incrementAndGet();return OAuthAuthorizationDecision.withSubject(context.getSubject()).authorizedScopesByResource(context.getAuthorizedScopesByResource()).refreshTokenPermitted(context.isRefreshTokenPermitted()).build();};}
  private @NonNull String code() {return code(this.dynamic);}
  private @NonNull String code(@NonNull OAuthServerClientSelection selection) {
-  assertEquals(OAuthStoreCommitStatus.COMMITTED,this.coordinator.initializeFreshIssuer(deadline()));this.coordinator.establishNewSubject("subject",deadline());
+  assertEquals(OAuthStoreCommitStatus.COMMITTED,this.coordinator.initializeFreshIssuer(deadline()).getStatus());this.coordinator.establishNewSubject("subject",deadline());
   var admission=OAuthServerAuthorizationAdmission.admit(authorize(null,REDIRECT),selection,deadline(),resources(),LIMITS,true,true);
   String handle=this.ledger.begin(admission,BROWSER,deadline());
   return this.ledger.complete(handle,BROWSER,selection.authorization(ID,resources(),deadline()),resources(),decision("subject"),deadline()).orElseThrow();
@@ -140,7 +140,7 @@ final class OAuthClientSelectionTests {
  private @NonNull OAuthTokenResponse rotate(@NonNull String credential) {return this.refresh.rotate(token(credential,true,Map.of(),null),this.dynamic,resources(),allow(),deadline());}
  private static @NonNull JsonObject body(@NonNull OAuthTokenResponse response) {try{return (JsonObject)JsonCodec.parse(response.body(),JsonLimits.jose(131072));}catch(com.revetsec.internal.json.JsonParseException failure){throw new AssertionError(failure);}}
  private static @NonNull String refreshValue(@NonNull OAuthTokenResponse response) {return body(response).find("refresh_token").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow();}
- private @NonNull JsonObject row(OAuthStoreKey.@NonNull Kind kind) {return this.codec.open(this.store.rows.values().stream().filter(e->e.getKey().getKind()==kind).findFirst().orElseThrow(),Clock.fixed(NOW,ZoneOffset.UTC));}
+ private @NonNull JsonObject row(OAuthStoreKey.@NonNull Kind kind) {return IssuerTestRecords.open(this.codec,this.store.rows.values().stream().filter(e->e.getKey().getKind()==kind).findFirst().orElseThrow(),Clock.fixed(NOW,ZoneOffset.UTC));}
  private static void failure(OAuthServerAdmissionFailure.@NonNull Reason reason,@NonNull Executable call) {
   var e=assertThrows(OAuthServerAdmissionFailure.class,call);assertEquals(reason,e.reason());assertNull(e.getCause());assertEquals("OAuth server admission failed.",e.getMessage());
  }
@@ -187,7 +187,7 @@ final class OAuthClientSelectionTests {
  @Test void explicitScopeCanNarrowConfiguredCeiling() {var a=OAuthServerAuthorizationAdmission.admit(authorize("read",REDIRECT),this.dynamic,deadline(),resources(),LIMITS,true,true);assertEquals(Set.of("read"),a.scopes());}
  @Test void emptyConfiguredScopeCannotAuthorize() {failure(OAuthServerAdmissionFailure.Reason.INVALID_SCOPE,()->OAuthServerAuthorizationAdmission.admit(authorize(null,REDIRECT),this.dynamic,deadline(),Map.of(RESOURCE,Set.of()),LIMITS,true,true));}
  @Test void emptyAppApprovalCannotCreateCode() {
-  this.coordinator.initializeFreshIssuer(deadline());this.coordinator.establishNewSubject("subject",deadline());var a=OAuthServerAuthorizationAdmission.admit(authorize(null,REDIRECT),this.dynamic,deadline(),resources(),LIMITS,true,true);
+  this.coordinator.initializeFreshIssuer(deadline()).getStatus();this.coordinator.establishNewSubject("subject",deadline());var a=OAuthServerAuthorizationAdmission.admit(authorize(null,REDIRECT),this.dynamic,deadline(),resources(),LIMITS,true,true);
   String interaction=this.ledger.begin(a,BROWSER,deadline());assertTrue(this.ledger.complete(interaction,BROWSER,this.dynamic.authorization(ID,resources(),deadline()),resources(),OAuthAuthorizationDecision.withSubject("subject").authorizedScopesByResource(Map.of(RESOURCE,Set.of())).build(),deadline()).isEmpty());assertFalse(this.store.rows.keySet().stream().anyMatch(k->k.getKind()==OAuthStoreKey.Kind.CODE));
  }
  @Test void dynamicCodeAndRefreshEachFetchOwn200IgnoringSharedCache() {
@@ -262,7 +262,7 @@ final class OAuthClientSelectionTests {
  @Test void applicationDenialStillTerminatesAfterFreshFetch() {String code=code();invalid(()->this.codes.redeem(token(code,false,Map.of(),null),this.dynamic,resources(),(context,b)->OAuthAuthorizationDecision.deniedInstance(),deadline()));assertEquals(2,this.fetches.get());assertEquals("CANCELLED",row(OAuthStoreKey.Kind.CODE).find("status").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow());}
  @Test void callbackFaultAfterFetchLeavesUnusedCode() {String code=code();int commits=this.store.commits;failure(OAuthServerAdmissionFailure.Reason.INFRASTRUCTURE,()->this.codes.redeem(token(code,false,Map.of(),null),this.dynamic,resources(),(context,b)->{throw new IllegalStateException("private");},deadline()));assertEquals(commits,this.store.commits);assertEquals(2,this.fetches.get());redeem(code);}
  @Test void resumeAndCompleteUsePersistedSourceSeparatedFingerprint() {
-  this.coordinator.initializeFreshIssuer(deadline());this.coordinator.establishNewSubject("subject",deadline());var a=OAuthServerAuthorizationAdmission.admit(authorize(null,REDIRECT),this.dynamic,deadline(),resources(),LIMITS,true,true);String handle=this.ledger.begin(a,BROWSER,deadline());
+  this.coordinator.initializeFreshIssuer(deadline()).getStatus();this.coordinator.establishNewSubject("subject",deadline());var a=OAuthServerAuthorizationAdmission.admit(authorize(null,REDIRECT),this.dynamic,deadline(),resources(),LIMITS,true,true);String handle=this.ledger.begin(a,BROWSER,deadline());
   var selected=this.dynamic.authorization(ID,resources(),deadline());assertEquals(selected.fingerprint(),this.ledger.resume(handle,BROWSER,selected,deadline()).text("clientHash"));
   assertThrows(OAuthServerAdmissionFailure.class,()->this.ledger.resume(handle,BROWSER,registered(false),deadline()));assertThrows(OAuthServerAdmissionFailure.class,()->this.ledger.complete(handle,BROWSER,registered(false),resources(),decision("subject"),deadline()));
   assertTrue(this.ledger.complete(handle,BROWSER,selected,resources(),decision("subject"),deadline()).isPresent());

@@ -63,7 +63,7 @@ final class IssuerFixture {
             .signingKeys(OAuthIssuerKeyProvider.fromSnapshot(keys)).resources(resources)
             .stateSealer(sealer(secrets,sealingMode))
             .grantPolicy((context,budget)->decision()).refreshTokensEnabled(true).clock(Clock.fixed(now,ZoneOffset.UTC))
-            .clockSkew(java.time.Duration.ZERO) // Strict fixture: even nanosecond high-water rollback must fail.
+            .clockSkew(java.time.Duration.ZERO) // Credential skew only; shared authority has its fixed worker-health profile.
             .totalDeadline(java.time.Duration.ofSeconds(30)).build();
     }
     private static @NonNull StateSealer sealer(@NonNull Path secrets,@NonNull String mode) throws Exception {

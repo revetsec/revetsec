@@ -48,7 +48,7 @@ public final class IssuerResources {
     final StartupMode startupMode;
     final byte @NonNull [] admissionPartitionKey;
     IssuerResources(@NonNull IssuerConfig config,@NonNull Clock clock) throws java.security.GeneralSecurityException {
-        this(config,clock,new VolatileStore(clock,2048,4_194_304));
+        this(config,clock,new VolatileStore(2048,4_194_304));
     }
     IssuerResources(@NonNull IssuerConfig config,@NonNull Clock clock,@NonNull OAuthAuthorizationServerStore store) throws java.security.GeneralSecurityException {
         this(config,clock,store,freshSigningKeys(clock),freshSealer(),StartupMode.FRESH);
@@ -101,7 +101,7 @@ public final class IssuerResources {
                 .clientMetadataPolicy(config.metadataPolicy).clock(clock).clockSkew(Duration.ZERO).publicMetadataHttpCacheMaxAge(Duration.ZERO).accessTokenLifetime(Duration.ofMinutes(2)).refreshTokensEnabled(true)
                 .allowInsecureLoopback(config.loopback).allowNativeLoopbackRedirects(true).build();
         if(startupMode==StartupMode.FRESH) {
-            if(server.initializeFreshIssuer()!=OAuthStoreCommitStatus.COMMITTED) throw new IllegalStateException("Fresh demo store initialization failed.");
+            if(server.initializeFreshIssuer().getStatus()!=OAuthStoreCommitStatus.COMMITTED) throw new IllegalStateException("Fresh demo store initialization failed.");
             server.establishNewSubject(IssuerConfig.SUBJECT);
         }
         server.warmUp();

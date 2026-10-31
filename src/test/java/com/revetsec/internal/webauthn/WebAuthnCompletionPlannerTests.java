@@ -16,6 +16,11 @@
 
 package com.revetsec.internal.webauthn;
 
+import com.revetsec.testing.ScriptedWebAuthnStore;
+import com.revetsec.StoreCommitTiming;
+import com.revetsec.StoreTimeObservation;
+import com.revetsec.webauthn.WebAuthnStoreCommitReceipt;
+
 import com.revetsec.SealingKey;
 import com.revetsec.StateSealer;
 import com.revetsec.internal.encoding.Base64Url;
@@ -48,6 +53,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -88,7 +94,7 @@ final class WebAuthnCompletionPlannerTests {
         assertEquals(WebAuthnCompletionPlanner.Preparation.Status.CANDIDATE, prepared.status());
         WebAuthnStoreWrite write = prepared.write().orElseThrow();
         assertEquals(keys, write.getSnapshot().getEntries().keySet());
-        assertEquals(4, write.getMutations().size());
+        assertEquals(3, write.getMutations().size());
         assertTrue(write.getMutations().stream().noneMatch(mutation -> mutation.getKey().equals(fenceKey())));
         assertTrue(new WebAuthnCeremonyRecordCodec(NAMESPACE, RP, records()).decode(
                 ceremonyKey(), changed(write, ceremonyKey()), CLOCK).isConsumed());
@@ -96,8 +102,9 @@ final class WebAuthnCompletionPlannerTests {
                 .decode(credentialKey(), changed(write, credentialKey()), CLOCK).userHandle());
         assertTrue(new WebAuthnCredentialIndex(NAMESPACE, RP, records())
                 .decode(indexKey(), changed(write, indexKey()), CLOCK).contains(ID));
-        assertEquals(NOW, new WebAuthnNamespaceClock(NAMESPACE, RP, records())
-                .decode(clockKey(), changed(write, clockKey()), CLOCK));
+        assertTrue(write.getMutations().stream().noneMatch(mutation->mutation.getKey().equals(clockKey())));
+        assertEquals(NOW,new WebAuthnNamespaceClock(NAMESPACE,RP,records()).decode(clockKey(),
+                ((WebAuthnStoreEntry.Present)write.getSnapshot().getEntry(clockKey())).getSealedBytes(),CLOCK));
         assertFalse(prepared.toString().contains(credentialKey().getStorageKey()));
 
         var duplicate = expanded(first, keys, Map.of(
@@ -128,7 +135,7 @@ final class WebAuthnCompletionPlannerTests {
         Map<WebAuthnStoreKey, WebAuthnStoreEntry> switched = new HashMap<>(base);
         switched.put(fenceKey(), present(new byte[] {2}, fence(true)));
         switched.put(ceremonyKey(), present(new byte[] {4}, new WebAuthnCeremonyRecordCodec(
-                NAMESPACE, RP, records()).encode(swapped).sealedBytes()));
+                NAMESPACE, RP, records()).encode(swapped, NOW).sealedBytes()));
         assertEquals(WebAuthnCompletionPlanner.Preparation.Status.REJECTED,
                 planner.prepareRegistration(inspected, expanded(first, keys, switched), CLOCK).status());
     }
@@ -142,7 +149,7 @@ final class WebAuthnCompletionPlannerTests {
                 assertionJson(pair.getPrivate(), 8), CLOCK).orElseThrow();
         var keys = inspected.expandedKeys();
         var stored = WebAuthnCredentialState.checked(ID, HANDLE, edKey(pair), -8, 7, false, false);
-        var credential = new WebAuthnCredentialRecordCodec(NAMESPACE, RP, records()).encode(stored);
+        var credential = new WebAuthnCredentialRecordCodec(NAMESPACE, RP, records()).encode(stored, NOW);
         var expanded = expanded(first, keys, Map.of(
                 credentialKey(), present(new byte[] {5}, credential.sealedBytes()),
                 indexKey(), present(new byte[] {6}, index(ID)),
@@ -150,14 +157,14 @@ final class WebAuthnCompletionPlannerTests {
         var prepared = planner.prepareAuthentication(inspected, expanded, CLOCK);
         assertEquals(WebAuthnCompletionPlanner.Preparation.Status.CANDIDATE, prepared.status());
         WebAuthnStoreWrite write = prepared.write().orElseThrow();
-        assertEquals(3, write.getMutations().size());
+        assertEquals(2, write.getMutations().size());
         assertTrue(write.getMutations().stream().noneMatch(mutation -> mutation.getKey().equals(indexKey())));
         assertEquals(8, new WebAuthnCredentialRecordCodec(NAMESPACE, RP, records())
                 .decode(credentialKey(), changed(write, credentialKey()), CLOCK).counter());
 
         var revoked = expanded(first, keys, Map.of(
                 credentialKey(), present(new byte[] {8}, new WebAuthnCredentialRecordCodec(
-                        NAMESPACE, RP, records()).encodeRevoked(ID, HANDLE).sealedBytes()),
+                        NAMESPACE, RP, records()).encodeRevoked(ID, HANDLE, NOW).sealedBytes()),
                 indexKey(), present(new byte[] {6}, index(ID)),
                 fenceKey(), present(new byte[] {7}, fence(true))));
         assertEquals(WebAuthnCompletionPlanner.Preparation.Status.REJECTED,
@@ -216,7 +223,7 @@ final class WebAuthnCompletionPlannerTests {
                 byte[] copy = fact.userHandle(); copy[0] ^= 1;
                 assertArrayEquals(HANDLE, fact.userHandle());
             }
-            assertEquals(2, reads.get());
+            assertEquals(status==WebAuthnStoreCommitResult.COMMITTED?3:2, reads.get());
             assertEquals(1, writes.get());
         }
     }
@@ -232,7 +239,7 @@ final class WebAuthnCompletionPlannerTests {
         malformed[0] = '<';
         assertEquals(WebAuthnCompletionRunner.Outcome.REJECTED,
                 rejected.completeRegistration(CEREMONY_ID, BINDING, malformed));
-        assertEquals(1, reads.get());
+        assertEquals(2, reads.get());
         assertEquals(0, writes.get());
     }
 
@@ -245,7 +252,7 @@ final class WebAuthnCompletionPlannerTests {
         var stored = WebAuthnCredentialState.checked(ID, HANDLE, edKey(pair), -8, 7, false, false);
         var expanded = expanded(first, inspected.expandedKeys(), Map.of(
                 credentialKey(), present(new byte[] {5}, new WebAuthnCredentialRecordCodec(
-                        NAMESPACE, RP, records()).encode(stored).sealedBytes()),
+                        NAMESPACE, RP, records()).encode(stored, NOW).sealedBytes()),
                 indexKey(), present(new byte[] {6}, index(ID)),
                 fenceKey(), present(new byte[] {7}, fence(true))));
         AtomicInteger reads = new AtomicInteger();
@@ -258,7 +265,7 @@ final class WebAuthnCompletionPlannerTests {
         assertEquals(WebAuthnCeremonyState.Kind.DISCOVERABLE_AUTHENTICATION,
                 completion.fact().orElseThrow().kind());
         assertArrayEquals(HANDLE, completion.fact().orElseThrow().userHandle());
-        assertEquals(2, reads.get());
+        assertEquals(3, reads.get());
         assertEquals(1, writes.get());
     }
 
@@ -273,7 +280,7 @@ final class WebAuthnCompletionPlannerTests {
         var stored = WebAuthnCredentialState.checked(ID, HANDLE, edKey(pair), -8, 7, false, false);
         var expanded = expanded(first, inspected.expandedKeys(), Map.of(
                 credentialKey(), present(new byte[] {5}, new WebAuthnCredentialRecordCodec(
-                        NAMESPACE, RP, records()).encode(stored).sealedBytes()),
+                        NAMESPACE, RP, records()).encode(stored, NOW).sealedBytes()),
                 indexKey(), present(new byte[] {6}, index(ID)),
                 fenceKey(), present(new byte[] {7}, fence(true))));
         var completion = runner(first, expanded, WebAuthnStoreCommitResult.COMMITTED,
@@ -295,34 +302,32 @@ final class WebAuthnCompletionPlannerTests {
                 credentialKey(), WebAuthnStoreEntry.Absent.confirmed(),
                 indexKey(), WebAuthnStoreEntry.Absent.confirmed(),
                 fenceKey(), present(new byte[] {2}, fence(true))));
-        AtomicReference<Instant> wallTime = new AtomicReference<>(NOW);
-        Clock changingClock = new Clock() {
-            @Override public @NonNull ZoneId getZone() { return ZoneOffset.UTC; }
-            @Override public @NonNull Clock withZone(@NonNull ZoneId zone) {
-                return Clock.fixed(instant(), zone);
-            }
-            @Override public @NonNull Instant instant() { return java.util.Objects.requireNonNull(wallTime.get()); }
+        AtomicReference<Instant> wallTime=new AtomicReference<>(NOW);
+        AtomicReference<Instant> authorityTime=new AtomicReference<>(NOW);
+        Clock changingClock=new Clock(){
+            @Override public @NonNull ZoneId getZone(){return ZoneOffset.UTC;}
+            @Override public @NonNull Clock withZone(@NonNull ZoneId zone){return Clock.fixed(instant(),zone);}
+            @Override public @NonNull Instant instant(){return java.util.Objects.requireNonNull(wallTime.get());}
         };
-        AtomicInteger reads = new AtomicInteger();
-        WebAuthnStore store = new WebAuthnStore() {
-            @Override public @NonNull WebAuthnStoreReadResult read(
-                    @NonNull Set<@NonNull WebAuthnStoreKey> keys, @NonNull Duration remaining) {
-                WebAuthnStoreSnapshot snapshot = reads.incrementAndGet() == 1 ? first : expanded;
-                assertEquals(keys, snapshot.getEntries().keySet());
-                return WebAuthnStoreReadResult.Available.fromSnapshot(snapshot);
+        AtomicInteger reads=new AtomicInteger();Map<WebAuthnStoreKey,WebAuthnStoreEntry> current=new HashMap<>(expanded.getEntries());
+        WebAuthnStore store=new WebAuthnStore(){
+            @Override public @NonNull WebAuthnStoreReadResult read(@NonNull Set<@NonNull WebAuthnStoreKey> keys,@NonNull Duration remaining){
+                int call=reads.incrementAndGet();
+                if(call>2)return WebAuthnStoreReadResult.Available.fromSnapshot(ScriptedWebAuthnStore.snapshot(keys,
+                        Map.of(clockKey(),java.util.Objects.requireNonNull(current.get(clockKey()))),java.util.Objects.requireNonNull(authorityTime.get())));
+                WebAuthnStoreSnapshot snapshot=call==1?first:expanded;assertEquals(keys,snapshot.getEntries().keySet());return WebAuthnStoreReadResult.Available.fromSnapshot(snapshot);
             }
-            @Override public @NonNull WebAuthnStoreCommitResult compareAndCommit(
-                    @NonNull WebAuthnStoreWrite write, @NonNull Duration remaining) {
-                assertEquals(expanded, write.getSnapshot());
-                wallTime.set(NOW.plusSeconds(301));
-                return WebAuthnStoreCommitResult.COMMITTED;
+            @Override public @NonNull WebAuthnStoreCommitReceipt compareAndCommit(@NonNull WebAuthnStoreWrite write,@NonNull Duration remaining){
+                assertEquals(expanded,write.getSnapshot());apply(current,write);
+                WebAuthnStoreCommitReceipt committed=receipt(WebAuthnStoreCommitResult.COMMITTED,write);
+                wallTime.set(NOW.plusSeconds(301));authorityTime.set(NOW.plusSeconds(301));return committed;
             }
         };
-        var runner = new WebAuthnCompletionRunner(new WebAuthnStoreCoordinator(store,
-                Duration.ofSeconds(1), () -> 0), planner(), changingClock, ALLOW);
-        assertEquals(WebAuthnCompletionRunner.Outcome.REJECTED,
-                runner.completeRegistration(CEREMONY_ID, BINDING, registrationJson(pair)));
-        assertEquals(2, reads.get());
+        var runner=new WebAuthnCompletionRunner(new WebAuthnStoreCoordinator(store,Duration.ofSeconds(1),changingClock,
+                new WebAuthnNamespaceClock(NAMESPACE,RP,records()),()->0),planner(),changingClock,ALLOW);
+        assertEquals(WebAuthnCompletionRunner.Outcome.RECONCILIATION_REQUIRED,
+                runner.completeRegistration(CEREMONY_ID,BINDING,registrationJson(pair)));
+        assertEquals(2,reads.get());
     }
 
     @Test void recoveryGateDenialPreventsReadsAndRevocationWithholdsConfirmedCommit()
@@ -347,18 +352,19 @@ final class WebAuthnCompletionPlannerTests {
         assertEquals(0, writes.get());
 
         AtomicInteger checks = new AtomicInteger();
+        AtomicBoolean stillCurrent=new AtomicBoolean(true);
         AtomicInteger closes = new AtomicInteger();
         WebAuthnRecoveryGate revoked = remaining -> new WebAuthnRecoveryGate.Permit() {
-            @Override public @NonNull Boolean isCurrent() { return checks.incrementAndGet() == 1; }
+            @Override public @NonNull Boolean isCurrent() { checks.incrementAndGet();return stillCurrent.get(); }
             @Override public void close() { closes.incrementAndGet(); }
         };
         var runner = runner(first, expanded, WebAuthnStoreCommitResult.COMMITTED,
-                reads, writes, new AtomicLong(), revoked);
+                reads, writes, new AtomicLong(), revoked,()->stillCurrent.set(false));
         var revokedCompletion = runner.completeRegistrationFact(CEREMONY_ID, BINDING,
                 registrationJson(pair));
-        assertEquals(WebAuthnCompletionRunner.Outcome.INDETERMINATE, revokedCompletion.outcome());
+        assertEquals(WebAuthnCompletionRunner.Outcome.RECONCILIATION_REQUIRED, revokedCompletion.outcome());
         assertTrue(revokedCompletion.fact().isEmpty());
-        assertEquals(2, checks.get());
+        assertTrue(checks.get()>2);
         assertEquals(2, reads.get());
         assertEquals(1, writes.get());
         assertEquals(1, closes.get());
@@ -395,9 +401,9 @@ final class WebAuthnCompletionPlannerTests {
                 reads, writes, new AtomicLong(), brokenRelease);
         byte[] malformed = registrationJson(pair);
         malformed[0] = '<';
-        assertEquals(WebAuthnCompletionRunner.Outcome.INDETERMINATE,
+        assertEquals(WebAuthnCompletionRunner.Outcome.UNAVAILABLE,
                 afterRejectedRead.completeRegistration(CEREMONY_ID, BINDING, malformed));
-        assertEquals(1, reads.get());
+        assertEquals(2, reads.get());
         assertEquals(0, writes.get());
     }
 
@@ -408,26 +414,41 @@ final class WebAuthnCompletionPlannerTests {
     }
 
     private static @NonNull WebAuthnCompletionRunner runner(@NonNull WebAuthnStoreSnapshot first,
-            @NonNull WebAuthnStoreSnapshot expanded, @NonNull WebAuthnStoreCommitResult status,
-            @NonNull AtomicInteger reads, @NonNull AtomicInteger writes, @NonNull AtomicLong nanos,
-            @NonNull WebAuthnRecoveryGate gate) {
-        WebAuthnStore store = new WebAuthnStore() {
-            @Override public @NonNull WebAuthnStoreReadResult read(
-                    @NonNull Set<@NonNull WebAuthnStoreKey> keys, @NonNull Duration remaining) {
-                int call = reads.incrementAndGet();
-                WebAuthnStoreSnapshot snapshot = call == 1 ? first : expanded;
-                assertEquals(keys, snapshot.getEntries().keySet());
+            @NonNull WebAuthnStoreSnapshot expanded,@NonNull WebAuthnStoreCommitResult status,
+            @NonNull AtomicInteger reads,@NonNull AtomicInteger writes,@NonNull AtomicLong nanos,
+            @NonNull WebAuthnRecoveryGate gate){
+        return runner(first,expanded,status,reads,writes,nanos,gate,()->{});
+    }
+    private static @NonNull WebAuthnCompletionRunner runner(@NonNull WebAuthnStoreSnapshot first,
+            @NonNull WebAuthnStoreSnapshot expanded,@NonNull WebAuthnStoreCommitResult status,
+            @NonNull AtomicInteger reads,@NonNull AtomicInteger writes,@NonNull AtomicLong nanos,
+            @NonNull WebAuthnRecoveryGate gate,@NonNull Runnable afterCommit){
+        Map<WebAuthnStoreKey,WebAuthnStoreEntry> current=new HashMap<>(expanded.getEntries());
+        WebAuthnStore store=new WebAuthnStore(){
+            @Override public @NonNull WebAuthnStoreReadResult read(@NonNull Set<@NonNull WebAuthnStoreKey> keys,@NonNull Duration remaining){
+                int call=reads.incrementAndGet();
+                if(keys.equals(Set.of(clockKey())))return WebAuthnStoreReadResult.Available.fromSnapshot(
+                        ScriptedWebAuthnStore.snapshot(keys,Map.of(clockKey(),java.util.Objects.requireNonNull(current.get(clockKey()))),NOW));
+                WebAuthnStoreSnapshot snapshot=call==1?first:expanded;assertEquals(keys,snapshot.getEntries().keySet());
                 return WebAuthnStoreReadResult.Available.fromSnapshot(snapshot);
             }
-            @Override public @NonNull WebAuthnStoreCommitResult compareAndCommit(
-                    @NonNull WebAuthnStoreWrite write, @NonNull Duration remaining) {
-                writes.incrementAndGet();
-                assertEquals(reads.get() == 1 ? first : expanded, write.getSnapshot());
-                return status;
+            @Override public @NonNull WebAuthnStoreCommitReceipt compareAndCommit(@NonNull WebAuthnStoreWrite write,@NonNull Duration remaining){
+                writes.incrementAndGet();assertEquals(reads.get()==1?first:expanded,write.getSnapshot());
+                if(status==WebAuthnStoreCommitResult.COMMITTED){apply(current,write);afterCommit.run();}
+                return receipt(status,write);
             }
         };
-        return new WebAuthnCompletionRunner(new WebAuthnStoreCoordinator(
-                store, Duration.ofSeconds(1), nanos::get), planner(), CLOCK, gate);
+        return new WebAuthnCompletionRunner(new WebAuthnStoreCoordinator(store,Duration.ofSeconds(1),CLOCK,
+                new WebAuthnNamespaceClock(NAMESPACE,RP,records()),nanos::get),planner(),CLOCK,gate);
+    }
+    private static void apply(@NonNull Map<@NonNull WebAuthnStoreKey,@NonNull WebAuthnStoreEntry> entries,@NonNull WebAuthnStoreWrite write){
+        for(var mutation:write.getMutations())entries.put(mutation.getKey(),mutation.getKind()==WebAuthnStoreWrite.Mutation.Kind.DELETE?
+                WebAuthnStoreEntry.Absent.confirmed():WebAuthnStoreEntry.Present.fromVersionAndSealedBytes(new byte[]{99},mutation.getSealedBytes().orElseThrow()));
+    }
+    private static @NonNull WebAuthnStoreCommitReceipt receipt(@NonNull WebAuthnStoreCommitResult status,@NonNull WebAuthnStoreWrite write){
+        return status==WebAuthnStoreCommitResult.COMMITTED?WebAuthnStoreCommitReceipt.fromCommittedTiming(
+                StoreCommitTiming.fromTimes((StoreTimeObservation.Healthy)write.getSnapshot().getTimeObservation(),null)):
+                status==WebAuthnStoreCommitResult.UNKNOWN?WebAuthnStoreCommitReceipt.unknownInstance():WebAuthnStoreCommitReceipt.fromRefusal(status);
     }
 
     private static @NonNull WebAuthnCompletionPlanner planner() {
@@ -442,17 +463,17 @@ final class WebAuthnCompletionPlannerTests {
                 Set.of("https://" + RP), NOW, NOW.plusSeconds(300));
     }
     private static @NonNull WebAuthnStoreSnapshot first(@NonNull WebAuthnCeremonyState pending) {
-        var ceremony = new WebAuthnCeremonyRecordCodec(NAMESPACE, RP, records()).encode(pending);
+        var ceremony = new WebAuthnCeremonyRecordCodec(NAMESPACE, RP, records()).encode(pending, NOW);
         return WebAuthnStoreSnapshot.fromEntries(Set.of(ceremony.key(), clockKey()), Map.of(
                 ceremony.key(), present(new byte[] {1}, ceremony.sealedBytes()),
-                clockKey(), WebAuthnStoreEntry.Absent.confirmed()));
+                clockKey(), present(new byte[]{77},new WebAuthnNamespaceClock(NAMESPACE,RP,records()).encode(ScriptedWebAuthnStore.observation(NOW).getAdmission().getAuthorityId(),NOW))), ScriptedWebAuthnStore.observation(NOW));
     }
     private static @NonNull WebAuthnStoreSnapshot expanded(@NonNull WebAuthnStoreSnapshot first,
             @NonNull Set<@NonNull WebAuthnStoreKey> keys,
             @NonNull Map<@NonNull WebAuthnStoreKey, @NonNull WebAuthnStoreEntry> changes) {
         Map<WebAuthnStoreKey, WebAuthnStoreEntry> entries = new HashMap<>(first.getEntries());
         entries.putAll(changes);
-        return WebAuthnStoreSnapshot.fromEntries(keys, entries);
+        return WebAuthnStoreSnapshot.fromEntries(keys, entries, ScriptedWebAuthnStore.observation(NOW));
     }
     private static WebAuthnStoreEntry.@NonNull Present present(byte @NonNull [] version,
             byte @NonNull [] sealed) {
@@ -474,11 +495,11 @@ final class WebAuthnCompletionPlannerTests {
         return WebAuthnStoreKey.forNamespaceClock(NAMESPACE, RP);
     }
     private static byte @NonNull [] fence(boolean active) {
-        return new WebAuthnAccountFence(NAMESPACE, RP, records()).encode(HANDLE, active).sealedBytes();
+        return new WebAuthnAccountFence(NAMESPACE, RP, records()).encode(HANDLE, active, NOW).sealedBytes();
     }
     private static byte @NonNull [] index(byte @NonNull [] id) {
         var indexes = new WebAuthnCredentialIndex(NAMESPACE, RP, records());
-        return indexes.encode(indexes.empty(HANDLE).withAdded(id)).sealedBytes();
+        return indexes.encode(indexes.empty(HANDLE).withAdded(id), NOW).sealedBytes();
     }
     private static byte @NonNull [] changed(@NonNull WebAuthnStoreWrite write,
             @NonNull WebAuthnStoreKey key) {

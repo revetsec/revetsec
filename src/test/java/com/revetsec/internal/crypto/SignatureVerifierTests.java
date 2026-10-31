@@ -419,12 +419,23 @@ final class SignatureVerifierTests {
 			}
 		}
 
-		PublicKey undecodable = Ed25519PublicKeysTests.rawJdkKey(Ed25519PublicKeysTests.encode(BigInteger.TWO, false));
+		PublicKey throwingEdKey = new Ed25519PublicKeysTests.UnusualEdKey(NamedParameterSpec.ED25519, null, true);
 		byte[] canonicalEdSignature = sign("Ed25519", null, generate("Ed25519").getPrivate());
-		Assertions.assertEquals(VerifyResult.PROVIDER_FAILURE, SignatureVerifier.verifyEd25519(undecodable, MESSAGE,
-				canonicalEdSignature), "control: the JDK decodes the key point when it verifies");
-		Assertions.assertEquals(VerifyResult.WRONG_LENGTH, SignatureVerifier.verifyEd25519(undecodable, MESSAGE,
+		Assertions.assertEquals(VerifyResult.PROVIDER_FAILURE, SignatureVerifier.verifyEd25519(throwingEdKey, MESSAGE,
+				canonicalEdSignature), "control: a well-formed signature reaches the key point accessor");
+		Assertions.assertEquals(VerifyResult.WRONG_LENGTH, SignatureVerifier.verifyEd25519(throwingEdKey, MESSAGE,
 				new byte[65]));
+	}
+
+	@Test
+	void undecodableEd25519PointsAreRejectedRegardlessOfProviderValidationTiming() throws GeneralSecurityException {
+		byte[] encoded = Ed25519PublicKeysTests.encode(BigInteger.TWO, false);
+		Assertions.assertEquals(KeyRejectedException.Kind.MALFORMED, Assertions.assertThrows(KeyRejectedException.class,
+				() -> Ed25519PublicKeys.fromEncoded(encoded)).getKind());
+		byte[] signature = sign("Ed25519", null, generate("Ed25519").getPrivate());
+		VerifyResult result = SignatureVerifier.verifyEd25519(Ed25519PublicKeysTests.rawJdkKey(encoded), MESSAGE, signature);
+		Assertions.assertTrue(result == VerifyResult.PROVIDER_FAILURE || result == VerifyResult.MISMATCH,
+				"the provider may throw or return false for a key that bypassed Revetsec's point validation");
 	}
 
 	// INV-G1: a key implementation or provider that throws gives PROVIDER_FAILURE, never VALID, and no
@@ -479,11 +490,11 @@ final class SignatureVerifierTests {
 						() -> new SecretKeySpec(new byte[0], "HmacSHA256"),
 						() -> Assertions.assertThrows(KeyRejectedException.class, () -> Hmac.verifyTag(HashAlgorithm.SHA_256,
 								new byte[0], MESSAGE, new byte[32]))),
-				new InventoryRow("Ed25519: an undecodable point throws InvalidKeyException at verification, not at load",
+				new InventoryRow("Signature(Ed25519): an RSA key throws InvalidKeyException",
 						InvalidKeyException.class, () -> Signature.getInstance("Ed25519").initVerify(
-						Ed25519PublicKeysTests.rawJdkKey(Ed25519PublicKeysTests.encode(BigInteger.TWO, false))),
-						() -> Assertions.assertThrows(KeyRejectedException.class, () -> Ed25519PublicKeys.fromEncoded(
-								Ed25519PublicKeysTests.encode(BigInteger.TWO, false)))),
+						RsaPublicKeysTests.Keys.rsa2048().getPublic()),
+						() -> Assertions.assertEquals(VerifyResult.MISMATCH, SignatureVerifier.verifyEd25519(
+								RsaPublicKeysTests.Keys.rsa2048().getPublic(), MESSAGE, new byte[64]))),
 				new InventoryRow("Signature(RSA): a signature of the wrong length throws SignatureException",
 						SignatureException.class, () -> {
 					Signature verifier = Signature.getInstance("SHA256withRSA");

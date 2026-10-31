@@ -17,6 +17,8 @@
 package com.revetsec.oauth.server;
 
 import com.google.errorprone.annotations.CheckReturnValue;
+import com.revetsec.StoreAdmission;
+import com.revetsec.StoreTemporalCondition;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 import javax.annotation.concurrent.Immutable;
@@ -45,7 +47,9 @@ final class OAuthStoreReadSet {
   if (previous == null && this.conditions.size() == 16) throw OAuthStoreFormat.invalid();
   this.conditions.put(key, condition);
  }
- @NonNull OAuthStoreTransaction transaction(@NonNull List<OAuthStoreTransaction.@NonNull Mutation> mutations) {
-  return OAuthStoreTransaction.fromConditions(List.copyOf(this.conditions.values()), mutations);
+ @NonNull OAuthStoreTransaction transaction(OAuthStoreTransaction.@NonNull Purpose purpose,
+   @NonNull StoreAdmission admission, @Nullable StoreTemporalCondition temporalCondition,
+   @NonNull List<OAuthStoreTransaction.@NonNull Mutation> mutations) {
+  return OAuthStoreTransaction.fromConditions(purpose, admission, temporalCondition, List.copyOf(this.conditions.values()), mutations);
  }
 }

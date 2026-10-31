@@ -21,7 +21,7 @@ import com.revetsec.totp.RecoveryCodeUse;
 import com.revetsec.totp.TotpAuthenticator;
 import com.revetsec.totp.TotpFactor;
 import com.revetsec.totp.TotpStore;
-import com.revetsec.totp.TotpStoreCommitResult;
+import com.revetsec.totp.TotpStoreCommitReceipt;
 import com.revetsec.totp.TotpStoreKey;
 import com.revetsec.totp.TotpStoreReadResult;
 import com.revetsec.totp.TotpStoreWrite;
@@ -82,7 +82,7 @@ public final class TotpExampleChecks {
                     @NonNull Set<@NonNull TotpStoreKey> keys, @NonNull Duration remainingBudget) {
                 throw new AssertionError("Unauthorized route reached credential storage");
             }
-            @Override public @NonNull TotpStoreCommitResult compareAndCommit(
+            @Override public @NonNull TotpStoreCommitReceipt compareAndCommit(
                     @NonNull TotpStoreWrite write, @NonNull Duration remainingBudget) {
                 throw new AssertionError("Unauthorized route mutated credential storage");
             }

@@ -17,6 +17,7 @@
 package com.revetsec.oauth.server;
 
 import com.revetsec.internal.http.Deadline;
+import com.revetsec.oauth.AccessTokenValidationException;
 import com.revetsec.internal.jose.JwtValidationAccess;
 import com.revetsec.jose.JoseException;
 import com.revetsec.jose.JwsAlgorithm;
@@ -34,6 +35,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.function.Supplier;
 import java.util.function.Function;
+import java.util.function.BiFunction;
 import static java.util.Objects.requireNonNull;
 import static com.revetsec.oauth.server.OAuthStoreFailure.Reason.*;
 
@@ -63,17 +65,38 @@ final class OAuthIssuerTokenStatus {
  /** Fresh checked public snapshot before the existing uncached atomic issuer-status admission. */
  @NonNull JsonObject validate(@NonNull String compact,@NonNull String resource,
    @NonNull OAuthIssuerKeyLifecycle keys,@NonNull Deadline deadline) {
-  return validate(compact,resource,keys.verificationKeys(deadline),deadline);
+  return validate(compact,resource,keys,deadline,Function.identity(),()->{});
  }
  /** Prepare the complete internal response before the authoritative status admission. */
  <T> @NonNull T validate(@NonNull String compact, @NonNull String resource,
    @NonNull StaticJwksSource keys, @NonNull Deadline deadline, @NonNull Function<@NonNull JsonObject, @NonNull T> prepare) {
+  return validatePrepared(compact,resource,keys,deadline,(claims,authorityClock)->prepare.apply(claims));
+ }
+ <T> @NonNull T validatePrepared(@NonNull String compact,@NonNull String resource,
+   @NonNull StaticJwksSource keys,@NonNull Deadline deadline,
+   @NonNull BiFunction<@NonNull JsonObject,@NonNull Clock,@NonNull T> prepare){
+  return validatePrepared(compact,resource,keys,deadline,prepare,null,()->{});
+ }
+ <T> @NonNull T validate(@NonNull String compact,@NonNull String resource,@NonNull OAuthIssuerKeyLifecycle keys,
+   @NonNull Deadline deadline,@NonNull Function<@NonNull JsonObject,@NonNull T> prepare,@NonNull Runnable beforeAttempt){
+  beforeAttempt.run();
+  return validatePrepared(compact,resource,keys.recognitionKeys(deadline),deadline,(claims,authorityClock)->prepare.apply(claims),keys,beforeAttempt);
+ }
+ private <T> @NonNull T validatePrepared(@NonNull String compact,@NonNull String resource,
+   @NonNull StaticJwksSource keys,@NonNull Deadline deadline,
+   @NonNull BiFunction<@NonNull JsonObject,@NonNull Clock,@NonNull T> prepare,
+   @Nullable OAuthIssuerKeyLifecycle lifecycle,@NonNull Runnable beforeAttempt){
   requireNonNull(prepare); requireNonNull(resource);
-  JsonObject claims = verify(compact, resource, keys, deadline, false);
+  JsonObject claims = verify(compact, resource, keys, deadline);
   String jti = claimString(claims, "jti").orElseThrow(OAuthIssuerTokenStatus::invalid);
   // Every conflict starts a new authoritative read set while preserving the original operation budget.
   for (int attempt = 0; attempt < this.attempts; attempt++) {
+   if(attempt>0)beforeAttempt.run();
    OAuthStoreCoordinator.Session session = this.coordinator.begin(deadline);
+   session.expiresAs(OAuthServerException.Reason.TOKEN_REVOKED);
+   if(lifecycle!=null){JsonObject current=verify(compact,resource,lifecycle.verificationKeys(deadline,session::authorityNow),deadline);
+    if(!current.toJson().equals(claims.toJson()))throw invalid();
+   }
    OAuthAuthorizationRecord access = read(session, this.codec.key(OAuthStoreKey.Kind.ACCESS_TOKEN, jti));
    if (access == null) { if (session.barrier() == OAuthStoreCommitStatus.COMMITTED) throw invalid(); else continue; }
    OAuthAuthorizationRecord grant = read(session, this.codec.key(OAuthStoreKey.Kind.GRANT, access.text("grantId")));
@@ -86,19 +109,61 @@ final class OAuthIssuerTokenStatus {
    boolean valid = state.equals("ACTIVE") && access.matchesIssuer(session.issuer()) && access.matchesSubject(subject)
      && session.effectiveNow().isBefore(lastAdmission) && !session.effectiveNow().isBefore(earliestAdmission)
      && matches(claims, access, resource);
-   T response = valid ? requireNonNull(prepare.apply(claims)) : null;
+   T response = valid ? requireNonNull(prepare.apply(claims,Clock.fixed(session.effectiveNow(),ZoneOffset.UTC))) : null;
    if (valid) session.requireBefore(lastAdmission);
    if (session.barrier() == OAuthStoreCommitStatus.COMMITTED) { if (!valid) throw invalid(); return requireNonNull(response); }
   }
   throw new OAuthStoreFailure(UNAVAILABLE);
  }
+ /** Signature/profile failures keep their fixed M5 diagnostics without constructing a worker-time proof. */
+ @NonNull JsonObject recognizeForProof(@NonNull String compact,@NonNull String resource,
+   @NonNull StaticJwksSource keys,@NonNull Deadline deadline){
+  try{return verify(compact,resource,keys,deadline,true);}
+  catch(OAuthServerAdmissionFailure failure){if(failure.reason()!=OAuthServerAdmissionFailure.Reason.INVALID_TOKEN)throw failure;
+   throw new RecognitionFailure(null);
+  }
+ }
+ /** Actual M5 proof preparation follows a healthy root observation and precedes the complete fact join. */
+ @NonNull OAuthIssuerAccessTokenResult validateProof(@NonNull JsonObject claims,@NonNull String resource,
+   @NonNull Deadline deadline,@NonNull Function<OAuthStoreCoordinator.@NonNull Session,@NonNull OAuthIssuerAccessTokenResult> prepare){
+  String jti=claimString(claims,"jti").orElseThrow(OAuthIssuerTokenStatus::invalid);
+  for(int attempt=0;attempt<this.attempts;attempt++){
+   OAuthStoreCoordinator.Session session=this.coordinator.begin(deadline);session.expiresAs(OAuthServerException.Reason.TOKEN_REVOKED);
+   OAuthIssuerAccessTokenResult proof=requireNonNull(prepare.apply(session));
+   if(proof instanceof OAuthIssuerAccessTokenResult.Rejected)return proof;
+   OAuthAuthorizationRecord access=read(session,this.codec.key(OAuthStoreKey.Kind.ACCESS_TOKEN,jti));
+   if(access==null){if(session.barrier()==OAuthStoreCommitStatus.COMMITTED)return OAuthIssuerAccessTokenResult.fromRejection(OAuthServerException.Reason.TOKEN_REVOKED,null,null);continue;}
+   OAuthAuthorizationRecord grant=read(session,this.codec.key(OAuthStoreKey.Kind.GRANT,access.text("grantId")));
+   if(grant==null){if(session.barrier()==OAuthStoreCommitStatus.COMMITTED)return OAuthIssuerAccessTokenResult.fromRejection(OAuthServerException.Reason.TOKEN_REVOKED,null,null);continue;}
+   OAuthStoreFence subject=session.subject(access.text("subject"));checkAccessGrant(access,grant);
+   Instant upper=prepared(()->access.expires().plus(this.skew));
+   boolean valid=grant.text("status").equals("ACTIVE") && access.matchesIssuer(session.issuer()) && access.matchesSubject(subject)
+     && session.effectiveNow().isBefore(upper) && !session.effectiveNow().isBefore(prepared(()->Instant.ofEpochSecond(access.number("issued")).minus(this.skew)))
+     && matches(claims,access,resource);
+   if(valid)session.requireBefore(upper);
+   if(session.barrier()==OAuthStoreCommitStatus.COMMITTED)return valid?proof:OAuthIssuerAccessTokenResult.fromRejection(OAuthServerException.Reason.TOKEN_REVOKED,null,null);
+  }
+  throw new OAuthStoreFailure(UNAVAILABLE);
+ }
+ /** Fixed diagnostic only, with no token, claims, external message or cause. */
+ static final class RecognitionFailure extends RuntimeException {
+  private static final long serialVersionUID=1L;
+  private final JoseException.@Nullable Reason joseReason;
+  private RecognitionFailure(JoseException.@Nullable Reason reason){super("The issuer access token was rejected.",null,false,false);this.joseReason=reason;}
+  @NonNull OAuthIssuerAccessTokenResult result(){return OAuthIssuerAccessTokenResult.fromRejection(OAuthServerException.Reason.TOKEN_REVOKED,AccessTokenValidationException.Reason.JWT_REJECTED,this.joseReason);}
+ }
  /** Signature and exact profile recognition only; never an admission proof. */
  @NonNull JsonObject retainedClaims(@NonNull String compact, @NonNull StaticJwksSource keys, @NonNull Deadline deadline) {
-  return verify(compact, null, keys, deadline, true);
+  return verify(compact, null, keys, deadline);
  }
  private @NonNull JsonObject verify(@NonNull String compact, @Nullable String resource,
-   @NonNull StaticJwksSource keys, @NonNull Deadline deadline, boolean retained) {
+   @NonNull StaticJwksSource keys, @NonNull Deadline deadline) {
+  return verify(compact,resource,keys,deadline,false);
+ }
+ private @NonNull JsonObject verify(@NonNull String compact,@Nullable String resource,
+   @NonNull StaticJwksSource keys,@NonNull Deadline deadline,boolean diagnostics){
   requireNonNull(compact); requireNonNull(keys);
+  if(compact.length()>this.tokenLimit){if(diagnostics)throw new RecognitionFailure(JoseException.Reason.TOKEN_TOO_LARGE);throw invalid();}
   if (resource != null) OAuthServerConfiguration.resources(java.util.Map.of(resource, Set.of()), 1);
   OAuthServerClientAdmission.remaining(deadline);
   // Fixed local key snapshot: no discovery, remote key source, positive token-status cache or caller claim override.
@@ -106,11 +171,11 @@ final class OAuthIssuerTokenStatus {
   builder = resource == null ? builder.acceptAnyAudience(true) : builder.expectedAudiences(Set.of(resource));
   JwtValidator validator = builder
    .allowedAlgorithms(Set.of(JwsAlgorithm.RS256)).allowedTypes(Set.of("at+jwt")).typeRequired(true).requiredClaims(CLAIMS)
-   .clockSkew(this.skew).clock(this.clock).maximumTokenLength(this.tokenLimit).build();
+   .clockSkew(this.skew).clock(this.clock).maximumTokenLength(Math.max(8192,this.tokenLimit)).build();
   Jwt jwt;
-  try { jwt = retained ? JwtValidationAccess.get().validateIssuerRevocation(validator, compact, deadline::remainingNanos)
-    : JwtValidationAccess.get().validate(validator, compact, deadline::remainingNanos); }
-  catch (JoseException rejection) { OAuthServerClientAdmission.remaining(deadline); throw invalid(); }
+  try { jwt = JwtValidationAccess.get().validateIssuerRevocation(validator, compact, deadline::remainingNanos); }
+  catch (JoseException rejection) { OAuthServerClientAdmission.remaining(deadline);if(diagnostics)throw new RecognitionFailure(rejection.getReason());throw invalid(); }
+  catch(IllegalArgumentException rejection){OAuthServerClientAdmission.remaining(deadline);if(diagnostics)throw new RecognitionFailure(JoseException.Reason.TOKEN_SYNTAX);throw invalid();}
   catch (VirtualMachineError fatal) { throw fatal; }
   catch (Throwable fault) { if (fault instanceof InterruptedException) Thread.currentThread().interrupt(); throw new OAuthStoreFailure(UNAVAILABLE); }
   OAuthServerClientAdmission.remaining(deadline);
@@ -149,12 +214,12 @@ final class OAuthIssuerTokenStatus {
   if (!session.effectiveNow().isBefore(entry.getRetainUntil())) return null;
   String raw = key.getStorageKey(), id = raw.substring(raw.lastIndexOf(':') + 1);
   OAuthAuthorizationRecord record = prepared(() -> OAuthAuthorizationRecord.decode(key.getKind(), id,
-   this.codec.open(entry, Clock.fixed(session.effectiveNow(), ZoneOffset.UTC)), this.limits, this.subjectLimit));
+   session.open(entry), this.limits, this.subjectLimit));
   if (!record.retention().equals(entry.getRetainUntil())) throw new OAuthStoreFailure(CORRUPT_STATE);
   return record;
  }
  private static <T> @NonNull T prepared(@NonNull Supplier<@NonNull T> work) {
-  try { return work.get(); } catch (VirtualMachineError fatal) { throw fatal; } catch (Throwable fault) { throw new OAuthStoreFailure(CORRUPT_STATE); }
+  try { return work.get(); } catch (VirtualMachineError fatal) { throw fatal; } catch (Throwable fault) { OAuthStoreCoordinator.preserveInterrupt(fault);throw new OAuthStoreFailure(CORRUPT_STATE); }
  }
  private static @NonNull Optional<@NonNull String> claimString(@NonNull JsonObject claims, @NonNull String name) {
   return claims.find(name).map(value -> {

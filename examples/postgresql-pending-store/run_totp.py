@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # Copyright 2026 Revetware LLC. Apache-2.0. Unpublished application fixture.
-"""Qualify TOTP storage and one-host recovery against an owned PostgreSQL primary."""
+"""Exercise admitted-time TOTP storage on an owned primary with scripted authority."""
 from __future__ import annotations
 
 import argparse
@@ -29,6 +29,12 @@ BASE_TIME = 1_700_000_010
 SOURCES = [
     ROOT / "src/main/java/example/pending/PostgresqlPyranidDataSource.java",
     ROOT / "src/main/java/example/pending/PostgresqlTotpStore.java",
+    ROOT / "src/main/java/example/pending/TotpPgScope.java",
+    ROOT / "src/main/java/example/pending/TotpPgLocks.java",
+    ROOT / "src/main/java/example/pending/TotpPgCapacity.java",
+    ROOT / "src/main/java/example/pending/TotpPgTransactions.java",
+    ROOT / "src/test/java/example/pending/TotpFixtureAuthority.java",
+    ROOT / "src/test/java/example/pending/TotpTemporalStoreProbe.java",
     ROOT / "src/test/java/example/pending/TotpStoreProbe.java",
     ROOT / "src/test/java/example/pending/TotpFlowProbe.java",
     ROOT / "src/test/java/example/pending/TotpFixtureRecoveryController.java",
@@ -117,7 +123,7 @@ def main() -> None:
     parser.add_argument("--output", type=Path,
                         help="Optional directory for a compact non-secret RESULT.json receipt")
     parser.add_argument("--workload-workers", type=int, default=4,
-                        help="Separate JVMs contending for one namespace lock (default: 4)")
+                        help="Separate JVMs sharing admission and assigned buckets (default: 4)")
     parser.add_argument("--workload-operations", type=int, default=8,
                         help="Read-and-insert operations per JVM (default: 8)")
     args = parser.parse_args()
@@ -133,6 +139,16 @@ def main() -> None:
         "ownedContainerRemoved": False, "ownedVolumeRemoved": False,
         "sourceInputs": {str(path.relative_to(CORE)): digest(path) for path in INPUTS},
         "artifacts": {path.name: digest(path) for path in jars},
+        "profile": {
+            "declaredFamilyAllowlist": ["TOTP"],
+            "authoritySource": "SCRIPTED_INDEPENDENT_FIXTURE",
+            "workerClockSource": "SEPARATE_SCRIPTED_TEST_INPUT",
+            "witnessOwnerProcessJoined": False,
+            "approvedUtcSourceQualified": False,
+            "platformDurabilityQualified": False,
+            "legacyWriterQuarantineExercised": False,
+            "deploymentActivation": False,
+        },
     }
     checks = receipt["checks"]
     assert isinstance(checks, list)
@@ -227,6 +243,14 @@ def main() -> None:
                               "FROM totp_store_entry WHERE namespace='" + FLOW_NAMESPACE
                               + "' ORDER BY storage_key").stdout
 
+            def flow_storage_state() -> bytes:
+                # Compare in memory only; never put addresses, versions or sealed state in receipts.
+                return flow_rows() + docker("exec", name, "psql", "-X", "-q", "-A", "-t",
+                    "-U", "postgres", "-d", "totp_fixture", "-c",
+                    "SELECT bucket,allocation_generation,entry_limit,used_entries,byte_limit,used_bytes "
+                    "FROM totp_store_escrow WHERE namespace=(SELECT physical_namespace "
+                    "FROM totp_store_namespace WHERE namespace='" + FLOW_NAMESPACE + "') ORDER BY bucket").stdout
+
             def application_row_counts() -> bytes:
                 return docker("exec", name, "psql", "-X", "-q", "-A", "-t", "-F", "|",
                               "-U", "postgres", "-d", "totp_fixture", "-c",
@@ -238,13 +262,52 @@ def main() -> None:
             ready()
             seed = ((ROOT / "totp-schema.sql").read_text()
                     + "\n" + (ROOT / "totp-application-schema.sql").read_text())
+            def identity(value: str) -> str:
+                return base64.urlsafe_b64encode(hashlib.sha256(value.encode()).digest()).decode().rstrip("=")
+
+            def admission_lock_sql(namespace: str) -> str:
+                physical = identity("totp-physical/" + namespace).encode()
+                data = b"revetsec/pg-admission/v1\0" + (4).to_bytes(4, "big") + b"TOTP" + len(physical).to_bytes(4, "big") + physical
+                raw = hashlib.sha256(data).digest()
+                first = int.from_bytes(raw[:4], "big", signed=True)
+                second = int.from_bytes(raw[4:8], "big", signed=True)
+                return "SELECT pg_advisory_xact_lock(" + str(first) + "," + str(second) + "); "
+
+            def address(namespace: str, epoch: str) -> str:
+                encode = lambda value: base64.urlsafe_b64encode(value.encode()).decode().rstrip("=")
+                return "totp1:" + encode(namespace) + ":" + encode(epoch) + ":NAMESPACE_STATE:imuTRYmFK91EEVQacqvPSOwL9Fiy6uV9Dlqs7_LkszQ"
+
+            def quotas(capacity: int, bootstrap: list[int]) -> list[int]:
+                remainder = capacity - sum(bootstrap)
+                if remainder < 0:
+                    raise RuntimeError("fixture-profile-cannot-reserve-bootstrap")
+                return [bootstrap[i] + remainder // 256 + (1 if i < remainder % 256 else 0) for i in range(256)]
+
             for namespace in ("fixture-totp-basic", "fixture-totp-race", "fixture-totp-unknown",
-                              "fixture-totp-byte-cap", "fixture-totp-load",
-                              FLOW_NAMESPACE):
-                seed += ("\nINSERT INTO totp_store_namespace(namespace,active_epoch,activation_state) "
-                         "VALUES ('" + namespace + "','" + FIRST_EPOCH + "','NEW');\n"
-                         "INSERT INTO totp_store_epoch(namespace,recovery_epoch) "
-                         "VALUES ('" + namespace + "','" + FIRST_EPOCH + "');\n")
+                              "fixture-totp-byte-cap", "fixture-totp-load", "fixture-totp-temporal", FLOW_NAMESPACE):
+                # Explicit new fixture profile:1024 synthetic entries,4096 flow/load entries.
+                # This is not an online cap increase/default; old100-entry workloads strand quotas.
+                entries = 4096 if namespace in ("fixture-totp-load", FLOW_NAMESPACE) else 1024
+                byte_cap = 64 * 1024 * 1024 if namespace == FLOW_NAMESPACE else 2_000_000
+                physical = identity("totp-physical/" + namespace)
+                authority = identity("totp-authority/" + namespace)
+                recovery = identity("totp-recovery/" + namespace)
+                clock = identity("totp-clock/" + namespace)
+                allocation = identity("totp-allocation/" + namespace)
+                seed += ("\nINSERT INTO totp_store_namespace(namespace,physical_namespace,active_epoch,activation_state,authority_id,recovery_generation,clock_generation,maximum_utc_error_nanos,allocation_generation,format_version,maximum_entries,maximum_reserved_bytes) VALUES ('"
+                         + namespace + "','" + physical + "','" + FIRST_EPOCH + "','NEW','" + authority + "','" + recovery + "','" + clock + "',0,'" + allocation + "',3," + str(entries) + "," + str(byte_cap) + ");\n"
+                         "INSERT INTO totp_store_epoch(namespace,recovery_epoch,activated) VALUES ('" + namespace + "','" + FIRST_EPOCH + "',false);\n")
+                planned_entries = [0] * 256
+                planned_bytes = [0] * 256
+                root_bucket = hashlib.sha256(address(namespace, FIRST_EPOCH).encode()).digest()[0]
+                planned_entries[root_bucket] = 1
+                # Scripted synthetic frame reserves158; genuine flow root bound1126 is conservative
+                # fixture allocation only. Full exact prepared-root fit remains its separate gate.
+                planned_bytes[root_bucket] = 1126 if namespace == FLOW_NAMESPACE else 158
+                entry_quotas = quotas(entries, planned_entries)
+                byte_quotas = quotas(byte_cap, planned_bytes)
+                for bucket in range(256):
+                    seed += ("INSERT INTO totp_store_escrow(family,namespace,bucket,allocation_generation,entry_limit,used_entries,byte_limit,used_bytes) VALUES ('TOTP','" + physical + "'," + str(bucket) + ",'" + allocation + "'," + str(entry_quotas[bucket]) + ",0," + str(byte_quotas[bucket]) + ",0);\n")
             docker("exec", "-i", name, "psql", "-X", "-q", "-v", "ON_ERROR_STOP=1",
                    "-U", "postgres", "-d", "totp_fixture", input_bytes=seed.encode())
             check(True, "schema-and-new-epoch-seeds")
@@ -259,7 +322,7 @@ def main() -> None:
 
             def grant_runtime_role() -> None:
                 grant = ("GRANT SELECT,INSERT,UPDATE ON "
-                         "totp_store_namespace,totp_store_epoch,totp_store_entry,"
+                         "totp_store_namespace,totp_store_epoch,totp_store_entry,totp_store_escrow,"
                          "totp_app_session,totp_app_pending_login,totp_app_approval,"
                          "totp_app_clock TO "
                          + app_user + ";\n")
@@ -268,7 +331,7 @@ def main() -> None:
 
             def no_delete_or_truncate() -> bool:
                 sql = ("SELECT count(*) FROM (VALUES ('totp_store_namespace'),"
-                       "('totp_store_epoch'),('totp_store_entry'),"
+                       "('totp_store_epoch'),('totp_store_entry'),('totp_store_escrow'),"
                        "('totp_app_session'),('totp_app_pending_login'),"
                        "('totp_app_approval'),('totp_app_clock')) AS tables(name) "
                        "WHERE has_table_privilege('" + app_user + "','public.'||name,'DELETE') "
@@ -280,6 +343,19 @@ def main() -> None:
 
             grant_runtime_role()
             check(no_delete_or_truncate(), "runtime-role-cannot-delete-or-truncate")
+            role_flags = docker("exec", name, "psql", "-X", "-q", "-A", "-t", "-U",
+                "postgres", "-d", "totp_fixture", "-c",
+                "SELECT rolsuper,rolcreaterole,rolcreatedb,rolreplication,rolbypassrls "
+                "FROM pg_roles WHERE rolname='" + app_user + "'").stdout.strip()
+            check(role_flags == b"f|f|f|f|f", "runtime-role-has-no-privileged-writer-flags")
+            family_rows = docker("exec", name, "psql", "-X", "-q", "-A", "-t", "-U",
+                "postgres", "-d", "totp_fixture", "-c",
+                "SELECT DISTINCT family FROM totp_store_escrow ORDER BY family").stdout.strip()
+            check(family_rows == b"TOTP", "sql-escrow-matches-one-family-fixture-allowlist")
+            receipt["runtimeRole"] = {
+                "superuser": False, "createRole": False, "createDatabase": False,
+                "replication": False, "bypassRls": False, "deleteOrTruncate": False,
+            }
 
             marker = work / "recovery.marker"
             lock = work / "recovery.lock"
@@ -293,7 +369,8 @@ def main() -> None:
                                REVETSEC_TEST_TOTP_SEAL_KEY_BASE64=seal_key,
                                REVETSEC_TEST_TOTP_NEW_SEAL_KEY_BASE64=next_seal_key,
                                REVETSEC_TEST_TOTP_EPOCH=FIRST_EPOCH,
-                               REVETSEC_TEST_TOTP_NOW=str(BASE_TIME))
+                               REVETSEC_TEST_TOTP_NOW=str(BASE_TIME),
+                               REVETSEC_TEST_TOTP_AUTHORITY_NOW=str(BASE_TIME))
             environment.pop("JAVA_TOOL_OPTIONS", None)
             environment.pop("JDK_JAVA_OPTIONS", None)
 
@@ -316,9 +393,10 @@ def main() -> None:
             def probe(class_name: str, mode: str, *parameters: str,
                       now: int = BASE_TIME, key: str | None = None,
                       epoch: str = FIRST_EPOCH, rotation: str = "old",
-                      timeout: int = 30) -> str:
+                      timeout: int = 30, authority_now: int | None = None) -> str:
                 process_env = dict(environment)
                 process_env["REVETSEC_TEST_TOTP_NOW"] = str(now)
+                process_env["REVETSEC_TEST_TOTP_AUTHORITY_NOW"] = str(now if authority_now is None else authority_now)
                 process_env["REVETSEC_TEST_TOTP_EPOCH"] = epoch
                 configure_keys(process_env, rotation, key)
                 result = subprocess.run(command(class_name, mode, *parameters), capture_output=True,
@@ -341,6 +419,7 @@ def main() -> None:
                       rotation: str = "old") -> subprocess.Popen[bytes]:
                 process_env = dict(environment)
                 process_env["REVETSEC_TEST_TOTP_NOW"] = str(now)
+                process_env["REVETSEC_TEST_TOTP_AUTHORITY_NOW"] = str(now)
                 process_env["REVETSEC_TEST_TOTP_EPOCH"] = epoch
                 configure_keys(process_env, rotation)
                 child = subprocess.Popen(command(class_name, mode, *parameters),
@@ -356,7 +435,13 @@ def main() -> None:
             expect(store, "basic", "BASIC_OK")
             expect(store, "unknown", "UNKNOWN_REPORTED")
             expect(store, "unknown-check", "UNKNOWN_RETAINED")
-            expect(store, "byte-cap", "BYTE_CAP_REFUSED")
+            expect(store, "byte-cap", "BYTE_PROFILE_MISMATCH_CLOSED")
+            temporal = probe("TotpTemporalStoreProbe", "all").splitlines()
+            check(bool(temporal) and all(line.startswith("PASS ") for line in temporal),
+                  "active-postgresql-temporal-source-receipt-checks")
+            for line in temporal:
+                check(True, line[5:])
+
             expect(store, "initialize-race", "RACE_INITIALIZED")
             race_children = [spawn(store, "race") for _ in range(2)]
             for child in race_children:
@@ -406,9 +491,8 @@ def main() -> None:
             holder = subprocess.Popen([
                 "docker", "exec", name, "psql", "-X", "-q", "-v", "ON_ERROR_STOP=1",
                 "-U", "postgres", "-d", "totp_fixture", "-c",
-                "BEGIN; SELECT 1 FROM totp_store_namespace "
-                "WHERE namespace='fixture-totp-race' FOR UPDATE; "
-                "SELECT pg_advisory_xact_lock(89368819); SELECT pg_sleep(5); COMMIT;",
+                "BEGIN; " + admission_lock_sql("fixture-totp-race")
+                + "SELECT pg_advisory_xact_lock(89368819); SELECT pg_sleep(5); COMMIT;",
             ], stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=environment)
             children.append(holder)
             held = False
@@ -420,11 +504,11 @@ def main() -> None:
                     held = True
                     break
                 time.sleep(0.1)
-            check(held, "namespace-row-lock-acquired-before-sentinel")
+            check(held, "physical-admission-lock-acquired-before-sentinel")
             expect(store, "deadline", "DEADLINE_CLOSED", timeout=10)
             if holder.wait(timeout=10):
-                raise RuntimeError("namespace-row-lock-holder-failed")
-            check(True, "bounded-fail-closed-under-namespace-row-lock")
+                raise RuntimeError("physical-admission-lock-holder-failed")
+            check(True, "bounded-fail-closed-under-physical-admission-lock")
 
             stale = spawn(store, "stale-writer")
             check(read_line(stale, 10) == "READY", "stale-store-writer-snapshot")
@@ -446,12 +530,23 @@ def main() -> None:
             check(len(prepared) == 3 and prepared[0] == "PREPARED", "public-enrollment-prepared")
             enrollment_id, manual_secret = prepared[1:]
             confirm_time = safe_step(manual_secret, BASE_TIME, 6)
+            before_fast_worker = flow_storage_state()
+            check(probe(flow, "confirm", enrollment_id, totp_code(manual_secret, confirm_time),
+                        now=confirm_time + 86_400, authority_now=confirm_time) == "UNAVAILABLE",
+                  "genuine-engine-fast-worker-health-refusal")
+            check(flow_storage_state() == before_fast_worker,
+                  "genuine-engine-fast-worker-does-not-poison-data-or-quota")
             confirmed = probe(flow, "confirm", enrollment_id,
                               totp_code(manual_secret, confirm_time), now=confirm_time).split()
             check(len(confirmed) == 8 and confirmed[0] == "CONFIRMED", "public-enrollment-confirmed")
+            check(True, "genuine-engine-healthy-worker-recovers-after-skew-refusal")
             (factor_id, batch_id, recovery_zero, recovery_one, recovery_two,
              recovery_three, recovery_four) = confirmed[1:]
             expect(flow, "status", f"ACTIVE {factor_id} {batch_id} 10")
+            before_status = flow_storage_state()
+            check(probe(flow, "status", now=BASE_TIME + 86_400, authority_now=BASE_TIME)
+                  == "UNAVAILABLE", "genuine-engine-status-fast-worker-health-refusal")
+            check(flow_storage_state() == before_status, "genuine-engine-status-no-data-or-quota-write")
 
             binding = "fixture-session-login"
             seeded = probe(application, "seed", binding).split()

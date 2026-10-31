@@ -68,7 +68,7 @@ final class WebAuthnCeremonyConsumption {
                 || !pending.matchesBrowserBinding(browserBinding)
                 || !java.security.MessageDigest.isEqual(pending.ceremonyId(), expectedCeremonyId))
             return Optional.empty();
-        var consumed = codec.encode(pending.consume());
+        var consumed = codec.encode(pending.consume(), observedAt);
         return Optional.of(new Prepared(pending,
                 WebAuthnStoreWrite.Mutation.replaceExpiring(consumed.key(), consumed.sealedBytes(),
                         consumed.expiresAt())));

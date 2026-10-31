@@ -62,7 +62,7 @@ final class OAuthIssuerTokenStatusTests {
  private static final @NonNull String CHALLENGE = "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM";
  private static final @NonNull OAuthServerIngressLimits LIMITS = OAuthServerIngressLimits.fromDefaults();
  private static final TestJwk.@NonNull Fixture KEY = TestJwk.Fixture.IDP_SIGNING_RSA_2048;
- private final @NonNull OAuthAtomicStoreFixture store = new OAuthAtomicStoreFixture();
+ private final @NonNull OAuthAtomicStoreFixture store = new OAuthAtomicStoreFixture(NOW);
  private final @NonNull MutableClock clock = new MutableClock(NOW);
  private final @NonNull OAuthStoreRecordCodec codec = codec();
  private final @NonNull OAuthStoreCoordinator coordinator = new OAuthStoreCoordinator(this.store, this.codec, this.clock, 3, 255);
@@ -98,7 +98,7 @@ final class OAuthIssuerTokenStatusTests {
  private static @NonNull OAuthGrantPolicy allow() { return (context,budget)->decision(context.getSubject(),requireNonNull(context.getAuthorizedScopesByResource().get(RESOURCE)),context.isRefreshTokenPermitted()); }
  private @NonNull String code(boolean refresh) { return code(refresh,client()); }
  private @NonNull String code(boolean refresh,@NonNull OAuthServerClientRegistration client) {
-  assertEquals(OAuthStoreCommitStatus.COMMITTED,this.coordinator.initializeFreshIssuer(deadline()));this.coordinator.establishNewSubject("subject",deadline());
+  assertEquals(OAuthStoreCommitStatus.COMMITTED,this.coordinator.initializeFreshIssuer(deadline()).getStatus());this.coordinator.establishNewSubject("subject",deadline());
   String q="client_id="+encode(client.getClientId())+"&response_type=code&redirect_uri="+encode(REDIRECT)+"&resource="+encode(RESOURCE)+"&code_challenge_method=S256&code_challenge="+CHALLENGE;
   var request=OAuthServerRequest.parse(OAuthServerRequest.Endpoint.AUTHORIZATION,"GET",q,new byte[0],Map.of(),LIMITS);
   var admission=OAuthServerAuthorizationAdmission.admit(request,(id,budget)->Optional.of(client),deadline(),resources(),LIMITS,false,false);
@@ -111,12 +111,12 @@ final class OAuthIssuerTokenStatusTests {
  }
  private @NonNull OAuthTokenResponse redeem(@NonNull String code) { return this.first.redeem(request(code,Map.of()),(id,budget)->Optional.of(client()),resources(),allow(),deadline()); }
  private @NonNull OAuthStoreEntry entry(OAuthStoreKey.@NonNull Kind kind) { return this.store.rows.values().stream().filter(e->e.getKey().getKind()==kind).findFirst().orElseThrow(); }
- private @NonNull JsonObject payload(OAuthStoreKey.@NonNull Kind kind) { return this.codec.open(entry(kind),Clock.fixed(this.clock.time,ZoneOffset.UTC)); }
+ private @NonNull JsonObject payload(OAuthStoreKey.@NonNull Kind kind) { return IssuerTestRecords.open(this.codec,entry(kind),Clock.fixed(this.clock.time,ZoneOffset.UTC)); }
  private @NonNull OAuthAuthorizationRecord record(OAuthStoreKey.@NonNull Kind kind) {
   String k=entry(kind).getKey().getStorageKey();return OAuthAuthorizationRecord.decode(kind,k.substring(k.lastIndexOf(':')+1),payload(kind),LIMITS,255);
  }
  private void replace(OAuthStoreKey.@NonNull Kind kind,@NonNull JsonObject payload) {
-  var entry=entry(kind);this.store.rows.put(entry.getKey(),this.codec.seal(entry.getKey(),entry.getRetainUntil(),payload.toJson()));
+  var entry=entry(kind);this.store.rows.put(entry.getKey(),IssuerTestRecords.seal(this.codec,entry.getKey(),entry.getRetainUntil(),payload.toJson()));
  }
  private static @NonNull JsonObject changed(@NonNull JsonObject original,@NonNull String key,@Nullable JsonValue value) {
   Map<String,JsonValue> members=new LinkedHashMap<>(original.getMembers());if(value==null)members.remove(key);else members.put(key,value);return JsonObject.fromMembers(members);
@@ -164,7 +164,7 @@ final class OAuthIssuerTokenStatusTests {
  @Test void allFourVersionPredicatesAreCheckedOnEverySuccessfulBarrier() {
   for(var kind:List.of(OAuthStoreKey.Kind.ISSUER_STATE,OAuthStoreKey.Kind.SUBJECT_STATE,OAuthStoreKey.Kind.ACCESS_TOKEN,OAuthStoreKey.Kind.GRANT)) {
    var f=new OAuthIssuerTokenStatusTests();String jwt=f.issued();var row=f.entry(kind);int commits=f.store.commits;
-   f.store.beforeCommit=()->f.store.rows.put(row.getKey(),f.codec.seal(row.getKey(),row.getRetainUntil(),f.codec.open(row,Clock.fixed(NOW,ZoneOffset.UTC)).toJson()));
+   f.store.beforeCommit=()->f.store.rows.put(row.getKey(),IssuerTestRecords.seal(f.codec,row.getKey(),row.getRetainUntil(),IssuerTestRecords.open(f.codec,row,Clock.fixed(NOW,ZoneOffset.UTC)).toJson()));
    f.validate(jwt);assertEquals(commits+2,f.store.commits,kind.name());assertEquals(4,requireNonNull(f.store.lastTransaction).getConditions().size());
   }
  }
@@ -189,7 +189,7 @@ final class OAuthIssuerTokenStatusTests {
   }));
  }
  @TestFactory @NonNull Stream<@NonNull DynamicTest> missingPermanentFencesAreInfrastructure() {
-  return Stream.of(OAuthStoreKey.Kind.ISSUER_STATE,OAuthStoreKey.Kind.SUBJECT_STATE).map(kind->test(kind.name(),()->{var f=new OAuthIssuerTokenStatusTests();String jwt=f.issued();f.remove(kind);failed(OAuthStoreFailure.Reason.CORRUPT_STATE,()->f.validate(jwt));}));
+  return Stream.of(OAuthStoreKey.Kind.ISSUER_STATE,OAuthStoreKey.Kind.SUBJECT_STATE).map(kind->test(kind.name(),()->{var f=new OAuthIssuerTokenStatusTests();String jwt=f.issued();f.remove(kind);failed(kind==OAuthStoreKey.Kind.ISSUER_STATE?OAuthStoreFailure.Reason.UNAVAILABLE:OAuthStoreFailure.Reason.CORRUPT_STATE,()->f.validate(jwt));}));
  }
  @Test void conflictExhaustionNeverReturnsClaims() {String jwt=issued();this.store.conflicts=8;failed(OAuthStoreFailure.Reason.UNAVAILABLE,()->validate(jwt));assertEquals(5,this.store.conflicts);}
  @Test void oneAttemptDoesNotRetryConflict() {String jwt=issued();this.store.conflicts=2;failed(OAuthStoreFailure.Reason.UNAVAILABLE,()->status(1,Duration.ZERO,this.clock).validate(jwt,RESOURCE,keys(),deadline()));assertEquals(1,this.store.conflicts);}
@@ -197,7 +197,7 @@ final class OAuthIssuerTokenStatusTests {
   return Stream.of("before-active","after-active","before-missing","after-missing").map(name->test(name,()->{
    var f=new OAuthIssuerTokenStatusTests();String jwt=f.issued();if(name.endsWith("missing"))f.remove(OAuthStoreKey.Kind.ACCESS_TOKEN);
    f.store.unknownBefore=name.startsWith("before");f.store.unknownAfter=name.startsWith("after");int count=f.store.commits;
-   failed(OAuthStoreFailure.Reason.COMMIT_OUTCOME_UNKNOWN,()->f.validate(jwt));assertEquals(count+1,f.store.commits);
+   failed(OAuthStoreFailure.Reason.UNAVAILABLE,()->f.validate(jwt));assertEquals(count+1,f.store.commits);
   }));
  }
  @TestFactory @NonNull Stream<@NonNull DynamicTest> backendFaultsRemainUnavailable() {
@@ -220,18 +220,18 @@ final class OAuthIssuerTokenStatusTests {
   Thread.currentThread().interrupt();try{unavailable(()->validate(jwt));assertTrue(Thread.currentThread().isInterrupted());}finally{Thread.interrupted();}
  }
  @Test void tokenExpiryAndConfiguredSkewAreEnforcedAtAdmission() {
-  String jwt=issued();Instant expires=record(OAuthStoreKey.Kind.ACCESS_TOKEN).expires();this.clock.time=expires.plusSeconds(29);validate(jwt);
-  this.clock.time=expires.plusSeconds(30);invalid(()->validate(jwt));
+  String jwt=issued();Instant expires=record(OAuthStoreKey.Kind.ACCESS_TOKEN).expires();this.clock.time=expires.plusSeconds(29); this.store.authorityNow=this.clock.time;validate(jwt);
+  this.clock.time=expires.plusSeconds(30); this.store.authorityNow=this.clock.time;invalid(()->validate(jwt));
  }
  @Test void grantFamilyExpiryDoesNotPrematurelyInvalidateLastAccessDescendant() {
-  String jwt=token(redeem(code(false)));this.clock.time=record(OAuthStoreKey.Kind.GRANT).expires().plusSeconds(1);validate(jwt);
+  String jwt=token(redeem(code(false)));this.clock.time=record(OAuthStoreKey.Kind.GRANT).expires().plusSeconds(1); this.store.authorityNow=this.clock.time;validate(jwt);
  }
  @TestFactory @NonNull Stream<@NonNull DynamicTest> lateValidityCrossingNeverReturnsSuccess() {
-  return Stream.of("before","after").map(when->test(when,()->{var f=new OAuthIssuerTokenStatusTests();String jwt=f.issued();Instant expires=f.record(OAuthStoreKey.Kind.ACCESS_TOKEN).expires().plusSeconds(30);Runnable late=()->f.clock.time=expires;
-   if(when.equals("before"))f.store.beforeCommit=late;else f.store.afterCommit=late;failed(OAuthStoreFailure.Reason.UNAVAILABLE,()->f.validate(jwt));
+  return Stream.of("before","after").map(when->test(when,()->{var f=new OAuthIssuerTokenStatusTests();String jwt=f.issued();Instant expires=f.record(OAuthStoreKey.Kind.ACCESS_TOKEN).expires().plusSeconds(30);Runnable late=()->{f.clock.time=expires; f.store.authorityNow=f.clock.time;};
+   if(when.equals("before")){f.store.beforeCommit=late;invalid(()->f.validate(jwt));}else {f.store.afterCommit=late;failed(OAuthStoreFailure.Reason.UNAVAILABLE,()->f.validate(jwt));}
   }));
  }
- @Test void backwardsClockCannotAdmit() {String jwt=issued();this.clock.time=NOW.minusSeconds(1);failed(OAuthStoreFailure.Reason.UNAVAILABLE,()->validate(jwt));}
+ @Test void backwardsClockCannotAdmit() {String jwt=issued();this.clock.time=NOW.minusSeconds(1); this.store.authorityNow=this.clock.time;failed(OAuthStoreFailure.Reason.UNAVAILABLE,()->validate(jwt));}
  @TestFactory @NonNull Stream<@NonNull DynamicTest> wrongSignedIdentityAndScopeNeverMatchIssuedJti() {
   Map<String,JsonValue> values=new LinkedHashMap<>();values.put("sub",JsonString.fromValue("other"));values.put("client_id",JsonString.fromValue("other"));values.put("scope",JsonString.fromValue("read"));values.put("iat",JsonNumber.fromValue(NOW.getEpochSecond()+1));values.put("exp",JsonNumber.fromValue(NOW.getEpochSecond()+299));
   return values.entrySet().stream().map(e->test(e.getKey(),()->{var f=new OAuthIssuerTokenStatusTests();String jwt=f.issued();invalid(()->f.validate(f.signed(changed(claims(jwt),e.getKey(),e.getValue()))));}));
@@ -260,7 +260,7 @@ final class OAuthIssuerTokenStatusTests {
     case "expired"->f.signed(changed(c,"exp",JsonNumber.fromValue(NOW.getEpochSecond()-60)));
     case "future"->f.signed(changed(c,"iat",JsonNumber.fromValue(NOW.getEpochSecond()+60)));
     case "size"->"x".repeat(16385);default->"invalid";};
-   int reads=f.store.reads;invalid(()->f.validate(hostile));assertEquals(reads,f.store.reads);
+   int reads=f.store.reads;invalid(()->f.validate(hostile));if(name.equals("expired")||name.equals("future"))assertTrue(f.store.reads>reads);else assertEquals(reads,f.store.reads);
   }));
  }
  @TestFactory @NonNull Stream<@NonNull DynamicTest> authenticatedCrossRecordContradictionsAreCorruption() {
@@ -293,29 +293,29 @@ final class OAuthIssuerTokenStatusTests {
   this.store.beforeCommit=()->this.store.rows.put(row.getKey(),row);validate(jwt);assertEquals(count+2,this.store.commits);
  }
  @Test void physicalExpiredRowsAreInactiveEvenWhenSignatureClockIsEarlier() {
-  String jwt=issued();this.clock.time=record(OAuthStoreKey.Kind.ACCESS_TOKEN).retention();
+  String jwt=issued();this.clock.time=record(OAuthStoreKey.Kind.ACCESS_TOKEN).retention(); this.store.authorityNow=this.clock.time;
   invalid(()->status(3,Duration.ZERO,Clock.fixed(NOW,ZoneOffset.UTC)).validate(jwt,RESOURCE,keys(),deadline()));
  }
  @Test void authenticatedRetentionMismatchIsCorruption() {
   String jwt=issued();var e=entry(OAuthStoreKey.Kind.ACCESS_TOKEN);
-  this.store.rows.put(e.getKey(),this.codec.seal(e.getKey(),e.getRetainUntil().plusSeconds(1),payload(OAuthStoreKey.Kind.ACCESS_TOKEN).toJson()));
+  this.store.rows.put(e.getKey(),IssuerTestRecords.seal(this.codec,e.getKey(),e.getRetainUntil().plusSeconds(1),payload(OAuthStoreKey.Kind.ACCESS_TOKEN).toJson()));
   failed(OAuthStoreFailure.Reason.CORRUPT_STATE,()->validate(jwt));
  }
  @Test void statusCannotOutliveAuthenticatedRetainedValidity() {
   String jwt=issued();var e=entry(OAuthStoreKey.Kind.ACCESS_TOKEN);Instant shortened=record(OAuthStoreKey.Kind.ACCESS_TOKEN).expires();
   JsonObject p=changed(payload(OAuthStoreKey.Kind.ACCESS_TOKEN),"retain",JsonNumber.fromValue(shortened.getEpochSecond()));
-  this.store.rows.put(e.getKey(),this.codec.seal(e.getKey(),shortened,p.toJson()));failed(OAuthStoreFailure.Reason.CORRUPT_STATE,()->validate(jwt));
+  this.store.rows.put(e.getKey(),IssuerTestRecords.seal(this.codec,e.getKey(),shortened,p.toJson()));failed(OAuthStoreFailure.Reason.CORRUPT_STATE,()->validate(jwt));
  }
  @Test void accessBeyondFamilyPinnedLifetimeIsCorruption() {
   String jwt=issued();var g=record(OAuthStoreKey.Kind.GRANT);JsonObject p=changed(payload(OAuthStoreKey.Kind.GRANT),"expires",JsonNumber.fromValue(NOW.getEpochSecond()-1));
   replace(OAuthStoreKey.Kind.GRANT,p);failed(OAuthStoreFailure.Reason.CORRUPT_STATE,()->validate(jwt));assertEquals(Duration.ofMinutes(5),g.maximumAccessLifetime());
  }
  @Test void signaturesCannotUseEarlierClockToBypassLedgerNotBefore() {
-  String jwt=issued();Clock ahead=Clock.fixed(NOW,ZoneOffset.UTC);this.clock.time=NOW.minusSeconds(31);
-  var issuer=entry(OAuthStoreKey.Kind.ISSUER_STATE);var p=this.codec.open(issuer,Clock.fixed(NOW,ZoneOffset.UTC));
-  p=changed(p,"highWaterSeconds",JsonNumber.fromValue(this.clock.time.getEpochSecond()));
-  this.store.rows.put(issuer.getKey(),this.codec.seal(issuer.getKey(),issuer.getRetainUntil(),p.toJson()));
-  invalid(()->status(3,Duration.ofSeconds(30),ahead).validate(jwt,RESOURCE,keys(),deadline()));
+  String jwt=issued();Clock ahead=Clock.fixed(NOW,ZoneOffset.UTC);this.clock.time=NOW.minusSeconds(31); this.store.authorityNow=this.clock.time;
+  var issuer=entry(OAuthStoreKey.Kind.ISSUER_STATE);var p=IssuerTestRecords.open(this.codec,issuer,Clock.fixed(NOW,ZoneOffset.UTC));
+  p=changed(p,"minimumSeconds",JsonNumber.fromValue(this.clock.time.getEpochSecond()));
+  this.store.rows.put(issuer.getKey(),IssuerTestRecords.seal(this.codec,issuer.getKey(),issuer.getRetainUntil(),p.toJson()));
+  failed(OAuthStoreFailure.Reason.UNAVAILABLE,()->status(3,Duration.ofSeconds(30),ahead).validate(jwt,RESOURCE,keys(),deadline()));
  }
  @Test void cooperativeBudgetIsNotRestartedOnConflict() {
   String jwt=issued();Deadline budget=Deadline.fromNow(Duration.ofMillis(100));this.store.conflicts=1;

@@ -212,6 +212,7 @@ public final class PasskeyApp {
         WebAuthnRegistrationRequestResult result = this.relyingParty.beginRegistrationResult(options, session.binding);
         if (result instanceof WebAuthnRegistrationRequestResult.Prepared prepared)
             return json(200, prepared.getRequest().getJson());
+        if (result instanceof WebAuthnRegistrationRequestResult.ReconciliationRequired) return reconciliationRequired();
         if (result instanceof WebAuthnRegistrationRequestResult.Indeterminate) return uncertain();
         return result instanceof WebAuthnRegistrationRequestResult.Unavailable
                 ? text(503, "Local demo unavailable.") : text(400, "Request rejected.");
@@ -230,6 +231,7 @@ public final class PasskeyApp {
         if (result instanceof WebAuthnRegistrationResult.Succeeded success
                 && MessageDigest.isEqual(this.accountHandle, success.getRegistration().getUserHandle()))
             return text(200, "Passkey registered.");
+        if (result instanceof WebAuthnRegistrationResult.ReconciliationRequired) return reconciliationRequired();
         if (result instanceof WebAuthnRegistrationResult.Indeterminate) return uncertain();
         return result instanceof WebAuthnRegistrationResult.Unavailable
                 ? text(503, "Local demo unavailable.") : text(400, "Registration rejected.");
@@ -335,6 +337,7 @@ public final class PasskeyApp {
         if (id == null) return text(403, "Request denied.");
         WebAuthnCredentialRemovalResult result = this.relyingParty.removeCredentialResult(this.accountHandle, id);
         if (result instanceof WebAuthnCredentialRemovalResult.Removed) return text(200, "Passkey removed.");
+        if (result instanceof WebAuthnCredentialRemovalResult.ReconciliationRequired) return reconciliationRequired();
         if (result instanceof WebAuthnCredentialRemovalResult.Indeterminate) return uncertain();
         return result instanceof WebAuthnCredentialRemovalResult.Unavailable
                 ? text(503, "Local demo unavailable.") : text(404, "Passkey not found.");
@@ -378,20 +381,27 @@ public final class PasskeyApp {
     private @NonNull MarshaledResponse authenticationStart(@NonNull WebAuthnAuthenticationRequestResult result) {
         if (result instanceof WebAuthnAuthenticationRequestResult.Prepared prepared)
             return json(200, prepared.getRequest().getJson());
+        if (result instanceof WebAuthnAuthenticationRequestResult.ReconciliationRequired) return reconciliationRequired();
         if (result instanceof WebAuthnAuthenticationRequestResult.Indeterminate) return uncertain();
         return result instanceof WebAuthnAuthenticationRequestResult.Unavailable
                 ? text(503, "Local demo unavailable.") : text(400, "Request rejected.");
     }
 
     private @NonNull MarshaledResponse authenticationFailure(@NonNull WebAuthnAuthenticationResult result) {
+        if (result instanceof WebAuthnAuthenticationResult.ReconciliationRequired) return reconciliationRequired();
         if (result instanceof WebAuthnAuthenticationResult.Indeterminate) return uncertain();
         return result instanceof WebAuthnAuthenticationResult.Unavailable
                 ? text(503, "Local demo unavailable.") : text(400, "Authentication rejected.");
     }
 
+    private @NonNull MarshaledResponse reconciliationRequired() {
+        this.admissionOpen.set(false);
+        return text(503, "Local demo unavailable.");
+    }
+
     private @NonNull MarshaledResponse uncertain() {
         this.admissionOpen.set(false);
-        return text(503, "State uncertain; stop this disposable demo and start fresh.");
+        return text(503, "Local demo unavailable.");
     }
 
     private @NonNull MarshaledResponse rotated(PasskeySessions.@NonNull Session session, boolean authenticated) {

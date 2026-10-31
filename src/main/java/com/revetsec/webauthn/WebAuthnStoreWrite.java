@@ -16,6 +16,10 @@
 
 package com.revetsec.webauthn;
 
+import com.google.errorprone.annotations.CheckReturnValue;
+import com.revetsec.StoreTemporalCondition;
+import com.revetsec.StoreTimeObservation;
+import com.revetsec.internal.StoreTimeRules;
 import java.time.Instant;
 import java.util.HashSet;
 import java.util.List;
@@ -31,13 +35,17 @@ import org.jspecify.annotations.Nullable;
  * @since 1.0.0
  */
 @javax.annotation.concurrent.Immutable
+@CheckReturnValue
 public final class WebAuthnStoreWrite {
  private final @NonNull WebAuthnStoreSnapshot snapshot;
  private final @NonNull List<WebAuthnStoreWrite.@NonNull Mutation> mutations;
+ private final @NonNull StoreTemporalCondition temporalCondition;
 
  private WebAuthnStoreWrite(@NonNull WebAuthnStoreSnapshot snapshot,
-   @NonNull List<WebAuthnStoreWrite.@NonNull Mutation> mutations) {
+   @NonNull List<WebAuthnStoreWrite.@NonNull Mutation> mutations,
+   @NonNull StoreTemporalCondition temporalCondition) {
   this.snapshot = snapshot; this.mutations = List.copyOf(mutations);
+  this.temporalCondition = temporalCondition;
  }
 
  /**
@@ -45,23 +53,32 @@ public final class WebAuthnStoreWrite {
   * requires confirmed absence; replacement and deletion require a present version.
   * @param snapshot the complete predicate set
   * @param mutations the bounded change set, possibly empty
+  * @param temporalCondition engine-created inclusive floor and optional exclusive expiry
   * @return a validated atomic request
   * @since 1.0.0
   */
  public static @NonNull WebAuthnStoreWrite fromSnapshotAndMutations(
    @NonNull WebAuthnStoreSnapshot snapshot,
-   @NonNull List<WebAuthnStoreWrite.@NonNull Mutation> mutations) {
+   @NonNull List<WebAuthnStoreWrite.@NonNull Mutation> mutations,
+   @NonNull StoreTemporalCondition temporalCondition) {
   java.util.Objects.requireNonNull(snapshot);
+  java.util.Objects.requireNonNull(mutations); java.util.Objects.requireNonNull(temporalCondition);
+  if (!(snapshot.getTimeObservation() instanceof StoreTimeObservation.Healthy healthy)
+    || !StoreTimeRules.sameAdmission(healthy.getAdmission(), temporalCondition.getAdmission())
+    || !healthy.getClockGeneration().equals(temporalCondition.getClockGeneration())
+    || temporalCondition.getNotBeforeInclusive().isBefore(healthy.getObservedAt()))
+   throw new IllegalArgumentException("Inconsistent WebAuthn temporal condition");
   if (mutations.size() > 8) throw new IllegalArgumentException("Too many mutations");
   Set<WebAuthnStoreKey> changed = new HashSet<>();
   for (Mutation mutation : mutations) {
+   java.util.Objects.requireNonNull(mutation);
    WebAuthnStoreEntry prior = snapshot.getEntry(mutation.key);
    if (!changed.add(mutation.key)
      || (mutation.kind == Mutation.Kind.INSERT && !(prior instanceof WebAuthnStoreEntry.Absent))
      || (mutation.kind != Mutation.Kind.INSERT && !(prior instanceof WebAuthnStoreEntry.Present)))
     throw new IllegalArgumentException("Invalid store mutation");
   }
-  return new WebAuthnStoreWrite(snapshot, mutations);
+  return new WebAuthnStoreWrite(snapshot, mutations, temporalCondition);
  }
 
  /** Returns every exact version or absence predicate.
@@ -73,6 +90,11 @@ public final class WebAuthnStoreWrite {
   * @return the mutations
   * @since 1.0.0 */
  public @NonNull List<WebAuthnStoreWrite.@NonNull Mutation> getMutations() { return this.mutations; }
+
+ /** Returns the original admitted temporal predicate.
+  * @return the inclusive floor and optional exclusive expiry
+  * @since 1.0.0 */
+ public @NonNull StoreTemporalCondition getTemporalCondition() { return this.temporalCondition; }
 
  /** Redacts predicates and mutations. @since 1.0.0 */
  @Override public @NonNull String toString() { return "WebAuthnStoreWrite{write=<redacted>}"; }
@@ -168,9 +190,10 @@ public final class WebAuthnStoreWrite {
    return this.sealedBytes == null ? Optional.empty() : Optional.of(this.sealedBytes.clone());
   }
 
-  /** Returns the ceremony reclamation deadline, if supplied. A store must remove expired
-   * ceremonies before evaluating its capacity limit and must treat them as absent on reads.
-   * Other record kinds are never reclaimed by this hint.
+  /** Returns the ceremony reclamation deadline, if supplied. It is an exact projection of the
+   * authenticated expiry, not authority to delete during reads or a no-effect refusal. Explicit
+   * maintenance must recheck expiry/version under current healthy admitted time. Other record
+   * kinds are never reclaimed by this hint; capacity may refuse while retained ceremonies remain.
    * @return the optional maintenance deadline
    * @since 1.0.0 */
   public @NonNull Optional<@NonNull Instant> getExpiresAt() { return Optional.ofNullable(this.expiresAt); }

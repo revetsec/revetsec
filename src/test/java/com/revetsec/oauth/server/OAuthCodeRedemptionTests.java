@@ -61,7 +61,7 @@ final class OAuthCodeRedemptionTests {
  private static final @NonNull String CHALLENGE = "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM";
  private static final @NonNull OAuthServerIngressLimits LIMITS = OAuthServerIngressLimits.fromDefaults();
  private static final TestJwk.@NonNull Fixture KEY = TestJwk.Fixture.IDP_SIGNING_RSA_2048;
- private final @NonNull OAuthAtomicStoreFixture store = new OAuthAtomicStoreFixture();
+ private final @NonNull OAuthAtomicStoreFixture store = new OAuthAtomicStoreFixture(NOW);
  private final @NonNull MutableClock clock = new MutableClock(NOW);
  private final @NonNull OAuthStoreRecordCodec codec = codec();
  private final @NonNull OAuthStoreCoordinator coordinator = new OAuthStoreCoordinator(this.store, this.codec, this.clock, 3, 255);
@@ -98,7 +98,7 @@ final class OAuthCodeRedemptionTests {
  private static @NonNull OAuthGrantPolicy allow() { return (context,budget)->decision(context.getSubject(),requireNonNull(context.getAuthorizedScopesByResource().get(RESOURCE)),context.isRefreshTokenPermitted()); }
  private @NonNull String code(boolean refresh) { return code(refresh,client()); }
  private @NonNull String code(boolean refresh,@NonNull OAuthServerClientRegistration client) {
-  assertEquals(OAuthStoreCommitStatus.COMMITTED,this.coordinator.initializeFreshIssuer(deadline()));this.coordinator.establishNewSubject("subject",deadline());
+  assertEquals(OAuthStoreCommitStatus.COMMITTED,this.coordinator.initializeFreshIssuer(deadline()).getStatus());this.coordinator.establishNewSubject("subject",deadline());
   String q="client_id="+encode(client.getClientId())+"&response_type=code&redirect_uri="+encode(REDIRECT)+"&resource="+encode(RESOURCE)+"&code_challenge_method=S256&code_challenge="+CHALLENGE;
   var request=OAuthServerRequest.parse(OAuthServerRequest.Endpoint.AUTHORIZATION,"GET",q,new byte[0],Map.of(),LIMITS);
   var admission=OAuthServerAuthorizationAdmission.admit(request,(id,budget)->Optional.of(client),deadline(),resources(),LIMITS,false,false);
@@ -111,12 +111,12 @@ final class OAuthCodeRedemptionTests {
  }
  private @NonNull OAuthTokenResponse redeem(@NonNull String code) { return this.first.redeem(request(code,Map.of()),(id,budget)->Optional.of(client()),resources(),allow(),deadline()); }
  private @NonNull OAuthStoreEntry entry(OAuthStoreKey.@NonNull Kind kind) { return this.store.rows.values().stream().filter(e->e.getKey().getKind()==kind).findFirst().orElseThrow(); }
- private @NonNull JsonObject payload(OAuthStoreKey.@NonNull Kind kind) { return this.codec.open(entry(kind),Clock.fixed(this.clock.time,ZoneOffset.UTC)); }
+ private @NonNull JsonObject payload(OAuthStoreKey.@NonNull Kind kind) { return IssuerTestRecords.open(this.codec,entry(kind),Clock.fixed(this.clock.time,ZoneOffset.UTC)); }
  private @NonNull OAuthAuthorizationRecord record(OAuthStoreKey.@NonNull Kind kind) {
   String k=entry(kind).getKey().getStorageKey();return OAuthAuthorizationRecord.decode(kind,k.substring(k.lastIndexOf(':')+1),payload(kind),LIMITS,255);
  }
  private void replace(OAuthStoreKey.@NonNull Kind kind,@NonNull JsonObject payload) {
-  var entry=entry(kind);this.store.rows.put(entry.getKey(),this.codec.seal(entry.getKey(),entry.getRetainUntil(),payload.toJson()));
+  var entry=entry(kind);this.store.rows.put(entry.getKey(),IssuerTestRecords.seal(this.codec,entry.getKey(),entry.getRetainUntil(),payload.toJson()));
  }
  private static @NonNull JsonObject changed(@NonNull JsonObject original,@NonNull String key,@Nullable JsonValue value) {
   Map<String,JsonValue> members=new LinkedHashMap<>(original.getMembers());if(value==null)members.remove(key);else members.put(key,value);return JsonObject.fromMembers(members);
@@ -152,7 +152,7 @@ final class OAuthCodeRedemptionTests {
   assertEquals(Duration.ofMinutes(5),g.maximumAccessLifetime());assertEquals(this.retention.horizon(g.expires()),g.horizon());assertEquals(g.horizon(),c.retention());assertEquals(g.horizon(),r.retention());
   assertEquals(this.retention.accessRetention(a.expires()),a.retention());assertEquals(g.text("id"),a.text("grantId"));assertEquals(g.text("id"),r.text("grantId"));assertTrue(a.sameLineage(g));assertTrue(c.sameLineage(g));assertTrue(r.sameLineage(g));
   String refresh=body(result).find("refresh_token").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow();assertEquals(OAuthServerCredential.refreshDigest(refresh),g.text("refreshId"));assertEquals(g.text("refreshId"),r.text("id"));assertEquals(NOW.plusSeconds(86400).minusNanos(NOW.getNano()),r.expires());
-  assertEquals(6,requireNonNull(this.store.lastTransaction).getConditions().size());assertEquals(5,requireNonNull(this.store.lastTransaction).getMutations().size());
+  assertEquals(6,requireNonNull(this.store.lastTransaction).getConditions().size());assertEquals(4,requireNonNull(this.store.lastTransaction).getMutations().size());
  }
  @Test void exactWireBodyAndHeaderBytesAreRetainedAndDefensivelyCopied() {
   var response=redeem(code(false));byte[] body=response.body(),headers=response.headers();String h=new String(headers,StandardCharsets.UTF_8);
@@ -177,7 +177,7 @@ final class OAuthCodeRedemptionTests {
   String code=code(true);redeem(code);invalid(()->redeem(code));assertEquals("REVOKED",record(OAuthStoreKey.Kind.GRANT).text("status"));int size=this.store.rows.size();invalid(()->redeem(code));assertEquals(size,this.store.rows.size());assertEquals(0,requireNonNull(this.store.lastTransaction).getMutations().size());
  }
  @Test void fullBoundUsedReplayStillRevokesAfterOriginalCodeExpiry() {
-  String code=code(true);redeem(code);this.clock.time=NOW.plusSeconds(121);invalid(()->redeem(code));assertEquals("REVOKED",record(OAuthStoreKey.Kind.GRANT).text("status"));
+  String code=code(true);redeem(code);this.clock.time=NOW.plusSeconds(121); this.store.authorityNow=this.clock.time;invalid(()->redeem(code));assertEquals("REVOKED",record(OAuthStoreKey.Kind.GRANT).text("status"));
  }
  @Test void usedReplayRejectsOnTheOnlyCommittedAttempt() {
   String code=code(true);redeem(code);
@@ -186,7 +186,7 @@ final class OAuthCodeRedemptionTests {
   assertEquals("REVOKED",record(OAuthStoreKey.Kind.GRANT).text("status"));
  }
  @Test void unusedExpiredCodeNeverIssuesOrCallsPolicy() {
-  String code=code(true);this.clock.time=record(OAuthStoreKey.Kind.CODE).expires();int count=this.store.commits;invalid(()->this.first.redeem(request(code,Map.of()),(id,b)->Optional.of(client()),resources(),(c,b)->{fail("No expired policy call");return OAuthAuthorizationDecision.deniedInstance();},deadline()));assertEquals(count,this.store.commits);
+  String code=code(true);this.clock.time=record(OAuthStoreKey.Kind.CODE).expires(); this.store.authorityNow=this.clock.time;int count=this.store.commits;invalid(()->this.first.redeem(request(code,Map.of()),(id,b)->Optional.of(client()),resources(),(c,b)->{fail("No expired policy call");return OAuthAuthorizationDecision.deniedInstance();},deadline()));assertEquals(count,this.store.commits);
  }
  @TestFactory @NonNull Stream<@NonNull DynamicTest> wrongBindingsCannotConsumeOrRevoke() {
   return Stream.of(Map.of("code_verifier","x".repeat(43)),Map.of("resource","https://other.example/mcp"),Map.of("redirect_uri","https://client.example/cb?x=%2F"),Map.of("code",OTHER),Map.of("client_id","other")).flatMap(overrides->Stream.of(false,true).map(used->DynamicTest.dynamicTest(overrides.keySet()+" used="+used,()->{
@@ -277,36 +277,36 @@ final class OAuthCodeRedemptionTests {
   assertNotNull(redeem(code));
  }
  @Test void preparedCredentialsCannotBeReleasedAfterCommitValidityBoundary() {
-  String code=code(false);Instant expiry=record(OAuthStoreKey.Kind.CODE).expires();this.store.afterCommit=()->this.clock.time=expiry;
-  failed(OAuthStoreFailure.Reason.UNAVAILABLE,()->redeem(code));assertEquals("USED",record(OAuthStoreKey.Kind.CODE).text("status"));invalid(()->redeem(code));assertEquals("REVOKED",record(OAuthStoreKey.Kind.GRANT).text("status"));
+  String code=code(false);Instant expiry=record(OAuthStoreKey.Kind.CODE).expires();this.store.afterCommit=()->{this.clock.time=expiry; this.store.authorityNow=this.clock.time;};
+  failed(OAuthStoreFailure.Reason.COMMIT_CONFIRMED_NOT_ADMITTED,()->redeem(code));assertEquals("USED",record(OAuthStoreKey.Kind.CODE).text("status"));invalid(()->redeem(code));assertEquals("REVOKED",record(OAuthStoreKey.Kind.GRANT).text("status"));
  }
  @Test void shortAccessTokenExpiryCannotBePassedBySlowCommit() {
-  String code=code(false);this.store.afterCommit=()->this.clock.time=NOW.plusSeconds(31);
+  String code=code(false);this.store.afterCommit=()->{this.clock.time=NOW.plusSeconds(31); this.store.authorityNow=this.clock.time;};
   var shortLived=new OAuthCodeRedemption(this.coordinator,this.codec,LIMITS,this.retention,
    new OAuthTokenResponse.Encoder(ISSUER,"key",signer(),32768,16384),Duration.ofSeconds(30),false,
    Duration.ofDays(1),Duration.ofDays(7),3,255);
-  failed(OAuthStoreFailure.Reason.UNAVAILABLE,
+  failed(OAuthStoreFailure.Reason.COMMIT_CONFIRMED_NOT_ADMITTED,
    ()->shortLived.redeem(request(code,Map.of()),(id,b)->Optional.of(client()),resources(),allow(),deadline()));
   assertEquals("USED",record(OAuthStoreKey.Kind.CODE).text("status"));
  }
  @Test void policyCannotPushOperationPastCodeExpiryOrOriginalDeadline() {
   String code=code(false);Instant expiry=record(OAuthStoreKey.Kind.CODE).expires();int commits=this.store.commits;
-  failed(OAuthStoreFailure.Reason.UNAVAILABLE,()->this.first.redeem(request(code,Map.of()),(id,b)->Optional.of(client()),resources(),(c,b)->{this.clock.time=expiry;return decision("subject",Set.of("read"),false);},deadline()));assertEquals(commits,this.store.commits);
-  this.clock.time=NOW;Deadline deadline=Deadline.fromNow(Duration.ofMillis(30));unavailable(()->this.first.redeem(request(code,Map.of()),(id,b)->Optional.of(client()),resources(),(c,b)->{while(!deadline.isExpired())Thread.onSpinWait();return decision("subject",Set.of("read"),false);},deadline));assertEquals(commits,this.store.commits);
+  invalid(()->this.first.redeem(request(code,Map.of()),(id,b)->Optional.of(client()),resources(),(c,b)->{this.clock.time=expiry; this.store.authorityNow=this.clock.time;return decision("subject",Set.of("read"),false);},deadline()));assertEquals(commits,this.store.commits);
+  var fresh=new OAuthCodeRedemptionTests();String freshCode=fresh.code(false);int freshCommits=fresh.store.commits;Deadline deadline=Deadline.fromNow(Duration.ofMillis(30));unavailable(()->fresh.first.redeem(fresh.request(freshCode,Map.of()),(id,b)->Optional.of(client()),resources(),(c,b)->{while(!deadline.isExpired())Thread.onSpinWait();return decision("subject",Set.of("read"),false);},deadline));assertEquals(freshCommits,fresh.store.commits);
  }
  @TestFactory @NonNull Stream<@NonNull DynamicTest> revocationOrIncarnationChangesCannotIssueOrReplayOldGrants() {
   return Stream.of("issuerEpoch","subjectEpoch","issuerIncarnation","subjectIncarnation").flatMap(mode->Stream.of(false,true).map(used->DynamicTest.dynamicTest(mode+" used="+used,()->{
    OAuthCodeRedemptionTests t=new OAuthCodeRedemptionTests();String code=t.code(true);if(used)t.redeem(code);
-   if(mode.equals("issuerEpoch"))t.coordinator.revokeAll(deadline());else if(mode.equals("subjectEpoch"))t.coordinator.revokeSubject("subject",deadline());else {var key=mode.equals("issuerIncarnation")?t.codec.issuerKey():t.codec.subjectKey("subject");var fence=mode.equals("issuerIncarnation")?OAuthStoreFence.initialIssuer(OTHER,NOW):OAuthStoreFence.initialSubject(OTHER);t.store.rows.put(key,t.codec.seal(key,OAuthStoreFormat.PERMANENT,fence.toPayload()));}
+   if(mode.equals("issuerEpoch"))t.coordinator.revokeAll(deadline());else if(mode.equals("subjectEpoch"))t.coordinator.revokeSubject("subject",deadline());else {var key=mode.equals("issuerIncarnation")?t.codec.issuerKey():t.codec.subjectKey("subject");var fence=mode.equals("issuerIncarnation")?OAuthStoreFence.initialIssuer(OTHER,NOW):OAuthStoreFence.initialSubject(OTHER);t.store.rows.put(key,IssuerTestRecords.seal(t.codec,key,OAuthStoreFormat.PERMANENT,fence.toPayload()));}
    int commits=t.store.commits;invalid(()->t.redeem(code));assertEquals(commits,t.store.commits);
   })));
  }
  @TestFactory @NonNull Stream<@NonNull DynamicTest> lostPermanentFenceOrReferencedGrantIsCorruptState() {
-  return Stream.of(OAuthStoreKey.Kind.ISSUER_STATE,OAuthStoreKey.Kind.SUBJECT_STATE,OAuthStoreKey.Kind.GRANT).map(kind->DynamicTest.dynamicTest(kind.name(),()->{OAuthCodeRedemptionTests t=new OAuthCodeRedemptionTests();String code=t.code(false);t.store.rows.remove(t.entry(kind).getKey());failed(OAuthStoreFailure.Reason.CORRUPT_STATE,()->t.redeem(code));}));
+  return Stream.of(OAuthStoreKey.Kind.ISSUER_STATE,OAuthStoreKey.Kind.SUBJECT_STATE,OAuthStoreKey.Kind.GRANT).map(kind->DynamicTest.dynamicTest(kind.name(),()->{OAuthCodeRedemptionTests t=new OAuthCodeRedemptionTests();String code=t.code(false);t.store.rows.remove(t.entry(kind).getKey());failed(kind==OAuthStoreKey.Kind.ISSUER_STATE?OAuthStoreFailure.Reason.UNAVAILABLE:OAuthStoreFailure.Reason.CORRUPT_STATE,()->t.redeem(code));}));
  }
  @TestFactory @NonNull Stream<@NonNull DynamicTest> crossLinkLineageAndAuthenticatedRetentionSubstitutionFailClosed() {
   return Stream.of("codeId","issuerIncarnation","subjectEpoch","retention","status").map(mode->DynamicTest.dynamicTest(mode,()->{OAuthCodeRedemptionTests t=new OAuthCodeRedemptionTests();String code=t.code(true);JsonObject payload=t.payload(OAuthStoreKey.Kind.GRANT);
-   if(mode.equals("retention")){var e=t.entry(OAuthStoreKey.Kind.GRANT);t.store.rows.put(e.getKey(),t.codec.seal(e.getKey(),e.getRetainUntil().plusSeconds(1),payload.toJson()));}
+   if(mode.equals("retention")){var e=t.entry(OAuthStoreKey.Kind.GRANT);t.store.rows.put(e.getKey(),IssuerTestRecords.seal(t.codec,e.getKey(),e.getRetainUntil().plusSeconds(1),payload.toJson()));}
    else t.replace(OAuthStoreKey.Kind.GRANT,changed(payload,mode,mode.equals("subjectEpoch")?JsonNumber.fromValue(1L):JsonString.fromValue(mode.equals("status")?"ACTIVE":OTHER)));
    int commits=t.store.commits;failed(OAuthStoreFailure.Reason.CORRUPT_STATE,()->t.redeem(code));assertEquals(commits,t.store.commits);
   }));
@@ -351,37 +351,37 @@ final class OAuthCodeRedemptionTests {
   return Stream.of(OAuthStoreKey.Kind.ACCESS_TOKEN,OAuthStoreKey.Kind.REFRESH_TOKEN).map(kind->DynamicTest.dynamicTest(kind.name(),()->{
    OAuthCodeRedemptionTests t=new OAuthCodeRedemptionTests();String code=t.code(true);int commits=t.store.commits;
    OAuthAuthorizationServerStore wrapper=new OAuthAuthorizationServerStore(){
-    @Override public @NonNull Optional<@NonNull OAuthStoreEntry> read(@NonNull OAuthStoreKey key,@NonNull Duration budget){
-     if(key.getKind()==kind&&!t.store.rows.containsKey(key))t.store.rows.put(key,t.codec.seal(key,NOW.truncatedTo(java.time.temporal.ChronoUnit.SECONDS).plusSeconds(1000),"{}"));return t.store.read(key,budget);
+    @Override public @NonNull OAuthStoreReadResult read(@NonNull OAuthStoreKey key,@NonNull Duration budget){
+     if(key.getKind()==kind&&!t.store.rows.containsKey(key))t.store.rows.put(key,IssuerTestRecords.seal(t.codec,key,NOW.truncatedTo(java.time.temporal.ChronoUnit.SECONDS).plusSeconds(1000),"{}"));return t.store.read(key,budget);
     }
-    @Override public @NonNull OAuthStoreCommitStatus commit(@NonNull OAuthStoreTransaction tx,@NonNull Duration budget){return t.store.commit(tx,budget);}
+    @Override public @NonNull OAuthStoreCommitReceipt commit(@NonNull OAuthStoreTransaction tx,@NonNull Duration budget){return t.store.commit(tx,budget);}
    };
    var coordinator=new OAuthStoreCoordinator(wrapper,t.codec,t.clock,3,255);
    var engine=new OAuthCodeRedemption(coordinator,t.codec,LIMITS,t.retention,new OAuthTokenResponse.Encoder(ISSUER,"key",signer(),4096,1024),Duration.ofMinutes(5),true,Duration.ofDays(1),Duration.ofDays(7),3,255);
    failed(OAuthStoreFailure.Reason.UNAVAILABLE,()->engine.redeem(request(code,Map.of()),(id,b)->Optional.of(client()),resources(),allow(),deadline()));assertEquals(commits,t.store.commits);assertEquals("UNUSED",t.record(OAuthStoreKey.Kind.CODE).text("status"));assertEquals(3,t.store.rows.keySet().stream().filter(k->k.getKind()==kind).count());
   }));
  }
- @Test void expiredReplayRetentionHasNoCredentialAuthority() {String code=code(true);redeem(code);this.clock.time=record(OAuthStoreKey.Kind.GRANT).horizon();int commits=this.store.commits;invalid(()->redeem(code));assertEquals(commits,this.store.commits);}
+ @Test void expiredReplayRetentionHasNoCredentialAuthority() {String code=code(true);redeem(code);this.clock.time=record(OAuthStoreKey.Kind.GRANT).horizon(); this.store.authorityNow=this.clock.time;int commits=this.store.commits;invalid(()->redeem(code));assertEquals(commits,this.store.commits);}
  @Test void usedReplayCannotCommitAfterGrantRetentionWhenCodeIsRetainedLonger() {
   String code=code(true);redeem(code);Instant grantHorizon=record(OAuthStoreKey.Kind.GRANT).horizon();
   Instant extended=grantHorizon.plusSeconds(60);OAuthStoreEntry old=entry(OAuthStoreKey.Kind.CODE);
   JsonObject payload=changed(payload(OAuthStoreKey.Kind.CODE),"horizon",JsonNumber.fromValue(extended.getEpochSecond()));
-  this.store.rows.put(old.getKey(),this.codec.seal(old.getKey(),extended,payload.toJson()));
+  this.store.rows.put(old.getKey(),IssuerTestRecords.seal(this.codec,old.getKey(),extended,payload.toJson()));
   var wrapper=new OAuthAuthorizationServerStore(){
-   @Override public @NonNull Optional<@NonNull OAuthStoreEntry> read(@NonNull OAuthStoreKey key,@NonNull Duration budget){
-    if(key.getKind()==OAuthStoreKey.Kind.SUBJECT_STATE)OAuthCodeRedemptionTests.this.clock.time=grantHorizon;
+   @Override public @NonNull OAuthStoreReadResult read(@NonNull OAuthStoreKey key,@NonNull Duration budget){
+    if(key.getKind()==OAuthStoreKey.Kind.SUBJECT_STATE){OAuthCodeRedemptionTests.this.clock.time=grantHorizon; OAuthCodeRedemptionTests.this.store.authorityNow=grantHorizon;}
     return store.read(key,budget);
    }
-   @Override public @NonNull OAuthStoreCommitStatus commit(@NonNull OAuthStoreTransaction tx,@NonNull Duration budget){return store.commit(tx,budget);}
+   @Override public @NonNull OAuthStoreCommitReceipt commit(@NonNull OAuthStoreTransaction tx,@NonNull Duration budget){return store.commit(tx,budget);}
   };
   var coordinator=new OAuthStoreCoordinator(wrapper,this.codec,this.clock,3,255);
   var engine=new OAuthCodeRedemption(coordinator,this.codec,LIMITS,this.retention,
    new OAuthTokenResponse.Encoder(ISSUER,"key",signer(),32768,16384),Duration.ofMinutes(5),true,
    Duration.ofDays(1),Duration.ofDays(7),1,255);
   int commits=this.store.commits;
-  failed(OAuthStoreFailure.Reason.UNAVAILABLE,
+  invalid(
    ()->engine.redeem(request(code,Map.of()),(id,b)->Optional.of(client()),resources(),allow(),deadline()));
-  assertEquals(commits,this.store.commits);this.clock.time=NOW;
+  assertEquals(commits,this.store.commits);this.clock.time=NOW; this.store.authorityNow=this.clock.time;
   assertEquals("ACTIVE",record(OAuthStoreKey.Kind.GRANT).text("status"));
  }
  @Test void usedCodeWithPendingGrantOrShortenedHorizonIsCorrupt() {
@@ -391,7 +391,7 @@ final class OAuthCodeRedemptionTests {
   String code=code(false);replace(OAuthStoreKey.Kind.GRANT,changed(payload(OAuthStoreKey.Kind.GRANT),"status",JsonString.fromValue("DENIED")));invalid(()->redeem(code));
  }
  @Test void pendingExpiryMismatchIsCorruptAndDoesNotConsume() {
-  String code=code(false);var e=entry(OAuthStoreKey.Kind.GRANT);JsonObject p=changed(payload(OAuthStoreKey.Kind.GRANT),"expires",JsonNumber.fromValue(e.getRetainUntil().plusSeconds(1).getEpochSecond()));this.store.rows.put(e.getKey(),this.codec.seal(e.getKey(),e.getRetainUntil().plusSeconds(1),p.toJson()));failed(OAuthStoreFailure.Reason.CORRUPT_STATE,()->redeem(code));
+  String code=code(false);var e=entry(OAuthStoreKey.Kind.GRANT);JsonObject p=changed(payload(OAuthStoreKey.Kind.GRANT),"expires",JsonNumber.fromValue(e.getRetainUntil().plusSeconds(1).getEpochSecond()));this.store.rows.put(e.getKey(),IssuerTestRecords.seal(this.codec,e.getKey(),e.getRetainUntil().plusSeconds(1),p.toJson()));failed(OAuthStoreFailure.Reason.CORRUPT_STATE,()->redeem(code));
  }
  @Test void preparedRecordFactoriesRejectFractionalRetentionAndWrongKind() {
   code(false);var c=record(OAuthStoreKey.Kind.CODE);var g=record(OAuthStoreKey.Kind.GRANT);
@@ -415,7 +415,7 @@ final class OAuthCodeRedemptionTests {
   byte[] key=new byte[32];for(int n=0;n<32;n++)key[n]=(byte)(n+1);
   var codec=new OAuthStoreRecordCodec(ISSUER,StateSealer.withActiveKey(SealingKey.fromBase64("k",Base64.getEncoder().encodeToString(key))).maximumSealedLength(16384).clock(Clock.fixed(NOW,ZoneOffset.UTC)).build(),16384);
   var coordinator=new OAuthStoreCoordinator(this.store,codec,this.clock,3,1024);
-  coordinator.initializeFreshIssuer(deadline());String subject="s".repeat(1024);coordinator.establishNewSubject(subject,deadline());
+  coordinator.initializeFreshIssuer(deadline()).getStatus();String subject="s".repeat(1024);coordinator.establishNewSubject(subject,deadline());
   Set<String> scopes=Set.of("a".repeat(128),"b".repeat(128),"c".repeat(128),"d".repeat(128),"e".repeat(128),"f".repeat(128),"g".repeat(128),"h".repeat(128));
   String clientId="c".repeat(2048);var resources=Map.of(RESOURCE,scopes);var client=OAuthServerClientRegistration.withClientId(clientId).configurationVersion("v1").redirectUris(List.of(URI.create(REDIRECT))).allowedScopesByResource(resources).build();
   String query="client_id="+clientId+"&response_type=code&redirect_uri="+encode(REDIRECT)+"&resource="+encode(RESOURCE)+"&code_challenge_method=S256&code_challenge="+CHALLENGE;
@@ -424,7 +424,7 @@ final class OAuthCodeRedemptionTests {
   String handle=ledger.begin(admission,BROWSER,deadline());String code=ledger.complete(handle,BROWSER,client,resources,OAuthAuthorizationDecision.withSubject(subject).authorizedScopesByResource(resources).build(),deadline()).orElseThrow();
   var engine=new OAuthCodeRedemption(coordinator,codec,LIMITS,this.retention,new OAuthTokenResponse.Encoder(ISSUER,"key",signer(),4096,1024),Duration.ofMinutes(5),false,Duration.ofDays(1),Duration.ofDays(7),3,1024);int commits=this.store.commits;
   unavailable(()->engine.redeem(request(code,Map.of("client_id",clientId)),(id,b)->Optional.of(client),resources,(c,b)->OAuthAuthorizationDecision.withSubject(subject).authorizedScopesByResource(resources).build(),deadline()));assertEquals(commits,this.store.commits);assertFalse(this.store.rows.keySet().stream().anyMatch(k->k.getKind()==OAuthStoreKey.Kind.ACCESS_TOKEN));
-  var entry=entry(OAuthStoreKey.Kind.CODE);assertEquals("UNUSED",codec.open(entry,Clock.fixed(NOW,ZoneOffset.UTC)).find("status").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow());
+  var entry=entry(OAuthStoreKey.Kind.CODE);assertEquals("UNUSED",IssuerTestRecords.open(codec,entry,Clock.fixed(NOW,ZoneOffset.UTC)).find("status").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow());
  }
  @Test void decodedIssuedFactsRejectOutOfRangeInstantsAndRetiredTransitions() {
   redeem(code(false));var g=record(OAuthStoreKey.Kind.GRANT);assertEquals("REVOKED",g.terminated(LIMITS,255).terminated(LIMITS,255).text("status"));

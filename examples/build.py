@@ -22,6 +22,7 @@ from pathlib import Path
 import re
 import shutil
 import subprocess
+import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 PINS = json.loads((ROOT / "examples/pins.json").read_text())
@@ -71,6 +72,8 @@ def main():
                         "cwd": str(cwd), "exit": result.returncode})
         (args.work / "COMMANDS.json").write_text(json.dumps(records, indent=2) + "\n")
         if result.returncode:
+            # Keep the Maven error visible in the job log as well as the uploaded evidence.
+            print((args.work / (label + ".log")).read_text(errors="replace"), file=sys.stderr)
             raise RuntimeError("Build failed: " + label + "; see " + str(args.work / (label + ".log")))
 
     def copy_source(label, source, require_exact=False):

@@ -51,7 +51,7 @@ class OAuthStoreCoordinationTests {
 	private static final @NonNull Instant NOW = Instant.parse("2026-10-04T00:00:00.123456789Z");
 	private static final @NonNull String NONCE = "A".repeat(43);
 	private static final @NonNull String ISSUER = "https://issuer.example/tenant";
-	private final @NonNull OAuthAtomicStoreFixture store = new OAuthAtomicStoreFixture();
+	private final @NonNull OAuthAtomicStoreFixture store = new OAuthAtomicStoreFixture(NOW);
 	private final @NonNull MutableClock clock = new MutableClock(NOW);
 	private final @NonNull OAuthStoreRecordCodec codec = codec(ISSUER);
 	private final @NonNull OAuthStoreCoordinator first = coordinator(3);
@@ -67,10 +67,10 @@ class OAuthStoreCoordinationTests {
 		return new OAuthStoreCoordinator(this.store, this.codec, this.clock, attempts, 255);
 	}
 	private static @NonNull Deadline deadline() { return Deadline.fromNow(Duration.ofSeconds(10)); }
-	private void initialized() { assertEquals(OAuthStoreCommitStatus.COMMITTED, this.first.initializeFreshIssuer(deadline())); }
+	private void initialized() { assertEquals(OAuthStoreCommitStatus.COMMITTED, this.first.initializeFreshIssuer(deadline()).getStatus()); }
 	private @NonNull OAuthStoreFence issuer() { return this.second.begin(deadline()).issuer(); }
 	private void putIssuer(@NonNull String payload) {
-		this.store.rows.put(this.codec.issuerKey(), this.codec.seal(this.codec.issuerKey(), OAuthStoreFormat.PERMANENT, payload));
+		this.store.rows.put(this.codec.issuerKey(), IssuerTestRecords.seal(this.codec,this.codec.issuerKey(), OAuthStoreFormat.PERMANENT, payload));
 	}
 	private static void failed(OAuthStoreFailure.@NonNull Reason reason, @NonNull Executable operation) {
 		OAuthStoreFailure failure = assertThrows(OAuthStoreFailure.class, operation);
@@ -83,7 +83,13 @@ class OAuthStoreCoordinationTests {
 		return this.codec.key(OAuthStoreKey.Kind.CODE, "A".repeat(41) + "ABCDEFGHIJKLMNOPQRSTUVWXYZ".charAt(number) + "A");
 	}
 	private @NonNull OAuthStoreEntry finite(@NonNull OAuthStoreKey key) {
-		return this.codec.seal(key, NOW.plusSeconds(100).minusNanos(123456789), "{}");
+		Instant expiry=NOW.plusSeconds(100).minusNanos(123456789);
+        String id=key.getStorageKey().substring(key.getStorageKey().lastIndexOf(':')+1);
+        String payload=com.revetsec.json.JsonObject.builder().put("schema",1L).put("id",id).put("status","UNUSED")
+          .put("expires",expiry.getEpochSecond()).put("issuerIncarnation",NONCE).put("issuerEpoch",0L)
+          .put("subjectIncarnation",NONCE).put("subjectEpoch",0L).put("grantId",NONCE)
+          .put("challenge","E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM").put("redirect","https://client.example/cb").build().toJson();
+        return IssuerTestRecords.seal(this.codec,key,expiry,payload);
 	}
 
 	@Test void missingIssuerFailsClosedWithoutInitializing() {
@@ -93,15 +99,15 @@ class OAuthStoreCoordinationTests {
 		initialized(); OAuthStoreFence fence = issuer(); assertEquals(0, fence.epoch()); assertEquals(NOW, fence.highWater());
 		assertEquals(OAuthStoreFormat.PERMANENT, requireNonNull(this.store.rows.get(this.codec.issuerKey())).getRetainUntil());
 		OAuthStoreCoordinator restarted = coordinator(3); assertEquals(fence.incarnation(), restarted.begin(deadline()).issuer().incarnation());
-		assertEquals(OAuthStoreCommitStatus.CONFLICT, restarted.initializeFreshIssuer(deadline())); assertEquals(1, this.store.commits);
+		assertEquals(OAuthStoreCommitStatus.CONFLICT, restarted.initializeFreshIssuer(deadline()).getStatus()); assertEquals(1, this.store.commits);
 	}
 	@Test void competingFreshInitializationCannotOverwriteWinner() {
-		this.store.beforeCommit = () -> assertEquals(OAuthStoreCommitStatus.COMMITTED, this.second.initializeFreshIssuer(deadline()));
-		assertEquals(OAuthStoreCommitStatus.CONFLICT, this.first.initializeFreshIssuer(deadline())); assertEquals(1, this.store.rows.size());
+		this.store.beforeCommit = () -> assertEquals(OAuthStoreCommitStatus.COMMITTED, this.second.initializeFreshIssuer(deadline()).getStatus());
+		assertEquals(OAuthStoreCommitStatus.CONFLICT, this.first.initializeFreshIssuer(deadline()).getStatus()); assertEquals(1, this.store.rows.size());
 	}
 	@Test void deletedEstablishedIssuerCannotBeRecreatedByNormalTraffic() {
-		initialized(); this.store.rows.clear(); failed(CORRUPT_STATE, () -> this.second.revokeAll(deadline()));
-		failed(CORRUPT_STATE, () -> this.second.establishNewSubject("subject", deadline())); assertTrue(this.store.rows.isEmpty());
+		initialized(); this.store.rows.clear(); failed(UNAVAILABLE, () -> this.second.revokeAll(deadline()));
+		failed(UNAVAILABLE, () -> this.second.establishNewSubject("subject", deadline())); assertTrue(this.store.rows.isEmpty());
 	}
 	@Test void subjectCreationRequiresIssuerAndIsStableAcrossInstances() {
 		initialized(); OAuthStoreFence original = this.first.establishNewSubject("subject", deadline());
@@ -123,29 +129,29 @@ class OAuthStoreCoordinationTests {
 		this.first.establishNewSubject("subject", deadline()); this.store.rows.remove(this.codec.subjectKey("subject"));
 		failed(CORRUPT_STATE, () -> this.second.revokeSubject("subject", deadline()));
 	}
-	@Test void issuerRevocationAdvancesEpochAndClockWithoutChangingIncarnation() {
-		initialized(); String incarnation = issuer().incarnation(); this.clock.time = NOW.plusNanos(1);
+	@Test void issuerRevocationAdvancesEpochAndPreservesMinimumAndIncarnation() {
+		initialized(); String incarnation = issuer().incarnation(); this.clock.time = NOW.plusNanos(1); this.store.authorityNow=this.clock.time;
 		assertEquals(1, this.first.revokeAll(deadline()).epoch()); assertEquals(2, this.second.revokeAll(deadline()).epoch());
-		assertEquals(incarnation, issuer().incarnation()); assertEquals(this.clock.time, issuer().highWater());
+		assertEquals(incarnation, issuer().incarnation()); assertEquals(NOW, issuer().highWater());
 	}
-	@Test void boundedClockSkewUsesTheDurableHighWaterForAdmissionsAndCommits() {
-		initialized(); this.clock.time = NOW.plusMillis(5);
+	@Test void workerSkewAdmissionUsesAuthorityAndKeepsTheStableMinimum() {
+		initialized(); this.clock.time = NOW.plusMillis(5); this.store.authorityNow=this.clock.time;
 		assertEquals(OAuthStoreCommitStatus.COMMITTED, this.first.begin(deadline()).commit(List.of()));
 		Clock lagging = Clock.fixed(NOW, ZoneOffset.UTC);
 		OAuthStoreCoordinator within = new OAuthStoreCoordinator(this.store, this.codec, lagging,
 			Duration.ofMillis(5), 3, 255);
 		assertEquals(NOW.plusMillis(5), within.begin(deadline()).effectiveNow());
 		assertEquals(OAuthStoreCommitStatus.COMMITTED, within.begin(deadline()).barrier());
-		assertEquals(NOW.plusMillis(5), issuer().highWater());
-		OAuthStoreCoordinator beyond = new OAuthStoreCoordinator(this.store, this.codec, lagging,
+		assertEquals(NOW, issuer().highWater());
+		OAuthStoreCoordinator beyond = new OAuthStoreCoordinator(this.store, this.codec, Clock.fixed(NOW.minusSeconds(6),ZoneOffset.UTC),
 			Duration.ofMillis(4), 3, 255);
 		failed(UNAVAILABLE, () -> beyond.begin(deadline()));
 	}
-	@Test void reservedIssuerClockAllowsIndependentCodeCommitsAcrossCoordinators() throws Exception {
+	@Test void stableIssuerRootAllowsIndependentCodeCommitsAcrossCoordinators() throws Exception {
 		OAuthAuthorizationServerStore synchronizedStore = new OAuthAuthorizationServerStore() {
-			@Override public synchronized @NonNull Optional<@NonNull OAuthStoreEntry> read(
+			@Override public synchronized @NonNull OAuthStoreReadResult read(
 					@NonNull OAuthStoreKey key, @NonNull Duration budget) { return store.read(key, budget); }
-			@Override public synchronized @NonNull OAuthStoreCommitStatus commit(
+			@Override public synchronized @NonNull OAuthStoreCommitReceipt commit(
 					@NonNull OAuthStoreTransaction transaction, @NonNull Duration budget) {
 				return store.commit(transaction, budget);
 			}
@@ -154,9 +160,9 @@ class OAuthStoreCoordinationTests {
 			Duration.ofMillis(200), 3, 255);
 		OAuthStoreCoordinator second = new OAuthStoreCoordinator(synchronizedStore, this.codec, this.clock,
 			Duration.ofMillis(200), 3, 255);
-		assertEquals(OAuthStoreCommitStatus.COMMITTED, first.initializeFreshIssuer(deadline()));
+		assertEquals(OAuthStoreCommitStatus.COMMITTED, first.initializeFreshIssuer(deadline()).getStatus());
 		OAuthStoreEntry original = requireNonNull(this.store.rows.get(this.codec.issuerKey()));
-		assertEquals(NOW.plusMillis(100), first.begin(deadline()).effectiveNow());
+		assertEquals(NOW, first.begin(deadline()).effectiveNow());
 		int workers = 32;
 		List<OAuthStoreCoordinator.Session> sessions = new ArrayList<>();
 		List<OAuthStoreKey> codes = new ArrayList<>();
@@ -186,20 +192,20 @@ class OAuthStoreCoordinationTests {
 			assertEquals(workers + 1, this.store.rows.size());
 		} finally { release.countDown(); executor.shutdownNow(); }
 	}
-	@Test void reservedClockRollsOverAndIssuerRevocationStillFencesAdmission() {
+	@Test void authorityAdvancesWithoutRootRewriteAndIssuerRevocationFencesAdmission() {
 		OAuthStoreCoordinator reserving = new OAuthStoreCoordinator(this.store, this.codec, this.clock,
 			Duration.ofMillis(200), 3, 255);
-		assertEquals(OAuthStoreCommitStatus.COMMITTED, reserving.initializeFreshIssuer(deadline()));
+		assertEquals(OAuthStoreCommitStatus.COMMITTED, reserving.initializeFreshIssuer(deadline()).getStatus());
 		OAuthStoreKey code = key(0);
 		OAuthStoreCoordinator.Session pending = reserving.begin(deadline()); pending.read(code);
 		assertEquals(1, reserving.revokeAll(deadline()).epoch());
 		assertEquals(OAuthStoreCommitStatus.CONFLICT, pending.commit(List.of(
 			OAuthStoreTransaction.Mutation.fromPut(finite(code)))));
-		assertEquals(NOW.plusMillis(100), reserving.begin(deadline()).issuer().highWater());
-		this.clock.time = NOW.plusMillis(101);
+		assertEquals(NOW, reserving.begin(deadline()).issuer().highWater());
+		this.clock.time = NOW.plusMillis(101); this.store.authorityNow=this.clock.time;
 		assertEquals(OAuthStoreCommitStatus.COMMITTED, reserving.begin(deadline()).commit(List.of()));
-		assertEquals(NOW.plusMillis(201), reserving.begin(deadline()).issuer().highWater());
-		this.clock.time = NOW.minusNanos(1);
+		assertEquals(NOW, reserving.begin(deadline()).issuer().highWater());
+		this.clock.time = NOW.minusNanos(1); this.store.authorityNow=this.clock.time;
 		failed(UNAVAILABLE, () -> reserving.begin(deadline()));
 	}
 	@Test void racingIssuerRevocationsReloadAndBothAdvanceExactlyOnce() {
@@ -208,11 +214,11 @@ class OAuthStoreCoordinationTests {
 	}
 	@Test void subjectRevocationAdvancesOnlySelectedSubjectWithClockFence() {
 		initialized(); OAuthStoreFence a = this.first.establishNewSubject("a", deadline());
-		this.first.establishNewSubject("b", deadline()); this.clock.time = NOW.plusSeconds(10);
+		this.first.establishNewSubject("b", deadline()); this.clock.time = NOW.plusSeconds(10); this.store.authorityNow=this.clock.time;
 		assertEquals(1, this.first.revokeSubject("a", deadline()).epoch());
 		assertEquals(a.incarnation(), this.second.begin(deadline()).subject("a").incarnation());
 		assertEquals(0, this.second.begin(deadline()).subject("b").epoch()); assertEquals(0, issuer().epoch());
-		assertEquals(this.clock.time, issuer().highWater()); assertEquals(2, requireNonNull(this.store.lastTransaction).getConditions().size());
+		assertEquals(NOW, issuer().highWater()); assertEquals(2, requireNonNull(this.store.lastTransaction).getConditions().size());
 	}
 	@Test void racingSubjectRevocationsAdvanceTwiceWithoutLosingWrites() {
 		initialized(); this.first.establishNewSubject("a", deadline());
@@ -249,7 +255,7 @@ class OAuthStoreCoordinationTests {
 			assertEquals(OAuthStoreCommitStatus.CONFLICT, pending.barrier());
 			assertThrows(IllegalStateException.class, pending::barrier);
 			// Dynamic cases share one instance: reset only the fixture after verifying this case.
-			this.store.rows.clear(); this.store.commits = 0;
+			this.store.resetClosedFixture(); this.store.commits = 0;
 		}));
 	}
 	@Test void alreadyAdmittedWorkIsNotRolledBackByLaterRevocation() {
@@ -257,23 +263,23 @@ class OAuthStoreCoordinationTests {
 		admitted.subject("a"); assertEquals(OAuthStoreCommitStatus.COMMITTED, admitted.barrier());
 		this.second.revokeSubject("a", deadline()); assertEquals(1, this.first.begin(deadline()).subject("a").epoch());
 	}
-	@Test void transactionConflictRejectsAllWritesIncludingClockUpdate() {
+	@Test void transactionConflictRejectsAllWritesWithoutRootUpdate() {
 		initialized(); OAuthStoreKey a = key(0), b = key(1); OAuthStoreCoordinator.Session attempt = this.first.begin(deadline());
 		attempt.read(a); attempt.read(b); OAuthStoreEntry issuerBefore = requireNonNull(this.store.rows.get(this.codec.issuerKey()));
-		this.store.rows.put(b, finite(b)); this.clock.time = NOW.plusSeconds(10);
+		this.store.rows.put(b, finite(b)); this.clock.time = NOW.plusSeconds(10); this.store.authorityNow=this.clock.time;
 		assertEquals(OAuthStoreCommitStatus.CONFLICT, attempt.commit(List.of(
 			OAuthStoreTransaction.Mutation.fromPut(finite(a)), OAuthStoreTransaction.Mutation.fromPut(finite(b)))));
 		assertFalse(this.store.rows.containsKey(a)); assertSame(issuerBefore, requireNonNull(this.store.rows.get(this.codec.issuerKey())));
 	}
-	@Test void multiRowCommitIncludesCompleteConditionsAndChangesClockAtomically() {
+	@Test void multiRowCommitIncludesCompleteConditionsAndPreservesIssuerRoot() {
 		initialized(); OAuthStoreKey a = key(0), b = key(1); this.store.rows.put(b, finite(b));
 		OAuthStoreCoordinator.Session attempt = this.first.begin(deadline()); attempt.read(a); attempt.read(b);
-		this.clock.time = NOW.plusSeconds(1);
+		this.clock.time = NOW.plusSeconds(1); this.store.authorityNow=this.clock.time;
 		assertEquals(OAuthStoreCommitStatus.COMMITTED, attempt.commit(List.of(
 			OAuthStoreTransaction.Mutation.fromPut(finite(a)), OAuthStoreTransaction.Mutation.fromRemove(b))));
 		assertTrue(this.store.rows.containsKey(a)); assertFalse(this.store.rows.containsKey(b));
-		assertEquals(3, requireNonNull(this.store.lastTransaction).getConditions().size()); assertEquals(3, requireNonNull(this.store.lastTransaction).getMutations().size());
-		assertEquals(this.clock.time, issuer().highWater());
+		assertEquals(3, requireNonNull(this.store.lastTransaction).getConditions().size()); assertEquals(2, requireNonNull(this.store.lastTransaction).getMutations().size());
+		assertEquals(NOW, issuer().highWater());
 	}
 	@TestFactory @NonNull Stream<@NonNull DynamicTest> unknownStopsWithoutRetryRegardlessOfBackendEffects() {
 		return Stream.of("before", "after").map(when -> DynamicTest.dynamicTest(when, () -> {
@@ -283,9 +289,9 @@ class OAuthStoreCoordinationTests {
 			this.store.unknownBefore = false; this.store.unknownAfter = false;
 			assertEquals(when.equals("after") ? 1 : 0, issuer().epoch());
 			OAuthStoreCoordinator.Session attempt = this.first.begin(deadline());
-			this.store.unknownAfter = true; failed(COMMIT_OUTCOME_UNKNOWN, attempt::barrier);
+			this.store.unknownAfter = true; failed(UNAVAILABLE, attempt::barrier);
 			assertThrows(IllegalStateException.class, attempt::barrier);
-			this.store.unknownAfter = false; this.store.rows.clear(); this.store.commits = 0;
+			this.store.unknownAfter = false; this.store.resetClosedFixture(); this.store.commits = 0;
 		}));
 	}
 	@Test void unknownSubjectRevocationIsNonIdempotentAndRequiresReconciliation() {
@@ -295,7 +301,7 @@ class OAuthStoreCoordinationTests {
 		assertEquals(1, this.second.begin(deadline()).subject("a").epoch());
 	}
 	@Test void unknownFreshInitializationNeverRetries() {
-		this.store.unknownAfter = true; failed(COMMIT_OUTCOME_UNKNOWN, () -> this.first.initializeFreshIssuer(deadline()));
+		this.store.unknownAfter = true; assertEquals(OAuthStoreCommitStatus.UNKNOWN,this.first.initializeFreshIssuer(deadline()).getStatus());
 		assertEquals(1, this.store.commits); this.store.unknownAfter = false; assertEquals(0, issuer().epoch());
 	}
 	@Test void conflictAttemptsAreBoundedAndBudgetsNeverReset() {
@@ -313,18 +319,18 @@ class OAuthStoreCoordinationTests {
 		assertEquals(reads + 1, this.store.reads);
 	}
 	@Test void expiredBudgetPreventsReadAndInitialization() {
-		failed(UNAVAILABLE, () -> this.first.initializeFreshIssuer(Deadline.fromNow(Duration.ZERO)));
+		failed(UNAVAILABLE, () -> this.first.initializeFreshIssuer(Deadline.fromNow(Duration.ZERO)).getStatus());
 		failed(UNAVAILABLE, () -> this.first.begin(Deadline.fromNow(Duration.ZERO))); assertEquals(0, this.store.reads);
 	}
 	@Test void callbackExhaustionIsCheckedOnReturn() {
 		Deadline shortBudget = Deadline.fromNow(Duration.ofMillis(100));
 		this.store.beforeRead = () -> { while (!shortBudget.isExpired()) LockSupport.parkNanos(100000); };
-		failed(UNAVAILABLE, () -> this.first.initializeFreshIssuer(shortBudget)); assertEquals(0, this.store.commits);
+		failed(UNAVAILABLE, () -> this.first.initializeFreshIssuer(shortBudget).getStatus()); assertEquals(0, this.store.commits);
 	}
 	@Test void committedButOverBudgetNeverReportsSuccessOrRetries() {
 		initialized(); Deadline shortBudget = Deadline.fromNow(Duration.ofMillis(100));
 		this.store.afterCommit = () -> { while (!shortBudget.isExpired()) LockSupport.parkNanos(100000); };
-		int commits = this.store.commits; failed(UNAVAILABLE, () -> this.first.revokeAll(shortBudget));
+		int commits = this.store.commits; failed(COMMIT_CONFIRMED_NOT_ADMITTED, () -> this.first.revokeAll(shortBudget));
 		assertEquals(commits + 1, this.store.commits); assertEquals(1, issuer().epoch());
 	}
 	@Test void unknownRetainsClassificationAfterBudgetExhaustion() {
@@ -333,14 +339,14 @@ class OAuthStoreCoordinationTests {
 		failed(COMMIT_OUTCOME_UNKNOWN, () -> this.first.revokeAll(shortBudget));
 	}
 	@Test void clocksBehindPersistedHighWaterFailIncludingWithinOneSecond() {
-		initialized(); this.clock.time = NOW.minusNanos(1); failed(UNAVAILABLE, () -> this.second.begin(deadline()));
-		this.clock.time = NOW; assertEquals(OAuthStoreCommitStatus.COMMITTED, this.second.begin(deadline()).barrier());
+		initialized(); this.clock.time = NOW.minusNanos(1); this.store.authorityNow=this.clock.time; failed(UNAVAILABLE, () -> this.second.begin(deadline()));
+		this.clock.time = NOW; this.store.authorityNow=this.clock.time; assertEquals(OAuthStoreCommitStatus.COMMITTED, this.second.begin(deadline()).barrier());
 	}
 	@Test void clockRollbackDuringPreparationOrCallbackNeverReleasesSuccess() {
-		initialized(); OAuthStoreCoordinator.Session attempt = this.first.begin(deadline()); this.clock.time = NOW.minusSeconds(1);
+		initialized(); OAuthStoreCoordinator.Session attempt = this.first.begin(deadline()); this.clock.time = NOW.minusSeconds(1); this.store.authorityNow=this.clock.time;
 		int commits = this.store.commits; failed(UNAVAILABLE, attempt::barrier); assertEquals(commits, this.store.commits);
-		this.clock.time = NOW; this.store.afterCommit = () -> this.clock.time = NOW.minusNanos(1);
-		failed(UNAVAILABLE, () -> this.second.revokeAll(deadline())); this.clock.time = NOW; assertEquals(1, issuer().epoch());
+		this.clock.time = NOW; this.store.authorityNow=this.clock.time; this.store.afterCommit = () ->{this.clock.time = NOW.minusNanos(1); this.store.authorityNow=this.clock.time;};
+		assertEquals(1,this.second.revokeAll(deadline()).epoch()); this.clock.time = NOW; this.store.authorityNow=this.clock.time; assertEquals(1, issuer().epoch());
 	}
 	@Test void repeatedReadsRemainOneObservedVersionAndOneBackendRead() {
 		initialized(); OAuthStoreKey key = key(0); this.store.rows.put(key, finite(key)); OAuthStoreCoordinator.Session attempt = this.first.begin(deadline());
@@ -354,16 +360,17 @@ class OAuthStoreCoordinationTests {
 		assertThrows(IllegalStateException.class, () -> attempt.read(key(0))); assertThrows(IllegalStateException.class, attempt::issuer);
 		assertThrows(IllegalStateException.class, attempt::effectiveNow);
 	}
-	@Test void conditionAndMutationBoundsReserveIssuerFenceSlot() {
+	@Test void conditionAndMutationBoundsIncludeIssuerPredicateWithoutExtraRootWrite() {
 		initialized(); OAuthStoreCoordinator.Session attempt = this.first.begin(deadline());
 		for (int i = 0; i < 15; i++) attempt.read(key(i)); int reads = this.store.reads;
 		assertThrows(IllegalArgumentException.class, () -> attempt.read(key(15))); assertEquals(reads, this.store.reads);
 		List<OAuthStoreTransaction.Mutation> seven = java.util.stream.IntStream.range(0, 7)
 			.mapToObj(i -> OAuthStoreTransaction.Mutation.fromPut(finite(key(i)))).toList();
-		assertEquals(OAuthStoreCommitStatus.COMMITTED, attempt.commit(seven)); assertEquals(8, requireNonNull(this.store.lastTransaction).getMutations().size());
+		assertEquals(OAuthStoreCommitStatus.COMMITTED, attempt.commit(seven)); assertEquals(7, requireNonNull(this.store.lastTransaction).getMutations().size());
 		OAuthStoreCoordinator.Session bad = this.first.begin(deadline());
 		assertThrows(IllegalArgumentException.class, () -> bad.commit(Stream.concat(seven.stream(), seven.stream().limit(1)).toList()));
-		assertThrows(IllegalArgumentException.class, () -> bad.commit(List.of(OAuthStoreTransaction.Mutation.fromPut(requireNonNull(this.store.rows.get(this.codec.issuerKey()))))));
+		OAuthStoreCoordinator.Session rootWrite=this.first.begin(deadline());
+		assertThrows(IllegalArgumentException.class, () -> rootWrite.commit(List.of(OAuthStoreTransaction.Mutation.fromPut(requireNonNull(this.store.rows.get(this.codec.issuerKey()))))));
 	}
 	@Test void foreignNamespaceRejectedBeforeBackendLookup() {
 		initialized(); OAuthStoreCoordinator.Session attempt = this.first.begin(deadline()); int reads = this.store.reads;
@@ -386,8 +393,8 @@ class OAuthStoreCoordinationTests {
 		assertEquals(NOW, coordinator(1).begin(deadline()).effectiveNow());
 	}
 	@TestFactory @NonNull Stream<@NonNull DynamicTest> authenticatedMalformedIssuerPayloadsAreConfigurationFaults() {
-		String good = OAuthStoreFence.initialIssuer(NONCE, NOW).toPayload();
-		return Stream.of("{}", good.replace("\"schema\":1", "\"schema\":2"), good.replace("\"schema\":1", "\"schema\":null"),
+		String good = OAuthIssuerRootV2.fromLegacy(OAuthStoreFence.initialIssuer(NONCE,NOW),this.store.admission.getAuthorityId()).toPayload();
+		return Stream.of("{}", good.replace("\"schema\":2", "\"schema\":1"), good.replace("\"schema\":2", "\"schema\":null"),
 			good.replace("\"epoch\":0", "\"epoch\":-1"), good.replace("\"epoch\":0", "\"epoch\":1.5"),
 			good.replace("\"epoch\":0", "\"epoch\":\"0\""), good.replace("\"epoch\":0", "\"epoch\":9223372036854775808"),
 			good.replace(NONCE, "bad"), good.replace(NONCE, "A".repeat(42) + "B"),
@@ -401,12 +408,12 @@ class OAuthStoreCoordinationTests {
 	@Test void epochOverflowFailsBeforeAnyCommit() {
 		putIssuer(OAuthStoreFence.initialIssuer(NONCE, NOW).toPayload().replace("\"epoch\":0", "\"epoch\":" + Long.MAX_VALUE));
 		failed(CORRUPT_STATE, () -> this.first.revokeAll(deadline())); assertEquals(0, this.store.commits);
-		this.store.rows.put(this.codec.subjectKey("a"), this.codec.seal(this.codec.subjectKey("a"), OAuthStoreFormat.PERMANENT,
+		this.store.rows.put(this.codec.subjectKey("a"), IssuerTestRecords.seal(this.codec,this.codec.subjectKey("a"), OAuthStoreFormat.PERMANENT,
 			OAuthStoreFence.initialSubject(NONCE).toPayload().replace("\"epoch\":0", "\"epoch\":" + Long.MAX_VALUE)));
 		failed(CORRUPT_STATE, () -> this.first.revokeSubject("a", deadline())); assertEquals(0, this.store.commits);
 	}
 	@Test void subjectSchemaDoesNotAcceptIssuerFieldsOrUnknownKind() {
-		initialized(); this.store.rows.put(this.codec.subjectKey("a"), this.codec.seal(this.codec.subjectKey("a"), OAuthStoreFormat.PERMANENT,
+		initialized(); this.store.rows.put(this.codec.subjectKey("a"), IssuerTestRecords.seal(this.codec,this.codec.subjectKey("a"), OAuthStoreFormat.PERMANENT,
 			OAuthStoreFence.initialIssuer(NONCE, NOW).toPayload()));
 		failed(CORRUPT_STATE, () -> this.first.begin(deadline()).subject("a"));
 		assertThrows(IllegalArgumentException.class, () -> OAuthStoreFence.initialSubject(NONCE).atTime(NOW));
@@ -415,40 +422,40 @@ class OAuthStoreCoordinationTests {
 		initialized(); OAuthStoreEntry old = requireNonNull(this.store.rows.get(this.codec.issuerKey()));
 		this.store.rows.put(old.getKey(), OAuthStoreEntry.fromStoredForm(old.getKey(), old.getVersion(), old.getRetainUntil(), "broken"));
 		failed(CORRUPT_STATE, () -> this.second.begin(deadline()));
-		this.store.substitute = finite(key(0)); failed(CORRUPT_STATE, () -> this.second.begin(deadline()));
+		this.store.substitute = finite(key(0)); failed(UNAVAILABLE, () -> this.second.begin(deadline()));
 		assertEquals(1, this.store.commits);
 	}
 	@TestFactory @NonNull Stream<@NonNull DynamicTest> nonfatalInfrastructureFailuresAreFixedAndNeverRetried() {
 		return Stream.of(new IllegalStateException("secret-row"), new AssertionError("secret-row"), new LinkageError("secret-row"))
 			.map(fault -> DynamicTest.dynamicTest(fault.getClass().getSimpleName(), () -> {
-				this.store.fault = fault; failed(UNAVAILABLE, () -> this.first.initializeFreshIssuer(deadline())); assertEquals(0, this.store.commits);
+				this.store.fault = fault; failed(UNAVAILABLE, () -> this.first.initializeFreshIssuer(deadline()).getStatus()); assertEquals(0, this.store.commits);
 			}));
 	}
 	@Test void commitFailureNeverAutomaticallyRepeatsAnOperation() {
 		initialized(); this.store.beforeCommit = () -> this.store.fault = new IllegalStateException("secret"); int commits = this.store.commits;
-		failed(UNAVAILABLE, () -> this.first.revokeAll(deadline())); assertEquals(commits + 1, this.store.commits);
+		failed(COMMIT_OUTCOME_UNKNOWN, () -> this.first.revokeAll(deadline())); assertEquals(commits + 1, this.store.commits);
 	}
 	@Test void nullSpiReturnsAreUnavailable() {
-		this.store.nullRead = true; failed(UNAVAILABLE, () -> this.first.initializeFreshIssuer(deadline()));
+		this.store.nullRead = true; failed(UNAVAILABLE, () -> this.first.initializeFreshIssuer(deadline()).getStatus());
 		this.store.nullRead = false; initialized(); this.store.nullCommit = true;
-		failed(UNAVAILABLE, () -> this.first.revokeAll(deadline()));
+		failed(COMMIT_OUTCOME_UNKNOWN, () -> this.first.revokeAll(deadline()));
 	}
 	@Test void interruptedCallbackRestoresFlagAndExistingInterruptionPreventsWork() {
 		try {
-			this.store.fault = new InterruptedException("secret"); failed(UNAVAILABLE, () -> this.first.initializeFreshIssuer(deadline()));
+			this.store.fault = new InterruptedException("secret"); failed(UNAVAILABLE, () -> this.first.initializeFreshIssuer(deadline()).getStatus());
 			assertTrue(Thread.currentThread().isInterrupted()); int reads = this.store.reads; this.store.fault = null;
-			failed(UNAVAILABLE, () -> this.first.initializeFreshIssuer(deadline())); assertEquals(reads, this.store.reads);
+			failed(UNAVAILABLE, () -> this.first.initializeFreshIssuer(deadline()).getStatus()); assertEquals(reads, this.store.reads);
 		} finally { Thread.interrupted(); }
 	}
 	@Test void interruptionDuringCommitPreventsSuccessAndKeepsFlag() {
 		initialized(); this.store.afterCommit = () -> Thread.currentThread().interrupt();
-		try { failed(UNAVAILABLE, () -> this.first.revokeAll(deadline())); assertTrue(Thread.currentThread().isInterrupted()); }
+		try { failed(COMMIT_CONFIRMED_NOT_ADMITTED, () -> this.first.revokeAll(deadline())); assertTrue(Thread.currentThread().isInterrupted()); }
 		finally { Thread.interrupted(); }
 		assertEquals(1, issuer().epoch());
 	}
 	@Test void fatalVmErrorsPropagateAsTheSameInstance() {
 		VirtualMachineError fatal = new OutOfMemoryError("synthetic"); this.store.fault = fatal;
-		assertSame(fatal, assertThrows(VirtualMachineError.class, () -> this.first.initializeFreshIssuer(deadline())));
+		assertSame(fatal, assertThrows(VirtualMachineError.class, () -> this.first.initializeFreshIssuer(deadline()).getStatus()));
 		this.store.fault = null; initialized(); this.store.beforeCommit = () -> this.store.fault = fatal;
 		assertSame(fatal, assertThrows(VirtualMachineError.class, () -> this.first.revokeAll(deadline())));
 	}
@@ -461,7 +468,7 @@ class OAuthStoreCoordinationTests {
 	}
 	@Test void invalidClockAndClockCallbackFaultsFailClosed() {
 		initialized(); this.clock.time = OAuthStoreFormat.PERMANENT; failed(UNAVAILABLE, () -> this.first.begin(deadline()));
-		this.clock.time = NOW; this.clock.fault = new IllegalStateException("secret");
+		this.clock.time = NOW; this.store.authorityNow=this.clock.time; this.clock.fault = new IllegalStateException("secret");
 		failed(UNAVAILABLE, () -> this.first.begin(deadline())); this.clock.fault = new InterruptedException("secret");
 		try { failed(UNAVAILABLE, () -> this.first.begin(deadline())); assertTrue(Thread.currentThread().isInterrupted()); }
 		finally { Thread.interrupted(); }
@@ -473,7 +480,7 @@ class OAuthStoreCoordinationTests {
 		assertThrows(IllegalArgumentException.class, () -> OAuthStoreFence.initialIssuer(NONCE, OAuthStoreFormat.PERMANENT));
 		assertThrows(IllegalArgumentException.class, () -> OAuthStoreFence.initialIssuer(NONCE, NOW).atTime(NOW.minusNanos(1)));
 		OAuthStoreEntry row = finite(key(0));
-		assertThrows(IllegalArgumentException.class, () -> OAuthStoreFence.decode(this.codec.open(row, this.clock), OAuthStoreKey.Kind.CODE));
+		assertThrows(IllegalArgumentException.class, () -> OAuthStoreFence.decode(IssuerTestRecords.open(this.codec,row, this.clock), OAuthStoreKey.Kind.CODE));
 	}
 	@Test void unobservedMutationsCannotBeSubmitted() {
 		initialized(); OAuthStoreCoordinator.Session attempt = this.first.begin(deadline()); int commits = this.store.commits;

@@ -40,7 +40,7 @@ import java.util.List;
 import static java.util.Objects.requireNonNull;
 
 /**
- * Bounded authenticated binary envelope for one authoritative WebAuthn record. Each chunk uses
+ * Legacy WAR1 framing and explicit admitted WAR2 normal-record operations. Each chunk uses
  * {@link StateSealer} under a dedicated type label and a context binding the exact store key,
  * random envelope ID, chunk count, chunk size and position. Framing is checked before any crypto.
  * The codec authenticates bytes but does not validate a ceremony, credential or account fence.
@@ -74,6 +74,50 @@ final class WebAuthnRecordCodec {
         this.rawChunkSize = plaintextLimit * 3 / 4 - 8;
         if (this.rawChunkSize < 1 || this.rawChunkSize > 16_384)
             throw new IllegalArgumentException("Invalid WebAuthn sealer capacity");
+    }
+
+    /** Active normal WAR2 path; the caller supplies admitted entity time explicitly. */
+    byte @NonNull [] sealEntity(@NonNull WebAuthnStoreKey key, byte @NonNull [] inner,
+            @NonNull Instant expiresAt, @NonNull Instant floor) {
+        byte[] payload;
+        try { payload = WebAuthnRecordPayloadV2.entity(key, floor, inner); }
+        catch (WebAuthnRecordException failure) { throw new IllegalArgumentException("Invalid WebAuthn payload"); }
+        try { return new WebAuthnRecordCodecV2(this.sealer, this.entropy).seal(key, payload, expiresAt); }
+        finally { Arrays.fill(payload, (byte) 0); }
+    }
+
+    byte @NonNull [] sealNamespace(@NonNull WebAuthnStoreKey key, @NonNull String authorityId,
+            @NonNull Instant minimum) {
+        byte[] payload = WebAuthnRecordPayloadV2.namespace(key, authorityId, minimum);
+        try { return new WebAuthnRecordCodecV2(this.sealer, this.entropy).seal(key, payload, WebAuthnRecordPayloadV2.PERMANENT); }
+        finally { Arrays.fill(payload, (byte) 0); }
+    }
+
+    WebAuthnRecordPayloadV2.@NonNull Decoded openAdmittedRecord(@NonNull WebAuthnStoreKey key,
+            byte @NonNull [] sealedBytes, @NonNull Clock authorityClock) throws WebAuthnRecordException {
+        Instant admitted = authorityClock.instant();
+        if (admitted.getEpochSecond() < 0 || admitted.getEpochSecond() > 253402300799L)
+            throw new WebAuthnRecordException();
+        var decoded = new WebAuthnRecordCodecV2(this.sealer, this.entropy).openRecord(key, sealedBytes, authorityClock);
+        if (decoded.floor().getEpochSecond() < 0 || decoded.floor().getEpochSecond() > 253402300799L
+                || decoded.floor().isAfter(admitted)) { decoded.close(); throw new WebAuthnRecordException(); }
+        return decoded;
+    }
+
+    byte @NonNull [] openAdmitted(@NonNull WebAuthnStoreKey key, byte @NonNull [] sealedBytes,
+            @NonNull Clock authorityClock) throws WebAuthnRecordException {
+        try (var decoded = openAdmittedRecord(key, sealedBytes, authorityClock)) { return decoded.innerPayload(); }
+    }
+
+    byte @NonNull [] resealAdmitted(@NonNull WebAuthnStoreKey key, byte @NonNull [] sealedBytes,
+            @NonNull Clock authorityClock) throws WebAuthnRecordException {
+        try (var decoded = openAdmittedRecord(key, sealedBytes, authorityClock)) {
+            if (key.getKind() == WebAuthnStoreKey.Kind.NAMESPACE_CLOCK)
+                return sealNamespace(key, decoded.authorityId().orElseThrow(), decoded.floor());
+            byte[] inner = decoded.innerPayload();
+            try { return sealEntity(key, inner, decoded.expiresAt(), decoded.floor()); }
+            finally { Arrays.fill(inner, (byte) 0); }
+        }
     }
 
     byte @NonNull [] seal(@NonNull WebAuthnStoreKey key, byte @NonNull [] plaintext,

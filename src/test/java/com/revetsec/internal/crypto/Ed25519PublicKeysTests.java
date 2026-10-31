@@ -19,6 +19,7 @@ package com.revetsec.internal.crypto;
 import org.jspecify.annotations.NonNull;
 
 import com.revetsec.internal.encoding.Base64Url;
+import org.bouncycastle.math.ec.rfc8032.Ed25519;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.DynamicTest;
@@ -28,7 +29,6 @@ import org.junit.jupiter.api.TestFactory;
 import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
-import java.security.InvalidKeyException;
 import java.security.KeyFactory;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
@@ -53,8 +53,8 @@ import java.util.stream.Stream;
 /**
  * {@link Ed25519PublicKeys}: the RFC 8032 section 5.1.3 decoding in {@code BigInteger} and the small-order check
  * (gate 8's M2-7). The eight small-order points are derived here from the curve equation with this class's own
- * square roots and point addition, never typed in. A differential against the JDK shows that an encoding is refused
- * as malformed exactly when the JDK's own verifier cannot decode it.
+ * square roots and point addition, never typed in. An independent Bouncy Castle decoder checks malformed
+ * encodings without relying on the JCA provider's validation timing.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
@@ -195,10 +195,10 @@ final class Ed25519PublicKeysTests {
 				() -> Ed25519PublicKeys.fromEncoded(identity)).getKind());
 	}
 
-	// Differential: an encoding is malformed exactly when the JDK's verifier cannot decode it (InvalidKeyException at
-	// initVerify); about half of all y values have no x. Every accepted key is the JDK's own point.
+	// Differential against an independent decoder: about half of all y values have no x. The JCA may defer point
+	// validation until verification (OpenJ9), so initVerify alone cannot serve as a decoding oracle.
 	@TestFactory
-	@NonNull Stream<@NonNull DynamicTest> malformedExactlyWhenTheJdkCannotDecodeThePoint() {
+	@NonNull Stream<@NonNull DynamicTest> malformedExactlyWhenTheIndependentDecoderCannotDecodeThePoint() {
 		Random random = new Random(0x45643235L);
 
 		return Stream.of(false, true).map(signBit -> DynamicTest.dynamicTest("sign bit " + signBit, () -> {
@@ -209,23 +209,16 @@ final class Ed25519PublicKeysTests {
 				random.nextBytes(encoded);
 				encoded[31] = (byte) ((encoded[31] & 0x7f) | (signBit ? 0x80 : 0));
 				PublicKey raw = rawJdkKey(encoded);
-				boolean jdkDecodes;
-
-				try {
-					Signature.getInstance("Ed25519").initVerify(raw);
-					jdkDecodes = true;
-				} catch (InvalidKeyException exception) {
-					jdkDecodes = false;
-				}
+				boolean referenceDecodes = Ed25519.validatePublicKeyPartial(encoded, 0);
 
 				try {
 					EdECPublicKey key = Ed25519PublicKeys.fromEncoded(encoded);
-					Assertions.assertTrue(jdkDecodes, () -> HEX.formatHex(encoded));
+					Assertions.assertTrue(referenceDecodes, () -> HEX.formatHex(encoded));
 					Assertions.assertEquals(((EdECPublicKey) raw).getPoint().getY(), key.getPoint().getY());
 					Assertions.assertEquals(signBit, key.getPoint().isXOdd());
 				} catch (KeyRejectedException exception) {
 					Assertions.assertEquals(KeyRejectedException.Kind.MALFORMED, exception.getKind());
-					Assertions.assertFalse(jdkDecodes, () -> HEX.formatHex(encoded));
+					Assertions.assertFalse(referenceDecodes, () -> HEX.formatHex(encoded));
 					++malformed;
 				}
 			}

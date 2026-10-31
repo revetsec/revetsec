@@ -55,7 +55,7 @@ final class WebAuthnCredentialRecordCodec {
         this.records = requireNonNull(records);
     }
 
-    @NonNull Encoded encode(@NonNull WebAuthnCredentialState state) {
+    @NonNull Encoded encode(@NonNull WebAuthnCredentialState state, @NonNull Instant floor) {
         requireNonNull(state);
         byte[] id = state.credentialId();
         byte[] handle = state.userHandle();
@@ -73,7 +73,7 @@ final class WebAuthnCredentialRecordCodec {
             writer.putShort((short) publicKey.length);
             writer.put(id).put(handle).put(publicKey);
             WebAuthnStoreKey key = WebAuthnStoreKey.forCredential(this.namespace, this.relyingPartyId, id);
-            return new Encoded(key, this.records.seal(key, payload, PERMANENT));
+            return new Encoded(key, this.records.sealEntity(key, payload, PERMANENT, floor));
         } finally {
             Arrays.fill(id, (byte) 0);
             Arrays.fill(handle, (byte) 0);
@@ -82,7 +82,7 @@ final class WebAuthnCredentialRecordCodec {
         }
     }
 
-    @NonNull Encoded encodeRevoked(byte @NonNull [] credentialId, byte @NonNull [] userHandle) {
+    @NonNull Encoded encodeRevoked(byte @NonNull [] credentialId, byte @NonNull [] userHandle, @NonNull Instant floor) {
         requireNonNull(credentialId);
         requireNonNull(userHandle);
         byte[] id = credentialId.clone();
@@ -94,7 +94,7 @@ final class WebAuthnCredentialRecordCodec {
             byte[] payload = ByteBuffer.allocate(REVOKED_HEADER_BYTES + id.length + handle.length)
                     .put((byte) REVOKED_VERSION).putShort((short) id.length)
                     .put((byte) handle.length).put(id).put(handle).array();
-            try { return new Encoded(key, this.records.seal(key, payload, PERMANENT)); }
+            try { return new Encoded(key, this.records.sealEntity(key, payload, PERMANENT, floor)); }
             finally { Arrays.fill(payload, (byte) 0); }
         } finally {
             Arrays.fill(id, (byte) 0);
@@ -117,7 +117,7 @@ final class WebAuthnCredentialRecordCodec {
         requireNonNull(clock);
         if (key.getKind() != WebAuthnStoreKey.Kind.CREDENTIAL)
             throw new WebAuthnRecordException();
-        byte[] payload = this.records.open(key, sealedBytes, clock);
+        byte[] payload = this.records.openAdmitted(key, sealedBytes, clock);
         try {
             if (payload.length < 1) throw new WebAuthnRecordException();
             if ((payload[0] & 0xff) == REVOKED_VERSION) return decodeRevoked(key, payload);

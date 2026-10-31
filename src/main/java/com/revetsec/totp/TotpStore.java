@@ -16,6 +16,7 @@
 
 package com.revetsec.totp;
 
+import com.google.errorprone.annotations.CheckReturnValue;
 import java.time.Duration;
 import java.util.Set;
 import org.jspecify.annotations.NonNull;
@@ -23,7 +24,7 @@ import org.jspecify.annotations.NonNull;
 /**
  * Application-owned, authoritative TOTP storage. Implementations coordinate every node, read a
  * complete immutable snapshot and atomically compare every version, absence and active recovery
- * epoch before applying all mutations or none. A separately performed epoch lookup is insufficient.
+ * epoch before applying all mutations or none. A separately performed epoch or time lookup is insufficient.
  * A confirmed commit is durable across restart. {@link InMemoryTotpStore} is an explicitly selected
  * volatile demonstration backend, never an automatic fallback.
  * <p>Both record kinds are permanent. No backend TTL, eviction or automatic deletion is allowed,
@@ -37,10 +38,13 @@ import org.jspecify.annotations.NonNull;
  * @since 1.0.0
  */
 @javax.annotation.concurrent.ThreadSafe
+@CheckReturnValue
 public interface TotpStore {
  /**
   * Reads exactly the requested nonempty bounded scope at one authoritative snapshot point,
-  * checking the active epoch in the same transaction. Explicitly represent every absence.
+  * checking the active epoch and operational admission in the same transaction. The entries and
+  * fresh admitted time or time-only unavailability form one coherent observation. Explicitly
+  * represent every absence; no cleanup, quota update or floor write belongs to a read.
   * @param keys one namespace and recovery epoch, at most 16 addresses
   * @param remainingBudget remaining positive operation budget
   * @return a complete snapshot, fenced epoch or unavailable read
@@ -49,12 +53,13 @@ public interface TotpStore {
  @NonNull TotpStoreReadResult read(@NonNull Set<@NonNull TotpStoreKey> keys,
    @NonNull Duration remainingBudget);
  /**
-  * Atomically compares epoch and all snapshot predicates, including for condition-only writes.
+  * Atomically compares current admission, epoch and all snapshot predicates, then validates fresh
+  * store-authoritative time after every wait, including for condition-only writes.
   * @param write the exact predicates and complete change set
   * @param remainingBudget remaining positive operation budget
-  * @return the actual commit acknowledgement
+  * @return the factual contextual receipt, with required validation timing for COMMITTED
   * @since 1.0.0
   */
- @NonNull TotpStoreCommitResult compareAndCommit(@NonNull TotpStoreWrite write,
+ @NonNull TotpStoreCommitReceipt compareAndCommit(@NonNull TotpStoreWrite write,
    @NonNull Duration remainingBudget);
 }

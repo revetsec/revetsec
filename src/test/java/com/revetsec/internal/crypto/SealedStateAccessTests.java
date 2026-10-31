@@ -238,6 +238,19 @@ final class SealedStateAccessTests {
 	 * Operations that {@code StateSealer} did not define, which {@link SealedStateAccess#set} must refuse.
 	 */
 	static final class ForeignOperations implements SealedStateAccess.Operations {
+		@Override public @NonNull AuthenticatedRecord openRecord(@NonNull StateSealer sealer,
+				@NonNull SealedStateType type, @NonNull String sealed, @NonNull String context, @NonNull Clock clock) {
+			throw new UnsupportedOperationException("Foreign operations");
+		}
+		@Override public @NonNull AuthenticatedRecord openForMigration(@NonNull StateSealer sealer,
+				@NonNull SealedStateType type, @NonNull String sealed, @NonNull String context,
+				@NonNull ClosedMigrationIntent intent) {
+			throw new UnsupportedOperationException("Foreign operations");
+		}
+		@Override public @NonNull AuthenticatedRecord openPermanentFence(@NonNull StateSealer sealer,
+				@NonNull String sealed, @NonNull String context) {
+			throw new UnsupportedOperationException("Foreign operations");
+		}
   @Override public @NonNull Integer getMaximumSealedLength(@NonNull StateSealer sealer) { return 3800; }
         @Override public @NonNull String getActiveKeyId(@NonNull StateSealer sealer) { return "foreign"; }
         @Override public java.util.@NonNull Set<@NonNull String> getOpeningKeyIds(@NonNull StateSealer sealer) {

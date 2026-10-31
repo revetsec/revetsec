@@ -61,6 +61,11 @@ final class OAuthTokenResponse {
   @NonNull OAuthTokenResponse prepare(@NonNull OAuthAuthorizationRecord grant, @NonNull String jti,
     @NonNull Instant issued, @NonNull Instant expires, @NonNull Set<@NonNull String> scopes,
     @Nullable String refresh, @NonNull Deadline deadline) {
+   return prepare(grant,jti,issued,expires,scopes,refresh,deadline,null);
+  }
+  @NonNull OAuthTokenResponse prepare(@NonNull OAuthAuthorizationRecord grant, @NonNull String jti,
+    @NonNull Instant issued, @NonNull Instant expires, @NonNull Set<@NonNull String> scopes,
+    @Nullable String refresh, @NonNull Deadline deadline, OAuthStoreCoordinator.@Nullable Session session) {
    String scope = String.join(" ", scopes.stream().sorted().toList());
    JsonObject claims = JsonObject.builder().put("iss", this.issuer).put("sub", grant.text("subject"))
     .put("aud", grant.text("resource")).put("client_id", grant.text("clientId"))
@@ -68,7 +73,7 @@ final class OAuthTokenResponse {
    byte[] bytes = JsonCodec.toUtf8Bytes(claims);
    String compact;
    try { compact = this.lifecycle==null ? requireNonNull(this.signer).toCompactSerialization("at+jwt", this.keyId, null, bytes, OAuthServerClientAdmission.remaining(deadline))
-    : this.lifecycle.sign(bytes, expires, deadline); }
+    : session==null ? this.lifecycle.sign(bytes, expires, deadline) : this.lifecycle.sign(bytes,expires,deadline,session::authorityNow); }
    finally { Arrays.fill(bytes, (byte) 0); }
    OAuthServerClientAdmission.remaining(deadline);
    JsonObject.Builder response = JsonObject.builder().put("access_token", compact).put("token_type", "Bearer")

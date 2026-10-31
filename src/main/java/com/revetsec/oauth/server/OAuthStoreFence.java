@@ -43,6 +43,10 @@ final class OAuthStoreFence {
 	static @NonNull OAuthStoreFence initialSubject(@NonNull String incarnation) {
 		return new OAuthStoreFence(incarnation, 0, Instant.EPOCH, false);
 	}
+	/** Lineage-only view of an already authenticated schema-two root; never writes schema one. */
+	static @NonNull OAuthStoreFence fromRoot(@NonNull OAuthIssuerRootV2 root) {
+		return new OAuthStoreFence(root.incarnation(), root.epoch(), root.minimum(), true);
+	}
 	static @NonNull OAuthStoreFence decode(@NonNull JsonObject payload, OAuthStoreKey.@NonNull Kind kind) {
 		requireNonNull(payload); requireNonNull(kind);
 		boolean issuer = kind == OAuthStoreKey.Kind.ISSUER_STATE;

@@ -243,7 +243,16 @@ public final class WycheproofSignatureTests {
 					counts.merge(observe(setup, vector), 1, Integer::sum);
 			}
 
-			if (!counts.equals(run.expectations.pinnedCounts(file.getName(), feature)))
+			SortedMap<String, Integer> expected = new TreeMap<>(run.expectations.pinnedCounts(file.getName(), feature));
+			// Semeru 21's SunEC throws for five invalid ECDSA signatures per curve where HotSpot's SunEC returns
+			// false. Pin that measured reason split too; every vector's accept/reject expectation still runs above.
+			if (feature == 21 && System.getProperty("java.vm.name", "").contains("OpenJ9")
+					&& Set.of("ecdsa_secp256r1_sha256_p1363_test.json", "ecdsa_secp384r1_sha384_p1363_test.json",
+							"ecdsa_secp521r1_sha512_p1363_test.json").contains(file.getName())) {
+				expected.computeIfPresent("reject:MISMATCH", (code, count) -> count - 5);
+				expected.put("reject:PROVIDER_FAILURE", 5);
+			}
+			if (!counts.equals(expected))
 				mismatches.add(Expectations.countLine(file.getName(), feature, counts));
 		}
 

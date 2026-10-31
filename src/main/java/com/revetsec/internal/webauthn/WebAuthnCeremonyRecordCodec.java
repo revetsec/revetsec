@@ -55,7 +55,7 @@ final class WebAuthnCeremonyRecordCodec {
         this.records = requireNonNull(records);
     }
 
-    @NonNull Encoded encode(@NonNull WebAuthnCeremonyState state) {
+    @NonNull Encoded encode(@NonNull WebAuthnCeremonyState state, @NonNull Instant floor) {
         requireNonNull(state);
         validateOrigins(state.allowedOrigins());
         List<String> origins = state.allowedOrigins().stream().sorted().toList();
@@ -86,7 +86,7 @@ final class WebAuthnCeremonyRecordCodec {
                 writer.putShort((short) ascii.length).put(ascii);
             }
             WebAuthnStoreKey key = WebAuthnStoreKey.forCeremony(this.namespace, this.relyingPartyId, id);
-            return new Encoded(key, this.records.seal(key, payload, state.expiresAt()), state.expiresAt());
+            return new Encoded(key, this.records.sealEntity(key, payload, state.expiresAt(), floor), state.expiresAt());
         } finally {
             Arrays.fill(id, (byte) 0);
             Arrays.fill(challenge, (byte) 0);
@@ -103,7 +103,7 @@ final class WebAuthnCeremonyRecordCodec {
         requireNonNull(sealedBytes);
         requireNonNull(clock);
         if (key.getKind() != WebAuthnStoreKey.Kind.CEREMONY) throw new WebAuthnRecordException();
-        byte[] payload = this.records.open(key, sealedBytes, clock);
+        byte[] payload = this.records.openAdmitted(key, sealedBytes, clock);
         try {
             if (payload.length < FIXED_BYTES || payload.length > MAXIMUM_PAYLOAD_BYTES)
                 throw new WebAuthnRecordException();

@@ -16,6 +16,10 @@
 
 package com.revetsec.totp;
 
+import com.google.errorprone.annotations.CheckReturnValue;
+import com.revetsec.StoreTemporalCondition;
+import com.revetsec.StoreTimeObservation;
+import com.revetsec.internal.StoreTimeRules;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
@@ -30,15 +34,18 @@ import org.jspecify.annotations.NonNull;
  * @since 1.0.0
  */
 @javax.annotation.concurrent.Immutable
+@CheckReturnValue
 public final class TotpStoreWrite {
  private final TotpStoreWrite.@NonNull Purpose purpose;
  private final @NonNull TotpStoreSnapshot snapshot;
  private final @NonNull List<TotpStoreWrite.@NonNull Mutation> mutations;
+ private final @NonNull StoreTemporalCondition temporalCondition;
  private final @NonNull String credentialNamespace;
  private final @NonNull String recoveryEpoch;
  private TotpStoreWrite(TotpStoreWrite.@NonNull Purpose purpose, @NonNull TotpStoreSnapshot snapshot,
-   @NonNull List<TotpStoreWrite.@NonNull Mutation> mutations) {
+   @NonNull List<TotpStoreWrite.@NonNull Mutation> mutations, @NonNull StoreTemporalCondition temporalCondition) {
   this.purpose = purpose; this.snapshot = snapshot; this.mutations = List.copyOf(mutations);
+  this.temporalCondition = temporalCondition;
   TotpStoreKey first = snapshot.getEntries().keySet().iterator().next();
   this.credentialNamespace = first.getCredentialNamespace(); this.recoveryEpoch = first.getRecoveryEpoch();
  }
@@ -49,12 +56,20 @@ public final class TotpStoreWrite {
   * @param purpose namespace initialization or ordinary update
   * @param snapshot the complete read set
   * @param mutations the bounded change set
+  * @param temporalCondition engine-created inclusive floor and optional exclusive expiry
   * @return the validated write
   * @since 1.0.0
   */
  public static @NonNull TotpStoreWrite fromSnapshotAndMutations(TotpStoreWrite.@NonNull Purpose purpose,
-   @NonNull TotpStoreSnapshot snapshot, @NonNull List<TotpStoreWrite.@NonNull Mutation> mutations) {
+   @NonNull TotpStoreSnapshot snapshot, @NonNull List<TotpStoreWrite.@NonNull Mutation> mutations,
+   @NonNull StoreTemporalCondition temporalCondition) {
   Objects.requireNonNull(purpose); Objects.requireNonNull(snapshot); Objects.requireNonNull(mutations);
+  Objects.requireNonNull(temporalCondition);
+  if (!(snapshot.getTimeObservation() instanceof StoreTimeObservation.Healthy healthy)
+    || !StoreTimeRules.sameAdmission(healthy.getAdmission(), temporalCondition.getAdmission())
+    || !healthy.getClockGeneration().equals(temporalCondition.getClockGeneration())
+    || temporalCondition.getNotBeforeInclusive().isBefore(healthy.getObservedAt()))
+   throw new IllegalArgumentException("Inconsistent TOTP temporal condition");
   if (mutations.size() > 16) throw new IllegalArgumentException("Too many TOTP mutations");
   TotpStoreKey first = snapshot.getEntries().keySet().iterator().next();
   TotpStoreKey namespace = TotpStoreKey.forNamespace(first.getCredentialNamespace(), first.getRecoveryEpoch());
@@ -76,7 +91,7 @@ public final class TotpStoreWrite {
        && present.getRecord().getVersion().equals(mutation.record.getVersion())))
     throw new IllegalArgumentException("Invalid TOTP store mutation");
   }
-  return new TotpStoreWrite(purpose, snapshot, mutations);
+  return new TotpStoreWrite(purpose, snapshot, mutations, temporalCondition);
  }
  /**
   * Returns the authoritative namespace.
@@ -108,6 +123,12 @@ public final class TotpStoreWrite {
   * @since 1.0.0
   */
  public @NonNull List<TotpStoreWrite.@NonNull Mutation> getMutations() { return this.mutations; }
+ /**
+  * Returns the original temporal condition to validate under the final transaction locks.
+  * @return the exact inclusive floor and optional exclusive expiry
+  * @since 1.0.0
+  */
+ public @NonNull StoreTemporalCondition getTemporalCondition() { return this.temporalCondition; }
  /**
   * Redacts predicates and mutations.
   * @since 1.0.0

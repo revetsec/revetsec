@@ -30,6 +30,7 @@ import com.revetsec.webauthn.WebAuthnRegistrationResult;
 import com.revetsec.webauthn.WebAuthnRelyingParty;
 import com.revetsec.webauthn.WebAuthnStore;
 import com.revetsec.webauthn.WebAuthnStoreCommitResult;
+import com.revetsec.webauthn.WebAuthnStoreCommitReceipt;
 import com.revetsec.webauthn.WebAuthnStoreEntry;
 import com.revetsec.webauthn.WebAuthnStoreKey;
 import com.revetsec.webauthn.WebAuthnStoreReadResult;
@@ -79,20 +80,27 @@ public final class WebAuthnFlowProbe {
             boolean loseCommitAcknowledgement, @NonNull WebAuthnRecoveryGate fixtureGate) {
         String key = System.getenv("REVETSEC_TEST_WA_SEAL_KEY");
         StateSealer sealer = StateSealer.withActiveKey(SealingKey.fromBase64("fixture", key)).build();
-        WebAuthnStore regular = new PostgresqlWebAuthnStore(namespace, WebAuthnStoreProbe::connection, 256);
+        WebAuthnStore regular = new PostgresqlWebAuthnStore(namespace,WebAuthnFixtureAuthority.physical(namespace),WebAuthnStoreProbe::connection,4096,WebAuthnFixtureAuthority.fromEnvironment(namespace));
         WebAuthnStore selected = loseCommitAcknowledgement ? new WebAuthnStore() {
             @Override public @NonNull WebAuthnStoreReadResult read(
                     @NonNull Set<@NonNull WebAuthnStoreKey> keys, @NonNull Duration remainingBudget) {
                 return regular.read(keys, remainingBudget);
             }
-            @Override public @NonNull WebAuthnStoreCommitResult compareAndCommit(
+            @Override public @NonNull WebAuthnStoreCommitReceipt compareAndCommit(
                     @NonNull WebAuthnStoreWrite write, @NonNull Duration remainingBudget) {
-                return new PostgresqlWebAuthnStore(namespace,
-                        WebAuthnStoreProbe::lostCommitAcknowledgement, 256)
+                return new PostgresqlWebAuthnStore(namespace,WebAuthnFixtureAuthority.physical(namespace),
+                        WebAuthnStoreProbe::lostCommitAcknowledgement,4096,WebAuthnFixtureAuthority.fromEnvironment(namespace))
                         .compareAndCommit(write, remainingBudget);
             }
         } : regular;
-        return WebAuthnRelyingParty.withRelyingPartyId(RP).relyingPartyName("Example")
+        if(System.getenv().getOrDefault("REVETSEC_TEST_WA_RECONCILE","0").equals("1")){
+            WebAuthnStore delegate=selected;java.util.concurrent.atomic.AtomicBoolean refuseRead=new java.util.concurrent.atomic.AtomicBoolean();
+            selected=new WebAuthnStore(){
+                @Override public @NonNull WebAuthnStoreReadResult read(@NonNull Set<@NonNull WebAuthnStoreKey> keys,@NonNull Duration remaining){return refuseRead.getAndSet(false)?WebAuthnStoreReadResult.Unavailable.get():delegate.read(keys,remaining);}
+                @Override public @NonNull WebAuthnStoreCommitReceipt compareAndCommit(@NonNull WebAuthnStoreWrite write,@NonNull Duration remaining){WebAuthnStoreCommitReceipt receipt=delegate.compareAndCommit(write,remaining);if(receipt.getStatus()==WebAuthnStoreCommitResult.COMMITTED && !write.getMutations().isEmpty())refuseRead.set(true);return receipt;}
+            };
+        }
+        return com.revetsec.webauthn.WebAuthnFixtureWorker.configure(WebAuthnRelyingParty.withRelyingPartyId(RP)).relyingPartyName("Example")
                 .allowedOrigins(Set.of(ORIGIN)).credentialNamespace(namespace)
                 .store(selected)
                 .stateSealer(sealer).recoveryGate(fixtureGate).build();
@@ -211,6 +219,27 @@ public final class WebAuthnFlowProbe {
         System.out.println("FLOW_OUTAGE_CLOSED");
     }
 
+    private static void workerRefusal(@NonNull WebAuthnRelyingParty party) {
+        if(!(party.beginAuthenticationResult(BINDING) instanceof WebAuthnAuthenticationRequestResult.Unavailable)
+                || !(party.listCredentialsResult(HANDLE) instanceof WebAuthnCredentialListResult.Unavailable))throw new IllegalStateException("Unhealthy worker released WebAuthn state");
+        System.out.println("WORKER_UNAVAILABLE");
+    }
+    private static void knownBegin(@NonNull WebAuthnRelyingParty party) {
+        WebAuthnRegistrationOptions options=WebAuthnRegistrationOptions.withUserHandle(HANDLE).userName("alice").userDisplayName("Alice Example").build();
+        if(!(party.beginRegistrationResult(options,BINDING) instanceof WebAuthnRegistrationRequestResult.ReconciliationRequired))throw new IllegalStateException("Known committed begin was not reconciliation");
+        System.out.println("RECONCILIATION_REQUIRED");
+    }
+    private static void reseal(@NonNull WebAuthnRelyingParty party) {
+        WebAuthnStoreCommitReceipt receipt=party.resealStoreEntry(WebAuthnStoreKey.forCredential(NAMESPACE,RP,CREDENTIAL_ID));
+        if(receipt.getStatus()!=WebAuthnStoreCommitResult.COMMITTED || receipt.getTiming().isEmpty())throw new IllegalStateException("Raw reseal lost contextual commitment");
+        try {party.resealStoreEntry(WebAuthnStoreKey.forCeremony(NAMESPACE,RP,new byte[32]));throw new IllegalStateException("Raw reseal accepted ceremony");}catch(IllegalArgumentException expected){ }
+        System.out.println("RESEALED_FACTUAL");
+    }
+    private static void disable(@NonNull WebAuthnRelyingParty party) {
+        if(!(party.disableAccountResult(HANDLE) instanceof com.revetsec.webauthn.WebAuthnAccountDisableResult.Disabled))throw new IllegalStateException("Account disable did not commit");
+        System.out.println("DISABLED");
+    }
+
     private static void holdAdmission() throws Exception {
         WebAuthnRecoveryGate.Permit permit = gate().acquire(java.time.Duration.ofSeconds(20));
         if (permit == null) throw new IllegalStateException("Fixture admission could not be acquired");
@@ -242,8 +271,8 @@ public final class WebAuthnFlowProbe {
         List<WebAuthnStoreKey> keys = List.of(ceremonyKey,
                 WebAuthnStoreKey.forAccountCredentialIndex(NAMESPACE, RP, HANDLE),
                 WebAuthnStoreKey.forCredential(NAMESPACE, RP, CREDENTIAL_ID));
-        WebAuthnStoreReadResult result = new PostgresqlWebAuthnStore(NAMESPACE,
-                WebAuthnStoreProbe::connection, 256).read(Set.copyOf(keys), java.time.Duration.ofSeconds(5));
+        WebAuthnStoreReadResult result = new PostgresqlWebAuthnStore(NAMESPACE,WebAuthnFixtureAuthority.physical(NAMESPACE),
+                WebAuthnStoreProbe::connection,4096,WebAuthnFixtureAuthority.fromEnvironment(NAMESPACE)).read(Set.copyOf(keys), java.time.Duration.ofSeconds(5));
         if (!(result instanceof WebAuthnStoreReadResult.Available available))
             throw new IllegalStateException("Could not inspect fixture state");
         WebAuthnStoreSnapshot snapshot = available.getSnapshot();
@@ -360,7 +389,7 @@ public final class WebAuthnFlowProbe {
         return value.getBytes(StandardCharsets.UTF_8);
     }
 
-    public static void main(String @NonNull [] args) throws Exception {
+    public static void main(@NonNull String @NonNull [] args) throws Exception {
         if (args.length == 0) throw new IllegalArgumentException("Expected flow command");
         WebAuthnRelyingParty party = party(args[0].equals("complete-auth-unknown"));
         switch (args[0]) {
@@ -382,6 +411,10 @@ public final class WebAuthnFlowProbe {
             case "hold-admission" -> holdAdmission();
             case "restored-closed" -> restoredClosed(party, args[1], args[2]);
             case "raw-hash" -> rawStateHash(args[1]);
+            case "worker-unavailable" -> workerRefusal(party);
+            case "begin-register-reconcile" -> knownBegin(party);
+            case "reseal" -> reseal(party);
+            case "disable" -> disable(party);
             default -> throw new IllegalArgumentException("Unknown flow command");
         }
     }

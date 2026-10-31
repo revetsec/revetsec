@@ -116,7 +116,7 @@ class CommitLossProxy:
                     if stream is client:
                         if kind == b'Q':
                             upper = body.upper()
-                            dirty |= b'INSERT INTO ISSUER_ENTRIES' in upper or b'DELETE FROM ISSUER_ENTRIES' in upper
+                            dirty |= b'INSERT INTO ISSUER_STORE_ENTRY' in upper or b'UPDATE ISSUER_STORE_ENTRY' in upper or b'DELETE FROM ISSUER_STORE_ENTRY' in upper
                             if upper.strip(b'\x00; \r\n\t') == b'COMMIT' and dirty:
                                 with self.lock:
                                     selected = self.drops == 0
@@ -170,6 +170,15 @@ class CommitLossProxy:
         if self.acceptor.is_alive() or any(t.is_alive() for t in self.threads):
             raise RuntimeError('Proxy fixture threads did not stop')
 
+
+def identity(value):
+    return base64.urlsafe_b64encode(hashlib.sha256(value.encode()).digest()).decode().rstrip('=')
+
+def provision():
+    namespace='fixture_verification';physical=identity('issuer-physical/'+namespace);allocation=identity('issuer-allocation/'+namespace)
+    values=[namespace,physical,identity('issuer-authority/'+namespace),identity('issuer-recovery/'+namespace),identity('issuer-clock/'+namespace)]
+    rows="INSERT INTO issuer_store_namespace VALUES ("+','.join("'"+x+"'" for x in values)+",0,'"+allocation+"',2,4096,true);\n"
+    return rows+"INSERT INTO issuer_store_escrow VALUES "+','.join("('ISSUER','"+physical+"',"+str(i)+",'"+allocation+"',"+str(4096//256+(i<4096%256))+",0,0,0)" for i in range(256))+";\n"
 
 def main():
     p = argparse.ArgumentParser(description=__doc__)
@@ -260,7 +269,7 @@ def main():
                 return docker('exec', '-i', container, 'psql', '-X', '-qAt', '-v', 'ON_ERROR_STOP=1',
                               '-U', 'postgres', '-d', 'issuer_fixture', data=query.encode())
 
-            sql((Path(__file__).parent / 'schema.sql').read_text())
+            sql((Path(__file__).parent / 'schema.sql').read_text()+provision())
             cp = os.pathsep.join(str(jar.resolve()) for jar in jars)
             secrets_dir = state / 'keys'
             secrets_dir.mkdir(mode=0o700)
@@ -305,7 +314,7 @@ def main():
 
             def digest():
                 # Never store rows, versions or sealed values. SQL MD5 is only an equality fingerprint here.
-                return hashlib.sha256(sql("SELECT storage_key||':'||version||':'||retain_seconds||':'||retain_nanos||':'||sealed FROM issuer_entries ORDER BY storage_key;").encode()).hexdigest()
+                return hashlib.sha256(sql("SELECT storage_key||':'||version||':'||retain_seconds||':'||retain_nanos||':'||sealed_form FROM issuer_store_entry ORDER BY storage_key;").encode()).hexdigest()
 
             record('ephemeral-test-keys', call('keys', secrets_dir, 'keys') == 'KEYS')
             contract = call('contract', state / 'contract', 'contract')
@@ -315,8 +324,8 @@ def main():
             # A bounded fixture refuses new records without evicting active/permanent rows.
             cap = fresh('capacity')
             old = digest()
-            count = sql('SELECT count(*) FROM issuer_entries;')
-            record('capacity-rejects-no-eviction', call('redeem', cap, 'capacity', capacity=count).startswith('STORE_UNAVAILABLE ') and digest() == old)
+            count = sql('SELECT count(*) FROM issuer_store_entry;')
+            record('declared-capacity-profile-mismatch-refuses-without-eviction', call('redeem', cap, 'capacity', capacity=count).startswith('STORE_UNAVAILABLE ') and digest() == old)
 
             for command in ['redeem', 'refresh']:
                 name = 'race-' + command
@@ -399,12 +408,15 @@ def main():
             ready()
             record('restart-fresh-jvm-status', call('active', recovery, 'restart') == 'ACTIVE')
             record('restart-existing-namespace-not-recreated', call('warm', recovery, 'restart') == 'READY')
-            # Hold the SQL mutex on an independent administrative connection; a backend read must time out.
+            # Hold exclusive family/physical admission on an owned administrator; shared reads time out.
             locker = subprocess.Popen(['docker', 'exec', '-i', container, 'psql', '-X', '-qAt', '-v', 'ON_ERROR_STOP=1',
                                        '-U', 'postgres', '-d', 'issuer_fixture'], stdin=subprocess.PIPE,
                                       stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
             processes.append(locker)
-            locker.stdin.write("BEGIN; DO $$ BEGIN PERFORM id FROM issuer_mutex WHERE id=1 FOR UPDATE; END $$; SELECT 'LOCKED';\n")
+            physical=identity('issuer-physical/fixture_verification')
+            lockbytes=hashlib.sha256(b'revetsec/pg-admission/v1\0'+struct.pack('!I',6)+b'ISSUER'+struct.pack('!I',len(physical))+physical.encode()).digest()
+            first,second=struct.unpack('!ii',lockbytes[:8])
+            locker.stdin.write("BEGIN; DO $$ BEGIN PERFORM pg_advisory_xact_lock("+str(first)+","+str(second)+"); END $$; SELECT 'LOCKED';\n")
             locker.stdin.flush()
             until = time.monotonic() + 5
             locked = False
@@ -414,15 +426,15 @@ def main():
                         locked = True
                         break
             if not locked:
-                raise RuntimeError('Fixture mutex rendezvous expired')
-            key = sql("SELECT storage_key FROM issuer_entries WHERE kind='ISSUER_STATE' ORDER BY storage_key LIMIT 1;")
+                raise RuntimeError('Fixture admission rendezvous expired')
+            key = sql("SELECT storage_key FROM issuer_store_entry WHERE kind='ISSUER_STATE' ORDER BY storage_key LIMIT 1;")
             try:
                 record('database-lock-wait-honors-budget', call('budget', recovery, 'restart', key=key) == 'BOUNDED')
             finally:
                 locker.stdin.write('ROLLBACK;\n\\q\n')
                 locker.stdin.flush()
                 locker.communicate(timeout=5)
-            record('durable-clock-highwater-rejects-backward', call('warm', recovery, 'restart', now='2026-10-06T11:59:59Z') == 'STORE_UNAVAILABLE')
+            record('independent-authority-rejects-unhealthy-backward-worker', call('warm', recovery, 'restart', now='2026-10-06T11:59:50Z') == 'STORE_UNAVAILABLE')
             waiting = launch('active', recovery, 'restart', mode='wait')
             until = time.monotonic() + 10
             while not (recovery / 'ready').exists():
@@ -435,8 +447,8 @@ def main():
             if args.recovery:
                 import recovery as recovery_checks
                 recovery_checks.exercise(state, container, port, record, sql, docker, digest, call, launch, outcome, CommitLossProxy, proxies)
-            sql("DELETE FROM issuer_entries WHERE kind='ISSUER_STATE';")
-            record('missing-permanent-fence-fails-closed', call('warm', recovery, 'restart') == 'STORE_CORRUPT')
+            sql("DELETE FROM issuer_store_entry WHERE kind='ISSUER_STATE';")
+            record('missing-permanent-fence-fails-closed', call('warm', recovery, 'restart') == 'STORE_UNAVAILABLE')
 
             module_files = sorted(path for path in Path(__file__).parent.rglob('*') if path.is_file() and 'target' not in path.relative_to(Path(__file__).parent).parts and '__pycache__' not in path.parts)
             source = hashlib.sha256()
@@ -445,8 +457,8 @@ def main():
                 source.update(hashlib.sha256(path.read_bytes()).digest())
             facts = dict(logicalRestoreExercised=args.recovery, moduleSourceSha256=source.hexdigest(), moduleFiles=len(module_files), status='PASS' , checks=len(results), jvm=str(java), runtimeJars=4,
                          sourceJars=[dict(name=jar.name, sha256=hashlib.sha256(jar.read_bytes()).hexdigest()) for jar in jars],
-                         cases=results, scope='single authoritative PostgreSQL primary, two independent JVM callers',
-                         exclusions=['HA/failover', 'power loss', 'cross-host', 'physical/PITR restore', 'distributed traffic drain/lease', 'HSM/key-loss reconstruction', *(['authentic backup restore'] if not args.recovery else []), 'browser/independent client', 'full AS closure'])
+                         cases=results, scope='single authoritative PostgreSQL primary, independent JVM callers and isolated scripted issuer authority',
+                         exclusions=['HA/failover', 'power loss', 'cross-host', 'physical/PITR restore', 'distributed traffic drain/lease', 'HSM/key-loss reconstruction', *(['authentic backup restore'] if not args.recovery else []), 'browser/independent client', 'full AS closure','approved UTC source','witness owner','platform durability','combined-family profile'])
             (args.output / 'RESULT.json').write_text(json.dumps(facts, indent=2) + '\n')
     finally:
         cleanup_errors = []
@@ -469,6 +481,7 @@ def main():
             cleanup(lambda: docker('volume', 'rm', volume))
         if 'network' in created:
             cleanup(lambda: docker('network', 'rm', network))
+        (args.output/'CLEANUP.json').write_text(json.dumps({'ownedContainerRemoved':'container' in created and not cleanup_errors,'ownedVolumeRemoved':'volume' in created and not cleanup_errors,'ownedNetworkRemoved':'network' in created and not cleanup_errors,'errors':cleanup_errors},indent=2)+'\n')
         if cleanup_errors:
             raise RuntimeError('Owned fixture cleanup incomplete')
 

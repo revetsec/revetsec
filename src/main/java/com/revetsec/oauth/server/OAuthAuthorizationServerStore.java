@@ -29,9 +29,13 @@ import static java.util.Objects.requireNonNull;
 /**
  * Application-owned authoritative issuer persistence. Implementations must be safe across callers and nodes.
  * Reads are linearizable; commits atomically check every condition before applying all mutations and return
- * COMMITTED only after durability under the application's deployment contract. CONFLICT has zero effects;
+ * a contextual COMMITTED receipt only after durability under the application's deployment contract. CONFLICT has zero effects;
  * a lost connection with uncertain outcome returns UNKNOWN, never a guessed conflict or success.
- * Condition-only commits are required atomic read-set barriers. No callback executes inside a transaction.
+ * Condition-only commits are required atomic read-set barriers. TIMED commits validate fresh authority time
+ * after all waits and exact predicates, lower/upper bounds before capacity or mutation. FENCE_ONLY is
+ * restricted to the transaction type's two existing permanent-fence epoch transitions. Reads and failed
+ * writes perform no cleanup. Missing established roots cannot be recreated as a fresh namespace.
+ * All time and admission facts are backend-owned; no worker clock fallback is permitted. No callback executes inside a transaction.
  * Providers honor the remaining budget and preserve permanent fences and retained replay tombstones:
  * capacity pressure rejects work rather than evicting active records. Revetsec cannot forcibly preempt
  * blocked application code. This interface supplies no database, durability or rollback detection by itself.
@@ -43,14 +47,14 @@ import static java.util.Objects.requireNonNull;
 @CheckReturnValue
 public interface OAuthAuthorizationServerStore {
  /**
-  * Reads an authoritative entry or confirmed absence, preserving every transport field exactly.
-  * Infrastructure failure is thrown, never translated into absence. Do not include record data in diagnostics.
+  * Reads an authoritative entry or confirmed absence with coherent admitted time, preserving every transport field exactly.
+  * Infrastructure failure is unavailable, never translated into absence. Do not include record data in diagnostics.
   * @param key the exact address
   * @param remainingBudget the remaining positive operation budget
-  * @return the authoritative entry or absence
+  * @return the coherent available, fenced or unavailable observation
   * @since 1.0.0
   */
- @NonNull Optional<@NonNull OAuthStoreEntry> read(@NonNull OAuthStoreKey key,
+ @NonNull OAuthStoreReadResult read(@NonNull OAuthStoreKey key,
    @NonNull Duration remainingBudget);
  /**
   * Atomically checks the complete predicate set and applies the complete mutation set.
@@ -60,6 +64,6 @@ public interface OAuthAuthorizationServerStore {
   * @return the actual durable, conflict or uncertain outcome
   * @since 1.0.0
   */
- @NonNull OAuthStoreCommitStatus commit(@NonNull OAuthStoreTransaction transaction,
+ @NonNull OAuthStoreCommitReceipt commit(@NonNull OAuthStoreTransaction transaction,
    @NonNull Duration remainingBudget);
 }

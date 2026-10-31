@@ -210,6 +210,8 @@ final class SourcePolicyTests {
 	 * {@code internal.crypto.SealedStateAccess}.
 	 */
 	static final List<List<String>> MUTABLE_STATIC_ALLOWLIST = rows(new String[][]{
+			{"com.revetsec.internal.StoreTimeAccess", "operations", "SCP-02 set-once time-condition accessor: "
+					+ "volatile, locked writes, only StoreTemporalCondition nestmates install; duplicate registration rejected"},
 			{"com.revetsec.internal.jose.JwtValidationAccess", "operations", "M4 shared HTTP deadline: set-once "
 					+ "volatile accessor, locked writes, only JwtValidator's nestmate installs it"},
 			{"com.revetsec.internal.oauth.OidcTransactionAccess", "operations", "M4-3 set-once accessor: volatile, "

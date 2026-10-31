@@ -20,6 +20,7 @@ import com.revetsec.internal.http.Deadline;
 import com.revetsec.jose.StaticJwksSource;
 import com.revetsec.json.JsonObject;
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -43,16 +44,21 @@ final class OAuthGrantRevocation {
  }
  @NonNull OAuthStatusResponse revoke(@NonNull OAuthServerRequest request, @NonNull OAuthServerClientRepository clients,
    @NonNull StaticJwksSource keys, @NonNull Deadline deadline) {
-  return revokeSelected(request, d -> OAuthServerClientSelection.registered(OAuthServerClientAdmission.authenticate(request, clients, d, this.limits)), keys, deadline);
+  return revokeSelected(request, d -> OAuthServerClientSelection.registered(OAuthServerClientAdmission.authenticate(request, clients, d, this.limits)), keys, null, deadline);
  }
  @NonNull OAuthStatusResponse revoke(@NonNull OAuthServerRequest request, @NonNull OAuthServerClientSelection clients,
    @NonNull Map<@NonNull String, @NonNull Set<@NonNull String>> resources,
    @NonNull StaticJwksSource keys, @NonNull Deadline deadline) {
-  return revokeSelected(request, d -> clients.authenticate(request, resources, d), keys, deadline);
+  return revokeSelected(request, d -> clients.authenticate(request, resources, d), keys, null, deadline);
+ }
+ @NonNull OAuthStatusResponse revoke(@NonNull OAuthServerRequest request,@NonNull OAuthServerClientSelection clients,
+   @NonNull Map<@NonNull String,@NonNull Set<@NonNull String>> resources,
+   @NonNull OAuthIssuerKeyLifecycle keys,@NonNull Deadline deadline){
+  return revokeSelected(request,d->clients.authenticate(request,resources,d),keys.recognitionKeys(deadline),keys,deadline);
  }
  private @NonNull OAuthStatusResponse revokeSelected(@NonNull OAuthServerRequest request,
    @NonNull Function<@NonNull Deadline, OAuthServerClientSelection.@NonNull Selected> clients,
-   @NonNull StaticJwksSource keys, @NonNull Deadline deadline) {
+   @NonNull StaticJwksSource keys, @Nullable OAuthIssuerKeyLifecycle lifecycle, @NonNull Deadline deadline) {
   if (request.endpoint() != OAuthServerRequest.Endpoint.REVOCATION) throw OAuthServerRequest.invalid();
   requireNonNull(keys);
   String token = request.required("token");
@@ -72,7 +78,15 @@ final class OAuthGrantRevocation {
     if (invalid.reason() != OAuthServerAdmissionFailure.Reason.INVALID_TOKEN) throw invalid;
     OAuthServerClientAdmission.remaining(deadline); return response;
    }
-   OAuthStoreCoordinator.Session session = this.coordinator.begin(deadline);
+   OAuthStoreCoordinator.Session session = this.coordinator.begin(deadline);session.allowExpiryNoop();
+   if(lifecycle!=null){StaticJwksSource admittedKeys=lifecycle.verificationKeys(deadline,session::authorityNow);
+    if(!refresh){
+     JsonObject current;
+     try{current=this.status.retainedClaims(token,admittedKeys,deadline);}
+     catch(OAuthServerAdmissionFailure invalid){if(invalid.reason()!=OAuthServerAdmissionFailure.Reason.INVALID_TOKEN)throw invalid;return response;}
+     if(claims==null || !current.toJson().equals(claims.toJson()))throw new OAuthStoreFailure(CORRUPT_STATE);
+    }
+   }
    OAuthAuthorizationRecord credential = this.status.read(session, this.codec.key(refresh ? OAuthStoreKey.Kind.REFRESH_TOKEN : OAuthStoreKey.Kind.ACCESS_TOKEN, id));
    if (credential == null) { if (session.barrier() == OAuthStoreCommitStatus.COMMITTED) return response; else continue; }
    OAuthStoreKey grantKey = this.codec.key(OAuthStoreKey.Kind.GRANT, credential.text("grantId"));
@@ -88,7 +102,7 @@ final class OAuthGrantRevocation {
     && (claims == null || this.status.matches(claims, credential, grant.text("resource")));
    session.requireBefore(credential.retention()); session.requireBefore(grant.retention());
    OAuthStoreCommitStatus result = owned && grant.text("status").equals("ACTIVE") ? terminate(session, grantKey, grant) : session.barrier();
-   if (result == OAuthStoreCommitStatus.COMMITTED) return response;
+   if (result == OAuthStoreCommitStatus.COMMITTED || result == OAuthStoreCommitStatus.TIME_EXPIRED) return response;
   }
   throw new OAuthStoreFailure(UNAVAILABLE);
  }
@@ -96,7 +110,7 @@ final class OAuthGrantRevocation {
  void revokeGrant(@NonNull String grantId, @NonNull Deadline deadline) {
   OAuthStoreFormat.nonce(grantId);
   for (int attempt = 0; attempt < this.attempts; attempt++) {
-   OAuthStoreCoordinator.Session session = this.coordinator.begin(deadline);
+   OAuthStoreCoordinator.Session session = this.coordinator.begin(deadline);session.allowExpiryNoop();
    OAuthStoreKey key = this.codec.key(OAuthStoreKey.Kind.GRANT, grantId);
    OAuthAuthorizationRecord grant = this.status.read(session, key);
    OAuthStoreCommitStatus result;
@@ -107,7 +121,7 @@ final class OAuthGrantRevocation {
     String state = grant.text("status");
     result = state.equals("REVOKED") || state.equals("DENIED") ? session.barrier() : terminate(session, key, grant);
    }
-   if (result == OAuthStoreCommitStatus.COMMITTED) return;
+   if (result == OAuthStoreCommitStatus.COMMITTED || result == OAuthStoreCommitStatus.TIME_EXPIRED) return;
   }
   throw new OAuthStoreFailure(UNAVAILABLE);
  }
@@ -121,7 +135,7 @@ final class OAuthGrantRevocation {
    @NonNull OAuthAuthorizationRecord grant) {
   OAuthAuthorizationRecord terminated;
   OAuthStoreEntry entry;
-  try { terminated = grant.terminated(this.limits, this.subjectLimit); entry = this.codec.seal(key, terminated.retention(), terminated.toPayload()); }
+  try { terminated = grant.terminated(this.limits, this.subjectLimit); entry = session.seal(key, terminated.retention(), terminated.toPayload()); }
   catch (VirtualMachineError fatal) { throw fatal; }
   catch (Throwable failure) { if (failure instanceof InterruptedException) Thread.currentThread().interrupt(); throw new OAuthStoreFailure(CORRUPT_STATE); }
   return session.commit(List.of(OAuthStoreTransaction.Mutation.fromPut(entry)));

@@ -16,6 +16,8 @@
 
 package com.revetsec.totp;
 
+import com.google.errorprone.annotations.CheckReturnValue;
+import com.revetsec.StoreTimeObservation;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -26,25 +28,32 @@ import org.jspecify.annotations.NonNull;
  * @since 1.0.0
  */
 @javax.annotation.concurrent.Immutable
+@CheckReturnValue
 public final class TotpStoreSnapshot {
  private final @NonNull Map<@NonNull TotpStoreKey, @NonNull TotpStoreEntry> entries;
- private TotpStoreSnapshot(@NonNull Map<@NonNull TotpStoreKey, @NonNull TotpStoreEntry> entries) {
+ private final @NonNull StoreTimeObservation timeObservation;
+ private TotpStoreSnapshot(@NonNull Map<@NonNull TotpStoreKey, @NonNull TotpStoreEntry> entries,
+   @NonNull StoreTimeObservation timeObservation) {
   this.entries = Map.copyOf(entries);
+  this.timeObservation = Objects.requireNonNull(timeObservation);
  }
  /**
   * Constructs a complete, bounded snapshot with one explicit observation per requested address.
   * @param requestedKeys the exact nonempty set of at most 16 keys in one scope
   * @param entries the matching present or absent observations
+  * @param timeObservation the admitted time or time-only unavailability coherent with these entries
   * @return the immutable snapshot
   * @since 1.0.0
   */
  public static @NonNull TotpStoreSnapshot fromEntries(@NonNull Set<@NonNull TotpStoreKey> requestedKeys,
-   @NonNull Map<@NonNull TotpStoreKey, @NonNull TotpStoreEntry> entries) {
-  Objects.requireNonNull(requestedKeys); Objects.requireNonNull(entries);
+   @NonNull Map<@NonNull TotpStoreKey, @NonNull TotpStoreEntry> entries,
+   @NonNull StoreTimeObservation timeObservation) {
+  Objects.requireNonNull(requestedKeys); Objects.requireNonNull(entries); Objects.requireNonNull(timeObservation);
   if (requestedKeys.isEmpty() || requestedKeys.size() > 16 || !entries.keySet().equals(requestedKeys))
    throw new IllegalArgumentException("Incomplete TOTP store snapshot");
-  TotpStoreKey first = requestedKeys.iterator().next();
+  TotpStoreKey first = Objects.requireNonNull(requestedKeys.iterator().next());
   for (TotpStoreKey key : requestedKeys) {
+   Objects.requireNonNull(key);
    if (!key.getCredentialNamespace().equals(first.getCredentialNamespace())
      || !key.getRecoveryEpoch().equals(first.getRecoveryEpoch()))
     throw new IllegalArgumentException("Mixed TOTP snapshot scope");
@@ -52,7 +61,7 @@ public final class TotpStoreSnapshot {
    if (entry instanceof TotpStoreEntry.Present present && !present.getRecord().getKey().equals(key))
     throw new IllegalArgumentException("Mismatched TOTP record address");
   }
-  return new TotpStoreSnapshot(entries);
+  return new TotpStoreSnapshot(entries, timeObservation);
  }
  /**
   * Returns all immutable requested observations.
@@ -71,6 +80,12 @@ public final class TotpStoreSnapshot {
   if (entry == null) throw new IllegalArgumentException("Key not in TOTP snapshot");
   return entry;
  }
+ /**
+  * Returns the admitted time metadata from the same atomic snapshot as every entry.
+  * @return the coherent time observation
+  * @since 1.0.0
+  */
+ public @NonNull StoreTimeObservation getTimeObservation() { return this.timeObservation; }
  /**
   * Redacts all observations.
   * @since 1.0.0

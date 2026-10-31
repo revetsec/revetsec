@@ -1,5 +1,7 @@
 # Compatibility Policy
 
+**2026-10-30 shared-clock source join:** the TOTP/WebAuthn/issuer transition adds 15 store declarations, 15 restricted reconciliation leaves, 56 source-declared store methods, seven existing-type getters and 17 enum constants. The 11 selected contract signature replacements also require two concrete in-memory override return replacements, for 13 binary replacements. Java's two generated `Purpose` enum methods are counted separately. This is a coordinated pre-1.0 source break with no legacy SPI wrapper or worker-clock fallback. [The joined contract](docs/shared-clock-stores.md) describes result branches, raw factual receipts and migration/readiness boundaries. Current compiled candidate acceptance does not grant release-owner approval or qualify a live shared clock/store deployment.
+
 Revetsec is pre-release. The version is `1.0.0-SNAPSHOT`, and **there is no compatibility promise before 1.0.0**. Until then, any public type, member, default or behavior may change incompatibly, without deprecation.
 
 From 1.0.0, Revetsec follows [Semantic Versioning](https://semver.org/), with release tags `vX.Y.Z`:

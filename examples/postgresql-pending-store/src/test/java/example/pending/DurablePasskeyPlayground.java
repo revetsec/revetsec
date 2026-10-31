@@ -51,10 +51,10 @@ public final class DurablePasskeyPlayground {
         WebAuthnRecoveryGate gate = new WebAuthnFixtureRecoveryGate(NAMESPACE,
                 Path.of(required(env, "REVETSEC_TEST_WA_MARKER_FILE")),
                 Path.of(required(env, "REVETSEC_TEST_WA_LOCK_FILE")), sealKey);
-        WebAuthnRelyingParty party = WebAuthnRelyingParty.withRelyingPartyId(rpId)
+        WebAuthnRelyingParty party = com.revetsec.webauthn.WebAuthnFixtureWorker.configure(WebAuthnRelyingParty.withRelyingPartyId(rpId))
                 .relyingPartyName("Revetsec Passkey Demo").allowedOrigins(Set.of(origin))
                 .credentialNamespace(NAMESPACE)
-                .store(new PostgresqlWebAuthnStore(NAMESPACE, WebAuthnStoreProbe::connection, 256))
+                .store(new PostgresqlWebAuthnStore(NAMESPACE,WebAuthnFixtureAuthority.physical(NAMESPACE),WebAuthnStoreProbe::connection,4096,WebAuthnFixtureAuthority.fromEnvironment(NAMESPACE)))
                 .stateSealer(sealer)
                 .recoveryGate(gate)
                 .build();

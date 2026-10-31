@@ -51,6 +51,8 @@ import com.revetsec.oauth.server.OAuthStoreKey;
 import com.revetsec.oauth.server.OAuthStoreEntry;
 import com.revetsec.oauth.server.OAuthStoreTransaction;
 import com.revetsec.oauth.server.OAuthStoreCommitStatus;
+import com.revetsec.oauth.server.OAuthStoreCommitReceipt;
+import com.revetsec.oauth.server.OAuthStoreReadResult;
 import com.revetsec.oauth.server.OAuthServerClientRegistration;
 import com.revetsec.oauth.server.OAuthServerClientAuthentication;
 import com.revetsec.oauth.server.OAuthAuthorizationDecision;
@@ -74,6 +76,10 @@ import com.revetsec.OutboundUriPolicy;
 import com.revetsec.RevetsecException;
 import com.revetsec.SealingKey;
 import com.revetsec.StateSealer;
+import com.revetsec.StoreAdmission;
+import com.revetsec.StoreCommitTiming;
+import com.revetsec.StoreTemporalCondition;
+import com.revetsec.StoreTimeObservation;
 import com.revetsec.oauth.AccessToken;
 import com.revetsec.oauth.BearerToken;
 import com.revetsec.oauth.BearerError;
@@ -210,6 +216,7 @@ import com.revetsec.webauthn.WebAuthnRelyingParty;
 import com.revetsec.webauthn.WebAuthnSettings;
 import com.revetsec.webauthn.WebAuthnStore;
 import com.revetsec.webauthn.WebAuthnStoreCommitResult;
+import com.revetsec.webauthn.WebAuthnStoreCommitReceipt;
 import com.revetsec.webauthn.WebAuthnStoreEntry;
 import com.revetsec.webauthn.WebAuthnStoreKey;
 import com.revetsec.webauthn.WebAuthnStoreReadResult;
@@ -325,6 +332,7 @@ import com.revetsec.totp.TotpStatus;
 import com.revetsec.totp.TotpStatusResult;
 import com.revetsec.totp.TotpStore;
 import com.revetsec.totp.TotpStoreCommitResult;
+import com.revetsec.totp.TotpStoreCommitReceipt;
 import com.revetsec.totp.TotpStoreEntry;
 import com.revetsec.totp.TotpStoreKey;
 import com.revetsec.totp.TotpStoreReadResult;
@@ -537,7 +545,12 @@ public final class PackagedConsumer {
 				WebAuthnAuthenticationResult.class, WebAuthnBrowserRequest.class, WebAuthnCredentialListResult.class, WebAuthnCredentialRemovalResult.class,
 				WebAuthnRecoveryGate.class, WebAuthnRegistration.class, WebAuthnRegistrationOptions.class, WebAuthnRegistrationRequestResult.class,
 				WebAuthnRegistrationResult.class, WebAuthnRejectionReason.class, WebAuthnRelyingParty.class, WebAuthnSettings.class,
-				WebAuthnStore.class, WebAuthnStoreCommitResult.class, WebAuthnStoreEntry.class, WebAuthnStoreKey.class,
+				WebAuthnStore.class, WebAuthnStoreCommitResult.class, WebAuthnStoreCommitReceipt.class,
+                WebAuthnStoreReadResult.Fenced.class,
+                WebAuthnRegistrationRequestResult.ReconciliationRequired.class, WebAuthnAuthenticationRequestResult.ReconciliationRequired.class,
+                WebAuthnRegistrationResult.ReconciliationRequired.class, WebAuthnAuthenticationResult.ReconciliationRequired.class,
+                WebAuthnCredentialRemovalResult.ReconciliationRequired.class, WebAuthnAccountDisableResult.ReconciliationRequired.class,
+                WebAuthnStoreEntry.class, WebAuthnStoreKey.class,
 				WebAuthnStoreReadResult.class, WebAuthnStoreSnapshot.class, WebAuthnStoreWrite.class
 		});
 		calledApi.add("com.revetsec.webauthn");
@@ -559,6 +572,9 @@ public final class PackagedConsumer {
 		});
 		calledApi.add("com.revetsec.scim");
 
+		exerciseSharedClockContracts();
+		calledApi.add("shared-clock");
+
 		System.out.println("jar=" + jar);
 		System.out.println("automatic-module-name=" + automaticModuleName);
 		System.out.println("root-package-info=" + packageInfo.getName());
@@ -568,10 +584,85 @@ public final class PackagedConsumer {
 		System.out.println("public-api=" + String.join(",", calledApi));
 	}
 
+
+    /** Exercises joined carrier linkage and restricted result shape; carrier facts grant no service readiness. */
+    private static void exerciseSharedClockContracts() throws ReflectiveOperationException {
+        Class<?>[] storeTypes={
+            StoreAdmission.class,StoreCommitTiming.class,StoreTemporalCondition.class,
+            StoreTimeObservation.class,StoreTimeObservation.Healthy.class,StoreTimeObservation.Unavailable.class,
+            com.revetsec.oauth.server.OAuthStoreCommitReceipt.class,com.revetsec.oauth.server.OAuthStoreReadResult.class,
+            com.revetsec.oauth.server.OAuthStoreReadResult.Available.class,com.revetsec.oauth.server.OAuthStoreReadResult.Fenced.class,
+            com.revetsec.oauth.server.OAuthStoreReadResult.Unavailable.class,com.revetsec.oauth.server.OAuthStoreTransaction.Purpose.class,
+            com.revetsec.totp.TotpStoreCommitReceipt.class,com.revetsec.webauthn.WebAuthnStoreCommitReceipt.class,
+            com.revetsec.webauthn.WebAuthnStoreReadResult.Fenced.class
+        };
+        require(storeTypes.length==15,"joined store declaration count");
+        for(Class<?> type:storeTypes) require(type.getConstructors().length==0,"store carrier restricted construction");
+        Class<?>[] reconciliations={
+            TotpEnrollmentRequestResult.ReconciliationRequired.class,TotpEnrollmentResult.ReconciliationRequired.class,
+            TotpVerificationResult.ReconciliationRequired.class,RecoveryCodeUseResult.ReconciliationRequired.class,
+            RecoveryCodeRotationResult.ReconciliationRequired.class,TotpFactorRemovalResult.ReconciliationRequired.class,
+            TotpEnrollmentCancellationResult.ReconciliationRequired.class,TotpNamespaceInitializationResult.ReconciliationRequired.class,
+            TotpStoreResealResult.ReconciliationRequired.class,WebAuthnRegistrationRequestResult.ReconciliationRequired.class,
+            WebAuthnAuthenticationRequestResult.ReconciliationRequired.class,WebAuthnRegistrationResult.ReconciliationRequired.class,
+            WebAuthnAuthenticationResult.ReconciliationRequired.class,WebAuthnCredentialRemovalResult.ReconciliationRequired.class,
+            WebAuthnAccountDisableResult.ReconciliationRequired.class
+        };
+        require(reconciliations.length==15,"joined reconciliation declaration count");
+        for(Class<?> type:reconciliations) {
+            require(java.lang.reflect.Modifier.isFinal(type.getModifiers()) && type.getConstructors().length==0,
+                "reconciliation marker restricted construction");
+            require(type.getDeclaredFields().length==0 && type.getDeclaredMethods().length==0,
+                "reconciliation marker carries no payload or factory");
+            require(type.getSuperclass().isSealed() && Arrays.asList(type.getSuperclass().getPermittedSubclasses()).contains(type),
+                "reconciliation marker belongs to its sealed family");
+        }
+        String authority="A".repeat(43),recovery="B".repeat(42)+"A",generation="C".repeat(42)+"A";
+        var admission=StoreAdmission.fromIdentifiers(authority,recovery);
+        var healthy=StoreTimeObservation.Healthy.fromObservation(admission,generation,NOW,Duration.ZERO);
+        var unavailable=StoreTimeObservation.Unavailable.fromAdmission(admission);
+        var timing=StoreCommitTiming.fromTimes(healthy,null);
+        require(admission.getAuthorityId().equals(authority) && admission.getRecoveryGeneration().equals(recovery),"admission transport");
+        require(healthy.getClockGeneration().equals(generation) && healthy.getObservedAt().equals(NOW)
+            && healthy.getMaximumUtcError().equals(Duration.ZERO) && timing.getCompletedTime().isEmpty(),"exact observation and absent completion");
+        require(unavailable.getAdmission().getRecoveryGeneration().equals(recovery),"time-unavailable preserves admission");
+        var totp=TotpStoreCommitReceipt.fromCommittedTiming(timing);
+        var webauthn=WebAuthnStoreCommitReceipt.fromCommittedTiming(timing);
+        var issuer=OAuthStoreCommitReceipt.fromCommittedTiming(timing);
+        require(totp.getStatus()==TotpStoreCommitResult.COMMITTED && webauthn.getStatus()==WebAuthnStoreCommitResult.COMMITTED
+            && issuer.getStatus()==OAuthStoreCommitStatus.COMMITTED && issuer.getAdmission().isPresent(),"contextual committed facts");
+        require(totp.getTiming().orElseThrow().getCompletedTime().isEmpty()
+            && webauthn.getTiming().orElseThrow().getCompletedTime().isEmpty()
+            && issuer.getTiming().orElseThrow().getCompletedTime().isEmpty(),"missing completion is not a fabricated sample");
+        var fence=OAuthStoreCommitReceipt.fromFenceAdmission(admission);
+        require(fence.getStatus()==OAuthStoreCommitStatus.COMMITTED && fence.getTiming().isEmpty() && fence.getAdmission().isPresent(),"fence-only factual shape");
+        require(TotpStoreCommitReceipt.unknownInstance().getStatus()==TotpStoreCommitResult.UNKNOWN
+            && WebAuthnStoreCommitReceipt.unknownInstance().getStatus()==WebAuthnStoreCommitResult.UNKNOWN
+            && OAuthStoreCommitReceipt.unknownInstance().getAdmission().isEmpty(),"unknown carries no invented timing or admission");
+        for(String name:List.of("TIME_UNAVAILABLE","TIME_BEFORE_FLOOR","TIME_EXPIRED")) {
+            require(TotpStoreCommitReceipt.fromRefusal(TotpStoreCommitResult.valueOf(name)).getTiming().isEmpty(),"TOTP definitive temporal refusal");
+            require(WebAuthnStoreCommitReceipt.fromRefusal(WebAuthnStoreCommitResult.valueOf(name)).getTiming().isEmpty(),"WebAuthn definitive temporal refusal");
+            require(OAuthStoreCommitReceipt.fromRefusal(OAuthStoreCommitStatus.valueOf(name)).getAdmission().isEmpty(),"issuer definitive temporal refusal");
+        }
+        require(TotpUnavailableReason.valueOf("ATTEMPT_INCOMPLETE")!=null
+            && TotpUnavailableReason.valueOf("TIME_AUTHORITY_UNAVAILABLE")!=null
+            && TotpUnavailableReason.valueOf("CLOCK_HEALTH_UNCONFIRMED")!=null
+            && OAuthServerException.Reason.valueOf("COMMIT_CONFIRMED_NOT_ADMITTED")!=null,"fixed service classifications");
+        require(OAuthAuthorizationServer.class.getMethod("initializeFreshIssuer").getReturnType()==OAuthStoreCommitReceipt.class
+            && OAuthAuthorizationServer.class.getMethod("resealStoreEntry",OAuthStoreKey.class).getReturnType()==OAuthStoreCommitReceipt.class
+            && WebAuthnRelyingParty.class.getMethod("resealStoreEntry",WebAuthnStoreKey.class).getReturnType()==WebAuthnStoreCommitReceipt.class,
+            "raw maintenance returns factual receipts");
+        require(!admission.toString().contains(authority) && !healthy.toString().contains(generation)
+            && !issuer.toString().contains(recovery),"joined carrier redaction");
+    }
+
 	/** Compile against every exported type that the behavioral consumer calls do not otherwise touch. */
 	private static void exerciseAdditionalExportedTypes() {
 		exerciseExportedTypes("com.revetsec", new Class<?>[] {
-			InvalidSealedStateException.class
+			InvalidSealedStateException.class, StoreAdmission.class,
+			StoreTimeObservation.class, StoreTimeObservation.Healthy.class,
+			StoreTimeObservation.Unavailable.class, StoreTemporalCondition.class,
+			StoreCommitTiming.class
 		});
 		exerciseExportedTypes("com.revetsec.jose", new Class<?>[] {
 			JwksParseResult.class, JwksParseResult.Succeeded.class, JwksParseResult.Rejected.class, JwksPublisher.class,
@@ -617,9 +708,16 @@ public final class PackagedConsumer {
 			TotpEnrollmentResult.class, TotpFactor.class, TotpFactorRemovalResult.class,
 			TotpNamespaceInitializationResult.class, TotpPendingEnrollment.class, TotpRecoveryContext.class,
 			TotpRecoveryGate.class, TotpRejectionReason.class, TotpStatus.class, TotpStatusResult.class, TotpStore.class,
-			TotpStoreCommitResult.class, TotpStoreEntry.class, TotpStoreKey.class, TotpStoreReadResult.class,
+			TotpStoreCommitResult.class, TotpStoreCommitReceipt.class, TotpStoreEntry.class, TotpStoreKey.class, TotpStoreReadResult.class,
 			TotpStoreRecord.class, TotpStoreResealResult.class, TotpStoreSnapshot.class, TotpStoreWrite.class,
-			TotpUnavailableReason.class, TotpVerification.class, TotpVerificationResult.class
+			TotpUnavailableReason.class, TotpVerification.class, TotpVerificationResult.class,
+			TotpEnrollmentRequestResult.ReconciliationRequired.class,
+			TotpEnrollmentResult.ReconciliationRequired.class, TotpVerificationResult.ReconciliationRequired.class,
+			RecoveryCodeUseResult.ReconciliationRequired.class, RecoveryCodeRotationResult.ReconciliationRequired.class,
+			TotpFactorRemovalResult.ReconciliationRequired.class,
+			TotpEnrollmentCancellationResult.ReconciliationRequired.class,
+			TotpNamespaceInitializationResult.ReconciliationRequired.class,
+			TotpStoreResealResult.ReconciliationRequired.class
 		});
 	}
 
@@ -652,8 +750,8 @@ public final class PackagedConsumer {
   OAuthAuthorizationServer server=OAuthAuthorizationServer.withIssuer(ISSUER)
    .authorizationEndpoint(URI.create(ISSUER+"/authorize")).tokenEndpoint(URI.create(ISSUER+"/token")).jwksEndpoint(URI.create(ISSUER+"/jwks"))
    .clientRepository((id,budget)->Optional.empty()).store(new OAuthAuthorizationServerStore(){
-    @Override public @NonNull Optional<@NonNull OAuthStoreEntry> read(@NonNull OAuthStoreKey address,@NonNull Duration budget){throw new AssertionError("build touched store");}
-    @Override public @NonNull OAuthStoreCommitStatus commit(@NonNull OAuthStoreTransaction transaction,@NonNull Duration budget){throw new AssertionError("build touched store");}
+    @Override public @NonNull OAuthStoreReadResult read(@NonNull OAuthStoreKey address,@NonNull Duration budget){throw new AssertionError("build touched store");}
+    @Override public @NonNull OAuthStoreCommitReceipt commit(@NonNull OAuthStoreTransaction transaction,@NonNull Duration budget){throw new AssertionError("build touched store");}
    }).signingKeys(provider).stateSealer(StateSealer.withActiveKey(SealingKey.fromBase64("consumer-issuer",Base64.getEncoder().encodeToString(sealBytes))).build())
    .resources(Map.of("https://resource.example/mcp",Set.of("read"))).grantPolicy((context,budget)->OAuthAuthorizationDecision.deniedInstance()).clock(Clock.fixed(NOW,ZoneOffset.UTC)).build();
   require(server.getIssuer().equals(ISSUER) && server.getTokenEndpoint().toString().equals(ISSUER+"/token") && server.getAuthorizationEndpoint()!=null
@@ -687,23 +785,24 @@ public final class PackagedConsumer {
   OAuthStoreKey key = OAuthStoreKey.fromStoredForm("revetsec:as:1:" + nonce + ":CODE:" + nonce);
   OAuthStoreEntry entry = OAuthStoreEntry.fromStoredForm(key, nonce, Instant.ofEpochSecond(2_000_000_000L), "opaque");
   OAuthAuthorizationServerStore store = new OAuthAuthorizationServerStore() {
-   @Override public @NonNull Optional<@NonNull OAuthStoreEntry> read(@NonNull OAuthStoreKey address, @NonNull Duration budget) {
-    return address.equals(key) ? Optional.of(entry) : Optional.empty();
+   @Override public @NonNull OAuthStoreReadResult read(@NonNull OAuthStoreKey address, @NonNull Duration budget) {
+    return OAuthStoreReadResult.Available.fromObservation(address,address.equals(key)?entry:null,
+      StoreTimeObservation.Unavailable.fromAdmission(StoreAdmission.fromIdentifiers(nonce,nonce)));
    }
-   @Override public @NonNull OAuthStoreCommitStatus commit(@NonNull OAuthStoreTransaction transaction, @NonNull Duration budget) {
+   @Override public @NonNull OAuthStoreCommitReceipt commit(@NonNull OAuthStoreTransaction transaction, @NonNull Duration budget) {
     for (OAuthStoreTransaction.Condition condition : transaction.getConditions()) {
      condition.getKey().getStorageKey(); condition.getExpectedVersion();
     }
     for (OAuthStoreTransaction.Mutation mutation : transaction.getMutations()) {
      mutation.getKey(); mutation.getKind(); mutation.getEntry();
     }
-    return OAuthStoreCommitStatus.UNKNOWN;
+    return OAuthStoreCommitReceipt.unknownInstance();
    }
   };
-  if (store.read(key, Duration.ofSeconds(1)).orElseThrow() != entry || entry.getKey().getKind() != OAuthStoreKey.Kind.CODE
+  if (((OAuthStoreReadResult.Available)store.read(key, Duration.ofSeconds(1))).getEntry().orElseThrow() != entry || entry.getKey().getKind() != OAuthStoreKey.Kind.CODE
     || !entry.getVersion().equals(nonce) || entry.getRetainUntil().getEpochSecond() != 2_000_000_000L
     || !entry.toSealedForm().equals("opaque") || OAuthStoreTransaction.Mutation.Kind.values().length != 2
-    || OAuthStoreCommitStatus.values().length != 3) throw new IllegalStateException("Storage carrier linkage failed.");
+    || OAuthStoreCommitStatus.values().length != 9) throw new IllegalStateException("Storage carrier linkage failed.");
  }
 	private static @NonNull OAuthAuthorizationDecision decisionForGrant(@NonNull OAuthGrantContext context) {
 		return OAuthAuthorizationDecision.withSubject(context.getSubject())

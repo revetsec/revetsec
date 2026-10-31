@@ -27,9 +27,10 @@ import static java.util.Objects.requireNonNull;
 @Immutable
 public abstract sealed class WebAuthnAuthenticationRequestResult permits
         WebAuthnAuthenticationRequestResult.Prepared, WebAuthnAuthenticationRequestResult.Rejected,
-        WebAuthnAuthenticationRequestResult.Unavailable, WebAuthnAuthenticationRequestResult.Indeterminate {
+        WebAuthnAuthenticationRequestResult.Unavailable, WebAuthnAuthenticationRequestResult.Indeterminate, WebAuthnAuthenticationRequestResult.ReconciliationRequired {
     private static final @NonNull Unavailable UNAVAILABLE = new Unavailable();
     private static final @NonNull Indeterminate INDETERMINATE = new Indeterminate();
+    private static final @NonNull ReconciliationRequired RECONCILIATION_REQUIRED = new ReconciliationRequired();
     WebAuthnAuthenticationRequestResult() { }
     static @NonNull WebAuthnAuthenticationRequestResult prepared(@NonNull WebAuthnBrowserRequest request) {
         return new Prepared(request);
@@ -37,6 +38,7 @@ public abstract sealed class WebAuthnAuthenticationRequestResult permits
     static @NonNull WebAuthnAuthenticationRequestResult rejected() { return new Rejected(); }
     static @NonNull WebAuthnAuthenticationRequestResult unavailable() { return UNAVAILABLE; }
     static @NonNull WebAuthnAuthenticationRequestResult indeterminate() { return INDETERMINATE; }
+    static @NonNull WebAuthnAuthenticationRequestResult reconciliationRequired() { return RECONCILIATION_REQUIRED; }
     /** Redacts browser and account fields.
      * @return a fixed description
      * @since 1.0.0 */
@@ -71,4 +73,11 @@ public abstract sealed class WebAuthnAuthenticationRequestResult permits
     @Immutable public static final class Indeterminate extends WebAuthnAuthenticationRequestResult {
         private Indeterminate() { }
     }
+    /** The requested transition committed, but normal output could not be admitted.
+     * Reconcile through an authorized fresh operation before deciding what to do next.
+     * @since 1.0.0 */
+    @Immutable public static final class ReconciliationRequired extends WebAuthnAuthenticationRequestResult {
+        private ReconciliationRequired() { }
+    }
+
 }

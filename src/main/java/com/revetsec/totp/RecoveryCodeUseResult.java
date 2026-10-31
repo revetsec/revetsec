@@ -17,6 +17,7 @@
 package com.revetsec.totp;
 
 import org.jspecify.annotations.NonNull;
+import com.google.errorprone.annotations.CheckReturnValue;
 import javax.annotation.concurrent.Immutable;
 import java.time.Duration;
 
@@ -26,8 +27,9 @@ import static java.util.Objects.requireNonNull;
  * @since 1.0.0 */
 @Immutable
 public abstract sealed class RecoveryCodeUseResult permits
-        RecoveryCodeUseResult.Succeeded, RecoveryCodeUseResult.Rejected, RecoveryCodeUseResult.Throttled, RecoveryCodeUseResult.Unavailable, RecoveryCodeUseResult.Indeterminate {
+        RecoveryCodeUseResult.Succeeded, RecoveryCodeUseResult.Rejected, RecoveryCodeUseResult.Throttled, RecoveryCodeUseResult.Unavailable, RecoveryCodeUseResult.Indeterminate, RecoveryCodeUseResult.ReconciliationRequired {
     private static final @NonNull Indeterminate INDETERMINATE = new Indeterminate();
+    private static final @NonNull ReconciliationRequired RECONCILIATION_REQUIRED = new ReconciliationRequired();
 
     RecoveryCodeUseResult() { }
     static @NonNull RecoveryCodeUseResult succeeded(@NonNull RecoveryCodeUse use) {
@@ -44,6 +46,10 @@ public abstract sealed class RecoveryCodeUseResult permits
     }
     static @NonNull RecoveryCodeUseResult indeterminate() {
         return INDETERMINATE;
+    }
+    @CheckReturnValue
+    static @NonNull RecoveryCodeUseResult reconciliationRequired() {
+        return RECONCILIATION_REQUIRED;
     }
     static @NonNull RecoveryCodeUseResult unavailable() {
         return unavailable(TotpUnavailableReason.DEPENDENCY_UNAVAILABLE);
@@ -116,5 +122,13 @@ public abstract sealed class RecoveryCodeUseResult permits
     @Immutable
     public static final class Indeterminate extends RecoveryCodeUseResult {
         private Indeterminate() { }
+    }
+
+    /** The requested transition is known committed, but normal output could not be admitted.
+     * No proof, secret or operation detail is released.
+     * @since 1.0.0 */
+    @Immutable
+    public static final class ReconciliationRequired extends RecoveryCodeUseResult {
+        private ReconciliationRequired() { }
     }
 }

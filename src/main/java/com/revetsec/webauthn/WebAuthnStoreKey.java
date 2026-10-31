@@ -93,7 +93,7 @@ public final class WebAuthnStoreKey {
   return new WebAuthnStoreKey(namespace, relyingPartyId, Kind.ACCOUNT_FENCE, userHandle);
  }
 
- /** Address for the single authoritative observed-time fence of a namespace and RP.
+ /** Address for the authenticated immutable authority/minimum root of a namespace and RP.
   * @param namespace the credential namespace
   * @param relyingPartyId the canonical RP ID
   * @return the namespace clock address

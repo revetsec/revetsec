@@ -21,6 +21,10 @@ import com.revetsec.webauthn.WebAuthnStoreKey;
 import com.revetsec.webauthn.WebAuthnStoreSnapshot;
 import com.revetsec.webauthn.WebAuthnStoreWrite;
 import org.jspecify.annotations.NonNull;
+import com.revetsec.StoreTimeObservation;
+import com.revetsec.internal.StoreTimeAccess;
+import java.time.ZoneOffset;
+import java.time.Instant;
 
 import javax.annotation.concurrent.Immutable;
 import java.security.MessageDigest;
@@ -74,6 +78,9 @@ final class WebAuthnCredentialRemoval {
             @NonNull Clock clock) throws WebAuthnRecordException {
         requireNonNull(snapshot);
         requireNonNull(clock);
+        if (!(snapshot.getTimeObservation() instanceof StoreTimeObservation.Healthy observation)) throw new WebAuthnRecordException();
+        clock = Clock.fixed(observation.getObservedAt(), ZoneOffset.UTC);
+        Instant observedAt = observation.getObservedAt();
         SetOfKeys keys = keys(approvedUserHandle, credentialId);
         WebAuthnStoreEntry credentialEntry = snapshot.getEntry(keys.credential());
         WebAuthnStoreEntry indexEntry = snapshot.getEntry(keys.index());
@@ -101,13 +108,13 @@ final class WebAuthnCredentialRemoval {
         if (credential == null || credential.isRevoked() || !owned)
             throw new WebAuthnRecordException();
 
-        var revoked = this.credentials.encodeRevoked(credentialId, approvedUserHandle);
-        var updatedIndex = this.indexes.encode(index.without(credentialId));
+        var revoked = this.credentials.encodeRevoked(credentialId, approvedUserHandle, observedAt);
+        var updatedIndex = this.indexes.encode(index.without(credentialId), observedAt);
         List<WebAuthnStoreWrite.Mutation> mutations = new ArrayList<>(3);
         mutations.add(WebAuthnStoreWrite.Mutation.replace(revoked.key(), revoked.sealedBytes()));
         mutations.add(WebAuthnStoreWrite.Mutation.replace(updatedIndex.key(), updatedIndex.sealedBytes()));
-        if (time.mutation() != null) mutations.add(time.mutation());
-        WebAuthnStoreWrite write = WebAuthnStoreWrite.fromSnapshotAndMutations(snapshot, mutations);
+        if (time.mutation() != null) throw new WebAuthnRecordException();
+        WebAuthnStoreWrite write = WebAuthnStoreWrite.fromSnapshotAndMutations(snapshot, mutations, StoreTimeAccess.get().fromObservation(observation, observedAt, null));
         return Optional.of(new Prepared(write));
     }
 

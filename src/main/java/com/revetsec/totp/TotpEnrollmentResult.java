@@ -17,6 +17,7 @@
 package com.revetsec.totp;
 
 import org.jspecify.annotations.NonNull;
+import com.google.errorprone.annotations.CheckReturnValue;
 import javax.annotation.concurrent.Immutable;
 import java.time.Duration;
 
@@ -26,8 +27,9 @@ import static java.util.Objects.requireNonNull;
  * @since 1.0.0 */
 @Immutable
 public abstract sealed class TotpEnrollmentResult permits
-        TotpEnrollmentResult.Succeeded, TotpEnrollmentResult.Rejected, TotpEnrollmentResult.Throttled, TotpEnrollmentResult.Unavailable, TotpEnrollmentResult.Indeterminate {
+        TotpEnrollmentResult.Succeeded, TotpEnrollmentResult.Rejected, TotpEnrollmentResult.Throttled, TotpEnrollmentResult.Unavailable, TotpEnrollmentResult.Indeterminate, TotpEnrollmentResult.ReconciliationRequired {
     private static final @NonNull Indeterminate INDETERMINATE = new Indeterminate();
+    private static final @NonNull ReconciliationRequired RECONCILIATION_REQUIRED = new ReconciliationRequired();
 
     TotpEnrollmentResult() { }
     static @NonNull TotpEnrollmentResult succeeded(@NonNull TotpFactor factor, @NonNull RecoveryCodes recoveryCodes) {
@@ -44,6 +46,10 @@ public abstract sealed class TotpEnrollmentResult permits
     }
     static @NonNull TotpEnrollmentResult indeterminate() {
         return INDETERMINATE;
+    }
+    @CheckReturnValue
+    static @NonNull TotpEnrollmentResult reconciliationRequired() {
+        return RECONCILIATION_REQUIRED;
     }
     static @NonNull TotpEnrollmentResult unavailable() {
         return unavailable(TotpUnavailableReason.DEPENDENCY_UNAVAILABLE);
@@ -122,5 +128,13 @@ public abstract sealed class TotpEnrollmentResult permits
     @Immutable
     public static final class Indeterminate extends TotpEnrollmentResult {
         private Indeterminate() { }
+    }
+
+    /** The requested transition is known committed, but normal output could not be admitted.
+     * No proof, secret or operation detail is released.
+     * @since 1.0.0 */
+    @Immutable
+    public static final class ReconciliationRequired extends TotpEnrollmentResult {
+        private ReconciliationRequired() { }
     }
 }

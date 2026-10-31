@@ -94,9 +94,9 @@ final class AccessTokenPhase2ContractTests {
         String compact=token(claims(ISSUER),"at+jwt");PreparedJws prepared=JwtProcessor.prepare(compact,JoseHeaderPolicy.fromSettings(65536,Set.of(JwsAlgorithm.RS256),Set.of("at+jwt"),true));
         JwtValidator mismatch=JwtValidator.withIssuer(ISSUER).jwksSource(keys()).expectedAudiences(Set.of(AUD)).clock(CLOCK).build();assertEquals(JoseException.Reason.INVALID_TYPE,assertThrows(JoseException.class,()->JwtValidationAccess.get().validatePrepared(mismatch,prepared,()->Duration.ofSeconds(10).toNanos())).getReason());
     }
-    @Test void resourceBuildsStartNoThreadsAndNeverLoadTheDefaultHttpClient(@org.junit.jupiter.api.io.TempDir java.nio.file.@NonNull Path directory) throws Exception {
-        java.nio.file.Path log=directory.resolve("class-load.log");ChildJvm.Result result=ChildJvm.withMainClass(ResourceBuildChild.class).jvmOptions(List.of("-Xlog:class+load=info:file=\""+log+"\":none:filecount=0")).timeout(Duration.ofSeconds(60)).build().run();
-        assertEquals(0,result.getExitCode(),result::toString);assertEquals("5000 resource builds; threads started: 0",result.getStandardOutput().strip(),result::toString);String loaded=java.nio.file.Files.readString(log);assertFalse(loaded.contains("jdk.internal.net.http.HttpClientImpl"));assertFalse(loaded.contains("com.revetsec.internal.http.DefaultHttpClientHolder"));assertTrue(loaded.contains(JwtAccessTokenValidator.class.getName()));assertTrue(loaded.contains(TokenIntrospectionClient.class.getName()));
+    @Test void resourceBuildsStartNoThreadsAndNeverLoadTheDefaultHttpClient() throws Exception {
+        ChildJvm.Result result=ChildJvm.withMainClass(ResourceBuildChild.class).classLoadLogging(true).timeout(Duration.ofSeconds(60)).build().run();
+        assertEquals(0,result.getExitCode(),result::toString);assertEquals("5000 resource builds; threads started: 0",result.getStandardOutput().strip(),result::toString);Set<String> loaded=result.getLoadedClasses();assertFalse(loaded.contains("jdk.internal.net.http.HttpClientImpl"));assertFalse(loaded.contains("com.revetsec.internal.http.DefaultHttpClientHolder"));assertTrue(loaded.contains(JwtAccessTokenValidator.class.getName()));assertTrue(loaded.contains(TokenIntrospectionClient.class.getName()));
     }
     public static final class ResourceBuildChild {
         private ResourceBuildChild() { }

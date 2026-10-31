@@ -16,6 +16,8 @@
 
 package com.revetsec.internal.webauthn;
 
+import com.revetsec.testing.ScriptedWebAuthnStore;
+
 import com.revetsec.SealingKey;
 import com.revetsec.StateSealer;
 import com.revetsec.webauthn.WebAuthnStoreEntry;
@@ -57,7 +59,7 @@ final class WebAuthnCredentialRemovalTests {
         WebAuthnStoreWrite write = prepared.write();
         var keys = fixture.planner.keys(HANDLE, ID);
         assertEquals(keys.all(), write.getSnapshot().getEntries().keySet());
-        assertEquals(3, write.getMutations().size());
+        assertEquals(2, write.getMutations().size());
         assertTrue(write.getMutations().stream().noneMatch(
                 mutation -> mutation.getKey().equals(keys.fence())));
 
@@ -70,7 +72,7 @@ final class WebAuthnCredentialRemovalTests {
         assertEquals(0, new WebAuthnCredentialIndex(NAMESPACE, RP, records())
                 .decode(keys.index(), changedBytes(write, keys.index()), CLOCK).size());
         assertEquals(NOW, new WebAuthnNamespaceClock(NAMESPACE, RP, records())
-                .decode(keys.clock(), changedBytes(write, keys.clock()), CLOCK));
+                .decode(keys.clock(), ((WebAuthnStoreEntry.Present)fixture.snapshot.getEntry(keys.clock())).getSealedBytes(), CLOCK));
         assertFalse(prepared.toString().contains(keys.credential().getStorageKey()));
 
         // A later read sees a retained Present credential, so registration cannot insert this ID.
@@ -81,8 +83,8 @@ final class WebAuthnCredentialRemovalTests {
                         new byte[] {10}, changedBytes(write, keys.index())),
                 keys.fence(), fixture.snapshot.getEntry(keys.fence()),
                 keys.clock(), WebAuthnStoreEntry.Present.fromVersionAndSealedBytes(
-                        new byte[] {11}, changedBytes(write, keys.clock()))));
-        assertThrows(IllegalArgumentException.class, () -> WebAuthnStoreWrite.fromSnapshotAndMutations(
+                        new byte[] {11}, ((WebAuthnStoreEntry.Present)fixture.snapshot.getEntry(keys.clock())).getSealedBytes())), ScriptedWebAuthnStore.observation(NOW));
+        assertThrows(IllegalArgumentException.class, () -> ScriptedWebAuthnStore.write(
                 later, java.util.List.of(WebAuthnStoreWrite.Mutation.insert(keys.credential(),
                         new byte[] {1}))));
         assertTrue(fixture.planner.prepare(later, HANDLE, ID, CLOCK).isEmpty());
@@ -94,7 +96,7 @@ final class WebAuthnCredentialRemovalTests {
         Map<WebAuthnStoreKey, WebAuthnStoreEntry> entries = new HashMap<>(fixture.snapshot.getEntries());
         entries.put(keys.fence(), WebAuthnStoreEntry.Present.fromVersionAndSealedBytes(
                 new byte[] {7}, new WebAuthnAccountFence(NAMESPACE, RP, records())
-                        .encode(HANDLE, false).sealedBytes()));
+                        .encode(HANDLE, false, NOW).sealedBytes()));
         assertTrue(fixture.planner.prepare(snapshot(keys, entries), HANDLE, ID, CLOCK).isPresent());
 
         entries = new HashMap<>(fixture.snapshot.getEntries());
@@ -114,7 +116,7 @@ final class WebAuthnCredentialRemovalTests {
         entries.put(keys.index(), WebAuthnStoreEntry.Present.fromVersionAndSealedBytes(
                 new byte[] {8}, new WebAuthnCredentialIndex(NAMESPACE, RP, records())
                         .encode(new WebAuthnCredentialIndex(NAMESPACE, RP, records())
-                                .empty(HANDLE)).sealedBytes()));
+                                .empty(HANDLE), NOW).sealedBytes()));
         var missingIndexMembership = snapshot(keys, entries);
         assertThrows(WebAuthnRecordException.class,
                 () -> fixture.planner.prepare(missingIndexMembership, HANDLE, ID, CLOCK));
@@ -122,7 +124,7 @@ final class WebAuthnCredentialRemovalTests {
         entries = new HashMap<>(fixture.snapshot.getEntries());
         entries.put(keys.credential(), WebAuthnStoreEntry.Present.fromVersionAndSealedBytes(
                 new byte[] {9}, new WebAuthnCredentialRecordCodec(NAMESPACE, RP, records())
-                        .encodeRevoked(ID, HANDLE).sealedBytes()));
+                        .encodeRevoked(ID, HANDLE, NOW).sealedBytes()));
         var stillListedRevoked = snapshot(keys, entries);
         assertThrows(WebAuthnRecordException.class,
                 () -> fixture.planner.prepare(stillListedRevoked, HANDLE, ID, CLOCK));
@@ -131,7 +133,7 @@ final class WebAuthnCredentialRemovalTests {
         byte[] otherCredential = new WebAuthnCredentialRecordCodec(NAMESPACE, RP, records())
                 .encode(WebAuthnCredentialState.checked(ID, otherHandle,
                         edKey(KeyPairGenerator.getInstance("Ed25519").generateKeyPair()),
-                        -8, 0, false, false)).sealedBytes();
+                        -8, 0, false, false), NOW).sealedBytes();
         entries = new HashMap<>(fixture.snapshot.getEntries());
         entries.put(keys.credential(), WebAuthnStoreEntry.Present.fromVersionAndSealedBytes(
                 new byte[] {10}, otherCredential));
@@ -141,7 +143,7 @@ final class WebAuthnCredentialRemovalTests {
         entries.put(keys.index(), WebAuthnStoreEntry.Present.fromVersionAndSealedBytes(
                 new byte[] {11}, new WebAuthnCredentialIndex(NAMESPACE, RP, records())
                         .encode(new WebAuthnCredentialIndex(NAMESPACE, RP, records())
-                                .empty(HANDLE)).sealedBytes()));
+                                .empty(HANDLE), NOW).sealedBytes()));
         assertTrue(fixture.planner.prepare(snapshot(keys, entries), HANDLE, ID, CLOCK).isEmpty());
     }
 
@@ -152,10 +154,10 @@ final class WebAuthnCredentialRemovalTests {
         var keys = planner.keys(handle, ID);
         byte[] publicKey = edKey(KeyPairGenerator.getInstance("Ed25519").generateKeyPair());
         var credential = new WebAuthnCredentialRecordCodec(NAMESPACE, RP, records)
-                .encode(WebAuthnCredentialState.checked(ID, handle, publicKey, -8, 0, false, false));
+                .encode(WebAuthnCredentialState.checked(ID, handle, publicKey, -8, 0, false, false), NOW);
         var indexes = new WebAuthnCredentialIndex(NAMESPACE, RP, records);
-        var index = indexes.encode(listed ? indexes.empty(handle).withAdded(ID) : indexes.empty(handle));
-        var fence = new WebAuthnAccountFence(NAMESPACE, RP, records).encode(handle, active);
+        var index = indexes.encode(listed ? indexes.empty(handle).withAdded(ID) : indexes.empty(handle), NOW);
+        var fence = new WebAuthnAccountFence(NAMESPACE, RP, records).encode(handle, active, NOW);
         var snapshot = WebAuthnStoreSnapshot.fromEntries(keys.all(), Map.of(
                 keys.credential(), WebAuthnStoreEntry.Present.fromVersionAndSealedBytes(
                         new byte[] {1}, credential.sealedBytes()),
@@ -163,14 +165,14 @@ final class WebAuthnCredentialRemovalTests {
                         new byte[] {2}, index.sealedBytes()),
                 keys.fence(), WebAuthnStoreEntry.Present.fromVersionAndSealedBytes(
                         new byte[] {3}, fence.sealedBytes()),
-                keys.clock(), WebAuthnStoreEntry.Absent.confirmed()));
+                keys.clock(), WebAuthnStoreEntry.Present.fromVersionAndSealedBytes(new byte[]{77},new WebAuthnNamespaceClock(NAMESPACE,RP,records).encode(ScriptedWebAuthnStore.observation(NOW).getAdmission().getAuthorityId(),NOW))), ScriptedWebAuthnStore.observation(NOW));
         return new Fixture(planner, snapshot);
     }
 
     private static @NonNull WebAuthnStoreSnapshot snapshot(
             WebAuthnCredentialRemoval.@NonNull SetOfKeys keys,
             @NonNull Map<@NonNull WebAuthnStoreKey, @NonNull WebAuthnStoreEntry> entries) {
-        return WebAuthnStoreSnapshot.fromEntries(keys.all(), entries);
+        return WebAuthnStoreSnapshot.fromEntries(keys.all(), entries, ScriptedWebAuthnStore.observation(NOW));
     }
 
     private static byte @NonNull [] changedBytes(@NonNull WebAuthnStoreWrite write,

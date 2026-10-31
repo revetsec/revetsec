@@ -74,6 +74,18 @@ public final class SealedStateAccess {
 	 */
 	@ThreadSafe
 	public interface Operations {
+		/** Opens only authoritative record domains with ordinary expiry and original authenticated metadata. */
+		@NonNull AuthenticatedRecord openRecord(@NonNull StateSealer sealer, @NonNull SealedStateType type,
+				@NonNull String sealed, @NonNull String context, @NonNull Clock clock) throws UnsealException;
+
+		/** Restricted retained-record opening under externally verified closed intent; never credential admission. */
+		@NonNull AuthenticatedRecord openForMigration(@NonNull StateSealer sealer, @NonNull SealedStateType type,
+				@NonNull String sealed, @NonNull String context, @NonNull ClosedMigrationIntent intent) throws UnsealException;
+
+		/** Opens only new issuer/subject fence addresses whose encrypted expiry is the exact permanent sentinel. */
+		@NonNull AuthenticatedRecord openPermanentFence(@NonNull StateSealer sealer, @NonNull String sealed,
+				@NonNull String context) throws UnsealException;
+
   /** Returns the configured sealed ASCII length cap without crypto, callbacks or I/O.
    * @param sealer the configured sealer
    * @return its validated maximum sealed length

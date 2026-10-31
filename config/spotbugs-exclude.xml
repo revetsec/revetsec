@@ -7,6 +7,16 @@
 	accepted risk.
 -->
 <FindBugsFilter>
+	<!-- An application-supplied TotpStore can violate its declared non-null receipt contract.
+	     This defensive check records an entered mutating callback as UNKNOWN (or withholds an
+	     empty barrier's validation) without retrying or inferring rollback. The interface annotation
+	     is not evidence of a remote callback's outcome. Keep this runtime guard and limit the
+	     exclusion to its exact method; the private SCP-06 null-reply control checks the boundary. -->
+	<Match>
+		<Bug pattern="RCN_REDUNDANT_NULLCHECK_OF_NONNULL_VALUE"/>
+		<Class name="com.revetsec.totp.TotpEngine$Run"/>
+		<Method name="commit" signature="(Lcom/revetsec/totp/TotpEngine$State;Ljava/util/List;Lcom/revetsec/totp/TotpStoreWrite$Purpose;Lcom/revetsec/totp/TotpEngine$CommitRole;Ljava/time/Instant;)Lcom/revetsec/totp/TotpStoreCommitResult;"/>
+	</Match>
 	<!-- RFC 7517 section 4.8 defines x5t specifically as a SHA-1 certificate identifier. This publisher
 	     emits it for compatibility alongside the SHA-256 x5t#S256 identifier. It never uses SHA-1 for
 	     signing, certificate trust or signature verification; publication tests check both exact digests.

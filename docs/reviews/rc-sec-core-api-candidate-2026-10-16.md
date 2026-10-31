@@ -1,9 +1,17 @@
 # RC-SEC selected core API candidate — 2026-10-16
 
+**All-family source join — 2026-10-30:** use the [shared-clock store and consumer contract](../shared-clock-stores.md) with the matching core and adapter artifacts. Its explicit reconciliation, factual raw-receipt and final-admission rules apply alongside this guide. Historical review and release approvals remain bound to their original artifacts; live profile, migration and release-owner acceptance remain separate.
+
 **Status:** source-bound inventory and contract review of the uncommitted Java 17
 password-hashing and TOTP/recovery core. This is a candidate boundary, not the
 owner's 1.0.0 API freeze, an independent cryptographic review, or approval of a
 production durable store or recovery controller.
+
+**SCP-06 source amendment — 2026-10-30:** the TOTP inventory below includes the
+coordinated shared-clock store receipt and result changes. The October 16 test
+counts later in this review remain historical evidence. Fresh SCP-06 checks do
+not complete the API freeze, deployment clock qualification or retained-data
+migration gates.
 
 ## Exported declarations
 
@@ -16,19 +24,27 @@ production durable store or recovery controller.
 | Optional pepper lifecycle | `PasswordPepperKey`, `PasswordPepperSnapshot`, `PasswordPepperSnapshotResult`, `PasswordPepperSource` |
 | Explicit legacy selectors | `LegacyPasswordPreparation`, `Pbkdf2Hmac` |
 
-`com.revetsec.totp` has 33 public top-level types:
+`com.revetsec.totp` has 34 public top-level types:
 
 | Role | Types |
 | --- | --- |
 | Configuration and operations | `TotpAuthenticator`, `TotpEnrollmentOptions`, `InMemoryTotpStore` |
 | Enrollment, use and management values | `TotpEnrollment`, `TotpPendingEnrollment`, `TotpFactor`, `TotpStatus`, `TotpVerification`, `RecoveryCodeUse`, `RecoveryCodes`, `TotpAuthenticationMethod` |
 | Operation results and reasons | `TotpEnrollmentRequestResult`, `TotpEnrollmentResult`, `TotpEnrollmentCancellationResult`, `TotpVerificationResult`, `RecoveryCodeUseResult`, `RecoveryCodeRotationResult`, `TotpFactorRemovalResult`, `TotpStatusResult`, `TotpNamespaceInitializationResult`, `TotpStoreResealResult`, `TotpRejectionReason`, `TotpUnavailableReason` |
-| Authoritative storage | `TotpStore`, `TotpStoreKey`, `TotpStoreRecord`, `TotpStoreEntry`, `TotpStoreSnapshot`, `TotpStoreReadResult`, `TotpStoreWrite`, `TotpStoreCommitResult` |
+| Authoritative storage | `TotpStore`, `TotpStoreKey`, `TotpStoreRecord`, `TotpStoreEntry`, `TotpStoreSnapshot`, `TotpStoreReadResult`, `TotpStoreWrite`, `TotpStoreCommitResult`, `TotpStoreCommitReceipt` |
 | External recovery admission | `TotpRecoveryGate`, `TotpRecoveryContext` |
 
 The nested sealed-result variants and builders are also public API. The
 [compatibility ledger](../../COMPATIBILITY.md) defines `public` and `protected`
 declarations in these packages as the compatibility boundary.
+
+SCP-06 adds nine payload-free nested `ReconciliationRequired` variants, one per
+TOTP mutation result family, and appends `ATTEMPT_INCOMPLETE`,
+`TIME_AUTHORITY_UNAVAILABLE` and `CLOCK_HEALTH_UNCONFIRMED` to
+`TotpUnavailableReason`. The markers add no public constructors, factories,
+getters or fields. Pure `TotpStatusResult` keeps exactly its three existing
+variants. The common time carriers live in `com.revetsec`; they are outside this
+TOTP package count.
 
 ## Operation and result boundary
 
@@ -44,8 +60,10 @@ declarations in these packages as the compatibility boundary.
 
 Password hashing and verification use complete success/match, `Rejected`, and
 `Unavailable` paths. TOTP mutations additionally expose `Indeterminate` after
-a possible unacknowledged commit; neither it nor `Unavailable` releases proof,
-setup secret or newly issued recovery codes. `Throttled` is a separate code
+a possible unacknowledged commit and `ReconciliationRequired` when the requested
+transition is known committed but normal output cannot be admitted. None of
+these paths releases proof, setup secret or newly issued recovery codes.
+`Throttled` is a separate code
 admission result. The application owns account authorization, credential-version
 compare-and-set, browser/session completion, MFA policy and recovery approval.
 No OAuth authorization server or HTTP framework adapter is required.
@@ -61,7 +79,8 @@ No OAuth authorization server or HTTP framework adapter is required.
 | TOTP profile | Six ASCII digits, 30-second HMAC-SHA1 steps, previous/current/next-step tolerance, 20-byte random enrollment secret and five-minute pending enrollment. One active factor and one pending enrollment per account. |
 | Recovery and guessing | Ten random 128-bit recovery codes per batch. A five-failed-or-unsettled-attempt rolling five-minute ledger covers confirmation, TOTP and recovery; a second ten-attempt rolling 24-hour ledger covers six-digit attempts. Code strings longer than 128 characters are rejected before admission or storage. |
 | Operation budget | One shrinking TOTP deadline defaults to five seconds and permits 100 milliseconds to 30 seconds. Account IDs are at most 1,024 UTF-8 bytes; namespace and recovery epoch are visible ASCII strings of at most 128 characters. |
-| Store SPI | A read covers 1–16 exact addresses in one namespace/epoch with explicit presence or absence. Compare-and-commit checks every snapshot predicate and active epoch transactionally, then applies at most 16 insertions/replacements or none. No record TTL, eviction, delete or version reuse. Only definite `CONFLICT` is retryable within the original deadline; `UNKNOWN` never is. |
+| Store SPI | A read covers 1–16 exact addresses in one namespace/epoch with explicit presence or absence and admitted time. Compare-and-commit returns a factual receipt, checks every snapshot, epoch, admission, clock-generation and temporal predicate transactionally, then applies at most 16 insertions/replacements or none. No record TTL, eviction, delete or version reuse. Only definite `CONFLICT` is retryable within the original deadline; `UNKNOWN` never is. |
+| TOTP time and codec | Normal TTR3 records bind the stable namespace authority/minimum and monotone account floor. Store time and worker health are checked separately. Status remains a pure query. Legacy TTR1/TTR2 opening requires explicit closed-migration intent and the authenticated legacy namespace root. |
 | Recovery gate | A caller-thread permit spans storage, crypto and result decision, plus any nested application completion transaction. Failed acquisition releases partial claims. A controller closes admission, drains and fences writers, provisions a fresh never-reused epoch outside restored state, then reopens. |
 
 The [password guide](../password-hashing.md) and [TOTP guide](../totp-recovery.md)

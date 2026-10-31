@@ -30,6 +30,9 @@ import java.time.Duration;
  * and thread-safe. Failures are contained except VirtualMachineError; interruption is restored. No event includes
  * a client, subject, grant, credential, key identifier, URL, request or claims. Exactly one terminal hook follows
  * each will hook during ordinary completion; status is absent only for validation or trusted management work.
+ * Terminal events describe the processing checkpoint before that hook runs. A hook that delays return or
+ * changes admission/clock health can still cause a subsequent release check to withhold normal output;
+ * that withholding does not emit a second terminal event. A successful event is not a delivery receipt.
  * @since 1.0.0
  */
 @ThreadSafe

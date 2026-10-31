@@ -5,7 +5,7 @@
   },
   "adapter": {
     "repository": "https://github.com/revetsec/revetsec-soklet",
-    "revision": "7f99a80a7971e47fb763d69cca36c74f4bc5e9b1"
+    "revision": "3bad3251bb9b3bd2baeecd5c55a41574c8ebb9b0"
   },
   "framework": {
     "repository": "https://github.com/soklet/soklet",

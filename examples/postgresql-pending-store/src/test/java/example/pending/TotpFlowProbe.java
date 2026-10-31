@@ -32,6 +32,9 @@ import com.revetsec.totp.TotpStatus;
 import com.revetsec.totp.TotpStatusResult;
 import com.revetsec.totp.TotpStore;
 import com.revetsec.totp.TotpStoreCommitResult;
+import com.revetsec.totp.TotpStoreCommitReceipt;
+import com.revetsec.StoreTimeObservation;
+import com.revetsec.internal.StoreTimeAccess;
 import com.revetsec.totp.TotpStoreKey;
 import com.revetsec.totp.TotpStoreReadResult;
 import com.revetsec.totp.TotpStoreResealResult;
@@ -84,8 +87,8 @@ public final class TotpFlowProbe {
         String keyBase64 = env("REVETSEC_TEST_TOTP_SEAL_KEY_BASE64");
         String activeKeyId = System.getenv().getOrDefault("REVETSEC_TEST_TOTP_ACTIVE_KEY_ID", KEY_ID);
         @Nullable String oldKeyBase64 = System.getenv("REVETSEC_TEST_TOTP_OLD_SEAL_KEY_BASE64");
-        PostgresqlTotpStore store = new PostgresqlTotpStore(NAMESPACE, TotpFlowProbe::connection,
-                4_096, 64L * 1024 * 1024);
+        PostgresqlTotpStore store = new PostgresqlTotpStore(NAMESPACE, TotpFixtureAuthority.physical(NAMESPACE), TotpFlowProbe::connection,
+                4_096, 64L * 1024 * 1024, TotpFixtureAuthority.fromEnvironment(NAMESPACE));
         Map<String, String> openingKeys = oldKeyBase64 == null
                 ? Map.of(activeKeyId, keyBase64)
                 : Map.of(activeKeyId, keyBase64, KEY_ID, oldKeyBase64);
@@ -251,13 +254,13 @@ public final class TotpFlowProbe {
                 store.read(Set.of(root), Duration.ofSeconds(5));
         TotpStoreSnapshot snapshot = read.getSnapshot();
         TotpStoreWrite barrier = TotpStoreWrite.fromSnapshotAndMutations(
-                TotpStoreWrite.Purpose.UPDATE, snapshot, List.of());
+                TotpStoreWrite.Purpose.UPDATE, snapshot, List.of(), StoreTimeAccess.get().fromObservation((StoreTimeObservation.Healthy)snapshot.getTimeObservation(), ((StoreTimeObservation.Healthy)snapshot.getTimeObservation()).getObservedAt(),null));
         System.out.println("SNAPSHOT");
         System.out.flush();
         if (!"go".equals(new BufferedReader(new InputStreamReader(System.in,
                 StandardCharsets.US_ASCII)).readLine()))
             throw new IllegalStateException("Stale-writer barrier closed");
-        System.out.println(store.compareAndCommit(barrier, Duration.ofSeconds(5)).name());
+        System.out.println(store.compareAndCommit(barrier, Duration.ofSeconds(5)).getStatus().name());
     }
 
     private static @NonNull TotpStore holdRead(@NonNull TotpStore delegate) {
@@ -275,7 +278,7 @@ public final class TotpFlowProbe {
                 }
                 return delegate.read(keys, remainingBudget);
             }
-            @Override public @NonNull TotpStoreCommitResult compareAndCommit(
+            @Override public @NonNull TotpStoreCommitReceipt compareAndCommit(
                     @NonNull TotpStoreWrite write, @NonNull Duration remainingBudget) {
                 return delegate.compareAndCommit(write, remainingBudget);
             }
@@ -305,6 +308,11 @@ public final class TotpFlowProbe {
                 || result instanceof TotpVerificationResult.Indeterminate
                 || result instanceof RecoveryCodeUseResult.Indeterminate
                 || result instanceof TotpFactorRemovalResult.Indeterminate) return "INDETERMINATE";
+        if(result instanceof TotpEnrollmentRequestResult.ReconciliationRequired
+                || result instanceof TotpEnrollmentResult.ReconciliationRequired
+                || result instanceof TotpVerificationResult.ReconciliationRequired
+                || result instanceof RecoveryCodeUseResult.ReconciliationRequired
+                || result instanceof TotpFactorRemovalResult.ReconciliationRequired)return "RECONCILIATION_REQUIRED";
         return "UNAVAILABLE";
     }
 
@@ -321,6 +329,8 @@ public final class TotpFlowProbe {
         properties.setProperty("connectTimeout", Integer.toString(seconds));
         properties.setProperty("socketTimeout", Integer.toString(seconds));
         properties.setProperty("gssEncMode", "disable");
+        properties.setProperty("sslmode", "disable");
+        properties.setProperty("preferQueryMode", "simple");
         return DriverManager.getConnection(env("REVETSEC_TEST_DB_URL"), properties);
     }
 

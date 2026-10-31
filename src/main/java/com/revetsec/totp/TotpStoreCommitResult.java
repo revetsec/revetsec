@@ -35,9 +35,21 @@ public enum TotpStoreCommitResult {
   * @since 1.0.0
   */ CAPACITY_REFUSED,
  /**
-  * The recovery epoch was fenced atomically with the transaction; no mutation occurred.
+  * The active authority, recovery/clock generation or address epoch was fenced; no mutation occurred.
   * @since 1.0.0
   */ FENCED,
+ /**
+  * Current data admission exists but healthy admitted time was unavailable at validation; no effect.
+  * @since 1.0.0
+  */ TIME_UNAVAILABLE,
+ /**
+  * Fresh admitted validation time was below the inclusive condition floor; no effect.
+  * @since 1.0.0
+  */ TIME_BEFORE_FLOOR,
+ /**
+  * Fresh admitted validation time reached the original exclusive expiry; no effect.
+  * @since 1.0.0
+  */ TIME_EXPIRED,
  /**
   * The backend failed before any possible mutation.
   * @since 1.0.0

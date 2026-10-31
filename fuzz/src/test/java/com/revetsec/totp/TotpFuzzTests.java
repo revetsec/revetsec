@@ -26,8 +26,6 @@ import org.junit.jupiter.api.Assertions;
 import javax.annotation.concurrent.ThreadSafe;
 import java.security.GeneralSecurityException;
 import java.time.Clock;
-import java.time.Instant;
-import java.time.ZoneOffset;
 import java.util.Arrays;
 import java.util.Base64;
 
@@ -41,7 +39,7 @@ public final class TotpFuzzTests {
     private static final @NonNull String EPOCH = "fuzz-epoch";
     private static final @NonNull String BROWSER = "fuzz-browser-binding";
     private static final @NonNull String LOGIN = "fuzz-pending-login";
-    private static final @NonNull Clock CLOCK = Clock.fixed(Instant.ofEpochSecond(1_700_000_010L), ZoneOffset.UTC);
+    private static final @NonNull Clock CLOCK = Clock.systemUTC();
     private static final @NonNull StateSealer SEALER = StateSealer.withActiveKey(key()).build();
     private static final @NonNull TotpRecoveryGate GATE = (context, budget) -> new TotpRecoveryGate.Permit() {
         @Override public @NonNull Boolean isCurrent() { return !budget.isNegative() && !budget.isZero(); }

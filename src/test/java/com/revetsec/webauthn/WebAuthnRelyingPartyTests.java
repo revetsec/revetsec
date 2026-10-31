@@ -25,6 +25,7 @@ import com.revetsec.json.JsonArray;
 import com.revetsec.json.JsonObject;
 import com.revetsec.json.JsonString;
 import com.revetsec.testing.TestClock;
+import com.revetsec.testing.ScriptedWebAuthnStore;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
@@ -89,7 +90,7 @@ final class WebAuthnRelyingPartyTests {
     }
 
     @Test void publicEnrollmentSignInAndPinnedReauthenticationUseCommittedState() throws Exception {
-        WebAuthnStore store = InMemoryWebAuthnStore.withLimits(128, 2_000_000, CLOCK);
+        WebAuthnStore store = new MemoryStore();
         WebAuthnRelyingParty rp = relyingParty(store, ADMIT);
         KeyPair pair = KeyPairGenerator.getInstance("Ed25519").generateKeyPair();
         var options = WebAuthnRegistrationOptions.withUserHandle(HANDLE)
@@ -130,7 +131,7 @@ final class WebAuthnRelyingPartyTests {
                     assertInstanceOf(WebAuthnStoreReadResult.Available.class,
                             store.read(Set.of(key), Duration.ofSeconds(1)))
                             .getSnapshot().getEntry(key)).getVersion();
-            assertEquals(WebAuthnStoreCommitResult.COMMITTED, rp.resealStoreEntry(key));
+            assertEquals(WebAuthnStoreCommitResult.COMMITTED, rp.resealStoreEntry(key).getStatus());
             byte[] after = assertInstanceOf(WebAuthnStoreEntry.Present.class,
                     assertInstanceOf(WebAuthnStoreReadResult.Available.class,
                             store.read(Set.of(key), Duration.ofSeconds(1)))
@@ -138,7 +139,7 @@ final class WebAuthnRelyingPartyTests {
             assertFalse(Arrays.equals(before, after));
         }
         assertEquals(WebAuthnStoreCommitResult.CONFLICT, rp.resealStoreEntry(
-                WebAuthnStoreKey.forCredential(NAMESPACE, RP, new byte[] {99})));
+                WebAuthnStoreKey.forCredential(NAMESPACE, RP, new byte[] {99})).getStatus());
         assertThrows(IllegalArgumentException.class, () -> rp.resealStoreEntry(
                 WebAuthnStoreKey.forCeremony(NAMESPACE, RP, new byte[32])));
         assertThrows(IllegalArgumentException.class, () -> rp.resealStoreEntry(
@@ -256,6 +257,7 @@ final class WebAuthnRelyingPartyTests {
                 rp.beginRegistrationResult(options, BINDING_TEXT));
         assertEquals(30_000L, expiring.getRequest().getPublicKeyOptions()
                 .find("timeout").filter(JsonNumber.class::isInstance).map(JsonNumber.class::cast).flatMap(JsonNumber::getLongValueExact).orElseThrow());
+        store.source.advance(Duration.ofSeconds(31));
         clock.advance(Duration.ofSeconds(31));
         assertInstanceOf(WebAuthnRegistrationResult.Rejected.class,
                 rp.completeRegistrationResult(expiring.getRequest().getCeremonyId(),
@@ -270,7 +272,7 @@ final class WebAuthnRelyingPartyTests {
                 .find("timeout").filter(JsonNumber.class::isInstance).map(JsonNumber.class::cast).flatMap(JsonNumber::getLongValueExact).orElseThrow());
     }
 
-    @Test void confirmedCompletionAfterCeremonyExpiryRejectsWithoutProof() throws Exception {
+    @Test void knownCompletionAfterCeremonyExpiryRequiresReconciliationWithoutProof() throws Exception {
         MemoryStore store = new MemoryStore();
         TestClock clock = TestClock.fromInstant(CLOCK.instant());
         WebAuthnRelyingParty rp = relyingParty(store, ADMIT,
@@ -280,8 +282,8 @@ final class WebAuthnRelyingPartyTests {
                 .userName("alice").userDisplayName("Alice Example").build();
         var begin = assertInstanceOf(WebAuthnRegistrationRequestResult.Prepared.class,
                 rp.beginRegistrationResult(options, BINDING_TEXT));
-        store.afterCommit = () -> clock.advance(Duration.ofSeconds(31));
-        assertInstanceOf(WebAuthnRegistrationResult.Rejected.class,
+        store.afterCommit = () -> { store.source.advance(Duration.ofSeconds(31)); clock.advance(Duration.ofSeconds(31)); };
+        assertInstanceOf(WebAuthnRegistrationResult.ReconciliationRequired.class,
                 rp.completeRegistrationResult(begin.getRequest().getCeremonyId(),
                         registrationJson(pair, begin.getRequest().getPublicKeyOptions()
                                 .find("challenge").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow()), BINDING_TEXT));
@@ -297,6 +299,7 @@ final class WebAuthnRelyingPartyTests {
                 rp.beginAuthenticationResult(BINDING_TEXT));
         assertTrue(store.reads >= 2);
         int version = store.version;
+        store.source.advance(Duration.ofSeconds(2));
         clock.advance(Duration.ofSeconds(2));
         assertInstanceOf(WebAuthnAuthenticationResult.Rejected.class,
                 rp.completeAuthenticationResult(begun.getRequest().getCeremonyId(),
@@ -361,7 +364,7 @@ final class WebAuthnRelyingPartyTests {
                 observed.set(remainingBudget);
                 return WebAuthnStoreReadResult.Unavailable.get();
             }
-            @Override public @NonNull WebAuthnStoreCommitResult compareAndCommit(
+            @Override public @NonNull WebAuthnStoreCommitReceipt compareAndCommit(
                     @NonNull WebAuthnStoreWrite write, @NonNull Duration remainingBudget) {
                 throw new AssertionError("No commit after unavailable read");
             }
@@ -500,7 +503,7 @@ final class WebAuthnRelyingPartyTests {
     private static WebAuthnRelyingParty.@NonNull Builder configuredBuilder() {
         return WebAuthnRelyingParty.withRelyingPartyId(RP).relyingPartyName("Example")
                 .allowedOrigins(Set.of(ORIGIN)).credentialNamespace(NAMESPACE)
-                .store(InMemoryWebAuthnStore.withLimits(128, 2_000_000, CLOCK))
+                .store(new MemoryStore())
                 .stateSealer(sealer()).recoveryGate(ADMIT);
     }
 
@@ -602,62 +605,23 @@ final class WebAuthnRelyingPartyTests {
     }
 
     private static final class MemoryStore implements WebAuthnStore {
-        private final @NonNull Map<@NonNull WebAuthnStoreKey, @NonNull Stored> records = new HashMap<>();
+        private final @NonNull ScriptedWebAuthnStore source=new ScriptedWebAuthnStore(CLOCK.instant());
         private int version;
         private int reads;
         private @Nullable WebAuthnStoreCommitResult nextCommit;
         private @Nullable Runnable afterCommit;
-
         @Override public synchronized @NonNull WebAuthnStoreReadResult read(
-                @NonNull Set<@NonNull WebAuthnStoreKey> keys, @NonNull Duration remainingBudget) {
-            this.reads++;
-            Map<WebAuthnStoreKey, WebAuthnStoreEntry> entries = new HashMap<>();
-            for (WebAuthnStoreKey key : keys) {
-                Stored current = this.records.get(key);
-                entries.put(key, current == null ? WebAuthnStoreEntry.Absent.confirmed()
-                        : WebAuthnStoreEntry.Present.fromVersionAndSealedBytes(
-                        current.version, current.sealed));
-            }
-            return WebAuthnStoreReadResult.Available.fromSnapshot(
-                    WebAuthnStoreSnapshot.fromEntries(keys, entries));
+                @NonNull Set<@NonNull WebAuthnStoreKey> keys,@NonNull Duration remainingBudget){
+            this.reads++;return this.source.read(keys,remainingBudget);
         }
-
-        @Override public synchronized @NonNull WebAuthnStoreCommitResult compareAndCommit(
-                @NonNull WebAuthnStoreWrite write, @NonNull Duration remainingBudget) {
-            if (this.nextCommit != null) {
-                WebAuthnStoreCommitResult forced = this.nextCommit;
-                this.nextCommit = null;
-                return forced;
-            }
-            for (var observed : write.getSnapshot().getEntries().entrySet()) {
-                Stored actual = this.records.get(observed.getKey());
-                WebAuthnStoreEntry entry = observed.getValue();
-                if ((entry instanceof WebAuthnStoreEntry.Absent && actual != null)
-                        || (entry instanceof WebAuthnStoreEntry.Present present
-                        && (actual == null || !Arrays.equals(actual.version, present.getVersion()))))
-                    return WebAuthnStoreCommitResult.CONFLICT;
-            }
-            for (var mutation : write.getMutations()) {
-                if (mutation.getKind() == WebAuthnStoreWrite.Mutation.Kind.DELETE)
-                    this.records.remove(mutation.getKey());
-                else this.records.put(mutation.getKey(), new Stored(
-                        ByteBuffer.allocate(4).putInt(++this.version).array(),
-                        mutation.getSealedBytes().orElseThrow()));
-            }
-            if (this.afterCommit != null) {
-                Runnable action = this.afterCommit;
-                this.afterCommit = null;
-                action.run();
-            }
-            return WebAuthnStoreCommitResult.COMMITTED;
-        }
-
-        private static final class Stored {
-            private final byte @NonNull [] version;
-            private final byte @NonNull [] sealed;
-            private Stored(byte @NonNull [] version, byte @NonNull [] sealed) {
-                this.version = version.clone(); this.sealed = sealed.clone();
-            }
+        @Override public synchronized @NonNull WebAuthnStoreCommitReceipt compareAndCommit(
+                @NonNull WebAuthnStoreWrite write,@NonNull Duration remainingBudget){
+            WebAuthnStoreCommitResult forced=this.nextCommit;this.nextCommit=null;
+            if(forced!=null)return forced==WebAuthnStoreCommitResult.UNKNOWN?WebAuthnStoreCommitReceipt.unknownInstance():WebAuthnStoreCommitReceipt.fromRefusal(forced);
+            WebAuthnStoreCommitReceipt result=this.source.compareAndCommit(write,remainingBudget);
+            if(result.getStatus()==WebAuthnStoreCommitResult.COMMITTED)this.version+=write.getMutations().size();
+            Runnable action=this.afterCommit;this.afterCommit=null;if(action!=null)action.run();
+            return result;
         }
     }
 }

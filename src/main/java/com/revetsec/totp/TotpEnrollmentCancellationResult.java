@@ -17,6 +17,7 @@
 package com.revetsec.totp;
 
 import org.jspecify.annotations.NonNull;
+import com.google.errorprone.annotations.CheckReturnValue;
 import javax.annotation.concurrent.Immutable;
 
 import static java.util.Objects.requireNonNull;
@@ -25,9 +26,10 @@ import static java.util.Objects.requireNonNull;
  * @since 1.0.0 */
 @Immutable
 public abstract sealed class TotpEnrollmentCancellationResult permits
-        TotpEnrollmentCancellationResult.Succeeded, TotpEnrollmentCancellationResult.Rejected, TotpEnrollmentCancellationResult.Unavailable, TotpEnrollmentCancellationResult.Indeterminate {
+        TotpEnrollmentCancellationResult.Succeeded, TotpEnrollmentCancellationResult.Rejected, TotpEnrollmentCancellationResult.Unavailable, TotpEnrollmentCancellationResult.Indeterminate, TotpEnrollmentCancellationResult.ReconciliationRequired {
     private static final @NonNull Succeeded SUCCEEDED = new Succeeded();
     private static final @NonNull Indeterminate INDETERMINATE = new Indeterminate();
+    private static final @NonNull ReconciliationRequired RECONCILIATION_REQUIRED = new ReconciliationRequired();
 
     TotpEnrollmentCancellationResult() { }
     static @NonNull TotpEnrollmentCancellationResult succeeded() {
@@ -41,6 +43,10 @@ public abstract sealed class TotpEnrollmentCancellationResult permits
     }
     static @NonNull TotpEnrollmentCancellationResult indeterminate() {
         return INDETERMINATE;
+    }
+    @CheckReturnValue
+    static @NonNull TotpEnrollmentCancellationResult reconciliationRequired() {
+        return RECONCILIATION_REQUIRED;
     }
     static @NonNull TotpEnrollmentCancellationResult unavailable() {
         return unavailable(TotpUnavailableReason.DEPENDENCY_UNAVAILABLE);
@@ -91,5 +97,13 @@ public abstract sealed class TotpEnrollmentCancellationResult permits
     @Immutable
     public static final class Indeterminate extends TotpEnrollmentCancellationResult {
         private Indeterminate() { }
+    }
+
+    /** The requested transition is known committed, but normal output could not be admitted.
+     * No proof, secret or operation detail is released.
+     * @since 1.0.0 */
+    @Immutable
+    public static final class ReconciliationRequired extends TotpEnrollmentCancellationResult {
+        private ReconciliationRequired() { }
     }
 }

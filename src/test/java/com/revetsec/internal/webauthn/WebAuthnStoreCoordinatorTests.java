@@ -16,6 +16,10 @@
 
 package com.revetsec.internal.webauthn;
 
+import com.revetsec.StoreAdmission;
+import com.revetsec.StoreCommitTiming;
+import com.revetsec.StoreTimeObservation;
+import com.revetsec.webauthn.WebAuthnStoreCommitReceipt;
 import com.revetsec.webauthn.WebAuthnStore;
 import com.revetsec.webauthn.WebAuthnStoreCommitResult;
 import com.revetsec.webauthn.WebAuthnStoreEntry;
@@ -27,6 +31,7 @@ import org.jspecify.annotations.NonNull;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -68,7 +73,7 @@ final class WebAuthnStoreCoordinatorTests {
                 (write, budget) -> WebAuthnStoreCommitResult.UNKNOWN),
                 Duration.ofSeconds(1), () -> 0).begin();
         assertTrue(uncertain.read(KEYS).isAvailable());
-        assertEquals(WebAuthnStoreCoordinator.Commit.INDETERMINATE, uncertain.commit(List.of()));
+        assertEquals(WebAuthnStoreCoordinator.Commit.INDETERMINATE, uncertain.commit(insertion()));
         assertFalse(uncertain.retryAfterConflict());
     }
 
@@ -177,11 +182,13 @@ final class WebAuthnStoreCoordinatorTests {
                     WebAuthnStoreReadResult.Available.fromSnapshot(snapshot(KEYS)),
                     (write, budget) -> status), Duration.ofSeconds(1), () -> 0).begin();
             assertTrue(attempt.read(KEYS).isAvailable());
-            var outcome = attempt.commit(List.of());
+            var outcome = attempt.commit(insertion());
             assertEquals(switch (status) {
                 case COMMITTED -> WebAuthnStoreCoordinator.Commit.COMMITTED;
                 case CONFLICT -> WebAuthnStoreCoordinator.Commit.CONFLICT;
                 case CAPACITY -> WebAuthnStoreCoordinator.Commit.CAPACITY;
+                case FENCED, TIME_UNAVAILABLE, TIME_BEFORE_FLOOR -> WebAuthnStoreCoordinator.Commit.UNAVAILABLE;
+                case TIME_EXPIRED -> WebAuthnStoreCoordinator.Commit.TIME_EXPIRED;
                 case UNAVAILABLE -> WebAuthnStoreCoordinator.Commit.UNAVAILABLE;
                 case UNKNOWN -> WebAuthnStoreCoordinator.Commit.INDETERMINATE;
             }, outcome);
@@ -196,12 +203,12 @@ final class WebAuthnStoreCoordinatorTests {
             throw new IllegalStateException("lost acknowledgement");
         }), Duration.ofSeconds(1), () -> 0).begin();
         attempt.read(KEYS);
-        assertEquals(WebAuthnStoreCoordinator.Commit.INDETERMINATE, attempt.commit(List.of()));
-        assertThrows(IllegalStateException.class, () -> attempt.commit(List.of()));
+        assertEquals(WebAuthnStoreCoordinator.Commit.INDETERMINATE, attempt.commit(insertion()));
+        assertThrows(IllegalStateException.class, () -> attempt.commit(insertion()));
         assertEquals(1, calls.get());
     }
 
-    @Test void lateCommitWithholdsSuccessAndZeroEffectLateReplyIsUnavailable() {
+    @Test void lateKnownCommitRequiresReconciliationAndZeroEffectLateReplyIsUnavailable() {
         for (WebAuthnStoreCommitResult status : List.of(WebAuthnStoreCommitResult.COMMITTED,
                 WebAuthnStoreCommitResult.CONFLICT, WebAuthnStoreCommitResult.UNKNOWN)) {
             AtomicLong clock = new AtomicLong();
@@ -212,8 +219,11 @@ final class WebAuthnStoreCoordinatorTests {
             }), Duration.ofSeconds(1), clock::get).begin();
             attempt.read(KEYS);
             assertEquals(status == WebAuthnStoreCommitResult.CONFLICT
-                    ? WebAuthnStoreCoordinator.Commit.UNAVAILABLE : WebAuthnStoreCoordinator.Commit.INDETERMINATE,
-                    attempt.commit(List.of()));
+                    ? WebAuthnStoreCoordinator.Commit.UNAVAILABLE
+                    : status == WebAuthnStoreCommitResult.COMMITTED
+                        ? WebAuthnStoreCoordinator.Commit.RECONCILIATION_REQUIRED : WebAuthnStoreCoordinator.Commit.INDETERMINATE,
+                    attempt.commit(insertion()));
+            assertEquals(status, attempt.lastReceipt().getStatus());
         }
     }
 
@@ -236,7 +246,7 @@ final class WebAuthnStoreCoordinatorTests {
                 WebAuthnStoreReadResult.Available.fromSnapshot(snapshot(KEYS)),
                 (write, budget) -> null), Duration.ofSeconds(1), () -> 0).begin();
         assertTrue(nullCommit.read(KEYS).isAvailable());
-        assertEquals(WebAuthnStoreCoordinator.Commit.INDETERMINATE, nullCommit.commit(List.of()));
+        assertEquals(WebAuthnStoreCoordinator.Commit.INDETERMINATE, nullCommit.commit(insertion()));
     }
 
     @Test void expiredOrInterruptedBudgetSkipsCallbacksAndPreservesInterrupt() {
@@ -279,11 +289,49 @@ final class WebAuthnStoreCoordinatorTests {
         }), Duration.ofSeconds(1), () -> 0).begin();
         try {
             attempt.read(KEYS);
-            assertEquals(WebAuthnStoreCoordinator.Commit.INDETERMINATE, attempt.commit(List.of()));
+            assertEquals(WebAuthnStoreCoordinator.Commit.INDETERMINATE, attempt.commit(insertion()));
             assertTrue(Thread.currentThread().isInterrupted());
         } finally {
             Thread.interrupted();
         }
+    }
+
+    @Test void uncertainEmptyBarrierWithholdsValidationWithoutCreatingMutationUncertainty() {
+        var attempt = new WebAuthnStoreCoordinator(store((keys, budget) ->
+                WebAuthnStoreReadResult.Available.fromSnapshot(snapshot(KEYS)),
+                (write, budget) -> WebAuthnStoreCommitResult.UNKNOWN), Duration.ofSeconds(1), () -> 0).begin();
+        assertTrue(attempt.read(KEYS).isAvailable());
+        assertEquals(WebAuthnStoreCoordinator.Commit.UNAVAILABLE, attempt.commit(List.of()));
+        assertFalse(attempt.hasMutationEffect()); assertFalse(attempt.retryAfterConflict());
+        assertEquals(WebAuthnStoreCommitResult.UNKNOWN, attempt.lastReceipt().getStatus());
+    }
+
+    @Test void rawKnownLateCommitRetainsTimingAndNeverPerformsServiceFinalRead() {
+        AtomicLong elapsed = new AtomicLong(); AtomicInteger reads = new AtomicInteger();
+        var attempt = new WebAuthnStoreCoordinator(store((keys, budget) -> {
+            reads.incrementAndGet(); return WebAuthnStoreReadResult.Available.fromSnapshot(snapshot(KEYS));
+        }, (write, budget) -> {
+            elapsed.set(Duration.ofSeconds(1).toNanos()); return WebAuthnStoreCommitResult.COMMITTED;
+        }), Duration.ofSeconds(1), elapsed::get).begin();
+        assertTrue(attempt.read(KEYS).isAvailable()); WebAuthnStoreCommitReceipt receipt = attempt.commitRaw(insertion());
+        assertEquals(WebAuthnStoreCommitResult.COMMITTED, receipt.getStatus()); assertTrue(receipt.getTiming().isPresent());
+        assertTrue(receipt.getTiming().orElseThrow().getCompletedTime().isEmpty()); assertEquals(1, reads.get());
+        assertEquals(WebAuthnStoreCoordinator.Commit.RECONCILIATION_REQUIRED, attempt.failed());
+    }
+
+    @Test void alreadyExpiredOriginalBoundNeverEntersTheWriteCallback() {
+        AtomicInteger writes = new AtomicInteger();
+        var attempt = new WebAuthnStoreCoordinator(store((keys, budget) ->
+                WebAuthnStoreReadResult.Available.fromSnapshot(snapshot(KEYS)), (write, budget) -> {
+            writes.incrementAndGet(); return WebAuthnStoreCommitResult.COMMITTED;
+        }), Duration.ofSeconds(1), () -> 0).begin();
+        assertTrue(attempt.read(KEYS).isAvailable());
+        assertEquals(WebAuthnStoreCoordinator.Commit.TIME_EXPIRED, attempt.commit(insertion(), attempt.observedAt()));
+        assertEquals(0, writes.get()); assertFalse(attempt.hasMutationEffect());
+    }
+
+    private static @NonNull List<WebAuthnStoreWrite.@NonNull Mutation> insertion() {
+        return List.of(WebAuthnStoreWrite.Mutation.insert(CEREMONY, new byte[] {3}));
     }
 
     private static @NonNull WebAuthnStoreSnapshot snapshot(@NonNull Set<@NonNull WebAuthnStoreKey> keys) {
@@ -291,15 +339,26 @@ final class WebAuthnStoreCoordinatorTests {
         for (WebAuthnStoreKey key : keys) entries.put(key, key.equals(CREDENTIAL)
                 ? WebAuthnStoreEntry.Present.fromVersionAndSealedBytes(new byte[] {1}, new byte[] {2})
                 : WebAuthnStoreEntry.Absent.confirmed());
-        return WebAuthnStoreSnapshot.fromEntries(keys, entries);
+        return WebAuthnStoreSnapshot.fromEntries(keys, entries, StoreTimeObservation.Healthy.fromObservation(
+                StoreAdmission.fromIdentifiers("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA"),
+                "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCA", Instant.now(), Duration.ofMillis(250)));
     }
 
     private static @NonNull WebAuthnStore store(@NonNull ReadCall reader, @NonNull CommitCall writer) {
         return new WebAuthnStore() {
             @Override public @NonNull WebAuthnStoreReadResult read(@NonNull Set<@NonNull WebAuthnStoreKey> keys,
                     @NonNull Duration budget) { return reader.call(keys, budget); }
-            @Override public @NonNull WebAuthnStoreCommitResult compareAndCommit(@NonNull WebAuthnStoreWrite write,
-                    @NonNull Duration budget) { return writer.call(write, budget); }
+            @Override @SuppressWarnings("NullAway") // Deliberately models null from a broken provider.
+            public @NonNull WebAuthnStoreCommitReceipt compareAndCommit(@NonNull WebAuthnStoreWrite write,
+                    @NonNull Duration budget) {
+                WebAuthnStoreCommitResult status = writer.call(write, budget);
+                if (status == null) return null;
+                if (status == WebAuthnStoreCommitResult.UNKNOWN) return WebAuthnStoreCommitReceipt.unknownInstance();
+                return status == WebAuthnStoreCommitResult.COMMITTED
+                        ? WebAuthnStoreCommitReceipt.fromCommittedTiming(StoreCommitTiming.fromTimes(
+                            (StoreTimeObservation.Healthy) write.getSnapshot().getTimeObservation(), null))
+                        : WebAuthnStoreCommitReceipt.fromRefusal(status);
+            }
         };
     }
 
