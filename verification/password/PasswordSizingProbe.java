@@ -74,14 +74,14 @@ public final class PasswordSizingProbe {
         if (aggregateKiB > 4_194_304L)
             throw new IllegalArgumentException("memoryKiB * gateCalls exceeds the work-gate maximum");
 
-        Argon2idParameters parameters = Argon2idParameters.withCosts(memoryKiB, passes, lanes);
+        Argon2idParameters parameters = Argon2idParameters.fromCosts(memoryKiB, passes, lanes);
         PasswordVerificationLimits limits = PasswordVerificationLimits.builder()
                 .maximumArgon2idMemoryKiB(Math.max(131_072, memoryKiB))
                 .maximumArgon2idPasses(Math.max(6, passes))
                 .build();
         PasswordHasher.Builder builder = PasswordHasher.withArgon2id(parameters)
                 .verificationLimits(limits)
-                .workGate(PasswordWorkGate.withLimits(gateCalls, (int) aggregateKiB));
+                .workGate(PasswordWorkGate.fromInMemoryLimits(gateCalls, (int) aggregateKiB));
         if (!argon2) builder.legacyBcrypt(LegacyPasswordPreparation.EXACT_UTF8, bcryptLogRounds);
         PasswordHasher hasher = builder.build();
         String stored = mode.equals("argon2-verify") ? newHash(hasher) : "";

@@ -85,7 +85,7 @@ final class WebAuthnCloseoutContractTests {
         assertEquals(0, store.reads); assertEquals(0, store.writes);
     }
 
-    @Test void allWriteFailureKindsWithholdEnrollmentAndAccountPinnedRequests() {
+    @Test void allWriteFailureKindsWithholdBeginsAndTentativeAccountsCannotReauthenticate() {
         var options = WebAuthnRegistrationOptions.withUserHandle(HANDLE).userName("a").userDisplayName("A").build();
         for (WebAuthnStoreCommitResult outcome : WebAuthnStoreCommitResult.values()) {
             var store = new OutcomeStore(WebAuthnStoreCommitResult.COMMITTED); var rp = relyingParty(store, budget -> permit(true, false));
@@ -107,9 +107,8 @@ final class WebAuthnCloseoutContractTests {
                 assertInstanceOf(WebAuthnRegistrationRequestResult.Unavailable.class, registration);
                 assertInstanceOf(WebAuthnAuthenticationRequestResult.Unavailable.class, authentication);
             }
-            if(outcome==WebAuthnStoreCommitResult.COMMITTED)assertInstanceOf(WebAuthnAuthenticationRequestResult.Prepared.class,reauth);
-            else assertInstanceOf(WebAuthnAuthenticationRequestResult.Rejected.class,reauth);
-            assertEquals(outcome==WebAuthnStoreCommitResult.CONFLICT?18:outcome==WebAuthnStoreCommitResult.COMMITTED?3:2,store.writes);
+            assertInstanceOf(WebAuthnAuthenticationRequestResult.Rejected.class,reauth);
+            assertEquals(outcome==WebAuthnStoreCommitResult.CONFLICT?18:2,store.writes);
         }
     }
 
@@ -150,8 +149,8 @@ final class WebAuthnCloseoutContractTests {
 
     @Test void storeLimitsAndInterruptedCallsLeaveAuthoritativeStateUntouched() {
         for (int[] limits : new int[][] {{0,1},{65537,1},{1,0},{1,268435457}})
-            assertThrows(IllegalArgumentException.class, () -> InMemoryWebAuthnStore.withLimits(limits[0],limits[1]));
-        var store = InMemoryWebAuthnStore.withLimits(1,1); var key = WebAuthnStoreKey.forCredential("tenant",RP,new byte[] {1});
+            assertThrows(IllegalArgumentException.class, () -> InMemoryWebAuthnStore.fromLimits(limits[0],limits[1]));
+        var store = InMemoryWebAuthnStore.fromLimits(1,1); var key = WebAuthnStoreKey.forCredential("tenant",RP,new byte[] {1});
         var absent=assertInstanceOf(WebAuthnStoreReadResult.Available.class,store.read(Set.of(key),Duration.ofSeconds(1))).getSnapshot();
         var insertion=ScriptedWebAuthnStore.write(absent,List.of(WebAuthnStoreWrite.Mutation.insert(key,new byte[] {1})));
         assertEquals(WebAuthnStoreCommitResult.UNAVAILABLE,store.compareAndCommit(insertion,Duration.ofNanos(-1)).getStatus());

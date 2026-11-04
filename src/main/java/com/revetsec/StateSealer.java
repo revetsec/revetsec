@@ -346,6 +346,9 @@ public final class StateSealer {
 
 		/**
 		 * Sets the longest sealed value, in characters, that {@code seal} returns and {@code unsealResult} decodes.
+		 * Also bounds each newly emitted WebAuthn store-record chunk. Historical WebAuthn framed-record
+		 * opening retains its fixed 16,384-character chunk ceiling when this emission setting is lowered;
+		 * authentication, expiry, record framing and admitted-time checks still apply.
 		 *
 		 * @param maximumSealedLength from 1,024 to 16,384; {@code null} restores the default, 3,800. {@link #build()}
 		 *                            checks the range
@@ -444,6 +447,14 @@ public final class StateSealer {
 	 */
 	@ThreadSafe
 	private static final class SealedStateOperations implements SealedStateAccess.Operations {
+		// WAR1/WAR2 framing has always bounded authenticated chunks to 16,384 ASCII characters.
+		// Historical reads must not shrink with the independently configured future emission cap.
+		private static final int WEBAUTHN_RECORD_OPENING_LIMIT = 16_384;
+
+		private static int recordOpeningLimit(@NonNull StateSealer sealer, @NonNull SealedStateType type) {
+			return type == SealedStateType.WEBAUTHN_RECORD ? WEBAUTHN_RECORD_OPENING_LIMIT : sealer.maximumSealedLength;
+		}
+
 		@Override
 		public @NonNull AuthenticatedRecord openRecord(@NonNull StateSealer sealer, @NonNull SealedStateType type,
 				@NonNull String sealed, @NonNull String context, @NonNull Clock clock) throws UnsealException {
@@ -453,14 +464,14 @@ public final class StateSealer {
 			requireNonNull(context);
 			requireNonNull(clock);
 			SealerV1.requireContext(context);
-			return SealerV1.openRecord(sealed, sealer.maximumSealedLength, sealer.keysByKeyId, type, context, clock.instant());
+			return SealerV1.openRecord(sealed, recordOpeningLimit(sealer, type), sealer.keysByKeyId, type, context, clock.instant());
 		}
 
 		@Override
 		public @NonNull AuthenticatedRecord openForMigration(@NonNull StateSealer sealer, @NonNull SealedStateType type,
 				@NonNull String sealed, @NonNull String context, @NonNull ClosedMigrationIntent intent) throws UnsealException {
 			requireNonNull(sealer);
-			return SealerV1.openForMigration(sealed, sealer.maximumSealedLength, sealer.keysByKeyId, type, context, intent);
+			return SealerV1.openForMigration(sealed, recordOpeningLimit(sealer, type), sealer.keysByKeyId, type, context, intent);
 		}
 
 		@Override

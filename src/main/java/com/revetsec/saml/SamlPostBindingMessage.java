@@ -57,6 +57,10 @@ public final class SamlPostBindingMessage {
 
     /**
      * Decodes the original form body with strict UTF-8, multiplicity, MIME and Base64 checks.
+     * The decoded form value must be canonical padded standard Base64, allowing at most 4096
+     * ASCII spaces, tabs, carriage returns or line feeds anywhere in that value. Padding is
+     * required for partial quanta and unused pad bits must be zero; URL-safe Base64 is rejected.
+     * Form decoding happens once: a literal Base64 plus must be percent-encoded as {@code %2B}.
      *
      * @param body original HTTP request body
      * @param contentTypeValues all Content-Type field values
@@ -74,6 +78,8 @@ public final class SamlPostBindingMessage {
     /**
      * Decodes exactly one SAMLRequest or SAMLResponse and optional RelayState at a logout endpoint.
      * XML and signatures remain unverified. The login factory continues to accept only SAMLResponse.
+     * Both message kinds use the same bounded canonical Base64 grammar as
+     * {@link #fromFormBodyResult(byte[], List, String)}.
      *
      * @param body original HTTP request body
      * @param contentTypeValues all Content-Type field values

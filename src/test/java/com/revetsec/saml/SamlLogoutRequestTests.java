@@ -180,7 +180,7 @@ final class SamlLogoutRequestTests {
                 .assertionConsumerServiceUrl(URI.create("https://sp.example.test/acs"))
                 .singleLogoutServiceUrl(URI.create("https://sp.example.test/logout"))
                 .signingPrivateKey(idpKey.getPrivate())
-                .replayCache(InMemorySamlReplayCache.withLimit(clock, 8)).clock(clock).build();
+                .replayCache(InMemorySamlReplayCache.fromLimit(clock, 8)).clock(clock).build();
         SamlIdentityProvider idp = SamlIdentityProvider.withEntityId("https://idp.example.test/saml")
                 .connectionId("tenant-one")
                 .redirectSingleSignOnService(URI.create("https://idp.example.test/sso"))
@@ -228,7 +228,7 @@ final class SamlLogoutRequestTests {
                 .assertionConsumerServiceUrl(URI.create("https://sp.example.test/acs"))
                 .singleLogoutServiceUrl(URI.create("https://sp.example.test/logout"))
                 .signingPrivateKey(idpKey.getPrivate())
-                .replayCache(InMemorySamlReplayCache.withLimit(clock, 16)).clock(clock).build();
+                .replayCache(InMemorySamlReplayCache.fromLimit(clock, 16)).clock(clock).build();
         String firstEntity = "https://idp.example.test/saml_";
         String secondEntity = "https://idp.example.test/saml";
         SamlIdentityProvider firstIdp = SamlIdentityProvider.withEntityId(firstEntity)
@@ -271,7 +271,7 @@ final class SamlLogoutRequestTests {
                 .assertionConsumerServiceUrl(URI.create("https://sp.example.test/acs"))
                 .singleLogoutServiceUrl(URI.create("https://sp.example.test/logout"))
                 .signingPrivateKey(spKey.getPrivate())
-                .replayCache(InMemorySamlReplayCache.withLimit(clock, 8)).clock(clock).build();
+                .replayCache(InMemorySamlReplayCache.fromLimit(clock, 8)).clock(clock).build();
         SamlIdentityProvider idp = SamlIdentityProvider.withEntityId("https://idp.example.test/saml")
                 .connectionId("tenant-one")
                 .redirectSingleSignOnService(URI.create("https://idp.example.test/sso"))
@@ -407,7 +407,7 @@ final class SamlLogoutRequestTests {
                 .assertionConsumerServiceUrl(URI.create("https://sp.example.test/acs"))
                 .singleLogoutServiceUrl(URI.create("https://sp.example.test/logout"))
                 .signingPrivateKey(spKey.getPrivate())
-                .replayCache(InMemorySamlReplayCache.withLimit(clock, 8)).clock(clock).build();
+                .replayCache(InMemorySamlReplayCache.fromLimit(clock, 8)).clock(clock).build();
         SamlIdentityProvider idp = SamlIdentityProvider.withEntityId("https://idp.example.test/saml")
                 .connectionId("tenant-one")
                 .redirectSingleSignOnService(URI.create("https://idp.example.test/sso"))
@@ -450,7 +450,7 @@ final class SamlLogoutRequestTests {
         PendingSamlLogout pending = new PendingSamlLogout(fields);
         StateSealer sealer = StateSealer.withActiveKey(TestSealers.fixedKey("saml-logout-store"))
                 .clock(clock).build();
-        InMemoryPendingSamlAuthenticationStore store = InMemoryPendingSamlAuthenticationStore.withLimit(clock, 4);
+        InMemoryPendingSamlAuthenticationStore store = InMemoryPendingSamlAuthenticationStore.fromLimit(clock, 4);
         assertEquals(SamlPendingSaveResult.SAVED, pending.saveToResult(store, sealer, "slo-store",
                 "browser-one", Duration.ofSeconds(5)));
         PendingSamlLogoutSource wrong = PendingSamlLogoutSource.fromStore(store, "browser-two", sealer,
@@ -479,7 +479,7 @@ final class SamlLogoutRequestTests {
                 .assertionConsumerServiceUrl(URI.create("https://sp.example.test/acs"))
                 .singleLogoutServiceUrl(URI.create("https://sp.example.test/logout"))
                 .signingPrivateKey(spKey.getPrivate())
-                .replayCache(InMemorySamlReplayCache.withLimit(clock, 8)).clock(clock).build();
+                .replayCache(InMemorySamlReplayCache.fromLimit(clock, 8)).clock(clock).build();
         SamlIdentityProvider idp = SamlIdentityProvider.withEntityId("https://idp.example.test/saml")
                 .connectionId("tenant-one")
                 .redirectSingleSignOnService(URI.create("https://idp.example.test/sso"))
@@ -493,7 +493,7 @@ final class SamlLogoutRequestTests {
                 sp.beginLogoutResult(idp, session));
         StateSealer sealer = StateSealer.withActiveKey(TestSealers.fixedKey("saml-logout-verify-first"))
                 .clock(clock).build();
-        InMemoryPendingSamlAuthenticationStore store = InMemoryPendingSamlAuthenticationStore.withLimit(clock, 4);
+        InMemoryPendingSamlAuthenticationStore store = InMemoryPendingSamlAuthenticationStore.fromLimit(clock, 4);
         assertEquals(SamlPendingSaveResult.SAVED, begin.getPendingLogout().saveToResult(store, sealer,
                 "slo-store", "browser-one", Duration.ofSeconds(5)));
         PendingSamlLogoutSource source = PendingSamlLogoutSource.fromStore(store, "browser-one", sealer,
@@ -525,7 +525,7 @@ final class SamlLogoutRequestTests {
                 .assertionConsumerServiceUrl(URI.create("https://sp.example.test/acs"))
                 .singleLogoutServiceUrl(URI.create("https://sp.example.test/logout"))
                 .signingPrivateKey(spKey.getPrivate())
-                .replayCache(InMemorySamlReplayCache.withLimit(clock, 8)).clock(clock).build();
+                .replayCache(InMemorySamlReplayCache.fromLimit(clock, 8)).clock(clock).build();
         SamlIdentityProvider idp = SamlIdentityProvider.withEntityId("https://idp.example.test/saml")
                 .connectionId("tenant-one")
                 .redirectSingleSignOnService(URI.create("https://idp.example.test/sso"))
@@ -597,7 +597,7 @@ final class SamlLogoutRequestTests {
                 .assertionConsumerServiceUrl(URI.create("https://sp.example.test/acs"))
                 .singleLogoutServiceUrl(URI.create("https://sp.example.test/logout"))
                 .signingPrivateKey(idpKey.getPrivate())
-                .replayCache(InMemorySamlReplayCache.withLimit(clock, 16)).clock(clock).build();
+                .replayCache(InMemorySamlReplayCache.fromLimit(clock, 16)).clock(clock).build();
         SamlIdentityProvider idp = SamlIdentityProvider.withEntityId("https://idp.example.test/saml")
                 .connectionId("tenant-one")
                 .redirectSingleSignOnService(URI.create("https://idp.example.test/sso"))
@@ -635,7 +635,7 @@ final class SamlLogoutRequestTests {
                 .assertionConsumerServiceUrl(URI.create("https://sp.example.test/acs"))
                 .singleLogoutServiceUrl(URI.create("https://sp.example.test/logout"))
                 .signingPrivateKey(spKey.getPrivate())
-                .replayCache(InMemorySamlReplayCache.withLimit(clock, 16)).clock(clock).build();
+                .replayCache(InMemorySamlReplayCache.fromLimit(clock, 16)).clock(clock).build();
         SamlIdentityProvider idp = SamlIdentityProvider.withEntityId("https://idp.example.test/saml")
                 .connectionId("tenant-one")
                 .redirectSingleSignOnService(URI.create("https://idp.example.test/sso"))

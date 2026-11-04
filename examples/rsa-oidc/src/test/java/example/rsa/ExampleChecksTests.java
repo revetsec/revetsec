@@ -20,7 +20,12 @@ import com.revetsec.jose.JoseException;
 import com.revetsec.oauth.*;
 import com.revetsec.oidc.*;
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.io.TempDir;
+import java.util.concurrent.TimeUnit;
 import java.net.URI;
 import java.nio.file.*;
 import java.security.KeyPair;
@@ -33,6 +38,36 @@ import static org.junit.jupiter.api.Assertions.*;
 public final class ExampleChecksTests {
 	private static final URI CALLBACK = URI.create("https://app.example/callback");
 	private static final String BINDING = "TEST-ONLY-private-browser-binding";
+
+  @TempDir static @NonNull Path tlsDirectory;
+  private static @Nullable String originalTlsStore;
+
+  @BeforeAll static void prepareTestTls() throws Exception {
+    originalTlsStore = System.getProperty("example.tlsStore");
+    if (originalTlsStore != null && !originalTlsStore.isBlank()) return;
+    // This private, two-day localhost certificate is trusted only by the test client.
+    Path store = tlsDirectory.resolve("localhost.p12");
+    String executable = System.getProperty("os.name").startsWith("Windows") ? "keytool.exe" : "keytool";
+    Process keytool = new ProcessBuilder(
+      Path.of(System.getProperty("java.home"), "bin", executable).toString(),
+      "-genkeypair", "-alias", "local", "-keyalg", "RSA", "-keysize", "2048",
+      "-sigalg", "SHA256withRSA", "-storetype", "PKCS12", "-keystore", store.toString(),
+      "-storepass", "changeit", "-keypass", "changeit", "-dname", "CN=localhost",
+      "-ext", "SAN=dns:localhost,ip:127.0.0.1", "-validity", "2", "-noprompt")
+      .redirectOutput(ProcessBuilder.Redirect.DISCARD)
+      .redirectError(ProcessBuilder.Redirect.DISCARD).start();
+    if (!keytool.waitFor(30, TimeUnit.SECONDS)) {
+      keytool.destroyForcibly().waitFor();
+      throw new IllegalStateException("Test keytool timed out");
+    }
+    if (keytool.exitValue() != 0) throw new IllegalStateException("Test keytool failed");
+    System.setProperty("example.tlsStore", store.toString());
+  }
+
+  @AfterAll static void restoreTestTls() {
+    if (originalTlsStore == null) System.clearProperty("example.tlsStore");
+    else System.setProperty("example.tlsStore", originalTlsStore);
+  }
 
 	@Test void issuerAudienceAcrossAllRolesAndAlgorithms() throws Exception {
 		for (JwsAlgorithm algorithm : List.of(JwsAlgorithm.PS256, JwsAlgorithm.RS256, JwsAlgorithm.RS384)) runPrivateKey(algorithm, false);

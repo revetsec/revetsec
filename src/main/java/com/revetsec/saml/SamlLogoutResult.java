@@ -20,7 +20,8 @@ import javax.annotation.concurrent.Immutable;
 
 /**
  * Result of a signed, pending-bound IdP LogoutResponse. Success means the IdP reported success;
- * it does not claim that application sessions were terminated.
+ * it does not claim that application sessions were terminated. Partial propagation is a
+ * {@link StatusReceived#PARTIAL_LOGOUT} outcome, never complete success.
  *
  * @since 1.0.0
  */
@@ -29,7 +30,7 @@ public sealed interface SamlLogoutResult permits SamlLogoutResult.Succeeded,
         SamlLogoutResult.StatusReceived, SamlLogoutResult.Rejected,
         SamlLogoutResult.Unavailable, SamlLogoutResult.Indeterminate {
     /**
-     * The IdP returned a verified Success status.
+     * The IdP returned a verified flat Success status, with no subordinate code.
      *
      * @since 1.0.0
      */
@@ -38,13 +39,21 @@ public sealed interface SamlLogoutResult permits SamlLogoutResult.Succeeded,
         /** Verified IdP completion. */ INSTANCE
     }
     /**
-     * The IdP returned a verified non-success status.
+     * The IdP returned a verified failure or incomplete logout status. Consumers should
+     * treat any unknown value as lacking complete success.
      *
      * @since 1.0.0
      */
     @Immutable
     enum StatusReceived implements SamlLogoutResult {
-        /** The provider did not report success. */ NON_SUCCESS
+        /** The provider did not report successful completion at the top level. */ NON_SUCCESS,
+        /**
+         * The provider reported Success with second-level PartialLogout: its own logout
+         * completed, but not all other participants confirmed logout. This is the provider's
+         * authenticated report, not proof that application sessions were terminated.
+         * @since 1.0.0
+         */
+        PARTIAL_LOGOUT
     }
     /**
      * The response was invalid, expired, unbound or replayed.

@@ -30,6 +30,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import static java.util.Objects.requireNonNull;
 import static org.junit.jupiter.api.Assertions.*;
 
 /** Exact public envelopes, temporal validation and narrow fence-only structural conformance. */
@@ -48,9 +49,12 @@ final class OAuthStoreTemporalContractTests {
         OAuthStoreEntry root=entry(ROOT,2);
         assertSame(root,OAuthStoreReadResult.Available.fromObservation(ROOT,root,sample).getEntry().orElseThrow());
         assertThrows(IllegalArgumentException.class,()->OAuthStoreReadResult.Available.fromObservation(SUBJECT,root,sample));
-        assertThrows(NullPointerException.class,()->OAuthStoreReadResult.Available.fromObservation(ROOT,null,null));
         assertSame(OAuthStoreReadResult.Fenced.get(),OAuthStoreReadResult.Fenced.get());
         assertSame(OAuthStoreReadResult.Unavailable.get(),OAuthStoreReadResult.Unavailable.get());
+    }
+    @Test @SuppressWarnings("NullAway") // Intentional required-null transport boundary probe.
+    void availableRejectsNullTimeObservation(){
+        assertThrows(NullPointerException.class,()->OAuthStoreReadResult.Available.fromObservation(ROOT,null,null));
     }
     @Test void receiptFormsAreExactAndRedacted(){
         var sample=ScriptedOAuthStore.observation(NOW);
@@ -131,13 +135,13 @@ final class OAuthStoreTemporalContractTests {
         assertEquals(OAuthStoreCommitStatus.TIME_UNAVAILABLE,store.commit(timed(sample,condition(sample,null),List.of(present(ROOT,2)),List.of()),BUDGET).getStatus());
         var committed=store.commit(fence(sample,List.of(present(ROOT,2),present(SUBJECT,3)),List.of(put(entry(SUBJECT,4)))),BUDGET);
         assertEquals(OAuthStoreCommitStatus.COMMITTED,committed.getStatus());assertTrue(committed.getTiming().isEmpty());
-        assertEquals(nonce(4),store.records().get(SUBJECT).getVersion());
+        assertEquals(nonce(4),requireNonNull(store.records().get(SUBJECT)).getVersion());
     }
     @Test void changedAdmissionFencesWithoutMutation(){
         var store=new ScriptedOAuthStore(NOW);store.seedClosedMigration(Map.of(ROOT,entry(ROOT,2)));var sample=ScriptedOAuthStore.observation(NOW);
         store.rotateRecoveryGeneration();
         assertEquals(OAuthStoreCommitStatus.FENCED,store.commit(fence(sample,List.of(present(ROOT,2)),List.of(put(entry(ROOT,3)))),BUDGET).getStatus());
-        assertEquals(nonce(2),store.records().get(ROOT).getVersion());
+        assertEquals(nonce(2),requireNonNull(store.records().get(ROOT)).getVersion());
     }
     @Test void readAndRefusalNeverPruneRetainedBytes(){
         var store=new ScriptedOAuthStore(NOW);store.seedClosedMigration(Map.of(ROOT,entry(ROOT,2),CODE,entry(CODE,3)));var before=store.records();
@@ -165,7 +169,7 @@ final class OAuthStoreTemporalContractTests {
         assertEquals(OAuthStoreCommitStatus.COMMITTED,receipt.getStatus());assertEquals(NOW,receipt.getTiming().orElseThrow().getValidatedTime().getObservedAt());
         store.unknownAfter=true;
         var unknown=store.commit(fence(sample,List.of(present(ROOT,2)),List.of(put(entry(ROOT,3)))),BUDGET);
-        assertEquals(OAuthStoreCommitStatus.UNKNOWN,unknown.getStatus());assertEquals(nonce(3),store.rows.get(ROOT).getVersion());
+        assertEquals(OAuthStoreCommitStatus.UNKNOWN,unknown.getStatus());assertEquals(nonce(3),requireNonNull(store.rows.get(ROOT)).getVersion());
     }
     @Test void confirmedNotAdmittedReasonIsRestrictedNontransientAndWireGeneric(){
         var failure=OAuthServerStoreException.fromReason(OAuthServerException.Reason.COMMIT_CONFIRMED_NOT_ADMITTED,true);

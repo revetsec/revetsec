@@ -76,6 +76,9 @@ final class OAuthAuthorizationLedger {
    OAuthStoreKey key=this.codec.key(OAuthStoreKey.Kind.INTERACTION,id);if(session.read(key).isPresent())continue;
    Instant expires=prepared(()->OAuthGrantRetention.expiry(session.effectiveNow(),this.interactionLifetime));
    OAuthAuthorizationRecord record=prepared(()->OAuthAuthorizationRecord.interaction(id,browserHash,clientHash,admission,session.issuer(),expires,this.limits));
+   // New request capacity is not authenticated-store corruption. No mutation has been submitted yet.
+   try { this.codec.requireInteractionCapacity(key,expires,record); }
+   catch (IllegalArgumentException oversized) { throw OAuthServerRequest.invalid(); }
    session.requireBefore(expires);
    if(session.commit(List.of(put(session,key,expires,record)))==OAuthStoreCommitStatus.COMMITTED)return new Begun(credential,record,admission);
   }
@@ -164,13 +167,14 @@ final class OAuthAuthorizationLedger {
    Optional<String> code = Optional.empty();
    if (!decision.isDenied()) {
     String resource = record.text("resource"); Set<String> approved = decision.getAuthorizedScopesByResource().get(resource);
-    if (decision.getAuthorizedScopesByResource().size() != 1 || approved == null) throw invalid();
+    if (decision.getAuthorizedScopesByResource().size() != 1 || approved == null) throw decisionInvalid();
     Set<String> requested = record.scopes(this.limits), server = resources.get(resource);
-    if (server == null || !requested.containsAll(approved) || !server.containsAll(approved)) throw invalid();
+    if (server == null || !requested.containsAll(approved) || !server.containsAll(approved)) throw decisionInvalid();
     // An explicit empty scope decision consumes consent as denial; it cannot mint a zero-scope credential.
     if (!approved.isEmpty()) {
-     String subject = decision.getSubject().orElseThrow(OAuthStoreFormat::invalid);
-     OAuthServerConfiguration.text(subject, this.subjectLimit);
+     String subject = decision.getSubject().orElseThrow(OAuthAuthorizationLedger::decisionInvalid);
+     try { OAuthServerConfiguration.text(subject, this.subjectLimit); }
+     catch (IllegalArgumentException invalidSubject) { throw decisionInvalid(); }
      OAuthStoreFence subjectFence = session.subject(subject);
      String credential = prepared(() -> OAuthServerCredential.code(this.codec.freshVersion())), codeId = OAuthServerCredential.codeDigest(credential);
      String grantId = prepared(this.codec::freshVersion);
@@ -190,9 +194,9 @@ final class OAuthAuthorizationLedger {
       if (current.isDenied()) approved = Set.of();
       else {
        Set<String> narrowed = current.getAuthorizedScopesByResource().get(resource);
-       if (!current.getSubject().orElseThrow(OAuthStoreFormat::invalid).equals(subject)
+       if (!current.getSubject().orElseThrow(OAuthAuthorizationLedger::decisionInvalid).equals(subject)
          || current.getAuthorizedScopesByResource().size() != 1 || narrowed == null || !approved.containsAll(narrowed)
-         || current.isRefreshTokenPermitted() && !refresh) throw OAuthServerClientAdmission.failure(OAuthServerAdmissionFailure.Reason.INFRASTRUCTURE);
+         || current.isRefreshTokenPermitted() && !refresh) throw decisionInvalid();
        approved = narrowed; refresh = current.isRefreshTokenPermitted();
       }
      }
@@ -246,6 +250,9 @@ final class OAuthAuthorizationLedger {
   try { return operation.get(); }
   catch (VirtualMachineError fatal) { throw fatal; }
   catch (Throwable failure) { OAuthStoreCoordinator.preserveInterrupt(failure);throw new OAuthStoreFailure(CORRUPT_STATE); }
+ }
+ private static @NonNull OAuthServerAdmissionFailure decisionInvalid() {
+  return OAuthServerClientAdmission.failure(OAuthServerAdmissionFailure.Reason.CONFIGURATION);
  }
  private static @NonNull OAuthServerAdmissionFailure invalid() {
   return new OAuthServerAdmissionFailure(OAuthServerAdmissionFailure.Reason.INVALID_REQUEST);

@@ -207,7 +207,9 @@ final class ScimM10ResponseTests {
         assertEquals("User", userType.find("name").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow());
         assertEquals("/Users", userType.find("endpoint").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow());
         assertEquals("urn:ietf:params:scim:schemas:core:2.0:User", userType.find("schema").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow());
-        JsonObject extension = (JsonObject) ((JsonArray) requireNonNull(userType.getMembers().get("schemaExtensions"))).getElements().get(0);
+        assertTrue(((JsonArray) requireNonNull(userType.getMembers().get("schemaExtensions"))).getElements().isEmpty());
+        JsonObject enterpriseType = ScimDiscovery.resourceType(ScimTestResourceTypes.userWithEnterpriseInstance());
+        JsonObject extension = (JsonObject) ((JsonArray) requireNonNull(enterpriseType.getMembers().get("schemaExtensions"))).getElements().get(0);
         assertEquals("urn:ietf:params:scim:schemas:extension:enterprise:2.0:User", extension.find("schema").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow());
         assertEquals(false, extension.find("required").filter(JsonBoolean.class::isInstance).map(JsonBoolean.class::cast).map(JsonBoolean::getValue).orElseThrow());
         JsonObject schema = ScimDiscovery.schema(ScimSchema.userInstance());

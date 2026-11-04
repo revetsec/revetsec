@@ -27,7 +27,11 @@ import java.util.*;
 import javax.annotation.concurrent.Immutable;
 import javax.annotation.concurrent.NotThreadSafe;
 
-/** Immutable SCIM operation budgets. Each original operation uses one work budget.
+/** Immutable SCIM operation budgets. Each original operation uses one shared work budget.
+ * Wire input and emitted JSON cost one work unit per started 16-byte block. JSON output blocks
+ * accumulate across the complete response. Node visits, validation, matching, headers and framing
+ * have their own additional charges. Byte and node limits are independent hard ceilings, not a
+ * promise that every document below them fits work; builders validate each configured range.
  * @since 1.0.0
  */
 @Immutable
@@ -139,7 +143,9 @@ public final class ScimLimits {
         return builder().build();
     }
 
-    /** Returns the maximumBodyBytes budget.
+    /** Returns the inclusive original request-body byte ceiling.
+     * Before decoding, the body also requires {@code ceil(bytes / 16)} remaining work units;
+     * schema/structural processing needs additional work. The ceiling is not an acceptance guarantee.
      * @return configured inclusive bound
      * @since 1.0.0
      */
@@ -235,7 +241,9 @@ public final class ScimLimits {
         return maximumResponseHeaderBytes;
     }
 
-    /** Returns the maximumResponseBytes budget.
+    /** Returns the inclusive prepared-response budget, including body, encoded headers and framing.
+     * JSON emission additionally costs {@code ceil(bodyBytes / 16)} work units for the entire body,
+     * plus node visits; projection and headers share that same operation budget.
      * @return configured inclusive bound
      * @since 1.0.0
      */
@@ -243,7 +251,10 @@ public final class ScimLimits {
         return maximumResponseBytes;
     }
 
-    /** Returns the maximumWorkUnits budget.
+    /** Returns the aggregate operation work allowance.
+     * Input decoding admission and JSON emission charge started 16-byte blocks; structural and
+     * semantic work remains separately charged. A low work allowance can intentionally refuse
+     * requests/responses below their byte ceilings. No budget resets per phase or resource.
      * @return configured inclusive bound
      * @since 1.0.0
      */

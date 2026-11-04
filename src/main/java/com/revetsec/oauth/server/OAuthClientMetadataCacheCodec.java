@@ -17,6 +17,7 @@
 package com.revetsec.oauth.server;
 
 import com.revetsec.StateSealer;
+import com.revetsec.internal.http.PinnedHttpsTransport;
 import com.revetsec.internal.crypto.EntropySource;
 import com.revetsec.internal.crypto.SealedStateAccess;
 import com.revetsec.internal.crypto.SealedStateType;
@@ -47,23 +48,32 @@ final class OAuthClientMetadataCacheCodec {
  private final @NonNull StateSealer sealer;
  private final @NonNull OAuthClientMetadataPolicy policy;
  private final @NonNull OAuthServerIngressLimits limits;
- private final boolean nativeLoopback, localhost;
+ private final boolean nativeLoopback, localhost, localhostAnyPort;
  private final @NonNull String namespace;
  private final int sealedCap, plaintextCap;
  OAuthClientMetadataCacheCodec(@NonNull String issuer, @NonNull StateSealer sealer,
    @NonNull OAuthClientMetadataPolicy policy, @NonNull OAuthServerIngressLimits limits,
    boolean nativeLoopback, boolean localhost) {
+  this(issuer, sealer, policy, limits, nativeLoopback, localhost, false);
+ }
+ OAuthClientMetadataCacheCodec(@NonNull String issuer, @NonNull StateSealer sealer,
+   @NonNull OAuthClientMetadataPolicy policy, @NonNull OAuthServerIngressLimits limits,
+   boolean nativeLoopback, boolean localhost, boolean localhostAnyPort) {
   OAuthServerConfiguration.text(issuer, 2048); this.sealer = requireNonNull(sealer);
   this.policy = requireNonNull(policy); this.limits = requireNonNull(limits);
-  this.nativeLoopback = nativeLoopback; this.localhost = localhost;
+  this.nativeLoopback = nativeLoopback; this.localhost = localhost; this.localhostAnyPort = localhostAnyPort;
   if (!policy.getEnabled()) throw OAuthServerConfiguration.invalid();
   List<JsonValue> origins = policy.getAllowedOrigins().orElse(Set.of()).stream().map(java.net.URI::toString).sorted()
     .map(JsonString::fromValue).map(value -> (JsonValue)value).toList();
-  this.namespace = OAuthAuthorizationRecord.digest(JsonObject.builder().put("schema", 1L).put("issuer", issuer)
+  JsonObject.Builder configuration = JsonObject.builder().put("schema", 1L).put("issuer", issuer)
+    .put("sharedFreshness", 2L).put("requestProfile", PinnedHttpsTransport.requestProfile())
     .put("originsRestricted", policy.getAllowedOrigins().isPresent()).put("origins", JsonArray.fromElements(origins))
     .put("documentBytes", policy.getMaximumDocumentBytes().longValue()).put("freshness", policy.getMaximumFreshness().toString())
     .put("clientIdLength", (long)limits.clientIdLength).put("redirects", (long)limits.redirects)
-    .put("native", nativeLoopback).put("localhost", localhost).build().toJson());
+    .put("native", nativeLoopback).put("localhost", localhost);
+  // Keep disabled/default namespaces byte-compatible; only the explicit new profile adds a fact.
+  if (localhostAnyPort) configuration.put("localhostAnyPort", true);
+  this.namespace = OAuthAuthorizationRecord.digest(configuration.build().toJson());
   this.sealedCap = Math.min(16384, SealedStateAccess.get().getMaximumSealedLength(sealer));
   this.plaintextCap = this.sealedCap * 3 / 4 - 55;
  }
@@ -73,7 +83,7 @@ final class OAuthClientMetadataCacheCodec {
  }
  @NonNull OAuthClientMetadataCacheEntry seal(@NonNull String clientId, byte @NonNull [] body,
    @NonNull Instant fetchedAt, @NonNull Instant expiresAt) {
-  OAuthClientMetadataDocument.parse(clientId, body, this.policy, this.limits, this.nativeLoopback, this.localhost);
+  OAuthClientMetadataDocument.parse(clientId, body, this.policy, this.limits, this.nativeLoopback, this.localhost, this.localhostAnyPort);
   times(fetchedAt, expiresAt, fetchedAt);
   OAuthClientMetadataCacheKey key = key(clientId);
   byte[] random = EntropySource.fromDefaults().nextBytes(32); String version;
@@ -117,7 +127,7 @@ final class OAuthClientMetadataCacheCodec {
    body = Base64Url.decode(encoded);
    if (!Base64Url.encode(body).equals(encoded)) return Optional.empty();
    OAuthClientMetadataDocument document = OAuthClientMetadataDocument.parse(clientId, body, this.policy,
-     this.limits, this.nativeLoopback, this.localhost);
+     this.limits, this.nativeLoopback, this.localhost, this.localhostAnyPort);
    return Optional.of(new Cached(document, fetched, entry.getExpiresAt()));
   } catch (UnsealException | JsonParseException | EncodingException | IllegalArgumentException | java.time.DateTimeException | ArithmeticException | OAuthServerAdmissionFailure failure) {
    return Optional.empty();

@@ -74,11 +74,14 @@ public final class SealedStateAccess {
 	 */
 	@ThreadSafe
 	public interface Operations {
-		/** Opens only authoritative record domains with ordinary expiry and original authenticated metadata. */
+		/** Opens only authoritative record domains with ordinary expiry and original authenticated metadata.
+		 * WebAuthn chunks use their fixed 16,384-character historical decode ceiling; other record domains
+		 * retain the configured sealer length cap. This does not change sealing or general unseal limits. */
 		@NonNull AuthenticatedRecord openRecord(@NonNull StateSealer sealer, @NonNull SealedStateType type,
 				@NonNull String sealed, @NonNull String context, @NonNull Clock clock) throws UnsealException;
 
-		/** Restricted retained-record opening under externally verified closed intent; never credential admission. */
+		/** Restricted retained-record opening under externally verified closed intent; never credential admission.
+		 * WebAuthn uses the same fixed historical chunk ceiling as normal record opening. */
 		@NonNull AuthenticatedRecord openForMigration(@NonNull StateSealer sealer, @NonNull SealedStateType type,
 				@NonNull String sealed, @NonNull String context, @NonNull ClosedMigrationIntent intent) throws UnsealException;
 

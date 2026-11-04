@@ -100,7 +100,7 @@ final class WebAuthnClientDataTests {
         verifier.verify(json(document("webauthn.get", ENCODED_CHALLENGE, ORIGIN + ":8443")),
                 WebAuthnClientData.Ceremony.AUTHENTICATION, CHALLENGE);
         for (String bad : new String[]{"http://login.example.com", "HTTPS://login.example.com",
-                "https://LOGIN.example.com", "https://sub.login.example.com", "https://login.example.com/",
+                "https://LOGIN.example.com", "https://sub-login.example.com", "https://login.example.com/",
                 "https://login.example.com?", "https://login.example.com#fragment",
                 "https://user@login.example.com", "https://login.example.com:",
                 "https://login.example.com:0", "https://login.example.com:65536",

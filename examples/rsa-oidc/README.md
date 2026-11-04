@@ -17,24 +17,31 @@ For Entra, pass the exact `https://login.microsoftonline.com/organizations/v2.0`
 
 At login, use `beginAuthentication`, save its pending record with a browser-specific secret binding in an atomic `PendingAuthorizationStore`, then complete through `completeAuthenticationResult` with the exact trusted callback URI. The [barebones Soklet example](../barebones-oidc/README.md) demonstrates the surrounding cookies, CSRF checks and application session rotation. Never derive issuer/callback/tenant routing from incoming headers or unsigned claims. A successful authentication gives the actual verified `(issuer, subject)` identity; persist that tuple, not email or the common issuer. Restored `OidcSessionReference` is comparison data, not proof. Another allowed tenant cannot replace the original during refresh. UserInfo requires the original associated authentication and a current tenant decision before Bearer disclosure. Follow the [issuer policy guide](../../docs/oidc-issuer-policy.md) for the remaining session contracts.
 
-## Build and run the owned fixture
+## Build and test
 
-This example uses the current authored core source, including explicitly inventoried uncommitted changes. It leaves the older Soklet examples' pushed artifact pins intact. Use a new private work directory outside the core checkout:
+Install matching core sources using the [parent Maven instructions](../README.md#build-with-maven).
+From the core repository root, run:
 
 ```sh
-python3 examples/rsa-oidc/build.py --work /absolute/new/rsa-example-build \
-  --maven /absolute/path/to/mvn --java-home /absolute/path/to/jdk \
-  --core-source /absolute/core-checkout --offline \
-  --repository-tail /absolute/read-only/maven-cache
+mvn -B -ntp -f examples/rsa-oidc/pom.xml verify
 ```
 
-The builder copies Git-tracked and nonignored authored inputs, installs core into its own repository, creates a two-day SAN-correct disposable TLS store, compiles and tests the recipes, and audits every main/test reference signature for explicit JSpecify annotations. The example's runtime dependency list contains **only core**; annotations are provided and JUnit belongs only to the test runner. It then launches a separate Java process to run nine scenarios and write `CAPTURE.json`. Java 17 source compatibility is retained; CI runs on JDK 17 and 27.
+This module contains integration recipes, rather than a standalone application.
+Maven runs the JUnit scenarios against an owned loopback HTTPS provider. The
+tests create a two-day localhost certificate with the JDK's `keytool`, use a
+private trust store and keep normal TLS hostname checks. They do not contact
+Microsoft or another hosted provider and do not change machine trust.
 
-The owned fixture binds IPv4 loopback and checks normal TLS hostname verification with its scoped trust store. JCA verifies outgoing assertions against fresh in-memory public RSA projections, including the PS256 parameters, role audiences, type, claims, lifetime and fresh identifiers. Three signing algorithms use issuer audience; PS256 also uses endpoint audience. Each scenario exercises client credentials/cache, refresh, introspection and revocation. Entra scenarios run PS256 endpoint assertions, template discovery and JWK issuer validation, login/UserInfo, tenant denial, forged signature, missing key issuer and refresh to another allowed tenant.
+The tests cover private-key client authentication, signature verification,
+endpoint audiences, cache use, refresh, introspection, revocation and explicit
+Entra tenant decisions. Synthetic Entra routing exists only in test sources;
+it must never be used in an application. Supply your actual provider
+configuration, key custody and tenant policy when adapting the recipes.
 
-**Synthetic Entra routing:** a test-source-only `HttpClient` maps the exact configured Microsoft fixture paths to the owned local TLS listener. It never contacts Microsoft and must never be used in an application. The synthetic authorization code carries a generated nonce for fixture correlation; it is not a browser/provider PKCE acceptance test. Genuine PKCE/private-key provider qualification is separately covered by the integration fixtures. No hosted account, interactive browser or Microsoft-issued token is involved.
-
-The capture writes only fixed case labels, checked booleans and aggregate counts. It contains no JWT, access/refresh token, private key, nonce, code, subject, tenant, cookie or session reference. Private TLS stores and runtime state stay in the work directory; do not upload them. Delete that directory after retaining the redacted JSON and selected test evidence. No system trust store or user keychain changes.
+The runtime dependency is core alone. Annotation libraries are provided and
+JUnit stays in test scope. Python is not required. Additional source/artifact
+and redacted capture audits live in
+[verification/examples](../../verification/examples/README.md).
 
 ## Qualification limits
 

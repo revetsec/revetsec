@@ -39,6 +39,7 @@ CONFIG_PATHS = (
     ".github/scripts/download-pinned-corretto21-linux-x64.sh",
     "examples/barebones-oidc/pom.xml", "examples/playground/pom.xml",
     "examples/self-issued/pom.xml", "examples/rsa-oidc/pom.xml",
+    "examples/passkeys-soklet/pom.xml", "examples/totp-soklet/pom.xml",
     "verification/examples/NullabilityAudit.java",
 )
 
@@ -92,7 +93,7 @@ def check_configuration(files, pins):
             raise AssertionError("Pinned Corretto download guard drift: " + required)
     for path, expected in (("pom.xml", core_release), ("examples/rsa-oidc/pom.xml", core_release),
                            *(("examples/" + name + "/pom.xml", minimum)
-                             for name in ("barebones-oidc", "playground", "self-issued"))):
+                             for name in ("barebones-oidc", "playground", "self-issued", "passkeys-soklet", "totp-soklet"))):
         releases = compiler_releases(files[path])
         if not releases or set(releases) != {str(expected)}:
             raise AssertionError("Compiler release drift: " + path)
@@ -200,7 +201,7 @@ class SokletBaselineConfigurationTests(unittest.TestCase):
     def test_guard_detects_lost_java17_core_and_java21_soklet_coverage(self):
         replacements = (
             ("pom.xml", "<release>17</release>", "<release>21</release>", "Compiler release"),
-            ("examples/playground/pom.xml", "<release>21</release>", "<release>17</release>", "Compiler release"),
+            ("examples/playground/pom.xml", "<maven.compiler.release>21</maven.compiler.release>", "<maven.compiler.release>17</maven.compiler.release>", "Compiler release"),
             (".github/workflows/ci.yml", "java: ['21', '27']", "java: ['17', '27']", "Soklet example matrix"),
             (".github/workflows/ci.yml", "jdk: ['17', '21', '25', '27']",
              "jdk: ['21', '25', '27']", "Core test matrix"),
@@ -229,8 +230,7 @@ class SokletBaselineConfigurationTests(unittest.TestCase):
 class SokletBaselineRunnerTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.examples = load_script("baseline_examples_build", "examples/build.py")
-        cls.passkeys = load_script("baseline_passkey_build", "examples/passkeys-soklet/build.py")
+        cls.examples = load_script("baseline_examples_build", "verification/examples/verify_packaged_examples.py")
         cls.postgres = load_script("baseline_postgres_run", "examples/postgresql-pending-store/run.py")
         with mock.patch.dict(sys.modules, {"run": cls.postgres}):
             cls.webauthn = load_script("baseline_postgres_webauthn", "examples/postgresql-pending-store/run_webauthn.py")
@@ -269,7 +269,7 @@ class SokletBaselineRunnerTests(unittest.TestCase):
 
     def test_all_runners_read_the_canonical_framework_pin(self):
         self.assertEqual(self.examples.PINS, PINS)
-        for script in (self.passkeys, self.postgres, self.webauthn):
+        for script in (self.postgres, self.webauthn):
             with self.subTest(script=script.__name__):
                 self.assertEqual(script.FRAMEWORK_PIN, PINS["framework"])
 
@@ -348,28 +348,12 @@ class SokletBaselineRunnerTests(unittest.TestCase):
         self.assertEqual(len(maven_calls), 1)  # Only core installation precedes JAR admission.
         self.assertFalse((self.work / "output/examples").exists())
 
-    def test_passkey_app_rejects_java17_before_creating_output(self):
-        with zipfile.ZipFile(self.jars["core"], "w") as jar:
-            jar.writestr("com/revetsec/webauthn/InMemoryWebAuthnStore.class", b"fixture")
-        arguments = ["build.py", "--work", str(self.work / "passkey-output"),
-                     "--java-home", str(self.java)]
-        for option, name in (("core", "core"), ("soklet", "framework"),
-                             ("jspecify", "jspecify"), ("jsr305", "jsr305")):
-            arguments.extend(("--" + option + "-jar", str(self.jars[name])))
-        with mock.patch.object(sys, "argv", arguments), mock.patch.object(
-                self.passkeys, "FRAMEWORK_PIN", self.framework_pin), mock.patch.object(
-                self.passkeys.subprocess, "check_output", return_value="javac 17.0.20"), mock.patch.object(
-                self.passkeys.subprocess, "run") as run, contextlib.redirect_stderr(io.StringIO()):
-            with self.assertRaises(SystemExit):
-                self.passkeys.main()
-            run.assert_not_called()
-        self.assertFalse((self.work / "passkey-output").exists())
 
 
 class SelfIssuedInventoryTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.builder = load_script("baseline_self_issued_build", "examples/self-issued/build.py")
+        cls.builder = load_script("baseline_self_issued_build", "verification/examples/verify_self_issued.py")
 
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory(prefix="revetsec-authored-inventory-test-")
@@ -411,6 +395,12 @@ class SelfIssuedInventoryTests(unittest.TestCase):
                                side_effect=[b"real.java\0linked.java\0", b""]):
             with self.assertRaisesRegex(RuntimeError, "Unexpected authored source entry"):
                 self.builder.inventory(self.source)
+
+
+class RsaInventoryTests(SelfIssuedInventoryTests):
+    @classmethod
+    def setUpClass(cls):
+        cls.builder = load_script("baseline_rsa_build", "verification/examples/verify_rsa_oidc.py")
 
 
 if __name__ == "__main__":

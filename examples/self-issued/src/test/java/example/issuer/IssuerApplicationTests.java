@@ -137,10 +137,16 @@ final class IssuerApplicationTests {
  }
  @Test void actualFrameworkRoutesBindLoginCsrfConsentRotationAndPreparedRedirect() throws Exception {
   var app=app();SokletSimulator.run(IssuerPlayground.sokletConfig(app),sim->{
-   var login=sim.performHttpRequest(request(app,HttpMethod.GET,"/authorize?"+query(app,"demo-public","mcp:discover mcp:whoami"),null,null));
+   String query=query(app,"demo-public","mcp:discover mcp:whoami");
+   var anonymous=sim.performHttpRequest(request(app,HttpMethod.GET,"/authorize?"+query,null,null)).getMarshaledResponse();
+   assertEquals(200,anonymous.getStatusCode());assertTrue(anonymous.getCookies().isEmpty());
+   var admitted=sim.performHttpRequest(request(app,HttpMethod.POST,"/session?"+query,"begin=1",null)).getMarshaledResponse();
+   assertEquals(303,admitted.getStatusCode());var initial=admitted.getCookies().iterator().next();
+   String initialCookie=initial.getName()+"="+initial.getValue().orElseThrow();
+   var login=sim.performHttpRequest(request(app,HttpMethod.GET,"/authorize?"+query,null,initialCookie));
    assertEquals(200,login.getMarshaledResponse().getStatusCode());var response=login.getMarshaledResponse();
    assertEquals(List.of("same-origin"),response.getHeaders().get("Referrer-Policy"));
-   var cookie=response.getCookies().iterator().next();String old=cookie.getName()+"="+cookie.getValue().orElseThrow();var session=app.sessions.find(request(app,HttpMethod.GET,"/",null,old)).orElseThrow();String binding=session.binding;
+   String old=initialCookie;var session=app.sessions.find(request(app,HttpMethod.GET,"/",null,old)).orElseThrow();String binding=session.binding;
    assertTrue(text(response).contains("Demo login"));assertFalse(text(response).contains(app.config.loginKey));assertFalse(text(response).contains(session.pending.get().handle));
    var post=request(app,HttpMethod.POST,"/login",form(Map.of("csrf",session.csrf,"flow",session.pending.get().nonce,"key",app.config.loginKey)),old);
    assertEquals(403,sim.performHttpRequest(post.copy().headers(h->h.remove("Origin")).finish()).getMarshaledResponse().getStatusCode());
@@ -224,9 +230,8 @@ final class IssuerApplicationTests {
  }
  @Test void sessionCapAndExpiryNeverEvictAuthenticatedStateToAdmitNewSession() {
   var clock=new MutableClock();var sessions=new BrowserSessions(clock,1,true);var first=sessions.begin();
-  var replacement=sessions.begin();
-  assertFalse(sessions.find(Request.withPath(HttpMethod.GET,"/").headers(Map.of("Cookie",List.of("__Host-RevetsecIssuer="+first.id))).build()).isPresent());
-  first=replacement;
+  assertThrows(IllegalStateException.class,sessions::begin);
+  assertSame(first,sessions.find(Request.withPath(HttpMethod.GET,"/").headers(Map.of("Cookie",List.of("__Host-RevetsecIssuer="+first.id))).build()).orElseThrow());
   var pending=new BrowserSessions.Pending("synthetic");sessions.replacePending(first,pending);
   var rotated=sessions.login(first,pending);
   assertThrows(IllegalStateException.class,sessions::begin);var cookie=sessions.cookie(rotated);assertEquals("__Host-RevetsecIssuer",cookie.getName());assertTrue(cookie.getSecure());assertTrue(cookie.getHttpOnly());
@@ -234,7 +239,11 @@ final class IssuerApplicationTests {
  }
  @Test void fixedHostsOriginsMetadataHeadAndEscapingAreChecked() throws Exception {
   var app=app();assertEquals(403,app.index(request(app,HttpMethod.GET,"/",null,null).copy().headers(h->h.put("Host",List.of("evil.example"))).finish()).getStatusCode());
-  assertEquals(0,assertInstanceOf(MarshaledResponseBody.Bytes.class,app.metadata(request(app,HttpMethod.HEAD,"/",null,null)).getBody().orElseThrow()).getBytes().length);
+  var get=app.metadata(request(app,HttpMethod.GET,"/",null,null));
+  var bytes=assertInstanceOf(MarshaledResponseBody.Bytes.class,get.getBody().orElseThrow()).getBytes();
+  var head=app.metadata(request(app,HttpMethod.HEAD,"/",null,null));
+  assertTrue(bytes.length>0);assertEquals(get.getStatusCode(),head.getStatusCode());assertTrue(head.getBody().isEmpty());
+  assertEquals(get.getHeaders(),head.getHeaders());assertEquals(List.of(Integer.toString(bytes.length)),head.getHeaders().get("Content-Length"));
   assertTrue(text(app.resourceMetadata(request(app,HttpMethod.GET,"/",null,null))).contains(app.config.resource.toString()));assertEquals("&lt;&amp;&quot;&#39;&gt;",LocalInputs.html("<&\"'>"));
  }
  @Test void failedStoreCapacityDoesNotDeletePermanentFencesAndCasIsAtomic() throws Exception {
@@ -304,7 +313,7 @@ final class IssuerApplicationTests {
   var disabled=app();assertFalse(text(disabled.metadata(request(disabled,HttpMethod.GET,"/",null,null))).contains("client_id_metadata_document_supported"));
   URI origin=URI.create("https://cimd.example.com:6277");
   var policy=IssuerConfig.metadataPolicy(Map.of("REVETSEC_ISSUER_CIMD_ORIGIN",origin.toString(),"REVETSEC_ISSUER_CIMD_ADDRESS","8.8.8.8"));
-  assertTrue(policy.getEnabled());assertEquals(Set.of(origin),policy.getAllowedOrigins().orElseThrow());assertTrue(policy.getCache().isEmpty());
+  assertTrue(policy.getEnabled());assertEquals(Set.of(origin),policy.getAllowedOrigins().orElseThrow());assertEquals(128,assertInstanceOf(InMemoryOAuthClientMetadataCache.class,policy.getCache().orElseThrow()).getMaximumEntries());
   var resolver=policy.getAddressResolver().orElseThrow();
   assertEquals("8.8.8.8",resolver.resolve("CIMD.EXAMPLE.COM",Duration.ofSeconds(1)).get(0).getHostAddress());
   assertThrows(IllegalArgumentException.class,()->resolver.resolve("other.example.com",Duration.ofSeconds(1)));

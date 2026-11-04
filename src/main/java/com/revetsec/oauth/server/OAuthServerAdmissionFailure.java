@@ -22,7 +22,7 @@ import org.jspecify.annotations.NonNull;
 final class OAuthServerAdmissionFailure extends RuntimeException {
 	private static final long serialVersionUID = 1L;
 	enum Reason { INVALID_TOKEN, INVALID_GRANT, INVALID_REQUEST, INVALID_CLIENT, UNAUTHORIZED_CLIENT, INVALID_SCOPE, INVALID_TARGET,
-		UNSUPPORTED_RESPONSE_TYPE, UNSUPPORTED_GRANT_TYPE, INFRASTRUCTURE }
+		UNSUPPORTED_RESPONSE_TYPE, UNSUPPORTED_GRANT_TYPE, INFRASTRUCTURE, CONFIGURATION }
 	private final @NonNull Reason reason;
 	OAuthServerAdmissionFailure(@NonNull Reason reason) {
 		super("OAuth server admission failed.", null, false, false);

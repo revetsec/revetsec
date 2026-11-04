@@ -589,7 +589,7 @@ class ScimM11PatchApplicationTests {
                         ScimAttributeDefinition.withName("links").type(ScimAttributeType.REFERENCE).multiValued(true).build(),
                         ScimAttributeDefinition.withName("blobs").type(ScimAttributeType.BINARY).multiValued(true).build())).build()).build();
     }
-    private static @NonNull ScimResource user(@NonNull String fields) { return resource(ScimResourceType.userInstance(),"\"userName\":\"Ada\""+(fields.isEmpty() ? "" : ","+fields)); }
+    private static @NonNull ScimResource user(@NonNull String fields) { return resource(ScimTestResourceTypes.userWithEnterpriseInstance(),"\"userName\":\"Ada\""+(fields.isEmpty() ? "" : ","+fields)); }
     private static @NonNull ScimResource group(@NonNull String members) { return resource(ScimResourceType.groupInstance(),"\"displayName\":\"Team\",\"members\":"+members); }
     private static @NonNull ScimResource resource(@NonNull ScimResourceType type,@NonNull String fields) {
         return ScimResource.withResourceType(type).document((JsonObject)json("{\"schemas\":[\""+type.getSchema().getId()+"\"]"+(fields.isEmpty() ? "" : ","+fields)+"}")).build();

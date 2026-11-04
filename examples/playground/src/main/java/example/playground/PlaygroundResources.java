@@ -83,24 +83,39 @@ public final class PlaygroundResources {
 
     @GET("/api/session") public @NonNull Response session(@NonNull Request request) {
         if (!PlaygroundAdmission.trusted(request, profile.config, false)) return fixed(403, "Request denied.");
+        BrowserSessions.Session session = sessions.find(request).orElse(null);
+        if (session == null) return sessionView(null);
+        synchronized (session) { return sessionView(session); }
+    }
+
+    /** Bootstrap has no authenticated effect; later controls still require the session's CSRF token. */
+    @POST("/api/session") public @NonNull Response beginSession(@NonNull Request request) {
+        if (request.getHttpMethod() != HttpMethod.POST || !PlaygroundAdmission.trusted(request, profile.config, false)
+                || !PlaygroundAdmission.headerValues(request, "Origin").equals(List.of(profile.config.origin.toString()))
+                || !PlaygroundAdmission.headerValues(request, "Content-Type").equals(List.of("application/x-www-form-urlencoded"))
+                || request.getRawQuery().isPresent() || request.isContentTooLarge()
+                || !java.util.Arrays.equals(request.getBody().orElseGet(() -> new byte[0]), "begin=1".getBytes(StandardCharsets.US_ASCII)))
+            return fixed(403, "Request denied.");
         try {
-            BrowserSessions.Session session = sessions.find(request).orElseGet(sessions::begin);
-            synchronized (session) {
-                JsonObject.Builder view = JsonObject.builder().put("csrf", session.csrf).put("authenticated", session.identity != null)
-                        .put("issuer", profile.config.issuer).put("clientId", profile.config.clientId)
-                        .put("strategy", profile.config.strategy).put("resource", profile.config.resourceUri().toString())
-                        .put("secretReference", profile.config.secretReference)
-                        .put("probeClientId", profile.config.probeClientId)
-                        .put("probeSecretReference", profile.config.probeSecretReference)
-                        .put("loopbackHttp", profile.config.loopbackHttp).put("replayEnabled", profile.config.replayEnabled)
-                        .put("samlAvailable", saml != null)
-                        .put("samlConnection", saml == null ? "" : saml.connectionId())
-                        .put("journalAvailable", session.journal != null)
-                        .put("events", SafeViews.scopes(eventSnapshot()));
-                if (session.identity != null) view.put("identity", session.identity);
-                return json(200, view.build()).copy().cookies(List.of(BrowserSessions.cookie(session))).finish();
-            }
+            BrowserSessions.Session existing = sessions.find(request).orElse(null);
+            if (existing != null) { synchronized (existing) { return sessionView(existing); } }
+            BrowserSessions.Session session = sessions.begin();
+            synchronized (session) { return sessionView(session).copy().cookies(List.of(BrowserSessions.cookie(session))).finish(); }
         } catch (IllegalStateException full) { return fixed(503, "Local session store is full."); }
+    }
+
+    private @NonNull Response sessionView(BrowserSessions.@Nullable Session session) {
+        JsonObject.Builder view = JsonObject.builder().put("csrf", session == null ? "" : session.csrf)
+                .put("sessionAvailable", session != null).put("authenticated", session != null && session.identity != null)
+                .put("issuer", profile.config.issuer).put("clientId", profile.config.clientId)
+                .put("strategy", profile.config.strategy).put("resource", profile.config.resourceUri().toString())
+                .put("secretReference", profile.config.secretReference).put("probeClientId", profile.config.probeClientId)
+                .put("probeSecretReference", profile.config.probeSecretReference)
+                .put("loopbackHttp", profile.config.loopbackHttp).put("replayEnabled", profile.config.replayEnabled)
+                .put("samlAvailable", saml != null).put("samlConnection", saml == null ? "" : saml.connectionId())
+                .put("journalAvailable", session != null && session.journal != null).put("events", SafeViews.scopes(eventSnapshot()));
+        if (session != null && session.identity != null) view.put("identity", session.identity);
+        return json(200, view.build());
     }
 
     @GET("/.well-known/oauth-protected-resource/mcp")

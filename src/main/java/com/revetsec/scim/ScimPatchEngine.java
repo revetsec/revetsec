@@ -41,6 +41,8 @@ final class ScimPatchEngine {
     private final boolean standardGroup;
     private final @NonNull Set<@NonNull ScimCompatibilityFeature> usedFeatures;
     private @Nullable ScimError error;
+    // Request-local instruction marker, never a retained reference value or cross-request proof.
+    private boolean managerReferenceSupplied;
 
     private ScimPatchEngine(@NonNull ScimResourceType type, @NonNull ScimCompatibility compatibility,
             @NonNull ScimStringMatching matching, @NonNull ScimWork work,
@@ -249,11 +251,11 @@ final class ScimPatchEngine {
         JsonValue value=update(definition,old.getMembers().get(definition.getName()),incoming,kind,childPath);
         if (error != null) return null;
         LinkedHashMap<String,JsonValue> result=new LinkedHashMap<>(old.getMembers());
+        noteManagerReference(top,name.equals("$ref"));
         if (type.isStandardEnterpriseManagerPath(top.toScimString()) && name.equals("value")
                 && !exact(old.getMembers().get("value"),value)) {
             if (error != null) return null;
-            result.remove("displayName");
-            result.remove("$ref");
+            clearManagerIdentity(result);
         }
         if (value == null) result.remove(definition.getName()); else result.put(definition.getName(),value);
         return JsonObject.fromMembers(result);
@@ -347,12 +349,12 @@ final class ScimPatchEngine {
             @NonNull JsonObject object,@NonNull ScimAttributePath target) {
         if (!spend(old.getMembers().size()+object.getMembers().size()+1L)) return null;
         LinkedHashMap<String,JsonValue> output=new LinkedHashMap<>(old.getMembers());
+        noteManagerReference(target,object.getMembers().containsKey("$ref"));
         if (type.isStandardEnterpriseManagerPath(target.toScimString())
                 && object.getMembers().containsKey("value")
                 && !exact(old.getMembers().get("value"),object.getMembers().get("value"))) {
             if (error != null) return null;
-            output.remove("displayName");
-            if (!object.getMembers().containsKey("$ref")) output.remove("$ref");
+            clearManagerIdentity(output);
         }
         for (Map.Entry<String,JsonValue> supplied : object.getMembers().entrySet()) {
             if (!spend(definition.getSubAttributes().size()+1L)) return null;
@@ -369,11 +371,28 @@ final class ScimPatchEngine {
         return protectParent(definition,old,result);
     }
 
+    private void noteManagerReference(@NonNull ScimAttributePath target, boolean supplied) {
+        if (supplied && type.isStandardEnterpriseManagerPath(target.toScimString())) managerReferenceSupplied=true;
+    }
+    private void clearManagerIdentity(@NonNull Map<@NonNull String,@NonNull JsonValue> values) {
+        values.remove("displayName");
+        if (!managerReferenceSupplied) values.remove("$ref");
+    }
+
     private @Nullable JsonValue array(@NonNull ScimAttributeDefinition definition,@Nullable JsonValue old,
             @NonNull JsonArray values,@NonNull ScimPatchOperationType kind,@NonNull ScimAttributePath target) {
         if (kind == ScimPatchOperationType.ADD && values.getElements().isEmpty()) return old;
         List<JsonValue> prior=old instanceof JsonArray array ? array.getElements() : List.of();
         if (!spend(prior.size()+1L)) return null;
+        if (groupMembers(target) && !values.getElements().isEmpty()) {
+            boolean assigned = ScimMemberIndex.allAssigned(values.getElements(), work);
+            if (work.wasExceeded()) { error=ScimError.requestTooLargeInstance(); return null; }
+            if (assigned) {
+                ScimMemberIndex index = ScimMemberIndex.fromValues(prior, work);
+                if (work.wasExceeded()) { error=ScimError.requestTooLargeInstance(); return null; }
+                if (index != null) return indexedMembers(definition,prior,values,kind,target,index);
+            }
+        }
         List<JsonValue> output=kind == ScimPatchOperationType.ADD ? new ArrayList<>(prior) : new ArrayList<>();
         int preferred=-1;
         for (JsonValue supplied : values.getElements()) {
@@ -419,6 +438,29 @@ final class ScimPatchEngine {
         }
         return primary(definition,output,preferred);
     }
+    private @Nullable JsonArray indexedMembers(@NonNull ScimAttributeDefinition definition,
+            @NonNull List<@NonNull JsonValue> prior, @NonNull JsonArray values,
+            @NonNull ScimPatchOperationType kind, @NonNull ScimAttributePath target,
+            @NonNull ScimMemberIndex index) {
+        List<JsonValue> output = kind == ScimPatchOperationType.ADD ? new ArrayList<>(prior) : new ArrayList<>();
+        for (JsonValue supplied : values.getElements()) {
+            if (!spend(1)) return null;
+            JsonObject existing = index.find(supplied);
+            if (work.wasExceeded()) { error=ScimError.requestTooLargeInstance(); return null; }
+            JsonObject basis = existing == null ? JsonObject.emptyInstance() : existing;
+            JsonValue next = merge(definition,basis,(JsonObject)supplied,target);
+            if (next == null) return null;
+            // Validate immutable/read-only children even when ADD would preserve an existing row.
+            if (kind == ScimPatchOperationType.ADD && existing != null) continue;
+            if (!spend(1)) return null;
+            output.add(next);
+            if (kind == ScimPatchOperationType.ADD && !index.add((JsonObject)next)) {
+                error=work.wasExceeded() ? ScimError.requestTooLargeInstance() : ScimError.invalidValueInstance();
+                return null;
+            }
+        }
+        return primary(definition,output,-1);
+    }
     private @Nullable JsonArray primary(@NonNull ScimAttributeDefinition definition,@NonNull List<@NonNull JsonValue> values,int preferred) {
         if (definition.getType() != ScimAttributeType.COMPLEX) return JsonArray.fromElements(values);
         if (!spend(definition.getSubAttributes().size())) return null;
@@ -455,6 +497,9 @@ final class ScimPatchEngine {
                 || suffix == null && incoming instanceof JsonObject object && object.find(primary.getName()).filter(JsonBoolean.class::isInstance).map(JsonBoolean.class::cast).map(JsonBoolean::getValue).orElse(false);
     }
     private @Nullable JsonValue removeIds(@Nullable JsonValue old,@NonNull JsonArray ids) {
+        ScimMemberIndex index = ScimMemberIndex.fromValues(ids.getElements(), work);
+        if (work.wasExceeded()) { error=ScimError.requestTooLargeInstance(); return null; }
+        if (index != null) return indexedRemoval(old,index);
         List<JsonValue> output=new ArrayList<>();
         if (old instanceof JsonArray array) for (JsonValue element : array.getElements()) {
             if (!spend(1)) return null;
@@ -467,6 +512,17 @@ final class ScimPatchEngine {
             if (!remove) output.add(element);
         }
         return old == null ? null : JsonArray.fromElements(output);
+    }
+
+    private @Nullable JsonValue indexedRemoval(@Nullable JsonValue old, @NonNull ScimMemberIndex index) {
+        List<JsonValue> retained=new ArrayList<>();
+        if (old instanceof JsonArray array) for (JsonValue element : array.getElements()) {
+            if (!spend(1)) return null;
+            boolean remove=index.find(element) != null;
+            if (work.wasExceeded()) { error=ScimError.requestTooLargeInstance(); return null; }
+            if (!remove) retained.add(element);
+        }
+        return old == null ? null : JsonArray.fromElements(retained);
     }
 
     private boolean protectedChildren(@NonNull ScimAttributeDefinition definition,@Nullable JsonValue value) {

@@ -111,7 +111,7 @@ final class KeycloakSamlIT {
                 .assertionConsumerServiceUrl(ACS)
                 .singleLogoutServiceUrl(URI.create("https://sp.test/logout"))
                 .signingPrivateKey(credential.privateKey())
-                .replayCache(InMemorySamlReplayCache.withLimit(clock, 32))
+                .replayCache(InMemorySamlReplayCache.fromLimit(clock, 32))
                 .decryptionCredentials(List.of(credential))
                 .clock(clock).build();
         SamlAuthenticationRequestResult.Prepared begin = assertInstanceOf(
@@ -160,7 +160,7 @@ final class KeycloakSamlIT {
         Clock clock = Clock.systemUTC();
         SamlServiceProvider sp = SamlServiceProvider.withEntityId(ENTITY)
                 .assertionConsumerServiceUrl(ACS)
-                .replayCache(InMemorySamlReplayCache.withLimit(clock, 32))
+                .replayCache(InMemorySamlReplayCache.fromLimit(clock, 32))
                 .decryptionCredentials(List.of(decryptionCredential()))
                 .clock(clock).build();
         SamlPostBindingMessage message = browserPost(browser, URI.create(issuer
@@ -189,7 +189,7 @@ final class KeycloakSamlIT {
                 .assertionConsumerServiceUrl(ACS)
                 .singleLogoutServiceUrl(URI.create("https://sp.test/logout"))
                 .signingPrivateKey(decryptionCredential().privateKey())
-                .replayCache(InMemorySamlReplayCache.withLimit(clock, 32))
+                .replayCache(InMemorySamlReplayCache.fromLimit(clock, 32))
                 .decryptionCredentials(List.of(decryptionCredential()))
                 .clock(clock).build();
         SamlAuthentication identity = assertInstanceOf(SamlAuthenticationResult.Succeeded.class,
@@ -245,7 +245,7 @@ final class KeycloakSamlIT {
         SamlCredential credential = decryptionCredential();
         SamlServiceProvider sp = SamlServiceProvider.withEntityId(POST_ENTITY).assertionConsumerServiceUrl(ACS)
                 .postSingleLogoutServiceUrl(POST_SLO).signingCredential(credential)
-                .replayCache(InMemorySamlReplayCache.withLimit(clock, 32))
+                .replayCache(InMemorySamlReplayCache.fromLimit(clock, 32))
                 .decryptionCredentials(List.of(credential)).clock(clock).build();
         SamlAuthenticationRequestResult.Prepared begin = assertInstanceOf(SamlAuthenticationRequestResult.Prepared.class,
                 sp.beginAuthenticationResult(idp));
@@ -300,7 +300,7 @@ final class KeycloakSamlIT {
         SamlCredential credential = decryptionCredential();
         SamlServiceProvider sp = SamlServiceProvider.withEntityId(POST_ENTITY).assertionConsumerServiceUrl(ACS)
                 .postSingleLogoutServiceUrl(POST_SLO).signingCredential(credential)
-                .replayCache(InMemorySamlReplayCache.withLimit(clock, 32))
+                .replayCache(InMemorySamlReplayCache.fromLimit(clock, 32))
                 .decryptionCredentials(List.of(credential)).clock(clock).build();
         SamlPostBindingMessage login = browserPost(browser, URI.create(issuer
                 + "/protocol/saml/clients/revetsec-post-logout-unsolicited"));

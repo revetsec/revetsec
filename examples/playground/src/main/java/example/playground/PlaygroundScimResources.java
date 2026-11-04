@@ -68,25 +68,25 @@ public final class PlaygroundScimResources {
         return response(request, () -> app.prepared(app.provider.schemaResponseResult(id, request.getRawQuery().orElse(""))));
     }
     @GET("/scim/v2/Users") public @NonNull MarshaledResponse listUsers(@NonNull Request request) {
-        return response(request, () -> app.list(ScimResourceType.userInstance(), request, false));
+        return response(request, () -> app.list(PlaygroundScim.USER_TYPE, request, false));
     }
     @POST("/scim/v2/Users/.search") public @NonNull MarshaledResponse searchUsers(@NonNull Request request) {
-        return response(request, () -> app.list(ScimResourceType.userInstance(), request, true));
+        return response(request, () -> app.list(PlaygroundScim.USER_TYPE, request, true));
     }
     @POST("/scim/v2/Users") public @NonNull MarshaledResponse createUser(@NonNull Request request) {
-        return response(request, () -> app.create(ScimResourceType.userInstance(), request));
+        return response(request, () -> app.create(PlaygroundScim.USER_TYPE, request));
     }
     @GET("/scim/v2/Users/{id}") public @NonNull MarshaledResponse getUser(@NonNull Request request, @PathParameter(name="id") @NonNull String id) {
-        return response(request, () -> app.get(ScimResourceType.userInstance(), id, request));
+        return response(request, () -> app.get(PlaygroundScim.USER_TYPE, id, request));
     }
     @PUT("/scim/v2/Users/{id}") public @NonNull MarshaledResponse putUser(@NonNull Request request, @PathParameter(name="id") @NonNull String id) {
-        return response(request, () -> app.write(ScimResourceType.userInstance(), id, request, false));
+        return response(request, () -> app.write(PlaygroundScim.USER_TYPE, id, request, false));
     }
     @PATCH("/scim/v2/Users/{id}") public @NonNull MarshaledResponse patchUser(@NonNull Request request, @PathParameter(name="id") @NonNull String id) {
-        return response(request, () -> app.write(ScimResourceType.userInstance(), id, request, true));
+        return response(request, () -> app.write(PlaygroundScim.USER_TYPE, id, request, true));
     }
     @DELETE("/scim/v2/Users/{id}") public @NonNull MarshaledResponse deleteUser(@NonNull Request request, @PathParameter(name="id") @NonNull String id) {
-        return response(request, () -> app.delete(ScimResourceType.userInstance(), id, request));
+        return response(request, () -> app.delete(PlaygroundScim.USER_TYPE, id, request));
     }
     @GET("/scim/v2/Groups") public @NonNull MarshaledResponse listGroups(@NonNull Request request) {
         return response(request, () -> app.list(ScimResourceType.groupInstance(), request, false));

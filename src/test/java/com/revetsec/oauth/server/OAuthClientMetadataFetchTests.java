@@ -64,7 +64,7 @@ class OAuthClientMetadataFetchTests {
   return StateSealer.withActiveKey(SealingKey.fromBase64(id,Base64.getEncoder().encodeToString(bytes))).maximumSealedLength(cap).build();
  }
  private static @NonNull StateSealer sealer() {return sealer("k",(byte)1,16384);}
- private static @NonNull OAuthClientMetadataPolicy policy(@Nullable OAuthClientMetadataCache cache) {
+ private static @NonNull OAuthClientMetadataPolicy policy(@NonNull OAuthClientMetadataCache cache) {
   return OAuthClientMetadataPolicy.withAddressResolver((host,budget)->{throw new AssertionError("No resolver in deterministic seam.");}).cache(cache).build();
  }
  private static @NonNull OAuthClientMetadataCacheCodec codec(@NonNull StateSealer sealer,@NonNull OAuthClientMetadataPolicy policy) {
@@ -81,10 +81,10 @@ class OAuthClientMetadataFetchTests {
  }
  @Test void productionTransportInvokesPinnedResolverBeforeRejectingPrivateAddress() {
   AtomicInteger resolutions=new AtomicInteger();
-  OAuthClientMetadataPolicy enabled=OAuthClientMetadataPolicy.fromAddressResolver((host,budget)->{
+  OAuthClientMetadataPolicy enabled=OAuthClientMetadataPolicy.fromAddressResolverAndCache((host,budget)->{
    assertEquals("client.example.com",host);resolutions.incrementAndGet();
    return List.of(java.net.InetAddress.getLoopbackAddress());
-  });
+  }, InMemoryOAuthClientMetadataCache.fromMaximumEntries(128));
   OAuthClientMetadataFetcher fetcher=new OAuthClientMetadataFetcher(ISSUER,sealer(),enabled,
    OAuthServerIngressLimits.fromDefaults(),false,false,OutboundUriPolicy.defaultInstance(),Clock.fixed(NOW,ZoneOffset.UTC),Duration.ofSeconds(1));
   infrastructure(()->fetcher.reusable(ID,deadline()));
@@ -106,23 +106,23 @@ class OAuthClientMetadataFetchTests {
   assertEquals("OAuth server admission failed.",failure.getMessage());assertEquals(0,failure.getSuppressed().length);
  }
  @Test void serializedRoundTripNeverExposesMetadataAndCanonicalIdentityIsExact() {
-  OAuthClientMetadataCacheCodec codec=codec(sealer(),policy(null));
+  OAuthClientMetadataCacheCodec codec=codec(sealer(),policy(InMemoryOAuthClientMetadataCache.fromMaximumEntries(128)));
   OAuthClientMetadataCacheEntry entry=codec.seal(ID,body("display"),NOW,NOW.plusSeconds(120));
   OAuthClientMetadataCacheEntry copy=OAuthClientMetadataCacheEntry.fromStoredForm(OAuthClientMetadataCacheKey.fromStoredForm(entry.getKey().getStorageKey()),entry.getVersion(),entry.getExpiresAt(),entry.toSealedForm());
   var cached=codec.open(ID,copy,NOW.plusSeconds(1)).orElseThrow();assertEquals("display",cached.document().clientName());
   assertEquals(NOW,cached.fetchedAt());assertEquals(NOW.plusSeconds(120),cached.expiresAt());
   assertEquals("CachedClientMetadata{metadata=redacted}",cached.toString());assertFalse(cached.toString().contains("display"));
-  assertEquals(codec.key(ID),codec(sealer(),policy(null)).key(ID));
+  assertEquals(codec.key(ID),codec(sealer(),policy(InMemoryOAuthClientMetadataCache.fromMaximumEntries(128))).key(ID));
   assertNotEquals(codec.key(ID),codec.key("https://CLIENT.example.com/metadata"));
   assertNotEquals(codec.key(ID),codec.key(ID+"?a=1"));
   assertTrue(codec.open(ID.toUpperCase(java.util.Locale.ROOT),entry,NOW).isEmpty());
  }
  @Test void issuerConfigurationAndPurposeAreSeparated() {
-  StateSealer sealer=sealer();OAuthClientMetadataPolicy p=policy(null);OAuthClientMetadataCacheCodec c=codec(sealer,p);
+  StateSealer sealer=sealer();OAuthClientMetadataPolicy p=policy(InMemoryOAuthClientMetadataCache.fromMaximumEntries(128));OAuthClientMetadataCacheCodec c=codec(sealer,p);
   var entry=c.seal(ID,body("display"),NOW,NOW.plusSeconds(120));
   OAuthClientMetadataCacheCodec other=new OAuthClientMetadataCacheCodec(ISSUER+"/",sealer,p,OAuthServerIngressLimits.fromDefaults(),false,false);
   assertTrue(other.open(ID,entry,NOW).isEmpty());assertNotEquals(c.key(ID),other.key(ID));
-  OAuthClientMetadataPolicy narrower=OAuthClientMetadataPolicy.withAddressResolver((h,b)->List.of()).maximumFreshness(Duration.ofSeconds(30)).build();
+  OAuthClientMetadataPolicy narrower=OAuthClientMetadataPolicy.withAddressResolver((h,b)->List.of()).cache(InMemoryOAuthClientMetadataCache.fromMaximumEntries(128)).maximumFreshness(Duration.ofSeconds(30)).build();
   assertTrue(codec(sealer,narrower).open(ID,entry,NOW).isEmpty());
   assertNotEquals(c.key(ID),new OAuthClientMetadataCacheCodec(ISSUER,sealer,p,OAuthServerIngressLimits.fromDefaults(),true,false).key(ID));
   String app=sealer.seal("untrusted", "context",Duration.ofSeconds(300));
@@ -135,23 +135,23 @@ class OAuthClientMetadataFetchTests {
   return OAuthClientMetadataCacheEntry.fromStoredForm(entry.getKey(),entry.getVersion(),entry.getExpiresAt(),sealed);
  }
  @Test void carrierTamperingAndWrongKeysAreMisses() {
-  StateSealer sealer=sealer();var c=codec(sealer,policy(null));var entry=c.seal(ID,body("display".repeat(100)),NOW,NOW.plusSeconds(120));
+  StateSealer sealer=sealer();var c=codec(sealer,policy(InMemoryOAuthClientMetadataCache.fromMaximumEntries(128)));var entry=c.seal(ID,body("display".repeat(100)),NOW,NOW.plusSeconds(120));
   assertTrue(c.open(ID,copy(entry,entry.toSealedForm().substring(0,entry.toSealedForm().length()-2)+"AA"),NOW).isEmpty());
   assertTrue(c.open(ID,OAuthClientMetadataCacheEntry.fromStoredForm(entry.getKey(),"A".repeat(43),entry.getExpiresAt(),entry.toSealedForm()),NOW).isEmpty());
   assertTrue(c.open(ID,OAuthClientMetadataCacheEntry.fromStoredForm(entry.getKey(),entry.getVersion(),NOW.plusSeconds(121),entry.toSealedForm()),NOW).isEmpty());
-  assertTrue(codec(sealer("other",(byte)2,16384),policy(null)).open(ID,entry,NOW).isEmpty());
-  assertTrue(codec(sealer("k",(byte)2,16384),policy(null)).open(ID,entry,NOW).isEmpty());
-  assertTrue(codec(sealer("k",(byte)1,1024),policy(null)).open(ID,entry,NOW).isEmpty());
+  assertTrue(codec(sealer("other",(byte)2,16384),policy(InMemoryOAuthClientMetadataCache.fromMaximumEntries(128))).open(ID,entry,NOW).isEmpty());
+  assertTrue(codec(sealer("k",(byte)2,16384),policy(InMemoryOAuthClientMetadataCache.fromMaximumEntries(128))).open(ID,entry,NOW).isEmpty());
+  assertTrue(codec(sealer("k",(byte)1,1024),policy(InMemoryOAuthClientMetadataCache.fromMaximumEntries(128))).open(ID,entry,NOW).isEmpty());
  }
  @Test void oldDecryptKeyWorksOnlyWhileRetained() {
-  StateSealer old=sealer();var c=codec(old,policy(null));var entry=c.seal(ID,body("display"),NOW,NOW.plusSeconds(120));
+  StateSealer old=sealer();var c=codec(old,policy(InMemoryOAuthClientMetadataCache.fromMaximumEntries(128)));var entry=c.seal(ID,body("display"),NOW,NOW.plusSeconds(120));
   byte[] bytes=new byte[32];for(int i=0;i<bytes.length;i++)bytes[i]=(byte)(1+i);SealingKey previous=SealingKey.fromBase64("k",Base64.getEncoder().encodeToString(bytes));
   for(int i=0;i<bytes.length;i++)bytes[i]=(byte)(2+i);StateSealer rotated=StateSealer.withActiveKey(SealingKey.fromBase64("new",Base64.getEncoder().encodeToString(bytes))).verificationKeys(List.of(previous)).maximumSealedLength(16384).build();
-  assertTrue(codec(rotated,policy(null)).open(ID,entry,NOW).isPresent());
-  assertTrue(codec(sealer("new",(byte)2,16384),policy(null)).open(ID,entry,NOW).isEmpty());
+  assertTrue(codec(rotated,policy(InMemoryOAuthClientMetadataCache.fromMaximumEntries(128))).open(ID,entry,NOW).isPresent());
+  assertTrue(codec(sealer("new",(byte)2,16384),policy(InMemoryOAuthClientMetadataCache.fromMaximumEntries(128))).open(ID,entry,NOW).isEmpty());
  }
  @Test void expiryFutureAndPreciseFetchedTimeAreAuthenticated() {
-  var c=codec(sealer(),policy(null));var entry=c.seal(ID,body("display"),NOW.plusNanos(1),NOW.plusSeconds(120));
+  var c=codec(sealer(),policy(InMemoryOAuthClientMetadataCache.fromMaximumEntries(128)));var entry=c.seal(ID,body("display"),NOW.plusNanos(1),NOW.plusSeconds(120));
   assertTrue(c.open(ID,entry,NOW).isEmpty());assertTrue(c.open(ID,entry,NOW.plusNanos(1)).isPresent());
   assertTrue(c.open(ID,entry,NOW.plusSeconds(120)).isEmpty());assertTrue(c.open(ID,entry,NOW.plusSeconds(121)).isEmpty());
   assertEquals(NOW.plusNanos(1),c.authenticatedFetchedAt(ID,entry).orElseThrow());
@@ -161,7 +161,7 @@ class OAuthClientMetadataFetchTests {
  }
  @TestFactory @NonNull Stream<@NonNull DynamicTest> authenticatedButMalformedSchemaAndBodyAreStillUnusable() {
   return Stream.of("schema","namespace","key","version","expiresAt","fetchedAt","body","extra","missing","json-array","json-invalid","body-invalid","body-noncanonical","body-too-large","future","overlong-lifetime").map(field->DynamicTest.dynamicTest(field,()->{
-   StateSealer sealer=sealer();var c=codec(sealer,policy(null));var entry=c.seal(ID,body("display"),NOW,NOW.plusSeconds(120));
+   StateSealer sealer=sealer();var c=codec(sealer,policy(InMemoryOAuthClientMetadataCache.fromMaximumEntries(128)));var entry=c.seal(ID,body("display"),NOW,NOW.plusSeconds(120));
    String text=SealedStateAccess.get().unseal(sealer,SealedStateType.AS_CLIENT_METADATA_CACHE,entry.toSealedForm(),context(entry),Clock.fixed(NOW,ZoneOffset.UTC));
    JsonObject original=(JsonObject)com.revetsec.internal.json.JsonCodec.parse(StrictUtf8.encode(text),com.revetsec.internal.json.JsonLimits.protocolDocument(16000));JsonObject.Builder builder=JsonObject.builder();
    for(var item:original.getMembers().entrySet()) {
@@ -181,7 +181,7 @@ class OAuthClientMetadataFetchTests {
   }));
  }
  @Test void authenticatedUnsupportedNumericSchemaAndWrongTypesRemainCacheMisses() throws Exception {
-  StateSealer sealer=sealer();var c=codec(sealer,policy(null));
+  StateSealer sealer=sealer();var c=codec(sealer,policy(InMemoryOAuthClientMetadataCache.fromMaximumEntries(128)));
   var original=c.seal(ID,body("display"),NOW,NOW.plusSeconds(120));
   assertEquals("display",c.open(ID,original,NOW).orElseThrow().document().clientName());
   String text=SealedStateAccess.get().unseal(sealer,SealedStateType.AS_CLIENT_METADATA_CACHE,
@@ -206,9 +206,10 @@ class OAuthClientMetadataFetchTests {
   assertEquals("display",first.reusable(ID,deadline()).clientName());assertEquals("display",second.reusable(ID,deadline()).clientName());assertEquals(1,calls.get());
   assertEquals("display",second.fresh(ID,deadline()).clientName());assertEquals("display",second.fresh(ID,deadline()).clientName());assertEquals(3,calls.get());
  }
- @Test void defaultSelectionIsPerCoordinatorAndConstructionDoesNoCallbacks() {
-  var p=policy(null);StateSealer s=sealer();AtomicInteger calls=new AtomicInteger();var clock=new MutableClock(NOW);
-  var a=fetcher(s,p,clock,(u,d)->{calls.incrementAndGet();return response("display");});var b=fetcher(s,p,clock,(u,d)->{calls.incrementAndGet();return response("display");});
+ @Test void separateExplicitSelectionsAreIndependentAndConstructionDoesNoCallbacks() {
+  var p=policy(InMemoryOAuthClientMetadataCache.fromMaximumEntries(128));StateSealer s=sealer();AtomicInteger calls=new AtomicInteger();var clock=new MutableClock(NOW);
+  var other=policy(InMemoryOAuthClientMetadataCache.fromMaximumEntries(128));
+  var a=fetcher(s,p,clock,(u,d)->{calls.incrementAndGet();return response("display");});var b=fetcher(s,other,clock,(u,d)->{calls.incrementAndGet();return response("display");});
   assertEquals(0,calls.get());assertEquals(0,clock.calls.get());a.reusable(ID,deadline());b.reusable(ID,deadline());assertEquals(2,calls.get());
  }
  @Test void localObservedRollbackDisablesReuseAndWrites() {
@@ -306,26 +307,26 @@ class OAuthClientMetadataFetchTests {
   finally {Thread.interrupted();}
  }
  @Test void originalDeadlineAndInterruptAreCheckedAroundCallbacks() {
-  AtomicInteger calls=new AtomicInteger();var f=fetcher(sealer(),policy(null),Clock.fixed(NOW,ZoneOffset.UTC),(u,d)->{calls.incrementAndGet();return response("fresh");});
+  AtomicInteger calls=new AtomicInteger();var f=fetcher(sealer(),policy(InMemoryOAuthClientMetadataCache.fromMaximumEntries(128)),Clock.fixed(NOW,ZoneOffset.UTC),(u,d)->{calls.incrementAndGet();return response("fresh");});
   infrastructure(()->f.reusable(ID,Deadline.fromNow(Duration.ZERO)));assertEquals(0,calls.get());
   try{Thread.currentThread().interrupt();infrastructure(()->f.fresh(ID,deadline()));assertEquals(0,calls.get());}finally{Thread.interrupted();}
-  var slow=fetcher(sealer(),policy(null),Clock.fixed(NOW,ZoneOffset.UTC),(u,d)->{while(!d.isExpired())Thread.onSpinWait();return response("fresh");});
+  var slow=fetcher(sealer(),policy(InMemoryOAuthClientMetadataCache.fromMaximumEntries(128)),Clock.fixed(NOW,ZoneOffset.UTC),(u,d)->{while(!d.isExpired())Thread.onSpinWait();return response("fresh");});
   infrastructure(()->slow.reusable(ID,Deadline.fromNow(Duration.ofMillis(5))));
  }
  @Test void unsafeOriginAndCurrentRestrictionRejectBeforeAnyProviderOrFetch() {
-  AtomicInteger calls=new AtomicInteger();var f=fetcher(sealer(),policy(null),Clock.fixed(NOW,ZoneOffset.UTC),(u,d)->{calls.incrementAndGet();return response("fresh");});
+  AtomicInteger calls=new AtomicInteger();var f=fetcher(sealer(),policy(InMemoryOAuthClientMetadataCache.fromMaximumEntries(128)),Clock.fixed(NOW,ZoneOffset.UTC),(u,d)->{calls.incrementAndGet();return response("fresh");});
   assertEquals(OAuthServerAdmissionFailure.Reason.INVALID_CLIENT,assertThrows(OAuthServerAdmissionFailure.class,()->f.reusable("https://127.0.0.1/metadata",deadline())).reason());assertEquals(0,calls.get());
  }
  @Test void actualParallelAdmissionIsBoundedAndBypassesDoNotShareFetch() throws Exception {
-  var p=OAuthClientMetadataPolicy.withAddressResolver((h,b)->List.of()).maximumConcurrentFetches(1).build();
+  var p=OAuthClientMetadataPolicy.withAddressResolver((h,b)->List.of()).cache(InMemoryOAuthClientMetadataCache.fromMaximumEntries(128)).maximumConcurrentFetches(1).build();
   CountDownLatch entered=new CountDownLatch(1),release=new CountDownLatch(1);AtomicInteger calls=new AtomicInteger();AtomicReference<Throwable> error=new AtomicReference<>();
   var f=fetcher(sealer(),p,Clock.fixed(NOW,ZoneOffset.UTC),(u,d)->{calls.incrementAndGet();entered.countDown();try{if(!release.await(2,TimeUnit.SECONDS))throw new AssertionError("release");}catch(InterruptedException failure){Thread.currentThread().interrupt();throw new IllegalStateException("interrupted");}return response("fresh");});
   Thread worker=new Thread(()->{try{f.fresh(ID,deadline());}catch(Throwable failure){error.set(failure);}},"cimd-owned-test");worker.start();
-  try{assertTrue(entered.await(2,TimeUnit.SECONDS));infrastructure(()->f.fresh(ID,deadline()));assertEquals(1,calls.get());}finally{release.countDown();worker.join(3000);if(worker.isAlive()){worker.interrupt();worker.join(3000);}}
+  try{assertTrue(entered.await(2,TimeUnit.SECONDS));infrastructure(()->f.fresh(ID,Deadline.fromNow(Duration.ofMillis(50))));assertEquals(1,calls.get());}finally{release.countDown();worker.join(3000);if(worker.isAlive()){worker.interrupt();worker.join(3000);}}
   assertFalse(worker.isAlive());assertNull(error.get());f.fresh(ID,deadline());assertEquals(2,calls.get());
  }
  @Test void anonymousFetchesCannotExhaustTheCredentialTransitionReserve() throws Exception {
-  var p=OAuthClientMetadataPolicy.withAddressResolver((h,b)->List.of()).maximumConcurrentFetches(2).build();
+  var p=OAuthClientMetadataPolicy.withAddressResolver((h,b)->List.of()).cache(InMemoryOAuthClientMetadataCache.fromMaximumEntries(128)).maximumConcurrentFetches(2).build();
   CountDownLatch entered=new CountDownLatch(1),release=new CountDownLatch(1);
   AtomicInteger calls=new AtomicInteger();AtomicReference<Throwable> error=new AtomicReference<>();
   var f=fetcher(sealer(),p,Clock.fixed(NOW,ZoneOffset.UTC),(u,d)->{
@@ -339,14 +340,14 @@ class OAuthClientMetadataFetchTests {
   Thread worker=new Thread(()->{try{f.reusable(ID,deadline());}catch(Throwable failure){error.set(failure);}},"cimd-anonymous-reserve");worker.start();
   try {
    assertTrue(entered.await(2,TimeUnit.SECONDS));
-   infrastructure(()->f.reusable(ID,deadline()));assertEquals(1,calls.get());
+   infrastructure(()->f.reusable(ID,Deadline.fromNow(Duration.ofMillis(50))));assertEquals(1,calls.get());
    assertEquals("fresh",f.fresh(ID,deadline()).clientName());assertEquals(2,calls.get());
   } finally {release.countDown();worker.join(3000);if(worker.isAlive()){worker.interrupt();worker.join(3000);}}
   assertFalse(worker.isAlive());assertNull(error.get());
  }
  @Test void productionSelectionUsesPinnedDriverAndOriginalResolverBudget() {
   AtomicInteger calls=new AtomicInteger();AtomicReference<Duration> budget=new AtomicReference<>();
-  var p=OAuthClientMetadataPolicy.withAddressResolver((host,remaining)->{assertEquals("client.example.com",host);calls.incrementAndGet();budget.set(remaining);try{return List.of(java.net.InetAddress.getByAddress(new byte[]{127,0,0,1}));}catch(java.net.UnknownHostException failure){throw new AssertionError(failure);}}).build();
+  var p=OAuthClientMetadataPolicy.withAddressResolver((host,remaining)->{assertEquals("client.example.com",host);calls.incrementAndGet();budget.set(remaining);try{return List.of(java.net.InetAddress.getByAddress(new byte[]{127,0,0,1}));}catch(java.net.UnknownHostException failure){throw new AssertionError(failure);}}).cache(InMemoryOAuthClientMetadataCache.fromMaximumEntries(128)).build();
   var f=new OAuthClientMetadataFetcher(ISSUER,sealer(),p,OAuthServerIngressLimits.fromDefaults(),false,false,OutboundUriPolicy.defaultInstance(),Clock.fixed(NOW,ZoneOffset.UTC),Duration.ofSeconds(1));
   infrastructure(()->f.fresh(ID,deadline()));assertEquals(1,calls.get());assertTrue(java.util.Objects.requireNonNull(budget.get()).compareTo(Duration.ofSeconds(1))<=0);
   assertThrows(IllegalArgumentException.class,()->new OAuthClientMetadataFetcher(ISSUER,sealer(),p,OAuthServerIngressLimits.fromDefaults(),false,false,OutboundUriPolicy.defaultInstance(),Clock.fixed(NOW,ZoneOffset.UTC),Duration.ZERO));
@@ -361,7 +362,7 @@ class OAuthClientMetadataFetchTests {
  }
  @Test void failedClockAndNullProviderAreFixedFailuresOrBoundedFreshFallback() {
   Clock broken=new Clock(){@Override public @NonNull Instant instant(){throw new IllegalStateException("clock diagnostic");}@Override public @NonNull ZoneId getZone(){return ZoneOffset.UTC;}@Override public @NonNull Clock withZone(@NonNull ZoneId zone){return this;}};
-  infrastructure(()->fetcher(sealer(),policy(null),broken,(u,d)->response("fresh")).reusable(ID,deadline()));
+  infrastructure(()->fetcher(sealer(),policy(InMemoryOAuthClientMetadataCache.fromMaximumEntries(128)),broken,(u,d)->response("fresh")).reusable(ID,deadline()));
   OAuthClientMetadataCache nullCache=new OAuthClientMetadataCache(){
    @SuppressWarnings("NullAway") @Override public @NonNull Optional<@NonNull OAuthClientMetadataCacheEntry> read(@NonNull OAuthClientMetadataCacheKey key,@NonNull Duration budget){return null;}
    @Override public @NonNull Boolean compareAndSet(@NonNull OAuthClientMetadataCacheKey key,@Nullable String version,@Nullable OAuthClientMetadataCacheEntry replacement,@NonNull Duration budget){throw new AssertionError("failed read skips optional write");}
@@ -369,10 +370,10 @@ class OAuthClientMetadataFetchTests {
   assertEquals("fresh",fetcher(sealer(),policy(nullCache),Clock.fixed(NOW,ZoneOffset.UTC),(u,d)->response("fresh")).reusable(ID,deadline()).clientName());
  }
  @Test void originSnapshotNamespaceIsStableAcrossInsertionOrderAndRestrictsCurrentReads() {
-  var p=OAuthClientMetadataPolicy.withAddressResolver((h,b)->List.of()).allowedOrigins(new java.util.LinkedHashSet<>(List.of(URI.create("https://client.example.com"),URI.create("https://other.example.com")))).build();
-  var q=OAuthClientMetadataPolicy.withAddressResolver((h,b)->List.of()).allowedOrigins(new java.util.LinkedHashSet<>(List.of(URI.create("https://other.example.com"),URI.create("https://client.example.com")))).build();
-  assertEquals(codec(sealer(),p).key(ID),codec(sealer(),q).key(ID));assertNotEquals(codec(sealer(),p).key(ID),codec(sealer(),policy(null)).key(ID));
-  var deny=OAuthClientMetadataPolicy.withAddressResolver((h,b)->List.of()).allowedOrigins(java.util.Set.of()).build();
+  var p=OAuthClientMetadataPolicy.withAddressResolver((h,b)->List.of()).cache(InMemoryOAuthClientMetadataCache.fromMaximumEntries(128)).allowedOrigins(new java.util.LinkedHashSet<>(List.of(URI.create("https://client.example.com"),URI.create("https://other.example.com")))).build();
+  var q=OAuthClientMetadataPolicy.withAddressResolver((h,b)->List.of()).cache(InMemoryOAuthClientMetadataCache.fromMaximumEntries(128)).allowedOrigins(new java.util.LinkedHashSet<>(List.of(URI.create("https://other.example.com"),URI.create("https://client.example.com")))).build();
+  assertEquals(codec(sealer(),p).key(ID),codec(sealer(),q).key(ID));assertNotEquals(codec(sealer(),p).key(ID),codec(sealer(),policy(InMemoryOAuthClientMetadataCache.fromMaximumEntries(128))).key(ID));
+  var deny=OAuthClientMetadataPolicy.withAddressResolver((h,b)->List.of()).cache(InMemoryOAuthClientMetadataCache.fromMaximumEntries(128)).allowedOrigins(java.util.Set.of()).build();
   assertEquals(OAuthServerAdmissionFailure.Reason.INVALID_CLIENT,assertThrows(OAuthServerAdmissionFailure.class,()->fetcher(sealer(),deny,Clock.fixed(NOW,ZoneOffset.UTC),(u,d)->{throw new AssertionError("deny before fetch");}).reusable(ID,deadline())).reason());
  }
  @Test void successfulNoStoreCannotRemoveConcurrentWinningReplacement() {

@@ -186,7 +186,10 @@ final class OAuthAuthorizationServerTests {
    if(which.equals("fault"))f.policyFault=new IllegalStateException("sensitive app text");
    Executable complete=()->f.server.completeAuthorizationResult(interaction.getInteractionValue(),BROWSER,decision("subject",Set.of("read","write"),!which.equals("refresh")));
    if(Set.of("subject","scope","resource","extra-resource","refresh","null","fault").contains(which)) {
-    OAuthServerConfigurationException failure=assertThrows(OAuthServerConfigurationException.class,complete);assertEquals(CONFIGURATION_INVALID,failure.getReason());assertNull(failure.getCause());assertEquals(before,f.store.rows);
+    boolean unavailable=Set.of("extra-resource","null","fault").contains(which);
+    OAuthServerException failure=assertThrows(OAuthServerException.class,complete);
+    if(unavailable)assertInstanceOf(OAuthServerTransportException.class,failure);else assertInstanceOf(OAuthServerConfigurationException.class,failure);
+    assertEquals(unavailable?SERVICE_UNAVAILABLE:CONFIGURATION_INVALID,failure.getReason());assertNull(failure.getCause());assertEquals(before,f.store.rows);
    } else {
     OAuthAuthorizationResult result=f.server.completeAuthorizationResult(interaction.getInteractionValue(),BROWSER,decision("subject",Set.of("read","write"),true));
     if(which.equals("narrowed")) {assertInstanceOf(OAuthAuthorizationResult.Completed.class,result);assertEquals(Set.of("read","write"),f.contexts.get(0).getAuthorizedScopesByResource().get(RESOURCE));}
@@ -264,7 +267,7 @@ final class OAuthAuthorizationServerTests {
  @Test void originalBudgetIsSharedAcrossM5AndAuthoritativeCallbacks() {
   this.server=builder().totalDeadline(Duration.ofSeconds(1)).requestTimeout(Duration.ofSeconds(1)).build();JsonObject one=issued();String token=one.find("access_token").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow();
   this.clock.hook=()->{long end=System.nanoTime()+1_050_000_000L;while(System.nanoTime()<end)Thread.onSpinWait();};int reads=this.store.reads;
-  OAuthServerException failure=assertThrows(OAuthServerException.class,()->this.server.validateAccessTokenResult(bearer(token),RESOURCE));assertEquals(reads,this.store.reads);assertTrue(Set.of(STORE_UNAVAILABLE,CONFIGURATION_INVALID).contains(failure.getReason()));
+  OAuthServerException failure=assertThrows(OAuthServerException.class,()->this.server.validateAccessTokenResult(bearer(token),RESOURCE));assertEquals(reads,this.store.reads);assertTrue(Set.of(STORE_UNAVAILABLE,SERVICE_UNAVAILABLE).contains(failure.getReason()));
  }
  @Test void resealPreservesAuthorityRetentionAndUsesCAS() {
   JsonObject one=issued();String token=one.find("access_token").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow();for(OAuthStoreKey key:List.copyOf(this.store.rows.keySet())) {OAuthStoreEntry old=requireNonNull(this.store.rows.get(key));assertEquals(OAuthStoreCommitStatus.COMMITTED,this.server.resealStoreEntry(key).getStatus());OAuthStoreEntry next=requireNonNull(this.store.rows.get(key));assertNotEquals(old.getVersion(),next.getVersion());assertEquals(old.getRetainUntil(),next.getRetainUntil());}
@@ -414,12 +417,12 @@ final class OAuthAuthorizationServerTests {
   OAuthAuthorizationServer first=b.build();assertSame(b,b.tokenEndpoint(URI.create(ISSUER+"/different")));assertEquals(URI.create(ISSUER+"/token"),first.getTokenEndpoint());assertEquals(URI.create(ISSUER+"/different"),b.build().getTokenEndpoint());
  }
  @Test void cimdOptInBuildDoesNotResolveAndPublicMetadataAdvertisesOnlyEnabledSupport() {
-  AtomicInteger lookups=new AtomicInteger();OAuthClientMetadataPolicy policy=OAuthClientMetadataPolicy.fromAddressResolver((host,budget)->{lookups.incrementAndGet();return List.of(InetAddress.getLoopbackAddress());});
+  AtomicInteger lookups=new AtomicInteger();OAuthClientMetadataPolicy policy=OAuthClientMetadataPolicy.fromAddressResolverAndCache((host,budget)->{lookups.incrementAndGet();return List.of(InetAddress.getLoopbackAddress());}, InMemoryOAuthClientMetadataCache.fromMaximumEntries(128));
   this.server=builder().clientMetadataPolicy(policy).outboundUriPolicy(null).clientRepository((id,b)->Optional.empty()).build();assertEquals(0,lookups.get());assertTrue(json(this.server.metadataResponse("GET")).find("client_id_metadata_document_supported").map(value -> ((com.revetsec.json.JsonBoolean) value).getValue()).orElseThrow());assertEquals(0,lookups.get());
   this.client=client("https://client.example.com/metadata");OAuthServerTransportException failure=assertThrows(OAuthServerTransportException.class,()->begin());assertEquals(CLIENT_METADATA_UNAVAILABLE,failure.getReason());assertFalse(failure.isTransient());assertEquals(1,lookups.get());
  }
  @Test void enabledClientMetadataConstructionRequiresAcknowledgmentOnUnpatchedRuntime() {
-  OAuthClientMetadataPolicy enabled=OAuthClientMetadataPolicy.fromAddressResolver((host,budget)->List.of());
+  OAuthClientMetadataPolicy enabled=OAuthClientMetadataPolicy.fromAddressResolverAndCache((host,budget)->List.of(), InMemoryOAuthClientMetadataCache.fromMaximumEntries(128));
   Runtime.Version old=Runtime.Version.parse("17.0.2");
   assertNotNull(constructForRuntime(builder(),old));
   assertThrows(IllegalStateException.class,()->constructForRuntime(builder().clientMetadataPolicy(enabled),old));
@@ -430,7 +433,7 @@ final class OAuthAuthorizationServerTests {
   return Stream.of(false,true).map(fatal->test("policy"+fatal,()->{
    var f=new OAuthAuthorizationServerTests();f.initialized();var interaction=f.begin();Throwable error=fatal?new TestFatal():new InterruptedException("secret");f.policyFault=error;
    Executable operation=()->f.server.completeAuthorizationResult(interaction.getInteractionValue(),BROWSER,decision("subject",Set.of("read"),false));
-   try{if(fatal)assertSame(error,assertThrows(TestFatal.class,operation));else{assertThrows(OAuthServerConfigurationException.class,operation);assertTrue(Thread.currentThread().isInterrupted());}}finally{Thread.interrupted();}
+   try{if(fatal)assertSame(error,assertThrows(TestFatal.class,operation));else{assertThrows(OAuthServerTransportException.class,operation);assertTrue(Thread.currentThread().isInterrupted());}}finally{Thread.interrupted();}
   }));
  }
  @Test void publicObserverPairsAreOutsideStoreCommitAndFixedKindsOnly() {
@@ -530,10 +533,10 @@ final class OAuthAuthorizationServerTests {
   initialized();
   OAuthServerInteraction interaction=begin();
   this.policyFault=new IllegalStateException("fixture");
-  assertThrows(OAuthServerConfigurationException.class,()->this.server.completeAuthorizationResult(
+  assertThrows(OAuthServerTransportException.class,()->this.server.completeAuthorizationResult(
    interaction.getInteractionValue(),BROWSER,decision("subject",Set.of("read"),false)));
   this.policyFault=null;
-  assertEquals(List.of("AUTHORIZATION:CONFIGURATION_INVALID"),failures);
+  assertEquals(List.of("AUTHORIZATION:SERVICE_UNAVAILABLE"),failures);
 
   String code=code();
   OAuthIssuerSigningKey opaque=OAuthIssuerSigningKey.fromKeyPair("key",new OpaquePrivate(),KEY.getPublicKey());
@@ -541,7 +544,7 @@ final class OAuthAuthorizationServerTests {
    .generation("g1").publishedAt(NOW.minusSeconds(120)).build();
   this.server=builder().signingKeys(OAuthIssuerKeyProvider.fromSnapshot(snapshot)).observer(observer).build();
   assertThrows(OAuthServerSigningException.class,()->redeem(code));
-  assertEquals(List.of("AUTHORIZATION:CONFIGURATION_INVALID","TOKEN:SIGNING_FAILED"),failures);
+  assertEquals(List.of("AUTHORIZATION:SERVICE_UNAVAILABLE","TOKEN:SIGNING_FAILED"),failures);
  }
  @Test void localM5BridgeNeverResetsAnExpiredParentBudget() {
   var snapshot=keys();StaticJwksSource source=StaticJwksSource.fromJwks(assertInstanceOf(JwksParseResult.Succeeded.class, Jwks.fromJsonResult(OAuthIssuerPublicKeys.jwks(snapshot.getVerificationKeys()).toJson())).getJwks());
@@ -617,7 +620,7 @@ final class OAuthAuthorizationServerTests {
  }
  @Test void warmUpExhaustionAndKeyFaultsAreInfrastructureAndMalformedContinuationsAreResults() {
   initialized();this.store.conflicts=3;assertEquals(STORE_UNAVAILABLE,assertThrows(OAuthServerStoreException.class,this.server::warmUp).getReason());this.store.conflicts=0;
-  this.server=builder().signingKeys(budget->{throw new IllegalStateException("key provider sensitive");}).build();assertEquals(CONFIGURATION_INVALID,assertThrows(OAuthServerConfigurationException.class,this.server::warmUp).getReason());
+  this.server=builder().signingKeys(budget->{throw new IllegalStateException("key provider sensitive");}).build();assertEquals(SERVICE_UNAVAILABLE,assertThrows(OAuthServerTransportException.class,this.server::warmUp).getReason());
   assertEquals(MALFORMED_REQUEST,assertInstanceOf(OAuthAuthorizationResult.Rejected.class,this.server.completeAuthorizationResult("bad",BROWSER,OAuthAuthorizationDecision.deniedInstance())).getReason());
  }
  @TestFactory @NonNull Stream<@NonNull DynamicTest> dynamicOwnerRevocationRequiresFreshCimdSourceBinding() {
@@ -628,7 +631,7 @@ final class OAuthAuthorizationServerTests {
    JsonObject document=JsonObject.builder().put("client_id",f.client.getClientId()).put("client_name","reviewed client").put("redirect_uris",com.revetsec.json.JsonArray.fromElements(List.of(com.revetsec.json.JsonString.fromValue(REDIRECT))))
     .put("token_endpoint_auth_method","none").put("grant_types",com.revetsec.json.JsonArray.fromElements(List.of(com.revetsec.json.JsonString.fromValue("authorization_code"),com.revetsec.json.JsonString.fromValue("refresh_token"))))
     .put("response_types",com.revetsec.json.JsonArray.fromElements(List.of(com.revetsec.json.JsonString.fromValue("code")))).build();
-   OAuthClientMetadataPolicy policy=OAuthClientMetadataPolicy.fromAddressResolver((host,budget)->List.of(InetAddress.getLoopbackAddress()));
+   OAuthClientMetadataPolicy policy=OAuthClientMetadataPolicy.fromAddressResolverAndCache((host,budget)->List.of(InetAddress.getLoopbackAddress()), InMemoryOAuthClientMetadataCache.fromMaximumEntries(128));
    OAuthClientMetadataFetcher fetcher=new OAuthClientMetadataFetcher(ISSUER,sealer(),policy,limits,false,false,OutboundUriPolicy.defaultInstance(),f.clock,(uri,deadline)->{
     fetches.incrementAndGet();return new com.revetsec.internal.http.RawResponse(200,java.net.http.HttpHeaders.of(Map.of("Cache-Control",List.of("max-age=300")),(a,b)->true),JsonCodec.toUtf8Bytes(document),null,false,Duration.ZERO);
    });

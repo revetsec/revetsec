@@ -33,6 +33,9 @@ import java.util.Set;
  * literal loopbacks 127.0.0.1/[::1] or localhost; their use still requires the server's separate explicit opt-ins.
  * Introspection authority is independent of authorization-code scopes and requires confidential Basic verification.
  * Carrier bounds admit the server's maximum configurable capacities; the server applies its configured limits.
+ * Security-field or configuration-version changes reject old interaction/code/refresh bindings but do not
+ * themselves revoke already-issued access tokens. Use trusted grant/subject/issuer management revocation
+ * when permanent invalidation is required; restoring an earlier binding can otherwise restore its use.
  * Construction performs no callback or I/O.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
@@ -222,6 +225,9 @@ public final class OAuthServerClientRegistration {
 		}
 		/**
 		 * Sets the required nonempty application configuration version, at most 4096 UTF-16 code units; null clears it.
+		 * Change this value when secret-verifier or key semantics change; callbacks are not fingerprinted.
+		 * Version equality binds existing interactions and grants. It is not a monotonic revocation epoch;
+		 * rolling it back can restore old bindings unless management revocation also invalidated them.
 		 * @param value the replacement value, or null to reset
 		 * @return this builder
 		 * @since 1.0.0

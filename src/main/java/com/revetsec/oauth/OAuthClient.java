@@ -87,6 +87,9 @@ public final class OAuthClient {
 		@Override public @NonNull OAuthException endpointExchangeFailure(com.revetsec.internal.http.@NonNull HttpExchangeException failure) {
 			return OAuthHttpErrors.fromExchange(failure);
 		}
+		@Override public @NonNull OAuthException copyEndpointFailure(@NonNull OAuthException failure) {
+			return OAuthHttpErrors.copyForCaller(failure);
+		}
 		@Override public @NonNull OAuthException endpointStatusFailure(int status, @Nullable Duration retryAfter) {
 			return OAuthErrorResponseException.fromResponse(status, "", Optional.ofNullable(retryAfter));
 		}

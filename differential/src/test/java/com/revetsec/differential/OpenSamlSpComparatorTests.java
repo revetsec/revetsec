@@ -993,7 +993,7 @@ final class OpenSamlSpComparatorTests {
             @NonNull String signingKey, boolean sha1, boolean cbc) throws Exception {
         SamlServiceProvider provider = SamlServiceProvider.withEntityId(SP)
                 .assertionConsumerServiceUrl(URI.create(ACS))
-                .replayCache(InMemorySamlReplayCache.withLimit(
+                .replayCache(InMemorySamlReplayCache.fromLimit(
                         Clock.fixed(NOW, ZoneOffset.UTC), 16))
                 .decryptionCredentials(List.of(SamlCredential.fromPem(
                         Files.readString(FIXTURES.resolve("keys/sp-encryption-rsa-2048-key.pem")),
@@ -1023,7 +1023,7 @@ final class OpenSamlSpComparatorTests {
                 Files.readString(FIXTURES.resolve("saml-independent/keys/sp-rsa-2048.crt")));
         SamlServiceProvider provider = SamlServiceProvider.withEntityId(SP)
                 .assertionConsumerServiceUrl(URI.create(ACS))
-                .replayCache(InMemorySamlReplayCache.withLimit(Clock.fixed(NOW, ZoneOffset.UTC), 16))
+                .replayCache(InMemorySamlReplayCache.fromLimit(Clock.fixed(NOW, ZoneOffset.UTC), 16))
                 .decryptionCredentials(List.of(decryption))
                 .clock(Clock.fixed(NOW, ZoneOffset.UTC)).build();
         EnumSet<SamlCompatibilityMode> compatibility = EnumSet.of(

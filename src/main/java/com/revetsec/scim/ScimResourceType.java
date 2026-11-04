@@ -132,7 +132,9 @@ public final class ScimResourceType {
     }
 
     /**
-     * Returns the standard User registration with optional Enterprise extension and PATCH 200.
+     * Returns the shared standard core User registration without schema extensions and with PATCH 200.
+     * Register the Enterprise User schema explicitly through {@link Builder#schemaExtensions(List)}
+     * when the application supports that extension. This registration does not enable PATCH.
      * @return the shared User resource type
      * @since 1.0.0
      */
@@ -242,8 +244,7 @@ public final class ScimResourceType {
 
     private static final class Defaults {
         private static final @NonNull ScimResourceType USER = withName("User").id("User").endpoint("/Users")
-                .schema(ScimSchema.userInstance()).schemaExtensions(List.of(
-                        ScimSchemaExtension.fromSchema(ScimSchema.enterpriseUserInstance(), false))).build();
+                .schema(ScimSchema.userInstance()).build();
         private static final @NonNull ScimResourceType GROUP = withName("Group").id("Group").endpoint("/Groups")
                 .schema(ScimSchema.groupInstance()).patchResponseNoContent(true).build();
         private Defaults() {}

@@ -96,7 +96,7 @@ public interface SamlObserver {
     @Immutable
     enum Outcome {
         /** A checked identity, request, response or redirect was produced. */ SUCCEEDED,
-        /** A request-bound, non-success IdP status was received. */ STATUS_RECEIVED,
+        /** A request-bound IdP status without complete success, including partial logout, was received. */ STATUS_RECEIVED,
         /** Revetsec rejected input or configuration. */ REJECTED,
         /** Required local work or infrastructure was unavailable. */ UNAVAILABLE,
         /** A required state transition may have occurred. */ INDETERMINATE,

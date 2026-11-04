@@ -25,7 +25,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /** Public projection membership agrees with structural path equality without granting authorization. */
 class ScimApiFreezeSelectionTests {
-    private static final @NonNull ScimResourceType USER = ScimResourceType.userInstance();
+    private static final @NonNull ScimResourceType USER = ScimTestResourceTypes.userWithEnterpriseInstance();
     private static final @NonNull String ENTERPRISE = ScimSchema.enterpriseUserInstance().getId();
     private static final @NonNull String UPPER_ENTERPRISE = "URN:IETF:PARAMS:SCIM:SCHEMAS:EXTENSION:ENTERPRISE:2.0:USER";
 

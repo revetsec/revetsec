@@ -26,17 +26,17 @@ final class CimdFuzzModel {
 	private static final @NonNull Instant NOW = Instant.parse("2026-10-07T12:00:00Z");
 	private static final @NonNull OAuthServerIngressLimits LIMITS = OAuthServerIngressLimits.fromDefaults();
 	private static final @NonNull OAuthClientMetadataPolicy POLICY = OAuthClientMetadataPolicy
-		.withAddressResolver((host, budget) -> List.of()).build();
+		.fromAddressResolverAndCache((host, budget) -> List.of(), InMemoryOAuthClientMetadataCache.fromMaximumEntries(128));
 	private static final @NonNull StateSealer SEALER = sealer();
 	private CimdFuzzModel() { }
 
 	static void run(byte @NonNull [] input) throws Exception {
-		int documentMode = M6FuzzOracle.choice(input, 0, 11);
+		int documentMode = M6FuzzOracle.choice(input, 0, 14);
 		int cacheMode = M6FuzzOracle.choice(input, 1, 7);
 		byte[] tail = Arrays.copyOfRange(input, Math.min(4, input.length), Math.min(input.length, 1028));
 		String display = tail.length == 0 ? "client" : Base64.getUrlEncoder().withoutPadding().encodeToString(tail);
 		byte[] body = document(documentMode, display).getBytes(StandardCharsets.UTF_8);
-		boolean expected = documentMode == 0 || documentMode == 9 || documentMode == 10;
+		boolean expected = documentMode == 0 || documentMode == 9 || documentMode == 10 || documentMode == 11 || documentMode == 12;
 		OAuthClientMetadataDocument parsed = null;
 		try { parsed = OAuthClientMetadataDocument.parse(CLIENT, body, POLICY, LIMITS, false, false); }
 		catch (OAuthServerAdmissionFailure failure) { assertFalse(expected, "enumerated invalid-client document"); }
@@ -45,7 +45,7 @@ final class CimdFuzzModel {
 			assertEquals(CLIENT, parsed.clientId());
 			assertEquals(display, parsed.clientName());
 			assertEquals(List.of(java.net.URI.create("https://client.example.com/callback")), parsed.redirectUris());
-			assertTrue(parsed.refreshTokenPermitted());
+			assertEquals(documentMode != 12, parsed.refreshTokenPermitted());
 			cache(body, cacheMode, parsed.fingerprint());
 		} else assertNull(parsed);
 		CimdTransportFuzzOracle.run(input);
@@ -54,7 +54,12 @@ final class CimdFuzzModel {
 	private static @NonNull String document(int mode, @NonNull String display) {
 		JsonObject.Builder builder = JsonObject.builder().put("client_id", mode == 1 ? CLIENT + "/other" : CLIENT)
 			.put("client_name", display).put("token_endpoint_auth_method", "none")
-			.put("grant_types", JsonArray.fromElements(strings("authorization_code", "refresh_token")))
+			.put("grant_types", JsonArray.fromElements(switch (mode) {
+				case 11 -> strings("authorization_code", "refresh_token", "urn:ietf:params:oauth:grant-type:device_code");
+				case 12 -> strings("authorization_code", "urn:ietf:params:oauth:grant-type:device_code");
+				case 13 -> strings("refresh_token", "urn:ietf:params:oauth:grant-type:device_code");
+				default -> strings("authorization_code", "refresh_token");
+			}))
 			.put("response_types", JsonArray.fromElements(strings(mode == 4 ? "token" : "code")))
 			.put("redirect_uris", JsonArray.fromElements(mode == 6 ? List.of() : strings(
 				mode == 5 ? "https://client.example.com/cb#fragment" : "https://client.example.com/callback")));

@@ -31,6 +31,8 @@ import java.time.Duration;
  * admission and drain every outstanding permit before reopening traffic. Implementations must
  * honor the remaining positive caller-thread budget and preserve interrupt status. This gate
  * never creates a verification proof.
+ * Reopening traffic means resuming deployment admission after recovery checks; it does not
+ * reenable an account whose permanent WebAuthn fence has been disabled.
  *
  * @since 1.0.0
  */

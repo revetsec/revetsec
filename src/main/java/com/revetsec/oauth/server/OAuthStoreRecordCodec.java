@@ -85,6 +85,11 @@ final class OAuthStoreRecordCodec {
    @NonNull Instant floor, @NonNull String payloadJson) {
   return admittedCodec().seal(key, retainUntil, floor, payloadJson);
  }
+ /** Pure new-interaction admission; includes its later completion footprint and performs no sealing or I/O. */
+ void requireInteractionCapacity(@NonNull OAuthStoreKey key, @NonNull Instant retainUntil,
+   @NonNull OAuthAuthorizationRecord record) {
+  admittedCodec().requireInteractionCapacity(key, retainUntil, record);
+ }
  /** Normal admission opens only schema two; it supplies no worker-selected time fallback. */
  OAuthStoreRecordCodecV2.@NonNull Opened openAdmitted(@NonNull OAuthStoreEntry entry, @NonNull Clock authorityClock) {
   return admittedCodec().open(entry, authorityClock);

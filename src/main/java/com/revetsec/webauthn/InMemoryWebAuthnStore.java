@@ -90,7 +90,7 @@ public final class InMemoryWebAuthnStore implements WebAuthnStore {
 	 * @return a new empty process-local store
 	 * @since 1.0.0
 	 */
-	public static @NonNull InMemoryWebAuthnStore withLimits(int maximumEntries, long maximumSealedBytes) {
+	public static @NonNull InMemoryWebAuthnStore fromLimits(int maximumEntries, long maximumSealedBytes) {
 		if (maximumEntries < 1 || maximumEntries > MAXIMUM_ENTRIES
 				|| maximumSealedBytes < 1 || maximumSealedBytes > MAXIMUM_BYTES)
 			throw new IllegalArgumentException("Invalid WebAuthn store limits");

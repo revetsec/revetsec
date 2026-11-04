@@ -63,21 +63,23 @@ The source handles every defined outcome and rejects future variants by default.
 
 After restore, provision a new never-reused epoch with an empty namespace, invalidate old sessions/approvals and require approved reenrollment. Preserve the application's MFA requirement outside the restored factor state: empty factor state must not allow a protected account to log in with only a password.
 
-## Compile and check
+## Build and test with Maven
 
-Build the current core JAR first. The isolated builder verifies the exact Soklet 4 artifact checksum from `examples/pins.json`, compiles all sources with warnings as errors, audits every source-declared reference signature for explicit JSpecify annotations, and runs boundary/lifecycle checks. It writes only to a new private output directory. The runtime classpath contains core and Soklet; annotation artifacts are compile-time only.
+Install matching core and Soklet dependencies using the
+[parent instructions](../README.md#build-with-maven), then run from the core
+repository root:
 
 ```sh
-python3 examples/totp-soklet/build.py \
-  --work /absolute/new/private-totp-build \
-  --java-home /absolute/jdk21-or-newer \
-  --core-jar /absolute/revetsec/target/revetsec-1.0.0-SNAPSHOT.jar \
-  --soklet-jar /absolute/soklet-4.0.0.jar \
-  --jspecify-jar /absolute/jspecify-1.0.1.jar \
-  --jsr305-jar /absolute/jsr305-3.0.2.jar \
-  --socket-check
+mvn -B -ntp -f examples/totp-soklet/pom.xml verify
 ```
+
+Maven compiles the sources with warnings as errors and runs boundary, lifecycle
+and loopback socket checks through JUnit. Core and Soklet are runtime
+dependencies; annotations are provided and JUnit is test-only. Python is not
+required. This integration deliberately has no standalone demo login service:
+your Java application calls `TotpApplication.run(...)` with the authenticator,
+application-security implementation and listener port described above.
 
 Authorized lifecycle checks use the real authenticator and an independent scripted test authority/store, with an independent JCA OTP generator and explicit test-only application grants. Fixture time progression explicitly advances worker and authority controls; it does not supply a worker clock to a production backend. They cover enrollment/confirmation, status, TOTP login/replay rejection, recovery consumption, rotation and old-batch rejection, replacement/cancellation, replacement confirmation and removal. Completion hooks check proof account, generation, method, operation binding and epoch while the same gate retains its outer permit. Unconfirmed application completion releases neither recovery plaintext nor a session cookie.
 
-Boundary checks prove denied routes never reach credential storage, closed/wrong/stale recovery admission fails closed, permits close, and default marshaling remains installed. Lifecycle checks also advance the monotonic deadline during permit release and verify that an enrollment secret and a login cookie are withheld. The optional loopback socket check reaches all routes and verifies HEAD suppresses JSON bytes. It requires local socket permission. Core's TOTP tests separately cover cryptography, replay, recovery consumption, atomic races, uncertain acknowledgements and sealing/restore boundaries. This example does not qualify a production database, distributed recovery controller or trusted HTTPS edge.
+Boundary checks prove denied routes never reach credential storage, closed/wrong/stale recovery admission fails closed, permits close, and default marshaling remains installed. Lifecycle checks also advance the monotonic deadline during permit release and verify that an enrollment secret and a login cookie are withheld. The loopback socket check reaches all routes and verifies HEAD suppresses JSON bytes. It requires local socket permission. Core's TOTP tests separately cover cryptography, replay, recovery consumption, atomic races, uncertain acknowledgements and sealing/restore boundaries. This example does not qualify a production database, distributed recovery controller or trusted HTTPS edge.

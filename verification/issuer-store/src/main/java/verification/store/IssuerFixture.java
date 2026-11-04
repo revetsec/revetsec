@@ -62,6 +62,7 @@ final class IssuerFixture {
                 id.equals("client")?client:id.equals("resource")?resource:null)).store(store)
             .signingKeys(OAuthIssuerKeyProvider.fromSnapshot(keys)).resources(resources)
             .stateSealer(sealer(secrets,sealingMode))
+            .maximumStoreRecordBytes(16384)
             .grantPolicy((context,budget)->decision()).refreshTokensEnabled(true).clock(Clock.fixed(now,ZoneOffset.UTC))
             .clockSkew(java.time.Duration.ZERO) // Credential skew only; shared authority has its fixed worker-health profile.
             .totalDeadline(java.time.Duration.ofSeconds(30)).build();
@@ -70,11 +71,11 @@ final class IssuerFixture {
         SealingKey old=SealingKey.fromBase64("fixture",Files.readString(secrets.resolve("sealer.txt")).strip());
         SealingKey next=SealingKey.fromBase64("fixture-next",Files.readString(secrets.resolve("sealer-next.txt")).strip());
         return switch(mode) {
-            case "old"->StateSealer.withActiveKey(old).build();
-            case "old-with-next"->StateSealer.withActiveKey(old).verificationKeys(List.of(next)).build();
-            case "next-with-old"->StateSealer.withActiveKey(next).verificationKeys(List.of(old)).build();
-            case "next-only"->StateSealer.withActiveKey(next).build();
-            case "lost"->StateSealer.withActiveKey(SealingKey.fromBase64("fixture",Files.readString(secrets.resolve("sealer-next.txt")).strip())).build();
+            case "old"->StateSealer.withActiveKey(old).maximumSealedLength(16384).build();
+            case "old-with-next"->StateSealer.withActiveKey(old).verificationKeys(List.of(next)).maximumSealedLength(16384).build();
+            case "next-with-old"->StateSealer.withActiveKey(next).verificationKeys(List.of(old)).maximumSealedLength(16384).build();
+            case "next-only"->StateSealer.withActiveKey(next).maximumSealedLength(16384).build();
+            case "lost"->StateSealer.withActiveKey(SealingKey.fromBase64("fixture",Files.readString(secrets.resolve("sealer-next.txt")).strip())).maximumSealedLength(16384).build();
             default->throw new IllegalArgumentException("Unknown sealing profile");
         };
     }

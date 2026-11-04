@@ -21,6 +21,8 @@ import com.revetsec.json.JsonObject;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 import java.util.Map;
+import java.util.Optional;
+import java.util.function.BooleanSupplier;
 import java.util.Set;
 import static java.util.Objects.requireNonNull;
 import static com.revetsec.oauth.server.OAuthServerAdmissionFailure.Reason.INVALID_CLIENT;
@@ -43,29 +45,39 @@ final class OAuthServerClientSelection {
  boolean metadataEnabled() { return this.metadata != null; }
  @NonNull Selected authorization(@NonNull String id,
    @NonNull Map<@NonNull String, @NonNull Set<@NonNull String>> resources, @NonNull Deadline deadline) {
-  return select(id, resources, deadline, false);
+  return select(id, resources, deadline, false, () -> true).orElseThrow();
  }
  @NonNull Selected authenticate(@NonNull OAuthServerRequest request,
    @NonNull Map<@NonNull String, @NonNull Set<@NonNull String>> resources, @NonNull Deadline deadline) {
+  return authenticate(request, resources, deadline, () -> true).orElseThrow();
+ }
+ @NonNull Optional<@NonNull Selected> authenticate(@NonNull OAuthServerRequest request,
+   @NonNull Map<@NonNull String, @NonNull Set<@NonNull String>> resources, @NonNull Deadline deadline,
+   @NonNull BooleanSupplier admission) {
   if (request.endpoint() == OAuthServerRequest.Endpoint.AUTHORIZATION) throw OAuthServerRequest.invalid();
   // Basic is registry-only. A missing verifier/unknown registration never becomes public metadata authentication.
-  if (request.authorization() != null) return registered(OAuthServerClientAdmission.authenticate(request, this.repository, deadline, this.limits));
+  if (request.authorization() != null) return Optional.of(registered(OAuthServerClientAdmission.authenticate(request, this.repository, deadline, this.limits)));
   String id = request.value("client_id");
   if (id == null || id.isEmpty() || request.endpoint() == OAuthServerRequest.Endpoint.INTROSPECTION)
    throw OAuthServerClientAdmission.failure(INVALID_CLIENT);
-  Selected selected = select(id, resources, deadline, true);
-  if (selected.client().getAuthentication().isConfidential()) throw OAuthServerClientAdmission.failure(INVALID_CLIENT);
+  Optional<Selected> selected = select(id, resources, deadline, true, admission);
+  if (selected.isPresent() && selected.orElseThrow().client().getAuthentication().isConfidential()) throw OAuthServerClientAdmission.failure(INVALID_CLIENT);
   return selected;
  }
- private @NonNull Selected select(@NonNull String id,
-   @NonNull Map<@NonNull String, @NonNull Set<@NonNull String>> resources, @NonNull Deadline deadline, boolean fresh) {
+ private @NonNull Optional<@NonNull Selected> select(@NonNull String id,
+   @NonNull Map<@NonNull String, @NonNull Set<@NonNull String>> resources, @NonNull Deadline deadline, boolean fresh, @NonNull BooleanSupplier admission) {
   Map<String, Set<String>> ceiling = OAuthServerAuthorizationAdmission.checkedServerResources(resources, this.limits);
   var registered = OAuthServerClientAdmission.findRegistered(id, this.repository, deadline, this.limits);
-  if (registered.isPresent()) return registered(registered.orElseThrow());
+  if (registered.isPresent()) return Optional.of(registered(registered.orElseThrow()));
   OAuthClientMetadataFetcher fetcher = this.metadata;
   if (fetcher == null) throw OAuthServerClientAdmission.failure(INVALID_CLIENT);
   OAuthClientMetadataDocument document;
-  try {document = fresh ? fetcher.fresh(id, deadline) : fetcher.reusable(id, deadline);}
+  try {
+   Optional<OAuthClientMetadataDocument> found = fresh ? fetcher.freshIfEligible(id, deadline, admission)
+     : Optional.of(fetcher.reusable(id, deadline));
+   if (found.isEmpty()) return Optional.empty();
+   document = found.orElseThrow();
+  }
   catch(OAuthServerAdmissionFailure failure) {
    if(this.publicBoundary && failure.reason()==OAuthServerAdmissionFailure.Reason.INFRASTRUCTURE) throw OAuthServerTransportException.fromReason(OAuthServerException.Reason.CLIENT_METADATA_UNAVAILABLE,false);
    throw failure;
@@ -77,7 +89,7 @@ final class OAuthServerClientSelection {
    .allowedScopesByResource(ceiling).refreshTokenPermitted(document.refreshTokenPermitted()).build();
   String fingerprint = OAuthAuthorizationRecord.digest(JsonObject.builder().put("source", "CIMD")
    .put("security", document.fingerprint()).build().toJson());
-  return new Selected(client, fingerprint);
+  return Optional.of(new Selected(client, fingerprint));
  }
  static @NonNull Selected registered(@NonNull OAuthServerClientRegistration client) {
   return new Selected(requireNonNull(client), OAuthAuthorizationRecord.clientFingerprint(client));

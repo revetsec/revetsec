@@ -20,6 +20,7 @@ import org.jspecify.annotations.NonNull;
 
 import org.junit.jupiter.api.*;
 import static org.junit.jupiter.api.Assertions.*;
+import static com.revetsec.testing.OAuthFailureAssertions.assertIndependentFailure;
 import com.revetsec.testing.*;
 import com.revetsec.jose.*;
 import com.revetsec.json.*;
@@ -63,7 +64,7 @@ final class ResourceServerMetadataCacheTests {
 			clock.advance(Duration.ofSeconds(61)); assertEquals(OAuthException.Reason.ATTEMPT_LIMIT, assertThrows(OAuthTransportException.class, () -> cache.get(deadline())).getReason());
 			nanos.addAndGet(Duration.ofSeconds(31).toNanos()); server.script(PATH,TestHttpsServer.Script.fromResponse(TestHttpsServer.Response.fromRetryAfter(503,"9999999999999999999999")));
 			OAuthException failure = assertThrows(OAuthException.class, () -> cache.get(deadline()));
-			assertSame(failure,assertThrows(OAuthException.class, () -> cache.get(deadline())));
+			assertIndependentFailure(failure,assertThrows(OAuthException.class, () -> cache.get(deadline())));
 			assertEquals(3, server.getHitCount(PATH));
 		}
 	}
@@ -73,10 +74,10 @@ final class ResourceServerMetadataCacheTests {
 			RewindableClock clock = RewindableClock.fromInstant(NOW); AtomicLong nanos = new AtomicLong();
 			server.script(PATH,TestHttpsServer.Script.fromResponse(TestHttpsServer.Response.fromRetryAfter(503,"99999")));
 			ResourceServerMetadataCache<ResourceServerMetadata> cache = cache(server,clock,nanos); OAuthException first = assertThrows(OAuthException.class, () -> cache.get(deadline()));
-			nanos.addAndGet(Duration.ofMinutes(9).toNanos()); assertSame(first,assertThrows(OAuthException.class, () -> cache.get(deadline())));
+			nanos.addAndGet(Duration.ofMinutes(9).toNanos()); assertIndependentFailure(first,assertThrows(OAuthException.class, () -> cache.get(deadline())));
 			nanos.addAndGet(Duration.ofMinutes(1).toNanos()); server.script(PATH,TestHttpsServer.Script.fromResponse(TestHttpsServer.Response.fromStatus(503)));
 			OAuthException second = assertThrows(OAuthException.class, () -> cache.get(deadline()));
-			nanos.addAndGet(Duration.ofSeconds(59).toNanos()); assertSame(second,assertThrows(OAuthException.class, () -> cache.get(deadline())));
+			nanos.addAndGet(Duration.ofSeconds(59).toNanos()); assertIndependentFailure(second,assertThrows(OAuthException.class, () -> cache.get(deadline())));
 			nanos.addAndGet(Duration.ofSeconds(1).toNanos()); assertThrows(OAuthException.class, () -> cache.get(deadline())); assertEquals(3,server.getHitCount(PATH));
 		}
 	}
@@ -145,7 +146,7 @@ final class ResourceServerMetadataCacheTests {
         try(TestHttpsServer server=TestHttpsServer.start()) {
             script(server,fields(server),"max-age=60");AtomicLong nanos=new AtomicLong();AtomicInteger calls=new AtomicInteger();
             ResourceServerMetadataCache<ResourceServerMetadata> cache=new ResourceServerMetadataCache<>(URI.create(issuer(server)),ResourceServerMetadata.Role.JWT,HttpExchange.fromHttpClient(TestTls.httpClient(),OutboundUriPolicy.defaultInstance(),false),OutboundUriPolicy.defaultInstance(),false,Duration.ofSeconds(10),CLOCK,AccessTokenObserver.disabledInstance(),Duration.ofSeconds(30),Duration.ofSeconds(30),Duration.ofSeconds(60),Duration.ofSeconds(30),m->{if(calls.getAndIncrement()==0)throw new IllegalStateException("TEST-ONLY-secret");return m;},nanos::get);
-            OAuthException failure=assertThrows(OAuthTransportException.class,()->cache.get(deadline()));redacted(failure,"TEST-ONLY-secret");assertNull(failure.getCause());assertSame(failure,assertThrows(OAuthTransportException.class,()->cache.get(deadline())));assertEquals(1,server.getHitCount(PATH));nanos.set(Duration.ofSeconds(31).toNanos());assertNotNull(cache.get(deadline()));assertEquals(2,server.getHitCount(PATH));
+            OAuthException failure=assertThrows(OAuthTransportException.class,()->cache.get(deadline()));redacted(failure,"TEST-ONLY-secret");assertNull(failure.getCause());assertIndependentFailure(failure,assertThrows(OAuthTransportException.class,()->cache.get(deadline())));assertEquals(1,server.getHitCount(PATH));nanos.set(Duration.ofSeconds(31).toNanos());assertNotNull(cache.get(deadline()));assertEquals(2,server.getHitCount(PATH));
         }
     }
 

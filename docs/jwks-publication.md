@@ -27,6 +27,7 @@ PublishedJwk key = PublishedJwk.withPublicKey(chain.get(0).getPublicKey())
     .certificateChain(chain)
     .build();
 
+// Share this immutable publisher across JWKS requests.
 JwksPublisher publisher = JwksPublisher.withKeys(List.of(key))
     .httpCacheMaxAge(Duration.ofHours(1))
     .build();

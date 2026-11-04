@@ -43,7 +43,7 @@ final class SamlPostLogoutMetadataTests {
             SamlServiceProvider.Builder builder = SamlServiceProvider.withEntityId("https://sp.example.test/saml")
                     .assertionConsumerServiceUrl(URI.create("https://sp.example.test/acs"))
                     .postSingleLogoutServiceUrl(URI.create("https://sp.example.test/post-logout"))
-                    .signingCredential(credential).replayCache(InMemorySamlReplayCache.withLimit(CLOCK, 8)).clock(CLOCK);
+                    .signingCredential(credential).replayCache(InMemorySamlReplayCache.fromLimit(CLOCK, 8)).clock(CLOCK);
             if (includeRedirect) builder = builder.singleLogoutServiceUrl(URI.create("https://sp.example.test/redirect-logout"));
             SamlServiceProvider sp = builder.build();
             String xml = assertInstanceOf(SamlServiceProviderMetadataResult.Generated.class,
@@ -94,7 +94,7 @@ final class SamlPostLogoutMetadataTests {
                 .singleLogoutServiceUrl(URI.create("https://sp.example.test/redirect-logout"))
                 .postSingleLogoutServiceUrl(URI.create("https://sp.example.test/post-logout"))
                 .signingCredential(credential)
-                .replayCache(InMemorySamlReplayCache.withLimit(CLOCK, 8)).clock(CLOCK).build();
+                .replayCache(InMemorySamlReplayCache.fromLimit(CLOCK, 8)).clock(CLOCK).build();
         SamlLogoutRequest accepted = new SamlLogoutRequest("tenant-one", "https://sp.example.test/saml",
                 "https://idp.example.test/saml", "_idp-request", "relay",
                 new SamlNameId("alice", null, null, null), List.of());

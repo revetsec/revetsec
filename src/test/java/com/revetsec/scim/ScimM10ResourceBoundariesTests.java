@@ -35,7 +35,7 @@ class ScimM10ResourceBoundariesTests {
     private static final @NonNull String ENTERPRISE="urn:ietf:params:scim:schemas:extension:enterprise:2.0:User";
 
     @Test void intentionalViewsFindValuesAndRetainImmutableCopiesWithoutDiagnosticDisclosure() {
-        ScimResource user=trusted(ScimResourceType.userInstance(),"{\"schemas\":[\""+USER+"\",\""+ENTERPRISE+"\"],\"id\":\"server\",\"externalId\":\"external\",\"userName\":\"private-user\",\"displayName\":\"private-display\",\"active\":true,\"name\":{\"givenName\":\"Ada\"},\"emails\":[{\"value\":\"a@example.invalid\"},{\"value\":\"b@example.invalid\"}],\"meta\":{\"resourceType\":\"User\",\"created\":\"2000-02-29T12:00:00.123456789123+05:00\",\"lastModified\":\"2000-03-01T00:00:00-14:00\"},\""+ENTERPRISE+"\":{\"employeeNumber\":\"1\",\"department\":\"d\",\"organization\":\"o\",\"division\":\"v\",\"manager\":{\"value\":\"manager-1\",\"$ref\":\"../Users/manager-1\"}}}");
+        ScimResource user=trusted(ScimTestResourceTypes.userWithEnterpriseInstance(),"{\"schemas\":[\""+USER+"\",\""+ENTERPRISE+"\"],\"id\":\"server\",\"externalId\":\"external\",\"userName\":\"private-user\",\"displayName\":\"private-display\",\"active\":true,\"name\":{\"givenName\":\"Ada\"},\"emails\":[{\"value\":\"a@example.invalid\"},{\"value\":\"b@example.invalid\"}],\"meta\":{\"resourceType\":\"User\",\"created\":\"2000-02-29T12:00:00.123456789123+05:00\",\"lastModified\":\"2000-03-01T00:00:00-14:00\"},\""+ENTERPRISE+"\":{\"employeeNumber\":\"1\",\"department\":\"d\",\"organization\":\"o\",\"division\":\"v\",\"manager\":{\"value\":\"manager-1\",\"$ref\":\"../Users/manager-1\"}}}");
         ScimUser view=ScimUser.fromResource(user);
         assertSame(user,view.getResource()); assertEquals("private-display",view.getDisplayName().orElseThrow());
         assertTrue(view.isActive().orElseThrow()); assertEquals(2,view.getEmails().size());
@@ -56,17 +56,17 @@ class ScimM10ResourceBoundariesTests {
         assertEquals("server",user.getId().orElseThrow()); assertEquals("external",user.getExternalId().orElseThrow());
         assertEquals(Instant.parse("2000-02-29T07:00:00.123456789Z"),user.getCreated().orElseThrow());
         assertEquals(Instant.parse("2000-03-01T14:00:00Z"),user.getLastModified().orElseThrow());
-        ScimResource.Builder builder=ScimResource.withResourceType(ScimResourceType.userInstance()).document(user.getDocument());
+        ScimResource.Builder builder=ScimResource.withResourceType(ScimTestResourceTypes.userWithEnterpriseInstance()).document(user.getDocument());
         assertEquals("ScimResource.Builder{document=<redacted>}",builder.toString());
         ScimResource.Copier copier=user.copy().document(JsonObject.builder().put("schemas",JsonArray.fromElements(List.of(JsonString.fromValue(USER)))).put("userName","other").build());
         assertEquals("ScimResource.Copier{document=<redacted>}",copier.toString());
         assertEquals("other",ScimUser.fromResource(copier.finish()).getUserName());
         assertEquals("private-user",view.getUserName());
-        ScimResource empty=trusted(ScimResourceType.userInstance(),"{\"schemas\":[\""+USER+"\",\""+ENTERPRISE+"\"],\"userName\":\"a\",\""+ENTERPRISE+"\":{}}");
+        ScimResource empty=trusted(ScimTestResourceTypes.userWithEnterpriseInstance(),"{\"schemas\":[\""+USER+"\",\""+ENTERPRISE+"\"],\"userName\":\"a\",\""+ENTERPRISE+"\":{}}");
         assertTrue(empty.getId().isEmpty()); assertTrue(empty.getExternalId().isEmpty()); assertTrue(empty.getVersion().isEmpty()); assertTrue(empty.getLocation().isEmpty()); assertTrue(empty.getCreated().isEmpty()); assertTrue(empty.getLastModified().isEmpty());
         assertTrue(ScimUser.fromResource(empty).getEmails().isEmpty()); assertTrue(ScimUser.fromResource(empty).getDisplayName().isEmpty()); assertTrue(ScimUser.fromResource(empty).isActive().isEmpty());
         assertTrue(ScimEnterpriseUser.fromResource(empty).getManager().isEmpty());
-        ScimResource without=trusted(ScimResourceType.userInstance(),"{\"schemas\":[\""+USER+"\"],\"userName\":\"a\"}");
+        ScimResource without=trusted(ScimTestResourceTypes.userWithEnterpriseInstance(),"{\"schemas\":[\""+USER+"\"],\"userName\":\"a\"}");
         assertTrue(without.find(path(ENTERPRISE+":department")).isEmpty());
         assertThrows(IllegalArgumentException.class,() -> ScimUser.fromResource(trusted(ScimResourceType.groupInstance(),"{\"schemas\":[\"urn:ietf:params:scim:schemas:core:2.0:Group\"],\"displayName\":\"g\"}")));
         ScimGroup group=ScimGroup.fromResource(trusted(ScimResourceType.groupInstance(),"{\"schemas\":[\"urn:ietf:params:scim:schemas:core:2.0:Group\"],\"displayName\":\"g\"}"));

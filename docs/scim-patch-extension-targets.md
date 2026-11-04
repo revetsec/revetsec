@@ -2,6 +2,11 @@
 
 The explicit `PATCH_EXTENSION_SCHEMA_ROOT` compatibility feature allows a PATCH `path` to name a registered extension schema URI itself. It is disabled in the strict, Microsoft Entra ID and Okta presets. When selected, the parser exposes the canonical URI through `ScimPatchOperation.getExtensionSchemaId()`. `getAttributePath()` is empty for this operation. Applications inspecting operations must check the extension identifier before interpreting an absent attribute path as a resource-object operation.
 
+The following example requires an explicit Enterprise User extension registration.
+The core `ScimResourceType.userInstance()` preset contains no extensions; see
+the [registration example](scim-server-primitives.md) before enabling this PATCH profile.
+Selecting the compatibility feature does not register the extension itself.
+
 ```json
 {
   "schemas": ["urn:ietf:params:scim:api:messages:2.0:PatchOp"],
@@ -26,3 +31,11 @@ The bare extension URI target is an explicit interoperability profile for regist
 Successful parsing and application each emit the fixed feature event once per public call when they use this profile, regardless of the number of root operations. Unknown roots and rejected ordinary grammar do not implicitly select the feature. Requests bound under this feature cannot be applied by a provider with a different compatibility context.
 
 An ordinary registered attribute path takes precedence if a custom extension identifier happens to equal that qualified path. Selecting this profile therefore cannot reinterpret an existing attribute target as an extension container.
+
+For the registered standard Enterprise User manager, an explicit `$ref` instruction in this
+PATCH request survives later `manager.value` edits, including through an extension-root object.
+An inherited reference clears when the value changes; the read-only display name always clears
+on that identity change. Explicit reference/manager/extension removal still takes effect, and
+nothing carries into a later request. This is ordered field application, not a proof that the
+final manager ID and reference identify the same authorized resource; the host validates that
+pair before persistence. Custom manager-like objects keep their own schema rules.

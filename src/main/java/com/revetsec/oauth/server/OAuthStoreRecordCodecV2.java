@@ -79,6 +79,21 @@ final class OAuthStoreRecordCodecV2 {
 	int subjectLimit() { return this.subjectLimit; }
 	@NonNull String freshVersion() { return this.legacyAddresses.freshVersion(); }
 
+	/**
+	 * Check both interaction states before mutation. Fixed-width version and latest possible floor are
+	 * allocation bounds only: they are never sealed, stored or admitted as authority. Completion keeps
+	 * the original expiry but may need more status/nanosecond bytes than initial creation.
+	 */
+	void requireInteractionCapacity(@NonNull OAuthStoreKey key, @NonNull Instant retainUntil,
+			@NonNull OAuthAuthorizationRecord record) {
+		Instant largestFloor = Instant.ofEpochSecond(retainUntil.getEpochSecond() - 1, 999999999);
+		for (String payload : java.util.List.of(record.toPayload(), record.completed().toPayload())) {
+			// The normal codec's plaintext cap already reserves the largest permitted sealing-key ID.
+			byte[] bytes = boundedUtf8(envelope(key, "A".repeat(43), retainUntil, largestFloor, payload), this.maximumPlaintextBytes);
+			Arrays.fill(bytes, (byte) 0);
+		}
+	}
+
 	@NonNull OAuthStoreEntry seal(@NonNull OAuthStoreKey key, @NonNull Instant retainUntil,
 			@NonNull Instant floor, @NonNull String payloadJson) {
 		return sealVersion(key, freshVersion(), retainUntil, floor, payloadJson);

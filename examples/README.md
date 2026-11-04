@@ -1,42 +1,84 @@
 # Revetsec examples
 
-Two unpublished Soklet projects use packaged core, adapter and framework artifacts. A separate [RSA/OIDC recipe project](rsa-oidc/README.md) uses the current authored core only, with private-key authentication and synthetic Entra captures:
+Build the public examples with Maven and launch the applications with Java.
+The eight example projects and a small demo-key utility share an [examples parent POM](pom.xml), separate from the
+core build. They are unpublished and do not deploy artifacts.
 
-| Project | Demonstrates | Soklet |
-|---|---|---|
-| [barebones-oidc](barebones-oidc/README.md) | OIDC login and an application-owned session | Pinned 4.0.0 |
-| [playground](playground/README.md) | OIDC and SAML browser sessions, JWT/introspection MCP `whoami`, resource metadata, scope and application permissions, client credentials and transient inspection | Pinned 4.0.0 |
+| Project | Demonstrates | Entry point |
+| --- | --- | --- |
+| [Barebones OIDC](barebones-oidc/README.md) | Browser sign-in and application-owned sessions | Executable JAR |
+| [Playground](playground/README.md) | OIDC/SAML sessions, JWT/introspection MCP admission and SCIM routes | Executable JAR; separate SCIM main |
+| [Self-issued MCP](self-issued/README.md) | Application-owned OAuth issuance, refresh, revocation and MCP permissions | Executable JAR |
+| [Passkeys](passkeys-soklet/README.md) | Registration, discoverable sign-in, reauthentication and removal | Executable JAR behind an HTTPS edge |
+| [TOTP and recovery](totp-soklet/README.md) | Enrollment, replacement, login, recovery and management | Injected application integration and Maven tests |
+| [Password hashing](password-hashing/README.md) | Bounded Argon2id work, pepper and exact-version rehashing | Executable console JAR |
+| [RSA/OIDC recipes](rsa-oidc/README.md) | Private-key client authentication and explicit Entra tenant decisions | Integration recipes and Maven tests |
+| [PostgreSQL stores](postgresql-pending-store/README.md) | Shared pending logins, metadata cache, issuer, SCIM, TOTP and WebAuthn storage | Store recipes; optional Docker failure tests |
 
-A separate [self-issued MCP Playground](self-issued/README.md) uses current core/helper sources for app-owned OAuth issuance and online MCP validation with bounded volatile sessions/storage. Its builder records the authored core/helper inputs separately from the packaged-example pins below.
+The paired [Jakarta Servlet](https://github.com/revetsec/revetsec-servlet-jakarta/blob/main/docs/totp.md)
+and [Javax Servlet](https://github.com/revetsec/revetsec-servlet-javax/blob/main/docs/totp.md)
+TOTP cookbooks live with their adapters. Applications supply production accounts,
+authorization, durable sessions/storage and coordinated recovery admission.
 
-The [Soklet passkey browser demo](passkeys-soklet/README.md) exercises registration, discoverable sign-in, account-pinned reauthentication and credential management with an explicitly selected volatile WebAuthn store and exact HTTPS DNS origin.
+## Build with Maven
 
-The [complete Soklet 4 TOTP integration](totp-soklet/README.md) shows enrollment, confirmation, replacement, TOTP login, recovery login, rotation, removal, cancellation and status with application-owned authorization, sessions, durable storage and recovery admission. Its isolated builder compiles against the current core and pinned Soklet JAR on Java 21 or newer. The examples CI job runs its boundary, lifecycle and loopback socket checks.
+Use JDK 21 or newer for the full reactor and Soklet applications. Core-only
+password and RSA recipes retain Java 17 compatibility. Select the JDK with
+`JAVA_HOME` and put its `bin` directory on `PATH` so Maven and Java agree.
 
-The paired [Jakarta Servlet](https://github.com/revetsec/revetsec-servlet-jakarta/blob/main/docs/totp.md) and [Javax Servlet](https://github.com/revetsec/revetsec-servlet-javax/blob/main/docs/totp.md) cookbooks live in their adapter repositories. Their Java 17 sources call core directly from application-owned routes, with disposable Tomcat 11 and 9 fixtures. They do not supply production primary authentication, durable sessions or a cross-host recovery gate.
-
-The [Java 17 password hashing example](password-hashing/README.md) runs directly
-against current core. It demonstrates bounded Argon2id work, an ephemeral pepper
-key and exact-version compare-and-set rehashing without an HTTP adapter.
-
-The standalone [PostgreSQL storage examples](postgresql-pending-store/README.md) show application-owned shared pending-authorization storage, an optional CIMD cache, an authoritative issuer store and a WebAuthn store, all using Pyranid. They are outside the core reactor and are not a managed database service.
-
-The examples are outside the core reactor. `pins.json` records already-pushed core/helper revisions and the exact framework source. They do not publish artifacts. Revetsec has not been independently audited.
-
-## Build
-
-Use JDK 21 or newer for Soklet examples. The framework source build uses Corretto 21.0.11 so its JAR matches the recorded checksum.
-
-Check out the revisions in `pins.json` for the adapter and Soklet framework. A core checkout with unchanged `pom.xml` and `src/main` relative to its recorded pin can supply the core artifact for a manual build. CI passes its exact run commit with `--core-revision` so the examples exercise the pushed core under test; the builder requires the source checkout to match that SHA and records it in the result. The builder copies these inputs into a new private directory and uses its own Maven repository. Optional `--repository-tail` is read-only; `--offline` requires cached build dependencies.
+Revetsec core and the Soklet adapter currently use the unpublished
+`1.0.0-SNAPSHOT` version. Install matching source checkouts before building the
+examples. The Soklet source revision and version are recorded in
+[pins.json](pins.json); use that framework checkout with these sources.
+From the core repository root, with the adapter and framework paths adjusted:
 
 ```sh
-python3 examples/build.py --work /absolute/new/example-build \
-  --maven /absolute/path/to/mvn --java-home /absolute/path/to/jdk \
-  --core-source /absolute/core-checkout --adapter-source /absolute/adapter-checkout \
-  --framework-source /absolute/pinned-soklet-checkout
+mvn -B -ntp -Dmaven.javadoc.skip=true -Dmaven.test.skip=true install
+mvn -B -ntp -f /absolute/soklet/pom.xml \
+  -Dmaven.javadoc.skip=true -Dmaven.test.skip=true -Dgpg.skip=true install
+mvn -B -ntp -f /absolute/revetsec-soklet/pom.xml \
+  -Dmaven.javadoc.skip=true -Dmaven.test.skip=true install
+mvn -B -ntp -f examples/pom.xml verify
 ```
 
-The builder runs both example test suites and checks their runtime classpaths contain exactly the three declared dependency JARs. Provided annotation JARs are absent at runtime. It records commands, artifact checksums and exact source pins in the private result. The alternative `--framework-jar` accepts only the recorded source-built JAR checksum. Soklet applications require Java 21 or newer; CI checks them on JDK 21 and 27. The framework JAR is built with the exact Corretto version recorded in `pins.json` before those application lanes run. Core and the core-only RSA/OIDC recipes retain Java 17 compatibility.
+The first three commands install prerequisites; the last runs the example tests
+and packages the applications. To build one project instead, use, for example:
+
+```sh
+mvn -B -ntp -f examples/pom.xml -pl passkeys-soklet -am verify
+```
+
+Maven manages compile, test and runtime dependencies. Each executable JAR has a
+manifest entry point and uses its sibling `target/lib` directory. Keep that JAR
+and `lib` together when moving an application. Annotation libraries are provided
+at compile time, and JUnit stays in test scope; neither is a runtime dependency.
+A build does not start Docker or contact a hosted identity provider. Some tests
+bind disposable loopback listeners.
+
+After supplying the selected project's environment configuration, launch it
+from the core repository root:
+
+```sh
+java -jar examples/playground/target/playground-1.0.0-SNAPSHOT.jar
+```
+
+Each project README describes its configuration. TOTP, RSA and PostgreSQL are
+integration recipes: their Maven build does not invent primary authentication,
+application security or a database service.
+
+## Optional verification tools
+
+Python is not required to build or launch these Java applications. The optional
+passkey TLS helper generates a disposable private CA and exact-DNS certificates
+without changing global trust. The PostgreSQL Python runners coordinate Docker,
+separate JVM races, outages, uncertain commits and restore tests. Those runners
+are test tools, separate from the normal Maven build.
+
+Additional source-pin, artifact, nullability and annotation-free runtime audits
+live under [verification/examples](../verification/examples/README.md).
+CI retains exact source and framework checksum checks, including the explicit
+[test-only adapter compatibility bridge](compatibility/soklet-shared-clock/README.md).
+Revetsec has not been independently audited.
 
 ## Local provider and HTTPS
 
@@ -67,8 +109,9 @@ Create a private JVM truststore for the local provider, using the selected JDK's
 `changeit` protects only a disposable public CA truststore. No installed JDK cacerts or user keychain is changed. Follow each project's environment configuration, start Caddy with the pinned recipe, then launch the packaged application:
 
 ```sh
-python3 examples/run.py --build /absolute/example-build --example playground \
-  --java-home /absolute/jdk --trust-store /private/tls/java-trust.p12
+java -Djavax.net.ssl.trustStore=/private/tls/java-trust.p12 \
+  -Djavax.net.ssl.trustStorePassword=changeit \
+  -jar examples/playground/target/playground-1.0.0-SNAPSHOT.jar
 ```
 
 Interrupt the app and provider and remove their private work/profile directories after use. Examples store no browser credentials in localStorage/sessionStorage. The transient inspection form is an explicit CSRF-protected demonstration and never becomes MCP bearer transport. Only allowlisted application-redacted fields from checked results are displayed.

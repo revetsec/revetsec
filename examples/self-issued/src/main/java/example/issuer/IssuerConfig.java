@@ -15,6 +15,8 @@
  */
 package example.issuer;
 
+import com.revetsec.oauth.server.InMemoryOAuthClientMetadataCache;
+
 import java.io.IOException;
 import java.net.URI;
 import java.net.InetAddress;
@@ -86,7 +88,7 @@ final class IssuerConfig {
             if(!hostname.equalsIgnoreCase(origin.getHost()) || budget.isZero() || budget.isNegative() || Thread.currentThread().isInterrupted())
                 throw invalid();
             return List.of(address);
-        }).allowedOrigins(Set.of(origin)).build();
+        }).cache(InMemoryOAuthClientMetadataCache.fromMaximumEntries(128)).allowedOrigins(Set.of(origin)).build();
     }
     @NonNull Map<@NonNull String,@NonNull Set<@NonNull String>> resources() {
         return secondResourceEnabled?Map.of(resource.toString(),SCOPES,resource.resolve("/mcp-second").toString(),SCOPES):Map.of(resource.toString(),SCOPES);

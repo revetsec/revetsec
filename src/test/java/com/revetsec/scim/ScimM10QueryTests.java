@@ -127,7 +127,14 @@ class ScimM10QueryTests {
         assertInstanceOf(ScimQueryParseResult.Succeeded.class, query("attributes=userName,USERNAME", CONFIG, limits));
         assertInstanceOf(ScimQueryParseResult.Rejected.class, query("attributes=userName,USERNAME,userName", CONFIG, limits));
         String extension = ScimSchema.enterpriseUserInstance().getId();
-        assertEquals(Set.of(path(extension + ":department")), selection("attributes=" + extension + ":DEPARTMENT").getIncludedAttributes());
+        ScimResourceType enterpriseUser = ScimTestResourceTypes.userWithEnterpriseInstance();
+        ScimServiceProvider provider = ScimServiceProvider.builder()
+                .baseUri(java.net.URI.create("https://example.test/scim/"))
+                .resourceTypes(java.util.List.of(enterpriseUser)).build();
+        ScimAttributeSelection selected = assertInstanceOf(ScimAttributeSelectionResult.Succeeded.class,
+                provider.parseAttributeSelectionResult(enterpriseUser,
+                        "attributes=" + extension + ":DEPARTMENT")).getAttributeSelection();
+        assertEquals(Set.of(path(extension + ":department")), selected.getIncludedAttributes());
     }
 
     @Test void sortingIsBoundAndCannotExposeNeverValuesOrIgnoredClauses() {

@@ -86,7 +86,11 @@ public sealed interface SamlAuthenticationResult permits SamlAuthenticationResul
             this.authenticated = authenticated;
         }
         /**
-         * Returns a bounded status classification.
+         * Returns a bounded status classification. A recognized immediate AuthnFailed,
+         * NoAuthnContext or RequestDenied subcode under Requester/Responder supplies the
+         * classification; otherwise the primary code supplies it. Deeper extension codes
+         * are shape-checked but do not override it. This classification alone is not
+         * signature proof; consult {@link #isAuthenticated()} separately.
          *
          * @return status code
          * @since 1.0.0

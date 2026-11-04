@@ -73,6 +73,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.function.Supplier;
 import java.util.stream.Stream;
 
+import static com.revetsec.testing.OAuthFailureAssertions.assertIndependentFailure;
 import static org.junit.jupiter.api.Assertions.*;
 
 /** Focused contracts found by the fresh RC-1 mutation inventory. */
@@ -350,7 +351,7 @@ final class OidcRc1MutationTests {
                         assertThrows(ExecutionException.class, () -> first.get(3, TimeUnit.SECONDS)).getCause());
                 OAuthException followerFailure = assertInstanceOf(OAuthException.class,
                         assertThrows(ExecutionException.class, () -> second.get(3, TimeUnit.SECONDS)).getCause());
-                assertSame(leaderFailure, followerFailure);
+                assertIndependentFailure(leaderFailure, followerFailure);
                 assertNotEquals(OAuthException.Reason.NETWORK_FAILURE, leaderFailure.getReason());
                 assertFalse(onFreshCaller(() -> assertDoesNotThrow(() -> cache.awaitWaitersForTests(1, Duration.ZERO))));
                 assertEquals(1, server.getHitCount("/tenant/.well-known/openid-configuration"));
@@ -382,7 +383,7 @@ final class OidcRc1MutationTests {
             assertEquals(OAuthException.Reason.NETWORK_FAILURE, first.getReason());
             assertNull(first.getCause());
             assertFalse(first.toString().contains("TEST-ONLY-clock-secret"));
-            assertSame(first, onFreshCaller(() -> assertThrows(OAuthException.class,
+            assertIndependentFailure(first, onFreshCaller(() -> assertThrows(OAuthException.class,
                     () -> cache.get(Deadline.fromNow(Duration.ofSeconds(5))))));
             assertEquals(1, server.getHitCount("/tenant/.well-known/openid-configuration"));
         }

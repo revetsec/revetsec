@@ -216,7 +216,7 @@ final class WebAuthnRelyingPartyTests {
                 () -> WebAuthnRelyingParty.withRelyingPartyId("EXAMPLE.com"));
         assertThrows(IllegalArgumentException.class,
                 () -> WebAuthnRelyingParty.withRelyingPartyId("example.com")
-                        .allowedOrigins(Set.of("https://other.example.com")));
+                        .allowedOrigins(Set.of("https://other.example.net")));
         assertThrows(IllegalArgumentException.class,
                 () -> WebAuthnRelyingParty.withRelyingPartyId(RP)
                         .allowedOrigins(Set.of(ORIGIN + "/path")));

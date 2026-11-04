@@ -89,7 +89,7 @@ class ScimRc3MutationTests {
 
     @Test void resourceLocationEscapesOpaqueSegmentsAndKeepsAlphabetBoundaries() {
         String id="AZaz09-._~!#$%&'()*+,/:;=?@[\\]^`{|}é😀";
-        assertEquals("https://example.invalid/scim/Users/AZaz09-%2E_~%21%23%24%25%26%27%28%29%2A%2B%2C%2F%3A%3B%3D%3F%40%5B%5C%5D%5E%60%7B%7C%7D%C3%A9%F0%9F%98%80",
+        assertEquals("https://example.invalid/scim/Users/AZaz09-._~%21%23%24%25%26%27%28%29%2A%2B%2C%2F%3A%3B%3D%3F%40%5B%5C%5D%5E%60%7B%7C%7D%C3%A9%F0%9F%98%80",
                 provider().resourceLocationFor(USER,id).toASCIIString());
     }
 

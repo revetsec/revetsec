@@ -286,7 +286,7 @@ final class SpringSamlComparatorTests {
         X509Certificate certificate = certificate(credential);
         SamlServiceProvider provider = SamlServiceProvider.withEntityId("https://sp.test/Selftest")
                 .assertionConsumerServiceUrl(URI.create("https://sp.test/acs"))
-                .replayCache(InMemorySamlReplayCache.withLimit(FIXTURE_CLOCK, 16))
+                .replayCache(InMemorySamlReplayCache.fromLimit(FIXTURE_CLOCK, 16))
                 .decryptionCredentials(List.of(SamlCredential.fromPem(
                         Files.readString(FIXTURES.resolve("keys/sp-encryption-rsa-2048-key.pem")),
                         Files.readString(FIXTURES.resolve("keys/sp-encryption-rsa-2048-cert.pem")))))

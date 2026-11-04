@@ -14,6 +14,37 @@ if (result instanceof ScimFilterEvaluationResult.Succeeded success) {
 
 Every evaluation rebinds and approves the complete tree under its receiving provider. A syntax-only filter, or one approved by another provider, cannot grant filtering permission. A resource with request provenance from a different semantic context rejects. Trusted application resources must use a resource type registered with this provider. The application remains responsible for caller authorization, tenant isolation, storage queries and authoritative identity uniqueness.
 
+Parsed and provider-bound root nodes privately retain the original bounded filter expression.
+Evaluation checks its original UTF-16 length against the receiving provider's input limit,
+preflights the tree's depth, nodes, literals and work, then reparses and reapproves the source
+with that provider's schema, policies and compatibility settings. A normalized path such as
+`tags.value` or an expanded compatibility ValuePath can make `toScimString()` longer than the
+accepted input; that canonical growth does not consume a second input-character allowance.
+The original expression is retained only after a successful bounded parse, is immutable, and
+is neither an approval token nor exposed by diagnostics.
+
+The receiving input limit still applies to the original source, even when whitespace removal,
+numeric normalization or other rendering would make it shorter. A foreign root that exceeds
+that limit rejects. Raw numeric-token and transient grouping bounds are checked again while
+reparsing. Source compatibility features are not inherited as receiving permission. Public
+extracted child trees without root provenance use the existing canonical-size preflight and
+canonical reparse instead; they still undergo full receiving policy and type checks.
+
+Canonical rendering and structural equality/hash behavior are unchanged. The original source
+is excluded from equality and can affect receiving-limit checks, so structural equality is
+not proof of interchangeable parse provenance or permission. Explicit canonical export may
+exceed the original or even the largest supported input length; it is not guaranteed to reparse
+under the same character cap. Pass the parsed root directly to evaluation rather than rendering
+it and parsing it again to recover approval. The evaluator retains bounded source text alongside
+the tree, so callers must account for its personal-data lifetime when caching roots.
+
+The operation still uses one monotonically consumed work budget for preflight, reparse, schema
+binding, whole-tree approval and evaluation; no budget is reset for canonical growth. Tree/path/
+literal work and the computed canonical footprint are charged before the source is returned,
+then binding charges the actual source. Work exhaustion remains `requestTooLarge`, syntax/
+policy refusal remains `invalidFilter`, and no partial verdict is returned. Successful parse
+alone does not guarantee an evaluation will fit its aggregate work or receiving policy.
+
 For strings, the application strategy receives the canonical attribute path, its definition, the operator, the stored value and the literal. It must be thread-safe, deterministic, bounded and free of I/O. Matching for `userName` must agree with the authoritative database's chosen [internationalized username preparation profile](https://www.rfc-editor.org/rfc/rfc8265.html). The synthetic ASCII strategies in tests and the example prove their fixture behavior; they do not provide a production Unicode matching default.
 
 Numbers, booleans, binary values, date-times and references use core rules. Numeric equality compares values rather than lexical spellings. Binary equality compares decoded bytes. References and standard Group membership IDs compare exact text. An accepted rebuilt Group schema with equal definitions and facets keeps this exact ID behavior; a custom schema uses its application matching strategy. Date-times with offsets compare normalized instants, including extended XML Schema years and fractional precision. Comparing a date-time with an offset to one without an offset rejects with `invalidFilter`, because that mixed comparison has no selected total order.

@@ -22,9 +22,13 @@ import javax.annotation.concurrent.ThreadSafe;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.ReentrantLock;
 
-/** Process-local admission for expensive password work. Share one instance across every hasher in
- * a process. The gate never waits or starts worker threads; exhausted capacity yields an operation
- * result. Applications still own distributed and per-account login throttling.
+/** Explicit in-memory, process-local admission for expensive password work. Share one instance
+ * across every hasher in a process; each JVM needs its own gate to bound that JVM's CPU and memory.
+ * Its temporary counters are discarded on restart and are never shared across nodes.
+ * Admission waits interruptibly for short reservation-counter updates. The gate never queues
+ * for KDF capacity or starts worker threads; exhausted capacity yields an operation result.
+ * Hashing and application callbacks run outside the accounting lock.
+ * Applications separately own shared per-account/edge attempt admission and durable credential storage.
  * @since 1.0.0 */
 @ThreadSafe
 public final class PasswordWorkGate {
@@ -39,12 +43,15 @@ public final class PasswordWorkGate {
         this.maximumMemoryKiB = maximumMemoryKiB;
     }
 
-    /** Creates a shared bounded work gate.
-     * @param maximumConcurrentCalls maximum simultaneous KDF operations
-     * @param maximumMemoryKiB aggregate Argon2id memory reservation in KiB
+    /** Creates a bounded in-memory work gate for one JVM. Reuse the returned instance across all
+     * hashers in that JVM. Separate calls create independent gates; this factory supplies no
+     * default concurrency or memory budget and performs no distributed attempt throttling.
+     * @param maximumConcurrentCalls maximum simultaneous KDF operations, from 1 through 256
+     * @param maximumMemoryKiB aggregate Argon2id memory reservation in KiB, from 19,456 through 4,194,304
      * @return the gate
+     * @throws IllegalArgumentException if either limit is outside its supported range
      * @since 1.0.0 */
-    public static @NonNull PasswordWorkGate withLimits(int maximumConcurrentCalls, int maximumMemoryKiB) {
+    public static @NonNull PasswordWorkGate fromInMemoryLimits(int maximumConcurrentCalls, int maximumMemoryKiB) {
         if (maximumConcurrentCalls < 1 || maximumConcurrentCalls > 256
                 || maximumMemoryKiB < 19_456 || maximumMemoryKiB > 4_194_304) {
             throw new IllegalArgumentException("Invalid password work limits");
@@ -63,7 +70,12 @@ public final class PasswordWorkGate {
     public @NonNull Integer getMaximumMemoryKiB() { return maximumMemoryKiB; }
 
     @Nullable Permit tryAcquire(int memoryKiB) {
-        if (!lock.tryLock()) return null;
+        try {
+            lock.lockInterruptibly();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return null;
+        }
         try {
             if (memoryKiB < 0 || memoryKiB > maximumMemoryKiB || activeCalls >= maximumConcurrentCalls
                     || reservedMemoryKiB > maximumMemoryKiB - memoryKiB) return null;

@@ -16,6 +16,7 @@
 package com.revetsec.oauth;
 
 import static com.revetsec.oauth.Phase2Fixtures.*;
+import static com.revetsec.testing.OAuthFailureAssertions.assertIndependentFailure;
 import static org.junit.jupiter.api.Assertions.*;
 
 import com.revetsec.jose.JoseException;
@@ -135,12 +136,12 @@ final class ResourceServerAssuranceTests {
             response(server, "/inspect", 503, "application/json", "{}");
             OAuthErrorResponseException failure = assertThrows(OAuthErrorResponseException.class,
                     () -> validator.validateResult(bearer("TEST-ONLY-unavailable")));
-            assertSame(failure, assertThrows(OAuthErrorResponseException.class,
+            assertIndependentFailure(failure, assertThrows(OAuthErrorResponseException.class,
                     () -> validator.validateResult(bearer("TEST-ONLY-different"))));
             assertEquals(0, eventCount(events, "didValidateAccessToken"));
             assertEquals(0, eventCount(events, "didRejectAccessToken"));
-            assertEquals(1, eventCount(events, "didFailEndpoint"));
-            assertEquals(1, server.getHitCount("/inspect"));
+            assertEquals(2, eventCount(events, "didFailEndpoint"));
+            assertEquals(2, server.getHitCount("/inspect"));
         }
     }
 

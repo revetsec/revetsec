@@ -28,6 +28,11 @@ final class ScimWork {
     ScimWork(long maximum) { this.maximum = maximum; remaining = maximum; }
     long maximum() { return maximum; }
     boolean wasExceeded() { return exceeded; }
+    /** Cheap wire traversal costs one unit per started 16-byte block; other costs stay explicit. */
+    static long byteUnits(int bytes) {
+        if (bytes < 0) throw new IllegalArgumentException("SCIM byte count cannot be negative.");
+        return (bytes + 15L) / 16;
+    }
     boolean take(int amount) { return spend(amount); }
     boolean spend(long amount) {
         if (amount < 0 || amount > remaining) { remaining = 0; exceeded = true; return false; }

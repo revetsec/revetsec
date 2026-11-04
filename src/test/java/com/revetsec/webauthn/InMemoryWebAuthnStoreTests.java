@@ -58,7 +58,7 @@ final class InMemoryWebAuthnStoreTests {
    "tenant", "login.example.com", new byte[32]);
 
  @Test void expiredCeremoniesRemainRetainedThroughQueriesBarriersAndCapacityRefusal() {
-  InMemoryWebAuthnStore store = InMemoryWebAuthnStore.withLimits(1, 100);
+  InMemoryWebAuthnStore store = InMemoryWebAuthnStore.fromLimits(1, 100);
   WebAuthnStoreSnapshot empty = snapshot(store, Set.of(CEREMONY));
   assertEquals(WebAuthnStoreCommitResult.COMMITTED, store.compareAndCommit(
     write(empty, List.of(WebAuthnStoreWrite.Mutation.insertExpiring(CEREMONY, new byte[] {1}, Instant.EPOCH))), BUDGET).getStatus());
@@ -74,7 +74,7 @@ final class InMemoryWebAuthnStoreTests {
  }
 
  @Test void repeatedCeremonyReplacementRemainsWithinTheDeclaredRecordCapacity() {
-  InMemoryWebAuthnStore store = InMemoryWebAuthnStore.withLimits(1, 1);
+  InMemoryWebAuthnStore store = InMemoryWebAuthnStore.fromLimits(1, 1);
   assertEquals(WebAuthnStoreCommitResult.COMMITTED, store.compareAndCommit(
     write(snapshot(store, Set.of(CEREMONY)), List.of(
       WebAuthnStoreWrite.Mutation.insertExpiring(CEREMONY, new byte[] {1}, Instant.EPOCH))), BUDGET).getStatus());
@@ -87,9 +87,9 @@ final class InMemoryWebAuthnStoreTests {
  }
 
  @Test void capacityRejectsWholeWriteAndNeverEvictsRecords() {
-  assertThrows(IllegalArgumentException.class, () -> InMemoryWebAuthnStore.withLimits(0, 10));
-  assertThrows(IllegalArgumentException.class, () -> InMemoryWebAuthnStore.withLimits(1, 0));
-  InMemoryWebAuthnStore store = InMemoryWebAuthnStore.withLimits(1, 3);
+  assertThrows(IllegalArgumentException.class, () -> InMemoryWebAuthnStore.fromLimits(0, 10));
+  assertThrows(IllegalArgumentException.class, () -> InMemoryWebAuthnStore.fromLimits(1, 0));
+  InMemoryWebAuthnStore store = InMemoryWebAuthnStore.fromLimits(1, 3);
   WebAuthnStoreSnapshot empty = snapshot(store, Set.of(FIRST, SECOND));
   WebAuthnStoreWrite both = write(empty, List.of(
     WebAuthnStoreWrite.Mutation.insert(FIRST, new byte[] {1}),
@@ -116,7 +116,7 @@ final class InMemoryWebAuthnStoreTests {
  }
 
  @Test void compareAllPredicatesAndRenewVersionsAcrossDeleteAndReinsert() {
-  InMemoryWebAuthnStore store = InMemoryWebAuthnStore.withLimits(2, 100);
+  InMemoryWebAuthnStore store = InMemoryWebAuthnStore.fromLimits(2, 100);
   WebAuthnStoreSnapshot empty = snapshot(store, Set.of(FIRST, SECOND));
   WebAuthnStoreWrite insert = write(empty,
     List.of(WebAuthnStoreWrite.Mutation.insert(FIRST, new byte[] {7})));
@@ -146,7 +146,7 @@ final class InMemoryWebAuthnStoreTests {
  }
 
  @Test void concurrentWritersHaveExactlyOneWinnerAndBudgetOrInterruptNeverMutates() throws Exception {
-  InMemoryWebAuthnStore store = InMemoryWebAuthnStore.withLimits(1, 100);
+  InMemoryWebAuthnStore store = InMemoryWebAuthnStore.fromLimits(1, 100);
   WebAuthnStoreSnapshot empty = snapshot(store, Set.of(FIRST));
   WebAuthnStoreWrite insert = write(empty,
     List.of(WebAuthnStoreWrite.Mutation.insert(FIRST, new byte[] {1})));
@@ -195,7 +195,7 @@ final class InMemoryWebAuthnStoreTests {
  }
 
  @Test void constructionAndNonpositiveOrInvalidCallsDoNotAcquireTimeOrRandomness() throws Exception {
-  InMemoryWebAuthnStore store = InMemoryWebAuthnStore.withLimits(4, 100);
+  InMemoryWebAuthnStore store = InMemoryWebAuthnStore.fromLimits(4, 100);
   assertNull(field(store, "admission")); assertNull(field(store, "authorityAnchor")); assertNull(field(store, "entropy")); assertNull(field(store, "versionPrefix"));
   assertThrows(IllegalArgumentException.class, () -> store.read(Set.of(), BUDGET));
   assertInstanceOf(WebAuthnStoreReadResult.Unavailable.class, store.read(Set.of(FIRST), Duration.ZERO));
@@ -203,7 +203,7 @@ final class InMemoryWebAuthnStoreTests {
  }
 
  @Test void scopedReadsHaveOneOwnedMonotoneProjectionAndRejectMixedScope() {
-  InMemoryWebAuthnStore store = InMemoryWebAuthnStore.withLimits(4, 100);
+  InMemoryWebAuthnStore store = InMemoryWebAuthnStore.fromLimits(4, 100);
   WebAuthnStoreKey other = WebAuthnStoreKey.forCredential("other", "other.example.com", new byte[] {3});
   assertThrows(IllegalArgumentException.class, () -> store.read(Set.of(FIRST, other), BUDGET));
   StoreTimeObservation.Healthy first = healthy(snapshot(store, Set.of(FIRST)));
@@ -214,7 +214,7 @@ final class InMemoryWebAuthnStoreTests {
  }
 
  @Test void currentAuthorityRecoveryClockAndFixedErrorProfileAreComparedBeforeMutation() {
-  InMemoryWebAuthnStore store = InMemoryWebAuthnStore.withLimits(1, 100);
+  InMemoryWebAuthnStore store = InMemoryWebAuthnStore.fromLimits(1, 100);
   WebAuthnStoreSnapshot snapshot = snapshot(store, Set.of(FIRST)); StoreTimeObservation.Healthy time = healthy(snapshot);
   String foreign = Base64.getUrlEncoder().withoutPadding().encodeToString(new byte[32]);
   // The literal ID is legal synthetic external metadata, not a backend-issued capability.
@@ -231,7 +231,7 @@ final class InMemoryWebAuthnStoreTests {
  }
 
  @Test void floorAndOriginalExpiryUseFreshTimeAfterTheActualStoreLockWait() throws Exception {
-  InMemoryWebAuthnStore store = InMemoryWebAuthnStore.withLimits(1, 100);
+  InMemoryWebAuthnStore store = InMemoryWebAuthnStore.fromLimits(1, 100);
   WebAuthnStoreSnapshot snapshot = snapshot(store, Set.of(FIRST)); StoreTimeObservation.Healthy time = healthy(snapshot);
   List<WebAuthnStoreWrite.Mutation> insertion = List.of(WebAuthnStoreWrite.Mutation.insert(FIRST, new byte[] {1}));
   StoreTemporalCondition future = StoreTimeAccess.get().fromObservation(time, time.getObservedAt().plusSeconds(3600), null);
@@ -257,7 +257,7 @@ final class InMemoryWebAuthnStoreTests {
  }
 
  @Test void authorityContinuityLossPreservesRowsAndRefusesEvenAnEmptyTimedBarrier() throws Exception {
-  InMemoryWebAuthnStore store = InMemoryWebAuthnStore.withLimits(1, 100);
+  InMemoryWebAuthnStore store = InMemoryWebAuthnStore.fromLimits(1, 100);
   assertEquals(WebAuthnStoreCommitResult.COMMITTED, store.compareAndCommit(write(snapshot(store, Set.of(CEREMONY)),
     List.of(WebAuthnStoreWrite.Mutation.insertExpiring(CEREMONY, new byte[] {1}, Instant.EPOCH))), BUDGET).getStatus());
   WebAuthnStoreSnapshot before = snapshot(store, Set.of(CEREMONY)); byte[] version = present(before, CEREMONY).getVersion();
@@ -270,7 +270,7 @@ final class InMemoryWebAuthnStoreTests {
  }
 
  @Test void timedBarrierHasRequiredReceiptButTouchesNoDataCountersOrBackingMap() throws Exception {
-  InMemoryWebAuthnStore store = InMemoryWebAuthnStore.withLimits(2, 100);
+  InMemoryWebAuthnStore store = InMemoryWebAuthnStore.fromLimits(2, 100);
   WebAuthnStoreKey root = WebAuthnStoreKey.forNamespaceClock("tenant", "login.example.com");
   assertEquals(WebAuthnStoreCommitResult.COMMITTED, store.compareAndCommit(write(snapshot(store, Set.of(root)),
     List.of(WebAuthnStoreWrite.Mutation.insert(root, new byte[] {1}))), BUDGET).getStatus());
@@ -286,7 +286,7 @@ final class InMemoryWebAuthnStoreTests {
  }
 
  @Test void knownRootLossCannotBecomeConfirmedAbsenceOrAutomaticReinitialization() {
-  InMemoryWebAuthnStore store = InMemoryWebAuthnStore.withLimits(2, 100);
+  InMemoryWebAuthnStore store = InMemoryWebAuthnStore.fromLimits(2, 100);
   WebAuthnStoreKey root = WebAuthnStoreKey.forNamespaceClock("tenant", "login.example.com");
   WebAuthnStoreSnapshot empty = snapshot(store, Set.of(root));
   assertEquals(WebAuthnStoreCommitResult.COMMITTED, store.compareAndCommit(write(empty,
@@ -301,7 +301,7 @@ final class InMemoryWebAuthnStoreTests {
  }
 
  @Test void preexistingOrphanedScopeCannotAcquireAnInventedStableMinimum() {
-  InMemoryWebAuthnStore store = InMemoryWebAuthnStore.withLimits(2, 100);
+  InMemoryWebAuthnStore store = InMemoryWebAuthnStore.fromLimits(2, 100);
   assertEquals(WebAuthnStoreCommitResult.COMMITTED, store.compareAndCommit(write(snapshot(store, Set.of(FIRST)),
     List.of(WebAuthnStoreWrite.Mutation.insert(FIRST, new byte[] {1}))), BUDGET).getStatus());
   assertInstanceOf(WebAuthnStoreReadResult.Unavailable.class, store.read(Set.of(WebAuthnStoreKey.forNamespaceClock("tenant", "login.example.com")), BUDGET));

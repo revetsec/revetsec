@@ -110,12 +110,14 @@ class ScimM10SchemaTests {
         String extension = ScimSchema.enterpriseUserInstance().getId();
         assertTrue(ScimSchemas.find(user, path(extension + ":id")).isEmpty());
         assertTrue(ScimSchemas.find(user, path("department")).isEmpty());
-        assertTrue(ScimSchemas.find(user, path(extension + ":department")).isPresent());
+        assertTrue(ScimSchemas.find(user, path(extension + ":department")).isEmpty());
+        assertTrue(ScimSchemas.find(ScimTestResourceTypes.userWithEnterpriseInstance(),
+                path(extension + ":department")).isPresent());
         assertTrue(ScimSchemas.find(user, path("urn:foreign:x:userName")).isEmpty());
     }
 
     @Test void lookupIsAsciiInsensitiveAndCanonicalizesOnlyRegisteredComponents() {
-        ScimResourceType user = ScimResourceType.userInstance();
+        ScimResourceType user = ScimTestResourceTypes.userWithEnterpriseInstance();
         String core = "URN:IETF:PARAMS:SCIM:SCHEMAS:CORE:2.0:USER";
         assertEquals("userName", ScimSchemas.canonicalPath(user, path(core + ":USERNAME")).orElseThrow().toScimString());
         String extension = ScimSchema.enterpriseUserInstance().getId();

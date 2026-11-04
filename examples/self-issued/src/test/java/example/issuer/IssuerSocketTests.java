@@ -49,8 +49,13 @@ final class IssuerSocketTests {
    soklet.start();
    var metadata=send(client,config.origin.resolve("/.well-known/oauth-authorization-server"),"GET",null,null,null);
    assertEquals(200,metadata.statusCode());assertTrue(metadata.body().contains(config.origin.toString()));
-   var login=send(client,URI.create(config.origin+"/authorize?"+IssuerApplicationTests.query(app,"demo-public","mcp:discover mcp:whoami")),"GET",null,null,null);
-   assertEquals(200,login.statusCode());String initial=login.headers().firstValue("Set-Cookie").orElseThrow().split(";",2)[0],csrf=csrf(login.body());
+   String query=IssuerApplicationTests.query(app,"demo-public","mcp:discover mcp:whoami");
+   var anonymous=send(client,URI.create(config.origin+"/authorize?"+query),"GET",null,null,null);
+   assertEquals(200,anonymous.statusCode());assertTrue(anonymous.headers().allValues("Set-Cookie").isEmpty());
+   var admitted=send(client,URI.create(config.origin+"/session?"+query),"POST","begin=1",null,config.origin.toString());
+   assertEquals(303,admitted.statusCode());String initial=admitted.headers().firstValue("Set-Cookie").orElseThrow().split(";",2)[0];
+   var login=send(client,URI.create(config.origin+"/authorize?"+query),"GET",null,initial,null);
+   assertEquals(200,login.statusCode());String csrf=csrf(login.body());
    var signedIn=send(client,config.origin.resolve("/login"),"POST",IssuerApplicationTests.form(Map.of("csrf",csrf,"flow",flow(login.body()),"key",config.loginKey)),initial,config.origin.toString());
    assertEquals(303,signedIn.statusCode());String cookie=signedIn.headers().firstValue("Set-Cookie").orElseThrow().split(";",2)[0];assertNotEquals(initial,cookie);
    var consent=send(client,config.origin.resolve("/consent"),"GET",null,cookie,null);assertEquals(200,consent.statusCode());

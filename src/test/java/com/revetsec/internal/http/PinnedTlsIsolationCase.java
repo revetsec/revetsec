@@ -74,8 +74,12 @@ public final class PinnedTlsIsolationCase {
     exchange.sendResponseHeaders(200,body.length);exchange.getResponseBody().write(body);exchange.close();});probe.start();
    InetAddress address=InetAddress.getByAddress(full?new byte[]{8,8,8,8}:new byte[]{127,0,0,1});
    if(full){Path trust=runtime.resolve("trust.p12");pki.writeTrustStore(trust);System.setProperty("javax.net.ssl.trustStore",trust.toString());System.setProperty("javax.net.ssl.trustStorePassword","changeit");System.setProperty("javax.net.ssl.trustStoreType","PKCS12");}
-   for(String protocol:List.of("TLSv1.2","TLSv1.3")) {
-    try(PinnedTlsPeer peer=new PinnedTlsPeer(pki.server(true),address,protocol,"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 2\r\n\r\n{}",false)) {
+   X509Certificate[] chain=pki.chain();var variants=pki.variants();
+   List<X509Certificate[]> bags=List.of(chain,new X509Certificate[]{chain[0],chain[2],chain[1]},
+     new X509Certificate[]{chain[0],chain[1],variants.get("cross")},
+     new X509Certificate[]{chain[0],variants.get("untrusted-issuer"),chain[1]});
+   for(String protocol:List.of("TLSv1.2","TLSv1.3")) for(X509Certificate[] bag:bags) {
+    try(PinnedTlsPeer peer=new PinnedTlsPeer(pki.server(bag),address,protocol,"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 2\r\n\r\n{}",false)) {
      URI uri=URI.create("https://"+(full?"metadata.revetsec.com":"localhost")+":"+peer.port()+"/id?x=%2B");
      RawResponse result;
      if(full)result=PinnedHttpsTransport.fetch(uri,(host,budget)->List.of(address),16,5120,Duration.ofSeconds(10),Deadline.fromNow(Duration.ofSeconds(10)));
@@ -127,7 +131,7 @@ public final class PinnedTlsIsolationCase {
    }
    require(hits.get()>0,"AIA probe was not exercised by stock control");
    require("true".equals(Security.getProperty("ocsp.enable")) && "true".equals(System.getProperty("com.sun.net.ssl.checkRevocation")),"Global revocation properties changed");
-   System.out.println("PASS pinned-complete-incomplete-no-secondary-fetch TLSv1.2 TLSv1.3 SNI Host proxy-exclusion AIA-positive-control"+(full?" fresh-resolution changed-numeric-peer mixed-answer-rejection":"")+"");
+   System.out.println("PASS pinned-ordered-shuffled-cross-signed-alternate-incomplete-no-secondary-fetch TLSv1.2 TLSv1.3 SNI Host proxy-exclusion AIA-positive-control"+(full?" fresh-resolution changed-numeric-peer mixed-answer-rejection":"")+"");
   } finally {probe.stop(0);}
  }
  private static @NonNull RawResponse local(@NonNull URI uri,@NonNull InetAddress address,@NonNull SSLContext context) throws Exception {

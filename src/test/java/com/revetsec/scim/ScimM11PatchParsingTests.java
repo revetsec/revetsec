@@ -33,7 +33,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /** Independent grammar, typed-wire-value and canonical provenance assertions. */
 final class ScimM11PatchParsingTests {
-    private static final @NonNull ScimResourceType USER=ScimResourceType.userInstance();
+    private static final @NonNull ScimResourceType USER=ScimTestResourceTypes.userWithEnterpriseInstance();
     private static final @NonNull ScimResourceType GROUP=ScimResourceType.groupInstance();
     private static final @NonNull Object CONTEXT=new Object();
     private static final @NonNull String SCHEMA="urn:ietf:params:scim:api:messages:2.0:PatchOp";

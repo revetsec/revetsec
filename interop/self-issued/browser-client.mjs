@@ -41,6 +41,9 @@ const handles={},sessions=new Map(),requests=new Map(),requestKinds=new Map();le
 const failure=code=>{throw new Error(code);};
 function check(name,condition){report.checks.push({name,status:condition?'PASS':'FAIL'});if(!condition)failure('CLIENT_ASSERTION');}
 const pause=()=>new Promise(resolve=>setTimeout(resolve,50));
+async function submitSessionBootstrap(session) {
+ return evaluate(session,`(()=>{const f=document.querySelector('form[action^="/session?"]');if(!f||f.dataset.submitted)return false;f.dataset.submitted='yes';f.requestSubmit();return true;})()`);
+}
 async function waitFor(probe,code,ms=15000){const until=Date.now()+ms;while(Date.now()<until){try{if(await probe())return;}catch(error){if(['CLIENT_ASSERTION','CLIENT_LOGIN_REJECTED'].includes(error.message))throw error;}await pause();}failure(code);}
 function managed(name,command,args,extra={}){const h=startProcess(command,args,{cwd:root,env,timeoutMs:input.recovery==='none'?210000:310000,maxOutputBytes:1048576,...extra});handles[name]=h;for(const stream of [h.child.stdout,h.child.stderr])stream.on('data',chunk=>{const value=chunk.toString('utf8');report.childErrorFacts??={};const facts=report.childErrorFacts[name]??=[];for(const category of ['no certificate available','no matching certificates','failed to get certificate','wrong version number','permission denied','cannot assign requested address','adapting config','error during handshake'])if(value.includes(category)&&!facts.includes(category))facts.push(category);report.childErrorFacts[name]=facts;});void h.completion.then(result=>{report.childExitFacts??={};report.childExitFacts[name]={code:result.code,signaled:result.signal!==null,fixedErrorCategories:['cannot assign requested address','address already in use','adapting config','unrecognized directive','permission denied','Local issuer configuration rejected','java.net.BindException','ExceptionInInitializerError','network is unreachable'].filter(text=>result.stdout.includes(text)||result.stderr.includes(text))};}).catch(()=>{});return h;}
 function command(executable,args){const r=spawnSync(executable,args,{env,encoding:'utf8',timeout:10000,maxBuffer:65536});if(r.status!==0)failure('CLIENT_SETUP_COMMAND');}
@@ -147,7 +150,7 @@ try{
   if(parsed.port==='0'){
    report.nativeFailureFacts={printedZeroPort:true,ownsNonzeroLoopbackListener:listeners.length===1&&listeners[0].port>0&&listeners[0].exactLoopback};
    await cdp.send('Page.navigate',{url:authorizationUrl},inspectorSession);
-   await waitFor(()=>report.http.some(r=>r.path==='AUTHORIZE'&&r.status===400),'CLIENT_NATIVE_ZERO_PORT_ISSUER_REJECTION');
+   await waitFor(async()=>{await submitSessionBootstrap(inspectorSession);return report.http.some(r=>r.path==='AUTHORIZE'&&r.status===400);},'CLIENT_NATIVE_ZERO_PORT_ISSUER_REJECTION');
    failure('CLIENT_NATIVE_ZERO_REDIRECT');
   }
   check('native-client-own-os-selected-ip-loopback-listener',listeners.length===1&&listeners[0].exactLoopback&&listeners[0].port===Number(parsed.port)&&listeners[0].family===report.nativePort.family&&listeners[0].port!==6273);
@@ -156,6 +159,7 @@ try{
   await waitFor(async()=>{
    if(report.loginRejected)failure('CLIENT_LOGIN_REJECTED');
    const session=inspectorSession;
+   await submitSessionBootstrap(session);
    if(!loginObserved&&await evaluate(session,`document.querySelector('form[action="/login"]')!==null`)){
     const cookies=await cdp.send('Network.getCookies',{urls:[issuer]},session),cookie=cookies.cookies.find(c=>c.name==='__Host-RevetsecIssuer');
     const csrf=await evaluate(session,`document.querySelector('form[action="/login"]')?.elements.csrf.value`);appForms.set(session,{cookie:cookie?.value,csrf});
@@ -213,6 +217,7 @@ try{
   for(const t of (await cdp.send('Target.getTargets')).targetInfos.filter(t=>t.type==='page'))await attach(t.targetId);
   await evaluate(inspectorSession,clickText('Authorize'));
   for(const session of sessions.values()){
+   await submitSessionBootstrap(session);
    const observed=await evaluate(session,`(()=>{if(location.origin!==${JSON.stringify(issuer)}||location.pathname!=='/authorize')return null;const q=new URL(location.href).searchParams;return {registeredClient:q.get('client_id')===${JSON.stringify(clientId)},exactCallback:q.get('redirect_uri')===${JSON.stringify(redirect)},resource:q.get('resource')===${JSON.stringify(resource)},s256:q.get('code_challenge_method')==='S256'&&/^[A-Za-z0-9_-]{43}$/.test(q.get('code_challenge')??'')};})()`);if(observed)report.authorization=observed;
    const login=await evaluate(session,`document.querySelector('form[action="/login"]')!==null`);
    if(login&&!loginObserved){

@@ -43,6 +43,10 @@ import static java.util.Objects.requireNonNull;
  * The app owns account approval, sessions, CSRF, durable storage, and the external recovery
  * barrier. Only confirmed, admitted store transitions can produce a browser request or proof.
  * Construction performs no application callback or storage I/O.
+ * The current browser profile requires exactly {@code credProps: {rk: true}} client-extension
+ * output during registration and an empty client-extension object during authentication.
+ * Additional outputs reject; submit the browser's unmodified JSON rather than stripping fields.
+ * Browser/provider compatibility and origin support require the documented profile checks.
  *
  * @since 1.0.0
  */
@@ -79,8 +83,9 @@ public final class WebAuthnRelyingParty {
         return new Builder(relyingPartyId);
     }
 
-    /** Creates and commits account-approved enrollment options. The first approved enrollment
-     * inserts an absent account fence as active; an existing disabled fence remains disabled.
+    /** Creates and commits account-approved enrollment options in an expiring ceremony.
+     * An absent account fence remains absent until the first credential completion atomically
+     * establishes its active fence and index. An existing disabled fence remains disabled.
      * @param options approved account display data and handle
      * @param browserBinding application-held random browser-session binding
      * @return a committed browser request or fixed failure
@@ -270,9 +275,16 @@ public final class WebAuthnRelyingParty {
         };
     }
 
-    /** Disables an app-approved account's passkey fence, including pending ceremonies. The app
-     * must authorize this action, coordinate its own account state, and reconcile uncertain
-     * transitions. This API does not reenable a disabled account or terminate app sessions.
+    /** Permanently disables the passkey fence for an app-approved namespace/RP/account handle,
+     * including completions of pending ceremonies. There is no account-enable transition in
+     * this API. Reopening {@link WebAuthnRecoveryGate} traffic admission, rebuilding the relying
+     * party, repeating disable, or resealing records does not reenable the account.
+     * The app must authorize this action, coordinate its own account state and existing sessions,
+     * and reconcile uncertain effects. Disable retains credentials and ownership tombstones;
+     * authorized listing, removal and permanent-record reseal remain available under admission.
+     * A discoverable authentication begin has no account identity to reject; completion still
+     * enforces the disabled fence. This operation does not terminate app sessions or revoke a
+     * verification fact already returned to the application.
      * @param approvedUserHandle app-approved account handle
      * @return confirmed disabled state or fixed failure
      * @since 1.0.0 */
@@ -289,6 +301,9 @@ public final class WebAuthnRelyingParty {
     }
 
     /** Reseals one permanent, namespace-bound record with the current active sealing key.
+     * Use {@link WebAuthnStoreKey#fromStoredForm(String)} with a trusted complete persistence
+     * inventory to address revoked-credential tombstones as well as active records. The active
+     * account credential list alone is not a complete key-rotation inventory.
      * The application must coordinate key rotation, retain the old key until every permanent
      * row has been resealed, and close admission during restore or uncertain outcomes. Ceremony
      * rows are short lived and are not eligible. Absence returns CONFLICT; an uncertain commit
@@ -414,7 +429,10 @@ public final class WebAuthnRelyingParty {
         public @NonNull Builder relyingPartyName(@Nullable String name) {
             this.relyingPartyName = name == null ? null : displayName(name); return this;
         }
-        /** Sets exact trusted HTTPS origins whose host is the configured RP ID.
+        /** Sets exact trusted HTTPS origins on the configured RP ID or its dot-delimited
+         * canonical subdomains. Eligibility is not a wildcard allowlist: each origin and port
+         * must be explicitly configured and is snapshotted into prepared ceremonies.
+         * Use canonical lowercase DNS names; omit the default HTTPS port.
          * @param origins one to eight canonical origins, or null to clear the required set
          * @return this builder
          * @since 1.0.0 */
@@ -496,12 +514,18 @@ public final class WebAuthnRelyingParty {
 
     private static void validOrigin(@NonNull String value, @NonNull String relyingPartyId) {
         requireNonNull(value);
+        if (value.length() > 267) throw new IllegalArgumentException("Invalid WebAuthn origin");
         URI uri;
         try { uri = URI.create(value); }
         catch (IllegalArgumentException failure) { throw new IllegalArgumentException("Invalid WebAuthn origin"); }
         int port = uri.getPort();
-        String expected = "https://" + relyingPartyId + (port == -1 ? "" : ":" + port);
-        if (!"https".equals(uri.getScheme()) || !relyingPartyId.equals(uri.getHost())
+        String host = uri.getHost();
+        if (host == null) throw new IllegalArgumentException("Invalid WebAuthn origin");
+        // Reuse the same bounded canonical DNS validation as the configured RP ID.
+        WebAuthnStoreKey.forNamespaceClock("origin", host);
+        String expected = "https://" + host + (port == -1 ? "" : ":" + port);
+        if (!"https".equals(uri.getScheme())
+                || !(relyingPartyId.equals(host) || host.endsWith("." + relyingPartyId))
                 || uri.getRawUserInfo() != null || uri.getRawQuery() != null
                 || uri.getRawFragment() != null || port == 0 || port == 443 || port > 65_535
                 || uri.getRawPath() != null && !uri.getRawPath().isEmpty()

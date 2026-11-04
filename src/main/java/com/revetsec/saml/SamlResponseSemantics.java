@@ -289,14 +289,15 @@ final class SamlResponseSemantics {
     }
 
     private static boolean successStatus(@NonNull Element status) {
-        return SUCCESS.equals(flatStatusCode(status));
+        Status inspected = inspectStatus(status);
+        return inspected != null && inspected.plainSuccess();
     }
 
-    static @Nullable String flatStatusCode(@NonNull Element status) {
+    static @Nullable Status inspectStatus(@NonNull Element status) {
         if (!scalarDeclarationAllowed(status, PROTOCOL, "StatusType")
                 || hasNonWhitespaceDirectText(status)) return null;
         int phase = 0;
-        String value = null;
+        Status value = null;
         for (Element child : children(status)) {
             if (phase == 0 && is(child, PROTOCOL, "StatusCode")) {
                 value = statusCode(child);
@@ -315,25 +316,44 @@ final class SamlResponseSemantics {
         return value;
     }
 
-    private static @Nullable String statusCode(@NonNull Element outer) {
+    private static @Nullable Status statusCode(@NonNull Element outer) {
         Element current = outer;
-        String primary = null;
+        String primary = outer.getAttributeNS(null, "Value");
+        String secondary = null;
         for (int depth = 0; depth < 32; depth++) {
             if (!scalarDeclarationAllowed(current, PROTOCOL, "StatusCodeType")
                     || hasNonWhitespaceDirectText(current)) return null;
             String value = current.getAttributeNS(null, "Value");
             if (value.isEmpty()) return null;
-            if (primary == null) primary = value;
+            if (depth > 0 && SUCCESS.equals(value)) return null;
+            if (depth == 1) secondary = value;
             List<Element> children = children(current);
-            if (children.isEmpty()) return primary;
-            // Success has no meaningful subordinate refusal; the second-level
-            // Success code likewise cannot explain a top-level refusal.
-            if (SUCCESS.equals(primary) || children.size() != 1
-                    || !is(children.get(0), PROTOCOL, "StatusCode")
-                    || SUCCESS.equals(children.get(0).getAttributeNS(null, "Value"))) return null;
+            if (children.isEmpty()) return new Status(primary, secondary);
+            if (children.size() != 1 || !is(children.get(0), PROTOCOL, "StatusCode")) return null;
             current = children.get(0);
         }
         return null;
+    }
+
+    // Shape-only data, never signature or replay proof. Every level is validated before this is returned.
+    record Status(@NonNull String primary, @Nullable String secondary) {
+        boolean plainSuccess() { return SUCCESS.equals(primary) && secondary == null; }
+        boolean partialLogout() {
+            return SUCCESS.equals(primary) && "urn:oasis:names:tc:SAML:2.0:status:PartialLogout".equals(secondary);
+        }
+        @NonNull String authenticationCode() {
+            if (secondary != null && ("urn:oasis:names:tc:SAML:2.0:status:Requester".equals(primary)
+                    || "urn:oasis:names:tc:SAML:2.0:status:Responder".equals(primary))) {
+                return switch (secondary) {
+                    case "urn:oasis:names:tc:SAML:2.0:status:AuthnFailed",
+                         "urn:oasis:names:tc:SAML:2.0:status:NoAuthnContext",
+                         "urn:oasis:names:tc:SAML:2.0:status:RequestDenied" -> secondary;
+                    default -> primary;
+                };
+            }
+            return primary;
+        }
+        @Override public @NonNull String toString() { return "SamlResponseSemantics.Status{<redacted>}"; }
     }
 
     private static boolean validIssueInstant(@NonNull Instant issued, @NonNull Instant ageEnd,

@@ -369,7 +369,7 @@ final class OAuthIssuerKeysTests {
   }));
   tests.add(test("zero HTTP cache max-age revalidates",()->assertTrue(new String(metadata(ISSUER,false,false,Set.of(),Duration.ZERO,32768,16384,false).metadata("GET",deadline()).headers(),StandardCharsets.US_ASCII).contains("max-age=0, must-revalidate"))));
   tests.add(test("metadata body overflow",()->{Set<String> scopes=new java.util.HashSet<>();for(int i=0;i<64;i++)scopes.add("a".repeat(100)+i);
-   var metadata=metadata(ISSUER,false,false,scopes,PUBLIC_METADATA_HTTP_CACHE_MAX_AGE,4096,16384,false);assertThrows(IllegalArgumentException.class,()->metadata.metadata("GET",deadline()));}));
+   var metadata=metadata(ISSUER,false,false,scopes,PUBLIC_METADATA_HTTP_CACHE_MAX_AGE,4096,16384,false);assertEquals(OAuthServerAdmissionFailure.Reason.CONFIGURATION,assertThrows(OAuthServerAdmissionFailure.class,()->metadata.metadata("GET",deadline())).reason());}));
   tests.add(test("metadata expired budget",()->unavailable(()->metadata(ISSUER,false,false,Set.of(),PUBLIC_METADATA_HTTP_CACHE_MAX_AGE,32768,16384,false).metadata("GET",Deadline.fromNow(Duration.ZERO)))));
   return tests.stream();
  }
@@ -392,7 +392,7 @@ final class OAuthIssuerKeysTests {
   Map<String,PublicKey> keys=new LinkedHashMap<>();for(int i=0;i<20;i++)keys.put("old"+i,A.getPublicKey());
   var life=lifecycle(snapshot(key("a",A),"g",NOW.minusSeconds(120),keys,Map.of()));
   var metadata=metadata(ISSUER,false,false,Set.of(),PUBLIC_METADATA_HTTP_CACHE_MAX_AGE,4096,16384,false);
-  assertThrows(IllegalArgumentException.class,()->metadata.jwks("GET",life,deadline()));
+  assertEquals(OAuthServerAdmissionFailure.Reason.CONFIGURATION,assertThrows(OAuthServerAdmissionFailure.class,()->metadata.jwks("GET",life,deadline())).reason());
  }
  @Test void scopeAdvertisementIncludesUnionAcrossResources() {
   Set<String> scopes=new java.util.HashSet<>();for(int i=0;i<128;i++)scopes.add("scope"+i);

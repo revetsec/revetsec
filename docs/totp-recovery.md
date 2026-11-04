@@ -9,10 +9,12 @@ The application owns account identity, authorization, primary authentication, se
 ## Configure one immutable authenticator
 
 ```java
+// Share this thread-safe sealer for this key set.
 StateSealer sealer = StateSealer.withActiveKey(currentSealingKey)
     .verificationKeys(List.of(previousSealingKey))
     .build();
 
+// Share this thread-safe authenticator across requests.
 TotpAuthenticator totp = TotpAuthenticator.withIssuer("Example")
     .credentialNamespace("production-accounts")
     .recoveryEpoch(deploymentRecoveryEpoch)

@@ -107,7 +107,7 @@ final class SamlObserverTests {
 
         SamlServiceProvider reset = SamlServiceProvider.withEntityId(SP)
                 .assertionConsumerServiceUrl(URI.create("https://sp.example.test/acs"))
-                .replayCache(InMemorySamlReplayCache.withLimit(CLOCK, 4))
+                .replayCache(InMemorySamlReplayCache.fromLimit(CLOCK, 4))
                 .clock(CLOCK).observer(broken).observer(null).build();
         assertInstanceOf(SamlAuthenticationRequestResult.Prepared.class, reset.beginAuthenticationResult(idp));
     }
@@ -168,7 +168,7 @@ final class SamlObserverTests {
     private static @NonNull SamlServiceProvider serviceProvider(@NonNull SamlObserver observer) {
         return SamlServiceProvider.withEntityId(SP)
                 .assertionConsumerServiceUrl(URI.create("https://sp.example.test/acs"))
-                .replayCache(InMemorySamlReplayCache.withLimit(CLOCK, 4))
+                .replayCache(InMemorySamlReplayCache.fromLimit(CLOCK, 4))
                 .clock(CLOCK).observer(observer).build();
     }
 

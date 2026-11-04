@@ -122,7 +122,11 @@ public final class ScriptedOAuthStore implements OAuthAuthorizationServerStore {
     }
     public static StoreTimeObservation.@NonNull Healthy observation(@NonNull Instant time){return observation(StoreAdmission.fromIdentifiers(identifier(1),identifier(2)),identifier(3),time);}
     public static StoreTimeObservation.@NonNull Healthy observation(@NonNull StoreAdmission admission,@NonNull String generation,@NonNull Instant time){return StoreTimeObservation.Healthy.fromObservation(admission,generation,time,Duration.ZERO);}
-    private static @NonNull String scope(@NonNull OAuthStoreKey key){return key.getStorageKey().split(":")[3];}
+    private static @NonNull String scope(@NonNull OAuthStoreKey key){
+        // OAuthStoreKey has already validated the fixed-width namespace transport grammar.
+        int start="revetsec:as:1:".length();
+        return key.getStorageKey().substring(start,start+43);
+    }
     private static boolean badBudget(@NonNull Duration budget){Objects.requireNonNull(budget);return budget.isNegative() || budget.isZero() || Thread.currentThread().isInterrupted();}
     private static @NonNull OAuthStoreCommitReceipt refusal(@NonNull OAuthStoreCommitStatus status){return OAuthStoreCommitReceipt.fromRefusal(status);}
     private static @NonNull String identifier(int seed){byte[] bytes=new byte[32];for(int n=0;n<bytes.length;n++)bytes[n]=(byte)(seed+n);return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);}

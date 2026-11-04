@@ -143,7 +143,7 @@ final class OidcApplicationTests {
         MutableClock clock = new MutableClock();
         try (SyntheticOidcProvider provider = new SyntheticOidcProvider(clock)) {
             with(provider, clock, browser -> {
-                HttpRequestResult home = browser.get("/"); String csrf = csrf(home);
+                HttpRequestResult home = browser.start(); String csrf = csrf(home);
                 assertEquals(403, status(browser.post("/login", "csrf=" + csrf, null)));
                 assertEquals(403, status(browser.post("/login", "csrf=" + csrf, "https://attacker.example")));
                 assertEquals(403, status(browser.post("/login", "csrf=wrong", "https://localhost:8443")));
@@ -188,13 +188,15 @@ final class OidcApplicationTests {
             SokletSimulator.run(app.configuration(18080), simulator -> {
                 Browser first = new Browser(simulator); Browser second = new Browser(simulator); Browser third = new Browser(simulator);
                 begin(provider, first);
-                HttpRequestResult home = second.get("/");
+                HttpRequestResult home = second.start();
                 assertEquals(503, status(second.post("/login", "csrf=" + csrf(home), "https://localhost:8443")));
-                assertEquals(503, status(third.get("/")));
+                assertEquals(200, status(third.get("/")));
+                assertEquals(503, status(third.post("/session", "begin=1", "https://localhost:8443")));
                 assertEquals(0, provider.tokenPosts.get());
                 clock.advance(Duration.ofSeconds(-1));
                 assertEquals(200, status(third.get("/")));
-                assertFalse(third.cookies.isEmpty());
+                assertTrue(third.cookies.isEmpty());
+                assertEquals(200, status(third.start()));
             });
         }
     }
@@ -206,11 +208,11 @@ final class OidcApplicationTests {
             OidcApplication app = provider.application(1024, 8, AuthorizationRequestOptions.ResponseMode.QUERY);
             SokletSimulator.run(app.configuration(18080), simulator -> {
                 Browser last = new Browser(simulator);
-                HttpRequestResult lastHome = last.get("/");
-                for (int index = 1; index < 512; index++) assertEquals(200, status(new Browser(simulator).get("/")));
-                assertEquals(503, status(new Browser(simulator).get("/")));
+                HttpRequestResult lastHome = last.start();
+                for (int index = 1; index < 512; index++) assertEquals(200, status(new Browser(simulator).start()));
+                assertEquals(503, status(new Browser(simulator).post("/session", "begin=1", "https://localhost:8443")));
                 assertEquals(302, status(last.post("/logout", "csrf=" + csrf(lastHome), "https://localhost:8443")));
-                assertEquals(200, status(new Browser(simulator).get("/")));
+                assertEquals(200, status(new Browser(simulator).start()));
                 assertEquals(0, provider.tokenPosts.get());
             });
         }
@@ -295,12 +297,13 @@ final class OidcApplicationTests {
                     "https://user@localhost:8443", "https://localhost:8443/path", "https://localhost:8443/?x=1", "https://localhost:8443/#x"))
                 assertThrows(IllegalArgumentException.class, () -> OidcApplication.checkedOrigin(URI.create(origin)));
             SokletSimulator.run(app.configuration(18080), simulator -> {
-                Browser browser = new Browser(simulator); HttpRequestResult home = browser.get("/");
+                Browser browser = new Browser(simulator); HttpRequestResult admission = browser.post("/session", "begin=1", "https://localhost:8443");
+                assertEquals(303, status(admission)); HttpRequestResult home = browser.get("/");
                 Map<String, List<String>> headers = home.getMarshaledResponse().getHeaders();
                 assertEquals(List.of("no-store"), headers.get("Cache-Control"));
                 assertEquals(List.of("same-origin"), headers.get("Referrer-Policy"));
                 assertTrue(headers.get("Content-Security-Policy").iterator().next().contains("default-src 'none'"));
-                ResponseCookie cookie = home.getMarshaledResponse().getCookies().iterator().next();
+                ResponseCookie cookie = admission.getMarshaledResponse().getCookies().iterator().next();
                 assertTrue(cookie.getName().startsWith("__Host-")); assertTrue(cookie.getSecure()); assertTrue(cookie.getHttpOnly());
                 assertEquals(Optional.of("/"), cookie.getPath()); assertTrue(cookie.getDomain().isEmpty());
                 assertEquals(Optional.of(ResponseCookie.SameSite.NONE), cookie.getSameSite());
@@ -315,7 +318,7 @@ final class OidcApplicationTests {
         SokletSimulator.run(app.configuration(18080), simulator -> test.accept(new Browser(simulator)));
     }
     private static @NonNull Flow begin(@NonNull SyntheticOidcProvider provider, @NonNull Browser browser) {
-        HttpRequestResult home = browser.get("/"); assertEquals(200, status(home));
+        HttpRequestResult home = browser.start(); assertEquals(200, status(home));
         HttpRequestResult redirect = browser.post("/login", "csrf=" + csrf(home), "https://localhost:8443");
         assertEquals(302, status(redirect));
         assertEquals(List.of("no-referrer"), redirect.getMarshaledResponse().getHeaders().get("Referrer-Policy"));
@@ -348,6 +351,10 @@ final class OidcApplicationTests {
         final @NonNull Simulator simulator;
         final @NonNull Map<@NonNull String, @NonNull String> cookies = new HashMap<>();
         Browser(@NonNull Simulator simulator) { this.simulator = simulator; }
+        @NonNull HttpRequestResult start() {
+            assertEquals(303, status(post("/session", "begin=1", "https://localhost:8443")));
+            return get("/");
+        }
         @NonNull HttpRequestResult get(@NonNull String path) { return send(HttpMethod.GET, path, null, Map.of()); }
         @NonNull HttpRequestResult post(@NonNull String path, @NonNull String body, @Nullable String origin) {
             Map<String, List<String>> headers = new HashMap<>();

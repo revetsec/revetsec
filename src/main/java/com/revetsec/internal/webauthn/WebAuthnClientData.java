@@ -43,6 +43,8 @@ import static java.util.Objects.requireNonNull;
  * Checks the browser-bound fields of one WebAuthn {@code clientDataJSON}. This does not verify an authenticator
  * signature, consume a challenge, or authorize a ceremony. The exact caller-selected origins are trusted only after
  * constructor validation; request headers never choose an origin.
+ * Eligible configured hosts are the RP ID or canonical dot-delimited subdomains; verification
+ * still matches the exact snapshotted origin string, never a suffix or wildcard.
  */
 @Immutable
 final class WebAuthnClientData {
@@ -129,17 +131,20 @@ final class WebAuthnClientData {
     }
 
     private static boolean isExactHttpsOrigin(@NonNull String origin, @NonNull String relyingPartyId) {
+        if (origin.length() > 267) return false;
         try {
             URI uri = new URI(origin);
-            if (!"https".equals(uri.getScheme()) || !relyingPartyId.equals(uri.getHost())
+            String host = uri.getHost();
+            if (!"https".equals(uri.getScheme()) || host == null || !isCanonicalRelyingPartyId(host)
+                    || !(relyingPartyId.equals(host) || host.endsWith("." + relyingPartyId))
                     || uri.getRawUserInfo() != null || uri.getRawPath() == null || !uri.getRawPath().isEmpty()
                     || uri.getRawQuery() != null || uri.getRawFragment() != null)
                 return false;
             int port = uri.getPort();
             if (port == -1)
-                return origin.equals("https://" + relyingPartyId);
+                return origin.equals("https://" + host);
             return port >= 1 && port <= 65_535
-                    && origin.equals("https://" + relyingPartyId + ":" + port);
+                    && origin.equals("https://" + host + ":" + port);
         } catch (URISyntaxException exception) {
             return false;
         }

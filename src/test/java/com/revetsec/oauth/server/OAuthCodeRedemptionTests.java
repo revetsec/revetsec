@@ -258,7 +258,9 @@ final class OAuthCodeRedemptionTests {
  }
  @TestFactory @NonNull Stream<@NonNull DynamicTest> policyFaultsAreInfrastructureAndLeaveCodeUsable() {
   Map<String,OAuthGrantPolicy> policies=new LinkedHashMap<>();policies.put("throw",(c,b)->{throw new IllegalStateException("secret");});policies.put("null",(c,b)->nullDecision());policies.put("identity",(c,b)->decision("other",Set.of("read"),false));policies.put("widen",(c,b)->decision("subject",Set.of("admin"),false));policies.put("resource",(c,b)->OAuthAuthorizationDecision.withSubject("subject").authorizedScopesByResource(Map.of("https://other.example/mcp",Set.of("read"))).build());policies.put("refresh",(c,b)->decision("subject",Set.of("read"),true));
-  return policies.entrySet().stream().map(e->DynamicTest.dynamicTest(e.getKey(),()->{OAuthCodeRedemptionTests t=new OAuthCodeRedemptionTests();String code=t.code(false);int commits=t.store.commits;unavailable(()->t.first.redeem(request(code,Map.of()),(id,b)->Optional.of(client()),resources(),e.getValue(),deadline()));assertEquals(commits,t.store.commits);assertNotNull(t.redeem(code));}));
+  return policies.entrySet().stream().map(e->DynamicTest.dynamicTest(e.getKey(),()->{OAuthCodeRedemptionTests t=new OAuthCodeRedemptionTests();String code=t.code(false);int commits=t.store.commits;
+   var failure=assertThrows(OAuthServerAdmissionFailure.class,()->t.first.redeem(request(code,Map.of()),(id,b)->Optional.of(client()),resources(),e.getValue(),deadline()));
+   assertEquals(Set.of("throw","null").contains(e.getKey())?OAuthServerAdmissionFailure.Reason.INFRASTRUCTURE:OAuthServerAdmissionFailure.Reason.CONFIGURATION,failure.reason());assertNull(failure.getCause());assertEquals(commits,t.store.commits);assertNotNull(t.redeem(code));}));
  }
  @SuppressWarnings("NullAway") private static @NonNull OAuthAuthorizationDecision nullDecision() {return null;}
  @Test void policyFatalErrorPropagatesAndInterruptionIsRestored() {
@@ -415,7 +417,7 @@ final class OAuthCodeRedemptionTests {
   byte[] key=new byte[32];for(int n=0;n<32;n++)key[n]=(byte)(n+1);
   var codec=new OAuthStoreRecordCodec(ISSUER,StateSealer.withActiveKey(SealingKey.fromBase64("k",Base64.getEncoder().encodeToString(key))).maximumSealedLength(16384).clock(Clock.fixed(NOW,ZoneOffset.UTC)).build(),16384);
   var coordinator=new OAuthStoreCoordinator(this.store,codec,this.clock,3,1024);
-  coordinator.initializeFreshIssuer(deadline()).getStatus();String subject="s".repeat(1024);coordinator.establishNewSubject(subject,deadline());
+  assertEquals(OAuthStoreCommitStatus.COMMITTED,coordinator.initializeFreshIssuer(deadline()).getStatus());String subject="s".repeat(1024);coordinator.establishNewSubject(subject,deadline());
   Set<String> scopes=Set.of("a".repeat(128),"b".repeat(128),"c".repeat(128),"d".repeat(128),"e".repeat(128),"f".repeat(128),"g".repeat(128),"h".repeat(128));
   String clientId="c".repeat(2048);var resources=Map.of(RESOURCE,scopes);var client=OAuthServerClientRegistration.withClientId(clientId).configurationVersion("v1").redirectUris(List.of(URI.create(REDIRECT))).allowedScopesByResource(resources).build();
   String query="client_id="+clientId+"&response_type=code&redirect_uri="+encode(REDIRECT)+"&resource="+encode(RESOURCE)+"&code_challenge_method=S256&code_challenge="+CHALLENGE;

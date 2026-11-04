@@ -1,18 +1,22 @@
 # Revetsec
 
-The current pre-1.0 source includes the coordinated TOTP/WebAuthn/issuer [shared-clock store and consumer contracts](docs/shared-clock-stores.md). Update stores and result handling together; a successful raw maintenance receipt is not traffic/readiness admission. Shared-profile qualification and retained-data migration remain separate requirements.
-
 ### What Is It?
 
-A zero-dependency Java library for OAuth 2.0 clients and resource servers, OpenID Connect relying parties, JOSE, SAML 2.0 service providers and SCIM 2.0 servers.
+A zero-dependency Java library for OAuth 2.0 clients, resource servers and app-integrated token issuance, OpenID Connect relying parties, JOSE, SAML 2.0 service providers (SPs), SCIM 2.0 server primitives, WebAuthn passkeys, TOTP/recovery codes and password hashing.
 
-**Revetsec is pre-release.** It verifies signed JWTs against JSON Web Key Sets, provides bounded RSA signing, and includes OAuth 2.0 client and issuer operations, audience-checked JWT/introspection resource validation, an OpenID Connect relying party, SAML SP, SCIM server primitives, WebAuthn relying-party workflows, TOTP enrollment with one-use recovery codes, and password hashing. See [Status](#status) for current release gates.
+**Revetsec is pre-release.** It verifies signed JWTs against JSON Web Key Sets, provides bounded RSA signing, and includes OAuth 2.0 client and issuer operations, audience-checked JWT/introspection resource validation, an OpenID Connect relying party, SAML SP, SCIM server primitives, WebAuthn relying-party workflows, TOTP enrollment with one-use recovery codes, and password hashing. See [Status](#status) for version and compatibility information.
 
 Revetsec handles the application side of these protocols. It builds outbound requests, parses and validates what comes back, and returns an explicit outcome for expected success or rejection. TOTP storage and recovery-admission failures also have explicit outcomes; other infrastructure and configuration failures retain their documented exception boundaries. Your application keeps its own users, sessions, routes and storage.
 
 Framework adapters for [Soklet](https://www.soklet.com) and the Servlet API are separate artifacts in their own repositories (see [Installation](#installation)).
 
-[Unpublished runnable examples](examples/README.md) demonstrate OIDC sessions and a Soklet MCP resource server with application-owned storage and authorization decisions. Their local HTTPS/provider setup uses exact source pins and private build/trust directories.
+The [runnable examples](examples/README.md) demonstrate OIDC sessions, protected
+MCP resources, OAuth issuance, passkeys, TOTP and durable storage. Each project
+documents its configuration and local HTTPS setup.
+Build the example projects with `mvn -f examples/pom.xml verify` after installing
+their dependencies, then launch the applications with `java -jar`; see the
+[setup instructions](examples/README.md#build-with-maven). Python is only needed
+for optional verification fixtures.
 
 ### Why?
 
@@ -24,15 +28,13 @@ It provides protocol-specific library APIs rather than one abstraction over ever
 
 ### Design Goals
 
-- Main focus: the application side of OAuth 2.0, OpenID Connect, SAML 2.0 and SCIM 2.0
+- Application-side OAuth 2.0, OpenID Connect, SAML 2.0 and SCIM 2.0, plus WebAuthn, TOTP/recovery codes and password hashing
 - Zero compile or runtime dependencies: the JAR plus the JDK is enough, enforced by the build and visible in the published POM
 - Secure defaults: every relaxation is a named compatibility mode that is off by default and observable
 - Validated identities are produced only by validators, with no public constructors, builders or factories for them
 - Framework-neutral and raw-input-first: the core parses raw query strings, form bodies and header values, and adapters only translate
-- Immutability and thread safety, with injectable [`Clock`](https://docs.oracle.com/en/java/javase/27/docs/api/java.base/java/time/Clock.html), [`HttpClient`](https://docs.oracle.com/en/java/javase/27/docs/api/java.net.http/java/net/http/HttpClient.html) and observers for deterministic tests
+- Immutability and thread safety, with injectable [`Clock`](https://docs.oracle.com/en/java/javase/27/docs/api/java.base/java/time/Clock.html), [`HttpClient`](https://docs.oracle.com/en/java/javase/27/docs/api/java.net.http/java/net/http/HttpClient.html) and observers
 - The common path for each protocol fits on one page of application code
-- More test code than production code, at least as many negative tests as positive ones, and every security rule tested with a citation of its spec section or CVE
-- Claims only with evidence that anyone can re-run
 
 ### Validation outcomes
 
@@ -82,7 +84,7 @@ HTTP errors rather than reflecting detailed validation reasons to a remote calle
 
 ### Design Non-Goals
 
-- Operating a hosted identity service, OpenID Provider or SAML identity provider
+- Operating a hosted identity service, OpenID Provider or SAML identity provider (IdP)
 - Implicit, hybrid and resource-owner-password flows, PKCE `plain`, and bearer tokens in query strings
 - SAML Artifact binding, SOAP back-channel, ECP/PAOS, SAML 1.1 and WS-Federation
 - RSA 1.5 and 3DES in XML Encryption, and unauthenticated AES-CBC decryption
@@ -154,17 +156,17 @@ Every area below ships together in a single 1.0.0 release:
 - OAuth 2.0 resource server
 - OpenID Connect relying party
 - JOSE: JWS verification, bounded RSA signing, JWK and JWK Sets, and JWT validation
-- SAML 2.0 service provider for Web Browser SSO, including encrypted assertions and front-channel Single Logout
+- SAML 2.0 SP for Web Browser SSO, including encrypted assertions and front-channel Single Logout
 - SCIM 2.0 server primitives
 - WebAuthn relying-party registration, sign-in and account management
 - TOTP authenticator enrollment, replay-protected verification and one-use recovery codes
 - Argon2id password hashing with bounded work and explicit legacy verification
 
-Each area gets its own section here, with application code, when it lands.
+The sections below link API usage to runnable application source and detailed configuration guides.
 
 ### TOTP and recovery codes
 
-`TotpAuthenticator` provides confirmed enrollment, factor replacement/removal, replay-protected TOTP verification and one-use recovery-code batches. The application supplies durable opaque-record storage and an independent deployment recovery gate; accounts, authorization, primary authentication and sessions remain application-owned. Core stays at Java 17. See the [TOTP and recovery guide](docs/totp-recovery.md), [complete Soklet 4 integration](examples/totp-soklet/README.md), and unpublished [PostgreSQL durable-store fixture](examples/postgresql-pending-store/README.md#durable-totp-fixture).
+`TotpAuthenticator` provides confirmed enrollment, factor replacement/removal, replay-protected TOTP verification and one-use recovery-code batches. The application supplies durable opaque-record storage and an independent deployment recovery gate; accounts, authorization, primary authentication and sessions remain application-owned. Core stays at Java 17. See the [TOTP and recovery guide](docs/totp-recovery.md), [complete Soklet 4 integration](examples/totp-soklet/README.md), and [PostgreSQL storage recipe](examples/postgresql-pending-store/README.md#durable-totp-fixture).
 
 ### Password hashing
 
@@ -174,13 +176,15 @@ Each area gets its own section here, with application code, when it lands.
 
 `PublishedJwk` and `JwksPublisher` publish application-owned public verification keys without an OAuth authorization server. RSA (RS*/PS*), EC and Ed25519 keys, certificate chains, HTTP caching and Soklet/Servlet adapters are covered in the [standalone JWKS publication guide](docs/jwks-publication.md).
 
-The [`JwtValidator`](https://javadoc.revetsec.com/com/revetsec/jose/JwtValidator.html) API validates a JWT signed with a public key, for one issuer, against a JSON Web Key Set. A [`RemoteJwksSource`](https://javadoc.revetsec.com/com/revetsec/jose/RemoteJwksSource.html) fetches your identity provider's key set on the first validation that needs it, on the calling thread, and caches it. Building either does no I/O.
+The [`JwtValidator`](https://javadoc.revetsec.com/com/revetsec/jose/JwtValidator.html) API validates a JWT signed with a public key, for one issuer, against a JSON Web Key Set. A [`RemoteJwksSource`](https://javadoc.revetsec.com/com/revetsec/jose/RemoteJwksSource.html) fetches your IdP's key set on the first validation that needs it, on the calling thread, and caches it. Building either does no I/O.
 
 ```java
+// Share this thread-safe key source for this issuer.
 var keySource = RemoteJwksSource
   .withUri(URI.create("https://login.example.com/.well-known/jwks.json"))
   .build();
 
+// Share this thread-safe validator across requests.
 var validator = JwtValidator.withIssuer("https://login.example.com")
   .jwksSource(keySource)
   .expectedAudiences(Set.of("https://api.example.com"))
@@ -203,17 +207,53 @@ Only the success variant releases the checked JWT. A rejection carries a fixed r
 
 The [`OAuthClient`](https://javadoc.revetsec.com/com/revetsec/oauth/OAuthClient.html) API supports authorization code with PKCE S256, client credentials, refresh, revocation and generated private-key assertions. It accepts static metadata or discovers an authorization server lazily. Browser completion checks the pending browser binding, state, callback route and issuer before token exchange. The [OAuth client guide](docs/oauth-client.md) covers cookie and store setup, concurrent replay, return destinations and the raw-token boundary.
 
-For an OIDC sign-in example with an application-owned session and both query and form-post callbacks, start with the [barebones OIDC application](examples/barebones-oidc/README.md). It runs against a local test provider and rotates the browser session after successful authentication.
+### OpenID Connect sign-in
+
+Use `OidcClient` when a browser login must produce a validated identity. Configure the issuer, registered client credentials and exact callback URI from trusted startup configuration:
+
+```java
+// Share this thread-safe client across requests for this issuer and registration.
+var oidc = OidcClient.withIssuer("https://login.example.com")
+  .clientId(clientId)
+  .clientAuthentication(ClientAuthentication.fromClientSecretBasic(clientSecret))
+  .redirectUri(URI.create("https://app.example.com/callback"))
+  .build();
+```
+
+`beginAuthentication()` creates the browser redirect and pending transaction. Bind that transaction to the initiating browser; with an atomic pending store, redirect only after `saveToResult` returns `SAVED`. Parse the raw query/form callback and pass the browser-bound pending source and trusted receiving URI to `completeAuthenticationResult`. Only `OidcAuthenticationResult.Succeeded` releases an identity. Key accounts by the exact issuer and subject, then apply application authorization and rotate the session/CSRF token. Clear pending cookies on every outcome; an OAuth token response or restored session reference is not an identity.
+
+Start with the [barebones OIDC application](examples/barebones-oidc/README.md), its [client construction](examples/barebones-oidc/src/main/java/com/revetsec/examples/barebones/BarebonesOidc.java) and [begin/callback/session handlers](examples/barebones-oidc/src/main/java/com/revetsec/examples/barebones/OidcApplication.java). It supports query and form-post callbacks with bounded local stores. The [browser authorization guide](docs/oauth-client.md#browser-authorization) covers pending cookies, raw callbacks and the shared-store replay boundary; the [Entra issuer policy guide](docs/oidc-issuer-policy.md) covers explicit tenant policy.
 
 ### OAuth authorization server
 
 The `com.revetsec.oauth.server` package implements authorization, token issuance, refresh, revocation, introspection, metadata and JWKS operations. The application supplies registered clients, subject authentication, consent, grant policy, a durable atomic store, signing keys and the browser session. See the [application-contract guide](docs/oauth-server-application-contracts.md) and the [self-issued runnable example](examples/self-issued/README.md).
+
+### WebAuthn passkeys
+
+`WebAuthnRelyingParty` provides registration, discoverable sign-in, account-pinned reauthentication and credential management. Supply an authoritative `WebAuthnStore`, managed record-sealing keys and an application-owned recovery admission gate:
+
+```java
+// Share this thread-safe relying party for this RP, namespace and storage/key policy.
+var passkeys = WebAuthnRelyingParty.withRelyingPartyId("app.example.com")
+  .relyingPartyName("Example application")
+  .allowedOrigins(Set.of("https://app.example.com"))
+  .credentialNamespace("accounts")
+  .store(passkeyStore)
+  .stateSealer(passkeyRecordSealer)
+  .recoveryGate(recoveryGate)
+  .build();
+```
+
+Begin account-approved enrollment with `beginRegistrationResult`, or discoverable sign-in with `beginAuthenticationResult`. Bind each ceremony to the browser session and return options only from `Prepared`. Complete using the saved ceremony ID, raw browser credential JSON and the same binding. Only successful completion releases proof; uncertain or reconciliation outcomes require deliberate recovery handling. Keep recovery admission through the application's session/action transition. The application owns enrollment approval, credential-management authorization, CSRF and sessions.
+
+The [runnable passkey example](examples/passkeys-soklet/README.md) and its [application handlers](examples/passkeys-soklet/src/main/java/example/passkeys/PasskeyApp.java) show the complete browser flow, reauthentication and removal. Its default store and keys are disposable and vanish at restart. For an established service, follow the [store/time/recovery contract](docs/shared-clock-stores.md) and [durable storage recipe](examples/postgresql-pending-store/README.md). Check the [browser/extension policy](docs/webauthn-browser-compatibility.md) for accepted JSON shapes and compatibility limits; a local or virtual-authenticator example does not establish physical-key or synced-credential compatibility.
 
 ### RSA signing
 
 The [`JwsSigner`](https://javadoc.revetsec.com/com/revetsec/jose/JwsSigner.html)`.fromRsaKeyPair(privateKey, publicKey, `[`JwsAlgorithm`](https://javadoc.revetsec.com/com/revetsec/jose/JwsAlgorithm.html)`.PS256)` creates a reusable signer with a checked public-key snapshot. It retains an application-owned private key without exporting it. Call `warmUp(remainingBudget)` for an explicit noncredential pair probe. Supply a typed [`JwtSigningHeader`](https://javadoc.revetsec.com/com/revetsec/jose/JwtSigningHeader.html) and [`JwtClaimsSet`](https://javadoc.revetsec.com/com/revetsec/jose/JwtClaimsSet.html) to sign a compact JWT without manual JSON serialization:
 
 ```java
+// Share this thread-safe signer across requests.
 var signer = JwsSigner.fromRsaKeyPair(
   privateKey, publicKey, JwsAlgorithm.PS256);
 var now = Instant.now();
@@ -240,13 +280,9 @@ PS256, RS256 and RS384 are supported. The optional 32-byte thumbprint is the SHA
 
 Revetsec is **pre-release**. The version is `1.0.0-SNAPSHOT`, and there is no compatibility promise before 1.0.0; see [COMPATIBILITY.md](COMPATIBILITY.md).
 
-The repository includes shared foundations, JOSE, an OAuth client and issuer, an OpenID Connect relying party, resource-server validation, a SAML SP, SCIM server primitives and a WebAuthn relying party. The SAML SP's [RC-2 readiness gate](docs/reviews/rc-2-round-1.md#rc-2-closure--2026-10-14) closed on 2026-10-14; its [integration guide](docs/saml-sp.md) describes deployment contracts. SCIM's API was frozen on 2026-10-14; see its [server guide](docs/scim-server-primitives.md). Subsequent API changes still require consolidated review against the final release source.
-
-On 2026-10-15, the local [WebAuthn browser example](examples/passkeys-soklet/README.md) passed registration, discoverable sign-in, account-pinned reauthentication and rejection after server-side credential removal with a Yubico Security Key C NFC over USB. WebAuthn's dedicated review and final release qualification remain open. The [PostgreSQL example](examples/postgresql-pending-store/README.md) also passed its full storage/Soklet application lanes on Java 17 and 27, including synthetic WebAuthn recovery checks, on one host and one authoritative primary. These observations retain their tested source and environment scope.
-
 The application supplies users, permissions, sessions, routes and durable storage. The Soklet, Jakarta Servlet and javax Servlet adapters provide transport helpers across OAuth, bearer admission, issuer endpoints, SAML, SCIM and WebAuthn as documented in each adapter. Applications choose validators and make permission decisions.
 
-Revetsec has not been independently audited. Its bounded security evidence is in [`docs/`](docs/): the [threat model](docs/threat-model.md), [interop matrix](COMPATIBILITY.md), [RC-1 local OAuth/OIDC qualification and Burp closeout](docs/pentest/2026-10-15-rc1-burp.md), [RC-2 review and closure](docs/reviews/rc-2-round-1.md), [SAML pentest notes](docs/pentest/2026-10-13.md), and [mutation ledger](docs/saml-mutation-triage-2026-10-11.md). [Fuzz evidence](fuzz/README.md) includes local runs and planted-defect checks. Other 1.0.0 release evidence is still being assembled.
+Revetsec has not been independently audited. The [threat model](docs/threat-model.md) describes protocol and storage trust boundaries.
 
 To report a vulnerability, see [SECURITY.md](SECURITY.md).
 
@@ -278,8 +314,8 @@ Both implement [`AccessTokenValidator`](https://javadoc.revetsec.com/com/revetse
 
 Role-specific discovery needs only issuer/JWKS for JWT or issuer/introspection endpoint for introspection. The existing OAuth metadata parser still requires authorization and token endpoints. `warmUp()` performs discovery/key loading without validating a credential. Builds perform no I/O and start no threads.
 
-Generated OAuth `private_key_jwt` authentication uses [`ClientAssertionSigningKey`](https://javadoc.revetsec.com/com/revetsec/oauth/ClientAssertionSigningKey.html) and a caller-thread [`ClientAssertionKeyProvider`](https://javadoc.revetsec.com/com/revetsec/oauth/ClientAssertionKeyProvider.html). See [the OAuth client guide](docs/oauth-client.md#private-key-client-assertions) for role metadata, audience compatibility and deadline rules. Hosted private-key qualification remains pending.
+Generated OAuth `private_key_jwt` authentication uses [`ClientAssertionSigningKey`](https://javadoc.revetsec.com/com/revetsec/oauth/ClientAssertionSigningKey.html) and a caller-thread [`ClientAssertionKeyProvider`](https://javadoc.revetsec.com/com/revetsec/oauth/ClientAssertionKeyProvider.html). See [the OAuth client guide](docs/oauth-client.md#private-key-client-assertions) for role metadata, audience compatibility and deadline rules.
 
 ### Microsoft Entra issuer policy
 
-OIDC clients can explicitly select the fixed public-cloud `common` or `organizations` v2.0 issuer policy with an application-owned allowed-tenant predicate. The engine verifies the token signature and the actual tenant/issuer/JWK binding before invoking that predicate. The authenticated account key remains the actual tenant issuer and subject. See [the issuer policy guide](docs/oidc-issuer-policy.md) for metadata, UserInfo and refresh behavior. Local synthetic tests cover this path; hosted Entra sign-in remains unproven.
+OIDC clients can explicitly select the fixed public-cloud `common` or `organizations` v2.0 issuer policy with an application-owned allowed-tenant predicate. The engine verifies the token signature and the actual tenant/issuer/JWK binding before invoking that predicate. The authenticated account key remains the actual tenant issuer and subject. See [the issuer policy guide](docs/oidc-issuer-policy.md) for metadata, UserInfo and refresh behavior. Configure the allowed-tenant policy and provider registration for your application.

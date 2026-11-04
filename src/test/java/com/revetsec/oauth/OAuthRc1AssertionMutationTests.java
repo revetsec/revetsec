@@ -261,7 +261,7 @@ final class OAuthRc1AssertionMutationTests {
  @Test void healthyIntrospectionProbeReleasesTheNextIndependentCaller() throws Exception {
   try (TestHttpsServer server = TestHttpsServer.start()) {
    TokenIntrospectionClient client = probingIntrospection(server, ClientAuthentication.fromClientSecretPost("fixture-secret"));
-   server.script("/introspect", TestHttpsServer.Script.fromResponse(TestHttpsServer.Response.fromStatus(503)));
+   server.script("/introspect", TestHttpsServer.Script.fromResponse(TestHttpsServer.Response.fromStatus(429)));
    assertThrows(OAuthException.class, () -> client.validateResult(probeToken())); assertEquals(1, server.getHitCount("/introspect"));
    ageIntrospectionFailure(client);
    server.script("/introspect", TestHttpsServer.Script.fromResponse(TestHttpsServer.Response.fromJson(200, "{\"active\":true,\"aud\":\"api\"}")));
@@ -276,7 +276,7 @@ final class OAuthRc1AssertionMutationTests {
    TokenIntrospectionClient client = probingIntrospection(server, ClientAuthentication.fromClientSecretPost(() -> {
     if (secrets.incrementAndGet() == 2) throw new IllegalStateException("fixture supplier interruption"); return "fixture-secret";
    }));
-   server.script("/introspect", TestHttpsServer.Script.fromResponse(TestHttpsServer.Response.fromStatus(503)));
+   server.script("/introspect", TestHttpsServer.Script.fromResponse(TestHttpsServer.Response.fromStatus(429)));
    assertThrows(OAuthException.class, () -> client.validateResult(probeToken())); assertEquals(1, server.getHitCount("/introspect"));
    ageIntrospectionFailure(client);
    assertThrows(IllegalArgumentException.class, () -> client.validateResult(probeToken()));
@@ -297,8 +297,8 @@ final class OAuthRc1AssertionMutationTests {
  private static void ageIntrospectionFailure(@NonNull TokenIntrospectionClient client) throws Exception {
   var guardField = TokenIntrospectionClient.class.getDeclaredField("guard"); guardField.setAccessible(true);
   Object guard = requireNonNull(guardField.get(client));
-  var failure = guard.getClass().getDeclaredField("failure"); failure.setAccessible(true); assertNotNull(failure.get(guard));
-  // Only simulate 31 elapsed seconds after the real 503; keep the actual attempt, failure and probe state.
+  var unhealthy = guard.getClass().getDeclaredField("unhealthy"); unhealthy.setAccessible(true); assertTrue(unhealthy.getBoolean(guard));
+  // Only simulate 31 elapsed seconds after the real 429; keep the actual attempt, health and probe state.
   var timestamp = guard.getClass().getDeclaredField("failedAtNanos"); timestamp.setAccessible(true);
   timestamp.setLong(guard, System.nanoTime() - Duration.ofSeconds(31).toNanos());
  }

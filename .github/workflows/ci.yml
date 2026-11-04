@@ -520,22 +520,36 @@ jobs:
 
       - name: Build exact artifacts and verify both unpublished examples
         run: |
-          python3 examples/build.py --work "$RUNNER_TEMP/revetsec-examples" \
+          python3 -m unittest discover -s verification -p 'test_examples_adapter_compatibility.py' -v
+          python3 verification/examples/verify_packaged_examples.py --work "$RUNNER_TEMP/revetsec-examples" \
             --maven "$(command -v mvn)" --java-home "$JAVA_HOME" \
             --core-source "$GITHUB_WORKSPACE/.example-inputs/core" \
             --core-revision "$GITHUB_SHA" \
             --adapter-source "$GITHUB_WORKSPACE/.example-inputs/adapter" \
             --framework-jar "$GITHUB_WORKSPACE/.example-inputs/framework/target/soklet-4.0.0.jar"
 
-      - name: Compile and exercise the Soklet TOTP example
+      - name: Build and test the complete Maven examples reactor
         run: |
-          python3 examples/totp-soklet/build.py --work "$RUNNER_TEMP/revetsec-totp-soklet" \
-            --java-home "$JAVA_HOME" \
-            --core-jar "$RUNNER_TEMP/revetsec-examples/core/target/revetsec-1.0.0-SNAPSHOT.jar" \
-            --soklet-jar "$GITHUB_WORKSPACE/.example-inputs/framework/target/soklet-4.0.0.jar" \
-            --jspecify-jar "$RUNNER_TEMP/revetsec-examples/repository/org/jspecify/jspecify/1.0.1/jspecify-1.0.1.jar" \
-            --jsr305-jar "$RUNNER_TEMP/revetsec-examples/repository/com/google/code/findbugs/jsr305/3.0.2/jsr305-3.0.2.jar" \
-            --socket-check
+          mvn -B -ntp -f examples/pom.xml \
+            -Dmaven.repo.local="$RUNNER_TEMP/revetsec-examples/repository" clean verify
+          for module in passkeys-soklet totp-soklet; do
+            target="$GITHUB_WORKSPACE/examples/$module/target"
+            mvn -B -ntp -f "examples/$module/pom.xml" \
+              -Dmaven.repo.local="$RUNNER_TEMP/revetsec-examples/repository" \
+              dependency:build-classpath -DincludeScope=test \
+              -Dmdep.outputFile="$target/test-classpath.txt"
+            printf '%s' "$target/classes:$(cat "$target/test-classpath.txt")" > "$target/audit-classpath.txt"
+            rg --files "examples/$module/src" -g '*.java' > "$target/audit-sources.txt"
+            java -cp "$(cat "$target/audit-classpath.txt")" \
+              verification/examples/NullabilityAudit.java "$target/audit-sources.txt" \
+              "$target/audit-classpath.txt" "$target/nullability-audit.json" 21
+          done
+          for check in PasskeyChecks PasskeySocketChecks; do
+            java -cp "examples/passkeys-soklet/target/classes:examples/passkeys-soklet/target/test-classes:$(cat examples/passkeys-soklet/target/runtime-classpath.txt)" "example.passkeys.$check"
+          done
+          for check in TotpExampleChecks TotpExampleLifecycleChecks TotpExampleSocketChecks; do
+            java -cp "examples/totp-soklet/target/classes:examples/totp-soklet/target/test-classes:$(cat examples/totp-soklet/target/runtime-classpath.txt)" "example.totp.$check"
+          done
 
       - name: Upload example evidence
         if: always()
@@ -545,10 +559,11 @@ jobs:
           path: |
             ${{ runner.temp }}/revetsec-examples/*.json
             ${{ runner.temp }}/revetsec-examples/*.log
+            ${{ runner.temp }}/revetsec-examples/adapter/target/surefire-reports/
             ${{ runner.temp }}/revetsec-examples/examples/*/target/surefire-reports/
             ${{ runner.temp }}/revetsec-examples/examples/*/target/nullability-audit.json
-            ${{ runner.temp }}/revetsec-totp-soklet/BUILD.txt
-            ${{ runner.temp }}/revetsec-totp-soklet/nullability-audit.json
+            examples/*/target/surefire-reports/
+            examples/*/target/nullability-audit.json
           if-no-files-found: warn
 
   rsa-oidc-examples:
@@ -573,7 +588,7 @@ jobs:
 
       - name: Compile and run current-core RSA/OIDC examples
         run: |
-          python3 examples/rsa-oidc/build.py --work "$RUNNER_TEMP/revetsec-rsa-examples" \
+          python3 verification/examples/verify_rsa_oidc.py --work "$RUNNER_TEMP/revetsec-rsa-examples" \
             --maven "$(command -v mvn)" --java-home "$JAVA_HOME" \
             --core-source "$GITHUB_WORKSPACE"
 

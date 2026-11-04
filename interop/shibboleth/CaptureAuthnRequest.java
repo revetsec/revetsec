@@ -55,7 +55,7 @@ public final class CaptureAuthnRequest {
                 .assertionConsumerServiceUrl(URI.create("https://sp.example.test/acs"))
                 .signingCredential(credential(keys, "sp-signing-rsa-2048"))
                 .decryptionCredentials(List.of(credential(keys, "sp-encryption-rsa-2048")))
-                .replayCache(InMemorySamlReplayCache.withLimit(Clock.systemUTC(), 16))
+                .replayCache(InMemorySamlReplayCache.fromLimit(Clock.systemUTC(), 16))
                 .clock(Clock.systemUTC()).build();
         SamlServiceProviderMetadataResult metadata = SamlServiceProviderMetadata
                 .fromServiceProviderResult(sp);

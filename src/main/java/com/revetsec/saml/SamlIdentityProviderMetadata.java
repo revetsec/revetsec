@@ -39,6 +39,8 @@ import java.util.Optional;
 /**
  * One bounded, application-supplied SAML IdP metadata descriptor. No network fetch occurs and
  * parsing does not approve the entity as an application connection.
+ * A verified signature authenticates content, not its age. The application owns retrieval,
+ * refresh, maximum age and expiry of any installed connection built from this snapshot.
  *
  * @since 1.0.0
  */
@@ -116,12 +118,16 @@ public final class SamlIdentityProviderMetadata {
      */
     public static @NonNull SamlIdentityProviderMetadataResult fromXmlResult(byte @NonNull [] xml,
             @Nullable String expectedEntityId, @NonNull Clock clock) {
-        return parse(xml, expectedEntityId, clock, null);
+        return parse(xml, expectedEntityId, clock, null, false);
     }
 
     /**
      * Parses metadata only when a pinned trusted key verifies a signature covering the selected
      * entity or its containing aggregate. Embedded KeyInfo is never a trust anchor.
+     * A missing {@code validUntil} is accepted for application-managed freshness; a signature
+     * alone is not evidence of recency. Use {@link #fromXmlRequiringValidUntilResult(byte[], String,
+     * Clock, List)} when a signed deadline is required. Any present covered deadline must still
+     * be in the future when parsing completes. This snapshot does not expire an installed connection.
      *
      * @param xml application-supplied metadata bytes
      * @param expectedEntityId exact entity ID for aggregate selection, or null for a single descriptor
@@ -133,16 +139,42 @@ public final class SamlIdentityProviderMetadata {
     public static @NonNull SamlIdentityProviderMetadataResult fromXmlResult(byte @NonNull [] xml,
             @Nullable String expectedEntityId, @NonNull Clock clock,
             @NonNull List<@NonNull PublicKey> trustedMetadataKeys) {
+        requireMetadataKeys(trustedMetadataKeys);
+        return parse(xml, expectedEntityId, clock, trustedMetadataKeys, false);
+    }
+
+    /**
+     * Requires a pinned signature and a future, signature-covered {@code validUntil} on the
+     * selected entity, its IdP role, or a verified containing aggregate. The earliest covered
+     * deadline wins. An unsigned parent's deadline cannot satisfy this policy.
+     * This checks expiry at parse completion, not publication age or freshness of the retrieval.
+     * Applications must cap trusted acquisition age and retire installed connections themselves;
+     * reparsing the same bytes must not reset that acquisition time.
+     *
+     * @param xml application-supplied metadata bytes
+     * @param expectedEntityId exact entity ID, or null for a single descriptor
+     * @param clock trusted validation clock
+     * @param trustedMetadataKeys one to four application-pinned verification keys
+     * @return metadata with a verified future deadline, rejection, or provider/clock unavailability
+     * @since 1.0.0
+     */
+    public static @NonNull SamlIdentityProviderMetadataResult fromXmlRequiringValidUntilResult(
+            byte @NonNull [] xml, @Nullable String expectedEntityId, @NonNull Clock clock,
+            @NonNull List<@NonNull PublicKey> trustedMetadataKeys) {
+        requireMetadataKeys(trustedMetadataKeys);
+        return parse(xml, expectedEntityId, clock, trustedMetadataKeys, true);
+    }
+
+    private static void requireMetadataKeys(@NonNull List<@NonNull PublicKey> trustedMetadataKeys) {
         Objects.requireNonNull(trustedMetadataKeys);
         if (trustedMetadataKeys.isEmpty() || trustedMetadataKeys.size() > 4
                 || trustedMetadataKeys.stream().anyMatch(key -> key == null))
             throw new IllegalArgumentException("Expected one to four pinned metadata keys");
-        return parse(xml, expectedEntityId, clock, trustedMetadataKeys);
     }
 
     private static @NonNull SamlIdentityProviderMetadataResult parse(byte @NonNull [] xml,
             @Nullable String expectedEntityId, @NonNull Clock clock,
-            @Nullable List<@NonNull PublicKey> trustedMetadataKeys) {
+            @Nullable List<@NonNull PublicKey> trustedMetadataKeys, boolean requireValidUntil) {
         Objects.requireNonNull(xml);
         Objects.requireNonNull(clock);
         SecureXmlParser.Result parsed = SecureXmlParser.parseMetadata(xml);
@@ -294,10 +326,23 @@ public final class SamlIdentityProviderMetadata {
         if (!wants.isEmpty() && !wants.equals("true") && !wants.equals("false")
                 && !wants.equals("1") && !wants.equals("0"))
             return SamlIdentityProviderMetadataResult.Rejected.INSTANCE;
+        if (trustedMetadataKeys != null) {
+            Instant completed;
+            try { completed = clock.instant(); }
+            catch (RuntimeException exception) { return SamlIdentityProviderMetadataResult.Unavailable.INSTANCE; }
+            if (completed.isBefore(now)) return SamlIdentityProviderMetadataResult.Unavailable.INSTANCE;
+            if (!freshnessAllows(validUntil, completed, requireValidUntil))
+                return SamlIdentityProviderMetadataResult.Rejected.INSTANCE;
+        }
         return new SamlIdentityProviderMetadataResult.Parsed(new SamlIdentityProviderMetadata(entityId,
                 redirect, post, logout, postLogout, logoutResponse, postLogoutResponse,
                 certificates, wants.equals("true") || wants.equals("1"),
                 validUntil, scopes));
+    }
+
+    private static boolean freshnessAllows(@Nullable Instant validUntil, @NonNull Instant now,
+            boolean requireValidUntil) {
+        return validUntil == null ? !requireValidUntil : now.isBefore(validUntil);
     }
 
     private static @Nullable Instant validity(@NonNull Element element, @NonNull Instant now) {
@@ -433,7 +478,9 @@ public final class SamlIdentityProviderMetadata {
      */
     public @NonNull Boolean wantsAuthnRequestsSigned() { return wantAuthnRequestsSigned; }
     /**
-     * Returns the earliest metadata expiry when present.
+     * Returns the earliest applicable metadata expiry when present. Pinned-signature parsing
+     * includes only deadlines covered by that proof; raw parsing does not establish trust.
+     * The application must stop using an installed connection at its effective deadline.
      *
      * @return optional expiry
      * @since 1.0.0

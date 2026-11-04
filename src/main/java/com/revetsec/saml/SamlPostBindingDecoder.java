@@ -92,10 +92,19 @@ final class SamlPostBindingDecoder {
         if (relayState != null && relayState.getBytes(StandardCharsets.UTF_8).length > 80)
             return new Rejected(Reason.RELAY_STATE_SIZE);
 
+        return decodeBase64(encodedResponse, relayState, kind);
+    }
+
+    private static @NonNull Result decodeBase64(@NonNull String encodedResponse,
+            @Nullable String relayState, SamlPostBindingMessage.@NonNull Kind kind) {
         StringBuilder base64 = new StringBuilder(Math.min(encodedResponse.length(), MAXIMUM_BASE64_CHARS));
+        int whitespace = 0;
         for (int i = 0; i < encodedResponse.length(); i++) {
             char ch = encodedResponse.charAt(i);
-            if (ch == ' ' || ch == '\t' || ch == '\r' || ch == '\n') continue;
+            if (ch == ' ' || ch == '\t' || ch == '\r' || ch == '\n') {
+                if (++whitespace > MAXIMUM_LINE_WRAP_CHARS) return new Rejected(Reason.BASE64);
+                continue;
+            }
             if (base64.length() == MAXIMUM_BASE64_CHARS) return new Rejected(Reason.XML_SIZE);
             base64.append(ch);
         }
@@ -103,6 +112,10 @@ final class SamlPostBindingDecoder {
         try { xml = Base64.getDecoder().decode(base64.toString()); }
         catch (IllegalArgumentException exception) { return new Rejected(Reason.BASE64); }
         if (xml.length == 0 || xml.length > MAXIMUM_XML_BYTES) return new Rejected(Reason.XML_SIZE);
+        // The JDK decoder also accepts omitted padding and nonzero unused pad bits. Require
+        // the unique padded standard-alphabet representation after the bounded XML whitespace.
+        if (!Base64.getEncoder().encodeToString(xml).contentEquals(base64))
+            return new Rejected(Reason.BASE64);
         return new Accepted(xml, relayState, kind);
     }
 

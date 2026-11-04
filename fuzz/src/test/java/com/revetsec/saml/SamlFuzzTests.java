@@ -315,7 +315,7 @@ public final class SamlFuzzTests {
                 resource("saml-independent/keys/sp-rsa-2048.crt"));
         SamlServiceProvider sp = SamlServiceProvider.withEntityId("https://sp.test/Selftest")
                 .assertionConsumerServiceUrl(URI.create("https://sp.test/acs"))
-                .replayCache(InMemorySamlReplayCache.withLimit(CLOCK, 16))
+                .replayCache(InMemorySamlReplayCache.fromLimit(CLOCK, 16))
                 .decryptionCredentials(List.of(credential)).clock(CLOCK).build();
         SamlIdentityProvider idp = SamlIdentityProvider.withEntityId(IDP)
                 .connectionId("fuzz-fixture")

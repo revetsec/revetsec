@@ -205,8 +205,7 @@ final class ScimResources {
         }
         private boolean charge(@NonNull JsonValue raw) {
             if (!work.take(1)) return false;
-            if (raw instanceof JsonString string) return work.spend(string.getValue().length());
-            if (raw instanceof JsonNumber number) return work.spend(number.getValue().precision());
+            // Projection shares immutable scalars; the emitter accounts for their wire traversal.
             if (raw instanceof JsonArray array) for (JsonValue element : array.getElements()) if (!charge(element)) return false;
             return true;
         }
@@ -245,11 +244,15 @@ final class ScimResources {
                 if (definition.getType() == ScimAttributeType.COMPLEX) {
                     if (definition.isMultiValued()) {
                         if (name.equals("members") && prefix.isEmpty() && type.hasStandardGroupSchema()
-                                && old instanceof JsonArray oldArray && stableMembers(oldArray)) {
-                            if (next == null) continue;
-                            JsonArray reconciled = members(definition,oldArray,next,prefix+name+".");
-                            if (reconciled == null) return null;
-                            merged.put(name,reconciled); continue;
+                                && old instanceof JsonArray oldArray) {
+                            ScimReplacementMemberIndex index = ScimReplacementMemberIndex.fromValues(oldArray.getElements(), work);
+                            if (work.wasExceeded()) { error = ScimError.requestTooLargeInstance(); return null; }
+                            if (index != null) {
+                                if (next == null) continue;
+                                JsonArray reconciled = members(definition,index,next,prefix+name+".");
+                                if (reconciled == null) return null;
+                                merged.put(name,reconciled); continue;
+                            }
                         }
                         if (old instanceof JsonArray array && protectedElements(definition,array)) {
                             if (!equalIgnoringReadOnly(definition,array,next)) { if (error == null) error = ScimError.mutabilityInstance(); return null; }
@@ -292,32 +295,15 @@ final class ScimResources {
             }
             return JsonArray.fromElements(output);
         }
-        private boolean stableMembers(@NonNull JsonArray array) {
-            for (JsonValue value : array.getElements()) {
-                if (!spend(1)) return false;
-                if (!(value instanceof JsonObject object) || object.find("value").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).filter(id -> !id.isEmpty()).isEmpty()) return false;
-            }
-            return true;
-        }
-        private @Nullable JsonArray members(@NonNull ScimAttributeDefinition definition, @NonNull JsonArray current, @NonNull JsonValue next, @NonNull String prefix) {
+        private @Nullable JsonArray members(@NonNull ScimAttributeDefinition definition, @NonNull ScimReplacementMemberIndex index,
+                @NonNull JsonValue next, @NonNull String prefix) {
             if (!(next instanceof JsonArray incoming)) return null;
             List<JsonValue> output = new ArrayList<>();
             for (JsonValue value : incoming.getElements()) {
                 if (!spend(1)) return null;
                 if (!(value instanceof JsonObject candidate)) return null;
-                JsonObject prior = null;
-                String id = candidate.find("value").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElse(null);
-                for (JsonValue old : current.getElements()) {
-                    if (!spend(1)) return null;
-                    if (old instanceof JsonObject existing && id != null) {
-                        String oldId = existing.find("value").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow();
-                        if (!spend((long)id.length()+oldId.length())) return null;
-                        if (id.equals(oldId)) {
-                            if (prior != null) { error=ScimError.mutabilityInstance(); return null; }
-                            prior=existing;
-                        }
-                    }
-                }
+                JsonObject prior = index.find(candidate);
+                if (work.wasExceeded()) { error = ScimError.requestTooLargeInstance(); return null; }
                 if (prior == null) output.add(candidate);
                 else {
                     JsonObject reconciled = object(definition.getSubAttributes(),prior,candidate,true,prefix);

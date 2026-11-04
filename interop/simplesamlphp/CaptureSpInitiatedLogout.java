@@ -119,7 +119,7 @@ public final class CaptureSpInitiatedLogout {
                 .decryptionCredentials(List.of(SamlCredential.fromPem(
                         Files.readString(keys.resolve("sp-encryption-rsa-2048-key.pem")),
                         Files.readString(keys.resolve("sp-encryption-rsa-2048-cert.pem")))))
-                .replayCache(InMemorySamlReplayCache.withLimit(clock, 16)).clock(clock).build();
+                .replayCache(InMemorySamlReplayCache.fromLimit(clock, 16)).clock(clock).build();
     }
 
     private static @NonNull SamlIdentityProvider identityProvider() throws Exception {

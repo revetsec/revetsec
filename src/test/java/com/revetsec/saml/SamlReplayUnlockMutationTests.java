@@ -31,7 +31,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 final class SamlReplayUnlockMutationTests {
     @Test void completedAdmissionReleasesLockForAnotherThread() throws Exception {
         Instant now = Instant.parse("2026-10-09T00:00:00Z");
-        SamlReplayCache cache = InMemorySamlReplayCache.withLimit(Clock.fixed(now, ZoneOffset.UTC), 2);
+        SamlReplayCache cache = InMemorySamlReplayCache.fromLimit(Clock.fixed(now, ZoneOffset.UTC), 2);
         Instant expiry = now.plusSeconds(30);
         ExecutorService executor = Executors.newSingleThreadExecutor();
         try {

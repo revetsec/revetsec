@@ -8,6 +8,7 @@ Build one client per configured issuer and client ID. Configure the exact regist
 
 ```java
 var callback = URI.create("https://app.example/oauth/google/callback");
+// Share this thread-safe client across requests.
 var client = OAuthClient.withIssuer("https://accounts.google.com")
   .clientId(clientId)
   .clientAuthentication(ClientAuthentication.fromClientSecretBasic(clientSecret))
@@ -47,11 +48,14 @@ The client refuses token and metadata redirects, enforces HTTPS endpoints and bo
 
 Captured public metadata for Google, Apple and tenant-specific Microsoft Entra is under `src/test/resources/fixtures/`. Tenant-specific Entra issuers work with exact metadata comparison. The generic OAuth metadata parser remains exact. OIDC `common` and `organizations` discovery can use the explicit [fixed Entra issuer policy](oidc-issuer-policy.md); this does not loosen the generic OAuth parser. The offline Keycloak integration test covers confidential and public code flows, client credentials, refresh and revocation. A live GitHub token-endpoint probe has not been run because no OAuth app/client ID was provided; HTTP-200 error parsing uses a synthetic test response.
 
+Discovery coordinates concurrent callers and bounds refresh attempts. A caller interrupted or out of time before admission consumes no discovery attempt. Cancellation after a request starts retains that attempt charge but does not install shared failure backoff; cancelling a waiter leaves the leader running. Shared discovery failures preserve fixed reason/status data through fresh exceptions, without another caller's mutable diagnostics or transport cause.
+
 ## Private-key client assertions
 
 The application owns registration, private keys and rotation. Revetsec prepares a fresh signed assertion for each actual token, refresh, code, revocation or introspection POST:
 
 ```java
+// Share this thread-safe signer across requests.
 var signer = JwsSigner.fromRsaKeyPair(privateKey, publicKey, JwsAlgorithm.PS256);
 var key = ClientAssertionSigningKey.withSigner(signer)
   .keyId(registeredKeyId)

@@ -53,6 +53,20 @@ final class OAuthServerAuthorizationAdmission {
 			@NonNull OAuthServerClientSelection selection, @NonNull Deadline deadline,
 			@NonNull Map<@NonNull String, @NonNull Set<@NonNull String>> serverResources,
 			@NonNull OAuthServerIngressLimits limits, boolean nativeLoopback, boolean localhostInterop) {
+		return admit(request, selection, deadline, serverResources, limits, nativeLoopback, localhostInterop, false);
+	}
+	static @NonNull OAuthServerAuthorizationAdmission admit(@NonNull OAuthServerRequest request,
+			@NonNull OAuthServerClientSelection selection, @NonNull Deadline deadline,
+			@NonNull Map<@NonNull String, @NonNull Set<@NonNull String>> serverResources,
+			@NonNull OAuthServerIngressLimits limits, boolean nativeLoopback, boolean localhostInterop, boolean localhostAnyPort) {
+		return admit(request, selection, deadline, serverResources, limits, nativeLoopback, localhostInterop, localhostAnyPort, () -> {});
+	}
+	static @NonNull OAuthServerAuthorizationAdmission admit(@NonNull OAuthServerRequest request,
+			@NonNull OAuthServerClientSelection selection, @NonNull Deadline deadline,
+			@NonNull Map<@NonNull String, @NonNull Set<@NonNull String>> serverResources,
+			@NonNull OAuthServerIngressLimits limits, boolean nativeLoopback, boolean localhostInterop, boolean localhostAnyPort,
+			@NonNull Runnable didUseLocalhostAnyPort) {
+		requireNonNull(didUseLocalhostAnyPort);
 		requireNonNull(request); requireNonNull(serverResources);
 		serverResources = checkedServerResources(serverResources, limits);
 		if (request.endpoint() != OAuthServerRequest.Endpoint.AUTHORIZATION) throw OAuthServerRequest.invalid();
@@ -60,7 +74,8 @@ final class OAuthServerAuthorizationAdmission {
 		OAuthServerClientRegistration client = selected.client();
 		if (!client.isAuthorizationCodePermitted()) throw failure(UNAUTHORIZED_CLIENT);
 		String redirect = request.required("redirect_uri");
-		if (!matchesRedirect(client, redirect, nativeLoopback, localhostInterop)) throw OAuthServerRequest.invalid();
+		if (!matchesRedirect(client, redirect, nativeLoopback, localhostInterop, localhostAnyPort)) throw OAuthServerRequest.invalid();
+		if (localhostAnyPort && !matchesRedirect(client, redirect, nativeLoopback, localhostInterop)) didUseLocalhostAnyPort.run();
 		if (!request.required("response_type").equals("code")) throw failure(UNSUPPORTED_RESPONSE_TYPE);
 		String mode = request.value("response_mode"); if (mode != null && !mode.equals("query")) throw OAuthServerRequest.invalid();
 		String challenge = request.required("code_challenge");
@@ -80,6 +95,10 @@ final class OAuthServerAuthorizationAdmission {
 	}
 	static boolean matchesRedirect(@NonNull OAuthServerClientRegistration client, @NonNull String supplied,
 			boolean nativeLoopback, boolean localhostInterop) {
+		return matchesRedirect(client, supplied, nativeLoopback, localhostInterop, false);
+	}
+	static boolean matchesRedirect(@NonNull OAuthServerClientRegistration client, @NonNull String supplied,
+			boolean nativeLoopback, boolean localhostInterop, boolean localhostAnyPort) {
 		URI candidate;
 		try { candidate = URI.create(supplied); OAuthServerConfiguration.redirects(List.of(candidate)); }
 		catch (IllegalArgumentException exception) { return false; }
@@ -88,11 +107,18 @@ final class OAuthServerAuthorizationAdmission {
 				if (registered.toString().equals(supplied)) return true;
 			} else if (registered.getHost().equals("localhost")) {
 				if (localhostInterop && registered.toString().equals(supplied)) return true;
+				if (localhostAnyPort && matchesPortlessLocalhost(registered, candidate)) return true;
 			} else if (nativeLoopback && candidate.getScheme().equalsIgnoreCase("http")
 					&& (candidate.getHost().equals("127.0.0.1") || candidate.getHost().equals("[::1]"))
 					&& withoutPort(registered).equals(withoutPort(candidate))) return true;
 		}
 		return false;
+	}
+	private static boolean matchesPortlessLocalhost(@NonNull URI registered, @NonNull URI candidate) {
+		// Authority equality distinguishes a genuinely omitted port from a dangling colon or an alias.
+		return "localhost".equals(registered.getRawAuthority())
+			&& ("localhost".equals(candidate.getRawAuthority()) || candidate.getPort() > 0)
+			&& withoutPort(registered).equals(withoutPort(candidate));
 	}
 	private static @NonNull String withoutPort(@NonNull URI value) {
 		String authority = requireNonNull(value.getRawAuthority());

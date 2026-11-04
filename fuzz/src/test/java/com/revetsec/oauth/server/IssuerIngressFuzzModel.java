@@ -148,6 +148,8 @@ final class IssuerIngressFuzzModel {
 		for (String text : List.of(query, body)) for (String field : text.split("&", -1)) if (!field.isEmpty() && ++fields > 128) throw new Rejected();
 		fields(query, result, !auth);
 		fields(body, result, false);
+		String state = result.get("state");
+		if (auth && state != null && state.codePoints().anyMatch(c -> c < 32 || c > 126)) throw new Rejected();
 		String authorization = selected.get("authorization");
 		if (authorization != null) result.put("@authorization", authorization);
 		return result;

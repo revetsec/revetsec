@@ -134,12 +134,12 @@ final class OAuthServerOutcomeTests {
   }
  }
  private static boolean validation(OAuthServerException.@NonNull Reason reason) { return switch(reason) {
-  case STORE_UNAVAILABLE,STORE_CORRUPT,COMMIT_OUTCOME_UNKNOWN,COMMIT_CONFIRMED_NOT_ADMITTED,CLIENT_METADATA_UNAVAILABLE,CONFIGURATION_INVALID,SIGNING_FAILED -> false;
+  case STORE_UNAVAILABLE,STORE_CORRUPT,COMMIT_OUTCOME_UNKNOWN,COMMIT_CONFIRMED_NOT_ADMITTED,CLIENT_METADATA_UNAVAILABLE,SERVICE_UNAVAILABLE,CONFIGURATION_INVALID,SIGNING_FAILED -> false;
   default -> true;
  }; }
  private static @NonNull OAuthServerException failure(OAuthServerException.@NonNull Reason reason,boolean interrupted) { return switch(reason) {
   case STORE_UNAVAILABLE,STORE_CORRUPT,COMMIT_OUTCOME_UNKNOWN,COMMIT_CONFIRMED_NOT_ADMITTED -> OAuthServerStoreException.fromReason(reason,interrupted);
-  case CLIENT_METADATA_UNAVAILABLE -> OAuthServerTransportException.fromReason(reason,interrupted);
+  case CLIENT_METADATA_UNAVAILABLE,SERVICE_UNAVAILABLE -> OAuthServerTransportException.fromReason(reason,interrupted);
   case CONFIGURATION_INVALID -> OAuthServerConfigurationException.fromReason(reason);
   case SIGNING_FAILED -> OAuthServerSigningException.fromReason(reason);
   default -> OAuthServerValidationException.fromReason(reason);
@@ -147,7 +147,7 @@ final class OAuthServerOutcomeTests {
  @TestFactory @NonNull Stream<@NonNull DynamicTest> wrongLeafFactoriesRejectMisclassification() { return Stream.of(OAuthServerException.Reason.values()).map(value->DynamicTest.dynamicTest("wrongLeafFactoriesRejectMisclassification["+value.name()+"]",()->wrongLeafFactoriesRejectMisclassificationCase(value))); }
  private void wrongLeafFactoriesRejectMisclassificationCase(OAuthServerException.@NonNull Reason reason) {
   if(reason!=STORE_UNAVAILABLE&&reason!=STORE_CORRUPT&&reason!=COMMIT_OUTCOME_UNKNOWN&&reason!=COMMIT_CONFIRMED_NOT_ADMITTED) assertThrows(IllegalArgumentException.class,()->OAuthServerStoreException.fromReason(reason,false));
-  if(reason!=CLIENT_METADATA_UNAVAILABLE) assertThrows(IllegalArgumentException.class,()->OAuthServerTransportException.fromReason(reason,false));
+  if(reason!=CLIENT_METADATA_UNAVAILABLE&&reason!=SERVICE_UNAVAILABLE) assertThrows(IllegalArgumentException.class,()->OAuthServerTransportException.fromReason(reason,false));
   if(reason!=CONFIGURATION_INVALID) assertThrows(IllegalArgumentException.class,()->OAuthServerConfigurationException.fromReason(reason));
   if(reason!=SIGNING_FAILED) assertThrows(IllegalArgumentException.class,()->OAuthServerSigningException.fromReason(reason));
  }
@@ -179,8 +179,9 @@ final class OAuthServerOutcomeTests {
  @TestFactory @NonNull Stream<@NonNull DynamicTest> internalAdmissionHasNoExternalExceptionChain() { return Stream.of(OAuthServerAdmissionFailure.Reason.values()).map(value->DynamicTest.dynamicTest("internalAdmissionHasNoExternalExceptionChain["+value.name()+"]",()->internalAdmissionHasNoExternalExceptionChainCase(value))); }
  private void internalAdmissionHasNoExternalExceptionChainCase(OAuthServerAdmissionFailure.@NonNull Reason reason) {
   OAuthServerException mapped=OAuthServerFailureBoundary.admission(new OAuthServerAdmissionFailure(reason));assertNull(mapped.getCause());assertEquals(0,mapped.getSuppressed().length);
-  assertEquals(reason==OAuthServerAdmissionFailure.Reason.INFRASTRUCTURE, mapped instanceof OAuthServerConfigurationException);
-  if(reason!=OAuthServerAdmissionFailure.Reason.INFRASTRUCTURE) assertInstanceOf(OAuthServerValidationException.class,mapped);
+  assertEquals(reason==OAuthServerAdmissionFailure.Reason.CONFIGURATION, mapped instanceof OAuthServerConfigurationException);
+  if(reason==OAuthServerAdmissionFailure.Reason.INFRASTRUCTURE)assertInstanceOf(OAuthServerTransportException.class,mapped);
+  else if(reason!=OAuthServerAdmissionFailure.Reason.CONFIGURATION)assertInstanceOf(OAuthServerValidationException.class,mapped);
  }
  @TestFactory @NonNull Stream<@NonNull DynamicTest> storeTranslationPreservesUnknownAndInterrupt() { return Stream.of(OAuthStoreFailure.Reason.values()).map(value->DynamicTest.dynamicTest("storeTranslationPreservesUnknownAndInterrupt["+value.name()+"]",()->storeTranslationPreservesUnknownAndInterruptCase(value))); }
  private void storeTranslationPreservesUnknownAndInterruptCase(OAuthStoreFailure.@NonNull Reason reason) {

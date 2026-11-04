@@ -77,12 +77,12 @@ public final class SamlIdentityProvider {
     /**
      * Starts manual trust configuration for one IdP.
      *
-     * @param entityId exact SAML IdP entity ID
+     * @param entityId nonempty exact IdP entity ID, well-formed text of at most 2048 UTF-16 code units
      * @return a builder
      * @since 1.0.0
      */
     public static @NonNull Builder withEntityId(@NonNull String entityId) {
-        if (Objects.requireNonNull(entityId).isEmpty() || entityId.length() > 2048)
+        if (!PendingSamlAuthenticationCodec.fitsText(Objects.requireNonNull(entityId), 2048))
             throw new IllegalArgumentException("Invalid IdP entity ID");
         return new Builder(entityId);
     }
@@ -184,7 +184,7 @@ public final class SamlIdentityProvider {
         /**
          * Configures this option.
          *
-         * @param value application-unique connection namespace
+         * @param value application-unique nonempty namespace of at most 256 well-formed UTF-16 code units
          * @return this builder
          * @since 1.0.0
          */
@@ -352,7 +352,7 @@ public final class SamlIdentityProvider {
          * @since 1.0.0
          */
         public @NonNull SamlIdentityProvider build() {
-            if (connectionId == null || connectionId.isEmpty() || connectionId.length() > 256)
+            if (connectionId == null || !PendingSamlAuthenticationCodec.fitsText(connectionId, 256))
                 throw new IllegalStateException("IdP connection ID is required");
             if ((redirectSingleSignOnService == null && postSingleSignOnService == null)
                     || !safeEndpoint(redirectSingleSignOnService) || !safeEndpoint(postSingleSignOnService)

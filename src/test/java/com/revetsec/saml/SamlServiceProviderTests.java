@@ -66,7 +66,7 @@ final class SamlServiceProviderTests {
                 .assertionConsumerServiceUrl(ACS)
                 .singleLogoutServiceUrl(URI.create("https://sp.example.test/logout?tenant=one"))
                 .signingPrivateKey(signing.getPrivate())
-                .replayCache(InMemorySamlReplayCache.withLimit(CLOCK, 4))
+                .replayCache(InMemorySamlReplayCache.fromLimit(CLOCK, 4))
                 .clock(CLOCK).build());
     }
 
@@ -77,7 +77,7 @@ final class SamlServiceProviderTests {
                 .assertionConsumerServiceUrl(ACS)
                 .singleLogoutServiceUrl(URI.create("https://sp.example.test/logout"))
                 .signingPrivateKey(signing.getPrivate())
-                .replayCache(InMemorySamlReplayCache.withLimit(fractional, 4))
+                .replayCache(InMemorySamlReplayCache.fromLimit(fractional, 4))
                 .clock(fractional).build();
         SamlIdentityProvider idp = SamlIdentityProvider.withEntityId(IDP)
                 .connectionId("fractional-clock")
@@ -110,7 +110,7 @@ final class SamlServiceProviderTests {
 
     @Test void sealedBrowserLoginCompletesOnlyAfterSignatureAndReplayAdmission() throws Exception {
         KeyPair key = rsa();
-        SamlReplayCache replay = InMemorySamlReplayCache.withLimit(CLOCK, 4);
+        SamlReplayCache replay = InMemorySamlReplayCache.fromLimit(CLOCK, 4);
         AtomicReference<SamlObserver.Outcome> completionOutcome = new AtomicReference<>();
         SamlObserver observer = new SamlObserver() {
             @Override public void didHandleOperation(@NonNull Operation operation,
@@ -151,7 +151,7 @@ final class SamlServiceProviderTests {
     @Test void signedResponseCannotSatisfyIdpSignedAssertionRequirement() throws Exception {
         KeyPair key = rsa();
         SamlServiceProvider sp = SamlServiceProvider.withEntityId(SP)
-                .assertionConsumerServiceUrl(ACS).replayCache(InMemorySamlReplayCache.withLimit(CLOCK, 4))
+                .assertionConsumerServiceUrl(ACS).replayCache(InMemorySamlReplayCache.fromLimit(CLOCK, 4))
                 .clock(CLOCK).build();
         SamlIdentityProvider strict = SamlIdentityProvider.withEntityId(IDP)
                 .connectionId("signed-assertion-policy")
@@ -181,7 +181,7 @@ final class SamlServiceProviderTests {
     @Test void idpRequestSignaturePolicyRejectsUnsignedBeginWithoutSpKey() throws Exception {
         KeyPair key = rsa();
         SamlServiceProvider sp = SamlServiceProvider.withEntityId(SP)
-                .assertionConsumerServiceUrl(ACS).replayCache(InMemorySamlReplayCache.withLimit(CLOCK, 4))
+                .assertionConsumerServiceUrl(ACS).replayCache(InMemorySamlReplayCache.fromLimit(CLOCK, 4))
                 .clock(CLOCK).build();
         SamlIdentityProvider requiresSignedRequests = SamlIdentityProvider.withEntityId(IDP)
                 .connectionId("signed-request-policy")
@@ -202,7 +202,7 @@ final class SamlServiceProviderTests {
     @Test void persistentNameIdKeepsQualifiersInStableSubjectKey() throws Exception {
         KeyPair key = rsa();
         SamlServiceProvider sp = SamlServiceProvider.withEntityId(SP)
-                .assertionConsumerServiceUrl(ACS).replayCache(InMemorySamlReplayCache.withLimit(CLOCK, 4))
+                .assertionConsumerServiceUrl(ACS).replayCache(InMemorySamlReplayCache.fromLimit(CLOCK, 4))
                 .clock(CLOCK).build();
         SamlIdentityProvider idp = SamlIdentityProvider.withEntityId(IDP).connectionId("tenant-one")
                 .redirectSingleSignOnService(URI.create("https://idp.example.test/sso"))
@@ -235,7 +235,7 @@ final class SamlServiceProviderTests {
     @Test void pendingFailurePrecedesXmlParsingAndCannotReleaseIdentity() throws Exception {
         KeyPair key = rsa();
         SamlServiceProvider sp = SamlServiceProvider.withEntityId(SP)
-                .assertionConsumerServiceUrl(ACS).replayCache(InMemorySamlReplayCache.withLimit(CLOCK, 4))
+                .assertionConsumerServiceUrl(ACS).replayCache(InMemorySamlReplayCache.fromLimit(CLOCK, 4))
                 .clock(CLOCK).build();
         SamlIdentityProvider idp = SamlIdentityProvider.withEntityId(IDP).connectionId("tenant-one")
                 .redirectSingleSignOnService(URI.create("https://idp.example.test/sso"))
@@ -260,7 +260,7 @@ final class SamlServiceProviderTests {
     @Test void atomicPendingStoreConsumesOnceAndBindsBrowserBeforeXml() throws Exception {
         KeyPair key = rsa();
         SamlServiceProvider sp = SamlServiceProvider.withEntityId(SP)
-                .assertionConsumerServiceUrl(ACS).replayCache(InMemorySamlReplayCache.withLimit(CLOCK, 4))
+                .assertionConsumerServiceUrl(ACS).replayCache(InMemorySamlReplayCache.fromLimit(CLOCK, 4))
                 .clock(CLOCK).build();
         SamlIdentityProvider idp = SamlIdentityProvider.withEntityId(IDP).connectionId("tenant-one")
                 .redirectSingleSignOnService(URI.create("https://idp.example.test/sso"))
@@ -269,7 +269,7 @@ final class SamlServiceProviderTests {
                 sp.beginAuthenticationResult(idp)).getPendingAuthentication();
         StateSealer sealer = StateSealer.withActiveKey(TestSealers.fixedKey("saml-store"))
                 .clock(CLOCK).build();
-        InMemoryPendingSamlAuthenticationStore store = InMemoryPendingSamlAuthenticationStore.withLimit(CLOCK, 2);
+        InMemoryPendingSamlAuthenticationStore store = InMemoryPendingSamlAuthenticationStore.fromLimit(CLOCK, 2);
         assertEquals(SamlPendingSaveResult.SAVED,
                 pending.saveToResult(store, sealer, "saml-store-context", "browser-one",
                         java.time.Duration.ofSeconds(5)));
@@ -295,7 +295,7 @@ final class SamlServiceProviderTests {
     @Test void requestBoundNonSuccessStatusDistinguishesSignatureCoverage() throws Exception {
         KeyPair key = rsa();
         SamlServiceProvider sp = SamlServiceProvider.withEntityId(SP)
-                .assertionConsumerServiceUrl(ACS).replayCache(InMemorySamlReplayCache.withLimit(CLOCK, 4))
+                .assertionConsumerServiceUrl(ACS).replayCache(InMemorySamlReplayCache.fromLimit(CLOCK, 4))
                 .clock(CLOCK).build();
         SamlIdentityProvider idp = SamlIdentityProvider.withEntityId(IDP).connectionId("tenant-one")
                 .redirectSingleSignOnService(URI.create("https://idp.example.test/sso"))
@@ -372,7 +372,8 @@ final class SamlServiceProviderTests {
                 + "Value='urn:oasis:names:tc:SAML:2.0:status:Responder'>"
                 + "<p:StatusCode Value='urn:oasis:names:tc:SAML:2.0:status:AuthnFailed'/>"
                 + "</p:StatusCode></p:Status>");
-        assertEquals(SamlAuthenticationResult.StatusCode.RESPONDER,
+        // The immediate recognized diagnostic refines the primary failure classification.
+        assertEquals(SamlAuthenticationResult.StatusCode.AUTHN_FAILED,
                 assertInstanceOf(SamlAuthenticationResult.StatusReceived.class,
                         sp.completeAuthenticationResult(message(nestedRefusal,
                                 pending.getRelayStateHandle()), source, idp)).getStatusCode());
@@ -401,7 +402,7 @@ final class SamlServiceProviderTests {
     @Test void postAuthnRequestCarriesVerifiableXmlSignatureAndSafeForm() throws Exception {
         KeyPair key = rsa();
         SamlServiceProvider sp = SamlServiceProvider.withEntityId(SP)
-                .assertionConsumerServiceUrl(ACS).replayCache(InMemorySamlReplayCache.withLimit(CLOCK, 4))
+                .assertionConsumerServiceUrl(ACS).replayCache(InMemorySamlReplayCache.fromLimit(CLOCK, 4))
                 .signingPrivateKey(key.getPrivate()).clock(CLOCK).build();
         SamlIdentityProvider idp = SamlIdentityProvider.withEntityId(IDP).connectionId("tenant-one")
                 .postSingleSignOnService(URI.create("https://idp.example.test/post"))
@@ -427,7 +428,7 @@ final class SamlServiceProviderTests {
     @Test void nonSuccessStatusKeepsEveryClassificationAndEnvelopeBoundary() throws Exception {
         KeyPair key = rsa();
         SamlServiceProvider sp = SamlServiceProvider.withEntityId(SP)
-                .assertionConsumerServiceUrl(ACS).replayCache(InMemorySamlReplayCache.withLimit(CLOCK, 4))
+                .assertionConsumerServiceUrl(ACS).replayCache(InMemorySamlReplayCache.fromLimit(CLOCK, 4))
                 .clock(CLOCK).build();
         SamlIdentityProvider idp = SamlIdentityProvider.withEntityId(IDP).connectionId("status-boundary")
                 .redirectSingleSignOnService(URI.create("https://idp.example.test/sso"))
@@ -501,7 +502,7 @@ final class SamlServiceProviderTests {
     @Test void requestPolicySurvivesSealAndChecksFreshnessAndContext() throws Exception {
         KeyPair key = rsa();
         SamlServiceProvider sp = SamlServiceProvider.withEntityId(SP)
-                .assertionConsumerServiceUrl(ACS).replayCache(InMemorySamlReplayCache.withLimit(CLOCK, 4))
+                .assertionConsumerServiceUrl(ACS).replayCache(InMemorySamlReplayCache.fromLimit(CLOCK, 4))
                 .clock(CLOCK).build();
         SamlIdentityProvider idp = SamlIdentityProvider.withEntityId(IDP).connectionId("tenant-one")
                 .postSingleSignOnService(URI.create("https://idp.example.test/post"))
@@ -549,7 +550,7 @@ final class SamlServiceProviderTests {
         KeyPair key = rsa();
         SamlServiceProvider sp = SamlServiceProvider.withEntityId(SP)
                 .assertionConsumerServiceUrl(ACS)
-                .replayCache(InMemorySamlReplayCache.withLimit(CLOCK, 4))
+                .replayCache(InMemorySamlReplayCache.fromLimit(CLOCK, 4))
                 .clock(CLOCK).maximumResponseAge(Duration.ofMinutes(15)).build();
         SamlIdentityProvider idp = SamlIdentityProvider.withEntityId(IDP)
                 .connectionId("tenant-one")
@@ -573,7 +574,7 @@ final class SamlServiceProviderTests {
     @Test void unsolicitedLoginIsOptInAndNeverAcceptsRelayState() throws Exception {
         KeyPair key = rsa();
         SamlServiceProvider sp = SamlServiceProvider.withEntityId(SP)
-                .assertionConsumerServiceUrl(ACS).replayCache(InMemorySamlReplayCache.withLimit(CLOCK, 4))
+                .assertionConsumerServiceUrl(ACS).replayCache(InMemorySamlReplayCache.fromLimit(CLOCK, 4))
                 .clock(CLOCK).build();
         SamlIdentityProvider denied = SamlIdentityProvider.withEntityId(IDP).connectionId("tenant-one")
                 .redirectSingleSignOnService(URI.create("https://idp.example.test/sso"))
@@ -650,7 +651,7 @@ final class SamlServiceProviderTests {
         };
         SamlServiceProvider sp = SamlServiceProvider.withEntityId(SP)
                 .assertionConsumerServiceUrl(ACS)
-                .replayCache(InMemorySamlReplayCache.withLimit(clock, 4))
+                .replayCache(InMemorySamlReplayCache.fromLimit(clock, 4))
                 .clock(clock).clockSkew(Duration.ZERO).build();
         SamlIdentityProvider idp = SamlIdentityProvider.withEntityId(IDP).connectionId("tenant-one")
                 .redirectSingleSignOnService(URI.create("https://idp.example.test/sso"))
@@ -678,7 +679,7 @@ final class SamlServiceProviderTests {
     @Test void signedAttributesAndSessionFieldsAreReleasedTogether() throws Exception {
         KeyPair key = rsa();
         SamlServiceProvider sp = SamlServiceProvider.withEntityId(SP)
-                .assertionConsumerServiceUrl(ACS).replayCache(InMemorySamlReplayCache.withLimit(CLOCK, 4))
+                .assertionConsumerServiceUrl(ACS).replayCache(InMemorySamlReplayCache.fromLimit(CLOCK, 4))
                 .clock(CLOCK).build();
         SamlIdentityProvider idp = SamlIdentityProvider.withEntityId(IDP).connectionId("tenant-one")
                 .redirectSingleSignOnService(URI.create("https://idp.example.test/sso"))
@@ -725,7 +726,7 @@ final class SamlServiceProviderTests {
         };
         SamlServiceProvider sp = SamlServiceProvider.withEntityId(SP)
                 .assertionConsumerServiceUrl(ACS)
-                .replayCache(InMemorySamlReplayCache.withLimit(clock, 4))
+                .replayCache(InMemorySamlReplayCache.fromLimit(clock, 4))
                 .clock(clock).clockSkew(Duration.ZERO).build();
         SamlIdentityProvider idp = SamlIdentityProvider.withEntityId(IDP).connectionId("tenant-one")
                 .redirectSingleSignOnService(URI.create("https://idp.example.test/sso"))
@@ -775,7 +776,7 @@ final class SamlServiceProviderTests {
         };
         SamlServiceProvider sp = SamlServiceProvider.withEntityId(SP)
                 .assertionConsumerServiceUrl(ACS)
-                .replayCache(InMemorySamlReplayCache.withLimit(clock, 4))
+                .replayCache(InMemorySamlReplayCache.fromLimit(clock, 4))
                 .clock(clock).clockSkew(Duration.ZERO)
                 .maximumResponseAge(Duration.ofMinutes(5)).build();
         SamlIdentityProvider idp = SamlIdentityProvider.withEntityId(IDP).connectionId("tenant-one")

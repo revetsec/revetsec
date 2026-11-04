@@ -2,7 +2,7 @@
 
 Use JDK 21 or newer for this Soklet application. Revetsec core retains Java 17 compatibility.
 
-Build with [the example builder](../README.md), start the local provider and [HTTPS edge](../../interop/local-https/README.md), and configure:
+Build with [the Maven build](../README.md#build-with-maven), start the local provider and [HTTPS edge](../../interop/local-https/README.md), and configure:
 
 ```sh
 export PLAYGROUND_ORIGIN=https://localhost:8443
@@ -15,13 +15,21 @@ export PLAYGROUND_PROBE_SECRET_REFERENCE=env:PLAYGROUND_CLIENT_SECRET
 export PLAYGROUND_VALIDATION=jwt
 ```
 
-Run `examples/run.py --example playground` as described in the parent README. Frontend HTTP binds 127.0.0.1:8080 and MCP binds 127.0.0.1:8081. The trusted resource is `https://localhost:8443/mcp`, metadata is `https://localhost:8443/.well-known/oauth-protected-resource/mcp`, and OIDC callback is `https://localhost:8443/oidc/callback`. The edge preserves the frontend Host and uses the exact backend MCP Host; applications never derive security identities from forwarded headers.
+Launch the application with the scoped provider truststore described in the parent README:
+
+```sh
+java -Djavax.net.ssl.trustStore=/private/tls/java-trust.p12 \
+  -Djavax.net.ssl.trustStorePassword=changeit \
+  -jar examples/playground/target/playground-1.0.0-SNAPSHOT.jar
+```
+
+Frontend HTTP binds 127.0.0.1:8080 and MCP binds 127.0.0.1:8081. The trusted resource is `https://localhost:8443/mcp`, metadata is `https://localhost:8443/.well-known/oauth-protected-resource/mcp`, and OIDC callback is `https://localhost:8443/oidc/callback`. The edge preserves the frontend Host and uses the exact backend MCP Host; applications never derive security identities from forwarded headers.
 
 The UI includes OIDC and optional SAML sign-in, configured resource validation, checked redacted results, client-credentials probing and transient token inspection. OIDC secret references are `env:NAME`, `file:/absolute/path`, or `none` for a public client. Provider configuration, probes and inspection require the application session, exact Origin and CSRF token. Raw credentials are not stored in browser storage, echoed or logged. Before validation, only explicitly unverified allowlisted algorithm/type labels may be shown; claim displays require completed validation.
 
 ## SAML service provider
 
-SAML is disabled unless a trusted operator supplies local IdP metadata and the SP's signing key and certificate. The app never fetches an IdP URL or accepts a browser-selected IdP. Configure one approved connection before starting the Playground:
+The Playground acts as a SAML service provider (SP). SAML is disabled unless a trusted operator supplies local identity provider (IdP) metadata and the SP's signing key and certificate. The app never fetches an IdP URL or accepts a browser-selected IdP. Configure one approved connection before starting the Playground:
 
 ```sh
 export PLAYGROUND_SAML_METADATA_FILE=/absolute/path/to/approved-idp-metadata.xml
@@ -54,4 +62,10 @@ The [locked Inspector checks](../../interop/inspector-auth/README.md) preserve t
 
 ## SCIM provisioning
 
-Enable the shared User/Group provisioning routes with `SCIM_BEARER_TOKEN` and a trusted `SCIM_BASE_URI`, or launch `example.playground.ScimPlayground` for standalone qualification. The bounded in-memory application implements atomic writes, explicit authorization/precondition/commit branches and synthetic ASCII matching. See [the application recipe](../../docs/scim-provisioning.md) for ingress caps, password handling, reference policy, durable/Servlet counterparts and the precise qualification boundary. [interop/scim](../../interop/scim/README.md) runs independent clients against these actual routes.
+Enable the shared User/Group provisioning routes with `SCIM_BEARER_TOKEN` and a trusted `SCIM_BASE_URI`, or launch `example.playground.ScimPlayground` for standalone qualification. The fixture explicitly registers the optional Enterprise User extension because it stores those attributes and checks manager references; the core `ScimResourceType.userInstance()` preset is core User only. The bounded in-memory application implements atomic writes, explicit authorization/precondition/commit branches and synthetic ASCII matching. See [the application recipe](../../docs/scim-provisioning.md) for ingress caps, password handling, reference policy, durable/Servlet counterparts and the precise qualification boundary. [interop/scim](../../interop/scim/README.md) runs independent clients against these actual routes.
+
+## Browser session admission
+
+Static assets, metadata and `GET /api/session` are allocation-free. Without a session, status returns `sessionAvailable: false` and an empty CSRF value. Start local session sends an explicit same-origin `POST /api/session` with only `begin=1`; it requires exact Host/Origin and one form Content-Type and rejects query parameters or discarded/oversized input. The UI enables protected controls after admission. This step creates no identity; configuration, probes and authentication controls still require the session-bound CSRF token.
+
+The launcher selects 128 sessions (constructor range 1–256), with a default 8,388,608-byte content budget charging 65,536 bytes per entry. The store refuses new admission with a fixed 503 at either limit and preserves every live session. Absolute expiry is ten minutes after creation or authentication rotation, with request-time cleanup; status reads and bootstrap reuse never renew it. Anonymous status remains readable at capacity. These are single-process example limits. Trusted edge admission/rate limits remain necessary against deliberate session creation, and distributed deployments supply their own shared session/admission infrastructure.

@@ -41,7 +41,8 @@ final class OAuthServerFailureBoundary {
 			case INVALID_TARGET -> OAuthServerValidationException.fromReason(INVALID_RESOURCE);
 			case UNSUPPORTED_RESPONSE_TYPE -> OAuthServerValidationException.fromReason(UNSUPPORTED_RESPONSE_TYPE);
 			case UNSUPPORTED_GRANT_TYPE -> OAuthServerValidationException.fromReason(UNSUPPORTED_GRANT_TYPE);
-			case INFRASTRUCTURE -> OAuthServerConfigurationException.fromReason(CONFIGURATION_INVALID);
+			case INFRASTRUCTURE -> OAuthServerTransportException.fromReason(SERVICE_UNAVAILABLE,false);
+			case CONFIGURATION -> OAuthServerConfigurationException.fromReason(CONFIGURATION_INVALID);
 		};
 	}
 	static @NonNull OAuthServerStoreException store(@NonNull OAuthStoreFailure failure) {

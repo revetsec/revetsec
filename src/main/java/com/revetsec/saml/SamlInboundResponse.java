@@ -143,7 +143,9 @@ final class SamlInboundResponse {
             }
             if (encryptedId != null) {
                 if (clearIds != 0) return new SignatureRejected("DECRYPTION");
-                byte[] plaintext = XmlEncryptionDecryptor.decrypt(encryptedId, decryptionKeys,
+                // At least one enclosing signature was verified above, before looking inside EncryptedID.
+                // Keep the outer-Response proof separate: an Assertion signature does not enable CBC.
+                byte[] plaintext = XmlEncryptionDecryptor.decryptAfterSignatureVerification(encryptedId, decryptionKeys,
                         response instanceof EnvelopedSignatureVerifier.Verified, allowCbc, random);
                 if (plaintext == null) return new SignatureRejected("DECRYPTION");
                 try {

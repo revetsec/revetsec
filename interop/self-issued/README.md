@@ -1,12 +1,18 @@
 # Self-issued browser interoperability fixture (unpublished)
 
+The [released Goose workflow](../goose-auth/workflow/README.md) supplies browser/code/tool and actual-expiry stored-auth reconnect evidence for its selected November-2025 command profile.
+
+The separate [Goose released-client preflight](../goose-auth/README.md) selects an account-free published command/profile after synthetic transport, OAuth deadline and callback checks. Its real self-issued browser/expiry workflow remains open.
+
+The separate [VS Code CIMD transport checkpoint](../vscode-auth/README.md) exercises another released client through browser/code/refresh milestones and preserves a post-initialization version-header blocker. It supplies no passing full-client qualification.
+
 This consumer fixture runs the [self-issued Soklet example](../../examples/self-issued/README.md) with unmodified released MCP Inspector 2.11.0 and Chromium. The application supplies users, registrations, sessions, consent and keys; Revetsec supplies OAuth issuance and checked online resource admission. No third-party security assessment is claimed.
 
 Each invocation uses a fresh issuer namespace and isolated container. No hosted identity provider, DCR, endpoint override, client patch or preloaded OAuth result is used. The ordinary client UI performs login/consent, discovery, code exchange and tool calls; optional recovery modes exercise real expiry/refresh or fresh scope-step-up consent. The second call selects another tenant and observes application denial.
 
 ## Prepared inputs
 
-Use linux/arm64. Build the example with its documented `build.py` against exact core/helper sources and the approved Soklet 4.0.0 JAR. Copy the four resulting JARs to a private `app` directory. Supply a JSON array of four `{ "name": "filename.jar", "sha256": "..." }` rows, using the hashes in the build's `RESULT.json`. The filenames are `self-issued-1.0.0-SNAPSHOT.jar`, `revetsec-1.0.0-SNAPSHOT.jar`, `revetsec-soklet-1.0.0-SNAPSHOT.jar`, and `soklet-4.0.0.jar`. Keep build source inventories with the receipts.
+Use linux/arm64. Build the example with [`verification/examples/verify_self_issued.py`](../../verification/examples/verify_self_issued.py) against exact core/helper sources and the approved Soklet 4.0.0 JAR. Copy the four resulting JARs to a private `app` directory. Supply a JSON array of four `{ "name": "filename.jar", "sha256": "..." }` rows, using the hashes in the build's `RESULT.json`. The filenames are `self-issued-1.0.0-SNAPSHOT.jar`, `revetsec-1.0.0-SNAPSHOT.jar`, `revetsec-soklet-1.0.0-SNAPSHOT.jar`, and `soklet-4.0.0.jar`. Keep build source inventories with the receipts.
 
 Prepare the browser image using the existing [pinned Dockerfile and context preparation](../inspector-auth/linux/README.md). The pinned npm lock/integrity, Playwright image, Chromium and NSS package are reused. Pass an already present immutable image ID via `--image`; the default is the locally qualified image ID. A rebuilt image produces its own evidence identity. Runs never pull images or contact external services.
 

@@ -32,7 +32,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class ScimM12ExtensionPatchTests {
     private static final @NonNull String PATCH="urn:ietf:params:scim:api:messages:2.0:PatchOp";
     private static final @NonNull String ENTERPRISE=ScimSchema.enterpriseUserInstance().getId();
-    private static final @NonNull ScimResourceType USER=ScimResourceType.userInstance();
+    private static final @NonNull ScimResourceType USER=ScimTestResourceTypes.userWithEnterpriseInstance();
     private static final @NonNull ScimStringMatching EXACT=(path,definition,operator,left,right) -> ScimStringMatchResult.fromMatched(
             operator == ScimComparisonOperator.EQ ? left.equals(right) : operator == ScimComparisonOperator.NE && !left.equals(right));
     private static @NonNull ScimServiceProvider provider(@NonNull ScimResourceType type) {

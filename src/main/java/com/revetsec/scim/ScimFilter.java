@@ -34,6 +34,8 @@ import static java.util.Objects.requireNonNull;
  * types, approve a filter policy, or authorize query execution. Applications
  * must perform those checks before using a tree to select resources.
  * <p>
+ * Parsed and schema-bound roots privately retain their bounded original expression for later
+ * receiving-provider checks. This text may contain personal data and grants no query permission.
  * Equality is structural, with the path's ASCII case-insensitive equality and
  * numeric-value literal equality. Explicit serialization contains the complete
  * filter and may expose personal data; every diagnostic toString redacts it.
@@ -93,9 +95,11 @@ public sealed interface ScimFilter permits ScimFilter.And, ScimFilter.Or, ScimFi
     /**
      * Emits a canonical filter with lowercase operators and minimal grouping.
      * Strings use JSON escapes; numeric exponent notation remains compact and
-     * never expands an exponent into zeros. The output contains personal data.
+     * never expands an exponent into zeros. The output contains personal data and can exceed
+     * the original input-character limit after schema normalization. Rendering does not prove
+     * that this text fits a receiving parser's limits.
      *
-     * @return round-trippable SCIM syntax
+     * @return canonical SCIM syntax, subject to receiving parser limits
      * @since 1.0.0
      */
     @CheckReturnValue
@@ -107,7 +111,14 @@ public sealed interface ScimFilter permits ScimFilter.And, ScimFilter.Or, ScimFi
     @Immutable
     final class And implements ScimFilter {
         private final @NonNull List<@NonNull ScimFilter> operands;
-        And(@NonNull List<@NonNull ScimFilter> operands) { this.operands = List.copyOf(operands); }
+        // Root-only lexical provenance; excluded from structural equality, hashing and rendering.
+        private final @Nullable String sourceExpression;
+        @Nullable String sourceExpression() { return sourceExpression; }
+        And(@NonNull List<@NonNull ScimFilter> operands) { this(operands, null); }
+        And(@NonNull List<@NonNull ScimFilter> operands, @Nullable String sourceExpression) {
+            this.operands = List.copyOf(operands);
+            this.sourceExpression = sourceExpression;
+        }
 
         /** Returns ordered conjunction operands.
          * @return immutable operands
@@ -155,7 +166,14 @@ public sealed interface ScimFilter permits ScimFilter.And, ScimFilter.Or, ScimFi
     @Immutable
     final class Or implements ScimFilter {
         private final @NonNull List<@NonNull ScimFilter> operands;
-        Or(@NonNull List<@NonNull ScimFilter> operands) { this.operands = List.copyOf(operands); }
+        // Root-only lexical provenance; excluded from structural equality, hashing and rendering.
+        private final @Nullable String sourceExpression;
+        @Nullable String sourceExpression() { return sourceExpression; }
+        Or(@NonNull List<@NonNull ScimFilter> operands) { this(operands, null); }
+        Or(@NonNull List<@NonNull ScimFilter> operands, @Nullable String sourceExpression) {
+            this.operands = List.copyOf(operands);
+            this.sourceExpression = sourceExpression;
+        }
 
         /** Returns ordered disjunction operands.
          * @return immutable operands
@@ -203,8 +221,13 @@ public sealed interface ScimFilter permits ScimFilter.And, ScimFilter.Or, ScimFi
     @Immutable
     final class Not implements ScimFilter {
         private final @NonNull ScimFilter operand;
-        Not(@NonNull ScimFilter operand) {
+        // Root-only lexical provenance; excluded from structural equality, hashing and rendering.
+        private final @Nullable String sourceExpression;
+        @Nullable String sourceExpression() { return sourceExpression; }
+        Not(@NonNull ScimFilter operand) { this(operand, null); }
+        Not(@NonNull ScimFilter operand, @Nullable String sourceExpression) {
             this.operand = requireNonNull(operand);
+            this.sourceExpression = sourceExpression;
         }
 
         /** Returns the operand.
@@ -257,10 +280,15 @@ public sealed interface ScimFilter permits ScimFilter.And, ScimFilter.Or, ScimFi
         private final @NonNull ScimAttributePath attributePath;
         private final @NonNull ScimComparisonOperator operator;
         private final @NonNull ScimFilterValue value;
-        Comparison(@NonNull ScimAttributePath attributePath, @NonNull ScimComparisonOperator operator, @NonNull ScimFilterValue value) {
+        // Root-only lexical provenance; excluded from structural equality, hashing and rendering.
+        private final @Nullable String sourceExpression;
+        @Nullable String sourceExpression() { return sourceExpression; }
+        Comparison(@NonNull ScimAttributePath attributePath, @NonNull ScimComparisonOperator operator, @NonNull ScimFilterValue value) { this(attributePath, operator, value, null); }
+        Comparison(@NonNull ScimAttributePath attributePath, @NonNull ScimComparisonOperator operator, @NonNull ScimFilterValue value, @Nullable String sourceExpression) {
             this.attributePath = requireNonNull(attributePath);
             this.operator = requireNonNull(operator);
             this.value = requireNonNull(value);
+            this.sourceExpression = sourceExpression;
         }
 
         /** Returns the attributePath.
@@ -321,8 +349,13 @@ public sealed interface ScimFilter permits ScimFilter.And, ScimFilter.Or, ScimFi
     @Immutable
     final class Present implements ScimFilter {
         private final @NonNull ScimAttributePath attributePath;
-        Present(@NonNull ScimAttributePath attributePath) {
+        // Root-only lexical provenance; excluded from structural equality, hashing and rendering.
+        private final @Nullable String sourceExpression;
+        @Nullable String sourceExpression() { return sourceExpression; }
+        Present(@NonNull ScimAttributePath attributePath) { this(attributePath, null); }
+        Present(@NonNull ScimAttributePath attributePath, @Nullable String sourceExpression) {
             this.attributePath = requireNonNull(attributePath);
+            this.sourceExpression = sourceExpression;
         }
 
         /** Returns the attributePath.
@@ -374,9 +407,14 @@ public sealed interface ScimFilter permits ScimFilter.And, ScimFilter.Or, ScimFi
     final class ValuePath implements ScimFilter {
         private final @NonNull ScimAttributePath attributePath;
         private final @NonNull ScimFilter filter;
-        ValuePath(@NonNull ScimAttributePath attributePath, @NonNull ScimFilter filter) {
+        // Root-only lexical provenance; excluded from structural equality, hashing and rendering.
+        private final @Nullable String sourceExpression;
+        @Nullable String sourceExpression() { return sourceExpression; }
+        ValuePath(@NonNull ScimAttributePath attributePath, @NonNull ScimFilter filter) { this(attributePath, filter, null); }
+        ValuePath(@NonNull ScimAttributePath attributePath, @NonNull ScimFilter filter, @Nullable String sourceExpression) {
             this.attributePath = requireNonNull(attributePath);
             this.filter = requireNonNull(filter);
+            this.sourceExpression = sourceExpression;
         }
 
         /** Returns the attributePath.

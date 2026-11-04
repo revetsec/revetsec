@@ -106,12 +106,15 @@ final class OidcProviderCache<T> {
 	}
 
 	@NonNull T get(@NonNull Deadline deadline) {
+		requireActive(deadline);
 		Flight<T> mine = null;
 		Flight<T> waitFor = null;
 		long nowNanos = this.nanoTime.getAsLong();
 		this.lock.lock();
 		try {
+			requireActive(deadline);
 			Instant now = this.clock.instant();
+			requireActive(deadline);
 			boolean rollback = this.lastClock != null && now.isBefore(this.lastClock);
 			this.lastClock = now;
 			if (this.snapshot != null) {
@@ -129,7 +132,7 @@ final class OidcProviderCache<T> {
 				this.waiters++; this.waiterChanged.signalAll();
 			} else {
 				if (this.lastFailure != null && nowNanos - this.lastFailureNanos < this.failureBackoffNanos)
-					throw this.lastFailure;
+					throw copyFailure(this.lastFailure);
 				while (!this.attemptTimes.isEmpty()
 						&& nowNanos - this.attemptTimes.peekFirst() >= this.cooldown.toNanos())
 					this.attemptTimes.removeFirst();
@@ -153,9 +156,11 @@ final class OidcProviderCache<T> {
 		Flight<T> leader = requireNonNull(mine);
 		try {
 			MetadataSnapshot<T> found = fetch(deadline);
+			requireActive(deadline);
 			boolean current;
 			this.lock.lock();
 			try {
+				requireActive(deadline);
 				current = this.flight == leader;
 				if (current) {
 					this.snapshot = found;
@@ -171,40 +176,50 @@ final class OidcProviderCache<T> {
 			leader.future.complete(found.metadata);
 			return found.metadata;
 		} catch (OAuthException failure) {
+			boolean interrupted = failure.getReason() == OAuthException.Reason.INTERRUPTED || Thread.currentThread().isInterrupted();
+			boolean callerLocal = interrupted || deadline.isExpired();
+			if (interrupted) Thread.currentThread().interrupt();
 			this.lock.lock();
 			try {
 				if (this.flight == leader) {
-					this.lastFailure = failure;
-					this.lastFailureNanos = this.nanoTime.getAsLong();
-					this.consecutiveFailures = Math.min(5, this.consecutiveFailures + 1);
-					this.failureBackoffNanos = Math.min(this.cooldown.toNanos() << (this.consecutiveFailures - 1),
-							Math.min(this.cooldown.toNanos() * 10, Duration.ofMinutes(10).toNanos()));
-					if (failure instanceof OAuthErrorResponseException error) {
-						Duration delay = error.getRetryAfter().orElse(Duration.ZERO);
-						long retryNanos = delay.compareTo(Duration.ofMinutes(10)) >= 0 ? Duration.ofMinutes(10).toNanos() : delay.toNanos();
-						this.failureBackoffNanos = Math.max(this.failureBackoffNanos, retryNanos);
+					if (!callerLocal) {
+						this.lastFailure = copyFailure(failure);
+						this.lastFailureNanos = this.nanoTime.getAsLong();
+						this.consecutiveFailures = Math.min(5, this.consecutiveFailures + 1);
+						this.failureBackoffNanos = Math.min(this.cooldown.toNanos() << (this.consecutiveFailures - 1),
+								Math.min(this.cooldown.toNanos() * 10, Duration.ofMinutes(10).toNanos()));
+						if (failure instanceof OAuthErrorResponseException error) {
+							Duration delay = error.getRetryAfter().orElse(Duration.ZERO);
+							long retryNanos = delay.compareTo(Duration.ofMinutes(10)) >= 0 ? Duration.ofMinutes(10).toNanos() : delay.toNanos();
+							this.failureBackoffNanos = Math.max(this.failureBackoffNanos, retryNanos);
+						}
 					}
 					this.flight = null;
 				}
 			} finally {
 				this.lock.unlock();
 			}
-			leader.future.completeExceptionally(failure);
+			leader.future.completeExceptionally(callerLocal ? failure(OAuthException.Reason.NETWORK_FAILURE) : copyFailure(failure));
+			if (interrupted) throw failure(OAuthException.Reason.INTERRUPTED);
 			throw failure;
 		} catch (RuntimeException failure) {
-			OAuthException safe = failure(OAuthException.Reason.NETWORK_FAILURE);
+			boolean interrupted = Thread.currentThread().isInterrupted();
+			boolean callerLocal = interrupted || deadline.isExpired();
+			OAuthException safe = interrupted ? failure(OAuthException.Reason.INTERRUPTED) : failure(OAuthException.Reason.NETWORK_FAILURE);
 			this.lock.lock();
 			try {
 				if (this.flight == leader) {
 					this.flight = null;
-					this.lastFailure = safe;
-					this.lastFailureNanos = this.nanoTime.getAsLong();
-					this.failureBackoffNanos = this.cooldown.toNanos();
+					if (!callerLocal) {
+						this.lastFailure = copyFailure(safe);
+						this.lastFailureNanos = this.nanoTime.getAsLong();
+						this.failureBackoffNanos = this.cooldown.toNanos();
+					}
 				}
 			} finally {
 				this.lock.unlock();
 			}
-			leader.future.completeExceptionally(safe);
+			leader.future.completeExceptionally(failure(OAuthException.Reason.NETWORK_FAILURE));
 			throw safe;
 		}
 	}
@@ -216,20 +231,33 @@ final class OidcProviderCache<T> {
 			return this.waiters >= expected;
 		} finally { this.lock.unlock(); }
 	}
+	private static void requireActive(@NonNull Deadline deadline) {
+		if (Thread.currentThread().isInterrupted()) throw failure(OAuthException.Reason.INTERRUPTED);
+		if (deadline.isExpired()) throw failure(OAuthException.Reason.NETWORK_FAILURE);
+	}
+
+	private static @NonNull OAuthException copyFailure(@NonNull OAuthException failure) {
+		return OidcTransactionAccess.get().copyEndpointFailure(failure);
+	}
+
 	private static <T> @NonNull T await(@NonNull CompletableFuture<@NonNull T> future,
 			@NonNull Deadline deadline) {
 		try {
 			long remaining = deadline.remainingNanos();
 			if (remaining <= 0)
 				throw failure(OAuthException.Reason.NETWORK_FAILURE);
-			return future.get(remaining, TimeUnit.NANOSECONDS);
+			requireActive(deadline);
+			T result = future.get(remaining, TimeUnit.NANOSECONDS);
+			requireActive(deadline);
+			return result;
 		} catch (InterruptedException interrupted) {
 			Thread.currentThread().interrupt();
 			throw failure(OAuthException.Reason.INTERRUPTED);
 		} catch (TimeoutException timeout) {
 			throw failure(OAuthException.Reason.NETWORK_FAILURE);
 		} catch (ExecutionException failure) {
-			if (failure.getCause() instanceof OAuthException oauth) throw oauth;
+			requireActive(deadline);
+			if (failure.getCause() instanceof OAuthException oauth) throw copyFailure(oauth);
 			throw failure(OAuthException.Reason.NETWORK_FAILURE);
 		}
 	}

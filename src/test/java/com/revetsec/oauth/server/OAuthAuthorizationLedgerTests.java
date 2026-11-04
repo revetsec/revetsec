@@ -98,7 +98,7 @@ final class OAuthAuthorizationLedgerTests {
   assertEquals(OAuthStoreCommitStatus.COMMITTED,this.coordinator.initializeFreshIssuer(deadline()).getStatus());
   this.coordinator.establishNewSubject("subject",deadline());
  }
- private @NonNull String begin() { return this.first.begin(admission("state +&✓"),BROWSER,deadline()); }
+ private @NonNull String begin() { return this.first.begin(admission("state +&~"),BROWSER,deadline()); }
  private @NonNull Optional<@NonNull String> complete(@NonNull String handle, @NonNull OAuthAuthorizationDecision decision) {
   return this.first.complete(handle,BROWSER,client(),resources(),decision,deadline());
  }
@@ -135,7 +135,7 @@ final class OAuthAuthorizationLedgerTests {
  @Test void resumeReconstructsExactReviewAndRequiresCompleteBarrier() {
   initialized();String handle=begin();OAuthAuthorizationRecord r=this.second.resume(handle,BROWSER,client(),deadline());
   assertEquals(REDIRECT,r.text("redirect"));assertEquals(RESOURCE,r.text("resource"));assertEquals(Set.of("read","write"),r.scopes(LIMITS));
-  assertEquals("state +&✓",r.state(1024));assertEquals(List.of(),requireNonNull(this.store.lastTransaction).getMutations());
+  assertEquals("state +&~",r.state(1024));assertEquals(List.of(),requireNonNull(this.store.lastTransaction).getMutations());
   assertEquals(2,requireNonNull(this.store.lastTransaction).getConditions().size());
  }
  @Test void absentAndEmptyStateRemainDistinct() {
@@ -199,9 +199,9 @@ final class OAuthAuthorizationLedgerTests {
   failed(OAuthStoreFailure.Reason.CORRUPT_STATE,()->approved(handle));assertEquals("PENDING",decoded(OAuthStoreKey.Kind.INTERACTION).text("status"));
  }
  @Test void wrongResourceExcessScopesOrChangedServerPolicyKeepConsentPending() {
-  initialized();String handle=begin();invalid(()->complete(handle,decision("subject",Set.of("admin"),false)));
-  OAuthAuthorizationDecision wrong=OAuthAuthorizationDecision.withSubject("subject").authorizedScopesByResource(Map.of("urn:other",Set.of("read"))).build();invalid(()->complete(handle,wrong));
-  invalid(()->this.first.complete(handle,BROWSER,client(),Map.of(RESOURCE,Set.of("write")),decision("subject",Set.of("read"),false),deadline()));assertNotNull(approved(handle));
+  initialized();String handle=begin();assertEquals(OAuthServerAdmissionFailure.Reason.CONFIGURATION,assertThrows(OAuthServerAdmissionFailure.class,()->complete(handle,decision("subject",Set.of("admin"),false))).reason());
+  OAuthAuthorizationDecision wrong=OAuthAuthorizationDecision.withSubject("subject").authorizedScopesByResource(Map.of("urn:other",Set.of("read"))).build();assertEquals(OAuthServerAdmissionFailure.Reason.CONFIGURATION,assertThrows(OAuthServerAdmissionFailure.class,()->complete(handle,wrong)).reason());
+  assertEquals(OAuthServerAdmissionFailure.Reason.CONFIGURATION,assertThrows(OAuthServerAdmissionFailure.class,()->this.first.complete(handle,BROWSER,client(),Map.of(RESOURCE,Set.of("write")),decision("subject",Set.of("read"),false),deadline())).reason());assertNotNull(approved(handle));
  }
  @TestFactory @NonNull Stream<@NonNull DynamicTest> clientSecurityChangesRejectResumeAndCompletion() {
   List<OAuthServerClientRegistration> changed=List.of(client("v2",true,Set.of("read","write"),REDIRECT,false),client("v1",false,Set.of("read","write"),REDIRECT,false),
@@ -263,7 +263,7 @@ final class OAuthAuthorizationLedgerTests {
  }
  @Test void configuredRecordCapRejectsOversizedConsentBeforeCommit() {
   initialized();OAuthStoreRecordCodec small=codec(1024);OAuthAuthorizationLedger ledger=new OAuthAuthorizationLedger(new OAuthStoreCoordinator(this.store,small,this.clock,3,255),small,LIMITS,Duration.ofMinutes(15),Duration.ofMinutes(2),3,255,false);
-  int commits=this.store.commits;failed(OAuthStoreFailure.Reason.CORRUPT_STATE,()->ledger.begin(admission("a".repeat(1024)),BROWSER,deadline()));assertEquals(commits,this.store.commits);
+  int commits=this.store.commits;invalid(()->ledger.begin(admission("a".repeat(1024)),BROWSER,deadline()));assertEquals(commits,this.store.commits);
  }
  @Test void forgedRetentionAndAuthenticatedWrongTypedPayloadAreCorrupt() {
   initialized();String handle=begin();OAuthStoreEntry e=entry(OAuthStoreKey.Kind.INTERACTION);JsonObject p=payload(OAuthStoreKey.Kind.INTERACTION);
@@ -390,7 +390,7 @@ final class OAuthAuthorizationLedgerTests {
  @Test void preparedConsentSuccessRetainsExactQueryStateIssuerAndTypedCode() {
   initialized();String handle=begin();var response=wireComplete(handle,decision("subject",Set.of("read"),true),1024);
   assertEquals(303,response.getStatusCode());String location=response.getLocationWithCredentials().orElseThrow().toString();
-  assertTrue(location.startsWith(REDIRECT+"&code=rsc1_"));assertTrue(location.endsWith("&state=state+%2B%26%E2%9C%93&iss=https%3A%2F%2Fissuer.example%2Ftenant"));
+  assertTrue(location.startsWith(REDIRECT+"&code=rsc1_"));assertTrue(location.endsWith("&state=state+%2B%26%7E&iss=https%3A%2F%2Fissuer.example%2Ftenant"));
   String code=location.substring(location.indexOf("code=")+5,location.indexOf("&state="));assertEquals(OAuthServerCredential.codeDigest(code),decoded(OAuthStoreKey.Kind.GRANT).text("codeId"));
   assertFalse(response.getHeaders().containsKey("Location"));assertEquals(0,response.toHttpBodyWithCredentials().length);assertEquals(List.of("no-referrer"),response.getHeaders().get("Referrer-Policy"));
   byte[] before=response.wireHeaders();this.clock.time=NOW.plusSeconds(9999); this.store.authorityNow=this.clock.time;assertArrayEquals(before,response.wireHeaders());assertEquals(location,response.getLocationWithCredentials().orElseThrow().toString());

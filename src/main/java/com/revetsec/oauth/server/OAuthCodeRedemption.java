@@ -69,11 +69,10 @@ final class OAuthCodeRedemption {
   catch (IllegalArgumentException failure) { throw invalid(); }
   Map<String, Set<String>> server = OAuthServerConfiguration.resources(resources, this.limits.resources);
   for (int attempt = 0; attempt < this.attempts; attempt++) {
-   // Public CIMD requests must identify an existing, matching credential before taking a fresh-fetch permit.
-   String claimedClient = request.authorization() == null ? request.value("client_id") : null;
-   if (claimedClient != null && clients.metadataEnabled()) readCredential(codeId, claimedClient, deadline);
-   // Resolve/authenticate again after every conflict; neither app decisions nor metadata are positive caches.
-   OAuthServerClientSelection.Selected selectedClient = clients.authenticate(request, server, deadline);
+   // Registry/Basic precedence remains intact. Only a possible, locally bound transition may fetch CIMD.
+   OAuthServerClientSelection.Selected selectedClient = clients.authenticate(request, server, deadline, () -> {
+    admitMetadata(request, codeId, verifier, deadline); return true;
+   }).orElseThrow(OAuthCodeRedemption::invalid);
    OAuthServerClientRegistration client = selectedClient.client();
    if (!client.isAuthorizationCodePermitted()) throw OAuthServerClientAdmission.failure(UNAUTHORIZED_CLIENT);
    String fingerprint = selectedClient.fingerprint();
@@ -109,9 +108,9 @@ final class OAuthCodeRedemption {
    OAuthAuthorizationDecision decision = authorize(policy, grant, deadline);
    if (decision.isDenied()) { if (terminate(session, codeKey, code, grantKey, grant)) throw invalid(); else continue; }
    Map<String, Set<String>> choices = decision.getAuthorizedScopesByResource(); Set<String> selected = choices.get(grant.text("resource"));
-   if (!decision.getSubject().orElseThrow(() -> OAuthServerClientAdmission.failure(INFRASTRUCTURE)).equals(grant.text("subject"))
+   if (!decision.getSubject().orElseThrow(() -> OAuthServerClientAdmission.failure(CONFIGURATION)).equals(grant.text("subject"))
      || choices.size() != 1 || selected == null || !approved.containsAll(selected)
-     || decision.isRefreshTokenPermitted() && !grant.refresh()) throw OAuthServerClientAdmission.failure(INFRASTRUCTURE);
+     || decision.isRefreshTokenPermitted() && !grant.refresh()) throw OAuthServerClientAdmission.failure(CONFIGURATION);
    if (selected.isEmpty()) { if (terminate(session, codeKey, code, grantKey, grant)) throw invalid(); else continue; }
    Instant issued = session.effectiveNow();
    Instant expires = prepared(() -> OAuthGrantRetention.expiry(session.effectiveNow(), this.accessLifetime));
@@ -142,6 +141,27 @@ final class OAuthCodeRedemption {
    if (session.commit(mutations) == OAuthStoreCommitStatus.COMMITTED) return response;
   }
   throw new OAuthStoreFailure(UNAVAILABLE);
+ }
+ /** Admission to external work only: every final fact and fresh client fingerprint is checked again below. */
+ private void admitMetadata(@NonNull OAuthServerRequest request, @NonNull String codeId, @NonNull String verifier,
+   @NonNull Deadline deadline) {
+  CredentialRead observed = readCredential(codeId, request.required("client_id"), deadline);
+  OAuthStoreCoordinator.Session session = observed.session();
+  OAuthAuthorizationRecord code = observed.credential(), grant = observed.grant();
+  if (!grant.text("codeId").equals(codeId) || !code.sameLineage(grant)) throw new OAuthStoreFailure(CORRUPT_STATE);
+  if (!grant.text("resource").equals(request.required("resource")) || !OAuthAuthorizationRecord.equalDigest(code.text("challenge"), verifier)
+    || request.value("redirect_uri") != null && !code.text("redirect").equals(request.value("redirect_uri"))
+    || !code.matchesIssuer(session.issuer()) || !grant.matchesSubject(session.subject(grant.text("subject")))) throw invalid();
+  if (code.text("status").equals("USED")) {
+   if (!grant.text("status").equals("ACTIVE") && !grant.text("status").equals("REVOKED")
+     || code.horizon().isBefore(grant.horizon())) throw new OAuthStoreFailure(CORRUPT_STATE);
+   // A bound retained replay can still revoke an active grant, but cannot repeatedly fetch after revocation.
+   if (!grant.text("status").equals("ACTIVE")) throw invalid();
+  } else {
+   if (!code.text("status").equals("UNUSED") || !grant.text("status").equals("PENDING")) throw invalid();
+   if (!code.expires().equals(grant.expires())) throw new OAuthStoreFailure(CORRUPT_STATE);
+   if (!session.effectiveNow().isBefore(code.expires())) throw invalid();
+  }
  }
  private record CredentialRead(OAuthStoreCoordinator.@NonNull Session session, @NonNull OAuthAuthorizationRecord credential,
    @NonNull OAuthAuthorizationRecord grant) {}

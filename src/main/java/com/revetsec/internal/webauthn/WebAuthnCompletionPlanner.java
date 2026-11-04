@@ -135,7 +135,12 @@ final class WebAuthnCompletionPlanner {
                 this.relyingPartyId, handle);
         WebAuthnStoreKey fenceKey = WebAuthnStoreKey.forAccountFence(this.namespace,
                 this.relyingPartyId, handle);
-        if (!activeFence(expanded, fenceKey, clock)) return Preparation.rejected();
+        boolean newAccount = expanded.getEntry(fenceKey) instanceof WebAuthnStoreEntry.Absent;
+        if (newAccount) {
+            // An index without its permanent fence is inconsistent, not a new account.
+            if (!(expanded.getEntry(indexKey) instanceof WebAuthnStoreEntry.Absent))
+                throw new WebAuthnRecordException();
+        } else if (!activeFence(expanded, fenceKey, clock)) return Preparation.rejected();
         if (expanded.getEntry(credentialKey) instanceof WebAuthnStoreEntry.Present present) {
             this.credentials.decodeRecord(credentialKey, present.getSealedBytes(), clock);
             return Preparation.rejected();
@@ -161,6 +166,10 @@ final class WebAuthnCompletionPlanner {
         changes.add(indexEntry instanceof WebAuthnStoreEntry.Present
                 ? WebAuthnStoreWrite.Mutation.replace(encodedIndex.key(), encodedIndex.sealedBytes())
                 : WebAuthnStoreWrite.Mutation.insert(encodedIndex.key(), encodedIndex.sealedBytes()));
+        if (newAccount) {
+            var encodedFence = this.fences.encode(handle, true, observedAt);
+            changes.add(WebAuthnStoreWrite.Mutation.insert(encodedFence.key(), encodedFence.sealedBytes()));
+        }
         requireEstablishedRoot(expanded, observedAt, clock);
         return Preparation.candidate(WebAuthnStoreWrite.fromSnapshotAndMutations(expanded, changes, StoreTimeAccess.get().fromObservation((StoreTimeObservation.Healthy) expanded.getTimeObservation(), observedAt, inspected.expiresAt())));
     }

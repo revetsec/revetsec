@@ -24,6 +24,15 @@ import java.util.Optional;
 /**
  * An attribute from the covered Assertion. Text values are exposed separately from complex
  * values so callers cannot mistake nested XML for a scalar identifier.
+ * <p>
+ * Login accepts at most 128 Attribute elements and 256 AttributeValue elements in total across
+ * every AttributeStatement in the assertion. Duplicate names, empty attributes and complex
+ * values count toward those totals. Each exposed text value is limited to 4,096 UTF-16 code
+ * units ({@link String#length()}); Name, NameFormat and FriendlyName are each limited to 2,048
+ * code units, with a nonempty Name required. These fixed limits apply in addition to XML input
+ * and structure limits. If attribute validation is reached, exceeding one rejects the entire login with
+ * {@link SamlAuthenticationResult.Reason#ASSERTION_SHAPE}; attributes are never truncated.
+ * The text limit does not describe opaque complex content or nested NameID validation.
  *
  * @since 1.0.0
  */

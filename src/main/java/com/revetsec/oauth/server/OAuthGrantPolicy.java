@@ -23,8 +23,9 @@ import java.time.Duration;
 /**
  * Continuing application authorization policy, invoked outside store transactions at approval, code exchange
  * and refresh. Implementations must be thread safe and honor the remaining budget. Decisions must retain the
- * checked subject and may only narrow scope/resource/refresh authority. Denial terminates authorization; null,
- * exceptions, exhausted budgets, changed subjects and widening are infrastructure/configuration faults.
+ * checked subject and may only narrow scope/resource/refresh authority. Denial terminates authorization.
+ * Null, nonfatal exceptions and exhausted budgets are unavailable service failures. A returned decision that
+ * changes the checked subject or widens resource/scope/refresh authority is an application configuration fault.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  * @since 1.0.0

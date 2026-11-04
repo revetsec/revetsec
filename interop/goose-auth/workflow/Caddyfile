@@ -1,0 +1,28 @@
+# Copyright 2026 Revetware LLC. Apache-2.0. Disposable verification edge only.
+{
+ admin off
+ auto_https off
+ servers {
+  protocols h1 h2
+ }
+}
+{$REVETSEC_ISSUER_ORIGIN} {
+ bind ::1
+ tls {$REVETSEC_TLS_CERT} {$REVETSEC_TLS_KEY}
+ route {
+  @mcp path /mcp /mcp/*
+  handle @mcp {
+   reverse_proxy 127.0.0.1:8090
+  }
+  handle {
+   reverse_proxy 127.0.0.1:8088
+  }
+ }
+}
+https://goose-docs.ai {
+ bind 8.8.8.8
+ tls {$REVETSEC_TLS_CERT} {$REVETSEC_TLS_KEY}
+ reverse_proxy 127.0.0.1:6278 {
+  header_up X-Fixture-Tls-Sni {http.request.tls.server_name}
+ }
+}

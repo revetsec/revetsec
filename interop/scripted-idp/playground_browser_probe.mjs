@@ -158,6 +158,7 @@ try {
   check('idp-validated-sp-metadata', before.spMetadata >= 1);
   result.stage = 'LOGIN';
   await cdp.send('Page.navigate', {url: app + '/'}, session);
+  await waitFor('session-admission', async () => await evaluate(`(()=>{if(document.querySelector('#login')?.elements.csrf.value.length>0)return true;const b=document.querySelector('#start-session');if(!b||b.disabled)return false;b.click();return true;})()`));
   await waitFor('login-button-ready', async () => await evaluate(
     `document.querySelector('#saml-login input[name=csrf]')?.value.length>0
       && document.querySelector('#saml-login button')?.disabled===false`));

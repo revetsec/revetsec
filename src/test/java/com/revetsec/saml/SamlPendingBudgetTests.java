@@ -50,7 +50,7 @@ final class SamlPendingBudgetTests {
         PendingSamlAuthentication pending = pending();
         StateSealer sealer = StateSealer.withActiveKey(TestSealers.fixedKey("saml-large-login-budget"))
                 .clock(CLOCK).build();
-        InMemoryPendingSamlAuthenticationStore store = InMemoryPendingSamlAuthenticationStore.withLimit(CLOCK, 1);
+        InMemoryPendingSamlAuthenticationStore store = InMemoryPendingSamlAuthenticationStore.fromLimit(CLOCK, 1);
         assertEquals(SamlPendingSaveResult.SAVED,
                 pending.saveToResult(store, sealer, "login", "browser", LARGE_BUDGET));
         PendingSamlAuthenticationSource.Resolved resolved = assertInstanceOf(
@@ -64,7 +64,7 @@ final class SamlPendingBudgetTests {
         PendingSamlLogout pending = new PendingSamlLogout(pending());
         StateSealer sealer = StateSealer.withActiveKey(TestSealers.fixedKey("saml-large-logout-budget"))
                 .clock(CLOCK).build();
-        InMemoryPendingSamlAuthenticationStore store = InMemoryPendingSamlAuthenticationStore.withLimit(CLOCK, 1);
+        InMemoryPendingSamlAuthenticationStore store = InMemoryPendingSamlAuthenticationStore.fromLimit(CLOCK, 1);
         assertEquals(SamlPendingSaveResult.SAVED,
                 pending.saveToResult(store, sealer, "logout", "browser", LARGE_BUDGET));
         PendingSamlLogoutSource.Resolved resolved = assertInstanceOf(

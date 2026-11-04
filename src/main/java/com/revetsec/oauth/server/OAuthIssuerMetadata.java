@@ -26,6 +26,7 @@ import java.net.URI;
 import java.time.Duration;
 import java.util.List;
 import java.util.Set;
+import java.util.function.Supplier;
 import static java.util.Objects.requireNonNull;
 
 /**
@@ -80,15 +81,20 @@ final class OAuthIssuerMetadata {
  @NonNull URI wellKnownUri() { return this.wellKnown; }
  @NonNull OAuthPublicMetadataResponse metadata(@NonNull String method,@NonNull Deadline deadline) {
   OAuthServerClientAdmission.remaining(deadline);
-  OAuthPublicMetadataResponse response=OAuthPublicMetadataResponse.prepare(this.metadata,method,this.publicMetadataHttpCacheMaxAge,this.bodyCap,this.headerCap);
+  OAuthPublicMetadataResponse response=prepared(()->OAuthPublicMetadataResponse.prepare(this.metadata,method,this.publicMetadataHttpCacheMaxAge,this.bodyCap,this.headerCap));
   OAuthServerClientAdmission.remaining(deadline);return response;
  }
  @NonNull OAuthPublicMetadataResponse jwks(@NonNull String method,@NonNull OAuthIssuerKeyLifecycle keys,@NonNull Deadline deadline) {
   OAuthServerClientAdmission.remaining(deadline);
-  if(!method.equals("GET") && !method.equals("HEAD")) return OAuthPublicMetadataResponse.prepare(JsonObject.builder().build(),method,this.publicMetadataHttpCacheMaxAge,this.bodyCap,this.headerCap);
+  if(!method.equals("GET") && !method.equals("HEAD")) return prepared(()->OAuthPublicMetadataResponse.prepare(JsonObject.builder().build(),method,this.publicMetadataHttpCacheMaxAge,this.bodyCap,this.headerCap));
   OAuthIssuerKeySnapshot snapshot=keys.snapshot(deadline);
-  OAuthPublicMetadataResponse response=OAuthPublicMetadataResponse.prepare(OAuthIssuerPublicKeys.jwks(snapshot.getVerificationKeys()),method,this.publicMetadataHttpCacheMaxAge,this.bodyCap,this.headerCap);
+  OAuthPublicMetadataResponse response=prepared(()->OAuthPublicMetadataResponse.prepare(OAuthIssuerPublicKeys.jwks(snapshot.getVerificationKeys()),method,this.publicMetadataHttpCacheMaxAge,this.bodyCap,this.headerCap));
   OAuthServerClientAdmission.remaining(deadline);return response;
+ }
+ /** Only trusted publication preparation is translated; provider/budget failures retain their own boundary. */
+ private static @NonNull OAuthPublicMetadataResponse prepared(@NonNull Supplier<@NonNull OAuthPublicMetadataResponse> prepare){
+  try{return prepare.get();}
+  catch(IllegalArgumentException invalid){throw new OAuthServerAdmissionFailure(OAuthServerAdmissionFailure.Reason.CONFIGURATION);}
  }
  @Override public @NonNull String toString() { return "OAuthIssuerMetadata{<redacted>}"; }
 }

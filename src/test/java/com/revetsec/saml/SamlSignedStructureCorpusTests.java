@@ -203,7 +203,7 @@ final class SamlSignedStructureCorpusTests {
     private static @NonNull SamlAuthenticationResult check(@NonNull String xml) throws Exception {
         SamlServiceProvider sp = SamlServiceProvider.withEntityId("https://sp.test/Selftest")
                 .assertionConsumerServiceUrl(URI.create("https://sp.test/acs"))
-                .replayCache(InMemorySamlReplayCache.withLimit(CLOCK, 16)).clock(CLOCK).build();
+                .replayCache(InMemorySamlReplayCache.fromLimit(CLOCK, 16)).clock(CLOCK).build();
         SamlIdentityProvider idp = SamlIdentityProvider
                 .withEntityId("https://idp.scripted-idp.test/")
                 .connectionId("signed-structure-corpus")

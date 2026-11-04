@@ -42,6 +42,17 @@ public interface OAuthServerObserver {
 	 * @since 1.0.0
 	 */
 	@CheckReturnValue static @NonNull OAuthServerObserver disabledInstance() { return DisabledOAuthServerObserver.INSTANCE; }
+	/** Called once after successful construction when the port-less HTTP localhost any-port option is enabled.
+	 * This event carries no configuration or request data.
+	 * @since 1.0.0
+	 */
+	default void didEnableLocalhostAnyPortRedirects() {}
+	/** Called once per authorization operation that relies on port-less HTTP localhost any-port matching.
+	 * It runs before store work, even if a later admission check rejects the request. Exact matches allowed by
+	 * the separate exact-localhost option do not use this relaxation. This event carries no request data.
+	 * @since 1.0.0
+	 */
+	default void didUseLocalhostAnyPortRedirects() {}
 	/** Called before handling an operation.
 	 * @param endpoint fixed operation kind
 	 * @since 1.0.0

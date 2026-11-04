@@ -50,6 +50,7 @@ import java.util.function.Supplier;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static com.revetsec.testing.OAuthFailureAssertions.assertIndependentFailure;
 
 /** Cache handoff and observation contracts found by the fresh RC-1 mutation inventory. */
 final class OAuthRc1CacheMutationTests {
@@ -117,10 +118,10 @@ final class OAuthRc1CacheMutationTests {
             assertEquals(OAuthException.Reason.NETWORK_FAILURE, first.getReason());
             assertNull(first.getCause());
             assertFalse(first.toString().contains("TEST-ONLY-private-validator"));
-            assertSame(first, onCaller(() -> assertThrows(OAuthException.class, () -> cache.get(deadline()))));
+            assertIndependentFailure(first, onCaller(() -> assertThrows(OAuthException.class, () -> cache.get(deadline()))));
             assertEquals(1, server.getHitCount(PATH));
             nanos.set(Duration.ofSeconds(5).toNanos());
-            assertSame(first, onCaller(() -> assertThrows(OAuthException.class, () -> cache.get(deadline()))));
+            assertIndependentFailure(first, onCaller(() -> assertThrows(OAuthException.class, () -> cache.get(deadline()))));
             assertEquals(1, server.getHitCount(PATH));
             nanos.set(Duration.ofSeconds(30).toNanos());
             ResourceServerMetadata found = onCaller(() -> cache.get(deadline()));
@@ -144,10 +145,10 @@ final class OAuthRc1CacheMutationTests {
                 assertTrue(onCaller(() -> assertDoesNotThrow(() -> cache.awaitWaitersForTests(1, Duration.ofSeconds(2)))));
                 held.release();
                 OAuthException first = failure(leader);
-                assertSame(first, failure(follower));
+                assertIndependentFailure(first, failure(follower));
                 assertTrue(onCaller(() -> assertDoesNotThrow(() -> cache.awaitWaitersForTests(0, Duration.ZERO))));
                 assertFalse(onCaller(() -> assertDoesNotThrow(() -> cache.awaitWaitersForTests(1, Duration.ZERO))));
-                assertSame(first, onCaller(() -> assertThrows(OAuthException.class, () -> cache.get(deadline()))));
+                assertIndependentFailure(first, onCaller(() -> assertThrows(OAuthException.class, () -> cache.get(deadline()))));
                 assertEquals(1, server.getHitCount(PATH));
             } finally { held.release(); workers.shutdownNow(); }
         }
@@ -217,8 +218,8 @@ final class OAuthRc1CacheMutationTests {
                     held.release();
                     if (fails) {
                         OAuthException first = failure(leader);
-                        assertSame(first, failure(follower));
-                        assertSame(first, onCaller(() -> assertThrows(OAuthException.class, () -> cache.get(deadline()))));
+                        assertIndependentFailure(first, failure(follower));
+                        assertIndependentFailure(first, onCaller(() -> assertThrows(OAuthException.class, () -> cache.get(deadline()))));
                     } else {
                         AuthorizationServerMetadata first = result(leader);
                         assertSame(first, result(follower));
@@ -250,7 +251,7 @@ final class OAuthRc1CacheMutationTests {
             java.lang.reflect.Field flight = AuthorizationServerCache.class.getDeclaredField("flight");
             flight.setAccessible(true);
             assertNull(flight.get(cache), "A failed discovery leader must release its installed flight.");
-            assertSame(first, onCaller(() -> assertThrows(OAuthException.class, () -> cache.get(deadline()))));
+            assertIndependentFailure(first, onCaller(() -> assertThrows(OAuthException.class, () -> cache.get(deadline()))));
             assertEquals(1, server.getHitCount(PATH));
         }
     }

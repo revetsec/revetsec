@@ -13,12 +13,12 @@
 import { execFile, spawn } from "node:child_process";
 import { createHash, randomBytes, X509Certificate } from "node:crypto";
 import { createReadStream } from "node:fs";
-import { readFile, mkdtemp, mkdir, open, writeFile, rm } from "node:fs/promises";
+import { readFile, readdir, mkdtemp, mkdir, open, writeFile, rm } from "node:fs/promises";
 import { createServer as createHttpServer, request as httpRequest } from "node:http";
 import { createServer as createHttpsServer } from "node:https";
 import { createServer as createNetServer } from "node:net";
 import { arch, platform, release, tmpdir } from "node:os";
-import { basename, delimiter, isAbsolute, join, resolve } from "node:path";
+import { basename, delimiter, dirname, isAbsolute, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 
@@ -34,7 +34,7 @@ const SENSITIVE_HEADERS = new Set([
 ]);
 
 export function options(argv = process.argv.slice(2)) {
-  const names = new Set(["--classpath-file", "--tls-dir", "--java", "--chrome"]);
+  const names = new Set(["--jar", "--classpath-file", "--tls-dir", "--java", "--chrome"]);
   const strings = new Set(["--main-class", "--postgres-container", "--key-model",
     "--key-firmware", "--key-transport"]);
   const supplied = new Map();
@@ -55,7 +55,9 @@ export function options(argv = process.argv.slice(2)) {
       throw new Error("Key metadata must be bounded nonsecret text; report path must be absolute");
     supplied.set(name, strings.has(name) ? value : resolve(value));
   }
-  if ([...names].some((name) => !supplied.has(name))
+  if (["--tls-dir", "--java", "--chrome"].some((name) => !supplied.has(name))
+      || supplied.has("--jar") === supplied.has("--classpath-file")
+      || (supplied.has("--jar") && supplied.has("--main-class"))
       || (supplied.has("--restart-app") && !supplied.has("--main-class"))
       || (supplied.has("--postgres-container") && (!supplied.has("--restart-app")
         || !/^revetsec-wa-[0-9a-f]{10}$/.test(supplied.get("--postgres-container")))))
@@ -288,8 +290,16 @@ async function main() {
     const key = await readFile(join(tls, "leaf.key"));
     const pin = createHash("sha256").update(new X509Certificate(cert)
       .publicKey.export({ type: "spki", format: "der" })).digest("base64");
-    const classpath = (await readFile(args.get("--classpath-file"), "utf8")).trim();
-    if (evidence) evidence.runtimeJars = await jarHashes(classpath);
+    const appJar = args.get("--jar");
+    const classpath = appJar ? null
+      : (await readFile(args.get("--classpath-file"), "utf8")).trim();
+    if (evidence) {
+      const lib = appJar ? join(dirname(appJar), "lib") : null;
+      const runtime = appJar ? [appJar, ...(await readdir(lib)).sort()
+        .filter((name) => name.endsWith(".jar")).map((name) => join(lib, name))]
+        .join(delimiter) : classpath;
+      evidence.runtimeJars = await jarHashes(runtime);
+    }
     work = await mkdtemp(join(tmpdir(), "revetsec-passkey-browser-"));
     const chromeProfile = join(work, "chrome-profile");
     const accessFile = join(work, "access-key");
@@ -335,8 +345,8 @@ async function main() {
     const authority = `${HOST}:${edgePort}`;
     const origin = `https://${authority}`;
     async function startApp() {
-      const child = spawn(args.get("--java"), ["-cp", classpath,
-        args.get("--main-class") ?? "example.passkeys.PasskeyPlayground"], {
+      const child = spawn(args.get("--java"), appJar ? ["-jar", appJar]
+        : ["-cp", classpath, args.get("--main-class") ?? "example.passkeys.PasskeyPlayground"], {
         env: { ...process.env, REVETSEC_PASSKEY_RP_ID: HOST,
           REVETSEC_PASSKEY_ORIGIN: origin, REVETSEC_PASSKEY_HTTP_PORT: String(appPort),
           REVETSEC_PASSKEY_ACCESS_KEY_FILE: accessFile },

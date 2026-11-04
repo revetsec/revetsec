@@ -132,7 +132,7 @@ public final class PasskeyApp {
         WebAuthnRelyingParty relyingParty = WebAuthnRelyingParty.withRelyingPartyId(relyingPartyId)
                 .relyingPartyName("Revetsec Passkey Demo").allowedOrigins(Set.of(origin))
                 .credentialNamespace("fresh-" + PasskeySessions.randomId())
-                .store(InMemoryWebAuthnStore.withLimits(1024, 8_388_608))
+                .store(InMemoryWebAuthnStore.fromLimits(1024, 8_388_608))
                 .stateSealer(sealer).recoveryGate(freshProcessOnly).build();
         return new Setup(Base64.getUrlDecoder().decode(PasskeySessions.randomId()), relyingParty,
                 freshProcessOnly, admissionOpen, "Single-process disposable account. Passkeys, sessions and "

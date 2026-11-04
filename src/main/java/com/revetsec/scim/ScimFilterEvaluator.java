@@ -54,6 +54,9 @@ public final class ScimFilterEvaluator {
 
     /** Rebinds, approves and evaluates a complete filter with one shared work budget.
      * A foreign registered resource context rejects; a syntax-only or foreign filter is rechecked.
+     * Parsed/bound roots retain original syntax privately so canonical expansion does not
+     * consume their input-character allowance. Original syntax is reparsed under this provider;
+     * extracted subtrees without that provenance use a bounded canonical fallback.
      * Unsupported matching rejects with invalidFilter. Ordinary application faults are contained
      * as fixed internalError results and redacted observer events; interruption is preserved and
      * fatal VM errors escape.

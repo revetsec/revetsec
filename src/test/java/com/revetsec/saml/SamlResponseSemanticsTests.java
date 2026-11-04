@@ -1139,7 +1139,7 @@ final class SamlResponseSemanticsTests {
 
         AtomicReference<Instant> now = new AtomicReference<>(Instant.parse(NOW));
         Clock clock = mutableClock(now);
-        SamlReplayCache replay = InMemorySamlReplayCache.withLimit(clock, 4);
+        SamlReplayCache replay = InMemorySamlReplayCache.fromLimit(clock, 4);
         SamlResponseSemantics.Expectation expectation = expected(replay, clock);
         SamlResponseSemantics.Accepted first = assertInstanceOf(
                 SamlResponseSemantics.Accepted.class,
@@ -1150,7 +1150,7 @@ final class SamlResponseSemanticsTests {
         now.set(Instant.parse("2026-10-09T00:05:30Z"));
         assertInstanceOf(SamlResponseSemantics.Accepted.class,
                 SamlResponseSemantics.validate(signed,
-                        expected(InMemorySamlReplayCache.withLimit(clock, 4), clock)));
+                        expected(InMemorySamlReplayCache.fromLimit(clock, 4), clock)));
         assertEquals(SamlResponseSemantics.Reason.REPLAYED,
                 rejected(SamlResponseSemantics.validate(signed, expectation)));
     }
@@ -1171,7 +1171,7 @@ final class SamlResponseSemanticsTests {
 
         AtomicReference<Instant> now = new AtomicReference<>(Instant.parse(NOW));
         Clock clock = mutableClock(now);
-        SamlReplayCache replay = InMemorySamlReplayCache.withLimit(clock, 4);
+        SamlReplayCache replay = InMemorySamlReplayCache.fromLimit(clock, 4);
         SamlResponseSemantics.Expectation expectation = unsolicitedExpected(replay, clock);
         assertEquals(SamlResponseSemantics.Reason.CONFIRMATION,
                 rejected(SamlResponseSemantics.validate(
@@ -1185,7 +1185,7 @@ final class SamlResponseSemanticsTests {
         now.set(Instant.parse("2026-10-09T00:01:21Z"));
         assertInstanceOf(SamlResponseSemantics.Accepted.class,
                 SamlResponseSemantics.validate(signed,
-                        unsolicitedExpected(InMemorySamlReplayCache.withLimit(clock, 4), clock)));
+                        unsolicitedExpected(InMemorySamlReplayCache.fromLimit(clock, 4), clock)));
         assertEquals(SamlResponseSemantics.Reason.REPLAYED,
                 rejected(SamlResponseSemantics.validate(signed, expectation)));
         assertEquals(Instant.parse("2026-10-09T00:01:50Z"), first.expiresAt());
@@ -1199,7 +1199,7 @@ final class SamlResponseSemanticsTests {
         SamlInboundResponse.SignaturesVerified signed = verified(xml, true, false, key, null);
         AtomicReference<Instant> now = new AtomicReference<>(Instant.parse(NOW));
         Clock clock = mutableClock(now);
-        SamlReplayCache shared = InMemorySamlReplayCache.withLimit(clock, 4);
+        SamlReplayCache shared = InMemorySamlReplayCache.fromLimit(clock, 4);
         SamlResponseSemantics.Accepted first = assertInstanceOf(
                 SamlResponseSemantics.Accepted.class,
                 SamlResponseSemantics.validate(signed, unsolicitedExpected(shared, clock)));
@@ -1213,7 +1213,7 @@ final class SamlResponseSemanticsTests {
                 SamlResponseSemantics.validate(signed, new SamlResponseSemantics.Expectation(
                         SP, "tenant-one", IDP, ACS, null, null, null, clock, Duration.ofMinutes(5),
                         Duration.ofMinutes(2), false, List.of(),
-                        InMemorySamlReplayCache.withLimit(clock, 4), Duration.ofSeconds(5))));
+                        InMemorySamlReplayCache.fromLimit(clock, 4), Duration.ofSeconds(5))));
         assertEquals(SamlResponseSemantics.Reason.REPLAYED,
                 rejected(SamlResponseSemantics.validate(signed, permissive)));
     }
@@ -1233,7 +1233,7 @@ final class SamlResponseSemanticsTests {
         SamlInboundResponse.SignaturesVerified signed = verified(xml, true, false, key);
         AtomicReference<Instant> now = new AtomicReference<>(Instant.parse(NOW));
         Clock clock = mutableClock(now);
-        SamlReplayCache shared = InMemorySamlReplayCache.withLimit(clock, 4);
+        SamlReplayCache shared = InMemorySamlReplayCache.fromLimit(clock, 4);
         SamlResponseSemantics.Expectation expectation = new SamlResponseSemantics.Expectation(
                 SP, "tenant-one", IDP, ACS, "_request", "relay",
                 Instant.parse("2026-10-09T00:10:00Z"), clock, Duration.ZERO,
@@ -1247,7 +1247,7 @@ final class SamlResponseSemanticsTests {
                         SP, "tenant-one", IDP, ACS, "_request", "relay",
                         Instant.parse("2026-10-09T00:10:00Z"), clock, Duration.ZERO,
                         Duration.ofMinutes(15), false, List.of(),
-                        InMemorySamlReplayCache.withLimit(clock, 4), Duration.ofSeconds(5))));
+                        InMemorySamlReplayCache.fromLimit(clock, 4), Duration.ofSeconds(5))));
         assertEquals(SamlResponseSemantics.Reason.REPLAYED,
                 rejected(SamlResponseSemantics.validate(signed, expectation)));
     }

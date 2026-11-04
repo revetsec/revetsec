@@ -5,7 +5,7 @@
 A compatibility mode is a named, explicit relaxation that lets Revetsec work with a provider or a deployment that departs from a specification or from Revetsec's defaults. The rules for every mode:
 
 - It is off by default.
-- It is set per instance: per client, per identity provider or per tenant, never globally.
+- It is set per instance: per client, per identity provider (IdP) or per tenant, never globally.
 - It has an entry on this page, and tests cover both the enabled and the disabled state.
 - It is never switched on by detecting a provider automatically.
 - Named presets bundle modes for one provider. A preset only widens what is accepted, and every change to a preset is recorded in the CHANGELOG.
@@ -27,11 +27,33 @@ Each entry gives the mode's name, protocol area, effect, conditions and safeguar
 
 ### `acknowledgeUnpatchedRuntime(true)`
 
-- **Where:** [`RemoteJwksSource.Builder`](https://javadoc.revetsec.com/com/revetsec/jose/RemoteJwksSource.Builder.html) (JOSE) and [`OAuthClient.Builder`](https://javadoc.revetsec.com/com/revetsec/oauth/OAuthClient.Builder.html) (OAuth).
-- **Effect:** the source builds and fetches on a Java runtime below Revetsec's minimum for network I/O, 17.0.3 (18.0.1 on Java 18), whose TLS and certificate checks are exposed to CVE-2022-21449 (ECDSA signature verification). Without it, `build()` throws [`IllegalStateException`](https://docs.oracle.com/en/java/javase/27/docs/api/java.base/java/lang/IllegalStateException.html) on such a runtime.
-- **Safeguards:** while the runtime is below the minimum, the choice is reported to [`JoseObserver`](https://javadoc.revetsec.com/com/revetsec/jose/JoseObserver.html)`.didUseUnpatchedRuntime(runtimeVersion)` when a key source is built and on every fetch, or when an [`OAuthClient`](https://javadoc.revetsec.com/com/revetsec/oauth/OAuthClient.html) is built. On a runtime at or above the minimum, the setting changes nothing and nothing is reported. Revetsec's own ECDSA range check protects the tokens a validator verifies on every runtime; what the setting accepts is the runtime's own TLS. A [`StaticJwksSource`](https://javadoc.revetsec.com/com/revetsec/jose/StaticJwksSource.html) does no I/O and never needs the setting.
-- **Tests:** `jose.RemoteJwksSourceBuilderTests.theRuntimeFloorIsEnforcedAndAnAcknowledgmentIsObserved` (17.0.2, 18, 17.0.2.0.1 and 17-ea each refused unless acknowledged, and reported at build and on every fetch), `aRuntimeAtOrAboveTheFloorIsNeverReported`, and `oauth.OAuthClientRuntimeFloorTests` (the Java 18.0.0 release is represented by `Runtime.Version.parse("18")`).
-- **Added in:** 1.0.0 (unreleased).
+- **Default and reset:** off, per builder instance. `true` explicitly accepts the runtime risk; `false` or `null` restores refusal where the guard applies. The flag is not inferred from a provider, HTTP client, static metadata, loopback setting or another component's configuration.
+- **Floor and effect:** permits construction below Revetsec's network-runtime floor: **17.0.3 on Java 17, 18.0.1 on Java 18**; Java 19 and later pass this guard. Without acknowledgment, an applicable builder throws `IllegalStateException` below that floor, even though construction performs no network I/O. The guard addresses the runtime TLS/certificate exposure to CVE-2022-21449; acknowledgment does not patch the runtime or relax token signatures, claims, key rules, HTTPS/peer verification or protocol policy. It is not a general JDK support or security-update guarantee.
+- **Risk:** the choice accepts the runtime's vulnerable TLS behavior. Revetsec's own ECDSA range checks protect the signatures it verifies itself; they do not repair the runtime's TLS checks.
+- **Version comparison:** the [shared floor implementation](../src/main/java/com/revetsec/internal/http/RuntimeFloor.java) uses `Runtime.Version.compareToIgnoreOptional` on Java 17/18. For example, `17.0.2.0.1`, `17-ea`, `17.0.3-ea` and `18` (the parsed spelling of 18.0.0) remain below the relevant floor; `17.0.3+7-LTS` passes. Optional vendor text does not rescue an older patch level.
+
+All five public entry points and their current behavior:
+
+| Builder | When the floor applies | Runtime-acknowledgment observation |
+| --- | --- | --- |
+| [`RemoteJwksSource.Builder`](../src/main/java/com/revetsec/jose/RemoteJwksSource.java) | At source build, before any JWKS fetch. | `JoseObserver.didUseUnpatchedRuntime(runtimeVersion)` at source construction and before each JWKS fetch, while below the floor. Cache hits are not fetches. |
+| [`OAuthClient.Builder`](../src/main/java/com/revetsec/oauth/OAuthClient.java) | At client build, including explicit/static authorization-server metadata. | The configured `OAuthObserver` inherits the same hook and receives it at client construction; ordinary endpoint/discovery requests do not repeat this acknowledgment event. |
+| [`JwtAccessTokenValidator.Builder`](../src/main/java/com/revetsec/oauth/JwtAccessTokenValidator.java) | At validator build unless the configured source is a `StaticJwksSource`. Discovery and supplied remote-source configurations require the guard. | The configured `AccessTokenObserver` inherits the hook and receives it at networked validator construction. An internally created remote JWKS source additionally reports its own construction/fetch events; discovery alone has no repeated runtime-acknowledgment event. |
+| [`OidcClient.Builder`](../src/main/java/com/revetsec/oidc/OidcClient.java) | Forwarded to the underlying OAuth client at build and to internally created remote JWKS sources. Static provider metadata or static keys do not bypass the OAuth-client floor. | The configured `OidcObserver` inherits the hook: underlying OAuth-client construction reports it, and an internally created remote source reports its own construction/fetch events. Source construction can occur while building explicit metadata or later after discovery; this is not one event per OIDC operation. |
+| [`OAuthAuthorizationServer.Builder`](../src/main/java/com/revetsec/oauth/server/OAuthAuthorizationServer.java) | At issuer build **only when client-ID metadata documents (CIMD) are enabled** through `clientMetadataPolicy`. With CIMD disabled, this flag has no runtime-floor effect on issuer construction. | **No runtime-acknowledgment event is exposed by `OAuthServerObserver`.** Issuer endpoint lifecycle events do not report this configuration choice. |
+
+**Observation and component ownership:** the JOSE hook is inherited through [OAuthObserver](../src/main/java/com/revetsec/oauth/OAuthObserver.java) by [AccessTokenObserver](../src/main/java/com/revetsec/oauth/AccessTokenObserver.java) and [OidcObserver](../src/main/java/com/revetsec/oidc/OidcObserver.java). It carries only the runtime version, not credentials or claims, and follows the usual observer-failure containment. At or above the floor, setting the flag does not cause this warning. A caller-supplied `JwksSource` retains its own acknowledgment and observer configuration; a wrapper flag does not reconfigure an already-built source. A `StaticJwksSource` does no key-fetch I/O and needs no acknowledgment itself. The resource-validator exception above does not apply to OIDC's underlying OAuth client. The [issuer observer](../src/main/java/com/revetsec/oauth/server/OAuthServerObserver.java) is a separate interface and has no such hook.
+
+**Focused evidence:**
+
+- [RuntimeFloorTests](../src/test/java/com/revetsec/internal/http/RuntimeFloorTests.java) checks version classification, refusal and acknowledgment, including early-access and extended patch versions.
+- [RemoteJwksSourceBuilderTests](../src/test/java/com/revetsec/jose/RemoteJwksSourceBuilderTests.java): `theRuntimeFloorIsEnforcedAndAnAcknowledgmentIsObserved` and `aRuntimeAtOrAboveTheFloorIsNeverReported` cover refusal/opt-in, construction and repeated-fetch observation, and no warnings at/above the floor.
+- [OAuthClientRuntimeFloorTests](../src/test/java/com/revetsec/oauth/OAuthClientRuntimeFloorTests.java) covers default refusal, observed opt-in and null reset.
+- [AccessTokenPhase2ContractTests](../src/test/java/com/revetsec/oauth/AccessTokenPhase2ContractTests.java): `staticKeysBypassNetworkRuntimeGuardButNetworkedBuildFailsClosed` covers the static-key exception, network refusal, one construction warning and no build-time I/O; `mutableBuilderChangesCannotAffectBuiltValidatorAndAllSettersReset` includes the acknowledgment reset.
+- [OidcAuthenticationFlowTests](../src/test/java/com/revetsec/oidc/OidcAuthenticationFlowTests.java): `nullableFlagsRestoreStrictDefaults` exercises true-to-null reset on the test JVM. OIDC's runtime-floor/observer forwarding is established by the linked source and underlying OAuth/source checks; there is no direct OIDC version-injection build seam.
+- [OAuthAuthorizationServerTests](../src/test/java/com/revetsec/oauth/server/OAuthAuthorizationServerTests.java): `enabledClientMetadataConstructionRequiresAcknowledgmentOnUnpatchedRuntime` covers CIMD-off construction, CIMD-on refusal, explicit opt-in and at-floor construction.
+
+The old-version checks inject `Runtime.Version` values on the test JVM; they do not qualify execution on an actual vulnerable runtime. This registry documents current per-role behavior and does not add an issuer observer hook or broaden release qualification. **Added in:** 1.0.0 (unreleased).
 
 ### [`ClientSecretBasicEncoding`](https://javadoc.revetsec.com/com/revetsec/oauth/ClientSecretBasicEncoding.html)`.UNENCODED`
 
@@ -56,7 +78,7 @@ Each entry gives the mode's name, protocol area, effect, conditions and safeguar
 ### `acknowledgeGlobalSecureValidationDisabled(true)`
 
 - **Where:** [`SamlServiceProvider.Builder`](https://javadoc.revetsec.com/com/revetsec/saml/SamlServiceProvider.Builder.html) (SAML).
-- **Effect:** permits building an SP when `org.jcp.xml.dsig.secureValidation` is globally set to a value other than `true`. Without acknowledgment, `build()` fails. Revetsec still sets secure validation explicitly on each XML-signature verification context, except where the IdP's explicit RSA-SHA1 compatibility mode requires it to be disabled for that signature; its own signature shape and algorithm allowlists apply in either case.
+- **Effect:** permits building a service provider (SP) when `org.jcp.xml.dsig.secureValidation` is globally set to a value other than `true`. Without acknowledgment, `build()` fails. Revetsec still sets secure validation explicitly on each XML-signature verification context, except where the IdP's explicit RSA-SHA1 compatibility mode requires it to be disabled for that signature; its own signature shape and algorithm allowlists apply in either case.
 - **Risk:** other XML-signature consumers in the same JVM may inherit the disabled global setting. Audit them separately.
 - **Safeguards:** false or null clears the acknowledgment. [`SamlObserver`](https://javadoc.revetsec.com/com/revetsec/saml/SamlObserver.html)`.didAcknowledgeGlobalSecureValidationDisabled()` reports its use after a successful build without carrying the property value or message data.
 - **Tests:** `saml.SamlConfigurationBoundaryTests.disabledGlobalSignatureValidationRequiresAnObservedAcknowledgment` and `internal.xml.EnvelopedSignatureVerifierTests.explicitVerificationContextWorksWithGlobalSecureValidationDisabled`.

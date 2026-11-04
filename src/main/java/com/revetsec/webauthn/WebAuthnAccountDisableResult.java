@@ -39,7 +39,9 @@ public abstract sealed class WebAuthnAccountDisableResult permits
      * @return fixed description
      * @since 1.0.0 */
     @Override public final @NonNull String toString() { return "WebAuthnAccountDisableResult{<redacted>}"; }
-    /** The fence is confirmed disabled; new and pending ceremonies cannot authenticate.
+    /** The fence is confirmed permanently disabled for this namespace/RP/account handle.
+     * New enrollment and account-pinned reauthentication reject; authentication and registration
+     * completions enforce the disabled fence. Reopening traffic admission does not enable it.
      * @since 1.0.0 */
     @Immutable public static final class Disabled extends WebAuthnAccountDisableResult {
         private Disabled() { }
@@ -49,13 +51,16 @@ public abstract sealed class WebAuthnAccountDisableResult permits
     @Immutable public static final class Unavailable extends WebAuthnAccountDisableResult {
         private Unavailable() { }
     }
-    /** A write may have occurred; reconcile the account before reopening it.
+    /** A write may have occurred; reconcile its actual effect through authorized fresh operations
+     * before resuming dependent application actions. This result does not authorize automatic
+     * retry, account reenabling, or deletion of the permanent fence.
      * @since 1.0.0 */
     @Immutable public static final class Indeterminate extends WebAuthnAccountDisableResult {
         private Indeterminate() { }
     }
     /** The requested transition committed, but normal output could not be admitted.
-     * Reconcile through an authorized fresh operation before deciding what to do next.
+     * The disable effect remains committed and terminal. Reconcile through an authorized fresh
+     * operation before resuming dependent actions; reopening traffic admission does not undo it.
      * @since 1.0.0 */
     @Immutable public static final class ReconciliationRequired extends WebAuthnAccountDisableResult {
         private ReconciliationRequired() { }

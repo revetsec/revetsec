@@ -132,18 +132,14 @@ public final class OidcApplication {
         if (!hostAllowed(request) || !headerAbsentOr(request, "Origin", this.origin.toString()))
             return failure(400, "Invalid request");
         Session session = sessionFor(request);
-        List<ResponseCookie> cookies = List.of();
-        if (session == null) {
-            session = addSession(null);
-            if (session == null) return failure(503, "Please try again later");
-            cookies = List.of(cookie(SESSION_COOKIE, session.id, SESSION_AGE));
-        }
-        String identity = session.identity == null ? "Signed out" : "Signed in as " + escape(session.identity);
-        String action = session.identity == null ? "login" : "logout";
+        String identity = session == null || session.identity == null ? "Signed out" : "Signed in as " + escape(session.identity);
+        String action = session == null ? "session" : session.identity == null ? "login" : "logout";
+        String field = session == null ? "<input type=\"hidden\" name=\"begin\" value=\"1\">"
+                : "<input type=\"hidden\" name=\"csrf\" value=\"" + session.csrf + "\">";
+        String label = session == null ? "Start local session" : action.equals("login") ? "Sign in" : "Sign out";
         String html = "<!doctype html><html lang=\"en\"><meta charset=\"utf-8\"><title>Revetsec OIDC</title>"
                 + "<h1>Revetsec OIDC example</h1><p>" + identity + "</p>"
-                + "<form method=\"post\" action=\"/" + action + "\"><input type=\"hidden\" name=\"csrf\" value=\""
-                + session.csrf + "\"><button>" + (action.equals("login") ? "Sign in" : "Sign out")
+                + "<form method=\"post\" action=\"/" + action + "\">" + field + "<button>" + label
                 + "</button></form><p>This example uses process-local storage.</p></html>";
         Map<String, List<String>> htmlHeaders = new HashMap<>(headers("text/html; charset=UTF-8"));
         // Browsers need the same-origin document referrer to send a non-null Origin on navigation POST forms.
@@ -151,7 +147,33 @@ public final class OidcApplication {
         // Some browsers apply form-action to redirect destinations. Only the configured provider origin is added.
         htmlHeaders.put("Content-Security-Policy", List.of("default-src 'none'; form-action 'self' "
                 + this.issuerOrigin + "; frame-ancestors 'none'; base-uri 'none'"));
-        return Response.withStatusCode(200).headers(htmlHeaders).cookies(cookies).body(html).build();
+        return Response.withStatusCode(200).headers(htmlHeaders).body(html).build();
+    }
+
+    /** Admits a local session after an explicit same-origin action; it does not authenticate the browser.
+     * @param request untrusted request
+     * @return local redirect or fixed admission error
+     * @since 1.0.0
+     */
+    @POST("/session")
+    public @NonNull Response beginSession(@NonNull Request request) {
+        if (request.getHttpMethod() != HttpMethod.POST || !hostAllowed(request)
+                || !singleHeader(request, "Origin", this.origin.toString())
+                || !singleHeader(request, "Content-Type", "application/x-www-form-urlencoded")
+                || request.getRawQuery().isPresent() || request.isContentTooLarge()
+                || !Arrays.equals(request.getBody().orElseGet(() -> new byte[0]), "begin=1".getBytes(StandardCharsets.US_ASCII)))
+            return failure(403, "Invalid request");
+        synchronized (this.sessions) {
+            if (sessionFor(request) != null) return admittedRedirect(List.of());
+            Session session = addSession(null);
+            return session == null ? failure(503, "Please try again later")
+                    : admittedRedirect(List.of(cookie(SESSION_COOKIE, session.id, SESSION_AGE)));
+        }
+    }
+
+    private @NonNull Response admittedRedirect(@NonNull List<@NonNull ResponseCookie> cookies) {
+        return Response.withStatusCode(303).headers(Map.of("Location", List.of(this.origin.resolve("/").toString()),
+                "Cache-Control", List.of("no-store"), "Referrer-Policy", List.of("no-referrer"))).cookies(cookies).build();
     }
 
     /** Starts a single browser-bound flow after the application's origin and CSRF checks.

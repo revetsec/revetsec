@@ -22,6 +22,9 @@ import java.util.List;
 
 public final class BuilderConventionsFixture {
 	private BuilderConventionsFixture() { }
+	public static @NonNull BuilderConventionsFixture withValue(@NonNull String value) {
+		return new BuilderConventionsFixture();
+	}
 	public boolean isReady() { return false; }
 	@Override public boolean equals(@Nullable Object value) { return this == value; }
 	@Override public int hashCode() { return 0; }

@@ -35,7 +35,7 @@ class ScimM10ResourceWorkTests {
     private static final @NonNull String ENTERPRISE="urn:ietf:params:scim:schemas:extension:enterprise:2.0:User";
 
     @Test void everyPartialWorkBudgetRejectsAtomicallyAndSufficientBudgetsProduceTheSameCandidate() {
-        ScimResourceType type=ScimResourceType.userInstance();
+        ScimResourceType type=ScimTestResourceTypes.userWithEnterpriseInstance();
         String createBody="{\"schemas\":[\""+USER+"\",\""+ENTERPRISE+"\"],\"userName\":\"new\",\"active\":true,\"name\":{\"givenName\":\"Ada\",\"familyName\":\"Lovelace\"},\"emails\":[{\"value\":\"a@example.invalid\",\"primary\":true},{\"value\":\"b@example.invalid\",\"primary\":false}],\"meta\":{\"ignored\":[\"one\",{\"two\":3}]},\""+ENTERPRISE+"\":{\"department\":\"research\",\"manager\":{\"value\":\"manager\",\"$ref\":\"../Users/manager\"}}}";
         JsonDocument creation=parsed(createBody);
         ScimResource current=trusted(type,"{\"schemas\":[\""+USER+"\",\""+ENTERPRISE+"\"],\"id\":\"server\",\"externalId\":\"old-client\",\"userName\":\"old\",\"name\":{\"givenName\":\"Old\"},\"emails\":[{\"value\":\"old@example.invalid\"}],\""+ENTERPRISE+"\":{\"department\":\"old\"}}");

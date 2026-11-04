@@ -34,7 +34,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class PlaygroundScimTests {
     private static final String TOKEN = "synthetic-private-scim-token-1234567890";
-    private static final ScimResourceType USER = ScimResourceType.userInstance(), GROUP = ScimResourceType.groupInstance();
+    private static final ScimResourceType USER = PlaygroundScim.USER_TYPE, GROUP = ScimResourceType.groupInstance();
     private static final URI BASE = URI.create("https://scim.example/scim/v2/");
     private static final String PATCH_SCHEMA = "urn:ietf:params:scim:api:messages:2.0:PatchOp";
     private @NonNull PlaygroundScim app() { return new PlaygroundScim(PlaygroundScim.provider(BASE, ScimLimits.fromDefaults()), TOKEN,

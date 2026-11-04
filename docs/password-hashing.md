@@ -12,10 +12,12 @@ ephemeral pepper and a versioned rehash transition.
 ## Configure one shared hasher and work gate
 
 ```java
-PasswordWorkGate workGate = PasswordWorkGate.withLimits(4, 262_144);
+// Share this in-memory work gate across this JVM.
+PasswordWorkGate workGate = PasswordWorkGate.fromInMemoryLimits(4, 262_144);
 
+// Share this thread-safe hasher across requests.
 PasswordHasher passwords = PasswordHasher
-    .withArgon2id(Argon2idParameters.withCosts(65_536, 3, 4))
+    .withArgon2id(Argon2idParameters.fromCosts(65_536, 3, 4))
     .workGate(workGate)
     .verificationLimits(PasswordVerificationLimits.fromDefaults())
     .build();
@@ -33,6 +35,16 @@ Provision equivalent admission on every node and enforce account and trusted-edg
 rate limits before submitting work. The gate limits local concurrent KDF work;
 it is not a distributed login-attempt ledger. Builders perform no I/O and core
 starts no worker threads.
+
+The gate briefly serializes reservation-counter updates. Admission waits
+interruptibly for its counter update; password hashing and application callbacks
+run outside the accounting lock. If the concurrency or memory budget is exhausted,
+the operation returns `Unavailable(WORK_CAPACITY)` without waiting for existing
+KDF work to finish. Interruption during the accounting wait returns
+`Unavailable(INTERRUPTED)` and preserves the thread's interrupt flag. Size
+request admission separately from this brief accounting wait and the calling
+thread's password work. Permit release completes its accounting even when the
+thread is interrupted.
 
 The default `PasswordVerificationLimits` cap stored forms at 512 characters,
 input at 1,024 UTF-16 code units and 4,096 normalized UTF-8 bytes, and Argon2id
@@ -133,8 +145,9 @@ only when the application explicitly enables the corresponding verify-only
 operation:
 
 ```java
+// Share this thread-safe hasher across requests.
 PasswordHasher migratingPasswords = PasswordHasher
-    .withArgon2id(Argon2idParameters.withCosts(65_536, 3, 4))
+    .withArgon2id(Argon2idParameters.fromCosts(65_536, 3, 4))
     .workGate(workGate)
     .legacyBcrypt(LegacyPasswordPreparation.EXACT_UTF8, 14)
     .legacyPbkdf2(LegacyPasswordPreparation.EXACT_UTF8, 1_000_000)
@@ -211,8 +224,9 @@ PasswordPepperSnapshot snapshot = PasswordPepperSnapshot
     .retainedKeys(List.of(previousKey))
     .build();
 
+// Share this thread-safe hasher across requests.
 PasswordHasher pepperedPasswords = PasswordHasher
-    .withArgon2id(Argon2idParameters.withCosts(65_536, 3, 4))
+    .withArgon2id(Argon2idParameters.fromCosts(65_536, 3, 4))
     .workGate(workGate)
     .pepperSource(PasswordPepperSource.fromSnapshot(snapshot))
     .build();

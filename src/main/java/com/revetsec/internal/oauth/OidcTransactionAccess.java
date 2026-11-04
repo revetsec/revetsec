@@ -52,6 +52,7 @@ public final class OidcTransactionAccess {
 		void checkHmacAuthentication(@NonNull ClientAuthentication authentication, @NonNull Set<@NonNull JwsAlgorithm> algorithms);
 		@NonNull OAuthException endpointFailure(OAuthException.@NonNull Reason reason);
 		@NonNull OAuthException endpointExchangeFailure(@NonNull HttpExchangeException failure);
+		@NonNull OAuthException copyEndpointFailure(@NonNull OAuthException failure);
 		@NonNull OAuthException endpointStatusFailure(int status, @Nullable Duration retryAfter);
 		@NonNull OAuthException metadataStatusFailure(int status, @Nullable Duration retryAfter);
 		boolean isEndpointRejection(@NonNull OAuthErrorResponseException failure);

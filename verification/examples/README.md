@@ -1,5 +1,42 @@
-# Explicit example nullability
+# Optional example verification
 
-`NullabilityAudit.java` attributes actual Java types through javac and checks every source-declared method/constructor/record-component reference, including private, nested, generic, wildcard and array positions. Each must carry exactly one JSpecify `NonNull` or `Nullable` meaning. Primitive/void positions are exempt. NullMarked defaults and same-named shadow annotations do not substitute for explicit JSpecify.
+The public examples build with Maven and run with Java; see
+[examples/README.md](../../examples/README.md#build-with-maven).
+These Python coordinators are optional CI audits, not consumer build launchers:
 
-[The example builder](../../examples/build.py) audits all main/test sources and the checker itself after each example's actual build, using its resolved test classpath and Java 21 attribution for Soklet applications (Java 17 for core-only recipes). Missing annotations and attribution errors produce JSON evidence and a failing exit. This runs in the `examples` CI job on Java 21 and 27; the separate core-only RSA/OIDC job remains on Java 17 and 27. The checker is verification tooling and does not enter published or example JARs.
+| Tool | Additional checks |
+| --- | --- |
+| [verify_packaged_examples.py](verify_packaged_examples.py) | Exact core/adapter source pins, framework checksum, complete adapter tests, explicit test-only compatibility overlay, packaged runtime dependencies and attributed nullability |
+| [verify_self_issued.py](verify_self_issued.py) | Frozen authored core/adapter inventories, private Maven repository, redacted capture and annotation-free standalone runtime |
+| [verify_rsa_oidc.py](verify_rsa_oidc.py) | Frozen authored core inventory, private TLS fixture, independent JCA provider capture and attributed nullability |
+
+Each tool accepts `--help`. Supply a new absolute `--work` directory and explicit
+Maven/JDK/source paths. The packaged verifier takes `--core-source`,
+`--adapter-source` and either `--framework-source` or the checksum-pinned
+`--framework-jar`; CI supplies the exact run commit using `--core-revision`.
+Source-building the framework requires the exact compiler recorded in
+[examples/pins.json](../../examples/pins.json). The authored-source verifiers
+accept `--core-source` (and `--adapter-source`/`--framework-jar` for self-issued).
+Optional `--repository-tail` is read-only; `--offline` needs cached dependencies.
+Retain inventories, commands and redacted results with the tested artifacts.
+Never upload generated private TLS material, keys, tokens or browser state.
+
+The [adapter compatibility helper](adapter_compatibility.py) preserves the
+[guarded test-only bridge](../../examples/compatibility/soklet-shared-clock/README.md).
+It checks source hashes before and after applying only the declared test overlay
+in a disposable adapter copy. Production code and the pinned POM stay unchanged.
+
+## Explicit nullability
+
+The `NullabilityAudit.java` checker attributes actual Java types through javac
+and checks every source-declared method, constructor and record-component
+reference, including private, nested, generic, wildcard and array positions.
+Each must carry exactly one JSpecify `NonNull` or `Nullable` meaning.
+Primitive/void positions are exempt. NullMarked defaults and same-named shadow
+annotations do not substitute for explicit JSpecify.
+
+The checker runs after the actual build with its resolved test classpath and
+Java 21 attribution for Soklet applications, or Java 17 for core-only recipes.
+Missing annotations and attribution errors fail with JSON evidence. CI runs the
+Soklet examples on JDK 21/27 and core-only RSA recipes on JDK 17/27. This checker
+is verification tooling and does not enter application JARs.

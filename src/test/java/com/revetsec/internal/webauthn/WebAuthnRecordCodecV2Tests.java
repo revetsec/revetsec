@@ -256,6 +256,26 @@ final class WebAuthnRecordCodecV2Tests {
 		assertThrows(WebAuthnRecordException.class, () -> WebAuthnRecordPayloadV2.entity(fence, NOW, invalidFence));
 	}
 
+	@Test void scApi02AuthenticatedRootAndEntityBoundariesRetainNanosAndRejectRawNanoOverflow() throws Exception {
+		var codec=new WebAuthnRecordCodecV2(sealer("k",3800));
+		Instant maximum=Instant.ofEpochSecond(253402300799L,999999999);
+		for(Instant time:List.of(Instant.EPOCH,Instant.EPOCH.plusNanos(1),Instant.ofEpochSecond(0,999999999),
+				Instant.ofEpochSecond(253402300799L),maximum.minusNanos(1),maximum)){
+			byte[] root=WebAuthnRecordPayloadV2.namespace(ROOT,identifier(1),time);
+			try(var decoded=codec.openRecord(ROOT,codec.seal(ROOT,root,PERMANENT),CLOCK)){
+				assertEquals(time,decoded.floor());assertEquals(identifier(1),decoded.authorityId().orElseThrow());
+			}
+			byte[] entity=WebAuthnRecordPayloadV2.entity(CREDENTIAL,time,revoked(ID,HANDLE));
+			try(var decoded=codec.openRecord(CREDENTIAL,codec.seal(CREDENTIAL,entity,PERMANENT),CLOCK)){assertEquals(time,decoded.floor());}
+		}
+		for(int nanos:List.of(-1,1000000000)){
+			byte[] root=changedInt(WebAuthnRecordPayloadV2.namespace(ROOT,identifier(1),NOW),41,nanos);
+			assertThrows(WebAuthnRecordException.class,()->codec.openRecord(ROOT,codec.seal(ROOT,root,PERMANENT),CLOCK));
+			byte[] entity=changedInt(WebAuthnRecordPayloadV2.entity(CREDENTIAL,NOW,revoked(ID,HANDLE)),8,nanos);
+			assertThrows(WebAuthnRecordException.class,()->codec.openRecord(CREDENTIAL,codec.seal(CREDENTIAL,entity,PERMANENT),CLOCK));
+		}
+	}
+
 	@Test void sortedIndexAndCredentialSemanticsAreRetainedExactly() throws Exception {
 		WebAuthnStoreKey index = WebAuthnStoreKey.forAccountCredentialIndex(NS, RP, HANDLE);
 		byte[] unordered = index(HANDLE, List.of(new byte[] {2}, new byte[] {1}));

@@ -91,7 +91,7 @@ final class OAuthClientMetadataCacheBoundaryTests {
 
         OAuthClientMetadataDocument parsed =
                 OAuthClientMetadataDocument.parse(
-                        CLIENT_ID, document, policy(null), limits, false, false);
+                        CLIENT_ID, document, policy(InMemoryOAuthClientMetadataCache.fromMaximumEntries(128)), limits, false, false);
 
         assertEquals(limits.redirects, parsed.redirectUris().size());
     }
@@ -264,7 +264,7 @@ final class OAuthClientMetadataCacheBoundaryTests {
     @Test
     void exactCodecPlaintextAndSealedLimitsRoundTrip() {
         StateSealer sealer = sealer(1024);
-        OAuthClientMetadataCacheCodec codec = codec(sealer, policy(null));
+        OAuthClientMetadataCacheCodec codec = codec(sealer, policy(InMemoryOAuthClientMetadataCache.fromMaximumEntries(128)));
 
         OAuthClientMetadataCacheEntry entry =
                 codec.seal(
@@ -296,7 +296,7 @@ final class OAuthClientMetadataCacheBoundaryTests {
 
     @Test
     void exactMaximumMetadataDocumentSurvivesTheCacheEnvelope() {
-        OAuthClientMetadataPolicy policy = policy(null);
+        OAuthClientMetadataPolicy policy = policy(InMemoryOAuthClientMetadataCache.fromMaximumEntries(128));
         byte[] document = exactDocument(policy.getMaximumDocumentBytes());
         StateSealer sealer = sealer(16384);
         OAuthClientMetadataCacheCodec codec = codec(sealer, policy);
@@ -311,7 +311,7 @@ final class OAuthClientMetadataCacheBoundaryTests {
                 OAuthClientMetadataPolicy.withAddressResolver(
                                 (host, budget) -> {
                                     throw new AssertionError("No resolver in deterministic seam.");
-                                })
+                                }).cache(InMemoryOAuthClientMetadataCache.fromMaximumEntries(128))
                         .maximumDocumentBytes(1026)
                         .build();
         byte[] divisibleDocument = exactDocument(divisibleLimit.getMaximumDocumentBytes());
@@ -325,7 +325,7 @@ final class OAuthClientMetadataCacheBoundaryTests {
     @Test
     void rollbackObservedAfterTheReadRemainsStickyThroughRelease() {
         StateSealer sealer = sealer(16384);
-        OAuthClientMetadataPolicy envelopePolicy = policy(null);
+        OAuthClientMetadataPolicy envelopePolicy = policy(InMemoryOAuthClientMetadataCache.fromMaximumEntries(128));
         OAuthClientMetadataCacheEntry old =
                 codec(sealer, envelopePolicy)
                         .seal(CLIENT_ID, clientDocument("cached"), NOW, NOW.plusSeconds(120));
@@ -420,7 +420,7 @@ final class OAuthClientMetadataCacheBoundaryTests {
     }
 
     private static @NonNull OAuthClientMetadataPolicy policy(
-            @Nullable OAuthClientMetadataCache cache) {
+            @NonNull OAuthClientMetadataCache cache) {
         return OAuthClientMetadataPolicy.withAddressResolver(
                         (host, budget) -> {
                             throw new AssertionError("No resolver in deterministic seam.");

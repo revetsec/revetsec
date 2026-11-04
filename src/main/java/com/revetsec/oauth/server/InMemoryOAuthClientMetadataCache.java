@@ -44,6 +44,8 @@ import javax.annotation.concurrent.ThreadSafe;
  * asserted by this storage cache. It may evict at any time and has no durability. Sharing one
  * instance shares only in-process storage; separate factories return separate caches. Applications
  * may supply a distributed implementation through the metadata policy's cache option.
+ * The raw reused map has only a maintenance capacity target under concurrent writes. This wrapper
+ * supplies the strict entry bound; keep its map private and every access under its budgeted lock.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  * @since 1.0.0

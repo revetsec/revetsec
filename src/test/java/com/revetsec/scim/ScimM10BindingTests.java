@@ -42,7 +42,7 @@ class ScimM10BindingTests {
 
     @Test void schemaQualifiedPathsCanonicalizeAndUnknownExtensionAttributesNeverBind() {
         ScimFilterPolicy policy=ScimFilterPolicy.builder().allowedComparisons(Map.of(USER+":userName",Set.of(ScimComparisonOperator.EQ),ENTERPRISE+":department",Set.of(ScimComparisonOperator.EQ))).build();
-        ScimFilterBinding binding=binding(ScimResourceType.userInstance(),policy,ScimCompatibility.strictInstance());
+        ScimFilterBinding binding=binding(ScimTestResourceTypes.userWithEnterpriseInstance(),policy,ScimCompatibility.strictInstance());
         assertEquals("userName eq \"a\"",accepted(binding,USER+":USERNAME eq \"a\""));
         assertEquals(ENTERPRISE+":department eq \"research\"",accepted(binding,ENTERPRISE.toUpperCase(java.util.Locale.ROOT)+":DEPARTMENT eq \"research\""));
         rejected(binding,"department eq \"research\"");

@@ -25,6 +25,7 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Supplier;
 import static java.util.Objects.requireNonNull;
@@ -66,10 +67,10 @@ final class OAuthRefreshRotation {
   catch (IllegalArgumentException failure) { throw invalid(); }
   Map<String, Set<String>> server = OAuthServerConfiguration.resources(resources, this.limits.resources);
   for (int attempt = 0; attempt < this.attempts; attempt++) {
-   // Public CIMD requests must identify an existing, matching credential before taking a fresh-fetch permit.
-   String claimedClient = request.authorization() == null ? request.value("client_id") : null;
-   if (claimedClient != null && clients.metadataEnabled()) readCredential(refreshId, claimedClient, deadline);
-   OAuthServerClientSelection.Selected selectedClient = clients.authenticate(request, server, deadline);
+   Optional<OAuthServerClientSelection.Selected> clientSelection = clients.authenticate(request, server, deadline,
+     () -> admitMetadata(request, refreshId, deadline));
+   if (clientSelection.isEmpty()) continue;
+   OAuthServerClientSelection.Selected selectedClient = clientSelection.orElseThrow();
    OAuthServerClientRegistration client = selectedClient.client();
    String fingerprint = selectedClient.fingerprint();
    // Re-read after the external fetch so the commit uses a current atomic-store observation.
@@ -108,8 +109,8 @@ final class OAuthRefreshRotation {
    OAuthAuthorizationDecision decision = authorize(policy, grant, deadline);
    if (decision.isDenied()) { if (terminate(session, grantKey, grant)) throw invalid(); else continue; }
    Map<String, Set<String>> choices = decision.getAuthorizedScopesByResource(); Set<String> continuing = choices.get(grant.text("resource"));
-   if (!decision.getSubject().orElseThrow(() -> OAuthServerClientAdmission.failure(INFRASTRUCTURE)).equals(grant.text("subject"))
-     || choices.size() != 1 || continuing == null || !approved.containsAll(continuing)) throw OAuthServerClientAdmission.failure(INFRASTRUCTURE);
+   if (!decision.getSubject().orElseThrow(() -> OAuthServerClientAdmission.failure(CONFIGURATION)).equals(grant.text("subject"))
+     || choices.size() != 1 || continuing == null || !approved.containsAll(continuing)) throw OAuthServerClientAdmission.failure(CONFIGURATION);
    // A narrowed continuing decision ends this family; a narrowed request changes only this access token.
    if (!continuing.equals(approved) || !decision.isRefreshTokenPermitted()) {
     if (terminate(session, grantKey, grant)) throw invalid(); else continue;
@@ -134,6 +135,26 @@ final class OAuthRefreshRotation {
    if (session.commit(mutations) == OAuthStoreCommitStatus.COMMITTED) return response;
   }
   throw new OAuthStoreFailure(UNAVAILABLE);
+ }
+ /** A retained replay is eligible only while it can still revoke its current active family. */
+ private boolean admitMetadata(@NonNull OAuthServerRequest request, @NonNull String refreshId, @NonNull Deadline deadline) {
+  CredentialRead observed = readCredential(refreshId, request.required("client_id"), deadline);
+  OAuthStoreCoordinator.Session session = observed.session();
+  OAuthAuthorizationRecord refresh = observed.credential(), grant = observed.grant();
+  if (!refresh.sameLineage(grant) || !grant.refresh()
+    || !grant.text("status").equals("ACTIVE") && !grant.text("status").equals("REVOKED")
+    || !refresh.horizon().equals(grant.horizon()) || refresh.expires().isAfter(grant.expires())) throw new OAuthStoreFailure(CORRUPT_STATE);
+  if (!grant.text("resource").equals(request.required("resource")) || !refresh.matchesIssuer(session.issuer())
+    || !grant.matchesSubject(session.subject(grant.text("subject")))) throw invalid();
+  boolean used = refresh.text("status").equals("USED");
+  if (used == grant.text("refreshId").equals(refreshId)) {
+   // A rotation between these reads can change both the row status and the grant head.
+   if (session.barrier() == OAuthStoreCommitStatus.COMMITTED) throw new OAuthStoreFailure(CORRUPT_STATE);
+   return false;
+  }
+  if (!grant.text("status").equals("ACTIVE")) throw invalid();
+  if (!used && (!session.effectiveNow().isBefore(refresh.expires()) || !session.effectiveNow().isBefore(grant.expires()))) throw invalid();
+  return true;
  }
  private record CredentialRead(OAuthStoreCoordinator.@NonNull Session session, @NonNull OAuthAuthorizationRecord credential,
    @NonNull OAuthAuthorizationRecord grant) {}

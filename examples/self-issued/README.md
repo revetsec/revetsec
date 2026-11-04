@@ -12,7 +12,7 @@ This bounded single-process **volatile** store keeps permanent issuer/subject fe
 
 The application source has an injection constructor that accepts an app-owned `OAuthAuthorizationServerStore`, `OAuthIssuerKeyProvider` and `StateSealer`, plus an explicit `FRESH` or `ESTABLISHED` startup mode. `FRESH` performs the one-time issuer and demo-subject creation; `ESTABLISHED` only warms up the existing issuer and never creates a missing fence or generates replacement keys. Established instances must also supply the same independent 32-byte admission partition key across nodes and restarts; the demo HMACs subjects with that key to derive Soklet admission/rate-limit partitions. Keep this key outside database snapshots and protect it as application secret material. The fresh volatile launcher generates a disposable partition key. The default `IssuerPlayground` launcher still uses fresh volatile state. An application using the established path must retain the same authorized signing and sealing material, close and drain routes during restore, and complete its external recovery fence before constructing a serving instance. `warmUp()` does not establish that a restored database is current or that every subject fence exists.
 
-The application also selects a `BrowserSessionStore`. Its local default is the bounded process-local `BrowserSessions`; a browser flow using that default restarts after process loss. At capacity it replaces the oldest anonymous session with no pending interaction, preserving authenticated and pending consent sessions. Repeated anonymous authorization requests can still occupy every slot; an actual deployment needs edge admission and shared rate limits. The optional PostgreSQL fixture supplies a shared store across JVMs. Both backends rotate the cookie and CSRF at login, bind a separate browser value to Revetsec's pending interaction, replace stale form actions, and claim consent once before calling core completion. A failed or uncertain claim releases no authorization response. An application backend must make these transitions atomic, keep a monotonic expiry fence, and return unavailable rather than treating a database outage as a missing session. This is application session/CSRF infrastructure, not a new Revetsec core session API.
+The application also selects a `BrowserSessionStore`. Its local default is the bounded process-local `BrowserSessions`; a browser flow using that default restarts after process loss. At capacity it refuses new sessions and preserves all live sessions. Anonymous authorization reads allocate no browser state; explicit session admission and expiry are described below. An actual deployment needs edge admission and shared rate limits. The optional PostgreSQL fixture supplies a shared store across JVMs. Both backends rotate the cookie and CSRF at login, bind a separate browser value to Revetsec's pending interaction, replace stale form actions, and claim consent once before calling core completion. A failed or uncertain claim releases no authorization response. An application backend must make these transitions atomic, keep a monotonic expiry fence, and return unavailable rather than treating a database outage as a missing session. This is application session/CSRF infrastructure, not a new Revetsec core session API.
 
 The fixture can run two established Soklet nodes concurrently on IPv4 and IPv6 loopback with the same checked issuer/resource ports. `IssuerPlayground.sokletConfig` accepts a loopback listen address for this purpose; public issuer and resource identities remain fixed. The scripted cross-node login, consent, token, MCP and outage checks use the application-provided stores. A production deployment must supply its own routing, TLS edge and node coordination.
 
@@ -22,34 +22,37 @@ The companion [PostgreSQL storage example](../postgresql-pending-store/README.md
 
 The fresh local issuer sets `publicMetadataHttpCacheMaxAge(Duration.ZERO)`, advertising zero HTTP cache max-age for metadata and JWKS responses and using no publication-wait contribution from that policy; this does not demonstrate key rotation/publication timing. Access tokens live for two minutes. Every MCP message calls `validateAccessTokenResult` online, then checks scopes and application permissions. Storage outages produce unavailable responses separate from invalid credentials.
 
-## Build exact local sources
+## Build and run
 
-The module is outside the reactor and cannot install/deploy itself. It records current core/helper source inventories, including uncommitted files. The packaged OIDC/Playground examples use the pushed revisions in [`examples/pins.json`](../pins.json); this builder separately checks the supplied authored source inventories and does not claim hosted CI qualification.
+Install the matching core, adapter and Soklet dependencies using the
+[parent Maven instructions](../README.md#build-with-maven), then build from
+the core repository root:
 
 ```sh
-python3 examples/self-issued/build.py --work /absolute/new/self-issued-build \
-  --maven /absolute/path/to/mvn --java-home /absolute/path/to/jdk \
-  --core-source /absolute/core-checkout --adapter-source /absolute/helper-checkout \
-  --framework-jar /absolute/pinned/soklet-4.0.0.jar \
-  --repository-tail /absolute/read-only/maven-cache --offline
+mvn -B -ntp -f examples/self-issued/pom.xml verify
 ```
 
-The framework JAR must match the framework SHA-256 in [`examples/pins.json`](../pins.json) (which records the exact pushed source and framework build toolchain). The builder copies both sources privately, installs exact artifacts, runs example tests and attributed nullability checks, then starts a standalone runtime with only core/helper/framework JARs. It records commands, inventories, hashes and boolean evidence without retaining credentials. Socket tests use the JDK HTTP client and raw bounded loopback sockets, including public-host and private-listener-port rejection. They do not qualify a browser or independent MCP client; see `interop/self-issued` for a separately pinned browser fixture.
+The build runs the Java integration tests and packages an executable JAR with
+its runtime dependencies in `target/lib`. After setting the trusted startup
+configuration below, launch it with:
+
+```sh
+java -jar examples/self-issued/target/self-issued-1.0.0-SNAPSHOT.jar
+```
+
+Keep the JAR beside its `lib` directory. Provided annotations and JUnit are not
+runtime dependencies. Python is not required for this build or launch.
 
 ## Start a disposable run
 
-Create three distinct random access keys in private POSIX files containing 43 base64url characters with an optional final newline. These are demo access keys, not human passwords. Never commit them.
+Build the demo-key utility with `mvn -f examples/tools/pom.xml package` if you selected a single example rather than the full reactor. Create three distinct random access keys in private POSIX files containing 43 base64url characters with an optional final newline. These are demo access keys, not human passwords. Never commit them.
 
 ```sh
-python3 - <<'PY'
-import os, secrets
-from pathlib import Path
-folder = Path('/absolute/private/issuer-keys')
-folder.mkdir(mode=0o700)
-for name in ('login', 'client', 'resource'):
-    with os.fdopen(os.open(folder / name, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), 'w') as out:
-        out.write(secrets.token_urlsafe(32) + '\n')
-PY
+mkdir -m 700 /absolute/private/issuer-keys
+java -jar examples/tools/target/example-tools-1.0.0-SNAPSHOT.jar \
+  /absolute/private/issuer-keys/login \
+  /absolute/private/issuer-keys/client \
+  /absolute/private/issuer-keys/resource
 ```
 
 Set `REVETSEC_ISSUER_LOGIN_KEY_FILE`, `REVETSEC_ISSUER_CLIENT_KEY_FILE` and `REVETSEC_ISSUER_RESOURCE_KEY_FILE` to those files. Set `REVETSEC_ISSUER_FRESH_NAMESPACE=true` only after verifying the origin is new. For disposable numeric-loopback HTTP, additionally set `REVETSEC_ISSUER_ALLOW_HTTP_LOOPBACK=true` and distinct unused `REVETSEC_ISSUER_HTTP_PORT` / `REVETSEC_ISSUER_MCP_PORT` (defaults 8089/8090). The local origin/resource default to those listeners. Do not reuse an established issuer origin.
@@ -57,7 +60,7 @@ Set `REVETSEC_ISSUER_LOGIN_KEY_FILE`, `REVETSEC_ISSUER_CLIENT_KEY_FILE` and `REV
 HTTPS requires a trusted TLS edge. Configure `REVETSEC_ISSUER_ORIGIN` (default `https://localhost:8443`) and `REVETSEC_ISSUER_RESOURCE` (default origin plus `/mcp`) to exact public locations. Route `/mcp` to the MCP listener and other routes to the HTTP listener. The default launcher binds IPv4 loopback; the two-node fixture can bind its second node on IPv6 loopback. The pinned Soklet artifact requires the public MCP port to equal the MCP listener port, even for explicitly allowed hostnames. Set `REVETSEC_ISSUER_MCP_PORT` to the configured resource port. Run the TLS edge on a separate address or in another network namespace so it can use the same public port without a bind conflict, and preserve the public Host header. The local browser fixture uses an IPv6 loopback edge and IPv4 loopback application. Never derive issuer/resource identity from forwarded headers. Set `REVETSEC_ISSUER_REDIRECT` to your client's registered URI; `https://client.example/callback` is only an illustrative default. HTTPS returns match the exact registered URI. Native numeric-loopback returns may vary only the port; the checked actual URI is retained for consent, redirect and token redemption. Set `REVETSEC_ISSUER_BROWSER_ORIGIN` to the explicitly trusted client browser origin when it differs from the registration origin (for example, a native callback's actual port). It defaults to the registration origin and accepts only an HTTPS origin or numeric IPv4 loopback HTTP origin. It does not add callback registrations or relax app login/consent Origin checks.
 
 ```sh
-java -cp "PRIVATE_BUILD/example/target/classes:$(cat PRIVATE_BUILD/example/target/runtime-classpath.txt)" example.issuer.IssuerPlayground
+java -jar examples/self-issued/target/self-issued-1.0.0-SNAPSHOT.jar
 ```
 
 Configure a client using `/.well-known/oauth-authorization-server`. Authorization requires S256 PKCE and the exact resource. The browser displays the checked client/redirect/scopes and accepts the login file's key. Login rotates its cookie and CSRF value while retaining an independent server-side browser binding. After consent the application supplies the fixed subject and freshly checked requested scopes. Every login/consent form also carries an independent action nonce bound to its exact interaction; old tabs cannot approve replacement clients. Form pages use `Referrer-Policy: same-origin` so normal browser form POSTs retain the exact Origin check; missing or opaque `null` origins still fail. Consent’s CSP permits only the app and library-checked interaction callback origin, including the browser’s redirect check. Credential-bearing redirects retain `Referrer-Policy: no-referrer`. Browser controls cannot supply another subject/resource/return target. Logout ends the browser session; revoke grants separately.
@@ -91,3 +94,9 @@ Retrieved names are untrusted display text, not identity evidence or authorizati
 ### IPv6 native browser return
 
 For an explicitly registered native `[::1]` callback, consent forms retain `form-action 'self'`. CSP host sources cannot express an IPv6 literal. After approval or denial the application renders an escaped **Return to application** link containing only the issuer's checked prepared callback, with `no-store`, `no-referrer`, `rel=noreferrer`, no scripts and frame/base restrictions. The user follows that normal link to the native listener. It does not broaden form submission to arbitrary HTTP origins or change client/resource/PKCE/token binding. IPv4 native and exact HTTPS returns continue to use the prepared redirect response.
+
+## Browser session admission
+
+Anonymous `GET /authorize` displays a Continue form without creating a browser session or OAuth interaction. Its explicit same-origin `POST /session` preserves the original raw authorization query and redirects back to `/authorize`; core then validates the request normally. The POST accepts only the fixed `begin=1` form, exact Host/Origin and one form Content-Type. It creates no identity and grants no consent. Later login, consent and logout still require the session CSRF token and applicable action nonce.
+
+The default local store admits at most 64 sessions (constructor range 1–128), rejects new admission with a fixed 503 when full, and never evicts a live session. Each session has an absolute ten-minute lifetime from creation or login rotation. Reads and bootstrap reuse do not renew it; request-time cleanup reclaims entries at the deadline. Existing sessions remain usable while new admission is full. A browser can deliberately request multiple sessions by dropping cookies; deployments must enforce trusted edge admission/rate limits. These local caps are not a distributed abuse-control service.

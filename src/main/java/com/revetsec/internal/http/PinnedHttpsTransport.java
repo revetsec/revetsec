@@ -53,7 +53,15 @@ import static java.util.Objects.requireNonNull;
  */
 @ThreadSafe
 public final class PinnedHttpsTransport {
+ private static final String METHOD = "GET ";
+ private static final String VERSION_AND_HOST = " HTTP/1.1\r\nHost: ";
+ private static final String FIXED_HEADERS = "\r\nAccept: application/json\r\nAccept-Encoding: identity\r\nUser-Agent: Revetsec\r\nConnection: close\r\n\r\n";
  private PinnedHttpsTransport() {}
+ /**
+  * Fixed request identity for optional cache variants; exact target/authority are bound separately by client URI.
+  * @return the method/header template used by the wire encoder, with URI placeholders
+  */
+ public static @NonNull String requestProfile() { return METHOD + "{target}" + VERSION_AND_HOST + "{authority}" + FIXED_HEADERS; }
  public static @NonNull RawResponse fetch(@NonNull URI uri,
    @NonNull BiFunction<@NonNull String, @NonNull Duration, @NonNull List<@NonNull InetAddress>> resolver,
    int maximumAnswers, int maximumDocumentBytes, @NonNull Duration requestTimeout, @NonNull Deadline operation)
@@ -118,8 +126,7 @@ public final class PinnedHttpsTransport {
   } catch (EncodingException failure) { throw new HttpExchangeException(HttpExchangeException.Kind.URI_REJECTED); }
   URI ascii = URI.create(uri.toASCIIString());
   String target = requireNonNull(ascii.getRawPath()) + (ascii.getRawQuery() == null ? "" : "?" + ascii.getRawQuery());
-  byte[] bytes = ("GET " + target + " HTTP/1.1\r\nHost: " + uri.getRawAuthority()
-    + "\r\nAccept: application/json\r\nAccept-Encoding: identity\r\nUser-Agent: Revetsec\r\nConnection: close\r\n\r\n").getBytes(StandardCharsets.US_ASCII);
+  byte[] bytes = (METHOD + target + VERSION_AND_HOST + uri.getRawAuthority() + FIXED_HEADERS).getBytes(StandardCharsets.US_ASCII);
   if (bytes.length > 65536) throw new HttpExchangeException(HttpExchangeException.Kind.URI_REJECTED);
   return bytes;
  }

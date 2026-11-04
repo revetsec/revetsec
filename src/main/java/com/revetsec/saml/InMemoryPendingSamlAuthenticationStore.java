@@ -22,9 +22,12 @@ import javax.annotation.concurrent.ThreadSafe;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.NavigableSet;
 import java.util.Objects;
+import java.util.TreeSet;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Predicate;
@@ -32,13 +35,20 @@ import java.util.function.Predicate;
 /**
  * Bounded, process-local store for pending SAML login and logout with atomic single consumption.
  * Restarting this process loses pending attempts. Distributed deployments supply their own shared store.
+ * Expiry maintenance removes at most 64 unrelated expired records per operation, plus the
+ * addressed record when expired. An ordered index retains exactly one node per stored record;
+ * consuming a record also unlinks its node. Operations remain serialized, including conditional
+ * validation, and their time budget does not guarantee a wall-clock execution bound.
  *
  * @since 1.0.0
  */
 @ThreadSafe
 public final class InMemoryPendingSamlAuthenticationStore implements PendingSamlAuthenticationStore {
+    private static final int CLEANUP_BATCH = 64;
     private final @NonNull ReentrantLock lock = new ReentrantLock();
     private final @NonNull Map<@NonNull String, @NonNull Entry> entries = new HashMap<>();
+    private final @NonNull NavigableSet<@NonNull Entry> expirations = new TreeSet<>(
+            Comparator.comparing(Entry::expiresAt).thenComparing(Entry::key));
     private final @NonNull Clock clock;
     private final int maximumEntries;
     private @NonNull Instant lastObserved = Instant.MIN;
@@ -56,7 +66,7 @@ public final class InMemoryPendingSamlAuthenticationStore implements PendingSaml
      * @return local store
      * @since 1.0.0
      */
-    public static @NonNull InMemoryPendingSamlAuthenticationStore withLimit(@NonNull Clock clock,
+    public static @NonNull InMemoryPendingSamlAuthenticationStore fromLimit(@NonNull Clock clock,
             int maximumEntries) {
         Objects.requireNonNull(clock);
         if (maximumEntries < 1 || maximumEntries > 1_000_000)
@@ -71,7 +81,7 @@ public final class InMemoryPendingSamlAuthenticationStore implements PendingSaml
      * @since 1.0.0
      */
     public static @NonNull InMemoryPendingSamlAuthenticationStore fromDefaults() {
-        return withLimit(Clock.systemUTC(), 65_536);
+        return fromLimit(Clock.systemUTC(), 65_536);
     }
 
     @Override public @NonNull SamlPendingSaveResult save(@NonNull String browserBinding,
@@ -95,10 +105,13 @@ public final class InMemoryPendingSamlAuthenticationStore implements PendingSaml
             Entry existing = entries.get(key);
             if (existing != null && now.isBefore(existing.expiresAt()))
                 return SamlPendingSaveResult.ALREADY_PRESENT;
-            entries.entrySet().removeIf(entry -> !now.isBefore(entry.getValue().expiresAt()));
+            if (existing != null) remove(existing);
+            if (!cleanExpired(now, deadline)) return SamlPendingSaveResult.UNAVAILABLE;
             if (entries.size() >= maximumEntries) return SamlPendingSaveResult.CAPACITY_REFUSED;
             if (expired(deadline)) return SamlPendingSaveResult.UNAVAILABLE;
-            entries.put(key, new Entry(sealedRecord, expiresAt));
+            Entry added = new Entry(key, sealedRecord, expiresAt);
+            entries.put(key, added);
+            expirations.add(added);
             return expired(deadline) ? SamlPendingSaveResult.INDETERMINATE : SamlPendingSaveResult.SAVED;
         } finally { lock.unlock(); }
     }
@@ -123,10 +136,14 @@ public final class InMemoryPendingSamlAuthenticationStore implements PendingSaml
         try {
             Instant now = now();
             if (now == null || expired(deadline)) return SamlPendingConsumeResult.Unavailable.INSTANCE;
+            if (!cleanExpired(now, deadline)) return SamlPendingConsumeResult.Unavailable.INSTANCE;
             String key = key(browserBinding, relayStateHandle);
             Entry existing = entries.get(key);
-            if (existing == null || !now.isBefore(existing.expiresAt()))
+            if (existing == null) return SamlPendingConsumeResult.Missing.INSTANCE;
+            if (!now.isBefore(existing.expiresAt())) {
+                remove(existing);
                 return SamlPendingConsumeResult.Missing.INSTANCE;
+            }
             boolean matches;
             try { matches = sealedRecordMatches.test(existing.sealedRecord()); }
             catch (RuntimeException exception) { return SamlPendingConsumeResult.Unavailable.INSTANCE; }
@@ -137,10 +154,28 @@ public final class InMemoryPendingSamlAuthenticationStore implements PendingSaml
             if (entries.get(key) != existing || !now.isBefore(existing.expiresAt()) || !matches)
                 return SamlPendingConsumeResult.Missing.INSTANCE;
             if (expired(deadline)) return SamlPendingConsumeResult.Unavailable.INSTANCE;
-            entries.remove(key);
+            remove(existing);
             return expired(deadline) ? SamlPendingConsumeResult.Indeterminate.INSTANCE
                     : SamlPendingConsumeResult.Consumed.fromSealedRecord(existing.sealedRecord());
         } finally { lock.unlock(); }
+    }
+
+    // Called only under lock after a non-rollback clock observation. No lazy tombstones:
+    // arbitrary consume/save churn must not grow the expiry index beyond store capacity.
+    private boolean cleanExpired(@NonNull Instant now, long deadline) {
+        for (int removed = 0; removed < CLEANUP_BATCH; removed++) {
+            if (expired(deadline)) return false;
+            if (expirations.isEmpty()) return true;
+            Entry first = expirations.first();
+            if (now.isBefore(first.expiresAt())) return true;
+            remove(first);
+        }
+        return !expired(deadline);
+    }
+
+    private void remove(@NonNull Entry entry) {
+        entries.remove(entry.key());
+        expirations.remove(entry);
     }
 
     private @Nullable Instant now() {
@@ -191,5 +226,5 @@ public final class InMemoryPendingSamlAuthenticationStore implements PendingSaml
      */
     @Override public @NonNull String toString() { return "InMemoryPendingSamlAuthenticationStore{<redacted>}"; }
 
-    private record Entry(@NonNull String sealedRecord, @NonNull Instant expiresAt) { }
+    private record Entry(@NonNull String key, @NonNull String sealedRecord, @NonNull Instant expiresAt) { }
 }

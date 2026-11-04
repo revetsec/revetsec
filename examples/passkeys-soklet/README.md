@@ -8,22 +8,27 @@ The default state is **single-process and volatile**. Each launch creates a fres
 
 `PasskeyApp` also has an injection constructor for an application-owned stable account handle, configured `WebAuthnRelyingParty` and application recovery gate. The app and relying party must receive the same reentrant gate instance so one permit spans verification and the subsequent browser-session change. The application supplies the store, namespace and sealing key through the relying party. It must bind that relying party to the same trusted RP ID and origin as the app and coordinate account disablement with the core account fence. This constructor keeps browser sessions in process memory: a new JVM can sign in using a persisted passkey, but an existing session does not roam between nodes or survive restart. The PostgreSQL fixture exercises this constructor across fresh JVMs, a real Chrome browser with two Soklet restarts and a primary outage, and a restore boundary. Its local file marker is test-only; production admission needs a durable cross-host recovery control stored outside the restorable database and a way to close every node after an uncertain write.
 
-## Build against the pinned 4.0.0 artifact
+Registration begin now stores only its expiring ceremony and, if needed, the shared namespace
+clock root. The first committed credential completion establishes the permanent account fence
+and index atomically. Abandoning a new handle creates no permanent per-account row. Retained
+ceremonies still consume this demo's finite capacity; no read or refusal cleans them up. Disabled
+fences and existing permanent rows are retained. See the [tentative enrollment and rollout
+contract](../../docs/shared-clock-stores.md#webauthn-tentative-enrollment-and-permanent-account-state).
 
-Build the current Revetsec core JAR first. The build.py script compiles the example into a new private directory with warning-fatal Java 21 settings. It verifies the Soklet 4.0.0 artifact SHA-256 recorded in [`examples/pins.json`](../pins.json), runs route checks, and copies only core and Soklet JARs onto the runtime classpath. Annotation JARs are compile-time only.
+## Build with Maven
+
+Install matching core and Soklet dependencies using the
+[parent instructions](../README.md#build-with-maven), then run from the core
+repository root:
 
 ~~~sh
-python3 examples/passkeys-soklet/build.py \
-  --work /absolute/new/private-passkey-build \
-  --java-home /absolute/jdk21-or-newer \
-  --core-jar /absolute/revetsec/target/revetsec-1.0.0-SNAPSHOT.jar \
-  --soklet-jar /absolute/soklet-4.0.0.jar \
-  --jspecify-jar /absolute/jspecify-1.0.1.jar \
-  --jsr305-jar /absolute/jsr305-3.0.2.jar \
-  --socket-check
+mvn -B -ntp -f examples/passkeys-soklet/pom.xml verify
 ~~~
 
-The route checks use a test-only Ed25519 authenticator to exercise registration, discoverable sign-in, account-pinned reauthentication, one-use step-up, credential removal and denial of the removed credential. They also reject a wrong signature, registration replay and credential-ID reuse after removal. The optional socket check starts an actual loopback Soklet listener and checks session rotation and registration preparation through HTTP. It requires local socket permission.
+Maven runs route and loopback socket checks and packages an executable JAR with
+core and Soklet in `target/lib`. Provided annotations and JUnit stay out of the
+runtime. Build and launch need no Python. Use your trusted HTTPS edge for manual
+browsing, or the optional disposable TLS helper below for local testing.
 
 ## Prepare one exact HTTPS origin
 
@@ -37,29 +42,34 @@ python3 examples/passkeys-soklet/prepare_tls.py \
   --https-port 9443 --http-port 8093
 ~~~
 
-The script requires an OpenSSL binary with `verify -verify_hostname` support (the tested binary was OpenSSL 3.6.3; macOS's `/usr/bin/openssl` lacks this option). It generates a two-day private CA, an exact DNS-SAN leaf certificate, checks matching and foreign hostnames, and writes a Caddyfile binding the HTTPS listener to loopback. It changes no trust store. Configure the browser's local DNS and trust for this disposable CA yourself, then run your pinned Caddy binary with /absolute/new/private-passkey-tls/Caddyfile. Remove the private CA, leaf keys, browser trust and test profile after use. The generated edge rejects comma-materialized sensitive header duplicates before forwarding. Keep the edge and app on the same host or private network; the backend is plain HTTP on 127.0.0.1:8093.
+This optional Python test helper requires an OpenSSL binary with `verify -verify_hostname` support. It generates a two-day private CA, an exact DNS-SAN leaf certificate, checks matching and foreign hostnames, and writes a Caddyfile binding the HTTPS listener to loopback. It changes no trust store. Configure the browser's local DNS and trust for this disposable CA yourself, then run your pinned Caddy binary with /absolute/new/private-passkey-tls/Caddyfile. Remove the private CA, leaf keys, browser trust and test profile after use. The generated edge rejects comma-materialized sensitive header duplicates before forwarding. Keep the edge and app on the same host or private network; the backend is plain HTTP on 127.0.0.1:8093.
 
 ## Run the isolated browser check
 
-`browser_check.mjs` exercises the actual page in Chrome with a CTAP2 virtual authenticator. It starts the built Soklet app, serves the exact DNS origin from a private Node HTTPS edge, maps that DNS name to loopback only in a disposable Chrome profile, and pins the test leaf's public key for Chrome without changing system trust. It checks browser registration, a deliberately bogus signed assertion rejected by Revetsec, discoverable sign-in, account-pinned reauthentication, one-use step-up, listing, server-side removal and rejection after removal. Node uses built-in modules only. The tested versions were Node 26.5.0 and Chrome 154 on macOS.
+`browser_check.mjs` exercises the actual page in Chrome with a CTAP2 virtual authenticator. It starts the built Soklet app, serves the exact DNS origin from a private Node HTTPS edge, maps that DNS name to loopback only in a disposable Chrome profile, and pins the test leaf's public key for Chrome without changing system trust. It checks browser registration, a deliberately bogus signed assertion rejected by Revetsec, discoverable sign-in, account-pinned reauthentication, one-use step-up, listing, server-side removal and rejection after removal. Node uses built-in modules only.
 
 ~~~sh
 node examples/passkeys-soklet/browser_check.mjs \
-  --classpath-file /absolute/new/private-passkey-build/CLASSPATH \
+  --jar examples/passkeys-soklet/target/passkeys-soklet-1.0.0-SNAPSHOT.jar \
   --tls-dir /absolute/new/private-passkey-tls \
   --java /absolute/jdk21-or-newer/bin/java \
   --chrome '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
 ~~~
 
-This check uses `leaf.crt` and `leaf.key` from `prepare_tls.py`; it does not run the generated Caddyfile. It removes its own temporary access key and Chrome profile. Remove the separate TLS and build directories after testing. A virtual authenticator proves browser/API integration, not a physical security key, PIN prompt, trusted browser profile or distributed deployment.
+This check uses `leaf.crt` and `leaf.key` from `prepare_tls.py`; it does not run the generated Caddyfile. It removes its own temporary access key and Chrome profile. Remove the separate TLS directory after testing. A virtual authenticator proves browser/API integration, not a physical security key, PIN prompt, trusted browser profile or distributed deployment.
 
 ## Check a physical FIDO2 security key
+
+The [current browser/extension policy](../../docs/webauthn-browser-compatibility.md) records the
+exact accepted output shapes, dated target-browser evidence and SR-2/SR-5 gaps. Send native
+`toJSON()` output unchanged. A virtual run or JSON API feature check does not qualify another
+browser/provider, conditional autofill or physical/synced credential flow.
 
 Use `--physical-key` with a connected key that supports discoverable credentials and PIN or biometric user verification. This mode opens visible Chrome and selects the demo's **Use a physical security key** checkbox before each ceremony, without enabling Chrome's virtual WebAuthn environment. The checkbox requests cross-platform enrollment and a security-key browser hint so the test passkey is saved on the key rather than the Mac. At each prompt, select the physical security key, enter its PIN directly in the browser if requested, and touch it. The runner supplies only the disposable application's enrollment approval; it never reads or records the key's PIN. For a manual run, select the checkbox yourself before enrollment; leave it unchecked to use ordinary platform or synced passkeys. These browser choices do not establish hardware trust.
 
 ~~~sh
 node examples/passkeys-soklet/browser_check.mjs \
-  --classpath-file /absolute/new/private-passkey-build/CLASSPATH \
+  --jar examples/passkeys-soklet/target/passkeys-soklet-1.0.0-SNAPSHOT.jar \
   --tls-dir /absolute/new/private-passkey-tls \
   --java /absolute/jdk21-or-newer/bin/java \
   --chrome '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' \
@@ -78,10 +88,10 @@ The optional report records redacted outcomes and operator-supplied device metad
 
 The PostgreSQL fixture can run the same Chrome flow against `DurablePasskeyPlayground`, a test-only launcher with one stable account handle, sealed PostgreSQL credential state and an external local marker. Pass its pinned Soklet JAR and absolute `--browser-node`, `--browser-chrome` and `--browser-openssl` paths to `run_webauthn.py`. It keeps Chrome's virtual authenticator alive while stopping and restarting the Soklet JVM after registration and again after removal. The browser starts with a new anonymous app session after each restart; its persisted credential signs in after the first restart and is rejected after the second. Between those steps, the fixture stops PostgreSQL after reauthentication: the account page and sensitive action return 503, and the unused step-up approval can be consumed exactly once after the same primary returns. The fixture owns and removes its PostgreSQL volume, Chrome profile, local TLS files and keys. See the PostgreSQL example README for the runner arguments and limits.
 
-Create a private POSIX access-key file containing one fresh 43-character base64url value (optionally followed by a newline), mode 0600. This key is an application enrollment approval for the fixed demo account. It is never a WebAuthn credential or a Revetsec secret:
+Build the demo-key utility with `mvn -f examples/tools/pom.xml package` if you selected a single example rather than the full reactor. Create a private POSIX access-key file containing one fresh 43-character base64url value (optionally followed by a newline), mode 0600. This key is an application enrollment approval for the fixed demo account. It is never a WebAuthn credential or a Revetsec secret:
 
 ~~~sh
-python3 -c 'import pathlib,secrets; p=pathlib.Path("/absolute/private/access-key"); p.write_text(secrets.token_urlsafe(32)+"\n"); p.chmod(0o600)'
+java -jar examples/tools/target/example-tools-1.0.0-SNAPSHOT.jar /absolute/private/access-key
 ~~~
 
 Start the application with the exact same RP ID and origin as the TLS edge:
@@ -91,9 +101,7 @@ REVETSEC_PASSKEY_RP_ID=passkeys.example.test \
 REVETSEC_PASSKEY_ORIGIN=https://passkeys.example.test:9443 \
 REVETSEC_PASSKEY_HTTP_PORT=8093 \
 REVETSEC_PASSKEY_ACCESS_KEY_FILE=/absolute/private/access-key \
-  /absolute/jdk21-or-newer/bin/java \
-  -cp "$(cat /absolute/new/private-passkey-build/CLASSPATH)" \
-  example.passkeys.PasskeyPlayground
+  java -jar examples/passkeys-soklet/target/passkeys-soklet-1.0.0-SNAPSHOT.jar
 ~~~
 
 Open https://passkeys.example.test:9443/ in the trusted browser. Approve enrollment with the private demo key. Enter that key again in the management approval field before registering or removing a passkey; the page clears the field as it sends each request. Sign out, sign in with the passkey, reauthenticate for the one-use sensitive action, list the credential and remove it after a fresh management approval. A removed credential may remain in the browser or security key, but the server will reject it on a later sign-in. The browser uses parseCreationOptionsFromJSON, parseRequestOptionsFromJSON and PublicKeyCredential.toJSON(); cancellation is only a browser UI outcome.
@@ -102,8 +110,6 @@ Every POST route checks the configured Host and exact Origin, a server-held sess
 
 Anonymous page floods can still churn in-progress anonymous sessions. A deployed application needs admission and rate limits at the trusted edge, plus a session store sized for its traffic.
 
-The route, loopback listener and virtual Chrome browser checks are separate. A
-[dated local physical-key flow](../../docs/reviews/security-review-2026-10-15-followup.md)
-passed with a discoverable UV-capable FIDO2 key. Trusted-edge deployment,
-distributed recovery and the remaining WebAuthn release review require separate
-evidence.
+Use the example to explore registration, sign-in, reauthentication and credential
+removal. For deployment, configure trusted HTTPS, authoritative credential
+storage and recovery admission across all application instances.

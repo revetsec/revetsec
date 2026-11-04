@@ -8,6 +8,16 @@
 
 ## Boundary and findings
 
+**2026-11-03 account-disable clarification:** the current API's account disable is terminal for
+its namespace/RP/account handle. It has no enable transition. Reopening deployment recovery
+admission, creating a fresh relying party or resealing permanent records does not reactivate the
+account. An unknown disable outcome requires factual reconciliation before dependent actions;
+the former result comment's “reopening it” wording did not describe a supported account operation.
+Known committed but unadmitted disable stays committed. The host separately owns current account
+and session policy. See the [current lifecycle contract](../shared-clock-stores.md#webauthn-terminal-account-disable-and-traffic-admission).
+The dated checks below retain their original scope; this clarification supplies no new runtime,
+restore, API-freeze or release approval.
+
 `com.revetsec.webauthn` was listed as exported in [the compatibility policy](../../COMPATIBILITY.md) but omitted from the source-contract package inventory. The package now participates in the same public type, nullability, thread-safety, Javadoc, builder, and source-policy checks as the other exported packages. A regression sentinel keeps it in that inventory.
 
 The expanded source check found eleven WebAuthn type declarations whose inline `@since` text was not parsed as a Javadoc tag. Those comments now put the tag on its own line. The builder-conventions check found fifteen additional findings: a primitive recovery-permit value, primitive settings accessors, required builder properties with nonnullable setters, and builders without `@CheckReturnValue`. The permit and value accessors now use nonnull boxed values. Passing null to a required registration-options or relying-party setter clears that selection so `build()` fails; passing null to optional settings restores defaults. Nonnull values still receive the existing eager validation. Tests cover the clear-and-rebuild behavior.

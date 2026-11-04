@@ -25,6 +25,7 @@ import java.net.URI;
 import java.nio.CharBuffer;
 import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
+import com.revetsec.internal.encoding.StrictUtf8;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -137,7 +138,8 @@ public final class SamlAuthenticationRequestOptions {
             if (values.size() > 8) throw new IllegalArgumentException("Too many SAML authentication contexts");
             for (String value : values) {
                 Objects.requireNonNull(value);
-                if (value.isEmpty() || value.length() > 512) throw new IllegalArgumentException("Invalid SAML context");
+                if (value.isEmpty() || value.length() > 512 || !StrictUtf8.isWellFormed(value))
+                    throw new IllegalArgumentException("Invalid SAML context");
                 try { if (!URI.create(value).isAbsolute()) throw new IllegalArgumentException("Invalid SAML context"); }
                 catch (IllegalArgumentException exception) { throw new IllegalArgumentException("Invalid SAML context"); }
             }

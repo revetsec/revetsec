@@ -97,12 +97,12 @@ public final class SamlServiceProvider {
     /**
      * Begins SP configuration with its exact entity ID.
      *
-     * @param entityId SP entity ID
+     * @param entityId nonempty SP entity ID, well-formed text of at most 2048 UTF-16 code units
      * @return a builder
      * @since 1.0.0
      */
     public static @NonNull Builder withEntityId(@NonNull String entityId) {
-        if (Objects.requireNonNull(entityId).isEmpty() || entityId.length() > 2048)
+        if (!PendingSamlAuthenticationCodec.fitsText(Objects.requireNonNull(entityId), 2048))
             throw new IllegalArgumentException("Invalid SP entity ID");
         return new Builder(entityId);
     }
@@ -207,6 +207,9 @@ public final class SamlServiceProvider {
      * Completes an SP-initiated login. It authenticates the browser's pending record and RelayState
      * before parsing XML. Identity is returned only after a successful atomic replay insertion.
      * The application clears the pending cookie on every terminal outcome.
+     * The fixed assertion attribute profile is described by {@link SamlAttribute}. An exceeded
+     * attribute limit rejects the entire login before replay insertion; store-backed pending
+     * state has already been consumed before XML parsing. Start a new login after rejection.
      *
      * @param message opaque POST-binding message
      * @param pendingSource pending state received from the initiating browser
@@ -288,6 +291,7 @@ public final class SamlServiceProvider {
      * Completes an IdP-initiated login only for a connection that explicitly enables it.
      * RelayState is rejected and never treated as an application return destination. The
      * assertion age is limited to two minutes before skew.
+     * The same fixed {@link SamlAttribute} limits apply as for an SP-initiated login.
      *
      * @param message POST-binding message
      * @param identityProvider approved IdP connection
@@ -673,8 +677,10 @@ public final class SamlServiceProvider {
         }
         if (signatureSeen != enveloped || issuer == null || status == null || !identityProvider.getEntityId().equals(textOnly(issuer)))
             return SamlLogoutResult.Rejected.INSTANCE;
-        String code = SamlResponseSemantics.flatStatusCode(status);
-        if (code == null) return SamlLogoutResult.Rejected.INSTANCE;
+        SamlResponseSemantics.Status checkedStatus = SamlResponseSemantics.inspectStatus(status);
+        if (checkedStatus == null || (SamlLogoutStatus.SUCCESS.uri().equals(checkedStatus.primary())
+                && !checkedStatus.plainSuccess() && !checkedStatus.partialLogout()))
+            return SamlLogoutResult.Rejected.INSTANCE;
         String replayKey;
         try { replayKey = logoutReplayKey(identityProvider, SamlRedirectBindingMessage.Kind.RESPONSE,
                 responseId); }
@@ -708,8 +714,9 @@ public final class SamlServiceProvider {
             return pendingConsumed ? SamlLogoutResult.Indeterminate.INSTANCE : SamlLogoutResult.Rejected.INSTANCE;
         if (mark != SamlReplayCache.MarkResult.MARKED)
             return pendingConsumed ? SamlLogoutResult.Indeterminate.INSTANCE : SamlLogoutResult.Unavailable.INSTANCE;
-        return SamlLogoutStatus.SUCCESS.uri().equals(code)
-                ? SamlLogoutResult.Succeeded.INSTANCE : SamlLogoutResult.StatusReceived.NON_SUCCESS;
+        if (checkedStatus.plainSuccess()) return SamlLogoutResult.Succeeded.INSTANCE;
+        return checkedStatus.partialLogout() ? SamlLogoutResult.StatusReceived.PARTIAL_LOGOUT
+                : SamlLogoutResult.StatusReceived.NON_SUCCESS;
     }
 
     /**
@@ -977,9 +984,10 @@ public final class SamlServiceProvider {
         if (issued == null || latestIssue == null || expiry == null
                 || issued.isAfter(latestIssue) || now.isAfter(expiry))
             return new SamlAuthenticationResult.Rejected(SamlAuthenticationResult.Reason.RESPONSE_AGE);
-        String code = SamlResponseSemantics.flatStatusCode(shape.getStatus());
-        if (code == null || SamlLogoutStatus.SUCCESS.uri().equals(code))
+        SamlResponseSemantics.Status status = SamlResponseSemantics.inspectStatus(shape.getStatus());
+        if (status == null || SamlLogoutStatus.SUCCESS.uri().equals(status.primary()))
             return new SamlAuthenticationResult.Rejected(SamlAuthenticationResult.Reason.MESSAGE);
+        String code = status.authenticationCode();
         SamlAuthenticationResult.StatusCode classification = switch (code) {
             case "urn:oasis:names:tc:SAML:2.0:status:AuthnFailed" ->
                     SamlAuthenticationResult.StatusCode.AUTHN_FAILED;
@@ -1097,7 +1105,7 @@ public final class SamlServiceProvider {
         /**
          * Configures this option.
          *
-         * @param value HTTPS ACS URL
+         * @param value HTTPS ACS URL, at most 2048 characters in ASCII URI form
          * @return this builder
          * @since 1.0.0
          */
@@ -1108,7 +1116,7 @@ public final class SamlServiceProvider {
         /**
          * Configures the public SP HTTP-Redirect logout receiver.
          *
-         * @param value HTTPS logout URI, or null to disable Redirect logout
+         * @param value HTTPS logout URI of at most 2048 ASCII URI characters, or null to disable Redirect logout
          * @return this builder
          * @since 1.0.0
          */
@@ -1119,7 +1127,7 @@ public final class SamlServiceProvider {
         /**
          * Configures the public SP HTTP-POST logout receiver.
          *
-         * @param value HTTPS logout URI, or null to disable POST logout
+         * @param value HTTPS logout URI of at most 2048 ASCII URI characters, or null to disable POST logout
          * @return this builder
          * @since 1.0.0
          */
@@ -1282,18 +1290,24 @@ public final class SamlServiceProvider {
                 throw new IllegalStateException("Global XML signature secure validation is disabled; "
                         + "set acknowledgeGlobalSecureValidationDisabled(true) to accept this runtime");
             URI acs = assertionConsumerServiceUrl;
-            if (acs == null || !"https".equalsIgnoreCase(acs.getScheme()) || acs.getHost() == null
+            if (acs == null || !PendingSamlAuthenticationCodec.fitsText(acs.toString(), 2048)
+                    || !PendingSamlAuthenticationCodec.fitsText(acs.toASCIIString(), 2048)
+                    || !"https".equalsIgnoreCase(acs.getScheme()) || acs.getHost() == null
                     || acs.getRawUserInfo() != null || acs.getRawFragment() != null)
                 throw new IllegalStateException("HTTPS ACS URL is required");
             if (singleLogoutServiceUrl != null
-                    && (!"https".equalsIgnoreCase(singleLogoutServiceUrl.getScheme())
+                    && (!PendingSamlAuthenticationCodec.fitsText(singleLogoutServiceUrl.toString(), 2048)
+                        || !PendingSamlAuthenticationCodec.fitsText(singleLogoutServiceUrl.toASCIIString(), 2048)
+                        || !"https".equalsIgnoreCase(singleLogoutServiceUrl.getScheme())
                         || singleLogoutServiceUrl.getHost() == null
                         || singleLogoutServiceUrl.getRawUserInfo() != null
                         || singleLogoutServiceUrl.getRawFragment() != null
                         || singleLogoutServiceUrl.getRawQuery() != null))
                 throw new IllegalStateException("Invalid HTTPS SAML logout URL");
             if (postSingleLogoutServiceUrl != null
-                    && (!"https".equalsIgnoreCase(postSingleLogoutServiceUrl.getScheme())
+                    && (!PendingSamlAuthenticationCodec.fitsText(postSingleLogoutServiceUrl.toString(), 2048)
+                        || !PendingSamlAuthenticationCodec.fitsText(postSingleLogoutServiceUrl.toASCIIString(), 2048)
+                        || !"https".equalsIgnoreCase(postSingleLogoutServiceUrl.getScheme())
                         || postSingleLogoutServiceUrl.getHost() == null
                         || postSingleLogoutServiceUrl.getRawUserInfo() != null
                         || postSingleLogoutServiceUrl.getRawFragment() != null

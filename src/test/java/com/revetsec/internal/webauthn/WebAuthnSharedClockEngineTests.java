@@ -169,7 +169,7 @@ final class WebAuthnSharedClockEngineTests {
         var key=WebAuthnStoreKey.forAccountFence(NAMESPACE,RP,HANDLE);assertFalse(new WebAuthnAccountFence(NAMESPACE,RP,f.records).decode(key,f.record(key).getSealedBytes(),f.authorityClock()).isActive());
     }
     @Test void rawPermanentResealKeepsKnownCommitAfterPermitCloseFailureAndReadsNoFinalCheckpoint() throws Exception {
-        F f=new F();prepared(f.begin(HANDLE));var key=WebAuthnStoreKey.forAccountFence(NAMESPACE,RP,HANDLE);Instant before;
+        F f=new F();f.enroll();var key=WebAuthnStoreKey.forAccountFence(NAMESPACE,RP,HANDLE);Instant before;
         try(var decoded=f.decoded(key)){before=decoded.floor();}f.advance(Duration.ofSeconds(3));f.reset();f.gate.failClose.set(true);
         var receipt=f.engine.resealStoreEntry(key);assertEquals(WebAuthnStoreCommitResult.COMMITTED,receipt.getStatus());assertTrue(receipt.getTiming().isPresent());
         assertEquals(1,f.store.reads.get());assertEquals(1,f.store.writes.size());try(var decoded=f.decoded(key)){assertEquals(before,decoded.floor());}
@@ -244,6 +244,42 @@ final class WebAuthnSharedClockEngineTests {
         f.store.afterCommit=(n,w,r)->WebAuthnStoreCommitReceipt.unknownInstance();assertEquals(WebAuthnStoreCommitResult.UNKNOWN,f.engine.resealStoreEntry(f.root()).getStatus());assertEquals(1,f.store.writes.size());assertEquals(1,f.store.reads.get());
     }
     private static void pause(){try{Thread.sleep(200);}catch(InterruptedException e){Thread.currentThread().interrupt();throw new IllegalStateException(e);}}
+
+    @org.junit.jupiter.api.TestFactory
+    @NonNull List<org.junit.jupiter.api.@NonNull DynamicTest> scApi02ErrorProfileCannotChangeAtReceiptOrFinalRead(){
+        List<org.junit.jupiter.api.DynamicTest> tests=new ArrayList<>();
+        for(Duration initial:List.of(Duration.ZERO,Duration.ofMillis(250)))for(String stage:List.of("CONTROL","VALIDATION","FINAL")){
+            Duration changed=initial.isZero()?Duration.ofMillis(250):Duration.ZERO;
+            tests.add(org.junit.jupiter.api.DynamicTest.dynamicTest("SC-API-02/WEBAUTHN/"+stage+"/"+initial,()->{
+                F f=new F();
+                f.store.afterRead=(n,result)->{
+                    var snapshot=assertInstanceOf(WebAuthnStoreReadResult.Available.class,result).getSnapshot();
+                    var time=assertInstanceOf(StoreTimeObservation.Healthy.class,snapshot.getTimeObservation());
+                    Duration error=stage.equals("FINAL") && n==2?changed:initial;
+                    return WebAuthnStoreReadResult.Available.fromSnapshot(WebAuthnStoreSnapshot.fromEntries(snapshot.getEntries().keySet(),snapshot.getEntries(),
+                        StoreTimeObservation.Healthy.fromObservation(time.getAdmission(),time.getClockGeneration(),time.getObservedAt(),error)));
+                };
+                f.store.afterCommit=(n,write,receipt)->{
+                    var time=receipt.getTiming().orElseThrow().getValidatedTime();
+                    return WebAuthnStoreCommitReceipt.fromCommittedTiming(StoreCommitTiming.fromTimes(
+                        StoreTimeObservation.Healthy.fromObservation(time.getAdmission(),time.getClockGeneration(),time.getObservedAt(),stage.equals("VALIDATION")?changed:initial),null));
+                };
+                var result=f.begin(HANDLE);
+                assertEquals(stage.equals("CONTROL")?WebAuthnEngine.Status.PREPARED:WebAuthnEngine.Status.RECONCILIATION_REQUIRED,result.status());
+                if(!stage.equals("CONTROL"))assertNull(result.request());
+                assertEquals(1,f.store.writes.size());assertEquals(stage.equals("VALIDATION")?1:2,f.store.reads.get());
+                assertFalse(f.source.records().isEmpty());
+            }));
+        }
+        return tests;
+    }
+    @Test void scApi02InvalidLocalHandleDoesNotLookUpStoreOrChangeState(){
+        F f=new F();
+        for(byte[] handle:List.of(new byte[0],new byte[65])){
+            assertThrows(IllegalArgumentException.class,()->f.engine.beginRegistration(handle,BINDING));
+            assertEquals(0,f.store.reads.get());assertTrue(f.store.writes.isEmpty());assertTrue(f.source.records().isEmpty());
+        }
+    }
     private static @NonNull WebAuthnStoreCommitReceipt refusal(@NonNull WebAuthnStoreCommitResult status){return WebAuthnStoreCommitReceipt.fromRefusal(status);}
     private static WebAuthnEngine.@NonNull Request prepared(WebAuthnEngine.@NonNull Start result){assertEquals(WebAuthnEngine.Status.PREPARED,result.status());return Objects.requireNonNull(result.request());}
     private static void assertRecordsSame(@NonNull Map<@NonNull WebAuthnStoreKey,WebAuthnStoreEntry.@NonNull Present> first,@NonNull Map<@NonNull WebAuthnStoreKey,WebAuthnStoreEntry.@NonNull Present> second){assertEquals(first.keySet(),second.keySet());for(var key:first.keySet()){assertArrayEquals(Objects.requireNonNull(first.get(key)).getVersion(),Objects.requireNonNull(second.get(key)).getVersion());assertArrayEquals(Objects.requireNonNull(first.get(key)).getSealedBytes(),Objects.requireNonNull(second.get(key)).getSealedBytes());}}

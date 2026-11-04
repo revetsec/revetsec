@@ -32,12 +32,13 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
 final class ConcurrentLruMapTests {
+    static final @NonNull String CAPACITY_CONTRACT_NOTE = " * <p>\n * Capacity is a maintenance target, not a strict retained-entry bound under concurrent writes.\n * A writer can publish a mapping and return while another thread owns maintenance; both the\n * backing map and its lossless write queue can then exceed that target until maintenance runs.\n * Use this class only behind the private serialized client-metadata cache, which evicts before\n * insertion and drains every mutation. A new production consumer requires its own bounded-admission\n * review; approximate LRU order and Map thread safety do not establish a storage quota.\n";
     private static @NonNull ConcurrentLruMap<@NonNull Integer, @NonNull String> map() {
         return new ConcurrentLruMap<>(3);
     }
 
     @Test
-    void upstreamSourceAndAnnotationOnlyEditsArePinned() throws Exception {
+    void upstreamSourceAndCapacityDocumentationArePinned() throws Exception {
         String upstream =
                 Files.readString(
                         Path.of("src/test/resources/cache-reuse/ConcurrentLruMap.soklet.java.txt"));
@@ -52,7 +53,8 @@ final class ConcurrentLruMapTests {
                                         .digest(
                                                 upstream.getBytes(
                                                         java.nio.charset.StandardCharsets.UTF_8))));
-        assertEquals(normalize(upstream), normalize(current));
+        assertTrue(current.contains(CAPACITY_CONTRACT_NOTE));
+        assertEquals(normalize(upstream), normalize(current.replace(CAPACITY_CONTRACT_NOTE, "")));
     }
 
     private static @NonNull String normalize(@NonNull String source) {

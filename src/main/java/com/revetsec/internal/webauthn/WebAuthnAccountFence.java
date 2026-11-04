@@ -28,8 +28,9 @@ import java.util.Arrays;
 import static java.util.Objects.requireNonNull;
 
 /**
- * Key-bound active/disabled account fence. Absence does not mean active. The application must
- * coordinate account disable and reopening with this authoritative versioned record; the store
+ * Key-bound permanent active/disabled account fence. Absence does not mean active; tentative
+ * registration establishes an active fence only with its first committed credential/index.
+ * The application must coordinate account disable with this authoritative versioned record; the store
  * version is the race predicate, and the external recovery marker handles authentic rollback.
  */
 @Immutable

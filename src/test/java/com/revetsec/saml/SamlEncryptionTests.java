@@ -132,7 +132,7 @@ final class SamlEncryptionTests {
         SamlCredential decryption = credential();
         SamlServiceProvider sp = SamlServiceProvider.withEntityId("https://sp.example.test/saml")
                 .assertionConsumerServiceUrl(URI.create("https://sp.example.test/acs"))
-                .replayCache(InMemorySamlReplayCache.withLimit(CLOCK, 64))
+                .replayCache(InMemorySamlReplayCache.fromLimit(CLOCK, 64))
                 .decryptionCredentials(List.of(decryption)).clock(CLOCK).build();
         SamlIdentityProvider idp = SamlIdentityProvider.withEntityId("https://idp.example.test/saml")
                 .connectionId("tenant-one").redirectSingleSignOnService(URI.create("https://idp.example.test/sso"))
@@ -227,7 +227,7 @@ final class SamlEncryptionTests {
         SamlCredential decryption = credential();
         SamlServiceProvider sp = SamlServiceProvider.withEntityId("https://sp.example.test/saml")
                 .assertionConsumerServiceUrl(URI.create("https://sp.example.test/acs"))
-                .replayCache(InMemorySamlReplayCache.withLimit(CLOCK, 4))
+                .replayCache(InMemorySamlReplayCache.fromLimit(CLOCK, 4))
                 .decryptionCredentials(List.of(decryption)).clock(CLOCK).build();
         SamlIdentityProvider idp = SamlIdentityProvider.withEntityId("https://idp.example.test/saml")
                 .connectionId("tenant-one").redirectSingleSignOnService(URI.create("https://idp.example.test/sso"))
@@ -354,9 +354,12 @@ final class SamlEncryptionTests {
                 XmlEncryptionDecryptor.decrypt(encryptedElement(eightKeys),
                         List.of(credential.privateKey()), false, false, new SecureRandom()));
         String eightUnreferencedKeys = eightKeys.replace(reference, "");
+        assertNull(XmlEncryptionDecryptor.decrypt(encryptedElement(eightUnreferencedKeys),
+                List.of(credential.privateKey()), false, false, new SecureRandom()));
+        // Multiple effective candidates require an already verified enclosing signature.
         assertArrayEquals("<a:Assertion ID='_checked'/>".getBytes(StandardCharsets.UTF_8),
                 XmlEncryptionDecryptor.decrypt(encryptedElement(eightUnreferencedKeys),
-                        List.of(credential.privateKey()), false, false, new SecureRandom()));
+                        List.of(credential.privateKey()), true, false, new SecureRandom()));
         String eightReferences = referenced.replace(reference, reference.repeat(8));
         assertArrayEquals("<a:Assertion ID='_checked'/>".getBytes(StandardCharsets.UTF_8),
                 XmlEncryptionDecryptor.decrypt(encryptedElement(eightReferences),

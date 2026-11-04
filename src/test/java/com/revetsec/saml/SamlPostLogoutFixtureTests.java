@@ -88,7 +88,7 @@ final class SamlPostLogoutFixtureTests {
                 resource("keys/sp-signing-rsa-2048-cert.pem"));
         return SamlServiceProvider.withEntityId(SP).assertionConsumerServiceUrl(URI.create("https://sp.test/acs"))
                 .postSingleLogoutServiceUrl(URI.create(SLO)).signingCredential(credential)
-                .replayCache(InMemorySamlReplayCache.withLimit(CLOCK, 8)).clock(CLOCK).build();
+                .replayCache(InMemorySamlReplayCache.fromLimit(CLOCK, 8)).clock(CLOCK).build();
     }
 
     private static @NonNull SamlIdentityProvider identityProvider() throws Exception {

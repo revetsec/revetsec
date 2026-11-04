@@ -1,0 +1,18 @@
+{
+  "client": {
+    "version": "1.57.0",
+    "commit": "30bba95105e59bc3e7df624cf6b4d433690cfe12",
+    "releaseUrl": "https://github.com/aaif-goose/goose/releases/tag/v1.57.0",
+    "archiveUrl": "https://github.com/aaif-goose/goose/releases/download/v1.57.0/goose-aarch64-unknown-linux-gnu.tar.bz2",
+    "archiveSha256": "17c6b090db6acc5605da904bbe19cc2765bc7a6786019d85a6d0a361de06dbf7",
+    "binarySha256": "9f595d283227a1196333655c7012ec5f7daf5fead63150545b377baf74da0edb"
+  },
+  "runtimeImage": "sha256:ccff4e2c9b4a150404caa459225165a269d8e0d828d77bd60a5fe85943f6fc42",
+  "sdk": {
+    "name": "rmcp",
+    "version": "3.4.1",
+    "archiveSha256": "5b6317cd8c13e3ec9033cf2aa5aa92cd743f0f4f8a93cddc42ea0ae6ce3b8898"
+  },
+  "clientMetadataSha256": "7f6cb1cf0fd391c1e2c1e732da91dbacf23215b5ae29609fa185e1fa28d8925e",
+  "protocolVersion": "2025-11-25"
+}

@@ -42,14 +42,14 @@ public final class PasswordHashingExample {
 
         PasswordPepperSource pepperSource = PasswordPepperSource.fromSnapshot(
                 PasswordPepperSnapshot.withActiveKey(pepper).build());
-        PasswordWorkGate workGate = PasswordWorkGate.withLimits(2, 131_072);
+        PasswordWorkGate workGate = PasswordWorkGate.fromInMemoryLimits(2, 131_072);
         PasswordHasher previousPolicy = PasswordHasher
-                .withArgon2id(Argon2idParameters.withCosts(19_456, 2, 1))
+                .withArgon2id(Argon2idParameters.fromCosts(19_456, 2, 1))
                 .workGate(workGate)
                 .pepperSource(pepperSource)
                 .build();
         PasswordHasher currentPolicy = PasswordHasher
-                .withArgon2id(Argon2idParameters.withCosts(65_536, 3, 4))
+                .withArgon2id(Argon2idParameters.fromCosts(65_536, 3, 4))
                 .workGate(workGate)
                 .pepperSource(pepperSource)
                 .build();

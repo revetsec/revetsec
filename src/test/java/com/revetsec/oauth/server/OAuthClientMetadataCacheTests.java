@@ -228,17 +228,19 @@ final class OAuthClientMetadataCacheTests {
                                     calls.incrementAndGet();
                                     return List.of();
                                 })
-                        .maximumCacheEntries(2)
                         .cache(custom);
         var explicit = b.build();
         assertSame(custom, explicit.getCache().orElseThrow());
         assertSame(custom, explicit.cacheForEngine());
         assertEquals(0, calls.get());
-        var reset = b.cache(null).build();
-        assertTrue(reset.getCache().isEmpty());
+        assertSame(b, b.cache(null));
+        assertThrows(IllegalStateException.class, b::build);
+        var local = InMemoryOAuthClientMetadataCache.fromMaximumEntries(2);
+        var reset = b.cache(local).build();
+        assertSame(local, reset.getCache().orElseThrow());
         var a = reset.cacheForEngine();
         var c = reset.cacheForEngine();
-        assertNotSame(a, c);
+        assertSame(a, c);
         assertEquals(
                 2, assertInstanceOf(InMemoryOAuthClientMetadataCache.class, a).getMaximumEntries());
         assertTrue(OAuthClientMetadataPolicy.disabledInstance().getCache().isEmpty());
@@ -349,9 +351,9 @@ final class OAuthClientMetadataCacheTests {
     }
 
     @Test
-    void explicitSharedProviderSelectionsShareStorageWhileDefaultSelectionsDoNot() {
+    void explicitlySelectedCachesShareOnlyWhenTheSameBackendIsReused() {
         var shared = InMemoryOAuthClientMetadataCache.fromMaximumEntries(4);
-        var p = OAuthClientMetadataPolicy.fromAddressResolver((h, t) -> List.of());
+        var p = OAuthClientMetadataPolicy.fromAddressResolverAndCache((h, t) -> List.of(), InMemoryOAuthClientMetadataCache.fromMaximumEntries(128));
         var q =
                 OAuthClientMetadataPolicy.withAddressResolver((h, t) -> List.of())
                         .cache(shared)
@@ -361,7 +363,10 @@ final class OAuthClientMetadataCacheTests {
         assertTrue(a.compareAndSet(key(1), null, entry(1, 1), WAIT));
         assertTrue(b.read(key(1), WAIT).isPresent());
         var localA = p.cacheForEngine();
-        var localB = p.cacheForEngine();
+        var independent = OAuthClientMetadataPolicy.fromAddressResolverAndCache(
+                (h, t) -> List.of(), InMemoryOAuthClientMetadataCache.fromMaximumEntries(128));
+        var localB = independent.cacheForEngine();
+        assertSame(localA, p.cacheForEngine());
         assertTrue(localA.compareAndSet(key(1), null, entry(1, 1), WAIT));
         assertTrue(localB.read(key(1), WAIT).isEmpty());
         var other =

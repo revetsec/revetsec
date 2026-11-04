@@ -102,7 +102,7 @@ Revetsec's exceptions are `Serializable`, as every Java `Throwable` is, but Reve
 
 Revetsec's security invariants are published in this section as the code that upholds them lands, each with a stable ID. The [threat model](https://github.com/revetsec/revetsec/blob/main/docs/threat-model.md) maps each one to the tests and build checks that enforce it, and states its scope; a test checks that every invariant listed here is in that map. The consolidated release review will check the newer OIDC, resource-server, issuer and WebAuthn rows against the final API and claims.
 
-- **INV-G1** Every public parse or validate entry point returns a validated value or throws a documented `RevetsecException`, and no other `Throwable` escapes, whatever the input.
+- **INV-G1** Expected untrusted-input failures use the documented sealed results or opaque rejection boundary. Infrastructure, programmer misuse and fatal VM errors retain their documented behavior; only success releases checked values.
 - **INV-G2** Size is checked before decoding, at every stage.
 - **INV-G3** Nesting depth is bounded by explicit counters.
 - **INV-G4** Every attacker-influenced work factor is bounded or unsupported.
@@ -111,9 +111,9 @@ Revetsec's security invariants are published in this section as the code that up
 - **INV-G7** Random values Revetsec generates, such as sealing salts and IVs, come from `SecureRandom`.
 - **INV-G8** Secrets and MACs are compared in constant time.
 - **INV-G9** No secret or personal data appears in any exception or log message, `toString()` or observer event.
-- **INV-G10** JCA algorithm names are pinned and JCA providers are not, so Revetsec works with any JCA provider, including hardware-backed and approved-mode ones. Each message is parsed exactly once.
+- **INV-G10** XML parsing/signature machinery and JCA algorithm names are pinned; JCA signing providers are not pinned. Provider faults fail closed. Source and JDK-provider tests do not qualify an untested hardware/provider profile.
 - **INV-G11** In JOSE validation, token content never chooses an outbound destination, and an unknown key causes at most one refetch of the configured JSON Web Key Set URI per cooldown. The optional OAuth issuer CIMD profile accepts a client metadata URL from `client_id` under its separate address-pinned fetch policy.
-- **INV-G12** Time checks use the injected `Clock`, with a documented clock skew.
+- **INV-G12** Message time checks use the configured clock/skew; shared authoritative transitions additionally require admitted store time, durable floors and recovery continuity. Elapsed deadlines use monotonic time.
 - **INV-J1** A JWT's signature algorithm must be one the application allows (RS256 alone by default), matched exactly and case-sensitively; `none` cannot be represented.
 - **INV-J2** A key serves only the algorithms of its key type and curve, and a public key is never used as an HMAC key.
 - **INV-J3** A JSON Web Key is used only for verification, only for its own `alg`, and never when it carries private or symmetric members. An RSA key without `alg` is used only while exactly one RSA algorithm is allowed.
@@ -123,8 +123,13 @@ Revetsec's security invariants are published in this section as the code that up
 - **INV-J7** Compact parsing counts a token's separators before splitting it, and base64url input must be in canonical form.
 - **INV-J8** A JWT's `typ` is checked per profile, as a media type compared ASCII case-insensitively.
 - **INV-J9** A JSON Web Key Set is bound to one URI and holds no issuer. An unknown key refreshes it at most once per cooldown, for all concurrent callers; a removed key stops verifying; stale keys are served for a bounded time; and a JWT without `kid` needs exactly one compatible key.
+- **INV-C1** The OIDC ID-token profile validates signature, exact issuer/audience/client binding, nonce, time and requested authentication context before creating an identity. INV-I1 remains the end-to-end result summary.
+- **INV-C2** Present at_hash and c_hash bind the exact access token and authorization code. The left half of the digest follows the signing algorithm; the implemented Ed25519 profile uses SHA-512. This rule does not permit c_hash in a refreshed ID token.
+- **INV-C3** Authentication exposes the exact validated issuer and issuer-scoped subject. Applications key accounts by that pair and never by email. getEmailVerified is empty unless the claim is a JSON boolean; parsing a present email value does not verify ownership or link accounts.
+- **INV-C4** UserInfo is associated only with the exact subject of the original validated ID token, including after refresh; it cannot create an identity from an unrelated subject. INV-I2 also records the separate tenant-policy boundary.
+- **INV-C5** A refreshed ID token preserves issuer, subject, audience recipient set and authorized party. Issued-at cannot predate the original; nonce and auth_time may be omitted but cannot contradict original present values. A restored session reference is nonidentity; refresh without an ID token creates no new identity, and c_hash is rejected on refresh. INV-I3 summarizes stored continuity.
 - **INV-C6** A JSON Web Key with an `issuer` member verifies only JWTs whose `iss` equals it. The one exception is Microsoft Entra ID's exact `{tenantid}` template, which matches only the token's own tenant.
-- **INV-O1** OAuth pending state binds the code-flow parameters and initiating browser through a sealed source or an atomic store; the latter consumes once. The M3 scope and OIDC-only fields still owed are listed in the threat model.
+- **INV-O1** OAuth pending state binds the initiated code-flow parameters and browser through a sealed source or atomic store; store consumption is single-use.
 - **INV-O2** Every authorization-code flow sends a fresh PKCE S256 challenge and never sends `plain`.
 - **INV-O3** A callback issuer matches the initiating issuer exactly; a required issuer cannot be absent, and endpoint changes fail before code exchange.
 - **INV-O4** An authorization error surfaces only after local state, browser-binding, route and issuer validation.
@@ -133,17 +138,26 @@ Revetsec's security invariants are published in this section as the code that up
 - **INV-O7** Basic credentials form-encode the ID and secret before Base64 by default, and secrets never enter request URLs.
 - **INV-O8** The OAuth client yields raw credentials, never a verified identity.
 - **INV-O9** Metadata issuer matches the configured issuer exactly, and each requestable endpoint passes the outbound URI policy.
+- **INV-O10** Introspection authorizes an active result only when active is the JSON literal true. Strings, numbers, null, missing members and malformed provider data do not become active tokens; provider failures remain distinct from a credential rejection.
 - **INV-I1** OIDC authentication releases an identity only after ID-token signature, issuer, audience, nonce and time checks bind it to the initiated browser flow.
 - **INV-I2** UserInfo and Microsoft Entra tenant policy cannot substitute another subject or tenant for the authenticated ID token.
 - **INV-I3** Refresh and restored OIDC session references remain bound to the original issuer, client and authenticated subject.
 - **INV-R1** A syntactically parsed bearer token is not authorization; resource validation checks signature or active introspection, issuer, audience, time and application scopes.
-- **INV-R2** Introspection failures do not create active tokens, and one caller's 4xx response does not disable the endpoint for other tokens.
+- **INV-R2** Introspection failures do not create active tokens. Request-specific client errors do not disable the endpoint for other tokens; shared health backoff opens immediately for 401/429 or transport failure, or after three 5xx responses within one cooldown window. Blocked callers receive fresh infrastructure failures rather than another request's endpoint rejection.
 - **INV-A1** Authorization-server requests bind registered clients, exact redirects, S256 PKCE, resources and browser consent before issuing a code.
 - **INV-A2** Code, refresh and revocation transitions use authoritative conditional commits; failed or uncertain writes release no new credential or authentication proof.
 - **INV-A3** Issuer signing keys are checked before use, public metadata exposes no private key, and publication/retirement windows govern signing.
 - **INV-W1** WebAuthn registration and assertion verification bind the exact RP ID, origin, challenge, browser ceremony, user presence, user verification and credential signature.
 - **INV-W2** Ceremonies are single use and account-bound; sensitive reauthentication requires the expected ceremony kind, user handle and action purpose.
 - **INV-W3** Credential transitions use conditional store writes and a recovery admission gate; unknown outcomes do not release authentication proof.
+- **INV-WA1** WebAuthn binds the configured HTTPS origin exactly, with RP-host or dot-delimited child hosts, RP-ID hash, ceremony type/challenge, browser/namespace and expiry. An origin allowlist is not wildcard trust; unlisted descendants, suffix lookalikes, HTTP/IP origins and cross-origin contexts reject.
+- **INV-WA2** Assertion verification uses the authoritative stored key and selected algorithm, the exact authenticatorData/clientDataJSON hash and bounded key/signature shapes. Browser input cannot substitute another key or algorithm. Local JCA tests do not qualify hardware/provider behavior.
+- **INV-WA3** The selected discoverable-credential profile requires user presence and verification, resident-key enrollment, user-handle/credential ownership and the pinned account/action for reauthentication. Options and parsed browser carriers are not authentication proofs.
+- **INV-WA4** Challenge consumption and required credential/counter state commit atomically under exact conditions before proof release. No-effect failures, unknown effects and confirmed commits requiring reconciliation have distinct outcomes; a later matching row cannot turn an unknown outcome into success.
+- **INV-WA5** Raw JSON/base64url/CBOR/COSE inputs have byte, length, nesting and work bounds. Duplicate, truncated/trailing, inconsistent-identifier and unsupported structures reject before proof. Parser and fixture evidence does not qualify an untested browser extension profile.
+- **INV-WA6** Backup flags and signature counters follow the explicit stored-state policy only after valid signature verification. Permitted synced/zero-counter cases do not establish clone detection from a counter alone.
+- **INV-WA7** Only successful service results release a verification proof; failed or reconciliation outcomes release none. Diagnostics/observers redact browser payloads and credential/account identifiers. The protocol uses public keys and authenticator outputs; it does not request biometric data or private keys.
+- **INV-WA8** Authoritative account/credential records prevent reassignment; removal keeps a permanent tombstone and fences pending assertions. Recovery and time admission remain required. These local/reference-store tests do not qualify an application durable backend, cross-node restart, rollback/restore control, trusted startup UTC or physical-authenticator profile; those deployment obligations remain open until separately qualified.
 - **INV-SEC1** New password hashes use bounded Argon2id work; stored parameters are checked before KDF work, pepper policy fails closed, and legacy bcrypt/PBKDF2 paths verify only.
 - **INV-SEC5** Confirmed TOTP factors and one-use recovery codes use atomic, epoch-fenced transitions; uncertain or stale-gate outcomes release no factor proof or recovery plaintext.
 - **INV-S1** SAML XML parsing refuses DTDs and verification reads the original parsed DOM.

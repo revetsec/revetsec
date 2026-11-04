@@ -101,7 +101,7 @@ final class PlaygroundSaml {
                 .assertionConsumerServiceUrl(config.origin.resolve("/saml/acs"))
                 .singleLogoutServiceUrl(config.origin.resolve("/saml/slo"))
                 .signingCredential(signing).decryptionCredentials(decryption)
-                .replayCache(InMemorySamlReplayCache.withLimit(clock, 1024)).clock(clock).build();
+                .replayCache(InMemorySamlReplayCache.fromLimit(clock, 1024)).clock(clock).build();
         SamlServiceProviderMetadataResult generated = SamlServiceProviderMetadata.fromServiceProviderResult(sp);
         if (!(generated instanceof SamlServiceProviderMetadataResult.Generated ready))
             throw new IllegalArgumentException("SAML SP metadata is unavailable.");

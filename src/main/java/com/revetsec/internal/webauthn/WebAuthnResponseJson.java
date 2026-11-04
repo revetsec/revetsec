@@ -41,6 +41,8 @@ import static java.util.Objects.requireNonNull;
  * Bounded decoder of the browser's {@code PublicKeyCredential.toJSON()} registration and assertion shapes. It checks
  * client data against a caller-held ceremony challenge, but returns no registration or authentication proof. Store
  * state, single-use challenge consumption and (for assertions) the stored-key signature check remain required.
+ * The selected client-extension profile is exactly credProps.rk=true at registration and an
+ * empty object at authentication. Additional client outputs are rejected, not silently discarded.
  */
 @Immutable
 final class WebAuthnResponseJson {

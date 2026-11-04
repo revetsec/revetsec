@@ -103,7 +103,7 @@ public final class PasswordHasher {
                 secret = key.copyKeyBytes();
             }
             PasswordWorkGate.Permit permit = workGate.tryAcquire(parameters.getMemoryKiB());
-            if (permit == null) return PasswordHashResult.unavailable(PasswordUnavailableReason.WORK_CAPACITY);
+            if (permit == null) return PasswordHashResult.unavailable(workAdmissionFailureReason());
             try (permit) {
                 if (Thread.currentThread().isInterrupted())
                     return PasswordHashResult.unavailable(PasswordUnavailableReason.INTERRUPTED);
@@ -164,7 +164,7 @@ public final class PasswordHasher {
                     secret = key.copyKeyBytes();
                 }
                 PasswordWorkGate.Permit permit = workGate.tryAcquire(form.memoryKiB());
-                if (permit == null) return PasswordVerificationResult.unavailable(PasswordUnavailableReason.WORK_CAPACITY);
+                if (permit == null) return PasswordVerificationResult.unavailable(workAdmissionFailureReason());
                 try (permit) {
                     if (Thread.currentThread().isInterrupted())
                         return PasswordVerificationResult.unavailable(PasswordUnavailableReason.INTERRUPTED);
@@ -217,7 +217,7 @@ public final class PasswordHasher {
             if (input.length > 72)
                 return PasswordVerificationResult.rejected(PasswordRejectionReason.LEGACY_BCRYPT_INPUT_TOO_LONG);
             PasswordWorkGate.Permit permit = workGate.tryAcquire(0);
-            if (permit == null) return PasswordVerificationResult.unavailable(PasswordUnavailableReason.WORK_CAPACITY);
+            if (permit == null) return PasswordVerificationResult.unavailable(workAdmissionFailureReason());
             try (permit) {
                 LegacyPasswordVerifier.Result result = LegacyPasswordVerifier.verifyBcrypt(input, storedForm,
                         maximumBcryptLogRounds);
@@ -258,7 +258,7 @@ public final class PasswordHasher {
         byte[] tagCopy = expectedTag.clone();
         try {
             PasswordWorkGate.Permit permit = workGate.tryAcquire(0);
-            if (permit == null) return PasswordVerificationResult.unavailable(PasswordUnavailableReason.WORK_CAPACITY);
+            if (permit == null) return PasswordVerificationResult.unavailable(workAdmissionFailureReason());
             try (permit) {
                 LegacyPasswordVerifier.Result result = LegacyPasswordVerifier.verifyPbkdf2(input,
                         hmac.jcaName(), iterations, saltCopy, tagCopy, maximumPbkdf2Iterations);
@@ -271,6 +271,11 @@ public final class PasswordHasher {
             Arrays.fill(saltCopy, (byte) 0);
             Arrays.fill(tagCopy, (byte) 0);
         }
+    }
+
+    private static @NonNull PasswordUnavailableReason workAdmissionFailureReason() {
+        return Thread.currentThread().isInterrupted()
+                ? PasswordUnavailableReason.INTERRUPTED : PasswordUnavailableReason.WORK_CAPACITY;
     }
 
     private @Nullable PasswordPepperSnapshot pepperSnapshot() {

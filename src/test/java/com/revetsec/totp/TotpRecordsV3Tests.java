@@ -247,6 +247,20 @@ final class TotpRecordsV3Tests {
 		assertThrows(IllegalArgumentException.class, () -> new TotpRecordsV3.Namespace(AUTHORITY, MAX.plusNanos(1)));
 	}
 
+	@Test void scApi02RootAndAccountFloorsPreserveEveryCommonBoundaryWithoutRounding() throws Exception {
+		TotpRecordsV3 codec=new TotpRecordsV3(sealer("key"));
+		for(Instant time:List.of(Instant.EPOCH,Instant.EPOCH.plusNanos(1),Instant.ofEpochSecond(0,999999999),
+				Instant.ofEpochSecond(253402300799L),MAX.minusNanos(1),MAX)){
+			TotpStoreRecord root=codec.sealNamespace(ROOT,new TotpRecordsV3.Namespace(AUTHORITY,time));
+			try(var decoded=codec.open(root)){assertEquals(time,require(decoded.namespace).getMinimum());assertEquals(AUTHORITY,require(decoded.namespace).getAuthorityId());}
+			TotpRecords.Account account=new TotpRecords.Account("account-é",id(3),time);
+			try{
+				TotpStoreRecord row=codec.sealAccount(ACCOUNT,account);
+				try(var decoded=codec.open(row)){assertEquals(time,require(decoded.account).observedAt);}
+			}finally{account.erase();}
+		}
+	}
+
 	@Test void decoderRejectsInvalidFlagsCountsDuplicateChargesFutureChargeAndAccountBindings() throws Exception {
 		StateSealer sealer = sealer("key");
 		TotpRecordsV3 codec = new TotpRecordsV3(sealer);

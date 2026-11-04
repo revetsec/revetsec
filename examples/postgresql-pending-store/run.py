@@ -428,11 +428,31 @@ def main() -> None:
                     status, _, content = issuer_http("GET", "/jwks")
                     check(status == 503 and b'"keys"' not in content,
                           "application-early-key-removal-fails-closed")
+                    # A token whose key disappeared fails cryptographic recognition before store work.
                     try:
                         opener.open(Request(mcp_url, data=mcp_body, headers=mcp_headers,
                                             method="POST"), timeout=5)
+                    except HTTPError as removed_key:
+                        challenge = removed_key.headers.get("WWW-Authenticate", "")
+                        rejected_body = removed_key.read(32_768)
+                        check(removed_key.code == 401 and challenge.startswith("Bearer ")
+                              and 'error="invalid_token"' in challenge
+                              and b"Checked identity partition" not in rejected_body
+                              and app_rotated_access.encode("ascii") not in rejected_body,
+                              "application-removed-key-token-rejected")
+                        removed_key.close()
+                    else:
+                        check(False, "application-removed-key-token-rejected")
+                    # The retained-key token reaches admitted lifecycle checks and exposes the provider fault.
+                    retained_key_headers = {**mcp_headers, "Authorization": "Bearer " + next_access}
+                    try:
+                        opener.open(Request(mcp_url, data=mcp_body, headers=retained_key_headers,
+                                            method="POST"), timeout=5)
                     except HTTPError as unavailable:
-                        check(unavailable.code == 503 and unavailable.headers.get("WWW-Authenticate") is None,
+                        unavailable_body = unavailable.read(32_768)
+                        check(unavailable.code == 503 and unavailable.headers.get("WWW-Authenticate") is None
+                              and b"Checked identity partition" not in unavailable_body
+                              and next_access.encode("ascii") not in unavailable_body,
                               "application-early-key-removal-withholds-resource-admission")
                         unavailable.close()
                     else:
@@ -442,6 +462,16 @@ def main() -> None:
                         verdict = json.loads(response.read(32_768))
                         check(response.status == 200 and verdict.get("active") is True,
                               "application-key-overlap-recovers-after-rejection")
+                    for label, authorization in (("removed-key", mcp_headers),
+                                                  ("retained-key", retained_key_headers)):
+                        with opener.open(Request(mcp_url, data=mcp_body, headers=authorization,
+                                                 method="POST"), timeout=5) as response:
+                            recovered_body = response.read(32_768)
+                            check(response.status == 200 and b"Checked identity partition" in recovered_body
+                                  and response.headers.get("WWW-Authenticate") is None
+                                  and app_rotated_access.encode("ascii") not in recovered_body
+                                  and next_access.encode("ascii") not in recovered_body,
+                                  "application-key-overlap-recovers-" + label + "-resource")
                     check(run_app("established-refresh", app_refresh) == "REJECTED",
                           "application-used-refresh-rejected")
                     try:
@@ -463,7 +493,15 @@ def main() -> None:
                                                "code_challenge": "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
                                                "code_challenge_method": "S256"})
                     status, headers, page = issuer_http("GET", "/authorize?" + authorization)
+                    check(status == 200 and "set-cookie" not in headers and b"/session?" in page,
+                          "application-http-anonymous-authorization-does-not-allocate")
+                    status, headers, _ = issuer_http("POST", "/session?" + authorization, b"begin=1",
+                        {"Content-Type": "application/x-www-form-urlencoded", "Origin": origin})
                     first_cookie = headers.get("set-cookie", "").split(";", 1)[0]
+                    check(status == 303 and headers.get("location") == "/authorize?" + authorization,
+                          "application-http-explicit-session-admission")
+                    status, headers, page = issuer_http("GET", "/authorize?" + authorization,
+                                                       headers={"Cookie": first_cookie})
                     check(status == 200 and b"Demo login" in page
                           and bool(re.fullmatch(r"RevetsecIssuerDev=[A-Za-z0-9_-]+", first_cookie))
                           and headers.get("referrer-policy") == "same-origin",

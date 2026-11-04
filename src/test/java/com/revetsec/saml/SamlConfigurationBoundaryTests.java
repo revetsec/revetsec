@@ -232,7 +232,7 @@ final class SamlConfigurationBoundaryTests {
 
     private static SamlServiceProvider.@NonNull Builder validSp() {
         return SamlServiceProvider.withEntityId(SP).assertionConsumerServiceUrl(ACS)
-                .replayCache(InMemorySamlReplayCache.withLimit(Clock.systemUTC(), 4));
+                .replayCache(InMemorySamlReplayCache.fromLimit(Clock.systemUTC(), 4));
     }
 
     private static SamlIdentityProvider.@NonNull Builder validIdp(@NonNull KeyPair key) {

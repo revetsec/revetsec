@@ -38,7 +38,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: revetsec/revetsec-soklet
-          ref: 7f99a80a7971e47fb763d69cca36c74f4bc5e9b1
+          ref: 3bad3251bb9b3bd2baeecd5c55a41574c8ebb9b0
           path: .scim-inputs/adapter
           persist-credentials: false
 
@@ -79,7 +79,29 @@ jobs:
       - name: Build current SCIM core and pinned adapter
         run: |
           mvn -B -ntp -DskipTests -Dmaven.javadoc.skip=true -Dgpg.skip=true clean install
-          mvn -B -ntp -f .scim-inputs/adapter/pom.xml -DskipTests -Dmaven.javadoc.skip=true -Dgpg.skip=true clean install
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          import subprocess
+          from verification.examples import adapter_compatibility
+
+          root = Path.cwd()
+          adapter = root / ".scim-inputs/adapter"
+          revision = json.loads((root / "examples/pins.json").read_text())["adapter"]["revision"]
+          compatibility = adapter_compatibility.prepare_adapter(root, adapter, revision)
+          receipt = Path(os.environ["RUNNER_TEMP"]) / "ADAPTER-COMPATIBILITY.json"
+          receipt.write_text(json.dumps(compatibility, indent=2) + "\n")
+          try:
+              subprocess.run(["mvn", "-B", "-ntp", "-f", str(adapter / "pom.xml"),
+                              "-Dmaven.javadoc.skip=true", "-Dgpg.skip=true", "clean", "install"],
+                             check=True)
+          finally:
+              adapter_compatibility.assert_adapter_unchanged(adapter, compatibility)
+              receipt.write_text(json.dumps(compatibility, indent=2) + "\n")
+          adapter_compatibility.record_test_results(adapter, compatibility)
+          receipt.write_text(json.dumps(compatibility, indent=2) + "\n")
+          PY
 
       - name: Compile and test actual provisioning routes
         run: mvn -B -ntp -f examples/playground/pom.xml clean verify
@@ -108,6 +130,8 @@ jobs:
           name: scim-qualification-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             ${{ runner.temp }}/scim-qualification/
+            ${{ runner.temp }}/ADAPTER-COMPATIBILITY.json
+            .scim-inputs/adapter/target/surefire-reports/
             examples/playground/target/surefire-reports/
           if-no-files-found: warn
           retention-days: 90

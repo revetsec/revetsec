@@ -1,5 +1,26 @@
 # PostgreSQL storage examples
 
+## Build the Java recipes
+
+Install matching core, adapter and Soklet dependencies using the
+[parent Maven instructions](../README.md#build-with-maven), then build from the
+core repository root:
+
+```sh
+mvn -B -ntp -f examples/pom.xml -pl postgresql-pending-store -am verify
+```
+
+Maven resolves Pyranid and the PostgreSQL JDBC driver and compiles the store
+recipes and probes. The reactor also builds the example application hosts used
+by those probes. This command does not start PostgreSQL or run the failure
+scenarios below. Applications instantiate these stores with their own
+connection source, namespace, limits and coordinated recovery control.
+
+The optional Python runners below are test orchestration: they manage Docker,
+separate JVMs, races, outages, uncertain commits and authentic restores. They
+are not required to build or use the Java stores.
+
+
 **Closed migration/restore fixture — 2026-10-30:** see the unpublished [administrative migration fixture](../../verification/shared-clock-migration/README.md) for bounded inventory/fit, exact prepared batches, uncertain-outcome reconciliation and disposable retained-data/restore checks. This is a closed operator procedure, not an online schema upgrade. Structural activation does not grant timed service admission. Approved witness/profile evidence and target-specific deployment inventory/authorization remain required before any real migration.
 
 The fixture's adapter-join lane starts with the frozen legacy tables, including WebAuthn's `TIMESTAMPTZ`-only retention column. It derives exact retention from authenticated legacy payloads, preflights the prepared target before the first rewrite, and installs the current schema, namespace/admission metadata, registries, capacity reservations and version continuation in place. It then exercises these actual adapters against migrated rows under a scripted witness profile. Pending or uncertain schema/migration intent keeps admission closed. This closes the source integration checkpoint; it supplies no real-deployment UTC, durability or recovery qualification.
@@ -35,6 +56,15 @@ It persists Revetsec's bounded encrypted carriers exactly. Revetsec still authen
 var issuerStore = new PostgresqlIssuerStore("my_issuer", physicalNamespaceId,
     connectionSource, 100_000, trustedAuthority);
 ```
+
+The selected PostgreSQL issuer profile explicitly sets both the issuer record cap and its sealer cap to 16,384 bytes. Add these settings to the application's otherwise complete server builder:
+
+```java
+.stateSealer(StateSealer.withActiveKey(sealingKey).maximumSealedLength(16384).build())
+.maximumStoreRecordBytes(16384)
+```
+
+The library defaults remain 3,800 bytes. A deliberately narrower profile is valid; the SQL ceiling alone does not select the larger engine budget. The issuer cap cannot exceed the sealer cap, and every adapter instance must match the namespace's provisioned entry capacity. Configuration disagreement must refuse before data writes. The SQL issuer ceiling remains `octet_length(sealed_form) BETWEEN 1 AND 16384`; selecting it does not guarantee that every retained legacy row or aggregate inventory fits a migration. [The CAP-01 component runner](../../verification/capacity-profile/README.md) checks both fixture builders and all three issuer schema variants with disposable PostgreSQL.
 
 The authority is application-owned and independent of worker `Clock` and PostgreSQL wall time. Every participating JVM uses the same primary, admitted metadata, physical scope and sealing/recovery lifecycle. The connection source opens a fresh clean primary connection within the shrinking budget and preserves deployment TLS/certificate requirements. Pyranid 4.7.0 and the JDBC driver remain application dependencies. The fixture verifies primary `fsync`/`full_page_writes` and transaction-local synchronous COMMIT.
 
@@ -102,7 +132,7 @@ Supplying absolute `--browser-node`, `--browser-chrome` and `--browser-openssl` 
 
 For example, from the core checkout after building its JAR, use `python3 examples/postgresql-pending-store/run_webauthn.py --help` for the six required artifact paths, add `--soklet-jar /absolute/soklet-4.0.0.jar`, and pass the three browser tool paths. The browser lane needs an OpenSSL binary with `verify -verify_hostname`, Node with built-in WebSocket, Chrome with DevTools virtual-authenticator support, Docker and loopback sockets. The runner cleans up its private TLS directory, Chrome profile, container and volume.
 
-`WebAuthnFixtureRecoveryGate` is a test-only, one-host implementation of the application admission contract. It holds a shared OS file lock for each operation and compares a control-file epoch and sealing-key digest with the `webauthn_recovery_epoch` row. The runner proves an exclusive restore lock cannot pass a live permit, advances the external epoch, and restores an earlier PostgreSQL logical dump containing an unconsumed ceremony and active credential. Their exact stored state reappears, but the older database epoch cannot acquire a permit, so the public API releases no browser options, credential list or authentication proof. A changed sealing key also closes admission. The runner deliberately leaves this restored state closed; an operator would need a separately reviewed reconciliation and key procedure before reopening. The control file is only a local fixture stand-in for a separate durable, cross-host marker and lock; it does not qualify HA, crash durability, unsupervised rollback detection or a production restore process. Run `python3 run_webauthn.py --help` for the six artifact paths. Physical FIDO2-key evidence is separate from this synthetic storage fixture; see the [WebAuthn status](../../README.md#webauthn).
+`WebAuthnFixtureRecoveryGate` is a test-only, one-host implementation of the application admission contract. It holds a shared OS file lock for each operation and compares a control-file epoch and sealing-key digest with the `webauthn_recovery_epoch` row. The runner proves an exclusive restore lock cannot pass a live permit, advances the external epoch, and restores an earlier PostgreSQL logical dump containing an unconsumed ceremony and active credential. Their exact stored state reappears, but the older database epoch cannot acquire a permit, so the public API releases no browser options, credential list or authentication proof. A changed sealing key also closes admission. The runner deliberately leaves this restored state closed; an operator would need a separately reviewed reconciliation and key procedure before reopening. The control file is only a local fixture stand-in for a separate durable, cross-host marker and lock; it does not qualify HA, crash durability, unsupervised rollback detection or a production restore process. Run `python3 run_webauthn.py --help` for the six artifact paths. Physical FIDO2-key evidence is separate from this synthetic storage fixture; see the [WebAuthn status](../../README.md#webauthn-passkeys).
 
 `run.py` compiles the example with warning-fatal Java 17 settings and exercises duplicate, expiry, capacity, rollback fencing, browser binding, cross-JVM single use, lock timeout, database outage and restart against a cached disposable PostgreSQL image. A loopback-only synthetic token endpoint checks the authorization-code form and persisted PKCE verifier: a valid callback redeems once, replay and wrong-browser binding send no token request, and simultaneous callbacks in two JVMs produce exactly one redemption.
 
@@ -112,7 +142,7 @@ The runner also checks cross-JVM cache reads and compare-and-set races, bounded 
 
 To include the self-issued Soklet application lane, use JDK 21 or newer and also pass `--adapter-jar` for the matching Revetsec/Soklet helper and `--framework-jar` for the pinned Soklet 4.0.0 JAR. The runner compiles the current app source for Java 21 with the Pyranid store, then runs fresh and established application instances in separate JVMs against a dedicated PostgreSQL namespace. It checks an issued token across startup, refusal to reinitialize an established issuer, rejection with the wrong sealing key and refresh rotation across JVMs. An established Soklet process then serves OAuth metadata and JWKS over an actual loopback HTTP listener, returns an active introspection verdict, and accepts the persisted token on its MCP listener while denying a missing bearer. Refresh replay in another JVM revokes that token; the still-running Soklet process rejects its next MCP call and returns an inactive introspection verdict.
 
-The fixture's application-owned key provider reads an atomic generation marker from its private temporary directory. During a live Soklet process, the runner changes from the initial RSA signing key to a second ephemeral key while retaining the first public key through a declared retirement boundary. It verifies overlapping JWKS publication, new-key signing, continued old-token admission, and new-token admission from another JVM. An attempted removal of the old public key before that boundary makes JWKS and protected-resource admission unavailable; restoring the retained-key snapshot restores admission. This exercises Revetsec's observed lifecycle guard, not durable key distribution: an application must persist the generation, publication and retirement history and publish changes to all nodes before advancing its provider.
+The fixture's application-owned key provider reads an atomic generation marker from its private temporary directory. During a live Soklet process, the runner changes from the initial RSA signing key to a second ephemeral key while retaining the first public key through a declared retirement boundary. It verifies overlapping JWKS publication, new-key signing, continued old-token admission, and new-token admission from another JVM. An attempted early removal makes JWKS unavailable. A token signed by the removed key receives 401 with an invalid_token bearer challenge at cryptographic recognition; a token signed by the still-advertised key reaches the admitted lifecycle guard and receives 503 with no bearer challenge for the invalid provider declaration. Neither response releases a checked resource identity. Restoring the retained-key snapshot restores both tokens' resource admission. The two statuses identify different checkpoints; a 401 does not certify key-provider health. This exercises Revetsec's observed lifecycle guard, not durable key distribution: an application must persist generation, publication and retirement history and publish changes to all nodes before advancing its provider. See the [recognition and lifecycle boundary](../../docs/oauth-server-key-lifecycle.md#recognition-and-lifecycle-failures).
 
 The application fixture also runs two established Soklet JVMs at once. The second binds IPv6 loopback while the first binds IPv4 loopback, using the same issuer and resource ports and checked public Host values; the app's admission controller requires the configured public authority. A scripted HTTP client logs in on the first node, reads and approves consent on the second, redeems the code on the first, and calls the second node's MCP resource. A second consent submitted concurrently to both nodes has one redirect winner and one denial; its code redeems once. During a primary outage, both live nodes return unavailable for browser sessions and protected MCP access. This is a single-host, single-primary application fixture, not load-balancer, real-browser, cross-host or HA qualification.
 

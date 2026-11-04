@@ -34,8 +34,8 @@ final class PasswordStoredFormTests {
         for (int i = 0; i < salt.length; i++) salt[i] = (byte) (i + 1);
         for (int i = 0; i < tag.length; i++) tag[i] = (byte) (i + 41);
         PasswordVerificationLimits limits = PasswordVerificationLimits.fromDefaults();
-        String raw = PasswordStoredForm.encode(Argon2idParameters.withCosts(19_456, 2, 1), salt, tag, null);
-        String keyed = PasswordStoredForm.encode(Argon2idParameters.withCosts(19_456, 2, 1), salt, tag, "key-1");
+        String raw = PasswordStoredForm.encode(Argon2idParameters.fromCosts(19_456, 2, 1), salt, tag, null);
+        String keyed = PasswordStoredForm.encode(Argon2idParameters.fromCosts(19_456, 2, 1), salt, tag, "key-1");
         PasswordStoredForm rawParsed = PasswordStoredForm.parse(raw, limits);
         PasswordStoredForm keyedParsed = PasswordStoredForm.parse(keyed, limits);
         assertEquals(PasswordStoredForm.Status.VALID, rawParsed.status());
@@ -53,7 +53,7 @@ final class PasswordStoredFormTests {
         byte[] tag = new byte[32];
         Arrays.fill(salt, (byte) 1);
         Arrays.fill(tag, (byte) 2);
-        String canonical = PasswordStoredForm.encode(Argon2idParameters.withCosts(19_456, 2, 1), salt, tag, null);
+        String canonical = PasswordStoredForm.encode(Argon2idParameters.fromCosts(19_456, 2, 1), salt, tag, null);
         for (String malformed : new String[]{
                 canonical + "=",
                 canonical.replace("m=19456", "m=019456"),
@@ -94,7 +94,7 @@ final class PasswordStoredFormTests {
                 for (int i = 0; i < tag.length; i++) tag[i] = (byte) (i * 11 + 5);
                 for (String keyId : new String[]{"", "A", "k".repeat(64)}) {
                     String form = PasswordStoredForm.encode(
-                            Argon2idParameters.withCosts(19_456, 2, 1), salt, tag,
+                            Argon2idParameters.fromCosts(19_456, 2, 1), salt, tag,
                             keyId.isEmpty() ? null : keyId);
                     PasswordStoredForm parsed = PasswordStoredForm.parse(form, defaults);
                     try {
@@ -107,7 +107,7 @@ final class PasswordStoredFormTests {
             }
         }
 
-        String base = PasswordStoredForm.encode(Argon2idParameters.withCosts(19_456, 2, 1),
+        String base = PasswordStoredForm.encode(Argon2idParameters.fromCosts(19_456, 2, 1),
                 new byte[16], new byte[32], null);
         for (String accepted : new String[]{
                 base.replace("m=19456", "m=131072"),
@@ -137,9 +137,9 @@ final class PasswordStoredFormTests {
 
     @Test void singleCharacterMutationsOfBothNativeFormsRemainTotalAndCanonicalWhenAccepted() {
         PasswordVerificationLimits limits = PasswordVerificationLimits.fromDefaults();
-        String raw = PasswordStoredForm.encode(Argon2idParameters.withCosts(19_456, 2, 1),
+        String raw = PasswordStoredForm.encode(Argon2idParameters.fromCosts(19_456, 2, 1),
                 new byte[16], new byte[32], null);
-        String keyed = PasswordStoredForm.encode(Argon2idParameters.withCosts(19_456, 2, 1),
+        String keyed = PasswordStoredForm.encode(Argon2idParameters.fromCosts(19_456, 2, 1),
                 new byte[16], new byte[32], "key-A.1");
         char[] replacements = {'\0', '$', '=', ',', '+', '/', '0', '1', '9', 'A', 'a', '\uD800'};
         for (String seed : new String[]{raw, keyed}) {
@@ -161,15 +161,15 @@ final class PasswordStoredFormTests {
     }
 
     @Test void hostileStoredFormsDoNotConsultKeysOrEnterBusyKdfGate() {
-        PasswordWorkGate gate = PasswordWorkGate.withLimits(1, 19_456);
+        PasswordWorkGate gate = PasswordWorkGate.fromInMemoryLimits(1, 19_456);
         PasswordHasher hasher = PasswordHasher.withArgon2id(
-                Argon2idParameters.withCosts(19_456, 2, 1))
+                Argon2idParameters.fromCosts(19_456, 2, 1))
                 .workGate(gate)
                 .pepperSource(() -> { throw new AssertionError("Malformed form reached pepper source"); })
                 .build();
-        String raw = PasswordStoredForm.encode(Argon2idParameters.withCosts(19_456, 2, 1),
+        String raw = PasswordStoredForm.encode(Argon2idParameters.fromCosts(19_456, 2, 1),
                 new byte[16], new byte[32], null);
-        String keyed = PasswordStoredForm.encode(Argon2idParameters.withCosts(19_456, 2, 1),
+        String keyed = PasswordStoredForm.encode(Argon2idParameters.fromCosts(19_456, 2, 1),
                 new byte[16], new byte[32], "key-A.1");
         try (PasswordWorkGate.Permit held = Objects.requireNonNull(gate.tryAcquire(19_456))) {
             for (String hostile : new String[]{

@@ -260,7 +260,7 @@ public final class WebAuthnCeremonyFuzzTests {
                 Base64.getEncoder().encodeToString(material))).clock(CLOCK).build();
         return WebAuthnRelyingParty.withRelyingPartyId(RP).relyingPartyName("Example")
                 .allowedOrigins(Set.of(ORIGIN)).credentialNamespace("fuzz")
-                .store(InMemoryWebAuthnStore.withLimits(128, 2_000_000))
+                .store(InMemoryWebAuthnStore.fromLimits(128, 2_000_000))
                 .stateSealer(sealer).recoveryGate(GATE).clockForTesting(CLOCK).build();
     }
 

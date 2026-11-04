@@ -723,6 +723,9 @@ public final class ScimServiceProvider {
     }
 
     /** Encodes an authoritative ID as one path segment beneath the trusted type endpoint.
+     * ASCII letters, digits and {@code -._~} remain literal; other UTF-8 bytes use uppercase
+     * percent escapes. Standalone {@code .} and {@code ..} identifiers are rejected before encoding.
+     * Existing percent escapes in the opaque ID are data, not instructions to decode.
      * @param resourceType the exact registered resource-type object
      * @param authoritativeId application-assigned identifier
      * @return an absolute resource location
@@ -741,6 +744,7 @@ public final class ScimServiceProvider {
                     || value >= 'A' && value <= 'Z'
                     || value >= '0' && value <= '9'
                     || value == '-'
+                    || value == '.'
                     || value == '_'
                     || value == '~') segment.append((char) value);
             else {
@@ -1180,7 +1184,7 @@ public final class ScimServiceProvider {
     }
 
     private @NonNull Body parse(byte @NonNull [] body, @NonNull ScimWork work) {
-        if (!work.spend(body.length)) return new Body(null, ScimError.requestTooLargeInstance());
+        if (!work.spend(ScimWork.byteUnits(body.length))) return new Body(null, ScimError.requestTooLargeInstance());
         JsonParseResult result =
                 JsonCodec.parseResult(
                         body,

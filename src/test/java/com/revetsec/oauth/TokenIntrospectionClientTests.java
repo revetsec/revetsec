@@ -73,8 +73,8 @@ final class TokenIntrospectionClientTests {
                 if (status == 401) {
                     AccessTokenValidationResult.RejectedEndpoint first=assertInstanceOf(AccessTokenValidationResult.RejectedEndpoint.class,client.validateResult(bearer("opaque")));
                     assertEquals(OAuthEndpointError.INVALID_CLIENT,first.getError());assertEquals(status,first.getStatus());
-                    AccessTokenValidationResult.RejectedEndpoint again=assertInstanceOf(AccessTokenValidationResult.RejectedEndpoint.class,client.validateResult(bearer("other-opaque")));
-                    assertEquals(first.getError(),again.getError());assertEquals(first.getStatus(),again.getStatus());
+                    OAuthTransportException unavailable=assertThrows(OAuthTransportException.class,()->client.validateResult(bearer("other-opaque")));
+                    assertEquals(OAuthException.Reason.NETWORK_FAILURE,unavailable.getReason());assertTrue(unavailable.isTransient());
                     assertEquals(1,server.getHitCount("/inspect"));redacted(first,"TEST-ONLY-prose",SECRET,"opaque");
                     for (var method : first.getClass().getMethods()) {
                         assertNotEquals("getBearerError", method.getName()); assertNotEquals("getAccessToken", method.getName());
@@ -87,7 +87,10 @@ final class TokenIntrospectionClientTests {
                     assertEquals(0, authorizations.get());
                 } else {
                     OAuthErrorResponseException first=assertThrows(OAuthErrorResponseException.class,()->client.validateResult(bearer("opaque")));
-                    assertSame(first,assertThrows(OAuthErrorResponseException.class,()->client.validateResult(bearer("other-opaque"))));assertEquals(1,server.getHitCount("/inspect"));redacted(first,"TEST-ONLY-prose",SECRET,"opaque");
+                    assertEquals(1,server.getHitCount("/inspect"));
+                    if(status==429){assertEquals(OAuthException.Reason.NETWORK_FAILURE,assertThrows(OAuthTransportException.class,()->client.validateResult(bearer("other-opaque"))).getReason());assertEquals(1,server.getHitCount("/inspect"));}
+                    else{OAuthErrorResponseException second=assertThrows(OAuthErrorResponseException.class,()->client.validateResult(bearer("other-opaque")));assertNotSame(first,second);assertEquals(first.getStatus(),second.getStatus());assertEquals(2,server.getHitCount("/inspect"));}
+                    redacted(first,"TEST-ONLY-prose",SECRET,"opaque");
                 }
             }
         }));
@@ -110,7 +113,7 @@ final class TokenIntrospectionClientTests {
         return Stream.of(Map.entry("application/token-introspection+jwt","signed.jwt.bytes"),Map.entry("application/json","{\"active\":\"true\"}"),Map.entry("application/json","{\"active\":true,\"active\":false}"),Map.entry("application/json","{\"active\":true,\"aud\":42}"),Map.entry("application/json","{\"active\":true,\"aud\":\"resource\",\"exp\":1.5}")).map(e->DynamicTest.dynamicTest(e.toString(),()-> {
             try(TestHttpsServer server=TestHttpsServer.start()) {
                 response(server,"/inspect",200,e.getKey(),e.getValue());TokenIntrospectionClient client=inspect(server).build();
-                assertThrows(OAuthException.class,()->client.validateResult(bearer("opaque")));assertThrows(OAuthException.class,()->client.validateResult(bearer("different")));assertEquals(1,server.getHitCount("/inspect"));
+                OAuthException first=assertThrows(OAuthException.class,()->client.validateResult(bearer("opaque")));OAuthException second=assertThrows(OAuthException.class,()->client.validateResult(bearer("different")));assertNotSame(first,second);assertEquals(first.getReason(),second.getReason());assertEquals(2,server.getHitCount("/inspect"));
             }
         }));
     }
@@ -126,7 +129,7 @@ final class TokenIntrospectionClientTests {
     @Test void providerFailureBackoffRecoversWithIndependentWaiterCredentials() throws Exception {
         try(TestHttpsServer server=TestHttpsServer.start()) {
             OAuthClient oauth=oauth(server).discoveryCooldown(Duration.ofSeconds(1)).build();TokenIntrospectionClient client=TokenIntrospectionClient.withOAuthClient(oauth).expectedAudiences(Set.of(AUD)).build();
-            response(server,"/inspect",503,"application/json","{}");assertThrows(OAuthErrorResponseException.class,()->client.validateResult(bearer("bad-health")));
+            response(server,"/inspect",429,"application/json","{}");assertThrows(OAuthErrorResponseException.class,()->client.validateResult(bearer("bad-health")));
             Thread.sleep(1050);TestHttpsServer.HeldScript held=TestHttpsServer.HeldScript.fromResponse(TestHttpsServer.Response.fromJson(200,active()));server.script("/inspect",held);
             ExecutorService pool=Executors.newFixedThreadPool(3);
             try {

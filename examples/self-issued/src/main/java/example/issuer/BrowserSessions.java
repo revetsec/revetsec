@@ -42,12 +42,7 @@ final class BrowserSessions implements BrowserSessionStore {
     }
     @Override public synchronized @NonNull Session begin() {
         cleanup();
-        if(entries.size()>=capacity) {
-            String idle=entries.values().stream().filter(s -> !s.authenticated && s.pending.get()==null)
-                    .map(s -> s.id).findFirst().orElse(null);
-            if(idle==null) throw new IllegalStateException("Session store full.");
-            entries.remove(idle);
-        }
+        if(entries.size()>=capacity) throw new IllegalStateException("Session store full.");
         Session s=new Session(LocalInputs.randomId(),LocalInputs.randomId(),LocalInputs.randomId(),clock.instant().plus(LIFETIME));
         entries.put(s.id,s);return s;
     }

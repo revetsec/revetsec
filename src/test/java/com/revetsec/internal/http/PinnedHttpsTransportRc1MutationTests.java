@@ -34,6 +34,15 @@ import static org.junit.jupiter.api.Assertions.*;
 @Isolated
 final class PinnedHttpsTransportRc1MutationTests {
  private static final Duration BOUND = Duration.ofSeconds(2);
+ @Test void cacheVariantProfileCoversEveryFixedRequestByte() throws Exception {
+  for(String value:List.of("https://metadata.example/id?a=1", "https://METADATA.example:8443/path%2fpart?q=%2F", "https://[::1]/id", "https://metadata.example/ü")) {
+   URI uri=URI.create(value),ascii=URI.create(uri.toASCIIString());
+   String target=ascii.getRawPath()+(ascii.getRawQuery()==null?"":"?"+ascii.getRawQuery());
+   String request=new String(PinnedHttpsTransport.request(uri,false),StandardCharsets.US_ASCII);
+   assertEquals(request,PinnedHttpsTransport.requestProfile().replace("{target}",target).replace("{authority}",uri.getRawAuthority()));
+   assertFalse(request.contains("Authorization:"));assertFalse(request.contains("Cookie:"));
+  }
+ }
  @Test void highestPortIsAdmittedAndItsNeighborIsRejected() throws Exception {
   String request=new String(PinnedHttpsTransport.request(URI.create("https://metadata.example:65535/id"),false),StandardCharsets.US_ASCII);
   assertTrue(request.contains("Host: metadata.example:65535\r\n"));

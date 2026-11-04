@@ -131,12 +131,15 @@ final class ResourceServerMetadataCache<T> {
 	}
 
 	@NonNull T get(@NonNull Deadline deadline) {
+		requireActive(deadline);
 		Flight<T> mine = null;
 		Flight<T> waitFor = null;
 		long nowNanos = this.nanoTime.getAsLong();
 		this.lock.lock();
 		try {
+			requireActive(deadline);
 			Instant now = this.clock.instant();
+			requireActive(deadline);
 			boolean rollback = this.lastClock != null && now.isBefore(this.lastClock);
 			this.lastClock = now;
 			if (this.snapshot != null) {
@@ -155,7 +158,7 @@ final class ResourceServerMetadataCache<T> {
 				this.waiterChanged.signalAll();
 			} else {
 				if (this.lastFailure != null && nowNanos - this.lastFailureNanos < this.failureBackoffNanos)
-					throw this.lastFailure;
+					throw OAuthHttpErrors.copyForCaller(this.lastFailure);
 				while (!this.attemptTimes.isEmpty() && nowNanos - this.attemptTimes.peekFirst() >= this.cooldown.toNanos()) this.attemptTimes.removeFirst();
 				if (this.attemptTimes.size() >= 2)
 					throw failure(OAuthException.Reason.ATTEMPT_LIMIT);
@@ -183,9 +186,11 @@ final class ResourceServerMetadataCache<T> {
 		Flight<T> leader = requireNonNull(mine);
 		try {
 			MetadataSnapshot<T> found = fetch(deadline);
+			requireActive(deadline);
 			boolean current;
 			this.lock.lock();
 			try {
+				requireActive(deadline);
 				current = this.flight == leader;
 				if (current) {
 					// Superseded flights cannot replace the role's current endpoint/key source.
@@ -203,11 +208,14 @@ final class ResourceServerMetadataCache<T> {
 			leader.future.complete(found.metadata);
 			return found.metadata;
 		} catch (OAuthException failure) {
+			boolean interrupted = failure.getReason() == OAuthException.Reason.INTERRUPTED || Thread.currentThread().isInterrupted();
+			boolean callerLocal = interrupted || deadline.isExpired();
+			if (interrupted) Thread.currentThread().interrupt();
 			this.lock.lock();
 			try {
 				if (this.flight == leader) {
-					if (failure.getReason() != OAuthException.Reason.INTERRUPTED) {
-						this.lastFailure = failure;
+					if (!callerLocal) {
+						this.lastFailure = OAuthHttpErrors.copyForCaller(failure);
 						this.lastFailureNanos = this.nanoTime.getAsLong();
 						this.consecutiveFailures = Math.min(5, this.consecutiveFailures + 1);
 						this.failureBackoffNanos = Math.min(this.cooldown.toNanos() << (this.consecutiveFailures - 1), Math.min(this.cooldown.toNanos() * 10, Duration.ofMinutes(10).toNanos()));
@@ -222,23 +230,27 @@ final class ResourceServerMetadataCache<T> {
 			} finally {
 				this.lock.unlock();
 			}
-			leader.future.completeExceptionally(failure.getReason() == OAuthException.Reason.INTERRUPTED
-					? failure(OAuthException.Reason.NETWORK_FAILURE) : failure);
+			leader.future.completeExceptionally(callerLocal ? failure(OAuthException.Reason.NETWORK_FAILURE) : OAuthHttpErrors.copyForCaller(failure));
+			if (interrupted) throw failure(OAuthException.Reason.INTERRUPTED);
 			throw failure;
 		} catch (RuntimeException failure) {
-			OAuthException safe = failure(OAuthException.Reason.NETWORK_FAILURE);
+			boolean interrupted = Thread.currentThread().isInterrupted();
+			boolean callerLocal = interrupted || deadline.isExpired();
+			OAuthException safe = interrupted ? failure(OAuthException.Reason.INTERRUPTED) : failure(OAuthException.Reason.NETWORK_FAILURE);
 			this.lock.lock();
 			try {
 				if (this.flight == leader) {
 					this.flight = null;
-					this.lastFailure = safe;
-					this.lastFailureNanos = this.nanoTime.getAsLong();
-					this.failureBackoffNanos = this.cooldown.toNanos();
+					if (!callerLocal) {
+						this.lastFailure = OAuthHttpErrors.copyForCaller(safe);
+						this.lastFailureNanos = this.nanoTime.getAsLong();
+						this.failureBackoffNanos = this.cooldown.toNanos();
+					}
 				}
 			} finally {
 				this.lock.unlock();
 			}
-			leader.future.completeExceptionally(safe);
+			leader.future.completeExceptionally(failure(OAuthException.Reason.NETWORK_FAILURE));
 			throw safe;
 		}
 	}
@@ -254,20 +266,29 @@ final class ResourceServerMetadataCache<T> {
 		}
 	}
 
+	private static void requireActive(@NonNull Deadline deadline) {
+		if (Thread.currentThread().isInterrupted()) throw failure(OAuthException.Reason.INTERRUPTED);
+		if (deadline.isExpired()) throw failure(OAuthException.Reason.NETWORK_FAILURE);
+	}
+
 	private static <T> @NonNull T await(@NonNull CompletableFuture<@NonNull T> future, @NonNull Deadline deadline) {
 		try {
 			long remaining = deadline.remainingNanos();
 			if (remaining <= 0)
 				throw failure(OAuthException.Reason.NETWORK_FAILURE);
-			return future.get(remaining, TimeUnit.NANOSECONDS);
+			requireActive(deadline);
+			T result = future.get(remaining, TimeUnit.NANOSECONDS);
+			requireActive(deadline);
+			return result;
 		} catch (InterruptedException interrupted) {
 			Thread.currentThread().interrupt();
 			throw failure(OAuthException.Reason.INTERRUPTED);
 		} catch (TimeoutException timeout) {
 			throw failure(OAuthException.Reason.NETWORK_FAILURE);
 		} catch (ExecutionException failure) {
+			requireActive(deadline);
 			if (failure.getCause() instanceof OAuthException oauth)
-				throw oauth;
+				throw OAuthHttpErrors.copyForCaller(oauth);
 			throw failure(OAuthException.Reason.NETWORK_FAILURE);
 		}
 	}

@@ -422,16 +422,16 @@ public final class PackagedConsumer {
     && OAuthServerResponse.class.getDeclaredMethod("toHttpBodyWithCredentials").getReturnType() == byte[].class,
     "server response annotation-free exported method signatures");
   OAuthClientMetadataAddressResolver metadataResolver = (hostname, remainingBudget) -> List.of();
-  OAuthClientMetadataPolicy.Builder metadataBuilder = OAuthClientMetadataPolicy.withAddressResolver(metadataResolver);
+  OAuthClientMetadataPolicy.Builder metadataBuilder = OAuthClientMetadataPolicy.withAddressResolver(metadataResolver).cache(InMemoryOAuthClientMetadataCache.fromMaximumEntries(128));
   OAuthClientMetadataPolicy metadataPolicy = metadataBuilder.allowedOrigins(Set.of(URI.create("https://consumer.example.com")))
-   .allowedOrigins(null).maximumDocumentBytes(1024).maximumDocumentBytes(null).maximumCacheEntries(1).maximumCacheEntries(null)
+   .allowedOrigins(null).maximumDocumentBytes(1024).maximumDocumentBytes(null)
    .maximumFreshness(Duration.ZERO).maximumFreshness(null).maximumConcurrentFetches(1).maximumConcurrentFetches(null)
    .maximumResolvedAddresses(1).maximumResolvedAddresses(null).addressResolver(metadataResolver).build();
   if (!metadataPolicy.getEnabled() || metadataPolicy.getAllowedOrigins().isPresent()
    || metadataPolicy.getAddressResolver().orElseThrow() != metadataResolver || metadataPolicy.getMaximumDocumentBytes() != 5120
-   || metadataPolicy.getMaximumCacheEntries() != 128 || !metadataPolicy.getMaximumFreshness().equals(Duration.ofSeconds(300))
+   || !metadataPolicy.getMaximumFreshness().equals(Duration.ofSeconds(300))
    || metadataPolicy.getMaximumConcurrentFetches() != 8 || metadataPolicy.getMaximumResolvedAddresses() != 16
-   || OAuthClientMetadataPolicy.disabledInstance().getEnabled() || !OAuthClientMetadataPolicy.fromAddressResolver(metadataResolver).getEnabled())
+   || OAuthClientMetadataPolicy.disabledInstance().getEnabled() || !OAuthClientMetadataPolicy.fromAddressResolverAndCache(metadataResolver, InMemoryOAuthClientMetadataCache.fromMaximumEntries(128)).getEnabled())
    throw new AssertionError("CIMD policy contract");
 
   InMemoryOAuthClientMetadataCache localCache = InMemoryOAuthClientMetadataCache.fromMaximumEntries(2);
@@ -446,8 +446,16 @@ public final class PackagedConsumer {
     && cache.read(cacheKey, Duration.ofSeconds(1)).orElseThrow().getVersion().equals(cacheDigest)
     && cacheEntry.getKey().equals(cacheKey) && cacheEntry.getExpiresAt().equals(NOW)
     && cacheEntry.toSealedForm().equals("storage-only-test-carrier"), "opaque cache storage round trip");
-  require(metadataBuilder.cache(cache).build().getCache().orElseThrow() == cache
-    && metadataBuilder.cache(null).build().getCache().isEmpty(), "custom cache selection and deferred reset");
+  OAuthClientMetadataPolicy selectedCachePolicy = metadataBuilder.cache(cache).build();
+  require(selectedCachePolicy.getCache().orElseThrow() == cache, "explicit cache selection");
+  metadataBuilder.cache(null);
+  try {
+   metadataBuilder.build();
+   throw new AssertionError("Cleared cache selected implicit storage");
+  } catch (IllegalStateException expected) {
+   require(selectedCachePolicy.getCache().orElseThrow() == cache,
+     "clearing the builder preserves its existing policy snapshot");
+  }
   require(cache.compareAndSet(cacheKey, cacheDigest, null, Duration.ofSeconds(1))
     && cache.read(cacheKey, Duration.ofSeconds(1)).isEmpty(), "exact-version cache deletion");
   OAuthClientMetadataCacheException cacheFailure = OAuthClientMetadataCacheException.fromReason(OAuthClientMetadataCacheException.Reason.UNAVAILABLE);

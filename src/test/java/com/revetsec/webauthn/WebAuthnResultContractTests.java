@@ -44,8 +44,8 @@ final class WebAuthnResultContractTests {
 					.filter(type->type.getSimpleName().equals("ReconciliationRequired")).findFirst().orElseThrow();
 			assertTrue(Modifier.isPublic(variant.getModifiers()));
 			assertTrue(Modifier.isFinal(variant.getModifiers()));
-			assertEquals(0,variant.getDeclaredFields().length);
-			assertEquals(0,variant.getDeclaredMethods().length);
+			assertEquals(0,Arrays.stream(variant.getDeclaredFields()).filter(field->!field.isSynthetic()).count());
+			assertEquals(0,Arrays.stream(variant.getDeclaredMethods()).filter(method->!method.isSynthetic()).count());
 			assertEquals(0,variant.getConstructors().length);
 			Constructor<?> constructor=variant.getDeclaredConstructors()[0];
 			assertTrue(Modifier.isPrivate(constructor.getModifiers()));

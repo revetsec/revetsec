@@ -71,9 +71,9 @@ class ScimM10ResourceTests {
 
     @Test void compatibilityFlagsOnlyChangeTheirNarrowBoundPositions() {
         String missingDeclaration = "{\"schemas\":[\""+USER+"\"],\"userName\":\"a\",\""+ENTERPRISE+"\":{\"department\":\"R&D\"}}";
-        rejected(create(ScimResourceType.userInstance(),missingDeclaration),ScimErrorType.INVALID_VALUE);
+        rejected(create(ScimTestResourceTypes.userWithEnterpriseInstance(),missingDeclaration),ScimErrorType.INVALID_VALUE);
         ScimCompatibility infer = compatibility(ScimCompatibilityFeature.INFER_MISSING_EXTENSION_SCHEMAS);
-        ScimResource inferred = accepted(create(ScimResourceType.userInstance(),missingDeclaration,infer)).getResource();
+        ScimResource inferred = accepted(create(ScimTestResourceTypes.userWithEnterpriseInstance(),missingDeclaration,infer)).getResource();
         assertEquals(Set.of(USER,ENTERPRISE),Set.copyOf(inferred.getDocument().find("schemas").map(JsonArray.class::cast).map(array -> array.getElements().stream().map(JsonString.class::cast).map(JsonString::getValue).toList()).orElseThrow()));
         assertEquals("R&D",ScimEnterpriseUser.fromResource(inferred).getDepartment().orElseThrow());
         String undeclared = "{\"schemas\":[\""+USER+"\",\"urn:unknown\"],\"userName\":\"a\"}";
@@ -87,8 +87,8 @@ class ScimM10ResourceTests {
         rejected(create(ScimResourceType.userInstance(),bool.replace("\"active\":\"true\"","\"active\":\"TRUE\""),
                 compatibility(ScimCompatibilityFeature.BOOLEAN_STRINGS)),ScimErrorType.INVALID_VALUE);
         String scalar = "{\"schemas\":[\""+USER+"\",\""+ENTERPRISE+"\"],\"userName\":\"a\",\""+ENTERPRISE+"\":{\"manager\":\"m-1\"}}";
-        rejected(create(ScimResourceType.userInstance(),scalar),ScimErrorType.INVALID_VALUE);
-        assertEquals("m-1",ScimEnterpriseUser.fromResource(accepted(create(ScimResourceType.userInstance(),scalar,
+        rejected(create(ScimTestResourceTypes.userWithEnterpriseInstance(),scalar),ScimErrorType.INVALID_VALUE);
+        assertEquals("m-1",ScimEnterpriseUser.fromResource(accepted(create(ScimTestResourceTypes.userWithEnterpriseInstance(),scalar,
                 compatibility(ScimCompatibilityFeature.COMPLEX_VALUE_AS_SCALAR))).getResource()).getManager().orElseThrow().find("value").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow());
     }
 

@@ -33,7 +33,11 @@ import org.jspecify.annotations.Nullable;
 
 /**
  * Audience-checked RFC7662 JSON introspection using the supplied OAuth client settings.
- * No credential result is cached; each validation performs its own single authenticated POST. Infrastructure errors remain exceptions.
+ * No credential result is cached; an admitted validation performs its own single authenticated POST.
+ * Endpoint health backoff can prevent that POST: 401/429 or transport failure opens it immediately,
+ * while three 5xx responses within one cooldown window are required to open it. Other client errors
+ * remain local to their request. Blocked callers receive fresh infrastructure exceptions, never
+ * another request's endpoint rejection. A valid parsed response, including inactive, restores health.
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  * @since 1.0.0
  */
@@ -149,8 +153,7 @@ public final class TokenIntrospectionClient implements AccessTokenValidator {
 				parsed = IntrospectionResponse.parse(response, requestStart);
 				this.guard.healthy(attempt);
 			} catch (OAuthException failure) {
-				// A token-specific 4xx proves the endpoint answered; it must not throttle unrelated tokens.
-				if (credentialSpecificResponse(failure)) this.guard.healthy(attempt);
+				if (failure.getReason() == OAuthException.Reason.INTERRUPTED || deadline.isExpired()) this.guard.abandon(attempt);
 				else this.guard.failed(attempt, failure);
 				if (receivedResponse)
 					this.client.introspectionResponseFailure(target.endpoint(), failure, Duration.ofNanos(System.nanoTime() - started), this.observer);
@@ -166,12 +169,6 @@ public final class TokenIntrospectionClient implements AccessTokenValidator {
 			ObserverDispatch.dispatch(this.observer, o -> o.didRejectAccessToken(rejection));
 			throw rejection;
 		}
-	}
-
-	private static boolean credentialSpecificResponse(@NonNull OAuthException failure) {
-		if (!(failure instanceof OAuthErrorResponseException response) || failure.isTransient()) return false;
-		int status = response.getStatus();
-		return status == 400 || status == 413 || status == 422;
 	}
 
 	/**

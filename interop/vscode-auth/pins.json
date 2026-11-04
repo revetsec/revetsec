@@ -1,0 +1,18 @@
+{
+  "client": {
+    "version": "1.144.0",
+    "commit": "2c33b50b16c472efe58357d1d2a8a5414bc23fbf",
+    "url": "https://vscode.download.prss.microsoft.com/dbazure/download/stable/2c33b50b16c472efe58357d1d2a8a5414bc23fbf/code-stable-arm64-1793133773.tar.gz",
+    "archiveSha256": "c1758f2144c68b295fb2a3543e93bc03ab99f8ea715cfd0560377092aba0f198",
+    "treeSha256": "97214f6499b947690988da9bf2b7eb230d4dccbdd11be61df60f970571186c48",
+    "releaseMetadataUrl": "https://update.code.visualstudio.com/api/update/linux-arm64/stable/0000000000000000000000000000000000000000"
+  },
+  "browserImage": "sha256:ccff4e2c9b4a150404caa459225165a269d8e0d828d77bd60a5fe85943f6fc42",
+  "namespaceImage": "sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b",
+  "javaImage": "sha256:b468c3fc688b14450571494f588bd939378e7fd542ed5a73f8efc13f17872a87",
+  "javaTreeSha256": "11d2005a20963f00dd6addc612098e3517a4bf76f896af3dea0d761e02b11920",
+  "caddySha256": "e1f904038fc11ca897ac5a12fdacfb2a7add02a8720c426d562a37f6fdad2afe",
+  "seccompSha256": "4196af2ea4c1921e0c1ab2891da6cb829308cfc2e9fe5f5fdf6fc4bead8665b7",
+  "metadataDocumentSha256": "ef2f099373c6417e4e7753e38d3832489ca2e3797a0a60cc4ae82a4095442ad2",
+  "systemCaSha256": "9481fcd95f41b221f02f14d896535fe500bec539bc563c4cdca1acee483a8bdd"
+}

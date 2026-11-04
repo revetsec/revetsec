@@ -506,7 +506,7 @@ class ScimM10ProviderTests {
                         .contains("\"name\":\"User\""));
         String schemas = text(response(p.schemasResponseResult("")));
         assertTrue(schemas.contains(URN));
-        assertTrue(schemas.contains(ScimSchema.enterpriseUserInstance().getId()));
+        assertFalse(schemas.contains(ScimSchema.enterpriseUserInstance().getId()));
         assertTrue(
                 text(response(p.schemaResponseResult(URN, "attributes=name")))
                         .contains("\"name\":\"User\""));
@@ -782,17 +782,13 @@ class ScimM10ProviderTests {
                 ScimError.requestTooLargeInstance(),
                 assertInstanceOf(
                                 ScimResourceParseResult.Rejected.class,
-                                p.parseResourceResult(USER, bytes(" ".repeat(10001))))
+                                p.parseResourceResult(USER, bytes(" ".repeat(160001))))
                         .getError());
         ScimResource huge =
                 ScimResource.withResourceType(USER)
-                        .document(
-                                object(
-                                        "{\"schemas\":[\""
-                                                + URN
-                                                + "\"],\"id\":\"1\",\"userName\":\""
-                                                + "x".repeat(15000)
-                                                + "\"}"))
+                        .document(JsonObject.builder()
+                                .put("schemas", com.revetsec.json.JsonArray.fromElements(List.of(com.revetsec.json.JsonString.fromValue(URN))))
+                                .put("id", "1").put("userName", "x".repeat(200000)).build())
                         .build();
         assertSame(
                 ScimError.responseTooLargeInstance(),

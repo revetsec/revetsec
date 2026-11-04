@@ -17,7 +17,6 @@
 package com.revetsec.saml;
 
 import com.revetsec.StateSealer;
-import com.revetsec.internal.crypto.SealedStateAccess;
 import com.revetsec.internal.crypto.SealedStateType;
 import org.jspecify.annotations.NonNull;
 
@@ -71,6 +70,8 @@ public final class PendingSamlAuthentication {
 
     /**
      * Seals this pending login under the SAML-specific type and exact application context.
+     * A valid pending record may exceed the configured sealer limit; this method then throws
+     * {@link IllegalArgumentException}. Persist successfully before delivering the request.
      *
      * @param sealer active and verification sealing keys
      * @param context fixed application-selected cookie context
@@ -78,13 +79,18 @@ public final class PendingSamlAuthentication {
      * @since 1.0.0
      */
     public @NonNull String toSealedForm(@NonNull StateSealer sealer, @NonNull String context) {
-        return SealedStateAccess.get().seal(Objects.requireNonNull(sealer), SealedStateType.PENDING_SAML,
-                PendingSamlAuthenticationCodec.encode(this), Objects.requireNonNull(context), expiresAt);
+        String sealed = PendingSamlAuthenticationCodec.sealIfFits(this, Objects.requireNonNull(sealer),
+                SealedStateType.PENDING_SAML, Objects.requireNonNull(context));
+        if (sealed == null) throw new IllegalArgumentException("SAML pending state exceeds sealing limit");
+        return sealed;
     }
 
     /**
      * Seals and saves this login under a browser-bound context. A possibly completed save returns
      * INDETERMINATE; callers must not assume that retrying is safe.
+     * If the complete encoded record exceeds the configured sealer limit, returns UNAVAILABLE
+     * without calling the store or drawing sealing entropy. Shorten configuration or options
+     * before retrying; no pending state was saved. Invalid contexts remain argument errors.
      *
      * @param store atomic pending store
      * @param sealer active and verification sealing keys
@@ -103,7 +109,9 @@ public final class PendingSamlAuthentication {
         if (remaining.isZero() || remaining.isNegative()) return SamlPendingSaveResult.UNAVAILABLE;
         String bindingContext = SamlPendingBinding.context(Objects.requireNonNull(context),
                 Objects.requireNonNull(browserBinding));
-        String record = toSealedForm(sealer, bindingContext);
+        String record = PendingSamlAuthenticationCodec.sealIfFits(this, sealer, SealedStateType.PENDING_SAML,
+                bindingContext);
+        if (record == null) return SamlPendingSaveResult.UNAVAILABLE;
         long started = System.nanoTime();
         try {
             SamlPendingSaveResult result = store.save(browserBinding, relayState, record, expiresAt, remaining);

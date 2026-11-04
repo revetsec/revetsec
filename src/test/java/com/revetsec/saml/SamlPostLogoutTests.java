@@ -113,7 +113,7 @@ final class SamlPostLogoutTests {
 
     @Test void outboundPostRequestIsRootSignedAndCarriesExactSessionAndPendingState() throws Exception {
         KeyPair key = rsa();
-        SamlServiceProvider sp = provider(key, InMemorySamlReplayCache.withLimit(CLOCK, 8));
+        SamlServiceProvider sp = provider(key, InMemorySamlReplayCache.fromLimit(CLOCK, 8));
         SamlIdentityProvider idp = identityProvider(key);
         SamlLogoutPostResult.Prepared begin = begin(sp, idp);
         SamlPostForm form = begin.getPostForm();
@@ -142,7 +142,7 @@ final class SamlPostLogoutTests {
 
     @Test void postRequestReleasesOnlyCheckedSessionIdentifiersAfterAtomicReplayAdmission() throws Exception {
         KeyPair key = rsa();
-        SamlServiceProvider sp = provider(key, InMemorySamlReplayCache.withLimit(CLOCK, 8));
+        SamlServiceProvider sp = provider(key, InMemorySamlReplayCache.fromLimit(CLOCK, 8));
         SamlIdentityProvider idp = identityProvider(key);
         SamlPostBindingMessage input = post("SAMLRequest", signed(request("_idp-request"), key.getPrivate()),
                 "opaque-state");
@@ -286,7 +286,7 @@ final class SamlPostLogoutTests {
         SamlIdentityProvider idp = identityProvider(key);
         PendingSamlLogout pending = begin(sp, idp).getPendingLogout();
         StateSealer sealer = sealer();
-        InMemoryPendingSamlAuthenticationStore backing = InMemoryPendingSamlAuthenticationStore.withLimit(CLOCK, 8);
+        InMemoryPendingSamlAuthenticationStore backing = InMemoryPendingSamlAuthenticationStore.fromLimit(CLOCK, 8);
         assertEquals(SamlPendingSaveResult.SAVED, pending.saveToResult(backing, sealer,
                 "post-logout", "browser-secret", Duration.ofSeconds(5)));
         PendingSamlAuthenticationStore store = new PendingSamlAuthenticationStore() {
@@ -672,7 +672,7 @@ final class SamlPostLogoutTests {
         KeyPair key = rsa();
         SamlIdentityProvider idp = identityProvider(key);
         for (boolean postFirst : List.of(true, false)) {
-            SamlServiceProvider sp = provider(key, InMemorySamlReplayCache.withLimit(CLOCK, 8));
+            SamlServiceProvider sp = provider(key, InMemorySamlReplayCache.fromLimit(CLOCK, 8));
             String xml = request("_shared-request");
             SamlPostBindingMessage post = post("SAMLRequest", signed(xml, key.getPrivate()), null);
             SamlRedirectBindingMessage redirect = redirect("SAMLRequest", xml, null, key.getPrivate());
@@ -740,12 +740,12 @@ final class SamlPostLogoutTests {
         SamlServiceProvider redirectOnly = SamlServiceProvider.withEntityId(SP)
                 .assertionConsumerServiceUrl(URI.create("https://sp.example.test/acs"))
                 .singleLogoutServiceUrl(SP_LOGOUT).signingPrivateKey(key.getPrivate())
-                .replayCache(InMemorySamlReplayCache.withLimit(CLOCK, 8)).clock(CLOCK).build();
+                .replayCache(InMemorySamlReplayCache.fromLimit(CLOCK, 8)).clock(CLOCK).build();
         SamlIdentityProvider idp = identityProvider(key);
         assertInstanceOf(SamlLogoutPostResult.Rejected.class, redirectOnly.beginPostLogoutResult(idp, session()));
         assertInstanceOf(SamlLogoutRequestResult.Rejected.class,
                 redirectOnly.acceptLogoutRequestResult(post("SAMLRequest", signed(request("_post-disabled"), key.getPrivate()), null), idp));
-        SamlServiceProvider sp = provider(key, InMemorySamlReplayCache.withLimit(CLOCK, 8));
+        SamlServiceProvider sp = provider(key, InMemorySamlReplayCache.fromLimit(CLOCK, 8));
         SamlLogoutRequest checked = assertInstanceOf(SamlLogoutRequestResult.Accepted.class,
                 sp.acceptLogoutRequestResult(post("SAMLRequest", signed(request("_without-relay"), key.getPrivate()), null), idp)).getRequest();
         SamlPostForm form = assertInstanceOf(SamlLogoutResponsePostResult.Prepared.class,
@@ -762,7 +762,7 @@ final class SamlPostLogoutTests {
 
     @Test void postLogoutIsStrictByDefaultButHonorsExplicitSha1Compatibility() throws Exception {
         KeyPair key = rsa();
-        SamlServiceProvider sp = provider(key, InMemorySamlReplayCache.withLimit(CLOCK, 8));
+        SamlServiceProvider sp = provider(key, InMemorySamlReplayCache.fromLimit(CLOCK, 8));
         SamlPostBindingMessage message = post("SAMLRequest", signed(request("_legacy-sha1"),
                 key.getPrivate(), SignatureMethod.RSA_SHA1, DigestMethod.SHA1), null);
         assertInstanceOf(SamlLogoutRequestResult.Rejected.class, sp.acceptLogoutRequestResult(message, identityProvider(key)));
@@ -775,7 +775,7 @@ final class SamlPostLogoutTests {
 
     @Test void requestKindCannotConsumeLoginPendingOrEnterUnsolicitedAuthentication() throws Exception {
         KeyPair key = rsa();
-        SamlServiceProvider sp = provider(key, InMemorySamlReplayCache.withLimit(CLOCK, 8));
+        SamlServiceProvider sp = provider(key, InMemorySamlReplayCache.fromLimit(CLOCK, 8));
         AtomicInteger consumes = new AtomicInteger();
         PendingSamlAuthenticationStore store = new PendingSamlAuthenticationStore() {
             @Override public @NonNull SamlPendingSaveResult save(@NonNull String browser,
@@ -814,7 +814,7 @@ final class SamlPostLogoutTests {
         SamlServiceProvider sp = SamlServiceProvider.withEntityId(SP)
                 .assertionConsumerServiceUrl(URI.create("https://sp.example.test/acs"))
                 .postSingleLogoutServiceUrl(SP_LOGOUT).signingPrivateKey(key.getPrivate())
-                .replayCache(InMemorySamlReplayCache.withLimit(CLOCK, 8)).clock(CLOCK).observer(observer).build();
+                .replayCache(InMemorySamlReplayCache.fromLimit(CLOCK, 8)).clock(CLOCK).observer(observer).build();
         SamlIdentityProvider idp = identityProvider(key);
         PendingSamlLogout pending = begin(sp, idp).getPendingLogout();
         SamlLogoutRequest checked = assertInstanceOf(SamlLogoutRequestResult.Accepted.class,
@@ -872,12 +872,12 @@ final class SamlPostLogoutTests {
         KeyPair key = rsa();
         SamlIdentityProvider idp = identityProvider(key);
         MutableClock clock = new MutableClock(CLOCK.instant());
-        SamlReplayCache cache = InMemorySamlReplayCache.withLimit(clock, 8);
+        SamlReplayCache cache = InMemorySamlReplayCache.fromLimit(clock, 8);
         Duration broadAge = widenSkew ? Duration.ofSeconds(1) : Duration.ofMinutes(5);
         Duration broadSkew = widenSkew ? Duration.ofSeconds(5) : Duration.ZERO;
         SamlServiceProvider narrow = provider(key, cache, clock, Duration.ofSeconds(1), Duration.ZERO);
         SamlServiceProvider broad = provider(key, cache, clock, broadAge, broadSkew);
-        SamlServiceProvider control = provider(key, InMemorySamlReplayCache.withLimit(clock, 8),
+        SamlServiceProvider control = provider(key, InMemorySamlReplayCache.fromLimit(clock, 8),
                 clock, broadAge, broadSkew);
         if (response) {
             PendingSamlLogout pending = firstPost ? begin(narrow, idp).getPendingLogout()
@@ -972,7 +972,7 @@ final class SamlPostLogoutTests {
         KeyPair key = rsa();
         SamlIdentityProvider idp = identityProvider(key);
         MutableClock clock = new MutableClock(CLOCK.instant());
-        SamlReplayCache cache = InMemorySamlReplayCache.withLimit(clock, 1);
+        SamlReplayCache cache = InMemorySamlReplayCache.fromLimit(clock, 1);
         SamlServiceProvider narrow = provider(key, cache, clock, Duration.ofSeconds(1), Duration.ZERO);
         SamlServiceProvider broad = provider(key, cache, clock, Duration.ofMinutes(15), Duration.ofMinutes(5));
         String captured = request("_universal-deadline").replace(CLOCK.instant().toString(),
@@ -986,7 +986,7 @@ final class SamlPostLogoutTests {
         assertInstanceOf(SamlLogoutRequestResult.Rejected.class,
                 acceptLogout(broad, idp, captured, key, usePost));
         assertInstanceOf(SamlLogoutRequestResult.Accepted.class,
-                acceptLogout(provider(key, InMemorySamlReplayCache.withLimit(clock, 1), clock,
+                acceptLogout(provider(key, InMemorySamlReplayCache.fromLimit(clock, 1), clock,
                         Duration.ofMinutes(15), Duration.ofMinutes(5)), idp, captured, key, usePost),
                 "the captured message remains locally valid one nanosecond before the universal deadline");
         clock.set(deadline);
@@ -1012,7 +1012,7 @@ final class SamlPostLogoutTests {
             SamlIdentityProvider idp = SamlIdentityProvider.withEntityId(IDP).connectionId("tenant-one")
                     .redirectSingleSignOnService(URI.create("https://idp.example.test/sso"))
                     .postSingleLogoutService(IDP_LOGOUT).signingKeys(List.of(oldKey.getPublic(), idpKey.getPublic())).build();
-            SamlServiceProvider sp = provider(spKey, InMemorySamlReplayCache.withLimit(CLOCK, 8));
+            SamlServiceProvider sp = provider(spKey, InMemorySamlReplayCache.fromLimit(CLOCK, 8));
             assertInstanceOf(SamlLogoutRequestResult.Accepted.class, sp.acceptLogoutRequestResult(post("SAMLRequest",
                     signed(request("_curve-" + curve), idpKey.getPrivate(), algorithm, digest), null), idp), curve);
             PendingSamlLogout pending = begin(sp, idp).getPendingLogout();
@@ -1072,7 +1072,7 @@ final class SamlPostLogoutTests {
 
         private TrackingPendingStore() { this(CLOCK); }
         private TrackingPendingStore(@NonNull Clock clock) {
-            backing = InMemoryPendingSamlAuthenticationStore.withLimit(clock, 8);
+            backing = InMemoryPendingSamlAuthenticationStore.fromLimit(clock, 8);
         }
 
         @Override public @NonNull SamlPendingSaveResult save(@NonNull String browserBinding,

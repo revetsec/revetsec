@@ -47,3 +47,15 @@ test("removed-key rejection requires a fresh actual server finish response", () 
   assert.doesNotThrow(() => requireOutcome([...old, { path: "/sign-in/finish", status: 400 }],
     1, "/sign-in/finish", 400));
 });
+
+
+test("Maven JAR launch and custom fixture classpath are explicit alternatives", () => {
+  const jar = ["--jar", "/tmp/passkeys.jar", ...required.slice(2)];
+  assert.equal(options(jar).get("--jar"), "/tmp/passkeys.jar");
+  assert.equal(options(required).get("--classpath-file"), "/tmp/classpath");
+  assert.throws(() => options(required.slice(2)));
+  assert.throws(() => options([...jar, "--classpath-file", "/tmp/classpath"]));
+  assert.throws(() => options([...jar, "--main-class", "example.CustomFixture"]));
+  assert.equal(options([...required, "--main-class", "example.CustomFixture"])
+    .get("--main-class"), "example.CustomFixture");
+});

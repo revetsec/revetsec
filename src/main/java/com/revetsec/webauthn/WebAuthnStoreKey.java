@@ -16,10 +16,13 @@
 
 package com.revetsec.webauthn;
 
+import com.revetsec.internal.encoding.Base64Url;
+import com.revetsec.internal.encoding.EncodingException;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Base64;
+import java.util.Arrays;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
@@ -32,8 +35,14 @@ import org.jspecify.annotations.Nullable;
 @javax.annotation.concurrent.Immutable
 public final class WebAuthnStoreKey {
  private static final Base64.Encoder ENCODER = Base64.getUrlEncoder().withoutPadding();
+ private static final int MAXIMUM_STORED_FORM_LENGTH = 583;
  private final @NonNull String storageKey;
  private final WebAuthnStoreKey.@NonNull Kind kind;
+
+ private WebAuthnStoreKey(@NonNull String storageKey, WebAuthnStoreKey.@NonNull Kind kind) {
+  this.storageKey = storageKey;
+  this.kind = kind;
+ }
 
  private WebAuthnStoreKey(@NonNull String namespace, @NonNull String relyingPartyId,
    WebAuthnStoreKey.@NonNull Kind kind, byte @NonNull [] identifier) {
@@ -101,6 +110,56 @@ public final class WebAuthnStoreKey {
  public static @NonNull WebAuthnStoreKey forNamespaceClock(@NonNull String namespace,
    @NonNull String relyingPartyId) {
   return new WebAuthnStoreKey(namespace, relyingPartyId, Kind.NAMESPACE_CLOCK, new byte[0]);
+ }
+
+ /** Reconstructs an exact canonical persistence address, bounded to 583 ASCII characters.
+  * This supports application-owned inventory and reseal of revoked credentials whose raw IDs
+  * are no longer listed. It checks address syntax only: it does not authenticate a record,
+  * approve a namespace, authorize maintenance, or construct a verification proof. The relying
+  * party still checks scope and permanent-record eligibility before reseal; ceremony addresses
+  * can round-trip but cannot be resealed. Treat the input and returned address as sensitive.
+  * @param storageKey the exact address from a trusted persistence inventory
+  * @return the reconstructed typed address without rehashing its identifier digest
+  * @throws NullPointerException if storageKey is null
+  * @throws IllegalArgumentException if the address is not canonical or exceeds its bounds
+  * @since 1.0.0 */
+ public static @NonNull WebAuthnStoreKey fromStoredForm(@NonNull String storageKey) {
+  if (storageKey.length() > MAXIMUM_STORED_FORM_LENGTH)
+   throw new IllegalArgumentException("Invalid WebAuthn storage address");
+  String[] parts = storageKey.split(":", -1);
+  if (parts.length != 5 || !parts[0].equals("wa1"))
+   throw new IllegalArgumentException("Invalid WebAuthn storage address");
+  byte[] namespace = null, rp = null, digest = null;
+  try {
+   namespace = decodeStoredPart(parts[1], 128);
+   rp = decodeStoredPart(parts[2], 253);
+   digest = decodeStoredPart(parts[4], 32);
+   if (digest.length != 32) throw new IllegalArgumentException();
+   for (byte value : namespace) if (value < 0x21 || value > 0x7e) throw new IllegalArgumentException();
+   for (byte value : rp) if (value < 0x21 || value > 0x7e) throw new IllegalArgumentException();
+   String ns = new String(namespace, StandardCharsets.US_ASCII);
+   String relyingParty = new String(rp, StandardCharsets.US_ASCII);
+   validateNamespace(ns);
+   validateRelyingPartyId(relyingParty);
+   Kind kind = Kind.valueOf(parts[3]);
+   if (kind == Kind.NAMESPACE_CLOCK
+     && !forNamespaceClock(ns, relyingParty).getStorageKey().equals(storageKey))
+    throw new IllegalArgumentException();
+   return new WebAuthnStoreKey(storageKey, kind);
+  } catch (IllegalArgumentException | EncodingException invalid) {
+   throw new IllegalArgumentException("Invalid WebAuthn storage address");
+  } finally {
+   if (namespace != null) Arrays.fill(namespace, (byte) 0);
+   if (rp != null) Arrays.fill(rp, (byte) 0);
+   if (digest != null) Arrays.fill(digest, (byte) 0);
+  }
+ }
+
+ private static byte @NonNull [] decodeStoredPart(@NonNull String encoded, int maximum)
+   throws EncodingException {
+  if (encoded.isEmpty() || encoded.length() > (maximum * 4 + 2) / 3)
+   throw new IllegalArgumentException();
+  return Base64Url.decode(encoded);
  }
 
  /** Returns the exact persistence address; do not log it.

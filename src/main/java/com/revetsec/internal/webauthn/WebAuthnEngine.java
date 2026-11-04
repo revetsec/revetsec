@@ -363,15 +363,15 @@ public final class WebAuthnEngine {
             if (!(snapshot.getEntry(ceremonyKey) instanceof WebAuthnStoreEntry.Absent))
                 return Start.failure(Status.UNAVAILABLE);
             List<byte[]> excluded = List.of();
-            WebAuthnStoreWrite.Mutation activeFence = null;
             if (fenceKey != null) {
                 WebAuthnStoreEntry fenceEntry = snapshot.getEntry(fenceKey);
                 if (fenceEntry instanceof WebAuthnStoreEntry.Absent) {
                     if (kind != WebAuthnCeremonyState.Kind.REGISTRATION)
                         return Start.failure(Status.REJECTED);
-                    var encodedFence = this.fences.encode(requireNonNull(approvedHandle), true, authorityClock.instant());
-                    activeFence = WebAuthnStoreWrite.Mutation.insert(encodedFence.key(),
-                            encodedFence.sealedBytes());
+                    // Tentative enrollment owns only its expiring ceremony. Account state is
+                    // established atomically with the first credential, never by a browser begin.
+                    if (!(snapshot.getEntry(requireNonNull(indexKey)) instanceof WebAuthnStoreEntry.Absent))
+                        return Start.failure(Status.UNAVAILABLE);
                 } else if (!(fenceEntry instanceof WebAuthnStoreEntry.Present presentFence)
                         || !this.fences.decode(fenceKey, presentFence.getSealedBytes(),
                         authorityClock).isActive()) {
@@ -403,7 +403,6 @@ public final class WebAuthnEngine {
             List<WebAuthnStoreWrite.Mutation> changes = new ArrayList<>(2);
             changes.add(WebAuthnStoreWrite.Mutation.insertExpiring(encoded.key(), encoded.sealedBytes(),
                     encoded.expiresAt()));
-            if (activeFence != null) changes.add(activeFence);
             if (time.mutation() != null) changes.add(time.mutation());
             Instant action=attempt.actionUpper();
             Instant upper=expiresAt.isBefore(action)?expiresAt:action;

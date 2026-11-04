@@ -380,7 +380,8 @@ final class OAuthServerIngressTests {
 		var value = query("&&client_id=a%252Bb&Client_Id=extension&state&");
 		assertEquals("a%2Bb", value.required("client_id")); assertEquals("", value.value("state"));
 		assertNull(value.value("Client_Id")); assertEquals("a;b", query("client_id=a;b").required("client_id"));
-		assertEquals("�", query("state=%EF%BF%BD").value("state"));
+		assertDoesNotThrow(() -> query("extension=%EF%BF%BD"));
+		fails(INVALID_REQUEST, () -> query("state=%EF%BF%BD"));
 	}
 	@Test void allPostEndpointShapesRetainTokenAndHintWithoutAuthenticatingTheToken() {
 		for (var endpoint : List.of(REVOCATION, INTROSPECTION)) {

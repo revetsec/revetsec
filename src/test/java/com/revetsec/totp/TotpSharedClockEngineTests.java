@@ -175,6 +175,44 @@ final class TotpSharedClockEngineTests {
 	}
 	private static @NonNull TotpEnrollmentOptions options(@NonNull String account){return TotpEnrollmentOptions.withAccountId(account).accountName("person@example.test").build();}
 
+	@org.junit.jupiter.api.TestFactory
+	@NonNull List<org.junit.jupiter.api.@NonNull DynamicTest> scApi02ErrorProfileCannotChangeAtReceiptOrFinalRead() {
+		List<org.junit.jupiter.api.DynamicTest> tests=new ArrayList<>();
+		for(Duration initial:List.of(Duration.ZERO,Duration.ofMillis(250)))for(String stage:List.of("CONTROL","VALIDATION","FINAL")){
+			Duration changed=initial.isZero()?Duration.ofMillis(250):Duration.ZERO;
+			tests.add(org.junit.jupiter.api.DynamicTest.dynamicTest("SC-API-02/TOTP/"+stage+"/"+initial,()->{
+				F f=new F();
+				f.store.afterRead=(n,result)->{
+					var snapshot=assertInstanceOf(TotpStoreReadResult.Available.class,result).getSnapshot();
+					var time=assertInstanceOf(com.revetsec.StoreTimeObservation.Healthy.class,snapshot.getTimeObservation());
+					Duration error=stage.equals("FINAL") && n==2?changed:initial;
+					return TotpStoreReadResult.Available.fromSnapshot(TotpStoreSnapshot.fromEntries(snapshot.getEntries().keySet(),snapshot.getEntries(),
+						com.revetsec.StoreTimeObservation.Healthy.fromObservation(time.getAdmission(),time.getClockGeneration(),time.getObservedAt(),error)));
+				};
+				f.store.afterCommit=(n,write,receipt)->{
+					var time=receipt.getTiming().orElseThrow().getValidatedTime();
+					return TotpStoreCommitReceipt.fromCommittedTiming(com.revetsec.StoreCommitTiming.fromTimes(
+						com.revetsec.StoreTimeObservation.Healthy.fromObservation(time.getAdmission(),time.getClockGeneration(),time.getObservedAt(),stage.equals("VALIDATION")?changed:initial),null));
+				};
+				TotpEnrollmentRequestResult result=f.begin();
+				if(stage.equals("CONTROL"))assertInstanceOf(TotpEnrollmentRequestResult.Prepared.class,result);
+				else assertInstanceOf(TotpEnrollmentRequestResult.ReconciliationRequired.class,result);
+				assertEquals(1,f.store.commits.get());assertEquals(stage.equals("VALIDATION")?1:2,f.store.reads.get());
+				try(var decoded=f.account()){assertNotNull(Objects.requireNonNull(decoded.account).pending);}
+				assertTrue(f.store.writes.stream().flatMap(w->w.getMutations().stream()).allMatch(m->m.getKey().getRecoveryEpoch().equals(EPOCH)));
+			}));
+		}
+		return tests;
+	}
+	@Test void scApi02InvalidLocalAccountDoesNotLookUpStoreOrChangeState(){
+		F f=new F();String rootVersion=f.record(f.root()).getVersion();
+		for(String account:List.of("","a".repeat(1025),"\ud800")){
+			assertThrows(IllegalArgumentException.class,()->f.totp.getStatusResult(account));
+			assertEquals(0,f.store.reads.get());assertEquals(0,f.store.commits.get());
+		}
+		assertEquals(rootVersion,f.record(f.root()).getVersion());
+	}
+
 	@FunctionalInterface private interface BeforeCommit { @Nullable TotpStoreCommitReceipt apply(int number,@NonNull TotpStoreWrite write); }
 	@FunctionalInterface private interface AfterCommit { @NonNull TotpStoreCommitReceipt apply(int number,@NonNull TotpStoreWrite write,@NonNull TotpStoreCommitReceipt result); }
 	@FunctionalInterface private interface AfterRead { @NonNull TotpStoreReadResult apply(int number,@NonNull TotpStoreReadResult result); }

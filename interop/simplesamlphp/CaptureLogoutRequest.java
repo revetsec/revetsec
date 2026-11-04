@@ -45,7 +45,7 @@ public final class CaptureLogoutRequest {
                 .signingCredential(SamlCredential.fromPem(
                         Files.readString(keys.resolve("sp-signing-rsa-2048-key.pem")),
                         Files.readString(keys.resolve("sp-signing-rsa-2048-cert.pem"))))
-                .replayCache(InMemorySamlReplayCache.withLimit(clock, 8))
+                .replayCache(InMemorySamlReplayCache.fromLimit(clock, 8))
                 .clock(clock).build();
         SamlIdentityProvider idp = SamlIdentityProvider.withEntityId("https://ssp.example.test/idp")
                 .connectionId("simplesaml-capture")

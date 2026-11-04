@@ -38,7 +38,8 @@ import java.util.Objects;
 /**
  * Narrow XML Encryption decrypt-only boundary for SAML EncryptedAssertion and EncryptedID. Every failure is
  * opaque. The caller verifies a signed Response before permitting CBC and verifies the decrypted
- * Assertion before releasing identity.
+ * Assertion before releasing identity. Before an enclosing signature has been verified, exactly one
+ * resolved EncryptedKey is allowed, tried against every configured rollover key (at most four attempts).
  */
 public final class XmlEncryptionDecryptor {
     private static final String ENC = "http://www.w3.org/2001/04/xmlenc#";
@@ -58,6 +59,24 @@ public final class XmlEncryptionDecryptor {
     public static byte @Nullable [] decrypt(@NonNull Element encryptedAssertion,
             @NonNull List<@NonNull PrivateKey> privateKeys, boolean responseSigned, boolean allowCbc,
             @NonNull SecureRandom random) {
+        return decryptWithBudget(encryptedAssertion, privateKeys, responseSigned, responseSigned, allowCbc, random);
+    }
+
+    /**
+     * Decrypts only after the caller has verified a configured peer's signature covering this exact
+     * ciphertext in its enclosing Response or Assertion. The ordinary eight-candidate/four-credential
+     * bound then applies. This is not a signature check or identity admission. CBC still requires
+     * a verified outer Response, even when an enclosing Assertion signature was verified.
+     */
+    public static byte @Nullable [] decryptAfterSignatureVerification(@NonNull Element encrypted,
+            @NonNull List<@NonNull PrivateKey> privateKeys, boolean responseSigned, boolean allowCbc,
+            @NonNull SecureRandom random) {
+        return decryptWithBudget(encrypted, privateKeys, true, responseSigned, allowCbc, random);
+    }
+
+    private static byte @Nullable [] decryptWithBudget(@NonNull Element encryptedAssertion,
+            @NonNull List<@NonNull PrivateKey> privateKeys, boolean signatureVerified,
+            boolean responseSigned, boolean allowCbc, @NonNull SecureRandom random) {
         Objects.requireNonNull(encryptedAssertion);
         Objects.requireNonNull(privateKeys);
         Objects.requireNonNull(random);
@@ -80,10 +99,11 @@ public final class XmlEncryptionDecryptor {
         String algorithm = dataMethod.getAttributeNS(null, "Algorithm");
         boolean gcm = algorithm.endsWith("-gcm");
         if (bits == 0 || (!gcm && (!responseSigned || !allowCbc))) return null;
+        List<Element> wrappedKeys = keyCandidates(data, encryptedAssertion);
+        if (wrappedKeys == null || wrappedKeys.isEmpty() || wrappedKeys.size() > 8
+                || !preAuthenticationBudgetAllows(signatureVerified, wrappedKeys.size())) return null;
         byte[] encrypted = decoded(dataCipher, 131072);
         if (encrypted == null || encrypted.length < (gcm ? 28 : 32)) return null;
-        List<Element> wrappedKeys = keyCandidates(data, encryptedAssertion);
-        if (wrappedKeys == null || wrappedKeys.isEmpty() || wrappedKeys.size() > 8) return null;
         byte[] accepted = null;
         for (Element wrapped : wrappedKeys) {
             KeyMethod keyMethod = keyMethod(wrapped);
@@ -139,6 +159,10 @@ public final class XmlEncryptionDecryptor {
         }
         Arrays.fill(encrypted, (byte) 0);
         return accepted;
+    }
+
+    private static boolean preAuthenticationBudgetAllows(boolean signatureVerified, int candidates) {
+        return signatureVerified || candidates == 1;
     }
 
     private static @Nullable KeyMethod keyMethod(@NonNull Element wrapped) {

@@ -25,7 +25,7 @@ import java.util.Arrays;
 import java.math.BigDecimal;
 import java.util.Map;
 
-/** Streaming UTF-8 output that charges emitted bytes and work before buffer growth. */
+/** Streaming UTF-8 output with exact byte bounds and cumulative byte-work before buffer growth. */
 @NotThreadSafe
 final class ScimJsonOutput {
     private static final @NonNull String HEX = "0123456789abcdef";
@@ -141,7 +141,9 @@ final class ScimJsonOutput {
         return true;
     }
     private boolean reserve(int amount) {
-        if (amount > maximum - size || !work.take(amount)) return false;
+        if (amount < 0 || amount > maximum - size || work.wasExceeded()) return false;
+        long units = ScimWork.byteUnits(size + amount) - ScimWork.byteUnits(size);
+        if (!work.spend(units)) return false;
         int required = size + amount;
         if (required > bytes.length) {
             int grown = (int) Math.min(maximum, Math.max((long) required, bytes.length + (long) bytes.length / 2 + 1));

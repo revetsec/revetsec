@@ -7,6 +7,7 @@ Exact issuer comparison is the default. `OidcIssuerPolicy.exactInstance()` and a
 ```java
 OidcIssuerPolicy policy = OidcIssuerPolicy.fromMicrosoftEntraMultiTenant(
     tenantId -> permittedTenantIds.contains(tenantId));
+// Share this thread-safe client across requests.
 OidcClient client = OidcClient.withIssuer(
         "https://login.microsoftonline.com/organizations/v2.0")
     .issuerPolicy(policy)

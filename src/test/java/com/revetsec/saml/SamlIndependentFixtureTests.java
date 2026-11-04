@@ -79,7 +79,7 @@ final class SamlIndependentFixtureTests {
                 resource("keys/sp-rsa-2048.key"), resource("keys/sp-rsa-2048.crt"));
         return SamlServiceProvider.withEntityId("https://sp.test/Selftest")
                 .assertionConsumerServiceUrl(URI.create("https://sp.test/acs"))
-                .replayCache(InMemorySamlReplayCache.withLimit(CLOCK, 32))
+                .replayCache(InMemorySamlReplayCache.fromLimit(CLOCK, 32))
                 .decryptionCredentials(List.of(credential)).clock(CLOCK).build();
     }
 

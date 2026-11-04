@@ -1,0 +1,19 @@
+{
+  "client": {
+    "version": "1.57.0",
+    "commit": "30bba95105e59bc3e7df624cf6b4d433690cfe12",
+    "releaseUrl": "https://github.com/aaif-goose/goose/releases/tag/v1.57.0",
+    "archiveUrl": "https://github.com/aaif-goose/goose/releases/download/v1.57.0/goose-aarch64-unknown-linux-gnu.tar.bz2",
+    "archiveSha256": "17c6b090db6acc5605da904bbe19cc2765bc7a6786019d85a6d0a361de06dbf7",
+    "binarySha256": "9f595d283227a1196333655c7012ec5f7daf5fead63150545b377baf74da0edb"
+  },
+  "browserImage": "sha256:ccff4e2c9b4a150404caa459225165a269d8e0d828d77bd60a5fe85943f6fc42",
+  "namespaceImage": "sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b",
+  "javaImage": "sha256:b468c3fc688b14450571494f588bd939378e7fd542ed5a73f8efc13f17872a87",
+  "javaTreeSha256": "11d2005a20963f00dd6addc612098e3517a4bf76f896af3dea0d761e02b11920",
+  "caddySha256": "e1f904038fc11ca897ac5a12fdacfb2a7add02a8720c426d562a37f6fdad2afe",
+  "seccompSha256": "4196af2ea4c1921e0c1ab2891da6cb829308cfc2e9fe5f5fdf6fc4bead8665b7",
+  "metadataDocumentSha256": "7f6cb1cf0fd391c1e2c1e732da91dbacf23215b5ae29609fa185e1fa28d8925e",
+  "systemCaSha256": "9481fcd95f41b221f02f14d896535fe500bec539bc563c4cdca1acee483a8bdd",
+  "profile": "goose-mcp-probe-2025-11-25-stored-auth-reconnect"
+}

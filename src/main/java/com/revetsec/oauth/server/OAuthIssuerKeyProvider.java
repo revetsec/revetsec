@@ -29,6 +29,9 @@ import static java.util.Objects.requireNonNull;
  * restarts. Returning a snapshot declares that its generation was actually published at its publication instant.
  * Construction does not call the provider. Ordinary key rotation does not invalidate grants; compromise or store
  * restoration requires an explicit issuer revocation fence before reopening traffic.
+ * The callback receives no candidate expiry or durable issuance acknowledgement. Persist conservative
+ * retention promises before enabling dependent issuance; process-local observations cannot recover missing
+ * publication history. A well-formed initial snapshot cannot prove that an omitted prior key is safe to remove.
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  * @since 1.0.0
  */
@@ -43,6 +46,7 @@ public interface OAuthIssuerKeyProvider {
  @NonNull OAuthIssuerKeySnapshot getSnapshot(@NonNull Duration remainingBudget);
  /**
   * Supplies one fixed immutable declaration without I/O.
+  * This convenience provider adds no durable publication history or cross-node rotation coordination.
   * @param snapshot required snapshot
   * @return a thread-safe fixed provider
   * @throws NullPointerException if snapshot is null

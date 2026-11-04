@@ -48,6 +48,13 @@ import java.util.function.Function;
  * </ul>
  * <p>
  * LRU ordering is approximate under high contention (read events may be overwritten).
+ * <p>
+ * Capacity is a maintenance target, not a strict retained-entry bound under concurrent writes.
+ * A writer can publish a mapping and return while another thread owns maintenance; both the
+ * backing map and its lossless write queue can then exceed that target until maintenance runs.
+ * Use this class only behind the private serialized client-metadata cache, which evicts before
+ * insertion and drains every mutation. A new production consumer requires its own bounded-admission
+ * review; approximate LRU order and Map thread safety do not establish a storage quota.
  *
  * @param <K> key type
  * @param <V> value type

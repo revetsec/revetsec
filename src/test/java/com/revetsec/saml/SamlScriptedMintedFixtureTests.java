@@ -170,7 +170,7 @@ final class SamlScriptedMintedFixtureTests {
                 resource("keys/sp-encryption-rsa-2048-cert.pem"));
         return SamlServiceProvider.withEntityId("https://sp.test/Selftest")
                 .assertionConsumerServiceUrl(URI.create("https://sp.test/acs"))
-                .replayCache(InMemorySamlReplayCache.withLimit(CLOCK, 32))
+                .replayCache(InMemorySamlReplayCache.fromLimit(CLOCK, 32))
                 .decryptionCredentials(List.of(credential)).clock(CLOCK).build();
     }
 

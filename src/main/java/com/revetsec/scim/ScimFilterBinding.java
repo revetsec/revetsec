@@ -69,7 +69,7 @@ final class ScimFilterBinding {
         if (!(syntax instanceof ScimFilterParseResult.Succeeded success)) return syntax;
         State state = new State(work, used);
         ScimFilter result = bindNode(success.getFilter(), policy, null, state);
-        return result == null ? rejected() : new ScimFilterParseResult.Succeeded(result);
+        return result == null ? rejected() : new ScimFilterParseResult.Succeeded(ScimFilterSource.retain(result, expression));
     }
 
     @NonNull Optional<@NonNull ScimAttributePath> sort(@NonNull ScimAttributePath path) {

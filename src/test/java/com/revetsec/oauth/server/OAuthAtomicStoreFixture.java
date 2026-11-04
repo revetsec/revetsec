@@ -53,6 +53,7 @@ final class OAuthAtomicStoreFixture implements OAuthAuthorizationServerStore {
 	@Nullable OAuthStoreTransaction lastTransaction;
     @NonNull Instant authorityNow;
     boolean healthy=true;
+    @NonNull Duration maximumUtcError=Duration.ZERO;
     @NonNull StoreAdmission admission=ScriptedOAuthStore.observation(Instant.EPOCH).getAdmission();
     @NonNull String clockGeneration=ScriptedOAuthStore.observation(Instant.EPOCH).getClockGeneration();
     private @NonNull Instant lastPublished=Instant.EPOCH;
@@ -64,7 +65,7 @@ final class OAuthAtomicStoreFixture implements OAuthAuthorizationServerStore {
     @NonNull StoreTimeObservation observation(){
         if(!this.healthy || this.authorityNow.isBefore(this.lastPublished))return StoreTimeObservation.Unavailable.fromAdmission(this.admission);
         this.lastPublished=this.authorityNow;
-        return ScriptedOAuthStore.observation(this.admission,this.clockGeneration,this.authorityNow);
+        return StoreTimeObservation.Healthy.fromObservation(this.admission,this.clockGeneration,this.authorityNow,this.maximumUtcError);
     }
     private boolean missingRoot(@NonNull OAuthStoreKey key){
         String scope=OAuthStoreFormat.namespace(key);boolean data=false;

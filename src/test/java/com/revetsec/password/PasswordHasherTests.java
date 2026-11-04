@@ -39,7 +39,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 final class PasswordHasherTests {
-    private static final Argon2idParameters PARAMETERS = Argon2idParameters.withCosts(19_456, 2, 1);
+    private static final Argon2idParameters PARAMETERS = Argon2idParameters.fromCosts(19_456, 2, 1);
     private static final String BCRYPT_2A = "$2a$05$CCCCCCCCCCCCCCCCCCCCC.E5YPO9kmyuRGyh0XouQYb4YMJKvyOeW";
 
     @Test void nativeRoundTripUsesCanonicalStoredFormAndFullNfcPassword() {
@@ -61,7 +61,7 @@ final class PasswordHasherTests {
     }
 
     @Test void invalidInputsAndStoredCostsAreRejectedBeforeKdfAdmission() {
-        PasswordWorkGate gate = PasswordWorkGate.withLimits(1, 19_456);
+        PasswordWorkGate gate = PasswordWorkGate.fromInMemoryLimits(1, 19_456);
         PasswordHasher hasher = PasswordHasher.withArgon2id(PARAMETERS).workGate(gate).build();
         assertEquals(PasswordRejectionReason.INVALID_PASSWORD,
                 assertInstanceOf(PasswordHashResult.Rejected.class,
@@ -82,7 +82,7 @@ final class PasswordHasherTests {
     }
 
     @Test void sharedGateLimitsMemoryAndConcurrentCallsWithoutBlocking() {
-        PasswordWorkGate gate = PasswordWorkGate.withLimits(1, 19_456);
+        PasswordWorkGate gate = PasswordWorkGate.fromInMemoryLimits(1, 19_456);
         PasswordHasher hasher = PasswordHasher.withArgon2id(PARAMETERS).workGate(gate).build();
         PasswordWorkGate.Permit reservation = Objects.requireNonNull(gate.tryAcquire(19_456));
         assertEquals(PasswordUnavailableReason.WORK_CAPACITY,
@@ -94,7 +94,7 @@ final class PasswordHasherTests {
     }
 
     @Test void sharedGateAccountsForOverlappingThreadsAndReleasesEveryReservation() throws InterruptedException {
-        PasswordWorkGate gate = PasswordWorkGate.withLimits(2, 38_912);
+        PasswordWorkGate gate = PasswordWorkGate.fromInMemoryLimits(2, 38_912);
         CountDownLatch firstHolding = new CountDownLatch(1);
         CountDownLatch secondHolding = new CountDownLatch(1);
         CountDownLatch releaseFirst = new CountDownLatch(1);
@@ -162,7 +162,7 @@ final class PasswordHasherTests {
             return observed;
         };
         PasswordHasher dynamic = PasswordHasher.withArgon2id(PARAMETERS)
-                .workGate(PasswordWorkGate.withLimits(1, 19_456))
+                .workGate(PasswordWorkGate.fromInMemoryLimits(1, 19_456))
                 .pepperSource(dynamicSource).build();
         AtomicReference<PasswordVerificationResult> result = new AtomicReference<>();
         AtomicReference<Throwable> failure = new AtomicReference<>();
@@ -205,8 +205,8 @@ final class PasswordHasherTests {
     }
 
     @Test void interruptedInFlightNativeHashReleasesGatePermit() throws InterruptedException {
-        PasswordWorkGate gate = PasswordWorkGate.withLimits(1, 65_536);
-        PasswordHasher hasher = PasswordHasher.withArgon2id(Argon2idParameters.withCosts(65_536, 10, 1))
+        PasswordWorkGate gate = PasswordWorkGate.fromInMemoryLimits(1, 65_536);
+        PasswordHasher hasher = PasswordHasher.withArgon2id(Argon2idParameters.fromCosts(65_536, 10, 1))
                 .workGate(gate)
                 .verificationLimits(PasswordVerificationLimits.builder().maximumArgon2idPasses(10).build())
                 .build();
@@ -304,7 +304,7 @@ final class PasswordHasherTests {
     }
 
     @Test void nullableBuilderPropertiesRestoreDefaultsWithoutRemovingRequiredWorkAdmission() {
-        PasswordWorkGate gate = PasswordWorkGate.withLimits(1, 19_456);
+        PasswordWorkGate gate = PasswordWorkGate.fromInMemoryLimits(1, 19_456);
         PasswordHasher.Builder builder = PasswordHasher.withArgon2id(PARAMETERS).workGate(gate);
         assertThrows(IllegalStateException.class, () -> builder.workGate(null).build());
         assertSame(builder, builder.workGate(gate)
@@ -343,15 +343,15 @@ final class PasswordHasherTests {
         PasswordPepperKey oldKey = key("older", 3);
         PasswordPepperKey currentKey = key("current", 4);
         PasswordHasher strongerHistorical = PasswordHasher
-                .withArgon2id(Argon2idParameters.withCosts(47_104, 2, 1))
-                .workGate(PasswordWorkGate.withLimits(1, 47_104))
+                .withArgon2id(Argon2idParameters.fromCosts(47_104, 2, 1))
+                .workGate(PasswordWorkGate.fromInMemoryLimits(1, 47_104))
                 .pepperSource(PasswordPepperSource.fromSnapshot(
                         PasswordPepperSnapshot.withActiveKey(oldKey).build()))
                 .build();
         String strongerStored = assertInstanceOf(PasswordHashResult.Succeeded.class,
                 strongerHistorical.hashResult("pw".toCharArray())).getPasswordHash().getStoredForm();
         PasswordHasher lowerCurrent = PasswordHasher.withArgon2id(PARAMETERS)
-                .workGate(PasswordWorkGate.withLimits(1, 47_104))
+                .workGate(PasswordWorkGate.fromInMemoryLimits(1, 47_104))
                 .pepperSource(PasswordPepperSource.fromSnapshot(PasswordPepperSnapshot
                         .withActiveKey(currentKey).retainedKeys(List.of(oldKey)).build()))
                 .build();
@@ -359,8 +359,8 @@ final class PasswordHasherTests {
                 lowerCurrent.verifyResult("pw".toCharArray(), strongerStored)).isRehashRecommended());
 
         PasswordHasher differentLanes = PasswordHasher
-                .withArgon2id(Argon2idParameters.withCosts(19_456, 2, 2))
-                .workGate(PasswordWorkGate.withLimits(1, 19_456)).build();
+                .withArgon2id(Argon2idParameters.fromCosts(19_456, 2, 2))
+                .workGate(PasswordWorkGate.fromInMemoryLimits(1, 19_456)).build();
         String otherLanes = assertInstanceOf(PasswordHashResult.Succeeded.class,
                 differentLanes.hashResult("pw".toCharArray())).getPasswordHash().getStoredForm();
         assertTrue(assertInstanceOf(PasswordVerificationResult.Matched.class,
@@ -369,7 +369,7 @@ final class PasswordHasherTests {
 
     @Test void legacyVerificationIsExplicitAndOnlyMatchesRecommendRehash() {
         PasswordHasher legacy = PasswordHasher.withArgon2id(PARAMETERS)
-                .workGate(PasswordWorkGate.withLimits(1, 19_456))
+                .workGate(PasswordWorkGate.fromInMemoryLimits(1, 19_456))
                 .legacyBcrypt(LegacyPasswordPreparation.EXACT_UTF8, 5)
                 .legacyPbkdf2(LegacyPasswordPreparation.EXACT_UTF8, 10_000)
                 .build();
@@ -404,7 +404,7 @@ final class PasswordHasherTests {
                 .maximumPasswordUtf8Bytes(65_536)
                 .build();
         PasswordHasher passwords = PasswordHasher.withArgon2id(PARAMETERS)
-                .workGate(PasswordWorkGate.withLimits(1, 19_456))
+                .workGate(PasswordWorkGate.fromInMemoryLimits(1, 19_456))
                 .verificationLimits(limits)
                 .legacyPbkdf2(LegacyPasswordPreparation.EXACT_UTF8, 10_000)
                 .build();
@@ -429,7 +429,7 @@ final class PasswordHasherTests {
         PasswordVerificationLimits limits = PasswordVerificationLimits.builder()
                 .maximumStoredFormChars(192).build();
         PasswordHasher passwords = PasswordHasher.withArgon2id(PARAMETERS)
-                .workGate(PasswordWorkGate.withLimits(1, 19_456))
+                .workGate(PasswordWorkGate.fromInMemoryLimits(1, 19_456))
                 .verificationLimits(limits)
                 .pepperSource(PasswordPepperSource.fromSnapshot(
                         PasswordPepperSnapshot.withActiveKey(key("k".repeat(64), 1)).build()))
@@ -445,12 +445,12 @@ final class PasswordHasherTests {
 
     private static @NonNull PasswordHasher hasher() {
         return PasswordHasher.withArgon2id(PARAMETERS)
-                .workGate(PasswordWorkGate.withLimits(1, 19_456)).build();
+                .workGate(PasswordWorkGate.fromInMemoryLimits(1, 19_456)).build();
     }
 
     private static @NonNull PasswordHasher peppered(@NonNull PasswordPepperSnapshot snapshot) {
         return PasswordHasher.withArgon2id(PARAMETERS)
-                .workGate(PasswordWorkGate.withLimits(1, 19_456))
+                .workGate(PasswordWorkGate.fromInMemoryLimits(1, 19_456))
                 .pepperSource(PasswordPepperSource.fromSnapshot(snapshot)).build();
     }
 

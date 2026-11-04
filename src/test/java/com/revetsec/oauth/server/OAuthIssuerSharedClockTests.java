@@ -124,6 +124,60 @@ final class OAuthIssuerSharedClockTests {
    .grantPolicy((context,budget)->{this.policies++;Runnable hook=this.policyHook;this.policyHook=null;if(hook!=null)hook.run();return decision();}).build();
  }
  private static @NonNull OAuthServerClientRegistration resourceClient(){return OAuthServerClientRegistration.withClientId("resource").configurationVersion("r1").authorizationCodePermitted(false).introspectionResources(Set.of(RESOURCE)).authentication(OAuthServerClientAuthentication.fromClientSecretVerifier((id,secret,budget)->java.util.Arrays.equals(secret,"secret".getBytes(StandardCharsets.UTF_8)))).build();}
+
+ @org.junit.jupiter.api.TestFactory
+ @NonNull List<org.junit.jupiter.api.@NonNull DynamicTest> scApi02ErrorProfileCannotChangeDuringAssemblyReceiptOrFinalRead(){
+  List<org.junit.jupiter.api.DynamicTest> tests=new java.util.ArrayList<>();
+  for(Duration initial:List.of(Duration.ZERO,Duration.ofMillis(250)))for(String stage:List.of("CONTROL","READ","VALIDATION","FINAL")){
+   Duration changed=initial.isZero()?Duration.ofMillis(250):Duration.ZERO;
+   tests.add(org.junit.jupiter.api.DynamicTest.dynamicTest("SC-API-02/ISSUER_NORMAL/"+stage+"/"+initial,()->{
+    OAuthIssuerSharedClockTests f=new OAuthIssuerSharedClockTests();f.store.maximumUtcError=initial;f.initialized();f.subject();
+    int commits=f.store.commits;String version=f.root().getVersion();
+    if(stage.equals("READ")){
+     var session=f.coordinator.begin(deadline());f.store.maximumUtcError=changed;
+     failed(OAuthStoreFailure.Reason.UNAVAILABLE,()->session.subject("subject"));assertEquals(commits,f.store.commits);
+    }else{
+     if(stage.equals("VALIDATION"))f.store.beforeCommit=()->f.store.maximumUtcError=changed;
+     if(stage.equals("FINAL"))f.store.afterCommit=()->f.store.maximumUtcError=changed;
+     if(stage.equals("CONTROL"))assertNotNull(f.coordinator.establishNewSubject("next-subject",deadline()));
+     else failed(OAuthStoreFailure.Reason.COMMIT_CONFIRMED_NOT_ADMITTED,()->f.coordinator.establishNewSubject("next-subject",deadline()));
+     assertEquals(commits+1,f.store.commits);assertTrue(f.store.rows.containsKey(f.codec.subjectKey("next-subject")));
+    }
+    assertEquals(version,f.root().getVersion());
+   }));
+  }
+  return tests;
+ }
+ @org.junit.jupiter.api.TestFactory
+ @NonNull List<org.junit.jupiter.api.@NonNull DynamicTest> scApi02FenceOnlyUsesAdmissionDomainsWithoutTimedProfile(){
+  List<org.junit.jupiter.api.DynamicTest> tests=new java.util.ArrayList<>();
+  for(boolean all:List.of(false,true))for(boolean healthy:List.of(false,true))for(String change:List.of("CONTROL","CLOCK","ERROR","AUTHORITY","RECOVERY")){
+   tests.add(org.junit.jupiter.api.DynamicTest.dynamicTest("SC-API-02/ISSUER_FENCE_ONLY/"+all+"/"+healthy+"/"+change,()->{
+    OAuthIssuerSharedClockTests f=new OAuthIssuerSharedClockTests();f.initialized();f.subject();f.store.healthy=healthy;f.clock.broken=true;
+    f.store.afterCommit=()->{
+     if(change.equals("CLOCK"))f.store.clockGeneration="A".repeat(43);
+     if(change.equals("ERROR"))f.store.maximumUtcError=Duration.ofMillis(250);
+     if(change.equals("AUTHORITY"))f.store.admission=StoreAdmission.fromIdentifiers("A".repeat(43),f.store.admission.getRecoveryGeneration());
+     if(change.equals("RECOVERY"))f.store.admission=StoreAdmission.fromIdentifiers(f.store.admission.getAuthorityId(),"A".repeat(43));
+    };
+    org.junit.jupiter.api.function.Executable action=()->{if(all)f.coordinator.revokeAll(deadline());else f.coordinator.revokeSubject("subject",deadline());};
+    if(change.equals("AUTHORITY") || change.equals("RECOVERY"))failed(OAuthStoreFailure.Reason.COMMIT_CONFIRMED_NOT_ADMITTED,action);
+    else assertDoesNotThrow(action);
+    var transaction=requireNonNull(f.store.lastTransaction);assertEquals(OAuthStoreTransaction.Purpose.FENCE_ONLY,transaction.getPurpose());
+    assertTrue(transaction.getTemporalCondition().isEmpty());assertEquals(1,transaction.getMutations().size());
+    assertEquals(all?1:2,transaction.getConditions().size());
+   }));
+  }
+  return tests;
+ }
+ @Test void scApi02InvalidLocalSubjectDoesNotLookUpStoreInNormalOrFenceOnlyMode(){
+  int reads=this.store.reads,commits=this.store.commits;
+  for(String subject:List.of("","s".repeat(256),"\ud800")){
+   assertThrows(IllegalArgumentException.class,()->this.coordinator.establishNewSubject(subject,deadline()));
+   assertThrows(IllegalArgumentException.class,()->this.coordinator.revokeSubject(subject,deadline()));
+   assertEquals(reads,this.store.reads);assertEquals(commits,this.store.commits);assertTrue(this.store.rows.isEmpty());
+  }
+ }
  private static @NonNull OAuthAuthorizationDecision decision(){return OAuthAuthorizationDecision.withSubject("subject").authorizedScopesByResource(Map.of(RESOURCE,Set.of("read"))).refreshTokenPermitted(true).build();}
  private static @NonNull String form(@NonNull Map<@NonNull String,@NonNull String> values){return String.join("&",values.entrySet().stream().map(e->encode(e.getKey())+"="+encode(e.getValue())).toList());}
  private static @NonNull String encode(@NonNull String value){try{return FormUrlEncoding.encode(value);}catch(com.revetsec.internal.encoding.EncodingException failure){throw new AssertionError(failure);}}
@@ -180,7 +234,7 @@ final class OAuthIssuerSharedClockTests {
   var key=TestJwk.Fixture.IDP_SIGNING_RSA_2048;OAuthIssuerSigningKey a=OAuthIssuerSigningKey.fromKeyPair("a",key.getPrivateKey(),key.getPublicKey()),b=OAuthIssuerSigningKey.fromKeyPair("b",key.getPrivateKey(),key.getPublicKey());
   OAuthIssuerKeySnapshot old=OAuthIssuerKeySnapshot.withActiveKey(a).generation("g1").publishedAt(NOW.minusSeconds(120)).retirementNotBefore(Map.of("a",NOW.plusSeconds(1000))).build();
   OAuthIssuerKeySnapshot future=OAuthIssuerKeySnapshot.withActiveKey(b).generation("g2").publishedAt(NOW.minusSeconds(60)).build();AtomicReference<OAuthIssuerKeySnapshot> provider=new AtomicReference<>(old);Worker worker=new Worker();
-  OAuthIssuerKeyLifecycle lifecycle=new OAuthIssuerKeyLifecycle(budget->provider.get(),worker,Duration.ZERO,new OAuthGrantRetention(Duration.ofSeconds(30),Duration.ZERO,Duration.ofSeconds(1),Duration.ZERO),true);
+  OAuthIssuerKeyLifecycle lifecycle=new OAuthIssuerKeyLifecycle(budget->requireNonNull(provider.get()),worker,Duration.ZERO,new OAuthGrantRetention(Duration.ofSeconds(30),Duration.ZERO,Duration.ofSeconds(1),Duration.ZERO),true);
   assertNotNull(lifecycle.snapshot(deadline()));assertDoesNotThrow(()->lifecycle.sign("{}".getBytes(StandardCharsets.UTF_8),NOW.plusSeconds(30),deadline(),()->NOW));
   provider.set(future);worker.time=NOW.plusSeconds(2000);assertEquals(Set.of("b"),lifecycle.snapshot(deadline()).getVerificationKeys().keySet());
   provider.set(old);worker.time=NOW;assertDoesNotThrow(()->lifecycle.sign("{}".getBytes(StandardCharsets.UTF_8),NOW.plusSeconds(30),deadline(),()->NOW));

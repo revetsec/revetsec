@@ -35,6 +35,8 @@ import static java.util.Objects.requireNonNull;
  * Applications persist these obligations across nodes, restarts and restores; an initial snapshot is a trusted
  * declaration, not evidence of external distribution. At most 100 keys and 128 KiB of aggregate configuration
  * are accepted; response limits apply separately. No provider lookup or signing occurs during construction.
+ * A fresh lifecycle instance conservatively waits from this generation's publication instant before signing,
+ * even when another process remembers an earlier staging observation for the same public key.
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  * @since 1.0.0
  */
@@ -143,6 +145,8 @@ public final class OAuthIssuerKeySnapshot {
   public @NonNull Builder generation(@Nullable String value) { this.generation=value==null ? null : OAuthServerConfiguration.text(value,256); return this; }
   /**
    * Sets the required publication instant.
+   * Preserve the actual instant for an unchanged generation across restarts; do not backdate a new
+   * generation to avoid the publication wait. This setter does not publish keys or restore prior history.
    * @param value an instant before the permanent storage sentinel, or null to clear required
    * @return this builder
    * @throws IllegalArgumentException if the supplied instant is invalid

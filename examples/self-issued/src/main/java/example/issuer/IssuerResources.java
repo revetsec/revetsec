@@ -152,19 +152,43 @@ public final class IssuerResources {
     @GET("/authorize") public @NonNull MarshaledResponse authorize(@NonNull Request request) {
         if(!issuerHost(request)) return fixed(403,"Request denied.");
         try {
-            BrowserSessions.Session session=sessions.find(request).orElseGet(sessions::begin);
+            BrowserSessions.Session session=sessions.find(request).orElse(null);
+            if(session==null) {
+                String query=request.getRawQuery().orElse("");
+                if(!authorizationQueryAllowed(query)) return fixed(400,"Authorization request rejected.");
+                return page("Start local browser session","<p>Continue to sign in and review the client request.</p>"
+                        +"<form method='post' action='/session?"+LocalInputs.html(query)
+                        +"'><input type='hidden' name='begin' value='1'><button>Continue</button></form>");
+            }
             var read=SokletOAuthAuthorizationServer.beginAuthorizationResultFor(server,request,session.binding);
             if(!(read instanceof SokletRequestResult.Completed<OAuthAuthorizationResult> completed))
                 return fixed(413,"Request body exceeds the limit.");
             OAuthAuthorizationResult result=completed.getResult();
             if(result instanceof OAuthAuthorizationResult.InteractionRequired required) {
                 sessions.replacePending(session,new BrowserSessions.Pending(required.getInteraction().getInteractionValue()));
-                return view(session).copy().cookies(List.of(sessions.cookie(session))).finish();
+                return view(session);
             }
             return authorizationResponse(result);
         } catch(OAuthServerException failure) {return failure(failure);}
         catch(BrowserSessionUnavailableException unavailable) {return fixed(503,"Local application unavailable.");}
         catch(IllegalStateException full) {return fixed(503,"Local application unavailable.");}
+    }
+    /** A same-origin bootstrap creates no identity or OAuth interaction; those still require the normal flow. */
+    @POST("/session") public @NonNull MarshaledResponse beginSession(@NonNull Request request) {
+        String query=request.getRawQuery().orElse("");
+        if(request.getHttpMethod()!=HttpMethod.POST || !sameOrigin(request) || request.isContentTooLarge()
+                || !LocalInputs.headers(request,"Content-Type").equals(List.of("application/x-www-form-urlencoded"))
+                || !java.util.Arrays.equals(request.getBody().orElseGet(() -> new byte[0]),"begin=1".getBytes(StandardCharsets.US_ASCII))
+                || !authorizationQueryAllowed(query)) return fixed(403,"Request denied.");
+        try {
+            BrowserSessions.Session existing=sessions.find(request).orElse(null);
+            if(existing!=null) return localRedirect("/authorize?"+query);
+            BrowserSessions.Session session=sessions.begin();
+            return localRedirect("/authorize?"+query).copy().cookies(List.of(sessions.cookie(session))).finish();
+        } catch(IllegalStateException unavailable) {return fixed(503,"Local application unavailable.");}
+    }
+    private static boolean authorizationQueryAllowed(@NonNull String query) {
+        return !query.isEmpty() && query.length()<=8192 && query.chars().allMatch(c -> c>=33 && c<=126 && c!='#');
     }
     @GET("/consent") public @NonNull MarshaledResponse consent(@NonNull Request request) {
         if(!issuerHost(request)) return fixed(403,"Request denied.");

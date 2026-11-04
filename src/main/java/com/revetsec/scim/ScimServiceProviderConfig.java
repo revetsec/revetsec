@@ -30,6 +30,9 @@ import java.util.Optional;
 /**
  * Immutable SCIM capability advertisement. The application must implement every enabled
  * operation; the facade checks registered filtering policies and configured processing bounds.
+ * The password-change flag advertises application support; it does not authorize credential
+ * changes or reject schema-bound write-only password input when false. Password handling and
+ * authorization belong to the application; response rendering omits returned-never values.
  * Bulk is always unsupported. Builders and copying perform no application callbacks.
  * @since 1.0.0
  */
@@ -65,7 +68,9 @@ public final class ScimServiceProviderConfig {
     }
 
     /**
-     * Starts with PATCH/filter/sort/password disabled, ETags enabled and default pagination.
+     * Starts with PATCH/filter/sort disabled, password-change advertising false, ETags enabled
+     * and default pagination. The password advertisement does not disable password input or
+     * enable a credential handler. Applications authorize and process supplied password values.
      * @return a new builder
      * @since 1.0.0
      */
@@ -94,6 +99,8 @@ public final class ScimServiceProviderConfig {
 
     /**
      * Returns whether password changes are advertised.
+     * False does not reject schema-bound password input; true does not authorize that input,
+     * enable PATCH, or change the standard User password's write-only/returned-never facets.
      * @return whether password changes are advertised
      * @since 1.0.0
      */
@@ -209,7 +216,9 @@ public final class ScimServiceProviderConfig {
         public @NonNull Builder sortSupported(@Nullable Boolean value) { sortSupported = value; return this; }
 
         /**
-         * Sets changePasswordSupported; null restores false.
+         * Sets the password-change capability advertisement; null restores false.
+         * This setting neither authorizes nor handles credential changes. It does not gate
+         * schema-bound password input, enable PATCH, or make passwords returnable in responses.
          * @param value the replacement, or null to restore its default
          * @return this builder
          * @since 1.0.0

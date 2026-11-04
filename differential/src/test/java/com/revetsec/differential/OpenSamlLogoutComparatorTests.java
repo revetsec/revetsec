@@ -335,7 +335,7 @@ final class OpenSamlLogoutComparatorTests {
                 .assertionConsumerServiceUrl(URI.create("https://sp.test/acs"))
                 .singleLogoutServiceUrl(URI.create(SLO))
                 .signingCredential(signing)
-                .replayCache(InMemorySamlReplayCache.withLimit(CLOCK, 16))
+                .replayCache(InMemorySamlReplayCache.fromLimit(CLOCK, 16))
                 .random(zeroRandom).clock(CLOCK).build();
     }
 

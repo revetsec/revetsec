@@ -241,6 +241,27 @@ final class OAuthStoreMigrationCodecTests {
 				row.getRetainUntil(), row.toSealedForm()), clock(NOW)));
 	}
 
+	@Test void scApi02RootAndSubjectCommonBoundariesStayExactAndRawMinimumNanosCannotNormalize() {
+		StateSealer sealer=sealer("k",16384);OAuthStoreRecordCodecV2 codec=next(sealer,16384,LIMITS);
+		Instant maximum=Instant.ofEpochSecond(253402300799L,999999999);
+		for(Instant time:List.of(Instant.EPOCH,Instant.EPOCH.plusNanos(1),Instant.ofEpochSecond(0,999999999),
+				Instant.ofEpochSecond(253402300799L),maximum.minusNanos(1),maximum)){
+			OAuthStoreEntry root=codec.seal(codec.issuerKey(),OAuthStoreFormat.PERMANENT,time,OAuthIssuerRootV2.initial(ID,AUTHORITY,time).toPayload());
+			var opened=codec.open(root,clock(NOW));assertEquals(time,opened.floor());
+			assertEquals(time,OAuthIssuerRootV2.decode(opened.payload()).minimum());
+			OAuthStoreEntry subject=codec.seal(codec.subjectKey("alice"),OAuthStoreFormat.PERMANENT,time,OAuthStoreFence.initialSubject(ID).toPayload());
+			assertEquals(time,codec.open(subject,clock(NOW)).floor());
+		}
+		String root=OAuthIssuerRootV2.initial(ID,AUTHORITY,MINIMUM).toPayload();
+		assertTrue(root.contains("\"minimumNanos\":999999999"));
+		for(int nanos:List.of(-1,1000000000)){
+			String invalid=root.replace("\"minimumNanos\":999999999","\"minimumNanos\":"+nanos);
+			// Check the decoder itself: a later floor/payload mismatch must not mask normalization.
+			assertThrows(IllegalArgumentException.class,()->OAuthIssuerRootV2.decode(OAuthStoreRecordCodecV2.parse(invalid,2000)));
+			assertThrows(IllegalArgumentException.class,()->codec.seal(codec.issuerKey(),OAuthStoreFormat.PERMANENT,MINIMUM,invalid));
+		}
+	}
+
 	@Test void rootShapeAuthorityMinimumAndAuthorizationPayloadSemanticsAreNotGenericJson() {
 		StateSealer sealer = sealer("k", 16384);
 		OAuthStoreRecordCodecV2 next = next(sealer, 16384, LIMITS);

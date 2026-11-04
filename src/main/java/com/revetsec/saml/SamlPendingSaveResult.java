@@ -28,6 +28,6 @@ public enum SamlPendingSaveResult {
     /** A new record was saved. */ SAVED,
     /** A live record already uses this binding and handle. */ ALREADY_PRESENT,
     /** Capacity does not permit another live record. */ CAPACITY_REFUSED,
-    /** The store was unavailable before a mutation could occur. */ UNAVAILABLE,
+    /** Sealing capacity was exceeded or the store was unavailable before a save could occur. */ UNAVAILABLE,
     /** A mutation may have occurred; do not assume the record is present. */ INDETERMINATE
 }

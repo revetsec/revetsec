@@ -112,7 +112,7 @@ final class ScriptedIdpSsoIT {
         SamlServiceProvider metadataSp = SamlServiceProvider.withEntityId(SP_ENTITY)
                 .assertionConsumerServiceUrl(ACS).singleLogoutServiceUrl(SLO)
                 .postSingleLogoutServiceUrl(SLO)
-                .replayCache(InMemorySamlReplayCache.withLimit(CLOCK, 8))
+                .replayCache(InMemorySamlReplayCache.fromLimit(CLOCK, 8))
                 .signingCredential(signing).decryptionCredentials(List.of(decryption))
                 .clock(CLOCK).build();
         String spMetadata = assertInstanceOf(SamlServiceProviderMetadataResult.Generated.class,
@@ -155,7 +155,7 @@ final class ScriptedIdpSsoIT {
         SamlServiceProvider sp = SamlServiceProvider.withEntityId(SP_ENTITY)
                 .assertionConsumerServiceUrl(ACS)
                 .singleLogoutServiceUrl(SLO)
-                .replayCache(InMemorySamlReplayCache.withLimit(CLOCK, 64))
+                .replayCache(InMemorySamlReplayCache.fromLimit(CLOCK, 64))
                 .signingCredential(signing).decryptionCredentials(List.of(decryption))
                 .clock(CLOCK).build();
         StateSealer sealer = StateSealer.withActiveKey(TestSealers.fixedKey("saml-live"))
@@ -445,7 +445,7 @@ final class ScriptedIdpSsoIT {
                 Files.readString(Path.of("src/test/resources/fixtures/keys/sp-signing-rsa-2048-cert.pem")));
         return SamlServiceProvider.withEntityId(SP_ENTITY).assertionConsumerServiceUrl(ACS)
                 .singleLogoutServiceUrl(SLO).postSingleLogoutServiceUrl(SLO).signingCredential(signing)
-                .replayCache(InMemorySamlReplayCache.withLimit(CLOCK, 32)).clock(CLOCK).build();
+                .replayCache(InMemorySamlReplayCache.fromLimit(CLOCK, 32)).clock(CLOCK).build();
     }
 
     private static @NonNull SamlIdentityProvider postLogoutIdentityProvider() throws Exception {
@@ -530,7 +530,7 @@ final class ScriptedIdpSsoIT {
         SamlServiceProvider sp = SamlServiceProvider.withEntityId(SP_ENTITY)
                 .assertionConsumerServiceUrl(ACS).singleLogoutServiceUrl(SLO)
                 .signingCredential(signing)
-                .replayCache(InMemorySamlReplayCache.withLimit(CLOCK, 32))
+                .replayCache(InMemorySamlReplayCache.fromLimit(CLOCK, 32))
                 .clock(CLOCK).build();
         StateSealer sealer = StateSealer.withActiveKey(TestSealers.fixedKey("saml-query-endpoints"))
                 .clock(CLOCK).build();
@@ -600,7 +600,7 @@ final class ScriptedIdpSsoIT {
         SamlServiceProvider sp = SamlServiceProvider.withEntityId(SP_ENTITY)
                 .assertionConsumerServiceUrl(ACS).singleLogoutServiceUrl(SLO)
                 .signingCredential(signing)
-                .replayCache(InMemorySamlReplayCache.withLimit(CLOCK, 32))
+                .replayCache(InMemorySamlReplayCache.fromLimit(CLOCK, 32))
                 .clock(CLOCK).build();
         String relay = "slo-hostile-relay";
         HttpResponse<String> issuedResponse = json("POST", "/control/logout-requests",
@@ -709,7 +709,7 @@ final class ScriptedIdpSsoIT {
         SamlServiceProvider sp = SamlServiceProvider.withEntityId(SP_ENTITY)
                 .assertionConsumerServiceUrl(ACS).singleLogoutServiceUrl(SLO)
                 .signingCredential(signing)
-                .replayCache(InMemorySamlReplayCache.withLimit(CLOCK, 32))
+                .replayCache(InMemorySamlReplayCache.fromLimit(CLOCK, 32))
                 .clock(CLOCK).build();
         StateSealer sealer = StateSealer.withActiveKey(TestSealers.fixedKey("slo-hostile"))
                 .clock(CLOCK).build();
@@ -782,7 +782,7 @@ final class ScriptedIdpSsoIT {
         SamlServiceProvider sp = SamlServiceProvider.withEntityId(SP_ENTITY)
                 .assertionConsumerServiceUrl(ACS).singleLogoutServiceUrl(SLO)
                 .signingCredential(signing)
-                .replayCache(InMemorySamlReplayCache.withLimit(CLOCK, 32))
+                .replayCache(InMemorySamlReplayCache.fromLimit(CLOCK, 32))
                 .clock(CLOCK).build();
         StateSealer sealer = StateSealer.withActiveKey(TestSealers.fixedKey("slo-status-extras"))
                 .clock(CLOCK).build();
@@ -827,7 +827,7 @@ final class ScriptedIdpSsoIT {
         SamlIdentityProvider identityProvider = logoutIdentityProvider();
         SamlServiceProvider sp = SamlServiceProvider.withEntityId(SP_ENTITY)
                 .assertionConsumerServiceUrl(ACS)
-                .replayCache(InMemorySamlReplayCache.withLimit(CLOCK, 16))
+                .replayCache(InMemorySamlReplayCache.fromLimit(CLOCK, 16))
                 .clock(CLOCK).build();
         SamlAuthenticationRequestResult.Prepared begin = assertInstanceOf(
                 SamlAuthenticationRequestResult.Prepared.class,
@@ -955,7 +955,7 @@ final class ScriptedIdpSsoIT {
 
         SamlServiceProvider provider = SamlServiceProvider.withEntityId(SP_ENTITY)
                 .assertionConsumerServiceUrl(ACS)
-                .replayCache(InMemorySamlReplayCache.withLimit(CLOCK, 16))
+                .replayCache(InMemorySamlReplayCache.fromLimit(CLOCK, 16))
                 .clock(CLOCK).build();
         SamlIdentityProvider identityProvider = SamlIdentityProvider
                 .withEntityId("https://idp.scripted-idp.test/")
@@ -1338,7 +1338,7 @@ final class ScriptedIdpSsoIT {
                 Files.readString(Path.of("src/test/resources/fixtures/keys/sp-encryption-rsa-2048-cert.pem")));
         SamlServiceProvider provider = SamlServiceProvider.withEntityId("https://sp.test/Selftest")
                 .assertionConsumerServiceUrl(ACS)
-                .replayCache(InMemorySamlReplayCache.withLimit(CLOCK, 16))
+                .replayCache(InMemorySamlReplayCache.fromLimit(CLOCK, 16))
                 .decryptionCredentials(List.of(decryption))
                 .clock(CLOCK).build();
         EnumSet<SamlCompatibilityMode> modes = EnumSet.of(

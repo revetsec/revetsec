@@ -48,7 +48,7 @@ class ScimRc3SecurityTests {
     private static final String GROUP_SCHEMA = "urn:ietf:params:scim:schemas:core:2.0:Group";
     private static final String ENTERPRISE = "urn:ietf:params:scim:schemas:extension:enterprise:2.0:User";
     private static final String PATCH_SCHEMA = "urn:ietf:params:scim:api:messages:2.0:PatchOp";
-    private static final ScimResourceType USER = ScimResourceType.userInstance(), GROUP = ScimResourceType.groupInstance();
+    private static final ScimResourceType USER = PlaygroundScim.USER_TYPE, GROUP = ScimResourceType.groupInstance();
     private static final URI BASE = URI.create("https://scim.example/scim/v2/");
     private static final Clock CLOCK = Clock.fixed(Instant.parse("2026-10-14T12:00:00Z"), ZoneOffset.UTC);
 

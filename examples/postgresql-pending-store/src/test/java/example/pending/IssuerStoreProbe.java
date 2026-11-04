@@ -131,7 +131,8 @@ public final class IssuerStoreProbe {
 						id.equals("client") ? client : id.equals("resource") ? resource : null))
 				.store(store)
 				.signingKeys(OAuthIssuerKeyProvider.fromSnapshot(keys)).resources(resources)
-				.stateSealer(StateSealer.withActiveKey(sealingKey).build())
+				.stateSealer(StateSealer.withActiveKey(sealingKey).maximumSealedLength(16384).build())
+				.maximumStoreRecordBytes(16384)
 				.grantPolicy((context, budget) -> decision()).refreshTokensEnabled(true)
 				.clock(Clock.fixed(Instant.ofEpochSecond(Long.parseLong(
 						java.util.Objects.requireNonNull(System.getenv("REVETSEC_TEST_ISSUER_TIME")))), ZoneOffset.UTC))

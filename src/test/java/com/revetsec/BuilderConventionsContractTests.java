@@ -46,6 +46,7 @@ final class BuilderConventionsContractTests {
 				.resolve("src/test/resources/contract-fixtures/builder-conventions"));
 		assertEquals(List.of(
 				"com.revetsec.BuilderConventionsFixture#isReady(): primitive value return",
+				"com.revetsec.BuilderConventionsFixture#withValue(java.lang.String): with factory must return a builder",
 				"com.revetsec.BuilderConventionsFixture$Builder: missing CheckReturnValue",
 				"com.revetsec.BuilderConventionsFixture$Builder#attempts(int): property argument must be nullable and boxed",
 				"com.revetsec.BuilderConventionsFixture$Builder#put(java.lang.String): property argument must be nullable and boxed",
@@ -68,6 +69,13 @@ final class BuilderConventionsContractTests {
 			for (ExecutableElement method : ElementFilter.methodsIn(analysis.getElements().getAllMembers(type))) {
 				if (!ContractSupport.isPublicOrProtected(method) || !analysis.isSourceAuthored(method)) continue;
 				String description = name + "#" + analysis.describe(method);
+				String methodName = method.getSimpleName().toString();
+				if (method.getModifiers().contains(Modifier.STATIC)
+						&& (methodName.equals("with") || methodName.startsWith("with")
+								&& methodName.length() > 4 && Character.isUpperCase(methodName.charAt(4)))
+						&& !(analysis.getTypes().asElement(method.getReturnType()) instanceof TypeElement returnedType
+								&& returnedType.getSimpleName().toString().endsWith("Builder")))
+					violations.add(description + ": with factory must return a builder");
 				if (builder && method.getParameters().size() == 1
 						&& analysis.getTypes().isSameType(analysis.getTypes().erasure(method.getReturnType()),
 								analysis.getTypes().erasure(type.asType()))

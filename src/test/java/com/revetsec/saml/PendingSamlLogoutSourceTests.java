@@ -203,7 +203,7 @@ final class PendingSamlLogoutSourceTests {
         for (String fault : List.of("pending expiry", "validator false", "clock failure", "validator failure")) {
             StateSealer sealer = sealer();
             PendingSamlAuthentication pending = pending();
-            InMemoryPendingSamlAuthenticationStore backing = InMemoryPendingSamlAuthenticationStore.withLimit(CLOCK, 1);
+            InMemoryPendingSamlAuthenticationStore backing = InMemoryPendingSamlAuthenticationStore.fromLimit(CLOCK, 1);
             assertEquals(SamlPendingSaveResult.SAVED, backing.save(BROWSER, RELAY,
                     sealed(pending, sealer, BROWSER, CONTEXT), pending.expiresAt(), BUDGET));
             AtomicReference<@NonNull Instant> current = new AtomicReference<>(CLOCK.instant());
@@ -256,7 +256,7 @@ final class PendingSamlLogoutSourceTests {
         for (String fault : List.of("validator false", "clock failure", "validator failure")) {
             StateSealer sealer = sealer();
             PendingSamlAuthentication pending = pending();
-            InMemoryPendingSamlAuthenticationStore store = InMemoryPendingSamlAuthenticationStore.withLimit(CLOCK, 1);
+            InMemoryPendingSamlAuthenticationStore store = InMemoryPendingSamlAuthenticationStore.fromLimit(CLOCK, 1);
             assertEquals(SamlPendingSaveResult.SAVED, store.save(BROWSER, RELAY,
                     sealed(pending, sealer, BROWSER, CONTEXT), pending.expiresAt(), BUDGET));
             Clock clock = fault.equals("clock failure") ? new Clock() {

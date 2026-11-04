@@ -25,7 +25,8 @@ import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 /**
- * Endpoint-wide provider-failure backoff. Never stores credentials or credential verdicts. RFC7662 section2.2.
+ * Endpoint health only: 401/429 or transport failure opens backoff immediately; three 5xx responses
+ * within one cooldown window open it without retaining a credential verdict. RFC7662 section2.2.
  */
 @ThreadSafe
 final class IntrospectionFailureGuard {
@@ -38,8 +39,11 @@ final class IntrospectionFailureGuard {
 
 	private final LongSupplier nanoTime;
 
-	@Nullable
-	private OAuthException failure;
+	private boolean unhealthy;
+	private static final int SERVER_FAILURE_THRESHOLD = 3;
+	private int serverFailures;
+	private long serverWindowStartedNanos;
+	private long serverRetryAfterNanos;
 
 	@Nullable
 	private Attempt probe;
@@ -61,16 +65,14 @@ final class IntrospectionFailureGuard {
 
 	@NonNull Attempt acquire(@NonNull Deadline deadline, @NonNull Duration requestTimeout) {
 		for (; ; ) {
-			if (deadline.isExpired())
-				throw unavailable();
-			if (Thread.currentThread().isInterrupted())
-				throw OAuthTransportException.fromReason(OAuthException.Reason.INTERRUPTED, null);
+			requireActive(deadline);
 			Attempt waitFor;
 			this.lock.lock();
 			try {
+				requireActive(deadline);
 				long now = this.nanoTime.getAsLong();
-				if (this.failure != null && now - this.failedAtNanos < this.backoffNanos)
-					throw this.failure;
+				if (this.unhealthy && now - this.failedAtNanos < this.backoffNanos)
+					throw unavailable();
 				if (this.probe != null && now - this.probe.startedNanos > this.probe.overdueAfterNanos) {
 					this.probe.future.completeExceptionally(unavailable());
 					this.probe = null;
@@ -79,7 +81,7 @@ final class IntrospectionFailureGuard {
 				if (this.probe == null) {
 					long budget = Math.min(Math.max(0, deadline.remainingNanos()), requestTimeout.toNanos()) + requestTimeout.toNanos();
 					Attempt attempt = new Attempt(this.generation, now, budget);
-					if (this.failure != null)
+					if (this.unhealthy)
 						this.probe = attempt;
 					return attempt;
 				}
@@ -107,54 +109,87 @@ final class IntrospectionFailureGuard {
 	void healthy(@NonNull Attempt attempt) {
 		this.lock.lock();
 		try {
-			if (attempt.generation == this.generation && this.failure != null) {
-				this.failure = null;
+			if (attempt.generation == this.generation) {
+				this.serverFailures = 0;
+				this.serverRetryAfterNanos = 0;
 				this.failures = 0;
-				this.generation++;
+				if (this.unhealthy) {
+					this.unhealthy = false;
+					this.generation++;
+				}
 			}
 			if (this.probe == attempt) {
 				this.probe = null;
 				attempt.future.complete(true);
 			}
-		} finally {
-			this.lock.unlock();
-		}
+		} finally { this.lock.unlock(); }
 	}
 
 	void failed(@NonNull Attempt attempt, @NonNull OAuthException failure) {
+		if (failure.getReason() == OAuthException.Reason.INTERRUPTED) {
+			abandon(attempt);
+			return;
+		}
+		boolean serverError = failure instanceof OAuthErrorResponseException response
+				&& response.getStatus() >= 500 && response.getStatus() <= 599;
+		boolean endpointSignal = failure instanceof OAuthErrorResponseException response
+				? response.getStatus() == 401 || response.getStatus() == 429
+				: failure instanceof OAuthTransportException && failure.getReason() == OAuthException.Reason.NETWORK_FAILURE;
+		if (!endpointSignal && !serverError) {
+			finishWithoutHealth(attempt, true);
+			return;
+		}
 		this.lock.lock();
 		try {
-			if (attempt.generation == this.generation && failure.getReason() != OAuthException.Reason.INTERRUPTED) {
-				this.failure = failure;
-				this.failedAtNanos = this.nanoTime.getAsLong();
-				this.generation++;
-				this.failures = Math.min(5, this.failures + 1);
-				this.backoffNanos = Math.min(this.cooldown.toNanos() << (this.failures - 1), Math.min(this.cooldown.toNanos() * 10, Duration.ofMinutes(10).toNanos()));
-				if (failure instanceof OAuthErrorResponseException error) {
-					Duration delay = error.getRetryAfter().orElse(Duration.ZERO);
-					long nanos = delay.compareTo(Duration.ofMinutes(10)) >= 0 ? Duration.ofMinutes(10).toNanos() : delay.toNanos();
-					this.backoffNanos = Math.max(this.backoffNanos, nanos);
+			boolean opened = false;
+			if (attempt.generation == this.generation) {
+				long now = this.nanoTime.getAsLong();
+				if (this.serverFailures != 0 && now - this.serverWindowStartedNanos >= this.cooldown.toNanos()) {
+					this.serverFailures = 0;
+					this.serverRetryAfterNanos = 0;
+				}
+				if (serverError) {
+					if (this.serverFailures == 0 || now - this.serverWindowStartedNanos >= this.cooldown.toNanos()) {
+						this.serverWindowStartedNanos = now;
+						this.serverFailures = 0;
+						this.serverRetryAfterNanos = 0;
+					}
+					this.serverFailures++;
+					this.serverRetryAfterNanos = Math.max(this.serverRetryAfterNanos, retryAfterNanos(failure));
+				}
+				if (endpointSignal || this.serverFailures >= SERVER_FAILURE_THRESHOLD) {
+					this.unhealthy = true;
+					this.failedAtNanos = now;
+					this.generation++;
+					this.failures = Math.min(5, this.failures + 1);
+					this.backoffNanos = Math.min(this.cooldown.toNanos() << (this.failures - 1),
+							Math.min(this.cooldown.toNanos() * 10, Duration.ofMinutes(10).toNanos()));
+					this.backoffNanos = Math.max(this.backoffNanos, Math.max(this.serverRetryAfterNanos, retryAfterNanos(failure)));
+					this.serverFailures = 0;
+					this.serverRetryAfterNanos = 0;
+					opened = true;
 				}
 			}
 			if (this.probe == attempt) {
 				this.probe = null;
-				attempt.future.completeExceptionally(failure);
+				if (!opened) this.generation++;
+				attempt.future.completeExceptionally(unavailable());
 			}
-		} finally {
-			this.lock.unlock();
-		}
+		} finally { this.lock.unlock(); }
 	}
 
-	void abandon(@NonNull Attempt attempt) {
+	void abandon(@NonNull Attempt attempt) { finishWithoutHealth(attempt, false); }
+
+	private void finishWithoutHealth(@NonNull Attempt attempt, boolean retryWaiters) {
 		this.lock.lock();
 		try {
 			if (this.probe == attempt) {
 				this.probe = null;
-				attempt.future.completeExceptionally(unavailable());
+				this.generation++;
+				if (retryWaiters) attempt.future.complete(true);
+				else attempt.future.completeExceptionally(unavailable());
 			}
-		} finally {
-			this.lock.unlock();
-		}
+		} finally { this.lock.unlock(); }
 	}
 
 	boolean awaitWaitersForTests(int expected, @NonNull Duration timeout) throws InterruptedException {
@@ -180,10 +215,22 @@ final class IntrospectionFailureGuard {
 		} catch (TimeoutException timeout) {
 			throw unavailable();
 		} catch (ExecutionException failure) {
-			if (failure.getCause() instanceof OAuthException oauth)
-				throw oauth;
+			// A shared probe carries health only; every waiter receives its own exception.
 			throw unavailable();
 		}
+	}
+
+	private static void requireActive(@NonNull Deadline deadline) {
+		if (Thread.currentThread().isInterrupted())
+			throw OAuthTransportException.fromReason(OAuthException.Reason.INTERRUPTED, null);
+		if (deadline.isExpired()) throw unavailable();
+	}
+
+	private static long retryAfterNanos(@NonNull OAuthException failure) {
+		if (!(failure instanceof OAuthErrorResponseException response)) return 0;
+		Duration delay = response.getRetryAfter().orElse(Duration.ZERO);
+		if (delay.isNegative()) return 0;
+		return delay.compareTo(Duration.ofMinutes(10)) >= 0 ? Duration.ofMinutes(10).toNanos() : delay.toNanos();
 	}
 
 	private static @NonNull OAuthTransportException unavailable() {

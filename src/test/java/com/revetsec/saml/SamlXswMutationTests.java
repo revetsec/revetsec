@@ -212,7 +212,7 @@ final class SamlXswMutationTests {
             @NonNull String certificate, boolean sha1) throws Exception {
         SamlServiceProvider sp = SamlServiceProvider.withEntityId("https://sp.test/Selftest")
                 .assertionConsumerServiceUrl(URI.create("https://sp.test/acs"))
-                .replayCache(InMemorySamlReplayCache.withLimit(CLOCK, 16)).clock(CLOCK).build();
+                .replayCache(InMemorySamlReplayCache.fromLimit(CLOCK, 16)).clock(CLOCK).build();
         SamlIdentityProvider idp = SamlIdentityProvider.withEntityId(IDP)
                 .connectionId("xsw-fixture")
                 .redirectSingleSignOnService(URI.create("https://idp.scripted-idp.test/sso"))

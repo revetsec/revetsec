@@ -37,13 +37,15 @@ final class ScimFilterEvaluation {
         standardGroup=type.hasStandardGroupSchema();
     }
 
-    /** Checks size before serialization/reparsing under the receiving provider's limits. */
+    /** Checks receiving bounds before reparsing the original source, or bounded canonical fallback. */
     static @Nullable String expression(@NonNull ScimFilter filter, @NonNull ScimFilterLimits limits,
             @NonNull ScimWork work) {
-        Footprint footprint=new Footprint(limits,work);
+        String source=ScimFilterSource.expression(filter);
+        if (source != null && source.length() > limits.getMaximumExpressionCharacters()) return null;
+        Footprint footprint=new Footprint(limits,work,source == null);
         long length=footprint.length(filter,0,1);
         if (length < 0 || !work.spend(length)) return null;
-        return filter.toScimString();
+        return source == null ? filter.toScimString() : source;
     }
 
     static @NonNull ScimFilterEvaluationResult evaluate(@NonNull ScimResource resource,
@@ -230,7 +232,10 @@ final class ScimFilterEvaluation {
         private final @NonNull ScimFilterLimits limits;
         private final @NonNull ScimWork work;
         private int nodes;
-        Footprint(@NonNull ScimFilterLimits limits,@NonNull ScimWork work) { this.limits=limits; this.work=work; }
+        private final boolean enforceRenderedLength;
+        Footprint(@NonNull ScimFilterLimits limits,@NonNull ScimWork work,boolean enforceRenderedLength) {
+            this.limits=limits; this.work=work; this.enforceRenderedLength=enforceRenderedLength;
+        }
         long length(@NonNull ScimFilter filter,int parentPrecedence,int depth) {
             if (!work.spend(1) || depth > limits.getMaximumDepth() || ++nodes > limits.getMaximumNodes()) return -1;
             int precedence=filter instanceof ScimFilter.Or ? 1 : filter instanceof ScimFilter.And ? 2 : 3;
@@ -268,7 +273,7 @@ final class ScimFilterEvaluation {
                     else result+=4;
                 }
             }
-            return result < 0 || result > limits.getMaximumExpressionCharacters() ? -1 : result;
+            return result < 0 || enforceRenderedLength && result > limits.getMaximumExpressionCharacters() ? -1 : result;
         }
         private long operands(@NonNull List<@NonNull ScimFilter> operands,int separator,int precedence,int depth) {
             long result=0;
@@ -276,7 +281,7 @@ final class ScimFilterEvaluation {
                 long child=length(operands.get(index),precedence,depth+1);
                 if (child < 0) return -limits.getMaximumExpressionCharacters()-1L;
                 result+=child+(index == 0 ? 0 : separator);
-                if (result > limits.getMaximumExpressionCharacters()) return -limits.getMaximumExpressionCharacters()-1L;
+                if (enforceRenderedLength && result > limits.getMaximumExpressionCharacters()) return -limits.getMaximumExpressionCharacters()-1L;
             }
             return result;
         }

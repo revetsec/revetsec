@@ -31,7 +31,7 @@ final class ScimCanonicalPathTests {
     }
 
     @Test void publishedCanonicalizerUsesPolicyPathSpelling() {
-        ScimResourceType user = ScimResourceType.userInstance();
+        ScimResourceType user = ScimTestResourceTypes.userWithEnterpriseInstance();
         assertEquals("userName", user.canonicalAttributePath(parsed(
                 user.getSchema().getId() + ":USERNAME")).orElseThrow().toScimString());
         String enterprise = ScimSchema.enterpriseUserInstance().getId();

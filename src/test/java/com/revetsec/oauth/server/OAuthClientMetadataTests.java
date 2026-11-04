@@ -41,7 +41,7 @@ final class OAuthClientMetadataTests {
  private static final @NonNull String ID = "https://client.example.com/metadata";
  private static final @NonNull String BASE = "{\"client_id\":\""+ID+"\",\"client_name\":\"Display\",\"redirect_uris\":[\"https://client.example.com/callback\"],\"token_endpoint_auth_method\":\"none\"}";
  private static final @NonNull OAuthClientMetadataAddressResolver RESOLVER = (host, budget) -> { throw new AssertionError("No resolution during configuration or parsing"); };
- private static @NonNull OAuthClientMetadataPolicy policy() { return OAuthClientMetadataPolicy.fromAddressResolver(RESOLVER); }
+ private static @NonNull OAuthClientMetadataPolicy policy() { return OAuthClientMetadataPolicy.fromAddressResolverAndCache(RESOLVER, InMemoryOAuthClientMetadataCache.fromMaximumEntries(128)); }
  private static @NonNull OAuthClientMetadataDocument parse(@NonNull String json) { return parse(json, false, false); }
  private static @NonNull OAuthClientMetadataDocument parse(@NonNull String json, boolean nativeLoopback, boolean localhost) {
   return OAuthClientMetadataDocument.parse(ID, json.getBytes(StandardCharsets.UTF_8), policy(), OAuthServerIngressLimits.fromDefaults(), nativeLoopback, localhost);
@@ -58,25 +58,36 @@ final class OAuthClientMetadataTests {
  }
  @Test void pureConstructionAndDefaultsHaveNoResolverCalls() {
   AtomicInteger calls = new AtomicInteger(); OAuthClientMetadataAddressResolver resolver = (host,budget) -> { calls.incrementAndGet(); return List.of(); };
-  var a=OAuthClientMetadataPolicy.withAddressResolver(resolver).build(); var b=OAuthClientMetadataPolicy.fromAddressResolver(resolver);
+  var a=OAuthClientMetadataPolicy.withAddressResolver(resolver).cache(InMemoryOAuthClientMetadataCache.fromMaximumEntries(128)).build(); var b=OAuthClientMetadataPolicy.fromAddressResolverAndCache(resolver, InMemoryOAuthClientMetadataCache.fromMaximumEntries(128));
   assertEquals(0,calls.get()); assertEquals(resolver,a.getAddressResolver().orElseThrow()); assertEquals(resolver,b.getAddressResolver().orElseThrow());
-  assertTrue(a.getEnabled()); assertTrue(a.getAllowedOrigins().isEmpty()); assertEquals(5120,a.getMaximumDocumentBytes()); assertEquals(128,a.getMaximumCacheEntries());
+  assertTrue(a.getEnabled()); assertTrue(a.getAllowedOrigins().isEmpty()); assertEquals(5120,a.getMaximumDocumentBytes()); assertEquals(128,assertInstanceOf(InMemoryOAuthClientMetadataCache.class,a.getCache().orElseThrow()).getMaximumEntries());
   assertEquals(Duration.ofSeconds(300),a.getMaximumFreshness()); assertEquals(8,a.getMaximumConcurrentFetches()); assertEquals(16,a.getMaximumResolvedAddresses());
   var disabled=OAuthClientMetadataPolicy.disabledInstance(); assertSame(disabled,OAuthClientMetadataPolicy.disabledInstance());
   assertFalse(disabled.getEnabled()); assertTrue(disabled.getAddressResolver().isEmpty()); assertTrue(disabled.getAllowedOrigins().isEmpty());
-  assertEquals(a.getMaximumDocumentBytes(),disabled.getMaximumDocumentBytes()); assertEquals(a.getMaximumCacheEntries(),disabled.getMaximumCacheEntries());
+  assertEquals(a.getMaximumDocumentBytes(),disabled.getMaximumDocumentBytes()); assertTrue(disabled.getCache().isEmpty());
   assertEquals(a.getMaximumFreshness(),disabled.getMaximumFreshness()); assertEquals(a.getMaximumConcurrentFetches(),disabled.getMaximumConcurrentFetches());
   assertEquals(a.getMaximumResolvedAddresses(),disabled.getMaximumResolvedAddresses());
  }
  @Test @SuppressWarnings("NullAway") void requiredResolverNullAndClearSemantics() {
-  assertThrows(NullPointerException.class,()->OAuthClientMetadataPolicy.withAddressResolver(null));
-  assertThrows(NullPointerException.class,()->OAuthClientMetadataPolicy.fromAddressResolver(null));
-  var builder=OAuthClientMetadataPolicy.withAddressResolver(RESOLVER); assertSame(builder,builder.addressResolver(null));
+  assertThrows(NullPointerException.class,()->OAuthClientMetadataPolicy.withAddressResolver(null).cache(InMemoryOAuthClientMetadataCache.fromMaximumEntries(128)));
+  assertThrows(NullPointerException.class,()->OAuthClientMetadataPolicy.fromAddressResolverAndCache(null, InMemoryOAuthClientMetadataCache.fromMaximumEntries(128)));
+  var builder=OAuthClientMetadataPolicy.withAddressResolver(RESOLVER).cache(InMemoryOAuthClientMetadataCache.fromMaximumEntries(128)); assertSame(builder,builder.addressResolver(null));
   assertThrows(IllegalStateException.class,builder::build); assertTrue(builder.addressResolver(RESOLVER).build().getEnabled());
+ }
+ @Test @SuppressWarnings("NullAway") void cacheSelectionIsRequiredAndNullNeverSelectsLocalStorage() {
+  var builder=OAuthClientMetadataPolicy.withAddressResolver(RESOLVER);
+  assertThrows(IllegalStateException.class,builder::build);
+  var local=InMemoryOAuthClientMetadataCache.fromMaximumEntries(7);
+  var configured=builder.cache(local).build();
+  assertSame(local,configured.getCache().orElseThrow());
+  assertSame(builder,builder.cache(null));
+  assertThrows(IllegalStateException.class,builder::build);
+  assertSame(local,configured.getCache().orElseThrow());
+  assertThrows(NullPointerException.class,()->OAuthClientMetadataPolicy.fromAddressResolverAndCache(RESOLVER,null));
  }
  @Test void originRestrictionsSnapshotResetAndDenyAll() {
   var origins=new LinkedHashSet<>(Set.of(URI.create("https://client.example.com")));
-  var builder=OAuthClientMetadataPolicy.withAddressResolver(RESOLVER).allowedOrigins(origins); var a=builder.build(); origins.clear();
+  var builder=OAuthClientMetadataPolicy.withAddressResolver(RESOLVER).cache(InMemoryOAuthClientMetadataCache.fromMaximumEntries(128)).allowedOrigins(origins); var a=builder.build(); origins.clear();
   assertEquals(1,a.getAllowedOrigins().orElseThrow().size()); assertThrows(UnsupportedOperationException.class,()->a.getAllowedOrigins().orElseThrow().clear());
   assertEquals(ID,OAuthClientMetadataUri.clientId(ID,a,2048).toString());
   assertThrows(IllegalArgumentException.class,()->OAuthClientMetadataUri.clientId("https://client.example.com:443/metadata",a,2048));
@@ -87,27 +98,27 @@ final class OAuthClientMetadataTests {
   assertEquals(ID,OAuthClientMetadataUri.clientId(ID,policy(),2048).toString());
  }
  @Test @SuppressWarnings("NullAway") void nullOriginElementRejected() {
-  assertThrows(NullPointerException.class,()->OAuthClientMetadataPolicy.withAddressResolver(RESOLVER).allowedOrigins(new LinkedHashSet<>(Arrays.asList((URI)null))));
+  assertThrows(NullPointerException.class,()->OAuthClientMetadataPolicy.withAddressResolver(RESOLVER).cache(InMemoryOAuthClientMetadataCache.fromMaximumEntries(128)).allowedOrigins(new LinkedHashSet<>(Arrays.asList((URI)null))));
  }
  @TestFactory @NonNull Stream<@NonNull DynamicTest> invalidOrigins() {
   return Stream.of("http://client.example.com","https://client.example.com/","https://client.example.com/path","https://client.example.com?x", "https://client.example.com#x",
    "https://user@client.example.com", "https://client.example.com:0", "https://client.example.com:65536", "https://127.0.0.1", "https://10.0.0.1",
    "https://[::1]", "https://localhost", "https://bad_host", "https://client.example.com:*", "mailto:client@example.com")
-   .map(origin->DynamicTest.dynamicTest(origin,()->assertThrows(IllegalArgumentException.class,()->OAuthClientMetadataPolicy.withAddressResolver(RESOLVER).allowedOrigins(Set.of(URI.create(origin))))));
+   .map(origin->DynamicTest.dynamicTest(origin,()->assertThrows(IllegalArgumentException.class,()->OAuthClientMetadataPolicy.withAddressResolver(RESOLVER).cache(InMemoryOAuthClientMetadataCache.fromMaximumEntries(128)).allowedOrigins(Set.of(URI.create(origin))))));
  }
  @Test void originCountAndAggregateBounds() {
   Set<URI> origins=new LinkedHashSet<>();for(int i=0;i<4096;i++)origins.add(URI.create("https://c"+i+".example.com"));
-  assertEquals(4096,OAuthClientMetadataPolicy.withAddressResolver(RESOLVER).allowedOrigins(origins).build().getAllowedOrigins().orElseThrow().size());
-  origins.add(URI.create("https://overflow.example.com"));assertThrows(IllegalArgumentException.class,()->OAuthClientMetadataPolicy.withAddressResolver(RESOLVER).allowedOrigins(origins));
+  assertEquals(4096,OAuthClientMetadataPolicy.withAddressResolver(RESOLVER).cache(InMemoryOAuthClientMetadataCache.fromMaximumEntries(128)).allowedOrigins(origins).build().getAllowedOrigins().orElseThrow().size());
+  origins.add(URI.create("https://overflow.example.com"));assertThrows(IllegalArgumentException.class,()->OAuthClientMetadataPolicy.withAddressResolver(RESOLVER).cache(InMemoryOAuthClientMetadataCache.fromMaximumEntries(128)).allowedOrigins(origins));
   Set<URI> large=new LinkedHashSet<>();for(int i=0;i<3000;i++)large.add(URI.create("https://"+"long".repeat(10)+i+".example.com"));
-  assertThrows(IllegalArgumentException.class,()->OAuthClientMetadataPolicy.withAddressResolver(RESOLVER).allowedOrigins(large));
+  assertThrows(IllegalArgumentException.class,()->OAuthClientMetadataPolicy.withAddressResolver(RESOLVER).cache(InMemoryOAuthClientMetadataCache.fromMaximumEntries(128)).allowedOrigins(large));
  }
  @TestFactory @NonNull Stream<@NonNull DynamicTest> integerBoundsAndNullResets() {
-  List<Function<OAuthClientMetadataPolicy.Builder,Integer>> getters=List.of(b->b.build().getMaximumDocumentBytes(),b->b.build().getMaximumCacheEntries(),b->b.build().getMaximumConcurrentFetches(),b->b.build().getMaximumResolvedAddresses());
-  List<java.util.function.BiFunction<OAuthClientMetadataPolicy.Builder,Integer,OAuthClientMetadataPolicy.Builder>> setters=List.of(OAuthClientMetadataPolicy.Builder::maximumDocumentBytes,OAuthClientMetadataPolicy.Builder::maximumCacheEntries,OAuthClientMetadataPolicy.Builder::maximumConcurrentFetches,OAuthClientMetadataPolicy.Builder::maximumResolvedAddresses);
-  int[] low={1024,1,1,1},high={5120,4096,64,64},defaults={5120,128,8,16};List<DynamicTest> tests=new ArrayList<>();
-  for(int i=0;i<4;i++){int row=i;for(int v:new int[]{-1,0,low[i]-1,low[i],high[i],high[i]+1,Integer.MAX_VALUE}){
-   tests.add(DynamicTest.dynamicTest("limit"+row+"="+v,()->{var b=OAuthClientMetadataPolicy.withAddressResolver(RESOLVER);var setter=setters.get(row);
+  List<Function<OAuthClientMetadataPolicy.Builder,Integer>> getters=List.of(b->b.build().getMaximumDocumentBytes(),b->b.build().getMaximumConcurrentFetches(),b->b.build().getMaximumResolvedAddresses());
+  List<java.util.function.BiFunction<OAuthClientMetadataPolicy.Builder,Integer,OAuthClientMetadataPolicy.Builder>> setters=List.of(OAuthClientMetadataPolicy.Builder::maximumDocumentBytes,OAuthClientMetadataPolicy.Builder::maximumConcurrentFetches,OAuthClientMetadataPolicy.Builder::maximumResolvedAddresses);
+  int[] low={1024,1,1},high={5120,64,64},defaults={5120,8,16};List<DynamicTest> tests=new ArrayList<>();
+  for(int i=0;i<getters.size();i++){int row=i;for(int v:new int[]{-1,0,low[i]-1,low[i],high[i],high[i]+1,Integer.MAX_VALUE}){
+   tests.add(DynamicTest.dynamicTest("limit"+row+"="+v,()->{var b=OAuthClientMetadataPolicy.withAddressResolver(RESOLVER).cache(InMemoryOAuthClientMetadataCache.fromMaximumEntries(128));var setter=setters.get(row);
     if(v<low[row]||v>high[row]) assertThrows(IllegalArgumentException.class,()->setter.apply(b,v));
     else {assertSame(b,setter.apply(b,v));assertEquals(v,getters.get(row).apply(b));}
     assertEquals(defaults[row],getters.get(row).apply(setter.apply(b,null)));
@@ -116,7 +127,7 @@ final class OAuthClientMetadataTests {
  }
  @TestFactory @NonNull Stream<@NonNull DynamicTest> freshnessBoundsAndNullReset() {
   return Stream.of(Duration.ofNanos(-1),Duration.ZERO,Duration.ofNanos(1),Duration.ofSeconds(300),Duration.ofHours(1),Duration.ofHours(1).plusNanos(1),Duration.ofSeconds(Long.MAX_VALUE))
-   .map(v->DynamicTest.dynamicTest(v.toString(),()->{var b=OAuthClientMetadataPolicy.withAddressResolver(RESOLVER);
+   .map(v->DynamicTest.dynamicTest(v.toString(),()->{var b=OAuthClientMetadataPolicy.withAddressResolver(RESOLVER).cache(InMemoryOAuthClientMetadataCache.fromMaximumEntries(128));
     if(v.isNegative()||v.compareTo(Duration.ofHours(1))>0)assertThrows(IllegalArgumentException.class,()->b.maximumFreshness(v));
     else assertEquals(v,b.maximumFreshness(v).build().getMaximumFreshness());
     assertEquals(Duration.ofSeconds(300),b.maximumFreshness(null).build().getMaximumFreshness());
@@ -178,7 +189,7 @@ final class OAuthClientMetadataTests {
    assertThrows(OAuthServerAdmissionFailure.class,()->OAuthClientMetadataDocument.parse(ID,bytes,policy(),OAuthServerIngressLimits.fromDefaults(),false,false));
   assertThrows(OAuthServerAdmissionFailure.class,()->parse(BASE.substring(0,BASE.length()-1)+",\"extension\":"+"[".repeat(33)+"0"+"]".repeat(33)+"}"));
   String boundary=BASE+" ".repeat(5120-BASE.getBytes(StandardCharsets.UTF_8).length);assertEquals(ID,parse(boundary).clientId());assertThrows(OAuthServerAdmissionFailure.class,()->parse(boundary+" "));
-  assertThrows(OAuthServerAdmissionFailure.class,()->OAuthClientMetadataDocument.parse(ID,boundary.getBytes(StandardCharsets.UTF_8),OAuthClientMetadataPolicy.withAddressResolver(RESOLVER).maximumDocumentBytes(1024).build(),OAuthServerIngressLimits.fromDefaults(),false,false));
+  assertThrows(OAuthServerAdmissionFailure.class,()->OAuthClientMetadataDocument.parse(ID,boundary.getBytes(StandardCharsets.UTF_8),OAuthClientMetadataPolicy.withAddressResolver(RESOLVER).cache(InMemoryOAuthClientMetadataCache.fromMaximumEntries(128)).maximumDocumentBytes(1024).build(),OAuthServerIngressLimits.fromDefaults(),false,false));
  }
  @Test void freshParsingHasNoPositiveOrNegativeCache() {
   assertThrows(OAuthServerAdmissionFailure.class,()->parse("{}"));assertEquals("Display",parse(BASE).clientName());assertThrows(OAuthServerAdmissionFailure.class,()->parse("{}"));
@@ -198,7 +209,7 @@ final class OAuthClientMetadataTests {
   for(String host:List.of("127.0.0.1","[::1]")) {
    String document=nativeDoc.replace("https://client.example.com/callback","http://"+host+":49152/callback");
    assertTrue(parse(document,true,false).nativeApplication());assertThrows(OAuthServerAdmissionFailure.class,()->parse(document,false,true));
-   assertThrows(OAuthServerAdmissionFailure.class,()->parse(document.replace(",\"application_type\":\"native\"",""),true,false));
+   assertFalse(parse(document.replace(",\"application_type\":\"native\"",""),true,false).nativeApplication());
   }
   String localhost=BASE.replace("https://client.example.com/callback","http://localhost:49152/callback");assertEquals("localhost",parse(localhost,false,true).redirectUris().get(0).getHost());
   assertThrows(OAuthServerAdmissionFailure.class,()->parse(localhost,true,false));

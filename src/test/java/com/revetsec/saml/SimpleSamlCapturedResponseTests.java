@@ -160,7 +160,7 @@ final class SimpleSamlCapturedResponseTests {
 
     private static @NonNull SamlServiceProvider serviceProvider(@NonNull Clock clock) throws Exception {
         return SamlServiceProvider.withEntityId(SP).assertionConsumerServiceUrl(ACS)
-                .replayCache(InMemorySamlReplayCache.withLimit(clock, 8))
+                .replayCache(InMemorySamlReplayCache.fromLimit(clock, 8))
                 .signingCredential(SamlCredential.fromPem(
                         Files.readString(KEYS.resolve("sp-signing-rsa-2048-key.pem")),
                         Files.readString(KEYS.resolve("sp-signing-rsa-2048-cert.pem"))))

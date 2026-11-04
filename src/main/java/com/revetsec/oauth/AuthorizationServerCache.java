@@ -91,12 +91,15 @@ final class AuthorizationServerCache {
 	}
 
 	@NonNull AuthorizationServerMetadata get(@NonNull Deadline deadline) {
+		requireActive(deadline);
 		Flight mine = null;
 		Flight waitFor = null;
 		long nowNanos = System.nanoTime();
 		this.lock.lock();
 		try {
+			requireActive(deadline);
 			Instant now = this.clock.instant();
+			requireActive(deadline);
 			boolean rollback = this.lastClock != null && now.isBefore(this.lastClock);
 			this.lastClock = now;
 			if (this.snapshot != null) {
@@ -113,7 +116,7 @@ final class AuthorizationServerCache {
 				waitFor = this.flight;
 			} else {
 				if (this.lastFailure != null && nowNanos - this.lastFailureNanos < this.failureBackoffNanos)
-					throw this.lastFailure;
+					throw OAuthHttpErrors.copyForCaller(this.lastFailure);
 				while (!this.attemptTimes.isEmpty()
 						&& nowNanos - this.attemptTimes.peekFirst() >= this.cooldown.toNanos())
 					this.attemptTimes.removeFirst();
@@ -132,9 +135,11 @@ final class AuthorizationServerCache {
 		Flight leader = requireNonNull(mine);
 		try {
 			MetadataSnapshot found = fetch(deadline);
+			requireActive(deadline);
 			boolean current;
 			this.lock.lock();
 			try {
+				requireActive(deadline);
 				current = this.flight == leader;
 				if (current) {
 					this.snapshot = found;
@@ -150,11 +155,14 @@ final class AuthorizationServerCache {
 			leader.future.complete(found.metadata);
 			return found.metadata;
 		} catch (OAuthException failure) {
+			boolean interrupted = failure.getReason() == OAuthException.Reason.INTERRUPTED || Thread.currentThread().isInterrupted();
+			boolean callerLocal = interrupted || deadline.isExpired();
+			if (interrupted) Thread.currentThread().interrupt();
 			this.lock.lock();
 			try {
 				if (this.flight == leader) {
-					if (failure.getReason() != OAuthException.Reason.INTERRUPTED) {
-						this.lastFailure = failure;
+					if (!callerLocal) {
+						this.lastFailure = OAuthHttpErrors.copyForCaller(failure);
 						this.lastFailureNanos = System.nanoTime();
 						this.consecutiveFailures = Math.min(5, this.consecutiveFailures + 1);
 						this.failureBackoffNanos = Math.min(this.cooldown.toNanos() << (this.consecutiveFailures - 1),
@@ -165,25 +173,34 @@ final class AuthorizationServerCache {
 			} finally {
 				this.lock.unlock();
 			}
-			leader.future.completeExceptionally(failure.getReason() == OAuthException.Reason.INTERRUPTED
-					? OAuthTransportException.fromReason(OAuthException.Reason.NETWORK_FAILURE, null) : failure);
+			leader.future.completeExceptionally(callerLocal ? OAuthTransportException.fromReason(OAuthException.Reason.NETWORK_FAILURE, null) : OAuthHttpErrors.copyForCaller(failure));
+			if (interrupted) throw OAuthTransportException.fromReason(OAuthException.Reason.INTERRUPTED, null);
 			throw failure;
 		} catch (RuntimeException failure) {
-			OAuthException safe = OAuthTransportException.fromReason(OAuthException.Reason.NETWORK_FAILURE, null);
+			boolean interrupted = Thread.currentThread().isInterrupted();
+			boolean callerLocal = interrupted || deadline.isExpired();
+			OAuthException safe = interrupted ? OAuthTransportException.fromReason(OAuthException.Reason.INTERRUPTED, null) : OAuthTransportException.fromReason(OAuthException.Reason.NETWORK_FAILURE, null);
 			this.lock.lock();
 			try {
 				if (this.flight == leader) {
 					this.flight = null;
-					this.lastFailure = safe;
-					this.lastFailureNanos = System.nanoTime();
-					this.failureBackoffNanos = this.cooldown.toNanos();
+					if (!callerLocal) {
+						this.lastFailure = OAuthHttpErrors.copyForCaller(safe);
+						this.lastFailureNanos = System.nanoTime();
+						this.failureBackoffNanos = this.cooldown.toNanos();
+					}
 				}
 			} finally {
 				this.lock.unlock();
 			}
-			leader.future.completeExceptionally(safe);
+			leader.future.completeExceptionally(OAuthTransportException.fromReason(OAuthException.Reason.NETWORK_FAILURE, null));
 			throw safe;
 		}
+	}
+
+	private static void requireActive(@NonNull Deadline deadline) {
+		if (Thread.currentThread().isInterrupted()) throw OAuthTransportException.fromReason(OAuthException.Reason.INTERRUPTED, null);
+		if (deadline.isExpired()) throw OAuthTransportException.fromReason(OAuthException.Reason.NETWORK_FAILURE, null);
 	}
 
 	private static @NonNull AuthorizationServerMetadata await(@NonNull CompletableFuture<@NonNull AuthorizationServerMetadata> future,
@@ -192,14 +209,18 @@ final class AuthorizationServerCache {
 			long remaining = deadline.remainingNanos();
 			if (remaining <= 0)
 				throw OAuthTransportException.fromReason(OAuthException.Reason.NETWORK_FAILURE, null);
-			return future.get(remaining, TimeUnit.NANOSECONDS);
+			requireActive(deadline);
+			AuthorizationServerMetadata result = future.get(remaining, TimeUnit.NANOSECONDS);
+			requireActive(deadline);
+			return result;
 		} catch (InterruptedException interrupted) {
 			Thread.currentThread().interrupt();
 			throw OAuthTransportException.fromReason(OAuthException.Reason.INTERRUPTED, null);
 		} catch (TimeoutException timeout) {
 			throw OAuthTransportException.fromReason(OAuthException.Reason.NETWORK_FAILURE, null);
 		} catch (ExecutionException failure) {
-			if (failure.getCause() instanceof OAuthException oauth) throw oauth;
+			requireActive(deadline);
+			if (failure.getCause() instanceof OAuthException oauth) throw OAuthHttpErrors.copyForCaller(oauth);
 			throw OAuthTransportException.fromReason(OAuthException.Reason.NETWORK_FAILURE, null);
 		}
 	}

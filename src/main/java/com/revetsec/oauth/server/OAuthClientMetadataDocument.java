@@ -53,6 +53,11 @@ final class OAuthClientMetadataDocument {
  static @NonNull OAuthClientMetadataDocument parse(@NonNull String clientId, byte @NonNull [] body,
    @NonNull OAuthClientMetadataPolicy policy, @NonNull OAuthServerIngressLimits limits,
    boolean allowNativeLoopback, boolean allowLocalhost) {
+  return parse(clientId, body, policy, limits, allowNativeLoopback, allowLocalhost, false);
+ }
+ static @NonNull OAuthClientMetadataDocument parse(@NonNull String clientId, byte @NonNull [] body,
+   @NonNull OAuthClientMetadataPolicy policy, @NonNull OAuthServerIngressLimits limits,
+   boolean allowNativeLoopback, boolean allowLocalhost, boolean allowLocalhostAnyPort) {
   requireNonNull(body); requireNonNull(policy); requireNonNull(limits);
   try {
    OAuthClientMetadataUri.clientId(clientId, policy, limits.clientIdLength);
@@ -65,7 +70,8 @@ final class OAuthClientMetadataDocument {
    if (!application.equals("web") && !application.equals("native")) throw invalid();
    boolean nativeApplication = application.equals("native");
    List<String> grants = strings(json, "grant_types", List.of("authorization_code"));
-   if (!grants.contains("authorization_code") || grants.stream().anyMatch(g -> !g.equals("authorization_code") && !g.equals("refresh_token"))) throw invalid();
+   // Other declared grants do not add issuer capabilities or enter the effective security fingerprint.
+   if (!grants.contains("authorization_code")) throw invalid();
    if (!strings(json, "response_types", List.of("code")).equals(List.of("code"))) throw invalid();
    List<String> spellings = strings(json, "redirect_uris", null);
    if (spellings.isEmpty() || spellings.size() > limits.redirects) throw invalid();
@@ -74,7 +80,9 @@ final class OAuthClientMetadataDocument {
     URI redirect = URI.create(spelling); String host = redirect.getHost();
     if ("http".equalsIgnoreCase(redirect.getScheme())) {
      boolean ip = "127.0.0.1".equals(host) || "[::1]".equals(host);
-     if (ip ? !nativeApplication || !allowNativeLoopback : !"localhost".equals(host) || !allowLocalhost) throw invalid();
+     // Loopback permission comes from the explicit server policy, independently of the declared application type.
+     if (ip ? !allowNativeLoopback : !"localhost".equals(host)
+       || !(allowLocalhost || (allowLocalhostAnyPort && "localhost".equals(redirect.getRawAuthority())))) throw invalid();
     }
     redirects.add(redirect);
    }

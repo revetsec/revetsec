@@ -252,7 +252,9 @@ final class OAuthRefreshRotationTests {
     if(mode.equals("resource"))return OAuthAuthorizationDecision.withSubject("subject").authorizedScopesByResource(Map.of("https://other.example",Set.of("read"))).refreshTokenPermitted(true).build();
     if(mode.equals("twoResources"))return OAuthAuthorizationDecision.withSubject("subject").authorizedScopesByResource(Map.of(RESOURCE,Set.of("read"),"https://other.example",Set.of("read"))).refreshTokenPermitted(true).build();
     return decision(mode.equals("subject")?"other":"subject",mode.equals("widen")?Set.of("read","write","admin"):Set.of("read","write"),true);};
-   try{if(mode.equals("fatal"))assertSame(fatal,assertThrows(TestFatal.class,()->t.rotate(old,Map.of(),policy)));else unavailable(()->t.rotate(old,Map.of(),policy));assertEquals(mode.equals("interrupt"),Thread.currentThread().isInterrupted());assertEquals(before,t.store.rows);}finally{Thread.interrupted();}
+   try{if(mode.equals("fatal"))assertSame(fatal,assertThrows(TestFatal.class,()->t.rotate(old,Map.of(),policy)));
+    else if(Set.of("subject","widen","resource").contains(mode))assertEquals(OAuthServerAdmissionFailure.Reason.CONFIGURATION,assertThrows(OAuthServerAdmissionFailure.class,()->t.rotate(old,Map.of(),policy)).reason());
+    else unavailable(()->t.rotate(old,Map.of(),policy));assertEquals(mode.equals("interrupt"),Thread.currentThread().isInterrupted());assertEquals(before,t.store.rows);}finally{Thread.interrupted();}
   }));
  }
  @TestFactory @NonNull Stream<@NonNull DynamicTest> unknownOutcomeNeverReleasesOrRetriesPreparedCredentials() {
@@ -403,7 +405,7 @@ final class OAuthRefreshRotationTests {
  @Test void boundedResponseFailureHappensBeforeAnyRotationMutation() {
   byte[] key=new byte[32];for(int n=0;n<32;n++)key[n]=(byte)(n+1);
   var codec=new OAuthStoreRecordCodec(ISSUER,StateSealer.withActiveKey(SealingKey.fromBase64("k",Base64.getEncoder().encodeToString(key))).maximumSealedLength(16384).clock(Clock.fixed(NOW,ZoneOffset.UTC)).build(),16384);
-  var coord=new OAuthStoreCoordinator(this.store,codec,this.clock,3,1024);coord.initializeFreshIssuer(deadline()).getStatus();String subject="s".repeat(1024);coord.establishNewSubject(subject,deadline());
+  var coord=new OAuthStoreCoordinator(this.store,codec,this.clock,3,1024);assertEquals(OAuthStoreCommitStatus.COMMITTED,coord.initializeFreshIssuer(deadline()).getStatus());String subject="s".repeat(1024);coord.establishNewSubject(subject,deadline());
   Set<String> scopes=Set.of("a".repeat(128),"b".repeat(128),"c".repeat(128),"d".repeat(128),"e".repeat(128),"f".repeat(128),"g".repeat(128),"h".repeat(128));
   String clientId="c".repeat(2048);var resources=Map.of(RESOURCE,scopes);var client=OAuthServerClientRegistration.withClientId(clientId).configurationVersion("v1").redirectUris(List.of(URI.create(REDIRECT))).allowedScopesByResource(resources).refreshTokenPermitted(true).build();
   var policy=(OAuthGrantPolicy)(c,b)->OAuthAuthorizationDecision.withSubject(subject).authorizedScopesByResource(resources).refreshTokenPermitted(true).build();

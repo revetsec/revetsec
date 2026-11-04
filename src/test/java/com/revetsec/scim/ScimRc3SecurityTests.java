@@ -264,7 +264,7 @@ class ScimRc3SecurityTests {
     }
     @Test void identifierLocationAlwaysEncodesOneSegmentAndRejectsReservedIds() {
         ScimServiceProvider p=provider();
-        assertEquals("https://example.invalid/scim/Users/%2E%2E%2Fadmin%3Fowner%3D1%23fragment",
+        assertEquals("https://example.invalid/scim/Users/..%2Fadmin%3Fowner%3D1%23fragment",
                 p.resourceLocationFor(USER,"../admin?owner=1#fragment").toASCIIString());
         for(String id:List.of("","bulkId-internal","case-BULKID-internal","a\r\nHeader","unpaired\uD800","unpaired\uDC00"))
             assertThrows(IllegalArgumentException.class,()->p.resourceLocationFor(USER,id));

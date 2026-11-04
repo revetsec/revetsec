@@ -179,6 +179,7 @@ try {
   const {targetId:appTarget}=await cdp.send('Target.createTarget',{url:'about:blank'});
   await waitFor(()=>sessions.has(appTarget),'CLIENT_APP_ATTACH');const appSession=sessions.get(appTarget);
   await cdp.send('Page.navigate',{url:'https://localhost:8443/'},appSession);
+  await waitFor(()=>evaluate(appSession,`(()=>{if(document.querySelector('#login')?.elements.csrf.value.length>0)return true;const b=document.querySelector('#start-session');if(!b||b.disabled)return false;b.click();return true;})()`),'CLIENT_APP_SESSION_ADMISSION');
   await waitFor(()=>evaluate(appSession,`document.querySelector('#login')?.elements.csrf.value.length>0`),'CLIENT_APP_CSRF');
   for(const [mode,responseMode]of [['atomic','query'],['sealed','form_post']]) {
     const before=await cdp.send('Network.getCookies',{urls:['https://localhost:8443/']},appSession);

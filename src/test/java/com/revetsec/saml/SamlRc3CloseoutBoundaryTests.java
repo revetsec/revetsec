@@ -118,13 +118,13 @@ final class SamlRc3CloseoutBoundaryTests {
     }
 
     @Test void interruptedAndInvalidStoreAdmissionsLeaveHealthyStateUsable() {
-        InMemoryPendingSamlAuthenticationStore store = InMemoryPendingSamlAuthenticationStore.withLimit(CLOCK, 2);
+        InMemoryPendingSamlAuthenticationStore store = InMemoryPendingSamlAuthenticationStore.fromLimit(CLOCK, 2);
         Instant expiry = CLOCK.instant().plusSeconds(60);
         for (String[] fields : List.of(new String[]{"", "handle", "sealed"}, new String[]{"browser", "", "sealed"}, new String[]{"browser", "handle", ""}))
             assertThrows(IllegalArgumentException.class, () -> store.save(fields[0], fields[1], fields[2], expiry, BUDGET));
         assertThrows(IllegalArgumentException.class, () -> store.consume("browser", "", BUDGET));
-        for (int capacity : List.of(0, 1000001)) assertThrows(IllegalArgumentException.class, () -> InMemorySamlReplayCache.withLimit(CLOCK, capacity));
-        InMemorySamlReplayCache cache = InMemorySamlReplayCache.withLimit(CLOCK, 2);
+        for (int capacity : List.of(0, 1000001)) assertThrows(IllegalArgumentException.class, () -> InMemorySamlReplayCache.fromLimit(CLOCK, capacity));
+        InMemorySamlReplayCache cache = InMemorySamlReplayCache.fromLimit(CLOCK, 2);
         assertThrows(IllegalArgumentException.class, () -> cache.markIfAbsent("", expiry, BUDGET));
         for (Duration budget : List.of(Duration.ZERO, Duration.ofNanos(-1)))
             assertEquals(SamlReplayCache.MarkResult.UNAVAILABLE, cache.markIfAbsent("key", expiry, budget));

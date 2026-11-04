@@ -67,6 +67,10 @@ public final class OAuthErrorResponseException extends OAuthException {
 		return this.operationEndpoint && this.status >= 400 && this.status < 500 && !isTransient();
 	}
 
+	OAuthErrorResponseException copyForCaller() {
+		return new OAuthErrorResponseException(this.status, this.errorCode, this.retryAfter, this.operationEndpoint);
+	}
+
 	/**
 	 * Returns the endpoint's HTTP status, including 200 when the body reported an OAuth error.
 	 *

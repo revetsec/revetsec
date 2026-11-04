@@ -228,7 +228,7 @@ public final class SamlLogoutFuzzTests {
                 .singleLogoutServiceUrl(URI.create(SLO))
                 .postSingleLogoutServiceUrl(URI.create(SLO))
                 .signingCredential(SP_CREDENTIAL)
-                .replayCache(InMemorySamlReplayCache.withLimit(CLOCK, 8))
+                .replayCache(InMemorySamlReplayCache.fromLimit(CLOCK, 8))
                 .clock(CLOCK).build();
     }
 

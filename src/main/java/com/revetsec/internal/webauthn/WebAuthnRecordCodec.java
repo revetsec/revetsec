@@ -205,8 +205,11 @@ final class WebAuthnRecordCodec {
                         if (!Base64Url.isAlphabet((char) (frame[offset] & 0xff)))
                             throw new WebAuthnRecordException();
                     String value = new String(frame, offsets[index], lengths[index], StandardCharsets.US_ASCII);
-                    String encoded = SealedStateAccess.get().unseal(this.sealer, SealedStateType.WEBAUTHN_RECORD,
-                            value, context(addressDigest, recordId, count, chunkSize, index), clock);
+                    String encoded;
+                    try (var authenticated = SealedStateAccess.get().openRecord(this.sealer, SealedStateType.WEBAUTHN_RECORD,
+                            value, context(addressDigest, recordId, count, chunkSize, index), clock)) {
+                        encoded = authenticated.getPlaintext();
+                    }
                     byte[] chunk = Base64Url.decode(encoded);
                     try {
                         if (chunk.length == 0 || chunk.length > chunkSize

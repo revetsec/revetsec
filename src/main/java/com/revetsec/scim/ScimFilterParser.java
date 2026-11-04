@@ -64,7 +64,7 @@ final class ScimFilterParser {
         if (filter == null || this.errorOffset >= 0)
             return new ScimFilterParseResult.Rejected(ScimError.invalidFilterAt(
                     this.errorOffset >= 0 ? this.errorOffset : this.position));
-        return new ScimFilterParseResult.Succeeded(filter.filter);
+        return new ScimFilterParseResult.Succeeded(ScimFilterSource.retain(filter.filter, this.expression));
     }
 
     private @Nullable Node parseOr(boolean inValuePath, int nesting) {

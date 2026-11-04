@@ -70,6 +70,12 @@ final class OAuthServerRequest {
 				parameters(StrictUtf8.decode(body), parameters, limits, false, fields);
 			}
 		} catch (EncodingException failure) { throw invalid(); }
+		if (authorizationEndpoint) {
+			String state = parameters.get("state");
+			// RFC 6749 VSCHAR. Preserve the existing absent/empty distinction; never normalize opaque state.
+			if (state != null) for (int i = 0; i < state.length(); i++)
+				if (state.charAt(i) < 0x20 || state.charAt(i) > 0x7e) throw invalid();
+		}
 		return new OAuthServerRequest(endpoint, parameters, headers.get("authorization"));
 	}
 	/** Same aggregate admission as parse, with the public fixed method verdict. */

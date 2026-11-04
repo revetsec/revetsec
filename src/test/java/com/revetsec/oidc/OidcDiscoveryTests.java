@@ -39,6 +39,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 import java.util.stream.Stream;
 import static org.junit.jupiter.api.Assertions.*;
+import static com.revetsec.testing.OAuthFailureAssertions.assertIndependentFailure;
 
 final class OidcDiscoveryTests {
 	private static final URI CALLBACK = URI.create("https://rp.example/callback");
@@ -245,7 +246,7 @@ final class OidcDiscoveryTests {
 			clock.advance(Duration.ofSeconds(61)); assertEquals(OAuthException.Reason.ATTEMPT_LIMIT, assertThrows(OAuthTransportException.class, () -> cache.get(deadline())).getReason());
 			nanos.addAndGet(Duration.ofSeconds(31).toNanos()); server.script(PATH,TestHttpsServer.Script.fromResponse(TestHttpsServer.Response.fromRetryAfter(503,"9999999999999999999999")));
 			OAuthException failure = assertThrows(OAuthException.class, () -> cache.get(deadline()));
-			assertSame(failure,assertThrows(OAuthException.class, () -> cache.get(deadline())));
+			assertIndependentFailure(failure,assertThrows(OAuthException.class, () -> cache.get(deadline())));
 			assertEquals(3, server.getHitCount(PATH));
 		}
 	}
@@ -255,10 +256,10 @@ final class OidcDiscoveryTests {
 			RewindableClock clock = RewindableClock.fromInstant(NOW); AtomicLong nanos = new AtomicLong();
 			server.script(PATH,TestHttpsServer.Script.fromResponse(TestHttpsServer.Response.fromRetryAfter(503,"99999")));
 			OidcProviderCache<OidcProviderMetadata> cache = cache(server,clock,nanos); OAuthException first = assertThrows(OAuthException.class, () -> cache.get(deadline()));
-			nanos.addAndGet(Duration.ofMinutes(9).toNanos()); assertSame(first,assertThrows(OAuthException.class, () -> cache.get(deadline())));
+			nanos.addAndGet(Duration.ofMinutes(9).toNanos()); assertIndependentFailure(first,assertThrows(OAuthException.class, () -> cache.get(deadline())));
 			nanos.addAndGet(Duration.ofMinutes(1).toNanos()); server.script(PATH,TestHttpsServer.Script.fromResponse(TestHttpsServer.Response.fromStatus(503)));
 			OAuthException second = assertThrows(OAuthException.class, () -> cache.get(deadline()));
-			nanos.addAndGet(Duration.ofSeconds(59).toNanos()); assertSame(second,assertThrows(OAuthException.class, () -> cache.get(deadline())));
+			nanos.addAndGet(Duration.ofSeconds(59).toNanos()); assertIndependentFailure(second,assertThrows(OAuthException.class, () -> cache.get(deadline())));
 			nanos.addAndGet(Duration.ofSeconds(1).toNanos()); assertThrows(OAuthException.class, () -> cache.get(deadline())); assertEquals(3,server.getHitCount(PATH));
 		}
 	}
@@ -339,7 +340,7 @@ final class OidcDiscoveryTests {
 			assertEquals(OAuthException.Reason.NETWORK_FAILURE,assertThrows(OAuthTransportException.class,()->lazy.completeAuthenticationResult(callback(redirect),source(redirect,clock),CALLBACK)).getReason());
 			assertEquals(0,server.getHitCount("/token"));
 			OidcClient warm=builder(server,clock).jwksSource(null).requestTimeout(Duration.ofSeconds(1)).totalDeadline(Duration.ofSeconds(1)).observer(slow).build();
-			assertThrows(JwksUnavailableException.class,warm::warmUp);assertEquals(0,server.getHitCount("/jwks"));assertEquals(2,server.getHitCount(PATH));
+			assertEquals(OAuthException.Reason.NETWORK_FAILURE,assertThrows(OAuthTransportException.class,warm::warmUp).getReason());assertEquals(0,server.getHitCount("/jwks"));assertEquals(2,server.getHitCount(PATH));
 		}
 	}
 	@TestFactory

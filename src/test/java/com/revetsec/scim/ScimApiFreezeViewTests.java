@@ -125,7 +125,7 @@ class ScimApiFreezeViewTests {
     }
 
     @Test void anOptionalUnassignedEnterpriseExtensionCannotProduceATypedExtensionView() {
-        ScimResourceType type = ScimResourceType.userInstance();
+        ScimResourceType type = ScimTestResourceTypes.userWithEnterpriseInstance();
         ScimResource resource = resource(type, envelope(type.getSchema()).put("userName", "Ada"));
         assertEquals("Ada", ScimUser.fromResource(resource).getUserName());
         assertThrows(IllegalArgumentException.class, () -> ScimEnterpriseUser.fromResource(resource));

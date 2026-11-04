@@ -32,7 +32,9 @@ import static java.util.Objects.requireNonNull;
 
 /**
  * Immutable opt-in configuration for public client metadata documents.
- * The default is disabled. Enabling requires a trusted bounded address resolver; no build performs
+ * The default is disabled. Enabling requires a trusted bounded address resolver and an explicitly
+ * selected cache backend. Select {@link InMemoryOAuthClientMetadataCache} for bounded volatile,
+ * single-process storage, or supply an application-owned shared implementation. No build performs
  * DNS, HTTP, signing, provider calls or thread creation. This policy is configuration, not client
  * authorization or evidence of identity. Retrieved client names are untrusted display text.
  * Origin restrictions can narrow public HTTPS eligibility, never permit private destinations.
@@ -47,16 +49,14 @@ public final class OAuthClientMetadataPolicy {
  private final @Nullable OAuthClientMetadataCache cache;
  private final @Nullable Set<@NonNull URI> allowedOrigins;
  private final @NonNull Integer maximumDocumentBytes;
- private final @NonNull Integer maximumCacheEntries;
  private final @NonNull Duration maximumFreshness;
  private final @NonNull Integer maximumConcurrentFetches;
  private final @NonNull Integer maximumResolvedAddresses;
  private OAuthClientMetadataPolicy(@Nullable Builder builder) {
   this.addressResolver = builder == null ? null : requireNonNull(builder.addressResolver);
-  this.cache = builder == null ? null : builder.cache;
+  this.cache = builder == null ? null : requireNonNull(builder.cache);
   this.allowedOrigins = builder == null ? null : builder.allowedOrigins;
   this.maximumDocumentBytes = builder == null ? Integer.valueOf(Limits.CIMD_MAXIMUM_DOCUMENT_BYTES.getDefaultIntValue()) : builder.maximumDocumentBytes;
-  this.maximumCacheEntries = builder == null ? Integer.valueOf(Limits.CIMD_MAXIMUM_CACHE_ENTRIES.getDefaultIntValue()) : builder.maximumCacheEntries;
   this.maximumFreshness = builder == null ? Limits.CIMD_MAXIMUM_FRESHNESS.getDefaultDuration() : builder.maximumFreshness;
   this.maximumConcurrentFetches = builder == null ? Integer.valueOf(Limits.CIMD_MAXIMUM_CONCURRENT_FETCHES.getDefaultIntValue()) : builder.maximumConcurrentFetches;
   this.maximumResolvedAddresses = builder == null ? Integer.valueOf(Limits.CIMD_MAXIMUM_RESOLVED_ADDRESSES.getDefaultIntValue()) : builder.maximumResolvedAddresses;
@@ -68,7 +68,8 @@ public final class OAuthClientMetadataPolicy {
   */
  @CheckReturnValue public static @NonNull OAuthClientMetadataPolicy disabledInstance() { return DISABLED; }
  /**
-  * Starts an enabled policy with its required trusted resolver.
+  * Starts an enabled policy with its required trusted resolver. Select the cache with
+  * {@link Builder#cache(OAuthClientMetadataCache)} before building.
   * @param addressResolver the bounded resolver
   * @return the builder
   * @throws NullPointerException if addressResolver is null
@@ -78,14 +79,16 @@ public final class OAuthClientMetadataPolicy {
   return new Builder(requireNonNull(addressResolver));
  }
  /**
-  * Builds an enabled policy with the reviewed defaults and no callback or I/O.
+  * Builds an enabled policy with an explicit resolver and cache, without callbacks or I/O.
   * @param addressResolver the bounded resolver
+  * @param cache the explicitly selected storage backend
   * @return the enabled policy
-  * @throws NullPointerException if addressResolver is null
+  * @throws NullPointerException if either required argument is null
   * @since 1.0.0
   */
- @CheckReturnValue public static @NonNull OAuthClientMetadataPolicy fromAddressResolver(@NonNull OAuthClientMetadataAddressResolver addressResolver) {
-  return withAddressResolver(addressResolver).build();
+ @CheckReturnValue public static @NonNull OAuthClientMetadataPolicy fromAddressResolverAndCache(
+   @NonNull OAuthClientMetadataAddressResolver addressResolver, @NonNull OAuthClientMetadataCache cache) {
+  return withAddressResolver(addressResolver).cache(requireNonNull(cache)).build();
  }
  /**
   * Returns whether metadata retrieval is configured.
@@ -100,16 +103,16 @@ public final class OAuthClientMetadataPolicy {
   */
  public @NonNull Optional<@NonNull OAuthClientMetadataAddressResolver> getAddressResolver() { return Optional.ofNullable(this.addressResolver); }
  /**
-  * Returns explicitly supplied storage; empty selects a deferred engine-owned bounded in-memory default.
-  * Sharing a policy object does not share default storage. An explicit instance may be shared by applications.
-  * maximumCacheEntries governs the default only; a custom provider owns its capacity and eviction policy.
-  * @return the explicitly configured storage, or empty for the local default
+  * Returns the explicitly selected storage. Reusing this policy reuses that same backend;
+  * a process-local backend remains local even when multiple engines share it. The backend owns
+  * capacity and eviction policy; no engine substitutes an implicit in-memory implementation.
+  * @return the configured storage, or empty only for the disabled policy
   * @since 1.0.0
   */
  public @NonNull Optional<@NonNull OAuthClientMetadataCache> getCache() { return Optional.ofNullable(this.cache); }
  @NonNull OAuthClientMetadataCache cacheForEngine() {
   if(!getEnabled())throw new IllegalStateException("Client metadata retrieval is disabled.");
-  return this.cache==null?InMemoryOAuthClientMetadataCache.fromMaximumEntries(this.maximumCacheEntries):this.cache;
+  return requireNonNull(this.cache);
  }
  /**
   * Returns the exact origin restriction snapshot.
@@ -124,19 +127,15 @@ public final class OAuthClientMetadataPolicy {
   */
  public @NonNull Integer getMaximumDocumentBytes() { return this.maximumDocumentBytes; }
  /**
-  * Returns the engine-owned default cache entry bound; custom provider capacity is backend-owned.
-  * @return the configured limit
-  * @since 1.0.0
-  */
- public @NonNull Integer getMaximumCacheEntries() { return this.maximumCacheEntries; }
- /**
   * Returns the configured time bound for maximumFreshness.
   * @return the configured limit
   * @since 1.0.0
   */
  public @NonNull Duration getMaximumFreshness() { return this.maximumFreshness; }
  /**
-  * Returns the configured fetches bound for maximumConcurrentFetches.
+  * Returns the configured bound on active metadata fetches. Callers wait interruptibly within the
+  * original operation deadline. When the bound is at least two, authorization requests cannot occupy
+  * the final slot reserved for locally eligible credential transitions. Applications bound incoming concurrency.
   * @return the configured limit
   * @since 1.0.0
   */
@@ -149,7 +148,8 @@ public final class OAuthClientMetadataPolicy {
  public @NonNull Integer getMaximumResolvedAddresses() { return this.maximumResolvedAddresses; }
  @Override public @NonNull String toString() { return "OAuthClientMetadataPolicy{enabled=" + getEnabled() + ", configuration=redacted}"; }
  /**
-  * Builds an enabled policy; null property values reset defaults, except resolver null clears a required property.
+  * Builds an enabled policy; null property values reset defaults, except resolver and cache null
+  * clear required properties. There is no implicit storage backend.
   * @author <a href="https://www.revetkn.com">Mark Allen</a>
   * @since 1.0.0
   */
@@ -159,7 +159,6 @@ public final class OAuthClientMetadataPolicy {
   private @Nullable OAuthClientMetadataCache cache;
   private @Nullable Set<@NonNull URI> allowedOrigins;
   private @NonNull Integer maximumDocumentBytes = Limits.CIMD_MAXIMUM_DOCUMENT_BYTES.getDefaultIntValue();
-  private @NonNull Integer maximumCacheEntries = Limits.CIMD_MAXIMUM_CACHE_ENTRIES.getDefaultIntValue();
   private @NonNull Duration maximumFreshness = Limits.CIMD_MAXIMUM_FRESHNESS.getDefaultDuration();
   private @NonNull Integer maximumConcurrentFetches = Limits.CIMD_MAXIMUM_CONCURRENT_FETCHES.getDefaultIntValue();
   private @NonNull Integer maximumResolvedAddresses = Limits.CIMD_MAXIMUM_RESOLVED_ADDRESSES.getDefaultIntValue();
@@ -172,9 +171,11 @@ public final class OAuthClientMetadataPolicy {
    */
   @CheckReturnValue public @NonNull Builder addressResolver(@Nullable OAuthClientMetadataAddressResolver value) { this.addressResolver = value; return this; }
   /**
-   * Selects application storage. Null resets deferred engine-local defaults; build invokes no provider method.
+   * Selects application storage. Null clears this required dependency and makes build fail;
+   * build invokes no provider method. Select an in-memory backend explicitly through
+   * {@link InMemoryOAuthClientMetadataCache#fromMaximumEntries(Integer)} when local storage is intended.
    * Shared providers must honor atomic comparison, namespaces, record bounds and remaining budgets.
-   * @param value the custom storage, or null for the default
+   * @param value the selected storage, or null to clear
    * @return this builder
    * @since 1.0.0
    */
@@ -211,16 +212,6 @@ public final class OAuthClientMetadataPolicy {
    this.maximumDocumentBytes = value == null ? Limits.CIMD_MAXIMUM_DOCUMENT_BYTES.getDefaultIntValue() : Limits.CIMD_MAXIMUM_DOCUMENT_BYTES.require(value); return this;
   }
   /**
-   * Sets the engine-owned default cache maximumCacheEntries, bounded from {@code 1} through {@code 4096}, inclusive.
-   * @param value the limit, or null to reset to {@code 128}
-   * @return this builder
-   * @throws IllegalArgumentException if outside the allowed interval
-   * @since 1.0.0
-   */
-  @CheckReturnValue public @NonNull Builder maximumCacheEntries(@Nullable Integer value) {
-   this.maximumCacheEntries = value == null ? Limits.CIMD_MAXIMUM_CACHE_ENTRIES.getDefaultIntValue() : Limits.CIMD_MAXIMUM_CACHE_ENTRIES.require(value); return this;
-  }
-  /**
    * Sets maximumFreshness, bounded from {@code Duration.ZERO} through {@code Duration.ofHours(1)}, inclusive.
    * @param value the limit, or null to reset to {@code Duration.ofSeconds(300)}
    * @return this builder
@@ -232,6 +223,8 @@ public final class OAuthClientMetadataPolicy {
   }
   /**
    * Sets maximumConcurrentFetches, bounded from {@code 1} through {@code 64}, inclusive.
+   * The limit bounds active fetches; waiting uses the original operation deadline without creating workers.
+   * At least two slots are needed to reserve one from authorization requests for credential transitions.
    * @param value the limit, or null to reset to {@code 8}
    * @return this builder
    * @throws IllegalArgumentException if outside the allowed interval
@@ -253,11 +246,12 @@ public final class OAuthClientMetadataPolicy {
   /**
    * Builds a complete immutable enabled configuration without invoking the resolver.
    * @return the configured policy
-   * @throws IllegalStateException if the required resolver was cleared
+   * @throws IllegalStateException if the required resolver or cache is missing
    * @since 1.0.0
    */
   @CheckReturnValue public @NonNull OAuthClientMetadataPolicy build() {
    if (this.addressResolver == null) throw new IllegalStateException("Client metadata requires an address resolver.");
+   if (this.cache == null) throw new IllegalStateException("Client metadata requires an explicit cache backend.");
    return new OAuthClientMetadataPolicy(this);
   }
  }

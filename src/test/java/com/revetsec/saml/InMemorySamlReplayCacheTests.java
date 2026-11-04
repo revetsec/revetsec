@@ -45,7 +45,7 @@ final class InMemorySamlReplayCacheTests {
     private static final @NonNull Instant START = Instant.parse("2026-10-09T00:00:00Z");
 
     @Test void maximumCapacityAndExactMonotonicDeadlineAreAcceptedPrecisely() {
-        assertDoesNotThrow(() -> InMemorySamlReplayCache.withLimit(
+        assertDoesNotThrow(() -> InMemorySamlReplayCache.fromLimit(
                 Clock.fixed(START, ZoneOffset.UTC), 1_000_000));
         assertTrue(InMemorySamlReplayCache.expired(System.nanoTime() - 1));
         assertFalse(InMemorySamlReplayCache.expiredAt(100, 99, false));
@@ -56,7 +56,7 @@ final class InMemorySamlReplayCacheTests {
 
     @Test void refusesLiveEvictionAndReclaimsExpiredEntries() {
         MutableClock clock = new MutableClock(START);
-        SamlReplayCache cache = InMemorySamlReplayCache.withLimit(clock, 1);
+        SamlReplayCache cache = InMemorySamlReplayCache.fromLimit(clock, 1);
         Instant expiry = START.plusSeconds(10);
         assertEquals(SamlReplayCache.MarkResult.MARKED, cache.markIfAbsent("one", expiry, BUDGET));
         assertEquals(SamlReplayCache.MarkResult.ALREADY_PRESENT, cache.markIfAbsent("one", expiry, BUDGET));
@@ -72,7 +72,7 @@ final class InMemorySamlReplayCacheTests {
 
     @Test void oneConnectionCannotConsumeOtherConnectionsReplayCapacity() {
         MutableClock clock = new MutableClock(START);
-        SamlReplayCache cache = InMemorySamlReplayCache.withLimit(clock, 8);
+        SamlReplayCache cache = InMemorySamlReplayCache.fromLimit(clock, 8);
         Instant early = START.plusSeconds(10);
         Instant late = START.plusSeconds(20);
         assertEquals(SamlReplayCache.MarkResult.MARKED,
@@ -95,7 +95,7 @@ final class InMemorySamlReplayCacheTests {
     }
 
     @Test void connectionQuotaScalesBeyondOneThousandEntries() {
-        SamlReplayCache cache = InMemorySamlReplayCache.withLimit(
+        SamlReplayCache cache = InMemorySamlReplayCache.fromLimit(
                 Clock.fixed(START, ZoneOffset.UTC), 4_100);
         Instant expiry = START.plusSeconds(60);
         for (int index = 0; index < 1_025; index++) {
@@ -110,7 +110,7 @@ final class InMemorySamlReplayCacheTests {
 
     @Test void expiredKeyCanBeReadmittedWithoutDiscardingItsNewExpiry() {
         MutableClock clock = new MutableClock(START);
-        SamlReplayCache cache = InMemorySamlReplayCache.withLimit(clock, 4);
+        SamlReplayCache cache = InMemorySamlReplayCache.fromLimit(clock, 4);
         Instant firstExpiry = START.plusSeconds(10);
         Instant secondExpiry = START.plusSeconds(20);
         assertEquals(SamlReplayCache.MarkResult.MARKED,
@@ -127,7 +127,7 @@ final class InMemorySamlReplayCacheTests {
 
     @Test void clockRollbackCannotReviveAnExpiredOrLiveKey() {
         MutableClock clock = new MutableClock(START);
-        SamlReplayCache cache = InMemorySamlReplayCache.withLimit(clock, 2);
+        SamlReplayCache cache = InMemorySamlReplayCache.fromLimit(clock, 2);
         Instant expiry = START.plusSeconds(10);
         assertEquals(SamlReplayCache.MarkResult.MARKED, cache.markIfAbsent("one", expiry, BUDGET));
         clock.set(START.plusSeconds(9));
@@ -142,7 +142,7 @@ final class InMemorySamlReplayCacheTests {
     }
 
     @Test void simultaneousAdmissionsHaveExactlyOneWinner() throws Exception {
-        SamlReplayCache cache = InMemorySamlReplayCache.withLimit(Clock.fixed(START, ZoneOffset.UTC), 2);
+        SamlReplayCache cache = InMemorySamlReplayCache.fromLimit(Clock.fixed(START, ZoneOffset.UTC), 2);
         CountDownLatch release = new CountDownLatch(1);
         Callable<SamlReplayCache.MarkResult> admit = () -> {
             release.await();
@@ -164,7 +164,7 @@ final class InMemorySamlReplayCacheTests {
 
     @Test void lockTimeoutDoesNotAdmitAndCacheRecoversWhenHolderFinishes() throws Exception {
         BlockingClock clock = new BlockingClock(START);
-        SamlReplayCache cache = InMemorySamlReplayCache.withLimit(clock, 2);
+        SamlReplayCache cache = InMemorySamlReplayCache.fromLimit(clock, 2);
         Instant expiry = START.plusSeconds(60);
         ExecutorService executor = Executors.newFixedThreadPool(2);
         try {
@@ -187,7 +187,7 @@ final class InMemorySamlReplayCacheTests {
 
     @Test void interruptedLockWaitPreservesInterruptAndDoesNotAdmit() throws Exception {
         BlockingClock clock = new BlockingClock(START);
-        SamlReplayCache cache = InMemorySamlReplayCache.withLimit(clock, 2);
+        SamlReplayCache cache = InMemorySamlReplayCache.fromLimit(clock, 2);
         Instant expiry = START.plusSeconds(60);
         ExecutorService executor = Executors.newSingleThreadExecutor();
         AtomicReference<SamlReplayCache.MarkResult> waiterResult = new AtomicReference<>();
@@ -224,7 +224,7 @@ final class InMemorySamlReplayCacheTests {
 
     @Test void failedClockDoesNotAdmitAndRecoveryCanAdmit() {
         MutableClock clock = new MutableClock(START);
-        SamlReplayCache cache = InMemorySamlReplayCache.withLimit(clock, 1);
+        SamlReplayCache cache = InMemorySamlReplayCache.fromLimit(clock, 1);
         Instant expiry = START.plusSeconds(60);
         clock.fail();
         assertEquals(SamlReplayCache.MarkResult.UNAVAILABLE,

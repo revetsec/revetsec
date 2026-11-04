@@ -146,16 +146,23 @@ final class SamlPostBindingDecoderTests {
     }
 
     @Test void acceptsTheExactBodyCapButRejectsTheNextByte() {
-        String prefix = "SAMLResponse=PA==";
-        byte[] body = bytes(prefix + " ".repeat(1_061_128 - prefix.length()));
+        byte[] xml = new byte[256 * 1024];
+        String encoded = Base64.getEncoder().encodeToString(xml);
+        StringBuilder escaped = new StringBuilder(3 * encoded.length());
+        for (char character : encoded.toCharArray())
+            escaped.append('%').append(Integer.toHexString(character));
+        String form = "SAMLResponse=" + escaped + "%20".repeat(4096)
+                + "&RelayState=" + "%78".repeat(77);
+        byte[] body = bytes(form);
+        assertEquals(1_061_128, body.length);
         SamlPostBindingDecoder.Accepted accepted = assertInstanceOf(
                 SamlPostBindingDecoder.Accepted.class,
                 SamlPostBindingDecoder.decode(body, List.of(MIME), null));
-        assertArrayEquals(bytes("<"), accepted.xml());
+        assertArrayEquals(xml, accepted.xml());
+        assertEquals("x".repeat(77), accepted.relayState());
         assertEquals(SamlPostBindingDecoder.Reason.BODY_SIZE,
                 assertInstanceOf(SamlPostBindingDecoder.Rejected.class,
-                        SamlPostBindingDecoder.decode(bytes(prefix + " ".repeat(
-                                1_061_129 - prefix.length())), List.of(MIME), null)).reason());
+                        SamlPostBindingDecoder.decode(bytes(form + "x"), List.of(MIME), null)).reason());
     }
 
     @Test void percentDecodingDistinguishesHexDigitsAndRejectsMalformedOctets() {

@@ -107,10 +107,10 @@ final class SamlSecurityBranchMutationTests {
         KeyPair key = rsa();
         SamlServiceProvider origin = SamlServiceProvider.withEntityId(SP)
                 .assertionConsumerServiceUrl(URI.create(ACS))
-                .replayCache(InMemorySamlReplayCache.withLimit(CLOCK, 4)).clock(CLOCK).build();
+                .replayCache(InMemorySamlReplayCache.fromLimit(CLOCK, 4)).clock(CLOCK).build();
         SamlServiceProvider other = SamlServiceProvider.withEntityId("https://other.example.test/saml")
                 .assertionConsumerServiceUrl(URI.create(ACS))
-                .replayCache(InMemorySamlReplayCache.withLimit(CLOCK, 4)).clock(CLOCK).build();
+                .replayCache(InMemorySamlReplayCache.fromLimit(CLOCK, 4)).clock(CLOCK).build();
         SamlIdentityProvider idp = SamlIdentityProvider.withEntityId(IDP).connectionId("tenant-one")
                 .redirectSingleSignOnService(URI.create("https://idp.example.test/sso"))
                 .signingKeys(List.of(key.getPublic())).build();

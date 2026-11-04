@@ -49,8 +49,8 @@ class ClientMetadataFreshnessTests {
  }
  @Test void explicitGrammarAndCapAreReused() {
   assertEquals(Duration.ofSeconds(300),ttl(Map.of("Cache-Control",List.of("max-age=1000"))));
-  assertEquals(Duration.ofSeconds(120),ttl(Map.of("Cache-Control",List.of("s-maxage=5, max-age=120"))));
-  assertEquals(Duration.ZERO,ttl(Map.of("Cache-Control",List.of("s-maxage=120"))));
+  assertEquals(Duration.ofSeconds(5),ttl(Map.of("Cache-Control",List.of("s-maxage=5, max-age=120"))));
+  assertEquals(Duration.ofSeconds(120),ttl(Map.of("Cache-Control",List.of("s-maxage=120"))));
   assertEquals(Duration.ofSeconds(120),ttl(Map.of("Cache-Control",List.of(",, max-age=\"120\", unknown=\"private,x\",", "MAX-AGE=120"))));
   assertEquals(Duration.ZERO,ttl(Map.of()));
   assertEquals(Duration.ZERO,ttl(Map.of("Cache-Control",List.of("max-age=0"))));
@@ -63,11 +63,11 @@ class ClientMetadataFreshnessTests {
   assertEquals(Duration.ofSeconds(120),ttl(Map.of("Cache-Control",List.of("max-age=120"),"Date",List.of("Tue, 06 Oct 2026 12:01:00 GMT"))));
   assertEquals(Duration.ZERO,ttl(Map.of("Cache-Control",List.of("max-age=120"),"Age",List.of("9".repeat(500)))));
  }
- @Test void invalidSingletonsAndVaryCannotGuessFreshness() {
+ @Test void invalidSingletonsCannotGuessFreshnessAndNamedVaryMatchesTheFixedRequest() {
   for(String name:List.of("Date","Age","Expires")) assertEquals(Duration.ZERO,ttl(Map.of("Cache-Control",List.of("max-age=120"),name,List.of("bad","bad"))));
   assertEquals(Duration.ZERO,ttl(Map.of("Cache-Control",List.of("max-age=120"),"Date",List.of("bad"))));
-  assertEquals(Duration.ZERO,ttl(Map.of("Cache-Control",List.of("max-age=120"),"Vary",List.of(""))));
-  assertEquals(Duration.ZERO,ttl(Map.of("Cache-Control",List.of("max-age=120"),"Vary",List.of("Accept"))));
+  assertEquals(Duration.ofSeconds(120),ttl(Map.of("Cache-Control",List.of("max-age=120"),"Vary",List.of(""))));
+  assertEquals(Duration.ofSeconds(120),ttl(Map.of("Cache-Control",List.of("max-age=120"),"Vary",List.of("Accept"))));
  }
  @Test void expiresRequiresExplicitFiniteDateAndAge() {
   assertEquals(Duration.ofSeconds(60),ttl(Map.of("Expires",List.of("Tue, 06 Oct 2026 12:01:00 GMT"))));

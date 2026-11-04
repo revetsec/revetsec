@@ -33,19 +33,23 @@ import java.security.cert.CertificateException;
 import java.security.cert.CertificateFactory;
 import java.security.cert.CertPathValidator;
 import java.security.cert.PKIXBuilderParameters;
+import java.security.cert.PKIXParameters;
 import java.security.cert.PKIXCertPathValidatorResult;
 import java.security.cert.TrustAnchor;
 import java.security.cert.X509Certificate;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.LinkedHashSet;
 import java.util.Set;
 import static java.util.Objects.requireNonNull;
 
 /**
- * Per-exchange local trust context. No global property changes or client keys. A supplied ordered path must
- * validate locally with revocation disabled before the ordinary extended TLS trust manager receives its complete
- * anchored chain. The inspected JDK SunJSSE/SUN implementations then take direct validation, never path building.
+ * Per-exchange local trust context. No global property changes or client keys. Bounded paths are constructed
+ * from the peer certificate bag and configured trust anchors, keeping the first certificate as the leaf. Each
+ * path must validate locally with revocation disabled before the ordinary extended TLS trust manager receives
+ * its complete anchored chain. The inspected JDK SunJSSE/SUN implementations then take direct validation,
+ * never network-capable path building. At most 128 candidate prefixes are checked for a bag of ten certificates.
  * Unknown providers fail closed: their secondary-egress behavior is not inferred from a standard algorithm name.
  * Provider execution and local trust-store configuration are trusted runtime work, cooperatively bounded by callers.
  */
@@ -109,37 +113,75 @@ final class PinnedTlsContext {
     @Nullable SSLEngine engine) throws CertificateException {
    if (engine == null || !"HTTPS".equals(engine.getSSLParameters().getEndpointIdentificationAlgorithm()))
     throw rejected();
-   this.delegate.checkServerTrusted(localChain(chain), authType, engine);
+   checkLocalServer(chain, authType, engine);
   }
-  private @NonNull X509Certificate @NonNull [] localChain(@NonNull X509Certificate @NonNull [] supplied) throws CertificateException {
-   requireNonNull(supplied);
-   if (supplied.length == 0 || supplied.length > 10) throw rejected();
+  private void checkLocalServer(@NonNull X509Certificate @NonNull [] supplied, @NonNull String authType,
+    @NonNull SSLEngine engine) throws CertificateException {
    try {
-    List<X509Certificate> path = new ArrayList<>();
+    requireNonNull(supplied);
+    if (supplied.length == 0 || supplied.length > 10) throw rejected();
+    // Check the entire bag, including material after an anchor. Never mutate the peer's array.
+    Set<X509Certificate> unique = new LinkedHashSet<>();
     for (X509Certificate cert : supplied) {
      if (cert == null || cert.getEncoded().length > 32768) throw rejected();
-     if (!path.isEmpty() && !path.get(path.size() - 1).getIssuerX500Principal().equals(cert.getSubjectX500Principal()))
-      throw rejected();
-     path.add(cert);
-     if (this.anchors.stream().anyMatch(anchor -> cert.equals(anchor.getTrustedCert()))) break;
+     unique.add(cert);
     }
-    if (path.size() > 1 && this.anchors.stream().anyMatch(anchor -> path.get(path.size() - 1).equals(anchor.getTrustedCert())))
-     path.remove(path.size() - 1);
-    PKIXBuilderParameters parameters = new PKIXBuilderParameters(this.anchors, null);
+    X509Certificate leaf = supplied[0];
+    // JSSE can shortcut an explicitly trusted leaf; even that leaf must be current.
+    leaf.checkValidity();
+    if (this.anchors.stream().anyMatch(anchor -> leaf.equals(anchor.getTrustedCert()))) {
+     this.delegate.checkServerTrusted(new X509Certificate[]{leaf}, authType, engine);
+     return;
+    }
+    PKIXParameters parameters = new PKIXParameters(this.anchors);
     parameters.setRevocationEnabled(false);
     CertPathValidator validator = CertPathValidator.getInstance("PKIX");
     supported(validator.getProvider(), "SUN");
     CertificateFactory certificates = CertificateFactory.getInstance("X.509");
     supported(certificates.getProvider(), "SUN");
-    PKIXCertPathValidatorResult result = (PKIXCertPathValidatorResult)
-      validator.validate(certificates.generateCertPath(path), parameters);
-    X509Certificate anchor = requireNonNull(result.getTrustAnchor().getTrustedCert());
-    // An explicitly trusted leaf is still checked for validity here, even though the TLS delegate can shortcut it.
-    path.get(0).checkValidity();
-    if (!path.get(path.size() - 1).equals(anchor)) path.add(anchor);
-    return path.toArray(new X509Certificate[0]);
+    LocalPaths search = new LocalPaths(List.copyOf(unique), parameters, validator, certificates);
+    if (!search.check(new ArrayList<>(List.of(leaf)), authType, engine)) throw rejected();
    } catch (GeneralSecurityException | RuntimeException failure) {
     throw rejected();
+   }
+  }
+
+  /** Operation-local search. No CertStores, builders, revocation checkers or certificate-URL access. */
+  private final class LocalPaths {
+   private final @NonNull List<@NonNull X509Certificate> candidates;
+   private final @NonNull PKIXParameters parameters;
+   private final @NonNull CertPathValidator validator;
+   private final @NonNull CertificateFactory certificates;
+   private int remaining = 128;
+   private LocalPaths(@NonNull List<@NonNull X509Certificate> candidates, @NonNull PKIXParameters parameters,
+     @NonNull CertPathValidator validator, @NonNull CertificateFactory certificates) {
+    this.candidates = candidates; this.parameters = parameters;
+    this.validator = validator; this.certificates = certificates;
+   }
+   private boolean check(@NonNull List<@NonNull X509Certificate> path, @NonNull String authType,
+     @NonNull SSLEngine engine) throws CertificateException {
+    if (this.remaining-- == 0) throw rejected();
+    try {
+     PKIXCertPathValidatorResult result = (PKIXCertPathValidatorResult)
+       this.validator.validate(this.certificates.generateCertPath(path), this.parameters);
+     List<X509Certificate> anchored = new ArrayList<>(path);
+     anchored.add(requireNonNull(result.getTrustAnchor().getTrustedCert()));
+     // This complete, ordered path forces the inspected delegate's direct-validation branch. It still
+     // checks hostname, TLS algorithms and server usage. A rejected alternative may be backtracked.
+     LocalTrust.this.delegate.checkServerTrusted(anchored.toArray(new X509Certificate[0]), authType, engine);
+     return true;
+    } catch (GeneralSecurityException invalidPath) {
+     // Only the finite local bag may extend a rejected prefix; never ask a builder to retrieve an issuer.
+    }
+    X509Certificate last = path.get(path.size() - 1);
+    for (X509Certificate candidate : this.candidates) {
+     if (!path.contains(candidate) && last.getIssuerX500Principal().equals(candidate.getSubjectX500Principal())) {
+      path.add(candidate);
+      if (check(path, authType, engine)) return true;
+      path.remove(path.size() - 1);
+     }
+    }
+    return false;
    }
   }
   @Override public void checkClientTrusted(@NonNull X509Certificate @NonNull [] chain, @NonNull String authType)

@@ -19,6 +19,7 @@ import com.google.errorprone.annotations.CheckReturnValue;
 import com.revetsec.StateSealer;
 import com.revetsec.internal.crypto.SealedStateAccess;
 import com.revetsec.internal.crypto.SealedStateType;
+import com.revetsec.internal.crypto.SealerV1;
 import com.revetsec.internal.crypto.UnsealException;
 import com.revetsec.internal.encoding.Base64Url;
 import com.revetsec.internal.encoding.EncodingException;
@@ -42,7 +43,12 @@ import static java.util.Objects.requireNonNull;
  */
 @Immutable
 public final class SamlSessionReference {
-    private static final int MAXIMUM_BYTES = 32 * 1024;
+    // Canonical v1 is ASCII. Well-formed UTF-16 needs at most three UTF-8 bytes per code unit.
+    // Three required fields: 4 * (256 + 2048 + 4096) = 25,600 base64url characters.
+    // Five optional 2048-unit fields: 5 * ceil(4 * (1 + 3 * 2048) / 3) = 40,970.
+    // Instant's longest canonical text is 37 ASCII characters: its optional part needs 51.
+    // Version plus nine separators add 10. This bound covers the existing field profile.
+    private static final int MAXIMUM_SERIALIZED_LENGTH = 66_631;
     private final @NonNull String connectionId;
     private final @NonNull String identityProviderEntityId;
     private final @NonNull SamlNameId nameId;
@@ -100,6 +106,9 @@ public final class SamlSessionReference {
     /**
      * Serializes the checked logout continuity fields for trusted application storage.
      * This contains personal data and is not itself proof of identity or authenticity.
+     * The version-1 form uses at most 66,631 ASCII characters, including base64url expansion
+     * of well-formed fields at their existing validation limits. This storage budget is
+     * separate from a sealer's configured limit and from browser cookie limits.
      *
      * @return bounded versioned storage form
      * @since 1.0.0
@@ -114,7 +123,7 @@ public final class SamlSessionReference {
                     + '.' + optionalPart(sessionIndex)
                     + '.' + optionalPart(sessionNotOnOrAfter == null ? null
                             : sessionNotOnOrAfter.toString());
-            if (serialized.length() > MAXIMUM_BYTES) throw invalid();
+            if (serialized.length() > MAXIMUM_SERIALIZED_LENGTH) throw invalid();
             return serialized;
         } catch (EncodingException exception) { throw invalid(); }
     }
@@ -140,7 +149,7 @@ public final class SamlSessionReference {
     private static @NonNull SamlSessionReference parseSerializedForm(@NonNull String serializedForm) {
         requireNonNull(serializedForm);
         try {
-            if (serializedForm.length() > MAXIMUM_BYTES) throw invalid();
+            if (serializedForm.length() > MAXIMUM_SERIALIZED_LENGTH) throw invalid();
             String[] fields = serializedForm.split("\\.", -1);
             if (fields.length != 10 || !fields[0].equals("1")) throw invalid();
             String connection = required(fields[1], 256);
@@ -184,10 +193,10 @@ public final class SamlSessionReference {
     }
 
     private static @NonNull String decoded(@NonNull String encoded) throws EncodingException {
-        if (encoded.isEmpty() || encoded.length() > MAXIMUM_BYTES) throw invalid();
+        if (encoded.isEmpty() || encoded.length() > MAXIMUM_SERIALIZED_LENGTH) throw invalid();
         byte[] bytes = Base64Url.decode(encoded);
         try {
-            if (bytes.length > MAXIMUM_BYTES) throw invalid();
+            if (bytes.length > MAXIMUM_SERIALIZED_LENGTH) throw invalid();
             return StrictUtf8.decode(bytes);
         } finally { Arrays.fill(bytes, (byte) 0); }
     }
@@ -195,17 +204,58 @@ public final class SamlSessionReference {
     /**
      * Seals the reference under a SAML-specific type and application context.
      * The application chooses an expiry no later than its own session lifetime.
+     * A valid reference can exceed even the largest allowed seal. Prefer
+     * {@link #toSealedFormResult(StateSealer, String, Instant)} to handle that expected outcome.
      *
      * @param sealer active and verification keys
      * @param context application-selected session context
      * @param expiresAt absolute seal expiry
      * @return sealed storage form
+     * @throws IllegalArgumentException if an argument is invalid or the reference exceeds the configured seal limit
+     * @throws IllegalStateException if the cryptographic provider cannot seal
      * @since 1.0.0
      */
     public @NonNull String toSealedForm(@NonNull StateSealer sealer, @NonNull String context,
             @NonNull Instant expiresAt) {
         return SealedStateAccess.get().seal(requireNonNull(sealer), SealedStateType.SAML_SESSION,
                 toSerializedForm(), requireNonNull(context), requireNonNull(expiresAt));
+    }
+
+    /**
+     * Seals logout continuity fields or reports a size limit or provider failure explicitly.
+     * Only {@link SamlSessionReferenceSealResult.Succeeded} contains a sealed value. A valid
+     * reference need not fit a seal: use trusted server-side storage when it is too large,
+     * without truncating identifiers or weakening the sealer's configured bound.
+     * Size refusal performs no random draws or encryption. Null and invalid arguments remain
+     * programmer errors, including an invalid context even when the reference is too large.
+     *
+     * @param sealer active and verification keys
+     * @param context application-selected session context
+     * @param expiresAt absolute seal expiry, no later than the application's session lifetime
+     * @return a sealed value, an expected size refusal, or an unavailable cryptographic provider
+     * @throws NullPointerException if a required argument is null
+     * @throws IllegalArgumentException if the context or reference text is invalid
+     * @since 1.0.0
+     */
+    @CheckReturnValue
+    public @NonNull SamlSessionReferenceSealResult toSealedFormResult(@NonNull StateSealer sealer,
+            @NonNull String context, @NonNull Instant expiresAt) {
+        requireNonNull(sealer);
+        requireNonNull(context);
+        requireNonNull(expiresAt);
+        SealerV1.requireContext(context);
+        String serialized = toSerializedForm();
+        SealedStateAccess.Operations access = SealedStateAccess.get();
+        // The versioned storage form is ASCII, so characters equal plaintext UTF-8 bytes.
+        long length = SealerV1.sealedLength(access.getActiveKeyId(sealer).length(), serialized.length());
+        if (length > access.getMaximumSealedLength(sealer))
+            return SamlSessionReferenceSealResult.TooLarge.INSTANCE;
+        try {
+            return new SamlSessionReferenceSealResult.Succeeded(access.seal(sealer,
+                    SealedStateType.SAML_SESSION, serialized, context, expiresAt));
+        } catch (IllegalStateException unavailable) {
+            return SamlSessionReferenceSealResult.Unavailable.INSTANCE;
+        }
     }
 
     /**

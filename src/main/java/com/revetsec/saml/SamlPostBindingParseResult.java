@@ -78,7 +78,7 @@ public sealed interface SamlPostBindingParseResult permits SamlPostBindingParseR
         /** Required parameters are missing, repeated or unexpected. */ PARAMETERS,
         /** A form component is not valid UTF-8 or percent encoding. */ FORM_ENCODING,
         /** RelayState exceeds the binding cap. */ RELAY_STATE_SIZE,
-        /** SAMLResponse is not strict Base64. */ BASE64,
-        /** Decoded XML is empty or exceeds its cap. */ XML_SIZE
+        /** The SAML payload violates canonical standard Base64 or its whitespace allowance. */ BASE64,
+        /** The encoded payload or decoded XML exceeds its cap, or decoded XML is empty. */ XML_SIZE
     }
 }

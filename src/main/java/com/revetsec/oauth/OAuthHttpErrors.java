@@ -27,6 +27,19 @@ import java.io.IOException;
 final class OAuthHttpErrors {
 	private OAuthHttpErrors() { }
 
+	/** Copy only fixed failure data. Throwable diagnostics and transport causes belong to their original caller. */
+	static @NonNull OAuthException copyForCaller(@NonNull OAuthException failure) {
+		if (failure instanceof OAuthErrorResponseException response) return response.copyForCaller();
+		if (failure instanceof OAuthTransportException) return OAuthTransportException.fromReason(failure.getReason(), null);
+		if (failure instanceof OAuthResponseException) return OAuthResponseException.fromReason(failure.getReason());
+		if (failure instanceof OAuthValidationException) return OAuthValidationException.fromReason(failure.getReason());
+		if (failure instanceof OAuthConfigurationException) return OAuthConfigurationException.fromReason(failure.getReason());
+		if (failure instanceof PendingAuthorizationStoreException) return PendingAuthorizationStoreException.fromReason(failure.getReason());
+		if (failure instanceof AuthorizationErrorException authorization)
+			return AuthorizationErrorException.fromErrorCode(authorization.getErrorCode().orElse(""));
+		throw new IllegalArgumentException("Unsupported OAuth failure type.");
+	}
+
 	static @NonNull OAuthException fromExchange(@NonNull HttpExchangeException exception) {
 		return switch (exception.getKind()) {
 			case TIMEOUT -> OAuthTransportException.fromReason(OAuthException.Reason.NETWORK_FAILURE, null);

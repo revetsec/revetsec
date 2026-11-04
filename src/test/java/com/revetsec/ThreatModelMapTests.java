@@ -182,6 +182,54 @@ final class ThreatModelMapTests {
 			Assertions.assertTrue(ids.contains(id), () -> THREAT_MODEL + " omits selected application-security " + id);
 	}
 
+	// Selected contracts keep their original IDs even where a later summary groups them under I or W.
+	@Test
+	void everySelectedShippedInvariantKeepsItsStableId() throws IOException {
+		List<String> problems = new ArrayList<>();
+		Set<String> actual = new HashSet<>();
+		for (InvariantRow row : invariantRows(read(THREAT_MODEL), problems)) actual.add(row.getId());
+		ContractSupport.assertNoViolations("Malformed invariant rows in " + THREAT_MODEL, problems);
+		Set<String> required = new TreeSet<>();
+		Map<String, Integer> groups = Map.ofEntries(Map.entry("G", 12), Map.entry("J", 9), Map.entry("C", 6),
+				Map.entry("O", 10), Map.entry("I", 3), Map.entry("R", 2), Map.entry("A", 3), Map.entry("W", 3),
+				Map.entry("WA", 8), Map.entry("S", 19), Map.entry("L", 2), Map.entry("M", 10));
+		for (Map.Entry<String, Integer> group : groups.entrySet())
+			for (int number = 1; number <= group.getValue(); number++) required.add("INV-" + group.getKey() + number);
+		required.addAll(List.of("INV-SEC1", "INV-SEC5"));
+		required.removeAll(actual);
+		Assertions.assertEquals(Set.of(), required, "Selected shipped invariants are missing from the map");
+	}
+
+	@Test
+	void checkedByCellsNameExactClassAndMethodInsteadOfWholeClasses() throws IOException {
+		List<String> problems = new ArrayList<>();
+		for (InvariantRow row : invariantRows(read(THREAT_MODEL), problems))
+			for (String problem : specificCitationProblems(row.getCheckedBy())) problems.add(row.getId() + ": " + problem);
+		ContractSupport.assertNoViolations("Invariant citations must identify exact test methods", problems);
+	}
+
+	@Test
+	void exactCitationPolicyRejectsWholeClassesAndAmbiguousBareMethods() {
+		Assertions.assertEquals(List.of(), specificCitationProblems("`FrozenLimitsTests.everyApprovedRowIsPinned`"));
+		Assertions.assertEquals(List.of(), specificCitationProblems("`internal.LimitsTests.rejectsZero`"));
+		Assertions.assertEquals(List.of(), specificCitationProblems("`pom.xml`, `<bannedDependencies>` and `verification/check.py`"));
+		Assertions.assertEquals(1, specificCitationProblems("`FrozenLimitsTests`").size());
+		Assertions.assertEquals(1, specificCitationProblems("`internal.LimitsTests`").size());
+		Assertions.assertEquals(1, specificCitationProblems("`everyApprovedRowIsPinned`").size());
+		Assertions.assertEquals(1, specificCitationProblems("`FrozenLimitsTests.everyApprovedRowIsPinned` and `zeroIsAllowedForExactlyTheApprovedZeroRows`").size());
+		Assertions.assertEquals(2, specificCitationProblems("`FrozenLimitsTests` and `everyApprovedRowIsPinned`").size());
+	}
+
+	private static @NonNull List<@NonNull String> specificCitationProblems(@NonNull String cell) {
+		List<String> problems = new ArrayList<>();
+		for (String token : backtickedTokens(cell)) {
+			Matcher citation = CITATION.matcher(token);
+			if (citation.matches() && citation.group(2) == null) problems.add("Whole test class: " + token);
+			else if (METHOD.matcher(token).matches()) problems.add("Bare method needs its class: " + token);
+		}
+		return List.copyOf(problems);
+	}
+
 	// M2-10 item 7 and plan 14.6: every row cites at least one test that exists, every citation in it resolves to a
 	// test class or test method, and the allowlisted row names build checks that exist.
 	@TestFactory

@@ -51,7 +51,7 @@ final class InMemoryPendingSamlAuthenticationStoreTests {
 
     @Test void consumesOncePrunesExpiryAndKeepsCompoundKeysUnambiguous() {
         MutableClock clock = new MutableClock(START);
-        InMemoryPendingSamlAuthenticationStore store = InMemoryPendingSamlAuthenticationStore.withLimit(clock, 2);
+        InMemoryPendingSamlAuthenticationStore store = InMemoryPendingSamlAuthenticationStore.fromLimit(clock, 2);
         Instant expiry = START.plusSeconds(60);
         assertEquals(SamlPendingSaveResult.SAVED, store.save("ab", "c", "first", expiry, BUDGET));
         assertEquals(SamlPendingSaveResult.SAVED, store.save("a", "bc", "second", expiry, BUDGET));
@@ -95,7 +95,7 @@ final class InMemoryPendingSamlAuthenticationStoreTests {
     }
 
     @Test void refusedConditionalConsumeRetainsTheRecordForAnAcceptedCallback() {
-        InMemoryPendingSamlAuthenticationStore store = InMemoryPendingSamlAuthenticationStore.withLimit(
+        InMemoryPendingSamlAuthenticationStore store = InMemoryPendingSamlAuthenticationStore.fromLimit(
                 Clock.fixed(START, ZoneOffset.UTC), 1);
         assertEquals(SamlPendingSaveResult.SAVED,
                 store.save("browser", "handle", "sealed", START.plusSeconds(60), BUDGET));
@@ -111,7 +111,7 @@ final class InMemoryPendingSamlAuthenticationStoreTests {
     }
 
     @Test void throwingOrTimedOutValidationDoesNotRemoveTheRecord() {
-        InMemoryPendingSamlAuthenticationStore store = InMemoryPendingSamlAuthenticationStore.withLimit(
+        InMemoryPendingSamlAuthenticationStore store = InMemoryPendingSamlAuthenticationStore.fromLimit(
                 Clock.fixed(START, ZoneOffset.UTC), 1);
         assertEquals(SamlPendingSaveResult.SAVED,
                 store.save("browser", "handle", "sealed", START.plusSeconds(60), BUDGET));
@@ -132,7 +132,7 @@ final class InMemoryPendingSamlAuthenticationStoreTests {
 
     @Test void recordExpiryIsRecheckedAfterValidation() {
         MutableClock clock = new MutableClock(START);
-        InMemoryPendingSamlAuthenticationStore store = InMemoryPendingSamlAuthenticationStore.withLimit(clock, 1);
+        InMemoryPendingSamlAuthenticationStore store = InMemoryPendingSamlAuthenticationStore.fromLimit(clock, 1);
         Instant expiry = START.plusSeconds(60);
         assertEquals(SamlPendingSaveResult.SAVED, store.save("browser", "handle", "sealed", expiry, BUDGET));
         assertInstanceOf(SamlPendingConsumeResult.Missing.class,
@@ -143,7 +143,7 @@ final class InMemoryPendingSamlAuthenticationStoreTests {
     }
 
     @Test void reentrantValidationCannotConsumeTheSameRecordTwiceOrRemoveAReplacement() {
-        InMemoryPendingSamlAuthenticationStore store = InMemoryPendingSamlAuthenticationStore.withLimit(
+        InMemoryPendingSamlAuthenticationStore store = InMemoryPendingSamlAuthenticationStore.fromLimit(
                 Clock.fixed(START, ZoneOffset.UTC), 1);
         Instant expiry = START.plusSeconds(60);
         for (boolean replace : new boolean[] {false, true}) {
@@ -165,7 +165,7 @@ final class InMemoryPendingSamlAuthenticationStoreTests {
     }
 
     @Test void concurrentConditionalConsumesAdmitExactlyOneCaller() throws Exception {
-        InMemoryPendingSamlAuthenticationStore store = InMemoryPendingSamlAuthenticationStore.withLimit(
+        InMemoryPendingSamlAuthenticationStore store = InMemoryPendingSamlAuthenticationStore.fromLimit(
                 Clock.fixed(START, ZoneOffset.UTC), 1);
         assertEquals(SamlPendingSaveResult.SAVED,
                 store.save("browser", "handle", "sealed", START.plusSeconds(60), BUDGET));
@@ -200,7 +200,7 @@ final class InMemoryPendingSamlAuthenticationStoreTests {
 
     @Test void failedBudgetAndClockRollbackLeavePendingRecordUntouched() {
         MutableClock clock = new MutableClock(START);
-        InMemoryPendingSamlAuthenticationStore store = InMemoryPendingSamlAuthenticationStore.withLimit(clock, 1);
+        InMemoryPendingSamlAuthenticationStore store = InMemoryPendingSamlAuthenticationStore.fromLimit(clock, 1);
         Instant expiry = START.plusSeconds(60);
         assertEquals(SamlPendingSaveResult.SAVED, store.save("browser", "handle", "sealed", expiry, BUDGET));
         assertEquals(SamlPendingSaveResult.UNAVAILABLE,
@@ -222,10 +222,10 @@ final class InMemoryPendingSamlAuthenticationStoreTests {
 
     @Test void invalidInputsAndFailingClockDoNotCreatePendingState() {
         MutableClock clock = new MutableClock(START);
-        InMemoryPendingSamlAuthenticationStore store = InMemoryPendingSamlAuthenticationStore.withLimit(clock, 1);
-        InMemoryPendingSamlAuthenticationStore.withLimit(clock, 1_000_000);
-        assertThrows(IllegalArgumentException.class, () -> InMemoryPendingSamlAuthenticationStore.withLimit(clock, 0));
-        assertThrows(IllegalArgumentException.class, () -> InMemoryPendingSamlAuthenticationStore.withLimit(clock, 1_000_001));
+        InMemoryPendingSamlAuthenticationStore store = InMemoryPendingSamlAuthenticationStore.fromLimit(clock, 1);
+        InMemoryPendingSamlAuthenticationStore.fromLimit(clock, 1_000_000);
+        assertThrows(IllegalArgumentException.class, () -> InMemoryPendingSamlAuthenticationStore.fromLimit(clock, 0));
+        assertThrows(IllegalArgumentException.class, () -> InMemoryPendingSamlAuthenticationStore.fromLimit(clock, 1_000_001));
         assertThrows(IllegalArgumentException.class,
                 () -> store.save("", "handle", "sealed", START.plusSeconds(60), BUDGET));
         assertThrows(IllegalArgumentException.class,
@@ -243,7 +243,7 @@ final class InMemoryPendingSamlAuthenticationStoreTests {
             throws Exception {
         BlockingClock clock = new BlockingClock();
         InMemoryPendingSamlAuthenticationStore store =
-                InMemoryPendingSamlAuthenticationStore.withLimit(clock, 1);
+                InMemoryPendingSamlAuthenticationStore.fromLimit(clock, 1);
         AtomicReference<SamlPendingSaveResult> saved = new AtomicReference<>();
         AtomicReference<SamlPendingConsumeResult> consumed = new AtomicReference<>();
         AtomicReference<Throwable> failure = new AtomicReference<>();
@@ -291,7 +291,7 @@ final class InMemoryPendingSamlAuthenticationStoreTests {
             throws Exception {
         BlockingClock clock = new BlockingClock();
         InMemoryPendingSamlAuthenticationStore store =
-                InMemoryPendingSamlAuthenticationStore.withLimit(clock, 1);
+                InMemoryPendingSamlAuthenticationStore.fromLimit(clock, 1);
         AtomicReference<SamlPendingSaveResult> saved = new AtomicReference<>();
         AtomicReference<SamlPendingConsumeResult> consumed = new AtomicReference<>();
         AtomicReference<Throwable> failure = new AtomicReference<>();

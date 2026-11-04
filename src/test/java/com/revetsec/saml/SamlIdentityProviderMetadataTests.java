@@ -444,7 +444,7 @@ final class SamlIdentityProviderMetadataTests {
         SamlServiceProvider sp = SamlServiceProvider.withEntityId("https://sp.example.test/saml")
                 .assertionConsumerServiceUrl(URI.create("https://sp.example.test/acs"))
                 .singleLogoutServiceUrl(URI.create("https://sp.example.test/slo"))
-                .replayCache(InMemorySamlReplayCache.withLimit(CLOCK, 4))
+                .replayCache(InMemorySamlReplayCache.fromLimit(CLOCK, 4))
                 .signingCredential(credential).clock(CLOCK).build();
         String xml = assertInstanceOf(SamlServiceProviderMetadataResult.Generated.class,
                 SamlServiceProviderMetadata.fromServiceProviderResult(sp)).getXml();

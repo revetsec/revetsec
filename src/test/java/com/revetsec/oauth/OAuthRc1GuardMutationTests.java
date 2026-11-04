@@ -28,6 +28,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Supplier;
+import static com.revetsec.testing.OAuthFailureAssertions.assertIndependentFailure;
 import static org.junit.jupiter.api.Assertions.*;
 
 /** Endpoint-wide health leases never share a credential verdict or busy-poll a provider probe. */
@@ -67,14 +68,14 @@ final class OAuthRc1GuardMutationTests {
     }
 
     @Test
-    void failedProbeWakesFollowersWithTheSameFailureAndReleasesItsLock() throws Exception {
+    void failedProbeWakesFollowersWithIndependentFailuresAndReleasesItsLock() throws Exception {
         AtomicLong nanos = new AtomicLong();
         IntrospectionFailureGuard guard = new IntrospectionFailureGuard(Duration.ofNanos(30), nanos::get);
         IntrospectionFailureGuard.Attempt first = onCaller(() -> guard.acquire(deadline(), Duration.ofSeconds(1)));
         OAuthException initial = OAuthTransportException.fromReason(OAuthException.Reason.NETWORK_FAILURE, null);
         onCaller(() -> { guard.failed(first, initial); return true; });
         nanos.set(29);
-        assertSame(initial, onCaller(() -> assertThrows(OAuthException.class, () -> guard.acquire(deadline(), Duration.ofSeconds(1)))));
+        assertIndependentFailure(initial, onCaller(() -> assertThrows(OAuthException.class, () -> guard.acquire(deadline(), Duration.ofSeconds(1)))));
         nanos.set(30);
         IntrospectionFailureGuard.Attempt probe = onCaller(() -> guard.acquire(deadline(), Duration.ofSeconds(1)));
         FutureTask<IntrospectionFailureGuard.Attempt> follower = task(() -> guard.acquire(deadline(), Duration.ofSeconds(1)));
@@ -82,10 +83,10 @@ final class OAuthRc1GuardMutationTests {
             assertTrue(onCaller(() -> assertDoesNotThrow(() -> guard.awaitWaitersForTests(1, Duration.ofSeconds(2)))));
             OAuthException replacement = OAuthTransportException.fromReason(OAuthException.Reason.NETWORK_FAILURE, null);
             onCaller(() -> { guard.failed(probe, replacement); return true; });
-            assertSame(replacement, failure(follower));
+            assertIndependentFailure(replacement, failure(follower));
             assertTrue(onCaller(() -> assertDoesNotThrow(() -> guard.awaitWaitersForTests(0, Duration.ZERO))));
             assertFalse(onCaller(() -> assertDoesNotThrow(() -> guard.awaitWaitersForTests(1, Duration.ZERO))));
-            assertSame(replacement, onCaller(() -> assertThrows(OAuthException.class,
+            assertIndependentFailure(replacement, onCaller(() -> assertThrows(OAuthException.class,
                     () -> guard.acquire(deadline(), Duration.ofSeconds(1)))));
         } finally { follower.cancel(true); }
     }

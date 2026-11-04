@@ -18,6 +18,11 @@ package com.revetsec.saml;
 
 import com.revetsec.internal.encoding.Base64Url;
 import com.revetsec.internal.encoding.EncodingException;
+import com.revetsec.internal.encoding.StrictUtf8;
+import com.revetsec.StateSealer;
+import com.revetsec.internal.crypto.SealedStateAccess;
+import com.revetsec.internal.crypto.SealedStateType;
+import com.revetsec.internal.crypto.SealerV1;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
@@ -34,11 +39,18 @@ final class PendingSamlAuthenticationCodec {
     // The StateSealer's maximum sealed length is 16384; its plaintext is shorter.
     // Keep the decoder above every plaintext that a configured sealer can issue.
     private static final int MAXIMUM_LENGTH = 16384;
+    private static final int CONTEXT_BYTES = 12 * 1024;
     private PendingSamlAuthenticationCodec() { }
 
     static @NonNull String encode(@NonNull PendingSamlAuthentication pending) {
+        String encoded = serialize(pending);
+        if (decode(encoded) == null) throw new IllegalArgumentException("Invalid SAML pending record");
+        return encoded;
+    }
+
+    private static @NonNull String serialize(@NonNull PendingSamlAuthentication pending) {
         SamlAuthenticationRequestOptions options = pending.options();
-        return "3." + part(pending.spEntityId()) + '.' + part(pending.requestId()) + '.'
+        String encoded = "3." + part(pending.spEntityId()) + '.' + part(pending.requestId()) + '.'
                 + part(pending.relayState()) + '.' + part(pending.connectionId()) + '.'
                 + part(pending.idpEntityId()) + '.' + part(pending.acs()) + '.'
                 + part(pending.issuedAt().toString()) + '.' + part(pending.expiresAt().toString()) + '.'
@@ -47,6 +59,25 @@ final class PendingSamlAuthenticationCodec {
                 + (options.getRequestedAuthnContextClassRefs().isEmpty() ? "-" : part(String.join("\n",
                         options.getRequestedAuthnContextClassRefs()))) + '.'
                 + options.getApplicationData().map(value -> part("x" + value)).orElse("-");
+        return encoded;
+    }
+
+    static boolean fitsText(@NonNull String value, int maximumUnits) {
+        return !value.isEmpty() && value.length() <= maximumUnits && StrictUtf8.isWellFormed(value);
+    }
+
+    static @Nullable String sealIfFits(@NonNull PendingSamlAuthentication pending,
+            @NonNull StateSealer sealer, @NonNull SealedStateType type, @NonNull String context) {
+        // Invalid contexts remain programmer errors even when the record is too large.
+        SealerV1.requireContext(context);
+        String encoded = serialize(pending);
+        SealedStateAccess.Operations access = SealedStateAccess.get();
+        // The versioned frame is ASCII, so characters are plaintext bytes. Include the active key ID.
+        if (SealerV1.sealedLength(access.getActiveKeyId(sealer).length(), encoded.length())
+                > access.getMaximumSealedLength(sealer)) return null;
+        // A successful writer must never issue state its paired bounded reader rejects.
+        if (decode(encoded) == null) throw new IllegalArgumentException("Invalid SAML pending record");
+        return access.seal(sealer, type, encoded, context, pending.expiresAt());
     }
 
     static @Nullable PendingSamlAuthentication decode(@NonNull String value) {
@@ -56,14 +87,15 @@ final class PendingSamlAuthenticationCodec {
         boolean current = fields.length == 13 && fields[0].equals("3");
         boolean previous = fields.length == 13 && fields[0].equals("2");
         if (!old && !previous && !current) return null;
-        String sp = fromPart(fields[1], 2048);
+        String sp = fromPart(fields[1], 3 * 2048);
         String request = fromPart(fields[2], 128);
         String relay = fromPart(fields[3], 80);
-        String connection = fromPart(fields[4], 256);
-        String idp = fromPart(fields[5], 2048);
+        String connection = fromPart(fields[4], 3 * 256);
+        String idp = fromPart(fields[5], 3 * 2048);
         String acs = fromPart(fields[6], 2048);
         if (sp == null || request == null || relay == null || connection == null || idp == null || acs == null
-                || sp.isEmpty() || request.length() != 41 || request.charAt(0) != '_'
+                || !fitsText(sp, 2048) || !fitsText(idp, 2048) || !fitsText(connection, 256)
+                || request.length() != 41 || request.charAt(0) != '_'
                 || relay.length() != 22 || connection.isEmpty() || idp.isEmpty() || acs.isEmpty()) return null;
         try {
             String issuedText = current ? fromPart(fields[7], 64) : fields[7];
@@ -76,7 +108,7 @@ final class PendingSamlAuthenticationCodec {
             if (!old) {
                 if (!(fields[9].equals("0") || fields[9].equals("1"))
                         || !(fields[10].equals("0") || fields[10].equals("1"))) return null;
-                String contexts = fields[11].equals("-") ? null : fromPart(fields[11], 12 * 1024);
+                String contexts = fields[11].equals("-") ? null : fromPart(fields[11], CONTEXT_BYTES);
                 String encodedData = fields[12].equals("-") ? null : fromPart(fields[12], 513);
                 String applicationData = encodedData == null || !encodedData.startsWith("x")
                         ? null : encodedData.substring(1);
@@ -94,6 +126,7 @@ final class PendingSamlAuthenticationCodec {
     }
 
     private static @NonNull String part(@NonNull String value) {
+        if (!StrictUtf8.isWellFormed(value)) throw new IllegalArgumentException("Invalid SAML pending text");
         return Base64.getUrlEncoder().withoutPadding().encodeToString(value.getBytes(StandardCharsets.UTF_8));
     }
 

@@ -31,6 +31,11 @@ async function refresh() {
   const state = await response.json();
   if (!response.ok) { show(state); return; }
   csrf = state.csrf;
+  const available = state.sessionAvailable;
+  byId('start-session').disabled = available;
+  byId('session-status').textContent = available ? 'Local session active' : 'Start a local session to use the controls.';
+  for (const id of ['configuration', 'login', 'inspection']) byId(id).querySelector('button').disabled = !available;
+  byId('probe').disabled = !available;
   for (const name of ['issuer', 'clientId', 'secretReference', 'probeClientId', 'probeSecretReference', 'strategy']) {
     byId('configuration').elements[name].value = state[name];
   }
@@ -39,9 +44,9 @@ async function refresh() {
   byId('saml-logout').elements.csrf.value = csrf;
   byId('saml-status').textContent = state.samlAvailable
     ? `Configured connection: ${state.samlConnection}.` : 'SAML is disabled until trusted local metadata and SP keys are configured.';
-  byId('saml-login').querySelector('button').disabled = !state.samlAvailable;
-  byId('saml-logout').querySelector('button').disabled = !state.samlAvailable || !state.identity || state.identity.method !== 'SAML';
-  byId('saml-negative').disabled = !state.samlAvailable;
+  byId('saml-login').querySelector('button').disabled = !available || !state.samlAvailable;
+  byId('saml-logout').querySelector('button').disabled = !available || !state.samlAvailable || !state.identity || state.identity.method !== 'SAML';
+  byId('saml-negative').disabled = !available || !state.samlAvailable;
   byId('resource').textContent = `Exact resource: ${state.resource}. Loopback HTTP exception: ${state.loopbackHttp ? 'explicitly enabled' : 'disabled'}.`;
   byId('identity').textContent = state.identity ? JSON.stringify(state.identity, null, 2) : 'No browser identity';
   byId('events').textContent = state.events.join('\n');
@@ -59,6 +64,13 @@ async function post(path, body, type) {
   await refresh();
   return response.ok;
 }
+byId('start-session').addEventListener('click', async () => {
+  byId('start-session').disabled = true;
+  const response = await fetch('/api/session', {method: 'POST', credentials: 'same-origin', cache: 'no-store',
+    headers: {'Content-Type': 'application/x-www-form-urlencoded'}, body: 'begin=1'});
+  if (!response.ok) show(await response.json());
+  await refresh();
+});
 byId('configuration').addEventListener('submit', async event => {
   event.preventDefault();
   if (await post('/api/config', new URLSearchParams(new FormData(event.currentTarget)), 'application/x-www-form-urlencoded')) location.reload();

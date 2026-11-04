@@ -34,9 +34,8 @@ import javax.annotation.concurrent.ThreadSafe;
  * interruption; providers run outside authoritative transactions. Revetsec cannot forcibly preempt
  * application code. Failures throw rather than pretending to be misses/conflicts; an optional-cache
  * failure permits only a bounded fresh retrieval within the original budget, never stale use.
- * Providers bound capacity and storage work; eviction/expiry may create misses. The policy's
- * maximumCacheEntries configures only its engine-owned default, not a cluster-wide limit on a
- * custom provider. Shared key namespaces must be stable across compatible engines and distinct
+ * Providers bound capacity and storage work; eviction/expiry may create misses. The policy does
+ * not impose a cluster-wide capacity limit on a custom provider. Shared key namespaces must be stable across compatible engines and distinct
  * across issuer/configuration identities. Persist fields exactly.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>

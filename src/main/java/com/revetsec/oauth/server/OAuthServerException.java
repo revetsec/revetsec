@@ -108,7 +108,9 @@ public abstract sealed class OAuthServerException extends RevetsecException perm
 		/** The OAuth server configuration is invalid. */
 		CONFIGURATION_INVALID(Kind.CONFIGURATION,ErrorCategory.CONFIGURATION,"The OAuth server configuration is invalid."),
 		/** The OAuth server response could not be signed. */
-		SIGNING_FAILED(Kind.SIGNING,ErrorCategory.CONFIGURATION,"The OAuth server response could not be signed.");
+		SIGNING_FAILED(Kind.SIGNING,ErrorCategory.CONFIGURATION,"The OAuth server response could not be signed."),
+		/** The OAuth server is unavailable. Generic dependency/budget failure does not establish transience. */
+		SERVICE_UNAVAILABLE(Kind.TRANSPORT,ErrorCategory.TRANSPORT,"The OAuth server is unavailable.");
 		private final @NonNull Kind kind;
 		private final @NonNull ErrorCategory category;
 		private final @NonNull String message;
