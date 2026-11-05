@@ -17,7 +17,7 @@
 #
 # Base: node 24.22.0 on Alpine 3.24, pinned by the multi-arch index digest
 # (linux/amd64 and linux/arm64). Move the pin only in a deliberate PR.
-FROM node:24.22.0-alpine3.24@sha256:44fce696f38ba8c987c4db89954051000bbd05ffd8d8659ba15ed4a8602e937f
+FROM node:24.22.2-alpine3.24@sha256:8a32c8cf649a49915a66e81e7a609223c708d0adabf288ee3f4077d765542f85
 
 ENV NODE_ENV=production \
 	NPM_CONFIG_UPDATE_NOTIFIER=false \
