@@ -15,6 +15,7 @@
  */
 package example.totp;
 
+import com.revetsec.OperationBinding;
 import com.revetsec.SealingKey;
 import com.revetsec.StateSealer;
 import com.revetsec.totp.RecoveryCodeUse;
@@ -62,8 +63,8 @@ public final class TotpExampleLifecycleChecks {
     private static final @NonNull String NAMESPACE = "example-lifecycle";
     private static final @NonNull String EPOCH = "fresh-test-epoch";
     private static final @NonNull String ACCOUNT = "test-account";
-    private static final @NonNull String BROWSER = "server-owned-test-browser-binding";
-    private static final @NonNull String LOGIN = "server-owned-current-primary-login";
+    private static final @NonNull OperationBinding BROWSER = OperationBinding.fromTrustedPersistence("server-owned-test-browser-binding");
+    private static final @NonNull OperationBinding LOGIN = OperationBinding.fromTrustedPersistence("server-owned-current-primary-login");
     private TotpExampleLifecycleChecks() { }
 
     public static void main(java.lang.@NonNull String @NonNull [] args) throws Exception {
@@ -428,7 +429,7 @@ public final class TotpExampleLifecycleChecks {
         @Override public synchronized TotpApplication.@Nullable LoginCompletion completeTotpLogin(
                 TotpApplication.@NonNull LoginSubmission context, @NonNull TotpVerification proof) {
             completion(context); equal(EPOCH, proof.getRecoveryEpoch()); equal(ACCOUNT, proof.getAccountId());
-            equal(context.getOperationBinding(), proof.getOperationBinding());
+            equal(context.getOperationBinding().toSecretString(), proof.getOperationBinding().toSecretString());
             equal(NAMESPACE, proof.getCredentialNamespace()); equal(this.factorId, proof.getFactorId());
             equal("TOTP", proof.getMethod().name());
             if (!this.loginCompletion) return null;
@@ -437,7 +438,7 @@ public final class TotpExampleLifecycleChecks {
         @Override public synchronized TotpApplication.@Nullable LoginCompletion completeRecoveryLogin(
                 TotpApplication.@NonNull LoginSubmission context, @NonNull RecoveryCodeUse proof) {
             completion(context); equal(EPOCH, proof.getRecoveryEpoch()); equal(ACCOUNT, proof.getAccountId());
-            equal(context.getOperationBinding(), proof.getOperationBinding());
+            equal(context.getOperationBinding().toSecretString(), proof.getOperationBinding().toSecretString());
             equal(NAMESPACE, proof.getCredentialNamespace()); equal(this.factorId, proof.getFactorId());
             equal("RECOVERY_CODE", proof.getMethod().name());
             if (!this.loginCompletion) return null;
@@ -483,11 +484,11 @@ public final class TotpExampleLifecycleChecks {
         }
         @Override public @NonNull String getAccountId() { return ACCOUNT; }
         @Override public @NonNull String getAccountLabel() { return "test-account"; }
-        @Override public @NonNull String getBrowserBinding() { return BROWSER; }
+        @Override public @NonNull OperationBinding getBrowserBinding() { return BROWSER; }
         @Override public @NonNull Optional<@NonNull String> getReplacingFactorId() { return this.replacing; }
         @Override public @NonNull String getEnrollmentId() { return this.enrollmentId; }
         @Override public @NonNull String getCode() { return this.code; }
-        @Override public @NonNull String getOperationBinding() { return LOGIN; }
+        @Override public @NonNull OperationBinding getOperationBinding() { return LOGIN; }
         @Override public @NonNull String getExpectedFactorId() { return this.factorId; }
         @Override public @NonNull String getExpectedBatchId() { return this.batchId; }
         @Override public @NonNull String toString() { return "TestContext[redacted]"; }

@@ -20,6 +20,7 @@ import org.jspecify.annotations.NonNull;
 
 import javax.annotation.concurrent.ThreadSafe;
 import java.security.SecureRandom;
+import java.util.Arrays;
 
 /**
  * The one source of randomness for a Revetsec object (plan R6).
@@ -65,7 +66,14 @@ public final class EntropySource {
 			throw new IllegalArgumentException("A random byte count must not be negative.");
 
 		byte[] bytes = new byte[length];
-		this.secureRandom.nextBytes(bytes);
-		return bytes;
+		boolean filled = false;
+		try {
+			this.secureRandom.nextBytes(bytes);
+			filled = true;
+			return bytes;
+		} finally {
+			// Success transfers the original array. A failed provider fill retains no owned random bytes.
+			if (!filled) Arrays.fill(bytes, (byte) 0);
+		}
 	}
 }

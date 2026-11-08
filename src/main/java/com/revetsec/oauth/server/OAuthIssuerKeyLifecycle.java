@@ -50,7 +50,7 @@ final class OAuthIssuerKeyLifecycle {
  private static final class History {
   private final @NonNull Map<@NonNull String,@NonNull Instant> reserved=new HashMap<>();
   private final @NonNull Map<@NonNull String,@NonNull Instant> firstPublished=new HashMap<>();
-  private @Nullable OAuthIssuerKeySnapshot previous;
+  private volatile @Nullable OAuthIssuerKeySnapshot previous;
   private @Nullable Instant lastNow;
  }
  OAuthIssuerKeyLifecycle(@NonNull OAuthIssuerKeyProvider provider,@NonNull Clock clock,@NonNull Duration publicMetadataHttpCacheMaxAge,
@@ -67,18 +67,34 @@ final class OAuthIssuerKeyLifecycle {
  private @NonNull OAuthIssuerKeySnapshot checked(@NonNull Deadline deadline,@Nullable Instant expiry) {
   return checked(deadline,expiry,this.clock::instant,this.provisional);
  }
+ @SuppressWarnings("ReferenceEquality") // Snapshot ordering and trusted authority-failure provenance require exact instance identity.
  private @NonNull OAuthIssuerKeySnapshot checked(@NonNull Deadline deadline,@Nullable Instant expiry,
    @NonNull Supplier<@NonNull Instant> authorityTime,@NonNull History history) {
-  // The provider callback runs outside the consistency lock; sample the clock after acquiring it.
+  // Revalidate one snapshot overtaken by a concurrent accepted generation. Never invoke a provider under the lock.
+  @Nullable OAuthStoreFailure trustedAuthorityFailure=null;
   try {
+   for(int attempt=0;attempt<2;attempt++) {
+   trustedAuthorityFailure=null;
+   OAuthIssuerKeySnapshot observed=history.previous;
    OAuthIssuerKeySnapshot next=requireNonNull(this.provider.getSnapshot(OAuthServerClientAdmission.remaining(deadline)));
    OAuthServerClientAdmission.remaining(deadline);
    if(!this.lock.tryLock(OAuthServerClientAdmission.remaining(deadline).toNanos(),TimeUnit.NANOSECONDS)) throw unavailable();
    try {
     OAuthServerClientAdmission.remaining(deadline);
-    Instant now=requireNonNull(authorityTime.get());
+    Instant now;
+    try { now=requireNonNull(authorityTime.get()); }
+    catch(OAuthStoreFailure failure) {
+     // Only the admitted internal authority supplier may preserve a store-health signal.
+     if(history==this.admitted)trustedAuthorityFailure=failure;
+     throw failure;
+    }
     if(next.getPublishedAt().isAfter(now) || (history.lastNow!=null && now.isBefore(history.lastNow))) throw unavailable();
     OAuthIssuerKeySnapshot old=history.previous;
+    if(old!=null && old!=observed && !old.getGeneration().equals(next.getGeneration())
+      && !next.getPublishedAt().isAfter(old.getPublishedAt())) {
+     if(attempt==0) continue;
+     throw unavailable();
+    }
     if(old!=null) {
      boolean same=old.getGeneration().equals(next.getGeneration());
      if(same ? !facts(old).equals(facts(next)) : !next.getPublishedAt().isAfter(old.getPublishedAt())) throw unavailable();
@@ -117,7 +133,13 @@ final class OAuthIssuerKeyLifecycle {
     history.firstPublished.clear();history.firstPublished.putAll(publication);
     history.previous=next;history.lastNow=now;return next;
    } finally { this.lock.unlock(); }
+   }
+   throw unavailable();
   } catch(VirtualMachineError fatal) { throw fatal; }
+  catch(OAuthStoreFailure failure) {
+   if(failure==trustedAuthorityFailure)throw failure;
+   throw unavailable();
+  }
   catch(Throwable fault) { if(fault instanceof InterruptedException) Thread.currentThread().interrupt();throw unavailable(); }
  }
  private static @NonNull JsonObject facts(@NonNull OAuthIssuerKeySnapshot snapshot) {
@@ -135,20 +157,29 @@ final class OAuthIssuerKeyLifecycle {
    @NonNull Supplier<@NonNull Instant> authorityTime) {
   return sign(claims,expiry,deadline,authorityTime,this.admitted);
  }
+ @SuppressWarnings("ReferenceEquality") // Only the exact checked authority failure may cross the signing boundary.
  private @NonNull String sign(byte @NonNull [] claims,@NonNull Instant expiry,@NonNull Deadline deadline,
    @NonNull Supplier<@NonNull Instant> authorityTime,@NonNull History history) {
   OAuthIssuerKeySnapshot selected=checked(deadline,expiry,authorityTime,history);
+  @Nullable OAuthStoreFailure trustedCheckedFailure=null;
   try {
    String result=selected.getActiveKey().signer().toCompactSerialization("at+jwt",selected.getActiveKey().getKeyId(),null,
     claims,OAuthServerClientAdmission.remaining(deadline));
    // Recheck rotation after provider signing and before a caller can prepare/commit an issuance response.
-   OAuthIssuerKeySnapshot after=checked(deadline,null,authorityTime,history);String id=selected.getActiveKey().getKeyId();
+   OAuthIssuerKeySnapshot after;
+   try { after=checked(deadline,null,authorityTime,history); }
+   catch(OAuthStoreFailure failure) { trustedCheckedFailure=failure;throw failure; }
+   String id=selected.getActiveKey().getKeyId();
    if(!after.getVerificationKeys().containsKey(id) || !OAuthIssuerPublicKeys.material(requireNonNull(after.getVerificationKeys().get(id)))
      .equals(OAuthIssuerPublicKeys.material(selected.getActiveKey().getPublicKey()))) throw unavailable();
    Instant boundary=after.getRetirementNotBefore().get(id);
    if(boundary!=null && boundary.isBefore(this.retention.accessRetention(expiry))) throw unavailable();
    OAuthServerClientAdmission.remaining(deadline);return result;
   } catch(VirtualMachineError fatal) { throw fatal; }
+  catch(OAuthStoreFailure failure) {
+   if(failure==trustedCheckedFailure)throw failure;
+   throw signingFailure();
+  }
   catch(Throwable fault) { if(fault instanceof InterruptedException) Thread.currentThread().interrupt();throw signingFailure(); }
  }
  void warmUp(@NonNull Deadline deadline) {
@@ -157,10 +188,18 @@ final class OAuthIssuerKeyLifecycle {
   catch(VirtualMachineError fatal) { throw fatal; }
   catch(Throwable fault) { if(fault instanceof InterruptedException) Thread.currentThread().interrupt();throw signingFailure(); }
  }
+ @SuppressWarnings("ReferenceEquality") // Only the exact checked authority failure may cross the warm-up boundary.
  void warmUp(@NonNull Deadline deadline,@NonNull Supplier<@NonNull Instant> authorityTime){
   OAuthIssuerKeySnapshot selected=checked(deadline,null,authorityTime,this.admitted);
-  try{selected.getActiveKey().signer().warmUp(OAuthServerClientAdmission.remaining(deadline));checked(deadline,null,authorityTime,this.admitted);}
-  catch(VirtualMachineError fatal){throw fatal;}catch(Throwable fault){OAuthStoreCoordinator.preserveInterrupt(fault);throw signingFailure();}
+  @Nullable OAuthStoreFailure trustedCheckedFailure=null;
+  try{
+   selected.getActiveKey().signer().warmUp(OAuthServerClientAdmission.remaining(deadline));
+   try { checked(deadline,null,authorityTime,this.admitted); }
+   catch(OAuthStoreFailure failure) { trustedCheckedFailure=failure;throw failure; }
+  }
+  catch(VirtualMachineError fatal){throw fatal;}
+  catch(OAuthStoreFailure failure){if(failure==trustedCheckedFailure)throw failure;throw signingFailure();}
+  catch(Throwable fault){OAuthStoreCoordinator.preserveInterrupt(fault);throw signingFailure();}
  }
  @NonNull StaticJwksSource verificationKeys(@NonNull Deadline deadline) {return publicKeys(snapshot(deadline),deadline);}
  @NonNull StaticJwksSource verificationKeys(@NonNull Deadline deadline,@NonNull Supplier<@NonNull Instant> authorityTime){

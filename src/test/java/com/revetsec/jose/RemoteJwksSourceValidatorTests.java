@@ -271,7 +271,7 @@ final class RemoteJwksSourceValidatorTests {
 					JwksUnavailableException exception = Assertions.assertThrows(
 							JwksUnavailableException.class, () -> validator.validateResult(unknown));
 					Assertions.assertEquals(ErrorCategory.MALFORMED_INPUT, exception.getCategory());
-					Assertions.assertFalse(exception.isTransient());
+					Assertions.assertFalse(exception.isTemporaryCondition());
 					Assertions.assertSame(exception, sourceObserver.getCalls("didFailToFetchJwks").get(0)
 							.getArgument(1));
 					Assertions.assertSame(exception, validatorObserver.getCalls("didFailToValidateJwt").get(0)

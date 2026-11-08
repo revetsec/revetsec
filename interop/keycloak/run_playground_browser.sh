@@ -111,7 +111,7 @@ docker run --pull never --rm -d --name "$APP" --network "container:$NS" \
   -e PLAYGROUND_SAML_SIGNING_CERT_FILE=/keys/sp-encryption-rsa-2048-cert.pem \
   -e PLAYGROUND_SAML_DECRYPTION_KEY_FILE=/keys/sp-encryption-rsa-2048-key.pem \
   -e PLAYGROUND_SAML_DECRYPTION_CERT_FILE=/keys/sp-encryption-rsa-2048-cert.pem \
-  eclipse-temurin:17-jdk-noble \
+  amazoncorretto@sha256:1a307926702559b0086a5c4d339eaafa9c992b3e8ba54201ac8ebbde31d22f0b \
   java -Djavax.net.ssl.trustStore=/tls/truststore.p12 \
   -Djavax.net.ssl.trustStoreType=PKCS12 -Djavax.net.ssl.trustStorePassword=changeit \
   -cp /app:/lib/core.jar:/lib/adapter.jar:/lib/soklet.jar example.playground.Playground >/dev/null

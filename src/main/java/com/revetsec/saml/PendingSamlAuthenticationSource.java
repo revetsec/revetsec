@@ -16,6 +16,7 @@
 
 package com.revetsec.saml;
 
+import com.revetsec.BrowserBinding;
 import com.revetsec.StateSealer;
 import com.revetsec.internal.crypto.SealedStateAccess;
 import com.revetsec.internal.crypto.SealedStateType;
@@ -80,6 +81,11 @@ public final class PendingSamlAuthenticationSource {
      * @since 1.0.0
      */
     public static @NonNull PendingSamlAuthenticationSource fromStore(@NonNull PendingSamlAuthenticationStore store,
+            @NonNull BrowserBinding browserBinding, @NonNull StateSealer sealer, @NonNull String context) {
+        return fromStore(Objects.requireNonNull(store), Objects.requireNonNull(browserBinding).toSecretString(), sealer, context);
+    }
+
+    static @NonNull PendingSamlAuthenticationSource fromStore(@NonNull PendingSamlAuthenticationStore store,
             @NonNull String browserBinding, @NonNull StateSealer sealer, @NonNull String context) {
         SamlPendingBinding.context(Objects.requireNonNull(context), Objects.requireNonNull(browserBinding));
         return new PendingSamlAuthenticationSource(null, Objects.requireNonNull(sealer), context,

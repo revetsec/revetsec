@@ -2942,6 +2942,150 @@
       "meaning": "client=1, resource=1, scopes=1, transition=10",
       "sha256": "77638f457d632328ec385ebcbf5fa5e2516dc6d3a1a36c90229f7b0ef04dc93f",
       "bytes": 27
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/authorization-state-00.bin",
+      "controls": [
+        0,
+        0,
+        12,
+        0
+      ],
+      "meaning": "Authorization state grammar/boundary carried by raw extension mode12",
+      "sha256": "fae73e601afb0608ffe9c1e2f76066038af63171d959b834f473a8bd343e8be6",
+      "bytes": 13
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/authorization-state-01.bin",
+      "controls": [
+        0,
+        0,
+        12,
+        0
+      ],
+      "meaning": "Authorization state grammar/boundary carried by raw extension mode12",
+      "sha256": "3fd6b1d3a5fd6c58561efb08cc740199ef66e5a6c48f4678934a16d957500103",
+      "bytes": 13
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/authorization-state-02.bin",
+      "controls": [
+        0,
+        0,
+        12,
+        0
+      ],
+      "meaning": "Authorization state grammar/boundary carried by raw extension mode12",
+      "sha256": "1f2f123851c1c8f017127a9f1204d48b9a23def9619bdaf13371f99ac5f918ac",
+      "bytes": 13
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/authorization-state-03.bin",
+      "controls": [
+        0,
+        0,
+        12,
+        0
+      ],
+      "meaning": "Authorization state grammar/boundary carried by raw extension mode12",
+      "sha256": "151583481555b4e74a9812f861fa09f19d8933061c3f495ef078866b3726275c",
+      "bytes": 16
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/authorization-state-04.bin",
+      "controls": [
+        0,
+        0,
+        12,
+        0
+      ],
+      "meaning": "Authorization state grammar/boundary carried by raw extension mode12",
+      "sha256": "4ae08bc839d1d4df7fd067aa3056b91619703c9b7515900dfeffdb31ec5321a6",
+      "bytes": 16
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/authorization-state-05.bin",
+      "controls": [
+        0,
+        0,
+        12,
+        0
+      ],
+      "meaning": "Authorization state grammar/boundary carried by raw extension mode12",
+      "sha256": "6168fc3620801ba57b7fa05058a729be07439888f80a598a6b921e88ca416339",
+      "bytes": 19
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/authorization-state-06.bin",
+      "controls": [
+        0,
+        0,
+        12,
+        0
+      ],
+      "meaning": "Authorization state grammar/boundary carried by raw extension mode12",
+      "sha256": "11f047f76c6eb1e17026af04112a56b7357d141302162113bef040f48abbfc94",
+      "bytes": 22
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/authorization-state-07.bin",
+      "controls": [
+        0,
+        0,
+        12,
+        0
+      ],
+      "meaning": "Authorization state grammar/boundary carried by raw extension mode12",
+      "sha256": "c5c3e13bcf612ea24b68d64b1422bf9e6ea441878e28bb77b31af228ae6ff613",
+      "bytes": 19
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/authorization-state-08.bin",
+      "controls": [
+        0,
+        0,
+        12,
+        0
+      ],
+      "meaning": "Authorization state grammar/boundary carried by raw extension mode12",
+      "sha256": "94248668729d164fe2ff3d0dd20b532d4e99ad3c9b686b25e00d89acd1ce10b1",
+      "bytes": 10
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/authorization-state-09.bin",
+      "controls": [
+        0,
+        0,
+        12,
+        0
+      ],
+      "meaning": "Authorization state grammar/boundary carried by raw extension mode12",
+      "sha256": "824a8e8ebffe7dcce3803e37d7fe54ee49046fc85e0995905f5f6efd02ad6a5f",
+      "bytes": 13
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/authorization-state-10.bin",
+      "controls": [
+        0,
+        0,
+        12,
+        0
+      ],
+      "meaning": "Authorization state grammar/boundary carried by raw extension mode12",
+      "sha256": "af15c9a38fe7e9794ffca6a6e88dfec3e670e885586d5d6aa797303520474c28",
+      "bytes": 13
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/IssuerIngressFuzzTestsInputs/rawRequestsMatchIndependentGrammar/authorization-state-11.bin",
+      "controls": [
+        0,
+        0,
+        12,
+        0
+      ],
+      "meaning": "Authorization state grammar/boundary carried by raw extension mode12",
+      "sha256": "3d9c2c1f9b2e689cfd9ef83a7b1a09e99c3e6e2569ed3f4840eb936bc2b5ae2d",
+      "bytes": 29
     }
   ]
 }

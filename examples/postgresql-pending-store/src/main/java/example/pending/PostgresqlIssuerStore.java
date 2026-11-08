@@ -21,6 +21,7 @@ import com.revetsec.oauth.server.OAuthStoreTransaction;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
+import javax.annotation.concurrent.Immutable;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -32,6 +33,7 @@ import java.util.Base64;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.OptionalInt;
 import java.util.TreeMap;
 import static java.util.Objects.requireNonNull;
 
@@ -132,6 +134,85 @@ public final class PostgresqlIssuerStore implements OAuthAuthorizationServerStor
   String reason=outcome.refusal().orElse(IssuerPgTransactions.Refusal.UNAVAILABLE).name();
   return refusal(OAuthStoreCommitStatus.valueOf(reason));
  }
+ /** Physical cleanup outcomes, never ordinary protocol admission or deployment-readiness proofs. */
+ public enum CleanupStatus { COMMITTED, CONFLICT, TIME_BEFORE_RETENTION, TIME_UNAVAILABLE, FENCED, UNAVAILABLE, UNKNOWN }
+ /** Factual batch outcome; UNKNOWN carries no guessed removed count and permits no automatic retry. */
+ @Immutable
+ public static final class CleanupResult {
+  private final @NonNull CleanupStatus status;
+  private final int removed;
+  private final boolean acknowledgedWithinBudget;
+  private CleanupResult(@NonNull CleanupStatus status,int removed,boolean acknowledgedWithinBudget){this.status=status;this.removed=removed;this.acknowledgedWithinBudget=acknowledgedWithinBudget;}
+  public @NonNull CleanupStatus getStatus(){return this.status;}
+  public @NonNull OptionalInt getRemovedCount(){return this.status==CleanupStatus.COMMITTED?OptionalInt.of(this.removed):OptionalInt.empty();}
+  /** Only acknowledgement timing; this does not assert current health or authorize ordinary service. */
+  public boolean isAcknowledgedWithinBudget(){return this.acknowledgedWithinBudget;}
+  @Override public @NonNull String toString(){return "IssuerCleanupResult{<redacted>}";}
+ }
+ /**
+  * Explicit application-owned reclamation of at most sixteen finite rows. Ordinary reads/commits never call it.
+  * This trusts integrity/ACL protection of engine-written SQL retention metadata; reconstructing a carrier does
+  * not authenticate its expired ciphertext. Tampering, backup restore and closed migration require separate
+  * admission/recovery procedures. Credential expiry or revocation is never cleanup authority.
+  * A known committed count stays factual after late acknowledgement; UNKNOWN has no count and is never retried.
+  * @param maximumRows bounded batch size, from one through sixteen
+  * @param remainingBudget original remaining budget; nonpositive refuses without lookup, above thirty seconds caps
+  * @return physical outcome, never a readiness or protocol-success proof
+  */
+ public @NonNull CleanupResult reclaimExpired(int maximumRows,@NonNull Duration remainingBudget){
+  if(maximumRows<1 || maximumRows>16)throw new IllegalArgumentException("Invalid issuer cleanup batch");
+  Duration budget=capped(remainingBudget);
+  if(budget.isZero() || Thread.currentThread().isInterrupted())return cleanupRefusal(CleanupStatus.UNAVAILABLE);
+  long deadline=System.nanoTime()+budget.toNanos();
+  IssuerPgTransactions.Outcome<Integer> outcome=IssuerPgTransactions.execute(this.source::open,left(deadline),context->{
+   Connection connection=context.connection();IssuerPgLocks.sharedAdmission(connection,this.scope,context.deadlineNanos());
+   Namespace admitted=namespace(context);StoreTimeObservation first;
+   try{first=observe(context,admitted,true);}catch(AdmissionChanged fenced){return IssuerPgTransactions.Decision.refuse(IssuerPgTransactions.Refusal.FENCED);}
+   if(!(first instanceof StoreTimeObservation.Healthy initial))return IssuerPgTransactions.Decision.refuse(IssuerPgTransactions.Refusal.TIME_UNAVAILABLE);
+   List<OAuthStoreEntry> candidates=new ArrayList<>();
+   try(PreparedStatement statement=connection.prepareStatement("SELECT storage_key,kind,version,retain_seconds,retain_nanos,sealed_form FROM issuer_store_entry WHERE namespace=? AND kind NOT IN ('ISSUER_STATE','SUBJECT_STATE') AND (retain_seconds,retain_nanos)<=(?,?) ORDER BY retain_seconds,retain_nanos LIMIT ?")){
+    context.bound(statement);statement.setString(1,this.namespace);statement.setLong(2,initial.getObservedAt().getEpochSecond());statement.setInt(3,initial.getObservedAt().getNano());statement.setInt(4,maximumRows);
+    try(ResultSet result=statement.executeQuery()){
+     while(result.next()){
+      if(candidates.size()>=maximumRows)throw new SQLException("Issuer cleanup batch exceeded bound");
+      OAuthStoreKey key=OAuthStoreKey.fromStoredForm(result.getString(1));
+      if(permanent(key) || !key.getKind().name().equals(result.getString(2)))throw new SQLException("Issuer cleanup kind inconsistent");
+      String form=result.getString(6);if(form==null || form.length()>16384)throw new SQLException("Issuer cleanup carrier invalid");
+      candidates.add(OAuthStoreEntry.fromStoredForm(key,result.getString(3),Instant.ofEpochSecond(result.getLong(4),result.getInt(5)),form));
+     }
+    }
+   }
+   if(candidates.isEmpty())return IssuerPgTransactions.Decision.commit(0);
+   Map<String,Boolean> locks=new TreeMap<>();for(OAuthStoreEntry entry:candidates)if(locks.put(entry.getKey().getStorageKey(),true)!=null)throw new SQLException("Issuer cleanup duplicate address");
+   IssuerPgLocks.entities(connection,IssuerPgLocks.entitySet(this.scope,locks),context.deadlineNanos());
+   List<IssuerPgCapacity.Delta> deltas=new ArrayList<>();
+   for(OAuthStoreEntry before:candidates){
+    OAuthStoreEntry current=entry(context,before.getKey());
+    if(current==null || !before.getVersion().equals(current.getVersion()) || !before.getRetainUntil().equals(current.getRetainUntil()) || !before.toSealedForm().equals(current.toSealedForm()))return IssuerPgTransactions.Decision.refuse(IssuerPgTransactions.Refusal.CONFLICT);
+    deltas.add(IssuerPgCapacity.Delta.from(IssuerPgCapacity.bucket(before.getKey().getStorageKey()),-1,0));
+   }
+   IssuerPgCapacity.LockedPlan capacity=IssuerPgCapacity.lockForValidation(connection,this.scope,admitted.allocation,deltas,context.deadlineNanos());
+   StoreTimeObservation finalPoint;
+   try{finalPoint=observe(context,admitted,true);}catch(AdmissionChanged fenced){return IssuerPgTransactions.Decision.refuse(IssuerPgTransactions.Refusal.FENCED);}
+   if(!(finalPoint instanceof StoreTimeObservation.Healthy healthy))return IssuerPgTransactions.Decision.refuse(IssuerPgTransactions.Refusal.TIME_UNAVAILABLE);
+   if(healthy.getObservedAt().isBefore(initial.getObservedAt()))return IssuerPgTransactions.Decision.refuse(IssuerPgTransactions.Refusal.TIME_UNAVAILABLE);
+   for(OAuthStoreEntry entry:candidates)if(healthy.getObservedAt().isBefore(entry.getRetainUntil()))return IssuerPgTransactions.Decision.refuse(IssuerPgTransactions.Refusal.TIME_BEFORE_FLOOR);
+   capacity.checkCapacity();
+   for(OAuthStoreEntry entry:candidates){
+    try(PreparedStatement statement=connection.prepareStatement("DELETE FROM issuer_store_entry WHERE namespace=? AND storage_key=? AND kind=? AND version=? AND retain_seconds=? AND retain_nanos=? AND sealed_form=?")){
+     context.bound(statement);statement.setString(1,this.namespace);statement.setString(2,entry.getKey().getStorageKey());statement.setString(3,entry.getKey().getKind().name());statement.setString(4,entry.getVersion());statement.setLong(5,entry.getRetainUntil().getEpochSecond());statement.setInt(6,entry.getRetainUntil().getNano());statement.setString(7,entry.toSealedForm());context.markPossibleMutation();
+     if(statement.executeUpdate()!=1)throw new SQLException("Issuer cleanup exact predicate changed");
+    }
+   }
+   context.markPossibleMutation();capacity.apply(connection,context.deadlineNanos());
+   return IssuerPgTransactions.Decision.commit(candidates.size());
+  });
+  if(outcome.status()==IssuerPgTransactions.Status.COMMITTED)return new CleanupResult(CleanupStatus.COMMITTED,outcome.value().orElseThrow(),!expired(deadline));
+  if(outcome.status()==IssuerPgTransactions.Status.UNKNOWN)return cleanupRefusal(CleanupStatus.UNKNOWN);
+  IssuerPgTransactions.Refusal refusal=outcome.refusal().orElse(IssuerPgTransactions.Refusal.UNAVAILABLE);
+  return cleanupRefusal(switch(refusal){case CONFLICT->CleanupStatus.CONFLICT;case FENCED->CleanupStatus.FENCED;case TIME_UNAVAILABLE->CleanupStatus.TIME_UNAVAILABLE;case TIME_BEFORE_FLOOR->CleanupStatus.TIME_BEFORE_RETENTION;default->CleanupStatus.UNAVAILABLE;});
+ }
+ private static @NonNull CleanupResult cleanupRefusal(@NonNull CleanupStatus status){return new CleanupResult(status,-1,false);}
  private @NonNull Namespace namespace(IssuerPgTransactions.@NonNull Context context)throws SQLException{
   try(PreparedStatement statement=context.connection().prepareStatement("SELECT physical_namespace,authority_id,recovery_generation,clock_generation,maximum_utc_error_nanos,allocation_generation,format_version,maximum_entries,admission_open FROM issuer_store_namespace WHERE namespace=?")){
    context.bound(statement);statement.setString(1,this.namespace);

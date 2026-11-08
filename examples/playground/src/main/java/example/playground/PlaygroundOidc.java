@@ -58,7 +58,7 @@ final class PlaygroundOidc {
             AuthorizationRedirect redirect = client.beginAuthentication(OidcAuthenticationOptions.builder()
                     .responseMode(formPost ? AuthorizationRequestOptions.ResponseMode.FORM_POST
                             : AuthorizationRequestOptions.ResponseMode.QUERY).build());
-            String context = "playground-oidc:" + session.binding;
+            String context = "playground-oidc:" + session.binding.toSecretString();
             String sealedForm = sealed ? redirect.getPendingAuthorization().toSealedForm(sealer, context) : "store";
             if (sealedForm.length() > 3800) throw new IllegalStateException("Pending cookie exceeds local cap.");
             if (!sealed && redirect.getPendingAuthorization().saveToResult(pending, session.binding)

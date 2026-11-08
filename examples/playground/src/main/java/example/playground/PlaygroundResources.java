@@ -189,7 +189,7 @@ public final class PlaygroundResources {
         return saml.beginLogout(session);
     }
 
-    @GET("/saml/slo") public @NonNull Response samlLogoutCallback(@NonNull Request request) {
+    @GET("/saml/slo") @POST("/saml/slo") public @NonNull Response samlLogoutCallback(@NonNull Request request) {
         return saml == null ? fixed(404, "SAML is not configured.") : saml.logoutCallback(request);
     }
 

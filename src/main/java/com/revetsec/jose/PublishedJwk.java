@@ -64,6 +64,10 @@ import static java.util.Objects.requireNonNull;
  * An immutable public signing key for publication in a JSON Web Key Set (RFC 7517). RSA, EC on P-256, P-384 or
  * P-521, and Ed25519 public keys are supported; shared secrets and private keys cannot be published here.
  * <p>
+ * RSA publication requires generic RSA key material with algorithm RSA and no key-level PSS parameters.
+ * RSASSA-PSS containers/restricted keys are outside this publication profile, even when a selected PSS signer
+ * can use them. Publication does not erase or reinterpret key restrictions.
+ * <p>
  * Only the public key is required. The key identifier, algorithm and certificate chain are optional. No algorithm
  * is inferred when it is absent. Every key advertises {@code use=sig}.
  * <p>

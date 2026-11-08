@@ -41,6 +41,9 @@ import static java.util.Objects.requireNonNull;
  * <p>Instances are safe to share across threads when their supplied work gate and pepper source
  * are shared and thread-safe. No operation starts a worker thread. A pepper-enabled instance
  * requires its peppered native stored form and never falls back to an unpeppered PHC value.
+ * One work permit covers preparation, pepper lookup and KDF cleanup. NFC uses the running JDK's
+ * Unicode data; stored forms do not identify that preparation revision. Applications own trusted
+ * credential preparation cohorts and verified migration between them.
  * @since 1.0.0 */
 @ThreadSafe
 public final class PasswordHasher {
@@ -87,24 +90,30 @@ public final class PasswordHasher {
         requireNonNull(password);
         if (Thread.currentThread().isInterrupted())
             return PasswordHashResult.unavailable(PasswordUnavailableReason.INTERRUPTED);
-        PreparedInput prepared = prepare(password, LegacyPasswordPreparation.NFC_UTF8);
-        if (prepared.reason != null) return PasswordHashResult.rejected(prepared.reason);
-        byte[] input = requireNonNull(prepared.bytes);
-        byte[] secret = new byte[0];
-        byte[] salt = new byte[SALT_BYTES];
-        byte[] tag = null;
-        try {
-            String keyId = null;
-            if (pepperSource != null) {
-                PasswordPepperSnapshot snapshot = pepperSnapshot();
-                if (snapshot == null) return PasswordHashResult.unavailable(PasswordUnavailableReason.PEPPER_UNAVAILABLE);
-                PasswordPepperKey key = snapshot.activeKey();
-                keyId = key.getKeyId();
-                secret = key.copyKeyBytes();
-            }
-            PasswordWorkGate.Permit permit = workGate.tryAcquire(parameters.getMemoryKiB());
-            if (permit == null) return PasswordHashResult.unavailable(workAdmissionFailureReason());
-            try (permit) {
+        PasswordWorkGate.Permit permit = workGate.tryAcquire(parameters.getMemoryKiB());
+        if (permit == null) return PasswordHashResult.unavailable(workAdmissionFailureReason());
+        try (permit) {
+            if (Thread.currentThread().isInterrupted())
+                return PasswordHashResult.unavailable(PasswordUnavailableReason.INTERRUPTED);
+            PreparedInput prepared = prepare(password, LegacyPasswordPreparation.NFC_UTF8);
+            if (prepared.reason != null) return PasswordHashResult.rejected(prepared.reason);
+            byte[] input = requireNonNull(prepared.bytes);
+            byte[] secret = new byte[0];
+            byte[] salt = new byte[SALT_BYTES];
+            byte[] tag = null;
+            try {
+                if (Thread.currentThread().isInterrupted())
+                    return PasswordHashResult.unavailable(PasswordUnavailableReason.INTERRUPTED);
+                String keyId = null;
+                if (pepperSource != null) {
+                    PasswordPepperSnapshot snapshot = pepperSnapshot();
+                    if (Thread.currentThread().isInterrupted())
+                        return PasswordHashResult.unavailable(PasswordUnavailableReason.INTERRUPTED);
+                    if (snapshot == null) return PasswordHashResult.unavailable(PasswordUnavailableReason.PEPPER_UNAVAILABLE);
+                    PasswordPepperKey key = snapshot.activeKey();
+                    keyId = key.getKeyId();
+                    secret = key.copyKeyBytes();
+                }
                 if (Thread.currentThread().isInterrupted())
                     return PasswordHashResult.unavailable(PasswordUnavailableReason.INTERRUPTED);
                 try {
@@ -116,14 +125,15 @@ public final class PasswordHasher {
                         parameters.getPasses(), parameters.getLanes(), TAG_BYTES);
                 return PasswordHashResult.succeeded(new PasswordHash(
                         PasswordStoredForm.encode(parameters, salt, tag, keyId)));
+
+            } catch (Argon2idInterruptedException e) {
+                return PasswordHashResult.unavailable(PasswordUnavailableReason.INTERRUPTED);
+            } finally {
+                Arrays.fill(input, (byte) 0);
+                Arrays.fill(secret, (byte) 0);
+                Arrays.fill(salt, (byte) 0);
+                if (tag != null) Arrays.fill(tag, (byte) 0);
             }
-        } catch (Argon2idInterruptedException e) {
-            return PasswordHashResult.unavailable(PasswordUnavailableReason.INTERRUPTED);
-        } finally {
-            Arrays.fill(input, (byte) 0);
-            Arrays.fill(secret, (byte) 0);
-            Arrays.fill(salt, (byte) 0);
-            if (tag != null) Arrays.fill(tag, (byte) 0);
         }
     }
 
@@ -149,23 +159,29 @@ public final class PasswordHasher {
                 return PasswordVerificationResult.unavailable(PasswordUnavailableReason.PEPPER_UNAVAILABLE);
             if (pepperSource != null && !form.peppered())
                 return PasswordVerificationResult.rejected(PasswordRejectionReason.UNSUPPORTED_STORED_HASH);
-            PreparedInput prepared = prepare(password, LegacyPasswordPreparation.NFC_UTF8);
-            if (prepared.reason != null) return PasswordVerificationResult.rejected(prepared.reason);
-            byte[] input = requireNonNull(prepared.bytes);
-            byte[] secret = new byte[0];
-            byte[] actual = null;
-            try {
-                PasswordPepperSnapshot snapshot = null;
-                if (pepperSource != null) {
-                    snapshot = pepperSnapshot();
-                    if (snapshot == null) return PasswordVerificationResult.unavailable(PasswordUnavailableReason.PEPPER_UNAVAILABLE);
-                    PasswordPepperKey key = snapshot.keyForId(requireNonNull(form.pepperKeyId()));
-                    if (key == null) return PasswordVerificationResult.unavailable(PasswordUnavailableReason.PEPPER_UNAVAILABLE);
-                    secret = key.copyKeyBytes();
-                }
-                PasswordWorkGate.Permit permit = workGate.tryAcquire(form.memoryKiB());
-                if (permit == null) return PasswordVerificationResult.unavailable(workAdmissionFailureReason());
-                try (permit) {
+            PasswordWorkGate.Permit permit = workGate.tryAcquire(form.memoryKiB());
+            if (permit == null) return PasswordVerificationResult.unavailable(workAdmissionFailureReason());
+            try (permit) {
+                if (Thread.currentThread().isInterrupted())
+                    return PasswordVerificationResult.unavailable(PasswordUnavailableReason.INTERRUPTED);
+                PreparedInput prepared = prepare(password, LegacyPasswordPreparation.NFC_UTF8);
+                if (prepared.reason != null) return PasswordVerificationResult.rejected(prepared.reason);
+                byte[] input = requireNonNull(prepared.bytes);
+                byte[] secret = new byte[0];
+                byte[] actual = null;
+                try {
+                    if (Thread.currentThread().isInterrupted())
+                        return PasswordVerificationResult.unavailable(PasswordUnavailableReason.INTERRUPTED);
+                    PasswordPepperSnapshot snapshot = null;
+                    if (pepperSource != null) {
+                        snapshot = pepperSnapshot();
+                        if (Thread.currentThread().isInterrupted())
+                            return PasswordVerificationResult.unavailable(PasswordUnavailableReason.INTERRUPTED);
+                        if (snapshot == null) return PasswordVerificationResult.unavailable(PasswordUnavailableReason.PEPPER_UNAVAILABLE);
+                        PasswordPepperKey key = snapshot.keyForId(requireNonNull(form.pepperKeyId()));
+                        if (key == null) return PasswordVerificationResult.unavailable(PasswordUnavailableReason.PEPPER_UNAVAILABLE);
+                        secret = key.copyKeyBytes();
+                    }
                     if (Thread.currentThread().isInterrupted())
                         return PasswordVerificationResult.unavailable(PasswordUnavailableReason.INTERRUPTED);
                     actual = Argon2id.hash(input, form.salt(), secret, form.memoryKiB(),
@@ -180,13 +196,14 @@ public final class PasswordHasher {
                     boolean oldPepper = snapshot != null
                             && !snapshot.getActiveKeyId().equals(form.pepperKeyId());
                     return PasswordVerificationResult.matched(policyDominates && (staleCosts || oldPepper));
+
+                } catch (Argon2idInterruptedException e) {
+                    return PasswordVerificationResult.unavailable(PasswordUnavailableReason.INTERRUPTED);
+                } finally {
+                    Arrays.fill(input, (byte) 0);
+                    Arrays.fill(secret, (byte) 0);
+                    if (actual != null) Arrays.fill(actual, (byte) 0);
                 }
-            } catch (Argon2idInterruptedException e) {
-                return PasswordVerificationResult.unavailable(PasswordUnavailableReason.INTERRUPTED);
-            } finally {
-                Arrays.fill(input, (byte) 0);
-                Arrays.fill(secret, (byte) 0);
-                if (actual != null) Arrays.fill(actual, (byte) 0);
             }
         } finally {
             form.wipe();
@@ -210,23 +227,28 @@ public final class PasswordHasher {
             return PasswordVerificationResult.rejected(PasswordRejectionReason.INVALID_STORED_HASH);
         if (Thread.currentThread().isInterrupted())
             return PasswordVerificationResult.unavailable(PasswordUnavailableReason.INTERRUPTED);
-        PreparedInput prepared = prepare(password, bcryptPreparation);
-        if (prepared.reason != null) return PasswordVerificationResult.rejected(prepared.reason);
-        byte[] input = requireNonNull(prepared.bytes);
-        try {
-            if (input.length > 72)
-                return PasswordVerificationResult.rejected(PasswordRejectionReason.LEGACY_BCRYPT_INPUT_TOO_LONG);
-            PasswordWorkGate.Permit permit = workGate.tryAcquire(0);
-            if (permit == null) return PasswordVerificationResult.unavailable(workAdmissionFailureReason());
-            try (permit) {
+        PasswordWorkGate.Permit permit = workGate.tryAcquire(0);
+        if (permit == null) return PasswordVerificationResult.unavailable(workAdmissionFailureReason());
+        try (permit) {
+            if (Thread.currentThread().isInterrupted())
+                return PasswordVerificationResult.unavailable(PasswordUnavailableReason.INTERRUPTED);
+            PreparedInput prepared = prepare(password, bcryptPreparation);
+            if (prepared.reason != null) return PasswordVerificationResult.rejected(prepared.reason);
+            byte[] input = requireNonNull(prepared.bytes);
+            try {
+                if (Thread.currentThread().isInterrupted())
+                    return PasswordVerificationResult.unavailable(PasswordUnavailableReason.INTERRUPTED);
+                if (input.length > 72)
+                    return PasswordVerificationResult.rejected(PasswordRejectionReason.LEGACY_BCRYPT_INPUT_TOO_LONG);
                 LegacyPasswordVerifier.Result result = LegacyPasswordVerifier.verifyBcrypt(input, storedForm,
                         maximumBcryptLogRounds);
                 if (Thread.currentThread().isInterrupted())
                     return PasswordVerificationResult.unavailable(PasswordUnavailableReason.INTERRUPTED);
                 return legacyResult(result);
+
+            } finally {
+                Arrays.fill(input, (byte) 0);
             }
-        } finally {
-            Arrays.fill(input, (byte) 0);
         }
     }
 
@@ -251,25 +273,30 @@ public final class PasswordHasher {
             return PasswordVerificationResult.rejected(PasswordRejectionReason.INVALID_STORED_HASH);
         if (Thread.currentThread().isInterrupted())
             return PasswordVerificationResult.unavailable(PasswordUnavailableReason.INTERRUPTED);
-        PreparedInput prepared = prepare(password, pbkdf2Preparation);
-        if (prepared.reason != null) return PasswordVerificationResult.rejected(prepared.reason);
-        byte[] input = requireNonNull(prepared.bytes);
-        byte[] saltCopy = salt.clone();
-        byte[] tagCopy = expectedTag.clone();
-        try {
-            PasswordWorkGate.Permit permit = workGate.tryAcquire(0);
-            if (permit == null) return PasswordVerificationResult.unavailable(workAdmissionFailureReason());
-            try (permit) {
+        PasswordWorkGate.Permit permit = workGate.tryAcquire(0);
+        if (permit == null) return PasswordVerificationResult.unavailable(workAdmissionFailureReason());
+        try (permit) {
+            if (Thread.currentThread().isInterrupted())
+                return PasswordVerificationResult.unavailable(PasswordUnavailableReason.INTERRUPTED);
+            PreparedInput prepared = prepare(password, pbkdf2Preparation);
+            if (prepared.reason != null) return PasswordVerificationResult.rejected(prepared.reason);
+            byte[] input = requireNonNull(prepared.bytes);
+            byte[] saltCopy = salt.clone();
+            byte[] tagCopy = expectedTag.clone();
+            try {
+                if (Thread.currentThread().isInterrupted())
+                    return PasswordVerificationResult.unavailable(PasswordUnavailableReason.INTERRUPTED);
                 LegacyPasswordVerifier.Result result = LegacyPasswordVerifier.verifyPbkdf2(input,
                         hmac.jcaName(), iterations, saltCopy, tagCopy, maximumPbkdf2Iterations);
                 if (Thread.currentThread().isInterrupted())
                     return PasswordVerificationResult.unavailable(PasswordUnavailableReason.INTERRUPTED);
                 return legacyResult(result);
+
+            } finally {
+                Arrays.fill(input, (byte) 0);
+                Arrays.fill(saltCopy, (byte) 0);
+                Arrays.fill(tagCopy, (byte) 0);
             }
-        } finally {
-            Arrays.fill(input, (byte) 0);
-            Arrays.fill(saltCopy, (byte) 0);
-            Arrays.fill(tagCopy, (byte) 0);
         }
     }
 
@@ -352,13 +379,14 @@ public final class PasswordHasher {
 
         private Builder(@NonNull Argon2idParameters parameters) { this.parameters = parameters; }
 
-        /** Sets the shared, process-local KDF admission gate.
+        /** Sets the shared, process-local preparation, pepper and KDF admission gate.
          * @param gate shared gate, or null to clear this required setting
          * @return this builder
          * @since 1.0.0 */
         public @NonNull Builder workGate(@Nullable PasswordWorkGate gate) { this.workGate = gate; return this; }
 
-        /** Sets strict input and stored-work ceilings.
+        /** Sets strict input and stored-work ceilings. A stored memory cost within these ceilings
+         * but above the gate's total budget is intentionally unavailable even with an idle gate.
          * @param limits verification ceilings, or null to restore conservative defaults
          * @return this builder
          * @since 1.0.0 */

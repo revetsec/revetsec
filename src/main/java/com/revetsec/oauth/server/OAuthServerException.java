@@ -54,7 +54,8 @@ public abstract sealed class OAuthServerException extends RevetsecException perm
 	 */
 	@Override public final @NonNull String toString() { return "OAuthServerException{"+this.reason+"}"; }
 	enum Kind { VALIDATION, STORE, TRANSPORT, CONFIGURATION, SIGNING }
-	/** Fixed internal classifications; different reasons may deliberately share the same safe wire error.
+	/** Fixed classifications; a later release may add values. Callers must include a default branch rather than
+	 * switching exhaustively. Different reasons may deliberately share the same safe wire error.
 	 * @since 1.0.0
 	 */
 	@Immutable public enum Reason {

@@ -14,7 +14,22 @@ def failed(report,delay=0):return any(c['status']!='PASS' for c in validate(repo
 class AcceptanceTests(unittest.TestCase):
     def test_recorded_structural_reference_passes(self):
         checks,samples=validate(reference(),0)
-        self.assertEqual(22,len(checks));self.assertFalse(any(c['status']!='PASS' for c in checks));self.assertEqual(['code','code','refresh'],[s['phase'] for s in samples])
+        self.assertEqual(23,len(checks));self.assertFalse(any(c['status']!='PASS' for c in checks));self.assertEqual(['code','code','refresh'],[s['phase'] for s in samples])
+
+    def test_bootstrap_proof_and_resumed_authorization_are_required(self):
+        original=reference()
+        for field in ['count','originalForm','sameOrigin','methodPost']:
+            with self.subTest(field=field):
+                r=copy.deepcopy(original);r['browserBootstrap'].pop(field);self.assertTrue(failed(r))
+        r=copy.deepcopy(original);r.pop('browserBootstrap');self.assertTrue(failed(r))
+        boot=next(i for i,e in enumerate(original['events'])if e['kind']=='BOOTSTRAP')
+        for field in ['originMatches','exactBeginBody','originalAuthorizationQuery','noPriorCookie','noAuthorization','secureHttpOnlySessionCookie']:
+            with self.subTest(field=field):
+                r=copy.deepcopy(original);r['events'][boot][field]=False;self.assertTrue(failed(r))
+        r=copy.deepcopy(original);r['events'][boot]['method']='GET';self.assertTrue(failed(r))
+        r=copy.deepcopy(original);r['events'][boot]['status']=200;self.assertTrue(failed(r))
+        r=copy.deepcopy(original);r['events'].append(copy.deepcopy(r['events'][boot]));self.assertTrue(failed(r))
+        r=copy.deepcopy(original);resume=next(e for e in r['events']if e.get('resumedAfterBootstrap'));resume['resumedAfterBootstrap']=False;self.assertTrue(failed(r))
 
     def test_empty_missing_events_and_wrong_delay_fail(self):
         self.assertTrue(failed({}));r=reference();r['events']=[];self.assertTrue(failed(r));self.assertTrue(failed(reference(),1000))

@@ -76,14 +76,14 @@ final class SamlSignedStructureCorpusTests {
     private static final @NonNull List<@NonNull String> OPAQUE_ATTRIBUTES = List.of(
             "nil-true", "nil-one", "nil-invalid", "type-and-nil", "mixed-element");
     private static final @NonNull List<@NonNull String> IDENTITY_POSITIVES = List.of(
-            "clean", "subject-nameid-type", "assertion-issuer-type", "audience-type",
-            "authn-class-ref-type", "subject-nameid-nil-false",
+            "clean", "subject-nameid-type", "assertion-issuer-type",
+            "subject-nameid-nil-false",
             "authn-locality-before-context");
     private static final @NonNull List<@NonNull String> IDENTITY_NEGATIVES = List.of(
             "assertion-version-old", "assertion-version-missing",
             "subject-nameid-nil", "subject-nameid-type-string",
             "assertion-issuer-nil", "assertion-issuer-type-string",
-            "audience-nil", "audience-type-string", "authn-class-ref-nil",
+            "audience-nil", "audience-type-string", "audience-type", "authn-class-ref-type", "authn-class-ref-nil",
             "subject-nameid-after-confirmation", "authn-locality-after-context",
             "authn-duplicate-locality", "authn-unknown-child");
     private static final @NonNull List<@NonNull String> BOUNDARY_POSITIVES = List.of(

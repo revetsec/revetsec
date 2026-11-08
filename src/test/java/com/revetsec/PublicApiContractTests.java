@@ -45,12 +45,14 @@ import javax.lang.model.type.TypeVariable;
 import javax.lang.model.type.WildcardType;
 import javax.lang.model.util.ElementFilter;
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
@@ -236,8 +238,47 @@ final class PublicApiContractTests {
 
 	@Test
 	void exportedApiMeetsSourceContracts() throws IOException {
-		ContractSupport.assertNoViolations("Public API contract violations",
-				findViolations(ContractSupport.repositoryRoot().resolve("src/main/java")));
+		Path repositoryRoot = ContractSupport.repositoryRoot();
+		Path sourceRoot = repositoryRoot.resolve("src/main/java");
+		Path helper = repositoryRoot.resolve("verification/packaged-consumer/ExportedTypeInventory.java");
+		Path output = Files.createTempFile("revetsec-exported-types-", ".tsv");
+		List<String> packagedConsumerInventory;
+		try {
+			ProcessBuilder builder = new ProcessBuilder(
+					Path.of(System.getProperty("java.home"), "bin", "java").toString(),
+					helper.toString(), sourceRoot.toString()).redirectErrorStream(true).redirectOutput(output.toFile());
+			builder.environment().remove("JAVA_TOOL_OPTIONS");
+			builder.environment().remove("JDK_JAVA_OPTIONS");
+			Process process = builder.start();
+			try {
+				if (!process.waitFor(30, TimeUnit.SECONDS)) {
+					process.destroyForcibly();
+					throw new AssertionError("The source-launchable packaged-consumer inventory exceeded 30 seconds");
+				}
+			} catch (InterruptedException exception) {
+				process.destroyForcibly();
+				Thread.currentThread().interrupt();
+				throw new IOException("Interrupted while running the packaged-consumer inventory", exception);
+			}
+			String inventoryOutput = Files.readString(output);
+			Assertions.assertEquals(0, process.exitValue(), inventoryOutput);
+			packagedConsumerInventory = inventoryOutput.lines().toList();
+		} finally {
+			Files.deleteIfExists(output);
+		}
+		ContractSupport.analyze(sourceRoot, analysis -> {
+			ContractSupport.assertNoViolations("Public API contract violations", findViolations(analysis,
+					VERIFIED_TYPES, VERIFIED_TYPE_SOURCES, R1_EXCEPTIONS, OPEN_ABSTRACT_TYPES,
+					APP_CONSTRUCTIBLE_EXCEPTION_FACTORIES));
+			List<String> attributedInventory = ContractSupport.exportedTypes(analysis).stream().map(type -> {
+				String packageName = analysis.getElements().getPackageOf(type).getQualifiedName().toString();
+				String canonicalName = type.getQualifiedName().toString();
+				return packageName + "\t" + canonicalName.substring(packageName.length() + 1);
+			}).sorted().toList();
+			Assertions.assertEquals(attributedInventory, packagedConsumerInventory,
+					"The source-launchable packaged-consumer inventory must equal ContractSupport's attributed inventory");
+			return Boolean.TRUE;
+		});
 	}
 
 	@Test

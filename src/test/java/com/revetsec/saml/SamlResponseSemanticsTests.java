@@ -466,13 +466,14 @@ final class SamlResponseSemanticsTests {
                 rejected(validate(BASE.replace(authn, nilContext), true, false, key, expected(cache))));
         assertEquals(0, writes.get());
 
+        // Positive typed declarations use a visibly used element prefix; unused aliases are refusal fixtures
+        // in SamlNamespaceCoverageTests rather than implicit namespace-context trust.
         String validNameId = BASE.replace(nameId,
-                "<a:NameID " + xsi + "xmlns:saml='urn:oasis:names:tc:SAML:2.0:assertion' "
-                        + "xsi:type='saml:NameIDType'>alice</a:NameID>");
+                "<a:NameID " + xsi + "xsi:type='a:NameIDType'>alice</a:NameID>");
         assertInstanceOf(SamlResponseSemantics.Accepted.class,
                 validate(validNameId, true, false, key, expected(cache)));
         String validAudience = BASE.replace(audience,
-                "<a:Audience " + xsi + xs + "xsi:type='xs:anyURI'>" + SP + "</a:Audience>");
+                "<a:Audience " + xsi + "xsi:nil='false'>" + SP + "</a:Audience>");
         assertInstanceOf(SamlResponseSemantics.Accepted.class,
                 validate(validAudience, true, false, key, expected(cache)));
     }
@@ -907,9 +908,7 @@ final class SamlResponseSemanticsTests {
         assertEquals(0, writes.get());
         String valid = BASE.replace("<a:AuthnStatement",
                 statement.replace("<a:AttributeStatement>",
-                        "<a:AttributeStatement " + xsi
-                                + "xmlns:saml='urn:oasis:names:tc:SAML:2.0:assertion' "
-                                + "xsi:type='saml:AttributeStatementType'>")
+                        "<a:AttributeStatement " + xsi + "xsi:type='a:AttributeStatementType'>")
                         + "<a:AuthnStatement");
         SamlResponseSemantics.Accepted accepted = assertInstanceOf(
                 SamlResponseSemantics.Accepted.class,

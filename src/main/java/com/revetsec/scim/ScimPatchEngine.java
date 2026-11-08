@@ -347,6 +347,10 @@ final class ScimPatchEngine {
     }
     private @Nullable JsonValue merge(@NonNull ScimAttributeDefinition definition,@NonNull JsonObject old,
             @NonNull JsonObject object,@NonNull ScimAttributePath target) {
+        return merge(definition,old,object,target,false);
+    }
+    private @Nullable JsonValue merge(@NonNull ScimAttributeDefinition definition,@NonNull JsonObject old,
+            @NonNull JsonObject object,@NonNull ScimAttributePath target,boolean duplicateAdd) {
         if (!spend(old.getMembers().size()+object.getMembers().size()+1L)) return null;
         LinkedHashMap<String,JsonValue> output=new LinkedHashMap<>(old.getMembers());
         noteManagerReference(target,object.getMembers().containsKey("$ref"));
@@ -361,6 +365,17 @@ final class ScimPatchEngine {
             ScimAttributeDefinition child=ScimSchemas.attribute(definition.getSubAttributes(),supplied.getKey()).orElseThrow();
             ScimAttributePath childPath=path(target.toScimString()+"."+supplied.getKey());
             if (childPath == null) return null;
+            if (groupMembers(target) && child.getName().equals("display")
+                    && child.getMutability() == ScimMutability.READ_ONLY
+                    && compatibility.getFeatures().contains(ScimCompatibilityFeature.PATCH_GROUP_MEMBER_DISPLAY_IGNORED)) {
+                usedFeatures.add(ScimCompatibilityFeature.PATCH_GROUP_MEMBER_DISPLAY_IGNORED);
+                continue;
+            }
+            // A hidden immutable echo must not disclose whether the submitted value equals stored data.
+            if (duplicateAdd && child.getReturned() == ScimReturned.NEVER
+                    && child.getMutability() == ScimMutability.IMMUTABLE) {
+                error=ScimError.mutabilityInstance(); return null;
+            }
             // Group member reference null is unassigned. It cannot clear an assigned immutable reference.
             if (groupMembers(target) && child.getName().equals("$ref") && supplied.getValue() instanceof JsonNull) continue;
             JsonValue value=update(child,old.getMembers().get(child.getName()),supplied.getValue(),ScimPatchOperationType.REPLACE,childPath);
@@ -382,6 +397,9 @@ final class ScimPatchEngine {
     private @Nullable JsonValue array(@NonNull ScimAttributeDefinition definition,@Nullable JsonValue old,
             @NonNull JsonArray values,@NonNull ScimPatchOperationType kind,@NonNull ScimAttributePath target) {
         if (kind == ScimPatchOperationType.ADD && values.getElements().isEmpty()) return old;
+        if (kind == ScimPatchOperationType.ADD && definition.getReturned() == ScimReturned.NEVER) {
+            error=ScimError.mutabilityInstance(); return null;
+        }
         List<JsonValue> prior=old instanceof JsonArray array ? array.getElements() : List.of();
         if (!spend(prior.size()+1L)) return null;
         if (groupMembers(target) && !values.getElements().isEmpty()) {
@@ -416,7 +434,7 @@ final class ScimPatchEngine {
                     if (!spend(1)) return null;
                     if (protectedChildren(definition,previous)) { if (error == null) error=ScimError.mutabilityInstance(); return null; }
                 }
-                next=merge(definition,basis,(JsonObject)supplied,target);
+                next=merge(definition,basis,(JsonObject)supplied,target,kind == ScimPatchOperationType.ADD && existing != null);
                 if (next == null) return null;
             }
             if (kind == ScimPatchOperationType.ADD && existing != null) continue;
@@ -551,7 +569,10 @@ final class ScimPatchEngine {
         if (left instanceof JsonObject a && right instanceof JsonObject b) {
             for (ScimAttributeDefinition child : definition.getSubAttributes()) {
                 if (!spend(1)) return false;
-                if (child.getMutability() == ScimMutability.READ_ONLY) continue;
+                // Hidden values cannot participate in observable ADD identity or application comparators.
+                // WRITE_ONLY definitions are required to use returned NEVER.
+                if (child.getMutability() == ScimMutability.READ_ONLY
+                        || child.getReturned() == ScimReturned.NEVER) continue;
                 ScimAttributePath childPath=path(target.toScimString()+"."+child.getName());
                 if (childPath == null || !equivalent(child,a.getMembers().get(child.getName()),b.getMembers().get(child.getName()),childPath,false)) return false;
             }

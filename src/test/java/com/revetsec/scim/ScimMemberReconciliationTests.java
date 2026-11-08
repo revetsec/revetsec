@@ -15,6 +15,8 @@
  */
 package com.revetsec.scim;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.internal.json.JsonCodec;
 import com.revetsec.internal.json.JsonLimits;
 import com.revetsec.internal.json.JsonParseResult;
@@ -40,7 +42,7 @@ final class ScimMemberReconciliationTests {
         fail("Standard Group member IDs must not use application matching"); return ScimStringMatchResult.unsupportedInstance();
     };
 
-    @TestFactory Stream<DynamicTest> largeStableMembershipOperationsFitTheirUnchangedProfiles() {
+    @TestFactory @NonNull Stream<@NonNull DynamicTest> largeStableMembershipOperationsFitTheirUnchangedProfiles() {
         return Stream.of("PUT", "REPLACE", "ADD", "REMOVE").flatMap(action -> Stream.of(3000, 4000)
                 .flatMap(size -> Stream.of(GROUP, TEAM).map(type -> DynamicTest.dynamicTest(
                         action + " size=" + size + " type=" + type.getName(), () -> {
@@ -58,7 +60,7 @@ final class ScimMemberReconciliationTests {
         }))));
     }
 
-    @TestFactory Stream<DynamicTest> aggregateWorkGrowthIsSubquadraticInStableMemberCount() {
+    @TestFactory @NonNull Stream<@NonNull DynamicTest> aggregateWorkGrowthIsSubquadraticInStableMemberCount() {
         return Stream.of("PUT", "REPLACE", "ADD", "REMOVE").map(action -> DynamicTest.dynamicTest("charged work " + action, () -> {
             long small = minimum(action, 64), medium = minimum(action, 128), large = minimum(action, 256);
             java.nio.file.Files.writeString(java.nio.file.Path.of("target/member-work-" + action + ".txt"), small + "," + medium + "," + large);
@@ -67,7 +69,7 @@ final class ScimMemberReconciliationTests {
         }));
     }
 
-    @TestFactory Stream<DynamicTest> commonPrefixAndHashCollisionIdsKeepExactIdentity() {
+    @TestFactory @NonNull Stream<@NonNull DynamicTest> commonPrefixAndHashCollisionIdsKeepExactIdentity() {
         return Stream.of("PUT", "REPLACE", "ADD", "REMOVE").map(action -> DynamicTest.dynamicTest("collision " + action, () -> {
             List<String> keys = new ArrayList<>();
             for (int i = 0; i < 512; i++) {
@@ -85,7 +87,7 @@ final class ScimMemberReconciliationTests {
         }));
     }
 
-    @TestFactory Stream<DynamicTest> exhaustionAtTheCommitBoundaryNeverPublishesAPartialCandidate() {
+    @TestFactory @NonNull Stream<@NonNull DynamicTest> exhaustionAtTheCommitBoundaryNeverPublishesAPartialCandidate() {
         return Stream.of("PUT", "REPLACE", "ADD", "REMOVE").map(action -> DynamicTest.dynamicTest("work boundary " + action, () -> {
             var current = resource(GROUP, members(ids(0, 32), true));
             String original = current.getDocument().toJson();
@@ -114,7 +116,7 @@ final class ScimMemberReconciliationTests {
         }));
     }
 
-    @TestFactory Stream<DynamicTest> immutableSurvivorsCannotBeChangedEvenByAddExisting() {
+    @TestFactory @NonNull Stream<@NonNull DynamicTest> immutableSurvivorsCannotBeChangedEvenByAddExisting() {
         return Stream.of("PUT", "REPLACE", "ADD").flatMap(action -> Stream.of("type", "$ref").map(field ->
                 DynamicTest.dynamicTest("immutable " + action + " " + field, () -> {
             var current = resource(GROUP, members(List.of("a"), true));
@@ -225,7 +227,7 @@ final class ScimMemberReconciliationTests {
         assertIdsAndMetadata(assertInstanceOf(ScimPatchApplicationResult.Succeeded.class, provider.applyPatchResult(current, request)).getPatchResult().getResource(), List.of("b", "a"), List.of("a", "b"));
     }
 
-    private static long minimum(String action, int size) {
+    private static long minimum(@NonNull String action, int size) {
         var current = resource(GROUP, members(ids(0, size), true));
         var supplied = members(supplied(action, size), false);
         long low = 0, high = 4_000_000;
@@ -236,7 +238,7 @@ final class ScimMemberReconciliationTests {
         }
         return low;
     }
-    private static Object direct(ScimResource current, String action, JsonArray supplied, long budget) {
+    private static @NonNull Object direct(@NonNull ScimResource current, @NonNull String action, @NonNull JsonArray supplied, long budget) {
         if (action.equals("PUT")) {
             var parsed = assertInstanceOf(JsonParseResult.Succeeded.class, JsonCodec.parseResult(document(current.getResourceType(), supplied).toJson().getBytes(StandardCharsets.UTF_8), JsonLimits.scim(1_000_000, 100_000))).getDocument();
             return ScimResources.replace(current.getResourceType(), current, parsed, COMPAT, new ScimWork(budget), new Object());
@@ -245,14 +247,14 @@ final class ScimMemberReconciliationTests {
         var request = request(provider, current.getResourceType(), List.of(operation(action.toLowerCase(java.util.Locale.ROOT), supplied)));
         return ScimPatchEngine.apply(current, request, COMPAT, NO_STRATEGY, new ScimWork(budget), request.getSemanticContext(), EnumSet.noneOf(ScimCompatibilityFeature.class));
     }
-    private static boolean succeeded(Object result) { return result instanceof ScimResourceParseResult.Succeeded || result instanceof ScimPatchApplicationResult.Succeeded; }
-    private static ScimResource apply(ScimServiceProvider provider, ScimResource current, String action, JsonArray supplied) {
+    private static boolean succeeded(@NonNull Object result) { return result instanceof ScimResourceParseResult.Succeeded || result instanceof ScimPatchApplicationResult.Succeeded; }
+    private static @NonNull ScimResource apply(@NonNull ScimServiceProvider provider, @NonNull ScimResource current, @NonNull String action, @NonNull JsonArray supplied) {
         if (action.equals("PUT")) return assertInstanceOf(ScimResourceParseResult.Succeeded.class,
                 provider.parseReplacementResult(current.getResourceType(), current, document(current.getResourceType(), supplied).toJson().getBytes(StandardCharsets.UTF_8))).getResource();
         return assertInstanceOf(ScimPatchApplicationResult.Succeeded.class, provider.applyPatchResult(current,
                 request(provider, current.getResourceType(), List.of(operation(action.toLowerCase(java.util.Locale.ROOT), supplied))))).getPatchResult().getResource();
     }
-    private static void assertError(ScimServiceProvider provider, ScimResource current, String action, JsonArray supplied, ScimErrorType expected) {
+    private static void assertError(@NonNull ScimServiceProvider provider, @NonNull ScimResource current, @NonNull String action, @NonNull JsonArray supplied, @NonNull ScimErrorType expected) {
         ScimError error;
         if (action.equals("PUT")) error = assertInstanceOf(ScimResourceParseResult.Rejected.class,
                 provider.parseReplacementResult(current.getResourceType(), current, document(current.getResourceType(), supplied).toJson().getBytes(StandardCharsets.UTF_8))).getError();
@@ -260,48 +262,48 @@ final class ScimMemberReconciliationTests {
                 request(provider, current.getResourceType(), List.of(operation(action.toLowerCase(java.util.Locale.ROOT), supplied))))).getError();
         assertEquals(expected, error.getErrorType().orElseThrow());
     }
-    private static JsonObject operation(String action, @org.jspecify.annotations.Nullable JsonArray values) {
+    private static @NonNull JsonObject operation(@NonNull String action, @org.jspecify.annotations.Nullable JsonArray values) {
         var object = JsonObject.builder().put("op", action).put("path", "members");
         if (values != null) object.put("value", values);
         return object.build();
     }
-    private static JsonObject patch(List<JsonObject> operations) { return JsonObject.builder().put("schemas", strings(List.of("urn:ietf:params:scim:api:messages:2.0:PatchOp"))).put("Operations", JsonArray.fromElements(operations)).build(); }
-    private static ScimPatchRequest request(ScimServiceProvider provider, ScimResourceType type, List<JsonObject> operations) { return assertInstanceOf(ScimPatchParseResult.Succeeded.class, provider.parsePatchRequestResult(type, patch(operations).toJson().getBytes(StandardCharsets.UTF_8))).getPatchRequest(); }
-    private static ScimServiceProvider provider(ScimResourceType type, int work) { return ScimServiceProvider.builder().baseUri(URI.create("https://example.invalid/scim/"))
+    private static @NonNull JsonObject patch(@NonNull List<@NonNull JsonObject> operations) { return JsonObject.builder().put("schemas", strings(List.of("urn:ietf:params:scim:api:messages:2.0:PatchOp"))).put("Operations", JsonArray.fromElements(operations)).build(); }
+    private static @NonNull ScimPatchRequest request(@NonNull ScimServiceProvider provider, @NonNull ScimResourceType type, @NonNull List<@NonNull JsonObject> operations) { return assertInstanceOf(ScimPatchParseResult.Succeeded.class, provider.parsePatchRequestResult(type, patch(operations).toJson().getBytes(StandardCharsets.UTF_8))).getPatchRequest(); }
+    private static @NonNull ScimServiceProvider provider(@NonNull ScimResourceType type, int work) { return ScimServiceProvider.builder().baseUri(URI.create("https://example.invalid/scim/"))
             .resourceTypes(List.of(type)).limits(ScimLimits.builder().maximumWorkUnits(work).build()).compatibility(COMPAT).stringMatching(NO_STRATEGY)
             .serviceProviderConfig(ScimServiceProviderConfig.builder().patchSupported(true).build()).build(); }
-    private static JsonObject document(ScimResourceType type, JsonArray members) { return JsonObject.builder().put("schemas", strings(List.of(type.getSchema().getId()))).put("displayName", "Team").put("members", members).build(); }
-    private static ScimResource resource(ScimResourceType type, JsonArray members) {
+    private static @NonNull JsonObject document(@NonNull ScimResourceType type, @NonNull JsonArray members) { return JsonObject.builder().put("schemas", strings(List.of(type.getSchema().getId()))).put("displayName", "Team").put("members", members).build(); }
+    private static @NonNull ScimResource resource(@NonNull ScimResourceType type, @NonNull JsonArray members) {
         var fields = new java.util.LinkedHashMap<String, JsonValue>(document(type, members).getMembers());
         fields.put("id", JsonString.fromValue("group1"));
         fields.put("meta", JsonObject.builder().put("version", "W/\"one\"").build());
         return ScimResource.withResourceType(type).limits(ScimLimits.builder().maximumWorkUnits(10_000_000).build())
                 .document(JsonObject.fromMembers(fields)).build();
     }
-    private static JsonArray members(List<String> ids, boolean metadata) { List<JsonValue> values = new ArrayList<>(); for (String id : ids) {
+    private static @NonNull JsonArray members(@NonNull List<@NonNull String> ids, boolean metadata) { List<JsonValue> values = new ArrayList<>(); for (String id : ids) {
         var member = JsonObject.builder().put("value", id);
         if (metadata) member.put("type", "User").put("$ref", URI.create("Users/" + id).toASCIIString()).put("display", "Saved:" + id);
         values.add(member.build());
     } return JsonArray.fromElements(values); }
-    private static JsonArray strings(List<String> values) { return JsonArray.fromElements(values.stream().map(JsonString::fromValue).toList()); }
-    private static List<String> ids(int start, int size) { List<String> values = new ArrayList<>(); for (int i = 0; i < size; i++) values.add("m" + Integer.toString(start + i, 36)); return values; }
-    private static List<String> supplied(String action, int size) {
+    private static @NonNull JsonArray strings(@NonNull List<@NonNull String> values) { return JsonArray.fromElements(values.stream().map(JsonString::fromValue).toList()); }
+    private static @NonNull List<@NonNull String> ids(int start, int size) { List<String> values = new ArrayList<>(); for (int i = 0; i < size; i++) values.add("m" + Integer.toString(start + i, 36)); return values; }
+    private static @NonNull List<@NonNull String> supplied(@NonNull String action, int size) {
         List<String> values = new ArrayList<>();
         if (action.equals("ADD")) { values.addAll(ids(0, size / 2)); values.addAll(ids(size, size / 2)); }
         else if (action.equals("REMOVE")) { for (int i = 0; i < size; i += 2) values.add("m" + Integer.toString(i, 36)); }
         else { values.addAll(ids(0, size)); Collections.reverse(values); }
         return values;
     }
-    private static List<String> expected(String action, List<String> old, List<String> supplied) {
+    private static @NonNull List<@NonNull String> expected(@NonNull String action, @NonNull List<@NonNull String> old, @NonNull List<@NonNull String> supplied) {
         if (action.equals("PUT") || action.equals("REPLACE")) return supplied;
         List<String> values = new ArrayList<>(old);
         if (action.equals("REMOVE")) values.removeAll(supplied);
         else for (String value : supplied) if (!values.contains(value)) values.add(value);
         return values;
     }
-    private static List<String> values(ScimResource resource) { var array = (JsonArray) resource.getDocument().find("members").orElseThrow(); return array.getElements().stream().map(JsonObject.class::cast).map(object -> ((JsonString) object.find("value").orElseThrow()).getValue()).toList(); }
-    private static JsonObject member(ScimResource resource, int index) { return (JsonObject) ((JsonArray) resource.getDocument().find("members").orElseThrow()).getElements().get(index); }
-    private static void assertIdsAndMetadata(ScimResource resource, List<String> expected, List<String> old) {
+    private static @NonNull List<@NonNull String> values(@NonNull ScimResource resource) { var array = (JsonArray) resource.getDocument().find("members").orElseThrow(); return array.getElements().stream().map(JsonObject.class::cast).map(object -> ((JsonString) object.find("value").orElseThrow()).getValue()).toList(); }
+    private static @NonNull JsonObject member(@NonNull ScimResource resource, int index) { return (JsonObject) ((JsonArray) resource.getDocument().find("members").orElseThrow()).getElements().get(index); }
+    private static void assertIdsAndMetadata(@NonNull ScimResource resource, @NonNull List<@NonNull String> expected, @NonNull List<@NonNull String> old) {
         assertEquals(expected, values(resource));
         for (int i = 0; i < expected.size(); i++) { String id = expected.get(i); JsonObject row = member(resource, i);
             if (old.contains(id)) { assertTrue(row.getMembers().keySet().containsAll(List.of("display", "type", "$ref")), "surviving member must retain protected metadata: " + id); assertEquals("Saved:" + id, ((JsonString) row.find("display").orElseThrow()).getValue()); assertEquals("User", ((JsonString) row.find("type").orElseThrow()).getValue()); assertEquals(URI.create("Users/" + id).toASCIIString(), ((JsonString) row.find("$ref").orElseThrow()).getValue()); }

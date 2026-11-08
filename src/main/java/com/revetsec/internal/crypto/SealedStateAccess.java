@@ -23,6 +23,7 @@ import org.jspecify.annotations.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
 import java.lang.invoke.MethodHandles;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Set;
 import java.util.concurrent.locks.ReentrantLock;
@@ -108,6 +109,33 @@ public final class SealedStateAccess {
         /** Opens only a durable TOTP record; the permanent wire lifetime is authenticated. */
         @NonNull String unsealDurable(@NonNull StateSealer sealer, @NonNull String sealed,
                 @NonNull String context) throws UnsealException;
+
+		/** Seals only OIDC logout hints under the sealer's existing configured-clock/lifetime profile.
+		 * Default denial preserves closed installation and cannot grant typed lifetime operations to other implementers.
+		 * @param sealer application sealer
+		 * @param type exactly OIDC_LOGOUT_HINT
+		 * @param plaintext credential-bearing bounded storage text
+		 * @param context fixed application context
+		 * @param lifetime existing sealer lifetime profile
+		 * @return typed sealed credential
+		 */
+		default @NonNull String sealForLifetime(@NonNull StateSealer sealer, @NonNull SealedStateType type,
+				@NonNull String plaintext, @NonNull String context, @NonNull Duration lifetime) {
+			throw new IllegalArgumentException("Typed lifetime operations are not available.");
+		}
+
+		/** Opens only OIDC logout hints using the sealer's configured clock, without exposing clock or keys.
+		 * @param sealer application sealer
+		 * @param type exactly OIDC_LOGOUT_HINT
+		 * @param sealed untrusted typed sealed credential
+		 * @param context fixed application context
+		 * @return bounded credential storage text
+		 * @throws UnsealException if the typed state is invalid or expired
+		 */
+		default @NonNull String unsealUsingConfiguredClock(@NonNull StateSealer sealer, @NonNull SealedStateType type,
+				@NonNull String sealed, @NonNull String context) throws UnsealException {
+			throw new IllegalArgumentException("Configured-clock operations are not available.");
+		}
 
 		/**
 		 * Seals {@code plaintext} under {@code type} with the sealer's active key.

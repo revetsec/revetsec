@@ -15,6 +15,8 @@
  */
 package com.revetsec.internal.webauthn;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.SealingKey;
 import com.revetsec.StateSealer;
 import com.revetsec.internal.encoding.Base64Url;
@@ -37,20 +39,20 @@ final class WebAuthnSr2OriginTests {
     private static final String RP="login.example.com",PARENT="https://"+RP,CHILD="https://sub."+RP;
     private static final String MAX_HOST="a".repeat(63)+"."+"b".repeat(63)+"."+"c".repeat(63)+"."+"d".repeat(43)+"."+RP;
     private static final byte[] CHALLENGE=new byte[32];
-    private record Profile(String origin,boolean accepted){}
-    private static List<Profile> profiles(){
+    private record Profile(@NonNull String origin,boolean accepted){}
+    private static @NonNull List<@NonNull Profile> profiles(){
         List<Profile> rows=new ArrayList<>();
         for(String value:List.of(PARENT,PARENT+":8443",CHILD,"https://a.b."+RP,CHILD+":8443",CHILD+":65535",CHILD+":1","https://xn--bcher-kva."+RP,"https://a-0."+RP,"https://0."+RP,"https://"+MAX_HOST+":65535"))rows.add(new Profile(value,true));
         for(String value:List.of("https://sibling.example.com","https://notlogin.example.com","https://evil-login.example.com",PARENT+".evil.test",CHILD+".evil.test","https://."+RP,"https://Sub."+RP,"https://sub.LOGIN.example.com",CHILD+".","HTTPS://sub."+RP,"http://sub."+RP,"null","data:text/plain,test","https://127.0.0.1","https://[::1]","https://*."+RP,"https://sub_."+RP,"https://-sub."+RP,"https://sub-."+RP,"https://"+"a".repeat(64)+"."+RP,CHILD+":-1",CHILD+":0",CHILD+":65536",CHILD+":0443",CHILD+":08443",CHILD+":",CHILD+":word","https://user@sub."+RP,CHILD+"@evil.test","https://sub%2e"+RP,"https://bücher."+RP,CHILD+"/",CHILD+"/path",CHILD+"?",CHILD+"#",CHILD+"\n"," https://sub."+RP,"https://"+MAX_HOST.replace("d".repeat(43),"d".repeat(44))+":65535"))rows.add(new Profile(value,false));
         return rows;
     }
-    @TestFactory Stream<DynamicTest> publicConfigurationUsesCanonicalRpOrDescendantHosts(){
+    @TestFactory @NonNull Stream<@NonNull DynamicTest> publicConfigurationUsesCanonicalRpOrDescendantHosts(){
         return profiles().stream().map(p->DynamicTest.dynamicTest("public / "+p.origin,()->{
             if(p.accepted)assertDoesNotThrow(()->WebAuthnRelyingParty.withRelyingPartyId(RP).allowedOrigins(Set.of(p.origin)));
             else assertThrows(IllegalArgumentException.class,()->WebAuthnRelyingParty.withRelyingPartyId(RP).allowedOrigins(Set.of(p.origin)));
         }));
     }
-    @TestFactory Stream<DynamicTest> clientAndStoredPolicyUseCanonicalRpOrDescendantHosts(){
+    @TestFactory @NonNull Stream<@NonNull DynamicTest> clientAndStoredPolicyUseCanonicalRpOrDescendantHosts(){
         return profiles().stream().map(p->DynamicTest.dynamicTest("client policy / "+p.origin,()->{
             if(p.accepted){
                 var policy=assertDoesNotThrow(()->policy(Set.of(p.origin)));
@@ -93,7 +95,7 @@ final class WebAuthnSr2OriginTests {
             assertThrows(WebAuthnClientDataException.class,()->policy.verify(value,WebAuthnClientData.Ceremony.AUTHENTICATION,CHALLENGE));
         }
     }
-    @TestFactory Stream<DynamicTest> allCeremonyKindsPersistTheirExactOriginSnapshot(){
+    @TestFactory @NonNull Stream<@NonNull DynamicTest> allCeremonyKindsPersistTheirExactOriginSnapshot(){
         return Arrays.stream(WebAuthnCeremonyState.Kind.values()).map(kind->DynamicTest.dynamicTest(kind.name(),()->{
             Instant now=Instant.parse("2026-11-03T12:00:00Z");Clock clock=Clock.fixed(now,ZoneOffset.UTC);Set<String> origins=Set.of(PARENT,CHILD+":8443");byte[] binding=new byte[32];binding[0]=1;byte[] id=new byte[32];id[0]=2;
             var state=switch(kind){case REGISTRATION->WebAuthnCeremonyState.registration(id,CHALLENGE,binding,origins,new byte[]{1},now,now.plusSeconds(300));case DISCOVERABLE_AUTHENTICATION->WebAuthnCeremonyState.discoverableAuthentication(id,CHALLENGE,binding,origins,now,now.plusSeconds(300));case ACCOUNT_REAUTHENTICATION->WebAuthnCeremonyState.accountReauthentication(id,CHALLENGE,binding,origins,new byte[]{1},"transfer",now,now.plusSeconds(300));};
@@ -103,6 +105,6 @@ final class WebAuthnSr2OriginTests {
             var restored=policy(decoded.allowedOrigins());assertThrows(WebAuthnClientDataException.class,()->restored.verify(document("https://unlisted."+RP,"webauthn.get",CHALLENGE),WebAuthnClientData.Ceremony.AUTHENTICATION,CHALLENGE));
         }));
     }
-    private static WebAuthnClientData policy(Set<String> origins){return new WebAuthnClientData(RP,origins,8192);}
-    private static byte[] document(String origin,String type,byte[] challenge){return JsonObject.builder().put("type",type).put("challenge",Base64Url.encode(challenge)).put("origin",origin).build().toJson().getBytes(StandardCharsets.UTF_8);}
+    private static @NonNull WebAuthnClientData policy(@NonNull Set<@NonNull String> origins){return new WebAuthnClientData(RP,origins,8192);}
+    private static byte @NonNull [] document(@NonNull String origin,@NonNull String type,byte @NonNull [] challenge){return JsonObject.builder().put("type",type).put("challenge",Base64Url.encode(challenge)).put("origin",origin).build().toJson().getBytes(StandardCharsets.UTF_8);}
 }

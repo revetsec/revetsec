@@ -16,6 +16,7 @@
 
 package example.pending;
 
+import com.revetsec.BrowserBinding;
 import com.revetsec.oauth.AuthorizationCompletionResult;
 import com.revetsec.oauth.AuthorizationRedirect;
 import com.revetsec.oauth.AuthorizationResponse;
@@ -159,7 +160,7 @@ public final class PendingStoreProbe {
 			@NonNull Duration deadline) {
 		AuthorizationResponse response = ((com.revetsec.oauth.AuthorizationResponseParseResult.Succeeded) AuthorizationResponse.fromQueryStringResult("state=" + state + "&error=access_denied")).getResponse();
 		AuthorizationCompletionResult result = client(deadline).completeAuthorizationResult(response,
-				PendingAuthorizationSource.fromStore(store(), binding), CALLBACK);
+				PendingAuthorizationSource.fromStore(store(), browserBinding(binding)), CALLBACK);
 		if (result instanceof AuthorizationCompletionResult.Denied) return "DENIED";
 		if (result instanceof AuthorizationCompletionResult.Rejected rejected) return "REJECTED:" + rejected.getReason();
 		if (result instanceof AuthorizationCompletionResult.Failed failed) return "FAILED:" + failed.getReason();
@@ -180,7 +181,7 @@ public final class PendingStoreProbe {
 			@NonNull String issuer, boolean rsa) {
 		AuthorizationResponse response = ((com.revetsec.oauth.AuthorizationResponseParseResult.Succeeded) AuthorizationResponse.fromQueryStringResult("state=" + state + "&code=test-only-code")).getResponse();
 		OidcAuthenticationResult result = (rsa ? rsaOidcClient(issuer) : oidcClient(issuer)).completeAuthenticationResult(response,
-				PendingAuthorizationSource.fromStore(store(), binding), CALLBACK);
+				PendingAuthorizationSource.fromStore(store(), browserBinding(binding)), CALLBACK);
 		if (result instanceof OidcAuthenticationResult.Succeeded succeeded) {
 			if (!succeeded.getAuthentication().getSubject().equals("synthetic-subject")
 					|| !succeeded.getAuthentication().getTokens().getAccessToken().getValue().equals("test-only-token"))
@@ -199,7 +200,7 @@ public final class PendingStoreProbe {
 			@NonNull String issuer, @NonNull PendingAuthorizationStore pendingStore) {
 		AuthorizationResponse response = ((com.revetsec.oauth.AuthorizationResponseParseResult.Succeeded) AuthorizationResponse.fromQueryStringResult("state=" + state + "&code=test-only-code")).getResponse();
 		AuthorizationCompletionResult result = codeClient(issuer).completeAuthorizationResult(response,
-				PendingAuthorizationSource.fromStore(pendingStore, binding), CALLBACK);
+				PendingAuthorizationSource.fromStore(pendingStore, browserBinding(binding)), CALLBACK);
 		if (result instanceof AuthorizationCompletionResult.Succeeded succeeded) {
 			if (!succeeded.getTokens().getAccessToken().getValue().equals("test-only-token"))
 				throw new IllegalStateException("Unexpected synthetic access token.");
@@ -232,7 +233,7 @@ public final class PendingStoreProbe {
 		switch (args[0]) {
 			case "issue" -> {
 				AuthorizationRedirect redirect = client(Duration.ofSeconds(3)).beginAuthorization();
-				if (redirect.getPendingAuthorization().saveToResult(store, args[1], Duration.ofSeconds(3))
+				if (redirect.getPendingAuthorization().saveToResult(store, browserBinding(args[1]), Duration.ofSeconds(3))
 						!= com.revetsec.oauth.PendingAuthorizationSaveResult.SAVED)
 					throw new IllegalStateException("Pending save did not succeed.");
 				System.out.println(state(redirect));
@@ -247,7 +248,7 @@ public final class PendingStoreProbe {
 			}
 			case "issue-code" -> {
 				AuthorizationRedirect redirect = codeClient(args[2]).beginAuthorization();
-				if (redirect.getPendingAuthorization().saveToResult(store, args[1], Duration.ofSeconds(3))
+				if (redirect.getPendingAuthorization().saveToResult(store, browserBinding(args[1]), Duration.ofSeconds(3))
 						!= com.revetsec.oauth.PendingAuthorizationSaveResult.SAVED)
 					throw new IllegalStateException("Pending save did not succeed.");
 				if (!queryValue(redirect, "code_challenge_method").equals("S256"))
@@ -256,7 +257,7 @@ public final class PendingStoreProbe {
 			}
 			case "issue-code-unknown" -> {
 				AuthorizationRedirect redirect = codeClient(args[2]).beginAuthorization();
-				if (redirect.getPendingAuthorization().saveToResult(uncertainStore(), args[1], Duration.ofSeconds(3))
+				if (redirect.getPendingAuthorization().saveToResult(uncertainStore(), browserBinding(args[1]), Duration.ofSeconds(3))
 						!= com.revetsec.oauth.PendingAuthorizationSaveResult.INDETERMINATE)
 					throw new IllegalStateException("Unknown save commit released a redirect.");
 				if (store.consume(args[1], state(redirect), Duration.ofSeconds(3)).isEmpty())
@@ -273,7 +274,7 @@ public final class PendingStoreProbe {
 			}
 			case "issue-oidc" -> {
 				AuthorizationRedirect redirect = oidcClient(args[2]).beginAuthentication();
-				if (redirect.getPendingAuthorization().saveToResult(store, args[1], Duration.ofSeconds(3))
+				if (redirect.getPendingAuthorization().saveToResult(store, browserBinding(args[1]), Duration.ofSeconds(3))
 						!= com.revetsec.oauth.PendingAuthorizationSaveResult.SAVED)
 					throw new IllegalStateException("Pending save did not succeed.");
 				if (!queryValue(redirect, "code_challenge_method").equals("S256"))
@@ -290,7 +291,7 @@ public final class PendingStoreProbe {
 			}
 			case "issue-oidc-rsa" -> {
 				AuthorizationRedirect redirect = rsaOidcClient(args[2]).beginAuthentication();
-				if (redirect.getPendingAuthorization().saveToResult(store, args[1], Duration.ofSeconds(3))
+				if (redirect.getPendingAuthorization().saveToResult(store, browserBinding(args[1]), Duration.ofSeconds(3))
 						!= com.revetsec.oauth.PendingAuthorizationSaveResult.SAVED)
 					throw new IllegalStateException("Pending save did not succeed.");
 				if (!queryValue(redirect, "code_challenge_method").equals("S256"))
@@ -392,5 +393,9 @@ public final class PendingStoreProbe {
 			}
 			default -> throw new IllegalArgumentException("Unknown probe mode.");
 		}
+	}
+
+	private static @NonNull BrowserBinding browserBinding(@NonNull String value) {
+		return BrowserBinding.fromTrustedPersistence(value);
 	}
 }

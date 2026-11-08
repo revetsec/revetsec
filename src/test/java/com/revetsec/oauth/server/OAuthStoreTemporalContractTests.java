@@ -173,7 +173,7 @@ final class OAuthStoreTemporalContractTests {
     }
     @Test void confirmedNotAdmittedReasonIsRestrictedNontransientAndWireGeneric(){
         var failure=OAuthServerStoreException.fromReason(OAuthServerException.Reason.COMMIT_CONFIRMED_NOT_ADMITTED,true);
-        assertFalse(failure.isTransient());assertNull(failure.getCause());assertEquals(0,failure.getSuppressed().length);
+        assertFalse(failure.isTemporaryCondition());assertNull(failure.getCause());assertEquals(0,failure.getSuppressed().length);
         var response=OAuthServerFailureBoundary.failure(failure,16384,16384);
         assertEquals(503,response.getStatusCode());
         assertEquals(OAuthServerException.Reason.COMMIT_CONFIRMED_NOT_ADMITTED,OAuthServerFailureBoundary.store(new OAuthStoreFailure(OAuthStoreFailure.Reason.COMMIT_CONFIRMED_NOT_ADMITTED)).getReason());
@@ -187,4 +187,78 @@ final class OAuthStoreTemporalContractTests {
     private static @NonNull OAuthStoreKey key(OAuthStoreKey.@NonNull Kind kind,@NonNull String id){return OAuthStoreFormat.key(NS,kind,id);}
     private static @NonNull OAuthStoreEntry entry(@NonNull OAuthStoreKey key,int version){return OAuthStoreEntry.fromStoredForm(key,nonce(version),key.getKind()==OAuthStoreKey.Kind.ISSUER_STATE || key.getKind()==OAuthStoreKey.Kind.SUBJECT_STATE?OAuthStoreFormat.PERMANENT:NOW.plusSeconds(30),"opaque-fixture");}
     private static @NonNull String nonce(int seed){byte[] bytes=new byte[32];for(int n=0;n<32;n++)bytes[n]=(byte)(seed+n);return java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);}
+
+ @Test @SuppressWarnings("NullAway") void scApi08IssuerReceiptFactoriesRejectEveryRequiredNull(){
+  assertThrows(NullPointerException.class,()->OAuthStoreCommitReceipt.fromCommittedTiming(null));assertThrows(NullPointerException.class,()->OAuthStoreCommitReceipt.fromFenceAdmission(null));assertThrows(NullPointerException.class,()->OAuthStoreCommitReceipt.fromRefusal(null));
+ }
+
+ @SuppressWarnings("try") // Early close releases waiting writers before joining the executor; repeated close is idempotent.
+ @org.junit.jupiter.api.TestFactory @NonNull List<org.junit.jupiter.api.@NonNull DynamicTest> scApi07DeclaredIssuerMonitorProtectsValidationThroughApplyAndOrdersLaterRecovery(){
+  List<org.junit.jupiter.api.DynamicTest> cells=new java.util.ArrayList<>();for(boolean fenceOnly:List.of(false,true))for(boolean recovery:List.of(false,true))cells.add(org.junit.jupiter.api.DynamicTest.dynamicTest("SC-API-07/ISSUER-volatile/"+(fenceOnly?"FENCE_ONLY":"TIMED")+"/"+(recovery?"recovery":"entity"),()->{
+   ScriptedOAuthStore store=new ScriptedOAuthStore(NOW);OAuthStoreEntry root=entry(ROOT,2),old=entry(SUBJECT,3),replacement=entry(SUBJECT,4),newCode=entry(CODE,5);store.seedClosedMigration(Map.of(ROOT,root,SUBJECT,old));StoreTimeObservation.Healthy observed=ScriptedOAuthStore.observation(store.admission(),store.clockGeneration(),NOW);List<OAuthStoreTransaction.Condition> predicates=fenceOnly?List.of(present(ROOT,2),present(SUBJECT,3)):List.of(present(ROOT,2),present(SUBJECT,3),absent(CODE));OAuthStoreTransaction primary=fenceOnly?fence(observed,predicates,List.of(put(replacement))):timed(observed,condition(observed,null),predicates,List.of(put(replacement),put(newCode)));OAuthStoreTransaction competitor=fenceOnly?fence(observed,predicates,List.of(put(entry(SUBJECT,6)))):timed(observed,condition(observed,null),predicates,List.of(put(entry(SUBJECT,6)),put(entry(CODE,7))));if(fenceOnly)store.setHealthy(false);List<String> trace=new java.util.concurrent.CopyOnWriteArrayList<>();var executor=java.util.concurrent.Executors.newFixedThreadPool(2);var rival=new java.util.concurrent.atomic.AtomicReference<Thread>();var called=new java.util.concurrent.CountDownLatch(1);
+   try(var pause=com.revetsec.testing.StoreCommitPause.install(store,"entries",trace,()->Thread.holdsLock(store))){
+    try{
+     var one=executor.submit(()->{trace.add("primary-call");pause.selectCurrentWriter();var result=store.commit(primary,Duration.ofSeconds(10));trace.add("primary-returned");return result;});assertTrue(pause.awaitEntered());assertTrue(pause.wasProtected(),"Post-validation state apply lost its actual store monitor");assertEquals(ScriptedOAuthStore.class.getName(),pause.getCallSite().getClassName());assertEquals("commit",pause.getCallSite().getMethodName());
+     var two=executor.submit(()->{rival.set(Thread.currentThread());trace.add("competitor-call");called.countDown();Object result;if(recovery){store.rotateRecoveryGeneration();result=store.admission();}else result=store.commit(competitor,Duration.ofSeconds(10));trace.add("competitor-returned");return result;});assertTrue(called.await(2,java.util.concurrent.TimeUnit.SECONDS));long end=System.nanoTime()+java.util.concurrent.TimeUnit.SECONDS.toNanos(2);boolean blocked=false;while(System.nanoTime()<end&&!two.isDone()){Thread thread=requireNonNull(rival.get());var info=java.lang.management.ManagementFactory.getThreadMXBean().getThreadInfo(thread.getId());if(info!=null&&info.getThreadState()==Thread.State.BLOCKED&&info.getLockInfo()!=null&&info.getLockInfo().getIdentityHashCode()==System.identityHashCode(store)){blocked=true;break;}Thread.yield();}assertTrue(blocked,"Competing operation must block on the actual issuer fixture monitor");assertFalse(two.isDone());trace.add("competitor-queued");pause.resume();var committed=one.get(5,java.util.concurrent.TimeUnit.SECONDS);assertEquals(OAuthStoreCommitStatus.COMMITTED,committed.getStatus());assertEquals(observed.getAdmission(),committed.getAdmission().orElseThrow());assertEquals(fenceOnly,committed.getTiming().isEmpty());if(!fenceOnly)assertEquals(NOW,committed.getTiming().orElseThrow().getValidatedTime().getObservedAt());Object later=two.get(5,java.util.concurrent.TimeUnit.SECONDS);
+     assertSame(root,store.records().get(ROOT));assertSame(replacement,store.records().get(SUBJECT));if(fenceOnly)assertFalse(store.records().containsKey(CODE));else assertSame(newCode,store.records().get(CODE));if(recovery){assertInstanceOf(StoreAdmission.class,later);assertNotEquals(observed.getAdmission(),store.admission());var fresh=assertInstanceOf(OAuthStoreReadResult.Available.class,store.read(ROOT,BUDGET));assertEquals(store.admission(),fresh.getTimeObservation().getAdmission());assertNotEquals(committed.getAdmission().orElseThrow(),fresh.getTimeObservation().getAdmission(),"Known receipt is a factual effect, not fresh service admission");assertEquals(OAuthStoreCommitStatus.FENCED,store.commit(competitor,BUDGET).getStatus());}else{var refused=assertInstanceOf(OAuthStoreCommitReceipt.class,later);assertEquals(OAuthStoreCommitStatus.CONFLICT,refused.getStatus());assertTrue(refused.getTiming().isEmpty());assertEquals(observed.getAdmission(),store.admission());}assertEquals(List.of("primary-call","validated-copy-paused","competitor-call","competitor-queued","release-copy","copy-resumed"),trace.subList(0,6));assertEquals(8,trace.size());
+    }finally{pause.close();executor.shutdown();if(!executor.awaitTermination(3,java.util.concurrent.TimeUnit.SECONDS)){executor.shutdownNow();assertTrue(executor.awaitTermination(3,java.util.concurrent.TimeUnit.SECONDS));}}
+   }finally{executor.shutdownNow();assertTrue(executor.awaitTermination(3,java.util.concurrent.TimeUnit.SECONDS));}
+  }));return cells;
+ }
+
+ @org.junit.jupiter.api.TestFactory
+ @NonNull List<org.junit.jupiter.api.@NonNull DynamicTest> scApi06DeclaredIssuerSamplesFreshAuthorityAfterActualMonitorWait(){
+  List<org.junit.jupiter.api.DynamicTest> cells=new java.util.ArrayList<>();
+  for(boolean expires:List.of(false,true))for(boolean mutate:List.of(false,true))cells.add(org.junit.jupiter.api.DynamicTest.dynamicTest("SC-API-06/ISSUER-monitor/"+(expires?"valid-to-E":"below-N-to-valid")+"/mutation="+mutate,()->{
+   ScriptedOAuthStore store=new ScriptedOAuthStore(NOW);OAuthStoreEntry root=entry(ROOT,2);store.seedClosedMigration(Map.of(ROOT,root));
+   StoreTimeObservation.Healthy original=assertInstanceOf(StoreTimeObservation.Healthy.class,assertInstanceOf(OAuthStoreReadResult.Available.class,store.read(ROOT,BUDGET)).getTimeObservation());
+   Instant lower=expires?NOW:NOW.plusSeconds(1),upper=expires?NOW.plusSeconds(1):NOW.plusSeconds(10),afterWait=expires?upper:NOW.plusSeconds(2);
+   StoreTemporalCondition predicate=StoreTimeAccess.get().fromObservation(original,lower,upper);
+   OAuthStoreTransaction tx=timed(original,predicate,List.of(present(ROOT,2),absent(CODE)),mutate?List.of(put(entry(CODE,3))):List.of());
+   var executor=java.util.concurrent.Executors.newSingleThreadExecutor();var called=new java.util.concurrent.CountDownLatch(1);var thread=new java.util.concurrent.atomic.AtomicReference<Thread>();List<String> trace=new java.util.concurrent.CopyOnWriteArrayList<>();java.util.concurrent.Future<OAuthStoreCommitReceipt> waiting;
+   try{
+    synchronized(store){
+     trace.add("snapshot-before-wait");waiting=executor.submit(()->{thread.set(Thread.currentThread());trace.add("commit-call");called.countDown();var result=store.commit(tx,Duration.ofSeconds(10));trace.add("commit-returned");return result;});assertTrue(called.await(2,java.util.concurrent.TimeUnit.SECONDS));
+     long end=System.nanoTime()+java.util.concurrent.TimeUnit.SECONDS.toNanos(2);boolean blocked=false;
+     while(System.nanoTime()<end&&!waiting.isDone()){var info=java.lang.management.ManagementFactory.getThreadMXBean().getThreadInfo(requireNonNull(thread.get()).getId());if(info!=null&&info.getThreadState()==Thread.State.BLOCKED&&info.getLockInfo()!=null&&info.getLockInfo().getIdentityHashCode()==System.identityHashCode(store)){blocked=true;break;}Thread.yield();}
+     assertTrue(blocked,"The real issuer commit must wait on its actual monitor");assertFalse(waiting.isDone());trace.add("blocked-on-real-monitor");store.setTime(afterWait);trace.add("authority-moved-under-monitor");assertFalse(waiting.isDone());trace.add("releasing-monitor");
+    }
+    OAuthStoreCommitReceipt receipt=waiting.get(5,java.util.concurrent.TimeUnit.SECONDS);
+    assertEquals(expires?OAuthStoreCommitStatus.TIME_EXPIRED:OAuthStoreCommitStatus.COMMITTED,receipt.getStatus());
+    if(expires){assertTrue(receipt.getTiming().isEmpty());assertEquals(Map.of(ROOT,root),store.records());}
+    else{var stamp=receipt.getTiming().orElseThrow().getValidatedTime();assertEquals(afterWait,stamp.getObservedAt(),"Validation must use authority sampled after the wait");assertEquals(original.getAdmission(),stamp.getAdmission());assertEquals(original.getClockGeneration(),stamp.getClockGeneration());assertTrue(receipt.getTiming().orElseThrow().getCompletedTime().isEmpty());assertSame(root,store.records().get(ROOT));if(mutate)assertEquals(entry(CODE,3).toSealedForm(),requireNonNull(store.records().get(CODE)).toSealedForm());else assertEquals(Map.of(ROOT,root),store.records());}
+    assertEquals(List.of("snapshot-before-wait","commit-call","blocked-on-real-monitor","authority-moved-under-monitor","releasing-monitor","commit-returned"),trace);
+   }finally{executor.shutdownNow();assertTrue(executor.awaitTermination(3,java.util.concurrent.TimeUnit.SECONDS));}
+  }));return cells;
+ }
+
+ @org.junit.jupiter.api.TestFactory
+ @NonNull List<org.junit.jupiter.api.@NonNull DynamicTest> scApi09DeclaredIssuerAuthorityLossAfterHealthyReadRefusesNormalButAllowsExactFence(){
+  List<org.junit.jupiter.api.DynamicTest> cells=new java.util.ArrayList<>();
+  for(boolean mutate:List.of(false,true))cells.add(org.junit.jupiter.api.DynamicTest.dynamicTest("SC-API-09/ISSUER-volatile/authority-loss-before-validation/mutation="+mutate,()->{
+   ScriptedOAuthStore store=new ScriptedOAuthStore(NOW);OAuthStoreEntry root=entry(ROOT,2),subject=entry(SUBJECT,3);store.seedClosedMigration(Map.of(ROOT,root,SUBJECT,subject));
+   var observed=assertInstanceOf(StoreTimeObservation.Healthy.class,assertInstanceOf(OAuthStoreReadResult.Available.class,store.read(ROOT,BUDGET)).getTimeObservation());
+   StoreTemporalCondition condition=condition(observed,NOW.plusSeconds(30));OAuthStoreTransaction tx=timed(observed,condition,List.of(present(ROOT,2),present(SUBJECT,3),absent(CODE)),mutate?List.of(put(entry(CODE,4))):List.of());
+   store.setTime(NOW.plusSeconds(1));store.setHealthy(false);Instant rawStore=store.authorityTime(),worker=java.time.Clock.fixed(NOW.plusSeconds(1),java.time.ZoneOffset.UTC).instant();assertFalse(rawStore.isBefore(condition.getNotBeforeInclusive()));assertFalse(worker.isBefore(condition.getNotBeforeInclusive()));assertTrue(rawStore.isBefore(condition.getValidBeforeExclusive().orElseThrow()));assertTrue(worker.isBefore(condition.getValidBeforeExclusive().orElseThrow()));
+   var refused=store.commit(tx,BUDGET);assertEquals(OAuthStoreCommitStatus.TIME_UNAVAILABLE,refused.getStatus(),"Raw store/worker instants cannot substitute for healthy authority");assertTrue(refused.getTiming().isEmpty());assertEquals(Map.of(ROOT,root,SUBJECT,subject),store.records());assertInstanceOf(StoreTimeObservation.Unavailable.class,assertInstanceOf(OAuthStoreReadResult.Available.class,store.read(ROOT,BUDGET)).getTimeObservation());
+   var permanent=entry(SUBJECT,5);var receipt=store.commit(fence(observed,List.of(present(ROOT,2),present(SUBJECT,3)),List.of(put(permanent))),BUDGET);assertEquals(OAuthStoreCommitStatus.COMMITTED,receipt.getStatus());assertTrue(receipt.getTiming().isEmpty());assertEquals(observed.getAdmission(),receipt.getAdmission().orElseThrow());assertEquals(Map.of(ROOT,root,SUBJECT,permanent),store.records());
+  }));return cells;
+ }
+
+ @org.junit.jupiter.api.TestFactory
+ @NonNull List<org.junit.jupiter.api.@NonNull DynamicTest> scApi04EveryIssuerKindAndAbsenceDefeatsBothWholeMutationAndBarrier(){
+  List<org.junit.jupiter.api.DynamicTest> cells=new java.util.ArrayList<>();
+  for(OAuthStoreKey.Kind kind:OAuthStoreKey.Kind.values())for(boolean exists:List.of(false,true))for(boolean mutate:List.of(false,true))cells.add(org.junit.jupiter.api.DynamicTest.dynamicTest("SC-API-04+10/ISSUER/"+kind+"/present="+exists+"/mutation="+mutate,()->{
+   ScriptedOAuthStore store=new ScriptedOAuthStore(NOW);OAuthStoreKey target=kind==OAuthStoreKey.Kind.ISSUER_STATE?ROOT:key(kind,nonce(6)),first=key(OAuthStoreKey.Kind.CODE,nonce(7)),second=key(OAuthStoreKey.Kind.CODE,nonce(8));var seed=new java.util.LinkedHashMap<OAuthStoreKey,OAuthStoreEntry>();
+   if(kind!=OAuthStoreKey.Kind.ISSUER_STATE || exists)seed.put(ROOT,entry(ROOT,2));if(exists&&!target.equals(ROOT))seed.put(target,entry(target,3));store.seedClosedMigration(seed);
+   var keys=new java.util.LinkedHashSet<OAuthStoreKey>(List.of(ROOT,target,first,second));var predicates=new java.util.ArrayList<OAuthStoreTransaction.Condition>();StoreTimeObservation.Healthy original=null;
+   for(OAuthStoreKey key:keys){var read=assertInstanceOf(OAuthStoreReadResult.Available.class,store.read(key,BUDGET));var time=assertInstanceOf(StoreTimeObservation.Healthy.class,read.getTimeObservation());if(original==null)original=time;else assertEquals(original.getAdmission(),time.getAdmission());predicates.add(read.getEntry().isPresent()?OAuthStoreTransaction.Condition.fromVersion(key,read.getEntry().orElseThrow().getVersion()):absent(key));}
+   var sample=requireNonNull(original);List<OAuthStoreTransaction.Mutation> candidates=target.equals(ROOT)&&!exists?List.of(put(entry(ROOT,20)),put(entry(first,21))):List.of(put(entry(first,20)),put(entry(second,21)));
+   var pending=timed(sample,condition(sample,NOW.plusSeconds(10)),predicates,mutate?candidates:List.of());var rival=timed(sample,condition(sample,NOW.plusSeconds(10)),predicates,List.of(put(entry(target,10))));
+   assertEquals(OAuthStoreCommitStatus.COMMITTED,store.commit(rival,BUDGET).getStatus());var retained=store.records();var backing=ScriptedOAuthStore.class.getDeclaredField("entries");backing.setAccessible(true);Object retainedBacking=requireNonNull(backing.get(store));var refused=store.commit(pending,BUDGET);
+   assertAll(()->assertEquals(OAuthStoreCommitStatus.CONFLICT,refused.getStatus()),()->assertTrue(refused.getTiming().isEmpty()),()->assertEquals(retained,store.records(),"No prefix put may survive a conflicting predicate"),()->assertSame(retainedBacking,backing.get(store)));
+   assertEquals(keys,pending.getConditions().stream().map(OAuthStoreTransaction.Condition::getKey).collect(java.util.stream.Collectors.toSet()));assertEquals(mutate?2:0,pending.getMutations().size());var fresh=new java.util.ArrayList<OAuthStoreTransaction.Condition>();for(OAuthStoreKey key:keys){var read=assertInstanceOf(OAuthStoreReadResult.Available.class,store.read(key,BUDGET));fresh.add(read.getEntry().isPresent()?OAuthStoreTransaction.Condition.fromVersion(key,read.getEntry().orElseThrow().getVersion()):absent(key));}
+   assertEquals(OAuthStoreCommitStatus.COMMITTED,store.commit(timed(sample,condition(sample,NOW.plusSeconds(10)),fresh,List.of()),BUDGET).getStatus());assertEquals(retained,store.records());assertSame(retainedBacking,backing.get(store));
+  }));return cells;
+ }
 }

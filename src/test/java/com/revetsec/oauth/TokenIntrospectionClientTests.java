@@ -74,7 +74,7 @@ final class TokenIntrospectionClientTests {
                     AccessTokenValidationResult.RejectedEndpoint first=assertInstanceOf(AccessTokenValidationResult.RejectedEndpoint.class,client.validateResult(bearer("opaque")));
                     assertEquals(OAuthEndpointError.INVALID_CLIENT,first.getError());assertEquals(status,first.getStatus());
                     OAuthTransportException unavailable=assertThrows(OAuthTransportException.class,()->client.validateResult(bearer("other-opaque")));
-                    assertEquals(OAuthException.Reason.NETWORK_FAILURE,unavailable.getReason());assertTrue(unavailable.isTransient());
+                    assertEquals(OAuthException.Reason.NETWORK_FAILURE,unavailable.getReason());assertTrue(unavailable.isTemporaryCondition());
                     assertEquals(1,server.getHitCount("/inspect"));redacted(first,"TEST-ONLY-prose",SECRET,"opaque");
                     for (var method : first.getClass().getMethods()) {
                         assertNotEquals("getBearerError", method.getName()); assertNotEquals("getAccessToken", method.getName());

@@ -4,7 +4,7 @@
 
 A zero-dependency Java library for OAuth 2.0 clients, resource servers and app-integrated token issuance, OpenID Connect relying parties, JOSE, SAML 2.0 service providers (SPs), SCIM 2.0 server primitives, WebAuthn passkeys, TOTP/recovery codes and password hashing.
 
-**Revetsec is pre-release.** It verifies signed JWTs against JSON Web Key Sets, provides bounded RSA signing, and includes OAuth 2.0 client and issuer operations, audience-checked JWT/introspection resource validation, an OpenID Connect relying party, SAML SP, SCIM server primitives, WebAuthn relying-party workflows, TOTP enrollment with one-use recovery codes, and password hashing. See [Status](#status) for version and compatibility information.
+**Revetsec is pre-release.** It verifies signed JWTs against JSON Web Key Sets, provides bounded RSA, EC and Ed25519 signing, and includes OAuth 2.0 client and issuer operations, audience-checked JWT/introspection resource validation, an OpenID Connect relying party, SAML SP, SCIM server primitives, WebAuthn relying-party workflows, TOTP enrollment with one-use recovery codes, and password hashing. See [Status](#status) for version and compatibility information.
 
 Revetsec handles the application side of these protocols. It builds outbound requests, parses and validates what comes back, and returns an explicit outcome for expected success or rejection. TOTP storage and recovery-admission failures also have explicit outcomes; other infrastructure and configuration failures retain their documented exception boundaries. Your application keeps its own users, sessions, routes and storage.
 
@@ -154,8 +154,8 @@ Every area below ships together in a single 1.0.0 release:
 - OAuth 2.0 client
 - App-integrated OAuth token issuance, with application-owned users, auth decisions and durable storage
 - OAuth 2.0 resource server
-- OpenID Connect relying party
-- JOSE: JWS verification, bounded RSA signing, JWK and JWK Sets, and JWT validation
+- OpenID Connect relying party, including explicit [RP-Initiated Logout](docs/oidc-logout.md)
+- JOSE: JWS verification, bounded RSA/EC/Ed25519 signing, JWK and JWK Sets, and JWT validation
 - SAML 2.0 SP for Web Browser SSO, including encrypted assertions and front-channel Single Logout
 - SCIM 2.0 server primitives
 - WebAuthn relying-party registration, sign-in and account management
@@ -207,6 +207,8 @@ Only the success variant releases the checked JWT. A rejection carries a fixed r
 
 The [`OAuthClient`](https://javadoc.revetsec.com/com/revetsec/oauth/OAuthClient.html) API supports authorization code with PKCE S256, client credentials, refresh, revocation and generated private-key assertions. It accepts static metadata or discovers an authorization server lazily. Browser completion checks the pending browser binding, state, callback route and issuer before token exchange. The [OAuth client guide](docs/oauth-client.md) covers cookie and store setup, concurrent replay, return destinations and the raw-token boundary.
 
+Application-owned key files can use the [bounded import guide](docs/key-imports.md) and [Java 17 key-import example](examples/key-import/README.md). Imports and pair checks do not establish certificate trust or authorize key use.
+
 ### OpenID Connect sign-in
 
 Use `OidcClient` when a browser login must produce a validated identity. Configure the issuer, registered client credentials and exact callback URI from trusted startup configuration:
@@ -244,7 +246,7 @@ var passkeys = WebAuthnRelyingParty.withRelyingPartyId("app.example.com")
   .build();
 ```
 
-Begin account-approved enrollment with `beginRegistrationResult`, or discoverable sign-in with `beginAuthenticationResult`. Bind each ceremony to the browser session and return options only from `Prepared`. Complete using the saved ceremony ID, raw browser credential JSON and the same binding. Only successful completion releases proof; uncertain or reconciliation outcomes require deliberate recovery handling. Keep recovery admission through the application's session/action transition. The application owns enrollment approval, credential-management authorization, CSRF and sessions.
+Begin account-approved enrollment with `beginRegistrationResult`, or discoverable sign-in with `beginAuthenticationResult`. Bind each ceremony to the browser session and return options only from `Prepared`. Complete using the saved ceremony ID, raw browser credential JSON and the same binding. Only successful completion releases proof; uncertain or reconciliation outcomes require deliberate recovery handling. For a sensitive action, call `completeReauthenticationResult` with the application-approved account handle and exact action purpose. Only its `Succeeded` leaf carries the restricted `WebAuthnReauthentication` proof; match its ceremony ID to the original one-use pending action, recheck the current session/account/scope, and atomically consume that action before applying it. A checked-context rejection can follow a known ceremony commitment, so it does not by itself authorize a blind retry. The general authentication result remains appropriate for sign-in, not sensitive-action authorization. Keep recovery admission through the application's session/action transition. The application owns enrollment approval, credential-management authorization, CSRF and sessions.
 
 The [runnable passkey example](examples/passkeys-soklet/README.md) and its [application handlers](examples/passkeys-soklet/src/main/java/example/passkeys/PasskeyApp.java) show the complete browser flow, reauthentication and removal. Its default store and keys are disposable and vanish at restart. For an established service, follow the [store/time/recovery contract](docs/shared-clock-stores.md) and [durable storage recipe](examples/postgresql-pending-store/README.md). Check the [browser/extension policy](docs/webauthn-browser-compatibility.md) for accepted JSON shapes and compatibility limits; a local or virtual-authenticator example does not establish physical-key or synced-credential compatibility.
 
@@ -274,7 +276,7 @@ var jwt = signer.fromHeaderAndClaims(header, claims);
 
 The [`JwtType`](https://javadoc.revetsec.com/com/revetsec/jose/JwtType.html) enum supplies the protected header's `typ`; `alg` comes from the signer. The convenience method signs immediately with a two-second operation budget. Use `signer.withHeaderAndClaims(header, claims).remainingBudget(budget).build()` to override that budget; constructing the builder does not sign. The terminal `build()` signs and verifies the output before releasing the compact credential. The existing `toCompactSerialization(type, keyId, certificateSha256Thumbprint, claimsUtf8, remainingBudget)` remains available to sign an exact, bounded JSON object supplied as bytes.
 
-PS256, RS256 and RS384 are supported. The optional 32-byte thumbprint is the SHA-256 digest of a DER certificate. The application supplies claims and remains responsible for their meaning. A checked JCA exception or provider [`RuntimeException`](https://docs.oracle.com/en/java/javase/27/docs/api/java.base/java/lang/RuntimeException.html), mismatched pair or exhausted budget produces a fixed [`JwsSigningException`](https://javadoc.revetsec.com/com/revetsec/jose/JwsSigningException.html); it emits no partial credential. Provider [`Error`](https://docs.oracle.com/en/java/javase/27/docs/api/java.base/java/lang/Error.html) values propagate after buffer cleanup, following the library’s unexpected-error boundary. JCA providers must cooperate with synchronous time budgets. See [algorithms and bounds](docs/supported-algorithms.md#bounded-rsa-signing-jwssigner). OAuth clients support private_key_jwt, and the issuer implements token issuance.
+PS256, PS384, PS512, RS256, RS384 and RS512 are supported. The optional 32-byte thumbprint is the SHA-256 digest of a DER certificate. The application supplies claims and remains responsible for their meaning. A checked JCA exception or provider [`RuntimeException`](https://docs.oracle.com/en/java/javase/27/docs/api/java.base/java/lang/RuntimeException.html), mismatched pair or exhausted budget produces a fixed [`JwsSigningException`](https://javadoc.revetsec.com/com/revetsec/jose/JwsSigningException.html); it emits no partial credential. Provider [`Error`](https://docs.oracle.com/en/java/javase/27/docs/api/java.base/java/lang/Error.html) values propagate after buffer cleanup, following the library’s unexpected-error boundary. JCA providers must cooperate with synchronous time budgets. See [algorithms and bounds](docs/supported-algorithms.md#bounded-signing-jwssigner). OAuth clients support private_key_jwt, and the issuer implements token issuance.
 
 ### Status
 

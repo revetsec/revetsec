@@ -17,6 +17,7 @@
 package com.revetsec.internal.crypto;
 
 import org.jspecify.annotations.NonNull;
+import com.revetsec.internal.encoding.Der;
 
 import javax.annotation.concurrent.ThreadSafe;
 import java.math.BigInteger;
@@ -127,6 +128,55 @@ public final class EcdsaSignatures {
 		putInteger(der, position, s);
 
 		return der;
+	}
+
+	/**
+	 * Converts one canonical provider DER ECDSA signature to fixed-width {@code r || s}, without JCA or keys.
+	 * Requires an exactly consumed SEQUENCE of two positive minimal INTEGERs in {@code [1, n - 1]}.
+	 * The input bound comes from the curve's maximum integer/sequence shape. High-S values remain valid.
+	 *
+	 * @param curve the existing curve determining widths and scalar range
+	 * @param der the provider DER signature; not modified
+	 * @return a new array of exactly the curve's signature length
+	 * @throws IllegalArgumentException with a fixed message if the input is not the canonical bounded shape
+	 */
+	public static byte @NonNull [] toJose(@NonNull EcCurve curve, byte @NonNull [] der) {
+		requireNonNull(curve); requireNonNull(der);
+		int maximumIntegerLength = (curve.getOrder().bitLength() + Byte.SIZE) / Byte.SIZE;
+		int maximumContentLength = 2 * (2 + maximumIntegerLength);
+		int maximumDerLength = maximumContentLength + (maximumContentLength < DER_SHORT_FORM_LIMIT ? 2 : 3);
+		if (der.length < 8 || der.length > maximumDerLength) throw invalidDerSignature();
+		byte[] signature = new byte[curve.getSignatureLength()];
+		try {
+			Der.Element sequence = Der.read(der, 0, der.length, Der.SEQUENCE);
+			if (sequence.getEnd() != der.length) throw invalidDerSignature();
+			Der.Element r = Der.read(der, sequence.getStart(), sequence.getEnd(), Der.INTEGER);
+			Der.Element s = Der.read(der, r.getEnd(), sequence.getEnd(), Der.INTEGER);
+			if (s.getEnd() != sequence.getEnd()) throw invalidDerSignature();
+			copyPositiveInteger(der, r, maximumIntegerLength, signature, 0, curve.getCoordinateLength());
+			copyPositiveInteger(der, s, maximumIntegerLength, signature, curve.getCoordinateLength(), curve.getCoordinateLength());
+			if (findShapeFailure(curve, signature).isPresent()) throw invalidDerSignature();
+			return signature;
+		} catch (RuntimeException | Error failure) {
+			Arrays.fill(signature, (byte) 0);
+			if (failure instanceof IllegalArgumentException) throw invalidDerSignature();
+			throw failure;
+		}
+	}
+
+	private static void copyPositiveInteger(byte @NonNull [] der, Der.@NonNull Element integer,
+			int maximumIntegerLength, byte @NonNull [] signature, int offset, int width) {
+		int length = integer.getLength(), start = integer.getStart();
+		if (length < 1 || length > maximumIntegerLength || (der[start] & 0x80) != 0) throw invalidDerSignature();
+		int padding = der[start] == 0 ? 1 : 0;
+		if (padding == 1 && (length == 1 || (der[start + 1] & 0x80) == 0)) throw invalidDerSignature();
+		int unsignedLength = length - padding;
+		if (unsignedLength > width) throw invalidDerSignature();
+		System.arraycopy(der, start + padding, signature, offset + width - unsignedLength, unsignedLength);
+	}
+
+	private static @NonNull IllegalArgumentException invalidDerSignature() {
+		return new IllegalArgumentException("The ECDSA signature is not canonical DER on the curve.");
 	}
 
 	private static boolean isInRange(@NonNull BigInteger value,

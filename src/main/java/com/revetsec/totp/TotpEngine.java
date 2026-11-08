@@ -32,8 +32,6 @@ import javax.annotation.concurrent.ThreadSafe;
 import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.Immutable;
 import java.io.IOException;
-import java.net.URLEncoder;
-import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -64,6 +62,10 @@ final class TotpEngine {
 		this.issuer=issuer; this.namespace=namespace; this.epoch=epoch; this.store=store;
 		this.sealer=sealer; this.gate=gate; this.clock=clock; this.timeoutNanos=timeout.toNanos();
 		this.records=new TotpRecordsV3(sealer); this.namespaceKey=TotpStoreKey.forNamespace(namespace,epoch);
+	}
+
+	void validateEnrollment(@NonNull TotpEnrollmentOptions options) {
+		TotpProvisioning.validateEncodedBudget(this.issuer,options.getAccountName());
 	}
 
 	@NonNull Result execute(@NonNull Command command) {
@@ -209,8 +211,7 @@ final class TotpEngine {
 		byte[] secret=prepared.secret.clone();
 		account.pending=new TotpRecords.Pending(enrollmentId,factorId,secret,prepared.browserHash.clone(),expires,expected);
 		String manual = TotpPrimitives.base32(secret);
-		String uri = "otpauth://totp/" + uri(this.issuer) + ':' + uri(options.getAccountName())
-				+ "?secret=" + manual + "&issuer=" + uri(this.issuer) + "&algorithm=SHA1&digits=6&period=30";
+		String uri = TotpProvisioning.uri(this.issuer,options.getAccountName(),manual);
 		result.enrollment = new TotpEnrollment(enrollmentId, factorId, expires, uri, manual, this.epoch);
 	}
 
@@ -379,9 +380,6 @@ final class TotpEngine {
 		Instant first = charges.get(0).at;
 		for (TotpRecords.Charge charge : charges) if (charge.at.isBefore(first)) first = charge.at;
 		return first.plusSeconds(windowSeconds);
-	}
-	private static @NonNull String uri(@NonNull String text) {
-		return URLEncoder.encode(text, StandardCharsets.UTF_8).replace("+", "%20");
 	}
 
 

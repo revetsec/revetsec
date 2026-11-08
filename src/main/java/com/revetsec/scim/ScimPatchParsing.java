@@ -343,6 +343,8 @@ final class ScimPatchParsing {
             if (extension != null) {
                 if (!(entry.getValue() instanceof JsonObject object)) { error=ScimError.invalidValueInstance(); return null; }
                 for (Map.Entry<String,JsonValue> child:object.getMembers().entrySet()) {
+                    // Nested keys are local to this schema, even when top-level qualified paths are enabled.
+                    if (child.getKey().indexOf(':') >= 0) { error=ScimError.invalidPathInstance(); return null; }
                     if (child.getKey().indexOf('.') >= 0) {
                         if (!enabled(ScimCompatibilityFeature.PATCH_VALUE_OBJECT_ATTRIBUTE_PATHS)) {
                             error = ScimError.invalidPathInstance(); return null;

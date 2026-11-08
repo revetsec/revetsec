@@ -117,11 +117,16 @@ async function visitLogoutRequest(index) {
   await waitFor('idp-logout-ack', async () => await evaluate(
     `location.origin===${JSON.stringify(idp)} && location.pathname==='/slo'`), 15000);
   await cdp.send('Page.navigate', {url: app + '/'}, session);
-  await waitFor('app-after-idp-logout', async () => await evaluate(
-    `document.querySelector('#saml-login input[name=csrf]')?.value.length>0`), 15000);
+  await admitSession('app-after-idp-logout');
 }
 async function loggedIn() {
   return await evaluate(`document.getElementById('identity')?.textContent.includes('"method": "SAML"')===true`);
+}
+async function admitSession(label) {
+  await waitFor(label + '-session-admission', async () => await evaluate(`(()=>{if(document.querySelector('#login')?.elements.csrf.value.length>0)return true;const b=document.querySelector('#start-session');if(!b||b.disabled)return false;b.click();return true;})()`));
+  await waitFor(label + '-saml-login-ready', async () => await evaluate(
+    `document.querySelector('#saml-login input[name=csrf]')?.value.length>0
+      && document.querySelector('#saml-login button')?.disabled===false`));
 }
 async function clickButton(selector) {
   check('button-enabled-' + selector.slice(1), await evaluate(`(() => {
@@ -158,10 +163,7 @@ try {
   check('idp-validated-sp-metadata', before.spMetadata >= 1);
   result.stage = 'LOGIN';
   await cdp.send('Page.navigate', {url: app + '/'}, session);
-  await waitFor('session-admission', async () => await evaluate(`(()=>{if(document.querySelector('#login')?.elements.csrf.value.length>0)return true;const b=document.querySelector('#start-session');if(!b||b.disabled)return false;b.click();return true;})()`));
-  await waitFor('login-button-ready', async () => await evaluate(
-    `document.querySelector('#saml-login input[name=csrf]')?.value.length>0
-      && document.querySelector('#saml-login button')?.disabled===false`));
+  await admitSession('initial');
   await armSso();
   await clickButton('#saml-login button');
   await waitFor('saml-login', loggedIn, 20000);
@@ -174,9 +176,10 @@ try {
   await clickButton('#saml-logout button');
   await waitFor('saml-sp-logout', async () => await evaluate(
     `document.getElementById('identity')?.textContent==='No browser identity'`), 20000);
-  await waitFor('sp-logout-ui-ready', async () => await evaluate(
+  await admitSession('post-sp-logout');
+  check('post-sp-logout-session-readmitted', await evaluate(
     `document.querySelector('#saml-login input[name=csrf]')?.value.length>0
-      && document.querySelector('#saml-login button')?.disabled===false`));
+      && document.getElementById('identity')?.textContent==='No browser identity'`));
   check('sp-initiated-logout-clears-app-identity', true);
   result.stage = 'IDP_LOGOUT';
   await armSso();

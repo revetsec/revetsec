@@ -31,6 +31,11 @@
     <module>totp-soklet</module>
     <module>password-hashing</module>
     <module>rsa-oidc</module>
+    <module>provider-backend-tokens</module>
+    <module>provider-backend-tokens-soklet</module>
+    <module>rp-initiated-logout</module>
+    <module>rp-initiated-logout-soklet</module>
+    <module>key-import</module>
     <module>postgresql-pending-store</module>
   </modules>
   <properties>

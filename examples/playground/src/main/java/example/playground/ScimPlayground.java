@@ -31,11 +31,16 @@ public final class ScimPlayground {
                 java.util.Objects.requireNonNull(env.get("SCIM_BEARER_TOKEN"), "SCIM_BEARER_TOKEN is required."));
         try (Soklet soklet = Soklet.fromConfig(config(app, env.getOrDefault("SCIM_HTTP_HOST", "127.0.0.1"), Integer.parseInt(env.getOrDefault("SCIM_HTTP_PORT", "8082"))))) {
             Runtime.getRuntime().addShutdownHook(new Thread(soklet::close, "scim-playground-shutdown"));
-            soklet.start(); System.out.println("SCIM synthetic provisioning fixture ready; scoped HTTPS edge required."); soklet.awaitShutdown();
+            soklet.start(); System.out.println("SCIM synthetic provisioning fixture ready; scoped HTTPS edge required."); if (!soklet.awaitShutdown().isComplete()) throw new IllegalStateException("Playground shutdown incomplete");
         }
     }
     static @NonNull SokletConfig config(@NonNull PlaygroundScim app, @NonNull String host, int port) {
-        PlaygroundScimResources resources = new PlaygroundScimResources(app);
+        return config(new PlaygroundScimResources(app), host, port);
+    }
+    static @NonNull SokletConfig config(@NonNull PlaygroundScimDirectory app, @NonNull String host, int port) {
+        return config(new PlaygroundScimResources(app), host, port);
+    }
+    private static @NonNull SokletConfig config(@NonNull PlaygroundScimResources resources, @NonNull String host, int port) {
         HttpServer server = HttpServer.withPort(port).host(host).maximumRequestBodySizeInBytes(16_384)
                 .maximumRequestSizeInBytes(32_768).requestHandlerConcurrency(8).requestHandlerQueueCapacity(16)
                 .requestHandlerTimeout(Duration.ofSeconds(15)).build();

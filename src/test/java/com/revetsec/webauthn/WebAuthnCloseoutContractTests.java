@@ -15,6 +15,7 @@
  */
 package com.revetsec.webauthn;
 
+import com.revetsec.OperationBinding;
 import com.revetsec.testing.ScriptedWebAuthnStore;
 
 import com.revetsec.SealingKey;
@@ -70,17 +71,26 @@ final class WebAuthnCloseoutContractTests {
 
     @Test void malformedBrowserHandlesAndActionLabelsNeverReachApplicationStorage() {
         var store = new OutcomeStore(WebAuthnStoreCommitResult.COMMITTED); var rp = relyingParty(store, budget -> null);
-        for (String binding : List.of("", "A".repeat(42), "!".repeat(43)))
-            assertThrows(IllegalArgumentException.class, () -> rp.beginAuthenticationResult(binding));
+        assertThrows(IllegalArgumentException.class, () -> OperationBinding.fromTrustedPersistence(""));
+        for (String binding : List.of("A".repeat(42), "!".repeat(43))) {
+            OperationBinding typed = OperationBinding.fromTrustedPersistence(binding);
+            assertThrows(IllegalArgumentException.class, () -> rp.beginAuthenticationResult(typed));
+        }
+        OperationBinding typedBinding = OperationBinding.fromTrustedPersistence(BINDING);
         for (String purpose : List.of("", "x".repeat(129), "\u001f", "\u007f"))
-            assertThrows(IllegalArgumentException.class, () -> rp.beginReauthenticationResult(HANDLE, purpose, BINDING));
+            assertThrows(IllegalArgumentException.class,
+                    () -> rp.beginReauthenticationResult(HANDLE, purpose, typedBinding));
         for (String ceremony : List.of("", "x".repeat(44), "!".repeat(43))) {
-            assertInstanceOf(WebAuthnRegistrationResult.Rejected.class, rp.completeRegistrationResult(ceremony, new byte[] {1}, BINDING));
-            assertInstanceOf(WebAuthnAuthenticationResult.Rejected.class, rp.completeAuthenticationResult(ceremony, new byte[] {1}, BINDING));
+            assertInstanceOf(WebAuthnRegistrationResult.Rejected.class,
+                    rp.completeRegistrationResult(ceremony, new byte[] {1}, typedBinding));
+            assertInstanceOf(WebAuthnAuthenticationResult.Rejected.class,
+                    rp.completeAuthenticationResult(ceremony, new byte[] {1}, typedBinding));
         }
         for (byte[] body : new byte[][] {new byte[0], new byte[65537]}) {
-            assertInstanceOf(WebAuthnRegistrationResult.Rejected.class, rp.completeRegistrationResult(BINDING, body, BINDING));
-            assertInstanceOf(WebAuthnAuthenticationResult.Rejected.class, rp.completeAuthenticationResult(BINDING, body, BINDING));
+            assertInstanceOf(WebAuthnRegistrationResult.Rejected.class,
+                    rp.completeRegistrationResult(BINDING, body, typedBinding));
+            assertInstanceOf(WebAuthnAuthenticationResult.Rejected.class,
+                    rp.completeAuthenticationResult(BINDING, body, typedBinding));
         }
         assertEquals(0, store.reads); assertEquals(0, store.writes);
     }

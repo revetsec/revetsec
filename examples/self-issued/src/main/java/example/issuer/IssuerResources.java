@@ -109,7 +109,7 @@ public final class IssuerResources {
     private static @NonNull OAuthIssuerKeyProvider freshSigningKeys(@NonNull Clock clock) throws java.security.GeneralSecurityException {
         KeyPairGenerator generator=KeyPairGenerator.getInstance("RSA");generator.initialize(2048);KeyPair pair=generator.generateKeyPair();
         return OAuthIssuerKeyProvider.fromSnapshot(OAuthIssuerKeySnapshot.withActiveKey(
-                OAuthIssuerSigningKey.fromKeyPair(LocalInputs.randomId(),pair.getPrivate(),pair.getPublic())).generation(LocalInputs.randomId()).publishedAt(clock.instant()).build());
+                OAuthIssuerSigningKey.fromRsaKeyPair(LocalInputs.randomId(),pair.getPrivate(),pair.getPublic())).generation(LocalInputs.randomId()).publishedAt(clock.instant()).build());
     }
     private static @NonNull StateSealer freshSealer() {
         return StateSealer.withActiveKey(SealingKey.fromBase64("demo-seal",Base64.getEncoder().encodeToString(LocalInputs.randomBytes()))).build();

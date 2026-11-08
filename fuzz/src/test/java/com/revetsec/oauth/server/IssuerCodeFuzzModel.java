@@ -140,7 +140,7 @@ final class IssuerCodeFuzzModel {
 			byte[] material = new byte[32]; for (int i = 0; i < material.length; i++) material[i] = (byte) (i + 1);
 			StateSealer sealer = StateSealer.withActiveKey(SealingKey.fromBase64("test", Base64.getEncoder().encodeToString(material))).build();
 			this.codec = new OAuthStoreRecordCodec(ISSUER, sealer, 3800);
-			OAuthIssuerKeySnapshot keys = OAuthIssuerKeySnapshot.withActiveKey(OAuthIssuerSigningKey.fromKeyPair("key", M6FuzzOracle.KEY.getPrivate(), M6FuzzOracle.KEY.getPublic())).generation("g1").publishedAt(NOW.minusSeconds(120)).build();
+			OAuthIssuerKeySnapshot keys = OAuthIssuerKeySnapshot.withActiveKey(OAuthIssuerSigningKey.fromRsaKeyPair("key", M6FuzzOracle.KEY.getPrivate(), M6FuzzOracle.KEY.getPublic())).generation("g1").publishedAt(NOW.minusSeconds(120)).build();
 			this.server = OAuthAuthorizationServer.withIssuer(ISSUER).authorizationEndpoint(URI.create(ISSUER + "/authorize"))
 				.tokenEndpoint(URI.create(ISSUER + "/token")).jwksEndpoint(URI.create(ISSUER + "/jwks"))
 				.clientRepository((id, budget) -> id.equals(this.clientId) || id.equals("other") ? Optional.of(client(id)) : Optional.empty())

@@ -58,9 +58,9 @@ final class SamlDecryptionBudgetTests {
     private static final TestJwk.Fixture SIGNER = TestJwk.Fixture.IDP_SIGNING_RSA_2048;
     private static final byte[] PAYLOAD = "<a:NameID xmlns:a='urn:oasis:names:tc:SAML:2.0:assertion'>alice</a:NameID>".getBytes(StandardCharsets.UTF_8);
     @FunctionalInterface private interface Check { void run() throws Exception; }
-    private record Case(String name, Check check) {}
+    private record Case(@NonNull String name, @NonNull Check check) {}
 
-    @TestFactory Stream<DynamicTest> functionalBudgetAndTrustBoundaries() throws Exception {
+    @TestFactory @NonNull Stream<@NonNull DynamicTest> functionalBudgetAndTrustBoundaries() throws Exception {
         return cases().stream().map(c -> DynamicTest.dynamicTest(c.name(), c.check()::run));
     }
 
@@ -77,7 +77,7 @@ final class SamlDecryptionBudgetTests {
         assertTrue(output.contains("DECRYPTION-WORK-PASS"), result::toString);
     }
 
-    private static List<Case> cases() throws Exception {
+    private static @NonNull List<@NonNull Case> cases() throws Exception {
         List<SamlCredential> pool = new ArrayList<>();
         for (String name : List.of("sp-encryption-rsa-2048", "sp-signing-rsa-2048", "idp-signing-rsa-2048", "negative-attacker-rsa-2048"))
             pool.add(credential(name));
@@ -181,8 +181,8 @@ final class SamlDecryptionBudgetTests {
         return cases;
     }
 
-    private static void publicCase(List<SamlCredential> credentials, boolean solicited, boolean encryptedAssertion, int assertionKeys,
-            int idKeys, boolean outerSigned, boolean innerSigned, boolean cbc, boolean allowCbc, String fault,
+    private static void publicCase(@NonNull List<@NonNull SamlCredential> credentials, boolean solicited, boolean encryptedAssertion, int assertionKeys,
+            int idKeys, boolean outerSigned, boolean innerSigned, boolean cbc, boolean allowCbc, @NonNull String fault,
             boolean succeeds, SamlAuthenticationResult.@Nullable Reason rejection, int work) throws Exception {
         int[] replay = {0}; List<SamlObserver.Outcome> events = new ArrayList<>();
         SamlServiceProvider sp = SamlServiceProvider.withEntityId(SP).assertionConsumerServiceUrl(URI.create("https://sp.example.test/acs"))
@@ -235,8 +235,8 @@ final class SamlDecryptionBudgetTests {
         Probe.expect(work, work);
     }
 
-    private static List<PrivateKey> keys(List<SamlCredential> credentials) { return credentials.stream().map(SamlCredential::privateKey).toList(); }
-    private static SamlCredential credential(String stem) throws Exception {
+    private static @NonNull List<@NonNull PrivateKey> keys(@NonNull List<@NonNull SamlCredential> credentials) { return credentials.stream().map(SamlCredential::privateKey).toList(); }
+    private static @NonNull SamlCredential credential(@NonNull String stem) throws Exception {
         String key; String certificate;
         try (var input = SamlDecryptionBudgetTests.class.getResourceAsStream("/fixtures/keys/" + stem + "-key.pem")) {
             key = new String(Objects.requireNonNull(input).readAllBytes(), StandardCharsets.US_ASCII);
@@ -246,15 +246,15 @@ final class SamlDecryptionBudgetTests {
         }
         return SamlCredential.fromPem(key, certificate);
     }
-    private static Element element(String xml) {
+    private static @NonNull Element element(@NonNull String xml) {
         return assertInstanceOf(SecureXmlParser.Result.Accepted.class, SecureXmlParser.parseResponse(xml.getBytes(StandardCharsets.UTF_8)))
                 .getDocument().getDocumentElement();
     }
-    private static String encrypt(byte[] plaintext, SamlCredential recipient, int candidates, boolean cbc) throws Exception {
+    private static @NonNull String encrypt(byte @NonNull [] plaintext, @NonNull SamlCredential recipient, int candidates, boolean cbc) throws Exception {
         byte[] cek = new byte[16]; new SecureRandom().nextBytes(cek);
         try { return encryptWithCek(plaintext, recipient, candidates, cbc, cek); } finally { Arrays.fill(cek, (byte) 0); }
     }
-    private static String encryptWithCek(byte[] plaintext, SamlCredential recipient, int candidates, boolean cbc, byte[] cek) throws Exception {
+    private static @NonNull String encryptWithCek(byte @NonNull [] plaintext, @NonNull SamlCredential recipient, int candidates, boolean cbc, byte @NonNull [] cek) throws Exception {
         SecureRandom random = new SecureRandom(); byte[] iv = new byte[cbc ? 16 : 12]; random.nextBytes(iv);
         Cipher aes = Cipher.getInstance(cbc ? "AES/CBC/NoPadding" : "AES/GCM/NoPadding");
         byte[] input = plaintext;
@@ -276,7 +276,7 @@ final class SamlDecryptionBudgetTests {
                 + "'/><ds:KeyInfo>" + key.repeat(candidates) + "</ds:KeyInfo><xenc:CipherData><xenc:CipherValue>"
                 + Base64.getEncoder().encodeToString(wire) + "</xenc:CipherValue></xenc:CipherData></xenc:EncryptedData></a:EncryptedAssertion>";
     }
-    private static String referenced(String xml, int count) {
+    private static @NonNull String referenced(@NonNull String xml, int count) {
         int start = xml.indexOf("<xenc:EncryptedKey>"); int end = xml.indexOf("</xenc:EncryptedKey>", start) + "</xenc:EncryptedKey>".length();
         String key = xml.substring(start, end); StringBuilder siblings = new StringBuilder();
         for (int i = 0; i < count; i++) siblings.append(key.replace("<xenc:EncryptedKey>", "<xenc:EncryptedKey Id='_selected_" + i + "'>"));
@@ -284,7 +284,7 @@ final class SamlDecryptionBudgetTests {
                 + "EncryptedKey' URI='#_selected_" + (count - 1) + "'/></ds:KeyInfo>")
                 .replace("</a:EncryptedAssertion>", siblings + "</a:EncryptedAssertion>");
     }
-    private static String damage(String xml, boolean wrapped) {
+    private static @NonNull String damage(@NonNull String xml, boolean wrapped) {
         String tag = "<xenc:CipherValue>"; int start = (wrapped ? xml.indexOf(tag) : xml.lastIndexOf(tag)) + tag.length();
         int end = xml.indexOf("</xenc:CipherValue>", start); byte[] bytes = Base64.getDecoder().decode(xml.substring(start, end)); bytes[bytes.length - 1] ^= 1;
         return xml.substring(0, start) + Base64.getEncoder().encodeToString(bytes) + xml.substring(end);
@@ -298,7 +298,7 @@ final class SamlDecryptionBudgetTests {
 
     /** JCA/JCE state is changed only in this owned child JVM. Every cipher delegates to its original real provider. */
     public static final class WorkMain {
-        public static void main(String[] args) throws Exception {
+        public static void main(@NonNull String @NonNull [] args) throws Exception {
             for (String transformation : List.of("RSA/ECB/OAEPPadding", "AES/GCM/NoPadding", "AES/CBC/NoPadding"))
                 Probe.original.put(transformation, Cipher.getInstance(transformation).getProvider().getName());
             Security.insertProviderAt(new WorkProvider(), 1);
@@ -347,29 +347,29 @@ final class SamlDecryptionBudgetTests {
         private final boolean rsa;
         private int operation;
         private boolean aad;
-        CountingCipher(String transformation) throws GeneralSecurityException {
+        CountingCipher(@NonNull String transformation) throws GeneralSecurityException {
             rsa = transformation.startsWith("RSA/"); delegate = Cipher.getInstance(transformation, Objects.requireNonNull(Probe.original.get(transformation)));
         }
-        @Override protected void engineSetMode(String mode) { }
-        @Override protected void engineSetPadding(String padding) { }
+        @Override protected void engineSetMode(@NonNull String mode) { }
+        @Override protected void engineSetPadding(@NonNull String padding) { }
         @Override protected int engineGetBlockSize() { return delegate.getBlockSize(); }
         @Override protected int engineGetOutputSize(int length) { return delegate.getOutputSize(length); }
         @Override protected byte @Nullable [] engineGetIV() { return delegate.getIV(); }
         @Override protected @Nullable AlgorithmParameters engineGetParameters() { return delegate.getParameters(); }
-        @Override protected void engineInit(int mode, Key key, @Nullable SecureRandom random) throws InvalidKeyException { operation = mode; aad = false; delegate.init(mode, key, random); }
-        @Override protected void engineInit(int mode, Key key, @Nullable AlgorithmParameterSpec params, @Nullable SecureRandom random) throws InvalidKeyException, InvalidAlgorithmParameterException { operation = mode; aad = false; delegate.init(mode, key, params, random); }
-        @Override protected void engineInit(int mode, Key key, @Nullable AlgorithmParameters params, @Nullable SecureRandom random) throws InvalidKeyException, InvalidAlgorithmParameterException { operation = mode; aad = false; delegate.init(mode, key, params, random); }
-        @Override protected byte @Nullable [] engineUpdate(byte[] input, int offset, int length) { return delegate.update(input, offset, length); }
-        @Override protected int engineUpdate(byte[] input, int offset, int length, byte[] output, int outputOffset) throws ShortBufferException { return delegate.update(input, offset, length, output, outputOffset); }
+        @Override protected void engineInit(int mode, @NonNull Key key, @Nullable SecureRandom random) throws InvalidKeyException { operation = mode; aad = false; delegate.init(mode, key, random); }
+        @Override protected void engineInit(int mode, @NonNull Key key, @Nullable AlgorithmParameterSpec params, @Nullable SecureRandom random) throws InvalidKeyException, InvalidAlgorithmParameterException { operation = mode; aad = false; delegate.init(mode, key, params, random); }
+        @Override protected void engineInit(int mode, @NonNull Key key, @Nullable AlgorithmParameters params, @Nullable SecureRandom random) throws InvalidKeyException, InvalidAlgorithmParameterException { operation = mode; aad = false; delegate.init(mode, key, params, random); }
+        @Override protected byte @Nullable [] engineUpdate(byte @NonNull [] input, int offset, int length) { return delegate.update(input, offset, length); }
+        @Override protected int engineUpdate(byte @NonNull [] input, int offset, int length, byte @NonNull [] output, int outputOffset) throws ShortBufferException { return delegate.update(input, offset, length, output, outputOffset); }
         private boolean measured() { return operation == Cipher.DECRYPT_MODE && (rsa || !aad); }
         private void count() { if (measured()) { if (rsa) Probe.rsa++; else Probe.content++; } }
-        @Override protected byte[] engineDoFinal(byte[] input, int offset, int length) throws IllegalBlockSizeException, BadPaddingException {
+        @Override protected byte @NonNull [] engineDoFinal(byte @NonNull [] input, int offset, int length) throws IllegalBlockSizeException, BadPaddingException {
             count(); byte[] result = delegate.doFinal(input, offset, length); if (measured()) Probe.returned.add(result); return result;
         }
-        @Override protected int engineDoFinal(byte[] input, int offset, int length, byte[] output, int outputOffset) throws ShortBufferException, IllegalBlockSizeException, BadPaddingException {
+        @Override protected int engineDoFinal(byte @NonNull [] input, int offset, int length, byte @NonNull [] output, int outputOffset) throws ShortBufferException, IllegalBlockSizeException, BadPaddingException {
             count(); return delegate.doFinal(input, offset, length, output, outputOffset);
         }
-        @Override protected void engineUpdateAAD(byte[] bytes, int offset, int length) { aad = true; delegate.updateAAD(bytes, offset, length); }
-        @Override protected void engineUpdateAAD(ByteBuffer bytes) { aad = true; delegate.updateAAD(bytes); }
+        @Override protected void engineUpdateAAD(byte @NonNull [] bytes, int offset, int length) { aad = true; delegate.updateAAD(bytes, offset, length); }
+        @Override protected void engineUpdateAAD(@NonNull ByteBuffer bytes) { aad = true; delegate.updateAAD(bytes); }
     }
 }

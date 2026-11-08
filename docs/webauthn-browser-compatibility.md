@@ -80,6 +80,16 @@ or remove their origins. Coordinate configuration changes and pending-ceremony e
 No credential format, storage address or RP-ID hash changes, and no credential migration or
 re-enrollment is required by this origin-policy change. Keep the same RP ID to retain that scope.
 
+The six registration, sign-in and checked-reauthentication entry points take
+[`OperationBinding`](https://javadoc.revetsec.com/com/revetsec/OperationBinding.html). WebAuthn
+retains its narrower existing boundary: the emitted secret must be exactly 43 canonical unpadded
+Base64URL characters decoding to 32 bytes. Generate it with `OperationBinding.fresh()` and retain
+it in protected application session state. Do not turn a browser cookie or other request value
+into a carrier with `fromTrustedPersistence`; compare request material to the retained session and
+pass the retained carrier. The carrier correlates credential work only. It is not identity,
+permission, freshness, uniqueness or a one-use action grant; the application still checks its
+current session/account/purpose and atomically consumes its own pending action.
+
 SR-5 still needs dated target-provider evidence for `credProps.rk`, any packed-under-`none`
 behavior, platform/synced credentials and actual conditional sign-in, or precise unproven entries.
 Before accepting another extension output, record a real browser/provider response shape and

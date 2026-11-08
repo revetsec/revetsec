@@ -15,6 +15,8 @@
  */
 package com.revetsec.oauth;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.internal.http.Deadline;
 import java.time.Duration;
 import java.util.Optional;
@@ -26,14 +28,14 @@ import static org.junit.jupiter.api.Assertions.*;
 
 final class IntrospectionHealthIsolationTests {
     private static final Duration SECOND = Duration.ofSeconds(1);
-    private static Deadline deadline() { return Deadline.fromNow(Duration.ofSeconds(10)); }
-    private static OAuthErrorResponseException status(int status) {
+    private static @NonNull Deadline deadline() { return Deadline.fromNow(Duration.ofSeconds(10)); }
+    private static @NonNull OAuthErrorResponseException status(int status) {
         return OAuthErrorResponseException.fromResponse(status, "invalid_request", Optional.empty());
     }
-    private static OAuthTransportException network() {
+    private static @NonNull OAuthTransportException network() {
         return OAuthTransportException.fromReason(OAuthException.Reason.NETWORK_FAILURE, null);
     }
-    private static IntrospectionFailureGuard.Attempt allowed(IntrospectionFailureGuard guard) {
+    private static IntrospectionFailureGuard.@NonNull Attempt allowed(@NonNull IntrospectionFailureGuard guard) {
         return assertDoesNotThrow(() -> guard.acquire(deadline(), SECOND));
     }
     @Test void expiredPartialWindowCannotExtendAnUnrelatedHealthSignal() {
@@ -94,7 +96,7 @@ final class IntrospectionHealthIsolationTests {
         assertFalse(worker.isAlive());
         guard.healthy(allowed(guard));
     }
-    private static ReentrantLock mutex(IntrospectionFailureGuard guard) throws ReflectiveOperationException {
+    private static @NonNull ReentrantLock mutex(@NonNull IntrospectionFailureGuard guard) throws ReflectiveOperationException {
         var field = IntrospectionFailureGuard.class.getDeclaredField("lock"); field.setAccessible(true);
         return assertInstanceOf(ReentrantLock.class, field.get(guard));
     }

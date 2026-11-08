@@ -59,7 +59,7 @@ final class IssuerApplicationTests {
   var match=Pattern.compile("\\\""+field+"\\\"\\s*:\\s*\\\"([A-Za-z0-9_.-]+)\\\"").matcher(json);assertTrue(match.find(),"Expected fixed response field "+field);return match.group(1);
  }
  static @NonNull String code(@NonNull IssuerResources app,@NonNull String client,@NonNull String scopes) {
-  String binding=LocalInputs.randomId();var i=assertInstanceOf(OAuthAuthorizationResult.InteractionRequired.class,app.server.beginAuthorizationResult("GET",query(app,client,scopes),new byte[0],Map.of(),binding)).getInteraction();
+  com.revetsec.BrowserBinding binding=com.revetsec.BrowserBinding.fresh();var i=assertInstanceOf(OAuthAuthorizationResult.InteractionRequired.class,app.server.beginAuthorizationResult("GET",query(app,client,scopes),new byte[0],Map.of(),binding)).getInteraction();
   var response=assertInstanceOf(OAuthAuthorizationResult.Completed.class,app.server.completeAuthorizationResult(i.getInteractionValue(),binding,OAuthAuthorizationDecision.withSubject(IssuerConfig.SUBJECT).authorizedScopesByResource(i.getRequestedScopesByResource()).refreshTokenPermitted(true).build())).getResponse();
   var location=response.getLocationWithCredentials().orElseThrow().toString();return location.substring(location.indexOf("code=")+5,location.indexOf("&state="));
  }
@@ -73,7 +73,7 @@ final class IssuerApplicationTests {
  static @NonNull BearerToken bearer(@NonNull String token) {return ((com.revetsec.oauth.BearerTokenResult.Present) BearerToken.fromAuthorizationHeaderValuesResult(List.of("Bearer "+token))).getToken();}
  static @NonNull OAuthIssuerKeyProvider signingKeys(@NonNull Clock clock) throws Exception {
   var generator=java.security.KeyPairGenerator.getInstance("RSA");generator.initialize(2048);var pair=generator.generateKeyPair();
-  return OAuthIssuerKeyProvider.fromSnapshot(OAuthIssuerKeySnapshot.withActiveKey(OAuthIssuerSigningKey.fromKeyPair(
+  return OAuthIssuerKeyProvider.fromSnapshot(OAuthIssuerKeySnapshot.withActiveKey(OAuthIssuerSigningKey.fromRsaKeyPair(
     LocalInputs.randomId(),pair.getPrivate(),pair.getPublic())).generation(LocalInputs.randomId()).publishedAt(clock.instant()).build());
  }
  static @NonNull StateSealer sealer() {
@@ -146,7 +146,7 @@ final class IssuerApplicationTests {
    var login=sim.performHttpRequest(request(app,HttpMethod.GET,"/authorize?"+query,null,initialCookie));
    assertEquals(200,login.getMarshaledResponse().getStatusCode());var response=login.getMarshaledResponse();
    assertEquals(List.of("same-origin"),response.getHeaders().get("Referrer-Policy"));
-   String old=initialCookie;var session=app.sessions.find(request(app,HttpMethod.GET,"/",null,old)).orElseThrow();String binding=session.binding;
+   String old=initialCookie;var session=app.sessions.find(request(app,HttpMethod.GET,"/",null,old)).orElseThrow();com.revetsec.BrowserBinding binding=session.binding;
    assertTrue(text(response).contains("Demo login"));assertFalse(text(response).contains(app.config.loginKey));assertFalse(text(response).contains(session.pending.get().handle));
    var post=request(app,HttpMethod.POST,"/login",form(Map.of("csrf",session.csrf,"flow",session.pending.get().nonce,"key",app.config.loginKey)),old);
    assertEquals(403,sim.performHttpRequest(post.copy().headers(h->h.remove("Origin")).finish()).getMarshaledResponse().getStatusCode());
@@ -275,7 +275,8 @@ final class IssuerApplicationTests {
   assertEquals(Set.of(cfg.resource.toString(),second.toString()),cfg.resources().keySet());assertTrue(base.resourceForEndpoint("/mcp-second").isEmpty());
   assertEquals(404,new IssuerResources(base,Clock.systemUTC()).secondResourceMetadata(request(app,HttpMethod.GET,"/.well-known/oauth-protected-resource/mcp-second",null,null)).getStatusCode());
   assertTrue(text(app.secondResourceMetadata(request(app,HttpMethod.GET,"/.well-known/oauth-protected-resource/mcp-second",null,null))).contains(second.toString()));
-  String firstToken=scalar(issued(app,"mcp:discover mcp:whoami"),"access_token"),binding=LocalInputs.randomId();
+  String firstToken=scalar(issued(app,"mcp:discover mcp:whoami"),"access_token");
+  com.revetsec.BrowserBinding binding=com.revetsec.BrowserBinding.fresh();
   String q=query(app,"demo-public","mcp:discover mcp:whoami").replace(URLEncoder.encode(cfg.resource.toString(),StandardCharsets.UTF_8),URLEncoder.encode(second.toString(),StandardCharsets.UTF_8));
   var interaction=assertInstanceOf(OAuthAuthorizationResult.InteractionRequired.class,app.server.beginAuthorizationResult("GET",q,new byte[0],Map.of(),binding)).getInteraction();
   assertEquals(Set.of(second.toString()),interaction.getRequestedScopesByResource().keySet());
@@ -357,7 +358,7 @@ final class IssuerApplicationTests {
   var clock=new MutableClock();var captured=new CapturingStore(new ScriptedOAuthStore(clock.instant(),2048,4_194_304));var app=new IssuerResources(config(8089,8090),clock,captured);
   var session=app.sessions.begin();session.authenticated=true;String cookie="RevetsecIssuerDev="+session.id;
   app.authorize(request(app,HttpMethod.GET,"/authorize?"+query(app,"demo-public","mcp:discover"),null,cookie));var first=session.pending.get();assertNotNull(first);
-  String binding=LocalInputs.randomId();var next=assertInstanceOf(OAuthAuthorizationResult.InteractionRequired.class,app.server.beginAuthorizationResult("GET",query(app,"demo-confidential","mcp:whoami"),new byte[0],Map.of(),binding));
+  com.revetsec.BrowserBinding binding=com.revetsec.BrowserBinding.fresh();var next=assertInstanceOf(OAuthAuthorizationResult.InteractionRequired.class,app.server.beginAuthorizationResult("GET",query(app,"demo-confidential","mcp:whoami"),new byte[0],Map.of(),binding));
   var replacement=new BrowserSessions.Pending(next.getInteraction().getInteractionValue());
   captured.beforeNextRead=()->session.pending.set(replacement);
   var completed=app.complete(request(app,HttpMethod.POST,"/consent",form(Map.of("csrf",session.csrf,"flow",first.nonce,"decision","approve")),cookie));

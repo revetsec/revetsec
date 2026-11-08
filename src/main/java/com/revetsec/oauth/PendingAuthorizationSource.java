@@ -16,6 +16,7 @@
 
 package com.revetsec.oauth;
 
+import com.revetsec.BrowserBinding;
 import com.revetsec.StateSealer;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
@@ -64,7 +65,8 @@ public final class PendingAuthorizationSource {
 	}
 
 	/**
-	 * Uses a store with a browser-specific binding. The store must consume atomically.
+	 * Uses a trusted store with a browser-specific binding. The store must consume atomically and protect
+	 * confidentiality/integrity of plaintext pending records and bindings. The unkeyed binding digest is not a MAC.
 	 *
 	 * @param store the store
 	 * @param browserBinding browser-specific secret
@@ -72,6 +74,11 @@ public final class PendingAuthorizationSource {
 	 * @since 1.0.0
 	 */
 	public static @NonNull PendingAuthorizationSource fromStore(@NonNull PendingAuthorizationStore store,
+			@NonNull BrowserBinding browserBinding) {
+		return fromStore(requireNonNull(store), requireNonNull(browserBinding).toSecretString());
+	}
+
+	static @NonNull PendingAuthorizationSource fromStore(@NonNull PendingAuthorizationStore store,
 			@NonNull String browserBinding) {
 		if (requireNonNull(browserBinding).isEmpty())
 			throw new IllegalArgumentException("A browser binding must not be empty.");

@@ -27,9 +27,17 @@ import java.util.Optional;
 /**
  * Storage for opaque, browser-bound pending authorization records. A shared implementation must make
  * {@link #consume(String, String, Duration)} atomic across all participating nodes: a record is returned at most once, even
- * when callbacks race. The browser binding and state are lookup inputs, not an excuse to omit Revetsec's authenticated
- * checks after a record is consumed. A durable shared store is required for client-side single use across nodes or
+ * when callbacks race. The browser binding and state are lookup inputs, not an excuse to omit Revetsec's structural,
+ * purpose, client, issuer, callback, time and binding checks after a record is consumed. Store-mode records are
+ * plaintext JSON containing sensitive PKCE/nonce/application state; their unkeyed binding digest is not a MAC.
+ * The implementation must provide confidentiality and integrity for records and browser bindings through trusted
+ * storage/access controls (and authenticated protected transport where remote). An attacker-controlled store can
+ * rewrite a record and recompute its digest; these checks do not authenticate such storage. A durable shared store is required for client-side single use across nodes or
  * restarts; {@link InMemoryPendingAuthorizationStore} covers one process only.
+ * <p>
+ * This low-level backend SPI deliberately retains opaque {@link String} lookup fields for existing store framing.
+ * Application-facing pending save/source APIs require {@link com.revetsec.BrowserBinding}; a store implementation
+ * must not interpret the raw SPI spelling as identity, authorization or authenticated request provenance.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  * @since 1.0.0
@@ -53,7 +61,7 @@ public interface PendingAuthorizationStore {
 	}
 
 	/**
-	 * Saves one opaque record until its authenticated expiry without replacing a live binding and state.
+	 * Saves one trusted opaque record until its exact supplied expiry without replacing a live binding and state.
 	 * Return ALREADY_PRESENT for a live duplicate and CAPACITY_REFUSED without evicting live records.
 	 * UNAVAILABLE promises that no record was saved. A possibly completed write must return INDETERMINATE;
 	 * callers must not infer that a retry is safe.

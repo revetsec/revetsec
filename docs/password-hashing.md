@@ -32,7 +32,7 @@ The [synthetic workload probe](../verification/password/README.md) reports
 per-call timings and gate refusals for selected Argon2id and bcrypt profiles;
 its local sample is not a production sizing result.
 Provision equivalent admission on every node and enforce account and trusted-edge
-rate limits before submitting work. The gate limits local concurrent KDF work;
+rate limits before submitting work. The gate limits local concurrent preparation, pepper lookup and KDF work;
 it is not a distributed login-attempt ledger. Builders perform no I/O and core
 starts no worker threads.
 
@@ -40,7 +40,7 @@ The gate briefly serializes reservation-counter updates. Admission waits
 interruptibly for its counter update; password hashing and application callbacks
 run outside the accounting lock. If the concurrency or memory budget is exhausted,
 the operation returns `Unavailable(WORK_CAPACITY)` without waiting for existing
-KDF work to finish. Interruption during the accounting wait returns
+admitted password work to finish. Admission precedes password normalization/encoding and pepper callbacks; one permit stays held through KDF cleanup. A full gate returns this operational outcome before checking password shape. Native stored-form and trusted legacy configuration/record-field checks still precede admission. Interruption during the accounting wait returns
 `Unavailable(INTERRUPTED)` and preserves the thread's interrupt flag. Size
 request admission separately from this brief accounting wait and the calling
 thread's password work. Permit release completes its accounting even when the
@@ -56,6 +56,8 @@ before allocating memory or performing the KDF. A stored cost over the configure
 verification ceiling is rejected; the stored form cannot ask the verifier to
 raise the ceiling. Keep a migration window only for bounded hashes you can
 actually verify, then narrow or remove it.
+Verification ceilings and the gate are independent policies. A stored Argon2 memory cost inside the verification ceiling but above the gate's entire memory budget returns `Unavailable(WORK_CAPACITY)` even when the gate is idle. That record is intentionally unserviceable under this configuration. To make every accepted cost serviceable, set the verification memory ceiling at or below the gate's memory and qualify the largest enabled cost; do not downgrade a stored cost or raise a ceiling automatically. New-hash parameters must fit both limits at construction.
+
 Passing null to a limit-builder property restores its finite default.
 `PasswordHasher.Builder.workGate(null)` clears a required setting, so `build()`
 fails until a gate is supplied again; it never creates an unbounded gate.
@@ -88,11 +90,17 @@ must reproduce the historical application's password preparation exactly; do
 not normalize a legacy password retroactively and assume the old hash will
 still match.
 
+### Runtime preparation cohorts
+
+NFC uses the running JDK's `java.text.Normalizer`. Unicode's stability guarantee excludes code points that were unassigned in an older implementation; see the [Unicode normalization FAQ](https://www.unicode.org/faq/normalization.html) and [JDK Normalizer contract](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/text/Normalizer.html). The native stored forms carry no Unicode-table or application preparation revision. Persist a trusted preparation-profile revision beside each credential and keep equivalent normalization behavior across its serving cohort. Test upgrades and mixed JDK deployments with representative inputs and newly supported code points. An installed-JDK fixture using U+1E08F demonstrates different normalized bytes between the selected JDK 17 and newer lanes; a successful cohort-local round trip does not establish cross-runtime equivalence.
+
+Verify under the original trusted cohort before a preparation migration, then replace the exact credential version after producing the new verifier. Never try several preparation forms to turn a mismatch into a match or rehash an unverified password. If the original preparation cannot be reproduced, use authorized account recovery/reset. No stored-form migration or normalization-table pin is implemented by this policy.
+
 Normalization and encoding create transient immutable Java string copies of the
 password. Core cannot deterministically wipe those copies; they can remain in
 memory until garbage collection. Clearing the caller's `char[]` and core's
 temporary byte arrays reduces retention but does not guarantee erasure from the
-JVM heap. Avoid additional string conversions, logs and heap dumps containing
+JVM heap. Normalization has no cooperative deadline API: an admitted call keeps its work permit until that bounded preparation finishes and cleanup completes. Interruption is checked before and after preparation and before provider/KDF work; the flag is preserved. Input limits do not promise a maximum wall time. Avoid additional string conversions, logs and heap dumps containing
 passwords.
 
 ## Verify and upgrade during login

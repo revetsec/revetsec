@@ -261,6 +261,7 @@ final class AuthorizationServerCache {
 				if (!(parsed instanceof AuthorizationServerMetadataParseResult.Succeeded success)) {
 					OAuthException.Reason reason = ((AuthorizationServerMetadataParseResult.Rejected) parsed).getReason();
 					if (reason == OAuthException.Reason.DOCUMENT_MALFORMED) throw OAuthResponseException.fromReason(reason);
+					if (reason == OAuthException.Reason.ISSUER_MISMATCH) throw OAuthConfigurationException.fromReason(reason);
 					throw OAuthValidationException.fromReason(reason);
 				}
 				AuthorizationServerMetadata metadata = success.getMetadata();

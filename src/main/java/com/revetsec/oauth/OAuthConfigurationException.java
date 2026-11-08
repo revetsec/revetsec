@@ -21,7 +21,7 @@ import org.jspecify.annotations.NonNull;
 import static java.util.Objects.requireNonNull;
 
 /**
- * A fixed, cause-free failure of configured assertion keys, signing, endpoint trust or issuer policy.
+ * A fixed, cause-free failure of configured assertion keys, signing, endpoint trust, discovery identity or issuer policy.
  * This infrastructure failure is never an invalid-user result.
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  * @since 1.0.0
@@ -34,8 +34,8 @@ public final class OAuthConfigurationException extends OAuthException {
 		requireNonNull(reason);
 		switch (reason) {
 			case CLIENT_ASSERTION_KEY_UNAVAILABLE, CLIENT_ASSERTION_SIGNING_FAILED,
-				CLIENT_ASSERTION_KEY_PAIR_MISMATCH, CLIENT_ASSERTION_ENDPOINT_MISMATCH, ISSUER_POLICY_UNAVAILABLE -> { }
-			default -> throw new IllegalArgumentException("The OAuth reason is not an assertion or issuer-policy configuration reason.");
+				CLIENT_ASSERTION_KEY_PAIR_MISMATCH, CLIENT_ASSERTION_ENDPOINT_MISMATCH, ISSUER_POLICY_UNAVAILABLE, ISSUER_MISMATCH -> { }
+			default -> throw new IllegalArgumentException("The OAuth reason is not a configuration reason.");
 		}
 		return new OAuthConfigurationException(reason);
 	}

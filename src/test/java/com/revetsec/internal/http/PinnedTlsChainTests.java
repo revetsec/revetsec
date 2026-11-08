@@ -59,8 +59,8 @@ final class PinnedTlsChainTests {
   if(pki==null)pki=new PinnedTlsPki(Files.createTempDirectory(Path.of("target"),"chain-pki-"),1);
   X509Certificate[] chain=pki.chain();leaf=chain[0];issuer=chain[1];root=chain[2];variants=pki.variants();
  }
- private static X509Certificate cert(String name){return requireNonNull(variants.get(name));}
- private static Map<String,X509Certificate[]> accepted() {
+ private static @NonNull X509Certificate cert(@NonNull String name){return requireNonNull(variants.get(name));}
+ private static @NonNull Map<@NonNull String,@NonNull X509Certificate @NonNull []> accepted() {
   return Map.ofEntries(
     Map.entry("ordered without root",new X509Certificate[]{leaf,issuer}),
     Map.entry("ordered with root",new X509Certificate[]{leaf,issuer,root}),
@@ -177,10 +177,10 @@ final class PinnedTlsChainTests {
    SSLEngine engine=PinnedTlsContext.fromTrustStore(pki.trustStore()).createSSLEngine("localhost",peer.port());engine.setUseClientMode(true);
    var options=engine.getSSLParameters();options.setEndpointIdentificationAlgorithm("HTTPS");
    options.setAlgorithmConstraints(new AlgorithmConstraints(){
-    private boolean permits(Key key){if(key.equals(issuer.getPublicKey())){denied.incrementAndGet();return false;}return true;}
-    @Override public boolean permits(Set<CryptoPrimitive> primitives,String algorithm,@Nullable AlgorithmParameters parameters){return true;}
-    @Override public boolean permits(Set<CryptoPrimitive> primitives,Key key){return permits(key);}
-    @Override public boolean permits(Set<CryptoPrimitive> primitives,String algorithm,Key key,@Nullable AlgorithmParameters parameters){return permits(key);}
+    private boolean permits(@NonNull Key key){if(key.equals(issuer.getPublicKey())){denied.incrementAndGet();return false;}return true;}
+    @Override public boolean permits(@NonNull Set<@NonNull CryptoPrimitive> primitives,@NonNull String algorithm,@Nullable AlgorithmParameters parameters){return true;}
+    @Override public boolean permits(@NonNull Set<@NonNull CryptoPrimitive> primitives,@NonNull Key key){return permits(key);}
+    @Override public boolean permits(@NonNull Set<@NonNull CryptoPrimitive> primitives,@NonNull String algorithm,@NonNull Key key,@Nullable AlgorithmParameters parameters){return permits(key);}
    });engine.setSSLParameters(options);
    // Reuse the actual numeric-only connector, without adding a production test hook or TLS-context bypass.
    var type=Class.forName("com.revetsec.internal.http.PinnedHttpsTransport$NioWire");
@@ -193,13 +193,13 @@ final class PinnedTlsChainTests {
    }
   }
  }
- private static X509ExtendedTrustManager manager(RecordingTrust delegate,X509Certificate... trusted) throws Exception {
+ private static @NonNull X509ExtendedTrustManager manager(@NonNull RecordingTrust delegate,@NonNull X509Certificate @NonNull ... trusted) throws Exception {
   var type=Class.forName("com.revetsec.internal.http.PinnedTlsContext$LocalTrust");
   var constructor=type.getDeclaredConstructor(X509ExtendedTrustManager.class,Set.class);constructor.setAccessible(true);
   Set<TrustAnchor> anchors=Arrays.stream(trusted).map(cert->new TrustAnchor(cert,null)).collect(java.util.stream.Collectors.toSet());
   return (X509ExtendedTrustManager)constructor.newInstance(delegate,anchors);
  }
- private static SSLEngine engine() {
+ private static @NonNull SSLEngine engine() {
   SSLEngine engine=TestTls.clientSslContext().createSSLEngine("localhost",443);engine.setUseClientMode(true);
   var options=engine.getSSLParameters();options.setEndpointIdentificationAlgorithm("HTTPS");engine.setSSLParameters(options);return engine;
  }
@@ -209,51 +209,51 @@ final class PinnedTlsChainTests {
   private static final long serialVersionUID=1L;
   private final X509Certificate delegate;
   private final AtomicInteger encodings;
-  private CountedCertificate(X509Certificate delegate,AtomicInteger encodings){this.delegate=delegate;this.encodings=encodings;}
-  @Override public byte[] getEncoded() throws java.security.cert.CertificateEncodingException {
+  private CountedCertificate(@NonNull X509Certificate delegate,@NonNull AtomicInteger encodings){this.delegate=delegate;this.encodings=encodings;}
+  @Override public byte @NonNull [] getEncoded() throws java.security.cert.CertificateEncodingException {
    // 128 prefixes over ten certificates have ample allowance, including PKIX's own encoding work.
    assertTrue(encodings.incrementAndGet()<=50000,"Certificate work exceeded the bounded local search allowance");
    return delegate.getEncoded();
   }
   @Override public void checkValidity() throws java.security.cert.CertificateExpiredException,java.security.cert.CertificateNotYetValidException {delegate.checkValidity();}
-  @Override public void checkValidity(java.util.Date date) throws java.security.cert.CertificateExpiredException,java.security.cert.CertificateNotYetValidException {delegate.checkValidity(date);}
+  @Override public void checkValidity(java.util.@NonNull Date date) throws java.security.cert.CertificateExpiredException,java.security.cert.CertificateNotYetValidException {delegate.checkValidity(date);}
   @Override public int getVersion(){return delegate.getVersion();}
-  @Override public java.math.BigInteger getSerialNumber(){return delegate.getSerialNumber();}
-  @Override public java.security.Principal getIssuerDN(){return delegate.getIssuerDN();}
-  @Override public java.security.Principal getSubjectDN(){return delegate.getSubjectDN();}
-  @Override public java.util.Date getNotBefore(){return delegate.getNotBefore();}
-  @Override public java.util.Date getNotAfter(){return delegate.getNotAfter();}
-  @Override public byte[] getTBSCertificate() throws java.security.cert.CertificateEncodingException {return delegate.getTBSCertificate();}
-  @Override public byte[] getSignature(){return delegate.getSignature();}
-  @Override public String getSigAlgName(){return delegate.getSigAlgName();}
-  @Override public String getSigAlgOID(){return delegate.getSigAlgOID();}
+  @Override public java.math.@NonNull BigInteger getSerialNumber(){return delegate.getSerialNumber();}
+  @Override public java.security.@NonNull Principal getIssuerDN(){return delegate.getIssuerDN();}
+  @Override public java.security.@NonNull Principal getSubjectDN(){return delegate.getSubjectDN();}
+  @Override public java.util.@NonNull Date getNotBefore(){return delegate.getNotBefore();}
+  @Override public java.util.@NonNull Date getNotAfter(){return delegate.getNotAfter();}
+  @Override public byte @NonNull [] getTBSCertificate() throws java.security.cert.CertificateEncodingException {return delegate.getTBSCertificate();}
+  @Override public byte @NonNull [] getSignature(){return delegate.getSignature();}
+  @Override public @NonNull String getSigAlgName(){return delegate.getSigAlgName();}
+  @Override public @NonNull String getSigAlgOID(){return delegate.getSigAlgOID();}
   @Override public byte @Nullable [] getSigAlgParams(){return delegate.getSigAlgParams();}
   @Override public boolean @Nullable [] getIssuerUniqueID(){return delegate.getIssuerUniqueID();}
   @Override public boolean @Nullable [] getSubjectUniqueID(){return delegate.getSubjectUniqueID();}
   @Override public boolean @Nullable [] getKeyUsage(){return delegate.getKeyUsage();}
   @Override public int getBasicConstraints(){return delegate.getBasicConstraints();}
-  @Override public void verify(java.security.PublicKey key) throws java.security.cert.CertificateException,java.security.NoSuchAlgorithmException,java.security.InvalidKeyException,java.security.NoSuchProviderException,java.security.SignatureException {delegate.verify(key);}
-  @Override public void verify(java.security.PublicKey key,String provider) throws java.security.cert.CertificateException,java.security.NoSuchAlgorithmException,java.security.InvalidKeyException,java.security.NoSuchProviderException,java.security.SignatureException {delegate.verify(key,provider);}
-  @Override public String toString(){return "Counted TEST ONLY certificate";}
-  @Override public java.security.PublicKey getPublicKey(){return delegate.getPublicKey();}
-  @Override public Set<String> getCriticalExtensionOIDs(){return requireNonNull(delegate.getCriticalExtensionOIDs());}
-  @Override public @Nullable Set<String> getNonCriticalExtensionOIDs(){return delegate.getNonCriticalExtensionOIDs();}
-  @Override public byte @Nullable [] getExtensionValue(String oid){return delegate.getExtensionValue(oid);}
+  @Override public void verify(java.security.@NonNull PublicKey key) throws java.security.cert.CertificateException,java.security.NoSuchAlgorithmException,java.security.InvalidKeyException,java.security.NoSuchProviderException,java.security.SignatureException {delegate.verify(key);}
+  @Override public void verify(java.security.@NonNull PublicKey key,@NonNull String provider) throws java.security.cert.CertificateException,java.security.NoSuchAlgorithmException,java.security.InvalidKeyException,java.security.NoSuchProviderException,java.security.SignatureException {delegate.verify(key,provider);}
+  @Override public @NonNull String toString(){return "Counted TEST ONLY certificate";}
+  @Override public java.security.@NonNull PublicKey getPublicKey(){return delegate.getPublicKey();}
+  @Override public @NonNull Set<@NonNull String> getCriticalExtensionOIDs(){return requireNonNull(delegate.getCriticalExtensionOIDs());}
+  @Override public @Nullable Set<@NonNull String> getNonCriticalExtensionOIDs(){return delegate.getNonCriticalExtensionOIDs();}
+  @Override public byte @Nullable [] getExtensionValue(@NonNull String oid){return delegate.getExtensionValue(oid);}
   @Override public boolean hasUnsupportedCriticalExtension(){return delegate.hasUnsupportedCriticalExtension();}
  }
  private static final class RecordingTrust extends X509ExtendedTrustManager {
   private final List<X509Certificate[]> chains=new ArrayList<>();
   private @Nullable X509Certificate rejectIssuer;
   private boolean rejectAll;
-  @Override public void checkServerTrusted(X509Certificate[] chain,String authType,SSLEngine engine) throws CertificateException {
+  @Override public void checkServerTrusted(@NonNull X509Certificate @NonNull [] chain,@NonNull String authType,@NonNull SSLEngine engine) throws CertificateException {
    assertEquals("RSA",authType);assertEquals("HTTPS",engine.getSSLParameters().getEndpointIdentificationAlgorithm());chains.add(chain.clone());
    if(rejectAll || chain.length>1 && chain[1].equals(rejectIssuer))throw new CertificateException("private TLS diagnostic");
   }
-  @Override public X509Certificate[] getAcceptedIssuers(){return new X509Certificate[0];}
-  @Override public void checkClientTrusted(X509Certificate[] chain,String authType){fail("client trust used");}
-  @Override public void checkServerTrusted(X509Certificate[] chain,String authType){fail("legacy trust used");}
-  @Override public void checkClientTrusted(X509Certificate[] chain,String authType,Socket socket){fail("client socket trust used");}
-  @Override public void checkServerTrusted(X509Certificate[] chain,String authType,Socket socket){fail("server socket trust used");}
-  @Override public void checkClientTrusted(X509Certificate[] chain,String authType,SSLEngine engine){fail("client engine trust used");}
+  @Override public @NonNull X509Certificate @NonNull [] getAcceptedIssuers(){return new X509Certificate[0];}
+  @Override public void checkClientTrusted(@NonNull X509Certificate @NonNull [] chain,@NonNull String authType){fail("client trust used");}
+  @Override public void checkServerTrusted(@NonNull X509Certificate @NonNull [] chain,@NonNull String authType){fail("legacy trust used");}
+  @Override public void checkClientTrusted(@NonNull X509Certificate @NonNull [] chain,@NonNull String authType,@NonNull Socket socket){fail("client socket trust used");}
+  @Override public void checkServerTrusted(@NonNull X509Certificate @NonNull [] chain,@NonNull String authType,@NonNull Socket socket){fail("server socket trust used");}
+  @Override public void checkClientTrusted(@NonNull X509Certificate @NonNull [] chain,@NonNull String authType,@NonNull SSLEngine engine){fail("client engine trust used");}
  }
 }

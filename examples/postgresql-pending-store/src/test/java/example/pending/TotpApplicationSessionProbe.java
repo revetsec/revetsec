@@ -7,6 +7,7 @@
  */
 package example.pending;
 
+import com.revetsec.OperationBinding;
 import com.revetsec.SealingKey;
 import com.revetsec.StateSealer;
 import com.revetsec.totp.RecoveryCodeUseResult;
@@ -142,7 +143,8 @@ public final class TotpApplicationSessionProbe {
                     ? "ADMISSION_REJECTED" : "ADMISSION_UNAVAILABLE";
         if (!permit.isCurrent()) return "COMPLETION_UNAVAILABLE";
         TotpAuthenticator totp = authenticator(epoch, key, activeKeyId, oldKey, gate);
-        TotpVerificationResult proofResult = totp.verifyResult(ACCOUNT, code, binding);
+        TotpVerificationResult proofResult = totp.verifyResult(ACCOUNT, code,
+                OperationBinding.fromTrustedPersistence(binding));
         if (proofResult instanceof TotpVerificationResult.ReconciliationRequired)return "PROOF_RECONCILIATION_REQUIRED";
         if (!(proofResult instanceof TotpVerificationResult.Succeeded success))
             return proofResult instanceof TotpVerificationResult.Rejected
@@ -189,7 +191,7 @@ public final class TotpApplicationSessionProbe {
         if (!permit.isCurrent()) return "COMPLETION_UNAVAILABLE";
         TotpAuthenticator totp = authenticator(epoch, key, activeKeyId, oldKey, gate);
         RecoveryCodeUseResult proofResult = totp.consumeRecoveryCodeResult(ACCOUNT,
-                argument(args, 2), binding);
+                argument(args, 2), OperationBinding.fromTrustedPersistence(binding));
         if (proofResult instanceof RecoveryCodeUseResult.ReconciliationRequired)return "PROOF_RECONCILIATION_REQUIRED";
         if (!(proofResult instanceof RecoveryCodeUseResult.Succeeded success))
             return proofResult instanceof RecoveryCodeUseResult.Rejected

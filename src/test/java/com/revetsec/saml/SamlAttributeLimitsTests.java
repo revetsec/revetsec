@@ -16,6 +16,8 @@
 
 package com.revetsec.saml;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.StateSealer;
 import com.revetsec.testing.TestJwk;
 import com.revetsec.testing.TestSealers;
@@ -56,25 +58,25 @@ final class SamlAttributeLimitsTests {
         Coverage(boolean response, boolean assertion) { this.response = response; this.assertion = assertion; }
     }
 
-    private record Value(String xml, SamlAttributeValue.Kind kind, String scalar) {}
-    private record Attribute(String name, String format, String friendly, List<Value> values) {
-        String xml() {
+    private record Value(@NonNull String xml, SamlAttributeValue.@NonNull Kind kind, @NonNull String scalar) {}
+    private record Attribute(@NonNull String name, @NonNull String format, @NonNull String friendly, @NonNull List<@NonNull Value> values) {
+        @NonNull String xml() {
             return "<a:Attribute Name='" + name + "' NameFormat='" + format + "' FriendlyName='" + friendly
                     + "'>" + values.stream().map(Value::xml).reduce("", String::concat) + "</a:Attribute>";
         }
     }
-    private record Scenario(String label, List<List<Attribute>> statements, boolean admitted) {
-        String xml() {
+    private record Scenario(@NonNull String label, @NonNull List<@NonNull List<@NonNull Attribute>> statements, boolean admitted) {
+        @NonNull String xml() {
             return statements.stream().map(statement -> "<a:AttributeStatement>"
                     + statement.stream().map(Attribute::xml).reduce("", String::concat)
                     + "</a:AttributeStatement>").reduce("", String::concat);
         }
-        List<Attribute> attributes() { return statements.stream().flatMap(List::stream).toList(); }
-        @Override public String toString() { return label; }
+        @NonNull List<@NonNull Attribute> attributes() { return statements.stream().flatMap(List::stream).toList(); }
+        @Override public @NonNull String toString() { return label; }
     }
 
     @TestFactory
-    Stream<DynamicTest> signedResponseBoundaries() {
+    @NonNull Stream<@NonNull DynamicTest> signedResponseBoundaries() {
         List<Scenario> cases = new ArrayList<>();
         cases.add(new Scenario("no attributes", List.of(), true));
         cases.add(value("empty scalar text", text(""), true));
@@ -135,7 +137,7 @@ final class SamlAttributeLimitsTests {
                         () -> signedResponsesFollowTheFixedProfile(scenario, coverage))));
     }
 
-    void signedResponsesFollowTheFixedProfile(Scenario scenario, Coverage coverage) throws Exception {
+    void signedResponsesFollowTheFixedProfile(@NonNull Scenario scenario, @NonNull Coverage coverage) throws Exception {
         AtomicInteger replayCalls = new AtomicInteger();
         SamlServiceProvider sp = provider(replayCalls);
         SamlIdentityProvider idp = identityProvider();
@@ -163,12 +165,12 @@ final class SamlAttributeLimitsTests {
     }
 
     @TestFactory
-    Stream<DynamicTest> storedPendingOutcomes() {
+    @NonNull Stream<@NonNull DynamicTest> storedPendingOutcomes() {
         return Stream.of(Coverage.values()).map(coverage -> DynamicTest.dynamicTest(coverage.toString(),
                 () -> limitRejectionSpendsStoredPendingButDoesNotFenceTheAssertion(coverage)));
     }
 
-    void limitRejectionSpendsStoredPendingButDoesNotFenceTheAssertion(Coverage coverage) throws Exception {
+    void limitRejectionSpendsStoredPendingButDoesNotFenceTheAssertion(@NonNull Coverage coverage) throws Exception {
         AtomicInteger replayCalls = new AtomicInteger();
         SamlServiceProvider sp = provider(replayCalls);
         SamlIdentityProvider idp = identityProvider();
@@ -199,7 +201,7 @@ final class SamlAttributeLimitsTests {
     }
 
     @TestFactory
-    Stream<DynamicTest> unsolicitedProfile() {
+    @NonNull Stream<@NonNull DynamicTest> unsolicitedProfile() {
         return Stream.of(Coverage.values()).map(coverage -> DynamicTest.dynamicTest(coverage.toString(), () -> {
             AtomicInteger replayCalls = new AtomicInteger();
             SamlServiceProvider sp = provider(replayCalls);
@@ -226,7 +228,7 @@ final class SamlAttributeLimitsTests {
         }));
     }
 
-    private static void assertAttribute(Attribute expected, SamlAttribute actual) {
+    private static void assertAttribute(@NonNull Attribute expected, @NonNull SamlAttribute actual) {
         assertEquals(expected.name(), actual.getName());
         assertEquals(Optional.of(expected.format()), actual.getNameFormat());
         assertEquals(Optional.of(expected.friendly()), actual.getFriendlyName());
@@ -244,7 +246,7 @@ final class SamlAttributeLimitsTests {
         }
     }
 
-    private static SamlServiceProvider provider(AtomicInteger replayCalls) {
+    private static @NonNull SamlServiceProvider provider(@NonNull AtomicInteger replayCalls) {
         SamlReplayCache cache = InMemorySamlReplayCache.fromLimit(CLOCK, 16);
         return SamlServiceProvider.withEntityId(SP).assertionConsumerServiceUrl(ACS).clock(CLOCK)
                 .replayCache((key, expiry, remaining) -> {
@@ -252,26 +254,26 @@ final class SamlAttributeLimitsTests {
                     return cache.markIfAbsent(key, expiry, remaining);
                 }).build();
     }
-    private static SamlIdentityProvider identityProvider() {
+    private static @NonNull SamlIdentityProvider identityProvider() {
         return SamlIdentityProvider.withEntityId(IDP).connectionId("attribute-limits")
                 .redirectSingleSignOnService(URI.create("https://idp.example.test/sso"))
                 .signingKeys(List.of(KEY.getPublicKey())).build();
     }
-    private static PendingSamlAuthentication pending(SamlServiceProvider sp, SamlIdentityProvider idp) {
+    private static @NonNull PendingSamlAuthentication pending(@NonNull SamlServiceProvider sp, @NonNull SamlIdentityProvider idp) {
         return assertInstanceOf(SamlAuthenticationRequestResult.Prepared.class,
                 sp.beginAuthenticationResult(idp)).getPendingAuthentication();
     }
-    private static StateSealer sealer() {
+    private static @NonNull StateSealer sealer() {
         return StateSealer.withActiveKey(TestSealers.fixedKey("saml-attribute-limits")).clock(CLOCK).build();
     }
-    private static SamlPostBindingMessage message(PendingSamlAuthentication pending, String attributes,
-            Coverage coverage) throws Exception {
+    private static @NonNull SamlPostBindingMessage message(@NonNull PendingSamlAuthentication pending, @NonNull String attributes,
+            @NonNull Coverage coverage) throws Exception {
         String xml = SamlResponseSemanticsTests.BASE.replace("_request", pending.getRequestId())
                 .replace("2026-10-09T00:00:00Z", "2026-10-09T00:01:00Z")
                 .replace("</a:Assertion>", attributes + "</a:Assertion>");
         return signedMessage(xml, "&RelayState=" + pending.getRelayStateHandle(), coverage);
     }
-    private static SamlPostBindingMessage signedMessage(String xml, String relayField, Coverage coverage) throws Exception {
+    private static @NonNull SamlPostBindingMessage signedMessage(@NonNull String xml, @NonNull String relayField, @NonNull Coverage coverage) throws Exception {
         String signed = SamlResponseSemanticsTests.signedXml(xml, coverage.response, coverage.assertion,
                 KEY.getKeyPair().getPrivate());
         if (xml.contains("<![CDATA[")) {
@@ -290,35 +292,35 @@ final class SamlAttributeLimitsTests {
                 SamlPostBindingMessage.fromFormBodyResult(("SAMLResponse=" + encoded + relayField).getBytes(StandardCharsets.UTF_8),
                         List.of("application/x-www-form-urlencoded"), null)).getMessage();
     }
-    private static Scenario one(String name, List<Attribute> attributes, boolean admitted) {
+    private static @NonNull Scenario one(@NonNull String name, @NonNull List<@NonNull Attribute> attributes, boolean admitted) {
         return new Scenario(name, List.of(attributes), admitted);
     }
-    private static Scenario split(String name, List<Attribute> attributes, int position, boolean admitted) {
+    private static @NonNull Scenario split(@NonNull String name, @NonNull List<@NonNull Attribute> attributes, int position, boolean admitted) {
         return new Scenario(name, List.of(attributes.subList(0, position), attributes.subList(position, attributes.size())), admitted);
     }
-    private static Scenario value(String name, Value value, boolean admitted) {
+    private static @NonNull Scenario value(@NonNull String name, @NonNull Value value, boolean admitted) {
         return one(name, List.of(attribute("roles", List.of(value))), admitted);
     }
-    private static List<Attribute> attributes(int count, boolean duplicates) {
+    private static @NonNull List<@NonNull Attribute> attributes(int count, boolean duplicates) {
         return IntStream.range(0, count).mapToObj(i -> attribute(duplicates ? "duplicate" : "claim-" + i,
                 duplicates ? List.of() : List.of(text("value-" + i)))).toList();
     }
-    private static Attribute attribute(String name, List<Value> values) {
+    private static @NonNull Attribute attribute(@NonNull String name, @NonNull List<@NonNull Value> values) {
         return new Attribute(name, "urn:example:format", "Roles", values);
     }
-    private static List<Value> copies(int count, Value value) { return Collections.nCopies(count, value); }
-    private static Value text(String value) {
+    private static @NonNull List<@NonNull Value> copies(int count, @NonNull Value value) { return Collections.nCopies(count, value); }
+    private static @NonNull Value text(@NonNull String value) {
         return new Value("<a:AttributeValue>" + value.replace("&", "&amp;").replace("<", "&lt;")
                 + "</a:AttributeValue>", SamlAttributeValue.Kind.TEXT, value);
     }
-    private static Value nameId(String value) {
+    private static @NonNull Value nameId(@NonNull String value) {
         return new Value("<a:AttributeValue><a:NameID>" + value + "</a:NameID></a:AttributeValue>",
                 SamlAttributeValue.Kind.NAME_ID, value);
     }
-    private static Value complex(String content) {
+    private static @NonNull Value complex(@NonNull String content) {
         return new Value("<a:AttributeValue>" + content + "</a:AttributeValue>", SamlAttributeValue.Kind.COMPLEX, "");
     }
-    private static Value nil(String content) {
+    private static @NonNull Value nil(@NonNull String content) {
         return new Value("<a:AttributeValue xmlns:xsi='http://www.w3.org/2001/XMLSchema-instance' xsi:nil='true'>"
                 + content + "</a:AttributeValue>", SamlAttributeValue.Kind.COMPLEX, "");
     }

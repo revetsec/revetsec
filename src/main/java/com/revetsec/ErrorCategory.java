@@ -21,9 +21,10 @@ import javax.annotation.concurrent.Immutable;
 /**
  * The broad kind of failure a {@link RevetsecException} reports.
  * <p>
- * Every {@code RevetsecException} has exactly one category. The category, together with the failure's cause,
- * decides whether the failure is transient (see {@link RevetsecException#isTransient()}): only {@link #TRANSPORT}
- * and {@link #REMOTE_ERROR} failures can be transient, and failures in every other category never are.
+ * Every {@code RevetsecException} has exactly one category. The documented category, reason, cause and response status
+ * determine its fixed temporary condition classification (see {@link RevetsecException#isTemporaryCondition()}).
+ * Only {@link #TRANSPORT} and {@link #REMOTE_ERROR} failures may be marked temporary; no category establishes
+ * whether earlier work had effects or is safe to replay.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  * @since 1.0.0
@@ -46,8 +47,9 @@ public enum ErrorCategory {
 	 */
 	REMOTE_ERROR,
 	/**
-	 * The exchange with the remote party did not complete. Transient when it timed out or failed with an I/O error;
-	 * never transient when the calling thread was interrupted.
+	 * An external exchange or admitted operation did not yield ordinary successful output. Selected timeout, I/O
+	 * and held-back-request conditions may be marked temporary. Interrupted threads and documented fixed commit
+	 * outcome reasons retain their false classification; the category alone is no effect or replay verdict.
 	 */
 	TRANSPORT,
 	/**

@@ -137,7 +137,7 @@ final class RemoteJwksSourceHostileTests {
 					JwksUnavailableException leaderException = leader.awaitFailure(
 							JwksUnavailableException.class);
 					Assertions.assertEquals(category, leaderException.getCategory());
-					Assertions.assertEquals(transientFailure, leaderException.isTransient());
+					Assertions.assertEquals(transientFailure, leaderException.isTemporaryCondition());
 					// An IO failure keeps the first IOException in the JDK's failure chain, when there is one: on some JDKs a
 					// 204 whose Content-Length the JDK cannot parse fails with no IOException in the chain at all.
 					@Nullable Throwable cause = leaderException.getCause();
@@ -151,7 +151,7 @@ final class RemoteJwksSourceHostileTests {
 					JwksUnavailableException waiterException = waiter.awaitFailure(
 							JwksUnavailableException.class);
 					Assertions.assertEquals(category, waiterException.getCategory());
-					Assertions.assertEquals(transientFailure, waiterException.isTransient());
+					Assertions.assertEquals(transientFailure, waiterException.isTemporaryCondition());
 					Assertions.assertNull(waiterException.getCause());
 					Assertions.assertNotSame(leaderException, waiterException);
 					Assertions.assertEquals(1, gated.getSendCount());

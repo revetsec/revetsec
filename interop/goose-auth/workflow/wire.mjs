@@ -6,10 +6,10 @@ import {readFileSync,writeFileSync,renameSync} from 'node:fs';
 const config=JSON.parse(readFileSync(process.argv[2],'utf8'));
 const events=[],servers=[],startedAt=Date.now(),began=performance.now();
 const elapsed=()=>Math.floor(performance.now()-began);
-let challenge,selectedRedirect,currentAccess,currentRefresh,initialAccess;
+let challenge,selectedRedirect,currentAccess,currentRefresh,initialAccess,lastAuthorizationQuery,resumeAfterBootstrap;
 const persist=()=>{writeFileSync(config.root+'/wire.json.tmp',JSON.stringify({startedAt,events}),{mode:0o600});renameSync(config.root+'/wire.json.tmp',config.root+'/wire.json');};
 const allowedMethods=new Set(['initialize','notifications/initialized','server/discover','tools/list','tools/call','ping','resources/list','prompts/list','resources/templates/list']);
-const classify=path=>path==='/token'?'TOKEN':path==='/authorize'?'AUTHORIZE':path==='/consent'?'CONSENT':path==='/login'?'LOGIN':path==='/register'||path==='/registration'?'DCR':path.includes('.well-known')?'METADATA':'OTHER';
+const classify=path=>path==='/token'?'TOKEN':path==='/authorize'?'AUTHORIZE':path==='/consent'?'CONSENT':path==='/login'?'LOGIN':path==='/session'?'BOOTSTRAP':path==='/register'||path==='/registration'?'DCR':path.includes('.well-known')?'METADATA':'OTHER';
 function proxy(port,targetPort,mcp){
  const server=http.createServer({maxHeaderSize:16384,requestTimeout:15000,headersTimeout:15000},(incoming,outgoing)=>{
   let size=0,parts=[];
@@ -30,10 +30,16 @@ function proxy(port,targetPort,mcp){
    }
    if(row.kind==='AUTHORIZE'){
     const q=url.searchParams;challenge=q.get('code_challenge');selectedRedirect=q.get('redirect_uri');
+    row.resumedAfterBootstrap=resumeAfterBootstrap!==undefined&&resumeAfterBootstrap===url.search;resumeAfterBootstrap=undefined;lastAuthorizationQuery=url.search;
     row.cimdClient=q.get('client_id')===config.clientId;row.exactResource=q.get('resource')===config.resource;
     row.s256=q.get('code_challenge_method')==='S256'&&/^[A-Za-z0-9_-]{43}$/.test(challenge??'');
     const scopes=(q.get('scope')??'').split(' ');row.scopesDiscover=scopes.includes('mcp:discover');row.scopesWhoami=scopes.includes('mcp:whoami');row.onlyKnownScopes=scopes.length>0&&scopes.every(s=>['mcp:discover','mcp:whoami'].includes(s));
     row.exactCallback=selectedRedirect==='http://127.0.0.1:33419/oauth_callback';
+   }
+   if(row.kind==='BOOTSTRAP'){
+    row.originMatches=incoming.headers.origin===config.issuer;row.exactBeginBody=body.equals(Buffer.from('begin=1'));
+    row.originalAuthorizationQuery=lastAuthorizationQuery!==undefined&&url.search===lastAuthorizationQuery;
+    row.noPriorCookie=incoming.headers.cookie===undefined;row.noAuthorization=incoming.headers.authorization===undefined;
    }
    if(row.kind==='TOKEN'){
     const q=new URLSearchParams(body.toString('utf8'));
@@ -46,6 +52,11 @@ function proxy(port,targetPort,mcp){
    events.push(row);persist();let responseStarted=false;
    const target=http.request({host:'127.0.0.1',port:targetPort,path:incoming.url,method:incoming.method,headers:incoming.rawHeaders,timeout:15000},response=>{
     responseStarted=true;row.status=response.statusCode;let length=0,responseParts=[];
+    if(row.kind==='BOOTSTRAP'){
+     const cookies=response.headers['set-cookie']??[];row.secureHttpOnlySessionCookie=cookies.some(cookie=>cookie.startsWith('__Host-RevetsecIssuer=')&&/;\s*Secure(?:;|$)/i.test(cookie)&&/;\s*HttpOnly(?:;|$)/i.test(cookie));
+     if(row.status===303&&row.method==='POST'&&row.originMatches&&row.exactBeginBody&&row.originalAuthorizationQuery)resumeAfterBootstrap=url.search;
+    }
+
     if(mcp&&row.status===403){const header=response.headers['www-authenticate']??'';row.insufficientScope=header.includes('error="insufficient_scope"');row.whoamiChallenge=header.includes('scope="mcp:whoami"');}
     response.on('data',p=>{length+=p.length;if(length<=16384)responseParts.push(p);else responseParts=[];});
     response.on('end',()=>{

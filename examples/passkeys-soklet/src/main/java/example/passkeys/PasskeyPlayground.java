@@ -19,6 +19,11 @@ import com.soklet.HttpServer;
 import com.soklet.InstanceProvider;
 import com.soklet.LogEvent;
 import com.soklet.LifecycleObserver;
+import com.soklet.Request;
+import com.soklet.MarshaledResponse;
+import com.soklet.ResourceMethod;
+import com.soklet.ServerType;
+import org.jspecify.annotations.Nullable;
 import com.soklet.ResourceMethodResolver;
 import com.soklet.Soklet;
 import com.soklet.SokletConfig;
@@ -51,14 +56,15 @@ public final class PasskeyPlayground {
             Runtime.getRuntime().addShutdownHook(new Thread(soklet::close, "passkey-demo-shutdown"));
             soklet.start();
             System.out.println("Passkey demo listening on IPv4 loopback; fresh volatile state.");
-            soklet.awaitShutdown();
+            if (!soklet.awaitShutdown().isComplete())
+                throw new IllegalStateException("Passkey demo shutdown incomplete");
         }
     }
 
     public static @NonNull SokletConfig config(@NonNull PasskeyApp app, int port) {
         if (port < 1 || port > 65535) throw new IllegalArgumentException("Invalid HTTP port");
         HttpServer http = HttpServer.withPort(port).host("127.0.0.1")
-                .maximumRequestBodySizeInBytes(65_536).maximumRequestSizeInBytes(73_728)
+                .idGenerator(app::requestId).maximumRequestBodySizeInBytes(65_536).maximumRequestSizeInBytes(73_728)
                 .requestHandlerTimeout(Duration.ofSeconds(15)).requestHandlerConcurrency(8)
                 .requestHandlerQueueCapacity(16).build();
         return SokletConfig.withHttpServer(http)
@@ -69,6 +75,12 @@ public final class PasskeyPlayground {
                                 : InstanceProvider.defaultInstance().provide(type);
                     }
                 }).lifecycleObserver(new LifecycleObserver() {
+                    @Override public void didFailToWriteResponse(@NonNull ServerType server,
+                            @NonNull Request request, @Nullable ResourceMethod method,
+                            @NonNull MarshaledResponse response, @NonNull Duration duration,
+                            @NonNull Throwable failure) {
+                        app.responseWriteFailed(request);
+                    }
                     @Override public void didReceiveLogEvent(@NonNull LogEvent event) {
                         System.err.println("Passkey demo event: " + event.getLogEventType().name());
                     }

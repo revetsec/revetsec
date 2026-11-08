@@ -15,6 +15,8 @@
  */
 package com.revetsec.saml;
 
+import org.jspecify.annotations.NonNull;
+
 import org.junit.jupiter.api.DynamicTest;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestFactory;
@@ -33,14 +35,14 @@ final class SamlPostBase64GrammarTests {
     private static final int XML_CAP = 256 * 1024;
     private static final int BODY_CAP = 1_061_128;
 
-    @TestFactory Stream<DynamicTest> rejectsOmittedPaddingAndNonzeroUnusedBits() {
+    @TestFactory @NonNull Stream<@NonNull DynamicTest> rejectsOmittedPaddingAndNonzeroUnusedBits() {
         return Stream.of(0, 1, 2).flatMap(channel -> Stream.of("PA", "PA=", "PHg", "AAA",
                 "PB==", "PC==", "PHh=", "PHj=", "/x==", "//9=").map(value ->
                 DynamicTest.dynamicTest("noncanonical channel=" + channel + " value=" + value,
                         () -> rejected(channel, value, SamlPostBindingParseResult.Reason.BASE64))));
     }
 
-    @TestFactory Stream<DynamicTest> independentPadBitModelCoversEveryFinalSextet() {
+    @TestFactory @NonNull Stream<@NonNull DynamicTest> independentPadBitModelCoversEveryFinalSextet() {
         return Stream.of(0, 1, 2).flatMap(channel -> Stream.of(false, true).map(twoBytes ->
                 DynamicTest.dynamicTest("pad-bit model channel=" + channel + " two bytes=" + twoBytes, () -> {
             // Literal sextet arithmetic is independent of the production re-encoding check.
@@ -65,7 +67,7 @@ final class SamlPostBase64GrammarTests {
         })));
     }
 
-    @TestFactory Stream<DynamicTest> exactAndExcessiveWhitespaceBudgets() {
+    @TestFactory @NonNull Stream<@NonNull DynamicTest> exactAndExcessiveWhitespaceBudgets() {
         return Stream.of(0, 1, 2).flatMap(channel -> Stream.of(" ", "\t", "\r", "\n", " \t\r\n")
                 .flatMap(unit -> Stream.of(false, true).map(over -> DynamicTest.dynamicTest(
                         "wrap channel=" + channel + " code=" + (int) unit.charAt(0) + " mixed=" + (unit.length() > 1) + " over=" + over, () -> {
@@ -76,7 +78,7 @@ final class SamlPostBase64GrammarTests {
         }))));
     }
 
-    @TestFactory Stream<DynamicTest> canonicalQuantaAndPermittedWhitespacePositionsRemainReadable() {
+    @TestFactory @NonNull Stream<@NonNull DynamicTest> canonicalQuantaAndPermittedWhitespacePositionsRemainReadable() {
         return Stream.of(0, 1, 2).flatMap(channel -> Stream.of("PA==", "PHg=", "PHgv", "++++", "////",
                 " \t\r\nPA==", "PA== \t\r\n", "P A = =", "P\tH\r g=\n").map(value ->
                 DynamicTest.dynamicTest("canonical channel=" + channel + " value=" + value, () -> {
@@ -85,7 +87,7 @@ final class SamlPostBase64GrammarTests {
         })));
     }
 
-    @TestFactory Stream<DynamicTest> malformedAlphabetPaddingAndWhitespaceStillReject() {
+    @TestFactory @NonNull Stream<@NonNull DynamicTest> malformedAlphabetPaddingAndWhitespaceStillReject() {
         return Stream.of(0, 1, 2).flatMap(channel -> Stream.of("A", "=", "====", "A===", "AA=", "AA===",
                 "AA==AA==", "A=AA", "AAA==", "AAAA=", "_A==", "-A==", "AA*==", "AA\u000b==",
                 "AA\f==", "AA\u0085==", "AA\u00a0==", "AA\u2028==").map(value ->
@@ -93,7 +95,7 @@ final class SamlPostBase64GrammarTests {
                         rejected(channel, value, SamlPostBindingParseResult.Reason.BASE64))));
     }
 
-    @TestFactory Stream<DynamicTest> decodedXmlAndEncodedCeilingsAreIndependentOfWrapping() {
+    @TestFactory @NonNull Stream<@NonNull DynamicTest> decodedXmlAndEncodedCeilingsAreIndependentOfWrapping() {
         return Stream.of(0, 1, 2).flatMap(channel -> Stream.of(1, 2, 3, XML_CAP - 1, XML_CAP,
                 XML_CAP + 1, XML_CAP + 2, XML_CAP + 3).map(size -> DynamicTest.dynamicTest(
                         "XML channel=" + channel + " size=" + size, () -> {
@@ -104,14 +106,14 @@ final class SamlPostBase64GrammarTests {
         })));
     }
 
-    @TestFactory Stream<DynamicTest> encodedCeilingRejectsBeforeDecodingMalformedBase64() {
+    @TestFactory @NonNull Stream<@NonNull DynamicTest> encodedCeilingRejectsBeforeDecodingMalformedBase64() {
         return Stream.of(0, 1, 2).map(channel -> DynamicTest.dynamicTest("encoded cap channel=" + channel, () -> {
             // A malformed byte after the encoded cap must not reach the JDK Base64 decoder.
             rejected(channel, "A".repeat(349_528) + "*", SamlPostBindingParseResult.Reason.XML_SIZE);
         }));
     }
 
-    @TestFactory Stream<DynamicTest> bodyCapPrecedesTheWhitespaceGrammar() {
+    @TestFactory @NonNull Stream<@NonNull DynamicTest> bodyCapPrecedesTheWhitespaceGrammar() {
         return Stream.of(0, 1, 2).map(channel -> DynamicTest.dynamicTest("body cap channel=" + channel, () -> {
             String prefix = field(channel) + "=PA==";
             byte[] atCap = (prefix + " ".repeat(BODY_CAP - prefix.length())).getBytes(StandardCharsets.US_ASCII);
@@ -150,7 +152,7 @@ final class SamlPostBase64GrammarTests {
         assertInstanceOf(SamlInboundResponse.Rejected.class, SamlInboundResponse.parse(parsed.getMessage()));
     }
 
-    private static void accepted(int channel, String value, byte[] expected) {
+    private static void accepted(int channel, @NonNull String value, byte @NonNull [] expected) {
         var message = assertInstanceOf(SamlPostBindingParseResult.Parsed.class,
                 parse(channel, body(channel, value), MIME, "tenant=one")).getMessage();
         assertEquals(channel == 2 ? SamlPostBindingMessage.Kind.REQUEST : SamlPostBindingMessage.Kind.RESPONSE, message.getKind());
@@ -159,20 +161,20 @@ final class SamlPostBase64GrammarTests {
         byte[] borrowed = message.xml(); borrowed[0] ^= 1;
         assertArrayEquals(expected, message.xml());
     }
-    private static void rejected(int channel, String value, SamlPostBindingParseResult.Reason reason) {
+    private static void rejected(int channel, @NonNull String value, SamlPostBindingParseResult.@NonNull Reason reason) {
         assertReason(reason, parse(channel, body(channel, value), MIME, null));
     }
-    private static void assertReason(SamlPostBindingParseResult.Reason reason, SamlPostBindingParseResult result) {
+    private static void assertReason(SamlPostBindingParseResult.@NonNull Reason reason, @NonNull SamlPostBindingParseResult result) {
         assertEquals(reason, assertInstanceOf(SamlPostBindingParseResult.Rejected.class, result).getReason());
     }
-    private static SamlPostBindingParseResult parse(int channel, byte[] body, List<String> mime,
+    private static @NonNull SamlPostBindingParseResult parse(int channel, byte @NonNull [] body, @NonNull List<@NonNull String> mime,
             @org.jspecify.annotations.Nullable String query) {
         return channel == 0 ? SamlPostBindingMessage.fromFormBodyResult(body, mime, query)
                 : SamlPostBindingMessage.fromLogoutFormBodyResult(body, mime, query);
     }
-    private static String field(int channel) { return channel == 2 ? "SAMLRequest" : "SAMLResponse"; }
-    private static byte[] body(int channel, String value) {
+    private static @NonNull String field(int channel) { return channel == 2 ? "SAMLRequest" : "SAMLResponse"; }
+    private static byte @NonNull [] body(int channel, @NonNull String value) {
         return bytes(field(channel) + "=" + URLEncoder.encode(value, StandardCharsets.UTF_8) + "&RelayState=opaque");
     }
-    private static byte[] bytes(String text) { return text.getBytes(StandardCharsets.UTF_8); }
+    private static byte @NonNull [] bytes(@NonNull String text) { return text.getBytes(StandardCharsets.UTF_8); }
 }

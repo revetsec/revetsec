@@ -182,7 +182,7 @@ final class OAuthCimdAdmissionTests {
   return Stream.of("garbage",OAuthServerCredential.refresh("A".repeat(43))).map(value->DynamicTest.dynamicTest(value,()->{
    var t=new OAuthCimdAdmissionTests();AtomicInteger resolutions=new AtomicInteger();var key=TestJwk.Fixture.IDP_SIGNING_RSA_2048;
    var policy=OAuthClientMetadataPolicy.fromAddressResolverAndCache((host,budget)->{resolutions.incrementAndGet();return List.of(java.net.InetAddress.getLoopbackAddress());},InMemoryOAuthClientMetadataCache.fromMaximumEntries(16));
-   var signing=OAuthIssuerKeySnapshot.withActiveKey(OAuthIssuerSigningKey.fromKeyPair("key",key.getPrivateKey(),key.getPublicKey())).generation("g1").publishedAt(NOW.minusSeconds(120)).build();
+   var signing=OAuthIssuerKeySnapshot.withActiveKey(OAuthIssuerSigningKey.fromRsaKeyPair("key",key.getPrivateKey(),key.getPublicKey())).generation("g1").publishedAt(NOW.minusSeconds(120)).build();
    var server=OAuthAuthorizationServer.withIssuer(ISSUER).authorizationEndpoint(URI.create(ISSUER+"/authorize")).tokenEndpoint(URI.create(ISSUER+"/token"))
     .jwksEndpoint(URI.create(ISSUER+"/jwks")).revocationEndpoint(URI.create(ISSUER+"/revoke"))
     .clientRepository((id,budget)->Optional.empty()).store(t.store).stateSealer(t.sealer).clock(t.clock)

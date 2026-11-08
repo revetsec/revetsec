@@ -193,7 +193,7 @@ final class OidcIssuerPolicyTests {
 					OAuthException failure = assertThrows(OAuthException.class, () -> validator.validate(compact, NONCE, ACCESS, CODE, null, Set.of()));
 					assertEquals(mode.equals("interrupt") ? OAuthException.Reason.INTERRUPTED : OAuthException.Reason.ISSUER_POLICY_UNAVAILABLE, failure.getReason());
 					assertNull(failure.getCause()); assertEquals(0, failure.getSuppressed().length); assertFalse(failure.toString().contains("TEST-ONLY-predicate-secret"));
-					assertFalse(failure.isTransient());
+					assertFalse(failure.isTemporaryCondition());
 					if (!mode.equals("interrupt")) { assertInstanceOf(OAuthConfigurationException.class, failure); assertEquals(ErrorCategory.CONFIGURATION, failure.getCategory()); }
 				} else assertEquals(OidcValidationException.Reason.TENANT_NOT_ALLOWED, assertThrows(OidcValidationException.class,
 						() -> validator.validate(compact, NONCE, ACCESS, CODE, null, Set.of())).getReason());

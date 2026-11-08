@@ -1326,7 +1326,7 @@ final class FrozenLimitsTests {
 		JwksUnavailableException exception = Assertions.assertThrows(JwksUnavailableException.class,
 				call);
 		Assertions.assertEquals(category, exception.getCategory());
-		Assertions.assertEquals(transientFailure, exception.isTransient());
+		Assertions.assertEquals(transientFailure, exception.isTemporaryCondition());
 		return exception;
 	}
 

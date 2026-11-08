@@ -15,6 +15,7 @@
  */
 package example.rsa;
 
+import com.revetsec.BrowserBinding;
 import com.revetsec.jose.JwsAlgorithm;
 import com.revetsec.jose.JoseException;
 import com.revetsec.oauth.*;
@@ -37,7 +38,7 @@ import static org.junit.jupiter.api.Assertions.*;
 /** Runs the same actual public-API scenarios as JUnit and as a separate capture process. */
 public final class ExampleChecksTests {
 	private static final URI CALLBACK = URI.create("https://app.example/callback");
-	private static final String BINDING = "TEST-ONLY-private-browser-binding";
+	private static final BrowserBinding BINDING = BrowserBinding.fromTrustedPersistence("TEST-ONLY-private-browser-binding");
 
   @TempDir static @NonNull Path tlsDirectory;
   private static @Nullable String originalTlsStore;
@@ -70,9 +71,9 @@ public final class ExampleChecksTests {
   }
 
 	@Test void issuerAudienceAcrossAllRolesAndAlgorithms() throws Exception {
-		for (JwsAlgorithm algorithm : List.of(JwsAlgorithm.PS256, JwsAlgorithm.RS256, JwsAlgorithm.RS384)) runPrivateKey(algorithm, false);
+		for (JwsAlgorithm algorithm : SelectedKeyProfileTests.SELECTED) runPrivateKey(algorithm, false);
 	}
-	@Test void explicitEndpointAudienceNamesEachActualRole() throws Exception { runPrivateKey(JwsAlgorithm.PS256, true); }
+	@Test void explicitEndpointAudienceNamesEachActualRole() throws Exception { for (JwsAlgorithm algorithm : SelectedKeyProfileTests.SELECTED) runPrivateKey(algorithm, true); }
 	@Test void signatureVerifiedTenantIdentityAndUserInfo() throws Exception { runEntra("valid"); }
 	@Test void applicationTenantDenialReturnsNoIdentity() throws Exception { runEntra("denied"); }
 	@Test void invalidSignatureNeverReachesTenantDecision() throws Exception { runEntra("forged"); }
@@ -84,18 +85,21 @@ public final class ExampleChecksTests {
 		if (arguments.length != 1) throw new IllegalArgumentException("Provide a new absolute capture file");
 		Path path = Path.of(arguments[0]); if (!path.isAbsolute()) throw new IllegalArgumentException("Absolute capture path required");
 		List<String> cases = new ArrayList<>();
-		for (JwsAlgorithm algorithm : List.of(JwsAlgorithm.PS256, JwsAlgorithm.RS256, JwsAlgorithm.RS384)) cases.add(runPrivateKey(algorithm, false));
-		cases.add(runPrivateKey(JwsAlgorithm.PS256, true));
+		for (JwsAlgorithm algorithm : SelectedKeyProfileTests.SELECTED) cases.add(runPrivateKey(algorithm, false));
+		for (JwsAlgorithm algorithm : SelectedKeyProfileTests.SELECTED) cases.add(runPrivateKey(algorithm, true));
 		for (String mode : List.of("valid", "denied", "forged", "key-issuer", "refresh-switch")) cases.add(runEntra(mode));
+		for (String role : List.of("token", "refresh", "introspection", "revocation")) cases.add(runLegacyMetadataRefusal(role));
+		for (JwsAlgorithm algorithm : List.of(JwsAlgorithm.RS256,JwsAlgorithm.ES256,JwsAlgorithm.ES384,JwsAlgorithm.ED25519)) cases.add(runMismatchedPrivate(algorithm));
 		Files.writeString(path, "{\"schema\":1,\"synthetic\":true,\"hostedEntraVerified\":false,\"cases\":[" + String.join(",", cases) + "]}\n", StandardOpenOption.CREATE_NEW);
-		System.out.println("Nine local example scenarios passed; capture contains no credentials or identity fields.");
+		System.out.println("Thirty-one local example scenarios passed; capture contains no credentials or identity fields.");
 	}
 
 	private static @NonNull String runPrivateKey(@NonNull JwsAlgorithm algorithm, boolean endpoint) throws Exception {
-		KeyPair keys = LocalProvider.freshKey(); AtomicInteger snapshots = new AtomicInteger();
-		ClientAssertionKeyProvider fixed = PrivateKeyClients.registeredKey(keys, algorithm, "application-key");
+		KeyPair keys = SelectedKeyProfileTests.fresh(algorithm); AtomicInteger snapshots = new AtomicInteger();
+		var registration = PrivateKeyClients.registration(keys, algorithm, "application-key");
+		ClientAssertionKeyProvider fixed = registration.getKeyProvider();
 		ClientAssertionKeyProvider rotating = budget -> { assertTrue(budget.compareTo(Duration.ZERO) > 0); snapshots.incrementAndGet(); return fixed.getSigningKey(budget); };
-		try (LocalProvider fixture = new LocalProvider(keys, algorithm, endpoint, false)) {
+		try (LocalProvider fixture = new LocalProvider(registration.getJwksPublisher(), algorithm, endpoint, false)) {
 			OAuthClient.Builder builder = PrivateKeyClients.withMetadata(fixture.metadata(), "example-client", rotating)
 					.httpClient(fixture.httpClient()).clock(LocalProvider.CLOCK);
 			if (endpoint) builder.clientAuthentication(ClientAuthentication.withPrivateKeyJwt(rotating).audience(ClientAssertionAudience.TOKEN_ENDPOINT).build());
@@ -109,18 +113,19 @@ public final class ExampleChecksTests {
 			assertInstanceOf(OAuthRevocationResult.Succeeded.class, client.revokeResult(LocalProvider.ACCESS, TokenTypeHint.ACCESS_TOKEN));
 			assertNull(fixture.failure, "Independent provider rejected a request (details redacted)");
 			assertEquals(4, fixture.posts.get()); assertEquals(4, fixture.assertions.get()); assertEquals(4, snapshots.get());
-			assertEquals(4, fixture.identifiers.size());
+			assertEquals(4, fixture.identifiers.size()); assertEquals(1, fixture.applicationJwksFetches.get()); assertEquals(1, fixture.signatureProviders.size());
 			if (endpoint) assertEquals(Set.of(fixture.endpoint("/token").toString(), fixture.endpoint("/revoke").toString(), fixture.endpoint("/inspect").toString()), new HashSet<>(fixture.audiences));
 			else assertEquals(Set.of(fixture.issuer()), new HashSet<>(fixture.audiences));
-			return "{\"case\":\"private-key-" + algorithm.getWireValue() + "-" + (endpoint ? "endpoint" : "issuer") + "\",\"posts\":4,\"independentSignaturesVerified\":4,\"freshIdentifiers\":4,\"cacheHitKeyCalls\":0,\"passed\":true}";
+			return "{\"case\":\"private-key-" + algorithm.getWireValue() + "-" + (endpoint ? "endpoint" : "issuer") + "\",\"posts\":4,\"independentSignaturesVerified\":4,\"freshIdentifiers\":4,\"cacheHitKeyCalls\":0,\"publicJwksFetches\":1,\"signatureProvider\":\"" + fixture.signatureProviders.iterator().next() + "\",\"passed\":true}";
 		}
 	}
 
 	private static @NonNull String runEntra(@NonNull String mode) throws Exception {
 		KeyPair keys = LocalProvider.freshKey(); AtomicInteger tenantCalls = new AtomicInteger();
-		ClientAuthentication authentication = ClientAuthentication.withPrivateKeyJwt(PrivateKeyClients.registeredKey(keys, JwsAlgorithm.PS256, "application-key"))
+		var registration = PrivateKeyClients.registration(keys, JwsAlgorithm.PS256, "application-key");
+		ClientAuthentication authentication = ClientAuthentication.withPrivateKeyJwt(registration.getKeyProvider())
 				.audience(ClientAssertionAudience.TOKEN_ENDPOINT).build();
-		try (LocalProvider fixture = new LocalProvider(keys, JwsAlgorithm.PS256, true, true)) {
+		try (LocalProvider fixture = new LocalProvider(registration.getJwksPublisher(), JwsAlgorithm.PS256, true, true)) {
 			fixture.forge = mode.equals("forged"); fixture.missingKeyIssuer = mode.equals("key-issuer");
 			Set<String> permitted = Set.of(LocalProvider.TENANT, LocalProvider.OTHER);
 			OidcClient client = EntraLogin.withIssuer(LocalProvider.TRUST, "example-client", CALLBACK,
@@ -162,4 +167,38 @@ public final class ExampleChecksTests {
 					+ ",\"tenantDecisionCalls\":" + tenantCalls.get() + ",\"userInfoCalls\":" + fixture.userInfoCalls.get() + ",\"passed\":true}";
 		}
 	}
+
+    @org.junit.jupiter.api.TestFactory @NonNull List<org.junit.jupiter.api.@NonNull DynamicTest> legacyEdDsaMetadataDoesNotAuthorizeFullySpecifiedEd25519Posts(){
+        List<org.junit.jupiter.api.DynamicTest> cells=new ArrayList<>();for(String role:List.of("token","refresh","introspection","revocation"))cells.add(org.junit.jupiter.api.DynamicTest.dynamicTest("legacy-metadata-"+role,()->runLegacyMetadataRefusal(role)));return cells;
+    }
+    @org.junit.jupiter.api.TestFactory @NonNull List<org.junit.jupiter.api.@NonNull DynamicTest> mismatchedPrivateKeyCannotReleaseAnyCredentialRequest(){
+        List<org.junit.jupiter.api.DynamicTest> cells=new ArrayList<>();for(JwsAlgorithm algorithm:List.of(JwsAlgorithm.RS256,JwsAlgorithm.ES256,JwsAlgorithm.ES384,JwsAlgorithm.ED25519))cells.add(org.junit.jupiter.api.DynamicTest.dynamicTest("mismatched-private-"+algorithm.getWireValue(),()->runMismatchedPrivate(algorithm)));return cells;
+    }
+
+    private static @NonNull String runLegacyMetadataRefusal(@NonNull String role)throws Exception{
+        var registration=PrivateKeyClients.registration(SelectedKeyProfileTests.fresh(JwsAlgorithm.ED25519),JwsAlgorithm.ED25519,"application-key");AtomicInteger snapshots=new AtomicInteger();ClientAssertionKeyProvider provider=budget->{snapshots.incrementAndGet();return registration.getKeyProvider().getSigningKey(budget);};
+        try(LocalProvider fixture=new LocalProvider(registration.getJwksPublisher(),JwsAlgorithm.ED25519,false,false)){
+            String selected=JwsAlgorithm.ED25519.getWireValue();var metadata=fixture.metadataWithAlgorithms(role.equals("token")||role.equals("refresh")?"EdDSA":selected,role.equals("revocation")?"EdDSA":selected,role.equals("introspection")?"EdDSA":selected);
+            OAuthClient client=PrivateKeyClients.withMetadata(metadata,"example-client",provider).httpClient(fixture.httpClient()).clock(LocalProvider.CLOCK).build();
+            OAuthConfigurationException refused=assertThrows(OAuthConfigurationException.class,()->{switch(role){
+                case "token"->ClientCredentialsTokenSource.withClient(client).build().getAccessTokenResult();
+                case "refresh"->client.refreshResult(RefreshToken.fromValue(LocalProvider.REFRESH),TokenRequestOptions.builder().build());
+                case "introspection"->TokenIntrospectionClient.withOAuthClient(client).expectedAudiences(Set.of("https://resource.example")).build().validateResult(((BearerTokenResult.Present)BearerToken.fromAuthorizationHeaderValuesResult(List.of("Bearer "+LocalProvider.ACCESS))).getToken());
+                case "revocation"->client.revokeResult(LocalProvider.ACCESS,TokenTypeHint.ACCESS_TOKEN);
+                default->throw new IllegalArgumentException("Unknown fixed role");
+            }});
+            assertEquals(OAuthException.Reason.CLIENT_ASSERTION_ENDPOINT_MISMATCH,refused.getReason());
+            assertEquals(0,fixture.posts.get());assertEquals(0,fixture.assertions.get());assertEquals(1,snapshots.get());assertEquals(1,fixture.applicationJwksFetches.get());assertNull(fixture.failure);
+            return "{\"case\":\"legacy-metadata-"+role+"\",\"credentialPosts\":0,\"keySnapshots\":1,\"outcome\":\""+refused.getReason().name()+"\",\"passed\":true}";
+        }
+    }
+
+    private static @NonNull String runMismatchedPrivate(@NonNull JwsAlgorithm algorithm)throws Exception{
+        KeyPair first=SelectedKeyProfileTests.fresh(algorithm),second=SelectedKeyProfileTests.fresh(algorithm);var registration=PrivateKeyClients.registration(new KeyPair(second.getPublic(),first.getPrivate()),algorithm,"application-key");AtomicInteger snapshots=new AtomicInteger();ClientAssertionKeyProvider provider=budget->{snapshots.incrementAndGet();return registration.getKeyProvider().getSigningKey(budget);};
+        try(LocalProvider fixture=new LocalProvider(registration.getJwksPublisher(),algorithm,false,false)){
+            var client=PrivateKeyClients.withMetadata(fixture.metadata(),"example-client",provider).httpClient(fixture.httpClient()).clock(LocalProvider.CLOCK).build();var source=ClientCredentialsTokenSource.withClient(client).build();OAuthConfigurationException refused=assertThrows(OAuthConfigurationException.class,source::getAccessTokenResult);
+            assertEquals(OAuthException.Reason.CLIENT_ASSERTION_KEY_PAIR_MISMATCH,refused.getReason());assertEquals(0,fixture.posts.get());assertEquals(0,fixture.assertions.get());assertEquals(1,snapshots.get());assertEquals(1,fixture.applicationJwksFetches.get());assertNull(fixture.failure);
+            return "{\"case\":\"mismatched-private-"+algorithm.getWireValue()+"\",\"credentialPosts\":0,\"keySnapshots\":1,\"outcome\":\""+refused.getReason().name()+"\",\"passed\":true}";
+        }
+    }
 }

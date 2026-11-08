@@ -15,6 +15,7 @@
  */
 package com.revetsec.saml;
 
+import com.revetsec.BrowserBinding;
 import com.revetsec.internal.xml.SecureXmlParser;
 import org.jspecify.annotations.NonNull;
 import org.junit.jupiter.api.Test;
@@ -203,10 +204,15 @@ final class SamlConfigurationBoundaryTests {
     }
 
     @Test void browserBindingAcceptsItsExactMaximumButRejectsTheNextCharacter() {
-        assertTrue(SamlPendingBinding.context("application", "b".repeat(4096))
+        BrowserBinding exact = BrowserBinding.fromTrustedPersistence("b".repeat(4096));
+        assertTrue(SamlPendingBinding.context("application", exact.toSecretString())
                 .startsWith("application|saml-store-v1|"));
+        BrowserBinding unmatched = BrowserBinding.fromTrustedPersistence("saml-\uD800-binding");
+        assertTrue(SamlPendingBinding.context("application", unmatched.toSecretString())
+                .startsWith("application|saml-store-v1|"));
+        BrowserBinding tooLongForSaml = BrowserBinding.fromTrustedPersistence("b".repeat(4097));
         assertThrows(IllegalArgumentException.class,
-                () -> SamlPendingBinding.context("application", "b".repeat(4097)));
+                () -> SamlPendingBinding.context("application", tooLongForSaml.toSecretString()));
     }
 
     @Test void postFormRejectsHostileNonceAndEscapesActionAndFields() {

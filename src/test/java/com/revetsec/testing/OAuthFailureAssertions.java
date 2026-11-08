@@ -27,7 +27,7 @@ public final class OAuthFailureAssertions {
         assertEquals(expected.getClass(), actual.getClass());
         assertEquals(expected.getReason(), actual.getReason());
         assertEquals(expected.getCategory(), actual.getCategory());
-        assertEquals(expected.isTransient(), actual.isTransient());
+        assertEquals(expected.isTemporaryCondition(), actual.isTemporaryCondition());
         assertEquals(0, actual.getSuppressed().length);
         assertNull(actual.getCause());
         if (expected instanceof OAuthErrorResponseException error) {

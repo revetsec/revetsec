@@ -65,8 +65,8 @@ final class JwsSignerTests {
 	private static final @NonNull String EXACT_CLAIMS = " \n{\"z\":1e+0,\"label\":\"é😀\",\"a\": [true,null]}\t ";
 
 	@TestFactory
-	@NonNull Stream<@NonNull DynamicTest> threeAlgorithmsEmitIndependentlyVerifiedExactByteCredentials() {
-		return Stream.of(JwsAlgorithm.PS256, JwsAlgorithm.RS256, JwsAlgorithm.RS384).map(algorithm ->
+	@NonNull Stream<@NonNull DynamicTest> sixRsaAlgorithmsEmitIndependentlyVerifiedExactByteCredentials() {
+		return Stream.of(JwsAlgorithm.PS256, JwsAlgorithm.PS384, JwsAlgorithm.PS512, JwsAlgorithm.RS256, JwsAlgorithm.RS384, JwsAlgorithm.RS512).map(algorithm ->
 				DynamicTest.dynamicTest(algorithm.name(), () -> {
 					JwsSigner signer = signer(algorithm);
 					byte[] claims = utf8(EXACT_CLAIMS);
@@ -92,9 +92,9 @@ final class JwsSignerTests {
 	}
 
 	@Test
-	void factoryAcceptsOnlyTheThreeSelectedAlgorithms() {
+	void factoryAcceptsOnlyTheSixSelectedRsaAlgorithms() {
 		for (JwsAlgorithm algorithm : JwsAlgorithm.values()) {
-			if (Set.of(JwsAlgorithm.PS256, JwsAlgorithm.RS256, JwsAlgorithm.RS384).contains(algorithm)) continue;
+			if (Set.of(JwsAlgorithm.PS256, JwsAlgorithm.PS384, JwsAlgorithm.PS512, JwsAlgorithm.RS256, JwsAlgorithm.RS384, JwsAlgorithm.RS512).contains(algorithm)) continue;
 			assertInvalidKey(() -> JwsSigner.fromRsaKeyPair(KEY.getPrivateKey(), KEY.getPublicKey(), algorithm));
 		}
 	}
@@ -193,7 +193,7 @@ final class JwsSignerTests {
 	@Test
 	void differentModulusLengthsFailAsSigningUnavailableWithoutOutput() {
 		PrivateKey largerPrivate = TestJwk.Fixture.IDP_SIGNING_RSA_3072.getPrivateKey();
-		for (JwsAlgorithm algorithm : List.of(JwsAlgorithm.PS256, JwsAlgorithm.RS256, JwsAlgorithm.RS384)) {
+		for (JwsAlgorithm algorithm : List.of(JwsAlgorithm.PS256, JwsAlgorithm.PS384, JwsAlgorithm.PS512, JwsAlgorithm.RS256, JwsAlgorithm.RS384, JwsAlgorithm.RS512)) {
 			JwsSigner signer = JwsSigner.fromRsaKeyPair(largerPrivate, KEY.getPublicKey(), algorithm);
 			assertReason(JwsSigningException.Reason.SIGNING_UNAVAILABLE, () -> emit(signer, "JWT", "{}", BUDGET));
 			assertReason(JwsSigningException.Reason.SIGNING_UNAVAILABLE, () -> signer.warmUp(BUDGET));
@@ -242,7 +242,7 @@ final class JwsSignerTests {
 		PublicKey pssPublic = KeyFactory.getInstance("RSASSA-PSS").generatePublic(
 				new RSAPublicKeySpec(real.getModulus(), real.getPublicExponent(), pss("SHA-256", 32)));
 		SuppliedPublicKey restrictedRsaPublic = new SuppliedPublicKey(real.getModulus(), real.getPublicExponent(), pss("SHA-256", 32));
-		for (JwsAlgorithm algorithm : List.of(JwsAlgorithm.RS256, JwsAlgorithm.RS384)) {
+		for (JwsAlgorithm algorithm : List.of(JwsAlgorithm.RS256, JwsAlgorithm.RS384, JwsAlgorithm.RS512)) {
 			assertInvalidKey(() -> JwsSigner.fromRsaKeyPair(KEY.getPrivateKey(), pssPublic, algorithm));
 			assertInvalidKey(() -> JwsSigner.fromRsaKeyPair(KEY.getPrivateKey(), restrictedRsaPublic, algorithm));
 		}
@@ -444,7 +444,7 @@ final class JwsSignerTests {
 			assertSame(reason, exception.getReason());
 			assertEquals(reason == JwsSigningException.Reason.BUDGET_EXHAUSTED ? ErrorCategory.TRANSPORT : ErrorCategory.CONFIGURATION,
 					exception.getCategory());
-			assertEquals(reason == JwsSigningException.Reason.BUDGET_EXHAUSTED, exception.isTransient());
+			assertEquals(reason == JwsSigningException.Reason.BUDGET_EXHAUSTED, exception.isTemporaryCondition());
 			assertNull(exception.getCause()); assertEquals(0, exception.getSuppressed().length);
 			assertTrue(requireNonNull(exception.getMessage()).endsWith(".")); assertTrue(messages.add(requireNonNull(exception.getMessage())));
 			assertEquals(exception.getMessage(), JwsSigningException.fromReason(reason).getMessage());
@@ -483,10 +483,20 @@ final class JwsSignerTests {
 	private static boolean verify(@NonNull JwsAlgorithm algorithm, @NonNull String compact, @NonNull PublicKey key,
 			@Nullable PSSParameterSpec parameters) throws Exception {
 		String[] segments = compact.split("\\.", -1);
-		Signature verifier = Signature.getInstance(algorithm == JwsAlgorithm.PS256 ? "RSASSA-PSS"
-				: algorithm == JwsAlgorithm.RS256 ? "SHA256withRSA" : "SHA384withRSA");
+		String name = switch (algorithm) {
+			case PS256, PS384, PS512 -> "RSASSA-PSS";
+			case RS256 -> "SHA256withRSA";
+			case RS384 -> "SHA384withRSA";
+			case RS512 -> "SHA512withRSA";
+			default -> throw new AssertionError("Unexpected test algorithm");
+		};
+		Signature verifier = Signature.getInstance(name);
 		verifier.initVerify(key);
-		if (algorithm == JwsAlgorithm.PS256) verifier.setParameter(parameters == null ? pss("SHA-256", 32) : parameters);
+		if (algorithm == JwsAlgorithm.PS256 || algorithm == JwsAlgorithm.PS384 || algorithm == JwsAlgorithm.PS512) {
+			String digest = algorithm == JwsAlgorithm.PS256 ? "SHA-256" : algorithm == JwsAlgorithm.PS384 ? "SHA-384" : "SHA-512";
+			int salt = algorithm == JwsAlgorithm.PS256 ? 32 : algorithm == JwsAlgorithm.PS384 ? 48 : 64;
+			verifier.setParameter(parameters == null ? new PSSParameterSpec(digest, "MGF1", new MGF1ParameterSpec(digest), salt, 1) : parameters);
+		}
 		verifier.update((segments[0] + "." + segments[1]).getBytes(StandardCharsets.US_ASCII));
 		return verifier.verify(Base64.getUrlDecoder().decode(segments[2]));
 	}

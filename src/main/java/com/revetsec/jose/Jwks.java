@@ -65,6 +65,8 @@ public final class Jwks {
 	/**
 	 * Parses a JSON Web Key Set document and returns the usable keys or a fixed structural rejection.
 	 * Malformed or unusable individual keys are skipped; only the document structure and limits reject the set.
+	 * This static facade returns usable keys only: it exposes no skipped-key count, original indices or per-key
+	 * skip reasons and emits no observer events. Remote fetches have separate JoseObserver skip callbacks.
 	 *
 	 * @param json untrusted document, at most 256 KiB as UTF-8 and 100 elements in its keys array
 	 * @return the parsing outcome; a successful key set may have no usable keys

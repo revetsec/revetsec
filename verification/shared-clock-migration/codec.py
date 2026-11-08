@@ -22,14 +22,15 @@ def protected_write(path,value):
  finally:os.close(fd)
 
 class CodecClient:
- def __init__(self,work,java_home,core_jar,old_jar,repository='/private/tmp/revetsec-refresh-m2'):
+ def __init__(self,work,java_home,core_jar,old_jar,repository='/private/tmp/revetsec-refresh-m2',*,expected_core_sha256=None):
   self.work=Path(work);self.work.mkdir(parents=True,exist_ok=True);os.chmod(self.work,0o700)
   self.java=Path(java_home)/'bin/java';self.javac=Path(java_home)/'bin/javac';self.core=Path(core_jar).resolve();self.old=Path(old_jar).resolve();self.annotations=[Path(repository)/x for x in ANNOTATIONS];self.commands=[];self.counter=0
-  if digest(self.core)!='b23109a3434703a40ce5a9795ae18b46265c9f07b73901c3b3c4c54dcbbe3b38' or digest(self.old)!='03c9bbc0ff0ec7ea1038d1549a198a49c8ec3e287fb3a8fd4ed0de0508e86497':raise ValueError('Unexpected source artifact')
+  if expected_core_sha256 is None:expected_core_sha256='b23109a3434703a40ce5a9795ae18b46265c9f07b73901c3b3c4c54dcbbe3b38'
+  if digest(self.core)!=expected_core_sha256 or digest(self.old)!='03c9bbc0ff0ec7ea1038d1549a198a49c8ec3e287fb3a8fd4ed0de0508e86497':raise ValueError('Unexpected source artifact')
   for label,jar,sources in [('current',self.core,sorted((HERE/'java').rglob('*.java'))),('legacy',self.old,[HERE/'java/example/migration/CodecSupport.java',*sorted((HERE/'old-writer').rglob('*.java'))])]:
    classes=self.work/(label+'-classes');classes.mkdir(exist_ok=True);cp=os.pathsep.join(map(str,[jar,*self.annotations]));command=[str(self.javac),'--release','17','-proc:none','-Xlint:all','-Werror','-cp',cp,'-d',str(classes),*map(str,sources)];r=subprocess.run(command,capture_output=True,text=True);(self.work/(label+'-compile.log')).write_text(r.stdout+r.stderr);self.commands.append({'kind':'compile','artifact':digest(jar),'exit':r.returncode,'sources':{str(p.relative_to(ROOT)):digest(p) for p in sources}})
    if r.returncode:raise RuntimeError('Private codec compilation failed; inspect owned log')
-  self.provenance={'core_jar_sha256':digest(self.core),'old_jar_sha256':digest(self.old),'java_home':str(java_home),'sources':{str(p.relative_to(ROOT)):digest(p) for directory in ['java','old-writer'] for p in sorted((HERE/directory).rglob('*.java'))},'strict_release':17,'runtime_jar_origins_asserted':True}
+  self.provenance={'core_jar_sha256':digest(self.core),'old_jar_sha256':digest(self.old),'java_home':str(java_home),'sources':{str(p.relative_to(ROOT)):digest(p) for directory in ['java','old-writer'] for p in sorted((HERE/directory).rglob('*.java'))},'strict_release':17,'runtime_jar_origins_asserted':True,'compiledClassfiles':{str(p.relative_to(self.work)):digest(p) for label in ['current','legacy'] for p in sorted((self.work/(label+'-classes')).rglob('*.class'))}}
  def _run(self,family,config,legacy=False):
   self.counter+=1;stem=self.work/('protected-%04d'%self.counter);inp=stem.with_suffix('.input.json');out=stem.with_suffix('.output.json');config=dict(config);config['expectedCoreSha256']=digest(self.old if legacy else self.core);protected_write(inp,config)
   jar=self.old if legacy else self.core;cp=os.pathsep.join(map(str,[self.work/('legacy-classes' if legacy else 'current-classes'),jar,*self.annotations]));command=[str(self.java),'-Xmx256m','-cp',cp,FAMILIES[family][0 if legacy else 1],str(inp),str(out)];r=subprocess.run(command,capture_output=True,text=True);self.commands.append({'kind':'fixture' if legacy else config['operation'],'family':family,'artifact':digest(jar),'exit':r.returncode,'stdout':r.stdout.strip(),'rows':len(config.get('rows',[]))})
@@ -43,21 +44,35 @@ class CodecClient:
   for family in FAMILIES:result.extend(self._run(family,config,True))
   return result
  def process(self,family,config,rows,roots,operation='prepare'):
+  # Root selection must never silently choose the first of duplicate entries.
+  root_addresses=[(r['family'],r['scope'],r['key']) for r in roots]
+  if len(set(root_addresses))!=len(root_addresses):raise ValueError('Duplicate administrative root')
   return self._run(family,{**config,'operation':operation,'rows':rows,'roots':roots})
  def prepare(self,config,rows):
-  result=[];roots=root_rows(rows)
-  for family in FAMILIES:
-   selected=[r for r in rows if r['family']==family]
-   if selected:result.extend(self.process(family,config,selected,[r for r in roots if r['family']==family]))
-  by_identity={(d["source"]["family"],d["source"]["scope"],d["source"]["handle"]):d for d in result}
-  return [by_identity[(r["family"],r["scope"],r["handle"])] for r in rows]
+  return self._complete(config,rows,'prepare')
  def verify(self,config,rows):
+  return self._complete(config,rows,'verify')
+ def _complete(self,config,rows,operation):
+  from migration import MAX_ROWS, validate_row, MigrationClosed
+  if type(rows) is not list or not 0<len(rows)<=MAX_ROWS:raise ValueError('Administrative inventory outside bound')
+  addresses=set();handles=set()
+  fields={'TOTP':'totpScope','WEBAUTHN':'webauthnScope','ISSUER':'issuerScope'}
+  for row in rows:
+   try:validate_row(row)
+   except MigrationClosed:raise ValueError('Invalid administrative row') from None
+   if row['scope']!=config[fields[row['family']]]:raise ValueError('Row outside declared administrative scope')
+   address=(row['family'],row['scope'],row['key']);handle=(row['family'],row['scope'],row['handle'])
+   if address in addresses or handle in handles:raise ValueError('Duplicate administrative address or handle')
+   addresses.add(address);handles.add(handle)
   result=[];roots=root_rows(rows)
   for family in FAMILIES:
    selected=[r for r in rows if r['family']==family]
-   if selected:result.extend(self.process(family,config,selected,[r for r in roots if r['family']==family],'verify'))
-  by_identity={(d["source"]["family"],d["source"]["scope"],d["source"]["handle"]):d for d in result}
-  return [by_identity[(r["family"],r["scope"],r["handle"])] for r in rows]
+   if selected:
+    decisions=self.process(family,config,selected,[r for r in roots if r['family']==family],operation)
+    if type(decisions) is not list or len(decisions)!=len(selected) or any(type(d) is not dict or d.get('source')!=r for d,r in zip(decisions,selected)):raise ValueError('Incomplete administrative codec result set')
+    result.extend(decisions)
+  by_address={(d['source']['family'],d['source']['scope'],d['source']['key']):d for d in result}
+  return [by_address[(r['family'],r['scope'],r['key'])] for r in rows]
 
  def inspect_legacy_webauthn(self,config,rows,roots=None):
   """Authenticate exact legacy expiry metadata without preparing replacement bytes.

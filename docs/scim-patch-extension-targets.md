@@ -39,3 +39,5 @@ on that identity change. Explicit reference/manager/extension removal still take
 nothing carries into a later request. This is ordered field application, not a proof that the
 final manager ID and reference identify the same authorized resource; the host validates that
 pair before persistence. Custom manager-like objects keep their own schema rules.
+
+Nested children of an extension object are local to that containing schema. A colon in a nested child always rejects, including when `PATCH_VALUE_OBJECT_ATTRIBUTE_PATHS` is selected. Registering another schema whose ID extends the first schema prefix cannot turn a nested name into a cross-schema target. Dotted local children and explicitly qualified top-level forms retain their separate opt-in rules.

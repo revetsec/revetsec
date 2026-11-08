@@ -22,7 +22,10 @@ import org.jspecify.annotations.Nullable;
 import javax.annotation.concurrent.Immutable;
 import javax.annotation.concurrent.NotThreadSafe;
 
-/** Input and stored-cost ceilings applied before expensive password work.
+/** Input and stored-cost ceilings applied around admitted password preparation/KDF work.
+ * These ceilings are independent of the work gate: an accepted stored memory cost above that
+ * gate's total budget is intentionally unavailable. Configure the memory ceiling at or below
+ * the gate when every accepted cost must be serviceable.
  * @since 1.0.0 */
 @Immutable
 public final class PasswordVerificationLimits {

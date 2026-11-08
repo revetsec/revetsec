@@ -34,7 +34,7 @@ async function ceremony(startPath, finishPath, creation, startHeaders = {}) {
       !PublicKeyCredential.parseCreationOptionsFromJSON ||
       !PublicKeyCredential.parseRequestOptionsFromJSON) {
     report("This browser does not support the required WebAuthn JSON API.");
-    return;
+    return false;
   }
   try {
     const started = await (await call(startPath, startHeaders)).json();
@@ -54,10 +54,12 @@ async function ceremony(startPath, finishPath, creation, startHeaders = {}) {
     report(await (await call(finishPath, { "X-Ceremony-Id": started.ceremonyId },
       credential.toJSON())).text());
     if (finishPath === "/sign-in/finish") window.location.reload();
+    return true;
   } catch (error) {
     if (error instanceof DOMException && (error.name === "NotAllowedError" ||
         error.name === "AbortError")) report("Browser ceremony cancelled.");
     else report(error instanceof Error ? error.message : "Operation failed.");
+    return false;
   }
 }
 
@@ -94,11 +96,20 @@ document.getElementById("list").addEventListener("click", () => action(async () 
     const remove = document.createElement("button");
     remove.textContent = "Remove";
     remove.addEventListener("click", () => action(async () => {
+      if (await ceremony("/credentials/self-remove/start", "/credentials/self-remove/finish",
+          false, { "X-Credential-Id": id })) {
+        report(await (await call("/credentials/self-remove", { "X-Credential-Id": id })).text());
+        item.remove();
+      }
+    }));
+    const recoveryRemove = document.createElement("button");
+    recoveryRemove.textContent = "Management/recovery remove";
+    recoveryRemove.addEventListener("click", () => action(async () => {
       report(await (await call("/credentials/remove",
         { "X-Credential-Id": id, ...managementHeaders() })).text());
       item.remove();
     }));
-    item.append(label, remove);
+    item.append(label, remove, recoveryRemove);
     list.append(item);
   }
   if (ids.length === 0) report("No passkeys registered.");

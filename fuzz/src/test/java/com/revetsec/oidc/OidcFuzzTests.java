@@ -132,7 +132,12 @@ public class OidcFuzzTests {
 	/** A trusted-storage reference stays bounded, canonical and redacted, and retains no credentials. */
 	@FuzzTest(maxDuration = "5m")
 	public void sessionReferencesRoundTripWithoutCredentials(byte @NonNull [] input) {
-		var result = OidcSessionReference.fromSerializedFormResult(new String(input, StandardCharsets.ISO_8859_1));
+        String control = "{\"v\":2,\"client_id\":\"client\",\"claims\":{\"iss\":\"https://issuer.example\",\"sub\":\"subject\",\"aud\":\"client\",\"iat\":1790769570},\"nonce_digest\":\"a9HFCXiC_6eM2Zp5BbBFJZnAKY1CXm5unWdwbRqtCKg\",\"required_acr_values\":[\"urn:mfa\",\"urn:pwd\"]}";
+        var positive = Assertions.assertInstanceOf(OidcSessionReferenceParseResult.Succeeded.class, OidcSessionReference.fromSerializedFormResult(control)).getReference();
+        Assertions.assertEquals(Set.of("urn:mfa", "urn:pwd"), positive.getRequiredAcrValues());
+        Assertions.assertInstanceOf(OidcSessionReferenceParseResult.Rejected.class, OidcSessionReference.fromSerializedFormResult(control.replace("\"v\":2", "\"v\":1")));
+        String suppliedText = new String(input, StandardCharsets.ISO_8859_1);
+        var result = OidcSessionReference.fromSerializedFormResult(suppliedText);
 		if (result instanceof OidcSessionReferenceParseResult.Rejected rejected) {
 			Assertions.assertEquals(OidcValidationException.Reason.SESSION_REFERENCE_INVALID, rejected.getReason());
 			return;
@@ -147,7 +152,20 @@ public class OidcFuzzTests {
 			Assertions.assertEquals("OidcSessionReference{session=<redacted>}", reference.toString());
 			JsonObject envelope = object(serialized.getBytes(StandardCharsets.UTF_8), JsonLimits.protocolDocument(65_536));
 			Assertions.assertNotNull(envelope);
-			Assertions.assertEquals(Set.of("v", "client_id", "claims", "nonce_digest"), envelope.getMembers().keySet());
+			Assertions.assertEquals(Set.of("v", "client_id", "claims", "nonce_digest", "required_acr_values"), envelope.getMembers().keySet());
+            JsonObject supplied = object(suppliedText.getBytes(StandardCharsets.UTF_8), JsonLimits.protocolDocument(65_536));
+            Assertions.assertNotNull(supplied);
+            Assertions.assertEquals(envelope.getMembers().keySet(), supplied.getMembers().keySet());
+            Assertions.assertEquals(2L, Assertions.assertInstanceOf(JsonNumber.class, supplied.find("v").orElseThrow()).getLongValueExact().orElseThrow());
+            JsonArray required = Assertions.assertInstanceOf(JsonArray.class, supplied.find("required_acr_values").orElseThrow());
+            Set<String> expectedPolicy = new java.util.HashSet<>();
+            for (JsonValue item : required.getElements()) {
+                String value = Assertions.assertInstanceOf(JsonString.class, item).getValue();
+                Assertions.assertFalse(value.isEmpty()); Assertions.assertTrue(value.chars().allMatch(c -> c > 0x20 && c < 0x7f));
+                Assertions.assertTrue(expectedPolicy.add(value), "duplicate-policy-must-reject");
+            }
+            Assertions.assertEquals(expectedPolicy, reference.getRequiredAcrValues());
+            Assertions.assertEquals(reference.getRequiredAcrValues(), restored.getRequiredAcrValues());
 			Assertions.assertTrue(Set.of("iss", "sub", "aud", "iat", "azp", "auth_time", "sid")
 					.containsAll(reference.continuityClaims().getMembers().keySet()));
 		}

@@ -320,7 +320,7 @@ final class ClientAssertionTests {
 				OAuthClient client = client(metadata(server),ClientAuthentication.fromPrivateKeyJwt(ClientAssertionKeyProvider.fromKey(ClientAssertionSigningKey.withSigner(signer).keyId("TEST-ONLY-key").build()))).observer(events).build();
 				OAuthConfigurationException failure = assertThrows(OAuthConfigurationException.class, () -> TokenIntrospectionClient.withOAuthClient(client).expectedAudiences(Set.of(AUD)).build().validateResult(bearer("opaque")));
 				assertEquals(mismatch ? OAuthException.Reason.CLIENT_ASSERTION_KEY_PAIR_MISMATCH : OAuthException.Reason.CLIENT_ASSERTION_SIGNING_FAILED,failure.getReason());
-				assertEquals(ErrorCategory.CONFIGURATION,failure.getCategory()); assertFalse(failure.isTransient()); assertNull(failure.getCause()); assertSame(failure,events.failure.get()); assertEquals(0,events.will.get());
+				assertEquals(ErrorCategory.CONFIGURATION,failure.getCategory()); assertFalse(failure.isTemporaryCondition()); assertNull(failure.getCause()); assertSame(failure,events.failure.get()); assertEquals(0,events.will.get());
 			}
 		}
 	}
@@ -397,14 +397,16 @@ final class ClientAssertionTests {
 		}
 	}
 	@SuppressWarnings("NullAway") // Deliberately violates required-null contracts to verify public boundary rejection.
-	@Test void configurationReasonPartitionsAreCauseFreeAndOtherLeavesCannotConstructThem() {
+	@Test void configurationReasonsAreCauseFreeAndOnlyIssuerMismatchIsSharedWithValidation() {
 		Set<OAuthException.Reason> selected = Set.of(OAuthException.Reason.CLIENT_ASSERTION_KEY_UNAVAILABLE,OAuthException.Reason.CLIENT_ASSERTION_SIGNING_FAILED,
-				OAuthException.Reason.CLIENT_ASSERTION_KEY_PAIR_MISMATCH,OAuthException.Reason.CLIENT_ASSERTION_ENDPOINT_MISMATCH,OAuthException.Reason.ISSUER_POLICY_UNAVAILABLE);
+				OAuthException.Reason.CLIENT_ASSERTION_KEY_PAIR_MISMATCH,OAuthException.Reason.CLIENT_ASSERTION_ENDPOINT_MISMATCH,OAuthException.Reason.ISSUER_POLICY_UNAVAILABLE,
+				OAuthException.Reason.ISSUER_MISMATCH);
 		for (OAuthException.Reason reason : OAuthException.Reason.values()) {
 			if (selected.contains(reason)) {
-				OAuthConfigurationException failure = OAuthConfigurationException.fromReason(reason); assertEquals(reason,failure.getReason()); assertEquals(ErrorCategory.CONFIGURATION,failure.getCategory()); assertFalse(failure.isTransient()); assertNull(failure.getCause());
+				OAuthConfigurationException failure = OAuthConfigurationException.fromReason(reason); assertEquals(reason,failure.getReason()); assertEquals(reason.category(),failure.getCategory()); assertFalse(failure.isTemporaryCondition()); assertNull(failure.getCause());
 				assertThrows(IllegalArgumentException.class, () -> OAuthTransportException.fromReason(reason,null));
-				assertThrows(IllegalArgumentException.class, () -> OAuthValidationException.fromReason(reason));
+				if (reason == OAuthException.Reason.ISSUER_MISMATCH) assertEquals(reason,OAuthValidationException.fromReason(reason).getReason());
+				else assertThrows(IllegalArgumentException.class, () -> OAuthValidationException.fromReason(reason));
 				assertThrows(IllegalArgumentException.class, () -> OAuthResponseException.fromReason(reason));
 			} else assertThrows(IllegalArgumentException.class, () -> OAuthConfigurationException.fromReason(reason));
 		}

@@ -216,7 +216,7 @@ final class OAuthIssuerCapacityGoldenTests {
                         .jwksEndpoint(java.net.URI.create("https://cap-02.issuer.example/jwks"))
                         .clientRepository((id, budget) -> id.equals(client) ? Optional.of(registration) : Optional.empty())
                         .store(store).signingKeys(OAuthIssuerKeyProvider.fromSnapshot(OAuthIssuerKeySnapshot.withActiveKey(
-                                OAuthIssuerSigningKey.fromKeyPair("signing", signing.getPrivateKey(), signing.getPublicKey()))
+                                OAuthIssuerSigningKey.fromRsaKeyPair("signing", signing.getPrivateKey(), signing.getPublicKey()))
                                 .generation("cap-02").publishedAt(NOW.minusSeconds(120)).build()))
                         .stateSealer(s).clock(CLOCK).resources(Map.of(resource, scopes))
                         .grantPolicy((context, budget) -> OAuthAuthorizationDecision.deniedInstance())

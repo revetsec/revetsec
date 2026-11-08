@@ -54,9 +54,9 @@ final class SamlStatusHierarchyTests {
     private static final PrivateKey WRONG = TestJwk.Fixture.IDP_SIGNING_RSA_3072.getKeyPair().getPrivate();
     private static final String PRIVATE = "PRIVATE-STATUS-DATA";
     private enum Binding { REDIRECT, POST }
-    private record AuthCase(String label, List<String> codes, SamlAuthenticationResult.StatusCode expected) {}
+    private record AuthCase(@NonNull String label, @NonNull List<@NonNull String> codes, SamlAuthenticationResult.@NonNull StatusCode expected) {}
 
-    @TestFactory Stream<DynamicTest> loginUsesTheImmediateDiagnosticAndRetainsProvenance() {
+    @TestFactory @NonNull Stream<@NonNull DynamicTest> loginUsesTheImmediateDiagnosticAndRetainsProvenance() {
         List<AuthCase> cases = List.of(
                 auth("responder authn", "AUTHN_FAILED", "Responder", "AuthnFailed"),
                 auth("responder context", "NO_AUTHN_CONTEXT", "Responder", "NoAuthnContext"),
@@ -90,7 +90,7 @@ final class SamlStatusHierarchyTests {
                 })));
     }
 
-    @TestFactory Stream<DynamicTest> partialIsVerifiedDistinctAndReplayFencedAcrossBindings() {
+    @TestFactory @NonNull Stream<@NonNull DynamicTest> partialIsVerifiedDistinctAndReplayFencedAcrossBindings() {
         return fixtures().map(pair -> DynamicTest.dynamicTest(pair.toString(), () -> {
             Fixture f = new Fixture(pair.binding(), pair.stored());
             String xml = f.logout(status(List.of("Success", "PartialLogout")));
@@ -110,7 +110,7 @@ final class SamlStatusHierarchyTests {
         }));
     }
 
-    @TestFactory Stream<DynamicTest> logoutClassificationDoesNotTurnOtherHierarchyIntoSuccess() {
+    @TestFactory @NonNull Stream<@NonNull DynamicTest> logoutClassificationDoesNotTurnOtherHierarchyIntoSuccess() {
         List<List<String>> cases = List.of(List.of("Success"), List.of("Responder", "PartialLogout"),
                 List.of("Requester", "RequestDenied"), List.of("VersionMismatch"),
                 List.of("Responder", "urn:example:" + PRIVATE), List.of("PartialLogout"));
@@ -126,7 +126,7 @@ final class SamlStatusHierarchyTests {
         })));
     }
 
-    @TestFactory Stream<DynamicTest> malformedStatusPreservesLogoutPendingAndReplayState() {
+    @TestFactory @NonNull Stream<@NonNull DynamicTest> malformedStatusPreservesLogoutPendingAndReplayState() {
         String partial = code(List.of("Success", "PartialLogout"));
         List<String> malformed = List.of(
                 status(List.of("Success", "Responder")), status(List.of("Success", "PartialLogout", "Success")),
@@ -154,7 +154,7 @@ final class SamlStatusHierarchyTests {
                 })));
     }
 
-    @TestFactory Stream<DynamicTest> hierarchyDepthIsBoundedIncludingThePrimary() {
+    @TestFactory @NonNull Stream<@NonNull DynamicTest> hierarchyDepthIsBoundedIncludingThePrimary() {
         return Stream.of(32, 33).flatMap(depth -> fixtures().map(pair -> DynamicTest.dynamicTest(depth + "; " + pair, () -> {
             Fixture f = new Fixture(pair.binding(), pair.stored());
             List<String> codes = new ArrayList<>(List.of("Success", "PartialLogout"));
@@ -170,7 +170,7 @@ final class SamlStatusHierarchyTests {
         })));
     }
 
-    @TestFactory Stream<DynamicTest> aPartialStatusCannotBypassSignatureOrPendingBindings() {
+    @TestFactory @NonNull Stream<@NonNull DynamicTest> aPartialStatusCannotBypassSignatureOrPendingBindings() {
         return Stream.of("signature", "request", "destination", "issuer", "age").flatMap(fault -> fixtures().map(pair ->
                 DynamicTest.dynamicTest(fault + "; " + pair, () -> {
                     Fixture f = new Fixture(pair.binding(), pair.stored());
@@ -190,7 +190,7 @@ final class SamlStatusHierarchyTests {
                 })));
     }
 
-    @TestFactory Stream<DynamicTest> partialRequiresSuccessfulReplayAdmission() {
+    @TestFactory @NonNull Stream<@NonNull DynamicTest> partialRequiresSuccessfulReplayAdmission() {
         return Stream.of(SamlReplayCache.MarkResult.ALREADY_PRESENT, SamlReplayCache.MarkResult.CAPACITY_REFUSED,
                 SamlReplayCache.MarkResult.UNAVAILABLE, SamlReplayCache.MarkResult.INDETERMINATE).flatMap(mark ->
                 fixtures().map(pair -> DynamicTest.dynamicTest(mark + "; " + pair, () -> {
@@ -205,7 +205,7 @@ final class SamlStatusHierarchyTests {
                 })));
     }
 
-    @TestFactory Stream<DynamicTest> statusCannotAuthenticateAnAssertionOrAnInvalidSignature() {
+    @TestFactory @NonNull Stream<@NonNull DynamicTest> statusCannotAuthenticateAnAssertionOrAnInvalidSignature() {
         return Stream.of("partial", "refusal", "bad signature").flatMap(scenario -> Stream.of("response", "assertion", "both")
                 .filter(coverage -> !scenario.equals("bad signature") || coverage.equals("response"))
                 .map(coverage -> DynamicTest.dynamicTest(scenario + "; " + coverage, () -> {
@@ -225,12 +225,12 @@ final class SamlStatusHierarchyTests {
                 })));
     }
 
-    private record Pair(Binding binding, boolean stored) {}
-    private static Stream<Pair> fixtures() { return Stream.of(Binding.values()).flatMap(b -> Stream.of(false, true).map(s -> new Pair(b, s))); }
-    private static AuthCase auth(String label, String expected, String... codes) {
+    private record Pair(@NonNull Binding binding, boolean stored) {}
+    private static @NonNull Stream<@NonNull Pair> fixtures() { return Stream.of(Binding.values()).flatMap(b -> Stream.of(false, true).map(s -> new Pair(b, s))); }
+    private static @NonNull AuthCase auth(@NonNull String label, @NonNull String expected, @NonNull String @NonNull ... codes) {
         return new AuthCase(label, List.of(codes), SamlAuthenticationResult.StatusCode.valueOf(expected));
     }
-    private static String code(List<String> values) {
+    private static @NonNull String code(@NonNull List<@NonNull String> values) {
         String nested = "";
         for (int i = values.size() - 1; i >= 0; i--) {
             String value = values.get(i).contains(":") ? values.get(i) : PREFIX + values.get(i);
@@ -238,27 +238,27 @@ final class SamlStatusHierarchyTests {
         }
         return nested;
     }
-    private static String status(List<String> codes) {
+    private static @NonNull String status(@NonNull List<@NonNull String> codes) {
         return "<p:Status>" + code(codes) + "<p:StatusMessage>" + PRIVATE + "</p:StatusMessage>"
                 + "<p:StatusDetail><other:Detail xmlns:other='urn:example'>" + PRIVATE + "</other:Detail></p:StatusDetail></p:Status>";
     }
-    private static String loginResponse(PendingSamlAuthentication pending, String status, boolean assertion) {
+    private static @NonNull String loginResponse(@NonNull PendingSamlAuthentication pending, @NonNull String status, boolean assertion) {
         String xml = SamlResponseSemanticsTests.BASE.replace("_request", pending.getRequestId())
                 .replace("2026-10-09T00:00:00Z", "2026-10-09T00:01:00Z");
         if (!assertion) xml = xml.substring(0, xml.indexOf("<a:Assertion")) + "</p:Response>";
         return xml.replace("<p:Status><p:StatusCode Value='" + PREFIX + "Success'/></p:Status>", status);
     }
-    private static String sign(String xml, PrivateKey key) throws Exception {
+    private static @NonNull String sign(@NonNull String xml, @NonNull PrivateKey key) throws Exception {
         return SamlResponseSemanticsTests.signedXml(xml, true, false, key);
     }
-    private static SamlPostBindingMessage post(String xml, String relay) {
+    private static @NonNull SamlPostBindingMessage post(@NonNull String xml, @NonNull String relay) {
         String encoded = Base64.getEncoder().encodeToString(xml.getBytes(StandardCharsets.UTF_8))
                 .replace("+", "%2B").replace("/", "%2F").replace("=", "%3D");
         return assertInstanceOf(SamlPostBindingParseResult.Parsed.class, SamlPostBindingMessage.fromFormBodyResult(
                 ("SAMLResponse=" + encoded + "&RelayState=" + relay).getBytes(StandardCharsets.UTF_8),
                 List.of("application/x-www-form-urlencoded"), null)).getMessage();
     }
-    private static SamlRedirectBindingMessage redirect(String xml, String relay, PrivateKey key) throws Exception {
+    private static @NonNull SamlRedirectBindingMessage redirect(@NonNull String xml, @NonNull String relay, @NonNull PrivateKey key) throws Exception {
         Deflater compressor = new Deflater(Deflater.DEFAULT_COMPRESSION, true);
         byte[] compressed;
         try {
@@ -307,7 +307,7 @@ final class SamlStatusHierarchyTests {
         int replayAttempts;
         int replayWrites;
         SamlReplayCache.@Nullable MarkResult forced;
-        Fixture(Binding binding, boolean stored) {
+        Fixture(@NonNull Binding binding, boolean stored) {
             this.binding = binding;
             SamlReplayCache cache = InMemorySamlReplayCache.fromLimit(CLOCK, 32);
             sp = SamlServiceProvider.withEntityId(SP).assertionConsumerServiceUrl(ACS)
@@ -339,13 +339,13 @@ final class SamlStatusHierarchyTests {
                 source = PendingSamlLogoutSource.fromStore(store, "browser-one", sealer, "logout-status");
             } else source = PendingSamlLogoutSource.fromSealedForm(pending.toSealedForm(sealer, "logout-status"), sealer, "logout-status");
         }
-        String logout(String status) {
+        @NonNull String logout(@NonNull String status) {
             return "<p:LogoutResponse xmlns:p='urn:oasis:names:tc:SAML:2.0:protocol' xmlns:a='urn:oasis:names:tc:SAML:2.0:assertion'"
                     + " ID='_status_response' Version='2.0' IssueInstant='2026-10-09T00:01:00Z' Destination='" + LOGOUT
                     + "' InResponseTo='" + pending.getRequestId() + "'><a:Issuer>" + IDP + "</a:Issuer>" + status + "</p:LogoutResponse>";
         }
-        SamlLogoutResult complete(String xml, PrivateKey key) throws Exception { return completeAs(binding, xml, key); }
-        SamlLogoutResult completeAs(Binding selected, String xml, PrivateKey key) throws Exception {
+        @NonNull SamlLogoutResult complete(@NonNull String xml, @NonNull PrivateKey key) throws Exception { return completeAs(binding, xml, key); }
+        @NonNull SamlLogoutResult completeAs(@NonNull Binding selected, @NonNull String xml, @NonNull PrivateKey key) throws Exception {
             resetEvents();
             SamlLogoutResult result = selected == Binding.POST
                     ? sp.completeLogoutResult(post(sign(xml, key), pending.getRelayStateHandle()), source, idp)
@@ -353,6 +353,6 @@ final class SamlStatusHierarchyTests {
             assertEquals(1, starts); assertEquals(1, ends.size()); return result;
         }
         void resetEvents() { starts = 0; ends.clear(); }
-        void observed(SamlObserver.Outcome expected) { assertEquals(1, starts); assertEquals(List.of(expected), ends); }
+        void observed(SamlObserver.@NonNull Outcome expected) { assertEquals(1, starts); assertEquals(List.of(expected), ends); }
     }
 }

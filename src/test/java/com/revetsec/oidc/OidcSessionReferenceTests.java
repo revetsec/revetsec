@@ -70,10 +70,10 @@ final class OidcSessionReferenceTests {
 	@NonNull Stream<@NonNull DynamicTest> invalidSchemaDuplicatesVersionClaimTypesAndNonceDigestUseOneFixedReason() {
 		record Case(@NonNull String name,@NonNull Consumer<@NonNull Map<@NonNull String,@NonNull JsonValue>> edit){}
 		List<Case> cases=new ArrayList<>();
-		for(String field:List.of("v","client_id","claims","nonce_digest")) {
+		for(String field:List.of("v","client_id","claims","nonce_digest","required_acr_values")) {
 			cases.add(new Case("missing "+field,m->m.remove(field)));cases.add(new Case("null "+field,m->m.put(field,JsonNull.defaultInstance())));
 		}
-		cases.add(new Case("future version",m->m.put("v",JsonNumber.fromValue(2L))));cases.add(new Case("string version",m->m.put("v",JsonString.fromValue("1"))));cases.add(new Case("empty client",m->m.put("client_id",JsonString.fromValue(""))));cases.add(new Case("client outside aud",m->m.put("client_id",JsonString.fromValue("other"))));cases.add(new Case("unknown field",m->m.put("access_token",JsonString.fromValue("TEST-ONLY-secret"))));
+		cases.add(new Case("future version",m->m.put("v",JsonNumber.fromValue(3L))));cases.add(new Case("string version",m->m.put("v",JsonString.fromValue("1"))));cases.add(new Case("empty client",m->m.put("client_id",JsonString.fromValue(""))));cases.add(new Case("client outside aud",m->m.put("client_id",JsonString.fromValue("other"))));cases.add(new Case("unknown field",m->m.put("access_token",JsonString.fromValue("TEST-ONLY-secret"))));
 		for(String digest:List.of("","a","A".repeat(42),"A".repeat(44),"A".repeat(42)+"B","A".repeat(43)+"=","+/"))cases.add(new Case("invalid digest "+digest.length()+":"+digest, m->m.put("nonce_digest",JsonString.fromValue(digest))));
 		for(String field:List.of("iss","sub","aud","iat")) {
 			cases.add(new Case("missing claim "+field,m->editClaims(m,c->c.remove(field))));cases.add(new Case("wrong type "+field,m->editClaims(m,c->c.put(field,JsonNull.defaultInstance()))));

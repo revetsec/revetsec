@@ -15,6 +15,7 @@
  */
 package example.issuer;
 
+import com.revetsec.BrowserBinding;
 import com.revetsec.SealingKey;
 import com.revetsec.StateSealer;
 import com.revetsec.oauth.BearerToken;
@@ -61,7 +62,7 @@ import java.util.regex.Pattern;
 
 /** Separate-JVM application startup probe. SQL and transactions remain owned by the Pyranid store. */
 public final class PostgresqlIssuerApplicationProbe {
-    private static final @NonNull String BROWSER="A".repeat(43);
+    private static final @NonNull BrowserBinding BROWSER=BrowserBinding.fromTrustedPersistence("A".repeat(43));
     private static final @NonNull String VERIFIER="dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
     private PostgresqlIssuerApplicationProbe() { }
 
@@ -90,16 +91,16 @@ public final class PostgresqlIssuerApplicationProbe {
                 java.util.Objects.requireNonNull(System.getenv("REVETSEC_TEST_ISSUER_TIME")))),ZoneOffset.UTC);
         Instant retirement=clock.instant().plusSeconds(3_600);
         OAuthIssuerKeySnapshot first=OAuthIssuerKeySnapshot.withActiveKey(
-                OAuthIssuerSigningKey.fromKeyPair("fixture",privateKey,publicKey))
+                OAuthIssuerSigningKey.fromRsaKeyPair("fixture",privateKey,publicKey))
                 .generation("g1").publishedAt(clock.instant().minusSeconds(2))
                 .retirementNotBefore(Map.of("fixture",retirement)).build();
         OAuthIssuerKeySnapshot second=OAuthIssuerKeySnapshot.withActiveKey(
-                OAuthIssuerSigningKey.fromKeyPair("fixture-next",nextPrivateKey,nextPublicKey))
+                OAuthIssuerSigningKey.fromRsaKeyPair("fixture-next",nextPrivateKey,nextPublicKey))
                 .verificationKeys(Map.of("fixture",publicKey))
                 .generation("g2").publishedAt(clock.instant().minusSeconds(1))
                 .retirementNotBefore(Map.of("fixture",retirement)).build();
         OAuthIssuerKeySnapshot earlyRemoval=OAuthIssuerKeySnapshot.withActiveKey(
-                OAuthIssuerSigningKey.fromKeyPair("fixture-next",nextPrivateKey,nextPublicKey))
+                OAuthIssuerSigningKey.fromRsaKeyPair("fixture-next",nextPrivateKey,nextPublicKey))
                 .generation("g3").publishedAt(clock.instant()).build();
         Path generation=directory.resolve("key-generation.txt");
         OAuthIssuerKeyProvider keys=remainingBudget -> {

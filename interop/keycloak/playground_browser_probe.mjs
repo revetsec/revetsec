@@ -80,12 +80,15 @@ async function click(selector) {
     b.click(); return true;
   })()`));
 }
-async function login(label) {
-  await cdp.send('Page.navigate', {url: app + '/'}, session);
-  await waitFor('session-admission', async () => await evaluate(`(()=>{if(document.querySelector('#login')?.elements.csrf.value.length>0)return true;const b=document.querySelector('#start-session');if(!b||b.disabled)return false;b.click();return true;})()`));
+async function admitSession(label) {
+  await waitFor(label + '-session-admission', async () => await evaluate(`(()=>{if(document.querySelector('#login')?.elements.csrf.value.length>0)return true;const b=document.querySelector('#start-session');if(!b||b.disabled)return false;b.click();return true;})()`));
   await waitFor(label + '-app-ready', async () => await evaluate(
     `document.querySelector('#saml-login input[name=csrf]')?.value.length>0
       && document.querySelector('#saml-login button')?.disabled===false`));
+}
+async function login(label) {
+  await cdp.send('Page.navigate', {url: app + '/'}, session);
+  await admitSession(label);
   await click('#saml-login button');
   await waitFor(label + '-keycloak-form', async () => await evaluate(
     `location.origin===${JSON.stringify(idp)}
@@ -163,8 +166,11 @@ try {
     route.site === 'app' && route.path === '/saml/slo'), 30000);
   await waitFor('sp-logout-return', async () => await evaluate(
     `location.origin===${JSON.stringify(app)}
-      && document.querySelector('#saml-login input[name=csrf]')?.value.length>0
       && document.getElementById('identity')?.textContent==='No browser identity'`), 30000);
+  await admitSession('post-sp-logout');
+  check('post-sp-logout-session-readmitted', await evaluate(
+    `document.querySelector('#saml-login input[name=csrf]')?.value.length>0
+      && document.getElementById('identity')?.textContent==='No browser identity'`));
   check('sp-initiated-logout-clears-app-identity', true);
   check('keycloak-returned-saml-logout-response', routes.some(route =>
     route.site === 'app' && route.path === '/saml/slo' && route.saml === 'response'));

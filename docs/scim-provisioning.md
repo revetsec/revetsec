@@ -4,7 +4,11 @@
 
 ## Runnable Soklet routes
 
-`examples/playground` includes `PlaygroundScimResources` in the complete Playground when `SCIM_BEARER_TOKEN` is present. The standalone `example.playground.ScimPlayground` entrypoint uses the same routes for independent qualification:
+`examples/playground` selects the [restrictive service-client profile](scim-restrictive-service-clients.md) when at least one explicit SCIM credential is registered. It has fixed alpha/beta tenant roles, default-deny field/query policies, bounded Argon2id work and immutable publication predicates. The standalone `example.playground.ScimDirectoryPlayground` uses that same selected policy and resources.
+
+### Administrative interoperability fixture
+
+The separate `example.playground.ScimPlayground` entrypoint retains the earlier single-administrative-principal fixture for dated independent-client qualification. It is not the complete Playground startup profile and does not expose the new tenant aliases:
 
 ```sh
 export SCIM_BEARER_TOKEN='<private ASCII credential, 32–256 characters>'

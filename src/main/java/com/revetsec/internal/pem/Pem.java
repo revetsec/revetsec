@@ -16,6 +16,7 @@
 
 package com.revetsec.internal.pem;
 
+import com.revetsec.internal.crypto.EcCurve;
 import com.revetsec.internal.encoding.EncodingException;
 import com.revetsec.internal.encoding.StandardBase64;
 import org.jspecify.annotations.NonNull;
@@ -146,6 +147,11 @@ public final class Pem {
 		return parseCertificateDer(readBlock(pem, CERTIFICATE_LABELS).getDer());
 	}
 
+	/** Parses a certificate with a pre-decode DER ceiling; a size refusal is an IllegalArgumentException. */
+	public static @NonNull X509Certificate parseCertificate(@NonNull String pem, int maximumDerBytes) throws PemException {
+		return parseCertificateDer(readBlock(pem, CERTIFICATE_LABELS, maximumDerBytes).getDer());
+	}
+
 	/**
 	 * Parses a DER certificate with the same checks as {@link #parseCertificate(String)}, for certificates that arrive
 	 * without PEM armor, such as a JWK {@code x5c} entry or a SAML metadata {@code X509Certificate} after Base64
@@ -181,8 +187,17 @@ public final class Pem {
 	 *                      encoding of its key
 	 */
 	public static @NonNull PublicKey parsePublicKey(@NonNull String pem) throws PemException {
-		byte[] der = readBlock(pem, PUBLIC_KEY_LABELS).getDer();
+		return parsePublicKeyDer(readBlock(pem, PUBLIC_KEY_LABELS).getDer());
+	}
 
+	/** Parses a public key with a pre-decode DER ceiling; a size refusal is an IllegalArgumentException. */
+	public static @NonNull PublicKey parsePublicKey(@NonNull String pem, int maximumDerBytes) throws PemException {
+		return parsePublicKeyDer(readBlock(pem, PUBLIC_KEY_LABELS, maximumDerBytes).getDer());
+	}
+
+	/** Parses exactly one SPKI directly; the input is not modified. */
+	public static @NonNull PublicKey parsePublicKeyDer(byte @NonNull [] der) throws PemException {
+		requireNonNull(der);
 		// SubjectPublicKeyInfo ::= SEQUENCE { algorithm AlgorithmIdentifier, subjectPublicKey BIT STRING }
 		Der.Element outer = requireSingleSequence(der);
 		Der.Element algorithm = Der.read(der, outer.getStart(), outer.getEnd(), Der.SEQUENCE);
@@ -274,26 +289,121 @@ public final class Pem {
 	 *                      algorithm
 	 */
 	public static @NonNull PrivateKey parsePrivateKey(@NonNull String pem) throws PemException {
-		Block block = readBlock(pem, PRIVATE_KEY_LABELS);
+		return privateBlock(readBlock(pem, PRIVATE_KEY_LABELS), false);
+	}
+
+	/** Parses a private key with a pre-decode DER ceiling; a size refusal is an IllegalArgumentException. */
+	public static @NonNull PrivateKey parsePrivateKey(@NonNull String pem, int maximumDerBytes) throws PemException {
+		return privateBlock(readBlock(pem, PRIVATE_KEY_LABELS, maximumDerBytes), true);
+	}
+
+	private static @NonNull PrivateKey privateBlock(@NonNull Block block, boolean selected) throws PemException {
 		byte[] der = block.getDer();
-		byte[] pkcs8 = der;
 		try {
-			if (block.getLabel().equals(RSA_PRIVATE_KEY)) {
-				// RSAPrivateKey ::= SEQUENCE { version INTEGER, modulus INTEGER, ... }; the JDK checks the fields.
-				Der.Element outer = requireSingleSequence(der);
-				Der.read(der, outer.getStart(), outer.getEnd(), Der.INTEGER);
-				pkcs8 = wrapPkcs1(der);
-			}
-			String keyFactoryAlgorithm = checkPrivateKeyInfo(pkcs8);
-			try {
-				return KeyFactory.getInstance(keyFactoryAlgorithm).generatePrivate(new PKCS8EncodedKeySpec(pkcs8));
-			} catch (GeneralSecurityException | RuntimeException e) {
-				throw new PemException(PemException.Kind.INVALID_KEY);
-			}
-		} finally {
-			Arrays.fill(der, (byte) 0);
-			Arrays.fill(pkcs8, (byte) 0);
+			return block.getLabel().equals(RSA_PRIVATE_KEY) ? rsaPrivateKeyDer(der, selected) : privateKeyDer(der, selected);
+		} finally { Arrays.fill(der, (byte) 0); }
+	}
+
+	/** Parses exactly one unencrypted PKCS#8 key directly; the caller's input is not modified. */
+	public static @NonNull PrivateKey parsePrivateKeyDer(byte @NonNull [] der) throws PemException {
+		return privateKeyDer(der, true);
+	}
+
+	private static @NonNull PrivateKey privateKeyDer(byte @NonNull [] der, boolean selected) throws PemException {
+		requireNonNull(der);
+		String algorithm = checkPrivateKeyInfo(der);
+		if (selected) checkSelectedPrivate(der, algorithm);
+		try {
+			return KeyFactory.getInstance(algorithm).generatePrivate(new PKCS8EncodedKeySpec(der));
+		} catch (GeneralSecurityException | RuntimeException failure) {
+			throw new PemException(PemException.Kind.INVALID_KEY);
 		}
+	}
+
+	/** Parses exactly one RSA PKCS#1 key directly; the caller's input is not modified. */
+	public static @NonNull PrivateKey parseRsaPrivateKeyDer(byte @NonNull [] der) throws PemException {
+		return rsaPrivateKeyDer(der, true);
+	}
+
+	private static @NonNull PrivateKey rsaPrivateKeyDer(byte @NonNull [] der, boolean selected) throws PemException {
+		requireNonNull(der);
+		Der.Element outer = requireSingleSequence(der);
+		Der.read(der, outer.getStart(), outer.getEnd(), Der.INTEGER);
+		byte[] pkcs8 = wrapPkcs1(der);
+		try { return privateKeyDer(pkcs8, selected); }
+		finally { Arrays.fill(pkcs8, (byte) 0); }
+	}
+
+	/** Selected facade profile only; legacy internal callers keep their wider schema acceptance. */
+	private static void checkSelectedPrivate(byte @NonNull [] der, @NonNull String algorithm) throws PemException {
+		Der.Element outer = requireSingleSequence(der);
+		Der.Element version = Der.read(der, outer.getStart(), outer.getEnd(), Der.INTEGER);
+		if (version.getLength() != 1 || der[version.getStart()] != 0)
+			throw new PemException(PemException.Kind.UNSUPPORTED_ALGORITHM);
+		Der.Element identifier = Der.read(der, version.getEnd(), outer.getEnd(), Der.SEQUENCE);
+		Der.Element key = Der.read(der, identifier.getEnd(), outer.getEnd(), Der.OCTET_STRING);
+		if (key.getEnd() != outer.getEnd()) throw new PemException(PemException.Kind.UNSUPPORTED_ALGORITHM);
+		Der.Element inner = Der.read(der, key.getStart(), key.getEnd());
+		if (algorithm.equals("RSA")) {
+			Der.Element rsaVersion = Der.read(der, inner.getStart(), inner.getEnd(), Der.INTEGER);
+			if (rsaVersion.getLength() != 1) throw new PemException(PemException.Kind.NON_CANONICAL);
+			if (der[rsaVersion.getStart()] != 0) throw new PemException(der[rsaVersion.getStart()] == 1
+					? PemException.Kind.UNSUPPORTED_ALGORITHM : PemException.Kind.MALFORMED_DER);
+			int position = rsaVersion.getEnd();
+			for (int i = 0; i < 8; ++i) position = positiveInteger(der, position, inner.getEnd()).getEnd();
+			if (position != inner.getEnd()) throw new PemException(PemException.Kind.MALFORMED_DER);
+		} else if (algorithm.equals("EC")) {
+			checkSelectedEcPrivate(der, identifier, inner);
+		} else {
+			Der.Element oid = Der.read(der, identifier.getStart(), identifier.getEnd(), Der.OBJECT_IDENTIFIER);
+			if (!HexFormat.of().formatHex(der, oid.getStart(), oid.getEnd()).equals(ID_ED25519))
+				throw new PemException(PemException.Kind.UNSUPPORTED_ALGORITHM);
+			if (inner.getLength() != 32) throw new PemException(PemException.Kind.INVALID_KEY);
+		}
+	}
+
+	private static Der.@NonNull Element positiveInteger(byte @NonNull [] der, int position, int limit) throws PemException {
+		Der.Element integer = Der.read(der, position, limit, Der.INTEGER);
+		if (integer.getLength() < 1 || integer.getLength() > 2049 || (der[integer.getStart()] & 0x80) != 0
+				|| (der[integer.getStart()] == 0 && (integer.getLength() == 1 || (der[integer.getStart() + 1] & 0x80) == 0)))
+			throw new PemException(PemException.Kind.NON_CANONICAL);
+		return integer;
+	}
+
+	private static void checkSelectedEcPrivate(byte @NonNull [] der, Der.@NonNull Element identifier,
+			Der.@NonNull Element inner) throws PemException {
+		Der.Element algorithmOid = Der.read(der, identifier.getStart(), identifier.getEnd(), Der.OBJECT_IDENTIFIER);
+		Der.Element curveOid = Der.read(der, algorithmOid.getEnd(), identifier.getEnd(), Der.OBJECT_IDENTIFIER);
+		String oid = HexFormat.of().formatHex(der, curveOid.getStart(), curveOid.getEnd());
+		EcCurve curve = switch (oid) {
+			case "2a8648ce3d030107" -> EcCurve.P_256;
+			case "2b81040022" -> EcCurve.P_384;
+			default -> throw new PemException(PemException.Kind.UNSUPPORTED_ALGORITHM);
+		};
+		Der.Element version = Der.read(der, inner.getStart(), inner.getEnd(), Der.INTEGER);
+		if (version.getLength() != 1 || der[version.getStart()] != 1) throw new PemException(PemException.Kind.MALFORMED_DER);
+		Der.Element scalar = Der.read(der, version.getEnd(), inner.getEnd(), Der.OCTET_STRING);
+		if (scalar.getLength() != curve.getCoordinateLength()) throw new PemException(PemException.Kind.INVALID_KEY);
+		BigInteger value = new BigInteger(1, der, scalar.getStart(), scalar.getLength());
+		if (value.signum() < 1 || value.compareTo(curve.getOrder()) >= 0) throw new PemException(PemException.Kind.INVALID_KEY);
+		int position = scalar.getEnd();
+		if (position < inner.getEnd() && (der[position] & 0xff) == Der.CONTEXT_0_CONSTRUCTED) {
+			Der.Element parameters = Der.read(der, position, inner.getEnd(), Der.CONTEXT_0_CONSTRUCTED);
+			Der.Element named = Der.read(der, parameters.getStart(), parameters.getEnd(), Der.OBJECT_IDENTIFIER);
+			if (named.getEnd() != parameters.getEnd() || !HexFormat.of().formatHex(der, named.getStart(), named.getEnd()).equals(oid))
+				throw new PemException(PemException.Kind.INVALID_KEY);
+			position = parameters.getEnd();
+		}
+		if (position < inner.getEnd() && (der[position] & 0xff) == 0xa1) {
+			Der.Element hint = Der.read(der, position, inner.getEnd(), 0xa1);
+			Der.Element bits = Der.read(der, hint.getStart(), hint.getEnd(), Der.BIT_STRING);
+			int width = curve.getCoordinateLength();
+			if (bits.getEnd() != hint.getEnd() || bits.getLength() != 2 + 2 * width || der[bits.getStart()] != 0 || der[bits.getStart() + 1] != 4
+					|| !curve.isOnCurve(new BigInteger(1, der, bits.getStart() + 2, width), new BigInteger(1, der, bits.getStart() + 2 + width, width)))
+				throw new PemException(PemException.Kind.INVALID_KEY);
+			position = hint.getEnd();
+		}
+		if (position != inner.getEnd()) throw new PemException(PemException.Kind.MALFORMED_DER);
 	}
 
 	/**
@@ -416,7 +526,13 @@ public final class Pem {
 	 */
 	private static @NonNull Block readBlock(@NonNull String pem, @NonNull Set<@NonNull String> labels)
 			throws PemException {
+		return readBlock(pem, labels, Integer.MAX_VALUE);
+	}
+
+	private static @NonNull Block readBlock(@NonNull String pem, @NonNull Set<@NonNull String> labels,
+			int maximumDerBytes) throws PemException {
 		requireNonNull(pem);
+		if (maximumDerBytes < 1) throw new IllegalArgumentException("Invalid DER ceiling.");
 		int start = 0;
 		int end = pem.length();
 		while (start < end && isOuterWhitespace(pem.charAt(start)))
@@ -476,6 +592,10 @@ public final class Pem {
 			if (character != '\r' && character != '\n')
 				base64.append(character);
 		}
+		int padding = base64.length() > 0 && base64.charAt(base64.length() - 1) == '=' ? 1 : 0;
+		if (padding == 1 && base64.length() > 1 && base64.charAt(base64.length() - 2) == '=') ++padding;
+		if (((long) base64.length() + 3) / 4 * 3 - padding > maximumDerBytes)
+			throw new IllegalArgumentException("Decoded DER exceeds its ceiling.");
 		try {
 			return new Block(label, StandardBase64.decode(base64.toString()));
 		} catch (EncodingException e) {

@@ -492,13 +492,14 @@ final class OidcRc1MutationTests {
                     .jwksSource(StaticJwksSource.fromJwks(assertInstanceOf(JwksParseResult.Succeeded.class, Jwks.fromJsonResult(keySet(false))).getJwks())).build();
             AuthorizationRedirect redirect = client.beginAuthentication();
             InMemoryPendingAuthorizationStore store = InMemoryPendingAuthorizationStore.builder().clock(clock).build();
-            org.junit.jupiter.api.Assertions.assertEquals(PendingAuthorizationSaveResult.SAVED, redirect.getPendingAuthorization().saveToResult(store, "TEST-ONLY-browser"));
+            com.revetsec.BrowserBinding binding = com.revetsec.BrowserBinding.fromTrustedPersistence("TEST-ONLY-browser");
+            org.junit.jupiter.api.Assertions.assertEquals(PendingAuthorizationSaveResult.SAVED, redirect.getPendingAuthorization().saveToResult(store, binding));
             String state = QueryParameters.parse(redirect.getAuthorizationUri().getRawQuery()).getValues("state").get(0);
             AuthorizationResponse callback = assertInstanceOf(AuthorizationResponseParseResult.Succeeded.class, AuthorizationResponse.fromQueryStringResult("code=TEST-ONLY-code&state=" + state
                     + "&iss=" + URLEncoder.encode(server.uri("/tenant/").toString(), StandardCharsets.UTF_8))).getResponse();
             clock.advance(Duration.ofSeconds(31));
             assertEquals(OAuthException.Reason.METADATA_ENDPOINT_DRIFT, assertThrows(OAuthException.class,
-                    () -> client.completeAuthenticationResult(callback, PendingAuthorizationSource.fromStore(store, "TEST-ONLY-browser"),
+                    () -> client.completeAuthenticationResult(callback, PendingAuthorizationSource.fromStore(store, binding),
                             URI.create("https://rp.example/callback"))).getReason());
             assertEquals(2, server.getHitCount("/tenant/.well-known/openid-configuration"));
             assertEquals(0, server.getHitCount("/token-one"));
@@ -508,10 +509,10 @@ final class OidcRc1MutationTests {
 
     @Test
     void storedReferenceVersionIsCheckedAndItsOriginalClaimsSurviveTheRefreshShortcut() {
-        OidcSessionReference reference = assertInstanceOf(OidcSessionReferenceParseResult.Succeeded.class, OidcSessionReference.fromSerializedFormResult(serializedReference("1"))).getReference();
+        OidcSessionReference reference = assertInstanceOf(OidcSessionReferenceParseResult.Succeeded.class, OidcSessionReference.fromSerializedFormResult(serializedReference("2"))).getReference();
         assertEquals(EXACT, reference.continuityClaims().find("iss").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow());
         assertEquals("subject", reference.continuityClaims().find("sub").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow());
-        for (String version : List.of("0", "-1", "2"))
+        for (String version : List.of("0", "-1", "1", "3"))
             assertEquals(OidcValidationException.Reason.SESSION_REFERENCE_INVALID, assertInstanceOf(OidcSessionReferenceParseResult.Rejected.class, OidcSessionReference.fromSerializedFormResult(serializedReference(version))).getReason());
         IdTokenValidator validator = new IdTokenValidator(EXACT, "client",
                 StaticJwksSource.fromJwks(assertInstanceOf(JwksParseResult.Succeeded.class, Jwks.fromJsonResult(keySet(false))).getJwks()), Set.of(JwsAlgorithm.RS256),
@@ -794,7 +795,7 @@ final class OidcRc1MutationTests {
     private static @NonNull String serializedReference(@NonNull String version) {
         return "{\"v\":" + version + ",\"client_id\":\"client\",\"claims\":{\"iss\":" + JsonText.string(EXACT)
                 + ",\"sub\":\"subject\",\"aud\":\"client\",\"iat\":" + NOW.getEpochSecond()
-                + "},\"nonce_digest\":" + JsonText.string(OidcSessionReference.digest(NONCE)) + "}";
+                + "},\"nonce_digest\":" + JsonText.string(OidcSessionReference.digest(NONCE)) + ",\"required_acr_values\":[]}";
     }
 
     private record Authenticated(@NonNull OidcClient client, @NonNull OidcAuthentication authentication,
@@ -816,11 +817,12 @@ final class OidcRc1MutationTests {
         server.script("/token", TestHttpsServer.Script.fromResponse(TestHttpsServer.Response.fromJson(200,
                 "{\"access_token\":\"TEST-ONLY-access\",\"token_type\":\"Bearer\",\"expires_in\":300,\"id_token\":" + JsonText.string(compact) + "}")));
         InMemoryPendingAuthorizationStore store = InMemoryPendingAuthorizationStore.builder().clock(CLOCK).build();
-        org.junit.jupiter.api.Assertions.assertEquals(PendingAuthorizationSaveResult.SAVED, redirect.getPendingAuthorization().saveToResult(store, "TEST-ONLY-browser"));
+        com.revetsec.BrowserBinding binding = com.revetsec.BrowserBinding.fromTrustedPersistence("TEST-ONLY-browser");
+        org.junit.jupiter.api.Assertions.assertEquals(PendingAuthorizationSaveResult.SAVED, redirect.getPendingAuthorization().saveToResult(store, binding));
         AuthorizationResponse response = assertInstanceOf(AuthorizationResponseParseResult.Succeeded.class, AuthorizationResponse.fromQueryStringResult("code=TEST-ONLY-code&state=" + query.getValues("state").get(0)
                 + "&iss=" + URLEncoder.encode(issuer, StandardCharsets.UTF_8))).getResponse();
         OidcAuthentication authentication = assertInstanceOf(OidcAuthenticationResult.Succeeded.class, client.completeAuthenticationResult(response,
-                PendingAuthorizationSource.fromStore(store, "TEST-ONLY-browser"), URI.create("https://rp.example/callback"))).getAuthentication();
+                PendingAuthorizationSource.fromStore(store, binding), URI.create("https://rp.example/callback"))).getAuthentication();
         return new Authenticated(client, authentication, metadata, keys, policy);
     }
 

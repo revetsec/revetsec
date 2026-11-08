@@ -191,7 +191,7 @@ final class ThreatModelMapTests {
 		ContractSupport.assertNoViolations("Malformed invariant rows in " + THREAT_MODEL, problems);
 		Set<String> required = new TreeSet<>();
 		Map<String, Integer> groups = Map.ofEntries(Map.entry("G", 12), Map.entry("J", 9), Map.entry("C", 6),
-				Map.entry("O", 10), Map.entry("I", 3), Map.entry("R", 2), Map.entry("A", 3), Map.entry("W", 3),
+				Map.entry("O", 10), Map.entry("I", 3), Map.entry("OL", 3), Map.entry("R", 2), Map.entry("A", 3), Map.entry("W", 3),
 				Map.entry("WA", 8), Map.entry("S", 19), Map.entry("L", 2), Map.entry("M", 10));
 		for (Map.Entry<String, Integer> group : groups.entrySet())
 			for (int number = 1; number <= group.getValue(); number++) required.add("INV-" + group.getKey() + number);

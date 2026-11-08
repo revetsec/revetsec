@@ -17,6 +17,7 @@
 package com.revetsec.totp;
 
 import com.google.errorprone.annotations.CheckReturnValue;
+import com.revetsec.OperationBinding;
 import com.revetsec.StateSealer;
 import com.revetsec.internal.encoding.StrictUtf8;
 import org.jspecify.annotations.NonNull;
@@ -60,7 +61,8 @@ public final class TotpAuthenticator {
         this.engine = engine; this.namespace = namespace; this.recoveryEpoch = recoveryEpoch;
     }
     /** Starts configuration with a trusted authenticator display issuer, not an OAuth issuer URL.
-     * @param issuer well-formed display issuer, 1–128 characters, without colons or controls
+     * @param issuer well-formed display issuer, 1–128 UTF-16 units, without colons, ISO controls,
+     * Unicode format/line/paragraph controls or leading/trailing whitespace
      * @return a builder
      * @since 1.0.0 */
     public static @NonNull Builder withIssuer(@NonNull String issuer) { return new Builder(issuer); }
@@ -73,13 +75,21 @@ public final class TotpAuthenticator {
      * @since 1.0.0 */
     public @NonNull String getRecoveryEpoch() { return this.recoveryEpoch; }
     /** Persist a browser-bound pending secret before releasing provisioning information. Management authorization is application-owned.
-     * @param options approved account, display label and optional exact replacement generation
+     * @param options approved account, display label and optional exact replacement generation;
+     * the complete percent-encoded provisioning URI must fit 512 ASCII bytes
      * @param browserBinding unpredictable server-owned browser binding
      * @return the canonical operation outcome
+     * @throws IllegalArgumentException if the encoded provisioning URI exceeds 512 bytes;
+     * validation precedes recovery admission, storage and entropy
      * @since 1.0.0 */
     @CheckReturnValue
-    public @NonNull TotpEnrollmentRequestResult beginEnrollmentResult(@NonNull TotpEnrollmentOptions options, @NonNull String browserBinding) {
+    public @NonNull TotpEnrollmentRequestResult beginEnrollmentResult(@NonNull TotpEnrollmentOptions options, @NonNull OperationBinding browserBinding) {
+        return beginEnrollmentResult(options, Objects.requireNonNull(browserBinding).toSecretString());
+    }
+    @CheckReturnValue
+    @NonNull TotpEnrollmentRequestResult beginEnrollmentResult(@NonNull TotpEnrollmentOptions options, @NonNull String browserBinding) {
         Objects.requireNonNull(options); account(options.getAccountId()); binding(browserBinding);
+        this.engine.validateEnrollment(options);
         TotpEngine.Result result = this.engine.execute(new TotpEngine.Command(TotpEngine.Action.BEGIN,
                 options.getAccountId(), "", "", browserBinding, options, null));
         return switch (result.status) {
@@ -100,7 +110,11 @@ public final class TotpAuthenticator {
      * @return the canonical operation outcome
      * @since 1.0.0 */
     @CheckReturnValue
-    public @NonNull TotpEnrollmentResult confirmEnrollmentResult(@NonNull String accountId, @NonNull String enrollmentId, @NonNull String code, @NonNull String browserBinding) {
+    public @NonNull TotpEnrollmentResult confirmEnrollmentResult(@NonNull String accountId, @NonNull String enrollmentId, @NonNull String code, @NonNull OperationBinding browserBinding) {
+        return confirmEnrollmentResult(accountId, enrollmentId, code, Objects.requireNonNull(browserBinding).toSecretString());
+    }
+    @CheckReturnValue
+    @NonNull TotpEnrollmentResult confirmEnrollmentResult(@NonNull String accountId, @NonNull String enrollmentId, @NonNull String code, @NonNull String browserBinding) {
         account(accountId); binding(browserBinding); Objects.requireNonNull(enrollmentId); Objects.requireNonNull(code);
         if (enrollmentId.length() > 128 || code.length() > 128) return TotpEnrollmentResult.rejected(TotpRejectionReason.INVALID_CODE);
         TotpEngine.Result result = execute(TotpEngine.Action.CONFIRM, accountId, enrollmentId, code, browserBinding);
@@ -121,7 +135,11 @@ public final class TotpAuthenticator {
      * @return the canonical operation outcome
      * @since 1.0.0 */
     @CheckReturnValue
-    public @NonNull TotpVerificationResult verifyResult(@NonNull String accountId, @NonNull String code, @NonNull String operationBinding) {
+    public @NonNull TotpVerificationResult verifyResult(@NonNull String accountId, @NonNull String code, @NonNull OperationBinding operationBinding) {
+        return verifyResult(accountId, code, Objects.requireNonNull(operationBinding).toSecretString());
+    }
+    @CheckReturnValue
+    @NonNull TotpVerificationResult verifyResult(@NonNull String accountId, @NonNull String code, @NonNull String operationBinding) {
         account(accountId); binding(operationBinding); Objects.requireNonNull(code);
         if (code.length() > 128) return TotpVerificationResult.rejected(TotpRejectionReason.INVALID_CODE);
         TotpEngine.Result result = execute(TotpEngine.Action.VERIFY, accountId, "", code, operationBinding);
@@ -142,7 +160,11 @@ public final class TotpAuthenticator {
      * @return the canonical operation outcome
      * @since 1.0.0 */
     @CheckReturnValue
-    public @NonNull RecoveryCodeUseResult consumeRecoveryCodeResult(@NonNull String accountId, @NonNull String recoveryCode, @NonNull String operationBinding) {
+    public @NonNull RecoveryCodeUseResult consumeRecoveryCodeResult(@NonNull String accountId, @NonNull String recoveryCode, @NonNull OperationBinding operationBinding) {
+        return consumeRecoveryCodeResult(accountId, recoveryCode, Objects.requireNonNull(operationBinding).toSecretString());
+    }
+    @CheckReturnValue
+    @NonNull RecoveryCodeUseResult consumeRecoveryCodeResult(@NonNull String accountId, @NonNull String recoveryCode, @NonNull String operationBinding) {
         account(accountId); binding(operationBinding); Objects.requireNonNull(recoveryCode);
         if (recoveryCode.length() > 128) return RecoveryCodeUseResult.rejected(TotpRejectionReason.INVALID_CODE);
         TotpEngine.Result result = execute(TotpEngine.Action.RECOVERY, accountId, "", recoveryCode, operationBinding);
@@ -200,7 +222,11 @@ public final class TotpAuthenticator {
      * @return the canonical operation outcome
      * @since 1.0.0 */
     @CheckReturnValue
-    public @NonNull TotpEnrollmentCancellationResult cancelEnrollmentResult(@NonNull String accountId, @NonNull String enrollmentId, @NonNull String browserBinding) {
+    public @NonNull TotpEnrollmentCancellationResult cancelEnrollmentResult(@NonNull String accountId, @NonNull String enrollmentId, @NonNull OperationBinding browserBinding) {
+        return cancelEnrollmentResult(accountId, enrollmentId, Objects.requireNonNull(browserBinding).toSecretString());
+    }
+    @CheckReturnValue
+    @NonNull TotpEnrollmentCancellationResult cancelEnrollmentResult(@NonNull String accountId, @NonNull String enrollmentId, @NonNull String browserBinding) {
         account(accountId); identifier(enrollmentId); binding(browserBinding);
         TotpEngine.Result result = execute(TotpEngine.Action.CANCEL, accountId, enrollmentId, "", browserBinding);
         return switch (result.status) {
@@ -296,9 +322,7 @@ public final class TotpAuthenticator {
             Objects.requireNonNull(issuer);
             if (issuer.isEmpty() || issuer.length() > 128 || !StrictUtf8.isWellFormed(issuer))
                 throw new IllegalArgumentException("Invalid TOTP issuer");
-            for (int i = 0; i < issuer.length(); i++)
-                if (issuer.charAt(i) == ':' || Character.isISOControl(issuer.charAt(i)))
-                    throw new IllegalArgumentException("Invalid TOTP issuer");
+            TotpProvisioning.validateLabel(issuer);
             this.issuer = issuer;
         }
         /** Sets the stable account storage namespace.

@@ -77,7 +77,8 @@ public final class OAuthClient {
 		@Override public void checkHmacAuthentication(@NonNull ClientAuthentication authentication, @NonNull Set<com.revetsec.jose.@NonNull JwsAlgorithm> algorithms) { authentication.checkHmac(algorithms); }
 		@Override public @NonNull OAuthException endpointFailure(OAuthException.@NonNull Reason reason) {
 			return switch (reason) {
-				case METADATA_INVALID, ISSUER_MISMATCH -> OAuthValidationException.fromReason(reason);
+				case METADATA_INVALID -> OAuthValidationException.fromReason(reason);
+				case ISSUER_MISMATCH -> OAuthConfigurationException.fromReason(reason);
 				case DOCUMENT_MALFORMED -> OAuthResponseException.fromReason(reason);
 				case ISSUER_POLICY_UNAVAILABLE -> OAuthConfigurationException.fromReason(reason);
 				case NETWORK_FAILURE, INTERRUPTED, ATTEMPT_LIMIT -> OAuthTransportException.fromReason(reason, null);
@@ -106,8 +107,8 @@ public final class OAuthClient {
 		}
 
 		@Override public @NonNull AuthorizationRedirect begin(@NonNull OAuthClient client, @NonNull AuthorizationRequestOptions options,
-				@NonNull AuthorizationServerMetadata metadata, @Nullable Duration maxAge, @NonNull Set<@NonNull String> acrValues) {
-			return client.begin(options, "oidc", metadata, maxAge, acrValues);
+				@NonNull AuthorizationServerMetadata metadata, @Nullable Duration maxAge, @NonNull Set<@NonNull String> acrValues, @NonNull List<@NonNull String> acrPreferences) {
+			return client.begin(options, "oidc", metadata, maxAge, acrValues, acrPreferences);
 		}
 		@Override public OidcTransactionAccess.@NonNull Completion complete(@NonNull OAuthClient client, @NonNull AuthorizationResponse response,
 				@NonNull PendingAuthorizationSource source, @NonNull URI callback, @NonNull Function<@NonNull Deadline, @NonNull AuthorizationServerMetadata> metadata, @NonNull Deadline deadline, @NonNull Set<com.revetsec.jose.@NonNull JwsAlgorithm> hmacAlgorithms) {
@@ -224,6 +225,11 @@ public final class OAuthClient {
 
 	private @NonNull AuthorizationRedirect begin(@NonNull AuthorizationRequestOptions options, @NonNull String kind,
 			@NonNull AuthorizationServerMetadata metadata, @Nullable Duration maxAge, @NonNull Set<@NonNull String> acrValues) {
+		return begin(options, kind, metadata, maxAge, acrValues, acrValues.stream().sorted().toList());
+	}
+	private @NonNull AuthorizationRedirect begin(@NonNull AuthorizationRequestOptions options, @NonNull String kind,
+			@NonNull AuthorizationServerMetadata metadata, @Nullable Duration maxAge, @NonNull Set<@NonNull String> acrValues,
+			@NonNull List<@NonNull String> acrPreferences) {
 		if (this.redirectUri == null)
 			throw new IllegalStateException("A redirect URI is required for authorization code flow.");
 		if (metadata.getCodeChallengeMethodsSupported().isPresent()) {
@@ -246,7 +252,7 @@ public final class OAuthClient {
 		if (kind.equals("oidc")) {
 			query.add("nonce", nonce);
 			if (maxAge != null) query.add("max_age", Long.toString(maxAge.getSeconds()));
-			if (!acrValues.isEmpty()) query.add("acr_values", String.join(" ", new TreeSet<>(acrValues)));
+			if (!acrPreferences.isEmpty()) query.add("acr_values", String.join(" ", acrPreferences));
 		}
 		if (options.getResponseMode() == AuthorizationRequestOptions.ResponseMode.FORM_POST)
 			query.add("response_mode", "form_post");
@@ -446,7 +452,7 @@ public final class OAuthClient {
 	 */
 	private @NonNull TokenResponse requestClientCredentialsTokens(@NonNull TokenRequestOptions options) {
 		requireNonNull(options);
-		if (this.clientAuthentication.isPublicClient())
+		if (!supportsClientCredentials())
 			throw new IllegalStateException("A public client cannot request client credentials.");
 		Deadline deadline = Deadline.fromNow(this.totalDeadline);
 		AuthorizationServerMetadata metadata = assertionMetadata(deadline, OAuthEndpoint.TOKEN);
@@ -674,6 +680,7 @@ public final class OAuthClient {
         endpointObservers(resource, o -> o.didFailEndpoint(OAuthEndpoint.INTROSPECTION, safe, failure, elapsed));
     }
 
+	boolean supportsClientCredentials() { return !this.clientAuthentication.isPublicClient(); }
 	@NonNull Clock clock() { return this.clock; }
 	@NonNull Duration totalDeadline() { return this.totalDeadline; }
 
@@ -833,9 +840,11 @@ public final class OAuthClient {
 		}
 
 		/**
-		 * Injects an application-managed HTTP client.
+		 * Injects an application-managed HTTP client. It must use Redirect.NEVER and have no Authenticator or
+		 * CookieHandler; build rejects noncompliance without sending a request. The application owns injected
+		 * TLS/proxy configuration and network egress beyond the URI policy.
 		 *
-		 * @param value injected redirect-disabled client, or null for the lazy default
+		 * @param value injected client meeting these restrictions, or null for the lazy default
 		 * @return this builder
 		 * @since 1.0.0
 		 */

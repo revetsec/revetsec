@@ -35,9 +35,9 @@ final class WebAuthnStoredKeyTests {
     private static final String RP="login.example.com",NS="tenant:two";
     private static final String MAX_RP="a".repeat(63)+"."+"b".repeat(63)+"."+"c".repeat(63)+"."+"d".repeat(61);
     private static final String DIGEST=Base64.getUrlEncoder().withoutPadding().encodeToString(new byte[32]);
-    private static String b64(String value){return Base64.getUrlEncoder().withoutPadding().encodeToString(value.getBytes(StandardCharsets.UTF_8));}
-    private static String form(String ns,String rp,String kind,String digest){return "wa1:"+b64(ns)+":"+b64(rp)+":"+kind+":"+digest;}
-    @TestFactory Stream<DynamicTest> everyKindRoundTripsMinimumNormalAndMaximumScopes() {
+    private static @NonNull String b64(@NonNull String value){return Base64.getUrlEncoder().withoutPadding().encodeToString(value.getBytes(StandardCharsets.UTF_8));}
+    private static @NonNull String form(@NonNull String ns,@NonNull String rp,@NonNull String kind,@NonNull String digest){return "wa1:"+b64(ns)+":"+b64(rp)+":"+kind+":"+digest;}
+    @TestFactory @NonNull Stream<@NonNull DynamicTest> everyKindRoundTripsMinimumNormalAndMaximumScopes() {
         List<DynamicTest> cases=new ArrayList<>();
         for(String[] scope:List.of(new String[]{"!","a.co"},new String[]{NS,RP},new String[]{"~".repeat(128),MAX_RP}))
             for(var kind:WebAuthnStoreKey.Kind.values())for(int seed=0;seed<(kind==WebAuthnStoreKey.Kind.NAMESPACE_CLOCK?1:2);seed++){
@@ -56,7 +56,7 @@ final class WebAuthnStoredKeyTests {
         assertNotEquals(WebAuthnStoreKey.forCredential(NS,RP,new byte[32]),WebAuthnStoreKey.fromStoredForm(opaque));
         assertNotEquals(WebAuthnStoreKey.fromStoredForm(opaque),WebAuthnStoreKey.fromStoredForm(form("other",RP,"CREDENTIAL",DIGEST)));
     }
-    @TestFactory Stream<DynamicTest> malformedAndNoncanonicalAddressesRejectWithFixedRedactedErrors() {
+    @TestFactory @NonNull Stream<@NonNull DynamicTest> malformedAndNoncanonicalAddressesRejectWithFixedRedactedErrors() {
         String valid=form(NS,RP,"CREDENTIAL",DIGEST);String[] parts=valid.split(":",-1);List<String> values=new ArrayList<>(List.of("",valid+":extra",valid+":",":"+valid,valid.replace("wa1:","wa2:"),valid.replace("wa1:","WA1:"),valid+"\n"," "+valid,valid+" ","x".repeat(584),"x".repeat(100000)));
         for(int i:new int[]{1,2,4})for(String replacement:List.of("",parts[i]+"=",parts[i]+"==","+","/","%41","\n"," ","é","Ａ","AA=A")){
             String[] copy=parts.clone();copy[i]=replacement;values.add(String.join(":",copy));

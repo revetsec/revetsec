@@ -16,6 +16,8 @@
 
 package com.revetsec.totp;
 
+import com.revetsec.OperationBinding;
+
 import org.jspecify.annotations.NonNull;
 import javax.annotation.concurrent.Immutable;
 import java.time.Instant;
@@ -72,7 +74,9 @@ public final class RecoveryCodeUse {
     /** The server-owned pending operation binding.
      * @return operationBinding
      * @since 1.0.0 */
-    public @NonNull String getOperationBinding() { return this.operationBinding; }
+    public @NonNull OperationBinding getOperationBinding() {
+        return OperationBinding.fromTrustedPersistence(this.operationBinding);
+    }
 
     /** The remaining recovery-code count after this consumption.
      * @return remainingRecoveryCodeCount

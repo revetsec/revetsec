@@ -375,7 +375,7 @@ final class IdTokenValidatorTests {
 	private static void assertRedactedGraph(@NonNull OidcValidationException exception, @NonNull String @NonNull ... credentials)
 			throws IllegalAccessException {
 		Assertions.assertEquals(ErrorCategory.VALIDATION_FAILURE, exception.getCategory());
-		Assertions.assertFalse(exception.isTransient());
+		Assertions.assertFalse(exception.isTemporaryCondition());
 		Assertions.assertNull(exception.getCause());
 		exception.addSuppressed(new IllegalStateException(ACCESS));
 		Assertions.assertEquals(0, exception.getSuppressed().length);

@@ -18,6 +18,7 @@ package com.revetsec.oauth.server;
 
 import com.revetsec.internal.ObserverDispatch;
 import java.util.concurrent.atomic.AtomicBoolean;
+import com.revetsec.BrowserBinding;
 import com.revetsec.StateSealer;
 import com.revetsec.OutboundUriPolicy;
 import com.revetsec.internal.crypto.SealedStateAccess;
@@ -148,6 +149,10 @@ public final class OAuthAuthorizationServer {
   * @since 1.0.0
   */
  @CheckReturnValue public @NonNull OAuthAuthorizationResult beginAuthorizationResult(@NonNull String httpMethod,@Nullable String rawQuery,
+   byte @NonNull [] rawBody,@NonNull Map<@NonNull String,@NonNull List<@NonNull String>> rawHeaderValues,@NonNull BrowserBinding browserBinding) {
+  return beginAuthorizationResult(httpMethod,rawQuery,rawBody,rawHeaderValues,requireNonNull(browserBinding).toSecretString());
+ }
+ @CheckReturnValue @NonNull OAuthAuthorizationResult beginAuthorizationResult(@NonNull String httpMethod,@Nullable String rawQuery,
    byte @NonNull [] rawBody,@NonNull Map<@NonNull String,@NonNull List<@NonNull String>> rawHeaderValues,@NonNull String browserBinding) {
   inputs(httpMethod,rawBody,rawHeaderValues); requireNonNull(browserBinding);
   return execute(AUTHORIZATION,d->{
@@ -164,7 +169,10 @@ public final class OAuthAuthorizationServer {
   * @return checked restricted interaction or rejection
   * @since 1.0.0
   */
- @CheckReturnValue public @NonNull OAuthAuthorizationResult resumeAuthorizationResult(@NonNull String interactionValue,@NonNull String browserBinding) {
+ @CheckReturnValue public @NonNull OAuthAuthorizationResult resumeAuthorizationResult(@NonNull String interactionValue,@NonNull BrowserBinding browserBinding) {
+  return resumeAuthorizationResult(interactionValue,requireNonNull(browserBinding).toSecretString());
+ }
+ @CheckReturnValue @NonNull OAuthAuthorizationResult resumeAuthorizationResult(@NonNull String interactionValue,@NonNull String browserBinding) {
   requireNonNull(interactionValue); requireNonNull(browserBinding);
   return execute(AUTHORIZATION,d->{binding(interactionValue);binding(browserBinding);
    return interaction(interactionValue,browserBinding,selected(interactionValue,browserBinding,d),d);
@@ -177,7 +185,10 @@ public final class OAuthAuthorizationServer {
   * @return retained committed redirect or rejection
   * @since 1.0.0
   */
- @CheckReturnValue public @NonNull OAuthAuthorizationResult completeAuthorizationResult(@NonNull String interactionValue,@NonNull String browserBinding,@NonNull OAuthAuthorizationDecision decision) {
+ @CheckReturnValue public @NonNull OAuthAuthorizationResult completeAuthorizationResult(@NonNull String interactionValue,@NonNull BrowserBinding browserBinding,@NonNull OAuthAuthorizationDecision decision) {
+  return completeAuthorizationResult(interactionValue,requireNonNull(browserBinding).toSecretString(),decision);
+ }
+ @CheckReturnValue @NonNull OAuthAuthorizationResult completeAuthorizationResult(@NonNull String interactionValue,@NonNull String browserBinding,@NonNull OAuthAuthorizationDecision decision) {
   requireNonNull(interactionValue);requireNonNull(browserBinding);requireNonNull(decision);
   return execute(AUTHORIZATION,d->{binding(interactionValue);binding(browserBinding);
    return this.ledger.completeResult(interactionValue,browserBinding,()->selected(interactionValue,browserBinding,d),this.resources,decision,this.policy,this.authorizationEncoder,d);

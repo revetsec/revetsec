@@ -15,6 +15,8 @@
  */
 package com.revetsec.scim;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.json.*;
 import org.junit.jupiter.api.Test;
 import java.util.ArrayList;
@@ -105,7 +107,7 @@ final class ScimMemberIndexTests {
             assertTrue(complete - build >= 100, "lookup must charge key work, not only build work");
         }
     }
-    private static long minimum(List<JsonValue> rows, boolean lookup) {
+    private static long minimum(@NonNull List<@NonNull JsonValue> rows, boolean lookup) {
         long low = 0, high = 1_000_000;
         while (low < high) {
             long middle = (low + high) >>> 1;
@@ -116,5 +118,5 @@ final class ScimMemberIndexTests {
         }
         return low;
     }
-    private static JsonObject row(String id) { return JsonObject.builder().put("value", id).put("display", "Saved:" + id).build(); }
+    private static @NonNull JsonObject row(@NonNull String id) { return JsonObject.builder().put("value", id).put("display", "Saved:" + id).build(); }
 }

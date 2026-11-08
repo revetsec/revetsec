@@ -60,8 +60,9 @@ final class OidcAuthenticationResultTests {
             String token = sign(claims(server, nonce(redirect)), false);
             respond(server, "/token", 200, "application/json", response(token, "Bearer"));
             InMemoryPendingAuthorizationStore store = InMemoryPendingAuthorizationStore.builder().clock(CLOCK).build();
-            org.junit.jupiter.api.Assertions.assertEquals(PendingAuthorizationSaveResult.SAVED, redirect.getPendingAuthorization().saveToResult(store, "browser"));
-            PendingAuthorizationSource source = PendingAuthorizationSource.fromStore(store, "browser");
+            com.revetsec.BrowserBinding binding = com.revetsec.BrowserBinding.fromTrustedPersistence("browser");
+            org.junit.jupiter.api.Assertions.assertEquals(PendingAuthorizationSaveResult.SAVED, redirect.getPendingAuthorization().saveToResult(store, binding));
+            PendingAuthorizationSource source = PendingAuthorizationSource.fromStore(store, binding);
             OidcAuthenticationResult.Succeeded success = assertInstanceOf(OidcAuthenticationResult.Succeeded.class,
                     client.completeAuthenticationResult(callback(redirect), source, CALLBACK));
             assertEquals("subject", success.getAuthentication().getSubject());
@@ -87,7 +88,8 @@ final class OidcAuthenticationResultTests {
                     throw new IllegalStateException("TEST-ONLY-secret-provider-detail");
                 }
             };
-            PendingAuthorizationSource source = PendingAuthorizationSource.fromStore(broken, "browser");
+            PendingAuthorizationSource source = PendingAuthorizationSource.fromStore(broken,
+                    com.revetsec.BrowserBinding.fromTrustedPersistence("browser"));
             OidcAuthenticationResult.Failed result = assertInstanceOf(OidcAuthenticationResult.Failed.class,
                     client.completeAuthenticationResult(callback(redirect), source, CALLBACK));
             assertEquals(OAuthException.Reason.PENDING_AUTHORIZATION_STORE_UNAVAILABLE, result.getReason());

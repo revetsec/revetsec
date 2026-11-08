@@ -60,7 +60,13 @@ final class LibxmlsecOracleComparatorTests {
     @BeforeAll static void startOracle() throws Exception {
         String image = System.getProperty("scripted-idp.image", "revetsec-scripted-idp:local");
         GenericContainer<?> started = new GenericContainer<>(DockerImageName.parse(image))
+                .withImagePullPolicy(imageName -> false)
+                .withLabel("com.revetsec.qualification", System.getProperty("revetsec.qualification.id", "provider-fixture"))
                 .withExposedPorts(8443)
+                .withCreateContainerCmdModifier(command -> java.util.Objects.requireNonNull(command.getHostConfig())
+                        .withPortBindings(new com.github.dockerjava.api.model.PortBinding(
+                                com.github.dockerjava.api.model.Ports.Binding.bindIp("127.0.0.1"),
+                                new com.github.dockerjava.api.model.ExposedPort(8443))))
                 .withEnv("SCRIPTED_IDP_TLS_CERT", "/run/tls/server.pem")
                 .withEnv("SCRIPTED_IDP_TLS_KEY", "/run/tls/server-key.pem")
                 .withEnv("SCRIPTED_IDP_KEYS_DIR", "/run/keys")
@@ -91,6 +97,8 @@ final class LibxmlsecOracleComparatorTests {
         copy(started, "fixtures/saml-independent/keys/sp-rsa-2048.key",
                 "/run/keys/independent-sp-rsa-2048-key.pem");
         started.start();
+        for (var binding : java.util.Objects.requireNonNull(started.getContainerInfo().getNetworkSettings().getPorts().getBindings().get(new com.github.dockerjava.api.model.ExposedPort(8443))))
+            assertEquals("127.0.0.1", binding.getHostIp(), "owned fixture must bind only loopback");
         container = started;
         base = "https://" + started.getHost() + ":" + started.getMappedPort(8443);
 

@@ -268,7 +268,7 @@ public class JwtValidatorFuzzTests {
 		Assertions.assertEquals(reason.category(), exception.getCategory(), "the reason's category");
 		Assertions.assertEquals(reason.message(), exception.getMessage(), "the reason's fixed message");
 		Assertions.assertNull(exception.getCause(), "a JOSE exception has a cause");
-		Assertions.assertFalse(exception.isTransient(), "a JOSE exception is transient");
+		Assertions.assertFalse(exception.isTemporaryCondition(), "a JOSE exception is transient");
 	}
 
 	/**

@@ -43,7 +43,7 @@ final class WebAuthnTombstoneResealTests {
     private static final Clock CLOCK=Clock.fixed(BASE,ZoneOffset.UTC);
     private static final byte[] ID={1,2,3},HANDLE={4,5,6};
 
-    @TestFactory Stream<DynamicTest> removedTombstoneRotatesFromPersistedAddressWithoutActiveIndex() {
+    @TestFactory @NonNull Stream<@NonNull DynamicTest> removedTombstoneRotatesFromPersistedAddressWithoutActiveIndex() {
         return Stream.of(false,true).map(disabled->DynamicTest.dynamicTest("stored address / disabled="+disabled,()->{
             Fixture f=removed(disabled);String stored=f.source.records().keySet().stream()
                     .filter(key->key.getKind()==WebAuthnStoreKey.Kind.CREDENTIAL)
@@ -53,7 +53,7 @@ final class WebAuthnTombstoneResealTests {
             rotate(f,key,true);
         }));
     }
-    @TestFactory Stream<DynamicTest> retainedRawCredentialAddressIsAnExistingResealControl() {
+    @TestFactory @NonNull Stream<@NonNull DynamicTest> retainedRawCredentialAddressIsAnExistingResealControl() {
         return Stream.of(false,true).map(disabled->DynamicTest.dynamicTest("retained ID / disabled="+disabled,()->rotate(removed(disabled),credential(),false)));
     }
     @Test void aDifferentWellFormedAddressDoesNotAuthenticateTheTombstone() throws Exception {
@@ -64,7 +64,7 @@ final class WebAuthnTombstoneResealTests {
         assertEquals(rows.keySet(),source.records().keySet());for(var key:rows.keySet()){assertArrayEquals(Objects.requireNonNull(rows.get(key)).getVersion(),Objects.requireNonNull(source.records().get(key)).getVersion());assertArrayEquals(Objects.requireNonNull(rows.get(key)).getSealedBytes(),Objects.requireNonNull(source.records().get(key)).getSealedBytes());}
     }
 
-    private static void rotate(Fixture f,WebAuthnStoreKey tombstone,boolean imported) throws Exception {
+    private static void rotate(@NonNull Fixture f,@NonNull WebAuthnStoreKey tombstone,boolean imported) throws Exception {
         var oldRecords=new WebAuthnRecordCodec(sealer(false,false));var oldCodec=new WebAuthnCredentialRecordCodec(NS,RP,oldRecords);
         byte[] before=Objects.requireNonNull(f.source.records().get(tombstone)).getSealedBytes();
         var original=oldCodec.decodeRecord(tombstone,before,CLOCK);assertTrue(original.isRevoked());assertArrayEquals(HANDLE,original.userHandle());
@@ -87,12 +87,12 @@ final class WebAuthnTombstoneResealTests {
         assertEquals(4,f.source.records().size());
         for(var entry:f.source.records().entrySet())try(var decoded=newRecords.openAdmittedRecord(entry.getKey(),entry.getValue().getSealedBytes(),CLOCK)){assertEquals(WebAuthnRecordPayloadV2.PERMANENT,decoded.expiresAt());}
     }
-    private static WebAuthnStoreKey restore(String stored) {
+    private static @NonNull WebAuthnStoreKey restore(@NonNull String stored) {
         Method factory=assertDoesNotThrow(()->WebAuthnStoreKey.class.getMethod("fromStoredForm",String.class),"Persisted tombstones need a typed address without a credential-ID preimage");
         return assertInstanceOf(WebAuthnStoreKey.class,assertDoesNotThrow(()->factory.invoke(null,stored)));
     }
-    private record Fixture(ScriptedWebAuthnStore source){}
-    private static Fixture removed(boolean disabled) throws Exception {
+    private record Fixture(@NonNull ScriptedWebAuthnStore source){}
+    private static @NonNull Fixture removed(boolean disabled) throws Exception {
         var source=new ScriptedWebAuthnStore(BASE);var records=new WebAuthnRecordCodec(sealer(false,false));
         byte[] spki=KeyPairGenerator.getInstance("Ed25519").generateKeyPair().getPublic().getEncoded();ByteArrayOutputStream cose=new ByteArrayOutputStream();
         for(int n:new int[]{0xa4,1,1,3,0x27,0x20,6,0x21,0x58,32})cose.write(n);cose.write(spki,spki.length-32,32);
@@ -107,14 +107,14 @@ final class WebAuthnTombstoneResealTests {
         assertTrue(rp.listCredentials(HANDLE).credentialIds().isEmpty());
         return new Fixture(source);
     }
-    private static WebAuthnStoreEntry.Present present(int version,byte[] sealed){return WebAuthnStoreEntry.Present.fromVersionAndSealedBytes(new byte[]{(byte)version},sealed);}
-    private static WebAuthnStoreKey credential(){return WebAuthnStoreKey.forCredential(NS,RP,ID);}
-    private static StateSealer sealer(boolean next,boolean overlap){
+    private static WebAuthnStoreEntry.@NonNull Present present(int version,byte @NonNull [] sealed){return WebAuthnStoreEntry.Present.fromVersionAndSealedBytes(new byte[]{(byte)version},sealed);}
+    private static @NonNull WebAuthnStoreKey credential(){return WebAuthnStoreKey.forCredential(NS,RP,ID);}
+    private static @NonNull StateSealer sealer(boolean next,boolean overlap){
         var old=SealingKey.fromBase64("old","AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=");
         var active=SealingKey.fromBase64("next","ICEiIyQlJicoKSorLC0uLzAxMjM0NTY3ODk6Ozw9Pj8=");
         return StateSealer.withActiveKey(next?active:old).verificationKeys(overlap?List.of(old):List.of()).clock(CLOCK).build();
     }
-    private static WebAuthnEngine party(WebAuthnStore store,StateSealer sealer){
+    private static @NonNull WebAuthnEngine party(@NonNull WebAuthnStore store,@NonNull StateSealer sealer){
         return new WebAuthnEngine(NS,RP,Set.of("https://"+RP),store,sealer,budget->new WebAuthnRecoveryGate.Permit(){@Override public @NonNull Boolean isCurrent(){return true;}@Override public void close(){}},CLOCK,WebAuthnSettings.builder().build());
     }
 }

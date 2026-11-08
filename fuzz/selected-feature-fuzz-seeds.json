@@ -1,0 +1,642 @@
+{
+  "schema": 1,
+  "scope": "Synthetic selected M-K/SIGN/API-PROOF public-path finite corpus; certificates imply no trust; no live credentials",
+  "seeds": [
+    {
+      "path": "src/test/resources/fixtures/key-import-profile/rsa-certificate.pem",
+      "bytes": 1253,
+      "sha256": "b5b7e371b0a464c408f2d8d608691aaf91aab310d5060d9dcad548ed01fb5d38",
+      "meaning": "Existing synthetic ordinary fixture; rsa certificate"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/KeyImportsFuzzTestsInputs/publicImportPathsAreBoundedAndAgreeWithArmor/rsa-certificate.der",
+      "bytes": 885,
+      "sha256": "d59d114490332bd274fce3578071fdb190abe17bf05194a333b277bbb0e7f1c6",
+      "meaning": "Ordinary rsa certificate DER"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/KeyImportsFuzzTestsInputs/publicImportPathsAreBoundedAndAgreeWithArmor/rsa-certificate.pem",
+      "bytes": 1253,
+      "sha256": "b5b7e371b0a464c408f2d8d608691aaf91aab310d5060d9dcad548ed01fb5d38",
+      "meaning": "Ordinary rsa certificate PEM"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/KeyImportsFuzzTestsInputs/publicImportPathsAreBoundedAndAgreeWithArmor/rsa-certificate-trailing.der",
+      "bytes": 886,
+      "sha256": "29cab019b4453f32123fbfe69e888d6e4ed82662c2220e430311ba8c1696796c",
+      "meaning": "Same ordinary DER plus trailing zero must refuse"
+    },
+    {
+      "path": "src/test/resources/fixtures/key-import-profile/rsa-public.pem",
+      "bytes": 451,
+      "sha256": "fb8d62d4c66454f384dbf46fa2128b975eb6e0cfdf89a6e5f844c57a1bb9ed14",
+      "meaning": "Existing synthetic ordinary fixture; rsa public"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/KeyImportsFuzzTestsInputs/publicImportPathsAreBoundedAndAgreeWithArmor/rsa-public.der",
+      "bytes": 294,
+      "sha256": "b5d35739a9f30527f82aa940a394c536f9525eaaf51bfd3d894ebdb84ddb08f0",
+      "meaning": "Ordinary rsa public DER"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/KeyImportsFuzzTestsInputs/publicImportPathsAreBoundedAndAgreeWithArmor/rsa-public.pem",
+      "bytes": 451,
+      "sha256": "fb8d62d4c66454f384dbf46fa2128b975eb6e0cfdf89a6e5f844c57a1bb9ed14",
+      "meaning": "Ordinary rsa public PEM"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/KeyImportsFuzzTestsInputs/publicImportPathsAreBoundedAndAgreeWithArmor/rsa-public-trailing.der",
+      "bytes": 295,
+      "sha256": "70851aad41f3e647b65d4e757f09b0a359752009c377e157d5b7434f74a2e430",
+      "meaning": "Same ordinary DER plus trailing zero must refuse"
+    },
+    {
+      "path": "src/test/resources/fixtures/key-import-profile/rsa-private.pem",
+      "bytes": 1704,
+      "sha256": "59dba0d0ba03a1002ae3c416aa27f0f69fd80e91c244f8d92f92b29758ba8fe3",
+      "meaning": "Existing synthetic ordinary fixture; rsa private"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/KeyImportsFuzzTestsInputs/publicImportPathsAreBoundedAndAgreeWithArmor/rsa-private.der",
+      "bytes": 1218,
+      "sha256": "bf25a573d4a14f1b6bfcc6016cf589665f4c86d0a54b3a5b8e9b86dfa3440d5f",
+      "meaning": "Ordinary rsa private DER"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/KeyImportsFuzzTestsInputs/publicImportPathsAreBoundedAndAgreeWithArmor/rsa-private.pem",
+      "bytes": 1704,
+      "sha256": "59dba0d0ba03a1002ae3c416aa27f0f69fd80e91c244f8d92f92b29758ba8fe3",
+      "meaning": "Ordinary rsa private PEM"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/KeyImportsFuzzTestsInputs/publicImportPathsAreBoundedAndAgreeWithArmor/rsa-private-trailing.der",
+      "bytes": 1219,
+      "sha256": "fb1432ae7e1e526ed530b0f5c60dc953b88d4f21efd911fe3e522b2b3988a274",
+      "meaning": "Same ordinary DER plus trailing zero must refuse"
+    },
+    {
+      "path": "src/test/resources/fixtures/key-import-profile/p256-certificate.pem",
+      "bytes": 717,
+      "sha256": "789350fa31b3209ce41e04dbf649e8bc8e1da2a101972cd6b37074dc830285b3",
+      "meaning": "Existing synthetic ordinary fixture; p256 certificate"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/KeyImportsFuzzTestsInputs/publicImportPathsAreBoundedAndAgreeWithArmor/p256-certificate.der",
+      "bytes": 488,
+      "sha256": "ae3c28a4812c7655a05ccb54ce32a474f763ec3945dc847a8f183ab7aa6efa59",
+      "meaning": "Ordinary p256 certificate DER"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/KeyImportsFuzzTestsInputs/publicImportPathsAreBoundedAndAgreeWithArmor/p256-certificate.pem",
+      "bytes": 717,
+      "sha256": "789350fa31b3209ce41e04dbf649e8bc8e1da2a101972cd6b37074dc830285b3",
+      "meaning": "Ordinary p256 certificate PEM"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/KeyImportsFuzzTestsInputs/publicImportPathsAreBoundedAndAgreeWithArmor/p256-certificate-trailing.der",
+      "bytes": 489,
+      "sha256": "5189bef38fec45f7b6d9cac420c80062481643bed62e5002b06a0886982a76bb",
+      "meaning": "Same ordinary DER plus trailing zero must refuse"
+    },
+    {
+      "path": "src/test/resources/fixtures/key-import-profile/p256-public.pem",
+      "bytes": 178,
+      "sha256": "fce94fd97b83868d1b064995dd9841d88622f5772422548d4ed964a6111d2065",
+      "meaning": "Existing synthetic ordinary fixture; p256 public"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/KeyImportsFuzzTestsInputs/publicImportPathsAreBoundedAndAgreeWithArmor/p256-public.der",
+      "bytes": 91,
+      "sha256": "e578db650c1e3de7d628183f043e43f60940004ad9055a092fb76f4a324a4bd5",
+      "meaning": "Ordinary p256 public DER"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/KeyImportsFuzzTestsInputs/publicImportPathsAreBoundedAndAgreeWithArmor/p256-public.pem",
+      "bytes": 178,
+      "sha256": "fce94fd97b83868d1b064995dd9841d88622f5772422548d4ed964a6111d2065",
+      "meaning": "Ordinary p256 public PEM"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/KeyImportsFuzzTestsInputs/publicImportPathsAreBoundedAndAgreeWithArmor/p256-public-trailing.der",
+      "bytes": 92,
+      "sha256": "6f4b8792345eaabccaf9432335f1d8405e881d4440561cc19d6c5ac88661cae9",
+      "meaning": "Same ordinary DER plus trailing zero must refuse"
+    },
+    {
+      "path": "src/test/resources/fixtures/key-import-profile/p256-private.pem",
+      "bytes": 241,
+      "sha256": "9e505cc91661c2c0e00de25d432ecc5038976293e5104c4d900a5ac025aeda3c",
+      "meaning": "Existing synthetic ordinary fixture; p256 private"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/KeyImportsFuzzTestsInputs/publicImportPathsAreBoundedAndAgreeWithArmor/p256-private.der",
+      "bytes": 138,
+      "sha256": "c5772a7acc0c5a5153ff80ef40aec70c8083bc7bef24d30952128109717c8cc7",
+      "meaning": "Ordinary p256 private DER"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/KeyImportsFuzzTestsInputs/publicImportPathsAreBoundedAndAgreeWithArmor/p256-private.pem",
+      "bytes": 241,
+      "sha256": "9e505cc91661c2c0e00de25d432ecc5038976293e5104c4d900a5ac025aeda3c",
+      "meaning": "Ordinary p256 private PEM"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/KeyImportsFuzzTestsInputs/publicImportPathsAreBoundedAndAgreeWithArmor/p256-private-trailing.der",
+      "bytes": 139,
+      "sha256": "5ba90f600ab2f488ea9af096279082a3a29d6fd798c40694ef5c828fc3fd26d2",
+      "meaning": "Same ordinary DER plus trailing zero must refuse"
+    },
+    {
+      "path": "src/test/resources/fixtures/key-import-profile/p384-certificate.pem",
+      "bytes": 802,
+      "sha256": "5ead0e9830a849e666b43b27df7bd5ce8ee8f9d2f27596497c5800d9e0d04cb6",
+      "meaning": "Existing synthetic ordinary fixture; p384 certificate"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/KeyImportsFuzzTestsInputs/publicImportPathsAreBoundedAndAgreeWithArmor/p384-certificate.der",
+      "bytes": 551,
+      "sha256": "1febed20d8e6da27d26ef07475a914ea3b1a145af01c83b6535e57a7585d371e",
+      "meaning": "Ordinary p384 certificate DER"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/KeyImportsFuzzTestsInputs/publicImportPathsAreBoundedAndAgreeWithArmor/p384-certificate.pem",
+      "bytes": 802,
+      "sha256": "5ead0e9830a849e666b43b27df7bd5ce8ee8f9d2f27596497c5800d9e0d04cb6",
+      "meaning": "Ordinary p384 certificate PEM"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/KeyImportsFuzzTestsInputs/publicImportPathsAreBoundedAndAgreeWithArmor/p384-certificate-trailing.der",
+      "bytes": 552,
+      "sha256": "253c841e6740876ea506249fa2606dea44d119c3f9f6b075b5a8d243fd418dde",
+      "meaning": "Same ordinary DER plus trailing zero must refuse"
+    },
+    {
+      "path": "src/test/resources/fixtures/key-import-profile/p384-public.pem",
+      "bytes": 215,
+      "sha256": "2644a2cdb8eea209ad1ad6531247aa4e851d7e504443fa3c81d5208582f6aca4",
+      "meaning": "Existing synthetic ordinary fixture; p384 public"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/KeyImportsFuzzTestsInputs/publicImportPathsAreBoundedAndAgreeWithArmor/p384-public.der",
+      "bytes": 120,
+      "sha256": "5251794d9d70a303783ba1369a686bd9b84c81cfc72f6d78334bfd2940f3642c",
+      "meaning": "Ordinary p384 public DER"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/KeyImportsFuzzTestsInputs/publicImportPathsAreBoundedAndAgreeWithArmor/p384-public.pem",
+      "bytes": 215,
+      "sha256": "2644a2cdb8eea209ad1ad6531247aa4e851d7e504443fa3c81d5208582f6aca4",
+      "meaning": "Ordinary p384 public PEM"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/KeyImportsFuzzTestsInputs/publicImportPathsAreBoundedAndAgreeWithArmor/p384-public-trailing.der",
+      "bytes": 121,
+      "sha256": "0e7e2683d3eeba6cd687bbc9060d22ed44d53c1c4a004c65b805a4904e31ca70",
+      "meaning": "Same ordinary DER plus trailing zero must refuse"
+    },
+    {
+      "path": "src/test/resources/fixtures/key-import-profile/p384-private.pem",
+      "bytes": 306,
+      "sha256": "1327274f253a466d3b6b34eb9597919611a81f83ea90ed7f3b7edc0751457096",
+      "meaning": "Existing synthetic ordinary fixture; p384 private"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/KeyImportsFuzzTestsInputs/publicImportPathsAreBoundedAndAgreeWithArmor/p384-private.der",
+      "bytes": 185,
+      "sha256": "647237c1b7a7779707c9facf1732c71f4985aa3b5e7ae3c1ac3d832510fabad0",
+      "meaning": "Ordinary p384 private DER"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/KeyImportsFuzzTestsInputs/publicImportPathsAreBoundedAndAgreeWithArmor/p384-private.pem",
+      "bytes": 306,
+      "sha256": "1327274f253a466d3b6b34eb9597919611a81f83ea90ed7f3b7edc0751457096",
+      "meaning": "Ordinary p384 private PEM"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/KeyImportsFuzzTestsInputs/publicImportPathsAreBoundedAndAgreeWithArmor/p384-private-trailing.der",
+      "bytes": 186,
+      "sha256": "ffd2529e3a227a87adf25ff7643874467834e146d59a628e623eb87e491e03f9",
+      "meaning": "Same ordinary DER plus trailing zero must refuse"
+    },
+    {
+      "path": "src/test/resources/fixtures/key-import-profile/ed25519-certificate.pem",
+      "bytes": 522,
+      "sha256": "bffe2fe2890e3825f14f3d71c2e977282a8742bd99a51f7ca480276d468115b9",
+      "meaning": "Existing synthetic ordinary fixture; ed25519 certificate"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/KeyImportsFuzzTestsInputs/publicImportPathsAreBoundedAndAgreeWithArmor/ed25519-certificate.der",
+      "bytes": 345,
+      "sha256": "314b55630b4b75f12d1f0114e151bb52025942ab88048e12fb196f08971407c5",
+      "meaning": "Ordinary ed25519 certificate DER"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/KeyImportsFuzzTestsInputs/publicImportPathsAreBoundedAndAgreeWithArmor/ed25519-certificate.pem",
+      "bytes": 522,
+      "sha256": "bffe2fe2890e3825f14f3d71c2e977282a8742bd99a51f7ca480276d468115b9",
+      "meaning": "Ordinary ed25519 certificate PEM"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/KeyImportsFuzzTestsInputs/publicImportPathsAreBoundedAndAgreeWithArmor/ed25519-certificate-trailing.der",
+      "bytes": 346,
+      "sha256": "aaa2c725a8323b0ed160b6f9dcdb5e2b104586aa8af8f41dd0b8e3ab38276e06",
+      "meaning": "Same ordinary DER plus trailing zero must refuse"
+    },
+    {
+      "path": "src/test/resources/fixtures/key-import-profile/ed25519-public.pem",
+      "bytes": 113,
+      "sha256": "200184d41c306bb168377c915400ae879499475b39c4e8c5acb71a9c1a2ae8a3",
+      "meaning": "Existing synthetic ordinary fixture; ed25519 public"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/KeyImportsFuzzTestsInputs/publicImportPathsAreBoundedAndAgreeWithArmor/ed25519-public.der",
+      "bytes": 44,
+      "sha256": "836529ed3996760c429aa327c85a2a7322b146cdff61f7d7f1e1e6b32074823f",
+      "meaning": "Ordinary ed25519 public DER"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/KeyImportsFuzzTestsInputs/publicImportPathsAreBoundedAndAgreeWithArmor/ed25519-public.pem",
+      "bytes": 113,
+      "sha256": "200184d41c306bb168377c915400ae879499475b39c4e8c5acb71a9c1a2ae8a3",
+      "meaning": "Ordinary ed25519 public PEM"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/KeyImportsFuzzTestsInputs/publicImportPathsAreBoundedAndAgreeWithArmor/ed25519-public-trailing.der",
+      "bytes": 45,
+      "sha256": "32a80574060ae73e150db8c2c6cc396ca81e36ddc4ae750f8c5f64fc3fe8d6a6",
+      "meaning": "Same ordinary DER plus trailing zero must refuse"
+    },
+    {
+      "path": "src/test/resources/fixtures/key-import-profile/ed25519-private.pem",
+      "bytes": 119,
+      "sha256": "3b452b5ec87117af561cf67608046b3d7ad2d23a36f2f780ac63138f17235051",
+      "meaning": "Existing synthetic ordinary fixture; ed25519 private"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/KeyImportsFuzzTestsInputs/publicImportPathsAreBoundedAndAgreeWithArmor/ed25519-private.der",
+      "bytes": 48,
+      "sha256": "5e14751c1755c93de2e9a451b1cf0fbdcb6473111ee9aacad3ab8af2bc607c2f",
+      "meaning": "Ordinary ed25519 private DER"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/KeyImportsFuzzTestsInputs/publicImportPathsAreBoundedAndAgreeWithArmor/ed25519-private.pem",
+      "bytes": 119,
+      "sha256": "3b452b5ec87117af561cf67608046b3d7ad2d23a36f2f780ac63138f17235051",
+      "meaning": "Ordinary ed25519 private PEM"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/KeyImportsFuzzTestsInputs/publicImportPathsAreBoundedAndAgreeWithArmor/ed25519-private-trailing.der",
+      "bytes": 49,
+      "sha256": "745fe710de5e9d48fe6cbda117523f18c86f7c5fa1c539d45bedce0434ab3204",
+      "meaning": "Same ordinary DER plus trailing zero must refuse"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/KeyImportsFuzzTestsInputs/publicImportPathsAreBoundedAndAgreeWithArmor/empty.bin",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "meaning": "Bounded framing or precopy ceiling refusal: empty"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/KeyImportsFuzzTestsInputs/publicImportPathsAreBoundedAndAgreeWithArmor/indefinite.bin",
+      "bytes": 4,
+      "sha256": "9dd6deb17adb1b3381b253bc934b43ad585b97d2eab8e1d5ef0d2daa8ff9e8c3",
+      "meaning": "Bounded framing or precopy ceiling refusal: indefinite"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/KeyImportsFuzzTestsInputs/publicImportPathsAreBoundedAndAgreeWithArmor/nonminimal-short.bin",
+      "bytes": 3,
+      "sha256": "fb482e431d91fce6d2c6408116f2b2ecb3d4fcf368e47f46a6707e832675943a",
+      "meaning": "Bounded framing or precopy ceiling refusal: nonminimal-short"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/KeyImportsFuzzTestsInputs/publicImportPathsAreBoundedAndAgreeWithArmor/negative-length.bin",
+      "bytes": 2,
+      "sha256": "e1f879ddfa1a3df5014efcfc8f6758254cd4687e9d2ef1a0dbb1a674c4558573",
+      "meaning": "Bounded framing or precopy ceiling refusal: negative-length"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/KeyImportsFuzzTestsInputs/publicImportPathsAreBoundedAndAgreeWithArmor/over-der-cap.bin",
+      "bytes": 65537,
+      "sha256": "3266304f31be278d06c3bd3eb9aa3e00c59bedec0a890de466568b0b90b0e01f",
+      "meaning": "Bounded framing or precopy ceiling refusal: over-der-cap"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/KeyImportsFuzzTestsInputs/ordinaryFixturePairsAgreeWithIndependentJca/family-0-mode-0.bin",
+      "bytes": 2,
+      "sha256": "96a296d224f285c67bee93c30f8a309157f0daa35dc5b87e410b78630a09cfc7",
+      "meaning": "Ordinary family0; correct pair"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/KeyImportsFuzzTestsInputs/ordinaryFixturePairsAgreeWithIndependentJca/family-0-mode-1.bin",
+      "bytes": 2,
+      "sha256": "b413f47d13ee2fe6c845b2ee141af81de858df4ec549a58b7970bb96645bc8d2",
+      "meaning": "Ordinary family0; same-family wrong public"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/KeyImportsFuzzTestsInputs/ordinaryFixturePairsAgreeWithIndependentJca/family-0-mode-2.bin",
+      "bytes": 2,
+      "sha256": "fcf0a6c700dd13e274b6fba8deea8dd9b26e4eedde3495717cac8408c9c5177f",
+      "meaning": "Ordinary family0; zero original budget"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/KeyImportsFuzzTestsInputs/ordinaryFixturePairsAgreeWithIndependentJca/family-1-mode-0.bin",
+      "bytes": 2,
+      "sha256": "47dc540c94ceb704a23875c11273e16bb0b8a87aed84de911f2133568115f254",
+      "meaning": "Ordinary family1; correct pair"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/KeyImportsFuzzTestsInputs/ordinaryFixturePairsAgreeWithIndependentJca/family-1-mode-1.bin",
+      "bytes": 2,
+      "sha256": "9dcf97a184f32623d11a73124ceb99a5709b083721e878a16d78f596718ba7b2",
+      "meaning": "Ordinary family1; same-family wrong public"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/KeyImportsFuzzTestsInputs/ordinaryFixturePairsAgreeWithIndependentJca/family-1-mode-2.bin",
+      "bytes": 2,
+      "sha256": "a12871fee210fb8619291eaea194581cbd2531e4b23759d225f6806923f63222",
+      "meaning": "Ordinary family1; zero original budget"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/KeyImportsFuzzTestsInputs/ordinaryFixturePairsAgreeWithIndependentJca/family-2-mode-0.bin",
+      "bytes": 2,
+      "sha256": "99be5efb88ca2013bd8e4eb035fd42d5245468fe9afa70d8ba9c1c419a48c4e8",
+      "meaning": "Ordinary family2; correct pair"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/KeyImportsFuzzTestsInputs/ordinaryFixturePairsAgreeWithIndependentJca/family-2-mode-1.bin",
+      "bytes": 2,
+      "sha256": "25dfd29c09617dcc9852281c030e5b3037a338a4712a42a21c907f259c6412a0",
+      "meaning": "Ordinary family2; same-family wrong public"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/KeyImportsFuzzTestsInputs/ordinaryFixturePairsAgreeWithIndependentJca/family-2-mode-2.bin",
+      "bytes": 2,
+      "sha256": "50cff72c8e550546d661ec235431888fb2f9f7bada40c17020d47f6ccc117aae",
+      "meaning": "Ordinary family2; zero original budget"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/KeyImportsFuzzTestsInputs/ordinaryFixturePairsAgreeWithIndependentJca/family-3-mode-0.bin",
+      "bytes": 2,
+      "sha256": "9b4fb24edd6d1d8830e272398263cdbf026b97392cc35387b991dc0248a628f9",
+      "meaning": "Ordinary family3; correct pair"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/KeyImportsFuzzTestsInputs/ordinaryFixturePairsAgreeWithIndependentJca/family-3-mode-1.bin",
+      "bytes": 2,
+      "sha256": "67294d0eff78c6dbf4ae91576d495f81ca8f9967119cff318132f79d41285dfc",
+      "meaning": "Ordinary family3; same-family wrong public"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/KeyImportsFuzzTestsInputs/ordinaryFixturePairsAgreeWithIndependentJca/family-3-mode-2.bin",
+      "bytes": 2,
+      "sha256": "d4ea3fc5537ce615543ea44f074bff451fb6c9749e9e8692c111f7070b4780c7",
+      "meaning": "Ordinary family3; zero original budget"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/jose/SigningProfilesFuzzTestsInputs/allSelectedAlgorithmsMatchIndependentJcaAndPreservePayload/algorithm-0-mode-0.bin",
+      "bytes": 2,
+      "sha256": "96a296d224f285c67bee93c30f8a309157f0daa35dc5b87e410b78630a09cfc7",
+      "meaning": "Selected algorithm0; correct pair"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/jose/SigningProfilesFuzzTestsInputs/allSelectedAlgorithmsMatchIndependentJcaAndPreservePayload/algorithm-0-mode-1.bin",
+      "bytes": 2,
+      "sha256": "b413f47d13ee2fe6c845b2ee141af81de858df4ec549a58b7970bb96645bc8d2",
+      "meaning": "Selected algorithm0; same-family wrong public"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/jose/SigningProfilesFuzzTestsInputs/allSelectedAlgorithmsMatchIndependentJcaAndPreservePayload/algorithm-0-mode-2.bin",
+      "bytes": 2,
+      "sha256": "fcf0a6c700dd13e274b6fba8deea8dd9b26e4eedde3495717cac8408c9c5177f",
+      "meaning": "Selected algorithm0; zero original budget"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/jose/SigningProfilesFuzzTestsInputs/allSelectedAlgorithmsMatchIndependentJcaAndPreservePayload/algorithm-1-mode-0.bin",
+      "bytes": 2,
+      "sha256": "47dc540c94ceb704a23875c11273e16bb0b8a87aed84de911f2133568115f254",
+      "meaning": "Selected algorithm1; correct pair"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/jose/SigningProfilesFuzzTestsInputs/allSelectedAlgorithmsMatchIndependentJcaAndPreservePayload/algorithm-1-mode-1.bin",
+      "bytes": 2,
+      "sha256": "9dcf97a184f32623d11a73124ceb99a5709b083721e878a16d78f596718ba7b2",
+      "meaning": "Selected algorithm1; same-family wrong public"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/jose/SigningProfilesFuzzTestsInputs/allSelectedAlgorithmsMatchIndependentJcaAndPreservePayload/algorithm-1-mode-2.bin",
+      "bytes": 2,
+      "sha256": "a12871fee210fb8619291eaea194581cbd2531e4b23759d225f6806923f63222",
+      "meaning": "Selected algorithm1; zero original budget"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/jose/SigningProfilesFuzzTestsInputs/allSelectedAlgorithmsMatchIndependentJcaAndPreservePayload/algorithm-2-mode-0.bin",
+      "bytes": 2,
+      "sha256": "99be5efb88ca2013bd8e4eb035fd42d5245468fe9afa70d8ba9c1c419a48c4e8",
+      "meaning": "Selected algorithm2; correct pair"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/jose/SigningProfilesFuzzTestsInputs/allSelectedAlgorithmsMatchIndependentJcaAndPreservePayload/algorithm-2-mode-1.bin",
+      "bytes": 2,
+      "sha256": "25dfd29c09617dcc9852281c030e5b3037a338a4712a42a21c907f259c6412a0",
+      "meaning": "Selected algorithm2; same-family wrong public"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/jose/SigningProfilesFuzzTestsInputs/allSelectedAlgorithmsMatchIndependentJcaAndPreservePayload/algorithm-2-mode-2.bin",
+      "bytes": 2,
+      "sha256": "50cff72c8e550546d661ec235431888fb2f9f7bada40c17020d47f6ccc117aae",
+      "meaning": "Selected algorithm2; zero original budget"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/jose/SigningProfilesFuzzTestsInputs/allSelectedAlgorithmsMatchIndependentJcaAndPreservePayload/algorithm-3-mode-0.bin",
+      "bytes": 2,
+      "sha256": "9b4fb24edd6d1d8830e272398263cdbf026b97392cc35387b991dc0248a628f9",
+      "meaning": "Selected algorithm3; correct pair"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/jose/SigningProfilesFuzzTestsInputs/allSelectedAlgorithmsMatchIndependentJcaAndPreservePayload/algorithm-3-mode-1.bin",
+      "bytes": 2,
+      "sha256": "67294d0eff78c6dbf4ae91576d495f81ca8f9967119cff318132f79d41285dfc",
+      "meaning": "Selected algorithm3; same-family wrong public"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/jose/SigningProfilesFuzzTestsInputs/allSelectedAlgorithmsMatchIndependentJcaAndPreservePayload/algorithm-3-mode-2.bin",
+      "bytes": 2,
+      "sha256": "d4ea3fc5537ce615543ea44f074bff451fb6c9749e9e8692c111f7070b4780c7",
+      "meaning": "Selected algorithm3; zero original budget"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/jose/SigningProfilesFuzzTestsInputs/allSelectedAlgorithmsMatchIndependentJcaAndPreservePayload/algorithm-4-mode-0.bin",
+      "bytes": 2,
+      "sha256": "c0ba8a33ac67f44abff5984dfbb6f56c46b880ac2b86e1f23e7fa9c402c53ae7",
+      "meaning": "Selected algorithm4; correct pair"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/jose/SigningProfilesFuzzTestsInputs/allSelectedAlgorithmsMatchIndependentJcaAndPreservePayload/algorithm-4-mode-1.bin",
+      "bytes": 2,
+      "sha256": "38b8bc5c86db41a80615b2f4694fc754cccffb95e8933d5b376021feab83cea3",
+      "meaning": "Selected algorithm4; same-family wrong public"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/jose/SigningProfilesFuzzTestsInputs/allSelectedAlgorithmsMatchIndependentJcaAndPreservePayload/algorithm-4-mode-2.bin",
+      "bytes": 2,
+      "sha256": "b7586d310e5efb1b7d10a917ba5af403adbf54f4f77fe7fdcb4880a95dac7e7e",
+      "meaning": "Selected algorithm4; zero original budget"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/jose/SigningProfilesFuzzTestsInputs/allSelectedAlgorithmsMatchIndependentJcaAndPreservePayload/algorithm-5-mode-0.bin",
+      "bytes": 2,
+      "sha256": "2921a11f25dadaa24aa79a548e4e81508c2e5e56af2d833d65e2bcce448ce2f5",
+      "meaning": "Selected algorithm5; correct pair"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/jose/SigningProfilesFuzzTestsInputs/allSelectedAlgorithmsMatchIndependentJcaAndPreservePayload/algorithm-5-mode-1.bin",
+      "bytes": 2,
+      "sha256": "8aabab9ba98811ca008e888337c0290d8486cb190834590effdd74e974b1f1db",
+      "meaning": "Selected algorithm5; same-family wrong public"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/jose/SigningProfilesFuzzTestsInputs/allSelectedAlgorithmsMatchIndependentJcaAndPreservePayload/algorithm-5-mode-2.bin",
+      "bytes": 2,
+      "sha256": "7c2f2290b282a9630f38a2449df18d5595dd88a3e9c9ca138fc5d3a72266211c",
+      "meaning": "Selected algorithm5; zero original budget"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/jose/SigningProfilesFuzzTestsInputs/allSelectedAlgorithmsMatchIndependentJcaAndPreservePayload/algorithm-6-mode-0.bin",
+      "bytes": 2,
+      "sha256": "ceb827ad3d3884fd4d50ae6099d6d50c09a21e72ebd309708e8b69d93df19e55",
+      "meaning": "Selected algorithm6; correct pair"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/jose/SigningProfilesFuzzTestsInputs/allSelectedAlgorithmsMatchIndependentJcaAndPreservePayload/algorithm-6-mode-1.bin",
+      "bytes": 2,
+      "sha256": "2347f5a2b07e8617c56ff8a8f88f2d970f977345034e04068c4644900393e2d4",
+      "meaning": "Selected algorithm6; same-family wrong public"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/jose/SigningProfilesFuzzTestsInputs/allSelectedAlgorithmsMatchIndependentJcaAndPreservePayload/algorithm-6-mode-2.bin",
+      "bytes": 2,
+      "sha256": "f94d7226f46fe9ddfec9f135a4eda91558f9f4f0ed7ee6a0b8bcabd30ba62c53",
+      "meaning": "Selected algorithm6; zero original budget"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/jose/SigningProfilesFuzzTestsInputs/allSelectedAlgorithmsMatchIndependentJcaAndPreservePayload/algorithm-7-mode-0.bin",
+      "bytes": 2,
+      "sha256": "0a6361b3a802f55cd5ae06101c88a1e216320fe11cc0cfe1d791eed08a1200fd",
+      "meaning": "Selected algorithm7; correct pair"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/jose/SigningProfilesFuzzTestsInputs/allSelectedAlgorithmsMatchIndependentJcaAndPreservePayload/algorithm-7-mode-1.bin",
+      "bytes": 2,
+      "sha256": "ff86c77e8ead00caf9bc3d3d424d759b34b27c685c3b94002cece6edfe763c41",
+      "meaning": "Selected algorithm7; same-family wrong public"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/jose/SigningProfilesFuzzTestsInputs/allSelectedAlgorithmsMatchIndependentJcaAndPreservePayload/algorithm-7-mode-2.bin",
+      "bytes": 2,
+      "sha256": "70e34c863b2cd26829ca7eaf29fb73f172bbab8a8d8871f91f1345c523539c37",
+      "meaning": "Selected algorithm7; zero original budget"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/jose/SigningProfilesFuzzTestsInputs/allSelectedAlgorithmsMatchIndependentJcaAndPreservePayload/algorithm-8-mode-0.bin",
+      "bytes": 2,
+      "sha256": "e545d395bb3fd971f91bf9a2b6722831df704efae6c1aa9da0989ed0970b77bb",
+      "meaning": "Selected algorithm8; correct pair"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/jose/SigningProfilesFuzzTestsInputs/allSelectedAlgorithmsMatchIndependentJcaAndPreservePayload/algorithm-8-mode-1.bin",
+      "bytes": 2,
+      "sha256": "fb8da7eb5b1b399e7321179dac9e9f65773d7331e1e30554e3911e4325e1ef19",
+      "meaning": "Selected algorithm8; same-family wrong public"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/jose/SigningProfilesFuzzTestsInputs/allSelectedAlgorithmsMatchIndependentJcaAndPreservePayload/algorithm-8-mode-2.bin",
+      "bytes": 2,
+      "sha256": "7a53cc5deb60512f3dacacc7695dd5072077c6f4984dbedbff76e27092393b1c",
+      "meaning": "Selected algorithm8; zero original budget"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/webauthn/WebAuthnCeremonyFuzzTestsInputs/checkedReauthenticationPreservesEntryContextAndEffectClasses/mode-0.bin",
+      "bytes": 1,
+      "sha256": "6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d",
+      "meaning": "success"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/webauthn/WebAuthnCeremonyFuzzTestsInputs/checkedReauthenticationPreservesEntryContextAndEffectClasses/mode-1.bin",
+      "bytes": 1,
+      "sha256": "4bf5122f344554c53bde2ebb8cd2b7e3d1600ad631c385a5d7cce23c7785459a",
+      "meaning": "known context rejection"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/webauthn/WebAuthnCeremonyFuzzTestsInputs/checkedReauthenticationPreservesEntryContextAndEffectClasses/mode-2.bin",
+      "bytes": 1,
+      "sha256": "dbc1b4c900ffe48d575b5da5c638040125f65db0fe3e24494b76ea986457d986",
+      "meaning": "unavailable"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/webauthn/WebAuthnCeremonyFuzzTestsInputs/checkedReauthenticationPreservesEntryContextAndEffectClasses/mode-3.bin",
+      "bytes": 1,
+      "sha256": "084fed08b978af4d7d196a7446a86b58009e636b611db16211b65a9aadff29c5",
+      "meaning": "UNKNOWN no effect"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/webauthn/WebAuthnCeremonyFuzzTestsInputs/checkedReauthenticationPreservesEntryContextAndEffectClasses/mode-4.bin",
+      "bytes": 1,
+      "sha256": "e52d9c508c502347344d8c07ad91cbd6068afc75ff6292f062a09ca381c89e71",
+      "meaning": "UNKNOWN applied"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/webauthn/WebAuthnCeremonyFuzzTestsInputs/checkedReauthenticationPreservesEntryContextAndEffectClasses/mode-5.bin",
+      "bytes": 1,
+      "sha256": "e77b9a9ae9e30b0dbdb6f510a264ef9de781501d7b6b92ae89eb059c5ab743db",
+      "meaning": "known withheld recovery"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/webauthn/WebAuthnCeremonyFuzzTestsInputs/checkedReauthenticationPreservesEntryContextAndEffectClasses/mode-6.bin",
+      "bytes": 1,
+      "sha256": "67586e98fad27da0b9968bc039a1ef34c939b9b8e523a8bef89d478608c5ecf6",
+      "meaning": "pre-entry cancellation"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/webauthn/WebAuthnCeremonyFuzzTestsInputs/checkedReauthenticationPreservesEntryContextAndEffectClasses/mode-7.bin",
+      "bytes": 1,
+      "sha256": "ca358758f6d27e6cf45272937977a748fd88391db679ceda7dc7bf1f005ee879",
+      "meaning": "entry expected A callback to B"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/webauthn/WebAuthnCeremonyFuzzTestsInputs/checkedReauthenticationPreservesEntryContextAndEffectClasses/mode-8.bin",
+      "bytes": 1,
+      "sha256": "beead77994cf573341ec17b58bbf7eb34d2711c993c1d976b128b3188dc1829a",
+      "meaning": "entry expected B callback away"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/KeyImportsFuzzTestsInputs/publicImportPathsAreBoundedAndAgreeWithArmor/rsa-pkcs1.der",
+      "bytes": 1192,
+      "sha256": "728c1826158482bcd67fd6919cbaf464b2a3012b180fe0fe663240eb4c87857e",
+      "meaning": "Existing ordinary RSA PKCS1 key"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/KeyImportsFuzzTestsInputs/publicImportPathsAreBoundedAndAgreeWithArmor/rsa-pkcs1.pem",
+      "bytes": 1679,
+      "sha256": "e0434eca5aa7c416d3e3471290ccc360d9627e14350b789505ee1b4f912b5919",
+      "meaning": "Existing ordinary RSA PKCS1 key"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/KeyImportsFuzzTestsInputs/publicImportPathsAreBoundedAndAgreeWithArmor/rsa-pkcs1-trailing.der",
+      "bytes": 1193,
+      "sha256": "104c540c9638c08d5c2ecaccf32eb1974997be60e12f00b44dc2ee3af1e4a515",
+      "meaning": "Existing ordinary RSA PKCS1 key with forbidden trailing zero"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/KeyImportsFuzzTestsInputs/publicImportPathsAreBoundedAndAgreeWithArmor/weak-rsa-1024-certificate.der",
+      "bytes": 668,
+      "sha256": "9b9677b7691eaa81ac3dffeabb285ae8bd67217aa1c14ed4a52dd6ec80504e8a",
+      "meaning": "Existing weak RSA1024 negative fixture must not become an imported selected key"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/KeyImportsFuzzTestsInputs/publicImportPathsAreBoundedAndAgreeWithArmor/rsa-selected-exponent-above-floor.der",
+      "bytes": 294,
+      "sha256": "fe19d42260646c36be4cf26683836ed547370176ff82c0a6c40e3b36bba398ff",
+      "meaning": "Retained native oracle calibration: existing RSA import exponent policy permits odd1114113; this is not pair agreement"
+    }
+  ]
+}

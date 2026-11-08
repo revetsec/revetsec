@@ -54,3 +54,17 @@ Test names are relative to `src/test/java/com/revetsec`; example tests are label
 | 10.7.3 | App-owned consent management; core revocation: `oauth.server.OAuthIssuerTokenStatusTests` |
 
 Store atomicity, persistence, restore coordination, keys, browser sessions, consent, authorization and operational policy require application evidence. The volatile self-issued example does not qualify a production deployment. Bearer tokens do not prove possession or prevent theft/replay by a credential holder. Current RC qualification records retain actual local observations and remaining gates separately.
+
+## Selected pre-release changes — 2026-11-06
+
+The original 43 V9/V10 identifiers and responsibility assignments above remain. The following source/test additions refine this map; they do not establish deployed-application assessment results or close release qualification.
+
+| Surface | Responsibility and current source/test inputs |
+| --- | --- |
+| Selected signing algorithms (9.1.2 and client credentials in 10.4.10) | The [signing profile](supported-algorithms.md#bounded-signing-jwssigner) separates general signing, client assertions and the RS256-only issuer. `jose.JwsSignerRsaExpansionTests`, `jose.JwsSignerEcExpansionTests` and `jose.JwsSignerEd25519ExpansionTests` cover selected software profiles. Applications select trusted registration, key/provider and exact algorithm; a local provider fixture does not establish hosted-provider or hardware acceptance. |
+| Per-flow assurance (10.3.4 and 10.5.2) | [Ordered request preferences and local acceptance](oidc-flow-assurance.md) are separate. `oidc.OidcAcrPreferenceTests` and `oidc.OidcPerFlowAssuranceTests` cover saved required ACR values on refresh and strict version-2 references. Applications clear unsupported version-1 references and require authentication again; no missing policy is inferred from defaults. |
+| Browser pending state (10.1.2 and 10.2.1) | [Pending-state storage](oauth-client.md) requires exact correlation and the selected atomic store contract. Cookie-only and atomic-store profiles have different concurrent-consumption guarantees. Store uncertainty does not authorize replay or establish that earlier work had no effects. |
+| RP-Initiated Logout (additional selected capability) | [Logout](oidc-logout.md) and `oidc.OidcLogoutFlowTests`, `oidc.OidcLogoutEdgeTests` and `oidc.OidcLogoutHintTests` cover checked hints, pending correlation and withheld output. The [local-first recipe](../examples/rp-initiated-logout/README.md) makes local POST/CSRF authorization and session closure application responsibilities. Provider return correlation grants no sign-in identity or session restoration. This capability does not satisfy the unsupported back-channel logout row 10.5.5. |
+| Import-only key utilities (supporting input boundary) | [Key imports](key-imports.md) provide bounded parsing and a separate budgeted pair check. They establish no certificate-chain trust, private-key export permission, provider readiness or application key-rotation policy. |
+
+The API declaration snapshot and [compatibility policy](../COMPATIBILITY.md) are separate from this responsibility map. Final source/member, claims, adversary, browser/provider, operating-profile and owner acceptance checks remain required. New API declarations or stronger integration types do not substitute for their runtime/effect evidence.

@@ -1,6 +1,6 @@
 # Current public type inventory
 
-Measured **2026-11-03** from the uncommitted **1.0.0-SNAPSHOT** core source. Revetsec remains pre-release, with no compatibility promise before 1.0.0. See the [compatibility policy](../COMPATIBILITY.md) for what is API and how changes are treated.
+Measured **2026-11-06** from the uncommitted **1.0.0-SNAPSHOT** core source. Revetsec remains pre-release, with no compatibility promise before 1.0.0. See the [compatibility policy](../COMPATIBILITY.md) for what is API and how changes are treated.
 
 ## Counting rules
 
@@ -9,34 +9,42 @@ Measured **2026-11-03** from the uncommitted **1.0.0-SNAPSHOT** core source. Rev
 - Exclude internal packages, package-private/private types, types hidden by a non-exported enclosing type, local/anonymous/synthetic classes, and adapter/test/tooling artifacts. Methods, constructors, fields, enum constants and compiler-generated methods are not type declarations.
 - Inclusion does not mean applications can construct or extend a type. Restricted carriers and result variants retain their documented construction and success-only payload rules. No protected nested declarations occur in this snapshot; all listed types are public.
 
-The attributed source inventory (`--release 17`) and compiled accessible declarations agree exactly on **677 types: 327 top-level and 350 nested**, measured on JDK 21. These are declaration counts, not a member-level compatibility diff, API freeze, runtime/provider qualification or release acceptance. Public/protected members, including inherited members, and behavior/default/storage changes require separate review. The existing contract tests enforce API shape; they do not automatically keep this Markdown snapshot synchronized. Refresh the counts and complete lists whenever exported declarations change, and remeasure the final release candidate.
+The attributed source inventory (`--release 17`) and compiled accessible declarations agree exactly on **702 types: 340 top-level and 362 nested**, measured on JDK 21 from the coherent core JAR with SHA-256 `3cd4a04dfb397d4cba7cedb0c78bbc576ea05ad1ab510625add86dfb89bcf11d` and its source JAR with SHA-256 `feb62d655194595d6945842acd4face9b290c0bc1541dcb0493dc1c26314bc46`. All 605 packaged main sources match the live source byte for byte. These declaration counts are not an API freeze, runtime/provider qualification or release acceptance. A separate `javap -protected -s` comparison against the immediately preceding 700-type artifact covers declared public/protected classfile members and JVM descriptors; it does not flatten inherited members or establish generic source compatibility, behavior, defaults or storage compatibility. The existing contract tests enforce API shape; they do not automatically keep this Markdown snapshot synchronized. Refresh the counts and complete lists whenever exported declarations change, and remeasure the final release candidate.
+
+This API-BIND component adds the final immutable `BrowserBinding` and `OperationBinding` role carriers and changes affected high-level OAuth/OIDC/SAML/issuer and TOTP/WebAuthn method descriptors from raw `String` to the appropriate carrier. It removes no public type. Public high-level raw-`String` overloads are absent; low-level pending-store SPIs intentionally retain opaque `String` fields as their backend compatibility boundary. The carriers expose fresh canonical 43-character generation, explicit trusted-persistence restoration, explicit secret serialization and fixed redacted diagnostics. They provide correlation typing, not identity, permission, freshness or one-use proof.
+
+The immediately preceding sealed Release25 snapshot contained 700 declarations. This coherent component adds the two carriers above and removes no type. Across the 700 preceding types, the declared-member comparison finds 13 changed existing blocks: the selected OAuth/OIDC/SAML browser-pending, issuer, TOTP/recovery and WebAuthn declarations now accept or return the appropriate carrier instead of a raw `String`. Together with the two new blocks, the comparison contains 15 changed or added blocks. The complete affected-name and descriptor delta is preserved in the bounded API-BIND release-refresh packet. Type counts still do not capture earlier member-only changes such as the temporary-condition getter, checked WebAuthn reauthentication result, issuer factory rename, algorithm additions, OIDC method additions or version-2 session-reference contract; their dated component comparisons and the consolidated release review remain applicable. Release25's 700-type packet remains historical rather than being rewritten.
 
 ## Package totals
 
 | Package | Top-level | Nested | Total |
 | --- | ---: | ---: | ---: |
-| [`com.revetsec`](#comrevetsec) | 11 | 5 | 16 |
+| [`com.revetsec`](#comrevetsec) | 15 | 6 | 21 |
 | [`com.revetsec.jose`](#comrevetsecjose) | 26 | 13 | 39 |
 | [`com.revetsec.json`](#comrevetsecjson) | 7 | 1 | 8 |
 | [`com.revetsec.oauth`](#comrevetsecoauth) | 52 | 37 | 89 |
 | [`com.revetsec.oauth.server`](#comrevetsecoauthserver) | 39 | 28 | 67 |
-| [`com.revetsec.oidc`](#comrevetsecoidc) | 18 | 21 | 39 |
+| [`com.revetsec.oidc`](#comrevetsecoidc) | 25 | 27 | 52 |
 | [`com.revetsec.password`](#comrevetsecpassword) | 15 | 12 | 27 |
 | [`com.revetsec.saml`](#comrevetsecsaml) | 43 | 63 | 106 |
 | [`com.revetsec.scim`](#comrevetsecscim) | 58 | 59 | 117 |
 | [`com.revetsec.totp`](#comrevetsectotp) | 34 | 67 | 101 |
-| [`com.revetsec.webauthn`](#comrevetsecwebauthn) | 24 | 44 | 68 |
-| **Total** | **327** | **350** | **677** |
+| [`com.revetsec.webauthn`](#comrevetsecwebauthn) | 26 | 49 | 75 |
+| **Total** | **340** | **362** | **702** |
 
 ## com.revetsec
 
-11 top-level + 5 nested = **16 types**. Names link to the declaring source file.
+15 top-level + 6 nested = **21 types**. Names link to the declaring source file.
 
 | Top-level declaration | Kind | Accessible nested declarations |
 | --- | --- | --- |
+| [`BrowserBinding`](../src/main/java/com/revetsec/BrowserBinding.java) | class | — |
 | [`ErrorCategory`](../src/main/java/com/revetsec/ErrorCategory.java) | enum | — |
 | [`InvalidSealedStateException`](../src/main/java/com/revetsec/InvalidSealedStateException.java) | class | — |
+| [`KeyImportException`](../src/main/java/com/revetsec/KeyImportException.java) | class | [`KeyImportException.Reason`](../src/main/java/com/revetsec/KeyImportException.java) |
+| [`KeyImports`](../src/main/java/com/revetsec/KeyImports.java) | class | — |
 | [`OutboundUriPolicy`](../src/main/java/com/revetsec/OutboundUriPolicy.java) | class | — |
+| [`OperationBinding`](../src/main/java/com/revetsec/OperationBinding.java) | class | — |
 | [`RevetsecException`](../src/main/java/com/revetsec/RevetsecException.java) | class | — |
 | [`SealingKey`](../src/main/java/com/revetsec/SealingKey.java) | class | — |
 | [`StateSealer`](../src/main/java/com/revetsec/StateSealer.java) | class | [`StateSealer.Builder`](../src/main/java/com/revetsec/StateSealer.java) |
@@ -200,7 +208,7 @@ The attributed source inventory (`--release 17`) and compiled accessible declara
 
 ## com.revetsec.oidc
 
-18 top-level + 21 nested = **39 types**. Names link to the declaring source file.
+25 top-level + 27 nested = **52 types**. Names link to the declaring source file.
 
 | Top-level declaration | Kind | Accessible nested declarations |
 | --- | --- | --- |
@@ -212,6 +220,11 @@ The attributed source inventory (`--release 17`) and compiled accessible declara
 | [`OidcCompatibilityMode`](../src/main/java/com/revetsec/oidc/OidcCompatibilityMode.java) | enum | — |
 | [`OidcException`](../src/main/java/com/revetsec/oidc/OidcException.java) | class | — |
 | [`OidcIssuerPolicy`](../src/main/java/com/revetsec/oidc/OidcIssuerPolicy.java) | class | — |
+| [`OidcLogoutException`](../src/main/java/com/revetsec/oidc/OidcLogoutException.java) | class | [`OidcLogoutException.Reason`](../src/main/java/com/revetsec/oidc/OidcLogoutException.java) |
+| [`OidcLogoutHint`](../src/main/java/com/revetsec/oidc/OidcLogoutHint.java) | class | — |
+| [`OidcLogoutHintParseResult`](../src/main/java/com/revetsec/oidc/OidcLogoutHintParseResult.java) | class | [`OidcLogoutHintParseResult.Parsed`](../src/main/java/com/revetsec/oidc/OidcLogoutHintParseResult.java), [`OidcLogoutHintParseResult.Rejected`](../src/main/java/com/revetsec/oidc/OidcLogoutHintParseResult.java) |
+| [`OidcLogoutRequest`](../src/main/java/com/revetsec/oidc/OidcLogoutRequest.java) | class | — |
+| [`OidcLogoutResult`](../src/main/java/com/revetsec/oidc/OidcLogoutResult.java) | class | [`OidcLogoutResult.Reason`](../src/main/java/com/revetsec/oidc/OidcLogoutResult.java), [`OidcLogoutResult.Rejected`](../src/main/java/com/revetsec/oidc/OidcLogoutResult.java), [`OidcLogoutResult.Returned`](../src/main/java/com/revetsec/oidc/OidcLogoutResult.java) |
 | [`OidcObserver`](../src/main/java/com/revetsec/oidc/OidcObserver.java) | interface | — |
 | [`OidcProviderMetadata`](../src/main/java/com/revetsec/oidc/OidcProviderMetadata.java) | class | [`OidcProviderMetadata.Builder`](../src/main/java/com/revetsec/oidc/OidcProviderMetadata.java) |
 | [`OidcProviderMetadataParseResult`](../src/main/java/com/revetsec/oidc/OidcProviderMetadataParseResult.java) | class | [`OidcProviderMetadataParseResult.Rejected`](../src/main/java/com/revetsec/oidc/OidcProviderMetadataParseResult.java), [`OidcProviderMetadataParseResult.Succeeded`](../src/main/java/com/revetsec/oidc/OidcProviderMetadataParseResult.java) |
@@ -222,6 +235,8 @@ The attributed source inventory (`--release 17`) and compiled accessible declara
 | [`OidcUserInfo`](../src/main/java/com/revetsec/oidc/OidcUserInfo.java) | class | — |
 | [`OidcUserInfoResult`](../src/main/java/com/revetsec/oidc/OidcUserInfoResult.java) | class | [`OidcUserInfoResult.Rejected`](../src/main/java/com/revetsec/oidc/OidcUserInfoResult.java), [`OidcUserInfoResult.RejectedEndpoint`](../src/main/java/com/revetsec/oidc/OidcUserInfoResult.java), [`OidcUserInfoResult.Succeeded`](../src/main/java/com/revetsec/oidc/OidcUserInfoResult.java) |
 | [`OidcValidationException`](../src/main/java/com/revetsec/oidc/OidcValidationException.java) | class | [`OidcValidationException.Reason`](../src/main/java/com/revetsec/oidc/OidcValidationException.java) |
+| [`PendingOidcLogout`](../src/main/java/com/revetsec/oidc/PendingOidcLogout.java) | class | — |
+| [`PendingOidcLogoutSource`](../src/main/java/com/revetsec/oidc/PendingOidcLogoutSource.java) | class | — |
 
 ## com.revetsec.password
 
@@ -403,7 +418,7 @@ The attributed source inventory (`--release 17`) and compiled accessible declara
 
 ## com.revetsec.webauthn
 
-24 top-level + 44 nested = **68 types**. Names link to the declaring source file.
+26 top-level + 49 nested = **75 types**. Names link to the declaring source file.
 
 | Top-level declaration | Kind | Accessible nested declarations |
 | --- | --- | --- |
@@ -420,6 +435,8 @@ The attributed source inventory (`--release 17`) and compiled accessible declara
 | [`WebAuthnRegistrationOptions`](../src/main/java/com/revetsec/webauthn/WebAuthnRegistrationOptions.java) | class | [`WebAuthnRegistrationOptions.Builder`](../src/main/java/com/revetsec/webauthn/WebAuthnRegistrationOptions.java) |
 | [`WebAuthnRegistrationRequestResult`](../src/main/java/com/revetsec/webauthn/WebAuthnRegistrationRequestResult.java) | class | [`WebAuthnRegistrationRequestResult.Indeterminate`](../src/main/java/com/revetsec/webauthn/WebAuthnRegistrationRequestResult.java), [`WebAuthnRegistrationRequestResult.Prepared`](../src/main/java/com/revetsec/webauthn/WebAuthnRegistrationRequestResult.java), [`WebAuthnRegistrationRequestResult.ReconciliationRequired`](../src/main/java/com/revetsec/webauthn/WebAuthnRegistrationRequestResult.java), [`WebAuthnRegistrationRequestResult.Rejected`](../src/main/java/com/revetsec/webauthn/WebAuthnRegistrationRequestResult.java), [`WebAuthnRegistrationRequestResult.Unavailable`](../src/main/java/com/revetsec/webauthn/WebAuthnRegistrationRequestResult.java) |
 | [`WebAuthnRegistrationResult`](../src/main/java/com/revetsec/webauthn/WebAuthnRegistrationResult.java) | class | [`WebAuthnRegistrationResult.Indeterminate`](../src/main/java/com/revetsec/webauthn/WebAuthnRegistrationResult.java), [`WebAuthnRegistrationResult.ReconciliationRequired`](../src/main/java/com/revetsec/webauthn/WebAuthnRegistrationResult.java), [`WebAuthnRegistrationResult.Rejected`](../src/main/java/com/revetsec/webauthn/WebAuthnRegistrationResult.java), [`WebAuthnRegistrationResult.Succeeded`](../src/main/java/com/revetsec/webauthn/WebAuthnRegistrationResult.java), [`WebAuthnRegistrationResult.Unavailable`](../src/main/java/com/revetsec/webauthn/WebAuthnRegistrationResult.java) |
+| [`WebAuthnReauthentication`](../src/main/java/com/revetsec/webauthn/WebAuthnReauthentication.java) | class | — |
+| [`WebAuthnReauthenticationResult`](../src/main/java/com/revetsec/webauthn/WebAuthnReauthenticationResult.java) | class | [`WebAuthnReauthenticationResult.Indeterminate`](../src/main/java/com/revetsec/webauthn/WebAuthnReauthenticationResult.java), [`WebAuthnReauthenticationResult.ReconciliationRequired`](../src/main/java/com/revetsec/webauthn/WebAuthnReauthenticationResult.java), [`WebAuthnReauthenticationResult.Rejected`](../src/main/java/com/revetsec/webauthn/WebAuthnReauthenticationResult.java), [`WebAuthnReauthenticationResult.Succeeded`](../src/main/java/com/revetsec/webauthn/WebAuthnReauthenticationResult.java), [`WebAuthnReauthenticationResult.Unavailable`](../src/main/java/com/revetsec/webauthn/WebAuthnReauthenticationResult.java) |
 | [`WebAuthnRejectionReason`](../src/main/java/com/revetsec/webauthn/WebAuthnRejectionReason.java) | enum | — |
 | [`WebAuthnRelyingParty`](../src/main/java/com/revetsec/webauthn/WebAuthnRelyingParty.java) | class | [`WebAuthnRelyingParty.Builder`](../src/main/java/com/revetsec/webauthn/WebAuthnRelyingParty.java) |
 | [`WebAuthnSettings`](../src/main/java/com/revetsec/webauthn/WebAuthnSettings.java) | class | [`WebAuthnSettings.Builder`](../src/main/java/com/revetsec/webauthn/WebAuthnSettings.java) |

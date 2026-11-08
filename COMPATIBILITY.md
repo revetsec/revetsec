@@ -20,7 +20,7 @@ Public top-level types in the exported packages below, and their reachable publi
 | --- | --- |
 | `com.revetsec` | shared, protocol-neutral types |
 | `com.revetsec.json` | the immutable JSON value model that appears in public signatures |
-| `com.revetsec.jose` | JWS verification and bounded RSA signing, JWK and JWK Sets, JWT validation |
+| `com.revetsec.jose` | JWS verification and bounded public-key signing, JWK and JWK Sets, JWT validation |
 | `com.revetsec.oauth` | OAuth 2.0 client; bearer parsing/challenges/resource metadata, JWT access-token validation and JSON introspection |
 | `com.revetsec.oauth.server` | application-integrated authorization, token issuance, refresh, revocation, introspection, metadata and key publication |
 | `com.revetsec.oidc` | OpenID Connect relying party |
@@ -30,32 +30,32 @@ Public top-level types in the exported packages below, and their reachable publi
 | `com.revetsec.password` | Argon2id password hashing, explicit legacy verification and migration, bounded work and pepper rotation |
 | `com.revetsec.totp` | TOTP enrollment and verification, recovery codes, durable record/store contracts and recovery fencing |
 
-### Current declaration inventory (2026-11-03)
+### Current declaration inventory (2026-11-06)
 
 The [complete current type list](docs/public-api-inventory.md) measures this uncommitted `1.0.0-SNAPSHOT` source using the same exported-type rules as `PublicApiContractTests`, cross-checked against compiled declarations. Count each public top-level declaration once and each accessible public or protected nested declaration once under its declaring type. Builders, enums and restricted result variants count as types; methods, constructors, fields, enum constants and compiler-generated helpers do not. No protected nested declarations occur in this snapshot. Adapter artifacts and internal packages are outside these totals.
 
 | Package | Top-level | Nested | Total |
 | --- | ---: | ---: | ---: |
-| [`com.revetsec`](docs/public-api-inventory.md#comrevetsec) | 11 | 5 | 16 |
+| [`com.revetsec`](docs/public-api-inventory.md#comrevetsec) | 15 | 6 | 21 |
 | [`com.revetsec.jose`](docs/public-api-inventory.md#comrevetsecjose) | 26 | 13 | 39 |
 | [`com.revetsec.json`](docs/public-api-inventory.md#comrevetsecjson) | 7 | 1 | 8 |
 | [`com.revetsec.oauth`](docs/public-api-inventory.md#comrevetsecoauth) | 52 | 37 | 89 |
 | [`com.revetsec.oauth.server`](docs/public-api-inventory.md#comrevetsecoauthserver) | 39 | 28 | 67 |
-| [`com.revetsec.oidc`](docs/public-api-inventory.md#comrevetsecoidc) | 18 | 21 | 39 |
+| [`com.revetsec.oidc`](docs/public-api-inventory.md#comrevetsecoidc) | 25 | 27 | 52 |
 | [`com.revetsec.password`](docs/public-api-inventory.md#comrevetsecpassword) | 15 | 12 | 27 |
 | [`com.revetsec.saml`](docs/public-api-inventory.md#comrevetsecsaml) | 43 | 63 | 106 |
 | [`com.revetsec.scim`](docs/public-api-inventory.md#comrevetsecscim) | 58 | 59 | 117 |
 | [`com.revetsec.totp`](docs/public-api-inventory.md#comrevetsectotp) | 34 | 67 | 101 |
-| [`com.revetsec.webauthn`](docs/public-api-inventory.md#comrevetsecwebauthn) | 24 | 44 | 68 |
-| **Total** | **327** | **350** | **677** |
+| [`com.revetsec.webauthn`](docs/public-api-inventory.md#comrevetsecwebauthn) | 26 | 49 | 75 |
+| **Total** | **340** | **362** | **702** |
 
-This is a dated type inventory, not a member-level compatibility diff, an API freeze or release qualification. Public/protected member signatures, inherited members, defaults, behavior and serialized/store contracts still require the consolidated compatibility review. The earlier snapshot below is retained as history; use the current linked lists for present type names and counts. Refresh this inventory when exported declarations change.
+This is a dated type inventory, not an API freeze or release qualification. The current API-BIND candidate adds `BrowserBinding` and `OperationBinding` over the sealed 700-type Release25 component and removes no type. A `javap -protected -s` comparison finds 15 changed or added declaration blocks: the two new carriers and 13 existing declarations whose selected browser or operation correlation parameters/returns change from raw `String` to the appropriate carrier. Those existing declarations are `PendingAuthorization`, `PendingAuthorizationSource`, `OAuthAuthorizationServer`, `PendingOidcLogout`, `PendingOidcLogoutSource`, `PendingSamlAuthentication`, `PendingSamlAuthenticationSource`, `PendingSamlLogout`, `PendingSamlLogoutSource`, `RecoveryCodeUse`, `TotpAuthenticator`, `TotpVerification` and `WebAuthnRelyingParty`. Low-level store SPIs intentionally remain raw-string compatibility boundaries. The broad browser carrier rejects values above 65,536 Java UTF-16 code units, so sufficiently provisioned OAuth/OIDC pending stores that accepted larger well-formed values have a pre-1.0 compatibility loss; only deployments retaining an affected live correlation need drain or rotate it. No account, credential, reference-PostgreSQL schema, key or codec migration follows. The bounded classfile comparison does not flatten inherited members or establish generic source compatibility, defaults, behavior, effects or serialized/store compatibility; those remain part of the consolidated compatibility review. The earlier snapshots below are retained as history; use the current linked lists for present type names and counts. Refresh this inventory when exported declarations change.
 
 ### Earlier public-type snapshot
 
 Milestone M1 (foundations) added the first public types, M2 added `com.revetsec.jose`, M3 added `com.revetsec.oauth`, M4 added `com.revetsec.oidc`, and M5 added resource-server protocol helpers. M6 added RSA signing and client authentication. The SAML service-provider API is present and remains pre-release; SCIM schema/resource/query/response primitives, ordered PATCH, membership reduction and the optional evaluator are implemented, with local integration and security/mutation qualification recorded. The SCIM API freeze recorded on 2026-10-14 and the SAML RC-2 review predate later public-contract changes; those changes require re-review before 1.0.0.
 
-The table below retains an earlier package snapshot and its historical counts. It predates the result-only migration, typed JWT signing and standalone JWKS publication and is not the current exported declaration inventory. In particular, current JOSE APIs also include `JwtClaimsSet`, `JwtSigningHeader`, `JwtType`, `PublishedJwk`, `JwksPublisher` and `JwksResponse`; see [signing](docs/supported-algorithms.md#bounded-rsa-signing-jwssigner) and [JWKS publication](docs/jwks-publication.md). The current measured inventory above supersedes these counts; the consolidated release review must remeasure the final candidate.
+The table below retains an earlier package snapshot and its historical counts. It predates the result-only migration, typed JWT signing and standalone JWKS publication and is not the current exported declaration inventory. In particular, current JOSE APIs also include `JwtClaimsSet`, `JwtSigningHeader`, `JwtType`, `PublishedJwk`, `JwksPublisher` and `JwksResponse`; see [signing](docs/supported-algorithms.md#bounded-signing-jwssigner) and [JWKS publication](docs/jwks-publication.md). The current measured inventory above supersedes these counts; the consolidated release review must remeasure the final candidate.
 
 | Package | Public types | Count |
 | --- | --- | --- |

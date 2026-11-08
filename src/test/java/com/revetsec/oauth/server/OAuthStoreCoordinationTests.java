@@ -364,9 +364,12 @@ class OAuthStoreCoordinationTests {
 		initialized(); OAuthStoreCoordinator.Session attempt = this.first.begin(deadline());
 		for (int i = 0; i < 15; i++) attempt.read(key(i)); int reads = this.store.reads;
 		assertThrows(IllegalArgumentException.class, () -> attempt.read(key(15))); assertEquals(reads, this.store.reads);
+		assertThrows(IllegalStateException.class, attempt::barrier);
+		OAuthStoreCoordinator.Session fresh = this.first.begin(deadline());
+		for (int i = 0; i < 15; i++) fresh.read(key(i));
 		List<OAuthStoreTransaction.Mutation> seven = java.util.stream.IntStream.range(0, 7)
 			.mapToObj(i -> OAuthStoreTransaction.Mutation.fromPut(finite(key(i)))).toList();
-		assertEquals(OAuthStoreCommitStatus.COMMITTED, attempt.commit(seven)); assertEquals(7, requireNonNull(this.store.lastTransaction).getMutations().size());
+		assertEquals(OAuthStoreCommitStatus.COMMITTED, fresh.commit(seven)); assertEquals(7, requireNonNull(this.store.lastTransaction).getMutations().size());
 		OAuthStoreCoordinator.Session bad = this.first.begin(deadline());
 		assertThrows(IllegalArgumentException.class, () -> bad.commit(Stream.concat(seven.stream(), seven.stream().limit(1)).toList()));
 		OAuthStoreCoordinator.Session rootWrite=this.first.begin(deadline());

@@ -68,7 +68,7 @@ final class RevetsecExceptionTests {
 		InvalidSealedStateException exception = InvalidSealedStateException.fromAnyFailure();
 
 		Assertions.assertEquals(ErrorCategory.VALIDATION_FAILURE, exception.getCategory());
-		Assertions.assertFalse(exception.isTransient());
+		Assertions.assertFalse(exception.isTemporaryCondition());
 	}
 
 	@Test
@@ -151,12 +151,12 @@ final class RevetsecExceptionTests {
 		return Arrays.stream(ErrorCategory.values()).map(category -> DynamicTest.dynamicTest(category.name(), () -> {
 			TestLeafException notTransient = new TestLeafException(category, false, "It failed.", null);
 			Assertions.assertEquals(category, notTransient.getCategory());
-			Assertions.assertFalse(notTransient.isTransient());
+			Assertions.assertFalse(notTransient.isTemporaryCondition());
 
 			if (category == ErrorCategory.TRANSPORT || category == ErrorCategory.REMOTE_ERROR) {
 				TestLeafException transientFailure = new TestLeafException(category, true, "It failed.", null);
 				Assertions.assertEquals(category, transientFailure.getCategory());
-				Assertions.assertTrue(transientFailure.isTransient());
+				Assertions.assertTrue(transientFailure.isTemporaryCondition());
 			} else {
 				IllegalArgumentException rejection = Assertions.assertThrows(IllegalArgumentException.class,
 						() -> new TestLeafException(category, true, "It failed.", null));
@@ -217,7 +217,8 @@ final class RevetsecExceptionTests {
 	void categoryAndTransienceCannotBeOverridden() throws ReflectiveOperationException {
 		// M1 plan G6-3: a subclass cannot make its own transience rule.
 		Assertions.assertTrue(Modifier.isFinal(RevetsecException.class.getMethod("getCategory").getModifiers()));
-		Assertions.assertTrue(Modifier.isFinal(RevetsecException.class.getMethod("isTransient").getModifiers()));
+		Assertions.assertTrue(Modifier.isFinal(RevetsecException.class.getMethod("isTemporaryCondition").getModifiers()));
+		Assertions.assertThrows(NoSuchMethodException.class, () -> RevetsecException.class.getMethod("isTransient"));
 		Assertions.assertTrue(Modifier.isAbstract(RevetsecException.class.getModifiers()));
 		Assertions.assertTrue(RuntimeException.class.isAssignableFrom(RevetsecException.class));
 	}
@@ -264,7 +265,7 @@ final class RevetsecExceptionTests {
 		InvalidSealedStateException copy = (InvalidSealedStateException) roundTrip(original);
 
 		Assertions.assertEquals(ErrorCategory.VALIDATION_FAILURE, copy.getCategory());
-		Assertions.assertFalse(copy.isTransient());
+		Assertions.assertFalse(copy.isTemporaryCondition());
 		Assertions.assertEquals("Sealed state is invalid.", copy.getMessage());
 		Assertions.assertNull(copy.getCause());
 		// Suppression stays disabled after deserialization, and the cause stays fixed.
@@ -275,7 +276,7 @@ final class RevetsecExceptionTests {
 		TestLeafException transportCopy = (TestLeafException) roundTrip(new TestLeafException(ErrorCategory.TRANSPORT,
 				true, "The exchange failed.", new IOException("connection reset")));
 		Assertions.assertEquals(ErrorCategory.TRANSPORT, transportCopy.getCategory());
-		Assertions.assertTrue(transportCopy.isTransient());
+		Assertions.assertTrue(transportCopy.isTemporaryCondition());
 		Assertions.assertInstanceOf(IOException.class, transportCopy.getCause());
 	}
 

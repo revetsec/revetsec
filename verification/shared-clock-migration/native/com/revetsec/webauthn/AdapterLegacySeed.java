@@ -50,13 +50,24 @@ public final class AdapterLegacySeed {
  }
  private static @NonNull Set<@NonNull WebAuthnStoreKey> keys(){
   byte[] ceremony=new byte[32];for(int i=0;i<32;i++)ceremony[i]=(byte)(i+1);
-  return Set.of(WebAuthnStoreKey.forNamespaceClock("migration","login.example.com"),
+  var result=new java.util.HashSet<>(Set.of(WebAuthnStoreKey.forNamespaceClock("migration","login.example.com"),
    WebAuthnStoreKey.forCredential("migration","login.example.com",new byte[]{1,2,3}),
    WebAuthnStoreKey.forCredential("migration","login.example.com",new byte[]{7,8,9}),
    WebAuthnStoreKey.forAccountCredentialIndex("migration","login.example.com",new byte[]{4,5,6}),
    WebAuthnStoreKey.forAccountCredentialIndex("migration","login.example.com",new byte[]{10,11,12}),
    WebAuthnStoreKey.forAccountFence("migration","login.example.com",new byte[]{4,5,6}),
    WebAuthnStoreKey.forAccountFence("migration","login.example.com",new byte[]{10,11,12}),
-   WebAuthnStoreKey.forCeremony("migration","login.example.com",ceremony));
+   WebAuthnStoreKey.forCeremony("migration","login.example.com",ceremony)));
+  result.add(WebAuthnStoreKey.forCredential("migration","login.example.com",fill(1023,202)));
+  result.add(WebAuthnStoreKey.forCredential("migration","login.example.com",fill(1023,203)));
+  result.add(WebAuthnStoreKey.forAccountCredentialIndex("migration","login.example.com",fill(64,204)));
+  for(int seed=206;seed<=207;seed++)result.add(WebAuthnStoreKey.forAccountFence("migration","login.example.com",fill(64,seed)));
+  for(int kind=1;kind<=3;kind++)for(int consumed=0;consumed<=1;consumed++)result.add(WebAuthnStoreKey.forCeremony("migration","login.example.com",fill(32,100+kind*2+consumed)));
+  String retained="retained.example.net";result.add(WebAuthnStoreKey.forNamespaceClock("migration",retained));
+  result.add(WebAuthnStoreKey.forCredential("migration",retained,new byte[]{1,2,3}));result.add(WebAuthnStoreKey.forCredential("migration",retained,new byte[]{7,8,9}));
+  for(byte[] handle:java.util.List.of(new byte[]{4,5,6},new byte[]{10,11,12})){result.add(WebAuthnStoreKey.forAccountCredentialIndex("migration",retained,handle));result.add(WebAuthnStoreKey.forAccountFence("migration",retained,handle));}
+  result.add(WebAuthnStoreKey.forCeremony("migration",retained,ceremony));
+  return Set.copyOf(result);
  }
+ private static byte @NonNull [] fill(int length,int seed){byte[] value=new byte[length];for(int i=0;i<length;i++)value[i]=(byte)(seed+i);return value;}
 }

@@ -193,6 +193,12 @@ final class OAuthIssuerTokenStatusTests {
  }
  @Test void conflictExhaustionNeverReturnsClaims() {String jwt=issued();this.store.conflicts=8;failed(OAuthStoreFailure.Reason.UNAVAILABLE,()->validate(jwt));assertEquals(5,this.store.conflicts);}
  @Test void oneAttemptDoesNotRetryConflict() {String jwt=issued();this.store.conflicts=2;failed(OAuthStoreFailure.Reason.UNAVAILABLE,()->status(1,Duration.ZERO,this.clock).validate(jwt,RESOURCE,keys(),deadline()));assertEquals(1,this.store.conflicts);}
+ @Test void statusBarrierTimeUnavailabilityNeverReturnsClaimsOrChangesRows() {
+  String jwt=issued();Map<OAuthStoreKey,OAuthStoreEntry> before=Map.copyOf(this.store.rows);int commits=this.store.commits;
+  this.store.beforeCommit=()->this.store.healthy=false;
+  failed(OAuthStoreFailure.Reason.UNAVAILABLE,()->validate(jwt));assertEquals(commits+1,this.store.commits);assertEquals(before,this.store.rows);
+  assertTrue(requireNonNull(this.store.lastTransaction).getMutations().isEmpty());
+ }
  @TestFactory @NonNull Stream<@NonNull DynamicTest> unknownCommitNeverReturnsClaimsOrRetriesEvenForInactiveToken() {
   return Stream.of("before-active","after-active","before-missing","after-missing").map(name->test(name,()->{
    var f=new OAuthIssuerTokenStatusTests();String jwt=f.issued();if(name.endsWith("missing"))f.remove(OAuthStoreKey.Kind.ACCESS_TOKEN);
@@ -349,7 +355,7 @@ final class OAuthIssuerTokenStatusTests {
   @Override public @NonNull Instant instant(){return this.time;}
  }
  @Test void managedKeyRolloverUsesCurrentKeysAndRetainsUncachedStatusBarrier() {
-  OAuthIssuerSigningKey a=OAuthIssuerSigningKey.fromKeyPair("a",KEY.getPrivateKey(),KEY.getPublicKey());
+  OAuthIssuerSigningKey a=OAuthIssuerSigningKey.fromRsaKeyPair("a",KEY.getPrivateKey(),KEY.getPublicKey());
   OAuthIssuerKeySnapshot first=OAuthIssuerKeySnapshot.withActiveKey(a).generation("g1").publishedAt(NOW.minusSeconds(120)).build();
   var current=new java.util.concurrent.atomic.AtomicReference<OAuthIssuerKeySnapshot>(first);
   var keys=new OAuthIssuerKeyLifecycle(budget->requireNonNull(current.get()),this.clock,Duration.ofSeconds(60),this.retention);
@@ -358,14 +364,14 @@ final class OAuthIssuerTokenStatusTests {
   String code=code(true);String compact=token(managed.redeem(request(code,Map.of()),(id,budget)->Optional.of(client()),resources(),allow(),deadline()));
   assertEquals(claims(compact),status().validate(compact,RESOURCE,keys,deadline()));int commits=this.store.commits;
   var b=TestJwk.Fixture.IDP_SIGNING_RSA_3072;
-  current.set(OAuthIssuerKeySnapshot.withActiveKey(OAuthIssuerSigningKey.fromKeyPair("b",b.getPrivateKey(),b.getPublicKey())).generation("g2")
+  current.set(OAuthIssuerKeySnapshot.withActiveKey(OAuthIssuerSigningKey.fromRsaKeyPair("b",b.getPrivateKey(),b.getPublicKey())).generation("g2")
    .publishedAt(NOW.minusSeconds(60)).verificationKeys(Map.of("a",a.getPublicKey())).retirementNotBefore(Map.of("a",NOW.plusSeconds(500))).build());
   assertEquals(claims(compact),status().validate(compact,RESOURCE,keys,deadline()));assertEquals(commits+1,this.store.commits);
   revokeGrant();invalid(()->status().validate(compact,RESOURCE,keys,deadline()));
  }
  @Test void managedMismatchedPairLeavesUnusedCodeAndLedgerUnchanged() {
   var b=TestJwk.Fixture.IDP_SIGNING_RSA_3072;
-  var snapshot=OAuthIssuerKeySnapshot.withActiveKey(OAuthIssuerSigningKey.fromKeyPair("a",KEY.getPrivateKey(),b.getPublicKey()))
+  var snapshot=OAuthIssuerKeySnapshot.withActiveKey(OAuthIssuerSigningKey.fromRsaKeyPair("a",KEY.getPrivateKey(),b.getPublicKey()))
    .generation("g1").publishedAt(NOW.minusSeconds(120)).build();
   var keys=new OAuthIssuerKeyLifecycle(OAuthIssuerKeyProvider.fromSnapshot(snapshot),this.clock,Duration.ofSeconds(60),this.retention);
   var managed=new OAuthCodeRedemption(this.coordinator,this.codec,LIMITS,this.retention,new OAuthTokenResponse.Encoder(ISSUER,keys,32768,16384),
@@ -376,9 +382,9 @@ final class OAuthIssuerTokenStatusTests {
   assertNotNull(redeem(code));
  }
  @Test void managedRotationWithoutPublicOverlapCannotCommitPreparedIssuance() {
-  var b=TestJwk.Fixture.IDP_SIGNING_RSA_3072;var first=OAuthIssuerKeySnapshot.withActiveKey(OAuthIssuerSigningKey.fromKeyPair("a",KEY.getPrivateKey(),KEY.getPublicKey()))
+  var b=TestJwk.Fixture.IDP_SIGNING_RSA_3072;var first=OAuthIssuerKeySnapshot.withActiveKey(OAuthIssuerSigningKey.fromRsaKeyPair("a",KEY.getPrivateKey(),KEY.getPublicKey()))
    .generation("g1").publishedAt(NOW.minusSeconds(120)).build();
-  var missing=OAuthIssuerKeySnapshot.withActiveKey(OAuthIssuerSigningKey.fromKeyPair("b",b.getPrivateKey(),b.getPublicKey()))
+  var missing=OAuthIssuerKeySnapshot.withActiveKey(OAuthIssuerSigningKey.fromRsaKeyPair("b",b.getPrivateKey(),b.getPublicKey()))
    .generation("g2").publishedAt(NOW.minusSeconds(60)).build();var calls=new java.util.concurrent.atomic.AtomicInteger();
   var keys=new OAuthIssuerKeyLifecycle(budget->calls.incrementAndGet()==1 ? first : missing,this.clock,Duration.ofSeconds(60),this.retention);
   var managed=new OAuthCodeRedemption(this.coordinator,this.codec,LIMITS,this.retention,new OAuthTokenResponse.Encoder(ISSUER,keys,32768,16384),

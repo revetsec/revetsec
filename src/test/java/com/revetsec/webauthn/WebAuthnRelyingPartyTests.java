@@ -177,7 +177,7 @@ final class WebAuthnRelyingPartyTests {
 
         var signInAtStepUpRoute = assertInstanceOf(WebAuthnAuthenticationRequestResult.Prepared.class,
                 rp.beginAuthenticationResult(BINDING_TEXT));
-        assertInstanceOf(WebAuthnAuthenticationResult.Rejected.class,
+        assertInstanceOf(WebAuthnReauthenticationResult.Rejected.class,
                 rp.completeReauthenticationResult(HANDLE, "transfer",
                         signInAtStepUpRoute.getRequest().getCeremonyId(),
                         assertionJson(pair.getPrivate(), signInAtStepUpRoute.getRequest().getPublicKeyOptions()
@@ -185,7 +185,7 @@ final class WebAuthnRelyingPartyTests {
 
         var wrongPurpose = assertInstanceOf(WebAuthnAuthenticationRequestResult.Prepared.class,
                 rp.beginReauthenticationResult(HANDLE, "transfer", BINDING_TEXT));
-        assertInstanceOf(WebAuthnAuthenticationResult.Rejected.class,
+        assertInstanceOf(WebAuthnReauthenticationResult.Rejected.class,
                 rp.completeReauthenticationResult(HANDLE, "withdraw",
                         wrongPurpose.getRequest().getCeremonyId(),
                         assertionJson(pair.getPrivate(), wrongPurpose.getRequest().getPublicKeyOptions()
@@ -193,7 +193,7 @@ final class WebAuthnRelyingPartyTests {
 
         var wrongAccount = assertInstanceOf(WebAuthnAuthenticationRequestResult.Prepared.class,
                 rp.beginReauthenticationResult(HANDLE, "transfer", BINDING_TEXT));
-        assertInstanceOf(WebAuthnAuthenticationResult.Rejected.class,
+        assertInstanceOf(WebAuthnReauthenticationResult.Rejected.class,
                 rp.completeReauthenticationResult(new byte[] {9}, "transfer",
                         wrongAccount.getRequest().getCeremonyId(),
                         assertionJson(pair.getPrivate(), wrongAccount.getRequest().getPublicKeyOptions()
@@ -201,13 +201,12 @@ final class WebAuthnRelyingPartyTests {
 
         var stepUp = assertInstanceOf(WebAuthnAuthenticationRequestResult.Prepared.class,
                 rp.beginReauthenticationResult(HANDLE, "transfer", BINDING_TEXT));
-        var stepUpProof = assertInstanceOf(WebAuthnAuthenticationResult.Succeeded.class,
+        var stepUpProof = assertInstanceOf(WebAuthnReauthenticationResult.Succeeded.class,
                 rp.completeReauthenticationResult(HANDLE, "transfer", stepUp.getRequest().getCeremonyId(),
                         assertionJson(pair.getPrivate(), stepUp.getRequest().getPublicKeyOptions()
                                 .find("challenge").filter(JsonString.class::isInstance).map(JsonString.class::cast).map(JsonString::getValue).orElseThrow(), 5), BINDING_TEXT));
-        assertEquals(WebAuthnAuthentication.Kind.REAUTHENTICATION,
-                stepUpProof.getAuthentication().getKind());
-        assertEquals("transfer", stepUpProof.getAuthentication().getActionPurpose().orElseThrow());
+        assertEquals(stepUp.getRequest().getCeremonyId(), stepUpProof.getReauthentication().getCeremonyId());
+        assertEquals("transfer", stepUpProof.getReauthentication().getActionPurpose());
     }
 
     @Test void configurationAndUncertainBeginDoNotReleaseBrowserOptions() {
@@ -476,6 +475,209 @@ final class WebAuthnRelyingPartyTests {
         assertEquals(before, store.reads);
     }
 
+    @Test void checkedReauthenticationPinsEntryExpectedHandleAcrossStoreCallbackMutation() throws Exception {
+        MemoryStore store = new MemoryStore();
+        WebAuthnRelyingParty rp = relyingParty(store, ADMIT);
+        KeyPair pair = KeyPairGenerator.getInstance("Ed25519").generateKeyPair();
+        enroll(rp, pair, WebAuthnRegistrationOptions.withUserHandle(HANDLE)
+                .userName("alice").userDisplayName("Alice").build());
+        var prepared = assertInstanceOf(WebAuthnAuthenticationRequestResult.Prepared.class,
+                rp.beginReauthenticationResult(HANDLE, "transfer", BINDING_TEXT));
+        byte[] expectedAtEntry = {9, 9, 9};
+        byte[] originalExpected = expectedAtEntry.clone();
+        store.afterCommit = () -> System.arraycopy(HANDLE, 0, expectedAtEntry, 0, HANDLE.length);
+        int beforeVersion = store.version;
+        int beforeCommits = store.commits;
+        WebAuthnReauthenticationResult result = rp.completeReauthenticationResult(expectedAtEntry, "transfer",
+                prepared.getRequest().getCeremonyId(), assertionJson(pair.getPrivate(), challenge(prepared), 1), BINDING_TEXT);
+        assertArrayEquals(HANDLE, expectedAtEntry, "actual-callback-mutated-caller-array");
+        assertFalse(Arrays.equals(originalExpected, HANDLE));
+        assertEquals(1, store.commits - beforeCommits, "one-engine-commit");
+        assertEquals(2, store.version - beforeVersion, "known-consumption-and-credential-update-preserved");
+        assertInstanceOf(WebAuthnReauthenticationResult.Rejected.class, result,
+                "entry-expected-account-cannot-follow-store-callback-alias");
+        assertInstanceOf(WebAuthnReauthenticationResult.Rejected.class,
+                rp.completeReauthenticationResult(HANDLE, "transfer", prepared.getRequest().getCeremonyId(),
+                        assertionJson(pair.getPrivate(), challenge(prepared), 1), BINDING_TEXT));
+        assertEquals(beforeCommits + 1, store.commits, "no-retry-or-rescue-after-known-consumption");
+    }
+
+    @Test void checkedReauthenticationKeepsMatchingEntryHandleWhenCallbackMutatesCallerAway() throws Exception {
+        MemoryStore store = new MemoryStore();
+        WebAuthnRelyingParty rp = relyingParty(store, ADMIT);
+        KeyPair pair = KeyPairGenerator.getInstance("Ed25519").generateKeyPair();
+        enroll(rp, pair, WebAuthnRegistrationOptions.withUserHandle(HANDLE)
+                .userName("alice").userDisplayName("Alice").build());
+        var prepared = assertInstanceOf(WebAuthnAuthenticationRequestResult.Prepared.class,
+                rp.beginReauthenticationResult(HANDLE, "transfer", BINDING_TEXT));
+        byte[] expectedAtEntry = HANDLE.clone();
+        store.afterCommit = () -> Arrays.fill(expectedAtEntry, (byte) 9);
+        int beforeVersion = store.version;
+        int beforeCommits = store.commits;
+        var success = assertInstanceOf(WebAuthnReauthenticationResult.Succeeded.class,
+                rp.completeReauthenticationResult(expectedAtEntry, "transfer", prepared.getRequest().getCeremonyId(),
+                        assertionJson(pair.getPrivate(), challenge(prepared), 1), BINDING_TEXT));
+        assertFalse(Arrays.equals(expectedAtEntry, HANDLE), "actual-callback-changed-caller-ownership");
+        assertArrayEquals(HANDLE, success.getReauthentication().getUserHandle());
+        assertEquals(prepared.getRequest().getCeremonyId(), success.getReauthentication().getCeremonyId());
+        assertEquals(1, store.commits - beforeCommits);
+        assertEquals(2, store.version - beforeVersion);
+    }
+
+    @Test void checkedReauthenticationProofIsScopedRestrictedRedactedAndDefensive() throws Exception {
+        MemoryStore store = new MemoryStore();
+        WebAuthnRelyingParty rp = relyingParty(store, ADMIT);
+        KeyPair pair = KeyPairGenerator.getInstance("Ed25519").generateKeyPair();
+        enroll(rp, pair, WebAuthnRegistrationOptions.withUserHandle(HANDLE)
+                .userName("alice").userDisplayName("Alice").build());
+        var prepared = assertInstanceOf(WebAuthnAuthenticationRequestResult.Prepared.class,
+                rp.beginReauthenticationResult(HANDLE, "remove-credential", BINDING_TEXT));
+        WebAuthnReauthenticationResult result = rp.completeReauthenticationResult(HANDLE,
+                "remove-credential", prepared.getRequest().getCeremonyId(),
+                assertionJson(pair.getPrivate(), challenge(prepared), 1), BINDING_TEXT);
+        var proof = assertInstanceOf(WebAuthnReauthenticationResult.Succeeded.class, result).getReauthentication();
+        assertEquals("WebAuthnRelyingParty{<redacted>}", rp.toString());
+        assertEquals(NAMESPACE, proof.getCredentialNamespace());
+        assertEquals(RP, proof.getRelyingPartyId());
+        assertEquals("remove-credential", proof.getActionPurpose());
+        assertEquals(prepared.getRequest().getCeremonyId(), proof.getCeremonyId());
+        byte[] handle = proof.getUserHandle();
+        byte[] credential = proof.getCredentialId();
+        assertArrayEquals(HANDLE, handle);
+        assertArrayEquals(CREDENTIAL_ID, credential);
+        Arrays.fill(handle, (byte) 0);
+        Arrays.fill(credential, (byte) 0);
+        assertArrayEquals(HANDLE, proof.getUserHandle());
+        assertArrayEquals(CREDENTIAL_ID, proof.getCredentialId());
+        assertEquals("WebAuthnReauthentication{identity=<redacted>}", proof.toString());
+        assertEquals("WebAuthnReauthenticationResult{<redacted>}", result.toString());
+        assertEquals(0, WebAuthnReauthentication.class.getConstructors().length);
+        assertEquals(0, WebAuthnReauthenticationResult.class.getConstructors().length);
+        assertEquals(5, WebAuthnReauthenticationResult.class.getPermittedSubclasses().length);
+        for (Class<?> type : WebAuthnReauthenticationResult.class.getPermittedSubclasses()) {
+            assertEquals(0, type.getConstructors().length);
+            if (type != WebAuthnReauthenticationResult.Succeeded.class)
+                for (var method : type.getMethods())
+                    assertFalse(method.getReturnType() == WebAuthnReauthentication.class);
+        }
+    }
+
+    @Test void checkedReauthenticationSucceeded() throws Exception {
+        assertCheckedOutcome(CheckedOutcome.SUCCEEDED);
+    }
+
+    @Test void checkedReauthenticationContextRejectionRetainsKnownConsumption() throws Exception {
+        assertCheckedOutcome(CheckedOutcome.REJECTED_CONTEXT);
+    }
+
+    @Test void checkedReauthenticationUnavailable() throws Exception {
+        assertCheckedOutcome(CheckedOutcome.UNAVAILABLE);
+    }
+
+    @Test void checkedReauthenticationUnknownWithoutEffect() throws Exception {
+        assertCheckedOutcome(CheckedOutcome.UNKNOWN_NO_EFFECT);
+    }
+
+    @Test void checkedReauthenticationUnknownAfterAppliedCommit() throws Exception {
+        assertCheckedOutcome(CheckedOutcome.UNKNOWN_APPLIED);
+    }
+
+    @Test void checkedReauthenticationKnownCommitAfterExpiry() throws Exception {
+        assertCheckedOutcome(CheckedOutcome.RECONCILIATION_EXPIRY);
+    }
+
+    @Test void checkedReauthenticationKnownCommitAfterRecoveryLoss() throws Exception {
+        assertCheckedOutcome(CheckedOutcome.RECONCILIATION_RECOVERY);
+    }
+
+    @Test void checkedReauthenticationCancelledBeforeStorage() throws Exception {
+        assertCheckedOutcome(CheckedOutcome.CANCELLED);
+    }
+
+    private void assertCheckedOutcome(@NonNull CheckedOutcome outcome) throws Exception {
+        MemoryStore store = new MemoryStore();
+        TestClock clock = TestClock.fromInstant(CLOCK.instant());
+        var allowed = new java.util.concurrent.atomic.AtomicBoolean(true);
+        WebAuthnRecoveryGate gate = remaining -> new WebAuthnRecoveryGate.Permit() {
+            @Override public @NonNull Boolean isCurrent() { return allowed.get(); }
+            @Override public void close() { }
+        };
+        WebAuthnRelyingParty rp = relyingParty(store, gate,
+                WebAuthnSettings.builder().ceremonyLifetime(Duration.ofSeconds(30)).build(), clock);
+        KeyPair pair = KeyPairGenerator.getInstance("Ed25519").generateKeyPair();
+        enroll(rp, pair, WebAuthnRegistrationOptions.withUserHandle(HANDLE)
+                .userName("alice").userDisplayName("Alice").build());
+        var prepared = assertInstanceOf(WebAuthnAuthenticationRequestResult.Prepared.class,
+                rp.beginReauthenticationResult(HANDLE, "transfer", BINDING_TEXT));
+        byte[] response = assertionJson(pair.getPrivate(), challenge(prepared), 1);
+        int beforeVersion = store.version;
+        int beforeCommits = store.commits;
+        int beforeReads = store.reads;
+        switch (outcome) {
+            case UNAVAILABLE -> store.nextCommit = WebAuthnStoreCommitResult.UNAVAILABLE;
+            case UNKNOWN_NO_EFFECT -> store.nextCommit = WebAuthnStoreCommitResult.UNKNOWN;
+            case UNKNOWN_APPLIED -> store.unknownAfterCommit = true;
+            case RECONCILIATION_EXPIRY -> store.afterCommit = () -> {
+                store.source.advance(Duration.ofSeconds(31)); clock.advance(Duration.ofSeconds(31));
+            };
+            case RECONCILIATION_RECOVERY -> store.afterCommit = () -> allowed.set(false);
+            case CANCELLED -> Thread.currentThread().interrupt();
+            case SUCCEEDED, REJECTED_CONTEXT -> { }
+        }
+        WebAuthnReauthenticationResult result;
+        try {
+            result = rp.completeReauthenticationResult(HANDLE,
+                    outcome == CheckedOutcome.REJECTED_CONTEXT ? "other-action" : "transfer",
+                    prepared.getRequest().getCeremonyId(), response, BINDING_TEXT);
+            if (outcome == CheckedOutcome.CANCELLED) assertTrue(Thread.currentThread().isInterrupted());
+        } finally {
+            if (outcome == CheckedOutcome.CANCELLED) assertTrue(Thread.interrupted());
+        }
+        boolean committed = switch (outcome) {
+            case SUCCEEDED, REJECTED_CONTEXT, UNKNOWN_APPLIED, RECONCILIATION_EXPIRY,
+                    RECONCILIATION_RECOVERY -> true;
+            case UNAVAILABLE, UNKNOWN_NO_EFFECT, CANCELLED -> false;
+        };
+        assertEquals(outcome == CheckedOutcome.CANCELLED ? 0 : 1, store.commits - beforeCommits);
+        assertEquals(committed ? 2 : 0, store.version - beforeVersion);
+        if (outcome == CheckedOutcome.CANCELLED) assertEquals(beforeReads, store.reads);
+        switch (outcome) {
+            case SUCCEEDED -> assertEquals(prepared.getRequest().getCeremonyId(),
+                    assertInstanceOf(WebAuthnReauthenticationResult.Succeeded.class, result)
+                            .getReauthentication().getCeremonyId());
+            case REJECTED_CONTEXT -> assertEquals(WebAuthnRejectionReason.REJECTED,
+                    assertInstanceOf(WebAuthnReauthenticationResult.Rejected.class, result).getReason());
+            case UNAVAILABLE, CANCELLED -> assertInstanceOf(WebAuthnReauthenticationResult.Unavailable.class, result);
+            case UNKNOWN_NO_EFFECT, UNKNOWN_APPLIED -> assertInstanceOf(WebAuthnReauthenticationResult.Indeterminate.class, result);
+            case RECONCILIATION_EXPIRY, RECONCILIATION_RECOVERY ->
+                    assertInstanceOf(WebAuthnReauthenticationResult.ReconciliationRequired.class, result);
+        }
+        if (outcome != CheckedOutcome.SUCCEEDED) {
+            assertFalse(result instanceof WebAuthnReauthenticationResult.Succeeded);
+            for (var method : result.getClass().getMethods())
+                assertFalse(method.getReturnType() == WebAuthnReauthentication.class);
+        }
+        // A deliberate fresh replay control proves physical consumption; it is not retry advice.
+        if (committed && outcome != CheckedOutcome.RECONCILIATION_RECOVERY) {
+            int committedCalls = store.commits;
+            assertInstanceOf(WebAuthnReauthenticationResult.Rejected.class,
+                    rp.completeReauthenticationResult(HANDLE, "transfer", prepared.getRequest().getCeremonyId(),
+                            response, BINDING_TEXT));
+            assertEquals(committedCalls, store.commits);
+        }
+    }
+
+    private enum CheckedOutcome {
+        SUCCEEDED, REJECTED_CONTEXT, UNAVAILABLE, UNKNOWN_NO_EFFECT, UNKNOWN_APPLIED,
+        RECONCILIATION_EXPIRY, RECONCILIATION_RECOVERY, CANCELLED
+    }
+
+    private static @NonNull String challenge(WebAuthnAuthenticationRequestResult.@NonNull Prepared prepared) {
+        return prepared.getRequest().getPublicKeyOptions().find("challenge")
+                .filter(JsonString.class::isInstance).map(JsonString.class::cast)
+                .map(JsonString::getValue).orElseThrow();
+    }
+
     private static void enroll(@NonNull WebAuthnRelyingParty rp, @NonNull KeyPair pair,
             @NonNull WebAuthnRegistrationOptions options) throws Exception {
         var started = assertInstanceOf(WebAuthnRegistrationRequestResult.Prepared.class,
@@ -608,6 +810,8 @@ final class WebAuthnRelyingPartyTests {
         private final @NonNull ScriptedWebAuthnStore source=new ScriptedWebAuthnStore(CLOCK.instant());
         private int version;
         private int reads;
+        private int commits;
+        private boolean unknownAfterCommit;
         private @Nullable WebAuthnStoreCommitResult nextCommit;
         private @Nullable Runnable afterCommit;
         @Override public synchronized @NonNull WebAuthnStoreReadResult read(
@@ -616,11 +820,13 @@ final class WebAuthnRelyingPartyTests {
         }
         @Override public synchronized @NonNull WebAuthnStoreCommitReceipt compareAndCommit(
                 @NonNull WebAuthnStoreWrite write,@NonNull Duration remainingBudget){
+            this.commits++;
             WebAuthnStoreCommitResult forced=this.nextCommit;this.nextCommit=null;
             if(forced!=null)return forced==WebAuthnStoreCommitResult.UNKNOWN?WebAuthnStoreCommitReceipt.unknownInstance():WebAuthnStoreCommitReceipt.fromRefusal(forced);
             WebAuthnStoreCommitReceipt result=this.source.compareAndCommit(write,remainingBudget);
             if(result.getStatus()==WebAuthnStoreCommitResult.COMMITTED)this.version+=write.getMutations().size();
             Runnable action=this.afterCommit;this.afterCommit=null;if(action!=null)action.run();
+            if(this.unknownAfterCommit){this.unknownAfterCommit=false;return WebAuthnStoreCommitReceipt.unknownInstance();}
             return result;
         }
     }

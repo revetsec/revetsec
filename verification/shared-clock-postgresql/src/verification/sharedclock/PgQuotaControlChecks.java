@@ -58,6 +58,7 @@ final class PgQuotaControlChecks {
 			refusalChecks();
 			rollbackAndReallocationChecks();
 			totpBootstrapChecks();
+			cap11FamilyChecks();
 		} catch (Throwable failure) { throw new IllegalStateException("SCP05 quota control checks failed"); }
 	}
 
@@ -216,6 +217,107 @@ final class PgQuotaControlChecks {
 		long[] state = summary(TOTP_SCOPE, G1);
 		check("quota-totp-bootstrap-byte-reservation-used-zero", result.status() == Status.COMMITTED && state[0] == 256 && state[1] == 1024
 				&& state[2] == 0 && state[3] == 65536 && state[4] == 0 && state[5] == 256);
+	}
+
+
+	/** CAP-11 actual generic controller coverage; opaque rows are not family engine proofs. */
+	private static void cap11FamilyChecks() throws SQLException {
+		for (String family : List.of("TOTP", "WEBAUTHN", "ISSUER")) {
+			PgScope scope = PgScope.from(family, id("CAP11/" + family));
+			initialize(scope);
+			long bytes = family.equals("TOTP") ? 500 : 0, byteCap = family.equals("TOTP") ? 65536 : 0;
+			long[] empty = new long[256], planned = new long[256], plannedBytes = new long[256];
+			planned[ROOT_BUCKET] = 1; plannedBytes[ROOT_BUCKET] = bytes;
+			Allocation initial = PgCapacity.allocate(family, 1024, byteCap, empty, empty, planned, plannedBytes);
+			Outcome<Boolean> result = PgQuotaControl.bootstrap(PgQuotaControlChecks::connect, BUDGET, scope, G0, G1, PROFILE, id("CAP11/metadata1"), initial);
+			check("CAP11/" + family + "/bootstrap", result.status() == Status.COMMITTED);
+			Outcome<Boolean> seed = PgTransactions.execute(PgQuotaControlChecks::connect, BUDGET, context -> {
+				PgLocks.exclusiveAdmission(context.connection(), List.of(scope), context.deadlineNanos());
+				PgCapacity.LockedPlan plan = PgCapacity.lockAndCheck(context.connection(), scope, G1, List.of(PgCapacity.Delta.from(ROOT_BUCKET, 1, bytes)), context.deadlineNanos());
+				context.markPossibleMutation();
+				try (PreparedStatement statement = context.connection().prepareStatement("INSERT INTO scp05_entries(family,namespace,storage_key,version,payload,actual_size,reserved_bytes) VALUES(?,?,?,?,?,1,?)")) {
+					context.bound(statement); statement.setString(1, family); statement.setString(2, scope.getNamespace()); statement.setString(3, ROOT_KEY);
+					statement.setString(4, id("CAP11/version")); statement.setBytes(5, new byte[]{1}); statement.setLong(6, bytes);
+					if (statement.executeUpdate() != 1) throw new SQLException("Missing CAP11 seed");
+				}
+				plan.apply(context.connection(), context.deadlineNanos()); return PgTransactions.Decision.commit(Boolean.TRUE);
+			});
+			check("CAP11/" + family + "/seed-data-and-quota", seed.status() == Status.COMMITTED);
+			long[] used = new long[256], usedBytes = new long[256]; used[ROOT_BUCKET] = 1; usedBytes[ROOT_BUCKET] = bytes;
+			planned = new long[256]; plannedBytes = new long[256]; planned[(ROOT_BUCKET + 1) % 256] = 1; plannedBytes[(ROOT_BUCKET + 1) % 256] = bytes;
+			Allocation next = PgCapacity.allocate(family, 1024, byteCap, used, usedBytes, planned, plannedBytes);
+			String before = cap11Fingerprint(scope);
+			Allocation increased = PgCapacity.allocate(family, 1025, byteCap, used, usedBytes, planned, plannedBytes);
+			result = PgQuotaControl.reallocate(PgQuotaControlChecks::connect, BUDGET, scope, G1, G2, PROFILE, id("CAP11/metadata2"), increased);
+			check("CAP11/" + family + "/entry-cap-change-refused-zero-effects", result.status() == Status.NO_EFFECT && result.refusal().orElseThrow() == Refusal.CAPACITY && before.equals(cap11Fingerprint(scope)));
+			if (family.equals("TOTP")) {
+				for (long wrong : new long[]{byteCap - 1, byteCap + 1}) {
+					Allocation changed = PgCapacity.allocate(family, 1024, wrong, used, usedBytes, planned, plannedBytes);
+					result = PgQuotaControl.reallocate(PgQuotaControlChecks::connect, BUDGET, scope, G1, G2, PROFILE, id("CAP11/metadata2"), changed);
+					check("CAP11/TOTP/byte-cap-change-" + wrong + "-refused-zero-effects", result.status() == Status.NO_EFFECT && result.refusal().orElseThrow() == Refusal.CAPACITY && before.equals(cap11Fingerprint(scope)));
+				}
+			}
+			Allocation wrongUsage = PgCapacity.allocate(family, 1024, byteCap, empty, empty, planned, plannedBytes);
+			result = PgQuotaControl.reallocate(PgQuotaControlChecks::connect, BUDGET, scope, G1, G2, PROFILE, id("CAP11/metadata2"), wrongUsage);
+			check("CAP11/" + family + "/caller-inventory-understatement-refused", result.status() == Status.NO_EFFECT && result.refusal().orElseThrow() == Refusal.CONFLICT && before.equals(cap11Fingerprint(scope)));
+			// A SQL snapshot is merely data. The current trusted caller still pins G2.
+			String safetyBefore = safety(scope), dataBefore = cap11Data(scope);
+			result = PgQuotaControl.reallocate(PgQuotaControlChecks::connect, BUDGET, scope, G1, G2, PROFILE, id("CAP11/metadata2"), next);
+			check("CAP11/" + family + "/closed-rebalance-all256-exact-hard-caps-and-safety", result.status() == Status.COMMITTED && cap11Exact(scope, next, G2) && safetyBefore.equals(safety(scope)));
+			long[] totals = summary(scope, G2);
+			check("CAP11/" + family + "/rebalance-preserves-exact-data-and-configured-totals", dataBefore.equals(cap11Data(scope)) && totals[0] == 256 && totals[1] == 1024 && totals[2] == 1 && totals[3] == byteCap && totals[4] == bytes && totals[5] == 256);
+			before = cap11Fingerprint(scope);
+			result = PgQuotaControl.reallocate(PgQuotaControlChecks::connect, BUDGET, scope, G1, id("CAP11/g3"), PROFILE, id("CAP11/metadata3"), next);
+			check("CAP11/" + family + "/stale-controller-generation-refused", result.status() == Status.NO_EFFECT && result.refusal().orElseThrow() == Refusal.FENCED && before.equals(cap11Fingerprint(scope)));
+			Outcome<Boolean> stale = PgTransactions.execute(PgQuotaControlChecks::connect, BUDGET, context -> {
+				PgLocks.sharedAdmission(context.connection(), scope, context.deadlineNanos());
+				PgCapacity.lockAndCheck(context.connection(), scope, G1, List.of(PgCapacity.Delta.from(ROOT_BUCKET, 1, bytes)), context.deadlineNanos());
+				return PgTransactions.Decision.commit(Boolean.TRUE);
+			});
+			check("CAP11/" + family + "/stale-bucket-writer-refused-before-mutation", stale.status() == Status.NO_EFFECT && !stale.possibleMutation() && before.equals(cap11Fingerprint(scope)));
+			// Restore old SQL allocation/admission from a separately captured known plan.
+			try (Connection connection = connect(BUDGET)) {
+				connection.setAutoCommit(false);
+				try (PreparedStatement q = connection.prepareStatement("UPDATE scp05_escrow SET allocation_generation=?,entry_limit=?,byte_limit=? WHERE family=? AND namespace=? AND bucket=?");
+					 PreparedStatement a = connection.prepareStatement("UPDATE scp05_admission SET allocation_generation=?,metadata_commitment=? WHERE family=? AND namespace=?")) {
+					for (int bucket = 0; bucket < 256; bucket++) { q.setString(1, G1); q.setLong(2, initial.getEntryLimits()[bucket]); q.setLong(3, initial.getByteLimits()[bucket]); q.setString(4, family); q.setString(5, scope.getNamespace()); q.setInt(6, bucket); if (q.executeUpdate() != 1) throw new SQLException("Incomplete CAP11 SQL restore"); }
+					a.setString(1, G1); a.setString(2, id("CAP11/metadata1")); a.setString(3, family); a.setString(4, scope.getNamespace()); if (a.executeUpdate() != 1) throw new SQLException("Missing CAP11 restored admission");
+				}
+				connection.commit();
+			}
+			before = cap11Fingerprint(scope);
+			result = PgQuotaControl.reallocate(PgQuotaControlChecks::connect, BUDGET, scope, G2, id("CAP11/g3"), PROFILE, id("CAP11/metadata3"), next);
+			check("CAP11/" + family + "/restored-sql-cannot-satisfy-current-external-generation", result.status() == Status.NO_EFFECT && result.refusal().orElseThrow() == Refusal.FENCED && before.equals(cap11Fingerprint(scope)));
+		}
+	}
+
+	private static boolean cap11Exact(@NonNull PgScope scope, @NonNull Allocation allocation, @NonNull String generation) throws SQLException {
+		try (Connection connection = connect(BUDGET); PreparedStatement statement = connection.prepareStatement("SELECT bucket,allocation_generation,entry_limit,used_entries,byte_limit,used_bytes FROM scp05_escrow WHERE family=? AND namespace=? ORDER BY bucket")) {
+			statement.setString(1, scope.getFamily()); statement.setString(2, scope.getNamespace());
+			try (ResultSet rows = statement.executeQuery()) {
+				for (int i = 0; i < 256; i++) if (!rows.next() || rows.getInt(1) != i || !generation.equals(rows.getString(2)) || rows.getLong(3) != allocation.getEntryLimits()[i] || rows.getLong(4) != allocation.getUsedEntries()[i] || rows.getLong(5) != allocation.getByteLimits()[i] || rows.getLong(6) != allocation.getUsedBytes()[i]) return false;
+				return !rows.next() && admissionGeneration(scope).equals(generation);
+			}
+		}
+	}
+
+
+	private static @NonNull String cap11Data(@NonNull PgScope scope) throws SQLException {
+		StringBuilder value = new StringBuilder();
+		try (Connection connection = connect(BUDGET); PreparedStatement statement = connection.prepareStatement("SELECT row_to_json(e)::text FROM scp05_entries e WHERE family=? AND namespace=? ORDER BY storage_key")) {
+			statement.setString(1, scope.getFamily()); statement.setString(2, scope.getNamespace());
+			try (ResultSet rows = statement.executeQuery()) { while (rows.next()) value.append(rows.getString(1)); }
+		}
+		return id(value.toString());
+	}
+
+	private static @NonNull String cap11Fingerprint(@NonNull PgScope scope) throws SQLException {
+		StringBuilder value = new StringBuilder(fingerprint(scope));
+		try (Connection connection = connect(BUDGET); PreparedStatement statement = connection.prepareStatement("SELECT row_to_json(e)::text FROM scp05_entries e WHERE family=? AND namespace=? ORDER BY storage_key")) {
+			statement.setString(1, scope.getFamily()); statement.setString(2, scope.getNamespace());
+			try (ResultSet rows = statement.executeQuery()) { while (rows.next()) value.append(rows.getString(1)); }
+		}
+		return id(value.toString());
 	}
 
 	private static void setMode(@NonNull String mode) throws SQLException {

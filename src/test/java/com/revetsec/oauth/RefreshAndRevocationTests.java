@@ -89,7 +89,7 @@ final class RefreshAndRevocationTests {
 			OAuthErrorResponseException unavailable = assertThrows(OAuthErrorResponseException.class,
 					() -> client.revokeResult("third-refresh", TokenTypeHint.REFRESH_TOKEN));
 			assertEquals(503, unavailable.getStatus());
-			assertTrue(unavailable.isTransient());
+			assertTrue(unavailable.isTemporaryCondition());
 			assertEquals(3, server.getHitCount("/revoke"));
 		}
 	}

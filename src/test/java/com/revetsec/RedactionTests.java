@@ -1842,7 +1842,7 @@ final class RedactionTests {
 				leader.interrupt();
 				JwksUnavailableException exception = Assertions.assertInstanceOf(
 						JwksUnavailableException.class, failure.get(WAIT.toNanos(), TimeUnit.NANOSECONDS));
-				Assertions.assertFalse(exception.isTransient(), () -> surface + ": not transient");
+				Assertions.assertFalse(exception.isTemporaryCondition(), () -> surface + ": not transient");
 				Assertions.assertNull(exception.getCause(), () -> surface + ": no cause");
 				add(Group.KEY_SET_FETCHES, surface + ": the exception", exception, Check.FAILURE, ErrorCategory.TRANSPORT);
 			} catch (InterruptedException e) {

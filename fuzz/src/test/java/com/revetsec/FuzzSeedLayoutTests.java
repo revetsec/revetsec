@@ -85,6 +85,7 @@ final class FuzzSeedLayoutTests {
 	 * The JOSE {@code byte[]} targets that read something else: compact serializations and signing programs.
 	 */
 	private static final Set<String> JOSE_OTHER_TARGETS = Set.of(
+			"com.revetsec.jose.SigningProfilesFuzzTests#allSelectedAlgorithmsMatchIndependentJcaAndPreservePayload",
 			"com.revetsec.jose.JwsSignerFuzzTests#signingMatchesIndependentGrammarAndSignature",
 			"com.revetsec.internal.jose.CompactJwsFuzzTests#"
 					+ "compactSerializationsSplitIntoThreeCanonicalSegmentsOrFailInStepOrder",

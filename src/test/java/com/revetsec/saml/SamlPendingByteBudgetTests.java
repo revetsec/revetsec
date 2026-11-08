@@ -15,6 +15,8 @@
  */
 package com.revetsec.saml;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.StateSealer;
 import com.revetsec.testing.TestSealers;
 import org.junit.jupiter.api.DynamicTest;
@@ -41,7 +43,7 @@ final class SamlPendingByteBudgetTests {
     private static final Clock CLOCK = Clock.fixed(NOW, ZoneOffset.UTC);
     private static final Duration BUDGET = Duration.ofSeconds(5);
 
-    @TestFactory Stream<DynamicTest> entityBuildersAndCodecAgreeOnUnicodeAndMalformedText() {
+    @TestFactory @NonNull Stream<@NonNull DynamicTest> entityBuildersAndCodecAgreeOnUnicodeAndMalformedText() {
         return Stream.of("é".repeat(1024) + "a", "界".repeat(683), "😀".repeat(512) + "a", "bad\ud800", "bad\udc00")
                 .flatMap(text -> Stream.of(false, true).map(idp -> DynamicTest.dynamicTest(
                         (idp ? "IdP" : "SP") + " bytes=" + text.getBytes(StandardCharsets.UTF_8).length
@@ -61,7 +63,7 @@ final class SamlPendingByteBudgetTests {
                 })));
     }
 
-    @TestFactory Stream<DynamicTest> validEntityByteBoundariesRoundTripExactly() {
+    @TestFactory @NonNull Stream<@NonNull DynamicTest> validEntityByteBoundariesRoundTripExactly() {
         return Stream.of("a".repeat(2048), "é".repeat(1024), "界".repeat(682) + "aa", "😀".repeat(512))
                 .map(text -> DynamicTest.dynamicTest("entity units=" + text.length(), () -> {
                     SamlServiceProvider.withEntityId(text);
@@ -74,7 +76,7 @@ final class SamlPendingByteBudgetTests {
                 }));
     }
 
-    @TestFactory Stream<DynamicTest> connectionBuilderAndCodecAgreeOnUnicodeAndMalformedText() throws Exception {
+    @TestFactory @NonNull Stream<@NonNull DynamicTest> connectionBuilderAndCodecAgreeOnUnicodeAndMalformedText() throws Exception {
         KeyPair key = rsa();
         return Stream.of("é".repeat(128) + "a", "界".repeat(86), "😀".repeat(64) + "a", "bad\ud800")
                 .map(text -> DynamicTest.dynamicTest("connection units=" + text.length(), () -> {
@@ -89,7 +91,7 @@ final class SamlPendingByteBudgetTests {
                 }));
     }
 
-    @TestFactory Stream<DynamicTest> maximumCharacterFieldsUseBoundedUtf8Expansion() {
+    @TestFactory @NonNull Stream<@NonNull DynamicTest> maximumCharacterFieldsUseBoundedUtf8Expansion() {
         return Stream.of(0, 1, 2).flatMap(field -> Stream.of(false, true).map(logout -> DynamicTest.dynamicTest(
                 "maximum UTF-8 field=" + field + " logout=" + logout, () -> {
             String text = "界".repeat(field == 1 ? 256 : 2048);
@@ -113,7 +115,7 @@ final class SamlPendingByteBudgetTests {
         })));
     }
 
-    @TestFactory Stream<DynamicTest> malformedCallbackTextRejectsBeforeAsciiConversion() throws Exception {
+    @TestFactory @NonNull Stream<@NonNull DynamicTest> malformedCallbackTextRejectsBeforeAsciiConversion() throws Exception {
         KeyPair key = rsa();
         URI malformed = URI.create("https://sp.test/bad\ud800");
         return Stream.of(0, 1, 2).map(mode -> DynamicTest.dynamicTest("malformed callback=" + mode,
@@ -150,7 +152,7 @@ final class SamlPendingByteBudgetTests {
         assertEquals(pending.getRequestId(), resolved.pending().getRequestId());
     }
 
-    @TestFactory Stream<DynamicTest> callbackBudgetsUseAsciiUriForAllThreeSpReceivers() throws Exception {
+    @TestFactory @NonNull Stream<@NonNull DynamicTest> callbackBudgetsUseAsciiUriForAllThreeSpReceivers() throws Exception {
         KeyPair key = rsa();
         // URI text is short, but toASCIIString expands each non-ASCII path character.
         URI tooLong = URI.create("https://sp.test/" + "界".repeat(230));
@@ -181,7 +183,7 @@ final class SamlPendingByteBudgetTests {
         }
     }
 
-    @TestFactory Stream<DynamicTest> encoderCannotIssueUnreadableOrLossilyEncodedFields() {
+    @TestFactory @NonNull Stream<@NonNull DynamicTest> encoderCannotIssueUnreadableOrLossilyEncodedFields() {
         return Stream.of(0, 1, 2, 3, 4).map(field -> DynamicTest.dynamicTest("invalid encoder field=" + field, () -> {
             String sp = field == 0 ? "a".repeat(2049) : field == 4 ? "bad\ud800" : "sp";
             String connection = field == 1 ? "a".repeat(257) : "c";
@@ -209,7 +211,7 @@ final class SamlPendingByteBudgetTests {
         assertEquals(options.getRequestedAuthnContextClassRefs(), resolved.pending().options().getRequestedAuthnContextClassRefs());
     }
 
-    @TestFactory Stream<DynamicTest> sizeRefusalBeforeStoreForEveryCapKeyLengthAndPendingType() {
+    @TestFactory @NonNull Stream<@NonNull DynamicTest> sizeRefusalBeforeStoreForEveryCapKeyLengthAndPendingType() {
         return Stream.of(1024, 3800, 16384).flatMap(cap -> Stream.of(1, 64).flatMap(keyLength ->
                 Stream.of(false, true).map(logout -> DynamicTest.dynamicTest(
                         "size cap=" + cap + " key=" + keyLength + " logout=" + logout, () -> {
@@ -234,7 +236,7 @@ final class SamlPendingByteBudgetTests {
                 }))));
     }
 
-    @TestFactory Stream<DynamicTest> exactSealBoundaryUsesBase64RoundingAndKeyIdLength() {
+    @TestFactory @NonNull Stream<@NonNull DynamicTest> exactSealBoundaryUsesBase64RoundingAndKeyIdLength() {
         return Stream.of(1024, 3800, 16384).flatMap(cap -> Stream.of(1, 64).flatMap(keyLength ->
                 Stream.of(false, true).map(logout -> DynamicTest.dynamicTest(
                         "exact cap=" + cap + " key=" + keyLength + " logout=" + logout, () -> {
@@ -300,11 +302,11 @@ final class SamlPendingByteBudgetTests {
         assertNotNull(PendingSamlAuthenticationCodec.decode("1." + String.join(".", java.util.Arrays.copyOfRange(v3, 1, 9))));
     }
 
-    private static PendingSamlAuthentication fitting(int cap, int keyLength) {
+    private static @NonNull PendingSamlAuthentication fitting(int cap, int keyLength) {
         int target = cap / 4 * 3 - 54 - keyLength;
         return atLength(target);
     }
-    private static PendingSamlAuthentication atLength(int target) {
+    private static @NonNull PendingSamlAuthentication atLength(int target) {
         for (int contexts = 0; contexts <= 8; contexts++) {
             for (boolean hint : new boolean[] {false, true}) {
                 var options = SamlAuthenticationRequestOptions.builder().requestedAuthnContextClassRefs(
@@ -327,36 +329,36 @@ final class SamlPendingByteBudgetTests {
     private static long wireLength(int keyLength, int plaintextLength) {
         return (4L * (54 + keyLength + plaintextLength) + 2) / 3;
     }
-    private static PendingSamlAuthentication largest() {
+    private static @NonNull PendingSamlAuthentication largest() {
         var options = SamlAuthenticationRequestOptions.builder().requestedAuthnContextClassRefs(
                 Collections.nCopies(8, "urn:" + "a".repeat(508))).applicationData("x".repeat(512)).build();
         return fields("s".repeat(2048), "c".repeat(256), "i".repeat(2048),
                 "https://sp.test/" + "a".repeat(2048 - "https://sp.test/".length()), options);
     }
-    private static PendingSamlAuthentication fields(String sp, String connection, String idp, String acs,
-            SamlAuthenticationRequestOptions options) {
+    private static @NonNull PendingSamlAuthentication fields(@NonNull String sp, @NonNull String connection, @NonNull String idp, @NonNull String acs,
+            @NonNull SamlAuthenticationRequestOptions options) {
         return new PendingSamlAuthentication(sp, "_" + "r".repeat(40), "h".repeat(22), connection,
                 idp, acs, NOW, NOW.plusSeconds(300), options);
     }
-    private static SamlAuthenticationRequestOptions defaults() { return SamlAuthenticationRequestOptions.builder().build(); }
-    private static StateSealer sealer(int cap, int keyLength) {
+    private static @NonNull SamlAuthenticationRequestOptions defaults() { return SamlAuthenticationRequestOptions.builder().build(); }
+    private static @NonNull StateSealer sealer(int cap, int keyLength) {
         return StateSealer.withActiveKey(TestSealers.fixedKey("k".repeat(keyLength))).clock(CLOCK)
                 .maximumSealedLength(cap).build();
     }
-    private static PendingSamlAuthenticationStore counting(AtomicInteger calls, @org.jspecify.annotations.Nullable SamlPendingSaveResult outcome) {
+    private static @NonNull PendingSamlAuthenticationStore counting(@NonNull AtomicInteger calls, @org.jspecify.annotations.Nullable SamlPendingSaveResult outcome) {
         return new PendingSamlAuthenticationStore() {
-            @Override public SamlPendingSaveResult save(String browser, String relay, String sealed, Instant expiry, Duration budget) {
+            @Override public @NonNull SamlPendingSaveResult save(@NonNull String browser, @NonNull String relay, @NonNull String sealed, @NonNull Instant expiry, @NonNull Duration budget) {
                 calls.incrementAndGet(); return unchecked(outcome);
             }
-            @Override public SamlPendingConsumeResult consume(String browser, String relay, Duration budget) {
+            @Override public @NonNull SamlPendingConsumeResult consume(@NonNull String browser, @NonNull String relay, @NonNull Duration budget) {
                 fail("unexpected consume"); return SamlPendingConsumeResult.Unavailable.INSTANCE;
             }
         };
     }
     @SuppressWarnings("NullAway") // Deliberately broken custom SPI result.
-    private static SamlPendingSaveResult unchecked(@org.jspecify.annotations.Nullable SamlPendingSaveResult outcome) { return outcome; }
-    private static KeyPair rsa() throws Exception { return KeyPairGenerator.getInstance("RSA").generateKeyPair(); }
-    private static SamlIdentityProvider idp(String connection, KeyPair key) {
+    private static @NonNull SamlPendingSaveResult unchecked(@org.jspecify.annotations.Nullable SamlPendingSaveResult outcome) { return outcome; }
+    private static @NonNull KeyPair rsa() throws Exception { return KeyPairGenerator.getInstance("RSA").generateKeyPair(); }
+    private static @NonNull SamlIdentityProvider idp(@NonNull String connection, @NonNull KeyPair key) {
         return SamlIdentityProvider.withEntityId("idp").connectionId(connection)
                 .redirectSingleSignOnService(URI.create("https://idp.test/sso"))
                 .postSingleSignOnService(URI.create("https://idp.test/sso"))
@@ -364,7 +366,7 @@ final class SamlPendingByteBudgetTests {
                 .postSingleLogoutService(URI.create("https://idp.test/logout"))
                 .signingKeys(List.of(key.getPublic())).build();
     }
-    private static SamlServiceProvider sp(URI endpoint, KeyPair key, int mode) {
+    private static @NonNull SamlServiceProvider sp(@NonNull URI endpoint, @NonNull KeyPair key, int mode) {
         return SamlServiceProvider.withEntityId("sp").assertionConsumerServiceUrl(mode == 0 || mode == 3 ? endpoint : URI.create("https://sp.test/acs"))
                 .singleLogoutServiceUrl(mode == 1 || mode == 3 ? endpoint : null)
                 .postSingleLogoutServiceUrl(mode == 2 || mode == 3 ? endpoint : null)

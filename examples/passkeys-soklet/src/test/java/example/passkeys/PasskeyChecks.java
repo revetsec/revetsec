@@ -56,7 +56,7 @@ public final class PasskeyChecks {
     }
 
     private static void checksAnonymousSessionCapacity() throws Exception {
-        PasskeySessions sessions = new PasskeySessions(Clock.systemUTC(), 1);
+        PasskeySessions sessions = new PasskeySessions(Clock.systemUTC(), 1, new byte[] {1}, "test", "passkeys.example.test");
         PasskeySessions.Session first = sessions.begin();
         PasskeySessions.Session second = sessions.begin();
         check(!sessions.current(first) && sessions.current(second));

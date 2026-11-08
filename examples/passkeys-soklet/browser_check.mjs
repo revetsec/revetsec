@@ -26,7 +26,8 @@ const HOST = "passkeys.example.test";
 const PHYSICAL_CEREMONY_TIMEOUT = 300_000;
 const POST_ROUTES = new Set(["/access-login", "/register/start", "/register/finish",
   "/sign-in/start", "/sign-in/finish", "/reauth/start", "/reauth/finish",
-  "/sensitive", "/credentials/list", "/credentials/remove", "/logout"]);
+  "/sensitive", "/credentials/list", "/credentials/remove", "/credentials/self-remove/start",
+  "/credentials/self-remove/finish", "/credentials/self-remove", "/logout"]);
 const execFileAsync = promisify(execFile);
 const SENSITIVE_HEADERS = new Set([
   "host", "origin", "cookie", "content-type", "x-csrf-token", "x-ceremony-id",
@@ -317,8 +318,8 @@ async function main() {
       return outcomes.length;
     }
     function completeStage(stage, since, expected) {
-      if (!physical) return;
       for (const [path, status] of expected) requireOutcome(outcomes, since, path, status);
+      if (!physical) return;
       evidence.completedStages.push(stage);
       process.stdout.write("Observed " + stage + " server outcomes passed.\n");
     }
@@ -477,13 +478,11 @@ async function main() {
     await click(cdp, "#list");
     await waitPage(cdp, (state) => state.count === 1, "credential list");
     completeStage("credential list", since, [["/credentials/list", 200]]);
-    await cdp.evaluate("document.querySelector('#management-access').value="
-      + JSON.stringify((await readFile(accessFile, "utf8")).trim()));
-    since = beginStage("server-side removal");
-    await click(cdp, "#credentials li button");
-    await waitPage(cdp, (state) => state.status === "Passkey removed." && state.count === 0,
-      "server-side removal");
-    completeStage("server-side removal", since, [["/credentials/remove", 200]]);
+    await ceremony("#credentials li button", "self-service passkey removal",
+      "Authorize removal: reauthenticate with a current passkey and complete any PIN/touch prompt.",
+      (state) => state.status === "Passkey removed." && state.count === 0,
+      [["/credentials/self-remove/start", 200], ["/credentials/self-remove/finish", 200],
+        ["/credentials/self-remove", 200]]);
     if (args.has("--restart-app")) {
       await stop(app);
       app = await startApp();

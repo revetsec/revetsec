@@ -15,6 +15,8 @@
  */
 package com.revetsec.scim;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.json.JsonArray;
 import com.revetsec.json.JsonObject;
 import org.junit.jupiter.api.DynamicTest;
@@ -52,7 +54,7 @@ final class ScimFilterCanonicalBudgetTests {
                     .allowedLogicalOperators(EnumSet.allOf(ScimLogicalOperator.class)).build())).build();
     private static final ScimCompatibility STRICT = ScimCompatibility.builder().build();
 
-    @TestFactory Stream<DynamicTest> acceptedCompactExpressionsSurviveCanonicalGrowth() {
+    @TestFactory @NonNull Stream<@NonNull DynamicTest> acceptedCompactExpressionsSurviveCanonicalGrowth() {
         return Stream.of(256, 4096, 16384).flatMap(cap -> Stream.of("comparison", "and", "or", "not")
                 .flatMap(shape -> Stream.of(false, true).map(bound -> DynamicTest.dynamicTest(
                         "cap=" + cap + " shape=" + shape + " bound=" + bound, () -> {
@@ -71,7 +73,7 @@ final class ScimFilterCanonicalBudgetTests {
         }))));
     }
 
-    @TestFactory Stream<DynamicTest> normalizedValuePathComparisonKeepsTheAcceptedSource() {
+    @TestFactory @NonNull Stream<@NonNull DynamicTest> normalizedValuePathComparisonKeepsTheAcceptedSource() {
         return Stream.of(256, 4096, 16384).map(cap -> DynamicTest.dynamicTest("ValuePath cap=" + cap, () -> {
             var compatibility = ScimCompatibility.builder().features(Set.of(ScimCompatibilityFeature.FILTER_VALUE_PATH_SUB_ATTRIBUTE_COMPARISON)).build();
             var provider = provider(limits(cap), POLICY, compatibility, new AtomicInteger(), 4_000_000);
@@ -87,7 +89,7 @@ final class ScimFilterCanonicalBudgetTests {
         }));
     }
 
-    @TestFactory Stream<DynamicTest> everyRootKindKeepsTheReceivingRawExpressionCap() {
+    @TestFactory @NonNull Stream<@NonNull DynamicTest> everyRootKindKeepsTheReceivingRawExpressionCap() {
         return Stream.of("text eq \"a\"", "text eq \"a\" and flag eq true", "text eq \"a\" or flag eq false",
                 "not(text eq \"z\")", "text pr", "tags[value eq \"a\"]").flatMap(expression -> Stream.of(false, true)
                 .map(bound -> DynamicTest.dynamicTest("foreign root=" + expression + " bound=" + bound, () -> {
@@ -220,11 +222,11 @@ final class ScimFilterCanonicalBudgetTests {
         }
     }
 
-    private static ScimFilterLimits limits(int cap) {
+    private static @NonNull ScimFilterLimits limits(int cap) {
         return ScimFilterLimits.builder().maximumExpressionCharacters(cap).maximumLiteralCharacters(Math.min(cap, 16384)).build();
     }
-    private static ScimServiceProvider provider(ScimFilterLimits filterLimits, ScimFilterPolicy policy,
-            ScimCompatibility compatibility, AtomicInteger calls, int work) {
+    private static @NonNull ScimServiceProvider provider(@NonNull ScimFilterLimits filterLimits, @NonNull ScimFilterPolicy policy,
+            @NonNull ScimCompatibility compatibility, @NonNull AtomicInteger calls, int work) {
         return ScimServiceProvider.builder().baseUri(URI.create("https://example.invalid/scim/"))
                 .resourceTypes(List.of(TYPE)).limits(ScimLimits.builder().filterLimits(filterLimits).maximumWorkUnits(work).build())
                 .compatibility(compatibility).filterPolicies(Map.of(TYPE, policy))
@@ -233,19 +235,19 @@ final class ScimFilterCanonicalBudgetTests {
                     calls.incrementAndGet(); return ScimStringMatchResult.fromMatched(left.equals(right));
                 }).build();
     }
-    private static ScimResource resource(String text) {
+    private static @NonNull ScimResource resource(@NonNull String text) {
         return ScimResource.withResourceType(TYPE).document(JsonObject.builder().put("schemas", JsonArray.fromElements(List.of(com.revetsec.json.JsonString.fromValue(URN))))
                 .put("text", text).put("flag", true).put("number", com.revetsec.json.JsonNumber.fromValue(java.math.BigDecimal.TEN))
                 .put("tags", JsonArray.fromElements(List.of(JsonObject.builder().put("value", text).build()))).build()).build();
     }
-    private static ScimFilter syntax(String source) {
+    private static @NonNull ScimFilter syntax(@NonNull String source) {
         var limits = ScimFilterLimits.builder().maximumExpressionCharacters(65536).maximumLiteralCharacters(16384).build();
         return assertInstanceOf(ScimFilterParseResult.Succeeded.class, ScimFilter.fromExpressionResult(source, limits)).getFilter();
     }
-    private static ScimFilter approved(ScimServiceProvider provider, String source) {
+    private static @NonNull ScimFilter approved(@NonNull ScimServiceProvider provider, @NonNull String source) {
         return assertInstanceOf(ScimFilterParseResult.Succeeded.class, provider.parseFilterResult(TYPE, source)).getFilter();
     }
-    private static ScimError assertInvalid(ScimServiceProvider provider, ScimResource resource, ScimFilter tree) {
+    private static @NonNull ScimError assertInvalid(@NonNull ScimServiceProvider provider, @NonNull ScimResource resource, @NonNull ScimFilter tree) {
         ScimError error = assertInstanceOf(ScimFilterEvaluationResult.Rejected.class,
                 ScimFilterEvaluator.fromServiceProvider(provider).evaluateResult(resource, tree)).getError();
         assertEquals(ScimError.invalidFilterInstance().getErrorType(), error.getErrorType());

@@ -38,14 +38,13 @@ public final class Playground {
         PlaygroundSaml saml = PlaygroundSaml.fromEnvironment(System.getenv(), config, sessions, views,
                 Clock.systemUTC());
         PlaygroundResources resources = new PlaygroundResources(config, sessions, views, oidc, http, saml);
-        String scimToken = System.getenv("SCIM_BEARER_TOKEN");
-        PlaygroundScimResources scim = scimToken == null ? null : new PlaygroundScimResources(PlaygroundScim.create(
-                URI.create(System.getenv().getOrDefault("SCIM_BASE_URI", config.origin + "/scim/v2/")), scimToken));
+        PlaygroundScimDirectory directory = PlaygroundScimDirectory.fromEnvironment(config.origin,System.getenv());
+        PlaygroundScimResources scim = directory == null ? null : new PlaygroundScimResources(directory);
         try (Soklet soklet = Soklet.fromConfig(sokletConfig(config, resources, views, scim))) {
             Runtime.getRuntime().addShutdownHook(new Thread(soklet::close, "playground-shutdown"));
             soklet.start();
             System.out.println("Revetsec Playground: local developer demonstration; HTTPS edge required.");
-            soklet.awaitShutdown();
+            if (!soklet.awaitShutdown().isComplete()) throw new IllegalStateException("Playground shutdown incomplete");
         }
     }
 

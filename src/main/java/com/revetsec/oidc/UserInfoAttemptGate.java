@@ -71,7 +71,7 @@ final class UserInfoAttemptGate {
 	void failed(@NonNull Attempt attempt, @NonNull OAuthException failure) {
 		this.lock.lock();
 		try {
-			if (attempt.generation == this.generation && failure.isTransient()
+			if (attempt.generation == this.generation && failure.isTemporaryCondition()
 					&& failure.getReason() != OAuthException.Reason.INTERRUPTED) {
 				this.failure = failure; this.failedAtNanos = this.nanoTime.getAsLong(); this.generation++;
 				this.failures = Math.min(5, this.failures + 1);

@@ -89,7 +89,7 @@ final class JoseExceptionTests {
 			Assertions.assertSame(leaf, exception.getClass());
 			Assertions.assertSame(reason, exception.getReason());
 			Assertions.assertEquals(CATEGORIES.get(leaf), exception.getCategory());
-			Assertions.assertFalse(exception.isTransient());
+			Assertions.assertFalse(exception.isTemporaryCondition());
 			Assertions.assertNull(exception.getCause());
 			exception.addSuppressed(new IllegalStateException());
 			Assertions.assertEquals(0, exception.getSuppressed().length);
@@ -131,13 +131,13 @@ final class JoseExceptionTests {
 			}
 			JwksUnavailableException exception = JwksUnavailableException.fromCategory(category, false);
 			Assertions.assertEquals(category, exception.getCategory());
-			Assertions.assertFalse(exception.isTransient());
+			Assertions.assertFalse(exception.isTemporaryCondition());
 			Assertions.assertNull(exception.getCause());
 			Assertions.assertEquals(messages.get(category), exception.getMessage());
 
 			boolean mayBeTransient = category == ErrorCategory.TRANSPORT || category == ErrorCategory.REMOTE_ERROR;
 			if (mayBeTransient)
-				Assertions.assertTrue(JwksUnavailableException.fromCategory(category, true).isTransient());
+				Assertions.assertTrue(JwksUnavailableException.fromCategory(category, true).isTemporaryCondition());
 			else
 				Assertions.assertThrows(IllegalArgumentException.class,
 						() -> JwksUnavailableException.fromCategory(category, true), category::name);

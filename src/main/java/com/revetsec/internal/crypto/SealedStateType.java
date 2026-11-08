@@ -52,6 +52,10 @@ public enum SealedStateType {
 	 * An OpenID Connect session reference: {@code revetsec/oidc-session/v1}.
 	 */
 	OIDC_SESSION("revetsec/oidc-session/v1"),
+	/** Explicitly retained OIDC logout hint credential, separate from comparison-only session references. */
+	OIDC_LOGOUT_HINT("revetsec/oidc-logout-hint/v1"),
+	/** Pending OIDC logout correlation, separate from pending login and credentials. */
+	PENDING_OIDC_LOGOUT("revetsec/pending-oidc-logout/v1"),
 	/**
 	 * Application data sealed through the public {@code StateSealer} API: {@code revetsec/app/v1}.
 	 */

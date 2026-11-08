@@ -17,6 +17,7 @@
 package com.revetsec.saml;
 
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.ThreadSafe;
 import java.time.Clock;
@@ -51,15 +52,18 @@ public final class InMemorySamlReplayCache implements SamlReplayCache {
     private final @NonNull Clock clock;
     private final int maximumEntries;
     private final int maximumPerConnection;
+    private final @Nullable Map<@NonNull String, @NonNull Integer> connectionLimits;
     private @NonNull Instant lastObserved = Instant.MIN;
 
     private record ReplayEntry(@NonNull String connectionId, @NonNull Instant expiresAt) { }
     private record ExpiryEntry(@NonNull String key, @NonNull Instant expiresAt) { }
 
-    private InMemorySamlReplayCache(@NonNull Clock clock, int maximumEntries) {
+    private InMemorySamlReplayCache(@NonNull Clock clock, int maximumEntries,
+            @Nullable Map<@NonNull String, @NonNull Integer> connectionLimits) {
         this.clock = clock;
         this.maximumEntries = maximumEntries;
         this.maximumPerConnection = Math.max(1, maximumEntries / 4);
+        this.connectionLimits = connectionLimits;
     }
 
     /**
@@ -67,7 +71,8 @@ public final class InMemorySamlReplayCache implements SamlReplayCache {
      *
      * New namespaced admissions are limited to one quarter of the total
      * capacity (at least one). Legacy three-argument admissions retain the
-     * full configured capacity.
+     * full configured capacity. This shared-pool heuristic does not reserve capacity for mutually
+     * untrusted connections; use {@link #fromConnectionLimits(Clock, Map)} for fixed independent reservations.
      *
      * @param clock the time source used for admission and expiry
      * @param maximumEntries maximum number of live replay records, from 1 to 1000000
@@ -78,7 +83,42 @@ public final class InMemorySamlReplayCache implements SamlReplayCache {
         Objects.requireNonNull(clock);
         if (maximumEntries < 1 || maximumEntries > MAXIMUM_ENTRIES)
             throw new IllegalArgumentException("Invalid SAML replay cache capacity");
-        return new InMemorySamlReplayCache(clock, maximumEntries);
+        return new InMemorySamlReplayCache(clock, maximumEntries, null);
+    }
+
+    /**
+     * Creates fixed independent replay reservations for application-approved IdP connections. Each connection
+     * can use its entire configured quota even after all others fill theirs. Unknown connection IDs and the
+     * namespace-free admission overload cannot consume reserved capacity. Live replay marks are never evicted.
+     * <p>
+     * Configuration is snapshotted without reading the clock. There is no borrowing or live reconfiguration;
+     * replacing a populated cache requires an application transition preserving every still-live replay mark.
+     * This remains a volatile, single-process cache; restart loses replay protection.
+     *
+     * @param clock admission and expiry clock
+     * @param connectionLimits 1–1024 trusted connection IDs, each nonempty and at most 256 characters, with
+     *                         positive quotas totaling at most 1000000 live records
+     * @return an empty cache with immutable reservations
+     * @throws NullPointerException if the clock, map, a connection ID or quota is null
+     * @throws IllegalArgumentException if a configuration bound is exceeded
+     * @since 1.0.0
+     */
+    public static @NonNull InMemorySamlReplayCache fromConnectionLimits(@NonNull Clock clock,
+            @NonNull Map<@NonNull String, @NonNull Integer> connectionLimits) {
+        Objects.requireNonNull(clock);
+        Objects.requireNonNull(connectionLimits);
+        if (connectionLimits.isEmpty() || connectionLimits.size() > 1024)
+            throw new IllegalArgumentException("Invalid SAML replay connection reservations");
+        Map<String, Integer> snapshot = Map.copyOf(connectionLimits);
+        long total = 0;
+        for (Map.Entry<String, Integer> entry : snapshot.entrySet()) {
+            if (entry.getKey().isEmpty() || entry.getKey().length() > 256 || entry.getValue() < 1)
+                throw new IllegalArgumentException("Invalid SAML replay connection reservations");
+            total += entry.getValue();
+            if (total > MAXIMUM_ENTRIES)
+                throw new IllegalArgumentException("Invalid SAML replay connection reservations");
+        }
+        return new InMemorySamlReplayCache(clock, (int) total, snapshot);
     }
 
     /**
@@ -111,6 +151,8 @@ public final class InMemorySamlReplayCache implements SamlReplayCache {
         if (key.isEmpty()) throw new IllegalArgumentException("Empty SAML replay key");
         if (remaining.isZero() || remaining.isNegative() || Thread.currentThread().isInterrupted())
             return MarkResult.UNAVAILABLE;
+        if (this.connectionLimits != null && !this.connectionLimits.containsKey(connectionId))
+            return MarkResult.CAPACITY_REFUSED;
         Duration bounded = remaining.compareTo(MAXIMUM_BUDGET) > 0 ? MAXIMUM_BUDGET : remaining;
         long deadline = System.nanoTime() + bounded.toNanos();
         try {
@@ -133,8 +175,10 @@ public final class InMemorySamlReplayCache implements SamlReplayCache {
             if (existing != null && now.isBefore(existing.expiresAt())) return MarkResult.ALREADY_PRESENT;
             reclaimExpired(now);
             if (entries.size() >= maximumEntries) return MarkResult.CAPACITY_REFUSED;
+            int connectionLimit = this.connectionLimits == null ? this.maximumPerConnection
+                    : this.connectionLimits.getOrDefault(connectionId, 0);
             if (!connectionId.isEmpty()
-                    && connectionCounts.getOrDefault(connectionId, 0) >= maximumPerConnection)
+                    && connectionCounts.getOrDefault(connectionId, 0) >= connectionLimit)
                 return MarkResult.CAPACITY_REFUSED;
             if (expired(deadline)) return MarkResult.UNAVAILABLE;
             entries.put(key, new ReplayEntry(connectionId, expiresAt));

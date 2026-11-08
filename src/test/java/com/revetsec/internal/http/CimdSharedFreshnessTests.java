@@ -16,6 +16,8 @@
 
 package com.revetsec.internal.http;
 
+import org.jspecify.annotations.NonNull;
+
 import java.net.http.HttpHeaders;
 import java.time.Duration;
 import java.time.Instant;
@@ -30,11 +32,11 @@ import static org.junit.jupiter.api.Assertions.*;
 /** Shared reuse is specific to the pinned anonymous CIMD request, not the general document TTL helper. */
 final class CimdSharedFreshnessTests {
  private static final Instant NOW=Instant.parse("2026-10-31T12:00:00Z");
- private static Duration ttl(Map<String,List<String>> headers,Duration delay) {
+ private static @NonNull Duration ttl(@NonNull Map<@NonNull String,@NonNull List<@NonNull String>> headers,@NonNull Duration delay) {
   return ClientMetadataFreshness.remaining(new RawResponse(200,HttpHeaders.of(headers,(a,b)->true),new byte[0],null,false,delay),NOW,Duration.ofSeconds(300));
  }
- private static Duration ttl(String control){return ttl(Map.of("Cache-Control",List.of(control)),Duration.ZERO);}
- @TestFactory Stream<DynamicTest> sharedMaxAgeIsExplicitAndOverridesPrivateFreshness() {
+ private static @NonNull Duration ttl(@NonNull String control){return ttl(Map.of("Cache-Control",List.of(control)),Duration.ZERO);}
+ @TestFactory @NonNull Stream<@NonNull DynamicTest> sharedMaxAgeIsExplicitAndOverridesPrivateFreshness() {
   return Stream.of("s-maxage=5,max-age=120","max-age=120,s-maxage=5","s-maxage=5", "S-MAXAGE=\"5\"", "s-maxage=005,S-MAXAGE=5", "s-maxage=5,unknown=\"max-age=200,private\"")
    .map(control->DynamicTest.dynamicTest(control,()->assertEquals(Duration.ofSeconds(5),ttl(control))));
  }
@@ -52,22 +54,22 @@ final class CimdSharedFreshnessTests {
   assertEquals(Duration.ofMillis(99500),ttl(Map.of("Cache-Control",List.of("s-maxage=120,max-age=1"),"Age",List.of("20")),Duration.ofMillis(500)));
   assertEquals(Duration.ofSeconds(30),ttl(Map.of("Cache-Control",List.of("s-maxage=120,max-age=1"),"Date",List.of("Sat, 31 Oct 2026 11:58:30 GMT")),Duration.ZERO));
  }
- @TestFactory Stream<DynamicTest> invalidOrConflictingSharedAgeCannotBorrowMaxAge() {
+ @TestFactory @NonNull Stream<@NonNull DynamicTest> invalidOrConflictingSharedAgeCannotBorrowMaxAge() {
   return Stream.of("s-maxage", "s-maxage=-1", "s-maxage=+1", "s-maxage=1.5", "s-maxage=\"\"", "s-maxage=\"12", "s-maxage =5", "s-maxage=1,s-maxage=2")
    .map(value->DynamicTest.dynamicTest(value,()->assertEquals(Duration.ZERO,ttl("max-age=120,"+value))));
  }
- @TestFactory Stream<DynamicTest> sharedFreshnessCannotOverrideNoReuseOrMalformedControl() {
+ @TestFactory @NonNull Stream<@NonNull DynamicTest> sharedFreshnessCannotOverrideNoReuseOrMalformedControl() {
   return Stream.of("no-store","no-cache","private","private=\"Set-Cookie\"","no-cache=\"ETag\"","{bad}","unknown=", "unknown=\"unfinished")
    .map(value->DynamicTest.dynamicTest(value,()->assertEquals(Duration.ZERO,ttl("s-maxage=120,"+value))));
  }
- @TestFactory Stream<DynamicTest> namedVaryMatchesTheFixedRequestIncludingAbsentFields() {
+ @TestFactory @NonNull Stream<@NonNull DynamicTest> namedVaryMatchesTheFixedRequestIncludingAbsentFields() {
   return Stream.of("Accept","Accept-Encoding,User-Agent","Host","Authorization,Cookie","Origin,Accept-Language,X-Unsent","accept,,", "", " , , ")
    .map(value->DynamicTest.dynamicTest("Vary="+value,()->assertEquals(Duration.ofSeconds(120),ttl(Map.of("Cache-Control",List.of("max-age=120"),"Vary",List.of(value)),Duration.ZERO))));
  }
  @Test void repeatedVaryFieldsHaveOneFixedRequestProfile() {
   assertEquals(Duration.ofSeconds(120),ttl(Map.of("Cache-Control",List.of("s-maxage=120"),"Vary",List.of("Accept", "accept-encoding,User-Agent", "X-Absent")),Duration.ZERO));
  }
- @TestFactory Stream<DynamicTest> wildcardAndMalformedVaryCannotAuthorizeReuse() {
+ @TestFactory @NonNull Stream<@NonNull DynamicTest> wildcardAndMalformedVaryCannotAuthorizeReuse() {
   return Stream.of("*","Accept,*", "Accept;foo", "\"Accept\"", "Accept=foo", "Accept Accept-Encoding", "{bad}", "é")
    .map(value->DynamicTest.dynamicTest(value,()->assertEquals(Duration.ZERO,ttl(Map.of("Cache-Control",List.of("s-maxage=120,max-age=120"),"Vary",List.of(value)),Duration.ZERO))));
  }

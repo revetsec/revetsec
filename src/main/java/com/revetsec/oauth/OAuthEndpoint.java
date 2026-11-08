@@ -31,5 +31,6 @@ public enum OAuthEndpoint {
 	/** Token endpoint. */ TOKEN,
 	/** Token revocation endpoint. */ REVOCATION,
 	/** OpenID Connect UserInfo endpoint. */ USERINFO,
-	/** Token introspection endpoint. */ INTROSPECTION
+	/** Token introspection endpoint. */ INTROSPECTION,
+	/** Browser RP-Initiated Logout endpoint; preparing its request is separate from server-side HTTP. */ END_SESSION
 }

@@ -15,6 +15,8 @@
  */
 package com.revetsec.scim;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.json.*;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.DynamicTest;
@@ -37,7 +39,7 @@ final class ScimLocationEncodingTests {
             "../admin?owner=1#fragment", "./child", "x/../y", "x\\..\\y", "%2e", "%2E%2e", "%2e%2fadmin", "%252e%252e", "a%2Fb",
             "a+b", "a b", "ü.😀", "e\u0301.é", "Az09-._~", "x:y;z@q", "a?b#c");
 
-    @TestFactory Stream<DynamicTest> opaqueIdsUseCanonicalUnreservedEncodingInOneRawSegment() {
+    @TestFactory @NonNull Stream<@NonNull DynamicTest> opaqueIdsUseCanonicalUnreservedEncodingInOneRawSegment() {
         return Stream.of(USER, GROUP).flatMap(type -> Stream.of(BASE, "https://[::1]:9443/v1.0/").flatMap(base -> IDS.stream().map(id ->
                 DynamicTest.dynamicTest(type.getName() + " " + base + " " + id, () -> {
             var provider = provider(type, base); URI location = assertDoesNotThrow(() -> provider.resourceLocationFor(type, id));
@@ -63,7 +65,7 @@ final class ScimLocationEncodingTests {
         }
     }
 
-    @TestFactory Stream<DynamicTest> invalidAndTraversalOnlyIdentifiersStillReject() {
+    @TestFactory @NonNull Stream<@NonNull DynamicTest> invalidAndTraversalOnlyIdentifiersStillReject() {
         return Stream.of(USER, GROUP).flatMap(type -> Stream.of("", ".", "..", "BULKID", "prefixBulkIdSuffix", "a\u0000b", "a\r\nb", "a\u007fb", "a\uD800", "a\uDC00", "x".repeat(1025))
                 .map(id -> DynamicTest.dynamicTest(type.getName() + " invalid ID length=" + id.length(), () -> {
             var provider = provider(type, BASE);
@@ -72,7 +74,7 @@ final class ScimLocationEncodingTests {
         })));
     }
 
-    @TestFactory Stream<DynamicTest> createHeadersAndBodyUseTheSameAuthoritativeCanonicalLocation() {
+    @TestFactory @NonNull Stream<@NonNull DynamicTest> createHeadersAndBodyUseTheSameAuthoritativeCanonicalLocation() {
         return Stream.of(USER, GROUP).flatMap(type -> Stream.of("a.b", "../x", "%2e%2e", "a/b.c", "é.😀").map(id -> DynamicTest.dynamicTest(type.getName() + " create " + id, () -> {
             var provider = provider(type, BASE); var current = resource(type, id, null); var before = current.getDocument();
             var response = prepared(provider, current);
@@ -84,7 +86,7 @@ final class ScimLocationEncodingTests {
         })));
     }
 
-    @TestFactory Stream<DynamicTest> canonicalStoredMetaLocationAgreesForDottedIds() {
+    @TestFactory @NonNull Stream<@NonNull DynamicTest> canonicalStoredMetaLocationAgreesForDottedIds() {
         return Stream.of(USER, GROUP).map(type -> DynamicTest.dynamicTest(type.getName() + " canonical metadata", () -> {
             String expected = BASE + type.getEndpoint().substring(1) + "/a.b";
             var provider = provider(type, BASE); var current = resource(type, "a.b", expected);
@@ -93,7 +95,7 @@ final class ScimLocationEncodingTests {
         }));
     }
 
-    @TestFactory Stream<DynamicTest> previousEscapedDotMetadataRequiresExplicitRegeneration() {
+    @TestFactory @NonNull Stream<@NonNull DynamicTest> previousEscapedDotMetadataRequiresExplicitRegeneration() {
         return Stream.of(USER, GROUP).map(type -> DynamicTest.dynamicTest(type.getName() + " legacy metadata", () -> {
             String previous = BASE + type.getEndpoint().substring(1) + "/a%2Eb";
             var provider = provider(type, BASE); var current = resource(type, "a.b", previous); var before = current.getDocument();
@@ -136,14 +138,14 @@ final class ScimLocationEncodingTests {
         assertThrows(NullPointerException.class, () -> provider(USER, BASE).resourceLocationFor(USER, null));
     }
 
-    private static String encoded(String id) { return URLEncoder.encode(id, StandardCharsets.UTF_8).replace("+", "%20").replace("*", "%2A").replace("%7E", "~"); }
-    private static ScimServiceProvider provider(ScimResourceType type, String base) { return ScimServiceProvider.builder().baseUri(URI.create(base)).resourceTypes(List.of(type)).build(); }
-    private static ScimResource resource(ScimResourceType type, String id, @Nullable String location) {
+    private static @NonNull String encoded(@NonNull String id) { return URLEncoder.encode(id, StandardCharsets.UTF_8).replace("+", "%20").replace("*", "%2A").replace("%7E", "~"); }
+    private static @NonNull ScimServiceProvider provider(@NonNull ScimResourceType type, @NonNull String base) { return ScimServiceProvider.builder().baseUri(URI.create(base)).resourceTypes(List.of(type)).build(); }
+    private static @NonNull ScimResource resource(@NonNull ScimResourceType type, @NonNull String id, @Nullable String location) {
         var document = JsonObject.builder().put("schemas", JsonArray.fromElements(List.of(JsonString.fromValue(type.getSchema().getId())))).put("id", id);
         document.put(type.hasStandardGroupSchema() ? "displayName" : "userName", "subject");
         var meta = JsonObject.builder().put("version", "W/\"one\""); if (location != null) meta.put("location", location);
         return ScimResource.withResourceType(type).document(document.put("meta", meta.build()).build()).build();
     }
-    private static ScimAttributeSelection selection(ScimServiceProvider provider, ScimResourceType type) { return assertInstanceOf(ScimAttributeSelectionResult.Succeeded.class, provider.parseAttributeSelectionResult(type, "")).getAttributeSelection(); }
-    private static ScimResponse prepared(ScimServiceProvider provider, ScimResource resource) { return assertInstanceOf(ScimResponseResult.Prepared.class, provider.createdResponseResult(resource, Set.of(), selection(provider, resource.getResourceType()))).getResponse(); }
+    private static @NonNull ScimAttributeSelection selection(@NonNull ScimServiceProvider provider, @NonNull ScimResourceType type) { return assertInstanceOf(ScimAttributeSelectionResult.Succeeded.class, provider.parseAttributeSelectionResult(type, "")).getAttributeSelection(); }
+    private static @NonNull ScimResponse prepared(@NonNull ScimServiceProvider provider, @NonNull ScimResource resource) { return assertInstanceOf(ScimResponseResult.Prepared.class, provider.createdResponseResult(resource, Set.of(), selection(provider, resource.getResourceType()))).getResponse(); }
 }

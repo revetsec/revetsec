@@ -107,47 +107,59 @@ class NativePgBackend:
             result += ' AND retain_seconds=' + str(row['retention']['epochSecond']) + ' AND retain_nanos=' + str(row['retention']['nano'])
         return result
 
-    def _external_current(self,context,*,restoring=False):
+    def _external_current(self,context,*,restoring=False,fresh_generation=None):
         if self.journal is None:return False
-        try:state=self.journal.read()
+        try:state=self.journal._backend_state(context)
         except Exception:return False
-        if state['invalidated'] and not restoring:return False
+        if restoring:
+            if not state['invalidated'] or state['timedAdmission']!='CLOSED' or state['restoreEvidence'] is None or state['restoreGeneration']!=fresh_generation:return False
+            if fresh_generation in [state['sourceRecoveryGeneration'],state['targetAdmission']['recoveryGeneration']]:return False
+        elif state['invalidated']:return False
         return all(state[k]==context[k] for k in ['migrationId','writerFence','sourceRecoveryGeneration','targetAdmission'])
 
-    def _guard(self, context, mode='CLOSED', restoring=False):
+    def _writer_predicate(self):
+        # Check live sessions, role inheritance and effective table/column grants
+        # in the same transaction predicate as the durable native control fence.
+        predicates=[]
+        for role in self.retired_roles:
+            if not role.startswith('scp10_old_'):return 'FALSE'
+            terms=['rolname='+quote(role),'NOT rolcanlogin','NOT rolsuper','NOT rolbypassrls',
+                'NOT EXISTS(SELECT 1 FROM pg_auth_members WHERE member=r.oid OR roleid=r.oid)',
+                'NOT EXISTS(SELECT 1 FROM pg_stat_activity WHERE usename=r.rolname)']
+            for table in TABLES.values():
+                terms += ['NOT has_table_privilege(r.oid,'+quote(table)+",'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')",
+                    'NOT has_any_column_privilege(r.oid,'+quote(table)+",'SELECT,INSERT,UPDATE,REFERENCES')"]
+            predicates.append('EXISTS(SELECT 1 FROM pg_roles r WHERE '+' AND '.join(terms)+')')
+        return ' AND '.join(predicates) or 'TRUE'
+
+    def _writers_retired(self):
+        return not self.retired_roles or self.sql('SELECT '+self._writer_predicate()+';')=='t'
+
+    def _guard(self, context, mode='CLOSED', restoring=False, fresh_generation=None):
         self._bound(context)
-        if not self._external_current(context,restoring=restoring):raise ValueError('External migration authority unavailable')
+        if not self._external_current(context,restoring=restoring,fresh_generation=fresh_generation):raise ValueError('External migration authority unavailable')
         values = [context['migrationId'], context['writerFence'], context['sourceRecoveryGeneration']]
         clause = 'migration_id=' + quote(values[0]) + ' AND writer_fence=' + quote(values[1]) + ' AND source_recovery=' + quote(values[2]) + ' AND target_authority='+quote(context['targetAdmission']['authorityId'])+' AND target_recovery='+quote(context['targetAdmission']['recoveryGeneration'])+' AND mode='+quote(mode)
-        return "DO $scp10$ BEGIN IF NOT EXISTS(SELECT 1 FROM scp10_control WHERE " + clause + " FOR UPDATE) THEN RAISE EXCEPTION 'SCP10_CLOSED'; END IF; END $scp10$"
+        return "DO $scp10$ BEGIN IF NOT EXISTS(SELECT 1 FROM scp10_control WHERE " + clause + " FOR UPDATE) OR NOT ("+self._writer_predicate()+") THEN RAISE EXCEPTION 'SCP10_CLOSED'; END IF; END $scp10$"
 
     def assert_closed(self, context):
         self._bound(context)
         # close() precedes the first manifest provision; only that exact new-owner
         # operation can use a missing journal, never a restored or damaged one.
         if self.journal is None:return False
-        try:state=self.journal.read()
+        try:state=self.journal._backend_state(context)
         except Exception:
             if not self.confirmed_new_intent or (self.journal.owner.path/'migration.json').exists():return False
             state=None
         if state is not None and not self._external_current(context):return False
-        if self.sql("SELECT count(*) FROM scp10_control WHERE migration_id=" + quote(context['migrationId']) + ' AND writer_fence=' + quote(context['writerFence']) + ' AND source_recovery=' + quote(context['sourceRecoveryGeneration']) + " AND mode='CLOSED';") != '1':
+        if self.sql("SELECT count(*) FROM scp10_control WHERE migration_id=" + quote(context['migrationId']) + ' AND writer_fence=' + quote(context['writerFence']) + ' AND source_recovery=' + quote(context['sourceRecoveryGeneration']) + ' AND target_authority='+quote(context['targetAdmission']['authorityId'])+' AND target_recovery='+quote(context['targetAdmission']['recoveryGeneration'])+" AND mode='CLOSED';") != '1':
             return False
-        for role in self.retired_roles:
-            if not role.startswith('scp10_old_'):
-                return False
-            safe = self.sql("SELECT NOT rolcanlogin AND NOT rolsuper AND NOT rolbypassrls AND NOT EXISTS(SELECT 1 FROM pg_auth_members WHERE member=r.oid OR roleid=r.oid) AND NOT EXISTS(SELECT 1 FROM pg_stat_activity WHERE usename=r.rolname) FROM pg_roles r WHERE rolname=" + quote(role) + ';')
-            if safe != 't':
-                return False
-            for table in TABLES.values():
-                if self.sql('SELECT NOT has_table_privilege(' + quote(role) + ',' + quote(table) + ",'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER');") != 't':
-                    return False
-        return True
+        return self._writers_retired()
 
     def _all(self):
         # Selected administrative profile: reject count/size before materializing rows.
-        from migration import MigrationClosed
-        if not self.required_roots:raise MigrationClosed('BLOCKED_DEPENDENCY')
+        from migration import MigrationClosed, validate_row
+        if not self.required_roots or {f for f,k in self.required_roots}!=set(self.scopes) or len(set(self.required_roots))!=len(self.required_roots):raise MigrationClosed('BLOCKED_DEPENDENCY')
         for family in self.scopes:
             namespace_table=TABLES[family].replace('_entry','_namespace')
             if self.sql('SELECT count(*) FROM '+namespace_table+' WHERE namespace='+quote(self.namespaces[family])+';')!='1':raise MigrationClosed('CORRUPT')
@@ -155,15 +167,18 @@ class NativePgBackend:
             if self.sql('SELECT count(*) FROM '+TABLES[family]+' WHERE namespace='+quote(self.namespaces[family])+' AND storage_key='+quote(key)+';')!='1':raise MigrationClosed('CORRUPT')
         if self.sql("SELECT count(*)>0 AND bool_and(EXISTS(SELECT 1 FROM totp_store_entry e WHERE e.namespace=x.namespace AND e.recovery_epoch=x.recovery_epoch AND e.kind='NAMESPACE_STATE')) FROM totp_store_epoch x WHERE namespace="+quote(self.namespaces['TOTP'])+';')!='t':raise MigrationClosed('CORRUPT')
         total_count = total_bytes = 0
+        counts = {}
         for family in self.scopes:
             count, size = self.sql("SELECT count(*)::text||'|'||coalesce(sum(octet_length(sealed_form)),0)::text FROM "+TABLES[family]+' WHERE namespace='+quote(self.namespaces[family])+';').split('|')
             total_count += int(count);total_bytes += int(size)
+            counts[family] = int(count)
         if total_count > MAX_NATIVE_ROWS or total_bytes > MAX_NATIVE_SQL_BYTES:
             from migration import MigrationClosed
             raise MigrationClosed('BLOCKED_DEPENDENCY')
         result = []
         for family, scope in sorted(self.scopes.items()):
             table = TABLES[family]
+            family_start = len(result)
             if family == 'WEBAUTHN':
                 version = "translate(rtrim(encode(int8send(version),'base64'),'='),'+/','-_')"
                 form = 'sealed_form'
@@ -177,10 +192,13 @@ class NativePgBackend:
             extra = ", 'physicalKind', kind" + (", 'physicalEpoch', recovery_epoch, 'physicalSize', sealed_size" if family=='TOTP' else '')
             last = None
             while True:
-                condition = 'namespace=' + quote(self.namespaces[family]) + ('' if last is None else ' AND storage_key>' + quote(last))
-                query = f"SELECT coalesce(json_agg(json_build_object('key',storage_key,'version',{version},'ciphertext',replace({form},E'\\n',''),'retention',{retention}{extra}) ORDER BY storage_key),'[]'::json) FROM (SELECT * FROM {table} WHERE {condition} ORDER BY storage_key LIMIT 32) bounded;"
+                condition = 'namespace=' + quote(self.namespaces[family]) + ('' if last is None else ' AND storage_key COLLATE "C">' + quote(last))
+                query = f"SELECT coalesce(json_agg(json_build_object('key',storage_key,'version',{version},'ciphertext',replace({form},E'\\n',''),'retention',{retention}{extra}) ORDER BY storage_key COLLATE \"C\"),'[]'::json) FROM (SELECT * FROM {table} WHERE {condition} ORDER BY storage_key COLLATE \"C\" LIMIT 32) bounded;"
                 raw = self.sql(query)
                 page = json.loads(raw)
+                if type(page) is not list or len(page)>32:raise MigrationClosed('CORRUPT')
+                keys=[row['key'] for row in page]
+                if keys!=sorted(set(keys)) or last is not None and any(key<=last for key in keys):raise MigrationClosed('CORRUPT')
                 for row in page:
                     if row.pop('physicalKind')!=kind(row):raise ValueError('Misaddressed native kind')
                     if family=='TOTP':
@@ -188,9 +206,13 @@ class NativePgBackend:
                         if physical_size!=len(decode(row['ciphertext'])):raise ValueError('Invalid legacy TOTP size projection')
                         if len(parts)!=5 or decode(parts[1]).decode('ascii')!=self.namespaces[family] or decode(parts[2]).decode('ascii')!=physical_epoch:raise ValueError('Misaddressed native TOTP epoch')
                     row.update(family=family, scope=scope, handle=encode(hashlib.sha256((family + '\0' + scope + '\0' + row['key']).encode('ascii')).digest()))
-                    result.append(row)
+                    result.append(validate_row(row))
+                    if len(result)>MAX_NATIVE_ROWS:raise MigrationClosed('BLOCKED_DEPENDENCY')
                 if len(page) < 32:break
                 last = page[-1]['key']
+            # The independent pre-materialization count owns completeness, even
+            # when an app-owned transport drops the final page or a tail row.
+            if len(result)-family_start!=counts[family]:raise MigrationClosed('CONFLICT')
         return sorted(result, key=lambda row: (row['family'], row['scope'], row['key'], row['handle']))
 
     def _metadata(self):
@@ -205,10 +227,10 @@ class NativePgBackend:
         data['TOTP_EPOCHS']=json.loads(self.sql("SELECT coalesce(jsonb_agg(to_jsonb(e) ORDER BY recovery_epoch),'[]'::jsonb) FROM totp_store_epoch e WHERE namespace="+quote(self.namespaces['TOTP'])+';'))
         return data
 
-    def _metadata_bound(self):
+    def _metadata_bound(self,context=None):
         from migration import commitment as machine_commitment
         if self.journal is None:return None
-        state=self.journal.read()
+        state=self.journal.read() if context is None else self.journal._backend_state(context)
         if state is None or state['inventoryBlob'] is None:return None
         original=self.journal.get_blob(state['inventoryBlob']);metadata=self._metadata()
         snapshot=commitment({'rows':original,'metadata':metadata})
@@ -229,7 +251,9 @@ class NativePgBackend:
     def install_quotas(self, context, allocation, expected_commitment=None):
         """Closed-only initialization/reassignment, with actual counters independently derived."""
         self._bound(context)
-        if self._metadata_bound() is None:raise ValueError('Native inventory metadata changed')
+        from migration import _ReconciliationContext
+        if isinstance(context,_ReconciliationContext):raise ValueError('Read-only reconciliation')
+        if self._metadata_bound(context) is None:raise ValueError('Native inventory metadata changed')
         quota_plan = copy.deepcopy(allocation)
         if isinstance(allocation, list):
             from migration import commitment as machine_commitment
@@ -263,6 +287,8 @@ class NativePgBackend:
         return status
 
     def apply(self, context, batch):
+        from migration import _ReconciliationContext
+        if isinstance(context,_ReconciliationContext):return 'NO_EFFECT'
         self._bound(context)
         replacements, deletions = batch['replacements'], batch.get('deletions', [])
         if not self.assert_closed(context) or len(batch['predicates']) > 16 or not 1 <= len(replacements) + len(deletions) <= 8:
@@ -299,6 +325,38 @@ class NativePgBackend:
                 statements.append('UPDATE ' + TABLES[family].replace('_entry','_escrow') + ' SET used_entries=used_entries+(' + str(count) + '),used_bytes=used_bytes+(' + str(size) + ') WHERE namespace=' + quote(self.namespaces[family]) + ' AND bucket=' + str(bucket))
         return self.transaction(statements, context['deadline_ns'])
 
+    def _observation_columns(self,row):
+        family=row['family'];columns={'physicalKind':'kind'}
+        if family=='TOTP':columns.update(physicalEpoch='recovery_epoch',physicalSize='sealed_size',physicalReservation='reserved_size')
+        if family=='WEBAUTHN':columns.update(physicalSize='sealed_size',physicalSeconds='expires_seconds',physicalNanos='expires_nanos')
+        return columns
+
+    def _observation_retention(self,row):
+        if row['family']=='ISSUER':return "json_build_object('epochSecond',retain_seconds,'nano',retain_nanos)"
+        if row['family']=='WEBAUTHN':return "CASE WHEN kind='CEREMONY' THEN json_build_object('epochSecond',expires_seconds,'nano',expires_nanos) ELSE json_build_object('epochSecond',31556889864403199,'nano',0) END"
+        return "json_build_object('epochSecond',31556889864403199,'nano',0)"
+
+    def _expected_observation(self,context,expected,row):
+        family=row['family'];fields={'physicalKind':kind(row)}
+        if family=='TOTP':
+            parts=row['key'].split(':')
+            if len(parts)!=5 or decode(parts[1]).decode('ascii')!=self.namespaces[family]:raise ValueError('Invalid physical namespace')
+            fields.update(physicalEpoch=decode(parts[2]).decode('ascii'),physicalSize=len(decode(row['ciphertext'])),physicalReservation=reservation(row))
+        if family=='WEBAUTHN':
+            finite=kind(row)=='CEREMONY'
+            fields.update(physicalSize=len(decode(row['ciphertext'])),physicalSeconds=row['retention']['epochSecond'] if finite else None,physicalNanos=row['retention']['nano'] if finite else None)
+        return fields
+
+    def _normalize_observation(self,context,expected,actual):
+        from migration import MigrationClosed, ROW_FIELDS, validate_row
+        if actual is None:return None
+        try:
+            raw=copy.deepcopy(actual);physical={key:raw.pop(key) for key in self._observation_columns(expected)}
+            wanted=self._expected_observation(context,expected,raw)
+            if physical!=wanted or set(raw)!=ROW_FIELDS:raise ValueError('Native projection conflict')
+            return validate_row(raw)
+        except (ValueError,KeyError,TypeError,MigrationClosed):raise MigrationClosed('THIRD_STATE') from None
+
     def read_batch(self, context, batch):
         self._bound(context)
         if not self.assert_closed(context):return {'rows':[None for _ in batch['predicates']],'settled':False}
@@ -309,20 +367,24 @@ class NativePgBackend:
             family=row['family']
             version="translate(rtrim(encode(int8send(version),'base64'),'='),'+/','-_')" if family=='WEBAUTHN' else 'version'
             form="replace(translate(rtrim(encode(convert_to(sealed_form,'UTF8'),'base64'),'='),'+/','-_'),E'\\n','')" if family=='ISSUER' else 'sealed_form'
-            if family=='ISSUER':retention="json_build_object('epochSecond',retain_seconds,'nano',retain_nanos)"
-            elif family=='WEBAUTHN' and kind(row)=='CEREMONY':retention="json_build_object('epochSecond',expires_seconds,'nano',expires_nanos)"
-            else:retention="json_build_object('epochSecond',31556889864403199,'nano',0)"
-            projections.append("(SELECT json_build_object('family',"+quote(family)+",'scope',"+quote(row['scope'])+",'handle',"+quote(row['handle'])+",'key',storage_key,'version',"+version+",'ciphertext',"+form+",'retention',"+retention+') FROM '+TABLES[family]+' WHERE '+self._where(row)+' AND kind='+quote(kind(row))+')')
+            retention=self._observation_retention(row)
+            extra=''.join(','+quote(name)+','+value for name,value in self._observation_columns(row).items())
+            # Observe presence independently of kind; a conflicting physical row
+            # must never become an apparent successful deletion.
+            projections.append("(SELECT json_build_object('family',"+quote(family)+",'scope',"+quote(row['scope'])+",'handle',"+quote(row['handle'])+",'key',storage_key,'version',"+version+",'ciphertext',"+form+",'retention',"+retention+extra+') FROM '+TABLES[family]+' WHERE '+self._where(row)+')')
         # The same SQL control row serializes every writing batch. Acquire it only
         # after the old JVM/proxy has ended; read the entire predicate set under
         # that protection, never stale rows followed by a later settlement check.
         raw=self.sql("BEGIN;SET LOCAL lock_timeout='5000ms';"+self._guard(context)+';SELECT json_build_array('+','.join(projections)+');COMMIT;')
         actual=json.loads(raw)
         settled=self.sql("SELECT count(*) FROM pg_stat_activity WHERE application_name='scp10-batch' AND xact_start IS NOT NULL;")=='0'
-        return {'rows':actual,'settled':settled}
+        if not settled:return {'rows':[None for _ in batch['predicates']],'settled':False}
+        from migration import MigrationClosed
+        if type(actual) is not list or len(actual)!=len(batch['predicates']):raise MigrationClosed('UNRESOLVED')
+        return {'rows':[self._normalize_observation(context,old,row) for old,row in zip(batch['predicates'],actual)],'settled':True}
 
     def verify(self, context, expected_target_rows, quota_commitment):
-        if self._metadata_bound() is None:return False
+        if self._metadata_bound(context) is None:return False
         if not self.assert_closed(context) or self._all() != sorted(expected_target_rows,key=lambda r:(r['family'],r['scope'],r['key'],r['handle'])):
             return False
         usage = {}
@@ -350,7 +412,7 @@ class NativePgBackend:
 
     def _activation_statements(self,context,rows,quota_commitment,mode):
         # An explicitly bounded administrative gate, not a normal eight-mutation batch.
-        metadata=self._metadata_bound()
+        metadata=self._metadata_bound(context)
         if metadata is None:raise ValueError('Native inventory metadata changed')
         tables=sorted([*TABLES.values(),*[t.replace('_entry','_escrow') for t in TABLES.values()],*[t.replace('_entry','_namespace') for t in TABLES.values()],'totp_store_epoch'])
         statements=[self._guard(context,mode),'LOCK TABLE '+','.join(tables)+' IN SHARE ROW EXCLUSIVE MODE']
@@ -377,6 +439,8 @@ class NativePgBackend:
         return statements
 
     def activate(self, context, activation_commitment):
+        from migration import _ReconciliationContext
+        if isinstance(context,_ReconciliationContext):return 'NO_EFFECT'
         if self.last_verified_rows is None or not self.assert_closed(context):return 'NO_EFFECT'
         try:statements=self._activation_statements(context,self.last_verified_rows,self.last_quota_commitment,'CLOSED')
         except ValueError:return 'NO_EFFECT'
@@ -398,10 +462,13 @@ class NativePgBackend:
         return {'status':('COMMITTED' if mode=='ACTIVE' else 'NO_EFFECT') if status=='COMMITTED' else 'UNRESOLVED','settled':status!='UNKNOWN'}
 
     def invalidate_restore(self,context,fresh_generation):
+        from migration import _ReconciliationContext
+        if isinstance(context,_ReconciliationContext):return 'NO_EFFECT'
         self._bound(context)
+        if not self._external_current(context,restoring=True,fresh_generation=fresh_generation) or not self._writers_retired():return 'NO_EFFECT'
         mode=self.sql('SELECT mode FROM scp10_control WHERE migration_id='+quote(context['migrationId'])+' AND writer_fence='+quote(context['writerFence'])+' AND source_recovery='+quote(context['sourceRecoveryGeneration'])+';')
         if mode not in ['CLOSED','ACTIVE']:return 'NO_EFFECT'
         tables=sorted([*TABLES.values(),*[t.replace('_entry','_escrow') for t in TABLES.values()]])
-        statements=[self._guard(context,mode,restoring=True),'LOCK TABLE '+','.join(tables)+' IN SHARE ROW EXCLUSIVE MODE',
+        statements=[self._guard(context,mode,restoring=True,fresh_generation=fresh_generation),'LOCK TABLE '+','.join(tables)+' IN SHARE ROW EXCLUSIVE MODE',
                     "UPDATE scp10_control SET mode='CLOSED',writer_fence="+quote(fresh_generation)+',source_recovery='+quote(fresh_generation)+' WHERE migration_id='+quote(context['migrationId'])]
         return self.transaction(statements,context['deadline_ns'])

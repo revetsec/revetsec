@@ -49,5 +49,8 @@ public enum ScimCompatibilityFeature {
     PATCH_READ_ONLY_ID_ECHO,
     /** Accept an exact registered extension schema URI as a whole-extension PATCH object target.
      * This profile is opt-in and is absent from the strict, Microsoft Entra ID and Okta presets. */
-    PATCH_EXTENSION_SCHEMA_ROOT
+    PATCH_EXTENSION_SCHEMA_ROOT,
+    /** Ignore only supplied display in standard Group member object merges; preserve server metadata.
+     * Direct read-only writes and other protected fields remain refused. Included in the Okta preset. */
+    PATCH_GROUP_MEMBER_DISPLAY_IGNORED
 }

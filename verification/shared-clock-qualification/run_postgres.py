@@ -26,6 +26,7 @@ ROOT=HERE.parents[2]
 CURRENT=ROOT/'revetsec/examples/postgresql-pending-store'
 OLD=ROOT/'planning/records/security/shared-clock-scp01-2026-10-29'
 CORE=ROOT/'planning/records/security/shared-clock-scp09-2026-10-30/candidate/core/revetsec-1.0.0-SNAPSHOT.jar'
+LEGACY_CORE_SHA256='b23109a3434703a40ce5a9795ae18b46265c9f07b73901c3b3c4c54dcbbe3b38'
 IMAGE='sha256:3a82e1f56c8f0f5616a11103ac3d47e632c3938698946a7ad26da0df1334744a'
 LABEL='com.revetsec.scp11.native=true'
 FAMILIES=('TOTP','WEBAUTHN','ISSUER')
@@ -36,11 +37,21 @@ def nonce(value):return base64.urlsafe_b64encode(hashlib.sha256(value.encode()).
 def encode(value):return base64.urlsafe_b64encode(value).decode().rstrip('=')
 def quote(value):return "'"+str(value).replace("'","''")+"'"
 def run(command,*,data=None,env=None,timeout=60):return subprocess.run(command,input=data,capture_output=True,text=True,env=env,timeout=timeout)
+def select_core(core_jar,core_sha256):
+ if (core_jar is None)!=(core_sha256 is None):raise ValueError('--core-jar and --core-sha256 must be supplied together')
+ selected=CORE if core_jar is None else core_jar
+ expected=LEGACY_CORE_SHA256 if core_sha256 is None else core_sha256
+ if not re.fullmatch('[a-f0-9]{64}',expected):raise ValueError('Expected a lowercase SHA-256 for selected core')
+ selected=selected.resolve()
+ if sha(selected)!=expected:raise ValueError('Selected core SHA-256 mismatch')
+ return selected,expected
 def main():
- parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--output',type=Path,required=True);parser.add_argument('--java-home',type=Path,required=True);args=parser.parse_args()
+ parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--output',type=Path,required=True);parser.add_argument('--java-home',type=Path,required=True);parser.add_argument('--core-jar',type=Path);parser.add_argument('--core-sha256');args=parser.parse_args()
+ try:core,expected_core_sha256=select_core(args.core_jar,args.core_sha256)
+ except (ValueError,OSError) as failure:parser.error(str(failure))
  out=args.output.resolve();out.mkdir(parents=True,exist_ok=False)
  runtime=Path(tempfile.mkdtemp(prefix='revetsec-scp11-native-',dir=Path(tempfile.gettempdir()).resolve()));runtime.chmod(0o700)
- result={'status':'RUNNING','checks':[],'workloads':[],'blocking':[],'qualified':False,'qualification':{'approvedUtcQualified':False,'witnessOwnerDeploymentQualified':False,'platformDurabilityQualified':False,'service120msPreparationQualified':False,'completeLaneCQualified':False,'actualDeploymentMigration':False},'profile':{'scope':'structural store carriers only; opaque synthetic records not opened by engines','families':list(FAMILIES),'actors':[8,16],'authorityDelayMillis':1,'authorityTime':'fixed-scripted-1800000000','normalServiceOperations':False,'realUTC':False},'actorJvmOptions':ACTOR_JVM_OPTIONS,'scriptedCarrierConstructedBeforeCallbacks':True,'image':IMAGE,'coreJarSha256':sha(CORE),'java_home':str(args.java_home),'cleanup':{}}
+ result={'status':'RUNNING','checks':[],'workloads':[],'blocking':[],'qualified':False,'qualification':{'approvedUtcQualified':False,'witnessOwnerDeploymentQualified':False,'platformDurabilityQualified':False,'service120msPreparationQualified':False,'completeLaneCQualified':False,'actualDeploymentMigration':False},'profile':{'scope':'structural store carriers only; opaque synthetic records not opened by engines','families':list(FAMILIES),'actors':[8,16],'authorityDelayMillis':1,'authorityTime':'fixed-scripted-1800000000','normalServiceOperations':False,'realUTC':False},'actorJvmOptions':ACTOR_JVM_OPTIONS,'scriptedCarrierConstructedBeforeCallbacks':True,'image':IMAGE,'coreJar':str(core),'coreJarSha256':expected_core_sha256,'explicitCoreSelection':args.core_jar is not None,'java_home':str(args.java_home),'cleanup':{}}
  resource='revetsec-scp11-native-'+secrets.token_hex(6);volume=resource+'-data';network=resource+'-network';password=secrets.token_urlsafe(32);created=[];children=[]
  def save():(out/'RESULT.json').write_text(json.dumps(result,indent=2)+'\n')
  def check(label,condition):
@@ -53,7 +64,7 @@ def main():
   return p.stdout.strip()
  def sql(text):return docker('exec','-i',resource,'psql','-X','-qAt','-v','ON_ERROR_STOP=1','-U','postgres','-d','qualification',data=text)
  def java(command,env=None,timeout=60):
-  return run([str(args.java_home/'bin/java'),*ACTOR_JVM_OPTIONS,'-cp',classpath,'example.pending.NativeContentionActor',*command],env=env,timeout=timeout)
+  return run([str(args.java_home/'bin/java'),*ACTOR_JVM_OPTIONS,'-cp',classpath,'example.pending.NativeContentionActor',*command],env=dict(os.environ if env is None else env,REVETSEC_QUALIFICATION_CORE_SHA256=expected_core_sha256),timeout=timeout)
  def readline(child,timeout=20):
   ready,_,_=select.select([child.stdout],[],[],timeout)
   if not ready:raise RuntimeError('Owned actor protocol deadline')
@@ -61,7 +72,7 @@ def main():
  def environment(family,namespace,actor,root,key='',bucket=0):
   return dict(os.environ,DB_URL=f'jdbc:postgresql://127.0.0.1:{port}/qualification',DB_USER='postgres',DB_PASSWORD=password,FAMILY=family,NAMESPACE=namespace,PHYSICAL=nonce(family+'/'+namespace),ACTOR_ID=actor,ROOT_KEY=root,TARGET_KEY=key,BUCKET=str(bucket),AUTHORITY=nonce('authority'),RECOVERY=nonce('recovery'),CLOCK=nonce('clock'))
  def spawn(env,mode=None):
-  p=subprocess.Popen([str(args.java_home/'bin/java'),*ACTOR_JVM_OPTIONS,'-cp',classpath,'example.pending.NativeContentionActor',*([mode] if mode else [])],env=env,stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,bufsize=1);children.append(p)
+  p=subprocess.Popen([str(args.java_home/'bin/java'),*ACTOR_JVM_OPTIONS,'-cp',classpath,'example.pending.NativeContentionActor',*([mode] if mode else [])],env=dict(env,REVETSEC_QUALIFICATION_CORE_SHA256=expected_core_sha256),stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,bufsize=1);children.append(p)
   return p
  def finish(child):
   stdout,stderr=child.communicate(timeout=30)
@@ -120,8 +131,9 @@ def main():
   inputs={str(p.relative_to(ROOT)):sha(p) for p in [Path(__file__),*sources,auditor,*[CURRENT/(family.lower()+'-schema.sql') for family in FAMILIES]]};result['sourceInputsSha256']=inputs
   for name in inputs:
    target=out/'SOURCE'/name;target.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(ROOT/name,target)
-  result['artifactInputsSha256']={str(p.relative_to(ROOT)):sha(p) for p in [CORE,*deps]};classes=runtime/'classes';classes.mkdir();classpath=os.pathsep.join(map(str,[classes,CORE,*deps]));result['javaVersion']=run([str(args.java_home/'bin/java'),'-version']).stderr.strip()
+  result['artifactInputsSha256']={str(p.relative_to(ROOT)) if p.is_relative_to(ROOT) else str(p):sha(p) for p in [core,*deps]};classes=runtime/'classes';classes.mkdir();classpath=os.pathsep.join(map(str,[classes,core,*deps]));result['javaVersion']=run([str(args.java_home/'bin/java'),'-version']).stderr.strip()
   p=run([str(args.java_home/'bin/javac'),'--release','17','-proc:none','-Xlint:all','-Werror','-cp',classpath,'-d',str(classes),*map(str,sources),str(auditor)]);(out/'compile.log').write_text(p.stdout+p.stderr);check('strict-current-java17-compile',p.returncode==0)
+  result['compiledClassfiles']={str(p.relative_to(classes)):sha(p) for p in sorted(classes.rglob('*.class'))};shutil.copytree(classes,out/'classes')
   source_list=runtime/'audit.sources';source_list.write_text('\n'.join(map(str,sources))+'\n');cp_file=runtime/'audit.classpath';cp_file.write_text(classpath)
   p=run([str(args.java_home/'bin/java'),'-cp',classpath,'NullabilityAudit',str(source_list),str(cp_file),str(out/'NULLABILITY.json')]);audit_result=json.loads((out/'NULLABILITY.json').read_text());result['nullability']=audit_result;check('all-compiled-source-nullability',p.returncode==0 and not audit_result['missing'] and not audit_result['attribution_errors'])
   envfile=runtime/'postgres.env';envfile.write_text('POSTGRES_PASSWORD='+password+'\nPOSTGRES_DB=qualification\n');envfile.chmod(0o600)

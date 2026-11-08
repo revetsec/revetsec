@@ -234,7 +234,7 @@ final class RemoteJwksSourceConcurrencyTests {
 		for (Call<?> waiter : List.of(selecting, warming)) {
 			JwksUnavailableException exception = waiter.awaitFailure(JwksUnavailableException.class);
 			Assertions.assertEquals(ErrorCategory.TRANSPORT, exception.getCategory());
-			Assertions.assertTrue(exception.isTransient());
+			Assertions.assertTrue(exception.isTemporaryCondition());
 		}
 		Duration waited = Duration.ofNanos(System.nanoTime() - started);
 		Assertions.assertTrue(waited.compareTo(Duration.ofMillis(999)) > 0, waited::toString);
@@ -286,7 +286,7 @@ final class RemoteJwksSourceConcurrencyTests {
 		waiter.interrupt();
 		JwksUnavailableException exception = waiter.awaitFailure(JwksUnavailableException.class);
 		Assertions.assertEquals(ErrorCategory.TRANSPORT, exception.getCategory());
-		Assertions.assertFalse(exception.isTransient());
+		Assertions.assertFalse(exception.isTemporaryCondition());
 		Assertions.assertNull(exception.getCause());
 		Assertions.assertTrue(waiter.wasInterruptedAtEnd());
 
@@ -316,7 +316,7 @@ final class RemoteJwksSourceConcurrencyTests {
 		leader.interrupt();
 		JwksUnavailableException exception = leader.awaitFailure(JwksUnavailableException.class);
 		Assertions.assertEquals(ErrorCategory.TRANSPORT, exception.getCategory());
-		Assertions.assertFalse(exception.isTransient());
+		Assertions.assertFalse(exception.isTemporaryCondition());
 		Assertions.assertTrue(leader.wasInterruptedAtEnd());
 		Assertions.assertSame(exception, observer.getCalls("didFailToFetchJwks").get(0).getArgument(1));
 
@@ -418,7 +418,7 @@ final class RemoteJwksSourceConcurrencyTests {
 		for (Call<KeySelection> call : calls) {
 			JwksUnavailableException exception = call.awaitFailure(JwksUnavailableException.class);
 			Assertions.assertEquals(ErrorCategory.TRANSPORT, exception.getCategory());
-			if (exception.isTransient())
+			if (exception.isTemporaryCondition())
 				++heldBack;
 			else
 				++interrupted;
@@ -542,7 +542,7 @@ final class RemoteJwksSourceConcurrencyTests {
 				probed = source.select(rs256("a"), Deadline.fromNow(Duration.ofMillis(250)));
 			} catch (JwksUnavailableException e) {
 				Assertions.assertEquals(ErrorCategory.TRANSPORT, e.getCategory());
-				Assertions.assertTrue(e.isTransient());
+				Assertions.assertTrue(e.isTemporaryCondition());
 			}
 		}
 		Duration waited = Duration.ofNanos(System.nanoTime() - started);
@@ -664,7 +664,7 @@ final class RemoteJwksSourceConcurrencyTests {
 		Assertions.assertEquals(1, client.failHeld());
 		JwksUnavailableException leaderException = leader.awaitFailure(JwksUnavailableException.class);
 		Assertions.assertEquals(ErrorCategory.TRANSPORT, leaderException.getCategory());
-		Assertions.assertTrue(leaderException.isTransient());
+		Assertions.assertTrue(leaderException.isTemporaryCondition());
 		Assertions.assertInstanceOf(IOException.class, leaderException.getCause());
 		Assertions.assertSame(leaderException, observer.getCalls("didFailToFetchJwks").get(0).getArgument(1));
 
@@ -673,7 +673,7 @@ final class RemoteJwksSourceConcurrencyTests {
 		for (Call<KeySelection> waiter : waiters) {
 			JwksUnavailableException exception = waiter.awaitFailure(JwksUnavailableException.class);
 			Assertions.assertEquals(ErrorCategory.TRANSPORT, exception.getCategory());
-			Assertions.assertTrue(exception.isTransient());
+			Assertions.assertTrue(exception.isTemporaryCondition());
 			Assertions.assertNull(exception.getCause());
 			distinct.add(exception);
 		}
@@ -744,7 +744,7 @@ final class RemoteJwksSourceConcurrencyTests {
 			} catch (JwksUnavailableException e) {
 				if (e.getCategory() != ErrorCategory.TRANSPORT)
 					return new Probe(null, e);
-				Assertions.assertTrue(e.isTransient(), "a waiter whose deadline ended");
+				Assertions.assertTrue(e.isTemporaryCondition(), "a waiter whose deadline ended");
 			}
 		}
 		throw new AssertionError("The stuck flight never became overdue");

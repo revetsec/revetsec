@@ -165,6 +165,23 @@ final class OAuthStoreMigrationCodecTests {
 		assertThrows(IllegalArgumentException.class, () -> next.open(converted, clock(converted.getRetainUntil())));
 	}
 
+	@org.junit.jupiter.api.TestFactory
+	@NonNull List<org.junit.jupiter.api.@NonNull DynamicTest> everyExpiredAuthorizationStatusStaysExpiredAtAuthenticatedRetention(){
+		List<org.junit.jupiter.api.DynamicTest> cases=new ArrayList<>();
+		for(OAuthStoreKey.Kind kind:List.of(OAuthStoreKey.Kind.INTERACTION,OAuthStoreKey.Kind.CODE,OAuthStoreKey.Kind.GRANT,OAuthStoreKey.Kind.ACCESS_TOKEN,OAuthStoreKey.Kind.REFRESH_TOKEN))for(String status:statuses(kind))for(long after:new long[]{0,1,1000000000L}){
+			cases.add(org.junit.jupiter.api.DynamicTest.dynamicTest("MIG12/ISSUER/"+kind+"/"+status+"/"+after,()->{
+				StateSealer selected=sealer("k",16384);var old=old(selected,16384);var next=next(selected,16384,LIMITS);var migration=migration(next,16384);
+				var root=migration.openRoot(old.seal(old.issuerKey(),OAuthStoreFormat.PERMANENT,legacyRoot(MINIMUM).toPayload()));JsonObject payload=authorization(kind,status,NOW.minusSeconds(2000));
+				var record=OAuthAuthorizationRecord.decode(kind,ID,payload,LIMITS,1024);var source=old.seal(old.key(kind,ID),record.retention(),payload.toJson());String original=source.toSealedForm();Clock expired=clock(source.getRetainUntil().plusNanos(after));
+				assertThrows(IllegalArgumentException.class,()->old.open(source,expired));var target=migration.convert(source,root);
+				assertEquals(source.getRetainUntil(),target.getRetainUntil());assertEquals(source.getKey(),target.getKey());assertNotEquals(source.getVersion(),target.getVersion());
+				assertThrows(IllegalArgumentException.class,()->next.open(target,expired));assertEquals(payload,next.open(target,clock(target.getRetainUntil().minusNanos(1))).payload());
+				try(var opened=SealedStateAccess.get().openForMigration(selected,SealedStateType.AS_RECORD,target.toSealedForm(),OAuthStoreRecordCodecV2.context(target.getKey()),ClosedMigrationIntent.fromExternalIntent(ID,StoreAdmission.fromIdentifiers(AUTHORITY,RECOVERY),Set.of(ClosedMigrationIntent.Format.ISSUER_SCHEMA2)))){assertEquals(source.getRetainUntil(),opened.getNotAfter());}
+				assertEquals(original,source.toSealedForm());
+			}));
+		}return cases;
+	}
+
 	@Test void ownerBoundMigrationRootCannotBeSubstitutedAcrossClosedTransformers() {
 		StateSealer sealer = sealer("k", 16384);
 		OAuthStoreRecordCodec old = old(sealer, 16384);

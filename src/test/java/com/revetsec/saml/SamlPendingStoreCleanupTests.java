@@ -15,6 +15,8 @@
  */
 package com.revetsec.saml;
 
+import org.jspecify.annotations.NonNull;
+
 import org.junit.jupiter.api.Test;
 import org.jspecify.annotations.Nullable;
 
@@ -298,27 +300,27 @@ final class SamlPendingStoreCleanupTests {
         assertCoherent(store, map);
     }
 
-    private static InMemoryPendingSamlAuthenticationStore seeded(MutableClock clock, int count, int limit, Instant expiry) {
+    private static @NonNull InMemoryPendingSamlAuthenticationStore seeded(@NonNull MutableClock clock, int count, int limit, @NonNull Instant expiry) {
         var store = InMemoryPendingSamlAuthenticationStore.fromLimit(clock, limit);
         for (int i = 0; i < count; i++) assertEquals(SamlPendingSaveResult.SAVED, save(store, "" + i, expiry));
         return store;
     }
-    private static SamlPendingSaveResult save(InMemoryPendingSamlAuthenticationStore store, String handle, Instant expiry) {
+    private static @NonNull SamlPendingSaveResult save(@NonNull InMemoryPendingSamlAuthenticationStore store, @NonNull String handle, @NonNull Instant expiry) {
         return store.save("b", handle, handle, expiry, BUDGET);
     }
-    private static void assertConsumed(InMemoryPendingSamlAuthenticationStore store, String handle) {
+    private static void assertConsumed(@NonNull InMemoryPendingSamlAuthenticationStore store, @NonNull String handle) {
         assertEquals(handle, assertInstanceOf(SamlPendingConsumeResult.Consumed.class,
                 store.consume("b", handle, BUDGET)).getSealedRecord());
     }
     @SuppressWarnings("unchecked")
-    private static CountingMap observe(InMemoryPendingSamlAuthenticationStore store) throws Exception {
+    private static @NonNull CountingMap observe(@NonNull InMemoryPendingSamlAuthenticationStore store) throws Exception {
         Field field = InMemoryPendingSamlAuthenticationStore.class.getDeclaredField("entries");
         field.setAccessible(true);
         CountingMap map = new CountingMap((Map<String, Object>) field.get(store));
         field.set(store, map);
         return map;
     }
-    private static void assertCoherent(InMemoryPendingSamlAuthenticationStore store, CountingMap map) throws Exception {
+    private static void assertCoherent(@NonNull InMemoryPendingSamlAuthenticationStore store, @NonNull CountingMap map) throws Exception {
         for (Field field : InMemoryPendingSamlAuthenticationStore.class.getDeclaredFields()) {
             field.setAccessible(true);
             if (field.get(store) instanceof Collection<?> index) {
@@ -333,26 +335,26 @@ final class SamlPendingStoreCleanupTests {
         Runnable onVisit = () -> {};
         Runnable onRemove = () -> {};
         Runnable onPut = () -> {};
-        CountingMap(Map<String, Object> source) { super(source); }
-        @Override public @Nullable Object put(String key, Object value) {
+        CountingMap(@NonNull Map<@NonNull String, @NonNull Object> source) { super(source); }
+        @Override public @Nullable Object put(@NonNull String key, @NonNull Object value) {
             Object prior = super.put(key, value);
             onPut.run();
             return prior;
         }
-        @Override public @Nullable Object remove(Object key) {
+        @Override public @Nullable Object remove(@NonNull Object key) {
             Object removed = super.remove(key);
             if (removed != null) { removals++; onRemove.run(); }
             return removed;
         }
-        @Override public Set<Map.Entry<String, Object>> entrySet() {
+        @Override public @NonNull Set<Map.@NonNull Entry<@NonNull String, @NonNull Object>> entrySet() {
             Set<Map.Entry<String, Object>> delegate = super.entrySet();
             return new AbstractSet<>() {
                 @Override public int size() { return delegate.size(); }
-                @Override public Iterator<Map.Entry<String, Object>> iterator() {
+                @Override public @NonNull Iterator<Map.@NonNull Entry<@NonNull String, @NonNull Object>> iterator() {
                     Iterator<Map.Entry<String, Object>> iterator = delegate.iterator();
                     return new Iterator<>() {
                         @Override public boolean hasNext() { return iterator.hasNext(); }
-                        @Override public Map.Entry<String, Object> next() { visits++; onVisit.run(); return iterator.next(); }
+                        @Override public Map.@NonNull Entry<@NonNull String, @NonNull Object> next() { visits++; onVisit.run(); return iterator.next(); }
                         @Override public void remove() { iterator.remove(); removals++; onRemove.run(); }
                     };
                 }
@@ -361,8 +363,8 @@ final class SamlPendingStoreCleanupTests {
     }
     private static final class MutableClock extends Clock {
         Instant value = START;
-        @Override public ZoneId getZone() { return ZoneOffset.UTC; }
-        @Override public Clock withZone(ZoneId zone) { return this; }
-        @Override public Instant instant() { return value; }
+        @Override public @NonNull ZoneId getZone() { return ZoneOffset.UTC; }
+        @Override public @NonNull Clock withZone(@NonNull ZoneId zone) { return this; }
+        @Override public @NonNull Instant instant() { return value; }
     }
 }

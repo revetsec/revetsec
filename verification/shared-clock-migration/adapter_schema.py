@@ -139,19 +139,23 @@ class SchemaState:
             fd = None; renamed = False
             try:
                 self.owner.check()
+                if self.fault:self.fault('before_temp')
                 fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600, dir_fd=self.owner.directory_fd)
                 offset = 0
                 while offset < len(raw):
                     written = os.write(fd, raw[offset:])
                     if written <= 0: raise OSError()
                     offset += written
+                if self.fault:self.fault('after_write')
                 os.fsync(fd)
+                if self.fault:self.fault('after_file_fsync')
                 if self.fault: self.fault('before_rename')
                 self.owner.check()
                 os.rename(temporary, 'adapter-schema.json', src_dir_fd=self.owner.directory_fd, dst_dir_fd=self.owner.directory_fd)
                 renamed = True
                 if self.fault: self.fault('after_rename')
                 os.fsync(self.owner.directory_fd)
+                if self.fault:self.fault('after_directory_fsync')
                 self.owner.check()
             except (OSError, MigrationClosed):
                 if renamed: self.owner._adapter_schema_uncertain = True
@@ -189,15 +193,19 @@ class AdapterPgBackend(NativePgBackend):
 
     def _raw_source(self):
         """Read bounded native rows without fabricated exact WA expiry columns."""
+        if not self.required_roots or {f for f,k in self.required_roots}!=set(self.scopes) or len(set(self.required_roots))!=len(self.required_roots):raise MigrationClosed('BLOCKED_DEPENDENCY')
         result = []
         total_count = total_bytes = 0
+        counts = {}
         for family in sorted(self.scopes):
             table = TABLES[family]
             count, size = self.sql("SELECT count(*)::text||'|'||coalesce(sum(octet_length(sealed_form)),0)::text FROM " + table + ' WHERE namespace=' + quote(self.namespaces[family]) + ';').split('|')
             total_count += int(count); total_bytes += int(size)
+            counts[family] = int(count)
         if total_count > 128 or total_bytes > 6 * 1024 * 1024: raise MigrationClosed('BLOCKED_DEPENDENCY')
         for family, scope in sorted(self.scopes.items()):
             table = TABLES[family]
+            family_start = len(result)
             version = "translate(rtrim(encode(int8send(version),'base64'),'='),'+/','-_')" if family == 'WEBAUTHN' else 'version'
             form = "replace(translate(rtrim(encode(convert_to(sealed_form,'UTF8'),'base64'),'='),'+/','-_'),E'\\n','')" if family == 'ISSUER' else 'sealed_form'
             retention = "json_build_object('epochSecond',retain_seconds,'nano',retain_nanos)" if family == 'ISSUER' else ('NULL' if family == 'WEBAUTHN' else "json_build_object('epochSecond',31556889864403199,'nano',0)")
@@ -206,9 +214,12 @@ class AdapterPgBackend(NativePgBackend):
             if family == 'WEBAUTHN': extra += ",'physicalExpiry',expires_at::text,'physicalMicros',CASE WHEN isfinite(expires_at) THEN (extract(epoch FROM expires_at)*1000000)::bigint::text ELSE NULL END"
             last = None
             while True:
-                where = 'namespace=' + quote(self.namespaces[family]) + ('' if last is None else ' AND storage_key>' + quote(last))
-                query = f"SELECT coalesce(json_agg(json_build_object('key',storage_key,'version',{version},'ciphertext',{form},'retention',{retention}{extra}) ORDER BY storage_key),'[]'::json) FROM (SELECT * FROM {table} WHERE {where} ORDER BY storage_key LIMIT 32) p;"
+                where = 'namespace=' + quote(self.namespaces[family]) + ('' if last is None else ' AND storage_key COLLATE "C">' + quote(last))
+                query = f"SELECT coalesce(json_agg(json_build_object('key',storage_key,'version',{version},'ciphertext',{form},'retention',{retention}{extra}) ORDER BY storage_key COLLATE \"C\"),'[]'::json) FROM (SELECT * FROM {table} WHERE {where} ORDER BY storage_key COLLATE \"C\" LIMIT 32) p;"
                 page = json.loads(self.sql(query))
+                if type(page) is not list or len(page)>32:raise MigrationClosed('CORRUPT')
+                keys=[raw['key'] for raw in page]
+                if keys!=sorted(set(keys)) or last is not None and any(key<=last for key in keys):raise MigrationClosed('CORRUPT')
                 for raw in page:
                     physical_kind = raw.pop('physicalKind')
                     if physical_kind != kind(raw): raise MigrationClosed('CORRUPT')
@@ -224,8 +235,10 @@ class AdapterPgBackend(NativePgBackend):
                         if len(parts) != 5 or decode(parts[1]).decode('ascii') != self.namespaces[family] or decode(parts[2]).decode('ascii') != auxiliary['physicalEpoch'] or auxiliary['physicalSize'] != len(decode(raw['ciphertext'])):
                             raise MigrationClosed('CORRUPT')
                     result.append({'row': raw, 'physical': auxiliary})
+                    if len(result)>128:raise MigrationClosed('BLOCKED_DEPENDENCY')
                 if len(page) < 32: break
                 last = page[-1]['key']
+            if len(result)-family_start!=counts[family]:raise MigrationClosed('CONFLICT')
         return sorted(result, key=lambda item: identity(item['row']))
 
     def _projections(self):
@@ -234,6 +247,34 @@ class AdapterPgBackend(NativePgBackend):
             rows = self.journal.get_blob(state['projectionBlob'])
             self._projection_cache = {identity(item['row']): item for item in rows}
         return self._projection_cache
+
+    def _observation_columns(self,row):
+        columns=super()._observation_columns(row)
+        if row['family']=='WEBAUTHN' and 'expires_at' in self._columns('webauthn_store_entry'):
+            available=set(self._columns('webauthn_store_entry'))
+            for name,column in [('physicalSize','sealed_size'),('physicalSeconds','expires_seconds'),('physicalNanos','expires_nanos')]:
+                if column not in available:columns[name]='NULL'
+            columns.update(physicalExpiry='expires_at::text',physicalMicros="CASE WHEN isfinite(expires_at) THEN (extract(epoch FROM expires_at)*1000000)::bigint::text ELSE NULL END")
+        return columns
+
+    def _observation_retention(self,row):
+        if row['family']=='WEBAUTHN' and 'expires_seconds' not in self._columns('webauthn_store_entry'):return 'NULL'
+        return super()._observation_retention(row)
+
+    def _expected_observation(self,context,expected,row):
+        family=row['family'];legacy='expires_at' in self._columns('webauthn_store_entry')
+        old=self._projections().get(identity(expected)) if legacy else None
+        exact_old=old is not None and all(row[k]==old['row'][k] for k in ['family','scope','handle','key','version','ciphertext'])
+        if family=='WEBAUTHN' and legacy:
+            if old is None:raise MigrationClosed('THIRD_STATE')
+            if exact_old:row['retention']=copy.deepcopy(old['row']['retention'])
+        fields=super()._expected_observation(context,expected,row)
+        if family=='WEBAUTHN' and legacy:
+            fields.update(physicalExpiry=old['physical']['physicalExpiry'],physicalMicros=old['physical']['physicalMicros'])
+            if exact_old:fields.update(physicalSize=None,physicalSeconds=None,physicalNanos=None)
+        if family=='TOTP' and exact_old and 'physical_namespace' not in self._columns('totp_store_namespace'):
+            fields['physicalReservation']=None
+        return fields
 
     def _exact(self, row):
         if row['family'] == 'WEBAUTHN' and 'expires_at' in self._columns('webauthn_store_entry'):
@@ -332,6 +373,7 @@ class SchemaInstaller:
         old = self._existing_state()
         if old is not None:
             if old['phase'] == 'STAGED': return old
+            if old['phase']=='SOURCE_PREPARED' and old['status'] in ['PREPARED','NO_EFFECT']:return self._execute(context,old,'STAGING')
             if old['phase'] == 'STAGING' and old['status'] == 'NO_EFFECT': return self._execute(context, old, 'STAGING')
             raise MigrationClosed('UNKNOWN')
         # Exact old shape is mandatory: fields cannot have been preseeded from
@@ -402,7 +444,10 @@ class SchemaInstaller:
         backend._projection_cache = {identity(item['row']): item for item in raw}
         return result
 
-    def _settle(self, context, state):
+    def _settlement_state(self,state,observe_only,**changes):
+        return dict(state,**changes) if observe_only else self.state.change(state,**changes)
+
+    def _settle(self, context, state, *, observe_only=False):
         plan = self.backend.journal.get_blob(state['planBlob'])
         if plan['context']!=context_without_deadline(context) or not self.backend._external_current(context):raise MigrationClosed('CLOSED')
         mode='CLOSED' if plan['kind']=='STAGE' else 'ACTIVE'
@@ -427,25 +472,35 @@ class SchemaInstaller:
                 for family in TABLES:
                     if self.backend.sql('SELECT count(*) FROM '+TABLES[family].replace('_entry','_escrow')+';')!='0':raise MigrationClosed('THIRD_STATE')
                 if state['phase']=='STAGED':return state
-                return self.state.change(state,phase='STAGED',status='COMMITTED')
+                return self._settlement_state(state,observe_only,phase='STAGED',status='COMMITTED')
             if current == plan['sourceCatalog'] and self.backend.sequence()==plan['sourceSequence'] and self._sequence_config()==plan['sequenceConfig'] and self.backend._metadata()==plan['sourceMetadata'] and self._legacy_source_rows_match(plan['rawRows']):
-                return self.state.change(state,status='NO_EFFECT')
+                return self._settlement_state(state,observe_only,status='NO_EFFECT')
             raise MigrationClosed('THIRD_STATE')
-        return self._settle_current(context,state,plan)
+        return self._settle_current(context,state,plan,observe_only=observe_only)
 
     def settle(self, context):
         state = self.state.read(reconcile=True)
-        if state['status'] not in ['PENDING','COMMITTED']: raise MigrationClosed('CLOSED')
+        prepared=state['phase'] in ['SOURCE_PREPARED','CURRENT_PREPARED'] and state['status']=='PREPARED'
+        if state['status'] not in ['PENDING','COMMITTED'] and not prepared: raise MigrationClosed('CLOSED')
+        if hasattr(self.backend,'_projection_cache') and self.backend._projection_cache is None:
+            raw=self.backend.journal.get_blob(state['projectionBlob'])
+            self.backend._projection_cache={identity(item['row']):item for item in raw}
+        observed=self._settle(context,state,observe_only=True)
+        if prepared and (observed['phase']!=state['phase'] or observed['status']!='NO_EFFECT'):raise MigrationClosed('THIRD_STATE')
         if self.state.owner._adapter_schema_uncertain:
-            # Reconciliation is explicit, never a normal read of visible metadata.
-            # Re-acknowledge the exact protected file and directory before using CAS.
+            # Exact native observation precedes acknowledgement. A failure above
+            # leaves visible metadata unavailable to normal reads and admission.
+            if self.state.read(reconcile=True)!=state:raise MigrationClosed('CONFLICT')
+            self.backend._bound(context)
             fd = os.open('adapter-schema.json', os.O_RDONLY | os.O_NOFOLLOW, dir_fd=self.state.owner.directory_fd)
             try: os.fsync(fd)
             finally: os.close(fd)
             os.fsync(self.state.owner.directory_fd)
+            self.state.owner.check()
+            if self.state.read(reconcile=True)!=state:raise MigrationClosed('CONFLICT')
             self.state.owner._adapter_schema_uncertain = False
-        result = self._settle(context,state)
-        return result
+        if observed==state:return state
+        return self.state.change(state,phase=observed['phase'],status=observed['status'])
 
     def _reference(self):
         files = [ROOT/'revetsec/examples/postgresql-pending-store'/name for name in ['totp-schema.sql','webauthn-schema.sql','issuer-schema.sql']]
@@ -697,6 +752,10 @@ class SchemaInstaller:
     def install_current(self, context, config):
         config=schema_config(config)
         old=self.state.read()
+        if old['phase']=='CURRENT_PREPARED' and old['status'] in ['PREPARED','NO_EFFECT']:
+            preflight=self.backend.journal.get_blob(old['preflightBlob'])
+            if preflight['config']!=config:raise MigrationClosed('CLOSED')
+            return self._execute(context,old,'CURRENT_APPLYING')
         if old['phase']=='CURRENT_VERIFIED':return self.verify_current(context)
         if old['phase']=='CURRENT_APPLYING' and old['status']=='NO_EFFECT':return self._execute(context,old,'CURRENT_APPLYING')
         if old['phase']!='STAGED' or old['status']!='COMMITTED':raise MigrationClosed('CLOSED')
@@ -704,15 +763,15 @@ class SchemaInstaller:
         prepared=self.state.change(old,phase='CURRENT_PREPARED',status='PREPARED',planBlob=blob)
         return self._execute(context,prepared,'CURRENT_APPLYING')
 
-    def _settle_current(self, context, state, plan):
+    def _settle_current(self, context, state, plan, *, observe_only=False):
         if context_without_deadline(context)!=plan['context'] or not self.backend._external_current(context):raise MigrationClosed('CLOSED')
         catalog=logical_catalog(self.backend.catalog())
         if catalog==plan['targetCatalog']:
             if not self._target_matches(plan):raise MigrationClosed('THIRD_STATE')
             if state['phase']=='CURRENT_VERIFIED':return state
-            return self.state.change(state,phase='CURRENT_VERIFIED',status='COMMITTED')
+            return self._settlement_state(state,observe_only,phase='CURRENT_VERIFIED',status='COMMITTED')
         if self.backend.catalog()==plan['sourceCatalog'] and self.backend.sequence()==plan['sourceSequence'] and self._sequence_config()==plan['sequenceConfig'] and self._metadata()==plan['sourceMetadata'] and self.backend._all()==plan['rows']:
-            return self.state.change(state,status='NO_EFFECT')
+            return self._settlement_state(state,observe_only,status='NO_EFFECT')
         raise MigrationClosed('THIRD_STATE')
 
     def _target_matches(self, plan):

@@ -80,7 +80,7 @@ final class OAuthIssuerConstructionBoundaryTests {
 
  private static @NonNull OAuthIssuerKeyLifecycle lifecycle() {
   TestJwk.Fixture key = TestJwk.Fixture.IDP_SIGNING_RSA_2048;
-  OAuthIssuerSigningKey active = OAuthIssuerSigningKey.fromKeyPair("key", key.getPrivateKey(), key.getPublicKey());
+  OAuthIssuerSigningKey active = OAuthIssuerSigningKey.fromRsaKeyPair("key", key.getPrivateKey(), key.getPublicKey());
   OAuthIssuerKeySnapshot snapshot = OAuthIssuerKeySnapshot.withActiveKey(active)
    .generation("generation").publishedAt(NOW.minusSeconds(600)).build();
   return new OAuthIssuerKeyLifecycle(OAuthIssuerKeyProvider.fromSnapshot(snapshot), CLOCK,
@@ -276,7 +276,7 @@ final class OAuthIssuerConstructionBoundaryTests {
 
  @Test void keySnapshotBuilderAcceptsExactMapCapacity() {
   TestJwk.Fixture key = TestJwk.Fixture.IDP_SIGNING_RSA_2048;
-  OAuthIssuerSigningKey active = OAuthIssuerSigningKey.fromKeyPair("key", key.getPrivateKey(), key.getPublicKey());
+  OAuthIssuerSigningKey active = OAuthIssuerSigningKey.fromRsaKeyPair("key", key.getPrivateKey(), key.getPublicKey());
   Map<String, java.security.PublicKey> keys = new LinkedHashMap<>();
   Map<String, Instant> retirements = new LinkedHashMap<>();
   for (int index = 0; index < 100; index++) {

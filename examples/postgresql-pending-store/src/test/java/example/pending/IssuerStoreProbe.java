@@ -15,6 +15,7 @@
  */
 package example.pending;
 
+import com.revetsec.BrowserBinding;
 import com.revetsec.SealingKey;
 import com.revetsec.StateSealer;
 import com.revetsec.oauth.BearerToken;
@@ -68,7 +69,7 @@ public final class IssuerStoreProbe {
 	private static final @NonNull String ISSUER = "https://issuer.example";
 	private static final @NonNull String RESOURCE = "https://resource.example/mcp";
 	private static final @NonNull String REDIRECT = "https://client.example/cb";
-	private static final @NonNull String BROWSER = "A".repeat(43);
+	private static final @NonNull BrowserBinding BROWSER = BrowserBinding.fromTrustedPersistence("A".repeat(43));
 	private static final @NonNull String VERIFIER = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
 	private IssuerStoreProbe() { }
 
@@ -111,7 +112,7 @@ public final class IssuerStoreProbe {
 		var privateKey = factory.generatePrivate(new PKCS8EncodedKeySpec(Files.readAllBytes(directory.resolve("private.der"))));
 		var publicKey = factory.generatePublic(new X509EncodedKeySpec(Files.readAllBytes(directory.resolve("public.der"))));
 		var keys = OAuthIssuerKeySnapshot.withActiveKey(
-				OAuthIssuerSigningKey.fromKeyPair("fixture", privateKey, publicKey))
+				OAuthIssuerSigningKey.fromRsaKeyPair("fixture", privateKey, publicKey))
 				.generation("g1").publishedAt(Instant.parse("2026-10-06T11:00:00Z")).build();
 		var resources = Map.of(RESOURCE, Set.of("read"));
 		var client = OAuthServerClientRegistration.withClientId("client").configurationVersion("v1")

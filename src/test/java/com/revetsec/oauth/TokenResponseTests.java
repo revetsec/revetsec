@@ -106,7 +106,7 @@ final class TokenResponseTests {
 		OAuthErrorResponseException error = assertThrows(OAuthErrorResponseException.class, () ->
 				TokenResponseParser.parse(raw(503, "unavailable", Map.of("Retry-After", List.of("5"))), START, null));
 		assertEquals(503, error.getStatus());
-		assertTrue(error.isTransient());
+		assertTrue(error.isTemporaryCondition());
 		assertEquals(Duration.ofSeconds(5), error.getRetryAfter().orElseThrow());
 	}
 

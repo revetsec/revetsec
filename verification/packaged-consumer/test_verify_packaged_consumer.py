@@ -27,7 +27,9 @@ import json
 import os
 from pathlib import Path
 import re
+import shutil
 import stat
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -305,6 +307,7 @@ class ConsumerOutputTests(unittest.TestCase):
     """PackagedConsumer's public-api= line must come last and name every group of public API calls."""
 
     API_LINE = VERIFIER.PUBLIC_API_LINE_PREFIX + ",".join(VERIFIER.PUBLIC_API_CALLS)
+    EXPORTED_TYPE_INVENTORY_SHA256 = "26d89bed139a42f19cd5edc188ddcfd56bef21e4ee3f38c6cdfb9511fadee78c"
 
     def lines(self, *last):
         return ["jar=/repository/revetsec.jar", "automatic-module-name=com.revetsec", *last]
@@ -339,27 +342,76 @@ class ConsumerOutputTests(unittest.TestCase):
     # annotation with an element (jsr305 @GuardedBy("lock")) on any member, private ones included, and the annotation
     # JAR is absent. The consumer compile catches that only for the types PackagedConsumer uses, so it must use every
     # exported one.
-    EXPORTED_TOP_LEVEL = re.compile(
-        r"^public\s+(?:(?:final|abstract|sealed|non-sealed|static|strictfp)\s+)*(?:class|interface|enum|record|@interface)"
-        r"\s+(?P<name>[A-Za-z_][A-Za-z0-9_]*)", re.MULTILINE)
-    EXPORTED_NESTED = re.compile(
-        r"^\tpublic\s+(?:(?:final|abstract|sealed|non-sealed|static|strictfp)\s+)*(?:class|interface|enum|record)"
-        r"\s+(?P<name>[A-Za-z_][A-Za-z0-9_]*)", re.MULTILINE)
+    def run_exported_type_inventory(self, root):
+        helper = VERIFIER.SCRIPT_DIRECTORY / "ExportedTypeInventory.java"
+        java_home = os.environ.get("JAVA_HOME")
+        java = str(Path(java_home) / "bin" / "java") if java_home else shutil.which("java")
+        self.assertIsNotNone(java, "A full JDK is required for the exported-type inventory")
+        self.assertTrue(Path(java).is_file(), f"Java launcher not found: {java}")
+        return subprocess.run([java, str(helper), str(root)], capture_output=True, text=True, check=False)
 
-    def exported_public_types(self):
-        root = REPOSITORY_ROOT / "src" / "main" / "java" / "com" / "revetsec"
+    def exported_public_types(self, root=None):
+        root = root or REPOSITORY_ROOT / "src" / "main" / "java"
+        result = self.run_exported_type_inventory(root)
+        self.assertEqual(result.returncode, 0,
+                         f"javac exported-type inventory failed:\n--- stdout ---\n{result.stdout}\n"
+                         f"--- stderr ---\n{result.stderr}")
         types = []
-        for source in sorted(root.rglob("*.java")):
-            relative = source.relative_to(root)
-            if relative.parts[0] == "internal" or source.name == "package-info.java":
-                continue
-            package = ".".join(("com", "revetsec", *relative.parts[:-1]))
-            text = source.read_text(encoding="utf-8")
-            for match in self.EXPORTED_TOP_LEVEL.finditer(text):
-                types.append((package, match.group("name"), None))
-                for nested in self.EXPORTED_NESTED.finditer(text):
-                    types.append((package, match.group("name"), nested.group("name")))
+        for line in result.stdout.splitlines():
+            package, separator, relative_name = line.partition("\t")
+            self.assertEqual(separator, "\t", f"Malformed exported-type inventory row: {line!r}")
+            self.assertRegex(package, r"^com\.revetsec(?:\.[a-z]+)*$")
+            self.assertRegex(relative_name,
+                             r"^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*$")
+            types.append((package, relative_name))
         return types
+
+    def test_javac_inventory_calibration(self):
+        with tempfile.TemporaryDirectory() as directory:
+            package = Path(directory) / "com" / "revetsec"
+            package.mkdir(parents=True)
+            (package / "Annotated.java").write_text("""
+                    package com.revetsec;
+                    @Deprecated public final class Annotated {
+                        public static class Space {
+                    \t\tpublic static class Deep {}
+                        }
+                    \tprotected static final class ProtectedMember {}
+                        public interface Contract {
+                            interface Implicit {
+                                class Deep {}
+                            }
+                        }
+                        static class Hidden { public static class Leaked {} }
+                    }
+                    """, encoding="utf-8")
+            (package / "PublicMarker.java").write_text("""
+                    package com.revetsec;
+                    public @interface PublicMarker {
+                        @interface Nested {}
+                    }
+                    """, encoding="utf-8")
+            self.assertEqual(self.exported_public_types(Path(directory)), [
+                ("com.revetsec", "Annotated"),
+                ("com.revetsec", "Annotated.Contract"),
+                ("com.revetsec", "Annotated.Contract.Implicit"),
+                ("com.revetsec", "Annotated.Contract.Implicit.Deep"),
+                ("com.revetsec", "Annotated.ProtectedMember"),
+                ("com.revetsec", "Annotated.Space"),
+                ("com.revetsec", "Annotated.Space.Deep"),
+                ("com.revetsec", "PublicMarker"),
+                ("com.revetsec", "PublicMarker.Nested"),
+            ])
+
+    def test_javac_inventory_fails_closed_on_parse_error(self):
+        with tempfile.TemporaryDirectory() as directory:
+            package = Path(directory) / "com" / "revetsec"
+            package.mkdir(parents=True)
+            (package / "Broken.java").write_text(
+                "package com.revetsec; public class Broken { public interface Partial {", encoding="utf-8")
+            result = self.run_exported_type_inventory(Path(directory))
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("Unable to parse sources", result.stderr)
 
     # Comments, string and character literals, and import lines: a type named only there is not used.
     NOT_CODE = re.compile(r'/\*.*?\*/|//[^\n]*|"(?:\\.|[^"\\\n])*"|\'(?:\\.|[^\'\\\n])*\'|^import\s[^\n]*',
@@ -370,22 +422,37 @@ class ConsumerOutputTests(unittest.TestCase):
             encoding="utf-8")
         code = self.NOT_CODE.sub(" ", source)
         types = self.exported_public_types()
-        self.assertIn(("com.revetsec", "StateSealer", "Builder"), types)
-        self.assertIn(("com.revetsec.json", "JsonObject", "Builder"), types)
+        self.assertEqual(types, sorted(set(types)))
+        rows = "".join(f"{package}\t{relative_name}\n" for package, relative_name in types).encode("utf-8")
+        self.assertEqual(hashlib.sha256(rows).hexdigest(), self.EXPORTED_TYPE_INVENTORY_SHA256)
+        self.assertEqual(len(types), 702)
+        self.assertEqual(sum("." not in relative_name for _, relative_name in types), 340)
+        self.assertEqual(sum("." in relative_name for _, relative_name in types), 362)
+        self.assertIn(("com.revetsec", "StateSealer.Builder"), types)
+        self.assertIn(("com.revetsec.json", "JsonObject.Builder"), types)
+        self.assertIn(("com.revetsec.totp", "TotpStoreWrite.Mutation.Kind"), types)
         imports_by_name = {imported.rsplit(".", 1)[-1]: imported
                            for imported in re.findall(r"^import ([A-Za-z_][A-Za-z0-9_.]*);$", source, re.MULTILINE)}
-        for package, name, nested in types:
-            with self.subTest(type=f"{package}.{name}" + (f".{nested}" if nested else "")):
+        for package, relative_name in types:
+            name, *nested = relative_name.split(".")
+            with self.subTest(type=f"{package}.{relative_name}"):
                 qualified = f"{package}.{name}"
                 imported = f"import {qualified};" in source
                 # Only a simple-name collision permits a qualified reference instead of an import.
                 if not imported:
                     self.assertIn(name, imports_by_name)
                     self.assertNotEqual(qualified, imports_by_name[name])
-                reference = name if imported else qualified
-                self.assertRegex(code, rf"(?<![A-Za-z0-9_$.]){re.escape(reference)}(?![A-Za-z0-9_$])")
+                references = [name if imported else qualified]
+                if imported:
+                    references.append(qualified)
+                pattern = rf"(?<![A-Za-z0-9_$.])(?:{'|'.join(map(re.escape, references))})(?![A-Za-z0-9_$])"
+                self.assertIsNotNone(re.search(pattern, code), f"PackagedConsumer does not use {qualified}")
                 if nested:
-                    self.assertRegex(code, rf"(?<![A-Za-z0-9_$.]){re.escape(reference)}\.{nested}(?![A-Za-z0-9_$])")
+                    nested_references = [".".join((reference, *nested)) for reference in references]
+                    nested_pattern = (rf"(?<![A-Za-z0-9_$.])(?:{'|'.join(map(re.escape, nested_references))})"
+                                      rf"(?![A-Za-z0-9_$])")
+                    self.assertIsNotNone(re.search(nested_pattern, code),
+                                         f"PackagedConsumer does not use {package}.{relative_name}")
 
     def test_internal_guard_annotation_is_source_retained(self):
         guard = (REPOSITORY_ROOT / "src" / "main" / "java" / "com" / "revetsec" / "internal" / "GuardedBy.java")

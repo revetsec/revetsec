@@ -27,7 +27,9 @@ import java.util.concurrent.locks.ReentrantLock;
  * Its temporary counters are discarded on restart and are never shared across nodes.
  * Admission waits interruptibly for short reservation-counter updates. The gate never queues
  * for KDF capacity or starts worker threads; exhausted capacity yields an operation result.
- * Hashing and application callbacks run outside the accounting lock.
+ * Password preparation, hashing and application callbacks run outside the accounting lock.
+ * One permit covers normalization/encoding, pepper lookup and KDF cleanup; it is not released
+ * between those phases. Input length caps do not guarantee a normalization wall-time bound.
  * Applications separately own shared per-account/edge attempt admission and durable credential storage.
  * @since 1.0.0 */
 @ThreadSafe
@@ -46,7 +48,7 @@ public final class PasswordWorkGate {
     /** Creates a bounded in-memory work gate for one JVM. Reuse the returned instance across all
      * hashers in that JVM. Separate calls create independent gates; this factory supplies no
      * default concurrency or memory budget and performs no distributed attempt throttling.
-     * @param maximumConcurrentCalls maximum simultaneous KDF operations, from 1 through 256
+     * @param maximumConcurrentCalls maximum simultaneous password operations, from 1 through 256
      * @param maximumMemoryKiB aggregate Argon2id memory reservation in KiB, from 19,456 through 4,194,304
      * @return the gate
      * @throws IllegalArgumentException if either limit is outside its supported range
@@ -59,8 +61,8 @@ public final class PasswordWorkGate {
         return new PasswordWorkGate(maximumConcurrentCalls, maximumMemoryKiB);
     }
 
-    /** Returns the concurrency limit for KDF operations.
-     * @return the maximum simultaneous KDF operations
+    /** Returns the concurrency limit for admitted password operations.
+     * @return the maximum simultaneous password operations
      * @since 1.0.0 */
     public @NonNull Integer getMaximumConcurrentCalls() { return maximumConcurrentCalls; }
 

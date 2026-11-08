@@ -16,6 +16,7 @@
 
 package com.revetsec.oauth;
 
+import com.revetsec.BrowserBinding;
 import com.revetsec.StateSealer;
 import com.google.errorprone.annotations.CheckReturnValue;
 import com.revetsec.internal.crypto.SealedStateAccess;
@@ -142,7 +143,7 @@ public final class PendingAuthorization {
 	public @NonNull Instant getCreatedAt() { return this.createdAt; }
 
 	/**
-	 * Returns the authenticated expiry instant.
+	 * Returns the expiry bound by the sealed form or trusted-store integrity.
 	 *
 	 * @return expiry
 	 * @since 1.0.0
@@ -150,7 +151,7 @@ public final class PendingAuthorization {
 	public @NonNull Instant getExpiresAt() { return this.expiresAt; }
 
 	/**
-	 * Returns application data, authenticated but still subject to application redirect allowlisting.
+	 * Returns application data bound by the seal or trusted-store integrity, still subject to application redirect allowlisting.
 	 *
 	 * @return data
 	 * @since 1.0.0
@@ -171,7 +172,8 @@ public final class PendingAuthorization {
 	}
 
 	/**
-	 * Saves the complete record with a digest of the browser binding. The store receives its exact expiry and must
+	 * Saves plaintext protocol state with an unkeyed digest of the browser binding. The trusted store must protect
+	 * confidentiality and integrity; the digest is a comparison value, not cryptographic authentication. It receives the exact expiry and must
 	 * consume atomically. This convenience overload supplies a five-second budget.
 	 *
 	 * @param store the store
@@ -180,7 +182,12 @@ public final class PendingAuthorization {
 	 * @since 1.0.0
 	 */
 	@CheckReturnValue
-	public @NonNull PendingAuthorizationSaveResult saveToResult(@NonNull PendingAuthorizationStore store, @NonNull String browserBinding) {
+	public @NonNull PendingAuthorizationSaveResult saveToResult(@NonNull PendingAuthorizationStore store, @NonNull BrowserBinding browserBinding) {
+		return saveToResult(store, requireNonNull(browserBinding), Duration.ofSeconds(5));
+	}
+
+	@CheckReturnValue
+	@NonNull PendingAuthorizationSaveResult saveToResult(@NonNull PendingAuthorizationStore store, @NonNull String browserBinding) {
 		return saveToResult(store, browserBinding, Duration.ofSeconds(5));
 	}
 
@@ -195,7 +202,13 @@ public final class PendingAuthorization {
 	 * @since 1.0.0
 	 */
 	@CheckReturnValue
-	public @NonNull PendingAuthorizationSaveResult saveToResult(@NonNull PendingAuthorizationStore store, @NonNull String browserBinding,
+	public @NonNull PendingAuthorizationSaveResult saveToResult(@NonNull PendingAuthorizationStore store, @NonNull BrowserBinding browserBinding,
+			@NonNull Duration remaining) {
+		return saveToResult(store, requireNonNull(browserBinding).toSecretString(), remaining);
+	}
+
+	@CheckReturnValue
+	@NonNull PendingAuthorizationSaveResult saveToResult(@NonNull PendingAuthorizationStore store, @NonNull String browserBinding,
 			@NonNull Duration remaining) {
 		requireNonNull(store);
 		requireNonNull(browserBinding);

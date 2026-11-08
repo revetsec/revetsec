@@ -231,6 +231,16 @@ final class OAuthCodeRedemptionTests {
   this.first.redeem(request(code,Map.of()),(id,b)->{auth[0]++;return Optional.of(client());},resources(),(c,b)->{policies[0]++;return decision("subject",Set.of("read"),false);},deadline);
   assertEquals(2,auth[0]);assertEquals(2,policies[0]);assertEquals(1,this.store.rows.keySet().stream().filter(k->k.getKind()==OAuthStoreKey.Kind.ACCESS_TOKEN).count());
  }
+ @Test void externalPolicyChangeAfterReturnedDecisionDoesNotInventStoreAtomicity() {
+  String code=code(false);boolean[] externalAllow={true};int[] policies={0};this.store.beforeCommit=()->externalAllow[0]=false;
+  OAuthTokenResponse response=assertDoesNotThrow(()->this.first.redeem(request(code,Map.of()),(id,b)->Optional.of(client()),resources(),(c,b)->{policies[0]++;return externalAllow[0]?decision("subject",Set.of("read"),false):OAuthAuthorizationDecision.deniedInstance();},deadline()));
+  assertNotNull(response);assertFalse(externalAllow[0]);assertEquals(1,policies[0]);assertEquals("USED",record(OAuthStoreKey.Kind.CODE).text("status"));assertEquals(1,this.store.rows.keySet().stream().filter(k->k.getKind()==OAuthStoreKey.Kind.ACCESS_TOKEN).count());
+ }
+ @Test void conflictRetryUsesChangedPolicyDecision() {
+  String code=code(false);int[] policies={0};this.store.conflicts=1;
+  invalid(()->this.first.redeem(request(code,Map.of()),(id,b)->Optional.of(client()),resources(),(c,b)->++policies[0]==1?decision("subject",Set.of("read"),false):OAuthAuthorizationDecision.deniedInstance(),deadline()));
+  assertEquals(2,policies[0]);assertEquals("CANCELLED",record(OAuthStoreKey.Kind.CODE).text("status"));assertEquals("DENIED",record(OAuthStoreKey.Kind.GRANT).text("status"));assertTrue(this.store.rows.keySet().stream().noneMatch(k->k.getKind()==OAuthStoreKey.Kind.ACCESS_TOKEN));
+ }
  @Test void attemptsExhaustWithoutIssuance() {String code=code(false);this.store.conflicts=10;failed(OAuthStoreFailure.Reason.UNAVAILABLE,()->redeem(code));assertEquals("UNUSED",record(OAuthStoreKey.Kind.CODE).text("status"));}
  @TestFactory @NonNull Stream<@NonNull DynamicTest> unknownOutcomeNeverEmitsOrRetriesAndLaterReplayReconciles() {
   return Stream.of(false,true).map(after->DynamicTest.dynamicTest("UNKNOWN after="+after,()->{OAuthCodeRedemptionTests t=new OAuthCodeRedemptionTests();String code=t.code(true);int commits=t.store.commits;t.store.unknownBefore=!after;t.store.unknownAfter=after;failed(OAuthStoreFailure.Reason.COMMIT_OUTCOME_UNKNOWN,()->t.redeem(code));assertEquals(commits+1,t.store.commits);t.store.unknownBefore=false;t.store.unknownAfter=false;if(after){invalid(()->t.redeem(code));assertEquals("REVOKED",t.record(OAuthStoreKey.Kind.GRANT).text("status"));}else assertNotNull(t.redeem(code));}));

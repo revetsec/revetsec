@@ -21,6 +21,7 @@ import com.revetsec.webauthn.InMemoryWebAuthnStore;
 import com.revetsec.webauthn.WebAuthnAuthentication;
 import com.revetsec.webauthn.WebAuthnAuthenticationRequestResult;
 import com.revetsec.webauthn.WebAuthnAuthenticationResult;
+import com.revetsec.webauthn.WebAuthnReauthenticationResult;
 import com.revetsec.webauthn.WebAuthnCredentialListResult;
 import com.revetsec.webauthn.WebAuthnCredentialRemovalResult;
 import com.revetsec.webauthn.WebAuthnRecoveryGate;
@@ -46,13 +47,13 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Supplier;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 /** One disposable, single-account browser demonstration; identity and sessions belong to this app. */
 public final class PasskeyApp {
-    private static final String PURPOSE = "demo-sensitive-action";
     private static final String CSP = "default-src 'none'; script-src 'self'; connect-src 'self'; "
             + "form-action 'none'; frame-ancestors 'none'; base-uri 'none'; object-src 'none'";
     private final @NonNull String origin;
@@ -60,6 +61,10 @@ public final class PasskeyApp {
     private final @NonNull String accessKey;
     private final byte @NonNull [] accountHandle;
     private final @NonNull PasskeySessions sessions;
+    private final @NonNull String namespace;
+    private final @NonNull String relyingPartyId;
+    private final @NonNull AtomicLong requestIds = new AtomicLong();
+    private final @NonNull Object publicationOwner = new Object();
     private final @NonNull WebAuthnRelyingParty relyingParty;
     private final @NonNull WebAuthnRecoveryGate admissionGate;
     private final @NonNull AtomicBoolean admissionOpen;
@@ -77,14 +82,18 @@ public final class PasskeyApp {
      * before routing one session across nodes. The supplied relying party must use the same
      * trusted RP ID and origin. Supply the same reentrant recovery gate instance to the relying
      * party and this constructor so a permit spans both verification and the session transition.
-     * Its construction is an application configuration decision.
+     * Its construction is an application configuration decision. The trusted credential namespace
+     * must exactly match the supplied relying party; proofs from another scope refuse. Use
+     * PasskeyPlayground.config so immutable app-owned request IDs and write-failure cleanup
+     * span the actual Soklet response boundary.
      */
     public PasskeyApp(@NonNull String origin, @NonNull String relyingPartyId,
             @NonNull String accessKey, @NonNull Clock clock,
-            byte @NonNull [] accountHandle, @NonNull WebAuthnRelyingParty relyingParty,
+            byte @NonNull [] accountHandle, @NonNull String credentialNamespace,
+            @NonNull WebAuthnRelyingParty relyingParty,
             @NonNull WebAuthnRecoveryGate admissionGate)
             throws IOException {
-        this(origin, relyingPartyId, accessKey, clock, new Setup(accountHandle, relyingParty,
+        this(origin, relyingPartyId, accessKey, clock, new Setup(accountHandle, credentialNamespace, relyingParty,
                 admissionGate, new AtomicBoolean(true), "Application-owned passkey state. Browser sessions "
                 + "are local to this process and expire on restart."));
     }
@@ -104,7 +113,9 @@ public final class PasskeyApp {
         if (setup.accountHandle.length < 1 || setup.accountHandle.length > 64)
             throw new IllegalArgumentException("Invalid account handle");
         this.accountHandle = setup.accountHandle.clone();
-        this.sessions = new PasskeySessions(clock, 64);
+        this.namespace = Objects.requireNonNull(setup.credentialNamespace);
+        this.relyingPartyId = relyingPartyId;
+        this.sessions = new PasskeySessions(clock, 64, this.accountHandle, this.namespace, relyingPartyId);
         this.relyingParty = Objects.requireNonNull(setup.relyingParty);
         this.admissionGate = Objects.requireNonNull(setup.admissionGate);
         this.admissionOpen = setup.admissionOpen;
@@ -129,17 +140,19 @@ public final class PasskeyApp {
                 @Override public void close() { }
             };
         };
+        String namespace = "fresh-" + PasskeySessions.randomId();
         WebAuthnRelyingParty relyingParty = WebAuthnRelyingParty.withRelyingPartyId(relyingPartyId)
                 .relyingPartyName("Revetsec Passkey Demo").allowedOrigins(Set.of(origin))
-                .credentialNamespace("fresh-" + PasskeySessions.randomId())
+                .credentialNamespace(namespace)
                 .store(InMemoryWebAuthnStore.fromLimits(1024, 8_388_608))
                 .stateSealer(sealer).recoveryGate(freshProcessOnly).build();
-        return new Setup(Base64.getUrlDecoder().decode(PasskeySessions.randomId()), relyingParty,
+        return new Setup(Base64.getUrlDecoder().decode(PasskeySessions.randomId()), namespace, relyingParty,
                 freshProcessOnly, admissionOpen, "Single-process disposable account. Passkeys, sessions and "
                 + "sealing key disappear on restart.");
     }
 
-    private record Setup(byte @NonNull [] accountHandle, @NonNull WebAuthnRelyingParty relyingParty,
+    private record Setup(byte @NonNull [] accountHandle, @NonNull String credentialNamespace,
+            @NonNull WebAuthnRelyingParty relyingParty,
             @NonNull WebAuthnRecoveryGate admissionGate, @NonNull AtomicBoolean admissionOpen,
             @NonNull String storageNotice) { }
 
@@ -150,9 +163,9 @@ public final class PasskeyApp {
     private @NonNull MarshaledResponse indexRoute(@NonNull Request request) {
         if (!host(request)) return text(403, "Request denied.");
         try {
-            PasskeySessions.Session session = this.sessions.find(request).orElse(null);
-            boolean newSession = session == null;
-            if (newSession) session = this.sessions.begin();
+            PasskeySessions.Session previous = this.sessions.find(request).orElse(null);
+            boolean newSession = previous == null;
+            PasskeySessions.Session session = previous == null ? this.sessions.begin() : previous;
             String html = "<!doctype html><html lang='en'><head><meta charset='utf-8'>"
                     + "<meta name='viewport' content='width=device-width,initial-scale=1'>"
                     + "<title>Revetsec passkey demo</title></head><body data-authenticated='"
@@ -260,7 +273,9 @@ public final class PasskeyApp {
         if (result instanceof WebAuthnAuthenticationResult.Succeeded success) {
             WebAuthnAuthentication proof = success.getAuthentication();
             if (proof.getKind() != WebAuthnAuthentication.Kind.SIGN_IN
-                    || !MessageDigest.isEqual(this.accountHandle, proof.getUserHandle()))
+                    || !MessageDigest.isEqual(this.accountHandle, proof.getUserHandle())
+                    || !this.namespace.equals(proof.getCredentialNamespace())
+                    || !this.relyingPartyId.equals(proof.getRelyingPartyId()))
                 return text(403, "Request denied.");
             return rotated(session, true);
         }
@@ -272,28 +287,128 @@ public final class PasskeyApp {
     }
 
     private @NonNull MarshaledResponse beginReauthenticationRoute(@NonNull Request request) {
+        return beginActionRoute(request, PasskeySessions.Action.SENSITIVE);
+    }
+
+    @POST("/credentials/self-remove/start") public @NonNull MarshaledResponse beginSelfRemoval(@NonNull Request request) {
+        return admittedResponse(() -> beginActionRoute(request, PasskeySessions.Action.SELF_REMOVAL));
+    }
+
+    private @NonNull MarshaledResponse beginActionRoute(@NonNull Request request,
+            PasskeySessions.@NonNull Action action) {
         PasskeySessions.Session session = admitted(request, true);
         if (session == null || !emptyBody(request)) return text(403, "Request denied.");
-        return authenticationStart(this.relyingParty.beginReauthenticationResult(
-                this.accountHandle, PURPOSE, session.binding));
+        byte[] target = new byte[0];
+        if (action == PasskeySessions.Action.SELF_REMOVAL) {
+            target = credentialTarget(request);
+            if (target == null) return text(403, "Request denied.");
+            WebAuthnCredentialListResult listing = this.relyingParty.listCredentialsResult(this.accountHandle);
+            if (!(listing instanceof WebAuthnCredentialListResult.Listed listed))
+                return text(503, "Local demo unavailable.");
+            boolean owned = false;
+            for (byte[] candidate : listed.getCredentialIds())
+                owned |= MessageDigest.isEqual(target, candidate);
+            if (!owned) return text(403, "Request denied.");
+        }
+        WebAuthnAuthenticationRequestResult result = this.relyingParty.beginReauthenticationResult(
+                this.accountHandle, action.purpose, session.binding);
+        if (result instanceof WebAuthnAuthenticationRequestResult.Prepared prepared
+                && !this.sessions.rememberAction(session, action, target, prepared.getRequest().getCeremonyId()))
+            return text(403, "Request denied.");
+        return authenticationStart(result);
     }
 
     @POST("/reauth/finish") public @NonNull MarshaledResponse finishReauthentication(@NonNull Request request) {
-        return admittedResponse(() -> finishReauthenticationRoute(request));
+        return admittedCompletionResponse(() -> finishActionRoute(request, PasskeySessions.Action.SENSITIVE));
     }
 
-    private @NonNull MarshaledResponse finishReauthenticationRoute(@NonNull Request request) {
+    @POST("/credentials/self-remove/finish") public @NonNull MarshaledResponse finishSelfRemoval(@NonNull Request request) {
+        return admittedCompletionResponse(() -> finishActionRoute(request, PasskeySessions.Action.SELF_REMOVAL));
+    }
+
+    private @NonNull ActionCompletion finishActionRoute(@NonNull Request request,
+            PasskeySessions.@NonNull Action action) {
         PasskeySessions.Session session = admitted(request, true);
         byte[] body = credentialBody(request);
         String ceremony = ceremonyId(request);
-        if (session == null || body == null || ceremony == null) return text(403, "Request denied.");
-        WebAuthnAuthenticationResult result = this.relyingParty.completeReauthenticationResult(
-                this.accountHandle, PURPOSE, ceremony, body, session.binding);
-        if (result instanceof WebAuthnAuthenticationResult.Succeeded) {
-            if (!this.sessions.grantStepUp(session)) return text(403, "Request denied.");
-            return text(200, "Sensitive action approved for one use.");
+        if (session == null || body == null || ceremony == null)
+            return ActionCompletion.denied(text(403, "Request denied."));
+        PasskeySessions.PendingAction pending = this.sessions.pendingAction(session, action, ceremony).orElse(null);
+        if (pending == null) return ActionCompletion.denied(text(403, "Request denied."));
+        WebAuthnReauthenticationResult result = this.relyingParty.completeReauthenticationResult(
+                this.accountHandle, action.purpose, pending.ceremonyId, body, session.binding);
+        if (result instanceof WebAuthnReauthenticationResult.Succeeded success) {
+            MarshaledResponse response = text(200, action == PasskeySessions.Action.SENSITIVE
+                    ? "Sensitive action approved for one use." : "Credential removal approved for one use.");
+            var grant = this.sessions.completeAction(session, pending, success.getReauthentication(), request.getId());
+            if (grant.isEmpty()) return ActionCompletion.denied(text(403, "Request denied."));
+            try { return new ActionCompletion(response, session, grant.orElseThrow()); }
+            catch (Throwable failure) {
+                this.sessions.discardApproval(session, grant.orElseThrow());
+                throw failure;
+            }
         }
-        return authenticationFailure(result);
+        if (result instanceof WebAuthnReauthenticationResult.ReconciliationRequired)
+            return ActionCompletion.denied(reconciliationRequired());
+        if (result instanceof WebAuthnReauthenticationResult.Indeterminate)
+            return ActionCompletion.denied(uncertain());
+        return ActionCompletion.denied(result instanceof WebAuthnReauthenticationResult.Unavailable
+                ? text(503, "Local demo unavailable.") : text(400, "Authentication rejected."));
+    }
+
+    private record ActionCompletion(@NonNull MarshaledResponse response,
+            PasskeySessions.@Nullable Session owner, PasskeySessions.@Nullable AuthorizedAction grant) {
+        static @NonNull ActionCompletion denied(@NonNull MarshaledResponse response) {
+            return new ActionCompletion(response, null, null);
+        }
+        @Override public @NonNull String toString() { return "PasskeyActionCompletion{<redacted>}"; }
+    }
+
+    private @NonNull MarshaledResponse admittedCompletionResponse(@NonNull Supplier<@NonNull ActionCompletion> action) {
+        if (!this.admissionOpen.get()) return text(503, "Local demo unavailable.");
+        WebAuthnRecoveryGate.Permit permit;
+        try { permit = this.admissionGate.acquire(Duration.ofSeconds(15)); }
+        catch (RuntimeException unavailable) { return text(503, "Local demo unavailable."); }
+        if (permit == null) return text(503, "Local demo unavailable.");
+        ActionCompletion completed = null;
+        boolean admitted = false;
+        try {
+            try (permit) {
+                if (!current(permit)) return text(503, "Local demo unavailable.");
+                completed = action.get();
+                if (!current(permit)) return text(503, "Local demo unavailable.");
+            }
+            if (!this.admissionOpen.get() || Thread.currentThread().isInterrupted())
+                return text(503, "Local demo unavailable.");
+            PasskeySessions.Session owner = completed.owner();
+            PasskeySessions.AuthorizedAction grant = completed.grant();
+            if (owner != null && grant != null && !this.sessions.publishable(owner, grant))
+                return text(503, "Local demo unavailable.");
+            if (!this.admissionOpen.get() || Thread.currentThread().isInterrupted())
+                return text(503, "Local demo unavailable.");
+            admitted = true;
+            return completed.response();
+        } catch (RuntimeException unavailable) {
+            return text(503, "Local demo unavailable.");
+        } finally {
+            if (!admitted && completed != null) {
+                PasskeySessions.Session owner = completed.owner();
+                PasskeySessions.AuthorizedAction grant = completed.grant();
+                if (owner != null && grant != null) this.sessions.discardApproval(owner, grant);
+            }
+        }
+    }
+
+    private record PublicationId(@NonNull Object owner, long value) {
+        @Override public @NonNull String toString() { return "PasskeyPublicationId{<redacted>}"; }
+    }
+
+    @NonNull Object requestId(@NonNull Request request) {
+        return new PublicationId(this.publicationOwner, this.requestIds.updateAndGet(value -> Math.incrementExact(value)));
+    }
+
+    void responseWriteFailed(@NonNull Request request) {
+        this.sessions.discardUnwrittenApproval(request.getId());
     }
 
     @POST("/sensitive") public @NonNull MarshaledResponse sensitiveAction(@NonNull Request request) {
@@ -302,7 +417,7 @@ public final class PasskeyApp {
 
     private @NonNull MarshaledResponse sensitiveActionRoute(@NonNull Request request) {
         PasskeySessions.Session session = admitted(request, true);
-        if (session == null || !emptyBody(request) || !this.sessions.consumeStepUp(session))
+        if (session == null || !emptyBody(request) || !this.sessions.consumeAction(session, PasskeySessions.Action.SENSITIVE, new byte[0]))
             return text(403, "Request denied.");
         return text(200, "Demo sensitive action completed.");
     }
@@ -323,6 +438,22 @@ public final class PasskeyApp {
         return json(200, "{\"credentialIds\":[" + String.join(",", encoded) + "]}");
     }
 
+    @POST("/credentials/self-remove") public @NonNull MarshaledResponse selfRemoveCredential(@NonNull Request request) {
+        return admittedResponse(() -> {
+            PasskeySessions.Session session = admitted(request, true);
+            byte[] target = credentialTarget(request);
+            if (session == null || target == null || !emptyBody(request)
+                    || !this.sessions.consumeAction(session, PasskeySessions.Action.SELF_REMOVAL, target))
+                return text(403, "Request denied.");
+            return removalResponse(this.relyingParty.removeCredentialResult(this.accountHandle, target));
+        });
+    }
+
+    private static byte @Nullable [] credentialTarget(@NonNull Request request) {
+        List<String> values = headers(request, "X-Credential-Id");
+        return values.size() == 1 ? decodeId(values.get(0)) : null;
+    }
+
     @POST("/credentials/remove") public @NonNull MarshaledResponse removeCredential(@NonNull Request request) {
         return admittedResponse(() -> removeCredentialRoute(request));
     }
@@ -335,7 +466,10 @@ public final class PasskeyApp {
         if (values.size() != 1) return text(403, "Request denied.");
         byte[] id = decodeId(values.get(0));
         if (id == null) return text(403, "Request denied.");
-        WebAuthnCredentialRemovalResult result = this.relyingParty.removeCredentialResult(this.accountHandle, id);
+        return removalResponse(this.relyingParty.removeCredentialResult(this.accountHandle, id));
+    }
+
+    private @NonNull MarshaledResponse removalResponse(@NonNull WebAuthnCredentialRemovalResult result) {
         if (result instanceof WebAuthnCredentialRemovalResult.Removed) return text(200, "Passkey removed.");
         if (result instanceof WebAuthnCredentialRemovalResult.ReconciliationRequired) return reconciliationRequired();
         if (result instanceof WebAuthnCredentialRemovalResult.Indeterminate) return uncertain();

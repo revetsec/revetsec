@@ -62,18 +62,18 @@ final class OAuthCimdMcpProfileTests {
  private static final Clock CLOCK=Clock.fixed(NOW,ZoneOffset.UTC);
  private static final Map<String,Set<String>> RESOURCES=Map.of(RESOURCE,Set.of("read"));
  private static final OAuthServerIngressLimits LIMITS=OAuthServerIngressLimits.fromDefaults();
- private static byte[] resource(String name) throws Exception {try(var input=requireNonNull(OAuthCimdMcpProfileTests.class.getResourceAsStream("/cimd/mcp-profile/"+name))){return input.readAllBytes();}}
- private static JsonObject json(byte[] body) throws Exception {return (JsonObject)JsonCodec.parse(body,JsonLimits.protocolDocument(131072));}
- private static String text(JsonObject json,String member){return ((JsonString)requireNonNull(json.getMembers().get(member))).getValue();}
- private static byte[] bytes(JsonObject json){return json.toJson().getBytes(StandardCharsets.UTF_8);}
- private static JsonObject change(JsonObject original,String name,@Nullable JsonValue value){var fields=new LinkedHashMap<>(original.getMembers());fields.remove(name);if(value!=null)fields.put(name,value);return JsonObject.fromMembers(fields);}
- private static JsonArray strings(String... values){return JsonArray.fromElements(Arrays.stream(values).map(JsonString::fromValue).map(v->(JsonValue)v).toList());}
- private static JsonObject application(JsonObject original,String type){return change(original,"application_type",type.equals("omitted")?null:JsonString.fromValue(type));}
- private static JsonObject reference() throws Exception {return json(resource("mcp-reference.json"));}
- private static OAuthClientMetadataPolicy policy(){return OAuthClientMetadataPolicy.withAddressResolver((host,budget)->{throw new AssertionError("No DNS in parser tests");}).cache(InMemoryOAuthClientMetadataCache.fromMaximumEntries(8)).build();}
- private static OAuthClientMetadataDocument parse(JsonObject document,boolean ip,boolean localhost){return OAuthClientMetadataDocument.parse(text(document,"client_id"),bytes(document),policy(),LIMITS,ip,localhost);}
- private static void invalid(JsonObject document,boolean ip,boolean localhost){var failure=assertThrows(OAuthServerAdmissionFailure.class,()->parse(document,ip,localhost));assertEquals(OAuthServerAdmissionFailure.Reason.INVALID_CLIENT,failure.reason());assertNull(failure.getCause());}
- private static StateSealer sealer(){byte[] key=new byte[32];for(int i=0;i<key.length;i++)key[i]=(byte)(i+1);return StateSealer.withActiveKey(SealingKey.fromBase64("k",Base64.getEncoder().encodeToString(key))).clock(CLOCK).build();}
+ private static byte @NonNull [] resource(@NonNull String name) throws Exception {try(var input=requireNonNull(OAuthCimdMcpProfileTests.class.getResourceAsStream("/cimd/mcp-profile/"+name))){return input.readAllBytes();}}
+ private static @NonNull JsonObject json(byte @NonNull [] body) throws Exception {return (JsonObject)JsonCodec.parse(body,JsonLimits.protocolDocument(131072));}
+ private static @NonNull String text(@NonNull JsonObject json,@NonNull String member){return ((JsonString)requireNonNull(json.getMembers().get(member))).getValue();}
+ private static byte @NonNull [] bytes(@NonNull JsonObject json){return json.toJson().getBytes(StandardCharsets.UTF_8);}
+ private static @NonNull JsonObject change(@NonNull JsonObject original,@NonNull String name,@Nullable JsonValue value){var fields=new LinkedHashMap<>(original.getMembers());fields.remove(name);if(value!=null)fields.put(name,value);return JsonObject.fromMembers(fields);}
+ private static @NonNull JsonArray strings(@NonNull String @NonNull ... values){return JsonArray.fromElements(Arrays.stream(values).map(JsonString::fromValue).map(v->(JsonValue)v).toList());}
+ private static @NonNull JsonObject application(@NonNull JsonObject original,@NonNull String type){return change(original,"application_type",type.equals("omitted")?null:JsonString.fromValue(type));}
+ private static @NonNull JsonObject reference() throws Exception {return json(resource("mcp-reference.json"));}
+ private static @NonNull OAuthClientMetadataPolicy policy(){return OAuthClientMetadataPolicy.withAddressResolver((host,budget)->{throw new AssertionError("No DNS in parser tests");}).cache(InMemoryOAuthClientMetadataCache.fromMaximumEntries(8)).build();}
+ private static @NonNull OAuthClientMetadataDocument parse(@NonNull JsonObject document,boolean ip,boolean localhost){return OAuthClientMetadataDocument.parse(text(document,"client_id"),bytes(document),policy(),LIMITS,ip,localhost);}
+ private static void invalid(@NonNull JsonObject document,boolean ip,boolean localhost){var failure=assertThrows(OAuthServerAdmissionFailure.class,()->parse(document,ip,localhost));assertEquals(OAuthServerAdmissionFailure.Reason.INVALID_CLIENT,failure.reason());assertNull(failure.getCause());}
+ private static @NonNull StateSealer sealer(){byte[] key=new byte[32];for(int i=0;i<key.length;i++)key[i]=(byte)(i+1);return StateSealer.withActiveKey(SealingKey.fromBase64("k",Base64.getEncoder().encodeToString(key))).clock(CLOCK).build();}
  @TestFactory @NonNull Stream<@NonNull DynamicTest> exactReferenceRequiresBothExplicitPolicies(){
   return Stream.of(false,true).flatMap(ip->Stream.of(false,true).map(localhost->DynamicTest.dynamicTest(ip+" "+localhost,()->{
    JsonObject document=reference();assertFalse(document.getMembers().containsKey("application_type"));
@@ -132,9 +132,9 @@ final class OAuthCimdMcpProfileTests {
   final boolean refreshRequested;
   final OAuthAuthorizationServer server;
   byte[] body;
-  Fixture(JsonObject document,@Nullable Boolean ip,@Nullable Boolean localhost) throws Exception {
+  Fixture(@NonNull JsonObject document,@Nullable Boolean ip,@Nullable Boolean localhost) throws Exception {
    body=bytes(document);id=text(document,"client_id");refreshRequested=((JsonArray)requireNonNull(document.getMembers().get("grant_types"))).getElements().contains(JsonString.fromValue("refresh_token"));var key=TestJwk.Fixture.IDP_SIGNING_RSA_2048;
-   var keys=OAuthIssuerKeySnapshot.withActiveKey(OAuthIssuerSigningKey.fromKeyPair("key",key.getPrivateKey(),key.getPublicKey())).generation("g1").publishedAt(NOW.minusSeconds(120)).build();
+   var keys=OAuthIssuerKeySnapshot.withActiveKey(OAuthIssuerSigningKey.fromRsaKeyPair("key",key.getPrivateKey(),key.getPublicKey())).generation("g1").publishedAt(NOW.minusSeconds(120)).build();
    server=OAuthAuthorizationServer.withIssuer(ISSUER).authorizationEndpoint(URI.create(ISSUER+"/authorize")).tokenEndpoint(URI.create(ISSUER+"/token"))
      .jwksEndpoint(URI.create(ISSUER+"/jwks")).revocationEndpoint(URI.create(ISSUER+"/revoke")).clientRepository((client,budget)->Optional.empty())
      .store(store).stateSealer(sealer()).signingKeys(OAuthIssuerKeyProvider.fromSnapshot(keys)).resources(RESOURCES).clock(CLOCK).refreshTokensEnabled(true)
@@ -148,16 +148,16 @@ final class OAuthCimdMcpProfileTests {
    transportField.set(fetcher,(OAuthClientMetadataFetcher.Transport)(uri,budget)->{assertEquals(URI.create(id),uri);fetches.incrementAndGet();return new RawResponse(200,HttpHeaders.of(Map.of("Cache-Control",List.of("max-age=60")),(a,b)->true),body,null,false,Duration.ZERO);});
    assertEquals(OAuthStoreCommitStatus.COMMITTED,server.initializeFreshIssuer().getStatus());server.establishNewSubject("subject");
   }
-  OAuthAuthorizationResult begin(String redirect,String challenge){return server.beginAuthorizationResult("GET",form(Map.of("client_id",id,"response_type","code","redirect_uri",redirect,"resource",RESOURCE,"code_challenge_method","S256","code_challenge",challenge)),new byte[0],Map.of(),BROWSER);}
-  String code(String redirect){var interaction=assertInstanceOf(OAuthAuthorizationResult.InteractionRequired.class,begin(redirect,CHALLENGE)).getInteraction();var response=assertInstanceOf(OAuthAuthorizationResult.Completed.class,server.completeAuthorizationResult(interaction.getInteractionValue(),BROWSER,decision(refreshRequested))).getResponse();URI location=response.getLocationWithCredentials().orElseThrow();assertEquals(redirect,location.toString().substring(0,location.toString().indexOf('?')));return Stream.of(requireNonNull(location.getRawQuery()).split("&")).filter(p->p.startsWith("code=")).map(p->p.substring(5)).findFirst().orElseThrow();}
-  OAuthTokenResult redeem(String code,String redirect,String verifier){return server.tokenResult("POST",null,form(Map.of("grant_type","authorization_code","client_id",id,"resource",RESOURCE,"code",code,"code_verifier",verifier,"redirect_uri",redirect)).getBytes(StandardCharsets.UTF_8),headers());}
-  OAuthTokenResult refresh(String value){return server.tokenResult("POST",null,form(Map.of("grant_type","refresh_token","client_id",id,"resource",RESOURCE,"refresh_token",value)).getBytes(StandardCharsets.UTF_8),headers());}
+  @NonNull OAuthAuthorizationResult begin(@NonNull String redirect,@NonNull String challenge){return server.beginAuthorizationResult("GET",form(Map.of("client_id",id,"response_type","code","redirect_uri",redirect,"resource",RESOURCE,"code_challenge_method","S256","code_challenge",challenge)),new byte[0],Map.of(),BROWSER);}
+  @NonNull String code(@NonNull String redirect){var interaction=assertInstanceOf(OAuthAuthorizationResult.InteractionRequired.class,begin(redirect,CHALLENGE)).getInteraction();var response=assertInstanceOf(OAuthAuthorizationResult.Completed.class,server.completeAuthorizationResult(interaction.getInteractionValue(),BROWSER,decision(refreshRequested))).getResponse();URI location=response.getLocationWithCredentials().orElseThrow();assertEquals(redirect,location.toString().substring(0,location.toString().indexOf('?')));return Stream.of(requireNonNull(location.getRawQuery()).split("&")).filter(p->p.startsWith("code=")).map(p->p.substring(5)).findFirst().orElseThrow();}
+  @NonNull OAuthTokenResult redeem(@NonNull String code,@NonNull String redirect,@NonNull String verifier){return server.tokenResult("POST",null,form(Map.of("grant_type","authorization_code","client_id",id,"resource",RESOURCE,"code",code,"code_verifier",verifier,"redirect_uri",redirect)).getBytes(StandardCharsets.UTF_8),headers());}
+  @NonNull OAuthTokenResult refresh(@NonNull String value){return server.tokenResult("POST",null,form(Map.of("grant_type","refresh_token","client_id",id,"resource",RESOURCE,"refresh_token",value)).getBytes(StandardCharsets.UTF_8),headers());}
  }
- private static OAuthAuthorizationDecision decision(boolean refresh){return OAuthAuthorizationDecision.withSubject("subject").authorizedScopesByResource(RESOURCES).refreshTokenPermitted(refresh).build();}
- private static Map<String,List<String>> headers(){return Map.of("Content-Type",List.of("application/x-www-form-urlencoded"));}
- private static String form(Map<String,String> fields){return String.join("&",fields.entrySet().stream().map(e->encode(e.getKey())+"="+encode(e.getValue())).toList());}
- private static String encode(String value){try{return FormUrlEncoding.encode(value);}catch(Exception failure){throw new AssertionError(failure);}}
- private static OAuthServerResponse success(OAuthTokenResult result){return assertInstanceOf(OAuthTokenResult.Succeeded.class,result).getResponse();}
+ private static @NonNull OAuthAuthorizationDecision decision(boolean refresh){return OAuthAuthorizationDecision.withSubject("subject").authorizedScopesByResource(RESOURCES).refreshTokenPermitted(refresh).build();}
+ private static @NonNull Map<@NonNull String,@NonNull List<@NonNull String>> headers(){return Map.of("Content-Type",List.of("application/x-www-form-urlencoded"));}
+ private static @NonNull String form(@NonNull Map<@NonNull String,@NonNull String> fields){return String.join("&",fields.entrySet().stream().map(e->encode(e.getKey())+"="+encode(e.getValue())).toList());}
+ private static @NonNull String encode(@NonNull String value){try{return FormUrlEncoding.encode(value);}catch(Exception failure){throw new AssertionError(failure);}}
+ private static @NonNull OAuthServerResponse success(@NonNull OAuthTokenResult result){return assertInstanceOf(OAuthTokenResult.Succeeded.class,result).getResponse();}
  @TestFactory @NonNull Stream<@NonNull DynamicTest> publicReferenceCompletesCodeFlowWithOnlyTheIpPortException(){
   return Stream.of("omitted","web","native").flatMap(type->Stream.of("http://127.0.0.1:49152/callback","http://localhost:3000/callback").map(redirect->DynamicTest.dynamicTest(type+" "+redirect,()->{
    Fixture f=new Fixture(application(reference(),type),true,true);String code=f.code(redirect);int before=f.fetches.get();
@@ -169,7 +169,7 @@ final class OAuthCimdMcpProfileTests {
   JsonObject document=change(reference(),"redirect_uris",strings("http://[::1]:3000/callback"));Fixture f=new Fixture(document,true,false);
   String actual="http://[::1]:49152/callback";success(f.redeem(f.code(actual),actual,VERIFIER));
  }
- private static @Nullable Boolean flag(String mode,String enabled){if(mode.equals("cleared"))return null;return mode.equals(enabled);}
+ private static @Nullable Boolean flag(@NonNull String mode,@NonNull String enabled){if(mode.equals("cleared"))return null;return mode.equals(enabled);}
  @TestFactory @NonNull Stream<@NonNull DynamicTest> builderDefaultFalseAndClearedPoliciesRejectTheMixedReference(){
   return Stream.of("off","cleared","ip-only","localhost-only").map(mode->DynamicTest.dynamicTest(mode,()->{
    Fixture f=new Fixture(reference(),flag(mode,"ip-only"),flag(mode,"localhost-only"));var rows=Map.copyOf(f.store.rows);

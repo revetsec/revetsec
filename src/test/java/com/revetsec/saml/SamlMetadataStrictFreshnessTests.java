@@ -15,6 +15,8 @@
  */
 package com.revetsec.saml;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.internal.pem.Pem;
 import com.revetsec.internal.xml.SamlXmlWriter;
 import com.revetsec.internal.xml.SecureXmlParser;
@@ -31,7 +33,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /** Final-only tests of the additive strict API; not counted as original runtime failures. */
 final class SamlMetadataStrictFreshnessTests {
-    @TestFactory Stream<DynamicTest> onlySignatureCoveredDeadlinesSatisfyTheStrictPolicy() {
+    @TestFactory @NonNull Stream<@NonNull DynamicTest> onlySignatureCoveredDeadlinesSatisfyTheStrictPolicy() {
         return Stream.of(0, 1, 2).flatMap(scope -> Stream.of(0, 1, 2, 3).map(location ->
                 DynamicTest.dynamicTest("scope=" + scope + " deadline location=" + location, () -> {
             byte[] xml = fixture(scope, location == 1 ? END.toString() : null,
@@ -44,7 +46,7 @@ final class SamlMetadataStrictFreshnessTests {
         })));
     }
 
-    @TestFactory Stream<DynamicTest> malformedAndExpiredCoveredDeadlinesFailClosed() {
+    @TestFactory @NonNull Stream<@NonNull DynamicTest> malformedAndExpiredCoveredDeadlinesFailClosed() {
         return Stream.of(0, 1, 2).flatMap(scope -> Stream.of(false, true).flatMap(role ->
                 Stream.of("", "not-a-date", NOW.toString(), NOW.minusNanos(1).toString()).map(limit ->
                         DynamicTest.dynamicTest("scope=" + scope + " role=" + role + " limit=" + limit, () -> {
@@ -74,7 +76,7 @@ final class SamlMetadataStrictFreshnessTests {
         }
     }
 
-    @TestFactory Stream<DynamicTest> completionBoundaryAndClockFailureAreAlsoEnforcedInStrictMode() {
+    @TestFactory @NonNull Stream<@NonNull DynamicTest> completionBoundaryAndClockFailureAreAlsoEnforcedInStrictMode() {
         return Stream.of(-1, 0, 1, 2, 3).map(boundary -> DynamicTest.dynamicTest("strict completion=" + boundary, () -> {
             Instant finish = boundary == -1 ? END.minusNanos(1) : boundary == 0 ? END
                     : boundary == 1 ? END.plusNanos(1) : NOW.minusNanos(1);

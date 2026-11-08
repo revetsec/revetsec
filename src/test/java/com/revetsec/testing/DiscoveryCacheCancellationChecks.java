@@ -167,7 +167,7 @@ public abstract class DiscoveryCacheCancellationChecks {
             assertNotSame(leader, first); assertNotSame(first, second);
             assertEquals(503, second.getStatus());
             assertEquals(Duration.ofSeconds(120), second.getRetryAfter().orElseThrow());
-            assertTrue(second.isTransient()); assertTrue(second.getErrorCode().isEmpty());
+            assertTrue(second.isTemporaryCondition()); assertTrue(second.getErrorCode().isEmpty());
             assertEquals(0, second.getSuppressed().length); assertNull(second.getCause());
             assertTrue(second.getStackTrace().length > 0);
             assertEquals(1, server.getHitCount(metadataPath()));

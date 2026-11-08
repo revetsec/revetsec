@@ -94,7 +94,7 @@ final class OAuthServerFailureClassificationTests {
    this.server=OAuthAuthorizationServer.withIssuer(ISSUER).authorizationEndpoint(URI.create(ISSUER+"/authorize")).tokenEndpoint(URI.create(ISSUER+"/token"))
     .jwksEndpoint(URI.create(ISSUER+"/jwks")).revocationEndpoint(URI.create(ISSUER+"/revoke")).introspectionEndpoint(URI.create(ISSUER+"/introspect"))
     .clientRepository((id,budget)->{String mode=this.registryFault;if(mode!=null){fault(mode);if(mode.equals("null"))return nullRegistration();}return id.equals("resource")?Optional.of(resourceClient):id.equals("client")?Optional.of(client):Optional.empty();})
-    .store(this.store).signingKeys(OAuthIssuerKeyProvider.fromSnapshot(OAuthIssuerKeySnapshot.withActiveKey(OAuthIssuerSigningKey.fromKeyPair("signing",key.getPrivateKey(),key.getPublicKey())).generation("g1").publishedAt(NOW.minusSeconds(120)).build()))
+    .store(this.store).signingKeys(OAuthIssuerKeyProvider.fromSnapshot(OAuthIssuerKeySnapshot.withActiveKey(OAuthIssuerSigningKey.fromRsaKeyPair("signing",key.getPrivateKey(),key.getPublicKey())).generation("g1").publishedAt(NOW.minusSeconds(120)).build()))
     .stateSealer(sealer).clock(Clock.fixed(NOW,ZoneOffset.UTC)).maximumSubjectLength(255).resources(Map.of(RESOURCE,Set.of("read","write")))
     .grantPolicy((context,budget)->{
      String mode=this.policyFault;if(mode!=null){fault(mode);if(mode.equals("null"))return nullDecision();}
@@ -132,7 +132,7 @@ final class OAuthServerFailureClassificationTests {
    var rows=Map.copyOf(this.store.rows);this.events.clear();OAuthServerException failure=assertThrows(OAuthServerException.class,attempt::get);
    if(configuration){assertInstanceOf(OAuthServerConfigurationException.class,failure);assertEquals(CONFIGURATION_INVALID,failure.getReason());assertEquals(ErrorCategory.CONFIGURATION,failure.getCategory());}
    else {assertInstanceOf(OAuthServerTransportException.class,failure);assertEquals("SERVICE_UNAVAILABLE",failure.getReason().name());assertEquals(ErrorCategory.TRANSPORT,failure.getCategory());}
-   assertFalse(failure.isTransient());assertNull(failure.getCause());assertEquals(0,failure.getSuppressed().length);assertFalse(failure.toString().contains(SENSITIVE));assertFalse(requireNonNull(failure.getMessage()).contains(SENSITIVE));
+   assertFalse(failure.isTemporaryCondition());assertNull(failure.getCause());assertEquals(0,failure.getSuppressed().length);assertFalse(failure.toString().contains(SENSITIVE));assertFalse(requireNonNull(failure.getMessage()).contains(SENSITIVE));
    var response=this.server.responseForFailure(failure);assertEquals(503,response.getStatusCode());assertEquals("{\"error\":\"server_error\"}",new String(response.toHttpBodyWithCredentials(),StandardCharsets.US_ASCII));assertTrue(response.getLocationWithCredentials().isEmpty());
    assertEquals(rows,this.store.rows);assertEquals(1,this.events.will);assertEquals(0,this.events.success);assertEquals(0,this.events.rejected);assertEquals(List.of(failure),this.events.failures);
   }

@@ -16,6 +16,7 @@
 
 package com.revetsec.saml;
 
+import com.revetsec.BrowserBinding;
 import com.revetsec.StateSealer;
 import com.revetsec.internal.crypto.SealedStateType;
 import org.jspecify.annotations.NonNull;
@@ -101,6 +102,12 @@ public final class PendingSamlAuthentication {
      * @since 1.0.0
      */
     public @NonNull SamlPendingSaveResult saveToResult(@NonNull PendingSamlAuthenticationStore store,
+            @NonNull StateSealer sealer, @NonNull String context, @NonNull BrowserBinding browserBinding,
+            @NonNull Duration remaining) {
+        return saveToResult(store, sealer, context, Objects.requireNonNull(browserBinding).toSecretString(), remaining);
+    }
+
+    @NonNull SamlPendingSaveResult saveToResult(@NonNull PendingSamlAuthenticationStore store,
             @NonNull StateSealer sealer, @NonNull String context, @NonNull String browserBinding,
             @NonNull Duration remaining) {
         Objects.requireNonNull(store);

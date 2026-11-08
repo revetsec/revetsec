@@ -33,6 +33,7 @@ import java.time.ZoneOffset;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Map;
+import java.util.List;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -123,6 +124,25 @@ final class RecordMigrationCryptoTests {
 			assertEquals(EXPIRY.plusSeconds(1), opened.getNotAfter());
 			assertEquals("AA", opened.getPlaintext());
 		}
+	}
+
+	@org.junit.jupiter.api.TestFactory
+	@NonNull List<org.junit.jupiter.api.@NonNull DynamicTest> expiredMigrationNeverAddsClockOrExpiryGrace() {
+		java.util.List<org.junit.jupiter.api.DynamicTest> cases=new java.util.ArrayList<>();
+		for(int family=0;family<2;family++)for(int version=1;version<=2;version++)for(int keyLength:new int[]{1,64})for(long after:new long[]{0,1,1000000000L}){
+			boolean wa=family==1;String context=wa?"revetsec/wa-record/v"+version+":"+ID+":record:1:1:0":"revetsec/as-record/v"+version+":"+STORAGE.replace("ISSUER_STATE","CODE");
+			SealedStateType type=wa?SealedStateType.WEBAUTHN_RECORD:SealedStateType.AS_RECORD;
+			ClosedMigrationIntent.Format format=wa?ClosedMigrationIntent.Format.WEBAUTHN_WAR2:ClosedMigrationIntent.Format.ISSUER_SCHEMA2;
+			Instant original=wa?EXPIRY.plusNanos(1):EXPIRY,notAfter=wa?EXPIRY.plusSeconds(1):EXPIRY;
+			cases.add(org.junit.jupiter.api.DynamicTest.dynamicTest("MIG12/crypto/"+family+"/"+version+"/"+keyLength+"/"+after,()->{
+				StateSealer selected=StateSealer.withActiveKey(TestSealers.fixedKey("k".repeat(keyLength))).clock(new UnreadableClock()).build();
+				String sealed=SealedStateAccess.get().seal(selected,type,"payload",context,original);
+				try(var before=SealedStateAccess.get().openRecord(selected,type,sealed,context,fixed(notAfter.minusNanos(1)))){assertEquals(notAfter,before.getNotAfter());}
+				UnsealException failure=assertThrows(UnsealException.class,()->SealedStateAccess.get().openRecord(selected,type,sealed,context,fixed(notAfter.plusNanos(after))));assertEquals(UnsealException.Kind.EXPIRED,failure.getKind());
+				try(var closed=SealedStateAccess.get().openForMigration(selected,type,sealed,context,intent(format))){assertEquals(notAfter,closed.getNotAfter());assertEquals("payload",closed.getPlaintext());}
+				assertThrows(UnsealException.class,()->SealedStateAccess.get().openRecord(selected,type,sealed,context,fixed(notAfter.plusNanos(after))));
+			}));
+		}return cases;
 	}
 
 	@Test

@@ -140,6 +140,12 @@ public final class PostgresqlTotpStore implements TotpStore {
 			for(TotpStoreKey key:requested){TotpStoreRecord record=entry(context,key);entries.put(key,record==null?TotpStoreEntry.Absent.confirmed():TotpStoreEntry.Present.fromRecord(record));}
 			if(admitted.state.equals("NEW") && !(entries.get(root) instanceof TotpStoreEntry.Absent))
 				return TotpPgTransactions.Decision.refuse(TotpPgTransactions.Refusal.UNAVAILABLE);
+			// Legal writers never delete permanent roots; shared admission excludes namespace
+			// activation. Check presence even for a caller requesting only account entries.
+			if(admitted.state.equals("ACTIVATED")){
+				boolean present=requested.contains(root)?entries.get(root) instanceof TotpStoreEntry.Present:entry(context,root)!=null;
+				if(!present)return TotpPgTransactions.Decision.refuse(TotpPgTransactions.Refusal.UNAVAILABLE);
+			}
 			StoreTimeObservation observation;try{observation=observe(context,admitted);}catch(AdmissionChanged fenced){return TotpPgTransactions.Decision.refuse(TotpPgTransactions.Refusal.FENCED);}
 			return TotpPgTransactions.Decision.commit(TotpStoreReadResult.Available.fromSnapshot(TotpStoreSnapshot.fromEntries(requested,entries,observation)));
 		});

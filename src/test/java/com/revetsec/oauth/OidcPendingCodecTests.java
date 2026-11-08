@@ -99,7 +99,7 @@ final class OidcPendingCodecTests {
 			@Override public boolean isEndpointRejection(@NonNull OAuthErrorResponseException failure) { throw new AssertionError(); }
 			@Override public OidcTransactionAccess.@NonNull RefreshCompletion refresh(@NonNull OAuthClient client, @NonNull RefreshToken token, @NonNull TokenRequestOptions options, @NonNull AuthorizationServerMetadata metadata, com.revetsec.internal.http.@NonNull Deadline deadline, @NonNull Set<com.revetsec.jose.@NonNull JwsAlgorithm> hmac) { throw new AssertionError(); }
 
-			@Override public @NonNull AuthorizationRedirect begin(@NonNull OAuthClient client, @NonNull AuthorizationRequestOptions options, @NonNull AuthorizationServerMetadata metadata, @Nullable Duration maxAge, @NonNull Set<@NonNull String> acr) { throw new AssertionError(); }
+			@Override public @NonNull AuthorizationRedirect begin(@NonNull OAuthClient client, @NonNull AuthorizationRequestOptions options, @NonNull AuthorizationServerMetadata metadata, @Nullable Duration maxAge, @NonNull Set<@NonNull String> acr, java.util.@NonNull List<@NonNull String> preferences) { throw new AssertionError(); }
 			@Override public OidcTransactionAccess.@NonNull Completion complete(@NonNull OAuthClient client, @NonNull AuthorizationResponse response, @NonNull PendingAuthorizationSource source, @NonNull URI callback, java.util.function.@NonNull Function<com.revetsec.internal.http.@NonNull Deadline, @NonNull AuthorizationServerMetadata> metadata, com.revetsec.internal.http.@NonNull Deadline deadline, @NonNull Set<com.revetsec.jose.@NonNull JwsAlgorithm> hmac) { throw new AssertionError(); }
 		};
 		assertThrows(IllegalArgumentException.class, () -> OidcTransactionAccess.set(impostor));

@@ -61,29 +61,29 @@ final class OAuthCimdHttpStatusTests {
  private static final OAuthServerIngressLimits LIMITS=OAuthServerIngressLimits.fromDefaults();
  private static final Map<String,Set<String>> RESOURCES=Map.of(RESOURCE,Set.of("read"));
  private static final List<Integer> REJECTED=List.of(401,403,404,410);
- private static Deadline deadline(){return Deadline.fromNow(Duration.ofSeconds(5));}
- private static String encode(String value){try{return FormUrlEncoding.encode(value);}catch(Exception failure){throw new AssertionError(failure);}}
- private static String form(Map<String,String> values){return String.join("&",values.entrySet().stream().map(e->encode(e.getKey())+"="+encode(e.getValue())).toList());}
- private static byte[] bytes(String value){return value.getBytes(StandardCharsets.UTF_8);}
- private static Map<String,List<String>> headers(){return Map.of("Content-Type",List.of("application/x-www-form-urlencoded"));}
- private static JsonObject json(OAuthServerResponse response){try{return (JsonObject)JsonCodec.parse(response.toHttpBodyWithCredentials(),JsonLimits.protocolDocument(131072));}catch(Exception failure){throw new AssertionError(failure);}}
- private static String value(OAuthServerResponse response,String name){return ((JsonString)requireNonNull(json(response).getMembers().get(name))).getValue();}
- private static OAuthAuthorizationDecision decision(){return OAuthAuthorizationDecision.withSubject("subject").authorizedScopesByResource(RESOURCES).refreshTokenPermitted(true).build();}
- private static StateSealer sealer(){byte[] key=new byte[32];for(int i=0;i<key.length;i++)key[i]=(byte)(i+1);return StateSealer.withActiveKey(SealingKey.fromBase64("k",Base64.getEncoder().encodeToString(key))).clock(CLOCK).build();}
- private static byte[] document(){return bytes(JsonObject.builder().put("client_id",ID).put("client_name","Client").put("token_endpoint_auth_method","none")
+ private static @NonNull Deadline deadline(){return Deadline.fromNow(Duration.ofSeconds(5));}
+ private static @NonNull String encode(@NonNull String value){try{return FormUrlEncoding.encode(value);}catch(Exception failure){throw new AssertionError(failure);}}
+ private static @NonNull String form(@NonNull Map<@NonNull String,@NonNull String> values){return String.join("&",values.entrySet().stream().map(e->encode(e.getKey())+"="+encode(e.getValue())).toList());}
+ private static byte @NonNull [] bytes(@NonNull String value){return value.getBytes(StandardCharsets.UTF_8);}
+ private static @NonNull Map<@NonNull String,@NonNull List<@NonNull String>> headers(){return Map.of("Content-Type",List.of("application/x-www-form-urlencoded"));}
+ private static @NonNull JsonObject json(@NonNull OAuthServerResponse response){try{return (JsonObject)JsonCodec.parse(response.toHttpBodyWithCredentials(),JsonLimits.protocolDocument(131072));}catch(Exception failure){throw new AssertionError(failure);}}
+ private static @NonNull String value(@NonNull OAuthServerResponse response,@NonNull String name){return ((JsonString)requireNonNull(json(response).getMembers().get(name))).getValue();}
+ private static @NonNull OAuthAuthorizationDecision decision(){return OAuthAuthorizationDecision.withSubject("subject").authorizedScopesByResource(RESOURCES).refreshTokenPermitted(true).build();}
+ private static @NonNull StateSealer sealer(){byte[] key=new byte[32];for(int i=0;i<key.length;i++)key[i]=(byte)(i+1);return StateSealer.withActiveKey(SealingKey.fromBase64("k",Base64.getEncoder().encodeToString(key))).clock(CLOCK).build();}
+ private static byte @NonNull [] document(){return bytes(JsonObject.builder().put("client_id",ID).put("client_name","Client").put("token_endpoint_auth_method","none")
    .put("redirect_uris",JsonArray.fromElements(List.of(JsonString.fromValue(REDIRECT))))
    .put("grant_types",JsonArray.fromElements(List.of(JsonString.fromValue("authorization_code"),JsonString.fromValue("refresh_token")))).build().toJson());}
- private static OAuthServerResponse rejection(Object result,OAuthServerException.Reason reason){
+ private static @NonNull OAuthServerResponse rejection(@NonNull Object result,OAuthServerException.@NonNull Reason reason){
   if(result instanceof OAuthAuthorizationResult.Rejected rejected){assertEquals(reason,rejected.getReason());return rejected.getResponse();}
   if(result instanceof OAuthTokenResult.Rejected rejected){assertEquals(reason,rejected.getReason());return rejected.getResponse();}
   OAuthRevocationResult.Rejected rejected=assertInstanceOf(OAuthRevocationResult.Rejected.class,result);assertEquals(reason,rejected.getReason());return rejected.getResponse();
  }
- private static void localError(OAuthServerResponse response,int status,String error){
+ private static void localError(@NonNull OAuthServerResponse response,int status,@NonNull String error){
   assertEquals(status,response.getStatusCode());assertEquals("{\"error\":\""+error+"\"}",new String(response.toHttpBodyWithCredentials(),StandardCharsets.US_ASCII));
   assertTrue(response.getLocationWithCredentials().isEmpty());assertTrue(response.getHeaders().keySet().stream().noneMatch(n->n.equalsIgnoreCase("Location")||n.equalsIgnoreCase("WWW-Authenticate")||n.equalsIgnoreCase("Retry-After")));
   assertFalse(response.getHeaders().toString().contains(REMOTE));assertEquals(List.of("no-store"),response.getHeaders().get("Cache-Control"));
  }
- private static void admission(OAuthServerAdmissionFailure.Reason reason,org.junit.jupiter.api.function.Executable operation){
+ private static void admission(OAuthServerAdmissionFailure.@NonNull Reason reason,org.junit.jupiter.api.function.@NonNull Executable operation){
   var failure=assertThrows(OAuthServerAdmissionFailure.class,operation);assertEquals(reason,failure.reason());assertNull(failure.getCause());assertEquals(0,failure.getSuppressed().length);assertEquals("OAuth server admission failed.",failure.getMessage());
  }
  private static final class Fixture {
@@ -105,7 +105,7 @@ final class OAuthCimdHttpStatusTests {
   @Nullable Runnable transportHook;
   Fixture() throws Exception {
    var key=TestJwk.Fixture.IDP_SIGNING_RSA_2048;
-   var snapshot=OAuthIssuerKeySnapshot.withActiveKey(OAuthIssuerSigningKey.fromKeyPair("key",key.getPrivateKey(),key.getPublicKey())).generation("g1").publishedAt(NOW.minusSeconds(120)).build();
+   var snapshot=OAuthIssuerKeySnapshot.withActiveKey(OAuthIssuerSigningKey.fromRsaKeyPair("key",key.getPrivateKey(),key.getPublicKey())).generation("g1").publishedAt(NOW.minusSeconds(120)).build();
    server=OAuthAuthorizationServer.withIssuer(ISSUER).authorizationEndpoint(URI.create(ISSUER+"/authorize")).tokenEndpoint(URI.create(ISSUER+"/token"))
      .jwksEndpoint(URI.create(ISSUER+"/jwks")).revocationEndpoint(URI.create(ISSUER+"/revoke")).clientRepository((id,budget)->Optional.ofNullable(registered.get()))
      .store(store).stateSealer(sealer).signingKeys(OAuthIssuerKeyProvider.fromSnapshot(snapshot)).resources(RESOURCES).clock(CLOCK).refreshTokensEnabled(true).clientMetadataPolicy(policy)
@@ -127,15 +127,15 @@ final class OAuthCimdHttpStatusTests {
    });
    assertEquals(OAuthStoreCommitStatus.COMMITTED,server.initializeFreshIssuer().getStatus());server.establishNewSubject("subject");
   }
-  OAuthAuthorizationResult begin(){return server.beginAuthorizationResult("GET",form(Map.of("client_id",ID,"response_type","code","redirect_uri",REDIRECT,"resource",RESOURCE,
+  @NonNull OAuthAuthorizationResult begin(){return server.beginAuthorizationResult("GET",form(Map.of("client_id",ID,"response_type","code","redirect_uri",REDIRECT,"resource",RESOURCE,
     "code_challenge_method","S256","code_challenge",CHALLENGE,"state","kept")),new byte[0],Map.of(),BROWSER);}
-  OAuthServerInteraction interaction(){return assertInstanceOf(OAuthAuthorizationResult.InteractionRequired.class,begin()).getInteraction();}
-  String code(){var result=server.completeAuthorizationResult(interaction().getInteractionValue(),BROWSER,decision());String query=requireNonNull(assertInstanceOf(OAuthAuthorizationResult.Completed.class,result).getResponse().getLocationWithCredentials().orElseThrow().getRawQuery());return Stream.of(query.split("&")).filter(p->p.startsWith("code=")).map(p->p.substring(5)).findFirst().orElseThrow();}
-  OAuthTokenResult redeem(String code){return server.tokenResult("POST",null,bytes(form(Map.of("grant_type","authorization_code","client_id",ID,"resource",RESOURCE,"code",code,"code_verifier",VERIFIER,"redirect_uri",REDIRECT))),headers());}
-  OAuthTokenResult rotate(String refresh){return server.tokenResult("POST",null,bytes(form(Map.of("grant_type","refresh_token","client_id",ID,"resource",RESOURCE,"refresh_token",refresh))),headers());}
-  OAuthRevocationResult revoke(String token){return server.revokeResult("POST",null,bytes(form(Map.of("client_id",ID,"token",token))),headers());}
-  OAuthServerResponse issued(){return assertInstanceOf(OAuthTokenResult.Succeeded.class,redeem(code())).getResponse();}
-  Supplier<Object> operation(String kind){
+  @NonNull OAuthServerInteraction interaction(){return assertInstanceOf(OAuthAuthorizationResult.InteractionRequired.class,begin()).getInteraction();}
+  @NonNull String code(){var result=server.completeAuthorizationResult(interaction().getInteractionValue(),BROWSER,decision());String query=requireNonNull(assertInstanceOf(OAuthAuthorizationResult.Completed.class,result).getResponse().getLocationWithCredentials().orElseThrow().getRawQuery());return Stream.of(query.split("&")).filter(p->p.startsWith("code=")).map(p->p.substring(5)).findFirst().orElseThrow();}
+  @NonNull OAuthTokenResult redeem(@NonNull String code){return server.tokenResult("POST",null,bytes(form(Map.of("grant_type","authorization_code","client_id",ID,"resource",RESOURCE,"code",code,"code_verifier",VERIFIER,"redirect_uri",REDIRECT))),headers());}
+  @NonNull OAuthTokenResult rotate(@NonNull String refresh){return server.tokenResult("POST",null,bytes(form(Map.of("grant_type","refresh_token","client_id",ID,"resource",RESOURCE,"refresh_token",refresh))),headers());}
+  @NonNull OAuthRevocationResult revoke(@NonNull String token){return server.revokeResult("POST",null,bytes(form(Map.of("client_id",ID,"token",token))),headers());}
+  @NonNull OAuthServerResponse issued(){return assertInstanceOf(OAuthTokenResult.Succeeded.class,redeem(code())).getResponse();}
+  @NonNull Supplier<@NonNull Object> operation(@NonNull String kind){
    if(kind.equals("begin"))return this::begin;
    if(kind.equals("resume")||kind.equals("complete")){String handle=interaction().getInteractionValue();return ()->kind.equals("resume")?server.resumeAuthorizationResult(handle,BROWSER):server.completeAuthorizationResult(handle,BROWSER,decision());}
    if(kind.equals("code")){String credential=code();return ()->redeem(credential);}
@@ -150,7 +150,7 @@ final class OAuthCimdHttpStatusTests {
     localError(rejection(assertDoesNotThrow(call::get),OAuthServerException.Reason.INVALID_CLIENT),400,"invalid_client");
     assertEquals(rejected+1,f.rejected.get());assertEquals(failed,f.failed.get());
    }else{
-    OAuthServerTransportException failure=assertThrows(OAuthServerTransportException.class,call::get);assertEquals(OAuthServerException.Reason.CLIENT_METADATA_UNAVAILABLE,failure.getReason());assertFalse(failure.isTransient());assertNull(failure.getCause());
+    OAuthServerTransportException failure=assertThrows(OAuthServerTransportException.class,call::get);assertEquals(OAuthServerException.Reason.CLIENT_METADATA_UNAVAILABLE,failure.getReason());assertFalse(failure.isTemporaryCondition());assertNull(failure.getCause());
     localError(f.server.responseForFailure(failure),503,"server_error");assertEquals(rejected,f.rejected.get());assertEquals(failed+1,f.failed.get());
    }
    assertEquals(fetches+1,f.fetches.get());assertEquals(writes,f.writes.get());assertEquals(policies,f.policies.get());assertEquals(rows,f.store.rows);

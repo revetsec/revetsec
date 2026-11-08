@@ -108,6 +108,19 @@ final class WebAuthnMigrationGoldenConformanceTests {
         }));return tests;
     }
 
+    @TestFactory @NonNull List<@NonNull DynamicTest> closedExpiredCeremonyConversionPreservesAuthenticatedEnvelopeCeiling(){
+        List<DynamicTest> tests=new ArrayList<>();
+        for(Vector vector:selected("CEREMONY"))for(long after:new long[]{0,1,1000000000L})tests.add(DynamicTest.dynamicTest("MIG12/WAR1-expired/"+vector.name()+"/"+after,()->{
+            StateSealer sealer=sealer();var codec=new WebAuthnRecordCodecV2(sealer);byte[] old=vector.bytes("sealed"),before=old.clone();
+            try(var opened=codec.openLegacyForMigration(vector.key().getStorageKey(),old,intent())){assertEquals(ceiling(vector.time("expires")),opened.notAfter());}
+            var prepared=convert(vector,sealer);Instant end=Instant.ofEpochSecond(ceiling(vector.time("expires")));assertEquals(vector.time("expires"),prepared.expiresAt());
+            try(var opened=codec.openWithMetadata(vector.key(),prepared.sealedBytes(),clock(end.minusNanos(1)))){assertEquals(end.getEpochSecond(),opened.notAfter());}
+            assertThrows(WebAuthnRecordException.class,()->codec.openWithMetadata(vector.key(),prepared.sealedBytes(),clock(end.plusNanos(after))));
+            assertThrows(WebAuthnRecordException.class,()->new WebAuthnRecordCodec(sealer).openAdmittedRecord(vector.key(),prepared.sealedBytes(),clock(end.plusNanos(after))));
+            assertArrayEquals(before,old);assertEquals(vector.time("floor"),prepared.floor());
+        }));return tests;
+    }
+
     @TestFactory @NonNull List<@NonNull DynamicTest> revokedOwnersStayPermanentAndInactiveThroughNormalReseal(){
         List<DynamicTest> tests=new ArrayList<>();
         for(Vector vector:selected("CREDENTIAL"))if(vector.optional("form").equals("revoked"))tests.add(DynamicTest.dynamicTest("MIG-02/revoked-reseal/"+vector.name(),()->{

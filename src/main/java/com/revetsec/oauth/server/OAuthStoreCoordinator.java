@@ -175,25 +175,25 @@ final class OAuthStoreCoordinator {
   }
   private @NonNull StoreAdmission admission(){return requireNonNull(this.expectedAdmission);}
   private StoreTimeObservation.@NonNull Healthy profile(){return requireNonNull(this.profile);}
-  private @NonNull OAuthIssuerRootV2 root(@NonNull OAuthStoreEntry entry){
+  private @NonNull OAuthIssuerRootV2 root(@NonNull OAuthStoreEntry entry){return readStep(()->{
    OAuthStoreRecordCodecV2.Opened opened=this.fenceOnly?crypto(()->codec.openPermanentFence(entry,admission(),entry)):opened(entry);
    OAuthIssuerRootV2 decoded=crypto(()->OAuthIssuerRootV2.decode(opened.payload()));
    if(!decoded.authorityId().equals(admission().getAuthorityId()) || !opened.floor().equals(decoded.minimum()))throw failure(CORRUPT_STATE);
    if(!this.fenceOnly)floor(decoded.minimum());
    this.root=decoded;this.rootEntry=entry;return decoded;
-  }
+  });}
   @NonNull OAuthStoreFence issuer(){checkOpen();return OAuthStoreFence.fromRoot(requireNonNull(this.root));}
   @NonNull Instant effectiveNow(){checkOpen();return requireNonNull(this.latestTime);}
   void requireBefore(@NonNull Instant expiry){
    checkOpen();requireNonNull(expiry);if(!ordinary(expiry))throw failure(UNAVAILABLE);
    if(this.validBefore==null || expiry.isBefore(this.validBefore))this.validBefore=expiry;
   }
-  @NonNull Optional<@NonNull OAuthStoreEntry> read(@NonNull OAuthStoreKey key){
+  @NonNull Optional<@NonNull OAuthStoreEntry> read(@NonNull OAuthStoreKey key){return readStep(()->{
    checkOpen();namespace(key);Optional<OAuthStoreEntry> old=this.loaded.get(key);if(old!=null)return old;
    if(this.loaded.size()==16)throw OAuthStoreFormat.invalid();Optional<OAuthStoreEntry> entry=observe(key);
    this.loaded.put(key,entry);this.reads.observe(key,entry);return entry;
-  }
-  private @NonNull Optional<@NonNull OAuthStoreEntry> observe(@NonNull OAuthStoreKey key){
+  });}
+  private @NonNull Optional<@NonNull OAuthStoreEntry> observe(@NonNull OAuthStoreKey key){return readStep(()->{
    Duration budget=remaining(this.deadline);long started=System.nanoTime();OAuthStoreReadResult reply;
    try{reply=store.read(key,budget);}catch(VirtualMachineError fatal){throw fatal;}
    catch(Throwable fault){preserveInterrupt(fault);throw failure(UNAVAILABLE);}
@@ -206,7 +206,7 @@ final class OAuthStoreCoordinator {
     accept(healthy,started);
    }
    remaining(this.deadline);return available.getEntry();
-  }
+  });}
   private void accept(StoreTimeObservation.@NonNull Healthy observation,long started){
    if(this.profile!=null && !StoreTimeRules.sameProfile(this.profile,observation))throw failure(UNAVAILABLE);
    if(this.latestTime!=null && observation.getObservedAt().isBefore(this.latestTime))throw failure(UNAVAILABLE);
@@ -219,25 +219,25 @@ final class OAuthStoreCoordinator {
   private void floor(@NonNull Instant value){
    if(!ordinary(value) || value.isAfter(requireNonNull(this.latestTime)))throw failure(UNAVAILABLE);
   }
-  private OAuthStoreRecordCodecV2.@NonNull Opened opened(@NonNull OAuthStoreEntry entry){
+  private OAuthStoreRecordCodecV2.@NonNull Opened opened(@NonNull OAuthStoreEntry entry){return readStep(()->{
    OAuthStoreRecordCodecV2.Opened opened=crypto(()->codec.openAdmitted(entry,Clock.fixed(requireNonNull(this.latestTime),ZoneOffset.UTC)));
    floor(opened.floor());this.floors.put(entry.getKey(),opened.floor());return opened;
-  }
+  });}
   @NonNull JsonObject open(@NonNull OAuthStoreEntry entry){checkOpen();return opened(entry).payload();}
   @NonNull OAuthStoreEntry seal(@NonNull OAuthStoreKey key,@NonNull Instant retainUntil,@NonNull String payload){
    checkOpen();return crypto(()->codec.sealAdmitted(key,retainUntil,effectiveNow(),payload));
   }
-  private @NonNull OAuthStoreFence decodeSubject(@NonNull OAuthStoreEntry entry){
+  private @NonNull OAuthStoreFence decodeSubject(@NonNull OAuthStoreEntry entry){return readStep(()->{
    OAuthStoreRecordCodecV2.Opened opened=this.fenceOnly?crypto(()->codec.openPermanentFence(entry,admission(),requireNonNull(this.rootEntry))):opened(entry);
    this.floors.put(entry.getKey(),opened.floor());return crypto(()->OAuthStoreFence.decode(opened.payload(),OAuthStoreKey.Kind.SUBJECT_STATE));
-  }
-  @NonNull OAuthStoreFence subject(@NonNull String subject){return decodeSubject(read(subjectKey(subject)).orElseThrow(()->failure(CORRUPT_STATE)));}
+  });}
+  @NonNull OAuthStoreFence subject(@NonNull String subject){return readStep(()->{return decodeSubject(read(subjectKey(subject)).orElseThrow(()->failure(CORRUPT_STATE)));});}
   /** Fresh authority time for key checks after provider/signing work; expected epoch predicates remain pinned. */
-  @NonNull Instant authorityNow(){
+  @NonNull Instant authorityNow(){return readStep(()->{
    checkOpen();OAuthStoreEntry entry=observe(codec.issuerKey()).orElseThrow(()->failure(CORRUPT_STATE));
    OAuthStoreRecordCodecV2.Opened opened=opened(entry);OAuthIssuerRootV2 observed=crypto(()->OAuthIssuerRootV2.decode(opened.payload()));
    sameRoot(observed);return effectiveNow();
-  }
+  });}
   private void sameRoot(@NonNull OAuthIssuerRootV2 observed){
    OAuthIssuerRootV2 expected=requireNonNull(this.root);
    if(!expected.authorityId().equals(observed.authorityId()) || !expected.minimum().equals(observed.minimum())
@@ -351,6 +351,13 @@ final class OAuthStoreCoordinator {
     sameRoot(crypto(()->OAuthIssuerRootV2.decode(opened.payload())));remaining(this.deadline);
     Operation scope=current(this.deadline);if(scope!=null)scope.release=this;return status;
    }catch(VirtualMachineError fatal){throw fatal;}catch(Throwable fault){preserveInterrupt(fault);throw effectFailure();}
+  }
+  // A failed observation or authenticated decode abandons every earlier prepared fact.
+  // Post-commit final checks may still use this helper; factual effect flags remain untouched.
+  private <T> @NonNull T readStep(@NonNull Supplier<@NonNull T> work){
+   boolean accepted=false;
+   try{T result=work.get();accepted=true;return result;}
+   finally{if(!accepted)this.finished=true;}
   }
   private void checkOpen(){if(this.finished)throw new IllegalStateException("OAuth store attempt is closed.");}
  }

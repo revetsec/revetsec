@@ -86,7 +86,8 @@ public final class OAuthStoreKey {
   */
  @Override public @NonNull String toString() { return "OAuthStoreKey{address=<redacted>}"; }
  /**
-  * The seven issuer storage record kinds. Permanent fence kinds must never be TTL evicted.
+  * Issuer storage record kinds; a later release may add values. Store backends must not switch exhaustively
+  * without a rejecting default. Permanent fence kinds must never be TTL evicted.
   * @author <a href="https://www.revetkn.com">Mark Allen</a>
   * @since 1.0.0
   */

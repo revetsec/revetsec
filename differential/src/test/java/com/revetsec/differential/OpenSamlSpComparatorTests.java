@@ -216,6 +216,27 @@ final class OpenSamlSpComparatorTests {
         }
     }
 
+    @Test void consumedTypedIdentityFieldsFollowTheNarrowedNamespacePolicy() throws Exception {
+        String clean = Files.readString(FIXTURES.resolve("scripted-idp/signed-structure/clean.xml"));
+        assertEquals("minted-user", authenticate(clean, "idp-signing-rsa-2048"));
+        assertEquals("minted-user", SpringSamlComparatorTests.spring(clean, "idp-signing-rsa-2048").getName());
+        Map<String, SamlAuthenticationResult.Reason> reasons = Map.of(
+                "audience-type", SamlAuthenticationResult.Reason.CONDITIONS,
+                "authn-class-ref-type", SamlAuthenticationResult.Reason.AUTHN_STATEMENT);
+        for (var entry : reasons.entrySet()) {
+            String xml = Files.readString(FIXTURES.resolve("scripted-idp/signed-identity-shape/" + entry.getKey() + ".xml"));
+            var rejected = assertInstanceOf(SamlAuthenticationResult.Rejected.class,
+                    revetsec(xml, "idp-signing-rsa-2048", false, false));
+            assertEquals(entry.getValue(), rejected.getReason(), entry.getKey());
+            Exception openSaml = org.junit.jupiter.api.Assertions.assertThrows(Exception.class,
+                    () -> authenticate(xml, "idp-signing-rsa-2048"));
+            assertTrue(java.util.Set.of("UnmarshallingException", "IllegalStateException").contains(openSaml.getClass().getSimpleName()), "OpenSAML consumed-type rejection");
+            Exception spring = org.junit.jupiter.api.Assertions.assertThrows(Exception.class,
+                    () -> SpringSamlComparatorTests.spring(xml, "idp-signing-rsa-2048"));
+            assertEquals("Saml2AuthenticationException", spring.getClass().getSimpleName());
+        }
+    }
+
     @Test void signedSemanticCorpusControlsRetainOnlyTheirOriginalIdentityUnderEnvelopeMutations()
             throws Exception {
         Map<String, Integer> familySizes = Map.of(
@@ -277,8 +298,8 @@ final class OpenSamlSpComparatorTests {
                 assertTrue(perControlMutations >= 15, family.getKey() + "/" + file.getFileName());
             }
         }
-        assertEquals(30, acceptedControls, "signed semantic corpus control count");
-        assertEquals(568, applicableMutations, "signed semantic corpus mutation coverage");
+        assertEquals(28, acceptedControls, "signed semantic corpus control count");
+        assertEquals(530, applicableMutations, "signed semantic corpus mutation coverage");
         assertEquals(0, revetsecAcceptances, "Revetsec changed-envelope acceptances");
         assertEquals(48, openSamlAcceptances, "OpenSAML changed-envelope acceptances");
         assertEquals(Map.of("attacker-extension", 24, "copied-signature-extension", 24),
@@ -345,8 +366,8 @@ final class OpenSamlSpComparatorTests {
                 }
             }
         }
-        assertEquals(65, rejectedFixtures, "rejected signed semantic corpus fixture count");
-        assertEquals(1232, applicableMutations, "rejected fixture mutation coverage");
+        assertEquals(67, rejectedFixtures, "rejected signed semantic corpus fixture count");
+        assertEquals(1270, applicableMutations, "rejected fixture mutation coverage");
         assertEquals(60, openSamlAcceptances, "OpenSAML changed-envelope acceptances");
         assertEquals(96, springAcceptances, "Spring changed-envelope acceptances");
     }

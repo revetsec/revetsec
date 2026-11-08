@@ -147,7 +147,7 @@ final class TotpApplicationSessionStore {
             long nowMs, @NonNull Duration budget, @Nullable Runnable beforeCommit) {
         if (proof.getMethod() != TotpAuthenticationMethod.TOTP) return WriteResult.rejected();
         return complete(proof.getCredentialNamespace(), proof.getRecoveryEpoch(),
-                proof.getAccountId(), proof.getOperationBinding(), proof.getFactorId(),
+                proof.getAccountId(), proof.getOperationBinding().toSecretString(), proof.getFactorId(),
                 "TOTP", oldCookie, oldCsrf,
                 nowMs, budget, beforeCommit);
     }
@@ -157,7 +157,7 @@ final class TotpApplicationSessionStore {
             long nowMs, @NonNull Duration budget) {
         if (proof.getMethod() != TotpAuthenticationMethod.RECOVERY_CODE) return WriteResult.rejected();
         return complete(proof.getCredentialNamespace(), proof.getRecoveryEpoch(),
-                proof.getAccountId(), proof.getOperationBinding(), proof.getFactorId(),
+                proof.getAccountId(), proof.getOperationBinding().toSecretString(), proof.getFactorId(),
                 "RECOVERY_CODE", oldCookie,
                 oldCsrf, nowMs, budget, null);
     }

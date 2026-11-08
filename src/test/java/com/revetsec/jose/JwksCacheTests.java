@@ -635,6 +635,30 @@ final class JwksCacheTests {
 		Assertions.assertEquals(3, client.getSendCount());
 	}
 
+	// Selected fail-closed contract: rollback discards even otherwise eligible stale material, never reviving it.
+	@Test
+	void rollbackDiscardsOtherwiseEligibleStaleKeysAndClockCatchupCannotReviveThem() {
+		RewindableClock clock = RewindableClock.fromInstant(START);
+		MemoryHttpClient client = MemoryHttpClient.answering(Answer.fromJwks("max-age=60", "a"));
+		RemoteJwksSource source = source(client, clock).maximumStaleness(Duration.ofMinutes(5)).build();
+		Assertions.assertEquals(KeySelection.Kind.FOUND, select(source, "a").getKind());
+		clock.advance(Duration.ofSeconds(5));
+		Assertions.assertEquals(KeySelection.Kind.FOUND, select(source, "a").getKind());
+		Assertions.assertEquals(1, client.getSendCount());
+		client.answer(Answer.fromStatus(503));
+		clock.rewind(Duration.ofSeconds(1)); // Still after fetchedAt and well inside the original fresh/stale horizon.
+		assertUnavailable(ErrorCategory.REMOTE_ERROR, true, () -> select(source, "a"));
+		Assertions.assertEquals(2, client.getSendCount());
+		clock.advance(Duration.ofSeconds(1)); // Catch up to the previously observed wall instant.
+		Assertions.assertThrows(JwksUnavailableException.class, () -> select(source, "a"));
+		Assertions.assertEquals(2, client.getSendCount(), "no hidden fetch or old-snapshot reanimation in backoff");
+		clock.advance(Duration.ofSeconds(30));
+		client.answer(Answer.fromJwks("max-age=60", "b"));
+		Assertions.assertEquals(KeySelection.Kind.FOUND, select(source, "b").getKind());
+		Assertions.assertEquals(3, client.getSendCount());
+		Assertions.assertEquals(KeySelection.Kind.UNKNOWN, select(source, "a").getKind());
+	}
+
 	@Test
 	void aSmallClockRollbackCannotKeepAnOldKeySetFresh() {
 		RewindableClock clock = RewindableClock.fromInstant(START);
@@ -1155,7 +1179,7 @@ final class JwksCacheTests {
 		JwksUnavailableException exception = Assertions.assertThrows(JwksUnavailableException.class,
 				executable);
 		Assertions.assertEquals(category, exception.getCategory(), exception::toString);
-		Assertions.assertEquals(transientFailure, exception.isTransient(), exception::toString);
+		Assertions.assertEquals(transientFailure, exception.isTemporaryCondition(), exception::toString);
 		return exception;
 	}
 

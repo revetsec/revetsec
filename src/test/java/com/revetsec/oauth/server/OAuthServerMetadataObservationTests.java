@@ -72,7 +72,7 @@ final class OAuthServerMetadataObservationTests {
    this.sealer=StateSealer.withActiveKey(SealingKey.fromBase64("key",Base64.getEncoder().encodeToString(material))).clock(Clock.fixed(NOW,ZoneOffset.UTC)).build();
    this.codec=new OAuthStoreRecordCodec(ISSUER,this.sealer,3800);
    var key=TestJwk.Fixture.IDP_SIGNING_RSA_2048;Map<String,PublicKey> old=new LinkedHashMap<>();if(largeJwks)for(int i=0;i<20;i++)old.put("old"+i,key.getPublicKey());
-   var snapshot=OAuthIssuerKeySnapshot.withActiveKey(OAuthIssuerSigningKey.fromKeyPair("active",key.getPrivateKey(),key.getPublicKey())).verificationKeys(old).generation("g1").publishedAt(NOW.minusSeconds(120)).build();
+   var snapshot=OAuthIssuerKeySnapshot.withActiveKey(OAuthIssuerSigningKey.fromRsaKeyPair("active",key.getPrivateKey(),key.getPublicKey())).verificationKeys(old).generation("g1").publishedAt(NOW.minusSeconds(120)).build();
    Set<String> scopes=new LinkedHashSet<>();if(largeMetadata)for(int i=0;i<64;i++)scopes.add("scope"+"x".repeat(95)+i);else scopes.add("read");
    this.server=OAuthAuthorizationServer.withIssuer(ISSUER).authorizationEndpoint(URI.create(ISSUER+"/authorize")).tokenEndpoint(URI.create(ISSUER+"/token"))
     .jwksEndpoint(URI.create(ISSUER+"/jwks")).clientRepository((id,budget)->{this.clients.incrementAndGet();return Optional.empty();}).store(this.store)
@@ -84,7 +84,7 @@ final class OAuthServerMetadataObservationTests {
   @NonNull OAuthServerResponse response(boolean jwks,@NonNull String method){return jwks?this.server.jwksResponse(method):this.server.metadataResponse(method);}
   void untouched(@NonNull Map<@NonNull OAuthStoreKey,@NonNull OAuthStoreEntry> rows,int reads,int commits){assertEquals(rows,this.store.rows);assertEquals(reads,this.store.reads);assertEquals(commits,this.store.commits);assertEquals(0,this.clients.get());}
  }
- private static void safe(@NonNull OAuthServerException failure){assertNull(failure.getCause());assertEquals(0,failure.getSuppressed().length);assertFalse(failure.toString().contains(PRIVATE));assertFalse(failure.isTransient());}
+ private static void safe(@NonNull OAuthServerException failure){assertNull(failure.getCause());assertEquals(0,failure.getSuppressed().length);assertFalse(failure.toString().contains(PRIVATE));assertFalse(failure.isTemporaryCondition());}
  @TestFactory @NonNull Stream<@NonNull DynamicTest> trustedPublicationOverflowIsConfigurationWithOneFailureEvent(){
   return Stream.of(false,true).flatMap(jwks->Stream.of("GET","HEAD").flatMap(method->Stream.of("ordinary","throw","interrupt","fatal").map(mode->DynamicTest.dynamicTest((jwks?"JWKS":"METADATA")+"/"+method+"/"+mode,()->{
    Fixture f=new Fixture(!jwks,jwks,4096);var rows=Map.copyOf(f.store.rows);int reads=f.store.reads,commits=f.store.commits;f.events.behavior=mode;

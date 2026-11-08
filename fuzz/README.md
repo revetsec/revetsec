@@ -1003,3 +1003,13 @@ M10 adds `com.revetsec.scim.ScimM10FuzzTests`: bounded GET query approval, heade
 
 
 M11 adds `com.revetsec.scim.ScimM11FuzzTests` with two targets: arbitrary PatchOp bodies through schema binding, ordered application and membership reduction; and a generated member addition followed by a forbidden final operation. Properties check unchanged authoritative snapshots, metadata retention, fixed rejection outcomes and request/result path provenance across strict, Entra and Okta configurations. Its 29 authored synthetic seeds, including empty and malformed input, are inventoried in `src/test/resources/com/revetsec/scim/scim-m11-seeds.sha256` and documented in `SCIM-M11-SEEDS.md`. All SCIM seed provenance checks run with the normal and main-sources-only fuzz builds. Replay and live qualification remain separate evidence.
+
+
+### Selected feature refresh
+
+`KeyImportsFuzzTests` drives all eight public import/pair methods with ordinary RSA, P-256, P-384 and Ed25519 fixtures, arbitrary bounded DER/PEM, independent outer framing and JCA/key-profile checks. Certificate parsing does not establish trust. `SigningProfilesFuzzTests` reaches all nine selected signing algorithms with exact compact bytes checked by a raw JCA oracle, same-family mismatches and zero budgets; EC verification uses the JDK fixed-length engine without calling the product converter. The checked WebAuthn target invokes genuine enrollment/completion and distinguishes all five result leaves, exact callback/effect counts, all six proof fields and deterministic entry-account mutation. Its controlled store loss and admission changes are local fault injections, not deployed recovery evidence.
+
+`selected-feature-fuzz-seeds.json` binds the complete new corpus and ordinary fixture bytes. The provenance guard retains exact path-set/count/hash checks, including the previously added authorization-state and CIMD grant-profile seeds in their existing manifests. Deterministic replay is finite corpus evidence; short native campaigns, retained mutation dispositions, physical keys, hosted providers and final-candidate qualification remain separate.
+
+
+The OIDC trusted-reference target now supplies current version-2 positive controls and verifies the exact persisted `required_acr_values` set separately from continuity claims. Historical version-1 corpus inputs remain unchanged and are explicit rejection inputs. This refresh repairs a stale four-field oracle that had no accepted current-version seed; it does not relax the parser or provide new authorization.

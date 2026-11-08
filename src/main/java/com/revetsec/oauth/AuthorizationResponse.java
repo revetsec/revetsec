@@ -341,6 +341,9 @@ public final class AuthorizationResponse {
 
 	/**
 	 * Returns the absolute error URI, if present and nonempty. Parsing rejects a malformed supplied URI.
+	 * This is untrusted provider data with no navigation, scheme or destination authorization. Never
+	 * automatically redirect, fetch or render it as active content. Applications choosing to expose a
+	 * link must apply their own exact HTTPS destination allowlist and safe HTML rendering.
 	 *
 	 * @return the URI
 	 * @since 1.0.0

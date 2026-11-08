@@ -153,7 +153,8 @@ class ScimM10ConfigurationTests {
                 ScimCompatibilityFeature.FILTER_VALUE_PATH_SUB_ATTRIBUTE_COMPARISON,
                 ScimCompatibilityFeature.INFER_MISSING_EXTENSION_SCHEMAS, ScimCompatibilityFeature.IGNORE_UNDECLARED_SCHEMA_URIS),
                 ScimCompatibility.microsoftEntraIdInstance().getFeatures());
-        assertEquals(Set.of(ScimCompatibilityFeature.PATCH_OPERATION_NAME_CASE_INSENSITIVE, ScimCompatibilityFeature.PATCH_READ_ONLY_ID_ECHO),
+        assertEquals(Set.of(ScimCompatibilityFeature.PATCH_OPERATION_NAME_CASE_INSENSITIVE, ScimCompatibilityFeature.PATCH_READ_ONLY_ID_ECHO,
+                ScimCompatibilityFeature.PATCH_GROUP_MEMBER_DISPLAY_IGNORED),
                 ScimCompatibility.oktaInstance().getFeatures());
         assertFalse(ScimCompatibility.microsoftEntraIdInstance().getFeatures().contains(ScimCompatibilityFeature.COMPLEX_VALUE_AS_SCALAR));
         assertFalse(ScimCompatibility.microsoftEntraIdInstance().getFeatures().contains(ScimCompatibilityFeature.IGNORE_UNKNOWN_ATTRIBUTES));

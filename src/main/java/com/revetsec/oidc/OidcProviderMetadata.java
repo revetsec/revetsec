@@ -50,19 +50,20 @@ public final class OidcProviderMetadata {
 	private final String advertisedIssuer;
 	private final URI jwksUri;
 	private final @Nullable URI userInfoEndpoint;
+	private final @Nullable URI endSessionEndpoint;
 	private final Set<String> subjectTypes;
 	private final Set<String> algorithms;
 	private final Set<String> responseTypes;
 	private final @Nullable Set<String> userInfoAlgorithms;
 	private OidcProviderMetadata(@NonNull Builder builder) {
 		this.oauth = builder.oauth.build(); this.advertisedIssuer = this.oauth.getIssuer(); this.jwksUri = requireNonNull(builder.jwksUri);
-		this.userInfoEndpoint = builder.userInfoEndpoint; this.subjectTypes = builder.subjectTypes;
+		this.userInfoEndpoint = builder.userInfoEndpoint; this.endSessionEndpoint = builder.endSessionEndpoint; this.subjectTypes = builder.subjectTypes;
 		this.algorithms = builder.algorithms; this.responseTypes = builder.responseTypes;
 		this.userInfoAlgorithms = builder.userInfoAlgorithms == null ? null : Set.copyOf(builder.userInfoAlgorithms);
 	}
-	private OidcProviderMetadata(@NonNull AuthorizationServerMetadata oauth, @NonNull URI jwksUri, @Nullable URI userInfo,
+	private OidcProviderMetadata(@NonNull AuthorizationServerMetadata oauth, @NonNull URI jwksUri, @Nullable URI userInfo, @Nullable URI endSession,
 			@NonNull Set<@NonNull String> subjects, @NonNull Set<@NonNull String> algorithms, @NonNull Set<@NonNull String> responses, @Nullable Set<@NonNull String> userInfoAlgorithms, @NonNull String advertisedIssuer) {
-		this.advertisedIssuer = advertisedIssuer; this.oauth = oauth; this.jwksUri = jwksUri; this.userInfoEndpoint = userInfo;
+		this.advertisedIssuer = advertisedIssuer; this.oauth = oauth; this.jwksUri = jwksUri; this.userInfoEndpoint = userInfo; this.endSessionEndpoint = endSession;
 		this.userInfoAlgorithms = userInfoAlgorithms == null ? null : Set.copyOf(userInfoAlgorithms);
 		this.subjectTypes = Set.copyOf(subjects); this.algorithms = Set.copyOf(algorithms); this.responseTypes = Set.copyOf(responses);
 	}
@@ -139,6 +140,7 @@ public final class OidcProviderMetadata {
 			} else oauth = requireNonNull(exact);
 			URI jwks = URI.create(requiredString(members, "jwks_uri"));
 			URI userInfo = members.containsKey("userinfo_endpoint") ? URI.create(requiredString(members, "userinfo_endpoint")) : null;
+			URI endSession = members.containsKey("end_session_endpoint") ? URI.create(requiredString(members, "end_session_endpoint")) : null;
 			Set<String> subjects = requiredSet(members, "subject_types_supported");
 			Set<String> algorithms = requiredSet(members, "id_token_signing_alg_values_supported");
 			Set<String> responses = requiredSet(members, "response_types_supported");
@@ -146,7 +148,7 @@ public final class OidcProviderMetadata {
 				throw new IllegalArgumentException();
 			Set<String> userInfoAlgorithms = members.containsKey("userinfo_signing_alg_values_supported")
 					? requiredSet(members, "userinfo_signing_alg_values_supported") : null;
-			return new OidcProviderMetadata(oauth, jwks, userInfo, subjects, algorithms, responses, userInfoAlgorithms, advertisedIssuer);
+			return new OidcProviderMetadata(oauth, jwks, userInfo, endSession, subjects, algorithms, responses, userInfoAlgorithms, advertisedIssuer);
 		} catch (EncodingException | JsonParseException | IllegalArgumentException invalid) {
 			throw OidcTransactionAccess.get().endpointFailure(OAuthException.Reason.DOCUMENT_MALFORMED);
 		} finally { if (bytes != null) Arrays.fill(bytes, (byte) 0); }
@@ -244,6 +246,14 @@ public final class OidcProviderMetadata {
 	 */
 	public @NonNull Optional<@NonNull URI> getUserInfoEndpoint() { return Optional.ofNullable(this.userInfoEndpoint); }
 	/**
+	 * Returns the provider's optional RP-Initiated Logout endpoint. A client must apply its configured URI policy
+	 * before handing a logout request to a browser; this metadata accessor performs no request or logout.
+	 * @return the advertised or explicitly configured logout endpoint, when present
+	 * @since 1.0.0
+	 */
+	public @NonNull Optional<@NonNull URI> getEndSessionEndpoint() { return Optional.ofNullable(this.endSessionEndpoint); }
+
+	/**
 	 * Returns the subject types.
 	 *
 	 * @return subject types
@@ -290,6 +300,7 @@ public final class OidcProviderMetadata {
 		private AuthorizationServerMetadata.Builder oauth;
 		private @Nullable URI jwksUri;
 		private @Nullable URI userInfoEndpoint;
+		private @Nullable URI endSessionEndpoint;
 		private Set<String> subjectTypes = Set.of("public");
 		private Set<String> algorithms = Set.of("RS256");
 		private Set<String> responseTypes = Set.of("code");
@@ -370,6 +381,14 @@ public final class OidcProviderMetadata {
 		 * @since 1.0.0
 		 */
 		public @NonNull Builder userInfoEndpoint(@Nullable URI value) { this.userInfoEndpoint = value; return this; }
+		/**
+		 * Sets the optional RP-Initiated Logout endpoint without making a request. Null restores absence.
+		 * @param value the explicit provider endpoint, or null to clear it
+		 * @return this builder
+		 * @since 1.0.0
+		 */
+		public @NonNull Builder endSessionEndpoint(@Nullable URI value) { this.endSessionEndpoint = value; return this; }
+
 		/**
 		 * Replaces the complete subjectTypesSupported set. Null restores the explicit configuration default.
 		 *

@@ -47,7 +47,7 @@ final class WebAuthnExtensionPolicyTests {
             "1e52ed75701163f7f9e40ddf9f341b3dc9ba860af7e0ca7ca7e9eecd0084d19c");
 
 
-    @TestFactory Stream<DynamicTest> registrationClientExtensionPolicy() {
+    @TestFactory @NonNull Stream<@NonNull DynamicTest> registrationClientExtensionPolicy() {
         List<String> values=List.of(
             "{\"credProps\":{\"rk\":true}}", "{}", "null", "[]", "true",
             "{\"credProps\":null}", "{\"credProps\":{}}", "{\"credProps\":{\"rk\":false}}",
@@ -67,7 +67,7 @@ final class WebAuthnExtensionPolicyTests {
             else assertThrows(WebAuthnResponseException.class,()->decoder().parseRegistration(body,CHALLENGE));
         }));
     }
-    @TestFactory Stream<DynamicTest> authenticationClientExtensionPolicy() {
+    @TestFactory @NonNull Stream<@NonNull DynamicTest> authenticationClientExtensionPolicy() {
         List<String> values=List.of("{}","null","[]","false","{\"credProps\":{\"rk\":true}}","{\"authenticatorDisplayName\":\"synthetic\"}","{\"prf\":{}}","{\"largeBlob\":{}}","{\"appid\":false}","{\"future\":null}");
         String base=assertionJson(CREDENTIAL_ID,assertionData(),new byte[]{1},USER_HANDLE);
         return java.util.stream.IntStream.range(0,values.size()).mapToObj(i->DynamicTest.dynamicTest("authentication client extension "+i,()->{
@@ -76,7 +76,7 @@ final class WebAuthnExtensionPolicyTests {
             else assertThrows(WebAuthnResponseException.class,()->decoder().parseAssertion(body,CHALLENGE));
         }));
     }
-    @TestFactory Stream<DynamicTest> registrationAuthenticatorExtensionPolicy() {
+    @TestFactory @NonNull Stream<@NonNull DynamicTest> registrationAuthenticatorExtensionPolicy() {
         List<byte[]> values=new ArrayList<>();
         for(int n:new int[]{1,2,3,0,4})values.add(extension("credProtect",n));
         values.add(extension("future",1));values.add(new byte[]{(byte)0xa0});
@@ -96,7 +96,7 @@ final class WebAuthnExtensionPolicyTests {
         byte[] normal=registrationData(CREDENTIAL_ID);String base=registrationJson(CREDENTIAL_ID,normal,attestation(normal));String large=base.replace("{\"credProps\":{\"rk\":true}}","{\"credProps\":{\"rk\":true},\"future\":\""+"x".repeat(65536)+"\"}");
         assertThrows(WebAuthnResponseException.class,()->decoder().parseRegistration(json(large),CHALLENGE));
     }
-    private static byte[] extension(String name,int value){ByteArrayOutputStream out=new ByteArrayOutputStream();out.write(0xa1);text(out,name);out.write(value);return out.toByteArray();}
+    private static byte @NonNull [] extension(@NonNull String name,int value){ByteArrayOutputStream out=new ByteArrayOutputStream();out.write(0xa1);text(out,name);out.write(value);return out.toByteArray();}
     private static @NonNull WebAuthnResponseJson decoder() {
         return new WebAuthnResponseJson(clientPolicy(), WebAuthnResponseJson.DEFAULT_MAXIMUM_BODY_BYTES);
     }

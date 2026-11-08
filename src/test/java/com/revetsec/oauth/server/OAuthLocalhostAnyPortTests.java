@@ -64,28 +64,28 @@ final class OAuthLocalhostAnyPortTests {
  private static final Map<String,Set<String>> RESOURCES=Map.of(RESOURCE,Set.of("read"));
  private static final OAuthServerIngressLimits LIMITS=OAuthServerIngressLimits.fromDefaults();
  private static @Nullable Method setter(){try{return OAuthAuthorizationServer.Builder.class.getMethod("allowLocalhostAnyPortRedirects",Boolean.class);}catch(NoSuchMethodException absent){return null;}}
- private static OAuthAuthorizationServer.Builder anyPort(OAuthAuthorizationServer.Builder builder,@Nullable Boolean value) throws Exception {
+ private static OAuthAuthorizationServer.@NonNull Builder anyPort(OAuthAuthorizationServer.@NonNull Builder builder,@Nullable Boolean value) throws Exception {
   Method method=setter();if(method==null)return builder;return (OAuthAuthorizationServer.Builder)requireNonNull(method.invoke(builder,value));
  }
- private static OAuthServerClientRegistration client(String... redirects){return OAuthServerClientRegistration.withClientId("client").configurationVersion("v1").redirectUris(Arrays.stream(redirects).map(URI::create).toList()).allowedScopesByResource(RESOURCES).refreshTokenPermitted(true).build();}
- private static boolean matches(String registered,String supplied,boolean ip,boolean exact,boolean any) throws Exception {
+ private static @NonNull OAuthServerClientRegistration client(@NonNull String @NonNull ... redirects){return OAuthServerClientRegistration.withClientId("client").configurationVersion("v1").redirectUris(Arrays.stream(redirects).map(URI::create).toList()).allowedScopesByResource(RESOURCES).refreshTokenPermitted(true).build();}
+ private static boolean matches(@NonNull String registered,@NonNull String supplied,boolean ip,boolean exact,boolean any) throws Exception {
   try{var method=OAuthServerAuthorizationAdmission.class.getDeclaredMethod("matchesRedirect",OAuthServerClientRegistration.class,String.class,boolean.class,boolean.class,boolean.class);method.setAccessible(true);return (Boolean)requireNonNull(method.invoke(null,client(registered),supplied,ip,exact,any));}
   catch(NoSuchMethodException absent){return OAuthServerAuthorizationAdmission.matchesRedirect(client(registered),supplied,ip,exact);}
   catch(InvocationTargetException failure){throw new AssertionError(failure.getCause());}
  }
- private static JsonObject json(byte[] body) throws Exception {return (JsonObject)JsonCodec.parse(body,JsonLimits.protocolDocument(131072));}
- private static JsonObject claude() throws Exception {try(var input=requireNonNull(OAuthLocalhostAnyPortTests.class.getResourceAsStream("/cimd/mcp-profile/claude-code-client-metadata.json"))){return json(input.readAllBytes());}}
- private static JsonObject document(String redirect){return JsonObject.builder().put("client_id","https://client.example.com/metadata").put("client_name","Client").put("token_endpoint_auth_method","none").put("redirect_uris",strings(redirect)).put("grant_types",strings("authorization_code","refresh_token")).build();}
- private static JsonArray strings(String... values){return JsonArray.fromElements(Arrays.stream(values).map(JsonString::fromValue).map(v->(JsonValue)v).toList());}
- private static String text(JsonObject json,String member){return ((JsonString)requireNonNull(json.getMembers().get(member))).getValue();}
- private static byte[] bytes(JsonObject json){return json.toJson().getBytes(StandardCharsets.UTF_8);}
- private static OAuthClientMetadataPolicy policy(InMemoryOAuthClientMetadataCache memory){return OAuthClientMetadataPolicy.withAddressResolver((host,budget)->{throw new AssertionError("No resolver in deterministic fixture");}).cache(memory).build();}
- private static StateSealer sealer(){byte[] key=new byte[32];for(int i=0;i<key.length;i++)key[i]=(byte)(i+1);return StateSealer.withActiveKey(SealingKey.fromBase64("k",Base64.getEncoder().encodeToString(key))).clock(CLOCK).build();}
- private static OAuthAuthorizationDecision decision(){return OAuthAuthorizationDecision.withSubject("subject").authorizedScopesByResource(RESOURCES).refreshTokenPermitted(true).build();}
- private static String encode(String value){try{return FormUrlEncoding.encode(value);}catch(Exception failure){throw new AssertionError(failure);}}
- private static String form(Map<String,String> fields){return String.join("&",fields.entrySet().stream().map(e->encode(e.getKey())+"="+encode(e.getValue())).toList());}
- private static Map<String,List<String>> headers(){return Map.of("Content-Type",List.of("application/x-www-form-urlencoded"));}
- private static OAuthServerResponse success(OAuthTokenResult result){return assertInstanceOf(OAuthTokenResult.Succeeded.class,result).getResponse();}
+ private static @NonNull JsonObject json(byte @NonNull [] body) throws Exception {return (JsonObject)JsonCodec.parse(body,JsonLimits.protocolDocument(131072));}
+ private static @NonNull JsonObject claude() throws Exception {try(var input=requireNonNull(OAuthLocalhostAnyPortTests.class.getResourceAsStream("/cimd/mcp-profile/claude-code-client-metadata.json"))){return json(input.readAllBytes());}}
+ private static @NonNull JsonObject document(@NonNull String redirect){return JsonObject.builder().put("client_id","https://client.example.com/metadata").put("client_name","Client").put("token_endpoint_auth_method","none").put("redirect_uris",strings(redirect)).put("grant_types",strings("authorization_code","refresh_token")).build();}
+ private static @NonNull JsonArray strings(@NonNull String @NonNull ... values){return JsonArray.fromElements(Arrays.stream(values).map(JsonString::fromValue).map(v->(JsonValue)v).toList());}
+ private static @NonNull String text(@NonNull JsonObject json,@NonNull String member){return ((JsonString)requireNonNull(json.getMembers().get(member))).getValue();}
+ private static byte @NonNull [] bytes(@NonNull JsonObject json){return json.toJson().getBytes(StandardCharsets.UTF_8);}
+ private static @NonNull OAuthClientMetadataPolicy policy(@NonNull InMemoryOAuthClientMetadataCache memory){return OAuthClientMetadataPolicy.withAddressResolver((host,budget)->{throw new AssertionError("No resolver in deterministic fixture");}).cache(memory).build();}
+ private static @NonNull StateSealer sealer(){byte[] key=new byte[32];for(int i=0;i<key.length;i++)key[i]=(byte)(i+1);return StateSealer.withActiveKey(SealingKey.fromBase64("k",Base64.getEncoder().encodeToString(key))).clock(CLOCK).build();}
+ private static @NonNull OAuthAuthorizationDecision decision(){return OAuthAuthorizationDecision.withSubject("subject").authorizedScopesByResource(RESOURCES).refreshTokenPermitted(true).build();}
+ private static @NonNull String encode(@NonNull String value){try{return FormUrlEncoding.encode(value);}catch(Exception failure){throw new AssertionError(failure);}}
+ private static @NonNull String form(@NonNull Map<@NonNull String,@NonNull String> fields){return String.join("&",fields.entrySet().stream().map(e->encode(e.getKey())+"="+encode(e.getValue())).toList());}
+ private static @NonNull Map<@NonNull String,@NonNull List<@NonNull String>> headers(){return Map.of("Content-Type",List.of("application/x-www-form-urlencoded"));}
+ private static @NonNull OAuthServerResponse success(@NonNull OAuthTokenResult result){return assertInstanceOf(OAuthTokenResult.Succeeded.class,result).getResponse();}
  private static final class Fixture {
   final OAuthAtomicStoreFixture store=new OAuthAtomicStoreFixture(NOW);
   final AtomicInteger fetches=new AtomicInteger();
@@ -96,9 +96,9 @@ final class OAuthLocalhostAnyPortTests {
   final OAuthAuthorizationServer server;
   final String id;
   byte[] body;
-  Fixture(JsonObject document,boolean cimd,boolean ip,boolean exact,@Nullable Boolean any) throws Exception {this(document,cimd,ip,exact,any,OAuthServerObserver.disabledInstance());}
-  Fixture(JsonObject document,boolean cimd,boolean ip,boolean exact,@Nullable Boolean any,OAuthServerObserver observer) throws Exception {
-   body=bytes(document);id=text(document,"client_id");var key=TestJwk.Fixture.IDP_SIGNING_RSA_2048;var signing=OAuthIssuerKeySnapshot.withActiveKey(OAuthIssuerSigningKey.fromKeyPair("key",key.getPrivateKey(),key.getPublicKey())).generation("g1").publishedAt(NOW.minusSeconds(120)).build();
+  Fixture(@NonNull JsonObject document,boolean cimd,boolean ip,boolean exact,@Nullable Boolean any) throws Exception {this(document,cimd,ip,exact,any,OAuthServerObserver.disabledInstance());}
+  Fixture(@NonNull JsonObject document,boolean cimd,boolean ip,boolean exact,@Nullable Boolean any,@NonNull OAuthServerObserver observer) throws Exception {
+   body=bytes(document);id=text(document,"client_id");var key=TestJwk.Fixture.IDP_SIGNING_RSA_2048;var signing=OAuthIssuerKeySnapshot.withActiveKey(OAuthIssuerSigningKey.fromRsaKeyPair("key",key.getPrivateKey(),key.getPublicKey())).generation("g1").publishedAt(NOW.minusSeconds(120)).build();
    List<URI> redirects=((JsonArray)requireNonNull(document.getMembers().get("redirect_uris"))).getElements().stream().map(v->URI.create(((JsonString)v).getValue())).toList();
    var registered=OAuthServerClientRegistration.withClientId(id).configurationVersion("v1").redirectUris(redirects).allowedScopesByResource(RESOURCES).refreshTokenPermitted(true).build();
    builder=OAuthAuthorizationServer.withIssuer(ISSUER).authorizationEndpoint(URI.create(ISSUER+"/authorize")).tokenEndpoint(URI.create(ISSUER+"/token"))
@@ -111,16 +111,16 @@ final class OAuthLocalhostAnyPortTests {
    transportField.set(fetcher(server),(OAuthClientMetadataFetcher.Transport)(uri,budget)->{assertEquals(URI.create(id),uri);fetches.incrementAndGet();return new RawResponse(200,HttpHeaders.of(Map.of("Cache-Control",List.of("max-age=60")),(a,b)->true),body,null,false,Duration.ZERO);});
    assertEquals(OAuthStoreCommitStatus.COMMITTED,server.initializeFreshIssuer().getStatus());server.establishNewSubject("subject");
   }
-  OAuthAuthorizationResult begin(OAuthAuthorizationServer target,String redirect){return begin(target,redirect,"code");}
-  OAuthAuthorizationResult begin(OAuthAuthorizationServer target,String redirect,String responseType){return target.beginAuthorizationResult("GET",form(Map.of("client_id",id,"response_type",responseType,"redirect_uri",redirect,"resource",RESOURCE,"code_challenge_method","S256","code_challenge",CHALLENGE)),new byte[0],Map.of(),BROWSER);}
-  OAuthAuthorizationResult begin(String redirect){return begin(server,redirect);}
-  String code(String actual){var interaction=assertInstanceOf(OAuthAuthorizationResult.InteractionRequired.class,begin(actual)).getInteraction();assertEquals(URI.create(actual),interaction.getRedirectUri());assertInstanceOf(OAuthAuthorizationResult.InteractionRequired.class,server.resumeAuthorizationResult(interaction.getInteractionValue(),BROWSER));
+  @NonNull OAuthAuthorizationResult begin(@NonNull OAuthAuthorizationServer target,@NonNull String redirect){return begin(target,redirect,"code");}
+  @NonNull OAuthAuthorizationResult begin(@NonNull OAuthAuthorizationServer target,@NonNull String redirect,@NonNull String responseType){return target.beginAuthorizationResult("GET",form(Map.of("client_id",id,"response_type",responseType,"redirect_uri",redirect,"resource",RESOURCE,"code_challenge_method","S256","code_challenge",CHALLENGE)),new byte[0],Map.of(),BROWSER);}
+  @NonNull OAuthAuthorizationResult begin(@NonNull String redirect){return begin(server,redirect);}
+  @NonNull String code(@NonNull String actual){var interaction=assertInstanceOf(OAuthAuthorizationResult.InteractionRequired.class,begin(actual)).getInteraction();assertEquals(URI.create(actual),interaction.getRedirectUri());assertInstanceOf(OAuthAuthorizationResult.InteractionRequired.class,server.resumeAuthorizationResult(interaction.getInteractionValue(),BROWSER));
    URI location=assertInstanceOf(OAuthAuthorizationResult.Completed.class,server.completeAuthorizationResult(interaction.getInteractionValue(),BROWSER,decision())).getResponse().getLocationWithCredentials().orElseThrow();assertTrue(location.toString().startsWith(actual+(actual.contains("?")?"&":"?")+"code="));return Stream.of(requireNonNull(location.getRawQuery()).split("&")).filter(p->p.startsWith("code=")).map(p->p.substring(5)).findFirst().orElseThrow();}
-  OAuthTokenResult redeem(String code,String redirect,String verifier){return server.tokenResult("POST",null,form(Map.of("client_id",id,"grant_type","authorization_code","code",code,"redirect_uri",redirect,"code_verifier",verifier,"resource",RESOURCE)).getBytes(StandardCharsets.UTF_8),headers());}
-  OAuthTokenResult refresh(String value){return server.tokenResult("POST",null,form(Map.of("client_id",id,"grant_type","refresh_token","refresh_token",value,"resource",RESOURCE)).getBytes(StandardCharsets.UTF_8),headers());}
+  @NonNull OAuthTokenResult redeem(@NonNull String code,@NonNull String redirect,@NonNull String verifier){return server.tokenResult("POST",null,form(Map.of("client_id",id,"grant_type","authorization_code","code",code,"redirect_uri",redirect,"code_verifier",verifier,"resource",RESOURCE)).getBytes(StandardCharsets.UTF_8),headers());}
+  @NonNull OAuthTokenResult refresh(@NonNull String value){return server.tokenResult("POST",null,form(Map.of("client_id",id,"grant_type","refresh_token","refresh_token",value,"resource",RESOURCE)).getBytes(StandardCharsets.UTF_8),headers());}
  }
- private static OAuthClientMetadataFetcher fetcher(OAuthAuthorizationServer server) throws Exception {var clients=OAuthAuthorizationServer.class.getDeclaredField("clients");clients.setAccessible(true);var metadata=OAuthServerClientSelection.class.getDeclaredField("metadata");metadata.setAccessible(true);return (OAuthClientMetadataFetcher)requireNonNull(metadata.get(requireNonNull(clients.get(server))));}
- private static OAuthClientMetadataCacheCodec codec(OAuthAuthorizationServer server) throws Exception {var field=OAuthClientMetadataFetcher.class.getDeclaredField("codec");field.setAccessible(true);return (OAuthClientMetadataCacheCodec)requireNonNull(field.get(fetcher(server)));}
+ private static @NonNull OAuthClientMetadataFetcher fetcher(@NonNull OAuthAuthorizationServer server) throws Exception {var clients=OAuthAuthorizationServer.class.getDeclaredField("clients");clients.setAccessible(true);var metadata=OAuthServerClientSelection.class.getDeclaredField("metadata");metadata.setAccessible(true);return (OAuthClientMetadataFetcher)requireNonNull(metadata.get(requireNonNull(clients.get(server))));}
+ private static @NonNull OAuthClientMetadataCacheCodec codec(@NonNull OAuthAuthorizationServer server) throws Exception {var field=OAuthClientMetadataFetcher.class.getDeclaredField("codec");field.setAccessible(true);return (OAuthClientMetadataCacheCodec)requireNonNull(field.get(fetcher(server)));}
  @Test void exposesOnlyThePlannedNullableBuilderSetter(){Method method=setter();assertNotNull(method);assertEquals(OAuthAuthorizationServer.Builder.class,method.getReturnType());}
  @TestFactory @NonNull Stream<@NonNull DynamicTest> portlessHttpLocalhostVariesOnlyThePort(){
   return Stream.of("http://localhost/callback","http://localhost/callback?tenant=%2F&x=1","HTTP://localhost/callback","http://localhost","http://localhost/","http://localhost/cb%2Fraw?x=%2f")
@@ -195,9 +195,9 @@ final class OAuthLocalhostAnyPortTests {
   int enabled,used,will,terminal;
   public void didEnableLocalhostAnyPortRedirects(){enabled++;}
   public void didUseLocalhostAnyPortRedirects(){used++;}
-  @Override public void willHandleEndpoint(Endpoint endpoint){if(endpoint==Endpoint.AUTHORIZATION)will++;}
-  @Override public void didHandleEndpoint(Endpoint endpoint,@Nullable Integer status,Duration elapsed){if(endpoint==Endpoint.AUTHORIZATION)terminal++;}
-  @Override public void didRejectEndpoint(Endpoint endpoint,OAuthServerException.Reason reason,@Nullable Integer status,Duration elapsed){if(endpoint==Endpoint.AUTHORIZATION)terminal++;}
+  @Override public void willHandleEndpoint(@NonNull Endpoint endpoint){if(endpoint==Endpoint.AUTHORIZATION)will++;}
+  @Override public void didHandleEndpoint(@NonNull Endpoint endpoint,@Nullable Integer status,@NonNull Duration elapsed){if(endpoint==Endpoint.AUTHORIZATION)terminal++;}
+  @Override public void didRejectEndpoint(@NonNull Endpoint endpoint,OAuthServerException.@NonNull Reason reason,@Nullable Integer status,@NonNull Duration elapsed){if(endpoint==Endpoint.AUTHORIZATION)terminal++;}
  }
  @Test void observerHooksAreDefaultVoidWithoutRequestData() throws Exception {
   for(String name:List.of("didEnableLocalhostAnyPortRedirects","didUseLocalhostAnyPortRedirects")){

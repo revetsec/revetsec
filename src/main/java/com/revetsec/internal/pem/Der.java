@@ -17,159 +17,34 @@
 package com.revetsec.internal.pem;
 
 import org.jspecify.annotations.NonNull;
-
 import javax.annotation.concurrent.Immutable;
 import javax.annotation.concurrent.ThreadSafe;
 
-/**
- * The little DER that {@link Pem} needs (X.690 section 10): reading one element's tag and length strictly, and
- * writing a definite length.
- * <p>
- * The reader accepts only low-tag-number identifiers and minimal definite lengths of at most four octets. It rejects
- * the BER indefinite form ({@code 0x80}), long forms with a leading zero octet or for lengths below 128, and any
- * length that runs past the enclosing element. It never recurses.
- *
- * @author <a href="https://www.revetkn.com">Mark Allen</a>
- */
+/** PEM-specific error adapter for the single shared bounded DER reader/writer. */
 @ThreadSafe
 final class Der {
-	static final int INTEGER = 0x02;
-	static final int BIT_STRING = 0x03;
-	static final int OCTET_STRING = 0x04;
-	static final int NULL = 0x05;
-	static final int OBJECT_IDENTIFIER = 0x06;
-	static final int SEQUENCE = 0x30;
-	/**
-	 * {@code [0] IMPLICIT}, constructed: PKCS#8 {@code attributes} (RFC 5958 section 2).
-	 */
-	static final int CONTEXT_0_CONSTRUCTED = 0xA0;
-	/**
-	 * {@code [1] IMPLICIT BIT STRING}, primitive: PKCS#8 v2 {@code publicKey} (RFC 5958 section 2).
-	 */
-	static final int CONTEXT_1_PRIMITIVE = 0x81;
-
-	private Der() {
-	}
-
-	/**
-	 * One element: its identifier octet and the bounds of its contents.
-	 *
-	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
-	 */
-	@Immutable
-	static final class Element {
-		private final int tag;
-		private final int start;
-		private final int end;
-
-		private Element(int tag, int start, int end) {
-			this.tag = tag;
-			this.start = start;
-			this.end = end;
-		}
-
-		/**
-		 * The identifier octet.
-		 */
-		int getTag() {
-			return this.tag;
-		}
-
-		/**
-		 * The index of the first content octet.
-		 */
-		int getStart() {
-			return this.start;
-		}
-
-		/**
-		 * The index just past the last content octet, which is also where the next element starts.
-		 */
-		int getEnd() {
-			return this.end;
-		}
-
-		/**
-		 * The number of content octets.
-		 */
-		int getLength() {
-			return this.end - this.start;
-		}
-	}
-
-	/**
-	 * Reads the element that starts at {@code offset}, which must end at or before {@code limit}.
-	 *
-	 * @throws PemException with {@link PemException.Kind#MALFORMED_DER} if the element is truncated or not DER
-	 */
-	static @NonNull Element read(byte @NonNull [] der, int offset, int limit) throws PemException {
-		if (limit - offset < 2)
-			throw new PemException(PemException.Kind.MALFORMED_DER);
-		int tag = der[offset] & 0xFF;
-		// Tag numbers of 31 or more use the multi-octet form, which nothing Pem reads needs.
-		if ((tag & 0x1F) == 0x1F)
-			throw new PemException(PemException.Kind.MALFORMED_DER);
-
-		int position = offset + 1;
-		int first = der[position++] & 0xFF;
-		long length;
-		if (first < 0x80) {
-			length = first;
-		} else {
-			int count = first & 0x7F;
-			// count 0 is BER's indefinite form; more than four octets exceeds any array.
-			if (count == 0 || count > 4 || limit - position < count || der[position] == 0)
-				throw new PemException(PemException.Kind.MALFORMED_DER);
-			length = 0;
-			for (int index = 0; index < count; ++index)
-				length = (length << 8) | (der[position++] & 0xFF);
-			if (length < 0x80)
-				throw new PemException(PemException.Kind.MALFORMED_DER);
-		}
-
-		if (length > limit - position)
-			throw new PemException(PemException.Kind.MALFORMED_DER);
-		return new Element(tag, position, position + (int) length);
-	}
-
-	/**
-	 * Reads the element at {@code offset} and requires its identifier octet to be {@code tag}.
-	 *
-	 * @throws PemException with {@link PemException.Kind#MALFORMED_DER} if it is not
-	 */
-	static @NonNull Element read(byte @NonNull [] der, int offset, int limit, int tag) throws PemException {
-		Element element = read(der, offset, limit);
-		if (element.getTag() != tag)
-			throw new PemException(PemException.Kind.MALFORMED_DER);
-		return element;
-	}
-
-	/**
-	 * The number of octets {@link #putLength(byte[], int, int)} writes for {@code length}.
-	 */
-	static int lengthOfLength(int length) {
-		if (length < 0x80)
-			return 1;
-		// The long form: one octet giving the count, then the length's significant octets.
-		int octets = 1;
-		for (int remaining = length; remaining != 0; remaining >>>= 8)
-			++octets;
-		return octets;
-	}
-
-	/**
-	 * Writes {@code length} in minimal definite form at {@code position} and returns the position after it.
-	 */
-	static int putLength(byte @NonNull [] out, int position, int length) {
-		int count = lengthOfLength(length) - 1;
-		int next = position;
-		if (count == 0) {
-			out[next++] = (byte) length;
-			return next;
-		}
-		out[next++] = (byte) (0x80 | count);
-		for (int shift = (count - 1) * 8; shift >= 0; shift -= 8)
-			out[next++] = (byte) (length >> shift);
-		return next;
-	}
+ static final int INTEGER=com.revetsec.internal.encoding.Der.INTEGER;
+ static final int BIT_STRING=com.revetsec.internal.encoding.Der.BIT_STRING;
+ static final int OCTET_STRING=com.revetsec.internal.encoding.Der.OCTET_STRING;
+ static final int NULL=com.revetsec.internal.encoding.Der.NULL;
+ static final int OBJECT_IDENTIFIER=com.revetsec.internal.encoding.Der.OBJECT_IDENTIFIER;
+ static final int SEQUENCE=com.revetsec.internal.encoding.Der.SEQUENCE;
+ static final int CONTEXT_0_CONSTRUCTED=com.revetsec.internal.encoding.Der.CONTEXT_0_CONSTRUCTED;
+ static final int CONTEXT_1_PRIMITIVE=com.revetsec.internal.encoding.Der.CONTEXT_1_PRIMITIVE;
+ private Der() { }
+ @Immutable static final class Element {
+  private final com.revetsec.internal.encoding.Der.@NonNull Element bounds;
+  private Element(com.revetsec.internal.encoding.Der.@NonNull Element bounds){this.bounds=bounds;}
+  int getTag(){return this.bounds.getTag();}int getStart(){return this.bounds.getStart();}int getEnd(){return this.bounds.getEnd();}int getLength(){return this.bounds.getLength();}
+ }
+ static @NonNull Element read(byte @NonNull [] der,int offset,int limit)throws PemException {
+  try{return new Element(com.revetsec.internal.encoding.Der.read(der,offset,limit));}
+  catch(IllegalArgumentException malformed){throw new PemException(PemException.Kind.MALFORMED_DER);}
+ }
+ static @NonNull Element read(byte @NonNull [] der,int offset,int limit,int tag)throws PemException {
+  try{return new Element(com.revetsec.internal.encoding.Der.read(der,offset,limit,tag));}
+  catch(IllegalArgumentException malformed){throw new PemException(PemException.Kind.MALFORMED_DER);}
+ }
+ static int lengthOfLength(int length){return com.revetsec.internal.encoding.Der.lengthOfLength(length);}
+ static int putLength(byte @NonNull [] out,int position,int length){return com.revetsec.internal.encoding.Der.putLength(out,position,length);}
 }

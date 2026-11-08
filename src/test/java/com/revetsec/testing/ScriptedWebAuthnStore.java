@@ -56,6 +56,7 @@ public final class ScriptedWebAuthnStore implements WebAuthnStore {
 	private int clockSequence=3;
 	private long version;
 	private boolean healthy=true;
+	private final @NonNull Set<@NonNull String> activatedScopes=new java.util.HashSet<>();
 
 	public ScriptedWebAuthnStore(@NonNull Instant time){this(time,65536,268435456L);}
 	public ScriptedWebAuthnStore(@NonNull Instant time,int maximumEntries,long maximumBytes){
@@ -73,17 +74,18 @@ public final class ScriptedWebAuthnStore implements WebAuthnStore {
 	public synchronized void seedClosedMigration(@NonNull Map<@NonNull WebAuthnStoreKey,WebAuthnStoreEntry.@NonNull Present> values){
 		if(!this.entries.isEmpty())throw new IllegalStateException("Fixture inventory must be empty");
 		this.entries.putAll(values);
+		for(WebAuthnStoreKey key:values.keySet())this.activatedScopes.add(scope(key));
 	}
 	public synchronized @NonNull Map<@NonNull WebAuthnStoreKey,WebAuthnStoreEntry.@NonNull Present> records(){return Map.copyOf(this.entries);}
 	@Override public synchronized @NonNull WebAuthnStoreReadResult read(@NonNull Set<@NonNull WebAuthnStoreKey> keys,@NonNull Duration budget){
-		if(badBudget(budget))return WebAuthnStoreReadResult.Unavailable.get();
+		if(badBudget(budget) || missingEstablishedRoot(keys))return WebAuthnStoreReadResult.Unavailable.get();
 		Map<WebAuthnStoreKey,WebAuthnStoreEntry> observed=new HashMap<>();
 		for(WebAuthnStoreKey key:keys){WebAuthnStoreEntry present=this.entries.get(key);observed.put(key,present==null?WebAuthnStoreEntry.Absent.confirmed():present);}
 		StoreTimeObservation sample=available()?observation():StoreTimeObservation.Unavailable.fromAdmission(this.admission);
 		return WebAuthnStoreReadResult.Available.fromSnapshot(WebAuthnStoreSnapshot.fromEntries(keys,observed,sample));
 	}
 	@Override public synchronized @NonNull WebAuthnStoreCommitReceipt compareAndCommit(@NonNull WebAuthnStoreWrite write,@NonNull Duration budget){
-		if(badBudget(budget))return refusal(WebAuthnStoreCommitResult.UNAVAILABLE);
+		if(badBudget(budget) || missingEstablishedRoot(write.getSnapshot().getEntries().keySet()))return refusal(WebAuthnStoreCommitResult.UNAVAILABLE);
 		StoreTemporalCondition condition=write.getTemporalCondition();
 		if(!StoreTimeRules.sameAdmission(this.admission,condition.getAdmission()) || !this.clockGeneration.equals(condition.getClockGeneration()))return refusal(WebAuthnStoreCommitResult.FENCED);
 		for(var predicate:write.getSnapshot().getEntries().entrySet()){
@@ -102,8 +104,15 @@ public final class ScriptedWebAuthnStore implements WebAuthnStore {
 		}
 		long bytes=0;for(var value:projected.values())bytes+=value.getSealedBytes().length;
 		if(projected.size()>this.maximumEntries || bytes>this.maximumBytes)return refusal(WebAuthnStoreCommitResult.CAPACITY);
-		if(!write.getMutations().isEmpty()){this.entries.clear();this.entries.putAll(projected);this.version=next;}
+		if(!write.getMutations().isEmpty()){this.entries.clear();this.entries.putAll(projected);this.version=next;for(var mutation:write.getMutations())if(mutation.getKey().getKind()==WebAuthnStoreKey.Kind.NAMESPACE_CLOCK)this.activatedScopes.add(scope(mutation.getKey()));}
 		return WebAuthnStoreCommitReceipt.fromCommittedTiming(StoreCommitTiming.fromTimes(validated,null));
+	}
+	private static @NonNull String scope(@NonNull WebAuthnStoreKey key){String[] parts=key.getStorageKey().split(":",5);return parts[0]+":"+parts[1]+":"+parts[2]+":";}
+	private boolean missingEstablishedRoot(@NonNull Set<@NonNull WebAuthnStoreKey> keys){
+		for(WebAuthnStoreKey key:keys){String current=scope(key);boolean root=false,data=false;
+			for(WebAuthnStoreKey stored:this.entries.keySet())if(scope(stored).equals(current)){data=true;if(stored.getKind()==WebAuthnStoreKey.Kind.NAMESPACE_CLOCK)root=true;}
+			if(!root && (data || this.activatedScopes.contains(current)))return true;
+		}return false;
 	}
 	private boolean available(){return this.healthy && !this.time.isBefore(this.lastPublished);}
 	private StoreTimeObservation.@NonNull Healthy observation(){this.lastPublished=this.time;return observation(this.admission,this.clockGeneration,this.time);}

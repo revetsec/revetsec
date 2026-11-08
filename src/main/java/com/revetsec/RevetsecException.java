@@ -34,11 +34,10 @@ import static java.util.Objects.requireNonNull;
  * Every instance has:
  * <ul>
  *   <li>an {@link ErrorCategory} ({@link #getCategory()});</li>
- *   <li>a transience flag ({@link #isTransient()}), which follows from the category and the cause alone, never
- *   from the exception's class: a {@link ErrorCategory#TRANSPORT} failure from a timeout or an I/O error, or from a
- *   request Revetsec held back so that it can be sent later, is transient, and so is a
- *   {@link ErrorCategory#REMOTE_ERROR} for HTTP 429 or 5xx or OAuth {@code error=temporarily_unavailable}. Nothing
- *   else is;</li>
+ *   <li>a temporary condition flag ({@link #isTemporaryCondition()}) set by the documented failure category,
+ *   reason, cause and response status. Only selected {@link ErrorCategory#TRANSPORT} conditions (timeout,
+ *   I/O failure or a held-back request) and {@link ErrorCategory#REMOTE_ERROR} responses (HTTP 429/5xx or OAuth
+ *   {@code temporarily_unavailable}) may be marked temporary. This is not an effect or replay verdict;</li>
  *   <li>a fixed, one-sentence message that never contains input, tokens, keys or other secrets;</li>
  *   <li>no cause, except the JDK {@link IOException} behind a {@link ErrorCategory#TRANSPORT} failure;</li>
  *   <li>suppression disabled, so {@link #addSuppressed(Throwable)} does nothing and {@link #getSuppressed()} is
@@ -66,7 +65,7 @@ public abstract class RevetsecException extends RuntimeException {
 	private final ErrorCategory category;
 
 	/**
-	 * Whether retrying the same operation later may succeed; never {@code null}.
+	 * Whether this failure is classified as a temporary condition; never {@code null}.
 	 *
 	 * @serial
 	 */
@@ -80,7 +79,7 @@ public abstract class RevetsecException extends RuntimeException {
 	 * failure may carry a cause, which must be the JDK's {@link IOException}.
 	 *
 	 * @param category         the category of this failure
-	 * @param transientFailure whether retrying the same operation later may succeed
+	 * @param transientFailure whether this failure is classified as a temporary condition
 	 * @param fixedMessage     a fixed, non-blank, one-sentence message that contains no input and no secret
 	 * @param cause            the JDK {@link IOException} behind a {@link ErrorCategory#TRANSPORT} failure, or
 	 *                         {@code null}
@@ -114,18 +113,27 @@ public abstract class RevetsecException extends RuntimeException {
 	}
 
 	/**
-	 * Returns whether retrying the same operation later may succeed.
+	 * Returns whether this failure is classified as a temporary condition.
 	 * <p>
 	 * It is {@code true} only for a {@link ErrorCategory#TRANSPORT} failure caused by a timeout or an I/O error, or
 	 * by a request Revetsec held back so that it can be sent later, and for a {@link ErrorCategory#REMOTE_ERROR} with
 	 * HTTP status 429 or 5xx or the OAuth error {@code temporarily_unavailable}. It is always {@code false} for an
 	 * interrupted thread and for every other category.
+	 * Documented fixed outcome reasons, including an unknown commit or a known commit whose output was withheld,
+	 * retain their false classification even if a separately authorized later operation could succeed.
+	 * <p>
+	 * This classification supplies no permission to replay an operation. Neither value establishes whether a
+	 * request was sent, whether earlier work had effects, whether a credential remains usable, or whether the
+	 * operation is idempotent. A timeout, HTTP 429/5xx or OAuth {@code temporarily_unavailable} can follow remote
+	 * consumption or commitment. A false value does not establish a permanent condition or zero effects.
+	 * Follow the particular operation's effect, pending-state and reconciliation contract; do not automatically
+	 * repeat a code redemption, rotating refresh, callback, credential mutation or application action.
 	 *
-	 * @return whether retrying the same operation later may succeed
+	 * @return whether this failure is classified as a temporary condition
 	 * @since 1.0.0
 	 */
 	@NonNull
-	public final Boolean isTransient() {
+	public final Boolean isTemporaryCondition() {
 		return this.transientFailure;
 	}
 

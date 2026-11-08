@@ -35,7 +35,7 @@ public final class ClosedWebAuthnCodec {
  private ClosedWebAuthnCodec(){}
  public static void main(@NonNull String @NonNull [] args)throws Exception{CodecSupport.main(args,ClosedWebAuthnCodec::process);}
  private static @NonNull JsonArray process(@NonNull JsonObject config)throws Exception{
-  @NonNull StateSealer sealer=sealer(config);var codec=new WebAuthnRecordCodecV2(sealer);var migration=new WebAuthnRecordMigration(sealer);
+  @NonNull StateSealer sealer=webauthnSealer(config);var codec=new WebAuthnRecordCodecV2(sealer);var migration=new WebAuthnRecordMigration(sealer);
   var intent=ClosedMigrationIntent.fromExternalIntent(text(config,"migrationId"),StoreAdmission.fromIdentifiers(text(config,"authorityId"),text(config,"recoveryGeneration")),Set.of(ClosedMigrationIntent.Format.WEBAUTHN_WAR2));
   if(text(config,"operation").equals("inspect-legacy"))return inspectLegacy(config,codec,migration,intent);
   boolean verify=text(config,"operation").equals("verify");var outputs=new ArrayList<@NonNull JsonValue>();var roots=new HashMap<@NonNull String,@NonNull JsonObject>();for(var root:rows(config,"roots"))if(roots.put(text(root,"key"),root)!=null)throw new IllegalArgumentException("Duplicate root");

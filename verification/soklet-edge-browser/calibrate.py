@@ -1,0 +1,38 @@
+#!/usr/bin/env python3
+# Copyright 2026 Revetware LLC. Licensed under the Apache License, Version 2.0.
+"""Private exact plants, setup failures never count as detection; never modify selected inputs."""
+from pathlib import Path
+import argparse,hashlib,json,shutil,subprocess,sys,tempfile
+
+def digest(path):return hashlib.sha256(path.read_bytes()).hexdigest()
+def main():
+ parser=argparse.ArgumentParser();parser.add_argument('--selected',required=True,type=Path);parser.add_argument('--output',required=True,type=Path);args=parser.parse_args();args.output.mkdir(parents=True);source=Path(__file__).parent;results=[]
+ def copy(destination):shutil.copytree(source,destination,ignore=shutil.ignore_patterns('__pycache__'))
+ def execute(directory,command,log):
+  result=subprocess.run(command,cwd=directory,capture_output=True,text=True,timeout=90);log.write_text(result.stdout+result.stderr);return result
+ pure=[
+ ('logout-query',"if delimiter:raise Refused(400,'query-on-start',target)","if False:raise Refused(400,'query-on-start',target)",'test_bare_and_nonempty_queries_never_collapse'),
+ ('provider-query',"if delimiter:raise Refused(400,'query-on-provider-route',target)","if False:raise Refused(400,'query-on-provider-route',target)",'test_provider_route_and_query_profile_is_separate'),
+ ('duplicate-headers',"if key in SINGLE and seen[key]!=1:","if False:",'test_duplicate_and_ambiguous_framing_refuse'),
+ ('body-prefix',"if length>cap:raise Refused(413,'body-bound',target)","if length>cap:length=cap",'test_declared_body_and_cap_plus_one_are_not_prefixes'),
+ ('private-forwarded-spoof',"if key=='forwarded'or key.startswith('x-forwarded-')or key.startswith('x-fixture-'):","if False:",'test_transport_spoof_and_encoded_targets_refuse'),
+ ('callback-alias',"name,equals,value=query.partition(b'=')","name,equals,value=query.partition(b'=');name=urllib.parse.unquote_to_bytes(name)",'test_callback_duplicates_aliases_and_noncanonical_values_refuse'),
+ ('chunk-trailers',"if line(128)!=b'\\r\\n':raise Refused(400,'trailers-not-selected',target)","line(128)",'test_complete_chunked_body_and_truncation'),
+ ]
+ with tempfile.TemporaryDirectory(prefix='revetsec-edge-plants-')as temporary:
+  work=Path(temporary);green=work/'green';copy(green);control=execute(green,[sys.executable,'-m','unittest','-v','test_edge','test_edge_budget'],args.output/'pure-control.log');assert control.returncode==0
+  for name,before,after,method in pure:
+   plant=work/name;copy(plant);file=plant/'edge.py';original=file.read_text();assert original.count(before)==1;file.write_text(original.replace(before,after));retained=args.output/name;retained.mkdir();shutil.copyfile(file,retained/'edge.py');result=execute(plant,[sys.executable,'-m','unittest','-v','test_edge.EdgeParserTests.'+method],retained/'test.log');detected=result.returncode==1 and 'FAIL:'in result.stderr and 'AssertionError:'in result.stderr and 'ERROR:'not in result.stderr
+   results.append({'name':name,'scope':'pure-parser','test':method,'detected':detected,'originalSha256':digest(source/'edge.py'),'plantedSha256':digest(file),'replacement':{'before':before,'after':after}})
+  plant=work/'deadline-renewal';copy(plant);file=plant/'edge.py';before='threading.Timer(max(0,deadline-time.monotonic()),expire_owned)';after='threading.Timer(max(0,deadline-time.monotonic()+5),expire_owned)';original=file.read_text();assert original.count(before)==1;file.write_text(original.replace(before,after));retained=args.output/'deadline-renewal';retained.mkdir();shutil.copyfile(file,retained/'edge.py');result=execute(plant,[sys.executable,'-m','unittest','-v','test_edge_budget.OriginalBudgetTests.test_progress_does_not_extend_original_edge_budget'],retained/'test.log');detected=result.returncode==1 and 'FAIL:'in result.stderr and 'slow-progress-must-not-renew-original-eight-second-budget'in result.stderr and 'ERROR:'not in result.stderr;results.append({'name':'deadline-renewal','scope':'actual-slow-progress-TLS','test':'test_progress_does_not_extend_original_edge_budget','detected':detected,'originalSha256':digest(source/'edge.py'),'plantedSha256':digest(file),'replacement':{'before':before,'after':after}})
+  for profile in ['logout','provider']:
+   destination=args.output/('runtime-'+profile+'-control');result=execute(green,[sys.executable,'calibration_probe.py','--selected',str(args.selected),'--output',str(destination),'--profile',profile,'--case','query'],args.output/(profile+'-control.log'));assert result.returncode==0
+   plant=work/('runtime-'+profile);copy(plant);before=pure[0 if profile=='logout'else 1][1];after=pure[0 if profile=='logout'else 1][2];file=plant/'edge.py';original=file.read_text();assert original.count(before)==1;file.write_text(original.replace(before,after));destination=args.output/('runtime-'+profile+'-plant');result=execute(plant,[sys.executable,'calibration_probe.py','--selected',str(args.selected),'--output',str(destination),'--profile',profile,'--case','query'],args.output/(profile+'-plant.log'));observed=json.loads((destination/'RESULT.json').read_text());expected='calibration-authorized-bare-query-never-closes'if profile=='logout'else'calibration-signed-bare-query-never-authenticates';detected=result.returncode==1 and observed.get('failure')=={'type':'AssertionError','check':expected}and observed.get('edgeClean')and observed.get('backendClean');shutil.copyfile(file,destination/'edge.py');results.append({'name':'runtime-'+profile+'-query','scope':'genuine-current-recipe-effect','test':expected,'detected':detected,'effectCounts':observed.get('effectCounts'),'plantedSha256':digest(file)})
+  for name,file_name,before,after,case,expected in [
+   ('TLS-verification','certificates.py','client.check_hostname=True;client.verify_mode=ssl.CERT_REQUIRED','client.check_hostname=False;client.verify_mode=ssl.CERT_NONE','TLS','normal-TLS-wrong-SAN-hostname-refused-before-dispatch'),
+   ('CONNECT-destination','edge.py',"or parts[1]!=b'app.example:443'","or False ",'CONNECT','calibration-CONNECT-foreign-refused')]:
+   destination=args.output/(name+'-control');result=execute(green,[sys.executable,'calibration_probe.py','--selected',str(args.selected),'--output',str(destination),'--profile','logout','--case',case],args.output/(name+'-control.log'));assert result.returncode==0
+   plant=work/name;copy(plant);file=plant/file_name;original=file.read_text();assert original.count(before)==1;file.write_text(original.replace(before,after));destination=args.output/(name+'-plant');result=execute(plant,[sys.executable,'calibration_probe.py','--selected',str(args.selected),'--output',str(destination),'--profile','logout','--case',case],args.output/(name+'-plant.log'));observed=json.loads((destination/'RESULT.json').read_text())if(destination/'RESULT.json').exists()else{'failure':{'type':'PreparationFailure'}};detected=result.returncode==1 and observed.get('failure')=={'type':'AssertionError','check':expected}and observed.get('edgeClean')and observed.get('backendClean');shutil.copyfile(file,destination/file_name);results.append({'name':name,'scope':'fixture-TLS-or-tunnel-guard','test':expected,'detected':detected,'originalSha256':digest(source/file_name),'plantedSha256':digest(file),'replacement':{'before':before,'after':after}})
+ receipt={'results':results,'detected':sum(bool(item['detected'])for item in results),'total':len(results),'success':all(item['detected']for item in results),'privatePlantRuntimeRemoved':not work.exists(),'sourceHashes':{path.name:digest(path)for path in source.iterdir()if path.is_file()and path.suffix in['.py','.java','.mjs']}}
+ (args.output/'CALIBRATION.json').write_text(json.dumps(receipt,indent=2)+'\n');return 0 if receipt['success']else 1
+if __name__=='__main__':raise SystemExit(main())

@@ -15,6 +15,8 @@
  */
 package com.revetsec.saml;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.StateSealer;
 import com.revetsec.StateUnsealResult;
 import com.revetsec.internal.crypto.SealedStateAccess;
@@ -43,7 +45,7 @@ final class SamlSessionReferenceSealResultTests {
     private static final String CONTEXT = "session-budget-result";
     private static final Instant END = NOW.plusSeconds(300);
 
-    @TestFactory Stream<DynamicTest> exactConfiguredBoundAndOneByteOver() {
+    @TestFactory @NonNull Stream<@NonNull DynamicTest> exactConfiguredBoundAndOneByteOver() {
         return Stream.of(1024, 3800, 16384).flatMap(cap -> Stream.of(1, 64).map(keyLength ->
                 DynamicTest.dynamicTest("cap " + cap + "; key ID " + keyLength, () -> {
                     StateSealer sealer = sealer(cap, "k".repeat(keyLength));
@@ -71,7 +73,7 @@ final class SamlSessionReferenceSealResultTests {
                 })));
     }
 
-    @TestFactory Stream<DynamicTest> completeUnicodeProfileUsesTrustedStorageWhenItCannotBeSealed() {
+    @TestFactory @NonNull Stream<@NonNull DynamicTest> completeUnicodeProfileUsesTrustedStorageWhenItCannotBeSealed() {
         return Stream.of("ASCII", "BMP", "supplementary").map(alphabet -> DynamicTest.dynamicTest(alphabet, () -> {
             SamlSessionReference reference = SamlSessionReferenceBudgetTests.maximum(alphabet, Instant.MAX);
             StateSealer sealer = sealer(16384, "largest-profile");
@@ -167,21 +169,21 @@ final class SamlSessionReferenceSealResultTests {
         assertEquals("1.Yw.aQ.YQ.-.-.-.-.-.-", open(sealed, sealer, "session-budget-v1", CLOCK).toSerializedForm());
     }
 
-    private static StateSealer sealer(int cap, String id) {
+    private static @NonNull StateSealer sealer(int cap, @NonNull String id) {
         return StateSealer.withActiveKey(TestSealers.fixedKey(id)).maximumSealedLength(cap).clock(CLOCK).build();
     }
-    private static SamlSessionReference small() { return SamlSessionReferenceBudgetTests.parsed("1.Yw.aQ.YQ.-.-.-.-.-.-"); }
-    private static SamlSessionReference open(String sealed, StateSealer sealer, String context, Clock clock) {
+    private static @NonNull SamlSessionReference small() { return SamlSessionReferenceBudgetTests.parsed("1.Yw.aQ.YQ.-.-.-.-.-.-"); }
+    private static @NonNull SamlSessionReference open(@NonNull String sealed, @NonNull StateSealer sealer, @NonNull String context, @NonNull Clock clock) {
         return assertInstanceOf(SamlSessionReferenceParseResult.Succeeded.class,
                 SamlSessionReference.fromSealedFormResult(sealed, sealer, context, clock)).getReference();
     }
-    private static void assertSameFields(SamlSessionReference expected, SamlSessionReference actual) {
+    private static void assertSameFields(@NonNull SamlSessionReference expected, @NonNull SamlSessionReference actual) {
         SamlSessionReferenceBudgetTests.assertSameFields(expected, actual);
     }
     private static int base64Length(int bytes) { return (4 * bytes + 2) / 3; }
     private static int optionalLength(int units) { return units == 0 ? 1 : base64Length(units + 1); }
     private static @Nullable String optionalText(int units) { return units == 0 ? null : "q".repeat(units); }
-    private static SamlSessionReference atPlaintextLength(int target) {
+    private static @NonNull SamlSessionReference atPlaintextLength(int target) {
         // Search integer lengths, allocating strings only after an exact ASCII envelope is found.
         for (int units = 1; units <= 12288; units++) {
             int value = Math.min(units, 4096);
@@ -201,7 +203,7 @@ final class SamlSessionReferenceSealResultTests {
         throw new AssertionError("No legal envelope at length " + target);
     }
 
-    private static CountingRandom instrument(StateSealer sealer, boolean fail) throws Exception {
+    private static @NonNull CountingRandom instrument(@NonNull StateSealer sealer, boolean fail) throws Exception {
         // Per-instance fault seam only; no global provider list or production SPI is modified.
         Field entropy = StateSealer.class.getDeclaredField("entropySource"); entropy.setAccessible(true);
         Object source = entropy.get(sealer);
@@ -213,7 +215,7 @@ final class SamlSessionReferenceSealResultTests {
         private final boolean fail;
         private int draws;
         private CountingRandom(boolean fail) { this.fail = fail; }
-        @Override public void nextBytes(byte[] bytes) {
+        @Override public void nextBytes(byte @NonNull [] bytes) {
             draws++;
             if (fail) throw new ProviderException("PRIVATE-PROVIDER-DETAIL");
             super.nextBytes(bytes);

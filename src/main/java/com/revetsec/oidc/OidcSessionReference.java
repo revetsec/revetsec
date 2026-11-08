@@ -39,7 +39,7 @@ import static java.util.Objects.requireNonNull;
 
 /**
  * Continuity reference for refresh and future logout. It holds original continuity claims, client binding and a
- * SHA-256 nonce digest. It is not proof of identity and contains no access, refresh or compact ID token. Persist
+ * SHA-256 nonce digest and the original flow's ACR acceptance set. It is not proof of identity and contains no access, refresh or compact ID token. Persist
  * it in trusted application storage or seal it; parsing a serialized reference does not authenticate its fields.
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  * @since 1.0.0
@@ -51,15 +51,21 @@ public final class OidcSessionReference {
 	private final JsonObject continuityClaims;
 	private final String clientId;
 	private final String nonceDigest;
+	private final Set<String> requiredAcrValues;
 	private final @Nullable String sessionId;
 	OidcSessionReference(@NonNull IdToken token, @NonNull String clientId) {
+		this(token, clientId, Set.of());
+	}
+	OidcSessionReference(@NonNull IdToken token, @NonNull String clientId, @NonNull Set<@NonNull String> requiredAcrValues) {
+		this.requiredAcrValues = Set.copyOf(OidcAuthenticationOptions.requireAcrValues(requiredAcrValues));
 		JsonObject.Builder fields = JsonObject.builder();
 		for (String name : CLAIM_NAMES) token.getClaims().getClaim(name).ifPresent(value -> fields.put(name, value));
 		this.continuityClaims = fields.build(); this.clientId = requireNonNull(clientId);
 		this.nonceDigest = digest(((JsonString) token.getClaims().getClaim("nonce").orElseThrow()).getValue());
 		this.sessionId = token.getClaims().getClaim("sid").map(value -> ((JsonString) value).getValue()).orElse(null);
 	}
-	private OidcSessionReference(@NonNull JsonObject claims, @NonNull String clientId, @NonNull String nonceDigest) {
+	private OidcSessionReference(@NonNull JsonObject claims, @NonNull String clientId, @NonNull String nonceDigest, @NonNull Set<@NonNull String> requiredAcrValues) {
+		this.requiredAcrValues = Set.copyOf(OidcAuthenticationOptions.requireAcrValues(requiredAcrValues));
 		this.continuityClaims = claims; this.clientId = clientId; this.nonceDigest = nonceDigest;
 		this.sessionId = claims.find("sid").map(value -> ((JsonString) value).getValue()).orElse(null);
 	}
@@ -72,10 +78,17 @@ public final class OidcSessionReference {
 		} catch (NoSuchAlgorithmException impossible) { throw new IllegalStateException("SHA-256 is unavailable."); }
 		finally { Arrays.fill(input, (byte) 0); }
 	}
+	/**
+	 * Returns the original flow's immutable local ACR acceptance set. An empty set imposes no ACR acceptance
+	 * requirement. This is comparison policy from trusted storage, never authenticated identity or current assurance.
+	 * @return saved acceptable ACR values
+	 * @since 1.0.0
+	 */
+	public @NonNull Set<@NonNull String> getRequiredAcrValues() { return this.requiredAcrValues; }
 	@NonNull JsonObject continuityClaims() { return this.continuityClaims; }
 	boolean matchesNonce(@NonNull String nonce) { return ConstantTime.isEqual(this.nonceDigest, digest(nonce)); }
 	boolean matchesOriginalReference(@NonNull OidcSessionReference other) {
-		if (!this.clientId.equals(other.clientId) || !ConstantTime.isEqual(this.nonceDigest, other.nonceDigest)
+		if (!this.clientId.equals(other.clientId) || !this.requiredAcrValues.equals(other.requiredAcrValues) || !ConstantTime.isEqual(this.nonceDigest, other.nonceDigest)
 				|| !audiences(this.continuityClaims).equals(audiences(other.continuityClaims))) return false;
 		Map<String, JsonValue> original = new HashMap<>(this.continuityClaims.getMembers());
 		Map<String, JsonValue> restored = new HashMap<>(other.continuityClaims.getMembers());
@@ -121,14 +134,15 @@ public final class OidcSessionReference {
 	 * @since 1.0.0
 	 */
 	public @NonNull String toSerializedForm() {
-		String value = JsonObject.builder().put("v", 1L).put("client_id", this.clientId).put("claims", this.continuityClaims).put("nonce_digest", this.nonceDigest).build().toJson();
+		String value = JsonObject.builder().put("v", 2L).put("client_id", this.clientId).put("claims", this.continuityClaims).put("nonce_digest", this.nonceDigest).put("required_acr_values", JsonArray.fromElements(this.requiredAcrValues.stream().sorted().map(acr -> (JsonValue) JsonString.fromValue(acr)).toList())).build().toJson();
 		if (value.length() > MAXIMUM_BYTES) throw invalid();
 		byte[] bytes;
 		try { bytes = StrictUtf8.encode(value); } catch (EncodingException malformed) { throw invalid(); }
 		try { if (bytes.length > MAXIMUM_BYTES) throw invalid(); return value; } finally { Arrays.fill(bytes, (byte) 0); }
 	}
 	/**
-	 * Parses a bounded reference from trusted application storage, returning a fixed rejection for invalid structure.
+	 * Parses a bounded version-2 reference from trusted application storage, returning a fixed rejection for invalid structure.
+	 * Version 1 lacks the original acceptance policy and is rejected; authenticate again rather than infer it.
 	 * This supplies no identity. Untrusted browser storage must use
 	 * {@link #fromSealedFormResult(String, StateSealer, String)}.
 	 * @param serializedForm versioned storage form
@@ -154,8 +168,8 @@ public final class OidcSessionReference {
 		try {
 			if (serializedForm.length() > MAXIMUM_BYTES) throw new IllegalArgumentException();
 			bytes = StrictUtf8.encode(serializedForm); JsonValue value = JsonCodec.parse(bytes, JsonLimits.protocolDocument(MAXIMUM_BYTES));
-			if (!(value instanceof JsonObject envelope) || !envelope.getMembers().keySet().equals(Set.of("v", "client_id", "claims", "nonce_digest"))
-					|| !referenceLong(envelope, "v").filter(v -> v == 1).isPresent() || !(envelope.getMembers().get("claims") instanceof JsonObject claims)) throw new IllegalArgumentException();
+			if (!(value instanceof JsonObject envelope) || !envelope.getMembers().keySet().equals(Set.of("v", "client_id", "claims", "nonce_digest", "required_acr_values"))
+					|| !referenceLong(envelope, "v").filter(v -> v == 2).isPresent() || !(envelope.getMembers().get("claims") instanceof JsonObject claims)) throw new IllegalArgumentException();
 			String client = JsonFields.string(envelope, "client_id").filter(v -> !v.isEmpty()).orElseThrow(IllegalArgumentException::new);
 			String digest = JsonFields.string(envelope, "nonce_digest").orElseThrow(IllegalArgumentException::new);
 			if (digest.length() != 43) throw new IllegalArgumentException();
@@ -168,7 +182,12 @@ public final class OidcSessionReference {
 			if (!audiences(claims).contains(client) || JsonFields.numericDate(claims, "iat").isEmpty()) throw new IllegalArgumentException();
 			JsonFields.numericDate(claims, "auth_time");
 			for (String name : List.of("azp", "sid")) if (claims.getMembers().containsKey(name) && !(claims.getMembers().get(name) instanceof JsonString)) throw new IllegalArgumentException();
-			return new OidcSessionReference(claims, client, digest);
+			if (!(envelope.getMembers().get("required_acr_values") instanceof JsonArray values)) throw new IllegalArgumentException();
+			Set<String> required = new HashSet<>();
+			for (JsonValue item : values.getElements()) {
+				if (!(item instanceof JsonString text) || !required.add(text.getValue())) throw new IllegalArgumentException();
+			}
+			return new OidcSessionReference(claims, client, digest, OidcAuthenticationOptions.requireAcrValues(required));
 		} catch (JsonParseException | JsonFieldException | EncodingException | IllegalArgumentException invalid) { throw invalid(); }
 		finally { if (bytes != null) Arrays.fill(bytes, (byte) 0); }
 	}

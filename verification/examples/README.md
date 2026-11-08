@@ -6,7 +6,7 @@ These Python coordinators are optional CI audits, not consumer build launchers:
 
 | Tool | Additional checks |
 | --- | --- |
-| [verify_packaged_examples.py](verify_packaged_examples.py) | Exact core/adapter source pins, framework checksum, complete adapter tests, explicit test-only compatibility overlay, packaged runtime dependencies and attributed nullability |
+| [verify_packaged_examples.py](verify_packaged_examples.py) | Exact core/adapter source pins, framework checksum, complete adapter tests, unchanged pinned upstream tests, packaged runtime dependencies and attributed nullability |
 | [verify_self_issued.py](verify_self_issued.py) | Frozen authored core/adapter inventories, private Maven repository, redacted capture and annotation-free standalone runtime |
 | [verify_rsa_oidc.py](verify_rsa_oidc.py) | Frozen authored core inventory, private TLS fixture, independent JCA provider capture and attributed nullability |
 
@@ -21,10 +21,12 @@ Optional `--repository-tail` is read-only; `--offline` needs cached dependencies
 Retain inventories, commands and redacted results with the tested artifacts.
 Never upload generated private TLS material, keys, tokens or browser state.
 
-The [adapter compatibility helper](adapter_compatibility.py) preserves the
-[guarded test-only bridge](../../examples/compatibility/soklet-shared-clock/README.md).
-It checks source hashes before and after applying only the declared test overlay
-in a disposable adapter copy. Production code and the pinned POM stay unchanged.
+The [adapter input guard](adapter_compatibility.py) checks the exact pinned POM,
+production and test trees before and after the build. The current published adapter
+runs its full 196-test upstream suite without source replacements. The former
+shared-clock fixture overlay is retired; the [manifest](../../examples/compatibility/soklet-shared-clock/manifest.json)
+records the current revision and required count. Dirty inputs, source drift or
+missing/failing/skipped tests fail closed.
 
 ## Explicit nullability
 

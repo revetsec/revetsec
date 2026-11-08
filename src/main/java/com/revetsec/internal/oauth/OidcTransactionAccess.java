@@ -25,6 +25,7 @@ import java.lang.invoke.MethodHandles;
 import java.net.URI;
 import java.time.Duration;
 import java.util.Set;
+import java.util.List;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Supplier;
 import java.util.function.Function;
@@ -57,7 +58,7 @@ public final class OidcTransactionAccess {
 		@NonNull OAuthException metadataStatusFailure(int status, @Nullable Duration retryAfter);
 		boolean isEndpointRejection(@NonNull OAuthErrorResponseException failure);
 		@NonNull AuthorizationRedirect begin(@NonNull OAuthClient client, @NonNull AuthorizationRequestOptions options,
-				@NonNull AuthorizationServerMetadata metadata, @Nullable Duration maxAge, @NonNull Set<@NonNull String> acrValues);
+				@NonNull AuthorizationServerMetadata metadata, @Nullable Duration maxAge, @NonNull Set<@NonNull String> acrValues, @NonNull List<@NonNull String> acrPreferences);
 		@NonNull RefreshCompletion refresh(@NonNull OAuthClient client, @NonNull RefreshToken token, @NonNull TokenRequestOptions options,
 				@NonNull AuthorizationServerMetadata metadata, @NonNull Deadline deadline, @NonNull Set<@NonNull JwsAlgorithm> hmacAlgorithms);
 		@NonNull Completion complete(@NonNull OAuthClient client, @NonNull AuthorizationResponse response, @NonNull PendingAuthorizationSource source,

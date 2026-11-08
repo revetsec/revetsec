@@ -21,7 +21,7 @@ import javax.annotation.concurrent.Immutable;
  * @since 1.0.0 */
 @Immutable
 public enum PasswordUnavailableReason {
-    /** The local shared work gate could not admit the KDF. */
+    /** The local shared work gate could not admit preparation, pepper lookup and KDF work. */
     WORK_CAPACITY,
     /** Required pepper key material was unavailable. */
     PEPPER_UNAVAILABLE,

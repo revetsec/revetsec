@@ -17,6 +17,7 @@
 package com.revetsec.totp;
 
 import org.junit.jupiter.api.Test;
+import org.jspecify.annotations.NonNull;
 
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
@@ -62,7 +63,12 @@ final class TotpResultContractTests {
 
 	@Test void pureStatusKeepsItsThreeSnapshotVariants() {
 		assertEquals(Set.of("Present","Absent","Unavailable"),Arrays.stream(TotpStatusResult.class.getPermittedSubclasses()).map(Class::getSimpleName).collect(Collectors.toSet()));
+		assertEquals(Set.of("getStatus"),publicDeclaredMethods(TotpStatusResult.Present.class));
+		assertEquals(Set.of(),publicDeclaredMethods(TotpStatusResult.Absent.class));
+		assertEquals(Set.of("getReason"),publicDeclaredMethods(TotpStatusResult.Unavailable.class));
 	}
+	private static @NonNull Set<@NonNull String> publicDeclaredMethods(@NonNull Class<?> type){return Arrays.stream(type.getDeclaredMethods())
+		.filter(method->Modifier.isPublic(method.getModifiers())&&!method.isSynthetic()).map(Method::getName).collect(Collectors.toSet());}
 
 	@Test void unavailableReasonsPreserveOldOrderAndAppendOnlySelectedReasons() {
 		assertEquals(List.of("DEPENDENCY_UNAVAILABLE","ADMISSION_CLOSED","FENCED","CAPACITY_REFUSED",

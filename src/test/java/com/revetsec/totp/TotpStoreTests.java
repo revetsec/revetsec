@@ -417,26 +417,12 @@ final class TotpStoreTests {
  }
 
  @Test void lockWaitCrossingExclusiveExpiryRefusesBeforeAnyMutation() throws Exception {
-  InMemoryTotpStore store = initializedStore(5, 100);
-  TotpStoreSnapshot snapshot = snapshot(store, Set.of(ROOT, ACCOUNT));
-  StoreTimeObservation.Healthy time = assertInstanceOf(StoreTimeObservation.Healthy.class, snapshot.getTimeObservation());
-  StoreTemporalCondition expires = StoreTimeAccess.get().fromObservation(time, time.getObservedAt(), time.getObservedAt().plusMillis(20));
-  TotpStoreWrite write = TotpStoreWrite.fromSnapshotAndMutations(TotpStoreWrite.Purpose.UPDATE, snapshot,
-    List.of(TotpStoreWrite.Mutation.insert(record(ACCOUNT, 2, 2))), expires);
-  Field lockField = InMemoryTotpStore.class.getDeclaredField("lock"); lockField.setAccessible(true);
-  ReentrantLock lock = (ReentrantLock) lockField.get(store);
-  ExecutorService executor = Executors.newSingleThreadExecutor();
-  CountDownLatch entered = new CountDownLatch(1);
-  lock.lock();
-  Future<TotpStoreCommitReceipt> waiting;
-  try {
-   waiting = executor.submit(() -> { entered.countDown(); return store.compareAndCommit(write, BUDGET); });
-   assertTrue(entered.await(2, TimeUnit.SECONDS));
-   assertFalse(new CountDownLatch(1).await(40, TimeUnit.MILLISECONDS));
-  } finally { lock.unlock(); }
-  try { assertEquals(TotpStoreCommitResult.TIME_EXPIRED, waiting.get(2, TimeUnit.SECONDS).getStatus()); }
-  finally { executor.shutdownNow(); }
-  assertInstanceOf(TotpStoreEntry.Absent.class, snapshot(store, Set.of(ROOT, ACCOUNT)).getEntry(ACCOUNT));
+  InMemoryTotpStore store=initializedStore(5,100);TotpStoreSnapshot before=snapshot(store,Set.of(ROOT,ACCOUNT));StoreTimeObservation.Healthy time=assertInstanceOf(StoreTimeObservation.Healthy.class,before.getTimeObservation());Instant upper=time.getObservedAt().plusMillis(500);TotpStoreWrite write=TotpStoreWrite.fromSnapshotAndMutations(TotpStoreWrite.Purpose.UPDATE,before,List.of(TotpStoreWrite.Mutation.insert(record(ACCOUNT,2,2))),StoreTimeAccess.get().fromObservation(time,time.getObservedAt(),upper));Field field=InMemoryTotpStore.class.getDeclaredField("lock");field.setAccessible(true);ReentrantLock lock=(ReentrantLock)field.get(store);ExecutorService executor=Executors.newSingleThreadExecutor();CountDownLatch entered=new CountDownLatch(1);List<String> trace=new java.util.concurrent.CopyOnWriteArrayList<>();Future<TotpStoreCommitReceipt> waiting;
+  try{lock.lock();try{
+   trace.add("snapshot-before-E");waiting=executor.submit(()->{trace.add("commit-call");entered.countDown();TotpStoreCommitReceipt receipt=store.compareAndCommit(write,BUDGET);trace.add("callback-returned");return receipt;});assertTrue(entered.await(2,TimeUnit.SECONDS));long queued=System.nanoTime()+TimeUnit.SECONDS.toNanos(2);while(!lock.hasQueuedThreads()&&System.nanoTime()<queued)Thread.yield();assertTrue(lock.hasQueuedThreads());assertFalse(waiting.isDone());trace.add("queued-under-lock");StoreTimeObservation.Healthy current=assertInstanceOf(StoreTimeObservation.Healthy.class,snapshot(store,Set.of(ROOT,ACCOUNT)).getTimeObservation());assertTrue(current.getObservedAt().isBefore(upper),"Queued call must begin before E");long limit=System.nanoTime()+TimeUnit.SECONDS.toNanos(2);while(current.getObservedAt().isBefore(upper)){assertTrue(System.nanoTime()<limit);assertFalse(waiting.isDone());Thread.sleep(1);current=assertInstanceOf(StoreTimeObservation.Healthy.class,snapshot(store,Set.of(ROOT,ACCOUNT)).getTimeObservation());}trace.add("reached-E-under-lock");assertFalse(waiting.isDone());trace.add("releasing-lock");
+  }finally{lock.unlock();}
+  TotpStoreCommitReceipt receipt=waiting.get(5,TimeUnit.SECONDS);assertEquals(TotpStoreCommitResult.TIME_EXPIRED,receipt.getStatus());assertTrue(receipt.getTiming().isEmpty());assertEquals(List.of("snapshot-before-E","commit-call","queued-under-lock","reached-E-under-lock","releasing-lock","callback-returned"),trace);TotpStoreSnapshot after=snapshot(store,Set.of(ROOT,ACCOUNT));assertInstanceOf(TotpStoreEntry.Absent.class,after.getEntry(ACCOUNT));assertEquals(present(before,ROOT).getVersion(),present(after,ROOT).getVersion());assertArrayEquals(present(before,ROOT).getSealedBytes(),present(after,ROOT).getSealedBytes());
+  }finally{executor.shutdownNow();assertTrue(executor.awaitTermination(5,TimeUnit.SECONDS));}
  }
 
  @Test void lossOfElapsedContinuityCannotBeRepairedByRecoveryEpochProvisioning() throws Exception {
@@ -519,5 +505,80 @@ final class TotpStoreTests {
  private static StoreTimeObservation.@NonNull Healthy healthy() {
   return StoreTimeObservation.Healthy.fromObservation(StoreAdmission.fromIdentifiers(version(101), version(102)),
     version(103), Instant.ofEpochSecond(1800000000), Duration.ZERO);
+ }
+
+ @org.junit.jupiter.api.TestFactory @NonNull List<org.junit.jupiter.api.@NonNull DynamicTest> scApi06BelowFloorWaitUsesValidationAfterTheActualLock(){
+  List<org.junit.jupiter.api.DynamicTest> cases=new ArrayList<>();for(boolean mutate:List.of(false,true))cases.add(org.junit.jupiter.api.DynamicTest.dynamicTest("SC-API-06/TOTP/below-N-to-valid/mutation="+mutate,()->{
+   InMemoryTotpStore store=initializedStore(5,100);TotpStoreSnapshot initial=snapshot(store,Set.of(ROOT,ACCOUNT));TotpStoreRecord root=present(initial,ROOT);StoreTimeObservation.Healthy original=assertInstanceOf(StoreTimeObservation.Healthy.class,initial.getTimeObservation());Instant lower=original.getObservedAt().plusMillis(500),upper=lower.plusSeconds(10);TotpStoreWrite write=TotpStoreWrite.fromSnapshotAndMutations(TotpStoreWrite.Purpose.UPDATE,initial,mutate?List.of(TotpStoreWrite.Mutation.insert(record(ACCOUNT,2,2))):List.of(),StoreTimeAccess.get().fromObservation(original,lower,upper));Field lockField=InMemoryTotpStore.class.getDeclaredField("lock");lockField.setAccessible(true);ReentrantLock lock=(ReentrantLock)lockField.get(store);List<String> trace=new java.util.concurrent.CopyOnWriteArrayList<>();java.util.concurrent.atomic.AtomicReference<Thread> callback=new java.util.concurrent.atomic.AtomicReference<>();ExecutorService executor=Executors.newSingleThreadExecutor();CountDownLatch entered=new CountDownLatch(1);Future<TotpStoreCommitReceipt> waiting;Instant heldSample;
+   try{lock.lock();try{
+    trace.add("snapshot-below-N");assertTrue(original.getObservedAt().isBefore(lower));waiting=executor.submit(()->{callback.set(Thread.currentThread());trace.add("commit-call");entered.countDown();TotpStoreCommitReceipt receipt=store.compareAndCommit(write,BUDGET);trace.add("callback-returned");return receipt;});assertTrue(entered.await(2,TimeUnit.SECONDS));long queuedDeadline=System.nanoTime()+TimeUnit.SECONDS.toNanos(2);while(!lock.hasQueuedThreads()&&System.nanoTime()<queuedDeadline)Thread.yield();assertTrue(lock.hasQueuedThread(java.util.Objects.requireNonNull(callback.get())));assertFalse(waiting.isDone());trace.add("queued-under-lock");StoreTimeObservation.Healthy current=assertInstanceOf(StoreTimeObservation.Healthy.class,snapshot(store,Set.of(ROOT,ACCOUNT)).getTimeObservation());assertTrue(current.getObservedAt().isBefore(lower),"Queued call must begin before N");long floorDeadline=System.nanoTime()+TimeUnit.SECONDS.toNanos(2);while(current.getObservedAt().isBefore(lower)){assertTrue(System.nanoTime()<floorDeadline,"Authority did not reach N");assertFalse(waiting.isDone());Thread.sleep(1);current=assertInstanceOf(StoreTimeObservation.Healthy.class,snapshot(store,Set.of(ROOT,ACCOUNT)).getTimeObservation());}heldSample=current.getObservedAt();trace.add("reached-N-under-lock");assertFalse(waiting.isDone());trace.add("releasing-lock");
+   }finally{lock.unlock();}
+   TotpStoreCommitReceipt receipt=waiting.get(5,TimeUnit.SECONDS);assertEquals(TotpStoreCommitResult.COMMITTED,receipt.getStatus());var timing=receipt.getTiming().orElseThrow();assertFalse(timing.getValidatedTime().getObservedAt().isBefore(lower));assertFalse(timing.getValidatedTime().getObservedAt().isBefore(heldSample));assertTrue(timing.getValidatedTime().getObservedAt().isBefore(upper));assertEquals(original.getAdmission(),timing.getValidatedTime().getAdmission());assertEquals(original.getClockGeneration(),timing.getValidatedTime().getClockGeneration());assertTrue(timing.getCompletedTime().isEmpty());assertEquals(List.of("snapshot-below-N","commit-call","queued-under-lock","reached-N-under-lock","releasing-lock","callback-returned"),trace);TotpStoreSnapshot after=snapshot(store,Set.of(ROOT,ACCOUNT));assertEquals(root.getVersion(),present(after,ROOT).getVersion());assertArrayEquals(root.getSealedBytes(),present(after,ROOT).getSealedBytes());if(mutate)assertEquals(record(ACCOUNT,2,2).getVersion(),present(after,ACCOUNT).getVersion());else assertInstanceOf(TotpStoreEntry.Absent.class,after.getEntry(ACCOUNT));}
+   finally{executor.shutdownNow();assertTrue(executor.awaitTermination(5,TimeUnit.SECONDS));}
+  }));return cases;
+ }
+
+ @org.junit.jupiter.api.TestFactory @NonNull List<org.junit.jupiter.api.@NonNull DynamicTest> scApi03ActualVolatileStoreRejectsEachForeignAdmissionDomainWithEqualGenerationAndTime(){
+  List<org.junit.jupiter.api.DynamicTest> cells=new ArrayList<>();for(boolean authority:List.of(false,true))cells.add(org.junit.jupiter.api.DynamicTest.dynamicTest("SC-API-03/TOTP-volatile/"+(authority?"authority":"recovery"),()->{
+   InMemoryTotpStore store=initializedStore(5,100);TotpStoreSnapshot before=snapshot(store,Set.of(ROOT,ACCOUNT));StoreTimeObservation.Healthy original=assertInstanceOf(StoreTimeObservation.Healthy.class,before.getTimeObservation());StoreAdmission admission=original.getAdmission();String foreign=version(116);StoreTimeObservation.Healthy changed=StoreTimeObservation.Healthy.fromObservation(StoreAdmission.fromIdentifiers(authority?foreign:admission.getAuthorityId(),authority?admission.getRecoveryGeneration():foreign),original.getClockGeneration(),original.getObservedAt(),original.getMaximumUtcError());TotpStoreSnapshot altered=TotpStoreSnapshot.fromEntries(before.getEntries().keySet(),before.getEntries(),changed);TotpStoreWrite attempt=TotpStoreWrite.fromSnapshotAndMutations(TotpStoreWrite.Purpose.UPDATE,altered,List.of(TotpStoreWrite.Mutation.insert(record(ACCOUNT,2,2))),condition(altered));Field bytesField=InMemoryTotpStore.class.getDeclaredField("sealedBytes");bytesField.setAccessible(true);Object bytes=bytesField.get(store);
+   TotpStoreCommitReceipt refusal=store.compareAndCommit(attempt,BUDGET);assertEquals(TotpStoreCommitResult.FENCED,refusal.getStatus());assertTrue(refusal.getTiming().isEmpty());TotpStoreSnapshot after=snapshot(store,Set.of(ROOT,ACCOUNT));assertEquals(original.getAdmission(),after.getTimeObservation().getAdmission());assertEquals(original.getClockGeneration(),assertInstanceOf(StoreTimeObservation.Healthy.class,after.getTimeObservation()).getClockGeneration());assertEquals(present(before,ROOT).getVersion(),present(after,ROOT).getVersion());assertArrayEquals(present(before,ROOT).getSealedBytes(),present(after,ROOT).getSealedBytes());assertInstanceOf(TotpStoreEntry.Absent.class,after.getEntry(ACCOUNT));assertEquals(bytes,bytesField.get(store));
+  }));return cells;
+ }
+ @SuppressWarnings("try") // Early close releases waiting writers before joining the executor; repeated close is idempotent.
+ @Test void scApi07PostValidationCopyKeepsActualLockUntilAllDataPublishes()throws Exception{
+  InMemoryTotpStore store=initializedStore(5,100);TotpStoreSnapshot before=snapshot(store,Set.of(ROOT,ACCOUNT,OTHER));StoreTimeObservation.Healthy observed=assertInstanceOf(StoreTimeObservation.Healthy.class,before.getTimeObservation());TotpStoreRecord first=record(ACCOUNT,2,2),other=record(OTHER,3,3);TotpStoreWrite primary=TotpStoreWrite.fromSnapshotAndMutations(TotpStoreWrite.Purpose.UPDATE,before,List.of(TotpStoreWrite.Mutation.insert(first),TotpStoreWrite.Mutation.insert(other)),condition(before));TotpStoreWrite competitor=TotpStoreWrite.fromSnapshotAndMutations(TotpStoreWrite.Purpose.UPDATE,before,List.of(TotpStoreWrite.Mutation.insert(record(ACCOUNT,4,4)),TotpStoreWrite.Mutation.insert(record(OTHER,5,5))),condition(before));Field field=InMemoryTotpStore.class.getDeclaredField("lock");field.setAccessible(true);ReentrantLock lock=(ReentrantLock)java.util.Objects.requireNonNull(field.get(store));List<String> trace=new java.util.concurrent.CopyOnWriteArrayList<>();ExecutorService executor=Executors.newFixedThreadPool(2);java.util.concurrent.atomic.AtomicReference<Thread> rival=new java.util.concurrent.atomic.AtomicReference<>();CountDownLatch called=new CountDownLatch(1);
+  try(var pause=com.revetsec.testing.StoreCommitPause.install(store,"records",trace,lock::isHeldByCurrentThread)){
+   try{
+    Future<TotpStoreCommitReceipt> one=executor.submit(()->{trace.add("primary-call");pause.selectCurrentWriter();var result=store.compareAndCommit(primary,Duration.ofSeconds(10));trace.add("primary-returned");return result;});assertTrue(pause.awaitEntered());assertTrue(pause.wasProtected(),"Post-validation state apply lost its real lock");assertEquals(InMemoryTotpStore.class.getName(),pause.getCallSite().getClassName());assertEquals("compareAndCommit",pause.getCallSite().getMethodName());Field rows=InMemoryTotpStore.class.getDeclaredField("records");rows.setAccessible(true);assertSame(pause.installedMap(),rows.get(store));
+    Future<TotpStoreCommitReceipt> two=executor.submit(()->{rival.set(Thread.currentThread());trace.add("competitor-call");called.countDown();var result=store.compareAndCommit(competitor,Duration.ofSeconds(10));trace.add("competitor-returned");return result;});assertTrue(called.await(2,TimeUnit.SECONDS));long end=System.nanoTime()+TimeUnit.SECONDS.toNanos(2);while(!lock.hasQueuedThread(java.util.Objects.requireNonNull(rival.get()))&&System.nanoTime()<end&&!two.isDone())Thread.yield();assertTrue(lock.hasQueuedThread(java.util.Objects.requireNonNull(rival.get())),"Competing write must queue on the real store lock");assertFalse(two.isDone());trace.add("competitor-queued");pause.resume();TotpStoreCommitReceipt committed=one.get(5,TimeUnit.SECONDS);assertEquals(TotpStoreCommitResult.COMMITTED,committed.getStatus());assertFalse(committed.getTiming().orElseThrow().getValidatedTime().getObservedAt().isBefore(observed.getObservedAt()));assertEquals(observed.getAdmission(),committed.getTiming().orElseThrow().getValidatedTime().getAdmission());assertTrue(committed.getTiming().orElseThrow().getCompletedTime().isEmpty());TotpStoreCommitReceipt rejected=two.get(5,TimeUnit.SECONDS);assertEquals(TotpStoreCommitResult.CONFLICT,rejected.getStatus());assertTrue(rejected.getTiming().isEmpty());
+    TotpStoreSnapshot after=snapshot(store,Set.of(ROOT,ACCOUNT,OTHER));assertEquals(first.getVersion(),present(after,ACCOUNT).getVersion());assertArrayEquals(first.getSealedBytes(),present(after,ACCOUNT).getSealedBytes());assertEquals(other.getVersion(),present(after,OTHER).getVersion());assertArrayEquals(other.getSealedBytes(),present(after,OTHER).getSealedBytes());assertEquals(present(before,ROOT).getVersion(),present(after,ROOT).getVersion());assertArrayEquals(present(before,ROOT).getSealedBytes(),present(after,ROOT).getSealedBytes());assertEquals(List.of("primary-call","validated-copy-paused","competitor-call","competitor-queued","release-copy","copy-resumed"),trace.subList(0,6));assertEquals(8,trace.size());
+   }finally{pause.close();executor.shutdown();if(!executor.awaitTermination(3,TimeUnit.SECONDS)){executor.shutdownNow();assertTrue(executor.awaitTermination(3,TimeUnit.SECONDS));}}
+  }finally{executor.shutdownNow();assertTrue(executor.awaitTermination(3,TimeUnit.SECONDS));}
+ }
+
+ @org.junit.jupiter.api.TestFactory
+ @NonNull List<org.junit.jupiter.api.@NonNull DynamicTest> scApi09HealthyReadThenAuthorityLossRefusesMutationAndBarrierWithoutClockFallback(){
+  List<org.junit.jupiter.api.DynamicTest> cells=new ArrayList<>();
+  for(boolean mutate:List.of(false,true))cells.add(org.junit.jupiter.api.DynamicTest.dynamicTest("SC-API-09/TOTP/authority-loss-before-validation/mutation="+mutate,()->{
+   InMemoryTotpStore store=initializedStore(5,100);
+   TotpStoreSnapshot before=snapshot(store,Set.of(ROOT,ACCOUNT));
+   StoreTimeObservation.Healthy original=assertInstanceOf(StoreTimeObservation.Healthy.class,before.getTimeObservation());
+   Instant upper=original.getObservedAt().plusSeconds(30);
+   TotpStoreWrite write=TotpStoreWrite.fromSnapshotAndMutations(TotpStoreWrite.Purpose.UPDATE,before,
+     mutate?List.of(TotpStoreWrite.Mutation.insert(record(ACCOUNT,2,2))):List.of(),
+     StoreTimeAccess.get().fromObservation(original,original.getObservedAt(),upper));
+   Field rows=InMemoryTotpStore.class.getDeclaredField("records");rows.setAccessible(true);
+   Field bytes=InMemoryTotpStore.class.getDeclaredField("sealedBytes");bytes.setAccessible(true);
+   Object retained=java.util.Objects.requireNonNull(rows.get(store));long retainedBytes=bytes.getLong(store);
+   Field lost=InMemoryTotpStore.class.getDeclaredField("authorityContinuityLost");lost.setAccessible(true);lost.setBoolean(store,true);
+   Instant temptingWorker=java.time.Clock.fixed(original.getObservedAt().plusSeconds(1),java.time.ZoneOffset.UTC).instant();
+   assertFalse(temptingWorker.isBefore(original.getObservedAt()));assertTrue(temptingWorker.isBefore(upper));assertTrue(Instant.now().isBefore(upper));
+   TotpStoreCommitReceipt refused=store.compareAndCommit(write,BUDGET);
+   assertEquals(TotpStoreCommitResult.TIME_UNAVAILABLE,refused.getStatus(),"An earlier healthy sample cannot replace authority validation");assertTrue(refused.getTiming().isEmpty());
+   TotpStoreSnapshot after=snapshot(store,Set.of(ROOT,ACCOUNT));assertInstanceOf(StoreTimeObservation.Unavailable.class,after.getTimeObservation());
+   assertEquals(original.getAdmission(),after.getTimeObservation().getAdmission());
+   assertEquals(present(before,ROOT).getVersion(),present(after,ROOT).getVersion());assertArrayEquals(present(before,ROOT).getSealedBytes(),present(after,ROOT).getSealedBytes());
+   assertInstanceOf(TotpStoreEntry.Absent.class,after.getEntry(ACCOUNT));assertSame(retained,rows.get(store));assertEquals(retainedBytes,bytes.getLong(store));assertTrue(lost.getBoolean(store));
+  }));return cells;
+ }
+
+ @org.junit.jupiter.api.TestFactory
+ @NonNull List<org.junit.jupiter.api.@NonNull DynamicTest> scApi04EveryTotpObservedRowDefeatsBothWholeMutationAndBarrier() {
+  List<org.junit.jupiter.api.DynamicTest> cells=new ArrayList<>();
+  for(TotpStoreKey changed:List.of(ROOT,ACCOUNT,OTHER))for(boolean mutate:List.of(false,true))cells.add(org.junit.jupiter.api.DynamicTest.dynamicTest("SC-API-04+10/TOTP/"+(changed.equals(ROOT)?"root-version":changed.equals(ACCOUNT)?"account-version":"account-absence")+"/mutation="+mutate,()->{
+   InMemoryTotpStore store=initializedStore(5,100);
+   assertEquals(TotpStoreCommitResult.COMMITTED,commit(store,write(snapshot(store,Set.of(ROOT,ACCOUNT)),List.of(TotpStoreWrite.Mutation.insert(record(ACCOUNT,2,2)))),BUDGET));
+   TotpStoreSnapshot observed=snapshot(store,Set.of(ROOT,ACCOUNT,OTHER));
+   TotpStoreWrite pending=write(observed,mutate?List.of(TotpStoreWrite.Mutation.replace(record(ACCOUNT,20,20)),TotpStoreWrite.Mutation.insert(record(OTHER,21,21))):List.of());
+   TotpStoreWrite.Mutation rival=changed.equals(OTHER)?TotpStoreWrite.Mutation.insert(record(changed,10,10)):TotpStoreWrite.Mutation.replace(record(changed,10,10));
+   assertEquals(TotpStoreCommitResult.COMMITTED,commit(store,write(observed,List.of(rival)),BUDGET));
+   Field rows=InMemoryTotpStore.class.getDeclaredField("records"),bytes=InMemoryTotpStore.class.getDeclaredField("sealedBytes");rows.setAccessible(true);bytes.setAccessible(true);Object retained=java.util.Objects.requireNonNull(rows.get(store)),retainedBytes=java.util.Objects.requireNonNull(bytes.get(store));
+   TotpStoreSnapshot afterRival=snapshot(store,Set.of(ROOT,ACCOUNT,OTHER));TotpStoreCommitReceipt refused=store.compareAndCommit(pending,BUDGET);
+   org.junit.jupiter.api.Assertions.assertAll(()->assertEquals(TotpStoreCommitResult.CONFLICT,refused.getStatus()),()->assertTrue(refused.getTiming().isEmpty()),()->assertSame(retained,rows.get(store),"No prefix write or replacement map may survive a conflicting predicate"),()->assertEquals(retainedBytes,bytes.get(store)));
+   TotpStoreSnapshot after=snapshot(store,Set.of(ROOT,ACCOUNT,OTHER));
+   for(TotpStoreKey key:observed.getEntries().keySet()){if(afterRival.getEntry(key) instanceof TotpStoreEntry.Present expected){TotpStoreRecord actual=present(after,key);assertEquals(expected.getRecord().getVersion(),actual.getVersion());assertArrayEquals(expected.getRecord().getSealedBytes(),actual.getSealedBytes());}else assertInstanceOf(TotpStoreEntry.Absent.class,after.getEntry(key));}
+   assertEquals(3,pending.getSnapshot().getEntries().size());assertEquals(mutate?2:0,pending.getMutations().size());
+   assertEquals(TotpStoreCommitResult.COMMITTED,commit(store,write(after,List.of()),BUDGET));assertSame(retained,rows.get(store));assertEquals(retainedBytes,bytes.get(store));
+  }));return cells;
  }
 }

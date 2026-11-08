@@ -32,7 +32,11 @@ def cid(label):return commitment(label)
 
 
 def main():
-    parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--output',type=Path,required=True);parser.add_argument('--java-home',type=Path,required=True);args=parser.parse_args()
+    parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--output',type=Path,required=True);parser.add_argument('--java-home',type=Path,required=True);parser.add_argument('--core-jar',type=Path);parser.add_argument('--core-sha256');parser.add_argument('--repository',type=Path,default=Path('/private/tmp/revetsec-refresh-m2'));parser.add_argument('--capacity-preflight',action='store_true');parser.add_argument('--inventory-preflight',action='store_true');parser.add_argument('--crash-restart',action='store_true');parser.add_argument('--unknown-reconciliation',action='store_true');parser.add_argument('--restore-fencing',action='store_true');parser.add_argument('--floor-catchup',action='store_true');parser.add_argument('--retention-maintenance',action='store_true');args=parser.parse_args()
+    global CORE
+    if args.core_jar is not None:
+        if args.core_sha256 is None:parser.error('--core-jar requires its explicit --core-sha256')
+        CORE=args.core_jar.resolve()
     out=args.output.resolve();out.mkdir(parents=True,exist_ok=False)
     result={'status':'RUNNING','checks':[],'image':IMAGE,'java_home':str(args.java_home),'coreJarSha256':sha(CORE),'oldCoreJarSha256':sha(OLD/'baseline/built-core/revetsec-1.0.0-SNAPSHOT.jar'),'qualification':{'approvedUtcQualified':False,'witnessOwnerDeploymentQualified':False,'platformDurabilityQualified':False,'actualDeploymentMigration':False,'qualifiedSharedProfile':False},'ownedContainerRemoved':False,'ownedVolumeRemoved':False,'ownedNetworkRemoved':False,'protectedRuntimeRemoved':False}
     def save():(out/'RESULT.json').write_text(json.dumps(result,indent=2)+'\n')
@@ -80,7 +84,7 @@ def main():
             p=execute([str(args.java_home/'bin/javac'),'--release','17','-proc:none','-Xlint:all','-Werror','-cp',classpath,'-d',str(dest),*map(str,sources)])
             (out/(label+'-compile.log')).write_text(p.stdout+p.stderr);check(label+'-strict-compile',p.returncode==0)
         native_cp=os.pathsep.join(map(str,[classes,*dependencies]));oldcp=os.pathsep.join(map(str,[oldclasses,oldjar,*dependencies]))
-        client=CodecClient(runtime/'codec',args.java_home,CORE,oldjar);config=synthetic_config();source_rows=sorted(client.fixtures(config),key=identity);check('frozen-old-all-family-fixtures',len(source_rows)==31 and {r['family'] for r in source_rows}==set(FORMATS))
+        client=CodecClient(runtime/'codec',args.java_home,CORE,oldjar,args.repository,expected_core_sha256=args.core_sha256);config=synthetic_config();source_rows=sorted(client.fixtures(config),key=identity);check('frozen-old-all-family-fixtures',len(source_rows)==31 and {r['family'] for r in source_rows}==set(FORMATS))
         scopes={f:config[k] for f,k in [('TOTP','totpScope'),('WEBAUTHN','webauthnScope'),('ISSUER','issuerScope')]};namespaces={f:'migration' for f in FORMATS};required_roots=[(r['family'],r['key']) for r in root_rows(source_rows)]
         envfile=runtime/'postgres.env';envfile.write_text('POSTGRES_PASSWORD='+password+'\nPOSTGRES_DB=migration_fixture\n');envfile.chmod(0o600)
         docker('network','create','--label','com.revetsec.scp10=true',network);created.append('network')
@@ -121,14 +125,16 @@ def main():
         for mode,p in zip(['direct','pooled'],processes):
             stdout,stderr=p.communicate('CONTINUE\n',timeout=15);check('old-engine-'+mode+'-refused-with-no-login',p.returncode==0 and not stderr and len([s for s in stdout.splitlines() if s.startswith('PASS ')])==2)
         def deadline():return time.monotonic_ns()+60_000_000_000
-        def case(name,*,prepare=True,fixture_rows=None):
+        def case(name,*,prepare=True,fixture_rows=None,record_cap=16384,inventory=True):
             fixture_rows=source_rows if fixture_rows is None else fixture_rows
-            seed(fixture_rows);cfg={**config,'migrationId':cid(name+'/migration'),'recoveryGeneration':cid(name+'/target')}
+            seed(fixture_rows);cfg={**config,'migrationId':cid(name+'/migration'),'recoveryGeneration':cid(name+'/target'),'maximumRecordBytes':record_cap}
             intent={'migrationId':cfg['migrationId'],'sourceRecoveryGeneration':cid(name+'/old'),'targetAdmission':{'authorityId':cfg['authorityId'],'recoveryGeneration':cfg['recoveryGeneration']},'writerFence':cid(name+'/fence'),'targetFormats':dict(FORMATS),'authorityWitness':cid(name+'/scripted-witness')}
             sql('INSERT INTO scp10_control(migration_id,writer_fence,source_recovery,target_authority,target_recovery,mode) VALUES('+','.join(map(quote,[intent['migrationId'],intent['writerFence'],intent['sourceRecoveryGeneration'],cfg['authorityId'],cfg['recoveryGeneration'],'CLOSED']))+');')
             directory=runtime/name;directory.mkdir(mode=0o700);owner=DirectoryOwner(directory);owners.append(owner);journal=Journal(owner);backend=NativePgBackend(sql,transaction,scopes,[old_role],namespaces=namespaces,required_roots=required_roots,journal=journal);machine=Migration(journal,backend)
             backend.confirmed_new_intent=True
-            machine.close(intent,deadline());backend.confirmed_new_intent=False;machine.inventory(deadline());rows=journal.get_blob(journal.read()['inventoryBlob']);check(name+'/complete-native-inventory',rows==sorted(fixture_rows,key=identity))
+            machine.close(intent,deadline());backend.confirmed_new_intent=False
+            if not inventory:return cfg,journal,backend,machine,[]
+            machine.inventory(deadline());rows=journal.get_blob(journal.read()['inventoryBlob']);check(name+'/complete-native-inventory',rows==sorted(fixture_rows,key=identity))
             decisions=sorted(client.prepare(cfg,rows),key=lambda d:identity(d['source']));caps=[{'family':f,'scope':scopes[f],'entryCap':65536 if f=='TOTP' else 1000000,'hardEntryCap':65536 if f=='TOTP' else 1000000,'byteCap':268435456 if f=='TOTP' else None,'hardByteCap':268435456 if f=='TOTP' else None} for f in sorted(FORMATS)]
             if prepare:
                 prepared=machine.prepare(decisions,caps,deadline());plan=journal.get_blob(prepared['quotaBlob']);check(name+'/closed-native-256-quota-assignment',backend.install_quotas(Migration.context(prepared,deadline()),plan)=='COMMITTED')
@@ -278,9 +284,9 @@ owner.close()
         check('query-only/g2-center-at-old-u-still-refuses-lower-endpoint',refused)
         clock.ns+=clock.uncertainty;g2.start(prepared['activeDatabaseAdmission'],clock.ns+100000000);point=g2.sample(expected(store2.read()),clock.ns+100000000)
         check('query-only/g2-catchup-cannot-revive-expired-entity',point.authority_ns>expiry and commitment(backend._all())==unchanged and store2.read()['authorityId']==old['authorityId'] and store2.read()['recoveryGeneration']==old['recoveryGeneration'])
-        oversized=sorted(client.fixtures({**config,'oversizedInteraction':True}),key=identity)
-        for mode in ['unhealthy','equality-unknown']:
-            cfg,journal,backend,machine,decisions=case('retention-'+mode,prepare=False,fixture_rows=oversized)
+        oversized=sorted(client.fixtures({**config,'oversizedInteraction':True,'interactionPlaintextBytes':12121}),key=identity)
+        for mode in ['unhealthy','equality-unknown']+(['kind-conflict'] if args.unknown_reconciliation else []):
+            cfg,journal,backend,machine,decisions=case('retention-'+mode,prepare=False,fixture_rows=oversized,record_cap=16300)
             waiting=[d for d in decisions if d['classification']=='WAIT_RETENTION']
             check('retention-'+mode+'/authenticated-oversize-classified',len(waiting)==1 and all(d['classification']=='FIT' for d in decisions if d not in waiting))
             initial=[]
@@ -303,7 +309,18 @@ owner.close()
                 except WitnessUnavailable:refused=True
                 check('retention/unhealthy-component-time-cannot-delete',refused and commitment(backend._all())==before)
                 continue
-            permanent=copy.deepcopy(waiting[0]);permanent['permanent']=True
+            if mode=='kind-conflict':
+                clock.ns=1;fault[0]='before'
+                try:machine.cleanup_waiting(waiting,witness,admission,deadline());unknown=False
+                except MigrationClosed as e:unknown=e.label=='UNKNOWN'
+                pending=journal.read();batch=journal.get_blob(pending['progress']['batchBlob'])
+                check('MIG09/cleanup/wrong-kind-unknown-rollback',unknown and len(batch['deletions'])==1)
+                sql("UPDATE issuer_store_entry SET kind='CODE' WHERE "+backend._where(batch['deletions'][0])+';')
+                try:machine.settle(deadline());refused=False
+                except MigrationClosed as e:refused=e.label=='THIRD_STATE'
+                check('MIG09/cleanup/present-wrong-kind-never-counts-as-absence',refused and journal.read()==pending and not pending['reinventoryRequired'])
+                continue
+            permanent=next(copy.deepcopy(d) for d in decisions if d['permanent']);permanent.update(classification='WAIT_RETENTION',target=None,targetSemanticCommitment=None)
             try:machine.cleanup_waiting([permanent],witness,admission,deadline());refused=False
             except MigrationClosed as e:refused=e.label=='CLOSED'
             check('retention/permanent-state-not-reclaimed',refused and commitment(backend._all())==before)
@@ -316,6 +333,188 @@ owner.close()
             check('retention/equality-real-unknown-delete-keeps-intent',unknown and journal.read()['progress']['status']=='PENDING' and not journal.read()['reinventoryRequired'])
             machine.settle(deadline());check('retention/whole-delete-settlement-requires-reinventory',journal.read()['reinventoryRequired'] and journal.read()['inventoryCommitment'] is None)
             machine.inventory(deadline());rows=journal.get_blob(journal.read()['inventoryBlob']);decisions=sorted(client.prepare(cfg,rows),key=lambda d:identity(d['source']));prepared=machine.prepare(decisions,caps,deadline());check('retention/independent-full-fit-and-quota-recomputed',len(rows)==31 and all(d['classification']=='FIT' for d in decisions) and backend.install_quotas(Migration.context(prepared,deadline()),journal.get_blob(prepared['quotaBlob']))=='COMMITTED')
+        if args.retention_maintenance:
+            from retention_checks import native_checks
+            result['retentionMaintenance']=native_checks(case=case,client=client,config=config,sql=sql,scopes=scopes,
+                runtime=runtime,owners=owners,check=check,set_loss=lambda value:fault.__setitem__(0,value),
+                transaction_count=lambda:len(transaction_observations))
+        if args.floor_catchup:
+            from floor_checks import native_checks
+            result['floorCatchup']=native_checks(case=case,client=client,config=config,sql=sql,scopes=scopes,runtime=runtime,owners=owners,check=check)
+        if args.restore_fencing:
+            from restore_checks import native_checks
+            def old_writer(mode):
+                p=execute([str(args.java_home/'bin/java'),'-cp',oldcp,'com.revetsec.webauthn.LegacyWriter',mode,'legacy_'+mode],env=writer_env,timeout=20)
+                return p.returncode==1 and p.stderr.strip()=='LEGACY_WRITER_FAILED'
+            result['restoreFencing']=native_checks(case=case,docker=docker,sql=sql,transaction=transaction,
+                resource=resource,scopes=scopes,old_role=old_role,namespaces=namespaces,required_roots=required_roots,
+                runtime=runtime,owners=owners,client=client,check=check,old_writer=old_writer)
+        if args.unknown_reconciliation:
+            from unknown_checks import native_checks
+            result['unknownReconciliation']=native_checks(sql=sql,transaction=transaction,seed=seed,client=client,
+                config=config,scopes=scopes,namespaces=namespaces,required_roots=required_roots,
+                retired_roles=[old_role],runtime=runtime,owners=owners,check=check,
+                set_loss=lambda value:fault.__setitem__(0,value),container=resource)
+        if args.crash_restart:
+            import signal
+            from codec import protected_write
+            crash_results=[]
+            cells=[(s,'after_rename') for s in ['inventory','prepare','rewrite-pending','rewrite-first-ack','verify','activation-pending','active','restore']]
+            cells += [(s,'after_ack') for s in ['inventory','rewrite-first-ack','active']]
+            cells += [('tx-'+s,b) for s in ['quota','rewrite','activate','restore'] for b in ['before','after']]
+            cells.append(('tx-rewrite-inflight','blocked'))
+            for number,(stage,boundary) in enumerate(cells):
+                name='crash-'+str(number);cfg,journal,backend,machine,_=case(name,prepare=False,inventory=False)
+                state_directory=journal.owner.path;journal.owner.close()
+                receipt=runtime/(name+'-receipt.json');config_path=runtime/(name+'-probe.json')
+                probe={'container':resource,'java':str(args.java_home/'bin/java'),'nativeClasspath':native_cp,
+                       'codecWork':str(client.work),'coreJar':str(CORE),'oldJar':str(oldjar),'coreSha256':sha(CORE),
+                       'annotations':list(map(str,client.annotations)),'classfiles':client.provenance['compiledClassfiles'],
+                       'stateDirectory':str(state_directory),'scopes':scopes,'namespaces':namespaces,
+                       'requiredRoots':required_roots,'retiredRoles':[old_role],'codecConfig':cfg,
+                       'capacities':caps,'receipt':str(receipt),'blockAdvisory':int.from_bytes(os.urandom(7),'big')}
+                protected_write(config_path,probe)
+                env=dict(os.environ,PYTHONDONTWRITEBYTECODE='1',DB_URL=f'jdbc:postgresql://127.0.0.1:{port}/migration_fixture',DB_USER='postgres',DB_PASSWORD=password)
+                command=[sys.executable,str(HERE/'pg_crash_probe.py'),str(config_path)]
+                if boundary=='blocked':
+                    gate=subprocess.Popen(['docker','exec','-i',resource,'psql','-X','-qAt','-v','ON_ERROR_STOP=1','-U','postgres','-d','migration_fixture'],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True);processes.append(gate)
+                    gate.stdin.write('SELECT pg_advisory_lock('+str(probe['blockAdvisory'])+");SELECT 'MIG08_GATE_READY';\n");gate.stdin.flush()
+                    while gate.stdout.readline().strip()!='MIG08_GATE_READY':
+                        if gate.poll() is not None:raise RuntimeError('Owned crash gate unavailable')
+                    child=subprocess.Popen([*command,'crash',stage,boundary],env=env,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,start_new_session=True);processes.append(child)
+                    try:
+                        for _ in range(400):
+                            if sql("SELECT count(*) FROM pg_stat_activity WHERE application_name='scp10-batch' AND wait_event='advisory';")=='1':break
+                            if child.poll() is not None:raise RuntimeError('Owned crash child exited early')
+                            time.sleep(.025)
+                        else:raise RuntimeError('Owned in-flight transaction did not block')
+                        os.killpg(child.pid,signal.SIGKILL);stdout,stderr=child.communicate(timeout=10)
+                        check('MIG08/inflight-actual-worker-and-jvm-killed',child.returncode==-signal.SIGKILL)
+                    finally:
+                        if child.poll() is None:os.killpg(child.pid,signal.SIGKILL);child.communicate(timeout=10)
+                        gate.communicate('SELECT pg_advisory_unlock('+str(probe['blockAdvisory'])+');\n',timeout=10)
+                    check('MIG08/inflight-native-transaction-actually-ended',sql("SELECT count(*) FROM pg_stat_activity WHERE application_name='scp10-batch' AND xact_start IS NOT NULL;")=='0')
+                else:
+                    died=execute([*command,'crash',stage,boundary],env=env,timeout=180)
+                    if died.returncode!=77 or died.stdout or died.stderr:
+                        result['crashProbeFailure']={'stage':stage,'boundary':boundary,'exitCode':died.returncode,
+                            'type':died.stderr.splitlines()[-1].split(':',1)[0] if died.stderr else 'UnexpectedProbeOutput'}
+                    check('MIG08/'+stage+'/'+boundary+'/process-died',died.returncode==77 and not died.stdout and not died.stderr)
+                state=json.loads((state_directory/'migration.json').read_text());pinned=state['decisionsBlob']
+                restarted=execute([*command,'resume',stage,boundary],env=env,timeout=180)
+                if restarted.returncode:
+                    # Fixed failure type only; protected diagnostics never enter evidence.
+                    (runtime/(name+'-failure.txt')).write_text(restarted.stderr)
+                check('MIG08/'+stage+'/'+boundary+'/fresh-process-recovers',restarted.returncode==0 and restarted.stdout.strip()=='MIG08_NATIVE_RESTART_PASS' and not restarted.stderr)
+                observed=json.loads(receipt.read_text())
+                check('MIG08/'+stage+'/'+boundary+'/exact-plan-and-closed-admission',observed['timedAdmission']=='CLOSED' and observed['retiredRolesStillExcluded'] and (pinned is None or observed['decisionsBlob']==pinned))
+                crash_results.append({'stage':stage,'boundary':boundary,**observed})
+            result['crashRestarts']=crash_results
+            # Same-owner lost acknowledgements exercise the native read-only
+            # reconciliation path; hard crashes above use genuinely new owners.
+            for target in ['INVENTORIED','PREPARED','REWRITING','VERIFIED','ACTIVE']:
+                cfg,journal,backend,machine,_=case('uncertain-'+target,prepare=False,inventory=False)
+                hit=[False]
+                def lost(point):
+                    if point=='after_rename':
+                        visible=json.loads((journal.owner.path/'migration.json').read_text())
+                        if visible['phase']==target and not hit[0]:hit[0]=True;raise OSError('MIG08_ACK_LOST')
+                journal.fault=lost
+                try:
+                    machine.inventory(deadline());rows=journal.get_blob(journal.read()['inventoryBlob'])
+                    machine.prepare(client.prepare(cfg,rows),caps,deadline())
+                    backend.install_quotas(Migration.context(journal.read(),deadline()),journal.get_blob(journal.read()['quotaBlob']))
+                    rewrite(machine,journal);verified(cfg,journal,backend,machine);machine.activate(evidence(journal),deadline())
+                    lost_ack=False
+                except MigrationClosed as failure:lost_ack=failure.label=='DURABILITY_UNCERTAIN'
+                journal.fault=None
+                check('MIG08/uncertain-'+target+'/lost-ack-closes',lost_ack and hit[0] and journal.owner._migration_uncertain)
+                acknowledged=machine.reconcile_persistence(deadline())
+                check('MIG08/uncertain-'+target+'/native-exact-reconciliation',acknowledged['phase']==target and not journal.owner._migration_uncertain and acknowledged['timedAdmission']=='CLOSED')
+        if args.inventory_preflight:
+            # These faults address only the uniquely owned disposable database.
+            # Hash raw native state independently, including when _all() must refuse.
+            def native_fingerprint():
+                tables=[*TABLES.values(),*[t.replace('_entry','_namespace') for t in TABLES.values()],
+                        'totp_store_epoch','scp10_control','scp10_quota_plan',*[t.replace('_entry','_escrow') for t in TABLES.values()]]
+                return commitment([sql("SELECT md5(coalesce(jsonb_agg(to_jsonb(e) ORDER BY to_jsonb(e)::text)::text,'[]')) FROM "+table+' e;') for table in tables])
+            def refused_inventory(name,mutate,*,codec=False):
+                cfg,journal,backend,machine,_=case('inventory-'+name,prepare=False,inventory=False)
+                mutate(backend)
+                before=journal.read();physical=native_fingerprint();dispatches=len(transaction_observations)
+                try:
+                    machine.inventory(deadline())
+                    if codec:
+                        before=journal.read()
+                        rows=journal.get_blob(before['inventoryBlob']);values=client.prepare(cfg,rows)
+                        machine.prepare(values,caps,deadline())
+                    refused=False
+                except (MigrationClosed,ValueError):refused=True
+                check('MIG07/'+name,refused and journal.read()==before and native_fingerprint()==physical and len(transaction_observations)==dispatches)
+            for index,(family,key) in enumerate(required_roots):
+                where='namespace='+quote(namespaces[family])+' AND storage_key='+quote(key)
+                refused_inventory('missing-root-'+str(index),lambda b,t=TABLES[family],w=where:sql('DELETE FROM '+t+' WHERE '+w+';'))
+                refused_inventory('corrupt-root-'+str(index),lambda b,t=TABLES[family],w=where:sql("UPDATE "+t+" SET sealed_form=left(sealed_form,-1)||CASE WHEN right(sealed_form,1)='A' THEN 'B' ELSE 'A' END WHERE "+w+';'),codec=True)
+            for family in sorted(FORMATS):
+                refused_inventory('physical-kind-'+family,lambda b,f=family:sql("UPDATE "+TABLES[f]+" SET kind='UNLISTED' WHERE namespace='migration';"))
+            refused_inventory('retired-epoch-root-required',lambda b:sql("INSERT INTO totp_store_epoch VALUES('migration','unlisted-retained');"))
+            refused_inventory('missing-root-declaration',lambda b:setattr(b,'required_roots',[r for r in b.required_roots if r[0]!='ISSUER']))
+            def omit_tail(backend):
+                original=backend.sql
+                backend.sql=lambda query:'[]' if 'FROM issuer_store_entry ' in query and 'LIMIT 32' in query else original(query)
+            refused_inventory('transport-omitted-tail',omit_tail)
+            def extra_row(backend):
+                sql("INSERT INTO issuer_store_entry SELECT namespace,storage_key||'x',kind,version,retain_seconds,retain_nanos,sealed_form FROM issuer_store_entry WHERE kind='ACCESS_TOKEN';")
+            refused_inventory('unlisted-authenticated-address',extra_row,codec=True)
+            cfg,journal,backend,machine,_=case('inventory-missing-key',prepare=False)
+            before=journal.read();physical=native_fingerprint();dispatches=len(transaction_observations)
+            missing={**cfg,'activeKeyId':'new','keys':{'new':base64.b64encode(bytes(range(33,65))).decode()}}
+            values=client.prepare(missing,journal.get_blob(before['inventoryBlob']))
+            try:machine.prepare(values,caps,deadline());refused=False
+            except MigrationClosed as e:refused=e.label=='BLOCKED_DEPENDENCY'
+            check('MIG07/missing-opening-key',refused and all(d['target'] is None for d in values) and journal.read()==before and native_fingerprint()==physical and len(transaction_observations)==dispatches)
+            large=client.fixtures({**config,'additionalInteractions':100})
+            cfg,journal,backend,machine,_=case('inventory-native-row-bound',fixture_rows=large,prepare=False,inventory=False)
+            before=journal.read();physical=native_fingerprint();dispatches=len(transaction_observations)
+            try:machine.inventory(deadline());refused=False
+            except MigrationClosed as e:refused=e.label=='BLOCKED_DEPENDENCY'
+            check('MIG07/native-row-bound-before-materialization',refused and journal.read()==before and native_fingerprint()==physical and len(transaction_observations)==dispatches)
+            refused_inventory('native-byte-bound-before-materialization',lambda b:sql("UPDATE issuer_store_entry SET sealed_form=repeat('A',6291457) WHERE kind='ACCESS_TOKEN';"))
+            paged=client.fixtures({**config,'additionalInteractions':33})
+            cfg,journal,backend,machine,_=case('inventory-native-pages',fixture_rows=paged)
+            rewrite(machine,journal);values=verified(cfg,journal,backend,machine)
+            check('MIG07/all-native-pages-authenticated-and-rewritten',len(values)==64 and sum(d['source']['family']=='ISSUER' for d in values)==47 and all(d['classification']=='FIT' for d in values) and journal.read()['timedAdmission']=='CLOSED')
+        if args.capacity_preflight:
+            import unittest
+            import test_capacity_preflight as capacity
+            environment_before = {key:os.environ.get(key) for key in ['MIG06_JAVA_HOME','MIG06_CORE_JAR','MIG06_CORE_SHA256','MIG06_OLD_JAR','MIG06_REPOSITORY','MIG06_CODEC_RECEIPT']}
+            os.environ.update(MIG06_JAVA_HOME=str(args.java_home),MIG06_CORE_JAR=str(CORE),MIG06_CORE_SHA256=sha(CORE),MIG06_OLD_JAR=str(oldjar),MIG06_REPOSITORY=str(args.repository),MIG06_CODEC_RECEIPT=str(out/'capacity-codec.json'))
+            def capacity_backend(rows,journal,intent):
+                seed(rows)
+                sql('INSERT INTO scp10_control(migration_id,writer_fence,source_recovery,target_authority,target_recovery,mode) VALUES('+','.join(map(quote,[intent['migrationId'],intent['writerFence'],intent['sourceRecoveryGeneration'],intent['targetAdmission']['authorityId'],intent['targetAdmission']['recoveryGeneration'],'CLOSED']))+');')
+                # Same issuer octet ceiling as the current adapter, also on this bounded native transport.
+                sql('ALTER TABLE issuer_store_entry ADD CONSTRAINT mig06_issuer_bytes CHECK(octet_length(sealed_form) BETWEEN 1 AND 16384);')
+                calls=[]
+                def capacity_transaction(statements,budget):
+                    outcome=transaction(statements,budget);calls.append({'statements':len(statements),'outcome':outcome});return outcome
+                backend=NativePgBackend(sql,capacity_transaction,scopes,[old_role],namespaces=namespaces,required_roots=required_roots,journal=journal,confirmed_new_intent=True)
+                backend.calls=calls;backend.snapshot=backend._all
+                return backend
+            capacity.BACKEND_FACTORY=capacity_backend
+            names=[name for name in unittest.defaultTestLoader.getTestCaseNames(capacity.CapacityPreflightTests) if not name.startswith('test_invalid_')]
+            suite=unittest.TestSuite(capacity.CapacityPreflightTests(name) for name in names)
+            observed=unittest.TestResult()
+            try:suite.run(observed)
+            finally:
+                capacity.BACKEND_FACTORY=None
+                for key,value in environment_before.items():
+                    if value is None:os.environ.pop(key,None)
+                    else:os.environ[key]=value
+            result['capacityPreflight']={'tests':observed.testsRun,'names':names,'failures':[test.id() for test,_ in observed.failures],'errors':[test.id() for test,_ in observed.errors],'skipped':[test.id() for test,_ in observed.skipped],'status':'PASS' if observed.wasSuccessful() else 'FAIL'}
+            if observed.failures or observed.errors:
+                # Keep only a fixed exception class/line, not potentially large assertion row dumps.
+                result['capacityPreflight']['diagnosticTypes']=[trace.splitlines()[-1].split(':',1)[0] for _,trace in observed.failures+observed.errors]
+            check('MIG06-five-current-native-capacity-controller-cases',observed.wasSuccessful() and observed.testsRun==5 and not observed.skipped)
         result['sourceInputsUnchanged']=all(sha(ROOT/name)==digest for name,digest in inputs.items())
         check('current-selected-runtime-input-bytes-unchanged',result['sourceInputsUnchanged'])
         result['status']='PASS';result['codecProvenance']=client.provenance;result['codecCommands']=client.commands;result['nativeTransactions']=transaction_observations;result['oldWriterSourceInputs']={str(p.relative_to(ROOT)):sha(p) for p in oldsources};result['sourceInputs']=inputs;result['retainedMigrationRows']=len(source_rows);result['nativeScopeProfile']={'maximumRows':128,'maximumSqlSealedBytes':6291456,'pageRows':32,'batchMutations':8,'batchPredicates':16};result['limits']=['Scripted authority component only; actual approved UTC/witness/backend/profile prerequisites remain open.','Actual family entry storage and transformed bytes verified against exact current core. Full selected current-adapter schema/probe activation remains separate.','No production, retained customer data or unowned database was addressed.']

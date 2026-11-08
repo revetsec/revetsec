@@ -64,10 +64,10 @@ public final class OAuthErrorResponseException extends OAuthException {
 	}
 
 	boolean isEndpointRejection() {
-		return this.operationEndpoint && this.status >= 400 && this.status < 500 && !isTransient();
+		return this.operationEndpoint && this.status >= 400 && this.status < 500 && !isTemporaryCondition();
 	}
 
-	OAuthErrorResponseException copyForCaller() {
+	@NonNull OAuthErrorResponseException copyForCaller() {
 		return new OAuthErrorResponseException(this.status, this.errorCode, this.retryAfter, this.operationEndpoint);
 	}
 

@@ -24,6 +24,8 @@ import java.time.Duration;
  * Continuing application authorization policy, invoked outside store transactions at approval, code exchange
  * and refresh. Implementations must be thread safe and honor the remaining budget. Decisions must retain the
  * checked subject and may only narrow scope/resource/refresh authority. Denial terminates authorization.
+ * Policies must explicitly deny grant types they do not recognize; never treat an unknown type as approval.
+ * Future client-credentials issuance requires a separate policy interface and namespaced client subjects.
  * Null, nonfatal exceptions and exhausted budgets are unavailable service failures. A returned decision that
  * changes the checked subject or widens resource/scope/refresh authority is an application configuration fault.
  *

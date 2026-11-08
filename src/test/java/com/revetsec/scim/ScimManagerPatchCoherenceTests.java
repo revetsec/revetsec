@@ -15,6 +15,8 @@
  */
 package com.revetsec.scim;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.json.*;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.DynamicTest;
@@ -41,7 +43,7 @@ final class ScimManagerPatchCoherenceTests {
         fail("Manager identity/reference coherence cannot invoke application matching"); return ScimStringMatchResult.unsupportedInstance();
     };
 
-    @TestFactory Stream<DynamicTest> anEarlierExplicitReferenceSurvivesEveryLaterValueWriteShape() {
+    @TestFactory @NonNull Stream<@NonNull DynamicTest> anEarlierExplicitReferenceSurvivesEveryLaterValueWriteShape() {
         return Stream.of(USER, PERSON).flatMap(type -> Stream.of("add", "replace").flatMap(kind -> Stream.of("child", "manager", "object", "root").flatMap(refShape ->
                 Stream.of("child", "manager", "object", "root").map(valueShape -> DynamicTest.dynamicTest(type.getName() + " " + kind + " " + refShape + "->" + valueShape, () -> {
             boolean root = refShape.equals("root") || valueShape.equals("root");
@@ -57,7 +59,7 @@ final class ScimManagerPatchCoherenceTests {
         })))));
     }
 
-    @TestFactory Stream<DynamicTest> anInheritedReferenceStillClearsWhenTheManagerChanges() {
+    @TestFactory @NonNull Stream<@NonNull DynamicTest> anInheritedReferenceStillClearsWhenTheManagerChanges() {
         return Stream.of("add", "replace").flatMap(kind -> Stream.of("child", "manager", "object", "root").map(shape ->
                 DynamicTest.dynamicTest(kind + " inherited " + shape, () -> {
             var provider = provider(USER, shape.equals("root") ? ROOT : ScimCompatibility.strictInstance());
@@ -66,7 +68,7 @@ final class ScimManagerPatchCoherenceTests {
         })));
     }
 
-    @TestFactory Stream<DynamicTest> writingTheReferenceAfterTheValueKeepsOrderedSemantics() {
+    @TestFactory @NonNull Stream<@NonNull DynamicTest> writingTheReferenceAfterTheValueKeepsOrderedSemantics() {
         return Stream.of("child", "manager", "object", "root").map(shape -> DynamicTest.dynamicTest("value then reference " + shape, () -> {
             var provider = provider(USER, shape.equals("root") ? ROOT : ScimCompatibility.strictInstance());
             var result = apply(provider, resource(USER), request(provider, USER, List.of(write("replace", shape, "value", "new"), write("replace", shape, "$ref", "Users/new"))));
@@ -103,7 +105,7 @@ final class ScimManagerPatchCoherenceTests {
         assertEquals(manager("new", "Users/new", null), manager(result.getResource()));
     }
 
-    @TestFactory Stream<DynamicTest> clearingValueDoesNotEraseAnExplicitReference() {
+    @TestFactory @NonNull Stream<@NonNull DynamicTest> clearingValueDoesNotEraseAnExplicitReference() {
         return Stream.of("remove", "null-child", "null-parent").map(shape -> DynamicTest.dynamicTest("clear value " + shape, () -> {
             var provider = provider(USER, ScimCompatibility.strictInstance());
             JsonObject clear = shape.equals("remove") ? op("remove", M + ".value", null)
@@ -114,7 +116,7 @@ final class ScimManagerPatchCoherenceTests {
         }));
     }
 
-    @TestFactory Stream<DynamicTest> explicitReferenceRemovalAndNullRemainClears() {
+    @TestFactory @NonNull Stream<@NonNull DynamicTest> explicitReferenceRemovalAndNullRemainClears() {
         return Stream.of("remove", "null-child", "null-parent").map(shape -> DynamicTest.dynamicTest("clear reference " + shape, () -> {
             var provider = provider(USER, ScimCompatibility.strictInstance());
             JsonObject clear = shape.equals("remove") ? op("remove", M + ".$ref", null)
@@ -125,7 +127,7 @@ final class ScimManagerPatchCoherenceTests {
         }));
     }
 
-    @TestFactory Stream<DynamicTest> managerAndExtensionRemovalCannotResurrectReferences() {
+    @TestFactory @NonNull Stream<@NonNull DynamicTest> managerAndExtensionRemovalCannotResurrectReferences() {
         return Stream.of("remove-manager", "null-manager", "remove-extension").map(shape -> DynamicTest.dynamicTest(shape, () -> {
             var provider = provider(USER, ROOT);
             JsonObject clear = shape.equals("remove-manager") ? op("remove", M, null) : shape.equals("null-manager") ? op("replace", M, JsonNull.defaultInstance()) : op("remove", E, null);
@@ -188,22 +190,22 @@ final class ScimManagerPatchCoherenceTests {
         assertEquals(manager("new", "Users/new", null), manager(result.getResource())); assertEquals(before, current.getDocument());
     }
 
-    private static ScimPatchApplicationResult direct(ScimResource current, ScimPatchRequest request, long work) { return ScimPatchEngine.apply(current, request, ScimCompatibility.strictInstance(), NO_MATCHING, new ScimWork(work), request.getSemanticContext(), EnumSet.noneOf(ScimCompatibilityFeature.class)); }
-    private static JsonObject write(String kind, String shape, String field, String value) {
+    private static @NonNull ScimPatchApplicationResult direct(@NonNull ScimResource current, @NonNull ScimPatchRequest request, long work) { return ScimPatchEngine.apply(current, request, ScimCompatibility.strictInstance(), NO_MATCHING, new ScimWork(work), request.getSemanticContext(), EnumSet.noneOf(ScimCompatibilityFeature.class)); }
+    private static @NonNull JsonObject write(@NonNull String kind, @NonNull String shape, @NonNull String field, @NonNull String value) {
         if (shape.equals("child")) return op(kind, M + "." + field, JsonString.fromValue(value));
         var manager = JsonObject.builder().put(field, value).build();
         if (shape.equals("manager")) return op(kind, M, manager);
         var extension = JsonObject.builder().put("manager", manager).build();
         return shape.equals("root") ? op(kind, E, extension) : op(kind, null, JsonObject.builder().put(E, extension).build());
     }
-    private static JsonObject op(String kind, @Nullable String path, @Nullable JsonValue value) { var b = JsonObject.builder().put("op", kind); if (path != null) b.put("path", path); if (value != null) b.put("value", value); return b.build(); }
-    private static JsonObject manager(@Nullable String value, @Nullable String ref, @Nullable String display) { var b = JsonObject.builder(); if (value != null) b.put("value", value); if (ref != null) b.put("$ref", ref); if (display != null) b.put("displayName", display); return b.build(); }
-    private static JsonObject manager(ScimResource resource) { return (JsonObject) resource.getExtension(E).orElseThrow().find("manager").orElseThrow(); }
-    private static JsonArray schemas(ScimResourceType type) { return JsonArray.fromElements(List.of(JsonString.fromValue(type.getSchema().getId()), JsonString.fromValue(E))); }
-    private static ScimResource resource(ScimResourceType type) { return ScimResource.withResourceType(type).document(JsonObject.builder().put("schemas", schemas(type)).put("userName", "Ada").put("id", "person").put("meta", JsonObject.builder().put("version", "W/\"one\"").build()).put(E, JsonObject.builder().put("manager", manager("old", "Users/old", "Old Display")).build()).build()).build(); }
-    private static ScimServiceProvider provider(ScimResourceType type, ScimCompatibility compatibility) { return ScimServiceProvider.builder().baseUri(URI.create("https://example.invalid/scim/")).resourceTypes(List.of(type)).stringMatching(NO_MATCHING).compatibility(compatibility).serviceProviderConfig(ScimServiceProviderConfig.builder().patchSupported(true).build()).build(); }
-    private static ScimPatchRequest request(ScimServiceProvider provider, ScimResourceType type, List<JsonObject> operations) { var body = JsonObject.builder().put("schemas", JsonArray.fromElements(List.of(JsonString.fromValue("urn:ietf:params:scim:api:messages:2.0:PatchOp")))).put("Operations", JsonArray.fromElements(operations)).build(); return assertInstanceOf(ScimPatchParseResult.Succeeded.class, provider.parsePatchRequestResult(type, bytes(body))).getPatchRequest(); }
-    private static ScimPatchResult apply(ScimServiceProvider provider, ScimResource current, ScimPatchRequest patch) { return assertInstanceOf(ScimPatchApplicationResult.Succeeded.class, provider.applyPatchResult(current, patch)).getPatchResult(); }
-    private static byte[] bytes(JsonObject value) { return value.toJson().getBytes(StandardCharsets.UTF_8); }
-    private static Set<String> paths(Set<ScimAttributePath> values) { return values.stream().map(ScimAttributePath::toScimString).collect(java.util.stream.Collectors.toSet()); }
+    private static @NonNull JsonObject op(@NonNull String kind, @Nullable String path, @Nullable JsonValue value) { var b = JsonObject.builder().put("op", kind); if (path != null) b.put("path", path); if (value != null) b.put("value", value); return b.build(); }
+    private static @NonNull JsonObject manager(@Nullable String value, @Nullable String ref, @Nullable String display) { var b = JsonObject.builder(); if (value != null) b.put("value", value); if (ref != null) b.put("$ref", ref); if (display != null) b.put("displayName", display); return b.build(); }
+    private static @NonNull JsonObject manager(@NonNull ScimResource resource) { return (JsonObject) resource.getExtension(E).orElseThrow().find("manager").orElseThrow(); }
+    private static @NonNull JsonArray schemas(@NonNull ScimResourceType type) { return JsonArray.fromElements(List.of(JsonString.fromValue(type.getSchema().getId()), JsonString.fromValue(E))); }
+    private static @NonNull ScimResource resource(@NonNull ScimResourceType type) { return ScimResource.withResourceType(type).document(JsonObject.builder().put("schemas", schemas(type)).put("userName", "Ada").put("id", "person").put("meta", JsonObject.builder().put("version", "W/\"one\"").build()).put(E, JsonObject.builder().put("manager", manager("old", "Users/old", "Old Display")).build()).build()).build(); }
+    private static @NonNull ScimServiceProvider provider(@NonNull ScimResourceType type, @NonNull ScimCompatibility compatibility) { return ScimServiceProvider.builder().baseUri(URI.create("https://example.invalid/scim/")).resourceTypes(List.of(type)).stringMatching(NO_MATCHING).compatibility(compatibility).serviceProviderConfig(ScimServiceProviderConfig.builder().patchSupported(true).build()).build(); }
+    private static @NonNull ScimPatchRequest request(@NonNull ScimServiceProvider provider, @NonNull ScimResourceType type, @NonNull List<@NonNull JsonObject> operations) { var body = JsonObject.builder().put("schemas", JsonArray.fromElements(List.of(JsonString.fromValue("urn:ietf:params:scim:api:messages:2.0:PatchOp")))).put("Operations", JsonArray.fromElements(operations)).build(); return assertInstanceOf(ScimPatchParseResult.Succeeded.class, provider.parsePatchRequestResult(type, bytes(body))).getPatchRequest(); }
+    private static @NonNull ScimPatchResult apply(@NonNull ScimServiceProvider provider, @NonNull ScimResource current, @NonNull ScimPatchRequest patch) { return assertInstanceOf(ScimPatchApplicationResult.Succeeded.class, provider.applyPatchResult(current, patch)).getPatchResult(); }
+    private static byte @NonNull [] bytes(@NonNull JsonObject value) { return value.toJson().getBytes(StandardCharsets.UTF_8); }
+    private static @NonNull Set<@NonNull String> paths(@NonNull Set<@NonNull ScimAttributePath> values) { return values.stream().map(ScimAttributePath::toScimString).collect(java.util.stream.Collectors.toSet()); }
 }

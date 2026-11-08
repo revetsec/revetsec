@@ -44,7 +44,23 @@ public final class FrozenTotpWriter {
    }
   }
   rows.add(row(scope,ttr1(config)));
+  if(number(config,"totpCapacityCorpus",0)==1)rows.addAll(capacityRows(config));
   return JsonArray.fromElements(rows);
+ }
+ private static @NonNull List<@NonNull JsonValue> capacityRows(@NonNull JsonObject config)throws Exception{
+  var result=new ArrayList<@NonNull JsonValue>();var sealer=sealer(config);var codec=new TotpRecords(sealer);Instant minimum=Instant.ofEpochSecond(number(config,"minimumSeconds"),number(config,"minimumNanos"));
+  for(int format:List.of(1,2))for(boolean full:List.of(false,true))for(boolean utf8:List.of(false,true)){
+   String prefix="cap06-"+format+"-"+full+"-"+utf8+"-";int left=1024-prefix.length();String name=prefix+(utf8?"é".repeat(left/2)+(left%2==0?"":"a"):"a".repeat(left));
+   var key=TotpStoreKey.forAccount("migration","old-one",name);var account=new TotpRecords.Account(name,identifier(100),minimum.minusNanos(1));
+   if(full){account.active=new TotpRecords.Active(identifier(101),pattern(20,7),minimum.minusSeconds(600),Long.MAX_VALUE);account.pending=new TotpRecords.Pending(identifier(102),identifier(103),pattern(20,8),pattern(32,9),minimum.plusSeconds(300),account.active.factorId);account.batchId=identifier(104);for(int i=0;i<10;i++)account.recoveryHashes.add(pattern(32,20+i));for(int i=0;i<5;i++)account.charges.add(new TotpRecords.Charge(identifier(110+i),minimum.minusSeconds(i+1)));for(int i=0;i<10;i++)account.totpCharges.add(new TotpRecords.Charge(identifier(120+i),minimum.minusSeconds(i+1)));}
+   try{
+    var source=codec.seal(key,new TotpRecords.Namespace(minimum),account);
+    if(format==1){byte[] digest=TotpPrimitives.digest("revetsec/totp/address/v1",key.getStorageKey());String context="revetsec/totp/durable/v1:"+b64(digest);byte[] plain=bytes(SealedStateAccess.get().unsealDurable(sealer,new String(source.getSealedBytes(),StandardCharsets.US_ASCII),context));byte[] shortened=Arrays.copyOf(plain,plain.length-4-59*(full?10:0));java.nio.ByteBuffer.wrap(shortened).putInt(0x54545231);try{source=TotpStoreRecord.fromStoredForm(key,source.getVersion(),SealedStateAccess.get().sealDurable(sealer,b64(shortened),context).getBytes(StandardCharsets.US_ASCII));}finally{Arrays.fill(digest,(byte)0);Arrays.fill(plain,(byte)0);Arrays.fill(shortened,(byte)0);}}
+    // Independently require the frozen reader to admit the old frame and promotion.
+    try(var opened=codec.open(source)){var old=Objects.requireNonNull(opened.account);if(old.charges.size()!=(full?5:0)||old.totpCharges.size()!=(full?(format==1?5:10):0))throw new IllegalArgumentException("Legacy capacity fixture mismatch");}
+    result.add(row(text(config,"totpScope"),source));
+   }finally{account.erase();}
+  }return result;
  }
  private static @NonNull TotpStoreRecord ttr1(@NonNull JsonObject config)throws Exception{
   var key=TotpStoreKey.forAccount("migration","old-one","ttr1-promoted");@NonNull String version=identifier(91);@NonNull Instant minimum=Instant.ofEpochSecond(number(config,"minimumSeconds",1700000000),number(config,"minimumNanos",999999999));

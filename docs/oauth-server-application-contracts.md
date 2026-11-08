@@ -66,7 +66,7 @@ Value and builder `toString()` methods redact identifiers, display names, config
 
 ### Issuer signing keys and public metadata
 
-`OAuthIssuerSigningKey.fromKeyPair` checks an RS256/RSA public projection locally without signing,
+`OAuthIssuerSigningKey.fromRsaKeyPair` checks an RS256/RSA public projection locally without signing,
 encoding private material or exposing a private-key getter. Mismatched pairs fail during actual bounded
 signing or warm-up. `OAuthIssuerKeySnapshot.withActiveKey` builds an immutable active/public key declaration;
 `generation` and `publishedAt` are required, null clears them, and null maps reset empty. An equal duplicate
@@ -311,7 +311,7 @@ The application owns login, session fixation defenses, browser binding, consent 
 
 Register the exact configured routes and preserve materialized body, raw query and header occurrences. Call `beginAuthorizationResult` for GET authorization, render its restricted interaction after app authentication, and submit the trusted decision through `completeAuthorizationResult` with app session and CSRF protection. `resumeAuthorizationResult` rechecks a continuation before rendering. An interaction does not authenticate a user. Initial approval rechecks grant policy before committing, keeps the app subject and only narrows scopes/refresh. Each conflict resolves current client facts and runs policy again; denial consumes the interaction without a credential.
 
-Use one app-generated canonical 32-byte random browser binding independent of OAuth state. Resume the issuer interaction before rendering a later consent view, escape untrusted client display text, and complete with a server-derived decision. Emit a credential-bearing response only from the returned admitted completion variant. Unknown or confirmed-but-not-admitted mutations require reconciliation, even if a local session still holds an interaction handle.
+Use one app-generated [`BrowserBinding`](https://javadoc.revetsec.com/com/revetsec/BrowserBinding.html), whose fresh form is an independent canonical 32-byte random value, independent of OAuth state. Keep it in protected server session state; never construct it from a submitted cookie merely to satisfy the type. Resume the issuer interaction before rendering a later consent view, escape untrusted client display text, and complete with a server-derived decision. Issuer operations retain their exact canonical-43 boundary. Emit a credential-bearing response only from the returned admitted completion variant. Unknown or confirmed-but-not-admitted mutations require reconciliation, even if a local session still holds an interaction handle.
 
 ### Supply an application decision
 

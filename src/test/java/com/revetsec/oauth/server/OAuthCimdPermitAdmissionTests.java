@@ -40,7 +40,7 @@ import static org.junit.jupiter.api.Assertions.*;
 /** Real bounded semaphores, deterministic held transport, no socket or production test hook. */
 final class OAuthCimdPermitAdmissionTests {
  private static final String ID="https://client.example.com/metadata";
- private static Deadline deadline(){return Deadline.fromNow(Duration.ofSeconds(5));}
+ private static @NonNull Deadline deadline(){return Deadline.fromNow(Duration.ofSeconds(5));}
  private static final class Fixture {
   final CountDownLatch entered,release=new CountDownLatch(1);
   final AtomicInteger calls=new AtomicInteger(),active=new AtomicInteger(),peak=new AtomicInteger();
@@ -62,17 +62,17 @@ final class OAuthCimdPermitAdmissionTests {
      } finally {this.active.decrementAndGet();}
     });
   }
-  Semaphore semaphore(String name) throws ReflectiveOperationException {
+  @NonNull Semaphore semaphore(@NonNull String name) throws ReflectiveOperationException {
    var field=OAuthClientMetadataFetcher.class.getDeclaredField(name);field.setAccessible(true);return assertInstanceOf(Semaphore.class,field.get(this.fetcher));
   }
-  Capture caller(boolean fresh,Deadline budget){return new Capture(()->fresh?this.fetcher.fresh(ID,budget):this.fetcher.reusable(ID,budget));}
+  @NonNull Capture caller(boolean fresh,@NonNull Deadline budget){return new Capture(()->fresh?this.fetcher.fresh(ID,budget):this.fetcher.reusable(ID,budget));}
   void held() throws InterruptedException {assertTrue(this.entered.await(3,TimeUnit.SECONDS));}
  }
  private static final class Capture {
   final FutureTask<OAuthClientMetadataDocument> result;
   final Thread worker;
   final AtomicBoolean interrupted=new AtomicBoolean();
-  Capture(Supplier<OAuthClientMetadataDocument> work){
+  Capture(@NonNull Supplier<@NonNull OAuthClientMetadataDocument> work){
    this.result=new FutureTask<>(()->{try{return work.get();}finally{this.interrupted.set(Thread.currentThread().isInterrupted());}});
    this.worker=new Thread(this.result,"cimd-permit-admission");this.worker.setDaemon(true);
   }
@@ -85,7 +85,7 @@ final class OAuthCimdPermitAdmissionTests {
   }
   void stop() throws InterruptedException {this.worker.interrupt();this.worker.join(3000);assertFalse(this.worker.isAlive());}
  }
- private static void queued(Semaphore semaphore,Capture caller){
+ private static void queued(@NonNull Semaphore semaphore,@NonNull Capture caller){
   Deadline wait=Deadline.fromNow(Duration.ofSeconds(2));
   while(!semaphore.hasQueuedThreads() && caller.worker.isAlive() && !wait.isExpired())Thread.yield();
   assertTrue(semaphore.hasQueuedThreads(),"A live caller must wait interruptibly for bounded fetch capacity.");

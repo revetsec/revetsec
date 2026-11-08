@@ -15,6 +15,8 @@
  */
 package com.revetsec.scim;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.json.*;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
@@ -56,7 +58,7 @@ final class ScimReplacementMemberIndexTests {
         }
     }
 
-    private static long minimum(List<JsonValue> rows, @Nullable JsonObject query) {
+    private static long minimum(@NonNull List<@NonNull JsonValue> rows, @Nullable JsonObject query) {
         long low = 0, high = 10_000_000;
         var ample = new ScimWork(high); var complete = ScimReplacementMemberIndex.fromValues(rows, ample); assertNotNull(complete);
         if (query != null) complete.find(query); assertFalse(ample.wasExceeded());
@@ -68,7 +70,7 @@ final class ScimReplacementMemberIndexTests {
         }
         return low;
     }
-    private static List<JsonValue> rows(int size) {
+    private static @NonNull List<@NonNull JsonValue> rows(int size) {
         List<JsonValue> rows = new ArrayList<>();
         for (int i = 0; i < size; i++) rows.add(JsonObject.builder().put("$ref", "Users/" + "a".repeat(512) + i)
                 .put("type", i % 2 == 0 ? "User" : "x".repeat(1024)).put("display", "saved:" + i).build());

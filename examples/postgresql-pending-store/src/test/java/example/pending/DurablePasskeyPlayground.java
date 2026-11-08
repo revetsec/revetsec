@@ -59,7 +59,7 @@ public final class DurablePasskeyPlayground {
                 .recoveryGate(gate)
                 .build();
         PasskeyApp app = new PasskeyApp(origin, rpId, accessKey, Clock.systemUTC(),
-                accountHandle, party, gate);
+                accountHandle, NAMESPACE, party, gate);
         try (Soklet soklet = Soklet.fromConfig(PasskeyPlayground.config(app, port))) {
             Runtime.getRuntime().addShutdownHook(new Thread(soklet::close, "durable-passkey-shutdown"));
             soklet.start();

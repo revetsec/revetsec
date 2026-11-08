@@ -80,7 +80,7 @@ final class OAuthIssuerPublicationFixture implements OAuthIssuerKeyProvider {
    if(!digest(jwks).equals(value(p,"artifactSha256")))throw new IllegalStateException("Publication artifact mismatch.");
    Map<String,Instant> floors=new LinkedHashMap<>();for(String id:ids){if(!fingerprint(id).equals(value(p,"material."+id)))throw new IllegalStateException("Material changed.");floors.put(id,Instant.parse(value(p,"retained."+id)));}
    String active=value(p,"active");var k=key(active);
-   return OAuthIssuerKeySnapshot.withActiveKey(OAuthIssuerSigningKey.fromKeyPair(active,k.getPrivateKey(),k.getPublicKey())).generation("g"+value(p,"revision")).publishedAt(Instant.parse(value(p,"publishedAt"))).verificationKeys(publicKeys(ids)).retirementNotBefore(floors).build();
+   return OAuthIssuerKeySnapshot.withActiveKey(OAuthIssuerSigningKey.fromRsaKeyPair(active,k.getPrivateKey(),k.getPublicKey())).generation("g"+value(p,"revision")).publishedAt(Instant.parse(value(p,"publishedAt"))).verificationKeys(publicKeys(ids)).retirementNotBefore(floors).build();
   }catch(IOException failure){throw new IllegalStateException("Publication unavailable.");}
  }
  /** Deliberately dishonest/incomplete declaration, used only to demonstrate the initial-snapshot boundary. */

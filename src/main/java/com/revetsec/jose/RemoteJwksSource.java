@@ -81,11 +81,14 @@ import static java.util.Objects.requireNonNull;
  * {@link JwksUnavailableException} of category {@link com.revetsec.ErrorCategory#TRANSPORT} with no cause.
  * <p>
  * <strong>Stale keys.</strong> While refreshes fail or are held back, an expired key set still answers, for the keys
- * it holds, until the maximum staleness after its expiry; other calls throw {@link JwksUnavailableException}.
+ * it holds, until the maximum staleness after its expiry, provided the cached snapshot remains retained.
+ * An observed clock rollback discards the snapshot entirely, including otherwise eligible stale keys. A failed
+ * refresh after rollback has no stale fallback; only a later successful fetch establishes another snapshot.
+ * Catching up the wall clock does not revive the discarded material. Other calls throw {@link JwksUnavailableException}.
  * <p>
  * <strong>Time.</strong> The time to live, cooldown, backoff and staleness follow the configured {@link Clock}. An
- * instant recorded in the future of the clock's current time counts as passed, so a clock set back makes the key set
- * expired and never extends anything. Deadlines and elapsed times use {@link System#nanoTime()}.
+ * instant recorded in the future of the clock's current time counts as passed. Any observed backward step
+ * discards the cached key set, even inside its original fresh/stale window, and never extends that old window. Deadlines and elapsed times use {@link System#nanoTime()}.
  * <p>
  * <strong>Bound to one URI, not to an issuer.</strong> Share an instance only among validators that expect the same
  * issuer, because every key in it is trusted for any token they check. Sources compare by reference.
@@ -277,9 +280,10 @@ public final class RemoteJwksSource implements JwksSource {
 		}
 
 		/**
-		 * Sets the HTTP client to fetch with.
+		 * Sets the HTTP client to fetch with. Build rejects redirect following, an Authenticator or a CookieHandler
+		 * without sending a request. The application owns injected TLS/proxy configuration and egress beyond URI checks.
 		 *
-		 * @param httpClient a client that never follows redirects; {@code null} restores the default, a process-wide
+		 * @param httpClient a client using Redirect.NEVER, with no Authenticator or CookieHandler; {@code null} restores the default, a process-wide
 		 *                   client Revetsec creates on the first fetch
 		 * @return this builder
 		 * @since 1.0.0

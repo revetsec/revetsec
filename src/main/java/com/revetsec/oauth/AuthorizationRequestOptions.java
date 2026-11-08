@@ -41,7 +41,7 @@ import java.util.Set;
 public final class AuthorizationRequestOptions {
 	private static final Set<String> RESERVED = Set.of("response_type", "client_id", "redirect_uri", "state",
 			"nonce", "code_challenge", "code_challenge_method", "scope", "resource", "response_mode", "prompt",
-			"max_age", "login_hint", "acr_values", "request", "request_uri", "dpop_jkt");
+			"max_age", "login_hint", "acr_values", "request", "request_uri", "dpop_jkt", "authorization_details");
 	private final @NonNull Set<@NonNull String> scopes;
 	private final boolean scopesOverridden;
 	private final @NonNull List<@NonNull URI> resources;
@@ -264,7 +264,7 @@ public final class AuthorizationRequestOptions {
 		}
 
 		/**
-		 * Replaces the complete additional-parameter map. Reserved OAuth names are rejected.
+		 * Replaces the complete additional-parameter map. Reserved OAuth names, including authorization_details, are rejected.
 		 *
 		 * @param value the parameters, or null which restores the default
 		 * @return this builder

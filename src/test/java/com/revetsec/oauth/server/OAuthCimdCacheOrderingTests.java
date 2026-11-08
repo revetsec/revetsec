@@ -44,9 +44,9 @@ final class OAuthCimdCacheOrderingTests {
  private static final Instant NOW=Instant.parse("2026-10-31T12:00:00Z");
  private static final String ID="https://client.example.com/metadata",ISSUER="https://issuer.example.com";
  private static final OAuthServerIngressLimits LIMITS=OAuthServerIngressLimits.fromDefaults();
- private static Deadline deadline(){return Deadline.fromNow(Duration.ofSeconds(5));}
- private static byte[] body(String name){return JsonObject.builder().put("client_id",ID).put("client_name",name).put("token_endpoint_auth_method","none").put("redirect_uris",JsonArray.fromElements(List.of(JsonString.fromValue("https://client.example.com/callback")))).build().toJson().getBytes(StandardCharsets.UTF_8);}
- private static StateSealer sealer(){byte[] key=new byte[32];for(int i=0;i<32;i++)key[i]=(byte)(i+1);return StateSealer.withActiveKey(SealingKey.fromBase64("k",Base64.getEncoder().encodeToString(key))).maximumSealedLength(16384).build();}
+ private static @NonNull Deadline deadline(){return Deadline.fromNow(Duration.ofSeconds(5));}
+ private static byte @NonNull [] body(@NonNull String name){return JsonObject.builder().put("client_id",ID).put("client_name",name).put("token_endpoint_auth_method","none").put("redirect_uris",JsonArray.fromElements(List.of(JsonString.fromValue("https://client.example.com/callback")))).build().toJson().getBytes(StandardCharsets.UTF_8);}
+ private static @NonNull StateSealer sealer(){byte[] key=new byte[32];for(int i=0;i<32;i++)key[i]=(byte)(i+1);return StateSealer.withActiveKey(SealingKey.fromBase64("k",Base64.getEncoder().encodeToString(key))).maximumSealedLength(16384).build();}
  private static final class PausingClock extends Clock {
   final AtomicReference<Instant> time=new AtomicReference<>(NOW);
   final AtomicReference<Thread> target=new AtomicReference<>();
@@ -69,9 +69,9 @@ final class OAuthCimdCacheOrderingTests {
  }
  private static final class Capture {
   final FutureTask<OAuthClientMetadataDocument> result;final Thread thread;
-  Capture(Supplier<OAuthClientMetadataDocument> action){this.result=new FutureTask<>(action::get);this.thread=new Thread(this.result,"cimd-clock-order");this.thread.setDaemon(true);}
+  Capture(@NonNull Supplier<@NonNull OAuthClientMetadataDocument> action){this.result=new FutureTask<>(action::get);this.thread=new Thread(this.result,"cimd-clock-order");this.thread.setDaemon(true);}
   void start(){this.thread.start();}
-  OAuthClientMetadataDocument success(){return assertDoesNotThrow(()->this.result.get(2,TimeUnit.SECONDS));}
+  @NonNull OAuthClientMetadataDocument success(){return assertDoesNotThrow(()->this.result.get(2,TimeUnit.SECONDS));}
   void stop() throws InterruptedException{this.thread.interrupt();this.thread.join(3000);assertFalse(this.thread.isAlive());}
  }
  private static final class Fixture {
@@ -80,19 +80,19 @@ final class OAuthCimdCacheOrderingTests {
   final OAuthClientMetadataCacheCodec codec=new OAuthClientMetadataCacheCodec(ISSUER,this.sealer,this.policy,LIMITS,false,false);
   final PausingClock clock;final AtomicInteger fetches=new AtomicInteger();final AtomicReference<Runnable> fetchHook=new AtomicReference<>();final OAuthClientMetadataFetcher fetcher;
   Fixture(int pauseAt){this(pauseAt,Map.of("Cache-Control",List.of("max-age=120")));}
-  Fixture(int pauseAt,Map<String,List<String>> headers){
+  Fixture(int pauseAt,@NonNull Map<@NonNull String,@NonNull List<@NonNull String>> headers){
    this.clock=new PausingClock(pauseAt);
    this.fetcher=new OAuthClientMetadataFetcher(ISSUER,this.sealer,this.policy,LIMITS,false,false,OutboundUriPolicy.defaultInstance(),this.clock,(uri,budget)->{
     int call=this.fetches.incrementAndGet();Runnable hook=this.fetchHook.getAndSet(null);if(hook!=null)hook.run();
     return new RawResponse(200,HttpHeaders.of(headers,(a,b)->true),body("fetch"+call),null,false,Duration.ZERO);
    });
   }
-  OAuthClientMetadataCacheEntry seed(Instant expiry){var entry=this.codec.seal(ID,body("cached"),NOW,expiry);assertTrue(this.cache.compareAndSet(this.codec.key(ID),null,entry,Duration.ofSeconds(1)));return entry;}
-  Optional<OAuthClientMetadataCacheEntry> stored(){return this.cache.read(this.codec.key(ID),Duration.ofSeconds(1));}
-  Capture delayed(boolean fresh){var c=new Capture(()->fresh?this.fetcher.fresh(ID,deadline()):this.fetcher.reusable(ID,deadline()));this.clock.target.set(c.thread);return c;}
+  @NonNull OAuthClientMetadataCacheEntry seed(@NonNull Instant expiry){var entry=this.codec.seal(ID,body("cached"),NOW,expiry);assertTrue(this.cache.compareAndSet(this.codec.key(ID),null,entry,Duration.ofSeconds(1)));return entry;}
+  @NonNull Optional<@NonNull OAuthClientMetadataCacheEntry> stored(){return this.cache.read(this.codec.key(ID),Duration.ofSeconds(1));}
+  @NonNull Capture delayed(boolean fresh){var c=new Capture(()->fresh?this.fetcher.fresh(ID,deadline()):this.fetcher.reusable(ID,deadline()));this.clock.target.set(c.thread);return c;}
   void paused() throws InterruptedException{assertTrue(this.clock.paused.await(2,TimeUnit.SECONDS));}
  }
- @TestFactory Stream<DynamicTest> orderedClockSamplesDoNotTurnCacheHitsIntoFetches() {
+ @TestFactory @NonNull Stream<@NonNull DynamicTest> orderedClockSamplesDoNotTurnCacheHitsIntoFetches() {
   return Stream.of(1,2,3).map(stage->DynamicTest.dynamicTest("clock-stage-"+stage,()->{
    var f=new Fixture(stage);var old=f.seed(NOW.plusSeconds(120));var a=f.delayed(false);var b=new Capture(()->f.fetcher.reusable(ID,deadline()));
    try {
@@ -136,7 +136,7 @@ final class OAuthCimdCacheOrderingTests {
   try{a.start();f.paused();f.clock.time.set(NOW.plusSeconds(10));b.start();b.success();f.clock.time.set(NOW.plusSeconds(5));f.clock.release.countDown();a.success();assertTrue(f.stored().isEmpty());}
   finally{f.clock.release.countDown();a.stop();b.stop();}
  }
- @TestFactory Stream<DynamicTest> aTransientObservedRollbackStaysLocalForTheEntireOperation() {
+ @TestFactory @NonNull Stream<@NonNull DynamicTest> aTransientObservedRollbackStaysLocalForTheEntireOperation() {
   return Stream.of(1,2,3).map(stage->DynamicTest.dynamicTest("rollback-stage-"+stage,()->{
    var f=new Fixture(0);var old=f.seed(NOW.plusSeconds(120));f.clock.time.set(NOW.plusSeconds(10));assertEquals("cached",f.fetcher.reusable(ID,deadline()).clientName());
    f.clock.target.set(Thread.currentThread());
@@ -154,7 +154,7 @@ final class OAuthCimdCacheOrderingTests {
   try{a.start();f.paused();a.thread.interrupt();var error=assertThrows(ExecutionException.class,()->a.result.get(2,TimeUnit.SECONDS));assertEquals(OAuthServerAdmissionFailure.Reason.INFRASTRUCTURE,assertInstanceOf(OAuthServerAdmissionFailure.class,error.getCause()).reason());assertEquals(0,f.fetches.get());assertEquals(old.getVersion(),assertDoesNotThrow(()->f.stored().orElseThrow()).getVersion());}
   finally{f.clock.release.countDown();a.stop();}
  }
- @TestFactory Stream<DynamicTest> sharedDirectivesAndNamedVariantsAreReusableThroughTheActualCache() {
+ @TestFactory @NonNull Stream<@NonNull DynamicTest> sharedDirectivesAndNamedVariantsAreReusableThroughTheActualCache() {
   return Stream.of("s-maxage=5,max-age=120","s-maxage=5","max-age=5").map(control->DynamicTest.dynamicTest(control,()->{
    var f=new Fixture(0,Map.of("Cache-Control",List.of(control),"Vary",List.of("Accept,Accept-Encoding,X-Absent")));
    assertEquals("fetch1",f.fetcher.reusable(ID,deadline()).clientName());assertEquals("fetch1",f.fetcher.reusable(ID,deadline()).clientName());assertEquals(1,f.fetches.get());assertEquals(NOW.plusSeconds(5),assertDoesNotThrow(()->f.stored().orElseThrow()).getExpiresAt());
@@ -168,7 +168,7 @@ final class OAuthCimdCacheOrderingTests {
   var f=new Fixture(0,Map.of("Cache-Control",List.of("s-maxage=120"),"Vary",List.of("Accept")));f.fetcher.reusable(ID,deadline());var old=assertDoesNotThrow(()->f.stored().orElseThrow());
   assertEquals("fetch2",f.fetcher.fresh(ID,deadline()).clientName());assertEquals("fetch3",f.fetcher.fresh(ID,deadline()).clientName());assertEquals(old.getVersion(),assertDoesNotThrow(()->f.stored().orElseThrow()).getVersion());
  }
- private static OAuthClientMetadataCacheEntry legacyEntry(Fixture f) {
+ private static @NonNull OAuthClientMetadataCacheEntry legacyEntry(@NonNull Fixture f) {
   String namespace=OAuthAuthorizationRecord.digest(JsonObject.builder().put("schema",1L).put("issuer",ISSUER).put("originsRestricted",false).put("origins",JsonArray.fromElements(List.of()))
    .put("documentBytes",f.policy.getMaximumDocumentBytes().longValue()).put("freshness",f.policy.getMaximumFreshness().toString())
    .put("clientIdLength",(long)LIMITS.clientIdLength).put("redirects",(long)LIMITS.redirects).put("native",false).put("localhost",false).build().toJson());

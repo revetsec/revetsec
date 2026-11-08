@@ -1,6 +1,7 @@
 /* Copyright 2026 Revetware LLC. Licensed under the Apache License, Version 2.0. */
 package com.revetsec.webauthn;
 
+import com.revetsec.OperationBinding;
 import com.revetsec.SealingKey;
 import com.revetsec.StateSealer;
 import com.revetsec.internal.json.JsonCodec;
@@ -16,7 +17,7 @@ import java.util.*;
 public final class BrowserExtensionWorker {
     private static final Clock CLOCK=Clock.fixed(Instant.parse("2026-11-03T12:00:00Z"),ZoneOffset.UTC);
     private static final byte[] HANDLE={4,5,6};
-    private static final String BINDING="AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+    private static final OperationBinding BINDING=OperationBinding.fromTrustedPersistence("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
     private final ScriptedWebAuthnStore store=new ScriptedWebAuthnStore(CLOCK.instant());
     private final WebAuthnRelyingParty party;
     private BrowserExtensionWorker(String origin){

@@ -55,7 +55,7 @@ final class BrowserSessionsTests {
         assertTrue(cookie.contains("Path=/")); assertTrue(cookie.contains("SameSite=None"));
         assertFalse(cookie.contains("Domain="));
         assertFalse(session.toString().contains(session.id));
-        assertFalse(session.toString().contains(session.binding));
+        assertFalse(session.toString().contains(session.binding.toSecretString()));
     }
 
     @Test void localOriginBindAndSecretIndirectionRejectUnsafeInputs() {

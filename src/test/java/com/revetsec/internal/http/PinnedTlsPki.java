@@ -100,13 +100,13 @@ final class PinnedTlsPki {
   KeyManagerFactory keys=KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());keys.init(this.serverKeys,"changeit".toCharArray());
   X509ExtendedKeyManager original=(X509ExtendedKeyManager)keys.getKeyManagers()[0];
   X509ExtendedKeyManager wire=new X509ExtendedKeyManager(){
-   @Override public String[] getClientAliases(String type,Principal[] issuers){return original.getClientAliases(type,issuers);}
-   @Override public String chooseClientAlias(String[] types,Principal[] issuers,Socket socket){return original.chooseClientAlias(types,issuers,socket);}
-   @Override public String[] getServerAliases(String type,Principal[] issuers){return original.getServerAliases(type,issuers);}
-   @Override public String chooseServerAlias(String type,Principal[] issuers,Socket socket){return original.chooseServerAlias(type,issuers,socket);}
-   @Override public String chooseEngineServerAlias(String type,Principal[] issuers,SSLEngine engine){return original.chooseEngineServerAlias(type,issuers,engine);}
-   @Override public X509Certificate[] getCertificateChain(String alias){return chain.clone();}
-   @Override public PrivateKey getPrivateKey(String alias){return original.getPrivateKey(alias);}
+   @Override public @NonNull String @NonNull [] getClientAliases(@NonNull String type,@NonNull Principal @NonNull [] issuers){return original.getClientAliases(type,issuers);}
+   @Override public @NonNull String chooseClientAlias(@NonNull String @NonNull [] types,@NonNull Principal @NonNull [] issuers,@NonNull Socket socket){return original.chooseClientAlias(types,issuers,socket);}
+   @Override public @NonNull String @NonNull [] getServerAliases(@NonNull String type,@NonNull Principal @NonNull [] issuers){return original.getServerAliases(type,issuers);}
+   @Override public @NonNull String chooseServerAlias(@NonNull String type,@NonNull Principal @NonNull [] issuers,@NonNull Socket socket){return original.chooseServerAlias(type,issuers,socket);}
+   @Override public @NonNull String chooseEngineServerAlias(@NonNull String type,@NonNull Principal @NonNull [] issuers,@NonNull SSLEngine engine){return original.chooseEngineServerAlias(type,issuers,engine);}
+   @Override public @NonNull X509Certificate @NonNull [] getCertificateChain(@NonNull String alias){return chain.clone();}
+   @Override public @NonNull PrivateKey getPrivateKey(@NonNull String alias){return original.getPrivateKey(alias);}
   };
   SSLContext context=SSLContext.getInstance("TLS");context.init(new javax.net.ssl.KeyManager[]{wire},null,null);return context;
  }

@@ -4,7 +4,7 @@ import socket
 import struct
 import threading
 import unittest
-from fault_proxy import packet, exact
+from fault_proxy import packet, exact, CommitLossProxy
 
 
 class ProtocolFixtureTests(unittest.TestCase):
@@ -59,6 +59,30 @@ class ProtocolFixtureTests(unittest.TestCase):
         b.shutdown(socket.SHUT_WR)
         with self.assertRaises(EOFError):
             exact(a, 4)
+
+
+    def test_capacity_fixture_accepts_exact_selected_two_megabyte_packet(self):
+        a, b = self.streams()
+        data = b'Q' + struct.pack('!I', 2097152) + b'x' * (2097152 - 4)
+        t = threading.Thread(target=b.sendall, args=(data,))
+        t.start()
+        kind, body, raw = packet(a, 2097152)
+        t.join(2)
+        self.assertFalse(t.is_alive())
+        self.assertEqual(kind, b'Q')
+        self.assertEqual(raw, data)
+        self.assertEqual(len(body), 2097152 - 4)
+
+    def test_capacity_fixture_rejects_one_over_selected_packet_before_body(self):
+        a, b = self.streams()
+        b.sendall(b'Q' + struct.pack('!I', 2097153))
+        with self.assertRaises(ValueError):
+            packet(a, 2097152)
+
+    def test_packet_override_is_bounded_before_opening_listener(self):
+        for invalid in [0, 131071, 2097153, True, None, float('inf')]:
+            with self.assertRaises(ValueError):
+                CommitLossProxy(0, 'before', maximum_packet_bytes=invalid)
 
 
 if __name__ == '__main__':

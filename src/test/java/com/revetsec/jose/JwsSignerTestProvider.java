@@ -42,6 +42,7 @@ public final class JwsSignerTestProvider extends Provider {
 	private static final long serialVersionUID = 1L;
 	private static @Nullable Provider original;
 	private static @NonNull String mode = "opaque";
+	private static @NonNull JwsAlgorithm selectedAlgorithm = JwsAlgorithm.PS256;
 	private static int signCalls;
 	private static int verifyCalls;
 	private static int encodedCalls;
@@ -54,13 +55,19 @@ public final class JwsSignerTestProvider extends Provider {
 
 	public JwsSignerTestProvider() {
 		super("RevetsecSignerProbe", "1", "Isolated signer test provider");
-		putService(new Service(this, "Signature", "SHA256withRSA", Engine.class.getName(), List.of(), null));
-		putService(new Service(this, "Signature", "SHA384withRSA", Engine.class.getName(), List.of(), null));
-		putService(new Service(this, "Signature", "RSASSA-PSS", Engine.class.getName(), List.of(), null));
+		for (String algorithm : List.of("SHA256withRSA", "SHA384withRSA", "SHA512withRSA", "RSASSA-PSS")) {
+			putService(new Service(this, "Signature", algorithm, Engine.class.getName(), List.of(), null) {
+				@Override public @NonNull Object newInstance(@Nullable Object constructorParameter) {
+					check(constructorParameter == null, "Unexpected provider constructor parameter.");
+					return new Engine(getAlgorithm());
+				}
+			});
+		}
 	}
 
 	public static void main(@NonNull String @NonNull [] arguments) throws Exception {
 		mode = arguments[0];
+		if (arguments.length > 1) selectedAlgorithm = JwsAlgorithm.valueOf(arguments[1]);
 		original = requireNonNull(Security.getProvider("SunRsaSign"));
 		Provider installed = new JwsSignerTestProvider();
 		Security.insertProviderAt(installed, 1);
@@ -74,7 +81,7 @@ public final class JwsSignerTestProvider extends Provider {
 		PublicKey publicKey = TestJwk.Fixture.IDP_SIGNING_RSA_2048.getPublicKey();
 		OpaqueKey opaque = new OpaqueKey(real, mode.equals("restricted") ? "RSASSA-PSS" : "RSA");
 		int beforeThreads = Thread.getAllStackTraces().size();
-		JwsSigner signer = JwsSigner.fromRsaKeyPair(opaque, publicKey, JwsAlgorithm.PS256);
+		JwsSigner signer = JwsSigner.fromRsaKeyPair(opaque, publicKey, selectedAlgorithm);
 		check(signCalls == 0 && verifyCalls == 0 && signatureInstances == 0 && encodedCalls == 0,
 				"Factory performed provider work.");
 		if (mode.equals("vm-error")) {
@@ -108,9 +115,13 @@ public final class JwsSignerTestProvider extends Provider {
 			String header = new String(java.util.Base64.getUrlDecoder().decode(pieces[0]), StandardCharsets.UTF_8);
 			check(header.contains(java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(acceptedDigest)),
 					"Digest copy changed.");
-			Signature verifier = Signature.getInstance("RSASSA-PSS", requireNonNull(original));
+			Signature verifier = Signature.getInstance(selectedAlgorithm == JwsAlgorithm.RS512 ? "SHA512withRSA" : "RSASSA-PSS", requireNonNull(original));
 			verifier.initVerify(publicKey);
-			verifier.setParameter(new PSSParameterSpec("SHA-256", "MGF1", MGF1ParameterSpec.SHA256, 32, 1));
+			if (selectedAlgorithm != JwsAlgorithm.RS512) {
+				String pssDigest = selectedAlgorithm == JwsAlgorithm.PS384 ? "SHA-384" : selectedAlgorithm == JwsAlgorithm.PS512 ? "SHA-512" : "SHA-256";
+				int salt = selectedAlgorithm == JwsAlgorithm.PS384 ? 48 : selectedAlgorithm == JwsAlgorithm.PS512 ? 64 : 32;
+				verifier.setParameter(new PSSParameterSpec(pssDigest, "MGF1", new MGF1ParameterSpec(pssDigest), salt, 1));
+			}
 			verifier.update((pieces[0] + "." + pieces[1]).getBytes(StandardCharsets.US_ASCII));
 			check(verifier.verify(java.util.Base64.getUrlDecoder().decode(pieces[2])), "Opaque provider output failed.");
 			signer.warmUp(Duration.ofSeconds(5));
@@ -153,13 +164,13 @@ public final class JwsSignerTestProvider extends Provider {
 		private ProbeVmError() { super(SECRET); }
 	}
 
-	/** JCA reflectively constructs this public fixture only in the child JVM. */
+	/** The selected JCA service constructs a fresh fixture engine only in the child JVM. */
 	public static final class Engine extends SignatureSpi {
 		private @Nullable Signature delegate;
 		private boolean signing;
 		private boolean initialized;
-		private @NonNull String algorithm = "RSASSA-PSS";
-		public Engine() { ++signatureInstances; }
+		private final @NonNull String algorithm;
+		private Engine(@NonNull String algorithm) { this.algorithm = algorithm; ++signatureInstances; }
 
 		@Override protected void engineInitVerify(@NonNull PublicKey publicKey) throws InvalidKeyException {
 			check(!this.initialized, "A verification engine was reused.");

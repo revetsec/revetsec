@@ -1,5 +1,6 @@
 /* Copyright 2026 Revetware LLC. Licensed under the Apache License, Version 2.0. */
 package verification.store;
+import com.revetsec.BrowserBinding;
 import com.revetsec.StateSealer;
 import com.revetsec.internal.crypto.SealedStateAccess;
 import com.revetsec.oauth.server.*;
@@ -55,7 +56,7 @@ public final class CapacityProfileProbe {
   check(connections.opened==0,PREFIX+"-construction-no-connection");
   check(server.initializeFreshIssuer().getStatus()==OAuthStoreCommitStatus.COMMITTED,PREFIX+"-genuine-initialization");
   var capture=new Counting(store);var prepared=server(capture,"old");
-  try{var result=prepared.beginAuthorizationResult("GET",query(),new byte[0],Map.of(),"A".repeat(43));throw new AssertionError(PREFIX+"-capture-must-conflict-"+(result instanceof OAuthAuthorizationResult.Rejected rejected?rejected.getReason():result.getClass().getSimpleName()));}
+  try{var result=prepared.beginAuthorizationResult("GET",query(),new byte[0],Map.of(),BrowserBinding.fromTrustedPersistence("A".repeat(43)));throw new AssertionError(PREFIX+"-capture-must-conflict-"+(result instanceof OAuthAuthorizationResult.Rejected rejected?rejected.getReason():result.getClass().getSimpleName()));}
   catch(OAuthServerStoreException failure){check(failure.getReason()==OAuthServerException.Reason.STORE_UNAVAILABLE,PREFIX+"-genuine-capture-refusal");}
   var txn=Objects.requireNonNull(capture.last);var mutation=txn.getMutations().stream().filter(x->x.getEntry().isPresent()).findFirst().orElseThrow();var row=mutation.getEntry().orElseThrow();
   check(row.toSealedForm().length()>3800 && row.toSealedForm().length()<=16384,PREFIX+"-genuine-record-exceeds-global-default");

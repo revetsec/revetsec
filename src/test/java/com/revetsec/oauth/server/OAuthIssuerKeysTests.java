@@ -69,7 +69,7 @@ final class OAuthIssuerKeysTests {
  private static final @NonNull String ISSUER="https://issuer.example/tenant";
  private static final @NonNull Duration PUBLIC_METADATA_HTTP_CACHE_MAX_AGE=Duration.ofSeconds(60);
  private static @NonNull OAuthIssuerSigningKey key(@NonNull String id,TestJwk.@NonNull Fixture fixture) {
-  return OAuthIssuerSigningKey.fromKeyPair(id,fixture.getPrivateKey(),fixture.getPublicKey());
+  return OAuthIssuerSigningKey.fromRsaKeyPair(id,fixture.getPrivateKey(),fixture.getPublicKey());
  }
  private static @NonNull OAuthIssuerKeySnapshot snapshot(@NonNull OAuthIssuerSigningKey key,@NonNull String generation,
    @NonNull Instant publication,@NonNull Map<@NonNull String,@NonNull PublicKey> keys,@NonNull Map<@NonNull String,@NonNull Instant> retirement) {
@@ -97,7 +97,7 @@ final class OAuthIssuerKeysTests {
  private static @NonNull DynamicTest test(@NonNull String name,@NonNull Executable call) { return DynamicTest.dynamicTest(name,call); }
  @Test void constructionDoesNotSignEncodeOrLookupAndDiagnosticsAreRedacted() {
   OpaquePrivate privateKey=new OpaquePrivate();
-  OAuthIssuerSigningKey key=OAuthIssuerSigningKey.fromKeyPair("private-identifier",privateKey,A.getPublicKey());
+  OAuthIssuerSigningKey key=OAuthIssuerSigningKey.fromRsaKeyPair("private-identifier",privateKey,A.getPublicKey());
   OAuthIssuerKeySnapshot snapshot=snapshot(key,"private-generation",NOW.minusSeconds(120),Map.of(),Map.of());
   AtomicInteger calls=new AtomicInteger();OAuthIssuerKeyLifecycle lifecycle=lifecycle(budget->{calls.incrementAndGet();return snapshot;},Clock.fixed(NOW,ZoneOffset.UTC));
   assertEquals(0,calls.get());assertEquals(0,privateKey.encodings);assertEquals("private-identifier",key.getKeyId());
@@ -188,7 +188,7 @@ final class OAuthIssuerKeysTests {
   supplied.n=BigInteger.ONE;supplied.e=BigInteger.ONE;assertEquals(before,OAuthIssuerPublicKeys.jwks(snapshot.getVerificationKeys()).toJson());
  }
  @Test void realPairMismatchFailsOnOperationAndWarmupWithoutCredentialRelease() {
-  var mismatch=OAuthIssuerSigningKey.fromKeyPair("a",A.getPrivateKey(),B.getPublicKey());var lifecycle=lifecycle(snapshot(mismatch,"g",NOW.minusSeconds(120),Map.of(),Map.of()));
+  var mismatch=OAuthIssuerSigningKey.fromRsaKeyPair("a",A.getPrivateKey(),B.getPublicKey());var lifecycle=lifecycle(snapshot(mismatch,"g",NOW.minusSeconds(120),Map.of(),Map.of()));
   unavailable(()->lifecycle.sign(claims(),NOW.plusSeconds(300),deadline()));unavailable(()->lifecycle.warmUp(deadline()));
  }
  @Test void independentOracleAndPublicJwksAgreeWithSignedToken() throws Exception {

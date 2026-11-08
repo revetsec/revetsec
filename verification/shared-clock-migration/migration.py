@@ -132,6 +132,10 @@ def validate_decision(value, *, verification=False):
         raise MigrationClosed('CORRUPT')
     for field in ['sourceSemanticCommitment', 'targetSemanticCommitment', 'rootCommitment']:
         if value[field] is not None:_id(value[field])
+    if value['sourceSemanticCommitment'] is not None:
+        prefixes={'TOTP':'totp:','WEBAUTHN':'wa1:','ISSUER':'revetsec:as:1:'}
+        if source['key'].startswith(prefixes[source['family']]) and value['kind']!=source['key'].split(':')[-2]:raise MigrationClosed('CORRUPT')
+        if source['retention'] is not None and value['permanent']!=(source['retention']=={'epochSecond':31556889864403199,'nano':0}):raise MigrationClosed('CORRUPT')
     for field in ['actualBytes', 'reservationBytes', 'sqlBytes']:_integer(value[field], 0, 350000)
     for field in ['openingKeyId', 'activeKeyId']:
         text = value[field]
@@ -142,6 +146,7 @@ def validate_decision(value, *, verification=False):
         raise MigrationClosed('CORRUPT')
     if required!=sorted(set(required)) or (value['openingKeyId'] is not None and value['openingKeyId'] not in required):raise MigrationClosed('CORRUPT')
     if value['classification'] == 'FIT':
+        if value['floor'] is None or value['retention']!=source['retention']:raise MigrationClosed('CORRUPT')
         if not required or value['openingKeyId'] is None or value['activeKeyId'] is None:raise MigrationClosed('CORRUPT')
         # A frame/root can advertise more parsed IDs while BLOCKED, but a
         # successful bounded pass retains the existing active+16 runtime limit.
@@ -174,6 +179,10 @@ def validate_batch(value):
     changed = replacements + deletions
     if len(expected) != len(predicates) or len({identity(x) for x in changed}) != len(changed):
         raise MigrationClosed('CORRUPT')
+    for group in [predicates,changed]:
+        addresses={(x['family'],x['scope'],x['key']) for x in group}
+        handles={(x['family'],x['scope'],x['handle']) for x in group}
+        if len(addresses)!=len(group) or len(handles)!=len(group):raise MigrationClosed('CORRUPT')
     if any(identity(x) not in expected for x in changed) or any(x != expected[identity(x)] for x in deletions):
         raise MigrationClosed('CORRUPT')
     if any(x['version'] == expected[identity(x)]['version'] or x['retention'] != expected[identity(x)]['retention'] for x in replacements):
@@ -272,6 +281,13 @@ def _reject_plaintext(value):
         for item in value:_reject_plaintext(item)
 
 
+class _ReconciliationContext(dict):
+    """In-process read authority for one exact uncertain file, never mutation."""
+    def __init__(self, journal, state, deadline):
+        super().__init__(Migration.context(state,deadline))
+        self.journal=journal;self.snapshot=copy.deepcopy(state);self.thread=threading.get_ident()
+
+
 class ProtectedJournal:
     """External-to-auth-DB, canonical CAS metadata and immutable ciphertext plans.
 
@@ -349,6 +365,14 @@ class ProtectedJournal:
             raise MigrationClosed('RECOVERY_REQUIRED')
         self.owner._migration_known=copy.deepcopy(value);return value
 
+    def _backend_state(self,context):
+        if not isinstance(context,_ReconciliationContext):return self.read()
+        self.owner.check()
+        if context.journal is not self or context.thread!=threading.get_ident() or dict(context)!=Migration.context(context.snapshot,context['deadline_ns']):raise MigrationClosed('CLOSED')
+        value=_validate_manifest(self._read('migration.json',65536))
+        if value!=context.snapshot:raise MigrationClosed('CONFLICT')
+        return value
+
     def provision(self,value,*,confirmed_new=False):
         value=_validate_manifest(value)
         if confirmed_new is not True or value['sequence']!=0 or value['phase']!='CLOSED' or self.owner._migration_known is not None:raise MigrationClosed('CLOSED')
@@ -359,6 +383,12 @@ class ProtectedJournal:
         with self.lock:
             if self.read()!=expected:raise MigrationClosed('CONFLICT')
             if proposed['sequence']!=expected['sequence']+1 or any(proposed[k]!=expected[k] for k in PINNED):raise MigrationClosed('CONFLICT')
+            if PHASES.index(expected['phase'])>=PHASES.index('PREPARED'):
+                prepared=('inventoryCommitment','inventoryCount','inventoryBlob','rootCommitment','capacityAndKeysCommitment','quotaBlob','decisionsBlob')
+                if any(proposed[k]!=expected[k] for k in prepared):raise MigrationClosed('CONFLICT')
+            pending=expected['progress'];following=proposed['progress']
+            if pending is not None and pending['kind']=='CLEANUP' and following is not None:
+                if any(following[k]!=pending[k] for k in ['kind','batchBlob','count']):raise MigrationClosed('CONFLICT')
             if not 0<=PHASES.index(proposed['phase'])-PHASES.index(expected['phase'])<=1:raise MigrationClosed('CLOSED')
             if expected['invalidated'] and not proposed['invalidated'] or expected['anyTargetWritten'] and not proposed['anyTargetWritten']:raise MigrationClosed('CLOSED')
             self._write('migration.json',proposed);self.owner._migration_known=copy.deepcopy(proposed)
@@ -412,10 +442,18 @@ class Migration:
     def inventory(self,deadline_ns):
         state=self.journal.read();self._check(state,deadline_ns)
         if state['phase']!='CLOSED' and not(state['phase']=='INVENTORIED' and state['reinventoryRequired']):raise MigrationClosed('CLOSED')
+        rows,snapshot=self._inventory_pages(state,deadline_ns,self.context(state,deadline_ns))
+        blob=self.journal.put_blob(rows);self._check(state,deadline_ns)
+        return self._change(state,phase='INVENTORIED',inventoryBlob=blob,inventoryCommitment=commitment({'snapshot':snapshot,'rows':rows}),inventoryCount=len(rows),reinventoryRequired=False)
+
+    def _inventory_pages(self,state,deadline_ns,context):
         cursor=None;rows=[];snapshot=None;seen_cursors=set()
         while True:
-            self._check(state,deadline_ns);page=self.backend.inventory(self.context(state,deadline_ns),cursor,16)
-            if type(page) is not dict or set(page)!={'rows','nextCursor','complete','snapshotCommitment'} or type(page['complete']) is not bool:raise MigrationClosed('CORRUPT')
+            self.journal.owner.check()
+            if self.elapsed()>=deadline_ns:raise MigrationClosed('DEADLINE')
+            if self.backend.assert_closed(context) is not True:raise MigrationClosed('CLOSED')
+            page=self.backend.inventory(context,cursor,16)
+            if type(page) is not dict or set(page)!={'rows','nextCursor','complete','snapshotCommitment'} or type(page['complete']) is not bool or type(page['rows']) is not list:raise MigrationClosed('CORRUPT')
             _id(page['snapshotCommitment'])
             if snapshot is None:snapshot=page['snapshotCommitment']
             if snapshot!=page['snapshotCommitment'] or len(page['rows'])>16:raise MigrationClosed('CONFLICT')
@@ -429,8 +467,12 @@ class Migration:
             seen_cursors.add(cursor)
         identities=[identity(x) for x in rows]
         if identities!=sorted(identities) or len(set(identities))!=len(rows) or not rows:raise MigrationClosed('CORRUPT')
-        blob=self.journal.put_blob(rows);self._check(state,deadline_ns)
-        return self._change(state,phase='INVENTORIED',inventoryBlob=blob,inventoryCommitment=commitment({'snapshot':snapshot,'rows':rows}),inventoryCount=len(rows),reinventoryRequired=False)
+        # A transport handle cannot split one physical address into multiple rows,
+        # or merge distinct addresses when the codec results are joined later.
+        addresses={(x['family'],x['scope'],x['key']) for x in rows}
+        handles={(x['family'],x['scope'],x['handle']) for x in rows}
+        if len(addresses)!=len(rows) or len(handles)!=len(rows) or any(x['family'] not in state['targetFormats'] for x in rows):raise MigrationClosed('CORRUPT')
+        return rows,snapshot
 
     def prepare(self,decisions,capacity_scopes,deadline_ns):
         state=self.journal.read();self._check(state,deadline_ns)
@@ -470,12 +512,31 @@ class Migration:
             return self._change(state,progress=None,reinventoryRequired=True,inventoryCommitment=None,inventoryBlob=None,inventoryCount=0)
         return self._change(state,progress=None,cursor=state['cursor']+progress['count'],anyTargetWritten=True)
 
+    def _pending_batch(self,state):
+        progress=state['progress']
+        batch=validate_batch(self.journal.get_blob(progress['batchBlob']))
+        if progress['count']!=len(batch['replacements'])+len(batch['deletions']):raise MigrationClosed('CORRUPT')
+        if progress['kind']=='REWRITE':
+            part=self._decisions(state)[state['cursor']:state['cursor']+8]
+            expected={'batchId':commitment({'migrationId':state['migrationId'],'cursor':state['cursor'],'decisions':part}),
+                      'predicates':[d['source'] for d in part],'replacements':[d['target'] for d in part],'deletions':[]}
+            if batch!=expected:raise MigrationClosed('CORRUPT')
+        elif progress['kind']=='CLEANUP':
+            try:
+                plan=self.journal.get_blob(batch['batchId'])
+                if type(plan) is not dict or set(plan)!={'migrationId','cleanup'} or plan['migrationId']!=state['migrationId']:raise MigrationClosed('CORRUPT')
+                _,expected=self._cleanup_plan(state,plan['cleanup'])
+                if batch!=expected:raise MigrationClosed('CORRUPT')
+            except (MigrationClosed,TypeError,KeyError):raise MigrationClosed('CORRUPT') from None
+        else:raise MigrationClosed('CORRUPT')
+        return batch
+
     def rewrite_next(self,deadline_ns):
         state=self.journal.read();self._check(state,deadline_ns)
         if state['phase'] not in ['PREPARED','REWRITING']:raise MigrationClosed('CLOSED')
         if state['progress'] is not None:
             if state['progress']['status']!='NO_EFFECT':raise MigrationClosed('UNKNOWN')
-            batch=self.journal.get_blob(state['progress']['batchBlob'])
+            batch=self._pending_batch(state)
             if state['progress']['kind']!='REWRITE':raise MigrationClosed('CLOSED')
         else:
             decisions=self._decisions(state);part=decisions[state['cursor']:state['cursor']+8]
@@ -488,23 +549,42 @@ class Migration:
     def settle(self,deadline_ns):
         state=self.journal.read();self._check(state,deadline_ns)
         if state['progress'] is None or state['progress']['status']!='PENDING' or state['progress']['kind']=='ACTIVATION':raise MigrationClosed('CLOSED')
-        batch=self.journal.get_blob(state['progress']['batchBlob']);observed=self.backend.read_batch(self.context(state,deadline_ns),batch)
+        batch=self._pending_batch(state);observed=self.backend.read_batch(self.context(state,deadline_ns),batch)
         if type(observed) is not dict or set(observed)!={'rows','settled'}:raise MigrationClosed('UNRESOLVED')
         outcome=settle_batch(batch,observed['rows'],observed['settled']);self._check(state,deadline_ns)
         return self._finish(state,outcome)
+
+    def _cleanup_plan(self,state,decisions):
+        if type(decisions) is not list:raise MigrationClosed('CLOSED')
+        rows=self.journal.get_blob(state['inventoryBlob']);decisions=[validate_decision(x) for x in decisions]
+        kinds={'INTERACTION','CODE','GRANT','ACCESS_TOKEN','REFRESH_TOKEN'}
+        if not 1<=len(decisions)<=8 or any(x['source'] not in rows or x['classification']!='WAIT_RETENTION' or x['permanent'] or x['retention'] is None or x['sourceSemanticCommitment'] is None or x['source']['family']!='ISSUER' or x['kind'] not in kinds or x['retention']!=x['source']['retention'] or x['retention']['epochSecond']>=31556889864403199 for x in decisions):raise MigrationClosed('CLOSED')
+        plan={'migrationId':state['migrationId'],'cleanup':decisions}
+        batch={'batchId':commitment(plan),'predicates':[x['source'] for x in decisions],'replacements':[],'deletions':[x['source'] for x in decisions]}
+        return plan,validate_batch(batch)
+
+    def bind_cleanup_plan(self,decisions,deadline_ns):
+        """Bind an older pending intent to its exact original committed report.
+
+        This acknowledges no outcome, supplies no time and dispatches no native
+        write. A substituted report cannot reproduce the saved batch identity.
+        """
+        state=self.journal.read();self._check(state,deadline_ns);progress=state['progress']
+        if state['phase']!='INVENTORIED' or progress is None or progress['kind']!='CLEANUP' or state['reinventoryRequired']:raise MigrationClosed('CLOSED')
+        saved=validate_batch(self.journal.get_blob(progress['batchBlob']));plan,batch=self._cleanup_plan(state,decisions)
+        if saved!=batch or progress['count']!=len(batch['deletions']):raise MigrationClosed('CORRUPT')
+        self.journal.put_blob(plan);self._check(state,deadline_ns)
+        return state
 
     def cleanup_waiting(self,decisions,witness,expected_database_admission,deadline_ns):
         state=self.journal.read();self._check(state,deadline_ns)
         if state['phase']!='INVENTORIED' or state['reinventoryRequired']:raise MigrationClosed('CLOSED')
         if state['progress'] is not None:
             if state['progress']['status']!='NO_EFFECT' or state['progress']['kind']!='CLEANUP':raise MigrationClosed('UNKNOWN')
-            batch=self.journal.get_blob(state['progress']['batchBlob'])
+            batch=self._pending_batch(state)
         else:
-            rows=self.journal.get_blob(state['inventoryBlob']);decisions=[validate_decision(x) for x in decisions]
-            if not 1<=len(decisions)<=8 or any(x['source'] not in rows or x['classification']!='WAIT_RETENTION' or x['permanent'] or x['retention'] is None or x['sourceSemanticCommitment'] is None or x['source']['family']!='ISSUER' or x['kind'] in ['ISSUER_STATE','SUBJECT_STATE'] or x['retention']!=x['source']['retention'] or x['retention']['epochSecond']>=31556889864403199 for x in decisions):raise MigrationClosed('CLOSED')
-            batch={'batchId':commitment({'migrationId':state['migrationId'],'cleanup':decisions}),
-                   'predicates':[x['source'] for x in decisions],'replacements':[],'deletions':[x['source'] for x in decisions]}
-            self.journal.put_blob({'cleanupDecisions':decisions})
+            plan,batch=self._cleanup_plan(state,decisions)
+            self.journal.put_blob(plan)
         if not isinstance(witness,Witness):raise MigrationClosed('BLOCKED_DEPENDENCY')
         witness.owner.check();observation=witness.administrative_sample(expected_database_admission,state['migrationId'],deadline_ns)
         if not isinstance(observation,AdministrativeObservation) or observation.migration_intent!=state['migrationId'] or observation.authority_id!=state['targetAdmission']['authorityId'] or observation.recovery_generation!=state['targetAdmission']['recoveryGeneration']:raise MigrationClosed('CLOSED')
@@ -569,13 +649,28 @@ class Migration:
         if known is not None and (state['sequence']<known['sequence'] or any(state[k]!=known[k] for k in PINNED)):
             raise MigrationClosed('RECOVERY_REQUIRED')
         if state['invalidated']:raise MigrationClosed('RECOVERY_REQUIRED')
-        context=self.context(state,deadline_ns)
+        context=_ReconciliationContext(self.journal,state,deadline_ns)
+        if state['progress'] is not None and state['progress']['kind']!='ACTIVATION':self._pending_batch(state)
         if state['phase']=='ACTIVE' or (state['progress'] and state['progress']['kind']=='ACTIVATION'):
             prepared=self._decisions(state);quotas=self.journal.get_blob(state['quotaBlob'])
             answer=self.backend.activation_state(context,state['activationCommitment'],[x['target'] for x in prepared],commitment(quotas))
-            if answer!={'status':'COMMITTED','settled':True}:raise MigrationClosed('UNRESOLVED')
+            allowed=['COMMITTED'] if state['phase']=='ACTIVE' else ['COMMITTED','NO_EFFECT']
+            if type(answer) is not dict or set(answer)!={'status','settled'} or answer['settled'] is not True or answer['status'] not in allowed:raise MigrationClosed('UNRESOLVED')
         else:
             if self.backend.assert_closed(context) is not True:raise MigrationClosed('CLOSED')
+            if state['inventoryBlob'] is not None and state['decisionsBlob'] is None:
+                expected=self.journal.get_blob(state['inventoryBlob']);cleanup=None
+                if state['progress'] is not None and state['progress']['kind']=='CLEANUP':
+                    batch=validate_batch(self.journal.get_blob(state['progress']['batchBlob']))
+                    observed=self.backend.read_batch(context,batch)
+                    cleanup=settle_batch(batch,observed['rows'],observed['settled'])
+                    if cleanup=='COMMITTED':
+                        deleted={identity(row) for row in batch['deletions']}
+                        expected=[row for row in expected if identity(row) not in deleted]
+                rows,snapshot=self._inventory_pages(state,deadline_ns,context)
+                if rows!=expected:raise MigrationClosed('CONFLICT')
+                if cleanup!='COMMITTED' and commitment({'snapshot':snapshot,'rows':rows})!=state['inventoryCommitment']:raise MigrationClosed('CONFLICT')
+                if cleanup=='COMMITTED' and hasattr(self.backend,'_metadata_bound') and self.backend._metadata_bound(context) is None:raise MigrationClosed('CONFLICT')
             if state['decisionsBlob'] is not None:
                 decisions=self._decisions(state)
                 pending=state['progress']

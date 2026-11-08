@@ -15,7 +15,12 @@
  */
 package example.passkeys;
 
+import com.revetsec.OperationBinding;
 import com.soklet.Request;
+import com.revetsec.webauthn.WebAuthnReauthentication;
+import com.revetsec.webauthn.WebAuthnStoreKey;
+import java.security.MessageDigest;
+import java.util.Arrays;
 import com.soklet.ResponseCookie;
 import java.security.SecureRandom;
 import java.time.Clock;
@@ -40,10 +45,18 @@ final class PasskeySessions {
     private final @NonNull Map<@NonNull String, @NonNull Session> entries = new LinkedHashMap<>();
     private final @NonNull Clock clock;
     private final int maximumSessions;
+    private final byte @NonNull [] accountHandle;
+    private final @NonNull String namespace;
+    private final @NonNull String relyingPartyId;
 
-    PasskeySessions(@NonNull Clock clock, int maximumSessions) {
+    PasskeySessions(@NonNull Clock clock, int maximumSessions,
+            byte @NonNull [] accountHandle, @NonNull String namespace, @NonNull String relyingPartyId) {
         if (maximumSessions < 1 || maximumSessions > 128) throw new IllegalArgumentException("Invalid session limit");
         this.clock = java.util.Objects.requireNonNull(clock);
+        WebAuthnStoreKey.forAccountFence(namespace, relyingPartyId, accountHandle);
+        this.accountHandle = accountHandle.clone();
+        this.namespace = namespace;
+        this.relyingPartyId = relyingPartyId;
         this.maximumSessions = maximumSessions;
     }
 
@@ -79,19 +92,123 @@ final class PasskeySessions {
         return replacement;
     }
 
-    synchronized boolean grantStepUp(@NonNull Session session) {
+    enum Action {
+        SENSITIVE("demo-sensitive-action"), SELF_REMOVAL("demo-remove-passkey");
+        final @NonNull String purpose;
+        Action(@NonNull String purpose) { this.purpose = purpose; }
+    }
+
+    synchronized @NonNull Optional<@NonNull PendingAction> pendingAction(
+            @NonNull Session session, @NonNull Action action, @NonNull String ceremonyId) {
         cleanup();
-        if (this.entries.get(session.id) != session || !session.authenticated) return false;
-        session.stepUpUntil = this.clock.instant().plus(STEP_UP_LIFETIME);
+        PendingAction pending = session.pending;
+        return currentAuthenticated(session) && pending != null && pending.owner == session
+                && pending.action == action && pending.ceremonyId.equals(ceremonyId)
+                ? Optional.of(pending) : Optional.empty();
+    }
+
+    synchronized boolean rememberAction(@NonNull Session session, @NonNull Action action,
+            byte @NonNull [] target, @NonNull String ceremonyId) {
+        cleanup();
+        if (!currentAuthenticated(session)) return false;
+        if (!ceremonyId.matches("[A-Za-z0-9_-]{43}") || target.length > 1023
+                || (action == Action.SENSITIVE ? target.length != 0 : target.length == 0))
+            throw new IllegalArgumentException("Invalid app action context");
+        session.pending = new PendingAction(session, action, target, ceremonyId,
+                this.accountHandle, this.namespace, this.relyingPartyId);
+        session.grant = null;
         return true;
     }
 
-    synchronized boolean consumeStepUp(@NonNull Session session) {
+    synchronized @NonNull Optional<@NonNull AuthorizedAction> completeAction(
+            @NonNull Session session, @NonNull PendingAction pending,
+            @NonNull WebAuthnReauthentication proof, @NonNull Object publicationId) {
         cleanup();
-        if (this.entries.get(session.id) != session || !session.authenticated) return false;
-        Instant deadline = session.stepUpUntil;
-        session.stepUpUntil = null;
-        return deadline != null && this.clock.instant().isBefore(deadline);
+        if (!currentAuthenticated(session) || session.pending != pending || pending.owner != session
+                || !this.namespace.equals(proof.getCredentialNamespace())
+                || !this.relyingPartyId.equals(proof.getRelyingPartyId())
+                || !pending.namespace.equals(proof.getCredentialNamespace())
+                || !pending.relyingPartyId.equals(proof.getRelyingPartyId())
+                || !pending.action.purpose.equals(proof.getActionPurpose())
+                || !pending.ceremonyId.equals(proof.getCeremonyId())) return Optional.empty();
+        byte[] handle = proof.getUserHandle();
+        try {
+            if (!MessageDigest.isEqual(this.accountHandle, handle)
+                    || !MessageDigest.isEqual(pending.accountHandle, handle)) return Optional.empty();
+        } finally { Arrays.fill(handle, (byte) 0); }
+        Instant deadline = this.clock.instant().plus(STEP_UP_LIFETIME);
+        if (session.expiresAt.isBefore(deadline)) deadline = session.expiresAt;
+        AuthorizedAction grant = new AuthorizedAction(pending, deadline, publicationId);
+        session.pending = null;
+        session.grant = grant;
+        return Optional.of(grant);
+    }
+
+    synchronized boolean consumeAction(@NonNull Session session, @NonNull Action action,
+            byte @NonNull [] target) {
+        AuthorizedAction grant = session.grant;
+        session.grant = null;
+        cleanup();
+        if (!currentAuthenticated(session) || grant == null) return false;
+        PendingAction context = grant.context;
+        return context.owner == session && context.action == action
+                && this.namespace.equals(context.namespace) && this.relyingPartyId.equals(context.relyingPartyId)
+                && MessageDigest.isEqual(this.accountHandle, context.accountHandle)
+                && MessageDigest.isEqual(target, context.target)
+                && this.clock.instant().isBefore(grant.expiresAt);
+    }
+
+    synchronized boolean publishable(@NonNull Session owner, @NonNull AuthorizedAction exactGrant) {
+        cleanup();
+        return currentAuthenticated(owner) && owner.grant == exactGrant
+                && this.clock.instant().isBefore(exactGrant.expiresAt);
+    }
+
+    synchronized void discardApproval(@NonNull Session owner, @NonNull AuthorizedAction exactGrant) {
+        if (owner.grant == exactGrant) owner.grant = null;
+        if (owner.pending == exactGrant.context) owner.pending = null;
+    }
+
+    synchronized void discardUnwrittenApproval(@NonNull Object publicationId) {
+        for (Session session : this.entries.values()) {
+            AuthorizedAction selected = session.grant;
+            if (selected != null && selected.publicationId.equals(publicationId))
+                discardApproval(session, selected);
+        }
+    }
+
+    private boolean currentAuthenticated(@NonNull Session session) {
+        return this.entries.get(session.id) == session && session.authenticated
+                && MessageDigest.isEqual(this.accountHandle, session.accountHandle);
+    }
+
+    static final class PendingAction {
+        final @NonNull Session owner;
+        final @NonNull Action action;
+        private final byte @NonNull [] target;
+        final @NonNull String ceremonyId;
+        private final byte @NonNull [] accountHandle;
+        private final @NonNull String namespace;
+        private final @NonNull String relyingPartyId;
+        private PendingAction(@NonNull Session owner, @NonNull Action action, byte @NonNull [] target,
+                @NonNull String ceremonyId, byte @NonNull [] accountHandle,
+                @NonNull String namespace, @NonNull String relyingPartyId) {
+            this.owner = owner; this.action = action; this.target = target.clone();
+            this.ceremonyId = ceremonyId; this.accountHandle = accountHandle.clone();
+            this.namespace = namespace; this.relyingPartyId = relyingPartyId;
+        }
+        @Override public @NonNull String toString() { return "PendingPasskeyAction{<redacted>}"; }
+    }
+
+    static final class AuthorizedAction {
+        private final @NonNull PendingAction context;
+        private final @NonNull Instant expiresAt;
+        private final @NonNull Object publicationId;
+        private AuthorizedAction(@NonNull PendingAction context, @NonNull Instant expiresAt,
+                @NonNull Object publicationId) {
+            this.context = context; this.expiresAt = expiresAt; this.publicationId = publicationId;
+        }
+        @Override public @NonNull String toString() { return "AuthorizedPasskeyAction{<redacted>}"; }
     }
 
     @NonNull ResponseCookie cookie(@NonNull Session session) {
@@ -100,8 +217,8 @@ final class PasskeySessions {
     }
 
     private @NonNull Session fresh(boolean authenticated) {
-        return new Session(randomId(), randomId(), randomId(),
-                this.clock.instant().plus(LIFETIME), authenticated);
+        return new Session(randomId(), randomId(), OperationBinding.fresh(),
+                this.clock.instant().plus(LIFETIME), authenticated, this.accountHandle);
     }
 
     private void cleanup() {
@@ -140,18 +257,21 @@ final class PasskeySessions {
     static final class Session {
         final @NonNull String id;
         final @NonNull String csrf;
-        final @NonNull String binding;
+        final @NonNull OperationBinding binding;
         final @NonNull Instant expiresAt;
         final boolean authenticated;
-        @Nullable Instant stepUpUntil;
+        private final byte @NonNull [] accountHandle;
+        private @Nullable PendingAction pending;
+        private @Nullable AuthorizedAction grant;
 
-        private Session(@NonNull String id, @NonNull String csrf, @NonNull String binding,
-                @NonNull Instant expiresAt, boolean authenticated) {
+        private Session(@NonNull String id, @NonNull String csrf, @NonNull OperationBinding binding,
+                @NonNull Instant expiresAt, boolean authenticated, byte @NonNull [] accountHandle) {
             this.id = id;
             this.csrf = csrf;
             this.binding = binding;
             this.expiresAt = expiresAt;
             this.authenticated = authenticated;
+            this.accountHandle = accountHandle.clone();
         }
 
         @Override public @NonNull String toString() { return "PasskeySession{<redacted>}"; }

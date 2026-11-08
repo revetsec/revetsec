@@ -105,6 +105,7 @@ final class ScriptedTotpStore implements TotpStore {
 		for(TotpStoreKey key:keys)
 			if(!this.namespace.equals(key.getCredentialNamespace()) || !this.epoch.equals(key.getRecoveryEpoch()))
 				return TotpStoreReadResult.Fenced.get();
+		if(missingEstablishedRoot())return TotpStoreReadResult.Unavailable.get();
 		Map<TotpStoreKey,TotpStoreEntry> entries=new HashMap<>();
 		for(TotpStoreKey key:keys) {
 			TotpStoreRecord record=this.records.get(key);
@@ -116,6 +117,7 @@ final class ScriptedTotpStore implements TotpStore {
 	@Override public synchronized @NonNull TotpStoreCommitReceipt compareAndCommit(@NonNull TotpStoreWrite write,
 			@NonNull Duration budget) {
 		if(badBudget(budget))return refuse(TotpStoreCommitResult.UNAVAILABLE);
+		if(missingEstablishedRoot())return refuse(TotpStoreCommitResult.UNAVAILABLE);
 		StoreTemporalCondition condition=write.getTemporalCondition();
 		if(!this.namespace.equals(write.getCredentialNamespace()) || !this.epoch.equals(write.getRecoveryEpoch())
 				|| !StoreTimeRules.sameAdmission(this.admission,condition.getAdmission())
@@ -142,6 +144,10 @@ final class ScriptedTotpStore implements TotpStore {
 		this.records.clear();this.records.putAll(projected);
 		if(write.getPurpose()==TotpStoreWrite.Purpose.INITIALIZE_NAMESPACE)this.initialized=true;
 		return TotpStoreCommitReceipt.fromCommittedTiming(StoreCommitTiming.fromTimes(validated,null));
+	}
+	private boolean missingEstablishedRoot(){
+		if(this.records.containsKey(TotpStoreKey.forNamespace(this.namespace,this.epoch)))return false;
+		return this.initialized || this.records.keySet().stream().anyMatch(key->key.getRecoveryEpoch().equals(this.epoch));
 	}
 	private boolean timeAvailable() {return this.healthy && !this.time.isBefore(this.lastPublished);}
 	private StoreTimeObservation.@NonNull Healthy observation() {

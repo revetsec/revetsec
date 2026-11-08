@@ -52,6 +52,11 @@ An expired, unsettled or uncertain attempt reservation remains conservatively ch
 
 The TOTP algorithm and once-only acceptance follow [RFC 6238](https://www.rfc-editor.org/rfc/rfc6238.html). Provisioning follows the [authenticator key URI format](https://github.com/google/google-authenticator/wiki/Key-Uri-Format). The code remains a `String` to preserve leading zeros. Recovery input has its own bounded ASCII parser; Unicode lookalikes and ambiguous symbols are rejected.
 
+Provisioning display labels retain the issuer limit of 128 UTF-16 units and account-name limit of 256 code points. Both reject colons, ISO controls, Unicode format characters, line/paragraph separators and leading/trailing Unicode whitespace. Rejecting all format characters is a conservative display policy that can exclude legitimate joining characters; use an approved alternate display label when needed. Ordinary Unicode letters and combining sequences are retained exactly, without normalization or truncation. Character categories and whitespace follow the running JDK's Unicode tables; this is not a pinned universal Unicode display or confusable-analysis profile. These restrictions do not prove that a label is visually unique or establish account identity.
+
+The complete URI is limited to **512 ASCII bytes after UTF-8 percent encoding**, including both copies of the issuer, the 32-character Base32 secret and all parameters. An individually valid issuer/account-name pair may exceed this combined limit. `beginEnrollmentResult` throws a fixed `IllegalArgumentException` before recovery admission, storage or entropy in that case. Choose a shorter approved display label; do not shorten the account identifier. This is a library rendering budget, not a maximum specified by the key-URI format or a universal authenticator acceptance guarantee. QR generation remains local and application-owned; select an error-correction level, quiet zone, module size and supported target profile that fit the chosen renderer. Local renderer roundtrips establish byte fidelity and capacity only. Real QR/manual enrollment and subsequent codes still need evidence on the application's selected authenticator devices and versions.
+
+
 ## Enrollment and management
 
 ```java
@@ -63,7 +68,7 @@ TotpEnrollmentRequestResult result =
     totp.beginEnrollmentResult(options, browserBinding);
 ```
 
-The app obtains `accountId`, label and unpredictable `browserBinding` from approved server-side state. Replacement is explicit: add `.replacingFactorId(expectedFactorId)` from the authorized management snapshot. Starting replacement leaves the existing factor and recovery batch usable. Confirmation atomically consumes the pending enrollment, installs the new factor and recovery batch, and initializes the accepted-step high-water mark.
+The app obtains `accountId`, label and unpredictable `OperationBinding` from approved server-side state. Generate a new canonical value with `OperationBinding.fresh()` or restore the exact protected value with `OperationBinding.fromTrustedPersistence`; never use that factory on a submitted cookie or form value. Replacement is explicit: add `.replacingFactorId(expectedFactorId)` from the authorized management snapshot. Starting replacement leaves the existing factor and recovery batch usable. Confirmation atomically consumes the pending enrollment, installs the new factor and recovery batch, and initializes the accepted-step high-water mark.
 
 Only `Prepared` releases a `TotpEnrollment`. Its enrollment ID, future factor ID and expiry can be retained against the approved browser session before releasing the setup secret. `getProvisioningUri()` and `getManualEntryKey()` deliberately expose secrets. Render QR codes locally with application-owned code. Do not send provisioning data to a third-party QR service, log it, persist it in browser storage or include it in telemetry. There is no accessor for retrieving an active factor's secret later.
 
@@ -97,7 +102,7 @@ RecoveryCodeUseResult recovery = totp.consumeRecoveryCodeResult(
     accountId, submittedRecoveryCode, pendingLoginBinding);
 ```
 
-The server-owned operation binding identifies the current pending login or approved reauthentication action. The application gives primary-authenticated pending logins a short fixed expiry, does not extend it after code failures, and rejects expired or previously consumed state at both code admission and session completion. A successful result echoes the binding for the application's comparison. This is orchestration: an OTP is not cryptographically bound to a browser, purpose or site.
+The server-owned [`OperationBinding`](https://javadoc.revetsec.com/com/revetsec/OperationBinding.html) identifies the current pending login or approved reauthentication action. Its trusted-restoration profile preserves the existing TOTP rule: nonempty, well-formed UTF-16 through 1,024 Java code units. The application gives primary-authenticated pending logins a short fixed expiry, does not extend it after code failures, and rejects expired or previously consumed state at both code admission and session completion. A successful result echoes the binding for the application's comparison. This is orchestration: an OTP is not cryptographically bound to a browser, purpose or site, and the carrier does not promise freshness, uniqueness, permission or one-use behavior.
 
 A TOTP success commits the accepted step before releasing `TotpVerification`; the same or any older step cannot succeed again. If several permitted steps happen to generate the same code, reject ambiguity rather than selecting a newer step around replay protection. Factor replacement/removal races participate in the same atomic predicates.
 

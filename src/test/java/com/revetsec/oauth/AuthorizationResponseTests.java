@@ -159,6 +159,17 @@ final class AuthorizationResponseTests {
 		assertThrows(NullPointerException.class, () -> parsed(AuthorizationResponse.fromFormBodyResult(null, List.of("application/x-www-form-urlencoded"), null)));
 	}
 
+	// Absolute syntax intentionally grants no navigation or outbound authorization.
+	@Test
+	void absoluteErrorUrisRemainUntrustedDataRatherThanNavigationPermission() {
+		for (String uri : List.of("javascript:alert(1)", "data:text/plain,untrusted", "http://elsewhere.example/help", "https://user:pass@elsewhere.example:8443/help#fragment")) {
+			AuthorizationResponse response = parsed(AuthorizationResponse.fromParametersResult(
+				Map.of("state", List.of("s"), "error", List.of("access_denied"), "error_uri", List.of(uri)), null, AuthorizationRequestOptions.ResponseMode.QUERY));
+			assertEquals(java.net.URI.create(uri), response.getErrorUri().orElseThrow());
+			assertFalse(response.toString().contains(uri));
+		}
+	}
+
 	@Test
 	void malformedErrorUrisAreRejectedDuringParsingAndAccessorsOnlyRepresentPresence() {
 		for (String uri : List.of("relative", "https://[", "%")) {

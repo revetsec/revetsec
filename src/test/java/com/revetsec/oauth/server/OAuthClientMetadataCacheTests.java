@@ -573,7 +573,7 @@ final class OAuthClientMetadataCacheTests {
                                                     r
                                                             != OAuthClientMetadataCacheException
                                                                     .Reason.INTERRUPTED,
-                                                    e.isTransient());
+                                                    e.isTemporaryCondition());
                                             assertNull(e.getCause());
                                             e.addSuppressed(
                                                     new IllegalArgumentException("private-value"));

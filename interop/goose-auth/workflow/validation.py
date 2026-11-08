@@ -5,7 +5,9 @@ def validate(report,delay):
     events=report.get('events',[]);checks=[]
     def add(name,value):checks.append(dict(name=name,status='PASS' if value else 'FAIL'))
     def true(row,keys):return all(row.get(k) is True for k in keys)
-    auth=[e for e in events if e.get('kind')=='AUTHORIZE']
+    auth=[e for e in events if e.get('kind')=='AUTHORIZE' and e.get('resumedAfterBootstrap') is not True]
+    resumed=[e for e in events if e.get('kind')=='AUTHORIZE' and e.get('resumedAfterBootstrap') is True]
+    bootstrap=[e for e in events if e.get('kind')=='BOOTSTRAP']
     codes=[e for e in events if e.get('kind')=='TOKEN' and e.get('codeGrant') is True and e.get('status')==200]
     refresh=[e for e in events if e.get('kind')=='TOKEN' and e.get('refreshGrant') is True and e.get('status')==200]
     cimd=[e for e in events if e.get('kind')=='CIMD']
@@ -17,6 +19,8 @@ def validate(report,delay):
     unauthorized=[e for e in mcp if e.get('status')==401]
     add('real-resource-and-issuer-discovery-after-challenge',bool(unauthorized) and all(any(e.get('kind')=='METADATA' and e.get('metadataKind')==kind and e.get('status')==200 and e.get('ordinal',-1)>unauthorized[0].get('ordinal',10**12) for e in events) for kind in ['PROTECTED_RESOURCE','AUTH_SERVER']))
     add('two-native-cimd-s256-resource-authorizations',len(auth)==2 and all(true(e,['cimdClient','exactResource','s256','exactCallback','scopesDiscover','onlyKnownScopes']) for e in auth) and auth[0].get('scopesWhoami') is False and auth[1].get('scopesWhoami') is True)
+    login=[e for e in events if e.get('kind')=='LOGIN' and e.get('method')=='POST' and e.get('status')==303]
+    add('explicit-original-same-origin-browser-session-bootstrap',report.get('browserBootstrap')==dict(count=1,originalForm=True,sameOrigin=True,methodPost=True) and len(bootstrap)==1 and len(resumed)==1 and len(auth)==2 and bool(login) and bootstrap[0].get('status')==303 and bootstrap[0].get('method')=='POST' and true(bootstrap[0],['originMatches','exactBeginBody','originalAuthorizationQuery','noPriorCookie','noAuthorization','secureHttpOnlySessionCookie']) and auth[0].get('ordinal',10**12)<bootstrap[0].get('ordinal',-1)<resumed[0].get('ordinal',-1)<login[0].get('ordinal',-1) and all(resumed[0].get(k)==auth[0].get(k) for k in ['cimdClient','exactResource','s256','exactCallback','scopesDiscover','scopesWhoami','onlyKnownScopes']))
     add('real-browser-login-two-consents-and-native-callbacks',report.get('realBrowserLogin') is True and report.get('realBrowserConsent') is True and report.get('browserOpenCount')==2 and report.get('callback',{}).get('count')==2 and report.get('callback',{}).get('noReferrer') is True and report.get('consentApprovals')==[dict(discover=True,whoami=False,exactResource=True,exactCallback=True),dict(discover=True,whoami=True,exactResource=True,exactCallback=True)])
     prepared=[e for e in events if e.get('kind')=='CONSENT' and e.get('method')=='POST' and e.get('status')==303]
     add('issuer-and-actual-return-bind-both-browser-redirects',len(prepared)==2 and all(true(e,['codeInPreparedRedirect','issuerBoundResponse','redirectMatchesAuthorization']) for e in prepared))

@@ -7,12 +7,15 @@ import { runInNewContext } from "node:vm";
 const source = await readFile(new URL("./src/main/resources/passkeys/app.js", import.meta.url), "utf8");
 const copy = (value) => JSON.parse(JSON.stringify(value));
 
-function browserPage({ checked, creation }) {
+function browserPage({ checked, creation, cancelled = false }) {
   const elements = new Map();
   function element(id) {
     if (!elements.has(id)) elements.set(id, {
       checked: id === "security-key" && checked, value: "demo-management-approval",
-      textContent: "", listeners: new Map(),
+      textContent: "", listeners: new Map(), children: [], removed: false,
+      append(...children) { this.children.push(...children); },
+      replaceChildren() { this.children = []; },
+      remove() { this.removed = true; },
       addEventListener(event, listener) { this.listeners.set(event, listener); }
     });
     return elements.get(id);
@@ -37,18 +40,18 @@ function browserPage({ checked, creation }) {
   };
   runInNewContext(source, {
     document: { body: { dataset: { csrf: "test-csrf", authenticated: "true" } },
-      getElementById: element },
+      getElementById: element, createElement: (tag) => element(Symbol(tag)) },
     window: { PublicKeyCredential, location: { reload() { reloads++; } } },
     PublicKeyCredential, DOMException,
     navigator: { credentials: {
       async create(options) { browserCalls.push({ method: "create", options: copy(options) }); return credential; },
-      async get(options) { browserCalls.push({ method: "get", options: copy(options) }); return credential; }
+      async get(options) { browserCalls.push({ method: "get", options: copy(options) }); if (cancelled) throw new DOMException("Test-only cancel", "NotAllowedError"); return credential; }
     } },
     async fetch(path, options) {
       requests.push({ path, options: copy(options) });
       return { ok: true,
-        async json() { return { ceremonyId: "test-ceremony", publicKey: copy(originalOptions) }; },
-        async text() { return "Ceremony completed."; }
+        async json() { return path === "/credentials/list" ? { credentialIds: ["AQID"] } : { ceremonyId: "test-ceremony", publicKey: copy(originalOptions) }; },
+        async text() { return path.endsWith("remove") ? "Passkey removed." : "Ceremony completed."; }
       };
     }
   });
@@ -57,6 +60,12 @@ function browserPage({ checked, creation }) {
     async click(id) {
       await element(id).listeners.get("click")();
       assert.equal(element("status").textContent, "Ceremony completed.");
+    },
+    async removeCredential(recovery = false) {
+      await element("list").listeners.get("click")();
+      const item = element("credentials").children[0];
+      await item.children[recovery ? 2 : 1].listeners.get("click")();
+      return { removed: item.removed, status: element("status").textContent };
     },
     get reloads() { return reloads; }
   };
@@ -96,4 +105,32 @@ test("physical-key sign-in and reauthentication use only the security-key hint",
     assert.deepEqual(page.requests.map(({ path }) => path), [start, finish]);
     assert.equal(page.reloads, button === "sign-in" ? 1 : 0);
   }
+});
+
+
+test("self-service removal uses selected reauthentication without management authority", async () => {
+  const page = browserPage({ checked: false, creation: false });
+  const outcome = await page.removeCredential();
+  assert.deepEqual(outcome, { removed: true, status: "Passkey removed." });
+  assert.deepEqual(page.requests.map(({ path }) => path), ["/credentials/list",
+    "/credentials/self-remove/start", "/credentials/self-remove/finish", "/credentials/self-remove"]);
+  for (const { options } of page.requests) assert.equal("X-Demo-Access-Key" in options.headers, false);
+  assert.equal(page.requests[1].options.headers["X-Credential-Id"], "AQID");
+  assert.equal(page.requests[3].options.headers["X-Credential-Id"], "AQID");
+  assert.deepEqual(JSON.parse(page.requests[2].options.body), { type: "public-key", id: "AQID" });
+});
+
+test("cancelled self-service reauthentication cannot remove or fall back to management", async () => {
+  const page = browserPage({ checked: false, creation: false, cancelled: true });
+  assert.deepEqual(await page.removeCredential(), { removed: false, status: "Browser ceremony cancelled." });
+  assert.deepEqual(page.requests.map(({ path }) => path), ["/credentials/list", "/credentials/self-remove/start"]);
+  for (const { options } of page.requests) assert.equal("X-Demo-Access-Key" in options.headers, false);
+});
+
+test("explicit management recovery removal retains its separate approval key", async () => {
+  const page = browserPage({ checked: false, creation: false });
+  assert.deepEqual(await page.removeCredential(true), { removed: true, status: "Passkey removed." });
+  assert.deepEqual(page.requests.map(({ path }) => path), ["/credentials/list", "/credentials/remove"]);
+  assert.equal(page.requests[1].options.headers["X-Demo-Access-Key"], "demo-management-approval");
+  assert.equal(page.browserCalls.length, 0);
 });

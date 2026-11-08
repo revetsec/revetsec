@@ -15,6 +15,7 @@
  */
 package example.pending;
 
+import com.revetsec.OperationBinding;
 import com.revetsec.SealingKey;
 import com.revetsec.StateSealer;
 import com.revetsec.totp.RecoveryCodeUse;
@@ -74,8 +75,8 @@ import static java.util.Objects.requireNonNull;
 public final class TotpFlowProbe {
     private static final @NonNull String NAMESPACE = "fixture_totp_flow";
     private static final @NonNull String ACCOUNT = "fixture-account";
-    private static final @NonNull String BROWSER = "fixture-browser-binding";
-    private static final @NonNull String LOGIN = "fixture-login-binding";
+    private static final @NonNull OperationBinding BROWSER = OperationBinding.fromTrustedPersistence("fixture-browser-binding");
+    private static final @NonNull OperationBinding LOGIN = OperationBinding.fromTrustedPersistence("fixture-login-binding");
     private static final @NonNull String KEY_ID = "fixture";
 
     private TotpFlowProbe() { }
@@ -206,9 +207,9 @@ public final class TotpFlowProbe {
     }
 
     private static void checkProof(@NonNull String namespace, @NonNull String epoch,
-            @NonNull String account, @NonNull String binding, @NonNull TotpAuthenticator totp) {
+            @NonNull String account, @NonNull OperationBinding binding, @NonNull TotpAuthenticator totp) {
         if (!NAMESPACE.equals(namespace) || !totp.getRecoveryEpoch().equals(epoch)
-                || !ACCOUNT.equals(account) || !LOGIN.equals(binding))
+                || !ACCOUNT.equals(account) || !LOGIN.toSecretString().equals(binding.toSecretString()))
             throw new IllegalStateException("Unexpected TOTP proof binding");
     }
 

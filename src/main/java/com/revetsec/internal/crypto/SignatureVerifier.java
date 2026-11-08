@@ -28,6 +28,7 @@ import java.security.interfaces.EdECPublicKey;
 import java.security.interfaces.RSAPublicKey;
 import java.security.spec.AlgorithmParameterSpec;
 import java.util.Optional;
+import java.util.Arrays;
 
 import static java.util.Objects.requireNonNull;
 
@@ -150,7 +151,9 @@ public final class SignatureVerifier {
 			return VerifyResult.PROVIDER_FAILURE;
 		}
 
-		return verify(hash.getEcdsaSignatureName(), null, key, message, EcdsaSignatures.toDer(curve, signature));
+		byte[] der = EcdsaSignatures.toDer(curve, signature);
+		try { return verify(hash.getEcdsaSignatureName(), null, key, message, der); }
+		finally { Arrays.fill(der, (byte) 0); }
 	}
 
 	/**

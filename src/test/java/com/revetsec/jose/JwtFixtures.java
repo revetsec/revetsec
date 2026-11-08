@@ -154,7 +154,7 @@ final class JwtFixtures {
 		Assertions.assertEquals(reason.category(), exception.getCategory());
 		Assertions.assertEquals(reason.message(), exception.getMessage());
 		Assertions.assertNull(exception.getCause());
-		Assertions.assertFalse(exception.isTransient());
+		Assertions.assertFalse(exception.isTemporaryCondition());
 	}
 
 	/**

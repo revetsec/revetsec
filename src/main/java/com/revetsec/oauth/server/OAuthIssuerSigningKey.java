@@ -48,7 +48,7 @@ public final class OAuthIssuerSigningKey {
   * @since 1.0.0
   */
  @CheckReturnValue
- public static @NonNull OAuthIssuerSigningKey fromKeyPair(@NonNull String keyId, @NonNull PrivateKey privateKey,
+ public static @NonNull OAuthIssuerSigningKey fromRsaKeyPair(@NonNull String keyId, @NonNull PrivateKey privateKey,
    @NonNull PublicKey publicKey) {
   return new OAuthIssuerSigningKey(OAuthServerConfiguration.text(keyId,256),
    JwsSigner.fromRsaKeyPair(privateKey,publicKey,JwsAlgorithm.RS256));

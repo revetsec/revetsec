@@ -24,6 +24,8 @@ import java.util.Set;
 /**
  * Issuer-created grant facts supplied to the application's continuing authorization policy.
  * This type has no application factory or builder and contains no raw code or refresh credential.
+ * Policies must deny any grant type they do not recognize, including types added in a later release.
+ * Future client-credentials issuance uses a separate policy interface and namespaced client subjects.
  * The grant management handle is sensitive; release it only to trusted application management code.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
@@ -68,7 +70,8 @@ public final class OAuthGrantContext {
 	 */
 	public @NonNull String getClientId() { return this.clientId; }
 	/**
-	 * Returns the authorization_code or refresh_token operation being checked.
+	 * Returns the operation being checked, currently authorization_code or refresh_token.
+	 * Policies must deny unrecognized types, including future additions.
 	 * @return the configured value
 	 * @since 1.0.0
 	 */

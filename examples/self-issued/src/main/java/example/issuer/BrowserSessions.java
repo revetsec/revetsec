@@ -15,6 +15,7 @@
  */
 package example.issuer;
 
+import com.revetsec.BrowserBinding;
 import com.soklet.Request;
 import com.soklet.ResponseCookie;
 import java.time.Clock;
@@ -43,7 +44,7 @@ final class BrowserSessions implements BrowserSessionStore {
     @Override public synchronized @NonNull Session begin() {
         cleanup();
         if(entries.size()>=capacity) throw new IllegalStateException("Session store full.");
-        Session s=new Session(LocalInputs.randomId(),LocalInputs.randomId(),LocalInputs.randomId(),clock.instant().plus(LIFETIME));
+        Session s=new Session(LocalInputs.randomId(),LocalInputs.randomId(),BrowserBinding.fresh(),clock.instant().plus(LIFETIME));
         entries.put(s.id,s);return s;
     }
     @Override public synchronized @NonNull Optional<@NonNull Session> find(@NonNull Request request) {
@@ -76,11 +77,12 @@ final class BrowserSessions implements BrowserSessionStore {
         @Override public @NonNull String toString() {return "IssuerPending{<redacted>}";}
     }
     static final class Session {
-        final String id,csrf,binding;
+        final String id,csrf;
+        final BrowserBinding binding;
         final Instant expires;
         volatile boolean authenticated;
         final AtomicReference<@Nullable Pending> pending=new AtomicReference<>();
-        Session(@NonNull String id,@NonNull String csrf,@NonNull String binding,@NonNull Instant expires) {
+        Session(@NonNull String id,@NonNull String csrf,@NonNull BrowserBinding binding,@NonNull Instant expires) {
             this.id=id;this.csrf=csrf;this.binding=binding;this.expires=expires;
         }
         @Override public @NonNull String toString() {return "IssuerSession{<redacted>}";}

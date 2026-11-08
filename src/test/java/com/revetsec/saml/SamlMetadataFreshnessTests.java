@@ -15,6 +15,8 @@
  */
 package com.revetsec.saml;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.internal.pem.Pem;
 import com.revetsec.internal.xml.SamlXmlWriter;
 import com.revetsec.internal.xml.SecureXmlParser;
@@ -50,7 +52,7 @@ final class SamlMetadataFreshnessTests {
     static final Clock FIXED = Clock.fixed(NOW, ZoneOffset.UTC);
     static final String MD = "urn:oasis:names:tc:SAML:2.0:metadata";
 
-    @TestFactory Stream<DynamicTest> pinnedMetadataMustStillBeCurrentAtReturn() {
+    @TestFactory @NonNull Stream<@NonNull DynamicTest> pinnedMetadataMustStillBeCurrentAtReturn() {
         return Stream.of(0, 1, 2).flatMap(scope -> Stream.of(-1, 0, 1, 2, 3).map(boundary ->
                 DynamicTest.dynamicTest("scope=" + scope + " boundary=" + boundary, () -> {
             byte[] signed = fixture(scope, scope == 0 ? END.toString() : null,
@@ -67,7 +69,7 @@ final class SamlMetadataFreshnessTests {
         })));
     }
 
-    @TestFactory Stream<DynamicTest> existingPinnedOverloadRetainsApplicationManagedUndatedMetadata() {
+    @TestFactory @NonNull Stream<@NonNull DynamicTest> existingPinnedOverloadRetainsApplicationManagedUndatedMetadata() {
         return Stream.of(0, 1, 2).map(scope -> DynamicTest.dynamicTest("undated scope=" + scope, () -> {
             var metadata = assertInstanceOf(SamlIdentityProviderMetadataResult.Parsed.class,
                     SamlIdentityProviderMetadata.fromXmlResult(fixture(scope, null, null, null), ENTITY, FIXED, keys())).getMetadata();
@@ -106,7 +108,7 @@ final class SamlMetadataFreshnessTests {
         assertEquals(1, clock.reads.get());
     }
 
-    static byte[] fixture(int scope, @Nullable String entityLimit, @Nullable String roleLimit,
+    static byte @NonNull [] fixture(int scope, @Nullable String entityLimit, @Nullable String roleLimit,
             @Nullable String aggregateLimit) throws Exception {
         String entity = "<md:EntityDescriptor xmlns:md='" + MD + "' xmlns:ds='http://www.w3.org/2000/09/xmldsig#' ID='_entity' entityID='" + ENTITY + "'" + until(entityLimit) + ">"
                 + "<md:IDPSSODescriptor protocolSupportEnumeration='urn:oasis:names:tc:SAML:2.0:protocol'" + until(roleLimit) + ">"
@@ -132,22 +134,22 @@ final class SamlMetadataFreshnessTests {
         factory.newXMLSignature(info, null).sign(context);
         return SamlXmlWriter.serialize(document);
     }
-    static List<PublicKey> keys() throws Exception { return List.of(Pem.parseCertificate(resource("idp-signing-rsa-2048-cert.pem")).getPublicKey()); }
-    static String certificate() throws Exception { return resource("idp-signing-rsa-2048-cert.pem").replaceAll("-----[^-]+-----", "").replaceAll("\\s", ""); }
-    static String resource(String name) throws Exception {
+    static @NonNull List<@NonNull PublicKey> keys() throws Exception { return List.of(Pem.parseCertificate(resource("idp-signing-rsa-2048-cert.pem")).getPublicKey()); }
+    static @NonNull String certificate() throws Exception { return resource("idp-signing-rsa-2048-cert.pem").replaceAll("-----[^-]+-----", "").replaceAll("\\s", ""); }
+    static @NonNull String resource(@NonNull String name) throws Exception {
         try (var input = SamlMetadataFreshnessTests.class.getResourceAsStream("/fixtures/keys/" + name)) {
             return new String(java.util.Objects.requireNonNull(input).readAllBytes(), StandardCharsets.US_ASCII);
         }
     }
-    private static String until(@Nullable String text) { return text == null ? "" : " validUntil='" + text + "'"; }
+    private static @NonNull String until(@Nullable String text) { return text == null ? "" : " validUntil='" + text + "'"; }
     static final class CompletionClock extends Clock {
         final AtomicInteger reads = new AtomicInteger();
         private final Instant finish;
         private final boolean fail;
-        CompletionClock(Instant finish, boolean fail) { this.finish = finish; this.fail = fail; }
-        @Override public ZoneId getZone() { return ZoneOffset.UTC; }
-        @Override public Clock withZone(ZoneId zone) { return this; }
-        @Override public Instant instant() {
+        CompletionClock(@NonNull Instant finish, boolean fail) { this.finish = finish; this.fail = fail; }
+        @Override public @NonNull ZoneId getZone() { return ZoneOffset.UTC; }
+        @Override public @NonNull Clock withZone(@NonNull ZoneId zone) { return this; }
+        @Override public @NonNull Instant instant() {
             if (reads.getAndIncrement() == 0) return NOW;
             if (fail) throw new IllegalStateException("clock unavailable");
             return finish;

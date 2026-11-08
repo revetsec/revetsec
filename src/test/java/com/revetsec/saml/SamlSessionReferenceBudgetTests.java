@@ -15,6 +15,8 @@
  */
 package com.revetsec.saml;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.StateSealer;
 import com.revetsec.testing.TestJwk;
 import com.revetsec.testing.TestSealers;
@@ -44,7 +46,7 @@ final class SamlSessionReferenceBudgetTests {
     private static final URI ACS = URI.create("https://sp.example.test/acs");
     private static final TestJwk.Fixture KEY = TestJwk.Fixture.IDP_SIGNING_RSA_2048;
 
-    @TestFactory Stream<DynamicTest> acceptedSignedIdentitiesRetainTheirFullReference() {
+    @TestFactory @NonNull Stream<@NonNull DynamicTest> acceptedSignedIdentitiesRetainTheirFullReference() {
         return Stream.of("ASCII", "BMP", "supplementary").flatMap(alphabet ->
                 Stream.of("response", "assertion", "both").map(coverage -> DynamicTest.dynamicTest(
                         alphabet + "; " + coverage, () -> {
@@ -87,7 +89,7 @@ final class SamlSessionReferenceBudgetTests {
                         })));
     }
 
-    @TestFactory Stream<DynamicTest> canonicalEnvelopeCoversTheFieldProfile() {
+    @TestFactory @NonNull Stream<@NonNull DynamicTest> canonicalEnvelopeCoversTheFieldProfile() {
         return Stream.of("ASCII", "BMP", "supplementary").map(alphabet -> DynamicTest.dynamicTest(alphabet, () -> {
             SamlSessionReference reference = maximum(alphabet, Instant.MAX);
             String serialized = assertDoesNotThrow(reference::toSerializedForm);
@@ -107,7 +109,7 @@ final class SamlSessionReferenceBudgetTests {
         }
     }
 
-    @TestFactory Stream<DynamicTest> restoredFieldsStillEnforceTheirIndividualLimits() {
+    @TestFactory @NonNull Stream<@NonNull DynamicTest> restoredFieldsStillEnforceTheirIndividualLimits() {
         List<DynamicTest> tests = new ArrayList<>();
         String valid = maximum("ASCII", Instant.MAX).toSerializedForm();
         int[] limits = {256, 2048, 4096, 2048, 2048, 2048, 2048, 2048};
@@ -146,12 +148,12 @@ final class SamlSessionReferenceBudgetTests {
         if (fixture != null) Files.writeString(Path.of(fixture), sealed + "\n", StandardCharsets.US_ASCII);
     }
 
-    static SamlSessionReference maximum(String alphabet, Instant end) {
+    static @NonNull SamlSessionReference maximum(@NonNull String alphabet, @NonNull Instant end) {
         String optional = fill(alphabet, 2048);
         return new SamlSessionReference(fill(alphabet, 256), fill(alphabet, 2048),
                 new SamlNameId(fill(alphabet, 4096), optional, optional, optional, optional), optional, end);
     }
-    private static String fill(String alphabet, int units) {
+    private static @NonNull String fill(@NonNull String alphabet, int units) {
         return switch (alphabet) {
             case "ASCII" -> "a".repeat(units);
             case "BMP" -> "\u20ac".repeat(units);
@@ -159,11 +161,11 @@ final class SamlSessionReferenceBudgetTests {
             default -> throw new AssertionError(alphabet);
         };
     }
-    static SamlSessionReference parsed(String serialized) {
+    static @NonNull SamlSessionReference parsed(@NonNull String serialized) {
         return assertInstanceOf(SamlSessionReferenceParseResult.Succeeded.class,
                 SamlSessionReference.fromSerializedFormResult(serialized)).getReference();
     }
-    static void assertSameFields(SamlSessionReference expected, SamlSessionReference actual) {
+    static void assertSameFields(@NonNull SamlSessionReference expected, @NonNull SamlSessionReference actual) {
         assertEquals(expected.getIdentityProviderConnectionId(), actual.getIdentityProviderConnectionId());
         assertEquals(expected.getIdentityProviderEntityId(), actual.getIdentityProviderEntityId());
         assertEquals(expected.getNameId().getValue(), actual.getNameId().getValue());

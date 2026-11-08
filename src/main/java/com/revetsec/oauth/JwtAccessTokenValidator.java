@@ -410,8 +410,10 @@ public final class JwtAccessTokenValidator implements AccessTokenValidator {
 		}
 
 		/**
-		 * Sets transport.
-		 * @param value setting, or null to restore its default or absence
+		 * Sets transport. An injected client must use Redirect.NEVER and have no Authenticator or CookieHandler;
+		 * build rejects noncompliance without sending a request. The application owns injected TLS/proxy
+		 * configuration and network egress beyond the URI policy.
+		 * @param value injected client meeting these restrictions, or null for the lazy default
 		 * @return this builder
 		 * @since 1.0.0
 		 */

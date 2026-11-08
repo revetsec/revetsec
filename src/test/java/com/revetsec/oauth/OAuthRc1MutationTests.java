@@ -297,8 +297,8 @@ final class OAuthRc1MutationTests {
         OAuthTransportException unavailable = OAuthTransportException.fromReason(OAuthException.Reason.HTTP_CLIENT_UNAVAILABLE, null);
         assertEquals(OAuthException.Reason.HTTP_CLIENT_UNAVAILABLE, unavailable.getReason());
         assertNull(unavailable.getCause());
-        assertTrue(OAuthErrorResponseException.fromResponse(500, "", java.util.Optional.empty()).isTransient());
-        assertFalse(OAuthErrorResponseException.fromResponse(499, "", java.util.Optional.empty()).isTransient());
+        assertTrue(OAuthErrorResponseException.fromResponse(500, "", java.util.Optional.empty()).isTemporaryCondition());
+        assertFalse(OAuthErrorResponseException.fromResponse(499, "", java.util.Optional.empty()).isTemporaryCondition());
     }
 
     @Test

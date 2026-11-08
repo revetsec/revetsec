@@ -15,6 +15,8 @@
  */
 package com.revetsec.scim;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.internal.json.JsonCodec;
 import com.revetsec.internal.json.JsonLimits;
 import com.revetsec.internal.json.JsonParseResult;
@@ -43,7 +45,7 @@ final class ScimPasswordAdvertisementTests {
         assertFalse(ScimServiceProviderConfig.builder().changePasswordSupported(false).build().isChangePasswordSupported());
     }
 
-    @TestFactory Stream<DynamicTest> discoveryTruthfullyReportsIndependentPasswordAndPatchFlags() {
+    @TestFactory @NonNull Stream<@NonNull DynamicTest> discoveryTruthfullyReportsIndependentPasswordAndPatchFlags() {
         return Stream.of("default", "false", "true").flatMap(state -> Stream.of(false, true).map(patch -> DynamicTest.dynamicTest(state + " patch=" + patch, () -> {
             var provider = provider(state, patch); var json = decoded(prepared(provider.serviceProviderConfigResponseResult("")));
             assertEquals(state.equals("true"), supported(json, "changePassword")); assertEquals(patch, supported(json, "patch"));
@@ -67,7 +69,7 @@ final class ScimPasswordAdvertisementTests {
         }
     }
 
-    @TestFactory Stream<DynamicTest> passwordWritesProduceExplicitTransientCandidatesRegardlessOfAdvertisement() {
+    @TestFactory @NonNull Stream<@NonNull DynamicTest> passwordWritesProduceExplicitTransientCandidatesRegardlessOfAdvertisement() {
         return Stream.of("default", "false", "true").flatMap(state -> Stream.of("create", "put", "patch").map(operation -> DynamicTest.dynamicTest(state + " " + operation, () -> {
             var provider = provider(state, true); var current = current(OLD); var before = current.getDocument();
             ScimResource candidate; Set<ScimAttributePath> supplied;
@@ -87,7 +89,7 @@ final class ScimPasswordAdvertisementTests {
         })));
     }
 
-    @TestFactory Stream<DynamicTest> everyRenderingPathOmitsPasswordEvenWhenRequestedAndSupplied() {
+    @TestFactory @NonNull Stream<@NonNull DynamicTest> everyRenderingPathOmitsPasswordEvenWhenRequestedAndSupplied() {
         return Stream.of("default", "false", "true").flatMap(state -> Stream.of("get", "create", "put", "patch", "list").flatMap(operation ->
                 Stream.of("", "attributes=password", "attributes=userName,password", "excludedAttributes=userName").map(query -> DynamicTest.dynamicTest(state + " " + operation + " " + query, () -> {
             var provider = provider(state, true); var current = current(SECRET); var before = current.getDocument();
@@ -110,21 +112,21 @@ final class ScimPasswordAdvertisementTests {
         }))));
     }
 
-    private static ScimServiceProvider provider(String state, boolean patch) {
+    private static @NonNull ScimServiceProvider provider(@NonNull String state, boolean patch) {
         var config = ScimServiceProviderConfig.builder().patchSupported(patch);
         if (!state.equals("default")) config = config.changePasswordSupported(state.equals("true"));
         return ScimServiceProvider.builder().baseUri(URI.create("https://example.invalid/scim/"))
                 .resourceTypes(List.of(USER)).serviceProviderConfig(config.build()).stringMatching((path, definition, operator, left, right) -> ScimStringMatchResult.fromMatched(left.equals(right))).build();
     }
-    private static JsonObject body() { return JsonObject.builder().put("schemas", JsonArray.fromElements(List.of(JsonString.fromValue(USER.getSchema().getId())))).put("userName", "subject").put("password", SECRET).build(); }
-    private static JsonObject patchBody() { return JsonObject.builder().put("schemas", JsonArray.fromElements(List.of(JsonString.fromValue("urn:ietf:params:scim:api:messages:2.0:PatchOp"))))
+    private static @NonNull JsonObject body() { return JsonObject.builder().put("schemas", JsonArray.fromElements(List.of(JsonString.fromValue(USER.getSchema().getId())))).put("userName", "subject").put("password", SECRET).build(); }
+    private static @NonNull JsonObject patchBody() { return JsonObject.builder().put("schemas", JsonArray.fromElements(List.of(JsonString.fromValue("urn:ietf:params:scim:api:messages:2.0:PatchOp"))))
             .put("Operations", JsonArray.fromElements(List.of(JsonObject.builder().put("op", "replace").put("path", "password").put("value", SECRET).build()))).build(); }
-    private static ScimResource current(String secret) { return ScimResource.withResourceType(USER).document(JsonObject.builder()
+    private static @NonNull ScimResource current(@NonNull String secret) { return ScimResource.withResourceType(USER).document(JsonObject.builder()
             .put("schemas", JsonArray.fromElements(List.of(JsonString.fromValue(USER.getSchema().getId())))).put("id", "user.1").put("userName", "subject").put("password", secret)
             .put("meta", JsonObject.builder().put("version", "W/\"one\"").build()).build()).build(); }
-    private static ScimAttributePath path(String value) { return assertInstanceOf(ScimAttributePathParseResult.Succeeded.class, ScimAttributePath.fromExpressionResult(value)).getAttributePath(); }
-    private static ScimResponse prepared(ScimResponseResult result) { return assertInstanceOf(ScimResponseResult.Prepared.class, result).getResponse(); }
-    private static JsonObject decoded(ScimResponse response) { return (JsonObject) assertInstanceOf(JsonParseResult.Succeeded.class, JsonCodec.parseResult(response.toHttpBodyWithPersonalData(), JsonLimits.scim(1_000_000, 100_000))).getDocument().getValue(); }
-    private static boolean supported(JsonObject value, String name) { return ((JsonBoolean) ((JsonObject) value.find(name).orElseThrow()).find("supported").orElseThrow()).getValue(); }
-    private static byte[] bytes(JsonObject value) { return value.toJson().getBytes(StandardCharsets.UTF_8); }
+    private static @NonNull ScimAttributePath path(@NonNull String value) { return assertInstanceOf(ScimAttributePathParseResult.Succeeded.class, ScimAttributePath.fromExpressionResult(value)).getAttributePath(); }
+    private static @NonNull ScimResponse prepared(@NonNull ScimResponseResult result) { return assertInstanceOf(ScimResponseResult.Prepared.class, result).getResponse(); }
+    private static @NonNull JsonObject decoded(@NonNull ScimResponse response) { return (JsonObject) assertInstanceOf(JsonParseResult.Succeeded.class, JsonCodec.parseResult(response.toHttpBodyWithPersonalData(), JsonLimits.scim(1_000_000, 100_000))).getDocument().getValue(); }
+    private static boolean supported(@NonNull JsonObject value, @NonNull String name) { return ((JsonBoolean) ((JsonObject) value.find(name).orElseThrow()).find("supported").orElseThrow()).getValue(); }
+    private static byte @NonNull [] bytes(@NonNull JsonObject value) { return value.toJson().getBytes(StandardCharsets.UTF_8); }
 }

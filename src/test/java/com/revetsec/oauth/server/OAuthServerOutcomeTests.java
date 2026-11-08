@@ -112,12 +112,12 @@ final class OAuthServerOutcomeTests {
  private void familyCategoriesAndTransienceAreFixedCase(OAuthServerException.@NonNull Reason reason) {
   OAuthServerException failure=failure(reason,false);assertEquals(reason,failure.getReason());assertInstanceOf(RevetsecException.class,failure);
   boolean unavailable=reason==STORE_UNAVAILABLE||reason==CLIENT_METADATA_UNAVAILABLE;
-  assertFalse(failure.isTransient());assertEquals(unavailable,failure(reason,true).isTransient());
+  assertFalse(failure.isTemporaryCondition());assertEquals(unavailable,failure(reason,true).isTemporaryCondition());
   assertNull(failure.getCause());failure.addSuppressed(new IllegalArgumentException("TEST-ONLY-sensitive-cause"));assertEquals(0,failure.getSuppressed().length);
   assertThrows(IllegalStateException.class,()->failure.initCause(new RuntimeException("TEST-ONLY-sensitive-cause")));
   assertFalse(requireNonNull(failure.getMessage()).contains("TEST-ONLY"));
   assertEquals("OAuthServerException{"+reason+"}",failure.toString());assertFalse(failure.toString().contains("TEST-ONLY"));
-  if(reason==COMMIT_OUTCOME_UNKNOWN||reason==COMMIT_CONFIRMED_NOT_ADMITTED) {assertEquals(ErrorCategory.TRANSPORT,failure.getCategory());assertFalse(failure.isTransient());}
+  if(reason==COMMIT_OUTCOME_UNKNOWN||reason==COMMIT_CONFIRMED_NOT_ADMITTED) {assertEquals(ErrorCategory.TRANSPORT,failure.getCategory());assertFalse(failure.isTemporaryCondition());}
   if(reason==STORE_CORRUPT||reason==CONFIGURATION_INVALID||reason==SIGNING_FAILED) assertEquals(ErrorCategory.CONFIGURATION,failure.getCategory());
   if(validation(reason)) {
    assertInstanceOf(OAuthServerValidationException.class,failure);OAuthServerResponse response=response();
@@ -185,16 +185,16 @@ final class OAuthServerOutcomeTests {
  }
  @TestFactory @NonNull Stream<@NonNull DynamicTest> storeTranslationPreservesUnknownAndInterrupt() { return Stream.of(OAuthStoreFailure.Reason.values()).map(value->DynamicTest.dynamicTest("storeTranslationPreservesUnknownAndInterrupt["+value.name()+"]",()->storeTranslationPreservesUnknownAndInterruptCase(value))); }
  private void storeTranslationPreservesUnknownAndInterruptCase(OAuthStoreFailure.@NonNull Reason reason) {
-  OAuthServerStoreException mapped=OAuthServerFailureBoundary.store(new OAuthStoreFailure(reason));assertFalse(mapped.isTransient());
-  try {Thread.currentThread().interrupt();assertFalse(OAuthServerFailureBoundary.store(new OAuthStoreFailure(reason)).isTransient());assertTrue(Thread.currentThread().isInterrupted());}finally{Thread.interrupted();}
+  OAuthServerStoreException mapped=OAuthServerFailureBoundary.store(new OAuthStoreFailure(reason));assertFalse(mapped.isTemporaryCondition());
+  try {Thread.currentThread().interrupt();assertFalse(OAuthServerFailureBoundary.store(new OAuthStoreFailure(reason)).isTemporaryCondition());assertTrue(Thread.currentThread().isInterrupted());}finally{Thread.interrupted();}
  }
  @Test void explicitTimeoutIoOrHeldBackClassificationCannotMakeUnknownOrInterruptionTransient() {
-  assertTrue(OAuthServerStoreException.fromReason(STORE_UNAVAILABLE,true).isTransient());
-  assertTrue(OAuthServerTransportException.fromReason(CLIENT_METADATA_UNAVAILABLE,true).isTransient());
-  assertFalse(OAuthServerStoreException.fromReason(COMMIT_OUTCOME_UNKNOWN,true).isTransient());
-  assertFalse(OAuthServerStoreException.fromReason(STORE_CORRUPT,true).isTransient());
-  try {Thread.currentThread().interrupt();assertFalse(OAuthServerStoreException.fromReason(STORE_UNAVAILABLE,true).isTransient());
-   assertFalse(OAuthServerTransportException.fromReason(CLIENT_METADATA_UNAVAILABLE,true).isTransient());assertTrue(Thread.currentThread().isInterrupted());}finally{Thread.interrupted();}
+  assertTrue(OAuthServerStoreException.fromReason(STORE_UNAVAILABLE,true).isTemporaryCondition());
+  assertTrue(OAuthServerTransportException.fromReason(CLIENT_METADATA_UNAVAILABLE,true).isTemporaryCondition());
+  assertFalse(OAuthServerStoreException.fromReason(COMMIT_OUTCOME_UNKNOWN,true).isTemporaryCondition());
+  assertFalse(OAuthServerStoreException.fromReason(STORE_CORRUPT,true).isTemporaryCondition());
+  try {Thread.currentThread().interrupt();assertFalse(OAuthServerStoreException.fromReason(STORE_UNAVAILABLE,true).isTemporaryCondition());
+   assertFalse(OAuthServerTransportException.fromReason(CLIENT_METADATA_UNAVAILABLE,true).isTemporaryCondition());assertTrue(Thread.currentThread().isInterrupted());}finally{Thread.interrupted();}
  }
  @Test void issuerRejectionRetainsOnlyOptionalFixedM5AndJoseReasons() {
   OAuthIssuerAccessTokenResult.Rejected r=assertInstanceOf(OAuthIssuerAccessTokenResult.Rejected.class,OAuthIssuerAccessTokenResult.fromRejection(TOKEN_REVOKED,AccessTokenValidationException.Reason.INACTIVE,JoseException.Reason.INVALID_TYPE));

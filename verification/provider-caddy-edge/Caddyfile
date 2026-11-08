@@ -1,0 +1,54 @@
+# Copyright 2026 Revetware LLC. Licensed under the Apache License, Version 2.0.
+# Dedicated provider-recipe qualification edge. This is not a general deployment proxy.
+{
+	admin off
+	auto_https off
+	servers {
+		protocols h1 h2
+		max_header_size 8192
+		timeouts {
+			read_body 3s
+			read_header 3s
+			write 6s
+			idle 8s
+		}
+	}
+}
+
+https://:18443 {
+	bind 127.0.0.1
+	tls /tls/leaf.pem /tls/leaf.key
+	route {
+		@wrongHost not host app.example
+		respond @wrongHost "" 400
+
+		@providerQuery {
+			path /google/begin /google/complete /apple/begin /apple/complete /session /native/session /account/* /native/account/* /logout /native/logout
+			expression `{orig_uri}.contains("?")`
+		}
+		respond @providerQuery "" 400
+
+		@fixtureCredential header X-Fixture-Credential *
+		respond @fixtureCredential "" 400
+
+		@ambiguous expression `{http.request.header.Authorization}.contains(",") || {http.request.header.Origin}.contains(",") || {http.request.header.Content-Type}.contains(",") || {http.request.header.Cookie}.contains(",")`
+		respond @ambiguous "" 400
+
+		@providerRoutes path /google/begin /google/complete /apple/begin /apple/complete /session /native/session /account/* /native/account/* /logout /native/logout
+		handle @providerRoutes {
+			request_body {
+				max_size 32768
+			}
+			reverse_proxy 127.0.0.1:18081 {
+				header_up Host app.example
+				header_up X-Fixture-Credential {$REVETSEC_PROVIDER_FIXTURE_CREDENTIAL}
+				transport http {
+					dial_timeout 1s
+					response_header_timeout 5s
+				}
+			}
+		}
+
+		respond "" 404
+	}
+}

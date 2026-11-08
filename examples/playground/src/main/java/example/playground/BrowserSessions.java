@@ -15,6 +15,7 @@
  */
 package example.playground;
 
+import com.revetsec.BrowserBinding;
 import com.revetsec.json.JsonObject;
 import com.revetsec.saml.SamlLogoutRequest;
 import com.revetsec.saml.SamlNameId;
@@ -62,7 +63,7 @@ final class BrowserSessions {
         if (entries.size() >= capacity || (entries.size() + 1L) * SESSION_CHARGE_BYTES > maximumChargedBytes)
             throw new IllegalStateException("Local session store is full.");
         Session session = new Session(LocalSecrets.randomId(), LocalSecrets.randomId(),
-                LocalSecrets.randomId(), clock.instant().plus(LIFETIME));
+                BrowserBinding.fresh(), clock.instant().plus(LIFETIME));
         entries.put(session.id, session);
         return session;
     }
@@ -70,14 +71,72 @@ final class BrowserSessions {
     synchronized @NonNull Optional<@NonNull Session> find(@NonNull Request request) {
         cleanup();
         String id = cookieValue(request, COOKIE).orElse("");
-        return Optional.ofNullable(entries.get(id));
+        Session found = entries.get(id);
+        return found == null || found.authenticationClosed ? Optional.empty() : Optional.of(found);
+    }
+
+    /** A closed browser marker can correlate a logout return but grants no authentication authority. */
+    synchronized @NonNull Optional<@NonNull Session> findForSamlLogout(@NonNull Request request) {
+        cleanup();
+        return Optional.ofNullable(entries.get(cookieValue(request, COOKIE).orElse("")));
+    }
+
+    synchronized long claimSamlFlow(@NonNull Session session, PlaygroundSaml.@NonNull Flow flow) {
+        cleanup();
+        if (entries.get(session.id) != session || session.authenticationClosed || session.samlFlow != flow)
+            throw new IllegalStateException("Browser session or SAML attempt is no longer current.");
+        session.samlFlow = null;
+        return session.authenticationGeneration;
+    }
+
+    synchronized @NonNull Optional<@NonNull SamlClosure> closeSamlAuthority(@NonNull Session session) {
+        cleanup();
+        if (entries.get(session.id) != session || session.authenticationClosed || session.samlReference == null)
+            return Optional.empty();
+        SamlSessionReference reference = session.samlReference;
+        boolean hadLogin = session.samlFlow != null;
+        String oidcCookie = session.flow == null ? null : session.flow.cookieName;
+        if (cancelAuthentication(session)) entries.remove(session.id);
+        return Optional.of(new SamlClosure(reference, hadLogin, oidcCookie, session.authenticationGeneration));
+    }
+
+    synchronized boolean saveSamlLogout(@NonNull Session session, long generation, PlaygroundSaml.@NonNull LogoutFlow flow) {
+        cleanup();
+        if (entries.get(session.id) != session || !session.authenticationClosed
+                || session.authenticationGeneration != generation || !clock.instant().isBefore(flow.expires)) return false;
+        session.samlLogout = flow;
+        return true;
+    }
+
+    synchronized @NonNull Session rotateSaml(@NonNull Session old, long generation, @NonNull JsonObject identity,
+            @NonNull SamlSessionReference reference) {
+        if (old.authenticationGeneration != generation) throw new IllegalStateException("Browser session changed.");
+        // Retain the store monitor through both identity and reference publication; IdP logout sees both.
+        Session rotated = rotate(old, identity);
+        rotated.samlReference = reference;
+        return rotated;
+    }
+
+    private static boolean cancelAuthentication(@NonNull Session session) {
+        boolean retire = session.authenticationGeneration == Long.MAX_VALUE;
+        if (!retire) session.authenticationGeneration++;
+        session.authenticationClosed = true;
+        session.identity = null; session.flow = null; session.journal = null;
+        session.samlReference = null; session.samlFlow = null; session.samlLogout = null;
+        return retire;
+    }
+
+    record SamlClosure(@NonNull SamlSessionReference reference, boolean hadLogin, @Nullable String oidcCookie,
+            long generation) {
+        @Override public @NonNull String toString() { return "SamlClosure{data=<redacted>}"; }
     }
 
     synchronized @NonNull Session rotate(@NonNull Session old, @NonNull JsonObject identity) {
         cleanup();
         if (identity.toJson().getBytes(StandardCharsets.UTF_8).length > 2048)
             throw new IllegalArgumentException("Redacted browser identity exceeds cap.");
-        if (entries.get(old.id) != old) throw new IllegalStateException("Browser session expired.");
+        if (entries.get(old.id) != old || old.authenticationClosed || old.authenticationGeneration == Long.MAX_VALUE)
+            throw new IllegalStateException("Browser session expired or closed.");
         entries.remove(old.id);
         Session rotated = new Session(LocalSecrets.randomId(), LocalSecrets.randomId(), old.binding,
                 clock.instant().plus(LIFETIME));
@@ -107,15 +166,16 @@ final class BrowserSessions {
     synchronized int endMatchingSamlSessions(@NonNull SamlLogoutRequest request) {
         cleanup();
         int ended = 0;
-        for (Session session : entries.values()) {
+        var iterator = entries.values().iterator();
+        while (iterator.hasNext()) {
+            Session session = iterator.next();
             SamlSessionReference reference = session.samlReference;
             if (reference == null || !reference.getIdentityProviderConnectionId()
                     .equals(request.getIdentityProviderConnectionId())
                     || !sameNameId(reference.getNameId(), request.getNameId())) continue;
             if (!request.getSessionIndexes().isEmpty()
                     && reference.getSessionIndex().filter(request.getSessionIndexes()::contains).isEmpty()) continue;
-            session.identity = null;
-            session.samlReference = null;
+            if (cancelAuthentication(session)) iterator.remove();
             ended++;
         }
         return ended;
@@ -173,15 +233,17 @@ final class BrowserSessions {
     static final class Session {
         final String id;
         final String csrf;
-        final String binding;
+        final BrowserBinding binding;
         final Instant expires;
         volatile @Nullable JsonObject identity;
+        volatile long authenticationGeneration;
+        volatile boolean authenticationClosed;
         volatile PlaygroundOidc.@Nullable Flow flow;
         volatile PlaygroundOidc.@Nullable Journal journal;
         volatile PlaygroundSaml.@Nullable Flow samlFlow;
         volatile PlaygroundSaml.@Nullable LogoutFlow samlLogout;
         volatile @Nullable SamlSessionReference samlReference;
-        Session(@NonNull String id, @NonNull String csrf, @NonNull String binding, @NonNull Instant expires) {
+        Session(@NonNull String id, @NonNull String csrf, @NonNull BrowserBinding binding, @NonNull Instant expires) {
             this.id = id; this.csrf = csrf; this.binding = binding; this.expires = expires;
         }
         @Override public @NonNull String toString() { return "BrowserSession{data=<redacted>}"; }

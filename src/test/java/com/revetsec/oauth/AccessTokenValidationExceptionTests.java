@@ -25,7 +25,7 @@ final class AccessTokenValidationExceptionTests {
 	@Test void verdictsAreFixedNontransientAndCannotRetainInput() {
 		for (AccessTokenValidationException.Reason reason : AccessTokenValidationException.Reason.values()) {
 			AccessTokenValidationException error = AccessTokenValidationException.fromReason(reason);
-			assertSame(reason, error.getReason()); assertFalse(error.isTransient()); assertNull(error.getCause());
+			assertSame(reason, error.getReason()); assertFalse(error.isTemporaryCondition()); assertNull(error.getCause());
 			assertTrue(error.getJoseReason().isEmpty()); assertTrue(java.util.Objects.requireNonNull(error.getMessage()).endsWith("."));
 			assertEquals(reason == AccessTokenValidationException.Reason.MALFORMED_REQUEST ? ErrorCategory.MALFORMED_INPUT : ErrorCategory.VALIDATION_FAILURE, error.getCategory());
 			assertEquals(reason == AccessTokenValidationException.Reason.MALFORMED_REQUEST ? BearerError.INVALID_REQUEST : BearerError.INVALID_TOKEN, error.getBearerError());

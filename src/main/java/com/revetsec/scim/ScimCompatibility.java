@@ -59,7 +59,7 @@ public final class ScimCompatibility {
     public static @NonNull ScimCompatibility microsoftEntraIdInstance() { return Defaults.ENTRA; }
 
     /**
-     * Returns the reviewed Okta feature set: operation-name casing and identical PATCH id echo.
+     * Returns the reviewed Okta feature set: operation-name casing, identical PATCH id echo and ignored Group member display input.
      * @return the shared Okta snapshot
      * @since 1.0.0
      */
@@ -109,7 +109,8 @@ public final class ScimCompatibility {
                 ScimCompatibilityFeature.IGNORE_UNDECLARED_SCHEMA_URIS)).build();
         private static final @NonNull ScimCompatibility OKTA = builder().features(Set.of(
                 ScimCompatibilityFeature.PATCH_OPERATION_NAME_CASE_INSENSITIVE,
-                ScimCompatibilityFeature.PATCH_READ_ONLY_ID_ECHO)).build();
+                ScimCompatibilityFeature.PATCH_READ_ONLY_ID_ECHO,
+                ScimCompatibilityFeature.PATCH_GROUP_MEMBER_DISPLAY_IGNORED)).build();
         private Defaults() {}
     }
 

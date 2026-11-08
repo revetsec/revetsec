@@ -92,7 +92,7 @@ final class OAuthAuthorizationServerTests {
   return StateSealer.withActiveKey(SealingKey.fromBase64("key",Base64.getEncoder().encodeToString(material))).build();
  }
  private static @NonNull OAuthIssuerKeySnapshot keys() {
-  return OAuthIssuerKeySnapshot.withActiveKey(OAuthIssuerSigningKey.fromKeyPair("key",KEY.getPrivateKey(),KEY.getPublicKey()))
+  return OAuthIssuerKeySnapshot.withActiveKey(OAuthIssuerSigningKey.fromRsaKeyPair("key",KEY.getPrivateKey(),KEY.getPublicKey()))
    .generation("g1").publishedAt(NOW.minusSeconds(120)).build();
  }
  private OAuthAuthorizationServer.@NonNull Builder builder() {
@@ -232,7 +232,7 @@ final class OAuthAuthorizationServerTests {
    else if(which.equals("reseal"))assertEquals(OAuthStoreCommitStatus.UNKNOWN,f.server.resealStoreEntry(requireNonNull(k)).getStatus());
    else {
     Executable operation=switch(which) {case "begin"->f::begin;case "complete"->()->f.server.completeAuthorizationResult(requireNonNull(h),BROWSER,decision("subject",Set.of("read"),true));case "redeem"->()->f.redeem(requireNonNull(co));case "validate"->()->f.server.validateAccessTokenResult(bearer(requireNonNull(to)),RESOURCE);case "refresh"->()->f.rotate(requireNonNull(re));case "revoke"->()->f.revoke(requireNonNull(to));case "subject"->()->f.server.revokeSubject("subject");case "issuer"->f.server::revokeAllGrants;default->()->f.server.revokeGrant(requireNonNull(gr));};
-    OAuthServerStoreException failure=assertThrows(OAuthServerStoreException.class,operation);assertEquals(Set.of("complete","validate").contains(which)?STORE_UNAVAILABLE:COMMIT_OUTCOME_UNKNOWN,failure.getReason());assertFalse(failure.isTransient());assertEquals(503,f.server.responseForFailure(failure).getStatusCode());
+    OAuthServerStoreException failure=assertThrows(OAuthServerStoreException.class,operation);assertEquals(Set.of("complete","validate").contains(which)?STORE_UNAVAILABLE:COMMIT_OUTCOME_UNKNOWN,failure.getReason());assertFalse(failure.isTemporaryCondition());assertEquals(503,f.server.responseForFailure(failure).getStatusCode());
    }
    assertEquals(commits+1,f.store.commits);
   })));
@@ -273,6 +273,43 @@ final class OAuthAuthorizationServerTests {
   JsonObject one=issued();String token=one.find("access_token").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow();for(OAuthStoreKey key:List.copyOf(this.store.rows.keySet())) {OAuthStoreEntry old=requireNonNull(this.store.rows.get(key));assertEquals(OAuthStoreCommitStatus.COMMITTED,this.server.resealStoreEntry(key).getStatus());OAuthStoreEntry next=requireNonNull(this.store.rows.get(key));assertNotEquals(old.getVersion(),next.getVersion());assertEquals(old.getRetainUntil(),next.getRetainUntil());}
   assertInstanceOf(OAuthIssuerAccessTokenResult.Succeeded.class,this.server.validateAccessTokenResult(bearer(token),RESOURCE));this.store.conflicts=1;assertEquals(OAuthStoreCommitStatus.CONFLICT,this.server.resealStoreEntry(this.store.rows.keySet().iterator().next()).getStatus());
   OAuthStoreKey absent=OAuthStoreFormat.key(OAuthStoreFormat.namespace(this.store.rows.keySet().iterator().next()),OAuthStoreKey.Kind.GRANT,"A".repeat(43));assertEquals(OAuthStoreCommitStatus.CONFLICT,this.server.resealStoreEntry(absent).getStatus());
+ }
+ @Test void ordinaryK64ResealPreservesCompleteAuthenticatedFactsForAllSevenGenuineKinds() {
+  JsonObject tokens=issued();String token=tokens.find("access_token").map(value->((com.revetsec.json.JsonString)value).getValue()).orElseThrow();
+  Set<OAuthStoreKey.Kind> expected=Set.of(OAuthStoreKey.Kind.ISSUER_STATE,OAuthStoreKey.Kind.SUBJECT_STATE,OAuthStoreKey.Kind.INTERACTION,OAuthStoreKey.Kind.CODE,OAuthStoreKey.Kind.GRANT,OAuthStoreKey.Kind.ACCESS_TOKEN,OAuthStoreKey.Kind.REFRESH_TOKEN);
+  assertTrue(this.store.rows.size()==7&&this.store.rows.keySet().stream().map(OAuthStoreKey::getKind).collect(java.util.stream.Collectors.toSet()).equals(expected),"SC-MIG-08 complete seven-kind genuine inventory");
+  byte[] oldMaterial=new byte[32],newMaterial=new byte[32];for(int i=0;i<32;i++){oldMaterial[i]=(byte)(i+1);newMaterial[i]=(byte)(i+33);}
+  try {
+   SealingKey oldKey=SealingKey.fromBase64("key",Base64.getEncoder().encodeToString(oldMaterial)),newKey=SealingKey.fromBase64("r".repeat(64),Base64.getEncoder().encodeToString(newMaterial));
+   StateSealer retired=StateSealer.withActiveKey(newKey).build();
+   this.server=builder().stateSealer(retired).build();Map<OAuthStoreKey,OAuthStoreEntry> original=Map.copyOf(this.store.rows);int commits=this.store.commits;
+   assertThrows(OAuthServerStoreException.class,()->this.server.resealStoreEntry(original.keySet().iterator().next()));
+   assertTrue(this.store.rows.equals(original)&&this.store.commits==commits,"SC-MIG-08 premature opening-key retirement preserves complete inventory");
+   StateSealer overlap=StateSealer.withActiveKey(newKey).verificationKeys(List.of(oldKey)).build();
+   OAuthStoreRecordCodecV2 oldCodec=new OAuthStoreRecordCodecV2(ISSUER,sealer(),3800,OAuthServerIngressLimits.fromDefaults(),255),newCodec=new OAuthStoreRecordCodecV2(ISSUER,overlap,3800,OAuthServerIngressLimits.fromDefaults(),255);
+   this.server=builder().stateSealer(overlap).build();this.store.authorityNow=NOW.plusSeconds(2);this.clock.time=this.store.authorityNow;
+   Set<OAuthStoreKey.Kind> seen=new java.util.HashSet<>();
+   for(OAuthStoreKey key:List.copyOf(this.store.rows.keySet())) {
+    Map<OAuthStoreKey,OAuthStoreEntry> before=Map.copyOf(this.store.rows);OAuthStoreEntry old=requireNonNull(before.get(key));var opened=oldCodec.open(old,this.clock);
+    byte[] payload=opened.payload().toJson().getBytes(StandardCharsets.UTF_8),afterPayload=null,wire=null;
+    try {
+     assertTrue(this.server.resealStoreEntry(key).getStatus()==OAuthStoreCommitStatus.COMMITTED,"SC-MIG-08 ordinary K64 maintenance commits");
+     OAuthStoreEntry next=requireNonNull(this.store.rows.get(key));var actual=newCodec.open(next,this.clock);afterPayload=actual.payload().toJson().getBytes(StandardCharsets.UTF_8);
+     assertTrue(java.security.MessageDigest.isEqual(payload,afterPayload),"SC-MIG-08 complete authenticated payload bytes preserved");
+     assertTrue(opened.floor().equals(actual.floor()),"SC-MIG-08 exact authenticated floor preserved");
+     assertTrue(old.getKey().equals(next.getKey())&&old.getRetainUntil().equals(next.getRetainUntil()),"SC-MIG-08 exact address kind and retention preserved");
+     assertTrue(!old.getVersion().equals(next.getVersion())&&next.getVersion().length()==43&&Base64.getUrlDecoder().decode(next.getVersion()).length==32,"SC-MIG-08 replacement version is fresh canonical nonce");
+     OAuthStoreTransaction transaction=requireNonNull(this.store.lastTransaction);
+     assertTrue(transaction.getConditions().stream().anyMatch(c->c.getKey().equals(key)&&c.getExpectedVersion().equals(Optional.of(old.getVersion()))),"SC-MIG-08 exact prior version predicate submitted");
+     assertTrue(transaction.getMutations().size()==1&&transaction.getMutations().get(0).getKey().equals(key)&&transaction.getMutations().get(0).getEntry().orElseThrow()==next,"SC-MIG-08 exactly one prepared replacement submitted");
+     assertTrue(before.keySet().equals(this.store.rows.keySet())&&before.entrySet().stream().allMatch(e->e.getKey().equals(key)||this.store.rows.get(e.getKey())==e.getValue()),"SC-MIG-08 every unselected retained row stays exact");
+     wire=Base64.getUrlDecoder().decode(next.toSealedForm());assertTrue(wire.length>66&&(wire[0]&255)==1&&(wire[1]&255)==64&&new String(wire,2,64,StandardCharsets.US_ASCII).equals("r".repeat(64)),"SC-MIG-08 actual output uses K64 within complete cap");
+     assertTrue(next.toSealedForm().getBytes(StandardCharsets.UTF_8).length<=3800,"SC-MIG-08 actual whole-byte output respects declared cap");seen.add(key.getKind());
+    } finally {java.util.Arrays.fill(payload,(byte)0);if(afterPayload!=null)java.util.Arrays.fill(afterPayload,(byte)0);if(wire!=null)java.util.Arrays.fill(wire,(byte)0);}
+   }
+   assertTrue(seen.equals(expected),"SC-MIG-08 every retained issuer kind receives ordinary maintenance");
+   this.server=builder().stateSealer(retired).build();assertInstanceOf(OAuthIssuerAccessTokenResult.Succeeded.class,this.server.validateAccessTokenResult(bearer(token),RESOURCE));
+  } finally {java.util.Arrays.fill(oldMaterial,(byte)0);java.util.Arrays.fill(newMaterial,(byte)0);}
  }
  @Test void resealCannotCommitAcrossAnIssuerFenceAdvance() {
   issued();OAuthStoreKey access=this.store.rows.keySet().stream()
@@ -419,7 +456,7 @@ final class OAuthAuthorizationServerTests {
  @Test void cimdOptInBuildDoesNotResolveAndPublicMetadataAdvertisesOnlyEnabledSupport() {
   AtomicInteger lookups=new AtomicInteger();OAuthClientMetadataPolicy policy=OAuthClientMetadataPolicy.fromAddressResolverAndCache((host,budget)->{lookups.incrementAndGet();return List.of(InetAddress.getLoopbackAddress());}, InMemoryOAuthClientMetadataCache.fromMaximumEntries(128));
   this.server=builder().clientMetadataPolicy(policy).outboundUriPolicy(null).clientRepository((id,b)->Optional.empty()).build();assertEquals(0,lookups.get());assertTrue(json(this.server.metadataResponse("GET")).find("client_id_metadata_document_supported").map(value -> ((com.revetsec.json.JsonBoolean) value).getValue()).orElseThrow());assertEquals(0,lookups.get());
-  this.client=client("https://client.example.com/metadata");OAuthServerTransportException failure=assertThrows(OAuthServerTransportException.class,()->begin());assertEquals(CLIENT_METADATA_UNAVAILABLE,failure.getReason());assertFalse(failure.isTransient());assertEquals(1,lookups.get());
+  this.client=client("https://client.example.com/metadata");OAuthServerTransportException failure=assertThrows(OAuthServerTransportException.class,()->begin());assertEquals(CLIENT_METADATA_UNAVAILABLE,failure.getReason());assertFalse(failure.isTemporaryCondition());assertEquals(1,lookups.get());
  }
  @Test void enabledClientMetadataConstructionRequiresAcknowledgmentOnUnpatchedRuntime() {
   OAuthClientMetadataPolicy enabled=OAuthClientMetadataPolicy.fromAddressResolverAndCache((host,budget)->List.of(), InMemoryOAuthClientMetadataCache.fromMaximumEntries(128));
@@ -539,7 +576,7 @@ final class OAuthAuthorizationServerTests {
   assertEquals(List.of("AUTHORIZATION:SERVICE_UNAVAILABLE"),failures);
 
   String code=code();
-  OAuthIssuerSigningKey opaque=OAuthIssuerSigningKey.fromKeyPair("key",new OpaquePrivate(),KEY.getPublicKey());
+  OAuthIssuerSigningKey opaque=OAuthIssuerSigningKey.fromRsaKeyPair("key",new OpaquePrivate(),KEY.getPublicKey());
   OAuthIssuerKeySnapshot snapshot=OAuthIssuerKeySnapshot.withActiveKey(opaque)
    .generation("g1").publishedAt(NOW.minusSeconds(120)).build();
   this.server=builder().signingKeys(OAuthIssuerKeyProvider.fromSnapshot(snapshot)).observer(observer).build();
@@ -572,7 +609,7 @@ final class OAuthAuthorizationServerTests {
   return Stream.of(false,true).map(refresh->test("signing"+refresh,()->{
    var f=new OAuthAuthorizationServerTests();f.initialized();String code=f.code(),credential=code;
    if(refresh)credential=json(assertInstanceOf(OAuthTokenResult.Succeeded.class,f.redeem(code)).getResponse()).find("refresh_token").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow();
-   f.server=f.builder().signingKeys(OAuthIssuerKeyProvider.fromSnapshot(OAuthIssuerKeySnapshot.withActiveKey(OAuthIssuerSigningKey.fromKeyPair("key",new OpaquePrivate(),KEY.getPublicKey())).generation("g1").publishedAt(NOW.minusSeconds(120)).build())).build();
+   f.server=f.builder().signingKeys(OAuthIssuerKeyProvider.fromSnapshot(OAuthIssuerKeySnapshot.withActiveKey(OAuthIssuerSigningKey.fromRsaKeyPair("key",new OpaquePrivate(),KEY.getPublicKey())).generation("g1").publishedAt(NOW.minusSeconds(120)).build())).build();
    String supplied=credential;var before=Map.copyOf(f.store.rows);var failure=assertThrows(OAuthServerSigningException.class,()->{if(refresh)f.rotate(supplied);else f.redeem(supplied);});
    assertEquals(SIGNING_FAILED,failure.getReason());assertNull(failure.getCause());assertEquals(before,f.store.rows);
   }));

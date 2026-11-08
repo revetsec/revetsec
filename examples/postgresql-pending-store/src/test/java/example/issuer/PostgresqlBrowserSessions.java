@@ -15,6 +15,7 @@
  */
 package example.issuer;
 
+import com.revetsec.BrowserBinding;
 import com.pyranid.Database;
 import com.pyranid.DatabaseType;
 import com.pyranid.TransactionIsolation;
@@ -79,7 +80,7 @@ public final class PostgresqlBrowserSessions implements BrowserSessionStore {
                     .bind("namespace",namespace).fetchObject(Long.class).orElseThrow();
             if(count>=capacity) throw unavailable();
             BrowserSessions.Session session=new BrowserSessions.Session(LocalInputs.randomId(),LocalInputs.randomId(),
-                    LocalInputs.randomId(),now.plus(LIFETIME));
+                    BrowserBinding.fresh(),now.plus(LIFETIME));
             insert(database,session,deadline);return session;
         });
     }
@@ -181,7 +182,8 @@ public final class PostgresqlBrowserSessions implements BrowserSessionStore {
         String handle=decode(parts[4]),nonce=decode(parts[5]);
         if((handle.isEmpty() != nonce.isEmpty()) || handle.length()>1024
                 || (!nonce.isEmpty() && !nonce.matches("[A-Za-z0-9_-]{43}"))) throw unavailable();
-        BrowserSessions.Session session=new BrowserSessions.Session(id,csrf,binding,expiry);
+        BrowserSessions.Session session=new BrowserSessions.Session(id,csrf,
+                BrowserBinding.fromTrustedPersistence(binding),expiry);
         session.authenticated=parts[3].equals("1");
         if(!handle.isEmpty()) session.pending.set(new BrowserSessions.Pending(handle,nonce));
         return session;
@@ -210,7 +212,7 @@ public final class PostgresqlBrowserSessions implements BrowserSessionStore {
 
     private @NonNull String seal(BrowserSessions.@NonNull Session session,byte @NonNull [] key) {
         BrowserSessions.Pending pending=session.pending.get();
-        String raw=String.join(".","1",encode(session.csrf),encode(session.binding),
+        String raw=String.join(".","1",encode(session.csrf),encode(session.binding.toSecretString()),
                 session.authenticated?"1":"0",encode(pending==null?"":pending.handle),
                 encode(pending==null?"":pending.nonce),Long.toString(session.expires.getEpochSecond()),
                 Integer.toString(session.expires.getNano()));

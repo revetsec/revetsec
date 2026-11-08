@@ -44,6 +44,16 @@ public final class ClosedTotpCodec {
     @NonNull String opening=asciiKey(row.getSealedBytes());@NonNull String rootOpening=asciiKey(carrier(rootRow).getSealedBytes());
     required=requiredKeys(List.of(opening),List.of(rootOpening));
     if(!keyIds(config).containsAll(required)){outputs.add(refusal(source,"BLOCKED_DEPENDENCY","TTR3",required));continue;}
+    if(text(config,"operation").equals("capacity-facts")){
+     intent.requireFormat(ClosedMigrationIntent.Format.TOTP_TTR3);
+     String context="revetsec/totp/durable/v1:"+b64(com.revetsec.internal.crypto.TotpPrimitives.digest("revetsec/totp/address/v1",key.getStorageKey()));
+     byte[] plain=bytes(com.revetsec.internal.crypto.SealedStateAccess.get().unsealDurable(sealer,new String(row.getSealedBytes(),StandardCharsets.US_ASCII),context));
+     try(var decoded=old.open(row);var root=old.open(carrier(rootRow))){
+      if(decoded.account!=null&&decoded.account.observedAt.isAfter(root.namespace.observedAt))throw new IllegalArgumentException("Old floor invariant");
+      var account=decoded.account;Instant at=account==null?decoded.namespace.observedAt:account.observedAt;
+      outputs.add(JsonObject.builder().put("source",source).put("classification","FIT").put("format",java.nio.ByteBuffer.wrap(plain).getInt()==0x54545231?1L:2L).put("rawBytes",(long)plain.length).put("wireBytes",(long)row.getSealedBytes().length).put("sqlBytes",(long)b64(row.getSealedBytes()).length()).put("shortCount",account==null?0L:(long)account.charges.size()).put("dailyCount",account==null?0L:(long)account.totpCharges.size()).put("semanticCommitment",semantic(key,account,at)).build());
+     }finally{Arrays.fill(plain,(byte)0);}continue;
+    }
     @NonNull Instant floor;@NonNull String before,after;@NonNull TotpStoreRecord target;
     if(verify){
      try(var root=next.open(carrier(rootRow));var decoded=next.open(row)){

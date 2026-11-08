@@ -155,7 +155,9 @@ public final class NativeContentionActor {
         try{
             java.nio.file.Path origin=java.nio.file.Path.of(com.revetsec.StateSealer.class.getProtectionDomain().getCodeSource().getLocation().toURI());
             String coreHash=java.util.HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(java.nio.file.Files.readAllBytes(origin)));
-            if(!coreHash.equals("b23109a3434703a40ce5a9795ae18b46265c9f07b73901c3b3c4c54dcbbe3b38"))throw new IllegalStateException("Selected core origin mismatch");
+            String expectedCoreHash=System.getenv("REVETSEC_QUALIFICATION_CORE_SHA256");
+            if(expectedCoreHash==null)expectedCoreHash="b23109a3434703a40ce5a9795ae18b46265c9f07b73901c3b3c4c54dcbbe3b38";
+            if(!expectedCoreHash.matches("[a-f0-9]{64}")||!coreHash.equals(expectedCoreHash))throw new IllegalStateException("Selected core origin mismatch");
             if(args.length==3&&args[0].equals("keys")){keys(args[1],args[2]);return;}
             if(args.length==1&&args[0].startsWith("hold-")){hold(args[0].equals("hold-bucket"));return;}
             fixedPoint=StoreTimeObservation.Healthy.fromObservation(StoreAdmission.fromIdentifiers(env("AUTHORITY"),env("RECOVERY")),env("CLOCK"),NOW,Duration.ZERO);

@@ -15,6 +15,8 @@
  */
 package com.revetsec.scim;
 
+import org.jspecify.annotations.NonNull;
+
 import com.revetsec.internal.json.JsonCodec;
 import com.revetsec.internal.json.JsonLimits;
 import com.revetsec.internal.json.JsonParseResult;
@@ -40,7 +42,7 @@ final class ScimValuelessMemberReplacementTests {
         fail("Standard Group reconciliation cannot invoke application string matching"); return ScimStringMatchResult.unsupportedInstance();
     };
 
-    @TestFactory Stream<DynamicTest> optionalAnonymousMembersNeverPreventClearingMembership() {
+    @TestFactory @NonNull Stream<@NonNull DynamicTest> optionalAnonymousMembersNeverPreventClearingMembership() {
         return Stream.of(GROUP, TEAM).flatMap(type -> Stream.of("reference", "typed", "empty", "null-value")
                 .flatMap(shape -> Stream.of("omitted", "null", "empty").map(clear -> DynamicTest.dynamicTest(type.getName() + " " + shape + " clear=" + clear, () -> {
             var current = resource(type, array(anonymous(shape, "saved"), assigned("a", true)));
@@ -53,7 +55,7 @@ final class ScimValuelessMemberReplacementTests {
         }))));
     }
 
-    @TestFactory Stream<DynamicTest> reorderAndRemovalRetainOnlyMatchedMemberMetadata() {
+    @TestFactory @NonNull Stream<@NonNull DynamicTest> reorderAndRemovalRetainOnlyMatchedMemberMetadata() {
         return Stream.of(GROUP, TEAM).flatMap(type -> Stream.of("reference", "typed", "empty", "null-value").map(shape ->
                 DynamicTest.dynamicTest(type.getName() + " reorder " + shape, () -> {
             var oldAnonymous = anonymous(shape, "saved-anonymous");
@@ -141,7 +143,7 @@ final class ScimValuelessMemberReplacementTests {
         assertEquals(List.of(supplied, assigned("a", true)), rows(recreated));
     }
 
-    @TestFactory Stream<DynamicTest> assignedSurvivorsKeepTheirImmutableChecksInMixedArrays() {
+    @TestFactory @NonNull Stream<@NonNull DynamicTest> assignedSurvivorsKeepTheirImmutableChecksInMixedArrays() {
         return Stream.of("type", "$ref").flatMap(field -> Stream.of(false, true).map(clear -> DynamicTest.dynamicTest(field + " clear=" + clear, () -> {
             var current = resource(GROUP, array(reference("Users/anonymous", "User", "saved"), assigned("a", true)));
             var changed = JsonObject.builder().put("value", "a").put(field, clear ? JsonNull.defaultInstance() : JsonString.fromValue(field.equals("type") ? "Group" : "Users/b")).build();
@@ -152,7 +154,7 @@ final class ScimValuelessMemberReplacementTests {
         })));
     }
 
-    @TestFactory Stream<DynamicTest> invalidMemberFieldsStillRejectBeforeReconciliation() {
+    @TestFactory @NonNull Stream<@NonNull DynamicTest> invalidMemberFieldsStillRejectBeforeReconciliation() {
         return Stream.of(JsonObject.builder().put("value", "").build(), JsonObject.builder().put("value", true).build(),
                 JsonObject.builder().put("$ref", 1L).build(), JsonObject.builder().put("type", 1L).build()).map(invalid -> DynamicTest.dynamicTest(invalid.toJson(), () -> {
             var current = resource(GROUP, array(reference("Users/a", "User", "saved")));
@@ -178,7 +180,7 @@ final class ScimValuelessMemberReplacementTests {
         assertEquals(ScimErrorType.MUTABILITY, assertInstanceOf(ScimResourceParseResult.Rejected.class, result).getError().getErrorType().orElseThrow());
     }
 
-    @TestFactory Stream<DynamicTest> mixedMembershipFitsExplicitUnchangedWorkProfiles() {
+    @TestFactory @NonNull Stream<@NonNull DynamicTest> mixedMembershipFitsExplicitUnchangedWorkProfiles() {
         return Stream.of(GROUP, TEAM).flatMap(type -> Stream.of(1000, 3000).map(size -> DynamicTest.dynamicTest(type.getName() + " count=" + size, () -> {
             List<JsonValue> old = mixed(size, true); List<JsonValue> supplied = mixed(size, false); Collections.reverse(supplied);
             var current = resource(type, JsonArray.fromElements(old));
@@ -209,16 +211,16 @@ final class ScimValuelessMemberReplacementTests {
         while (low < high) { long middle = (low + high) >>> 1; if (direct(current, supplied, middle) instanceof ScimResourceParseResult.Succeeded) high = middle; else low = middle + 1; }
         return low;
     }
-    private static ScimResourceParseResult direct(ScimResource current, JsonArray supplied, long work) {
+    private static @NonNull ScimResourceParseResult direct(@NonNull ScimResource current, @NonNull JsonArray supplied, long work) {
         var parsed = assertInstanceOf(JsonParseResult.Succeeded.class, JsonCodec.parseResult(bytes(GROUP, supplied), JsonLimits.scim(1_000_000, 100_000))).getDocument();
         return ScimResources.replace(GROUP, current, parsed, ScimCompatibility.strictInstance(), new ScimWork(work), new Object());
     }
-    private static List<JsonValue> mixed(int size, boolean metadata) {
+    private static @NonNull List<@NonNull JsonValue> mixed(int size, boolean metadata) {
         List<JsonValue> values = new ArrayList<>();
         for (int i = 0; i < size; i++) { String id = "m" + Integer.toString(i, 36); values.add(i % 2 == 0 ? assigned(id, metadata) : reference("Users/" + id, "User", metadata ? "saved:" + id : null)); }
         return values;
     }
-    private static JsonObject anonymous(String shape, @Nullable String display) {
+    private static @NonNull JsonObject anonymous(@NonNull String shape, @Nullable String display) {
         var row = JsonObject.builder();
         if (shape.equals("reference") || shape.equals("typed")) row.put("$ref", "Users/anonymous");
         if (shape.equals("typed")) row.put("type", "User");
@@ -226,16 +228,16 @@ final class ScimValuelessMemberReplacementTests {
         if (display != null) row.put("display", display);
         return row.build();
     }
-    private static JsonObject normalizedAnonymous(String shape, String display) { return shape.equals("null-value") ? anonymous("empty", display) : anonymous(shape, display); }
-    private static JsonObject reference(String ref, @Nullable String type, @Nullable String display) { var b = JsonObject.builder().put("$ref", ref); if (type != null) b.put("type", type); if (display != null) b.put("display", display); return b.build(); }
-    private static JsonObject assigned(String id, boolean metadata) { var b = JsonObject.builder().put("value", id); if (metadata) b.put("type", "User").put("$ref", "Users/" + id).put("display", "saved:" + id); return b.build(); }
-    private static JsonObject writable(JsonObject row) { var fields = new LinkedHashMap<String, JsonValue>(row.getMembers()); fields.remove("display"); return JsonObject.fromMembers(fields); }
-    private static JsonArray array(JsonValue... rows) { return JsonArray.fromElements(List.of(rows)); }
-    private static JsonArray schemas(ScimResourceType type) { return JsonArray.fromElements(List.of(JsonString.fromValue(type.getSchema().getId()))); }
-    private static byte[] bytes(ScimResourceType type, @Nullable JsonValue members) { var body = JsonObject.builder().put("schemas", schemas(type)).put("displayName", "Team"); if (members != null) body.put("members", members); return body.build().toJson().getBytes(StandardCharsets.UTF_8); }
-    private static ScimResource resource(ScimResourceType type, JsonArray members) { return ScimResource.withResourceType(type).limits(ScimLimits.builder().maximumWorkUnits(10_000_000).build()).document(JsonObject.builder().put("schemas", schemas(type)).put("displayName", "Team").put("id", "group1").put("members", members).put("meta", JsonObject.builder().put("version", "W/\"one\"").build()).build()).build(); }
-    private static ScimResource replace(ScimResourceType type, ScimResource current, @Nullable JsonValue members) { return accepted(provider(type, 4_000_000).parseReplacementResult(type, current, bytes(type, members))); }
-    private static ScimResource accepted(ScimResourceParseResult result) { return assertInstanceOf(ScimResourceParseResult.Succeeded.class, result).getResource(); }
-    private static List<JsonValue> rows(ScimResource resource) { return ((JsonArray) resource.getDocument().find("members").orElseThrow()).getElements(); }
-    private static ScimServiceProvider provider(ScimResourceType type, int work) { return ScimServiceProvider.builder().baseUri(URI.create("https://example.invalid/scim/")).resourceTypes(List.of(type)).stringMatching(NO_MATCHING).limits(ScimLimits.builder().maximumWorkUnits(work).build()).build(); }
+    private static @NonNull JsonObject normalizedAnonymous(@NonNull String shape, @NonNull String display) { return shape.equals("null-value") ? anonymous("empty", display) : anonymous(shape, display); }
+    private static @NonNull JsonObject reference(@NonNull String ref, @Nullable String type, @Nullable String display) { var b = JsonObject.builder().put("$ref", ref); if (type != null) b.put("type", type); if (display != null) b.put("display", display); return b.build(); }
+    private static @NonNull JsonObject assigned(@NonNull String id, boolean metadata) { var b = JsonObject.builder().put("value", id); if (metadata) b.put("type", "User").put("$ref", "Users/" + id).put("display", "saved:" + id); return b.build(); }
+    private static @NonNull JsonObject writable(@NonNull JsonObject row) { var fields = new LinkedHashMap<String, JsonValue>(row.getMembers()); fields.remove("display"); return JsonObject.fromMembers(fields); }
+    private static @NonNull JsonArray array(@NonNull JsonValue @NonNull ... rows) { return JsonArray.fromElements(List.of(rows)); }
+    private static @NonNull JsonArray schemas(@NonNull ScimResourceType type) { return JsonArray.fromElements(List.of(JsonString.fromValue(type.getSchema().getId()))); }
+    private static byte @NonNull [] bytes(@NonNull ScimResourceType type, @Nullable JsonValue members) { var body = JsonObject.builder().put("schemas", schemas(type)).put("displayName", "Team"); if (members != null) body.put("members", members); return body.build().toJson().getBytes(StandardCharsets.UTF_8); }
+    private static @NonNull ScimResource resource(@NonNull ScimResourceType type, @NonNull JsonArray members) { return ScimResource.withResourceType(type).limits(ScimLimits.builder().maximumWorkUnits(10_000_000).build()).document(JsonObject.builder().put("schemas", schemas(type)).put("displayName", "Team").put("id", "group1").put("members", members).put("meta", JsonObject.builder().put("version", "W/\"one\"").build()).build()).build(); }
+    private static @NonNull ScimResource replace(@NonNull ScimResourceType type, @NonNull ScimResource current, @Nullable JsonValue members) { return accepted(provider(type, 4_000_000).parseReplacementResult(type, current, bytes(type, members))); }
+    private static @NonNull ScimResource accepted(@NonNull ScimResourceParseResult result) { return assertInstanceOf(ScimResourceParseResult.Succeeded.class, result).getResource(); }
+    private static @NonNull List<@NonNull JsonValue> rows(@NonNull ScimResource resource) { return ((JsonArray) resource.getDocument().find("members").orElseThrow()).getElements(); }
+    private static @NonNull ScimServiceProvider provider(@NonNull ScimResourceType type, int work) { return ScimServiceProvider.builder().baseUri(URI.create("https://example.invalid/scim/")).resourceTypes(List.of(type)).stringMatching(NO_MATCHING).limits(ScimLimits.builder().maximumWorkUnits(work).build()).build(); }
 }

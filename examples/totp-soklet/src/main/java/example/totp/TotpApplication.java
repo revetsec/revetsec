@@ -15,6 +15,7 @@
  */
 package example.totp;
 
+import com.revetsec.OperationBinding;
 import com.revetsec.json.JsonArray;
 import com.revetsec.json.JsonObject;
 import com.revetsec.json.JsonString;
@@ -509,7 +510,7 @@ public final class TotpApplication {
     @ThreadSafe
     public interface EnrollmentContext extends ActionContext {
         @NonNull String getAccountLabel();
-        @NonNull String getBrowserBinding();
+        @NonNull OperationBinding getBrowserBinding();
         @NonNull Optional<@NonNull String> getReplacingFactorId();
     }
 
@@ -517,13 +518,13 @@ public final class TotpApplication {
     public interface EnrollmentSubmission extends ActionContext {
         @NonNull String getEnrollmentId();
         @NonNull String getCode();
-        @NonNull String getBrowserBinding();
+        @NonNull OperationBinding getBrowserBinding();
     }
 
     @ThreadSafe
     public interface LoginSubmission extends ActionContext {
         @NonNull String getCode();
-        @NonNull String getOperationBinding();
+        @NonNull OperationBinding getOperationBinding();
     }
 
     @ThreadSafe
@@ -540,6 +541,6 @@ public final class TotpApplication {
     @ThreadSafe
     public interface CancellationContext extends ActionContext {
         @NonNull String getEnrollmentId();
-        @NonNull String getBrowserBinding();
+        @NonNull OperationBinding getBrowserBinding();
     }
 }

@@ -1680,6 +1680,258 @@
       ],
       "meaning": "store kind 6, authenticated substitution mode 8",
       "sha256": "54119a05213ae6cd9725abe6462232d3f16eb02a2641786e49021dff4b6e7a98"
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/CimdFuzzTestsInputs/metadataCachePeerAndFramingRemainBound/document-11-cache-00.bin",
+      "controls": [
+        11,
+        0,
+        0,
+        0
+      ],
+      "meaning": "CIMD selected grant profile document mode11, cache context mode0",
+      "sha256": "2ac0cdb91e240ec7279f0a678caa96ba29f54a1b2846edf8a8c3a3a3f8261788",
+      "bytes": 17
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/CimdFuzzTestsInputs/metadataCachePeerAndFramingRemainBound/document-11-cache-01.bin",
+      "controls": [
+        11,
+        1,
+        0,
+        0
+      ],
+      "meaning": "CIMD selected grant profile document mode11, cache context mode1",
+      "sha256": "d15b36e28def813d51e6afa28e1cc3485731ecfdd0d73629bccf2a178380049e",
+      "bytes": 17
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/CimdFuzzTestsInputs/metadataCachePeerAndFramingRemainBound/document-11-cache-02.bin",
+      "controls": [
+        11,
+        2,
+        0,
+        0
+      ],
+      "meaning": "CIMD selected grant profile document mode11, cache context mode2",
+      "sha256": "32501ab2d24d064e2e1711b75f8ac0a2540e429c28263b05a4ef24d4460d3425",
+      "bytes": 17
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/CimdFuzzTestsInputs/metadataCachePeerAndFramingRemainBound/document-11-cache-03.bin",
+      "controls": [
+        11,
+        3,
+        0,
+        0
+      ],
+      "meaning": "CIMD selected grant profile document mode11, cache context mode3",
+      "sha256": "106418e5be6f0122d30b84e38519982a2ebde6772df065899c5b4bec2a473f3f",
+      "bytes": 17
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/CimdFuzzTestsInputs/metadataCachePeerAndFramingRemainBound/document-11-cache-04.bin",
+      "controls": [
+        11,
+        4,
+        0,
+        0
+      ],
+      "meaning": "CIMD selected grant profile document mode11, cache context mode4",
+      "sha256": "a69e4b6de65b7a1c82f2f502cca9b7e119bf2d9046d2c5dd34840343e6b8518a",
+      "bytes": 17
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/CimdFuzzTestsInputs/metadataCachePeerAndFramingRemainBound/document-11-cache-05.bin",
+      "controls": [
+        11,
+        5,
+        0,
+        0
+      ],
+      "meaning": "CIMD selected grant profile document mode11, cache context mode5",
+      "sha256": "9b854fbe65fdbaa44ce6951ba7df96c68d588e500be8f8dfcceea8f639efcd54",
+      "bytes": 17
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/CimdFuzzTestsInputs/metadataCachePeerAndFramingRemainBound/document-11-cache-06.bin",
+      "controls": [
+        11,
+        6,
+        0,
+        0
+      ],
+      "meaning": "CIMD selected grant profile document mode11, cache context mode6",
+      "sha256": "e5dfbeb30c8717125807f3ae8b5cbe7832b467532384619089383b414afede7b",
+      "bytes": 17
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/CimdFuzzTestsInputs/metadataCachePeerAndFramingRemainBound/document-12-cache-00.bin",
+      "controls": [
+        12,
+        0,
+        0,
+        0
+      ],
+      "meaning": "CIMD selected grant profile document mode12, cache context mode0",
+      "sha256": "9f15d9ac13b6c0b989cdaeca0c0b61851262aae3bb959081bc93d2e380871738",
+      "bytes": 17
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/CimdFuzzTestsInputs/metadataCachePeerAndFramingRemainBound/document-12-cache-01.bin",
+      "controls": [
+        12,
+        1,
+        0,
+        0
+      ],
+      "meaning": "CIMD selected grant profile document mode12, cache context mode1",
+      "sha256": "32385524cd9cedbd46dfa7004473786cfc114ce3e05b687a95f792329e1e6e6d",
+      "bytes": 17
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/CimdFuzzTestsInputs/metadataCachePeerAndFramingRemainBound/document-12-cache-02.bin",
+      "controls": [
+        12,
+        2,
+        0,
+        0
+      ],
+      "meaning": "CIMD selected grant profile document mode12, cache context mode2",
+      "sha256": "c15e52f92f94c7361cc5b7f063803ca095d3d1e5daecbc6f82f882054fe29473",
+      "bytes": 17
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/CimdFuzzTestsInputs/metadataCachePeerAndFramingRemainBound/document-12-cache-03.bin",
+      "controls": [
+        12,
+        3,
+        0,
+        0
+      ],
+      "meaning": "CIMD selected grant profile document mode12, cache context mode3",
+      "sha256": "68e6b6b4702ab833d6465af753b1fc798dfebdab0e3016dd5ebc08900d3bbd75",
+      "bytes": 17
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/CimdFuzzTestsInputs/metadataCachePeerAndFramingRemainBound/document-12-cache-04.bin",
+      "controls": [
+        12,
+        4,
+        0,
+        0
+      ],
+      "meaning": "CIMD selected grant profile document mode12, cache context mode4",
+      "sha256": "acd85ffa9e7f1af6df5e488030277a5cf04618168f702c4b4a265ada57ad8fba",
+      "bytes": 17
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/CimdFuzzTestsInputs/metadataCachePeerAndFramingRemainBound/document-12-cache-05.bin",
+      "controls": [
+        12,
+        5,
+        0,
+        0
+      ],
+      "meaning": "CIMD selected grant profile document mode12, cache context mode5",
+      "sha256": "cee7e8e6fdb9f1e6180d9055e0e44c4d506dc7049b66e0967a412a11b9fe0a68",
+      "bytes": 17
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/CimdFuzzTestsInputs/metadataCachePeerAndFramingRemainBound/document-12-cache-06.bin",
+      "controls": [
+        12,
+        6,
+        0,
+        0
+      ],
+      "meaning": "CIMD selected grant profile document mode12, cache context mode6",
+      "sha256": "67961a2e7d5feba9d850dae772ff5f61ae6ff304e8587254c6c589524f954662",
+      "bytes": 17
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/CimdFuzzTestsInputs/metadataCachePeerAndFramingRemainBound/document-13-cache-00.bin",
+      "controls": [
+        13,
+        0,
+        0,
+        0
+      ],
+      "meaning": "CIMD selected grant profile document mode13, cache context mode0",
+      "sha256": "5096d39ea1c1f7e47729aade7690c47da6547aa4404ed46d446ee6a5b8970052",
+      "bytes": 17
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/CimdFuzzTestsInputs/metadataCachePeerAndFramingRemainBound/document-13-cache-01.bin",
+      "controls": [
+        13,
+        1,
+        0,
+        0
+      ],
+      "meaning": "CIMD selected grant profile document mode13, cache context mode1",
+      "sha256": "01e3854a3e3f380e5f0d1d19814d6eba958358e6a0bd4c20b902b0bbc98052f4",
+      "bytes": 17
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/CimdFuzzTestsInputs/metadataCachePeerAndFramingRemainBound/document-13-cache-02.bin",
+      "controls": [
+        13,
+        2,
+        0,
+        0
+      ],
+      "meaning": "CIMD selected grant profile document mode13, cache context mode2",
+      "sha256": "894fe99b7f5f9147ed29051c766677ee691a362c8f19a8d2d728dbba653fdb7b",
+      "bytes": 17
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/CimdFuzzTestsInputs/metadataCachePeerAndFramingRemainBound/document-13-cache-03.bin",
+      "controls": [
+        13,
+        3,
+        0,
+        0
+      ],
+      "meaning": "CIMD selected grant profile document mode13, cache context mode3",
+      "sha256": "61605a9eb170f9d9f02ae2031aa77a1ccd6baf661b17735ed806c578a1a354ef",
+      "bytes": 17
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/CimdFuzzTestsInputs/metadataCachePeerAndFramingRemainBound/document-13-cache-04.bin",
+      "controls": [
+        13,
+        4,
+        0,
+        0
+      ],
+      "meaning": "CIMD selected grant profile document mode13, cache context mode4",
+      "sha256": "82c147623b73d4760e25008d1bb059febd9f481521f407b3640c7074099b946a",
+      "bytes": 17
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/CimdFuzzTestsInputs/metadataCachePeerAndFramingRemainBound/document-13-cache-05.bin",
+      "controls": [
+        13,
+        5,
+        0,
+        0
+      ],
+      "meaning": "CIMD selected grant profile document mode13, cache context mode5",
+      "sha256": "6a5cb7472be1ff2e31976750fb298a862652cfe125f6cbdd2409bba098944c2f",
+      "bytes": 17
+    },
+    {
+      "path": "src/test/resources/com/revetsec/oauth/server/CimdFuzzTestsInputs/metadataCachePeerAndFramingRemainBound/document-13-cache-06.bin",
+      "controls": [
+        13,
+        6,
+        0,
+        0
+      ],
+      "meaning": "CIMD selected grant profile document mode13, cache context mode6",
+      "sha256": "659d2e08b859eac5e095f7ef1beb9338ded9b99e0949c115409bf97494d4fc7b",
+      "bytes": 17
     }
   ]
 }

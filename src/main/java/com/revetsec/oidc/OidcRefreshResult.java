@@ -37,10 +37,18 @@ public final class OidcRefreshResult {
 	private final @Nullable IdToken idToken;
 	private final RefreshToken refreshToken;
 	private final OidcSessionReference original;
+	private final @Nullable Object owner;
 	OidcRefreshResult(@NonNull TokenResponse tokens, @Nullable IdToken idToken, @NonNull RefreshToken previous, @NonNull OidcSessionReference original) {
+		this(tokens, idToken, previous, original, null);
+	}
+	OidcRefreshResult(@NonNull TokenResponse tokens, @Nullable IdToken idToken, @NonNull RefreshToken previous,
+			@NonNull OidcSessionReference original, @Nullable Object owner) {
+		this.owner = owner;
 		this.tokens = requireNonNull(tokens); this.idToken = idToken; this.original = requireNonNull(original);
 		this.refreshToken = tokens.getRefreshToken().orElse(requireNonNull(previous));
 	}
+	@SuppressWarnings("ReferenceEquality") // Logout hint creation requires the exact producing client's private capability.
+	boolean belongsTo(@NonNull Object owner) { return this.owner == owner; }
 	/**
 	 * Returns the endpoint tokens. The raw id_token is absent from its safe parameter view.
 	 * @return token response

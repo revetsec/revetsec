@@ -47,7 +47,7 @@ final class WebAuthnTerminalDisableTests {
     private static final byte[] HANDLE={4,5,6},CREDENTIAL_ID={1,2,3};
     private static final String BINDING_TEXT=Base64Url.encode(new byte[32]);
 
-    @TestFactory Stream<DynamicTest> terminalAtEveryAccountStageAcrossAdmissionAndMaintenance() {
+    @TestFactory @NonNull Stream<@NonNull DynamicTest> terminalAtEveryAccountStageAcrossAdmissionAndMaintenance() {
         return Stream.of("empty","tentative","enrolled").flatMap(stage->Stream.of("reopen","fresh-service","repeat-disable","reseal").map(mode->DynamicTest.dynamicTest(stage+"/"+mode,()->{
             F f=new F();WebAuthnBrowserRequest registration=null,authentication=null,reauthentication=null;
             if(stage.equals("tentative"))registration=f.registration();
@@ -70,7 +70,7 @@ final class WebAuthnTerminalDisableTests {
             f.authentication();
             if(registration!=null)assertInstanceOf(WebAuthnRegistrationResult.Rejected.class,f.rp.completeRegistrationResult(registration.getCeremonyId(),registrationJson(f.pair,challenge(registration)),BINDING_TEXT));
             if(authentication!=null)assertInstanceOf(WebAuthnAuthenticationResult.Rejected.class,f.rp.completeAuthenticationResult(authentication.getCeremonyId(),assertionJson(f.pair.getPrivate(),challenge(authentication),1),BINDING_TEXT));
-            if(reauthentication!=null)assertInstanceOf(WebAuthnAuthenticationResult.Rejected.class,f.rp.completeReauthenticationResult(HANDLE,"transfer",reauthentication.getCeremonyId(),assertionJson(f.pair.getPrivate(),challenge(reauthentication),1),BINDING_TEXT));
+            if(reauthentication!=null)assertInstanceOf(WebAuthnReauthenticationResult.Rejected.class,f.rp.completeReauthenticationResult(HANDLE,"transfer",reauthentication.getCeremonyId(),assertionJson(f.pair.getPrivate(),challenge(reauthentication),1),BINDING_TEXT));
             var listed=assertInstanceOf(WebAuthnCredentialListResult.Listed.class,f.rp.listCredentialsResult(HANDLE));assertEquals(stage.equals("enrolled")?1:0,listed.getCredentialIds().size());
             if(stage.equals("enrolled"))assertInstanceOf(WebAuthnCredentialRemovalResult.Removed.class,f.rp.removeCredentialResult(HANDLE,CREDENTIAL_ID));
             else assertInstanceOf(WebAuthnCredentialRemovalResult.Absent.class,f.rp.removeCredentialResult(HANDLE,CREDENTIAL_ID));
@@ -79,7 +79,7 @@ final class WebAuthnTerminalDisableTests {
             assertInstanceOf(WebAuthnRegistrationRequestResult.Rejected.class,f.rp.beginRegistrationResult(options(),BINDING_TEXT));
         })));
     }
-    @TestFactory Stream<DynamicTest> outcomeReconciliationNeverPromisesAnEnableTransition() {
+    @TestFactory @NonNull Stream<@NonNull DynamicTest> outcomeReconciliationNeverPromisesAnEnableTransition() {
         return Stream.of("unknown-applied","known-commit-not-admitted","definite-no-effect").map(mode->DynamicTest.dynamicTest(mode,()->{
             F f=new F();f.enroll();
             if(mode.equals("unknown-applied"))f.store.unknownAfter=true;
@@ -97,24 +97,24 @@ final class WebAuthnTerminalDisableTests {
             assertInstanceOf(WebAuthnRegistrationRequestResult.Rejected.class,f.rp.beginRegistrationResult(options(),BINDING_TEXT));
         }));
     }
-    private static WebAuthnRegistrationOptions options(){return WebAuthnRegistrationOptions.withUserHandle(HANDLE).userName("test").userDisplayName("Test").build();}
-    private static String challenge(WebAuthnBrowserRequest request){return ((JsonString)request.getPublicKeyOptions().find("challenge").orElseThrow()).getValue();}
+    private static @NonNull WebAuthnRegistrationOptions options(){return WebAuthnRegistrationOptions.withUserHandle(HANDLE).userName("test").userDisplayName("Test").build();}
+    private static @NonNull String challenge(@NonNull WebAuthnBrowserRequest request){return ((JsonString)request.getPublicKeyOptions().find("challenge").orElseThrow()).getValue();}
     @ThreadSafe private static final class Gate implements WebAuthnRecoveryGate {
         final AtomicBoolean open=new AtomicBoolean(true);
         @Override public @Nullable Permit acquire(@NonNull Duration budget){return open.get()?new Permit(){@Override public @NonNull Boolean isCurrent(){return open.get();}@Override public void close(){}}:null;}
     }
     @ThreadSafe private static final class Store implements WebAuthnStore {
         final ScriptedWebAuthnStore source;volatile boolean unknownAfter,refuse;volatile @Nullable AtomicBoolean closeAfter;
-        Store(ScriptedWebAuthnStore source){this.source=source;}
+        Store(@NonNull ScriptedWebAuthnStore source){this.source=source;}
         @Override public @NonNull WebAuthnStoreReadResult read(@NonNull Set<@NonNull WebAuthnStoreKey> keys,@NonNull Duration budget){return source.read(keys,budget);}
         @Override public @NonNull WebAuthnStoreCommitReceipt compareAndCommit(@NonNull WebAuthnStoreWrite write,@NonNull Duration budget){if(refuse)return WebAuthnStoreCommitReceipt.fromRefusal(WebAuthnStoreCommitResult.UNAVAILABLE);var receipt=source.compareAndCommit(write,budget);AtomicBoolean close=closeAfter;if(close!=null)close.set(false);return unknownAfter?WebAuthnStoreCommitReceipt.unknownInstance():receipt;}
     }
     @NotThreadSafe private static final class F {
         final ScriptedWebAuthnStore source=new ScriptedWebAuthnStore(BASE);final Store store=new Store(source);final Gate gate=new Gate();final KeyPair pair;WebAuthnRelyingParty rp;
         F(){try{pair=KeyPairGenerator.getInstance("Ed25519").generateKeyPair();}catch(GeneralSecurityException e){throw new IllegalStateException(e);}rp=party(false);}
-        WebAuthnRelyingParty party(boolean rotate){var old=SealingKey.fromBase64("old","AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=");var next=SealingKey.fromBase64("next","ICEiIyQlJicoKSorLC0uLzAxMjM0NTY3ODk6Ozw9Pj8=");var sealer=StateSealer.withActiveKey(rotate?next:old).verificationKeys(rotate?List.of(old):List.of()).clock(CLOCK).build();return WebAuthnRelyingParty.withRelyingPartyId(RP).relyingPartyName("Test").credentialNamespace(NS).allowedOrigins(Set.of(ORIGIN)).stateSealer(sealer).store(store).recoveryGate(gate).clockForTesting(CLOCK).build();}
-        WebAuthnBrowserRequest registration(){return assertInstanceOf(WebAuthnRegistrationRequestResult.Prepared.class,rp.beginRegistrationResult(options(),BINDING_TEXT)).getRequest();}
-        WebAuthnBrowserRequest authentication(){return assertInstanceOf(WebAuthnAuthenticationRequestResult.Prepared.class,rp.beginAuthenticationResult(BINDING_TEXT)).getRequest();}
+        @NonNull WebAuthnRelyingParty party(boolean rotate){var old=SealingKey.fromBase64("old","AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=");var next=SealingKey.fromBase64("next","ICEiIyQlJicoKSorLC0uLzAxMjM0NTY3ODk6Ozw9Pj8=");var sealer=StateSealer.withActiveKey(rotate?next:old).verificationKeys(rotate?List.of(old):List.of()).clock(CLOCK).build();return WebAuthnRelyingParty.withRelyingPartyId(RP).relyingPartyName("Test").credentialNamespace(NS).allowedOrigins(Set.of(ORIGIN)).stateSealer(sealer).store(store).recoveryGate(gate).clockForTesting(CLOCK).build();}
+        @NonNull WebAuthnBrowserRequest registration(){return assertInstanceOf(WebAuthnRegistrationRequestResult.Prepared.class,rp.beginRegistrationResult(options(),BINDING_TEXT)).getRequest();}
+        @NonNull WebAuthnBrowserRequest authentication(){return assertInstanceOf(WebAuthnAuthenticationRequestResult.Prepared.class,rp.beginAuthenticationResult(BINDING_TEXT)).getRequest();}
         void enroll(){var request=registration();assertInstanceOf(WebAuthnRegistrationResult.Succeeded.class,rp.completeRegistrationResult(request.getCeremonyId(),registrationJson(pair,challenge(request)),BINDING_TEXT));}
     }
     private static byte @NonNull [] registrationJson(@NonNull KeyPair pair,

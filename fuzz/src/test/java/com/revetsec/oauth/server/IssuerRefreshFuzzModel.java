@@ -190,7 +190,7 @@ final class IssuerRefreshFuzzModel {
 			this.scopes = M6FuzzOracle.choice(input, 3, 2) == 0 ? Set.of("read") : Set.of("read", "write");
 			byte[] material = new byte[32]; for (int index = 0; index < material.length; index++) material[index] = (byte) (index + 1);
 			StateSealer sealer = StateSealer.withActiveKey(SealingKey.fromBase64("test", Base64.getEncoder().encodeToString(material))).build();
-			OAuthIssuerKeySnapshot keys = OAuthIssuerKeySnapshot.withActiveKey(OAuthIssuerSigningKey.fromKeyPair("key",
+			OAuthIssuerKeySnapshot keys = OAuthIssuerKeySnapshot.withActiveKey(OAuthIssuerSigningKey.fromRsaKeyPair("key",
 				M6FuzzOracle.KEY.getPrivate(), M6FuzzOracle.KEY.getPublic())).generation("g1").publishedAt(NOW.minusSeconds(120)).build();
 			this.server = OAuthAuthorizationServer.withIssuer(ISSUER).authorizationEndpoint(URI.create(ISSUER + "/authorize"))
 				.tokenEndpoint(URI.create(ISSUER + "/token")).jwksEndpoint(URI.create(ISSUER + "/jwks"))

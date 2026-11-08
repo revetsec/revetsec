@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 package example.pending;
+import com.revetsec.OperationBinding;
 import com.revetsec.json.JsonString;
 
 import com.revetsec.SealingKey;
@@ -63,7 +64,7 @@ public final class WebAuthnFlowProbe {
     private static final @NonNull String ORIGIN = "https://" + RP;
     private static final byte @NonNull [] HANDLE = { 4, 5, 6 };
     private static final byte @NonNull [] CREDENTIAL_ID = { 1, 2, 3 };
-    private static final @NonNull String BINDING = url(filled(65));
+    private static final @NonNull OperationBinding BINDING = OperationBinding.fromTrustedPersistence(url(filled(65)));
 
     private WebAuthnFlowProbe() { }
 

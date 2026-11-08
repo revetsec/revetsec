@@ -1,7 +1,7 @@
 # Revetsec examples
 
 Build the public examples with Maven and launch the applications with Java.
-The eight example projects and a small demo-key utility share an [examples parent POM](pom.xml), separate from the
+The example projects and a small demo-key utility share an [examples parent POM](pom.xml), separate from the
 core build. They are unpublished and do not deploy artifacts.
 
 | Project | Demonstrates | Entry point |
@@ -13,6 +13,11 @@ core build. They are unpublished and do not deploy artifacts.
 | [TOTP and recovery](totp-soklet/README.md) | Enrollment, replacement, login, recovery and management | Injected application integration and Maven tests |
 | [Password hashing](password-hashing/README.md) | Bounded Argon2id work, pepper and exact-version rehashing | Executable console JAR |
 | [RSA/OIDC recipes](rsa-oidc/README.md) | Private-key client authentication and explicit Entra tenant decisions | Integration recipes and Maven tests |
+| [Google/Apple with Soklet](provider-backend-tokens-soklet/README.md) | Common provider-token flows through bounded Soklet routes and current account policy | Injected Java 21 integration; trusted HTTPS/query-free edge required |
+| [Local-first OIDC logout](rp-initiated-logout/README.md) | Authorized local session close, bounded provider preparation and correlated return | Common Java 17 application recipe and Maven tests |
+| [OIDC logout with Soklet](rp-initiated-logout-soklet/README.md) | Shared logout workflow through bounded raw Soklet requests | Injected Java 21 integration; trusted HTTPS/query-free edge required |
+| [Key import](key-import/README.md) | Bounded application-owned DER files and explicit pair checking | Executable console JAR |
+| [Google/Apple backend tokens](provider-backend-tokens/README.md) | Request-bound provider tokens, local session rotation and current authorization | Common application recipe and Maven tests |
 | [PostgreSQL stores](postgresql-pending-store/README.md) | Shared pending logins, metadata cache, issuer, SCIM, TOTP and WebAuthn storage | Store recipes; optional Docker failure tests |
 
 The paired [Jakarta Servlet](https://github.com/revetsec/revetsec-servlet-jakarta/blob/main/docs/totp.md)
@@ -23,7 +28,7 @@ authorization, durable sessions/storage and coordinated recovery admission.
 ## Build with Maven
 
 Use JDK 21 or newer for the full reactor and Soklet applications. Core-only
-password and RSA recipes retain Java 17 compatibility. Select the JDK with
+password, RSA, key-import, common logout and provider-token recipes retain Java 17 compatibility. Select the JDK with
 `JAVA_HOME` and put its `bin` directory on `PATH` so Maven and Java agree.
 
 Revetsec core and the Soklet adapter currently use the unpublished
@@ -62,7 +67,7 @@ from the core repository root:
 java -jar examples/playground/target/playground-1.0.0-SNAPSHOT.jar
 ```
 
-Each project README describes its configuration. TOTP, RSA and PostgreSQL are
+Each project README describes its configuration. TOTP, RSA, logout and PostgreSQL are
 integration recipes: their Maven build does not invent primary authentication,
 application security or a database service.
 

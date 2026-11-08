@@ -21,9 +21,15 @@ import com.revetsec.StateSealer;
 import com.revetsec.StoreCommitTiming;
 import com.revetsec.StoreTimeObservation;
 import com.revetsec.internal.crypto.TotpPrimitives;
+import com.revetsec.internal.StoreTimeAccess;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestFactory;
+import org.junit.jupiter.api.DynamicTest;
+import java.util.stream.Stream;
+import java.util.Arrays;
+import java.util.function.Consumer;
 
 import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
@@ -276,6 +282,131 @@ final class TotpSharedClockReceiptTests {
 				shortBudget.beginEnrollmentResult(options(), "browser"));
 		assertEquals(1, f.store.writes.size()); assertEquals(1, f.store.reads);
 		try (TotpRecordsV3.Decoded decoded = f.account()) { assertNotNull(Objects.requireNonNull(Objects.requireNonNull(decoded.account).pending)); }
+	}
+
+
+	@TestFactory @NonNull Stream<@NonNull DynamicTest> scEng01SettlementReloadsEveryPreparedAccountFactAfterItsCharge() {
+		return Stream.of("FACTOR", "FENCE", "RESERVATION", "USED_STEP", "PENDING_FACTOR", "PENDING_BINDING", "RECOVERY_BATCH", "RECOVERY_HASH")
+				.map(mode -> DynamicTest.dynamicTest("ENG01/after-charge/" + mode, () -> {
+			F f = new F();
+			boolean pending = mode.startsWith("PENDING_");
+			TotpEnrollment enrollment = pending ? assertInstanceOf(TotpEnrollmentRequestResult.Prepared.class, f.begin()).getEnrollment() : null;
+			RecoveryCodes codes = pending ? null : f.enroll();
+			if (!pending) f.advance(Duration.ofSeconds(60));
+			boolean recovery = mode.startsWith("RECOVERY_");
+			String code = pending ? f.pendingCode(0) : recovery ? Objects.requireNonNull(codes).getCodes().get(0) : f.code(0);
+			long matched = f.source.authorityTime().getEpochSecond() / 30;
+			String rootVersion = f.record(f.root()).getVersion();
+			AtomicReference<TotpStoreRecord> changed = new AtomicReference<>();
+			AtomicReference<String> ownCharge = new AtomicReference<>();
+			f.reset();
+			f.store.after = (number, write, receipt) -> {
+				if (number != 1) return receipt;
+				assertEquals(TotpStoreCommitResult.COMMITTED, receipt.getStatus());
+				try (TotpRecordsV3.Decoded decoded = f.account()) {
+					var account = Objects.requireNonNull(decoded.account);
+					assertEquals(1, account.charges.size()); ownCharge.set(account.charges.get(0).id);
+					assertEquals(recovery ? 0 : 1, account.totpCharges.size());
+				}
+				changed.set(competingAccountChange(f, account -> {
+					switch (mode) {
+						case "FACTOR" -> { var active = Objects.requireNonNull(account.active); account.active = new TotpRecords.Active(f.codec.freshId(), active.secret.clone(), active.enrolledAt, active.usedStep); }
+						case "FENCE" -> account.fence = f.codec.freshId();
+						case "RESERVATION" -> {
+							String replacement = f.codec.freshId(); var charge = account.charges.get(0);
+							account.charges.set(0, new TotpRecords.Charge(replacement, charge.at));
+							account.totpCharges.set(0, new TotpRecords.Charge(replacement, charge.at));
+						}
+						case "USED_STEP" -> Objects.requireNonNull(account.active).usedStep = matched;
+						case "PENDING_FACTOR" -> { var old = Objects.requireNonNull(account.pending); account.pending = new TotpRecords.Pending(old.enrollmentId, f.codec.freshId(), old.secret.clone(), old.browserHash.clone(), old.expiresAt, old.expectedFactorId); }
+						case "PENDING_BINDING" -> Objects.requireNonNull(account.pending).browserHash[0] ^= 1;
+						case "RECOVERY_BATCH" -> account.batchId = f.codec.freshId();
+						case "RECOVERY_HASH" -> { for (byte[] hash : account.recoveryHashes) Arrays.fill(hash, (byte) 0); account.recoveryHashes.clear(); }
+						default -> throw new AssertionError("Unrecognized account substitution");
+					}
+				}));
+				return receipt;
+			};
+			TotpRejectionReason expected = switch (mode) {
+				case "FACTOR" -> TotpRejectionReason.NOT_ENROLLED;
+				case "PENDING_FACTOR" -> TotpRejectionReason.ENROLLMENT_NOT_FOUND;
+				case "PENDING_BINDING" -> TotpRejectionReason.BINDING_MISMATCH;
+				case "RECOVERY_BATCH" -> TotpRejectionReason.RECOVERY_BATCH_MISMATCH;
+				case "USED_STEP", "RECOVERY_HASH" -> TotpRejectionReason.INVALID_CODE;
+				default -> TotpRejectionReason.REJECTED;
+			};
+			if (pending) assertEquals(expected, assertInstanceOf(TotpEnrollmentResult.Rejected.class,
+					f.totp.confirmEnrollmentResult(ACCOUNT, Objects.requireNonNull(enrollment).getEnrollmentId(), code, "browser")).getReason());
+			else if (recovery) assertEquals(expected, assertInstanceOf(RecoveryCodeUseResult.Rejected.class,
+					f.totp.consumeRecoveryCodeResult(ACCOUNT, code, "recover")).getReason());
+			else assertEquals(expected, assertInstanceOf(TotpVerificationResult.Rejected.class, f.totp.verifyResult(ACCOUNT, code, "login")).getReason());
+			assertEquals(2, f.store.writes.size()); assertEquals(3, f.store.reads);
+			TotpStoreWrite settlement = f.store.writes.get(1);
+			assertTrue(settlement.getMutations().isEmpty());
+			assertEquals(Set.of(f.root(), f.key()), settlement.getSnapshot().getEntries().keySet());
+			TotpStoreRecord retained = Objects.requireNonNull(changed.get());
+			assertEquals(retained.getVersion(), assertInstanceOf(TotpStoreEntry.Present.class, settlement.getSnapshot().getEntry(f.key())).getRecord().getVersion());
+			assertEquals(retained.getVersion(), f.record(f.key()).getVersion());
+			assertArrayEquals(retained.getSealedBytes(), f.record(f.key()).getSealedBytes());
+			assertEquals(rootVersion, f.record(f.root()).getVersion());
+			try (TotpRecordsV3.Decoded decoded = f.account()) {
+				var account = Objects.requireNonNull(decoded.account);
+				assertEquals(1, account.charges.size()); assertEquals(recovery ? 0 : 1, account.totpCharges.size());
+				if (!mode.equals("RESERVATION")) assertEquals(ownCharge.get(), account.charges.get(0).id);
+				else assertNotEquals(ownCharge.get(), account.charges.get(0).id);
+			}
+		}));
+	}
+
+	@Test void scEng01IndependentAccountSettlementDoesNotChurnRootOrInvalidateAnotherReservation() {
+		F f = new F(); f.enroll(); f.advance(Duration.ofSeconds(60));
+		String other = "account-b";
+		var otherEnrollment = assertInstanceOf(TotpEnrollmentRequestResult.Prepared.class, f.totp.beginEnrollmentResult(
+				TotpEnrollmentOptions.withAccountId(other).accountName("other@example.test").build(), "other-browser")).getEnrollment();
+		TotpStoreKey otherKey = TotpStoreKey.forAccount(NAMESPACE, EPOCH, other);
+		String otherCode;
+		try (TotpRecordsV3.Decoded decoded = f.open(f.record(otherKey))) {
+			byte[] secret = Objects.requireNonNull(Objects.requireNonNull(decoded.account).pending).secret;
+			long step = f.source.authorityTime().getEpochSecond() / 30; otherCode = hotp(secret, step);
+			assertEquals(step, matching(secret, otherCode, step, -1));
+		}
+		String code = f.code(0), rootVersion = f.record(f.root()).getVersion();
+		f.reset();
+		f.store.after = (number, write, receipt) -> {
+			if (number == 1) {
+				assertEquals(TotpStoreCommitResult.COMMITTED, receipt.getStatus());
+				assertInstanceOf(TotpEnrollmentResult.Succeeded.class, f.totp.confirmEnrollmentResult(other,
+						otherEnrollment.getEnrollmentId(), otherCode, "other-browser"));
+			}
+			return receipt;
+		};
+		assertInstanceOf(TotpVerificationResult.Succeeded.class, f.totp.verifyResult(ACCOUNT, code, "login"));
+		assertEquals(4, f.store.writes.size()); assertEquals(6, f.store.reads);
+		assertEquals(rootVersion, f.record(f.root()).getVersion());
+		for (TotpStoreWrite write : f.store.writes) {
+			assertEquals(1, write.getMutations().size());
+			assertFalse(write.getMutations().get(0).getKey().equals(f.root()));
+			assertEquals(rootVersion, assertInstanceOf(TotpStoreEntry.Present.class, write.getSnapshot().getEntry(f.root())).getRecord().getVersion());
+		}
+		for (TotpStoreKey key : List.of(f.key(), otherKey)) try (TotpRecordsV3.Decoded decoded = f.open(f.record(key))) {
+			assertTrue(Objects.requireNonNull(decoded.account).charges.isEmpty());
+			assertTrue(Objects.requireNonNull(decoded.account).totpCharges.isEmpty());
+			assertNotNull(Objects.requireNonNull(decoded.account).active);
+		}
+	}
+
+	private static @NonNull TotpStoreRecord competingAccountChange(@NonNull F f, @NonNull Consumer<TotpRecords.@NonNull Account> change) {
+		TotpStoreSnapshot snapshot = assertInstanceOf(TotpStoreReadResult.Available.class,
+				f.source.read(Set.of(f.root(), f.key()), Duration.ofSeconds(2))).getSnapshot();
+		TotpStoreRecord record;
+		try (TotpRecordsV3.Decoded decoded = f.open(assertInstanceOf(TotpStoreEntry.Present.class, snapshot.getEntry(f.key())).getRecord())) {
+			var account = Objects.requireNonNull(decoded.account); change.accept(account); record = f.codec.sealAccount(f.key(), account);
+		}
+		var observation = assertInstanceOf(StoreTimeObservation.Healthy.class, snapshot.getTimeObservation());
+		var write = TotpStoreWrite.fromSnapshotAndMutations(TotpStoreWrite.Purpose.UPDATE, snapshot,
+				List.of(TotpStoreWrite.Mutation.replace(record)), StoreTimeAccess.get().fromObservation(observation, observation.getObservedAt(), null));
+		assertEquals(TotpStoreCommitResult.COMMITTED, f.source.compareAndCommit(write, Duration.ofSeconds(2)).getStatus());
+		return record;
 	}
 
 	private static @NonNull TotpEnrollmentOptions options() { return TotpEnrollmentOptions.withAccountId(ACCOUNT).accountName("person@example.test").build(); }

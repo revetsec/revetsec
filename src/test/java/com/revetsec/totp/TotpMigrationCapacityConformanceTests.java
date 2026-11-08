@@ -71,4 +71,34 @@ final class TotpMigrationCapacityConformanceTests {
  private static @NonNull StateSealer sealer(int keyLength){return StateSealer.withActiveKey(SealingKey.fromBase64("k".repeat(keyLength),"AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA=")).build();}
  private static @NonNull String id(int n){return Base64Url.encode(ByteBuffer.allocate(32).putInt(n).array());}
  private static byte @NonNull [] pattern(int length,int value){byte[] b=new byte[length];Arrays.fill(b,(byte)value);return b;}
+ @TestFactory @NonNull List<@NonNull DynamicTest> cap06PromotionHistoryRootAndKeyGrowth(){
+  List<DynamicTest> tests=new ArrayList<>();
+  for(int format:List.of(1,2))for(int scope:List.of(1,128))for(String width:List.of("ascii","utf8"))for(boolean full:List.of(false,true))for(int targetKeyLength:List.of(1,64))
+   tests.add(DynamicTest.dynamicTest("CAP-06/"+format+"/"+scope+"/"+width+"/"+full+"/"+targetKeyLength,()->{
+    String name=width.equals("ascii")?"a".repeat(1024):"é".repeat(512);var root=TotpStoreKey.forNamespace("n".repeat(scope),"e".repeat(scope));var key=TotpStoreKey.forAccount("n".repeat(scope),"e".repeat(scope),name);
+    var oldSealer=sealer(1);var legacy=new TotpRecords(oldSealer);var state=full?state(name,10,5,10):new TotpRecords.Account(name,id(1),TIME);
+    try{
+     var oldRoot=legacy.seal(root,new TotpRecords.Namespace(TIME),null);var oldAccount=legacy.seal(key,new TotpRecords.Namespace(TIME),state);byte[] rootRaw=plain(oldSealer,oldRoot,false),accountRaw=plain(oldSealer,oldAccount,false);byte[] canonical=accountRaw.clone();
+     if(format==1){accountRaw=Arrays.copyOf(accountRaw,accountRaw.length-4-59*(full?10:0));ByteBuffer.wrap(accountRaw).putInt(0x54545231);ByteBuffer.wrap(rootRaw).putInt(0x54545231);oldRoot=cap06Legacy(oldSealer,oldRoot,rootRaw);oldAccount=cap06Legacy(oldSealer,oldAccount,accountRaw);}
+     byte[] sourceRoot=oldRoot.getSealedBytes(),sourceAccount=oldAccount.getSealedBytes();
+     var active=SealingKey.fromBase64("r".repeat(targetKeyLength),"ISIjJCUmJygpKissLS4vMDEyMzQ1Njc4OTo7PD0+P0A=");var targetSealer=StateSealer.withActiveKey(active).verificationKeys(List.of(SealingKey.fromBase64("k","AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA="))).build();
+     var migration=new TotpMigrationV3(targetSealer);var migratedRoot=migration.migrateNamespace(oldRoot,intent());var migrated=migration.migrateAccount(oldAccount,oldRoot,intent());byte[] newRoot=plain(targetSealer,migratedRoot,true),newAccount=plain(targetSealer,migrated,true);
+     assertEquals(47,newRoot.length-rootRaw.length);assertEquals(format==1?4+59*(full?5:0):0,newAccount.length-accountRaw.length);assertTrue(newRoot.length<=544);assertTrue(newAccount.length<=3182);
+     // Complete independent binary oracle: format one duplicates the exact short-list
+     // bytes into its new daily list; format two preserves the original daily suffix.
+     byte[] expected=canonical;
+     if(format==1){int shortBytes=59*(full?5:0);int end=accountRaw.length;expected=Arrays.copyOf(accountRaw,end+4+shortBytes);ByteBuffer.wrap(expected,end,4).putInt(full?5:0);System.arraycopy(accountRaw,end-shortBytes,expected,end+4,shortBytes);}
+     ByteBuffer.wrap(expected).putInt(0x54545233);expected=withHeaderVersion(expected,key,migrated.getVersion());assertArrayEquals(expected,newAccount);
+     var buffer=new java.io.ByteArrayOutputStream();buffer.write(rootRaw,0,rootRaw.length-12);var out=new java.io.DataOutputStream(buffer);byte[] authority=intent().getTargetAdmission().getAuthorityId().getBytes(StandardCharsets.US_ASCII);out.writeInt(authority.length);out.write(authority);out.write(rootRaw,rootRaw.length-12,12);out.flush();var expectedRoot=buffer.toByteArray();ByteBuffer.wrap(expectedRoot).putInt(0x54545233);assertArrayEquals(withHeaderVersion(expectedRoot,root,migratedRoot.getVersion()),newRoot);
+     for(var row:List.of(migratedRoot,migrated)){
+      int raw=plain(targetSealer,row,true).length,wire=(4*(54+targetKeyLength+(4*raw+2)/3)+2)/3,sql=(4*wire+2)/3;assertEquals(wire,row.getSealedBytes().length);assertEquals(sql,Base64Url.encode(row.getSealedBytes()).length());assertTrue(wire<=65536);assertTrue(sql<=87382);
+      int k1=(4*(55+(4*raw+2)/3)+2)/3,k64=(4*(118+(4*raw+2)/3)+2)/3;assertEquals(84,k64-k1);assertTrue(wire<=k64);
+     }
+     try(var decoded=new TotpRecordsV3(targetSealer).open(migrated)){var a=Objects.requireNonNull(decoded.account);assertEquals(TIME,a.observedAt);assertEquals(full?5:0,a.charges.size());assertEquals(full?(format==1?5:10):0,a.totpCharges.size());}
+     assertArrayEquals(sourceRoot,oldRoot.getSealedBytes());assertArrayEquals(sourceAccount,oldAccount.getSealedBytes());assertNotEquals(oldRoot.getVersion(),migratedRoot.getVersion());assertNotEquals(oldAccount.getVersion(),migrated.getVersion());assertEquals(full?5:0,state.charges.size());assertEquals(full?10:0,state.totpCharges.size());
+    }finally{state.erase();}
+   }));return tests;
+ }
+ private static @NonNull TotpStoreRecord cap06Legacy(@NonNull StateSealer sealer,@NonNull TotpStoreRecord source,byte @NonNull [] raw){return TotpStoreRecord.fromStoredForm(source.getKey(),source.getVersion(),SealedStateAccess.get().sealDurable(sealer,Base64Url.encode(raw),context(source.getKey(),false)).getBytes(StandardCharsets.US_ASCII));}
+
 }

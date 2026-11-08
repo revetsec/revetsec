@@ -51,13 +51,15 @@ Publication supports:
 
 | Public key | Optional `algorithm` |
 | --- | --- |
-| RSA, 2048–16384 bits under Revetsec's existing exponent and weak-key policy | `RS256`, `RS384`, `RS512`, `PS256`, `PS384`, `PS512` |
+| Generic RSA material (`RSA` algorithm, no key-level PSS parameters), 2048–16384 bits under Revetsec's exponent and weak-key policy | `RS256`, `RS384`, `RS512`, `PS256`, `PS384`, `PS512` |
 | EC P-256 | `ES256` |
 | EC P-384 | `ES384` |
 | EC P-521 | `ES512` |
 | Ed25519 | `ED25519` or the legacy `EDDSA` identifier |
 
 Incompatible key/algorithm combinations and unsupported key types are rejected. HMAC keys cannot be published: their shared secret is not public verification material. This API publishes signature-verification keys; it does not describe encryption keys.
+
+Signing, import and publication have deliberately distinct key profiles. `JwsSigner.fromRsaKeyPair` can use a compatible typed/restricted `RSASSA-PSS` public key for a selected PSS algorithm, with fixed parameters and verification before signature release. `PublishedJwk` accepts generic RSA material only; it rejects those typed keys rather than dropping their restrictions. The import-only facade also excludes RSA-PSS containers. A signer's public snapshot is therefore not universally publication-ready. Use deliberately provisioned generic RSA material for an integration requiring this publication profile; do not relabel a restricted key or strip its parameters to force acceptance. The [public-only profile probe](../verification/key-publication-profiles/README.md) exercises these boundaries on the selected artifact.
 
 ## Certificate metadata
 

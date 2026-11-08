@@ -118,11 +118,44 @@
       "onlyKnownScopes": true,
       "exactCallback": true,
       "status": 200,
-      "completedElapsedMs": 813,
-      "durationMs": 155
+      "completedElapsedMs": 659,
+      "durationMs": 1,
+      "resumedAfterBootstrap": false
     },
     {
-      "ordinal": 7,
+      "kind": "BOOTSTRAP",
+      "method": "POST",
+      "status": 303,
+      "elapsedMs": 660,
+      "completedElapsedMs": 661,
+      "durationMs": 1,
+      "originMatches": true,
+      "exactBeginBody": true,
+      "originalAuthorizationQuery": true,
+      "noPriorCookie": true,
+      "noAuthorization": true,
+      "secureHttpOnlySessionCookie": true,
+      "ordinal": 7
+    },
+    {
+      "ordinal": 8,
+      "kind": "AUTHORIZE",
+      "method": "GET",
+      "elapsedMs": 662,
+      "cimdClient": true,
+      "exactResource": true,
+      "s256": true,
+      "scopesDiscover": true,
+      "scopesWhoami": false,
+      "onlyKnownScopes": true,
+      "exactCallback": true,
+      "status": 200,
+      "completedElapsedMs": 813,
+      "durationMs": 151,
+      "resumedAfterBootstrap": true
+    },
+    {
+      "ordinal": 9,
       "kind": "CIMD",
       "elapsedMs": 793,
       "status": 200,
@@ -137,7 +170,7 @@
       "durationMs": 2
     },
     {
-      "ordinal": 8,
+      "ordinal": 10,
       "kind": "LOGIN",
       "method": "POST",
       "elapsedMs": 827,
@@ -146,7 +179,7 @@
       "durationMs": 3
     },
     {
-      "ordinal": 9,
+      "ordinal": 11,
       "kind": "CONSENT",
       "method": "GET",
       "elapsedMs": 832,
@@ -155,7 +188,7 @@
       "durationMs": 7
     },
     {
-      "ordinal": 10,
+      "ordinal": 12,
       "kind": "CONSENT",
       "method": "POST",
       "elapsedMs": 938,
@@ -167,7 +200,7 @@
       "redirectMatchesAuthorization": true
     },
     {
-      "ordinal": 11,
+      "ordinal": 13,
       "kind": "TOKEN",
       "method": "POST",
       "elapsedMs": 959,
@@ -193,7 +226,7 @@
       "refreshChanged": false
     },
     {
-      "ordinal": 12,
+      "ordinal": 14,
       "kind": "CIMD",
       "elapsedMs": 1016,
       "status": 200,
@@ -208,7 +241,7 @@
       "durationMs": 1
     },
     {
-      "ordinal": 13,
+      "ordinal": 15,
       "kind": "MCP",
       "method": "POST",
       "elapsedMs": 1033,
@@ -230,7 +263,7 @@
       "responseSessionHeaderPresent": false
     },
     {
-      "ordinal": 14,
+      "ordinal": 16,
       "kind": "MCP",
       "method": "POST",
       "elapsedMs": 1051,
@@ -250,7 +283,7 @@
       "durationMs": 5
     },
     {
-      "ordinal": 15,
+      "ordinal": 17,
       "kind": "MCP",
       "method": "POST",
       "elapsedMs": 1059,
@@ -270,7 +303,7 @@
       "durationMs": 8
     },
     {
-      "ordinal": 16,
+      "ordinal": 18,
       "kind": "MCP",
       "method": "POST",
       "elapsedMs": 1068,
@@ -290,7 +323,7 @@
       "durationMs": 4
     },
     {
-      "ordinal": 17,
+      "ordinal": 19,
       "kind": "MCP",
       "method": "POST",
       "elapsedMs": 1074,
@@ -315,7 +348,7 @@
       "durationMs": 4
     },
     {
-      "ordinal": 18,
+      "ordinal": 20,
       "kind": "MCP",
       "method": "POST",
       "elapsedMs": 1079,
@@ -340,7 +373,7 @@
       "durationMs": 3
     },
     {
-      "ordinal": 19,
+      "ordinal": 21,
       "kind": "MCP",
       "method": "GET",
       "elapsedMs": 1086,
@@ -359,7 +392,7 @@
       "durationMs": 1
     },
     {
-      "ordinal": 20,
+      "ordinal": 22,
       "kind": "METADATA",
       "method": "GET",
       "elapsedMs": 1088,
@@ -369,7 +402,7 @@
       "durationMs": 1
     },
     {
-      "ordinal": 21,
+      "ordinal": 23,
       "kind": "METADATA",
       "method": "GET",
       "elapsedMs": 1089,
@@ -379,7 +412,7 @@
       "durationMs": 2
     },
     {
-      "ordinal": 22,
+      "ordinal": 24,
       "kind": "METADATA",
       "method": "GET",
       "elapsedMs": 1094,
@@ -389,7 +422,7 @@
       "durationMs": 1
     },
     {
-      "ordinal": 23,
+      "ordinal": 25,
       "kind": "METADATA",
       "method": "GET",
       "elapsedMs": 1095,
@@ -399,7 +432,7 @@
       "durationMs": 2
     },
     {
-      "ordinal": 24,
+      "ordinal": 26,
       "kind": "AUTHORIZE",
       "method": "GET",
       "elapsedMs": 1111,
@@ -415,7 +448,7 @@
       "durationMs": 6
     },
     {
-      "ordinal": 25,
+      "ordinal": 27,
       "kind": "CONSENT",
       "method": "POST",
       "elapsedMs": 1141,
@@ -427,7 +460,7 @@
       "redirectMatchesAuthorization": true
     },
     {
-      "ordinal": 26,
+      "ordinal": 28,
       "kind": "TOKEN",
       "method": "POST",
       "elapsedMs": 1152,
@@ -453,7 +486,7 @@
       "refreshChanged": true
     },
     {
-      "ordinal": 27,
+      "ordinal": 29,
       "kind": "CIMD",
       "elapsedMs": 1200,
       "status": 200,
@@ -468,7 +501,7 @@
       "durationMs": 1
     },
     {
-      "ordinal": 28,
+      "ordinal": 30,
       "kind": "MCP",
       "method": "POST",
       "elapsedMs": 1214,
@@ -490,7 +523,7 @@
       "responseSessionHeaderPresent": false
     },
     {
-      "ordinal": 29,
+      "ordinal": 31,
       "kind": "MCP",
       "method": "POST",
       "elapsedMs": 1218,
@@ -510,7 +543,7 @@
       "durationMs": 3
     },
     {
-      "ordinal": 30,
+      "ordinal": 32,
       "kind": "MCP",
       "method": "POST",
       "elapsedMs": 1221,
@@ -535,7 +568,7 @@
       "permittedTool": true
     },
     {
-      "ordinal": 31,
+      "ordinal": 33,
       "kind": "MCP",
       "method": "POST",
       "elapsedMs": 1234,
@@ -560,7 +593,7 @@
       "permittedTool": false
     },
     {
-      "ordinal": 32,
+      "ordinal": 34,
       "kind": "MCP",
       "method": "GET",
       "elapsedMs": 122933,
@@ -579,7 +612,7 @@
       "durationMs": 1
     },
     {
-      "ordinal": 33,
+      "ordinal": 35,
       "kind": "METADATA",
       "method": "GET",
       "elapsedMs": 122935,
@@ -589,7 +622,7 @@
       "durationMs": 1
     },
     {
-      "ordinal": 34,
+      "ordinal": 36,
       "kind": "METADATA",
       "method": "GET",
       "elapsedMs": 122937,
@@ -599,7 +632,7 @@
       "durationMs": 1
     },
     {
-      "ordinal": 35,
+      "ordinal": 37,
       "kind": "TOKEN",
       "method": "POST",
       "elapsedMs": 122939,
@@ -624,7 +657,7 @@
       "refreshChanged": true
     },
     {
-      "ordinal": 36,
+      "ordinal": 38,
       "kind": "CIMD",
       "elapsedMs": 122985,
       "status": 200,
@@ -639,7 +672,7 @@
       "durationMs": 1
     },
     {
-      "ordinal": 37,
+      "ordinal": 39,
       "kind": "MCP",
       "method": "POST",
       "elapsedMs": 123002,
@@ -661,7 +694,7 @@
       "responseSessionHeaderPresent": false
     },
     {
-      "ordinal": 38,
+      "ordinal": 40,
       "kind": "MCP",
       "method": "POST",
       "elapsedMs": 123006,
@@ -681,7 +714,7 @@
       "durationMs": 2
     },
     {
-      "ordinal": 39,
+      "ordinal": 41,
       "kind": "MCP",
       "method": "POST",
       "elapsedMs": 123011,
@@ -701,7 +734,7 @@
       "durationMs": 3
     },
     {
-      "ordinal": 40,
+      "ordinal": 42,
       "kind": "MCP",
       "method": "POST",
       "elapsedMs": 123015,
@@ -721,7 +754,7 @@
       "durationMs": 3
     },
     {
-      "ordinal": 41,
+      "ordinal": 43,
       "kind": "MCP",
       "method": "POST",
       "elapsedMs": 123019,
@@ -746,7 +779,7 @@
       "permittedTool": true
     },
     {
-      "ordinal": 42,
+      "ordinal": 44,
       "kind": "MCP",
       "method": "POST",
       "elapsedMs": 123023,
@@ -819,5 +852,11 @@
     "wire": "CLOSED",
     "application": "CLOSED"
   },
-  "privateStateRemoved": true
+  "privateStateRemoved": true,
+  "browserBootstrap": {
+    "count": 1,
+    "originalForm": true,
+    "sameOrigin": true,
+    "methodPost": true
+  }
 }

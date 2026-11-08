@@ -140,7 +140,7 @@ final class IssuerSigningFuzzModel {
 			this.activeKeyId = active == 0 ? "active-key-a" : "active-key-b";
 			this.retainedKeyId = active == 0 ? "retained-key-b" : "retained-key-a";
 			this.activePublicKey = activePair.getPublic(); this.retainedPublicKey = retainedPair.getPublic();
-			OAuthIssuerSigningKey signing = OAuthIssuerSigningKey.fromKeyPair(this.activeKeyId, activePair.getPrivate(), activePair.getPublic());
+			OAuthIssuerSigningKey signing = OAuthIssuerSigningKey.fromRsaKeyPair(this.activeKeyId, activePair.getPrivate(), activePair.getPublic());
 			OAuthIssuerKeySnapshot snapshot = OAuthIssuerKeySnapshot.withActiveKey(signing)
 				.verificationKeys(Map.of(this.retainedKeyId, this.retainedPublicKey)).generation("signing-generation")
 				.publishedAt(NOW.minusSeconds(120)).build();

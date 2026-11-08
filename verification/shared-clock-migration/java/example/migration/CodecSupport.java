@@ -57,6 +57,11 @@ public final class CodecSupport {
  public static @NonNull String text(@NonNull JsonObject o,@NonNull String n){return ((JsonString)o.find(n).orElseThrow()).getValue();}
  public static long number(@NonNull JsonObject o,@NonNull String n){return ((JsonNumber)o.find(n).orElseThrow()).getValue().longValueExact();}
  public static long number(@NonNull JsonObject o,@NonNull String n,long fallback){return o.find(n).isEmpty()?fallback:number(o,n);}
+ public static int recordCapacity(@NonNull JsonObject config,@NonNull String name){
+  long value=number(config,name,16384);
+  if(value<1024||value>16384)throw new IllegalArgumentException("Invalid record capacity: "+name);
+  return (int)value;
+ }
  public static @NonNull List<@NonNull JsonObject> rows(@NonNull JsonObject o,@NonNull String name){return ((JsonArray)o.find(name).orElseThrow()).getElements().stream().map(x->(JsonObject)x).toList();}
  public static @NonNull JsonObject instant(@NonNull Instant v){return JsonObject.builder().put("epochSecond",v.getEpochSecond()).put("nano",(long)v.getNano()).build();}
  public static @NonNull Instant instant(@NonNull JsonObject o){long nano=number(o,"nano");if(nano<0||nano>999999999)throw new IllegalArgumentException("Invalid instant");return Instant.ofEpochSecond(number(o,"epochSecond"),nano);}
@@ -69,7 +74,14 @@ public final class CodecSupport {
  public static @NonNull StateSealer sealer(@NonNull JsonObject config){
   @NonNull String active=text(config,"activeKeyId");@NonNull JsonObject keys=(JsonObject)config.find("keys").orElseThrow();@NonNull List<@NonNull SealingKey> others=new ArrayList<>();@Nullable SealingKey selected=null;
   for(var e:keys.getMembers().entrySet()){@NonNull SealingKey key=SealingKey.fromBase64(e.getKey(),((JsonString)e.getValue()).getValue());if(e.getKey().equals(active))selected=key;else others.add(key);}
-  if(selected==null)throw new IllegalArgumentException("Missing active key");return StateSealer.withActiveKey(selected).verificationKeys(others).maximumSealedLength((int)number(config,"sealerMaximumSealedLength",16384)).build();
+  if(selected==null)throw new IllegalArgumentException("Missing active key");return StateSealer.withActiveKey(selected).verificationKeys(others).maximumSealedLength(recordCapacity(config,"sealerMaximumSealedLength")).build();
+ }
+ /** Optional private family setting; omitted configurations retain the existing shared value. */
+ public static @NonNull StateSealer webauthnSealer(@NonNull JsonObject config){
+  if(config.find("webauthnMaximumSealedLength").isEmpty())return sealer(config);
+  var members=new LinkedHashMap<@NonNull String,@NonNull JsonValue>(config.getMembers());
+  members.put("sealerMaximumSealedLength",config.find("webauthnMaximumSealedLength").orElseThrow());
+  return sealer(JsonObject.fromMembers(members));
  }
  public static @NonNull Set<@NonNull String> keyIds(@NonNull JsonObject config){return ((JsonObject)config.find("keys").orElseThrow()).getMembers().keySet();}
  public static @NonNull String wireKey(byte @NonNull [] sealed){

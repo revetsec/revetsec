@@ -81,7 +81,7 @@ final class OAuthAuthorizationInputBoundaryTests {
    var key=TestJwk.Fixture.IDP_SIGNING_RSA_2048;
    this.server=OAuthAuthorizationServer.withIssuer(ISSUER).authorizationEndpoint(URI.create(ISSUER+"/authorize")).tokenEndpoint(URI.create(ISSUER+"/token")).jwksEndpoint(URI.create(ISSUER+"/jwks"))
     .clientRepository((id,budget)->{this.clients.incrementAndGet();return id.equals(this.clientId)?Optional.of(registered):Optional.empty();}).store(this.store)
-    .signingKeys(OAuthIssuerKeyProvider.fromSnapshot(OAuthIssuerKeySnapshot.withActiveKey(OAuthIssuerSigningKey.fromKeyPair("signing",key.getPrivateKey(),key.getPublicKey())).generation("generation-1").publishedAt(NOW.minusSeconds(120)).build()))
+    .signingKeys(OAuthIssuerKeyProvider.fromSnapshot(OAuthIssuerKeySnapshot.withActiveKey(OAuthIssuerSigningKey.fromRsaKeyPair("signing",key.getPrivateKey(),key.getPublicKey())).generation("generation-1").publishedAt(NOW.minusSeconds(120)).build()))
     .stateSealer(this.sealer).clock(this.time).resources(Map.of(resource,Set.of("read"))).grantPolicy((context,budget)->OAuthAuthorizationDecision.deniedInstance()).observer(this.events).maximumStoreRecordBytes(cap).acknowledgeUnpatchedRuntime(true).build();
    assertEquals(OAuthStoreCommitStatus.COMMITTED,this.server.initializeFreshIssuer().getStatus());this.events.clear();
   }

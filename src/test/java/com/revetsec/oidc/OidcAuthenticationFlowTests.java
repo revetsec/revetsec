@@ -92,7 +92,8 @@ final class OidcAuthenticationFlowTests {
 				PendingAuthorizationSource source;
 				if (mode.startsWith("store")) {
 					InMemoryPendingAuthorizationStore store = InMemoryPendingAuthorizationStore.builder().clock(CLOCK).build();
-					org.junit.jupiter.api.Assertions.assertEquals(PendingAuthorizationSaveResult.SAVED, redirect.getPendingAuthorization().saveToResult(store, "browser-A")); source = PendingAuthorizationSource.fromStore(store, "browser-A");
+					com.revetsec.BrowserBinding binding = com.revetsec.BrowserBinding.fromTrustedPersistence("browser-A");
+					org.junit.jupiter.api.Assertions.assertEquals(PendingAuthorizationSaveResult.SAVED, redirect.getPendingAuthorization().saveToResult(store, binding)); source = PendingAuthorizationSource.fromStore(store, binding);
 				} else source = sealed(redirect);
 				AuthorizationResponse callback = post ? assertInstanceOf(AuthorizationResponseParseResult.Succeeded.class, AuthorizationResponse.fromFormBodyResult(callbackQuery(redirect).getBytes(StandardCharsets.UTF_8), StandardCharsets.UTF_8, null)).getResponse() : callback(redirect);
 				OidcAuthentication authentication = assertInstanceOf(OidcAuthenticationResult.Succeeded.class, client.completeAuthenticationResult(callback, source, CALLBACK)).getAuthentication();
@@ -216,8 +217,9 @@ final class OidcAuthenticationFlowTests {
 				} else {
 					// Storage deliberately retains the entry; the OIDC transaction must enforce its own expiry.
 					InMemoryPendingAuthorizationStore store = InMemoryPendingAuthorizationStore.builder().clock(CLOCK).build();
-					org.junit.jupiter.api.Assertions.assertEquals(PendingAuthorizationSaveResult.SAVED, redirect.getPendingAuthorization().saveToResult(store, "browser"));
-					source = PendingAuthorizationSource.fromStore(store, "browser");
+					com.revetsec.BrowserBinding binding = com.revetsec.BrowserBinding.fromTrustedPersistence("browser");
+					org.junit.jupiter.api.Assertions.assertEquals(PendingAuthorizationSaveResult.SAVED, redirect.getPendingAuthorization().saveToResult(store, binding));
+					source = PendingAuthorizationSource.fromStore(store, binding);
 				}
 				clock.advance(Duration.ofMinutes(16));
 				OidcAuthenticationResult.RejectedAuthorization failure = assertInstanceOf(OidcAuthenticationResult.RejectedAuthorization.class, client.completeAuthenticationResult(callback(redirect), source, CALLBACK));
@@ -300,8 +302,8 @@ final class OidcAuthenticationFlowTests {
 				@Override public @NonNull PendingAuthorizationSaveResult save(@NonNull String binding, @NonNull String state, @NonNull String opaque, @NonNull Instant expires, @NonNull Duration remaining) { saved.set(opaque); return PendingAuthorizationSaveResult.SAVED; }
 				@Override public @NonNull Optional<@NonNull String> consume(@NonNull String binding, @NonNull String state, @NonNull Duration remaining) { return Optional.ofNullable(saved.getAndSet(null)); }
 			};
-			org.junit.jupiter.api.Assertions.assertEquals(PendingAuthorizationSaveResult.SAVED, redirect.getPendingAuthorization().saveToResult(broken, "browser-A"));
-			assertEquals(OAuthException.Reason.BROWSER_BINDING_MISMATCH, assertInstanceOf(OidcAuthenticationResult.RejectedAuthorization.class, client.completeAuthenticationResult(callback(redirect), PendingAuthorizationSource.fromStore(broken, "browser-B"), CALLBACK)).getReason());
+			org.junit.jupiter.api.Assertions.assertEquals(PendingAuthorizationSaveResult.SAVED, redirect.getPendingAuthorization().saveToResult(broken, com.revetsec.BrowserBinding.fromTrustedPersistence("browser-A")));
+			assertEquals(OAuthException.Reason.BROWSER_BINDING_MISMATCH, assertInstanceOf(OidcAuthenticationResult.RejectedAuthorization.class, client.completeAuthenticationResult(callback(redirect), PendingAuthorizationSource.fromStore(broken, com.revetsec.BrowserBinding.fromTrustedPersistence("browser-B")), CALLBACK)).getReason());
 			assertEquals(0, server.getRequests().size());
 		}
 	}

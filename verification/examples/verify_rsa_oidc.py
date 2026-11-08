@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Build/run RSA and Entra examples from an exact authored core copy; all work stays private."""
+"""Build/run selected private-key and Entra examples from an exact authored core copy; all work stays private."""
 import argparse
 import hashlib
 import json
@@ -43,6 +43,51 @@ def inventory(source):
             raise RuntimeError("Unexpected authored source entry")
         rows.append({"path": name, "sha256": digest(path)})
     return rows
+
+
+
+def validate_capture(capture):
+    """Validate only the exact owned local software-provider scenarios; no hosted claim."""
+    if (not isinstance(capture, dict) or set(capture) != {"schema", "synthetic", "hostedEntraVerified", "cases"}
+            or type(capture["schema"]) is not int or capture["schema"] != 1
+            or capture["synthetic"] is not True or capture["hostedEntraVerified"] is not False
+            or not isinstance(capture["cases"], list)):
+        raise RuntimeError("Unexpected local capture envelope")
+    expected = {}
+    for algorithm in ("RS256", "RS384", "RS512", "PS256", "PS384", "PS512", "ES256", "ES384", "Ed25519"):
+        for audience in ("issuer", "endpoint"):
+            name = "private-key-" + algorithm + "-" + audience
+            expected[name] = {"case": name, "posts": 4, "independentSignaturesVerified": 4,
+                "freshIdentifiers": 4, "cacheHitKeyCalls": 0, "publicJwksFetches": 1,
+                "signatureProvider": "SunEC" if algorithm in {"ES256", "ES384", "Ed25519"} else "SunRsaSign",
+                "passed": True}
+    for mode, posts, tenant_calls, user_info_calls in (
+            ("valid", 1, 2, 1), ("denied", 1, 1, 0), ("forged", 1, 0, 0),
+            ("key-issuer", 1, 0, 0), ("refresh-switch", 2, 1, 0)):
+        name = "entra-" + mode
+        expected[name] = {"case": name, "posts": posts, "independentSignaturesVerified": posts,
+            "tenantDecisionCalls": tenant_calls, "userInfoCalls": user_info_calls, "passed": True}
+    for role in ("token", "refresh", "introspection", "revocation"):
+        name = "legacy-metadata-" + role
+        expected[name] = {"case": name, "credentialPosts": 0, "keySnapshots": 1,
+            "outcome": "CLIENT_ASSERTION_ENDPOINT_MISMATCH", "passed": True}
+    for algorithm in ("RS256", "ES256", "ES384", "Ed25519"):
+        name = "mismatched-private-" + algorithm
+        expected[name] = {"case": name, "credentialPosts": 0, "keySnapshots": 1,
+            "outcome": "CLIENT_ASSERTION_KEY_PAIR_MISMATCH", "passed": True}
+    seen = set()
+    for row in capture["cases"]:
+        if not isinstance(row, dict) or not isinstance(row.get("case"), str):
+            raise RuntimeError("Unexpected local capture case")
+        name = row["case"]
+        if name in seen or name not in expected or set(row) != set(expected[name]):
+            raise RuntimeError("Missing, duplicate or unexpected local capture case")
+        seen.add(name)
+        for key, value in expected[name].items():
+            if type(row[key]) is not type(value) or row[key] != value:
+                raise RuntimeError("Local capture assertion does not match the selected profile")
+    if seen != set(expected):
+        raise RuntimeError("Missing local capture cases")
 
 
 def main():
@@ -110,8 +155,7 @@ def main():
     run("redacted-capture", [args.java_home / "bin/java", "-Dexample.tlsStore=" + str(store), "-cp", cp,
         "example.rsa.ExampleChecksTests", args.work / "CAPTURE.json"], example)
     capture = json.loads((args.work / "CAPTURE.json").read_text())
-    if len(capture["cases"]) != 9 or not all(row["passed"] for row in capture["cases"]):
-        raise RuntimeError("Missing local capture cases")
+    validate_capture(capture)
     if inventory(core) != rows or inventory(args.core_source) != rows:
         raise RuntimeError("Authored source changed during the build")
     artifacts = [*runtime, *sorted((example / "target").glob("*.jar"))]
@@ -120,7 +164,7 @@ def main():
               "nullability": json.loads((example / "target/nullability-audit.json").read_text()),
               "captureSha256": digest(args.work / "CAPTURE.json"), "hostedEntraVerified": False}
     (args.work / "RESULT.json").write_text(json.dumps(result, indent=2) + "\n")
-    print("RSA/OIDC example built, tested, attributed and independently run; runtime dependency: core only.")
+    print("Private-key/OIDC example built, tested, attributed and independently run; runtime dependency: core only.")
 
 
 if __name__ == "__main__":

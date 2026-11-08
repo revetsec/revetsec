@@ -16,6 +16,8 @@
 
 package com.revetsec.totp;
 
+import com.revetsec.OperationBinding;
+
 import org.jspecify.annotations.NonNull;
 import javax.annotation.concurrent.Immutable;
 import java.time.Instant;
@@ -70,7 +72,9 @@ public final class TotpVerification {
     /** The server-owned pending operation binding.
      * @return operationBinding
      * @since 1.0.0 */
-    public @NonNull String getOperationBinding() { return this.operationBinding; }
+    public @NonNull OperationBinding getOperationBinding() {
+        return OperationBinding.fromTrustedPersistence(this.operationBinding);
+    }
 
     /** Returns the verified method provenance.
      * @return authentication method

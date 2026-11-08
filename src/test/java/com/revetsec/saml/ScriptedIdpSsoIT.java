@@ -76,7 +76,13 @@ final class ScriptedIdpSsoIT {
     @BeforeAll static void start() throws Exception {
         String image = System.getProperty("scripted-idp.image", "revetsec-scripted-idp:local");
         container = new GenericContainer<>(DockerImageName.parse(image))
+                .withImagePullPolicy(imageName -> false)
+                .withLabel("com.revetsec.qualification", System.getProperty("revetsec.qualification.id", "provider-fixture"))
                 .withExposedPorts(8443)
+                .withCreateContainerCmdModifier(command -> java.util.Objects.requireNonNull(command.getHostConfig())
+                        .withPortBindings(new com.github.dockerjava.api.model.PortBinding(
+                                com.github.dockerjava.api.model.Ports.Binding.bindIp("127.0.0.1"),
+                                new com.github.dockerjava.api.model.ExposedPort(8443))))
                 .withEnv("SCRIPTED_IDP_TLS_CERT", "/run/tls/server.pem")
                 .withEnv("SCRIPTED_IDP_TLS_KEY", "/run/tls/server-key.pem")
                 .withEnv("SCRIPTED_IDP_KEYS_DIR", "/run/keys")
@@ -99,6 +105,8 @@ final class ScriptedIdpSsoIT {
         copy("src/test/resources/fixtures/keys/sp-encryption-rsa-2048-key.pem",
                 "/run/keys/sp-encryption-rsa-2048-key.pem");
         container.start();
+        for (var binding : java.util.Objects.requireNonNull(container.getContainerInfo().getNetworkSettings().getPorts().getBindings().get(new com.github.dockerjava.api.model.ExposedPort(8443))))
+            assertEquals("127.0.0.1", binding.getHostIp(), "owned fixture must bind only loopback");
         client = TestTls.httpClient();
         base = "https://127.0.0.1:" + container.getMappedPort(8443);
         assertEquals(200, json("PUT", "/control/config",
@@ -1036,8 +1044,7 @@ final class ScriptedIdpSsoIT {
                 .map(line -> line.substring(0, line.indexOf(' '))).toList();
         assertEquals(20, names.size(), "signed identity-shape corpus changed");
         List<String> accepted = List.of("clean", "subject-nameid-type",
-                "assertion-issuer-type", "audience-type", "authn-class-ref-type",
-                "subject-nameid-nil-false", "authn-locality-before-context");
+                "assertion-issuer-type", "subject-nameid-nil-false", "authn-locality-before-context");
         for (String name : names) {
             String xml = Files.readString(directory.resolve(name + ".xml"));
             assertTrue(oracleValid(xml, "_mint_assertion_9", "idp-signing-rsa-2048"),
@@ -1048,7 +1055,11 @@ final class ScriptedIdpSsoIT {
                         SamlAuthenticationResult.Succeeded.class, result, name).getAuthentication();
                 assertEquals("minted-user", authentication.getNameId().orElseThrow().getValue(), name);
                 assertTrue(authentication.getSubjectKey().isPresent(), name);
-            } else assertInstanceOf(SamlAuthenticationResult.Rejected.class, result, name);
+            } else {
+                var rejected = assertInstanceOf(SamlAuthenticationResult.Rejected.class, result, name);
+                if (name.equals("audience-type")) assertEquals(SamlAuthenticationResult.Reason.CONDITIONS, rejected.getReason());
+                if (name.equals("authn-class-ref-type")) assertEquals(SamlAuthenticationResult.Reason.AUTHN_STATEMENT, rejected.getReason());
+            }
         }
     }
 

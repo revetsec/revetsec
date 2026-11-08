@@ -27,6 +27,7 @@ import javax.annotation.concurrent.Immutable;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * One fully validated code-flow authentication. The exact issuer and subject pair is the stable account key
@@ -46,14 +47,18 @@ public final class OidcAuthentication {
 		this(idToken, tokens, clientId, null);
 	}
 	OidcAuthentication(@NonNull IdToken idToken, @NonNull TokenResponse tokens, @NonNull String clientId, @Nullable Object owner) {
+		this(idToken, tokens, clientId, owner, Set.of());
+	}
+	OidcAuthentication(@NonNull IdToken idToken, @NonNull TokenResponse tokens, @NonNull String clientId, @Nullable Object owner,
+			@NonNull Set<@NonNull String> requiredAcrValues) {
 		this.owner = owner;
 		this.clientId = java.util.Objects.requireNonNull(clientId);
-		this.idToken = idToken; this.tokens = tokens; this.sessionReference = new OidcSessionReference(idToken, clientId);
+		this.idToken = idToken; this.tokens = tokens; this.sessionReference = new OidcSessionReference(idToken, clientId, requiredAcrValues);
 	}
 	@NonNull String clientId() { return this.clientId; }
 	@SuppressWarnings("ReferenceEquality") // A private client capability requires identical ownership, never value equality.
 	boolean belongsTo(@NonNull Object owner) { return this.owner == owner; }
-	@NonNull OidcAuthentication withTokens(@NonNull TokenResponse tokens) { return new OidcAuthentication(this.idToken, tokens, this.clientId, this.owner); }
+	@NonNull OidcAuthentication withTokens(@NonNull TokenResponse tokens) { return new OidcAuthentication(this.idToken, tokens, this.clientId, this.owner, this.sessionReference.getRequiredAcrValues()); }
 	/**
 	 * Returns the exact validated issuer.
 	 *

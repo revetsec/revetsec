@@ -31,14 +31,21 @@ final class SyntheticAuthenticator {
     private static final String ORIGIN = "https://passkeys.example.test:9443";
     private static final byte @NonNull [] CREDENTIAL_ID = new byte[] {11, 22, 33, 44};
     private final @NonNull KeyPair keyPair;
+    private final byte @NonNull [] credentialId;
     private final byte @NonNull [] userHandle;
 
     SyntheticAuthenticator(byte @NonNull [] userHandle) throws Exception {
+        this(userHandle, CREDENTIAL_ID);
+    }
+
+    SyntheticAuthenticator(byte @NonNull [] userHandle, byte @NonNull [] credentialId) throws Exception {
+        if (credentialId.length < 1 || credentialId.length > 1023) throw new IllegalArgumentException("Fixture ID bound");
+        this.credentialId = credentialId.clone();
         this.userHandle = userHandle.clone();
         this.keyPair = KeyPairGenerator.getInstance("Ed25519").generateKeyPair();
     }
 
-    @NonNull String credentialId() { return encode(CREDENTIAL_ID); }
+    @NonNull String credentialId() { return encode(this.credentialId); }
 
     byte @NonNull [] registration(@NonNull String challenge) {
         byte[] auth = registrationAuth();
@@ -70,7 +77,7 @@ final class SyntheticAuthenticator {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         out.writeBytes(hash(RP_ID.getBytes(StandardCharsets.US_ASCII)));
         out.write(0x45); out.writeBytes(new byte[4]); out.writeBytes(new byte[16]);
-        out.write(0); out.write(CREDENTIAL_ID.length); out.writeBytes(CREDENTIAL_ID);
+        out.write(this.credentialId.length >>> 8); out.write(this.credentialId.length); out.writeBytes(this.credentialId);
         byte[] spki = this.keyPair.getPublic().getEncoded();
         out.write(0xa4); out.write(1); out.write(1); out.write(3); out.write(0x27);
         out.write(0x20); out.write(6); out.write(0x21); out.write(0x58); out.write(32);

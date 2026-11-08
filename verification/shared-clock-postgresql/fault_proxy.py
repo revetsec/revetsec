@@ -17,10 +17,16 @@ def exact(stream, count):
         data.extend(piece)
     return bytes(data)
 
-def packet(stream):
+def packet_limit(value):
+    if type(value) is not int or not 131072 <= value <= 2097152:
+        raise ValueError('Fixture packet configuration bound')
+    return value
+
+def packet(stream, maximum_packet_bytes=131072):
+    maximum_packet_bytes = packet_limit(maximum_packet_bytes)
     kind = exact(stream, 1)
     length = struct.unpack('!I', exact(stream, 4))[0]
-    if not 4 <= length <= 131072:
+    if not 4 <= length <= maximum_packet_bytes:
         raise ValueError('Fixture packet bound')
     body = exact(stream, length - 4)
     return kind, body, kind + struct.pack('!I', length) + body
@@ -32,7 +38,8 @@ class CommitLossProxy:
     until authoritative ReadyForQuery confirms server commit, then closes the client.
     Read COMMITs are forwarded. Raw protocol bytes/queries are never retained or logged.
     """
-    def __init__(self, port, when, drop_read_commits=False):
+    def __init__(self, port, when, drop_read_commits=False, *, maximum_packet_bytes=131072):
+        self.maximum_packet_bytes = packet_limit(maximum_packet_bytes)
         self.drop_read_commits = drop_read_commits
         self.port, self.when = port, when
         self.listener = socket.socket()
@@ -93,7 +100,7 @@ class CommitLossProxy:
             while not self.stop.is_set():
                 readable, _, _ = select.select([client, server], [], [], .2)
                 for stream in readable:
-                    kind, body, raw = packet(stream)
+                    kind, body, raw = packet(stream, self.maximum_packet_bytes)
                     if stream is client:
                         if kind == b'Q':
                             upper = body.upper()

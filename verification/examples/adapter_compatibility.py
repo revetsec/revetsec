@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Explicit, hash-guarded test compatibility for the pinned Soklet adapter."""
+"""Read-only source and complete-test guards for the pinned Soklet adapter."""
 import hashlib
 import json
 from pathlib import Path
@@ -51,59 +51,21 @@ def require(condition, message):
 
 
 def prepare_adapter(core, adapter, revision, root=ROOT):
-    """Modify only the private copy's two declared test paths, or fail closed."""
+    """Verify unchanged pinned library and test inputs; never patch the private copy."""
     manifest_path = root / MANIFEST
     manifest = json.loads(manifest_path.read_text())
-    require(manifest["schemaVersion"] == 1, "unknown manifest schema")
-    require(revision == manifest["adapterRevision"], "adapter revision differs from guarded base")
-    library_paths = ("pom.xml", "src/main")
-    before = tree_hashes(adapter, library_paths)
-    require(before == pinned_hashes(adapter, revision, library_paths), "library/POM differs from pin")
-    carriers = {path: digest((core / path).read_bytes()) if (core / path).is_file() else None
-                for path in manifest["sharedClockCarriers"]}
-    present = sum(value is not None for value in carriers.values())
-    require(present in (0, len(carriers)), "partial shared-clock SPI")
-    shared_clock = present != 0
-    if shared_clock:
-        require(carriers == manifest["sharedClockCarriers"], "unknown shared-clock carrier source")
-    fixture = manifest["issuerFixture"]
-    helper = manifest["supportHelper"]
-    base_tests = pinned_hashes(adapter, revision, ("src/test",))
-    require(base_tests.get(fixture["adapterPath"]) == fixture["baseSha256"],
-            "pinned issuer fixture hash differs from guarded base")
-    tests_before = tree_hashes(adapter, ("src/test",))
-    info = {"mode": "shared-clock-test-overlay" if shared_clock else "legacy-upstream-tests",
-            "manifestSha256": digest(manifest_path.read_bytes()), "adapterRevision": revision,
-            "coreCarriers": carriers, "pinnedLibraryInputsBefore": before,
-            "issuerFixtureBaseSha256": fixture["baseSha256"],
-            "issuerFixtureInputSha256": tests_before.get(fixture["adapterPath"])}
-    if shared_clock:
-        excluded = {fixture["adapterPath"], helper["adapterPath"]}
-        require({k: v for k, v in tests_before.items() if k not in excluded} ==
-                {k: v for k, v in base_tests.items() if k not in excluded},
-                "other upstream tests differ from pin")
-        require(info["issuerFixtureInputSha256"] in (fixture["baseSha256"], fixture["overlaySha256"]),
-                "unknown issuer fixture input")
-        overlay_bytes = (root / fixture["overlayPath"]).read_bytes()
-        helper_bytes = (root / helper["corePath"]).read_bytes()
-        require(digest(overlay_bytes) == fixture["overlaySha256"], "overlay fixture hash mismatch")
-        require(digest(helper_bytes) == helper["sha256"], "canonical support helper hash mismatch")
-        helper_before = tests_before.get(helper["adapterPath"])
-        require(helper_before in (None, helper["sha256"], *helper["acceptedExistingSha256"]),
-                "unknown existing support helper")
-        for destination, data in ((fixture["adapterPath"], overlay_bytes),
-                                  (helper["adapterPath"], helper_bytes)):
-            path = adapter / destination
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_bytes(data)
-        info.update({"issuerFixtureOverlay": {"path": fixture["overlayPath"],
-                                               "sha256": fixture["overlaySha256"]},
-                     "supportHelper": {"corePath": helper["corePath"], "sha256": helper["sha256"],
-                                       "inputSha256": helper_before},
-                     "expectedTests": manifest["expectedSharedClockTests"]})
-    else:
-        require(tests_before == base_tests, "legacy core requires unchanged pinned adapter tests")
-    info["selectedTestInputs"] = tree_hashes(adapter, ("src/test",))
+    require(manifest["schemaVersion"] == 2 and manifest["mode"] == "pinned-upstream-tests",
+            "unknown manifest schema or mode")
+    require(revision == manifest["adapterRevision"], "adapter revision differs from guarded pin")
+    before = tree_hashes(adapter, ("pom.xml", "src/main"))
+    require(before == pinned_hashes(adapter, revision, ("pom.xml", "src/main")),
+            "library/POM differs from pin")
+    tests = tree_hashes(adapter, ("src/test",))
+    require(tests == pinned_hashes(adapter, revision, ("src/test",)), "upstream tests differ from pin")
+    info = {"mode": "pinned-upstream-tests", "manifestSha256": digest(manifest_path.read_bytes()),
+            "adapterRevision": revision, "coreSourceRoot": str(core),
+            "pinnedLibraryInputsBefore": before, "selectedTestInputs": tests,
+            "expectedTests": manifest["expectedTests"]}
     assert_adapter_unchanged(adapter, info)
     return info
 

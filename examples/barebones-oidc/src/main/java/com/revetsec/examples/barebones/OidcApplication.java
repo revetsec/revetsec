@@ -15,6 +15,7 @@
  */
 package com.revetsec.examples.barebones;
 
+import com.revetsec.BrowserBinding;
 import com.revetsec.RevetsecException;
 import com.revetsec.oauth.AuthorizationRedirect;
 import com.revetsec.oauth.AuthorizationResponse;
@@ -185,7 +186,7 @@ public final class OidcApplication {
     public @NonNull Response login(@NonNull Request request) {
         Session session = sessionFor(request);
         if (!mutationAllowed(request, session)) return failure(403, "Invalid request");
-        String binding = token();
+        BrowserBinding binding = BrowserBinding.fresh();
         synchronized (this.sessions) {
             if (this.sessions.get(session.id) != session || session.binding != null || session.identity != null)
                 return failure(409, "Sign in already started");
@@ -200,7 +201,8 @@ public final class OidcApplication {
                 clearPending(session, binding);
                 return failure(503, "Please try again later");
             }
-            return SokletOAuth.redirect(redirect.getAuthorizationUri(), Set.of(cookie(PENDING_COOKIE, binding, Duration.ofMinutes(5))));
+            return SokletOAuth.redirect(redirect.getAuthorizationUri(), Set.of(cookie(PENDING_COOKIE,
+                    binding.toSecretString(), Duration.ofMinutes(5))));
         } catch (RevetsecException exception) {
             clearPending(session, binding);
             return failure(503, "Please try again later");
@@ -229,13 +231,16 @@ public final class OidcApplication {
     private @NonNull Response complete(@NonNull Request request) {
         List<ResponseCookie> deletion = List.of(cookie(PENDING_COOKIE, "", Duration.ZERO));
         Session session = sessionFor(request);
-        String binding = cookieValue(request, PENDING_COOKIE);
-        if (!hostAllowed(request) || session == null || binding == null
+        String bindingCandidate = cookieValue(request, PENDING_COOKIE);
+        if (!hostAllowed(request) || session == null || bindingCandidate == null
                 || !headerAbsentOr(request, "Origin", this.issuerOrigin))
             return failure(400, "Sign in failed", deletion);
+        BrowserBinding binding;
         synchronized (this.sessions) {
             if (this.sessions.get(session.id) != session || session.binding == null
-                    || !same(session.binding, binding)) return failure(400, "Sign in failed", deletion);
+                    || !same(session.binding.toSecretString(), bindingCandidate))
+                return failure(400, "Sign in failed", deletion);
+            binding = session.binding;
             session.binding = null; // Reserve before network I/O; competing callbacks cannot start a token POST.
             session.pendingUntil = null;
         }
@@ -264,7 +269,7 @@ public final class OidcApplication {
         } catch (IllegalArgumentException exception) {
             return failure(400, "Sign in failed", deletion);
         } finally {
-            this.pending.discardBinding(binding);
+            this.pending.discardBinding(binding.toSecretString());
         }
     }
 
@@ -279,7 +284,7 @@ public final class OidcApplication {
         if (!mutationAllowed(request, session)) return failure(403, "Invalid request");
         synchronized (this.sessions) {
             if (this.sessions.remove(session.id, session)) this.sessionBytes -= session.chargedBytes;
-            if (session.binding != null) this.pending.discardBinding(session.binding);
+            if (session.binding != null) this.pending.discardBinding(session.binding.toSecretString());
         }
         return SokletOAuth.redirect(this.origin.resolve("/"), Set.of(cookie(SESSION_COOKIE, "", Duration.ZERO),
                 cookie(PENDING_COOKIE, "", Duration.ZERO)));
@@ -313,11 +318,11 @@ public final class OidcApplication {
         }
     }
 
-    private void clearPending(@NonNull Session session, @NonNull String binding) {
+    private void clearPending(@NonNull Session session, @NonNull BrowserBinding binding) {
         synchronized (this.sessions) {
-            if (binding.equals(session.binding)) { session.binding = null; session.pendingUntil = null; }
+            if (binding == session.binding) { session.binding = null; session.pendingUntil = null; }
         }
-        this.pending.discardBinding(binding);
+        this.pending.discardBinding(binding.toSecretString());
     }
 
     private void cleanup() {
@@ -327,11 +332,11 @@ public final class OidcApplication {
             while (iterator.hasNext()) {
                 Session session = iterator.next();
                 if (now.isBefore(session.createdAt) || !now.isBefore(session.createdAt.plus(SESSION_AGE))) {
-                    if (session.binding != null) this.pending.discardBinding(session.binding);
+                    if (session.binding != null) this.pending.discardBinding(session.binding.toSecretString());
                     this.sessionBytes -= session.chargedBytes;
                     iterator.remove();
                 } else if (session.pendingUntil != null && !now.isBefore(session.pendingUntil)) {
-                    if (session.binding != null) this.pending.discardBinding(session.binding);
+                    if (session.binding != null) this.pending.discardBinding(session.binding.toSecretString());
                     session.binding = null; session.pendingUntil = null;
                 }
             }
@@ -424,7 +429,7 @@ public final class OidcApplication {
         final @NonNull Instant createdAt;
         final @Nullable String identity;
         final long chargedBytes;
-        @Nullable String binding;
+        @Nullable BrowserBinding binding;
         @Nullable Instant pendingUntil;
         Session(@NonNull String id, @NonNull String csrf, @NonNull Instant createdAt, @Nullable String identity, long chargedBytes) {
             this.id = id; this.csrf = csrf; this.createdAt = createdAt; this.identity = identity;

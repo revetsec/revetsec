@@ -193,7 +193,10 @@ class MigrationTests(unittest.TestCase):
         m.validate_decision(value)  # Active ID was already counted, not an eighteenth key.
     def test_reloaded_prepared_plan_requires_the_complete_pinned_key_commitment(self):
         machine,backend,_=self.fixture();state=self.journal.read();values=self.journal.get_blob(state['decisionsBlob'])
-        values[0]['openingKeyIds']=sorted(['old','uncommitted-chunk-key']);new=copy.deepcopy(state);new.update(sequence=state['sequence']+1,decisionsBlob=self.journal.put_blob(values));self.journal.cas(state,new)
+        values[0]['openingKeyIds']=sorted(['old','uncommitted-chunk-key']);new=copy.deepcopy(state);new.update(sequence=state['sequence']+1,decisionsBlob=self.journal.put_blob(values))
+        self.assert_label('CONFLICT',lambda:self.journal.cas(state,new))
+        # Raw protected-file substitution still exercises the independent key commitment check.
+        self.journal._write('migration.json',new)
         self.assert_label('CORRUPT',lambda:machine.rewrite_next(self.deadline));self.assertEqual(backend.calls,[])
     def test_quota_all_256_buckets_exact_remainders_and_target_usage(self):
         values=[decision(row(i),root=i==0) for i in range(7)];plan=m.allocate_quotas(values,capacities(entry=263,byte=10007))[0]
@@ -297,7 +300,7 @@ class MigrationTests(unittest.TestCase):
         self.assertEqual(backend.rows,{});self.assertTrue(self.journal.read()['reinventoryRequired']);self.assertIsNone(self.journal.read()['inventoryCommitment'])
     def test_utc_unhealthy_permanent_or_wrong_intent_cannot_cleanup(self):
         machine,backend,value,witness,store,clock=self.waiting_fixture();value['permanent']=True
-        self.assert_label('CLOSED',lambda:machine.cleanup_waiting([value],witness,store.read()['activeDatabaseAdmission'],self.deadline));value['permanent']=False
+        self.assert_label('CORRUPT',lambda:machine.cleanup_waiting([value],witness,store.read()['activeDatabaseAdmission'],self.deadline));value['permanent']=False
         clock.boot='different-boot'
         with self.assertRaises(WitnessUnavailable):machine.cleanup_waiting([value],witness,store.read()['activeDatabaseAdmission'],self.deadline)
         self.assertEqual(backend.calls,[])

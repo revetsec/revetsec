@@ -19,6 +19,10 @@ package com.revetsec.jose;
 import com.google.errorprone.annotations.CheckReturnValue;
 import com.revetsec.internal.Limits;
 import com.revetsec.internal.crypto.HashAlgorithm;
+import com.revetsec.internal.crypto.EcCurve;
+import com.revetsec.internal.crypto.EcPublicKeys;
+import com.revetsec.internal.crypto.EcdsaSignatures;
+import com.revetsec.internal.crypto.Ed25519PublicKeys;
 import com.revetsec.internal.crypto.KeyRejectedException;
 import com.revetsec.internal.crypto.RsaPublicKeys;
 import com.revetsec.internal.crypto.SignatureVerifier;
@@ -48,6 +52,15 @@ import java.security.PrivateKey;
 import java.security.PublicKey;
 import java.security.Signature;
 import java.security.interfaces.RSAPublicKey;
+import java.security.interfaces.ECPublicKey;
+import java.security.interfaces.EdECKey;
+import java.security.interfaces.EdECPublicKey;
+import java.security.spec.EdECPoint;
+import java.security.spec.NamedParameterSpec;
+import java.security.spec.ECFieldFp;
+import java.security.spec.ECParameterSpec;
+import java.security.spec.ECPoint;
+import java.security.spec.EllipticCurve;
 import java.security.spec.AlgorithmParameterSpec;
 import java.security.spec.MGF1ParameterSpec;
 import java.security.spec.PSSParameterSpec;
@@ -56,8 +69,8 @@ import java.util.Arrays;
 import static java.util.Objects.requireNonNull;
 
 /**
- * Signs compact JWS credentials with one application-owned RSA key pair and one fixed algorithm.
- * PS256, RS256 and RS384 are supported. Each operation uses fresh JCA engines and verifies its actual signature
+ * Signs compact JWS credentials with one application-owned key pair and one fixed algorithm.
+ * PS256, PS384, PS512, RS256, RS384, RS512, ES256, ES384 and Ed25519 are supported. Each operation uses fresh JCA engines and verifies its actual signature
  * against the checked public projection before releasing any credential. Provider selection is left to JCA;
  * no fallback or provider configuration change is made.
  * <p>
@@ -84,26 +97,36 @@ public final class JwsSigner {
 	private static final @NonNull JsonLimits CLAIM_LIMITS = JsonLimits.jose(MAXIMUM_CLAIMS_LENGTH);
 
 	private final @NonNull PrivateKey privateKey;
-	private final @NonNull PublicProjection publicKey;
+	private final @NonNull PublicKey publicKey;
+	private final int signatureLength;
+	private final @Nullable EcCurve ecCurve;
 	private final @NonNull JwsAlgorithm algorithm;
-	private final @NonNull HashAlgorithm hash;
+	// Ed25519 is a pure JCA operation with no caller-supplied digest/prehash parameter.
+	private final @Nullable HashAlgorithm hash;
 
 	private JwsSigner(@NonNull PrivateKey privateKey, @NonNull PublicProjection publicKey,
 			@NonNull JwsAlgorithm algorithm) {
+		this(privateKey, publicKey, algorithm, publicKey.signatureLength(), null);
+	}
+
+	private JwsSigner(@NonNull PrivateKey privateKey, @NonNull PublicKey publicKey,
+			@NonNull JwsAlgorithm algorithm, int signatureLength, @Nullable EcCurve ecCurve) {
 		this.privateKey = privateKey;
 		this.publicKey = publicKey;
+		this.signatureLength = signatureLength;
+		this.ecCurve = ecCurve;
 		this.algorithm = algorithm;
-		this.hash = Algorithms.findHash(algorithm).orElseThrow();
+		this.hash = Algorithms.findHash(algorithm).orElse(null);
 	}
 
 	/**
 	 * Returns a signer after bounded structural checks of its algorithm and inspectable RSA public projection.
 	 * Public keys must satisfy the existing 2048–16384-bit, exponent and ROCA policy. RSA-PSS key restrictions are
-	 * preserved; a PSS-only key cannot be selected for RS256 or RS384. This factory does not test pair agreement.
+	 * preserved; a PSS-only key cannot be selected for RS256, RS384 or RS512. This factory does not test pair agreement.
 	 *
 	 * @param privateKey the application-owned private key, retained by reference without encoding
 	 * @param publicKey the inspectable RSA public key, snapshotted without encoding
-	 * @param algorithm exactly PS256, RS256 or RS384
+	 * @param algorithm exactly PS256, PS384, PS512, RS256, RS384 or RS512
 	 * @return the signer
 	 * @throws NullPointerException if a required argument is null
 	 * @throws IllegalArgumentException if a supplied algorithm or key is structurally invalid or unsupported
@@ -115,7 +138,8 @@ public final class JwsSigner {
 		requireNonNull(privateKey);
 		requireNonNull(publicKey);
 		requireNonNull(algorithm);
-		if (algorithm != JwsAlgorithm.PS256 && algorithm != JwsAlgorithm.RS256 && algorithm != JwsAlgorithm.RS384)
+		if (algorithm != JwsAlgorithm.PS256 && algorithm != JwsAlgorithm.PS384 && algorithm != JwsAlgorithm.PS512
+				&& algorithm != JwsAlgorithm.RS256 && algorithm != JwsAlgorithm.RS384 && algorithm != JwsAlgorithm.RS512)
 			throw invalidKey();
 		try {
 			if (!(publicKey instanceof RSAPublicKey rsaKey)) throw invalidKey();
@@ -123,10 +147,10 @@ public final class JwsSigner {
 			String publicAlgorithm = requireNonNull(publicKey.getAlgorithm());
 			if (!rsaAlgorithm(privateAlgorithm) || !rsaAlgorithm(publicAlgorithm)) throw invalidKey();
 			@Nullable AlgorithmParameterSpec parameters = rsaKey.getParams();
-			if (algorithm != JwsAlgorithm.PS256 && (isPss(privateAlgorithm) || isPss(publicAlgorithm)
+			if (!isRsaPss(algorithm) && (isPss(privateAlgorithm) || isPss(publicAlgorithm)
 					|| parameters != null)) throw invalidKey();
 			PublicProjection projection = new PublicProjection(snapshotInteger(requireNonNull(rsaKey.getModulus()), 16384, 2049),
-					snapshotInteger(requireNonNull(rsaKey.getPublicExponent()), 32, 5), publicAlgorithm, snapshotParameters(parameters));
+					snapshotInteger(requireNonNull(rsaKey.getPublicExponent()), 32, 5), publicAlgorithm, snapshotParameters(parameters, Algorithms.findHash(algorithm).orElseThrow()));
 			RsaPublicKeys.checkPublicKey(projection);
 			return new JwsSigner(privateKey, projection, algorithm);
 		} catch (KeyRejectedException | RuntimeException failure) {
@@ -135,14 +159,84 @@ public final class JwsSigner {
 	}
 
 	/**
+	 * Returns a signer after bounded structural checks of an EC public point and its complete domain parameters.
+	 * ES256 requires exactly P-256; ES384 requires exactly P-384. The optional domain seed is not significant.
+	 * The private key must report EC and may remain opaque. This factory does not invoke JCA or test pair agreement;
+	 * each signing operation verifies its actual signature against the independent public snapshot before release.
+	 *
+	 * @param privateKey the application-owned EC private key, retained by reference without encoding
+	 * @param publicKey the inspectable EC public key, snapshotted without encoding
+	 * @param algorithm exactly ES256 or ES384
+	 * @return the signer
+	 * @throws NullPointerException if a required argument is null
+	 * @throws IllegalArgumentException if the algorithm, public point or domain parameters are unsupported or invalid
+	 * @since 1.0.0
+	 */
+	@CheckReturnValue
+	public static @NonNull JwsSigner fromEcKeyPair(@NonNull PrivateKey privateKey, @NonNull PublicKey publicKey,
+			@NonNull JwsAlgorithm algorithm) {
+		requireNonNull(privateKey); requireNonNull(publicKey); requireNonNull(algorithm);
+		EcCurve curve = switch (algorithm) {
+			case ES256 -> EcCurve.P_256;
+			case ES384 -> EcCurve.P_384;
+			default -> throw invalidEcKey();
+		};
+		try {
+			if (!(publicKey instanceof ECPublicKey ecKey)
+					|| !"EC".equalsIgnoreCase(privateKey.getAlgorithm())
+					|| !"EC".equalsIgnoreCase(publicKey.getAlgorithm())) throw invalidEcKey();
+			ECParameterSpec parameters = snapshotEcParameters(requireNonNull(ecKey.getParams()), curve);
+			if (!curve.isDescribedBy(parameters)) throw invalidEcKey();
+			ECPoint point = requireNonNull(ecKey.getW());
+			EcPublicProjection projection = new EcPublicProjection(curve,
+					snapshotEcInteger(requireNonNull(point.getAffineX()), curve),
+					snapshotEcInteger(requireNonNull(point.getAffineY()), curve));
+			EcPublicKeys.checkPublicKey(curve, projection);
+			return new JwsSigner(privateKey, projection, algorithm, curve.getSignatureLength(), curve);
+		} catch (KeyRejectedException | RuntimeException failure) { throw invalidEcKey(); }
+	}
+
+	/**
+	 * Returns a signer for pure Ed25519 with the fully specified {@code Ed25519} JWS algorithm identifier.
+	 * The public key must name Ed25519 and its bounded point must decode canonically and not have small order.
+	 * Its point and parameters are snapshotted without encoding. The private key may remain opaque and must report
+	 * Ed25519 or EdDSA; if it exposes {@link EdECKey} parameters, those must name Ed25519. Private key bytes are never
+	 * read. Construction invokes no JCA provider or signing probe; every actual operation verifies
+	 * its signature against the checked public snapshot before release. Legacy {@code EdDSA} is not emitted.
+	 *
+	 * @param privateKey the application-owned private key, retained by reference without encoding
+	 * @param publicKey the inspectable Ed25519 public key, snapshotted without encoding
+	 * @return the signer using {@link JwsAlgorithm#ED25519}
+	 * @throws NullPointerException if a required argument is null
+	 * @throws IllegalArgumentException if a supplied key or inspectable parameter is structurally invalid or unsupported
+	 * @since 1.0.0
+	 */
+	@CheckReturnValue
+	public static @NonNull JwsSigner fromEd25519KeyPair(@NonNull PrivateKey privateKey, @NonNull PublicKey publicKey) {
+		requireNonNull(privateKey); requireNonNull(publicKey);
+		try {
+			if (!(publicKey instanceof EdECPublicKey edKey) || !ed25519Algorithm(privateKey.getAlgorithm())
+					|| !ed25519Algorithm(publicKey.getAlgorithm())) throw invalidEd25519Key();
+			if (privateKey instanceof EdECKey inspectable
+					&& !"Ed25519".equals(requireNonNull(inspectable.getParams()).getName())) throw invalidEd25519Key();
+			if (!"Ed25519".equals(requireNonNull(edKey.getParams()).getName())) throw invalidEd25519Key();
+			EdECPoint point = requireNonNull(edKey.getPoint());
+			Ed25519PublicProjection projection = new Ed25519PublicProjection(snapshotEd25519Y(requireNonNull(point.getY())),
+					point.isXOdd());
+			Ed25519PublicKeys.checkPublicKey(projection);
+			return new JwsSigner(privateKey, projection, JwsAlgorithm.ED25519, Ed25519PublicKeys.SIGNATURE_LENGTH, null);
+		} catch (KeyRejectedException | RuntimeException failure) { throw invalidEd25519Key(); }
+	}
+
+	/**
 	 * Returns the one selected signing algorithm.
-	 * @return PS256, RS256 or RS384
+	 * @return the selected signing algorithm
 	 * @since 1.0.0
 	 */
 	public @NonNull JwsAlgorithm getAlgorithm() { return this.algorithm; }
 
 	/**
-	 * Returns the stable, inspectable checked RSA public projection. It does not expose private material, and its
+	 * Returns the stable, inspectable checked public projection. It does not expose private material, and its
 	 * encoding and format are absent; applications retain their original public key when an encoded key is needed.
 	 * @return the checked public key
 	 * @since 1.0.0
@@ -243,7 +337,7 @@ public final class JwsSigner {
 			long headerLength = encodedLength(header.length);
 			long claimsLength = encodedLength(claims.length);
 			if (headerLength > MAXIMUM_HEADER_LENGTH || headerLength + claimsLength + 2L
-					+ encodedLength(this.publicKey.signatureLength()) > MAXIMUM_COMPACT_LENGTH) throw invalidInput();
+					+ encodedLength(this.signatureLength) > MAXIMUM_COMPACT_LENGTH) throw invalidInput();
 			checkBudget(deadline);
 			String signingInput = Base64Url.encode(header) + "." + Base64Url.encode(claims);
 			input = signingInput.getBytes(StandardCharsets.US_ASCII);
@@ -390,24 +484,35 @@ public final class JwsSigner {
 		checkBudget(deadline);
 		byte[] signature;
 		try {
-			Signature engine = Signature.getInstance(this.algorithm == JwsAlgorithm.PS256
-					? "RSASSA-PSS" : this.hash.getRsaSignatureName());
+			Signature engine = Signature.getInstance(this.algorithm == JwsAlgorithm.ED25519 ? "Ed25519"
+					: this.ecCurve != null ? hash().getEcdsaSignatureName()
+					: isRsaPss(this.algorithm) ? "RSASSA-PSS" : hash().getRsaSignatureName());
 			engine.initSign(this.privateKey);
 			checkBudget(deadline);
-			if (this.algorithm == JwsAlgorithm.PS256) engine.setParameter(this.hash.getPssParameterSpec());
+			if (isRsaPss(this.algorithm)) engine.setParameter(hash().getPssParameterSpec());
 			checkBudget(deadline);
 			engine.update(input);
 			checkBudget(deadline);
 			signature = requireNonNull(engine.sign());
+			if (this.ecCurve != null) {
+				byte[] der = signature;
+				try {
+					checkBudget(deadline);
+					signature = EcdsaSignatures.toJose(this.ecCurve, der);
+				} finally { clear(der); }
+			}
 		} catch (GeneralSecurityException | RuntimeException failure) {
 			checkBudget(deadline);
 			throw JwsSigningException.fromReason(JwsSigningException.Reason.SIGNING_UNAVAILABLE);
 		}
 		try {
 			checkBudget(deadline);
-			VerifyResult result = this.algorithm == JwsAlgorithm.PS256
-					? SignatureVerifier.verifyRsaPss(this.hash, this.publicKey, input, signature)
-					: SignatureVerifier.verifyRsaPkcs1(this.hash, this.publicKey, input, signature);
+			VerifyResult result = this.algorithm == JwsAlgorithm.ED25519
+					? SignatureVerifier.verifyEd25519(this.publicKey, input, signature)
+					: this.ecCurve != null
+					? SignatureVerifier.verifyEcdsa(this.ecCurve, hash(), this.publicKey, input, signature)
+					: isRsaPss(this.algorithm) ? SignatureVerifier.verifyRsaPss(hash(), this.publicKey, input, signature)
+					: SignatureVerifier.verifyRsaPkcs1(hash(), this.publicKey, input, signature);
 			checkBudget(deadline);
 			if (result != VerifyResult.VALID)
 				throw JwsSigningException.fromReason(result == VerifyResult.MISMATCH
@@ -417,6 +522,21 @@ public final class JwsSigner {
 			clear(signature);
 			throw failure;
 		}
+	}
+
+	private @NonNull HashAlgorithm hash() { return requireNonNull(this.hash); }
+
+	private static boolean ed25519Algorithm(@Nullable String algorithm) {
+		return "Ed25519".equalsIgnoreCase(algorithm) || "EdDSA".equalsIgnoreCase(algorithm);
+	}
+
+	private static @NonNull BigInteger snapshotEd25519Y(@NonNull BigInteger value) {
+		if (value.bitLength() < 0 || value.bitLength() > 255) throw invalidEd25519Key();
+		byte[] bytes = value.toByteArray();
+		if (bytes.length == 0 || bytes.length > Ed25519PublicKeys.KEY_LENGTH) throw invalidEd25519Key();
+		BigInteger snapshot = new BigInteger(bytes);
+		if (snapshot.signum() < 0 || snapshot.bitLength() > 255) throw invalidEd25519Key();
+		return snapshot;
 	}
 
 	private static @NonNull Deadline deadline(@NonNull Duration remainingBudget) {
@@ -442,17 +562,44 @@ public final class JwsSigner {
 		return new BigInteger(bytes);
 	}
 
-	private static @Nullable PSSParameterSpec snapshotParameters(@Nullable AlgorithmParameterSpec parameters) {
+	private static @NonNull ECParameterSpec snapshotEcParameters(@NonNull ECParameterSpec parameters,
+			@NonNull EcCurve curve) {
+		EllipticCurve domain = requireNonNull(parameters.getCurve());
+		if (!(domain.getField() instanceof ECFieldFp field)) throw invalidEcKey();
+		ECPoint generator = requireNonNull(parameters.getGenerator());
+		return new ECParameterSpec(new EllipticCurve(new ECFieldFp(snapshotEcInteger(field.getP(), curve)),
+				snapshotEcInteger(domain.getA(), curve), snapshotEcInteger(domain.getB(), curve)),
+				new ECPoint(snapshotEcInteger(requireNonNull(generator.getAffineX()), curve),
+						snapshotEcInteger(requireNonNull(generator.getAffineY()), curve)),
+				snapshotEcInteger(parameters.getOrder(), curve), parameters.getCofactor());
+	}
+
+	private static @NonNull BigInteger snapshotEcInteger(@NonNull BigInteger value, @NonNull EcCurve curve) {
+		int bits = curve.getCoordinateLength() * Byte.SIZE;
+		if (value.bitLength() < 0 || value.bitLength() > bits) throw invalidEcKey();
+		byte[] bytes = value.toByteArray();
+		if (bytes.length == 0 || bytes.length > curve.getCoordinateLength() + 1) throw invalidEcKey();
+		BigInteger snapshot = new BigInteger(bytes);
+		if (snapshot.signum() < 0 || snapshot.bitLength() > bits) throw invalidEcKey();
+		return snapshot;
+	}
+
+	private static boolean isRsaPss(@NonNull JwsAlgorithm algorithm) {
+		return algorithm == JwsAlgorithm.PS256 || algorithm == JwsAlgorithm.PS384 || algorithm == JwsAlgorithm.PS512;
+	}
+
+	private static @Nullable PSSParameterSpec snapshotParameters(@Nullable AlgorithmParameterSpec parameters,
+			@NonNull HashAlgorithm hash) {
 		if (parameters == null) return null;
 		if (!(parameters instanceof PSSParameterSpec pss) || !(pss.getMGFParameters() instanceof MGF1ParameterSpec mgf))
 			throw invalidKey();
-		// Only bounded known SHA-256/MGF1 restrictions are supported; all provider restrictions are still carried
-		// into the checked public projection and fixed PS256 parameters must succeed on the private provider key.
-		if (!pss.getDigestAlgorithm().equalsIgnoreCase("SHA-256") || !pss.getMGFAlgorithm().equalsIgnoreCase("MGF1")
-				|| !mgf.getDigestAlgorithm().equalsIgnoreCase("SHA-256")) throw invalidKey();
+		// Public restrictions must permit this fixed JWS digest/MGF1 pair and digest-sized salt. Private-provider
+		// restrictions remain provider-owned and must succeed with those exact parameters during each operation.
+		if (!pss.getDigestAlgorithm().equalsIgnoreCase(hash.getDigestName()) || !pss.getMGFAlgorithm().equalsIgnoreCase("MGF1")
+				|| !mgf.getDigestAlgorithm().equalsIgnoreCase(hash.getDigestName())) throw invalidKey();
 		int saltLength = pss.getSaltLength();
-		if (saltLength < 0 || saltLength > 32 || pss.getTrailerField() != 1) throw invalidKey();
-		return new PSSParameterSpec("SHA-256", "MGF1", MGF1ParameterSpec.SHA256, saltLength, 1);
+		if (saltLength < 0 || saltLength > hash.getLength() || pss.getTrailerField() != 1) throw invalidKey();
+		return new PSSParameterSpec(hash.getDigestName(), "MGF1", new MGF1ParameterSpec(hash.getDigestName()), saltLength, 1);
 	}
 
 	private static long encodedLength(long bytes) { return 4L * (bytes / 3L) + (bytes % 3L == 0 ? 0 : bytes % 3L + 1L); }
@@ -479,8 +626,45 @@ public final class JwsSigner {
 	private static @NonNull IllegalArgumentException invalidKey() {
 		return new IllegalArgumentException("The RSA signing key or algorithm is invalid.");
 	}
+	private static @NonNull IllegalArgumentException invalidEcKey() {
+		return new IllegalArgumentException("The EC signing key or algorithm is invalid.");
+	}
+	private static @NonNull IllegalArgumentException invalidEd25519Key() {
+		return new IllegalArgumentException("The Ed25519 signing key is invalid.");
+	}
 	private static @NonNull IllegalArgumentException invalidInput() {
 		return new IllegalArgumentException("The JWS signing input is invalid.");
+	}
+
+	@Immutable
+	private static final class Ed25519PublicProjection implements EdECPublicKey {
+		private static final long serialVersionUID = 1L;
+		private final @NonNull BigInteger y;
+		private final boolean xOdd;
+		private Ed25519PublicProjection(@NonNull BigInteger y, boolean xOdd) { this.y = y; this.xOdd = xOdd; }
+		@Override public @NonNull EdECPoint getPoint() { return new EdECPoint(this.xOdd, this.y); }
+		@Override public @NonNull NamedParameterSpec getParams() { return new NamedParameterSpec("Ed25519"); }
+		@Override public @NonNull String getAlgorithm() { return "Ed25519"; }
+		@Override public @Nullable String getFormat() { return null; }
+		@Override public byte @Nullable [] getEncoded() { return null; }
+		@Override public @NonNull String toString() { return "Ed25519PublicKey{material=<redacted>}"; }
+	}
+
+	@Immutable
+	private static final class EcPublicProjection implements ECPublicKey {
+		private static final long serialVersionUID = 1L;
+		private final @NonNull EcCurve curve;
+		private final @NonNull BigInteger x;
+		private final @NonNull BigInteger y;
+		private EcPublicProjection(@NonNull EcCurve curve, @NonNull BigInteger x, @NonNull BigInteger y) {
+			this.curve = curve; this.x = x; this.y = y;
+		}
+		@Override public @NonNull ECPoint getW() { return new ECPoint(this.x, this.y); }
+		@Override public @NonNull ECParameterSpec getParams() { return this.curve.getParameterSpec(); }
+		@Override public @NonNull String getAlgorithm() { return "EC"; }
+		@Override public @Nullable String getFormat() { return null; }
+		@Override public byte @Nullable [] getEncoded() { return null; }
+		@Override public @NonNull String toString() { return "EcPublicKey{material=<redacted>}"; }
 	}
 
 	@Immutable
@@ -492,18 +676,20 @@ public final class JwsSigner {
 		// Canonical PSS facts retain restrictions even when the inherited RSA key serialization contract is used.
 		private final boolean hasPssParameters;
 		private final int minimumSaltLength;
+		private final @NonNull String pssDigestName;
 		private PublicProjection(@NonNull BigInteger modulus, @NonNull BigInteger exponent, @NonNull String algorithm,
 				@Nullable PSSParameterSpec parameters) {
 			this.modulus = modulus; this.exponent = exponent; this.algorithm = algorithm;
 			this.hasPssParameters = parameters != null;
 			this.minimumSaltLength = parameters == null ? 0 : parameters.getSaltLength();
+			this.pssDigestName = parameters == null ? "SHA-256" : parameters.getDigestAlgorithm();
 		}
 		private int signatureLength() { return (this.modulus.bitLength() + 7) / 8; }
 		@Override public @NonNull BigInteger getModulus() { return this.modulus; }
 		@Override public @NonNull BigInteger getPublicExponent() { return this.exponent; }
 		@Override public @NonNull String getAlgorithm() { return this.algorithm; }
 		@Override public @Nullable AlgorithmParameterSpec getParams() {
-			return this.hasPssParameters ? new PSSParameterSpec("SHA-256", "MGF1", MGF1ParameterSpec.SHA256,
+			return this.hasPssParameters ? new PSSParameterSpec(this.pssDigestName, "MGF1", new MGF1ParameterSpec(this.pssDigestName),
 					this.minimumSaltLength, 1) : null;
 		}
 		@Override public @Nullable String getFormat() { return null; }

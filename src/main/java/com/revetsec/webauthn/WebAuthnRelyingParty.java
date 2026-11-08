@@ -17,6 +17,7 @@
 package com.revetsec.webauthn;
 
 import com.google.errorprone.annotations.CheckReturnValue;
+import com.revetsec.OperationBinding;
 import com.revetsec.StateSealer;
 import com.revetsec.internal.encoding.Base64Url;
 import com.revetsec.internal.encoding.EncodingException;
@@ -33,6 +34,7 @@ import java.net.URI;
 import java.security.MessageDigest;
 import java.time.Clock;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
 
@@ -91,6 +93,10 @@ public final class WebAuthnRelyingParty {
      * @return a committed browser request or fixed failure
      * @since 1.0.0 */
     @CheckReturnValue public @NonNull WebAuthnRegistrationRequestResult beginRegistrationResult(
+            @NonNull WebAuthnRegistrationOptions options, @NonNull OperationBinding browserBinding) {
+        return beginRegistrationResult(options, requireNonNull(browserBinding).toSecretString());
+    }
+    @CheckReturnValue @NonNull WebAuthnRegistrationRequestResult beginRegistrationResult(
             @NonNull WebAuthnRegistrationOptions options, @NonNull String browserBinding) {
         requireNonNull(options);
         byte[] binding = parseBinding(browserBinding);
@@ -111,6 +117,10 @@ public final class WebAuthnRelyingParty {
      * @return a committed browser request or fixed failure
      * @since 1.0.0 */
     @CheckReturnValue public @NonNull WebAuthnAuthenticationRequestResult beginAuthenticationResult(
+            @NonNull OperationBinding browserBinding) {
+        return beginAuthenticationResult(requireNonNull(browserBinding).toSecretString());
+    }
+    @CheckReturnValue @NonNull WebAuthnAuthenticationRequestResult beginAuthenticationResult(
             @NonNull String browserBinding) {
         WebAuthnEngine.Start start = this.engine.beginAuthentication(parseBinding(browserBinding));
         return authenticationRequestResult(start);
@@ -123,6 +133,12 @@ public final class WebAuthnRelyingParty {
      * @return a committed browser request or fixed failure
      * @since 1.0.0 */
     @CheckReturnValue public @NonNull WebAuthnAuthenticationRequestResult beginReauthenticationResult(
+            byte @NonNull [] expectedUserHandle, @NonNull String actionPurpose,
+            @NonNull OperationBinding browserBinding) {
+        return beginReauthenticationResult(expectedUserHandle, actionPurpose,
+                requireNonNull(browserBinding).toSecretString());
+    }
+    @CheckReturnValue @NonNull WebAuthnAuthenticationRequestResult beginReauthenticationResult(
             byte @NonNull [] expectedUserHandle, @NonNull String actionPurpose,
             @NonNull String browserBinding) {
         WebAuthnStoreKey.forAccountFence(this.credentialNamespace, this.relyingPartyId,
@@ -140,6 +156,12 @@ public final class WebAuthnRelyingParty {
      * @return verified registration only after a confirmed admitted write
      * @since 1.0.0 */
     @CheckReturnValue public @NonNull WebAuthnRegistrationResult completeRegistrationResult(
+            @NonNull String ceremonyId, byte @NonNull [] responseBody,
+            @NonNull OperationBinding browserBinding) {
+        return completeRegistrationResult(ceremonyId, responseBody,
+                requireNonNull(browserBinding).toSecretString());
+    }
+    @CheckReturnValue @NonNull WebAuthnRegistrationResult completeRegistrationResult(
             @NonNull String ceremonyId, byte @NonNull [] responseBody,
             @NonNull String browserBinding) {
         requireNonNull(ceremonyId);
@@ -169,7 +191,7 @@ public final class WebAuthnRelyingParty {
 
     /** Consumes a raw browser sign-in or account-pinned reauthentication response. Applications
      * using this general result for a sensitive action must check the proof's kind, account
-     * handle and action purpose. {@link #completeReauthenticationResult(byte[], String, String, byte[], String)}
+     * handle and action purpose. The checked reauthentication completion method
      * enforces those checks before returning a successful result.
      * @param ceremonyId opaque request handle
      * @param responseBody browser {@code PublicKeyCredential.toJSON()} bytes
@@ -177,6 +199,12 @@ public final class WebAuthnRelyingParty {
      * @return verified authentication only after a confirmed admitted write
      * @since 1.0.0 */
     @CheckReturnValue public @NonNull WebAuthnAuthenticationResult completeAuthenticationResult(
+            @NonNull String ceremonyId, byte @NonNull [] responseBody,
+            @NonNull OperationBinding browserBinding) {
+        return completeAuthenticationResult(ceremonyId, responseBody,
+                requireNonNull(browserBinding).toSecretString());
+    }
+    @CheckReturnValue @NonNull WebAuthnAuthenticationResult completeAuthenticationResult(
             @NonNull String ceremonyId, byte @NonNull [] responseBody,
             @NonNull String browserBinding) {
         requireNonNull(ceremonyId);
@@ -212,29 +240,55 @@ public final class WebAuthnRelyingParty {
      * discoverable sign-in ceremony, or a reauthentication for another account or purpose,
      * cannot return a successful result here. The application still authorizes the current
      * browser session and consumes its own one-use action before applying the operation.
+     * The exact completed ceremony ID is included in the restricted proof so the application
+     * can match its original pending action. A rejected checked context may follow a known
+     * committed ceremony consumption; it does not imply that completion had no effects.
      * @param expectedUserHandle app-approved current account handle
      * @param actionPurpose app-approved action label used when beginning reauthentication
      * @param ceremonyId opaque request handle
      * @param responseBody browser {@code PublicKeyCredential.toJSON()} bytes
      * @param browserBinding application-held browser-session binding
-     * @return a matching reauthentication proof or fixed failure
+     * @return a matching restricted reauthentication proof or fixed failure
      * @since 1.0.0 */
-    @CheckReturnValue public @NonNull WebAuthnAuthenticationResult completeReauthenticationResult(
+    @CheckReturnValue public @NonNull WebAuthnReauthenticationResult completeReauthenticationResult(
+            byte @NonNull [] expectedUserHandle, @NonNull String actionPurpose,
+            @NonNull String ceremonyId, byte @NonNull [] responseBody,
+            @NonNull OperationBinding browserBinding) {
+        return completeReauthenticationResult(expectedUserHandle, actionPurpose, ceremonyId, responseBody,
+                requireNonNull(browserBinding).toSecretString());
+    }
+    @CheckReturnValue @NonNull WebAuthnReauthenticationResult completeReauthenticationResult(
             byte @NonNull [] expectedUserHandle, @NonNull String actionPurpose,
             @NonNull String ceremonyId, byte @NonNull [] responseBody,
             @NonNull String browserBinding) {
         WebAuthnStoreKey.forAccountFence(this.credentialNamespace, this.relyingPartyId,
                 requireNonNull(expectedUserHandle));
-        validateActionPurpose(actionPurpose);
-        WebAuthnAuthenticationResult result = completeAuthenticationResult(ceremonyId, responseBody, browserBinding);
-        if (result instanceof WebAuthnAuthenticationResult.Succeeded succeeded) {
-            WebAuthnAuthentication proof = succeeded.getAuthentication();
-            if (proof.getKind() != WebAuthnAuthentication.Kind.REAUTHENTICATION
-                    || !MessageDigest.isEqual(proof.getUserHandle(), expectedUserHandle)
-                    || !proof.getActionPurpose().filter(actionPurpose::equals).isPresent())
-                return WebAuthnAuthenticationResult.rejected(WebAuthnRejectionReason.REJECTED);
+        byte[] expectedHandle = expectedUserHandle.clone();
+        try {
+            validateActionPurpose(actionPurpose);
+            WebAuthnAuthenticationResult result = completeAuthenticationResult(ceremonyId, responseBody, browserBinding);
+            if (result instanceof WebAuthnAuthenticationResult.Succeeded succeeded) {
+                WebAuthnAuthentication proof = succeeded.getAuthentication();
+                if (proof.getKind() != WebAuthnAuthentication.Kind.REAUTHENTICATION
+                        || !MessageDigest.isEqual(proof.getUserHandle(), expectedHandle)
+                        || !proof.getActionPurpose().filter(actionPurpose::equals).isPresent())
+                    return WebAuthnReauthenticationResult.rejected(WebAuthnRejectionReason.REJECTED);
+                return WebAuthnReauthenticationResult.succeeded(new WebAuthnReauthentication(
+                        this.credentialNamespace, this.relyingPartyId, proof.getUserHandle(),
+                        proof.getCredentialId(), actionPurpose, ceremonyId));
+            }
+            if (result instanceof WebAuthnAuthenticationResult.Rejected rejected)
+                return WebAuthnReauthenticationResult.rejected(rejected.getReason());
+            if (result instanceof WebAuthnAuthenticationResult.Unavailable)
+                return WebAuthnReauthenticationResult.unavailable();
+            if (result instanceof WebAuthnAuthenticationResult.Indeterminate)
+                return WebAuthnReauthenticationResult.indeterminate();
+            if (result instanceof WebAuthnAuthenticationResult.ReconciliationRequired)
+                return WebAuthnReauthenticationResult.reconciliationRequired();
+            throw new IllegalStateException("Invalid checked reauthentication outcome");
+        } finally {
+            Arrays.fill(expectedHandle, (byte) 0);
         }
-        return result;
     }
 
     /** Lists active credential IDs for an app-approved account. The application must authorize

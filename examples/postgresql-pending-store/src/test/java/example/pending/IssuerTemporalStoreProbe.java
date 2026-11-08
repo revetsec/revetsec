@@ -31,7 +31,7 @@ public final class IssuerTemporalStoreProbe {
   throw new AssertionError("No actual native lock wait observed");
  }
  private static void waitChecks(@NonNull PostgresqlIssuerStore store,@NonNull Capture capture,@NonNull OAuthAuthorizationServer prepared,@NonNull AtomicReference<@NonNull StoreTimeObservation> point,@NonNull String query)throws Exception{
-  point.set(healthy(NOW));try{prepared.beginAuthorizationResult("GET",query,new byte[0],Map.of(),"A".repeat(43));throw new AssertionError("Capture must conflict");}catch(OAuthServerStoreException expected){if(expected.getReason()!=OAuthServerException.Reason.STORE_UNAVAILABLE)throw expected;}
+  point.set(healthy(NOW));try{prepared.beginAuthorizationResult("GET",query,new byte[0],Map.of(),com.revetsec.BrowserBinding.fromTrustedPersistence("A".repeat(43)));throw new AssertionError("Capture must conflict");}catch(OAuthServerStoreException expected){if(expected.getReason()!=OAuthServerException.Reason.STORE_UNAVAILABLE)throw expected;}
   OAuthStoreTransaction txn=java.util.Objects.requireNonNull(capture.last);OAuthStoreKey changed=txn.getMutations().get(0).getKey();
   var executor=java.util.concurrent.Executors.newSingleThreadExecutor();
   try(var holder=PendingStoreProbe.connection(Duration.ofSeconds(10))){
@@ -57,7 +57,7 @@ public final class IssuerTemporalStoreProbe {
   check(receipt.getStatus()==OAuthStoreCommitStatus.COMMITTED && receipt.getTiming().isPresent(),"late-known-commit-keeps-required-validation-timing");
  }
  private static void clockTransition(@NonNull PostgresqlIssuerStore store,@NonNull Capture capture,@NonNull OAuthAuthorizationServer prepared,@NonNull AtomicReference<@NonNull StoreTimeObservation> point,@NonNull String query,boolean generation)throws Exception{
-  point.set(healthy(NOW));try{prepared.beginAuthorizationResult("GET",query,new byte[0],Map.of(),"A".repeat(43));throw new AssertionError("Capture must conflict");}catch(OAuthServerStoreException expected){if(expected.getReason()!=OAuthServerException.Reason.STORE_UNAVAILABLE)throw expected;}
+  point.set(healthy(NOW));try{prepared.beginAuthorizationResult("GET",query,new byte[0],Map.of(),com.revetsec.BrowserBinding.fromTrustedPersistence("A".repeat(43)));throw new AssertionError("Capture must conflict");}catch(OAuthServerStoreException expected){if(expected.getReason()!=OAuthServerException.Reason.STORE_UNAVAILABLE)throw expected;}
   OAuthStoreTransaction txn=java.util.Objects.requireNonNull(capture.last);
   point.set(StoreTimeObservation.Healthy.fromObservation(IssuerFixtureAuthority.admission(NAMESPACE),generation?IssuerFixtureAuthority.identity("foreign-clock"):IssuerFixtureAuthority.clock(NAMESPACE),NOW,generation?Duration.ZERO:Duration.ofMillis(1)));
   String label=generation?"clock-generation-transition":"fixed-error-profile-transition";
@@ -82,7 +82,7 @@ public final class IssuerTemporalStoreProbe {
   server.establishNewSubject("subject");check(true,"genuine-existing-subject-for-clock-transition");
   Capture capture=new Capture(store);OAuthAuthorizationServer prepared=IssuerStoreProbe.server(capture);
   String query="client_id=client&response_type=code&redirect_uri=https%3A%2F%2Fclient.example%2Fcb&resource=https%3A%2F%2Fresource.example%2Fmcp&code_challenge=E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM&code_challenge_method=S256&state=fixture";
-  try{prepared.beginAuthorizationResult("GET",query,new byte[0],Map.of(),"A".repeat(43));throw new AssertionError("Capture must conflict");}catch(OAuthServerStoreException expected){check(expected.getReason()==OAuthServerException.Reason.STORE_UNAVAILABLE,"captured-genuine-timed-attempt");}
+  try{prepared.beginAuthorizationResult("GET",query,new byte[0],Map.of(),com.revetsec.BrowserBinding.fromTrustedPersistence("A".repeat(43)));throw new AssertionError("Capture must conflict");}catch(OAuthServerStoreException expected){check(expected.getReason()==OAuthServerException.Reason.STORE_UNAVAILABLE,"captured-genuine-timed-attempt");}
   OAuthStoreTransaction txn=java.util.Objects.requireNonNull(capture.last);var temporal=txn.getTemporalCondition().orElseThrow();
   check(txn.getPurpose()==OAuthStoreTransaction.Purpose.TIMED && temporal.getValidBeforeExclusive().isPresent(),"timed-original-finite-condition");
   point.set(healthy(temporal.getNotBeforeInclusive().minusNanos(1)));

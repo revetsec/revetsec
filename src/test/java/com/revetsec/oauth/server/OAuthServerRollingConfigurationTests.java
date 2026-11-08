@@ -84,7 +84,7 @@ final class OAuthServerRollingConfigurationTests {
   }
   @NonNull OAuthAuthorizationServer engine(@NonNull Profile p){
    var k=TestJwk.Fixture.IDP_SIGNING_RSA_2048;
-   var keys=OAuthIssuerKeySnapshot.withActiveKey(OAuthIssuerSigningKey.fromKeyPair("key",k.getPrivateKey(),k.getPublicKey())).generation("g1").publishedAt(NOW.minusSeconds(3600)).build();
+   var keys=OAuthIssuerKeySnapshot.withActiveKey(OAuthIssuerSigningKey.fromRsaKeyPair("key",k.getPrivateKey(),k.getPublicKey())).generation("g1").publishedAt(NOW.minusSeconds(3600)).build();
    return OAuthAuthorizationServer.withIssuer(ISSUER).authorizationEndpoint(URI.create(ISSUER+"/authorize")).tokenEndpoint(URI.create(ISSUER+"/token")).jwksEndpoint(URI.create(ISSUER+"/jwks")).revocationEndpoint(URI.create(ISSUER+"/revoke"))
     .clientRepository((id,budget)->id.equals("client")?Optional.of(this.client):Optional.empty()).store(this.store).stateSealer(this.sealer).signingKeys(OAuthIssuerKeyProvider.fromSnapshot(keys))
     .resources(Map.of(RESOURCE,Set.of("read","write","extra"))).clock(this.clock).grantPolicy((context,budget)->{this.lastGrant=context.getGrantValue();return decision(context.getAuthorizedScopesByResource().get(RESOURCE));})

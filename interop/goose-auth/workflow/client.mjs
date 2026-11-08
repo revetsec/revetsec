@@ -17,7 +17,7 @@ const env={PATH:[root+'/bin',dirname(process.execPath),'/runtime/java/bin','/usr
 for(const d of [env.HOME,env.XDG_CONFIG_HOME,env.XDG_CACHE_HOME,env.XDG_DATA_HOME,env.TMPDIR,root+'/bin'])mkdirSync(d,{recursive:true,mode:0o700});
 for(const [n,v]of Object.entries({ca:input.ca,cert:input.cert,key:input.key}))writeFileSync(root+'/'+n+'.pem',v,{mode:0o600});
 const keys={login:randomBytes(32).toString('base64url'),client:randomBytes(32).toString('base64url'),resource:randomBytes(32).toString('base64url')};for(const[n,v]of Object.entries(keys))writeFileSync(root+'/'+n+'.key',v,{mode:0o600});
-const handles={},connections=[],started=performance.now();let browserConnection,browserSession,externalBrowser,closing=false,loginSubmitted=false;
+const handles={},connections=[],started=performance.now();let browserConnection,browserSession,externalBrowser,closing=false,loginSubmitted=false,bootstrapSubmitted=false;
 const pause=ms=>new Promise(r=>setTimeout(r,ms));
 function stage(value){report.stage=value;writeFileSync('/evidence/PROGRESS.json',JSON.stringify({stage:value,checks:report.checks.length,elapsedMs:Math.floor(performance.now()-started)}),{mode:0o600});}
 function fail(code){throw new Error(code);}
@@ -29,7 +29,12 @@ async function evaluate(expression){const r=await browserConnection.send('Runtim
 function wire(){return JSON.parse(readFileSync(root+'/wire.json','utf8'));}
 const approved=new Set();
 async function browserTick(){
+ const bootstrapExpression=`(()=>{if(location.origin!==${JSON.stringify(issuer)})return false;const f=Array.from(document.forms).find(f=>{const u=new URL(f.action,location.href);return f.method==='post'&&u.origin===location.origin&&u.pathname==='/session'&&u.search!==''&&f.elements.begin?.value==='1';});return !!f;})()`;
  const forms=await evaluate(`({login:document.querySelector('form[action="/login"]')!==null,consent:document.querySelector('form[action="/consent"]')!==null})`);
+ if(!bootstrapSubmitted&&await evaluate(bootstrapExpression)){
+  const submitted=await evaluate(bootstrapExpression.replace('return !!f;',"if(!f)return false;f.requestSubmit();return true;"));
+  if(submitted){bootstrapSubmitted=true;report.browserBootstrap={count:1,originalForm:true,sameOrigin:true,methodPost:true};}return;
+ }
  if(forms.login&&!loginSubmitted){await evaluate(`(()=>{const f=document.querySelector('form[action="/login"]');f.elements.key.value=${JSON.stringify(keys.login)};f.requestSubmit();return true;})()`);loginSubmitted=true;}
  if(forms.consent){
   const nonce=await evaluate(`document.querySelector('form[action="/consent"]').elements.flow.value`);

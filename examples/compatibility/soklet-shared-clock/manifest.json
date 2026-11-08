@@ -1,24 +1,8 @@
 {
-  "schemaVersion": 1,
-  "adapterRevision": "3bad3251bb9b3bd2baeecd5c55a41574c8ebb9b0",
-  "sharedClockCarriers": {
-    "src/main/java/com/revetsec/oauth/server/OAuthStoreReadResult.java": "f6a3960bde80223f14d6dab6fc0406a5b4894ce2a54fee50647b7093b046bd75",
-    "src/main/java/com/revetsec/oauth/server/OAuthStoreCommitReceipt.java": "596be7482807f1d3d7cc113240fbabb9f2a448e08c30aa75796b2084e2f1cdbb"
-  },
-  "issuerFixture": {
-    "adapterPath": "src/test/java/com/revetsec/soklet/SokletOAuthAuthorizationServerTests.java",
-    "baseSha256": "2f3f25e659acb4afcd919deff18114b7e36fdc5c30c6c319e1f38ad16ee9216b",
-    "overlayPath": "examples/compatibility/soklet-shared-clock/SokletOAuthAuthorizationServerTests.java",
-    "overlaySha256": "2b24faa91aed2f35fcdf46f48775b9327badc9ebed30158f69ec7a3a92526ab4"
-  },
-  "supportHelper": {
-    "corePath": "src/test/java/com/revetsec/testing/ScriptedOAuthStore.java",
-    "adapterPath": "src/test/java/com/revetsec/testing/ScriptedOAuthStore.java",
-    "sha256": "438bab7ef8f1bdbe3cd7883204e4f54b5fef596b289a6f758ae04f75c7537628",
-    "acceptedExistingSha256": [
-      "5572c7fd889f8c1703e959a04637087a3c0783021c35918888433108566b3a6b"
-    ]
-  },
-  "expectedSharedClockTests": 169,
-  "retirement": "Remove this test-only bridge after a compatible revetsec-soklet commit is pushed, pinned, and passes both example JDK lanes without the overlay."
+  "schemaVersion": 2,
+  "adapterRevision": "06350ebec1e6002bb365c2226a06b37f9077c1a0",
+  "expectedTests": 196,
+  "mode": "pinned-upstream-tests",
+  "retiredOverlayRevision": "3bad3251bb9b3bd2baeecd5c55a41574c8ebb9b0",
+  "scope": "All adapter tests and library/POM inputs are unchanged from the published pin; no fixture replacement is applied."
 }

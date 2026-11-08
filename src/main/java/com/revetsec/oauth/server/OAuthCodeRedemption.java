@@ -188,6 +188,7 @@ final class OAuthCodeRedemption {
    @NonNull Instant issued, @NonNull Instant expires, @NonNull Set<@NonNull String> scopes, @Nullable String refresh, @NonNull Deadline deadline, OAuthStoreCoordinator.@NonNull Session session) {
   try { return this.encoder.prepare(grant, jti, issued, expires, scopes, refresh, deadline, session); }
   catch (VirtualMachineError fatal) { throw fatal; }
+  catch (OAuthStoreFailure failure) {throw failure;}
   catch (OAuthServerException failure) {throw failure;}
   catch (Throwable failure) { if (failure instanceof InterruptedException) Thread.currentThread().interrupt(); throw OAuthServerClientAdmission.failure(INFRASTRUCTURE); }
  }

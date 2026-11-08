@@ -231,7 +231,7 @@ final class RemoteJwksSourceZeroThreadTests {
 				source.warmUp();
 				return "fetched";
 			} catch (JwksUnavailableException e) {
-				return e.getCategory() + (e.isTransient() ? ", transient" : ", not transient");
+				return e.getCategory() + (e.isTemporaryCondition() ? ", transient" : ", not transient");
 			}
 		}
 

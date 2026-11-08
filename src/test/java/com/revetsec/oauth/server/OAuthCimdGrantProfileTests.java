@@ -64,17 +64,17 @@ final class OAuthCimdGrantProfileTests {
  private static final Map<String,Set<String>> RESOURCES=Map.of(RESOURCE,Set.of("read"));
  private static final OAuthServerIngressLimits LIMITS=OAuthServerIngressLimits.fromDefaults();
  private static final List<String> EXTRAS=List.of("urn:ietf:params:oauth:grant-type:device_code","client_credentials","password","implicit","urn:example:grant","https://client.example.com/custom-grant");
- private static JsonObject vscode() throws Exception {try(var input=requireNonNull(OAuthCimdGrantProfileTests.class.getResourceAsStream("/cimd/mcp-profile/vscode-client-metadata.json"))){return json(input.readAllBytes());}}
- private static JsonObject json(byte[] body) throws Exception {return (JsonObject)JsonCodec.parse(body,JsonLimits.protocolDocument(131072));}
- private static String text(JsonObject json,String member){return ((JsonString)requireNonNull(json.getMembers().get(member))).getValue();}
- private static byte[] bytes(JsonObject json){return json.toJson().getBytes(StandardCharsets.UTF_8);}
- private static JsonObject change(JsonObject original,String name,@Nullable JsonValue value){var fields=new LinkedHashMap<>(original.getMembers());fields.remove(name);if(value!=null)fields.put(name,value);return JsonObject.fromMembers(fields);}
- private static JsonArray strings(String... values){return JsonArray.fromElements(Arrays.stream(values).map(JsonString::fromValue).map(v->(JsonValue)v).toList());}
- private static JsonObject grants(String... values) throws Exception {return change(vscode(),"grant_types",strings(values));}
- private static OAuthClientMetadataPolicy policy(){return OAuthClientMetadataPolicy.withAddressResolver((host,budget)->{throw new AssertionError("Deterministic metadata only");}).cache(InMemoryOAuthClientMetadataCache.fromMaximumEntries(8)).build();}
- private static OAuthClientMetadataDocument parse(JsonObject document){return OAuthClientMetadataDocument.parse(text(document,"client_id"),bytes(document),policy(),LIMITS,true,false);}
- private static void invalid(JsonObject document){var failure=assertThrows(OAuthServerAdmissionFailure.class,()->parse(document));assertEquals(OAuthServerAdmissionFailure.Reason.INVALID_CLIENT,failure.reason());assertNull(failure.getCause());}
- private static StateSealer sealer(){byte[] key=new byte[32];for(int i=0;i<key.length;i++)key[i]=(byte)(i+1);return StateSealer.withActiveKey(SealingKey.fromBase64("k",Base64.getEncoder().encodeToString(key))).clock(CLOCK).build();}
+ private static @NonNull JsonObject vscode() throws Exception {try(var input=requireNonNull(OAuthCimdGrantProfileTests.class.getResourceAsStream("/cimd/mcp-profile/vscode-client-metadata.json"))){return json(input.readAllBytes());}}
+ private static @NonNull JsonObject json(byte @NonNull [] body) throws Exception {return (JsonObject)JsonCodec.parse(body,JsonLimits.protocolDocument(131072));}
+ private static @NonNull String text(@NonNull JsonObject json,@NonNull String member){return ((JsonString)requireNonNull(json.getMembers().get(member))).getValue();}
+ private static byte @NonNull [] bytes(@NonNull JsonObject json){return json.toJson().getBytes(StandardCharsets.UTF_8);}
+ private static @NonNull JsonObject change(@NonNull JsonObject original,@NonNull String name,@Nullable JsonValue value){var fields=new LinkedHashMap<>(original.getMembers());fields.remove(name);if(value!=null)fields.put(name,value);return JsonObject.fromMembers(fields);}
+ private static @NonNull JsonArray strings(@NonNull String @NonNull ... values){return JsonArray.fromElements(Arrays.stream(values).map(JsonString::fromValue).map(v->(JsonValue)v).toList());}
+ private static @NonNull JsonObject grants(@NonNull String @NonNull ... values) throws Exception {return change(vscode(),"grant_types",strings(values));}
+ private static @NonNull OAuthClientMetadataPolicy policy(){return OAuthClientMetadataPolicy.withAddressResolver((host,budget)->{throw new AssertionError("Deterministic metadata only");}).cache(InMemoryOAuthClientMetadataCache.fromMaximumEntries(8)).build();}
+ private static @NonNull OAuthClientMetadataDocument parse(@NonNull JsonObject document){return OAuthClientMetadataDocument.parse(text(document,"client_id"),bytes(document),policy(),LIMITS,true,false);}
+ private static void invalid(@NonNull JsonObject document){var failure=assertThrows(OAuthServerAdmissionFailure.class,()->parse(document));assertEquals(OAuthServerAdmissionFailure.Reason.INVALID_CLIENT,failure.reason());assertNull(failure.getCause());}
+ private static @NonNull StateSealer sealer(){byte[] key=new byte[32];for(int i=0;i<key.length;i++)key[i]=(byte)(i+1);return StateSealer.withActiveKey(SealingKey.fromBase64("k",Base64.getEncoder().encodeToString(key))).clock(CLOCK).build();}
  @Test void unmodifiedDatedVsCodeDocumentAdmitsOnlySupportedCapabilities() throws Exception {
   JsonObject document=vscode();assertTrue(((JsonArray)requireNonNull(document.getMembers().get("grant_types"))).getElements().contains(JsonString.fromValue(EXTRAS.get(0))));
   var parsed=assertDoesNotThrow(()->parse(document));assertTrue(parsed.refreshTokenPermitted());assertTrue(parsed.nativeApplication());assertEquals(2,parsed.redirectUris().size());
@@ -128,9 +128,9 @@ final class OAuthCimdGrantProfileTests {
   final boolean approvalRefresh;
   final OAuthAuthorizationServer server;
   byte[] body;
-  Fixture(JsonObject document,boolean serverRefresh,boolean approvalRefresh) throws Exception {
+  Fixture(@NonNull JsonObject document,boolean serverRefresh,boolean approvalRefresh) throws Exception {
    body=bytes(document);id=text(document,"client_id");this.approvalRefresh=approvalRefresh;var key=TestJwk.Fixture.IDP_SIGNING_RSA_2048;
-   var keys=OAuthIssuerKeySnapshot.withActiveKey(OAuthIssuerSigningKey.fromKeyPair("key",key.getPrivateKey(),key.getPublicKey())).generation("g1").publishedAt(NOW.minusSeconds(120)).build();
+   var keys=OAuthIssuerKeySnapshot.withActiveKey(OAuthIssuerSigningKey.fromRsaKeyPair("key",key.getPrivateKey(),key.getPublicKey())).generation("g1").publishedAt(NOW.minusSeconds(120)).build();
    server=OAuthAuthorizationServer.withIssuer(ISSUER).authorizationEndpoint(URI.create(ISSUER+"/authorize")).tokenEndpoint(URI.create(ISSUER+"/token"))
      .jwksEndpoint(URI.create(ISSUER+"/jwks")).revocationEndpoint(URI.create(ISSUER+"/revoke")).clientRepository((client,budget)->Optional.empty())
      .store(store).stateSealer(sealer()).signingKeys(OAuthIssuerKeyProvider.fromSnapshot(keys)).resources(RESOURCES).clock(CLOCK).refreshTokensEnabled(serverRefresh)
@@ -144,16 +144,16 @@ final class OAuthCimdGrantProfileTests {
    transportField.set(fetcher,(OAuthClientMetadataFetcher.Transport)(uri,budget)->{assertEquals(URI.create(id),uri);fetches.incrementAndGet();return new RawResponse(200,HttpHeaders.of(Map.of("Cache-Control",List.of("max-age=60")),(a,b)->true),body,null,false,Duration.ZERO);});
    assertEquals(OAuthStoreCommitStatus.COMMITTED,server.initializeFreshIssuer().getStatus());server.establishNewSubject("subject");
   }
-  OAuthAuthorizationResult begin(String redirect,String challenge){return server.beginAuthorizationResult("GET",form(Map.of("client_id",id,"response_type","code","redirect_uri",redirect,"resource",RESOURCE,"code_challenge_method","S256","code_challenge",challenge)),new byte[0],Map.of(),BROWSER);}
-  String code(String redirect){var interaction=assertInstanceOf(OAuthAuthorizationResult.InteractionRequired.class,begin(redirect,CHALLENGE)).getInteraction();var response=assertInstanceOf(OAuthAuthorizationResult.Completed.class,server.completeAuthorizationResult(interaction.getInteractionValue(),BROWSER,decision(approvalRefresh))).getResponse();URI location=response.getLocationWithCredentials().orElseThrow();assertEquals(redirect,location.toString().substring(0,location.toString().indexOf('?')));return Stream.of(requireNonNull(location.getRawQuery()).split("&")).filter(p->p.startsWith("code=")).map(p->p.substring(5)).findFirst().orElseThrow();}
-  OAuthTokenResult redeem(String code,String redirect,String verifier){return server.tokenResult("POST",null,form(Map.of("grant_type","authorization_code","client_id",id,"resource",RESOURCE,"code",code,"code_verifier",verifier,"redirect_uri",redirect)).getBytes(StandardCharsets.UTF_8),headers());}
-  OAuthTokenResult refresh(String value){return server.tokenResult("POST",null,form(Map.of("grant_type","refresh_token","client_id",id,"resource",RESOURCE,"refresh_token",value)).getBytes(StandardCharsets.UTF_8),headers());}
+  @NonNull OAuthAuthorizationResult begin(@NonNull String redirect,@NonNull String challenge){return server.beginAuthorizationResult("GET",form(Map.of("client_id",id,"response_type","code","redirect_uri",redirect,"resource",RESOURCE,"code_challenge_method","S256","code_challenge",challenge)),new byte[0],Map.of(),BROWSER);}
+  @NonNull String code(@NonNull String redirect){var interaction=assertInstanceOf(OAuthAuthorizationResult.InteractionRequired.class,begin(redirect,CHALLENGE)).getInteraction();var response=assertInstanceOf(OAuthAuthorizationResult.Completed.class,server.completeAuthorizationResult(interaction.getInteractionValue(),BROWSER,decision(approvalRefresh))).getResponse();URI location=response.getLocationWithCredentials().orElseThrow();assertEquals(redirect,location.toString().substring(0,location.toString().indexOf('?')));return Stream.of(requireNonNull(location.getRawQuery()).split("&")).filter(p->p.startsWith("code=")).map(p->p.substring(5)).findFirst().orElseThrow();}
+  @NonNull OAuthTokenResult redeem(@NonNull String code,@NonNull String redirect,@NonNull String verifier){return server.tokenResult("POST",null,form(Map.of("grant_type","authorization_code","client_id",id,"resource",RESOURCE,"code",code,"code_verifier",verifier,"redirect_uri",redirect)).getBytes(StandardCharsets.UTF_8),headers());}
+  @NonNull OAuthTokenResult refresh(@NonNull String value){return server.tokenResult("POST",null,form(Map.of("grant_type","refresh_token","client_id",id,"resource",RESOURCE,"refresh_token",value)).getBytes(StandardCharsets.UTF_8),headers());}
  }
- private static OAuthAuthorizationDecision decision(boolean refresh){return OAuthAuthorizationDecision.withSubject("subject").authorizedScopesByResource(RESOURCES).refreshTokenPermitted(refresh).build();}
- private static Map<String,List<String>> headers(){return Map.of("Content-Type",List.of("application/x-www-form-urlencoded"));}
- private static String form(Map<String,String> fields){return String.join("&",fields.entrySet().stream().map(e->encode(e.getKey())+"="+encode(e.getValue())).toList());}
- private static String encode(String value){try{return FormUrlEncoding.encode(value);}catch(Exception failure){throw new AssertionError(failure);}}
- private static OAuthServerResponse success(OAuthTokenResult result){return assertInstanceOf(OAuthTokenResult.Succeeded.class,result).getResponse();}
+ private static @NonNull OAuthAuthorizationDecision decision(boolean refresh){return OAuthAuthorizationDecision.withSubject("subject").authorizedScopesByResource(RESOURCES).refreshTokenPermitted(refresh).build();}
+ private static @NonNull Map<@NonNull String,@NonNull List<@NonNull String>> headers(){return Map.of("Content-Type",List.of("application/x-www-form-urlencoded"));}
+ private static @NonNull String form(@NonNull Map<@NonNull String,@NonNull String> fields){return String.join("&",fields.entrySet().stream().map(e->encode(e.getKey())+"="+encode(e.getValue())).toList());}
+ private static @NonNull String encode(@NonNull String value){try{return FormUrlEncoding.encode(value);}catch(Exception failure){throw new AssertionError(failure);}}
+ private static @NonNull OAuthServerResponse success(@NonNull OAuthTokenResult result){return assertInstanceOf(OAuthTokenResult.Succeeded.class,result).getResponse();}
  @TestFactory @NonNull Stream<@NonNull DynamicTest> listedRefreshStillNeedsServerAndApplicationPermission(){
   return Stream.of(false,true).flatMap(listed->Stream.of(false,true).flatMap(enabled->Stream.of(false,true).map(approved->DynamicTest.dynamicTest(listed+" "+enabled+" "+approved,()->{
    JsonObject document=listed?vscode():grants("authorization_code",EXTRAS.get(0));Fixture f=new Fixture(document,enabled,approved);String code=f.code(REDIRECT);int before=f.fetches.get();

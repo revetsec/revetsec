@@ -78,7 +78,7 @@ final class UserInfoEndpoint {
 		byte[] body = response.body();
 		try {
 			OAuthException statusFailure = response.status() == 200 ? null : OidcTransactionAccess.get().endpointStatusFailure(response.status(), RetryAfter.parse(response.headers(), this.clock.instant()).orElse(null));
-			if (statusFailure != null && statusFailure.isTransient()) this.attempts.failed(attempt, statusFailure);
+			if (statusFailure != null && statusFailure.isTemporaryCondition()) this.attempts.failed(attempt, statusFailure);
 			else this.attempts.healthy(attempt);
 			Duration elapsed = Duration.ofNanos(System.nanoTime() - started);
 			ObserverDispatch.dispatch(this.observer, observer -> observer.didRequestEndpoint(OAuthEndpoint.USERINFO, safe, response.status(), elapsed));

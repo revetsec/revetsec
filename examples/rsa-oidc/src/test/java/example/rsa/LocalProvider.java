@@ -34,6 +34,19 @@ import java.security.*;
 import java.security.interfaces.RSAPublicKey;
 import java.security.spec.MGF1ParameterSpec;
 import java.security.spec.PSSParameterSpec;
+import java.security.spec.RSAPublicKeySpec;
+import java.security.spec.ECGenParameterSpec;
+import java.security.spec.ECParameterSpec;
+import java.security.spec.ECPoint;
+import java.security.spec.ECPublicKeySpec;
+import java.security.spec.NamedParameterSpec;
+import java.security.spec.EdECPoint;
+import java.security.spec.EdECPublicKeySpec;
+import com.revetsec.jose.JwksPublisher;
+import com.revetsec.jose.Jwks;
+import com.revetsec.jose.JwksParseResult;
+import com.revetsec.json.JsonObject;
+import com.revetsec.json.JsonString;
 import java.time.*;
 import java.util.*;
 import java.util.concurrent.*;
@@ -50,25 +63,31 @@ final class LocalProvider implements AutoCloseable {
 	static final String REFRESH = "TEST-ONLY-example-refresh";
 	static final Clock CLOCK = Clock.fixed(Instant.parse("2026-10-03T12:00:00Z"), ZoneOffset.UTC);
 	final AtomicInteger posts = new AtomicInteger();
+	final AtomicInteger applicationJwksFetches = new AtomicInteger();
 	final AtomicInteger assertions = new AtomicInteger();
 	final AtomicInteger userInfoCalls = new AtomicInteger();
 	final Set<String> identifiers = ConcurrentHashMap.newKeySet();
+	final Set<String> signatureProviders = ConcurrentHashMap.newKeySet();
 	final List<String> audiences = new CopyOnWriteArrayList<>();
 	volatile @Nullable Throwable failure;
 	volatile String tenant = TENANT;
 	volatile boolean missingKeyIssuer;
 	volatile boolean forge;
 	private final KeyPair issuerKey;
-	private final KeyPair clientKey;
+	private final PublicKey clientKey;
+	private final JwksPublisher applicationKeys;
 	private final JwsAlgorithm algorithm;
 	private final boolean endpointAudience;
 	private final boolean entra;
 	private final HttpsServer server;
 	private final HttpClient http;
 
-	LocalProvider(@NonNull KeyPair clientKey, @NonNull JwsAlgorithm algorithm, boolean endpointAudience,
+	LocalProvider(@NonNull JwksPublisher applicationKeys, @NonNull JwsAlgorithm algorithm, boolean endpointAudience,
 			boolean entra) throws Exception {
-		this.clientKey = clientKey; this.algorithm = algorithm; this.endpointAudience = endpointAudience; this.entra = entra;
+		this.algorithm = algorithm; this.endpointAudience = endpointAudience; this.entra = entra;
+		this.applicationKeys = applicationKeys;
+		check(applicationKeys.getKeys().size() == 1);
+		this.clientKey = applicationPublicKey(applicationKeys.getKeys().get(0).toJsonObject(), algorithm);
 		this.issuerKey = freshKey();
 		KeyStore store = KeyStore.getInstance("PKCS12");
 		try (InputStream input = Files.newInputStream(Path.of(System.getProperty("example.tlsStore")))) {
@@ -83,6 +102,7 @@ final class LocalProvider implements AutoCloseable {
 		this.server = HttpsServer.create(new InetSocketAddress(InetAddress.getByAddress(new byte[]{127,0,0,1}), 0), 16);
 		this.server.setHttpsConfigurator(new HttpsConfigurator(context));
 		this.server.createContext("/", this::respond); this.server.start();
+		try { verifyApplicationPublication(); } catch (Exception | Error problem) { this.server.stop(0); throw problem; }
 	}
 
 	static @NonNull KeyPair freshKey() throws GeneralSecurityException {
@@ -93,19 +113,30 @@ final class LocalProvider implements AutoCloseable {
 	@NonNull URI endpoint(@NonNull String path) { return URI.create(issuer() + path); }
 	@NonNull HttpClient httpClient() { return this.entra ? new RoutedClient(this.http, local()) : this.http; }
 	@NonNull AuthorizationServerMetadata metadata() {
+		return metadataWithAlgorithms(this.algorithm.getWireValue(), this.algorithm.getWireValue(), this.algorithm.getWireValue());
+	}
+	@NonNull AuthorizationServerMetadata metadataWithAlgorithms(@NonNull String token, @NonNull String revocation,
+			@NonNull String introspection) {
 		return AuthorizationServerMetadata.withIssuer(issuer()).authorizationEndpoint(endpoint("/authorize"))
 				.tokenEndpoint(endpoint("/token")).revocationEndpoint(endpoint("/revoke")).introspectionEndpoint(endpoint("/inspect"))
 				.tokenEndpointAuthMethodsSupported(Set.of("private_key_jwt"))
 				.revocationEndpointAuthMethodsSupported(Set.of("private_key_jwt"))
 				.introspectionEndpointAuthMethodsSupported(Set.of("private_key_jwt"))
-				.tokenEndpointAuthSigningAlgValuesSupported(Set.of(this.algorithm.getWireValue()))
-				.revocationEndpointAuthSigningAlgValuesSupported(Set.of(this.algorithm.getWireValue()))
-				.introspectionEndpointAuthSigningAlgValuesSupported(Set.of(this.algorithm.getWireValue())).build();
+				.tokenEndpointAuthSigningAlgValuesSupported(Set.of(token))
+				.revocationEndpointAuthSigningAlgValuesSupported(Set.of(revocation))
+				.introspectionEndpointAuthSigningAlgValuesSupported(Set.of(introspection)).build();
 	}
 
 	private void respond(@NonNull HttpExchange exchange) throws IOException {
 		try {
 			String path = exchange.getRequestURI().getRawPath(); String json;
+			if (path.equals("/application-jwks")) {
+				this.applicationJwksFetches.incrementAndGet();
+				var response = this.applicationKeys.responseFor(exchange.getRequestMethod());
+				exchange.getResponseHeaders().putAll(response.getHeaders());
+				byte[] body = response.toHttpBody(); exchange.sendResponseHeaders(response.getStatusCode(), body.length);
+				try (var output = exchange.getResponseBody()) { output.write(body); } return;
+			}
 			if (path.contains(".well-known")) json = discovery();
 			else if (path.endsWith("/jwks")) json = jwks();
 			else if (path.endsWith("/userinfo")) {
@@ -162,11 +193,25 @@ final class LocalProvider implements AutoCloseable {
 
 	private void verify(@NonNull String compact, @NonNull String localPath) throws GeneralSecurityException {
 		String[] parts = compact.split("\\.", -1); check(parts.length == 3);
-		Signature signature = Signature.getInstance(this.algorithm == JwsAlgorithm.PS256 ? "RSASSA-PSS"
-				: this.algorithm == JwsAlgorithm.RS384 ? "SHA384withRSA" : "SHA256withRSA");
-		if (this.algorithm == JwsAlgorithm.PS256) signature.setParameter(new PSSParameterSpec("SHA-256", "MGF1", MGF1ParameterSpec.SHA256, 32, 1));
-		signature.initVerify(this.clientKey.getPublic()); signature.update((parts[0] + "." + parts[1]).getBytes(StandardCharsets.US_ASCII));
-		check(signature.verify(Base64.getUrlDecoder().decode(parts[2])));
+		String name = switch (this.algorithm) {
+			case RS256 -> "SHA256withRSA"; case RS384 -> "SHA384withRSA"; case RS512 -> "SHA512withRSA";
+			case PS256, PS384, PS512 -> "RSASSA-PSS";
+			case ES256 -> "SHA256withECDSAinP1363Format"; case ES384 -> "SHA384withECDSAinP1363Format";
+			case ED25519 -> "Ed25519";
+			default -> throw new IllegalArgumentException("Unsupported fixture algorithm");
+		};
+		Signature signature = Signature.getInstance(name);
+		if (this.algorithm == JwsAlgorithm.PS256 || this.algorithm == JwsAlgorithm.PS384 || this.algorithm == JwsAlgorithm.PS512) {
+			int bits = this.algorithm == JwsAlgorithm.PS256 ? 256 : this.algorithm == JwsAlgorithm.PS384 ? 384 : 512;
+			signature.setParameter(new PSSParameterSpec("SHA-" + bits, "MGF1", new MGF1ParameterSpec("SHA-" + bits), bits / 8, 1));
+		}
+		byte[] wire = Base64.getUrlDecoder().decode(parts[2]);
+		if (this.algorithm == JwsAlgorithm.ES256 || this.algorithm == JwsAlgorithm.ED25519) check(wire.length == 64);
+		if (this.algorithm == JwsAlgorithm.ES384) check(wire.length == 96);
+		signature.initVerify(this.clientKey); signature.update((parts[0] + "." + parts[1]).getBytes(StandardCharsets.US_ASCII));
+		check(signature.verify(wire));
+		String selectedProvider = signature.getProvider().getName(); check(Set.of("SunEC", "SunRsaSign").contains(selectedProvider)); this.signatureProviders.add(selectedProvider);
+		Arrays.fill(wire, (byte) 0);
 		String header = decoded(parts[0]); String claims = decoded(parts[1]);
 		check(header.equals("{\"alg\":\"" + this.algorithm.getWireValue() + "\",\"typ\":\"" + (this.endpointAudience ? "JWT" : "client-authentication+jwt") + "\",\"kid\":\"application-key\"}"));
 		String audience = this.endpointAudience ? issuer() + (this.entra ? localPath.substring("/organizations/v2.0".length()) : localPath) : issuer();
@@ -225,4 +270,42 @@ final class LocalProvider implements AutoCloseable {
 		@Override public <T> @NonNull CompletableFuture<@NonNull HttpResponse<@NonNull T>> sendAsync(@NonNull HttpRequest request, HttpResponse.@NonNull BodyHandler<@NonNull T> handler) { return this.delegate.sendAsync(map(request), handler); }
 		@Override public <T> @NonNull CompletableFuture<@NonNull HttpResponse<@NonNull T>> sendAsync(@NonNull HttpRequest request, HttpResponse.@NonNull BodyHandler<@NonNull T> handler, HttpResponse.@NonNull PushPromiseHandler<@NonNull T> push) { return this.delegate.sendAsync(map(request), handler, push); }
 	}
+
+    private void verifyApplicationPublication() throws Exception {
+        var request=HttpRequest.newBuilder(local().resolve("/application-jwks")).timeout(Duration.ofSeconds(3)).GET().build();
+        var response=this.http.send(request,HttpResponse.BodyHandlers.ofByteArray());
+        check(response.statusCode()==200 && response.body().length<=16384);
+        // Exact byte equality binds the independent key reconstruction to the public object actually served.
+        check(Arrays.equals(this.applicationKeys.responseFor("GET").toHttpBody(),response.body()));
+        var parsed=Jwks.fromJsonResult(new String(response.body(),StandardCharsets.UTF_8));
+        check(parsed instanceof JwksParseResult.Succeeded);
+        var keys=((JwksParseResult.Succeeded)parsed).getJwks().getKeys();check(keys.size()==1);
+        check(keys.get(0).getAlgorithm().orElseThrow()==this.algorithm);
+        check(keys.get(0).getKeyId().orElseThrow().equals("application-key"));check(keys.get(0).getUse().orElseThrow().equals("sig"));
+    }
+
+    /** Test-only JCA public-key construction from the exact application publication; never private material. */
+    private static @NonNull PublicKey applicationPublicKey(@NonNull JsonObject material,@NonNull JwsAlgorithm algorithm) throws GeneralSecurityException {
+        check(text(material,"alg").equals(algorithm.getWireValue()));check(text(material,"kid").equals("application-key"));check(text(material,"use").equals("sig"));
+        switch(algorithm){
+            case RS256,RS384,RS512,PS256,PS384,PS512 -> {
+                check(material.getMembers().keySet().equals(Set.of("kty","n","e","use","kid","alg")));check(text(material,"kty").equals("RSA"));
+                return KeyFactory.getInstance("RSA").generatePublic(new RSAPublicKeySpec(new BigInteger(1,Base64.getUrlDecoder().decode(text(material,"n"))),new BigInteger(1,Base64.getUrlDecoder().decode(text(material,"e")))));
+            }
+            case ES256,ES384 -> {
+                check(material.getMembers().keySet().equals(Set.of("kty","crv","x","y","use","kid","alg")));check(text(material,"kty").equals("EC"));
+                boolean p256=algorithm==JwsAlgorithm.ES256;check(text(material,"crv").equals(p256?"P-256":"P-384"));
+                byte[] x=Base64.getUrlDecoder().decode(text(material,"x")),y=Base64.getUrlDecoder().decode(text(material,"y"));check(x.length==(p256?32:48) && y.length==x.length);
+                var parameters=AlgorithmParameters.getInstance("EC");parameters.init(new ECGenParameterSpec(p256?"secp256r1":"secp384r1"));
+                return KeyFactory.getInstance("EC").generatePublic(new ECPublicKeySpec(new ECPoint(new BigInteger(1,x),new BigInteger(1,y)),parameters.getParameterSpec(ECParameterSpec.class)));
+            }
+            case ED25519 -> {
+                check(material.getMembers().keySet().equals(Set.of("kty","crv","x","use","kid","alg")));check(text(material,"kty").equals("OKP"));check(text(material,"crv").equals("Ed25519"));
+                byte[] little=Base64.getUrlDecoder().decode(text(material,"x"));check(little.length==32);boolean odd=(little[31]&128)!=0;little[31]&=127;byte[] big=new byte[32];for(int n=0;n<32;n++)big[n]=little[31-n];
+                return KeyFactory.getInstance("Ed25519").generatePublic(new EdECPublicKeySpec(NamedParameterSpec.ED25519,new EdECPoint(odd,new BigInteger(1,big))));
+            }
+            default -> throw new IllegalArgumentException("Unsupported fixture publication algorithm");
+        }
+    }
+    private static @NonNull String text(@NonNull JsonObject object,@NonNull String name){return ((JsonString)Objects.requireNonNull(object.getMembers().get(name))).getValue();}
 }

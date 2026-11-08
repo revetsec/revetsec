@@ -70,6 +70,12 @@ For example, with a 60-second public metadata cache age:
 
 The example assumes the declared bounds cover all issuance in the scenario and the publication destinations satisfy the application's distribution contract. The logical times illustrate the calculation; a real deployment needs its actual publication acknowledgements and trusted time/recovery evidence.
 
+## Concurrent provider responses
+
+Provider callbacks run outside the local lifecycle lock and use the original operation's shrinking budget. If a response from one callback has been overtaken by a newer accepted generation in that same history, the issuer releases the lock and reads the provider once more. It validates that response against the latest accepted history. A second overtake, ordinary rollback, changed facts for one generation, backward time, or invalid publication/retirement obligations still refuses the operation. The guard never replaces newer history with the older response.
+
+This is one bounded provider read for local ordering; it does not retry a token request, signing operation or store mutation. Signing still reserves the selected key's retention and checks the provider again after signing before output can be prepared. Provisional and admitted histories remain separate. The re-read adds no durable distribution, cross-node ordering or restore guarantee.
+
 ## Recognition and lifecycle failures
 
 Resource admission first recognizes the token's signature and fixed profile against the public keys in the provider's current snapshot. This step does not consult remembered temporal lifecycle history, read the authoritative store or release a proof. If a token's `kid` is absent, recognition returns the fixed `UNKNOWN_KEY`/`INVALID_TOKEN` rejection. The self-issued MCP application maps that rejection to 401 with a bearer invalid_token challenge. No historical-key fallback is used to make an otherwise unrecognized token reach storage.

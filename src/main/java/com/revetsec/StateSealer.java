@@ -173,6 +173,11 @@ public final class StateSealer {
 	public String seal(@NonNull String plaintext,
 										 @NonNull String context,
 										 @NonNull Duration lifetime) {
+		return sealForLifetime(SealedStateType.APP, plaintext, context, lifetime);
+	}
+
+	private @NonNull String sealForLifetime(@NonNull SealedStateType type, @NonNull String plaintext,
+			@NonNull String context, @NonNull Duration lifetime) {
 		requireNonNull(plaintext);
 		requireNonNull(context);
 		requireNonNull(lifetime);
@@ -181,7 +186,7 @@ public final class StateSealer {
 
 		// Neither sum can overflow: the largest Instant is about 3.2E16 seconds and the lifetime at most 400 days.
 		long notAfter = ceilingEpochSecond(this.clock.instant()) + lifetime.toSeconds();
-		return sealUntil(SealedStateType.APP, plaintext, context, notAfter);
+		return sealUntil(type, plaintext, context, notAfter);
 	}
 
 	/**
@@ -513,6 +518,22 @@ public final class StateSealer {
                 @NonNull String sealed, @NonNull String context) throws UnsealException {
             return SealerV1.openDurable(sealed, requireNonNull(sealer).keysByKeyId, context);
         }
+
+		@Override
+		public @NonNull String sealForLifetime(@NonNull StateSealer sealer, @NonNull SealedStateType type,
+				@NonNull String plaintext, @NonNull String context, @NonNull Duration lifetime) {
+			requireNonNull(sealer); requireNonNull(type);
+			if (type != SealedStateType.OIDC_LOGOUT_HINT) throw new IllegalArgumentException("The lifetime operation requires a logout hint type.");
+			return sealer.sealForLifetime(type, plaintext, context, lifetime);
+		}
+
+		@Override
+		public @NonNull String unsealUsingConfiguredClock(@NonNull StateSealer sealer, @NonNull SealedStateType type,
+				@NonNull String sealed, @NonNull String context) throws UnsealException {
+			requireNonNull(sealer); requireNonNull(type);
+			if (type != SealedStateType.OIDC_LOGOUT_HINT) throw new IllegalArgumentException("The configured-clock operation requires a logout hint type.");
+			return unseal(sealer, type, sealed, context, sealer.clock);
+		}
 
 		@Override
 		@NonNull

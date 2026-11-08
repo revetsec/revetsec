@@ -62,7 +62,10 @@ public final class OidcClient {
 	private final Set<String> scopes;
 	private final List<URI> resources;
 	private final Set<String> acrValues;
+	private final @Nullable List<String> acrPreferences;
 	private final Duration totalDeadline;
+	private final @Nullable URI postLogoutRedirectUri;
+	private final Duration logoutPendingLifetime;
 	private final OidcObserver observer;
 	private final @Nullable JwksSource configuredKeySource;
 	private final String clientId;
@@ -83,7 +86,8 @@ public final class OidcClient {
 
 	private OidcClient(@NonNull Builder builder, @NonNull OAuthClient oauth) {
 		this.issuerPolicy = builder.issuerPolicy; this.oauth = oauth; this.issuer = builder.issuer; this.userInfoAlgorithm = builder.userInfoAlgorithm; this.scopes = builder.scopes; this.resources = builder.resources;
-		this.acrValues = builder.acrValues; this.totalDeadline = builder.totalDeadline; this.observer = builder.observer;
+		this.acrValues = builder.acrValues; this.acrPreferences = builder.acrPreferences; this.totalDeadline = builder.totalDeadline;
+		this.postLogoutRedirectUri = builder.postLogoutRedirectUri; this.logoutPendingLifetime = builder.pendingLifetime; this.observer = builder.observer;
 		this.configuredKeySource = builder.keySource; this.clientId = requireNonNull(builder.clientId);
 		this.algorithms = builder.algorithms; this.hmacAlgorithms = hmacAlgorithms(this.algorithms); this.trustedAudiences = builder.trustedAudiences;
 		this.trustedAuthorizedParties = builder.trustedAuthorizedParties; this.clockSkew = builder.clockSkew;
@@ -194,8 +198,10 @@ public final class OidcClient {
 	 */
 	public @NonNull AuthorizationRedirect beginAuthentication(@NonNull OidcAuthenticationOptions options) {
 		requireNonNull(options);
+		Set<String> required = options.getRequiredAcrValues().orElse(this.acrValues);
+		List<String> preferred = options.getAcrPreferences().orElse(this.acrPreferences == null ? required.stream().sorted().toList() : this.acrPreferences);
 		return OidcTransactionAccess.get().begin(this.oauth, options.transactionOptions(this.scopes, this.resources),
-				provider(Deadline.fromNow(this.totalDeadline)).metadata.oauthMetadata(), options.getMaxAge().orElse(null), options.getRequiredAcrValues().orElse(this.acrValues));
+				provider(Deadline.fromNow(this.totalDeadline)).metadata.oauthMetadata(), options.getMaxAge().orElse(null), required, preferred);
 	}
 	/**
 	 * Completes authentication after the shared browser binding, state, flow kind, client, issuer, callback route and
@@ -228,7 +234,7 @@ public final class OidcClient {
 			ObserverDispatch.dispatch(this.observer, observer -> observer.didRejectIdToken(failure));
 			throw failure;
 		}
-		OidcAuthentication authentication = new OidcAuthentication(token, completion.releaseTokens(), this.clientId, this.proofOwner);
+		OidcAuthentication authentication = new OidcAuthentication(token, completion.releaseTokens(), this.clientId, this.proofOwner, completion.acrValues());
 		ObserverDispatch.dispatch(this.observer, OidcObserver::didCompleteAuthentication);
 		return authentication;
 	}
@@ -420,7 +426,7 @@ public final class OidcClient {
 	 * restricts scope requests to the original grant. A returned ID token must preserve original issuer, subject,
 	 * audience and authorized party. Present auth_time and nonce must match the original. Issued-at cannot precede
 	 * the original token; refresh does not apply the login token-age or authentication-age window. A present code
-	 * hash cannot be verified during refresh and is rejected. Tokens remain private until validation completes.
+	 * hash cannot be verified during refresh and is rejected. The original flow's saved ACR acceptance set applies to every returned ID token, separately from this client's login defaults. Tokens remain private until validation completes.
 	 * @param refreshToken current refresh credential
 	 * @param original original session comparison reference
 	 * @param options per-request options
@@ -441,14 +447,168 @@ public final class OidcClient {
 			if (!completion.tokenType().equalsIgnoreCase("Bearer")) throw OidcValidationException.fromReason(OidcValidationException.Reason.TOKEN_TYPE_UNSUPPORTED);
 			String compact = completion.idToken();
 			if (completion.idTokenPresent() && compact == null) throw OidcValidationException.fromReason(OidcValidationException.Reason.ID_TOKEN_MALFORMED);
-			verified = compact == null ? null : provider.validator.validateRefresh(compact, original, completion.accessToken(), this.acrValues, deadline, completion.clientSecret());
+			verified = compact == null ? null : provider.validator.validateRefresh(compact, original, completion.accessToken(), original.getRequiredAcrValues(), deadline, completion.clientSecret());
 		} catch (OidcValidationException failure) {
 			ObserverDispatch.dispatch(this.observer, observer -> observer.didRejectRefresh(failure)); throw failure;
 		}
 		TokenResponse tokens = completion.releaseTokens();
-		OidcRefreshResult result = new OidcRefreshResult(tokens, verified, refreshToken, original);
+		OidcRefreshResult result = new OidcRefreshResult(tokens, verified, refreshToken, original, this.proofOwner);
 		ObserverDispatch.dispatch(this.observer, observer -> observer.didRefreshTokens(result.getIdToken().isPresent(), tokens.getRefreshToken().isPresent()));
 		return result;
+	}
+
+
+	/**
+	 * Explicitly retains this exact client's validated ID token as a logout hint. This does not extend identity
+	 * lifetime or change the comparison-only original reference. A token may later be used after authentication expiry.
+	 * @param authentication genuine completed authentication produced by this exact client instance
+	 * @return credential-bearing logout companion for trusted storage
+	 * @throws NullPointerException if authentication is null
+	 * @throws OidcLogoutException if ownership, profile, current issuer policy, interruption or the budget fails
+	 * @since 1.0.0
+	 */
+	public @NonNull OidcLogoutHint logoutHintFrom(@NonNull OidcAuthentication authentication) {
+		requireNonNull(authentication); Deadline deadline = Deadline.fromNow(this.totalDeadline); OidcLogoutSupport.active(deadline);
+		if (!authentication.belongsTo(this.proofOwner)) throw OidcLogoutSupport.failure(OidcLogoutException.Reason.HINT_MISMATCH);
+		checkLogoutReference(authentication.getSessionReference(), deadline);
+		OidcLogoutHint hint = checkedLogoutHint(authentication.getSessionReference(), authentication.getIdToken().toCompactSerialization(), deadline);
+		OidcLogoutSupport.active(deadline); return hint;
+	}
+
+	/**
+	 * Explicitly retains a newly validated ID token from this exact client's refresh. Omitted ID tokens yield empty;
+	 * the original session reference is always retained and no new authenticated identity is created.
+	 * @param refreshed genuine refresh result produced by this exact client instance
+	 * @return optional replacement credential, never a replacement original reference
+	 * @throws NullPointerException if refreshed is null
+	 * @throws OidcLogoutException if ownership, profile, current issuer policy, interruption or the budget fails
+	 * @since 1.0.0
+	 */
+	public @NonNull Optional<@NonNull OidcLogoutHint> logoutHintFrom(@NonNull OidcRefreshResult refreshed) {
+		requireNonNull(refreshed); Deadline deadline = Deadline.fromNow(this.totalDeadline); OidcLogoutSupport.active(deadline);
+		if (!refreshed.belongsTo(this.proofOwner)) throw OidcLogoutSupport.failure(OidcLogoutException.Reason.HINT_MISMATCH);
+		checkLogoutReference(refreshed.getSessionReference(), deadline);
+		Optional<OidcLogoutHint> hint = refreshed.getIdToken().map(token -> checkedLogoutHint(refreshed.getSessionReference(), token.toCompactSerialization(), deadline));
+		OidcLogoutSupport.active(deadline); return hint;
+	}
+
+
+	/**
+	 * Prepares a browser GET/form POST request after the application has authorized its local POST/CSRF request and
+	 * terminated its own session. Failures never undo local termination. No end-session server request or automatic
+	 * retry is sent. The original reference and retained hint must match before discovery, entropy or output.
+	 * @param original original continuity reference for this session, not identity proof
+	 * @param hint explicitly retained logout credential bound to that reference
+	 * @return credential-bearing browser request and independent pending correlation state
+	 * @throws NullPointerException if a required argument is null
+	 * @throws OidcLogoutException if configuration, binding, discovery, URI policy, time, entropy or the budget fails
+	 * @since 1.0.0
+	 */
+	public @NonNull OidcLogoutRequest beginLogout(@NonNull OidcSessionReference original, @NonNull OidcLogoutHint hint) {
+		requireNonNull(original); requireNonNull(hint); Deadline deadline = Deadline.fromNow(this.totalDeadline); OidcLogoutSupport.active(deadline);
+		URI callback = requireLogoutConfiguration();
+		if (!original.matchesOriginalReference(hint.reference())) throw OidcLogoutSupport.failure(OidcLogoutException.Reason.HINT_MISMATCH);
+		java.time.Instant before = logoutClock(deadline); checkLogoutReference(original, deadline);
+		ProviderState provider;
+		try { provider = logoutProvider(deadline); OidcLogoutSupport.active(deadline); }
+		catch (OidcLogoutException failure) { throw failure; }
+		catch (com.revetsec.oauth.OAuthException failure) {
+			OidcLogoutSupport.active(deadline); throw OidcLogoutSupport.failure(failure.isTemporaryCondition() ? OidcLogoutException.Reason.DISCOVERY_UNAVAILABLE : OidcLogoutException.Reason.PROVIDER_UNAVAILABLE);
+		} catch (VirtualMachineError fatal) { throw fatal; }
+		catch (Throwable failure) { if (failure instanceof InterruptedException) Thread.currentThread().interrupt(); OidcLogoutSupport.active(deadline); throw OidcLogoutSupport.failure(OidcLogoutException.Reason.PROVIDER_UNAVAILABLE); }
+		URI endpoint = provider.metadata.getEndSessionEndpoint().orElseThrow(() -> OidcLogoutSupport.failure(OidcLogoutException.Reason.END_SESSION_UNSUPPORTED));
+		try {
+			OidcLogoutSupport.active(deadline); OidcLogoutSupport.endpoint(endpoint); UriChecks.requirePermitted(endpoint, this.policy, this.allowInsecureLoopback); OidcLogoutSupport.active(deadline);
+		} catch (OidcLogoutException failure) { throw failure; }
+		catch (VirtualMachineError fatal) { throw fatal; }
+		catch (Throwable invalid) { if (invalid instanceof InterruptedException) Thread.currentThread().interrupt(); OidcLogoutSupport.active(deadline); throw OidcLogoutSupport.failure(OidcLogoutException.Reason.ENDPOINT_NOT_PERMITTED); }
+		java.time.Instant created = logoutClock(deadline);
+		if (created.isBefore(before)) throw OidcLogoutSupport.failure(OidcLogoutException.Reason.PROVIDER_UNAVAILABLE);
+		byte @Nullable [] random = null;
+		try {
+			java.time.Instant expires = created.plus(this.logoutPendingLifetime);
+			OidcLogoutSupport.active(deadline); com.revetsec.internal.crypto.EntropySource entropy = com.revetsec.internal.crypto.EntropySource.fromDefaults(); OidcLogoutSupport.active(deadline);
+			random = entropy.nextBytes(32); OidcLogoutSupport.active(deadline); String state = com.revetsec.internal.encoding.Base64Url.encode(random);
+			PendingOidcLogout pending = new PendingOidcLogout(this.issuer, this.clientId, callback, state, created, expires); OidcLogoutPendingCodec.encode(pending, null);
+			OidcLogoutRequest request = new OidcLogoutRequest(endpoint, this.clientId, callback, hint.compact(), state, pending);
+			java.time.Instant completed = logoutClock(deadline);
+			if (completed.isBefore(created) || !completed.isBefore(expires)) throw OidcLogoutSupport.failure(OidcLogoutException.Reason.PROVIDER_UNAVAILABLE);
+			OidcLogoutSupport.active(deadline); return request;
+		} catch (OidcLogoutException failure) { OidcLogoutSupport.active(deadline); throw failure; }
+		catch (VirtualMachineError fatal) { throw fatal; }
+		catch (Throwable unavailable) { if (unavailable instanceof InterruptedException) Thread.currentThread().interrupt(); OidcLogoutSupport.active(deadline); throw OidcLogoutSupport.failure(OidcLogoutException.Reason.PROVIDER_UNAVAILABLE); }
+		finally { OidcLogoutSupport.clear(random); }
+	}
+
+	/**
+	 * Correlates a state-only browser return without discovery, JWKS, token POST, ID-token signature verification,
+	 * retry or session creation. The actual callback comes from trusted routing configuration, never headers. Clear
+	 * a pending cookie on every callback, including rejection/exception paths. Returned proves correlation only.
+	 * @param rawQuery raw query without the leading question mark, at most4096characters
+	 * @param source this browser's typed pending source
+	 * @param actualCallbackUri trusted actual callback route
+	 * @return correlation-only Returned or a fixed value-free rejection
+	 * @throws NullPointerException if a required argument is null
+	 * @throws OidcLogoutException if configuration, budget, interruption, provider or store uncertainty prevents completion
+	 * @since 1.0.0
+	 */
+	@CheckReturnValue
+	public @NonNull OidcLogoutResult completeLogoutResult(@NonNull String rawQuery, @NonNull PendingOidcLogoutSource source, @NonNull URI actualCallbackUri) {
+		requireNonNull(rawQuery); requireNonNull(source); requireNonNull(actualCallbackUri); Deadline deadline = Deadline.fromNow(this.totalDeadline); OidcLogoutSupport.active(deadline);
+		URI callback = requireLogoutConfiguration();
+		if (!callback.toString().equals(actualCallbackUri.toString())) return OidcLogoutResult.rejected(OidcLogoutResult.Reason.CALLBACK_MISMATCH);
+		String state;
+		try { state = OidcLogoutSupport.returnedState(rawQuery); }
+		catch (IllegalArgumentException malformed) { return OidcLogoutResult.rejected(OidcLogoutResult.Reason.MALFORMED_RETURN); }
+		return source.complete(state, this.issuer, this.clientId, callback, this.clock, deadline);
+	}
+
+	private @NonNull URI requireLogoutConfiguration() {
+		if (this.postLogoutRedirectUri == null) throw OidcLogoutSupport.failure(OidcLogoutException.Reason.LOGOUT_NOT_CONFIGURED);
+		return this.postLogoutRedirectUri;
+	}
+	private @NonNull ProviderState logoutProvider(@NonNull Deadline deadline) {
+		OidcLogoutSupport.active(deadline);
+		if (this.cache != null) return this.cache.get(deadline);
+		boolean locked = false;
+		try {
+			locked = this.stateLock.tryLock(OidcLogoutSupport.remaining(deadline).toNanos(), java.util.concurrent.TimeUnit.NANOSECONDS);
+			if (!locked) throw OidcLogoutSupport.failure(OidcLogoutException.Reason.BUDGET_EXHAUSTED);
+			OidcLogoutSupport.active(deadline); return requireNonNull(this.state);
+		} catch (InterruptedException interrupted) { Thread.currentThread().interrupt(); throw OidcLogoutSupport.failure(OidcLogoutException.Reason.INTERRUPTED); }
+		finally { if (locked) this.stateLock.unlock(); }
+	}
+	private @NonNull Instant logoutClock(@NonNull Deadline deadline) {
+		OidcLogoutSupport.active(deadline);
+		try { java.time.Instant now = requireNonNull(this.clock.instant()); OidcLogoutSupport.active(deadline); return now; }
+		catch (OidcLogoutException failure) { throw failure; }
+		catch (VirtualMachineError fatal) { throw fatal; }
+		catch (RuntimeException | Error unavailable) { OidcLogoutSupport.active(deadline); throw OidcLogoutSupport.failure(OidcLogoutException.Reason.PROVIDER_UNAVAILABLE); }
+	}
+
+	private @NonNull OidcLogoutHint checkedLogoutHint(@NonNull OidcSessionReference reference, @NonNull String compact, @NonNull Deadline deadline) {
+		try { OidcLogoutHint hint = new OidcLogoutHint(reference, compact); OidcLogoutSupport.active(deadline); return hint; }
+		catch (OidcLogoutException failure) { OidcLogoutSupport.active(deadline); throw failure; }
+		catch (VirtualMachineError fatal) { throw fatal; }
+		catch (RuntimeException | Error unavailable) { OidcLogoutSupport.active(deadline); throw OidcLogoutSupport.failure(OidcLogoutException.Reason.PROVIDER_UNAVAILABLE); }
+	}
+
+	private void checkLogoutReference(@NonNull OidcSessionReference original, @NonNull Deadline deadline) {
+		OidcLogoutSupport.active(deadline);
+		try {
+			OidcLogoutSupport.client(this.clientId); OidcLogoutSupport.text(this.issuer, OidcLogoutSupport.FIELD_LIMIT);
+			if (this.issuerPolicy.isMicrosoftEntra()) {
+				original.checkMicrosoftEntraClient(this.clientId);
+				String actualIssuer = ((com.revetsec.json.JsonString) requireNonNull(original.continuityClaims().getMembers().get("iss"))).getValue();
+				OidcLogoutSupport.text(actualIssuer, OidcLogoutSupport.FIELD_LIMIT);
+				this.issuerPolicy.checkTenant(requireNonNull(OidcIssuerPolicy.tenantFromIssuer(actualIssuer)), deadline);
+			} else original.checkClient(this.issuer, this.clientId);
+		} catch (OidcValidationException | IllegalArgumentException invalid) {
+			OidcLogoutSupport.active(deadline); throw OidcLogoutSupport.failure(OidcLogoutException.Reason.HINT_MISMATCH);
+		} catch (RuntimeException unavailable) {
+			OidcLogoutSupport.active(deadline); throw OidcLogoutSupport.failure(OidcLogoutException.Reason.PROVIDER_UNAVAILABLE);
+		}
+		OidcLogoutSupport.active(deadline);
 	}
 
 	/**
@@ -471,9 +631,11 @@ public final class OidcClient {
 		private @Nullable String clientId;
 		private ClientAuthentication authentication = ClientAuthentication.noneInstance();
 		private @Nullable URI redirectUri;
+		private @Nullable URI postLogoutRedirectUri;
 		private Set<String> scopes = Set.of();
 		private List<URI> resources = List.of();
 		private Set<String> acrValues = Set.of();
+		private @Nullable List<String> acrPreferences;
 		private Set<String> trustedAudiences = Set.of();
 		private Set<String> trustedAuthorizedParties = Set.of();
 		private Set<JwsAlgorithm> algorithms = Set.of(JwsAlgorithm.RS256);
@@ -524,6 +686,15 @@ public final class OidcClient {
 		 */
 		public @NonNull Builder redirectUri(@Nullable URI value) { this.redirectUri = value; return this; }
 		/**
+		 * Sets one fixed registered logout callback, independent of the login callback. It must be HTTPS (or explicit
+		 * test loopback), at most 2048 UTF8 bytes, without query, fragment or userinfo. Null disables logout.
+		 * @param value fixed callback, or null for absent
+		 * @return this builder
+		 * @since 1.0.0
+		 */
+		public @NonNull Builder postLogoutRedirectUri(@Nullable URI value) { this.postLogoutRedirectUri = value; return this; }
+
+		/**
 		 * Sets the complete default scopes, in addition to openid.
 		 *
 		 * @param value value, or null to restore the default
@@ -547,6 +718,16 @@ public final class OidcClient {
 		 * @since 1.0.0
 		 */
 		public @NonNull Builder requiredAcrValues(@Nullable Set<@NonNull String> value) { this.acrValues = value == null ? Set.of() : OidcAuthenticationOptions.requireAcrValues(value); return this; }
+		/**
+		 * Sets ordered acr_values request preferences, independent of local acceptance. Null derives a deterministic
+		 * lexical request list from the effective acceptance set; an empty list omits the request parameter.
+		 * @param value distinct nonempty visible-ASCII preferences, or null
+		 * @return this builder
+		 * @throws IllegalArgumentException if a value is malformed or duplicated
+		 * @since 1.0.0
+		 */
+		public @NonNull Builder acrPreferences(@Nullable List<@NonNull String> value) { this.acrPreferences = value == null ? null : OidcAuthenticationOptions.requireAcrPreferences(value); return this; }
+
 		/**
 		 * Sets the complete additional trusted audience set.
 		 *
@@ -650,7 +831,9 @@ public final class OidcClient {
 		 */
 		public @NonNull Builder clock(@Nullable Clock value) { this.clock = value == null ? Clock.systemUTC() : value; return this; }
 		/**
-		 * Sets the application-managed redirect-disabled HTTP client.
+		 * Sets the application-managed HTTP client. It must use {@code HttpClient.Redirect.NEVER} and have no
+		 * {@code Authenticator} or {@code CookieHandler}; build rejects noncompliance without a network request.
+		 * Null restores the lazy default. The application owns TLS, proxy and egress controls beyond URI text policy.
 		 *
 		 * @param value value, or null to restore the default
 		 * @return this builder
@@ -752,6 +935,10 @@ public final class OidcClient {
 			if (this.clientId.isEmpty() || this.algorithms.isEmpty()
 					|| this.trustedAudiences.contains("") || this.trustedAuthorizedParties.contains(""))
 				throw new IllegalArgumentException("An OIDC client requires a client ID, callback URI and algorithm allowlist.");
+			if (this.postLogoutRedirectUri != null) {
+				OidcLogoutSupport.callback(this.postLogoutRedirectUri, this.allowInsecureLoopback);
+				OidcLogoutSupport.client(this.clientId); OidcLogoutSupport.text(this.issuer, OidcLogoutSupport.FIELD_LIMIT);
+			}
 			this.issuerPolicy.checkConfiguredIssuer(this.issuer);
 			if (this.metadata != null) this.issuerPolicy.checkMetadata(this.metadata);
 			Set<JwsAlgorithm> hmac = hmacAlgorithms(this.algorithms);

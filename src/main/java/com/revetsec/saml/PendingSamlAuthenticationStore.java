@@ -26,6 +26,11 @@ import java.util.function.Predicate;
  * Atomic storage for browser-bound SAML login and logout attempts. A shared implementation must consume a
  * record at most once across all nodes. The record is sealed by Revetsec and is opaque to the
  * provider. A process-local provider is suitable only for a single node.
+ * <p>
+ * This low-level backend SPI deliberately retains opaque {@link String} lookup fields for exact existing store
+ * framing, including retained SAML spellings. Application-facing pending save/source APIs require
+ * {@link com.revetsec.BrowserBinding}; the SPI value is not identity, authorization or authenticated request
+ * provenance.
  *
  * @since 1.0.0
  */

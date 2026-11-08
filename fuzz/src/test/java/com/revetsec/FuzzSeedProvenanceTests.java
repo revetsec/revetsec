@@ -62,6 +62,26 @@ import java.util.stream.Stream;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 final class FuzzSeedProvenanceTests {
+    @Test
+    void selectedFeatureSeedsHaveExactPathsAndBytes() throws Exception {
+        Path fuzz = coreBasedir().resolve("fuzz"), resources = fuzz.resolve("src/test/resources");
+        var manifest = (com.revetsec.json.JsonObject) JsonCodec.parse(Files.readAllBytes(fuzz.resolve("selected-feature-fuzz-seeds.json")), com.revetsec.internal.json.JsonLimits.protocolDocument(262144));
+        var entries = (com.revetsec.json.JsonArray) manifest.find("seeds").orElseThrow();
+        Set<String> expected = new TreeSet<>(), actual = new TreeSet<>();
+        for (var value : entries.getElements()) {
+            var item = (com.revetsec.json.JsonObject) value;
+            String relative = ((JsonString) item.find("path").orElseThrow()).getValue();
+            Path selected = fuzz.resolve(relative).normalize(); Assertions.assertTrue(selected.startsWith(resources)); Assertions.assertTrue(expected.add(relative));
+            byte[] bytes = Files.readAllBytes(selected);
+            Assertions.assertEquals(((com.revetsec.json.JsonNumber) item.find("bytes").orElseThrow()).getValue().intValueExact(), bytes.length);
+            Assertions.assertEquals(((JsonString) item.find("sha256").orElseThrow()).getValue(), HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256").digest(bytes)));
+            Assertions.assertFalse(((JsonString) item.find("meaning").orElseThrow()).getValue().isBlank());
+        }
+        for (String root : List.of("com/revetsec/KeyImportsFuzzTestsInputs", "com/revetsec/jose/SigningProfilesFuzzTestsInputs", "com/revetsec/webauthn/WebAuthnCeremonyFuzzTestsInputs/checkedReauthenticationPreservesEntryContextAndEffectClasses", "fixtures/key-import-profile"))
+            try (Stream<Path> files = Files.walk(resources.resolve(root))) { actual.addAll(files.filter(Files::isRegularFile).map(fuzz::relativize).map(Path::toString).collect(Collectors.toSet())); }
+        Assertions.assertEquals(expected, actual); Assertions.assertEquals(106, actual.size());
+    }
+
 	@Test
 	void issuerG4SemanticSeedsMatchCompleteControlsAndChecksums() throws Exception {
 		Path fuzz = coreBasedir().resolve("fuzz");
@@ -140,7 +160,7 @@ final class FuzzSeedProvenanceTests {
 			try (Stream<Path> files = Files.walk(resources.resolve("com/revetsec/oauth/server/" + root))) {
 				actual.addAll(files.filter(Files::isRegularFile).map(fuzz::relativize).map(Path::toString).collect(Collectors.toSet()));
 			}
-		Assertions.assertEquals(expected, actual); Assertions.assertEquals(140, actual.size());
+		Assertions.assertEquals(expected, actual); Assertions.assertEquals(161, actual.size());
 	}
 
 	@Test
@@ -171,7 +191,7 @@ final class FuzzSeedProvenanceTests {
 				actual.addAll(files.filter(Files::isRegularFile).map(fuzz::relativize).map(Path::toString).collect(Collectors.toSet()));
 			}
 		}
-		Assertions.assertEquals(expected, actual); Assertions.assertEquals(244, actual.size());
+		Assertions.assertEquals(expected, actual); Assertions.assertEquals(256, actual.size());
 	}
 
 	@Test

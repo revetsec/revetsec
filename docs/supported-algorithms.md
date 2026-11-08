@@ -1,6 +1,6 @@
 # Supported Algorithms
 
-This page covers the implemented JWS verification, RSA signing, JSON Web Key and OIDC ID-token profiles. The final section links the implemented access-token, OAuth client-assertion, SAML and standalone JWKS publication profiles. Dated provider observations retain their original source and environment scope.
+This page covers the implemented JWS verification, bounded signing, JSON Web Key and OIDC ID-token profiles. The final section links the implemented access-token, OAuth client-assertion, SAML and standalone JWKS publication profiles. Dated provider observations retain their original source and environment scope.
 
 Algorithms come from allowlists configured on the validating object, never from the message being validated. Names are compared exactly: JOSE `alg` values case-sensitively, and XML Signature and XML Encryption algorithms as exact URIs.
 
@@ -29,17 +29,23 @@ Each table has three kinds of entry:
 - **The signature's shape is checked before any key is looked up,** so a malformed signature never causes a key set fetch. An ECDSA signature must be exactly 64, 96 or 132 octets, with r and s from 1 to n - 1, the check for CVE-2022-21449; Revetsec makes it itself, on every Java runtime and with any provider. An Ed25519 signature must be 64 octets. An RSA signature must be 256 to 2,048 octets, the modulus lengths the key rules allow, and after the key is selected exactly its modulus length. Anything else is `SIGNATURE_MALFORMED`.
 - **Why DER for ECDSA.** Revetsec checks the fixed-length form itself and then verifies through the standard `SHAxxxwithECDSA` names, which works with any JCA provider, including hardware-backed and approved-mode ones. The exact-length check is needed either way: the JDK's own fixed-length (P1363) verifier accepts some signatures that are too short, and without the check a zero-padded signature would verify through DER.
 
-## Bounded RSA signing (`JwsSigner`)
+## Bounded signing (`JwsSigner`)
 
-The application supplies a private key and an inspectable RSA public key. `fromRsaKeyPair` checks and snapshots the public modulus and exponent under the key rules below; it performs no signing or provider probe. It retains the private key without exporting it. `warmUp(Duration)` explicitly signs and verifies a fixed noncredential probe.
+The application supplies a private key and an inspectable public key. `fromRsaKeyPair` checks and snapshots the RSA modulus/exponent; `fromEcKeyPair` accepts exactly ES256/P-256 or ES384/P-384 and snapshots the checked point/parameters; `fromEd25519KeyPair` fixes the wire algorithm to `Ed25519` and snapshots a canonical, non-small-order Ed25519 point. Factories perform no signing, entropy draw or provider probe, and retain private keys without exporting them. `warmUp(Duration)` explicitly signs and verifies a fixed noncredential probe.
 
 | Algorithm | JCA signature | Parameters |
 | --- | --- | --- |
 | `PS256` | `RSASSA-PSS` | SHA-256, MGF1 with SHA-256, salt length 32, trailer 1 |
+| `PS384` | `RSASSA-PSS` | SHA-384, MGF1 with SHA-384, salt length 48, trailer 1 |
+| `PS512` | `RSASSA-PSS` | SHA-512, MGF1 with SHA-512, salt length 64, trailer 1 |
 | `RS256` | `SHA256withRSA` | RSA PKCS #1 v1.5 with SHA-256 |
 | `RS384` | `SHA384withRSA` | RSA PKCS #1 v1.5 with SHA-384 |
+| `RS512` | `SHA512withRSA` | RSA PKCS #1 v1.5 with SHA-512 |
+| `ES256` | `SHA256withECDSA` | P-256; strict DER-to-JOSE conversion, 64-byte signature |
+| `ES384` | `SHA384withECDSA` | P-384; strict DER-to-JOSE conversion, 96-byte signature |
+| `Ed25519` | `Ed25519` | Pure Ed25519, no prehash; canonical 64-byte signature |
 
-Other algorithms are refused by the factory. Every operation uses a fresh signing engine and verifies the output with the checked public projection before returning it. The JCA selects providers; Revetsec neither names one nor retries another algorithm when a key or provider refuses signing. Provider-backed, nonexportable private keys can be supplied when the selected provider supports the operation; real hardware-provider compatibility remains unproven.
+The RSA and EC factories refuse algorithms outside their own listed profiles. `ES512` and legacy `EdDSA` are verification-only; general signing does not add HMAC or Ed448. Every operation uses a fresh signing engine and verifies the output with the checked public projection before returning it. The JCA selects providers; Revetsec neither names one nor retries another algorithm when a key or provider refuses signing. Provider-backed, nonexportable private keys can be supplied when the selected provider supports the operation; real hardware-provider compatibility remains unproven.
 
 The signer owns `alg`. A typed `JwtSigningHeader` supplies `typ` through `JwtType.JWT`, `JwtType.ACCESS_TOKEN` or `JwtType.CLIENT_AUTHENTICATION`, which serialize as `JWT`, `at+jwt` and `client-authentication+jwt`. It may also include `kid` and a 32-byte SHA-256 certificate digest as `x5t#S256`. That digest is of the DER certificate, not a JWK thumbprint. A typed `JwtClaimsSet` builds the payload, accepts `Instant` timestamps and reserves registered claim names for their typed setters. Issuance claims are unvalidated application input; they are separate from the checked `JwtClaims` returned by validation.
 
@@ -48,6 +54,8 @@ Calling `fromHeaderAndClaims(header, claims)` signs immediately with a two-secon
 The immediate method, signing builder's `build()` and `toCompactSerialization` explicitly release a credential. They do not validate the application's claim meaning, authenticate a user or make an authorization decision. Signer renderings and fixed `JwsSigningException` diagnostics contain no key, header identifier, claims or credential. The operation budget starts when signing begins; it does not set token expiration. Exhausted time budgets discard output. Providers run synchronously on the caller thread and must cooperate: Revetsec cannot interrupt a hung provider, and a caller with an original deadline must recheck it after this operation.
 
 ## Keys (JSON Web Keys)
+
+`Jwks.fromJsonResult` returns only the usable keys and a fixed whole-document rejection when needed. Its static public result does not expose skipped-key counts, original input indices or per-key skip reasons, and it has no observer callback. `getKeys()` indices refer to the filtered usable list. Remote sources separately report fixed index/reason callbacks through `JoseObserver.didSkipJwk`; do not infer that static parsing has that diagnostic API.
 
 A key set is parsed key by key. A key that breaks a rule is skipped, with a `JwkSkipReason` that a remote key source reports to `JoseObserver.didSkipJwk`, and is never used, not even for its public half. Only the document itself (not JSON, no `keys` array, an element of `keys` that is not an object, too large, too many keys) fails a key set.
 
@@ -103,8 +111,8 @@ Remote key sources refuse to build on a runtime older than Java 17.0.3 (18.0.1 o
 | Area | Current profile | Details |
 | --- | --- | --- |
 | JWT access tokens | `JwtAccessTokenValidator` defaults to `RS256`; its public-key `allowedAlgorithms` replaces that allowlist and rejects HMAC. The default requires the `at+jwt` type. | [Resource-server API and compatibility boundary](../README.md#resource-server-validation) |
-| OAuth `private_key_jwt` | Client assertions use the shared `JwsSigner` and its `PS256`, `RS256` and `RS384` signing profiles, with explicitly configured key identifiers and audience. | [OAuth client guide](oauth-client.md#private-key-client-assertions) and [signing profile](#bounded-rsa-signing-jwssigner) |
-| Standalone JWKS publication | `PublishedJwk` publishes RSA RS*/PS*, EC P-256/P-384/P-521 and Ed25519 public keys, with optional algorithm and certificate-chain metadata. Publication does not add signing algorithms to `JwsSigner`. | [JWKS publication algorithms and certificate rules](jwks-publication.md) |
+| OAuth `private_key_jwt` | Client assertions use the shared `JwsSigner` and the six selected RSA profiles and ES256/ES384, with explicitly configured key identifiers and audience. | [OAuth client guide](oauth-client.md#private-key-client-assertions) and [signing profile](#bounded-signing-jwssigner) |
+| Standalone JWKS publication | `PublishedJwk` publishes generic RSA key material for RS*/PS* (not typed/restricted PSS containers), EC P-256/P-384/P-521 and Ed25519 public keys, with optional algorithm and certificate-chain metadata. Publication does not add signing algorithms to `JwsSigner`. | [JWKS publication algorithms and certificate rules](jwks-publication.md) |
 | TOTP and recovery codes | Fixed HMAC-SHA1 / six ASCII digits / 30-second steps with 20-byte random enrollment secrets. Recovery codes have 128 random bits and domain-separated SHA-256 verifiers. Typed authenticated durable-record sealing uses the application StateSealer key set. | [TOTP profile and durable-state contract](totp-recovery.md) |
 | SAML XML and Redirect signatures | RSA/ECDSA SHA-256/384/512 verification and connection-specific RSA-SHA1 compatibility follow the SAML service provider (SP) profile; generated SP signatures use RSA-SHA256. XML signature structure, digest and transform admission remain part of verification. | [SAML SP guide](saml-sp.md) and [compatibility registry](compatibility-modes.md#samlcompatibilitymodesha1_signatures) |
 | SAML XML Encryption | AES-GCM with RSA-OAEP is the preferred profile. AES-CBC requires a per-IdP opt-in and a verified outer Response signature before decryption. RSA1_5 key transport is rejected. | [Encryption and decryption profile](saml-sp.md#metadata-encryption-and-logout) |

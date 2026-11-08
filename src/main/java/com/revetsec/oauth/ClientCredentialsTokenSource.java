@@ -39,7 +39,7 @@ import java.util.concurrent.locks.ReentrantLock;
 import static java.util.Objects.requireNonNull;
 
 /**
- * A bounded caller-thread cache for client-credentials access tokens. One caller renews; callers may continue
+ * A bounded caller-thread cache for confidential client-credentials access tokens. One caller renews; callers may continue
  * using a valid cached token during early renewal, while callers without one share the renewal result.
  * A rejected cached token is cleared only when {@link #invalidate(AccessToken)} receives that exact instance.
  * No expired or rejected token is returned.
@@ -407,12 +407,16 @@ public final class ClientCredentialsTokenSource {
 		}
 
 		/**
-		 * Builds the source without I/O or a worker thread.
+		 * Builds the source without I/O, secret/key-provider callbacks or a worker thread.
+		 * Rejects public-client authentication locally; provider capability and endpoint checks occur when requesting.
 		 *
 		 * @return the source
+		 * @throws IllegalArgumentException if the client has no confidential authentication strategy
 		 * @since 1.0.0
 		 */
 		public @NonNull ClientCredentialsTokenSource build() {
+            if (!this.client.supportsClientCredentials())
+                throw new IllegalArgumentException("A client-credentials token source requires confidential authentication.");
 			Limits.requireFallbackWithinMaximumCacheDuration(this.fallbackCacheDuration, this.maximumCacheDuration);
 			Limits.requireRenewBeforeBelowMaximumCacheDuration(this.renewBefore, this.maximumCacheDuration);
 			return new ClientCredentialsTokenSource(this);

@@ -61,7 +61,7 @@ public final class WebAuthnSokletAppProbe {
                 Path.of(System.getenv("REVETSEC_TEST_WA_MARKER_FILE")),
                 Path.of(System.getenv("REVETSEC_TEST_WA_LOCK_FILE")),
                 System.getenv("REVETSEC_TEST_WA_SEAL_KEY"));
-        PasskeyApp app = new PasskeyApp(ORIGIN, RP, ACCESS_KEY, Clock.systemUTC(), ACCOUNT,
+        PasskeyApp app = new PasskeyApp(ORIGIN, RP, ACCESS_KEY, Clock.systemUTC(), ACCOUNT, NAMESPACE,
                 WebAuthnFlowProbe.partyFor(NAMESPACE, args[0].equals("unknown-begin"), gate), gate);
         switch (args[0]) {
             case "register" -> register(app);

@@ -133,9 +133,17 @@ identifiers, even when a nested AttributeValue looks valid.
 Configure an SP entity ID, HTTPS ACS URL, replay cache, signing credential and optional
 decryption credentials. A distributed deployment must supply a replay cache whose
 `markIfAbsent` operation is atomic across all nodes. The in-memory implementation is for
-one node and reserves at most one quarter of its configured live entries per IdP
-connection (at least one). Size the cache for each connection's peak login and logout
-volume over the replay lifetime. A shared custom cache must override the
+one node. For mutually untrusted IdP connections, use
+`InMemorySamlReplayCache.fromConnectionLimits(clock, Map.of("employee-idp", 10000,
+"partner-idp", 1000))` with the exact application-approved connection IDs. Each
+connection owns its full fixed reservation; other connections cannot borrow it,
+and unknown or namespace-free admissions cannot spend it. The immutable map has
+1–1024 IDs of at most 256 characters and positive quotas totaling at most 1,000,000
+live marks. Construction reads no clock. Size each reservation for that connection's
+peak login/logout volume over the replay lifetime. `fromLimit`/`fromDefaults` keep
+the historical shared-pool quarter-cap heuristic (at least one); that heuristic does
+not reserve capacity for an independent healthy connection. Replacing a populated
+cache to change configuration requires preserving every still-live replay mark. A shared custom cache must override the
 connection-aware `markIfAbsent(connectionId, key, expiresAt, remaining)` operation
 to isolate capacity per approved IdP connection; its compatibility default does
 not provide isolation. Limit the number of connections an untrusted tenant can
@@ -190,7 +198,7 @@ the existing signature, pending-state and replay checks.
    Secure, HttpOnly cookie or through [`PendingSamlAuthenticationStore`](https://javadoc.revetsec.com/com/revetsec/saml/PendingSamlAuthenticationStore.html). Prefer a
    `__Host-` cookie with `Path=/` and no `Domain` attribute. For a cross-site
    IdP POST to the ACS, use `SameSite=None; Secure`. Use the same application context and
-   browser binding when constructing [`PendingSamlAuthenticationSource`](https://javadoc.revetsec.com/com/revetsec/saml/PendingSamlAuthenticationSource.html) later.
+   [`BrowserBinding`](https://javadoc.revetsec.com/com/revetsec/BrowserBinding.html) when constructing [`PendingSamlAuthenticationSource`](https://javadoc.revetsec.com/com/revetsec/saml/PendingSamlAuthenticationSource.html) later. Generate new values with `BrowserBinding.fresh()` or restore the exact value from protected server persistence. Do not type a raw ACS cookie with `fromTrustedPersistence`; use it only to select/compare the server-retained attempt, then pass that attempt's carrier. SAML retains its existing nonempty 4,096-Java-code-unit limit and exact raw spelling, including historically accepted unmatched-surrogate strings. The broad carrier does not normalize them. The low-level pending-store SPI remains an opaque raw-`String` compatibility boundary.
 3. At the ACS, retain the original POST body, every Content-Type value and the raw query.
    Decode with [`SamlPostBindingMessage`](https://javadoc.revetsec.com/com/revetsec/saml/SamlPostBindingMessage.html)`.fromFormBodyResult`, then call
    `completeAuthenticationResult`. Clear the pending browser cookie on every terminal
@@ -475,3 +483,11 @@ IdP, sealed browser pending state, local account mapping and both Redirect logou
 directions. The adapter verification tooling includes POST logout transport checks in real Tomcat
 containers; those checks qualify transport preservation, while the core interop tests
 exercise protocol partners.
+
+## Explicit type declarations and namespace coverage
+
+Structural SAML `xsi:type` declarations are accepted only when the type uses the consumed element's own nonempty prefix, its expanded namespace is the expected type namespace, and its local type name is exact. This keeps type interpretation tied to a visibly used element-name binding when that element is covered by the required signature. Signature coverage, structural validation and all transaction/identity/replay checks must each still pass.
+
+A prefix used only inside an attribute value can be omitted by exclusive canonicalization; see the [W3C limitations](https://www.w3.org/TR/xml-exc-c14n/#sec-Limitations). Merely declaring that prefix locally does not authenticate the binding. Revetsec deliberately refuses such aliases and redundant XML Schema type annotations on SAML text fields, including `xs:anyURI`, even if a particular signer included extra namespace context. Have the sender omit redundant annotations or use the supported SAML element prefix before signing. Never strip or rewrite a received signed document to make it fit. This narrows the pre-release accepted input profile; qualify actual IdP output after adoption.
+
+The earlier AttributeValue rule is unchanged: leaf text is exposed without interpreting mutable type-prefix bindings, while literal `xsi:nil` and element structure still apply. It creates no typed Boolean/number or whole-schema-validation claim. Unprefixed or malformed type values, wrong type-local names and nilled structural data retain refusal. Logout request/response/issuer/session-index callers use the same declaration rule; full browser/provider and final candidate qualification remain separate.

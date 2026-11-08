@@ -727,7 +727,10 @@ final class SamlResponseSemantics {
         int separator = type.indexOf(':');
         return separator > 0 && separator == type.lastIndexOf(':')
                 && typeLocalName.equals(type.substring(separator + 1))
-                && typeNamespace.equals(element.lookupNamespaceURI(type.substring(0, separator)));
+                // A prefix used only in an attribute value need not be covered by exclusive canonicalization.
+                // The element's own visibly used name binding is covered whenever this element is signed.
+                && typeNamespace.equals(element.getNamespaceURI())
+                && type.substring(0, separator).equals(element.getPrefix());
     }
 
     private static @Nullable String scopedIdentifier(@NonNull List<@NonNull SamlAttribute> attributes,

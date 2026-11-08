@@ -148,7 +148,7 @@ final class AuthorizationServerDiscoveryTests {
 			OAuthClient client = OAuthClient.withIssuer(issuer).clientId("client")
 					.clientAuthentication(ClientAuthentication.noneInstance()).httpClient(TestTls.httpClient()).build();
 			assertEquals(OAuthException.Reason.ISSUER_MISMATCH,
-					assertThrows(OAuthValidationException.class, client::warmUp).getReason());
+					assertThrows(OAuthConfigurationException.class, client::warmUp).getReason());
 			assertEquals(1, server.getHitCount(RFC_PATH));
 			assertEquals(0, server.getHitCount(OIDC_INSERTED));
 		}

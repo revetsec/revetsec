@@ -104,7 +104,7 @@ final class AuthorizationCompletionResultTests {
             assertEquals(0, server.getRequests().size());
             respond(server, 503, "{\"error\":\"temporarily_unavailable\"}");
             assertTrue(assertThrows(OAuthErrorResponseException.class,
-                    () -> client.completeAuthorizationResult(response, source, CALLBACK)).isTransient());
+                    () -> client.completeAuthorizationResult(response, source, CALLBACK)).isTemporaryCondition());
             assertEquals(1, server.getRequests().size());
         }
     }

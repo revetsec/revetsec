@@ -92,14 +92,15 @@ public final class TotpEnrollmentOptions {
         }
 
         /** Sets the display name shown by the authenticator application.
-         * @param accountName display name of at most 256 code points, without colons or controls; null clears this required setting
+         * @param accountName display name of at most 256 code points, without colons, ISO controls,
+         * Unicode format/line/paragraph controls or leading/trailing whitespace; null clears this required setting.
+         * Enrollment also requires the full percent-encoded URI to fit 512 ASCII bytes
          * @return this builder
          * @since 1.0.0 */
         public @NonNull Builder accountName(@Nullable String accountName) {
             if (accountName == null) { this.accountName = null; return this; }
             bounded(accountName, 256);
-            if (accountName.indexOf(':') >= 0)
-                throw new IllegalArgumentException("Invalid TOTP account display name");
+            TotpProvisioning.validateLabel(accountName);
             this.accountName = accountName;
             return this;
         }

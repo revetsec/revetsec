@@ -18,6 +18,10 @@ package example;
 
 import org.jspecify.annotations.NonNull;
 
+import com.revetsec.BrowserBinding;
+import com.revetsec.KeyImportException;
+import com.revetsec.KeyImports;
+import com.revetsec.OperationBinding;
 import com.revetsec.oauth.server.OAuthServerResponse;
 import com.revetsec.oauth.server.OAuthAuthorizationServer;
 import com.revetsec.oauth.server.OAuthServerInteraction;
@@ -124,11 +128,18 @@ import com.revetsec.oidc.OidcCompatibilityMode;
 import com.revetsec.oidc.OidcException;
 import com.revetsec.oidc.OidcObserver;
 import com.revetsec.oidc.OidcIssuerPolicy;
+import com.revetsec.oidc.OidcLogoutException;
+import com.revetsec.oidc.OidcLogoutHint;
+import com.revetsec.oidc.OidcLogoutHintParseResult;
+import com.revetsec.oidc.OidcLogoutRequest;
+import com.revetsec.oidc.OidcLogoutResult;
 import com.revetsec.oidc.OidcProviderMetadata;
 import com.revetsec.oidc.OidcSessionReference;
 import com.revetsec.oidc.OidcUserInfo;
 import com.revetsec.oidc.OidcValidationException;
 import com.revetsec.oidc.OidcRefreshResult;
+import com.revetsec.oidc.PendingOidcLogout;
+import com.revetsec.oidc.PendingOidcLogoutSource;
 import com.revetsec.json.JsonArray;
 import com.revetsec.json.JsonBoolean;
 import com.revetsec.json.JsonNull;
@@ -207,6 +218,8 @@ import com.revetsec.webauthn.WebAuthnBrowserRequest;
 import com.revetsec.webauthn.WebAuthnCredentialListResult;
 import com.revetsec.webauthn.WebAuthnCredentialRemovalResult;
 import com.revetsec.webauthn.WebAuthnRecoveryGate;
+import com.revetsec.webauthn.WebAuthnReauthentication;
+import com.revetsec.webauthn.WebAuthnReauthenticationResult;
 import com.revetsec.webauthn.WebAuthnRegistration;
 import com.revetsec.webauthn.WebAuthnRegistrationOptions;
 import com.revetsec.webauthn.WebAuthnRegistrationRequestResult;
@@ -233,6 +246,7 @@ import com.revetsec.scim.ScimComparisonOperator;
 import com.revetsec.scim.ScimCompatibility;
 import com.revetsec.scim.ScimCompatibilityFeature;
 import com.revetsec.scim.ScimContentTypeResult;
+import com.revetsec.scim.ScimEnterpriseUser;
 import com.revetsec.scim.ScimError;
 import com.revetsec.scim.ScimErrorType;
 import com.revetsec.scim.ScimFilter;
@@ -243,6 +257,7 @@ import com.revetsec.scim.ScimFilterParseResult;
 import com.revetsec.scim.ScimFilterPolicy;
 import com.revetsec.scim.ScimFilterValue;
 import com.revetsec.scim.ScimFilterVisitor;
+import com.revetsec.scim.ScimGroup;
 import com.revetsec.scim.ScimIfMatchResult;
 import com.revetsec.scim.ScimIfNoneMatchResult;
 import com.revetsec.scim.ScimLimits;
@@ -276,6 +291,7 @@ import com.revetsec.scim.ScimSortOrder;
 import com.revetsec.scim.ScimStringMatchResult;
 import com.revetsec.scim.ScimStringMatching;
 import com.revetsec.scim.ScimUniqueness;
+import com.revetsec.scim.ScimUser;
 
 // Type inventory for exerciseAdditionalExportedTypes.
 import com.revetsec.jose.JwksParseResult;
@@ -308,6 +324,7 @@ import com.revetsec.password.PasswordVerificationResult;
 import com.revetsec.password.PasswordWorkGate;
 import com.revetsec.password.Pbkdf2Hmac;
 import com.revetsec.saml.SamlSessionReferenceParseResult;
+import com.revetsec.saml.SamlSessionReferenceSealResult;
 import com.revetsec.scim.ScimResourceWorkLimitException;
 import com.revetsec.totp.InMemoryTotpStore;
 import com.revetsec.totp.RecoveryCodeRotationResult;
@@ -406,6 +423,7 @@ public final class PackagedConsumer {
 	private static final String ISSUER = "https://login.example.com/tenant-1";
 	private static final String AUDIENCE = "packaged-consumer";
 	private static final String KEY_ID = "consumer-key-1";
+	private static final BrowserBinding BROWSER_BINDING = BrowserBinding.fromTrustedPersistence("consumer-browser");
 	// A fixed clock, so the tokens' lifetimes do not depend on when the consumer runs.
 	private static final Instant NOW = Instant.ofEpochSecond(1_800_000_000L);
 	private static final Base64.Encoder BASE64URL = Base64.getUrlEncoder().withoutPadding();
@@ -460,7 +478,7 @@ public final class PackagedConsumer {
     && cache.read(cacheKey, Duration.ofSeconds(1)).isEmpty(), "exact-version cache deletion");
   OAuthClientMetadataCacheException cacheFailure = OAuthClientMetadataCacheException.fromReason(OAuthClientMetadataCacheException.Reason.UNAVAILABLE);
   require(cacheFailure.getReason() == OAuthClientMetadataCacheException.Reason.UNAVAILABLE
-    && cacheFailure.getCategory() == ErrorCategory.TRANSPORT && cacheFailure.isTransient()
+    && cacheFailure.getCategory() == ErrorCategory.TRANSPORT && cacheFailure.isTemporaryCondition()
     && cacheFailure.getCause() == null, "fixed cache provider failure");
 
 
@@ -666,8 +684,20 @@ public final class PackagedConsumer {
 
 	/** Compile against every exported type that the behavioral consumer calls do not otherwise touch. */
 	private static void exerciseAdditionalExportedTypes() {
+		try {
+			KeyImports.publicKeyFromSpkiDer(new byte[65_537]);
+			throw new AssertionError("Oversized packaged key input was accepted");
+		} catch (KeyImportException expected) {
+			require(expected.getReason() == KeyImportException.Reason.INPUT_TOO_LARGE
+					&& expected.getCategory() == ErrorCategory.MALFORMED_INPUT && expected.getCause() == null,
+					"packaged key import has a fixed value-free size rejection");
+		}
+		OidcLogoutHintParseResult invalidLogoutHint = OidcLogoutHint.fromSerializedFormResult("{}");
+		require(invalidLogoutHint instanceof OidcLogoutHintParseResult.Rejected,
+				"packaged logout hint parser rejects a value-free malformed envelope");
 		exerciseExportedTypes("com.revetsec", new Class<?>[] {
-			InvalidSealedStateException.class, StoreAdmission.class,
+			BrowserBinding.class, KeyImportException.class, KeyImportException.Reason.class, KeyImports.class,
+			OperationBinding.class, InvalidSealedStateException.class, StoreAdmission.class,
 			StoreTimeObservation.class, StoreTimeObservation.Healthy.class,
 			StoreTimeObservation.Unavailable.class, StoreTemporalCondition.class,
 			StoreCommitTiming.class
@@ -691,6 +721,11 @@ public final class PackagedConsumer {
 		});
 		exerciseExportedTypes("com.revetsec.oidc", new Class<?>[] {
 			OidcAuthenticationResult.RejectedAuthorizationError.class, OidcAuthenticationResult.RejectedEndpoint.class,
+			OidcLogoutException.class, OidcLogoutException.Reason.class, OidcLogoutHint.class,
+			OidcLogoutHintParseResult.class, OidcLogoutHintParseResult.Parsed.class,
+			OidcLogoutHintParseResult.Rejected.class, OidcLogoutRequest.class, OidcLogoutResult.class,
+			OidcLogoutResult.Returned.class, OidcLogoutResult.Rejected.class, OidcLogoutResult.Reason.class,
+			PendingOidcLogout.class, PendingOidcLogoutSource.class,
 			OidcProviderMetadataParseResult.class, OidcRefreshOutcome.class, OidcRefreshOutcome.Succeeded.class,
 			OidcRefreshOutcome.Rejected.class, OidcRefreshOutcome.RejectedEndpoint.class,
 			OidcSessionReferenceParseResult.class, OidcSessionReferenceParseResult.Succeeded.class,
@@ -704,7 +739,9 @@ public final class PackagedConsumer {
 			PasswordVerificationLimits.class, PasswordVerificationResult.class, PasswordWorkGate.class, Pbkdf2Hmac.class
 		});
 		exerciseExportedTypes("com.revetsec.saml", new Class<?>[] {
-			SamlSessionReferenceParseResult.class
+			SamlSessionReferenceParseResult.class, SamlSessionReferenceSealResult.class,
+			SamlSessionReferenceSealResult.Succeeded.class, SamlSessionReferenceSealResult.TooLarge.class,
+			SamlSessionReferenceSealResult.Unavailable.class
 		});
 		exerciseExportedTypes("com.revetsec.scim", new Class<?>[] {
 			ScimResourceWorkLimitException.class
@@ -727,6 +764,137 @@ public final class PackagedConsumer {
 			TotpNamespaceInitializationResult.ReconciliationRequired.class,
 			TotpStoreResealResult.ReconciliationRequired.class
 		});
+		exerciseExportedTypes("com.revetsec.webauthn", new Class<?>[] {
+			WebAuthnReauthentication.class, WebAuthnReauthenticationResult.class,
+			WebAuthnReauthenticationResult.Succeeded.class, WebAuthnReauthenticationResult.Rejected.class,
+			WebAuthnReauthenticationResult.Unavailable.class, WebAuthnReauthenticationResult.Indeterminate.class,
+			WebAuthnReauthenticationResult.ReconciliationRequired.class
+		});
+		exerciseRemainingExportedTypes();
+	}
+
+	/** Compile against the recursively nested exported types not exercised elsewhere. */
+	private static void exerciseRemainingExportedTypes() {
+		exerciseExportedTypes("com.revetsec.oauth", new Class<?>[] {
+			AuthorizationServerMetadataParseResult.Rejected.class, AuthorizationServerMetadataParseResult.Succeeded.class
+		});
+		exerciseExportedTypes("com.revetsec.oauth.server", new Class<?>[] {
+			OAuthAuthorizationServer.Builder.class
+		});
+		exerciseExportedTypes("com.revetsec.oidc", new Class<?>[] {
+			OidcProviderMetadataParseResult.Rejected.class
+		});
+		exerciseExportedTypes("com.revetsec.password", new Class<?>[] {
+			PasswordHashResult.Rejected.class, PasswordHashResult.Succeeded.class, PasswordHashResult.Unavailable.class,
+			PasswordHasher.Builder.class, PasswordPepperSnapshot.Builder.class, PasswordPepperSnapshotResult.Available.class,
+			PasswordPepperSnapshotResult.Unavailable.class, PasswordVerificationLimits.Builder.class,
+			PasswordVerificationResult.Matched.class, PasswordVerificationResult.NotMatched.class,
+			PasswordVerificationResult.Rejected.class, PasswordVerificationResult.Unavailable.class
+		});
+		exerciseExportedTypes("com.revetsec.saml", new Class<?>[] {
+			SamlAttributeValue.Kind.class, SamlAuthenticationRequestOptions.Builder.class,
+			SamlAuthenticationRequestResult.PostPrepared.class, SamlAuthenticationRequestResult.Prepared.class,
+			SamlAuthenticationRequestResult.Rejected.class, SamlAuthenticationRequestResult.Unavailable.class,
+			SamlAuthenticationResult.Indeterminate.class, SamlAuthenticationResult.Reason.class,
+			SamlAuthenticationResult.Rejected.class, SamlAuthenticationResult.StatusCode.class,
+			SamlAuthenticationResult.StatusReceived.class, SamlAuthenticationResult.Succeeded.class,
+			SamlAuthenticationResult.Unavailable.class, SamlIdentityProvider.Builder.class,
+			SamlIdentityProviderMetadataResult.Parsed.class, SamlIdentityProviderMetadataResult.Rejected.class,
+			SamlIdentityProviderMetadataResult.Unavailable.class, SamlLogoutPostResult.Prepared.class,
+			SamlLogoutPostResult.Rejected.class, SamlLogoutPostResult.Unavailable.class,
+			SamlLogoutRedirectResult.Prepared.class, SamlLogoutRedirectResult.Rejected.class,
+			SamlLogoutRedirectResult.Unavailable.class, SamlLogoutRequestResult.Accepted.class,
+			SamlLogoutRequestResult.Indeterminate.class, SamlLogoutRequestResult.Rejected.class,
+			SamlLogoutRequestResult.Unavailable.class, SamlLogoutResponsePostResult.Prepared.class,
+			SamlLogoutResponsePostResult.Rejected.class, SamlLogoutResponsePostResult.Unavailable.class,
+			SamlLogoutResponseRedirectResult.Prepared.class, SamlLogoutResponseRedirectResult.Rejected.class,
+			SamlLogoutResponseRedirectResult.Unavailable.class, SamlLogoutResult.Indeterminate.class,
+			SamlLogoutResult.Rejected.class, SamlLogoutResult.StatusReceived.class, SamlLogoutResult.Succeeded.class,
+			SamlLogoutResult.Unavailable.class, SamlObserver.Operation.class, SamlObserver.Outcome.class,
+			SamlPendingConsumeResult.Consumed.class, SamlPendingConsumeResult.Indeterminate.class,
+			SamlPendingConsumeResult.Missing.class, SamlPendingConsumeResult.Unavailable.class,
+			SamlPostBindingMessage.Kind.class, SamlPostBindingParseResult.Parsed.class,
+			SamlPostBindingParseResult.Reason.class, SamlPostBindingParseResult.Rejected.class,
+			SamlRedirectBindingMessage.Kind.class, SamlRedirectBindingParseResult.Parsed.class,
+			SamlRedirectBindingParseResult.Rejected.class, SamlReplayCache.MarkResult.class,
+			SamlServiceProvider.Builder.class, SamlServiceProviderMetadataResult.Generated.class,
+			SamlServiceProviderMetadataResult.Rejected.class, SamlServiceProviderMetadataResult.Unavailable.class,
+			SamlSessionReferenceParseResult.Reason.class, SamlSessionReferenceParseResult.Rejected.class,
+			SamlSessionReferenceParseResult.RejectedSealedState.class, SamlSessionReferenceParseResult.Succeeded.class
+		});
+		exerciseExportedTypes("com.revetsec.scim", new Class<?>[] {
+			ScimAttributeDefinition.Builder.class, ScimAttributePathParseResult.Rejected.class,
+			ScimAttributePathParseResult.Succeeded.class, ScimAttributeSelectionResult.Rejected.class,
+			ScimAttributeSelectionResult.Succeeded.class, ScimAuthenticationScheme.Builder.class,
+			ScimCompatibility.Builder.class, ScimContentTypeResult.Accepted.class, ScimContentTypeResult.Rejected.class,
+			ScimEnterpriseUser.class, ScimFilter.And.class, ScimFilter.Comparison.class, ScimFilter.Not.class,
+			ScimFilter.Or.class, ScimFilter.Present.class, ScimFilter.ValuePath.class,
+			ScimFilterEvaluationResult.Rejected.class, ScimFilterEvaluationResult.Succeeded.class,
+			ScimFilterLimits.Builder.class, ScimFilterParseResult.Rejected.class, ScimFilterParseResult.Succeeded.class,
+			ScimFilterPolicy.Builder.class, ScimFilterValue.BooleanValue.class, ScimFilterValue.NullValue.class,
+			ScimFilterValue.NumberValue.class, ScimFilterValue.StringValue.class, ScimGroup.class,
+			ScimIfMatchResult.Rejected.class, ScimIfMatchResult.Satisfied.class, ScimIfNoneMatchResult.NotModified.class,
+			ScimIfNoneMatchResult.Proceed.class, ScimIfNoneMatchResult.Rejected.class, ScimLimits.Builder.class,
+			ScimListPage.Builder.class, ScimMembershipPatch.Kind.class, ScimMembershipPatch.Step.class,
+			ScimMembershipPatchResult.Reduced.class, ScimMembershipPatchResult.Rejected.class,
+			ScimMembershipPatchResult.RequiresFullEvaluation.class, ScimObserver.Operation.class, ScimObserver.Outcome.class,
+			ScimPaginationConfig.Builder.class, ScimPatchApplicationResult.Rejected.class,
+			ScimPatchApplicationResult.Succeeded.class, ScimPatchParseResult.Rejected.class,
+			ScimPatchParseResult.Succeeded.class, ScimQueryParseResult.Rejected.class, ScimQueryParseResult.Succeeded.class,
+			ScimResource.Builder.class, ScimResource.Copier.class, ScimResourceParseResult.Rejected.class,
+			ScimResourceParseResult.Succeeded.class, ScimResourceType.Builder.class, ScimResponseResult.Prepared.class,
+			ScimResponseResult.Rejected.class, ScimSchema.Builder.class, ScimServiceProvider.Builder.class,
+			ScimServiceProvider.Copier.class, ScimServiceProviderConfig.Builder.class, ScimStringMatchResult.Matched.class,
+			ScimStringMatchResult.Unsupported.class, ScimUser.class
+		});
+		exerciseExportedTypes("com.revetsec.totp", new Class<?>[] {
+			InMemoryTotpStore.Builder.class, RecoveryCodeRotationResult.Indeterminate.class,
+			RecoveryCodeRotationResult.Rejected.class, RecoveryCodeRotationResult.Succeeded.class,
+			RecoveryCodeRotationResult.Unavailable.class, RecoveryCodeUseResult.Indeterminate.class,
+			RecoveryCodeUseResult.Rejected.class, RecoveryCodeUseResult.Succeeded.class,
+			RecoveryCodeUseResult.Throttled.class, RecoveryCodeUseResult.Unavailable.class, TotpAuthenticator.Builder.class,
+			TotpEnrollmentCancellationResult.Indeterminate.class, TotpEnrollmentCancellationResult.Rejected.class,
+			TotpEnrollmentCancellationResult.Succeeded.class, TotpEnrollmentCancellationResult.Unavailable.class,
+			TotpEnrollmentOptions.Builder.class, TotpEnrollmentRequestResult.Indeterminate.class,
+			TotpEnrollmentRequestResult.Prepared.class, TotpEnrollmentRequestResult.Rejected.class,
+			TotpEnrollmentRequestResult.Throttled.class, TotpEnrollmentRequestResult.Unavailable.class,
+			TotpEnrollmentResult.Indeterminate.class, TotpEnrollmentResult.Rejected.class,
+			TotpEnrollmentResult.Succeeded.class, TotpEnrollmentResult.Throttled.class,
+			TotpEnrollmentResult.Unavailable.class, TotpFactorRemovalResult.Indeterminate.class,
+			TotpFactorRemovalResult.Rejected.class, TotpFactorRemovalResult.Succeeded.class,
+			TotpFactorRemovalResult.Unavailable.class, TotpNamespaceInitializationResult.AlreadyInitialized.class,
+			TotpNamespaceInitializationResult.Indeterminate.class, TotpNamespaceInitializationResult.Initialized.class,
+			TotpNamespaceInitializationResult.Unavailable.class, TotpRecoveryContext.Purpose.class,
+			TotpRecoveryGate.Permit.class, TotpStatusResult.Absent.class, TotpStatusResult.Present.class,
+			TotpStatusResult.Unavailable.class, TotpStoreEntry.Absent.class, TotpStoreEntry.Present.class,
+			TotpStoreKey.Kind.class, TotpStoreReadResult.Available.class, TotpStoreReadResult.Fenced.class,
+			TotpStoreReadResult.Unavailable.class, TotpStoreResealResult.Absent.class,
+			TotpStoreResealResult.AlreadyCurrent.class, TotpStoreResealResult.Indeterminate.class,
+			TotpStoreResealResult.Resealed.class, TotpStoreResealResult.Unavailable.class, TotpStoreWrite.Mutation.class,
+			TotpStoreWrite.Mutation.Kind.class, TotpStoreWrite.Purpose.class, TotpVerificationResult.Indeterminate.class,
+			TotpVerificationResult.Rejected.class, TotpVerificationResult.Succeeded.class,
+			TotpVerificationResult.Throttled.class, TotpVerificationResult.Unavailable.class
+		});
+		exerciseExportedTypes("com.revetsec.webauthn", new Class<?>[] {
+			WebAuthnAccountDisableResult.Disabled.class, WebAuthnAccountDisableResult.Indeterminate.class,
+			WebAuthnAccountDisableResult.Unavailable.class, WebAuthnAuthentication.Kind.class,
+			WebAuthnAuthenticationRequestResult.Indeterminate.class, WebAuthnAuthenticationRequestResult.Prepared.class,
+			WebAuthnAuthenticationRequestResult.Rejected.class, WebAuthnAuthenticationRequestResult.Unavailable.class,
+			WebAuthnAuthenticationResult.Indeterminate.class, WebAuthnAuthenticationResult.Rejected.class,
+			WebAuthnAuthenticationResult.Succeeded.class, WebAuthnAuthenticationResult.Unavailable.class,
+			WebAuthnCredentialListResult.Listed.class, WebAuthnCredentialListResult.Unavailable.class,
+			WebAuthnCredentialRemovalResult.Absent.class, WebAuthnCredentialRemovalResult.Indeterminate.class,
+			WebAuthnCredentialRemovalResult.Removed.class, WebAuthnCredentialRemovalResult.Unavailable.class,
+			WebAuthnRecoveryGate.Permit.class, WebAuthnRegistrationOptions.Builder.class,
+			WebAuthnRegistrationRequestResult.Indeterminate.class, WebAuthnRegistrationRequestResult.Prepared.class,
+			WebAuthnRegistrationRequestResult.Rejected.class, WebAuthnRegistrationRequestResult.Unavailable.class,
+			WebAuthnRegistrationResult.Indeterminate.class, WebAuthnRegistrationResult.Rejected.class,
+			WebAuthnRegistrationResult.Succeeded.class, WebAuthnRegistrationResult.Unavailable.class,
+			WebAuthnRelyingParty.Builder.class, WebAuthnSettings.Builder.class, WebAuthnStoreEntry.Absent.class,
+			WebAuthnStoreEntry.Present.class, WebAuthnStoreKey.Kind.class, WebAuthnStoreReadResult.Available.class,
+			WebAuthnStoreReadResult.Unavailable.class, WebAuthnStoreWrite.Mutation.class,
+			WebAuthnStoreWrite.Mutation.Kind.class
+		});
 	}
 
 	private static void exerciseExportedTypes(@NonNull String packageName, @NonNull Class<?> @NonNull [] types) {
@@ -741,7 +909,7 @@ public final class PackagedConsumer {
 		KeyPairGenerator generator = KeyPairGenerator.getInstance("RSA");
 		generator.initialize(2048);
 		KeyPair pair = generator.generateKeyPair();
-		OAuthIssuerSigningKey key = OAuthIssuerSigningKey.fromKeyPair(KEY_ID, pair.getPrivate(), pair.getPublic());
+		OAuthIssuerSigningKey key = OAuthIssuerSigningKey.fromRsaKeyPair(KEY_ID, pair.getPrivate(), pair.getPublic());
 		OAuthIssuerKeySnapshot.Builder builder = OAuthIssuerKeySnapshot.withActiveKey(key);
 		OAuthIssuerKeySnapshot snapshot = builder.generation("consumer-generation").publishedAt(NOW.minusSeconds(120))
 				.verificationKeys(Map.of(KEY_ID, pair.getPublic())).verificationKeys(null)
@@ -1132,12 +1300,12 @@ public final class PackagedConsumer {
 		InMemoryPendingAuthorizationStore.Builder storeBuilder = InMemoryPendingAuthorizationStore.builder();
 		PendingAuthorizationStore store = storeBuilder.build();
 		AuthorizationCompletionResult outcome = client.completeAuthorizationResult(response,
-				PendingAuthorizationSource.fromStore(store, "consumer-browser"), URI.create("https://consumer.example/callback"));
+				PendingAuthorizationSource.fromStore(store, BROWSER_BINDING), URI.create("https://consumer.example/callback"));
 		require(outcome instanceof AuthorizationCompletionResult.Rejected
 				&& ((AuthorizationCompletionResult.Rejected) outcome).getReason() == OAuthException.Reason.PENDING_AUTHORIZATION_NOT_FOUND,
 				"callback result rejects missing state without network I/O");
 		AuthorizationCompletionResult unavailable = client.completeAuthorizationResult(response,
-				PendingAuthorizationSource.fromStore(unavailablePendingStore(), "consumer-browser"),
+				PendingAuthorizationSource.fromStore(unavailablePendingStore(), BROWSER_BINDING),
 				URI.create("https://consumer.example/callback"));
 		require(unavailable instanceof AuthorizationCompletionResult.Failed
 				&& ((AuthorizationCompletionResult.Failed) unavailable).getReason() == OAuthException.Reason.PENDING_AUTHORIZATION_STORE_UNAVAILABLE,
@@ -1245,8 +1413,12 @@ public final class PackagedConsumer {
 		JsonObject original = JsonObject.builder().put("iss", ISSUER).put("sub", "consumer-session")
 				.put("aud", AUDIENCE).put("iat", NOW.getEpochSecond()).put("sid", "consumer-sid").build();
 		String nonceDigest = BASE64URL.encodeToString(MessageDigest.getInstance("SHA-256").digest("TEST-ONLY-nonce".getBytes(StandardCharsets.UTF_8)));
-		String storage = JsonObject.builder().put("v", 1L).put("client_id", AUDIENCE).put("claims", original)
+		String legacyStorage = JsonObject.builder().put("v", 1L).put("client_id", AUDIENCE).put("claims", original)
 				.put("nonce_digest", nonceDigest).build().toJson();
+		require(OidcSessionReference.fromSerializedFormResult(legacyStorage)
+				instanceof com.revetsec.oidc.OidcSessionReferenceParseResult.Rejected, "version-1 references are not silently upgraded");
+		String storage = JsonObject.builder().put("v", 2L).put("client_id", AUDIENCE).put("claims", original)
+				.put("nonce_digest", nonceDigest).put("required_acr_values", JsonArray.emptyInstance()).build().toJson();
 		OidcSessionReference reference = parsedOidcReference(OidcSessionReference.fromSerializedFormResult(storage));
 		byte[] keyBytes = new byte[32]; new SecureRandom().nextBytes(keyBytes);
 		StateSealer sealer = StateSealer.withActiveKey(SealingKey.fromBase64("oidc-consumer", Base64.getEncoder().encodeToString(keyBytes)))
@@ -1262,14 +1434,14 @@ public final class PackagedConsumer {
 				"OIDC reference parser rejects invalid storage with a fixed reason");
 
 		OidcAuthenticationResult outcome = client.completeAuthenticationResult(parsedCallback(AuthorizationResponse.fromQueryStringResult("state=missing&code=example")),
-				PendingAuthorizationSource.fromStore(InMemoryPendingAuthorizationStore.builder().clock(Clock.fixed(NOW, ZoneOffset.UTC)).build(), "consumer-browser"),
+				PendingAuthorizationSource.fromStore(InMemoryPendingAuthorizationStore.builder().clock(Clock.fixed(NOW, ZoneOffset.UTC)).build(), BROWSER_BINDING),
 				URI.create("https://consumer.example/callback"));
 		require(outcome instanceof OidcAuthenticationResult.RejectedAuthorization
 				&& ((OidcAuthenticationResult.RejectedAuthorization) outcome).getReason() == OAuthException.Reason.PENDING_AUTHORIZATION_NOT_FOUND,
 				"OIDC result rejects missing state before any token or identity release");
 		OidcAuthenticationResult unavailable = client.completeAuthenticationResult(
 				parsedCallback(AuthorizationResponse.fromQueryStringResult("state=missing&code=example")),
-				PendingAuthorizationSource.fromStore(unavailablePendingStore(), "consumer-browser"),
+				PendingAuthorizationSource.fromStore(unavailablePendingStore(), BROWSER_BINDING),
 				URI.create("https://consumer.example/callback"));
 		require(unavailable instanceof OidcAuthenticationResult.Failed
 				&& ((OidcAuthenticationResult.Failed) unavailable).getReason() == OAuthException.Reason.PENDING_AUTHORIZATION_STORE_UNAVAILABLE,
@@ -1402,7 +1574,7 @@ public final class PackagedConsumer {
 				throw new AssertionError("zero signing budget accepted");
 			} catch (JwsSigningException failure) {
 				require(failure.getReason() == JwsSigningException.Reason.BUDGET_EXHAUSTED
-						&& failure.getCategory() == ErrorCategory.TRANSPORT && failure.isTransient()
+						&& failure.getCategory() == ErrorCategory.TRANSPORT && failure.isTemporaryCondition()
 						&& failure.getCause() == null, "fixed signer budget failure");
 			}
 		}

@@ -32,9 +32,21 @@ public final class ClosedIssuerCodec {
  private ClosedIssuerCodec(){}
  public static void main(@NonNull String @NonNull [] args)throws Exception{CodecSupport.main(args,ClosedIssuerCodec::process);}
  private static @NonNull JsonArray process(@NonNull JsonObject config)throws Exception{
-  @NonNull StateSealer sealer=sealer(config);int cap=(int)number(config,"maximumRecordBytes",16384);var next=new OAuthStoreRecordCodecV2(text(config,"issuer"),sealer,cap,new OAuthServerIngressLimits(65536,65536,65536,4096,4096,1024,64,128,128),1024);
+  @NonNull StateSealer sealer=sealer(config);int cap=recordCapacity(config,"maximumRecordBytes"),legacyCap=recordCapacity(config,"legacyMaximumRecordBytes");var next=new OAuthStoreRecordCodecV2(text(config,"issuer"),sealer,cap,new OAuthServerIngressLimits(65536,65536,65536,4096,4096,1024,64,128,128),1024);
   var intent=ClosedMigrationIntent.fromExternalIntent(text(config,"migrationId"),StoreAdmission.fromIdentifiers(text(config,"authorityId"),text(config,"recoveryGeneration")),Set.of(ClosedMigrationIntent.Format.ISSUER_SCHEMA2));
   boolean verify=text(config,"operation").equals("verify");var outputs=new ArrayList<@NonNull JsonValue>();var roots=rows(config,"roots");@Nullable JsonObject rootRow=roots.stream().filter(x->text(x,"key").equals(next.issuerKey().getStorageKey())).findFirst().orElse(null);
+  if(text(config,"operation").equals("fence-facts")){
+   if(rootRow==null)throw new IllegalArgumentException("Missing permanent root");
+   StoreAdmission admission=StoreAdmission.fromIdentifiers(text(config,"authorityId"),text(config,"recoveryGeneration"));
+   OAuthStoreEntry rootEntry=carrier(rootRow);
+   for(JsonObject source:rows(config,"rows")){
+    OAuthStoreEntry entry=carrier(source);var opened=next.openPermanentFence(entry,admission,rootEntry);
+    var normalized=JsonObject.builder();for(var member:opened.payload().getMembers().entrySet())if(!member.getKey().equals("epoch"))normalized.put(member.getKey(),member.getValue());
+    outputs.add(JsonObject.builder().put("source",source).put("floor",instant(opened.floor())).put("retention",instant(entry.getRetainUntil()))
+     .put("epoch",number(opened.payload(),"epoch")).put("unchangedPayloadCommitment",hash(normalized.build().toJson())).build());
+   }
+   return JsonArray.fromElements(outputs);
+  }
   for(@NonNull JsonObject source:rows(config,"rows")){
    @NonNull List<@NonNull String> required=List.of();
    try{
@@ -46,14 +58,14 @@ public final class ClosedIssuerCodec {
      var openedRoot=openNew(next,carrier(rootRow),intent);var root=OAuthIssuerRootV2.decode(openedRoot.payload());if(!root.authorityId().equals(text(config,"authorityId")))throw new IllegalArgumentException("Wrong authority");
      var opened=openNew(next,row,intent);floor=opened.floor();before=semantic(row.getKey(),opened.payload(),row.getRetainUntil(),floor,true);after=before;target=row;
     }else{
-     var migration=new OAuthStoreMigrationCodec(next,(int)number(config,"legacyMaximumRecordBytes",16384),intent);var pinned=migration.openRoot(carrier(rootRow));@NonNull JsonObject payload=openOld(next,row,intent,(int)number(config,"legacyMaximumRecordBytes",16384));
+     var migration=new OAuthStoreMigrationCodec(next,legacyCap,intent);var pinned=migration.openRoot(carrier(rootRow));@NonNull JsonObject payload=openOld(next,row,intent,legacyCap);
      floor=pinned.minimum();@NonNull JsonObject targetPayload=payload;
      if(row.getKey().getKind()==OAuthStoreKey.Kind.ISSUER_STATE){var oldRoot=OAuthStoreFence.decode(payload,OAuthStoreKey.Kind.ISSUER_STATE);targetPayload=OAuthStoreRecordCodecV2.parse(OAuthIssuerRootV2.fromLegacy(oldRoot,text(config,"authorityId")).toPayload(),12170);}
      else if(row.getKey().getKind()==OAuthStoreKey.Kind.ACCESS_TOKEN){@NonNull Instant issued=Instant.ofEpochSecond(OAuthStoreFormat.longMember(payload,"issued").orElseThrow());if(issued.isAfter(floor))floor=issued;}
      before=semantic(row.getKey(),payload,row.getRetainUntil(),floor,false);
      @NonNull String prepared="{\"schema\":2,\"issuer\":"+JsonString.fromValue(next.issuer()).toJson()+",\"key\":"+JsonString.fromValue(row.getKey().getStorageKey()).toJson()+",\"version\":\""+identifier(0)+"\",\"retainUntil\":"+row.getRetainUntil().getEpochSecond()+",\"floorSeconds\":"+floor.getEpochSecond()+",\"floorNanos\":"+floor.getNano()+",\"payload\":"+targetPayload.toJson()+"}";
      int plaintext=prepared.getBytes(StandardCharsets.UTF_8).length;
-     if(plaintext>cap*3/4-118){boolean permanent=row.getRetainUntil().equals(OAuthStoreFormat.PERMANENT);outputs.add(decision(source,null,permanent?"UNSUPPORTED":"WAIT_RETENTION",before,null,floor,row.getRetainUntil(),permanent,row.getKey().getKind().name(),"ISSUER1","ISSUER2",0,0,0,opening,text(config,"activeKeyId"),rootCommitment(rootRow),required));continue;}
+     if(plaintext>cap*3/4-118){boolean permanent=row.getRetainUntil().equals(OAuthStoreFormat.PERMANENT);boolean hardOverflow=plaintext>16384*3/4-118;outputs.add(decision(source,null,permanent||hardOverflow?"UNSUPPORTED":"WAIT_RETENTION",before,null,floor,row.getRetainUntil(),permanent,row.getKey().getKind().name(),"ISSUER1","ISSUER2",0,0,0,opening,text(config,"activeKeyId"),rootCommitment(rootRow),required));continue;}
      target=migration.convert(row,pinned);var opened=openNew(next,target,intent);after=semantic(target.getKey(),opened.payload(),target.getRetainUntil(),opened.floor(),true);
      if(!floor.equals(opened.floor())||!before.equals(after)||row.getVersion().equals(target.getVersion())||!row.getRetainUntil().equals(target.getRetainUntil()))throw new IllegalArgumentException("Semantic mismatch");
     }

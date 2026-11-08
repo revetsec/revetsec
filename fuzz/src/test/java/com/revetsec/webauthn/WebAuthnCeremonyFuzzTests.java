@@ -36,6 +36,7 @@ import java.security.interfaces.ECPublicKey;
 import java.security.interfaces.RSAPublicKey;
 import java.security.spec.ECGenParameterSpec;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.Arrays;
@@ -254,14 +255,93 @@ public final class WebAuthnCeremonyFuzzTests {
                 rp.completeAuthenticationResult(request.getCeremonyId(), valid, BINDING));
     }
 
+    /** The checked facade preserves factual effect classes, pins entry context and releases exactly six checked fields. */
+    @FuzzTest(maxDuration = "5m")
+    public void checkedReauthenticationPreservesEntryContextAndEffectClasses(byte @NonNull [] input) throws Exception {
+        int mode = unsigned(input, 0) % 9;
+        ProofStore store = new ProofStore();
+        var admitted = new java.util.concurrent.atomic.AtomicBoolean(true);
+        WebAuthnRecoveryGate gate = remaining -> new WebAuthnRecoveryGate.Permit() {
+            @Override public @NonNull Boolean isCurrent() { return admitted.get(); }
+            @Override public void close() { }
+        };
+        WebAuthnRelyingParty rp = relyingParty(store, gate);
+        byte[] id = credentialId(input); enroll(rp, id);
+        var pending = Assertions.assertInstanceOf(WebAuthnAuthenticationRequestResult.Prepared.class,
+                rp.beginReauthenticationResult(HANDLE, "transfer", BINDING)).getRequest();
+        String challenge = pending.getPublicKeyOptions().find("challenge").map(com.revetsec.json.JsonString.class::cast).map(com.revetsec.json.JsonString::getValue).orElseThrow();
+        byte[] response = assertion(id, KEY.getPrivate(), challenge, ORIGIN, 0x05, 1, HANDLE, false, false);
+        byte[] expected = mode == 7 ? new byte[]{9, 9, 9} : HANDLE.clone();
+        int callbacks = store.callbacks, mutations = store.mutations;
+        switch (mode) {
+            case 2 -> store.refusal = WebAuthnStoreCommitResult.UNAVAILABLE;
+            case 3 -> store.refusal = WebAuthnStoreCommitResult.UNKNOWN;
+            case 4 -> store.unknownApplied = true;
+            case 5 -> store.after = () -> admitted.set(false);
+            case 6 -> Thread.currentThread().interrupt();
+            case 7 -> store.after = () -> System.arraycopy(HANDLE, 0, expected, 0, HANDLE.length);
+            case 8 -> store.after = () -> Arrays.fill(expected, (byte) 9);
+            default -> { }
+        }
+        WebAuthnReauthenticationResult result;
+        try {
+            result = rp.completeReauthenticationResult(expected, mode == 1 ? "other-action" : "transfer",
+                    pending.getCeremonyId(), response, BINDING);
+            if (mode == 6) Assertions.assertTrue(Thread.currentThread().isInterrupted());
+        } finally { if (mode == 6) Assertions.assertTrue(Thread.interrupted()); }
+        Assertions.assertEquals(mode == 6 ? 0 : 1, store.callbacks - callbacks, "one-callback-no-retry");
+        Assertions.assertEquals(mode == 2 || mode == 3 || mode == 6 ? 0 : 2, store.mutations - mutations, "genuine-effect-class");
+        switch (mode) {
+            case 0, 8 -> {
+                var proof = Assertions.assertInstanceOf(WebAuthnReauthenticationResult.Succeeded.class, result).getReauthentication();
+                Assertions.assertEquals("fuzz", proof.getCredentialNamespace()); Assertions.assertEquals(RP, proof.getRelyingPartyId());
+                Assertions.assertEquals("transfer", proof.getActionPurpose()); Assertions.assertEquals(pending.getCeremonyId(), proof.getCeremonyId());
+                byte[] account = proof.getUserHandle(), credential = proof.getCredentialId();
+                try { Assertions.assertArrayEquals(HANDLE, account); Assertions.assertArrayEquals(id, credential); }
+                finally { Arrays.fill(account, (byte) 0); Arrays.fill(credential, (byte) 0); }
+                Assertions.assertArrayEquals(HANDLE, proof.getUserHandle()); Assertions.assertArrayEquals(id, proof.getCredentialId());
+                Assertions.assertEquals("WebAuthnReauthentication{identity=<redacted>}", proof.toString());
+            }
+            case 1, 7 -> Assertions.assertInstanceOf(WebAuthnReauthenticationResult.Rejected.class, result);
+            case 2, 6 -> Assertions.assertInstanceOf(WebAuthnReauthenticationResult.Unavailable.class, result);
+            case 3, 4 -> Assertions.assertInstanceOf(WebAuthnReauthenticationResult.Indeterminate.class, result);
+            case 5 -> Assertions.assertInstanceOf(WebAuthnReauthenticationResult.ReconciliationRequired.class, result);
+            default -> throw new AssertionError("Bounded mode");
+        }
+        Assertions.assertEquals("WebAuthnReauthenticationResult{<redacted>}", result.toString());
+    }
+
+    @javax.annotation.concurrent.NotThreadSafe
+    private static final class ProofStore implements WebAuthnStore {
+        private final @NonNull WebAuthnStore backing = InMemoryWebAuthnStore.fromLimits(128, 2_000_000);
+        private int callbacks, mutations;
+        private @org.jspecify.annotations.Nullable WebAuthnStoreCommitResult refusal;
+        private @org.jspecify.annotations.Nullable Runnable after;
+        private boolean unknownApplied;
+        @Override public @NonNull WebAuthnStoreReadResult read(@NonNull Set<@NonNull WebAuthnStoreKey> keys, @NonNull Duration remaining) { return this.backing.read(keys, remaining); }
+        @Override public @NonNull WebAuthnStoreCommitReceipt compareAndCommit(@NonNull WebAuthnStoreWrite write, @NonNull Duration remaining) {
+            this.callbacks++; WebAuthnStoreCommitResult selected = this.refusal; this.refusal = null;
+            if (selected != null) return selected == WebAuthnStoreCommitResult.UNKNOWN ? WebAuthnStoreCommitReceipt.unknownInstance() : WebAuthnStoreCommitReceipt.fromRefusal(selected);
+            WebAuthnStoreCommitReceipt receipt = this.backing.compareAndCommit(write, remaining);
+            if (receipt.getStatus() == WebAuthnStoreCommitResult.COMMITTED) this.mutations += write.getMutations().size();
+            Runnable callback = this.after; this.after = null; if (callback != null) callback.run();
+            if (this.unknownApplied) { this.unknownApplied = false; return WebAuthnStoreCommitReceipt.unknownInstance(); }
+            return receipt;
+        }
+    }
+
     private static @NonNull WebAuthnRelyingParty relyingParty() {
+        return relyingParty(InMemoryWebAuthnStore.fromLimits(128, 2_000_000), GATE);
+    }
+
+    private static @NonNull WebAuthnRelyingParty relyingParty(@NonNull WebAuthnStore store, @NonNull WebAuthnRecoveryGate gate) {
         byte[] material = filled(1);
         StateSealer sealer = StateSealer.withActiveKey(SealingKey.fromBase64("k",
                 Base64.getEncoder().encodeToString(material))).clock(CLOCK).build();
         return WebAuthnRelyingParty.withRelyingPartyId(RP).relyingPartyName("Example")
                 .allowedOrigins(Set.of(ORIGIN)).credentialNamespace("fuzz")
-                .store(InMemoryWebAuthnStore.fromLimits(128, 2_000_000))
-                .stateSealer(sealer).recoveryGate(GATE).clockForTesting(CLOCK).build();
+                .store(store)
+                .stateSealer(sealer).recoveryGate(gate).clockForTesting(CLOCK).build();
     }
 
     private static void enroll(@NonNull WebAuthnRelyingParty rp, byte @NonNull [] id) {

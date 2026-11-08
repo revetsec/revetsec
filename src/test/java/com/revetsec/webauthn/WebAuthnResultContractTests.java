@@ -17,6 +17,7 @@
 package com.revetsec.webauthn;
 
 import org.junit.jupiter.api.Test;
+import org.jspecify.annotations.NonNull;
 
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
@@ -64,5 +65,9 @@ final class WebAuthnResultContractTests {
 
     @Test void pureListingKeepsItsTwoSnapshotVariants() {
         assertEquals(Set.of("Listed","Unavailable"),Arrays.stream(WebAuthnCredentialListResult.class.getPermittedSubclasses()).map(Class::getSimpleName).collect(Collectors.toSet()));
+        assertEquals(Set.of("getCredentialIds"),publicDeclaredMethods(WebAuthnCredentialListResult.Listed.class));
+        assertEquals(Set.of(),publicDeclaredMethods(WebAuthnCredentialListResult.Unavailable.class));
     }
+    private static @NonNull Set<@NonNull String> publicDeclaredMethods(@NonNull Class<?> type){return Arrays.stream(type.getDeclaredMethods())
+        .filter(method->Modifier.isPublic(method.getModifiers())&&!method.isSynthetic()).map(Method::getName).collect(Collectors.toSet());}
 }
