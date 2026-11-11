@@ -539,7 +539,8 @@ jobs:
               dependency:build-classpath -DincludeScope=test \
               -Dmdep.outputFile="$target/test-classpath.txt"
             printf '%s' "$target/classes:$(cat "$target/test-classpath.txt")" > "$target/audit-classpath.txt"
-            rg --files "examples/$module/src" -g '*.java' > "$target/audit-sources.txt"
+            find "examples/$module/src" -type f -name '*.java' -print | LC_ALL=C sort > "$target/audit-sources.txt"
+            test -s "$target/audit-sources.txt"
             java -cp "$(cat "$target/audit-classpath.txt")" \
               verification/examples/NullabilityAudit.java "$target/audit-sources.txt" \
               "$target/audit-classpath.txt" "$target/nullability-audit.json" 21
