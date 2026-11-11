@@ -33,7 +33,12 @@ def compiler_release(pom):
     root = ET.parse(pom).getroot()
     for plugin in root.findall("m:build/m:plugins/m:plugin", NAMESPACES):
         if plugin.findtext("m:artifactId", namespaces=NAMESPACES) == "maven-compiler-plugin":
-            return int(plugin.findtext("m:configuration/m:release", namespaces=NAMESPACES))
+            release = plugin.findtext("m:configuration/m:release", namespaces=NAMESPACES)
+            if release is not None:
+                return int(release)
+    release = root.findtext("m:properties/m:maven.compiler.release", namespaces=NAMESPACES)
+    if release is not None:
+        return int(release)
     raise AssertionError("POM has no explicit compiler release")
 
 
