@@ -28,10 +28,9 @@ public final class ScimDirectoryPlayground {
         Map<String,String> environment=System.getenv();
         PlaygroundScimDirectory app=Objects.requireNonNull(PlaygroundScimDirectory.fromEnvironment(
                 URI.create(environment.getOrDefault("ORIGIN","https://localhost:8445")),environment),"Register at least one private SCIM client.");
-        try(Soklet soklet=Soklet.fromConfig(ScimPlayground.config(app,environment.getOrDefault("SCIM_HTTP_HOST","127.0.0.1"),
-                Integer.parseInt(environment.getOrDefault("SCIM_HTTP_PORT","8082"))))){
-            Runtime.getRuntime().addShutdownHook(new Thread(soklet::close,"scim-directory-shutdown"));
-            soklet.start();System.out.println("Restrictive volatile SCIM service-client fixture ready; scoped HTTPS edge required.");if (!soklet.awaitShutdown().isComplete()) throw new IllegalStateException("Playground shutdown incomplete");
-        }
+        Soklet soklet=Soklet.run(ScimPlayground.config(app,environment.getOrDefault("SCIM_HTTP_HOST","127.0.0.1"),
+                Integer.parseInt(environment.getOrDefault("SCIM_HTTP_PORT","8082"))));
+        System.out.println("Restrictive volatile SCIM service-client fixture ready; scoped HTTPS edge required.");
+        if (!soklet.awaitShutdown().isComplete()) throw new IllegalStateException("Playground shutdown incomplete");
     }
 }

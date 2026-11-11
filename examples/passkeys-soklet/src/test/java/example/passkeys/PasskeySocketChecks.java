@@ -36,8 +36,7 @@ public final class PasskeySocketChecks {
         }
         PasskeyApp app = new PasskeyApp("https://passkeys.example.test:9443",
                 "passkeys.example.test", "A".repeat(43), Clock.systemUTC());
-        try (Soklet soklet = Soklet.fromConfig(PasskeyPlayground.config(app, port))) {
-            soklet.start();
+        Soklet.run(PasskeyPlayground.config(app, port), () -> {
             String page = request(port, "GET / HTTP/1.1\r\nHost: passkeys.example.test:9443\r\nConnection: close\r\n\r\n");
             if (!page.startsWith("HTTP/1.1 200 ") || !page.contains("__Host-RevetsecPasskeyDemo=")
                     || !page.contains("Secure") || !page.contains("HttpOnly"))
@@ -63,7 +62,7 @@ public final class PasskeySocketChecks {
             String wrongHost = request(port, "GET / HTTP/1.1\r\nHost: other.example.test\r\nConnection: close\r\n\r\n");
             if (!wrongHost.startsWith("HTTP/1.1 403 "))
                 throw new AssertionError("Unexpected Host accepted");
-        }
+        });
         System.out.println("Passkey Soklet socket checks passed.");
     }
 

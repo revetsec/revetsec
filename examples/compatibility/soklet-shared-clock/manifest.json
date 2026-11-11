@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "adapterRevision": "06350ebec1e6002bb365c2226a06b37f9077c1a0",
+  "adapterRevision": "1dc67dbdfe571cde845edf2bb07f639259f3fa33",
   "expectedTests": 196,
   "mode": "pinned-upstream-tests",
   "retiredOverlayRevision": "3bad3251bb9b3bd2baeecd5c55a41574c8ebb9b0",

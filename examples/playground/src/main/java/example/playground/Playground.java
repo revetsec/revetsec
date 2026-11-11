@@ -40,12 +40,9 @@ public final class Playground {
         PlaygroundResources resources = new PlaygroundResources(config, sessions, views, oidc, http, saml);
         PlaygroundScimDirectory directory = PlaygroundScimDirectory.fromEnvironment(config.origin,System.getenv());
         PlaygroundScimResources scim = directory == null ? null : new PlaygroundScimResources(directory);
-        try (Soklet soklet = Soklet.fromConfig(sokletConfig(config, resources, views, scim))) {
-            Runtime.getRuntime().addShutdownHook(new Thread(soklet::close, "playground-shutdown"));
-            soklet.start();
-            System.out.println("Revetsec Playground: local developer demonstration; HTTPS edge required.");
-            if (!soklet.awaitShutdown().isComplete()) throw new IllegalStateException("Playground shutdown incomplete");
-        }
+        Soklet soklet = Soklet.run(sokletConfig(config, resources, views, scim));
+        System.out.println("Revetsec Playground: local developer demonstration; HTTPS edge required.");
+        if (!soklet.awaitShutdown().isComplete()) throw new IllegalStateException("Playground shutdown incomplete");
     }
 
     static @NonNull SokletConfig sokletConfig(@NonNull PlaygroundConfig config,
@@ -66,7 +63,8 @@ public final class Playground {
         McpServer mcp = McpServer.withPort(config.mcpPort).host("127.0.0.1")
                 .endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
                 .admissionController(new PlaygroundAdmission(resources::profile, views))
-                .toolRateLimiter(McpRateLimiter.fromInMemoryDefaults())
+                .toolRateLimiter(McpRateLimiter.fromInMemoryTokenBucket(McpTokenBucketConfig.withCapacity(20L)
+                        .refillTokens(60L).refillInterval(Duration.ofMinutes(1)).build()))
                 .corsAuthorizer(CorsAuthorizer.fromWhitelistedOrigins(Set.of(config.origin.toString())))
                 .allowedHosts(Set.copyOf(List.of("127.0.0.1", config.origin.getHost())))
                 .requestTimeout(Duration.ofSeconds(8)).requestHandlerConcurrency(8).requestHandlerQueueCapacity(16)

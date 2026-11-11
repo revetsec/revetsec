@@ -43,10 +43,9 @@ final class IssuerSocketTests {
   int hp=port(),mp=port();while(mp==hp)mp=port();var config=IssuerApplicationTests.config(hp,mp);var app=new IssuerResources(config,Clock.systemUTC());
   var acquired=new AtomicInteger();
   var client=HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).followRedirects(HttpClient.Redirect.NEVER).build();
-  try(var soklet=Soklet.fromConfig(IssuerPlayground.sokletConfig(app,context -> {
+  Soklet.run(IssuerPlayground.sokletConfig(app,context -> {
    acquired.incrementAndGet();return McpRateLimitDecision.allowed();
-  }))) {
-   soklet.start();
+  }), () -> {
    var metadata=send(client,config.origin.resolve("/.well-known/oauth-authorization-server"),"GET",null,null,null);
    assertEquals(200,metadata.statusCode());assertTrue(metadata.body().contains(config.origin.toString()));
    String query=IssuerApplicationTests.query(app,"demo-public","mcp:discover mcp:whoami");
@@ -72,25 +71,24 @@ final class IssuerSocketTests {
    assertTrue(acquired.get()>0);
    assertEquals(200,send(client,config.origin.resolve("/revoke"),"POST",IssuerApplicationTests.form(Map.of("client_id","demo-public","token",access)),null,null).statusCode());
    assertEquals(401,client.send(builder.build(),HttpResponse.BodyHandlers.discarding()).statusCode());
-  }
+  });
  }
  @Test void proxyAuthorityReachesAdmissionWhileOtherAuthoritiesRemainRejected() throws Exception {
   int hp=port(),mp=port();while(mp==hp)mp=port();var base=IssuerApplicationTests.config(hp,mp);
   var config=new IssuerConfig(URI.create("https://localhost:"+hp),URI.create("https://issuer.example:"+mp+"/mcp"),base.redirect,hp,mp,base.loginKey,base.clientKey,base.resourceKey,false);
   var app=new IssuerResources(config,Clock.systemUTC());
-  try(var soklet=Soklet.fromConfig(IssuerPlayground.sokletConfig(app))) {
-   soklet.start();
+  Soklet.run(IssuerPlayground.sokletConfig(app), () -> {
    String authority=config.resource.getRawAuthority();
-   String missing=rawMcp(mp,authority,null);assertTrue(missing.startsWith("HTTP/1.1 401 "),missing.split("\r\n",2)[0]);assertTrue(missing.toLowerCase(java.util.Locale.ROOT).contains("www-authenticate:"));
+   String missing=rawMcp(config.mcpPort,authority,null);assertTrue(missing.startsWith("HTTP/1.1 401 "),missing.split("\r\n",2)[0]);assertTrue(missing.toLowerCase(java.util.Locale.ROOT).contains("www-authenticate:"));
    String access=IssuerApplicationTests.scalar(IssuerApplicationTests.issued(app,"mcp:discover mcp:whoami"),"access_token");
-   assertTrue(rawMcp(mp,authority,access).startsWith("HTTP/1.1 200 "));
-   assertTrue(rawMcp(mp,"localhost:"+mp,access).startsWith("HTTP/1.1 403 "));
-   assertTrue(rawMcp(mp,"127.0.0.1:"+mp,access).startsWith("HTTP/1.1 403 "));
+   assertTrue(rawMcp(config.mcpPort,authority,access).startsWith("HTTP/1.1 200 "));
+   assertTrue(rawMcp(config.mcpPort,"localhost:"+config.mcpPort,access).startsWith("HTTP/1.1 403 "));
+   assertTrue(rawMcp(config.mcpPort,"127.0.0.1:"+config.mcpPort,access).startsWith("HTTP/1.1 403 "));
    // Explicit public hosts may use a proxy port; app admission still requires the exact resource authority.
-   String wrongPort=rawMcp(mp,"issuer.example:"+hp,access);
+   String wrongPort=rawMcp(config.mcpPort,"issuer.example:"+hp,access);
    assertTrue(wrongPort.startsWith("HTTP/1.1 403 "),wrongPort.split("\r\n",2)[0]);
-   assertTrue(rawMcp(mp,"unregistered.example:"+mp,access).startsWith("HTTP/1.1 421 "));
-  }
+   assertTrue(rawMcp(config.mcpPort,"unregistered.example:"+config.mcpPort,access).startsWith("HTTP/1.1 421 "));
+  });
  }
  private static @NonNull String rawMcp(int port,@NonNull String authority,@Nullable String access) throws Exception {
   String body="{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"whoami\",\"arguments\":{}}}";

@@ -28,19 +28,22 @@ public final class IssuerPlayground {
     public static void main(java.lang.@NonNull String @NonNull [] args) throws Exception {
         IssuerConfig config=IssuerConfig.fromEnvironment(System.getenv());
         IssuerResources resources=new IssuerResources(config,Clock.systemUTC());
-        try(Soklet soklet=Soklet.fromConfig(sokletConfig(resources))) {
-            Runtime.getRuntime().addShutdownHook(new Thread(soklet::close,"issuer-demo-shutdown"));
-            soklet.start();System.out.println("Self-issued MCP Playground: fresh volatile local demonstration.");soklet.awaitShutdown();
-        }
+        Soklet soklet=Soklet.run(sokletConfig(resources));
+        System.out.println("Self-issued MCP Playground: fresh volatile local demonstration.");
+        soklet.awaitShutdown();
     }
     static @NonNull SokletConfig sokletConfig(@NonNull IssuerResources app) {
-        return sokletConfig(app,McpRateLimiter.fromInMemoryDefaults());
+        return sokletConfig(app,localToolLimiter());
     }
     static @NonNull SokletConfig sokletConfig(@NonNull IssuerResources app,@NonNull McpRateLimiter toolRateLimiter) {
         return sokletConfig(app,toolRateLimiter,"127.0.0.1");
     }
     static @NonNull SokletConfig sokletConfig(@NonNull IssuerResources app,@NonNull String listenHost) {
-        return sokletConfig(app,McpRateLimiter.fromInMemoryDefaults(),listenHost);
+        return sokletConfig(app,localToolLimiter(),listenHost);
+    }
+    private static @NonNull McpRateLimiter localToolLimiter() {
+        return McpRateLimiter.fromInMemoryTokenBucket(McpTokenBucketConfig.withCapacity(20L)
+                .refillTokens(60L).refillInterval(Duration.ofMinutes(1)).build());
     }
     private static @NonNull SokletConfig sokletConfig(@NonNull IssuerResources app,@NonNull McpRateLimiter toolRateLimiter,
             @NonNull String listenHost) {

@@ -37,11 +37,11 @@ final class RuntimeSmoke {
   int hp=port(),mp=port();while(mp==hp)mp=port();
   var config=new IssuerConfig(URI.create("http://127.0.0.1:"+hp),URI.create("http://127.0.0.1:"+mp+"/mcp"),URI.create("https://client.example/cb"),hp,mp,LocalInputs.randomId(),LocalInputs.randomId(),LocalInputs.randomId(),true);
   var app=new IssuerResources(config,Clock.systemUTC());
-  try(var soklet=Soklet.fromConfig(IssuerPlayground.sokletConfig(app))) {
-   soklet.start();var client=HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
+  Soklet.run(IssuerPlayground.sokletConfig(app), () -> {
+   var client=HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
    var response=client.send(HttpRequest.newBuilder(config.origin.resolve("/.well-known/oauth-authorization-server")).timeout(Duration.ofSeconds(5)).GET().build(),HttpResponse.BodyHandlers.ofString());
    if(response.statusCode()!=200 || !response.body().contains(config.origin.toString()))throw new IllegalStateException("Runtime check failed.");
    Files.writeString(Path.of(args[0]),"{\"freshInitialization\":true,\"httpMetadata\":true,\"annotationFreeRuntime\":true,\"externalServices\":false}\n");
-  }
+  });
  }
 }

@@ -302,8 +302,7 @@ final class PasskeyActionPolicyTests {
         AtomicBoolean handoffRefusal = new AtomicBoolean();
         var configA = observedConfig(f.app, first, observer, handoffRefusal);
         var configB = observedConfig(f.app, second, observer, new AtomicBoolean());
-        try (Soklet serverA = Soklet.fromConfig(configA); Soklet serverB = Soklet.fromConfig(configB)) {
-            serverA.start();serverB.start();
+        Soklet.run(configA, () -> Soklet.run(configB, () -> {
             assertEquals(200, rawGet(first));assertEquals(200, rawGet(second));
             assertEquals(2, actualIds.size());assertEquals(2, new HashSet<>(actualIds).size(), "same-App-configs-share-sequence");
             var prepared = f.app.beginReauthentication(f.post("/reauth/start", Map.of()));
@@ -328,7 +327,7 @@ final class PasskeyActionPolicyTests {
             assertFalse(handoffRefusal.get(), "exact-one-injected-handoff-refusal");
             assertEquals(403, f.app.sensitiveAction(f.post("/sensitive", Map.of())).getStatusCode(), "write-refusal-grant-not-usable");
             assertEquals(before + 1, f.core.commits.get(), "no-core-rollback-refund-or-retry");
-        }
+        }));
     }
 
     private static int port() throws Exception {

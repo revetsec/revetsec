@@ -173,7 +173,8 @@ final class PlaygroundAdmissionTests {
                 .toolRegistrations(List.of(tool)).build();
         McpServer server = McpServer.withPort(8081).host("127.0.0.1").endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
                 .admissionController(new PlaygroundAdmission(() -> profile, new SafeViews(LocalSecrets.randomBytes())))
-                .toolRateLimiter(McpRateLimiter.fromInMemoryDefaults()).build();
+                .toolRateLimiter(McpRateLimiter.fromInMemoryTokenBucket(McpTokenBucketConfig.withCapacity(20L)
+                        .refillTokens(60L).refillInterval(Duration.ofMinutes(1)).build())).build();
         SokletSimulator.run(SokletConfig.withMcpServer(server).resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of())).build(), simulator -> {
             assertEquals(403, fixture.call(simulator, "Bearer " + fixture.jwt(fixture.issuer, fixture.resource, "mcp:whoami", 60, false),
                     "tools/call", "unmapped", "{}", false).getStatusCode());

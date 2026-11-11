@@ -245,12 +245,11 @@ public final class PostgresqlIssuerApplicationProbe {
             }
             case "serve" -> {
                 IssuerResources app=app(IssuerResources.StartupMode.ESTABLISHED,false);
-                try(Soklet soklet=Soklet.fromConfig(IssuerPlayground.sokletConfig(app,
-                        System.getenv().getOrDefault("REVETSEC_TEST_ISSUER_BIND_HOST","127.0.0.1")))) {
-                    soklet.start();
+                Soklet.run(IssuerPlayground.sokletConfig(app,
+                        System.getenv().getOrDefault("REVETSEC_TEST_ISSUER_BIND_HOST","127.0.0.1")), () -> {
                     System.out.println("READY");System.out.flush();
-                    if(System.in.read()==-1)return;
-                }
+                    System.in.read();
+                });
             }
             default -> throw new IllegalArgumentException("Unknown application probe mode.");
         }

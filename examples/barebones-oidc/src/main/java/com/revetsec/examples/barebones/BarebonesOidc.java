@@ -61,11 +61,9 @@ public final class BarebonesOidc {
                     new PendingStore(clock, 128, 262_144), mode.equals("form_post")
                     ? AuthorizationRequestOptions.ResponseMode.FORM_POST : AuthorizationRequestOptions.ResponseMode.QUERY);
             int port = Integer.parseInt(environment.getOrDefault("APP_UPSTREAM_PORT", "8080"));
-            try (Soklet soklet = Soklet.fromConfig(app.configuration(port))) {
-                soklet.start();
-                System.out.println("Revetsec OIDC example listening on IPv4 loopback; open the configured HTTPS origin.");
-                soklet.awaitShutdown();
-            }
+            Soklet soklet = Soklet.run(app.configuration(port));
+            System.out.println("Revetsec OIDC example listening on IPv4 loopback; open the configured HTTPS origin.");
+            soklet.awaitShutdown();
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
         } catch (Exception exception) {

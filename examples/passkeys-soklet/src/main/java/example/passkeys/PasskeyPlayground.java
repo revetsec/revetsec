@@ -52,13 +52,10 @@ public final class PasskeyPlayground {
         String accessKey = privateKeyFile(Path.of(required(env, "REVETSEC_PASSKEY_ACCESS_KEY_FILE")));
         int port = Integer.parseInt(env.getOrDefault("REVETSEC_PASSKEY_HTTP_PORT", "8093"));
         PasskeyApp app = new PasskeyApp(origin, relyingPartyId, accessKey, Clock.systemUTC());
-        try (Soklet soklet = Soklet.fromConfig(config(app, port))) {
-            Runtime.getRuntime().addShutdownHook(new Thread(soklet::close, "passkey-demo-shutdown"));
-            soklet.start();
-            System.out.println("Passkey demo listening on IPv4 loopback; fresh volatile state.");
-            if (!soklet.awaitShutdown().isComplete())
-                throw new IllegalStateException("Passkey demo shutdown incomplete");
-        }
+        Soklet soklet = Soklet.run(config(app, port));
+        System.out.println("Passkey demo listening on IPv4 loopback; fresh volatile state.");
+        if (!soklet.awaitShutdown().isComplete())
+            throw new IllegalStateException("Passkey demo shutdown incomplete");
     }
 
     public static @NonNull SokletConfig config(@NonNull PasskeyApp app, int port) {

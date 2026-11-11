@@ -482,7 +482,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: revetsec/revetsec-soklet
-          ref: 06350ebec1e6002bb365c2226a06b37f9077c1a0
+          ref: 1dc67dbdfe571cde845edf2bb07f639259f3fa33
           path: .example-inputs/adapter
           persist-credentials: false
 
@@ -490,7 +490,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: soklet/soklet
-          ref: 61d02245c745cedf8452a1fc0a13be96f9414a9b
+          ref: 157fbe587e177e7332fcbaffe51e7a2138685bd2
           path: .example-inputs/framework
           persist-credentials: false
 
@@ -510,7 +510,7 @@ jobs:
         working-directory: .example-inputs/framework
         run: |
           mvn -B -ntp -Dmaven.test.skip=true -Dmaven.javadoc.skip=true -Dgpg.skip=true clean package
-          echo "56e37d0e8ef781822de1618595f43366df00bb29e7b486cdc5901623b83845a9  target/soklet-4.0.0.jar" | sha256sum --check
+          echo "2ebff62b5ec1fd6d86761d8a894276a07efdaa12859badc8e376a2c1ca87960d  target/soklet-4.0.0.jar" | sha256sum --check
 
       - name: Set up Corretto
         uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0

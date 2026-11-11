@@ -33,10 +33,7 @@ final class ProviderSokletWiring {
                 "configured-apple-bundle-id", null, 128, 65_536);
         var application = BackendApplication.create(configuration, accounts, admission);
         var recipe = new SokletProviderTokensRecipe(application, qualifiedHttpsAndQueryFreeEdge);
-        try (Soklet server = Soklet.fromConfig(recipe.configuration(18080))) {
-            server.start();
-            server.awaitShutdown();
-        }
+        Soklet.run(recipe.configuration(18080)).awaitShutdown();
     }
 }
 ```

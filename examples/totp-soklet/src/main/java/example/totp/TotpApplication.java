@@ -95,10 +95,7 @@ public final class TotpApplication {
     public static void run(@NonNull TotpAuthenticator totp,
             @NonNull ApplicationSecurity security, @NonNull Integer port) throws Exception {
         TotpApplication app = new TotpApplication(totp, security);
-        try (Soklet soklet = Soklet.fromConfig(config(app, port))) {
-            soklet.start();
-            soklet.awaitShutdown();
-        }
+        Soklet.run(config(app, port)).awaitShutdown();
     }
 
     /** Creates an actual Soklet 4 server configuration with its default response marshaler. */

@@ -34,8 +34,7 @@ public final class TotpExampleSocketChecks {
             port = available.getLocalPort();
         }
         TotpApplication app = TotpExampleChecks.application(new TotpExampleChecks.Boundary());
-        try (Soklet soklet = Soklet.fromConfig(TotpApplication.config(app, port))) {
-            soklet.start();
+        Soklet.run(TotpApplication.config(app, port), () -> {
             String get = request(port, "GET", "/account/totp");
             String head = request(port, "HEAD", "/account/totp");
             if (!get.startsWith("HTTP/1.1 403 ") || !get.contains("Request rejected")
@@ -50,7 +49,7 @@ public final class TotpExampleSocketChecks {
                 if (!request(port, "POST", path).startsWith("HTTP/1.1 403 "))
                     throw new AssertionError("Expected protected Soklet route missing");
             }
-        }
+        });
         System.out.println("TOTP Soklet socket checks passed.");
     }
 

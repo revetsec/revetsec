@@ -29,10 +29,9 @@ public final class ScimPlayground {
         Map<String, String> env = System.getenv();
         PlaygroundScim app = PlaygroundScim.create(URI.create(env.getOrDefault("SCIM_BASE_URI", "https://localhost:8445/scim/v2/")),
                 java.util.Objects.requireNonNull(env.get("SCIM_BEARER_TOKEN"), "SCIM_BEARER_TOKEN is required."));
-        try (Soklet soklet = Soklet.fromConfig(config(app, env.getOrDefault("SCIM_HTTP_HOST", "127.0.0.1"), Integer.parseInt(env.getOrDefault("SCIM_HTTP_PORT", "8082"))))) {
-            Runtime.getRuntime().addShutdownHook(new Thread(soklet::close, "scim-playground-shutdown"));
-            soklet.start(); System.out.println("SCIM synthetic provisioning fixture ready; scoped HTTPS edge required."); if (!soklet.awaitShutdown().isComplete()) throw new IllegalStateException("Playground shutdown incomplete");
-        }
+        Soklet soklet = Soklet.run(config(app, env.getOrDefault("SCIM_HTTP_HOST", "127.0.0.1"), Integer.parseInt(env.getOrDefault("SCIM_HTTP_PORT", "8082"))));
+        System.out.println("SCIM synthetic provisioning fixture ready; scoped HTTPS edge required.");
+        if (!soklet.awaitShutdown().isComplete()) throw new IllegalStateException("Playground shutdown incomplete");
     }
     static @NonNull SokletConfig config(@NonNull PlaygroundScim app, @NonNull String host, int port) {
         return config(new PlaygroundScimResources(app), host, port);

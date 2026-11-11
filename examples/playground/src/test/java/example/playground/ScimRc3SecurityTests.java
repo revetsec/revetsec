@@ -294,8 +294,7 @@ class ScimRc3SecurityTests {
     @Test void actualLoopbackHttpPreservesPhysicalAmbiguitiesAndChecksVersionUnderRace() throws Exception {
         PlaygroundScim app = app(); int port;
         try (ServerSocket reservation = new ServerSocket(0, 1, InetAddress.getLoopbackAddress())) { port = reservation.getLocalPort(); }
-        try (Soklet server = Soklet.fromConfig(ScimPlayground.config(app, "127.0.0.1", port))) {
-            server.start();
+        Soklet.run(ScimPlayground.config(app, "127.0.0.1", port), () -> {
             assertEquals(401, wire(port, "POST", "/scim/v2/Users", List.of("Content-Type: text/plain"), "{").status);
             assertEquals(401, wire(port, "GET", "/scim/v2/Users", List.of("Authorization: Bearer " + TOKEN, "Authorization: Bearer " + TOKEN), "").status);
             assertEquals(415, wire(port, "POST", "/scim/v2/Users", List.of("Authorization: Bearer " + TOKEN, "Content-Type: application/scim+json", "Content-Type: application/scim+json"), userDocument("alice")).status);
@@ -321,7 +320,7 @@ class ScimRc3SecurityTests {
             assertEquals(503, unknown.status); assertFalse(unknown.message.contains("LostAck")); assertFalse(unknown.message.contains("ETag:"));
             assertEquals(PlaygroundScim.CommitOutcome.UNKNOWN, app.lastOutcome()); assertEquals(Optional.of("W/\"3\""), app.snapshot(USER, "u-1").getVersion());
             assertEquals(304, wire(port, "GET", "/scim/v2/Users/u-1", List.of("Authorization: Bearer " + TOKEN, "If-None-Match: W/\"3\""), "").status);
-        }
+        });
     }
 
     private record WireResponse(int status, @NonNull String message) { }

@@ -42,7 +42,9 @@ public final class ProviderSokletSocketFixture {
     String expected=System.getenv().getOrDefault("REVETSEC_PROVIDER_FIXTURE_CREDENTIAL","");String actual=one(request,"X-Fixture-Credential");
     if(expected.isEmpty()||actual==null||!MessageDigest.isEqual(expected.getBytes(StandardCharsets.US_ASCII),actual.getBytes(StandardCharsets.US_ASCII)))writer.accept(MarshaledResponse.fromResponse(json(401,JsonObject.builder().put("error","Fixture denied").build())));else writer.accept(handler.apply(request));
    }}).build();
-  Soklet server=Soklet.fromConfig(config);Runtime.getRuntime().addShutdownHook(new Thread(()->{server.close();fixture.close();}));server.start();System.out.println("READY");new CountDownLatch(1).await();
+  Soklet.run(config,ShutdownCleanup.fromTimeoutAndAction(java.time.Duration.ofSeconds(5),result->fixture.close()),()->{
+   System.out.println("READY");new CountDownLatch(1).await();
+  });
  }
  @GET("/fixture/{command}") public @NonNull Response control(@NonNull Request request){
   String command=request.getPath().substring("/fixture/".length());if(request.getRawQuery().isPresent())return json(400,JsonObject.builder().put("error","Fixture denied").build());

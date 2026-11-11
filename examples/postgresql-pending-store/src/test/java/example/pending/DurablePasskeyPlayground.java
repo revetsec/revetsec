@@ -60,11 +60,7 @@ public final class DurablePasskeyPlayground {
                 .build();
         PasskeyApp app = new PasskeyApp(origin, rpId, accessKey, Clock.systemUTC(),
                 accountHandle, NAMESPACE, party, gate);
-        try (Soklet soklet = Soklet.fromConfig(PasskeyPlayground.config(app, port))) {
-            Runtime.getRuntime().addShutdownHook(new Thread(soklet::close, "durable-passkey-shutdown"));
-            soklet.start();
-            soklet.awaitShutdown();
-        }
+        Soklet.run(PasskeyPlayground.config(app, port)).awaitShutdown();
     }
 
     private static @NonNull String required(@NonNull Map<@NonNull String, @NonNull String> env,
