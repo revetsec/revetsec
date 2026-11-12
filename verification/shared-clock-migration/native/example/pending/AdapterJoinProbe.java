@@ -75,9 +75,10 @@ public final class AdapterJoinProbe {
     private final @NonNull PostgresqlWebAuthnStore webauthnStore;
     private final @NonNull PostgresqlIssuerStore issuerStore;
 
-    private AdapterJoinProbe(@NonNull JsonObject config) {
+    private AdapterJoinProbe(@NonNull JsonObject config){this(config,null);}
+    private AdapterJoinProbe(@NonNull JsonObject config,@Nullable Instant workerOverride) {
         this.config=config;
-        Instant workerBase=instant((JsonObject)config.find("workerNow").orElseThrow());
+        Instant workerBase=workerOverride==null?instant((JsonObject)config.find("workerNow").orElseThrow()):workerOverride;
         long workerStarted=System.nanoTime();
         this.worker=new Clock(){
             @Override public @NonNull ZoneId getZone(){return ZoneOffset.UTC;}
@@ -106,12 +107,18 @@ public final class AdapterJoinProbe {
 
     public static void main(@NonNull String @NonNull [] args) {
         try {
-            if(args.length!=2)throw new IllegalArgumentException("Expected protected config and command");
+            if(args.length!=2&&!(args.length==4&&args[1].equals("capacity-worker")))throw new IllegalArgumentException("Expected protected config and command");
             JsonObject config=(JsonObject)com.revetsec.internal.json.JsonCodec.parse(Files.readAllBytes(Path.of(args[0])),
                     com.revetsec.internal.json.JsonLimits.protocolDocument(4194304));
             if(!hash(Files.readAllBytes(Path.of(StateSealer.class.getProtectionDomain().getCodeSource().getLocation().toURI())))
                     .equals(text(config,"expectedCoreSha256")))throw new AssertionError("Exact current artifact origin");
-            AdapterJoinProbe probe=new AdapterJoinProbe(config);
+            AdapterJoinProbe probe;
+            if(args[1].equals("capacity-worker")){
+                System.out.println("SYNC_READY");System.out.flush();
+                String[] parts=readWorkerSync().split(" ");
+                if(parts.length!=2)throw new IllegalArgumentException("Invalid worker sync");
+                probe=new AdapterJoinProbe(config,Instant.ofEpochSecond(Long.parseLong(parts[0]),Integer.parseInt(parts[1])));
+            }else probe=new AdapterJoinProbe(config);
             switch(args[1]){
                 case "raw" -> probe.raw();
                 case "query" -> probe.query();
@@ -122,7 +129,8 @@ public final class AdapterJoinProbe {
                 case "bootstrap-denied" -> probe.bootstrapDenied();
                 case "totp-capacity" -> probe.totpCapacity();
                 case "webauthn-capacity" -> probe.webauthnCapacity();
-                case "capacity-contention" -> probe.cap09Contention();
+                case "capacity-contention" -> probe.cap09Contention(Path.of(args[0]));
+                case "capacity-worker" -> probe.cap09Worker(args[2],Integer.parseInt(args[3]));
                 case "fence-denied" -> probe.fenceDenied();
                 case "closed" -> probe.closed(true);
                 case "skew" -> probe.closed(false);
@@ -133,8 +141,16 @@ public final class AdapterJoinProbe {
             System.err.println("ADAPTER_PROBE_FAILED "+failure.getClass().getSimpleName());
             if(failure instanceof SQLException sql&&sql.getSQLState()!=null&&sql.getSQLState().matches("[A-Z0-9]{5}"))System.err.println("FIXTURE_SQLSTATE "+sql.getSQLState());
             if(failure instanceof AssertionError&&failure.getMessage()!=null&&failure.getMessage().matches("[A-Za-z0-9/_-]{1,180}"))System.err.println("FIXTURE_ASSERTION "+failure.getMessage());
+            if(failure instanceof AssertionError&&failure.getMessage()!=null&&failure.getMessage().startsWith("SC-BOUND-04/")){String diagnostic=failure.getMessage().replaceAll("\\s+","_");System.err.println("SC_BOUND04_DIAGNOSTIC "+diagnostic.substring(0,Math.min(240,diagnostic.length())));}
             System.exit(1);
         }
+    }
+
+    private static @NonNull String readWorkerSync()throws Exception{
+        StringBuilder line=new StringBuilder();int next;
+        while((next=System.in.read())>=0&&next!='\n'&&line.length()<80)line.append((char)next);
+        if(next!='\n')throw new IllegalArgumentException("Missing worker sync");
+        return line.toString();
     }
 
     private void check(@NonNull String name,boolean condition){
@@ -422,6 +438,7 @@ public final class AdapterJoinProbe {
                 @Override public @NonNull TotpStoreCommitReceipt compareAndCommit(@NonNull TotpStoreWrite tx,@NonNull Duration budget){written.set(tx);calls.incrementAndGet();try{if(capture){status.set("UNAVAILABLE");return TotpStoreCommitReceipt.fromRefusal(TotpStoreCommitResult.UNAVAILABLE);}var receipt=(TotpStoreCommitReceipt)cap09Receipt(cap09Plan(family,index,large,tx),source);status.set(receipt.getStatus().name());return receipt;}catch(Exception failure){throw new IllegalStateException(failure);}}
             };
             var result=totp(selected).beginEnrollmentResult(TotpEnrollmentOptions.withAccountId(cap09Name(index,large)).accountName("Synthetic").build(),OperationBinding.fromTrustedPersistence("cap09-browser"));
+            if(capture&&calls.get()==0&&result instanceof TotpEnrollmentRequestResult.Unavailable unavailable)status.set("EARLY_"+unavailable.getReason().name());
             outcome=result instanceof TotpEnrollmentRequestResult.Prepared?"SUCCESS":result instanceof TotpEnrollmentRequestResult.Unavailable u&&u.getReason()==TotpUnavailableReason.CAPACITY_REFUSED?"CAPACITY":result instanceof TotpEnrollmentRequestResult.Unavailable?"UNAVAILABLE":"OTHER";
         }else if(family.equals("WEBAUTHN")){
             var selected=new WebAuthnStore(){
@@ -438,8 +455,25 @@ public final class AdapterJoinProbe {
         }
         return new Cap09ContentionChecks.PublicResult(outcome,status.get(),calls.get());
     }
-    private void cap09Contention()throws Exception{
-        Cap09ContentionChecks.run(new Cap09ContentionChecks.Harness(){
+    private void cap09Worker(@NonNull String family,int index)throws Exception{
+        System.out.println("SC_BOUND04_WORKER_STAGE capture");System.out.flush();
+        try(Lease probe=new Lease(family)){if(!probe.isCurrent())throw new AssertionError("SC-BOUND-04/preflight-not-current");}
+        catch(Exception failure){throw new AssertionError("SC-BOUND-04/preflight-"+failure.getClass().getSimpleName());}
+        var written=new java.util.concurrent.atomic.AtomicReference<Object>();
+        var result=cap09Attempt(family,index,false,true,new Cap09ContentionChecks.Stats(),written);
+        if(!result.outcome().equals("UNAVAILABLE")||result.calls()!=1)throw new AssertionError("SC-BOUND-04/capture-"+result.outcome()+"-"+result.status()+"-"+result.calls());
+        var plan=cap09Plan(family,index,false,java.util.Objects.requireNonNull(written.get()));
+        System.out.println("PREPARED");System.out.flush();
+        if(System.in.read()<0)throw new IllegalStateException("SC-BOUND-04 worker start missing");
+        System.out.println("SC_BOUND04_WORKER_STAGE permit");System.out.flush();
+        try(Lease lease=new Lease(family)){
+            System.out.println("SC_BOUND04_WORKER_STAGE commit");System.out.flush();
+            ScBound04AdapterChecks.worker(family,this::connection,source->{String status=cap09Commit(plan,source);
+                if(!lease.isCurrent())throw new AssertionError("SC-BOUND-04 permit lost");return status;});
+        }
+    }
+    private void cap09Contention(@NonNull Path configPath)throws Exception{
+        var harness=new Cap09ContentionChecks.Harness(){
             @Override public @NonNull String key(@NonNull String family,int index,boolean large){return cap09Key(family,index,large);}
             @Override public @NonNull String scope(@NonNull String family){return AdapterJoinProbe.this.scope(family);}
             @Override public Cap09ContentionChecks.@NonNull Plan capture(@NonNull String family,int index,boolean large)throws Exception{var written=new java.util.concurrent.atomic.AtomicReference<Object>();var result=cap09Attempt(family,index,large,true,new Cap09ContentionChecks.Stats(),written);if(!result.outcome().equals("UNAVAILABLE")||result.calls()!=1)throw new AssertionError("CAP09 capture failed");return cap09Plan(family,index,large,java.util.Objects.requireNonNull(written.get()));}
@@ -447,7 +481,10 @@ public final class AdapterJoinProbe {
             @Override public Cap09ContentionChecks.@NonNull PublicResult execute(Cap09ContentionChecks.@NonNull Plan plan,Cap09ContentionChecks.@NonNull Stats trace)throws Exception{return cap09Attempt(plan.family(),plan.index(),plan.large(),false,trace,new java.util.concurrent.atomic.AtomicReference<>());}
             @Override public @NonNull Connection open(@NonNull Duration budget)throws SQLException{return connection(budget);}
             @Override public @NonNull AutoCloseable permit(@NonNull String family)throws Exception{return new Lease(family);}
-        });
+        };
+        ScBound04LockOrderChecks.run(harness);
+        Cap09ContentionChecks.run(harness);
+        ScBound04AdapterChecks.run(harness,configPath,this.worker);
     }
 
     private void bootstrapDenied()throws Exception{

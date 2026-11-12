@@ -1,6 +1,6 @@
 # Current public type inventory
 
-Measured **2026-11-06** from the uncommitted **1.0.0-SNAPSHOT** core source. Revetsec remains pre-release, with no compatibility promise before 1.0.0. See the [compatibility policy](../COMPATIBILITY.md) for what is API and how changes are treated.
+Measured **2026-11-11** from the uncommitted **1.0.0-SNAPSHOT** core source. Revetsec remains pre-release, with no compatibility promise before 1.0.0. See the [compatibility policy](../COMPATIBILITY.md) for what is API and how changes are treated.
 
 ## Counting rules
 
@@ -9,7 +9,9 @@ Measured **2026-11-06** from the uncommitted **1.0.0-SNAPSHOT** core source. Rev
 - Exclude internal packages, package-private/private types, types hidden by a non-exported enclosing type, local/anonymous/synthetic classes, and adapter/test/tooling artifacts. Methods, constructors, fields, enum constants and compiler-generated methods are not type declarations.
 - Inclusion does not mean applications can construct or extend a type. Restricted carriers and result variants retain their documented construction and success-only payload rules. No protected nested declarations occur in this snapshot; all listed types are public.
 
-The attributed source inventory (`--release 17`) and compiled accessible declarations agree exactly on **702 types: 340 top-level and 362 nested**, measured on JDK 21 from the coherent core JAR with SHA-256 `3cd4a04dfb397d4cba7cedb0c78bbc576ea05ad1ab510625add86dfb89bcf11d` and its source JAR with SHA-256 `feb62d655194595d6945842acd4face9b290c0bc1541dcb0493dc1c26314bc46`. All 605 packaged main sources match the live source byte for byte. These declaration counts are not an API freeze, runtime/provider qualification or release acceptance. A separate `javap -protected -s` comparison against the immediately preceding 700-type artifact covers declared public/protected classfile members and JVM descriptors; it does not flatten inherited members or establish generic source compatibility, behavior, defaults or storage compatibility. The existing contract tests enforce API shape; they do not automatically keep this Markdown snapshot synchronized. Refresh the counts and complete lists whenever exported declarations change, and remeasure the final release candidate.
+The attributed source inventory and accessible declarations compiled on JDK 21 with `--release 17` agree exactly on **703 types: 341 top-level and 362 nested**, measured from the coherent core JAR with SHA-256 `2deca1bdbe3e7788fe22029baa09b772b172598acb1a110212de9744c88982d3` and its source JAR with SHA-256 `394e884701944752ef5737633ba5afee234a1f2fd8495e0f5b5dd01debc6cffa`. All 606 packaged main sources match the live source byte for byte. These declaration counts are not an API freeze, runtime/provider qualification or release acceptance. The earlier `javap -protected -s` comparison against the 700-type artifact remains bound to the 702-type API-BIND snapshot; it covers declared public/protected classfile members and JVM descriptors but does not flatten inherited members or establish generic source compatibility, behavior, defaults or storage compatibility. The existing contract tests enforce API shape; they do not automatically keep this Markdown snapshot synchronized. Refresh the counts and complete lists whenever exported declarations change, and remeasure the final release candidate.
+
+The CFG-DIAG component adds the immutable `ConfigurationDiagnostic` enum and construction-only inspection methods on the selected TOTP, WebAuthn and OAuth authorization-server builders. It removes no public type. The fixed codes contain no supplied values and grant no runtime-readiness or deployment claim. The 703-type packaged-consumer guard compiles and runs against the built JAR; the detailed earlier API-BIND member comparison remains historical rather than being relabeled as a comparison of this later API.
 
 This API-BIND component adds the final immutable `BrowserBinding` and `OperationBinding` role carriers and changes affected high-level OAuth/OIDC/SAML/issuer and TOTP/WebAuthn method descriptors from raw `String` to the appropriate carrier. It removes no public type. Public high-level raw-`String` overloads are absent; low-level pending-store SPIs intentionally retain opaque `String` fields as their backend compatibility boundary. The carriers expose fresh canonical 43-character generation, explicit trusted-persistence restoration, explicit secret serialization and fixed redacted diagnostics. They provide correlation typing, not identity, permission, freshness or one-use proof.
 
@@ -19,7 +21,7 @@ The immediately preceding sealed Release25 snapshot contained 700 declarations. 
 
 | Package | Top-level | Nested | Total |
 | --- | ---: | ---: | ---: |
-| [`com.revetsec`](#comrevetsec) | 15 | 6 | 21 |
+| [`com.revetsec`](#comrevetsec) | 16 | 6 | 22 |
 | [`com.revetsec.jose`](#comrevetsecjose) | 26 | 13 | 39 |
 | [`com.revetsec.json`](#comrevetsecjson) | 7 | 1 | 8 |
 | [`com.revetsec.oauth`](#comrevetsecoauth) | 52 | 37 | 89 |
@@ -30,15 +32,16 @@ The immediately preceding sealed Release25 snapshot contained 700 declarations. 
 | [`com.revetsec.scim`](#comrevetsecscim) | 58 | 59 | 117 |
 | [`com.revetsec.totp`](#comrevetsectotp) | 34 | 67 | 101 |
 | [`com.revetsec.webauthn`](#comrevetsecwebauthn) | 26 | 49 | 75 |
-| **Total** | **340** | **362** | **702** |
+| **Total** | **341** | **362** | **703** |
 
 ## com.revetsec
 
-15 top-level + 6 nested = **21 types**. Names link to the declaring source file.
+16 top-level + 6 nested = **22 types**. Names link to the declaring source file.
 
 | Top-level declaration | Kind | Accessible nested declarations |
 | --- | --- | --- |
 | [`BrowserBinding`](../src/main/java/com/revetsec/BrowserBinding.java) | class | — |
+| [`ConfigurationDiagnostic`](../src/main/java/com/revetsec/ConfigurationDiagnostic.java) | enum | — |
 | [`ErrorCategory`](../src/main/java/com/revetsec/ErrorCategory.java) | enum | — |
 | [`InvalidSealedStateException`](../src/main/java/com/revetsec/InvalidSealedStateException.java) | class | — |
 | [`KeyImportException`](../src/main/java/com/revetsec/KeyImportException.java) | class | [`KeyImportException.Reason`](../src/main/java/com/revetsec/KeyImportException.java) |

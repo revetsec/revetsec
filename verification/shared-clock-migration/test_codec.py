@@ -10,7 +10,7 @@ class CodecTests(unittest.TestCase):
  @classmethod
  def setUpClass(cls):
   cls.work=pathlib.Path(tempfile.mkdtemp(prefix='revetsec-scp10-codec-tests-'));cls.addClassCleanup(shutil.rmtree,cls.work,ignore_errors=True)
-  cls.config=synthetic_config();cls.client=CodecClient(cls.work,os.environ.get('SCP10_JAVA_HOME','/Users/agents/Java/amazon-corretto-17.jdk/Contents/Home'),os.environ.get('SCP10_CORE_JAR',ROOT/'planning/records/security/shared-clock-scp09-2026-10-30/candidate/core/revetsec-1.0.0-SNAPSHOT.jar'),os.environ.get('SCP10_OLD_JAR',ROOT/'planning/records/security/shared-clock-scp01-2026-10-29/baseline/built-core/revetsec-1.0.0-SNAPSHOT.jar'),os.environ.get('SCP10_REPOSITORY','/private/tmp/revetsec-refresh-m2'),expected_core_sha256=os.environ.get('SCP10_CORE_SHA256'))
+  cls.config=synthetic_config();cls.client=CodecClient(cls.work,os.environ.get('SCP10_JAVA_HOME','/Users/agents/Java/amazon-corretto-17.jdk/Contents/Home'),os.environ.get('SCP10_CORE_JAR',ROOT/'planning/records/security/shared-clock-scp09-2026-10-30/candidate/core/revetsec-1.0.0-SNAPSHOT.jar'),os.environ.get('SCP10_OLD_JAR',ROOT/'planning/records/security/shared-clock-scp01-2026-10-29/baseline/built-core/revetsec-1.0.0-SNAPSHOT.jar'),os.environ.get('SCP10_REPOSITORY','/Users/agents/.m2/repository'),expected_core_sha256=os.environ.get('SCP10_CORE_SHA256'))
   cls.rows=cls.client.fixtures(cls.config);cls.prepared=cls.client.prepare(cls.config,cls.rows);cls.targets=[x['target'] for x in cls.prepared];cls.verified=cls.client.verify(cls.config,cls.targets)
  @classmethod
  def tearDownClass(cls):

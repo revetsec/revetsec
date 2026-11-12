@@ -117,11 +117,19 @@ final class OAuthClientMetadataCacheBoundaryTests {
     }
 
     @Test
-    void expiredEntryWaitStopsBeforeTryingTheLock() throws Exception {
-        InMemoryOAuthClientMetadataCache cache =
-                InMemoryOAuthClientMetadataCache.fromMaximumEntries(2);
+    void injectedStorageMustRetainTheConfiguredCapacity() {
+        assertThrows(
+                IllegalArgumentException.class,
+                () ->
+                        new InMemoryOAuthClientMetadataCache(
+                                2, new ReentrantLock(), new ConcurrentLruMap<>(1)));
+    }
+
+    @Test
+    void expiredEntryWaitStopsBeforeTryingTheLock() {
         InstrumentedLock lock = new InstrumentedLock(false);
-        replace(cache, "lock", lock);
+        InMemoryOAuthClientMetadataCache cache =
+                new InMemoryOAuthClientMetadataCache(2, lock, new ConcurrentLruMap<>(2));
         try {
             Thread.currentThread().interrupt();
             OAuthClientMetadataCacheException failure =
@@ -138,12 +146,10 @@ final class OAuthClientMetadataCacheBoundaryTests {
     }
 
     @Test
-    void readChecksInterruptionImmediatelyAfterAcquiringTheLock() throws Exception {
-        InMemoryOAuthClientMetadataCache cache =
-                InMemoryOAuthClientMetadataCache.fromMaximumEntries(2);
+    void readChecksInterruptionImmediatelyAfterAcquiringTheLock() {
         InstrumentedMap entries = new InstrumentedMap(2);
-        replace(cache, "entries", entries);
-        replace(cache, "lock", new InstrumentedLock(true));
+        InMemoryOAuthClientMetadataCache cache =
+                new InMemoryOAuthClientMetadataCache(2, new InstrumentedLock(true), entries);
         try {
             OAuthClientMetadataCacheException failure =
                     assertThrows(
@@ -159,12 +165,11 @@ final class OAuthClientMetadataCacheBoundaryTests {
     }
 
     @Test
-    void readChecksInterruptionAfterTheMapRead() throws Exception {
-        InMemoryOAuthClientMetadataCache cache =
-                InMemoryOAuthClientMetadataCache.fromMaximumEntries(2);
+    void readChecksInterruptionAfterTheMapRead() {
         InstrumentedMap entries = new InstrumentedMap(2);
         entries.interruptOnRead = true;
-        replace(cache, "entries", entries);
+        InMemoryOAuthClientMetadataCache cache =
+                new InMemoryOAuthClientMetadataCache(2, new ReentrantLock(), entries);
         try {
             OAuthClientMetadataCacheException failure =
                     assertThrows(
@@ -180,12 +185,10 @@ final class OAuthClientMetadataCacheBoundaryTests {
     }
 
     @Test
-    void compareAndSetChecksInterruptionBeforeReading() throws Exception {
-        InMemoryOAuthClientMetadataCache cache =
-                InMemoryOAuthClientMetadataCache.fromMaximumEntries(2);
+    void compareAndSetChecksInterruptionBeforeReading() {
         InstrumentedMap entries = new InstrumentedMap(2);
-        replace(cache, "entries", entries);
-        replace(cache, "lock", new InstrumentedLock(true));
+        InMemoryOAuthClientMetadataCache cache =
+                new InMemoryOAuthClientMetadataCache(2, new InstrumentedLock(true), entries);
         try {
             OAuthClientMetadataCacheException failure =
                     assertThrows(
@@ -206,16 +209,15 @@ final class OAuthClientMetadataCacheBoundaryTests {
     }
 
     @Test
-    void compareAndSetChecksInterruptionAfterReadingAndBeforeMutation() throws Exception {
-        InMemoryOAuthClientMetadataCache cache =
-                InMemoryOAuthClientMetadataCache.fromMaximumEntries(2);
+    void compareAndSetChecksInterruptionAfterReadingAndBeforeMutation() {
         InstrumentedMap entries = new InstrumentedMap(2);
         OAuthClientMetadataCacheEntry original = cacheEntry(1, 11);
         entries.put(original.getKey(), original);
         entries.drain();
         entries.writes.set(0);
         entries.interruptOnRead = true;
-        replace(cache, "entries", entries);
+        InMemoryOAuthClientMetadataCache cache =
+                new InMemoryOAuthClientMetadataCache(2, new ReentrantLock(), entries);
         try {
             OAuthClientMetadataCacheException failure =
                     assertThrows(
@@ -236,12 +238,11 @@ final class OAuthClientMetadataCacheBoundaryTests {
     }
 
     @Test
-    void compareAndSetChecksInterruptionAfterAppliedMaintenance() throws Exception {
-        InMemoryOAuthClientMetadataCache cache =
-                InMemoryOAuthClientMetadataCache.fromMaximumEntries(2);
+    void compareAndSetChecksInterruptionAfterAppliedMaintenance() {
         InstrumentedMap entries = new InstrumentedMap(2);
         entries.interruptOnDrain = true;
-        replace(cache, "entries", entries);
+        InMemoryOAuthClientMetadataCache cache =
+                new InMemoryOAuthClientMetadataCache(2, new ReentrantLock(), entries);
         try {
             OAuthClientMetadataCacheException failure =
                     assertThrows(
@@ -494,17 +495,6 @@ final class OAuthClientMetadataCacheBoundaryTests {
         return Base64.getUrlEncoder()
                 .withoutPadding()
                 .encodeToString(java.nio.ByteBuffer.allocate(32).putInt(value).array());
-    }
-
-    private static void replace(
-            @NonNull InMemoryOAuthClientMetadataCache cache,
-            @NonNull String fieldName,
-            @NonNull Object value)
-            throws ReflectiveOperationException {
-        java.lang.reflect.Field field =
-                InMemoryOAuthClientMetadataCache.class.getDeclaredField(fieldName);
-        field.setAccessible(true);
-        field.set(cache, value);
     }
 
     private static final class FixedReadCache implements OAuthClientMetadataCache {

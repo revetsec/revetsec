@@ -41,6 +41,7 @@ import java.time.Duration;
 import java.util.Arrays;
 import java.util.Base64;
 import java.util.List;
+import java.util.concurrent.locks.LockSupport;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static java.util.Objects.requireNonNull;
@@ -51,6 +52,7 @@ import static org.junit.jupiter.api.Assertions.*;
 final class JwsSignerRc1MutationTests {
  private static final @NonNull String PROVIDER_NAME = "RevetsecRc1SignerProbe";
  private static final @NonNull Duration BUDGET = Duration.ofSeconds(30);
+ private static final @NonNull Duration EXPIRING_BUDGET = Duration.ofSeconds(1);
 
  @Test void encodedLengthMatchesRealBase64UrlEncoding() throws Exception {
   for (int length : new int[]{0, 1, 2, 3, 4, 5, 6, 7, 31, 32, 255, 256, 2048, 32768}) {
@@ -94,7 +96,7 @@ final class JwsSignerRc1MutationTests {
 
  @Test void expirationDuringInitializationPreventsParameterWork() throws Exception {
   withProvider(state -> {
-   Deadline deadline = Deadline.fromNow(BUDGET); state.afterInit = () -> expire(deadline);
+   Deadline deadline = Deadline.fromNow(EXPIRING_BUDGET); state.afterInit = () -> expire(deadline);
    assertBudget(() -> signAndVerify(signer(), new byte[]{1}, deadline));
    assertEquals(0, state.signParameters);
   });
@@ -102,7 +104,7 @@ final class JwsSignerRc1MutationTests {
 
  @Test void expirationDuringParameterSetupPreventsInputUpdate() throws Exception {
   withProvider(state -> {
-   Deadline deadline = Deadline.fromNow(BUDGET); state.afterParameter = () -> expire(deadline);
+   Deadline deadline = Deadline.fromNow(EXPIRING_BUDGET); state.afterParameter = () -> expire(deadline);
    assertBudget(() -> signAndVerify(signer(), new byte[]{1}, deadline));
    assertEquals(0, state.signUpdates);
   });
@@ -110,7 +112,7 @@ final class JwsSignerRc1MutationTests {
 
  @Test void expirationDuringInputUpdatePreventsSigning() throws Exception {
   withProvider(state -> {
-   Deadline deadline = Deadline.fromNow(BUDGET); state.afterUpdate = () -> expire(deadline);
+   Deadline deadline = Deadline.fromNow(EXPIRING_BUDGET); state.afterUpdate = () -> expire(deadline);
    assertBudget(() -> signAndVerify(signer(), new byte[]{1}, deadline));
    assertEquals(0, state.signCalls);
   });
@@ -118,7 +120,7 @@ final class JwsSignerRc1MutationTests {
 
  @Test void expirationDuringSigningPreventsVerificationAndClearsOutput() throws Exception {
   withProvider(state -> {
-   Deadline deadline = Deadline.fromNow(BUDGET); state.afterSign = () -> expire(deadline);
+   Deadline deadline = Deadline.fromNow(EXPIRING_BUDGET); state.afterSign = () -> expire(deadline);
    assertBudget(() -> signAndVerify(signer(), new byte[]{1}, deadline));
    assertEquals(0, state.verifyCalls);
    assertZero(requireNonNull(state.signature));
@@ -127,7 +129,7 @@ final class JwsSignerRc1MutationTests {
 
  @Test void expirationDuringVerificationDiscardsAndClearsTheSignature() throws Exception {
   withProvider(state -> {
-   Deadline deadline = Deadline.fromNow(BUDGET); state.afterVerify = () -> expire(deadline);
+   Deadline deadline = Deadline.fromNow(EXPIRING_BUDGET); state.afterVerify = () -> expire(deadline);
    assertBudget(() -> signAndVerify(signer(), new byte[]{1}, deadline));
    assertEquals(1, state.verifyCalls);
    assertZero(requireNonNull(state.signature));
@@ -136,7 +138,7 @@ final class JwsSignerRc1MutationTests {
 
  @Test void expiredProviderFailureKeepsBudgetPrecedence() throws Exception {
   withProvider(state -> {
-   Deadline deadline = Deadline.fromNow(BUDGET);
+   Deadline deadline = Deadline.fromNow(EXPIRING_BUDGET);
    state.afterUpdate = () -> { expire(deadline); throw new IllegalStateException("private provider detail"); };
    assertBudget(() -> signAndVerify(signer(), new byte[]{1}, deadline));
   });
@@ -252,8 +254,7 @@ final class JwsSignerRc1MutationTests {
   }
  }
  private static void expire(@NonNull Deadline deadline) {
-  try { var field = Deadline.class.getDeclaredField("totalNanos"); field.setAccessible(true); field.setLong(deadline, 0L); }
-  catch (ReflectiveOperationException failure) { throw new AssertionError(failure); }
+  while (!deadline.isExpired()) LockSupport.parkNanos(Math.max(1L, deadline.remainingNanos()));
  }
  private static void withProvider(@NonNull Scenario scenario) throws Exception {
   // Load fixture key material before installing this operation-only provider.

@@ -52,6 +52,7 @@ import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.FutureTask;
+import java.util.concurrent.locks.LockSupport;
 import java.util.concurrent.TimeUnit;
 
 import static java.util.Objects.requireNonNull;
@@ -98,12 +99,16 @@ final class OAuthRc1AssertionMutationTests {
  }
 
  @Test void exhaustedKeyProviderWinsOverAnExcludedAlgorithm() {
-  Deadline deadline = Deadline.fromNow(BUDGET);
-  ClientAuthentication authentication = authentication(() -> { expire(deadline); return key(); });
+  Deadline deadline = Deadline.fromNow(Duration.ofSeconds(1)); AtomicInteger providers = new AtomicInteger();
+  ClientAuthentication authentication = authentication(() -> {
+   providers.incrementAndGet();
+   while (!deadline.isExpired()) LockSupport.parkNanos(Math.max(1L, deadline.remainingNanos()));
+   return key();
+  });
   var target = new ResourceServerMetadata(ISSUER, URI.create(ISSUER + "/token"), Set.of("private_key_jwt"), Set.of("RS384"), null);
   OAuthTransportException failure = assertThrows(OAuthTransportException.class, () -> ClientAssertionPreparation.prepare(authentication,
     "client", target, OAuthEndpoint.TOKEN, settings(new CountingClock(NOW)), new CapturingRandom(), deadline));
-  assertEquals(OAuthException.Reason.NETWORK_FAILURE, failure.getReason());
+  assertEquals(OAuthException.Reason.NETWORK_FAILURE, failure.getReason()); assertEquals(1, providers.get());
  }
 
  @Test void nonceCancellationPreventsPrivateKeyUse() {
@@ -359,10 +364,6 @@ final class OAuthRc1AssertionMutationTests {
    if (failure.getCause() instanceof Error cause) throw cause;
    throw failure;
   }
- }
- private static void expire(@NonNull Deadline deadline) {
-  try { var field = Deadline.class.getDeclaredField("totalNanos"); field.setAccessible(true); field.setLong(deadline, 0L); }
-  catch (ReflectiveOperationException failure) { throw new AssertionError(failure); }
  }
  private static void assertZero(byte @NonNull [] bytes) { assertArrayEquals(new byte[bytes.length], bytes); }
  private static @NonNull PendingAuthorization pending(boolean oidc, @NonNull Instant expires, @NonNull String payload) {

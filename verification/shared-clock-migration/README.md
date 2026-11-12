@@ -64,12 +64,13 @@ Run the legacy schema/backfill and current-adapter join with its own fresh outpu
 ```sh
 python3 verification/shared-clock-migration/run_adapter_join.py \
   --output /absolute/fresh-owned-adapter-output \
-  --java-home /absolute/jdk17-or21-home
+  --java-home /absolute/jdk17-or21-home \
+  --repository /absolute/offline-maven-repository
 ```
 
 Both runners own and remove their disposable PostgreSQL resources and protected temporary runtime files. The earlier structural result and the adapter-join result have separate evidence boundaries; neither grants deployment migration or release approval.
 
-For current-source MIG-06 qualification, pass an explicit existing `--core-jar` and its exact `--core-sha256`, plus `--repository` for the existing offline annotation dependencies. Omitting these options retains the historical artifact pin; there is no automatic selection of a cached replacement. Add `--capacity-preflight` to `run_postgres.py` for the five current-codec/controller capacity cases against real native tables. They check refusal before writes, repeated preflight after a permitted `16383 → 16384` record-cap adjustment, hard-limit refusal and TOTP quotas based on reserved K64 bytes rather than current short-key output.
+For current-source MIG-06 qualification, pass an explicit existing `--core-jar` and its exact `--core-sha256`, plus `--repository` for the existing offline annotation dependencies. Omitting these options retains the hash-checked canonical API-BIND29/Performance42 artifact pin that supports the live probe; there is no automatic selection of a cached replacement. Add `--capacity-preflight` to `run_postgres.py` for the five current-codec/controller capacity cases against real native tables. They check refusal before writes, repeated preflight after a permitted `16383 → 16384` record-cap adjustment, hard-limit refusal and TOTP quotas based on reserved K64 bytes rather than current short-key output.
 
 Add `--rotation-key-id-length 64` to `run_adapter_join.py` to exercise the current public maintenance operations with the longest supported runtime key ID. The TOTP reseal checks actual SQL size, unchanged reservation and bucket usage/limit, and exact use of the previously reserved bytes. Source checks in `test_capacity_preflight.py` also cover invalid and wrapping capacity values, exact fit and all-family short/long-key semantic preservation. The fixture's `ACTIVE` phase still leaves normal timed admission separately closed; these are disposable component receipts, not approved UTC/witness/platform or release certificates.
 
@@ -128,6 +129,24 @@ An earlier pending cleanup intent without the bound report remains closed. Expli
 Add `--retention-maintenance` to `run_postgres.py` for raw DB-time pause controls, unhealthy source/boot and invalidated migration, all-family permanent-state cleanup refusal, old-intent exact-report binding across real pre/postcommit loss, complete reinventory/capacity reconciliation and non-eviction under a refused capacity plan. Only full authenticated retention can delete the selected finite nonfit row; permanent facts stay exact.
 
 Add the same flag to `run_adapter_join.py` to seed one genuine frozen-old USED issuer code whose credential expires before admitted authority time while its outer retention remains future. Actual public maintenance reseals it; independent current decoding preserves the complete payload, floor and original retention. Restricted before/after audits run only behind the exclusive drain barrier with the runtime authority channel closed, the SQL writer role disabled and its sessions drained. Closing authority while advancing the raw worker by 100 years denies services and leaves all retained data intact. Core tests separately cover real spent-credential rejection, retained maintenance before/equal/after full retention, unhealthy/fast/broken-clock refusal, and old/new encrypted expiry boundaries for issuer/WA contexts and all retained status vectors. Ordinary decoders and ceremony reseal scope are unchanged; no expiry grace or new credential admission follows from migration or maintenance. All database operations remain disposable components; real UTC/witness/worker/durability/profile qualification remains open.
+
+## SC-BOUND-04 current-adapter contention component
+
+Add `--capacity-contention` to `run_adapter_join.py` to execute the TOTP,
+WebAuthn and issuer engines through the current public adapters in separate JVMs.
+The component holds unrelated entity, bucket and namespace locks, observes actual
+PostgreSQL waiting, and requires unrelated work to commit before release. It also
+exercises reverse-order multi-lock acquisition and emits the SQL trace used to
+check the signed advisory-lock ordering. The result records the exact
+`scBound04Assertions` and `crossJvmAdapterSqlTraces` counts and keeps all 256
+capacity counters tied to the authenticated retained inventory.
+
+This closes only the disposable current-adapter component that was absent from
+the earlier source-boundary record. Its witness and time are scripted, and the
+fixture supplies neither a latency SLO nor an approved deployment, durability,
+worker-continuity or restore profile. The runner therefore keeps `qualified`
+false; this component must not be reported as a lane-B, full lane-C or whole
+`SC-BOUND-04` pass.
 
 ## CAP-10 isolated adapter atomicity
 

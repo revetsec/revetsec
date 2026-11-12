@@ -27,6 +27,10 @@ TotpAuthenticator totp = TotpAuthenticator.withIssuer("Example")
 
 These configuration values and collaborators are application supplied. The issuer is trusted authenticator display text, not an OAuth issuer URL. Stable account IDs distinguish tenants and accounts; an email label is display text rather than storage identity. Building performs no I/O and starts no background threads. The authenticator is safe to share. Configuration is immutable; replace instances for configuration/key changes while preserving authoritative state.
 
+Before building, `TotpAuthenticator.Builder.configurationDiagnostics()` can report all missing
+required settings as fixed, redacted codes. See [builder configuration diagnostics](builder-diagnostics.md)
+for its construction-only scope. An empty result does not establish deployment readiness.
+
 The recovery epoch is an opaque, never-reused generation identifier maintained outside the database being restored. Ordinary deployments and sealing-key rotation retain it. Every participating node uses the same active epoch and coordinated gate/store policy.
 
 For a newly provisioned epoch, explicitly call `initializeNamespaceResult()` while the external controller permits initialization. Handle `Initialized`, `AlreadyInitialized`, `Unavailable`, `Indeterminate` and `ReconciliationRequired`. Confirm initialization under the recovery controller before opening ordinary traffic. Ordinary operations never recreate a missing namespace fence. The backend changes the namespace activation state from `NEW` to `ACTIVATED` atomically with its initial namespace record. Once activated, a missing record is infrastructure failure.

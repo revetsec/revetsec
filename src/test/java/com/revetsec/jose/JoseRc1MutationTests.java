@@ -18,6 +18,7 @@ package com.revetsec.jose;
 
 import com.revetsec.ErrorCategory;
 import com.revetsec.internal.http.Deadline;
+import com.revetsec.internal.http.HttpExchange;
 import com.revetsec.internal.jose.JwksParser;
 import com.revetsec.internal.jose.KeySelection;
 import com.revetsec.testing.TestClock;
@@ -67,11 +68,10 @@ final class JoseRc1MutationTests {
  }
 
  @Test void joiningAFlightIncrementsAndNotifiesWaiters() throws Exception {
-  JwksCache cache = cache();
+  RecordingCondition condition = new RecordingCondition();
+  JwksCache cache = cache(condition);
   Object flight = flight();
   set(cache, "flight", flight);
-  RecordingCondition condition = new RecordingCondition();
-  set(cache, "waitersChanged", condition);
   Object decision = call(cache, "decide", JwksCacheTests.rs256("a"), Deadline.fromNow(Duration.ofSeconds(2)), null);
   Assertions.assertNotNull(decision);
   Assertions.assertEquals("JOIN", Objects.requireNonNull(field(decision, "action")).toString());
@@ -127,14 +127,13 @@ final class JoseRc1MutationTests {
 
  @Test void everyWaitOutcomeDecrementsNotifiesAndUnlocks() throws Exception {
   for (String outcome : List.of("success", "exceptional", "timeout", "interrupt")) {
-   JwksCache cache = cache();
+   RecordingCondition condition = new RecordingCondition();
+   JwksCache cache = cache(condition);
    Object flight = flight();
    Object cutShort = staticField("FlightResult", "CUT_SHORT");
    if (outcome.equals("success")) future(flight).complete(cutShort);
    if (outcome.equals("exceptional")) future(flight).completeExceptionally(new IllegalStateException("private defensive probe"));
    set(cache, "waiterCount", 1);
-   RecordingCondition condition = new RecordingCondition();
-   set(cache, "waitersChanged", condition);
    try {
     if (outcome.equals("interrupt")) Thread.currentThread().interrupt();
     if (outcome.equals("timeout") || outcome.equals("interrupt")) {
@@ -151,9 +150,8 @@ final class JoseRc1MutationTests {
  }
 
  @Test void waiterObservationAtEqualitySucceedsAndZeroBudgetNeverWaits() throws Exception {
-  JwksCache cache = cache();
   RecordingCondition condition = new RecordingCondition();
-  set(cache, "waitersChanged", condition);
+  JwksCache cache = cache(condition);
   Assertions.assertTrue(cache.awaitWaitersForTests(0, Duration.ZERO));
   Assertions.assertFalse(cache.awaitWaitersForTests(1, Duration.ZERO));
   Assertions.assertEquals(0, condition.waits);
@@ -174,11 +172,10 @@ final class JoseRc1MutationTests {
   JwksCache.Snapshot old = snapshot(false, false);
   JwksCache.Snapshot newer = snapshot(true, true);
   set(cache, "snapshot", old);
-  Object flight = flight();
   PublishingFuture completion = new PublishingFuture(() -> Assertions.assertDoesNotThrow(() -> {
    set(cache, "snapshot", newer); set(cache, "flight", null);
   }), failedResult());
-  set(flight, "result", completion);
+  Object flight = flight(completion);
   set(cache, "flight", flight);
   Object answer = call(cache, "resolve", JwksCacheTests.rs256("a"), Deadline.fromNow(Duration.ofSeconds(2)), old);
   Assertions.assertInstanceOf(KeySelection.class, answer);
@@ -215,6 +212,12 @@ final class JoseRc1MutationTests {
   return JwksCacheTests.source(JwksCacheTests.MemoryHttpClient.answering(JwksCacheTests.Answer.fromJwks(null)),
     TestClock.fromInstant(JwksCacheTests.START)).build().cacheForTests();
  }
+ private static @NonNull JwksCache cache(@NonNull Condition condition) throws Exception {
+  JwksCache basis=cache();
+  return new JwksCache((URI)Objects.requireNonNull(field(basis,"reportedUri")),
+    (HttpExchange)Objects.requireNonNull(field(basis,"httpExchange")),
+    (JwksSettings)Objects.requireNonNull(field(basis,"settings")),condition);
+ }
  private static JwksCache.@NonNull Snapshot snapshot(boolean fresh, boolean withKey) throws Exception {
   String json = withKey ? TestJwk.keySet(List.of(TestJwk.withFixture(TestJwk.Fixture.IDP_SIGNING_RSA_2048).kid("a").toJson())) : "{\"keys\":[]}";
   return new JwksCache.Snapshot(JwksParser.parse(json, 256 * 1024, 100).keys(), JwksCacheTests.START.minusSeconds(60),
@@ -225,6 +228,11 @@ final class JoseRc1MutationTests {
   Constructor<?> constructor = nested("Flight").getDeclaredConstructor(java.time.Instant.class, java.time.Instant.class, java.time.Instant.class, long.class, long.class);
   constructor.setAccessible(true);
   return constructor.newInstance(null, null, null, System.nanoTime(), Duration.ofSeconds(20).toNanos());
+ }
+ private static @NonNull Object flight(@NonNull CompletableFuture<@NonNull Object> result) throws Exception {
+  Constructor<?> constructor = nested("Flight").getDeclaredConstructor(java.time.Instant.class, java.time.Instant.class, java.time.Instant.class, long.class, long.class, CompletableFuture.class);
+  constructor.setAccessible(true);
+  return constructor.newInstance(null, null, null, System.nanoTime(), Duration.ofSeconds(20).toNanos(),result);
  }
  private static @NonNull Object staticField(@NonNull String type, @NonNull String name) throws Exception {
   Field field = nested(type).getDeclaredField(name);field.setAccessible(true);return Objects.requireNonNull(field.get(null));

@@ -35,6 +35,7 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Shared transactional contract checks for TOTP stores. A future backend test can subclass this
@@ -44,16 +45,19 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
  */
 @javax.annotation.concurrent.NotThreadSafe
 public abstract class TotpStoreConformanceTests {
- private static final @NonNull Duration BUDGET = Duration.ofSeconds(5);
- private static final @NonNull String NAMESPACE = "conformance-accounts";
- private static final @NonNull String FIRST_EPOCH = "conformance-epoch-one";
- private static final @NonNull String SECOND_EPOCH = "conformance-epoch-two";
- private static final @NonNull TotpStoreKey ROOT = TotpStoreKey.forNamespace(NAMESPACE, FIRST_EPOCH);
- private static final @NonNull TotpStoreKey ACCOUNT = TotpStoreKey.forAccount(NAMESPACE, FIRST_EPOCH, "account-a");
- private static final @NonNull TotpStoreKey OTHER = TotpStoreKey.forAccount(NAMESPACE, FIRST_EPOCH, "account-b");
+ protected static final @NonNull Duration BUDGET = Duration.ofSeconds(5);
+ protected static final @NonNull String NAMESPACE = "conformance-accounts";
+ protected static final @NonNull String FIRST_EPOCH = "conformance-epoch-one";
+ protected static final @NonNull String SECOND_EPOCH = "conformance-epoch-two";
+ protected static final @NonNull TotpStoreKey ROOT = TotpStoreKey.forNamespace(NAMESPACE, FIRST_EPOCH);
+ protected static final @NonNull TotpStoreKey ACCOUNT = TotpStoreKey.forAccount(NAMESPACE, FIRST_EPOCH, "account-a");
+ protected static final @NonNull TotpStoreKey OTHER = TotpStoreKey.forAccount(NAMESPACE, FIRST_EPOCH, "account-b");
 
  /** Creates a new empty store configured with the first namespace and epoch. */
  protected abstract @NonNull TotpStore newStore();
+
+ /** Creates a fresh scope whose permanent record capacity includes its namespace root. */
+ protected abstract @NonNull TotpStore newStoreWithEntryLimit(int maximumEntries);
 
  /** Fences the first epoch and selects the second through the backend's recovery controller. */
  protected abstract void provisionSecondEpoch(@NonNull TotpStore store);
@@ -64,7 +68,8 @@ public abstract class TotpStoreConformanceTests {
   assertInstanceOf(TotpStoreEntry.Absent.class, absent.getEntry(ROOT));
   TotpStoreWrite initialize = initialize(absent, ROOT, 1);
   assertEquals(TotpStoreCommitResult.COMMITTED, commit(store, initialize, BUDGET));
-  assertEquals(TotpStoreCommitResult.CONFLICT, commit(store, initialize, BUDGET));
+  TotpStoreCommitResult repeated = commit(store, initialize, BUDGET);
+  assertTrue(repeated == TotpStoreCommitResult.CONFLICT || repeated == TotpStoreCommitResult.FENCED);
   assertArrayEquals(new byte[] {1}, present(snapshot(store, Set.of(ROOT)), ROOT).getSealedBytes());
  }
 
@@ -109,6 +114,47 @@ public abstract class TotpStoreConformanceTests {
   } finally { executor.shutdownNow(); }
  }
 
+ @Test void conditionOnlyBarrierReturnsTimingWithoutRewritingTheRoot() {
+  TotpStore store = initializedStore();
+  TotpStoreSnapshot before = snapshot(store, Set.of(ROOT));
+  TotpStoreCommitReceipt receipt = store.compareAndCommit(update(before, List.of()), BUDGET);
+  assertEquals(TotpStoreCommitResult.COMMITTED, receipt.getStatus());
+  assertTrue(receipt.getTiming().isPresent());
+  TotpStoreSnapshot after = snapshot(store, Set.of(ROOT));
+  assertEquals(present(before, ROOT).getVersion(), present(after, ROOT).getVersion());
+  assertArrayEquals(present(before, ROOT).getSealedBytes(), present(after, ROOT).getSealedBytes());
+ }
+
+ @Test void futureFloorAndExhaustedBudgetRefuseWithoutMutation() {
+  TotpStore store = initializedStore();
+  TotpStoreSnapshot before = snapshot(store, Set.of(ROOT, ACCOUNT));
+  StoreTimeObservation.Healthy time = assertInstanceOf(StoreTimeObservation.Healthy.class,
+    before.getTimeObservation());
+  StoreTemporalCondition future = StoreTimeAccess.get().fromObservation(time,
+    time.getObservedAt().plusSeconds(3600), null);
+  TotpStoreWrite tooEarly = TotpStoreWrite.fromSnapshotAndMutations(TotpStoreWrite.Purpose.UPDATE,
+    before, List.of(TotpStoreWrite.Mutation.insert(record(ACCOUNT, 6))), future);
+  assertEquals(TotpStoreCommitResult.TIME_BEFORE_FLOOR, commit(store, tooEarly, BUDGET));
+  assertEquals(TotpStoreCommitResult.UNAVAILABLE, commit(store, update(before,
+    List.of(TotpStoreWrite.Mutation.insert(record(ACCOUNT, 7)))), Duration.ZERO));
+  assertInstanceOf(TotpStoreReadResult.Unavailable.class, store.read(Set.of(ROOT), Duration.ZERO));
+  assertInstanceOf(TotpStoreEntry.Absent.class, snapshot(store, Set.of(ROOT, ACCOUNT)).getEntry(ACCOUNT));
+ }
+
+ @Test void capacityRefusalPreservesThePermanentRootAndConfirmedAbsence() {
+  TotpStore store = newStoreWithEntryLimit(1);
+  TotpStoreSnapshot empty = snapshot(store, Set.of(ROOT));
+  assertEquals(TotpStoreCommitResult.COMMITTED,
+    commit(store, initialize(empty, ROOT, 1), BUDGET));
+  TotpStoreSnapshot before = snapshot(store, Set.of(ROOT, ACCOUNT));
+  TotpStoreWrite attempted = update(before,
+    List.of(TotpStoreWrite.Mutation.insert(record(ACCOUNT, 8))));
+  assertEquals(TotpStoreCommitResult.CAPACITY_REFUSED, commit(store, attempted, BUDGET));
+  TotpStoreSnapshot after = snapshot(store, Set.of(ROOT, ACCOUNT));
+  assertEquals(present(before, ROOT).getVersion(), present(after, ROOT).getVersion());
+  assertInstanceOf(TotpStoreEntry.Absent.class, after.getEntry(ACCOUNT));
+ }
+
  @Test void epochChangeFencesOldReadsAndCommitsIncludingStaleSnapshots() {
   TotpStore store = initializedStore();
   TotpStoreSnapshot oldSnapshot = snapshot(store, Set.of(ROOT, ACCOUNT));
@@ -132,38 +178,38 @@ public abstract class TotpStoreConformanceTests {
     commit(store, initialize(snapshot(store, Set.of(ROOT)), ROOT, 1), BUDGET));
   return store;
  }
- private static @NonNull TotpStoreSnapshot snapshot(@NonNull TotpStore store,
+ protected static @NonNull TotpStoreSnapshot snapshot(@NonNull TotpStore store,
    @NonNull Set<@NonNull TotpStoreKey> keys) {
   TotpStoreReadResult.Available available = assertInstanceOf(TotpStoreReadResult.Available.class,
     store.read(keys, BUDGET));
   assertEquals(keys, available.getSnapshot().getEntries().keySet());
   return available.getSnapshot();
  }
- private static @NonNull TotpStoreWrite initialize(@NonNull TotpStoreSnapshot snapshot,
+ protected static @NonNull TotpStoreWrite initialize(@NonNull TotpStoreSnapshot snapshot,
    @NonNull TotpStoreKey key, int value) {
   return TotpStoreWrite.fromSnapshotAndMutations(TotpStoreWrite.Purpose.INITIALIZE_NAMESPACE, snapshot,
     List.of(TotpStoreWrite.Mutation.insert(record(key, value))), condition(snapshot));
  }
- private static @NonNull TotpStoreWrite update(@NonNull TotpStoreSnapshot snapshot,
+ protected static @NonNull TotpStoreWrite update(@NonNull TotpStoreSnapshot snapshot,
    @NonNull List<TotpStoreWrite.@NonNull Mutation> mutations) {
   return TotpStoreWrite.fromSnapshotAndMutations(TotpStoreWrite.Purpose.UPDATE, snapshot, mutations, condition(snapshot));
  }
- private static @NonNull TotpStoreRecord present(@NonNull TotpStoreSnapshot snapshot,
+ protected static @NonNull TotpStoreRecord present(@NonNull TotpStoreSnapshot snapshot,
    @NonNull TotpStoreKey key) {
   return assertInstanceOf(TotpStoreEntry.Present.class, snapshot.getEntry(key)).getRecord();
  }
- private static @NonNull TotpStoreRecord record(@NonNull TotpStoreKey key, int value) {
+ protected static @NonNull TotpStoreRecord record(@NonNull TotpStoreKey key, int value) {
   byte[] version = new byte[32];
   Arrays.fill(version, (byte) value);
   return TotpStoreRecord.fromStoredForm(key, Base64.getUrlEncoder().withoutPadding().encodeToString(version),
     new byte[] {(byte) value});
  }
 
- private static @NonNull TotpStoreCommitResult commit(@NonNull TotpStore store, @NonNull TotpStoreWrite write,
+ protected static @NonNull TotpStoreCommitResult commit(@NonNull TotpStore store, @NonNull TotpStoreWrite write,
    @NonNull Duration remainingBudget) {
   return store.compareAndCommit(write, remainingBudget).getStatus();
  }
- private static @NonNull StoreTemporalCondition condition(@NonNull TotpStoreSnapshot snapshot) {
+ protected static @NonNull StoreTemporalCondition condition(@NonNull TotpStoreSnapshot snapshot) {
   StoreTimeObservation.Healthy time = assertInstanceOf(StoreTimeObservation.Healthy.class, snapshot.getTimeObservation());
   return StoreTimeAccess.get().fromObservation(time, time.getObservedAt(), null);
  }

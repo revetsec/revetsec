@@ -89,7 +89,7 @@ class InventoryCodecTests(unittest.TestCase):
             os.environ.get('SCP10_JAVA_HOME', '/Users/agents/Java/amazon-corretto-21.jdk/Contents/Home'),
             os.environ.get('SCP10_CORE_JAR', ROOT/'planning/records/security/shared-clock-scp09-2026-10-30/candidate/core/revetsec-1.0.0-SNAPSHOT.jar'),
             os.environ.get('SCP10_OLD_JAR', ROOT/'planning/records/security/shared-clock-scp01-2026-10-29/baseline/built-core/revetsec-1.0.0-SNAPSHOT.jar'),
-            os.environ.get('SCP10_REPOSITORY', '/private/tmp/revetsec-refresh-m2'),
+            os.environ.get('SCP10_REPOSITORY', '/Users/agents/.m2/repository'),
             expected_core_sha256=os.environ.get('SCP10_CORE_SHA256'))
         cls.rows = cls.client.fixtures(cls.config)
         cls.prepared = cls.client.prepare(cls.config, cls.rows)

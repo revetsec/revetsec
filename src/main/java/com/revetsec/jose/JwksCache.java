@@ -167,7 +167,7 @@ final class JwksCache {
 	 * Signalled, under {@link #lock}, whenever {@link #waiterCount} changes.
 	 */
 	@NonNull
-	private final Condition waitersChanged = this.lock.newCondition();
+	private final Condition waitersChanged;
 
 	/**
 	 * The current key set, or {@code null} before the first successful fetch; written only while {@link #lock} is
@@ -216,6 +216,13 @@ final class JwksCache {
 	JwksCache(@NonNull URI uri,
 						@NonNull HttpExchange httpExchange,
 						@NonNull JwksSettings settings) {
+		this(uri,httpExchange,settings,null);
+	}
+
+	JwksCache(@NonNull URI uri,
+			@NonNull HttpExchange httpExchange,
+			@NonNull JwksSettings settings,
+			@Nullable Condition waitersChanged) {
 		requireNonNull(uri);
 		this.reportedUri = cut(uri);
 		this.httpExchange = requireNonNull(httpExchange);
@@ -224,6 +231,7 @@ final class JwksCache {
 				settings.maximumResponseBytes(), Limits.HTTP_ERROR_BODY_SIZE.getDefaultIntValue(),
 				settings.requestTimeout());
 		this.backoffCap = backoffCap(settings.unknownKeyRefreshCooldown());
+		this.waitersChanged = waitersChanged == null ? this.lock.newCondition() : waitersChanged;
 	}
 
 	/**
@@ -984,7 +992,7 @@ final class JwksCache {
 	@ThreadSafe
 	private static final class Flight {
 		@NonNull
-		private final CompletableFuture<@NonNull FlightResult> result = new CompletableFuture<>();
+		private final CompletableFuture<@NonNull FlightResult> result;
 		@Nullable
 		private final Instant previousUnknownKidFetchStart;
 		@Nullable
@@ -999,6 +1007,16 @@ final class JwksCache {
 									 @Nullable Instant previousEarlierAttemptStart,
 									 long startNanos,
 									 long budgetNanos) {
+			this(previousUnknownKidFetchStart,previousLatestAttemptStart,previousEarlierAttemptStart,startNanos,budgetNanos,new CompletableFuture<>());
+		}
+
+		private Flight(@Nullable Instant previousUnknownKidFetchStart,
+				@Nullable Instant previousLatestAttemptStart,
+				@Nullable Instant previousEarlierAttemptStart,
+				long startNanos,
+				long budgetNanos,
+				@NonNull CompletableFuture<@NonNull FlightResult> result) {
+			this.result = requireNonNull(result);
 			this.previousUnknownKidFetchStart = previousUnknownKidFetchStart;
 			this.previousLatestAttemptStart = previousLatestAttemptStart;
 			this.previousEarlierAttemptStart = previousEarlierAttemptStart;

@@ -307,7 +307,7 @@ class ConsumerOutputTests(unittest.TestCase):
     """PackagedConsumer's public-api= line must come last and name every group of public API calls."""
 
     API_LINE = VERIFIER.PUBLIC_API_LINE_PREFIX + ",".join(VERIFIER.PUBLIC_API_CALLS)
-    EXPORTED_TYPE_INVENTORY_SHA256 = "26d89bed139a42f19cd5edc188ddcfd56bef21e4ee3f38c6cdfb9511fadee78c"
+    EXPORTED_TYPE_INVENTORY_SHA256 = "f78734beea7140f95b2b4abe5cde127b0b4e1d9412b75b193fcda1cf8e2270b5"
 
     def lines(self, *last):
         return ["jar=/repository/revetsec.jar", "automatic-module-name=com.revetsec", *last]
@@ -425,9 +425,10 @@ class ConsumerOutputTests(unittest.TestCase):
         self.assertEqual(types, sorted(set(types)))
         rows = "".join(f"{package}\t{relative_name}\n" for package, relative_name in types).encode("utf-8")
         self.assertEqual(hashlib.sha256(rows).hexdigest(), self.EXPORTED_TYPE_INVENTORY_SHA256)
-        self.assertEqual(len(types), 702)
-        self.assertEqual(sum("." not in relative_name for _, relative_name in types), 340)
+        self.assertEqual(len(types), 703)
+        self.assertEqual(sum("." not in relative_name for _, relative_name in types), 341)
         self.assertEqual(sum("." in relative_name for _, relative_name in types), 362)
+        self.assertIn(("com.revetsec", "ConfigurationDiagnostic"), types)
         self.assertIn(("com.revetsec", "StateSealer.Builder"), types)
         self.assertIn(("com.revetsec.json", "JsonObject.Builder"), types)
         self.assertIn(("com.revetsec.totp", "TotpStoreWrite.Mutation.Kind"), types)
@@ -465,6 +466,23 @@ class ConsumerOutputTests(unittest.TestCase):
         self.assertIn(f'System.out.println("{VERIFIER.PUBLIC_API_LINE_PREFIX}" + String.join(",", calledApi));', source)
         positions = [source.find(f'calledApi.add("{call}");') for call in VERIFIER.PUBLIC_API_CALLS]
         self.assertNotIn(-1, positions)
+
+    def test_packaged_consumer_runs_each_configuration_diagnostic_surface(self):
+        source = (VERIFIER.SCRIPT_DIRECTORY / "src" / "main" / "java" / "example" / "PackagedConsumer.java").read_text(
+            encoding="utf-8")
+        code = self.NOT_CODE.sub(" ", source)
+        self.assertEqual(1, len(re.findall(r"\bexerciseConfigurationDiagnostics\(\)\s*;", code)))
+        for builder, factory in (
+                ("TotpAuthenticator", "withIssuer"),
+                ("WebAuthnRelyingParty", "withRelyingPartyId"),
+                ("OAuthAuthorizationServer", "withIssuer")):
+            declaration = re.search(
+                rf"\bvar\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*{builder}\.{factory}\(", code)
+            self.assertIsNotNone(declaration, builder)
+            variable = declaration.group(1)
+            self.assertRegex(code, rf"\b{re.escape(variable)}\.configurationDiagnostics\(\)", builder)
+        self.assertRegex(code, r"\bsnapshot\.clear\(\)")
+        self.assertIn("UnsupportedOperationException", code)
 
 
 class GradlePinTests(unittest.TestCase):

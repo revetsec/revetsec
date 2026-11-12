@@ -19,6 +19,7 @@ package example;
 import org.jspecify.annotations.NonNull;
 
 import com.revetsec.BrowserBinding;
+import com.revetsec.ConfigurationDiagnostic;
 import com.revetsec.KeyImportException;
 import com.revetsec.KeyImports;
 import com.revetsec.OperationBinding;
@@ -544,6 +545,7 @@ public final class PackagedConsumer {
 		String json = exerciseJsonModel(calledApi);
 		exerciseResultTypes();
 		exerciseAdditionalExportedTypes();
+		exerciseConfigurationDiagnostics();
 		exerciseStateSealer(json, calledApi);
 		exerciseOutboundUriPolicy(calledApi);
 		exerciseJose(calledApi);
@@ -608,6 +610,62 @@ public final class PackagedConsumer {
 		System.out.println("runtime=" + Runtime.version());
 		System.out.println("error-categories=" + Arrays.toString(ErrorCategory.values()));
 		System.out.println("public-api=" + String.join(",", calledApi));
+	}
+
+	/** Exercises the three configuration-only inspection surfaces without constructing their services. */
+	private static void exerciseConfigurationDiagnostics() {
+		var totpBuilder = TotpAuthenticator.withIssuer("consumer-totp");
+		var webAuthnBuilder = WebAuthnRelyingParty.withRelyingPartyId("login.example.com");
+		var issuerBuilder = OAuthAuthorizationServer.withIssuer(ISSUER);
+		List<ConfigurationDiagnostic> totp = totpBuilder.configurationDiagnostics();
+		List<ConfigurationDiagnostic> webAuthn = webAuthnBuilder.configurationDiagnostics();
+		List<ConfigurationDiagnostic> issuer = issuerBuilder.configurationDiagnostics();
+		require(totp.equals(List.of(
+				ConfigurationDiagnostic.TOTP_CREDENTIAL_NAMESPACE_REQUIRED,
+				ConfigurationDiagnostic.TOTP_RECOVERY_EPOCH_REQUIRED,
+				ConfigurationDiagnostic.TOTP_STORE_REQUIRED,
+				ConfigurationDiagnostic.TOTP_STATE_SEALER_REQUIRED,
+				ConfigurationDiagnostic.TOTP_RECOVERY_GATE_REQUIRED))
+				&& webAuthn.equals(List.of(
+						ConfigurationDiagnostic.WEBAUTHN_RELYING_PARTY_NAME_REQUIRED,
+						ConfigurationDiagnostic.WEBAUTHN_CREDENTIAL_NAMESPACE_REQUIRED,
+						ConfigurationDiagnostic.WEBAUTHN_ALLOWED_ORIGINS_REQUIRED,
+						ConfigurationDiagnostic.WEBAUTHN_STORE_REQUIRED,
+						ConfigurationDiagnostic.WEBAUTHN_STATE_SEALER_REQUIRED,
+						ConfigurationDiagnostic.WEBAUTHN_RECOVERY_GATE_REQUIRED))
+				&& issuer.equals(List.of(
+						ConfigurationDiagnostic.OAUTH_AUTHORIZATION_ENDPOINT_REQUIRED,
+						ConfigurationDiagnostic.OAUTH_TOKEN_ENDPOINT_REQUIRED,
+						ConfigurationDiagnostic.OAUTH_JWKS_ENDPOINT_REQUIRED,
+						ConfigurationDiagnostic.OAUTH_CLIENT_REPOSITORY_REQUIRED,
+						ConfigurationDiagnostic.OAUTH_STORE_REQUIRED,
+						ConfigurationDiagnostic.OAUTH_SIGNING_KEYS_REQUIRED,
+						ConfigurationDiagnostic.OAUTH_STATE_SEALER_REQUIRED,
+						ConfigurationDiagnostic.OAUTH_GRANT_POLICY_REQUIRED,
+						ConfigurationDiagnostic.OAUTH_RESOURCES_REQUIRED)),
+				"configuration diagnostics retain deterministic missing-setting order");
+		require(totpBuilder == totpBuilder.credentialNamespace("consumer-namespace")
+				&& webAuthnBuilder == webAuthnBuilder.relyingPartyName("Consumer RP")
+				&& issuerBuilder == issuerBuilder.authorizationEndpoint(URI.create(ISSUER + "/authorize")),
+				"configuration setters retain builder identity");
+		require(totp.size() == 5 && webAuthn.size() == 6 && issuer.size() == 9
+				&& totpBuilder.configurationDiagnostics().size() == 4
+				&& webAuthnBuilder.configurationDiagnostics().size() == 5
+				&& issuerBuilder.configurationDiagnostics().size() == 8,
+				"configuration diagnostics are immutable point-in-time snapshots");
+		for (ConfigurationDiagnostic diagnostic : ConfigurationDiagnostic.values()) {
+			require(!diagnostic.getFieldCode().isEmpty() && !diagnostic.getReasonCode().isEmpty()
+					&& !diagnostic.getMessage().isEmpty() && !diagnostic.getDocumentationReference().isEmpty(),
+					"configuration diagnostics expose fixed metadata");
+		}
+		for (List<ConfigurationDiagnostic> snapshot : List.of(totp, webAuthn, issuer)) {
+			try {
+				snapshot.clear();
+				throw new AssertionError("Configuration diagnostics were mutable");
+			} catch (UnsupportedOperationException expected) {
+				// Immutable consumer snapshot.
+			}
+		}
 	}
 
 

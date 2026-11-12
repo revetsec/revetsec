@@ -106,7 +106,7 @@ final class SamlPendingStoreCleanupTests {
 
     @Test void equalExpiriesAndCompositeKeysRemainDistinctAtExactCapacity() throws Exception {
         var clock = new MutableClock();
-        var store = InMemoryPendingSamlAuthenticationStore.fromLimit(clock, 3);
+        var store = instrumented(clock, 3);
         Instant expiry = START.plusNanos(1);
         assertEquals(SamlPendingSaveResult.SAVED, store.save("ab", "c", "one", expiry, BUDGET));
         assertEquals(SamlPendingSaveResult.SAVED, store.save("a", "bc", "two", expiry, BUDGET));
@@ -148,7 +148,7 @@ final class SamlPendingStoreCleanupTests {
     }
 
     @Test void consumedSlotChurnDoesNotRetainAuxiliaryTombstones() throws Exception {
-        var store = InMemoryPendingSamlAuthenticationStore.fromLimit(new MutableClock(), 2);
+        var store = instrumented(new MutableClock(), 2);
         assertEquals(SamlPendingSaveResult.SAVED, save(store, "long-lived", START.plusSeconds(3600)));
         CountingMap map = observe(store);
         for (int i = 0; i < 300; i++) {
@@ -162,7 +162,7 @@ final class SamlPendingStoreCleanupTests {
     }
 
     @Test void recursiveIdenticalReplacementKeepsBothIndexesAndSingleConsumption() throws Exception {
-        var store = InMemoryPendingSamlAuthenticationStore.fromLimit(new MutableClock(), 1);
+        var store = instrumented(new MutableClock(), 1);
         Instant expiry = START.plusSeconds(60);
         assertEquals(SamlPendingSaveResult.SAVED, save(store, "target", expiry));
         CountingMap map = observe(store);
@@ -199,7 +199,7 @@ final class SamlPendingStoreCleanupTests {
 
     @Test void predicateTimeAdvanceAndRollbackKeepTheExpiryAndClockFences() throws Exception {
         var clock = new MutableClock();
-        var store = InMemoryPendingSamlAuthenticationStore.fromLimit(clock, 1);
+        var store = instrumented(clock, 1);
         Instant expiry = START.plusNanos(1);
         assertEquals(SamlPendingSaveResult.SAVED, save(store, "target", expiry));
         CountingMap map = observe(store);
@@ -231,7 +231,7 @@ final class SamlPendingStoreCleanupTests {
     }
 
     @Test void interruptedSaveCommitKeepsBothIndexesAndReportsIndeterminate() throws Exception {
-        var store = InMemoryPendingSamlAuthenticationStore.fromLimit(new MutableClock(), 1);
+        var store = instrumented(new MutableClock(), 1);
         CountingMap map = observe(store);
         map.onPut = () -> Thread.currentThread().interrupt();
         try {
@@ -301,10 +301,11 @@ final class SamlPendingStoreCleanupTests {
     }
 
     private static @NonNull InMemoryPendingSamlAuthenticationStore seeded(@NonNull MutableClock clock, int count, int limit, @NonNull Instant expiry) {
-        var store = InMemoryPendingSamlAuthenticationStore.fromLimit(clock, limit);
+        var store = instrumented(clock, limit);
         for (int i = 0; i < count; i++) assertEquals(SamlPendingSaveResult.SAVED, save(store, "" + i, expiry));
         return store;
     }
+    private static @NonNull InMemoryPendingSamlAuthenticationStore instrumented(@NonNull Clock clock,int limit){return new InMemoryPendingSamlAuthenticationStore(clock,limit,new CountingMap(Map.of()));}
     private static @NonNull SamlPendingSaveResult save(@NonNull InMemoryPendingSamlAuthenticationStore store, @NonNull String handle, @NonNull Instant expiry) {
         return store.save("b", handle, handle, expiry, BUDGET);
     }
@@ -316,8 +317,7 @@ final class SamlPendingStoreCleanupTests {
     private static @NonNull CountingMap observe(@NonNull InMemoryPendingSamlAuthenticationStore store) throws Exception {
         Field field = InMemoryPendingSamlAuthenticationStore.class.getDeclaredField("entries");
         field.setAccessible(true);
-        CountingMap map = new CountingMap((Map<String, Object>) field.get(store));
-        field.set(store, map);
+        CountingMap map = (CountingMap)field.get(store);map.visits=0;map.removals=0;
         return map;
     }
     private static void assertCoherent(@NonNull InMemoryPendingSamlAuthenticationStore store, @NonNull CountingMap map) throws Exception {

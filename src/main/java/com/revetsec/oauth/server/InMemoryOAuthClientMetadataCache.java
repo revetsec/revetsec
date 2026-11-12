@@ -54,15 +54,28 @@ import javax.annotation.concurrent.ThreadSafe;
 @CheckReturnValue
 public final class InMemoryOAuthClientMetadataCache implements OAuthClientMetadataCache {
     private final int maximumEntries;
-    private final @NonNull ReentrantLock lock = new ReentrantLock();
+    private final @NonNull ReentrantLock lock;
     private final @NonNull
             ConcurrentLruMap<
                     @NonNull OAuthClientMetadataCacheKey, @NonNull OAuthClientMetadataCacheEntry>
             entries;
 
     private InMemoryOAuthClientMetadataCache(int maximumEntries) {
-        this.maximumEntries = maximumEntries;
-        this.entries = new ConcurrentLruMap<>(maximumEntries);
+        this(maximumEntries, new ReentrantLock(), new ConcurrentLruMap<>(maximumEntries));
+    }
+
+    InMemoryOAuthClientMetadataCache(
+            int maximumEntries,
+            @NonNull ReentrantLock lock,
+            @NonNull ConcurrentLruMap<
+                            @NonNull OAuthClientMetadataCacheKey,
+                            @NonNull OAuthClientMetadataCacheEntry>
+                    entries) {
+        this.maximumEntries = Limits.CIMD_MAXIMUM_CACHE_ENTRIES.require(maximumEntries);
+        this.lock = requireNonNull(lock);
+        this.entries = requireNonNull(entries);
+        if (entries.capacity() != this.maximumEntries)
+            throw new IllegalArgumentException("Cache storage capacity does not match its bound.");
     }
 
     /**

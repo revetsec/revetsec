@@ -48,12 +48,12 @@ final class SamlSessionReferenceSealResultTests {
     @TestFactory @NonNull Stream<@NonNull DynamicTest> exactConfiguredBoundAndOneByteOver() {
         return Stream.of(1024, 3800, 16384).flatMap(cap -> Stream.of(1, 64).map(keyLength ->
                 DynamicTest.dynamicTest("cap " + cap + "; key ID " + keyLength, () -> {
-                    StateSealer sealer = sealer(cap, "k".repeat(keyLength));
+                    StateSealer basis = sealer(cap, "k".repeat(keyLength));
                     // Independent v1 wire arithmetic; each cap is divisible by four.
                     int plaintextLength = cap / 4 * 3 - 54 - keyLength;
                     SamlSessionReference exact = atPlaintextLength(plaintextLength);
                     assertEquals(plaintextLength, exact.toSerializedForm().length());
-                    CountingRandom random = instrument(sealer, false);
+                    Instrumented instrumented = instrument(basis, false);StateSealer sealer=instrumented.sealer();CountingRandom random=instrumented.random();
                     SamlSessionReferenceSealResult.Succeeded success = assertInstanceOf(
                             SamlSessionReferenceSealResult.Succeeded.class,
                             assertDoesNotThrow(() -> exact.toSealedFormResult(sealer, CONTEXT, END)));
@@ -63,11 +63,11 @@ final class SamlSessionReferenceSealResultTests {
                     assertFalse(success.toString().contains(success.getSealedForm()));
                     assertTrue(success.toString().contains("<redacted>"));
                     SamlSessionReference over = atPlaintextLength(plaintextLength + 1);
-                    random = instrument(sealer, true);
+                    instrumented=instrument(basis,true);StateSealer failingSealer=instrumented.sealer();random=instrumented.random();
                     assertSame(SamlSessionReferenceSealResult.TooLarge.INSTANCE,
-                            assertDoesNotThrow(() -> over.toSealedFormResult(sealer, CONTEXT, END)));
+                            assertDoesNotThrow(() -> over.toSealedFormResult(failingSealer, CONTEXT, END)));
                     assertEquals(0, random.draws, "size refusal must precede entropy/provider work");
-                    assertThrows(IllegalArgumentException.class, () -> over.toSealedForm(sealer, CONTEXT, END),
+                    assertThrows(IllegalArgumentException.class, () -> over.toSealedForm(failingSealer, CONTEXT, END),
                             "the existing throwing convenience remains available");
                     assertEquals(0, random.draws);
                 })));
@@ -76,8 +76,7 @@ final class SamlSessionReferenceSealResultTests {
     @TestFactory @NonNull Stream<@NonNull DynamicTest> completeUnicodeProfileUsesTrustedStorageWhenItCannotBeSealed() {
         return Stream.of("ASCII", "BMP", "supplementary").map(alphabet -> DynamicTest.dynamicTest(alphabet, () -> {
             SamlSessionReference reference = SamlSessionReferenceBudgetTests.maximum(alphabet, Instant.MAX);
-            StateSealer sealer = sealer(16384, "largest-profile");
-            CountingRandom random = instrument(sealer, true);
+            Instrumented instrumented=instrument(sealer(16384,"largest-profile"),true);StateSealer sealer=instrumented.sealer();CountingRandom random=instrumented.random();
             assertSame(SamlSessionReferenceSealResult.TooLarge.INSTANCE,
                     assertDoesNotThrow(() -> reference.toSealedFormResult(sealer, CONTEXT, END)));
             assertEquals(0, random.draws);
@@ -88,8 +87,7 @@ final class SamlSessionReferenceSealResultTests {
     @Test void acceptedMaximumNameIdAloneCanExceedEvenTheLargestSeal() throws Exception {
         SamlSessionReference reference = new SamlSessionReference("connection", "idp",
                 new SamlNameId("\u20ac".repeat(4096), null, null, null), null, null);
-        StateSealer sealer = sealer(16384, "maximum-nameid");
-        CountingRandom random = instrument(sealer, true);
+        Instrumented instrumented=instrument(sealer(16384,"maximum-nameid"),true);StateSealer sealer=instrumented.sealer();CountingRandom random=instrumented.random();
         assertSame(SamlSessionReferenceSealResult.TooLarge.INSTANCE,
                 assertDoesNotThrow(() -> reference.toSealedFormResult(sealer, CONTEXT, END)));
         assertEquals(0, random.draws);
@@ -99,8 +97,7 @@ final class SamlSessionReferenceSealResultTests {
 
     @Test void providerFailureIsUnavailableWithoutProviderDetails() throws Exception {
         SamlSessionReference reference = small();
-        StateSealer sealer = sealer(3800, "provider-fault");
-        CountingRandom random = instrument(sealer, true);
+        Instrumented instrumented=instrument(sealer(3800,"provider-fault"),true);StateSealer sealer=instrumented.sealer();CountingRandom random=instrumented.random();
         SamlSessionReferenceSealResult result = assertDoesNotThrow(() -> reference.toSealedFormResult(sealer, CONTEXT, END));
         assertSame(SamlSessionReferenceSealResult.Unavailable.INSTANCE, result);
         assertEquals(1, random.draws);
@@ -146,8 +143,7 @@ final class SamlSessionReferenceSealResultTests {
     @SuppressWarnings("NullAway") // Required argument violations remain programmer errors, including oversized references.
     @Test void invalidArgumentsAreNotMisclassifiedAsTooLarge() throws Exception {
         SamlSessionReference reference = SamlSessionReferenceBudgetTests.maximum("BMP", Instant.MAX);
-        StateSealer sealer = sealer(1024, "bad-arguments");
-        CountingRandom random = instrument(sealer, true);
+        Instrumented instrumented=instrument(sealer(1024,"bad-arguments"),true);StateSealer sealer=instrumented.sealer();CountingRandom random=instrumented.random();
         assertThrows(NullPointerException.class, () -> reference.toSealedFormResult(null, CONTEXT, END));
         assertThrows(NullPointerException.class, () -> reference.toSealedFormResult(sealer, null, END));
         assertThrows(NullPointerException.class, () -> reference.toSealedFormResult(sealer, CONTEXT, null));
@@ -203,13 +199,16 @@ final class SamlSessionReferenceSealResultTests {
         throw new AssertionError("No legal envelope at length " + target);
     }
 
-    private static @NonNull CountingRandom instrument(@NonNull StateSealer sealer, boolean fail) throws Exception {
-        // Per-instance fault seam only; no global provider list or production SPI is modified.
-        Field entropy = StateSealer.class.getDeclaredField("entropySource"); entropy.setAccessible(true);
-        Object source = entropy.get(sealer);
-        Field random = source.getClass().getDeclaredField("secureRandom"); random.setAccessible(true);
-        CountingRandom replacement = new CountingRandom(fail); random.set(source, replacement); return replacement;
+    private record Instrumented(@NonNull StateSealer sealer,@NonNull CountingRandom random) { }
+    private static @NonNull Instrumented instrument(@NonNull StateSealer basis, boolean fail) throws Exception {
+        // Per-instance constructor seam only; no global provider list or production SPI is modified.
+        CountingRandom random=new CountingRandom(fail);Class<?> entropyType=Class.forName("com.revetsec.internal.crypto.EntropySource");
+        var entropyConstructor=entropyType.getDeclaredConstructor(SecureRandom.class);entropyConstructor.setAccessible(true);Object entropy=entropyConstructor.newInstance(random);
+        var constructor=java.util.Arrays.stream(StateSealer.class.getDeclaredConstructors()).filter(candidate->candidate.getParameterCount()==6).findFirst().orElseThrow();constructor.setAccessible(true);
+        Object[] arguments={field(basis,"activeKey"),field(basis,"keysByKeyId"),field(basis,"verificationKeyIds"),field(basis,"clock"),field(basis,"maximumSealedLength"),entropy};
+        return new Instrumented((StateSealer)constructor.newInstance(arguments),random);
     }
+    private static @NonNull Object field(@NonNull StateSealer sealer,@NonNull String name)throws Exception{Field field=StateSealer.class.getDeclaredField(name);field.setAccessible(true);return java.util.Objects.requireNonNull(field.get(sealer));}
     private static final class CountingRandom extends SecureRandom {
         private static final long serialVersionUID = 1L;
         private final boolean fail;

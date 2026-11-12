@@ -21,8 +21,8 @@ class AdapterSourceSelectionTests(unittest.TestCase):
   exec(compile(selected.read_text(),str(selected),'exec'),namespace)
   cls.selected=staticmethod(namespace['current_sources'])
   cls.java=Path(os.environ.get('SCP10_JAVA_HOME','/Users/agents/Java/amazon-corretto-21.jdk/Contents/Home'))/'bin/javac'
-  cls.core=Path(os.environ.get('SCP10_CORE_JAR',ROOT/'planning/records/security/cap-10-2026-11-05/artifacts/core.jar'))
-  expected=os.environ.get('SCP10_CORE_SHA256','8d307f157854f1960c260b254e54f684d9849b6da2e41856f0dd4779e629a9c5')
+  cls.core=Path(os.environ.get('SCP10_CORE_JAR',namespace['DEFAULT_CORE']))
+  expected=os.environ.get('SCP10_CORE_SHA256',namespace['DEFAULT_CORE_SHA256'])
   if hashlib.sha256(cls.core.read_bytes()).hexdigest()!=expected:raise AssertionError('Explicit current artifact mismatch')
   manifest=json.loads((ROOT/'planning/records/security/shared-clock-scp01-2026-10-29/ARTIFACT-PRESERVATION.json').read_text())
   cls.dependencies=[]
@@ -37,5 +37,19 @@ class AdapterSourceSelectionTests(unittest.TestCase):
   self.assertEqual(result.returncode,0,result.stdout+result.stderr)
  def test_default_shared_probe_has_complete_compile_dependencies(self):self.compile(False)
  def test_quota_shared_probe_has_complete_compile_dependencies(self):self.compile(True)
+ def test_core_without_hash_is_rejected_before_output_creation(self):
+  with tempfile.TemporaryDirectory(prefix='revetsec-adapter-arguments-') as directory:
+   output=Path(directory)/'output'
+   result=subprocess.run([sys.executable,str(HERE/'run_adapter_join.py'),'--output',str(output),'--java-home',str(self.java.parent.parent),'--core-jar',str(self.core)],capture_output=True,text=True,timeout=15)
+   self.assertEqual(result.returncode,2,result.stdout+result.stderr)
+   self.assertIn('--core-jar requires its explicit --core-sha256',result.stderr)
+   self.assertFalse(output.exists())
+ def test_hash_without_core_is_rejected_before_output_creation(self):
+  with tempfile.TemporaryDirectory(prefix='revetsec-adapter-arguments-') as directory:
+   output=Path(directory)/'output'
+   result=subprocess.run([sys.executable,str(HERE/'run_adapter_join.py'),'--output',str(output),'--java-home',str(self.java.parent.parent),'--core-sha256','0'*64],capture_output=True,text=True,timeout=15)
+   self.assertEqual(result.returncode,2,result.stdout+result.stderr)
+   self.assertIn('--core-sha256 requires --core-jar',result.stderr)
+   self.assertFalse(output.exists())
 
 if __name__=='__main__':unittest.main()

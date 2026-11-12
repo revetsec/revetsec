@@ -52,7 +52,7 @@ import static java.util.Objects.requireNonNull;
 @ThreadSafe
 public final class InMemoryPendingAuthorizationStore implements PendingAuthorizationStore {
 	private final @NonNull ReentrantLock lock = new ReentrantLock();
-	private final @NonNull Map<@NonNull Key, @NonNull Entry> entries = new HashMap<>();
+	private final @NonNull Map<@NonNull Key, @NonNull Entry> entries;
 	private final int maximumLiveEntries;
 	private final long maximumChargedBytes;
 	private final int maximumOpaqueRecordBytes;
@@ -61,6 +61,15 @@ public final class InMemoryPendingAuthorizationStore implements PendingAuthoriza
 	private @Nullable Instant lastObserved;
 
 	private InMemoryPendingAuthorizationStore(@NonNull Builder builder) {
+		this(builder, new HashMap<>());
+	}
+
+	@SuppressWarnings("unchecked")
+	InMemoryPendingAuthorizationStore(@NonNull Builder builder, @NonNull Map<@NonNull ?, @NonNull ?> entries) {
+		if (builder.maximumOpaqueRecordBytes > builder.maximumChargedBytes)
+			throw new IllegalArgumentException("One record limit must not exceed the total store byte limit.");
+		if (!entries.isEmpty()) throw new IllegalArgumentException("Initial pending-authorization storage must be empty.");
+		this.entries = (Map<@NonNull Key, @NonNull Entry>) entries;
 		this.maximumLiveEntries = builder.maximumLiveEntries;
 		this.maximumChargedBytes = builder.maximumChargedBytes;
 		this.maximumOpaqueRecordBytes = builder.maximumOpaqueRecordBytes;

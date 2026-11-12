@@ -26,7 +26,7 @@ import org.jspecify.annotations.Nullable;
 import java.time.Duration;
 import java.time.Instant;
 
-/** Explicit SC-API-08 test-only known-receipt faults. Impossible factory shapes use reflection, never production APIs. */
+/** Explicit SC-API-08 test-only known-receipt faults. Impossible factory shapes invoke private constructors, never production APIs. */
 public final class StoreReceiptMatrix {
  private StoreReceiptMatrix() { }
  public enum Case {
@@ -44,23 +44,29 @@ public final class StoreReceiptMatrix {
  }
  public static @NonNull Object apply(@NonNull Object receipt,@NonNull Case scenario,StoreTimeObservation.@NonNull Healthy validated,@NonNull StoreTemporalCondition condition){
   if(scenario==Case.POST_ACK_FACTORY_THROW){var unused = StoreCommitTiming.fromTimes(validated,at(validated,validated.getObservedAt().minusNanos(1),scenario));throw new AssertionError("Control factory must reject completion preceding validation");}
-  if(scenario==Case.MISSING_TIMING){corrupt(receipt,"timing",null);return receipt;}
-  if(scenario==Case.MISSING_VALIDATION){StoreCommitTiming timing=StoreCommitTiming.fromTimes(validated,null);Object known=withTiming(receipt,timing);corrupt(timing,"validatedTime",null);return known;}
+  if(scenario==Case.MISSING_TIMING)return withTiming(receipt,null,validated.getAdmission());
+  if(scenario==Case.MISSING_VALIDATION)return withTiming(receipt,timing(null,null),validated.getAdmission());
   Instant validationTime=switch(scenario){case VALIDATION_BELOW_FLOOR->condition.getNotBeforeInclusive().minusNanos(1);case VALIDATION_AT_UPPER->condition.getValidBeforeExclusive().orElseThrow();case VALIDATION_AFTER_UPPER->condition.getValidBeforeExclusive().orElseThrow().plusNanos(1);default->validated.getObservedAt();};
   StoreTimeObservation.Healthy candidate=at(validated,validationTime,scenario);StoreCommitTiming timing;
   if(scenario.name().startsWith("COMPLETION_")){
    Instant completionTime=switch(scenario){case COMPLETION_PLUS_NANO->validated.getObservedAt().plusNanos(1);case COMPLETION_REGRESSED->validated.getObservedAt().minusNanos(1);case COMPLETION_AT_UPPER->condition.getValidBeforeExclusive().orElseThrow();case COMPLETION_AFTER_UPPER->condition.getValidBeforeExclusive().orElseThrow().plusNanos(1);default->validated.getObservedAt();};
    StoreTimeObservation.Healthy completed=at(validated,completionTime,scenario);
    if(scenario==Case.COMPLETION_EQUAL||scenario==Case.COMPLETION_PLUS_NANO||scenario==Case.COMPLETION_AT_UPPER||scenario==Case.COMPLETION_AFTER_UPPER)timing=StoreCommitTiming.fromTimes(validated,completed);
-   else {timing=StoreCommitTiming.fromTimes(validated,null);Object known=withTiming(receipt,timing);corrupt(timing,"completedTime",completed);return known;}
+   else timing=timing(validated,completed);
   }else timing=StoreCommitTiming.fromTimes(candidate,null);
-  return withTiming(receipt,timing);
+  return withTiming(receipt,timing,validated.getAdmission());
  }
- private static @NonNull Object withTiming(@NonNull Object receipt,@NonNull StoreCommitTiming timing){
-  if(receipt instanceof com.revetsec.totp.TotpStoreCommitReceipt)return com.revetsec.totp.TotpStoreCommitReceipt.fromCommittedTiming(timing);
-  if(receipt instanceof com.revetsec.webauthn.WebAuthnStoreCommitReceipt)return com.revetsec.webauthn.WebAuthnStoreCommitReceipt.fromCommittedTiming(timing);
-  if(receipt instanceof com.revetsec.oauth.server.OAuthStoreCommitReceipt)return com.revetsec.oauth.server.OAuthStoreCommitReceipt.fromCommittedTiming(timing);
+ private static @NonNull Object withTiming(@NonNull Object receipt,@Nullable StoreCommitTiming timing,@Nullable StoreAdmission admission){
+  try{
+   if(receipt instanceof com.revetsec.totp.TotpStoreCommitReceipt){var constructor=receipt.getClass().getDeclaredConstructor(com.revetsec.totp.TotpStoreCommitResult.class,StoreCommitTiming.class);constructor.setAccessible(true);return constructor.newInstance(com.revetsec.totp.TotpStoreCommitResult.COMMITTED,timing);}
+   if(receipt instanceof com.revetsec.webauthn.WebAuthnStoreCommitReceipt){var constructor=receipt.getClass().getDeclaredConstructor(com.revetsec.webauthn.WebAuthnStoreCommitResult.class,StoreCommitTiming.class);constructor.setAccessible(true);return constructor.newInstance(com.revetsec.webauthn.WebAuthnStoreCommitResult.COMMITTED,timing);}
+   if(receipt instanceof com.revetsec.oauth.server.OAuthStoreCommitReceipt){var constructor=receipt.getClass().getDeclaredConstructor(com.revetsec.oauth.server.OAuthStoreCommitStatus.class,StoreAdmission.class,StoreCommitTiming.class);constructor.setAccessible(true);return constructor.newInstance(com.revetsec.oauth.server.OAuthStoreCommitStatus.COMMITTED,admission,timing);}
+  }catch(ReflectiveOperationException failure){throw new AssertionError("Receipt fixture constructor unavailable",failure);}
   throw new AssertionError("Unsupported receipt fixture kind");
+ }
+ private static @NonNull StoreCommitTiming timing(StoreTimeObservation.@Nullable Healthy validated,StoreTimeObservation.@Nullable Healthy completed){
+  try{var constructor=StoreCommitTiming.class.getDeclaredConstructor(StoreTimeObservation.Healthy.class,StoreTimeObservation.Healthy.class);constructor.setAccessible(true);return constructor.newInstance(validated,completed);}
+  catch(ReflectiveOperationException failure){throw new AssertionError("Timing fixture constructor unavailable",failure);}
  }
  private static StoreTimeObservation.@NonNull Healthy at(StoreTimeObservation.@NonNull Healthy basis,@NonNull Instant time,@NonNull Case scenario){
   String authority=basis.getAdmission().getAuthorityId(),recovery=basis.getAdmission().getRecoveryGeneration(),generation=basis.getClockGeneration();Duration error=basis.getMaximumUtcError();
@@ -71,11 +77,9 @@ public final class StoreReceiptMatrix {
   return StoreTimeObservation.Healthy.fromObservation(StoreAdmission.fromIdentifiers(authority,recovery),generation,time,error);
  }
  private static @NonNull String other(@NonNull String value){return value.equals("A".repeat(43))?"E".repeat(42)+"A":"A".repeat(43);}
- private static void corrupt(@NonNull Object target,@NonNull String name,@Nullable Object value){
-  try{var field=target.getClass().getDeclaredField(name);field.setAccessible(true);field.set(target,value);}catch(ReflectiveOperationException failure){throw new AssertionError("Receipt fixture field unavailable",failure);}
- }
-
  @SuppressWarnings({"NullAway","TypeParameterUnusedInFormals"}) public static <T> @NonNull T brokenNull(){return null;}
 
- public static void removeAdmission(com.revetsec.oauth.server.@NonNull OAuthStoreCommitReceipt receipt){corrupt(receipt,"admission",null);}
+ public static com.revetsec.oauth.server.@NonNull OAuthStoreCommitReceipt withoutAdmission(){
+  return (com.revetsec.oauth.server.OAuthStoreCommitReceipt)withTiming(com.revetsec.oauth.server.OAuthStoreCommitReceipt.unknownInstance(),null,null);
+ }
 }

@@ -141,11 +141,14 @@ public final class PasskeyApp {
             };
         };
         String namespace = "fresh-" + PasskeySessions.randomId();
-        WebAuthnRelyingParty relyingParty = WebAuthnRelyingParty.withRelyingPartyId(relyingPartyId)
+        WebAuthnRelyingParty.Builder relyingPartyBuilder = WebAuthnRelyingParty.withRelyingPartyId(relyingPartyId)
                 .relyingPartyName("Revetsec Passkey Demo").allowedOrigins(Set.of(origin))
                 .credentialNamespace(namespace)
                 .store(InMemoryWebAuthnStore.fromLimits(1024, 8_388_608))
-                .stateSealer(sealer).recoveryGate(freshProcessOnly).build();
+                .stateSealer(sealer).recoveryGate(freshProcessOnly);
+        var diagnostics = relyingPartyBuilder.configurationDiagnostics();
+        if (!diagnostics.isEmpty()) throw new IllegalStateException("Passkey builder configuration: " + diagnostics);
+        WebAuthnRelyingParty relyingParty = relyingPartyBuilder.build();
         return new Setup(Base64.getUrlDecoder().decode(PasskeySessions.randomId()), namespace, relyingParty,
                 freshProcessOnly, admissionOpen, "Single-process disposable account. Passkeys, sessions and "
                 + "sealing key disappear on restart.");

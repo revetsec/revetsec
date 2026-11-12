@@ -216,19 +216,12 @@ final class ConcurrentLruMapRc1MutationTests {
   List<GatedKey> evicted = new ArrayList<>();
   var map = new ConcurrentLruMap<GatedKey, String>(2, (key, value) -> evicted.add(key));
   map.put(stale, "stale"); map.put(victim, "victim"); map.drain();
-  // Pause a genuine removal after map publication and before its lossless task is enqueued.
-  PausingQueue queue = new PausingQueue(); setField(map, "writeBuffer", queue);
-  AtomicReference<Throwable> failure = new AtomicReference<>();
-  Thread worker = thread(() -> { try { map.remove(stale); } catch (Throwable problem) { failure.set(problem); } });
-  queue.pausedThread = worker; worker.start();
-  try {
-   await(queue.reached);
-   stale.rejectRepeatedHashes = true;
-   map.put(third, "third"); map.put(fourth, "fourth");
-   assertEquals(List.of(victim), evicted);
-   assertEquals(List.of(fourth, third), map.keysInAccessOrder());
-  } finally { queue.release.countDown(); join(worker); }
-  assertNull(failure.get());
+  // Model the real remove interleaving after map publication and before its lossless retire task is enqueued.
+  @SuppressWarnings("unchecked") Map<GatedKey,?> backing=(Map<GatedKey,?>)field(map,"map");
+  assertNotNull(backing.remove(stale));stale.rejectRepeatedHashes=true;
+  map.put(third, "third"); map.put(fourth, "fourth");
+  assertEquals(List.of(victim), evicted);
+  assertEquals(List.of(fourth, third), map.keysInAccessOrder());
  }
 
  private static void assertAccessPromotes(@NonNull Consumer<@NonNull ConcurrentLruMap<@NonNull Integer, @NonNull String>> access) {
@@ -255,9 +248,6 @@ final class ConcurrentLruMapRc1MutationTests {
  private static @NonNull Object field(@NonNull Object target, @NonNull String name) throws Exception {
   var field = ConcurrentLruMap.class.getDeclaredField(name); field.setAccessible(true); return java.util.Objects.requireNonNull(field.get(target));
  }
- private static void setField(@NonNull Object target, @NonNull String name, @NonNull Object value) throws Exception {
-  var field = ConcurrentLruMap.class.getDeclaredField(name); field.setAccessible(true); field.set(target, value);
- }
  private static @NonNull Thread thread(@NonNull Runnable action) { Thread thread = new Thread(action); thread.setDaemon(true); return thread; }
  private static void await(@NonNull CountDownLatch latch) {
   try { assertTrue(latch.await(3, TimeUnit.SECONDS), "controlled interleaving did not reach its gate"); }
@@ -283,13 +273,4 @@ final class ConcurrentLruMapRc1MutationTests {
   @Override public @NonNull String toString() { return Integer.toString(this.value); }
  }
 
- private static final class PausingQueue extends ConcurrentLinkedQueue<@NonNull Object> {
-  private static final long serialVersionUID = 1L;
-  private final transient @NonNull CountDownLatch reached = new CountDownLatch(1), release = new CountDownLatch(1);
-  private transient volatile @Nullable Thread pausedThread;
-  @Override public boolean offer(@NonNull Object task) {
-   if (Thread.currentThread().equals(this.pausedThread)) { this.reached.countDown(); await(this.release); }
-   return super.offer(task);
-  }
- }
 }

@@ -23,6 +23,11 @@ The application supplies users, login/session handling, CSRF defenses, permissio
 
 Use one shared `OAuthAuthorizationServer` per exact issuer and application store/key/admission/policy configuration. Configure its builder during application startup, not for each request. The builder snapshots values; repositories, stores, key providers, clocks and callbacks remain application-owned references and must satisfy their thread-safety and budget contracts. The issuer is an OAuth code issuer, not an OpenID Connect provider: it does not issue ID tokens or provide dynamic client registration or arbitrary grants.
 
+At startup, `OAuthAuthorizationServer.Builder.configurationDiagnostics()` can
+report missing and incompatible settings together as fixed codes. See
+[builder configuration diagnostics](builder-diagnostics.md). An empty result is
+a construction check, not permission to admit traffic or a provider-health test.
+
 The following construction example assumes application-supplied `clients`, `store`, `signingKeys`, `stateSealer`, `grantPolicy` and `workerClock`. It does not initialize the issuer or demonstrate a production backend:
 
 ```java

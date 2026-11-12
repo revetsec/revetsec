@@ -32,7 +32,6 @@ import java.util.stream.Stream;
 import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
 import java.io.ByteArrayOutputStream;
-import java.lang.reflect.Field;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.security.KeyPair;
@@ -262,8 +261,8 @@ final class WebAuthnSharedClockEngineTests {
         F f=new F();f.store.afterCommit=(n,w,r)->{var v=r.getTiming().orElseThrow().getValidatedTime();return WebAuthnStoreCommitReceipt.fromCommittedTiming(StoreCommitTiming.fromTimes(StoreTimeObservation.Healthy.fromObservation(v.getAdmission(),v.getClockGeneration(),v.getObservedAt(),Duration.ofMillis(1)),null));};
         assertEquals(WebAuthnEngine.Status.RECONCILIATION_REQUIRED,f.begin(HANDLE).status());assertEquals(1,f.store.reads.get());assertEquals(1,f.store.writes.size());
     }
-    @Test void malformedKnownCommitMissingRequiredTimingCannotBeRescued() throws Exception {
-        F f=new F();f.store.afterCommit=(n,w,r)->{try{Field field=WebAuthnStoreCommitReceipt.class.getDeclaredField("timing");field.setAccessible(true);field.set(r,null);}catch(ReflectiveOperationException e){throw new LinkageError(e.getMessage(),e);}return r;};
+    @Test void malformedKnownCommitMissingRequiredTimingCannotBeRescued() {
+        F f=new F();f.store.afterCommit=(n,w,r)->{var validated=r.getTiming().orElseThrow().getValidatedTime();return (WebAuthnStoreCommitReceipt)com.revetsec.testing.StoreReceiptMatrix.apply(r,com.revetsec.testing.StoreReceiptMatrix.Case.MISSING_TIMING,validated,w.getTemporalCondition());};
         assertEquals(WebAuthnEngine.Status.RECONCILIATION_REQUIRED,f.begin(HANDLE).status());assertEquals(1,f.store.reads.get());assertFalse(f.source.records().isEmpty());
     }
     @Test void finalReadCannotRegressBelowUsableCompletionTime() {

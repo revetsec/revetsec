@@ -17,6 +17,7 @@
 package com.revetsec.webauthn;
 
 import com.google.errorprone.annotations.CheckReturnValue;
+import com.revetsec.ConfigurationDiagnostic;
 import com.revetsec.OperationBinding;
 import com.revetsec.StateSealer;
 import com.revetsec.internal.encoding.Base64Url;
@@ -541,10 +542,26 @@ public final class WebAuthnRelyingParty {
         @NonNull Builder clockForTesting(@NonNull Clock clock) {
             this.clock = requireNonNull(clock); return this;
         }
+        /** Inspects only the current configuration shape. The immutable, ordered result contains
+         * fixed codes and no supplied values; it does not call application dependencies.
+         * @return every missing required setting, or an empty list
+         * @since 1.0.0 */
+        @CheckReturnValue public @NonNull List<@NonNull ConfigurationDiagnostic> configurationDiagnostics() {
+            List<ConfigurationDiagnostic> issues = new ArrayList<>(6);
+            if (this.relyingPartyName == null) issues.add(ConfigurationDiagnostic.WEBAUTHN_RELYING_PARTY_NAME_REQUIRED);
+            if (this.credentialNamespace == null) issues.add(ConfigurationDiagnostic.WEBAUTHN_CREDENTIAL_NAMESPACE_REQUIRED);
+            if (this.allowedOrigins == null) issues.add(ConfigurationDiagnostic.WEBAUTHN_ALLOWED_ORIGINS_REQUIRED);
+            if (this.store == null) issues.add(ConfigurationDiagnostic.WEBAUTHN_STORE_REQUIRED);
+            if (this.stateSealer == null) issues.add(ConfigurationDiagnostic.WEBAUTHN_STATE_SEALER_REQUIRED);
+            if (this.recoveryGate == null) issues.add(ConfigurationDiagnostic.WEBAUTHN_RECOVERY_GATE_REQUIRED);
+            return List.copyOf(issues);
+        }
         /** Builds the immutable RP without performing a store or gate callback.
          * @return configured relying party
          * @since 1.0.0 */
         @CheckReturnValue public @NonNull WebAuthnRelyingParty build() {
+            List<ConfigurationDiagnostic> issues = configurationDiagnostics();
+            if (!issues.isEmpty()) throw new NullPointerException(issues.get(0).getFieldCode());
             return new WebAuthnRelyingParty(this);
         }
         /** Redacts configuration.

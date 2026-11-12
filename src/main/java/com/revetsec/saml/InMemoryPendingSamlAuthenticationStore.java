@@ -46,7 +46,7 @@ import java.util.function.Predicate;
 public final class InMemoryPendingSamlAuthenticationStore implements PendingSamlAuthenticationStore {
     private static final int CLEANUP_BATCH = 64;
     private final @NonNull ReentrantLock lock = new ReentrantLock();
-    private final @NonNull Map<@NonNull String, @NonNull Entry> entries = new HashMap<>();
+    private final @NonNull Map<@NonNull String, @NonNull Entry> entries;
     private final @NonNull NavigableSet<@NonNull Entry> expirations = new TreeSet<>(
             Comparator.comparing(Entry::expiresAt).thenComparing(Entry::key));
     private final @NonNull Clock clock;
@@ -54,8 +54,17 @@ public final class InMemoryPendingSamlAuthenticationStore implements PendingSaml
     private @NonNull Instant lastObserved = Instant.MIN;
 
     private InMemoryPendingSamlAuthenticationStore(@NonNull Clock clock, int maximumEntries) {
+        this(clock,maximumEntries,new HashMap<>());
+    }
+
+    @SuppressWarnings("unchecked")
+    InMemoryPendingSamlAuthenticationStore(@NonNull Clock clock, int maximumEntries,
+            @NonNull Map<@NonNull String, ?> entries) {
         this.clock = clock;
         this.maximumEntries = maximumEntries;
+        Objects.requireNonNull(entries);
+        if (!entries.isEmpty()) throw new IllegalArgumentException("Initial SAML pending entries must be empty");
+        this.entries = (Map<@NonNull String,@NonNull Entry>)(Map<?,?>)entries;
     }
 
     /**

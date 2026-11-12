@@ -43,12 +43,7 @@ public final class StoreCommitTiming {
 
 	private StoreCommitTiming(StoreTimeObservation.@NonNull Healthy validatedTime,
 			StoreTimeObservation.@Nullable Healthy completedTime) {
-		this.validatedTime = requireNonNull(validatedTime);
-		if (completedTime != null) {
-			if (!StoreTimeRules.sameProfile(validatedTime, completedTime)
-					|| completedTime.getObservedAt().isBefore(validatedTime.getObservedAt()))
-				throw new IllegalArgumentException("Inconsistent store commit timing.");
-		}
+		this.validatedTime = validatedTime;
 		this.completedTime = completedTime;
 	}
 
@@ -66,6 +61,10 @@ public final class StoreCommitTiming {
 	 */
 	public static @NonNull StoreCommitTiming fromTimes(StoreTimeObservation.@NonNull Healthy validatedTime,
 			StoreTimeObservation.@Nullable Healthy completedTime) {
+		requireNonNull(validatedTime);
+		if (completedTime != null && (!StoreTimeRules.sameProfile(validatedTime, completedTime)
+				|| completedTime.getObservedAt().isBefore(validatedTime.getObservedAt())))
+			throw new IllegalArgumentException("Inconsistent store commit timing.");
 		return new StoreCommitTiming(validatedTime, completedTime);
 	}
 

@@ -34,7 +34,6 @@ import java.util.function.Consumer;
 import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
 import java.io.IOException;
-import java.lang.reflect.Field;
 import java.security.GeneralSecurityException;
 import java.time.Clock;
 import java.time.Duration;
@@ -60,8 +59,9 @@ final class TotpSharedClockReceiptTests {
 		F f = new F();
 		f.store.after = (number, write, receipt) -> {
 			// Public factories forbid this shape; deliberately simulate a malformed backend reply.
-			corrupt(receipt, "timing", null);
-			return receipt;
+			var validated=receipt.getTiming().orElseThrow().getValidatedTime();
+			return (TotpStoreCommitReceipt)com.revetsec.testing.StoreReceiptMatrix.apply(receipt,
+					com.revetsec.testing.StoreReceiptMatrix.Case.MISSING_TIMING,validated,write.getTemporalCondition());
 		};
 		assertInstanceOf(TotpEnrollmentRequestResult.ReconciliationRequired.class, f.begin());
 		assertEquals(1, f.store.writes.size());
@@ -92,10 +92,10 @@ final class TotpSharedClockReceiptTests {
 	@Test void malformedRegressedCompletionPreservesKnownCommit() {
 		F f = new F();
 		f.store.after = (number, write, receipt) -> {
-			StoreCommitTiming timing = receipt.getTiming().orElseThrow();
+			StoreTimeObservation.Healthy validated=receipt.getTiming().orElseThrow().getValidatedTime();
 			// StoreCommitTiming rejects this through its public factory.
-			corrupt(timing, "completedTime", at(write, BASE.minusNanos(1)));
-			return receipt;
+			return (TotpStoreCommitReceipt)com.revetsec.testing.StoreReceiptMatrix.apply(receipt,
+					com.revetsec.testing.StoreReceiptMatrix.Case.COMPLETION_REGRESSED,validated,write.getTemporalCondition());
 		};
 		assertInstanceOf(TotpEnrollmentRequestResult.ReconciliationRequired.class, f.begin());
 		assertEquals(1, f.store.writes.size());
@@ -427,11 +427,6 @@ final class TotpSharedClockReceiptTests {
 		try { return TotpPrimitives.matchingStep(secret, code, step, used); }
 		catch (GeneralSecurityException failure) { throw new AssertionError(failure); }
 	}
-	private static void corrupt(@NonNull Object target, @NonNull String name, @Nullable Object value) {
-		try { Field field = target.getClass().getDeclaredField(name); field.setAccessible(true); field.set(target, value); }
-		catch (ReflectiveOperationException failure) { throw new AssertionError(failure); }
-	}
-
 	@FunctionalInterface private interface Before { @Nullable TotpStoreCommitReceipt apply(int number, @NonNull TotpStoreWrite write); }
 	@FunctionalInterface private interface After { @NonNull TotpStoreCommitReceipt apply(int number, @NonNull TotpStoreWrite write, @NonNull TotpStoreCommitReceipt receipt); }
 	@NotThreadSafe private static final class RecordingStore implements TotpStore {

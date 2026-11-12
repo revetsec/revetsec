@@ -34,7 +34,7 @@ class WebAuthnCapacityTests(unittest.TestCase):
  def setUpClass(cls):
   cls.work=Path(tempfile.mkdtemp(prefix='revetsec-cap07-codec-'));cls.addClassCleanup(shutil.rmtree,cls.work,ignore_errors=True)
   cls.config={**synthetic_config(),'webauthnCapacityCorpus':1,'webauthnMaximumSealedLength':3800}
-  cls.client=CodecClient(cls.work,os.environ.get('SCP10_JAVA_HOME','/Users/agents/Java/amazon-corretto-21.jdk/Contents/Home'),os.environ.get('SCP10_CORE_JAR',ROOT/'planning/records/security/cap-06-2026-11-05/artifacts/core.jar'),ROOT/'planning/records/security/shared-clock-scp01-2026-10-29/baseline/built-core/revetsec-1.0.0-SNAPSHOT.jar',os.environ.get('SCP10_REPOSITORY','/private/tmp/revetsec-mig-06-2026-11-04/repository'),expected_core_sha256=os.environ.get('SCP10_CORE_SHA256','8d307f157854f1960c260b254e54f684d9849b6da2e41856f0dd4779e629a9c5'))
+  cls.client=CodecClient(cls.work,os.environ.get('SCP10_JAVA_HOME','/Users/agents/Java/amazon-corretto-21.jdk/Contents/Home'),os.environ.get('SCP10_CORE_JAR',ROOT/'planning/records/security/cap-06-2026-11-05/artifacts/core.jar'),ROOT/'planning/records/security/shared-clock-scp01-2026-10-29/baseline/built-core/revetsec-1.0.0-SNAPSHOT.jar',os.environ.get('SCP10_REPOSITORY','/Users/agents/.m2/repository'),expected_core_sha256=os.environ.get('SCP10_CORE_SHA256','8d307f157854f1960c260b254e54f684d9849b6da2e41856f0dd4779e629a9c5'))
   cls.all_rows=cls.client.fixtures(cls.config);cls.rows=[r for r in cls.all_rows if r['family']=='WEBAUTHN'];cls.controls={}
   for capacity in [1024,1026,3800,16384]:
    for key_length in [1,64]:

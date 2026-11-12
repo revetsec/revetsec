@@ -52,7 +52,7 @@ final class OAuthClientMetadataCacheCapacityContractTests {
   @Override public @NonNull List<@NonNull OAuthClientMetadataCacheKey> keysInAccessOrder(){checked();return super.keysInAccessOrder();}
  }
  private record F(@NonNull InMemoryOAuthClientMetadataCache cache,@NonNull CheckingMap map){}
- private static @NonNull F fixture(int limit) throws Exception {var cache=InMemoryOAuthClientMetadataCache.fromMaximumEntries(limit);var map=new CheckingMap(limit,cache.lockForTests());var field=InMemoryOAuthClientMetadataCache.class.getDeclaredField("entries");field.setAccessible(true);field.set(cache,map);return new F(cache,map);}
+ private static @NonNull F fixture(int limit) throws Exception {var lock=new ReentrantLock();var map=new CheckingMap(limit,lock);var cache=new InMemoryOAuthClientMetadataCache(limit,lock,map);return new F(cache,map);}
  private static void bounded(@NonNull F f){var lock=f.cache().lockForTests();lock.lock();try{assertTrue(f.map().size()<=f.cache().getMaximumEntries());assertEquals(0,f.map().pending.get());}finally{lock.unlock();}}
  @TestFactory @NonNull Stream<@NonNull DynamicTest> everyPublicationAndMutationRetainsTheConfiguredEntryBound(){return Stream.of(1,2,16,128,4096).flatMap(limit->Stream.of(1,16384).map(length->DynamicTest.dynamicTest("capacity="+limit+" envelope="+length,()->{
   F f=fixture(limit);String body="A".repeat(length);

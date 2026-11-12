@@ -798,7 +798,7 @@ public final class HttpExchange {
 		private final int limit;
 		private final long contentLength;
 		@NonNull
-		private final CompletableFuture<Void> body = new CompletableFuture<>();
+		private final CompletableFuture<Void> body;
 		@NonNull
 		private final ReentrantLock lock = new ReentrantLock();
 
@@ -818,12 +818,23 @@ public final class HttpExchange {
 															@Nullable MediaType mediaType,
 															int limit,
 															long contentLength) {
+			this(sink,status,headers,mediaType,limit,contentLength,new CompletableFuture<>());
+		}
+
+		private BoundedSubscriber(@NonNull Sink sink,
+				int status,
+				@NonNull HttpHeaders headers,
+				@Nullable MediaType mediaType,
+				int limit,
+				long contentLength,
+				@NonNull CompletableFuture<@NonNull Void> body) {
 			this.sink = sink;
 			this.status = status;
 			this.headers = headers;
 			this.mediaType = mediaType;
 			this.limit = limit;
 			this.contentLength = contentLength;
+			this.body = requireNonNull(body);
 		}
 
 		@Override

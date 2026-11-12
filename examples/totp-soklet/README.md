@@ -9,13 +9,15 @@ This is an injected integration, not a login server. There is deliberately no la
 ## Configure and initialize
 
 ```java
-TotpAuthenticator totp = TotpAuthenticator.withIssuer("Example")
+TotpAuthenticator.Builder builder = TotpAuthenticator.withIssuer("Example")
     .credentialNamespace("production-accounts")
     .recoveryEpoch(deploymentRecoveryEpoch)
     .store(applicationTotpStore)
     .stateSealer(applicationStateSealer)
-    .recoveryGate(applicationRecoveryGate)
-    .build();
+    .recoveryGate(applicationRecoveryGate);
+var diagnostics = builder.configurationDiagnostics();
+if (!diagnostics.isEmpty()) throw new IllegalStateException("TOTP builder configuration: " + diagnostics);
+TotpAuthenticator totp = builder.build();
 
 // Provisioning controller only: handle the explicit initialization outcome
 // before admitting ordinary requests. Existing nodes do not initialize on absence.

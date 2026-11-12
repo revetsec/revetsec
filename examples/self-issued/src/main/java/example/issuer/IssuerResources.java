@@ -88,7 +88,7 @@ public final class IssuerResources {
                 .authorizationCodePermitted(false).authentication(confidential).introspectionResources(resources.keySet())
                 .configurationVersion("demo-v1").build();
         Map<String,OAuthServerClientRegistration> clients=Map.of("demo-public",publicClient,"demo-confidential",privateClient,"resource-client",resourceClient);
-        this.server=OAuthAuthorizationServer.withIssuer(config.origin.toString())
+        OAuthAuthorizationServer.Builder serverBuilder=OAuthAuthorizationServer.withIssuer(config.origin.toString())
                 .authorizationEndpoint(config.origin.resolve("/authorize")).tokenEndpoint(config.origin.resolve("/token"))
                 .jwksEndpoint(config.origin.resolve("/jwks")).revocationEndpoint(config.origin.resolve("/revoke"))
                 .introspectionEndpoint(config.origin.resolve("/introspect"))
@@ -99,7 +99,10 @@ public final class IssuerResources {
                                 .refreshTokenPermitted(context.isRefreshTokenPermitted()).build()
                         : OAuthAuthorizationDecision.deniedInstance())
                 .clientMetadataPolicy(config.metadataPolicy).clock(clock).clockSkew(Duration.ZERO).publicMetadataHttpCacheMaxAge(Duration.ZERO).accessTokenLifetime(Duration.ofMinutes(2)).refreshTokensEnabled(true)
-                .allowInsecureLoopback(config.loopback).allowNativeLoopbackRedirects(true).build();
+                .allowInsecureLoopback(config.loopback).allowNativeLoopbackRedirects(true);
+        var diagnostics=serverBuilder.configurationDiagnostics();
+        if(!diagnostics.isEmpty()) throw new IllegalStateException("Issuer builder configuration: "+diagnostics);
+        this.server=serverBuilder.build();
         if(startupMode==StartupMode.FRESH) {
             if(server.initializeFreshIssuer().getStatus()!=OAuthStoreCommitStatus.COMMITTED) throw new IllegalStateException("Fresh demo store initialization failed.");
             server.establishNewSubject(IssuerConfig.SUBJECT);

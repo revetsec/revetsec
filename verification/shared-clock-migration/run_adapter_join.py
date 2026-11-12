@@ -35,7 +35,9 @@ from witness_storage import DirectoryOwner as WitnessOwner,ManifestStore,PROFILE
 
 IMAGE='sha256:3a82e1f56c8f0f5616a11103ac3d47e632c3938698946a7ad26da0df1334744a'
 OLD=ROOT/'planning/records/security/shared-clock-scp01-2026-10-29'
-CORE=ROOT/'planning/records/security/shared-clock-scp09-2026-10-30/candidate/core/revetsec-1.0.0-SNAPSHOT.jar'
+DEFAULT_CORE=ROOT/'planning/records/security/remaining-work-2026-11-05/performance42/core.jar'
+DEFAULT_CORE_SHA256='3cd4a04dfb397d4cba7cedb0c78bbc576ea05ad1ab510625add86dfb89bcf11d'
+CORE=DEFAULT_CORE
 CURRENT=ROOT/'revetsec/examples/postgresql-pending-store'
 def sha(p):return hashlib.sha256(Path(p).read_bytes()).hexdigest()
 def execute(command,*,data=None,env=None,timeout=60):return subprocess.run(command,input=data,capture_output=True,text=True,env=env,timeout=timeout)
@@ -45,7 +47,7 @@ def schema_config(config):return {key:config[key] for key in ['clockGeneration',
 def current_sources(current_java, *, quota_allocation=False):
  # The shared probe has typed CAP09 references even when that workload is disabled.
  # Workload flags select execution; required compile dependencies remain unconditional.
- sources=[*sorted(current_java.glob('*Pg*.java')),*[current_java/name for name in ['PostgresqlTotpStore.java','PostgresqlWebAuthnStore.java','PostgresqlIssuerStore.java','PostgresqlPyranidDataSource.java']],HERE/'java/example/migration/CodecSupport.java',HERE/'native/example/pending/AdapterJoinProbe.java',HERE/'native/com/revetsec/webauthn/AdapterJoinWorker.java',HERE/'native/verification/migration/AdapterPgBatch.java',HERE/'native/example/pending/Cap09ContentionChecks.java']
+ sources=[*sorted(current_java.glob('*Pg*.java')),*[current_java/name for name in ['PostgresqlTotpStore.java','PostgresqlWebAuthnStore.java','PostgresqlIssuerStore.java','PostgresqlPyranidDataSource.java']],HERE/'java/example/migration/CodecSupport.java',HERE/'native/example/pending/AdapterJoinProbe.java',HERE/'native/com/revetsec/webauthn/AdapterJoinWorker.java',HERE/'native/verification/migration/AdapterPgBatch.java',HERE/'native/example/pending/Cap09ContentionChecks.java',HERE/'native/example/pending/ScBound04LockOrderChecks.java',HERE/'native/example/pending/ScBound04AdapterChecks.java']
  if quota_allocation:sources.append(HERE/'native/example/pending/Cap08CapacityChecks.java')
  return sources
 
@@ -55,6 +57,9 @@ def main():
  if args.core_jar is not None:
   if args.core_sha256 is None:parser.error('--core-jar requires its explicit --core-sha256')
   CORE=args.core_jar.resolve()
+ elif args.core_sha256 is not None:parser.error('--core-sha256 requires --core-jar')
+ selected_core_sha256=args.core_sha256 or DEFAULT_CORE_SHA256
+ if sha(CORE)!=selected_core_sha256:raise RuntimeError('Selected current core artifact mismatch')
  out=args.output.resolve();out.mkdir(parents=True,exist_ok=False)
  result={'status':'RUNNING','checks':[],'image':IMAGE,'java_home':str(args.java_home),'coreJarSha256':sha(CORE),'oldCoreJarSha256':sha(OLD/'baseline/built-core/revetsec-1.0.0-SNAPSHOT.jar'),'qualified':False,'qualification':{'approvedUtcQualified':False,'witnessOwnerDeploymentQualified':False,'platformDurabilityQualified':False,'actualDeploymentMigration':False,'qualifiedSharedProfile':False},'cleanup':{}}
  def save():(out/'RESULT.json').write_text(json.dumps(result,indent=2)+'\n')
@@ -119,7 +124,7 @@ def main():
   for label,selected,classpath in [('legacy',oldsources,oldcp),('current',sources,currentcp)]:
    source_file=runtime/(label+'-audit.sources');source_file.write_text('\n'.join(map(str,selected))+'\n');classpath_file=runtime/(label+'-audit.classpath');classpath_file.write_text(classpath);audit_output=out/(label+'-nullability.json')
    p=execute([str(args.java_home/'bin/java'),'-cp',currentcp,'NullabilityAudit',str(source_file),str(classpath_file),str(audit_output)]);audit=json.loads(audit_output.read_text()) if audit_output.exists() else {};check(label+'-all-compiled-source-signature-nullability',p.returncode==0 and not audit.get('missing',[1]) and not audit.get('attribution_errors',[1]));result[label+'Nullability']=audit
-  client=CodecClient(runtime/'codec',args.java_home,CORE,oldjar,args.repository,expected_core_sha256=args.core_sha256);config=synthetic_config();config.update(minimumSeconds=int(time.time())+3600,minimumNanos=123456001,ceremonyExpiresNanos=123456001,clockGeneration=commitment('adapter/clock'),allocationGeneration=commitment('adapter/allocation'),maximumUtcErrorNanos=250000000)
+  client=CodecClient(runtime/'codec',args.java_home,CORE,oldjar,args.repository,expected_core_sha256=selected_core_sha256);config=synthetic_config();config.update(minimumSeconds=int(time.time())+3600,minimumNanos=123456001,ceremonyExpiresNanos=123456001,clockGeneration=commitment('adapter/clock'),allocationGeneration=commitment('adapter/allocation'),maximumUtcErrorNanos=250000000)
   if args.retention_maintenance:config['retainedCodeBaseSeconds']=config['minimumSeconds']-10
   if args.totp_capacity:config['totpCapacityCorpus']=1
   if args.webauthn_capacity:config.update(webauthnCapacityCorpus=1,webauthnMaximumSealedLength=3800)
@@ -613,6 +618,8 @@ def main():
    selected={**cfg,'keys':{**cfg['keys'],runtime_key_id:base64.b64encode(bytes(range(32,64))).decode()},'activeKeyId':runtime_key_id}
    before=closed_audit(selected);originals={identity(d['source']):d for d in before};namespace_before=[sql("SELECT row_to_json(n)::text FROM "+family.lower()+"_store_namespace n;") for family in sorted(FORMATS)]
    ran=probe('capacity-contention','CAP09-current-adapter-bucket-contention');after=closed_audit(selected)
+   lock_order=[line for line in ran.stdout.splitlines() if line.startswith('PASS SC-BOUND-04/')]
+   check('SC-BOUND-04/all-family-multiprocess-adapter-and-lock-order-profile',len(lock_order)==63 and all(sum(line.startswith('PASS SC-BOUND-04/'+family+'/') for line in lock_order)==21 for family in FORMATS))
    check('CAP09/adapter/all-original-retained-facts-floors-retention-survive',all(d['sourceSemanticCommitment']==originals[identity(d['source'])]['sourceSemanticCommitment'] and d['floor']==originals[identity(d['source'])]['floor'] and d['retention']==originals[identity(d['source'])]['retention'] for d in after if identity(d['source']) in originals) and len([d for d in after if identity(d['source']) in originals])==len(originals))
    check('CAP09/adapter/all-new-genuine-account-records-independently-authenticate',len(after)>len(before) and all(d['classification']=='FIT' for d in after))
    check('CAP09/adapter/no-namespace-capacity-metadata-write',namespace_before==[sql("SELECT row_to_json(n)::text FROM "+family.lower()+"_store_namespace n;") for family in sorted(FORMATS)])
@@ -622,7 +629,7 @@ def main():
      b=int(hashlib.sha256(d['source']['key'].encode('ascii')).hexdigest()[:2],16);used[b]+=1;reserved[b]+=d['reservationBytes'] if family=='TOTP' else 0
     actual=json.loads(sql("SELECT jsonb_agg(jsonb_build_object('bucket',bucket,'entries',used_entries,'bytes',used_bytes) ORDER BY bucket) FROM "+family.lower()+'_store_escrow;'))
     check('CAP09/adapter/'+family+'-all-256-counters-match-authenticated-retained-inventory',actual==[{'bucket':i,'entries':used[i],'bytes':reserved[i]} for i in range(256)])
-   result['capacityContention']={'sourceRows':source_count,'newOuterChecks':7,'nativeAssertions':sum(line.startswith('PASS CAP09/') for line in ran.stdout.splitlines()),'roundsPerFamily':2,'entryCap':513,'totpByteCap':512003,'allFamilyCollision':True,'totpByteStranding':True,'qualified':False,'scope':'Genuine public engine-generated transactions; explicit native bucket/namespace row holders, exact wait observation and before-release commits. Scripted witness; no latency SLO/full deployment profile.'}
+   result['capacityContention']={'sourceRows':source_count,'newOuterChecks':8,'nativeAssertions':sum(line.startswith('PASS CAP09/') for line in ran.stdout.splitlines()),'scBound04Assertions':len(lock_order),'crossJvmAdapterSqlTraces':sum(line.startswith('SC_BOUND04_SQL ') for line in ran.stdout.splitlines()),'roundsPerFamily':2,'entryCap':513,'totpByteCap':512003,'allFamilyCollision':True,'totpByteStranding':True,'qualified':False,'scope':'Genuine public engine-generated transactions; explicit native bucket/namespace row holders, exact wait observation and before-release commits. Scripted witness; no latency SLO/full deployment profile.'}
   check('runtime/installer-immutable-guard-after-mutations',installer.runtime_guard(Migration.context(journal.read(),deadline())))
   check('runtime/genuine-mutations-do-not-invalidate-static-admission',fast_sql(static_query[0])=='t' and backend.sequence()['lastValue']>=plan['targetSequence']['lastValue'])
   held=subprocess.Popen([str(args.java_home/'bin/java'),'-cp',currentcp,'example.pending.AdapterJoinProbe',str(probe_config()),'hold-status'],env=environment(runtime_role,runtime_password),stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True);processes.append(held);check('restore/public-service-permit-held',held.stdout.readline().strip()=='READY HELD_PUBLIC_STATUS')

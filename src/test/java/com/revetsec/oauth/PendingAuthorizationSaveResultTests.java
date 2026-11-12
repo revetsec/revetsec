@@ -26,6 +26,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.HashMap;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
@@ -119,21 +120,26 @@ final class PendingAuthorizationSaveResultTests {
 		}
 	}
 
-	@Test void interruptionAfterInMemoryMutationIsIndeterminateAndDoesNotLoseTheRecord() throws Exception {
-		InMemoryPendingAuthorizationStore store = InMemoryPendingAuthorizationStore.builder().clock(Clock.fixed(NOW, ZoneOffset.UTC)).build();
-		var entries = InMemoryPendingAuthorizationStore.class.getDeclaredField("entries"); entries.setAccessible(true);
-		entries.set(store, new HashMap<@NonNull Object, @NonNull Object>() {
+	@Test void interruptionAfterInMemoryMutationIsIndeterminateAndDoesNotLoseTheRecord() {
+		var entries = new HashMap<@NonNull Object, @NonNull Object>() {
 			private static final long serialVersionUID = 1L;
 			@Override public @Nullable Object put(@NonNull Object key, @NonNull Object value) {
 				Object previous = super.put(key, value); Thread.currentThread().interrupt(); return previous;
 			}
-		});
+		};
+		InMemoryPendingAuthorizationStore store = new InMemoryPendingAuthorizationStore(
+				InMemoryPendingAuthorizationStore.builder().clock(Clock.fixed(NOW, ZoneOffset.UTC)), entries);
 		try {
 			assertEquals(PendingAuthorizationSaveResult.INDETERMINATE,
 					store.save("binding", "state", "TEST-ONLY-record", NOW.plusSeconds(60)));
 			assertTrue(Thread.currentThread().isInterrupted());
 		} finally { Thread.interrupted(); }
 		assertEquals("TEST-ONLY-record", store.consume("binding", "state").orElseThrow());
+	}
+
+	@Test void injectedInMemoryStorageMustStartEmpty() {
+		assertThrows(IllegalArgumentException.class, () -> new InMemoryPendingAuthorizationStore(
+				InMemoryPendingAuthorizationStore.builder(), Map.of("unexpected", "entry")));
 	}
 
 	@SuppressWarnings("NullAway") // Deliberate required-argument misuse.

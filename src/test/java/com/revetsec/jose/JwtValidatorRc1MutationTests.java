@@ -45,12 +45,13 @@ final class JwtValidatorRc1MutationTests {
   Assertions.assertEquals(JoseException.Reason.ALGORITHM_NOT_ALLOWED,failure.getReason());Assertions.assertSame(failure,observer.exception);Assertions.assertEquals(0,observer.success);Assertions.assertEquals(1,observer.failure);measured(observer.elapsed);
  }
  @Test void unexpectedStaticSelectionFailureMapsToUnknownKey()throws Exception{
-  StaticJwksSource source=JwtFixtures.source(TestJwk.Fixture.IDP_SIGNING_RSA_2048);
-  var field=Jwks.class.getDeclaredField("verificationKeys");field.setAccessible(true);
-  field.set(source.getJwks(),new java.util.AbstractList<VerificationKey>(){
+  StaticJwksSource original=JwtFixtures.source(TestJwk.Fixture.IDP_SIGNING_RSA_2048);
+  var constructor=Jwks.class.getDeclaredConstructor(java.util.List.class,java.util.List.class);constructor.setAccessible(true);
+  Jwks jwks=constructor.newInstance(original.getJwks().getKeys(),new java.util.AbstractList<VerificationKey>(){
    @Override public @NonNull VerificationKey get(int index){throw new IllegalStateException("controlled selector fault");}
    @Override public int size(){return 1;}
   });
+  StaticJwksSource source=StaticJwksSource.fromJwks(jwks);
   JwtValidator validator=JwtFixtures.validator(source).build();
   JoseException failure=Assertions.assertThrows(JoseException.class,()->JwtValidationAccess.get().validatePrepared(validator,prepared(JwtFixtures.signed(TestJwk.Fixture.IDP_SIGNING_RSA_2048,TestJws.Algorithm.RS256)),()->1_000_000_000L));
   Assertions.assertEquals(JoseException.Reason.UNKNOWN_KEY,failure.getReason());

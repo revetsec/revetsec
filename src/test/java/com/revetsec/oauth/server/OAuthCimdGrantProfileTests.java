@@ -135,13 +135,9 @@ final class OAuthCimdGrantProfileTests {
      .jwksEndpoint(URI.create(ISSUER+"/jwks")).revocationEndpoint(URI.create(ISSUER+"/revoke")).clientRepository((client,budget)->Optional.empty())
      .store(store).stateSealer(sealer()).signingKeys(OAuthIssuerKeyProvider.fromSnapshot(keys)).resources(RESOURCES).clock(CLOCK).refreshTokensEnabled(serverRefresh)
      .allowNativeLoopbackRedirects(true)
-     .clientMetadataPolicy(policy()).grantPolicy((context,budget)->decision(context.isRefreshTokenPermitted()&&approvalRefresh)).build();
-   var clientsField=OAuthAuthorizationServer.class.getDeclaredField("clients");clientsField.setAccessible(true);
-   var metadataField=OAuthServerClientSelection.class.getDeclaredField("metadata");metadataField.setAccessible(true);
-   var fetcher=requireNonNull(metadataField.get(requireNonNull(clientsField.get(server))));
-   var transportField=OAuthClientMetadataFetcher.class.getDeclaredField("transport");transportField.setAccessible(true);
-   // The production constructor still owns its pinned transport; this replacement is test-only.
-   transportField.set(fetcher,(OAuthClientMetadataFetcher.Transport)(uri,budget)->{assertEquals(URI.create(id),uri);fetches.incrementAndGet();return new RawResponse(200,HttpHeaders.of(Map.of("Cache-Control",List.of("max-age=60")),(a,b)->true),body,null,false,Duration.ZERO);});
+     .clientMetadataPolicy(policy()).clientMetadataTransport((uri,budget)->{assertEquals(URI.create(id),uri);fetches.incrementAndGet();
+      return new RawResponse(200,HttpHeaders.of(Map.of("Cache-Control",List.of("max-age=60")),(a,b)->true),body,null,false,Duration.ZERO);})
+     .grantPolicy((context,budget)->decision(context.isRefreshTokenPermitted()&&approvalRefresh)).build();
    assertEquals(OAuthStoreCommitStatus.COMMITTED,server.initializeFreshIssuer().getStatus());server.establishNewSubject("subject");
   }
   @NonNull OAuthAuthorizationResult begin(@NonNull String redirect,@NonNull String challenge){return server.beginAuthorizationResult("GET",form(Map.of("client_id",id,"response_type","code","redirect_uri",redirect,"resource",RESOURCE,"code_challenge_method","S256","code_challenge",challenge)),new byte[0],Map.of(),BROWSER);}

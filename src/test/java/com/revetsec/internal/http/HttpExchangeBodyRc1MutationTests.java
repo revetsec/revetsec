@@ -114,19 +114,21 @@ final class HttpExchangeBodyRc1MutationTests {
   assertSame(failure,field(outcome(fixture).get(2,TimeUnit.SECONDS),"failure"));assertArrayEquals(new byte[4],buffer(fixture));assertEquals(1,subscription.cancels);assertBodyFailed(fixture);assertLockReleased(fixture);
  }
  @Test void aPrivateBodyFutureCompletionFaultStillErasesDataAndFailsTheBody() throws Exception {
-  Fixture fixture=fixture(200,4,2,4);fixture.subscriber().onSubscribe(new RecordingSubscription());fixture.subscriber().onNext(List.of(ByteBuffer.wrap(new byte[]{121,122,123,124})));
-  byte[] retained=buffer(fixture);assertArrayEquals(new byte[]{121,122,123,124},retained);
   // The stock CompletableFuture does not expose this fault through wire input; this is a private dependency probe.
-  ThrowingCompleteFuture body=new ThrowingCompleteFuture();setField(fixture.subscriber(),"body",body);
+  ThrowingCompleteFuture body=new ThrowingCompleteFuture();Fixture fixture=fixture(200,4,2,4,body);fixture.subscriber().onSubscribe(new RecordingSubscription());fixture.subscriber().onNext(List.of(ByteBuffer.wrap(new byte[]{121,122,123,124})));byte[] retained=buffer(fixture);assertArrayEquals(new byte[]{121,122,123,124},retained);
   assertDoesNotThrow(()->fixture.subscriber().onComplete());assertEquals(1,body.attempts);
   assertArrayEquals(new byte[]{121,122,123,124},response(fixture).body());assertArrayEquals(new byte[4],retained);
   assertBodyFailed(fixture);assertLockReleased(fixture);
  }
  private record Fixture(@NonNull Object sink,HttpResponse.@NonNull BodySubscriber<@NonNull Void> subscriber) { }
  @SuppressWarnings("unchecked") private static @NonNull Fixture fixture(int status,int maximum,int maximumError,@Nullable Integer length) throws Exception {
+  return fixture(status,maximum,maximumError,length,null);
+ }
+ @SuppressWarnings("unchecked") private static @NonNull Fixture fixture(int status,int maximum,int maximumError,@Nullable Integer length,@Nullable CompletableFuture<@NonNull Void> body) throws Exception {
   Class<?> type=Class.forName(HttpExchange.class.getName()+"$Sink");var constructor=type.getDeclaredConstructor(HttpExchangeRequest.class,long.class);constructor.setAccessible(true);
   Object sink=constructor.newInstance(new HttpExchangeRequest(URI.create("https://issuer.example/jwks"),ResponseProfile.JWKS,null,Map.of(),maximum,maximumError,Duration.ofSeconds(1)),System.nanoTime());
   Map<String,List<String>> fields=new HashMap<>();fields.put("Content-Type",List.of("application/json"));if(length!=null)fields.put("Content-Length",List.of(length.toString()));HttpHeaders headers=HttpHeaders.of(fields,(a,b)->true);
+  if(body!=null){Class<?> subscriberType=Class.forName(HttpExchange.class.getName()+"$BoundedSubscriber");var subscriberConstructor=subscriberType.getDeclaredConstructor(type,int.class,HttpHeaders.class,MediaType.class,int.class,long.class,CompletableFuture.class);subscriberConstructor.setAccessible(true);return new Fixture(sink,(HttpResponse.BodySubscriber<Void>)subscriberConstructor.newInstance(sink,status,headers,MediaType.parse("application/json").orElseThrow(),maximum,length==null?-1L:length.longValue(),body));}
   HttpResponse.BodyHandler<Void> handler=(HttpResponse.BodyHandler<Void>)sink;
   return new Fixture(sink,handler.apply(new HttpResponse.ResponseInfo(){@Override public int statusCode(){return status;}@Override public @NonNull HttpHeaders headers(){return headers;}@Override public HttpClient.@NonNull Version version(){return HttpClient.Version.HTTP_1_1;}}));
  }
@@ -138,7 +140,6 @@ final class HttpExchangeBodyRc1MutationTests {
  private static void assertBodyFailed(@NonNull Fixture fixture){var body=fixture.subscriber().getBody().toCompletableFuture();assertTrue(body.isDone());assertTrue(body.isCompletedExceptionally());}
  private static void assertLockReleased(@NonNull Fixture fixture) throws Exception {ReentrantLock lock=(ReentrantLock)requireNonNull(field(fixture.subscriber(),"lock"));assertFalse(lock.isLocked());assertTrue(acquirableByAnotherThread(lock));}
  private static @Nullable Object field(@NonNull Object target,@NonNull String name) throws Exception {var field=target.getClass().getDeclaredField(name);field.setAccessible(true);return field.get(target);}
- private static void setField(@NonNull Object target,@NonNull String name,@NonNull Object value) throws Exception {var field=target.getClass().getDeclaredField(name);field.setAccessible(true);field.set(target,value);}
  private static @Nullable Object invoke(@NonNull Object target,@NonNull String name,@Nullable Object @NonNull ... args) throws Exception {
   var method=Arrays.stream(target.getClass().getDeclaredMethods()).filter(m->m.getName().equals(name)&&m.getParameterCount()==args.length).findFirst().orElseThrow();method.setAccessible(true);
   try{return method.invoke(target,args);}catch(InvocationTargetException failure){if(failure.getCause() instanceof Exception cause)throw cause;if(failure.getCause() instanceof Error cause)throw cause;throw failure;}

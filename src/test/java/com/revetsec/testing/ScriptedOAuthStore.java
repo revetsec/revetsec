@@ -43,7 +43,8 @@ import java.util.Set;
 /** Test-only opaque atomic issuer storage with independent explicit authority controls. */
 @ThreadSafe
 public final class ScriptedOAuthStore implements OAuthAuthorizationServerStore {
-    private final @NonNull Map<@NonNull OAuthStoreKey,@NonNull OAuthStoreEntry> entries=new HashMap<>();
+    // The race probe replaces this fixture map after seeding; commits still hold this store's monitor.
+    private @NonNull Map<@NonNull OAuthStoreKey,@NonNull OAuthStoreEntry> entries=new HashMap<>();
     private final @NonNull Set<@NonNull String> activatedScopes=new HashSet<>();
     private final int maximumEntries;
     private final long maximumBytes;

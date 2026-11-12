@@ -21,6 +21,7 @@ import com.revetsec.oauth.BearerTokenResult;
 import com.revetsec.jose.JwksParseResult;
 
 import com.revetsec.StateSealer;
+import com.revetsec.ConfigurationDiagnostic;
 import com.revetsec.SealingKey;
 import com.revetsec.OutboundUriPolicy;
 import com.revetsec.internal.encoding.FormUrlEncoding;
@@ -61,6 +62,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.stream.Stream;
 import static org.junit.jupiter.api.Assertions.*;
@@ -115,6 +117,29 @@ final class OAuthAuthorizationServerTests {
    Throwable cause=requireNonNull(failure.getCause());
    if(cause instanceof RuntimeException unchecked) throw unchecked;
    if(cause instanceof Error fatal) throw fatal;
+   throw new AssertionError(cause);
+  } catch(ReflectiveOperationException failure) { throw new AssertionError(failure); }
+ }
+ private static void assertDiagnosticBuildParity(OAuthAuthorizationServer.@NonNull Builder builder,
+   @NonNull ConfigurationDiagnostic diagnostic, @NonNull Class<? extends @NonNull RuntimeException> failureType) {
+  List<ConfigurationDiagnostic> snapshot=builder.configurationDiagnostics();
+  assertEquals(List.of(diagnostic),snapshot);
+  assertThrows(failureType,builder::build);
+  assertEquals(snapshot,builder.configurationDiagnostics());
+ }
+ private static @NonNull List<@NonNull ConfigurationDiagnostic> diagnosticsForRuntime(
+   OAuthAuthorizationServer.@NonNull Builder builder, Runtime.@NonNull Version version) {
+  try {
+   var method=OAuthAuthorizationServer.Builder.class.getDeclaredMethod("configurationDiagnostics",Runtime.Version.class);
+   method.setAccessible(true);
+   List<?> raw=List.class.cast(method.invoke(builder,version));
+   List<ConfigurationDiagnostic> diagnostics=new ArrayList<>(raw.size());
+   for(Object item:raw)diagnostics.add(ConfigurationDiagnostic.class.cast(item));
+   return List.copyOf(diagnostics);
+  } catch(InvocationTargetException failure) {
+   Throwable cause=requireNonNull(failure.getCause());
+   if(cause instanceof RuntimeException unchecked)throw unchecked;
+   if(cause instanceof Error fatal)throw fatal;
    throw new AssertionError(cause);
   } catch(ReflectiveOperationException failure) { throw new AssertionError(failure); }
  }
@@ -416,16 +441,277 @@ final class OAuthAuthorizationServerTests {
   Map<String,Function<OAuthAuthorizationServer.@NonNull Builder,OAuthAuthorizationServer.@NonNull Builder>> clear=Map.of("authorization",b->b.authorizationEndpoint(null),"token",b->b.tokenEndpoint(null),"jwks",b->b.jwksEndpoint(null),"clients",b->b.clientRepository(null),"store",b->b.store(null),"keys",b->b.signingKeys(null),"sealer",b->b.stateSealer(null),"resources",b->b.resources(null),"policy",b->b.grantPolicy(null));
   return clear.entrySet().stream().map(e->test(e.getKey(),()->{var f=new OAuthAuthorizationServerTests();var b=f.builder();b=e.getValue().apply(b);assertThrows(IllegalStateException.class,b::build);}));
  }
- @TestFactory @NonNull Stream<@NonNull DynamicTest> builderEndpointAuthorityIsNeverInferredOrRelaxed() {
-  return Stream.of("https://wrong.example/token","http://issuer.example/token","https://issuer.example/token?x=1","https://issuer.example/token#x","https://u@issuer.example/token","https://issuer.example:0/token",ISSUER+"/authorize").map(uri->test(uri,()->assertThrows(IllegalArgumentException.class,()->builder().tokenEndpoint(URI.create(uri)).build())));
+ @TestFactory @NonNull Stream<@NonNull DynamicTest> issuerDiagnosticNamesEachMissingRequiredSetting() {
+  Map<ConfigurationDiagnostic,Function<OAuthAuthorizationServer.@NonNull Builder,OAuthAuthorizationServer.@NonNull Builder>> clear=Map.of(
+   ConfigurationDiagnostic.OAUTH_AUTHORIZATION_ENDPOINT_REQUIRED,b->b.authorizationEndpoint(null),
+   ConfigurationDiagnostic.OAUTH_TOKEN_ENDPOINT_REQUIRED,b->b.tokenEndpoint(null),
+   ConfigurationDiagnostic.OAUTH_JWKS_ENDPOINT_REQUIRED,b->b.jwksEndpoint(null),
+   ConfigurationDiagnostic.OAUTH_CLIENT_REPOSITORY_REQUIRED,b->b.clientRepository(null),
+   ConfigurationDiagnostic.OAUTH_STORE_REQUIRED,b->b.store(null),
+   ConfigurationDiagnostic.OAUTH_SIGNING_KEYS_REQUIRED,b->b.signingKeys(null),
+   ConfigurationDiagnostic.OAUTH_STATE_SEALER_REQUIRED,b->b.stateSealer(null),
+   ConfigurationDiagnostic.OAUTH_GRANT_POLICY_REQUIRED,b->b.grantPolicy(null),
+   ConfigurationDiagnostic.OAUTH_RESOURCES_REQUIRED,b->b.resources(null));
+  return clear.entrySet().stream().map(e->test(e.getKey().name(),()->{
+   var fixture=new OAuthAuthorizationServerTests();var configured=e.getValue().apply(fixture.builder());
+   assertEquals(List.of(e.getKey()),configured.configurationDiagnostics());
+   assertThrows(IllegalStateException.class,configured::build);
+  }));
  }
- @Test @SuppressWarnings("NullAway") // Deliberate null primary factory argument.
+ @Test void issuerConfigurationDiagnosticsAggregateMissingFieldsWithoutCallbacks() {
+  var empty=OAuthAuthorizationServer.withIssuer(ISSUER);
+  assertEquals(List.of(
+   ConfigurationDiagnostic.OAUTH_AUTHORIZATION_ENDPOINT_REQUIRED,
+   ConfigurationDiagnostic.OAUTH_TOKEN_ENDPOINT_REQUIRED,
+   ConfigurationDiagnostic.OAUTH_JWKS_ENDPOINT_REQUIRED,
+   ConfigurationDiagnostic.OAUTH_CLIENT_REPOSITORY_REQUIRED,
+   ConfigurationDiagnostic.OAUTH_STORE_REQUIRED,
+   ConfigurationDiagnostic.OAUTH_SIGNING_KEYS_REQUIRED,
+   ConfigurationDiagnostic.OAUTH_STATE_SEALER_REQUIRED,
+   ConfigurationDiagnostic.OAUTH_GRANT_POLICY_REQUIRED,
+   ConfigurationDiagnostic.OAUTH_RESOURCES_REQUIRED),empty.configurationDiagnostics());
+  assertThrows(UnsupportedOperationException.class,()->empty.configurationDiagnostics().clear());
+  assertThrows(IllegalStateException.class,empty::build);
+  var configured=builder().allowLocalhostAnyPortRedirects(true).observer(new OAuthServerObserver(){
+   @Override public void didEnableLocalhostAnyPortRedirects(){throw new AssertionError("observer called during inspection");}
+  });
+  assertTrue(configured.configurationDiagnostics().isEmpty());
+  assertTrue(configured.configurationDiagnostics().isEmpty());
+ }
+ @TestFactory @NonNull Stream<@NonNull DynamicTest> issuerDiagnosticNamesEachInvalidNumericSetting() {
+  return Stream.of("authorizationInteractionLifetime","authorizationCodeLifetime","accessTokenLifetime","refreshTokenIdleLifetime","refreshTokenAbsoluteLifetime","clockSkew","totalDeadline","requestTimeout","publicMetadataHttpCacheMaxAge","maximumRequestBodyBytes","maximumRawQueryLength","maximumHeaderBytes","maximumResponseBodyBytes","maximumStoreRecordBytes","maximumStoreCommitAttempts","maximumResources","maximumRedirectUris","maximumScopesPerResource","maximumScopeLength","maximumStateLength","maximumClientIdLength","maximumSubjectLength").flatMap(name->Stream.of("below","above").map(bound->test("diagnostic-"+name+'-'+bound,()->{
+   var fixture=new OAuthAuthorizationServerTests();var configured=fixture.builder();boolean duration=!name.startsWith("maximum");
+   Object invalid=duration?(bound.equals("below")?Duration.ofNanos(-1):Duration.ofDays(366)):(bound.equals("below")?Integer.MIN_VALUE:Integer.MAX_VALUE);
+   var setter=OAuthAuthorizationServer.Builder.class.getMethod(name,duration?Duration.class:Integer.class);
+   assertSame(configured,setter.invoke(configured,invalid));
+   String code="OAUTH_"+name.replaceAll("([a-z])([A-Z])","$1_$2").toUpperCase(java.util.Locale.ROOT)+"_INVALID";
+   assertEquals(List.of(ConfigurationDiagnostic.valueOf(code)),configured.configurationDiagnostics());
+   assertThrows(IllegalArgumentException.class,configured::build);
+   assertSame(configured,setter.invoke(configured,new Object[]{null}));
+   assertTrue(configured.configurationDiagnostics().isEmpty());
+   assertNotNull(configured.build());
+  })));
+ }
+ @Test void issuerDiagnosticsCollectIndependentConflictsAndRedactValues() {
+  var configured=builder().revocationEndpoint(null)
+   .tokenEndpoint(URI.create("https://secret-other.example/token"))
+   .authorizationInteractionLifetime(Duration.ofMinutes(1))
+   .authorizationCodeLifetime(Duration.ofMinutes(10))
+   .totalDeadline(Duration.ofSeconds(1)).requestTimeout(Duration.ofSeconds(30))
+   .accessTokenLifetime(Duration.ofMinutes(1)).clockSkew(Duration.ofMinutes(1))
+   .maximumStoreRecordBytes(3801).maximumScopesPerResource(1);
+  List<ConfigurationDiagnostic> issues=configured.configurationDiagnostics();
+  assertEquals(List.of(
+   ConfigurationDiagnostic.OAUTH_REFRESH_REQUIRES_REVOCATION_ENDPOINT,
+   ConfigurationDiagnostic.OAUTH_REQUEST_TIMEOUT_EXCEEDS_DEADLINE,
+   ConfigurationDiagnostic.OAUTH_CODE_LIFETIME_EXCEEDS_INTERACTION,
+   ConfigurationDiagnostic.OAUTH_CLOCK_SKEW_EXCEEDS_HALF_ACCESS,
+   ConfigurationDiagnostic.OAUTH_STORE_RECORD_EXCEEDS_SEALER,
+   ConfigurationDiagnostic.OAUTH_RESOURCES_INVALID,
+   ConfigurationDiagnostic.OAUTH_TOKEN_ENDPOINT_INVALID),issues);
+  assertEquals(issues,configured.configurationDiagnostics());
+  for(ConfigurationDiagnostic issue:issues){
+   String text=issue+issue.getFieldCode()+issue.getReasonCode()+issue.getMessage()+issue.getDocumentationReference();
+   assertFalse(text.contains("secret-other.example"));assertFalse(text.contains(ISSUER));
+  }
+  assertThrows(IllegalStateException.class,configured::build);
+ }
+ @Test void issuerDiagnosticsGiveSingletonConstructionParityForRemainingCombinationRules() {
+  assertDiagnosticBuildParity(builder().revocationEndpoint(null),
+   ConfigurationDiagnostic.OAUTH_REFRESH_REQUIRES_REVOCATION_ENDPOINT,IllegalStateException.class);
+  assertDiagnosticBuildParity(builder().totalDeadline(Duration.ofSeconds(1)).requestTimeout(Duration.ofSeconds(2)),
+   ConfigurationDiagnostic.OAUTH_REQUEST_TIMEOUT_EXCEEDS_DEADLINE,IllegalArgumentException.class);
+  assertDiagnosticBuildParity(builder().authorizationInteractionLifetime(Duration.ofMinutes(1))
+   .authorizationCodeLifetime(Duration.ofMinutes(2)),
+   ConfigurationDiagnostic.OAUTH_CODE_LIFETIME_EXCEEDS_INTERACTION,IllegalArgumentException.class);
+  assertDiagnosticBuildParity(builder().accessTokenLifetime(Duration.ofSeconds(30)).clockSkew(Duration.ofSeconds(16)),
+   ConfigurationDiagnostic.OAUTH_CLOCK_SKEW_EXCEEDS_HALF_ACCESS,IllegalArgumentException.class);
+ }
+ @TestFactory @NonNull Stream<@NonNull DynamicTest> issuerDiagnosticsCoverEveryConfiguredRoute() {
+  Map<ConfigurationDiagnostic,Function<OAuthAuthorizationServer.@NonNull Builder,OAuthAuthorizationServer.@NonNull Builder>> invalid=Map.of(
+   ConfigurationDiagnostic.OAUTH_AUTHORIZATION_ENDPOINT_INVALID,b->b.authorizationEndpoint(URI.create("https://other.example/authorize")),
+   ConfigurationDiagnostic.OAUTH_TOKEN_ENDPOINT_INVALID,b->b.tokenEndpoint(URI.create("https://other.example/token")),
+   ConfigurationDiagnostic.OAUTH_JWKS_ENDPOINT_INVALID,b->b.jwksEndpoint(URI.create("https://other.example/jwks")),
+   ConfigurationDiagnostic.OAUTH_REVOCATION_ENDPOINT_INVALID,b->b.revocationEndpoint(URI.create("https://other.example/revoke")),
+   ConfigurationDiagnostic.OAUTH_INTROSPECTION_ENDPOINT_INVALID,b->b.introspectionEndpoint(URI.create("https://other.example/introspect")));
+  return invalid.entrySet().stream().map(e->test(e.getKey().name(),()->{
+   var fixture=new OAuthAuthorizationServerTests();var configured=e.getValue().apply(fixture.builder());
+   assertEquals(List.of(e.getKey()),configured.configurationDiagnostics());
+   assertEquals(List.of(e.getKey()),configured.configurationDiagnostics());
+   assertThrows(IllegalArgumentException.class,configured::build);
+  }));
+ }
+ @TestFactory @NonNull Stream<@NonNull DynamicTest> issuerDiagnosticsAttributeEveryDuplicateRouteToCanonicalLaterRoute() {
+  List<Map.Entry<ConfigurationDiagnostic,BiFunction<OAuthAuthorizationServer.Builder,URI,OAuthAuthorizationServer.Builder>>> routes=List.of(
+   Map.entry(ConfigurationDiagnostic.OAUTH_AUTHORIZATION_ENDPOINT_INVALID,(b,u)->b.authorizationEndpoint(u)),
+   Map.entry(ConfigurationDiagnostic.OAUTH_TOKEN_ENDPOINT_INVALID,(b,u)->b.tokenEndpoint(u)),
+   Map.entry(ConfigurationDiagnostic.OAUTH_JWKS_ENDPOINT_INVALID,(b,u)->b.jwksEndpoint(u)),
+   Map.entry(ConfigurationDiagnostic.OAUTH_REVOCATION_ENDPOINT_INVALID,(b,u)->b.revocationEndpoint(u)),
+   Map.entry(ConfigurationDiagnostic.OAUTH_INTROSPECTION_ENDPOINT_INVALID,(b,u)->b.introspectionEndpoint(u)));
+  return java.util.stream.IntStream.range(0,routes.size()).boxed().flatMap(first->
+   java.util.stream.IntStream.range(first+1,routes.size()).mapToObj(second->test(
+    routes.get(first).getKey().name()+"-then-"+routes.get(second).getKey().name(),()->{
+     URI collision=URI.create(ISSUER+"/collision");var fixture=new OAuthAuthorizationServerTests();
+     var configured=routes.get(second).getValue().apply(routes.get(first).getValue().apply(fixture.builder(),collision),collision);
+     assertEquals(List.of(routes.get(second).getKey()),configured.configurationDiagnostics());
+     assertThrows(IllegalArgumentException.class,configured::build);
+     var reverse=routes.get(first).getValue().apply(routes.get(second).getValue().apply(fixture.builder(),collision),collision);
+     assertEquals(List.of(routes.get(second).getKey()),reverse.configurationDiagnostics());
+     assertSame(configured,routes.get(second).getValue().apply(configured,URI.create(ISSUER+"/fixed-"+second)));
+     assertTrue(configured.configurationDiagnostics().isEmpty());
+     assertNotNull(configured.build());
+    })));
+ }
+ @Test void issuerDiagnosticsCoverRefreshLifetimeDependenciesAndConstructionParity() {
+  var accessExceedsIdle=builder().accessTokenLifetime(Duration.ofMinutes(15))
+   .refreshTokenIdleLifetime(Duration.ofMinutes(5));
+  assertEquals(List.of(ConfigurationDiagnostic.OAUTH_ACCESS_LIFETIME_EXCEEDS_IDLE),
+   accessExceedsIdle.configurationDiagnostics());
+  assertThrows(IllegalArgumentException.class,accessExceedsIdle::build);
+
+  var idleExceedsAbsolute=builder().refreshTokenIdleLifetime(Duration.ofDays(7))
+   .refreshTokenAbsoluteLifetime(Duration.ofHours(1));
+  assertEquals(List.of(ConfigurationDiagnostic.OAUTH_IDLE_LIFETIME_EXCEEDS_ABSOLUTE),
+   idleExceedsAbsolute.configurationDiagnostics());
+  assertThrows(IllegalArgumentException.class,idleExceedsAbsolute::build);
+
+  var disabledAccessConflict=builder().refreshTokensEnabled(false).revocationEndpoint(null)
+   .accessTokenLifetime(Duration.ofMinutes(15)).refreshTokenIdleLifetime(Duration.ofMinutes(5));
+  assertEquals(List.of(ConfigurationDiagnostic.OAUTH_ACCESS_LIFETIME_EXCEEDS_IDLE),
+   disabledAccessConflict.configurationDiagnostics());
+  assertThrows(IllegalArgumentException.class,disabledAccessConflict::build);
+
+  var disabledAbsoluteConflict=builder().refreshTokensEnabled(false).revocationEndpoint(null)
+   .refreshTokenIdleLifetime(Duration.ofDays(7)).refreshTokenAbsoluteLifetime(Duration.ofHours(1));
+  assertTrue(disabledAbsoluteConflict.configurationDiagnostics().isEmpty());
+  assertNotNull(disabledAbsoluteConflict.build());
+ }
+ @Test void issuerDiagnosticsSuppressOnlyChecksDependentOnInvalidParentSettings() {
+  var timing=builder().authorizationInteractionLifetime(Duration.ofNanos(-1))
+   .authorizationCodeLifetime(Duration.ofMinutes(10)).accessTokenLifetime(Duration.ofNanos(-1))
+   .refreshTokenIdleLifetime(Duration.ofMinutes(5)).clockSkew(Duration.ofSeconds(60))
+   .totalDeadline(Duration.ofNanos(-1)).requestTimeout(Duration.ofSeconds(30));
+  assertEquals(List.of(
+   ConfigurationDiagnostic.OAUTH_AUTHORIZATION_INTERACTION_LIFETIME_INVALID,
+   ConfigurationDiagnostic.OAUTH_ACCESS_TOKEN_LIFETIME_INVALID,
+   ConfigurationDiagnostic.OAUTH_TOTAL_DEADLINE_INVALID),timing.configurationDiagnostics());
+  assertThrows(IllegalArgumentException.class,timing::build);
+
+  var resourceParent=builder().maximumScopesPerResource(Integer.MIN_VALUE);
+  assertEquals(List.of(ConfigurationDiagnostic.OAUTH_MAXIMUM_SCOPES_PER_RESOURCE_INVALID),
+   resourceParent.configurationDiagnostics());
+  assertThrows(IllegalArgumentException.class,resourceParent::build);
+
+  var sealerParent=builder().maximumStoreRecordBytes(Integer.MIN_VALUE);
+  assertEquals(List.of(ConfigurationDiagnostic.OAUTH_MAXIMUM_STORE_RECORD_BYTES_INVALID),
+   sealerParent.configurationDiagnostics());
+  assertThrows(IllegalArgumentException.class,sealerParent::build);
+ }
+ @Test void issuerDiagnosticsDeferDependentChecksUntilRequiredParentsAreRepaired() {
+  var resourcesParent=builder().resources(null).maximumScopesPerResource(1);
+  assertEquals(List.of(ConfigurationDiagnostic.OAUTH_RESOURCES_REQUIRED),resourcesParent.configurationDiagnostics());
+  assertThrows(IllegalStateException.class,resourcesParent::build);
+  assertSame(resourcesParent,resourcesParent.resources(resources()));
+  assertEquals(List.of(ConfigurationDiagnostic.OAUTH_RESOURCES_INVALID),resourcesParent.configurationDiagnostics());
+  assertThrows(IllegalArgumentException.class,resourcesParent::build);
+
+  var sealerParent=builder().stateSealer(null).maximumStoreRecordBytes(3801);
+  assertEquals(List.of(ConfigurationDiagnostic.OAUTH_STATE_SEALER_REQUIRED),sealerParent.configurationDiagnostics());
+  assertThrows(IllegalStateException.class,sealerParent::build);
+  assertSame(sealerParent,sealerParent.stateSealer(sealer()));
+  assertEquals(List.of(ConfigurationDiagnostic.OAUTH_STORE_RECORD_EXCEEDS_SEALER),
+   sealerParent.configurationDiagnostics());
+  assertThrows(IllegalArgumentException.class,sealerParent::build);
+ }
+ @Test void issuerDiagnosticSnapshotsAndCrossFamilyPrecedenceSurviveOrderedRepair() {
+  AtomicInteger callbacks=new AtomicInteger();
+  OAuthClientMetadataPolicy enabled=OAuthClientMetadataPolicy.fromAddressResolverAndCache((host,budget)->{
+   callbacks.incrementAndGet();throw new AssertionError("resolver called during inspection");
+  },new OAuthClientMetadataCache(){
+   @Override public @NonNull Optional<@NonNull OAuthClientMetadataCacheEntry> read(
+     @NonNull OAuthClientMetadataCacheKey key,@NonNull Duration budget){callbacks.incrementAndGet();throw new AssertionError("cache read during inspection");}
+   @Override public @NonNull Boolean compareAndSet(@NonNull OAuthClientMetadataCacheKey key,@Nullable String expectedVersion,
+     @Nullable OAuthClientMetadataCacheEntry replacement,@NonNull Duration budget){callbacks.incrementAndGet();throw new AssertionError("cache write during inspection");}
+  });
+  Runtime.Version old=Runtime.Version.parse("17.0.2");
+  var configured=builder().clientRepository(null).revocationEndpoint(null)
+   .requestTimeout(Duration.ofNanos(-1)).maximumScopesPerResource(1)
+   .tokenEndpoint(URI.create("https://other.example/token")).clientMetadataPolicy(enabled);
+  List<ConfigurationDiagnostic> publicSnapshot=configured.configurationDiagnostics();
+  assertEquals(5,publicSnapshot.size());
+  List<ConfigurationDiagnostic> initial=diagnosticsForRuntime(configured,old);
+  assertEquals(List.of(
+   ConfigurationDiagnostic.OAUTH_CLIENT_REPOSITORY_REQUIRED,
+   ConfigurationDiagnostic.OAUTH_REFRESH_REQUIRES_REVOCATION_ENDPOINT,
+   ConfigurationDiagnostic.OAUTH_REQUEST_TIMEOUT_INVALID,
+   ConfigurationDiagnostic.OAUTH_RESOURCES_INVALID,
+   ConfigurationDiagnostic.OAUTH_TOKEN_ENDPOINT_INVALID,
+   ConfigurationDiagnostic.OAUTH_CLIENT_METADATA_RUNTIME_INCOMPATIBLE),initial);
+  assertThrows(UnsupportedOperationException.class,initial::clear);
+  assertThrows(IllegalStateException.class,()->constructForRuntime(configured,old));
+
+  assertSame(configured,configured.clientRepository((id,budget)->Optional.empty()));
+  List<ConfigurationDiagnostic> afterRequired=diagnosticsForRuntime(configured,old);
+  assertEquals(initial.subList(1,initial.size()),afterRequired);
+  assertThrows(IllegalStateException.class,()->constructForRuntime(configured,old));
+  assertSame(configured,configured.revocationEndpoint(URI.create(ISSUER+"/revoke")));
+  assertThrows(IllegalArgumentException.class,()->constructForRuntime(configured,old));
+  assertSame(configured,configured.requestTimeout(null));
+  assertThrows(IllegalArgumentException.class,()->constructForRuntime(configured,old));
+  assertSame(configured,configured.maximumScopesPerResource(null));
+  assertThrows(IllegalArgumentException.class,()->constructForRuntime(configured,old));
+  assertSame(configured,configured.tokenEndpoint(URI.create(ISSUER+"/token")));
+  assertEquals(List.of(ConfigurationDiagnostic.OAUTH_CLIENT_METADATA_RUNTIME_INCOMPATIBLE),
+   diagnosticsForRuntime(configured,old));
+  assertThrows(IllegalStateException.class,()->constructForRuntime(configured,old));
+  assertSame(configured,configured.acknowledgeUnpatchedRuntime(true));
+  assertTrue(diagnosticsForRuntime(configured,old).isEmpty());
+  assertNotNull(constructForRuntime(configured,old));
+  assertEquals(5,publicSnapshot.size());
+  assertEquals(6,initial.size());
+  assertEquals(5,afterRequired.size());
+  assertEquals(0,callbacks.get());
+ }
+ @Test void issuerDiagnosticsCoverCimdRuntimeFloorWithoutResolverOrCacheCallbacks() {
+  AtomicInteger callbacks=new AtomicInteger();
+  OAuthClientMetadataPolicy enabled=OAuthClientMetadataPolicy.fromAddressResolverAndCache((host,budget)->{
+   callbacks.incrementAndGet();throw new AssertionError("resolver called during inspection");
+  },new OAuthClientMetadataCache(){
+   @Override public @NonNull Optional<@NonNull OAuthClientMetadataCacheEntry> read(
+     @NonNull OAuthClientMetadataCacheKey key,@NonNull Duration budget){callbacks.incrementAndGet();throw new AssertionError("cache read during inspection");}
+   @Override public @NonNull Boolean compareAndSet(@NonNull OAuthClientMetadataCacheKey key,@Nullable String expectedVersion,
+     @Nullable OAuthClientMetadataCacheEntry replacement,@NonNull Duration budget){callbacks.incrementAndGet();throw new AssertionError("cache write during inspection");}
+  });
+  Runtime.Version old=Runtime.Version.parse("17.0.2");
+  var configured=builder().clientMetadataPolicy(enabled);
+  assertEquals(List.of(ConfigurationDiagnostic.OAUTH_CLIENT_METADATA_RUNTIME_INCOMPATIBLE),
+   diagnosticsForRuntime(configured,old));
+  assertThrows(IllegalStateException.class,()->constructForRuntime(configured,old));
+  assertTrue(diagnosticsForRuntime(configured.acknowledgeUnpatchedRuntime(true),old).isEmpty());
+  assertTrue(diagnosticsForRuntime(configured.acknowledgeUnpatchedRuntime(false),Runtime.Version.parse("17.0.3")).isEmpty());
+  assertEquals(0,callbacks.get());
+ }
+ @TestFactory @NonNull Stream<@NonNull DynamicTest> builderEndpointAuthorityIsNeverInferredOrRelaxed() {
+  return Stream.of("https://wrong.example/token","http://issuer.example/token","https://issuer.example/token?x=1","https://issuer.example/token#x","https://u@issuer.example/token","https://issuer.example:0/token",ISSUER+"/authorize").map(uri->test(uri,()->{
+   var configured=builder().tokenEndpoint(URI.create(uri));
+   assertTrue(configured.configurationDiagnostics().contains(ConfigurationDiagnostic.OAUTH_TOKEN_ENDPOINT_INVALID));
+   assertThrows(IllegalArgumentException.class,configured::build);
+  }));
+ }
+ @Test @SuppressWarnings("NullAway") // Deliberate null factory argument and resource element.
  void primaryIssuerAndConfiguredResourceSnapshotsArePure() {
   assertThrows(NullPointerException.class,()->OAuthAuthorizationServer.withIssuer(null));for(String issuer:List.of("relative","https://user@issuer.example","https://issuer.example?q=1","https://issuer.example#x","http://localhost/issuer"))assertThrows(IllegalArgumentException.class,()->OAuthAuthorizationServer.withIssuer(issuer));
   assertThrows(IllegalArgumentException.class,()->builder().resources(Map.of()));
-  Map<String,Set<String>> mutable=new LinkedHashMap<>(resources());var b=builder().resources(mutable);mutable.clear();assertNotNull(b.build());
-  AtomicInteger callbacks=new AtomicInteger();b=builder().clientRepository((id,budget)->{callbacks.incrementAndGet();throw new AssertionError();}).signingKeys(budget->{callbacks.incrementAndGet();throw new AssertionError();}).grantPolicy((context,budget)->{callbacks.incrementAndGet();throw new AssertionError();}).clock(new Clock(){@Override public @NonNull ZoneId getZone(){throw new AssertionError();}@Override public @NonNull Clock withZone(@NonNull ZoneId z){throw new AssertionError();}@Override public @NonNull Instant instant(){callbacks.incrementAndGet();throw new AssertionError();}});
-  assertNotNull(b.build());assertEquals(0,callbacks.get());
+  Map<String,Set<String>> mutable=new LinkedHashMap<>(resources());var resourceBuilder=builder().resources(mutable);mutable.clear();
+  Map<String,Set<String>> nullScopes=new LinkedHashMap<>();Set<String> scopesWithNull=new java.util.LinkedHashSet<>();scopesWithNull.add(null);nullScopes.put(RESOURCE,scopesWithNull);
+  assertThrows(IllegalArgumentException.class,()->resourceBuilder.resources(Map.of()));
+  assertThrows(NullPointerException.class,()->resourceBuilder.resources(nullScopes));
+  assertTrue(resourceBuilder.configurationDiagnostics().isEmpty());assertNotNull(resourceBuilder.build());
+  AtomicInteger callbacks=new AtomicInteger();var b=builder().store(new OAuthAuthorizationServerStore(){
+   @Override public @NonNull OAuthStoreReadResult read(@NonNull OAuthStoreKey key,@NonNull Duration budget){callbacks.incrementAndGet();throw new AssertionError("store read during construction");}
+   @Override public @NonNull OAuthStoreCommitReceipt commit(@NonNull OAuthStoreTransaction transaction,@NonNull Duration budget){callbacks.incrementAndGet();throw new AssertionError("store commit during construction");}
+  }).clientRepository((id,budget)->{callbacks.incrementAndGet();throw new AssertionError();}).signingKeys(budget->{callbacks.incrementAndGet();throw new AssertionError();}).grantPolicy((context,budget)->{callbacks.incrementAndGet();throw new AssertionError();}).clock(new Clock(){@Override public @NonNull ZoneId getZone(){throw new AssertionError();}@Override public @NonNull Clock withZone(@NonNull ZoneId z){throw new AssertionError();}@Override public @NonNull Instant instant(){callbacks.incrementAndGet();throw new AssertionError();}});
+  assertTrue(b.configurationDiagnostics().isEmpty());assertNotNull(b.build());assertEquals(0,callbacks.get());
  }
  @Test void allDefaultResetSettersRemainUsableAndBuildSnapshotsDoNotAliasBuilder() {
   var b=builder().clock(null).observer(null).clientMetadataPolicy(null).outboundUriPolicy(null).refreshTokensEnabled(null).allowNativeLoopbackRedirects(null).allowLocalhostRedirects(null).allowInsecureLoopback(null).acknowledgeUnpatchedRuntime(null);
@@ -600,10 +886,18 @@ final class OAuthAuthorizationServerTests {
   var b=OAuthAuthorizationServer.withIssuer("http://127.0.0.1:1234/tenant").authorizationEndpoint(URI.create("http://127.0.0.1:1234/authorize"))
    .tokenEndpoint(URI.create("http://127.0.0.1:1234/token")).jwksEndpoint(URI.create("http://127.0.0.1:1234/jwks"))
    .clientRepository((id,budget)->Optional.empty()).store(this.store).signingKeys(OAuthIssuerKeyProvider.fromSnapshot(keys())).stateSealer(sealer()).resources(resources()).grantPolicy((context,budget)->OAuthAuthorizationDecision.deniedInstance());
-  assertThrows(IllegalArgumentException.class,b::build);assertNotNull(b.allowInsecureLoopback(true).allowLocalhostRedirects(true).allowNativeLoopbackRedirects(true).acknowledgeUnpatchedRuntime(true).build());
+  assertEquals(List.of(ConfigurationDiagnostic.OAUTH_ISSUER_SCHEME_INCOMPATIBLE),b.configurationDiagnostics());
+  assertThrows(IllegalArgumentException.class,b::build);
+  assertTrue(b.allowInsecureLoopback(true).allowLocalhostRedirects(true).allowNativeLoopbackRedirects(true).acknowledgeUnpatchedRuntime(true).configurationDiagnostics().isEmpty());
+  assertNotNull(b.build());
  }
  @Test void sealerCapAndScopeLimitsAreCheckedBeforeBuilderCallbacks() {
-  assertThrows(IllegalArgumentException.class,()->builder().maximumStoreRecordBytes(3801).build());assertThrows(IllegalArgumentException.class,()->builder().maximumScopesPerResource(1).build());
+  var cap=builder().maximumStoreRecordBytes(3801);
+  assertEquals(List.of(ConfigurationDiagnostic.OAUTH_STORE_RECORD_EXCEEDS_SEALER),cap.configurationDiagnostics());
+  assertThrows(IllegalArgumentException.class,cap::build);
+  var scopes=builder().maximumScopesPerResource(1);
+  assertEquals(List.of(ConfigurationDiagnostic.OAUTH_RESOURCES_INVALID),scopes.configurationDiagnostics());
+  assertThrows(IllegalArgumentException.class,scopes::build);
  }
  @TestFactory @NonNull Stream<@NonNull DynamicTest> signingFailureKeepsCredentialUnusedAndNeverLeaksExternalCause() {
   return Stream.of(false,true).map(refresh->test("signing"+refresh,()->{

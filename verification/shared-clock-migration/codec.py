@@ -22,7 +22,7 @@ def protected_write(path,value):
  finally:os.close(fd)
 
 class CodecClient:
- def __init__(self,work,java_home,core_jar,old_jar,repository='/private/tmp/revetsec-refresh-m2',*,expected_core_sha256=None):
+ def __init__(self,work,java_home,core_jar,old_jar,repository='/Users/agents/.m2/repository',*,expected_core_sha256=None):
   self.work=Path(work);self.work.mkdir(parents=True,exist_ok=True);os.chmod(self.work,0o700)
   self.java=Path(java_home)/'bin/java';self.javac=Path(java_home)/'bin/javac';self.core=Path(core_jar).resolve();self.old=Path(old_jar).resolve();self.annotations=[Path(repository)/x for x in ANNOTATIONS];self.commands=[];self.counter=0
   if expected_core_sha256 is None:expected_core_sha256='b23109a3434703a40ce5a9795ae18b46265c9f07b73901c3b3c4c54dcbbe3b38'

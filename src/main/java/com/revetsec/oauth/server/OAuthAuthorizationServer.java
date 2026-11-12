@@ -19,6 +19,7 @@ package com.revetsec.oauth.server;
 import com.revetsec.internal.ObserverDispatch;
 import java.util.concurrent.atomic.AtomicBoolean;
 import com.revetsec.BrowserBinding;
+import com.revetsec.ConfigurationDiagnostic;
 import com.revetsec.StateSealer;
 import com.revetsec.OutboundUriPolicy;
 import com.revetsec.internal.crypto.SealedStateAccess;
@@ -43,6 +44,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.util.List;
+import java.util.ArrayList;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -88,6 +90,18 @@ public final class OAuthAuthorizationServer {
  private final @NonNull OAuthIssuerMetadata metadata;
  private OAuthAuthorizationServer(@NonNull Builder b) { this(b, Runtime.version()); }
  private OAuthAuthorizationServer(@NonNull Builder b, Runtime.@NonNull Version runtimeVersion) {
+  // Inspection is the single construction-time configuration decision. Keep the historical
+  // exception categories while the fixed diagnostic codes remain local to the configuring caller.
+  List<ConfigurationDiagnostic> issues=b.configurationDiagnostics(runtimeVersion);
+  if(!issues.isEmpty()){
+   ConfigurationDiagnostic first=issues.get(0);
+   if(first.getReasonCode().equals("REQUIRED")) throw new IllegalStateException("Required authorization-server configuration is absent.");
+   if(first==ConfigurationDiagnostic.OAUTH_REFRESH_REQUIRES_REVOCATION_ENDPOINT)
+    throw new IllegalStateException("Refresh requires a revocation endpoint.");
+   if(first==ConfigurationDiagnostic.OAUTH_CLIENT_METADATA_RUNTIME_INCOMPATIBLE)
+    RuntimeFloor.require(runtimeVersion,b.acknowledgeUnpatchedRuntime);
+   throw OAuthStoreFormat.invalid();
+  }
   this.issuer=b.issuer; this.authorizationEndpoint=required(b.authorizationEndpoint); this.tokenEndpoint=required(b.tokenEndpoint);
   this.jwksEndpoint=required(b.jwksEndpoint); this.revocationEndpoint=b.revocationEndpoint; this.introspectionEndpoint=b.introspectionEndpoint;
   this.repository=required(b.clientRepository); this.policy=required(b.grantPolicy); OAuthAuthorizationServerStore store=required(b.store);
@@ -104,8 +118,11 @@ public final class OAuthAuthorizationServer {
   if(this.introspectionEndpoint!=null) checkRoute(issuerUri,this.introspectionEndpoint,b.allowInsecureLoopback,routes);
   OAuthClientMetadataPolicy metadataPolicy=b.clientMetadataPolicy;
   if(metadataPolicy.getEnabled()) RuntimeFloor.require(runtimeVersion,b.acknowledgeUnpatchedRuntime);
-  OAuthClientMetadataFetcher fetcher=metadataPolicy.getEnabled() ? new OAuthClientMetadataFetcher(this.issuer,sealer,metadataPolicy,this.limits,
-   this.nativeLoopback,this.localhost,this.localhostAnyPort,b.outboundUriPolicy,this.clock,this.settings.requestTimeout) : null;
+  OAuthClientMetadataFetcher fetcher=metadataPolicy.getEnabled() ? b.clientMetadataTransport==null
+   ? new OAuthClientMetadataFetcher(this.issuer,sealer,metadataPolicy,this.limits,this.nativeLoopback,this.localhost,this.localhostAnyPort,
+    b.outboundUriPolicy,this.clock,this.settings.requestTimeout)
+   : new OAuthClientMetadataFetcher(this.issuer,sealer,metadataPolicy,this.limits,this.nativeLoopback,this.localhost,this.localhostAnyPort,
+    b.outboundUriPolicy,this.clock,b.clientMetadataTransport) : null;
   this.clients=new OAuthServerClientSelection(this.repository,this.limits,fetcher,true);
   OAuthStoreRecordCodec codec=new OAuthStoreRecordCodec(this.issuer,sealer,this.settings.maximumStoreRecordBytes);
   this.coordinator=new OAuthStoreCoordinator(store,codec,this.clock,this.settings.clockSkew,this.settings.maximumStoreCommitAttempts,this.settings.maximumSubjectLength);
@@ -539,12 +556,16 @@ public final class OAuthAuthorizationServer {
   private @Nullable OAuthGrantPolicy grantPolicy;
   private @Nullable Map<@NonNull String,@NonNull Set<@NonNull String>> resources;
   private @NonNull OAuthClientMetadataPolicy clientMetadataPolicy=OAuthClientMetadataPolicy.disabledInstance();
+  private OAuthClientMetadataFetcher.@Nullable Transport clientMetadataTransport;
   private @NonNull Clock clock=Clock.systemUTC();
   private @NonNull OutboundUriPolicy outboundUriPolicy=OutboundUriPolicy.publicAddressesOnlyInstance();
   private @NonNull OAuthServerObserver observer=OAuthServerObserver.disabledInstance();
   private boolean refreshTokensEnabled,allowInsecureLoopback,allowNativeLoopbackRedirects,allowLocalhostRedirects,allowLocalhostAnyPortRedirects,acknowledgeUnpatchedRuntime;
   private final OAuthServerSettings.@NonNull Builder settings=OAuthServerSettings.builder();
   private Builder(@NonNull String issuer) {this.issuer=endpoint(URI.create(requireNonNull(issuer)),true).toString();}
+  @CheckReturnValue @NonNull Builder clientMetadataTransport(OAuthClientMetadataFetcher.@NonNull Transport value) {
+   this.clientMetadataTransport=requireNonNull(value);return this;
+  }
   /**
    * Sets the required browser authorization route; there is no default.
    * Null clears the required route, so the next build fails until it is supplied again.
@@ -1010,6 +1031,57 @@ public final class OAuthAuthorizationServer {
    * @since 1.0.0
    */
   @CheckReturnValue public @NonNull Builder maximumSubjectLength(@Nullable Integer value) {this.settings.maximumSubjectLength(value);return this;}
+  /** Inspects the current configuration shape without invoking application collaborators.
+   * The immutable result contains only fixed codes and no configured values or exception text.
+   * An empty result establishes construction validity, not deployment or key-provider readiness.
+   * @return every detectable missing or incompatible setting in deterministic order
+   * @since 1.0.0
+   */
+  @CheckReturnValue public @NonNull List<@NonNull ConfigurationDiagnostic> configurationDiagnostics() {
+   return configurationDiagnostics(Runtime.version());
+  }
+  private @NonNull List<@NonNull ConfigurationDiagnostic> configurationDiagnostics(Runtime.@NonNull Version runtimeVersion) {
+   List<ConfigurationDiagnostic> issues=new ArrayList<>();
+   if(this.authorizationEndpoint==null)issues.add(ConfigurationDiagnostic.OAUTH_AUTHORIZATION_ENDPOINT_REQUIRED);
+   if(this.tokenEndpoint==null)issues.add(ConfigurationDiagnostic.OAUTH_TOKEN_ENDPOINT_REQUIRED);
+   if(this.jwksEndpoint==null)issues.add(ConfigurationDiagnostic.OAUTH_JWKS_ENDPOINT_REQUIRED);
+   if(this.clientRepository==null)issues.add(ConfigurationDiagnostic.OAUTH_CLIENT_REPOSITORY_REQUIRED);
+   if(this.store==null)issues.add(ConfigurationDiagnostic.OAUTH_STORE_REQUIRED);
+   if(this.signingKeys==null)issues.add(ConfigurationDiagnostic.OAUTH_SIGNING_KEYS_REQUIRED);
+   if(this.stateSealer==null)issues.add(ConfigurationDiagnostic.OAUTH_STATE_SEALER_REQUIRED);
+   if(this.grantPolicy==null)issues.add(ConfigurationDiagnostic.OAUTH_GRANT_POLICY_REQUIRED);
+   if(this.resources==null)issues.add(ConfigurationDiagnostic.OAUTH_RESOURCES_REQUIRED);
+   if(this.refreshTokensEnabled&&this.revocationEndpoint==null)
+    issues.add(ConfigurationDiagnostic.OAUTH_REFRESH_REQUIRES_REVOCATION_ENDPOINT);
+
+   Integer sealerMaximum=this.stateSealer==null?null:SealedStateAccess.get().getMaximumSealedLength(this.stateSealer);
+   List<ConfigurationDiagnostic> settingsIssues=this.settings.configurationDiagnostics(this.refreshTokensEnabled,sealerMaximum);
+   issues.addAll(settingsIssues);
+   OAuthServerIngressLimits ingress=this.settings.resourceLimitsForDiagnostics();
+   if(ingress!=null&&this.resources!=null){
+    try{OAuthServerAuthorizationAdmission.checkedServerResources(this.resources,ingress);}
+    catch(IllegalArgumentException invalid){issues.add(ConfigurationDiagnostic.OAUTH_RESOURCES_INVALID);}
+   }
+
+   URI issuerUri=endpoint(URI.create(this.issuer),true);
+   try{endpoint(issuerUri,this.allowInsecureLoopback);}
+   catch(IllegalArgumentException invalid){issues.add(ConfigurationDiagnostic.OAUTH_ISSUER_SCHEME_INCOMPATIBLE);}
+   Set<String> routes=new HashSet<>();
+   routeDiagnostic(issuerUri,this.authorizationEndpoint,routes,ConfigurationDiagnostic.OAUTH_AUTHORIZATION_ENDPOINT_INVALID,issues);
+   routeDiagnostic(issuerUri,this.tokenEndpoint,routes,ConfigurationDiagnostic.OAUTH_TOKEN_ENDPOINT_INVALID,issues);
+   routeDiagnostic(issuerUri,this.jwksEndpoint,routes,ConfigurationDiagnostic.OAUTH_JWKS_ENDPOINT_INVALID,issues);
+   routeDiagnostic(issuerUri,this.revocationEndpoint,routes,ConfigurationDiagnostic.OAUTH_REVOCATION_ENDPOINT_INVALID,issues);
+   routeDiagnostic(issuerUri,this.introspectionEndpoint,routes,ConfigurationDiagnostic.OAUTH_INTROSPECTION_ENDPOINT_INVALID,issues);
+   if(this.clientMetadataPolicy.getEnabled())try{RuntimeFloor.require(runtimeVersion,this.acknowledgeUnpatchedRuntime);}
+    catch(IllegalStateException invalid){issues.add(ConfigurationDiagnostic.OAUTH_CLIENT_METADATA_RUNTIME_INCOMPATIBLE);}
+   return List.copyOf(issues);
+  }
+  private static void routeDiagnostic(@NonNull URI issuer,@Nullable URI route,@NonNull Set<@NonNull String> routes,
+    @NonNull ConfigurationDiagnostic code,@NonNull List<@NonNull ConfigurationDiagnostic> issues){
+   if(route==null)return;
+   try{checkRoute(issuer,route,true,routes);}
+   catch(IllegalArgumentException invalid){issues.add(code);}
+  }
   /**
    * Validates the complete configuration and returns an issuer retaining the selected application collaborators.
    * Missing required values, refresh without revocation, unsafe/duplicate/cross-authority routes, invalid

@@ -10,7 +10,7 @@ import test_capacity_preflight as capacity
 ROOT=Path(__file__).resolve().parents[3]
 class CapacityArtifactSelectionTests(unittest.TestCase):
  def environment(self,sha):
-  return dict(MIG06_JAVA_HOME=os.environ.get('SCP10_JAVA_HOME','/Users/agents/Java/amazon-corretto-21.jdk/Contents/Home'),MIG06_CORE_JAR=str(self.jar),MIG06_CORE_SHA256=sha,MIG06_REPOSITORY=os.environ.get('SCP10_REPOSITORY','/private/tmp/revetsec-mig-06-2026-11-04/repository'),MIG06_CODEC_RECEIPT='')
+  return dict(MIG06_JAVA_HOME=os.environ.get('SCP10_JAVA_HOME','/Users/agents/Java/amazon-corretto-21.jdk/Contents/Home'),MIG06_CORE_JAR=str(self.jar),MIG06_CORE_SHA256=sha,MIG06_REPOSITORY=os.environ.get('SCP10_REPOSITORY',os.environ.get('MIG06_REPOSITORY','/Users/agents/.m2/repository')),MIG06_CODEC_RECEIPT='')
  def setUp(self):
   self.jar=Path(os.environ.get('SCP10_CORE_JAR',ROOT/'planning/records/security/cap-10-2026-11-05/artifacts/core.jar'))
   self.sha=hashlib.sha256(self.jar.read_bytes()).hexdigest()

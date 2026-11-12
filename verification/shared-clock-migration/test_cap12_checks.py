@@ -34,7 +34,7 @@ class Cap12RetentionTests(unittest.TestCase):
             cls.work, os.environ.get('SCP10_JAVA_HOME', '/Users/agents/Java/amazon-corretto-21.jdk/Contents/Home'),
             os.environ.get('SCP10_CORE_JAR', ROOT / 'planning/records/security/cap-10-2026-11-05/artifacts/core.jar'),
             os.environ.get('SCP10_OLD_JAR', ROOT / 'planning/records/security/shared-clock-scp01-2026-10-29/baseline/built-core/revetsec-1.0.0-SNAPSHOT.jar'),
-            os.environ.get('SCP10_REPOSITORY', '/private/tmp/revetsec-mig-06-2026-11-04/repository'),
+            os.environ.get('SCP10_REPOSITORY', '/Users/agents/.m2/repository'),
             expected_core_sha256=os.environ.get('SCP10_CORE_SHA256', CURRENT_SHA))
         cls.rows = sorted(cls.client.fixtures({**cls.config, 'oversizedInteraction': True, 'interactionPlaintextBytes': 12121}), key=m.identity)
         cls.decisions = cls.client.prepare(cls.config, cls.rows)

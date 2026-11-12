@@ -290,12 +290,14 @@ public final class TotpExampleLifecycleChecks {
         private Fixture(@NonNull LongSupplier monotonicNanos) {
             byte[] key = new byte[32];
             for (int index = 0; index < key.length; index++) key[index] = (byte) (index + 1);
-            TotpAuthenticator totp = TotpAuthenticator.withIssuer("Example")
+            TotpAuthenticator.Builder builder = TotpAuthenticator.withIssuer("Example")
                     .credentialNamespace(NAMESPACE).recoveryEpoch(EPOCH)
                     .store(this.store)
                     .stateSealer(StateSealer.withActiveKey(SealingKey.fromBase64("test-only",
                             Base64.getEncoder().encodeToString(key))).build())
-                    .clock(this.clock).recoveryGate(this.gate).build();
+                    .clock(this.clock).recoveryGate(this.gate);
+            check(builder.configurationDiagnostics().isEmpty());
+            TotpAuthenticator totp = builder.build();
             check(totp.initializeNamespaceResult() instanceof TotpNamespaceInitializationResult.Initialized);
             this.gate.provisioning = false;
             this.app = new TotpApplication(totp, this.security, monotonicNanos);

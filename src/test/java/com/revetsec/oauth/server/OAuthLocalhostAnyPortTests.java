@@ -104,11 +104,11 @@ final class OAuthLocalhostAnyPortTests {
    builder=OAuthAuthorizationServer.withIssuer(ISSUER).authorizationEndpoint(URI.create(ISSUER+"/authorize")).tokenEndpoint(URI.create(ISSUER+"/token"))
     .jwksEndpoint(URI.create(ISSUER+"/jwks")).revocationEndpoint(URI.create(ISSUER+"/revoke")).clientRepository((client,budget)->cimd?Optional.empty():Optional.of(registered))
     .store(store).stateSealer(sealer).signingKeys(OAuthIssuerKeyProvider.fromSnapshot(signing)).resources(RESOURCES).clock(CLOCK).refreshTokensEnabled(true)
-    .observer(observer).allowNativeLoopbackRedirects(ip).allowLocalhostRedirects(exact).clientMetadataPolicy(policy).grantPolicy((context,budget)->decision());
+    .observer(observer).allowNativeLoopbackRedirects(ip).allowLocalhostRedirects(exact).clientMetadataPolicy(policy)
+    .clientMetadataTransport((uri,budget)->{assertEquals(URI.create(id),uri);fetches.incrementAndGet();
+     return new RawResponse(200,HttpHeaders.of(Map.of("Cache-Control",List.of("max-age=60")),(a,b)->true),body,null,false,Duration.ZERO);})
+    .grantPolicy((context,budget)->decision());
    assertSame(builder,anyPort(builder,any));server=builder.build();
-   var transportField=OAuthClientMetadataFetcher.class.getDeclaredField("transport");transportField.setAccessible(true);
-   // Test-only transport replacement; the public builder never exposes a transport or TLS bypass.
-   transportField.set(fetcher(server),(OAuthClientMetadataFetcher.Transport)(uri,budget)->{assertEquals(URI.create(id),uri);fetches.incrementAndGet();return new RawResponse(200,HttpHeaders.of(Map.of("Cache-Control",List.of("max-age=60")),(a,b)->true),body,null,false,Duration.ZERO);});
    assertEquals(OAuthStoreCommitStatus.COMMITTED,server.initializeFreshIssuer().getStatus());server.establishNewSubject("subject");
   }
   @NonNull OAuthAuthorizationResult begin(@NonNull OAuthAuthorizationServer target,@NonNull String redirect){return begin(target,redirect,"code");}

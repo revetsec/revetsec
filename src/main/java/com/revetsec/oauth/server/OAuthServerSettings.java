@@ -16,10 +16,14 @@
 
 package com.revetsec.oauth.server;
 
+import com.revetsec.ConfigurationDiagnostic;
+import com.revetsec.internal.Limit;
 import com.revetsec.internal.Limits;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
 
 /** Pure immutable internal snapshot for the approved issuer builder settings. */
 final class OAuthServerSettings {
@@ -47,6 +51,8 @@ final class OAuthServerSettings {
  final int maximumClientIdLength;
  final int maximumSubjectLength;
  private OAuthServerSettings(@NonNull Builder builder, boolean refreshEnabled, int sealerMaximumLength) {
+  if (!builder.configurationDiagnostics(refreshEnabled, sealerMaximumLength).isEmpty())
+   throw OAuthStoreFormat.invalid();
   this.authorizationInteractionLifetime = Limits.AS_AUTHORIZATION_INTERACTION_LIFETIME.require(builder.authorizationInteractionLifetime == null ? Limits.AS_AUTHORIZATION_INTERACTION_LIFETIME.getDefaultDuration() : builder.authorizationInteractionLifetime);
   this.authorizationCodeLifetime = Limits.AS_AUTHORIZATION_CODE_LIFETIME.require(builder.authorizationCodeLifetime == null ? Limits.AS_AUTHORIZATION_CODE_LIFETIME.getDefaultDuration() : builder.authorizationCodeLifetime);
   this.accessTokenLifetime = Limits.AS_ACCESS_TOKEN_LIFETIME.require(builder.accessTokenLifetime == null ? Limits.AS_ACCESS_TOKEN_LIFETIME.getDefaultDuration() : builder.accessTokenLifetime);
@@ -69,15 +75,12 @@ final class OAuthServerSettings {
   this.maximumStateLength = Limits.AS_MAXIMUM_STATE_LENGTH.require(builder.maximumStateLength == null ? Limits.AS_MAXIMUM_STATE_LENGTH.getDefaultIntValue() : builder.maximumStateLength);
   this.maximumClientIdLength = Limits.AS_MAXIMUM_CLIENT_ID_LENGTH.require(builder.maximumClientIdLength == null ? Limits.AS_MAXIMUM_CLIENT_ID_LENGTH.getDefaultIntValue() : builder.maximumClientIdLength);
   this.maximumSubjectLength = Limits.AS_MAXIMUM_SUBJECT_LENGTH.require(builder.maximumSubjectLength == null ? Limits.AS_MAXIMUM_SUBJECT_LENGTH.getDefaultIntValue() : builder.maximumSubjectLength);
-  Limits.requireRequestTimeoutWithinTotalDeadline(this.requestTimeout, this.totalDeadline);
-  if (this.authorizationCodeLifetime.compareTo(this.authorizationInteractionLifetime) > 0
-    || (refreshEnabled && (this.accessTokenLifetime.compareTo(this.refreshTokenIdleLifetime) > 0
-      || this.refreshTokenIdleLifetime.compareTo(this.refreshTokenAbsoluteLifetime) > 0))
-    || this.clockSkew.compareTo(this.accessTokenLifetime.dividedBy(2)) > 0
-    || this.maximumStoreRecordBytes > Limits.STATE_SEALER_MAXIMUM_SEALED_LENGTH.require(sealerMaximumLength))
-   throw OAuthStoreFormat.invalid();
-  // All rows are bounded; explicit exact addition keeps retention overflow a build failure.
-  this.retentionExtension = Duration.ofNanos(this.accessTokenLifetime.plus(this.clockSkew).plus(this.totalDeadline).plus(this.publicMetadataHttpCacheMaxAge).toNanos());
+  this.retentionExtension = retentionExtension(this.accessTokenLifetime, this.clockSkew,
+   this.totalDeadline, this.publicMetadataHttpCacheMaxAge);
+ }
+ private static @NonNull Duration retentionExtension(@NonNull Duration access, @NonNull Duration skew,
+   @NonNull Duration deadline, @NonNull Duration metadataAge) {
+  return Duration.ofNanos(access.plus(skew).plus(deadline).plus(metadataAge).toNanos());
  }
  static @NonNull Builder builder() { return new Builder(); }
  @NonNull OAuthServerIngressLimits ingress() {
@@ -134,6 +137,76 @@ final class OAuthServerSettings {
   @NonNull Builder maximumSubjectLength(@Nullable Integer value) { this.maximumSubjectLength = value; return this; }
   @NonNull OAuthServerSettings build(boolean refreshEnabled, int sealerMaximumLength) {
    return new OAuthServerSettings(this, refreshEnabled, sealerMaximumLength);
+  }
+  @NonNull List<@NonNull ConfigurationDiagnostic> configurationDiagnostics(boolean refreshEnabled, @Nullable Integer sealerMaximumLength) {
+   List<ConfigurationDiagnostic> issues = new ArrayList<>();
+   Duration authorizationInteractionLifetimeValue = checkedDuration(this.authorizationInteractionLifetime, Limits.AS_AUTHORIZATION_INTERACTION_LIFETIME, ConfigurationDiagnostic.OAUTH_AUTHORIZATION_INTERACTION_LIFETIME_INVALID, issues);
+   Duration authorizationCodeLifetimeValue = checkedDuration(this.authorizationCodeLifetime, Limits.AS_AUTHORIZATION_CODE_LIFETIME, ConfigurationDiagnostic.OAUTH_AUTHORIZATION_CODE_LIFETIME_INVALID, issues);
+   Duration accessTokenLifetimeValue = checkedDuration(this.accessTokenLifetime, Limits.AS_ACCESS_TOKEN_LIFETIME, ConfigurationDiagnostic.OAUTH_ACCESS_TOKEN_LIFETIME_INVALID, issues);
+   Duration refreshTokenIdleLifetimeValue = checkedDuration(this.refreshTokenIdleLifetime, Limits.AS_REFRESH_TOKEN_IDLE_LIFETIME, ConfigurationDiagnostic.OAUTH_REFRESH_TOKEN_IDLE_LIFETIME_INVALID, issues);
+   Duration refreshTokenAbsoluteLifetimeValue = checkedDuration(this.refreshTokenAbsoluteLifetime, Limits.AS_REFRESH_TOKEN_ABSOLUTE_LIFETIME, ConfigurationDiagnostic.OAUTH_REFRESH_TOKEN_ABSOLUTE_LIFETIME_INVALID, issues);
+   Duration clockSkewValue = checkedDuration(this.clockSkew, Limits.AS_CLOCK_SKEW, ConfigurationDiagnostic.OAUTH_CLOCK_SKEW_INVALID, issues);
+   Duration totalDeadlineValue = checkedDuration(this.totalDeadline, Limits.AS_TOTAL_DEADLINE, ConfigurationDiagnostic.OAUTH_TOTAL_DEADLINE_INVALID, issues);
+   Duration requestTimeoutValue = checkedDuration(this.requestTimeout, Limits.AS_REQUEST_TIMEOUT, ConfigurationDiagnostic.OAUTH_REQUEST_TIMEOUT_INVALID, issues);
+   checkedDuration(this.publicMetadataHttpCacheMaxAge, Limits.AS_PUBLIC_METADATA_HTTP_CACHE_MAX_AGE, ConfigurationDiagnostic.OAUTH_PUBLIC_METADATA_HTTP_CACHE_MAX_AGE_INVALID, issues);
+   checkedInt(this.maximumRequestBodyBytes, Limits.AS_MAXIMUM_REQUEST_BODY_BYTES, ConfigurationDiagnostic.OAUTH_MAXIMUM_REQUEST_BODY_BYTES_INVALID, issues);
+   checkedInt(this.maximumRawQueryLength, Limits.AS_MAXIMUM_RAW_QUERY_LENGTH, ConfigurationDiagnostic.OAUTH_MAXIMUM_RAW_QUERY_LENGTH_INVALID, issues);
+   checkedInt(this.maximumHeaderBytes, Limits.AS_MAXIMUM_HEADER_BYTES, ConfigurationDiagnostic.OAUTH_MAXIMUM_HEADER_BYTES_INVALID, issues);
+   checkedInt(this.maximumResponseBodyBytes, Limits.AS_MAXIMUM_RESPONSE_BODY_BYTES, ConfigurationDiagnostic.OAUTH_MAXIMUM_RESPONSE_BODY_BYTES_INVALID, issues);
+   Integer maximumStoreRecordBytesValue = checkedInt(this.maximumStoreRecordBytes, Limits.AS_MAXIMUM_STORE_RECORD_BYTES, ConfigurationDiagnostic.OAUTH_MAXIMUM_STORE_RECORD_BYTES_INVALID, issues);
+   checkedInt(this.maximumStoreCommitAttempts, Limits.AS_MAXIMUM_STORE_COMMIT_ATTEMPTS, ConfigurationDiagnostic.OAUTH_MAXIMUM_STORE_COMMIT_ATTEMPTS_INVALID, issues);
+   checkedInt(this.maximumResources, Limits.AS_MAXIMUM_RESOURCES, ConfigurationDiagnostic.OAUTH_MAXIMUM_RESOURCES_INVALID, issues);
+   checkedInt(this.maximumRedirectUris, Limits.AS_MAXIMUM_REDIRECT_URIS, ConfigurationDiagnostic.OAUTH_MAXIMUM_REDIRECT_URIS_INVALID, issues);
+   checkedInt(this.maximumScopesPerResource, Limits.AS_MAXIMUM_SCOPES_PER_RESOURCE, ConfigurationDiagnostic.OAUTH_MAXIMUM_SCOPES_PER_RESOURCE_INVALID, issues);
+   checkedInt(this.maximumScopeLength, Limits.AS_MAXIMUM_SCOPE_LENGTH, ConfigurationDiagnostic.OAUTH_MAXIMUM_SCOPE_LENGTH_INVALID, issues);
+   checkedInt(this.maximumStateLength, Limits.AS_MAXIMUM_STATE_LENGTH, ConfigurationDiagnostic.OAUTH_MAXIMUM_STATE_LENGTH_INVALID, issues);
+   checkedInt(this.maximumClientIdLength, Limits.AS_MAXIMUM_CLIENT_ID_LENGTH, ConfigurationDiagnostic.OAUTH_MAXIMUM_CLIENT_ID_LENGTH_INVALID, issues);
+   checkedInt(this.maximumSubjectLength, Limits.AS_MAXIMUM_SUBJECT_LENGTH, ConfigurationDiagnostic.OAUTH_MAXIMUM_SUBJECT_LENGTH_INVALID, issues);
+   if (requestTimeoutValue != null && totalDeadlineValue != null) {
+    try { Limits.requireRequestTimeoutWithinTotalDeadline(requestTimeoutValue, totalDeadlineValue); }
+    catch (IllegalArgumentException invalid) { issues.add(ConfigurationDiagnostic.OAUTH_REQUEST_TIMEOUT_EXCEEDS_DEADLINE); }
+   }
+   if (authorizationCodeLifetimeValue != null && authorizationInteractionLifetimeValue != null
+     && authorizationCodeLifetimeValue.compareTo(authorizationInteractionLifetimeValue) > 0)
+    issues.add(ConfigurationDiagnostic.OAUTH_CODE_LIFETIME_EXCEEDS_INTERACTION);
+   // OAuthRefreshRotation always retains both lifetimes, even when refresh issuance is disabled.
+   if (accessTokenLifetimeValue != null && refreshTokenIdleLifetimeValue != null
+     && accessTokenLifetimeValue.compareTo(refreshTokenIdleLifetimeValue) > 0)
+    issues.add(ConfigurationDiagnostic.OAUTH_ACCESS_LIFETIME_EXCEEDS_IDLE);
+   if (refreshEnabled && refreshTokenIdleLifetimeValue != null && refreshTokenAbsoluteLifetimeValue != null
+     && refreshTokenIdleLifetimeValue.compareTo(refreshTokenAbsoluteLifetimeValue) > 0)
+    issues.add(ConfigurationDiagnostic.OAUTH_IDLE_LIFETIME_EXCEEDS_ABSOLUTE);
+   if (clockSkewValue != null && accessTokenLifetimeValue != null
+     && clockSkewValue.compareTo(accessTokenLifetimeValue.dividedBy(2)) > 0)
+    issues.add(ConfigurationDiagnostic.OAUTH_CLOCK_SKEW_EXCEEDS_HALF_ACCESS);
+   if (maximumStoreRecordBytesValue != null && sealerMaximumLength != null
+     && maximumStoreRecordBytesValue > Limits.STATE_SEALER_MAXIMUM_SEALED_LENGTH.require(sealerMaximumLength))
+    issues.add(ConfigurationDiagnostic.OAUTH_STORE_RECORD_EXCEEDS_SEALER);
+   return List.copyOf(issues);
+  }
+  @Nullable OAuthServerIngressLimits resourceLimitsForDiagnostics() {
+   try {
+    return new OAuthServerIngressLimits(
+     Limits.AS_MAXIMUM_REQUEST_BODY_BYTES.require(this.maximumRequestBodyBytes==null?Limits.AS_MAXIMUM_REQUEST_BODY_BYTES.getDefaultIntValue():this.maximumRequestBodyBytes),
+     Limits.AS_MAXIMUM_RAW_QUERY_LENGTH.require(this.maximumRawQueryLength==null?Limits.AS_MAXIMUM_RAW_QUERY_LENGTH.getDefaultIntValue():this.maximumRawQueryLength),
+     Limits.AS_MAXIMUM_HEADER_BYTES.require(this.maximumHeaderBytes==null?Limits.AS_MAXIMUM_HEADER_BYTES.getDefaultIntValue():this.maximumHeaderBytes),
+     Limits.AS_MAXIMUM_STATE_LENGTH.require(this.maximumStateLength==null?Limits.AS_MAXIMUM_STATE_LENGTH.getDefaultIntValue():this.maximumStateLength),
+     Limits.AS_MAXIMUM_CLIENT_ID_LENGTH.require(this.maximumClientIdLength==null?Limits.AS_MAXIMUM_CLIENT_ID_LENGTH.getDefaultIntValue():this.maximumClientIdLength),
+     Limits.AS_MAXIMUM_RESOURCES.require(this.maximumResources==null?Limits.AS_MAXIMUM_RESOURCES.getDefaultIntValue():this.maximumResources),
+     Limits.AS_MAXIMUM_REDIRECT_URIS.require(this.maximumRedirectUris==null?Limits.AS_MAXIMUM_REDIRECT_URIS.getDefaultIntValue():this.maximumRedirectUris),
+     Limits.AS_MAXIMUM_SCOPES_PER_RESOURCE.require(this.maximumScopesPerResource==null?Limits.AS_MAXIMUM_SCOPES_PER_RESOURCE.getDefaultIntValue():this.maximumScopesPerResource),
+     Limits.AS_MAXIMUM_SCOPE_LENGTH.require(this.maximumScopeLength==null?Limits.AS_MAXIMUM_SCOPE_LENGTH.getDefaultIntValue():this.maximumScopeLength));
+   } catch(IllegalArgumentException invalid) { return null; }
+  }
+  private static @Nullable Duration checkedDuration(@Nullable Duration value, @NonNull Limit limit,
+    @NonNull ConfigurationDiagnostic code, @NonNull List<@NonNull ConfigurationDiagnostic> issues) {
+   try { return limit.require(value == null ? limit.getDefaultDuration() : value); }
+   catch (IllegalArgumentException invalid) { issues.add(code); return null; }
+  }
+  private static @Nullable Integer checkedInt(@Nullable Integer value, @NonNull Limit limit,
+    @NonNull ConfigurationDiagnostic code, @NonNull List<@NonNull ConfigurationDiagnostic> issues) {
+   try { return limit.require(value == null ? limit.getDefaultIntValue() : value); }
+   catch (IllegalArgumentException invalid) { issues.add(code); return null; }
   }
   @Override public @NonNull String toString() { return "OAuthServerSettings.Builder{<redacted>}"; }
  }

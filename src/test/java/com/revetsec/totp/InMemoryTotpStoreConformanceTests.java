@@ -27,6 +27,11 @@ final class InMemoryTotpStoreConformanceTests extends TotpStoreConformanceTests 
   return InMemoryTotpStore.withNamespace("conformance-accounts", "conformance-epoch-one").build();
  }
 
+ @Override protected @NonNull TotpStore newStoreWithEntryLimit(int maximumEntries) {
+  return InMemoryTotpStore.withNamespace("conformance-accounts", "conformance-epoch-one")
+    .maximumEntries(maximumEntries).build();
+ }
+
  @Override protected void provisionSecondEpoch(@NonNull TotpStore store) {
   assertEquals(TotpStoreCommitResult.COMMITTED,
     ((InMemoryTotpStore) store).provisionRecoveryEpoch("conformance-epoch-two", Duration.ofSeconds(5)));

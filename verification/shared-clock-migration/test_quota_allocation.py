@@ -45,7 +45,7 @@ class QuotaAllocationTests(unittest.TestCase):
  def setUpClass(cls):
   cls.work=Path(tempfile.mkdtemp(prefix='revetsec-cap08-codec-'));cls.addClassCleanup(shutil.rmtree,cls.work,ignore_errors=True)
   cls.config={**synthetic_config(),'quotaCorpus':1};cls.java=Path(os.environ.get('SCP10_JAVA_HOME','/Users/agents/Java/amazon-corretto-21.jdk/Contents/Home'))/'bin'
-  cls.client=CodecClient(cls.work,cls.java.parent,os.environ.get('SCP10_CORE_JAR',ROOT/'planning/records/security/cap-07-2026-11-05/artifacts/core.jar'),ROOT/'planning/records/security/shared-clock-scp01-2026-10-29/baseline/built-core/revetsec-1.0.0-SNAPSHOT.jar',os.environ.get('SCP10_REPOSITORY','/private/tmp/revetsec-mig-06-2026-11-04/repository'),expected_core_sha256=os.environ.get('SCP10_CORE_SHA256','8d307f157854f1960c260b254e54f684d9849b6da2e41856f0dd4779e629a9c5'))
+  cls.client=CodecClient(cls.work,cls.java.parent,os.environ.get('SCP10_CORE_JAR',ROOT/'planning/records/security/cap-07-2026-11-05/artifacts/core.jar'),ROOT/'planning/records/security/shared-clock-scp01-2026-10-29/baseline/built-core/revetsec-1.0.0-SNAPSHOT.jar',os.environ.get('SCP10_REPOSITORY','/Users/agents/.m2/repository'),expected_core_sha256=os.environ.get('SCP10_CORE_SHA256','8d307f157854f1960c260b254e54f684d9849b6da2e41856f0dd4779e629a9c5'))
   cls.rows=sorted(cls.client.fixtures(cls.config),key=m.identity);cls.prepared=sorted(cls.client.prepare(cls.config,cls.rows),key=lambda d:m.identity(d['source']))
   if len(cls.rows)!=39 or any(d['classification']!='FIT' for d in cls.prepared):raise AssertionError('CAP08-genuine-corpus-positive-control')
   cls.verified=cls.client.verify(cls.config,[d['target'] for d in cls.prepared])

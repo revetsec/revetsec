@@ -57,6 +57,7 @@ final class OAuthServerWireContractTests {
    for (Object value : accepted) tests.add(DynamicTest.dynamicTest(name+" accepts "+value, () -> {
     OAuthServerSettings.Builder builder = compatible();
     if (name.equals("authorizationInteractionLifetime")) builder.authorizationCodeLifetime(Duration.ofSeconds(30));
+    if (name.equals("refreshTokenIdleLifetime")) builder.accessTokenLifetime(Duration.ofSeconds(30));
     if (name.equals("totalDeadline")) builder.requestTimeout(Duration.ofSeconds(1));
     assertSame(builder, set(builder, name, value, duration));
     OAuthServerSettings settings = builder.build(false, 16384);
@@ -87,9 +88,11 @@ final class OAuthServerWireContractTests {
   assertThrows(IllegalArgumentException.class, () -> OAuthServerSettings.builder().accessTokenLifetime(Duration.ofSeconds(30)).build(false,3800));
   assertThrows(IllegalArgumentException.class, () -> OAuthServerSettings.builder().refreshTokenIdleLifetime(Duration.ofDays(7)).refreshTokenAbsoluteLifetime(Duration.ofDays(1)).build(true,3800));
   assertThrows(IllegalArgumentException.class, () -> OAuthServerSettings.builder().accessTokenLifetime(Duration.ofMinutes(15)).refreshTokenIdleLifetime(Duration.ofMinutes(5)).build(true,3800));
-  assertNotNull(OAuthServerSettings.builder().clockSkew(Duration.ofSeconds(15)).accessTokenLifetime(Duration.ofSeconds(30))
+  OAuthServerSettings.Builder exact=OAuthServerSettings.builder().clockSkew(Duration.ofSeconds(15)).accessTokenLifetime(Duration.ofSeconds(30))
    .authorizationInteractionLifetime(Duration.ofMinutes(2)).totalDeadline(Duration.ofSeconds(5)).refreshTokenIdleLifetime(Duration.ofHours(1))
-   .refreshTokenAbsoluteLifetime(Duration.ofHours(1)).build(true,3800));
+   .refreshTokenAbsoluteLifetime(Duration.ofHours(1));
+  assertTrue(exact.configurationDiagnostics(true,3800).isEmpty());
+  assertNotNull(exact.build(true,3800));
   assertNotNull(OAuthServerSettings.builder().refreshTokenIdleLifetime(Duration.ofDays(7)).refreshTokenAbsoluteLifetime(Duration.ofDays(1)).build(false,3800));
  }
  @Test void sealerCapacityMustBeExplicitlyAligned() {
@@ -104,6 +107,13 @@ final class OAuthServerWireContractTests {
   assertEquals(Duration.ofMinutes(2),b.build(false,3800).authorizationCodeLifetime);
   assertEquals(Duration.ofSeconds(400),a.retentionExtension);assertEquals(16384,a.ingress().bodyBytes);assertEquals(32,a.ingress().scopes);assertEquals(1024,a.ingress().stateLength);
   assertEquals("OAuthServerSettings{<redacted>}",a.toString());assertEquals("OAuthServerSettings.Builder{<redacted>}",b.toString());
+ }
+ @Test void maximumValidatedRetentionInputsHaveAnExactBoundedSum() {
+  OAuthServerSettings settings=OAuthServerSettings.builder()
+   .accessTokenLifetime(Duration.ofMinutes(15)).clockSkew(Duration.ofSeconds(60))
+   .totalDeadline(Duration.ofSeconds(60)).requestTimeout(Duration.ofSeconds(30))
+   .publicMetadataHttpCacheMaxAge(Duration.ofMinutes(5)).build(false,3800);
+  assertEquals(Duration.ofMinutes(22),settings.retentionExtension);
  }
  @Test void completeTypedSpellingSeparatesCodeAndRefreshLedgerKeys() throws Exception {
   String code=OAuthServerCredential.code(NONCE),refresh=OAuthServerCredential.refresh(NONCE);

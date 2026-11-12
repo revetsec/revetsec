@@ -73,6 +73,11 @@ core does not perform a complete public-suffix-list lookup. This follows the sta
 exact origin verification remains a separate check. Related Origin Requests, HTTP/IP origins,
 iframe/cross-origin and native-app profiles remain outside this scope.
 
+Before constructing the relying party, `WebAuthnRelyingParty.Builder.configurationDiagnostics()`
+can report every missing required setting as fixed, redacted codes. See
+[builder configuration diagnostics](builder-diagnostics.md) for its construction-only scope; an
+empty result does not verify browser compatibility, authenticator behavior or deployment readiness.
+
 Update all participating readers before enabling child-origin configuration: the existing WAR2
 codec format is unchanged, but older readers reject child-origin pending records. Existing
 ceremonies keep their sealed origin snapshot; changing configuration does not retroactively add

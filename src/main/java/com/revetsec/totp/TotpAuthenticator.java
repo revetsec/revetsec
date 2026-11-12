@@ -17,6 +17,7 @@
 package com.revetsec.totp;
 
 import com.google.errorprone.annotations.CheckReturnValue;
+import com.revetsec.ConfigurationDiagnostic;
 import com.revetsec.OperationBinding;
 import com.revetsec.StateSealer;
 import com.revetsec.internal.encoding.StrictUtf8;
@@ -26,6 +27,8 @@ import javax.annotation.concurrent.ThreadSafe;
 import javax.annotation.concurrent.NotThreadSafe;
 import java.time.Clock;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 
 /**
@@ -369,10 +372,25 @@ public final class TotpAuthenticator {
                 throw new IllegalArgumentException("Invalid TOTP operation timeout");
             this.timeout = timeout; return this;
         }
+        /** Inspects only the current configuration shape. The immutable, ordered result contains
+         * fixed codes and no supplied values; it does not call application dependencies.
+         * @return every missing required setting, or an empty list
+         * @since 1.0.0 */
+        @CheckReturnValue public @NonNull List<@NonNull ConfigurationDiagnostic> configurationDiagnostics() {
+            List<ConfigurationDiagnostic> issues = new ArrayList<>(5);
+            if (this.namespace == null) issues.add(ConfigurationDiagnostic.TOTP_CREDENTIAL_NAMESPACE_REQUIRED);
+            if (this.epoch == null) issues.add(ConfigurationDiagnostic.TOTP_RECOVERY_EPOCH_REQUIRED);
+            if (this.store == null) issues.add(ConfigurationDiagnostic.TOTP_STORE_REQUIRED);
+            if (this.sealer == null) issues.add(ConfigurationDiagnostic.TOTP_STATE_SEALER_REQUIRED);
+            if (this.gate == null) issues.add(ConfigurationDiagnostic.TOTP_RECOVERY_GATE_REQUIRED);
+            return List.copyOf(issues);
+        }
         /** Checks configuration without admission, storage, cryptographic-provider calls or thread startup.
          * @return the immutable authenticator
          * @since 1.0.0 */
         public @NonNull TotpAuthenticator build() {
+            List<ConfigurationDiagnostic> issues = configurationDiagnostics();
+            if (!issues.isEmpty()) throw new NullPointerException(issues.get(0).getFieldCode());
             String ns = Objects.requireNonNull(this.namespace, "credentialNamespace");
             String recoveryEpoch = Objects.requireNonNull(this.epoch, "recoveryEpoch");
             return new TotpAuthenticator(new TotpEngine(this.issuer, ns, recoveryEpoch,

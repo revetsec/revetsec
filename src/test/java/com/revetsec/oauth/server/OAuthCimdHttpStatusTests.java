@@ -109,22 +109,20 @@ final class OAuthCimdHttpStatusTests {
    server=OAuthAuthorizationServer.withIssuer(ISSUER).authorizationEndpoint(URI.create(ISSUER+"/authorize")).tokenEndpoint(URI.create(ISSUER+"/token"))
      .jwksEndpoint(URI.create(ISSUER+"/jwks")).revocationEndpoint(URI.create(ISSUER+"/revoke")).clientRepository((id,budget)->Optional.ofNullable(registered.get()))
      .store(store).stateSealer(sealer).signingKeys(OAuthIssuerKeyProvider.fromSnapshot(snapshot)).resources(RESOURCES).clock(CLOCK).refreshTokensEnabled(true).clientMetadataPolicy(policy)
+     .clientMetadataTransport((uri,budget)->{
+      assertEquals(URI.create(ID),uri);fetches.incrementAndGet();Runnable hook=transportHook;if(hook!=null)hook.run();
+      boolean drop=status>=400&&dropped;
+      return new RawResponse(status,HttpHeaders.of(Map.of("Cache-Control",List.of(status==200?control:"max-age=86400"),"Location",List.of("https://other.invalid/"+REMOTE),
+       "WWW-Authenticate",List.of("Basic realm=\""+REMOTE+"\""),"Retry-After",List.of("86400")),(a,b)->true),drop?new byte[0]:status==200?document():bytes(REMOTE),null,drop,Duration.ZERO);
+     })
      .grantPolicy((context,budget)->{policies.incrementAndGet();return decision();})
      .observer(new OAuthServerObserver(){
       @Override public void didRejectEndpoint(@NonNull Endpoint endpoint,OAuthServerException.@NonNull Reason reason,@Nullable Integer httpStatus,@NonNull Duration elapsed){rejected.incrementAndGet();}
       @Override public void didFailToHandleEndpoint(@NonNull Endpoint endpoint,@NonNull OAuthServerException failure,@NonNull Duration elapsed){failed.incrementAndGet();}
      }).build();
-   // Replace only the private transport for tests; public issuer methods and the constructed coordinator remain real.
    var clientsField=OAuthAuthorizationServer.class.getDeclaredField("clients");clientsField.setAccessible(true);
    var metadataField=OAuthServerClientSelection.class.getDeclaredField("metadata");metadataField.setAccessible(true);
    fetcher=(OAuthClientMetadataFetcher)requireNonNull(metadataField.get(requireNonNull(clientsField.get(server))));
-   var transportField=OAuthClientMetadataFetcher.class.getDeclaredField("transport");transportField.setAccessible(true);
-   transportField.set(fetcher,(OAuthClientMetadataFetcher.Transport)(uri,budget)->{
-    assertEquals(URI.create(ID),uri);fetches.incrementAndGet();Runnable hook=transportHook;if(hook!=null)hook.run();
-    boolean drop=status>=400&&dropped;
-    return new RawResponse(status,HttpHeaders.of(Map.of("Cache-Control",List.of(status==200?control:"max-age=86400"),"Location",List.of("https://other.invalid/"+REMOTE),
-      "WWW-Authenticate",List.of("Basic realm=\""+REMOTE+"\""),"Retry-After",List.of("86400")),(a,b)->true),drop?new byte[0]:status==200?document():bytes(REMOTE),null,drop,Duration.ZERO);
-   });
    assertEquals(OAuthStoreCommitStatus.COMMITTED,server.initializeFreshIssuer().getStatus());server.establishNewSubject("subject");
   }
   @NonNull OAuthAuthorizationResult begin(){return server.beginAuthorizationResult("GET",form(Map.of("client_id",ID,"response_type","code","redirect_uri",REDIRECT,"resource",RESOURCE,

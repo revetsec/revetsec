@@ -24,7 +24,7 @@ class TotpCapacityTests(unittest.TestCase):
  def setUpClass(cls):
   cls.work=Path(tempfile.mkdtemp(prefix='revetsec-cap06-codec-'));cls.addClassCleanup(shutil.rmtree,cls.work,ignore_errors=True)
   cls.config={**synthetic_config(),'totpCapacityCorpus':1}
-  cls.client=CodecClient(cls.work,os.environ.get('SCP10_JAVA_HOME','/Users/agents/Java/amazon-corretto-21.jdk/Contents/Home'),os.environ.get('SCP10_CORE_JAR',ROOT/'planning/records/security/mig-15-2026-11-04/artifacts/core.jar'),ROOT/'planning/records/security/shared-clock-scp01-2026-10-29/baseline/built-core/revetsec-1.0.0-SNAPSHOT.jar',os.environ.get('SCP10_REPOSITORY','/private/tmp/revetsec-mig-06-2026-11-04/repository'),expected_core_sha256=os.environ.get('SCP10_CORE_SHA256','8d307f157854f1960c260b254e54f684d9849b6da2e41856f0dd4779e629a9c5'))
+  cls.client=CodecClient(cls.work,os.environ.get('SCP10_JAVA_HOME','/Users/agents/Java/amazon-corretto-21.jdk/Contents/Home'),os.environ.get('SCP10_CORE_JAR',ROOT/'planning/records/security/mig-15-2026-11-04/artifacts/core.jar'),ROOT/'planning/records/security/shared-clock-scp01-2026-10-29/baseline/built-core/revetsec-1.0.0-SNAPSHOT.jar',os.environ.get('SCP10_REPOSITORY','/Users/agents/.m2/repository'),expected_core_sha256=os.environ.get('SCP10_CORE_SHA256','8d307f157854f1960c260b254e54f684d9849b6da2e41856f0dd4779e629a9c5'))
   cls.rows=cls.client.fixtures(cls.config);cls.prepared=cls.client.prepare(cls.config,cls.rows)
   cls.totp=[r for r in cls.rows if r['family']=='TOTP'];cls.facts=cls.client.process('TOTP',cls.config,cls.totp,root_rows(cls.totp),'capacity-facts')
   cls.rotation={**cls.config,'activeKeyId':'r'*64,'keys':{**cls.config['keys'],'r'*64:base64.b64encode(bytes(range(33,65))).decode()}}
