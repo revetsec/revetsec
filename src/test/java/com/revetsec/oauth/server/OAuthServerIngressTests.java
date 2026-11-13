@@ -111,10 +111,17 @@ final class OAuthServerIngressTests {
 		fails(INVALID_CLIENT,()->OAuthServerClientAdmission.authenticate(request,repository(client("client",null)),deadline(),LIMITS));
 		fails(INVALID_CLIENT,()->OAuthServerClientAdmission.authenticate(post(pair,basic("client:secret")),
 			repository(client("client",(id,secret,budget)->true)),deadline(),LIMITS));
+		String arbitrary="client_id=client&client_assertion=definitely-not-a-jwt&client_assertion_type=unsupported";
+		OAuthServerRequest opaque=post(arbitrary,null);assertTrue(opaque.clientAssertion());
+		fails(INVALID_CLIENT,()->OAuthServerClientAdmission.authenticate(opaque,repository(client("client",null)),deadline(),LIMITS));
 		for(String malformed:List.of("client_assertion=x","client_assertion_type=x","client_assertion=&client_assertion_type=x",
-			"client_assertion=x&client_assertion_type=","client_assertion=%00&client_assertion_type=x"))
+			"client_assertion=x&client_assertion_type=","client_assertion=%00&client_assertion_type=x",
+			"client_assertion=x&client_assertion=x&client_assertion_type=y",
+			"client_assertion=x&client_assertion_type=y&client_assertion_type=y"))
 			fails(INVALID_REQUEST,()->post(malformed,null));
-		fails(INVALID_REQUEST,()->OAuthServerRequest.parse(REVOCATION,"POST",null,pair.getBytes(StandardCharsets.UTF_8),headers(null),LIMITS));
+		for(OAuthServerRequest.Endpoint endpoint:List.of(REVOCATION,INTROSPECTION))
+			fails(INVALID_REQUEST,()->OAuthServerRequest.parse(endpoint,"POST",null,pair.getBytes(StandardCharsets.UTF_8),headers(null),LIMITS));
+		fails(INVALID_REQUEST,()->OAuthServerRequest.parse(AUTHORIZATION,"GET",pair,new byte[0],Map.of(),LIMITS));
 	}
 	@TestFactory @NonNull Stream<@NonNull DynamicTest> malformedEncodingsAnywhereRejectWholeInput() {
 		return Stream.of("%", "%1", "%GG", "%ＦＦ", "%FF", "%80", "%C0%AF", "%E0%80%80", "%ED%A0%80", "%F4%90%80%80", "%E2%82", "\uD800")

@@ -89,12 +89,22 @@ final class OAuthServerOutcomeTests {
   assertSame(wire,assertInstanceOf(OAuthTokenResult.Succeeded.class,OAuthTokenResult.fromSucceeded(wire)).getResponse());
   assertSame(wire,assertInstanceOf(OAuthRevocationResult.Succeeded.class,OAuthRevocationResult.fromSucceeded(wire)).getResponse());
   assertSame(wire,assertInstanceOf(OAuthIntrospectionResult.Succeeded.class,OAuthIntrospectionResult.fromSucceeded(wire)).getResponse());
+  assertTrue(Arrays.stream(VerifiedAccessToken.class.getMethods()).noneMatch(method->method.getName().equals("getGrantValue")));
   VerifiedAccessToken proof=proof();var admitted=assertInstanceOf(OAuthIssuerAccessTokenResult.Succeeded.class,
    OAuthIssuerAccessTokenResult.fromSucceeded(proof,HANDLE));assertSame(proof,admitted.getAccessToken());assertEquals(HANDLE,admitted.getGrantValue());
   for(Object outcome:List.of(OAuthAuthorizationResult.fromCompleted(wire),OAuthAuthorizationResult.fromDenied(wire),OAuthAuthorizationResult.fromInteractionRequired(view),OAuthTokenResult.fromSucceeded(wire),OAuthRevocationResult.fromSucceeded(wire),OAuthIntrospectionResult.fromSucceeded(wire),OAuthIssuerAccessTokenResult.fromSucceeded(proof,HANDLE))) {
    assertTrue(outcome.toString().endsWith("{<redacted>}"));assertFalse(outcome.toString().contains("TEST-ONLY"));
   }
   assertNotEquals(OAuthTokenResult.fromSucceeded(wire),OAuthTokenResult.fromSucceeded(wire));
+ }
+ @Test void grantHandleAccessorExistsOnlyOnCheckedIssuerSuccess() throws Exception {
+  var accessor=OAuthIssuerAccessTokenResult.Succeeded.class.getMethod("getGrantValue");
+  assertEquals(String.class,accessor.getReturnType());assertTrue(Modifier.isPublic(accessor.getModifiers()));
+  Set<String> publicMethods=Set.copyOf(Arrays.stream(OAuthIssuerAccessTokenResult.Succeeded.class.getDeclaredMethods())
+   .filter(method->Modifier.isPublic(method.getModifiers())).map(java.lang.reflect.Method::getName).toList());
+  assertEquals(Set.of("getAccessToken","getGrantValue"),publicMethods);
+  for(Class<?> type:List.of(OAuthIssuerAccessTokenResult.class,OAuthIssuerAccessTokenResult.Rejected.class,VerifiedAccessToken.class))
+   assertThrows(NoSuchMethodException.class,()->type.getMethod("getGrantValue"));
  }
  @Test void sealedOutcomesAndErrorsHaveNoPublicMintingOrSubclassingSeam() {
   for(Class<?> base:List.of(OAuthAuthorizationResult.class,OAuthTokenResult.class,OAuthRevocationResult.class,OAuthIntrospectionResult.class,OAuthIssuerAccessTokenResult.class,OAuthServerException.class)) {
@@ -108,6 +118,11 @@ final class OAuthServerOutcomeTests {
  private static void restricted(@NonNull Class<?> type) {
   for(var c:type.getDeclaredConstructors()) assertFalse(Modifier.isPublic(c.getModifiers())||Modifier.isProtected(c.getModifiers()));
   for(var m:type.getDeclaredMethods()) assertFalse(Modifier.isStatic(m.getModifiers())&&(Modifier.isPublic(m.getModifiers())||Modifier.isProtected(m.getModifiers())));
+ }
+ @TestFactory @NonNull Stream<@NonNull DynamicTest> checkedSuccessCannotSynthesizeAMalformedGrantHandle() {
+  VerifiedAccessToken token=proof();return Stream.of("","A".repeat(42),"A".repeat(44),"A".repeat(42)+"B","A".repeat(42)+"+")
+   .map(handle->DynamicTest.dynamicTest(Integer.toString(handle.length())+' '+handle.substring(0,Math.min(1,handle.length())),
+    ()->assertThrows(IllegalArgumentException.class,()->OAuthIssuerAccessTokenResult.fromSucceeded(token,handle))));
  }
  @TestFactory @NonNull Stream<@NonNull DynamicTest> familyCategoriesAndTransienceAreFixed() { return Stream.of(OAuthServerException.Reason.values()).map(value->DynamicTest.dynamicTest("familyCategoriesAndTransienceAreFixed["+value.name()+"]",()->familyCategoriesAndTransienceAreFixedCase(value))); }
  private void familyCategoriesAndTransienceAreFixedCase(OAuthServerException.@NonNull Reason reason) {

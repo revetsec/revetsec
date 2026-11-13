@@ -180,6 +180,14 @@ final class OAuthClientSelectionTests {
  }
  @Test void registryFatalPropagates() {assertThrows(Fatal.class,()->selection((id,b)->{throw new Fatal();}).authorization(ID,resources(),deadline()));assertEquals(0,this.fetches.get());}
  @Test void confidentialRegisteredClientCannotFallBackToPublicMetadata() {failure(OAuthServerAdmissionFailure.Reason.INVALID_CLIENT,()->selection((id,b)->Optional.of(registered(true))).authenticate(token(BROWSER,false,Map.of(),null),resources(),deadline()));assertEquals(0,this.fetches.get());}
+ @Test void failedRegisteredBasicVerificationCannotFallBackToPublicMetadata() {
+  AtomicInteger verifications=new AtomicInteger();var client=OAuthServerClientRegistration.withClientId(ID).configurationVersion("v1")
+   .redirectUris(List.of(URI.create(REDIRECT))).allowedScopesByResource(resources()).refreshTokenPermitted(true)
+   .authentication(OAuthServerClientAuthentication.fromClientSecretVerifier((id,secret,budget)->{verifications.incrementAndGet();return false;})).build();
+  failure(OAuthServerAdmissionFailure.Reason.INVALID_CLIENT,()->selection((id,b)->Optional.of(client))
+   .authenticate(token(BROWSER,false,Map.of(),basic()),resources(),deadline()));
+  assertEquals(1,verifications.get());assertEquals(0,this.fetches.get());assertEquals(0,this.cacheReads.get());
+ }
  @Test void basicUnknownNeverFetches() {failure(OAuthServerAdmissionFailure.Reason.INVALID_CLIENT,()->this.dynamic.authenticate(token(BROWSER,false,Map.of(),basic()),resources(),deadline()));assertEquals(0,this.fetches.get());}
  @Test void basicPublicRegistrationNeverFetchesOrDowngrades() {failure(OAuthServerAdmissionFailure.Reason.INVALID_CLIENT,()->selection((id,b)->Optional.of(registered(false))).authenticate(token(BROWSER,false,Map.of(),basic()),resources(),deadline()));assertEquals(0,this.fetches.get());}
  @Test void dynamicIntrospectionNeverFetches() {

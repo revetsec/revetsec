@@ -170,10 +170,18 @@ final class OAuthClientMetadataTests {
 
   List<String> invalid=List.of(
    add.apply(",\"token_endpoint_auth_method\":\"private_key_jwt\""),
+   add.apply(",\"token_endpoint_auth_method\":\"future_method\""),
    add.apply(",\"token_endpoint_auth_methods_supported\":[\"private_key_jwt\"]"),
+   add.apply(",\"token_endpoint_auth_methods_supported\":[\"future_method\"]"),
+   add.apply(",\"token_endpoint_auth_methods_supported\":[\"private_key_jwt\"],\"token_endpoint_auth_method\":\"private_key_jwt\""),
+   add.apply(",\"token_endpoint_auth_methods_supported\":[\"future_method\"],\"token_endpoint_auth_method\":\"future_method\""),
+   add.apply(",\"token_endpoint_auth_methods_supported\":[\"private_key_jwt\"],\"token_endpoint_auth_method\":\"none\""),
    add.apply(",\"token_endpoint_auth_methods_supported\":[\"none\",\"private_key_jwt\"],\"token_endpoint_auth_method\":\"future_method\""),
+   add.apply(",\"token_endpoint_auth_methods_supported\":[\"none\",\"future_method\"],\"token_endpoint_auth_method\":\"private_key_jwt\""),
    add.apply(",\"token_endpoint_auth_methods_supported\":[]"),
+   add.apply(",\"token_endpoint_auth_methods_supported\":[],\"token_endpoint_auth_method\":\"none\""),
    add.apply(",\"token_endpoint_auth_methods_supported\":null"),
+   add.apply(",\"token_endpoint_auth_methods_supported\":null,\"token_endpoint_auth_method\":\"none\""),
    add.apply(",\"token_endpoint_auth_methods_supported\":\"none\""),
    add.apply(",\"token_endpoint_auth_methods_supported\":[null]"),
    add.apply(",\"token_endpoint_auth_methods_supported\":[7]"),
@@ -183,18 +191,34 @@ final class OAuthClientMetadataTests {
    add.apply(",\"token_endpoint_auth_methods_supported\":[\"none\",\"client_secret_post\"]"),
    add.apply(",\"token_endpoint_auth_methods_supported\":[\"none\",\"client_secret_jwt\"]"),
    add.apply(",\"token_endpoint_auth_methods_supported\":[\"none\",\"client_secret_basic\"],\"token_endpoint_auth_method\":\"client_secret_basic\""),
+   add.apply(",\"token_endpoint_auth_methods_supported\":[\"none\"],\"token_endpoint_auth_method\":\"client_secret_post\""),
+   add.apply(",\"token_endpoint_auth_methods_supported\":[\"none\"],\"token_endpoint_auth_method\":\"client_secret_jwt\""),
    add.apply(",\"token_endpoint_auth_method\":\"client_secret_basic\""),
    add.apply(",\"token_endpoint_auth_method\":\"client_secret_post\""),
    add.apply(",\"token_endpoint_auth_method\":\"client_secret_jwt\""),
    add.apply(",\"token_endpoint_auth_method\":null"),
    add.apply(",\"token_endpoint_auth_method\":\"\""),
    add.apply(",\"token_endpoint_auth_method\":7"),
+   add.apply(",\"token_endpoint_auth_methods_supported\":[\"none\"],\"token_endpoint_auth_method\":null"),
+   add.apply(",\"token_endpoint_auth_methods_supported\":[\"none\"],\"token_endpoint_auth_method\":\"\""),
+   add.apply(",\"token_endpoint_auth_methods_supported\":[\"none\"],\"token_endpoint_auth_method\":7"),
    add.apply(",\"token_endpoint_auth_signing_alg\":\"\""),
    add.apply(",\"token_endpoint_auth_signing_alg\":null"),
    add.apply(",\"token_endpoint_auth_signing_alg\":7"));
   for(String document:invalid)assertThrows(OAuthServerAdmissionFailure.class,()->parse(document));
   String repeated=java.util.stream.IntStream.range(0,129).mapToObj(i->"\"none\"").collect(java.util.stream.Collectors.joining(","));
   assertThrows(OAuthServerAdmissionFailure.class,()->parse(add.apply(",\"token_endpoint_auth_methods_supported\":["+repeated+"]")));
+ }
+ @TestFactory @NonNull Stream<@NonNull DynamicTest> duplicateAuthenticationMembersRemainInvalidIncludingEscapedAliases() {
+  String root=BASE.replace(",\"token_endpoint_auth_method\":\"none\"","");
+  Function<String,String> add=members->root.substring(0,root.length()-1)+members+"}";
+  List<String> documents=List.of(
+   BASE.substring(0,BASE.length()-1)+",\"token_endpoint_auth_method\":\"none\"}",
+   BASE.substring(0,BASE.length()-1)+",\"token_endpoint_auth_meth\\u006fd\":\"none\"}",
+   add.apply(",\"token_endpoint_auth_methods_supported\":[\"none\"],\"token_endpoint_auth_methods_supported\":[\"none\"]"),
+   add.apply(",\"token_endpoint_auth_methods_supported\":[\"none\"],\"token_endpoint_auth_methods_supp\\u006frted\":[\"none\"]"));
+  return java.util.stream.IntStream.range(0,documents.size()).mapToObj(i->DynamicTest.dynamicTest(
+   "duplicate authentication member "+i,()->assertThrows(OAuthServerAdmissionFailure.class,()->parse(documents.get(i)))));
  }
  @TestFactory @NonNull Stream<@NonNull DynamicTest> requiredMembersAndWrongTypes() {
   List<DynamicTest> result=new ArrayList<>();for(String field:List.of("client_id","client_name","redirect_uris")) {

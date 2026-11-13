@@ -196,8 +196,11 @@ final class OAuthCimdMcpProfileTests {
   JsonObject document=change(reference(),"token_endpoint_auth_methods_supported",strings("none","private_key_jwt"));
   document=change(document,"token_endpoint_auth_method",JsonString.fromValue("private_key_jwt"));
   document=change(document,"token_endpoint_auth_signing_alg",JsonString.fromValue("RS256"));
+  document=change(document,"jwks_uri",JsonString.fromValue("https://keys.example.com/client.jwks"));
   Fixture f=new Fixture(document,true,true);String redirect="http://127.0.0.1:49152/callback";
-  JsonObject response=json(success(f.redeem(f.code(redirect),redirect,VERIFIER)).toHttpBodyWithCredentials());
+  assertFalse(json(f.server.metadataResponse("GET").toHttpBodyWithCredentials()).toJson().contains("private_key_jwt"));
+  String code=f.code(redirect);int before=f.fetches.get();
+  JsonObject response=json(success(f.redeem(code,redirect,VERIFIER)).toHttpBodyWithCredentials());assertEquals(before+1,f.fetches.get());
   var bearer=assertInstanceOf(BearerTokenResult.Present.class,
    BearerToken.fromAuthorizationHeaderValuesResult(List.of("Bearer "+text(response,"access_token")))).getToken();
   assertInstanceOf(OAuthIssuerAccessTokenResult.Succeeded.class,f.server.validateAccessTokenResult(bearer,RESOURCE));
@@ -211,10 +214,22 @@ final class OAuthCimdMcpProfileTests {
   assertEquals(OAuthServerException.Reason.INVALID_CLIENT,rejected.getReason());assertEquals(rows,f.store.rows);assertEquals(before+1,f.fetches.get());
   f.body=bytes(document);success(f.redeem(code,redirect,VERIFIER));
  }
+ @Test void freshMetadataRemovingNoneCannotRotateAnExistingRefreshToken() throws Exception {
+  JsonObject document=change(reference(),"grant_types",strings("authorization_code","refresh_token"));
+  document=change(document,"token_endpoint_auth_methods_supported",strings("none","private_key_jwt"));
+  document=change(document,"token_endpoint_auth_method",JsonString.fromValue("private_key_jwt"));
+  Fixture f=new Fixture(document,true,true);String redirect="http://127.0.0.1:49152/callback";
+  JsonObject token=json(success(f.redeem(f.code(redirect),redirect,VERIFIER)).toHttpBodyWithCredentials());String refresh=text(token,"refresh_token");
+  Map<OAuthStoreKey,OAuthStoreEntry> rows=Map.copyOf(f.store.rows);int before=f.fetches.get();
+  f.body=bytes(change(document,"token_endpoint_auth_methods_supported",strings("private_key_jwt")));
+  var rejected=assertInstanceOf(OAuthTokenResult.Rejected.class,f.refresh(refresh));
+  assertEquals(OAuthServerException.Reason.INVALID_CLIENT,rejected.getReason());assertEquals(rows,f.store.rows);assertEquals(before+1,f.fetches.get());
+  f.body=bytes(document);success(f.refresh(refresh));assertEquals(before+2,f.fetches.get());
+ }
  @Test void completeUnsupportedAssertionIsInvalidClientAndDoesNotConsumeTheCode() throws Exception {
   Fixture f=new Fixture(reference(),true,true);String redirect="http://127.0.0.1:49152/callback",code=f.code(redirect);
   Map<String,String> fields=new LinkedHashMap<>(Map.of("grant_type","authorization_code","client_id",f.id,"resource",RESOURCE,
-   "code",code,"code_verifier",VERIFIER,"redirect_uri",redirect,"client_assertion","header.payload.signature",
+   "code",code,"code_verifier",VERIFIER,"redirect_uri",redirect,"client_assertion","definitely-not-a-jwt",
    "client_assertion_type","urn:ietf:params:oauth:client-assertion-type:jwt-bearer"));
   int before=f.fetches.get();var rejected=assertInstanceOf(OAuthTokenResult.Rejected.class,
    f.server.tokenResult("POST",null,form(fields).getBytes(StandardCharsets.UTF_8),headers()));

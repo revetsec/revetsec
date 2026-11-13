@@ -63,6 +63,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.stream.Stream;
@@ -156,6 +157,7 @@ final class OAuthAuthorizationServerTests {
  private static byte @NonNull [] bytes(@NonNull String value) {return value.getBytes(StandardCharsets.UTF_8);}
  private static @NonNull Map<@NonNull String,@NonNull List<@NonNull String>> headers() {return Map.of("Content-Type",List.of("application/x-www-form-urlencoded"));}
  private static @NonNull JsonObject json(@NonNull OAuthServerResponse response) {try{return (JsonObject)JsonCodec.parse(response.toHttpBodyWithCredentials(),JsonLimits.protocolDocument(131072));}catch(com.revetsec.internal.json.JsonParseException e){throw new AssertionError(e);}}
+ private static void excludesGrantHandle(@NonNull JsonObject response) {assertTrue(Set.of("grant","grant_id","grantId","grant_value","grantValue").stream().noneMatch(response.getMembers()::containsKey));}
  private static @NonNull BearerToken bearer(@NonNull String token) {return assertInstanceOf(BearerTokenResult.Present.class, BearerToken.fromAuthorizationHeaderValuesResult(List.of("Bearer "+token))).getToken();}
  private void initialized() {assertEquals(OAuthStoreCommitStatus.COMMITTED,this.server.initializeFreshIssuer().getStatus());this.server.establishNewSubject("subject");}
  private @NonNull String query() {return form(Map.of("client_id",this.client.getClientId(),"response_type","code","redirect_uri",REDIRECT,"resource",RESOURCE,"code_challenge",CHALLENGE,"code_challenge_method","S256","state","original-state"));}
@@ -200,18 +202,38 @@ final class OAuthAuthorizationServerTests {
   assertTrue(Set.of(STORE_UNAVAILABLE,SERVICE_UNAVAILABLE).contains(failure.getReason()));assertNull(failure.getCause());
  }
  @Test void publicFlowRechecksPolicyAndReleasesProofOnlyAfterAtomicStatus() {
-  JsonObject one=issued();String token=one.find("access_token").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow();
+  JsonObject one=issued();excludesGrantHandle(one);String token=one.find("access_token").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow();
   OAuthIssuerAccessTokenResult.Succeeded checked=assertInstanceOf(OAuthIssuerAccessTokenResult.Succeeded.class,this.server.validateAccessTokenResult(bearer(token),RESOURCE));
   assertEquals(Optional.of("subject"),checked.getAccessToken().getSubject());assertEquals(Set.of("read","write"),checked.getAccessToken().getScopes());
+  excludesGrantHandle(checked.getAccessToken().getClaims());
   assertEquals(4,requireNonNull(this.store.lastTransaction).getConditions().size());assertTrue(requireNonNull(this.store.lastTransaction).getMutations().isEmpty());
   assertEquals(2,this.contexts.size());assertEquals(this.contexts.get(0).getGrantValue(),this.contexts.get(1).getGrantValue());
+  assertEquals(this.contexts.get(0).getGrantValue(),checked.getGrantValue());
   assertEquals("authorization_code",this.contexts.get(0).getGrantType());
-  assertTrue(json(assertInstanceOf(OAuthIntrospectionResult.Succeeded.class,introspect(token)).getResponse()).find("active").map(value -> ((com.revetsec.json.JsonBoolean) value).getValue()).orElseThrow());
-  JsonObject two=json(assertInstanceOf(OAuthTokenResult.Succeeded.class,rotate(one.find("refresh_token").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow())).getResponse());assertEquals(3,this.contexts.size());
+  assertFalse(one.toJson().contains(checked.getGrantValue()));assertFalse(checked.getAccessToken().getClaims().toJson().contains(checked.getGrantValue()));
+  assertFalse(json(this.server.metadataResponse("GET")).toJson().contains(checked.getGrantValue()));
+  JsonObject active=json(assertInstanceOf(OAuthIntrospectionResult.Succeeded.class,introspect(token)).getResponse());excludesGrantHandle(active);
+  assertFalse(active.toJson().contains(checked.getGrantValue()));
+  assertTrue(active.find("active").map(value -> ((com.revetsec.json.JsonBoolean) value).getValue()).orElseThrow());
+  JsonObject two=json(assertInstanceOf(OAuthTokenResult.Succeeded.class,rotate(one.find("refresh_token").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow())).getResponse());excludesGrantHandle(two);assertEquals(3,this.contexts.size());
   assertEquals("refresh_token",this.contexts.get(2).getGrantType());assertEquals(this.contexts.get(0).getGrantValue(),this.contexts.get(2).getGrantValue());
-  assertInstanceOf(OAuthRevocationResult.Succeeded.class,revoke(two.find("access_token").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow()));
+  String refreshedToken=two.find("access_token").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow();
+  var refreshed=assertInstanceOf(OAuthIssuerAccessTokenResult.Succeeded.class,this.server.validateAccessTokenResult(bearer(refreshedToken),RESOURCE));
+  assertEquals(checked.getGrantValue(),refreshed.getGrantValue());excludesGrantHandle(refreshed.getAccessToken().getClaims());
+  assertFalse(two.toJson().contains(refreshed.getGrantValue()));assertFalse(refreshed.getAccessToken().getClaims().toJson().contains(refreshed.getGrantValue()));
+  assertInstanceOf(OAuthRevocationResult.Succeeded.class,revoke(refreshedToken));
   assertInstanceOf(OAuthIssuerAccessTokenResult.Rejected.class,this.server.validateAccessTokenResult(bearer(token),RESOURCE));
-  assertFalse(json(assertInstanceOf(OAuthIntrospectionResult.Succeeded.class,introspect(token)).getResponse()).find("active").map(value -> ((com.revetsec.json.JsonBoolean) value).getValue()).orElseThrow());
+  JsonObject inactive=json(assertInstanceOf(OAuthIntrospectionResult.Succeeded.class,introspect(token)).getResponse());excludesGrantHandle(inactive);
+  assertFalse(inactive.toJson().contains(checked.getGrantValue()));
+  assertFalse(inactive.find("active").map(value -> ((com.revetsec.json.JsonBoolean) value).getValue()).orElseThrow());
+ }
+ @Test void checkedGrantHandleUsesThePublicRevocationConvention() {
+  JsonObject response=issued();String token=response.find("access_token").map(value->((com.revetsec.json.JsonString)value).getValue()).orElseThrow();
+  var checked=assertInstanceOf(OAuthIssuerAccessTokenResult.Succeeded.class,this.server.validateAccessTokenResult(bearer(token),RESOURCE));
+  this.server.revokeGrant(checked.getGrantValue());
+  assertInstanceOf(OAuthIssuerAccessTokenResult.Rejected.class,this.server.validateAccessTokenResult(bearer(token),RESOURCE));
+  assertFalse(json(assertInstanceOf(OAuthIntrospectionResult.Succeeded.class,introspect(token)).getResponse())
+   .find("active").map(value->((com.revetsec.json.JsonBoolean)value).getValue()).orElseThrow());
  }
  @TestFactory @NonNull Stream<@NonNull DynamicTest> initialPolicyCannotWidenOrChangeSubjectOrRefresh() {
   return Stream.of("subject","scope","resource","extra-resource","refresh","null","fault","denied","empty","narrowed").map(which->test(which,()->{
@@ -242,9 +264,69 @@ final class OAuthAuthorizationServerTests {
   }));
  }
  @SuppressWarnings("NullAway") private static @NonNull OAuthAuthorizationDecision invalidNullDecision() {return null;}
+ @Test void uncertainApplicationBindingPreparationCannotAuthorizeIssuerGrant() {
+  initialized();OAuthServerInteraction interaction=begin();Map<OAuthStoreKey,OAuthStoreEntry> before=Map.copyOf(this.store.rows);
+  Map<String,String> candidateBindings=new LinkedHashMap<>();
+  this.override=(context,budget)->{
+   candidateBindings.putIfAbsent(context.getGrantValue(),"organization-a");
+   throw new IllegalStateException("synthetic mapping outcome unknown");
+  };
+  OAuthServerTransportException failure=assertThrows(OAuthServerTransportException.class,
+   ()->this.server.completeAuthorizationResult(interaction.getInteractionValue(),BROWSER,decision("subject",Set.of("read"),false)));
+  assertEquals(SERVICE_UNAVAILABLE,failure.getReason());assertNull(failure.getCause());assertEquals(before,this.store.rows);
+  assertEquals(1,candidateBindings.size());assertEquals(Set.of(this.contexts.get(0).getGrantValue()),candidateBindings.keySet());
+  assertTrue(this.store.rows.keySet().stream().noneMatch(key->key.getKind()==OAuthStoreKey.Kind.GRANT||key.getKind()==OAuthStoreKey.Kind.CODE));
+ }
  @Test void completionConflictReloadsClientAndPolicyInsteadOfReusingApproval() {
-  initialized();OAuthServerInteraction interaction=begin();AtomicInteger calls=new AtomicInteger();this.override=(context,b)->{calls.incrementAndGet();if(calls.get()==1)this.store.conflicts=1;return decision("subject",Set.of("read"),false);};
-  assertInstanceOf(OAuthAuthorizationResult.Completed.class,this.server.completeAuthorizationResult(interaction.getInteractionValue(),BROWSER,decision("subject",Set.of("read"),false)));assertEquals(2,calls.get());
+  initialized();OAuthServerInteraction interaction=begin();AtomicInteger calls=new AtomicInteger();Map<String,String> preparedBindings=new LinkedHashMap<>();
+  this.override=(context,b)->{preparedBindings.putIfAbsent(context.getGrantValue(),"organization-a");calls.incrementAndGet();if(calls.get()==1)this.store.conflicts=1;return decision("subject",Set.of("read"),false);};
+  var completed=assertInstanceOf(OAuthAuthorizationResult.Completed.class,
+   this.server.completeAuthorizationResult(interaction.getInteractionValue(),BROWSER,decision("subject",Set.of("read"),false)));
+  assertEquals(2,calls.get());String abandoned=this.contexts.get(0).getGrantValue(),committed=this.contexts.get(1).getGrantValue();assertNotEquals(abandoned,committed);
+  assertEquals(Set.of(abandoned,committed),preparedBindings.keySet());
+  String location=completed.getResponse().getLocationWithCredentials().orElseThrow().toString();
+  String code=location.substring(location.indexOf("code=")+5,location.indexOf("&state="));
+  JsonObject token=json(assertInstanceOf(OAuthTokenResult.Succeeded.class,redeem(code)).getResponse());
+  var checked=assertInstanceOf(OAuthIssuerAccessTokenResult.Succeeded.class,this.server.validateAccessTokenResult(
+   bearer(token.find("access_token").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow()),RESOURCE));
+  assertEquals(committed,checked.getGrantValue());assertNotEquals(abandoned,checked.getGrantValue());
+  assertEquals("organization-a",preparedBindings.get(checked.getGrantValue()));assertTrue(preparedBindings.containsKey(abandoned));
+ }
+ @Test void trustedConsentContextCreatesBindingButCodeAndRefreshOnlyValidateIt() {
+  record Binding(@NonNull String subject,@NonNull String client,@NonNull String resource,@NonNull String organization) {}
+  initialized();Map<String,Binding> bindings=new LinkedHashMap<>();AtomicReference<@Nullable String> trustedOrganization=new AtomicReference<>();
+  AtomicInteger prepared=new AtomicInteger(),validated=new AtomicInteger();
+  this.override=(context,budget)->{
+   Set<String> scopes=context.getAuthorizedScopesByResource().get(RESOURCE);
+   if(scopes==null||!context.getAuthorizedScopesByResource().keySet().equals(Set.of(RESOURCE)))return OAuthAuthorizationDecision.deniedInstance();
+   String organization=trustedOrganization.get();
+   if(organization!=null){
+    assertEquals("authorization_code",context.getGrantType());Binding candidate=new Binding(context.getSubject(),context.getClientId(),RESOURCE,organization);
+    Binding existing=bindings.putIfAbsent(context.getGrantValue(),candidate);if(existing!=null&&!existing.equals(candidate))return OAuthAuthorizationDecision.deniedInstance();prepared.incrementAndGet();
+   }else{
+    Binding existing=bindings.get(context.getGrantValue());
+    if(existing==null||!existing.subject().equals(context.getSubject())||!existing.client().equals(context.getClientId())||!existing.resource().equals(RESOURCE))return OAuthAuthorizationDecision.deniedInstance();
+    validated.incrementAndGet();
+   }
+   return decision(context.getSubject(),scopes,context.isRefreshTokenPermitted());
+  };
+  trustedOrganization.set("organization-a");String firstCode;try{firstCode=code();}finally{trustedOrganization.set(null);}
+  assertEquals(1,prepared.get());assertEquals(1,bindings.size());String firstHandle=this.contexts.get(0).getGrantValue();assertEquals("organization-a",requireNonNull(bindings.get(firstHandle)).organization());
+  JsonObject first=json(assertInstanceOf(OAuthTokenResult.Succeeded.class,redeem(firstCode)).getResponse());assertEquals(1,validated.get());assertEquals(1,prepared.get());
+  JsonObject rotated=json(assertInstanceOf(OAuthTokenResult.Succeeded.class,rotate(first.find("refresh_token").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow())).getResponse());
+  assertEquals(2,validated.get());assertEquals(1,prepared.get());assertEquals(Set.of(firstHandle),bindings.keySet());
+
+  trustedOrganization.set("organization-b");String secondCode;try{secondCode=code();}finally{trustedOrganization.set(null);}
+  String secondHandle=this.contexts.get(3).getGrantValue();assertNotEquals(firstHandle,secondHandle);assertEquals(2,prepared.get());bindings.remove(secondHandle);
+  assertInstanceOf(OAuthTokenResult.Rejected.class,redeem(secondCode));assertFalse(bindings.containsKey(secondHandle));assertEquals(2,prepared.get());
+  bindings.remove(firstHandle);String currentRefresh=rotated.find("refresh_token").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow();
+  assertInstanceOf(OAuthTokenResult.Rejected.class,rotate(currentRefresh));assertFalse(bindings.containsKey(firstHandle));assertEquals(2,prepared.get());
+
+  trustedOrganization.set("organization-c");String reassignmentCode;try{reassignmentCode=code();}finally{trustedOrganization.set(null);}
+  String reassignmentHandle=this.contexts.get(this.contexts.size()-1).getGrantValue();
+  assertEquals("organization-c",requireNonNull(bindings.get(reassignmentHandle)).organization());assertEquals(3,prepared.get());
+  trustedOrganization.set("organization-d");try{assertInstanceOf(OAuthTokenResult.Rejected.class,redeem(reassignmentCode));}finally{trustedOrganization.set(null);}
+  assertEquals("organization-c",requireNonNull(bindings.get(reassignmentHandle)).organization());assertEquals(3,prepared.get());
  }
  @TestFactory @NonNull Stream<@NonNull DynamicTest> consentBindingsAndReplayRejectWithoutRedirect() {
   return Stream.of("handle","browser","expired","completed","client-change","issuer-fence").map(which->test(which,()->{

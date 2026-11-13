@@ -996,6 +996,8 @@ public final class PackagedConsumer {
 	}
 
 	private static void exerciseIssuerApplicationContracts() {
+		java.util.function.Function<OAuthIssuerAccessTokenResult.Succeeded, String> checkedGrantAccessor =
+				OAuthIssuerAccessTokenResult.Succeeded::getGrantValue;
 		String resource = "https://resource.example/mcp";
 		OAuthClientSecretVerifier verifier = (id, bytes, budget) -> id.equals("resource-client") && bytes.length == 1 && bytes[0] == 42;
 		OAuthServerClientAuthentication authentication = OAuthServerClientAuthentication.fromClientSecretVerifier(verifier);
@@ -1011,7 +1013,8 @@ public final class PackagedConsumer {
 				|| repository.findRegisteredClient("resource-client", Duration.ofSeconds(1)).orElseThrow() != client
 				|| decision.isDenied() || decision.isRefreshTokenPermitted() || !OAuthAuthorizationDecision.deniedInstance().isDenied()
 				|| client.isAuthorizationCodePermitted() || !client.getRedirectUris().isEmpty()
-				|| OAuthServerClientAuthentication.publicClientInstance() == authentication || policy == null)
+				|| OAuthServerClientAuthentication.publicClientInstance() == authentication || policy == null
+				|| checkedGrantAccessor == null)
 			throw new IllegalStateException("Issuer application contracts did not retain configuration.");
 	}
 	private static void exerciseIssuerStorageCarriers() {
@@ -1751,7 +1754,8 @@ public final class PackagedConsumer {
   else if(revocation instanceof OAuthRevocationResult.Rejected bad) require(bad.getReason()!=null&&bad.getResponse()!=null,"revocation rejection");
   if(introspection instanceof OAuthIntrospectionResult.Succeeded ok) require(ok.getResponse()!=null,"introspection response");
   else if(introspection instanceof OAuthIntrospectionResult.Rejected bad) require(bad.getReason()!=null&&bad.getResponse()!=null,"introspection rejection");
-  if(validation instanceof OAuthIssuerAccessTokenResult.Succeeded ok) require(ok.getAccessToken()!=null,"issuer proof");
+  if(validation instanceof OAuthIssuerAccessTokenResult.Succeeded ok) require(ok.getAccessToken()!=null&&!ok.getGrantValue().isEmpty(),
+    "issuer proof and checked grant handle");
   else if(validation instanceof OAuthIssuerAccessTokenResult.Rejected bad) require(bad.getReason()!=null&&bad.getAccessTokenReason()!=null
     && bad.getJoseReason()!=null&&bad.getBearerError()!=null,"issuer rejection without proof");
  }

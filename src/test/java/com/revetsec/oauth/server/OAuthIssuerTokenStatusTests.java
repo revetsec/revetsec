@@ -191,6 +191,36 @@ final class OAuthIssuerTokenStatusTests {
  @Test void workAdmittedBeforeRevocationHasNoRollbackPromiseButNextAdmissionFails() {
   String jwt=issued();this.store.afterCommit=this::revokeGrant;assertEquals(claims(jwt),validate(jwt));invalid(()->validate(jwt));
  }
+ @Test void grantHandleRequiresCommittedStatusBarrierAndIsNotRetroactivelyRevoked() {
+  var before=new OAuthIssuerTokenStatusTests();String beforeJwt=before.issued();VerifiedAccessToken beforeProof=proof(beforeJwt);int beforeCommits=before.store.commits;
+  before.store.beforeCommit=before::revokeGrant;
+  assertInstanceOf(OAuthIssuerAccessTokenResult.Rejected.class,before.status().validateProof(
+   claims(beforeJwt),RESOURCE,deadline(),session->OAuthIssuerTokenStatus.PreparedProof.fromSucceeded(beforeProof)));
+  assertEquals(beforeCommits+2,before.store.commits);
+
+  var after=new OAuthIssuerTokenStatusTests();String afterJwt=after.issued();VerifiedAccessToken afterProof=proof(afterJwt);
+  String expectedGrant=after.record(OAuthStoreKey.Kind.GRANT).text("id");int afterCommits=after.store.commits;
+  after.store.afterCommit=after::revokeGrant;
+  var admitted=assertInstanceOf(OAuthIssuerAccessTokenResult.Succeeded.class,after.status().validateProof(
+   claims(afterJwt),RESOURCE,deadline(),session->OAuthIssuerTokenStatus.PreparedProof.fromSucceeded(afterProof)));
+  assertSame(afterProof,admitted.getAccessToken());assertEquals(expectedGrant,admitted.getGrantValue());assertEquals(afterCommits+1,after.store.commits);
+  assertInstanceOf(OAuthIssuerAccessTokenResult.Rejected.class,after.status().validateProof(
+   claims(afterJwt),RESOURCE,deadline(),session->OAuthIssuerTokenStatus.PreparedProof.fromSucceeded(afterProof)));
+ }
+ @TestFactory @NonNull Stream<@NonNull DynamicTest> inactiveIssuerFactsNeverReleaseAProofOrGrantHandle() {
+  return Stream.of("grant","subject","issuer","expired").map(kind->test(kind,()->{
+   var f=new OAuthIssuerTokenStatusTests();String jwt=f.issued();VerifiedAccessToken tokenProof=proof(jwt);
+   switch(kind){
+    case "grant"->f.revokeGrant();
+    case "subject"->f.coordinator.revokeSubject("subject",deadline());
+    case "issuer"->f.coordinator.revokeAll(deadline());
+    default->{f.clock.time=NOW.plus(Duration.ofMinutes(10));f.store.authorityNow=f.clock.time;}
+   }
+   var rejected=assertInstanceOf(OAuthIssuerAccessTokenResult.Rejected.class,f.status().validateProof(
+    claims(jwt),RESOURCE,deadline(),session->OAuthIssuerTokenStatus.PreparedProof.fromSucceeded(tokenProof)));
+   assertEquals("OAuthIssuerAccessTokenResult{<redacted>}",rejected.toString());assertFalse(rejected.toString().contains(jwt));
+  }));
+ }
  @Test void absentJtiBarrierReloadsIfRowAppearsBeforeCommit() {
   String jwt=issued();var row=entry(OAuthStoreKey.Kind.ACCESS_TOKEN);remove(OAuthStoreKey.Kind.ACCESS_TOKEN);int commits=this.store.commits;
   this.store.beforeCommit=()->this.store.rows.put(row.getKey(),row);assertEquals(claims(jwt),validate(jwt));assertEquals(commits+2,this.store.commits);
