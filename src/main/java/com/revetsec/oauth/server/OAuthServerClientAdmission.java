@@ -65,6 +65,7 @@ final class OAuthServerClientAdmission {
 			@NonNull OAuthServerClientRepository repository, @NonNull Deadline deadline, @NonNull OAuthServerIngressLimits limits) {
 		requireNonNull(request);
 		if (request.endpoint() == OAuthServerRequest.Endpoint.AUTHORIZATION) throw OAuthServerRequest.invalid();
+		if (request.clientAssertion()) throw failure(INVALID_CLIENT);
 		String header = request.authorization();
 		if (header == null) {
 			String id = request.value("client_id"); if (id == null || id.isEmpty()) throw failure(INVALID_CLIENT);

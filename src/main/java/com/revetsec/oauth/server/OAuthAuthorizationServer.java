@@ -272,10 +272,13 @@ public final class OAuthAuthorizationServer {
    return OAuthIntrospectionResult.fromSucceeded(this.introspection.introspect(request,this.repository,resource,this.keys,d).response());
   },r->OAuthIntrospectionResult.fromRejection(r,rejection(OAuthServerRequest.Endpoint.INTROSPECTION,r,basic[0])));
  }
- /** Validates local M5 signature/profile facts and uncached authoritative issuer status before proof release.
+ /**
+  * Validates local M5 signature/profile facts and uncached authoritative issuer status before releasing the
+  * checked token and its sensitive issuer-local grant management handle. The handle is constructed from the
+  * same access/grant snapshot only after the atomic status barrier commits; it is not a generic JWT claim.
   * @param token unverified bearer credential
   * @param resource exact configured application resource
-  * @return restricted checked proof or fixed rejection
+  * @return restricted checked proof plus grant handle, or fixed rejection
   * @since 1.0.0
   */
  @CheckReturnValue public @NonNull OAuthIssuerAccessTokenResult validateAccessTokenResult(@NonNull BearerToken token,@NonNull String resource) {
@@ -296,10 +299,11 @@ public final class OAuthAuthorizationServer {
       .allowedAlgorithms(Set.of(JwsAlgorithm.RS256)).clock(authorityClock).clockSkew(this.settings.clockSkew)
       .maximumTokenLength(Math.max(8192,this.settings.maximumRequestBodyBytes)).requestTimeout(Duration.ofSeconds(1)).totalDeadline(this.settings.totalDeadline).build();
      VerifiedAccessToken proof=OidcTransactionAccess.get().validateAccessToken(validator,token,d);
-     return OAuthIssuerAccessTokenResult.fromSucceeded(proof);
+     return OAuthIssuerTokenStatus.PreparedProof.fromSucceeded(proof);
     }catch(AccessTokenValidationException rejected){
      OAuthServerClientAdmission.remaining(d);
-     return OAuthIssuerAccessTokenResult.fromRejection(TOKEN_REVOKED,rejected.getReason(),rejected.getJoseReason().orElse(null));
+     return OAuthIssuerTokenStatus.PreparedProof.fromRejection(
+      OAuthIssuerAccessTokenResult.fromRejection(TOKEN_REVOKED,rejected.getReason(),rejected.getJoseReason().orElse(null)));
     }
    });
   },r->OAuthIssuerAccessTokenResult.fromRejection(r,null,null));

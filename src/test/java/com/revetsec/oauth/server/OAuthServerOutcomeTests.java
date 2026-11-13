@@ -89,8 +89,9 @@ final class OAuthServerOutcomeTests {
   assertSame(wire,assertInstanceOf(OAuthTokenResult.Succeeded.class,OAuthTokenResult.fromSucceeded(wire)).getResponse());
   assertSame(wire,assertInstanceOf(OAuthRevocationResult.Succeeded.class,OAuthRevocationResult.fromSucceeded(wire)).getResponse());
   assertSame(wire,assertInstanceOf(OAuthIntrospectionResult.Succeeded.class,OAuthIntrospectionResult.fromSucceeded(wire)).getResponse());
-  VerifiedAccessToken proof=proof();assertSame(proof,assertInstanceOf(OAuthIssuerAccessTokenResult.Succeeded.class,OAuthIssuerAccessTokenResult.fromSucceeded(proof)).getAccessToken());
-  for(Object outcome:List.of(OAuthAuthorizationResult.fromCompleted(wire),OAuthAuthorizationResult.fromDenied(wire),OAuthAuthorizationResult.fromInteractionRequired(view),OAuthTokenResult.fromSucceeded(wire),OAuthRevocationResult.fromSucceeded(wire),OAuthIntrospectionResult.fromSucceeded(wire),OAuthIssuerAccessTokenResult.fromSucceeded(proof))) {
+  VerifiedAccessToken proof=proof();var admitted=assertInstanceOf(OAuthIssuerAccessTokenResult.Succeeded.class,
+   OAuthIssuerAccessTokenResult.fromSucceeded(proof,HANDLE));assertSame(proof,admitted.getAccessToken());assertEquals(HANDLE,admitted.getGrantValue());
+  for(Object outcome:List.of(OAuthAuthorizationResult.fromCompleted(wire),OAuthAuthorizationResult.fromDenied(wire),OAuthAuthorizationResult.fromInteractionRequired(view),OAuthTokenResult.fromSucceeded(wire),OAuthRevocationResult.fromSucceeded(wire),OAuthIntrospectionResult.fromSucceeded(wire),OAuthIssuerAccessTokenResult.fromSucceeded(proof,HANDLE))) {
    assertTrue(outcome.toString().endsWith("{<redacted>}"));assertFalse(outcome.toString().contains("TEST-ONLY"));
   }
   assertNotEquals(OAuthTokenResult.fromSucceeded(wire),OAuthTokenResult.fromSucceeded(wire));
@@ -244,7 +245,8 @@ final class OAuthServerOutcomeTests {
  @SuppressWarnings("NullAway") @Test void nullPlumbingRemainsProgrammerMisuse() {
   assertThrows(NullPointerException.class,()->OAuthServerValidationException.fromReason(null));
   assertThrows(NullPointerException.class,()->OAuthTokenResult.fromSucceeded(null));assertThrows(NullPointerException.class,()->OAuthAuthorizationResult.fromInteractionRequired(null));
-  assertThrows(NullPointerException.class,()->OAuthIssuerAccessTokenResult.fromSucceeded(null));assertThrows(NullPointerException.class,()->OAuthTokenResult.fromRejection(INVALID_GRANT,null));
+  assertThrows(NullPointerException.class,()->OAuthIssuerAccessTokenResult.fromSucceeded(null,HANDLE));
+  assertThrows(NullPointerException.class,()->OAuthIssuerAccessTokenResult.fromSucceeded(proof(),null));assertThrows(NullPointerException.class,()->OAuthTokenResult.fromRejection(INVALID_GRANT,null));
   assertThrows(NullPointerException.class,()->OAuthServerFailureBoundary.failure(null,4096,1024));assertThrows(NullPointerException.class,()->OAuthServerFailureBoundary.store(null));assertThrows(NullPointerException.class,()->OAuthServerFailureBoundary.admission(null));
   assertThrows(NullPointerException.class,()->new OAuthServerObservation(null,OAuthServerObserver.Endpoint.TOKEN));assertThrows(NullPointerException.class,()->new OAuthServerObservation(OAuthServerObserver.disabledInstance(),null));
  }

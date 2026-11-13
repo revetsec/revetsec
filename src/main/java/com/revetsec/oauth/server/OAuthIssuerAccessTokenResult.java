@@ -35,8 +35,12 @@ import com.revetsec.jose.JoseException;
 @Immutable
 public abstract sealed class OAuthIssuerAccessTokenResult permits OAuthIssuerAccessTokenResult.Succeeded, OAuthIssuerAccessTokenResult.Rejected {
 	OAuthIssuerAccessTokenResult() {}
-	static @NonNull OAuthIssuerAccessTokenResult fromSucceeded(@NonNull VerifiedAccessToken token) { return new Succeeded(requireNonNull(token)); }
-	static @NonNull OAuthIssuerAccessTokenResult fromRejection(OAuthServerException.@NonNull Reason reason,
+	static @NonNull OAuthIssuerAccessTokenResult fromSucceeded(@NonNull VerifiedAccessToken token,
+			@NonNull String grantValue) {
+		requireNonNull(token); OAuthStoreFormat.nonce(grantValue);
+		return new Succeeded(token, grantValue);
+	}
+	static OAuthIssuerAccessTokenResult.@NonNull Rejected fromRejection(OAuthServerException.@NonNull Reason reason,
 		AccessTokenValidationException.@Nullable Reason accessTokenReason, JoseException.@Nullable Reason joseReason) {
 		requireNonNull(reason).requireKind(OAuthServerException.Kind.VALIDATION);
 		return new Rejected(reason,accessTokenReason,joseReason);
@@ -51,12 +55,23 @@ public abstract sealed class OAuthIssuerAccessTokenResult permits OAuthIssuerAcc
 	 */
 	@Immutable public static final class Succeeded extends OAuthIssuerAccessTokenResult {
 		private final @NonNull VerifiedAccessToken token;
-		private Succeeded(@NonNull VerifiedAccessToken token) { this.token=token; }
+		private final @NonNull String grantValue;
+		private Succeeded(@NonNull VerifiedAccessToken token, @NonNull String grantValue) {
+			this.token=token; this.grantValue=grantValue;
+		}
 		/** Returns the checked access-token proof after authoritative issuer status validation.
 		 * @return token
 		 * @since 1.0.0
 		 */
 		@CheckReturnValue public @NonNull VerifiedAccessToken getAccessToken() { return this.token; }
+		/**
+		 * Explicitly releases the sensitive issuer-local grant management handle checked by the same authoritative
+		 * admission as the access-token proof. Scope application lookup keys to the issuer or deployment as well as
+		 * this value; the bare string is not globally authoritative or permission to act. Never log it.
+		 * @return the checked issuer-local grant handle
+		 * @since 1.0.0
+		 */
+		@CheckReturnValue public @NonNull String getGrantValue() { return this.grantValue; }
 	}
 	/** A fixed rejection with no proof, request, credential, identity, claims or exception object.
 	 * @since 1.0.0

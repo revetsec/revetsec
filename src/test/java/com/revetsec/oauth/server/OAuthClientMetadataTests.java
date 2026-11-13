@@ -155,8 +155,49 @@ final class OAuthClientMetadataTests {
   assertEquals("OAuthClientMetadataPolicy{enabled=true, configuration=redacted}",policy().toString());
   assertFalse(d.toString().contains(ID));assertFalse(policy().toString().contains("example"));
  }
+ @Test void authenticationMethodDeclarationsSelectOnlyPublicNoneByEffectiveFacts() {
+  String root=BASE.replace(",\"token_endpoint_auth_method\":\"none\"","");
+  Function<String,String> add=members->root.substring(0,root.length()-1)+members+"}";
+  String fingerprint=parse(root).fingerprint();
+  for(String document:List.of(BASE,
+   add.apply(",\"token_endpoint_auth_method\":\"none\""),
+   add.apply(",\"token_endpoint_auth_methods_supported\":[\"none\"]"),
+   add.apply(",\"token_endpoint_auth_methods_supported\":[\"none\",\"private_key_jwt\"],\"token_endpoint_auth_method\":\"private_key_jwt\""),
+   add.apply(",\"token_endpoint_auth_methods_supported\":[\"future_method\",\"none\"],\"token_endpoint_auth_method\":\"future_method\""),
+   add.apply(",\"token_endpoint_auth_methods_supported\":[\"none\",\"none\",\"private_key_jwt\"]"),
+   add.apply(",\"token_endpoint_auth_methods_supported\":[\"none\"],\"token_endpoint_auth_signing_alg\":\"RS256\"")))
+   assertEquals(fingerprint,parse(document).fingerprint());
+
+  List<String> invalid=List.of(
+   add.apply(",\"token_endpoint_auth_method\":\"private_key_jwt\""),
+   add.apply(",\"token_endpoint_auth_methods_supported\":[\"private_key_jwt\"]"),
+   add.apply(",\"token_endpoint_auth_methods_supported\":[\"none\",\"private_key_jwt\"],\"token_endpoint_auth_method\":\"future_method\""),
+   add.apply(",\"token_endpoint_auth_methods_supported\":[]"),
+   add.apply(",\"token_endpoint_auth_methods_supported\":null"),
+   add.apply(",\"token_endpoint_auth_methods_supported\":\"none\""),
+   add.apply(",\"token_endpoint_auth_methods_supported\":[null]"),
+   add.apply(",\"token_endpoint_auth_methods_supported\":[7]"),
+   add.apply(",\"token_endpoint_auth_methods_supported\":[\"\"]"),
+   add.apply(",\"token_endpoint_auth_methods_supported\":[\"NONE\"]"),
+   add.apply(",\"token_endpoint_auth_methods_supported\":[\"none\",\"client_secret_basic\"]"),
+   add.apply(",\"token_endpoint_auth_methods_supported\":[\"none\",\"client_secret_post\"]"),
+   add.apply(",\"token_endpoint_auth_methods_supported\":[\"none\",\"client_secret_jwt\"]"),
+   add.apply(",\"token_endpoint_auth_methods_supported\":[\"none\",\"client_secret_basic\"],\"token_endpoint_auth_method\":\"client_secret_basic\""),
+   add.apply(",\"token_endpoint_auth_method\":\"client_secret_basic\""),
+   add.apply(",\"token_endpoint_auth_method\":\"client_secret_post\""),
+   add.apply(",\"token_endpoint_auth_method\":\"client_secret_jwt\""),
+   add.apply(",\"token_endpoint_auth_method\":null"),
+   add.apply(",\"token_endpoint_auth_method\":\"\""),
+   add.apply(",\"token_endpoint_auth_method\":7"),
+   add.apply(",\"token_endpoint_auth_signing_alg\":\"\""),
+   add.apply(",\"token_endpoint_auth_signing_alg\":null"),
+   add.apply(",\"token_endpoint_auth_signing_alg\":7"));
+  for(String document:invalid)assertThrows(OAuthServerAdmissionFailure.class,()->parse(document));
+  String repeated=java.util.stream.IntStream.range(0,129).mapToObj(i->"\"none\"").collect(java.util.stream.Collectors.joining(","));
+  assertThrows(OAuthServerAdmissionFailure.class,()->parse(add.apply(",\"token_endpoint_auth_methods_supported\":["+repeated+"]")));
+ }
  @TestFactory @NonNull Stream<@NonNull DynamicTest> requiredMembersAndWrongTypes() {
-  List<DynamicTest> result=new ArrayList<>();for(String field:List.of("client_id","client_name","redirect_uris","token_endpoint_auth_method")) {
+  List<DynamicTest> result=new ArrayList<>();for(String field:List.of("client_id","client_name","redirect_uris")) {
    result.add(DynamicTest.dynamicTest(field+" missing",()->assertThrows(OAuthServerAdmissionFailure.class,()->parse(change(field,null)))));
    for(JsonValue value:List.of(com.revetsec.json.JsonNull.defaultInstance(),com.revetsec.json.JsonBoolean.fromValue(true),com.revetsec.json.JsonNumber.fromValue(1L),JsonObject.builder().build()))
     result.add(DynamicTest.dynamicTest(field+" "+value.toJson(),()->assertThrows(OAuthServerAdmissionFailure.class,()->parse(change(field,value)))));
@@ -179,7 +220,8 @@ final class OAuthClientMetadataTests {
    BASE.substring(0,BASE.length()-1)+",\"application_type\":\"unknown\"}",
    BASE.substring(0,BASE.length()-1)+",\"jwks\":[]}",BASE.substring(0,BASE.length()-1)+",\"jwks\":{\"keys\":[7]}}",
    BASE.substring(0,BASE.length()-1)+",\"jwks\":{\"keys\":[{\"kty\":\"unknown\"}]}}",
-   BASE.substring(0,BASE.length()-1)+",\"scope\":\"one  two\"}",BASE.substring(0,BASE.length()-1)+",\"token_endpoint_auth_signing_alg\":\"RS256\"}");
+   BASE.substring(0,BASE.length()-1)+",\"jwks_uri\":\"https://evil.example.com/keys\",\"jwks\":{\"keys\":[]}}",
+   BASE.substring(0,BASE.length()-1)+",\"scope\":\"one  two\"}");
   return java.util.stream.IntStream.range(0,bad.size()).mapToObj(i->DynamicTest.dynamicTest("bad document "+i,()->{
    var failure=assertThrows(OAuthServerAdmissionFailure.class,()->parse(bad.get(i)));assertFalse(failure.toString().contains(ID));assertNull(failure.getCause());
   }));
@@ -216,8 +258,10 @@ final class OAuthClientMetadataTests {
   for(String host:List.of("127.0.0.2","foo.localhost","192.168.1.1"))assertThrows(OAuthServerAdmissionFailure.class,()->parse(nativeDoc.replace("https://client.example.com/callback","http://"+host+"/callback"),true,true));
  }
  @Test void safeExtensionsHaveExactTypesAndAreNeverFetched() {
-  String fields=",\"client_uri\":\"https://evil.example.com/client\",\"logo_uri\":\"https://evil.example.com/logo\",\"policy_uri\":\"https://evil.example.com/policy\",\"tos_uri\":\"https://evil.example.com/tos\",\"jwks_uri\":\"https://evil.example.com/keys\",\"contacts\":[\"a@example.com\"],\"scope\":\"untrusted admin\",\"software_id\":\"untrusted\",\"software_version\":\"1\",\"software_statement\":\"unverified\",\"unknown_uri\":\"http://127.0.0.1/private\",\"jwks\":{\"keys\":[{\"kty\":\"RSA\",\"n\":\"AQ\",\"e\":\"Aw\"},{\"kty\":\"EC\",\"crv\":\"P-256\",\"x\":\"AQ\",\"y\":\"AQ\"},{\"kty\":\"OKP\",\"crv\":\"Ed25519\",\"x\":\"AQ\"}]}";
-  assertEquals(parse(BASE).fingerprint(),parse(BASE.substring(0,BASE.length()-1)+fields+"}").fingerprint());
+  String fields=",\"client_uri\":\"https://evil.example.com/client\",\"logo_uri\":\"https://evil.example.com/logo\",\"policy_uri\":\"https://evil.example.com/policy\",\"tos_uri\":\"https://evil.example.com/tos\",\"contacts\":[\"a@example.com\"],\"scope\":\"untrusted admin\",\"software_id\":\"untrusted\",\"software_version\":\"1\",\"software_statement\":\"unverified\",\"unknown_uri\":\"http://127.0.0.1/private\"";
+  String jwks=",\"jwks\":{\"keys\":[{\"kty\":\"RSA\",\"n\":\"AQ\",\"e\":\"Aw\"},{\"kty\":\"EC\",\"crv\":\"P-256\",\"x\":\"AQ\",\"y\":\"AQ\"},{\"kty\":\"OKP\",\"crv\":\"Ed25519\",\"x\":\"AQ\"}]}";
+  assertEquals(parse(BASE).fingerprint(),parse(BASE.substring(0,BASE.length()-1)+fields+",\"jwks_uri\":\"https://evil.example.com/keys\"}").fingerprint());
+  assertEquals(parse(BASE).fingerprint(),parse(BASE.substring(0,BASE.length()-1)+fields+jwks+"}").fingerprint());
   for(String name:List.of("client_uri","logo_uri","policy_uri","tos_uri","jwks_uri","contacts","scope","software_id","software_version","software_statement","grant_types","response_types","application_type"))
    assertThrows(OAuthServerAdmissionFailure.class,()->parse(change(name,com.revetsec.json.JsonBoolean.fromValue(false))));
  }

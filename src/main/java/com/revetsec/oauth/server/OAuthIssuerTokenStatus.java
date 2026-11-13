@@ -18,6 +18,7 @@ package com.revetsec.oauth.server;
 
 import com.revetsec.internal.http.Deadline;
 import com.revetsec.oauth.AccessTokenValidationException;
+import com.revetsec.oauth.VerifiedAccessToken;
 import com.revetsec.internal.jose.JwtValidationAccess;
 import com.revetsec.jose.JoseException;
 import com.revetsec.jose.JwsAlgorithm;
@@ -125,12 +126,13 @@ final class OAuthIssuerTokenStatus {
  }
  /** Actual M5 proof preparation follows a healthy root observation and precedes the complete fact join. */
  @NonNull OAuthIssuerAccessTokenResult validateProof(@NonNull JsonObject claims,@NonNull String resource,
-   @NonNull Deadline deadline,@NonNull Function<OAuthStoreCoordinator.@NonNull Session,@NonNull OAuthIssuerAccessTokenResult> prepare){
+   @NonNull Deadline deadline,@NonNull Function<OAuthStoreCoordinator.@NonNull Session,@NonNull PreparedProof> prepare){
   String jti=claimString(claims,"jti").orElseThrow(OAuthIssuerTokenStatus::invalid);
   for(int attempt=0;attempt<this.attempts;attempt++){
    OAuthStoreCoordinator.Session session=this.coordinator.begin(deadline);session.expiresAs(OAuthServerException.Reason.TOKEN_REVOKED);
-   OAuthIssuerAccessTokenResult proof=requireNonNull(prepare.apply(session));
-   if(proof instanceof OAuthIssuerAccessTokenResult.Rejected)return proof;
+   PreparedProof preparedProof=requireNonNull(prepare.apply(session));
+   OAuthIssuerAccessTokenResult rejection=preparedProof.rejection();
+   if(rejection!=null)return rejection;
    OAuthAuthorizationRecord access=read(session,this.codec.key(OAuthStoreKey.Kind.ACCESS_TOKEN,jti));
    if(access==null){if(session.barrier()==OAuthStoreCommitStatus.COMMITTED)return OAuthIssuerAccessTokenResult.fromRejection(OAuthServerException.Reason.TOKEN_REVOKED,null,null);continue;}
    OAuthAuthorizationRecord grant=read(session,this.codec.key(OAuthStoreKey.Kind.GRANT,access.text("grantId")));
@@ -141,9 +143,22 @@ final class OAuthIssuerTokenStatus {
      && session.effectiveNow().isBefore(upper) && !session.effectiveNow().isBefore(prepared(()->Instant.ofEpochSecond(access.number("issued")).minus(this.skew)))
      && matches(claims,access,resource);
    if(valid)session.requireBefore(upper);
-   if(session.barrier()==OAuthStoreCommitStatus.COMMITTED)return valid?proof:OAuthIssuerAccessTokenResult.fromRejection(OAuthServerException.Reason.TOKEN_REVOKED,null,null);
+   if(session.barrier()==OAuthStoreCommitStatus.COMMITTED)return valid
+     ? OAuthIssuerAccessTokenResult.fromSucceeded(preparedProof.token(),access.text("grantId"))
+     : OAuthIssuerAccessTokenResult.fromRejection(OAuthServerException.Reason.TOKEN_REVOKED,null,null);
   }
   throw new OAuthStoreFailure(UNAVAILABLE);
+ }
+ /** Internal pre-barrier carrier. It cannot expose a successful authoritative issuer result. */
+ static final class PreparedProof {
+  private final @Nullable VerifiedAccessToken token;
+  private final OAuthIssuerAccessTokenResult.@Nullable Rejected rejection;
+  private PreparedProof(@Nullable VerifiedAccessToken token,
+    OAuthIssuerAccessTokenResult.@Nullable Rejected rejection){this.token=token;this.rejection=rejection;}
+  static @NonNull PreparedProof fromSucceeded(@NonNull VerifiedAccessToken token){return new PreparedProof(requireNonNull(token),null);}
+  static @NonNull PreparedProof fromRejection(OAuthIssuerAccessTokenResult.@NonNull Rejected rejection){return new PreparedProof(null,requireNonNull(rejection));}
+  @NonNull VerifiedAccessToken token(){return requireNonNull(this.token);}
+  OAuthIssuerAccessTokenResult.@Nullable Rejected rejection(){return this.rejection;}
  }
  /** Fixed diagnostic only, with no token, claims, external message or cause. */
  static final class RecognitionFailure extends RuntimeException {

@@ -37,14 +37,16 @@ final class OAuthServerRequest {
 			"redirect_uri", "scope", "state", "code_challenge", "code_challenge_method", "resource", "grant_type",
 			"code", "code_verifier", "refresh_token", "token", "token_type_hint", "client_secret", "client_assertion",
 			"client_assertion_type", "request", "request_uri", "response_mode", "authorization_details", "username", "password");
-	private static final @NonNull Set<@NonNull String> UNSUPPORTED = Set.of("client_secret", "client_assertion",
-			"client_assertion_type", "request", "request_uri", "authorization_details", "username", "password");
+	private static final @NonNull Set<@NonNull String> UNSUPPORTED = Set.of("client_secret", "request", "request_uri",
+			"authorization_details", "username", "password");
 	private final @NonNull Endpoint endpoint;
 	private final @NonNull Map<@NonNull String, @NonNull String> parameters;
 	private final @Nullable String authorization;
+	private final boolean clientAssertion;
 	private OAuthServerRequest(@NonNull Endpoint endpoint, @NonNull Map<@NonNull String, @NonNull String> parameters,
-			@Nullable String authorization) {
+			@Nullable String authorization, boolean clientAssertion) {
 		this.endpoint = endpoint; this.parameters = Map.copyOf(parameters); this.authorization = authorization;
+		this.clientAssertion = clientAssertion;
 	}
 	static @NonNull OAuthServerRequest parse(@NonNull Endpoint endpoint, @NonNull String method,
 			@Nullable String rawQuery, byte @NonNull [] body,
@@ -70,13 +72,23 @@ final class OAuthServerRequest {
 				parameters(StrictUtf8.decode(body), parameters, limits, false, fields);
 			}
 		} catch (EncodingException failure) { throw invalid(); }
+		boolean clientAssertion = parameters.containsKey("client_assertion") || parameters.containsKey("client_assertion_type");
+		if (clientAssertion) {
+			String assertion = parameters.remove("client_assertion");
+			String type = parameters.remove("client_assertion_type");
+			if (endpoint != Endpoint.TOKEN || assertion == null || type == null || assertion.isEmpty() || type.isEmpty()) throw invalid();
+			try {
+				OAuthServerConfiguration.text(assertion, limits.bodyBytes);
+				OAuthServerConfiguration.text(type, limits.bodyBytes);
+			} catch (IllegalArgumentException failure) { throw invalid(); }
+		}
 		if (authorizationEndpoint) {
 			String state = parameters.get("state");
 			// RFC 6749 VSCHAR. Preserve the existing absent/empty distinction; never normalize opaque state.
 			if (state != null) for (int i = 0; i < state.length(); i++)
 				if (state.charAt(i) < 0x20 || state.charAt(i) > 0x7e) throw invalid();
 		}
-		return new OAuthServerRequest(endpoint, parameters, headers.get("authorization"));
+		return new OAuthServerRequest(endpoint, parameters, headers.get("authorization"), clientAssertion);
 	}
 	/** Same aggregate admission as parse, with the public fixed method verdict. */
 	static @NonNull OAuthServerRequest parseForServer(@NonNull Endpoint endpoint,@NonNull String method,@Nullable String query,
@@ -149,6 +161,7 @@ final class OAuthServerRequest {
 		String value = value(name); if (value == null || value.isEmpty()) throw invalid(); return value;
 	}
 	@Nullable String authorization() { return this.authorization; }
+	boolean clientAssertion() { return this.clientAssertion; }
 	static @NonNull OAuthServerAdmissionFailure invalid() { return new OAuthServerAdmissionFailure(INVALID_REQUEST); }
 	@Override public @NonNull String toString() { return "OAuthServerRequest{<redacted>}"; }
 }

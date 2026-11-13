@@ -102,6 +102,20 @@ final class OAuthServerIngressTests {
 		return Stream.of("client_secret", "client_assertion", "client_assertion_type", "request", "request_uri", "authorization_details", "username", "password")
 				.map(name -> DynamicTest.dynamicTest(name, () -> fails(INVALID_REQUEST, () -> post(name + "=", null))));
 	}
+	@Test void completeClientAssertionPairIsRetainedOnlyAsAnInvalidClientSignal() {
+		String pair="client_id=client&client_assertion=header.payload.signature&client_assertion_type="
+				+encode("urn:ietf:params:oauth:client-assertion-type:jwt-bearer");
+		OAuthServerRequest request=post(pair,null);assertTrue(request.clientAssertion());
+		assertNull(request.value("client_assertion"));assertNull(request.value("client_assertion_type"));
+		assertFalse(request.toString().contains("header"));
+		fails(INVALID_CLIENT,()->OAuthServerClientAdmission.authenticate(request,repository(client("client",null)),deadline(),LIMITS));
+		fails(INVALID_CLIENT,()->OAuthServerClientAdmission.authenticate(post(pair,basic("client:secret")),
+			repository(client("client",(id,secret,budget)->true)),deadline(),LIMITS));
+		for(String malformed:List.of("client_assertion=x","client_assertion_type=x","client_assertion=&client_assertion_type=x",
+			"client_assertion=x&client_assertion_type=","client_assertion=%00&client_assertion_type=x"))
+			fails(INVALID_REQUEST,()->post(malformed,null));
+		fails(INVALID_REQUEST,()->OAuthServerRequest.parse(REVOCATION,"POST",null,pair.getBytes(StandardCharsets.UTF_8),headers(null),LIMITS));
+	}
 	@TestFactory @NonNull Stream<@NonNull DynamicTest> malformedEncodingsAnywhereRejectWholeInput() {
 		return Stream.of("%", "%1", "%GG", "%ＦＦ", "%FF", "%80", "%C0%AF", "%E0%80%80", "%ED%A0%80", "%F4%90%80%80", "%E2%82", "\uD800")
 				.map(value -> DynamicTest.dynamicTest("encoding: " + value, () -> {

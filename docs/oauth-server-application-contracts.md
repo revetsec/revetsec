@@ -171,8 +171,15 @@ Null resets each exact default. Invalid supplied values fail immediately. Intege
 optional absence is explicit. These four policy rows and the selected in-memory cache's separate capacity range are part of the issuer limits surface. The integrated transport and selected backend enforce their respective bounds.
 
 The internal parser uses strict UTF-8 and bounded JSON, including duplicate-member and depth checks.
-It requires exact `client_id`, nonempty `client_name`, nonempty safe `redirect_uris`, and an explicit
-`token_endpoint_auth_method` of `none`. Unsupported authentication is rejected. The grant list must contain `authorization_code`, which is
+It requires exact `client_id`, nonempty `client_name` and nonempty safe `redirect_uris`. A discovered
+client is always public in this profile. Absent singular and plural token authentication declarations
+select `none`. A present `token_endpoint_auth_methods_supported` must be a nonempty bounded string array
+containing `none`; repeated strings are harmless. A present singular `token_endpoint_auth_method` must
+belong to that array. Advertising `private_key_jwt` or another well-formed unsupported method alongside
+`none`, including selecting it in the singular legacy field, still selects public `none`; it does not enable
+assertion verification. A plural declaration excluding `none`, an inconsistent singular value, malformed
+types or any `client_secret_basic`, `client_secret_post` or `client_secret_jwt` declaration rejects the
+document. Method names are exact and case sensitive. The grant list must contain `authorization_code`, which is
 also the default when `grant_types` is omitted. Additional grant strings are ignored for capabilities;
 they do not enable device, client-credentials, password, implicit or extension grant issuance. JSON
 array/member types and duplicate entries remain checked. Refresh permission requires the listed
@@ -191,11 +198,15 @@ the selected option without changing the others. Redirect spellings are preserve
 
 Recognized optional fields have checked JSON types. The optional application type retains its checked `web`/`native` values and conservative fingerprint binding; it does not enable a redirect policy. Scope, software statements and public key
 descriptions confer no application authorization, trusted scopes or authentication authority.
-References in metadata and unknown ordinary extensions are never fetched. Symmetric key material,
+References in metadata and unknown ordinary extensions are never fetched. A bounded nonempty
+`token_endpoint_auth_signing_alg` is accepted as unused metadata and selects no verifier or key. `jwks`
+and `jwks_uri` are mutually exclusive; neither is retrieved. Symmetric key material,
 client secrets and private JWK members are rejected recursively, including nested extensions. Public
 JWK descriptions receive structural/type checks only; they are not used to verify client credentials.
 The security fingerprint covers exact client ID, authentication, redirect set, declared native flag and refresh
-permission using structured facts. Display names, redirect order, ignored grant strings and ignored extensions do not change it.
+permission using structured facts. Advertised unsupported authentication methods, their order/repetition,
+an unselected legacy preference and unused signing metadata do not change the effective `auth=none`
+fingerprint. Display names, redirect order, ignored grant strings and ignored extensions do not change it.
 Display text must be escaped by the application, and URL possession does not establish benevolent software.
 
 CIMD document validation, pinned HTTPS retrieval, registry-first selection and fresh retrieval before eligible credential transitions are integrated into `OAuthAuthorizationServer`. Parsing or reconstructing a cache carrier is not proof of a current fetch. Metadata advertises CIMD only when the configured policy is enabled; exact registered clients always take precedence. Each eligible code/refresh attempt requires its own successful HTTP 200 and the final grant/fingerprint/store checks described below.
@@ -396,6 +407,11 @@ recovery, failover or actual parallel execution.
 
 `tokenResult` handles code exchange and strict refresh rotation. `revokeResult` invalidates the whole credential-owning grant for registered or admitted dynamic clients; dynamic owner authentication requires a fresh pinned 200 fetch. `introspectionResult` accepts registered confidential resource-only callers; an optional resource selector must belong to the server registry and caller allowlist. Omitting it is supported only with a sole configured server resource. Metadata/JWKS advertise the configured profile, including CIMD only when enabled. Request Host/Forwarded values provide no authority.
 
+A complete nonempty `client_assertion` plus `client_assertion_type` on the token endpoint is recognized only
+far enough to reject the unsupported authentication attempt as `invalid_client`; the assertion is not parsed,
+verified, retained or exposed. An incomplete/empty pair, malformed encoding or use on another endpoint remains
+an `invalid_request`. Registered Basic authentication keeps registry precedence and cannot fall back to CIMD.
+
 Register the exact configured routes before passing the original materialized method, query, body and all header occurrences to the issuer. Transport helpers do not supply application login, authorization or session recovery. The host still owns body/query/header acquisition limits, request framing, TLS and route selection.
 
 | Route/work | Public operation | Host action |
@@ -405,7 +421,7 @@ Register the exact configured routes before passing the original materialized me
 | Optional revocation POST | `revokeResult` | Preserve uniform unknown-token response semantics and distinguish infrastructure failure. |
 | Optional introspection POST | `introspectionResult` | Use registered confidential resource authorization and the configured resource selector. |
 | Public metadata/JWKS GET or HEAD | `metadataResponse` / `jwksResponse` | Publish the configured issuer profile, preserve HEAD representation headers, and implement conditional HTTP handling if needed. |
-| Resource access | `validateAccessTokenResult` | Authorize the application's resource only from the successful `VerifiedAccessToken`; raw parsing or a signature alone is insufficient. |
+| Resource access | `validateAccessTokenResult` | Authorize only from the successful checked token and issuer-local grant handle; raw parsing or a signature alone is insufficient. |
 
 Normal credential/proof output needs a known authoritative commitment or barrier **and final release admission**, including the current root/recovery, time, health and original budget checks. This is distinct from raw initialization/reseal receipts, which acknowledge factual effects and do not open serving admission.
 
@@ -469,7 +485,7 @@ code and grant retain through H; access rows retain through their own expiry plu
 
 ## Operate the issuer
 
-`validateAccessTokenResult` uses the JWT access-token validator with a fresh static local public-key snapshot and the original operation Deadline, followed by the uncached exact-profile issuance/grant/subject/issuer check and atomic complete read-set barrier. Only committed admission followed by the final release check releases `VerifiedAccessToken`. No raw BearerToken accessor or proof factory was added to the public API. All callbacks use the shrinking caller budget; trusted synchronous callbacks must honor it.
+`validateAccessTokenResult` uses the JWT access-token validator with a fresh static local public-key snapshot and the original operation Deadline, followed by the uncached exact-profile issuance/grant/subject/issuer check and atomic complete read-set barrier. Only committed admission followed by the final release check constructs `OAuthIssuerAccessTokenResult.Succeeded`, which releases both `VerifiedAccessToken` and the exact checked issuer-local grant handle through explicit getters. A failed/conflicting attempt cannot release its candidate handle. The handle is sensitive management information: scope application lookup keys to issuer/deployment plus handle, never log it, and do not treat a bare string as authority. Generic JWT validation intentionally has no grant handle because it cannot establish current local grant state. No raw BearerToken accessor or proof factory was added to the public API. All callbacks use the shrinking caller budget; trusted synchronous callbacks must honor it.
 
 <a id="internal-online-token-status-admission"></a>
 
@@ -487,6 +503,18 @@ issuer fence, issued-jti, grant and subject-fence version. Missing issuance/gran
 only after an authoritative absence barrier. Missing permanent fences, contradictory authenticated records,
 backend faults and unknown barrier acknowledgements remain infrastructure failures. A read barrier creates no uncertain mutation. CONFLICT reloads the entire read set
 under the original bounded deadline. No positive token-status cache is used.
+
+Applications that attach organization, tenant or membership selection to a grant keep that mapping in their
+own store. During trusted consent completion, a narrow lexical application context can let the continuing
+grant-policy callback perform an idempotent `putIfAbsent` for the candidate handle after checking the subject,
+client and resource. The same callback can repeat before issuer commit and can see abandoned candidate handles;
+such preparation rows are not proof that a grant exists. Code exchange and refresh also report
+`authorization_code`/`refresh_token` grant checks but have no consent context, so they may validate only an
+existing mapping and must never create or reassign one merely from the grant type. Resource admission first
+requires the successful issuer result for the exact handle, then checks the issuer-scoped application row,
+current association generation, live membership and required scope. This is not a distributed atomic commit;
+cleanup must remain conservative while a grant may still be active. The self-issued example contains a
+deterministic synthetic repository test for these lookup and non-rebinding rules.
 
 The barrier is the admission point: revocation racing before it prevents admission after reload; work
 admitted before revocation may finish, while subsequent validation rejects. The helper releases only immutable

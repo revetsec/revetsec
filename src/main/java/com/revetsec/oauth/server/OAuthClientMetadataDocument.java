@@ -27,6 +27,7 @@ import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 import java.net.URI;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 import static java.util.Objects.requireNonNull;
@@ -36,6 +37,8 @@ import static com.revetsec.oauth.server.OAuthServerAdmissionFailure.Reason.INVAL
 final class OAuthClientMetadataDocument {
  private static final @NonNull Set<@NonNull String> SECRET_MEMBERS = Set.of(
   "client_secret", "client_secret_expires_at", "d", "p", "q", "dp", "dq", "qi", "oth", "k");
+ private static final @NonNull Set<@NonNull String> SECRET_METHODS = Set.of(
+  "client_secret_basic", "client_secret_post", "client_secret_jwt");
  private final @NonNull String clientId, clientName, fingerprint;
  private final @NonNull List<@NonNull URI> redirectUris;
  private final boolean nativeApplication, refreshTokenPermitted;
@@ -64,7 +67,8 @@ final class OAuthClientMetadataDocument {
    JsonValue value = JsonCodec.parse(body, JsonLimits.protocolDocument(policy.getMaximumDocumentBytes()));
    if (!(value instanceof JsonObject json)) throw invalid();
    secrets(value);
-   if (!clientId.equals(string(json, "client_id", null)) || !"none".equals(string(json, "token_endpoint_auth_method", null))) throw invalid();
+   if (!clientId.equals(string(json, "client_id", null))) throw invalid();
+   authentication(json);
    String name = OAuthServerConfiguration.text(string(json, "client_name", null), OAuthServerConfiguration.MAXIMUM_TEXT_LENGTH);
    String application = string(json, "application_type", "web");
    if (!application.equals("web") && !application.equals("native")) throw invalid();
@@ -88,6 +92,7 @@ final class OAuthClientMetadataDocument {
    }
    redirects = OAuthServerConfiguration.redirects(redirects);
    // Known optional fields have exact types, but confer no scopes, key or software identity authority.
+   if (json.getMembers().containsKey("jwks") && json.getMembers().containsKey("jwks_uri")) throw invalid();
    for (String field : List.of("client_uri", "logo_uri", "policy_uri", "tos_uri", "jwks_uri")) {
     if (json.getMembers().containsKey(field)) OAuthServerConfiguration.resource(string(json, field, null));
    }
@@ -100,7 +105,8 @@ final class OAuthClientMetadataDocument {
    if (json.getMembers().containsKey("software_version")) OAuthServerConfiguration.text(string(json, "software_version", null), 4096);
    // No unverified software statement or signing-algorithm declaration is treated as authentication.
    if (json.getMembers().containsKey("software_statement")) OAuthServerConfiguration.text(string(json, "software_statement", null), 4096);
-   if (json.getMembers().containsKey("token_endpoint_auth_signing_alg")) throw invalid();
+   if (json.getMembers().containsKey("token_endpoint_auth_signing_alg"))
+    OAuthServerConfiguration.text(string(json, "token_endpoint_auth_signing_alg", null), OAuthServerConfiguration.MAXIMUM_TEXT_LENGTH);
    if (json.getMembers().containsKey("jwks")) publicKeys(json.getMembers().get("jwks"));
    return new OAuthClientMetadataDocument(clientId, name, redirects, nativeApplication, grants.contains("refresh_token"));
   } catch (JsonParseException | IllegalArgumentException failure) { throw invalid(); }
@@ -124,6 +130,31 @@ final class OAuthClientMetadataDocument {
    else if (type.equals("OKP")) { string(key, "crv", null); string(key, "x", null); }
    else throw invalid();
   }
+ }
+ private static void authentication(@NonNull JsonObject json) {
+  boolean plural = json.getMembers().containsKey("token_endpoint_auth_methods_supported");
+  boolean singular = json.getMembers().containsKey("token_endpoint_auth_method");
+  Set<String> methods = plural ? methods(json, "token_endpoint_auth_methods_supported") : Set.of();
+  String selected = singular ? method(string(json, "token_endpoint_auth_method", null)) : null;
+  if (methods.stream().anyMatch(SECRET_METHODS::contains) || selected != null && SECRET_METHODS.contains(selected)) throw invalid();
+  if (!plural) {
+   if (selected != null && !selected.equals("none")) throw invalid();
+   return;
+  }
+  if (!methods.contains("none") || selected != null && !methods.contains(selected)) throw invalid();
+ }
+ private static @NonNull Set<@NonNull String> methods(@NonNull JsonObject json, @NonNull String name) {
+  JsonValue value = json.getMembers().get(name);
+  if (!(value instanceof JsonArray array) || array.getElements().isEmpty() || array.getElements().size() > 128) throw invalid();
+  Set<String> result = new LinkedHashSet<>();
+  for (JsonValue item : array.getElements()) {
+   if (!(item instanceof JsonString text)) throw invalid();
+   result.add(method(text.getValue()));
+  }
+  return Set.copyOf(result);
+ }
+ private static @NonNull String method(@NonNull String value) {
+  return OAuthServerConfiguration.text(value, OAuthServerConfiguration.MAXIMUM_TEXT_LENGTH);
  }
  private static @NonNull String string(@NonNull JsonObject json, @NonNull String name, @Nullable String fallback) {
   JsonValue value = json.getMembers().get(name);

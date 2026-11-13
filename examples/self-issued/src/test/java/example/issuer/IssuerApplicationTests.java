@@ -109,6 +109,49 @@ final class IssuerApplicationTests {
   assertThrows(OAuthServerStoreException.class,
     ()->new IssuerResources(config,clock,store,keys,sealer(),IssuerResources.StartupMode.ESTABLISHED,partitionKey));
  }
+ @Test void checkedGrantHandlesBindOtherwiseIdenticalGrantsAndSurviveRefresh() throws Exception {
+  var app=app();String firstPair=issued(app,"mcp:discover mcp:whoami");
+  var first=assertInstanceOf(OAuthIssuerAccessTokenResult.Succeeded.class,app.server.validateAccessTokenResult(
+   bearer(scalar(firstPair,"access_token")),app.config.resource.toString()));
+  String refreshForm=form(Map.of("grant_type","refresh_token","client_id","demo-public","resource",
+   app.config.resource.toString(),"refresh_token",scalar(firstPair,"refresh_token")));
+  var rotated=app.token(request(app,HttpMethod.POST,"/token",refreshForm,null));assertEquals(200,rotated.getStatusCode());
+  var refreshed=assertInstanceOf(OAuthIssuerAccessTokenResult.Succeeded.class,app.server.validateAccessTokenResult(
+   bearer(scalar(text(rotated),"access_token")),app.config.resource.toString()));
+  assertEquals(first.getGrantValue(),refreshed.getGrantValue());
+
+  String secondPair=issued(app,"mcp:discover mcp:whoami");
+  var second=assertInstanceOf(OAuthIssuerAccessTokenResult.Succeeded.class,app.server.validateAccessTokenResult(
+   bearer(scalar(secondPair,"access_token")),app.config.resource.toString()));
+  assertNotEquals(first.getGrantValue(),second.getGrantValue());
+  assertEquals(first.getAccessToken().getSubject(),second.getAccessToken().getSubject());
+  assertEquals(first.getAccessToken().getClientId(),second.getAccessToken().getClientId());
+  assertEquals(first.getAccessToken().getAudiences(),second.getAccessToken().getAudiences());
+  assertEquals(first.getAccessToken().getScopes(),second.getAccessToken().getScopes());
+
+  SyntheticGrantBindings bindings=new SyntheticGrantBindings();String issuer=app.config.origin.toString(),resource=app.config.resource.toString();
+  var one=new SyntheticGrantBindings.Binding(issuer,first.getGrantValue(),IssuerConfig.SUBJECT,"demo-public",resource,"organization-a","member-a",7);
+  var two=new SyntheticGrantBindings.Binding(issuer,second.getGrantValue(),IssuerConfig.SUBJECT,"demo-public",resource,"organization-b","member-b",11);
+  assertTrue(bindings.prepare(one));assertTrue(bindings.prepare(one));assertTrue(bindings.prepare(two));
+  assertFalse(bindings.prepare(new SyntheticGrantBindings.Binding(issuer,first.getGrantValue(),IssuerConfig.SUBJECT,
+   "demo-public",resource,"organization-b","member-b",7)));
+  assertTrue(bindings.admits(first,issuer,Set.of("member-a"),7,"mcp:whoami"));
+  assertTrue(bindings.admits(second,issuer,Set.of("member-b"),11,"mcp:whoami"));
+  assertFalse(bindings.admits(first,issuer,Set.of(),7,"mcp:whoami"));
+  assertFalse(bindings.admits(first,issuer,Set.of("member-a"),8,"mcp:whoami"));
+  assertFalse(bindings.admits(first,"https://other-issuer.example",Set.of("member-a"),7,"mcp:whoami"));
+  assertFalse(new SyntheticGrantBindings().admits(first,issuer,Set.of("member-a"),7,"mcp:whoami"));
+  for(var wrong:List.of(
+   new SyntheticGrantBindings.Binding(issuer,first.getGrantValue(),"other-subject","demo-public",resource,"organization-a","member-a",7),
+   new SyntheticGrantBindings.Binding(issuer,first.getGrantValue(),IssuerConfig.SUBJECT,"other-client",resource,"organization-a","member-a",7),
+   new SyntheticGrantBindings.Binding(issuer,first.getGrantValue(),IssuerConfig.SUBJECT,"demo-public","https://other.example/mcp","organization-a","member-a",7))) {
+   var isolated=new SyntheticGrantBindings();assertTrue(isolated.prepare(wrong));
+   assertFalse(isolated.admits(first,issuer,Set.of("member-a"),7,"mcp:whoami"));
+  }
+  assertTrue(bindings.prepare(new SyntheticGrantBindings.Binding(issuer,"D".repeat(42)+"A",IssuerConfig.SUBJECT,
+   "demo-public",resource,"orphan","member-orphan",1)));
+  assertEquals("organization-a",bindings.binding(first,issuer).orElseThrow().organization());
+ }
  @Test void publicAndConfidentialClientsUsePkceAndNoCredentialLeaksInRedirectPage() throws Exception {
   var app=app();for(String client:List.of("demo-public","demo-confidential")) {
    String code=code(app,client,"mcp:discover mcp:whoami");
@@ -376,6 +419,27 @@ final class IssuerApplicationTests {
  }
  static @NonNull McpSimulationResponse call(@NonNull Simulator sim,@NonNull IssuerResources app,@Nullable String token,@NonNull String method,@Nullable String tool,@NonNull String args) throws InterruptedException {
   try(var simulation=sim.startMcpRequest(mcpRequest(app,token,method,tool,args))) {return simulation.awaitResponse(Duration.ofSeconds(5)).orElseThrow();}
+ }
+ /** Synthetic app-owned repository: preparation is idempotent; only a checked result can select a row. */
+ static final class SyntheticGrantBindings {
+  record Key(@NonNull String issuer,@NonNull String grantValue) {}
+  record Binding(@NonNull String issuer,@NonNull String grantValue,@NonNull String subject,@NonNull String client,
+    @NonNull String resource,@NonNull String organization,@NonNull String member,long generation) {}
+  private final Map<Key,Binding> rows=new HashMap<>();
+  boolean prepare(@NonNull Binding candidate) {
+   Binding current=this.rows.putIfAbsent(new Key(candidate.issuer(),candidate.grantValue()),candidate);
+   return current==null||current.equals(candidate);
+  }
+  @NonNull Optional<Binding> binding(OAuthIssuerAccessTokenResult.@NonNull Succeeded result,@NonNull String issuer) {
+   return Optional.ofNullable(this.rows.get(new Key(issuer,result.getGrantValue())));
+  }
+  boolean admits(OAuthIssuerAccessTokenResult.@NonNull Succeeded result,@NonNull String issuer,
+    @NonNull Set<@NonNull String> liveMembers,long generation,@NonNull String requiredScope) {
+   var token=result.getAccessToken();Binding binding=binding(result,issuer).orElse(null);
+   return binding!=null&&binding.issuer().equals(token.getIssuer())&&token.getSubject().filter(binding.subject()::equals).isPresent()
+    &&token.getClientId().filter(binding.client()::equals).isPresent()&&token.getAudiences().contains(binding.resource())
+    &&token.getScopes().contains(requiredScope)&&liveMembers.contains(binding.member())&&binding.generation()==generation;
+  }
  }
  static final class MutableClock extends Clock {
   Instant now=Instant.parse("2026-10-06T12:00:00Z");

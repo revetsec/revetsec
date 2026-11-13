@@ -55,6 +55,7 @@ final class OAuthServerClientSelection {
    @NonNull Map<@NonNull String, @NonNull Set<@NonNull String>> resources, @NonNull Deadline deadline,
    @NonNull BooleanSupplier admission) {
   if (request.endpoint() == OAuthServerRequest.Endpoint.AUTHORIZATION) throw OAuthServerRequest.invalid();
+  if (request.clientAssertion()) throw OAuthServerClientAdmission.failure(INVALID_CLIENT);
   // Basic is registry-only. A missing verifier/unknown registration never becomes public metadata authentication.
   if (request.authorization() != null) return Optional.of(registered(OAuthServerClientAdmission.authenticate(request, this.repository, deadline, this.limits)));
   String id = request.value("client_id");

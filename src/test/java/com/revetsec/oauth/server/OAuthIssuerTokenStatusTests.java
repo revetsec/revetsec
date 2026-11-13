@@ -253,24 +253,30 @@ final class OAuthIssuerTokenStatusTests {
   });
  }
  @Test void proofAdmissionCoversInactiveRowsMismatchesAndConflictExhaustion() {
-  String jwt=issued();JsonObject original=claims(jwt);OAuthIssuerAccessTokenResult admitted=OAuthIssuerAccessTokenResult.fromSucceeded(proof(jwt));
-  assertSame(admitted,status().validateProof(original,RESOURCE,deadline(),session->admitted));
+  String jwt=issued();JsonObject original=claims(jwt);VerifiedAccessToken tokenProof=proof(jwt);
+  java.util.function.Function<OAuthStoreCoordinator.Session,OAuthIssuerTokenStatus.PreparedProof> admitted=
+   session->OAuthIssuerTokenStatus.PreparedProof.fromSucceeded(tokenProof);
+  var success=assertInstanceOf(OAuthIssuerAccessTokenResult.Succeeded.class,status().validateProof(original,RESOURCE,deadline(),admitted));
+  assertSame(tokenProof,success.getAccessToken());assertEquals(record(OAuthStoreKey.Kind.GRANT).text("id"),success.getGrantValue());
   assertInstanceOf(OAuthIssuerAccessTokenResult.Rejected.class,status().validateProof(
-   changed(original,"sub",JsonString.fromValue("other")),RESOURCE,deadline(),session->admitted));
+   changed(original,"sub",JsonString.fromValue("other")),RESOURCE,deadline(),admitted));
+  var preparedRejection=OAuthIssuerAccessTokenResult.fromRejection(OAuthServerException.Reason.TOKEN_REVOKED,null,null);
+  assertSame(preparedRejection,status().validateProof(original,RESOURCE,deadline(),
+   session->OAuthIssuerTokenStatus.PreparedProof.fromRejection(preparedRejection)));
 
   var missingAccess=new OAuthIssuerTokenStatusTests();String accessJwt=missingAccess.issued();missingAccess.remove(OAuthStoreKey.Kind.ACCESS_TOKEN);
   assertInstanceOf(OAuthIssuerAccessTokenResult.Rejected.class,missingAccess.status().validateProof(
-   claims(accessJwt),RESOURCE,deadline(),session->admitted));
+   claims(accessJwt),RESOURCE,deadline(),admitted));
   var missingGrant=new OAuthIssuerTokenStatusTests();String grantJwt=missingGrant.issued();missingGrant.remove(OAuthStoreKey.Kind.GRANT);
   assertInstanceOf(OAuthIssuerAccessTokenResult.Rejected.class,missingGrant.status().validateProof(
-   claims(grantJwt),RESOURCE,deadline(),session->admitted));
+   claims(grantJwt),RESOURCE,deadline(),admitted));
 
   var accessConflicts=new OAuthIssuerTokenStatusTests();String conflictAccess=accessConflicts.issued();accessConflicts.remove(OAuthStoreKey.Kind.ACCESS_TOKEN);accessConflicts.store.conflicts=3;
   failed(OAuthStoreFailure.Reason.UNAVAILABLE,()->accessConflicts.status().validateProof(
-   claims(conflictAccess),RESOURCE,deadline(),session->admitted));
+   claims(conflictAccess),RESOURCE,deadline(),admitted));
   var grantConflicts=new OAuthIssuerTokenStatusTests();String conflictGrant=grantConflicts.issued();grantConflicts.remove(OAuthStoreKey.Kind.GRANT);grantConflicts.store.conflicts=3;
   failed(OAuthStoreFailure.Reason.UNAVAILABLE,()->grantConflicts.status().validateProof(
-   claims(conflictGrant),RESOURCE,deadline(),session->admitted));
+   claims(conflictGrant),RESOURCE,deadline(),admitted));
  }
  @Test void matcherRejectsMalformedNumericClaimsAndPreparedPreservesFatalErrors() throws Exception {
   String jwt=issued();OAuthIssuerTokenStatus selected=status();
