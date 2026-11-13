@@ -56,6 +56,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -594,8 +595,10 @@ final class TotpAuthenticatorTests {
                 assertEquals(1, hooks.get());
                 assertEquals(commits + 1, fixture.store.commits.get());
                 assertEquals(reads + 2, fixture.store.reads.get());
-                assertEquals(0, withheld.getClass().getDeclaredFields().length);
-                assertEquals(0, withheld.getClass().getDeclaredMethods().length);
+                assertEquals(0, Arrays.stream(withheld.getClass().getDeclaredFields())
+                        .filter(field -> !field.isSynthetic()).count());
+                assertEquals(0, Arrays.stream(withheld.getClass().getDeclaredMethods())
+                        .filter(method -> !method.isSynthetic()).count());
                 assertEquals("RecoveryCodeRotationResult{<redacted>}", withheld.toString());
                 TotpStoreRecord committed = assertInstanceOf(TotpStoreEntry.Present.class,
                         fixture.accountRecordEntry()).getRecord();
@@ -1101,6 +1104,20 @@ final class TotpAuthenticatorTests {
                 totp.beginEnrollmentResult(options(null), BROWSER));
         assertEquals(TotpUnavailableReason.CAPACITY_REFUSED, failure.getReason());
         assertInstanceOf(TotpStatusResult.Absent.class, totp.getStatusResult(ACCOUNT));
+    }
+
+    @Test void builderNullableDefaultsAndIndependentTextAndTimeoutBoundsAreExact() {
+        assertThrows(IllegalArgumentException.class, () -> TotpAuthenticator.withIssuer(""));
+        assertThrows(IllegalArgumentException.class, () -> TotpAuthenticator.withIssuer("x".repeat(129)));
+        assertThrows(IllegalArgumentException.class, () -> TotpAuthenticator.withIssuer("bad\uD800"));
+        TotpAuthenticator.Builder builder = TotpAuthenticator.withIssuer("Example Security");
+        assertSame(builder, builder.recoveryEpoch(null).clock(null).operationTimeout(null));
+        assertThrows(IllegalArgumentException.class,
+                () -> builder.operationTimeout(Duration.ofMillis(99)));
+        assertThrows(IllegalArgumentException.class,
+                () -> builder.operationTimeout(Duration.ofSeconds(30).plusNanos(1)));
+        assertSame(builder, builder.operationTimeout(Duration.ofMillis(100)));
+        assertSame(builder, builder.operationTimeout(Duration.ofSeconds(30)));
     }
 
     private static @NonNull TotpAuthenticator authenticator(@NonNull TotpStore store,

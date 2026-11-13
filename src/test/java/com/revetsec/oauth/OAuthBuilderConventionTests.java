@@ -194,11 +194,14 @@ final class OAuthBuilderConventionTests {
 
 	@Test
 	void requiredResetsAndInvalidValuesUseDistinctLocalFailures() {
+		assertThrows(IllegalArgumentException.class, () -> AuthorizationServerMetadata.withIssuer(""));
 		assertThrows(IllegalStateException.class, () -> OAuthClient.withIssuer("https://issuer.example").build());
 		assertThrows(IllegalStateException.class, () -> builder(metadata("https://issuer.example")).clientId(null).build());
 		assertThrows(IllegalStateException.class, () -> builder(metadata("https://issuer.example")).clientAuthentication(null).build());
 		assertThrows(IllegalArgumentException.class, () -> builder(metadata("https://issuer.example")).clientId(""));
 		assertThrows(IllegalStateException.class, () -> AuthorizationServerMetadata.withIssuer("https://issuer.example").build());
+		assertThrows(IllegalStateException.class, () -> AuthorizationServerMetadata.withIssuer("https://issuer.example")
+				.authorizationEndpoint(URI.create("https://issuer.example/auth")).build());
 		assertThrows(IllegalStateException.class, () -> OidcClient.withIssuer("https://issuer.example").clientId("client").build());
 		assertThrows(IllegalArgumentException.class, () -> OidcClient.withIssuer("https://issuer.example").clientId("").redirectUri(CALLBACK).build());
 		assertThrows(IllegalStateException.class, () -> OidcProviderMetadata.withIssuer("https://issuer.example").build());
@@ -209,6 +212,22 @@ final class OAuthBuilderConventionTests {
 		assertEquals(Boolean.FALSE, reset.isAuthorizationResponseIssuerSupported());
 		assertEquals(Boolean.FALSE, reset.isRemotelyDiscovered());
 		assertEquals(OAuthException.Reason.DOCUMENT_MALFORMED, assertInstanceOf(AuthorizationServerMetadataParseResult.Rejected.class, AuthorizationServerMetadata.fromJsonResult("https://issuer.example", "{\"issuer\":\"https://issuer.example\"}")).getReason());
+		assertEquals(OAuthException.Reason.DOCUMENT_MALFORMED, assertInstanceOf(AuthorizationServerMetadataParseResult.Rejected.class,
+				AuthorizationServerMetadata.fromJsonResult("https://issuer.example",
+						"{\"issuer\":\"https://issuer.example\",\"authorization_endpoint\":\"https://issuer.example/auth\"}"))
+				.getReason());
+	}
+
+	@Test
+	void discoveredMetadataBuilderRejectsTheIndependentMissingTokenEndpoint() throws Exception {
+		AuthorizationServerMetadata.Builder builder = AuthorizationServerMetadata.withIssuer("https://issuer.example")
+				.authorizationEndpoint(URI.create("https://issuer.example/auth"));
+		java.lang.reflect.Method buildDiscovered = AuthorizationServerMetadata.Builder.class
+				.getDeclaredMethod("buildDiscovered");
+		buildDiscovered.setAccessible(true);
+		java.lang.reflect.InvocationTargetException failure = assertThrows(
+				java.lang.reflect.InvocationTargetException.class, () -> buildDiscovered.invoke(builder));
+		assertInstanceOf(OAuthResponseException.class, failure.getCause());
 	}
 
 	private static @NonNull AuthorizationServerMetadata metadata(@NonNull String issuer) {

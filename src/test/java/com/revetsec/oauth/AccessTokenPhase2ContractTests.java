@@ -68,7 +68,9 @@ final class AccessTokenPhase2ContractTests {
         Runtime.Version old=Runtime.Version.parse("17.0.1");JwtAccessTokenValidator staticKeys=jwt().build(old);staticKeys.warmUp();assertNotNull(assertInstanceOf(AccessTokenValidationResult.Succeeded.class, staticKeys.validateResult(bearer(token(claims(ISSUER),"at+jwt")))).getAccessToken());
         assertThrows(IllegalStateException.class,()->JwtAccessTokenValidator.withIssuer(ISSUER).expectedAudiences(Set.of(AUD)).build(old));
         AtomicInteger warnings=new AtomicInteger();assertNotNull(JwtAccessTokenValidator.withIssuer(ISSUER).expectedAudiences(Set.of(AUD)).acknowledgeUnpatchedRuntime(true).observer(new AccessTokenObserver(){@Override public void didUseUnpatchedRuntime(@NonNull String v){warnings.incrementAndGet();}}).build(old));assertEquals(1,warnings.get());
+		assertThrows(IllegalArgumentException.class,()->JwtAccessTokenValidator.withIssuer(""));
         assertThrows(IllegalArgumentException.class,()->JwtAccessTokenValidator.withIssuer("https://issuer.example?bad").expectedAudiences(Set.of(AUD)).build());
+		assertThrows(IllegalArgumentException.class,()->JwtAccessTokenValidator.withIssuer("https://issuer.example#bad").expectedAudiences(Set.of(AUD)).build());
         assertThrows(IllegalArgumentException.class,()->JwtAccessTokenValidator.withIssuer("http://10.0.0.1").expectedAudiences(Set.of(AUD)).build());
         try(TestHttpsServer server=TestHttpsServer.start()) {
             assertNotNull(JwtAccessTokenValidator.withIssuer(server.getBaseUri().toString()).expectedAudiences(Set.of(AUD)).jwksSource(null).httpClient(TestTls.httpClient()).build());assertEquals(0,server.getRequests().size());

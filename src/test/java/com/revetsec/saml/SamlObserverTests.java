@@ -22,6 +22,8 @@ import org.jspecify.annotations.NonNull;
 import org.junit.jupiter.api.Test;
 
 import java.net.URI;
+import java.lang.reflect.Method;
+import java.lang.reflect.Proxy;
 import java.nio.charset.StandardCharsets;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
@@ -32,6 +34,11 @@ import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
+import java.util.Map;
+
+import javax.xml.parsers.DocumentBuilderFactory;
+
+import org.w3c.dom.Node;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -151,6 +158,65 @@ final class SamlObserverTests {
                 URI.create("https://idp.example.test/slo?SAMLResponse=redacted"))));
         assertEquals(rejected, SamlServiceProvider.outcome(SamlLogoutResponseRedirectResult.Rejected.INSTANCE));
         assertEquals(unavailable, SamlServiceProvider.outcome(SamlLogoutResponseRedirectResult.Unavailable.INSTANCE));
+
+        SamlPostForm form = new SamlPostForm(URI.create("https://idp.example.test/slo"),
+                "SAMLRequest", "redacted", null);
+        assertEquals(success, SamlServiceProvider.outcome(new SamlLogoutPostResult.Prepared(
+                form, new PendingSamlLogout(pending))));
+        assertEquals(rejected, SamlServiceProvider.outcome(SamlLogoutPostResult.Rejected.CONFIGURATION));
+        assertEquals(unavailable, SamlServiceProvider.outcome(SamlLogoutPostResult.Unavailable.INSTANCE));
+        assertEquals(success, SamlServiceProvider.outcome(new SamlLogoutResponsePostResult.Prepared(form)));
+        assertEquals(rejected, SamlServiceProvider.outcome(SamlLogoutResponsePostResult.Rejected.INSTANCE));
+        assertEquals(unavailable, SamlServiceProvider.outcome(SamlLogoutResponsePostResult.Unavailable.INSTANCE));
+    }
+
+    @Test void privateDomAndReasonClassifiersCoverEveryClosedInputKind() throws Exception {
+        Method ignorable = SamlServiceProvider.class.getDeclaredMethod("ignorableStructuralNode", Node.class);
+        ignorable.setAccessible(true);
+        var document = DocumentBuilderFactory.newInstance().newDocumentBuilder().newDocument();
+        assertEquals(true, ignorable.invoke(null, document.createComment("comment")));
+        assertEquals(true, ignorable.invoke(null, document.createProcessingInstruction("target", "data")));
+        assertEquals(false, ignorable.invoke(null, document.createElement("element")));
+        assertEquals(true, ignorable.invoke(null, document.createTextNode("")));
+        assertEquals(true, ignorable.invoke(null, document.createTextNode(" \t\r\n")));
+        for (String value : List.of("x", "\tx", "\rx", "\nx"))
+            assertEquals(false, ignorable.invoke(null, document.createTextNode(value)));
+        Node nullText = (Node) Proxy.newProxyInstance(Node.class.getClassLoader(), new Class<?>[]{Node.class},
+                (proxy, method, arguments) -> switch (method.getName()) {
+                    case "getNodeType" -> Node.TEXT_NODE;
+                    case "getNodeValue" -> null;
+                    default -> throw new UnsupportedOperationException(method.getName());
+                });
+        assertEquals(false, ignorable.invoke(null, nullText));
+		Method textOnly = SamlServiceProvider.class.getDeclaredMethod("textOnly", org.w3c.dom.Element.class);
+		textOnly.setAccessible(true);
+		var mixed = document.createElement("mixed");
+		mixed.appendChild(document.createComment("not scalar text"));
+		assertEquals(null, textOnly.invoke(null, mixed));
+
+        Method map = SamlServiceProvider.class.getDeclaredMethod("map", SamlResponseSemantics.Reason.class);
+        map.setAccessible(true);
+        Map<SamlResponseSemantics.Reason, SamlAuthenticationResult.Reason> expected = Map.ofEntries(
+                Map.entry(SamlResponseSemantics.Reason.PENDING, SamlAuthenticationResult.Reason.PENDING),
+                Map.entry(SamlResponseSemantics.Reason.COVERAGE, SamlAuthenticationResult.Reason.SIGNATURE),
+                Map.entry(SamlResponseSemantics.Reason.ISSUER, SamlAuthenticationResult.Reason.ISSUER),
+                Map.entry(SamlResponseSemantics.Reason.DESTINATION, SamlAuthenticationResult.Reason.DESTINATION),
+                Map.entry(SamlResponseSemantics.Reason.REQUEST_BINDING, SamlAuthenticationResult.Reason.REQUEST_BINDING),
+                Map.entry(SamlResponseSemantics.Reason.STATUS, SamlAuthenticationResult.Reason.STATUS),
+                Map.entry(SamlResponseSemantics.Reason.SUBJECT, SamlAuthenticationResult.Reason.SUBJECT),
+                Map.entry(SamlResponseSemantics.Reason.CONFIRMATION, SamlAuthenticationResult.Reason.CONFIRMATION),
+                Map.entry(SamlResponseSemantics.Reason.CONDITIONS, SamlAuthenticationResult.Reason.CONDITIONS),
+                Map.entry(SamlResponseSemantics.Reason.AUTHN_STATEMENT, SamlAuthenticationResult.Reason.AUTHN_STATEMENT),
+                Map.entry(SamlResponseSemantics.Reason.RESPONSE_AGE, SamlAuthenticationResult.Reason.RESPONSE_AGE),
+                Map.entry(SamlResponseSemantics.Reason.REPLAYED, SamlAuthenticationResult.Reason.REPLAYED),
+                Map.entry(SamlResponseSemantics.Reason.ASSERTION_SHAPE, SamlAuthenticationResult.Reason.ASSERTION_SHAPE));
+        for (var entry : expected.entrySet()) assertEquals(entry.getValue(), map.invoke(null, entry.getKey()));
+
+        Method requestOutcome = SamlServiceProvider.class.getDeclaredMethod("outcome",
+                SamlAuthenticationRequestResult.class);
+        requestOutcome.setAccessible(true);
+        assertEquals(SamlObserver.Outcome.UNAVAILABLE,
+                requestOutcome.invoke(null, SamlAuthenticationRequestResult.Unavailable.INSTANCE));
     }
 
     @Test @SuppressWarnings("NullAway") // Deliberate required-argument misuse.

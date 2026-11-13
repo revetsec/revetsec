@@ -185,6 +185,40 @@ final class PasswordStoredFormTests {
         }
     }
 
+    @Test void parserRejectsIndependentNumericKeyAndBase64BoundaryShapes() {
+        PasswordVerificationLimits limits = PasswordVerificationLimits.fromDefaults();
+        String raw = PasswordStoredForm.encode(Argon2idParameters.fromCosts(19_456, 2, 1),
+                new byte[16], new byte[32], null);
+        String keyed = PasswordStoredForm.encode(Argon2idParameters.fromCosts(19_456, 2, 1),
+                new byte[16], new byte[32], "key");
+
+        for (String malformed : new String[]{
+                raw.replace("p=1", "p="),
+                raw.replace("m=19456", "m=12345678"),
+                raw.replace("m=19456,t=2,p=1", "m=8,t=1,p=2"),
+                keyed.replace("kid=key", "kid=" + "k".repeat(65)),
+                raw.replace("$AAAAAAAAAAAAAAAAAAAAAA$", "$" + "A".repeat(10) + "$"),
+                raw.replace("$AAAAAAAAAAAAAAAAAAAAAA$", "$" + "A".repeat(87) + "$"),
+                raw.replace("$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "$" + "A".repeat(11)),
+                raw.replace("$AAAAAAAAAAAAAAAAAAAAAA$", "$" + "A".repeat(13) + "$"),
+                raw.replace("$AAAAAAAAAAAAAAAAAAAAAA$", "$AAAAAAAAAAB$")}) {
+            PasswordStoredForm parsed = PasswordStoredForm.parse(malformed, limits);
+            assertNotEquals(PasswordStoredForm.Status.VALID, parsed.status(), malformed);
+            parsed.wipe();
+        }
+
+        for (String keyId : new String[]{"_", "~"}) {
+            PasswordStoredForm parsed = PasswordStoredForm.parse(
+                    keyed.replace("kid=key", "kid=" + keyId), limits);
+            try {
+                assertEquals(PasswordStoredForm.Status.VALID, parsed.status(), keyId);
+                assertEquals(keyId, parsed.pepperKeyId());
+            } finally {
+                parsed.wipe();
+            }
+        }
+    }
+
     private static @NonNull String reconstruct(@NonNull PasswordStoredForm form) {
         String prefix = form.peppered() ? "$revetsec-pw$v=1$kid=" + form.pepperKeyId() : "";
         return prefix + "$argon2id$v=19$m=" + form.memoryKiB() + ",t=" + form.passes()

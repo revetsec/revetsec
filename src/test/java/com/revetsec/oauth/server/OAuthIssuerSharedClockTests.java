@@ -590,6 +590,13 @@ final class OAuthIssuerSharedClockTests {
  @NonNull List<org.junit.jupiter.api.@NonNull DynamicTest> scClk04ProviderFailuresCannotSpoofTrustedStoreHealth(){
   List<org.junit.jupiter.api.DynamicTest> cells=new java.util.ArrayList<>();for(String origin:List.of("SNAPSHOT","JCA","JCA_REFRESH"))for(String fault:List.of("RUNTIME","STORE_SIGNAL"))cells.add(org.junit.jupiter.api.DynamicTest.dynamicTest("SC-CLK-04/provider-origin/"+origin+"/"+fault,()->scClk04Child(origin+"/"+fault)));cells.add(org.junit.jupiter.api.DynamicTest.dynamicTest("SC-CLK-04/origin-is-invocation-local",()->scClk04Child("ORIGIN/REUSE")));cells.add(org.junit.jupiter.api.DynamicTest.dynamicTest("SC-CLK-04/provisional-clock-is-not-an-admitted-store",()->scClk04Child("PROVISIONAL/STORE_SIGNAL")));return cells;
  }
+ @org.junit.jupiter.api.Test
+ void scClk04TrustedStoreFailuresAlsoRunInProcessForCoverage()throws Exception{
+  OAuthIssuerClockHealthTestProvider.main(new String[]{"TOKEN/UTC_UNAVAILABLE"});
+  OAuthIssuerClockHealthTestProvider.main(new String[]{"REFRESH/UTC_UNAVAILABLE"});
+  OAuthIssuerClockHealthTestProvider.main(new String[]{"WARMUP/NONE"});
+  OAuthIssuerClockHealthTestProvider.main(new String[]{"WARMUP/UTC_UNAVAILABLE"});
+ }
  @org.junit.jupiter.api.TestFactory
  @NonNull List<org.junit.jupiter.api.@NonNull DynamicTest> scClk04MaterialFailuresCannotSpoofTrustedStoreHealth(){
   List<org.junit.jupiter.api.DynamicTest> cells=new java.util.ArrayList<>();for(String fault:List.of("RUNTIME","STORE_SIGNAL"))cells.add(org.junit.jupiter.api.DynamicTest.dynamicTest("SC-CLK-04/material-origin/"+fault,()->scClk04Child("MATERIAL/"+fault)));return cells;

@@ -155,6 +155,13 @@ final class OAuthClientSelectionTests {
   var client=registered(false);var selected=selection((id,b)->Optional.of(client)).authorization(ID,resources(),deadline());
   assertSame(client,selected.client());assertEquals(OAuthAuthorizationRecord.clientFingerprint(client),selected.fingerprint());assertEquals(0,this.fetches.get());assertEquals(0,this.cacheReads.get());
  }
+ @Test void selectorCapabilityAndSuccessfulTokenWrapperAreExplicit() {
+  var disabled=new OAuthServerClientSelection((id,b)->Optional.empty(),LIMITS,null);
+  assertFalse(disabled.metadataEnabled());assertTrue(this.dynamic.metadataEnabled());
+  var client=registered(false);var selected=selection((id,b)->Optional.of(client))
+   .authenticate(token(BROWSER,false,Map.of(),null),resources(),deadline());
+  assertSame(client,selected.client());assertEquals(OAuthAuthorizationRecord.clientFingerprint(client),selected.fingerprint());
+ }
  @Test void registeredCodeAndRefreshNeedNoMetadataFetch() {
   var client=registered(false);var selection=selection((id,b)->Optional.of(client));String code=code(selection);
   var first=this.codes.redeem(token(code,false,Map.of(),null),selection,resources(),allow(),deadline());

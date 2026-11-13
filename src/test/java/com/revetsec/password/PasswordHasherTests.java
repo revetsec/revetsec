@@ -27,6 +27,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.UnaryOperator;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -441,6 +442,106 @@ final class PasswordHasherTests {
                 passwords.verifyResult("pw".toCharArray(), stored));
         assertThrows(IllegalArgumentException.class,
                 () -> PasswordVerificationLimits.builder().maximumStoredFormChars(191).build());
+    }
+
+    @Test void entryInterruptionAndLegacySelectionFailBeforeAnyWork() {
+        PasswordHasher legacy = PasswordHasher.withArgon2id(PARAMETERS)
+                .workGate(PasswordWorkGate.fromInMemoryLimits(1, 19_456))
+                .legacyBcrypt(LegacyPasswordPreparation.EXACT_UTF8, 5)
+                .legacyPbkdf2(LegacyPasswordPreparation.EXACT_UTF8, 100).build();
+        Thread.currentThread().interrupt();
+        try {
+            assertEquals(PasswordUnavailableReason.INTERRUPTED,
+                    assertInstanceOf(PasswordHashResult.Unavailable.class, legacy.hashResult("pw".toCharArray())).getReason());
+            assertEquals(PasswordUnavailableReason.INTERRUPTED,
+                    assertInstanceOf(PasswordVerificationResult.Unavailable.class,
+                            legacy.verifyResult("pw".toCharArray(), "$argon2id$v=19$m=19456,t=2,p=1$c2FsdHNhbHRzYWx0c2FsdA$AAAAAAAAAAAAAAAAAAAAAA")).getReason());
+            assertEquals(PasswordUnavailableReason.INTERRUPTED,
+                    assertInstanceOf(PasswordVerificationResult.Unavailable.class,
+                            legacy.verifyLegacyBcryptResult("pw".toCharArray(), BCRYPT_2A)).getReason());
+            assertEquals(PasswordUnavailableReason.INTERRUPTED,
+                    assertInstanceOf(PasswordVerificationResult.Unavailable.class,
+                            legacy.verifyLegacyPbkdf2Result("pw".toCharArray(), Pbkdf2Hmac.SHA256, 1, new byte[8], new byte[16])).getReason());
+        } finally { Thread.interrupted(); }
+        assertEquals(PasswordRejectionReason.UNSUPPORTED_STORED_HASH,
+                assertInstanceOf(PasswordVerificationResult.Rejected.class,
+                        hasher().verifyLegacyBcryptResult("pw".toCharArray(), BCRYPT_2A)).getReason());
+        assertEquals(PasswordRejectionReason.UNSUPPORTED_STORED_HASH,
+                assertInstanceOf(PasswordVerificationResult.Rejected.class,
+                        hasher().verifyLegacyPbkdf2Result("pw".toCharArray(), Pbkdf2Hmac.SHA256, 1, new byte[8], new byte[16])).getReason());
+    }
+
+    @Test void preparationAndLegacyFieldBoundariesAreIndependentlyRejected() {
+        PasswordVerificationLimits byteLimited = PasswordVerificationLimits.builder()
+                .maximumPasswordUtf8Bytes(256).build();
+        PasswordHasher bounded = PasswordHasher.withArgon2id(PARAMETERS)
+                .workGate(PasswordWorkGate.fromInMemoryLimits(1, 19_456)).verificationLimits(byteLimited).build();
+        for (char[] password : List.of(new char[]{'\uDC00'}, new char[]{'\uD800','a'}, "é".repeat(129).toCharArray()))
+            assertInstanceOf(PasswordHashResult.Rejected.class, bounded.hashResult(password));
+
+        PasswordHasher legacy = PasswordHasher.withArgon2id(PARAMETERS)
+                .workGate(PasswordWorkGate.fromInMemoryLimits(1, 19_456))
+                .legacyBcrypt(LegacyPasswordPreparation.EXACT_UTF8, 5)
+                .legacyPbkdf2(LegacyPasswordPreparation.EXACT_UTF8, 100).build();
+        assertEquals(PasswordRejectionReason.INVALID_STORED_HASH,
+                assertInstanceOf(PasswordVerificationResult.Rejected.class,
+                        legacy.verifyLegacyBcryptResult("pw".toCharArray(), "x".repeat(10_000))).getReason());
+        for (Object[] vector : List.of(
+                new Object[]{0,new byte[8],new byte[16]}, new Object[]{101,new byte[8],new byte[16]},
+                new Object[]{1,new byte[7],new byte[16]}, new Object[]{1,new byte[65],new byte[16]},
+                new Object[]{1,new byte[8],new byte[15]}, new Object[]{1,new byte[8],new byte[65]}))
+            assertEquals(PasswordRejectionReason.INVALID_STORED_HASH,
+                    assertInstanceOf(PasswordVerificationResult.Rejected.class,
+                            legacy.verifyLegacyPbkdf2Result("pw".toCharArray(), Pbkdf2Hmac.SHA256,
+                                    (Integer)vector[0], (byte[])vector[1], (byte[])vector[2])).getReason());
+    }
+
+    @Test void builderRejectsEachIndependentWorkAndMigrationCeiling() {
+        assertThrows(IllegalArgumentException.class, () -> PasswordHasher.withArgon2id(PARAMETERS)
+                .workGate(PasswordWorkGate.fromInMemoryLimits(1, 19_455)).build());
+        assertThrows(IllegalArgumentException.class, () -> PasswordHasher.withArgon2id(PARAMETERS)
+                .workGate(PasswordWorkGate.fromInMemoryLimits(1, 19_456))
+                .verificationLimits(PasswordVerificationLimits.builder().maximumArgon2idMemoryKiB(19_455).build()).build());
+        assertThrows(IllegalArgumentException.class, () -> PasswordHasher.withArgon2id(Argon2idParameters.fromCosts(19_456, 3, 1))
+                .workGate(PasswordWorkGate.fromInMemoryLimits(1, 19_456))
+                .verificationLimits(PasswordVerificationLimits.builder().maximumArgon2idPasses(2).build()).build());
+        assertThrows(IllegalArgumentException.class, () -> PasswordHasher.withArgon2id(Argon2idParameters.fromCosts(19_456, 2, 2))
+                .workGate(PasswordWorkGate.fromInMemoryLimits(1, 19_456))
+                .verificationLimits(PasswordVerificationLimits.builder().maximumArgon2idLanes(1).build()).build());
+        for (int rounds : List.of(3,17)) assertThrows(IllegalArgumentException.class, () -> PasswordHasher.withArgon2id(PARAMETERS)
+                .workGate(PasswordWorkGate.fromInMemoryLimits(1, 19_456))
+                .legacyBcrypt(LegacyPasswordPreparation.EXACT_UTF8, rounds).build());
+        for (int iterations : List.of(0,2_000_001)) assertThrows(IllegalArgumentException.class, () -> PasswordHasher.withArgon2id(PARAMETERS)
+                .workGate(PasswordWorkGate.fromInMemoryLimits(1, 19_456))
+                .legacyPbkdf2(LegacyPasswordPreparation.EXACT_UTF8, iterations).build());
+    }
+
+    @Test void parameterLimitAndPepperKeyGrammarChecksCoverEveryIndependentBound() {
+        for (int[] costs : List.of(
+                new int[]{19_456,2,0}, new int[]{19_456,2,9}, new int[]{19_456,0,1}, new int[]{19_456,11,1},
+                new int[]{262_145,2,1}, new int[]{15,2,2}, new int[]{47_103,1,1}, new int[]{19_455,2,1}))
+            assertThrows(IllegalArgumentException.class, () -> Argon2idParameters.fromCosts(costs[0],costs[1],costs[2]));
+        assertTrue(Argon2idParameters.fromCosts(47_104,1,1).toString().contains("passes=1"));
+
+        List<UnaryOperator<PasswordVerificationLimits.Builder>> invalidLimits = List.of(
+                b->b.maximumStoredFormChars(191), b->b.maximumStoredFormChars(4_097),
+                b->b.maximumPasswordChars(63), b->b.maximumPasswordChars(16_385),
+                b->b.maximumPasswordUtf8Bytes(255), b->b.maximumPasswordUtf8Bytes(65_537),
+                b->b.maximumArgon2idMemoryKiB(19_455), b->b.maximumArgon2idMemoryKiB(262_145),
+                b->b.maximumArgon2idPasses(1), b->b.maximumArgon2idPasses(11),
+                b->b.maximumArgon2idLanes(0), b->b.maximumArgon2idLanes(9));
+        for (var mutation : invalidLimits) {
+            PasswordVerificationLimits.Builder builder=mutation.apply(PasswordVerificationLimits.builder());
+            assertThrows(IllegalArgumentException.class,builder::build);
+        }
+
+        byte[] nonuniform = new byte[32]; for(int i=0;i<nonuniform.length;i++)nonuniform[i]=(byte)i;
+        assertEquals("AZaz09._~-",PasswordPepperKey.fromBytes("AZaz09._~-",nonuniform).getKeyId());
+        for(String id:List.of("","a".repeat(65),"!","é"))
+            assertThrows(IllegalArgumentException.class,()->PasswordPepperKey.fromBytes(id,nonuniform));
+        assertThrows(IllegalArgumentException.class,()->PasswordPepperKey.fromBytes("key",new byte[31]));
+        assertThrows(IllegalArgumentException.class,()->PasswordPepperKey.fromBytes("key",new byte[33]));
+        assertThrows(IllegalArgumentException.class,()->PasswordPepperKey.fromBytes("key",new byte[32]));
     }
 
     private static @NonNull PasswordHasher hasher() {

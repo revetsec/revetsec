@@ -75,7 +75,12 @@ final class TotpPrimitivesTests {
         assertThrows(IllegalArgumentException.class,
                 () -> TotpPrimitives.hotp(secret, -1, "HmacSHA1", 6));
         assertThrows(IllegalArgumentException.class,
+                () -> TotpPrimitives.hotp(secret, 0, "HmacSHA1", 7));
+        assertThrows(IllegalArgumentException.class,
+                () -> TotpPrimitives.hotp(new byte[0], 0, "HmacSHA1", 6));
+        assertThrows(IllegalArgumentException.class,
                 () -> TotpPrimitives.hotp(secret, 0, "HmacMD5", 6));
+        assertEquals(-1, TotpPrimitives.matchingStep(secret, "755224", 0, 0));
     }
 
     @Test void base32UsesCanonicalUnpaddedRfc4648Encoding() {
@@ -97,6 +102,7 @@ final class TotpPrimitivesTests {
         assertNull(TotpPrimitives.normalizeRecoveryCode("00000000000000000000000005"));
         assertNull(TotpPrimitives.normalizeRecoveryCode("O0000000000000000000000004"));
         assertNull(TotpPrimitives.normalizeRecoveryCode(" 00000000000000000000000004"));
+        assertNull(TotpPrimitives.normalizeRecoveryCode("0".repeat(27)));
         assertNull(TotpPrimitives.normalizeRecoveryCode("0".repeat(1000)));
         assertThrows(IllegalArgumentException.class, () -> TotpPrimitives.recoveryCode(new byte[15]));
         Arrays.fill(entropy, (byte) 255);

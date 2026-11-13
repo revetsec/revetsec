@@ -166,6 +166,49 @@ final class RecordMigrationCryptoTests {
 	}
 
 	@Test
+	void permanentFenceAddressGrammarRejectsEveryIndependentComponent() {
+		StateSealer sealer = sealer(); byte[] otherBytes = new byte[32]; otherBytes[0] = 1;
+		String other = Base64Url.encode(otherBytes), prefix = "revetsec/as-record/v2:";
+		for (String address : List.of(
+			"revetsec:as:1", "other:as:1:" + ID + ":ISSUER_STATE:" + ID,
+			"revetsec:other:1:" + ID + ":ISSUER_STATE:" + ID,
+			"revetsec:as:2:" + ID + ":ISSUER_STATE:" + ID,
+			"revetsec:as:1:" + ID + ":CODE:" + ID,
+			"revetsec:as:1:" + "A".repeat(42) + ":SUBJECT_STATE:" + ID,
+			"revetsec:as:1:" + ID + ":SUBJECT_STATE:" + "A".repeat(42),
+			"revetsec:as:1:" + "!".repeat(43) + ":SUBJECT_STATE:" + ID,
+			"revetsec:as:1:" + ID + ":ISSUER_STATE:" + other))
+			assertThrows(IllegalArgumentException.class,
+				() -> SealedStateAccess.get().openPermanentFence(sealer, "untrusted", prefix + address), address);
+	}
+
+	@Test
+	void authenticatedRecordFrameGrammarAndRuntimeFailuresAreUniformlyInvalid() throws Exception {
+		byte[] master = new byte[32]; SealerV1.Key key = SealerV1.Key.fromMasterKey("k", master);
+		String sealed = SealerV1.seal(key, SealedStateType.AS_RECORD, CONTEXT, EXPIRY.getEpochSecond(),
+			"payload".getBytes(StandardCharsets.UTF_8), new byte[16], new byte[12]);
+		byte[] authentic = Base64Url.decode(sealed);
+		byte[] version = authentic.clone(); version[0] = 2;
+		byte[] zeroKey = authentic.clone(); zeroKey[1] = 0;
+		byte[] longKey = authentic.clone(); longKey[1] = 65;
+		byte[] truncatedKey = Arrays.copyOf(authentic, SealerV1.FIXED_OVERHEAD + 1); truncatedKey[1] = 64;
+		byte[] invalidKey = authentic.clone(); invalidKey[2] = '/';
+		for (byte[] malformed : List.of(Arrays.copyOf(authentic, SealerV1.FIXED_OVERHEAD), version, zeroKey, longKey, truncatedKey, invalidKey))
+			assertInvalid(() -> SealerV1.openForMigration(Base64Url.encode(malformed), 3800, Map.of("k", key),
+				SealedStateType.AS_RECORD, CONTEXT, intent(ClosedMigrationIntent.Format.ISSUER_SCHEMA2)));
+		assertThrows(IllegalArgumentException.class, () -> SealerV1.openForMigration(sealed, 0, Map.of("k", key),
+			SealedStateType.AS_RECORD, CONTEXT, intent(ClosedMigrationIntent.Format.ISSUER_SCHEMA2)));
+		Map<String,SealerV1.Key> throwingKeys = new java.util.AbstractMap<>() {
+			@Override public @NonNull Set<@NonNull Entry<@NonNull String,SealerV1.@NonNull Key>> entrySet() {
+				throw new IllegalStateException("synthetic");
+			}
+		};
+		assertInvalid(() -> SealerV1.openForMigration(sealed, 3800, throwingKeys, SealedStateType.AS_RECORD,
+			CONTEXT, intent(ClosedMigrationIntent.Format.ISSUER_SCHEMA2)));
+		Arrays.fill(master, (byte) 0);
+	}
+
+	@Test
 	void ownedPlaintextIsErasedAndClosedHolderCannotBeReused() throws Exception {
 		StateSealer sealer = sealer();
 		String sealed = SealedStateAccess.get().seal(sealer, SealedStateType.AS_RECORD, "private", CONTEXT, EXPIRY);

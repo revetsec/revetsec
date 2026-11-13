@@ -20,6 +20,11 @@ import com.revetsec.jose.JwksParseResult;
 
 import com.revetsec.SealingKey;
 import com.revetsec.StateSealer;
+import com.revetsec.oauth.AccessTokenValidationResult;
+import com.revetsec.oauth.BearerToken;
+import com.revetsec.oauth.BearerTokenResult;
+import com.revetsec.oauth.JwtAccessTokenValidator;
+import com.revetsec.oauth.VerifiedAccessToken;
 import com.revetsec.internal.encoding.FormUrlEncoding;
 import com.revetsec.internal.http.Deadline;
 import com.revetsec.internal.json.JsonCodec;
@@ -142,6 +147,14 @@ final class OAuthIssuerTokenStatusTests {
  private @NonNull String issued() { return token(redeem(code(true))); }
  private @NonNull String signed(@NonNull JsonObject claims) { return signer().toCompactSerialization("at+jwt","key",null,JsonCodec.toUtf8Bytes(claims),Duration.ofSeconds(10)); }
  private static @NonNull JsonObject claims(@NonNull String token) { return json(Base64.getUrlDecoder().decode(token.split("\\.",-1)[1])); }
+ private static @NonNull VerifiedAccessToken proof(@NonNull String token) {
+  var bearer=assertInstanceOf(BearerTokenResult.Present.class,
+   BearerToken.fromAuthorizationHeaderValuesResult(List.of("Bearer "+token))).getToken();
+  return assertInstanceOf(AccessTokenValidationResult.Succeeded.class,
+   JwtAccessTokenValidator.withIssuer(ISSUER).jwksSource(keys()).expectedAudiences(Set.of(RESOURCE))
+    .allowedAlgorithms(Set.of(JwsAlgorithm.RS256)).clock(Clock.fixed(NOW,ZoneOffset.UTC)).clockSkew(Duration.ofSeconds(30)).build()
+    .validateResult(bearer)).getAccessToken();
+ }
  private void revokeGrant() { var g=record(OAuthStoreKey.Kind.GRANT);replace(OAuthStoreKey.Kind.GRANT,json(g.terminated(LIMITS,255).toPayload().getBytes(StandardCharsets.UTF_8))); }
  private void remove(OAuthStoreKey.@NonNull Kind kind) { this.store.rows.remove(entry(kind).getKey()); }
  private static @NonNull DynamicTest test(@NonNull String name,@NonNull Executable action) { return DynamicTest.dynamicTest(name,action); }
@@ -220,6 +233,58 @@ final class OAuthIssuerTokenStatusTests {
    InterruptingSignatureProvider.around(()->failed(OAuthStoreFailure.Reason.UNAVAILABLE,()->validate(jwt)));
    assertTrue(Thread.currentThread().isInterrupted());assertEquals(reads,this.store.reads);
   } finally {Thread.interrupted();}
+ }
+ @Test void recognitionDiagnosticsMapProfileSizeAndProviderSyntaxFailures() {
+  String jwt=issued();JsonObject original=claims(jwt);OAuthIssuerTokenStatus selected=status();
+  var profile=assertThrows(OAuthIssuerTokenStatus.RecognitionFailure.class,()->selected.recognizeForProof(
+   signed(changed(original,"extra",JsonBoolean.fromValue(true))),RESOURCE,keys(),deadline()));
+  assertTrue(assertInstanceOf(OAuthIssuerAccessTokenResult.Rejected.class,profile.result()).getJoseReason().isEmpty());
+  var size=assertThrows(OAuthIssuerTokenStatus.RecognitionFailure.class,
+   ()->selected.recognizeForProof("x".repeat(16385),RESOURCE,keys(),deadline()));
+  assertEquals(com.revetsec.jose.JoseException.Reason.TOKEN_TOO_LARGE,
+   assertInstanceOf(OAuthIssuerAccessTokenResult.Rejected.class,size.result()).getJoseReason().orElseThrow());
+  InterruptingSignatureProvider.around(new IllegalArgumentException("synthetic"),
+   ()->invalid(()->selected.validate(jwt,RESOURCE,keys(),deadline())));
+  InterruptingSignatureProvider.around(new IllegalArgumentException("synthetic"),()->{
+   var syntax=assertThrows(OAuthIssuerTokenStatus.RecognitionFailure.class,
+    ()->selected.recognizeForProof(jwt,RESOURCE,keys(),deadline()));
+   assertEquals(com.revetsec.jose.JoseException.Reason.SIGNATURE_MISMATCH,
+    assertInstanceOf(OAuthIssuerAccessTokenResult.Rejected.class,syntax.result()).getJoseReason().orElseThrow());
+  });
+ }
+ @Test void proofAdmissionCoversInactiveRowsMismatchesAndConflictExhaustion() {
+  String jwt=issued();JsonObject original=claims(jwt);OAuthIssuerAccessTokenResult admitted=OAuthIssuerAccessTokenResult.fromSucceeded(proof(jwt));
+  assertSame(admitted,status().validateProof(original,RESOURCE,deadline(),session->admitted));
+  assertInstanceOf(OAuthIssuerAccessTokenResult.Rejected.class,status().validateProof(
+   changed(original,"sub",JsonString.fromValue("other")),RESOURCE,deadline(),session->admitted));
+
+  var missingAccess=new OAuthIssuerTokenStatusTests();String accessJwt=missingAccess.issued();missingAccess.remove(OAuthStoreKey.Kind.ACCESS_TOKEN);
+  assertInstanceOf(OAuthIssuerAccessTokenResult.Rejected.class,missingAccess.status().validateProof(
+   claims(accessJwt),RESOURCE,deadline(),session->admitted));
+  var missingGrant=new OAuthIssuerTokenStatusTests();String grantJwt=missingGrant.issued();missingGrant.remove(OAuthStoreKey.Kind.GRANT);
+  assertInstanceOf(OAuthIssuerAccessTokenResult.Rejected.class,missingGrant.status().validateProof(
+   claims(grantJwt),RESOURCE,deadline(),session->admitted));
+
+  var accessConflicts=new OAuthIssuerTokenStatusTests();String conflictAccess=accessConflicts.issued();accessConflicts.remove(OAuthStoreKey.Kind.ACCESS_TOKEN);accessConflicts.store.conflicts=3;
+  failed(OAuthStoreFailure.Reason.UNAVAILABLE,()->accessConflicts.status().validateProof(
+   claims(conflictAccess),RESOURCE,deadline(),session->admitted));
+  var grantConflicts=new OAuthIssuerTokenStatusTests();String conflictGrant=grantConflicts.issued();grantConflicts.remove(OAuthStoreKey.Kind.GRANT);grantConflicts.store.conflicts=3;
+  failed(OAuthStoreFailure.Reason.UNAVAILABLE,()->grantConflicts.status().validateProof(
+   claims(conflictGrant),RESOURCE,deadline(),session->admitted));
+ }
+ @Test void matcherRejectsMalformedNumericClaimsAndPreparedPreservesFatalErrors() throws Exception {
+  String jwt=issued();OAuthIssuerTokenStatus selected=status();
+  assertFalse(selected.matches(claims(jwt),record(OAuthStoreKey.Kind.ACCESS_TOKEN),RESOURCE+"/other"));
+  assertFalse(selected.matches(changed(claims(jwt),"aud",JsonString.fromValue(RESOURCE+"/other")),
+   record(OAuthStoreKey.Kind.ACCESS_TOKEN),RESOURCE));
+  assertFalse(selected.matches(changed(claims(jwt),"iss",JsonString.fromValue(ISSUER+"/other")),
+   record(OAuthStoreKey.Kind.ACCESS_TOKEN),RESOURCE));
+  invalid(()->selected.matches(changed(claims(jwt),"iat",JsonString.fromValue("0")),
+   record(OAuthStoreKey.Kind.ACCESS_TOKEN),RESOURCE));
+  var prepared=OAuthIssuerTokenStatus.class.getDeclaredMethod("prepared",java.util.function.Supplier.class);prepared.setAccessible(true);
+  TestFatal fatal=new TestFatal();var wrapped=assertThrows(java.lang.reflect.InvocationTargetException.class,
+   ()->prepared.invoke(null,(java.util.function.Supplier<Object>)()->{throw fatal;}));
+  assertSame(fatal,wrapped.getCause());
  }
  @Test void deadlineAndExistingInterruptionAreCheckedBeforeCryptoOrBackend() {
   String jwt=issued();int count=this.store.reads;unavailable(()->status().validate(jwt,RESOURCE,keys(),Deadline.fromNow(Duration.ZERO)));assertEquals(count,this.store.reads);

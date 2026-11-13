@@ -156,6 +156,16 @@ final class OAuthRc1MutationTests {
                 .defaultTimeToLive(Duration.ofMinutes(1)).build());
         assertDoesNotThrow(() -> client().redirectUri(URI.create("https://app.example:65535/callback")).build());
         assertThrows(IllegalArgumentException.class, () -> client().redirectUri(URI.create("https://app.example:65536/callback")).build());
+		for (String invalid : List.of("callback", "mailto:user@example.com", "https:/callback",
+				"https://user@app.example/callback", "https://app.example/callback#fragment",
+				"https://app.example:0/callback", "http://app.example/callback",
+				"http://127.0.0.1/callback"))
+			assertThrows(IllegalArgumentException.class,
+					() -> client().redirectUri(URI.create(invalid)).build(), invalid);
+		assertDoesNotThrow(() -> client().allowInsecureLoopback(true)
+				.redirectUri(URI.create("http://127.0.0.1/callback")).build());
+		assertThrows(IllegalArgumentException.class, () -> client().allowInsecureLoopback(true)
+				.redirectUri(URI.create("http://app.example/callback")).build());
     }
 
     @Test

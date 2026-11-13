@@ -257,6 +257,17 @@ class ScimM11PatchApplicationTests {
         assertFalse(success(apply(old,request(old.getResourceType(),op(0,ScimPatchOperationType.ADD,"members","[{\"value\":\"a\"}]")))).isModified());
     }
 
+    @Test void groupRemovalWithoutAssignedCandidateIdsUsesDeclaredNullIdentity() {
+        ScimResource old=group("[{\"$ref\":\"Users/a\",\"display\":\"A\"},{\"value\":\"b\"},{\"$ref\":\"Users/c\"}]");
+        ScimPatchResult result=success(apply(old,request(old.getResourceType(),
+                op(0,ScimPatchOperationType.REMOVE,"members","[{\"$ref\":\"Users/other\"}]"))));
+        assertEquals(json("[{\"value\":\"b\"}]"),result.getResource().getDocument().find("members").orElseThrow());
+
+        ScimResource absent=group("[{\"value\":\"b\"}]");
+        assertFalse(success(apply(absent,request(absent.getResourceType(),
+                op(0,ScimPatchOperationType.REMOVE,"members","[{\"$ref\":\"Users/other\"}]")))).isModified());
+    }
+
     @Test void groupProtectedMetadataCannotBeWrittenEvenOnADuplicateAdd() {
         ScimResource old=group("[{\"value\":\"a\",\"display\":\"saved\",\"type\":\"User\"}]");
         for (String value : List.of("[{\"value\":\"a\",\"display\":\"forged\"}]","[{\"value\":\"a\",\"type\":\"Group\"}]"))

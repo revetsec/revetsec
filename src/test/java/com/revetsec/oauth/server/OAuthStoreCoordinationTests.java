@@ -322,6 +322,55 @@ class OAuthStoreCoordinationTests {
 		failed(UNAVAILABLE, () -> this.first.initializeFreshIssuer(Deadline.fromNow(Duration.ZERO)).getStatus());
 		failed(UNAVAILABLE, () -> this.first.begin(Deadline.fromNow(Duration.ZERO))); assertEquals(0, this.store.reads);
 	}
+	@Test void nestedOperationWithDifferentDeadlineAndInterruptedIoRemainIsolated() {
+		Deadline outer = deadline();
+		try (OAuthStoreCoordinator.Operation ignored = this.first.operation(outer)) {
+			assertEquals(OAuthStoreCommitStatus.COMMITTED, this.first.initializeFreshIssuer(deadline()).getStatus());
+		}
+		try {
+			OAuthStoreCoordinator.preserveInterrupt(new java.io.InterruptedIOException("fixture"));
+			assertTrue(Thread.currentThread().isInterrupted());
+		} finally { Thread.interrupted(); }
+	}
+	@Test void cryptoBoundaryPreservesDomainAndFatalFailures() throws Exception {
+		var crypto = OAuthStoreCoordinator.class.getDeclaredMethod("crypto", java.util.function.Supplier.class);
+		crypto.setAccessible(true);
+		OAuthStoreFailure domain = new OAuthStoreFailure(CORRUPT_STATE);
+		VirtualMachineError fatal = new OutOfMemoryError("synthetic");
+		for (Throwable expected : List.of(domain, fatal)) {
+			var wrapped = assertThrows(java.lang.reflect.InvocationTargetException.class,
+				() -> crypto.invoke(null, (java.util.function.Supplier<Object>) () -> { throwUnchecked(expected); return new Object(); }));
+			assertSame(expected, wrapped.getCause());
+		}
+	}
+	@Test void elapsedAndPostCommitReleaseFaultsFailClosed() throws Exception {
+		initialized(); OAuthStoreCoordinator.Session elapsed = this.first.begin(deadline());
+		var accept = elapsed.getClass().getDeclaredMethod("accept", com.revetsec.StoreTimeObservation.Healthy.class, long.class);
+		accept.setAccessible(true);
+		var observation = assertInstanceOf(com.revetsec.StoreTimeObservation.Healthy.class, this.store.observation());
+		var elapsedFailure = assertThrows(java.lang.reflect.InvocationTargetException.class,
+			() -> accept.invoke(elapsed, observation, Long.MAX_VALUE));
+		assertEquals(UNAVAILABLE, assertInstanceOf(OAuthStoreFailure.class, elapsedFailure.getCause()).reason());
+		var effectFailure = elapsed.getClass().getDeclaredMethod("effectFailure"); effectFailure.setAccessible(true);
+		assertEquals(UNAVAILABLE, assertInstanceOf(OAuthStoreFailure.class, effectFailure.invoke(elapsed)).reason());
+
+		OAuthStoreCoordinator.Session committed = this.first.begin(deadline());
+		assertEquals(OAuthStoreCommitStatus.COMMITTED, committed.barrier());
+		var releaseAllowed = committed.getClass().getDeclaredMethod("releaseAllowed"); releaseAllowed.setAccessible(true);
+		this.clock.fault = new IllegalStateException("secret");
+		assertEquals(false, releaseAllowed.invoke(committed));
+		VirtualMachineError fatal = new OutOfMemoryError("synthetic"); this.clock.fault = fatal;
+		var fatalFailure = assertThrows(java.lang.reflect.InvocationTargetException.class, () -> releaseAllowed.invoke(committed));
+		assertSame(fatal, fatalFailure.getCause());
+	}
+	@Test void missingFreshIssuerObservationUsesCorruptStateBoundary() {
+		initialized(); OAuthStoreCoordinator.Session session = this.first.begin(deadline()); this.store.resetClosedFixture();
+		failed(CORRUPT_STATE, session::authorityNow);
+	}
+	@Test void nonordinaryExpiryCannotEnterAStoreCondition() {
+		initialized(); OAuthStoreCoordinator.Session session = this.first.begin(deadline());
+		failed(UNAVAILABLE, () -> session.requireBefore(Instant.ofEpochSecond(-1)));
+	}
 	@Test void callbackExhaustionIsCheckedOnReturn() {
 		Deadline shortBudget = Deadline.fromNow(Duration.ofMillis(100));
 		this.store.beforeRead = () -> { while (!shortBudget.isExpired()) LockSupport.parkNanos(100000); };
@@ -482,6 +531,11 @@ class OAuthStoreCoordinationTests {
 	@Test void fenceKindTimeAndPermanentBoundaryChecks() {
 		assertThrows(IllegalArgumentException.class, () -> OAuthStoreFence.initialIssuer(NONCE, OAuthStoreFormat.PERMANENT));
 		assertThrows(IllegalArgumentException.class, () -> OAuthStoreFence.initialIssuer(NONCE, NOW).atTime(NOW.minusNanos(1)));
+		assertEquals(NOW, OAuthStoreFence.initialIssuer(NONCE, NOW).atTime(NOW).highWater());
+		var negativeEpoch = com.revetsec.json.JsonObject.builder().put("schema", 1L).put("incarnation", NONCE)
+			.put("epoch", -1L).build();
+		assertThrows(IllegalArgumentException.class,
+			() -> OAuthStoreFence.decode(negativeEpoch, OAuthStoreKey.Kind.SUBJECT_STATE));
 		OAuthStoreEntry row = finite(key(0));
 		assertThrows(IllegalArgumentException.class, () -> OAuthStoreFence.decode(IssuerTestRecords.open(this.codec,row, this.clock), OAuthStoreKey.Kind.CODE));
 	}
@@ -508,4 +562,6 @@ class OAuthStoreCoordinationTests {
 		@SuppressWarnings("unchecked")
 		private static <T extends Throwable> void raise(@NonNull Throwable failure) throws T { throw (T) failure; }
 	}
+	@SuppressWarnings("unchecked")
+	private static <T extends Throwable> void throwUnchecked(@NonNull Throwable failure) throws T { throw (T) failure; }
 }

@@ -22,6 +22,7 @@ import com.revetsec.jose.JwksParseResult;
 
 import com.revetsec.StateSealer;
 import com.revetsec.ConfigurationDiagnostic;
+import com.revetsec.BrowserBinding;
 import com.revetsec.SealingKey;
 import com.revetsec.OutboundUriPolicy;
 import com.revetsec.internal.encoding.FormUrlEncoding;
@@ -179,6 +180,24 @@ final class OAuthAuthorizationServerTests {
   assertEquals(display,interaction.getClientName().orElseThrow());
   assertInstanceOf(OAuthAuthorizationResult.Completed.class,this.server.completeAuthorizationResult(
    interaction.getInteractionValue(),BROWSER,decision("subject",Set.of("read"),false)));
+ }
+ @Test void typedBrowserBindingOverloadsCompleteThePublicAuthorizationFlow() {
+  initialized();BrowserBinding binding=BrowserBinding.fromTrustedPersistence(BROWSER);
+  var started=assertInstanceOf(OAuthAuthorizationResult.InteractionRequired.class,
+   this.server.beginAuthorizationResult("GET",query(),new byte[0],Map.of(),binding)).getInteraction();
+  assertInstanceOf(OAuthAuthorizationResult.InteractionRequired.class,
+   this.server.resumeAuthorizationResult(started.getInteractionValue(),binding));
+  assertInstanceOf(OAuthAuthorizationResult.Denied.class,
+   this.server.completeAuthorizationResult(started.getInteractionValue(),binding,OAuthAuthorizationDecision.deniedInstance()));
+ }
+ @Test void requiredGuardAndRecognitionProviderFailureRemainFailClosed()throws Exception {
+  var required=OAuthAuthorizationServer.class.getDeclaredMethod("required",Object.class);required.setAccessible(true);
+  var wrapped=assertThrows(InvocationTargetException.class,()->required.invoke(null,new Object[]{null}));
+  assertInstanceOf(IllegalStateException.class,wrapped.getCause());
+  this.server=builder().signingKeys(budget->{throw new IllegalStateException("private provider failure");}).build();
+  var failure=assertThrows(OAuthServerException.class,
+   ()->this.server.validateAccessTokenResult(bearer("x.y.z"),RESOURCE));
+  assertTrue(Set.of(STORE_UNAVAILABLE,SERVICE_UNAVAILABLE).contains(failure.getReason()));assertNull(failure.getCause());
  }
  @Test void publicFlowRechecksPolicyAndReleasesProofOnlyAfterAtomicStatus() {
   JsonObject one=issued();String token=one.find("access_token").map(value -> ((com.revetsec.json.JsonString) value).getValue()).orElseThrow();

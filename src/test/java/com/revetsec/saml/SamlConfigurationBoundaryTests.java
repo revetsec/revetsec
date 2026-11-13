@@ -37,6 +37,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -201,6 +202,37 @@ final class SamlConfigurationBoundaryTests {
                 .build().getRequestedAuthnContextClassRefs().size());
         assertThrows(IllegalArgumentException.class, () -> SamlAuthenticationRequestOptions.builder()
                 .requestedAuthnContextClassRefs(Collections.nCopies(9, "urn:example:password")));
+    }
+
+    @Test void requestOptionNullsMalformedTextAndConflictsAreExplicit() {
+        var defaults=SamlAuthenticationRequestOptions.builder().forceAuthn(null).passive(null)
+                .requestedAuthnContextClassRefs(null).applicationData(null).build();
+        assertFalse(defaults.isForceAuthn());assertFalse(defaults.isPassive());
+        assertTrue(defaults.getRequestedAuthnContextClassRefs().isEmpty());assertTrue(defaults.getApplicationData().isEmpty());
+        assertEquals("SamlAuthenticationRequestOptions{<redacted>}",defaults.toString());
+        assertTrue(SamlAuthenticationRequestOptions.builder().requestedAuthnContextClassRefs(List.of()).build()
+                .getRequestedAuthnContextClassRefs().isEmpty());
+        for(String invalid:List.of("","relative","urn:example:"+"x".repeat(501),"urn:example:\uD800"))
+            assertThrows(IllegalArgumentException.class,()->SamlAuthenticationRequestOptions.builder()
+                    .requestedAuthnContextClassRefs(List.of(invalid)));
+        assertThrows(IllegalArgumentException.class,()->SamlAuthenticationRequestOptions.builder()
+                .applicationData("é".repeat(257)));
+        assertThrows(IllegalArgumentException.class,()->SamlAuthenticationRequestOptions.builder()
+                .applicationData("\uD800"));
+        assertThrows(IllegalArgumentException.class,()->SamlAuthenticationRequestOptions.builder()
+                .forceAuthn(true).passive(true).build());
+    }
+
+    @Test void identityProviderNullableCollectionsAndEveryLogoutEndpointRemainBounded() throws Exception {
+        KeyPair strong=rsa(2048);
+        SamlIdentityProvider idp=validIdp(strong).compatibility(null).authorizedIdentifierScopes(null).build();
+        assertTrue(idp.authorizedIdentifierScopes().isEmpty());assertEquals("SamlIdentityProvider{<redacted>}",idp.toString());
+        assertThrows(IllegalStateException.class,()->validIdp(strong).signingKeys(null).build());
+        for(java.util.function.Function<SamlIdentityProvider.Builder,SamlIdentityProvider.Builder> mutation:List.<java.util.function.Function<SamlIdentityProvider.Builder,SamlIdentityProvider.Builder>>of(
+                b->b.postSingleLogoutService(URI.create("http://idp.example/logout")),
+                b->b.redirectSingleLogoutResponseService(URI.create("http://idp.example/logout")),
+                b->b.postSingleLogoutResponseService(URI.create("http://idp.example/logout"))))
+            assertThrows(IllegalStateException.class,()->mutation.apply(validIdp(strong)).build());
     }
 
     @Test void browserBindingAcceptsItsExactMaximumButRejectsTheNextCharacter() {

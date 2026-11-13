@@ -33,18 +33,23 @@ public final class InterruptingSignatureProvider extends Provider {
  private static final long serialVersionUID=1L;
  private static final @NonNull String NAME="RevetsecInterruptingSignature";
  private static final @NonNull Object LOCK=new Object();
+ private static @Nullable Throwable signal;
  private InterruptingSignatureProvider() {
   super(NAME,"1.0","Revetsec test provider that interrupts RS256 signing.");
   put("Signature.SHA256withRSA",InterruptingSignatureSpi.class.getName());
  }
  static void around(@NonNull Executable operation) {
+  around(new InterruptedException("fixture"),operation);
+ }
+ static void around(@NonNull Throwable selected,@NonNull Executable operation) {
   synchronized(LOCK) {
    if(Security.getProvider(NAME)!=null)throw new AssertionError("interrupting provider already installed");
+   signal=selected;
    if(Security.insertProviderAt(new InterruptingSignatureProvider(),1)!=1)throw new AssertionError("interrupting provider was not first");
    try {operation.execute();}
    catch(RuntimeException|Error failure){throw failure;}
    catch(Throwable failure){InterruptingSignatureProvider.<RuntimeException>raise(failure);}
-   finally {Security.removeProvider(NAME);}
+   finally {Security.removeProvider(NAME);signal=null;}
   }
  }
  @SuppressWarnings("unchecked") private static <T extends Throwable> void raise(@NonNull Throwable failure) throws T {throw (T)failure;}
@@ -57,14 +62,15 @@ public final class InterruptingSignatureProvider extends Provider {
   @Override protected void engineUpdate(byte input) throws SignatureException { }
   @Override protected void engineUpdate(byte @NonNull [] input,int offset,int length) throws SignatureException { }
   @Override protected byte @NonNull [] engineSign() throws SignatureException {
-   return InterruptingSignatureProvider.<RuntimeException,byte[]>raiseResult(new InterruptedException("fixture"));
+   return InterruptingSignatureProvider.<RuntimeException,byte[]>raiseResult(selectedSignal());
   }
   @Override protected boolean engineVerify(byte @NonNull [] signature) throws SignatureException {
-   return InterruptingSignatureProvider.<RuntimeException,Boolean>raiseResult(new InterruptedException("fixture"));
+   return InterruptingSignatureProvider.<RuntimeException,Boolean>raiseResult(selectedSignal());
   }
   @Override protected void engineSetParameter(@NonNull String parameter,@Nullable Object value) { }
   @Override protected @Nullable Object engineGetParameter(@NonNull String parameter) {return null;}
   @Override protected void engineSetParameter(@NonNull AlgorithmParameterSpec parameters) { }
  }
+ private static @NonNull Throwable selectedSignal(){Throwable selected=signal;if(selected==null)throw new AssertionError("no provider signal");return selected;}
  @SuppressWarnings("unchecked") private static <T extends Throwable,R> @NonNull R raiseResult(@NonNull Throwable failure) throws T {throw (T)failure;}
 }

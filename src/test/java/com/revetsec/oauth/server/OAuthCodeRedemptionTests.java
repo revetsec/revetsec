@@ -288,6 +288,19 @@ final class OAuthCodeRedemptionTests {
   finally {Thread.interrupted();}
   assertNotNull(redeem(code));
  }
+ @Test void signerFatalPropagatesBeforeCommitAndPreservesUnusedCode() {
+  String code=code(false);int commits=this.store.commits;TestFatal fatal=new TestFatal();
+  assertSame(fatal,assertThrows(TestFatal.class,()->InterruptingSignatureProvider.around(fatal,
+   ()->engine(false,signer(),3).redeem(request(code,Map.of()),(id,b)->Optional.of(client()),resources(),allow(),deadline()))));
+  assertEquals(commits,this.store.commits);assertNotNull(redeem(code));
+ }
+ @Test void preparedFatalIsNeverReclassifiedAsCorruptState()throws Exception {
+  var prepared=OAuthCodeRedemption.class.getDeclaredMethod("prepared",java.util.function.Supplier.class);
+  prepared.setAccessible(true);TestFatal fatal=new TestFatal();
+  var wrapped=assertThrows(java.lang.reflect.InvocationTargetException.class,
+   ()->prepared.invoke(null,(java.util.function.Supplier<Object>)()->{throw fatal;}));
+  assertSame(fatal,wrapped.getCause());
+ }
  @Test void preparedCredentialsCannotBeReleasedAfterCommitValidityBoundary() {
   String code=code(false);Instant expiry=record(OAuthStoreKey.Kind.CODE).expires();this.store.afterCommit=()->{this.clock.time=expiry; this.store.authorityNow=this.clock.time;};
   failed(OAuthStoreFailure.Reason.COMMIT_CONFIRMED_NOT_ADMITTED,()->redeem(code));assertEquals("USED",record(OAuthStoreKey.Kind.CODE).text("status"));invalid(()->redeem(code));assertEquals("REVOKED",record(OAuthStoreKey.Kind.GRANT).text("status"));

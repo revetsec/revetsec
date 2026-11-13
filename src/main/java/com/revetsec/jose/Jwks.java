@@ -58,8 +58,13 @@ public final class Jwks {
 
 	private Jwks(@NonNull List<@NonNull Jwk> keys,
 												@NonNull List<@NonNull VerificationKey> verificationKeys) {
-		this.keys = keys;
-		this.verificationKeys = verificationKeys;
+		this(keys,verificationKeys,false);
+	}
+
+	private Jwks(@NonNull List<@NonNull Jwk> keys,
+			@NonNull List<@NonNull VerificationKey> verificationKeys,boolean retainVerificationFixture) {
+		this.keys = List.copyOf(keys);
+		this.verificationKeys = retainVerificationFixture ? requireNonNull(verificationKeys) : List.copyOf(verificationKeys);
 	}
 
 	/**
@@ -96,7 +101,7 @@ public final class Jwks {
 		List<Jwk> keys = new ArrayList<>(parsedJwks.keys().size());
 		for (VerificationKey key : parsedJwks.keys())
 			keys.add(Jwk.fromVerificationKey(key));
-		return new Jwks(List.copyOf(keys), List.copyOf(parsedJwks.keys()));
+		return new Jwks(keys, parsedJwks.keys());
 	}
 
 	/**

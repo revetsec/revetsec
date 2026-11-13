@@ -282,6 +282,13 @@ final class OAuthRefreshRotationTests {
   finally {Thread.interrupted();}
   assertNotNull(rotate(old));
  }
+ @Test void signerFatalPropagatesAndLeavesRefreshUsable() {
+  String old=refresh(issued());var before=Map.copyOf(this.store.rows);TestFatal fatal=new TestFatal();
+  assertSame(fatal,assertThrows(TestFatal.class,()->InterruptingSignatureProvider.around(fatal,()->
+   rotation(true,Duration.ofMinutes(5),this.retention,signer(),3).rotate(refreshRequest(old,Map.of()),
+    (id,b)->Optional.of(client()),resources(),allow(),deadline()))));
+  assertEquals(before,this.store.rows);assertNotNull(rotate(old));
+ }
  @TestFactory @NonNull Stream<@NonNull DynamicTest> epochAndIncarnationChangesPreventIssuanceAndDestructiveReuse() {
   return Stream.of("issuerEpoch","subjectEpoch","issuerIncarnation","subjectIncarnation").flatMap(mode->Stream.of(false,true).map(used->DynamicTest.dynamicTest(mode+" used="+used,()->{
    var t=new OAuthRefreshRotationTests();String old=refresh(t.issued());if(used)t.rotate(old);
@@ -295,12 +302,12 @@ final class OAuthRefreshRotationTests {
   }));
  }
  @TestFactory @NonNull Stream<@NonNull DynamicTest> corruptAuthenticatedRefreshAndGrantLinksFailWithoutMutation() {
-  return Stream.of("issuerEpoch","subjectIncarnation","grantId","head","horizon","status","refreshDisabled","retention").map(mode->DynamicTest.dynamicTest(mode,()->{
+  return Stream.of("issuerEpoch","subjectIncarnation","grantId","head","horizon","expires","status","refreshDisabled","retention").map(mode->DynamicTest.dynamicTest(mode,()->{
    var t=new OAuthRefreshRotationTests();String old=refresh(t.issued());var key=t.refreshKey(old);var entry=requireNonNull(t.store.rows.get(key));JsonObject p=IssuerTestRecords.open(t.codec,entry,Clock.fixed(NOW,ZoneOffset.UTC));
    if(mode.equals("head"))t.replace(OAuthStoreKey.Kind.GRANT,changed(t.payload(OAuthStoreKey.Kind.GRANT),"refreshId",JsonString.fromValue(OTHER)));
    else if(mode.equals("refreshDisabled")){var g=changed(t.payload(OAuthStoreKey.Kind.GRANT),"refresh",JsonBoolean.fromValue(false));t.replace(OAuthStoreKey.Kind.GRANT,changed(g,"refreshId",JsonNull.defaultInstance()));}
    else if(mode.equals("retention"))t.store.rows.put(key,IssuerTestRecords.seal(t.codec,key,entry.getRetainUntil().plusSeconds(1),p.toJson()));
-   else {JsonValue value=mode.equals("issuerEpoch")?JsonNumber.fromValue(1L):mode.equals("horizon")?JsonNumber.fromValue(entry.getRetainUntil().plusSeconds(1).getEpochSecond()):JsonString.fromValue(mode.equals("status")?"USED":OTHER);t.store.rows.put(key,IssuerTestRecords.seal(t.codec,key,entry.getRetainUntil(),changed(p,mode,value).toJson()));}
+   else {JsonValue value=mode.equals("issuerEpoch")?JsonNumber.fromValue(1L):mode.equals("horizon")?JsonNumber.fromValue(entry.getRetainUntil().plusSeconds(1).getEpochSecond()):mode.equals("expires")?JsonNumber.fromValue(t.record(OAuthStoreKey.Kind.GRANT).expires().plusSeconds(1).getEpochSecond()):JsonString.fromValue(mode.equals("status")?"USED":OTHER);t.store.rows.put(key,IssuerTestRecords.seal(t.codec,key,entry.getRetainUntil(),changed(p,mode,value).toJson()));}
    var before=Map.copyOf(t.store.rows);failed(OAuthStoreFailure.Reason.CORRUPT_STATE,()->t.rotate(old));assertEquals(before,t.store.rows);
   }));
  }

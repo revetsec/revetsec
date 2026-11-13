@@ -21,13 +21,46 @@ import com.revetsec.testing.TestHttpsServer;
 import org.jspecify.annotations.NonNull;
 import org.junit.jupiter.api.Test;
 import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
 import java.time.ZoneOffset;
+import java.net.URI;
 import java.util.List;
 import java.util.Random;
 import static org.junit.jupiter.api.Assertions.*;
 
 /** Bounded deterministic codec mutation replay; no coverage-guided campaign or authenticated-identity claim. */
 final class OidcLogoutCodecMutationTests {
+	@Test void pendingCodecEscapesEveryJsonControlAndRejectsIndependentEnvelopeShapes() {
+		Instant created=OidcLogoutFixtures.NOW;
+		PendingOidcLogout pending=new PendingOidcLogout("https://issuer.example/\"\\\b\f\n\r\t\u0001", "client",
+				URI.create("https://rp.example/callback"), "A".repeat(43), created, created.plus(Duration.ofMinutes(5)));
+		String plain=OidcLogoutPendingCodec.encode(pending,null);
+		OidcLogoutPendingCodec.Decoded decoded=OidcLogoutPendingCodec.decode(plain);
+		assertEquals(pending.getIssuer(),decoded.pending().getIssuer());
+		assertNull(decoded.bindingDigest());
+
+		String binding="A".repeat(42)+"Q";
+		String bound=OidcLogoutPendingCodec.encode(pending,binding);
+		assertEquals(binding,OidcLogoutPendingCodec.decode(bound).bindingDigest());
+		String missingWithTwoExtras=plain.replace("\"purpose\":\"oidc-logout\",", "");
+		missingWithTwoExtras=missingWithTwoExtras.substring(0,missingWithTwoExtras.length()-1)
+				+",\"extra_one\":\"x\",\"extra_two\":\"x\"}";
+		for(String malformed:List.of(
+				plain.replace("\"purpose\":\"oidc-logout\",", ""),
+				missingWithTwoExtras,
+				plain.substring(0,plain.length()-1)+",\"extra\":\"x\"}",
+				bound.substring(0,bound.length()-1)+",\"extra\":\"x\"}",
+				plain.replace("\"purpose\":\"oidc-logout\"", "\"purpose\":\"login\"")))
+			assertThrows(IllegalArgumentException.class,()->OidcLogoutPendingCodec.decode(malformed));
+
+		for(Duration lifetime:List.of(Duration.ofSeconds(59),Duration.ofMinutes(60).plusNanos(1)))
+			assertThrows(IllegalArgumentException.class,()->new PendingOidcLogout("https://issuer.example", "client",
+					URI.create("https://rp.example/callback"), "A".repeat(43), created, created.plus(lifetime)));
+		assertDoesNotThrow(()->OidcLogoutPendingCodec.interval(created,created.plus(Duration.ofMinutes(1))));
+		assertDoesNotThrow(()->OidcLogoutPendingCodec.interval(created,created.plus(Duration.ofMinutes(60))));
+	}
+
 	@Test void seededHintEnvelopeAndTokenMutationsNeverReleaseIdentityOrInputDiagnostics() throws Exception {
 		try(TestHttpsServer server=TestHttpsServer.start()) {
 			Clock clock=Clock.fixed(OidcLogoutFixtures.NOW,ZoneOffset.UTC);OidcClient client=OidcLogoutFixtures.builder(server,clock).build();var login=OidcLogoutFixtures.login(server,client,clock);var hint=client.logoutHintFrom(login.authentication());String form=hint.toSerializedForm();Random random=new Random(20261105L);

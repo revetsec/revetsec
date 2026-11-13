@@ -23,6 +23,8 @@ import org.junit.jupiter.api.DynamicTest;
 import java.net.http.HttpHeaders;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Stream;
@@ -72,6 +74,9 @@ class ClientMetadataFreshnessTests {
  @Test void expiresRequiresExplicitFiniteDateAndAge() {
   assertEquals(Duration.ofSeconds(60),ttl(Map.of("Expires",List.of("Tue, 06 Oct 2026 12:01:00 GMT"))));
   assertEquals(Duration.ofSeconds(30),ttl(Map.of("Expires",List.of("Tue, 06 Oct 2026 12:01:00 GMT"),"Age",List.of("30"))));
+  String distant=DateTimeFormatter.RFC_1123_DATE_TIME.format(
+   NOW.plusSeconds(CacheLifetime.MAXIMUM_DELTA_SECONDS+1).atZone(ZoneOffset.UTC));
+  assertEquals(Duration.ofSeconds(300),ttl(Map.of("Expires",List.of(distant))));
   assertEquals(Duration.ZERO,ttl(Map.of("Expires",List.of("0"))));
   assertEquals(Duration.ZERO,ttl(Map.of("Expires",List.of("Tue, 06 Oct 2026 11:59:59 GMT"))));
  }

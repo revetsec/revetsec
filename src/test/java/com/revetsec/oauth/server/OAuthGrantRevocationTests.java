@@ -150,6 +150,11 @@ final class OAuthGrantRevocationTests {
 
  private @NonNull OAuthGrantRevocation revocations(int attempts) {return new OAuthGrantRevocation(this.coordinator,this.codec,status(),LIMITS,attempts,255,32768,16384);}
  private @NonNull OAuthResourceIntrospection introspection() {return new OAuthResourceIntrospection(status(),LIMITS,32768,16384);}
+ private @NonNull OAuthIssuerKeyLifecycle managedKeys() {
+  var active=OAuthIssuerSigningKey.fromRsaKeyPair("key",KEY.getPrivateKey(),KEY.getPublicKey());
+  var snapshot=OAuthIssuerKeySnapshot.withActiveKey(active).generation("g1").publishedAt(NOW.minusSeconds(60)).build();
+  return new OAuthIssuerKeyLifecycle(OAuthIssuerKeyProvider.fromSnapshot(snapshot),this.clock,Duration.ZERO,this.retention);
+ }
  private static @NonNull OAuthServerClientRegistration resourceClient(@NonNull Set<@NonNull String> allowed,boolean browser) {
   var b=OAuthServerClientRegistration.withClientId("resource").configurationVersion("r1")
    .authentication(OAuthServerClientAuthentication.fromClientSecretVerifier((id,secret,budget)->java.util.Arrays.equals(secret,"secret".getBytes(StandardCharsets.UTF_8))))
@@ -254,6 +259,26 @@ final class OAuthGrantRevocationTests {
   assertEquals("OAuthResourceIntrospection{<redacted>}",introspection().toString());
   assertEquals("OAuthGrantRevocation{<redacted>}",revocations(3).toString());
   assertFalse(response.toString().contains("subject"));assertFalse(introspection().toString().contains("subject"));assertFalse(revocations(3).toString().contains("subject"));
+ }
+ @Test void managedIntrospectionChecksEndpointCallerAndOptionalResourceBeforeClaims() {
+  String jwt=token(issued());var engine=introspection();var keys=managedKeys();
+  OAuthServerClientRepository allowed=(id,budget)->Optional.of(resourceClient(Set.of(RESOURCE),false));
+  var selected=endpoint(OAuthServerRequest.Endpoint.INTROSPECTION,jwt,Map.of("resource",RESOURCE),"resource:secret");
+  assertTrue(json(engine.introspect(selected,allowed,RESOURCE,keys,deadline()).body()).find("active")
+   .map(value->((com.revetsec.json.JsonBoolean)value).getValue()).orElseThrow());
+  var mismatch=endpoint(OAuthServerRequest.Endpoint.INTROSPECTION,jwt,Map.of("resource",RESOURCE+"/wrong"),"resource:secret");
+  inactive(engine.introspect(mismatch,allowed,RESOURCE,keys,deadline()));
+  admission(OAuthServerAdmissionFailure.Reason.INVALID_REQUEST,()->engine.introspect(
+   endpoint(OAuthServerRequest.Endpoint.REVOCATION,jwt,Map.of(),"resource:secret"),allowed,RESOURCE,keys,deadline()));
+  for(var caller:List.of(resourceClient(Set.of(RESOURCE),true),resourceClient(Set.of(RESOURCE+"/wrong"),false)))
+   admission(OAuthServerAdmissionFailure.Reason.UNAUTHORIZED_CLIENT,()->engine.introspect(
+    selected,(id,budget)->Optional.of(caller),RESOURCE,keys,deadline()));
+ }
+ @Test void managedEncoderConveniencePathSignsWithoutAStoreSession() {
+  issued();var encoder=new OAuthTokenResponse.Encoder(ISSUER,managedKeys(),32768,16384);
+  var response=encoder.prepare(record(OAuthStoreKey.Kind.GRANT),"managed-jti",NOW,NOW.plusSeconds(300),
+   Set.of("read"),null,deadline());
+  assertFalse(token(response).isEmpty());assertFalse(body(response).getMembers().containsKey("refresh_token"));
  }
  @TestFactory @NonNull Stream<@NonNull DynamicTest> unauthorizedIntrospectionCallersHaveNoStoreOrClaimAccess() {
   return Stream.of("public","wrong-secret","wrong-resource","browser","unknown").map(kind->test(kind,()->{

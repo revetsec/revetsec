@@ -31,6 +31,7 @@ import org.jspecify.annotations.NonNull;
 import java.net.URI;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Stream;
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -55,5 +56,6 @@ final class OidcLogoutMetadataTests {
   return java.util.stream.IntStream.range(0,values.size()).mapToObj(i->DynamicTest.dynamicTest("malformed-logout-metadata-"+i,()->assertInstanceOf(OidcProviderMetadataParseResult.Rejected.class,OidcProviderMetadata.fromJsonResult(ISSUER,document().put("end_session_endpoint",values.get(i)).build().toJson()))));
  }
  @Test void duplicateLogoutMetadataRemainsMalformed(){String value=document().put("end_session_endpoint",END.toString()).build().toJson();value=value.substring(0,value.length()-1)+",\"end_session_endpoint\":\"https://other.example/logout\"}";assertInstanceOf(OidcProviderMetadataParseResult.Rejected.class,OidcProviderMetadata.fromJsonResult(ISSUER,value));}
+ @Test void nullableMetadataCollectionsRestoreExactDefaults(){var metadata=OidcProviderMetadata.withIssuer(ISSUER).authorizationEndpoint(URI.create(ISSUER+"/authorize")).tokenEndpoint(URI.create(ISSUER+"/token")).jwksUri(URI.create(ISSUER+"/keys")).subjectTypesSupported(null).idTokenSigningAlgValuesSupported(null).responseTypesSupported(null).userInfoSigningAlgValuesSupported(null).build();assertEquals(Set.of("public"),metadata.getSubjectTypesSupported());assertEquals(Set.of("RS256"),metadata.getIdTokenSigningAlgValuesSupported());assertEquals(Set.of("code"),metadata.getResponseTypesSupported());assertTrue(metadata.getUserInfoSigningAlgValuesSupported().isEmpty());assertThrows(IllegalArgumentException.class,()->OidcProviderMetadata.withIssuer(ISSUER).userInfoSigningAlgValuesSupported(Set.of("")));}
  @Test void metadataDiagnosticsRemainValueFree(){String rendered=parsed(document().put("end_session_endpoint",END.toString()).build().toJson()).toString();assertEquals("OidcProviderMetadata{configuration=<redacted>}",rendered);}
 }
