@@ -1,11 +1,11 @@
 {
   "core": {
     "repository": "https://github.com/revetsec/revetsec",
-    "revision": "d387e1222fdfed7865273184077dca463e94bf35"
+    "revision": "e5f7ab267dcbb9a04768a5725584265c60318d0e"
   },
   "adapter": {
     "repository": "https://github.com/revetsec/revetsec-soklet",
-    "revision": "40e52aa703c02b1ad49c04a256c9989212a94759"
+    "revision": "2e522099bfc2511aba19354d7f4b68d4d79d15ff"
   },
   "framework": {
     "repository": "https://repo.maven.apache.org/maven2",

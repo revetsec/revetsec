@@ -307,7 +307,7 @@ class ConsumerOutputTests(unittest.TestCase):
     """PackagedConsumer's public-api= line must come last and name every group of public API calls."""
 
     API_LINE = VERIFIER.PUBLIC_API_LINE_PREFIX + ",".join(VERIFIER.PUBLIC_API_CALLS)
-    EXPORTED_TYPE_INVENTORY_SHA256 = "f78734beea7140f95b2b4abe5cde127b0b4e1d9412b75b193fcda1cf8e2270b5"
+    EXPORTED_TYPE_INVENTORY_SHA256 = "10deab66575094a205e8894c2745f97e9389a3ed4902274cee6c252d540fd870"
 
     def lines(self, *last):
         return ["jar=/repository/revetsec.jar", "automatic-module-name=com.revetsec", *last]

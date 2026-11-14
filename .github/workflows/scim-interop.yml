@@ -38,7 +38,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: revetsec/revetsec-soklet
-          ref: 40e52aa703c02b1ad49c04a256c9989212a94759
+          ref: 2e522099bfc2511aba19354d7f4b68d4d79d15ff
           path: .scim-inputs/adapter
           persist-credentials: false
 
